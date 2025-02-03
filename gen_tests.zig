@@ -1,0 +1,49 @@
+const std = @import("std");
+
+pub fn main() !void {
+    var arena_state = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    const arena = arena_state.allocator();
+
+    const args = try std.process.argsAlloc(arena);
+    const case_path, const root, const out = args[1..4].*;
+
+    const readme = try std.fs.cwd().readFileAlloc(arena, case_path, 1024 * 1024);
+
+    const out_file = try std.fs.cwd().createFile(out, .{});
+    defer out_file.close();
+    const writer = out_file.writer();
+
+    try writer.print(
+        \\const root = @import("../{s}");
+        \\
+        \\
+    , .{root});
+
+    var iter = std.mem.splitSequence(u8, readme, "#### ");
+    while (iter.next()) |segment| {
+        const pos = std.mem.indexOf(u8, segment, "\n```hb") orelse continue;
+        const name = segment[0..pos];
+        const end = std.mem.indexOf(u8, segment[pos + 6 ..], "```\n") orelse continue;
+        const body = std.mem.trim(u8, segment[pos + 6 ..][0..end], "\n \t");
+
+        try writer.print(
+            \\test "{s}" {{
+            \\    try root.runTest(
+            \\        "{s}",
+            \\
+        ,
+            .{ name, name },
+        );
+
+        var lines = std.mem.splitScalar(u8, body, '\n');
+        while (lines.next()) |line| {
+            try writer.print("        \\\\{s}\n", .{line});
+        }
+        try writer.writeAll(
+            \\    );
+            \\}
+            \\
+            \\
+        );
+    }
+}

@@ -1,6 +1,12 @@
 # holey-bytes
 
+## vendored tests
 
+```bash
+git submodule add https://git.ablecorp.us/lily-org/lily.git vendored-tests/lily # add a new
+git submodule update --init --recursive                                         # fetch
+git submodule update --remote --rebase -- vendored-tests/lily/                  # update a
+```
 
 ### Tour
 

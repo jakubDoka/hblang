@@ -11,6 +11,10 @@ pub fn runTest(name: []const u8, code: []const u8) !void {
     defer ast.deinit(std.testing.allocator);
 }
 
+pub fn runVendoredTest(path: []const u8) !void {
+    _ = path; // autofix
+}
+
 const debug = @import("builtin").mode == .Debug;
 
 const IdRepr = u32;
