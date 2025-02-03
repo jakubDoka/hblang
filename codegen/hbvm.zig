@@ -6,7 +6,8 @@ ir: Codegen.Ir = undefined,
 regs: Regs = undefined,
 block_order: std.ArrayListUnmanaged(Codegen.Cfg.Id) = .{},
 computed: std.ArrayListUnmanaged(Loc) = .{},
-block_offsets: std.ArrayListUnmanaged(u32) = .{},
+blocks: std.ArrayListUnmanaged(Block) = .{},
+block_args: std.ArrayListUnmanaged(Loc) = .{},
 goto_relocs: std.ArrayListUnmanaged(GotoReloc) = .{},
 if_relocs: std.ArrayListUnmanaged(IfReloc) = .{},
 ret_relocs: std.ArrayListUnmanaged(u32) = .{},
@@ -27,6 +28,11 @@ const HbvmCg = @This();
 pub const Loc = codegen.Loc;
 pub const Regs = codegen.Regs;
 pub const Error = error{Goto} || std.mem.Allocator.Error;
+
+const Block = struct {
+    offset: u32 = std.math.maxInt(u32),
+    args: Codegen.Instr.Slice = .{},
+};
 
 const GotoReloc = struct {
     to: Codegen.Cfg.Id,
@@ -63,7 +69,7 @@ pub fn deinit(self: *HbvmCg) void {
     self.relocs.funcs.deinit(self.gpa);
     std.debug.assert(self.tmp_locs.items.len == 0);
     self.tmp_locs.deinit(self.gpa);
-    self.block_offsets.deinit(self.gpa);
+    self.blocks.deinit(self.gpa);
 }
 
 pub fn generateFunc(self: *HbvmCg, func_id: usize) !void {
@@ -74,7 +80,8 @@ pub fn generateFunc(self: *HbvmCg, func_id: usize) !void {
     self.ir = func.ir;
     defer self.ir.deinit(self.gpa);
     try self.computed.resize(self.gpa, self.ir.cfg.store.items.len);
-    try self.block_offsets.resize(self.gpa, self.ir.cfg.store.items.len);
+    try self.blocks.resize(self.gpa, self.ir.cfg.store.items.len);
+    for (self.blocks.items) |*block| block.* = .{};
 
     try self.emit(.addi64, .{ Regs.stack_ptr, Regs.stack_ptr, 0 });
     if (!entry) try self.emit(.st, .{ Regs.ret_addr, Regs.stack_ptr, 0, 0 });
@@ -115,7 +122,6 @@ pub fn generateFunc(self: *HbvmCg, func_id: usize) !void {
     var ctx = struct {
         blocks: *std.ArrayListUnmanaged(Codegen.Cfg.Id),
         pub fn addBlock(s: *@This(), id: Codegen.Cfg.Id) !void {
-            std.debug.print("block {d}\n", .{id.index});
             s.blocks.appendAssumeCapacity(id);
         }
     }{ .blocks = &self.block_order };
@@ -124,20 +130,21 @@ pub fn generateFunc(self: *HbvmCg, func_id: usize) !void {
         try self.generateBlock(id, i);
     }
     self.block_order.items.len = 0;
-    std.debug.print("generated blocks\n", .{});
 
     for (self.args.items) |arg| self.freeValue(arg);
 
-    self.regs.checkLeaks();
+    //self.regs.checkLeaks();
     const stack_size = 0;
     const poped_regs_size = self.regs.free_count * @as(u16, 8) + 8;
 
-    for (self.goto_relocs.items) |reloc|
-        self.writeReloc(i32, @intCast(reloc.offset + 1), @as(i32, @intCast(self.block_offsets.items[reloc.to.index])) - @as(i32, @intCast(reloc.offset)));
+    for (self.goto_relocs.items) |reloc| {
+        std.debug.print("reloc {d} to {x}\n", .{ reloc.offset, self.blocks.items[reloc.to.index].offset });
+        self.writeReloc(i32, @intCast(reloc.offset + 1), @as(i32, @intCast(self.blocks.items[reloc.to.index].offset)) - @as(i32, @intCast(reloc.offset)));
+    }
     self.goto_relocs.items.len = 0;
 
     for (self.if_relocs.items) |reloc|
-        self.writeReloc(i16, @intCast(reloc.offset + 3), @intCast(self.block_offsets.items[reloc.to.index] -% reloc.offset));
+        self.writeReloc(i16, @intCast(reloc.offset + 3), @intCast(self.blocks.items[reloc.to.index].offset -% reloc.offset));
     self.if_relocs.items.len = 0;
 
     for (self.ret_relocs.items) |offset|
@@ -175,9 +182,13 @@ pub fn finalize(self: *HbvmCg) void {
 }
 
 fn generateBlock(self: *HbvmCg, id: Codegen.Cfg.Id, idx: usize) !void {
-    self.block_offsets.items[id.index] = @intCast(self.out.items.len);
+    self.blocks.items[id.index].offset = @intCast(self.out.items.len);
     switch (self.ir.cfg.get(id)) {
         .Void => unreachable,
+        .Decl => |decl| {
+            const loc = try self.generateExpr(null, decl.value);
+            self.computed.items[id.index] = loc;
+        },
         .Call => |call| {
             std.debug.assert(call.func.tag() == .func);
             const func = self.cg.ctx.funcs.items[call.func.index];
@@ -232,7 +243,25 @@ fn generateBlock(self: *HbvmCg, id: Codegen.Cfg.Id, idx: usize) !void {
         },
         .Goto => |goto| {
             // TODO: collect the ordering instead so that we can eliminate useles jumps
-            std.debug.assert(goto.args.len == 0);
+            const block = &self.blocks.items[goto.to.index];
+            if (block.args.len != goto.args.len) {
+                std.debug.print("block {d} args {any}\n", .{ goto.to.index, goto.args });
+                for (self.ir.view(goto.args)) |arg| {
+                    try self.block_args.append(self.gpa, try self.generateExpr(null, arg));
+                }
+                block.args = .{
+                    .base = @intCast(self.block_args.items.len - goto.args.len),
+                    .len = @intCast(goto.args.len),
+                };
+            } else {
+                for (
+                    self.ir.view(goto.args),
+                    self.block_args.items[block.args.base..][0..block.args.len],
+                ) |arg, dst| {
+                    _ = try self.generateExpr(dst.toggled("borrowed", true), arg);
+                }
+            }
+
             if (!self.isBefore(idx, goto.to)) {
                 try self.goto_relocs.append(self.gpa, .{ .to = goto.to, .offset = @intCast(self.out.items.len) });
                 try self.emit(.jmp, .{0});
@@ -288,8 +317,10 @@ fn generateExpr(self: *HbvmCg, dst: ?Loc, id: Codegen.Instr.Id) !Loc {
             break :b loc;
         },
         inline .@"+64", .@"-64", .@"*64" => |body, t| b: {
-            const lhs = try self.generateExpr(dst, body.lhs);
+            const lhs = try self.generateExpr(null, body.lhs);
+            defer if (dst != null) self.freeValue(lhs);
             const rhs = try self.generateExpr(null, body.rhs);
+            const bdst = dst orelse lhs;
             defer self.freeValue(rhs);
             const instr = switch (t) {
                 .@"+64" => .add64,
@@ -297,19 +328,32 @@ fn generateExpr(self: *HbvmCg, dst: ?Loc, id: Codegen.Instr.Id) !Loc {
                 .@"*64" => .mul64,
                 else => @compileError("wat"),
             };
-            try self.emit(instr, .{ lhs.reg, lhs.reg, rhs.reg });
-            break :b lhs;
+            try self.emit(instr, .{ bdst.reg, lhs.reg, rhs.reg });
+            break :b bdst;
         },
         .@"<=64", .@"==64" => unreachable,
         .@"/64" => |body| b: {
-            const lhs = try self.generateExpr(dst, body.lhs);
+            const lhs = try self.generateExpr(null, body.lhs);
+            defer if (dst != null) self.freeValue(lhs);
             const rhs = try self.generateExpr(null, body.rhs);
             defer self.freeValue(rhs);
-            try self.emit(.diru64, .{ lhs.reg, 0, lhs.reg, rhs.reg });
-            break :b lhs;
+            const bdst = dst orelse lhs;
+            try self.emit(.diru64, .{ bdst.reg, 0, lhs.reg, rhs.reg });
+            break :b bdst;
         },
         .Call => |call| self.computed.items[call.index],
-        //else => |v| std.debug.panic("unhandled expr: {any}", .{v}),
+        .BlockArg => |ba| b: {
+            std.debug.print("block arg {d} {d}\n", .{ ba.block.index, ba.index });
+            const block = &self.blocks.items[ba.block.index];
+            const loc = self.block_args.items[block.args.base..][0..block.args.len][ba.index]
+                .toggled("borrowed", true);
+
+            if (dst) |d| {
+                std.debug.print("block arg {d} {d} need move\n", .{ ba.block.index, ba.index });
+                try self.emit(.cp, .{ d.reg, loc.reg });
+                break :b d;
+            } else break :b loc;
+        },
     };
 }
 

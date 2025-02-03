@@ -18,13 +18,11 @@ b2:
 	ret v2
 
 b3:
-	v0 = arg 0
 	v3 = Li64 1
 	v4 = -64 v0, v3
 	call :f1, v4
 
 b4:
-	v0 = arg 0
 	v6 = Li64 2
 	v7 = -64 v0, v6
 	call :f1, v7

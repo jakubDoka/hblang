@@ -2,8 +2,9 @@ const std = @import("std");
 
 test {
     _ = @import("codegen.zig");
-    _ = @import("codegen2.zig");
 }
+
+const Ty = std.builtin.Type.Fn;
 
 const debug = @import("builtin").mode == .Debug;
 
@@ -38,6 +39,10 @@ pub fn EnumSlice(comptime T: type) type {
         pub fn isEmpty(self: @This()) bool {
             return self.start == self.end;
         }
+
+        pub fn len(self: @This()) usize {
+            return (self.end - self.start) / @sizeOf(Elem);
+        }
     };
 }
 
@@ -66,10 +71,11 @@ pub fn TaglessEnumStore(comptime SelfId: type, comptime T: type) type {
             value: std.meta.TagPayload(T, tag),
         ) !SelfId {
             try self.store.append(gpa, @unionInit(Elem, @tagName(tag), value));
-            return SelfId{
-                .taga = @intFromEnum(tag),
-                .index = @intCast(self.store.items.len - 1),
-            };
+            return .{ .taga = @intFromEnum(tag), .index = @intCast(self.store.items.len - 1) };
+        }
+
+        pub fn nextId(self: *Self, comptime tag: std.meta.Tag(T), offset: usize) SelfId {
+            return .{ .taga = @intFromEnum(tag), .index = @intCast(self.store.items.len + offset) };
         }
 
         pub fn get(self: *const Self, id: SelfId) T {

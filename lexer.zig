@@ -63,6 +63,13 @@ pub const Lexeme = enum(u8) {
         return @tagName(self);
     }
 
+    pub fn isAssignment(self: Lexeme) bool {
+        switch (self) {
+            .@"=", .@"+=", .@"-=" => return true,
+            else => return false,
+        }
+    }
+
     pub fn assOp(comptime self: Lexeme) Lexeme {
         if (comptime std.mem.endsWith(u8, @tagName(self), "="))
             return @enumFromInt(@as(u8, @intFromEnum(self) - 128));

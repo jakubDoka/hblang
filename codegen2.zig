@@ -56,6 +56,7 @@ const root_file = 0;
 
 pub const CfgKind = enum {
     Void,
+    Decl,
     Call,
     Goto,
     If,
@@ -64,6 +65,10 @@ pub const CfgKind = enum {
 
 pub const Cfg = union(CfgKind) {
     Void,
+    Decl: struct {
+        value: Instr.Id,
+        goto: Id = undefined,
+    },
     Call: struct {
         func: Ty,
         args: Instr.Slice,
@@ -88,6 +93,7 @@ pub const Cfg = union(CfgKind) {
 pub const InstrKind = enum {
     Void,
     Arg,
+    BlockArg,
     Li64,
     @"+64",
     @"-64",
@@ -101,6 +107,10 @@ pub const InstrKind = enum {
 pub const Instr = union(InstrKind) {
     Void,
     Arg,
+    BlockArg: struct {
+        block: Cfg.Id,
+        index: u32,
+    },
     Li64: u64,
     @"+64": BinOp,
     @"-64": BinOp,
@@ -131,6 +141,10 @@ pub const Ir = struct {
         return self.args.items[args.base..][0..args.len];
     }
 
+    fn makeArgs(self: *Ir, len: usize) Instr.Slice {
+        return .{ .base = @intCast(self.args.items.len - len), .len = @intCast(len) };
+    }
+
     fn allocSlice(self: *Ir, gpa: std.mem.Allocator, slice: []const Instr.Id) !Instr.Slice {
         const base = self.args.items.len;
         try self.args.appendSlice(gpa, slice);
@@ -155,6 +169,7 @@ pub const Ir = struct {
 
         var bd = struct {
             out: *std.ArrayList(u8),
+            seen: std.ArrayListUnmanaged(Instr.Id) = .{},
             ir: *const Ir,
 
             pub fn addBlock(s: *@This(), block: Cfg.Id) !void {
@@ -165,7 +180,12 @@ pub const Ir = struct {
                         try s.displayInstr(r);
                         try s.out.writer().print("\tret v{d}", .{r.index});
                     },
+                    .Decl => |d| {
+                        try s.displayInstr(d.value);
+                        try s.out.writer().print("\tdecl v{d} godo b{d}", .{ d.value.index, d.goto.index });
+                    },
                     .Goto => |g| {
+                        for (s.ir.view(g.args)) |arg| try s.displayInstr(arg);
                         try s.out.writer().print("\tgoto b{d}", .{g.to.index});
                         for (s.ir.view(g.args)) |arg| try s.out.writer().print(", v{d}", .{arg.index});
                     },
@@ -186,9 +206,13 @@ pub const Ir = struct {
             }
 
             pub fn displayInstr(s: *@This(), instr: Instr.Id) !void {
+                if (std.mem.indexOfScalar(u32, @ptrCast(s.seen.items), @bitCast(instr)) != null) return;
+                try s.seen.append(s.out.allocator, instr);
+
                 switch (s.ir.instrs.get(instr)) {
                     .Void => {},
                     .Arg => try s.out.writer().print("\tv{d} = arg {d}\n", .{ instr.index, instr.index }),
+                    .BlockArg => |b| try s.out.writer().print("\tv{d} = arg b{d} {d}\n", .{ instr.index, b.block.index, b.index }),
                     inline .Li64 => |l, t| try s.out.writer().print(
                         "\tv{d} = {s} {d}\n",
                         .{ instr.index, @tagName(t), l },
@@ -205,6 +229,7 @@ pub const Ir = struct {
                 }
             }
         }{ .out = out, .ir = self };
+        defer bd.seen.deinit(out.allocator);
         try self.traverseBlocks(entry, &bd);
     }
 
@@ -276,8 +301,8 @@ pub const Ir = struct {
     fn nextCfgNodes(self: *Ir, id: Cfg.Id, buf: *[2]Cfg.Id) []const Cfg.Id {
         return switch (self.cfg.get(id)) {
             .Void, .Ret => &.{},
-            .Call => |call| b: {
-                buf[0] = call.goto;
+            inline .Decl, .Call => |v| b: {
+                buf[0] = v.goto;
                 break :b buf[0..1];
             },
             .Goto => |goto| b: {
@@ -303,6 +328,7 @@ pub const Func = struct {
 
 const Loop = struct {
     back: Cfg.Id,
+    mutates: root.EnumSlice(Ast.Ident),
     break_base: u32,
 };
 
@@ -432,9 +458,19 @@ fn generateExpr(self: *Codegen, file: File, inferred: ?Ty, id: Ast.Id) Error!Val
             return .{};
         },
         .Loop => |l| {
-            const back = try self.out.store.cfg.alloc(self.gpa, .Goto, .{ .args = .{} });
+            for (ast.exprs.view(l.mutates), 0..) |ident, i| {
+                try self.out.store.args.append(self.gpa, self.tmp.variables.items[ident.index].id);
+                self.tmp.variables.items[ident.index].id = try self.out.store.instrs.alloc(self.gpa, .BlockArg, .{
+                    .block = self.out.store.cfg.nextId(.Goto, 1),
+                    .index = @intCast(i),
+                });
+            }
+            const back_args = self.out.store.makeArgs(l.mutates.len());
+
+            const back = try self.out.store.cfg.alloc(self.gpa, .Goto, .{ .args = back_args });
             try self.tmp.loops.append(self.gpa, .{
                 .back = back,
+                .mutates = l.mutates,
                 .break_base = @intCast(self.tmp.loop_breaks.items.len),
             });
             _ = try self.passControlFlow(back);
@@ -444,7 +480,7 @@ fn generateExpr(self: *Codegen, file: File, inferred: ?Ty, id: Ast.Id) Error!Val
                 try self.passControlFlow(try self.out.store.cfg.alloc(
                     self.gpa,
                     .Goto,
-                    .{ .to = back, .args = .{} },
+                    .{ .to = self.out.store.cfg.getTyped(.Goto, back).?.to, .args = .{} },
                 ));
 
             const loop = self.tmp.loops.pop();
@@ -455,7 +491,6 @@ fn generateExpr(self: *Codegen, file: File, inferred: ?Ty, id: Ast.Id) Error!Val
                 self.scope.returning = breaker;
                 for (breaks) |break_id| {
                     self.out.store.cfg.getTypedPtr(.Goto, break_id).?.to = breaker;
-                    std.debug.print("breaked {any}\n", .{break_id});
                 }
                 return .{};
             } else {
@@ -471,10 +506,14 @@ fn generateExpr(self: *Codegen, file: File, inferred: ?Ty, id: Ast.Id) Error!Val
         },
         .Continue => {
             const loop = self.tmp.loops.getLast();
+            for (ast.exprs.view(loop.mutates)) |ident| {
+                try self.out.store.args.append(self.gpa, self.tmp.variables.items[ident.index].id);
+            }
+            const back_args = self.out.store.makeArgs(loop.mutates.len());
             _ = try self.passControlFlow(try self.out.store.cfg.alloc(
                 self.gpa,
                 .Goto,
-                .{ .to = loop.back, .args = .{} },
+                .{ .to = self.out.store.cfg.getTyped(.Goto, loop.back).?.to, .args = back_args },
             ));
             return error.LoopControl;
         },
@@ -488,7 +527,14 @@ fn generateBinOp(self: *Codegen, file: File, bo: Ast.Payload(.BinOp), inferred: 
     switch (bo.op) {
         .@":=" => {
             _ = ast.exprs.getTyped(.Ident, bo.lhs).?;
-            const value = try self.generateExpr(file, inferred, bo.rhs);
+            var value = try self.generateExpr(file, inferred, bo.rhs);
+            const cfg = try self.out.store.cfg.alloc(
+                self.gpa,
+                .Decl,
+                .{ .value = value.id },
+            );
+            try self.passControlFlow(cfg);
+            value.id = try self.out.store.instrs.alloc(self.gpa, .Call, cfg);
             try self.tmp.variables.append(self.gpa, value);
             return .{};
         },
@@ -750,7 +796,7 @@ fn testCodegen(comptime name: []const u8, source: []const u8) !void {
         var exec_log = std.ArrayList(u8).init(gpa);
         errdefer exec_log.deinit();
         try exec_log.writer().print("EXECUTION\n", .{});
-        vm.fuel = 10000;
+        vm.fuel = 2000;
         vm.ip = @intFromPtr(code.items.ptr);
         vm.log_buffer = &exec_log;
         var ctx = Vm.UnsafeCtx{};

@@ -14,7 +14,8 @@ pub const Slice = root.EnumSlice(Id);
 
 pub const Ident = packed struct(Ident.Repr) {
     const Repr = u32;
-    index: u30,
+    index: u29,
+    mutated: bool = false,
     referenced: bool = false,
     last: bool = false,
 
@@ -111,6 +112,7 @@ pub const Expr = union(Kind) {
     },
     Loop: struct {
         pos: Pos,
+        mutates: root.EnumSlice(Ident),
         body: Id,
     },
     Break: Pos,
@@ -162,6 +164,8 @@ const Parser = struct {
     active_syms: std.ArrayListUnmanaged(Sym) = .{},
     all_sym_decls: std.ArrayListUnmanaged(u16) = .{},
     all_sym_occurences: std.ArrayListUnmanaged(Id) = .{},
+    mutated_syms: std.ArrayListUnmanaged(Ident) = .{},
+    mutated_slices: std.ArrayListUnmanaged(root.EnumSlice(Ident)) = .{},
 
     lexer: Lexer,
     cur: Lexer.Token,
@@ -198,6 +202,11 @@ const Parser = struct {
             const ident = self.store.getTypedPtr(.Ident, id).?;
             ident.id.index = self.all_sym_decls.items[ident.id.index];
         }
+        for (self.mutated_slices.items) |slice| {
+            for (self.store.view(slice)) |*ident| {
+                ident.index = self.all_sym_decls.items[ident.index];
+            }
+        }
         for (self.active_syms.items[0..remining]) |s| {
             std.debug.print(
                 "undefined identifier: {s}\n",
@@ -221,6 +230,7 @@ const Parser = struct {
             if (prec >= prevPrec) break;
 
             const to_decl = if (op == .@":=") self.declareExpr(acum) else null;
+            if (op.isAssignment()) try self.markIdent(acum, "mutated");
 
             self.cur = self.lexer.next();
             const rhs = try self.parseBinExpr(try self.parseUnit(), prec);
@@ -294,6 +304,7 @@ const Parser = struct {
     fn parseUnitWithoutTail(self: *Parser) Error!Id {
         const token = self.advance();
         const scope_frame = self.active_syms.items.len;
+        const mutated_scope_frame = self.mutated_syms.items.len;
         return try self.store.allocDyn(self.gpa, switch (token.kind) {
             .Comment => .{ .Comment = Pos.init(token.pos) },
             .Ident => return try self.resolveIdent(token),
@@ -352,7 +363,7 @@ const Parser = struct {
                 .op = op,
                 .oper = b: {
                     const oper = try self.parseUnit();
-                    if (op == .@"&") self.markIdent(oper, "referenced");
+                    if (op == .@"&") try self.markIdent(oper, "referenced");
                     break :b oper;
                 },
             } },
@@ -368,6 +379,14 @@ const Parser = struct {
             .loop => .{ .Loop = .{
                 .pos = Pos.init(token.pos),
                 .body = try self.parseExpr(),
+                .mutates = b: {
+                    const list = self.mutated_syms.items[mutated_scope_frame..];
+                    if (list.len == 0) break :b .{};
+                    const mutated = try self.store.allocSlice(Ident, self.gpa, list);
+                    self.mutated_syms.items.len = mutated_scope_frame;
+                    try self.mutated_slices.append(self.gpa, mutated);
+                    break :b mutated;
+                },
             } },
             .@"break" => .{ .Break = Pos.init(token.pos) },
             .@"continue" => .{ .Continue = Pos.init(token.pos) },
@@ -383,11 +402,14 @@ const Parser = struct {
         });
     }
 
-    fn markIdent(self: *Parser, expr: Id, comptime flag: []const u8) void {
+    fn markIdent(self: *Parser, expr: Id, comptime flag: []const u8) !void {
         switch (self.store.get(expr)) {
             .Ident => |i| {
                 const sym_idx = self.all_sym_decls.items[i.id.index];
                 @field(self.active_syms.items[sym_idx].id, flag) = true;
+                if (comptime std.mem.eql(u8, flag, "mutated")) {
+                    try self.mutated_syms.append(self.gpa, i.id);
+                }
             },
             else => {},
         }
@@ -731,6 +753,8 @@ pub fn init(path: []const u8, code: []const u8, gpa: std.mem.Allocator) !Ast {
         parser.active_syms.deinit(gpa);
         parser.all_sym_decls.deinit(gpa);
         parser.all_sym_occurences.deinit(gpa);
+        parser.mutated_slices.deinit(gpa);
+        parser.mutated_syms.deinit(gpa);
     }
     errdefer {
         parser.store.deinit(gpa);

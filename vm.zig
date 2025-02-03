@@ -1,8 +1,4 @@
-regs: [256]u64 = b: {
-    var arr: [256]u64 = undefined;
-    arr[0] = 0;
-    break :b arr;
-},
+regs: [256]u64 = [_]u64{0} ++ [_]u64{undefined} ** 255,
 ip: usize = undefined,
 fuel: usize = 0,
 log_buffer: if (debug) ?*std.ArrayList(u8) else void = if (debug) null,

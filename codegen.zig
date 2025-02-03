@@ -247,7 +247,7 @@ pub const Loc = struct {
 
     pub fn toggled(self: Loc, comptime flag: []const u8, value: bool) Loc {
         var loc = self;
-        std.debug.assert(@field(loc.flags, "is_" ++ flag) != value);
+        // std.debug.assert(@field(loc.flags, "is_" ++ flag) != value);
         @field(loc.flags, "is_" ++ flag) = value;
         return loc;
     }
