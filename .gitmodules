@@ -1,0 +1,3 @@
+[submodule "vendored-tests/lily"]
+	path = vendored-tests/lily
+	url = https://git.ablecorp.us/lily-org/lily.git

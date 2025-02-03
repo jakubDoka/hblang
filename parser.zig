@@ -5,7 +5,7 @@ items: Slice,
 decls: []const Decl,
 
 const std = @import("std");
-const root = @import("root.zig");
+const root = @import("main.zig");
 const Lexer = @import("lexer.zig");
 const Ast = @This();
 const Store = root.EnumStore(Id, Expr);

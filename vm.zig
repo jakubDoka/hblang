@@ -5,7 +5,7 @@ log_buffer: if (debug) ?*std.ArrayList(u8) else void = if (debug) null,
 
 const std = @import("std");
 const isa = @import("isa.zig");
-const root = @import("root.zig");
+const root = @import("main.zig");
 const Self = @This();
 const debug = @import("builtin").mode == .Debug;
 
@@ -44,6 +44,7 @@ pub const UnsafeCtx = struct {
 };
 
 pub fn run(self: *Self, ctx: anytype) !isa.Op {
+    @setEvalBranchQuota(10000);
     while (self.fuel > 0) : (self.fuel -= 1) switch (try self.readOp(ctx)) {
         .un => return error.Unreachable,
         .nop => {},

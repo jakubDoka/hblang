@@ -1,8 +1,0 @@
-DISASM
-addi64   $254, $254, 0
-li64     $1, 42
-addi64   $254, $254, 0
-tx
-
-REGISTERS
-$1: 42

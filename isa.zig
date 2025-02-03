@@ -20,7 +20,7 @@ pub const Op = b: {
     var values: [spec.len]std.builtin.Type.EnumField = undefined;
     for (spec, &values, 0..) |instr, *value, i|
         value.* = .{ .name = instr.name, .value = i };
-    break :b @Type(.{ .Enum = .{
+    break :b @Type(.{ .@"enum" = .{
         .tag_type = u8,
         .fields = &values,
         .decls = &.{},
@@ -40,11 +40,11 @@ pub fn ArgsOf(comptime op: Op) type {
     for (args, &fields, 0..) |arg, *field, i| field.* = .{
         .name = &[_:0]u8{ 'a', 'r', 'g', '0' + i },
         .type = ArgType(arg),
-        .default_value = null,
+        .default_value_ptr = null,
         .alignment = 0,
         .is_comptime = false,
     };
-    return @Type(.{ .Struct = .{
+    return @Type(.{ .@"struct" = .{
         .fields = &fields,
         .decls = &.{},
         .is_tuple = false,

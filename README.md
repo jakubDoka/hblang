@@ -1,8 +1,10 @@
-# zoley-bytes
+# holey-bytes
+
+
 
 ### Tour
 
-#### main-fn
+#### main fn
 ```hb
 main := fn(): int {
     return 42
@@ -45,7 +47,7 @@ foo := fn(comment: void): void return /* comment evaluates to void */
 // comments might be formatted in the future
 ```
 
-#### if-statements
+#### if statements
 ```hb
 main := fn(): int {
     return fib(10)
@@ -156,7 +158,7 @@ odher_pass := fn(t: Ty2): Ty2 {
 
 ## Edge Cases
 
-#### register-ownership
+#### register ownership
 ```hb
 // should use only 3 registers as last occurence should end
 // the variable lifetime
