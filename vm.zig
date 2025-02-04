@@ -1,12 +1,12 @@
-regs: [256]u64 = [_]u64{0} ++ [_]u64{undefined} ** 255,
+regs: std.EnumArray(isa.Reg, u64) = .{ .values = [_]u64{0} ++ [_]u64{undefined} ** 255 },
 ip: usize = undefined,
 fuel: usize = 0,
 log_buffer: if (debug) ?*std.ArrayList(u8) else void = if (debug) null,
 
 const std = @import("std");
 const isa = @import("isa.zig");
-const root = @import("main.zig");
-const Self = @This();
+const root = @import("utils.zig");
+const Vm = @This();
 const debug = @import("builtin").mode == .Debug;
 
 const one: u64 = 1;
@@ -43,25 +43,24 @@ pub const UnsafeCtx = struct {
     }
 };
 
-pub fn run(self: *Self, ctx: anytype) !isa.Op {
-    @setEvalBranchQuota(10000);
+pub fn run(self: *Vm, ctx: anytype) !isa.Op {
+    @setEvalBranchQuota(2000);
     while (self.fuel > 0) : (self.fuel -= 1) switch (try self.readOp(ctx)) {
         .un => return error.Unreachable,
         .nop => {},
         .tx, .eca, .ebp => |op| return op,
         .cp => {
             const args = try self.readArgs(.cp, ctx);
-            self.writeReg(args.arg0, self.regs[args.arg1]);
+            self.writeReg(args.arg0, self.regs.get(args.arg1));
         },
         .swa => {
             const args = try self.readArgs(.swa, ctx);
-            std.mem.swap(u64, &self.regs[args.arg0], &self.regs[args.arg1]);
+            std.mem.swap(u64, self.regs.getPtr(args.arg0), self.regs.getPtr(args.arg1));
         },
         inline .@"and", .@"or", .xor, .cmpu, .cmps, .andi, .ori, .xori, .cmpui, .cmpsi => |op| {
             const args = try self.readArgs(op, ctx);
-            const lhs = self.regs[args.arg1];
-            const imm = isa.hasImm(op);
-            const rhs = if (imm) args.arg2 else self.regs[args.arg2];
+            const lhs = self.regs.get(args.arg1);
+            const rhs = if (@TypeOf(args.arg2) != isa.Reg) args.arg2 else self.regs.get(args.arg2);
             const res = switch (op) {
                 .@"and", .andi => lhs & rhs,
                 .@"or", .ori => lhs | rhs,
@@ -99,12 +98,12 @@ pub fn run(self: *Self, ctx: anytype) !isa.Op {
             const mask = comptime OpInteger(.sxt8, op);
             const width = @bitSizeOf(mask);
             const args = try self.readArgs(op, ctx);
-            const opera: mask = @truncate(self.regs[args.arg1]);
+            const opera: mask = @truncate(self.regs.get(args.arg1));
             self.writeReg(args.arg0, toUnsigned(64, toSigned(width, opera)));
         },
         inline .not, .neg, .itf32, .itf64 => |op| {
             const args = try self.readArgs(op, ctx);
-            const opera = self.regs[args.arg1];
+            const opera = self.regs.get(args.arg1);
             const res = switch (op) {
                 .not => ~opera,
                 .neg => -%opera,
@@ -118,8 +117,8 @@ pub fn run(self: *Self, ctx: anytype) !isa.Op {
             const addPc = op != .ld and op != .st;
             const args = try self.readArgs(op, ctx);
             const ptr = (if (addPc) self.ip -% isa.instrSize(op) else 0) +%
-                self.regs[args.arg1] +% toUnsigned(64, args.arg2);
-            const regp: [*]u8 = @ptrCast(@alignCast(&self.regs[args.arg0]));
+                self.regs.get(args.arg1) +% toUnsigned(64, args.arg2);
+            const regp: [*]u8 = @ptrCast(@alignCast(self.regs.getPtr(args.arg0)));
             switch (op) {
                 .st, .str, .str16 => try ctx.write(regp[0..args.arg3], ptr),
                 .ld, .ldr, .ldr16 => try ctx.read(ptr, regp[0..args.arg3]),
@@ -132,18 +131,18 @@ pub fn run(self: *Self, ctx: anytype) !isa.Op {
         },
         inline .lra, .lra16 => |op| {
             const args = try self.readArgs(op, ctx);
-            const addr = self.ip + args.arg1 + args.arg2;
+            const addr = self.ip + self.regs.get(args.arg1) + @as(usize, @intCast(args.arg2));
             self.writeReg(args.arg0, addr);
         },
         .bmc => {
             const args = try self.readArgs(.bmc, ctx);
-            try ctx.memmove(self.regs[args.arg0], self.regs[args.arg1], args.arg2);
+            try ctx.memmove(self.regs.get(args.arg0), self.regs.get(args.arg1), args.arg2);
         },
         .brc => {
             const args = try self.readArgs(.brc, ctx);
-            const dst = self.regs[args.arg0..][0..args.arg2];
-            const src = self.regs[args.arg1..][0..args.arg2];
-            if (args.arg0 <= args.arg1) {
+            const dst = self.regs.values[@intFromEnum(args.arg0)..][0..args.arg2];
+            const src = self.regs.values[@intFromEnum(args.arg1)..][0..args.arg2];
+            if (@intFromEnum(args.arg0) <= @intFromEnum(args.arg1)) {
                 std.mem.copyForwards(u64, dst, src);
             } else {
                 std.mem.copyBackwards(u64, dst, src);
@@ -155,14 +154,13 @@ pub fn run(self: *Self, ctx: anytype) !isa.Op {
         },
         inline .jal, .jala => |op| {
             const args = try self.readArgs(op, ctx);
-            if (args.arg0 != 0) self.writeReg(args.arg0, self.ip);
             self.ip = (if (op == .jal) self.ip -% isa.instrSize(op) else 0) +%
-                self.regs[args.arg1] +% toUnsigned(64, args.arg2);
+                self.regs.get(args.arg1) +% toUnsigned(64, args.arg2);
         },
         inline .jltu, .jgtu, .jlts, .jgts, .jeq, .jne => |op| {
             const args = try self.readArgs(op, ctx);
-            const lhs = self.regs[args.arg0];
-            const rhs = self.regs[args.arg1];
+            const lhs = self.regs.get(args.arg0);
+            const rhs = self.regs.get(args.arg1);
             if (switch (op) {
                 .jltu => lhs < rhs,
                 .jgtu => lhs > rhs,
@@ -189,12 +187,12 @@ pub fn run(self: *Self, ctx: anytype) !isa.Op {
     return error.Timeout;
 }
 
-inline fn fbinOp(self: *Self, comptime base: isa.Op, comptime op: isa.Op, ctx: anytype) !void {
+inline fn fbinOp(self: *Vm, comptime base: isa.Op, comptime op: isa.Op, ctx: anytype) !void {
     const Repr = OpFloat(base, op);
     const args = try self.readArgs(op, ctx);
     const Args = @TypeOf(args);
     const lhs = self.readFloatReg(Repr, args.arg1);
-    const rhs = if (@hasField(Args, "arg2")) self.readFloatReg(Repr, args.arg2);
+    const rhs = if (@hasField(Args, "arg2") and @TypeOf(args.arg2) == isa.Reg) self.readFloatReg(Repr, args.arg2);
     const rhs2 = if (@hasField(Args, "arg3")) self.readFloatReg(Repr, args.arg3);
     const res = switch (base) {
         .fadd32 => lhs + rhs,
@@ -219,19 +217,18 @@ inline fn fbinOp(self: *Self, comptime base: isa.Op, comptime op: isa.Op, ctx: a
     });
 }
 
-inline fn readFloatReg(self: *Self, comptime Repr: type, src: u8) Repr {
-    if (src == 0) return 0;
+inline fn readFloatReg(self: *Vm, comptime Repr: type, src: isa.Reg) Repr {
+    if (src == .null) return 0;
     const IntRepr = if (Repr == f32) u32 else u64;
-    return @bitCast(@as(IntRepr, @truncate(self.regs[src])));
+    return @bitCast(@as(IntRepr, @truncate(self.regs.get(src))));
 }
 
-inline fn ibinOp(self: *Self, comptime base: isa.Op, comptime op: isa.Op, ctx: anytype) !void {
+inline fn ibinOp(self: *Vm, comptime base: isa.Op, comptime op: isa.Op, ctx: anytype) !void {
     const Repr = OpInteger(base, op);
     const width = @bitSizeOf(Repr);
     const args = try self.readArgs(op, ctx);
-    const lhs: Repr = @truncate(self.regs[args.arg1]);
-    const imm = isa.hasImm(op);
-    const rhs: Repr = if (imm) args.arg2 else @truncate(self.regs[args.arg2]);
+    const lhs: Repr = @truncate(self.regs.get(args.arg1));
+    const rhs: Repr = if (@TypeOf(args.arg2) != isa.Reg) args.arg2 else @truncate(self.regs.get(args.arg2));
     const res = switch (base) {
         .add8, .addi8 => lhs +% rhs,
         .sub8 => lhs -% rhs,
@@ -244,13 +241,13 @@ inline fn ibinOp(self: *Self, comptime base: isa.Op, comptime op: isa.Op, ctx: a
     self.writeReg(args.arg0, res);
 }
 
-inline fn idivOp(self: *Self, comptime base: isa.Op, comptime op: isa.Op, ctx: anytype) !void {
+inline fn idivOp(self: *Vm, comptime base: isa.Op, comptime op: isa.Op, ctx: anytype) !void {
     const Ctx = std.meta.Child(@TypeOf(ctx));
     const Repr = OpInteger(base, op);
     const width = @bitSizeOf(Repr);
     const args = try self.readArgs(op, ctx);
-    const lhs: Repr = @truncate(self.regs[args.arg2]);
-    const rhs: Repr = @truncate(self.regs[args.arg3]);
+    const lhs: Repr = @truncate(self.regs.get(args.arg2));
+    const rhs: Repr = @truncate(self.regs.get(args.arg3));
     if (!Ctx.assume_no_div_by_zero and rhs == 0) return error.DivideByZero;
     switch (base) {
         .diru8 => {
@@ -283,31 +280,25 @@ fn OpFloat(base: isa.Op, offset: isa.Op) type {
     return .{ f32, f64 }[@as(u8, @intFromEnum(offset)) - @as(u8, @intFromEnum(base))];
 }
 
-inline fn writeReg(self: *Self, dst: u8, value: u64) void {
-    if (dst == 0) return;
-    self.regs[dst] = value;
+inline fn writeReg(self: *Vm, dst: isa.Reg, value: u64) void {
+    if (dst == .null) return;
+    self.regs.set(dst, value);
 }
 
-fn readOp(self: *Self, ctx: anytype) !isa.Op {
+fn readOp(self: *Vm, ctx: anytype) !isa.Op {
     const byte = try self.progRead(u8, ctx);
     self.ip += 1;
     if (std.meta.Child(@TypeOf(ctx)).check_ops and byte > isa.instr_count) {
         return error.InvalidOp;
     }
 
-    @setEvalBranchQuota(2500);
     if (debug) if (self.log_buffer) |buf| {
         const prev_ip = self.ip;
         switch (@as(isa.Op, @enumFromInt(byte))) {
             inline else => |o| {
                 try buf.appendSlice(@tagName(o));
-                const argTys = isa.spec[@intFromEnum(o)].args;
-                inline for (argTys, 0..) |argTy, i| {
-                    if (i > 0) try buf.appendSlice(", ") else try buf.appendSlice(" ");
-                    const arg = try self.progRead(isa.ArgType(argTy), ctx);
-                    self.ip += @sizeOf(isa.ArgType(argTy));
-                    try self.displayArg(argTy, arg, buf);
-                }
+                const argTys = isa.spec[@intFromEnum(o)][1];
+                try self.readOpArgs(argTys, buf, ctx);
             },
         }
         try buf.appendSlice("\n");
@@ -317,37 +308,47 @@ fn readOp(self: *Self, ctx: anytype) !isa.Op {
     return @enumFromInt(byte);
 }
 
+fn readOpArgs(self: *Vm, comptime argTys: []const u8, buf: *std.ArrayList(u8), ctx: anytype) !void {
+    inline for (argTys, 0..) |argTy, i| {
+        const argt = comptime isa.Arg.fromChar(argTy);
+        if (i > 0) try buf.appendSlice(", ") else try buf.appendSlice(" ");
+        const arg = try self.progRead(isa.ArgType(argt), ctx);
+        self.ip += @sizeOf(isa.ArgType(argt));
+        try self.displayArg(argt, arg, buf);
+    }
+}
+
 fn displayArg(
-    self: *Self,
+    self: *Vm,
     comptime arg: isa.Arg,
     value: isa.ArgType(arg),
     buf: *std.ArrayList(u8),
 ) !void {
     switch (arg) {
-        .reg => try buf.writer().print("${d}={d}", .{ value, self.regs[value] }),
+        .reg => try buf.writer().print("${d}={d}", .{ value, self.regs.get(value) }),
         else => try buf.writer().print("{any}", .{value}),
     }
 }
 
-fn readArgs(self: *Self, comptime op: isa.Op, ctx: anytype) !isa.ArgsOf(op) {
-    defer self.ip += isa.instrSize(op) - 1;
+fn readArgs(self: *Vm, comptime op: isa.Op, ctx: anytype) !isa.ArgsOf(op) {
+    defer self.ip += @sizeOf(isa.ArgsOf(op));
     return try self.progRead(isa.ArgsOf(op), ctx);
 }
 
-fn progRead(self: *Self, comptime T: type, ctx: anytype) !T {
+fn progRead(self: *Vm, comptime T: type, ctx: anytype) !T {
     return (try ctx.progRead(T, self.ip)).*;
 }
 
-pub fn testRun(vm: *Self, res: anyerror!isa.Op, regRes: anytype, comptime code: anytype) !void {
+pub fn testRun(vm: *Vm, res: anyerror!isa.Op, regRes: anytype, comptime code: anytype) !void {
     const fode = isa.packMany(code);
     vm.ip = @intFromPtr(fode.ptr);
     var ctx = UnsafeCtx{};
     try std.testing.expectEqual(res, vm.run(&ctx));
-    try std.testing.expectEqual(regRes, vm.regs[1]);
+    try std.testing.expectEqual(regRes, vm.regs.get(.ret));
 }
 
 test "sanity" {
-    var vm = Self{ .fuel = 1000 };
+    var vm = Vm{ .fuel = 1000 };
     try testRun(&vm, .tx, 0, .{.{.tx}});
 
     try testRun(&vm, error.Unreachable, 1, .{

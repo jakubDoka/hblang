@@ -1,25 +1,54 @@
 const std = @import("std");
 
+pub const Reg = enum(u8) { null, ret, _ };
+
 pub const instr_count = spec.len;
 pub const max_instr_len = blk: {
     var max_len: usize = 0;
     for (spec) |instr| {
-        max_len = @max(max_len, instr.name.len);
+        max_len = @max(max_len, instr[0].len);
     }
     break :blk max_len;
 };
 
-pub const Arg = enum { reg, imm8, imm16, imm32, imm64, rel16, rel32, abs64 };
-const InstrSpec = struct { name: [:0]const u8, args: []const Arg, desc: []const u8 };
+pub const Arg = enum {
+    reg,
+    imm8,
+    imm16,
+    imm32,
+    imm64,
+    rel16,
+    rel32,
+    abs64,
+
+    const valid_chars = "RBHWDPOA";
+    const min_char = std.mem.min(u8, valid_chars);
+    const char_to_self = b: {
+        const max_char = std.mem.max(u8, valid_chars) + 1;
+
+        var table: [max_char - min_char]Arg = undefined;
+        for (valid_chars, 0..) |c, i| {
+            table[c - min_char] = @enumFromInt(i);
+        }
+
+        const t = table;
+        break :b &t;
+    };
+
+    pub fn fromChar(char: u8) Arg {
+        return char_to_self[char - min_char];
+    }
+};
+const InstrSpec = struct { [:0]const u8, []const u8, []const u8 };
 
 pub fn ArgType(comptime arg: Arg) type {
-    return .{ u8, u8, u16, u32, u64, i16, i32, i64 }[@intFromEnum(arg)];
+    return .{ Reg, u8, u16, u32, u64, i16, i32, i64 }[@intFromEnum(arg)];
 }
 
 pub const Op = b: {
     var values: [spec.len]std.builtin.Type.EnumField = undefined;
     for (spec, &values, 0..) |instr, *value, i|
-        value.* = .{ .name = instr.name, .value = i };
+        value.* = .{ .name = instr[0], .value = i };
     break :b @Type(.{ .@"enum" = .{
         .tag_type = u8,
         .fields = &values,
@@ -28,35 +57,31 @@ pub const Op = b: {
     } });
 };
 
-pub fn hasImm(op: Op) bool {
-    return for (spec[@intFromEnum(op)].args) |arg| {
-        if (arg != .reg) return true;
-    } else false;
-}
-
 pub fn ArgsOf(comptime op: Op) type {
-    const args = spec[@intFromEnum(op)].args;
-    var fields: [args.len]std.builtin.Type.StructField = undefined;
-    for (args, &fields, 0..) |arg, *field, i| field.* = .{
-        .name = &[_:0]u8{ 'a', 'r', 'g', '0' + i },
-        .type = ArgType(arg),
-        .default_value_ptr = null,
-        .alignment = 0,
-        .is_comptime = false,
-    };
-    return @Type(.{ .@"struct" = .{
-        .fields = &fields,
-        .decls = &.{},
-        .is_tuple = false,
-        .layout = .@"packed",
-    } });
+    const cache = struct {
+        pub fn cache(comptime args: []const u8) type {
+            var fields: [args.len]std.builtin.Type.StructField = undefined;
+            for (args, &fields, 0..) |arg, *field, i| field.* = .{
+                .name = &[_:0]u8{ 'a', 'r', 'g', '0' + i },
+                .type = ArgType(Arg.fromChar(arg)),
+                .default_value_ptr = null,
+                .alignment = 0,
+                .is_comptime = false,
+            };
+            return @Type(.{ .@"struct" = .{
+                .fields = &fields,
+                .decls = &.{},
+                .is_tuple = false,
+                .layout = .@"packed",
+            } });
+        }
+    }.cache;
+
+    return cache(spec[@intFromEnum(op)][1]);
 }
 
 pub fn instrSize(comptime op: Op) comptime_int {
-    const args = spec[@intFromEnum(op)].args;
-    var size = 1;
-    for (args) |arg| size += @sizeOf(ArgType(arg));
-    return size;
+    return @sizeOf(ArgsOf(op)) + 1;
 }
 
 pub fn pack(comptime op: Op, args: anytype) [instrSize(op)]u8 {
@@ -84,7 +109,15 @@ pub fn packMany(comptime instrs: anytype) []const u8 {
         out[cursor] = @intFromEnum(op);
         cursor += 1;
         inline for (std.meta.fields(ArgsOf(op)), 1..) |name, i| {
-            @as(*align(1) name.type, @ptrCast(&out[cursor])).* = @truncate(instr[i]);
+            if (name.type == Reg) {
+                if (@TypeOf(instr[i]) == comptime_int) {
+                    @as(*align(1) name.type, @ptrCast(&out[cursor])).* = @enumFromInt(instr[i]);
+                } else {
+                    @as(*align(1) name.type, @ptrCast(&out[cursor])).* = instr[i];
+                }
+            } else {
+                @as(*align(1) name.type, @ptrCast(&out[cursor])).* = @truncate(instr[i]);
+            }
             cursor += @sizeOf(name.type);
         }
     }
@@ -111,19 +144,25 @@ pub fn disasmOne(full_code: []const u8, cursor: usize, labelMap: *const std.Auto
     switch (op) {
         inline else => |v| {
             try out.appendSlice(@tagName(v));
-            const argTys = spec[@intFromEnum(v)].args;
+            const argTys = spec[@intFromEnum(v)][1];
             if (argTys.len > 0) for (@tagName(v).len..max_instr_len) |_| try out.append(' ');
-            comptime var i: usize = 1;
-            inline for (argTys) |argTy| {
-                if (i > 1) try out.appendSlice(", ") else try out.appendSlice(" ");
-                const arg: *align(1) const ArgType(argTy) = @ptrCast(@alignCast(&code[i]));
-                try disasmArg(argTy, arg.*, @intCast(cursor), labelMap, out);
-                i += @sizeOf(@TypeOf(arg.*));
-            }
-            try out.appendSlice("\n");
-            return i;
+            return try disadmArgs(argTys, out, cursor, code, labelMap);
         },
     }
+}
+
+// this is a separate function to cache the code per arg configuration
+fn disadmArgs(comptime argTys: []const u8, out: *std.ArrayList(u8), cursor: usize, code: []const u8, labelMap: *const std.AutoHashMap(u32, u32)) !usize {
+    comptime var i: usize = 1;
+    inline for (argTys) |argTy| {
+        const argt = comptime Arg.fromChar(argTy);
+        if (i > 1) try out.appendSlice(", ") else try out.appendSlice(" ");
+        const arg: *align(1) const ArgType(argt) = @ptrCast(@alignCast(&code[i]));
+        try disasmArg(argt, arg.*, @intCast(cursor), labelMap, out);
+        i += @sizeOf(@TypeOf(arg.*));
+    }
+    try out.appendSlice("\n");
+    return i;
 }
 
 fn disasmArg(
@@ -160,9 +199,9 @@ fn makeLabelMap(code: []const u8, gpa: std.mem.Allocator) !std.AutoHashMap(u32, 
         const cursor_snap = cursor;
         const op: Op = @enumFromInt(code[@intCast(cursor)]);
         cursor += 1;
-        const args = spec[@intFromEnum(op)].args;
+        const args = spec[@intFromEnum(op)][1];
         for (args) |argTy| {
-            switch (argTy) {
+            switch (Arg.fromChar(argTy)) {
                 inline .rel16, .rel32 => |ty| {
                     const arg: *align(1) const ArgType(ty) =
                         @ptrCast(@alignCast(&code[@intCast(cursor)]));
@@ -178,125 +217,125 @@ fn makeLabelMap(code: []const u8, gpa: std.mem.Allocator) !std.AutoHashMap(u32, 
     return map;
 }
 
-fn ni(name: [:0]const u8, args: anytype, desc: []const u8) InstrSpec {
-    return .{ .name = name, .args = &args, .desc = desc };
-}
-
-fn nsi(name: [:0]const u8, args: anytype, attach_imm: bool, desc: []const u8) [4]InstrSpec {
-    var ret: [4]InstrSpec = undefined;
-    const names = .{ "8", "16", "32", "64" };
-    for (&ret, names, 1..) |*r, nm, i|
-        r.* = ni(
-            name ++ nm,
-            if (attach_imm) args ++ .{@as(Arg, @enumFromInt(i))} else args,
-            desc,
-        );
-    return ret;
-}
-
-fn nfsi(name: [:0]const u8, args: anytype, attach_imm: bool, desc: []const u8) [2]InstrSpec {
-    return nsi(name, args, attach_imm, desc)[2..].*;
-}
-
-const breg = .{ .reg, .reg, .reg };
-const bregm = .{ .reg, .reg, .imm64 };
-
-fn bdesc(op: []const u8) []const u8 {
-    return std.fmt.comptimePrint("$0 = $1 {s} $2", .{op});
-}
-
-fn bdescm(op: []const u8) []const u8 {
-    return std.fmt.comptimePrint("$0 = $1 {s} #2", .{op});
-}
-
-fn nsiop(name: [:0]const u8, op: []const u8) [4]InstrSpec {
-    return nsi(name, breg, false, bdesc(op));
-}
-
-fn nsimop(name: [:0]const u8, op: []const u8) [4]InstrSpec {
-    return nsi(name, .{ .reg, .reg }, true, bdescm(op));
-}
-
-fn nfsiop(name: [:0]const u8, op: []const u8) [2]InstrSpec {
-    return nfsi(name, breg, false, bdesc(op ++ "(floating point)"));
-}
-
-const cmp_mapping = " < => -1 : = => 0 : > => 1";
-
-pub const spec = .{
-    ni("un", .{}, "unreachable code reached"),
-    ni("tx", .{}, "gracefully end execution"),
-    ni("nop", .{}, "no operation"),
-} ++
-    nsiop("add", "+") ++
-    nsiop("sub", "-") ++
-    nsiop("mul", "*") ++ .{
-    ni("and", breg, bdesc("&")),
-    ni("or", breg, bdesc("|")),
-    ni("xor", breg, bdesc("^")),
-} ++
-    nsiop("slu", "<<") ++
-    nsiop("sru", ">>") ++
-    nsiop("srs", ">> (signed)") ++ .{
-    ni("cmpu", breg, "unsigned coimparison" ++ cmp_mapping),
-    ni("cmps", breg, "signed coimparison" ++ cmp_mapping),
-} ++
-    nsi("diru", .{ .reg, .reg, .reg, .reg }, false, "$0 / $1 = $2, $3 % $1 = $4") ++
-    nsi("dirs", .{ .reg, .reg, .reg, .reg }, false, "(signed) $0 / $1 = $2, $3 % $1 = $4") ++ .{
-    ni("neg", .{ .reg, .reg }, "$0 = -$1"),
-    ni("not", .{ .reg, .reg }, "$0 = !$1"),
-    ni("sxt8", .{ .reg, .reg }, "$0 = (signextend) $1"),
-    ni("sxt16", .{ .reg, .reg }, "$0 = (signextend) $1"),
-    ni("sxt32", .{ .reg, .reg }, "$0 = (signextend) $1"),
-} ++
-    nsimop("addi", "+") ++
-    nsimop("muli", "-") ++ .{
-    ni("andi", bregm, bdesc("&")),
-    ni("ori", bregm, bdesc("|")),
-    ni("xori", bregm, bdesc("^")),
-} ++
-    nsi("slui", .{ .reg, .reg, .imm8 }, false, bdescm("<<")) ++
-    nsi("srui", .{ .reg, .reg, .imm8 }, false, bdescm(">>")) ++
-    nsi("srsi", .{ .reg, .reg, .imm8 }, false, bdescm(">> (signed)")) ++ .{
-    ni("cmpui", bregm, "unsigned coimparison" ++ cmp_mapping),
-    ni("cmpsi", bregm, "signed coimparison" ++ cmp_mapping),
-    ni("cp", .{ .reg, .reg }, "$0 = $1"),
-    ni("swa", .{ .reg, .reg }, "$0 = $1"),
-} ++
-    nsi("li", .{.reg}, true, "$0 = #1") ++ .{
-    ni("lra", .{ .reg, .reg, .imm32 }, "$0 = ip + $1 + #2"),
-    ni("ld", .{ .reg, .reg, .abs64, .imm16 }, "$0[#3] = ($1 + #2)[#3]"),
-    ni("st", .{ .reg, .reg, .abs64, .imm16 }, "($1 + #2)[#3] = $0[#3]"),
-    ni("ldr", .{ .reg, .reg, .rel32, .imm16 }, "$0[#3] = (pc + $1 + #2)[#3]"),
-    ni("str", .{ .reg, .reg, .rel32, .imm16 }, "(pc + $1 + #2)[#3] = $0[#3]"),
-    ni("bmc", .{ .reg, .reg, .imm16 }, "$0[#2] = $1[#2]"),
-    ni("brc", .{ .reg, .reg, .imm16 }, "$0 = $1[#2]"),
-    ni("jmp", .{.rel32}, "pc += #1"),
-    ni("jal", .{ .reg, .reg, .rel32 }, "pc += #1"),
-    ni("jala", .{ .reg, .reg, .abs64 }, "pc += #1"),
-    ni("jeq", .{ .reg, .reg, .rel16 }, "Branch on equal"),
-    ni("jne", .{ .reg, .reg, .rel16 }, "Branch on not equal"),
-    ni("jltu", .{ .reg, .reg, .rel16 }, "Branch on lesser-than (unsigned)"),
-    ni("jgtu", .{ .reg, .reg, .rel16 }, "Branch on greater-than (unsigned)"),
-    ni("jlts", .{ .reg, .reg, .rel16 }, "Branch on lesser-than (signed)"),
-    ni("jgts", .{ .reg, .reg, .rel16 }, "Branch on greater-than (signed)"),
-    ni("eca", .{}, "interrupt"),
-    ni("ebp", .{}, "breakpoint"),
-} ++
-    nfsiop("fadd", "+") ++
-    nfsiop("fsub", "-") ++
-    nfsiop("fmul", "*") ++
-    nfsiop("fdiv", "/") ++
-    nfsi("fma", .{ .reg, .reg, .reg, .reg }, false, "$0 = $1 * $2 + $3") ++
-    nfsi("finv", .{ .reg, .reg }, false, "$0 = 1.0 / $1") ++
-    nfsiop("fcmplt", "<") ++
-    nfsiop("fcmpgt", ">") ++
-    nfsi("itf", .{ .reg, .reg }, false, "$0 = (F<width>)$1") ++
-    nfsi("fti", .{ .reg, .reg }, false, "$0 = (I<width>)$1") ++ .{
-    ni("fc32t64", .{ .reg, .reg }, "$0 = (F64)$1"),
-    ni("fc64t32", .{ .reg, .reg }, "$0 = (F32)$1"),
-    ni("lra16", .{ .reg, .reg, .imm16 }, "$0 = ip + $1 + #2"),
-    ni("ldr16", .{ .reg, .reg, .rel16, .imm16 }, "$0[#3] = (pc + $1 + #2)[#3]"),
-    ni("str16", .{ .reg, .reg, .rel16, .imm16 }, "(pc + $1 + #2)[#3] = $0[#3]"),
-    ni("jmp16", .{.rel16}, "pc += #1"),
+pub const spec = [_]InstrSpec{
+    .{ "un", "", "Cause an unreachable code trap" },
+    .{ "tx", "", "Termiante execution" },
+    .{ "nop", "", "Do nothing" },
+    .{ "add8", "RRR", "Addition (8b)" },
+    .{ "add16", "RRR", "Addition (16b)" },
+    .{ "add32", "RRR", "Addition (32b)" },
+    .{ "add64", "RRR", "Addition (64b)" },
+    .{ "sub8", "RRR", "Subtraction (8b)" },
+    .{ "sub16", "RRR", "Subtraction (16b)" },
+    .{ "sub32", "RRR", "Subtraction (32b)" },
+    .{ "sub64", "RRR", "Subtraction (64b)" },
+    .{ "mul8", "RRR", "Multiplication (8b)" },
+    .{ "mul16", "RRR", "Multiplication (16b)" },
+    .{ "mul32", "RRR", "Multiplication (32b)" },
+    .{ "mul64", "RRR", "Multiplication (64b)" },
+    .{ "and", "RRR", "Bitand" },
+    .{ "or", "RRR", "Bitor" },
+    .{ "xor", "RRR", "Bitxor" },
+    .{ "slu8", "RRR", "Unsigned left bitshift (8b)" },
+    .{ "slu16", "RRR", "Unsigned left bitshift (16b)" },
+    .{ "slu32", "RRR", "Unsigned left bitshift (32b)" },
+    .{ "slu64", "RRR", "Unsigned left bitshift (64b)" },
+    .{ "sru8", "RRR", "Unsigned right bitshift (8b)" },
+    .{ "sru16", "RRR", "Unsigned right bitshift (16b)" },
+    .{ "sru32", "RRR", "Unsigned right bitshift (32b)" },
+    .{ "sru64", "RRR", "Unsigned right bitshift (64b)" },
+    .{ "srs8", "RRR", "Signed right bitshift (8b)" },
+    .{ "srs16", "RRR", "Signed right bitshift (16b)" },
+    .{ "srs32", "RRR", "Signed right bitshift (32b)" },
+    .{ "srs64", "RRR", "Signed right bitshift (64b)" },
+    .{ "cmpu", "RRR", "Unsigned comparsion" },
+    .{ "cmps", "RRR", "Signed comparsion" },
+    .{ "diru8", "RRRR", "Merged divide-remainder (unsigned 8b)" },
+    .{ "diru16", "RRRR", "Merged divide-remainder (unsigned 16b)" },
+    .{ "diru32", "RRRR", "Merged divide-remainder (unsigned 32b)" },
+    .{ "diru64", "RRRR", "Merged divide-remainder (unsigned 64b)" },
+    .{ "dirs8", "RRRR", "Merged divide-remainder (signed 8b)" },
+    .{ "dirs16", "RRRR", "Merged divide-remainder (signed 16b)" },
+    .{ "dirs32", "RRRR", "Merged divide-remainder (signed 32b)" },
+    .{ "dirs64", "RRRR", "Merged divide-remainder (signed 64b)" },
+    .{ "neg", "RR", "Bit negation" },
+    .{ "not", "RR", "Logical negation" },
+    .{ "sxt8", "RR", "Sign extend 8b to 64b" },
+    .{ "sxt16", "RR", "Sign extend 16b to 64b" },
+    .{ "sxt32", "RR", "Sign extend 32b to 64b" },
+    .{ "addi8", "RRB", "Addition with immediate (8b)" },
+    .{ "addi16", "RRH", "Addition with immediate (16b)" },
+    .{ "addi32", "RRW", "Addition with immediate (32b)" },
+    .{ "addi64", "RRD", "Addition with immediate (64b)" },
+    .{ "muli8", "RRB", "Multiplication with immediate (8b)" },
+    .{ "muli16", "RRH", "Multiplication with immediate (16b)" },
+    .{ "muli32", "RRW", "Multiplication with immediate (32b)" },
+    .{ "muli64", "RRD", "Multiplication with immediate (64b)" },
+    .{ "andi", "RRD", "Bitand with immediate" },
+    .{ "ori", "RRD", "Bitor with immediate" },
+    .{ "xori", "RRD", "Bitxor with immediate" },
+    .{ "slui8", "RRB", "Unsigned left bitshift with immedidate (8b)" },
+    .{ "slui16", "RRB", "Unsigned left bitshift with immedidate (16b)" },
+    .{ "slui32", "RRB", "Unsigned left bitshift with immedidate (32b)" },
+    .{ "slui64", "RRB", "Unsigned left bitshift with immedidate (64b)" },
+    .{ "srui8", "RRB", "Unsigned right bitshift with immediate (8b)" },
+    .{ "srui16", "RRB", "Unsigned right bitshift with immediate (16b)" },
+    .{ "srui32", "RRB", "Unsigned right bitshift with immediate (32b)" },
+    .{ "srui64", "RRB", "Unsigned right bitshift with immediate (64b)" },
+    .{ "srsi8", "RRB", "Signed right bitshift with immediate" },
+    .{ "srsi16", "RRB", "Signed right bitshift with immediate" },
+    .{ "srsi32", "RRB", "Signed right bitshift with immediate" },
+    .{ "srsi64", "RRB", "Signed right bitshift with immediate" },
+    .{ "cmpui", "RRD", "Unsigned compare with immediate" },
+    .{ "cmpsi", "RRD", "Signed compare with immediate" },
+    .{ "cp", "RR", "Copy register" },
+    .{ "swa", "RR", "Swap registers" },
+    .{ "li8", "RB", "Load immediate (8b)" },
+    .{ "li16", "RH", "Load immediate (16b)" },
+    .{ "li32", "RW", "Load immediate (32b)" },
+    .{ "li64", "RD", "Load immediate (64b)" },
+    .{ "lra", "RRO", "Load relative address" },
+    .{ "ld", "RRAH", "Load from absolute address" },
+    .{ "st", "RRAH", "Store to absolute address" },
+    .{ "ldr", "RROH", "Load from relative address" },
+    .{ "str", "RROH", "Store to relative address" },
+    .{ "bmc", "RRH", "Copy block of memory" },
+    .{ "brc", "RRB", "Copy register block" },
+    .{ "jmp", "O", "Relative jump" },
+    .{ "jal", "RRO", "Linking relative jump" },
+    .{ "jala", "RRA", "Linking absolute jump" },
+    .{ "jeq", "RRP", "Branch on equal" },
+    .{ "jne", "RRP", "Branch on nonequal" },
+    .{ "jltu", "RRP", "Branch on lesser-than (unsigned)" },
+    .{ "jgtu", "RRP", "Branch on greater-than (unsigned)" },
+    .{ "jlts", "RRP", "Branch on lesser-than (signed)" },
+    .{ "jgts", "RRP", "Branch on greater-than (signed)" },
+    .{ "eca", "", "Environment call trap" },
+    .{ "ebp", "", "Environment breakpoint" },
+    .{ "fadd32", "RRR", "Floating point addition (32b)" },
+    .{ "fadd64", "RRR", "Floating point addition (64b)" },
+    .{ "fsub32", "RRR", "Floating point subtraction (32b)" },
+    .{ "fsub64", "RRR", "Floating point subtraction (64b)" },
+    .{ "fmul32", "RRR", "Floating point multiply (32b)" },
+    .{ "fmul64", "RRR", "Floating point multiply (64b)" },
+    .{ "fdiv32", "RRR", "Floating point division (32b)" },
+    .{ "fdiv64", "RRR", "Floating point division (64b)" },
+    .{ "fma32", "RRRR", "Float fused multiply-add (32b)" },
+    .{ "fma64", "RRRR", "Float fused multiply-add (64b)" },
+    .{ "finv32", "RR", "Float reciprocal (32b)" },
+    .{ "finv64", "RR", "Float reciprocal (64b)" },
+    .{ "fcmplt32", "RRR", "Flaot compare less than (32b)" },
+    .{ "fcmplt64", "RRR", "Flaot compare less than (64b)" },
+    .{ "fcmpgt32", "RRR", "Flaot compare greater than (32b)" },
+    .{ "fcmpgt64", "RRR", "Flaot compare greater than (64b)" },
+    .{ "itf32", "RR", "Int to 32 bit float" },
+    .{ "itf64", "RR", "Int to 64 bit float" },
+    .{ "fti32", "RRB", "Float 32 to int" },
+    .{ "fti64", "RRB", "Float 64 to int" },
+    .{ "fc32t64", "RR", "Float 64 to Float 32" },
+    .{ "fc64t32", "RRB", "Float 32 to Float 64" },
+    .{ "lra16", "RRP", "Load relative immediate (16 bit)" },
+    .{ "ldr16", "RRPH", "Load from relative address (16 bit)" },
+    .{ "str16", "RRPH", "Store to relative address (16 bit)" },
+    .{ "jmp16", "P", "Relative jump (16 bit)" },
 };
