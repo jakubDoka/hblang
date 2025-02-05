@@ -24,7 +24,7 @@ pub const Ident = packed struct(Ident.Repr) {
     }
 };
 
-pub fn cmp(pos: u32, source: []const u8, repr: []const u8) bool {
+fn cmpLow(pos: u32, source: []const u8, repr: []const u8) bool {
     return std.mem.eql(u8, Lexer.peekStr(source, pos), repr);
 }
 
@@ -442,7 +442,7 @@ const Parser = struct {
     fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
         const repr = token.view(self.lexer.source);
 
-        for (self.active_syms.items) |*s| if (cmp(s.id.index, self.lexer.source, repr)) {
+        for (self.active_syms.items) |*s| if (cmpLow(s.id.index, self.lexer.source, repr)) {
             s.last = try self.store.alloc(self.gpa, .Ident, .{
                 .pos = Pos.init(token.pos),
                 .id = .{ .index = @intCast(s.sym_decl) },
@@ -768,6 +768,14 @@ pub fn init(path: []const u8, code: []const u8, gpa: std.mem.Allocator) !Ast {
         .source = code,
         .path = path,
     };
+}
+
+pub fn cmpIdent(self: *const Ast, id: Ident, to: []const u8) bool {
+    return cmpLow(id.index, self.source, to);
+}
+
+pub fn tokenSrc(self: *const Ast, pos: u32) []const u8 {
+    return Lexer.peekStr(self.source, pos);
 }
 
 pub fn posOf(self: *const Ast, origin: anytype) Pos {
