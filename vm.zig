@@ -325,7 +325,7 @@ fn displayArg(
     buf: *std.ArrayList(u8),
 ) !void {
     switch (arg) {
-        .reg => try buf.writer().print("${d}={d}", .{ value, self.regs.get(value) }),
+        .reg => try buf.writer().print("${d}={d}", .{ @intFromEnum(value), self.regs.get(value) }),
         else => try buf.writer().print("{any}", .{value}),
     }
 }

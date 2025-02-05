@@ -18,13 +18,13 @@ pub fn runTest(name: []const u8, code: []const u8) !void {
     var out = std.ArrayList(u8).init(gpa);
     defer out.deinit();
 
-    try testBuilder(name, code, out.writer(), .no_color);
-
     errdefer {
         const stderr = std.io.getStdErr();
         const colors = std.io.tty.detectConfig(stderr);
         testBuilder(name, code, stderr.writer(), colors) catch unreachable;
     }
+
+    try testBuilder(name, code, out.writer(), .no_color);
 
     try checkOrUpdatePrintTest(name, out.items);
 }
@@ -58,6 +58,36 @@ fn testBuilder(name: []const u8, code: []const u8, output: anytype, colors: std.
     bf.func.gcm();
     try output.writeAll(header("SCHEDULED SON"));
     bf.func.fmtScheduled(output, colors);
+
+    const allocs = @import("Regalloc.zig").ralloc(&bf.func);
+
+    try output.writeAll(header("REGISTER SELECTION"));
+    try output.print("{any}\n", .{allocs});
+
+    var out = std.ArrayList(u8).init(gpa);
+    defer out.deinit();
+
+    @import("HbvmGen.zig").gen(&bf.func, allocs, &out);
+
+    var disasm = std.ArrayList(u8).init(gpa);
+    defer disasm.deinit();
+    try isa.disasm(out.items, &disasm, false);
+
+    try output.writeAll(header("DISASM"));
+    try output.writeAll(disasm.items);
+
+    var log = std.ArrayList(u8).init(gpa);
+    defer log.deinit();
+
+    var vm = Vm{};
+    vm.fuel = 10000;
+    vm.ip = @intFromPtr(out.items.ptr);
+    vm.log_buffer = &log;
+    var ctx = Vm.UnsafeCtx{};
+    try std.testing.expectEqual(.tx, vm.run(&ctx));
+
+    try output.writeAll(header("EXECUTION"));
+    try output.writeAll(log.items);
 }
 
 pub fn testFmt(name: []const u8, path: []const u8, code: []const u8) !void {

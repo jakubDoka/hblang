@@ -31,10 +31,10 @@ pub const Node = extern struct {
         }
     };
 
-    fn fmt(self: *Node, scheduled: bool, writer: anytype, colors: std.io.tty.Config) void {
+    fn fmt(self: *Node, scheduled: ?u16, writer: anytype, colors: std.io.tty.Config) void {
         logNid(writer, self.id, colors);
-        if (scheduled) {
-            writer.print(" ={d} {s}", .{ self.schedule, @tagName(self.kind) }) catch unreachable;
+        if (scheduled) |v| {
+            writer.print(" ={d} {s}", .{ if (isCfg(self.kind)) v - self.schedule - 1 else self.schedule, @tagName(self.kind) }) catch unreachable;
         } else {
             writer.print(" = {s}", .{@tagName(self.kind)}) catch unreachable;
         }
@@ -118,10 +118,10 @@ pub const Extra = union(enum(u16)) {
 
 pub const NodeKind = std.meta.Tag(Extra);
 
-pub fn idBasicBlockStart(k: NodeKind) bool {
+pub fn isBasicBlockStart(k: NodeKind) bool {
     std.debug.assert(isCfg(k));
     return switch (k) {
-        .Entry => true,
+        .Start => true,
         else => false,
     };
 }
@@ -137,7 +137,7 @@ pub fn isCfg(k: NodeKind) bool {
     };
 }
 
-pub fn idBasicBlockEnd(k: NodeKind) bool {
+pub fn isBasicBlockEnd(k: NodeKind) bool {
     std.debug.assert(isCfg(k));
     return switch (k) {
         .Return => true,
@@ -188,7 +188,7 @@ fn SubclassFor(comptime Ext: type) type {
         }
 
         fn better(cfg: *@This(), best: *@This()) bool {
-            return cfg.idepth() > best.idepth() or idBasicBlockEnd(best.base.kind);
+            return cfg.idepth() > best.idepth() or isBasicBlockEnd(best.base.kind);
         }
     };
 }
@@ -258,7 +258,7 @@ pub fn addUse(self: *Func, def: *Node, use: *Node) void {
     def.output_len += 1;
 }
 
-inline fn begin_tmplc(self: *Func) std.mem.Allocator {
+pub inline fn beginTmpAlloc(self: *Func) std.mem.Allocator {
     std.debug.assert(self.tmp_arena.reset(.retain_capacity));
     return self.tmp_arena.allocator();
 }
@@ -266,13 +266,13 @@ inline fn begin_tmplc(self: *Func) std.mem.Allocator {
 pub const Frame = struct { *Node, []const ?*Node };
 
 pub fn gcm(self: *Func) void {
-    const tmplc = self.begin_tmplc();
+    const tmp = self.beginTmpAlloc();
 
-    var visited = std.DynamicBitSet.initEmpty(tmplc, self.next_id) catch unreachable;
-    var stack = std.ArrayList(Frame).init(tmplc);
+    var visited = std.DynamicBitSet.initEmpty(tmp, self.next_id) catch unreachable;
+    var stack = std.ArrayList(Frame).init(tmp);
 
     const cfg_rpo = cfg_rpo: {
-        var rpo = std.ArrayList(*CfgNode).init(tmplc);
+        var rpo = std.ArrayList(*CfgNode).init(tmp);
 
         traversePostorder(struct {
             rpo: *std.ArrayList(*CfgNode),
@@ -302,11 +302,11 @@ pub fn gcm(self: *Func) void {
     }
 
     sched_late: {
-        const late_scheds = tmplc.alloc(?*SubclassFor(Extra.Cfg), self.next_id) catch unreachable;
+        const late_scheds = tmp.alloc(?*SubclassFor(Extra.Cfg), self.next_id) catch unreachable;
         @memset(late_scheds, null);
-        const nodes = tmplc.alloc(?*Node, self.next_id) catch unreachable;
+        const nodes = tmp.alloc(?*Node, self.next_id) catch unreachable;
         @memset(nodes, null);
-        var work_list = std.ArrayList(*Node).init(tmplc);
+        var work_list = std.ArrayList(*Node).init(tmp);
 
         work_list.append(self.end) catch unreachable;
 
@@ -314,7 +314,7 @@ pub fn gcm(self: *Func) void {
             std.debug.assert(late_scheds[t.id] == null);
 
             if (t.subclass(Extra.Cfg)) |c| {
-                late_scheds[c.base.id] = if (idBasicBlockStart(c.base.kind)) c else c.base.cfg0();
+                late_scheds[c.base.id] = if (isBasicBlockStart(c.base.kind)) c else c.base.cfg0();
                 continue :task;
             }
 
@@ -344,7 +344,7 @@ pub fn gcm(self: *Func) void {
                     cursor = early.idom();
                 }
 
-                std.debug.assert(!idBasicBlockEnd(best.base.kind));
+                std.debug.assert(!isBasicBlockEnd(best.base.kind));
 
                 nodes[t.id] = t;
                 late_scheds[t.id] = best;
@@ -377,11 +377,12 @@ pub fn gcm(self: *Func) void {
         std.debug.assert(!@hasDecl(Extra, "Loop"));
         Func.traversePostorder(struct {
             func: *Func,
-            const dir = "inputs";
+            const dir = "outputs";
             fn each(ctx: @This(), node: *Func.Node) void {
                 node.schedule = ctx.func.block_count;
-                ctx.func.block_count += 1;
+                ctx.func.block_count += @intFromBool(isBasicBlockStart(node.kind));
 
+                std.mem.reverse(*Node, node.outputs());
                 for (node.outputs()) |o| if (!isCfg(o.kind)) {
                     o.schedule = ctx.func.instr_count;
                     ctx.func.instr_count += 1;
@@ -391,7 +392,7 @@ pub fn gcm(self: *Func) void {
             fn filter(_: @This(), node: *Func.Node) bool {
                 return Func.isCfg(node.kind);
             }
-        }{ .func = self }, self.end, &stack, &visited);
+        }{ .func = self }, self.root, &stack, &visited);
 
         break :compact_ids;
     }
@@ -451,11 +452,11 @@ fn logNid(wr: anytype, nid: usize, cc: std.io.tty.Config) void {
 }
 
 pub fn fmtScheduled(self: *Func, writer: anytype, colors: std.io.tty.Config) void {
-    const tmplc = self.begin_tmplc();
+    const tmp = self.beginTmpAlloc();
 
-    var postorder = std.ArrayList(*CfgNode).init(tmplc);
-    var visited = std.DynamicBitSet.initEmpty(tmplc, self.next_id) catch unreachable;
-    var stack = std.ArrayList(Frame).init(tmplc);
+    var postorder = std.ArrayList(*CfgNode).init(tmp);
+    var visited = std.DynamicBitSet.initEmpty(tmp, self.next_id) catch unreachable;
+    var stack = std.ArrayList(Frame).init(tmp);
 
     traversePostorder(struct {
         rpo: *std.ArrayList(*CfgNode),
@@ -469,19 +470,19 @@ pub fn fmtScheduled(self: *Func, writer: anytype, colors: std.io.tty.Config) voi
     }{ .rpo = &postorder }, self.end, &stack, &visited);
 
     for (postorder.items) |p| {
-        p.base.fmt(true, writer, colors);
+        p.base.fmt(self.block_count, writer, colors);
         for (p.base.outputs()) |o| if (!visited.isSet(o.id)) {
             writer.writeAll("  ") catch unreachable;
-            o.fmt(true, writer, colors);
+            o.fmt(self.block_count, writer, colors);
         };
     }
 }
 
 pub fn fmt(self: *Func, writer: anytype, colors: std.io.tty.Config) void {
-    const tmplc = self.begin_tmplc();
+    const tmp = self.beginTmpAlloc();
 
-    var seen = std.DynamicBitSet.initEmpty(tmplc, self.next_id) catch unreachable;
-    var postorder = std.ArrayList(*Node).init(tmplc);
+    var seen = std.DynamicBitSet.initEmpty(tmp, self.next_id) catch unreachable;
+    var postorder = std.ArrayList(*Node).init(tmp);
     postorder.append(self.end) catch unreachable;
 
     var i: usize = 0;
@@ -502,7 +503,7 @@ pub fn fmt(self: *Func, writer: anytype, colors: std.io.tty.Config) void {
 
     std.mem.reverse(*Node, postorder.items);
 
-    for (postorder.items) |p| p.fmt(false, writer, colors);
+    for (postorder.items) |p| p.fmt(null, writer, colors);
 }
 
 fn todo(comptime variant: anytype, comptime message: []const u8) void {

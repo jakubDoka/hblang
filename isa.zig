@@ -65,14 +65,14 @@ pub fn ArgsOf(comptime op: Op) type {
                 .name = &[_:0]u8{ 'a', 'r', 'g', '0' + i },
                 .type = ArgType(Arg.fromChar(arg)),
                 .default_value_ptr = null,
-                .alignment = 0,
+                .alignment = 1,
                 .is_comptime = false,
             };
             return @Type(.{ .@"struct" = .{
                 .fields = &fields,
                 .decls = &.{},
                 .is_tuple = false,
-                .layout = .@"packed",
+                .layout = .@"extern",
             } });
         }
     }.cache;
@@ -95,6 +95,7 @@ pub fn pack(comptime op: Op, args: anytype) [instrSize(op)]u8 {
             if (@sizeOf(@TypeOf(args[j])) > @sizeOf(field.type)) @truncate(args[j]) else args[j];
         i += @sizeOf(field.type);
     }
+    if (out.len != i) @compileError("wut");
     return out;
 }
 
@@ -178,7 +179,7 @@ fn disasmArg(
             const label = labelMap.get(pos).?;
             try out.writer().print(":{x}", .{label});
         },
-        .reg => try out.writer().print("${d}", .{value}),
+        .reg => try out.writer().print("${d}", .{@intFromEnum(value)}),
         else => try out.writer().print("{any}", .{value}),
     }
 }
@@ -197,6 +198,7 @@ fn makeLabelMap(code: []const u8, gpa: std.mem.Allocator) !std.AutoHashMap(u32, 
     var cursor: i32 = 0;
     while (code.len > cursor) {
         const cursor_snap = cursor;
+
         const op: Op = @enumFromInt(code[@intCast(cursor)]);
         cursor += 1;
         const args = spec[@intFromEnum(op)][1];
