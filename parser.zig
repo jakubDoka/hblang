@@ -357,7 +357,7 @@ const Parser = struct {
                 _ = try self.expectAdvance(.@")");
                 return expr;
             },
-            .int, .void => .{ .Buty = .{ .pos = Pos.init(token.pos), .bt = token.kind } },
+            .uint, .void => .{ .Buty = .{ .pos = Pos.init(token.pos), .bt = token.kind } },
             .@"&", .@"*", .@"^" => |op| .{ .UnOp = .{
                 .pos = Pos.init(token.pos),
                 .op = op,
@@ -801,6 +801,16 @@ fn posOfPayload(self: *const Ast, v: anytype) Pos {
 pub fn deinit(self: *Ast, gpa: std.mem.Allocator) void {
     self.exprs.deinit(gpa);
     gpa.free(self.decls);
+    self.* = undefined;
+}
+
+pub fn fmtExpr(self: *const Ast, buf: *std.ArrayList(u8), expr: Ast.Id) !void {
+    var ft = Fmt{
+        .buf = buf,
+        .indent = 0,
+        .ast = self,
+    };
+    try ft.fmtExpr(expr);
 }
 
 pub fn fmt(self: *const Ast, buf: *std.ArrayList(u8)) !void {

@@ -39,7 +39,7 @@ pub const Lexeme = enum(u8) {
     @".{",
     @".(",
     bool,
-    int,
+    uint,
     void,
     @"+=" = '+' + 128,
     @"-=" = '-' + 128,

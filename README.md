@@ -12,29 +12,29 @@ git submodule update --remote --rebase -- vendored-tests/lily/                  
 
 #### main fn
 ```hb
-main := fn(): int {
+main := fn(): uint {
     return 42
 }
 ```
 
 #### arithmetic
 ```hb
-main := fn(): int {
+main := fn(): uint {
     return 10 - 20 / 2 + 4 * (2 + 2) - 4 * 4 + 1 - 1
 }
 ```
 
 #### functions
 ```hb
-main := fn(): int {
+main := fn(): uint {
     return add_one(10) + add_two(20)
 }
 
-add_two := fn(x: int): int {
+add_two := fn(x: uint): uint {
     return x + 2
 }
 
-add_one := fn(x: int): int {
+add_one := fn(x: uint): uint {
     return x + 1
 }
 ```

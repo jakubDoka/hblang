@@ -10,14 +10,6 @@ pub const Block = struct {
     defs: Set,
     uses: Set,
 
-    pub fn isBasicBlock(k: Func.NodeKind) bool {
-        std.debug.assert(Func.isCfg(k));
-        return switch (k) {
-            .Entry => true,
-            else => false,
-        };
-    }
-
     pub fn setMasks(s: Set) []Set.MaskInt {
         return s.masks[0 .. (s.bit_length + @bitSizeOf(Set.MaskInt) - 1) / @bitSizeOf(Set.MaskInt)];
     }
@@ -78,15 +70,11 @@ pub fn ralloc(func: *Func) []u8 {
             //    ctx.blocks[node.schedule].end = node;
             //}
 
-            if (Block.isBasicBlock(node.kind)) {
+            if (Func.isBasicBlockStart(node.kind)) {
                 for (node.outputs()[0 .. node.outputs().len - 1], node.outputs()[1..]) |c, n| {
                     ctx.instrs[c.schedule].def = c;
                     ctx.instrs[c.schedule].end = n;
                 }
-
-                //ctx.blocks[node.schedule].start = node;
-            } else if (Func.isBasicBlockEnd(node.kind)) {
-                //ctx.blocks[node.schedule].end = node;
             }
         }
 
@@ -110,9 +98,9 @@ pub fn ralloc(func: *Func) []u8 {
     //}
     for (instrs, 0..) |*instr, i| {
         if (instr.def.outputs().len != 0) instr.defs.set(i);
-        for (instr.def.outputs()) |use| {
+        for (instr.def.outputs()) |use| if (!Func.isCfg(use.kind)) {
             instrs[use.schedule].uses.set(instr.def.schedule);
-        }
+        };
     }
 
     // compute liveins and liveouts

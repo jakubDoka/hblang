@@ -162,8 +162,9 @@ pub fn run(self: *Vm, ctx: anytype) !isa.Op {
         },
         inline .jal, .jala => |op| {
             const args = try self.readArgs(op, ctx);
-            self.ip = (if (op == .jal) self.ip -% isa.instrSize(op) else 0) +%
-                self.regs.get(args.arg1) +% toUnsigned(64, args.arg2);
+            self.writeReg(args.arg0, self.ip);
+            self.ip = (if (op == .jal) self.ip -% isa.instrSize(op) else 0);
+            self.ip +%= self.regs.get(args.arg1) +% toUnsigned(64, args.arg2);
         },
         inline .jltu, .jgtu, .jlts, .jgts, .jeq, .jne => |op| {
             const args = try self.readArgs(op, ctx);
@@ -347,7 +348,11 @@ fn displayArg(
             const value = try self.progRead(isa.ArgType(t), ctx);
             self.ip += @sizeOf(isa.ArgType(t));
             try ctx.setColor(arg.color());
-            try ctx.writer.print("{any}", .{value});
+            if (@typeInfo(@TypeOf(value)).int.signedness == .unsigned) {
+                try ctx.writer.print("{any}", .{@as(std.meta.Int(.signed, @bitSizeOf(@TypeOf(value))), @bitCast(value))});
+            } else {
+                try ctx.writer.print("{any}", .{value});
+            }
             try ctx.setColor(.reset);
         },
     }

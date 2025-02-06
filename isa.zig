@@ -1,6 +1,14 @@
 const std = @import("std");
 
-pub const Reg = enum(u8) { null, ret, _ };
+pub const Reg = enum(u8) {
+    null,
+    ret,
+    ret_addr = 31,
+    _,
+    pub fn arg(index: usize) Reg {
+        return @enumFromInt(2 + index);
+    }
+};
 
 pub const instr_count = spec.len;
 pub const max_instr_len = blk: {

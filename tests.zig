@@ -3,7 +3,9 @@ const isa = @import("isa.zig");
 const Ast = @import("parser.zig");
 const Vm = @import("vm.zig");
 const Builder = @import("Builder.zig");
-const Codegen = @import("Codegen.zig");
+const HbvmGen = @import("HbvmGen.zig");
+const Types = @import("Types.zig");
+const Regalloc = @import("Regalloc.zig");
 
 test {
     _ = @import("zig-out/tests.zig");
@@ -46,30 +48,51 @@ fn testBuilder(name: []const u8, code: []const u8, output: anytype, colors: std.
     defer ast.deinit(gpa);
 
     const main = ast.exprs.view(ast.items)[0];
-    const func_ast = ast.exprs.get(main).BinOp.rhs;
+    const fn_ast = ast.exprs.get(main).BinOp.rhs;
 
-    try header("UNSCHEDULED SON", output, colors);
-    var bf = Builder.init(gpa);
+    var types = Types.init(gpa, &.{ast});
+    defer types.deinit();
+
+    var bf = Builder.init(gpa, &types);
     defer bf.deinit();
 
-    bf.generate(ast, func_ast);
-    defer bf.func.deinit();
-    bf.func.fmt(output, colors);
+    _ = types.addFunc(.root, fn_ast);
 
-    //if (true) return;
-
-    try header("SCHEDULED SON", output, colors);
-    bf.func.gcm();
-    bf.func.fmtScheduled(output, colors);
-
-    try header("REGISTER SELECTION", output, colors);
-    const allocs = @import("Regalloc.zig").ralloc(&bf.func);
-    try output.print("{any}\n", .{allocs});
-
-    try header("CODEGEN", output, colors);
     var out = std.ArrayList(u8).init(gpa);
     defer out.deinit();
-    @import("HbvmGen.zig").gen(&bf.func, allocs, &out);
+
+    var gen = HbvmGen.init(&types, &out);
+    defer gen.deinit();
+
+    while (types.func_worklist.popOrNull()) |func| {
+        try header("SOURCE", output, colors);
+        var out_fmt = std.ArrayList(u8).init(gpa);
+        defer out_fmt.deinit();
+        try ast.fmtExpr(&out_fmt, types.get(func).ast);
+        try output.writeAll(out_fmt.items);
+
+        try header("UNSCHEDULED SON", output, colors);
+        bf.build(.root, func);
+        defer bf.func.reset();
+        bf.func.fmt(output, colors, HbvmGen.Mach);
+
+        try header("OPTIMIZED SON", output, colors);
+        bf.func.iterPeeps(HbvmGen.Mach);
+        bf.func.fmt(output, colors, HbvmGen.Mach);
+
+        try header("SCHEDULED SON", output, colors);
+        bf.func.gcm();
+        bf.func.fmtScheduled(output, colors, HbvmGen.Mach);
+
+        try header("REGISTER SELECTION", output, colors);
+        const allocs = Regalloc.ralloc(&bf.func);
+        try output.print("{any}\n", .{allocs});
+
+        gen.emitFunc(&bf.func, func, allocs);
+    }
+
+    try header("CODEGEN", output, colors);
+    gen.finalize();
     try isa.disasm(out.items, gpa, output, colors);
 
     var vm = Vm{};

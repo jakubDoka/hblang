@@ -134,6 +134,7 @@ pub fn EnumStore(comptime SelfId: type, comptime T: type) type {
 
         pub fn deinit(self: *Self, gpa: std.mem.Allocator) void {
             self.store.deinit(gpa);
+            self.* = undefined;
         }
     };
 }
