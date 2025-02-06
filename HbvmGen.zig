@@ -24,24 +24,48 @@ pub fn gen(func: *Func, allocs: []u8, out: *std.ArrayList(u8)) void {
         allocs: []u8,
 
         pub const dir = "inputs";
+
         pub fn each(ctx: @This(), node: *Func.Node) void {
             if (Regalloc.Block.isBasicBlock(node.kind)) {
                 ctx.block_offsets[node.schedule] = @intCast(ctx.relocs.items.len);
 
                 for (node.outputs()) |no| {
-                    const alloc: isa.Reg = @enumFromInt(ctx.allocs[no.schedule]);
+                    const alloc = ctx.reg(no);
+                    const inps = no.inputs();
                     switch (no.kind) {
                         .CInt => {
                             const extra = no.extra(.CInt);
-                            ctx.out.appendSlice(&isa.pack(.li64, .{ alloc, @as(u64, @intCast(extra.*)) })) catch unreachable;
+                            ctx.emit(.li64, .{ alloc, @as(u64, @intCast(extra.*)) });
                         },
                         .Return => {
-                            ctx.out.appendSlice(&isa.pack(.cp, .{ .ret, alloc })) catch unreachable;
+                            ctx.emit(.cp, .{ .ret, alloc });
+                        },
+                        .BinOp => {
+                            const extra = no.extra(.BinOp);
+                            switch (extra.*) {
+                                .@"+" => ctx.binop(.add64, no),
+                                .@"-" => ctx.binop(.sub64, no),
+                                .@"*" => ctx.binop(.mul64, no),
+                                .@"/" => ctx.emit(.dirs64, .{ alloc, .null, ctx.reg(inps[1]), ctx.reg(inps[2]) }),
+                                else => std.debug.panic("{any}", .{extra.*}),
+                            }
                         },
                         else => std.debug.panic("{any}", .{no.kind}),
                     }
                 }
             }
+        }
+
+        fn binop(ctx: @This(), comptime op: isa.Op, n: *Func.Node) void {
+            ctx.emit(op, .{ ctx.reg(n), ctx.reg(n.inputs()[1]), ctx.reg(n.inputs()[2]) });
+        }
+
+        fn reg(ctx: @This(), n: ?*Func.Node) isa.Reg {
+            return @enumFromInt(ctx.allocs[n.?.schedule]);
+        }
+
+        fn emit(ctx: @This(), comptime op: isa.Op, args: anytype) void {
+            ctx.out.appendSlice(&isa.pack(op, args)) catch unreachable;
         }
 
         pub fn filter(_: @This(), node: *Func.Node) bool {

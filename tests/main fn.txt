@@ -1,0 +1,24 @@
+======== UNSCHEDULED SON ========
+%0 = Start: idpth: 0
+%1 = Entry: idpth: 0, %0
+%2 = CInt: 42
+%3 = Return: idpth: 0, %1, %2
+
+======== SCHEDULED SON ========
+%0 =0 Start: idpth: 0
+%1 =0 Entry: idpth: 0, %0
+  %2 =0 CInt: 42, %1
+%3 =0 Return: idpth: 0, %1, %2
+
+======== REGISTER SELECTION ========
+{ 1 }
+
+======== CODEGEN ========
+    li64 $1, 42
+      cp $1, $1
+      tx
+
+======== EXECUTION ========
+    li64 $1=0, 42
+      cp $1=42, $1=42
+      tx

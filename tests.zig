@@ -18,11 +18,9 @@ pub fn runTest(name: []const u8, code: []const u8) !void {
     var out = std.ArrayList(u8).init(gpa);
     defer out.deinit();
 
-    errdefer {
-        const stderr = std.io.getStdErr();
-        const colors = std.io.tty.detectConfig(stderr);
-        testBuilder(name, code, stderr.writer(), colors) catch unreachable;
-    }
+    const stderr = std.io.getStdErr();
+    const colors = std.io.tty.detectConfig(stderr);
+    testBuilder(name, code, stderr.writer(), colors) catch unreachable;
 
     try testBuilder(name, code, out.writer(), .no_color);
 
@@ -33,9 +31,12 @@ pub fn runVendoredTest(path: []const u8) !void {
     _ = path; // autofix
 }
 
-inline fn header(comptime name: []const u8) []const u8 {
+inline fn header(comptime name: []const u8, writer: anytype, corors: std.io.tty.Config) !void {
     const side = "========";
-    return side ++ " " ++ name ++ " " ++ side ++ "\n";
+    const msg = "\n" ++ side ++ " " ++ name ++ " " ++ side ++ "\n";
+    try corors.setColor(writer, .dim);
+    try writer.writeAll(msg);
+    try corors.setColor(writer, .reset);
 }
 
 fn testBuilder(name: []const u8, code: []const u8, output: anytype, colors: std.io.tty.Config) !void {
@@ -47,47 +48,37 @@ fn testBuilder(name: []const u8, code: []const u8, output: anytype, colors: std.
     const main = ast.exprs.view(ast.items)[0];
     const func_ast = ast.exprs.get(main).BinOp.rhs;
 
+    try header("UNSCHEDULED SON", output, colors);
     var bf = Builder.init(gpa);
     defer bf.deinit();
 
     bf.generate(ast, func_ast);
     defer bf.func.deinit();
-
-    try output.writeAll(header("UNSCHEDULED SON"));
     bf.func.fmt(output, colors);
+
+    //if (true) return;
+
+    try header("SCHEDULED SON", output, colors);
     bf.func.gcm();
-    try output.writeAll(header("SCHEDULED SON"));
     bf.func.fmtScheduled(output, colors);
 
+    try header("REGISTER SELECTION", output, colors);
     const allocs = @import("Regalloc.zig").ralloc(&bf.func);
-
-    try output.writeAll(header("REGISTER SELECTION"));
     try output.print("{any}\n", .{allocs});
 
+    try header("CODEGEN", output, colors);
     var out = std.ArrayList(u8).init(gpa);
     defer out.deinit();
-
     @import("HbvmGen.zig").gen(&bf.func, allocs, &out);
-
-    var disasm = std.ArrayList(u8).init(gpa);
-    defer disasm.deinit();
-    try isa.disasm(out.items, &disasm, false);
-
-    try output.writeAll(header("DISASM"));
-    try output.writeAll(disasm.items);
-
-    var log = std.ArrayList(u8).init(gpa);
-    defer log.deinit();
+    try isa.disasm(out.items, gpa, output, colors);
 
     var vm = Vm{};
     vm.fuel = 10000;
     vm.ip = @intFromPtr(out.items.ptr);
-    vm.log_buffer = &log;
-    var ctx = Vm.UnsafeCtx{};
-    try std.testing.expectEqual(.tx, vm.run(&ctx));
 
-    try output.writeAll(header("EXECUTION"));
-    try output.writeAll(log.items);
+    try header("EXECUTION", output, colors);
+    var ctx = Vm.UnsafeCtx(@TypeOf(output)){ .writer = output, .color_cfg = colors };
+    try std.testing.expectEqual(.tx, vm.run(&ctx));
 }
 
 pub fn testFmt(name: []const u8, path: []const u8, code: []const u8) !void {
@@ -125,9 +116,9 @@ pub fn testFmt(name: []const u8, path: []const u8, code: []const u8) !void {
     try runDiff(gpa, dir, old, new);
 }
 
-pub fn runDiff(gpa: std.mem.Allocator, dir: std.testing.TmpDir, old: []const u8, new: []const u8) !void {
+pub fn runDiff(gpa: std.mem.Allocator, tmp: std.testing.TmpDir, old: []const u8, new: []const u8) !void {
     var child = std.process.Child.init(&.{ "diff", "--unified", "--color", old, new }, gpa);
-    child.cwd = try dir.dir.realpathAlloc(gpa, ".");
+    child.cwd = try tmp.dir.realpathAlloc(gpa, ".");
     defer gpa.free(child.cwd.?);
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = .Pipe;
@@ -141,9 +132,9 @@ pub fn runDiff(gpa: std.mem.Allocator, dir: std.testing.TmpDir, old: []const u8,
 
     const exit = (try child.wait()).Exited;
     if (exit != 0) {
-        const new_data = try std.fs.cwd().readFileAlloc(gpa, new, 1024 * 1024);
+        const new_data = try tmp.dir.readFileAlloc(gpa, new, 1024 * 1024);
         defer gpa.free(new_data);
-        const old_data = try std.fs.cwd().readFileAlloc(gpa, old, 1024 * 1024);
+        const old_data = try tmp.dir.readFileAlloc(gpa, old, 1024 * 1024);
         defer gpa.free(old_data);
         const new_line_count: isize = @intCast(std.mem.count(u8, new_data, "\n"));
         const old_line_count: isize = @intCast(std.mem.count(u8, old_data, "\n"));
@@ -224,7 +215,7 @@ fn checkOrUpdatePrintTest(name: []const u8, output: []const u8) !void {
             .sub_path = new,
             .data = std.mem.trim(u8, output, "\n"),
         });
-        tests.copyFile(new, tmp.dir, new, .{}) catch |err| switch (err) {
+        tests.copyFile(new, tmp.dir, old, .{}) catch |err| switch (err) {
             error.FileNotFound => return error.NewTestFound,
             else => return err,
         };
@@ -235,5 +226,5 @@ fn checkOrUpdatePrintTest(name: []const u8, output: []const u8) !void {
 fn hasEnv(name: []const u8) bool {
     const update = std.process.getEnvVarOwned(std.testing.allocator, name) catch "";
     defer std.testing.allocator.free(update);
-    return update.len > 1;
+    return update.len > 0;
 }

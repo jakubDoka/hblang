@@ -20,7 +20,7 @@ main := fn(): int {
 #### arithmetic
 ```hb
 main := fn(): int {
-    return 10 - 20 / 2 + 4 * (2 + 2) - 4 * 4 + 1
+    return 10 - 20 / 2 + 4 * (2 + 2) - 4 * 4 + 1 - 1
 }
 ```
 

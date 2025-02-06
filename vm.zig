@@ -1,7 +1,6 @@
 regs: std.EnumArray(isa.Reg, u64) = .{ .values = [_]u64{0} ++ [_]u64{undefined} ** 255 },
 ip: usize = undefined,
 fuel: usize = 0,
-log_buffer: if (debug) ?*std.ArrayList(u8) else void = if (debug) null,
 
 const std = @import("std");
 const isa = @import("isa.zig");
@@ -11,37 +10,46 @@ const debug = @import("builtin").mode == .Debug;
 
 const one: u64 = 1;
 
-pub const UnsafeCtx = struct {
-    const check_ops = debug;
-    const assume_no_writes_to_zero = true;
-    const assume_no_div_by_zero = true;
+pub fn UnsafeCtx(comptime Writer: type) type {
+    return struct {
+        color_cfg: if (debug) std.io.tty.Config else void = undefined,
+        writer: if (debug) Writer else void = undefined,
 
-    fn read(_: *UnsafeCtx, src: usize, dst: []u8) !void {
-        const ptr: [*]u8 = @ptrFromInt(src);
-        @memcpy(dst, ptr);
-    }
+        const check_ops = debug;
+        const assume_no_div_by_zero = true;
+        const Self = @This();
 
-    fn write(_: *UnsafeCtx, src: []u8, dst: usize) !void {
-        const ptr: [*]u8 = @ptrFromInt(dst);
-        @memcpy(ptr, src);
-    }
-
-    fn memmove(_: *UnsafeCtx, dst: usize, src: usize, len: usize) !void {
-        const srcp: [*]u8 = @ptrFromInt(src);
-        const dstp: [*]u8 = @ptrFromInt(dst);
-        if (dst + len <= src or src + len <= dst) {
-            @memcpy(dstp[0..len], srcp[0..len]);
-        } else if (dst <= src) {
-            std.mem.copyForwards(u8, dstp[0..len], srcp[0..len]);
-        } else {
-            std.mem.copyBackwards(u8, dstp[0..len], srcp[0..len]);
+        fn read(_: *Self, src: usize, dst: []u8) !void {
+            const ptr: [*]u8 = @ptrFromInt(src);
+            @memcpy(dst, ptr);
         }
-    }
 
-    fn progRead(_: *UnsafeCtx, comptime T: type, src: usize) !*align(1) T {
-        return @ptrFromInt(src);
-    }
-};
+        fn write(_: *Self, src: []u8, dst: usize) !void {
+            const ptr: [*]u8 = @ptrFromInt(dst);
+            @memcpy(ptr, src);
+        }
+
+        fn setColor(self: *Self, color: std.io.tty.Color) !void {
+            try self.color_cfg.setColor(self.writer, color);
+        }
+
+        fn memmove(_: *Self, dst: usize, src: usize, len: usize) !void {
+            const srcp: [*]u8 = @ptrFromInt(src);
+            const dstp: [*]u8 = @ptrFromInt(dst);
+            if (dst + len <= src or src + len <= dst) {
+                @memcpy(dstp[0..len], srcp[0..len]);
+            } else if (dst <= src) {
+                std.mem.copyForwards(u8, dstp[0..len], srcp[0..len]);
+            } else {
+                std.mem.copyBackwards(u8, dstp[0..len], srcp[0..len]);
+            }
+        }
+
+        fn progRead(_: *Self, comptime T: type, src: usize) !*align(1) T {
+            return @ptrFromInt(src);
+        }
+    };
+}
 
 pub fn run(self: *Vm, ctx: anytype) !isa.Op {
     @setEvalBranchQuota(2000);
@@ -292,41 +300,56 @@ fn readOp(self: *Vm, ctx: anytype) !isa.Op {
         return error.InvalidOp;
     }
 
-    if (debug) if (self.log_buffer) |buf| {
+    if (@TypeOf(ctx.writer) != void) {
         const prev_ip = self.ip;
-        switch (@as(isa.Op, @enumFromInt(byte))) {
-            inline else => |o| {
-                try buf.appendSlice(@tagName(o));
-                const argTys = isa.spec[@intFromEnum(o)][1];
-                try self.readOpArgs(argTys, buf, ctx);
-            },
-        }
-        try buf.appendSlice("\n");
+        const instr_name = @tagName(@as(isa.Op, @enumFromInt(byte)));
+        for (instr_name.len..isa.max_instr_len) |_| try ctx.writer.writeAll(" ");
+        try ctx.writer.writeAll(instr_name);
+        const argTys = isa.spec[byte][1];
+        try self.readOpArgs(argTys, ctx);
+        try ctx.writer.writeAll("\n");
         self.ip = prev_ip;
-    };
+    }
 
     return @enumFromInt(byte);
 }
 
-fn readOpArgs(self: *Vm, comptime argTys: []const u8, buf: *std.ArrayList(u8), ctx: anytype) !void {
-    inline for (argTys, 0..) |argTy, i| {
-        const argt = comptime isa.Arg.fromChar(argTy);
-        if (i > 0) try buf.appendSlice(", ") else try buf.appendSlice(" ");
-        const arg = try self.progRead(isa.ArgType(argt), ctx);
-        self.ip += @sizeOf(isa.ArgType(argt));
-        try self.displayArg(argt, arg, buf);
+fn readOpArgs(self: *Vm, argTys: []const u8, ctx: anytype) !void {
+    for (argTys, 0..) |argTy, i| {
+        const argt = isa.Arg.fromChar(argTy);
+        if (i > 0) try ctx.writer.writeAll(", ") else try ctx.writer.writeAll(" ");
+        try self.displayArg(argt, ctx);
     }
 }
 
 fn displayArg(
     self: *Vm,
-    comptime arg: isa.Arg,
-    value: isa.ArgType(arg),
-    buf: *std.ArrayList(u8),
+    arg: isa.Arg,
+    ctx: anytype,
 ) !void {
     switch (arg) {
-        .reg => try buf.writer().print("${d}={d}", .{ @intFromEnum(value), self.regs.get(value) }),
-        else => try buf.writer().print("{any}", .{value}),
+        inline .reg => |t| {
+            const value = try self.progRead(isa.ArgType(t), ctx);
+            self.ip += @sizeOf(isa.ArgType(t));
+
+            const col: std.io.tty.Color = @enumFromInt(3 + @intFromEnum(value) % 13);
+            try ctx.setColor(col);
+            try ctx.writer.print("${d}", .{@intFromEnum(value)});
+            try ctx.setColor(.reset);
+
+            try ctx.writer.writeAll("=");
+
+            try ctx.setColor((isa.Arg.imm8).color());
+            try ctx.writer.print("{d}", .{self.regs.get(value)});
+            try ctx.setColor(.reset);
+        },
+        inline else => |t| {
+            const value = try self.progRead(isa.ArgType(t), ctx);
+            self.ip += @sizeOf(isa.ArgType(t));
+            try ctx.setColor(arg.color());
+            try ctx.writer.print("{any}", .{value});
+            try ctx.setColor(.reset);
+        },
     }
 }
 
@@ -342,7 +365,7 @@ fn progRead(self: *Vm, comptime T: type, ctx: anytype) !T {
 pub fn testRun(vm: *Vm, res: anyerror!isa.Op, regRes: anytype, comptime code: anytype) !void {
     const fode = isa.packMany(code);
     vm.ip = @intFromPtr(fode.ptr);
-    var ctx = UnsafeCtx{};
+    var ctx = UnsafeCtx(void){};
     try std.testing.expectEqual(res, vm.run(&ctx));
     try std.testing.expectEqual(regRes, vm.regs.get(.ret));
 }

@@ -55,6 +55,9 @@ fn emit(self: *Codegen, expr: Ast.Id) *Func.Node {
             self.ctrl = self.func.addNode(.Return, &.{ self.ctrl, self.emit(e.value) }, .{});
             return self.ctrl;
         },
+        .BinOp => |e| {
+            return self.func.addNode(.BinOp, &.{ null, self.emit(e.lhs), self.emit(e.rhs) }, e.op);
+        },
         else => std.debug.panic("{any}\n", .{self.getAst(expr)}),
     }
 }

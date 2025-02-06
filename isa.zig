@@ -35,6 +35,21 @@ pub const Arg = enum {
         break :b &t;
     };
 
+    const colors: []const std.io.tty.Color = &.{
+        .red,
+        .green,
+        .green,
+        .green,
+        .green,
+        .red,
+        .red,
+        .red,
+    };
+
+    pub fn color(self: Arg) std.io.tty.Color {
+        return colors[@intFromEnum(self)];
+    }
+
     pub fn fromChar(char: u8) Arg {
         return char_to_self[char - min_char];
     }
@@ -127,16 +142,30 @@ pub fn packMany(comptime instrs: anytype) []const u8 {
     return &outa;
 }
 
-pub fn disasmOne(full_code: []const u8, cursor: usize, labelMap: *const std.AutoHashMap(u32, u32), out: *std.ArrayList(u8), write_offset: bool) !usize {
-    if (write_offset) try out.writer().print("{d:4} ", .{cursor});
+pub fn disasm(code: []const u8, gpa: std.mem.Allocator, writer: anytype, colors: std.io.tty.Config) !void {
+    var labelMap = try makeLabelMap(code, gpa);
+    defer labelMap.deinit();
+    var cursor: usize = 0;
+    while (code.len > cursor) {
+        cursor += try disasmOne(code, cursor, &labelMap, writer, colors);
+    }
+}
+
+pub fn disasmOne(
+    full_code: []const u8,
+    cursor: usize,
+    labelMap: *const std.AutoHashMap(u32, u32),
+    writer: anytype,
+    color: std.io.tty.Config,
+) !usize {
     const padding = if (labelMap.count() != 0)
         2 + @max(std.math.log2_int_ceil(usize, labelMap.count()) / 4, 1)
     else
         0;
     if (labelMap.get(@intCast(cursor))) |l| {
-        try out.writer().print("{x}: ", .{l});
+        try writer.print("{x}: ", .{l});
     } else {
-        for (0..padding) |_| try out.append(' ');
+        for (0..padding) |_| try writer.writeAll(" ");
     }
 
     const code = full_code[cursor..];
@@ -144,53 +173,65 @@ pub fn disasmOne(full_code: []const u8, cursor: usize, labelMap: *const std.Auto
     const op: Op = @enumFromInt(code[0]);
     switch (op) {
         inline else => |v| {
-            try out.appendSlice(@tagName(v));
             const argTys = spec[@intFromEnum(v)][1];
-            if (argTys.len > 0) for (@tagName(v).len..max_instr_len) |_| try out.append(' ');
-            return try disadmArgs(argTys, out, cursor, code, labelMap);
+            for (@tagName(v).len..max_instr_len) |_| try writer.writeAll(" ");
+            try writer.writeAll(@tagName(v));
+            return try disadmArgs(argTys, code, cursor, labelMap, writer, color);
         },
     }
 }
 
 // this is a separate function to cache the code per arg configuration
-fn disadmArgs(comptime argTys: []const u8, out: *std.ArrayList(u8), cursor: usize, code: []const u8, labelMap: *const std.AutoHashMap(u32, u32)) !usize {
-    comptime var i: usize = 1;
-    inline for (argTys) |argTy| {
-        const argt = comptime Arg.fromChar(argTy);
-        if (i > 1) try out.appendSlice(", ") else try out.appendSlice(" ");
-        const arg: *align(1) const ArgType(argt) = @ptrCast(@alignCast(&code[i]));
-        try disasmArg(argt, arg.*, @intCast(cursor), labelMap, out);
-        i += @sizeOf(@TypeOf(arg.*));
+fn disadmArgs(
+    argTys: []const u8,
+    code: []const u8,
+    cursor: usize,
+    labelMap: *const std.AutoHashMap(u32, u32),
+    writer: anytype,
+    color: std.io.tty.Config,
+) !usize {
+    var i: usize = 1;
+    for (argTys) |argTy| {
+        const argt = Arg.fromChar(argTy);
+        if (i > 1) try writer.writeAll(", ") else try writer.writeAll(" ");
+        i += try disasmArg(argt, @intCast(cursor), @ptrCast(&code[i]), labelMap, writer, color);
     }
-    try out.appendSlice("\n");
+    try writer.writeAll("\n");
     return i;
 }
 
 fn disasmArg(
-    comptime arg: Arg,
-    value: ArgType(arg),
+    arg: Arg,
     cursor: i32,
+    ptr: [*]const u8,
     labelMap: *const std.AutoHashMap(u32, u32),
-    out: *std.ArrayList(u8),
-) !void {
+    writer: anytype,
+    colors: std.io.tty.Config,
+) !usize {
+    try colors.setColor(writer, arg.color());
+    var size: usize = 0;
     switch (arg) {
-        .rel16, .rel32 => {
-            const pos: u32 = @intCast(cursor + value);
-            const label = labelMap.get(pos).?;
-            try out.writer().print(":{x}", .{label});
-        },
-        .reg => try out.writer().print("${d}", .{@intFromEnum(value)}),
-        else => try out.writer().print("{any}", .{value}),
-    }
-}
+        inline else => |t| {
+            const value: *align(1) const ArgType(t) = @ptrCast(@alignCast(ptr));
+            size = @sizeOf(@TypeOf(value.*));
 
-pub fn disasm(code: []const u8, out: *std.ArrayList(u8), write_offset: bool) !void {
-    var labelMap = try makeLabelMap(code, out.allocator);
-    defer labelMap.deinit();
-    var cursor: usize = 0;
-    while (code.len > cursor) {
-        cursor += try disasmOne(code, cursor, &labelMap, out, write_offset);
+            switch (t) {
+                .rel16, .rel32 => {
+                    const pos: u32 = @intCast(cursor + value.*);
+                    const label = labelMap.get(pos).?;
+                    try writer.print(":{x}", .{label});
+                },
+                .reg => {
+                    const col: std.io.tty.Color = @enumFromInt(3 + @intFromEnum(value.*) % 13);
+                    try colors.setColor(writer, col);
+                    try writer.print("${d}", .{@intFromEnum(value.*)});
+                },
+                else => try writer.print("{any}", .{value.*}),
+            }
+        },
     }
+    try colors.setColor(writer, .reset);
+    return size;
 }
 
 fn makeLabelMap(code: []const u8, gpa: std.mem.Allocator) !std.AutoHashMap(u32, u32) {

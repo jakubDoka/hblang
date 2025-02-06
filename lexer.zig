@@ -90,6 +90,10 @@ pub const Lexeme = enum(u8) {
             else => return null,
         }
     }
+
+    pub fn format(self: *const Lexeme, comptime _: anytype, _: anytype, writer: anytype) !void {
+        try writer.writeAll(@tagName(self.*));
+    }
 };
 
 pub const Token = struct {

@@ -110,9 +110,15 @@ pub const Extra = union(enum(u16)) {
     Entry: Cfg,
     Return: Cfg,
     CInt: i64,
+    BinOp: lexer.Lexeme,
+    _,
 
     pub const Cfg = extern struct {
         idepth: u16 = 0,
+
+        pub fn format(self: *const Cfg, comptime _: anytype, _: anytype, writer: anytype) !void {
+            try writer.print("idpth: {}", .{self.idepth});
+        }
     };
 };
 
@@ -374,15 +380,15 @@ pub fn gcm(self: *Func) void {
         self.instr_count = 0;
 
         todo(.Loop, "loops need to be handled differently due to cycles");
-        std.debug.assert(!@hasDecl(Extra, "Loop"));
-        Func.traversePostorder(struct {
+        traversePostorder(struct {
             func: *Func,
             const dir = "outputs";
             fn each(ctx: @This(), node: *Func.Node) void {
                 node.schedule = ctx.func.block_count;
                 ctx.func.block_count += @intFromBool(isBasicBlockStart(node.kind));
 
-                std.mem.reverse(*Node, node.outputs());
+                if (node.outputs().len == 0) return;
+                std.mem.rotate(*Node, node.outputs(), 1);
                 for (node.outputs()) |o| if (!isCfg(o.kind)) {
                     o.schedule = ctx.func.instr_count;
                     ctx.func.instr_count += 1;
@@ -403,7 +409,7 @@ fn shedEarly(self: *Func, cfg: *CfgNode, early: *CfgNode, stack: *std.ArrayList(
         traversePostorder(struct {
             early: *CfgNode,
             func: *Func,
-            const dir = "outputs";
+            const dir = "inputs";
             fn each(ctx: @This(), node: *Node) void {
                 if (isPinned(node.kind)) return;
 
