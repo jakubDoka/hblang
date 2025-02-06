@@ -47,7 +47,9 @@ fn testBuilder(name: []const u8, code: []const u8, output: anytype, colors: std.
     var ast = try Ast.init(name, code, gpa);
     defer ast.deinit(gpa);
 
-    const main = ast.exprs.view(ast.items)[0];
+    const main = for (ast.decls) |d| {
+        if (std.mem.eql(u8, ast.tokenSrc(d.name.index), "main")) break d.expr;
+    } else unreachable;
     const fn_ast = ast.exprs.get(main).BinOp.rhs;
 
     var types = Types.init(gpa, &.{ast});

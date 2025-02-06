@@ -42,7 +42,7 @@ add_one := fn(x: uint): uint {
 #### comments
 ```hb
 // commant is an item
-main := fn(): int {
+main := fn(): uint {
     // comment is a statement
     foo(/* comment is an exprression /* if you are crazy */ */)
     return 0

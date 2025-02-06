@@ -108,12 +108,17 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: Types.Func, allocs: []u8) void 
     var stack = std.ArrayList(Func.Frame).init(tmp);
     const postorder = func.collectPostorder(tmp, &stack, &visited);
 
-    for (fdata.args, 0..) |arg, i| {
-        std.debug.assert(arg == .uint);
-        const argn = for (postorder[0].base.outputs()) |o| {
-            if (o.kind == .Arg and o.extra(.Arg).* == i) break o;
-        } else unreachable;
-        self.emit(.cp, .{ self.reg(argn), isa.Reg.arg(i) });
+    {
+        var i: usize = 0;
+        for (fdata.args) |arg| {
+            if (arg == .void) continue;
+            std.debug.assert(arg == .uint);
+            const argn = for (postorder[0].base.outputs()) |o| {
+                if (o.kind == .Arg and o.extra(.Arg).* == i) break o;
+            } else unreachable;
+            self.emit(.cp, .{ self.reg(argn), isa.Reg.arg(i) });
+            i += 1;
+        }
     }
 
     for (postorder, 0..) |bb, i| {
@@ -155,7 +160,9 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
             },
             .Arg => {},
             .Return => {
-                self.emit(.cp, .{ .ret, self.reg(inps[1]) });
+                if (inps[1] != null) {
+                    self.emit(.cp, .{ .ret, self.reg(inps[1]) });
+                }
             },
             .BinOp => {
                 const extra = no.extra(.BinOp);
