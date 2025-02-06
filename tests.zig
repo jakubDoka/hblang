@@ -97,10 +97,17 @@ fn testBuilder(name: []const u8, code: []const u8, output: anytype, colors: std.
 
     var vm = Vm{};
     vm.fuel = 10000;
-    vm.ip = @intFromPtr(out.items.ptr);
+    vm.ip = 0;
 
     try header("EXECUTION", output, colors);
-    var ctx = Vm.UnsafeCtx(@TypeOf(output)){ .writer = output, .color_cfg = colors };
+    var stack: [1024 * 10]u8 = undefined;
+    vm.regs.set(.stack_addr, stack.len);
+    var ctx = Vm.SafeContext(@TypeOf(output)){
+        .writer = output,
+        .color_cfg = colors,
+        .code = out.items,
+        .memory = &stack,
+    };
     try std.testing.expectEqual(.tx, vm.run(&ctx));
 }
 

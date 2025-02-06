@@ -33,6 +33,7 @@ pub const FuncData = struct {
     args: []Id,
     ret: Id,
     ast: Ast.Id,
+    tail: bool = true,
 };
 
 pub fn init(gpa: std.mem.Allocator, source: []const Ast) Types {

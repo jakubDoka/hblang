@@ -101,6 +101,9 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: Types.Func, allocs: []u8) void 
     self.relocs = .init(tmp);
     self.allocs = allocs;
 
+    const reg_shift: u8 = if (fdata.tail) 12 else 31;
+    for (self.allocs) |*r| r.* += reg_shift;
+
     var visited = std.DynamicBitSet.initEmpty(tmp, func.next_id) catch unreachable;
     var stack = std.ArrayList(Func.Frame).init(tmp);
     const postorder = func.collectPostorder(tmp, &stack, &visited);

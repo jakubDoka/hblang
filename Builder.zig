@@ -1,10 +1,11 @@
+types: *Types,
+func: Func,
+scope: std.ArrayListUnmanaged(*Func.Node) = .{},
 file: Types.File = undefined,
 ast: Ast = undefined,
 arena: std.mem.Allocator = undefined,
-types: *Types,
 ctrl: *Func.Node = undefined,
-func: Func,
-scope: std.ArrayListUnmanaged(*Func.Node) = .{},
+fdata: *Types.FuncData = undefined,
 
 const std = @import("std");
 const Ast = @import("parser.zig");
@@ -29,10 +30,9 @@ pub fn build(self: *Codegen, file: Types.File, func: Types.Func) void {
     self.ast = self.types.getFile(file).*;
     self.arena = self.func.beginTmpAlloc();
     self.scope.items.len = 0;
+    self.fdata = self.types.get(func);
 
-    const fdata: *Types.FuncData = self.types.get(func);
-
-    for (fdata.args, 0..) |ty, i| {
+    for (self.fdata.args, 0..) |ty, i| {
         std.debug.assert(ty == .uint);
         const arg = self.func.addNode(.Arg, &.{self.func.root}, i);
         self.scope.append(self.arena, arg) catch unreachable;
@@ -40,7 +40,7 @@ pub fn build(self: *Codegen, file: Types.File, func: Types.Func) void {
 
     self.ctrl = self.func.addNode(.Entry, &.{self.func.root}, .{});
 
-    _ = self.emit(self.ast.exprs.get(fdata.ast).Fn.body);
+    _ = self.emit(self.ast.exprs.get(self.fdata.ast).Fn.body);
 
     std.debug.assert(self.ctrl.kind == .Return);
     self.func.end = self.ctrl;
@@ -82,6 +82,8 @@ fn emit(self: *Codegen, expr: Ast.Id) *Func.Node {
             return self.func.addNode(.BinOp, &.{ null, self.emit(e.lhs), self.emit(e.rhs) }, e.op);
         },
         .Call => |e| {
+            self.fdata.tail = false;
+
             const args = self.arena.alloc(?*Func.Node, 1 + e.args.len()) catch unreachable;
             args[0] = self.ctrl;
             for (self.getAstSlice(e.args), args[1..]) |a, *s| s.* = self.emit(a);
