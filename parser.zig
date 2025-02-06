@@ -6,7 +6,7 @@ decls: []const Decl,
 
 const std = @import("std");
 const root = @import("utils.zig");
-const Lexer = @import("lexer.zig");
+const Lexer = @import("Lexer.zig");
 const Ast = @This();
 const Store = root.EnumStore(Id, Expr);
 pub const Id = root.EnumId(Kind);

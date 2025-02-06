@@ -7,7 +7,7 @@ root: *Node = undefined,
 end: *Node = undefined,
 
 const std = @import("std");
-const lexer = @import("lexer.zig");
+const Lexer = @import("Lexer.zig");
 const Types = @import("Types.zig");
 const Func = @This();
 
@@ -181,7 +181,7 @@ pub const Extra = union(enum(u16)) {
     // [?Cfg]
     CInt: i64,
     // [?Cfg, lhs, rhs]
-    BinOp: lexer.Lexeme,
+    BinOp: Lexer.Lexeme,
     // [Cfg, ..args]
     Call: extern struct {
         base: Cfg = .{},
