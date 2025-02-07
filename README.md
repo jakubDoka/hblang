@@ -55,11 +55,11 @@ foo := fn(comment: void): void return /* comment evaluates to void */
 
 #### if statements
 ```hb
-main := fn(): int {
-    return fib(10)
+main := fn(): uint {
+    return fib(3)
 }
 
-fib := fn(x: int): int {
+fib := fn(x: uint): uint {
     if x <= 2 {
         return 1
     } else {
@@ -68,9 +68,25 @@ fib := fn(x: int): int {
 }
 ```
 
+#### if statements 2
+```hb
+main := fn(): uint {
+    return fib(3)
+}
+
+fib := fn(x: uint): uint {
+    if x <= 2 {
+        x = 1
+    } else {
+        x = fib(x - 1) + fib(x - 2)
+    }
+    return x
+}
+```
+
 #### variables
 ```hb
-main := fn(): int {
+main := fn(): uint {
     ඞ := 1
     b := 2
     ඞ += 1
@@ -80,11 +96,11 @@ main := fn(): int {
 
 #### loops
 ```hb
-main := fn(): int {
+main := fn(): uint {
     return fib(10)
 }
 
-fib := fn(n: int): int {
+fib := fn(n: uint): uint {
     a := 0
     b := 1
     loop {

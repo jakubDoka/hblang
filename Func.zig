@@ -44,11 +44,7 @@ pub const Node = extern struct {
             inline else => |t| @tagName(t),
         };
 
-        if (scheduled) |_| {
-            writer.print(" ={d} {s}", .{ self.schedule, name }) catch unreachable;
-        } else {
-            writer.print(" = {s}", .{name}) catch unreachable;
-        }
+        writer.print(" = {s}", .{name}) catch unreachable;
 
         var add_colon_space = false;
 
@@ -79,7 +75,9 @@ pub const Node = extern struct {
             },
         }
 
-        for (self.inputs()[@min(@intFromBool(!isCfg(self.kind) or !isBasicBlockStart(self.kind)), self.inputs().len)..]) |oo| if (oo) |o| {
+        for (self.inputs()[@min(@intFromBool(scheduled != null and
+            (!isCfg(self.kind) or !isBasicBlockStart(self.kind))), self.inputs().len)..]) |oo| if (oo) |o|
+        {
             if (!add_colon_space) {
                 writer.writeAll(": ") catch unreachable;
                 add_colon_space = true;
@@ -162,8 +160,12 @@ pub const Node = extern struct {
     }
 
     pub fn useBlock(self: *Node, use: *Node, scheds: []const ?*CfgNode) *CfgNode {
-        _ = self; // autofix
-        todo(.Phi, "phis need to be forwarded to a block depending which use this is");
+        if (use.kind == .Phi) {
+            std.debug.assert(use.inputs()[0].?.kind == .Region);
+            for (use.inputs()[0].?.inputs(), use.inputs()[1..]) |b, u| {
+                if (u.? == self) return b.?.subclass(Extra.Cfg).?;
+            }
+        }
         return scheds[use.id].?;
     }
 };
@@ -191,8 +193,22 @@ pub const Extra = union(enum(u16)) {
             try writer.print("{}, {}", .{ self.id, self.base });
         }
     },
+    // [Call]
     CallEnd: Cfg,
+    // [CallEnd]
     Ret: void,
+    // [Cfg, cond],
+    If: Cfg,
+    // [If]
+    Then: Cfg,
+    // [If]
+    Else: Cfg,
+    // [lCfg, rCfg]
+    Region: Cfg,
+    // [Cfg]
+    Jmp: Cfg,
+    // [Region, lhs, rhs]
+    Phi,
 
     pub const Cfg = extern struct {
         idepth: u16 = 0,
@@ -232,20 +248,19 @@ fn splitKind(kind: NodeKind, comptime Mach: type) union(enum) { Builtin: Builtin
 }
 
 pub fn isPinned(k: NodeKind) bool {
-    return isCfg(k) or k == .Ret;
+    return isCfg(k) or k == .Ret or k == .Phi;
 }
 
 pub fn isCfg(k: NodeKind) bool {
-    return switch (k) {
-        .Return, .Entry, .Start, .Call, .CallEnd => true,
-        else => false,
+    return switch (toBuiltinKind(k) orelse return false) {
+        inline else => |t| return comptime Node.isSubbclass(ExtFor(t), Extra.Cfg),
     };
 }
 
 pub fn isBasicBlockStart(k: NodeKind) bool {
     std.debug.assert(isCfg(k));
     return switch (k) {
-        .Entry, .CallEnd => true,
+        .Entry, .CallEnd, .Then, .Else, .Region => true,
         else => false,
     };
 }
@@ -253,7 +268,7 @@ pub fn isBasicBlockStart(k: NodeKind) bool {
 pub fn isBasicBlockEnd(k: NodeKind) bool {
     std.debug.assert(isCfg(k));
     return switch (k) {
-        .Return, .Call => true,
+        .Return, .Call, .If, .Jmp => true,
         else => false,
     };
 }
@@ -383,6 +398,7 @@ pub fn iterPeeps(self: *Func, comptime Mach: type) void {
     var worklist = std.ArrayList(*Node).initCapacity(tmp, self.next_id) catch unreachable;
     var in_worklist = std.DynamicBitSet.initEmpty(tmp, self.next_id) catch unreachable;
     worklist.appendAssumeCapacity(self.end);
+    in_worklist.set(self.end.id);
     var i: usize = 0;
     while (i < worklist.items.len) : (i += 1) {
         for (worklist.items[i].inputs()) |oi| if (oi) |o| {
@@ -390,6 +406,12 @@ pub fn iterPeeps(self: *Func, comptime Mach: type) void {
             in_worklist.set(o.id);
             worklist.appendAssumeCapacity(o);
         };
+
+        for (worklist.items[i].outputs()) |o| {
+            if (in_worklist.isSet(o.id)) continue;
+            in_worklist.set(o.id);
+            worklist.appendAssumeCapacity(o);
+        }
     }
 
     while (worklist.popOrNull()) |t| {
@@ -468,9 +490,20 @@ pub fn gcm(self: *Func) void {
     sched_early: {
         var iter = std.mem.reverseIterator(cfg_rpo);
         while (iter.next()) |cfg| {
-            self.shedEarly(cfg, cfg_rpo[1], &stack, &visited);
+            for (cfg.base.inputs()) |oinp| if (oinp) |inp| {
+                self.shedEarly(inp, cfg_rpo[1], &stack, &visited);
+            };
 
-            todo(.Phi, "phis need to be traversed");
+            todo(.Loop, "loops are also regions");
+            if (cfg.base.kind == .Region) {
+                for (cfg.base.outputs()) |o| {
+                    if (o.kind == .Phi) {
+                        for (o.inputs()[1..]) |pi| {
+                            self.shedEarly(pi.?, cfg_rpo[1], &stack, &visited);
+                        }
+                    }
+                }
+            }
         }
 
         break :sched_early;
@@ -493,9 +526,9 @@ pub fn gcm(self: *Func) void {
 
             if (t.subclass(Extra.Cfg)) |c| {
                 late_scheds[c.base.id] = if (isBasicBlockStart(c.base.kind)) c else c.base.cfg0();
+            } else if (t.kind == .Phi) {
+                late_scheds[t.id] = t.cfg0().?;
             } else if (isPinned(t.kind)) {} else {
-                todo(.Phi, "pin phys to the region");
-
                 todo(.Proj, "pin projs to the parent");
 
                 for (t.outputs()) |o| {
@@ -553,79 +586,68 @@ pub fn gcm(self: *Func) void {
         self.root.schedule = 0;
 
         todo(.Loop, "loops need to be handled differently due to cycles");
-        traversePostorder(struct {
-            func: *Func,
-            const dir = "outputs";
-            fn each(ctx: @This(), node: *Func.Node) void {
-                if (!isBasicBlockStart(node.kind)) return;
+        const postorder = self.collectPostorder(tmp, &stack, &visited);
+        for (postorder) |bb| {
+            const node = &bb.base;
+            node.schedule = self.block_count;
+            self.block_count += 1;
 
-                node.schedule = ctx.func.block_count;
-                ctx.func.block_count += 1;
-
+            for (node.outputs()) |o| if (!isCfg(o.kind)) {
+                o.schedule = 0;
+            } else {
+                o.schedule = node.output_len;
+            };
+            var changed = true;
+            while (changed) {
+                changed = false;
                 for (node.outputs()) |o| if (!isCfg(o.kind)) {
-                    o.schedule = 0;
-                } else {
-                    o.schedule = node.output_len;
-                };
-                var changed = true;
-                while (changed) {
-                    changed = false;
-                    for (node.outputs()) |o| if (!isCfg(o.kind)) {
-                        var max_depth: u16 = 0;
-                        for (o.inputs()[1..]) |oi| if (oi) |i| if (i.inputs()[0] == o.inputs()[0]) {
-                            max_depth = @max(max_depth, i.schedule + 1);
-                        };
-                        changed = changed or max_depth != o.schedule;
-                        o.schedule = max_depth;
+                    var max_depth: u16 = 0;
+                    for (o.inputs()[1..]) |oi| if (oi) |i| if (i.inputs()[0] == o.inputs()[0]) {
+                        max_depth = @max(max_depth, i.schedule + 1);
                     };
-                }
-
-                std.sort.pdq(*Node, node.outputs(), {}, struct {
-                    fn lt(_: void, a: *Node, b: *Node) bool {
-                        return a.schedule < b.schedule;
-                    }
-                }.lt);
-
-                var iter = std.mem.reverseIterator(node.outputs());
-                while (iter.next()) |o| if (!isCfg(o.kind)) {
-                    o.schedule = ctx.func.instr_count;
-                    ctx.func.instr_count += 1;
+                    changed = changed or max_depth != o.schedule;
+                    o.schedule = max_depth;
                 };
             }
 
-            fn filter(_: @This(), node: *Func.Node) bool {
-                return Func.isCfg(node.kind);
+            std.sort.pdq(*Node, node.outputs(), {}, struct {
+                fn lt(_: void, a: *Node, b: *Node) bool {
+                    return a.schedule < b.schedule;
+                }
+            }.lt);
+
+            for (node.outputs()) |o| {
+                o.schedule = self.instr_count;
+                self.instr_count += 1;
             }
-        }{ .func = self }, self.root, &stack, &visited);
+        }
 
         break :compact_ids;
     }
 }
 
-fn shedEarly(self: *Func, cfg: *CfgNode, early: *CfgNode, stack: *std.ArrayList(Frame), visited: *std.DynamicBitSet) void {
-    for (cfg.base.inputs()) |oinp| if (oinp) |inp| {
-        traversePostorder(struct {
-            early: *CfgNode,
-            func: *Func,
-            const dir = "inputs";
-            fn each(ctx: @This(), node: *Node) void {
-                if (isPinned(node.kind)) return;
+fn shedEarly(self: *Func, inp: *Node, early: *CfgNode, stack: *std.ArrayList(Frame), visited: *std.DynamicBitSet) void {
+    traversePostorder(struct {
+        early: *CfgNode,
+        func: *Func,
+        const dir = "inputs";
+        fn each(ctx: @This(), node: *Node) void {
+            if (isPinned(node.kind)) return;
 
-                var best = ctx.early;
-                if (node.inputs()[0]) |n| if (n.subclass(Extra.Cfg)) |cn| {
-                    best = cn;
-                };
+            var best = ctx.early;
+            if (node.inputs()[0]) |n| if (n.subclass(Extra.Cfg)) |cn| {
+                best = cn;
+            };
 
-                for (node.inputs()) |oin| if (oin) |in| {
-                    if (in.cfg0().?.idepth() > best.idepth()) {
-                        best = in.cfg0().?;
-                    }
-                };
+            for (node.inputs()) |oin| if (oin) |in| {
+                if (in.cfg0().?.idepth() > best.idepth()) {
+                    best = in.cfg0().?;
+                }
+            };
 
-                ctx.func.setInput(node, 0, &best.base);
-            }
-        }{ .early = early, .func = self }, inp, stack, visited);
-    };
+            ctx.func.setInput(node, 0, &best.base);
+        }
+    }{ .early = early, .func = self }, inp, stack, visited);
 }
 
 pub fn traversePostorder(ctx: anytype, inp: *Node, stack: *std.ArrayList(Frame), visited: *std.DynamicBitSet) void {

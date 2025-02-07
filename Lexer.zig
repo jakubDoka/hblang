@@ -70,10 +70,8 @@ pub const Lexeme = enum(u8) {
         }
     }
 
-    pub fn assOp(comptime self: Lexeme) Lexeme {
-        if (comptime std.mem.endsWith(u8, @tagName(self), "="))
-            return @enumFromInt(@as(u8, @intFromEnum(self) - 128));
-        @compileError("wat");
+    pub fn assOp(self: Lexeme) Lexeme {
+        return @enumFromInt(@as(u8, @intFromEnum(self) - 128));
     }
 
     pub fn cantStartExpression(self: Lexeme) bool {

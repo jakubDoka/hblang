@@ -151,7 +151,17 @@ pub fn packMany(comptime instrs: anytype) []const u8 {
     return &outa;
 }
 
-pub fn disasm(code: []const u8, gpa: std.mem.Allocator, writer: anytype, colors: std.io.tty.Config) !void {
+const SymbolSpec = struct {
+    name: []const u8,
+    offset: u32,
+};
+
+pub fn disasm(
+    code: []const u8,
+    gpa: std.mem.Allocator,
+    writer: anytype,
+    colors: std.io.tty.Config,
+) !void {
     var labelMap = try makeLabelMap(code, gpa);
     defer labelMap.deinit();
     var cursor: usize = 0;
@@ -180,14 +190,11 @@ pub fn disasmOne(
     const code = full_code[cursor..];
 
     const op: Op = @enumFromInt(code[0]);
-    switch (op) {
-        inline else => |v| {
-            const argTys = spec[@intFromEnum(v)][1];
-            for (@tagName(v).len..max_instr_len) |_| try writer.writeAll(" ");
-            try writer.writeAll(@tagName(v));
-            return try disadmArgs(argTys, code, cursor, labelMap, writer, color);
-        },
-    }
+    const name = @tagName(op);
+    const argTys = spec[code[0]][1];
+    for (name.len..max_instr_len) |_| try writer.writeAll(" ");
+    try writer.writeAll(name);
+    return try disadmArgs(argTys, code, cursor, labelMap, writer, color);
 }
 
 // this is a separate function to cache the code per arg configuration

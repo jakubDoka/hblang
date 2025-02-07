@@ -1,0 +1,49 @@
+======== SOURCE ========
+fn(): uint {
+    ඞ := 1
+    b := 2
+    ඞ += 1
+    return ඞ - b
+}
+======== UNSCHEDULED SON ========
+%2 = CInt: 1
+%4 = CInt: 1
+%0 = Start: idpth: 0
+%5 = BinOp: +, %2, %4
+%3 = CInt: 2
+%1 = Entry: idpth: 0, %0
+%6 = BinOp: -, %5, %3
+%7 = Return: idpth: 0, %1, %6
+
+======== OPTIMIZED SON ========
+%2 = CInt: 1
+%0 = Start: idpth: 0
+%8 = ImmBinOp: addi64(1), %2
+%1 = Entry: idpth: 0, %0
+%9 = ImmBinOp: addi64(-2), %8
+%7 = Return: idpth: 0, %1, %9
+
+======== SCHEDULED SON ========
+%0 = Start: idpth: 0
+%1 = Entry: idpth: 1, %0
+  %2 = CInt: 1
+  %8 = ImmBinOp: addi64(1), %2
+  %9 = ImmBinOp: addi64(-2), %8
+  %7 = Return: idpth: 0, %9
+
+======== REGISTER SELECTION ========
+{ 1, 1, 1, 1 }
+
+======== CODEGEN ========
+    li64 $13, 1
+  addi64 $13, $13, 1
+  addi64 $13, $13, 18446744073709551614
+      cp $1, $13
+      tx
+
+======== EXECUTION ========
+    li64 $13=0, 1
+  addi64 $13=1, $13=1, 1
+  addi64 $13=2, $13=2, -2
+      cp $1=0, $13=0
+      tx

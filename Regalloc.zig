@@ -18,7 +18,7 @@ pub const Block = struct {
 pub const Instr = struct {
     prev: *Func.Node = undefined,
     def: *Func.Node = undefined,
-    end: *Func.Node = undefined,
+    succ: []const *Func.Node = undefined,
     liveins: Set,
     liveouts: Set,
     defs: Set,
@@ -50,56 +50,27 @@ pub fn ralloc(func: *Func) []u8 {
         .uses = Set.initEmpty(tmp, func.instr_count) catch unreachable,
     };
 
-    //for (blocks) |*b| b.* = .{
-    //    .liveins = Set.initEmpty(tmp, func.instr_count) catch unreachable,
-    //    .liveouts = Set.initEmpty(tmp, func.instr_count) catch unreachable,
-    //    .defs = Set.initEmpty(tmp, func.instr_count) catch unreachable,
-    //    .uses = Set.initEmpty(tmp, func.instr_count) catch unreachable,
-    //};
-
     var visited = std.DynamicBitSet.initEmpty(tmp, func.next_id) catch unreachable;
     var stack = std.ArrayList(Func.Frame).init(tmp);
-    Func.traversePostorder(struct {
-        //blocks: []Block,
-        instrs: []Instr,
-        pub const dir = "outputs";
-        pub fn each(ctx: @This(), node: *Func.Node) void {
-            //if (Block.isBasicBlock(node.kind)) {
-            //    ctx.blocks[node.schedule].start = node;
-            //} else if (Func.isBasicBlockEnd(node.kind)) {
-            //    ctx.blocks[node.schedule].end = node;
-            //}
-
-            if (Func.isBasicBlockStart(node.kind)) {
-                for (node.outputs()[0 .. node.outputs().len - 1], node.outputs()[1..]) |c, n| {
-                    ctx.instrs[c.schedule].def = c;
-                    ctx.instrs[c.schedule].end = n;
-                }
+    const postorder = func.collectPostorder(tmp, &stack, &visited);
+    for (postorder) |bb| {
+        const node = &bb.base;
+        for (node.outputs(), 0..) |c, i| {
+            instrs[c.schedule].def = c;
+            if (i + 1 < node.outputs().len) {
+                instrs[c.schedule].succ = node.outputs()[i + 1 ..][0..1];
+            } else {
+                instrs[c.schedule].succ = c.outputs();
             }
         }
+    }
 
-        pub fn filter(_: @This(), node: *Func.Node) bool {
-            return Func.isCfg(node.kind);
-        }
-    }{
-        //.blocks = blocks,
-        .instrs = instrs,
-    }, func.root, &stack, &visited);
-
-    // compute def and uses
-    //for (blocks) |*b| {
-    //    for (b.start.outputs()) |def| if (!Func.isCfg(def.kind)) {
-    //        if (def.outputs().len != 0) b.defs.set(def.schedule);
-    //        for (def.outputs()) |use| {
-    //            if (use.inputs()[0] != def.inputs()[0])
-    //                blocks[use.inputs()[0].?.schedule].uses.set(def.schedule);
-    //        }
-    //    };
-    //}
     for (instrs, 0..) |*instr, i| {
-        if (instr.def.outputs().len != 0) instr.defs.set(i);
-        for (instr.def.outputs()) |use| if (!Func.isCfg(use.kind)) {
-            instrs[use.schedule].uses.set(instr.def.schedule);
+        if (instr.def.outputs().len != 0 and !Func.isCfg(instr.def.kind)) {
+            instr.defs.set(i);
+        }
+        for (instr.def.inputs()[1..]) |use| if (use) |uuse| {
+            instrs[instr.def.schedule].uses.set(uuse.schedule);
         };
     }
 
@@ -107,32 +78,6 @@ pub fn ralloc(func: *Func) []u8 {
     var changed: Set.MaskInt = 1;
     while (changed != 0) {
         changed = 0;
-
-        // the blocks are already in the reverse order
-        //for (blocks) |*b| {
-        //    for (
-        //        Block.setMasks(b.liveins),
-        //        Block.setMasks(b.liveouts),
-        //        Block.setMasks(b.uses),
-        //        Block.setMasks(b.defs),
-        //    ) |*lin, *lot, us, df| {
-        //        const previ = lin.*;
-        //        lin.* = us | (lot.* & ~df);
-
-        //        changed |= (previ ^ lin.*);
-        //    }
-
-        //    for (b.end.outputs()) |bo| if (Func.isCfg(bo.kind)) {
-        //        for (
-        //            Block.setMasks(b.liveouts),
-        //            Block.setMasks(blocks[bo.schedule].liveins),
-        //        ) |*lot, sin| {
-        //            const prevo = lot.*;
-        //            lot.* |= sin;
-        //            changed |= (prevo ^ lot.*);
-        //        }
-        //    };
-        //}
 
         for (instrs) |*i| {
             for (
@@ -147,21 +92,10 @@ pub fn ralloc(func: *Func) []u8 {
                 changed |= (previ ^ lin.*);
             }
 
-            if (Func.isCfg(i.end.kind)) {
-                for (i.end.outputs()) |bo| if (Func.isCfg(bo.kind)) {
-                    for (
-                        Block.setMasks(i.liveouts),
-                        Block.setMasks(instrs[bo.outputs()[0].schedule].liveins),
-                    ) |*lot, sin| {
-                        const prevo = lot.*;
-                        lot.* |= sin;
-                        changed |= (prevo ^ lot.*);
-                    }
-                };
-            } else {
+            for (i.succ) |bo| {
                 for (
                     Block.setMasks(i.liveouts),
-                    Block.setMasks(instrs[i.end.schedule].liveins),
+                    Block.setMasks(instrs[if (Func.isCfg(bo.kind) and Func.isBasicBlockStart(bo.kind)) bo.outputs()[0].schedule else bo.schedule].liveins),
                 ) |*lot, sin| {
                     const prevo = lot.*;
                     lot.* |= sin;
@@ -171,20 +105,17 @@ pub fn ralloc(func: *Func) []u8 {
         }
     }
 
+    for (postorder) |bb| {
+        for (bb.base.outputs()) |o| {
+            for (o.inputs()[1..]) |i| if (i) |ii| {
+                std.debug.assert(instrs[o.schedule].liveins.isSet(ii.schedule));
+            };
+        }
+    }
+
     // build interference => very wastefull
     const interference_table = tmp.alloc(Set, func.instr_count) catch unreachable;
     for (interference_table) |*r| r.* = Set.initEmpty(tmp, func.instr_count) catch unreachable;
-
-    //for (blocks) |b| {
-    //    var iter = b.liveins.iterator(.{});
-    //    while (iter.next()) |i| {
-    //        interference_table[i].setUnion(b.liveins);
-    //    }
-    //    iter = b.liveouts.iterator(.{});
-    //    while (iter.next()) |i| {
-    //        interference_table[i].setUnion(b.liveouts);
-    //    }
-    //}
 
     for (instrs) |ins| {
         var iter = ins.liveins.iterator(.{});
@@ -198,13 +129,14 @@ pub fn ralloc(func: *Func) []u8 {
     }
 
     const tight_interference_table = tmp.alloc([]u16, func.instr_count) catch unreachable;
-    for (interference_table, tight_interference_table) |r, *tr| {
-        tr.* = tmp.alloc(u16, r.count()) catch unreachable;
+    for (interference_table, tight_interference_table, 0..) |r, *tr, j| {
+        tr.* = tmp.alloc(u16, r.count() -| 1) catch unreachable;
         var i: usize = 0;
         var iter = r.iterator(.{});
-        while (iter.next()) |e| : (i += 1) {
+        while (iter.next()) |e| if (j != e) {
             tr.*[i] = @intCast(e);
-        }
+            i += 1;
+        };
     }
 
     // color => inefficient
@@ -213,9 +145,11 @@ pub fn ralloc(func: *Func) []u8 {
     for (tight_interference_table, colors) |slc, *c| {
         // we set the bits of occupied colors
         var selection_set: usize = 0;
-        for (slc) |e| if (colors[e] != 0) {
-            selection_set |= @as(usize, 1) << @intCast(colors[e] - 1);
-        };
+        for (slc) |e| {
+            if (colors[e] != 0) {
+                selection_set |= @as(usize, 1) << @intCast(colors[e] - 1);
+            }
+        }
         // select the closest free bit as a new color
         c.* = @ctz(~selection_set) + 1;
     }

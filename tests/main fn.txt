@@ -6,22 +6,22 @@ fn(): uint {
 %0 = Start: idpth: 0
 %1 = Entry: idpth: 0, %0
 %2 = CInt: 42
-%3 = Return: idpth: 0, %2
+%3 = Return: idpth: 0, %1, %2
 
 ======== OPTIMIZED SON ========
 %0 = Start: idpth: 0
 %1 = Entry: idpth: 0, %0
 %2 = CInt: 42
-%3 = Return: idpth: 0, %2
+%3 = Return: idpth: 0, %1, %2
 
 ======== SCHEDULED SON ========
-%0 =0 Start: idpth: 0
-%1 =0 Entry: idpth: 0, %0
-  %2 =0 CInt: 42
-  %3 =2 Return: idpth: 0, %2
+%0 = Start: idpth: 0
+%1 = Entry: idpth: 0, %0
+  %2 = CInt: 42
+  %3 = Return: idpth: 0, %2
 
 ======== REGISTER SELECTION ========
-{ 1 }
+{ 1, 1 }
 
 ======== CODEGEN ========
     li64 $13, 42

@@ -98,7 +98,7 @@ fn testBuilder(name: []const u8, code: []const u8, output: anytype, colors: std.
     try isa.disasm(out.items, gpa, output, colors);
 
     var vm = Vm{};
-    vm.fuel = 10000;
+    vm.fuel = 1000;
     vm.ip = 0;
 
     try header("EXECUTION", output, colors);
