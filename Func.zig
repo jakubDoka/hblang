@@ -11,10 +11,44 @@ const Lexer = @import("Lexer.zig");
 const Types = @import("Types.zig");
 const Func = @This();
 
+pub const WorkList = struct {
+    list: std.ArrayList(*Node),
+    in_list: std.DynamicBitSet,
+
+    pub fn init(gpa: std.mem.Allocator, cap: usize) !WorkList {
+        return .{
+            .list = try .initCapacity(gpa, cap * 2),
+            .in_list = try .initEmpty(gpa, cap * 2),
+        };
+    }
+
+    pub fn add(self: *WorkList, node: *Node) void {
+        std.debug.assert(node.id != std.math.maxInt(u16));
+        if (self.in_list.isSet(node.id)) return;
+        self.in_list.set(node.id);
+        self.list.appendAssumeCapacity(node);
+    }
+
+    pub fn pop(self: *WorkList) ?*Node {
+        var node = self.list.popOrNull() orelse return null;
+        while (node.id == std.math.maxInt(u16)) {
+            node = self.list.popOrNull() orelse return null;
+        }
+        self.in_list.unset(node.id);
+        return node;
+    }
+};
+
+pub const DataType = enum(u16) {
+    void,
+    dead,
+};
+
 pub const Node = extern struct {
     kind: NodeKind,
     id: u16,
     schedule: u16 = undefined,
+    data_type: DataType = .void,
 
     input_ordered_len: u16,
     input_len: u16,
@@ -33,7 +67,7 @@ pub const Node = extern struct {
     };
 
     fn fmt(
-        self: *Node,
+        self: *const Node,
         scheduled: ?u16,
         writer: anytype,
         colors: std.io.tty.Config,
@@ -51,7 +85,7 @@ pub const Node = extern struct {
         switch (splitKind(self.kind, Mach)) {
             .Builtin => |b| switch (b) {
                 inline else => |t| {
-                    const ext = self.extra(t);
+                    const ext = self.extraConst(t);
                     if (@TypeOf(ext.*) != void) {
                         if (!add_colon_space) {
                             writer.writeAll(": ") catch unreachable;
@@ -63,7 +97,7 @@ pub const Node = extern struct {
             },
             .Specific => |s| switch (s) {
                 inline else => |t| {
-                    const ext = self.machExtra(Mach, t);
+                    const ext = self.machExtraConst(Mach, t);
                     if (@TypeOf(ext.*) != void) {
                         if (!add_colon_space) {
                             writer.writeAll(": ") catch unreachable;
@@ -75,8 +109,8 @@ pub const Node = extern struct {
             },
         }
 
-        for (self.inputs()[@min(@intFromBool(scheduled != null and
-            (!isCfg(self.kind) or !isBasicBlockStart(self.kind))), self.inputs().len)..]) |oo| if (oo) |o|
+        for (self.input_base[0..self.input_len][@min(@intFromBool(scheduled != null and
+            (!isCfg(self.kind) or !isBasicBlockStart(self.kind))), self.input_base[0..self.input_len].len)..]) |oo| if (oo) |o|
         {
             if (!add_colon_space) {
                 writer.writeAll(": ") catch unreachable;
@@ -87,7 +121,23 @@ pub const Node = extern struct {
             logNid(writer, o.id, colors);
         };
 
-        writer.writeAll("\n") catch unreachable;
+        if (scheduled == null) {
+            writer.writeAll(" [") catch unreachable;
+            for (self.output_base[0..self.output_len]) |o| {
+                writer.writeAll(", ") catch unreachable;
+                logNid(writer, o.id, colors);
+            }
+            writer.writeAll("]") catch unreachable;
+        }
+    }
+
+    pub fn format(self: *const Node, comptime _: anytype, _: anytype, writer: anytype) !void {
+        const colors = .escape_codes;
+        self.fmt(null, writer, colors, @import("HbvmGen.zig").Mach);
+    }
+
+    pub fn isLazyPhi(self: *Node, on_loop: *Node) bool {
+        return self.kind == .Phi and self.inputs()[0] == on_loop and self.inputs()[2] == null;
     }
 
     pub fn inputs(self: *Node) []?*Node {
@@ -100,6 +150,7 @@ pub const Node = extern struct {
             i.removeUse(self);
         };
         self.* = undefined;
+        self.id = std.math.maxInt(u16);
     }
 
     pub fn removeUse(self: *Node, use: *Node) void {
@@ -116,6 +167,18 @@ pub const Node = extern struct {
     pub fn machExtra(self: *Node, comptime Mach: type, comptime kind: std.meta.Tag(Mach)) *std.meta.TagPayload(Mach, kind) {
         std.debug.assert(splitKind(self.kind, Mach).Specific == kind);
         const ptr: *MachLayoutFor(Mach, kind) = @ptrCast(self);
+        return &ptr.extra;
+    }
+
+    pub fn machExtraConst(self: *const Node, comptime Mach: type, comptime kind: std.meta.Tag(Mach)) *const std.meta.TagPayload(Mach, kind) {
+        std.debug.assert(splitKind(self.kind, Mach).Specific == kind);
+        const ptr: *const MachLayoutFor(Mach, kind) = @ptrCast(self);
+        return &ptr.extra;
+    }
+
+    pub fn extraConst(self: *const Node, comptime kind: BuiltinNodeKind) *const ExtFor(kind) {
+        std.debug.assert(self.kind == toKind(kind));
+        const ptr: *const LayoutFor(kind) = @ptrCast(self);
         return &ptr.extra;
     }
 
@@ -161,9 +224,11 @@ pub const Node = extern struct {
 
     pub fn useBlock(self: *Node, use: *Node, scheds: []const ?*CfgNode) *CfgNode {
         if (use.kind == .Phi) {
-            std.debug.assert(use.inputs()[0].?.kind == .Region);
+            std.debug.assert(use.inputs()[0].?.kind == .Region or use.inputs()[0].?.kind == .Loop);
             for (use.inputs()[0].?.inputs(), use.inputs()[1..]) |b, u| {
-                if (u.? == self) return b.?.subclass(Extra.Cfg).?;
+                if (u.? == self) {
+                    return b.?.subclass(Extra.Cfg).?;
+                }
             }
         }
         return scheds[use.id].?;
@@ -198,13 +263,22 @@ pub const Extra = union(enum(u16)) {
     // [CallEnd]
     Ret: void,
     // [Cfg, cond],
-    If: Cfg,
+    If: extern struct {
+        base: Cfg = .{},
+        swapped: bool = false,
+
+        pub fn format(self: *const @This(), comptime _: anytype, _: anytype, writer: anytype) !void {
+            try writer.print("swapped: {}, {}", .{ self.swapped, self.base });
+        }
+    },
     // [If]
     Then: Cfg,
     // [If]
     Else: Cfg,
     // [lCfg, rCfg]
     Region: Cfg,
+    // [entryCfg, backCfg]
+    Loop: Cfg,
     // [Cfg]
     Jmp: Cfg,
     // [Region, lhs, rhs]
@@ -260,7 +334,7 @@ pub fn isCfg(k: NodeKind) bool {
 pub fn isBasicBlockStart(k: NodeKind) bool {
     std.debug.assert(isCfg(k));
     return switch (k) {
-        .Entry, .CallEnd, .Then, .Else, .Region => true,
+        .Entry, .CallEnd, .Then, .Else, .Region, .Loop => true,
         else => false,
     };
 }
@@ -302,6 +376,7 @@ fn SubclassFor(comptime Ext: type) type {
             if (extra.idepth != 0) return extra.idepth;
             extra.idepth = switch (cfg.base.kind) {
                 .Start => return 0,
+                .Region => cfg.idom().idepth(),
                 else => cfg.base.cfg0().?.idepth() + 1,
             };
             return extra.idepth;
@@ -310,6 +385,8 @@ fn SubclassFor(comptime Ext: type) type {
         fn findLce(left: *@This(), right: *@This()) *@This() {
             var lc, var rc = .{ left, right };
             while (lc != rc) {
+                if (!isCfg(lc.base.kind)) std.debug.panic("{}", .{lc.base});
+                if (!isCfg(rc.base.kind)) std.debug.panic("{}", .{rc.base});
                 if (lc.idepth() >= rc.idepth()) lc = lc.base.cfg0().?;
                 if (rc.idepth() >= lc.idepth()) rc = rc.base.cfg0().?;
             }
@@ -318,6 +395,7 @@ fn SubclassFor(comptime Ext: type) type {
 
         fn idom(cfg: *@This()) *@This() {
             return switch (cfg.base.kind) {
+                .Region => findLce(cfg.base.inputs()[0].?.subclass(Extra.Cfg).?, cfg.base.inputs()[1].?.subclass(Extra.Cfg).?),
                 else => cfg.base.cfg0().?,
             };
         }
@@ -372,10 +450,6 @@ pub fn addNodeLow(self: *Func, comptime kind: NodeKind, inputs: []const ?*Node, 
     const node = self.arena.allocator().create(Layout) catch unreachable;
     const owned_inputs = self.arena.allocator().dupe(?*Node, inputs) catch unreachable;
 
-    for (owned_inputs) |on| if (on) |def| {
-        self.addUse(def, &node.base);
-    };
-
     node.* = .{
         .base = .{
             .input_base = owned_inputs.ptr,
@@ -387,6 +461,11 @@ pub fn addNodeLow(self: *Func, comptime kind: NodeKind, inputs: []const ?*Node, 
         },
         .extra = extra,
     };
+
+    for (owned_inputs) |on| if (on) |def| {
+        self.addUse(def, &node.base);
+    };
+
     self.next_id += 1;
 
     return &node.base;
@@ -395,54 +474,123 @@ pub fn addNodeLow(self: *Func, comptime kind: NodeKind, inputs: []const ?*Node, 
 pub fn iterPeeps(self: *Func, comptime Mach: type) void {
     const tmp = self.beginTmpAlloc();
 
-    var worklist = std.ArrayList(*Node).initCapacity(tmp, self.next_id) catch unreachable;
-    var in_worklist = std.DynamicBitSet.initEmpty(tmp, self.next_id) catch unreachable;
-    worklist.appendAssumeCapacity(self.end);
-    in_worklist.set(self.end.id);
+    var worklist = WorkList.init(tmp, self.next_id) catch unreachable;
+    worklist.add(self.end);
     var i: usize = 0;
-    while (i < worklist.items.len) : (i += 1) {
-        for (worklist.items[i].inputs()) |oi| if (oi) |o| {
-            if (in_worklist.isSet(o.id)) continue;
-            in_worklist.set(o.id);
-            worklist.appendAssumeCapacity(o);
+    while (i < worklist.list.items.len) : (i += 1) {
+        for (worklist.list.items[i].inputs()) |oi| if (oi) |o| {
+            worklist.add(o);
         };
 
-        for (worklist.items[i].outputs()) |o| {
-            if (in_worklist.isSet(o.id)) continue;
-            in_worklist.set(o.id);
-            worklist.appendAssumeCapacity(o);
+        for (worklist.list.items[i].outputs()) |o| {
+            worklist.add(o);
         }
     }
 
-    while (worklist.popOrNull()) |t| {
+    while (worklist.pop()) |t| {
         if (t.outputs().len == 0 and t != self.end) {
+            for (t.inputs()) |ii| if (ii) |ia| worklist.add(ia);
             t.kill();
             continue;
         }
 
-        if (Mach.idealize(self, t)) |nt| {
+        if (self.idealize(t, &worklist)) |nt| {
+            for (t.inputs()) |ii| if (ii) |ia| worklist.add(ia);
+            for (t.outputs()) |o| worklist.add(o);
             self.subsume(nt, t);
+            continue;
+        }
+
+        if (Mach.idealize(self, t, &worklist)) |nt| {
+            self.subsume(nt, t);
+            continue;
+        }
+    }
+
+    i = 0;
+    worklist.add(self.end);
+    while (i < worklist.list.items.len) : (i += 1) {
+        for (worklist.list.items[i].inputs()) |oi| if (oi) |o| {
+            worklist.add(o);
+        };
+
+        for (worklist.list.items[i].outputs()) |o| {
+            worklist.add(o);
         }
     }
 }
 
-pub fn subsume(self: *Func, this: *Node, target: *Node) void {
-    for (target.outputs()) |use| {
-        const index = std.mem.indexOfScalar(?*Node, use.inputs(), target).?;
-        self.setInput(use, index, this);
+fn isDead(node: ?*Node) bool {
+    return node == null or node.?.data_type == .dead;
+}
+
+fn idealize(self: *Func, node: *Node, worklist: *WorkList) ?*Node {
+    const inps = node.inputs();
+
+    var is_dead = node.kind == .Region and isDead(inps[0]) and isDead(inps[1]);
+    is_dead = is_dead or (node.kind != .Start and node.kind != .Region and
+        isCfg(node.kind) and isDead(inps[0]));
+
+    if (is_dead) {
+        node.data_type = .dead;
+        for (node.outputs()) |o| worklist.add(o);
+        return null;
     }
 
+    if (node.kind == .Region) b: {
+        std.debug.assert(node.inputs().len == 2);
+        const idx = for (node.inputs(), 0..) |in, i| {
+            if (isDead(in)) break i;
+        } else break :b;
+
+        var iter = std.mem.reverseIterator(node.outputs());
+        while (iter.next()) |o| if (o.kind == .Phi) {
+            for (o.outputs()) |oo| worklist.add(oo);
+            self.subsume(o.inputs()[idx + 1].?, o);
+        };
+
+        return node.inputs()[1 - idx].?.inputs()[0];
+    }
+
+    if (node.kind == .Loop) b: {
+        if (!isDead(node.inputs()[1])) break :b;
+
+        var iter = std.mem.reverseIterator(node.outputs());
+        while (iter.next()) |o| if (o.kind == .Phi) {
+            for (o.outputs()) |oo| worklist.add(oo);
+            self.subsume(o.inputs()[1].?, o);
+        };
+
+        return node.inputs()[0].?.inputs()[0];
+    }
+
+    return null;
+}
+
+pub fn subsume(self: *Func, this: *Node, target: *Node) void {
+    for (target.outputs()) |use| {
+        const index = std.mem.indexOfScalar(?*Node, use.inputs(), target) orelse {
+            std.debug.panic("{} {any} {}", .{ this, target.outputs(), use });
+        };
+
+        use.inputs()[index] = this;
+        self.addUse(this, use);
+    }
+
+    target.output_len = 0;
     target.kill();
 }
 
-pub fn setInput(self: *Func, use: *Node, idx: usize, def: *Node) void {
+pub fn setInput(self: *Func, use: *Node, idx: usize, def: ?*Node) void {
     if (use.inputs()[idx] == def) return;
     if (use.inputs()[idx]) |n| {
         n.removeUse(use);
     }
 
     use.inputs()[idx] = def;
-    self.addUse(def, use);
+    if (def) |d| {
+        self.addUse(d, use);
+    }
 }
 
 pub fn addUse(self: *Func, def: *Node, use: *Node) void {
@@ -494,9 +642,9 @@ pub fn gcm(self: *Func) void {
                 self.shedEarly(inp, cfg_rpo[1], &stack, &visited);
             };
 
-            todo(.Loop, "loops are also regions");
-            if (cfg.base.kind == .Region) {
-                for (cfg.base.outputs()) |o| {
+            if (cfg.base.kind == .Region or cfg.base.kind == .Loop) {
+                for (tmp.dupe(*Node, cfg.base.outputs()) catch unreachable) |o| {
+                    //std.debug.print("{}\n", .{o});
                     if (o.kind == .Phi) {
                         for (o.inputs()[1..]) |pi| {
                             self.shedEarly(pi.?, cfg_rpo[1], &stack, &visited);
@@ -553,7 +701,9 @@ pub fn gcm(self: *Func) void {
                         cursor = early.idom();
                     }
 
-                    std.debug.assert(!isBasicBlockEnd(best.base.kind));
+                    if (isBasicBlockEnd(best.base.kind)) {
+                        best = cursor;
+                    }
 
                     nodes[t.id] = t;
                     late_scheds[t.id] = best;
@@ -585,7 +735,6 @@ pub fn gcm(self: *Func) void {
         self.instr_count = 0;
         self.root.schedule = 0;
 
-        todo(.Loop, "loops need to be handled differently due to cycles");
         const postorder = self.collectPostorder(tmp, &stack, &visited);
         for (postorder) |bb| {
             const node = &bb.base;
@@ -597,6 +746,7 @@ pub fn gcm(self: *Func) void {
             } else {
                 o.schedule = node.output_len;
             };
+
             var changed = true;
             while (changed) {
                 changed = false;
@@ -680,6 +830,7 @@ fn logNid(wr: anytype, nid: usize, cc: std.io.tty.Config) void {
 
 pub fn collectPostorder(self: *Func, arena: std.mem.Allocator, stack: *std.ArrayList(Frame), visited: *std.DynamicBitSet) []*CfgNode {
     var postorder = std.ArrayList(*CfgNode).init(arena);
+    //todo(.Loop, "loops need to be handled differently due to cycles");
     traversePostorder(struct {
         rpo: *std.ArrayList(*CfgNode),
         const dir = "inputs";
@@ -701,41 +852,46 @@ pub fn fmtScheduled(self: *Func, writer: anytype, colors: std.io.tty.Config, com
     var stack = std.ArrayList(Frame).init(tmp);
 
     self.root.fmt(self.block_count, writer, colors, Mach);
+    writer.writeAll("\n") catch unreachable;
     for (self.collectPostorder(tmp, &stack, &visited)) |p| {
         p.base.fmt(self.block_count, writer, colors, Mach);
+
+        writer.writeAll("\n") catch unreachable;
         for (p.base.outputs()) |o| {
             writer.writeAll("  ") catch unreachable;
             o.fmt(self.instr_count, writer, colors, Mach);
+            writer.writeAll("\n") catch unreachable;
         }
     }
+}
+
+pub fn fmtLog(self: *Func, comptime Mach: type) void {
+    self.fmt(std.io.getStdErr().writer(), std.io.tty.detectConfig(std.io.getStdErr()), Mach);
 }
 
 pub fn fmt(self: *Func, writer: anytype, colors: std.io.tty.Config, comptime Mach: type) void {
     const tmp = self.beginTmpAlloc();
 
-    var seen = std.DynamicBitSet.initEmpty(tmp, self.next_id) catch unreachable;
-    var postorder = std.ArrayList(*Node).init(tmp);
-    postorder.append(self.end) catch unreachable;
+    var worklist = WorkList.init(tmp, self.next_id) catch unreachable;
 
+    worklist.add(self.end);
     var i: usize = 0;
-    while (i < postorder.items.len) {
-        defer i += 1;
-        const node = postorder.items[i];
-
-        const pre_len = postorder.items.len;
-        for (node.inputs()) |on| if (on) |n| {
-            if (!seen.isSet(n.id)) {
-                seen.set(n.id);
-                postorder.append(n) catch unreachable;
-            }
+    while (i < worklist.list.items.len) : (i += 1) {
+        for (worklist.list.items[i].inputs()) |oi| if (oi) |o| {
+            worklist.add(o);
         };
 
-        std.mem.reverse(*Node, postorder.items[pre_len..]);
+        for (worklist.list.items[i].outputs()) |o| {
+            worklist.add(o);
+        }
     }
 
-    std.mem.reverse(*Node, postorder.items);
+    std.mem.reverse(*Node, worklist.list.items);
 
-    for (postorder.items) |p| p.fmt(null, writer, colors, Mach);
+    for (worklist.list.items) |p| {
+        p.fmt(null, writer, colors, Mach);
+        writer.writeAll("\n") catch unreachable;
+    }
 }
 
 fn todo(comptime variant: anytype, comptime message: []const u8) void {
