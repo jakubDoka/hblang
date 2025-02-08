@@ -159,6 +159,7 @@ const SymbolSpec = struct {
 pub fn disasm(
     code: []const u8,
     gpa: std.mem.Allocator,
+    symbols: *const std.AutoHashMap(u32, []const u8),
     writer: anytype,
     colors: std.io.tty.Config,
 ) !void {
@@ -166,7 +167,7 @@ pub fn disasm(
     defer labelMap.deinit();
     var cursor: usize = 0;
     while (code.len > cursor) {
-        cursor += try disasmOne(code, cursor, &labelMap, writer, colors);
+        cursor += try disasmOne(code, cursor, &labelMap, symbols, writer, colors);
     }
 }
 
@@ -174,6 +175,7 @@ pub fn disasmOne(
     full_code: []const u8,
     cursor: usize,
     labelMap: *const std.AutoHashMap(u32, u32),
+    symbols: *const std.AutoHashMap(u32, []const u8),
     writer: anytype,
     color: std.io.tty.Config,
 ) !usize {
@@ -181,7 +183,10 @@ pub fn disasmOne(
         2 + @max(std.math.log2_int_ceil(usize, labelMap.count()) / 4, 1)
     else
         0;
-    if (labelMap.get(@intCast(cursor))) |l| {
+    if (symbols.get(@intCast(cursor))) |s| {
+        try writer.print("{s}:\n", .{s});
+        for (0..padding) |_| try writer.writeAll(" ");
+    } else if (labelMap.get(@intCast(cursor))) |l| {
         try writer.print("{x}: ", .{l});
     } else {
         for (0..padding) |_| try writer.writeAll(" ");
@@ -194,23 +199,11 @@ pub fn disasmOne(
     const argTys = spec[code[0]][1];
     for (name.len..max_instr_len) |_| try writer.writeAll(" ");
     try writer.writeAll(name);
-    return try disadmArgs(argTys, code, cursor, labelMap, writer, color);
-}
-
-// this is a separate function to cache the code per arg configuration
-fn disadmArgs(
-    argTys: []const u8,
-    code: []const u8,
-    cursor: usize,
-    labelMap: *const std.AutoHashMap(u32, u32),
-    writer: anytype,
-    color: std.io.tty.Config,
-) !usize {
     var i: usize = 1;
     for (argTys) |argTy| {
         const argt = Arg.fromChar(argTy);
         if (i > 1) try writer.writeAll(", ") else try writer.writeAll(" ");
-        i += try disasmArg(argt, @intCast(cursor), @ptrCast(&code[i]), labelMap, writer, color);
+        i += try disasmArg(argt, @intCast(cursor), @ptrCast(&code[i]), labelMap, symbols, writer, color);
     }
     try writer.writeAll("\n");
     return i;
@@ -221,6 +214,7 @@ fn disasmArg(
     cursor: i32,
     ptr: [*]const u8,
     labelMap: *const std.AutoHashMap(u32, u32),
+    symbols: *const std.AutoHashMap(u32, []const u8),
     writer: anytype,
     colors: std.io.tty.Config,
 ) !usize {
@@ -234,15 +228,19 @@ fn disasmArg(
             switch (t) {
                 .rel16, .rel32 => {
                     const pos: u32 = @intCast(cursor + value.*);
-                    const label = labelMap.get(pos).?;
-                    try writer.print(":{x}", .{label});
+                    if (symbols.get(pos)) |s| {
+                        try writer.print(":{s}", .{s});
+                    } else {
+                        const label = labelMap.get(pos).?;
+                        try writer.print(":{x}", .{label});
+                    }
                 },
                 .reg => {
                     const col: std.io.tty.Color = @enumFromInt(3 + @intFromEnum(value.*) % 13);
                     try colors.setColor(writer, col);
                     try writer.print("${d}", .{@intFromEnum(value.*)});
                 },
-                else => try writer.print("{any}", .{value.*}),
+                else => try writer.print("{any}", .{@as(std.meta.Int(.signed, @bitSizeOf(@TypeOf(value.*))), @bitCast(value.*))}),
             }
         },
     }

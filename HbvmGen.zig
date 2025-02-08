@@ -80,6 +80,14 @@ pub fn init(types: *Types, out: *std.ArrayList(u8)) HbvmGen {
     };
 }
 
+pub fn getSymbolMap(self: *HbvmGen, arena: std.mem.Allocator) std.AutoHashMap(u32, []const u8) {
+    var map = std.AutoHashMap(u32, []const u8).init(arena);
+    for (self.types.funcs.items, self.funcs.items) |tf, df| {
+        map.put(df.offset, self.types.getFile(tf.file).tokenSrc(tf.name.index)) catch unreachable;
+    }
+    return map;
+}
+
 pub fn deinit(self: *HbvmGen) void {
     self.global_relocs.deinit();
     self.funcs.deinit();
@@ -120,7 +128,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: Types.Func, allocs: []u8) void 
     for (self.allocs) |*r| r.* += reg_shift;
     const used_registers = std.mem.max(u8, self.allocs) -| 31;
 
-    const used_reg_size = @as(u16, used_registers + 1) * 8;
+    const used_reg_size = @as(u16, used_registers + @intFromBool(!fdata.tail)) * 8;
     const stack_size: i64 = used_reg_size;
 
     var visited = std.DynamicBitSet.initEmpty(tmp, func.next_id) catch unreachable;
@@ -155,9 +163,20 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: Types.Func, allocs: []u8) void 
         std.debug.assert(bb.base.schedule == i);
         self.emitBlockBody(&bb.base);
         const last = bb.base.outputs()[bb.base.output_len - 1];
-        if (postorder.len == i + 1) {
-            // noop
-        } else if (last.output_len == 1 and i + 1 == last.outputs()[0].schedule) {
+        if (last.outputs().len == 0) {
+            std.debug.assert(last.kind == .Return);
+            if (id == .main) {
+                self.emit(.tx, .{});
+            } else {
+                if (stack_size != 0) {
+                    self.emit(.addi64, .{ .stack_addr, .stack_addr, @as(u64, @bitCast(stack_size)) });
+                }
+                if (used_registers != 0) {
+                    self.emit(.ld, .{ .ret_addr, .stack_addr, -@as(i64, used_reg_size), used_reg_size });
+                }
+                self.emit(.jala, .{ .null, .ret_addr, 0 });
+            }
+        } else if (i + 1 == last.outputs()[0].schedule) {
             // noop
         } else {
             std.debug.assert(Func.isBasicBlockStart(last.outputs()[0].kind));
@@ -171,18 +190,6 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: Types.Func, allocs: []u8) void 
 
     for (self.local_relocs.items) |lr| {
         self.doReloc(lr.rel, self.block_offsets[lr.dest_block]);
-    }
-
-    if (id == .main) {
-        self.emit(.tx, .{});
-    } else {
-        if (stack_size != 0) {
-            self.emit(.addi64, .{ .stack_addr, .stack_addr, @as(u64, @bitCast(stack_size)) });
-        }
-        if (used_registers != 0) {
-            self.emit(.ld, .{ .ret_addr, .stack_addr, -@as(i64, used_reg_size), used_reg_size });
-        }
-        self.emit(.jala, .{ .null, .ret_addr, 0 });
     }
 }
 
@@ -206,6 +213,11 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
                         self.binop(.cmpu, no);
                         self.emit(.cmpui, .{ self.reg(no), self.reg(no), 1 });
                     },
+                    .@"==" => {
+                        self.binop(.cmpu, no);
+                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), 0 });
+                        self.emit(.not, .{ self.reg(no), self.reg(no) });
+                    },
                     else => std.debug.panic("{any}", .{extra.*}),
                 }
             },
@@ -227,8 +239,9 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
                 }) catch unreachable;
                 if (toJoined(inps[1].?.kind) == .CondOp) {
                     const extra = inps[1].?.machExtra(Mach, .CondOp);
+                    const finps = inps[1].?.inputs();
                     switch (extra.op) {
-                        inline .jgtu => |op| self.emit(op, .{ self.reg(inps[1].?.inputs()[1]), self.reg(inps[1].?.inputs()[2]), 0 }),
+                        inline .jgtu, .jne => |op| self.emit(op, .{ self.reg(finps[1]), self.reg(finps[2]), 0 }),
                         else => unreachable,
                     }
                 } else {
@@ -250,11 +263,13 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
             .Ret => {
                 self.emit(.cp, .{ self.reg(no), .ret });
             },
-            .Jmp => if (no.outputs()[0].kind == .Region) {
+            .Jmp => if (no.outputs()[0].kind == .Region or no.outputs()[0].kind == .Loop) {
                 const idx = std.mem.indexOfScalar(?*Func.Node, no.outputs()[0].inputs(), no).? + 1;
                 for (no.outputs()[0].outputs()) |o| {
                     if (o.kind == .Phi) {
-                        self.emit(.cp, .{ self.reg(o), self.reg(o.inputs()[idx]) });
+                        if (self.reg(o) != self.reg(o.inputs()[idx])) {
+                            self.emit(.cp, .{ self.reg(o), self.reg(o.inputs()[idx]) });
+                        }
                     }
                 }
             },
@@ -292,12 +307,13 @@ pub fn reloc(self: *HbvmGen, sub_offset: u8, arg: isa.Arg) Reloc {
 pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
     const inps = node.inputs();
 
-    if (false and node.kind == .If) {
+    if (node.kind == .If) {
         if (inps[1].?.kind == .BinOp) b: {
             work.add(inps[1].?);
             const op = inps[1].?.extra(.BinOp).*;
             const instr: isa.Op, const swap = switch (op) {
                 .@"<=" => .{ .jgtu, true },
+                .@"==" => .{ .jne, false },
                 else => break :b,
             };
 

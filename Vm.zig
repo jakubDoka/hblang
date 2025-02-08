@@ -94,7 +94,7 @@ pub fn UnsafeCtx(comptime Writer: type) type {
 }
 
 pub fn run(self: *Vm, ctx: anytype) !isa.Op {
-    @setEvalBranchQuota(2000);
+    @setEvalBranchQuota(3000);
     while (self.fuel > 0) : (self.fuel -= 1) switch (try self.readOp(ctx)) {
         .un => return error.Unreachable,
         .nop => {},
@@ -155,7 +155,7 @@ pub fn run(self: *Vm, ctx: anytype) !isa.Op {
             const args = try self.readArgs(op, ctx);
             const opera = self.regs.get(args.arg1);
             const res = switch (op) {
-                .not => ~opera,
+                .not => @intFromBool(opera == 0),
                 .neg => -%opera,
                 .itf32 => @as(u32, @bitCast(@as(f32, @floatFromInt(toSigned(32, @truncate(opera)))))),
                 .itf64 => @as(u64, @bitCast(@as(f64, @floatFromInt(toSigned(64, opera))))),
@@ -284,7 +284,7 @@ inline fn ibinOp(self: *Vm, comptime base: isa.Op, comptime op: isa.Op, ctx: any
         .add8, .addi8 => lhs +% rhs,
         .sub8 => lhs -% rhs,
         .mul8, .muli8 => lhs *% rhs,
-        .slu8, .slui8 => lhs <<| rhs,
+        .slu8, .slui8 => @shlWithOverflow(lhs, @as(std.math.Log2Int(@TypeOf(rhs)), @intCast(rhs)))[1],
         .sru8, .srui8 => lhs >> @truncate(rhs),
         .srs8, .srsi8 => toUnsigned(width, toSigned(width, lhs) >> @truncate(rhs)),
         else => |t| @compileError(std.fmt.comptimePrint("unspupported op {any}", .{t})),
@@ -358,10 +358,11 @@ fn readOp(self: *Vm, ctx: anytype) !isa.Op {
 }
 
 fn readOpArgs(self: *Vm, argTys: []const u8, ctx: anytype) !void {
+    var seen_regs = std.EnumSet(isa.Reg){};
     for (argTys, 0..) |argTy, i| {
         const argt = isa.Arg.fromChar(argTy);
         if (i > 0) try ctx.writer.writeAll(", ") else try ctx.writer.writeAll(" ");
-        try self.displayArg(argt, ctx);
+        try self.displayArg(argt, ctx, &seen_regs);
     }
 }
 
@@ -369,6 +370,7 @@ fn displayArg(
     self: *Vm,
     arg: isa.Arg,
     ctx: anytype,
+    seen_regs: *std.EnumSet(isa.Reg),
 ) !void {
     switch (arg) {
         inline .reg => |t| {
@@ -380,11 +382,15 @@ fn displayArg(
             try ctx.writer.print("${d}", .{@intFromEnum(value)});
             try ctx.setColor(.reset);
 
-            try ctx.writer.writeAll("=");
+            if (!seen_regs.contains(value)) {
+                seen_regs.insert(value);
 
-            try ctx.setColor((isa.Arg.imm8).color());
-            try ctx.writer.print("{d}", .{self.regs.get(value)});
-            try ctx.setColor(.reset);
+                try ctx.writer.writeAll("=");
+
+                try ctx.setColor((isa.Arg.imm8).color());
+                try ctx.writer.print("{d}", .{self.regs.get(value)});
+                try ctx.setColor(.reset);
+            }
         },
         inline else => |t| {
             const value = try self.progRead(isa.ArgType(t), ctx);

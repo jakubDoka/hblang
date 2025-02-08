@@ -58,7 +58,7 @@ fn testBuilder(name: []const u8, code: []const u8, output: anytype, colors: std.
     var bf = Builder.init(gpa, &types);
     defer bf.deinit();
 
-    _ = types.addFunc(.root, fn_ast);
+    _ = types.addFunc(.root, ast.posOf(main), fn_ast);
 
     var out = std.ArrayList(u8).init(gpa);
     defer out.deinit();
@@ -95,7 +95,9 @@ fn testBuilder(name: []const u8, code: []const u8, output: anytype, colors: std.
 
     try header("CODEGEN", output, colors);
     gen.finalize();
-    try isa.disasm(out.items, gpa, output, colors);
+    var arena = std.heap.ArenaAllocator.init(gpa);
+    defer arena.deinit();
+    try isa.disasm(out.items, gpa, &gen.getSymbolMap(arena.allocator()), output, colors);
 
     var vm = Vm{};
     vm.fuel = 1000;

@@ -32,6 +32,8 @@ pub const Id = enum {
 pub const FuncData = struct {
     args: []Id,
     ret: Id,
+    file: File,
+    name: Ast.Pos,
     ast: Ast.Id,
     tail: bool = true,
 };
@@ -83,10 +85,10 @@ pub fn resolveFunc(self: *Types, file: File, called: Ast.Id) Func {
         if (f.ast == fn_ast) return @enumFromInt(i);
     }
 
-    return self.addFunc(file, fn_ast);
+    return self.addFunc(file, ast.posOf(ast.decls[id.index].expr), fn_ast);
 }
 
-pub fn addFunc(self: *Types, file: File, func: Ast.Id) Func {
+pub fn addFunc(self: *Types, file: File, name: Ast.Pos, func: Ast.Id) Func {
     const ast = self.getFile(file);
     const fn_ast = self.getAst(file, func).Fn;
 
@@ -98,6 +100,8 @@ pub fn addFunc(self: *Types, file: File, func: Ast.Id) Func {
 
     self.funcs.append(self.arena.child_allocator, .{
         .args = args,
+        .name = name,
+        .file = file,
         .ret = self.resolveTy(file, fn_ast.ret),
         .ast = func,
     }) catch unreachable;

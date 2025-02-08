@@ -3,32 +3,32 @@ fn(): uint {
     return add_one(10) + add_two(20)
 }
 ======== UNSCHEDULED SON ========
-%0 = Start: idpth: 0
-%1 = Entry: idpth: 0, %0
-%2 = CInt: 10
-%3 = Call: fn1, idpth: 0, %1, %2
-%6 = CInt: 20
-%4 = CallEnd: idpth: 0, %3
-%7 = Call: fn2, idpth: 0, %4, %6
-%5 = Ret: %4
-%9 = Ret: %8
-%8 = CallEnd: idpth: 0, %7
-%10 = BinOp: +, %5, %9
-%11 = Return: idpth: 0, %8, %10
+%0 = Start: idpth: 0 [, %1]
+%2 = CInt: 10 [, %3]
+%1 = Entry: idpth: 0, %0 [, %3]
+%3 = Call: fn1, idpth: 0, %1, %2 [, %4]
+%6 = CInt: 20 [, %7]
+%4 = CallEnd: idpth: 0, %3 [, %5, %7]
+%5 = Ret: %4 [, %10]
+%9 = Ret: %8 [, %10]
+%7 = Call: fn2, idpth: 0, %4, %6 [, %8]
+%10 = BinOp: +, %5, %9 [, %11]
+%8 = CallEnd: idpth: 0, %7 [, %9, %11]
+%11 = Return: idpth: 0, %8, %10 []
 
 ======== OPTIMIZED SON ========
-%0 = Start: idpth: 0
-%1 = Entry: idpth: 0, %0
-%2 = CInt: 10
-%3 = Call: fn1, idpth: 0, %1, %2
-%6 = CInt: 20
-%4 = CallEnd: idpth: 0, %3
-%7 = Call: fn2, idpth: 0, %4, %6
-%5 = Ret: %4
-%9 = Ret: %8
-%8 = CallEnd: idpth: 0, %7
-%10 = BinOp: +, %5, %9
-%11 = Return: idpth: 0, %8, %10
+%0 = Start: idpth: 0 [, %1]
+%2 = CInt: 10 [, %3]
+%1 = Entry: idpth: 0, %0 [, %3]
+%3 = Call: fn1, idpth: 0, %1, %2 [, %4]
+%6 = CInt: 20 [, %7]
+%4 = CallEnd: idpth: 0, %3 [, %5, %7]
+%5 = Ret: %4 [, %10]
+%9 = Ret: %8 [, %10]
+%7 = Call: fn2, idpth: 0, %4, %6 [, %8]
+%10 = BinOp: +, %5, %9 [, %11]
+%8 = CallEnd: idpth: 0, %7 [, %9, %11]
+%11 = Return: idpth: 0, %8, %10 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idpth: 0
@@ -52,19 +52,19 @@ fn(x: uint): uint {
     return x + 2
 }
 ======== UNSCHEDULED SON ========
-%0 = Start: idpth: 0
-%1 = Arg: 0, %0
-%3 = CInt: 2
-%2 = Entry: idpth: 0, %0
-%4 = BinOp: +, %1, %3
-%5 = Return: idpth: 0, %2, %4
+%3 = CInt: 2 [, %4]
+%1 = Arg: 0, %0 [, %4]
+%0 = Start: idpth: 0 [, %1, %2]
+%4 = BinOp: +, %1, %3 [, %5]
+%2 = Entry: idpth: 0, %0 [, %5]
+%5 = Return: idpth: 0, %2, %4 []
 
 ======== OPTIMIZED SON ========
-%0 = Start: idpth: 0
-%1 = Arg: 0, %0
-%2 = Entry: idpth: 0, %0
-%6 = ImmBinOp: addi64(2), %1
-%5 = Return: idpth: 0, %2, %6
+%1 = Arg: 0, %0 [, %6]
+%0 = Start: idpth: 0 [, %1, %2]
+%6 = ImmBinOp: addi64(2), %1 [, %5]
+%2 = Entry: idpth: 0, %0 [, %5]
+%5 = Return: idpth: 0, %2, %6 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idpth: 0
@@ -81,19 +81,19 @@ fn(x: uint): uint {
     return x + 1
 }
 ======== UNSCHEDULED SON ========
-%0 = Start: idpth: 0
-%1 = Arg: 0, %0
-%3 = CInt: 1
-%2 = Entry: idpth: 0, %0
-%4 = BinOp: +, %1, %3
-%5 = Return: idpth: 0, %2, %4
+%3 = CInt: 1 [, %4]
+%1 = Arg: 0, %0 [, %4]
+%0 = Start: idpth: 0 [, %1, %2]
+%4 = BinOp: +, %1, %3 [, %5]
+%2 = Entry: idpth: 0, %0 [, %5]
+%5 = Return: idpth: 0, %2, %4 []
 
 ======== OPTIMIZED SON ========
-%0 = Start: idpth: 0
-%1 = Arg: 0, %0
-%2 = Entry: idpth: 0, %0
-%6 = ImmBinOp: addi64(1), %1
-%5 = Return: idpth: 0, %2, %6
+%1 = Arg: 0, %0 [, %6]
+%0 = Start: idpth: 0 [, %1, %2]
+%6 = ImmBinOp: addi64(1), %1 [, %5]
+%2 = Entry: idpth: 0, %0 [, %5]
+%5 = Return: idpth: 0, %2, %6 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idpth: 0
@@ -106,51 +106,46 @@ fn(x: uint): uint {
 { 1, 1, 1 }
 
 ======== CODEGEN ========
+main:
        li64 $32, 10
          cp $2, $32
-        jal $31, $0, :0
+        jal $31, $0, :add_one
          cp $32, $1
        li64 $33, 20
          cp $2, $33
-        jal $31, $0, :1
+        jal $31, $0, :add_two
          cp $33, $1
       add64 $32, $32, $33
          cp $1, $32
          tx
-1:   addi64 $254, $254, 18446744073709551608
+add_two:
          cp $13, $2
      addi64 $13, $13, 2
          cp $1, $13
-     addi64 $254, $254, 8
        jala $0, $31, 0
-0:   addi64 $254, $254, 18446744073709551608
+add_one:
          cp $13, $2
      addi64 $13, $13, 1
          cp $1, $13
-     addi64 $254, $254, 8
        jala $0, $31, 0
 
 ======== EXECUTION ========
     li64 $32=0, 10
       cp $2=0, $32=10
-     jal $31=0, $0=0, 91
-  addi64 $254=10240, $254=10240, -8
+     jal $31=0, $0=0, 69
       cp $13=0, $2=10
-  addi64 $13=10, $13=10, 1
+  addi64 $13=10, $13, 1
       cp $1=0, $13=11
-  addi64 $254=10232, $254=10232, 8
     jala $0=0, $31=20, 0
       cp $32=10, $1=11
     li64 $33=0, 20
       cp $2=10, $33=20
      jal $31=20, $0=0, 18
-  addi64 $254=10240, $254=10240, -8
       cp $13=11, $2=20
-  addi64 $13=20, $13=20, 2
+  addi64 $13=20, $13, 2
       cp $1=11, $13=22
-  addi64 $254=10232, $254=10232, 8
     jala $0=0, $31=43, 0
       cp $33=20, $1=22
-   add64 $32=11, $32=11, $33=22
+   add64 $32=11, $32, $33=22
       cp $1=22, $32=33
       tx

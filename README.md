@@ -10,89 +10,90 @@ git submodule update --remote --rebase -- vendored-tests/lily/                  
 
 ### Tour
 
-//#### main fn
-//```hb
-//main := fn(): uint {
-//    return 42
-//}
-//```
-//
-//#### arithmetic
-//```hb
-//main := fn(): uint {
-//    return 10 - 20 / 2 + 4 * (2 + 2) - 4 * 4 + 1 - 1
-//}
-//```
-//
-//#### functions
-//```hb
-//main := fn(): uint {
-//    return add_one(10) + add_two(20)
-//}
-//
-//add_two := fn(x: uint): uint {
-//    return x + 2
-//}
-//
-//add_one := fn(x: uint): uint {
-//    return x + 1
-//}
-//```
-//
-//#### comments
-//```hb
-//// commant is an item
-//main := fn(): uint {
-//    // comment is a statement
-//    foo(/* comment is an exprression /* if you are crazy */ */)
-//    return 0
-//}
-//
-//foo := fn(comment: void): void return /* comment evaluates to void */
-//
-//// comments might be formatted in the future
-//```
-//
-//#### if statements
-//```hb
-//main := fn(): uint {
-//    return fib(3)
-//}
-//
-//fib := fn(x: uint): uint {
-//    if x <= 2 {
-//        return 1
-//    } else {
-//        return fib(x - 1) + fib(x - 2)
-//    }
-//}
-//```
-//
-//#### if statements 2
-//```hb
-//main := fn(): uint {
-//    return fib(3)
-//}
-//
-//fib := fn(x: uint): uint {
-//    if x <= 2 {
-//        x = 1
-//    } else {
-//        x = fib(x - 1) + fib(x - 2)
-//    }
-//    return x
-//}
-//```
-//
-//#### variables
-//```hb
-//main := fn(): uint {
-//    ඞ := 1
-//    b := 2
-//    ඞ += 1
-//    return ඞ - b
-//}
+#### main fn
+```hb
+main := fn(): uint {
+    return 42
+}
 ```
+
+#### arithmetic
+```hb
+main := fn(): uint {
+    return 10 - 20 / 2 + 4 * (2 + 2) - 4 * 4 + 1 - 1
+}
+```
+
+#### functions
+```hb
+main := fn(): uint {
+    return add_one(10) + add_two(20)
+}
+
+add_two := fn(x: uint): uint {
+    return x + 2
+}
+
+add_one := fn(x: uint): uint {
+    return x + 1
+}
+```
+
+#### comments
+```hb
+// commant is an item
+main := fn(): uint {
+    // comment is a statement
+    foo(/* comment is an exprression /* if you are crazy */ */)
+    return 0
+}
+
+foo := fn(comment: void): void return /* comment evaluates to void */
+
+// comments might be formatted in the future
+```
+
+#### if statements
+```hb
+main := fn(): uint {
+    return fib(3)
+}
+
+fib := fn(x: uint): uint {
+    if x <= 2 {
+        return 1
+    } else {
+        return fib(x - 1) + fib(x - 2)
+    }
+}
+```
+
+#### if statements 2
+```hb
+main := fn(): uint {
+    return fib(3)
+}
+
+fib := fn(x: uint): uint {
+    if x <= 2 {
+        x = 1
+    } else {
+        x = fib(x - 1) + fib(x - 2)
+    }
+    return x
+}
+```
+
+#### variables
+```hb
+main := fn(): uint {
+    ඞ := 1
+    b := 2
+    ඞ += 1
+    return ඞ - b
+}
+```
+
 
 #### loops
 ```hb
@@ -101,8 +102,8 @@ main := fn(): uint {
 }
 
 fib := fn(n: uint): uint {
-    a := 0
     b := 1
+    a := 0
     loop {
         if n == 0 break
         c := a + b
@@ -112,6 +113,27 @@ fib := fn(n: uint): uint {
         continue
     }
     return a
+}
+```
+
+#### loops 2
+```hb
+main := fn(): uint {
+    return not_fib(3)
+}
+
+not_fib := fn(size: uint): uint {
+    acc := 0
+    y := 0
+    loop if y == size break else {
+        x := 0
+        loop if x == size break else {
+            acc += x * y
+            x += 1
+        }
+        y += 1
+    }
+    return acc
 }
 ```
 

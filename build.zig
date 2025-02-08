@@ -51,9 +51,12 @@ pub fn build(b: *std.Build) !void {
         run_gen.addArg("tests.zig");
         const out = run_gen.addOutputFileArg("tests.zig");
         const installed = b.addInstallFile(out, "tests.zig");
-        const rdm_stat = try std.fs.cwd().statFile("README.md");
-        const stat = try std.fs.cwd().statFile("zig-out/tests.zig");
-        run_gen.has_side_effects = rdm_stat.mtime > stat.mtime;
+
+        {
+            const rdm_stat = try std.fs.cwd().statFile("README.md");
+            const stat = if (std.fs.cwd().statFile("zig-out/tests.zig")) |s| s.mtime else |_| 0;
+            run_gen.has_side_effects = rdm_stat.mtime > stat;
+        }
 
         break :example_tests &installed.step;
     };

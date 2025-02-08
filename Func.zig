@@ -283,6 +283,8 @@ pub const Extra = union(enum(u16)) {
     Jmp: Cfg,
     // [Region, lhs, rhs]
     Phi,
+    // [Cfg, inp]
+    MachMove,
 
     pub const Cfg = extern struct {
         idepth: u16 = 0,
@@ -382,7 +384,7 @@ fn SubclassFor(comptime Ext: type) type {
             return extra.idepth;
         }
 
-        fn findLce(left: *@This(), right: *@This()) *@This() {
+        fn findLca(left: *@This(), right: *@This()) *@This() {
             var lc, var rc = .{ left, right };
             while (lc != rc) {
                 if (!isCfg(lc.base.kind)) std.debug.panic("{}", .{lc.base});
@@ -395,13 +397,15 @@ fn SubclassFor(comptime Ext: type) type {
 
         fn idom(cfg: *@This()) *@This() {
             return switch (cfg.base.kind) {
-                .Region => findLce(cfg.base.inputs()[0].?.subclass(Extra.Cfg).?, cfg.base.inputs()[1].?.subclass(Extra.Cfg).?),
+                .Region => findLca(cfg.base.inputs()[0].?.subclass(Extra.Cfg).?, cfg.base.inputs()[1].?.subclass(Extra.Cfg).?),
                 else => cfg.base.cfg0().?,
             };
         }
 
         fn better(cfg: *@This(), best: *@This()) bool {
-            return cfg.idepth() > best.idepth() or isBasicBlockEnd(best.base.kind);
+            return cfg.idepth() > best.idepth() or
+                (cfg.base.kind == .Jmp and cfg.base.outputs()[0].kind == .Loop) or
+                isBasicBlockEnd(best.base.kind);
         }
     };
 }
@@ -546,7 +550,7 @@ fn idealize(self: *Func, node: *Node, worklist: *WorkList) ?*Node {
         var iter = std.mem.reverseIterator(node.outputs());
         while (iter.next()) |o| if (o.kind == .Phi) {
             for (o.outputs()) |oo| worklist.add(oo);
-            self.subsume(o.inputs()[idx + 1].?, o);
+            self.subsume(o.inputs()[(1 - idx) + 1].?, o);
         };
 
         return node.inputs()[1 - idx].?.inputs()[0];
@@ -632,23 +636,35 @@ pub fn gcm(self: *Func) void {
             }
         }{ .rpo = &rpo }, self.root, &stack, &visited);
 
+        std.mem.reverse(*CfgNode, rpo.items);
+
         break :cfg_rpo rpo.items;
     };
 
+    if (false) add_mach_moves: {
+        for (cfg_rpo) |n| if (n.base.kind == .Loop) {
+            for (tmp.dupe(*Node, n.base.outputs()) catch unreachable) |o| if (o.kind == .Phi) {
+                std.debug.assert(o.inputs().len == 3);
+                const lhs = self.addNode(.MachMove, &.{ null, o.inputs()[1].? }, {});
+                const rhs = self.addNode(.MachMove, &.{ null, o.inputs()[2].? }, {});
+                const new_phy = self.addNode(.Phi, &.{ &n.base, lhs, rhs }, {});
+                const fin = self.addNode(.MachMove, &.{ null, new_phy }, {});
+                self.subsume(fin, o);
+            };
+        };
+        break :add_mach_moves;
+    }
+
     sched_early: {
-        var iter = std.mem.reverseIterator(cfg_rpo);
-        while (iter.next()) |cfg| {
+        for (cfg_rpo) |cfg| {
             for (cfg.base.inputs()) |oinp| if (oinp) |inp| {
                 self.shedEarly(inp, cfg_rpo[1], &stack, &visited);
             };
 
             if (cfg.base.kind == .Region or cfg.base.kind == .Loop) {
                 for (tmp.dupe(*Node, cfg.base.outputs()) catch unreachable) |o| {
-                    //std.debug.print("{}\n", .{o});
                     if (o.kind == .Phi) {
-                        for (o.inputs()[1..]) |pi| {
-                            self.shedEarly(pi.?, cfg_rpo[1], &stack, &visited);
-                        }
+                        self.shedEarly(o, cfg_rpo[1], &stack, &visited);
                     }
                 }
             }
@@ -689,7 +705,7 @@ pub fn gcm(self: *Func) void {
                     var lca: ?*CfgNode = null;
                     for (t.outputs()) |o| {
                         const other = t.useBlock(o, late_scheds);
-                        lca = if (lca) |l| l.findLce(other) else other;
+                        lca = if (lca) |l| l.findLca(other) else other;
                     }
 
                     todo(.Load, "handle loads being defered");
@@ -702,11 +718,12 @@ pub fn gcm(self: *Func) void {
                     }
 
                     if (isBasicBlockEnd(best.base.kind)) {
-                        best = cursor;
+                        best = best.idom();
                     }
 
                     nodes[t.id] = t;
                     late_scheds[t.id] = best;
+
                     break :schedule_late;
                 }
             }
@@ -741,30 +758,60 @@ pub fn gcm(self: *Func) void {
             node.schedule = self.block_count;
             self.block_count += 1;
 
-            for (node.outputs()) |o| if (!isCfg(o.kind)) {
-                o.schedule = 0;
-            } else {
-                o.schedule = node.output_len;
+            const NodeMeta = struct {
+                unscheduled_deps: u16 = 0,
+                ready_unscheduled_deps: u16 = 0,
+                priority: u16,
             };
 
-            var changed = true;
-            while (changed) {
-                changed = false;
-                for (node.outputs()) |o| if (!isCfg(o.kind)) {
-                    var max_depth: u16 = 0;
-                    for (o.inputs()[1..]) |oi| if (oi) |i| if (i.inputs()[0] == o.inputs()[0]) {
-                        max_depth = @max(max_depth, i.schedule + 1);
+            // init meta
+            const extra = tmp.alloc(NodeMeta, node.outputs().len) catch unreachable;
+            for (node.outputs(), extra, 0..) |o, *e, i| {
+                o.schedule = @intCast(i);
+                e.* = .{ .priority = if (isCfg(o.kind)) 0 else if (o.kind == .Phi) 100 else 50 };
+                if (o.kind != .Phi) {
+                    for (o.inputs()[1..]) |j| if (j != null) if (j.?.inputs()[0] == o.inputs()[0]) {
+                        e.unscheduled_deps += 1;
                     };
-                    changed = changed or max_depth != o.schedule;
-                    o.schedule = max_depth;
-                };
+                }
             }
 
-            std.sort.pdq(*Node, node.outputs(), {}, struct {
-                fn lt(_: void, a: *Node, b: *Node) bool {
-                    return a.schedule < b.schedule;
+            const outs = node.outputs();
+            var ready: usize = 0;
+            for (outs) |*o| {
+                if (extra[o.*.schedule].unscheduled_deps == 0) {
+                    std.mem.swap(*Node, &outs[ready], o);
+                    ready += 1;
                 }
-            }.lt);
+            }
+
+            var scheduled: usize = 0;
+            while (scheduled < outs.len) {
+                std.debug.assert(ready != scheduled);
+
+                var pick = scheduled;
+                for (outs[scheduled + 1 .. ready], scheduled + 1..) |o, i| {
+                    if (extra[o.schedule].priority > extra[outs[pick].schedule].priority) {
+                        pick = i;
+                    }
+                }
+
+                const n = outs[pick];
+                for (n.outputs()) |def| if (def.inputs()[0] == n.inputs()[0] and def.kind != .Phi) {
+                    extra[def.schedule].unscheduled_deps -= 1;
+                };
+
+                std.mem.swap(*Node, &outs[scheduled], &outs[pick]);
+                scheduled += 1;
+
+                for (outs[ready..]) |*o| {
+                    if (extra[o.*.schedule].unscheduled_deps == 0) {
+                        std.debug.assert(o.*.kind != .Phi);
+                        std.mem.swap(*Node, &outs[ready], o);
+                        ready += 1;
+                    }
+                }
+            }
 
             for (node.outputs()) |o| {
                 o.schedule = self.instr_count;
@@ -776,28 +823,30 @@ pub fn gcm(self: *Func) void {
     }
 }
 
-fn shedEarly(self: *Func, inp: *Node, early: *CfgNode, stack: *std.ArrayList(Frame), visited: *std.DynamicBitSet) void {
-    traversePostorder(struct {
-        early: *CfgNode,
-        func: *Func,
-        const dir = "inputs";
-        fn each(ctx: @This(), node: *Node) void {
-            if (isPinned(node.kind)) return;
+fn shedEarly(self: *Func, node: *Node, early: *CfgNode, stack: *std.ArrayList(Frame), visited: *std.DynamicBitSet) void {
+    std.debug.assert(early.base.kind != .Start);
+    if (visited.isSet(node.id)) return;
+    visited.set(node.id);
 
-            var best = ctx.early;
-            if (node.inputs()[0]) |n| if (n.subclass(Extra.Cfg)) |cn| {
-                best = cn;
-            };
+    for (node.inputs()) |i| if (i) |ii| if (ii.kind != .Phi) {
+        self.shedEarly(ii, early, stack, visited);
+    };
 
-            for (node.inputs()) |oin| if (oin) |in| {
-                if (in.cfg0().?.idepth() > best.idepth()) {
-                    best = in.cfg0().?;
-                }
-            };
+    if (!isPinned(node.kind)) {
+        var best = early;
+        if (node.inputs()[0]) |n| if (n.subclass(Extra.Cfg)) |cn| {
+            if (n.kind != .Start) best = cn;
+        };
 
-            ctx.func.setInput(node, 0, &best.base);
-        }
-    }{ .early = early, .func = self }, inp, stack, visited);
+        for (node.inputs()[1..]) |oin| if (oin) |in| {
+            if (in.cfg0().?.idepth() > best.idepth()) {
+                best = in.cfg0().?;
+            }
+        };
+
+        std.debug.assert(best.base.kind != .Start);
+        self.setInput(node, 0, &best.base);
+    }
 }
 
 pub fn traversePostorder(ctx: anytype, inp: *Node, stack: *std.ArrayList(Frame), visited: *std.DynamicBitSet) void {
@@ -830,19 +879,69 @@ fn logNid(wr: anytype, nid: usize, cc: std.io.tty.Config) void {
 
 pub fn collectPostorder(self: *Func, arena: std.mem.Allocator, stack: *std.ArrayList(Frame), visited: *std.DynamicBitSet) []*CfgNode {
     var postorder = std.ArrayList(*CfgNode).init(arena);
-    //todo(.Loop, "loops need to be handled differently due to cycles");
-    traversePostorder(struct {
-        rpo: *std.ArrayList(*CfgNode),
-        const dir = "inputs";
-        fn each(ctx: @This(), node: *Node) void {
-            if (isBasicBlockStart(node.kind))
-                ctx.rpo.append(node.subclass(Extra.Cfg).?) catch unreachable;
+
+    self.collectPostorder2(self.root, arena, &postorder, visited);
+
+    if (false) {
+        stack.append(.{ self.root, self.root.inputs() }) catch unreachable;
+        visited.set(self.root.id);
+
+        while (stack.items.len > 0) {
+            const frame = &stack.items[stack.items.len - 1];
+            if (frame[1].len == 0) {
+                _ = stack.pop();
+                continue;
+            }
+            const node = frame[1][0];
+            frame[1] = frame[1][1..];
+            if (node) |n| if (isCfg(n.kind) and !visited.isSet(n.id)) {
+                visited.set(n.id);
+                stack.append(.{ n, n.inputs() }) catch unreachable;
+            };
         }
-        fn filter(_: @This(), node: *Node) bool {
-            return isCfg(node.kind);
-        }
-    }{ .rpo = &postorder }, self.end, stack, visited);
+    }
+
     return postorder.items;
+}
+
+pub fn collectPostorderAll(self: *Func, node: *Node, arena: std.mem.Allocator, pos: *std.ArrayList(*CfgNode), visited: *std.DynamicBitSet) void {
+    switch (node.kind) {
+        .Region => {
+            if (!visited.isSet(node.id)) {
+                visited.set(node.id);
+                return;
+            }
+        },
+        else => {
+            if (visited.isSet(node.id)) {
+                return;
+            }
+            visited.set(node.id);
+        },
+    }
+
+    pos.append(node.subclass(Extra.Cfg).?) catch unreachable;
+    for (node.outputs()) |o| if (isCfg(o.kind)) self.collectPostorderAll(o, arena, pos, visited);
+}
+
+pub fn collectPostorder2(self: *Func, node: *Node, arena: std.mem.Allocator, pos: *std.ArrayList(*CfgNode), visited: *std.DynamicBitSet) void {
+    switch (node.kind) {
+        .Region => {
+            if (!visited.isSet(node.id)) {
+                visited.set(node.id);
+                return;
+            }
+        },
+        else => {
+            if (visited.isSet(node.id)) {
+                return;
+            }
+            visited.set(node.id);
+        },
+    }
+
+    if (isBasicBlockStart(node.kind)) pos.append(node.subclass(Extra.Cfg).?) catch unreachable;
+    for (node.outputs()) |o| if (isCfg(o.kind)) self.collectPostorder2(o, arena, pos, visited);
 }
 
 pub fn fmtScheduled(self: *Func, writer: anytype, colors: std.io.tty.Config, comptime Mach: type) void {

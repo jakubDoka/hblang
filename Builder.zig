@@ -110,7 +110,6 @@ fn mergeScopes(func: *Func, lhs: []ScopeEntry, rhs: []ScopeEntry, region: *Func.
         if (lh == .Node and rh.* == .Node and lh.Node == rh.Node) continue;
         const thn = resolveIdent(func, lhs, i);
         const els = resolveIdent(func, rhs, i);
-        std.debug.print("{any} {any} {any}\n", .{ thn, els, region });
         rh.* = .{ .Node = func.addNode(.Phi, &.{ region, thn, els }, {}) };
     }
 }
@@ -180,6 +179,7 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
                 .ctrl = self.func.addNode(.Loop, &.{ self.jmp(self.ctrl), null }, .{}),
                 .scope = self.scope.clone() catch unreachable,
             };
+            self.ctrl = loop.ctrl;
 
             self.loops.append(&loop) catch unreachable;
             @memset(self.scope.items, .{ .LazyPhy = &loop });
@@ -191,14 +191,14 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
                 mergeScopes(&self.func, cscope.scope.items, self.scope.items, self.ctrl.?);
             }
 
-            for (loop.scope.items, self.scope.items) |l, c| {
-                if (c != .LazyPhy) {
+            for (loop.scope.items, self.scope.items) |l, *c| {
+                if (c.* != .LazyPhy) {
                     std.debug.assert(l.Node.isLazyPhi(loop.ctrl));
                     self.func.setInput(l.Node, 2, c.Node);
                 }
             }
 
-            self.func.setInput(loop.ctrl, 1, self.ctrl);
+            self.func.setInput(loop.ctrl, 1, self.jmp(self.ctrl));
 
             const break_ = loop.control.get(.break_) orelse {
                 self.ctrl = null;

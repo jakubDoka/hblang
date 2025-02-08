@@ -3,26 +3,26 @@ fn(): uint {
     return fib(3)
 }
 ======== UNSCHEDULED SON ========
-%0 = Start: idpth: 0
-%1 = Entry: idpth: 0, %0
-%2 = CInt: 3
-%3 = Call: fn1, idpth: 0, %1, %2
-%4 = CallEnd: idpth: 0, %3
-%5 = Ret: %4
-%6 = Return: idpth: 0, %4, %5
+%0 = Start: idpth: 0 [, %1]
+%2 = CInt: 3 [, %3]
+%1 = Entry: idpth: 0, %0 [, %3]
+%3 = Call: fn1, idpth: 0, %1, %2 [, %4]
+%5 = Ret: %4 [, %6]
+%4 = CallEnd: idpth: 0, %3 [, %5, %6]
+%6 = Return: idpth: 0, %4, %5 []
 
 ======== OPTIMIZED SON ========
-%0 = Start: idpth: 0
-%1 = Entry: idpth: 0, %0
-%2 = CInt: 3
-%3 = Call: fn1, idpth: 0, %1, %2
-%4 = CallEnd: idpth: 0, %3
-%5 = Ret: %4
-%6 = Return: idpth: 0, %4, %5
+%0 = Start: idpth: 0 [, %1]
+%2 = CInt: 3 [, %3]
+%1 = Entry: idpth: 0, %0 [, %3]
+%3 = Call: fn1, idpth: 0, %1, %2 [, %4]
+%5 = Ret: %4 [, %6]
+%4 = CallEnd: idpth: 0, %3 [, %5, %6]
+%6 = Return: idpth: 0, %4, %5 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idpth: 0
-%1 = Entry: idpth: 1, %0
+%1 = Entry: idpth: 0, %0
   %2 = CInt: 3
   %3 = Call: fn1, idpth: 0, %2
 %4 = CallEnd: idpth: 0, %3
@@ -41,56 +41,56 @@ fn(x: uint): uint {
     }
 }
 ======== UNSCHEDULED SON ========
-%9 = CInt: 1
-%0 = Start: idpth: 0
-%3 = CInt: 2
-%1 = Arg: 0, %0
-%14 = CInt: 2
-%8 = Else: idpth: 0, %5
-%10 = BinOp: -, %1, %9
-%2 = Entry: idpth: 0, %0
-%4 = BinOp: <=, %1, %3
-%15 = BinOp: -, %1, %14
-%11 = Call: fn1, idpth: 0, %8, %10
-%5 = If: swapped: false, idpth: 0, %2, %4
-%16 = Call: fn1, idpth: 0, %12, %15
-%12 = CallEnd: idpth: 0, %11
-%6 = Then: idpth: 0, %5
-%17 = CallEnd: idpth: 0, %16
-%13 = Ret: %12
-%18 = Ret: %17
-%20 = Jmp: idpth: 0, %6
-%21 = Jmp: idpth: 0, %17
-%7 = CInt: 1
-%19 = BinOp: +, %13, %18
-%22 = Region: idpth: 0, %20, %21
-%23 = Phi: %22, %7, %19
-%27 = Return: idpth: 0, %22, %23
+%9 = CInt: 1 [, %10]
+%10 = BinOp: -, %1, %9 [, %11]
+%14 = CInt: 2 [, %15]
+%3 = CInt: 2 [, %4]
+%1 = Arg: 0, %0 [, %4, %10, %15]
+%0 = Start: idpth: 0 [, %1, %2]
+%11 = Call: fn1, idpth: 0, %8, %10 [, %12]
+%15 = BinOp: -, %1, %14 [, %16]
+%8 = Else: idpth: 0, %5 [, %11]
+%4 = BinOp: <=, %1, %3 [, %5]
+%2 = Entry: idpth: 0, %0 [, %5]
+%12 = CallEnd: idpth: 0, %11 [, %13, %16]
+%16 = Call: fn1, idpth: 0, %12, %15 [, %17]
+%5 = If: swapped: false, idpth: 0, %2, %4 [, %6, %8]
+%18 = Ret: %17 [, %19]
+%13 = Ret: %12 [, %19]
+%17 = CallEnd: idpth: 0, %16 [, %18, %21]
+%6 = Then: idpth: 0, %5 [, %20]
+%19 = BinOp: +, %13, %18 [, %23]
+%7 = CInt: 1 [, %23]
+%21 = Jmp: idpth: 0, %17 [, %22]
+%20 = Jmp: idpth: 0, %6 [, %22]
+%23 = Phi: %22, %7, %19 [, %27]
+%22 = Region: idpth: 0, %20, %21 [, %23, %27]
+%27 = Return: idpth: 0, %22, %23 []
 
 ======== OPTIMIZED SON ========
-%0 = Start: idpth: 0
-%3 = CInt: 2
-%1 = Arg: 0, %0
-%8 = Else: idpth: 0, %5
-%28 = ImmBinOp: addi64(-1), %1
-%2 = Entry: idpth: 0, %0
-%30 = CondOp: jgtu, %1, %3
-%29 = ImmBinOp: addi64(-2), %1
-%11 = Call: fn1, idpth: 0, %8, %28
-%5 = If: swapped: true, idpth: 0, %2, %30
-%16 = Call: fn1, idpth: 0, %12, %29
-%12 = CallEnd: idpth: 0, %11
-%6 = Then: idpth: 0, %5
-%17 = CallEnd: idpth: 0, %16
-%13 = Ret: %12
-%18 = Ret: %17
-%20 = Jmp: idpth: 0, %6
-%21 = Jmp: idpth: 0, %17
-%7 = CInt: 1
-%19 = BinOp: +, %13, %18
-%22 = Region: idpth: 0, %20, %21
-%23 = Phi: %22, %7, %19
-%27 = Return: idpth: 0, %22, %23
+%28 = ImmBinOp: addi64(-1), %1 [, %11]
+%3 = CInt: 2 [, %30]
+%1 = Arg: 0, %0 [, %30, %28, %29]
+%0 = Start: idpth: 0 [, %1, %2]
+%11 = Call: fn1, idpth: 0, %8, %28 [, %12]
+%29 = ImmBinOp: addi64(-2), %1 [, %16]
+%8 = Else: idpth: 0, %5 [, %11]
+%30 = CondOp: jgtu, %1, %3 [, %5]
+%2 = Entry: idpth: 0, %0 [, %5]
+%12 = CallEnd: idpth: 0, %11 [, %13, %16]
+%16 = Call: fn1, idpth: 0, %12, %29 [, %17]
+%5 = If: swapped: true, idpth: 0, %2, %30 [, %6, %8]
+%18 = Ret: %17 [, %19]
+%13 = Ret: %12 [, %19]
+%17 = CallEnd: idpth: 0, %16 [, %18, %21]
+%6 = Then: idpth: 0, %5 [, %20]
+%19 = BinOp: +, %13, %18 [, %23]
+%7 = CInt: 1 [, %23]
+%21 = Jmp: idpth: 0, %17 [, %22]
+%20 = Jmp: idpth: 0, %6 [, %22]
+%23 = Phi: %22, %7, %19 [, %27]
+%22 = Region: idpth: 0, %20, %21 [, %23, %27]
+%27 = Return: idpth: 0, %22, %23 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idpth: 0
@@ -113,7 +113,7 @@ fn(x: uint): uint {
   %18 = Ret
   %19 = BinOp: +, %13, %18
   %21 = Jmp: idpth: 8
-%22 = Region: idpth: 5, %20, %21
+%22 = Region: idpth: 0, %20, %21
   %23 = Phi: %7, %19
   %27 = Return: idpth: 0, %23
 
@@ -121,32 +121,33 @@ fn(x: uint): uint {
 { 1, 2, 2, 1, 3, 1, 2, 1, 2, 1, 1, 1, 4, 1, 1, 1 }
 
 ======== CODEGEN ========
+main:
        li64 $32, 3
          cp $2, $32
-        jal $31, $0, :0
+        jal $31, $0, :fib
          cp $32, $1
          cp $1, $32
          tx
-0:       st $31, $254, -40, 40
-     addi64 $254, $254, 18446744073709551576
+fib:
+         st $31, $254, -40, 40
+     addi64 $254, $254, -40
          cp $32, $2
        li64 $33, 2
        jgtu $32, $33, :1
-        jmp :2
-2:     li64 $34, 1
+       li64 $34, 1
          cp $32, $34
-        jmp :3
-1:   addi64 $33, $32, 18446744073709551615
+        jmp :2
+1:   addi64 $33, $32, -1
          cp $2, $33
-        jal $31, $0, :0
+        jal $31, $0, :fib
          cp $33, $1
-     addi64 $32, $32, 18446744073709551614
+     addi64 $32, $32, -2
          cp $2, $32
-        jal $31, $0, :0
+        jal $31, $0, :fib
          cp $32, $1
       add64 $35, $33, $32
          cp $32, $35
-3:       cp $1, $32
+2:       cp $1, $32
      addi64 $254, $254, 40
          ld $31, $254, -40, 40
        jala $0, $31, 0
@@ -156,49 +157,47 @@ fn(x: uint): uint {
       cp $2=0, $32=3
      jal $31=0, $0=0, 14
       st $31=20, $254=10240, -40, 40
-  addi64 $254=10240, $254=10240, -40
+  addi64 $254=10240, $254, -40
       cp $32=3, $2=3
     li64 $33=0, 2
-    jgtu $32=3, $33=2, 28
+    jgtu $32=3, $33=2, 23
   addi64 $33=2, $32=3, -1
       cp $2=3, $33=2
-     jal $31=20, $0=0, -79
-      st $31=113, $254=10200, -40, 40
-  addi64 $254=10200, $254=10200, -40
+     jal $31=20, $0=0, -74
+      st $31=108, $254=10200, -40, 40
+  addi64 $254=10200, $254, -40
       cp $32=3, $2=2
     li64 $33=2, 2
-    jgtu $32=2, $33=2, 28
-     jmp 5
+    jgtu $32=2, $33=2, 23
     li64 $34=0, 1
       cp $32=2, $34=1
      jmp 60
       cp $1=0, $32=1
-  addi64 $254=10160, $254=10160, 40
-      ld $31=113, $254=10200, -40, 40
-    jala $0=0, $31=113, 0
+  addi64 $254=10160, $254, 40
+      ld $31=108, $254=10200, -40, 40
+    jala $0=0, $31=108, 0
       cp $33=2, $1=1
-  addi64 $32=3, $32=3, -2
+  addi64 $32=3, $32, -2
       cp $2=2, $32=1
-     jal $31=113, $0=0, -103
-      st $31=137, $254=10200, -40, 40
-  addi64 $254=10200, $254=10200, -40
+     jal $31=108, $0=0, -98
+      st $31=132, $254=10200, -40, 40
+  addi64 $254=10200, $254, -40
       cp $32=1, $2=1
     li64 $33=1, 2
-    jgtu $32=1, $33=2, 28
-     jmp 5
+    jgtu $32=1, $33=2, 23
     li64 $34=0, 1
       cp $32=1, $34=1
      jmp 60
       cp $1=1, $32=1
-  addi64 $254=10160, $254=10160, 40
-      ld $31=137, $254=10200, -40, 40
-    jala $0=0, $31=137, 0
+  addi64 $254=10160, $254, 40
+      ld $31=132, $254=10200, -40, 40
+    jala $0=0, $31=132, 0
       cp $32=1, $1=1
    add64 $35=0, $33=1, $32=1
       cp $32=1, $35=2
       cp $1=1, $32=2
-  addi64 $254=10200, $254=10200, 40
-      ld $31=137, $254=10240, -40, 40
+  addi64 $254=10200, $254, 40
+      ld $31=132, $254=10240, -40, 40
     jala $0=0, $31=20, 0
       cp $32=3, $1=2
       cp $1=2, $32=2
