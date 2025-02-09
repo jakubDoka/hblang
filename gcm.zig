@@ -24,7 +24,7 @@ fn _Utils(comptime Mach: type) struct {
     fn LayoutFor(comptime kind: std.meta.Tag(Mach)) type {
         return extern struct {
             base: Node,
-            extra: std.meta.TagPayload(Mach, kind),
+            extra: @typeInfo(Mach).@"union".fields[@intFromEnum(kind) - @typeInfo(BuiltinNodeKind).@"enum".fields.len].type,
         };
     }
 
@@ -267,14 +267,6 @@ fn _Utils(comptime Mach: type) struct {
             };
 
             return node.inputs()[0].?.inputs()[0];
-        }
-
-        if (node.kind == .Load) {
-            for (node.mem().outputs()) |o| {
-                if (o.kind == .Load and o != node and std.mem.eql(?*Node, o.inputs(), node.inputs())) {
-                    return o;
-                }
-            }
         }
 
         return null;

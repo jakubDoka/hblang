@@ -70,7 +70,7 @@ pub fn build(self: *Builder, file: Types.File, func: Types.Func) void {
         if (ty == .void) continue;
         std.debug.assert(ty == .uint or ty == .ptr);
         const arg = self.func.addNode(.Arg, &.{self.func.root}, i);
-        const local = self.func.addNode(.Local, &.{ null, self.mem }, .{ .size = 8 });
+        const local = self.func.addNode(.Local, &.{ null, self.mem }, 8);
         const mem = self.resolveMem();
         self.scope.items[0].Node = self.func.addNode(.Store, &.{ self.ctrl, mem, local, arg }, {});
         self.scope.append(.{ .Node = local }) catch unreachable;
@@ -145,7 +145,6 @@ fn resolveMem(self: *Builder) *Func.Node {
 }
 
 fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
-    @setEvalBranchQuota(2000);
     switch (self.getAst(expr)) {
         .Comment => return null,
         .Void => return null,
@@ -276,7 +275,7 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
         .BinOp => |e| switch (e.op) {
             .@":=" => {
                 const value = self.emit(e.rhs).?;
-                const local = self.func.addNode(.Local, &.{ null, self.mem }, .{ .size = 8 });
+                const local = self.func.addNode(.Local, &.{ null, self.mem }, 8);
                 const mem = self.resolveMem();
                 self.scope.items[0].Node = self.func.addNode(.Store, &.{ self.ctrl, mem, local, value }, {});
                 self.scope.append(.{ .Node = local }) catch unreachable;

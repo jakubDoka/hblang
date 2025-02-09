@@ -149,8 +149,8 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: Types.Func, allocs: []u8) void 
         std.debug.assert(func.root.outputs()[1].kind == .Mem);
         for (func.root.outputs()[1].outputs()) |o| if (o.kind == .Local) {
             const extra = o.extra(.Local);
-            const size = extra.size;
-            extra.offset = @bitCast(local_size);
+            const size = extra.*;
+            extra.* = @bitCast(local_size);
             local_size += @intCast(size);
         };
     }
@@ -228,18 +228,18 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
             .Arg => {},
             .Local => {
                 const extra = no.extra(.Local);
-                self.emit(.addi64, .{ self.reg(no), .stack_addr, extra.offset });
+                self.emit(.addi64, .{ self.reg(no), .stack_addr, extra.* });
             },
             .Store => {
                 if (inps[0].?.kind == .Local) {
-                    self.emit(.st, .{ self.reg(inps[1]), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).offset)), 8 });
+                    self.emit(.st, .{ self.reg(inps[1]), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).*)), 8 });
                 } else {
                     self.emit(.st, .{ self.reg(inps[1]), self.reg(inps[0]), 0, 8 });
                 }
             },
             .Load => {
                 if (inps[0].?.kind == .Local) {
-                    self.emit(.ld, .{ self.reg(no), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).offset)), 8 });
+                    self.emit(.ld, .{ self.reg(no), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).*)), 8 });
                 } else {
                     self.emit(.ld, .{ self.reg(no), self.reg(inps[0]), 0, 8 });
                 }

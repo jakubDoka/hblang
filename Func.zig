@@ -1,10 +1,16 @@
 arena: std.heap.ArenaAllocator,
 tmp_arena: std.heap.ArenaAllocator,
+interner: std.hash_map.HashMapUnmanaged(InternedNode, void, void, 70) = .{},
 next_id: u16 = 0,
 block_count: u16 = undefined,
 instr_count: u16 = undefined,
 root: *Node = undefined,
 end: *Node = undefined,
+
+pub const InternedNode = struct {
+    hash: u64,
+    node: *Node,
+};
 
 const std = @import("std");
 const Lexer = @import("Lexer.zig");
@@ -66,6 +72,11 @@ pub const Node = extern struct {
             return @ptrFromInt(self.pointer);
         }
     };
+
+    pub fn anyextra(self: *const Node) *const anyopaque {
+        const any: *const extern struct { n: Node, ex: u8 } = @ptrCast(self);
+        return &any.ex;
+    }
 
     pub fn format(self: *const Node, comptime _: anytype, _: anytype, writer: anytype) !void {
         const colors = .escape_codes;
@@ -177,14 +188,7 @@ pub const Extra = union(enum(u16)) {
     // [?Cfg, lhs, rhs]
     BinOp: Lexer.Lexeme,
     // [?Cfg, Mem]
-    Local: extern union {
-        size: usize,
-        offset: usize,
-
-        pub fn format(self: *const @This(), comptime _: anytype, _: anytype, writer: anytype) !void {
-            try writer.print("{}", .{self.size});
-        }
-    },
+    Local: usize,
     // [?Cfg, thread, ptr]
     Load,
     // [?Cfg, thread, ptr, value, ...antideps]
@@ -222,6 +226,13 @@ pub const Extra = union(enum(u16)) {
         idepth: u16 = 0,
         antidep: u16 = 0,
     };
+
+    pub fn isInterned(kind: BuiltinNodeKind) bool {
+        return switch (kind) {
+            .CInt, .BinOp, .Load => true,
+            else => false,
+        };
+    }
 };
 
 pub const BuiltinNodeKind = std.meta.Tag(Extra);
@@ -233,7 +244,7 @@ pub const NodeKind = b: {
 };
 
 pub fn ExtFor(comptime kind: BuiltinNodeKind) type {
-    return std.meta.TagPayload(Extra, kind);
+    return @typeInfo(Extra).@"union".fields[@intFromEnum(kind)].type;
 }
 
 fn LayoutFor(comptime kind: BuiltinNodeKind) type {
@@ -281,6 +292,54 @@ pub fn reset(self: *Func) void {
     std.debug.assert(self.arena.reset(.free_all));
     self.next_id = 0;
     self.root = self.addNode(.Start, &.{}, .{});
+    self.interner = .{};
+}
+
+pub fn TagPayloadOfLinear(comptime Union: type, comptime tag: std.meta.Tag(Union)) type {
+    const base = @typeInfo(@TypeOf(tag)).@"enum".fields[0].value;
+    return @typeInfo(Union).@"union".fields[@intFromEnum(tag) - base].type;
+}
+
+pub fn hashNode(comptime Enum: type, kind: std.meta.Tag(Enum), inputs: []const ?*Node, extra: *const anyopaque) u64 {
+    var hasher = std.hash.Fnv1a_64.init();
+
+    hasher.update(@as(*const [2]u8, @ptrCast(&kind)));
+    hasher.update(@as([*]const u8, @ptrCast(inputs.ptr))[0 .. inputs.len * @sizeOf(?*Node)]);
+
+    switch (kind) {
+        inline else => |k| {
+            const ext: *const TagPayloadOfLinear(Enum, k) = @alignCast(@ptrCast(extra));
+            hasher.update(std.mem.asBytes(ext));
+        },
+    }
+
+    return hasher.final();
+}
+
+pub fn cmpNode(
+    comptime Enum: type,
+    akind: std.meta.Tag(Enum),
+    bkind: std.meta.Tag(Enum),
+    ainputs: []const ?*Node,
+    binputs: []const ?*Node,
+    aextra: *const anyopaque,
+    bextra: *const anyopaque,
+) bool {
+    if (akind != bkind) return false;
+
+    if (!std.mem.eql(?*Node, ainputs, binputs)) return false;
+
+    switch (akind) {
+        inline else => |k| {
+            const aext: *const TagPayloadOfLinear(Enum, k) = @alignCast(@ptrCast(aextra));
+            const bext: *const TagPayloadOfLinear(Enum, k) = @alignCast(@ptrCast(bextra));
+            return std.meta.eql(aext.*, bext.*);
+        },
+    }
+}
+
+pub fn addNode(self: *Func, comptime kind: BuiltinNodeKind, inputs: []const ?*Node, extra: ExtFor(kind)) *Node {
+    return self.addMachNode(Extra, kind, inputs, extra);
 }
 
 pub fn addMachNode(
@@ -288,16 +347,43 @@ pub fn addMachNode(
     comptime Mach: type,
     comptime kind: std.meta.Tag(Mach),
     inputs: []const ?*Node,
-    extra: std.meta.TagPayload(Mach, kind),
+    extra: TagPayloadOfLinear(Mach, kind),
 ) *Node {
-    return self.addNodeLow(toKind(kind), inputs, extra);
+    return self.addMachNodeLow(Mach, kind, inputs, extra);
 }
 
-pub fn addNode(self: *Func, comptime kind: BuiltinNodeKind, inputs: []const ?*Node, extra: ExtFor(kind)) *Node {
-    return self.addNodeLow(toKind(kind), inputs, extra);
+pub fn addMachNodeLow(self: *Func, comptime Enum: type, kind: std.meta.Tag(Enum), inputs: []const ?*Node, extra: anytype) *Node {
+    if (@hasDecl(Enum, "isInterned") and Enum.isInterned(kind)) {
+        const Inserter = struct {
+            kind: @TypeOf(kind),
+            inputs: []const ?*Node,
+            extra: *const anyopaque,
+
+            pub fn hash(_: anytype, k: InternedNode) u64 {
+                return k.hash;
+            }
+
+            pub fn eql(s: @This(), a: InternedNode, b: InternedNode) bool {
+                if (a.hash != b.hash) return false;
+                return cmpNode(Enum, s.kind, toBuiltinKind(b.node.kind) orelse return false, s.inputs, b.node.inputs(), s.extra, b.node.anyextra());
+            }
+        };
+
+        const map: *std.hash_map.HashMapUnmanaged(InternedNode, void, Inserter, 70) = @ptrCast(&self.interner);
+
+        const entry = map.getOrPutContext(self.arena.allocator(), .{
+            .node = undefined,
+            .hash = hashNode(Enum, kind, inputs, &extra),
+        }, Inserter{ .kind = kind, .inputs = inputs, .extra = &extra }) catch unreachable;
+
+        if (!entry.found_existing) entry.key_ptr.node = self.addNodeLow(toKind(kind), inputs, extra);
+        return entry.key_ptr.node;
+    } else {
+        return self.addNodeLow(toKind(kind), inputs, extra);
+    }
 }
 
-pub fn addNodeLow(self: *Func, comptime kind: NodeKind, inputs: []const ?*Node, extra: anytype) *Node {
+pub fn addNodeLow(self: *Func, kind: NodeKind, inputs: []const ?*Node, extra: anytype) *Node {
     const Layout = extern struct {
         base: Node,
         extra: @TypeOf(extra),
