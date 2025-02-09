@@ -8,21 +8,22 @@ fn(): uint {
 ======== UNSCHEDULED SON ========
 %5 = CInt: 1 [, %6]
 %3 = CInt: 1 [, %6]
-%1 = Mem: %0 []
 %4 = CInt: 2 [, %7]
 %6 = BinOp: +, %3, %5 [, %7]
 %0 = Start: idepth: 0 [, %1, %2]
 %7 = BinOp: -, %6, %4 [, %8]
+%1 = Mem: %0 [, %8]
 %2 = Entry: idepth: 0, %0 [, %8]
-%8 = Return: idepth: 0, %2, %7 []
+%8 = Return: idepth: 0, %2, %1, %7 []
 
 ======== OPTIMIZED SON ========
 %3 = CInt: 1 [, %9]
 %9 = ImmBinOp: imm: 1, op: addi64, %3 [, %10]
-%0 = Start: idepth: 0 [, %2]
+%0 = Start: idepth: 0 [, %1, %2]
 %10 = ImmBinOp: imm: -2, op: addi64, %9 [, %8]
+%1 = Mem: %0 [, %8]
 %2 = Entry: idepth: 0, %0 [, %8]
-%8 = Return: idepth: 0, %2, %10 []
+%8 = Return: idepth: 0, %2, %1, %10 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
@@ -30,7 +31,7 @@ fn(): uint {
   %3 = CInt: 1
   %9 = ImmBinOp: imm: 1, op: addi64, %3
   %10 = ImmBinOp: imm: -2, op: addi64, %9
-  %8 = Return: idepth: 0, %10
+  %8 = Return: idepth: 0, %1, %10
 
 ======== REGISTER SELECTION ========
 { 1, 1, 1, 1 }

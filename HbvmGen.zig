@@ -13,6 +13,8 @@ const Types = @import("Types.zig");
 const Regalloc = @import("Regalloc.zig");
 const HbvmGen = @This();
 
+pub const gcm = @import("gcm.zig").Utils(Mach);
+
 pub const dir = "inputs";
 
 pub const MachKind = enum(u16) {
@@ -73,6 +75,14 @@ pub const Mach = union(MachKind) {
     },
 
     pub const idealize = HbvmGen.idealize;
+
+    pub fn isLoad(k: Func.NodeKind) bool {
+        return toJoined(k) == .Ld;
+    }
+
+    pub fn isStore(k: Func.NodeKind) bool {
+        return toJoined(k) == .St;
+    }
 };
 
 pub fn init(types: *Types, out: *std.ArrayList(u8)) HbvmGen {
@@ -133,29 +143,36 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: Types.Func, allocs: []u8) void 
     const used_registers = std.mem.max(u8, self.allocs) -| 31;
 
     const used_reg_size = @as(u16, used_registers + @intFromBool(!fdata.tail)) * 8;
-    const stack_size: i64 = used_reg_size;
+
+    var local_size: i64 = 0;
+    if (func.root.outputs().len > 1) for (func.root.outputs()[1].outputs()) |o| if (o.kind == .Local) {
+        const extra = o.extra(.Local);
+        const size = extra.size;
+        extra.offset = @bitCast(local_size);
+        local_size += @intCast(size);
+    };
+
+    const stack_size: i64 = used_reg_size + local_size;
 
     var visited = std.DynamicBitSet.initEmpty(tmp, func.next_id) catch unreachable;
     var stack = std.ArrayList(Func.Frame).init(tmp);
-    const postorder = func.collectPostorder(tmp, &stack, &visited);
+    const postorder = gcm.collectPostorder(func, tmp, &stack, &visited);
 
     prelude: {
-        if (id != .main) {
-            if (used_registers != 0) {
-                self.emit(.st, .{ .ret_addr, .stack_addr, -@as(i64, used_reg_size), used_reg_size });
-            }
-            if (stack_size != 0) {
-                self.emit(.addi64, .{ .stack_addr, .stack_addr, @as(u64, @bitCast(-stack_size)) });
-            }
+        if (used_registers != 0) {
+            self.emit(.st, .{ .ret_addr, .stack_addr, -@as(i64, used_reg_size), used_reg_size });
+        }
+        if (stack_size != 0) {
+            self.emit(.addi64, .{ .stack_addr, .stack_addr, @as(u64, @bitCast(-stack_size)) });
         }
 
         var i: usize = 0;
         for (fdata.args) |arg| {
             if (arg == .void) continue;
-            std.debug.assert(arg == .uint);
+            std.debug.assert(arg == .uint or arg == .ptr);
             const argn = for (postorder[0].base.outputs()) |o| {
                 if (o.kind == .Arg and o.extra(.Arg).* == i) break o;
-            } else unreachable;
+            } else continue; // is dead
             self.emit(.cp, .{ self.reg(argn), isa.Reg.arg(i) });
             i += 1;
         }
@@ -169,21 +186,21 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: Types.Func, allocs: []u8) void 
         const last = bb.base.outputs()[bb.base.output_len - 1];
         if (last.outputs().len == 0) {
             std.debug.assert(last.kind == .Return);
+            if (stack_size != 0) {
+                self.emit(.addi64, .{ .stack_addr, .stack_addr, @as(u64, @bitCast(stack_size)) });
+            }
+            if (used_registers != 0) {
+                self.emit(.ld, .{ .ret_addr, .stack_addr, -@as(i64, used_reg_size), used_reg_size });
+            }
             if (id == .main) {
                 self.emit(.tx, .{});
             } else {
-                if (stack_size != 0) {
-                    self.emit(.addi64, .{ .stack_addr, .stack_addr, @as(u64, @bitCast(stack_size)) });
-                }
-                if (used_registers != 0) {
-                    self.emit(.ld, .{ .ret_addr, .stack_addr, -@as(i64, used_reg_size), used_reg_size });
-                }
                 self.emit(.jala, .{ .null, .ret_addr, 0 });
             }
         } else if (i + 1 == last.outputs()[0].schedule) {
             // noop
         } else {
-            std.debug.assert(Func.isBasicBlockStart(last.outputs()[0].kind));
+            std.debug.assert(gcm.isBasicBlockStart(last.outputs()[0].kind));
             self.local_relocs.append(.{
                 .dest_block = last.outputs()[0].schedule,
                 .rel = self.reloc(1, .rel32),
@@ -206,6 +223,16 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
                 self.emit(.li64, .{ self.reg(no), @as(u64, @bitCast(extra.*)) });
             },
             .Arg => {},
+            .Local => {
+                const extra = no.extra(.Local);
+                self.emit(.addi64, .{ self.reg(no), .stack_addr, extra.offset });
+            },
+            .Store => {
+                self.emit(.st, .{ self.reg(inps[3]), self.reg(inps[2]), 0, 8 });
+            },
+            .Load => {
+                self.emit(.ld, .{ self.reg(no), self.reg(inps[2]), 0, 8 });
+            },
             .BinOp => {
                 const extra = no.extra(.BinOp);
                 switch (extra.*) {
@@ -227,7 +254,7 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
             },
             .ImmBinOp => {
                 const alloc = self.reg(no);
-                const extra = no.machExtra(Mach, .ImmBinOp);
+                const extra = gcm.machExtra(no, .ImmBinOp);
                 switch (extra.op) {
                     inline .addi64, .muli64 => |t| {
                         self.emit(t, .{ alloc, self.reg(inps[1]), @as(u64, @bitCast(extra.imm)) });
@@ -242,7 +269,7 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
                     .rel = self.reloc(3, .rel16),
                 }) catch unreachable;
                 if (toJoined(inps[1].?.kind) == .CondOp) {
-                    const extra = inps[1].?.machExtra(Mach, .CondOp);
+                    const extra = gcm.machExtra(inps[1].?, .CondOp);
                     const finps = inps[1].?.inputs();
                     switch (extra.op) {
                         inline .jgtu, .jne => |op| self.emit(op, .{ self.reg(finps[1]), self.reg(finps[2]), 0 }),
@@ -254,7 +281,7 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
             },
             .Call => {
                 const extra = no.extra(.Call);
-                for (inps[1..], 0..) |arg, i| {
+                for (inps[2..], 0..) |arg, i| {
                     self.emit(.cp, .{ isa.Reg.arg(i), self.reg(arg) });
                 }
 
@@ -264,13 +291,14 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
                 }) catch unreachable;
                 self.emit(.jal, .{ .ret_addr, .null, 0 });
             },
+            .Mem => {},
             .Ret => {
                 self.emit(.cp, .{ self.reg(no), .ret });
             },
             .Jmp => if (no.outputs()[0].kind == .Region or no.outputs()[0].kind == .Loop) {
                 const idx = std.mem.indexOfScalar(?*Func.Node, no.outputs()[0].inputs(), no).? + 1;
                 for (no.outputs()[0].outputs()) |o| {
-                    if (o.kind == .Phi) {
+                    if (o.kind == .Phi and o.data_type != .mem) {
                         if (self.reg(o) != self.reg(o.inputs()[idx])) {
                             self.emit(.cp, .{ self.reg(o), self.reg(o.inputs()[idx]) });
                         }
@@ -279,8 +307,8 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
             },
             .Phi => {},
             .Return => {
-                if (inps[1] != null) {
-                    self.emit(.cp, .{ .ret, self.reg(inps[1]) });
+                if (inps[2] != null) {
+                    self.emit(.cp, .{ .ret, self.reg(inps[2]) });
                 }
             },
             else => std.debug.panic("{any}", .{toJoined(no.kind)}),

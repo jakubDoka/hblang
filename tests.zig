@@ -76,18 +76,18 @@ fn testBuilder(name: []const u8, code: []const u8, output: anytype, colors: std.
         try header("UNSCHEDULED SON", output, colors);
         bf.build(.root, func);
         defer bf.func.reset();
-        bf.func.fmt(output, colors, HbvmGen.Mach);
+        HbvmGen.gcm.fmtUnscheduled(&bf.func, output, colors);
 
         try header("OPTIMIZED SON", output, colors);
-        bf.func.iterPeeps(HbvmGen.Mach);
-        bf.func.fmt(output, colors, HbvmGen.Mach);
+        HbvmGen.gcm.iterPeeps(&bf.func);
+        HbvmGen.gcm.fmtUnscheduled(&bf.func, output, colors);
 
         try header("SCHEDULED SON", output, colors);
-        bf.func.gcm();
-        bf.func.fmtScheduled(output, colors, HbvmGen.Mach);
+        HbvmGen.gcm.gcm(&bf.func);
+        HbvmGen.gcm.fmtScheduled(&bf.func, output, colors);
 
         try header("REGISTER SELECTION", output, colors);
-        const allocs = Regalloc.ralloc(&bf.func);
+        const allocs = Regalloc.ralloc(&bf.func, HbvmGen.Mach);
         try output.print("{any}\n", .{allocs});
 
         gen.emitFunc(&bf.func, func, allocs);

@@ -5,67 +5,80 @@ fn(): uint {
     return 0
 }
 ======== UNSCHEDULED SON ========
-%1 = Mem: %0 []
 %0 = Start: idepth: 0 [, %1, %2]
+%1 = Mem: %0 [, %3]
 %2 = Entry: idepth: 0, %0 [, %3]
-%5 = Ret: %4 []
-%3 = Call: id: fn1, idepth: 0, %2 [, %4]
-%6 = CInt: 0 [, %7]
-%4 = CallEnd: idepth: 0, %3 [, %5, %7]
-%7 = Return: idepth: 0, %4, %6 []
+%6 = Ret: %4 []
+%3 = Call: id: fn1, idepth: 0, %2, %1 [, %4]
+%7 = CInt: 0 [, %8]
+%5 = Mem: %4 [, %8]
+%4 = CallEnd: idepth: 0, %3 [, %5, %6, %8]
+%8 = Return: idepth: 0, %4, %5, %7 []
 
 ======== OPTIMIZED SON ========
-%0 = Start: idepth: 0 [, %2]
+%0 = Start: idepth: 0 [, %1, %2]
+%1 = Mem: %0 [, %3]
 %2 = Entry: idepth: 0, %0 [, %3]
-%3 = Call: id: fn1, idepth: 0, %2 [, %4]
-%6 = CInt: 0 [, %7]
-%4 = CallEnd: idepth: 0, %3 [, %7]
-%7 = Return: idepth: 0, %4, %6 []
+%3 = Call: id: fn1, idepth: 0, %2, %1 [, %4]
+%7 = CInt: 0 [, %8]
+%5 = Mem: %4 [, %8]
+%4 = CallEnd: idepth: 0, %3 [, %5, %8]
+%8 = Return: idepth: 0, %4, %5, %7 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
 %2 = Entry: idepth: 1, %0
-  %3 = Call: id: fn1, idepth: 2
+  %3 = Call: id: fn1, idepth: 2, %1
 %4 = CallEnd: idepth: 3, %3
-  %6 = CInt: 0
-  %7 = Return: idepth: 0, %6
+  %5 = Mem
+  %7 = CInt: 0
+  %8 = Return: idepth: 0, %5, %7
 
 ======== REGISTER SELECTION ========
-{ 1, 1, 1 }
+{ 1, 1, 1, 1 }
 
 ======== SOURCE ========
 fn(comment: void): void return /* comment evaluates to void */
 ======== UNSCHEDULED SON ========
-%1 = Mem: %0 []
 %0 = Start: idepth: 0 [, %1, %2]
+%1 = Mem: %0 [, %3]
 %2 = Entry: idepth: 0, %0 [, %3]
-%3 = Return: idepth: 0, %2 []
+%3 = Return: idepth: 0, %2, %1 []
 
 ======== OPTIMIZED SON ========
-%0 = Start: idepth: 0 [, %2]
+%0 = Start: idepth: 0 [, %1, %2]
+%1 = Mem: %0 [, %3]
 %2 = Entry: idepth: 0, %0 [, %3]
-%3 = Return: idepth: 0, %2 []
+%3 = Return: idepth: 0, %2, %1 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
 %2 = Entry: idepth: 0, %0
-  %3 = Return: idepth: 0
+  %3 = Return: idepth: 0, %1
 
 ======== REGISTER SELECTION ========
 { 1 }
 
 ======== CODEGEN ========
 main:
+         st $31, $254, -16, 16
+     addi64 $254, $254, -16
         jal $31, $0, :foo
        li64 $32, 0
          cp $1, $32
+     addi64 $254, $254, 16
+         ld $31, $254, -16, 16
          tx
 foo:
        jala $0, $31, 0
 
 ======== EXECUTION ========
-     jal $31=0, $0=0, 21
-    jala $0=0, $31=7, 0
+      st $31=0, $254=10240, -16, 16
+  addi64 $254=10240, $254, -16
+     jal $31=0, $0=0, 45
+    jala $0=0, $31=31, 0
     li64 $32=0, 0
       cp $1=0, $32=0
+  addi64 $254=10224, $254, 16
+      ld $31=31, $254=10240, -16, 16
       tx

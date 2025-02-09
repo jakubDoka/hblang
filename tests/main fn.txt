@@ -3,23 +3,24 @@ fn(): uint {
     return 42
 }
 ======== UNSCHEDULED SON ========
-%1 = Mem: %0 []
 %0 = Start: idepth: 0 [, %1, %2]
 %3 = CInt: 42 [, %4]
+%1 = Mem: %0 [, %4]
 %2 = Entry: idepth: 0, %0 [, %4]
-%4 = Return: idepth: 0, %2, %3 []
+%4 = Return: idepth: 0, %2, %1, %3 []
 
 ======== OPTIMIZED SON ========
-%0 = Start: idepth: 0 [, %2]
+%0 = Start: idepth: 0 [, %1, %2]
 %3 = CInt: 42 [, %4]
+%1 = Mem: %0 [, %4]
 %2 = Entry: idepth: 0, %0 [, %4]
-%4 = Return: idepth: 0, %2, %3 []
+%4 = Return: idepth: 0, %2, %1, %3 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
 %2 = Entry: idepth: 0, %0
   %3 = CInt: 42
-  %4 = Return: idepth: 0, %3
+  %4 = Return: idepth: 0, %1, %3
 
 ======== REGISTER SELECTION ========
 { 1, 1 }

@@ -3,35 +3,39 @@ fn(): uint {
     return not_fib(3)
 }
 ======== UNSCHEDULED SON ========
-%1 = Mem: %0 []
 %0 = Start: idepth: 0 [, %1, %2]
 %3 = CInt: 3 [, %4]
+%1 = Mem: %0 [, %4]
 %2 = Entry: idepth: 0, %0 [, %4]
-%4 = Call: id: fn1, idepth: 0, %2, %3 [, %5]
-%6 = Ret: %5 [, %7]
-%5 = CallEnd: idepth: 0, %4 [, %6, %7]
-%7 = Return: idepth: 0, %5, %6 []
+%4 = Call: id: fn1, idepth: 0, %2, %1, %3 [, %5]
+%7 = Ret: %5 [, %8]
+%6 = Mem: %5 [, %8]
+%5 = CallEnd: idepth: 0, %4 [, %6, %7, %8]
+%8 = Return: idepth: 0, %5, %6, %7 []
 
 ======== OPTIMIZED SON ========
-%0 = Start: idepth: 0 [, %2]
+%0 = Start: idepth: 0 [, %1, %2]
 %3 = CInt: 3 [, %4]
+%1 = Mem: %0 [, %4]
 %2 = Entry: idepth: 0, %0 [, %4]
-%4 = Call: id: fn1, idepth: 0, %2, %3 [, %5]
-%6 = Ret: %5 [, %7]
-%5 = CallEnd: idepth: 0, %4 [, %6, %7]
-%7 = Return: idepth: 0, %5, %6 []
+%4 = Call: id: fn1, idepth: 0, %2, %1, %3 [, %5]
+%7 = Ret: %5 [, %8]
+%6 = Mem: %5 [, %8]
+%5 = CallEnd: idepth: 0, %4 [, %6, %7, %8]
+%8 = Return: idepth: 0, %5, %6, %7 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
 %2 = Entry: idepth: 0, %0
   %3 = CInt: 3
-  %4 = Call: id: fn1, idepth: 0, %3
+  %4 = Call: id: fn1, idepth: 0, %1, %3
 %5 = CallEnd: idepth: 0, %4
-  %6 = Ret
-  %7 = Return: idepth: 0, %6
+  %6 = Mem
+  %7 = Ret
+  %8 = Return: idepth: 0, %6, %7
 
 ======== REGISTER SELECTION ========
-{ 1, 1, 1, 1 }
+{ 1, 1, 1, 1, 1 }
 
 ======== SOURCE ========
 fn(size: uint): uint {
@@ -50,7 +54,6 @@ fn(size: uint): uint {
 ======== UNSCHEDULED SON ========
 %28 = CInt: 1 [, %29]
 %37 = CInt: 1 [, %38]
-%1 = Mem: %0 []
 %31 = Jmp: idepth: 0, %22 [, %32]
 %30 = Jmp: idepth: 0 [, %32]
 %22 = Else: idepth: 0, %20 [, %31]
@@ -61,7 +64,6 @@ fn(size: uint): uint {
 %19 = BinOp: ==, %17, %18 [, %20]
 %34 = Phi: %32, %25, %25 [, %25]
 %38 = BinOp: +, %25, %37 [, %44]
-%0 = Start: idepth: 0 [, %1, %2, %3]
 %26 = BinOp: *, %17, %25 [, %27]
 %32 = Region: idepth: 0, %30, %31 [, %33, %34, %35, %36]
 %20 = If: swapped: false, idepth: 0, %16, %19 [, %21, %22]
@@ -71,11 +73,9 @@ fn(size: uint): uint {
 %39 = Jmp: idepth: 0 [, %41]
 %18 = Phi: %16, %9, %18 [, %19, %18, %42]
 %42 = Phi: %41, %9, %18 [, %9]
-%2 = Arg: 0, %0 [, %9]
 %25 = Phi: %16, %8, %34 [, %26, %34, %34, %38]
 %44 = Phi: %41, %8, %38 [, %8]
 %5 = CInt: 0 [, %8]
-%3 = Entry: idepth: 0, %0 [, %6]
 %15 = Jmp: idepth: 0, %13 [, %16]
 %27 = BinOp: +, %24, %26 [, %33]
 %33 = Phi: %32, %24, %27 [, %24]
@@ -85,34 +85,35 @@ fn(size: uint): uint {
 %8 = Phi: %7, %5, %44 [, %10, %25, %44]
 %45 = Jmp: idepth: 0, %41 [, %7]
 %6 = Jmp: idepth: 0, %3 [, %7]
+%3 = Entry: idepth: 0, %0 [, %6]
+%2 = Arg: 0, %0 [, %9]
 %13 = Else: idepth: 0, %11 [, %15]
 %10 = BinOp: ==, %8, %9 [, %11]
 %24 = Phi: %16, %23, %33 [, %27, %33, %43]
 %43 = Phi: %41, %23, %24 [, %23]
 %4 = CInt: 0 [, %23]
 %7 = Loop: idepth: 0, %6, %45 [, %8, %9, %11, %23]
+%0 = Start: idepth: 0 [, %1, %2, %3]
 %11 = If: swapped: false, idepth: 0, %7, %10 [, %12, %13]
 %23 = Phi: %7, %4, %43 [, %24, %43, %46]
+%1 = Mem: %0 [, %46]
 %12 = Then: idepth: 0, %11 [, %46]
-%46 = Return: idepth: 0, %12, %23 []
+%46 = Return: idepth: 0, %12, %1, %23 []
 
 ======== OPTIMIZED SON ========
 %47 = ImmBinOp: imm: 1, op: addi64, %17 [, %17]
 %14 = CInt: 0 [, %17]
 %22 = Else: idepth: 0, %20 [, %36]
 %49 = CondOp: op: jne, %17, %18 [, %20]
-%0 = Start: idepth: 0 [, %3, %2]
 %26 = BinOp: *, %17, %25 [, %27]
 %20 = If: swapped: false, idepth: 0, %16, %49 [, %21, %22]
 %17 = Phi: %16, %14, %47 [, %49, %26, %47]
 %36 = Jmp: idepth: 0, %22 [, %16]
 %18 = Phi: %16, %9, %18 [, %49, %18, %9]
-%2 = Arg: 0, %0 [, %9]
 %25 = Phi: %16, %8, %25 [, %26, %25, %48]
 %48 = ImmBinOp: imm: 1, op: addi64, %25 [, %8]
 %5 = CInt: 0 [, %8]
 %21 = Then: idepth: 0, %20 [, %45]
-%3 = Entry: idepth: 0, %0 [, %6]
 %15 = Jmp: idepth: 0, %13 [, %16]
 %27 = BinOp: +, %24, %26 [, %24]
 %16 = Loop: idepth: 0, %15, %36 [, %17, %18, %20, %24, %25]
@@ -120,15 +121,19 @@ fn(size: uint): uint {
 %8 = Phi: %7, %5, %48 [, %50, %25]
 %45 = Jmp: idepth: 0, %21 [, %7]
 %6 = Jmp: idepth: 0, %3 [, %7]
+%3 = Entry: idepth: 0, %0 [, %6]
+%2 = Arg: 0, %0 [, %9]
 %13 = Else: idepth: 0, %11 [, %15]
 %50 = CondOp: op: jne, %8, %9 [, %11]
 %24 = Phi: %16, %23, %27 [, %27, %23]
 %4 = CInt: 0 [, %23]
 %7 = Loop: idepth: 0, %6, %45 [, %8, %9, %11, %23]
+%0 = Start: idepth: 0 [, %1, %2, %3]
 %11 = If: swapped: false, idepth: 0, %7, %50 [, %12, %13]
 %23 = Phi: %7, %4, %24 [, %24, %46]
+%1 = Mem: %0 [, %46]
 %12 = Then: idepth: 0, %11 [, %46]
-%46 = Return: idepth: 0, %12, %23 []
+%46 = Return: idepth: 0, %12, %1, %23 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
@@ -145,7 +150,7 @@ fn(size: uint): uint {
   %50 = CondOp: op: jne, %8, %9
   %11 = If: swapped: false, idepth: 4, %50
 %12 = Then: idepth: 0, %11
-  %46 = Return: idepth: 0, %23
+  %46 = Return: idepth: 0, %1, %23
 %13 = Else: idepth: 5, %11
   %15 = Jmp: idepth: 6
 %16 = Loop: idepth: 7, %15, %36
@@ -169,11 +174,15 @@ fn(size: uint): uint {
 
 ======== CODEGEN ========
 main:
+         st $31, $254, -16, 16
+     addi64 $254, $254, -16
        li64 $32, 3
          cp $2, $32
         jal $31, $0, :not_fib
          cp $32, $1
          cp $1, $32
+     addi64 $254, $254, 16
+         ld $31, $254, -16, 16
          tx
 not_fib:
          cp $14, $2
@@ -203,9 +212,11 @@ not_fib:
         jmp :4
 
 ======== EXECUTION ========
+      st $31=0, $254=10240, -16, 16
+  addi64 $254=10240, $254, -16
     li64 $32=0, 3
       cp $2=0, $32=3
-     jal $31=0, $0=0, 14
+     jal $31=0, $0=0, 38
       cp $14=0, $2=3
     li64 $13=0, 0
     li64 $15=0, 0
@@ -308,7 +319,9 @@ not_fib:
      jmp -53
      jne $17=3, $18=3, 19
       cp $1=0, $19=9
-    jala $0=0, $31=20, 0
+    jala $0=0, $31=44, 0
       cp $32=3, $1=9
       cp $1=9, $32=9
+  addi64 $254=10224, $254, 16
+      ld $31=44, $254=10240, -16, 16
       tx

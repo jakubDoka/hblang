@@ -2,6 +2,7 @@ types: *Types,
 func: Func,
 scope: Scope = undefined,
 loops: std.ArrayList(*Loop) = undefined,
+return_mem: *Func.Node = undefined,
 return_value: ?*Func.Node = undefined,
 return_ctrl: ?*Func.Node = undefined,
 file: Types.File = undefined,
@@ -60,12 +61,13 @@ pub fn build(self: *Builder, file: Types.File, func: Types.Func) void {
     self.return_ctrl = null;
 
     self.mem = self.func.addNode(.Mem, &.{self.func.root}, {});
+    self.return_mem = self.mem;
     self.scope.append(.{ .Node = self.mem }) catch unreachable;
 
     var i: usize = 0;
     for (self.fdata.args) |ty| {
         if (ty == .void) continue;
-        std.debug.assert(ty == .uint);
+        std.debug.assert(ty == .uint or ty == .ptr);
         const arg = self.func.addNode(.Arg, &.{self.func.root}, i);
         self.scope.append(.{ .Node = arg }) catch unreachable;
         i += 1;
@@ -75,7 +77,7 @@ pub fn build(self: *Builder, file: Types.File, func: Types.Func) void {
 
     _ = self.emit(self.ast.exprs.get(self.fdata.ast).Fn.body);
 
-    self.func.end = self.func.addNode(.Return, &.{ self.return_ctrl orelse self.ctrl, self.return_value }, .{});
+    self.func.end = self.func.addNode(.Return, &.{ self.return_ctrl orelse self.ctrl, self.return_mem, self.return_value }, .{});
 }
 
 inline fn getAst(self: *Builder, expr: Ast.Id) Ast.Expr {
@@ -115,6 +117,7 @@ fn mergeScopes(func: *Func, lhs: []ScopeEntry, rhs: []ScopeEntry, region: *Func.
         const thn = resolveIdent(func, lhs, i);
         const els = resolveIdent(func, rhs, i);
         rh.* = .{ .Node = func.addNode(.Phi, &.{ region, thn, els }, {}) };
+        if (i == 0) rh.Node.data_type = .mem;
     }
 }
 
@@ -136,6 +139,7 @@ fn loopCtrl(self: *Builder, kind: Loop.Control) void {
 }
 
 fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
+    @setEvalBranchQuota(2000);
     switch (self.getAst(expr)) {
         .Comment => return null,
         .Void => return null,
@@ -247,15 +251,18 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
         },
         .Return => |e| {
             const value = self.emit(e.value);
+            const mem = resolveIdent(&self.func, self.scope.items, 0);
             if (self.return_value) |other| {
                 const ret_ctrl = self.return_ctrl.?;
-
                 self.return_ctrl = self.func.addNode(.Region, &.{
                     self.jmp(ret_ctrl),
                     self.jmp(self.ctrl),
                 }, .{});
+                self.return_mem = self.func.addNode(.Phi, &.{ self.return_ctrl, self.return_mem, mem }, {});
+                self.return_mem.data_type = .mem;
                 self.return_value = self.func.addNode(.Phi, &.{ self.return_ctrl, other, value }, {});
             } else {
+                self.return_mem = mem;
                 self.return_ctrl = self.ctrl;
                 self.return_value = value;
             }
@@ -290,15 +297,18 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
         .Call => |e| {
             self.fdata.tail = false;
 
-            const args = self.arena.alloc(?*Func.Node, 1 + e.args.len()) catch unreachable;
+            const fixed_args = 2;
+            const args = self.arena.alloc(?*Func.Node, fixed_args + e.args.len()) catch unreachable;
             args[0] = self.ctrl;
-            var len: usize = 1;
+            args[1] = resolveIdent(&self.func, self.scope.items, 0);
+            var len: usize = fixed_args;
             for (self.getAstSlice(e.args)) |a| {
                 args[len] = self.emit(a);
                 if (args[len] != null) len += 1;
             }
-            self.ctrl = self.func.addNode(.Call, args[0..len], .{ .id = self.types.resolveFunc(self.file, e.called) });
-            self.ctrl = self.func.addNode(.CallEnd, &.{self.ctrl}, .{});
+            const call = self.func.addNode(.Call, args[0..len], .{ .id = self.types.resolveFunc(self.file, e.called) });
+            self.ctrl = self.func.addNode(.CallEnd, &.{call}, .{});
+            self.scope.items[0].Node = self.func.addNode(.Mem, &.{self.ctrl}, {});
             return self.func.addNode(.Ret, &.{self.ctrl}, {});
         },
         else => std.debug.panic("{any}\n", .{self.getAst(expr)}),
