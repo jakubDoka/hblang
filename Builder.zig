@@ -8,6 +8,7 @@ file: Types.File = undefined,
 ast: Ast = undefined,
 arena: std.mem.Allocator = undefined,
 ctrl: ?*Func.Node = undefined,
+mem: *Func.Node = undefined,
 fdata: *Types.FuncData = undefined,
 
 const std = @import("std");
@@ -57,6 +58,9 @@ pub fn build(self: *Builder, file: Types.File, func: Types.Func) void {
     self.fdata = self.types.get(func);
     self.return_value = null;
     self.return_ctrl = null;
+
+    self.mem = self.func.addNode(.Mem, &.{self.func.root}, {});
+    self.scope.append(.{ .Node = self.mem }) catch unreachable;
 
     var i: usize = 0;
     for (self.fdata.args) |ty| {
@@ -139,7 +143,7 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
             return self.func.addNode(.CInt, &.{null}, std.fmt.parseInt(i64, self.tokenSrc(e.index), 10) catch unreachable);
         },
         .Ident => |e| {
-            return resolveIdent(&self.func, self.scope.items, e.id.index);
+            return resolveIdent(&self.func, self.scope.items, e.id.index + 1);
         },
         .Block => |e| {
             const prev_scope_height = self.scope.items.len;
@@ -216,6 +220,23 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
 
             return self.ctrl;
         },
+        .UnOp => |e| switch (e.op) {
+            .@"&" => {
+                const oper = self.emit(e.oper).?;
+                if (oper.kind == .Load) unreachable;
+                const local = self.func.addNode(.Local, &.{ null, self.mem }, .{ .size = 8 });
+                const mem = resolveIdent(&self.func, self.scope.items, 0);
+                self.scope.items[0].Node = self.func.addNode(.Store, &.{ null, mem, local, oper }, {});
+                return local;
+            },
+            .@"*" => {
+                const oper = self.emit(e.oper).?;
+                const mem = resolveIdent(&self.func, self.scope.items, 0);
+                const load = self.func.addNode(.Load, &.{ null, mem, oper }, {});
+                return load;
+            },
+            else => std.debug.panic("{any}\n", .{self.getAst(expr)}),
+        },
         .Break => |_| {
             self.loopCtrl(.break_);
             return self.ctrl;
@@ -247,15 +268,22 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
                 self.scope.append(.{ .Node = self.emit(e.rhs).? }) catch unreachable;
                 return null;
             },
-            .@"=" => {
-                self.scope.items[self.getAst(e.lhs).Ident.id.index] = .{ .Node = self.emit(e.rhs).? };
-                return null;
-            },
-            .@"+=", .@"-=" => {
-                self.scope.items[self.getAst(e.lhs).Ident.id.index] = .{
-                    .Node = self.func.addNode(.BinOp, &.{ null, self.emit(e.lhs), self.emit(e.rhs) }, e.op.assOp()),
-                };
-                return null;
+            .@"=" => switch (self.getAst(e.lhs)) {
+                .Ident => |i| {
+                    self.scope.items[i.id.index + 1] = .{ .Node = self.emit(e.rhs).? };
+                    return null;
+                },
+                else => {
+                    const loc = self.emit(e.lhs).?;
+                    std.debug.assert(loc.kind == .Load);
+                    const val = self.emit(e.rhs).?;
+
+                    const base = loc.base();
+                    const mem = resolveIdent(&self.func, self.scope.items, 0);
+                    self.scope.items[0].Node = self.func.addNode(.Store, &.{ null, mem, base, val }, {});
+
+                    return null;
+                },
             },
             else => return self.func.addNode(.BinOp, &.{ null, self.emit(e.lhs), self.emit(e.rhs) }, e.op),
         },

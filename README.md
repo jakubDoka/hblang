@@ -139,7 +139,7 @@ not_fib := fn(size: uint): uint {
 
 #### pointers
 ```hb
-main := fn(): int {
+main := fn(): uint {
     a := 1
     b := &a
     modify(b)
@@ -149,12 +149,12 @@ main := fn(): int {
     return *b - 4
 }
 
-modify := fn(a: ^int): void {
+modify := fn(a: ^uint): void {
     *a = 2
     return
 }
 
-drop := fn(a: int): void {
+drop := fn(a: uint): void {
     return
 }
 ```

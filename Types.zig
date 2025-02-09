@@ -23,6 +23,7 @@ pub const File = enum(u16) { root, _ };
 pub const Id = enum {
     void,
     uint,
+    ptr,
 
     pub fn fromStr(str: []const u8) ?Id {
         return std.meta.stringToEnum(Id, str);
@@ -71,6 +72,14 @@ pub fn resolveTy(self: *Types, file: File, expr: Ast.Id) Id {
             .uint => .uint,
             .void => .void,
             else => std.debug.panic("{any}", .{e.bt}),
+        },
+        .UnOp => |e| switch (e.op) {
+            .@"^" => b: {
+                const v = self.resolveTy(file, e.oper);
+                std.debug.assert(v == .uint);
+                break :b .ptr;
+            },
+            else => std.debug.panic("{any}", .{e.op}),
         },
         else => std.debug.panic("{any}", .{expr.tag()}),
     };

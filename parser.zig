@@ -226,11 +226,23 @@ const Parser = struct {
 
             self.cur = self.lexer.next();
             const rhs = try self.parseBinExpr(try self.parseUnit(), prec);
-            acum = try self.store.alloc(
-                self.gpa,
-                .BinOp,
-                .{ .lhs = acum, .op = op, .rhs = rhs },
-            );
+            if (op.innerOp()) |iop| {
+                acum = try self.store.alloc(self.gpa, .BinOp, .{
+                    .lhs = acum,
+                    .op = .@"=",
+                    .rhs = try self.store.alloc(
+                        self.gpa,
+                        .BinOp,
+                        .{ .lhs = acum, .op = iop, .rhs = rhs },
+                    ),
+                });
+            } else {
+                acum = try self.store.alloc(
+                    self.gpa,
+                    .BinOp,
+                    .{ .lhs = acum, .op = op, .rhs = rhs },
+                );
+            }
             if (to_decl) |decl| self.active_syms.items[decl].decl = acum;
         }
         return acum;
@@ -667,7 +679,12 @@ const Fmt = struct {
                 try self.fmtExprPrec(o.oper, unprec);
                 if (prec < unprec) try self.buf.appendSlice(")");
             },
-            .BinOp => |o| {
+            .BinOp => |co| {
+                var o = co;
+                if (o.op == .@"=" and self.ast.exprs.get(o.rhs) == .BinOp and self.ast.exprs.get(o.rhs).BinOp.lhs == o.lhs) {
+                    o.op = self.ast.exprs.get(o.rhs).BinOp.op.toAssignment();
+                    o.rhs = self.ast.exprs.get(o.rhs).BinOp.rhs;
+                }
                 if (prec < o.op.precedence()) try self.buf.appendSlice("(");
                 try self.fmtExprPrec(o.lhs, o.op.precedence());
                 // TODO: linebreaks

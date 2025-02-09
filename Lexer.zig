@@ -89,6 +89,10 @@ pub const Lexeme = enum(u8) {
         }
     }
 
+    pub fn toAssignment(self: Lexeme) Lexeme {
+        return @enumFromInt(@intFromEnum(self) + 128);
+    }
+
     pub fn format(self: *const Lexeme, comptime _: anytype, _: anytype, writer: anytype) !void {
         try writer.writeAll(@tagName(self.*));
     }

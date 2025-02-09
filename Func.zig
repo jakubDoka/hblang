@@ -66,74 +66,19 @@ pub const Node = extern struct {
         }
     };
 
-    fn fmt(
-        self: *const Node,
-        scheduled: ?u16,
-        writer: anytype,
-        colors: std.io.tty.Config,
-        comptime Mach: type,
-    ) void {
-        logNid(writer, self.id, colors);
-        const name = switch (splitKind(self.kind, Mach)) {
-            inline else => |t| @tagName(t),
-        };
-
-        writer.print(" = {s}", .{name}) catch unreachable;
-
-        var add_colon_space = false;
-
-        switch (splitKind(self.kind, Mach)) {
-            .Builtin => |b| switch (b) {
-                inline else => |t| {
-                    const ext = self.extraConst(t);
-                    if (@TypeOf(ext.*) != void) {
-                        if (!add_colon_space) {
-                            writer.writeAll(": ") catch unreachable;
-                            add_colon_space = true;
-                        }
-                        writer.print("{any}", .{ext.*}) catch unreachable;
-                    }
-                },
-            },
-            .Specific => |s| switch (s) {
-                inline else => |t| {
-                    const ext = self.machExtraConst(Mach, t);
-                    if (@TypeOf(ext.*) != void) {
-                        if (!add_colon_space) {
-                            writer.writeAll(": ") catch unreachable;
-                            add_colon_space = true;
-                        }
-                        writer.print("{any}", .{ext.*}) catch unreachable;
-                    }
-                },
-            },
-        }
-
-        for (self.input_base[0..self.input_len][@min(@intFromBool(scheduled != null and
-            (!isCfg(self.kind) or !isBasicBlockStart(self.kind))), self.input_base[0..self.input_len].len)..]) |oo| if (oo) |o|
-        {
-            if (!add_colon_space) {
-                writer.writeAll(": ") catch unreachable;
-                add_colon_space = true;
-            } else {
-                writer.writeAll(", ") catch unreachable;
-            }
-            logNid(writer, o.id, colors);
-        };
-
-        if (scheduled == null) {
-            writer.writeAll(" [") catch unreachable;
-            for (self.output_base[0..self.output_len]) |o| {
-                writer.writeAll(", ") catch unreachable;
-                logNid(writer, o.id, colors);
-            }
-            writer.writeAll("]") catch unreachable;
-        }
-    }
-
     pub fn format(self: *const Node, comptime _: anytype, _: anytype, writer: anytype) !void {
         const colors = .escape_codes;
         self.fmt(null, writer, colors, @import("HbvmGen.zig").Mach);
+    }
+
+    pub fn mem(self: *Node) *Node {
+        std.debug.assert(self.kind == .Load or self.kind == .Store);
+        return self.inputs()[1].?;
+    }
+
+    pub fn base(self: *Node) *Node {
+        std.debug.assert(self.kind == .Load or self.kind == .Store);
+        return self.inputs()[2].?;
     }
 
     pub fn isLazyPhi(self: *Node, on_loop: *Node) bool {
@@ -142,6 +87,11 @@ pub const Node = extern struct {
 
     pub fn inputs(self: *Node) []?*Node {
         return self.input_base[0..self.input_len];
+    }
+
+    pub fn dataDeps(self: *Node) []?*Node {
+        const start: usize = @intFromBool(isMemOp(self.kind));
+        return self.input_base[1 + start .. self.input_ordered_len];
     }
 
     pub fn kill(self: *Node) void {
@@ -233,6 +183,97 @@ pub const Node = extern struct {
         }
         return scheds[use.id].?;
     }
+
+    fn fmt(
+        self: *const Node,
+        scheduled: ?u16,
+        writer: anytype,
+        colors: std.io.tty.Config,
+        comptime Mach: type,
+    ) void {
+        logNid(writer, self.id, colors);
+        const name = switch (splitKind(self.kind, Mach)) {
+            inline else => |t| @tagName(t),
+        };
+
+        writer.print(" = {s}", .{name}) catch unreachable;
+
+        var add_colon_space = false;
+
+        const utils = struct {
+            fn logExtra(writ: anytype, ex: anytype, comptime fir: bool) !void {
+                switch (@typeInfo(@TypeOf(ex.*))) {
+                    .@"struct" => |s| {
+                        comptime var fields = std.mem.reverseIterator(s.fields);
+                        comptime var first = fir;
+                        inline while (fields.next()) |f| {
+                            if (comptime std.mem.eql(u8, f.name, "antidep")) {
+                                continue;
+                            }
+
+                            comptime var prefix: []const u8 = "";
+                            if (!first) prefix = ", ";
+                            first = false;
+
+                            const is_base = comptime std.mem.eql(u8, f.name, "base");
+                            if (!is_base) {
+                                prefix = prefix ++ f.name ++ ": ";
+                            }
+
+                            try writ.writeAll(prefix);
+                            try logExtra(writ, &@field(ex, f.name), is_base);
+                        }
+                    },
+                    .@"enum" => |e| if (e.is_exhaustive) {
+                        try writ.print("{s}", .{@tagName(ex.*)});
+                    } else {
+                        try writ.print("{}", .{ex.*});
+                    },
+                    else => try writ.print("{}", .{ex.*}),
+                }
+            }
+        };
+
+        switch (splitKind(self.kind, Mach)) {
+            inline else => |b, tg| switch (b) {
+                inline else => |t| {
+                    const ext = switch (tg) {
+                        .Builtin => self.extraConst(t),
+                        .Specific => self.machExtraConst(Mach, t),
+                    };
+                    if (@TypeOf(ext.*) != void) {
+                        if (!add_colon_space) {
+                            writer.writeAll(": ") catch unreachable;
+                            add_colon_space = true;
+                        }
+
+                        utils.logExtra(writer, ext, true) catch unreachable;
+                    }
+                },
+            },
+        }
+
+        for (self.input_base[0..self.input_len][@min(@intFromBool(scheduled != null and
+            (!isCfg(self.kind) or !isBasicBlockStart(self.kind))), self.input_base[0..self.input_len].len)..]) |oo| if (oo) |o|
+        {
+            if (!add_colon_space) {
+                writer.writeAll(": ") catch unreachable;
+                add_colon_space = true;
+            } else {
+                writer.writeAll(", ") catch unreachable;
+            }
+            logNid(writer, o.id, colors);
+        };
+
+        if (scheduled == null) {
+            writer.writeAll(" [") catch unreachable;
+            for (self.output_base[0..self.output_len]) |o| {
+                writer.writeAll(", ") catch unreachable;
+                logNid(writer, o.id, colors);
+            }
+            writer.writeAll("]") catch unreachable;
+        }
+    }
 };
 
 pub const CfgNode = SubclassFor(Extra.Cfg);
@@ -243,20 +284,27 @@ pub const Extra = union(enum(u16)) {
     Arg: usize,
     // [Start]
     Entry: Cfg,
+    // [Start]
+    Mem: void,
     // [Cfg, ret]
     Return: Cfg,
     // [?Cfg]
     CInt: i64,
     // [?Cfg, lhs, rhs]
     BinOp: Lexer.Lexeme,
+    // [?Cfg, Mem]
+    Local: extern union {
+        size: usize,
+        offset: usize,
+    },
+    // [?Cfg, thread, ptr]
+    Load,
+    // [?Cfg, thread, ptr, value, ...antideps]
+    Store,
     // [Cfg, ..args]
     Call: extern struct {
         base: Cfg = .{},
         id: Types.Func,
-
-        pub fn format(self: *const @This(), comptime _: anytype, _: anytype, writer: anytype) !void {
-            try writer.print("{}, {}", .{ self.id, self.base });
-        }
     },
     // [Call]
     CallEnd: Cfg,
@@ -266,10 +314,6 @@ pub const Extra = union(enum(u16)) {
     If: extern struct {
         base: Cfg = .{},
         swapped: bool = false,
-
-        pub fn format(self: *const @This(), comptime _: anytype, _: anytype, writer: anytype) !void {
-            try writer.print("swapped: {}, {}", .{ self.swapped, self.base });
-        }
     },
     // [If]
     Then: Cfg,
@@ -288,10 +332,7 @@ pub const Extra = union(enum(u16)) {
 
     pub const Cfg = extern struct {
         idepth: u16 = 0,
-
-        pub fn format(self: *const Cfg, comptime _: anytype, _: anytype, writer: anytype) !void {
-            try writer.print("idpth: {}", .{self.idepth});
-        }
+        antidep: u16 = 0,
     };
 };
 
@@ -324,7 +365,14 @@ fn splitKind(kind: NodeKind, comptime Mach: type) union(enum) { Builtin: Builtin
 }
 
 pub fn isPinned(k: NodeKind) bool {
-    return isCfg(k) or k == .Ret or k == .Phi;
+    return isCfg(k) or k == .Ret or k == .Phi or k == .Mem;
+}
+
+pub fn isMemOp(k: NodeKind) bool {
+    return switch (k) {
+        .Load, .Local, .Store => true,
+        else => false,
+    };
 }
 
 pub fn isCfg(k: NodeKind) bool {
@@ -597,6 +645,23 @@ pub fn setInput(self: *Func, use: *Node, idx: usize, def: ?*Node) void {
     }
 }
 
+pub fn addDep(self: *Func, use: *Node, def: *Node) void {
+    if (use.input_ordered_len == use.input_len) {
+        const new_cap = @max(use.input_len, 1) * 2;
+        const new_inputs = self.arena.allocator().realloc(use.inputs(), new_cap) catch unreachable;
+        @memset(new_inputs[use.input_len..], null);
+        use.input_base = new_inputs.ptr;
+        use.input_len = new_cap;
+    }
+
+    for (use.input_base[use.input_ordered_len..use.input_len]) |*slot| {
+        if (slot.* == null) {
+            slot.* = def;
+            break;
+        }
+    } else unreachable;
+}
+
 pub fn addUse(self: *Func, def: *Node, use: *Node) void {
     if (def.output_len == def.output_cap) {
         const new_cap = @max(def.output_cap, 1) * 2;
@@ -699,6 +764,12 @@ pub fn gcm(self: *Func) void {
                     if (late_scheds[o.id] == null) continue :task;
                 }
 
+                if (t.kind == .Load) {
+                    for (t.mem().outputs()) |p| {
+                        if (p.kind == .Store) continue :task;
+                    }
+                }
+
                 schedule_late: {
                     const early = t.cfg0() orelse unreachable;
 
@@ -708,17 +779,41 @@ pub fn gcm(self: *Func) void {
                         lca = if (lca) |l| l.findLca(other) else other;
                     }
 
-                    todo(.Load, "handle loads being defered");
-
                     var best = lca.?;
                     var cursor = best.base.cfg0().?;
-                    while (cursor != early.idom()) {
+                    while (cursor != early.idom()) : (cursor = cursor.idom()) {
                         if (cursor.better(best)) best = cursor;
-                        cursor = early.idom();
                     }
 
                     if (isBasicBlockEnd(best.base.kind)) {
                         best = best.idom();
+                    }
+
+                    if (t.kind == .Load) add_antideps: {
+                        var cur = best;
+                        while (cur != early.idom()) : (cur = cur.idom()) {
+                            cur.extra.antidep = t.id;
+                        }
+
+                        for (t.mem().outputs()) |o| switch (o.kind) {
+                            .Store, .CallEnd => {
+                                const sdef = o.cfg0().?;
+                                var curr = late_scheds[o.id].?;
+                                while (curr != sdef.idom()) : (curr = curr.idom()) {
+                                    if (curr.extra.antidep == t.id) {
+                                        best = sdef.findLca(best);
+                                        if (best == sdef) {
+                                            self.addDep(o, t);
+                                            self.addUse(t, o);
+                                        }
+                                    }
+                                }
+                            },
+                            .Load, .Local => {},
+                            else => std.debug.panic("{any}", .{o.kind}),
+                        };
+
+                        break :add_antideps;
                     }
 
                     nodes[t.id] = t;
@@ -733,7 +828,12 @@ pub fn gcm(self: *Func) void {
                     visited.set(def.id);
                     work_list.append(def) catch unreachable;
 
-                    todo(.Load, "smh appent loads smh");
+                    if (def.kind == .Store) for (def.outputs()) |out| {
+                        if (out.kind == .Load and !visited.isSet(def.id)) {
+                            visited.set(def.id);
+                            work_list.append(def) catch unreachable;
+                        }
+                    };
                 }
             };
         }

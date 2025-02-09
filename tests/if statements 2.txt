@@ -3,31 +3,32 @@ fn(): uint {
     return fib(3)
 }
 ======== UNSCHEDULED SON ========
-%0 = Start: idpth: 0 [, %1]
-%2 = CInt: 3 [, %3]
-%1 = Entry: idpth: 0, %0 [, %3]
-%3 = Call: fn1, idpth: 0, %1, %2 [, %4]
-%5 = Ret: %4 [, %6]
-%4 = CallEnd: idpth: 0, %3 [, %5, %6]
-%6 = Return: idpth: 0, %4, %5 []
+%1 = Mem: %0 []
+%0 = Start: idepth: 0 [, %1, %2]
+%3 = CInt: 3 [, %4]
+%2 = Entry: idepth: 0, %0 [, %4]
+%4 = Call: id: fn1, idepth: 0, %2, %3 [, %5]
+%6 = Ret: %5 [, %7]
+%5 = CallEnd: idepth: 0, %4 [, %6, %7]
+%7 = Return: idepth: 0, %5, %6 []
 
 ======== OPTIMIZED SON ========
-%0 = Start: idpth: 0 [, %1]
-%2 = CInt: 3 [, %3]
-%1 = Entry: idpth: 0, %0 [, %3]
-%3 = Call: fn1, idpth: 0, %1, %2 [, %4]
-%5 = Ret: %4 [, %6]
-%4 = CallEnd: idpth: 0, %3 [, %5, %6]
-%6 = Return: idpth: 0, %4, %5 []
+%0 = Start: idepth: 0 [, %2]
+%3 = CInt: 3 [, %4]
+%2 = Entry: idepth: 0, %0 [, %4]
+%4 = Call: id: fn1, idepth: 0, %2, %3 [, %5]
+%6 = Ret: %5 [, %7]
+%5 = CallEnd: idepth: 0, %4 [, %6, %7]
+%7 = Return: idepth: 0, %5, %6 []
 
 ======== SCHEDULED SON ========
-%0 = Start: idpth: 0
-%1 = Entry: idpth: 0, %0
-  %2 = CInt: 3
-  %3 = Call: fn1, idpth: 0, %2
-%4 = CallEnd: idpth: 0, %3
-  %5 = Ret
-  %6 = Return: idpth: 0, %5
+%0 = Start: idepth: 0
+%2 = Entry: idepth: 0, %0
+  %3 = CInt: 3
+  %4 = Call: id: fn1, idepth: 0, %3
+%5 = CallEnd: idepth: 0, %4
+  %6 = Ret
+  %7 = Return: idepth: 0, %6
 
 ======== REGISTER SELECTION ========
 { 1, 1, 1, 1 }
@@ -42,81 +43,82 @@ fn(x: uint): uint {
     return x
 }
 ======== UNSCHEDULED SON ========
-%9 = CInt: 1 [, %10]
-%10 = BinOp: -, %1, %9 [, %11]
-%14 = CInt: 2 [, %15]
-%3 = CInt: 2 [, %4]
-%1 = Arg: 0, %0 [, %4, %10, %15]
-%0 = Start: idpth: 0 [, %1, %2]
-%11 = Call: fn1, idpth: 0, %8, %10 [, %12]
-%15 = BinOp: -, %1, %14 [, %16]
-%8 = Else: idpth: 0, %5 [, %11]
-%4 = BinOp: <=, %1, %3 [, %5]
-%2 = Entry: idpth: 0, %0 [, %5]
-%12 = CallEnd: idpth: 0, %11 [, %13, %16]
-%16 = Call: fn1, idpth: 0, %12, %15 [, %17]
-%5 = If: swapped: false, idpth: 0, %2, %4 [, %6, %8]
-%18 = Ret: %17 [, %19]
-%13 = Ret: %12 [, %19]
-%17 = CallEnd: idpth: 0, %16 [, %18, %21]
-%6 = Then: idpth: 0, %5 [, %20]
-%19 = BinOp: +, %13, %18 [, %23]
-%7 = CInt: 1 [, %23]
-%21 = Jmp: idpth: 0, %17 [, %22]
-%20 = Jmp: idpth: 0, %6 [, %22]
-%23 = Phi: %22, %7, %19 [, %24]
-%22 = Region: idpth: 0, %20, %21 [, %23, %24]
-%24 = Return: idpth: 0, %22, %23 []
+%10 = CInt: 1 [, %11]
+%1 = Mem: %0 []
+%11 = BinOp: -, %2, %10 [, %12]
+%15 = CInt: 2 [, %16]
+%4 = CInt: 2 [, %5]
+%2 = Arg: 0, %0 [, %5, %11, %16]
+%0 = Start: idepth: 0 [, %1, %2, %3]
+%12 = Call: id: fn1, idepth: 0, %9, %11 [, %13]
+%16 = BinOp: -, %2, %15 [, %17]
+%9 = Else: idepth: 0, %6 [, %12]
+%5 = BinOp: <=, %2, %4 [, %6]
+%3 = Entry: idepth: 0, %0 [, %6]
+%13 = CallEnd: idepth: 0, %12 [, %14, %17]
+%17 = Call: id: fn1, idepth: 0, %13, %16 [, %18]
+%6 = If: swapped: false, idepth: 0, %3, %5 [, %7, %9]
+%19 = Ret: %18 [, %20]
+%14 = Ret: %13 [, %20]
+%18 = CallEnd: idepth: 0, %17 [, %19, %22]
+%7 = Then: idepth: 0, %6 [, %21]
+%20 = BinOp: +, %14, %19 [, %24]
+%8 = CInt: 1 [, %24]
+%22 = Jmp: idepth: 0, %18 [, %23]
+%21 = Jmp: idepth: 0, %7 [, %23]
+%24 = Phi: %23, %8, %20 [, %25]
+%23 = Region: idepth: 0, %21, %22 [, %24, %25]
+%25 = Return: idepth: 0, %23, %24 []
 
 ======== OPTIMIZED SON ========
-%25 = ImmBinOp: addi64(-1), %1 [, %11]
-%3 = CInt: 2 [, %27]
-%1 = Arg: 0, %0 [, %27, %25, %26]
-%0 = Start: idpth: 0 [, %1, %2]
-%11 = Call: fn1, idpth: 0, %8, %25 [, %12]
-%26 = ImmBinOp: addi64(-2), %1 [, %16]
-%8 = Else: idpth: 0, %5 [, %11]
-%27 = CondOp: jgtu, %1, %3 [, %5]
-%2 = Entry: idpth: 0, %0 [, %5]
-%12 = CallEnd: idpth: 0, %11 [, %13, %16]
-%16 = Call: fn1, idpth: 0, %12, %26 [, %17]
-%5 = If: swapped: true, idpth: 0, %2, %27 [, %6, %8]
-%18 = Ret: %17 [, %19]
-%13 = Ret: %12 [, %19]
-%17 = CallEnd: idpth: 0, %16 [, %18, %21]
-%6 = Then: idpth: 0, %5 [, %20]
-%19 = BinOp: +, %13, %18 [, %23]
-%7 = CInt: 1 [, %23]
-%21 = Jmp: idpth: 0, %17 [, %22]
-%20 = Jmp: idpth: 0, %6 [, %22]
-%23 = Phi: %22, %7, %19 [, %24]
-%22 = Region: idpth: 0, %20, %21 [, %23, %24]
-%24 = Return: idpth: 0, %22, %23 []
+%26 = ImmBinOp: imm: -1, op: addi64, %2 [, %12]
+%4 = CInt: 2 [, %28]
+%2 = Arg: 0, %0 [, %28, %26, %27]
+%0 = Start: idepth: 0 [, %3, %2]
+%12 = Call: id: fn1, idepth: 0, %9, %26 [, %13]
+%27 = ImmBinOp: imm: -2, op: addi64, %2 [, %17]
+%9 = Else: idepth: 0, %6 [, %12]
+%28 = CondOp: op: jgtu, %2, %4 [, %6]
+%3 = Entry: idepth: 0, %0 [, %6]
+%13 = CallEnd: idepth: 0, %12 [, %14, %17]
+%17 = Call: id: fn1, idepth: 0, %13, %27 [, %18]
+%6 = If: swapped: true, idepth: 0, %3, %28 [, %7, %9]
+%19 = Ret: %18 [, %20]
+%14 = Ret: %13 [, %20]
+%18 = CallEnd: idepth: 0, %17 [, %19, %22]
+%7 = Then: idepth: 0, %6 [, %21]
+%20 = BinOp: +, %14, %19 [, %24]
+%8 = CInt: 1 [, %24]
+%22 = Jmp: idepth: 0, %18 [, %23]
+%21 = Jmp: idepth: 0, %7 [, %23]
+%24 = Phi: %23, %8, %20 [, %25]
+%23 = Region: idepth: 0, %21, %22 [, %24, %25]
+%25 = Return: idepth: 0, %23, %24 []
 
 ======== SCHEDULED SON ========
-%0 = Start: idpth: 0
-%2 = Entry: idpth: 1, %0
-  %1 = Arg: 0
-  %3 = CInt: 2
-  %27 = CondOp: jgtu, %1, %3
-  %5 = If: swapped: true, idpth: 2, %27
-%6 = Then: idpth: 3, %5
-  %7 = CInt: 1
-  %20 = Jmp: idpth: 4
-%8 = Else: idpth: 3, %5
-  %25 = ImmBinOp: addi64(-1), %1
-  %11 = Call: fn1, idpth: 4, %25
-%12 = CallEnd: idpth: 5, %11
-  %13 = Ret
-  %26 = ImmBinOp: addi64(-2), %1
-  %16 = Call: fn1, idpth: 6, %26
-%17 = CallEnd: idpth: 7, %16
-  %18 = Ret
-  %19 = BinOp: +, %13, %18
-  %21 = Jmp: idpth: 8
-%22 = Region: idpth: 0, %20, %21
-  %23 = Phi: %7, %19
-  %24 = Return: idpth: 0, %23
+%0 = Start: idepth: 0
+%3 = Entry: idepth: 1, %0
+  %2 = Arg: 0
+  %4 = CInt: 2
+  %28 = CondOp: op: jgtu, %2, %4
+  %6 = If: swapped: true, idepth: 2, %28
+%7 = Then: idepth: 3, %6
+  %8 = CInt: 1
+  %21 = Jmp: idepth: 4
+%9 = Else: idepth: 3, %6
+  %26 = ImmBinOp: imm: -1, op: addi64, %2
+  %12 = Call: id: fn1, idepth: 4, %26
+%13 = CallEnd: idepth: 5, %12
+  %14 = Ret
+  %27 = ImmBinOp: imm: -2, op: addi64, %2
+  %17 = Call: id: fn1, idepth: 6, %27
+%18 = CallEnd: idepth: 7, %17
+  %19 = Ret
+  %20 = BinOp: +, %14, %19
+  %22 = Jmp: idepth: 8
+%23 = Region: idepth: 0, %21, %22
+  %24 = Phi: %8, %20
+  %25 = Return: idepth: 0, %24
 
 ======== REGISTER SELECTION ========
 { 1, 2, 2, 1, 3, 1, 2, 1, 2, 1, 1, 1, 4, 1, 1, 1 }

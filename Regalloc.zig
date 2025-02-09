@@ -69,7 +69,7 @@ pub fn ralloc(func: *Func) []u8 {
         if (instr.def.outputs().len != 0 and !Func.isCfg(instr.def.kind)) {
             instr.defs.set(i);
         }
-        for (instr.def.inputs()[1..]) |use| if (use) |uuse| {
+        for (instr.def.dataDeps()) |use| if (use) |uuse| {
             instrs[instr.def.schedule].uses.set(uuse.schedule);
         };
     }
@@ -107,7 +107,7 @@ pub fn ralloc(func: *Func) []u8 {
 
     for (postorder) |bb| {
         for (bb.base.outputs()) |o| {
-            for (o.inputs()[1..]) |i| if (i) |ii| {
+            for (o.dataDeps()) |i| if (i) |ii| {
                 std.debug.assert(instrs[o.schedule].liveins.isSet(ii.schedule));
             };
         }

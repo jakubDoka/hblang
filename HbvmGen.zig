@@ -18,6 +18,8 @@ pub const dir = "inputs";
 pub const MachKind = enum(u16) {
     ImmBinOp = @typeInfo(Func.BuiltinNodeKind).@"enum".fields.len,
     CondOp,
+    Ld,
+    St,
 };
 
 const FuncData = struct {
@@ -52,20 +54,22 @@ fn toJoined(kind: Func.NodeKind) JointKind {
 }
 
 pub const Mach = union(MachKind) {
+    // [?Cfg, lhs]
     ImmBinOp: extern struct {
         op: isa.Op,
         imm: i64,
-
-        pub fn format(self: *const @This(), comptime _: anytype, _: anytype, writer: anytype) !void {
-            try writer.print("{s}({d})", .{ @tagName(self.op), self.imm });
-        }
     },
+    // [?Cfg, lhs, rhs]
     CondOp: extern struct {
         op: isa.Op,
-
-        pub fn format(self: *const @This(), comptime _: anytype, _: anytype, writer: anytype) !void {
-            try writer.print("{s}", .{@tagName(self.op)});
-        }
+    },
+    // [?Cfg, mem, ptr]
+    Ld: extern struct {
+        offset: i64,
+    },
+    // [?Cfg, mem, ptr, value, ...antideps]
+    St: extern struct {
+        offset: i64,
     },
 
     pub const idealize = HbvmGen.idealize;
