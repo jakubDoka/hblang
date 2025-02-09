@@ -264,8 +264,8 @@ pub fn toBuiltinKind(kind: NodeKind) ?BuiltinNodeKind {
 
 pub fn init(gpa: std.mem.Allocator) Func {
     var self = Func{
-        .arena = std.heap.ArenaAllocator.init(gpa),
-        .tmp_arena = std.heap.ArenaAllocator.init(gpa),
+        .arena = .init(gpa),
+        .tmp_arena = .init(gpa),
     };
     self.root = self.addNode(.Start, &.{}, .{});
     return self;

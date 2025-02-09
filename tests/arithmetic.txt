@@ -23,9 +23,9 @@ fn(): uint {
 %19 = BinOp: +, %17, %18 [, %21]
 %0 = Start: idepth: 0 [, %1, %2]
 %21 = BinOp: -, %19, %20 [, %22]
-%1 = Mem: %0 [, %22]
-%2 = Entry: idepth: 0, %0 [, %22]
-%22 = Return: idepth: 0, %2, %1, %21 []
+%2 = Mem: %0 [, %22]
+%1 = Entry: idepth: 0, %0 [, %22]
+%22 = Return: idepth: 0, %1, %2, %21 []
 
 ======== OPTIMIZED SON ========
 %9 = CInt: 2 [, %23]
@@ -44,13 +44,13 @@ fn(): uint {
 %25 = ImmBinOp: imm: 1, op: addi64, %17 [, %26]
 %0 = Start: idepth: 0 [, %1, %2]
 %26 = ImmBinOp: imm: -1, op: addi64, %25 [, %22]
-%1 = Mem: %0 [, %22]
-%2 = Entry: idepth: 0, %0 [, %22]
-%22 = Return: idepth: 0, %2, %1, %26 []
+%2 = Mem: %0 [, %22]
+%1 = Entry: idepth: 0, %0 [, %22]
+%22 = Return: idepth: 0, %1, %2, %26 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
-%2 = Entry: idepth: 1, %0
+%1 = Entry: idepth: 1, %0
   %3 = CInt: 10
   %4 = CInt: 20
   %5 = CInt: 2
@@ -66,7 +66,7 @@ fn(): uint {
   %17 = BinOp: -, %13, %24
   %25 = ImmBinOp: imm: 1, op: addi64, %17
   %26 = ImmBinOp: imm: -1, op: addi64, %25
-  %22 = Return: idepth: 0, %1, %26
+  %22 = Return: idepth: 0, %2, %26
 
 ======== REGISTER SELECTION ========
 { 1, 2, 3, 4, 5, 6, 2, 3, 5, 1, 2, 1, 1, 1, 1, 1 }

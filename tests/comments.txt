@@ -6,10 +6,10 @@ fn(): uint {
 }
 ======== UNSCHEDULED SON ========
 %0 = Start: idepth: 0 [, %1, %2]
-%1 = Mem: %0 [, %3]
-%2 = Entry: idepth: 0, %0 [, %3]
+%2 = Mem: %0 [, %3]
+%1 = Entry: idepth: 0, %0 [, %3]
 %6 = Ret: %4 []
-%3 = Call: id: fn1, idepth: 0, %2, %1 [, %4]
+%3 = Call: id: fn1, idepth: 0, %1, %2 [, %4]
 %7 = CInt: 0 [, %8]
 %5 = Mem: %4 [, %8]
 %4 = CallEnd: idepth: 0, %3 [, %5, %6, %8]
@@ -17,9 +17,9 @@ fn(): uint {
 
 ======== OPTIMIZED SON ========
 %0 = Start: idepth: 0 [, %1, %2]
-%1 = Mem: %0 [, %3]
-%2 = Entry: idepth: 0, %0 [, %3]
-%3 = Call: id: fn1, idepth: 0, %2, %1 [, %4]
+%2 = Mem: %0 [, %3]
+%1 = Entry: idepth: 0, %0 [, %3]
+%3 = Call: id: fn1, idepth: 0, %1, %2 [, %4]
 %7 = CInt: 0 [, %8]
 %5 = Mem: %4 [, %8]
 %4 = CallEnd: idepth: 0, %3 [, %5, %8]
@@ -27,8 +27,8 @@ fn(): uint {
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
-%2 = Entry: idepth: 1, %0
-  %3 = Call: id: fn1, idepth: 2, %1
+%1 = Entry: idepth: 1, %0
+  %3 = Call: id: fn1, idepth: 2, %2
 %4 = CallEnd: idepth: 3, %3
   %5 = Mem
   %7 = CInt: 0
@@ -41,20 +41,20 @@ fn(): uint {
 fn(comment: void): void return /* comment evaluates to void */
 ======== UNSCHEDULED SON ========
 %0 = Start: idepth: 0 [, %1, %2]
-%1 = Mem: %0 [, %3]
-%2 = Entry: idepth: 0, %0 [, %3]
-%3 = Return: idepth: 0, %2, %1 []
+%2 = Mem: %0 [, %3]
+%1 = Entry: idepth: 0, %0 [, %3]
+%3 = Return: idepth: 0, %1, %2 []
 
 ======== OPTIMIZED SON ========
 %0 = Start: idepth: 0 [, %1, %2]
-%1 = Mem: %0 [, %3]
-%2 = Entry: idepth: 0, %0 [, %3]
-%3 = Return: idepth: 0, %2, %1 []
+%2 = Mem: %0 [, %3]
+%1 = Entry: idepth: 0, %0 [, %3]
+%3 = Return: idepth: 0, %1, %2 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
-%2 = Entry: idepth: 0, %0
-  %3 = Return: idepth: 0, %1
+%1 = Entry: idepth: 0, %0
+  %3 = Return: idepth: 0, %2
 
 ======== REGISTER SELECTION ========
 { 1 }

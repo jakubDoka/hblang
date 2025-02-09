@@ -269,6 +269,14 @@ fn _Utils(comptime Mach: type) struct {
             return node.inputs()[0].?.inputs()[0];
         }
 
+        if (node.kind == .Load) {
+            for (node.mem().outputs()) |o| {
+                if (o.kind == .Load and o != node and std.mem.eql(?*Node, o.inputs(), node.inputs())) {
+                    return o;
+                }
+            }
+        }
+
         return null;
     }
 
@@ -564,6 +572,17 @@ fn _Utils(comptime Mach: type) struct {
                                             }
                                         }
                                     }
+                                },
+                                .Phi => {
+                                    for (o.inputs()[1..], o.cfg0().?.base.inputs()) |inp, oblk| if (inp.? == t.mem()) {
+                                        const sdef = t.mem().cfg0().?;
+                                        var lcar = oblk.?.subclass(Extra.Cfg).?;
+                                        while (lcar != idom(sdef)) : (lcar = idom(lcar)) {
+                                            if (lcar.extra.antidep == t.id) {
+                                                lca = findLca(lcar, lca);
+                                            }
+                                        }
+                                    };
                                 },
                                 .Local => {},
                                 .Return => {},

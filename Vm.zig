@@ -377,7 +377,7 @@ fn displayArg(
             const value = try self.progRead(isa.ArgType(t), ctx);
             self.ip += @sizeOf(isa.ArgType(t));
 
-            const col: std.io.tty.Color = @enumFromInt(3 + @intFromEnum(value) % 13);
+            const col: std.io.tty.Color = @enumFromInt(3 + @intFromEnum(value) % 12);
             try ctx.setColor(col);
             try ctx.writer.print("${d}", .{@intFromEnum(value)});
             try ctx.setColor(.reset);
@@ -385,9 +385,9 @@ fn displayArg(
             if (!seen_regs.contains(value)) {
                 seen_regs.insert(value);
 
+                try ctx.setColor(.dim);
                 try ctx.writer.writeAll("=");
 
-                try ctx.setColor((isa.Arg.imm8).color());
                 try ctx.writer.print("{d}", .{self.regs.get(value)});
                 try ctx.setColor(.reset);
             }

@@ -60,6 +60,7 @@ pub fn build(self: *Builder, file: Types.File, func: Types.Func) void {
     self.return_value = null;
     self.return_ctrl = null;
 
+    self.ctrl = self.func.addNode(.Entry, &.{self.func.root}, .{});
     self.mem = self.func.addNode(.Mem, &.{self.func.root}, {});
     self.return_mem = self.mem;
     self.scope.append(.{ .Node = self.mem }) catch unreachable;
@@ -69,11 +70,12 @@ pub fn build(self: *Builder, file: Types.File, func: Types.Func) void {
         if (ty == .void) continue;
         std.debug.assert(ty == .uint or ty == .ptr);
         const arg = self.func.addNode(.Arg, &.{self.func.root}, i);
-        self.scope.append(.{ .Node = arg }) catch unreachable;
+        const local = self.func.addNode(.Local, &.{ null, self.mem }, .{ .size = 8 });
+        const mem = self.resolveMem();
+        self.scope.items[0].Node = self.func.addNode(.Store, &.{ self.ctrl, mem, local, arg }, {});
+        self.scope.append(.{ .Node = local }) catch unreachable;
         i += 1;
     }
-
-    self.ctrl = self.func.addNode(.Entry, &.{self.func.root}, .{});
 
     _ = self.emit(self.ast.exprs.get(self.fdata.ast).Fn.body);
 
@@ -138,6 +140,10 @@ fn loopCtrl(self: *Builder, kind: Loop.Control) void {
     self.ctrl = null;
 }
 
+fn resolveMem(self: *Builder) *Func.Node {
+    return resolveIdent(&self.func, self.scope.items, 0);
+}
+
 fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
     @setEvalBranchQuota(2000);
     switch (self.getAst(expr)) {
@@ -147,7 +153,9 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
             return self.func.addNode(.CInt, &.{null}, std.fmt.parseInt(i64, self.tokenSrc(e.index), 10) catch unreachable);
         },
         .Ident => |e| {
-            return resolveIdent(&self.func, self.scope.items, e.id.index + 1);
+            const ident = resolveIdent(&self.func, self.scope.items, e.id.index + 1);
+            std.debug.assert(ident.kind == .Local);
+            return self.func.addNode(.Load, &.{ null, self.resolveMem(), ident }, {});
         },
         .Block => |e| {
             const prev_scope_height = self.scope.items.len;
@@ -190,7 +198,7 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
             self.ctrl = loop.ctrl;
 
             self.loops.append(&loop) catch unreachable;
-            @memset(self.scope.items, .{ .LazyPhy = &loop });
+            @memset(self.scope.items[0..1], .{ .LazyPhy = &loop });
             _ = self.emit(e.body);
             _ = self.loops.pop();
 
@@ -199,9 +207,10 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
                 mergeScopes(&self.func, cscope.scope.items, self.scope.items, self.ctrl.?);
             }
 
-            for (loop.scope.items, self.scope.items) |l, *c| {
+            for (loop.scope.items[0..1], self.scope.items[0..1]) |l, *c| {
                 if (c.* != .LazyPhy) {
                     std.debug.assert(l.Node.isLazyPhi(loop.ctrl));
+                    l.Node.data_type = .mem;
                     self.func.setInput(l.Node, 2, c.Node);
                 }
             }
@@ -213,7 +222,7 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
                 return self.ctrl;
             };
 
-            for (loop.scope.items, break_.scope.items) |c, *b| {
+            for (loop.scope.items[0..1], break_.scope.items[0..1]) |c, *b| {
                 if (b.* == .LazyPhy) {
                     b.* = c;
                 }
@@ -226,17 +235,11 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
         },
         .UnOp => |e| switch (e.op) {
             .@"&" => {
-                const oper = self.emit(e.oper).?;
-                if (oper.kind == .Load) unreachable;
-                const local = self.func.addNode(.Local, &.{ null, self.mem }, .{ .size = 8 });
-                const mem = resolveIdent(&self.func, self.scope.items, 0);
-                self.scope.items[0].Node = self.func.addNode(.Store, &.{ null, mem, local, oper }, {});
-                return local;
+                return self.emit(e.oper).?.base();
             },
             .@"*" => {
                 const oper = self.emit(e.oper).?;
-                const mem = resolveIdent(&self.func, self.scope.items, 0);
-                const load = self.func.addNode(.Load, &.{ null, mem, oper }, {});
+                const load = self.func.addNode(.Load, &.{ null, self.resolveMem(), oper }, {});
                 return load;
             },
             else => std.debug.panic("{any}\n", .{self.getAst(expr)}),
@@ -251,7 +254,7 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
         },
         .Return => |e| {
             const value = self.emit(e.value);
-            const mem = resolveIdent(&self.func, self.scope.items, 0);
+            const mem = self.resolveMem();
             if (self.return_value) |other| {
                 const ret_ctrl = self.return_ctrl.?;
                 self.return_ctrl = self.func.addNode(.Region, &.{
@@ -272,25 +275,23 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
         },
         .BinOp => |e| switch (e.op) {
             .@":=" => {
-                self.scope.append(.{ .Node = self.emit(e.rhs).? }) catch unreachable;
+                const value = self.emit(e.rhs).?;
+                const local = self.func.addNode(.Local, &.{ null, self.mem }, .{ .size = 8 });
+                const mem = self.resolveMem();
+                self.scope.items[0].Node = self.func.addNode(.Store, &.{ self.ctrl, mem, local, value }, {});
+                self.scope.append(.{ .Node = local }) catch unreachable;
                 return null;
             },
-            .@"=" => switch (self.getAst(e.lhs)) {
-                .Ident => |i| {
-                    self.scope.items[i.id.index + 1] = .{ .Node = self.emit(e.rhs).? };
-                    return null;
-                },
-                else => {
-                    const loc = self.emit(e.lhs).?;
-                    std.debug.assert(loc.kind == .Load);
-                    const val = self.emit(e.rhs).?;
+            .@"=" => {
+                const loc = self.emit(e.lhs).?;
+                std.debug.assert(loc.kind == .Load);
+                const val = self.emit(e.rhs).?;
 
-                    const base = loc.base();
-                    const mem = resolveIdent(&self.func, self.scope.items, 0);
-                    self.scope.items[0].Node = self.func.addNode(.Store, &.{ null, mem, base, val }, {});
+                const base = loc.base();
+                const mem = self.resolveMem();
+                self.scope.items[0].Node = self.func.addNode(.Store, &.{ self.ctrl, mem, base, val }, {});
 
-                    return null;
-                },
+                return null;
             },
             else => return self.func.addNode(.BinOp, &.{ null, self.emit(e.lhs), self.emit(e.rhs) }, e.op),
         },

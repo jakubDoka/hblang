@@ -145,12 +145,15 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: Types.Func, allocs: []u8) void 
     const used_reg_size = @as(u16, used_registers + @intFromBool(!fdata.tail)) * 8;
 
     var local_size: i64 = 0;
-    if (func.root.outputs().len > 1) for (func.root.outputs()[1].outputs()) |o| if (o.kind == .Local) {
-        const extra = o.extra(.Local);
-        const size = extra.size;
-        extra.offset = @bitCast(local_size);
-        local_size += @intCast(size);
-    };
+    if (func.root.outputs().len > 1) {
+        std.debug.assert(func.root.outputs()[1].kind == .Mem);
+        for (func.root.outputs()[1].outputs()) |o| if (o.kind == .Local) {
+            const extra = o.extra(.Local);
+            const size = extra.size;
+            extra.offset = @bitCast(local_size);
+            local_size += @intCast(size);
+        };
+    }
 
     const stack_size: i64 = used_reg_size + local_size;
 
@@ -216,7 +219,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: Types.Func, allocs: []u8) void 
 
 pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
     for (node.outputs()) |no| {
-        const inps = no.inputs();
+        const inps = gcm.dataDeps(no);
         switch (toJoined(no.kind)) {
             .CInt => {
                 const extra = no.extra(.CInt);
@@ -228,10 +231,18 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
                 self.emit(.addi64, .{ self.reg(no), .stack_addr, extra.offset });
             },
             .Store => {
-                self.emit(.st, .{ self.reg(inps[3]), self.reg(inps[2]), 0, 8 });
+                if (inps[0].?.kind == .Local) {
+                    self.emit(.st, .{ self.reg(inps[1]), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).offset)), 8 });
+                } else {
+                    self.emit(.st, .{ self.reg(inps[1]), self.reg(inps[0]), 0, 8 });
+                }
             },
             .Load => {
-                self.emit(.ld, .{ self.reg(no), self.reg(inps[2]), 0, 8 });
+                if (inps[0].?.kind == .Local) {
+                    self.emit(.ld, .{ self.reg(no), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).offset)), 8 });
+                } else {
+                    self.emit(.ld, .{ self.reg(no), self.reg(inps[0]), 0, 8 });
+                }
             },
             .BinOp => {
                 const extra = no.extra(.BinOp);
@@ -239,7 +250,7 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
                     .@"+" => self.binop(.add64, no),
                     .@"-" => self.binop(.sub64, no),
                     .@"*" => self.binop(.mul64, no),
-                    .@"/" => self.emit(.dirs64, .{ self.reg(no), .null, self.reg(inps[1]), self.reg(inps[2]) }),
+                    .@"/" => self.emit(.dirs64, .{ self.reg(no), .null, self.reg(inps[0]), self.reg(inps[1]) }),
                     .@"<=" => {
                         self.binop(.cmpu, no);
                         self.emit(.cmpui, .{ self.reg(no), self.reg(no), 1 });
@@ -257,7 +268,7 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
                 const extra = gcm.machExtra(no, .ImmBinOp);
                 switch (extra.op) {
                     inline .addi64, .muli64 => |t| {
-                        self.emit(t, .{ alloc, self.reg(inps[1]), @as(u64, @bitCast(extra.imm)) });
+                        self.emit(t, .{ alloc, self.reg(inps[0]), @as(u64, @bitCast(extra.imm)) });
                     },
                     else => unreachable,
                 }
@@ -268,11 +279,11 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
                     .dest_block = no.outputs()[1].schedule,
                     .rel = self.reloc(3, .rel16),
                 }) catch unreachable;
-                if (toJoined(inps[1].?.kind) == .CondOp) {
-                    const extra = gcm.machExtra(inps[1].?, .CondOp);
-                    const finps = inps[1].?.inputs();
+                if (toJoined(inps[0].?.kind) == .CondOp) {
+                    const extra = gcm.machExtra(inps[0].?, .CondOp);
+                    const finps = gcm.dataDeps(inps[0].?);
                     switch (extra.op) {
-                        inline .jgtu, .jne => |op| self.emit(op, .{ self.reg(finps[1]), self.reg(finps[2]), 0 }),
+                        inline .jgtu, .jne => |op| self.emit(op, .{ self.reg(finps[0]), self.reg(finps[1]), 0 }),
                         else => unreachable,
                     }
                 } else {
@@ -281,7 +292,7 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
             },
             .Call => {
                 const extra = no.extra(.Call);
-                for (inps[2..], 0..) |arg, i| {
+                for (inps, 0..) |arg, i| {
                     self.emit(.cp, .{ isa.Reg.arg(i), self.reg(arg) });
                 }
 
@@ -307,8 +318,8 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
             },
             .Phi => {},
             .Return => {
-                if (inps[2] != null) {
-                    self.emit(.cp, .{ .ret, self.reg(inps[2]) });
+                if (inps[0] != null) {
+                    self.emit(.cp, .{ .ret, self.reg(inps[0]) });
                 }
             },
             else => std.debug.panic("{any}", .{toJoined(no.kind)}),
