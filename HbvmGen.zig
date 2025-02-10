@@ -8,21 +8,12 @@ allocs: []u8 = undefined,
 
 const std = @import("std");
 const isa = @import("isa.zig");
-const Func = @import("Func.zig");
+const Func = @import("Func2.zig").Func(Mach);
 const Types = @import("Types.zig");
 const Regalloc = @import("Regalloc.zig");
 const HbvmGen = @This();
 
-pub const gcm = @import("gcm.zig").Utils(Mach);
-
 pub const dir = "inputs";
-
-pub const MachKind = enum(u16) {
-    ImmBinOp = @typeInfo(Func.BuiltinNodeKind).@"enum".fields.len,
-    IfOp,
-    Ld,
-    St,
-};
 
 const FuncData = struct {
     offset: u32 = 0,
@@ -44,18 +35,7 @@ const Reloc = struct {
     operand: isa.Arg,
 };
 
-pub const JointKind = b: {
-    var builtin = @typeInfo(Func.NodeKind);
-    const mach = @typeInfo(MachKind);
-    builtin.@"enum".fields = builtin.@"enum".fields ++ mach.@"enum".fields;
-    break :b @Type(builtin);
-};
-
-fn toJoined(kind: Func.NodeKind) JointKind {
-    return @enumFromInt(@intFromEnum(kind));
-}
-
-pub const Mach = union(MachKind) {
+pub const Mach = union(enum) {
     // [?Cfg, lhs]
     ImmBinOp: extern struct {
         op: isa.Op,
@@ -78,20 +58,12 @@ pub const Mach = union(MachKind) {
 
     pub const idealize = HbvmGen.idealize;
 
-    pub fn isLoad(k: Func.NodeKind) bool {
-        return toJoined(k) == .Ld;
-    }
-
-    pub fn isStore(k: Func.NodeKind) bool {
-        return toJoined(k) == .St;
-    }
+    pub const is_load = .{.Ld};
+    pub const is_store = .{.St};
+    pub const is_basic_block_end = .{.IfOp};
 
     pub fn isSwapped(node: *Func.Node) bool {
-        return toJoined(node.kind) == .IfOp and gcm.machExtra(node, .IfOp).swapped;
-    }
-
-    pub fn isBasicBlockEnd(node: Func.NodeKind) bool {
-        return toJoined(node) == .IfOp;
+        return node.kind == .IfOp and node.extra(.IfOp).swapped;
     }
 };
 
@@ -168,8 +140,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: Types.Func, allocs: []u8) void 
     const stack_size: i64 = used_reg_size + local_size;
 
     var visited = std.DynamicBitSet.initEmpty(tmp, func.next_id) catch unreachable;
-    var stack = std.ArrayList(Func.Frame).init(tmp);
-    const postorder = gcm.collectPostorder(func, tmp, &stack, &visited);
+    const postorder = func.collectPostorder(tmp, &visited);
 
     prelude: {
         if (used_registers != 0) {
@@ -213,7 +184,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: Types.Func, allocs: []u8) void 
         } else if (i + 1 == last.outputs()[0].schedule) {
             // noop
         } else {
-            std.debug.assert(gcm.isBasicBlockStart(last.outputs()[0].kind));
+            std.debug.assert(last.outputs()[0].isBasicBlockStart());
             self.local_relocs.append(.{
                 .dest_block = last.outputs()[0].schedule,
                 .rel = self.reloc(1, .rel32),
@@ -229,8 +200,8 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: Types.Func, allocs: []u8) void 
 
 pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
     for (node.outputs()) |no| {
-        const inps = gcm.dataDeps(no);
-        switch (toJoined(no.kind)) {
+        const inps = no.dataDeps();
+        switch (no.kind) {
             .CInt => {
                 const extra = no.extra(.CInt);
                 self.emit(.li64, .{ self.reg(no), @as(u64, @bitCast(extra.*)) });
@@ -275,7 +246,7 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
             },
             .ImmBinOp => {
                 const alloc = self.reg(no);
-                const extra = gcm.machExtra(no, .ImmBinOp);
+                const extra = no.extra(.ImmBinOp);
                 switch (extra.op) {
                     inline .addi64, .muli64 => |t| {
                         self.emit(t, .{ alloc, self.reg(inps[0]), @as(u64, @bitCast(extra.imm)) });
@@ -288,7 +259,7 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
                     .dest_block = no.outputs()[1].schedule,
                     .rel = self.reloc(3, .rel16),
                 }) catch unreachable;
-                const extra = gcm.machExtra(no, .IfOp);
+                const extra = no.extra(.IfOp);
                 const args = .{ self.reg(inps[0]), self.reg(inps[1]), 0 };
                 switch (extra.op) {
                     inline .jgtu, .jne => |op| self.emit(op, args),
@@ -334,7 +305,7 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
                     self.emit(.cp, .{ .ret, self.reg(inps[0]) });
                 }
             },
-            else => std.debug.panic("{any}", .{toJoined(no.kind)}),
+            else => std.debug.panic("{any}", .{no.kind}),
         }
     }
 }
@@ -372,7 +343,7 @@ pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node
                 else => break :b,
             };
             const op_inps = inps[1].?.inputs();
-            return func.addMachNode(Mach, .IfOp, &.{ inps[0], op_inps[1], op_inps[2] }, .{
+            return func.addNode(.IfOp, &.{ inps[0], op_inps[1], op_inps[2] }, .{
                 .op = instr,
                 .swapped = swap,
             });
@@ -395,7 +366,7 @@ pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node
                 else => break :b,
             };
 
-            return func.addMachNode(Mach, .ImmBinOp, &.{ null, node.inputs()[1] }, .{
+            return func.addNode(.ImmBinOp, &.{ null, node.inputs()[1] }, .{
                 .op = instr,
                 .imm = imm,
             });

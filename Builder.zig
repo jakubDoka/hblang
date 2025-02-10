@@ -14,7 +14,7 @@ fdata: *Types.FuncData = undefined,
 
 const std = @import("std");
 const Ast = @import("parser.zig");
-const Func = @import("Func.zig");
+const Func = @import("Func2.zig").Func(union(enum) {});
 const Types = @import("Types.zig");
 const Builder = @This();
 

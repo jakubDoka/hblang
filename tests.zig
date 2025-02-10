@@ -6,6 +6,7 @@ const Builder = @import("Builder.zig");
 const HbvmGen = @import("HbvmGen.zig");
 const Types = @import("Types.zig");
 const Regalloc = @import("Regalloc.zig");
+const Func = @import("Func2.zig");
 
 test {
     _ = @import("zig-out/tests.zig");
@@ -76,21 +77,23 @@ fn testBuilder(name: []const u8, code: []const u8, output: anytype, colors: std.
         try header("UNSCHEDULED SON", output, colors);
         bf.build(.root, func);
         defer bf.func.reset();
-        HbvmGen.gcm.fmtUnscheduled(&bf.func, output, colors);
+
+        const fnc: *Func.Func(HbvmGen.Mach) = @ptrCast(&bf.func);
+        fnc.fmtUnscheduled(output, colors);
 
         try header("OPTIMIZED SON", output, colors);
-        HbvmGen.gcm.iterPeeps(&bf.func);
-        HbvmGen.gcm.fmtUnscheduled(&bf.func, output, colors);
+        fnc.iterPeeps();
+        fnc.fmtUnscheduled(output, colors);
 
         try header("SCHEDULED SON", output, colors);
-        HbvmGen.gcm.gcm(&bf.func);
-        HbvmGen.gcm.fmtScheduled(&bf.func, output, colors);
+        fnc.gcm();
+        fnc.fmtScheduled(output, colors);
 
         try header("REGISTER SELECTION", output, colors);
-        const allocs = Regalloc.ralloc(&bf.func, HbvmGen.Mach);
+        const allocs = Regalloc.ralloc(HbvmGen.Mach, fnc);
         try output.print("{any}\n", .{allocs});
 
-        gen.emitFunc(&bf.func, func, allocs);
+        gen.emitFunc(fnc, func, allocs);
     }
 
     try header("CODEGEN", output, colors);

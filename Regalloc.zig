@@ -1,44 +1,45 @@
 const std = @import("std");
-const Func = @import("Func.zig");
+const Func = @import("Func2.zig");
 
-const Set = std.DynamicBitSetUnmanaged;
-pub const Block = struct {
-    start: *Func.Node = undefined,
-    end: *Func.Node = undefined,
-    liveins: Set,
-    liveouts: Set,
-    defs: Set,
-    uses: Set,
+pub fn ralloc(comptime Mach: type, func: *Func.Func(Mach)) []u8 {
+    const Fn = Func.Func(Mach);
 
-    pub fn setMasks(s: Set) []Set.MaskInt {
-        return s.masks[0 .. (s.bit_length + @bitSizeOf(Set.MaskInt) - 1) / @bitSizeOf(Set.MaskInt)];
-    }
-};
+    const Set = std.DynamicBitSetUnmanaged;
+    const Block = struct {
+        start: *Fn.Node = undefined,
+        end: *Fn.Node = undefined,
+        liveins: Set,
+        liveouts: Set,
+        defs: Set,
+        uses: Set,
 
-pub const Instr = struct {
-    prev: *Func.Node = undefined,
-    def: *Func.Node = undefined,
-    succ: []const *Func.Node = undefined,
-    liveins: Set,
-    liveouts: Set,
-    defs: Set,
-    uses: Set,
+        pub fn setMasks(s: Set) []Set.MaskInt {
+            return s.masks[0 .. (s.bit_length + @bitSizeOf(Set.MaskInt) - 1) / @bitSizeOf(Set.MaskInt)];
+        }
+    };
 
-    pub fn isBasicBlock(k: Func.NodeKind) bool {
-        std.debug.assert(Func.isCfg(k));
-        return switch (k) {
-            .Entry => true,
-            else => false,
-        };
-    }
+    const Instr = struct {
+        prev: *Fn.Node = undefined,
+        def: *Fn.Node = undefined,
+        succ: []const *Fn.Node = undefined,
+        liveins: Set,
+        liveouts: Set,
+        defs: Set,
+        uses: Set,
 
-    pub fn setMasks(s: Set) []Set.MaskInt {
-        return s.masks[0 .. (s.bit_length + @bitSizeOf(Set.MaskInt) - 1) / @bitSizeOf(Set.MaskInt)];
-    }
-};
+        pub fn isBasicBlock(k: Fn.NodeKind) bool {
+            std.debug.assert(Fn.isCfg(k));
+            return switch (k) {
+                .Entry => true,
+                else => false,
+            };
+        }
 
-pub fn ralloc(func: *Func, comptime Mach: type) []u8 {
-    const gcm = @import("gcm.zig").Utils(Mach);
+        pub fn setMasks(s: Set) []Set.MaskInt {
+            return s.masks[0 .. (s.bit_length + @bitSizeOf(Set.MaskInt) - 1) / @bitSizeOf(Set.MaskInt)];
+        }
+    };
+
     const tmp = func.beginTmpAlloc();
 
     const instrs = tmp.alloc(Instr, func.instr_count) catch unreachable;
@@ -52,8 +53,7 @@ pub fn ralloc(func: *Func, comptime Mach: type) []u8 {
     };
 
     var visited = std.DynamicBitSet.initEmpty(tmp, func.next_id) catch unreachable;
-    var stack = std.ArrayList(Func.Frame).init(tmp);
-    const postorder = gcm.collectPostorder(func, tmp, &stack, &visited);
+    const postorder = func.collectPostorder(tmp, &visited);
     for (postorder) |bb| {
         const node = &bb.base;
         for (node.outputs(), 0..) |c, i| {
@@ -67,10 +67,11 @@ pub fn ralloc(func: *Func, comptime Mach: type) []u8 {
     }
 
     for (instrs, 0..) |*instr, i| {
-        if (instr.def.outputs().len != 0 and !gcm.isCfg(instr.def.kind)) {
+        if (instr.def.outputs().len != 0 and !instr.def.isCfg()) {
             instr.defs.set(i);
         }
-        for (gcm.dataDeps(instr.def)) |use| if (use) |uuse| {
+        for (instr.def.dataDeps()) |use| if (use) |uuse| {
+            std.debug.print("{}\n", .{uuse});
             instrs[instr.def.schedule].uses.set(uuse.schedule);
         };
     }
@@ -96,7 +97,7 @@ pub fn ralloc(func: *Func, comptime Mach: type) []u8 {
             for (i.succ) |bo| {
                 for (
                     Block.setMasks(i.liveouts),
-                    Block.setMasks(instrs[if (gcm.isCfg(bo.kind) and gcm.isBasicBlockStart(bo.kind)) bo.outputs()[0].schedule else bo.schedule].liveins),
+                    Block.setMasks(instrs[if (bo.isCfg() and bo.isBasicBlockStart()) bo.outputs()[0].schedule else bo.schedule].liveins),
                 ) |*lot, sin| {
                     const prevo = lot.*;
                     lot.* |= sin;
@@ -108,7 +109,7 @@ pub fn ralloc(func: *Func, comptime Mach: type) []u8 {
 
     for (postorder) |bb| {
         for (bb.base.outputs()) |o| {
-            for (gcm.dataDeps(o)) |i| if (i) |ii| {
+            for (o.dataDeps()) |i| if (i) |ii| {
                 std.debug.assert(instrs[o.schedule].liveins.isSet(ii.schedule));
             };
         }
