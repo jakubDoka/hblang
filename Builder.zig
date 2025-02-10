@@ -14,7 +14,7 @@ fdata: *Types.FuncData = undefined,
 
 const std = @import("std");
 const Ast = @import("parser.zig");
-const Func = @import("Func2.zig").Func(union(enum) {});
+const Func = @import("Func.zig").Func(union(enum) {});
 const Types = @import("Types.zig");
 const Builder = @This();
 
@@ -158,7 +158,7 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
         .Ident => |e| {
             const ident = resolveIdent(&self.func, self.scope.items, e.id.index + 1);
             std.debug.assert(ident.kind == .Local);
-            return self.func.addNode(.Load, &.{ null, self.resolveMem(), ident }, {});
+            return self.func.addNode(.Load, &.{ self.ctrl, self.resolveMem(), ident }, {});
         },
         .Block => |e| {
             const prev_scope_height = self.scope.items.len;
@@ -242,7 +242,7 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
             },
             .@"*" => {
                 const oper = self.emit(e.oper).?;
-                const load = self.func.addNode(.Load, &.{ null, self.resolveMem(), oper }, {});
+                const load = self.func.addNode(.Load, &.{ self.ctrl, self.resolveMem(), oper }, {});
                 return load;
             },
             else => std.debug.panic("{any}\n", .{self.getAst(expr)}),

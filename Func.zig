@@ -6,69 +6,6 @@ const std = @import("std");
 const Lexer = @import("Lexer.zig");
 const Types = @import("Types.zig");
 
-pub const Buitin = union(enum) {
-    Start: Cfg,
-    // [Start]
-    Arg: usize,
-    // [Start]
-    Entry: Cfg,
-    // [Start]
-    Mem: void,
-    // [Cfg, ret]
-    Return: Cfg,
-    // [?Cfg]
-    CInt: i64,
-    // [?Cfg, lhs, rhs]
-    BinOp: Lexer.Lexeme,
-    // [?Cfg, Mem]
-    Local: usize,
-    // [?Cfg, thread, ptr]
-    Load,
-    // [?Cfg, thread, ptr, value, ...antideps]
-    Store,
-    // [?Cfg, ...lane]
-    Split,
-    // [?Cfg, ...lane]
-    Join,
-    // [Cfg, ..args]
-    Call: extern struct {
-        base: Cfg = .{},
-        id: Types.Func,
-    },
-    // [Call]
-    CallEnd: Cfg,
-    // [CallEnd]
-    Ret: void,
-    // [Cfg, cond],
-    If: Cfg,
-    // [If]
-    Then: Cfg,
-    // [If]
-    Else: Cfg,
-    // [lCfg, rCfg]
-    Region: Cfg,
-    // [entryCfg, backCfg]
-    Loop: Cfg,
-    // [Cfg]
-    Jmp: Cfg,
-    // [Region, lhs, rhs]
-    Phi,
-    // [Cfg, inp]
-    MachMove,
-
-    pub const is_basic_block_start = .{ .Entry, .CallEnd, .Then, .Else, .Region, .Loop };
-    pub const is_basic_block_end = .{ .Return, .Call, .If, .Jmp };
-    pub const is_mem_op = .{ .Load, .Local, .Store, .Return, .Call };
-    pub const is_pinned = .{ .Ret, .Phi, .Mem };
-    pub const is_load = .{.Load};
-    pub const is_store = .{.Store};
-
-    pub const Cfg = extern struct {
-        idepth: u16 = 0,
-        antidep: u16 = 0,
-    };
-};
-
 fn _Func(comptime Mach: type) struct {
     arena: std.heap.ArenaAllocator,
     tmp_arena: std.heap.ArenaAllocator,
@@ -79,8 +16,70 @@ fn _Func(comptime Mach: type) struct {
     root: *Node = undefined,
     end: *Node = undefined,
 
-    pub const Extra = Buitin;
-    pub const all_classes = std.meta.fields(Buitin) ++ std.meta.fields(Mach);
+    pub const Builtin = union(enum) {
+        Start: Cfg,
+        // [Start]
+        Arg: usize,
+        // [Start]
+        Entry: Cfg,
+        // [Start]
+        Mem: void,
+        // [Cfg, ret]
+        Return: Cfg,
+        // [?Cfg]
+        CInt: i64,
+        // [?Cfg, lhs, rhs]
+        BinOp: Lexer.Lexeme,
+        // [?Cfg, Mem]
+        Local: usize,
+        // [?Cfg, thread, ptr]
+        Load,
+        // [?Cfg, thread, ptr, value, ...antideps]
+        Store,
+        // [?Cfg, ...lane]
+        Split,
+        // [?Cfg, ...lane]
+        Join,
+        // [Cfg, ..args]
+        Call: extern struct {
+            base: Cfg = .{},
+            id: Types.Func,
+        },
+        // [Call]
+        CallEnd: Cfg,
+        // [CallEnd]
+        Ret: void,
+        // [Cfg, cond],
+        If: Cfg,
+        // [If]
+        Then: Cfg,
+        // [If]
+        Else: Cfg,
+        // [lCfg, rCfg]
+        Region: Cfg,
+        // [entryCfg, backCfg]
+        Loop: Cfg,
+        // [Cfg]
+        Jmp: Cfg,
+        // [Region, lhs, rhs]
+        Phi,
+        // [Cfg, inp]
+        MachMove,
+
+        pub const is_basic_block_start = .{ .Entry, .CallEnd, .Then, .Else, .Region, .Loop };
+        pub const is_basic_block_end = .{ .Return, .Call, .If, .Jmp };
+        pub const is_mem_op = .{ .Load, .Local, .Store, .Return, .Call };
+        pub const is_pinned = .{ .Ret, .Phi, .Mem };
+        pub const is_load = .{.Load};
+        pub const is_store = .{.Store};
+
+        pub const Cfg = extern struct {
+            idepth: u16 = 0,
+            antidep: u16 = 0,
+        };
+    };
+
+    pub const all_classes = std.meta.fields(Builtin) ++ std.meta.fields(Mach);
 
     const Self = @This();
 
@@ -117,10 +116,10 @@ fn _Func(comptime Mach: type) struct {
         node: *Node,
     };
 
-    pub const CfgNode = LayoutOf(Buitin.Cfg);
+    pub const CfgNode = LayoutOf(Builtin.Cfg);
 
     pub const Kind = b: {
-        var builtin = @typeInfo(std.meta.Tag(Buitin));
+        var builtin = @typeInfo(std.meta.Tag(Builtin));
         builtin.@"enum".tag_type = u16;
         const field_ref = std.meta.fields(std.meta.Tag(Mach));
         var fields = field_ref[0..field_ref.len].*;
@@ -133,7 +132,7 @@ fn _Func(comptime Mach: type) struct {
 
     pub fn bakeBitset(name: []const u8) std.EnumSet(Kind) {
         var set = std.EnumSet(Kind).initEmpty();
-        if (@hasDecl(Buitin, name)) for (@field(Buitin, name)) |k| set.insert(k);
+        if (@hasDecl(Builtin, name)) for (@field(Builtin, name)) |k| set.insert(k);
         if (@hasDecl(Mach, name)) for (@field(Mach, name)) |k| set.insert(k);
         return set;
     }
@@ -152,7 +151,7 @@ fn _Func(comptime Mach: type) struct {
             ext: Class,
 
             pub fn idepth(cfg: *CfgNode) u16 {
-                const extra: *Buitin.Cfg = &cfg.ext;
+                const extra: *Builtin.Cfg = &cfg.ext;
 
                 if (extra.idepth != 0) return extra.idepth;
                 extra.idepth = switch (cfg.base.kind) {
@@ -225,7 +224,7 @@ fn _Func(comptime Mach: type) struct {
                 std.debug.assert(use.inputs()[0].?.kind == .Region or use.inputs()[0].?.kind == .Loop);
                 for (use.inputs()[0].?.inputs(), use.inputs()[1..]) |b, u| {
                     if (u.? == self) {
-                        return subclass(b.?, Extra.Cfg).?;
+                        return subclass(b.?, Builtin.Cfg).?;
                     }
                 }
             }
@@ -369,8 +368,8 @@ fn _Func(comptime Mach: type) struct {
         }
 
         pub fn cfg0(self: *Node) ?*CfgNode {
-            if (self.kind == .Start) return subclass(self, Extra.Cfg);
-            return subclass((self.inputs()[0] orelse return null), Extra.Cfg);
+            if (self.kind == .Start) return subclass(self, Builtin.Cfg);
+            return subclass((self.inputs()[0] orelse return null), Builtin.Cfg);
         }
 
         pub fn removeUse(self: *Node, use: *Node) void {
@@ -431,11 +430,11 @@ fn _Func(comptime Mach: type) struct {
         }
 
         pub fn asCfg(self: *Node) ?*CfgNode {
-            return self.subclass(Buitin.Cfg);
+            return self.subclass(Builtin.Cfg);
         }
 
         pub fn isCfg(self: *const Node) bool {
-            return self.isSub(Buitin.Cfg);
+            return self.isSub(Builtin.Cfg);
         }
 
         pub inline fn isLoad(self: *const Node) bool {
@@ -587,7 +586,7 @@ fn _Func(comptime Mach: type) struct {
         return node == null or node.?.data_type == .dead;
     }
 
-    pub fn subsume(self: *Self, this: *Node, target: *Node) void {
+    pub fn subsumeNoKill(self: *Self, this: *Node, target: *Node) void {
         for (target.outputs()) |use| {
             const index = std.mem.indexOfScalar(?*Node, use.inputs(), target) orelse {
                 std.debug.panic("{} {any} {}", .{ this, target.outputs(), use });
@@ -598,6 +597,10 @@ fn _Func(comptime Mach: type) struct {
         }
 
         target.output_len = 0;
+    }
+
+    pub fn subsume(self: *Self, this: *Node, target: *Node) void {
+        self.subsumeNoKill(this, target);
         target.kill();
     }
 
@@ -774,10 +777,6 @@ fn _Func(comptime Mach: type) struct {
                         }
                         var lca = olca.?;
 
-                        if (t.id == 31) {
-                            std.debug.print("{}\n", .{&lca.base});
-                        }
-
                         if (t.isLoad()) add_antideps: {
                             var cursor = lca;
                             while (cursor != early.idom()) : (cursor = cursor.idom()) {
@@ -817,10 +816,6 @@ fn _Func(comptime Mach: type) struct {
                             };
 
                             break :add_antideps;
-                        }
-
-                        if (t.id == 31) {
-                            std.debug.print("{}\n", .{&lca.base});
                         }
 
                         var best = lca;
@@ -1023,6 +1018,177 @@ fn _Func(comptime Mach: type) struct {
         }
     }
 
+    pub fn collectDfs(self: *Self, arena: std.mem.Allocator, visited: *std.DynamicBitSet) []*CfgNode {
+        var postorder = std.ArrayList(*CfgNode).init(arena);
+        collectPostorder3(self, self.root, arena, &postorder, visited, true);
+        return postorder.items;
+    }
+
+    pub fn collectPostorder3(
+        self: *Self,
+        node: *Node,
+        arena: std.mem.Allocator,
+        pos: *std.ArrayList(*CfgNode),
+        visited: *std.DynamicBitSet,
+        comptime only_basic: bool,
+    ) void {
+        if (visited.isSet(node.id)) {
+            return;
+        }
+        visited.set(node.id);
+        pos.append(node.asCfg().?) catch unreachable;
+        for (node.outputs()) |o| if (o.isCfg()) collectPostorder3(self, o, arena, pos, visited, only_basic);
+    }
+
+    // TODO: does not work
+    pub fn mem2reg(self: *Self) void {
+        const tmp = self.beginTmpAlloc();
+
+        var visited = std.DynamicBitSet.initEmpty(tmp, self.next_id) catch unreachable;
+        const postorder = self.collectDfs(tmp, &visited);
+
+        for (postorder, 0..) |bb, i| {
+            bb.base.schedule = @intCast(i);
+        }
+
+        var local_count: u16 = 0;
+        std.debug.assert(self.root.outputs()[1].kind == .Mem);
+        for (self.root.outputs()[1].outputs()) |o| {
+            if (o.kind == .Local) b: {
+                for (o.outputs()) |oo| {
+                    if ((oo.kind != .Store and !oo.isLoad()) or oo.base() != o) {
+                        o.schedule = std.math.maxInt(u16);
+                        break :b;
+                    }
+                }
+                const extra = o.extra(.Local);
+                std.debug.assert(extra.* == 8);
+                o.schedule = local_count;
+                local_count += 1;
+                continue;
+            }
+        }
+
+        const Local = union(enum) {
+            Node: *Node,
+            Loop: *Join,
+
+            const Join = struct { done: bool, ctrl: *Node, items: []?L };
+
+            const L = @This();
+
+            fn resolve(func: *Self, scope: []?L, index: usize) *Node {
+                return switch (scope[index].?) {
+                    .Node => |n| n,
+                    .Loop => |loop| {
+                        if (!loop.done) {
+                            const initVal = resolve(func, loop.items, index);
+
+                            if (!loop.items[index].?.Node.isLazyPhi(loop.ctrl)) {
+                                loop.items[index].? = .{ .Node = func.addNode(.Phi, &.{ loop.ctrl, initVal, null }, {}) };
+                            }
+                        }
+                        scope[index] = loop.items[index];
+                        return scope[index].?.Node;
+                    },
+                };
+            }
+        };
+
+        const BBState = union(enum) {
+            Fork: struct {
+                saved: []?Local,
+            },
+            Join: *Local.Join,
+        };
+
+        var locals = tmp.alloc(?Local, local_count) catch unreachable;
+        @memset(locals, null);
+
+        var states = tmp.alloc(?BBState, postorder.len) catch unreachable;
+        @memset(states, null);
+
+        var to_remove = std.ArrayList(*Node).init(tmp);
+        for (postorder[1..]) |bbc| {
+            const bb = &bbc.base;
+
+            var parent_succs: usize = 0;
+            const parent = bb.inputs()[0].?;
+            std.debug.assert(parent.isCfg());
+            for (parent.outputs()) |o| parent_succs += @intFromBool(o.isCfg());
+            std.debug.assert(parent_succs >= 1 and parent_succs <= 2);
+            // handle fork
+            if (parent_succs == 2) {
+                // this is the second branch, restore the value
+                if (states[parent.schedule]) |s| {
+                    locals = s.Fork.saved;
+                } else {
+                    // we will visit this eventually
+                    states[parent.schedule] = .{ .Fork = .{ .saved = tmp.dupe(?Local, locals) catch unreachable } };
+                }
+            }
+
+            for (tmp.dupe(*Node, bb.outputs()) catch unreachable) |o| {
+                if (o.kind == .Load and o.base().kind == .Local and o.base().schedule != std.math.maxInt(u16)) {
+                    to_remove.append(o) catch unreachable;
+                    self.subsumeNoKill(Local.resolve(self, locals, o.base().schedule), o);
+                }
+
+                if (o.kind == .Store and o.base().kind == .Local and o.base().schedule != std.math.maxInt(u16)) {
+                    to_remove.append(o) catch unreachable;
+                    locals[o.base().schedule] = .{ .Node = o.value() };
+                }
+            }
+
+            const child: *Node = for (bb.outputs()) |o| {
+                if (o.isCfg()) break o;
+            } else continue;
+            var child_preds: usize = 0;
+            for (child.inputs()) |b| child_preds += @intFromBool(b != null and b.?.isCfg() and b.?.inputs()[0] != null);
+            std.debug.assert(child_preds >= 1 and child_preds <= 2);
+            // handle joins
+            if (child_preds == 2) {
+                // eider we arrived from the back branch or the other side of the split
+                if (states[child.schedule]) |s| {
+                    std.debug.assert(s.Join.ctrl == child);
+                    for (s.Join.items, locals, 0..) |lhs, rhsm, i| {
+                        if (lhs == null) continue;
+                        if (lhs.? == .Node and lhs.?.Node.isLazyPhi(s.Join.ctrl)) {
+                            var rhs = rhsm;
+                            if (rhs.? == .Loop and rhs.?.Loop != s.Join) {
+                                rhs = .{ .Node = Local.resolve(self, locals, i) };
+                            }
+                            if (rhs.? == .Node) {
+                                self.setInput(lhs.?.Node, 2, rhs.?.Node);
+                            } else {
+                                const prev = lhs.?.Node.inputs()[1].?;
+                                self.subsume(prev, lhs.?.Node);
+                                s.Join.items[i].?.Node = prev;
+                            }
+                        }
+                    }
+                    s.Join.done = true;
+                } else {
+                    // first time seeing, this ca also be a region, needs renaming I guess
+                    const loop = tmp.create(Local.Join) catch unreachable;
+                    loop.* = .{
+                        .done = false,
+                        .ctrl = child,
+                        .items = tmp.dupe(?Local, locals) catch unreachable,
+                    };
+                    @memset(locals, .{ .Loop = loop });
+                    states[child.schedule] = .{ .Join = loop };
+                }
+            }
+        }
+
+        for (to_remove.items) |tr| {
+            if (tr.kind == .Load) tr.kill() else {
+                self.subsume(tr.mem(), tr);
+            }
+        }
+    }
+
     fn idealize(self: *Self, node: *Node, worklist: *WorkList) ?*Node {
         const inps = node.inputs();
 
@@ -1127,13 +1293,14 @@ fn _Func(comptime Mach: type) struct {
             }
 
             if (earlier != node.mem()) {
-                //std.debug.assert(node.id == 31);
                 return self.addNode(.Load, &.{ inps[0], earlier, inps[2] }, {});
             }
         }
 
         if (node.kind == .Phi) {
             const region, const l, const r = .{ inps[0].?, inps[1].?, inps[2].? };
+
+            if (r == node) return l;
 
             if (region.kind == .Loop) b: {
                 var cursor = r;
@@ -1165,6 +1332,8 @@ fn _Func(comptime Mach: type) struct {
 
     pub fn noAlias(lbase: *Node, rbase: *Node) bool {
         if (lbase.kind == .Local and rbase.kind == .Local) return lbase != rbase;
+        if (lbase.kind == .Local and rbase.kind == .Arg) return true;
+        if (lbase.kind == .Arg and rbase.kind == .Local) return true;
         return false;
     }
 
@@ -1186,8 +1355,10 @@ fn _Func(comptime Mach: type) struct {
         return postorder.items;
     }
 
-    pub fn collectPostorderAll(self: *Self, node: *Node, arena: std.mem.Allocator, pos: *std.ArrayList(*CfgNode), visited: *std.DynamicBitSet) void {
-        self.collectPostorder2(node, arena, pos, visited, false);
+    pub fn collectPostorderAll(self: *Self, arena: std.mem.Allocator, visited: *std.DynamicBitSet) []*CfgNode {
+        var postorder = std.ArrayList(*CfgNode).init(arena);
+        self.collectPostorder2(self.root, arena, &postorder, visited, false);
+        return postorder.items;
     }
 
     pub fn collectPostorder2(
@@ -1202,7 +1373,9 @@ fn _Func(comptime Mach: type) struct {
             .Region => {
                 if (!visited.isSet(node.id)) {
                     visited.set(node.id);
-                    return;
+                    if (node.inputs()[0].?.inputs()[0] != null and node.inputs()[1].?.inputs()[0] != null) {
+                        return;
+                    }
                 }
             },
             else => {

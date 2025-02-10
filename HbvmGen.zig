@@ -8,8 +8,8 @@ allocs: []u8 = undefined,
 
 const std = @import("std");
 const isa = @import("isa.zig");
-const Func = @import("Func2.zig").Func(Mach);
 const Types = @import("Types.zig");
+const Func = @import("Func.zig").Func(Mach);
 const Regalloc = @import("Regalloc.zig");
 const HbvmGen = @This();
 
@@ -43,7 +43,7 @@ pub const Mach = union(enum) {
     },
     // [?Cfg, lhs, rhs]
     IfOp: extern struct {
-        base: Func.Extra.Cfg = .{},
+        base: Func.Builtin.Cfg = .{},
         op: isa.Op,
         swapped: bool,
     },

@@ -61,14 +61,14 @@ fn(x: uint): uint {
 }
 ======== UNSCHEDULED SON ========
 %7 = CInt: 2 [, %8]
-%6 = Load: %5, %4 [, %8]
 %3 = Arg: 0, %0 [, %5]
 %4 = Local: 8, %2 [, %5, %6]
 %2 = Mem: %0 [, %4, %5]
+%6 = Load: %1, %5, %4 [, %8]
 %0 = Start: idepth: 0 [, %1, %2, %3]
 %8 = BinOp: +, %6, %7 [, %9]
 %5 = Store: %1, %2, %4, %3 [, %6, %9]
-%1 = Entry: idepth: 0, %0 [, %5, %9]
+%1 = Entry: idepth: 0, %0 [, %5, %6, %9]
 %9 = Return: idepth: 0, %1, %5, %8 []
 
 ======== OPTIMIZED SON ========
@@ -95,14 +95,14 @@ fn(x: uint): uint {
 }
 ======== UNSCHEDULED SON ========
 %7 = CInt: 1 [, %8]
-%6 = Load: %5, %4 [, %8]
 %3 = Arg: 0, %0 [, %5]
 %4 = Local: 8, %2 [, %5, %6]
 %2 = Mem: %0 [, %4, %5]
+%6 = Load: %1, %5, %4 [, %8]
 %0 = Start: idepth: 0 [, %1, %2, %3]
 %8 = BinOp: +, %6, %7 [, %9]
 %5 = Store: %1, %2, %4, %3 [, %6, %9]
-%1 = Entry: idepth: 0, %0 [, %5, %9]
+%1 = Entry: idepth: 0, %0 [, %5, %6, %9]
 %9 = Return: idepth: 0, %1, %5, %8 []
 
 ======== OPTIMIZED SON ========

@@ -1,5 +1,5 @@
 const std = @import("std");
-const Func = @import("Func2.zig");
+const Func = @import("Func.zig");
 
 pub fn ralloc(comptime Mach: type, func: *Func.Func(Mach)) []u8 {
     const Fn = Func.Func(Mach);
@@ -71,7 +71,6 @@ pub fn ralloc(comptime Mach: type, func: *Func.Func(Mach)) []u8 {
             instr.defs.set(i);
         }
         for (instr.def.dataDeps()) |use| if (use) |uuse| {
-            std.debug.print("{}\n", .{uuse});
             instrs[instr.def.schedule].uses.set(uuse.schedule);
         };
     }

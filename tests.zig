@@ -6,7 +6,7 @@ const Builder = @import("Builder.zig");
 const HbvmGen = @import("HbvmGen.zig");
 const Types = @import("Types.zig");
 const Regalloc = @import("Regalloc.zig");
-const Func = @import("Func2.zig");
+const Func = @import("Func.zig");
 
 test {
     _ = @import("zig-out/tests.zig");
@@ -82,6 +82,7 @@ fn testBuilder(name: []const u8, code: []const u8, output: anytype, colors: std.
         fnc.fmtUnscheduled(output, colors);
 
         try header("OPTIMIZED SON", output, colors);
+        fnc.mem2reg();
         fnc.iterPeeps();
         fnc.fmtUnscheduled(output, colors);
 
