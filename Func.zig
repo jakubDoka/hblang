@@ -7,15 +7,15 @@ instr_count: u16 = undefined,
 root: *Node = undefined,
 end: *Node = undefined,
 
-pub const InternedNode = struct {
-    hash: u64,
-    node: *Node,
-};
-
 const std = @import("std");
 const Lexer = @import("Lexer.zig");
 const Types = @import("Types.zig");
 const Func = @This();
+
+pub const InternedNode = struct {
+    hash: u64,
+    node: *Node,
+};
 
 pub const WorkList = struct {
     list: std.ArrayList(*Node),
@@ -94,6 +94,11 @@ pub const Node = extern struct {
         return self.inputs()[2].?;
     }
 
+    pub fn value(self: *Node) *Node {
+        std.debug.assert(self.kind == .Store);
+        return self.inputs()[3].?;
+    }
+
     pub fn isLazyPhi(self: *Node, on_loop: *Node) bool {
         return self.kind == .Phi and self.inputs()[0] == on_loop and self.inputs()[2] == null;
     }
@@ -134,16 +139,6 @@ pub const Node = extern struct {
         return &ptr.extra;
     }
 
-    pub fn subclass(self: *Node, comptime Ext: type) ?*SubclassFor(Ext) {
-        switch (toBuiltinKind(self.kind) orelse return null) {
-            inline else => |t| if (comptime isSubbclass(ExtFor(t), Ext)) {
-                return @ptrCast(self);
-            },
-        }
-
-        return null;
-    }
-
     pub fn isSubbclass(Full: type, Sub: type) bool {
         var Cursor = Full;
         while (true) {
@@ -151,23 +146,6 @@ pub const Node = extern struct {
             if (@typeInfo(Cursor) != .@"struct" or !@hasField(Cursor, "base")) return false;
             Cursor = @TypeOf(@as(Cursor, undefined).base);
         }
-    }
-
-    pub fn cfg0(self: *Node) ?*SubclassFor(Extra.Cfg) {
-        if (self.kind == .Start) return self.subclass(Extra.Cfg);
-        return (self.inputs()[0] orelse return null).subclass(Extra.Cfg);
-    }
-
-    pub fn useBlock(self: *Node, use: *Node, scheds: []const ?*CfgNode) *CfgNode {
-        if (use.kind == .Phi) {
-            std.debug.assert(use.inputs()[0].?.kind == .Region or use.inputs()[0].?.kind == .Loop);
-            for (use.inputs()[0].?.inputs(), use.inputs()[1..]) |b, u| {
-                if (u.? == self) {
-                    return b.?.subclass(Extra.Cfg).?;
-                }
-            }
-        }
-        return scheds[use.id].?;
     }
 };
 
@@ -193,6 +171,10 @@ pub const Extra = union(enum(u16)) {
     Load,
     // [?Cfg, thread, ptr, value, ...antideps]
     Store,
+    // [?Cfg, ...lane]
+    Split,
+    // [?Cfg, ...lane]
+    Join,
     // [Cfg, ..args]
     Call: extern struct {
         base: Cfg = .{},
@@ -203,10 +185,7 @@ pub const Extra = union(enum(u16)) {
     // [CallEnd]
     Ret: void,
     // [Cfg, cond],
-    If: extern struct {
-        base: Cfg = .{},
-        swapped: bool = false,
-    },
+    If: Cfg,
     // [If]
     Then: Cfg,
     // [If]
@@ -227,9 +206,10 @@ pub const Extra = union(enum(u16)) {
         antidep: u16 = 0,
     };
 
-    pub fn isInterned(kind: BuiltinNodeKind) bool {
+    pub fn isInterned(kind: BuiltinNodeKind, inputs: []const ?*Node) bool {
         return switch (kind) {
             .CInt, .BinOp, .Load => true,
+            .Phi => inputs[2] != null,
             else => false,
         };
     }
@@ -254,7 +234,7 @@ fn LayoutFor(comptime kind: BuiltinNodeKind) type {
     };
 }
 
-fn SubclassFor(comptime Ext: type) type {
+pub fn SubclassFor(comptime Ext: type) type {
     return extern struct {
         base: Node,
         extra: Ext,
@@ -329,13 +309,19 @@ pub fn cmpNode(
 
     if (!std.mem.eql(?*Node, ainputs, binputs)) return false;
 
-    switch (akind) {
-        inline else => |k| {
+    const res = switch (akind) {
+        inline else => |k| b: {
             const aext: *const TagPayloadOfLinear(Enum, k) = @alignCast(@ptrCast(aextra));
             const bext: *const TagPayloadOfLinear(Enum, k) = @alignCast(@ptrCast(bextra));
-            return std.meta.eql(aext.*, bext.*);
+            break :b std.meta.eql(aext.*, bext.*);
         },
+    };
+
+    if (!res and akind == .Phi) {
+        std.debug.print("a: {any}", .{ainputs});
+        std.debug.print("b: {any}", .{binputs});
     }
+    return res;
 }
 
 pub fn addNode(self: *Func, comptime kind: BuiltinNodeKind, inputs: []const ?*Node, extra: ExtFor(kind)) *Node {
@@ -353,7 +339,7 @@ pub fn addMachNode(
 }
 
 pub fn addMachNodeLow(self: *Func, comptime Enum: type, kind: std.meta.Tag(Enum), inputs: []const ?*Node, extra: anytype) *Node {
-    if (@hasDecl(Enum, "isInterned") and Enum.isInterned(kind)) {
+    if (@hasDecl(Enum, "isInterned") and Enum.isInterned(kind, inputs)) {
         const Inserter = struct {
             kind: @TypeOf(kind),
             inputs: []const ?*Node,
@@ -379,6 +365,12 @@ pub fn addMachNodeLow(self: *Func, comptime Enum: type, kind: std.meta.Tag(Enum)
         if (!entry.found_existing) entry.key_ptr.node = self.addNodeLow(toKind(kind), inputs, extra);
         return entry.key_ptr.node;
     } else {
+        if (Enum == Extra) if (kind == .Phi) {
+            for (inputs) |i| if (i != null) {
+                std.debug.print("{} ", .{i.?.id});
+            };
+        };
+
         return self.addNodeLow(toKind(kind), inputs, extra);
     }
 }
@@ -444,7 +436,7 @@ pub fn setInput(self: *Func, use: *Node, idx: usize, def: ?*Node) void {
 }
 
 pub fn addDep(self: *Func, use: *Node, def: *Node) void {
-    if (use.input_ordered_len == use.input_len) {
+    if (use.input_ordered_len == use.input_len or std.mem.indexOfScalar(?*Node, use.input_base[use.input_ordered_len..use.input_len], null) == null) {
         const new_cap = @max(use.input_len, 1) * 2;
         const new_inputs = self.arena.allocator().realloc(use.inputs(), new_cap) catch unreachable;
         @memset(new_inputs[use.input_len..], null);

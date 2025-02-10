@@ -72,28 +72,26 @@ fn(x: uint): uint {
 %9 = Return: idepth: 0, %1, %5, %8 []
 
 ======== OPTIMIZED SON ========
-%6 = Load: %5, %4 [, %10]
-%3 = Arg: 0, %0 [, %5]
-%4 = Local: 8, %2 [, %5, %6]
-%2 = Mem: %0 [, %4, %5]
+%3 = Arg: 0, %0 [, %11, %10]
+%4 = Local: 8, %2 [, %11]
+%2 = Mem: %0 [, %4, %11]
 %0 = Start: idepth: 0 [, %1, %2, %3]
-%10 = ImmBinOp: imm: 2, op: addi64, %6 [, %9]
-%5 = Store: %1, %2, %4, %3 [, %6, %9]
-%1 = Entry: idepth: 0, %0 [, %5, %9]
-%9 = Return: idepth: 0, %1, %5, %10 []
+%10 = ImmBinOp: imm: 2, op: addi64, %3 [, %9]
+%11 = Store: %2, %4, %3 [, %9]
+%1 = Entry: idepth: 0, %0 [, %9]
+%9 = Return: idepth: 0, %1, %11, %10 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
 %1 = Entry: idepth: 1, %0
   %4 = Local: 8, %2
   %3 = Arg: 0
-  %5 = Store: %2, %4, %3
-  %6 = Load: %5, %4
-  %10 = ImmBinOp: imm: 2, op: addi64, %6
-  %9 = Return: idepth: 0, %5, %10
+  %11 = Store: %2, %4, %3
+  %10 = ImmBinOp: imm: 2, op: addi64, %3
+  %9 = Return: idepth: 0, %11, %10
 
 ======== REGISTER SELECTION ========
-{ 1, 2, 1, 1, 1, 1 }
+{ 1, 2, 1, 1, 1 }
 
 ======== SOURCE ========
 fn(x: uint): uint {
@@ -112,28 +110,26 @@ fn(x: uint): uint {
 %9 = Return: idepth: 0, %1, %5, %8 []
 
 ======== OPTIMIZED SON ========
-%6 = Load: %5, %4 [, %10]
-%3 = Arg: 0, %0 [, %5]
-%4 = Local: 8, %2 [, %5, %6]
-%2 = Mem: %0 [, %4, %5]
+%3 = Arg: 0, %0 [, %11, %10]
+%4 = Local: 8, %2 [, %11]
+%2 = Mem: %0 [, %4, %11]
 %0 = Start: idepth: 0 [, %1, %2, %3]
-%10 = ImmBinOp: imm: 1, op: addi64, %6 [, %9]
-%5 = Store: %1, %2, %4, %3 [, %6, %9]
-%1 = Entry: idepth: 0, %0 [, %5, %9]
-%9 = Return: idepth: 0, %1, %5, %10 []
+%10 = ImmBinOp: imm: 1, op: addi64, %3 [, %9]
+%11 = Store: %2, %4, %3 [, %9]
+%1 = Entry: idepth: 0, %0 [, %9]
+%9 = Return: idepth: 0, %1, %11, %10 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
 %1 = Entry: idepth: 1, %0
   %4 = Local: 8, %2
   %3 = Arg: 0
-  %5 = Store: %2, %4, %3
-  %6 = Load: %5, %4
-  %10 = ImmBinOp: imm: 1, op: addi64, %6
-  %9 = Return: idepth: 0, %5, %10
+  %11 = Store: %2, %4, %3
+  %10 = ImmBinOp: imm: 1, op: addi64, %3
+  %9 = Return: idepth: 0, %11, %10
 
 ======== REGISTER SELECTION ========
-{ 1, 2, 1, 1, 1, 1 }
+{ 1, 2, 1, 1, 1 }
 
 ======== CODEGEN ========
 main:
@@ -157,8 +153,7 @@ add_two:
          cp $14, $2
      addi64 $13, $254, 0
          st $14, $254, 0, 8
-         ld $13, $254, 0, 8
-     addi64 $13, $13, 2
+     addi64 $13, $14, 2
          cp $1, $13
      addi64 $254, $254, 8
        jala $0, $31, 0
@@ -167,8 +162,7 @@ add_one:
          cp $14, $2
      addi64 $13, $254, 0
          st $14, $254, 0, 8
-         ld $13, $254, 0, 8
-     addi64 $13, $13, 1
+     addi64 $13, $14, 1
          cp $1, $13
      addi64 $254, $254, 8
        jala $0, $31, 0
@@ -178,13 +172,12 @@ add_one:
   addi64 $254=10240, $254, -24
     li64 $32=0, 10
       cp $2=0, $32=10
-     jal $31=0, $0=0, 152
+     jal $31=0, $0=0, 139
   addi64 $254=10216, $254, -8
       cp $14=0, $2=10
   addi64 $13=0, $254=10208, 0
       st $14=10, $254=10208, 0, 8
-      ld $13=10208, $254=10208, 0, 8
-  addi64 $13=10, $13, 1
+  addi64 $13=10208, $14=10, 1
       cp $1=0, $13=11
   addi64 $254=10208, $254, 8
     jala $0=0, $31=44, 0
@@ -196,8 +189,7 @@ add_one:
       cp $14=10, $2=20
   addi64 $13=11, $254=10208, 0
       st $14=20, $254=10208, 0, 8
-      ld $13=10208, $254=10208, 0, 8
-  addi64 $13=20, $13, 2
+  addi64 $13=10208, $14=20, 2
       cp $1=11, $13=22
   addi64 $254=10208, $254, 8
     jala $0=0, $31=67, 0

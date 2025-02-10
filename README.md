@@ -137,6 +137,17 @@ not_fib := fn(size: uint): uint {
 }
 ```
 
+#### loops 3
+```hb
+main := fn(): uint {
+    i := 0
+    loop if i == 4 break else {
+        i += 1
+    }
+    return i
+}
+```
+
 #### pointers
 ```hb
 main := fn(): uint {
@@ -156,6 +167,27 @@ modify := fn(a: ^uint): void {
 
 drop := fn(a: uint): void {
     return
+}
+```
+
+#### pointers 2
+```hb
+main := fn(): uint {
+    a := 1
+    b := 2
+
+    c := &a
+    d := &b
+
+    swap(c, d)
+
+    return a - b
+}
+
+swap := fn(a: ^uint, b: ^uint): void {
+    tmp := *b;
+    *b = *a;
+    *a = tmp
 }
 ```
 
@@ -197,21 +229,5 @@ pass := fn(t: ^Ty): int {
 
 odher_pass := fn(t: Ty2): Ty2 {
     return t
-}
-```
-
-## Edge Cases
-
-#### register ownership
-```hb
-// should use only 3 registers as last occurence should end
-// the variable lifetime
-main := fn(): int {
-    a := 1
-    b := 2
-    c := 3
-    e := a
-    f := b
-    return c + e + f - 6
 }
 ```

@@ -2,7 +2,7 @@ types: *Types,
 func: Func,
 scope: Scope = undefined,
 loops: std.ArrayList(*Loop) = undefined,
-return_mem: *Func.Node = undefined,
+return_mem: ?*Func.Node = undefined,
 return_value: ?*Func.Node = undefined,
 return_ctrl: ?*Func.Node = undefined,
 file: Types.File = undefined,
@@ -62,7 +62,7 @@ pub fn build(self: *Builder, file: Types.File, func: Types.Func) void {
 
     self.ctrl = self.func.addNode(.Entry, &.{self.func.root}, .{});
     self.mem = self.func.addNode(.Mem, &.{self.func.root}, {});
-    self.return_mem = self.mem;
+    self.return_mem = null;
     self.scope.append(.{ .Node = self.mem }) catch unreachable;
 
     var i: usize = 0;
@@ -79,7 +79,11 @@ pub fn build(self: *Builder, file: Types.File, func: Types.Func) void {
 
     _ = self.emit(self.ast.exprs.get(self.fdata.ast).Fn.body);
 
-    self.func.end = self.func.addNode(.Return, &.{ self.return_ctrl orelse self.ctrl, self.return_mem, self.return_value }, .{});
+    self.func.end = self.func.addNode(.Return, &.{
+        self.return_ctrl orelse self.ctrl,
+        self.return_mem orelse self.resolveMem(),
+        self.return_value,
+    }, .{});
 }
 
 inline fn getAst(self: *Builder, expr: Ast.Id) Ast.Expr {
@@ -261,7 +265,7 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
                     self.jmp(self.ctrl),
                 }, .{});
                 self.return_mem = self.func.addNode(.Phi, &.{ self.return_ctrl, self.return_mem, mem }, {});
-                self.return_mem.data_type = .mem;
+                self.return_mem.?.data_type = .mem;
                 self.return_value = self.func.addNode(.Phi, &.{ self.return_ctrl, other, value }, {});
             } else {
                 self.return_mem = mem;

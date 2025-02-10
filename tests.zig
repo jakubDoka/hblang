@@ -159,9 +159,9 @@ pub fn runDiff(gpa: std.mem.Allocator, tmp: std.testing.TmpDir, old: []const u8,
 
     try child.spawn();
 
-    const stdout = try child.stderr.?.readToEndAlloc(gpa, 1024 * 10);
+    const stdout = try child.stderr.?.readToEndAlloc(gpa, 1024 * 100);
     defer gpa.free(stdout);
-    const stderr = try child.stdout.?.readToEndAlloc(gpa, 1024 * 10);
+    const stderr = try child.stdout.?.readToEndAlloc(gpa, 1024 * 100);
     defer gpa.free(stderr);
 
     const exit = (try child.wait()).Exited;

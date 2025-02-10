@@ -35,7 +35,7 @@ fn _Utils(comptime Mach: type) struct {
         extra.idepth = switch (cfg.base.kind) {
             .Start => return 0,
             .Region => idepth(idom(cfg)),
-            else => idepth(cfg.base.cfg0().?) + 1,
+            else => idepth(cfg0(&cfg.base).?) + 1,
         };
         return extra.idepth;
     }
@@ -45,16 +45,17 @@ fn _Utils(comptime Mach: type) struct {
         while (lc != rc) {
             if (!isCfg(lc.base.kind)) std.debug.panic("{}", .{lc.base});
             if (!isCfg(rc.base.kind)) std.debug.panic("{}", .{rc.base});
-            if (idepth(lc) >= idepth(rc)) lc = lc.base.cfg0().?;
-            if (idepth(rc) >= idepth(lc)) rc = rc.base.cfg0().?;
+            const diff = @as(i64, idepth(lc)) - idepth(rc);
+            if (diff >= 0) lc = cfg0(&lc.base).?;
+            if (diff <= 0) rc = cfg0(&rc.base).?;
         }
         return lc;
     }
 
     fn idom(cfg: *CfgNode) *CfgNode {
         return switch (cfg.base.kind) {
-            .Region => findLca(cfg.base.inputs()[0].?.subclass(Extra.Cfg).?, cfg.base.inputs()[1].?.subclass(Extra.Cfg).?),
-            else => cfg.base.cfg0().?,
+            .Region => findLca(subclass(cfg.base.inputs()[0].?, Extra.Cfg).?, subclass(cfg.base.inputs()[1].?, Extra.Cfg).?),
+            else => cfg0(&cfg.base).?,
         };
     }
 
@@ -67,7 +68,7 @@ fn _Utils(comptime Mach: type) struct {
     pub fn collectPostorder(self: *Func, arena: std.mem.Allocator, stack: *std.ArrayList(Frame), visited: *std.DynamicBitSet) []*CfgNode {
         var postorder = std.ArrayList(*CfgNode).init(arena);
 
-        collectPostorder2(self, self.root, arena, &postorder, visited);
+        collectPostorder2(self, self.root, arena, &postorder, visited, true);
 
         if (false) {
             stack.append(.{ self.root, self.root.inputs() }) catch unreachable;
@@ -92,26 +93,17 @@ fn _Utils(comptime Mach: type) struct {
     }
 
     pub fn collectPostorderAll(self: *Func, node: *Node, arena: std.mem.Allocator, pos: *std.ArrayList(*CfgNode), visited: *std.DynamicBitSet) void {
-        switch (node.kind) {
-            .Region => {
-                if (!visited.isSet(node.id)) {
-                    visited.set(node.id);
-                    return;
-                }
-            },
-            else => {
-                if (visited.isSet(node.id)) {
-                    return;
-                }
-                visited.set(node.id);
-            },
-        }
-
-        pos.append(node.subclass(Extra.Cfg).?) catch unreachable;
-        for (node.outputs()) |o| if (isCfg(o.kind)) self.collectPostorderAll(o, arena, pos, visited);
+        self.collectPostorder2(node, arena, pos, visited, false);
     }
 
-    pub fn collectPostorder2(self: *Func, node: *Node, arena: std.mem.Allocator, pos: *std.ArrayList(*CfgNode), visited: *std.DynamicBitSet) void {
+    pub fn collectPostorder2(
+        self: *Func,
+        node: *Node,
+        arena: std.mem.Allocator,
+        pos: *std.ArrayList(*CfgNode),
+        visited: *std.DynamicBitSet,
+        comptime only_basic: bool,
+    ) void {
         switch (node.kind) {
             .Region => {
                 if (!visited.isSet(node.id)) {
@@ -127,8 +119,13 @@ fn _Utils(comptime Mach: type) struct {
             },
         }
 
-        if (isBasicBlockStart(node.kind)) pos.append(node.subclass(Extra.Cfg).?) catch unreachable;
-        for (node.outputs()) |o| if (isCfg(o.kind)) collectPostorder2(self, o, arena, pos, visited);
+        if (!only_basic or isBasicBlockStart(node.kind)) pos.append(subclass(node, Extra.Cfg).?) catch unreachable;
+        if (isSwapped(node)) {
+            var iter = std.mem.reverseIterator(node.outputs());
+            while (iter.next()) |o| if (isCfg(o.kind)) collectPostorder2(self, o, arena, pos, visited, only_basic);
+        } else {
+            for (node.outputs()) |o| if (isCfg(o.kind)) collectPostorder2(self, o, arena, pos, visited, only_basic);
+        }
     }
 
     pub fn fmtScheduled(self: *Func, writer: anytype, colors: std.io.tty.Config) void {
@@ -269,17 +266,109 @@ fn _Utils(comptime Mach: type) struct {
             return node.inputs()[0].?.inputs()[0];
         }
 
-        return null;
-    }
+        if (node.kind == .Store) {
+            if (node.base().kind == .Local and cfg0(node) != null) {
+                const dinps = self.arena.allocator().dupe(?*Node, node.inputs()) catch unreachable;
+                dinps[0] = null;
+                const st = self.addNode(.Store, dinps, {});
+                worklist.add(st);
+                return st;
+            }
 
-    pub fn subclass(self: *Node, comptime Ext: type) ?*Func.SubclassFor(Ext) {
-        switch (splitKind(self.kind, Ext).Specific) {
-            inline else => |t| if (ExtFor(t) == Ext) {
-                return @ptrCast(self);
-            },
+            if (node.base().kind == .Local and node.outputs().len == 1 and node.outputs()[0].kind == .Return) {
+                return node.mem();
+            }
+        }
+
+        if (node.kind == .Load) {
+            var earlier = node.mem();
+
+            if (node.base().kind == .Local and cfg0(node) != null) {
+                const ld = self.addNode(.Load, &.{ null, inps[1], inps[2] }, {});
+                worklist.add(ld);
+                return ld;
+            }
+
+            while (earlier.kind == .Store and
+                (cfg0(earlier) == cfg0(node) or cfg0(node) == null) and
+                noAlias(earlier.base(), node.base()))
+            {
+                earlier = earlier.mem();
+            }
+
+            if (earlier.kind == .Store and
+                earlier.base() == node.base() and
+                earlier.data_type == node.data_type)
+            {
+                return earlier.value();
+            }
+
+            if (earlier.kind == .Phi) {
+                std.debug.assert(earlier.inputs().len == 3);
+                var l, var r = .{ earlier.inputs()[1].?, earlier.inputs()[2].? };
+
+                while (l.kind == .Store and
+                    (cfg0(l) == cfg0(node) or cfg0(node) == null) and
+                    noAlias(l.base(), node.base()))
+                {
+                    l = l.mem();
+                }
+
+                while (r.kind == .Store and
+                    (cfg0(r) == cfg0(node) or cfg0(node) == null) and
+                    noAlias(r.base(), node.base()))
+                {
+                    r = r.mem();
+                }
+
+                if (l.kind == .Store and r.kind == .Store and
+                    l.base() == r.base() and l.base() == node.base() and
+                    l.data_type == r.data_type and l.data_type == node.data_type)
+                {
+                    return self.addNode(.Phi, &.{ earlier.inputs()[0].?, l.value(), r.value() }, {});
+                }
+            }
+
+            if (earlier != node.mem()) {
+                //std.debug.assert(node.id == 31);
+                return self.addNode(.Load, &.{ inps[0], earlier, inps[2] }, {});
+            }
+        }
+
+        if (node.kind == .Phi) {
+            const region, const l, const r = .{ inps[0].?, inps[1].?, inps[2].? };
+
+            if (region.kind == .Loop) b: {
+                var cursor = r;
+                var looped = false;
+
+                for (node.outputs()) |o| {
+                    if (o.kind != .Store and o.kind != .Return) break :b;
+                }
+
+                w: while (!looped) {
+                    for (cursor.outputs()) |o| {
+                        if (o == node) {
+                            looped = true;
+                        } else if (o.kind != .Store) {
+                            looped = false;
+                            break :w;
+                        }
+                    }
+                }
+
+                if (looped) {
+                    return l;
+                }
+            }
         }
 
         return null;
+    }
+
+    pub fn noAlias(lbase: *Node, rbase: *Node) bool {
+        if (lbase.kind == .Local and rbase.kind == .Local) return lbase != rbase;
+        return false;
     }
 
     pub fn fmt(
@@ -392,30 +481,34 @@ fn _Utils(comptime Mach: type) struct {
         }
     }
 
-    fn callKindCheck(comptime name: []const u8, kind: NodeKind) bool {
-        return @hasDecl(Mach, name) and @field(Mach, name)(kind);
+    fn callCheck(comptime name: []const u8, value: anytype) bool {
+        return @hasDecl(Mach, name) and @field(Mach, name)(value);
     }
 
     pub fn isLoad(k: NodeKind) bool {
-        return k == .Load or callKindCheck("isLoad", k);
+        return k == .Load or callCheck("isLoad", k);
     }
 
     pub fn isStore(k: NodeKind) bool {
-        return k == .Store or callKindCheck("isStore", k);
+        return k == .Store or callCheck("isStore", k);
     }
 
     pub fn isPinned(k: NodeKind) bool {
         return switch (k) {
             .Ret, .Phi, .Mem => true,
-            else => isCfg(k) or callKindCheck("isPinned", k),
+            else => isCfg(k) or callCheck("isPinned", k),
         };
     }
 
     pub fn isMemOp(k: NodeKind) bool {
         return switch (k) {
             .Load, .Local, .Store, .Return, .Call => true,
-            else => callKindCheck("isMemOp", k),
+            else => callCheck("isMemOp", k),
         };
+    }
+
+    pub fn isSwapped(node: *Node) bool {
+        return callCheck("isSwapped", node);
     }
 
     pub fn isCfg(k: NodeKind) bool {
@@ -433,7 +526,7 @@ fn _Utils(comptime Mach: type) struct {
         std.debug.assert(isCfg(k));
         return switch (k) {
             .Entry, .CallEnd, .Then, .Else, .Region, .Loop => true,
-            else => callKindCheck("isBasicBlockStart", k),
+            else => callCheck("isBasicBlockStart", k),
         };
     }
 
@@ -441,8 +534,41 @@ fn _Utils(comptime Mach: type) struct {
         std.debug.assert(isCfg(k));
         return switch (k) {
             .Return, .Call, .If, .Jmp => true,
-            else => callKindCheck("isBasicBlockEnd", k),
+            else => callCheck("isBasicBlockEnd", k),
         };
+    }
+
+    pub fn subclass(self: *Node, comptime Ext: type) ?*Func.SubclassFor(Ext) {
+        switch (splitKind(self.kind)) {
+            .Builtin => |kt| switch (kt) {
+                inline else => |t| if (comptime Node.isSubbclass(ExtFor(t), Ext)) {
+                    return @ptrCast(self);
+                },
+            },
+            .Specific => |kt| switch (kt) {
+                inline else => |t| if (comptime Node.isSubbclass(std.meta.TagPayload(Mach, t), Ext)) {
+                    return @ptrCast(self);
+                },
+            },
+        }
+        return null;
+    }
+
+    pub fn cfg0(self: *Node) ?*Func.SubclassFor(Extra.Cfg) {
+        if (self.kind == .Start) return subclass(self, Extra.Cfg);
+        return subclass((self.inputs()[0] orelse return null), Extra.Cfg);
+    }
+
+    pub fn useBlock(self: *Node, use: *Node, scheds: []const ?*CfgNode) *CfgNode {
+        if (use.kind == .Phi) {
+            std.debug.assert(use.inputs()[0].?.kind == .Region or use.inputs()[0].?.kind == .Loop);
+            for (use.inputs()[0].?.inputs(), use.inputs()[1..]) |b, u| {
+                if (u.? == self) {
+                    return subclass(b.?, Extra.Cfg).?;
+                }
+            }
+        }
+        return scheds[use.id].?;
     }
 
     pub fn gcm(self: *Func) void {
@@ -458,7 +584,7 @@ fn _Utils(comptime Mach: type) struct {
                 rpo: *std.ArrayList(*CfgNode),
                 pub const dir = "outputs";
                 pub fn each(ctx: @This(), node: *Node) void {
-                    ctx.rpo.append(node.subclass(Extra.Cfg).?) catch unreachable;
+                    ctx.rpo.append(subclass(node, Extra.Cfg).?) catch unreachable;
                 }
                 pub fn filter(_: @This(), node: *Node) bool {
                     return isCfg(node.kind);
@@ -517,32 +643,40 @@ fn _Utils(comptime Mach: type) struct {
                 visited.unset(t.id);
                 std.debug.assert(late_scheds[t.id] == null);
 
-                if (t.subclass(Extra.Cfg)) |c| {
-                    late_scheds[c.base.id] = if (isBasicBlockStart(c.base.kind)) c else c.base.cfg0();
-                } else if (t.kind == .Phi) {
-                    late_scheds[t.id] = t.cfg0().?;
-                } else if (isPinned(t.kind)) {} else {
+                if (subclass(t, Extra.Cfg)) |c| {
+                    late_scheds[c.base.id] = if (isBasicBlockStart(c.base.kind)) c else cfg0(&c.base);
+                } else if (isPinned(t.kind)) {
+                    late_scheds[t.id] = cfg0(t).?;
+                } else {
                     todo(.Proj, "pin projs to the parent");
 
                     for (t.outputs()) |o| {
-                        if (late_scheds[o.id] == null) continue :task;
+                        if (late_scheds[o.id] == null) {
+                            continue :task;
+                        }
                     }
 
                     if (isLoad(t.kind)) {
                         for (t.mem().outputs()) |p| {
-                            if (p.kind == .Store) continue :task;
+                            if (p.kind == .Store and late_scheds[p.id] == null) {
+                                continue :task;
+                            }
                         }
                     }
 
                     schedule_late: {
-                        const early = t.cfg0() orelse unreachable;
+                        const early = cfg0(t) orelse unreachable;
 
                         var olca: ?*CfgNode = null;
                         for (t.outputs()) |o| {
-                            const other = t.useBlock(o, late_scheds);
+                            const other = useBlock(t, o, late_scheds);
                             olca = if (olca) |l| findLca(l, other) else other;
                         }
                         var lca = olca.?;
+
+                        if (t.id == 31) {
+                            std.debug.print("{}\n", .{&lca.base});
+                        }
 
                         if (isLoad(t.kind)) add_antideps: {
                             var cursor = lca;
@@ -553,7 +687,7 @@ fn _Utils(comptime Mach: type) struct {
 
                             for (t.mem().outputs()) |o| switch (o.kind) {
                                 .Store, .Call => {
-                                    const sdef = o.cfg0().?;
+                                    const sdef = cfg0(o).?;
                                     var lcar = late_scheds[o.id].?;
                                     while (lcar != idom(sdef)) : (lcar = idom(lcar)) {
                                         if (lcar.extra.antidep == t.id) {
@@ -562,13 +696,14 @@ fn _Utils(comptime Mach: type) struct {
                                                 self.addDep(o, t);
                                                 self.addUse(t, o);
                                             }
+                                            break;
                                         }
                                     }
                                 },
                                 .Phi => {
-                                    for (o.inputs()[1..], o.cfg0().?.base.inputs()) |inp, oblk| if (inp.? == t.mem()) {
-                                        const sdef = t.mem().cfg0().?;
-                                        var lcar = oblk.?.subclass(Extra.Cfg).?;
+                                    for (o.inputs()[1..], cfg0(o).?.base.inputs()) |inp, oblk| if (inp.? == t.mem()) {
+                                        const sdef = cfg0(t.mem()).?;
+                                        var lcar = subclass(oblk.?, Extra.Cfg).?;
                                         while (lcar != idom(sdef)) : (lcar = idom(lcar)) {
                                             if (lcar.extra.antidep == t.id) {
                                                 lca = findLca(lcar, lca);
@@ -584,8 +719,12 @@ fn _Utils(comptime Mach: type) struct {
                             break :add_antideps;
                         }
 
+                        if (t.id == 31) {
+                            std.debug.print("{}\n", .{&lca.base});
+                        }
+
                         var best = lca;
-                        var cursor = best.base.cfg0().?;
+                        var cursor = cfg0(&best.base).?;
                         while (cursor != idom(early)) : (cursor = idom(cursor)) {
                             std.debug.assert(cursor.base.kind != .Start);
                             if (better(cursor, best)) best = cursor;
@@ -603,16 +742,18 @@ fn _Utils(comptime Mach: type) struct {
                 }
 
                 for (t.inputs()) |odef| if (odef) |def| {
-                    if (late_scheds[def.id] == null and !visited.isSet(def.id)) {
-                        visited.set(def.id);
-                        work_list.append(def) catch unreachable;
+                    if (late_scheds[def.id] == null) {
+                        if (!visited.isSet(def.id)) {
+                            visited.set(def.id);
+                            work_list.append(def) catch unreachable;
+                        }
 
-                        if (def.kind == .Store) for (def.outputs()) |out| {
-                            if (isLoad(out.kind) and !visited.isSet(def.id)) {
+                        for (def.outputs()) |out| {
+                            if (isLoad(out.kind) and late_scheds[out.id] == null and !visited.isSet(def.id)) {
                                 visited.set(def.id);
                                 work_list.append(def) catch unreachable;
                             }
-                        };
+                        }
                     }
                 };
             }
@@ -718,13 +859,13 @@ fn _Utils(comptime Mach: type) struct {
 
         if (!isPinned(node.kind)) {
             var best = early;
-            if (node.inputs()[0]) |n| if (n.subclass(Extra.Cfg)) |cn| {
+            if (node.inputs()[0]) |n| if (subclass(n, Extra.Cfg)) |cn| {
                 if (n.kind != .Start) best = cn;
             };
 
             for (node.inputs()[1..]) |oin| if (oin) |in| {
-                if (idepth(in.cfg0().?) > idepth(best)) {
-                    best = in.cfg0().?;
+                if (idepth(cfg0(in).?) > idepth(best)) {
+                    best = cfg0(in).?;
                 }
             };
 

@@ -72,10 +72,13 @@ pub fn build(b: *std.Build) !void {
     const check_step = b.step("check", "Run the app");
     check_step.dependOn(&check_unit_tests.step);
 
+    const test_filter = b.option([]const u8, "tf", "passed as a filter to tests");
+
     const unit_tests = b.addTest(.{
         .root_source_file = b.path("tests.zig"),
         .target = b.graph.host,
         .optimize = optimize,
+        .filter = test_filter,
     });
     unit_tests.step.dependOn(tests);
 

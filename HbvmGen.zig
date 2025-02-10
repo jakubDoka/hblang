@@ -19,7 +19,7 @@ pub const dir = "inputs";
 
 pub const MachKind = enum(u16) {
     ImmBinOp = @typeInfo(Func.BuiltinNodeKind).@"enum".fields.len,
-    CondOp,
+    IfOp,
     Ld,
     St,
 };
@@ -62,8 +62,10 @@ pub const Mach = union(MachKind) {
         imm: i64,
     },
     // [?Cfg, lhs, rhs]
-    CondOp: extern struct {
+    IfOp: extern struct {
+        base: Func.Extra.Cfg = .{},
         op: isa.Op,
+        swapped: bool,
     },
     // [?Cfg, mem, ptr]
     Ld: extern struct {
@@ -82,6 +84,14 @@ pub const Mach = union(MachKind) {
 
     pub fn isStore(k: Func.NodeKind) bool {
         return toJoined(k) == .St;
+    }
+
+    pub fn isSwapped(node: *Func.Node) bool {
+        return toJoined(node.kind) == .IfOp and gcm.machExtra(node, .IfOp).swapped;
+    }
+
+    pub fn isBasicBlockEnd(node: Func.NodeKind) bool {
+        return toJoined(node) == .IfOp;
     }
 };
 
@@ -273,22 +283,24 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
                     else => unreachable,
                 }
             },
-            .CondOp => {},
+            .IfOp => {
+                self.local_relocs.append(.{
+                    .dest_block = no.outputs()[1].schedule,
+                    .rel = self.reloc(3, .rel16),
+                }) catch unreachable;
+                const extra = gcm.machExtra(no, .IfOp);
+                const args = .{ self.reg(inps[0]), self.reg(inps[1]), 0 };
+                switch (extra.op) {
+                    inline .jgtu, .jne => |op| self.emit(op, args),
+                    else => unreachable,
+                }
+            },
             .If => {
                 self.local_relocs.append(.{
                     .dest_block = no.outputs()[1].schedule,
                     .rel = self.reloc(3, .rel16),
                 }) catch unreachable;
-                if (toJoined(inps[0].?.kind) == .CondOp) {
-                    const extra = gcm.machExtra(inps[0].?, .CondOp);
-                    const finps = gcm.dataDeps(inps[0].?);
-                    switch (extra.op) {
-                        inline .jgtu, .jne => |op| self.emit(op, .{ self.reg(finps[0]), self.reg(finps[1]), 0 }),
-                        else => unreachable,
-                    }
-                } else {
-                    self.emit(.jeq, .{ self.reg(inps[1]), .null, 0 });
-                }
+                self.emit(.jeq, .{ self.reg(inps[1]), .null, 0 });
             },
             .Call => {
                 const extra = no.extra(.Call);
@@ -359,9 +371,11 @@ pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node
                 .@"==" => .{ .jne, false },
                 else => break :b,
             };
-
-            node.extra(.If).swapped = swap;
-            func.setInput(node, 1, func.addMachNode(Mach, .CondOp, inps[1].?.inputs(), .{ .op = instr }));
+            const op_inps = inps[1].?.inputs();
+            return func.addMachNode(Mach, .IfOp, &.{ inps[0], op_inps[1], op_inps[2] }, .{
+                .op = instr,
+                .swapped = swap,
+            });
         }
     }
 
