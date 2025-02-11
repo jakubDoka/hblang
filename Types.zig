@@ -28,6 +28,13 @@ pub const Id = enum {
     pub fn fromStr(str: []const u8) ?Id {
         return std.meta.stringToEnum(Id, str);
     }
+
+    pub fn format(self: *const Id, comptime _: anytype, _: anytype, writer: anytype) !void {
+        try switch (self.*) {
+            .ptr => writer.writeAll("^uint"),
+            else => writer.writeAll(@tagName(self.*)),
+        };
+    }
 };
 
 pub const FuncData = struct {

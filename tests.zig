@@ -11,6 +11,7 @@ const Func = @import("Func.zig");
 test {
     _ = @import("zig-out/tests.zig");
     _ = @import("zig-out/vendored_tests.zig");
+    _ = @import("fuzz.zig");
 }
 
 pub fn runTest(name: []const u8, code: []const u8) !void {
@@ -23,9 +24,9 @@ pub fn runTest(name: []const u8, code: []const u8) !void {
 
     const stderr = std.io.getStdErr();
     const colors = std.io.tty.detectConfig(stderr);
-    testBuilder(name, code, stderr.writer(), colors) catch unreachable;
+    testBuilder(name, code, gpa, stderr.writer(), colors) catch unreachable;
 
-    try testBuilder(name, code, out.writer(), .no_color);
+    try testBuilder(name, code, gpa, out.writer(), .no_color);
 
     try checkOrUpdatePrintTest(name, out.items);
 }
@@ -42,9 +43,7 @@ inline fn header(comptime name: []const u8, writer: anytype, corors: std.io.tty.
     try corors.setColor(writer, .reset);
 }
 
-fn testBuilder(name: []const u8, code: []const u8, output: anytype, colors: std.io.tty.Config) !void {
-    const gpa = std.testing.allocator;
-
+pub fn testBuilder(name: []const u8, code: []const u8, gpa: std.mem.Allocator, output: anytype, colors: std.io.tty.Config) !void {
     var ast = try Ast.init(name, code, gpa);
     defer ast.deinit(gpa);
 
