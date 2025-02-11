@@ -5,6 +5,7 @@ pub const Reg = enum(u8) {
     ret,
     ret_addr = 31,
     stack_addr = 254,
+    max = 255,
     _,
     pub fn arg(index: usize) Reg {
         return @enumFromInt(2 + index);

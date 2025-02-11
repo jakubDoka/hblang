@@ -117,7 +117,7 @@ fib := fn(n: uint): uint {
 ```
 
 #### loops 2
-```hb
+//```hb
 main := fn(): uint {
     return not_fib(3)
 }
@@ -138,7 +138,7 @@ not_fib := fn(size: uint): uint {
 ```
 
 #### loops 3
-```hb
+//```hb
 main := fn(): uint {
     i := 0
     loop if i == 4 break else {
@@ -188,6 +188,25 @@ swap := fn(a: ^uint, b: ^uint): void {
     tmp := *b;
     *b = *a;
     *a = tmp
+}
+```
+
+#### pointers 3
+```hb
+main := fn(): uint {
+    a := 1
+    do_stuff(&a)
+    return a
+}
+
+do_stuff := fn(v: ^uint): uint {
+    if *v == 0 {
+        return 0;
+        *v = 2
+    } else {
+        return 1;
+        *v = 3
+    }
 }
 ```
 

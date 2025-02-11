@@ -208,7 +208,7 @@ fn _Func(comptime Mach: type) struct {
     pub const Node = extern struct {
         kind: Kind,
         id: u16,
-        schedule: u16 = undefined,
+        schedule: u16 = std.math.maxInt(u16),
         data_type: DataType = .void,
 
         input_ordered_len: u16,
@@ -677,7 +677,7 @@ fn _Func(comptime Mach: type) struct {
     pub fn gcm(self: *Self) void {
         const tmp = self.beginTmpAlloc();
 
-        var visited = std.DynamicBitSet.initEmpty(tmp, self.next_id) catch unreachable;
+        var visited = std.DynamicBitSet.initEmpty(tmp, self.next_id * 2) catch unreachable;
         var stack = std.ArrayList(Frame).init(tmp);
 
         const cfg_rpo = cfg_rpo: {
@@ -768,7 +768,21 @@ fn _Func(comptime Mach: type) struct {
                     }
 
                     schedule_late: {
-                        const early = t.cfg0() orelse unreachable;
+                        const early = t.cfg0() orelse {
+                            var frointier = std.ArrayList(*Node).init(tmp);
+                            var seen = std.DynamicBitSet.initEmpty(tmp, self.next_id) catch unreachable;
+                            frointier.append(t) catch unreachable;
+                            seen.set(t.id);
+                            var i: usize = 0;
+                            while (i < frointier.items.len) : (i += 1) {
+                                for (frointier.items[i].inputs()) |oinp| if (oinp) |inp| {
+                                    if (seen.isSet(inp.id) or inp.cfg0() != null) continue;
+                                    seen.set(inp.id);
+                                    frointier.append(inp) catch unreachable;
+                                };
+                            }
+                            unreachable;
+                        };
 
                         var olca: ?*CfgNode = null;
                         for (t.outputs()) |o| {
@@ -873,65 +887,7 @@ fn _Func(comptime Mach: type) struct {
                 node.schedule = self.block_count;
                 self.block_count += 1;
 
-                const NodeMeta = struct {
-                    unscheduled_deps: u16 = 0,
-                    ready_unscheduled_deps: u16 = 0,
-                    priority: u16,
-                };
-
-                // init meta
-                const extra = tmp.alloc(NodeMeta, node.outputs().len) catch unreachable;
-                for (node.outputs(), extra, 0..) |o, *e, i| {
-                    o.schedule = @intCast(i);
-                    e.* = .{ .priority = if (o.isCfg())
-                        0
-                    else if (o.kind == .Phi or o.kind == .Mem or o.kind == .Ret)
-                        100
-                    else
-                        50 };
-                    if (o.kind != .Phi) {
-                        for (o.inputs()[1..]) |j| if (j != null) if (j.?.inputs()[0] == o.inputs()[0]) {
-                            e.unscheduled_deps += 1;
-                        };
-                    }
-                }
-
-                const outs = node.outputs();
-                var ready: usize = 0;
-                for (outs) |*o| {
-                    if (extra[o.*.schedule].unscheduled_deps == 0) {
-                        std.mem.swap(*Node, &outs[ready], o);
-                        ready += 1;
-                    }
-                }
-
-                var scheduled: usize = 0;
-                while (scheduled < outs.len) {
-                    std.debug.assert(ready != scheduled);
-
-                    var pick = scheduled;
-                    for (outs[scheduled + 1 .. ready], scheduled + 1..) |o, i| {
-                        if (extra[o.schedule].priority > extra[outs[pick].schedule].priority) {
-                            pick = i;
-                        }
-                    }
-
-                    const n = outs[pick];
-                    for (n.outputs()) |def| if (def.inputs()[0] == n.inputs()[0] and def.kind != .Phi) {
-                        extra[def.schedule].unscheduled_deps -= 1;
-                    };
-
-                    std.mem.swap(*Node, &outs[scheduled], &outs[pick]);
-                    scheduled += 1;
-
-                    for (outs[ready..]) |*o| {
-                        if (extra[o.*.schedule].unscheduled_deps == 0) {
-                            std.debug.assert(o.*.kind != .Phi);
-                            std.mem.swap(*Node, &outs[ready], o);
-                            ready += 1;
-                        }
-                    }
-                }
+                scheduleBlock(tmp, node);
 
                 for (node.outputs()) |o| {
                     o.schedule = self.instr_count;
@@ -940,6 +896,73 @@ fn _Func(comptime Mach: type) struct {
             }
 
             break :compact_ids;
+        }
+    }
+
+    fn scheduleBlock(tmp: std.mem.Allocator, node: *Node) void {
+        const NodeMeta = struct {
+            unscheduled_deps: u16 = 0,
+            ready_unscheduled_deps: u16 = 0,
+            priority: u16,
+        };
+
+        // init meta
+        const extra = tmp.alloc(NodeMeta, node.outputs().len) catch unreachable;
+        for (node.outputs(), extra, 0..) |o, *e, i| {
+            if (o.schedule != std.math.maxInt(u16)) std.debug.panic("{} {}\n", .{ o, o.schedule });
+            o.schedule = @intCast(i);
+            e.* = .{ .priority = if (o.isCfg())
+                0
+            else if (o.kind == .Phi or o.kind == .Mem or o.kind == .Ret)
+                100
+            else
+                50 };
+            if (o.kind != .Phi) {
+                for (o.inputs()[1..]) |j| if (j != null) if (j.?.inputs()[0] == o.inputs()[0]) {
+                    e.unscheduled_deps += 1;
+                };
+            }
+        }
+
+        const outs = node.outputs();
+        var ready: usize = 0;
+        for (outs) |*o| {
+            if (extra[o.*.schedule].unscheduled_deps == 0) {
+                std.mem.swap(*Node, &outs[ready], o);
+                ready += 1;
+            }
+        }
+
+        var scheduled: usize = 0;
+        while (scheduled < outs.len) {
+            std.debug.assert(ready != scheduled);
+
+            var pick = scheduled;
+            for (outs[scheduled + 1 .. ready], scheduled + 1..) |o, i| {
+                if (extra[o.schedule].priority > extra[outs[pick].schedule].priority) {
+                    pick = i;
+                }
+            }
+
+            const n = outs[pick];
+            for (n.outputs()) |def| if (def.inputs()[0] == n.inputs()[0] and def.kind != .Phi) {
+                extra[def.schedule].unscheduled_deps -= 1;
+            };
+
+            std.mem.swap(*Node, &outs[scheduled], &outs[pick]);
+            scheduled += 1;
+
+            for (outs[ready..]) |*o| {
+                if (extra[o.*.schedule].unscheduled_deps == 0) {
+                    std.debug.assert(o.*.kind != .Phi);
+                    std.mem.swap(*Node, &outs[ready], o);
+                    ready += 1;
+                }
+            }
+        }
+
+        for (node.outputs()) |o| {
+            o.schedule = std.math.maxInt(u16);
         }
     }
 
@@ -969,7 +992,11 @@ fn _Func(comptime Mach: type) struct {
         }
     }
 
-    pub fn iterPeeps(self: *Self) void {
+    pub fn stripDeadCode(self: *Self) void {
+        _ = self; // autofix
+    }
+
+    pub fn iterPeeps(self: *Self, strategy: fn (*Self, *Node, *WorkList) ?*Node) void {
         const tmp = self.beginTmpAlloc();
 
         var worklist = WorkList.init(tmp, self.next_id) catch unreachable;
@@ -992,28 +1019,11 @@ fn _Func(comptime Mach: type) struct {
                 continue;
             }
 
-            if (idealize(self, t, &worklist)) |nt| {
+            if (strategy(self, t, &worklist)) |nt| {
                 for (t.inputs()) |ii| if (ii) |ia| worklist.add(ia);
                 for (t.outputs()) |o| worklist.add(o);
                 self.subsume(nt, t);
                 continue;
-            }
-
-            if (Mach.idealize(self, t, &worklist)) |nt| {
-                self.subsume(nt, t);
-                continue;
-            }
-        }
-
-        i = 0;
-        worklist.add(self.end);
-        while (i < worklist.list.items.len) : (i += 1) {
-            for (worklist.list.items[i].inputs()) |oi| if (oi) |o| {
-                worklist.add(o);
-            };
-
-            for (worklist.list.items[i].outputs()) |o| {
-                worklist.add(o);
             }
         }
     }
@@ -1045,10 +1055,13 @@ fn _Func(comptime Mach: type) struct {
         const tmp = self.beginTmpAlloc();
 
         var visited = std.DynamicBitSet.initEmpty(tmp, self.next_id) catch unreachable;
-        const postorder = self.collectDfs(tmp, &visited);
+        const postorder = self.collectDfs(tmp, &visited)[1..];
 
         for (postorder, 0..) |bb, i| {
             bb.base.schedule = @intCast(i);
+            if (bb.base.isBasicBlockStart()) {
+                scheduleBlock(tmp, &bb.base);
+            }
         }
 
         var local_count: u16 = 0;
@@ -1109,7 +1122,7 @@ fn _Func(comptime Mach: type) struct {
         @memset(states, null);
 
         var to_remove = std.ArrayList(*Node).init(tmp);
-        for (postorder[1..]) |bbc| {
+        for (postorder) |bbc| {
             const bb = &bbc.base;
 
             var parent_succs: usize = 0;
@@ -1129,14 +1142,24 @@ fn _Func(comptime Mach: type) struct {
             }
 
             for (tmp.dupe(*Node, bb.outputs()) catch unreachable) |o| {
-                if (o.kind == .Load and o.base().kind == .Local and o.base().schedule != std.math.maxInt(u16)) {
-                    to_remove.append(o) catch unreachable;
-                    self.subsumeNoKill(Local.resolve(self, locals, o.base().schedule), o);
+                if (o.kind == .Phi) {
+                    for (o.outputs()) |lo| {
+                        if (lo.kind == .Load and lo.base().kind == .Local and lo.base().schedule != std.math.maxInt(u16)) {
+                            const su = Local.resolve(self, locals, lo.base().schedule);
+                            self.subsume(su, lo);
+                        }
+                    }
                 }
-
                 if (o.kind == .Store and o.base().kind == .Local and o.base().schedule != std.math.maxInt(u16)) {
                     to_remove.append(o) catch unreachable;
                     locals[o.base().schedule] = .{ .Node = o.value() };
+
+                    for (o.outputs()) |lo| {
+                        if (lo.kind == .Load and lo.base().kind == .Local and lo.base().schedule != std.math.maxInt(u16)) {
+                            const su = Local.resolve(self, locals, lo.base().schedule);
+                            self.subsume(su, lo);
+                        }
+                    }
                 }
             }
 
@@ -1182,14 +1205,18 @@ fn _Func(comptime Mach: type) struct {
             }
         }
 
-        for (to_remove.items) |tr| {
-            if (tr.kind == .Load) tr.kill() else {
-                self.subsume(tr.mem(), tr);
+        for (self.root.outputs()[1].outputs()) |o| {
+            if (o.kind == .Local) {
+                o.schedule = std.math.maxInt(u16);
             }
+        }
+
+        for (postorder) |bb| {
+            bb.base.schedule = std.math.maxInt(u16);
         }
     }
 
-    fn idealize(self: *Self, node: *Node, worklist: *WorkList) ?*Node {
+    pub fn idealizeDead(self: *Self, node: *Node, worklist: *WorkList) ?*Node {
         const inps = node.inputs();
 
         var is_dead = node.kind == .Region and isDead(inps[0]) and isDead(inps[1]);
@@ -1228,6 +1255,16 @@ fn _Func(comptime Mach: type) struct {
 
             return node.inputs()[0].?.inputs()[0];
         }
+
+        return null;
+    }
+
+    pub fn idealize(self: *Self, node: *Node, worklist: *WorkList) ?*Node {
+        if (node.data_type == .dead) return null;
+
+        if (self.idealizeDead(node, worklist)) |w| return w;
+
+        const inps = node.inputs();
 
         if (node.kind == .Store) {
             if (node.base().kind == .Local and node.cfg0() != null) {
@@ -1300,6 +1337,8 @@ fn _Func(comptime Mach: type) struct {
         if (node.kind == .Phi) {
             const region, const l, const r = .{ inps[0].?, inps[1].?, inps[2].? };
 
+            if (l == r) return l;
+
             if (r == node) return l;
 
             if (region.kind == .Loop) b: {
@@ -1327,7 +1366,7 @@ fn _Func(comptime Mach: type) struct {
             }
         }
 
-        return null;
+        return Mach.idealize(self, node, worklist);
     }
 
     pub fn noAlias(lbase: *Node, rbase: *Node) bool {

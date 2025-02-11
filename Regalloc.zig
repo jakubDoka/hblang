@@ -80,7 +80,8 @@ pub fn ralloc(comptime Mach: type, func: *Func.Func(Mach)) []u8 {
     while (changed != 0) {
         changed = 0;
 
-        for (instrs) |*i| {
+        var ite = std.mem.reverseIterator(instrs);
+        while (ite.next()) |i| {
             for (
                 Block.setMasks(i.liveins),
                 Block.setMasks(i.liveouts),
@@ -106,6 +107,12 @@ pub fn ralloc(comptime Mach: type, func: *Func.Func(Mach)) []u8 {
         }
     }
 
+    for (instrs) |*i| {
+        for (Block.setMasks(i.liveins), Block.setMasks(i.uses)) |a, b| {
+            std.debug.assert(b & ~a == 0);
+        }
+    }
+
     for (postorder) |bb| {
         for (bb.base.outputs()) |o| {
             for (o.dataDeps()) |i| if (i) |ii| {
@@ -118,15 +125,13 @@ pub fn ralloc(comptime Mach: type, func: *Func.Func(Mach)) []u8 {
     const interference_table = tmp.alloc(Set, func.instr_count) catch unreachable;
     for (interference_table) |*r| r.* = Set.initEmpty(tmp, func.instr_count) catch unreachable;
 
-    for (instrs) |ins| {
+    for (instrs) |*ins| {
+        ins.liveins.setUnion(ins.liveouts);
         var iter = ins.liveins.iterator(.{});
         while (iter.next()) |i| {
             interference_table[i].setUnion(ins.liveins);
         }
         iter = ins.liveouts.iterator(.{});
-        while (iter.next()) |i| {
-            interference_table[i].setUnion(ins.liveouts);
-        }
     }
 
     const tight_interference_table = tmp.alloc([]u16, func.instr_count) catch unreachable;

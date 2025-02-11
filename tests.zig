@@ -81,8 +81,9 @@ pub fn testBuilder(name: []const u8, code: []const u8, gpa: std.mem.Allocator, o
         fnc.fmtUnscheduled(output, colors);
 
         try header("OPTIMIZED SON", output, colors);
+        fnc.iterPeeps(@TypeOf(fnc.*).idealizeDead);
         fnc.mem2reg();
-        fnc.iterPeeps();
+        fnc.iterPeeps(@TypeOf(fnc.*).idealize);
         fnc.fmtUnscheduled(output, colors);
 
         try header("SCHEDULED SON", output, colors);

@@ -122,7 +122,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: Types.Func, allocs: []u8) void 
 
     const reg_shift: u8 = if (fdata.tail) 12 else 31;
     for (self.allocs) |*r| r.* += reg_shift;
-    const used_registers = std.mem.max(u8, self.allocs) -| 31;
+    const used_registers = if (self.allocs.len == 0) 0 else std.mem.max(u8, self.allocs) -| 31;
 
     const used_reg_size = @as(u16, used_registers + @intFromBool(!fdata.tail)) * 8;
 
@@ -166,7 +166,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: Types.Func, allocs: []u8) void 
     for (postorder, 0..) |bb, i| {
         self.block_offsets[bb.base.schedule] = @intCast(self.out.items.len);
         std.debug.assert(bb.base.schedule == i);
-        self.emitBlockBody(&bb.base);
+        self.emitBlockBody(tmp, &bb.base);
         const last = bb.base.outputs()[bb.base.output_len - 1];
         if (last.outputs().len == 0) {
             std.debug.assert(last.kind == .Return);
@@ -198,7 +198,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: Types.Func, allocs: []u8) void 
     }
 }
 
-pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
+pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) void {
     for (node.outputs()) |no| {
         const inps = no.dataDeps();
         switch (no.kind) {
@@ -241,6 +241,10 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
                         self.emit(.cmpui, .{ self.reg(no), self.reg(no), 0 });
                         self.emit(.not, .{ self.reg(no), self.reg(no) });
                     },
+                    .@"!=" => {
+                        self.binop(.cmpu, no);
+                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), 0 });
+                    },
                     else => std.debug.panic("{any}", .{extra.*}),
                 }
             },
@@ -271,7 +275,7 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
                     .dest_block = no.outputs()[1].schedule,
                     .rel = self.reloc(3, .rel16),
                 }) catch unreachable;
-                self.emit(.jeq, .{ self.reg(inps[1]), .null, 0 });
+                self.emit(.jeq, .{ self.reg(inps[0]), .null, 0 });
             },
             .Call => {
                 const extra = no.extra(.Call);
@@ -290,14 +294,91 @@ pub fn emitBlockBody(self: *HbvmGen, node: *Func.Node) void {
                 self.emit(.cp, .{ self.reg(no), .ret });
             },
             .Jmp => if (no.outputs()[0].kind == .Region or no.outputs()[0].kind == .Loop) {
+
+                //let index = node
+                //    .inputs
+                //    .iter()
+                //    .position(|&n| block.entry == nodes.idom_of(n))
+                //    .unwrap()
+                //    + 1;
+
                 const idx = std.mem.indexOfScalar(?*Func.Node, no.outputs()[0].inputs(), no).? + 1;
+
+                const Move = struct { isa.Reg, isa.Reg, u8 };
+                var moves = std.ArrayList(Move).init(tmp);
                 for (no.outputs()[0].outputs()) |o| {
                     if (o.kind == .Phi and o.data_type != .mem) {
-                        if (self.reg(o) != self.reg(o.inputs()[idx])) {
-                            self.emit(.cp, .{ self.reg(o), self.reg(o.inputs()[idx]) });
-                        }
+                        moves.append(.{ self.reg(o), self.reg(o.inputs()[idx]), 0 }) catch unreachable;
+                        //if (self.reg(o) != self.reg(o.inputs()[idx])) {
+                        //    self.emit(.cp, .{ self.reg(o), self.reg(o.inputs()[idx]) });
+                        //}
                     }
                 }
+
+                // code makes sure all moves are ordered so that register is only moved
+                // into after all its uses
+                //
+                // in case of cycles, swaps are used instead in which case the conflicting
+                // move is removed and remining moves are replaced with swaps
+
+                //const CYCLE_SENTINEL: u8 = u8::MAX;
+                const cycle_sentinel = isa.Reg.max;
+
+                var graph = std.EnumArray(isa.Reg, isa.Reg).initFill(cycle_sentinel);
+                for (moves.items) |m| {
+                    graph.set(m[0], m[1]);
+                }
+
+                o: for (moves.items) |*m| {
+                    var c = m[1];
+                    while (c != m[0]) {
+                        c = graph.get(c);
+                        m[2] += 1;
+                        if (c == .max) continue :o;
+                    }
+
+                    graph.set(c, .max);
+                    m[2] = 255;
+                }
+
+                std.sort.pdq(Move, moves.items, {}, struct {
+                    fn lt(_: void, lhs: Move, rhs: Move) bool {
+                        return rhs[2] < lhs[2];
+                    }
+                }.lt);
+
+                for (moves.items) |*m| {
+                    if (m[2] == 255) {
+                        while (graph.get(m[1]) != .max) {
+                            self.emit(.swa, .{ m[0], m[1] });
+                            std.mem.swap(isa.Reg, graph.getPtr(m[1]), &m[1]);
+                        }
+                        graph.set(m[1], m[1]);
+                    } else {
+                        self.emit(.cp, .{ m[0], m[1] });
+                    }
+                }
+
+                //quad_sort(&mut moves, |a, b| a[2].cmp(&b[2]).reverse());
+
+                //for [mut d, mut s, depth] in moves {
+                //    if depth == CYCLE_SENTINEL {
+                //        while graph[s as usize] != u8::MAX {
+                //            self.emit(instrs::swa(d, s));
+                //            d = s;
+                //            mem::swap(&mut graph[s as usize], &mut s);
+                //        }
+                //        // trivial cycle denotes this move was already generated in a
+                //        // cycyle
+                //        graph[s as usize] = s;
+                //    } else if graph[s as usize] != s {
+                //        self.emit(instrs::cp(d, s));
+                //    }
+                //}
+
+            },
+            .MachMove => {
+                self.emit(.cp, .{ self.reg(no), self.reg(inps[0]) });
             },
             .Phi => {},
             .Return => {
@@ -343,6 +424,7 @@ pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node
                 else => break :b,
             };
             const op_inps = inps[1].?.inputs();
+
             return func.addNode(.IfOp, &.{ inps[0], op_inps[1], op_inps[2] }, .{
                 .op = instr,
                 .swapped = swap,

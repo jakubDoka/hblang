@@ -158,7 +158,7 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
         .Ident => |e| {
             const ident = resolveIdent(&self.func, self.scope.items, e.id.index + 1);
             std.debug.assert(ident.kind == .Local);
-            return self.func.addNode(.Load, &.{ self.ctrl, self.resolveMem(), ident }, {});
+            return self.func.addNode(.Load, &.{ null, self.resolveMem(), ident }, {});
         },
         .Block => |e| {
             const prev_scope_height = self.scope.items.len;
@@ -242,7 +242,7 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
             },
             .@"*" => {
                 const oper = self.emit(e.oper).?;
-                const load = self.func.addNode(.Load, &.{ self.ctrl, self.resolveMem(), oper }, {});
+                const load = self.func.addNode(.Load, &.{ null, self.resolveMem(), oper }, {});
                 return load;
             },
             else => std.debug.panic("{any}\n", .{self.getAst(expr)}),
@@ -258,15 +258,16 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
         .Return => |e| {
             const value = self.emit(e.value);
             const mem = self.resolveMem();
-            if (self.return_value) |other| {
-                const ret_ctrl = self.return_ctrl.?;
+            if (self.return_ctrl) |ret_ctrl| {
                 self.return_ctrl = self.func.addNode(.Region, &.{
                     self.jmp(ret_ctrl),
                     self.jmp(self.ctrl),
                 }, .{});
                 self.return_mem = self.func.addNode(.Phi, &.{ self.return_ctrl, self.return_mem, mem }, {});
                 self.return_mem.?.data_type = .mem;
-                self.return_value = self.func.addNode(.Phi, &.{ self.return_ctrl, other, value }, {});
+                if (self.return_value != null) {
+                    self.return_value = self.func.addNode(.Phi, &.{ self.return_ctrl, self.return_value, value }, {});
+                }
             } else {
                 self.return_mem = mem;
                 self.return_ctrl = self.ctrl;

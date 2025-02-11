@@ -22,12 +22,13 @@ const names = [_][]const u8{
     "unique",     "versatile", "wise",      "xenophobic", "yearning",    "zenith",
 };
 
-const func_count = 4;
+const func_count = 1;
+const max_depth = 5;
 const max_arg_count = 5;
 const return_types = [_]Types.Id{ .void, .uint };
 const arguments = [_]Types.Id{ .uint, .ptr };
 const variable_types = [_]Types.Id{.uint};
-const binops = [_]Lexer.Lexeme{ .@"+", .@"-", .@"*" };
+const binops = [_]Lexer.Lexeme{ .@"+", .@"-", .@"*", .@"==", .@"!=" };
 
 fn fuzz(seed: usize, arena: std.mem.Allocator) !void {
     std.debug.print("seed: {}\n", .{seed});
@@ -63,7 +64,9 @@ fn fuzz(seed: usize, arena: std.mem.Allocator) !void {
         try gen.generate();
     }
 
-    try tests.testBuilder("smh", file.items, arena, std.io.null_writer, .no_color);
+    std.debug.print("{s}\n", .{file.items});
+
+    try tests.testBuilder("smh", file.items, arena, std.io.getStdErr().writer(), .escape_codes);
 }
 
 const FuncData = struct {
@@ -77,6 +80,7 @@ const ExprGen = struct {
     rng: std.Random,
     out: std.ArrayList(u8).Writer,
     variables: std.ArrayList(Types.Id) = undefined,
+    depth: usize = 0,
 
     const Error = std.ArrayList(u8).Writer.Error;
 
@@ -87,29 +91,40 @@ const ExprGen = struct {
     }
 
     fn genExpr(self: *ExprGen, ty: Types.Id) Error!void {
-        const Entry = struct { usize, *const fn (*ExprGen) Error!void, ?Types.Id };
+        const Entry = struct { usize, *const fn (*ExprGen) Error!void, ?Types.Id, usize };
+
+        self.depth += 1;
+        defer self.depth -= 1;
+        const reservoar = max_depth - self.depth;
 
         const table = [_]Entry{
-            .{ 20, genConst, .uint },
-            .{ 30, genBinOp, .uint },
-            .{ 10, genVariable, .void },
-            .{ 10, genIdent, .uint },
-            .{ 10, genPtrIdent, .ptr },
-            .{ 10, genBlock, .void },
-            .{ 5, genReturn, .void },
+            .{ 40, genConst, .uint, 0 },
+            .{ 30, genBinOp, .uint, 1 },
+            .{ 10, genVariable, .void, 1 },
+            .{ 10, genIdent, .uint, 0 },
+            .{ 10, genPtrIdent, .ptr, 0 },
+            .{ 10, genBlock, .void, 2 },
+            .{ 10, genAssignment, .void, 1 },
+            .{ 10, genIf, .void, 2 },
+            .{ 5, genReturn, .void, 1 },
         };
 
         var space_limit: usize = 0;
-        for (table) |e| if (e[2] == ty) {
+        for (table) |e| if (e[2] == ty and e[3] <= reservoar) {
             space_limit += e[0];
         };
+
+        if (space_limit == 0) {
+            try self.out.writeAll("{}");
+            return;
+        }
 
         const choice = self.rng.intRangeLessThan(usize, 0, space_limit);
         var range: usize = 0;
         for (table) |e| {
-            if (e[2] != ty) continue;
+            if (e[2] != ty or e[3] > reservoar) continue;
 
-            if (range >= choice and choice < range + e[0]) {
+            if (range <= choice and choice <= range + e[0]) {
                 try e[1](self);
                 break;
             }
@@ -121,10 +136,31 @@ const ExprGen = struct {
     fn genVariable(self: *ExprGen) !void {
         const ty = variable_types[self.rng.intRangeLessThan(usize, 0, variable_types.len)];
         const name = self.funcs.len + self.variables.items.len;
-        try self.variables.append(ty);
-
         try self.out.print("{s}:=", .{names[name]});
         try self.genExpr(ty);
+        try self.variables.append(ty);
+    }
+
+    fn genIf(self: *ExprGen) !void {
+        try self.out.writeAll("if ");
+        try self.genExpr(.uint);
+        try self.genBlock();
+        if (self.rng.boolean()) {
+            try self.out.writeAll("else");
+            try self.genBlock();
+        }
+    }
+
+    fn genAssignment(self: *ExprGen) !void {
+        if (self.variables.items.len == 0) {
+            try self.genConst();
+            return;
+        }
+
+        const index = self.rng.intRangeLessThan(usize, 0, self.variables.items.len);
+        try self.out.writeAll(names[self.funcs.len + index]);
+        try self.out.writeAll("=");
+        try self.genExpr(self.variables.items[index]);
     }
 
     fn genIdent(self: *ExprGen) !void {
