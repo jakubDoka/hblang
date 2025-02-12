@@ -214,11 +214,11 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
                 if (c.* != .LazyPhy) {
                     std.debug.assert(l.Node.isLazyPhi(loop.ctrl));
                     l.Node.data_type = .mem;
-                    self.func.setInput(l.Node, 2, c.Node);
+                    std.debug.assert(self.func.setInput(l.Node, 2, c.Node) == null);
                 }
             }
 
-            self.func.setInput(loop.ctrl, 1, self.jmp(self.ctrl));
+            std.debug.assert(self.func.setInput(loop.ctrl, 1, self.jmp(self.ctrl)) == null);
 
             const break_ = loop.control.get(.break_) orelse {
                 self.ctrl = null;

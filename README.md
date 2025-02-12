@@ -117,7 +117,7 @@ fib := fn(n: uint): uint {
 ```
 
 #### loops 2
-//```hb
+```hb
 main := fn(): uint {
     return not_fib(3)
 }
@@ -138,7 +138,7 @@ not_fib := fn(size: uint): uint {
 ```
 
 #### loops 3
-//```hb
+```hb
 main := fn(): uint {
     i := 0
     loop if i == 4 break else {

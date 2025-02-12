@@ -61,6 +61,19 @@ pub fn build(b: *std.Build) !void {
         break :example_tests &installed.step;
     };
 
+    const fuzz = b.addExecutable(.{
+        .name = "fuzz",
+        .root_source_file = b.path("fuzz.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    b.installArtifact(fuzz);
+
+    const fuzz_step = b.step("fuzz", "guzz");
+
+    fuzz_step.dependOn(&b.addInstallArtifact(fuzz, .{}).step);
+    fuzz_step.dependOn(&b.addRunArtifact(fuzz).step);
+
     const check_unit_tests = b.addTest(.{
         .root_source_file = b.path("tests.zig"),
         .target = b.graph.host,

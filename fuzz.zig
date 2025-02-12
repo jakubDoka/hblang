@@ -3,13 +3,15 @@ const Types = @import("Types.zig");
 const Lexer = @import("Lexer.zig");
 const tests = @import("tests.zig");
 
-test "fuzz" {
+pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    for (0..100) |i| {
+    //var arena = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = arena.deinit();
+    for (2513..10000) |i| {
         _ = arena.reset(.retain_capacity);
         try fuzz(i, arena.allocator());
     }
+    std.debug.print("top mem: {}", .{arena.queryCapacity()});
 }
 
 const names = [_][]const u8{
@@ -23,7 +25,7 @@ const names = [_][]const u8{
 };
 
 const func_count = 1;
-const max_depth = 5;
+const max_depth = 6;
 const max_arg_count = 5;
 const return_types = [_]Types.Id{ .void, .uint };
 const arguments = [_]Types.Id{ .uint, .ptr };
@@ -37,6 +39,10 @@ fn fuzz(seed: usize, arena: std.mem.Allocator) !void {
     const rng = pcg.random();
 
     const funcs = try arena.alloc(FuncData, func_count);
+    defer {
+        for (funcs) |*f| arena.free(f.args);
+        arena.free(funcs);
+    }
 
     for (funcs) |*f| {
         f.* = .{
@@ -50,6 +56,7 @@ fn fuzz(seed: usize, arena: std.mem.Allocator) !void {
     }
 
     var file = try std.ArrayList(u8).initCapacity(arena, 1024 * 16);
+    defer file.deinit();
     var writer = file.writer();
 
     for (funcs, 0..) |f, i| {
@@ -61,12 +68,15 @@ fn fuzz(seed: usize, arena: std.mem.Allocator) !void {
         try writer.print("):{}", .{f.ret});
 
         var gen = ExprGen{ .func = i, .funcs = funcs, .rng = rng, .out = writer };
+        defer gen.variables.deinit();
         try gen.generate();
     }
 
-    std.debug.print("{s}\n", .{file.items});
-
-    try tests.testBuilder("smh", file.items, arena, std.io.getStdErr().writer(), .escape_codes);
+    if (false) {
+        try tests.testBuilder("smh", file.items, arena, std.io.getStdErr().writer(), .escape_codes);
+    } else {
+        try tests.testBuilder("smh", file.items, arena, std.io.null_writer, .no_color);
+    }
 }
 
 const FuncData = struct {

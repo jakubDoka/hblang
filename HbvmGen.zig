@@ -294,24 +294,15 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 self.emit(.cp, .{ self.reg(no), .ret });
             },
             .Jmp => if (no.outputs()[0].kind == .Region or no.outputs()[0].kind == .Loop) {
-
-                //let index = node
-                //    .inputs
-                //    .iter()
-                //    .position(|&n| block.entry == nodes.idom_of(n))
-                //    .unwrap()
-                //    + 1;
-
                 const idx = std.mem.indexOfScalar(?*Func.Node, no.outputs()[0].inputs(), no).? + 1;
 
                 const Move = struct { isa.Reg, isa.Reg, u8 };
                 var moves = std.ArrayList(Move).init(tmp);
                 for (no.outputs()[0].outputs()) |o| {
                     if (o.kind == .Phi and o.data_type != .mem) {
-                        moves.append(.{ self.reg(o), self.reg(o.inputs()[idx]), 0 }) catch unreachable;
-                        //if (self.reg(o) != self.reg(o.inputs()[idx])) {
-                        //    self.emit(.cp, .{ self.reg(o), self.reg(o.inputs()[idx]) });
-                        //}
+                        std.debug.assert(o.inputs()[idx].?.kind == .MachMove);
+                        const dst, const src = .{ self.reg(o), self.reg(o.inputs()[idx].?.inputs()[1]) };
+                        if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
                     }
                 }
 
@@ -321,10 +312,9 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 // in case of cycles, swaps are used instead in which case the conflicting
                 // move is removed and remining moves are replaced with swaps
 
-                //const CYCLE_SENTINEL: u8 = u8::MAX;
-                const cycle_sentinel = isa.Reg.max;
+                const cycle_sentinel = 255;
 
-                var graph = std.EnumArray(isa.Reg, isa.Reg).initFill(cycle_sentinel);
+                var graph = std.EnumArray(isa.Reg, isa.Reg).initFill(.null);
                 for (moves.items) |m| {
                     graph.set(m[0], m[1]);
                 }
@@ -334,11 +324,11 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     while (c != m[0]) {
                         c = graph.get(c);
                         m[2] += 1;
-                        if (c == .max) continue :o;
+                        if (c == .null) continue :o;
                     }
 
-                    graph.set(c, .max);
-                    m[2] = 255;
+                    graph.set(c, .null);
+                    m[2] = cycle_sentinel;
                 }
 
                 std.sort.pdq(Move, moves.items, {}, struct {
@@ -348,37 +338,21 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }.lt);
 
                 for (moves.items) |*m| {
-                    if (m[2] == 255) {
-                        while (graph.get(m[1]) != .max) {
+                    if (m[2] == cycle_sentinel) {
+                        while (graph.get(m[1]) != .null) {
                             self.emit(.swa, .{ m[0], m[1] });
+                            m[0] = m[1];
                             std.mem.swap(isa.Reg, graph.getPtr(m[1]), &m[1]);
                         }
                         graph.set(m[1], m[1]);
-                    } else {
+                    } else if (graph.get(m[1]) != m[1]) {
                         self.emit(.cp, .{ m[0], m[1] });
                     }
                 }
-
-                //quad_sort(&mut moves, |a, b| a[2].cmp(&b[2]).reverse());
-
-                //for [mut d, mut s, depth] in moves {
-                //    if depth == CYCLE_SENTINEL {
-                //        while graph[s as usize] != u8::MAX {
-                //            self.emit(instrs::swa(d, s));
-                //            d = s;
-                //            mem::swap(&mut graph[s as usize], &mut s);
-                //        }
-                //        // trivial cycle denotes this move was already generated in a
-                //        // cycyle
-                //        graph[s as usize] = s;
-                //    } else if graph[s as usize] != s {
-                //        self.emit(instrs::cp(d, s));
-                //    }
-                //}
-
             },
             .MachMove => {
-                self.emit(.cp, .{ self.reg(no), self.reg(inps[0]) });
+                //std.debug.assert(no.outputs()[0].kind == .Phi);
+                //self.emit(.cp, .{ self.reg(no.outputs()[0]), self.reg(inps[0]) });
             },
             .Phi => {},
             .Return => {

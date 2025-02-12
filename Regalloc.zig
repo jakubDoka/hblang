@@ -67,9 +67,12 @@ pub fn ralloc(comptime Mach: type, func: *Func.Func(Mach)) []u8 {
     }
 
     for (instrs, 0..) |*instr, i| {
-        if (instr.def.outputs().len != 0 and !instr.def.isCfg()) {
+        if (instr.def.outputs().len != 0 and instr.def.kind != .MachMove and instr.def.kind != .Store and
+            instr.def.kind != .Mem and !instr.def.isCfg())
+        {
             instr.defs.set(i);
         }
+        if (instr.def.kind == .Phi) continue;
         for (instr.def.dataDeps()) |use| if (use) |uuse| {
             instrs[instr.def.schedule].uses.set(uuse.schedule);
         };
@@ -115,6 +118,7 @@ pub fn ralloc(comptime Mach: type, func: *Func.Func(Mach)) []u8 {
 
     for (postorder) |bb| {
         for (bb.base.outputs()) |o| {
+            if (o.kind == .Phi) continue;
             for (o.dataDeps()) |i| if (i) |ii| {
                 std.debug.assert(instrs[o.schedule].liveins.isSet(ii.schedule));
             };
@@ -126,12 +130,10 @@ pub fn ralloc(comptime Mach: type, func: *Func.Func(Mach)) []u8 {
     for (interference_table) |*r| r.* = Set.initEmpty(tmp, func.instr_count) catch unreachable;
 
     for (instrs) |*ins| {
-        ins.liveins.setUnion(ins.liveouts);
-        var iter = ins.liveins.iterator(.{});
+        var iter = ins.defs.iterator(.{});
         while (iter.next()) |i| {
-            interference_table[i].setUnion(ins.liveins);
+            interference_table[i].setUnion(ins.liveouts);
         }
-        iter = ins.liveouts.iterator(.{});
     }
 
     const tight_interference_table = tmp.alloc([]u16, func.instr_count) catch unreachable;

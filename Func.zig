@@ -9,12 +9,16 @@ const Types = @import("Types.zig");
 fn _Func(comptime Mach: type) struct {
     arena: std.heap.ArenaAllocator,
     tmp_arena: std.heap.ArenaAllocator,
-    interner: std.hash_map.HashMapUnmanaged(InternedNode, void, void, 70) = .{},
+    interner: InternMap(Uninserter) = .{},
     next_id: u16 = 0,
     block_count: u16 = undefined,
     instr_count: u16 = undefined,
     root: *Node = undefined,
     end: *Node = undefined,
+
+    pub fn InternMap(comptime Context: type) type {
+        return std.hash_map.HashMapUnmanaged(InternedNode, void, Context, 70);
+    }
 
     pub const Builtin = union(enum) {
         Start: Cfg,
@@ -65,6 +69,8 @@ fn _Func(comptime Mach: type) struct {
         Phi,
         // [Cfg, inp]
         MachMove,
+        // [Cfg, inp]
+        MachSwap,
 
         pub const is_basic_block_start = .{ .Entry, .CallEnd, .Then, .Else, .Region, .Loop };
         pub const is_basic_block_end = .{ .Return, .Call, .If, .Jmp };
@@ -156,7 +162,10 @@ fn _Func(comptime Mach: type) struct {
                 if (extra.idepth != 0) return extra.idepth;
                 extra.idepth = switch (cfg.base.kind) {
                     .Start => return 0,
-                    .Region => idepth(idom(cfg)),
+                    .Region => @max(
+                        cfg.base.inputs()[0].?.asCfg().?.idepth(),
+                        cfg.base.inputs()[0].?.asCfg().?.idepth(),
+                    ) + 1,
                     else => idepth(cfg.base.cfg0().?) + 1,
                 };
                 return extra.idepth;
@@ -181,10 +190,14 @@ fn _Func(comptime Mach: type) struct {
                 };
             }
 
-            fn better(cfg: *CfgNode, best: *CfgNode) bool {
+            fn better(cfg: *CfgNode, best: *CfgNode, to_sched: *Node) bool {
                 return idepth(cfg) > idepth(best) or
-                    (cfg.base.kind == .Jmp and cfg.base.outputs()[0].kind == .Loop) or
+                    (cfg.base.kind == .Jmp and cfg.base.outputs()[0].kind == .Loop and to_sched.kind != .MachMove) or
                     best.base.isBasicBlockEnd();
+            }
+
+            pub fn format(self: *const CfgNode, comptime a: anytype, b: anytype, writer: anytype) !void {
+                try self.base.format(a, b, writer);
             }
         };
     }
@@ -527,7 +540,7 @@ fn _Func(comptime Mach: type) struct {
         }
     };
 
-    const InsertMap = std.hash_map.HashMapUnmanaged(InternedNode, void, Inserter, 70);
+    const InsertMap = InternMap(Inserter);
 
     pub fn internNode(self: *Self, kind: Kind, inputs: []const ?*Node, extra: *const anyopaque) InsertMap.GetOrPutResult {
         const map: *InsertMap = @ptrCast(&self.interner);
@@ -536,6 +549,36 @@ fn _Func(comptime Mach: type) struct {
             .node = undefined,
             .hash = Node.hash(kind, inputs, extra),
         }, Inserter{ .kind = kind, .inputs = inputs, .extra = extra }) catch unreachable;
+    }
+
+    const Uninserter = struct {
+        pub fn hash(_: anytype, k: InternedNode) u64 {
+            return k.hash;
+        }
+
+        pub fn eql(_: anytype, a: InternedNode, b: InternedNode) bool {
+            return a.node == b.node;
+        }
+    };
+
+    pub fn uninternNode(self: *Self, node: *Node) void {
+        if (Node.isInterned(node.kind, node.inputs())) {
+            std.debug.assert(self.interner.remove(.{ .node = node, .hash = Node.hash(node.kind, node.inputs(), node.anyextra()) }));
+        }
+    }
+
+    pub fn reinternNode(self: *Self, node: *Node) ?*Node {
+        if (Node.isInterned(node.kind, node.inputs())) {
+            const entry = self.internNode(node.kind, node.inputs(), node.anyextra());
+
+            if (entry.found_existing) {
+                return entry.key_ptr.node;
+            }
+
+            entry.key_ptr.node = node;
+        }
+
+        return null;
     }
 
     pub fn addNode(self: *Self, comptime kind: Kind, inputs: []const ?*Node, extra: ClassFor(kind)) *Node {
@@ -566,7 +609,7 @@ fn _Func(comptime Mach: type) struct {
                 .input_base = owned_inputs.ptr,
                 .input_len = @intCast(owned_inputs.len),
                 .input_ordered_len = @intCast(owned_inputs.len),
-                .output_base = (self.arena.allocator().alloc(*Node, 0) catch unreachable).ptr,
+                .output_base = @ptrFromInt(@alignOf(*Node)),
                 .kind = kind,
                 .id = self.next_id,
             },
@@ -587,33 +630,42 @@ fn _Func(comptime Mach: type) struct {
     }
 
     pub fn subsumeNoKill(self: *Self, this: *Node, target: *Node) void {
-        for (target.outputs()) |use| {
+        for (self.arena.allocator().dupe(*Node, target.outputs()) catch unreachable) |use| {
+            if (use.id == std.math.maxInt(u16)) continue;
             const index = std.mem.indexOfScalar(?*Node, use.inputs(), target) orelse {
                 std.debug.panic("{} {any} {}", .{ this, target.outputs(), use });
             };
 
-            use.inputs()[index] = this;
-            self.addUse(this, use);
+            _ = self.setInput(use, index, this);
         }
 
-        target.output_len = 0;
+        var iter = self.interner.iterator();
+        while (iter.next()) |e| std.debug.assert(e.key_ptr.node.id != std.math.maxInt(u16));
     }
 
     pub fn subsume(self: *Self, this: *Node, target: *Node) void {
         self.subsumeNoKill(this, target);
+        self.uninternNode(target);
         target.kill();
     }
 
-    pub fn setInput(self: *Self, use: *Node, idx: usize, def: ?*Node) void {
-        if (use.inputs()[idx] == def) return;
+    pub fn setInput(self: *Self, use: *Node, idx: usize, def: ?*Node) ?*Node {
+        if (use.inputs()[idx] == def) return null;
         if (use.inputs()[idx]) |n| {
             n.removeUse(use);
         }
 
+        self.uninternNode(use);
         use.inputs()[idx] = def;
         if (def) |d| {
             self.addUse(d, use);
         }
+        if (self.reinternNode(use)) |nuse| {
+            self.subsumeNoKill(nuse, use);
+            use.kill();
+            return nuse;
+        }
+        return null;
     }
 
     pub fn addDep(self: *Self, use: *Node, def: *Node) void {
@@ -699,15 +751,14 @@ fn _Func(comptime Mach: type) struct {
             break :cfg_rpo rpo.items;
         };
 
-        if (false) add_mach_moves: {
-            for (cfg_rpo) |n| if (n.base.kind == .Loop) {
-                for (tmp.dupe(*Node, n.base.outputs()) catch unreachable) |o| if (o.kind == .Phi) {
+        add_mach_moves: {
+            for (cfg_rpo) |n| if (n.base.kind == .Loop or n.base.kind == .Region) {
+                for (tmp.dupe(*Node, n.base.outputs()) catch unreachable) |o| if (o.kind == .Phi and o.data_type != .mem) {
                     std.debug.assert(o.inputs().len == 3);
                     const lhs = self.addNode(.MachMove, &.{ null, o.inputs()[1].? }, {});
                     const rhs = self.addNode(.MachMove, &.{ null, o.inputs()[2].? }, {});
                     const new_phy = self.addNode(.Phi, &.{ &n.base, lhs, rhs }, {});
-                    const fin = self.addNode(.MachMove, &.{ null, new_phy }, {});
-                    self.subsume(fin, o);
+                    self.subsume(new_phy, o);
                 };
             };
             break :add_mach_moves;
@@ -748,7 +799,7 @@ fn _Func(comptime Mach: type) struct {
 
                 if (t.asCfg()) |c| {
                     late_scheds[c.base.id] = if (c.base.isBasicBlockStart()) c else c.base.cfg0();
-                } else if (t.isPinned()) {
+                } else if (t.isPinned() or t.kind == .Arg) {
                     late_scheds[t.id] = t.cfg0().?;
                 } else {
                     todo(.Proj, "pin projs to the parent");
@@ -798,6 +849,7 @@ fn _Func(comptime Mach: type) struct {
                                 cursor.ext.antidep = t.id;
                             }
 
+                            // TODO: might be dangerosa
                             for (t.mem().outputs()) |o| switch (o.kind) {
                                 .Store, .Call => {
                                     const sdef = o.cfg0().?;
@@ -836,7 +888,7 @@ fn _Func(comptime Mach: type) struct {
                         var cursor = best.base.cfg0().?;
                         while (cursor != early.idom()) : (cursor = cursor.idom()) {
                             std.debug.assert(cursor.base.kind != .Start);
-                            if (cursor.better(best)) best = cursor;
+                            if (cursor.better(best, t)) best = cursor;
                         }
 
                         if (best.base.isBasicBlockEnd()) {
@@ -869,7 +921,7 @@ fn _Func(comptime Mach: type) struct {
 
             for (nodes, late_scheds) |on, l| if (on) |n| {
                 todo(.Proj, "ignore them");
-                self.setInput(n, 0, &l.?.base);
+                std.debug.assert(self.setInput(n, 0, &l.?.base) == null);
             };
 
             break :sched_late;
@@ -988,7 +1040,8 @@ fn _Func(comptime Mach: type) struct {
             };
 
             std.debug.assert(best.base.kind != .Start);
-            self.setInput(node, 0, &best.base);
+
+            std.debug.assert(self.setInput(node, 0, &best.base) == null);
         }
     }
 
@@ -1013,8 +1066,11 @@ fn _Func(comptime Mach: type) struct {
         }
 
         while (worklist.pop()) |t| {
+            if (t.id == std.math.maxInt(u16)) continue;
+
             if (t.outputs().len == 0 and t != self.end) {
                 for (t.inputs()) |ii| if (ii) |ia| worklist.add(ia);
+                self.uninternNode(t);
                 t.kill();
                 continue;
             }
@@ -1078,7 +1134,6 @@ fn _Func(comptime Mach: type) struct {
                 std.debug.assert(extra.* == 8);
                 o.schedule = local_count;
                 local_count += 1;
-                continue;
             }
         }
 
@@ -1142,19 +1197,13 @@ fn _Func(comptime Mach: type) struct {
             }
 
             for (tmp.dupe(*Node, bb.outputs()) catch unreachable) |o| {
-                if (o.kind == .Phi) {
-                    for (o.outputs()) |lo| {
-                        if (lo.kind == .Load and lo.base().kind == .Local and lo.base().schedule != std.math.maxInt(u16)) {
-                            const su = Local.resolve(self, locals, lo.base().schedule);
-                            self.subsume(su, lo);
-                        }
+                if (o.kind == .Phi or o.kind == .Mem or o.kind == .Store) {
+                    if (o.kind == .Store and o.base().kind == .Local and o.base().schedule != std.math.maxInt(u16)) {
+                        to_remove.append(o) catch unreachable;
+                        locals[o.base().schedule] = .{ .Node = o.value() };
                     }
-                }
-                if (o.kind == .Store and o.base().kind == .Local and o.base().schedule != std.math.maxInt(u16)) {
-                    to_remove.append(o) catch unreachable;
-                    locals[o.base().schedule] = .{ .Node = o.value() };
 
-                    for (o.outputs()) |lo| {
+                    for (tmp.dupe(*Node, o.outputs()) catch unreachable) |lo| {
                         if (lo.kind == .Load and lo.base().kind == .Local and lo.base().schedule != std.math.maxInt(u16)) {
                             const su = Local.resolve(self, locals, lo.base().schedule);
                             self.subsume(su, lo);
@@ -1182,7 +1231,9 @@ fn _Func(comptime Mach: type) struct {
                                 rhs = .{ .Node = Local.resolve(self, locals, i) };
                             }
                             if (rhs.? == .Node) {
-                                self.setInput(lhs.?.Node, 2, rhs.?.Node);
+                                if (self.setInput(lhs.?.Node, 2, rhs.?.Node)) |nlhs| {
+                                    s.Join.items[i].?.Node = nlhs;
+                                }
                             } else {
                                 const prev = lhs.?.Node.inputs()[1].?;
                                 self.subsume(prev, lhs.?.Node);
@@ -1203,6 +1254,10 @@ fn _Func(comptime Mach: type) struct {
                     states[child.schedule] = .{ .Join = loop };
                 }
             }
+        }
+
+        for (to_remove.items) |tr| {
+            self.subsume(tr.mem(), tr);
         }
 
         for (self.root.outputs()[1].outputs()) |o| {
@@ -1266,7 +1321,7 @@ fn _Func(comptime Mach: type) struct {
 
         const inps = node.inputs();
 
-        if (node.kind == .Store) {
+        if (false and node.kind == .Store) {
             if (node.base().kind == .Local and node.cfg0() != null) {
                 const dinps = self.arena.allocator().dupe(?*Node, node.inputs()) catch unreachable;
                 dinps[0] = null;
@@ -1280,7 +1335,7 @@ fn _Func(comptime Mach: type) struct {
             }
         }
 
-        if (node.kind == .Load) {
+        if (false and node.kind == .Load) {
             var earlier = node.mem();
 
             if (node.base().kind == .Local and node.cfg0() != null) {

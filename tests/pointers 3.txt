@@ -1,0 +1,172 @@
+======== SOURCE ========
+fn(): uint {
+    a := 1
+    do_stuff(&a)
+    return a
+}
+======== UNSCHEDULED SON ========
+%3 = CInt: 1 [, %5]
+%0 = Start: idepth: 0 [, %1, %2]
+%6 = Load: %5, %4 []
+%2 = Mem: %0 [, %4, %5]
+%5 = Store: %1, %2, %4, %3 [, %6, %7]
+%1 = Entry: idepth: 0, %0 [, %5, %7]
+%4 = Local: 8, %2 [, %5, %6, %7, %11]
+%10 = Ret: %8 []
+%7 = Call: id: fn1, idepth: 0, %1, %5, %4 [, %8]
+%11 = Load: %9, %4 [, %12]
+%9 = Mem: %8 [, %11, %12]
+%8 = CallEnd: idepth: 0, %7 [, %9, %10, %12]
+%12 = Return: idepth: 0, %8, %9, %11 []
+
+======== OPTIMIZED SON ========
+%3 = CInt: 1 [, %5]
+%0 = Start: idepth: 0 [, %1, %2]
+%2 = Mem: %0 [, %4, %5]
+%5 = Store: %1, %2, %4, %3 [, %7]
+%1 = Entry: idepth: 0, %0 [, %5, %7]
+%4 = Local: 8, %2 [, %5, %11, %7]
+%7 = Call: id: fn1, idepth: 0, %1, %5, %4 [, %8]
+%11 = Load: %9, %4 [, %12]
+%9 = Mem: %8 [, %11, %12]
+%8 = CallEnd: idepth: 0, %7 [, %9, %12]
+%12 = Return: idepth: 0, %8, %9, %11 []
+
+======== SCHEDULED SON ========
+%0 = Start: idepth: 0
+%1 = Entry: idepth: 1, %0
+  %4 = Local: 8, %2
+  %3 = CInt: 1
+  %5 = Store: %2, %4, %3
+  %7 = Call: id: fn1, idepth: 2, %5, %4
+%8 = CallEnd: idepth: 3, %7
+  %9 = Mem
+  %11 = Load: %9, %4
+  %12 = Return: idepth: 0, %9, %11
+
+======== REGISTER SELECTION ========
+{ 1, 2, 1, 1, 1, 1, 1 }
+
+======== SOURCE ========
+fn(v: ^uint): uint {
+    if *v == 0 {
+        return 0;
+        *v = 2
+    } else {
+        return 1;
+        *v = 3
+    }
+}
+======== UNSCHEDULED SON ========
+%24 = Jmp: idepth: 0 [, %25]
+%23 = Jmp: idepth: 0 [, %25]
+%25 = Region: idepth: 0, %23, %24 [, %26]
+%21 = CInt: 3 [, %22]
+%26 = Phi: %25, %13, %22 []
+%12 = CInt: 2 [, %13]
+%0 = Start: idepth: 0 [, %1, %2, %3]
+%10 = If: idepth: 0, %1, %9 [, %11, %14]
+%9 = BinOp: ==, %7, %8 [, %10]
+%22 = Store: %5, %6, %21 [, %26]
+%13 = Store: %5, %6, %12 [, %26]
+%7 = Load: %5, %6 [, %9]
+%6 = Load: %5, %4 [, %7, %13, %22]
+%3 = Arg: 0, %0 [, %5]
+%4 = Local: 8, %2 [, %5, %6]
+%2 = Mem: %0 [, %4, %5]
+%1 = Entry: idepth: 0, %0 [, %5, %10]
+%14 = Else: idepth: 0, %10 [, %17]
+%11 = Then: idepth: 0, %10 [, %16]
+%15 = CInt: 1 [, %20]
+%8 = CInt: 0 [, %9, %20]
+%5 = Store: %1, %2, %4, %3 [, %6, %7, %13, %19, %19, %22]
+%17 = Jmp: idepth: 0, %14 [, %18]
+%16 = Jmp: idepth: 0, %11 [, %18]
+%20 = Phi: %18, %8, %15 [, %27]
+%19 = Phi: %18, %5, %5 [, %27]
+%18 = Region: idepth: 0, %16, %17 [, %19, %20, %27]
+%27 = Return: idepth: 0, %18, %19, %20 []
+
+======== OPTIMIZED SON ========
+%28 = IfOp: swapped: false, op: jne, idepth: 0, %1, %7, %8 [, %11, %14]
+%3 = Arg: 0, %0 [, %7]
+%1 = Entry: idepth: 0, %0 [, %28]
+%14 = Else: idepth: 0, %28 [, %17]
+%11 = Then: idepth: 0, %28 [, %16]
+%15 = CInt: 1 [, %20]
+%8 = CInt: 0 [, %28, %20]
+%7 = Load: %2, %3 [, %28]
+%0 = Start: idepth: 0 [, %1, %2, %3]
+%17 = Jmp: idepth: 0, %14 [, %18]
+%16 = Jmp: idepth: 0, %11 [, %18]
+%20 = Phi: %18, %8, %15 [, %27]
+%2 = Mem: %0 [, %7, %27]
+%18 = Region: idepth: 0, %16, %17 [, %27, %20]
+%27 = Return: idepth: 0, %18, %2, %20 []
+
+======== SCHEDULED SON ========
+%0 = Start: idepth: 0
+%1 = Entry: idepth: 1, %0
+  %3 = Arg: 0
+  %8 = CInt: 0
+  %7 = Load: %2, %3
+  %28 = IfOp: swapped: false, op: jne, idepth: 2, %7, %8
+%11 = Then: idepth: 3, %28
+  %29 = MachMove: %8
+  %16 = Jmp: idepth: 4
+%14 = Else: idepth: 3, %28
+  %15 = CInt: 1
+  %30 = MachMove: %15
+  %17 = Jmp: idepth: 4
+%18 = Region: idepth: 0, %16, %17
+  %31 = Phi: %29, %30
+  %27 = Return: idepth: 0, %2, %31
+
+======== REGISTER SELECTION ========
+{ 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1 }
+
+======== CODEGEN ========
+main:
+         st $31, $254, -24, 24
+     addi64 $254, $254, -32
+     addi64 $32, $254, 0
+       li64 $33, 1
+         st $33, $254, 0, 8
+         cp $2, $32
+        jal $31, $0, :do_stuff
+         ld $32, $254, 0, 8
+         cp $1, $32
+     addi64 $254, $254, 32
+         ld $31, $254, -24, 24
+         tx
+do_stuff:
+         cp $13, $2
+       li64 $14, 0
+         ld $13, $13, 0, 8
+        jne $13, $14, :1
+         cp $13, $14
+        jmp :2
+1:     li64 $13, 1
+2:       cp $1, $13
+       jala $0, $31, 0
+
+======== EXECUTION ========
+      st $31=0, $254=10240, -24, 24
+  addi64 $254=10240, $254, -32
+  addi64 $32=0, $254=10208, 0
+    li64 $33=0, 1
+      st $33=1, $254=10208, 0, 8
+      cp $2=0, $32=10208
+     jal $31=0, $0=0, 48
+      cp $13=0, $2=10208
+    li64 $14=0, 0
+      ld $13=10208, $13, 0, 8
+     jne $13=1, $14=0, 13
+    li64 $13=1, 1
+      cp $1=0, $13=1
+    jala $0=0, $31=68, 0
+      ld $32=10208, $254=10208, 0, 8
+      cp $1=1, $32=1
+  addi64 $254=10208, $254, 32
+      ld $31=68, $254=10240, -24, 24
+      tx

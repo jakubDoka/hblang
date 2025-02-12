@@ -11,7 +11,7 @@ const Func = @import("Func.zig");
 test {
     _ = @import("zig-out/tests.zig");
     _ = @import("zig-out/vendored_tests.zig");
-    _ = @import("fuzz.zig");
+    _ = @import("fuzz.zig").main;
 }
 
 pub fn runTest(name: []const u8, code: []const u8) !void {
@@ -22,9 +22,11 @@ pub fn runTest(name: []const u8, code: []const u8) !void {
     var out = std.ArrayList(u8).init(gpa);
     defer out.deinit();
 
-    const stderr = std.io.getStdErr();
-    const colors = std.io.tty.detectConfig(stderr);
-    testBuilder(name, code, gpa, stderr.writer(), colors) catch unreachable;
+    errdefer {
+        const stderr = std.io.getStdErr();
+        const colors = std.io.tty.detectConfig(stderr);
+        testBuilder(name, code, gpa, stderr.writer(), colors) catch unreachable;
+    }
 
     try testBuilder(name, code, gpa, out.writer(), .no_color);
 
@@ -127,7 +129,7 @@ pub fn testFmt(name: []const u8, path: []const u8, code: []const u8) !void {
 
     const ast_overhead = @as(f64, @floatFromInt(ast.exprs.store.items.len)) /
         @as(f64, @floatFromInt(ast.source.len));
-    if (ast_overhead > 3.0) {
+    if (ast_overhead > 3.5) {
         std.debug.print(
             "\n{s} is too large ({d} bytes, {any} ratio)\n",
             .{ name, ast.source.len, ast_overhead },

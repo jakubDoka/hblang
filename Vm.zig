@@ -12,12 +12,12 @@ const one: u64 = 1;
 
 pub fn SafeContext(comptime Writer: type) type {
     return struct {
-        color_cfg: if (debug) std.io.tty.Config else void = undefined,
-        writer: if (debug) Writer else void = undefined,
+        color_cfg: std.io.tty.Config,
+        writer: Writer,
         code: []const u8,
         memory: []u8,
 
-        const check_ops = debug;
+        const check_ops = true;
         const assume_no_div_by_zero = false;
         const Self = @This();
 
