@@ -72,7 +72,7 @@ pub fn build(self: *Builder, file: Types.File, func: Types.Func) void {
         const arg = self.func.addNode(.Arg, &.{self.func.root}, i);
         const local = self.func.addNode(.Local, &.{ null, self.mem }, 8);
         const mem = self.resolveMem();
-        self.scope.items[0].Node = self.func.addNode(.Store, &.{ self.ctrl, mem, local, arg }, {});
+        self.scope.items[0].Node = self.func.addNode(.Store, &.{ self.ctrl, mem, local, arg }, .{});
         self.scope.append(.{ .Node = local }) catch unreachable;
         i += 1;
     }
@@ -158,7 +158,7 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
         .Ident => |e| {
             const ident = resolveIdent(&self.func, self.scope.items, e.id.index + 1);
             std.debug.assert(ident.kind == .Local);
-            return self.func.addNode(.Load, &.{ null, self.resolveMem(), ident }, {});
+            return self.func.addNode(.Load, &.{ null, self.resolveMem(), ident }, .{});
         },
         .Block => |e| {
             const prev_scope_height = self.scope.items.len;
@@ -242,7 +242,7 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
             },
             .@"*" => {
                 const oper = self.emit(e.oper).?;
-                const load = self.func.addNode(.Load, &.{ null, self.resolveMem(), oper }, {});
+                const load = self.func.addNode(.Load, &.{ null, self.resolveMem(), oper }, .{});
                 return load;
             },
             else => std.debug.panic("{any}\n", .{self.getAst(expr)}),
@@ -282,7 +282,7 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
                 const value = self.emit(e.rhs).?;
                 const local = self.func.addNode(.Local, &.{ null, self.mem }, 8);
                 const mem = self.resolveMem();
-                self.scope.items[0].Node = self.func.addNode(.Store, &.{ self.ctrl, mem, local, value }, {});
+                self.scope.items[0].Node = self.func.addNode(.Store, &.{ self.ctrl, mem, local, value }, .{});
                 self.scope.append(.{ .Node = local }) catch unreachable;
                 return null;
             },
@@ -293,7 +293,7 @@ fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
 
                 const base = loc.base();
                 const mem = self.resolveMem();
-                self.scope.items[0].Node = self.func.addNode(.Store, &.{ self.ctrl, mem, base, val }, {});
+                self.scope.items[0].Node = self.func.addNode(.Store, &.{ self.ctrl, mem, base, val }, .{});
 
                 return null;
             },

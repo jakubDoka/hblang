@@ -43,23 +43,23 @@ pub const Mach = union(enum) {
     },
     // [?Cfg, lhs, rhs]
     IfOp: extern struct {
-        base: Func.Builtin.Cfg = .{},
+        base: Func.Cfg = .{},
         op: isa.Op,
         swapped: bool,
     },
     // [?Cfg, mem, ptr]
     Ld: extern struct {
+        base: Func.Load,
         offset: i64,
     },
     // [?Cfg, mem, ptr, value, ...antideps]
     St: extern struct {
+        base: Func.Store,
         offset: i64,
     },
 
     pub const idealize = HbvmGen.idealize;
 
-    pub const is_load = .{.Ld};
-    pub const is_store = .{.St};
     pub const is_basic_block_end = .{.IfOp};
 
     pub fn isSwapped(node: *Func.Node) bool {

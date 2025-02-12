@@ -37,9 +37,9 @@ fn _Func(comptime Mach: type) struct {
         // [?Cfg, Mem]
         Local: usize,
         // [?Cfg, thread, ptr]
-        Load,
+        Load: Load,
         // [?Cfg, thread, ptr, value, ...antideps]
-        Store,
+        Store: Store,
         // [?Cfg, ...lane]
         Split,
         // [?Cfg, ...lane]
@@ -69,21 +69,19 @@ fn _Func(comptime Mach: type) struct {
         Phi,
         // [Cfg, inp]
         MachMove,
-        // [Cfg, inp]
-        MachSwap,
 
         pub const is_basic_block_start = .{ .Entry, .CallEnd, .Then, .Else, .Region, .Loop };
         pub const is_basic_block_end = .{ .Return, .Call, .If, .Jmp };
         pub const is_mem_op = .{ .Load, .Local, .Store, .Return, .Call };
         pub const is_pinned = .{ .Ret, .Phi, .Mem };
-        pub const is_load = .{.Load};
-        pub const is_store = .{.Store};
-
-        pub const Cfg = extern struct {
-            idepth: u16 = 0,
-            antidep: u16 = 0,
-        };
     };
+
+    pub const Cfg = extern struct {
+        idepth: u16 = 0,
+        antidep: u16 = 0,
+    };
+    pub const Load = extern struct {};
+    pub const Store = extern struct {};
 
     pub const all_classes = std.meta.fields(Builtin) ++ std.meta.fields(Mach);
 
@@ -122,7 +120,7 @@ fn _Func(comptime Mach: type) struct {
         node: *Node,
     };
 
-    pub const CfgNode = LayoutOf(Builtin.Cfg);
+    pub const CfgNode = LayoutOf(Cfg);
 
     pub const Kind = b: {
         var builtin = @typeInfo(std.meta.Tag(Builtin));
@@ -157,7 +155,7 @@ fn _Func(comptime Mach: type) struct {
             ext: Class,
 
             pub fn idepth(cfg: *CfgNode) u16 {
-                const extra: *Builtin.Cfg = &cfg.ext;
+                const extra: *Cfg = &cfg.ext;
 
                 if (extra.idepth != 0) return extra.idepth;
                 extra.idepth = switch (cfg.base.kind) {
@@ -216,7 +214,6 @@ fn _Func(comptime Mach: type) struct {
     const is_basic_block_end = bakeBitset("is_basic_block_end");
     const is_mem_op = bakeBitset("is_mem_op");
     const is_pinned = bakeBitset("is_pinned");
-    const is_load = bakeBitset("is_load");
 
     pub const Node = extern struct {
         kind: Kind,
@@ -237,7 +234,7 @@ fn _Func(comptime Mach: type) struct {
                 std.debug.assert(use.inputs()[0].?.kind == .Region or use.inputs()[0].?.kind == .Loop);
                 for (use.inputs()[0].?.inputs(), use.inputs()[1..]) |b, u| {
                     if (u.? == self) {
-                        return subclass(b.?, Builtin.Cfg).?;
+                        return subclass(b.?, Cfg).?;
                     }
                 }
             }
@@ -257,7 +254,6 @@ fn _Func(comptime Mach: type) struct {
 
         pub fn format(self: *const Node, comptime _: anytype, _: anytype, writer: anytype) !void {
             const colors = .escape_codes;
-
             self.fmt(null, writer, colors);
         }
 
@@ -275,6 +271,20 @@ fn _Func(comptime Mach: type) struct {
             var add_colon_space = false;
 
             const utils = struct {
+                fn isVisibel(comptime Ty: type) bool {
+                    switch (@typeInfo(Ty)) {
+                        .@"struct" => |s| {
+                            if (s.fields.len == 0) return false;
+                        },
+                        .void => {
+                            return false;
+                        },
+                        else => {},
+                    }
+
+                    return true;
+                }
+
                 fn logExtra(writ: anytype, ex: anytype, comptime fir: bool) !void {
                     switch (@typeInfo(@TypeOf(ex.*))) {
                         .@"struct" => |s| {
@@ -293,17 +303,20 @@ fn _Func(comptime Mach: type) struct {
                                 if (!is_base) {
                                     prefix = prefix ++ f.name ++ ": ";
                                 }
-
                                 try writ.writeAll(prefix);
-                                try logExtra(writ, &@field(ex, f.name), is_base);
+                                _ = try logExtra(writ, &@field(ex, f.name), true);
                             }
                         },
-                        .@"enum" => |e| if (e.is_exhaustive) {
-                            try writ.print("{s}", .{@tagName(ex.*)});
-                        } else {
+                        .@"enum" => |e| {
+                            if (e.is_exhaustive) {
+                                try writ.print("{s}", .{@tagName(ex.*)});
+                            } else {
+                                try writ.print("{}", .{ex.*});
+                            }
+                        },
+                        else => {
                             try writ.print("{}", .{ex.*});
                         },
-                        else => try writ.print("{}", .{ex.*}),
                     }
                 }
             };
@@ -312,12 +325,11 @@ fn _Func(comptime Mach: type) struct {
                 inline else => |t| {
                     const ext = self.extraConst(t);
                     if (@TypeOf(ext.*) != void) {
-                        if (!add_colon_space) {
+                        if (utils.isVisibel(@TypeOf(ext.*))) {
                             writer.writeAll(": ") catch unreachable;
                             add_colon_space = true;
+                            utils.logExtra(writer, ext, true) catch unreachable;
                         }
-
-                        utils.logExtra(writer, ext, true) catch unreachable;
                     }
                 },
             }
@@ -349,17 +361,17 @@ fn _Func(comptime Mach: type) struct {
         }
 
         pub fn mem(self: *Node) *Node {
-            std.debug.assert(self.kind == .Load or self.kind == .Store);
+            std.debug.assert(self.isLoad() or self.isStore());
             return self.inputs()[1].?;
         }
 
         pub fn base(self: *Node) *Node {
-            std.debug.assert(self.kind == .Load or self.kind == .Store);
+            std.debug.assert(self.isLoad() or self.isStore());
             return self.inputs()[2].?;
         }
 
         pub fn value(self: *Node) *Node {
-            std.debug.assert(self.kind == .Store);
+            std.debug.assert(self.isStore());
             return self.inputs()[3].?;
         }
 
@@ -381,8 +393,8 @@ fn _Func(comptime Mach: type) struct {
         }
 
         pub fn cfg0(self: *Node) ?*CfgNode {
-            if (self.kind == .Start) return subclass(self, Builtin.Cfg);
-            return subclass((self.inputs()[0] orelse return null), Builtin.Cfg);
+            if (self.kind == .Start) return subclass(self, Cfg);
+            return subclass((self.inputs()[0] orelse return null), Cfg);
         }
 
         pub fn removeUse(self: *Node, use: *Node) void {
@@ -443,15 +455,19 @@ fn _Func(comptime Mach: type) struct {
         }
 
         pub fn asCfg(self: *Node) ?*CfgNode {
-            return self.subclass(Builtin.Cfg);
+            return self.subclass(Cfg);
         }
 
         pub fn isCfg(self: *const Node) bool {
-            return self.isSub(Builtin.Cfg);
+            return self.isSub(Cfg);
+        }
+
+        pub inline fn isStore(self: *const Node) bool {
+            return self.isSub(Store);
         }
 
         pub inline fn isLoad(self: *const Node) bool {
-            return is_load.contains(self.kind);
+            return self.isSub(Load);
         }
 
         pub inline fn isPinned(self: *const Node) bool {
@@ -812,7 +828,7 @@ fn _Func(comptime Mach: type) struct {
 
                     if (t.isLoad()) {
                         for (t.mem().outputs()) |p| {
-                            if (p.kind == .Store and late_scheds[p.id] == null) {
+                            if (p.isStore() and late_scheds[p.id] == null) {
                                 continue :task;
                             }
                         }
@@ -1197,8 +1213,8 @@ fn _Func(comptime Mach: type) struct {
             }
 
             for (tmp.dupe(*Node, bb.outputs()) catch unreachable) |o| {
-                if (o.kind == .Phi or o.kind == .Mem or o.kind == .Store) {
-                    if (o.kind == .Store and o.base().kind == .Local and o.base().schedule != std.math.maxInt(u16)) {
+                if (o.kind == .Phi or o.kind == .Mem or o.isStore()) {
+                    if (o.isStore() and o.base().kind == .Local and o.base().schedule != std.math.maxInt(u16)) {
                         to_remove.append(o) catch unreachable;
                         locals[o.base().schedule] = .{ .Node = o.value() };
                     }
@@ -1321,7 +1337,7 @@ fn _Func(comptime Mach: type) struct {
 
         const inps = node.inputs();
 
-        if (false and node.kind == .Store) {
+        if (false and node.isStore()) {
             if (node.base().kind == .Local and node.cfg0() != null) {
                 const dinps = self.arena.allocator().dupe(?*Node, node.inputs()) catch unreachable;
                 dinps[0] = null;
@@ -1344,14 +1360,14 @@ fn _Func(comptime Mach: type) struct {
                 return ld;
             }
 
-            while (earlier.kind == .Store and
+            while (earlier.isStore() and
                 (earlier.cfg0() == node.cfg0() or node.cfg0() == null) and
                 noAlias(earlier.base(), node.base()))
             {
                 earlier = earlier.mem();
             }
 
-            if (earlier.kind == .Store and
+            if (earlier.isStore() and
                 earlier.base() == node.base() and
                 earlier.data_type == node.data_type)
             {
@@ -1362,21 +1378,21 @@ fn _Func(comptime Mach: type) struct {
                 std.debug.assert(earlier.inputs().len == 3);
                 var l, var r = .{ earlier.inputs()[1].?, earlier.inputs()[2].? };
 
-                while (l.kind == .Store and
+                while (l.isStore() and
                     (l.cfg0() == node.cfg0() or node.cfg0() == null) and
                     noAlias(l.base(), node.base()))
                 {
                     l = l.mem();
                 }
 
-                while (r.kind == .Store and
+                while (r.isStore() and
                     (r.cfg0() == node.cfg0() or node.cfg0() == null) and
                     noAlias(r.base(), node.base()))
                 {
                     r = r.mem();
                 }
 
-                if (l.kind == .Store and r.kind == .Store and
+                if (l.isStore() and r.isStore() and
                     l.base() == r.base() and l.base() == node.base() and
                     l.data_type == r.data_type and l.data_type == node.data_type)
                 {

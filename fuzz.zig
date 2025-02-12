@@ -7,7 +7,7 @@ pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     //var arena = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = arena.deinit();
-    for (2513..10000) |i| {
+    for (0..10000) |i| {
         _ = arena.reset(.retain_capacity);
         try fuzz(i, arena.allocator());
     }
