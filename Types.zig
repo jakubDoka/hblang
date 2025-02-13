@@ -5,6 +5,7 @@ source: []const Ast,
 
 const std = @import("std");
 const Ast = @import("parser.zig");
+const graph = @import("Func.zig");
 const Types = @This();
 
 pub const Func = enum(u32) {
@@ -25,6 +26,20 @@ pub const Id = enum {
     uint,
     ptr,
 
+    pub fn size(self: Id) usize {
+        return switch (self) {
+            .void => 0,
+            .uint, .ptr => 8,
+        };
+    }
+
+    pub fn asDataType(self: Id) graph.DataType {
+        return switch (self) {
+            .void => unreachable,
+            .uint, .ptr => .int,
+        };
+    }
+
     pub fn fromStr(str: []const u8) ?Id {
         return std.meta.stringToEnum(Id, str);
     }
@@ -43,7 +58,6 @@ pub const FuncData = struct {
     file: File,
     name: Ast.Pos,
     ast: Ast.Id,
-    tail: bool = true,
 };
 
 pub fn init(gpa: std.mem.Allocator, source: []const Ast) Types {

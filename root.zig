@@ -2,6 +2,7 @@ pub const Lexer = @import("Lexer.zig");
 pub const Ast = @import("parser.zig");
 pub const Vm = @import("Vm.zig");
 pub const Builder = @import("Builder.zig");
+pub const Codegen = @import("Codegen.zig");
 pub const HbvmGen = @import("HbvmGen.zig");
 pub const Types = @import("Types.zig");
 pub const Regalloc = @import("Regalloc.zig");

@@ -9,79 +9,77 @@ fn(): uint {
     return *b - 4
 }
 ======== UNSCHEDULED SON ========
-%3 = CInt: 1 [, %5]
-%6 = Load: %5, %4 []
-%1 = Entry: idepth: 0, %0 [, %5, %8, %10]
-%9 = Load: %8, %7 [, %10]
-%8 = Store: %1, %5, %7, %4 [, %9, %10]
-%5 = Store: %1, %2, %4, %3 [, %6, %8]
+%4 = CInt: 1 [, %6]
+%7 = Load: %6, %5 []
+%1 = Entry: idepth: 0, %0 [, %11, %6, %9]
+%10 = Load: %9, %8 [, %11]
+%9 = Store: %1, %6, %8, %5 [, %11, %10]
+%6 = Store: %1, %2, %5, %4 [, %9, %7]
 %0 = Start: idepth: 0 [, %1, %2]
-%21 = CInt: 2 [, %22]
-%4 = Local: 8, %2 [, %5, %6, %8, %14]
-%13 = Ret: %11 []
-%10 = Call: id: fn1, idepth: 0, %1, %8, %9 [, %11]
-%7 = Local: 8, %2 [, %8, %9, %19, %27]
-%2 = Mem: %0 [, %4, %5, %7, %25]
-%22 = BinOp: +, %20, %21 [, %23]
-%20 = Load: %17, %19 [, %22]
-%19 = Load: %17, %7 [, %20, %23]
-%14 = Load: %12, %4 [, %15]
-%12 = Mem: %11 [, %14, %15]
-%11 = CallEnd: idepth: 0, %10 [, %12, %13, %15]
-%29 = CInt: 4 [, %30]
-%28 = Load: %26, %27 [, %30]
-%27 = Load: %26, %7 [, %28]
-%24 = CInt: 0 [, %26]
-%25 = Local: 8, %2 [, %26]
-%23 = Store: %16, %17, %19, %22 [, %26]
-%18 = Ret: %16 []
-%17 = Mem: %16 [, %19, %20, %23]
-%15 = Call: id: fn2, idepth: 0, %11, %12, %14 [, %16]
-%30 = BinOp: -, %28, %29 [, %31]
-%26 = Store: %16, %23, %25, %24 [, %27, %28, %31]
-%16 = CallEnd: idepth: 0, %15 [, %17, %18, %23, %26, %31]
-%31 = Return: idepth: 0, %16, %26, %30 []
+%20 = CInt: 2 [, %21]
+%5 = Local: 8, %2 [, %6, %14, %7, %9]
+%11 = Call: id: 1, idepth: 0, %1, %9, %10 [, %12]
+%8 = Local: 8, %2 [, %9, %26, %10, %18]
+%2 = Mem: %0 [, %6, %5, %8, %24]
+%21 = BinOp: iadd, %19, %20 [, %22]
+%19 = Load: %17, %18 [, %21]
+%18 = Load: %17, %8 [, %19, %22]
+%14 = Load: %13, %5 [, %15]
+%13 = Mem: %12 [, %15, %14]
+%12 = CallEnd: idepth: 0, %11 [, %15, %13]
+%28 = CInt: 4 [, %29]
+%27 = Load: %25, %26 [, %29]
+%26 = Load: %25, %8 [, %27]
+%23 = CInt: 0 [, %25]
+%24 = Local: 8, %2 [, %25]
+%22 = Store: %16, %17, %18, %21 [, %25]
+%17 = Mem: %16 [, %22, %18, %19]
+%15 = Call: id: 2, idepth: 0, %12, %13, %14 [, %16]
+%29 = BinOp: isub, %27, %28 [, %30]
+%25 = Store: %16, %22, %24, %23 [, %30, %26, %27]
+%16 = CallEnd: idepth: 0, %15 [, %30, %17, %22, %25]
+%30 = Return: idepth: 0, %16, %25, %29 []
 
 ======== OPTIMIZED SON ========
-%3 = CInt: 1 [, %5]
-%1 = Entry: idepth: 0, %0 [, %5, %10]
+%4 = CInt: 1 [, %6]
+%1 = Entry: idepth: 0, %0 [, %6, %11]
 %0 = Start: idepth: 0 [, %1, %2]
-%10 = Call: id: fn1, idepth: 0, %1, %5, %4 [, %11]
-%5 = Store: %1, %2, %4, %3 [, %10]
-%2 = Mem: %0 [, %4, %5]
-%20 = Load: %17, %4 [, %32]
-%14 = Load: %12, %4 [, %15]
-%12 = Mem: %11 [, %14, %15]
-%11 = CallEnd: idepth: 0, %10 [, %12, %15]
-%28 = Load: %23, %4 [, %33]
-%32 = ImmBinOp: imm: 2, op: addi64, %20 [, %23]
-%4 = Local: 8, %2 [, %5, %14, %28, %10, %20, %23]
-%17 = Mem: %16 [, %23, %20]
-%15 = Call: id: fn2, idepth: 0, %11, %12, %14 [, %16]
-%33 = ImmBinOp: imm: -4, op: addi64, %28 [, %31]
-%23 = Store: %16, %17, %4, %32 [, %28, %31]
-%16 = CallEnd: idepth: 0, %15 [, %17, %23, %31]
-%31 = Return: idepth: 0, %16, %23, %33 []
+%11 = Call: id: 1, idepth: 0, %1, %6, %5 [, %12]
+%6 = Store: %1, %2, %5, %4 [, %11]
+%2 = Mem: %0 [, %6, %5]
+%19 = Load: %17, %5 [, %31]
+%14 = Load: %13, %5 [, %15]
+%13 = Mem: %12 [, %15, %14]
+%12 = CallEnd: idepth: 0, %11 [, %13, %15]
+%27 = Load: %22, %5 [, %32]
+%31 = ImmBinOp: imm: 2, op: addi64, %19 [, %22]
+%5 = Local: 8, %2 [, %6, %14, %27, %11, %19, %22]
+%17 = Mem: %16 [, %22, %19]
+%15 = Call: id: 2, idepth: 0, %12, %13, %14 [, %16]
+%32 = ImmBinOp: imm: -4, op: addi64, %27 [, %30]
+%22 = Store: %16, %17, %5, %31 [, %27, %30]
+%16 = CallEnd: idepth: 0, %15 [, %17, %22, %30]
+%30 = Return: idepth: 0, %16, %22, %32 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
 %1 = Entry: idepth: 1, %0
-  %4 = Local: 8, %2
-  %3 = CInt: 1
-  %5 = Store: %2, %4, %3
-  %10 = Call: id: fn1, idepth: 2, %5, %4
-%11 = CallEnd: idepth: 3, %10
-  %12 = Mem
-  %14 = Load: %12, %4
-  %15 = Call: id: fn2, idepth: 4, %12, %14, %14
+  %5 = Local: 8, %2
+  %4 = CInt: 1
+  %6 = Store: %2, %5, %4
+  %11 = Call: id: 1, idepth: 2, %6, %5
+%12 = CallEnd: idepth: 3, %11
+  %13 = Mem
+  %14 = Load: %13, %5
+  %15 = Call: id: 2, idepth: 4, %13, %14, %14
 %16 = CallEnd: idepth: 5, %15
   %17 = Mem
-  %20 = Load: %17, %4
-  %32 = ImmBinOp: imm: 2, op: addi64, %20
-  %23 = Store: %17, %4, %32, %20
-  %28 = Load: %23, %4
-  %33 = ImmBinOp: imm: -4, op: addi64, %28
-  %31 = Return: idepth: 0, %23, %33
+  %19 = Load: %17, %5
+  %31 = ImmBinOp: imm: 2, op: addi64, %19
+  %22 = Store: %17, %5, %31, %19
+  %27 = Load: %22, %5
+  %32 = ImmBinOp: imm: -4, op: addi64, %27
+  %30 = Return: idepth: 0, %22, %32
 
 ======== REGISTER SELECTION ========
 { 1, 2, 1, 1, 1, 2, 1, 1, 2, 2, 1, 1, 1, 1 }
@@ -91,24 +89,24 @@ fn(a: uint): void {
     return
 }
 ======== UNSCHEDULED SON ========
-%3 = Arg: 0, %0 [, %5]
-%4 = Local: 8, %2 [, %5]
-%2 = Mem: %0 [, %4, %5]
-%0 = Start: idepth: 0 [, %1, %2, %3]
-%5 = Store: %1, %2, %4, %3 [, %6]
-%1 = Entry: idepth: 0, %0 [, %5, %6]
-%6 = Return: idepth: 0, %1, %5 []
+%4 = Arg: 0, %0 [, %6]
+%5 = Local: 8, %2 [, %6]
+%2 = Mem: %0 [, %6, %5]
+%0 = Start: idepth: 0 [, %1, %2, %4]
+%6 = Store: %1, %2, %5, %4 [, %7]
+%1 = Entry: idepth: 0, %0 [, %7, %6]
+%7 = Return: idepth: 0, %1, %6 []
 
 ======== OPTIMIZED SON ========
 %0 = Start: idepth: 0 [, %1, %2]
-%2 = Mem: %0 [, %6]
-%1 = Entry: idepth: 0, %0 [, %6]
-%6 = Return: idepth: 0, %1, %2 []
+%2 = Mem: %0 [, %7]
+%1 = Entry: idepth: 0, %0 [, %7]
+%7 = Return: idepth: 0, %1, %2 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
 %1 = Entry: idepth: 0, %0
-  %6 = Return: idepth: 0, %2
+  %7 = Return: idepth: 0, %2
 
 ======== REGISTER SELECTION ========
 { 1 }
@@ -119,34 +117,34 @@ fn(a: ^uint): void {
     return
 }
 ======== UNSCHEDULED SON ========
-%7 = Load: %5, %6 []
-%4 = Local: 8, %2 [, %5, %6]
-%3 = Arg: 0, %0 [, %5]
-%2 = Mem: %0 [, %4, %5]
-%8 = CInt: 2 [, %9]
-%6 = Load: %5, %4 [, %7, %9]
-%5 = Store: %1, %2, %4, %3 [, %6, %7, %9]
-%0 = Start: idepth: 0 [, %1, %2, %3]
-%9 = Store: %1, %5, %6, %8 [, %10]
-%1 = Entry: idepth: 0, %0 [, %5, %9, %10]
-%10 = Return: idepth: 0, %1, %9 []
+%8 = Load: %6, %7 []
+%5 = Local: 8, %2 [, %6, %7]
+%4 = Arg: 0, %0 [, %6]
+%2 = Mem: %0 [, %6, %5]
+%9 = CInt: 2 [, %10]
+%7 = Load: %6, %5 [, %8, %10]
+%6 = Store: %1, %2, %5, %4 [, %10, %7, %8]
+%0 = Start: idepth: 0 [, %1, %2, %4]
+%10 = Store: %1, %6, %7, %9 [, %11]
+%1 = Entry: idepth: 0, %0 [, %11, %6, %10]
+%11 = Return: idepth: 0, %1, %10 []
 
 ======== OPTIMIZED SON ========
-%8 = CInt: 2 [, %9]
-%3 = Arg: 0, %0 [, %9]
-%2 = Mem: %0 [, %9]
-%0 = Start: idepth: 0 [, %1, %2, %3]
-%9 = Store: %1, %2, %3, %8 [, %10]
-%1 = Entry: idepth: 0, %0 [, %10, %9]
-%10 = Return: idepth: 0, %1, %9 []
+%9 = CInt: 2 [, %10]
+%4 = Arg: 0, %0 [, %10]
+%2 = Mem: %0 [, %10]
+%0 = Start: idepth: 0 [, %1, %2, %4]
+%10 = Store: %1, %2, %4, %9 [, %11]
+%1 = Entry: idepth: 0, %0 [, %11, %10]
+%11 = Return: idepth: 0, %1, %10 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
 %1 = Entry: idepth: 1, %0
-  %3 = Arg: 0
-  %8 = CInt: 2
-  %9 = Store: %2, %3, %8
-  %10 = Return: idepth: 0, %9
+  %4 = Arg: 0
+  %9 = CInt: 2
+  %10 = Store: %2, %4, %9
+  %11 = Return: idepth: 0, %10
 
 ======== REGISTER SELECTION ========
 { 1, 2, 1, 1 }

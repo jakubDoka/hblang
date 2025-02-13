@@ -1,48 +1,33 @@
-types: *Types,
 func: Func,
-scope: Scope = undefined,
-loops: std.ArrayList(*Loop) = undefined,
-return_mem: ?*Func.Node = undefined,
-return_value: ?*Func.Node = undefined,
-return_ctrl: ?*Func.Node = undefined,
-file: Types.File = undefined,
-ast: Ast = undefined,
-arena: std.mem.Allocator = undefined,
-ctrl: ?*Func.Node = undefined,
-mem: *Func.Node = undefined,
-fdata: *Types.FuncData = undefined,
+scope: ?*Func.Node = undefined,
+root_mem: *Func.Node = undefined,
+ret: ?*Func.Node = undefined,
 
 const std = @import("std");
 const Ast = @import("parser.zig");
-const Func = @import("Func.zig").Func(union(enum) {});
 const Types = @import("Types.zig");
 const Builder = @This();
+const ScopeEntry = void;
+const Scope = void;
 
-const Scope = std.ArrayList(ScopeEntry);
+pub const Func = @import("Func.zig").Func(Mach);
+pub const Node = Func.Node;
+pub const DataType = Func.DataType;
+pub const Kind = Func.Kind;
+pub const BinOp = Func.BinOp;
+pub const Mach = union(enum) {
+    // [Cfg, mem, ...values]
+    Scope,
 
-const ScopeEntry = union(enum) {
-    Node: *Func.Node,
-    LazyPhy: *Loop,
+    pub const is_temporary = .{.Scope};
 };
 
-const Loop = struct {
-    ctrl: *Func.Node,
-    scope: Scope,
-    control: std.EnumArray(Control, ?ControlData) = .{ .values = .{ null, null } },
+pub fn SpecificNode(comptime _: Kind) type {
+    return *Node;
+}
 
-    const Control = enum { break_, continume_ };
-
-    const ControlData = struct {
-        ctrl: *Func.Node,
-        scope: Scope,
-    };
-};
-
-pub fn init(gpa: std.mem.Allocator, types: *Types) Builder {
-    return .{
-        .types = types,
-        .func = .init(gpa),
-    };
+pub fn init(gpa: std.mem.Allocator) Builder {
+    return .{ .func = .init(gpa) };
 }
 
 pub fn deinit(self: *Builder) void {
@@ -50,272 +35,395 @@ pub fn deinit(self: *Builder) void {
     self.* = undefined;
 }
 
-pub fn build(self: *Builder, file: Types.File, func: Types.Func) void {
-    self.file = file;
-    self.ast = self.types.getFile(file).*;
-    self.arena = self.func.beginTmpAlloc();
-    self.scope = .init(self.arena);
-    self.loops = .init(self.arena);
-    self.fdata = self.types.get(func);
-    self.return_value = null;
-    self.return_ctrl = null;
+const BuildToken = enum { @"please call Builder.begin() first, then Builder.end()" };
 
-    self.ctrl = self.func.addNode(.Entry, &.{self.func.root}, .{});
-    self.mem = self.func.addNode(.Mem, &.{self.func.root}, {});
-    self.return_mem = null;
-    self.scope.append(.{ .Node = self.mem }) catch unreachable;
+pub fn begin(self: *Builder, param_count: usize, return_coutn: usize) struct { BuildToken, []DataType, []DataType } {
+    _ = self.func.beginTmpAlloc();
+    const ctrl = self.func.addNode(.Entry, &.{self.func.root}, .{});
+    self.root_mem = self.func.addNode(.Mem, &.{self.func.root}, {});
+    // TODO: maybe its worth allocating scopes in a separate arena
+    self.scope = self.func.addNode(.Scope, &.{ ctrl, self.root_mem }, {});
+    self.ret = null;
 
-    var i: usize = 0;
-    for (self.fdata.args) |ty| {
-        if (ty == .void) continue;
-        std.debug.assert(ty == .uint or ty == .ptr);
-        const arg = self.func.addNode(.Arg, &.{self.func.root}, i);
-        const local = self.func.addNode(.Local, &.{ null, self.mem }, 8);
-        const mem = self.resolveMem();
-        self.scope.items[0].Node = self.func.addNode(.Store, &.{ self.ctrl, mem, local, arg }, .{});
-        self.scope.append(.{ .Node = local }) catch unreachable;
-        i += 1;
+    const alloc = self.func.arena.allocator().alloc(DataType, param_count + return_coutn) catch unreachable;
+
+    self.func.params = alloc[0..param_count];
+    self.func.returns = alloc[param_count..];
+
+    return .{ @enumFromInt(0), alloc[0..param_count], alloc[param_count..] };
+}
+
+pub fn addParam(self: *Builder, idx: usize) SpecificNode(.Arg) {
+    const arg = self.func.addNode(.Arg, &.{self.func.root}, idx);
+    arg.data_type = self.func.params[idx];
+    return arg;
+}
+
+pub fn end(self: *Builder, _: BuildToken) void {
+    if (self.ret == null) self.addReturn(&.{});
+    self.func.tmp_alloc.unlock();
+    self.func.end = self.ret.?;
+}
+
+// #MEM ========================================================================
+
+pub fn addLocal(self: *Builder, size: usize) SpecificNode(.Local) {
+    const local = self.func.addNode(.Local, &.{ null, self.root_mem }, size);
+    local.data_type = .int;
+    return local;
+}
+
+pub fn addLoad(self: *Builder, addr: *Node, ty: DataType) SpecificNode(.Store) {
+    const val = self.func.addNode(.Load, &.{ null, self.memory(), addr }, .{});
+    val.data_type = ty;
+    return val;
+}
+
+pub fn addStore(self: *Builder, addr: *Node, value: *Node) SpecificNode(.Store) {
+    std.debug.assert(value.data_type.size() != 0);
+    const mem = self.memory();
+    const ctrl = self.control();
+    const store = self.func.addNode(.Store, &.{ ctrl, mem, addr, value }, .{});
+    self.func.setInputNoIntern(self.scope.?, 1, store);
+    return store;
+}
+
+pub fn addSpill(self: *Builder, value: *Node) SpecificNode(.Local) {
+    const local = self.addLocal(value.data_type.size());
+    _ = self.addStore(local, value);
+    return local;
+}
+
+// #MATH =======================================================================
+
+pub fn addIntConst(self: *Builder, ty: DataType, value: i64) SpecificNode(.CInt) {
+    const val = self.func.addNode(.CInt, &.{null}, value);
+    val.data_type = ty;
+    return val;
+}
+
+pub fn addBinOp(self: *Builder, op: BinOp, lhs: *Node, rhs: *Node) SpecificNode(.BinOp) {
+    const val = self.func.addNode(.BinOp, &.{ null, lhs, rhs }, op);
+    val.data_type = .int;
+    return val;
+}
+
+// #SCOPE ======================================================================
+
+pub fn memory(self: *Builder) *Func.Node {
+    return self._readScopeValue(1);
+}
+
+pub fn control(self: *Builder) *Func.Node {
+    return getScopeValues(self.scope.?)[0];
+}
+
+pub const scope_value_start = 2;
+
+pub fn pushScopeValue(self: *Builder, value: *Node) void {
+    const scope = self.scope.?;
+    if (scope.input_ordered_len == scope.input_len) {
+        const new_cap = scope.input_len * 2;
+        const new_alloc = self.func.getTmpArena().realloc(
+            scope.input_base[0..scope.input_len],
+            new_cap,
+        ) catch unreachable;
+        scope.input_base = new_alloc.ptr;
+        scope.input_len = @intCast(new_alloc.len);
     }
 
-    _ = self.emit(self.ast.exprs.get(self.fdata.ast).Fn.body);
-
-    self.func.end = self.func.addNode(.Return, &.{
-        self.return_ctrl orelse self.ctrl,
-        self.return_mem orelse self.resolveMem(),
-        self.return_value,
-    }, .{});
+    scope.input_base[scope.input_ordered_len] = value;
+    scope.input_ordered_len += 1;
+    self.func.addUse(value, scope);
 }
 
-inline fn getAst(self: *Builder, expr: Ast.Id) Ast.Expr {
-    return self.ast.exprs.get(expr);
+pub inline fn getScopeValue(self: *Builder, index: usize) *Func.Node {
+    return self._readScopeValue(scope_value_start + index);
 }
 
-inline fn getAstSlice(self: *Builder, slice: Ast.Slice) []Ast.Id {
-    return self.ast.exprs.view(slice);
+pub fn getScopeValues(scope: SpecificNode(.Scope)) []*Node {
+    std.debug.assert(scope.kind == .Scope);
+    for (scope.input_base[0..scope.input_ordered_len]) |e| std.debug.assert(e != null);
+    return @ptrCast(scope.input_base[0..scope.input_ordered_len]);
 }
 
-inline fn tokenSrc(self: *Builder, idx: u32) []const u8 {
-    return self.ast.tokenSrc(idx);
+pub fn _readScopeValue(self: *Builder, index: usize) *Func.Node {
+    return getScopeValueMulty(&self.func, self.scope.?, index);
 }
 
-inline fn jmp(self: *Builder, from: ?*Func.Node) *Func.Node {
-    return self.func.addNode(.Jmp, &.{from}, .{});
-}
-
-fn resolveIdent(func: *Func, scope: []ScopeEntry, index: usize) *Func.Node {
-    return switch (scope[index]) {
-        .Node => |n| n,
-        .LazyPhy => |loop| {
-            const initVal = resolveIdent(func, loop.scope.items, index);
-            if (!loop.scope.items[index].Node.isLazyPhi(loop.ctrl)) {
-                loop.scope.items[index] = .{ .Node = func.addNode(.Phi, &.{ loop.ctrl, initVal, null }, {}) };
+pub fn getScopeValueMulty(func: *Func, scope: *Node, index: usize) *Func.Node {
+    const values = getScopeValues(scope);
+    return switch (values[index].kind) {
+        .Scope => {
+            const loop = values[index];
+            const initVal = getScopeValueMulty(func, loop, index);
+            const items = getScopeValues(loop);
+            if (!items[index].isLazyPhi(items[0])) {
+                const phi = func.addNode(.Phi, &.{ items[0], initVal, null }, {});
+                std.debug.assert(phi.isLazyPhi(items[0]));
+                if (index == 1) phi.data_type = .mem;
+                func.setInputNoIntern(loop, index, phi);
             }
-            scope[index] = loop.scope.items[index];
-            return scope[index].Node;
+
+            func.setInputNoIntern(scope, index, items[index]);
+            return values[index];
         },
+        else => values[index],
     };
 }
 
-fn mergeScopes(func: *Func, lhs: []ScopeEntry, rhs: []ScopeEntry, region: *Func.Node) void {
-    for (lhs, rhs, 0..) |lh, *rh, i| {
-        if (lh == .LazyPhy and rh.* == .LazyPhy and lh.LazyPhy == rh.LazyPhy) continue;
-        if (lh == .Node and rh.* == .Node and lh.Node == rh.Node) continue;
-        const thn = resolveIdent(func, lhs, i);
-        const els = resolveIdent(func, rhs, i);
-        rh.* = .{ .Node = func.addNode(.Phi, &.{ region, thn, els }, {}) };
-        if (i == 0) rh.Node.data_type = .mem;
+pub fn mergeScopes(
+    func: *Func,
+    lhs: SpecificNode(.Scope),
+    rhs: SpecificNode(.Scope),
+) SpecificNode(.Scope) {
+    const lhs_values = getScopeValues(lhs);
+    const rhs_values = getScopeValues(rhs);
+
+    const relevant_size = @min(lhs_values.len, rhs_values.len);
+
+    const new_ctrl = func.addNode(.Region, &.{
+        func.addNode(.Jmp, &.{lhs_values[0]}, .{}),
+        func.addNode(.Jmp, &.{rhs_values[0]}, .{}),
+    }, .{});
+
+    const start = 1;
+    for (lhs_values[start..relevant_size], rhs_values[start..relevant_size], start..) |lh, rh, i| {
+        if (lh == rh) continue;
+        const thn = getScopeValueMulty(func, lhs, i);
+        const els = getScopeValueMulty(func, rhs, i);
+        const phi = func.addNode(.Phi, &.{ new_ctrl, thn, els }, {});
+        if (i == start) phi.data_type = .mem;
+        func.setInputNoIntern(rhs, i, phi);
+    }
+
+    func.setInputNoIntern(rhs, 0, new_ctrl);
+    killScope(lhs);
+
+    return rhs;
+}
+
+pub fn cloneScope(self: *Builder) SpecificNode(.Scope) {
+    const values = getScopeValues(self.scope.?);
+    return self.func.addNode(.Scope, values, {});
+}
+
+pub inline fn truncateScope(self: *Builder, back_to: usize) void {
+    self._truncateScope(self.scope orelse return, scope_value_start + back_to);
+}
+
+pub fn _truncateScope(self: *Builder, scope: SpecificNode(.Scope), back_to: usize) void {
+    while (scope.input_ordered_len > back_to) {
+        scope.input_ordered_len -= 1;
+        self.func.setInputNoIntern(scope, scope.input_ordered_len, null);
     }
 }
 
-fn loopCtrl(self: *Builder, kind: Loop.Control) void {
-    const loop = self.loops.getLast();
+pub fn killScope(scope: SpecificNode(.Scope)) void {
+    scope.input_len = scope.input_ordered_len;
+    scope.kill();
+}
 
-    if (loop.control.getPtr(kind).*) |*ctrl| {
-        ctrl.ctrl = self.func.addNode(.Region, &.{ self.jmp(self.ctrl), self.jmp(ctrl.ctrl) }, .{});
-        mergeScopes(&self.func, self.scope.items[0..ctrl.scope.items.len], ctrl.scope.items, ctrl.ctrl);
-    } else {
-        loop.control.set(kind, .{
-            .ctrl = self.ctrl.?,
-            .scope = self.scope.clone() catch unreachable,
-        });
-        std.debug.assert(loop.control.getPtr(kind).*.?.scope.items.len >= loop.scope.items.len);
-        loop.control.getPtr(kind).*.?.scope.items.len = loop.scope.items.len;
+// #CONTROL ====================================================================
+
+pub fn isUnreachable(self: *Builder) bool {
+    return self.scope == null;
+}
+
+pub const If = struct {
+    if_node: *Node,
+    saved_branch: union {
+        else_: SpecificNode(.Scope),
+        then: ?SpecificNode(.Scope),
+    },
+
+    const EndToken = enum { @"please call IfBuilder.beginElse() first, then IfBuilder.end()" };
+
+    pub fn beginElse(self: *If, builder: *Builder) EndToken {
+        const then = builder.scope;
+        builder.scope = self.saved_branch.else_;
+        self.saved_branch = .{ .then = then };
+        builder.func.setInputNoIntern(
+            builder.scope.?,
+            0,
+            builder.func.addNode(.Then, &.{self.if_node}, .{}),
+        );
+        return @enumFromInt(0);
     }
-    self.ctrl = null;
+
+    pub fn end(self: *If, builder: *Builder, _: EndToken) void {
+        const then = self.saved_branch.then orelse return;
+        const else_ = builder.scope orelse {
+            builder.scope = self.saved_branch.then;
+            return;
+        };
+        builder.scope = mergeScopes(&builder.func, then, else_);
+        self.* = undefined;
+        return;
+    }
+};
+
+pub fn addIfAndBeginThen(self: *Builder, cond: *Node) If {
+    const else_ = self.cloneScope();
+    const if_node = self.func.addNode(.If, &.{ self.control(), cond }, .{});
+    self.func.setInputNoIntern(self.scope.?, 0, self.func.addNode(.Then, &.{if_node}, .{}));
+    return .{
+        .if_node = if_node,
+        .saved_branch = .{ .else_ = else_ },
+    };
 }
 
-fn resolveMem(self: *Builder) *Func.Node {
-    return resolveIdent(&self.func, self.scope.items, 0);
-}
+pub const Loop = struct {
+    scope: SpecificNode(.Scope),
+    control: std.EnumArray(Control, ?SpecificNode(.Scope)) = .{ .values = .{ null, null } },
 
-fn emit(self: *Builder, expr: Ast.Id) ?*Func.Node {
-    switch (self.getAst(expr)) {
-        .Comment => return null,
-        .Void => return null,
-        .Integer => |e| {
-            return self.func.addNode(.CInt, &.{null}, std.fmt.parseInt(i64, self.tokenSrc(e.index), 10) catch unreachable);
-        },
-        .Ident => |e| {
-            const ident = resolveIdent(&self.func, self.scope.items, e.id.index + 1);
-            std.debug.assert(ident.kind == .Local);
-            return self.func.addNode(.Load, &.{ null, self.resolveMem(), ident }, .{});
-        },
-        .Block => |e| {
-            const prev_scope_height = self.scope.items.len;
-            defer self.scope.items.len = prev_scope_height;
+    const Control = enum { @"break", @"continue" };
 
-            for (self.getAstSlice(e.stmts)) |s| {
-                _ = self.emit(s);
-            }
+    pub fn addLoopControl(self: *Loop, builder: *Builder, kind: Loop.Control) void {
+        if (self.control.getPtr(kind).*) |ctrl| {
+            _ = mergeScopes(&builder.func, builder.scope.?, ctrl);
+        } else {
+            builder._truncateScope(builder.scope.?, self.scope.inputs().len);
+            self.control.set(kind, builder.scope.?);
+        }
+        builder.scope = null;
+    }
 
-            return self.ctrl;
-        },
-        .If => |e| {
-            const cond = self.emit(e.cond);
-            const if_node = self.func.addNode(.If, &.{ self.ctrl, cond }, .{});
-
-            var saved_scope = self.scope.clone() catch unreachable;
-            self.ctrl = self.func.addNode(.Then, &.{if_node}, .{});
-            _ = self.emit(e.then);
-            const then_cfg = self.ctrl;
-
-            std.mem.swap(Scope, &self.scope, &saved_scope);
-
-            self.ctrl = self.func.addNode(.Else, &.{if_node}, .{});
-            _ = self.emit(e.else_);
-            const else_cfg = self.ctrl;
-
-            self.ctrl = self.func.addNode(.Region, &.{ self.jmp(then_cfg), self.jmp(else_cfg) }, .{});
-
-            const then_scope = saved_scope;
-
-            mergeScopes(&self.func, then_scope.items, self.scope.items, self.ctrl.?);
-
-            return self.ctrl;
-        },
-        .Loop => |e| {
-            var loop = Loop{
-                .ctrl = self.func.addNode(.Loop, &.{ self.jmp(self.ctrl), null }, .{}),
-                .scope = self.scope.clone() catch unreachable,
-            };
-            self.ctrl = loop.ctrl;
-
-            self.loops.append(&loop) catch unreachable;
-            @memset(self.scope.items[0..1], .{ .LazyPhy = &loop });
-            _ = self.emit(e.body);
-            _ = self.loops.pop();
-
-            if (loop.control.get(.continume_)) |cscope| {
-                self.ctrl = self.func.addNode(.Region, &.{ self.jmp(cscope.ctrl), self.jmp(self.ctrl) }, .{});
-                mergeScopes(&self.func, cscope.scope.items, self.scope.items, self.ctrl.?);
-            }
-
-            for (loop.scope.items[0..1], self.scope.items[0..1]) |l, *c| {
-                if (c.* != .LazyPhy) {
-                    std.debug.assert(l.Node.isLazyPhi(loop.ctrl));
-                    l.Node.data_type = .mem;
-                    std.debug.assert(self.func.setInput(l.Node, 2, c.Node) == null);
-                }
-            }
-
-            std.debug.assert(self.func.setInput(loop.ctrl, 1, self.jmp(self.ctrl)) == null);
-
-            const break_ = loop.control.get(.break_) orelse {
-                self.ctrl = null;
-                return self.ctrl;
-            };
-
-            for (loop.scope.items[0..1], break_.scope.items[0..1]) |c, *b| {
-                if (b.* == .LazyPhy) {
-                    b.* = c;
-                }
-            }
-
-            self.ctrl = break_.ctrl;
-            self.scope = break_.scope;
-
-            return self.ctrl;
-        },
-        .UnOp => |e| switch (e.op) {
-            .@"&" => {
-                return self.emit(e.oper).?.base();
-            },
-            .@"*" => {
-                const oper = self.emit(e.oper).?;
-                const load = self.func.addNode(.Load, &.{ null, self.resolveMem(), oper }, .{});
-                return load;
-            },
-            else => std.debug.panic("{any}\n", .{self.getAst(expr)}),
-        },
-        .Break => |_| {
-            self.loopCtrl(.break_);
-            return self.ctrl;
-        },
-        .Continue => |_| {
-            self.loopCtrl(.continume_);
-            return self.ctrl;
-        },
-        .Return => |e| {
-            const value = self.emit(e.value);
-            const mem = self.resolveMem();
-            if (self.return_ctrl) |ret_ctrl| {
-                self.return_ctrl = self.func.addNode(.Region, &.{
-                    self.jmp(ret_ctrl),
-                    self.jmp(self.ctrl),
-                }, .{});
-                self.return_mem = self.func.addNode(.Phi, &.{ self.return_ctrl, self.return_mem, mem }, {});
-                self.return_mem.?.data_type = .mem;
-                if (self.return_value != null) {
-                    self.return_value = self.func.addNode(.Phi, &.{ self.return_ctrl, self.return_value, value }, {});
-                }
+    pub fn end(self: *Loop, builder: *Builder) void {
+        defer self.* = undefined;
+        if (self.control.get(.@"continue")) |cscope| {
+            if (builder.scope) |scope| {
+                builder.scope = mergeScopes(&builder.func, scope, cscope);
             } else {
-                self.return_mem = mem;
-                self.return_ctrl = self.ctrl;
-                self.return_value = value;
+                builder.scope = cscope;
             }
+        }
 
-            self.ctrl = null;
-            return null;
-        },
-        .BinOp => |e| switch (e.op) {
-            .@":=" => {
-                const value = self.emit(e.rhs).?;
-                const local = self.func.addNode(.Local, &.{ null, self.mem }, 8);
-                const mem = self.resolveMem();
-                self.scope.items[0].Node = self.func.addNode(.Store, &.{ self.ctrl, mem, local, value }, .{});
-                self.scope.append(.{ .Node = local }) catch unreachable;
-                return null;
-            },
-            .@"=" => {
-                const loc = self.emit(e.lhs).?;
-                std.debug.assert(loc.kind == .Load);
-                const val = self.emit(e.rhs).?;
-
-                const base = loc.base();
-                const mem = self.resolveMem();
-                self.scope.items[0].Node = self.func.addNode(.Store, &.{ self.ctrl, mem, base, val }, .{});
-
-                return null;
-            },
-            else => return self.func.addNode(.BinOp, &.{ null, self.emit(e.lhs), self.emit(e.rhs) }, e.op),
-        },
-        .Call => |e| {
-            self.fdata.tail = false;
-
-            const fixed_args = 2;
-            const args = self.arena.alloc(?*Func.Node, fixed_args + e.args.len()) catch unreachable;
-            args[0] = self.ctrl;
-            args[1] = resolveIdent(&self.func, self.scope.items, 0);
-            var len: usize = fixed_args;
-            for (self.getAstSlice(e.args)) |a| {
-                args[len] = self.emit(a);
-                if (args[len] != null) len += 1;
+        const init_values = getScopeValues(self.scope);
+        const start = 1;
+        if (builder.scope) |backedge| {
+            const update_values = getScopeValues(backedge);
+            for (init_values[start..], update_values[start..], start..) |ini, update, i| {
+                if (update.kind != .Scope) {
+                    std.debug.assert(ini.isLazyPhi(init_values[0]));
+                    if (i == 0) ini.data_type = .mem;
+                    builder.func.setInputNoIntern(ini, 2, update);
+                }
             }
-            const call = self.func.addNode(.Call, args[0..len], .{ .id = self.types.resolveFunc(self.file, e.called) });
-            self.ctrl = self.func.addNode(.CallEnd, &.{call}, .{});
-            self.scope.items[0].Node = self.func.addNode(.Mem, &.{self.ctrl}, {});
-            return self.func.addNode(.Ret, &.{self.ctrl}, {});
-        },
-        else => std.debug.panic("{any}\n", .{self.getAst(expr)}),
+            builder.func.setInputNoIntern(init_values[0], 1, builder.jmp(update_values[0]));
+        } else {
+            for (init_values[start..]) |ini| {
+                if (ini.isLazyPhi(init_values[0])) {
+                    builder.func.subsume(ini.inputs()[1].?, ini);
+                }
+            }
+            builder.func.subsume(init_values[0].inputs()[0].?, init_values[0]);
+            unreachable;
+        }
+
+        if (builder.scope) |scope| killScope(scope);
+
+        builder.scope = self.control.get(.@"break");
+        const exit = builder.scope orelse return;
+
+        const exit_values = getScopeValues(exit);
+        for (init_values[start..], exit_values[start..], start..) |ini, exi, i| {
+            if (exi.kind == .Scope) {
+                builder.func.setInputNoIntern(exit, i, ini);
+            }
+        }
+
+        killScope(self.scope);
     }
+};
+
+pub fn jmp(self: *Builder, ctrl: *Node) SpecificNode(.Jmp) {
+    return self.func.addNode(.Jmp, &.{ctrl}, .{});
+}
+
+pub fn addLoopAndBeginBody(self: *Builder) Loop {
+    const loop = self.func.addNode(.Loop, &.{
+        self.jmp(self.control()),
+        null,
+    }, .{});
+    self.func.setInputNoIntern(self.scope.?, 0, loop);
+    const pscope = self.cloneScope();
+    for (1..self.scope.?.input_ordered_len) |i| {
+        self.func.setInputNoIntern(self.scope.?, i, pscope);
+    }
+    return .{ .scope = pscope };
+}
+
+pub const CallArgs = struct {
+    params: []const DataType,
+    arg_slots: []*Node,
+    returns: []const DataType,
+    return_slots: []*Node,
+    hint: enum { @"construst this with Builder.allocCallArgs()" },
+};
+
+const arg_prefix_len = 2;
+
+pub fn allocCallArgs(self: *Builder, params: []const DataType, returns: []const DataType) CallArgs {
+    const args = self.func.getTmpArena().alloc(?*Node, arg_prefix_len + params.len + returns.len) catch unreachable;
+    return .{
+        .params = params,
+        .returns = returns,
+        .arg_slots = @ptrCast(args[arg_prefix_len..][0..params.len]),
+        .return_slots = @ptrCast(args[arg_prefix_len + params.len ..]),
+        .hint = @enumFromInt(0),
+    };
+}
+
+pub fn addCall(
+    self: *Builder,
+    arbitrary_call_id: u32,
+    args_with_initialized_arg_slots: CallArgs,
+) []const *Node {
+    const args = args_with_initialized_arg_slots;
+    for (args.arg_slots, args.params) |ar, pr| std.debug.assert(ar.data_type == pr);
+    const full_args = (args.arg_slots.ptr - arg_prefix_len)[0 .. arg_prefix_len + args.params.len];
+    full_args[0] = self.control();
+    full_args[1] = self.memory();
+
+    const call = self.func.addNode(.Call, full_args, .{ .id = arbitrary_call_id });
+    const call_end = self.func.addNode(.CallEnd, &.{call}, .{});
+    self.func.setInputNoIntern(self.scope.?, 0, call_end);
+    const call_mem = self.func.addNode(.Mem, &.{call_end}, {});
+    self.func.setInputNoIntern(self.scope.?, 1, call_mem);
+
+    for (args.return_slots, args.returns, 0..) |*slt, rty, i| {
+        slt.* = self.func.addNode(.Ret, &.{call_end}, i);
+        slt.*.data_type = rty;
+    }
+
+    return args.return_slots;
+}
+
+pub fn addReturn(self: *Builder, values: []const *Node) void {
+    for (values, self.func.returns) |val, rtt| if (val.data_type != rtt) std.debug.panic("{s} != {s}", .{ @tagName(val.data_type), @tagName(rtt) });
+
+    if (self.ret) |ret| {
+        const inps = ret.inputs();
+        const new_ctrl = self.func.addNode(.Region, &.{ self.jmp(inps[0].?), self.jmp(self.control()) }, .{});
+        self.func.setInputNoIntern(ret, 0, new_ctrl);
+        const new_mem = self.func.addNode(.Phi, &.{ new_ctrl, inps[1], self.memory() }, {});
+        new_mem.data_type = .mem;
+        self.func.setInputNoIntern(ret, 1, new_mem);
+        for (inps[2..], values, 2..) |curr, next, vidx| {
+            const new_value = self.func.addNode(.Phi, &.{ new_ctrl, curr, next }, {});
+            self.func.setInputNoIntern(ret, vidx, new_value);
+        }
+    } else {
+        const return_prefix = 2;
+        // this must be enough, if not, just copy paste the function
+        var buf: [16]?*Node = undefined;
+        buf[0] = self.control();
+        buf[1] = self.memory();
+        @memcpy(buf[return_prefix..][0..values.len], values);
+        self.ret = self.func.addNode(.Return, buf[0 .. return_prefix + values.len], .{});
+    }
+
+    killScope(self.scope.?);
+    self.scope = null;
 }

@@ -40,10 +40,10 @@ pub fn ralloc(comptime Mach: type, func: *Func.Func(Mach)) []u8 {
         }
     };
 
-    const tmp = func.beginTmpAlloc();
+    const tmp, const lock = func.beginTmpAlloc();
+    defer lock.unlock();
 
     const instrs = tmp.alloc(Instr, func.instr_count) catch unreachable;
-    //const blocks = tmp.alloc(Block, func.block_count) catch unreachable;
 
     for (instrs) |*b| b.* = .{
         .liveins = Set.initEmpty(tmp, func.instr_count) catch unreachable,

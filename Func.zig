@@ -3,22 +3,62 @@ pub fn Func(comptime Mach: type) type {
 }
 
 const std = @import("std");
-const Lexer = @import("Lexer.zig");
-const Types = @import("Types.zig");
+
+pub const BinOp = enum(u8) {
+    iadd,
+    isub,
+    imul,
+    udiv,
+    sdiv,
+
+    ne,
+    eq,
+    ugt,
+    sgt,
+    ult,
+    slt,
+    uge,
+    sge,
+    ule,
+    sle,
+};
+
+pub const DataType = enum(u16) {
+    void,
+    mem,
+    dead,
+    int,
+
+    pub fn size(self: DataType) usize {
+        return switch (self) {
+            .void => 0,
+            .int => 8,
+            else => unreachable,
+        };
+    }
+};
+
+const mod = @This();
 
 fn _Func(comptime Mach: type) struct {
     arena: std.heap.ArenaAllocator,
     tmp_arena: std.heap.ArenaAllocator,
     interner: InternMap(Uninserter) = .{},
+    params: []const mod.DataType = &.{},
+    returns: []const mod.DataType = &.{},
     next_id: u16 = 0,
     block_count: u16 = undefined,
     instr_count: u16 = undefined,
     root: *Node = undefined,
     end: *Node = undefined,
+    tmp_alloc: std.debug.SafetyLock = .{},
 
     pub fn InternMap(comptime Context: type) type {
         return std.hash_map.HashMapUnmanaged(InternedNode, void, Context, 70);
     }
+
+    pub const BinOp = mod.BinOp;
+    pub const DataType = mod.DataType;
 
     pub const Builtin = union(enum) {
         Start: Cfg,
@@ -27,13 +67,13 @@ fn _Func(comptime Mach: type) struct {
         // [Start]
         Entry: Cfg,
         // [Start]
-        Mem: void,
+        Mem,
         // [Cfg, ret]
         Return: Cfg,
         // [?Cfg]
         CInt: i64,
         // [?Cfg, lhs, rhs]
-        BinOp: Lexer.Lexeme,
+        BinOp: mod.BinOp,
         // [?Cfg, Mem]
         Local: usize,
         // [?Cfg, thread, ptr]
@@ -47,12 +87,12 @@ fn _Func(comptime Mach: type) struct {
         // [Cfg, ..args]
         Call: extern struct {
             base: Cfg = .{},
-            id: Types.Func,
+            id: u32,
         },
         // [Call]
         CallEnd: Cfg,
         // [CallEnd]
-        Ret: void,
+        Ret: usize,
         // [Cfg, cond],
         If: Cfg,
         // [If]
@@ -99,7 +139,7 @@ fn _Func(comptime Mach: type) struct {
         }
 
         pub fn add(self: *WorkList, node: *Node) void {
-            std.debug.assert(node.id != std.math.maxInt(u16));
+            if (node.id == std.math.maxInt(u16)) std.debug.panic("{} {any}\n", .{ node, node.inputs() });
             if (self.in_list.isSet(node.id)) return;
             self.in_list.set(node.id);
             self.list.appendAssumeCapacity(node);
@@ -134,7 +174,7 @@ fn _Func(comptime Mach: type) struct {
         break :b @Type(builtin);
     };
 
-    pub fn bakeBitset(name: []const u8) std.EnumSet(Kind) {
+    pub fn bakeBitset(comptime name: []const u8) std.EnumSet(Kind) {
         var set = std.EnumSet(Kind).initEmpty();
         if (@hasDecl(Builtin, name)) for (@field(Builtin, name)) |k| set.insert(k);
         if (@hasDecl(Mach, name)) for (@field(Mach, name)) |k| set.insert(k);
@@ -204,22 +244,17 @@ fn _Func(comptime Mach: type) struct {
         return @hasDecl(Mach, name) and @field(Mach, name)(value);
     }
 
-    pub const DataType = enum(u16) {
-        void,
-        mem,
-        dead,
-    };
-
     const is_basic_block_start = bakeBitset("is_basic_block_start");
     const is_basic_block_end = bakeBitset("is_basic_block_end");
     const is_mem_op = bakeBitset("is_mem_op");
     const is_pinned = bakeBitset("is_pinned");
+    const is_temporary = bakeBitset("is_temporary");
 
     pub const Node = extern struct {
         kind: Kind,
         id: u16,
         schedule: u16 = std.math.maxInt(u16),
-        data_type: DataType = .void,
+        data_type: mod.DataType = .void,
 
         input_ordered_len: u16,
         input_len: u16,
@@ -376,6 +411,7 @@ fn _Func(comptime Mach: type) struct {
         }
 
         pub fn isLazyPhi(self: *Node, on_loop: *Node) bool {
+            std.debug.assert(on_loop.kind == .Loop or on_loop.kind == .Region);
             return self.kind == .Phi and self.inputs()[0] == on_loop and self.inputs()[2] == null;
         }
 
@@ -388,7 +424,7 @@ fn _Func(comptime Mach: type) struct {
             for (self.inputs()) |oi| if (oi) |i| {
                 i.removeUse(self);
             };
-            self.* = undefined;
+            //self.* = undefined;
             self.id = std.math.maxInt(u16);
         }
 
@@ -597,8 +633,16 @@ fn _Func(comptime Mach: type) struct {
         return null;
     }
 
+    pub fn connect(self: *Self, root: *Node, to: *Node) void {
+        std.debug.assert(!Node.isInterned(to.kind, to.inputs()));
+        self.addUse(root, to);
+        self.addDep(to, root);
+    }
+
     pub fn addNode(self: *Self, comptime kind: Kind, inputs: []const ?*Node, extra: ClassFor(kind)) *Node {
-        return self.addNodeUntyped(kind, inputs, extra);
+        const node = self.addNodeUntyped(kind, inputs, extra);
+        if (kind == .Phi) node.data_type = node.inputs()[1].?.data_type;
+        return node;
     }
 
     pub fn addNodeUntyped(self: *Self, kind: Kind, inputs: []const ?*Node, extra: anytype) *Node {
@@ -665,6 +709,10 @@ fn _Func(comptime Mach: type) struct {
         target.kill();
     }
 
+    pub fn setInputNoIntern(self: *Self, use: *Node, idx: usize, def: ?*Node) void {
+        std.debug.assert(self.setInput(use, idx, def) == null);
+    }
+
     pub fn setInput(self: *Self, use: *Node, idx: usize, def: ?*Node) ?*Node {
         if (use.inputs()[idx] == def) return null;
         if (use.inputs()[idx]) |n| {
@@ -713,8 +761,14 @@ fn _Func(comptime Mach: type) struct {
         def.output_len += 1;
     }
 
-    pub inline fn beginTmpAlloc(self: *Self) std.mem.Allocator {
+    pub fn beginTmpAlloc(self: *Self) struct { std.mem.Allocator, *std.debug.SafetyLock } {
         std.debug.assert(self.tmp_arena.reset(.retain_capacity));
+        self.tmp_alloc.lock();
+        return .{ self.tmp_arena.allocator(), &self.tmp_alloc };
+    }
+
+    pub fn getTmpArena(self: *Self) std.mem.Allocator {
+        self.tmp_alloc.assertLocked();
         return self.tmp_arena.allocator();
     }
 
@@ -743,7 +797,8 @@ fn _Func(comptime Mach: type) struct {
     }
 
     pub fn gcm(self: *Self) void {
-        const tmp = self.beginTmpAlloc();
+        const tmp, const lock = self.beginTmpAlloc();
+        defer lock.unlock();
 
         var visited = std.DynamicBitSet.initEmpty(tmp, self.next_id * 2) catch unreachable;
         var stack = std.ArrayList(Frame).init(tmp);
@@ -1066,7 +1121,8 @@ fn _Func(comptime Mach: type) struct {
     }
 
     pub fn iterPeeps(self: *Self, strategy: fn (*Self, *Node, *WorkList) ?*Node) void {
-        const tmp = self.beginTmpAlloc();
+        const tmp, const lock = self.beginTmpAlloc();
+        defer lock.unlock();
 
         var worklist = WorkList.init(tmp, self.next_id) catch unreachable;
         worklist.add(self.end);
@@ -1124,7 +1180,8 @@ fn _Func(comptime Mach: type) struct {
 
     // TODO: does not work
     pub fn mem2reg(self: *Self) void {
-        const tmp = self.beginTmpAlloc();
+        const tmp, const lock = self.beginTmpAlloc();
+        defer lock.unlock();
 
         var visited = std.DynamicBitSet.initEmpty(tmp, self.next_id) catch unreachable;
         const postorder = self.collectDfs(tmp, &visited)[1..];
@@ -1141,7 +1198,7 @@ fn _Func(comptime Mach: type) struct {
         for (self.root.outputs()[1].outputs()) |o| {
             if (o.kind == .Local) b: {
                 for (o.outputs()) |oo| {
-                    if ((oo.kind != .Store and !oo.isLoad()) or oo.base() != o) {
+                    if ((!oo.isStore() and !oo.isLoad()) or oo.base() != o) {
                         o.schedule = std.math.maxInt(u16);
                         break :b;
                     }
@@ -1220,7 +1277,7 @@ fn _Func(comptime Mach: type) struct {
                     }
 
                     for (tmp.dupe(*Node, o.outputs()) catch unreachable) |lo| {
-                        if (lo.kind == .Load and lo.base().kind == .Local and lo.base().schedule != std.math.maxInt(u16)) {
+                        if (lo.isLoad() and lo.base().kind == .Local and lo.base().schedule != std.math.maxInt(u16)) {
                             const su = Local.resolve(self, locals, lo.base().schedule);
                             self.subsume(su, lo);
                         }
@@ -1325,6 +1382,22 @@ fn _Func(comptime Mach: type) struct {
             };
 
             return node.inputs()[0].?.inputs()[0];
+        }
+
+        if (node.kind == .Store) {
+            if (node.value().data_type.size() == 0) {
+                return node.mem();
+            }
+        }
+
+        std.debug.assert(node.kind != .Load or node.data_type.size() != 0);
+
+        if (node.kind == .Phi) {
+            const l, const r = .{ inps[1].?, inps[2].? };
+
+            if (l == r) return l;
+
+            if (r == node) return l;
         }
 
         return null;
@@ -1437,7 +1510,7 @@ fn _Func(comptime Mach: type) struct {
             }
         }
 
-        return Mach.idealize(self, node, worklist);
+        return if (@hasDecl(Mach, "idealize")) Mach.idealize(self, node, worklist) else null;
     }
 
     pub fn noAlias(lbase: *Node, rbase: *Node) bool {
@@ -1506,7 +1579,8 @@ fn _Func(comptime Mach: type) struct {
     }
 
     pub fn fmtScheduled(self: *Self, writer: anytype, colors: std.io.tty.Config) void {
-        const tmp = self.beginTmpAlloc();
+        const tmp, const lock = self.beginTmpAlloc();
+        defer lock.unlock();
 
         var visited = std.DynamicBitSet.initEmpty(tmp, self.next_id) catch unreachable;
 
@@ -1524,12 +1598,9 @@ fn _Func(comptime Mach: type) struct {
         }
     }
 
-    pub fn fmtLog(self: *Self) void {
-        self.fmt(std.io.getStdErr().writer(), std.io.tty.detectConfig(std.io.getStdErr()));
-    }
-
     pub fn fmtUnscheduled(self: *Self, writer: anytype, colors: std.io.tty.Config) void {
-        const tmp = self.beginTmpAlloc();
+        const tmp, const lock = self.beginTmpAlloc();
+        defer lock.unlock();
 
         var worklist = Self.WorkList.init(tmp, self.next_id) catch unreachable;
 

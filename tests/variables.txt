@@ -6,39 +6,39 @@ fn(): uint {
     return ඞ - b
 }
 ======== UNSCHEDULED SON ========
-%9 = Load: %8, %4 [, %10]
-%6 = CInt: 2 [, %8]
-%7 = Local: 8, %2 [, %8, %13]
-%3 = CInt: 1 [, %5, %10]
-%2 = Mem: %0 [, %4, %5, %7]
-%13 = Load: %11, %7 [, %14]
-%12 = Load: %11, %4 [, %14]
-%10 = BinOp: +, %9, %3 [, %11]
-%4 = Local: 8, %2 [, %5, %9, %11, %12]
-%8 = Store: %1, %5, %7, %6 [, %9, %11]
-%5 = Store: %1, %2, %4, %3 [, %8]
+%10 = Load: %9, %5 [, %11]
+%7 = CInt: 2 [, %9]
+%8 = Local: 8, %2 [, %9, %14]
+%4 = CInt: 1 [, %6, %11]
+%2 = Mem: %0 [, %6, %5, %8]
+%14 = Load: %12, %8 [, %15]
+%13 = Load: %12, %5 [, %15]
+%11 = BinOp: iadd, %10, %4 [, %12]
+%5 = Local: 8, %2 [, %6, %13, %10, %12]
+%9 = Store: %1, %6, %8, %7 [, %12, %10]
+%6 = Store: %1, %2, %5, %4 [, %9]
 %0 = Start: idepth: 0 [, %1, %2]
-%14 = BinOp: -, %12, %13 [, %15]
-%11 = Store: %1, %8, %4, %10 [, %12, %13, %15]
-%1 = Entry: idepth: 0, %0 [, %5, %8, %11, %15]
-%15 = Return: idepth: 0, %1, %11, %14 []
+%15 = BinOp: isub, %13, %14 [, %16]
+%12 = Store: %1, %9, %5, %11 [, %16, %13, %14]
+%1 = Entry: idepth: 0, %0 [, %16, %6, %9, %12]
+%16 = Return: idepth: 0, %1, %12, %15 []
 
 ======== OPTIMIZED SON ========
-%3 = CInt: 1 [, %16]
-%16 = ImmBinOp: imm: 1, op: addi64, %3 [, %17]
+%4 = CInt: 1 [, %17]
+%17 = ImmBinOp: imm: 1, op: addi64, %4 [, %18]
 %0 = Start: idepth: 0 [, %1, %2]
-%17 = ImmBinOp: imm: -2, op: addi64, %16 [, %15]
-%2 = Mem: %0 [, %15]
-%1 = Entry: idepth: 0, %0 [, %15]
-%15 = Return: idepth: 0, %1, %2, %17 []
+%18 = ImmBinOp: imm: -2, op: addi64, %17 [, %16]
+%2 = Mem: %0 [, %16]
+%1 = Entry: idepth: 0, %0 [, %16]
+%16 = Return: idepth: 0, %1, %2, %18 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
 %1 = Entry: idepth: 1, %0
-  %3 = CInt: 1
-  %16 = ImmBinOp: imm: 1, op: addi64, %3
-  %17 = ImmBinOp: imm: -2, op: addi64, %16
-  %15 = Return: idepth: 0, %2, %17
+  %4 = CInt: 1
+  %17 = ImmBinOp: imm: 1, op: addi64, %4
+  %18 = ImmBinOp: imm: -2, op: addi64, %17
+  %16 = Return: idepth: 0, %2, %18
 
 ======== REGISTER SELECTION ========
 { 1, 1, 1, 1 }

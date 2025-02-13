@@ -3,6 +3,7 @@ const isa = @import("isa.zig");
 const Ast = @import("parser.zig");
 const Vm = @import("Vm.zig");
 const Builder = @import("Builder.zig");
+const Codegen = @import("Codegen.zig");
 const HbvmGen = @import("HbvmGen.zig");
 const Types = @import("Types.zig");
 const Regalloc = @import("Regalloc.zig");
@@ -12,6 +13,7 @@ test {
     _ = @import("zig-out/tests.zig");
     _ = @import("zig-out/vendored_tests.zig");
     _ = @import("fuzz.zig").main;
+    std.testing.refAllDeclsRecursive(Builder);
 }
 
 pub fn runTest(name: []const u8, code: []const u8) !void {
@@ -57,7 +59,7 @@ pub fn testBuilder(name: []const u8, code: []const u8, gpa: std.mem.Allocator, o
     var types = Types.init(gpa, &.{ast});
     defer types.deinit();
 
-    var bf = Builder.init(gpa, &types);
+    var bf = Codegen.init(gpa, &types);
     defer bf.deinit();
 
     _ = types.addFunc(.root, ast.posOf(main), fn_ast);
@@ -65,7 +67,7 @@ pub fn testBuilder(name: []const u8, code: []const u8, gpa: std.mem.Allocator, o
     var out = std.ArrayList(u8).init(gpa);
     defer out.deinit();
 
-    var gen = HbvmGen.init(&types, &out);
+    var gen = HbvmGen.init(&out);
     defer gen.deinit();
 
     while (types.func_worklist.popOrNull()) |func| {
@@ -77,9 +79,9 @@ pub fn testBuilder(name: []const u8, code: []const u8, gpa: std.mem.Allocator, o
 
         try header("UNSCHEDULED SON", output, colors);
         bf.build(.root, func);
-        defer bf.func.reset();
+        defer bf.bl.func.reset();
 
-        const fnc: *Func.Func(HbvmGen.Mach) = @ptrCast(&bf.func);
+        const fnc: *Func.Func(HbvmGen.Mach) = @ptrCast(&bf.bl.func);
         fnc.fmtUnscheduled(output, colors);
 
         try header("OPTIMIZED SON", output, colors);
@@ -96,14 +98,20 @@ pub fn testBuilder(name: []const u8, code: []const u8, gpa: std.mem.Allocator, o
         const allocs = Regalloc.ralloc(HbvmGen.Mach, fnc);
         try output.print("{any}\n", .{allocs});
 
-        gen.emitFunc(fnc, func, allocs);
+        gen.emitFunc(fnc, @intFromEnum(func), allocs);
     }
 
     try header("CODEGEN", output, colors);
-    gen.finalize();
-    var arena = std.heap.ArenaAllocator.init(gpa);
-    defer arena.deinit();
-    try isa.disasm(out.items, gpa, &gen.getSymbolMap(arena.allocator()), output, colors);
+    {
+        gen.finalize();
+        var arena = std.heap.ArenaAllocator.init(gpa);
+        defer arena.deinit();
+        var map = std.AutoHashMap(u32, []const u8).init(arena.allocator());
+        for (types.funcs.items, gen.funcs.items) |tf, df| {
+            map.put(df.offset, types.getFile(tf.file).tokenSrc(tf.name.index)) catch unreachable;
+        }
+        try isa.disasm(out.items, gpa, &map, output, colors);
+    }
 
     var vm = Vm{};
     vm.fuel = 1000;
@@ -129,7 +137,7 @@ pub fn testFmt(name: []const u8, path: []const u8, code: []const u8) !void {
 
     const ast_overhead = @as(f64, @floatFromInt(ast.exprs.store.items.len)) /
         @as(f64, @floatFromInt(ast.source.len));
-    if (ast_overhead > 3.5) {
+    if (ast_overhead > 3.0) {
         std.debug.print(
             "\n{s} is too large ({d} bytes, {any} ratio)\n",
             .{ name, ast.source.len, ast_overhead },

@@ -5,44 +5,44 @@ fn(): uint {
     return a
 }
 ======== UNSCHEDULED SON ========
-%3 = CInt: 1 [, %5]
+%4 = CInt: 1 [, %6]
 %0 = Start: idepth: 0 [, %1, %2]
-%6 = Load: %5, %4 []
-%2 = Mem: %0 [, %4, %5]
-%5 = Store: %1, %2, %4, %3 [, %6, %7]
-%1 = Entry: idepth: 0, %0 [, %5, %7]
-%4 = Local: 8, %2 [, %5, %6, %7, %11]
-%10 = Ret: %8 []
-%7 = Call: id: fn1, idepth: 0, %1, %5, %4 [, %8]
-%11 = Load: %9, %4 [, %12]
-%9 = Mem: %8 [, %11, %12]
-%8 = CallEnd: idepth: 0, %7 [, %9, %10, %12]
-%12 = Return: idepth: 0, %8, %9, %11 []
+%7 = Load: %6, %5 []
+%2 = Mem: %0 [, %6, %5]
+%6 = Store: %1, %2, %5, %4 [, %8, %7]
+%1 = Entry: idepth: 0, %0 [, %8, %6]
+%5 = Local: 8, %2 [, %6, %12, %7, %8]
+%11 = Ret: 0, %9 []
+%8 = Call: id: 1, idepth: 0, %1, %6, %5 [, %9]
+%12 = Load: %10, %5 [, %13]
+%10 = Mem: %9 [, %13, %12]
+%9 = CallEnd: idepth: 0, %8 [, %13, %10, %11]
+%13 = Return: idepth: 0, %9, %10, %12 []
 
 ======== OPTIMIZED SON ========
-%3 = CInt: 1 [, %5]
+%4 = CInt: 1 [, %6]
 %0 = Start: idepth: 0 [, %1, %2]
-%2 = Mem: %0 [, %4, %5]
-%5 = Store: %1, %2, %4, %3 [, %7]
-%1 = Entry: idepth: 0, %0 [, %5, %7]
-%4 = Local: 8, %2 [, %5, %11, %7]
-%7 = Call: id: fn1, idepth: 0, %1, %5, %4 [, %8]
-%11 = Load: %9, %4 [, %12]
-%9 = Mem: %8 [, %11, %12]
-%8 = CallEnd: idepth: 0, %7 [, %9, %12]
-%12 = Return: idepth: 0, %8, %9, %11 []
+%2 = Mem: %0 [, %6, %5]
+%6 = Store: %1, %2, %5, %4 [, %8]
+%1 = Entry: idepth: 0, %0 [, %6, %8]
+%5 = Local: 8, %2 [, %6, %12, %8]
+%8 = Call: id: 1, idepth: 0, %1, %6, %5 [, %9]
+%12 = Load: %10, %5 [, %13]
+%10 = Mem: %9 [, %13, %12]
+%9 = CallEnd: idepth: 0, %8 [, %10, %13]
+%13 = Return: idepth: 0, %9, %10, %12 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
 %1 = Entry: idepth: 1, %0
-  %4 = Local: 8, %2
-  %3 = CInt: 1
-  %5 = Store: %2, %4, %3
-  %7 = Call: id: fn1, idepth: 2, %5, %4
-%8 = CallEnd: idepth: 3, %7
-  %9 = Mem
-  %11 = Load: %9, %4
-  %12 = Return: idepth: 0, %9, %11
+  %5 = Local: 8, %2
+  %4 = CInt: 1
+  %6 = Store: %2, %5, %4
+  %8 = Call: id: 1, idepth: 2, %6, %5
+%9 = CallEnd: idepth: 3, %8
+  %10 = Mem
+  %12 = Load: %10, %5
+  %13 = Return: idepth: 0, %10, %12
 
 ======== REGISTER SELECTION ========
 { 1, 2, 1, 1, 1, 1, 1 }
@@ -58,69 +58,61 @@ fn(v: ^uint): uint {
     }
 }
 ======== UNSCHEDULED SON ========
-%24 = Jmp: idepth: 0 [, %25]
-%23 = Jmp: idepth: 0 [, %25]
-%25 = Region: idepth: 0, %23, %24 [, %26]
-%21 = CInt: 3 [, %22]
-%26 = Phi: %25, %13, %22 []
-%12 = CInt: 2 [, %13]
-%0 = Start: idepth: 0 [, %1, %2, %3]
-%10 = If: idepth: 0, %1, %9 [, %11, %14]
-%9 = BinOp: ==, %7, %8 [, %10]
-%22 = Store: %5, %6, %21 [, %26]
-%13 = Store: %5, %6, %12 [, %26]
-%7 = Load: %5, %6 [, %9]
-%6 = Load: %5, %4 [, %7, %13, %22]
-%3 = Arg: 0, %0 [, %5]
-%4 = Local: 8, %2 [, %5, %6]
-%2 = Mem: %0 [, %4, %5]
-%1 = Entry: idepth: 0, %0 [, %5, %10]
-%14 = Else: idepth: 0, %10 [, %17]
-%11 = Then: idepth: 0, %10 [, %16]
-%15 = CInt: 1 [, %20]
-%8 = CInt: 0 [, %9, %20]
-%5 = Store: %1, %2, %4, %3 [, %6, %7, %13, %19, %19, %22]
-%17 = Jmp: idepth: 0, %14 [, %18]
-%16 = Jmp: idepth: 0, %11 [, %18]
-%20 = Phi: %18, %8, %15 [, %27]
-%19 = Phi: %18, %5, %5 [, %27]
-%18 = Region: idepth: 0, %16, %17 [, %19, %20, %27]
-%27 = Return: idepth: 0, %18, %19, %20 []
+%0 = Start: idepth: 0 [, %1, %2, %4]
+%12 = If: idepth: 0, %1, %10 [, %13, %15]
+%10 = BinOp: eq, %8, %9 [, %12]
+%8 = Load: %6, %7 [, %10]
+%7 = Load: %6, %5 [, %8]
+%4 = Arg: 0, %0 [, %6]
+%5 = Local: 8, %2 [, %6, %7]
+%2 = Mem: %0 [, %6, %5]
+%1 = Entry: idepth: 0, %0 [, %12, %6]
+%15 = Then: idepth: 0, %12 [, %18]
+%13 = Then: idepth: 0, %12 [, %17]
+%16 = CInt: 1 [, %21]
+%9 = CInt: 0 [, %10, %21]
+%6 = Store: %1, %2, %5, %4 [, %20, %7, %8, %20]
+%18 = Jmp: idepth: 0, %15 [, %19]
+%17 = Jmp: idepth: 0, %13 [, %19]
+%21 = Phi: %19, %9, %16 [, %14]
+%20 = Phi: %19, %6, %6 [, %14]
+%19 = Region: idepth: 0, %17, %18 [, %14, %20, %21]
+%14 = Return: idepth: 0, %19, %20, %21 []
 
 ======== OPTIMIZED SON ========
-%28 = IfOp: swapped: false, op: jne, idepth: 0, %1, %7, %8 [, %11, %14]
-%3 = Arg: 0, %0 [, %7]
-%1 = Entry: idepth: 0, %0 [, %28]
-%14 = Else: idepth: 0, %28 [, %17]
-%11 = Then: idepth: 0, %28 [, %16]
-%15 = CInt: 1 [, %20]
-%8 = CInt: 0 [, %28, %20]
-%7 = Load: %2, %3 [, %28]
-%0 = Start: idepth: 0 [, %1, %2, %3]
-%17 = Jmp: idepth: 0, %14 [, %18]
-%16 = Jmp: idepth: 0, %11 [, %18]
-%20 = Phi: %18, %8, %15 [, %27]
-%2 = Mem: %0 [, %7, %27]
-%18 = Region: idepth: 0, %16, %17 [, %27, %20]
-%27 = Return: idepth: 0, %18, %2, %20 []
+%22 = IfOp: swapped: false, op: jne, idepth: 0, %1, %8, %9 [, %13, %15]
+%4 = Arg: 0, %0 [, %8]
+%1 = Entry: idepth: 0, %0 [, %22]
+%15 = Then: idepth: 0, %22 [, %18]
+%13 = Then: idepth: 0, %22 [, %17]
+%16 = CInt: 1 [, %21]
+%9 = CInt: 0 [, %22, %21]
+%8 = Load: %2, %4 [, %22]
+%0 = Start: idepth: 0 [, %1, %2, %4]
+%18 = Jmp: idepth: 0, %15 [, %19]
+%17 = Jmp: idepth: 0, %13 [, %19]
+%21 = Phi: %19, %9, %16 [, %14]
+%2 = Mem: %0 [, %8, %14]
+%19 = Region: idepth: 0, %17, %18 [, %21, %14]
+%14 = Return: idepth: 0, %19, %2, %21 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
 %1 = Entry: idepth: 1, %0
-  %3 = Arg: 0
-  %8 = CInt: 0
-  %7 = Load: %2, %3
-  %28 = IfOp: swapped: false, op: jne, idepth: 2, %7, %8
-%11 = Then: idepth: 3, %28
-  %29 = MachMove: %8
-  %16 = Jmp: idepth: 4
-%14 = Else: idepth: 3, %28
-  %15 = CInt: 1
-  %30 = MachMove: %15
+  %4 = Arg: 0
+  %9 = CInt: 0
+  %8 = Load: %2, %4
+  %22 = IfOp: swapped: false, op: jne, idepth: 2, %8, %9
+%13 = Then: idepth: 3, %22
+  %23 = MachMove: %9
   %17 = Jmp: idepth: 4
-%18 = Region: idepth: 0, %16, %17
-  %31 = Phi: %29, %30
-  %27 = Return: idepth: 0, %2, %31
+%15 = Then: idepth: 3, %22
+  %16 = CInt: 1
+  %24 = MachMove: %16
+  %18 = Jmp: idepth: 4
+%19 = Region: idepth: 0, %17, %18
+  %25 = Phi: %23, %24
+  %14 = Return: idepth: 0, %2, %25
 
 ======== REGISTER SELECTION ========
 { 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1 }

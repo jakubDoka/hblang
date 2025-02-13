@@ -59,6 +59,19 @@ pub const Lexeme = enum(u8) {
         };
     }
 
+    pub fn toUnsignedBinOp(self: Lexeme) @import("Func.zig").BinOp {
+        return switch (self) {
+            .@"+" => .iadd,
+            .@"-" => .isub,
+            .@"*" => .imul,
+            .@"/" => .udiv,
+            .@"<=" => .ule,
+            .@"==" => .eq,
+            .@"!=" => .ne,
+            else => std.debug.panic("{s}", .{@tagName(self)}),
+        };
+    }
+
     pub fn repr(self: Lexeme) []const u8 {
         return @tagName(self);
     }
