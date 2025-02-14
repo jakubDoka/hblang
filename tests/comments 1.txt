@@ -1,8 +1,8 @@
 ======== SOURCE ========
 fn(): uint {
-    // comment is a statement
-    foo(/* comment is an exprression /* if you are crazy */ */)
-    return 0
+	// comment is a statement
+	foo(/* comment is an exprression /* if you are crazy */ */)
+	return 0
 }
 ======== UNSCHEDULED SON ========
 %0 = Start: idepth: 0 [, %1, %2]

@@ -1,12 +1,12 @@
 ======== SOURCE ========
 fn(): uint {
-    a := 1
-    b := &a
-    modify(b)
-    drop(a);
-    *b += 2
-    stack_reclamation_edge_case := 0
-    return *b - 4
+	a := 1
+	b := &a
+	modify(b)
+	drop(a);
+	*b += 2
+	stack_reclamation_edge_case := 0
+	return *b - 4
 }
 ======== UNSCHEDULED SON ========
 %4 = CInt: 1 [, %6]
@@ -86,7 +86,7 @@ fn(): uint {
 
 ======== SOURCE ========
 fn(a: uint): void {
-    return
+	return
 }
 ======== UNSCHEDULED SON ========
 %4 = Arg: 0, %0 [, %6]
@@ -113,8 +113,8 @@ fn(a: uint): void {
 
 ======== SOURCE ========
 fn(a: ^uint): void {
-    *a = 2
-    return
+	*a = 2
+	return
 }
 ======== UNSCHEDULED SON ========
 %8 = Load: %6, %7 []

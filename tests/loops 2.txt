@@ -1,6 +1,6 @@
 ======== SOURCE ========
 fn(): uint {
-    return not_fib(3)
+	return not_fib(3)
 }
 ======== UNSCHEDULED SON ========
 %0 = Start: idepth: 0 [, %1, %2]
@@ -39,17 +39,17 @@ fn(): uint {
 
 ======== SOURCE ========
 fn(size: uint): uint {
-    acc := 0
-    y := 0
-    loop if y == size break else {
-        x := 0
-        loop if x == size break else {
-            acc += x * y
-            x += 1
-        }
-        y += 1
-    }
-    return acc
+	acc := 0
+	y := 0
+	loop if y == size break else {
+		x := 0
+		loop if x == size break else {
+			acc += x * y
+			x += 1
+		}
+		y += 1
+	}
+	return acc
 }
 ======== UNSCHEDULED SON ========
 %48 = Load: %47, %30 [, %50]

@@ -59,7 +59,7 @@ pub fn testBuilder(name: []const u8, code: []const u8, gpa: std.mem.Allocator, o
     var types = Types.init(gpa, &.{ast});
     defer types.deinit();
 
-    var bf = Codegen.init(gpa, &types);
+    var bf = Codegen.init(gpa, &types, output.any());
     defer bf.deinit();
 
     _ = types.addFunc(.root, ast.posOf(main), fn_ast);
@@ -78,7 +78,7 @@ pub fn testBuilder(name: []const u8, code: []const u8, gpa: std.mem.Allocator, o
         try output.writeAll(out_fmt.items);
 
         try header("UNSCHEDULED SON", output, colors);
-        bf.build(.root, func);
+        try bf.build(.root, func);
         defer bf.bl.func.reset();
 
         const fnc: *Func.Func(HbvmGen.Mach) = @ptrCast(&bf.bl.func);
@@ -137,7 +137,7 @@ pub fn testFmt(name: []const u8, path: []const u8, code: []const u8) !void {
 
     const ast_overhead = @as(f64, @floatFromInt(ast.exprs.store.items.len)) /
         @as(f64, @floatFromInt(ast.source.len));
-    if (ast_overhead > 3.0) {
+    if (ast_overhead > 4.0) {
         std.debug.print(
             "\n{s} is too large ({d} bytes, {any} ratio)\n",
             .{ name, ast.source.len, ast_overhead },

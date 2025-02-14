@@ -1,6 +1,6 @@
 ======== SOURCE ========
 fn(): uint {
-    return add_one(10) + add_two(20)
+	return add_one(10) + add_two(20)
 }
 ======== UNSCHEDULED SON ========
 %0 = Start: idepth: 0 [, %1, %2]
@@ -57,7 +57,7 @@ fn(): uint {
 
 ======== SOURCE ========
 fn(x: uint): uint {
-    return x + 2
+	return x + 2
 }
 ======== UNSCHEDULED SON ========
 %8 = CInt: 2 [, %9]
@@ -91,7 +91,7 @@ fn(x: uint): uint {
 
 ======== SOURCE ========
 fn(x: uint): uint {
-    return x + 1
+	return x + 1
 }
 ======== UNSCHEDULED SON ========
 %8 = CInt: 1 [, %9]

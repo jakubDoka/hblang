@@ -1,12 +1,26 @@
 funcs: std.ArrayListUnmanaged(FuncData) = .{},
 arena: std.heap.ArenaAllocator,
 func_worklist: std.ArrayListUnmanaged(Func) = .{},
+interner: std.hash_map.HashMapUnmanaged(Id, void, TypeCtx, 70) = .{},
 source: []const Ast,
 
 const std = @import("std");
 const Ast = @import("parser.zig");
 const graph = @import("Func.zig");
+const Lexer = @import("Lexer.zig");
 const Types = @This();
+
+pub const TypeCtx = struct {
+    pub fn eql(_: @This(), a: Id, b: Id) bool {
+        return std.meta.eql(a.data(), b.data());
+    }
+
+    pub fn hash(_: @This(), adapted_key: Id) u64 {
+        var hasher = std.hash.Fnv1a_64.init();
+        std.hash.autoHash(&hasher, adapted_key.data());
+        return hasher.final();
+    }
+};
 
 pub const Func = enum(u32) {
     main,
@@ -21,33 +35,126 @@ pub const Func = enum(u32) {
 
 pub const File = enum(u16) { root, _ };
 
-pub const Id = enum {
+pub const Data = union(enum) {
+    Builtin: b: {
+        var enm = @typeInfo(Id);
+        enm.@"enum".is_exhaustive = true;
+        enm.@"enum".decls = &.{};
+        break :b @Type(enm);
+    },
+    Ptr: Id,
+};
+
+pub const Id = enum(usize) {
+    never,
     void,
+    bool,
+    u8,
+    u16,
+    u32,
     uint,
-    ptr,
+    i8,
+    i16,
+    i32,
+    int,
+    _,
+
+    const Repr = packed struct(usize) {
+        data: std.meta.Int(.unsigned, @bitSizeOf(usize) - @bitSizeOf(std.meta.Tag(Data))),
+        flag: std.meta.Tag(std.meta.Tag(Data)),
+
+        inline fn tag(self: Repr) std.meta.Tag(Data) {
+            return @enumFromInt(self.flag);
+        }
+    };
+
+    pub fn fromLexeme(lexeme: Lexer.Lexeme) Id {
+        const off = comptime @as(isize, @intFromEnum(Id.void)) - @intFromEnum(Lexer.Lexeme.void);
+        return @enumFromInt(@as(isize, @intFromEnum(lexeme)) + off);
+    }
+
+    inline fn init(flg: std.meta.Tag(Data), dt: usize) Id {
+        comptime {
+            std.debug.assert(fromLexeme(.i8) == .i8);
+        }
+        return @enumFromInt(@as(usize, @bitCast(Repr{ .flag = @intFromEnum(flg), .data = @intCast(dt) })));
+    }
+
+    pub fn isUnsigned(self: Id) bool {
+        return @intFromEnum(Id.u8) <= @intFromEnum(self) and @intFromEnum(self) <= @intFromEnum(Id.uint);
+    }
+
+    pub fn isSigned(self: Id) bool {
+        return @intFromEnum(Id.i8) <= @intFromEnum(self) and @intFromEnum(self) <= @intFromEnum(Id.int);
+    }
+
+    pub fn data(self: Id) Data {
+        const repr: Repr = @bitCast(@intFromEnum(self));
+        return switch (repr.tag()) {
+            .Builtin => .{ .Builtin = @enumFromInt(repr.data) },
+            .Ptr => .{ .Ptr = @as(*const Id, @ptrFromInt(repr.data)).* },
+        };
+    }
 
     pub fn size(self: Id) usize {
-        return switch (self) {
-            .void => 0,
-            .uint, .ptr => 8,
+        return switch (self.data()) {
+            .Builtin => |b| switch (b) {
+                .never => unreachable,
+                .void => 0,
+                .u8, .i8, .bool => 1,
+                .u16, .i16 => 2,
+                .u32, .i32 => 4,
+                .uint, .int => 8,
+            },
+            .Ptr => 8,
         };
     }
 
     pub fn asDataType(self: Id) graph.DataType {
-        return switch (self) {
-            .void => unreachable,
-            .uint, .ptr => .int,
+        return switch (self.data()) {
+            .Builtin => |b| switch (b) {
+                .never => unreachable,
+                .void => unreachable,
+                .u8, .i8, .bool => .i8,
+                .u16, .i16 => .i16,
+                .u32, .i32 => .i32,
+                .uint, .int => .int,
+            },
+            .Ptr => .int,
         };
     }
 
-    pub fn fromStr(str: []const u8) ?Id {
-        return std.meta.stringToEnum(Id, str);
+    pub fn max(lhs: Id, rhs: Id) Id {
+        return @enumFromInt(@max(@intFromEnum(lhs), @intFromEnum(rhs)));
+    }
+
+    pub fn canUpcast(from: Id, to: Id) bool {
+        if (from == .never) return true;
+        if (from == to) return true;
+        const is_bigger = from.size() < to.size();
+        if (from.isUnsigned() and to.isUnsigned()) return is_bigger;
+        if (from.isSigned() and to.isSigned()) return is_bigger;
+        if (from.isUnsigned() and to.isSigned()) return is_bigger;
+
+        return false;
+    }
+
+    pub fn binOpUpcast(lhs: Id, rhs: Id) !Id {
+        if (lhs == rhs) return lhs;
+        if (lhs.data() == .Ptr and rhs.data() == .Ptr) return .uint;
+        if (lhs.data() == .Ptr) return lhs;
+        if (rhs.data() == .Ptr) return error.@"pointer must be on the left";
+
+        if (lhs.canUpcast(rhs)) return rhs;
+        if (rhs.canUpcast(lhs)) return lhs;
+
+        return error.@"incompatible types";
     }
 
     pub fn format(self: *const Id, comptime _: anytype, _: anytype, writer: anytype) !void {
-        try switch (self.*) {
-            .ptr => writer.writeAll("^uint"),
-            else => writer.writeAll(@tagName(self.*)),
+        try switch (self.data()) {
+            .Ptr => |b| writer.print("^{}", .{b}),
+            .Builtin => |b| writer.writeAll(@tagName(b)),
         };
     }
 };
@@ -70,6 +177,7 @@ pub fn init(gpa: std.mem.Allocator, source: []const Ast) Types {
 pub fn deinit(self: *Types) void {
     self.funcs.deinit(self.arena.child_allocator);
     self.func_worklist.deinit(self.arena.child_allocator);
+    self.interner.deinit(self.arena.child_allocator);
     self.arena.deinit();
     self.* = undefined;
 }
@@ -86,20 +194,22 @@ pub fn getFile(self: *Types, file: File) *const Ast {
     return &self.source[@intFromEnum(file)];
 }
 
+pub fn makePtr(self: *Types, v: Id) Id {
+    const ptr = Id.init(.Ptr, @intFromPtr(&v));
+    const slot = self.interner.getOrPut(self.arena.child_allocator, ptr) catch unreachable;
+    if (slot.found_existing) return slot.key_ptr.*;
+    const ptr_slot = self.arena.allocator().create(Id) catch unreachable;
+    ptr_slot.* = v;
+    slot.key_ptr.* = Id.init(.Ptr, @intFromPtr(ptr_slot));
+    return slot.key_ptr.*;
+}
+
 pub fn resolveTy(self: *Types, file: File, expr: Ast.Id) Id {
     const ast = self.getFile(file);
     return switch (ast.exprs.get(expr)) {
-        .Buty => |e| switch (e.bt) {
-            .uint => .uint,
-            .void => .void,
-            else => std.debug.panic("{any}", .{e.bt}),
-        },
+        .Buty => |e| .fromLexeme(e.bt),
         .UnOp => |e| switch (e.op) {
-            .@"^" => b: {
-                const v = self.resolveTy(file, e.oper);
-                std.debug.assert(v == .uint);
-                break :b .ptr;
-            },
+            .@"^" => self.makePtr(self.resolveTy(file, e.oper)),
             else => std.debug.panic("{any}", .{e.op}),
         },
         else => std.debug.panic("{any}", .{expr.tag()}),

@@ -9,8 +9,11 @@ const root = @import("utils.zig");
 const Lexer = @import("Lexer.zig");
 const Ast = @This();
 const Store = root.EnumStore(Id, Expr);
+
 pub const Id = root.EnumId(Kind);
 pub const Slice = root.EnumSlice(Id);
+
+pub var colors: std.io.tty.Config = .no_color;
 
 pub const Ident = packed struct(Ident.Repr) {
     const Repr = u32;
@@ -35,6 +38,7 @@ pub fn Payload(comptime kind: Kind) type {
 pub const Kind = enum {
     Void,
     Comment,
+    Wildcard,
     Ident,
     Buty,
     Fn,
@@ -59,6 +63,7 @@ pub const Kind = enum {
 pub const Expr = union(Kind) {
     Void,
     Comment: Pos,
+    Wildcard: Pos,
     Ident: struct {
         pos: Pos = Pos.init(0),
         id: Ident = Ident.init(Lexer.Token.init(0, 0, .Eof)),
@@ -221,7 +226,7 @@ const Parser = struct {
             const prec = op.precedence();
             if (prec >= prevPrec) break;
 
-            const to_decl = if (op == .@":=") self.declareExpr(acum) else null;
+            const to_decl = if (op == .@":=" or op == .@":") self.declareExpr(acum) else null;
             if (op.isAssignment()) try self.markIdent(acum, "mutated");
 
             self.cur = self.lexer.next();
@@ -310,6 +315,7 @@ const Parser = struct {
         const scope_frame = self.active_syms.items.len;
         return try self.store.allocDyn(self.gpa, switch (token.kind) {
             .Comment => .{ .Comment = Pos.init(token.pos) },
+            ._ => .{ .Wildcard = Pos.init(token.pos) },
             .Ident => return try self.resolveIdent(token),
             .@"fn" => .{ .Fn = .{
                 .args = p: {
@@ -360,8 +366,18 @@ const Parser = struct {
                 _ = try self.expectAdvance(.@")");
                 return expr;
             },
-            .uint, .void => .{ .Buty = .{ .pos = Pos.init(token.pos), .bt = token.kind } },
-            .@"&", .@"*", .@"^" => |op| .{ .UnOp = .{
+            .bool,
+            .u8,
+            .u16,
+            .u32,
+            .uint,
+            .i8,
+            .i16,
+            .i32,
+            .int,
+            .void,
+            => .{ .Buty = .{ .pos = Pos.init(token.pos), .bt = token.kind } },
+            .@"&", .@"*", .@"^", .@"-" => |op| .{ .UnOp = .{
                 .pos = Pos.init(token.pos),
                 .op = op,
                 .oper = b: {
@@ -580,6 +596,7 @@ const Fmt = struct {
     fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
         switch (self.ast.exprs.get(id)) {
             .Void => {},
+            .Wildcard => try self.buf.appendSlice("_"),
             .Comment => |c| {
                 const comment_token = Lexer.peek(self.ast.source, c.index);
                 const content = std.mem.trimRight(u8, comment_token.view(self.ast.source), "\n");
@@ -637,7 +654,7 @@ const Fmt = struct {
                 try self.buf.appendSlice("{\n");
                 self.indent += 1;
                 for (view, 1..) |stmt, i| {
-                    for (0..self.indent) |_| try self.buf.appendSlice("    ");
+                    for (0..self.indent) |_| try self.buf.appendSlice("\t");
                     try self.fmtExpr(stmt);
                     if (view.len > i) {
                         try self.autoInsertSemi(view[i]);
@@ -646,7 +663,7 @@ const Fmt = struct {
                     try self.buf.appendSlice("\n");
                 }
                 self.indent -= 1;
-                for (0..self.indent) |_| try self.buf.appendSlice("    ");
+                for (0..self.indent) |_| try self.buf.appendSlice("\t");
                 try self.buf.appendSlice("}");
             },
             .If => |i| {
@@ -688,7 +705,7 @@ const Fmt = struct {
                 if (prec < o.op.precedence()) try self.buf.appendSlice("(");
                 try self.fmtExprPrec(o.lhs, o.op.precedence());
                 // TODO: linebreaks
-                try self.buf.appendSlice(" ");
+                if (o.op != .@":") try self.buf.appendSlice(" ");
                 try self.buf.appendSlice(o.op.repr());
                 try self.buf.appendSlice(" ");
                 try self.fmtExprPrec(o.rhs, o.op.precedence());
@@ -718,7 +735,7 @@ const Fmt = struct {
 
         const view = self.ast.exprs.view(slice);
         for (view, 0..) |id, i| {
-            if (indent) for (0..self.indent) |_| try self.buf.appendSlice("    ");
+            if (indent) for (0..self.indent) |_| try self.buf.appendSlice("\t");
             try self.fmtExpr(id);
             if (indent or i != view.len - 1) {
                 try self.buf.appendSlice(sep.repr());
@@ -729,7 +746,7 @@ const Fmt = struct {
 
         if (indent) {
             self.indent -= 1;
-            for (0..self.indent) |_| try self.buf.appendSlice("    ");
+            for (0..self.indent) |_| try self.buf.appendSlice("\t");
         }
 
         try self.buf.appendSlice(end.repr());
@@ -817,6 +834,19 @@ pub fn fmt(self: *const Ast, buf: *std.ArrayList(u8)) !void {
     try ft.fmt();
 }
 
+pub const CodePointer = struct {
+    self: *const Ast,
+    index: usize,
+
+    pub fn format(slf: *const @This(), comptime _: anytype, _: anytype, writer: anytype) !void {
+        try slf.self.pointToCode(slf.index, writer);
+    }
+};
+
+pub fn codePointer(self: *const Ast, index: usize) CodePointer {
+    return .{ .self = self, .index = index };
+}
+
 pub fn lineCol(self: *const Ast, index: isize) struct { usize, usize } {
     var line: usize = 0;
     var last_nline: isize = -1;
@@ -825,4 +855,37 @@ pub fn lineCol(self: *const Ast, index: isize) struct { usize, usize } {
         last_nline = @intCast(i);
     };
     return .{ line + 1, @intCast(index - last_nline) };
+}
+
+fn pointToCode(self: *const Ast, index: usize, writer: anytype) !void {
+    const line_start = if (std.mem.lastIndexOfScalar(u8, self.source[0..index], '\n')) |l| l + 1 else 0;
+    const line_end = if (std.mem.indexOfScalar(u8, self.source[index..], '\n')) |l| l + index else self.source.len;
+    const the_line = self.source[line_start..line_end];
+
+    var buf: [256]u8 = undefined;
+    var i: usize = 0;
+
+    var extra_bytes: usize = 0;
+    const code_start = for (the_line, 0..) |c, j| {
+        if (c == ' ') {
+            buf[i] = ' ';
+            i += 1;
+        } else if (c == '\t') {
+            @memset(buf[i..][0 .. 4 - i % 4], ' ');
+            i += 4 - i % 4;
+            extra_bytes += 3 - i % 4;
+        } else break j;
+    } else the_line.len;
+
+    const remining = @min(buf.len - i, the_line.len - code_start);
+    @memcpy(buf[i..][0..remining], the_line[code_start..][0..remining]);
+    i += remining;
+    buf[i] = '\n';
+    i += 1;
+    try writer.writeAll(buf[0..i]);
+
+    const col = index - line_start + extra_bytes;
+    @memset(buf[0..col], ' ');
+    buf[col] = '^';
+    try writer.writeAll(buf[0 .. col + 1]);
 }

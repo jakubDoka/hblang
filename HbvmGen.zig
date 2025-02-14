@@ -146,7 +146,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: u32, allocs: []u8) void {
 
         var i: usize = 0;
         for (func.params) |arg| {
-            std.debug.assert(arg == .int);
+            _ = arg; // autofix
             const argn = for (postorder[0].base.outputs()) |o| {
                 if (o.kind == .Arg and o.extra(.Arg).* == i) break o;
             } else continue; // is dead
@@ -179,7 +179,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: u32, allocs: []u8) void {
         } else {
             std.debug.assert(last.outputs()[0].isBasicBlockStart());
             self.local_relocs.append(.{
-                .dest_block = last.outputs()[0].schedule,
+                .dest_block = last.outputs()[@intFromBool(last.isSwapped())].schedule,
                 .rel = self.reloc(1, .rel32),
             }) catch unreachable;
             self.emit(.jmp, .{0});
@@ -219,15 +219,49 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }
             },
             .BinOp => {
+                const mone = std.math.maxInt(u64);
                 const extra = no.extra(.BinOp);
                 switch (extra.*) {
-                    .iadd => self.binop(.add64, no),
-                    .isub => self.binop(.sub64, no),
-                    .imul => self.binop(.mul64, no),
-                    .udiv => self.emit(.diru64, .{ self.reg(no), .null, self.reg(inps[0]), self.reg(inps[1]) }),
-                    .ule => {
-                        self.binop(.cmpu, no);
-                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), 1 });
+                    .iadd => switch (no.data_type) {
+                        .i8 => self.binop(.add8, no),
+                        .i16 => self.binop(.add16, no),
+                        .i32 => self.binop(.add32, no),
+                        .int => self.binop(.add64, no),
+                        else => unreachable,
+                    },
+                    .isub => switch (no.data_type) {
+                        .i8 => self.binop(.sub8, no),
+                        .i16 => self.binop(.sub16, no),
+                        .i32 => self.binop(.sub32, no),
+                        .int => self.binop(.sub64, no),
+                        else => unreachable,
+                    },
+                    .imul => switch (no.data_type) {
+                        .i8 => self.binop(.mul8, no),
+                        .i16 => self.binop(.mul16, no),
+                        .i32 => self.binop(.mul32, no),
+                        .int => self.binop(.mul64, no),
+                        else => unreachable,
+                    },
+                    .udiv => {
+                        const args = .{ self.reg(no), .null, self.reg(inps[0]), self.reg(inps[1]) };
+                        switch (no.data_type) {
+                            .i8 => self.emit(.diru8, args),
+                            .i16 => self.emit(.diru16, args),
+                            .i32 => self.emit(.diru32, args),
+                            .int => self.emit(.diru64, args),
+                            else => unreachable,
+                        }
+                    },
+                    .sdiv => {
+                        const args = .{ self.reg(no), .null, self.reg(inps[0]), self.reg(inps[1]) };
+                        switch (no.data_type) {
+                            .i8 => self.emit(.dirs8, args),
+                            .i16 => self.emit(.dirs16, args),
+                            .i32 => self.emit(.dirs32, args),
+                            .int => self.emit(.dirs64, args),
+                            else => unreachable,
+                        }
                     },
                     .eq => {
                         self.binop(.cmpu, no);
@@ -238,7 +272,62 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                         self.binop(.cmpu, no);
                         self.emit(.cmpui, .{ self.reg(no), self.reg(no), 0 });
                     },
-                    else => std.debug.panic("{any}", .{extra.*}),
+                    .ule => {
+                        self.binop(.cmpu, no);
+                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), 1 });
+                    },
+                    .sle => {
+                        self.binop(.cmps, no);
+                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), 1 });
+                    },
+                    .uge => {
+                        self.binop(.cmpu, no);
+                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), mone });
+                    },
+                    .sge => {
+                        self.binop(.cmps, no);
+                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), mone });
+                    },
+                    .ugt => {
+                        self.binop(.cmpu, no);
+                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), 1 });
+                        self.emit(.not, .{ self.reg(no), self.reg(no) });
+                    },
+                    .sgt => {
+                        self.binop(.cmps, no);
+                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), 1 });
+                        self.emit(.not, .{ self.reg(no), self.reg(no) });
+                    },
+                    .ult => {
+                        self.binop(.cmpu, no);
+                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), mone });
+                        self.emit(.not, .{ self.reg(no), self.reg(no) });
+                    },
+                    .slt => {
+                        self.binop(.cmps, no);
+                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), mone });
+                        self.emit(.not, .{ self.reg(no), self.reg(no) });
+                    },
+                }
+            },
+            .UnOp => {
+                const extra = no.extra(.UnOp);
+                switch (extra.*) {
+                    .sext => {
+                        switch (inps[0].?.data_type) {
+                            .i8 => self.emit(.sxt8, .{ self.reg(no), self.reg(inps[0]) }),
+                            .i16 => self.emit(.sxt16, .{ self.reg(no), self.reg(inps[0]) }),
+                            .i32 => self.emit(.sxt32, .{ self.reg(no), self.reg(inps[0]) }),
+                            else => unreachable,
+                        }
+                    },
+                    .uext => {
+                        const mask = (@as(u64, 1) << @intCast(inps[0].?.data_type.size() * 8)) - 1;
+                        self.emit(.andi, .{ self.reg(no), self.reg(inps[0]), mask });
+                    },
+                    .neg => {
+                        self.emit(.neg, .{ self.reg(no), self.reg(inps[0]) });
+                    },
                 }
             },
             .ImmBinOp => {
@@ -259,7 +348,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 const extra = no.extra(.IfOp);
                 const args = .{ self.reg(inps[0]), self.reg(inps[1]), 0 };
                 switch (extra.op) {
-                    inline .jgtu, .jne => |op| self.emit(op, args),
+                    inline .jgtu, .jltu, .jlts, .jgts, .jne => |op| self.emit(op, args),
                     else => unreachable,
                 }
             },
@@ -387,8 +476,18 @@ pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node
             work.add(inps[1].?);
             const op = inps[1].?.extra(.BinOp).*;
             const instr: isa.Op, const swap = switch (op) {
-                .ule => .{ .jgtu, true },
+                .ule => .{ .jgtu, false },
+                .uge => .{ .jltu, false },
+                .ult => .{ .jltu, true },
+                .ugt => .{ .jgtu, true },
+
+                .sle => .{ .jgts, false },
+                .sge => .{ .jlts, false },
+                .slt => .{ .jlts, true },
+                .sgt => .{ .jgts, true },
+
                 .eq => .{ .jne, false },
+                .ne => .{ .jeq, false },
                 else => break :b,
             };
             const op_inps = inps[1].?.inputs();

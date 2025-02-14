@@ -1,10 +1,10 @@
 ======== SOURCE ========
 fn(): uint {
-    i := 0
-    loop if i == 4 break else {
-        i += 1
-    }
-    return i
+	i := 0
+	loop if i == 4 break else {
+		i += 1
+	}
+	return i
 }
 ======== UNSCHEDULED SON ========
 %0 = Start: idepth: 0 [, %1, %2]

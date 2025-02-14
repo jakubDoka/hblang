@@ -1,9 +1,9 @@
 ======== SOURCE ========
 fn(): uint {
-    ඞ := 1
-    b := 2
-    ඞ += 1
-    return ඞ - b
+	ඞ := 1
+	b := 2
+	ඞ += 1
+	return ඞ - b
 }
 ======== UNSCHEDULED SON ========
 %10 = Load: %9, %5 [, %11]

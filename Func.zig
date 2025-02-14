@@ -23,18 +23,46 @@ pub const BinOp = enum(u8) {
     sle,
 };
 
+pub const UnOp = enum(u8) {
+    sext,
+    uext,
+    neg,
+};
+
 pub const DataType = enum(u16) {
     void,
     mem,
     dead,
+    i8,
+    i16,
+    i32,
     int,
 
     pub fn size(self: DataType) usize {
         return switch (self) {
             .void => 0,
+            .i8 => 1,
+            .i16 => 2,
+            .i32 => 4,
             .int => 8,
             else => unreachable,
         };
+    }
+
+    pub fn isInt(self: DataType) bool {
+        return switch (self) {
+            .i8, .i16, .i32, .int => true,
+            else => false,
+        };
+    }
+
+    pub fn meet(self: DataType, other: DataType) DataType {
+        if (self.isInt()) {
+            std.debug.assert(other.isInt());
+            return @enumFromInt(@max(@intFromEnum(self), @intFromEnum(other)));
+        }
+
+        unreachable;
     }
 };
 
@@ -58,6 +86,7 @@ fn _Func(comptime Mach: type) struct {
     }
 
     pub const BinOp = mod.BinOp;
+    pub const UnOp = mod.UnOp;
     pub const DataType = mod.DataType;
 
     pub const Builtin = union(enum) {
@@ -74,6 +103,8 @@ fn _Func(comptime Mach: type) struct {
         CInt: i64,
         // [?Cfg, lhs, rhs]
         BinOp: mod.BinOp,
+        // [?Cfg, lhs, rhs]
+        UnOp: mod.UnOp,
         // [?Cfg, Mem]
         Local: usize,
         // [?Cfg, thread, ptr]
@@ -1204,7 +1235,7 @@ fn _Func(comptime Mach: type) struct {
                     }
                 }
                 const extra = o.extra(.Local);
-                std.debug.assert(extra.* == 8);
+                std.debug.assert(extra.* <= 8);
                 o.schedule = local_count;
                 local_count += 1;
             }

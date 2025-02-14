@@ -1,6 +1,6 @@
 ======== SOURCE ========
 fn(): uint {
-    return 42
+	return 42
 }
 ======== UNSCHEDULED SON ========
 %0 = Start: idepth: 0 [, %1, %2]

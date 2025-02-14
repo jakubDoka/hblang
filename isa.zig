@@ -237,7 +237,7 @@ fn disasmArg(
                     }
                 },
                 .reg => {
-                    const col: std.io.tty.Color = @enumFromInt(3 + @intFromEnum(value.*) % 13);
+                    const col: std.io.tty.Color = @enumFromInt(3 + @intFromEnum(value.*) % 12);
                     try colors.setColor(writer, col);
                     try writer.print("${d}", .{@intFromEnum(value.*)});
                 },

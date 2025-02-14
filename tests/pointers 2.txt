@@ -1,14 +1,14 @@
 ======== SOURCE ========
 fn(): uint {
-    a := 1
-    b := 2
+	a := 1
+	b := 2
 
-    c := &a
-    d := &b
+	c := &a
+	d := &b
 
-    swap(c, d)
+	swap(c, d)
 
-    return a - b
+	return a - b
 }
 ======== UNSCHEDULED SON ========
 %7 = CInt: 2 [, %9]
@@ -76,9 +76,9 @@ fn(): uint {
 
 ======== SOURCE ========
 fn(a: ^uint, b: ^uint): void {
-    tmp := *b;
-    *b = *a;
-    *a = tmp
+	tmp := *b;
+	*b = *a;
+	*a = tmp
 }
 ======== UNSCHEDULED SON ========
 %20 = Load: %18, %19 []

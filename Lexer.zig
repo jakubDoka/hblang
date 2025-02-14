@@ -2,12 +2,23 @@ source: []const u8,
 cursor: u32,
 
 const std = @import("std");
+const Types = @import("Types.zig");
 
 const Lexer = @This();
 pub const Pos = u32;
 
 pub const Lexeme = enum(u8) {
     Eof = 0,
+    void,
+    bool,
+    u8,
+    u16,
+    u32,
+    uint,
+    i8,
+    i16,
+    i32,
+    int,
     @"{" = '{',
     @"}" = '}',
     @"(" = '(',
@@ -24,6 +35,7 @@ pub const Lexeme = enum(u8) {
     @"*" = '*',
     @"/" = '/',
     @"<" = '<',
+    @">" = '>',
     @"=" = '=',
     Ident = 128,
     Comment,
@@ -36,22 +48,22 @@ pub const Lexeme = enum(u8) {
     @"break",
     @"continue",
     @"struct",
+    @"_",
     @".{",
     @".(",
-    bool,
-    uint,
-    void,
     @"+=" = '+' + 128,
     @"-=" = '-' + 128,
     @":=" = ':' + 128,
     @"==" = '=' + 128,
     @"!=" = '!' + 128,
     @"<=" = '<' + 128,
+    @">=" = '>' + 128,
 
     pub fn precedence(self: Lexeme) u8 {
         return switch (self) {
+            .@":" => 16,
             .@"=", .@":=", .@"+=", .@"-=" => 15,
-            .@"<", .@"<=", .@"==", .@"!=" => 6,
+            .@"<", .@">", .@"<=", .@">=", .@"==", .@"!=" => 6,
             .@"+", .@"-" => 4,
             .@"*", .@"/" => 3,
             .@".", .@".{", .@".(" => 0,
@@ -59,17 +71,25 @@ pub const Lexeme = enum(u8) {
         };
     }
 
-    pub fn toUnsignedBinOp(self: Lexeme) @import("Func.zig").BinOp {
+    pub fn toBinOp(self: Lexeme, ty: Types.Id) @import("Func.zig").BinOp {
+        const unsigned = ty.isUnsigned();
         return switch (self) {
             .@"+" => .iadd,
             .@"-" => .isub,
             .@"*" => .imul,
-            .@"/" => .udiv,
-            .@"<=" => .ule,
+            .@"/" => if (unsigned) .udiv else .sdiv,
+            .@"<" => if (unsigned) .ult else .slt,
+            .@">" => if (unsigned) .ugt else .sgt,
+            .@"<=" => if (unsigned) .ule else .sle,
+            .@">=" => if (unsigned) .uge else .sge,
             .@"==" => .eq,
             .@"!=" => .ne,
             else => std.debug.panic("{s}", .{@tagName(self)}),
         };
+    }
+
+    pub fn isComparison(self: Lexeme) bool {
+        return self.precedence() == 6;
     }
 
     pub fn repr(self: Lexeme) []const u8 {
@@ -77,10 +97,7 @@ pub const Lexeme = enum(u8) {
     }
 
     pub fn isAssignment(self: Lexeme) bool {
-        switch (self) {
-            .@"=", .@"+=", .@"-=" => return true,
-            else => return false,
-        }
+        return self.precedence() == 15;
     }
 
     pub fn assOp(self: Lexeme) Lexeme {
@@ -151,7 +168,7 @@ pub fn next(self: *Lexer) Token {
                 };
                 const ident = self.source[pos..self.cursor];
                 inline for (std.meta.fields(Lexeme)) |field| {
-                    if (comptime !std.ascii.isLower(field.name[0])) continue;
+                    if (comptime !std.ascii.isLower(field.name[0]) and field.name[0] != '_') continue;
                     if (std.mem.eql(u8, field.name, ident)) break :b @field(Lexeme, field.name);
                 }
                 break :b .Ident;
@@ -185,7 +202,7 @@ pub fn next(self: *Lexer) Token {
                 .@".("
             else
                 .@".",
-            ':', '<', '+', '-', '=', '!' => |c| @enumFromInt(if (self.advanceIf('=')) c + 128 else c),
+            ':', '<', '>', '+', '-', '=', '!' => |c| @enumFromInt(if (self.advanceIf('=')) c + 128 else c),
             else => |c| @enumFromInt(c),
         };
         return Token.init(pos, self.cursor, kind);

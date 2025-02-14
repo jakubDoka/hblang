@@ -15,6 +15,7 @@ pub const Node = Func.Node;
 pub const DataType = Func.DataType;
 pub const Kind = Func.Kind;
 pub const BinOp = Func.BinOp;
+pub const UnOp = Func.UnOp;
 pub const Mach = union(enum) {
     // [Cfg, mem, ...values]
     Scope,
@@ -102,9 +103,15 @@ pub fn addIntConst(self: *Builder, ty: DataType, value: i64) SpecificNode(.CInt)
     return val;
 }
 
-pub fn addBinOp(self: *Builder, op: BinOp, lhs: *Node, rhs: *Node) SpecificNode(.BinOp) {
+pub fn addBinOp(self: *Builder, op: BinOp, ty: DataType, lhs: *Node, rhs: *Node) SpecificNode(.BinOp) {
     const val = self.func.addNode(.BinOp, &.{ null, lhs, rhs }, op);
-    val.data_type = .int;
+    val.data_type = ty;
+    return val;
+}
+
+pub fn addUnOp(self: *Builder, op: UnOp, ty: DataType, oper: *Node) SpecificNode(.BinOp) {
+    const val = self.func.addNode(.UnOp, &.{ null, oper }, op);
+    val.data_type = ty;
     return val;
 }
 

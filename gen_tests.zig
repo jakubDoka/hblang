@@ -24,21 +24,20 @@ pub fn main() !void {
         const pos = std.mem.indexOf(u8, segment, "\n```hb") orelse continue;
         const name = segment[0..pos];
         const end = std.mem.indexOf(u8, segment[pos + 6 ..], "```\n") orelse continue;
-        const body = std.mem.trim(u8, segment[pos + 6 ..][0..end], "\n \t");
+        var body = std.mem.trim(u8, segment[pos + 6 ..][0..end], "\n \t");
 
+        body = try std.mem.replaceOwned(u8, arena, body, "\t", "\\t");
+        body = try std.mem.replaceOwned(u8, arena, body, "\n", "\\n");
         try writer.print(
             \\test "{s}" {{
             \\    try root.runTest(
             \\        "{s}",
+            \\        "{s}",
             \\
         ,
-            .{ name, name },
+            .{ name, name, body },
         );
 
-        var lines = std.mem.splitScalar(u8, body, '\n');
-        while (lines.next()) |line| {
-            try writer.print("        \\\\{s}\n", .{line});
-        }
         try writer.writeAll(
             \\    );
             \\}
