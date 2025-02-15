@@ -89,6 +89,7 @@ pub fn testBuilder(name: []const u8, code: []const u8, gpa: std.mem.Allocator, o
         fnc.fmtUnscheduled(output, colors);
 
         try header("SCHEDULED SON", output, colors);
+
         fnc.gcm();
         fnc.fmtScheduled(output, colors);
 
