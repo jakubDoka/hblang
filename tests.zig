@@ -1,19 +1,19 @@
 const std = @import("std");
-const isa = @import("isa.zig");
-const Ast = @import("parser.zig");
-const Vm = @import("Vm.zig");
-const Builder = @import("Builder.zig");
-const Codegen = @import("Codegen.zig");
-const HbvmGen = @import("HbvmGen.zig");
-const Types = @import("Types.zig");
-const Regalloc = @import("Regalloc.zig");
-const Func = @import("Func.zig");
+pub const isa = @import("isa.zig");
+pub const Ast = @import("parser.zig");
+pub const Vm = @import("Vm.zig");
+pub const Builder = @import("Builder.zig");
+pub const Codegen = @import("Codegen.zig");
+pub const HbvmGen = @import("HbvmGen.zig");
+pub const Types = @import("Types.zig");
+pub const Regalloc = @import("Regalloc.zig");
+pub const Func = @import("Func.zig");
 
 test {
     _ = @import("zig-out/tests.zig");
     _ = @import("zig-out/vendored_tests.zig");
     _ = @import("fuzz.zig").main;
-    std.testing.refAllDeclsRecursive(Builder);
+    std.testing.refAllDeclsRecursive(@This());
 }
 
 pub fn runTest(name: []const u8, code: []const u8) !void {

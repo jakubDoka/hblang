@@ -12,12 +12,18 @@ const Types = @This();
 
 pub const TypeCtx = struct {
     pub fn eql(_: @This(), a: Id, b: Id) bool {
-        return std.meta.eql(a.data(), b.data());
+        const ad, const bd = .{ a.data(), b.data() };
+        if (std.meta.fields(@TypeOf(ad.Struct.*)).len != 3) @compileError("maybe we are capturing already");
+        if (ad == .Struct and bd == .Struct) {
+            return ad.Struct.file == bd.Struct.file and ad.Struct.pos == bd.Struct.pos;
+        }
+
+        return std.meta.eql(ad, bd);
     }
 
     pub fn hash(_: @This(), adapted_key: Id) u64 {
         var hasher = std.hash.Fnv1a_64.init();
-        std.hash.autoHash(&hasher, adapted_key.data());
+        std.hash.autoHashStrat(&hasher, adapted_key.data(), .Deep);
         return hasher.final();
     }
 };
@@ -43,6 +49,18 @@ pub const Data = union(enum) {
         break :b @Type(enm);
     },
     Ptr: Id,
+    Struct: *const Struct,
+};
+
+const Struct = struct {
+    file: File,
+    pos: Ast.Pos,
+    fields: []const Field,
+
+    const Field = struct {
+        name: Ast.Pos,
+        ty: Id,
+    };
 };
 
 pub const Id = enum(usize) {
@@ -93,6 +111,7 @@ pub const Id = enum(usize) {
         return switch (repr.tag()) {
             .Builtin => .{ .Builtin = @enumFromInt(repr.data) },
             .Ptr => .{ .Ptr = @as(*const Id, @ptrFromInt(repr.data)).* },
+            .Struct => .{ .Struct = @ptrFromInt(repr.data) },
         };
     }
 
@@ -107,20 +126,31 @@ pub const Id = enum(usize) {
                 .uint, .int => 8,
             },
             .Ptr => 8,
+            .Struct => |s| {
+                var siz: usize = 0;
+                var alignm: usize = 1;
+                for (s.fields) |f| {
+                    alignm = @max(alignm, f.ty.alignment());
+                    siz = std.mem.alignForward(usize, siz, f.ty.alignment());
+                    siz += f.ty.size();
+                }
+                siz = std.mem.alignForward(usize, siz, alignm);
+                return siz;
+            },
         };
     }
 
-    pub fn asDataType(self: Id) graph.DataType {
+    pub fn alignment(self: Id) usize {
         return switch (self.data()) {
-            .Builtin => |b| switch (b) {
-                .never => unreachable,
-                .void => unreachable,
-                .u8, .i8, .bool => .i8,
-                .u16, .i16 => .i16,
-                .u32, .i32 => .i32,
-                .uint, .int => .int,
+            .Builtin => self.size(),
+            .Ptr => 8,
+            .Struct => |s| {
+                var alignm: usize = 1;
+                for (s.fields) |f| {
+                    alignm = @max(alignm, f.ty.alignment());
+                }
+                return alignm;
             },
-            .Ptr => .int,
         };
     }
 
@@ -155,7 +185,94 @@ pub const Id = enum(usize) {
         try switch (self.data()) {
             .Ptr => |b| writer.print("^{}", .{b}),
             .Builtin => |b| writer.writeAll(@tagName(b)),
+            .Struct => unreachable,
         };
+    }
+};
+
+pub const Abi = enum {
+    ableos,
+
+    pub const Spec = union(enum) {
+        ByValue: graph.DataType,
+        ByValuePair: struct {
+            types: [2]graph.DataType,
+            padding: u16,
+        },
+        ByRef,
+        Imaginary,
+
+        const max_subtypes = 2;
+
+        pub const Field = struct {
+            offset: usize = 0,
+            dt: graph.DataType,
+        };
+
+        const Dts = std.BoundedArray(graph.DataType, max_subtypes);
+        const Offs = std.BoundedArray(usize, max_subtypes);
+
+        pub fn dataTypes(self: Spec) struct { Dts, Offs } {
+            return switch (self) {
+                .ByValue => |i| .{
+                    Dts.fromSlice(&.{i}) catch unreachable,
+                    Offs.fromSlice(&.{0}) catch unreachable,
+                },
+                .ByValuePair => |*pari| .{
+                    Dts.fromSlice(&pari.types) catch unreachable,
+                    Offs.fromSlice(&.{ 0, pari.types[0].size() + pari.padding }) catch unreachable,
+                },
+                .ByRef => .{
+                    Dts.fromSlice(&.{.int}) catch unreachable,
+                    Offs.fromSlice(&.{0}) catch unreachable,
+                },
+                .Imaginary => .{ .{}, .{} },
+            };
+        }
+    };
+
+    pub fn categorize(self: Abi, ty: Id) Spec {
+        return switch (ty.data()) {
+            .Builtin => |b| .{ .ByValue = switch (b) {
+                .never => unreachable,
+                .void => return .Imaginary,
+                .u8, .i8, .bool => .i8,
+                .u16, .i16 => .i16,
+                .u32, .i32 => .i32,
+                .uint, .int => .int,
+            } },
+            .Ptr => .{ .ByValue = .int },
+            .Struct => |s| switch (self) {
+                .ableos => categorizeAbleosStruct(s),
+            },
+        };
+    }
+
+    pub fn categorizeAbleosStruct(stru: *const Struct) Spec {
+        var res: Spec = .Imaginary;
+        var offset: usize = 0;
+        for (stru.fields) |f| {
+            const fspec = Abi.ableos.categorize(f.ty);
+            if (fspec == .Imaginary) continue;
+            if (res == .Imaginary) {
+                res = fspec;
+                continue;
+            }
+
+            if (fspec == .ByRef) return fspec;
+            if (fspec == .ByValuePair) return .ByRef;
+            if (res == .ByValuePair) return .ByRef;
+            std.debug.assert(res != .ByRef);
+
+            const off = std.mem.alignForward(usize, offset, f.ty.alignment());
+            res = .{ .ByValuePair = .{
+                .types = .{ res.ByValue, fspec.ByValue },
+                .padding = @intCast(off - offset),
+            } };
+
+            offset = off + f.ty.size();
+        }
+        return res;
     }
 };
 
@@ -211,6 +328,36 @@ pub fn resolveTy(self: *Types, file: File, expr: Ast.Id) Id {
         .UnOp => |e| switch (e.op) {
             .@"^" => self.makePtr(self.resolveTy(file, e.oper)),
             else => std.debug.panic("{any}", .{e.op}),
+        },
+        .Ident => |e| {
+            const decl = ast.decls[e.id.index];
+            return self.resolveTy(file, ast.exprs.get(decl.expr).BinOp.rhs);
+        },
+        .Struct => |e| {
+            var v: Struct = undefined;
+            v.file = file;
+            v.pos = e.pos;
+            const stru = Id.init(.Struct, @intFromPtr(&v));
+            const slot = self.interner.getOrPut(self.arena.child_allocator, stru) catch unreachable;
+            if (slot.found_existing) return slot.key_ptr.*;
+            const struct_slot = self.arena.allocator().create(Struct) catch unreachable;
+            struct_slot.* = .{
+                .file = file,
+                .pos = e.pos,
+                .fields = b: {
+                    const fields = self.arena.allocator().alloc(Struct.Field, e.fields.len()) catch unreachable;
+                    for (fields, ast.exprs.view(e.fields)) |*fslot, fast| {
+                        const field = ast.exprs.get(fast).CtorField;
+                        fslot.* = .{
+                            .name = field.pos,
+                            .ty = self.resolveTy(file, field.value),
+                        };
+                    }
+                    break :b fields;
+                },
+            };
+            slot.key_ptr.* = Id.init(.Struct, @intFromPtr(struct_slot));
+            return slot.key_ptr.*;
         },
         else => std.debug.panic("{any}", .{expr.tag()}),
     };

@@ -9,7 +9,7 @@ fn(): uint {
 ======== UNSCHEDULED SON ========
 %0 = Start: idepth: 0 [, %1, %2]
 %19 = CInt: 1 [, %20]
-%13 = CInt: 4 [, %14]
+%11 = CInt: 4 [, %14]
 %4 = CInt: 0 [, %6]
 %5 = Local: 8, %2 [, %6, %10]
 %2 = Mem: %0 [, %6, %5]
@@ -17,29 +17,29 @@ fn(): uint {
 %22 = Jmp: idepth: 0, %18 [, %8]
 %7 = Jmp: idepth: 0, %1 [, %8]
 %18 = Then: idepth: 0, %16 [, %22, %21]
-%20 = BinOp: iadd, %12, %19 [, %21]
-%14 = BinOp: eq, %12, %13 [, %16]
-%10 = Phi: %8, %5, %10 [, %21, %10, %12]
-%21 = Store: %18, %11, %10, %20 [, %11]
-%6 = Store: %1, %2, %5, %4 [, %11]
-%8 = Loop: idepth: 0, %7, %22 [, %16, %11, %10]
+%20 = BinOp: iadd, %13, %19 [, %21]
+%14 = BinOp: eq, %13, %11 [, %16]
+%10 = Phi: %8, %5, %10 [, %21, %10, %13]
+%21 = Store: %18, %12, %10, %20 [, %12]
+%6 = Store: %1, %2, %5, %4 [, %12]
+%8 = Loop: idepth: 0, %7, %22 [, %16, %12, %10]
 %16 = If: idepth: 0, %8, %14 [, %17, %18]
-%12 = Load: %11, %10 [, %14, %20, %23]
-%11 = Phi: %8, %6, %21 [, %21, %23, %12]
+%13 = Load: %12, %10 [, %14, %20, %23]
+%12 = Phi: %8, %6, %21 [, %21, %23, %13]
 %17 = Then: idepth: 0, %16 [, %23]
-%23 = Return: idepth: 0, %17, %11, %12 []
+%23 = Return: idepth: 0, %17, %12, %13 []
 
 ======== OPTIMIZED SON ========
 %22 = Jmp: idepth: 0, %18 [, %8]
 %7 = Jmp: idepth: 0, %1 [, %8]
 %1 = Entry: idepth: 0, %0 [, %7]
 %18 = Then: idepth: 0, %26 [, %22]
-%13 = CInt: 4 [, %26]
+%11 = CInt: 4 [, %26]
 %25 = ImmBinOp: imm: 1, op: addi64, %24 [, %24]
 %4 = CInt: 0 [, %24]
 %8 = Loop: idepth: 0, %7, %22 [, %24, %26]
 %0 = Start: idepth: 0 [, %1, %2]
-%26 = IfOp: swapped: false, op: jne, idepth: 0, %8, %24, %13 [, %17, %18]
+%26 = IfOp: swapped: false, op: jne, idepth: 0, %8, %24, %11 [, %17, %18]
 %24 = Phi: %8, %4, %25 [, %26, %25, %23]
 %2 = Mem: %0 [, %23]
 %17 = Then: idepth: 0, %26 [, %23]
@@ -49,12 +49,12 @@ fn(): uint {
 %0 = Start: idepth: 0
 %1 = Entry: idepth: 1, %0
   %4 = CInt: 0
-  %13 = CInt: 4
+  %11 = CInt: 4
   %27 = MachMove: %4
   %7 = Jmp: idepth: 2
 %8 = Loop: idepth: 3, %7, %22
   %29 = Phi: %27, %28
-  %26 = IfOp: swapped: false, op: jne, idepth: 4, %29, %13
+  %26 = IfOp: swapped: false, op: jne, idepth: 4, %29, %11
 %17 = Then: idepth: 0, %26
   %23 = Return: idepth: 0, %2, %29
 %18 = Then: idepth: 5, %26

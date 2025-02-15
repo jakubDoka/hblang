@@ -66,6 +66,73 @@ pub const DataType = enum(u16) {
     }
 };
 
+pub const Builtin = union(enum) {
+    Start: Cfg,
+    // [Start]
+    Arg: usize,
+    // [Start]
+    Entry: Cfg,
+    // [Start]
+    Mem,
+    // [Cfg, ret]
+    Return: Cfg,
+    // [?Cfg]
+    CInt: i64,
+    // [?Cfg, lhs, rhs]
+    BinOp: mod.BinOp,
+    // [?Cfg, lhs, rhs]
+    UnOp: mod.UnOp,
+    // [?Cfg, Mem]
+    Local: usize,
+    // [?Cfg, thread, ptr]
+    Load: Load,
+    // [?Cfg, thread, ptr, value, ...antideps]
+    Store: Store,
+    // [?Cfg, thread, dst, src, size, ...antideps]
+    MemCpy: Store,
+    // [?Cfg, ...lane]
+    Split,
+    // [?Cfg, ...lane]
+    Join,
+    // [Cfg, ..args]
+    Call: extern struct {
+        base: Cfg = .{},
+        id: u32,
+    },
+    // [Call]
+    CallEnd: Cfg,
+    // [CallEnd]
+    Ret: usize,
+    // [Cfg, cond],
+    If: Cfg,
+    // [If]
+    Then: Cfg,
+    // [If]
+    Else: Cfg,
+    // [lCfg, rCfg]
+    Region: Cfg,
+    // [entryCfg, backCfg]
+    Loop: Cfg,
+    // [Cfg]
+    Jmp: Cfg,
+    // [Region, lhs, rhs]
+    Phi,
+    // [Cfg, inp]
+    MachMove,
+
+    pub const is_basic_block_start = .{ .Entry, .CallEnd, .Then, .Else, .Region, .Loop };
+    pub const is_basic_block_end = .{ .Return, .Call, .If, .Jmp };
+    pub const is_mem_op = .{ .Load, .MemCpy, .Local, .Store, .Return, .Call };
+    pub const is_pinned = .{ .Ret, .Phi, .Mem };
+};
+
+pub const Cfg = extern struct {
+    idepth: u16 = 0,
+    antidep: u16 = 0,
+};
+pub const Load = extern struct {};
+pub const Store = extern struct {};
+
 const mod = @This();
 
 fn _Func(comptime Mach: type) struct {
@@ -84,75 +151,6 @@ fn _Func(comptime Mach: type) struct {
     pub fn InternMap(comptime Context: type) type {
         return std.hash_map.HashMapUnmanaged(InternedNode, void, Context, 70);
     }
-
-    pub const BinOp = mod.BinOp;
-    pub const UnOp = mod.UnOp;
-    pub const DataType = mod.DataType;
-
-    pub const Builtin = union(enum) {
-        Start: Cfg,
-        // [Start]
-        Arg: usize,
-        // [Start]
-        Entry: Cfg,
-        // [Start]
-        Mem,
-        // [Cfg, ret]
-        Return: Cfg,
-        // [?Cfg]
-        CInt: i64,
-        // [?Cfg, lhs, rhs]
-        BinOp: mod.BinOp,
-        // [?Cfg, lhs, rhs]
-        UnOp: mod.UnOp,
-        // [?Cfg, Mem]
-        Local: usize,
-        // [?Cfg, thread, ptr]
-        Load: Load,
-        // [?Cfg, thread, ptr, value, ...antideps]
-        Store: Store,
-        // [?Cfg, ...lane]
-        Split,
-        // [?Cfg, ...lane]
-        Join,
-        // [Cfg, ..args]
-        Call: extern struct {
-            base: Cfg = .{},
-            id: u32,
-        },
-        // [Call]
-        CallEnd: Cfg,
-        // [CallEnd]
-        Ret: usize,
-        // [Cfg, cond],
-        If: Cfg,
-        // [If]
-        Then: Cfg,
-        // [If]
-        Else: Cfg,
-        // [lCfg, rCfg]
-        Region: Cfg,
-        // [entryCfg, backCfg]
-        Loop: Cfg,
-        // [Cfg]
-        Jmp: Cfg,
-        // [Region, lhs, rhs]
-        Phi,
-        // [Cfg, inp]
-        MachMove,
-
-        pub const is_basic_block_start = .{ .Entry, .CallEnd, .Then, .Else, .Region, .Loop };
-        pub const is_basic_block_end = .{ .Return, .Call, .If, .Jmp };
-        pub const is_mem_op = .{ .Load, .Local, .Store, .Return, .Call };
-        pub const is_pinned = .{ .Ret, .Phi, .Mem };
-    };
-
-    pub const Cfg = extern struct {
-        idepth: u16 = 0,
-        antidep: u16 = 0,
-    };
-    pub const Load = extern struct {};
-    pub const Store = extern struct {};
 
     pub const all_classes = std.meta.fields(Builtin) ++ std.meta.fields(Mach);
 
@@ -1234,8 +1232,6 @@ fn _Func(comptime Mach: type) struct {
                         break :b;
                     }
                 }
-                const extra = o.extra(.Local);
-                std.debug.assert(extra.* <= 8);
                 o.schedule = local_count;
                 local_count += 1;
             }

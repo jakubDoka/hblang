@@ -4,18 +4,20 @@ root_mem: *Func.Node = undefined,
 ret: ?*Func.Node = undefined,
 
 const std = @import("std");
+const graph = @import("Func.zig");
 const Ast = @import("parser.zig");
 const Types = @import("Types.zig");
 const Builder = @This();
 const ScopeEntry = void;
 const Scope = void;
 
-pub const Func = @import("Func.zig").Func(Mach);
+pub const Func = graph.Func(Mach);
 pub const Node = Func.Node;
-pub const DataType = Func.DataType;
 pub const Kind = Func.Kind;
-pub const BinOp = Func.BinOp;
-pub const UnOp = Func.UnOp;
+
+pub const DataType = graph.DataType;
+pub const BinOp = graph.BinOp;
+pub const UnOp = graph.UnOp;
 pub const Mach = union(enum) {
     // [Cfg, mem, ...values]
     Scope,
@@ -80,6 +82,10 @@ pub fn addLoad(self: *Builder, addr: *Node, ty: DataType) SpecificNode(.Store) {
     return val;
 }
 
+pub fn addFieldLoad(self: *Builder, base: *Node, offset: i64, ty: DataType) *Node {
+    return self.addLoad(self.addFieldOffset(base, offset), ty);
+}
+
 pub fn addStore(self: *Builder, addr: *Node, value: *Node) SpecificNode(.Store) {
     std.debug.assert(value.data_type.size() != 0);
     const mem = self.memory();
@@ -89,15 +95,32 @@ pub fn addStore(self: *Builder, addr: *Node, value: *Node) SpecificNode(.Store) 
     return store;
 }
 
+pub fn addFieldOffset(self: *Builder, base: *Node, offset: i64) *Node {
+    return if (offset != 0) self.addBinOp(.iadd, .int, base, self.addIntImm(.int, offset)) else base;
+}
+
+pub fn addFieldStore(self: *Builder, base: *Node, offset: i64, value: *Node) void {
+    _ = self.addStore(self.addFieldOffset(base, offset), value);
+}
+
 pub fn addSpill(self: *Builder, value: *Node) SpecificNode(.Local) {
     const local = self.addLocal(value.data_type.size());
     _ = self.addStore(local, value);
     return local;
 }
 
+pub fn addFixedMemCpy(self: *Builder, dst: *Node, src: *Node, size: usize) SpecificNode(.MemCpy) {
+    const mem = self.memory();
+    const ctrl = self.control();
+    const siz = self.addIntImm(.int, @intCast(size));
+    const mcpy = self.func.addNode(.MemCpy, &.{ ctrl, mem, dst, src, siz }, .{});
+    self.func.setInputNoIntern(self.scope.?, 1, mcpy);
+    return mcpy;
+}
+
 // #MATH =======================================================================
 
-pub fn addIntConst(self: *Builder, ty: DataType, value: i64) SpecificNode(.CInt) {
+pub fn addIntImm(self: *Builder, ty: DataType, value: i64) SpecificNode(.CInt) {
     const val = self.func.addNode(.CInt, &.{null}, value);
     val.data_type = ty;
     return val;

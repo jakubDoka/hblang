@@ -1301,27 +1301,27 @@ fn(): i8 return -1
 ======== SOURCE ========
 fn(v: bool): bool return v
 ======== UNSCHEDULED SON ========
-%4 = Arg: 0, %0 [, %6]
-%5 = Local: 1, %2 [, %6, %7]
-%2 = Mem: %0 [, %6, %5]
-%0 = Start: idepth: 0 [, %1, %2, %4]
-%7 = Load: %6, %5 [, %8]
-%6 = Store: %1, %2, %5, %4 [, %8, %7]
+%5 = Arg: 0, %0 [, %6]
+%4 = Local: 1, %2 [, %6, %7]
+%2 = Mem: %0 [, %6, %4]
+%0 = Start: idepth: 0 [, %1, %2, %5]
+%7 = Load: %6, %4 [, %8]
+%6 = Store: %1, %2, %4, %5 [, %8, %7]
 %1 = Entry: idepth: 0, %0 [, %8, %6]
 %8 = Return: idepth: 0, %1, %6, %7 []
 
 ======== OPTIMIZED SON ========
-%0 = Start: idepth: 0 [, %1, %2, %4]
-%4 = Arg: 0, %0 [, %8]
+%0 = Start: idepth: 0 [, %1, %2, %5]
+%5 = Arg: 0, %0 [, %8]
 %2 = Mem: %0 [, %8]
 %1 = Entry: idepth: 0, %0 [, %8]
-%8 = Return: idepth: 0, %1, %2, %4 []
+%8 = Return: idepth: 0, %1, %2, %5 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
 %1 = Entry: idepth: 0, %0
-  %4 = Arg: 0
-  %8 = Return: idepth: 0, %2, %4
+  %5 = Arg: 0
+  %8 = Return: idepth: 0, %2, %5
 
 ======== REGISTER SELECTION ========
 { 1, 1 }

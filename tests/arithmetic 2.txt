@@ -9,14 +9,14 @@ fn(): int {
 	return f + e
 }
 ======== UNSCHEDULED SON ========
-%10 = CInt: 1 [, %12, %18, %24, %30]
-%24 = UnOp: sext, %10 [, %25]
+%9 = CInt: 1 [, %12, %18, %24, %30]
+%24 = UnOp: sext, %9 [, %25]
 %23 = UnOp: sext, %22 [, %25]
-%18 = UnOp: uext, %10 [, %19]
+%18 = UnOp: uext, %9 [, %19]
 %17 = UnOp: uext, %16 [, %19]
-%12 = UnOp: sext, %10 [, %13]
-%11 = UnOp: sext, %9 [, %13]
-%30 = UnOp: uext, %10 [, %31]
+%12 = UnOp: sext, %9 [, %13]
+%11 = UnOp: sext, %10 [, %13]
+%30 = UnOp: uext, %9 [, %31]
 %29 = UnOp: uext, %28 [, %31]
 %28 = Load: %27, %20 [, %29]
 %25 = BinOp: isub, %23, %24 [, %27]
@@ -27,10 +27,10 @@ fn(): int {
 %16 = Load: %15, %7 [, %17]
 %13 = BinOp: isub, %11, %12 [, %15]
 %14 = Local: 2, %2 [, %15, %22]
-%9 = Load: %8, %5 [, %11]
+%10 = Load: %8, %5 [, %11]
 %7 = Local: 1, %2 [, %8, %16]
 %4 = CInt: 0 [, %6, %8]
-%5 = Local: 1, %2 [, %6, %9]
+%5 = Local: 1, %2 [, %6, %10]
 %2 = Mem: %0 [, %6, %5, %7, %14, %20, %26, %32]
 %37 = UnOp: sext, %35 [, %38]
 %36 = UnOp: uext, %34 [, %38]
@@ -41,7 +41,7 @@ fn(): int {
 %27 = Store: %1, %21, %26, %25 [, %33, %28]
 %21 = Store: %1, %15, %20, %19 [, %27, %22]
 %15 = Store: %1, %8, %14, %13 [, %21, %16]
-%8 = Store: %1, %6, %7, %4 [, %15, %9]
+%8 = Store: %1, %6, %7, %4 [, %15, %10]
 %6 = Store: %1, %2, %5, %4 [, %8]
 %0 = Start: idepth: 0 [, %1, %2]
 %38 = BinOp: iadd, %36, %37 [, %39]
@@ -52,15 +52,15 @@ fn(): int {
 ======== OPTIMIZED SON ========
 %4 = CInt: 0 [, %17, %11]
 %11 = UnOp: sext, %4 [, %13]
-%12 = UnOp: sext, %10 [, %13]
-%18 = UnOp: uext, %10 [, %19]
+%12 = UnOp: sext, %9 [, %13]
+%18 = UnOp: uext, %9 [, %19]
 %17 = UnOp: uext, %4 [, %19]
 %13 = BinOp: isub, %11, %12 [, %23]
-%10 = CInt: 1 [, %12, %18, %24, %30]
+%9 = CInt: 1 [, %12, %18, %24, %30]
 %19 = BinOp: iadd, %17, %18 [, %29]
-%24 = UnOp: sext, %10 [, %25]
+%24 = UnOp: sext, %9 [, %25]
 %23 = UnOp: sext, %13 [, %25]
-%30 = UnOp: uext, %10 [, %31]
+%30 = UnOp: uext, %9 [, %31]
 %29 = UnOp: uext, %19 [, %31]
 %25 = BinOp: isub, %23, %24 [, %37]
 %31 = BinOp: iadd, %29, %30 [, %36]
@@ -76,13 +76,13 @@ fn(): int {
 %0 = Start: idepth: 0
 %1 = Entry: idepth: 1, %0
   %4 = CInt: 0
-  %10 = CInt: 1
+  %9 = CInt: 1
   %17 = UnOp: uext, %4
   %11 = UnOp: sext, %4
-  %18 = UnOp: uext, %10
-  %30 = UnOp: uext, %10
-  %12 = UnOp: sext, %10
-  %24 = UnOp: sext, %10
+  %18 = UnOp: uext, %9
+  %30 = UnOp: uext, %9
+  %12 = UnOp: sext, %9
+  %24 = UnOp: sext, %9
   %19 = BinOp: iadd, %17, %18
   %13 = BinOp: isub, %11, %12
   %29 = UnOp: uext, %19

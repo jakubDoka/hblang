@@ -67,7 +67,7 @@ pub fn ralloc(comptime Mach: type, func: *Func.Func(Mach)) []u8 {
     }
 
     for (instrs, 0..) |*instr, i| {
-        if (instr.def.outputs().len != 0 and instr.def.kind != .MachMove and instr.def.kind != .Store and
+        if (instr.def.outputs().len != 0 and instr.def.kind != .MachMove and !instr.def.isStore() and
             instr.def.kind != .Mem and !instr.def.isCfg())
         {
             instr.defs.set(i);
@@ -142,6 +142,7 @@ pub fn ralloc(comptime Mach: type, func: *Func.Func(Mach)) []u8 {
         var i: usize = 0;
         var iter = r.iterator(.{});
         while (iter.next()) |e| if (j != e) {
+            //std.debug.print("{} {}\n", .{ instrs[j].def, instrs[e].def });
             tr.*[i] = @intCast(e);
             i += 1;
         };

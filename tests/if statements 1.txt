@@ -46,31 +46,31 @@ fn(x: uint): uint {
 	}
 }
 ======== UNSCHEDULED SON ========
-%8 = CInt: 2 [, %9, %22]
-%22 = BinOp: isub, %21, %8 [, %23]
+%7 = CInt: 2 [, %9, %22]
+%22 = BinOp: isub, %21, %7 [, %23]
 %19 = Mem: %18 [, %23, %21]
 %18 = CallEnd: idepth: 0, %17 [, %23, %19, %20]
 %15 = Then: idepth: 0, %11 [, %17]
-%9 = BinOp: ule, %7, %8 [, %11]
-%21 = Load: %19, %5 [, %22]
-%0 = Start: idepth: 0 [, %1, %2, %4]
+%9 = BinOp: ule, %8, %7 [, %11]
+%21 = Load: %19, %4 [, %22]
+%0 = Start: idepth: 0 [, %1, %2, %5]
 %23 = Call: id: 1, idepth: 0, %18, %19, %22 [, %24]
 %11 = If: idepth: 0, %1, %9 [, %12, %15]
 %26 = Ret: 0, %24 [, %27]
 %20 = Ret: 0, %18 [, %27]
-%16 = BinOp: isub, %7, %13 [, %17]
+%16 = BinOp: isub, %8, %13 [, %17]
 %17 = Call: id: 1, idepth: 0, %15, %6, %16 [, %18]
-%7 = Load: %6, %5 [, %9, %16]
-%4 = Arg: 0, %0 [, %6]
-%5 = Local: 8, %2 [, %6, %21, %7]
-%2 = Mem: %0 [, %6, %5]
+%8 = Load: %6, %4 [, %9, %16]
+%5 = Arg: 0, %0 [, %6]
+%4 = Local: 8, %2 [, %6, %21, %8]
+%2 = Mem: %0 [, %6, %4]
 %1 = Entry: idepth: 0, %0 [, %11, %6]
 %24 = CallEnd: idepth: 0, %23 [, %29, %25, %26]
 %12 = Then: idepth: 0, %11 [, %28]
 %27 = BinOp: iadd, %20, %26 [, %32]
 %13 = CInt: 1 [, %32, %16]
 %25 = Mem: %24 [, %31]
-%6 = Store: %1, %2, %5, %4 [, %31, %7, %17]
+%6 = Store: %1, %2, %4, %5 [, %31, %8, %17]
 %29 = Jmp: idepth: 0, %24 [, %30]
 %28 = Jmp: idepth: 0, %12 [, %30]
 %32 = Phi: %30, %13, %27 [, %14]
@@ -79,20 +79,20 @@ fn(x: uint): uint {
 %14 = Return: idepth: 0, %30, %31, %32 []
 
 ======== OPTIMIZED SON ========
-%33 = ImmBinOp: imm: -2, op: addi64, %4 [, %23]
+%33 = ImmBinOp: imm: -2, op: addi64, %5 [, %23]
 %19 = Mem: %18 [, %23]
-%8 = CInt: 2 [, %34]
+%7 = CInt: 2 [, %34]
 %18 = CallEnd: idepth: 0, %17 [, %19, %20, %23]
-%35 = ImmBinOp: imm: -1, op: addi64, %4 [, %17]
+%35 = ImmBinOp: imm: -1, op: addi64, %5 [, %17]
 %15 = Then: idepth: 0, %34 [, %17]
-%4 = Arg: 0, %0 [, %33, %34, %35]
+%5 = Arg: 0, %0 [, %33, %34, %35]
 %1 = Entry: idepth: 0, %0 [, %34]
 %23 = Call: id: 1, idepth: 0, %18, %19, %33 [, %24]
-%34 = IfOp: swapped: false, op: jgtu, idepth: 0, %1, %4, %8 [, %12, %15]
+%34 = IfOp: swapped: false, op: jgtu, idepth: 0, %1, %5, %7 [, %12, %15]
 %26 = Ret: 0, %24 [, %27]
 %20 = Ret: 0, %18 [, %27]
 %17 = Call: id: 1, idepth: 0, %15, %2, %35 [, %18]
-%0 = Start: idepth: 0 [, %1, %2, %4]
+%0 = Start: idepth: 0 [, %1, %2, %5]
 %24 = CallEnd: idepth: 0, %23 [, %25, %26, %29]
 %12 = Then: idepth: 0, %34 [, %28]
 %27 = BinOp: iadd, %20, %26 [, %32]
@@ -109,20 +109,20 @@ fn(x: uint): uint {
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
 %1 = Entry: idepth: 1, %0
-  %4 = Arg: 0
-  %8 = CInt: 2
-  %34 = IfOp: swapped: false, op: jgtu, idepth: 2, %4, %8
+  %5 = Arg: 0
+  %7 = CInt: 2
+  %34 = IfOp: swapped: false, op: jgtu, idepth: 2, %5, %7
 %12 = Then: idepth: 3, %34
   %13 = CInt: 1
   %36 = MachMove: %13
   %28 = Jmp: idepth: 4
 %15 = Then: idepth: 3, %34
-  %35 = ImmBinOp: imm: -1, op: addi64, %4
+  %35 = ImmBinOp: imm: -1, op: addi64, %5
   %17 = Call: id: 1, idepth: 4, %2, %35
 %18 = CallEnd: idepth: 5, %17
   %19 = Mem
   %20 = Ret: 0
-  %33 = ImmBinOp: imm: -2, op: addi64, %4
+  %33 = ImmBinOp: imm: -2, op: addi64, %5
   %23 = Call: id: 1, idepth: 6, %19, %33
 %24 = CallEnd: idepth: 7, %23
   %25 = Mem

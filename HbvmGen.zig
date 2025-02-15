@@ -7,7 +7,8 @@ allocs: []u8 = undefined,
 
 const std = @import("std");
 const isa = @import("isa.zig");
-const Func = @import("Func.zig").Func(Mach);
+const graph = @import("Func.zig");
+const Func = graph.Func(Mach);
 const Regalloc = @import("Regalloc.zig");
 const HbvmGen = @This();
 
@@ -41,24 +42,30 @@ pub const Mach = union(enum) {
     },
     // [?Cfg, lhs, rhs]
     IfOp: extern struct {
-        base: Func.Cfg = .{},
+        base: graph.Cfg = .{},
         op: isa.Op,
         swapped: bool,
     },
     // [?Cfg, mem, ptr]
     Ld: extern struct {
-        base: Func.Load,
+        base: graph.Load,
         offset: i64,
     },
     // [?Cfg, mem, ptr, value, ...antideps]
     St: extern struct {
-        base: Func.Store,
+        base: graph.Store,
         offset: i64,
+    },
+    // [?Cfg, mem, dst, src, ...antideps]
+    BlockCpy: extern struct {
+        base: graph.Store = .{},
+        size: u16,
     },
 
     pub const idealize = HbvmGen.idealize;
 
     pub const is_basic_block_end = .{.IfOp};
+    pub const is_mem_op = .{.BlockCpy};
 
     pub fn isSwapped(node: *Func.Node) bool {
         return node.kind == .IfOp and node.extra(.IfOp).swapped;
@@ -204,6 +211,13 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 const extra = no.extra(.Local);
                 self.emit(.addi64, .{ self.reg(no), .stack_addr, extra.* });
             },
+            .Load => {
+                if (inps[0].?.kind == .Local) {
+                    self.emit(.ld, .{ self.reg(no), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).*)), 8 });
+                } else {
+                    self.emit(.ld, .{ self.reg(no), self.reg(inps[0]), 0, 8 });
+                }
+            },
             .Store => {
                 if (inps[0].?.kind == .Local) {
                     self.emit(.st, .{ self.reg(inps[1]), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).*)), 8 });
@@ -211,12 +225,8 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     self.emit(.st, .{ self.reg(inps[1]), self.reg(inps[0]), 0, 8 });
                 }
             },
-            .Load => {
-                if (inps[0].?.kind == .Local) {
-                    self.emit(.ld, .{ self.reg(no), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).*)), 8 });
-                } else {
-                    self.emit(.ld, .{ self.reg(no), self.reg(inps[0]), 0, 8 });
-                }
+            .BlockCpy => {
+                self.emit(.bmc, .{ self.reg(inps[0]), self.reg(inps[1]), no.extra(.BlockCpy).size });
             },
             .BinOp => {
                 const mone = std.math.maxInt(u64);
@@ -348,7 +358,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 const extra = no.extra(.IfOp);
                 const args = .{ self.reg(inps[0]), self.reg(inps[1]), 0 };
                 switch (extra.op) {
-                    inline .jgtu, .jltu, .jlts, .jgts, .jne => |op| self.emit(op, args),
+                    inline .jgtu, .jltu, .jlts, .jgts, .jne, .jeq => |op| self.emit(op, args),
                     else => unreachable,
                 }
             },
@@ -396,20 +406,20 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
 
                 const cycle_sentinel = 255;
 
-                var graph = std.EnumArray(isa.Reg, isa.Reg).initFill(.null);
+                var reg_graph = std.EnumArray(isa.Reg, isa.Reg).initFill(.null);
                 for (moves.items) |m| {
-                    graph.set(m[0], m[1]);
+                    reg_graph.set(m[0], m[1]);
                 }
 
                 o: for (moves.items) |*m| {
                     var c = m[1];
                     while (c != m[0]) {
-                        c = graph.get(c);
+                        c = reg_graph.get(c);
                         m[2] += 1;
                         if (c == .null) continue :o;
                     }
 
-                    graph.set(c, .null);
+                    reg_graph.set(c, .null);
                     m[2] = cycle_sentinel;
                 }
 
@@ -421,13 +431,13 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
 
                 for (moves.items) |*m| {
                     if (m[2] == cycle_sentinel) {
-                        while (graph.get(m[1]) != .null) {
+                        while (reg_graph.get(m[1]) != .null) {
                             self.emit(.swa, .{ m[0], m[1] });
                             m[0] = m[1];
-                            std.mem.swap(isa.Reg, graph.getPtr(m[1]), &m[1]);
+                            std.mem.swap(isa.Reg, reg_graph.getPtr(m[1]), &m[1]);
                         }
-                        graph.set(m[1], m[1]);
-                    } else if (graph.get(m[1]) != m[1]) {
+                        reg_graph.set(m[1], m[1]);
+                    } else if (reg_graph.get(m[1]) != m[1]) {
                         self.emit(.cp, .{ m[0], m[1] });
                     }
                 }
@@ -458,10 +468,6 @@ fn reg(self: HbvmGen, n: ?*Func.Node) isa.Reg {
 
 fn emit(self: HbvmGen, comptime op: isa.Op, args: anytype) void {
     self.out.appendSlice(&isa.pack(op, args)) catch unreachable;
-}
-
-pub fn filter(_: @This(), node: *Func.Node) bool {
-    return Func.isCfg(node.kind);
 }
 
 pub fn reloc(self: *HbvmGen, sub_offset: u8, arg: isa.Arg) Reloc {
@@ -521,6 +527,12 @@ pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node
             });
             bop.data_type = node.data_type;
             return bop;
+        }
+    }
+
+    if (node.kind == .MemCpy) {
+        if (inps[4].?.kind == .CInt) {
+            return func.addNode(.BlockCpy, &.{ null, inps[1], inps[2], inps[3] }, .{ .size = @intCast(inps[4].?.extra(.CInt).*) });
         }
     }
 

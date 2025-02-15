@@ -290,7 +290,7 @@ do_stuff := fn(v: ^uint): uint {
 }
 ```
 
-#### structs
+#### structs 1
 ```hb
 Ty := struct {
 	a: int,
