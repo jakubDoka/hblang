@@ -43,9 +43,6 @@ fn(): uint {
   %11 = Load: %9, %5
   %12 = Return: idepth: 0, %9, %11
 
-======== REGISTER SELECTION ========
-{ 1, 2, 1, 1, 1, 1, 1 }
-
 ======== SOURCE ========
 fn(v: ^uint): uint {
 	if *v == 0 {
@@ -112,9 +109,6 @@ fn(v: ^uint): uint {
 %19 = Region: idepth: 0, %17, %18
   %25 = Phi: %23, %24
   %14 = Return: idepth: 0, %2, %25
-
-======== REGISTER SELECTION ========
-{ 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1 }
 
 ======== CODEGEN ========
 main:

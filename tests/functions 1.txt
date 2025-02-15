@@ -52,9 +52,6 @@ fn(): uint {
   %14 = BinOp: iadd, %8, %13
   %15 = Return: idepth: 0, %12, %14
 
-======== REGISTER SELECTION ========
-{ 1, 1, 1, 1, 2, 1, 1, 2, 1, 1 }
-
 ======== SOURCE ========
 fn(x: uint): uint {
 	return x + 2
@@ -86,9 +83,6 @@ fn(x: uint): uint {
   %11 = ImmBinOp: imm: 2, op: addi64, %5
   %10 = Return: idepth: 0, %2, %11
 
-======== REGISTER SELECTION ========
-{ 1, 1, 1 }
-
 ======== SOURCE ========
 fn(x: uint): uint {
 	return x + 1
@@ -119,9 +113,6 @@ fn(x: uint): uint {
   %5 = Arg: 0
   %11 = ImmBinOp: imm: 1, op: addi64, %5
   %10 = Return: idepth: 0, %2, %11
-
-======== REGISTER SELECTION ========
-{ 1, 1, 1 }
 
 ======== CODEGEN ========
 main:

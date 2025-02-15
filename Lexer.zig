@@ -48,6 +48,8 @@ pub const Lexeme = enum(u8) {
     @"break",
     @"continue",
     @"struct",
+    true,
+    false,
     @"_",
     @".{",
     @".(",

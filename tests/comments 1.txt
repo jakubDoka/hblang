@@ -33,9 +33,6 @@ fn(): uint {
   %7 = CInt: 0
   %8 = Return: idepth: 0, %6, %7
 
-======== REGISTER SELECTION ========
-{ 1, 1, 1, 1 }
-
 ======== SOURCE ========
 fn(comment: void): void return /* comment evaluates to void */
 ======== UNSCHEDULED SON ========
@@ -55,9 +52,6 @@ fn(comment: void): void return /* comment evaluates to void */
 %0 = Start: idepth: 0
 %1 = Entry: idepth: 0, %0
   %5 = Return: idepth: 0, %2
-
-======== REGISTER SELECTION ========
-{ 1 }
 
 ======== CODEGEN ========
 main:

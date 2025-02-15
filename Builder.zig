@@ -68,6 +68,13 @@ pub fn end(self: *Builder, _: BuildToken) void {
     self.func.end = self.ret.?;
 }
 
+pub fn isPinned(_: *Builder, vl: *Node) bool {
+    if (vl.kind != .Local) return true;
+    return for (vl.outputs()) |o| {
+        if (o.kind == .Scope) break true;
+    } else false;
+}
+
 // #MEM ========================================================================
 
 pub fn addLocal(self: *Builder, size: usize) SpecificNode(.Local) {

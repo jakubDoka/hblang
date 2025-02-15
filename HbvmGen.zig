@@ -1,4 +1,4 @@
-out: *std.ArrayList(u8),
+out: std.ArrayList(u8),
 local_relocs: std.ArrayList(BlockReloc) = undefined,
 global_relocs: std.ArrayList(GloblReloc),
 funcs: std.ArrayList(FuncData),
@@ -8,13 +8,15 @@ allocs: []u8 = undefined,
 const std = @import("std");
 const isa = @import("isa.zig");
 const graph = @import("Func.zig");
-const Func = graph.Func(Mach);
+const Mach = @import("Mach.zig");
+const Func = graph.Func(Node);
 const Regalloc = @import("Regalloc.zig");
 const HbvmGen = @This();
 
 pub const dir = "inputs";
 
 const FuncData = struct {
+    name: []const u8,
     offset: u32 = 0,
 };
 
@@ -34,7 +36,7 @@ const Reloc = struct {
     operand: isa.Arg,
 };
 
-pub const Mach = union(enum) {
+pub const Node = union(enum) {
     // [?Cfg, lhs]
     ImmBinOp: extern struct {
         op: isa.Op,
@@ -48,31 +50,31 @@ pub const Mach = union(enum) {
     },
     // [?Cfg, mem, ptr]
     Ld: extern struct {
-        base: graph.Load,
+        base: graph.Load = .{},
         offset: i64,
     },
     // [?Cfg, mem, ptr, value, ...antideps]
     St: extern struct {
-        base: graph.Store,
+        base: graph.Store = .{},
         offset: i64,
     },
-    // [?Cfg, mem, dst, src, ...antideps]
+    // [?Cfg, mem, src, dst, ...antideps]
     BlockCpy: extern struct {
-        base: graph.Store = .{},
+        base: graph.MemCpy = .{},
         size: u16,
     },
 
     pub const idealize = HbvmGen.idealize;
 
     pub const is_basic_block_end = .{.IfOp};
-    pub const is_mem_op = .{.BlockCpy};
+    pub const is_mem_op = .{ .BlockCpy, .St, .Ld };
 
     pub fn isSwapped(node: *Func.Node) bool {
         return node.kind == .IfOp and node.extra(.IfOp).swapped;
     }
 };
 
-pub fn init(out: *std.ArrayList(u8)) HbvmGen {
+pub fn init(out: std.ArrayList(u8)) HbvmGen {
     return .{
         .out = out,
         .global_relocs = .init(out.allocator),
@@ -84,12 +86,6 @@ pub fn deinit(self: *HbvmGen) void {
     self.global_relocs.deinit();
     self.funcs.deinit();
     self.* = undefined;
-}
-
-pub fn finalize(self: *HbvmGen) void {
-    for (self.global_relocs.items) |r| {
-        self.doReloc(r.rel, self.funcs.items[r.dest].offset);
-    }
 }
 
 pub fn doReloc(self: *HbvmGen, rel: Reloc, dest: i64) void {
@@ -105,7 +101,40 @@ pub fn doReloc(self: *HbvmGen, rel: Reloc, dest: i64) void {
     @memcpy(self.out.items[location..][0..size], @as(*const [8]u8, @ptrCast(&jump))[0..size]);
 }
 
-pub fn emitFunc(self: *HbvmGen, func: *Func, id: u32, allocs: []u8) void {
+pub fn link(self: *HbvmGen) void {
+    for (self.global_relocs.items) |r| {
+        self.doReloc(r.rel, self.funcs.items[r.dest].offset);
+    }
+    self.global_relocs.items.len = 0;
+}
+
+pub fn finalize(self: *HbvmGen) std.ArrayList(u8) {
+    self.link();
+
+    defer self.deinit();
+    return self.out;
+}
+
+pub fn disasm(self: *HbvmGen, out: std.io.AnyWriter, colors: std.io.tty.Config) void {
+    self.link();
+
+    var arena = std.heap.ArenaAllocator.init(self.out.allocator);
+    defer arena.deinit();
+    var map = std.AutoHashMap(u32, []const u8).init(arena.allocator());
+    for (self.funcs.items) |gf| {
+        map.put(gf.offset, gf.name) catch unreachable;
+    }
+    isa.disasm(self.out.items, arena.allocator(), &map, out, colors) catch unreachable;
+}
+
+pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
+    opts.optimizations.execute(Node, func);
+
+    const allocs = Regalloc.ralloc(Node, func);
+
+    const id = opts.id;
+    const name = opts.name;
+
     const tmp, const lock = func.beginTmpAlloc();
     defer lock.unlock();
 
@@ -113,6 +142,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: u32, allocs: []u8) void {
         self.funcs.resize(id + 1) catch unreachable;
     }
     self.funcs.items[id].offset = @intCast(self.out.items.len);
+    self.funcs.items[id].name = name;
 
     self.block_offsets = tmp.alloc(i32, func.block_count) catch unreachable;
     self.local_relocs = .init(tmp);
@@ -151,14 +181,11 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, id: u32, allocs: []u8) void {
             self.emit(.addi64, .{ .stack_addr, .stack_addr, @as(u64, @bitCast(-stack_size)) });
         }
 
-        var i: usize = 0;
-        for (func.params) |arg| {
-            _ = arg; // autofix
+        for (0..func.params.len) |i| {
             const argn = for (postorder[0].base.outputs()) |o| {
                 if (o.kind == .Arg and o.extra(.Arg).* == i) break o;
             } else continue; // is dead
             self.emit(.cp, .{ self.reg(argn), isa.Reg.arg(i) });
-            i += 1;
         }
         break :prelude;
     }
@@ -212,21 +239,42 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 self.emit(.addi64, .{ self.reg(no), .stack_addr, extra.* });
             },
             .Load => {
+                const size: u16 = @intCast(no.data_type.size());
                 if (inps[0].?.kind == .Local) {
-                    self.emit(.ld, .{ self.reg(no), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).*)), 8 });
+                    self.emit(.ld, .{ self.reg(no), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).*)), size });
                 } else {
-                    self.emit(.ld, .{ self.reg(no), self.reg(inps[0]), 0, 8 });
+                    self.emit(.ld, .{ self.reg(no), self.reg(inps[0]), 0, size });
+                }
+            },
+            .Ld => {
+                const size: u16 = @intCast(no.data_type.size());
+                const off = no.extra(.Ld).offset;
+                if (inps[0].?.kind == .Local) {
+                    self.emit(.ld, .{ self.reg(no), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).*)) + off, size });
+                } else {
+                    self.emit(.ld, .{ self.reg(no), self.reg(inps[0]), off, size });
                 }
             },
             .Store => {
+                const size: u16 = @intCast(inps[1].?.data_type.size());
                 if (inps[0].?.kind == .Local) {
-                    self.emit(.st, .{ self.reg(inps[1]), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).*)), 8 });
+                    self.emit(.st, .{ self.reg(inps[1]), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).*)), size });
                 } else {
-                    self.emit(.st, .{ self.reg(inps[1]), self.reg(inps[0]), 0, 8 });
+                    self.emit(.st, .{ self.reg(inps[1]), self.reg(inps[0]), 0, size });
+                }
+            },
+            .St => {
+                const size: u16 = @intCast(inps[1].?.data_type.size());
+                const off = no.extra(.St).offset;
+                if (inps[0].?.kind == .Local) {
+                    self.emit(.st, .{ self.reg(inps[1]), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).*)) + off, size });
+                } else {
+                    self.emit(.st, .{ self.reg(inps[1]), self.reg(inps[0]), off, size });
                 }
             },
             .BlockCpy => {
-                self.emit(.bmc, .{ self.reg(inps[0]), self.reg(inps[1]), no.extra(.BlockCpy).size });
+                // not a mistake, the bmc is retarded
+                self.emit(.bmc, .{ self.reg(inps[1]), self.reg(inps[0]), no.extra(.BlockCpy).size });
             },
             .BinOp => {
                 const mone = std.math.maxInt(u64);
@@ -458,7 +506,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
     }
 }
 
-fn binop(self: HbvmGen, comptime op: isa.Op, n: *Func.Node) void {
+fn binop(self: *HbvmGen, comptime op: isa.Op, n: *Func.Node) void {
     self.emit(op, .{ self.reg(n), self.reg(n.inputs()[1]), self.reg(n.inputs()[2]) });
 }
 
@@ -466,7 +514,7 @@ fn reg(self: HbvmGen, n: ?*Func.Node) isa.Reg {
     return @enumFromInt(self.allocs[n.?.schedule]);
 }
 
-fn emit(self: HbvmGen, comptime op: isa.Op, args: anytype) void {
+fn emit(self: *HbvmGen, comptime op: isa.Op, args: anytype) void {
     self.out.appendSlice(&isa.pack(op, args)) catch unreachable;
 }
 
@@ -521,18 +569,39 @@ pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node
                 else => break :b,
             };
 
-            const bop = func.addNode(.ImmBinOp, &.{ null, node.inputs()[1] }, .{
-                .op = instr,
-                .imm = imm,
-            });
-            bop.data_type = node.data_type;
-            return bop;
+            return func.addTypedNode(
+                .ImmBinOp,
+                node.data_type,
+                &.{ null, node.inputs()[1] },
+                .{ .op = instr, .imm = imm },
+            );
         }
     }
 
     if (node.kind == .MemCpy) {
         if (inps[4].?.kind == .CInt) {
-            return func.addNode(.BlockCpy, &.{ null, inps[1], inps[2], inps[3] }, .{ .size = @intCast(inps[4].?.extra(.CInt).*) });
+            return func.addNode(.BlockCpy, &.{ inps[0], inps[1], inps[2], inps[3] }, .{ .size = @intCast(inps[4].?.extra(.CInt).*) });
+        }
+    }
+
+    if (node.kind == .Store) {
+        if (node.base().kind == .ImmBinOp) {
+            return func.addNode(
+                .St,
+                &.{ inps[0], inps[1], node.base().inputs()[1], inps[3] },
+                .{ .offset = node.base().extra(.ImmBinOp).imm },
+            );
+        }
+    }
+
+    if (node.kind == .Load) {
+        if (node.base().kind == .ImmBinOp) {
+            return func.addTypedNode(
+                .Ld,
+                node.data_type,
+                &.{ inps[0], inps[1], node.base().inputs()[1] },
+                .{ .offset = node.base().extra(.ImmBinOp).imm },
+            );
         }
     }
 

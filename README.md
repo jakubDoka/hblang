@@ -8,6 +8,76 @@ git submodule update --init --recursive                                         
 git submodule update --remote --rebase -- vendored-tests/lily/                  # update a
 ```
 
+### progress
+
+- [ ] control flow
+  - [x] functions
+    - [ ] inlining
+    - [ ] comptime parameters
+  - [x] ifs
+	- [ ] comptime
+  - [x] loops
+	- [ ] comptime
+	- [x] break
+	- [x] continue
+	- [ ] labels
+  - [x] blocks
+    - [ ] labels
+  - [ ] match
+    - [ ] comptime
+  - [ ] `die`
+- [ ] types
+  - [ ] `idk`
+  - [x] integers/bool
+	- [ ] binary operators
+	  - [x] `- + * / == != <= >= < >`
+	  - [ ] others
+	- [ ] unary operators
+	  - [x] `-`
+	  - [ ] `! ~`
+  - [ ] floats
+	- [ ] binary operators
+	  - [ ] all
+	- [ ] unary operators
+	  - [ ] all
+  - [x] structs
+	- [ ] indexing
+	- [ ] packed
+	- [ ] constructors
+		- [x] dictionary
+		- [ ] tuple
+	- [ ] default values
+	- [ ] scope
+  - [ ] enums
+	- [ ] specific values
+	- [ ] backing integer
+	- [ ] scope
+  - [ ] unions
+    - [ ] tag + customizable
+	- [ ] scope
+  - [ ] pointers
+    - [ ] slicing
+  - [ ] slices
+    - [ ] known size (arrays)
+    - [ ] field access
+  - [ ] tuples
+- [ ] directives
+  - [ ] `@use(<string>)`
+  - [ ] `@TypeOf(<expr>)`
+  - [ ] `@as(<ty>, <expr>)`
+  - [ ] `@intcast(<expr>)`
+  - [ ] `@sizeof(<ty>), @alignof(<ty>)`
+  - [ ] `@bitcast(<expr>)`
+  - [ ] `@eca(...<expr>)`
+  - [ ] `@embed(<string>)`
+  - [ ] `@inline(<func>, ...<args>)`
+  - [ ] `@lenof(<ty>)`
+  - [ ] `@kindof(<ty>)`
+  - [ ] `@Any()`
+  - [ ] `@error(...<expr>)`
+  - [ ] `@ChildOf(<ty>)`
+  - [ ] `@target("<pat>")`
+
 ### Tour
 
 #### main fn 1
@@ -330,3 +400,28 @@ odher_pass := fn(t: Ty2): Ty2 {
 	return t
 }
 ```
+
+#### structs 2
+```hb
+Ty := struct {
+	a: int,
+	b: int,
+	c: int,
+}
+
+main := fn(): int {
+	a := Ty.{a: 0, b: 0, c: 0}
+	b := Ty.{a: 1, b: 1, c: 1}
+	swap(&a, &b)
+	return a.a + a.b + a.c
+}
+
+swap := fn(a: ^Ty, b: ^Ty): void {
+	tmp := *a;
+	*a = *b;
+	*b = tmp
+}
+```
+
+## Contributing
+

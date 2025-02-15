@@ -34,9 +34,6 @@ fn(): uint {
   %8 = Ret: 0
   %9 = Return: idepth: 0, %7, %8
 
-======== REGISTER SELECTION ========
-{ 1, 1, 1, 1, 1 }
-
 ======== SOURCE ========
 fn(n: uint): uint {
 	b := 1
@@ -134,9 +131,6 @@ fn(n: uint): uint {
   %49 = MachMove: %28
   %52 = MachMove: %43
   %38 = Jmp: idepth: 6
-
-======== REGISTER SELECTION ========
-{ 1, 2, 3, 1, 1, 1, 1, 2, 3, 4, 1, 1, 2, 4, 1, 1, 1, 1 }
 
 ======== CODEGEN ========
 main:

@@ -40,9 +40,6 @@ fn(): uint {
   %18 = ImmBinOp: imm: -2, op: addi64, %17
   %16 = Return: idepth: 0, %2, %18
 
-======== REGISTER SELECTION ========
-{ 1, 1, 1, 1 }
-
 ======== CODEGEN ========
 main:
     li64 $13, 1

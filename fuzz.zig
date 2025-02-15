@@ -28,9 +28,10 @@ const func_count = 1;
 const max_depth = 6;
 const max_arg_count = 5;
 const return_types = [_]Types.Id{ .void, .uint };
-const arguments = [_]Types.Id{ .uint, .ptr };
+const arguments = [_]Types.Id{.uint};
 const variable_types = [_]Types.Id{.uint};
-const binops = [_]Lexer.Lexeme{ .@"+", .@"-", .@"*", .@"==", .@"!=" };
+const binops = [_]Lexer.Lexeme{ .@"+", .@"-", .@"*" };
+const cmps = [_]Lexer.Lexeme{ .@"==", .@"!=" };
 
 fn fuzz(seed: usize, arena: std.mem.Allocator) !void {
     std.debug.print("seed: {}\n", .{seed});
@@ -109,10 +110,11 @@ const ExprGen = struct {
 
         const table = [_]Entry{
             .{ 40, genConst, .uint, 0 },
+            .{ 30, genBool, .bool, 0 },
             .{ 30, genBinOp, .uint, 1 },
+            .{ 30, genCmp, .bool, 1 },
             .{ 10, genVariable, .void, 1 },
             .{ 10, genIdent, .uint, 0 },
-            .{ 10, genPtrIdent, .ptr, 0 },
             .{ 10, genBlock, .void, 2 },
             .{ 10, genAssignment, .void, 1 },
             .{ 10, genIf, .void, 2 },
@@ -153,7 +155,7 @@ const ExprGen = struct {
 
     fn genIf(self: *ExprGen) !void {
         try self.out.writeAll("if ");
-        try self.genExpr(.uint);
+        try self.genExpr(.bool);
         try self.genBlock();
         if (self.rng.boolean()) {
             try self.out.writeAll("else");
@@ -163,7 +165,7 @@ const ExprGen = struct {
 
     fn genAssignment(self: *ExprGen) !void {
         if (self.variables.items.len == 0) {
-            try self.genConst();
+            try self.out.writeAll("{}");
             return;
         }
 
@@ -215,9 +217,19 @@ const ExprGen = struct {
         try self.out.print("{}", .{self.rng.intRangeLessThan(usize, 0, 10)});
     }
 
+    fn genBool(self: *ExprGen) !void {
+        try self.out.print("{}", .{self.rng.boolean()});
+    }
+
     fn genBinOp(self: *ExprGen) !void {
         try self.genExpr(.uint);
         try self.out.writeAll(@tagName(binops[self.rng.intRangeLessThan(usize, 0, binops.len)]));
+        try self.genExpr(.uint);
+    }
+
+    fn genCmp(self: *ExprGen) !void {
+        try self.genExpr(.uint);
+        try self.out.writeAll(@tagName(cmps[self.rng.intRangeLessThan(usize, 0, cmps.len)]));
         try self.genExpr(.uint);
     }
 
@@ -239,7 +251,7 @@ const ExprGen = struct {
 
         for (0..self.rng.intRangeLessThan(usize, 1, 7)) |_| {
             try self.genExpr(.void);
-            try self.out.writeAll(";");
+            try self.out.writeAll(";\n");
         }
         if (force_return) try self.genReturn();
 

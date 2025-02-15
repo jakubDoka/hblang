@@ -58,6 +58,7 @@ pub const Kind = enum {
     UnOp,
     BinOp,
     Integer,
+    Bool,
 };
 
 pub const Expr = union(Kind) {
@@ -140,6 +141,10 @@ pub const Expr = union(Kind) {
         rhs: Id,
     },
     Integer: Pos,
+    Bool: struct {
+        pos: Pos,
+        value: bool,
+    },
 };
 
 pub const Pos = packed struct(Pos.Repr) {
@@ -409,6 +414,8 @@ const Parser = struct {
                     try self.parseExpr(),
             } },
             .Integer => .{ .Integer = Pos.init(token.pos) },
+            .true => .{ .Bool = .{ .value = true, .pos = Pos.init(token.pos) } },
+            .false => .{ .Bool = .{ .value = false, .pos = Pos.init(token.pos) } },
             else => |k| std.debug.panic("{any}", .{k}),
         });
     }
@@ -714,6 +721,9 @@ const Fmt = struct {
             .Integer => |i| {
                 const int_token = Lexer.peek(self.ast.source, i.index);
                 try self.buf.appendSlice(self.ast.source[int_token.pos..int_token.end]);
+            },
+            .Bool => |b| {
+                try self.buf.appendSlice(if (b.value) "true" else "false");
             },
         }
     }

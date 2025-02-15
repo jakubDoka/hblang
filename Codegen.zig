@@ -144,6 +144,7 @@ inline fn mki(ty: Types.Id) Value {
 
 pub const Ctx = struct {
     ty: ?Types.Id = null,
+    loc: ?*Node = null,
 };
 
 pub fn emitTyped(self: *Codegen, ty: Types.Id, expr: Ast.Id) Value.Mode {
@@ -201,8 +202,15 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         // #VALUES =====================================================================
         .Integer => |e| {
             const ty = ctx.ty orelse .uint;
+            if (!ty.isInteger()) {
+                self.report(expr, "{} can not be constructed as integer literal", .{ty});
+                return .never;
+            }
             const parsed = std.fmt.parseInt(i64, self.tokenSrc(e.index), 10) catch unreachable;
             return mkv(ty, self.bl.addIntImm(self.abi.categorize(ty).ByValue, parsed));
+        },
+        .Bool => |e| {
+            return mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(e.value)));
         },
         .Ident => |e| {
             const vari = self.scope.items[e.id.index];
@@ -223,7 +231,7 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             const struct_ty = ty.data().Struct;
 
             const struct_file = self.types.getFile(struct_ty.file);
-            const local = self.bl.addLocal(ty.size());
+            const local = ctx.loc orelse self.bl.addLocal(ty.size());
 
             // TODO: diagnostics
 
@@ -239,14 +247,12 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     continue;
                 };
 
-                var value = Value{ .ty = ftype, .id = self.emitTyped(ftype, field.value) };
+                const off = self.bl.addFieldOffset(local, @intCast(offset));
+                var value = self.emit(.{ .ty = ftype, .loc = off }, field.value);
 
-                if (self.abi.categorize(value.ty) != .ByValue) {
-                    const off = self.bl.addFieldOffset(local, @intCast(offset));
-                    _ = self.bl.addFixedMemCpy(off, value.id.Ptr, value.ty.size());
-                } else {
+                if (self.abi.categorize(value.ty) == .ByValue) {
                     self.ensureLoaded(&value);
-                    self.bl.addFieldStore(local, @intCast(offset), value.id.Value);
+                    _ = self.bl.addStore(off, value.id.Value);
                 }
             }
 
@@ -296,27 +302,32 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             else => std.debug.panic("{any}\n", .{self.getAst(expr)}),
         },
         .BinOp => |e| switch (e.op) {
-            .@":=" => {
-                var value = self.emit(.{}, e.rhs);
-                const local = if (self.abi.categorize(value.ty) != .ByValue) b: {
-                    const local = self.bl.addLocal(value.ty.size());
-                    _ = self.bl.addFixedMemCpy(local, value.id.Ptr, value.ty.size());
-                    break :b local;
-                } else b: {
+            inline .@":=", .@":" => |t| {
+                var value = if (t == .@":=")
+                    self.emit(.{}, e.rhs)
+                else b: {
+                    const assign = self.getAst(e.rhs).BinOp;
+                    std.debug.assert(assign.op == .@"=");
+                    const ty = self.types.resolveTy(self.file, assign.lhs);
+                    var vl = self.emit(.{ .ty = ty }, assign.rhs);
+                    self.typeCheck(assign.rhs, &vl, ty);
+                    break :b vl;
+                };
+
+                const local = if (self.abi.categorize(value.ty) != .ByValue)
+                    if (self.bl.isPinned(value.id.Ptr)) b: {
+                        const local = self.bl.addLocal(value.ty.size());
+                        _ = self.bl.addFixedMemCpy(local, value.id.Ptr, value.ty.size());
+                        break :b local;
+                    } else b: {
+                        break :b value.id.Ptr;
+                    }
+                else b: {
                     self.ensureLoaded(&value);
                     break :b self.bl.addSpill(value.id.Value);
                 };
+
                 self.scope.append(.{ .ty = value.ty }) catch unreachable;
-                self.bl.pushScopeValue(local);
-                return .{};
-            },
-            .@":" => {
-                const assign = self.getAst(e.rhs).BinOp;
-                std.debug.assert(assign.op == .@"=");
-                const ty = self.types.resolveTy(self.file, assign.lhs);
-                const value = self.emitTyped(ty, assign.rhs).Value;
-                const local = self.bl.addSpill(value);
-                self.scope.append(.{ .ty = ty }) catch unreachable;
                 self.bl.pushScopeValue(local);
                 return .{};
             },
@@ -326,12 +337,16 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             } else {
                 const loc = self.emit(.{}, e.lhs);
                 var val = Value{ .ty = loc.ty, .id = self.emitTyped(loc.ty, e.rhs) };
-                self.ensureLoaded(&val);
-                _ = self.bl.addStore(loc.id.Ptr, val.id.Value);
+                if (self.abi.categorize(loc.ty) == .ByValue) {
+                    self.ensureLoaded(&val);
+                    _ = self.bl.addStore(loc.id.Ptr, val.id.Value);
+                } else {
+                    _ = self.bl.addFixedMemCpy(loc.id.Ptr, val.id.Ptr, @intCast(loc.ty.size()));
+                }
                 return .{};
             },
             else => {
-                var lhs = self.emit(ctx, e.lhs);
+                var lhs = self.emit(if (e.op.isComparison()) .{} else ctx, e.lhs);
                 var rhs = self.emit(.{ .ty = lhs.ty }, e.rhs);
                 if (e.op.isComparison() and lhs.ty.isSigned() != rhs.ty.isSigned())
                     self.report(e.lhs, "mixed sign comparison ({} {})", .{ lhs.ty, rhs.ty });
@@ -362,8 +377,9 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             return .{};
         },
         .If => |e| {
-            const cond = self.emitTyped(.bool, e.cond).Value;
-            var if_builder = self.bl.addIfAndBeginThen(cond);
+            var cond = Value{ .ty = .bool, .id = self.emitTyped(.bool, e.cond) };
+            self.ensureLoaded(&cond);
+            var if_builder = self.bl.addIfAndBeginThen(cond.id.Value);
             _ = self.emitTyped(.void, e.then);
             const end_else = if_builder.beginElse(&self.bl);
             _ = self.emitTyped(.void, e.else_);
@@ -425,15 +441,26 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             }
 
             for (self.getAstSlice(e.args), fdata.args) |arg, ty| {
-                const tys, const offs = self.abi.categorize(ty).dataTypes();
-                const value = self.emitTyped(ty, arg);
-                if (value == .Imaginary) continue;
-                for (tys.slice(), offs.slice()) |t, off| {
-                    args.arg_slots[i] = if (value == .Ptr)
-                        self.bl.addFieldLoad(value.Ptr, @intCast(off), t)
-                    else
-                        value.Value;
-                    i += 1;
+                var value = Value{ .ty = ty, .id = self.emitTyped(ty, arg) };
+                switch (self.abi.categorize(ty)) {
+                    .Imaginary => continue,
+                    .ByValue => {
+                        self.ensureLoaded(&value);
+                        args.arg_slots[i] = value.id.Value;
+                        i += 1;
+                    },
+                    .ByValuePair => {
+                        const tys, const offs = self.abi.categorize(ty).dataTypes();
+                        for (tys.slice(), offs.slice()) |t, off| {
+                            args.arg_slots[i] =
+                                self.bl.addFieldLoad(value.id.Ptr, @intCast(off), t);
+                            i += 1;
+                        }
+                    },
+                    .ByRef => {
+                        args.arg_slots[i] = value.id.Ptr;
+                        i += 1;
+                    },
                 }
             }
 

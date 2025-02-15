@@ -34,9 +34,6 @@ fn(): uint {
   %8 = Ret: 0
   %9 = Return: idepth: 0, %7, %8
 
-======== REGISTER SELECTION ========
-{ 1, 1, 1, 1, 1 }
-
 ======== SOURCE ========
 fn(x: uint): uint {
 	if x <= 2 {
@@ -134,9 +131,6 @@ fn(x: uint): uint {
   %31 = Phi: %2, %25
   %38 = Phi: %36, %37
   %14 = Return: idepth: 0, %31, %38
-
-======== REGISTER SELECTION ========
-{ 1, 2, 1, 1, 1, 1, 2, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 }
 
 ======== CODEGEN ========
 main:

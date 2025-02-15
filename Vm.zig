@@ -186,7 +186,8 @@ pub fn run(self: *Vm, ctx: anytype) !isa.Op {
         },
         .bmc => {
             const args = try self.readArgs(.bmc, ctx);
-            try ctx.memmove(self.regs.get(args.arg0), self.regs.get(args.arg1), args.arg2);
+            // yep, retarded
+            try ctx.memmove(self.regs.get(args.arg1), self.regs.get(args.arg0), args.arg2);
         },
         .brc => {
             const args = try self.readArgs(.brc, ctx);

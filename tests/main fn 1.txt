@@ -22,9 +22,6 @@ fn(): uint {
   %4 = CInt: 42
   %5 = Return: idepth: 0, %2, %4
 
-======== REGISTER SELECTION ========
-{ 1, 1 }
-
 ======== CODEGEN ========
 main:
     li64 $13, 42

@@ -98,6 +98,10 @@ pub const Id = enum(usize) {
         return @enumFromInt(@as(usize, @bitCast(Repr{ .flag = @intFromEnum(flg), .data = @intCast(dt) })));
     }
 
+    pub fn isInteger(self: Id) bool {
+        return self.isUnsigned() or self.isSigned();
+    }
+
     pub fn isUnsigned(self: Id) bool {
         return @intFromEnum(Id.u8) <= @intFromEnum(self) and @intFromEnum(self) <= @intFromEnum(Id.uint);
     }

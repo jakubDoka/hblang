@@ -89,7 +89,7 @@ pub const Builtin = union(enum) {
     // [?Cfg, thread, ptr, value, ...antideps]
     Store: Store,
     // [?Cfg, thread, dst, src, size, ...antideps]
-    MemCpy: Store,
+    MemCpy: MemCpy,
     // [?Cfg, ...lane]
     Split,
     // [?Cfg, ...lane]
@@ -132,10 +132,13 @@ pub const Cfg = extern struct {
 };
 pub const Load = extern struct {};
 pub const Store = extern struct {};
+pub const MemCpy = extern struct {
+    base: Store = .{},
+};
 
 const mod = @This();
 
-fn _Func(comptime Mach: type) struct {
+fn _Func(comptime MachNode: type) struct {
     arena: std.heap.ArenaAllocator,
     tmp_arena: std.heap.ArenaAllocator,
     interner: InternMap(Uninserter) = .{},
@@ -152,7 +155,7 @@ fn _Func(comptime Mach: type) struct {
         return std.hash_map.HashMapUnmanaged(InternedNode, void, Context, 70);
     }
 
-    pub const all_classes = std.meta.fields(Builtin) ++ std.meta.fields(Mach);
+    pub const all_classes = std.meta.fields(Builtin) ++ std.meta.fields(MachNode);
 
     const Self = @This();
 
@@ -194,7 +197,7 @@ fn _Func(comptime Mach: type) struct {
     pub const Kind = b: {
         var builtin = @typeInfo(std.meta.Tag(Builtin));
         builtin.@"enum".tag_type = u16;
-        const field_ref = std.meta.fields(std.meta.Tag(Mach));
+        const field_ref = std.meta.fields(std.meta.Tag(MachNode));
         var fields = field_ref[0..field_ref.len].*;
         for (&fields, builtin.@"enum".fields.len..) |*f, i| {
             f.value = i;
@@ -206,7 +209,7 @@ fn _Func(comptime Mach: type) struct {
     pub fn bakeBitset(comptime name: []const u8) std.EnumSet(Kind) {
         var set = std.EnumSet(Kind).initEmpty();
         if (@hasDecl(Builtin, name)) for (@field(Builtin, name)) |k| set.insert(k);
-        if (@hasDecl(Mach, name)) for (@field(Mach, name)) |k| set.insert(k);
+        if (@hasDecl(MachNode, name)) for (@field(MachNode, name)) |k| set.insert(k);
         return set;
     }
 
@@ -270,7 +273,7 @@ fn _Func(comptime Mach: type) struct {
     }
 
     fn callCheck(comptime name: []const u8, value: anytype) bool {
-        return @hasDecl(Mach, name) and @field(Mach, name)(value);
+        return @hasDecl(MachNode, name) and @field(MachNode, name)(value);
     }
 
     const is_basic_block_start = bakeBitset("is_basic_block_start");
@@ -668,6 +671,12 @@ fn _Func(comptime Mach: type) struct {
         self.addDep(to, root);
     }
 
+    pub fn addTypedNode(self: *Self, comptime kind: Kind, ty: DataType, inputs: []const ?*Node, extra: ClassFor(kind)) *Node {
+        const node = self.addNode(kind, inputs, extra);
+        node.data_type = ty;
+        return node;
+    }
+
     pub fn addNode(self: *Self, comptime kind: Kind, inputs: []const ?*Node, extra: ClassFor(kind)) *Node {
         const node = self.addNodeUntyped(kind, inputs, extra);
         if (kind == .Phi) node.data_type = node.inputs()[1].?.data_type;
@@ -951,7 +960,7 @@ fn _Func(comptime Mach: type) struct {
 
                             // TODO: might be dangerosa
                             for (t.mem().outputs()) |o| switch (o.kind) {
-                                .Store, .Call => {
+                                .Call => {
                                     const sdef = o.cfg0().?;
                                     var lcar = late_scheds[o.id].?;
                                     while (lcar != sdef.idom()) : (lcar = lcar.idom()) {
@@ -978,7 +987,20 @@ fn _Func(comptime Mach: type) struct {
                                 },
                                 .Local => {},
                                 .Return => {},
-                                else => if (!o.isLoad()) std.debug.panic("{any}", .{o.kind}),
+                                else => if (o.isLoad()) {} else if (o.isStore()) {
+                                    const sdef = o.cfg0().?;
+                                    var lcar = late_scheds[o.id].?;
+                                    while (lcar != sdef.idom()) : (lcar = lcar.idom()) {
+                                        if (lcar.ext.antidep == t.id) {
+                                            lca = lcar.findLca(lca);
+                                            if (lca == sdef) {
+                                                self.addDep(o, t);
+                                                self.addUse(t, o);
+                                            }
+                                            break;
+                                        }
+                                    }
+                                } else std.debug.panic("{any}", .{o.kind}),
                             };
 
                             break :add_antideps;
@@ -1145,11 +1167,7 @@ fn _Func(comptime Mach: type) struct {
         }
     }
 
-    pub fn stripDeadCode(self: *Self) void {
-        _ = self; // autofix
-    }
-
-    pub fn iterPeeps(self: *Self, strategy: fn (*Self, *Node, *WorkList) ?*Node) void {
+    pub fn iterPeeps(self: *Self, max_peep_iters: usize, strategy: fn (*Self, *Node, *WorkList) ?*Node) void {
         const tmp, const lock = self.beginTmpAlloc();
         defer lock.unlock();
 
@@ -1166,7 +1184,11 @@ fn _Func(comptime Mach: type) struct {
             }
         }
 
+        var fuel = max_peep_iters;
         while (worklist.pop()) |t| {
+            if (fuel == 0) break;
+            fuel -= 1;
+
             if (t.id == std.math.maxInt(u16)) continue;
 
             if (t.outputs().len == 0 and t != self.end) {
@@ -1227,7 +1249,7 @@ fn _Func(comptime Mach: type) struct {
         for (self.root.outputs()[1].outputs()) |o| {
             if (o.kind == .Local) b: {
                 for (o.outputs()) |oo| {
-                    if ((!oo.isStore() and !oo.isLoad()) or oo.base() != o) {
+                    if ((!oo.isStore() and !oo.isLoad()) or oo.base() != o or oo.isSub(MemCpy)) {
                         o.schedule = std.math.maxInt(u16);
                         break :b;
                     }
@@ -1537,7 +1559,7 @@ fn _Func(comptime Mach: type) struct {
             }
         }
 
-        return if (@hasDecl(Mach, "idealize")) Mach.idealize(self, node, worklist) else null;
+        return if (@hasDecl(MachNode, "idealize")) MachNode.idealize(self, node, worklist) else null;
     }
 
     pub fn noAlias(lbase: *Node, rbase: *Node) bool {

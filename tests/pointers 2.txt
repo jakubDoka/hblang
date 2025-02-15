@@ -69,9 +69,6 @@ fn(): uint {
   %21 = BinOp: isub, %19, %20
   %22 = Return: idepth: 0, %18, %21
 
-======== REGISTER SELECTION ========
-{ 1, 2, 3, 4, 1, 1, 1, 1, 1, 2, 1, 1 }
-
 ======== SOURCE ========
 fn(a: ^uint, b: ^uint): void {
 	tmp := *b;
@@ -123,9 +120,6 @@ fn(a: ^uint, b: ^uint): void {
   %17 = Store: %2, %8, %16, %16
   %20 = Store: %17, %5, %11
   %21 = Return: idepth: 0, %20
-
-======== REGISTER SELECTION ========
-{ 1, 2, 3, 4, 1, 1, 1 }
 
 ======== CODEGEN ========
 main:

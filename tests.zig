@@ -8,6 +8,7 @@ pub const HbvmGen = @import("HbvmGen.zig");
 pub const Types = @import("Types.zig");
 pub const Regalloc = @import("Regalloc.zig");
 pub const Func = @import("Func.zig");
+pub const Mach = @import("Mach.zig");
 
 test {
     _ = @import("zig-out/tests.zig");
@@ -64,11 +65,8 @@ pub fn testBuilder(name: []const u8, code: []const u8, gpa: std.mem.Allocator, o
 
     _ = types.addFunc(.root, ast.posOf(main), fn_ast);
 
-    var out = std.ArrayList(u8).init(gpa);
-    defer out.deinit();
-
-    var gen = HbvmGen.init(&out);
-    defer gen.deinit();
+    var hbgen = HbvmGen.init(std.ArrayList(u8).init(gpa));
+    var gen = Mach.init(&hbgen);
 
     while (types.func_worklist.popOrNull()) |func| {
         try header("SOURCE", output, colors);
@@ -81,37 +79,31 @@ pub fn testBuilder(name: []const u8, code: []const u8, gpa: std.mem.Allocator, o
         try bf.build(.root, func);
         defer bf.bl.func.reset();
 
-        const fnc: *Func.Func(HbvmGen.Mach) = @ptrCast(&bf.bl.func);
+        const fnc: *Func.Func(HbvmGen.Node) = @ptrCast(&bf.bl.func);
         fnc.fmtUnscheduled(output, colors);
 
         try header("OPTIMIZED SON", output, colors);
-        fnc.iterPeeps(@TypeOf(fnc.*).idealizeDead);
+        fnc.iterPeeps(1000, @TypeOf(fnc.*).idealizeDead);
         fnc.mem2reg();
-        fnc.iterPeeps(@TypeOf(fnc.*).idealize);
+        fnc.iterPeeps(1000, @TypeOf(fnc.*).idealize);
         fnc.fmtUnscheduled(output, colors);
 
         try header("SCHEDULED SON", output, colors);
         fnc.gcm();
         fnc.fmtScheduled(output, colors);
 
-        try header("REGISTER SELECTION", output, colors);
-        const allocs = Regalloc.ralloc(HbvmGen.Mach, fnc);
-        try output.print("{any}\n", .{allocs});
-
-        gen.emitFunc(fnc, @intFromEnum(func), allocs);
+        const tf = types.get(func);
+        gen.emitFunc(&bf.bl.func, .{
+            .id = @intFromEnum(func),
+            .name = types.getFile(tf.file).tokenSrc(tf.name.index),
+            .optimizations = .none,
+        });
     }
 
     try header("CODEGEN", output, colors);
-    {
-        gen.finalize();
-        var arena = std.heap.ArenaAllocator.init(gpa);
-        defer arena.deinit();
-        var map = std.AutoHashMap(u32, []const u8).init(arena.allocator());
-        for (types.funcs.items, gen.funcs.items) |tf, df| {
-            map.put(df.offset, types.getFile(tf.file).tokenSrc(tf.name.index)) catch unreachable;
-        }
-        try isa.disasm(out.items, gpa, &map, output, colors);
-    }
+    gen.disasm(output.any(), colors);
+    var out = gen.finalize();
+    defer out.deinit();
 
     var vm = Vm{};
     vm.fuel = 1000;
