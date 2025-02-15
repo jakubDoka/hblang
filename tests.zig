@@ -1,5 +1,4 @@
 const std = @import("std");
-pub const isa = @import("isa.zig");
 pub const Ast = @import("parser.zig");
 pub const Vm = @import("Vm.zig");
 pub const Builder = @import("Builder.zig");
@@ -7,7 +6,7 @@ pub const Codegen = @import("Codegen.zig");
 pub const HbvmGen = @import("HbvmGen.zig");
 pub const Types = @import("Types.zig");
 pub const Regalloc = @import("Regalloc.zig");
-pub const Func = @import("Func.zig");
+pub const graph = @import("graph.zig");
 pub const Mach = @import("Mach.zig");
 
 test {
@@ -28,16 +27,16 @@ pub fn runTest(name: []const u8, code: []const u8) !void {
     errdefer {
         const stderr = std.io.getStdErr();
         const colors = std.io.tty.detectConfig(stderr);
-        testBuilder(name, code, gpa, stderr.writer(), colors) catch unreachable;
+        testBuilder(name, code, gpa, stderr.writer().any(), colors) catch unreachable;
     }
 
-    try testBuilder(name, code, gpa, out.writer(), .no_color);
+    try testBuilder(name, code, gpa, out.writer().any(), .no_color);
 
     try checkOrUpdatePrintTest(name, out.items);
 }
 
 pub fn runVendoredTest(path: []const u8) !void {
-    _ = path; // autofix
+    _ = path;
 }
 
 inline fn header(comptime name: []const u8, writer: anytype, corors: std.io.tty.Config) !void {
@@ -48,7 +47,13 @@ inline fn header(comptime name: []const u8, writer: anytype, corors: std.io.tty.
     try corors.setColor(writer, .reset);
 }
 
-pub fn testBuilder(name: []const u8, code: []const u8, gpa: std.mem.Allocator, output: anytype, colors: std.io.tty.Config) !void {
+pub fn testBuilder(
+    name: []const u8,
+    code: []const u8,
+    gpa: std.mem.Allocator,
+    output: std.io.AnyWriter,
+    colors: std.io.tty.Config,
+) !void {
     var ast = try Ast.init(name, code, gpa);
     defer ast.deinit(gpa);
 
@@ -60,8 +65,8 @@ pub fn testBuilder(name: []const u8, code: []const u8, gpa: std.mem.Allocator, o
     var types = Types.init(gpa, &.{ast});
     defer types.deinit();
 
-    var bf = Codegen.init(gpa, &types, output.any());
-    defer bf.deinit();
+    var cg = Codegen.init(gpa, &types, output);
+    defer cg.deinit();
 
     _ = types.addFunc(.root, ast.posOf(main), fn_ast);
 
@@ -76,10 +81,10 @@ pub fn testBuilder(name: []const u8, code: []const u8, gpa: std.mem.Allocator, o
         try output.writeAll(out_fmt.items);
 
         try header("UNSCHEDULED SON", output, colors);
-        try bf.build(.root, func);
-        defer bf.bl.func.reset();
+        try cg.build(.root, func);
+        defer cg.bl.func.reset();
 
-        const fnc: *Func.Func(HbvmGen.Node) = @ptrCast(&bf.bl.func);
+        const fnc: *graph.Func(HbvmGen.Node) = @ptrCast(&cg.bl.func);
         fnc.fmtUnscheduled(output, colors);
 
         try header("OPTIMIZED SON", output, colors);
@@ -94,7 +99,7 @@ pub fn testBuilder(name: []const u8, code: []const u8, gpa: std.mem.Allocator, o
         fnc.fmtScheduled(output, colors);
 
         const tf = types.get(func);
-        gen.emitFunc(&bf.bl.func, .{
+        gen.emitFunc(&cg.bl.func, .{
             .id = @intFromEnum(func),
             .name = types.getFile(tf.file).tokenSrc(tf.name.index),
             .optimizations = .none,
@@ -102,7 +107,7 @@ pub fn testBuilder(name: []const u8, code: []const u8, gpa: std.mem.Allocator, o
     }
 
     try header("CODEGEN", output, colors);
-    gen.disasm(output.any(), colors);
+    gen.disasm(output, colors);
     var out = gen.finalize();
     defer out.deinit();
 
@@ -113,7 +118,7 @@ pub fn testBuilder(name: []const u8, code: []const u8, gpa: std.mem.Allocator, o
     try header("EXECUTION", output, colors);
     var stack: [1024 * 10]u8 = undefined;
     vm.regs.set(.stack_addr, stack.len);
-    var ctx = Vm.SafeContext(@TypeOf(output)){
+    var ctx = Vm.SafeContext{
         .writer = output,
         .color_cfg = colors,
         .code = out.items,
@@ -184,53 +189,6 @@ pub fn runDiff(gpa: std.mem.Allocator, tmp: std.testing.TmpDir, old: []const u8,
         if (stderr.len > 0) std.debug.print("stderr:\n{s}", .{stderr});
     }
     try std.testing.expectEqual(0, exit);
-}
-
-fn testCodegen(name: []const u8, code: []const u8) !void {
-    const static = struct {
-        var vm = Vm{};
-    };
-
-    const gpa = std.testing.allocator;
-
-    var ast = try Ast.init(name, code, gpa);
-    defer ast.deinit(gpa);
-
-    const files = [_]Ast{ast};
-
-    var codegen = try Builder.init(gpa);
-    defer codegen.deinit();
-
-    codegen.files = &files;
-
-    try codegen.generate();
-
-    var output = std.ArrayList(u8).init(gpa);
-    defer output.deinit();
-
-    var exec_log = std.ArrayList(u8).init(gpa);
-    defer exec_log.deinit();
-
-    errdefer std.debug.print("\n{s}\n", .{exec_log.items});
-
-    if (codegen.errors.items.len != 0) {
-        try output.appendSlice("\nERRORS\n");
-        try output.appendSlice(codegen.errors.items);
-    } else {
-        try output.writer().print("\nDISASM\n", .{});
-        try isa.disasm(codegen.output.items, &output, false);
-
-        errdefer exec_log.deinit();
-        try exec_log.writer().print("EXECUTION\n", .{});
-        static.vm.fuel = 10000;
-        static.vm.ip = @intFromPtr(codegen.output.items.ptr);
-        static.vm.log_buffer = &exec_log;
-        var ctx = Vm.UnsafeCtx{};
-        try std.testing.expectEqual(.tx, static.vm.run(&ctx));
-
-        try output.writer().print("\nREGISTERS\n", .{});
-        try output.writer().print("$1: {d}\n", .{static.vm.regs.get(.ret)});
-    }
 }
 
 fn checkOrUpdatePrintTest(name: []const u8, output: []const u8) !void {

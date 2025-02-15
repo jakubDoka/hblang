@@ -1,4 +1,4 @@
-const graph = @import("Func.zig");
+const graph = @import("graph.zig");
 const std = @import("std");
 
 pub fn gcm(comptime MachNode: type, self: *graph.Func(MachNode)) void {

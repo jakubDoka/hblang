@@ -1,5 +1,5 @@
 const std = @import("std");
-const Func = @import("Func.zig");
+const Func = @import("graph.zig");
 
 pub fn ralloc(comptime Mach: type, func: *Func.Func(Mach)) []u8 {
     const Fn = Func.Func(Mach);

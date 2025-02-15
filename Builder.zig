@@ -4,29 +4,31 @@ root_mem: *Func.Node = undefined,
 ret: ?*Func.Node = undefined,
 
 const std = @import("std");
-const graph = @import("Func.zig");
+const graph = @import("graph.zig");
 const Ast = @import("parser.zig");
 const Types = @import("Types.zig");
 const Builder = @This();
 const ScopeEntry = void;
 const Scope = void;
 
-pub const Func = graph.Func(Mach);
-pub const Node = Func.Node;
+pub const Func = graph.Func(Node);
+pub const BuildNode = Func.Node;
 pub const Kind = Func.Kind;
 
 pub const DataType = graph.DataType;
 pub const BinOp = graph.BinOp;
 pub const UnOp = graph.UnOp;
-pub const Mach = union(enum) {
+pub const Node = union(enum) {
     // [Cfg, mem, ...values]
     Scope,
 
     pub const is_temporary = .{.Scope};
+
+    pub const i_know_the_api = {};
 };
 
 pub fn SpecificNode(comptime _: Kind) type {
-    return *Node;
+    return *BuildNode;
 }
 
 pub fn init(gpa: std.mem.Allocator) Builder {
@@ -64,11 +66,11 @@ pub fn addParam(self: *Builder, idx: usize) SpecificNode(.Arg) {
 
 pub fn end(self: *Builder, _: BuildToken) void {
     if (self.ret == null) self.addReturn(&.{});
-    self.func.tmp_alloc.unlock();
+    self.func.during_tmp_alloc.unlock();
     self.func.end = self.ret.?;
 }
 
-pub fn isPinned(_: *Builder, vl: *Node) bool {
+pub fn isPinned(_: *Builder, vl: *BuildNode) bool {
     if (vl.kind != .Local) return true;
     return for (vl.outputs()) |o| {
         if (o.kind == .Scope) break true;
@@ -83,17 +85,17 @@ pub fn addLocal(self: *Builder, size: usize) SpecificNode(.Local) {
     return local;
 }
 
-pub fn addLoad(self: *Builder, addr: *Node, ty: DataType) SpecificNode(.Store) {
+pub fn addLoad(self: *Builder, addr: *BuildNode, ty: DataType) SpecificNode(.Store) {
     const val = self.func.addNode(.Load, &.{ null, self.memory(), addr }, .{});
     val.data_type = ty;
     return val;
 }
 
-pub fn addFieldLoad(self: *Builder, base: *Node, offset: i64, ty: DataType) *Node {
+pub fn addFieldLoad(self: *Builder, base: *BuildNode, offset: i64, ty: DataType) *BuildNode {
     return self.addLoad(self.addFieldOffset(base, offset), ty);
 }
 
-pub fn addStore(self: *Builder, addr: *Node, value: *Node) SpecificNode(.Store) {
+pub fn addStore(self: *Builder, addr: *BuildNode, value: *BuildNode) SpecificNode(.Store) {
     std.debug.assert(value.data_type.size() != 0);
     const mem = self.memory();
     const ctrl = self.control();
@@ -102,21 +104,21 @@ pub fn addStore(self: *Builder, addr: *Node, value: *Node) SpecificNode(.Store) 
     return store;
 }
 
-pub fn addFieldOffset(self: *Builder, base: *Node, offset: i64) *Node {
+pub fn addFieldOffset(self: *Builder, base: *BuildNode, offset: i64) *BuildNode {
     return if (offset != 0) self.addBinOp(.iadd, .int, base, self.addIntImm(.int, offset)) else base;
 }
 
-pub fn addFieldStore(self: *Builder, base: *Node, offset: i64, value: *Node) void {
+pub fn addFieldStore(self: *Builder, base: *BuildNode, offset: i64, value: *BuildNode) void {
     _ = self.addStore(self.addFieldOffset(base, offset), value);
 }
 
-pub fn addSpill(self: *Builder, value: *Node) SpecificNode(.Local) {
+pub fn addSpill(self: *Builder, value: *BuildNode) SpecificNode(.Local) {
     const local = self.addLocal(value.data_type.size());
     _ = self.addStore(local, value);
     return local;
 }
 
-pub fn addFixedMemCpy(self: *Builder, dst: *Node, src: *Node, size: usize) SpecificNode(.MemCpy) {
+pub fn addFixedMemCpy(self: *Builder, dst: *BuildNode, src: *BuildNode, size: usize) SpecificNode(.MemCpy) {
     const mem = self.memory();
     const ctrl = self.control();
     const siz = self.addIntImm(.int, @intCast(size));
@@ -133,13 +135,13 @@ pub fn addIntImm(self: *Builder, ty: DataType, value: i64) SpecificNode(.CInt) {
     return val;
 }
 
-pub fn addBinOp(self: *Builder, op: BinOp, ty: DataType, lhs: *Node, rhs: *Node) SpecificNode(.BinOp) {
+pub fn addBinOp(self: *Builder, op: BinOp, ty: DataType, lhs: *BuildNode, rhs: *BuildNode) SpecificNode(.BinOp) {
     const val = self.func.addNode(.BinOp, &.{ null, lhs, rhs }, op);
     val.data_type = ty;
     return val;
 }
 
-pub fn addUnOp(self: *Builder, op: UnOp, ty: DataType, oper: *Node) SpecificNode(.BinOp) {
+pub fn addUnOp(self: *Builder, op: UnOp, ty: DataType, oper: *BuildNode) SpecificNode(.BinOp) {
     const val = self.func.addNode(.UnOp, &.{ null, oper }, op);
     val.data_type = ty;
     return val;
@@ -157,7 +159,7 @@ pub fn control(self: *Builder) *Func.Node {
 
 pub const scope_value_start = 2;
 
-pub fn pushScopeValue(self: *Builder, value: *Node) void {
+pub fn pushScopeValue(self: *Builder, value: *BuildNode) void {
     const scope = self.scope.?;
     if (scope.input_ordered_len == scope.input_len) {
         const new_cap = scope.input_len * 2;
@@ -178,7 +180,7 @@ pub inline fn getScopeValue(self: *Builder, index: usize) *Func.Node {
     return self._readScopeValue(scope_value_start + index);
 }
 
-pub fn getScopeValues(scope: SpecificNode(.Scope)) []*Node {
+pub fn getScopeValues(scope: SpecificNode(.Scope)) []*BuildNode {
     std.debug.assert(scope.kind == .Scope);
     for (scope.input_base[0..scope.input_ordered_len]) |e| std.debug.assert(e != null);
     return @ptrCast(scope.input_base[0..scope.input_ordered_len]);
@@ -188,7 +190,7 @@ pub fn _readScopeValue(self: *Builder, index: usize) *Func.Node {
     return getScopeValueMulty(&self.func, self.scope.?, index);
 }
 
-pub fn getScopeValueMulty(func: *Func, scope: *Node, index: usize) *Func.Node {
+pub fn getScopeValueMulty(func: *Func, scope: *BuildNode, index: usize) *Func.Node {
     const values = getScopeValues(scope);
     return switch (values[index].kind) {
         .Scope => {
@@ -268,7 +270,7 @@ pub fn isUnreachable(self: *Builder) bool {
 }
 
 pub const If = struct {
-    if_node: *Node,
+    if_node: *BuildNode,
     saved_branch: union {
         else_: SpecificNode(.Scope),
         then: ?SpecificNode(.Scope),
@@ -300,7 +302,7 @@ pub const If = struct {
     }
 };
 
-pub fn addIfAndBeginThen(self: *Builder, cond: *Node) If {
+pub fn addIfAndBeginThen(self: *Builder, cond: *BuildNode) If {
     const else_ = self.cloneScope();
     const if_node = self.func.addNode(.If, &.{ self.control(), cond }, .{});
     self.func.setInputNoIntern(self.scope.?, 0, self.func.addNode(.Then, &.{if_node}, .{}));
@@ -374,7 +376,7 @@ pub const Loop = struct {
     }
 };
 
-pub fn jmp(self: *Builder, ctrl: *Node) SpecificNode(.Jmp) {
+pub fn jmp(self: *Builder, ctrl: *BuildNode) SpecificNode(.Jmp) {
     return self.func.addNode(.Jmp, &.{ctrl}, .{});
 }
 
@@ -393,16 +395,16 @@ pub fn addLoopAndBeginBody(self: *Builder) Loop {
 
 pub const CallArgs = struct {
     params: []const DataType,
-    arg_slots: []*Node,
+    arg_slots: []*BuildNode,
     returns: []const DataType,
-    return_slots: []*Node,
+    return_slots: []*BuildNode,
     hint: enum { @"construst this with Builder.allocCallArgs()" },
 };
 
 const arg_prefix_len = 2;
 
 pub fn allocCallArgs(self: *Builder, params: []const DataType, returns: []const DataType) CallArgs {
-    const args = self.func.getTmpArena().alloc(?*Node, arg_prefix_len + params.len + returns.len) catch unreachable;
+    const args = self.func.getTmpArena().alloc(?*BuildNode, arg_prefix_len + params.len + returns.len) catch unreachable;
     return .{
         .params = params,
         .returns = returns,
@@ -416,7 +418,7 @@ pub fn addCall(
     self: *Builder,
     arbitrary_call_id: u32,
     args_with_initialized_arg_slots: CallArgs,
-) []const *Node {
+) []const *BuildNode {
     const args = args_with_initialized_arg_slots;
     for (args.arg_slots, args.params) |ar, pr| std.debug.assert(ar.data_type == pr);
     const full_args = (args.arg_slots.ptr - arg_prefix_len)[0 .. arg_prefix_len + args.params.len];
@@ -437,7 +439,7 @@ pub fn addCall(
     return args.return_slots;
 }
 
-pub fn addReturn(self: *Builder, values: []const *Node) void {
+pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
     for (values, self.func.returns) |val, rtt| if (val.data_type != rtt) std.debug.panic("{s} != {s}", .{ @tagName(val.data_type), @tagName(rtt) });
 
     if (self.ret) |ret| {
@@ -454,7 +456,7 @@ pub fn addReturn(self: *Builder, values: []const *Node) void {
     } else {
         const return_prefix = 2;
         // this must be enough, if not, just copy paste the function
-        var buf: [16]?*Node = undefined;
+        var buf: [16]?*BuildNode = undefined;
         buf[0] = self.control();
         buf[1] = self.memory();
         @memcpy(buf[return_prefix..][0..values.len], values);

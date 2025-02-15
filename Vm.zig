@@ -10,47 +10,45 @@ const debug = @import("builtin").mode == .Debug;
 
 const one: u64 = 1;
 
-pub fn SafeContext(comptime Writer: type) type {
-    return struct {
-        color_cfg: std.io.tty.Config,
-        writer: Writer,
-        code: []const u8,
-        memory: []u8,
+pub const SafeContext = struct {
+    color_cfg: std.io.tty.Config,
+    writer: std.io.AnyWriter,
+    code: []const u8,
+    memory: []u8,
 
-        const check_ops = true;
-        const assume_no_div_by_zero = false;
-        const Self = @This();
+    const check_ops = true;
+    const assume_no_div_by_zero = false;
+    const Self = @This();
 
-        fn read(self: *Self, src: usize, dst: []u8) !void {
-            @memcpy(dst, self.memory[src..][0..dst.len]);
+    fn read(self: *Self, src: usize, dst: []u8) !void {
+        @memcpy(dst, self.memory[src..][0..dst.len]);
+    }
+
+    fn write(self: *Self, src: []u8, dst: usize) !void {
+        @memcpy(self.memory[dst..][0..src.len], src);
+    }
+
+    fn setColor(self: *Self, color: std.io.tty.Color) !void {
+        try self.color_cfg.setColor(self.writer, color);
+    }
+
+    fn memmove(self: *Self, dst: usize, src: usize, len: usize) !void {
+        const srcp = self.memory[src..];
+        const dstp = self.memory[dst..];
+        if (dst + len <= src or src + len <= dst) {
+            @memcpy(dstp[0..len], srcp[0..len]);
+        } else if (dst <= src) {
+            std.mem.copyForwards(u8, dstp[0..len], srcp[0..len]);
+        } else {
+            std.mem.copyBackwards(u8, dstp[0..len], srcp[0..len]);
         }
+    }
 
-        fn write(self: *Self, src: []u8, dst: usize) !void {
-            @memcpy(self.memory[dst..][0..src.len], src);
-        }
-
-        fn setColor(self: *Self, color: std.io.tty.Color) !void {
-            try self.color_cfg.setColor(self.writer, color);
-        }
-
-        fn memmove(self: *Self, dst: usize, src: usize, len: usize) !void {
-            const srcp = self.memory[src..];
-            const dstp = self.memory[dst..];
-            if (dst + len <= src or src + len <= dst) {
-                @memcpy(dstp[0..len], srcp[0..len]);
-            } else if (dst <= src) {
-                std.mem.copyForwards(u8, dstp[0..len], srcp[0..len]);
-            } else {
-                std.mem.copyBackwards(u8, dstp[0..len], srcp[0..len]);
-            }
-        }
-
-        fn progRead(self: *Self, comptime T: type, src: usize) !*align(1) const T {
-            const mem = self.code[src..][0..@sizeOf(T)];
-            return @ptrCast(mem.ptr);
-        }
-    };
-}
+    fn progRead(self: *Self, comptime T: type, src: usize) !*align(1) const T {
+        const mem = self.code[src..][0..@sizeOf(T)];
+        return @ptrCast(mem.ptr);
+    }
+};
 
 pub fn UnsafeCtx(comptime Writer: type) type {
     return struct {

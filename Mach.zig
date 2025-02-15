@@ -1,21 +1,76 @@
+test init {
+    const ExampleMachine = struct {
+        const Func = graph.Func(Node);
+
+        pub const Node = union(enum) {
+            CustomNode: bool,
+
+            pub const is_basic_block_start: []const Func.Kind = &.{};
+            pub const is_basic_block_end: []const Func.Kind = &.{.CustomNode};
+            pub const is_pinned: []const Func.Kind = &.{.CustomNode};
+
+            pub fn isInterned(kind: Func.Kind) bool {
+                // this is not a good idea since its supposed to be a control flow
+                return kind == .CustomNode;
+            }
+
+            pub fn isSwapped(node: *Func.Node) bool {
+                // means the output basic blocks should be reversed for reducing jumps
+                return node.kind == .CustomNode and node.extra(.CustomNode).*;
+            }
+
+            pub fn idealize(func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
+                _ = worklist;
+                // relpace node whih the return value
+                if (node.kind == .Start)
+                    return func.addNode(.CustomNode, &.{}, false);
+
+                return null;
+            }
+        };
+
+        pub fn emitFunc(self: *@This(), func: *Func, opts: EmitOptions) void {
+            opts.optimizations.execute(Node, func);
+            _ = self;
+            unreachable;
+        }
+
+        pub fn finalize(self: *@This()) std.ArrayList(u8) {
+            _ = self;
+            unreachable;
+        }
+
+        pub fn disasm(self: *@This(), out: std.io.AnyWriter, colors: std.io.tty.Config) void {
+            _ = self;
+            _ = out;
+            _ = colors;
+            unreachable;
+        }
+    };
+
+    var em = ExampleMachine{};
+    _ = init(&em);
+}
+
 data: *anyopaque,
-_emitFunc: *const fn (self: *anyopaque, func: *Func, opts: EmitOptions) void,
+_emitFunc: *const fn (self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void,
 _finalize: *const fn (self: *anyopaque) std.ArrayList(u8),
 _disasm: *const fn (self: *anyopaque, out: std.io.AnyWriter, colors: std.io.tty.Config) void,
 
 const std = @import("std");
-const graph = @import("Func.zig");
+const graph = @import("graph.zig");
 const Builder = @import("Builder.zig");
-const Func = Builder.Func;
+const BuilderFunc = Builder.Func;
 const Mach = @This();
 
 pub fn init(data: anytype) Mach {
     const Type = @TypeOf(data.*);
+    if (!@hasDecl(Type, "Node")) @compileError("expected `pub const Node = enum(union) { ... }` to be present");
 
     return .{
         .data = data,
         ._emitFunc = struct {
-            fn emitFunc(self: *anyopaque, func: *Func, opts: EmitOptions) void {
+            fn emitFunc(self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void {
                 const slf: *Type = @alignCast(@ptrCast(self));
                 const fnc: *graph.Func(Type.Node) = @alignCast(@ptrCast(func));
                 slf.emitFunc(fnc, opts);
@@ -43,14 +98,15 @@ pub const EmitOptions = struct {
         dead_code_fuel: usize = 1000,
         mem2reg: bool = true,
         peephole_fuel: usize = 1000,
+        do_gcm: bool = true,
 
-        pub const none = @This(){ .dead_code_fuel = 0, .mem2reg = false, .peephole_fuel = 0 };
+        pub const none = @This(){
+            .mem2reg = false,
+            .peephole_fuel = 0,
+            .do_gcm = false,
+        };
 
         pub fn execute(self: @This(), comptime MachNode: type, func: *graph.Func(MachNode)) void {
-            if (self.dead_code_fuel != 0) {
-                func.iterPeeps(self.dead_code_fuel, @TypeOf(func.*).idealizeDead);
-            }
-
             if (self.mem2reg) {
                 func.mem2reg();
             }
@@ -58,20 +114,28 @@ pub const EmitOptions = struct {
             if (self.peephole_fuel != 0) {
                 func.iterPeeps(self.peephole_fuel, @TypeOf(func.*).idealize);
             }
+
+            if (self.do_gcm) {
+                func.gcm();
+            }
         }
     } = .{},
 };
 
-/// Translates the function into machine code and ideally alos relocations
-///  - func: functions has `gcm()`
-pub fn emitFunc(self: Mach, func: *Func, opts: EmitOptions) void {
+/// generate apropriate final output for a function
+///
+/// this also runs optimization passes
+pub fn emitFunc(self: Mach, func: *BuilderFunc, opts: EmitOptions) void {
     self._emitFunc(self.data, func, opts);
 }
 
+/// package the final output (.eg object file)
 pub fn finalize(self: Mach) std.ArrayList(u8) {
     return self._finalize(self.data);
 }
 
+/// visualize already compiled code, its best to include different colors
+/// for registers for better readability
 pub fn disasm(self: Mach, out: std.io.AnyWriter, colors: std.io.tty.Config) void {
     self._disasm(self.data, out, colors);
 }

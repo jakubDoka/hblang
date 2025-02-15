@@ -73,7 +73,7 @@ pub const Lexeme = enum(u8) {
         };
     }
 
-    pub fn toBinOp(self: Lexeme, ty: Types.Id) @import("Func.zig").BinOp {
+    pub fn toBinOp(self: Lexeme, ty: Types.Id) @import("graph.zig").BinOp {
         const unsigned = ty.isUnsigned();
         return switch (self) {
             .@"+" => .iadd,

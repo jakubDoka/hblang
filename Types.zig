@@ -6,7 +6,7 @@ source: []const Ast,
 
 const std = @import("std");
 const Ast = @import("parser.zig");
-const graph = @import("Func.zig");
+const graph = @import("graph.zig");
 const Lexer = @import("Lexer.zig");
 const Types = @This();
 

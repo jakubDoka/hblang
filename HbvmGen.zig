@@ -7,9 +7,10 @@ allocs: []u8 = undefined,
 
 const std = @import("std");
 const isa = @import("isa.zig");
-const graph = @import("Func.zig");
+const graph = @import("graph.zig");
 const Mach = @import("Mach.zig");
 const Func = graph.Func(Node);
+const Kind = Func.Kind;
 const Regalloc = @import("Regalloc.zig");
 const HbvmGen = @This();
 
@@ -66,12 +67,14 @@ pub const Node = union(enum) {
 
     pub const idealize = HbvmGen.idealize;
 
-    pub const is_basic_block_end = .{.IfOp};
-    pub const is_mem_op = .{ .BlockCpy, .St, .Ld };
+    pub const is_basic_block_end: []const Kind = &.{.IfOp};
+    pub const is_mem_op: []const Kind = &.{ .BlockCpy, .St, .Ld };
 
     pub fn isSwapped(node: *Func.Node) bool {
         return node.kind == .IfOp and node.extra(.IfOp).swapped;
     }
+
+    pub const i_know_the_api = {};
 };
 
 pub fn init(out: std.ArrayList(u8)) HbvmGen {

@@ -1,4 +1,4 @@
-const graph = @import("Func.zig");
+const graph = @import("graph.zig");
 const std = @import("std");
 
 pub fn mem2reg(comptime MachNode: type, self: *graph.Func(MachNode)) void {
