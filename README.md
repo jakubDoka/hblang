@@ -44,10 +44,11 @@ git submodule update --remote --rebase -- vendored-tests/lily/                  
 	- [ ] indexing
 	- [ ] packed
 	- [ ] constructors
-		- [x] dictionary
-		- [ ] tuple
+	  - [x] dictionary
+	  - [ ] tuple
 	- [ ] default values
 	- [ ] scope
+	- [ ] operators
   - [ ] enums
 	- [ ] specific values
 	- [ ] backing integer
@@ -61,6 +62,7 @@ git submodule update --remote --rebase -- vendored-tests/lily/                  
     - [ ] known size (arrays)
     - [ ] field access
   - [ ] tuples
+  - [ ] nullable types
 - [ ] directives
   - [ ] `@use(<string>)`
   - [ ] `@TypeOf(<expr>)`
@@ -77,6 +79,7 @@ git submodule update --remote --rebase -- vendored-tests/lily/                  
   - [ ] `@error(...<expr>)`
   - [ ] `@ChildOf(<ty>)`
   - [ ] `@target("<pat>")`
+  - [ ] `@unwrap(<expr>)`
 
 ### Tour
 
@@ -420,6 +423,41 @@ swap := fn(a: ^Ty, b: ^Ty): void {
 	tmp := *a;
 	*a = *b;
 	*b = tmp
+}
+```
+
+#### struct operators 1
+```hb
+Point := struct {
+	x: uint,
+	y: uint,
+}
+
+Rect := struct {
+	a: Point,
+	b: Point,
+}
+
+Color := struct{b: u8, g: u8, r: u8, a: u8}
+
+main := fn(): uint {
+	i := Color.(0, 0, 0, 0)
+	i += .(1, 1, 1, 1)
+	if i.r + i.g + i.b + i.a != 4 return 1001
+
+	//if Point.(1, 1) != Point.(1, 1) return 1002
+	//if Point.(1, 2) == Point.(1, 1) return 1003
+
+	a := Point.(1, 2)
+	b := Point.(3, 4)
+
+	d := Rect.(a + b, b - a)
+	zp := Point.(0, 0)
+	d2 := Rect.(zp - b, a)
+	d2 += d
+
+	c := d2.a + d2.b
+	return c.x + c.y
 }
 ```
 

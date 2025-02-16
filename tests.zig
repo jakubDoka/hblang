@@ -214,10 +214,12 @@ fn checkOrUpdatePrintTest(name: []const u8, output: []const u8) !void {
             .sub_path = new,
             .data = std.mem.trim(u8, output, "\n"),
         });
+
         tests.copyFile(new, tmp.dir, old, .{}) catch |err| switch (err) {
             error.FileNotFound => return error.NewTestFound,
             else => return err,
         };
+
         try runDiff(gpa, tmp, old, new);
     }
 }

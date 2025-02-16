@@ -70,19 +70,16 @@ pub fn end(self: *Builder, _: BuildToken) void {
     self.func.end = self.ret.?;
 }
 
-pub fn isPinned(_: *Builder, vl: *BuildNode) bool {
-    if (vl.kind != .Local) return true;
-    return for (vl.outputs()) |o| {
-        if (o.kind == .Scope) break true;
-    } else false;
-}
-
 // #MEM ========================================================================
 
 pub fn addLocal(self: *Builder, size: usize) SpecificNode(.Local) {
     const local = self.func.addNode(.Local, &.{ null, self.root_mem }, size);
     local.data_type = .int;
     return local;
+}
+
+pub fn resizeLocal(_: *Builder, here: SpecificNode(.Local), to_size: usize) void {
+    here.extra(.Local).* = to_size;
 }
 
 pub fn addLoad(self: *Builder, addr: *BuildNode, ty: DataType) SpecificNode(.Store) {
@@ -95,26 +92,29 @@ pub fn addFieldLoad(self: *Builder, base: *BuildNode, offset: i64, ty: DataType)
     return self.addLoad(self.addFieldOffset(base, offset), ty);
 }
 
-pub fn addStore(self: *Builder, addr: *BuildNode, value: *BuildNode) SpecificNode(.Store) {
+pub fn addStore(self: *Builder, addr: *BuildNode, ty: DataType, value: *BuildNode) SpecificNode(.Store) {
     std.debug.assert(value.data_type.size() != 0);
     const mem = self.memory();
     const ctrl = self.control();
     const store = self.func.addNode(.Store, &.{ ctrl, mem, addr, value }, .{});
+    store.data_type = ty;
     self.func.setInputNoIntern(self.scope.?, 1, store);
     return store;
 }
 
 pub fn addFieldOffset(self: *Builder, base: *BuildNode, offset: i64) *BuildNode {
-    return if (offset != 0) self.addBinOp(.iadd, .int, base, self.addIntImm(.int, offset)) else base;
+    return if (offset != 0) if (base.kind == .BinOp and base.inputs()[2].?.kind == .CInt) b: {
+        break :b self.addBinOp(.iadd, .int, base.inputs()[1].?, self.addIntImm(.int, base.inputs()[2].?.extra(.CInt).* + offset));
+    } else self.addBinOp(.iadd, .int, base, self.addIntImm(.int, offset)) else base;
 }
 
-pub fn addFieldStore(self: *Builder, base: *BuildNode, offset: i64, value: *BuildNode) void {
-    _ = self.addStore(self.addFieldOffset(base, offset), value);
+pub fn addFieldStore(self: *Builder, base: *BuildNode, offset: i64, ty: DataType, value: *BuildNode) void {
+    _ = self.addStore(self.addFieldOffset(base, offset), ty, value);
 }
 
 pub fn addSpill(self: *Builder, value: *BuildNode) SpecificNode(.Local) {
     const local = self.addLocal(value.data_type.size());
-    _ = self.addStore(local, value);
+    _ = self.addStore(local, value.data_type, value);
     return local;
 }
 
@@ -131,19 +131,19 @@ pub fn addFixedMemCpy(self: *Builder, dst: *BuildNode, src: *BuildNode, size: us
 
 pub fn addIntImm(self: *Builder, ty: DataType, value: i64) SpecificNode(.CInt) {
     const val = self.func.addNode(.CInt, &.{null}, value);
-    val.data_type = ty;
+    val.data_type = val.data_type.meet(ty);
     return val;
 }
 
 pub fn addBinOp(self: *Builder, op: BinOp, ty: DataType, lhs: *BuildNode, rhs: *BuildNode) SpecificNode(.BinOp) {
     const val = self.func.addNode(.BinOp, &.{ null, lhs, rhs }, op);
-    val.data_type = ty;
+    val.data_type = val.data_type.meet(ty);
     return val;
 }
 
 pub fn addUnOp(self: *Builder, op: UnOp, ty: DataType, oper: *BuildNode) SpecificNode(.BinOp) {
     const val = self.func.addNode(.UnOp, &.{ null, oper }, op);
-    val.data_type = ty;
+    val.data_type = val.data_type.meet(ty);
     return val;
 }
 

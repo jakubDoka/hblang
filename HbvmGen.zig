@@ -259,7 +259,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }
             },
             .Store => {
-                const size: u16 = @intCast(inps[1].?.data_type.size());
+                const size: u16 = @intCast(no.data_type.size());
                 if (inps[0].?.kind == .Local) {
                     self.emit(.st, .{ self.reg(inps[1]), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).*)), size });
                 } else {
@@ -267,7 +267,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }
             },
             .St => {
-                const size: u16 = @intCast(inps[1].?.data_type.size());
+                const size: u16 = @intCast(no.data_type.size());
                 const off = no.extra(.St).offset;
                 if (inps[0].?.kind == .Local) {
                     self.emit(.st, .{ self.reg(inps[1]), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).*)) + off, size });
@@ -589,8 +589,9 @@ pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node
 
     if (node.kind == .Store) {
         if (node.base().kind == .ImmBinOp) {
-            return func.addNode(
+            return func.addTypedNode(
                 .St,
+                node.data_type,
                 &.{ inps[0], inps[1], node.base().inputs()[1], inps[3] },
                 .{ .offset = node.base().extra(.ImmBinOp).imm },
             );

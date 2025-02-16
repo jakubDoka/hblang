@@ -344,12 +344,12 @@ const Parser = struct {
             } },
             .@".{" => .{ .Ctor = .{
                 .ty = Id.zeroSized(.Void),
-                .fields = try self.parseList(.@".{", .@",", .@"}", parseCtorField),
+                .fields = try self.parseList(null, .@",", .@"}", parseCtorField),
                 .pos = self.list_pos,
             } },
             .@".(" => .{ .Tupl = .{
                 .ty = Id.zeroSized(.Void),
-                .fields = try self.parseList(.@".(", .@",", .@")", parseExpr),
+                .fields = try self.parseList(null, .@",", .@")", parseExpr),
                 .pos = self.list_pos,
             } },
             .@"{" => .{ .Block = .{

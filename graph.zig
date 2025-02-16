@@ -26,17 +26,17 @@ pub const UnOp = enum(u8) {
 };
 
 pub const DataType = enum(u16) {
-    void,
+    top,
     mem,
-    dead,
     i8,
     i16,
     i32,
     int,
+    dead,
 
     pub fn size(self: DataType) usize {
         return switch (self) {
-            .void => 0,
+            .top => 0,
             .i8 => 1,
             .i16 => 2,
             .i32 => 4,
@@ -53,6 +53,9 @@ pub const DataType = enum(u16) {
     }
 
     pub fn meet(self: DataType, other: DataType) DataType {
+        if (self == .top) return other;
+        if (other == .top) return self;
+
         if (self.isInt()) {
             std.debug.assert(other.isInt());
             return @enumFromInt(@max(@intFromEnum(self), @intFromEnum(other)));
@@ -305,7 +308,7 @@ pub fn Func(comptime MachNode: type) type {
             kind: Kind,
             id: u16,
             schedule: u16 = std.math.maxInt(u16),
-            data_type: mod.DataType = .void,
+            data_type: mod.DataType = .top,
 
             input_ordered_len: u16,
             input_len: u16,
@@ -360,7 +363,11 @@ pub fn Func(comptime MachNode: type) type {
                     fn isVisibel(comptime Ty: type) bool {
                         switch (@typeInfo(Ty)) {
                             .@"struct" => |s| {
-                                if (s.fields.len == 0) return false;
+                                for (s.fields) |f| {
+                                    if (isVisibel(f.type)) return true;
+                                }
+
+                                return false;
                             },
                             .void => {
                                 return false;
@@ -377,7 +384,7 @@ pub fn Func(comptime MachNode: type) type {
                                 comptime var fields = std.mem.reverseIterator(s.fields);
                                 comptime var first = fir;
                                 inline while (fields.next()) |f| {
-                                    if (comptime std.mem.eql(u8, f.name, "antidep")) {
+                                    if (comptime std.mem.eql(u8, f.name, "antidep") or !isVisibel(f.type)) {
                                         continue;
                                     }
 
@@ -411,7 +418,7 @@ pub fn Func(comptime MachNode: type) type {
                     inline else => |t| {
                         const ext = self.extraConst(t);
                         if (@TypeOf(ext.*) != void) {
-                            if (utils.isVisibel(@TypeOf(ext.*))) {
+                            if (comptime utils.isVisibel(@TypeOf(ext.*))) {
                                 writer.writeAll(": ") catch unreachable;
                                 add_colon_space = true;
                                 utils.logExtra(writer, ext, true) catch unreachable;
@@ -535,7 +542,7 @@ pub fn Func(comptime MachNode: type) type {
 
             pub fn isInterned(kind: Kind, inpts: []const ?*Node) bool {
                 return switch (kind) {
-                    .CInt, .BinOp, .Load => true,
+                    .CInt, .BinOp, .Load, .UnOp => true,
                     .Phi => inpts[2] != null,
                     else => callCheck("isInterned", kind),
                 };
@@ -1059,6 +1066,15 @@ pub fn Func(comptime MachNode: type) type {
 
                 if (earlier != node.mem()) {
                     return self.addNode(.Load, &.{ inps[0], earlier, inps[2] }, {});
+                }
+            }
+
+            if (node.kind == .UnOp) {
+                const op = node.extra(.UnOp).*;
+                if (node.data_type.meet(inps[1].?.data_type) == inps[1].?.data_type) {
+                    if (op == .uext or op == .sext) {
+                        return inps[1];
+                    }
                 }
             }
 

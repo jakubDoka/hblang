@@ -387,7 +387,7 @@ fn displayArg(
                 try ctx.setColor(.dim);
                 try ctx.writer.writeAll("=");
 
-                try ctx.writer.print("{d}", .{self.regs.get(value)});
+                try ctx.writer.print("{d}", .{@as(i64, @bitCast(self.regs.get(value)))});
                 try ctx.setColor(.reset);
             }
         },

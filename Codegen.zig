@@ -14,6 +14,7 @@ const std = @import("std");
 const Ast = @import("parser.zig");
 const Types = @import("Types.zig");
 const Builder = @import("Builder.zig");
+const Lexer = @import("Lexer.zig");
 const Func = Builder.Func;
 const Node = Builder.BuildNode;
 const DataType = Builder.DataType;
@@ -91,7 +92,7 @@ pub fn build(self: *Codegen, file: Types.File, func: Types.Func) !void {
             const slot = self.bl.addLocal(ty.size());
             for (offs.slice()) |off| {
                 const arg = self.bl.addParam(i);
-                self.bl.addFieldStore(slot, @intCast(off), arg);
+                self.bl.addFieldStore(slot, @intCast(off), arg.data_type, arg);
                 i += 1;
             }
             self.bl.pushScopeValue(slot);
@@ -147,10 +148,10 @@ pub const Ctx = struct {
     loc: ?*Node = null,
 };
 
-pub fn emitTyped(self: *Codegen, ty: Types.Id, expr: Ast.Id) Value.Mode {
+pub fn emitTyped(self: *Codegen, ty: Types.Id, expr: Ast.Id) Value {
     var value = self.emit(.{ .ty = ty }, expr);
     self.typeCheck(expr, &value, ty);
-    return value.id;
+    return value;
 }
 
 pub fn ensureLoaded(self: *Codegen, value: *Value) void {
@@ -166,11 +167,12 @@ pub fn typeCheck(self: *Codegen, expr: Ast.Id, got: *Value, expected: Types.Id) 
     }
 
     if (got.ty != expected) {
-        if (got.ty.isSigned()) {
+        if (got.ty.isSigned() and got.ty.size() < expected.size()) {
             got.id.Value = self.bl.addUnOp(.sext, self.abi.categorize(expected).ByValue, got.id.Value);
         }
 
-        if (got.ty.isUnsigned()) {
+        if (got.ty.isUnsigned() and got.ty.size() < expected.size()) {
+            //self.report(expr, "{} {} {}", .{ got.ty, got.id.Value.data_type, expected });
             got.id.Value = self.bl.addUnOp(.uext, self.abi.categorize(expected).ByValue, got.id.Value);
         }
 
@@ -191,6 +193,35 @@ fn report(self: *Codegen, expr: Ast.Id, comptime fmt: []const u8, args: anytype)
         "{s}:{}:{}: " ++ fmt ++ "\n{}\n",
         .{ file.path, line, col } ++ args ++ .{file.codePointer(file.posOf(expr).index)},
     ) catch unreachable;
+}
+
+fn emitStructOp(self: *Codegen, ty: *const Types.Struct, op: Lexer.Lexeme, loc: *Node, lhs: *Node, rhs: *Node) void {
+    var offset: usize = 0;
+    for (ty.fields) |field| {
+        offset = std.mem.alignForward(usize, offset, field.ty.alignment());
+        const field_loc = self.bl.addFieldOffset(loc, @intCast(offset));
+        const lhs_loc = self.bl.addFieldOffset(lhs, @intCast(offset));
+        const rhs_loc = self.bl.addFieldOffset(rhs, @intCast(offset));
+        if (field.ty.data() == .Struct) {
+            self.emitStructOp(field.ty.data().Struct, op, field_loc, lhs_loc, rhs_loc);
+        } else {
+            const dt = self.abi.categorize(field.ty).ByValue;
+            const lhs_val = self.bl.addLoad(lhs_loc, dt);
+            const rhs_val = self.bl.addLoad(rhs_loc, dt);
+            const res = self.bl.addBinOp(op.toBinOp(field.ty), dt, lhs_val, rhs_val);
+            _ = self.bl.addStore(field_loc, res.data_type, res);
+        }
+        offset += field.ty.size();
+    }
+}
+
+pub fn emitGenericStore(self: *Codegen, loc: *Node, value: *Value) void {
+    if (self.abi.categorize(value.ty) == .ByValue) {
+        self.ensureLoaded(value);
+        _ = self.bl.addStore(loc, self.abi.categorize(value.ty).ByValue, value.id.Value);
+    } else if (value.id.Ptr != loc) {
+        _ = self.bl.addFixedMemCpy(loc, value.id.Ptr, value.ty.size());
+    }
 }
 
 fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
@@ -249,11 +280,37 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
                 const off = self.bl.addFieldOffset(local, @intCast(offset));
                 var value = self.emit(.{ .ty = ftype, .loc = off }, field.value);
+                self.emitGenericStore(off, &value);
+            }
 
-                if (self.abi.categorize(value.ty) == .ByValue) {
-                    self.ensureLoaded(&value);
-                    _ = self.bl.addStore(off, value.id.Value);
-                }
+            return mkp(ty, local);
+        },
+        .Tupl => |e| {
+            if (e.ty.tag() == .Void and ctx.ty == null) {
+                self.report(expr, "cant infer the type of this constructor, you can specify a type before the '.{{'", .{});
+                return .never;
+            }
+
+            const ty = ctx.ty orelse self.types.resolveTy(self.file, e.ty);
+            if (ty.data() != .Struct) {
+                self.report(expr, "{} can not be constructed with '.{{..}}'", .{ty});
+                return .never;
+            }
+            const struct_ty = ty.data().Struct;
+
+            const local = ctx.loc orelse self.bl.addLocal(ty.size());
+
+            // TODO: diagnostics
+
+            var offset: usize = 0;
+            for (self.getAstSlice(e.fields), struct_ty.fields) |field, sf| {
+                const ftype = sf.ty;
+                offset = std.mem.alignForward(usize, offset, ftype.alignment());
+
+                const off = self.bl.addFieldOffset(local, @intCast(offset));
+                var value = self.emit(.{ .ty = ftype, .loc = off }, field);
+                self.emitGenericStore(off, &value);
+                offset += ftype.size();
             }
 
             return mkp(ty, local);
@@ -303,32 +360,24 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .BinOp => |e| switch (e.op) {
             inline .@":=", .@":" => |t| {
+                const loc = self.bl.addLocal(0);
+
                 var value = if (t == .@":=")
-                    self.emit(.{}, e.rhs)
+                    self.emit(.{ .loc = loc }, e.rhs)
                 else b: {
                     const assign = self.getAst(e.rhs).BinOp;
                     std.debug.assert(assign.op == .@"=");
                     const ty = self.types.resolveTy(self.file, assign.lhs);
-                    var vl = self.emit(.{ .ty = ty }, assign.rhs);
+                    var vl = self.emit(.{ .loc = loc, .ty = ty }, assign.rhs);
                     self.typeCheck(assign.rhs, &vl, ty);
                     break :b vl;
                 };
 
-                const local = if (self.abi.categorize(value.ty) != .ByValue)
-                    if (self.bl.isPinned(value.id.Ptr)) b: {
-                        const local = self.bl.addLocal(value.ty.size());
-                        _ = self.bl.addFixedMemCpy(local, value.id.Ptr, value.ty.size());
-                        break :b local;
-                    } else b: {
-                        break :b value.id.Ptr;
-                    }
-                else b: {
-                    self.ensureLoaded(&value);
-                    break :b self.bl.addSpill(value.id.Value);
-                };
+                self.bl.resizeLocal(loc, value.ty.size());
+                self.emitGenericStore(loc, &value);
 
                 self.scope.append(.{ .ty = value.ty }) catch unreachable;
-                self.bl.pushScopeValue(local);
+                self.bl.pushScopeValue(loc);
                 return .{};
             },
             .@"=" => if (e.lhs.tag() == .Wildcard) {
@@ -336,10 +385,10 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return .{};
             } else {
                 const loc = self.emit(.{}, e.lhs);
-                var val = Value{ .ty = loc.ty, .id = self.emitTyped(loc.ty, e.rhs) };
+                var val = self.emitTyped(loc.ty, e.rhs);
                 if (self.abi.categorize(loc.ty) == .ByValue) {
                     self.ensureLoaded(&val);
-                    _ = self.bl.addStore(loc.id.Ptr, val.id.Value);
+                    _ = self.bl.addStore(loc.id.Ptr, self.abi.categorize(loc.ty).ByValue, val.id.Value);
                 } else {
                     _ = self.bl.addFixedMemCpy(loc.id.Ptr, val.id.Ptr, @intCast(loc.ty.size()));
                 }
@@ -350,16 +399,26 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 var rhs = self.emit(.{ .ty = lhs.ty }, e.rhs);
                 if (e.op.isComparison() and lhs.ty.isSigned() != rhs.ty.isSigned())
                     self.report(e.lhs, "mixed sign comparison ({} {})", .{ lhs.ty, rhs.ty });
-                const unified = ctx.ty orelse lhs.ty.binOpUpcast(rhs.ty) catch |err| {
+                const unified: Types.Id = ctx.ty orelse lhs.ty.binOpUpcast(rhs.ty) catch |err| {
                     self.report(expr, "{s} ({} and {})", .{ @errorName(err), lhs.ty, rhs.ty });
                     return .never;
                 };
-                const upcast_to: Types.Id = if (e.op.isComparison()) if (lhs.ty.isSigned()) .int else .uint else unified;
-                self.ensureLoaded(&lhs);
-                self.ensureLoaded(&rhs);
-                self.typeCheck(e.lhs, &lhs, upcast_to);
-                self.typeCheck(e.rhs, &rhs, upcast_to);
-                return mkv(unified, self.bl.addBinOp(e.op.toBinOp(lhs.ty), self.abi.categorize(unified).ByValue, lhs.id.Value, rhs.id.Value));
+
+                if (lhs.ty.data() == .Struct) if (e.op.isComparison()) {
+                    self.report(e.lhs, "\n", .{});
+                    unreachable;
+                } else {
+                    const loc = ctx.loc orelse self.bl.addLocal(unified.size());
+                    self.emitStructOp(unified.data().Struct, e.op, loc, lhs.id.Ptr, rhs.id.Ptr);
+                    return mkp(unified, loc);
+                } else {
+                    const upcast_to: Types.Id = if (e.op.isComparison()) if (lhs.ty.isSigned()) .int else .uint else unified;
+                    self.ensureLoaded(&lhs);
+                    self.ensureLoaded(&rhs);
+                    self.typeCheck(e.lhs, &lhs, upcast_to);
+                    self.typeCheck(e.rhs, &rhs, upcast_to);
+                    return mkv(unified, self.bl.addBinOp(e.op.toBinOp(lhs.ty), self.abi.categorize(unified).ByValue, lhs.id.Value, rhs.id.Value));
+                }
             },
         },
 
@@ -377,7 +436,7 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             return .{};
         },
         .If => |e| {
-            var cond = Value{ .ty = .bool, .id = self.emitTyped(.bool, e.cond) };
+            var cond = self.emitTyped(.bool, e.cond);
             self.ensureLoaded(&cond);
             var if_builder = self.bl.addIfAndBeginThen(cond.id.Value);
             _ = self.emitTyped(.void, e.then);
@@ -441,7 +500,7 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             }
 
             for (self.getAstSlice(e.args), fdata.args) |arg, ty| {
-                var value = Value{ .ty = ty, .id = self.emitTyped(ty, arg) };
+                var value = self.emitTyped(ty, arg);
                 switch (self.abi.categorize(ty)) {
                     .Imaginary => continue,
                     .ByValue => {
@@ -472,9 +531,9 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 .ByValuePair => b: {
                     const slot = self.bl.addLocal(fdata.ret.size());
 
-                    _, const offs = self.abi.categorize(fdata.ret).dataTypes();
-                    for (offs.slice(), rets) |off, vl| {
-                        self.bl.addFieldStore(slot, @intCast(off), vl);
+                    const tys, const offs = self.abi.categorize(fdata.ret).dataTypes();
+                    for (tys.slice(), offs.slice(), rets) |ty, off, vl| {
+                        self.bl.addFieldStore(slot, @intCast(off), ty, vl);
                     }
 
                     break :b mkp(fdata.ret, slot);
@@ -483,7 +542,7 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             };
         },
         .Return => |e| {
-            var value = Value{ .ty = self.fdata.ret, .id = self.emitTyped(self.fdata.ret, e.value) };
+            var value = self.emitTyped(self.fdata.ret, e.value);
             switch (self.abi.categorize(value.ty)) {
                 .Imaginary => self.bl.addReturn(&.{}),
                 .ByValue => {

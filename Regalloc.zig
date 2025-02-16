@@ -1,8 +1,8 @@
 const std = @import("std");
-const Func = @import("graph.zig");
+const graph = @import("graph.zig");
 
-pub fn ralloc(comptime Mach: type, func: *Func.Func(Mach)) []u8 {
-    const Fn = Func.Func(Mach);
+pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u8 {
+    const Fn = graph.Func(Mach);
 
     const Set = std.DynamicBitSetUnmanaged;
     const Block = struct {

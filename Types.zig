@@ -52,7 +52,7 @@ pub const Data = union(enum) {
     Struct: *const Struct,
 };
 
-const Struct = struct {
+pub const Struct = struct {
     file: File,
     pos: Ast.Pos,
     fields: []const Field,
@@ -215,6 +215,24 @@ pub const Abi = enum {
 
         const Dts = std.BoundedArray(graph.DataType, max_subtypes);
         const Offs = std.BoundedArray(usize, max_subtypes);
+
+        pub fn types(self: Spec, buf: []graph.DataType) void {
+            switch (self) {
+                .Imaginary => {},
+                .ByValue => |d| buf[0] = d,
+                .ByValuePair => |pair| buf[0..2].* = pair.types,
+                .ByRef => buf[0] = .int,
+            }
+        }
+
+        pub fn len(self: Spec, is_ret: bool) usize {
+            return switch (self) {
+                .Imaginary => 0,
+                .ByValue => 1,
+                .ByValuePair => 2,
+                .ByRef => 1 - @intFromBool(is_ret),
+            };
+        }
 
         pub fn dataTypes(self: Spec) struct { Dts, Offs } {
             return switch (self) {

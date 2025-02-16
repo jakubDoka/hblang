@@ -93,6 +93,7 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
         .filter = test_filter,
     });
+    unit_tests.step.dependOn(vendored_tests);
     unit_tests.step.dependOn(tests);
 
     const test_step = b.step("test", "Run the app");
