@@ -12,7 +12,7 @@ fn(): uint {
 %1 = Entry: idepth: 0, %0 [, %7, %6]
 %4 = Local: 8, %2 [, %6, %11, %7]
 %10 = Ret: 0, %8 []
-%7 = Call: id: 1, idepth: 0, %1, %6, %4 [, %8]
+%7 = Call: ret_count: 1, id: 1, idepth: 0, %1, %6, %4 [, %8]
 %11 = Load: %9, %4 [, %12]
 %9 = Mem: %8 [, %12, %11]
 %8 = CallEnd: idepth: 0, %7 [, %12, %9, %10]
@@ -25,7 +25,7 @@ fn(): uint {
 %6 = Store: %1, %2, %4, %5 [, %7]
 %1 = Entry: idepth: 0, %0 [, %6, %7]
 %4 = Local: 8, %2 [, %6, %11, %7]
-%7 = Call: id: 1, idepth: 0, %1, %6, %4 [, %8]
+%7 = Call: ret_count: 1, id: 1, idepth: 0, %1, %6, %4 [, %8]
 %11 = Load: %9, %4 [, %12]
 %9 = Mem: %8 [, %12, %11]
 %8 = CallEnd: idepth: 0, %7 [, %9, %12]
@@ -37,7 +37,7 @@ fn(): uint {
   %5 = CInt: 1
   %4 = Local: 8, %2
   %6 = Store: %2, %4, %5
-  %7 = Call: id: 1, idepth: 2, %6, %4
+  %7 = Call: ret_count: 1, id: 1, idepth: 2, %6, %4
 %8 = CallEnd: idepth: 3, %7
   %9 = Mem
   %11 = Load: %9, %4
@@ -54,20 +54,20 @@ fn(v: ^uint): uint {
 	}
 }
 ======== UNSCHEDULED SON ========
-%0 = Start: idepth: 0 [, %1, %2, %5]
+%0 = Start: idepth: 0 [, %1, %2, %4]
 %12 = If: idepth: 0, %1, %10 [, %13, %15]
 %10 = BinOp: eq, %9, %8 [, %12]
 %9 = Load: %6, %7 [, %10]
-%7 = Load: %6, %4 [, %9]
-%5 = Arg: 0, %0 [, %6]
-%4 = Local: 8, %2 [, %6, %7]
-%2 = Mem: %0 [, %6, %4]
+%7 = Load: %6, %5 [, %9]
+%4 = Arg: 0, %0 [, %6]
+%5 = Local: 8, %2 [, %6, %7]
+%2 = Mem: %0 [, %6, %5]
 %1 = Entry: idepth: 0, %0 [, %12, %6]
 %15 = Then: idepth: 0, %12 [, %18]
 %13 = Then: idepth: 0, %12 [, %17]
 %16 = CInt: 1 [, %21]
 %8 = CInt: 0 [, %10, %21]
-%6 = Store: %1, %2, %4, %5 [, %20, %7, %9, %20]
+%6 = Store: %1, %2, %5, %4 [, %20, %7, %9, %20]
 %18 = Jmp: idepth: 0, %15 [, %19]
 %17 = Jmp: idepth: 0, %13 [, %19]
 %21 = Phi: %19, %8, %16 [, %14]
@@ -77,14 +77,14 @@ fn(v: ^uint): uint {
 
 ======== OPTIMIZED SON ========
 %22 = IfOp: swapped: false, op: jne, idepth: 0, %1, %9, %8 [, %13, %15]
-%5 = Arg: 0, %0 [, %9]
+%4 = Arg: 0, %0 [, %9]
 %1 = Entry: idepth: 0, %0 [, %22]
 %15 = Then: idepth: 0, %22 [, %18]
 %13 = Then: idepth: 0, %22 [, %17]
 %16 = CInt: 1 [, %21]
 %8 = CInt: 0 [, %22, %21]
-%9 = Load: %2, %5 [, %22]
-%0 = Start: idepth: 0 [, %1, %2, %5]
+%9 = Load: %2, %4 [, %22]
+%0 = Start: idepth: 0 [, %1, %2, %4]
 %18 = Jmp: idepth: 0, %15 [, %19]
 %17 = Jmp: idepth: 0, %13 [, %19]
 %21 = Phi: %19, %8, %16 [, %14]
@@ -95,9 +95,9 @@ fn(v: ^uint): uint {
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
 %1 = Entry: idepth: 1, %0
-  %5 = Arg: 0
+  %4 = Arg: 0
   %8 = CInt: 0
-  %9 = Load: %2, %5
+  %9 = Load: %2, %4
   %22 = IfOp: swapped: false, op: jne, idepth: 2, %9, %8
 %13 = Then: idepth: 3, %22
   %23 = MachMove: %8

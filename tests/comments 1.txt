@@ -8,7 +8,7 @@ fn(): uint {
 %0 = Start: idepth: 0 [, %1, %2]
 %2 = Mem: %0 [, %4]
 %1 = Entry: idepth: 0, %0 [, %4]
-%4 = Call: id: 1, idepth: 0, %1, %2 [, %5]
+%4 = Call: ret_count: 0, id: 1, idepth: 0, %1, %2 [, %5]
 %7 = CInt: 0 [, %8]
 %6 = Mem: %5 [, %8]
 %5 = CallEnd: idepth: 0, %4 [, %8, %6]
@@ -18,7 +18,7 @@ fn(): uint {
 %0 = Start: idepth: 0 [, %1, %2]
 %2 = Mem: %0 [, %4]
 %1 = Entry: idepth: 0, %0 [, %4]
-%4 = Call: id: 1, idepth: 0, %1, %2 [, %5]
+%4 = Call: ret_count: 0, id: 1, idepth: 0, %1, %2 [, %5]
 %7 = CInt: 0 [, %8]
 %6 = Mem: %5 [, %8]
 %5 = CallEnd: idepth: 0, %4 [, %6, %8]
@@ -27,7 +27,7 @@ fn(): uint {
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
 %1 = Entry: idepth: 1, %0
-  %4 = Call: id: 1, idepth: 2, %2
+  %4 = Call: ret_count: 0, id: 1, idepth: 2, %2
 %5 = CallEnd: idepth: 3, %4
   %6 = Mem
   %7 = CInt: 0
@@ -36,22 +36,21 @@ fn(): uint {
 ======== SOURCE ========
 fn(comment: void): void return /* comment evaluates to void */
 ======== UNSCHEDULED SON ========
-%4 = Local: 0, %2 []
 %0 = Start: idepth: 0 [, %1, %2]
-%2 = Mem: %0 [, %5, %4]
-%1 = Entry: idepth: 0, %0 [, %5]
-%5 = Return: idepth: 0, %1, %2 []
+%2 = Mem: %0 [, %4]
+%1 = Entry: idepth: 0, %0 [, %4]
+%4 = Return: idepth: 0, %1, %2 []
 
 ======== OPTIMIZED SON ========
 %0 = Start: idepth: 0 [, %1, %2]
-%2 = Mem: %0 [, %5]
-%1 = Entry: idepth: 0, %0 [, %5]
-%5 = Return: idepth: 0, %1, %2 []
+%2 = Mem: %0 [, %4]
+%1 = Entry: idepth: 0, %0 [, %4]
+%4 = Return: idepth: 0, %1, %2 []
 
 ======== SCHEDULED SON ========
 %0 = Start: idepth: 0
 %1 = Entry: idepth: 0, %0
-  %5 = Return: idepth: 0, %2
+  %4 = Return: idepth: 0, %2
 
 ======== CODEGEN ========
 main:

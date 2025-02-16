@@ -2,13 +2,17 @@ const std = @import("std");
 
 pub const Reg = enum(u8) {
     null,
-    ret,
     ret_addr = 31,
     stack_addr = 254,
     max = 255,
     _,
-    pub fn arg(index: usize) Reg {
-        return @enumFromInt(2 + index);
+
+    pub fn arg(ret_count: usize, index: usize) Reg {
+        return @enumFromInt(1 + ret_count + index);
+    }
+
+    pub fn ret(index: usize) Reg {
+        return @enumFromInt(1 + index);
     }
 };
 

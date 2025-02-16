@@ -26,7 +26,7 @@ pub fn main() !void {
         const end = std.mem.indexOf(u8, segment[pos + 6 ..], "```\n") orelse continue;
         var body = std.mem.trim(u8, segment[pos + 6 ..][0..end], "\n \t");
 
-        body = try std.mem.replaceOwned(u8, arena, body, "\t", "\\t");
+        body = try std.mem.replaceOwned(u8, arena, body, "    ", "\\t");
         body = try std.mem.replaceOwned(u8, arena, body, "\n", "\\n");
         try writer.print(
             \\test "{s}" {{

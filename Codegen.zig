@@ -51,17 +51,7 @@ pub fn build(self: *Codegen, file: Types.File, func: Types.Func) !void {
     self.ast = self.types.getFile(file).*;
     self.fdata = self.types.get(func);
 
-    var param_count: usize = 0;
-    for (self.fdata.args) |ty| param_count += self.abi.categorize(ty).dataTypes()[0].len;
-    const return_count: usize = switch (self.abi.categorize(self.fdata.ret)) {
-        .Imaginary => 0,
-        .ByValue => 1,
-        .ByValuePair => 2,
-        .ByRef => b: {
-            param_count += 1;
-            break :b 0;
-        },
-    };
+    const param_count, const return_count, const ret_abi = self.fdata.computeAbiSize(self.abi);
     const token, const params, const returns = self.bl.begin(param_count, return_count);
 
     self.scope = .init(self.arena());
@@ -69,34 +59,35 @@ pub fn build(self: *Codegen, file: Types.File, func: Types.Func) !void {
 
     var i: usize = 0;
 
-    if (self.abi.categorize(self.fdata.ret) == .ByRef) {
-        params[i] = .int;
+    if (ret_abi == .ByRef) {
+        ret_abi.types(params[0..1]);
         self.struct_ret_ptr = self.bl.addParam(i);
         i += 1;
     } else {
-        @memcpy(returns, self.abi.categorize(self.fdata.ret).dataTypes()[0].slice());
+        ret_abi.types(returns);
         self.struct_ret_ptr = null;
     }
 
     for (self.fdata.args) |ty| {
-        if (self.abi.categorize(ty) == .ByRef) {
-            const arg = self.bl.addParam(i);
-            i += 1;
-            self.scope.append(.{ .ty = ty }) catch unreachable;
-            self.bl.pushScopeValue(arg);
-        } else {
-            const tys, const offs = self.abi.categorize(ty).dataTypes();
-            @memcpy(params[i..][0..tys.len], tys.slice());
+        const abi = self.abi.categorize(ty);
+        abi.types(params[i..]);
 
-            self.scope.append(.{ .ty = ty }) catch unreachable;
-            const slot = self.bl.addLocal(ty.size());
-            for (offs.slice()) |off| {
-                const arg = self.bl.addParam(i);
-                self.bl.addFieldStore(slot, @intCast(off), arg.data_type, arg);
-                i += 1;
-            }
-            self.bl.pushScopeValue(slot);
-        }
+        const arg = switch (abi) {
+            .ByRef => self.bl.addParam(i),
+            .ByValue => self.bl.addSpill(self.bl.addParam(i)),
+            .ByValuePair => |p| b: {
+                const slot = self.bl.addLocal(ty.size());
+                for (p.offsets(), 0..) |off, j| {
+                    const arg = self.bl.addParam(i + j);
+                    self.bl.addFieldStore(slot, @intCast(off), arg.data_type, arg);
+                }
+                break :b slot;
+            },
+            .Imaginary => continue,
+        };
+        self.scope.append(.{ .ty = ty }) catch unreachable;
+        self.bl.pushScopeValue(arg);
+        i += abi.len(false);
     }
 
     _ = self.emit(.{}, self.getAst(self.fdata.ast).Fn.body);
@@ -386,12 +377,7 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             } else {
                 const loc = self.emit(.{}, e.lhs);
                 var val = self.emitTyped(loc.ty, e.rhs);
-                if (self.abi.categorize(loc.ty) == .ByValue) {
-                    self.ensureLoaded(&val);
-                    _ = self.bl.addStore(loc.id.Ptr, self.abi.categorize(loc.ty).ByValue, val.id.Value);
-                } else {
-                    _ = self.bl.addFixedMemCpy(loc.id.Ptr, val.id.Ptr, @intCast(loc.ty.size()));
-                }
+                self.emitGenericStore(loc.id.Ptr, &val);
                 return .{};
             },
             else => {
@@ -417,7 +403,12 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     self.ensureLoaded(&rhs);
                     self.typeCheck(e.lhs, &lhs, upcast_to);
                     self.typeCheck(e.rhs, &rhs, upcast_to);
-                    return mkv(unified, self.bl.addBinOp(e.op.toBinOp(lhs.ty), self.abi.categorize(unified).ByValue, lhs.id.Value, rhs.id.Value));
+                    return mkv(unified, self.bl.addBinOp(
+                        e.op.toBinOp(lhs.ty),
+                        self.abi.categorize(unified).ByValue,
+                        lhs.id.Value,
+                        rhs.id.Value,
+                    ));
                 }
             },
         },
@@ -467,98 +458,72 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             const func = self.types.resolveFunc(self.file, e.called);
             const fdata: *Types.FuncData = self.types.get(func);
 
-            var param_count: usize = 0;
-            for (fdata.args) |ty| param_count += self.abi.categorize(ty).dataTypes()[0].len;
+            const param_count, const return_count, const ret_abi = fdata.computeAbiSize(self.abi);
+            const args = self.bl.allocCallArgs(param_count, return_count);
 
-            var params: [16]DataType = undefined;
             var i: usize = 0;
-
-            const returns = switch (self.abi.categorize(fdata.ret)) {
-                .ByRef => b: {
-                    params[i] = .int;
-                    param_count += 1;
-                    i += 1;
-                    break :b self.abi.categorize(.void).dataTypes();
-                },
-                else => self.abi.categorize(fdata.ret).dataTypes(),
-            };
-
-            for (fdata.args) |ty| {
-                const tys = self.abi.categorize(ty).dataTypes()[0];
-                @memcpy(params[i..][0..tys.len], tys.slice());
-                i += tys.len;
-            }
-            std.debug.assert(param_count == i);
-
-            const args = self.bl.allocCallArgs(params[0..param_count], returns[0].slice());
-
-            i = 0;
-
-            if (self.abi.categorize(fdata.ret) == .ByRef) {
-                args.arg_slots[i] = self.bl.addLocal(fdata.ret.size());
+            if (ret_abi == .ByRef) {
+                ret_abi.types(args.params[0..1]);
+                args.arg_slots[i] = ctx.loc orelse self.bl.addLocal(fdata.ret.size());
                 i += 1;
+            } else {
+                ret_abi.types(args.returns[0..return_count]);
             }
 
             for (self.getAstSlice(e.args), fdata.args) |arg, ty| {
+                const abi = self.abi.categorize(ty);
+                abi.types(args.params[i..]);
                 var value = self.emitTyped(ty, arg);
-                switch (self.abi.categorize(ty)) {
-                    .Imaginary => continue,
+                switch (abi) {
+                    .Imaginary => {},
                     .ByValue => {
                         self.ensureLoaded(&value);
                         args.arg_slots[i] = value.id.Value;
-                        i += 1;
                     },
-                    .ByValuePair => {
-                        const tys, const offs = self.abi.categorize(ty).dataTypes();
-                        for (tys.slice(), offs.slice()) |t, off| {
-                            args.arg_slots[i] =
+                    .ByValuePair => |pair| {
+                        for (pair.types, pair.offsets(), 0..) |t, off, j| {
+                            args.arg_slots[i + j] =
                                 self.bl.addFieldLoad(value.id.Ptr, @intCast(off), t);
-                            i += 1;
                         }
                     },
-                    .ByRef => {
-                        args.arg_slots[i] = value.id.Ptr;
-                        i += 1;
-                    },
+                    .ByRef => args.arg_slots[i] = value.id.Ptr,
                 }
+                i += abi.len(false);
             }
 
             const rets = self.bl.addCall(@intFromEnum(func), args);
 
-            return switch (self.abi.categorize(fdata.ret)) {
+            return switch (ret_abi) {
                 .Imaginary => .{},
                 .ByValue => mkv(fdata.ret, rets[0]),
-                .ByValuePair => b: {
-                    const slot = self.bl.addLocal(fdata.ret.size());
-
-                    const tys, const offs = self.abi.categorize(fdata.ret).dataTypes();
-                    for (tys.slice(), offs.slice(), rets) |ty, off, vl| {
+                .ByValuePair => |pair| b: {
+                    const slot = ctx.loc orelse self.bl.addLocal(fdata.ret.size());
+                    for (pair.types, pair.offsets(), rets) |ty, off, vl| {
                         self.bl.addFieldStore(slot, @intCast(off), ty, vl);
                     }
-
                     break :b mkp(fdata.ret, slot);
                 },
                 .ByRef => mkp(fdata.ret, args.arg_slots[0]),
             };
         },
         .Return => |e| {
-            var value = self.emitTyped(self.fdata.ret, e.value);
+            var value = self.emit(.{ .loc = self.struct_ret_ptr, .ty = self.fdata.ret }, e.value);
+            self.typeCheck(e.value, &value, self.fdata.ret);
             switch (self.abi.categorize(value.ty)) {
                 .Imaginary => self.bl.addReturn(&.{}),
                 .ByValue => {
                     self.ensureLoaded(&value);
                     self.bl.addReturn(&.{value.id.Value});
                 },
-                .ByValuePair => {
+                .ByValuePair => |pair| {
                     var slots: [2]*Node = undefined;
-                    const tys, const offs = self.abi.categorize(value.ty).dataTypes();
-                    for (tys.slice(), offs.slice(), &slots) |t, off, *slt| {
+                    for (pair.types, pair.offsets(), &slots) |t, off, *slt| {
                         slt.* = self.bl.addFieldLoad(value.id.Ptr, @intCast(off), t);
                     }
                     self.bl.addReturn(&slots);
                 },
                 .ByRef => {
-                    _ = self.bl.addFixedMemCpy(self.struct_ret_ptr.?, value.id.Ptr, value.ty.size());
+                    self.emitGenericStore(self.struct_ret_ptr.?, &value);
                     self.bl.addReturn(&.{});
                 },
             }

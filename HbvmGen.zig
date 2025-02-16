@@ -188,7 +188,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
             const argn = for (postorder[0].base.outputs()) |o| {
                 if (o.kind == .Arg and o.extra(.Arg).* == i) break o;
             } else continue; // is dead
-            self.emit(.cp, .{ self.reg(argn), isa.Reg.arg(i) });
+            self.emit(.cp, .{ self.reg(argn), isa.Reg.arg(func.returns.len, i) });
         }
         break :prelude;
     }
@@ -423,7 +423,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             .Call => {
                 const extra = no.extra(.Call);
                 for (inps, 0..) |arg, i| {
-                    self.emit(.cp, .{ isa.Reg.arg(i), self.reg(arg) });
+                    self.emit(.cp, .{ isa.Reg.arg(extra.ret_count, i), self.reg(arg) });
                 }
 
                 self.global_relocs.append(.{
@@ -434,7 +434,8 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .Mem => {},
             .Ret => {
-                self.emit(.cp, .{ self.reg(no), .ret });
+                const idx = no.extra(.Ret).*;
+                self.emit(.cp, .{ self.reg(no), isa.Reg.ret(idx) });
             },
             .Jmp => if (no.outputs()[0].kind == .Region or no.outputs()[0].kind == .Loop) {
                 const idx = std.mem.indexOfScalar(?*Func.Node, no.outputs()[0].inputs(), no).? + 1;
@@ -499,9 +500,9 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .Phi => {},
             .Return => {
-                std.debug.assert(inps.len < 2);
-                if (inps.len != 0) {
-                    self.emit(.cp, .{ .ret, self.reg(inps[0]) });
+                std.debug.assert(inps.len < 3);
+                for (inps, 0..) |inp, i| {
+                    self.emit(.cp, .{ isa.Reg.ret(i), self.reg(inp) });
                 }
             },
             else => std.debug.panic("{any}", .{no.kind}),

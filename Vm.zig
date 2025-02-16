@@ -419,7 +419,7 @@ pub fn testRun(vm: *Vm, res: anyerror!isa.Op, regRes: anytype, comptime code: an
     vm.ip = @intFromPtr(fode.ptr);
     var ctx = UnsafeCtx(void){};
     try std.testing.expectEqual(res, vm.run(&ctx));
-    try std.testing.expectEqual(regRes, vm.regs.get(.ret));
+    try std.testing.expectEqual(regRes, vm.regs.get(.ret(0)));
 }
 
 test "sanity" {

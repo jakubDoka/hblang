@@ -202,6 +202,10 @@ pub const Abi = enum {
         ByValuePair: struct {
             types: [2]graph.DataType,
             padding: u16,
+
+            pub fn offsets(self: @This()) [2]usize {
+                return .{ 0, self.types[0].size() + self.padding };
+            }
         },
         ByRef,
         Imaginary,
@@ -233,24 +237,6 @@ pub const Abi = enum {
                 .ByRef => 1 - @intFromBool(is_ret),
             };
         }
-
-        pub fn dataTypes(self: Spec) struct { Dts, Offs } {
-            return switch (self) {
-                .ByValue => |i| .{
-                    Dts.fromSlice(&.{i}) catch unreachable,
-                    Offs.fromSlice(&.{0}) catch unreachable,
-                },
-                .ByValuePair => |*pari| .{
-                    Dts.fromSlice(&pari.types) catch unreachable,
-                    Offs.fromSlice(&.{ 0, pari.types[0].size() + pari.padding }) catch unreachable,
-                },
-                .ByRef => .{
-                    Dts.fromSlice(&.{.int}) catch unreachable,
-                    Offs.fromSlice(&.{0}) catch unreachable,
-                },
-                .Imaginary => .{ .{}, .{} },
-            };
-        }
     };
 
     pub fn categorize(self: Abi, ty: Id) Spec {
@@ -278,6 +264,7 @@ pub const Abi = enum {
             if (fspec == .Imaginary) continue;
             if (res == .Imaginary) {
                 res = fspec;
+                offset += f.ty.size();
                 continue;
             }
 
@@ -304,6 +291,14 @@ pub const FuncData = struct {
     file: File,
     name: Ast.Pos,
     ast: Ast.Id,
+
+    pub fn computeAbiSize(self: FuncData, abi: Abi) struct { usize, usize, Abi.Spec } {
+        const ret_abi = abi.categorize(self.ret);
+        var param_count: usize = @intFromBool(ret_abi == .ByRef);
+        for (self.args) |ty| param_count += abi.categorize(ty).len(false);
+        const return_count: usize = ret_abi.len(true);
+        return .{ param_count, return_count, ret_abi };
+    }
 };
 
 pub fn init(gpa: std.mem.Allocator, source: []const Ast) Types {

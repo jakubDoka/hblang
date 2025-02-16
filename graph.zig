@@ -97,6 +97,7 @@ pub const Builtin = union(enum) {
     Call: extern struct {
         base: Cfg = .{},
         id: u32,
+        ret_count: u32,
     },
     // [Call]
     CallEnd: Cfg,

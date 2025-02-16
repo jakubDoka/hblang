@@ -394,22 +394,23 @@ pub fn addLoopAndBeginBody(self: *Builder) Loop {
 }
 
 pub const CallArgs = struct {
-    params: []const DataType,
+    params: []DataType,
     arg_slots: []*BuildNode,
-    returns: []const DataType,
+    returns: []DataType,
     return_slots: []*BuildNode,
     hint: enum { @"construst this with Builder.allocCallArgs()" },
 };
 
 const arg_prefix_len = 2;
 
-pub fn allocCallArgs(self: *Builder, params: []const DataType, returns: []const DataType) CallArgs {
-    const args = self.func.getTmpArena().alloc(?*BuildNode, arg_prefix_len + params.len + returns.len) catch unreachable;
+pub fn allocCallArgs(self: *Builder, param_count: usize, return_count: usize) CallArgs {
+    const params = self.func.getTmpArena().alloc(DataType, param_count + return_count) catch unreachable;
+    const args = self.func.getTmpArena().alloc(*BuildNode, arg_prefix_len + param_count + return_count) catch unreachable;
     return .{
-        .params = params,
-        .returns = returns,
-        .arg_slots = @ptrCast(args[arg_prefix_len..][0..params.len]),
-        .return_slots = @ptrCast(args[arg_prefix_len + params.len ..]),
+        .params = params[0..param_count],
+        .returns = params[param_count..],
+        .arg_slots = args[arg_prefix_len..][0..param_count],
+        .return_slots = args[arg_prefix_len + param_count ..],
         .hint = @enumFromInt(0),
     };
 }
@@ -425,7 +426,10 @@ pub fn addCall(
     full_args[0] = self.control();
     full_args[1] = self.memory();
 
-    const call = self.func.addNode(.Call, full_args, .{ .id = arbitrary_call_id });
+    const call = self.func.addNode(.Call, full_args, .{
+        .id = arbitrary_call_id,
+        .ret_count = @intCast(args.returns.len),
+    });
     const call_end = self.func.addNode(.CallEnd, &.{call}, .{});
     self.func.setInputNoIntern(self.scope.?, 0, call_end);
     const call_mem = self.func.addNode(.Mem, &.{call_end}, {});
