@@ -46,7 +46,6 @@ pub fn begin(self: *Builder, param_count: usize, return_coutn: usize) struct { B
     _ = self.func.beginTmpAlloc();
     const ctrl = self.func.addNode(.Entry, &.{self.func.root}, .{});
     self.root_mem = self.func.addNode(.Mem, &.{self.func.root}, {});
-    // TODO: maybe its worth allocating scopes in a separate arena
     self.scope = self.func.addNode(.Scope, &.{ ctrl, self.root_mem }, {});
     self.ret = null;
 

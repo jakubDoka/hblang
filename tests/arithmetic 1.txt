@@ -1,65 +1,3 @@
-======== SOURCE ========
-fn(): uint {
-	return 10 - 20 / 2 + 4 * (2 + 2) - 4 * 4 + 1 - 1
-}
-======== UNSCHEDULED SON ========
-%6 = CInt: 2 [, %7, %10, %10]
-%5 = CInt: 20 [, %7]
-%10 = BinOp: iadd, %6, %6 [, %11]
-%7 = BinOp: udiv, %5, %6 [, %8]
-%4 = CInt: 10 [, %8]
-%9 = CInt: 4 [, %11, %13, %13]
-%11 = BinOp: imul, %9, %10 [, %12]
-%8 = BinOp: isub, %4, %7 [, %12]
-%13 = BinOp: imul, %9, %9 [, %14]
-%12 = BinOp: iadd, %8, %11 [, %14]
-%14 = BinOp: isub, %12, %13 [, %16]
-%15 = CInt: 1 [, %16, %17]
-%16 = BinOp: iadd, %14, %15 [, %17]
-%0 = Start: idepth: 0 [, %1, %2]
-%17 = BinOp: isub, %16, %15 [, %18]
-%2 = Mem: %0 [, %18]
-%1 = Entry: idepth: 0, %0 [, %18]
-%18 = Return: idepth: 0, %1, %2, %17 []
-
-======== OPTIMIZED SON ========
-%6 = CInt: 2 [, %7, %19]
-%5 = CInt: 20 [, %7]
-%19 = ImmBinOp: imm: 2, op: addi64, %6 [, %11]
-%7 = BinOp: udiv, %5, %6 [, %8]
-%4 = CInt: 10 [, %8]
-%9 = CInt: 4 [, %11, %20]
-%11 = BinOp: imul, %9, %19 [, %12]
-%8 = BinOp: isub, %4, %7 [, %12]
-%20 = ImmBinOp: imm: 4, op: muli64, %9 [, %14]
-%12 = BinOp: iadd, %8, %11 [, %14]
-%14 = BinOp: isub, %12, %20 [, %21]
-%21 = ImmBinOp: imm: 1, op: addi64, %14 [, %22]
-%0 = Start: idepth: 0 [, %1, %2]
-%22 = ImmBinOp: imm: -1, op: addi64, %21 [, %18]
-%2 = Mem: %0 [, %18]
-%1 = Entry: idepth: 0, %0 [, %18]
-%18 = Return: idepth: 0, %1, %2, %22 []
-
-======== SCHEDULED SON ========
-%0 = Start: idepth: 0
-%1 = Entry: idepth: 1, %0
-  %4 = CInt: 10
-  %5 = CInt: 20
-  %6 = CInt: 2
-  %9 = CInt: 4
-  %7 = BinOp: udiv, %5, %6
-  %19 = ImmBinOp: imm: 2, op: addi64, %6
-  %20 = ImmBinOp: imm: 4, op: muli64, %9
-  %8 = BinOp: isub, %4, %7
-  %11 = BinOp: imul, %9, %19
-  %12 = BinOp: iadd, %8, %11
-  %14 = BinOp: isub, %12, %20
-  %21 = ImmBinOp: imm: 1, op: addi64, %14
-  %22 = ImmBinOp: imm: -1, op: addi64, %21
-  %18 = Return: idepth: 0, %2, %22
-
-======== CODEGEN ========
 main:
     li64 $13, 10
     li64 $14, 20
@@ -75,21 +13,4 @@ main:
   addi64 $13, $13, 1
   addi64 $13, $13, -1
       cp $1, $13
-      tx
-
-======== EXECUTION ========
-    li64 $13=0, 10
-    li64 $14=0, 20
-    li64 $15=0, 2
-    li64 $16=0, 4
-  diru64 $14=20, $0=0, $14, $15=2
-  addi64 $15=2, $15, 2
-  muli64 $17=0, $16=4, 4
-   sub64 $13=10, $13, $14=10
-   mul64 $14=10, $16=4, $15=4
-   add64 $13=0, $13, $14=16
-   sub64 $13=16, $13, $17=16
-  addi64 $13=0, $13, 1
-  addi64 $13=1, $13, -1
-      cp $1=0, $13=0
       tx

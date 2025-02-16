@@ -1,34 +1,4 @@
-======== SOURCE ========
-fn(): uint {
-	return 42
-}
-======== UNSCHEDULED SON ========
-%0 = Start: idepth: 0 [, %1, %2]
-%4 = CInt: 42 [, %5]
-%2 = Mem: %0 [, %5]
-%1 = Entry: idepth: 0, %0 [, %5]
-%5 = Return: idepth: 0, %1, %2, %4 []
-
-======== OPTIMIZED SON ========
-%0 = Start: idepth: 0 [, %1, %2]
-%4 = CInt: 42 [, %5]
-%2 = Mem: %0 [, %5]
-%1 = Entry: idepth: 0, %0 [, %5]
-%5 = Return: idepth: 0, %1, %2, %4 []
-
-======== SCHEDULED SON ========
-%0 = Start: idepth: 0
-%1 = Entry: idepth: 0, %0
-  %4 = CInt: 42
-  %5 = Return: idepth: 0, %2, %4
-
-======== CODEGEN ========
 main:
     li64 $13, 42
       cp $1, $13
-      tx
-
-======== EXECUTION ========
-    li64 $13=0, 42
-      cp $1=0, $13=42
       tx

@@ -27,10 +27,10 @@ pub fn runTest(name: []const u8, code: []const u8) !void {
     errdefer {
         const stderr = std.io.getStdErr();
         const colors = std.io.tty.detectConfig(stderr);
-        testBuilder(name, code, gpa, stderr.writer().any(), colors) catch unreachable;
+        testBuilder(name, code, gpa, stderr.writer().any(), colors, true) catch unreachable;
     }
 
-    try testBuilder(name, code, gpa, out.writer().any(), .no_color);
+    try testBuilder(name, code, gpa, out.writer().any(), .no_color, false);
 
     try checkOrUpdatePrintTest(name, out.items);
 }
@@ -53,9 +53,26 @@ pub fn testBuilder(
     gpa: std.mem.Allocator,
     output: std.io.AnyWriter,
     colors: std.io.tty.Config,
+    verbose: bool,
 ) !void {
     var ast = try Ast.init(name, code, gpa);
     defer ast.deinit(gpa);
+
+    var ret: u64 = 0;
+    for (ast.decls) |d| {
+        if (std.mem.eql(u8, ast.tokenSrc(d.name.index), "expectations")) {
+            const decl = ast.exprs.get(d.expr).BinOp.rhs;
+            const ctor = ast.exprs.get(decl).Ctor;
+            for (ast.exprs.view(ctor.fields)) |f| {
+                const field = ast.exprs.get(f).CtorField;
+                const value = ast.exprs.get(field.value);
+
+                if (std.mem.eql(u8, ast.tokenSrc(field.pos.index), "return_value")) {
+                    ret = @bitCast(try std.fmt.parseInt(i64, ast.tokenSrc(value.Integer.index), 10));
+                }
+            }
+        }
+    }
 
     const main = for (ast.decls) |d| {
         if (std.mem.eql(u8, ast.tokenSrc(d.name.index), "main")) break d.expr;
@@ -74,29 +91,30 @@ pub fn testBuilder(
     var gen = Mach.init(&hbgen);
 
     while (types.func_worklist.popOrNull()) |func| {
-        try header("SOURCE", output, colors);
-        var out_fmt = std.ArrayList(u8).init(gpa);
-        defer out_fmt.deinit();
-        try ast.fmtExpr(&out_fmt, types.get(func).ast);
-        try output.writeAll(out_fmt.items);
+        if (verbose) {
+            if (verbose) try header("SOURCE", output, colors);
+            var out_fmt = std.ArrayList(u8).init(gpa);
+            defer out_fmt.deinit();
+            try ast.fmtExpr(&out_fmt, types.get(func).ast);
+            try output.writeAll(out_fmt.items);
+        }
 
-        try header("UNSCHEDULED SON", output, colors);
+        if (verbose) try header("UNSCHEDULED SON", output, colors);
         try cg.build(.root, func);
         defer cg.bl.func.reset();
 
         const fnc: *graph.Func(HbvmGen.Node) = @ptrCast(&cg.bl.func);
-        fnc.fmtUnscheduled(output, colors);
+        if (verbose) fnc.fmtUnscheduled(output, colors);
 
-        try header("OPTIMIZED SON", output, colors);
+        if (verbose) try header("OPTIMIZED SON", output, colors);
         fnc.iterPeeps(1000, @TypeOf(fnc.*).idealizeDead);
         fnc.mem2reg();
         fnc.iterPeeps(1000, @TypeOf(fnc.*).idealize);
-        fnc.fmtUnscheduled(output, colors);
+        if (verbose) fnc.fmtUnscheduled(output, colors);
 
-        try header("SCHEDULED SON", output, colors);
-
+        if (verbose) try header("SCHEDULED SON", output, colors);
         fnc.gcm();
-        fnc.fmtScheduled(output, colors);
+        if (verbose) fnc.fmtScheduled(output, colors);
 
         const tf = types.get(func);
         gen.emitFunc(&cg.bl.func, .{
@@ -106,7 +124,7 @@ pub fn testBuilder(
         });
     }
 
-    try header("CODEGEN", output, colors);
+    if (verbose) try header("CODEGEN", output, colors);
     gen.disasm(output, colors);
     var out = gen.finalize();
     defer out.deinit();
@@ -115,16 +133,18 @@ pub fn testBuilder(
     vm.fuel = 1000;
     vm.ip = 0;
 
-    try header("EXECUTION", output, colors);
+    if (verbose) try header("EXECUTION", output, colors);
     var stack: [1024 * 10]u8 = undefined;
     vm.regs.set(.stack_addr, stack.len);
     var ctx = Vm.SafeContext{
-        .writer = output,
+        .writer = if (verbose) output else std.io.null_writer.any(),
         .color_cfg = colors,
         .code = out.items,
         .memory = &stack,
     };
+
     try std.testing.expectEqual(.tx, vm.run(&ctx));
+    try std.testing.expectEqual(ret, vm.regs.get(.ret(0)));
 }
 
 pub fn testFmt(name: []const u8, path: []const u8, code: []const u8) !void {

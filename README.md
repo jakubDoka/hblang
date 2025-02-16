@@ -1,96 +1,15 @@
-# holey-bytes
+# hblang
 
-## vendored tests
+## Tour
 
-```bash
-git submodule add https://git.ablecorp.us/lily-org/lily.git vendored-tests/lily # add a new
-git submodule update --init --recursive                                         # fetch
-git submodule update --remote --rebase -- vendored-tests/lily/                  # update a
-```
-
-### progress
-
-- [ ] control flow
-  - [x] functions
-    - [ ] inlining
-    - [ ] comptime parameters
-  - [x] ifs
-    - [ ] comptime
-  - [x] loops
-    - [ ] comptime
-    - [x] break
-    - [x] continue
-    - [ ] labels
-  - [x] blocks
-    - [ ] labels
-  - [ ] match
-    - [ ] comptime
-  - [ ] `die`
-- [ ] types
-  - [ ] `idk`
-  - [x] integers/bool
-    - [x] bool literals
-    - [ ] integer literals
-      - [ ] binary
-      - [ ] octal
-      - [x] decimal
-      - [ ] hexadecimal
-    - [ ] binary operators
-      - [x] `- + * / == != <= >= < >`
-      - [ ] others
-    - [ ] unary operators
-      - [x] `-`
-      - [ ] `! ~`
-  - [ ] floats
-    - [ ] binary operators
-      - [ ] all
-    - [ ] unary operators
-      - [ ] all
-  - [x] structs
-    - [ ] indexing
-    - [ ] packed
-    - [ ] constructors
-      - [x] dictionary
-      - [ ] tuple
-    - [ ] default values
-    - [ ] scope
-    - [ ] operators
-  - [ ] enums
-    - [ ] specific values
-    - [ ] backing integer
-    - [ ] scope
-  - [ ] unions
-    - [ ] tag + customizable
-    - [ ] scope
-  - [ ] pointers
-    - [ ] slicing
-  - [ ] slices
-    - [ ] known size (arrays)
-    - [ ] field access
-  - [ ] tuples
-  - [ ] nullable types
-- [ ] directives
-  - [ ] `@use(<string>)`
-  - [ ] `@TypeOf(<expr>)`
-  - [ ] `@as(<ty>, <expr>)`
-  - [ ] `@intcast(<expr>)`
-  - [ ] `@sizeof(<ty>), @alignof(<ty>)`
-  - [ ] `@bitcast(<expr>)`
-  - [ ] `@eca(...<expr>)`
-  - [ ] `@embed(<string>)`
-  - [ ] `@inline(<func>, ...<args>)`
-  - [ ] `@lenof(<ty>)`
-  - [ ] `@kindof(<ty>)`
-  - [ ] `@Any()`
-  - [ ] `@error(...<expr>)`
-  - [ ] `@ChildOf(<ty>)`
-  - [ ] `@target("<pat>")`
-  - [ ] `@unwrap(<expr>)`
-
-### Tour
+Note: the examples are used to generate unit tests, `n = 1` from each group is most interesting, others are more for testing purposes.
 
 #### main fn 1
 ```hb
+expectations := .{
+    return_value: 42,
+}
+
 main := fn(): uint {
     return 42
 }
@@ -185,6 +104,10 @@ mero := fn(): i8 return 0
 
 #### functions 1
 ```hb
+expectations := .{
+    return_value: 33,
+}
+
 main := fn(): uint {
     return add_one(10) + add_two(20)
 }
@@ -214,6 +137,10 @@ foo := fn(comment: void): void return /* comment evaluates to void */
 
 #### if statements 1
 ```hb
+expectations := .{
+    return_value: 2,
+}
+
 main := fn(): uint {
     return fib(3)
 }
@@ -229,6 +156,10 @@ fib := fn(x: uint): uint {
 
 #### if statements 2
 ```hb
+expectations := .{
+    return_value: 2,
+}
+
 main := fn(): uint {
     return fib(3)
 }
@@ -256,6 +187,10 @@ main := fn(): uint {
 
 #### loops 1
 ```hb
+expectations := .{
+    return_value: 55,
+}
+
 main := fn(): uint {
     return fib(10)
 }
@@ -277,11 +212,15 @@ fib := fn(n: uint): uint {
 
 #### loops 2
 ```hb
-main := fn(): uint {
-    return not_fib(3)
+expectations := .{
+    return_value: 9,
 }
 
-not_fib := fn(size: uint): uint {
+main := fn(): uint {
+    return square(3)
+}
+
+square := fn(size: uint): uint {
     acc := 0
     y := 0
     loop if y == size break else {
@@ -298,6 +237,10 @@ not_fib := fn(size: uint): uint {
 
 #### loops 3
 ```hb
+expectations := .{
+    return_value: 4,
+}
+
 main := fn(): uint {
     i := 0
     loop if i == 4 break else {
@@ -331,6 +274,10 @@ drop := fn(a: uint): void {
 
 #### pointers 2
 ```hb
+expectations := .{
+    return_value: 1,
+}
+
 main := fn(): uint {
     a := 1
     b := 2
@@ -352,6 +299,10 @@ swap := fn(a: ^uint, b: ^uint): void {
 
 #### pointers 3
 ```hb
+expectations := .{
+    return_value: 1,
+}
+
 main := fn(): uint {
     a := 1
     _ = do_stuff(&a)
@@ -371,6 +322,10 @@ do_stuff := fn(v: ^uint): uint {
 
 #### structs 1
 ```hb
+expectations := .{
+    return_value: 3,
+}
+
 Ty := struct {
     a: int,
     b: int,
@@ -412,6 +367,10 @@ odher_pass := fn(t: Ty2): Ty2 {
 
 #### structs 2
 ```hb
+expectations := .{
+    return_value: 3,
+}
+
 Ty := struct {
     a: int,
     b: int,
@@ -465,6 +424,10 @@ take_triple := fn(triple: Triple): uint {
 
 #### struct operators 1
 ```hb
+expectations := .{
+    return_value: 10,
+}
+
 Point := struct {
     x: uint,
     y: uint,
@@ -498,5 +461,96 @@ main := fn(): uint {
 }
 ```
 
+## progress
+
+- [ ] control flow
+  - [x] functions
+    - [ ] inlining
+    - [ ] comptime parameters
+  - [x] ifs
+    - [ ] comptime
+  - [x] loops
+    - [ ] comptime
+    - [x] break
+    - [x] continue
+    - [ ] labels
+  - [x] blocks
+    - [ ] labels
+  - [ ] match
+    - [ ] comptime
+  - [ ] `die`
+- [ ] types
+  - [ ] `idk`
+  - [x] integers/bool
+    - [x] bool literals
+    - [ ] integer literals
+      - [ ] binary
+      - [ ] octal
+      - [x] decimal
+      - [ ] hexadecimal
+    - [ ] binary operators
+      - [x] `- + * / == != <= >= < >`
+      - [ ] others
+    - [ ] unary operators
+      - [x] `-`
+      - [ ] `! ~`
+  - [ ] floats
+    - [ ] binary operators
+      - [ ] all
+    - [ ] unary operators
+      - [ ] all
+  - [x] structs
+    - [ ] indexing
+    - [ ] packed
+    - [ ] constructors
+      - [x] dictionary
+      - [ ] tuple
+    - [ ] default values
+    - [ ] scope
+    - [ ] operators
+  - [ ] enums
+    - [ ] specific values
+    - [ ] backing integer
+    - [ ] scope
+  - [ ] unions
+    - [ ] tag + customizable
+    - [ ] scope
+  - [ ] pointers
+    - [ ] slicing
+  - [ ] slices
+    - [ ] known size (arrays)
+    - [ ] field access
+  - [ ] tuples
+  - [ ] nullable types
+- [ ] directives
+  - [ ] `@use(<string>)`
+  - [ ] `@TypeOf(<expr>)`
+  - [ ] `@as(<ty>, <expr>)`
+  - [ ] `@intcast(<expr>)`
+  - [ ] `@sizeof(<ty>), @alignof(<ty>)`
+  - [ ] `@bitcast(<expr>)`
+  - [ ] `@eca(...<expr>)`
+  - [ ] `@embed(<string>)`
+  - [ ] `@inline(<func>, ...<args>)`
+  - [ ] `@lenof(<ty>)`
+  - [ ] `@kindof(<ty>)`
+  - [ ] `@Any()`
+  - [ ] `@error(...<expr>)`
+  - [ ] `@ChildOf(<ty>)`
+  - [ ] `@target("<pat>")`
+  - [ ] `@unwrap(<expr>)`
+
+## vendored tests
+
+```bash
+git submodule add https://git.ablecorp.us/lily-org/lily.git vendored-tests/lily # add a new
+git submodule update --init --recursive                                         # fetch
+git submodule update --remote --rebase -- vendored-tests/lily/                  # update a
+```
+
 ## Contributing
 
+When contributing make sure to:
+1. Mark what you completed in [progress](#progress), as the part of your changes. Stuff that is not in the checklist needs an issue. TODO: make an issue template
+2. Add apropriate examples to test the functionality, `zig build test` will automatically generate a test for the example and run it with rverithing else. It's preferable to add `#### <feature> <n>` and use `n = 1` for demonstration and other examples to cover all ways to use the frature you can think of.
+3. Extend the fuzzer to generate newly added syntax and run `zig build fuzz`. TODO: refactor the fuzzer to be easiert to add typechecked syntax generation.

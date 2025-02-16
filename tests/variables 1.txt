@@ -1,56 +1,6 @@
-======== SOURCE ========
-fn(): uint {
-	ඞ := 1
-	b := 2
-	ඞ += 1
-	return ඞ - b
-}
-======== UNSCHEDULED SON ========
-%10 = Load: %9, %4 [, %11]
-%8 = CInt: 2 [, %9]
-%7 = Local: 8, %2 [, %9, %14]
-%5 = CInt: 1 [, %6, %11]
-%2 = Mem: %0 [, %6, %4, %7]
-%14 = Load: %12, %7 [, %15]
-%13 = Load: %12, %4 [, %15]
-%11 = BinOp: iadd, %10, %5 [, %12]
-%4 = Local: 8, %2 [, %6, %13, %10, %12]
-%9 = Store: %1, %6, %7, %8 [, %12, %10]
-%6 = Store: %1, %2, %4, %5 [, %9]
-%0 = Start: idepth: 0 [, %1, %2]
-%15 = BinOp: isub, %13, %14 [, %16]
-%12 = Store: %1, %9, %4, %11 [, %16, %13, %14]
-%1 = Entry: idepth: 0, %0 [, %16, %6, %9, %12]
-%16 = Return: idepth: 0, %1, %12, %15 []
-
-======== OPTIMIZED SON ========
-%5 = CInt: 1 [, %17]
-%17 = ImmBinOp: imm: 1, op: addi64, %5 [, %18]
-%0 = Start: idepth: 0 [, %1, %2]
-%18 = ImmBinOp: imm: -2, op: addi64, %17 [, %16]
-%2 = Mem: %0 [, %16]
-%1 = Entry: idepth: 0, %0 [, %16]
-%16 = Return: idepth: 0, %1, %2, %18 []
-
-======== SCHEDULED SON ========
-%0 = Start: idepth: 0
-%1 = Entry: idepth: 1, %0
-  %5 = CInt: 1
-  %17 = ImmBinOp: imm: 1, op: addi64, %5
-  %18 = ImmBinOp: imm: -2, op: addi64, %17
-  %16 = Return: idepth: 0, %2, %18
-
-======== CODEGEN ========
 main:
     li64 $13, 1
   addi64 $13, $13, 1
   addi64 $13, $13, -2
       cp $1, $13
-      tx
-
-======== EXECUTION ========
-    li64 $13=0, 1
-  addi64 $13=1, $13, 1
-  addi64 $13=2, $13, -2
-      cp $1=0, $13=0
       tx
