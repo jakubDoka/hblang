@@ -29,6 +29,12 @@ git submodule update --remote --rebase -- vendored-tests/lily/                  
 - [ ] types
   - [ ] `idk`
   - [x] integers/bool
+    - [x] bool literals
+    - [ ] integer literals
+      - [ ] binary
+      - [ ] octal
+      - [x] decimal
+      - [ ] hexadecimal
     - [ ] binary operators
       - [x] `- + * / == != <= >= < >`
       - [ ] others
