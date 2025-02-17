@@ -13,7 +13,7 @@ const Types = @This();
 pub const TypeCtx = struct {
     pub fn eql(_: @This(), a: Id, b: Id) bool {
         const ad, const bd = .{ a.data(), b.data() };
-        if (std.meta.fields(@TypeOf(ad.Struct.*)).len != 3) @compileError("maybe we are capturing already");
+        if (std.meta.fields(@TypeOf(ad.Struct.*)).len != 4) @compileError("maybe we are capturing already");
         if (ad == .Struct and bd == .Struct) {
             return ad.Struct.file == bd.Struct.file and ad.Struct.pos == bd.Struct.pos;
         }
@@ -23,7 +23,13 @@ pub const TypeCtx = struct {
 
     pub fn hash(_: @This(), adapted_key: Id) u64 {
         var hasher = std.hash.Fnv1a_64.init();
-        std.hash.autoHashStrat(&hasher, adapted_key.data(), .Deep);
+        const adk = adapted_key.data();
+        if (adk == .Struct) {
+            std.hash.autoHashStrat(&hasher, adk.Struct.file, .Deep);
+            std.hash.autoHashStrat(&hasher, adk.Struct.pos, .Deep);
+        } else {
+            std.hash.autoHashStrat(&hasher, adk, .Deep);
+        }
         return hasher.final();
     }
 };
@@ -55,12 +61,17 @@ pub const Data = union(enum) {
 pub const Struct = struct {
     file: File,
     pos: Ast.Pos,
+    name: []const u8,
     fields: []const Field,
 
-    const Field = struct {
+    pub const Field = struct {
         name: Ast.Pos,
         ty: Id,
     };
+
+    pub fn asTy(self: *const Struct) Id {
+        return Id.init(.Struct, @intFromPtr(self));
+    }
 };
 
 pub const Id = enum(usize) {
@@ -91,7 +102,7 @@ pub const Id = enum(usize) {
         return @enumFromInt(@as(isize, @intFromEnum(lexeme)) + off);
     }
 
-    inline fn init(flg: std.meta.Tag(Data), dt: usize) Id {
+    pub inline fn init(flg: std.meta.Tag(Data), dt: usize) Id {
         comptime {
             std.debug.assert(fromLexeme(.i8) == .i8);
         }
@@ -189,7 +200,7 @@ pub const Id = enum(usize) {
         try switch (self.data()) {
             .Ptr => |b| writer.print("^{}", .{b}),
             .Builtin => |b| writer.writeAll(@tagName(b)),
-            .Struct => unreachable,
+            .Struct => |b| writer.writeAll(b.name),
         };
     }
 };
@@ -338,36 +349,46 @@ pub fn makePtr(self: *Types, v: Id) Id {
     return slot.key_ptr.*;
 }
 
-pub fn resolveTy(self: *Types, file: File, expr: Ast.Id) Id {
-    const ast = self.getFile(file);
+const Ctx = struct {
+    name: []const u8 = &.{},
+    file: File,
+
+    pub fn init(fl: File) Ctx {
+        return .{ .file = fl };
+    }
+};
+
+pub fn resolveTy(self: *Types, ctx: Ctx, expr: Ast.Id) Id {
+    const ast = self.getFile(ctx.file);
     return switch (ast.exprs.get(expr)) {
         .Buty => |e| .fromLexeme(e.bt),
         .UnOp => |e| switch (e.op) {
-            .@"^" => self.makePtr(self.resolveTy(file, e.oper)),
+            .@"^" => self.makePtr(self.resolveTy(ctx, e.oper)),
             else => std.debug.panic("{any}", .{e.op}),
         },
         .Ident => |e| {
             const decl = ast.decls[e.id.index];
-            return self.resolveTy(file, ast.exprs.get(decl.expr).BinOp.rhs);
+            return self.resolveTy(.{ .file = ctx.file, .name = ast.tokenSrc(decl.name.index) }, ast.exprs.get(decl.expr).BinOp.rhs);
         },
         .Struct => |e| {
             var v: Struct = undefined;
-            v.file = file;
+            v.file = ctx.file;
             v.pos = e.pos;
             const stru = Id.init(.Struct, @intFromPtr(&v));
             const slot = self.interner.getOrPut(self.arena.child_allocator, stru) catch unreachable;
             if (slot.found_existing) return slot.key_ptr.*;
             const struct_slot = self.arena.allocator().create(Struct) catch unreachable;
             struct_slot.* = .{
-                .file = file,
+                .file = ctx.file,
                 .pos = e.pos,
+                .name = ctx.name,
                 .fields = b: {
                     const fields = self.arena.allocator().alloc(Struct.Field, e.fields.len()) catch unreachable;
                     for (fields, ast.exprs.view(e.fields)) |*fslot, fast| {
                         const field = ast.exprs.get(fast).CtorField;
                         fslot.* = .{
                             .name = field.pos,
-                            .ty = self.resolveTy(file, field.value),
+                            .ty = self.resolveTy(.{ .file = ctx.file }, field.value),
                         };
                     }
                     break :b fields;
@@ -399,14 +420,14 @@ pub fn addFunc(self: *Types, file: File, name: Ast.Pos, func: Ast.Id) Func {
     const args = self.arena.allocator().alloc(Id, fn_ast.args.len()) catch unreachable;
     for (ast.exprs.view(fn_ast.args), args) |argid, *arg| {
         const ty = ast.exprs.get(argid).Arg.ty;
-        arg.* = self.resolveTy(file, ty);
+        arg.* = self.resolveTy(.init(file), ty);
     }
 
     self.funcs.append(self.arena.child_allocator, .{
         .args = args,
         .name = name,
         .file = file,
-        .ret = self.resolveTy(file, fn_ast.ret),
+        .ret = self.resolveTy(.init(file), fn_ast.ret),
         .ast = func,
     }) catch unreachable;
 

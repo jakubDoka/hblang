@@ -1,7 +1,10 @@
 out: std.ArrayList(u8),
-local_relocs: std.ArrayList(BlockReloc) = undefined,
-global_relocs: std.ArrayList(GloblReloc),
 funcs: std.ArrayList(FuncData),
+funcs_appended: usize = 0,
+globals: std.ArrayList(GlobalData),
+globals_appended: usize = 0,
+global_relocs: std.ArrayList(GloblReloc),
+local_relocs: std.ArrayList(BlockReloc) = undefined,
 block_offsets: []i32 = undefined,
 allocs: []u8 = undefined,
 
@@ -16,6 +19,12 @@ const HbvmGen = @This();
 
 pub const dir = "inputs";
 
+const GlobalData = struct {
+    ptr: ?[*]u8,
+    size: u32,
+    offset: u32,
+};
+
 const FuncData = struct {
     name: []const u8,
     offset: u32 = 0,
@@ -24,6 +33,7 @@ const FuncData = struct {
 const GloblReloc = struct {
     rel: Reloc,
     dest: u32,
+    kind: enum { func, global },
 };
 
 const BlockReloc = struct {
@@ -82,12 +92,14 @@ pub fn init(out: std.ArrayList(u8)) HbvmGen {
         .out = out,
         .global_relocs = .init(out.allocator),
         .funcs = .init(out.allocator),
+        .globals = .init(out.allocator),
     };
 }
 
 pub fn deinit(self: *HbvmGen) void {
     self.global_relocs.deinit();
     self.funcs.deinit();
+    self.globals.deinit();
     self.* = undefined;
 }
 
@@ -105,10 +117,26 @@ pub fn doReloc(self: *HbvmGen, rel: Reloc, dest: i64) void {
 }
 
 pub fn link(self: *HbvmGen) void {
-    for (self.global_relocs.items) |r| {
-        self.doReloc(r.rel, self.funcs.items[r.dest].offset);
+    for (self.globals.items) |*ig| {
+        const value = ig.ptr orelse continue;
+        ig.offset = @intCast(self.out.items.len);
+        self.out.appendSlice(value[0..ig.size]) catch unreachable;
     }
-    self.global_relocs.items.len = 0;
+
+    var cursor = self.out.items.len;
+    for (self.globals.items) |*ug| {
+        if (ug.ptr == null) continue;
+        ug.offset = @intCast(cursor);
+        cursor += ug.size;
+    }
+
+    for (self.global_relocs.items) |r| {
+        const offset = switch (r.kind) {
+            .func => self.funcs.items[r.dest].offset,
+            .global => self.globals.items[r.dest].offset,
+        };
+        self.doReloc(r.rel, offset);
+    }
 }
 
 pub fn finalize(self: *HbvmGen) std.ArrayList(u8) {
@@ -226,6 +254,12 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     for (self.local_relocs.items) |lr| {
         self.doReloc(lr.rel, self.block_offsets[lr.dest_block]);
     }
+}
+
+pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
+    _ = self; // autofix
+    _ = opts; // autofix
+
 }
 
 pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) void {
@@ -428,6 +462,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
 
                 self.global_relocs.append(.{
                     .dest = extra.id,
+                    .kind = .func,
                     .rel = self.reloc(3, .rel32),
                 }) catch unreachable;
                 self.emit(.jal, .{ .ret_addr, .null, 0 });
@@ -440,10 +475,12 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             .Jmp => if (no.outputs()[0].kind == .Region or no.outputs()[0].kind == .Loop) {
                 const idx = std.mem.indexOfScalar(?*Func.Node, no.outputs()[0].inputs(), no).? + 1;
 
-                const Move = struct { isa.Reg, isa.Reg, u8 };
+                const Depth = u8;
+
+                const Move = struct { isa.Reg, isa.Reg, Depth };
                 var moves = std.ArrayList(Move).init(tmp);
                 for (no.outputs()[0].outputs()) |o| {
-                    if (o.kind == .Phi and o.data_type != .mem) {
+                    if (o.isDataPhi()) {
                         std.debug.assert(o.inputs()[idx].?.kind == .MachMove);
                         const dst, const src = .{ self.reg(o), self.reg(o.inputs()[idx].?.inputs()[1]) };
                         if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
@@ -456,7 +493,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 // in case of cycles, swaps are used instead in which case the conflicting
                 // move is removed and remining moves are replaced with swaps
 
-                const cycle_sentinel = 255;
+                const cycle_sentinel = std.math.maxInt(Depth);
 
                 var reg_graph = std.EnumArray(isa.Reg, isa.Reg).initFill(.null);
                 for (moves.items) |m| {
@@ -464,11 +501,13 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }
 
                 o: for (moves.items) |*m| {
+                    var seen = std.EnumSet(isa.Reg).initEmpty();
                     var c = m[1];
                     while (c != m[0]) {
                         c = reg_graph.get(c);
                         m[2] += 1;
-                        if (c == .null) continue :o;
+                        if (c == .null or seen.contains(c)) continue :o;
+                        seen.insert(c);
                     }
 
                     reg_graph.set(c, .null);

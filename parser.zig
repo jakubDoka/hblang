@@ -262,6 +262,9 @@ const Parser = struct {
         const ident = self.store.getTypedPtr(.Ident, id).?;
         const sym_idx = self.all_sym_decls.items[ident.id.index];
         const sym = &self.active_syms.items[sym_idx];
+        if (sym.decl.tag() != .Void) {
+            std.debug.panic("redeclaration of identifier", .{});
+        }
         if (!std.mem.eql(
             u8,
             Lexer.peekStr(self.lexer.source, ident.pos.index),

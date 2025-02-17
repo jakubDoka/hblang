@@ -33,7 +33,12 @@ pub fn gcm(comptime MachNode: type, self: *graph.Func(MachNode)) void {
 
     add_mach_moves: {
         for (cfg_rpo) |n| if (n.base.kind == .Loop or n.base.kind == .Region) {
-            for (tmp.dupe(*Node, n.base.outputs()) catch unreachable) |o| if (o.kind == .Phi and o.data_type != .mem) {
+            for (0..2) |i| {
+                self.setInputNoIntern(&n.base, i, self.addNode(.Jmp, &.{n.base.inputs()[i].?}, .{}));
+            }
+
+            for (tmp.dupe(*Node, n.base.outputs()) catch unreachable) |o| if (o.isDataPhi()) {
+                //std.debug.print("{}\n", .{o.inputs()[1].?});
                 std.debug.assert(o.inputs().len == 3);
                 const lhs = self.addNode(.MachMove, &.{ null, o.inputs()[1].? }, {});
                 const rhs = self.addNode(.MachMove, &.{ null, o.inputs()[2].? }, {});
@@ -252,7 +257,7 @@ pub fn scheduleBlock(comptime MachNode: type, tmp: std.mem.Allocator, node: *gra
     // init meta
     const extra = tmp.alloc(NodeMeta, node.outputs().len) catch unreachable;
     for (node.outputs(), extra, 0..) |o, *e, i| {
-        if (o.schedule != std.math.maxInt(u16)) std.debug.panic("{} {}\n", .{ o, o.schedule });
+        if (o.schedule != std.math.maxInt(u16) and !o.isCfg()) std.debug.panic("{} {}\n", .{ o, o.schedule });
         o.schedule = @intCast(i);
         e.* = .{ .priority = if (o.isCfg())
             0

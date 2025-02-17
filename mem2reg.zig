@@ -11,12 +11,13 @@ pub fn mem2reg(comptime MachNode: type, self: *graph.Func(MachNode)) void {
     var visited = std.DynamicBitSet.initEmpty(tmp, self.next_id) catch unreachable;
     const postorder = self.collectDfs(tmp, &visited)[1..];
 
-    for (postorder, 0..) |bb, i| {
-        bb.base.schedule = @intCast(i);
+    for (postorder) |bb| {
         if (bb.base.isBasicBlockStart()) {
             @import("gcm.zig").scheduleBlock(MachNode, tmp, &bb.base);
         }
     }
+
+    for (postorder, 0..) |bb, i| bb.base.schedule = @intCast(i);
 
     var local_count: u16 = 0;
     std.debug.assert(self.root.outputs()[1].kind == .Mem);
@@ -59,18 +60,18 @@ pub fn mem2reg(comptime MachNode: type, self: *graph.Func(MachNode)) void {
         }
     };
 
-    const BBState = union(enum) {
-        Fork: struct {
+    const BBState = struct {
+        Fork: ?struct {
             saved: []?Local,
-        },
-        Join: *Local.Join,
+        } = null,
+        Join: ?*Local.Join = null,
     };
 
     var locals = tmp.alloc(?Local, local_count) catch unreachable;
     @memset(locals, null);
 
-    var states = tmp.alloc(?BBState, postorder.len) catch unreachable;
-    @memset(states, null);
+    var states = tmp.alloc(BBState, postorder.len) catch unreachable;
+    @memset(states, .{});
 
     var to_remove = std.ArrayList(*Node).init(tmp);
     for (postorder) |bbc| {
@@ -84,11 +85,11 @@ pub fn mem2reg(comptime MachNode: type, self: *graph.Func(MachNode)) void {
         // handle fork
         if (parent_succs == 2) {
             // this is the second branch, restore the value
-            if (states[parent.schedule]) |s| {
-                locals = s.Fork.saved;
+            if (states[parent.schedule].Fork) |s| {
+                locals = s.saved;
             } else {
                 // we will visit this eventually
-                states[parent.schedule] = .{ .Fork = .{ .saved = tmp.dupe(?Local, locals) catch unreachable } };
+                states[parent.schedule].Fork = .{ .saved = tmp.dupe(?Local, locals) catch unreachable };
             }
         }
 
@@ -112,32 +113,35 @@ pub fn mem2reg(comptime MachNode: type, self: *graph.Func(MachNode)) void {
             if (o.isCfg()) break o;
         } else continue;
         var child_preds: usize = 0;
-        for (child.inputs()) |b| child_preds += @intFromBool(b != null and b.?.isCfg() and b.?.inputs()[0] != null);
+        for (child.inputs()) |b| child_preds += @intFromBool(b != null and b.?.isCfg());
         std.debug.assert(child_preds >= 1 and child_preds <= 2);
         // handle joins
         if (child_preds == 2) {
+            if (!(child.kind == .Region or child.kind == .Loop)) {
+                std.debug.panic("{}\n", .{child});
+            }
             // eider we arrived from the back branch or the other side of the split
-            if (states[child.schedule]) |s| {
-                std.debug.assert(s.Join.ctrl == child);
-                for (s.Join.items, locals, 0..) |lhs, rhsm, i| {
+            if (states[child.schedule].Join) |s| {
+                if (s.ctrl != child) std.debug.panic("{} {} {} {}\n", .{ s.ctrl, s.ctrl.schedule, child, child.schedule });
+                for (s.items, locals, 0..) |lhs, rhsm, i| {
                     if (lhs == null) continue;
-                    if (lhs.? == .Node and lhs.?.Node.isLazyPhi(s.Join.ctrl)) {
+                    if (lhs.? == .Node and lhs.?.Node.isLazyPhi(s.ctrl)) {
                         var rhs = rhsm;
-                        if (rhs.? == .Loop and rhs.?.Loop != s.Join) {
+                        if (rhs.? == .Loop and rhs.?.Loop != s) {
                             rhs = .{ .Node = Local.resolve(self, locals, i) };
                         }
                         if (rhs.? == .Node) {
                             if (self.setInput(lhs.?.Node, 2, rhs.?.Node)) |nlhs| {
-                                s.Join.items[i].?.Node = nlhs;
+                                s.items[i].?.Node = nlhs;
                             }
                         } else {
                             const prev = lhs.?.Node.inputs()[1].?;
                             self.subsume(prev, lhs.?.Node);
-                            s.Join.items[i].?.Node = prev;
+                            s.items[i].?.Node = prev;
                         }
                     }
                 }
-                s.Join.done = true;
+                s.done = true;
             } else {
                 // first time seeing, this ca also be a region, needs renaming I guess
                 const loop = tmp.create(Local.Join) catch unreachable;
@@ -147,7 +151,7 @@ pub fn mem2reg(comptime MachNode: type, self: *graph.Func(MachNode)) void {
                     .items = tmp.dupe(?Local, locals) catch unreachable,
                 };
                 @memset(locals, .{ .Loop = loop });
-                states[child.schedule] = .{ .Join = loop };
+                states[child.schedule].Join = loop;
             }
         }
     }

@@ -27,7 +27,6 @@ pub const UnOp = enum(u8) {
 
 pub const DataType = enum(u16) {
     top,
-    mem,
     i8,
     i16,
     i32,
@@ -122,7 +121,7 @@ pub const Builtin = union(enum) {
 
     pub const is_basic_block_start = .{ .Entry, .CallEnd, .Then, .Else, .Region, .Loop };
     pub const is_basic_block_end = .{ .Return, .Call, .If, .Jmp };
-    pub const is_mem_op = .{ .Load, .MemCpy, .Local, .Store, .Return, .Call };
+    pub const is_mem_op = .{ .Load, .MemCpy, .Local, .Store, .Return, .Call, .Mem };
     pub const is_pinned = .{ .Ret, .Phi, .Mem };
 };
 
@@ -332,7 +331,7 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             pub fn dataDeps(self: *Node) []?*Node {
-                if (self.kind == .Phi and self.data_type == .mem) return &.{};
+                if ((self.kind == .Phi and !self.isDataPhi()) or self.kind == .Mem) return &.{};
                 const start: usize = @intFromBool(self.isMemOp());
                 return self.input_base[1 + start .. self.input_ordered_len];
             }
@@ -571,6 +570,11 @@ pub fn Func(comptime MachNode: type) type {
 
             pub inline fn isMemOp(self: *const Node) bool {
                 return is_mem_op.contains(self.kind);
+            }
+
+            pub fn isDataPhi(self: *const Node) bool {
+                // TODO: get rid of this recursion
+                return self.kind == .Phi and (!self.input_base[1].?.isMemOp() or self.input_base[1].?.isLoad()) and (self.input_base[1].?.kind != .Phi or self.input_base[1].?.isDataPhi());
             }
 
             pub inline fn isBasicBlockStart(self: *const Node) bool {
@@ -949,11 +953,11 @@ pub fn Func(comptime MachNode: type) type {
                 return null;
             }
 
-            if (node.kind == .Region) b: {
+            if (node.kind == .Region) eliminate_branch: {
                 std.debug.assert(node.inputs().len == 2);
                 const idx = for (node.inputs(), 0..) |in, i| {
                     if (isDead(in)) break i;
-                } else break :b;
+                } else break :eliminate_branch;
 
                 var iter = std.mem.reverseIterator(node.outputs());
                 while (iter.next()) |o| if (o.kind == .Phi) {
@@ -961,11 +965,21 @@ pub fn Func(comptime MachNode: type) type {
                     self.subsume(o.inputs()[(1 - idx) + 1].?, o);
                 };
 
-                return node.inputs()[1 - idx].?.inputs()[0];
+                return node.inputs()[1 - idx].?;
             }
 
-            if (node.kind == .Loop) b: {
-                if (!isDead(node.inputs()[1])) break :b;
+            if (node.kind == .Region) eliminate_if: {
+                for (node.outputs()) |o| {
+                    if (!o.isCfg()) break :eliminate_if;
+                }
+
+                if (node.inputs()[0].?.inputs()[0] == node.inputs()[1].?.inputs()[0]) {
+                    return node.inputs()[0].?.inputs()[0].?.inputs()[0];
+                }
+            }
+
+            if (node.kind == .Loop) remove: {
+                if (!isDead(node.inputs()[1])) break :remove;
 
                 var iter = std.mem.reverseIterator(node.outputs());
                 while (iter.next()) |o| if (o.kind == .Phi) {
@@ -973,7 +987,7 @@ pub fn Func(comptime MachNode: type) type {
                     self.subsume(o.inputs()[1].?, o);
                 };
 
-                return node.inputs()[0].?.inputs()[0];
+                return node.inputs()[0].?;
             }
 
             if (node.kind == .Store) {

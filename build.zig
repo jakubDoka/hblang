@@ -84,6 +84,7 @@ pub fn build(b: *std.Build) !void {
 
     const check_step = b.step("check", "Run the app");
     check_step.dependOn(&check_unit_tests.step);
+    check_step.dependOn(&fuzz.step);
 
     const test_filter = b.option([]const u8, "tf", "passed as a filter to tests");
 

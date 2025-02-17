@@ -107,9 +107,9 @@ pub fn testBuilder(
         if (verbose) fnc.fmtUnscheduled(output, colors);
 
         if (verbose) try header("OPTIMIZED SON", output, colors);
-        fnc.iterPeeps(1000, @TypeOf(fnc.*).idealizeDead);
+        fnc.iterPeeps(10000, @TypeOf(fnc.*).idealizeDead);
         fnc.mem2reg();
-        fnc.iterPeeps(1000, @TypeOf(fnc.*).idealize);
+        fnc.iterPeeps(10000, @TypeOf(fnc.*).idealize);
         if (verbose) fnc.fmtUnscheduled(output, colors);
 
         if (verbose) try header("SCHEDULED SON", output, colors);

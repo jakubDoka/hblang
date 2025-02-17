@@ -68,7 +68,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u8 {
 
     for (instrs, 0..) |*instr, i| {
         if (instr.def.outputs().len != 0 and instr.def.kind != .MachMove and !instr.def.isStore() and
-            instr.def.kind != .Mem and !instr.def.isCfg())
+            instr.def.kind != .Mem and !instr.def.isCfg() and (instr.def.kind != .Phi or instr.def.isDataPhi()))
         {
             instr.defs.set(i);
         }
@@ -142,7 +142,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u8 {
         var i: usize = 0;
         var iter = r.iterator(.{});
         while (iter.next()) |e| if (j != e) {
-            //std.debug.print("{} {}\n", .{ instrs[j].def, instrs[e].def });
+            // std.debug.print("{} {}\n", .{ instrs[j].def, instrs[e].def });
             tr.*[i] = @intCast(e);
             i += 1;
         };

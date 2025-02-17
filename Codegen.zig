@@ -141,7 +141,7 @@ pub const Ctx = struct {
 
 pub fn emitTyped(self: *Codegen, ty: Types.Id, expr: Ast.Id) Value {
     var value = self.emit(.{ .ty = ty }, expr);
-    self.typeCheck(expr, &value, ty);
+    if (self.typeCheck(expr, &value, ty)) return .never;
     return value;
 }
 
@@ -151,10 +151,13 @@ pub fn ensureLoaded(self: *Codegen, value: *Value) void {
     }
 }
 
-pub fn typeCheck(self: *Codegen, expr: Ast.Id, got: *Value, expected: Types.Id) void {
+pub fn typeCheck(self: *Codegen, expr: Ast.Id, got: *Value, expected: Types.Id) bool {
+    if (got.ty == .never) return true;
+
     if (!got.ty.canUpcast(expected)) {
         self.report(expr, "expected {} got {}", .{ expected, got.ty });
-        return;
+        got.* = .never;
+        return true;
     }
 
     if (got.ty != expected) {
@@ -169,6 +172,8 @@ pub fn typeCheck(self: *Codegen, expr: Ast.Id, got: *Value, expected: Types.Id) 
 
         got.ty = expected;
     }
+
+    return false;
 }
 
 fn codePointer(self: *Codegen, ast: Ast.Id) Ast.CodePointer {
@@ -207,6 +212,8 @@ fn emitStructOp(self: *Codegen, ty: *const Types.Struct, op: Lexer.Lexeme, loc: 
 }
 
 pub fn emitGenericStore(self: *Codegen, loc: *Node, value: *Value) void {
+    if (value.ty == .never) return;
+
     if (self.abi.categorize(value.ty) == .ByValue) {
         self.ensureLoaded(value);
         _ = self.bl.addStore(loc, self.abi.categorize(value.ty).ByValue, value.id.Value);
@@ -245,7 +252,7 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return .never;
             }
 
-            const ty = ctx.ty orelse self.types.resolveTy(self.file, e.ty);
+            const ty = ctx.ty orelse self.types.resolveTy(.init(self.file), e.ty);
             if (ty.data() != .Struct) {
                 self.report(expr, "{} can not be constructed with '.{{..}}'", .{ty});
                 return .never;
@@ -271,6 +278,7 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
                 const off = self.bl.addFieldOffset(local, @intCast(offset));
                 var value = self.emit(.{ .ty = ftype, .loc = off }, field.value);
+                if (self.typeCheck(field.value, &value, ftype)) continue;
                 self.emitGenericStore(off, &value);
             }
 
@@ -282,7 +290,7 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return .never;
             }
 
-            const ty = ctx.ty orelse self.types.resolveTy(self.file, e.ty);
+            const ty = ctx.ty orelse self.types.resolveTy(.init(self.file), e.ty);
             if (ty.data() != .Struct) {
                 self.report(expr, "{} can not be constructed with '.{{..}}'", .{ty});
                 return .never;
@@ -300,6 +308,7 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
                 const off = self.bl.addFieldOffset(local, @intCast(offset));
                 var value = self.emit(.{ .ty = ftype, .loc = off }, field);
+                if (self.typeCheck(field, &value, ftype)) continue;
                 self.emitGenericStore(off, &value);
                 offset += ftype.size();
             }
@@ -344,7 +353,7 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             },
             .@"-" => {
                 var lhs = self.emit(ctx, e.oper);
-                if (ctx.ty) |ty| self.typeCheck(expr, &lhs, ty);
+                if (ctx.ty) |ty| if (self.typeCheck(expr, &lhs, ty)) return .never;
                 return mkv(lhs.ty, self.bl.addUnOp(.neg, self.abi.categorize(lhs.ty).ByValue, lhs.id.Value));
             },
             else => std.debug.panic("{any}\n", .{self.getAst(expr)}),
@@ -358,9 +367,9 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 else b: {
                     const assign = self.getAst(e.rhs).BinOp;
                     std.debug.assert(assign.op == .@"=");
-                    const ty = self.types.resolveTy(self.file, assign.lhs);
+                    const ty = self.types.resolveTy(.init(self.file), assign.lhs);
                     var vl = self.emit(.{ .loc = loc, .ty = ty }, assign.rhs);
-                    self.typeCheck(assign.rhs, &vl, ty);
+                    if (self.typeCheck(assign.rhs, &vl, ty)) break :b Value.never;
                     break :b vl;
                 };
 
@@ -401,8 +410,9 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     const upcast_to: Types.Id = if (e.op.isComparison()) if (lhs.ty.isSigned()) .int else .uint else unified;
                     self.ensureLoaded(&lhs);
                     self.ensureLoaded(&rhs);
-                    self.typeCheck(e.lhs, &lhs, upcast_to);
-                    self.typeCheck(e.rhs, &rhs, upcast_to);
+                    const lhs_fail = self.typeCheck(e.lhs, &lhs, upcast_to);
+                    const rhs_fail = self.typeCheck(e.rhs, &rhs, upcast_to);
+                    if (lhs_fail or rhs_fail) return .{};
                     return mkv(unified, self.bl.addBinOp(
                         e.op.toBinOp(lhs.ty),
                         self.abi.categorize(unified).ByValue,
@@ -508,7 +518,7 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .Return => |e| {
             var value = self.emit(.{ .loc = self.struct_ret_ptr, .ty = self.fdata.ret }, e.value);
-            self.typeCheck(e.value, &value, self.fdata.ret);
+            if (self.typeCheck(e.value, &value, self.fdata.ret)) return .never;
             switch (self.abi.categorize(value.ty)) {
                 .Imaginary => self.bl.addReturn(&.{}),
                 .ByValue => {

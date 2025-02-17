@@ -479,6 +479,8 @@ main := fn(): uint {
   - [ ] match
     - [ ] comptime
   - [ ] `die`
+- [ ] global variables
+  - [ ] comptime evaluation
 - [ ] types
   - [ ] `idk`
   - [x] integers/bool
@@ -553,4 +555,4 @@ git submodule update --remote --rebase -- vendored-tests/lily/                  
 When contributing make sure to:
 1. Mark what you completed in [progress](#progress), as the part of your changes. Stuff that is not in the checklist needs an issue. TODO: make an issue template
 2. Add apropriate examples to test the functionality, `zig build test` will automatically generate a test for the example and run it with rverithing else. It's preferable to add `#### <feature> <n>` and use `n = 1` for demonstration and other examples to cover all ways to use the frature you can think of.
-3. Extend the fuzzer to generate newly added syntax and run `zig build fuzz`. TODO: refactor the fuzzer to be easiert to add typechecked syntax generation.
+3. Extend the fuzzer to generate newly added syntax and run `zig build fuzz`.

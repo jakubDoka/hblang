@@ -199,7 +199,6 @@ pub fn getScopeValueMulty(func: *Func, scope: *BuildNode, index: usize) *Func.No
             if (!items[index].isLazyPhi(items[0])) {
                 const phi = func.addNode(.Phi, &.{ items[0], initVal, null }, {});
                 std.debug.assert(phi.isLazyPhi(items[0]));
-                if (index == 1) phi.data_type = .mem;
                 func.setInputNoIntern(loop, index, phi);
             }
 
@@ -220,10 +219,7 @@ pub fn mergeScopes(
 
     const relevant_size = @min(lhs_values.len, rhs_values.len);
 
-    const new_ctrl = func.addNode(.Region, &.{
-        func.addNode(.Jmp, &.{lhs_values[0]}, .{}),
-        func.addNode(.Jmp, &.{rhs_values[0]}, .{}),
-    }, .{});
+    const new_ctrl = func.addNode(.Region, &.{ lhs_values[0], rhs_values[0] }, .{});
 
     const start = 1;
     for (lhs_values[start..relevant_size], rhs_values[start..relevant_size], start..) |lh, rh, i| {
@@ -231,7 +227,6 @@ pub fn mergeScopes(
         const thn = getScopeValueMulty(func, lhs, i);
         const els = getScopeValueMulty(func, rhs, i);
         const phi = func.addNode(.Phi, &.{ new_ctrl, thn, els }, {});
-        if (i == start) phi.data_type = .mem;
         func.setInputNoIntern(rhs, i, phi);
     }
 
@@ -342,13 +337,13 @@ pub const Loop = struct {
         if (builder.scope) |backedge| {
             const update_values = getScopeValues(backedge);
             for (init_values[start..], update_values[start..], start..) |ini, update, i| {
+                _ = i; // autofix
                 if (update.kind != .Scope) {
                     std.debug.assert(ini.isLazyPhi(init_values[0]));
-                    if (i == 0) ini.data_type = .mem;
                     builder.func.setInputNoIntern(ini, 2, update);
                 }
             }
-            builder.func.setInputNoIntern(init_values[0], 1, builder.jmp(update_values[0]));
+            builder.func.setInputNoIntern(init_values[0], 1, update_values[0]);
         } else {
             for (init_values[start..]) |ini| {
                 if (ini.isLazyPhi(init_values[0])) {
@@ -375,13 +370,9 @@ pub const Loop = struct {
     }
 };
 
-pub fn jmp(self: *Builder, ctrl: *BuildNode) SpecificNode(.Jmp) {
-    return self.func.addNode(.Jmp, &.{ctrl}, .{});
-}
-
 pub fn addLoopAndBeginBody(self: *Builder) Loop {
     const loop = self.func.addNode(.Loop, &.{
-        self.jmp(self.control()),
+        self.control(),
         null,
     }, .{});
     self.func.setInputNoIntern(self.scope.?, 0, loop);
@@ -447,10 +438,9 @@ pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
 
     if (self.ret) |ret| {
         const inps = ret.inputs();
-        const new_ctrl = self.func.addNode(.Region, &.{ self.jmp(inps[0].?), self.jmp(self.control()) }, .{});
+        const new_ctrl = self.func.addNode(.Region, &.{ inps[0].?, self.control() }, .{});
         self.func.setInputNoIntern(ret, 0, new_ctrl);
         const new_mem = self.func.addNode(.Phi, &.{ new_ctrl, inps[1], self.memory() }, {});
-        new_mem.data_type = .mem;
         self.func.setInputNoIntern(ret, 1, new_mem);
         for (inps[2..], values, 2..) |curr, next, vidx| {
             const new_value = self.func.addNode(.Phi, &.{ new_ctrl, curr, next }, {});

@@ -6,6 +6,7 @@ test init {
             CustomNode: bool,
 
             pub const is_basic_block_start: []const Func.Kind = &.{};
+            pub const is_mem_op: []const Func.Kind = &.{};
             pub const is_basic_block_end: []const Func.Kind = &.{.CustomNode};
             pub const is_pinned: []const Func.Kind = &.{.CustomNode};
 
@@ -35,6 +36,12 @@ test init {
             unreachable;
         }
 
+        pub fn emitData(self: *@This(), opts: DataOptions) void {
+            _ = self;
+            _ = opts;
+            unreachable;
+        }
+
         pub fn finalize(self: *@This()) std.ArrayList(u8) {
             _ = self;
             unreachable;
@@ -54,6 +61,7 @@ test init {
 
 data: *anyopaque,
 _emitFunc: *const fn (self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void,
+_emitData: *const fn (self: *anyopaque, opts: DataOptions) void,
 _finalize: *const fn (self: *anyopaque) std.ArrayList(u8),
 _disasm: *const fn (self: *anyopaque, out: std.io.AnyWriter, colors: std.io.tty.Config) void,
 
@@ -63,33 +71,12 @@ const Builder = @import("Builder.zig");
 const BuilderFunc = Builder.Func;
 const Mach = @This();
 
-pub fn init(data: anytype) Mach {
-    const Type = @TypeOf(data.*);
-    if (!@hasDecl(Type, "Node")) @compileError("expected `pub const Node = enum(union) { ... }` to be present");
+pub const DataOptions = struct {
+    id: u32,
+    value: ValueSpec,
 
-    return .{
-        .data = data,
-        ._emitFunc = struct {
-            fn emitFunc(self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void {
-                const slf: *Type = @alignCast(@ptrCast(self));
-                const fnc: *graph.Func(Type.Node) = @alignCast(@ptrCast(func));
-                slf.emitFunc(fnc, opts);
-            }
-        }.emitFunc,
-        ._finalize = struct {
-            fn finalize(self: *anyopaque) std.ArrayList(u8) {
-                const slf: *Type = @alignCast(@ptrCast(self));
-                return slf.finalize();
-            }
-        }.finalize,
-        ._disasm = struct {
-            fn disasm(self: *anyopaque, out: std.io.AnyWriter, colors: std.io.tty.Config) void {
-                const slf: *Type = @alignCast(@ptrCast(self));
-                return slf.disasm(out, colors);
-            }
-        }.disasm,
-    };
-}
+    pub const ValueSpec = union(enum) { init: []const u8, uninit: usize };
+};
 
 pub const EmitOptions = struct {
     id: u32,
@@ -122,11 +109,49 @@ pub const EmitOptions = struct {
     } = .{},
 };
 
+pub fn init(data: anytype) Mach {
+    const Type = @TypeOf(data.*);
+    if (!@hasDecl(Type, "Node")) @compileError("expected `pub const Node = enum(union) { ... }` to be present");
+
+    return .{
+        .data = data,
+        ._emitFunc = struct {
+            fn emitFunc(self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void {
+                const slf: *Type = @alignCast(@ptrCast(self));
+                const fnc: *graph.Func(Type.Node) = @alignCast(@ptrCast(func));
+                slf.emitFunc(fnc, opts);
+            }
+        }.emitFunc,
+        ._emitData = struct {
+            fn emitData(self: *anyopaque, opts: DataOptions) void {
+                const slf: *Type = @alignCast(@ptrCast(self));
+                slf.emitData(opts);
+            }
+        }.emitData,
+        ._finalize = struct {
+            fn finalize(self: *anyopaque) std.ArrayList(u8) {
+                const slf: *Type = @alignCast(@ptrCast(self));
+                return slf.finalize();
+            }
+        }.finalize,
+        ._disasm = struct {
+            fn disasm(self: *anyopaque, out: std.io.AnyWriter, colors: std.io.tty.Config) void {
+                const slf: *Type = @alignCast(@ptrCast(self));
+                return slf.disasm(out, colors);
+            }
+        }.disasm,
+    };
+}
+
 /// generate apropriate final output for a function
 ///
 /// this also runs optimization passes
 pub fn emitFunc(self: Mach, func: *BuilderFunc, opts: EmitOptions) void {
     self._emitFunc(self.data, func, opts);
+}
+
+pub fn emitData(self: Mach, opts: DataOptions) void {
+    self._emitData(self.data, opts);
 }
 
 /// package the final output (.eg object file)
