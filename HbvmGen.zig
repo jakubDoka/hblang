@@ -1,6 +1,5 @@
 out: std.ArrayList(u8),
 funcs: std.ArrayList(FuncData),
-funcs_appended: usize = 0,
 globals: std.ArrayList(GlobalData),
 globals_appended: usize = 0,
 global_relocs: std.ArrayList(GloblReloc),
@@ -20,9 +19,9 @@ const HbvmGen = @This();
 pub const dir = "inputs";
 
 const GlobalData = struct {
-    ptr: ?[*]u8,
+    ptr: ?[*]const u8 = null,
     size: u32,
-    offset: u32,
+    offset: u32 = 0,
 };
 
 const FuncData = struct {
@@ -86,77 +85,6 @@ pub const Node = union(enum) {
 
     pub const i_know_the_api = {};
 };
-
-pub fn init(out: std.ArrayList(u8)) HbvmGen {
-    return .{
-        .out = out,
-        .global_relocs = .init(out.allocator),
-        .funcs = .init(out.allocator),
-        .globals = .init(out.allocator),
-    };
-}
-
-pub fn deinit(self: *HbvmGen) void {
-    self.global_relocs.deinit();
-    self.funcs.deinit();
-    self.globals.deinit();
-    self.* = undefined;
-}
-
-pub fn doReloc(self: *HbvmGen, rel: Reloc, dest: i64) void {
-    const jump = dest - rel.offset;
-    const location: usize = @intCast(rel.offset + rel.sub_offset);
-
-    const size: usize = switch (rel.operand) {
-        .rel32 => 4,
-        .rel16 => 2,
-        else => unreachable,
-    };
-
-    @memcpy(self.out.items[location..][0..size], @as(*const [8]u8, @ptrCast(&jump))[0..size]);
-}
-
-pub fn link(self: *HbvmGen) void {
-    for (self.globals.items) |*ig| {
-        const value = ig.ptr orelse continue;
-        ig.offset = @intCast(self.out.items.len);
-        self.out.appendSlice(value[0..ig.size]) catch unreachable;
-    }
-
-    var cursor = self.out.items.len;
-    for (self.globals.items) |*ug| {
-        if (ug.ptr == null) continue;
-        ug.offset = @intCast(cursor);
-        cursor += ug.size;
-    }
-
-    for (self.global_relocs.items) |r| {
-        const offset = switch (r.kind) {
-            .func => self.funcs.items[r.dest].offset,
-            .global => self.globals.items[r.dest].offset,
-        };
-        self.doReloc(r.rel, offset);
-    }
-}
-
-pub fn finalize(self: *HbvmGen) std.ArrayList(u8) {
-    self.link();
-
-    defer self.deinit();
-    return self.out;
-}
-
-pub fn disasm(self: *HbvmGen, out: std.io.AnyWriter, colors: std.io.tty.Config) void {
-    self.link();
-
-    var arena = std.heap.ArenaAllocator.init(self.out.allocator);
-    defer arena.deinit();
-    var map = std.AutoHashMap(u32, []const u8).init(arena.allocator());
-    for (self.funcs.items) |gf| {
-        map.put(gf.offset, gf.name) catch unreachable;
-    }
-    isa.disasm(self.out.items, arena.allocator(), &map, out, colors) catch unreachable;
-}
 
 pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     opts.optimizations.execute(Node, func);
@@ -257,9 +185,89 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 }
 
 pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
-    _ = self; // autofix
-    _ = opts; // autofix
+    if (self.globals.items.len <= opts.id) {
+        self.funcs.resize(opts.id + 1) catch unreachable;
+    }
 
+    self.globals.items[opts.id] = switch (opts.value) {
+        .init => |v| .{ .ptr = v.ptr, .size = @intCast(v.len) },
+        .uninit => |size| .{ .size = @intCast(size) },
+    };
+}
+
+pub fn finalize(self: *HbvmGen) std.ArrayList(u8) {
+    self.link(false);
+
+    defer self.deinit();
+    return self.out;
+}
+
+pub fn disasm(self: *HbvmGen, out: std.io.AnyWriter, colors: std.io.tty.Config) void {
+    self.link(false);
+
+    var arena = std.heap.ArenaAllocator.init(self.out.allocator);
+    defer arena.deinit();
+    var map = std.AutoHashMap(u32, []const u8).init(arena.allocator());
+    for (self.funcs.items) |gf| {
+        map.put(gf.offset, gf.name) catch unreachable;
+    }
+    isa.disasm(self.out.items, arena.allocator(), &map, out, colors) catch unreachable;
+}
+
+pub fn init(out: std.ArrayList(u8)) HbvmGen {
+    return .{
+        .out = out,
+        .global_relocs = .init(out.allocator),
+        .funcs = .init(out.allocator),
+        .globals = .init(out.allocator),
+    };
+}
+
+pub fn deinit(self: *HbvmGen) void {
+    self.global_relocs.deinit();
+    self.funcs.deinit();
+    self.globals.deinit();
+    self.* = undefined;
+}
+
+pub fn doReloc(self: *HbvmGen, rel: Reloc, dest: i64) void {
+    const jump = dest - rel.offset;
+    const location: usize = @intCast(rel.offset + rel.sub_offset);
+
+    const size: usize = switch (rel.operand) {
+        .rel32 => 4,
+        .rel16 => 2,
+        else => unreachable,
+    };
+
+    @memcpy(self.out.items[location..][0..size], @as(*const [8]u8, @ptrCast(&jump))[0..size]);
+}
+
+pub fn link(self: *HbvmGen, push_uninit_memory: bool) void {
+    for (self.globals.items[self.globals_appended..]) |*ig| {
+        const value = ig.ptr orelse continue;
+        ig.offset = @intCast(self.out.items.len);
+        self.out.appendSlice(value[0..ig.size]) catch unreachable;
+    }
+
+    var cursor = self.out.items.len;
+    for (self.globals.items[self.globals_appended..]) |*ug| {
+        if (ug.ptr == null) continue;
+        ug.offset = @intCast(cursor);
+        cursor += ug.size;
+    }
+    if (push_uninit_memory) self.out.resize(cursor) catch unreachable;
+
+    for (self.global_relocs.items) |r| {
+        const offset = switch (r.kind) {
+            .func => self.funcs.items[r.dest].offset,
+            .global => self.globals.items[r.dest].offset,
+        };
+        self.doReloc(r.rel, offset);
+    }
+
+    self.global_relocs.items.len = 0;
+    self.globals_appended = self.globals.items.len;
 }
 
 pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) void {

@@ -461,6 +461,21 @@ main := fn(): uint {
 }
 ```
 
+#### global variables 1
+```hb
+counter: uint = 0
+
+dec := fn(): void {
+    counter -= 1
+}
+
+main := fn(): uint {
+    counter = 1
+    dec()
+    return counter
+}
+```
+
 ## progress
 
 - [ ] control flow

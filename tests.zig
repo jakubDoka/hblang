@@ -82,15 +82,15 @@ pub fn testBuilder(
     var types = Types.init(gpa, &.{ast});
     defer types.deinit();
 
-    var cg = Codegen.init(gpa, &types, output);
+    var cg = Codegen.init(gpa, &types, .runtime, output);
     defer cg.deinit();
 
-    _ = types.addFunc(.root, ast.posOf(main), fn_ast);
+    try cg.work_list.append(types.addFunc(.root, ast.posOf(main), fn_ast));
 
     var hbgen = HbvmGen.init(std.ArrayList(u8).init(gpa));
     var gen = Mach.init(&hbgen);
 
-    while (types.func_worklist.popOrNull()) |func| {
+    while (cg.nextTask()) |func| {
         if (verbose) {
             if (verbose) try header("SOURCE", output, colors);
             var out_fmt = std.ArrayList(u8).init(gpa);

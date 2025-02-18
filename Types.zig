@@ -1,6 +1,5 @@
 funcs: std.ArrayListUnmanaged(FuncData) = .{},
 arena: std.heap.ArenaAllocator,
-func_worklist: std.ArrayListUnmanaged(Func) = .{},
 interner: std.hash_map.HashMapUnmanaged(Id, void, TypeCtx, 70) = .{},
 source: []const Ast,
 
@@ -302,6 +301,10 @@ pub const FuncData = struct {
     file: File,
     name: Ast.Pos,
     ast: Ast.Id,
+    completion: std.EnumArray(Target, CompileState) = .{ .values = .{ .queued, .queued } },
+
+    pub const Target = enum { @"comptime", runtime };
+    pub const CompileState = enum { queued, compiled };
 
     pub fn computeAbiSize(self: FuncData, abi: Abi) struct { usize, usize, Abi.Spec } {
         const ret_abi = abi.categorize(self.ret);
@@ -321,7 +324,6 @@ pub fn init(gpa: std.mem.Allocator, source: []const Ast) Types {
 
 pub fn deinit(self: *Types) void {
     self.funcs.deinit(self.arena.child_allocator);
-    self.func_worklist.deinit(self.arena.child_allocator);
     self.interner.deinit(self.arena.child_allocator);
     self.arena.deinit();
     self.* = undefined;
@@ -430,11 +432,6 @@ pub fn addFunc(self: *Types, file: File, name: Ast.Pos, func: Ast.Id) Func {
         .ret = self.resolveTy(.init(file), fn_ast.ret),
         .ast = func,
     }) catch unreachable;
-
-    self.func_worklist.append(
-        self.arena.child_allocator,
-        @enumFromInt(self.funcs.items.len - 1),
-    ) catch unreachable;
 
     return @enumFromInt(self.funcs.items.len - 1);
 }

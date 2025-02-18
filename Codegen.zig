@@ -1,9 +1,11 @@
 bl: Builder,
 types: *Types,
 diagnostics: std.io.AnyWriter,
+work_list: std.ArrayList(Types.Func),
+target: Types.FuncData.Target,
 comptime abi: Types.Abi = .ableos,
 struct_ret_ptr: ?*Node = undefined,
-scope: Scope = undefined,
+scope: std.ArrayList(ScopeEntry) = undefined,
 loops: std.ArrayList(*Builder.Loop) = undefined,
 file: Types.File = undefined,
 ast: Ast = undefined,
@@ -20,25 +22,46 @@ const Node = Builder.BuildNode;
 const DataType = Builder.DataType;
 const Codegen = @This();
 const panic = std.debug.panic;
-const Scope = std.ArrayList(ScopeEntry);
 
 const ScopeEntry = struct {
     ty: Types.Id,
 };
 
-const Loop = void;
-
-pub fn init(gpa: std.mem.Allocator, types: *Types, diagnostics: std.io.AnyWriter) Codegen {
+pub fn init(
+    gpa: std.mem.Allocator,
+    types: *Types,
+    target: Types.FuncData.Target,
+    diagnostics: std.io.AnyWriter,
+) Codegen {
     return .{
         .diagnostics = diagnostics,
         .types = types,
+        .target = target,
         .bl = .init(gpa),
+        .work_list = .init(gpa),
     };
 }
 
 pub fn deinit(self: *Codegen) void {
     self.bl.deinit();
+    self.work_list.deinit();
     self.* = undefined;
+}
+
+pub fn queue(self: *Codegen, func: Types.Func) void {
+    const fdata: *Types.FuncData = self.types.get(func);
+    if (fdata.completion.get(self.target) == .compiled) return;
+    self.work_list.append(func) catch unreachable;
+}
+
+pub fn nextTask(self: *Codegen) ?Types.Func {
+    while (true) {
+        const func = self.work_list.popOrNull() orelse return null;
+        const fdata: *Types.FuncData = self.types.get(func);
+        if (fdata.completion.get(self.target) == .compiled) continue;
+        fdata.completion.set(self.target, .compiled);
+        return func;
+    }
 }
 
 pub inline fn arena(self: *Codegen) std.mem.Allocator {
@@ -466,6 +489,7 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .Call => |e| {
             const func = self.types.resolveFunc(self.file, e.called);
+            self.queue(func);
             const fdata: *Types.FuncData = self.types.get(func);
 
             const param_count, const return_count, const ret_abi = fdata.computeAbiSize(self.abi);

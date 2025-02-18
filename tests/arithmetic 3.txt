@@ -187,15 +187,15 @@ mne:
         neg $13, $13
          cp $1, $13
        jala $0, $31, 0
-cond:
-         cp $13, $2
-         cp $1, $13
-       jala $0, $31, 0
 zero:
        li64 $13, 0
          cp $1, $13
        jala $0, $31, 0
 one:
        li64 $13, 1
+         cp $1, $13
+       jala $0, $31, 0
+cond:
+         cp $13, $2
          cp $1, $13
        jala $0, $31, 0
