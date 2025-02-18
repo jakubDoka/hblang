@@ -294,10 +294,10 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 else => unreachable,
             };
 
-            const done, const global = self.types.addGlobal(self.file, self.getAst(vari.lhs).Ident.pos, decl);
-            const gdata = self.types.get(global);
+            const global = self.types.addGlobal(self.file, self.getAst(vari.lhs).Ident.pos, decl);
+            const gdata: *Types.GlobalData = self.types.get(global);
 
-            if (!done) {
+            if (gdata.completion.get(self.target) == .queued) {
                 var gen = Codegen.init(self.work_list.allocator, self.types, .@"comptime", self.diagnostics);
                 defer gen.deinit();
 
@@ -354,7 +354,7 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     },
                 };
 
-                const code_len = gen.types.comptime_code.link(false);
+                _ = gen.types.comptime_code.link(false);
                 const stack_size = 1024 * 10;
                 const stack_end = stack_size - gen.types.comptime_code.out.items.len;
 
@@ -370,8 +370,8 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     .writer = if (false) std.io.getStdErr().writer().any() else std.io.null_writer.any(),
                     .color_cfg = .escape_codes,
                     .memory = &stack,
-                    .code_start = stack_end,
-                    .code_end = stack_end + code_len,
+                    .code_start = 0,
+                    .code_end = 0,
                 };
                 const res = gen.types.vm.run(&vm_ctx) catch unreachable;
                 std.debug.assert(res == .tx);

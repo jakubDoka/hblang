@@ -491,8 +491,10 @@ fib := fn(n: uint): uint {
     return 55
 }
 
+bigon_era := some_other - 10
+
 main := fn(): uint {
-    return some_fib
+    return some_fib - bigon_era
 }
 ```
 

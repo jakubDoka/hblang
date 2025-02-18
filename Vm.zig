@@ -54,7 +54,7 @@ pub const SafeContext = struct {
     }
 
     fn progRead(self: *Self, comptime T: type, src: usize) !*align(1) const T {
-        const mem = self.memory[self.code_start..self.code_end][src - self.code_start ..][0..@sizeOf(T)];
+        const mem = self.memory[src..][0..@sizeOf(T)];
         return @ptrCast(mem.ptr);
     }
 };
@@ -188,7 +188,7 @@ pub fn run(self: *Vm, ctx: anytype) !isa.Op {
         },
         inline .lra, .lra16 => |op| {
             const args = try self.readArgs(op, ctx);
-            const addr = self.ip - isa.instrSize(op) + self.regs.get(args.arg1) + @as(usize, @intCast(args.arg2));
+            const addr = self.ip -% isa.instrSize(op) +% self.regs.get(args.arg1) +% @as(usize, @bitCast(@as(i64, args.arg2)));
             self.writeReg(args.arg0, addr);
         },
         .bmc => {

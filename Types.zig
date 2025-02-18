@@ -465,12 +465,12 @@ pub fn addFunc(self: *Types, file: File, name: Ast.Pos, func: Ast.Id) Func {
     return @enumFromInt(self.funcs.items.len - 1);
 }
 
-pub fn addGlobal(self: *Types, file: File, name: Ast.Pos, decl: Ast.Id) struct { bool, Global } {
+pub fn addGlobal(self: *Types, file: File, name: Ast.Pos, decl: Ast.Id) Global {
     const ast = self.getFile(file);
     const glob_ast = ast.exprs.get(decl).BinOp.rhs;
 
     for (self.globals.items, 0..) |g, i| {
-        if (g.ast == glob_ast) return .{ true, @enumFromInt(i) };
+        if (g.ast == glob_ast) return @enumFromInt(i);
     }
 
     self.globals.append(self.arena.child_allocator, .{
@@ -481,5 +481,5 @@ pub fn addGlobal(self: *Types, file: File, name: Ast.Pos, decl: Ast.Id) struct {
         .ty = undefined,
     }) catch unreachable;
 
-    return .{ false, @enumFromInt(self.globals.items.len - 1) };
+    return @enumFromInt(self.globals.items.len - 1);
 }
