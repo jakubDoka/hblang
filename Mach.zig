@@ -73,6 +73,7 @@ const Mach = @This();
 
 pub const DataOptions = struct {
     id: u32,
+    name: []const u8 = &.{},
     value: ValueSpec,
 
     pub const ValueSpec = union(enum) { init: []const u8, uninit: usize };
@@ -81,6 +82,7 @@ pub const DataOptions = struct {
 pub const EmitOptions = struct {
     id: u32,
     name: []const u8 = &.{},
+    entry: bool = false,
     optimizations: struct {
         dead_code_fuel: usize = 1000,
         mem2reg: bool = true,

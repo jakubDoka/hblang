@@ -1,12 +1,17 @@
 funcs: std.ArrayListUnmanaged(FuncData) = .{},
+globals: std.ArrayListUnmanaged(GlobalData) = .{},
 arena: std.heap.ArenaAllocator,
 interner: std.hash_map.HashMapUnmanaged(Id, void, TypeCtx, 70) = .{},
+comptime_code: HbvmGen,
+vm: Vm = .{},
 source: []const Ast,
 
 const std = @import("std");
 const Ast = @import("parser.zig");
 const graph = @import("graph.zig");
 const Lexer = @import("Lexer.zig");
+const HbvmGen = @import("HbvmGen.zig");
+const Vm = @import("Vm.zig");
 const Types = @This();
 
 pub const TypeCtx = struct {
@@ -41,6 +46,16 @@ pub const Func = enum(u32) {
 
     pub fn format(self: *const @This(), comptime _: anytype, _: anytype, writer: anytype) !void {
         try writer.print("fn{}", .{@intFromEnum(self.*)});
+    }
+};
+
+pub const Global = enum(u32) {
+    _,
+    const Data = GlobalData;
+    const field = "globals";
+
+    pub fn format(self: *const @This(), comptime _: anytype, _: anytype, writer: anytype) !void {
+        try writer.print("gl{}", .{@intFromEnum(self.*)});
     }
 };
 
@@ -295,6 +310,9 @@ pub const Abi = enum {
     }
 };
 
+pub const Target = enum { @"comptime", runtime };
+pub const CompileState = enum { queued, compiled };
+
 pub const FuncData = struct {
     args: []Id,
     ret: Id,
@@ -302,9 +320,6 @@ pub const FuncData = struct {
     name: Ast.Pos,
     ast: Ast.Id,
     completion: std.EnumArray(Target, CompileState) = .{ .values = .{ .queued, .queued } },
-
-    pub const Target = enum { @"comptime", runtime };
-    pub const CompileState = enum { queued, compiled };
 
     pub fn computeAbiSize(self: FuncData, abi: Abi) struct { usize, usize, Abi.Spec } {
         const ret_abi = abi.categorize(self.ret);
@@ -315,17 +330,30 @@ pub const FuncData = struct {
     }
 };
 
+pub const GlobalData = struct {
+    data: []const u8,
+    ty: Id,
+    file: File,
+    name: Ast.Pos,
+    ast: Ast.Id,
+    completion: std.EnumArray(Target, CompileState) = .{ .values = .{ .queued, .queued } },
+};
+
 pub fn init(gpa: std.mem.Allocator, source: []const Ast) Types {
     return .{
         .source = source,
         .arena = .init(gpa),
+        .comptime_code = .init(gpa),
     };
 }
 
 pub fn deinit(self: *Types) void {
     self.funcs.deinit(self.arena.child_allocator);
+    self.globals.deinit(self.arena.child_allocator);
     self.interner.deinit(self.arena.child_allocator);
     self.arena.deinit();
+    self.comptime_code.out.deinit();
+    self.comptime_code.deinit();
     self.* = undefined;
 }
 
@@ -369,8 +397,8 @@ pub fn resolveTy(self: *Types, ctx: Ctx, expr: Ast.Id) Id {
             else => std.debug.panic("{any}", .{e.op}),
         },
         .Ident => |e| {
-            const decl = ast.decls[e.id.index];
-            return self.resolveTy(.{ .file = ctx.file, .name = ast.tokenSrc(decl.name.index) }, ast.exprs.get(decl.expr).BinOp.rhs);
+            const decl = ast.findDecl(e.id) orelse unreachable;
+            return self.resolveTy(.{ .file = ctx.file, .name = ast.tokenSrc(e.id.pos()) }, ast.exprs.get(decl).BinOp.rhs);
         },
         .Struct => |e| {
             var v: Struct = undefined;
@@ -406,13 +434,14 @@ pub fn resolveTy(self: *Types, ctx: Ctx, expr: Ast.Id) Id {
 pub fn resolveFunc(self: *Types, file: File, called: Ast.Id) Func {
     const ast = self.getFile(file);
     const id = ast.exprs.get(called).Ident.id;
-    const fn_ast = ast.exprs.get(ast.decls[id.index].expr).BinOp.rhs;
+    const decl_ast = ast.findDecl(id).?;
+    const fn_ast = ast.exprs.get(decl_ast).BinOp.rhs;
 
     for (self.funcs.items, 0..) |f, i| {
         if (f.ast == fn_ast) return @enumFromInt(i);
     }
 
-    return self.addFunc(file, ast.posOf(ast.decls[id.index].expr), fn_ast);
+    return self.addFunc(file, ast.posOf(decl_ast), fn_ast);
 }
 
 pub fn addFunc(self: *Types, file: File, name: Ast.Pos, func: Ast.Id) Func {
@@ -434,4 +463,23 @@ pub fn addFunc(self: *Types, file: File, name: Ast.Pos, func: Ast.Id) Func {
     }) catch unreachable;
 
     return @enumFromInt(self.funcs.items.len - 1);
+}
+
+pub fn addGlobal(self: *Types, file: File, name: Ast.Pos, decl: Ast.Id) struct { bool, Global } {
+    const ast = self.getFile(file);
+    const glob_ast = ast.exprs.get(decl).BinOp.rhs;
+
+    for (self.globals.items, 0..) |g, i| {
+        if (g.ast == glob_ast) return .{ true, @enumFromInt(i) };
+    }
+
+    self.globals.append(self.arena.child_allocator, .{
+        .name = name,
+        .file = file,
+        .ast = glob_ast,
+        .data = undefined,
+        .ty = undefined,
+    }) catch unreachable;
+
+    return .{ false, @enumFromInt(self.globals.items.len - 1) };
 }

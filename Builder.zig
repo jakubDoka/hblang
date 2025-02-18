@@ -126,6 +126,10 @@ pub fn addFixedMemCpy(self: *Builder, dst: *BuildNode, src: *BuildNode, size: us
     return mcpy;
 }
 
+pub fn addGlobalAddr(self: *Builder, arbitrary_global_id: u32) SpecificNode(.GlobalAddr) {
+    return self.func.addNode(.GlobalAddr, &.{null}, .{ .id = arbitrary_global_id });
+}
+
 // #MATH =======================================================================
 
 pub fn addIntImm(self: *Builder, ty: DataType, value: i64) SpecificNode(.CInt) {

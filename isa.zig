@@ -168,7 +168,7 @@ pub fn disasm(
     writer: anytype,
     colors: std.io.tty.Config,
 ) !void {
-    var labelMap = try makeLabelMap(code, gpa);
+    var labelMap = try makeLabelMap(code, symbols, gpa);
     defer labelMap.deinit();
     var cursor: usize = 0;
     while (code.len > cursor) {
@@ -253,7 +253,7 @@ fn disasmArg(
     return size;
 }
 
-fn makeLabelMap(code: []const u8, gpa: std.mem.Allocator) !std.AutoHashMap(u32, u32) {
+fn makeLabelMap(code: []const u8, syms: *const std.AutoHashMap(u32, []const u8), gpa: std.mem.Allocator) !std.AutoHashMap(u32, u32) {
     var map = std.AutoHashMap(u32, u32).init(gpa);
     var cursor: i32 = 0;
     while (code.len > cursor) {
@@ -268,7 +268,9 @@ fn makeLabelMap(code: []const u8, gpa: std.mem.Allocator) !std.AutoHashMap(u32, 
                     const arg: *align(1) const ArgType(ty) =
                         @ptrCast(@alignCast(&code[@intCast(cursor)]));
                     const pos: u32 = @intCast(cursor_snap + arg.*);
-                    std.debug.assert(code[pos] < instr_count);
+                    if (!syms.contains(pos)) {
+                        std.debug.assert(code[pos] < instr_count);
+                    }
                     if (map.get(pos) == null) try map.put(pos, map.count());
                     cursor += @sizeOf(@TypeOf(arg.*));
                 },

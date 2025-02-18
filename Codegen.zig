@@ -1,8 +1,8 @@
 bl: Builder,
 types: *Types,
 diagnostics: std.io.AnyWriter,
-work_list: std.ArrayList(Types.Func),
-target: Types.FuncData.Target,
+work_list: std.ArrayList(Task),
+target: Types.Target,
 comptime abi: Types.Abi = .ableos,
 struct_ret_ptr: ?*Node = undefined,
 scope: std.ArrayList(ScopeEntry) = undefined,
@@ -14,6 +14,8 @@ errored: bool = undefined,
 
 const std = @import("std");
 const Ast = @import("parser.zig");
+const Vm = @import("Vm.zig");
+const isa = @import("isa.zig");
 const Types = @import("Types.zig");
 const Builder = @import("Builder.zig");
 const Lexer = @import("Lexer.zig");
@@ -23,14 +25,20 @@ const DataType = Builder.DataType;
 const Codegen = @This();
 const panic = std.debug.panic;
 
+const Task = union(enum) {
+    Func: Types.Func,
+    Global: Types.Global,
+};
+
 const ScopeEntry = struct {
+    name: Ast.Ident,
     ty: Types.Id,
 };
 
 pub fn init(
     gpa: std.mem.Allocator,
     types: *Types,
-    target: Types.FuncData.Target,
+    target: Types.Target,
     diagnostics: std.io.AnyWriter,
 ) Codegen {
     return .{
@@ -48,19 +56,27 @@ pub fn deinit(self: *Codegen) void {
     self.* = undefined;
 }
 
-pub fn queue(self: *Codegen, func: Types.Func) void {
-    const fdata: *Types.FuncData = self.types.get(func);
-    if (fdata.completion.get(self.target) == .compiled) return;
-    self.work_list.append(func) catch unreachable;
+pub fn queue(self: *Codegen, task: Task) void {
+    switch (task) {
+        inline else => |func| {
+            const fdata = self.types.get(func);
+            if (fdata.completion.get(self.target) == .compiled) return;
+            self.work_list.append(task) catch unreachable;
+        },
+    }
 }
 
-pub fn nextTask(self: *Codegen) ?Types.Func {
+pub fn nextTask(self: *Codegen) ?Task {
     while (true) {
-        const func = self.work_list.popOrNull() orelse return null;
-        const fdata: *Types.FuncData = self.types.get(func);
-        if (fdata.completion.get(self.target) == .compiled) continue;
-        fdata.completion.set(self.target, .compiled);
-        return func;
+        const task = self.work_list.popOrNull() orelse return null;
+        switch (task) {
+            inline else => |func| {
+                const fdata = self.types.get(func);
+                if (fdata.completion.get(self.target) == .compiled) continue;
+                fdata.completion.set(self.target, .compiled);
+            },
+        }
+        return task;
     }
 }
 
@@ -91,7 +107,7 @@ pub fn build(self: *Codegen, file: Types.File, func: Types.Func) !void {
         self.struct_ret_ptr = null;
     }
 
-    for (self.fdata.args) |ty| {
+    for (self.fdata.args, self.getAstSlice(self.getAst(self.fdata.ast).Fn.args)) |ty, aarg| {
         const abi = self.abi.categorize(ty);
         abi.types(params[i..]);
 
@@ -108,7 +124,7 @@ pub fn build(self: *Codegen, file: Types.File, func: Types.Func) !void {
             },
             .Imaginary => continue,
         };
-        self.scope.append(.{ .ty = ty }) catch unreachable;
+        self.scope.append(.{ .ty = ty, .name = self.getAst(self.getAst(aarg).Arg.bindings).Ident.id }) catch unreachable;
         self.bl.pushScopeValue(arg);
         i += abi.len(false);
     }
@@ -264,10 +280,112 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         .Bool => |e| {
             return mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(e.value)));
         },
-        .Ident => |e| {
-            const vari = self.scope.items[e.id.index];
-            const value = self.bl.getScopeValue(e.id.index);
-            return mkp(vari.ty, value);
+        .Ident => |e| for (self.scope.items, 0..) |se, i| {
+            if (se.name == e.id) {
+                const value = self.bl.getScopeValue(i);
+                return mkp(se.ty, value);
+            }
+        } else {
+            const decl = self.types.getFile(self.file).findDecl(e.id).?;
+            const vari = self.getAst(decl).BinOp;
+            const ty: ?Types.Id, const value: Ast.Id = switch (vari.op) {
+                .@":" => .{ self.types.resolveTy(.init(self.file), self.getAst(vari.rhs).BinOp.lhs), self.getAst(vari.rhs).BinOp.rhs },
+                .@":=" => .{ null, vari.rhs },
+                else => unreachable,
+            };
+
+            const done, const global = self.types.addGlobal(self.file, self.getAst(vari.lhs).Ident.pos, decl);
+            const gdata = self.types.get(global);
+
+            if (!done) {
+                var gen = Codegen.init(self.work_list.allocator, self.types, .@"comptime", self.diagnostics);
+                defer gen.deinit();
+
+                gen.errored = false;
+                gen.file = self.file;
+                gen.ast = file.*;
+
+                const token, const params, _ = gen.bl.begin(1, 0);
+
+                params[0] = .int;
+                const ptr = gen.bl.addParam(0);
+
+                var ret = gen.emit(.{ .ty = ty, .loc = ptr }, value);
+                gen.emitGenericStore(ptr, &ret);
+
+                gen.bl.end(token);
+
+                const id = gen.types.funcs.items.len;
+                gen.types.comptime_code.emitFunc(
+                    @ptrCast(&gen.bl.func),
+                    .{ .id = @intCast(id), .entry = true },
+                );
+
+                gen.types.funcs.append(gen.types.arena.child_allocator, .{
+                    .name = gdata.name,
+                    .args = &.{},
+                    .ret = ret.ty,
+                    .file = self.file,
+                    .ast = gdata.ast,
+                }) catch unreachable;
+
+                gen.bl.func.reset();
+
+                var fuel: usize = 10;
+                while (gen.nextTask()) |task| : (fuel -= 1) switch (task) {
+                    .Func => |func| {
+                        defer gen.bl.func.reset();
+                        gen.build(gen.file, func) catch {
+                            unreachable;
+                        };
+
+                        gen.types.comptime_code.emitFunc(
+                            @ptrCast(&gen.bl.func),
+                            .{ .id = @intFromEnum(func) },
+                        );
+                    },
+                    .Global => |glob| {
+                        const g = gen.types.get(glob);
+                        gen.types.comptime_code.emitData(.{
+                            .name = file.tokenSrc(g.name.index),
+                            .id = @intFromEnum(glob),
+                            .value = .{ .init = g.data },
+                        });
+                    },
+                };
+
+                const code_len = gen.types.comptime_code.link(false);
+                const stack_size = 1024 * 10;
+                const stack_end = stack_size - gen.types.comptime_code.out.items.len;
+
+                var stack: [stack_size]u8 = undefined;
+
+                @memcpy(stack[stack_end..], gen.types.comptime_code.out.items);
+
+                gen.types.vm.ip = stack_end + gen.types.comptime_code.funcs.items[id].offset;
+                gen.types.vm.fuel = 1024;
+                gen.types.vm.regs.set(isa.Reg.arg(0, 0), stack_end - ret.ty.size());
+                gen.types.vm.regs.set(.stack_addr, stack_end - ret.ty.size());
+                var vm_ctx = Vm.SafeContext{
+                    .writer = if (false) std.io.getStdErr().writer().any() else std.io.null_writer.any(),
+                    .color_cfg = .escape_codes,
+                    .memory = &stack,
+                    .code_start = stack_end,
+                    .code_end = stack_end + code_len,
+                };
+                const res = gen.types.vm.run(&vm_ctx) catch unreachable;
+                std.debug.assert(res == .tx);
+
+                const data = gen.types.arena.allocator().alloc(u8, ret.ty.size()) catch unreachable;
+                @memcpy(data, stack[stack_end - ret.ty.size() .. stack_end]);
+
+                gdata.data = data;
+                gdata.ty = ret.ty;
+
+                self.queue(.{ .Global = global });
+            }
+
+            return mkp(gdata.ty, self.bl.addGlobalAddr(@intFromEnum(global)));
         },
         .Ctor => |e| {
             if (e.ty.tag() == .Void and ctx.ty == null) {
@@ -399,7 +517,7 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 self.bl.resizeLocal(loc, value.ty.size());
                 self.emitGenericStore(loc, &value);
 
-                self.scope.append(.{ .ty = value.ty }) catch unreachable;
+                self.scope.append(.{ .ty = value.ty, .name = self.getAst(e.lhs).Ident.id }) catch unreachable;
                 self.bl.pushScopeValue(loc);
                 return .{};
             },
@@ -489,7 +607,7 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .Call => |e| {
             const func = self.types.resolveFunc(self.file, e.called);
-            self.queue(func);
+            self.queue(.{ .Func = func });
             const fdata: *Types.FuncData = self.types.get(func);
 
             const param_count, const return_count, const ret_abi = fdata.computeAbiSize(self.abi);

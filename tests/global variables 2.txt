@@ -1,0 +1,5 @@
+main:
+        lra $13, $0, :some_fib
+         ld $13, $13, 0, 8
+         cp $1, $13
+         tx

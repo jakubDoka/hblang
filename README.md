@@ -476,6 +476,26 @@ main := fn(): uint {
 }
 ```
 
+#### global variables 2
+```hb
+expectations := .{
+    return_value: 55,
+}
+
+some_other := 10
+
+some_fib := fib(some_other)
+
+fib := fn(n: uint): uint {
+    if n != 10 return 0
+    return 55
+}
+
+main := fn(): uint {
+    return some_fib
+}
+```
+
 ## progress
 
 - [ ] control flow

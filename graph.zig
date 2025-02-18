@@ -88,6 +88,10 @@ pub const Builtin = union(enum) {
     Store: Store,
     // [?Cfg, thread, dst, src, size, ...antideps]
     MemCpy: MemCpy,
+    // [?Cfg]
+    GlobalAddr: extern struct {
+        id: u32,
+    },
     // [?Cfg, ...lane]
     Split,
     // [?Cfg, ...lane]
@@ -542,7 +546,7 @@ pub fn Func(comptime MachNode: type) type {
 
             pub fn isInterned(kind: Kind, inpts: []const ?*Node) bool {
                 return switch (kind) {
-                    .CInt, .BinOp, .Load, .UnOp => true,
+                    .CInt, .BinOp, .Load, .UnOp, .GlobalAddr => true,
                     .Phi => inpts[2] != null,
                     else => callCheck("isInterned", kind),
                 };

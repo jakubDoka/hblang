@@ -11,20 +11,23 @@ const debug = @import("builtin").mode == .Debug;
 const one: u64 = 1;
 
 pub const SafeContext = struct {
-    color_cfg: std.io.tty.Config,
-    writer: std.io.AnyWriter,
-    code: []const u8,
+    color_cfg: std.io.tty.Config = .no_color,
+    writer: std.io.AnyWriter = std.io.null_writer.any(),
     memory: []u8,
+    code_start: usize,
+    code_end: usize,
 
     const check_ops = true;
     const assume_no_div_by_zero = false;
     const Self = @This();
 
     fn read(self: *Self, src: usize, dst: []u8) !void {
+        self.assertOutsideCode(src);
         @memcpy(dst, self.memory[src..][0..dst.len]);
     }
 
     fn write(self: *Self, src: []u8, dst: usize) !void {
+        self.assertOutsideCode(dst);
         @memcpy(self.memory[dst..][0..src.len], src);
     }
 
@@ -33,6 +36,8 @@ pub const SafeContext = struct {
     }
 
     fn memmove(self: *Self, dst: usize, src: usize, len: usize) !void {
+        self.assertOutsideCode(src);
+        self.assertOutsideCode(dst);
         const srcp = self.memory[src..];
         const dstp = self.memory[dst..];
         if (dst + len <= src or src + len <= dst) {
@@ -44,8 +49,12 @@ pub const SafeContext = struct {
         }
     }
 
+    fn assertOutsideCode(self: *const Self, pos: usize) void {
+        if (self.code_start <= pos and pos < self.code_end) unreachable;
+    }
+
     fn progRead(self: *Self, comptime T: type, src: usize) !*align(1) const T {
-        const mem = self.code[src..][0..@sizeOf(T)];
+        const mem = self.memory[self.code_start..self.code_end][src - self.code_start ..][0..@sizeOf(T)];
         return @ptrCast(mem.ptr);
     }
 };
@@ -179,7 +188,7 @@ pub fn run(self: *Vm, ctx: anytype) !isa.Op {
         },
         inline .lra, .lra16 => |op| {
             const args = try self.readArgs(op, ctx);
-            const addr = self.ip + self.regs.get(args.arg1) + @as(usize, @intCast(args.arg2));
+            const addr = self.ip - isa.instrSize(op) + self.regs.get(args.arg1) + @as(usize, @intCast(args.arg2));
             self.writeReg(args.arg0, addr);
         },
         .bmc => {

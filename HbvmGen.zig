@@ -19,8 +19,9 @@ const HbvmGen = @This();
 pub const dir = "inputs";
 
 const GlobalData = struct {
+    name: []const u8 = &.{},
     ptr: ?[*]const u8 = null,
-    size: u32,
+    size: u32 = 0,
     offset: u32 = 0,
 };
 
@@ -93,6 +94,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     const id = opts.id;
     const name = opts.name;
+    const entry = opts.entry;
 
     const tmp, const lock = func.beginTmpAlloc();
     defer lock.unlock();
@@ -162,7 +164,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
             if (used_registers != 0) {
                 self.emit(.ld, .{ .ret_addr, .stack_addr, -@as(i64, used_reg_size), used_reg_size });
             }
-            if (id == 0) {
+            if (entry) {
                 self.emit(.tx, .{});
             } else {
                 self.emit(.jala, .{ .null, .ret_addr, 0 });
@@ -186,24 +188,26 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
 pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
     if (self.globals.items.len <= opts.id) {
-        self.funcs.resize(opts.id + 1) catch unreachable;
+        const prev_len = self.globals.items.len;
+        self.globals.resize(opts.id + 1) catch unreachable;
+        @memset(self.globals.items[prev_len..], .{});
     }
 
     self.globals.items[opts.id] = switch (opts.value) {
-        .init => |v| .{ .ptr = v.ptr, .size = @intCast(v.len) },
-        .uninit => |size| .{ .size = @intCast(size) },
+        .init => |v| .{ .ptr = v.ptr, .size = @intCast(v.len), .name = opts.name },
+        .uninit => |size| .{ .size = @intCast(size), .name = opts.name },
     };
 }
 
 pub fn finalize(self: *HbvmGen) std.ArrayList(u8) {
-    self.link(false);
+    _ = self.link(false);
 
     defer self.deinit();
     return self.out;
 }
 
 pub fn disasm(self: *HbvmGen, out: std.io.AnyWriter, colors: std.io.tty.Config) void {
-    self.link(false);
+    const code_len = self.link(false);
 
     var arena = std.heap.ArenaAllocator.init(self.out.allocator);
     defer arena.deinit();
@@ -211,15 +215,18 @@ pub fn disasm(self: *HbvmGen, out: std.io.AnyWriter, colors: std.io.tty.Config) 
     for (self.funcs.items) |gf| {
         map.put(gf.offset, gf.name) catch unreachable;
     }
-    isa.disasm(self.out.items, arena.allocator(), &map, out, colors) catch unreachable;
+    for (self.globals.items) |gf| {
+        map.put(gf.offset, gf.name) catch unreachable;
+    }
+    isa.disasm(self.out.items[0..code_len], arena.allocator(), &map, out, colors) catch unreachable;
 }
 
-pub fn init(out: std.ArrayList(u8)) HbvmGen {
+pub fn init(gpa: std.mem.Allocator) HbvmGen {
     return .{
-        .out = out,
-        .global_relocs = .init(out.allocator),
-        .funcs = .init(out.allocator),
-        .globals = .init(out.allocator),
+        .out = .init(gpa),
+        .global_relocs = .init(gpa),
+        .funcs = .init(gpa),
+        .globals = .init(gpa),
     };
 }
 
@@ -243,7 +250,7 @@ pub fn doReloc(self: *HbvmGen, rel: Reloc, dest: i64) void {
     @memcpy(self.out.items[location..][0..size], @as(*const [8]u8, @ptrCast(&jump))[0..size]);
 }
 
-pub fn link(self: *HbvmGen, push_uninit_memory: bool) void {
+pub fn link(self: *HbvmGen, push_uninit_memory: bool) usize {
     for (self.globals.items[self.globals_appended..]) |*ig| {
         const value = ig.ptr orelse continue;
         ig.offset = @intCast(self.out.items.len);
@@ -252,7 +259,7 @@ pub fn link(self: *HbvmGen, push_uninit_memory: bool) void {
 
     var cursor = self.out.items.len;
     for (self.globals.items[self.globals_appended..]) |*ug| {
-        if (ug.ptr == null) continue;
+        if (ug.ptr != null) continue;
         ug.offset = @intCast(cursor);
         cursor += ug.size;
     }
@@ -268,6 +275,13 @@ pub fn link(self: *HbvmGen, push_uninit_memory: bool) void {
 
     self.global_relocs.items.len = 0;
     self.globals_appended = self.globals.items.len;
+
+    var data_size: usize = 0;
+    for (self.globals.items[0..self.globals_appended]) |g| if (push_uninit_memory or g.ptr != null) {
+        data_size += g.size;
+    };
+
+    return self.out.items.len - data_size;
 }
 
 pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) void {
@@ -279,6 +293,15 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 self.emit(.li64, .{ self.reg(no), @as(u64, @bitCast(extra.*)) });
             },
             .Arg => {},
+            .GlobalAddr => {
+                const extra = no.extra(.GlobalAddr);
+                self.global_relocs.append(.{
+                    .kind = .global,
+                    .dest = extra.id,
+                    .rel = self.reloc(3, .rel32),
+                }) catch unreachable;
+                self.emit(.lra, .{ self.reg(no), .null, 0 });
+            },
             .Local => {
                 const extra = no.extra(.Local);
                 self.emit(.addi64, .{ self.reg(no), .stack_addr, extra.* });

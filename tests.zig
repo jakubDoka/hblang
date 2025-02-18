@@ -60,7 +60,7 @@ pub fn testBuilder(
 
     var ret: u64 = 0;
     for (ast.decls) |d| {
-        if (std.mem.eql(u8, ast.tokenSrc(d.name.index), "expectations")) {
+        if (std.mem.eql(u8, ast.tokenSrc(d.name.pos()), "expectations")) {
             const decl = ast.exprs.get(d.expr).BinOp.rhs;
             const ctor = ast.exprs.get(decl).Ctor;
             for (ast.exprs.view(ctor.fields)) |f| {
@@ -75,7 +75,7 @@ pub fn testBuilder(
     }
 
     const main = for (ast.decls) |d| {
-        if (std.mem.eql(u8, ast.tokenSrc(d.name.index), "main")) break d.expr;
+        if (std.mem.eql(u8, ast.tokenSrc(d.name.pos()), "main")) break d.expr;
     } else unreachable;
     const fn_ast = ast.exprs.get(main).BinOp.rhs;
 
@@ -85,63 +85,89 @@ pub fn testBuilder(
     var cg = Codegen.init(gpa, &types, .runtime, output);
     defer cg.deinit();
 
-    try cg.work_list.append(types.addFunc(.root, ast.posOf(main), fn_ast));
+    try cg.work_list.append(.{ .Func = types.addFunc(.root, ast.posOf(main), fn_ast) });
 
-    var hbgen = HbvmGen.init(std.ArrayList(u8).init(gpa));
+    var hbgen = HbvmGen.init(gpa);
     var gen = Mach.init(&hbgen);
 
-    while (cg.nextTask()) |func| {
-        if (verbose) {
-            if (verbose) try header("SOURCE", output, colors);
-            var out_fmt = std.ArrayList(u8).init(gpa);
-            defer out_fmt.deinit();
-            try ast.fmtExpr(&out_fmt, types.get(func).ast);
-            try output.writeAll(out_fmt.items);
-        }
+    const static = struct {
+        var depht_fuel: usize = 2;
+    };
 
-        if (verbose) try header("UNSCHEDULED SON", output, colors);
-        try cg.build(.root, func);
-        defer cg.bl.func.reset();
+    static.depht_fuel -= 1;
+    defer static.depht_fuel += 1;
 
-        const fnc: *graph.Func(HbvmGen.Node) = @ptrCast(&cg.bl.func);
-        if (verbose) fnc.fmtUnscheduled(output, colors);
+    var fuel: usize = 10;
+    while (cg.nextTask()) |task| : (fuel -= 1) switch (task) {
+        .Func => |func| {
+            if (verbose) {
+                if (verbose) try header("SOURCE", output, colors);
+                var out_fmt = std.ArrayList(u8).init(gpa);
+                defer out_fmt.deinit();
+                try ast.fmtExpr(&out_fmt, types.get(func).ast);
+                try output.writeAll(out_fmt.items);
+            }
 
-        if (verbose) try header("OPTIMIZED SON", output, colors);
-        fnc.iterPeeps(10000, @TypeOf(fnc.*).idealizeDead);
-        fnc.mem2reg();
-        fnc.iterPeeps(10000, @TypeOf(fnc.*).idealize);
-        if (verbose) fnc.fmtUnscheduled(output, colors);
+            if (verbose) try header("UNSCHEDULED SON", output, colors);
+            try cg.build(.root, func);
+            defer cg.bl.func.reset();
 
-        if (verbose) try header("SCHEDULED SON", output, colors);
-        fnc.gcm();
-        if (verbose) fnc.fmtScheduled(output, colors);
+            const fnc: *graph.Func(HbvmGen.Node) = @ptrCast(&cg.bl.func);
+            if (verbose) fnc.fmtUnscheduled(output, colors);
 
-        const tf = types.get(func);
-        gen.emitFunc(&cg.bl.func, .{
-            .id = @intFromEnum(func),
-            .name = types.getFile(tf.file).tokenSrc(tf.name.index),
-            .optimizations = .none,
-        });
-    }
+            if (verbose) try header("OPTIMIZED SON", output, colors);
+            fnc.iterPeeps(10000, @TypeOf(fnc.*).idealizeDead);
+            fnc.mem2reg();
+            fnc.iterPeeps(10000, @TypeOf(fnc.*).idealize);
+            if (verbose) fnc.fmtUnscheduled(output, colors);
+
+            if (verbose) try header("SCHEDULED SON", output, colors);
+            fnc.gcm();
+            if (verbose) fnc.fmtScheduled(output, colors);
+
+            const tf = types.get(func);
+            gen.emitFunc(&cg.bl.func, .{
+                .id = @intFromEnum(func),
+                .name = types.getFile(tf.file).tokenSrc(tf.name.index),
+                .entry = func == .main,
+                .optimizations = .none,
+            });
+        },
+        .Global => |global| {
+            const g = types.get(global);
+            gen.emitData(.{
+                .name = ast.tokenSrc(g.name.index),
+                .id = @intFromEnum(global),
+                .value = .{ .init = g.data },
+            });
+        },
+    };
 
     if (verbose) try header("CODEGEN", output, colors);
+    const code_len = hbgen.link(true);
     gen.disasm(output, colors);
     var out = gen.finalize();
     defer out.deinit();
 
-    var vm = Vm{};
-    vm.fuel = 1000;
-    vm.ip = 0;
+    const stack_size = 1024 * 10;
+    const stack_end = stack_size - out.items.len;
 
-    if (verbose) try header("EXECUTION", output, colors);
-    var stack: [1024 * 10]u8 = undefined;
-    vm.regs.set(.stack_addr, stack.len);
+    var stack: [stack_size]u8 = undefined;
+
+    @memcpy(stack[stack_end..], out.items);
+
+    var vm = Vm{};
+    vm.ip = stack_end;
+    vm.fuel = 1024 * 10;
+    vm.regs.set(.stack_addr, stack_end);
     var ctx = Vm.SafeContext{
         .writer = if (verbose) output else std.io.null_writer.any(),
         .color_cfg = colors,
-        .code = out.items,
         .memory = &stack,
+        .code_start = stack_end,
+        .code_end = stack_end + code_len,
     };
+    if (verbose) try header("EXECUTION", output, colors);
 
     try std.testing.expectEqual(.tx, vm.run(&ctx));
     try std.testing.expectEqual(ret, vm.regs.get(.ret(0)));
