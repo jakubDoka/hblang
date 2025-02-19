@@ -132,6 +132,36 @@ add_one := fn(x: uint): uint {
 }
 ```
 
+#### functions 2
+```hb
+expectations := .{
+    return_value: 33,
+}
+
+main := @use("main.hb").main
+
+// in: main.hb
+
+one := @use("one.hb")
+two := @use("two.hb")
+
+main := fn(): uint {
+    return one.add(10) + two.add(20)
+}
+
+// in: two.hb
+
+add := fn(x: uint): uint {
+    return x + 2
+}
+
+// in: one.hb
+
+add := fn(x: uint): uint {
+    return x + 1
+}
+```
+
 #### comments 1
 ```hb
 // commant is an item
@@ -527,6 +557,8 @@ main := fn(): uint {
 
 ## progress
 
+- [ ] diagnostics
+  - [ ] don't crash on cycles
 - [ ] control flow
   - [x] functions
     - [ ] inlining
@@ -574,6 +606,7 @@ main := fn(): uint {
       - [ ] tuple
     - [ ] default values
     - [ ] scope
+    - [ ] file
     - [ ] operators
   - [ ] enums
     - [ ] specific values
@@ -590,7 +623,7 @@ main := fn(): uint {
   - [ ] tuples
   - [ ] nullable types
 - [ ] directives
-  - [ ] `@use(<string>)`
+  - [x] `@use(<string>)`
   - [ ] `@TypeOf(<expr>)`
   - [ ] `@as(<ty>, <expr>)`
   - [ ] `@intcast(<expr>)`

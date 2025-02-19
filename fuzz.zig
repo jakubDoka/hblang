@@ -48,7 +48,7 @@ fn fuzz(seed: usize, arena: std.mem.Allocator) !void {
     for (funcs) |*f| {
         f.* = .{
             .file = .root,
-            .name = .init(0),
+            .name = "mian",
             .ast = undefined,
             .args = try arena.alloc(Types.Id, rng.intRangeAtMost(usize, 0, max_arg_count)),
             .ret = return_types[rng.intRangeLessThan(usize, 0, return_types.len)],
@@ -168,6 +168,7 @@ const generators = enum {
                 }
                 return depth_requirement;
             },
+            .Func => unreachable,
         };
     }
 

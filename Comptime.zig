@@ -5,7 +5,7 @@ const Ast = @import("Ast.zig");
 const Vm = @import("Vm.zig");
 
 const fdata = Types.FuncData{
-    .name = .init(0),
+    .name = "!",
     .args = &.{},
     .ret = .never,
     .file = @enumFromInt(0),
@@ -59,7 +59,7 @@ pub fn evalGlobal(self: *Codegen, global: Types.Global, ty: ?Types.Id, value: As
         .Global => |glob| {
             const g = gen.types.get(glob);
             gen.types.comptime_code.emitData(.{
-                .name = gen.ast.tokenSrc(g.name.index),
+                .name = g.name,
                 .id = @intFromEnum(glob),
                 .value = .{ .init = g.data },
             });

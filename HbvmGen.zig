@@ -348,106 +348,53 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .BinOp => {
                 const mone = std.math.maxInt(u64);
-                const extra = no.extra(.BinOp);
-                switch (extra.*) {
-                    .iadd => switch (no.data_type) {
-                        .i8 => self.binop(.add8, no),
-                        .i16 => self.binop(.add16, no),
-                        .i32 => self.binop(.add32, no),
-                        .int => self.binop(.add64, no),
-                        else => unreachable,
-                    },
-                    .isub => switch (no.data_type) {
-                        .i8 => self.binop(.sub8, no),
-                        .i16 => self.binop(.sub16, no),
-                        .i32 => self.binop(.sub32, no),
-                        .int => self.binop(.sub64, no),
-                        else => unreachable,
-                    },
-                    .imul => switch (no.data_type) {
-                        .i8 => self.binop(.mul8, no),
-                        .i16 => self.binop(.mul16, no),
-                        .i32 => self.binop(.mul32, no),
-                        .int => self.binop(.mul64, no),
-                        else => unreachable,
-                    },
-                    .udiv => {
-                        const args = .{ self.reg(no), .null, self.reg(inps[0]), self.reg(inps[1]) };
-                        switch (no.data_type) {
-                            .i8 => self.emit(.diru8, args),
-                            .i16 => self.emit(.diru16, args),
-                            .i32 => self.emit(.diru32, args),
-                            .int => self.emit(.diru64, args),
-                            else => unreachable,
-                        }
-                    },
-                    .sdiv => {
-                        const args = .{ self.reg(no), .null, self.reg(inps[0]), self.reg(inps[1]) };
-                        switch (no.data_type) {
-                            .i8 => self.emit(.dirs8, args),
-                            .i16 => self.emit(.dirs16, args),
-                            .i32 => self.emit(.dirs32, args),
-                            .int => self.emit(.dirs64, args),
-                            else => unreachable,
-                        }
-                    },
-                    .eq => {
-                        self.binop(.cmpu, no);
-                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), 0 });
-                        self.emit(.not, .{ self.reg(no), self.reg(no) });
-                    },
-                    .ne => {
-                        self.binop(.cmpu, no);
-                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), 0 });
-                    },
-                    .ule => {
-                        self.binop(.cmpu, no);
-                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), 1 });
-                    },
-                    .sle => {
-                        self.binop(.cmps, no);
-                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), 1 });
-                    },
-                    .uge => {
-                        self.binop(.cmpu, no);
-                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), mone });
-                    },
-                    .sge => {
-                        self.binop(.cmps, no);
-                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), mone });
-                    },
-                    .ugt => {
-                        self.binop(.cmpu, no);
-                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), 1 });
-                        self.emit(.not, .{ self.reg(no), self.reg(no) });
-                    },
-                    .sgt => {
-                        self.binop(.cmps, no);
-                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), 1 });
-                        self.emit(.not, .{ self.reg(no), self.reg(no) });
-                    },
-                    .ult => {
-                        self.binop(.cmpu, no);
-                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), mone });
-                        self.emit(.not, .{ self.reg(no), self.reg(no) });
-                    },
-                    .slt => {
-                        self.binop(.cmps, no);
-                        self.emit(.cmpui, .{ self.reg(no), self.reg(no), mone });
-                        self.emit(.not, .{ self.reg(no), self.reg(no) });
-                    },
+                const extra = no.extra(.BinOp).*;
+
+                var op: isa.Op = switch (extra) {
+                    .iadd => .add8,
+                    .isub => .sub8,
+                    .imul => .mul8,
+                    .udiv => .diru8,
+                    .sdiv => .dirs8,
+                    .eq, .ne, .uge, .ule, .ugt, .ult => .cmpu,
+                    .sge, .sle, .sgt, .slt => .cmps,
+                };
+
+                switch (extra) {
+                    .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => {},
+                    else => op = @enumFromInt(@intFromEnum(op) +
+                        (@intFromEnum(no.data_type) - @intFromEnum(graph.DataType.i8))),
+                }
+
+                const lhs, const rhs = .{ self.reg(no.inputs()[1]), self.reg(no.inputs()[2]) };
+                switch (extra) {
+                    .udiv, .sdiv => self.emitLow("RRRR", op, .{ self.reg(no), .null, lhs, rhs }),
+                    else => self.emitLow("RRR", op, .{ self.reg(no), lhs, rhs }),
+                }
+
+                extra_comparison_instrs: {
+                    const compare_to: u64 = switch (extra) {
+                        .eq, .ne => 0,
+                        .ugt, .sgt, .ule, .sle => 1,
+                        .ult, .slt, .uge, .sge => mone,
+                        else => break :extra_comparison_instrs,
+                    };
+                    self.emit(.cmpui, .{ self.reg(no), self.reg(no), compare_to });
+                    switch (extra) {
+                        .eq, .ugt, .sgt, .ult, .slt => {
+                            self.emit(.not, .{ self.reg(no), self.reg(no) });
+                        },
+                        else => {},
+                    }
                 }
             },
             .UnOp => {
                 const extra = no.extra(.UnOp);
                 switch (extra.*) {
                     .sext => {
-                        switch (inps[0].?.data_type) {
-                            .i8 => self.emit(.sxt8, .{ self.reg(no), self.reg(inps[0]) }),
-                            .i16 => self.emit(.sxt16, .{ self.reg(no), self.reg(inps[0]) }),
-                            .i32 => self.emit(.sxt32, .{ self.reg(no), self.reg(inps[0]) }),
-                            else => unreachable,
-                        }
+                        const op: isa.Op = @enumFromInt(@intFromEnum(isa.Op.sxt8) +
+                            (@intFromEnum(inps[0].?.data_type) - @intFromEnum(graph.DataType.i8)));
+                        self.emitLow("RR", op, .{ self.reg(no), self.reg(inps[0]) });
                     },
                     .uext => {
                         const mask = (@as(u64, 1) << @intCast(inps[0].?.data_type.size() * 8)) - 1;
@@ -461,9 +408,17 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             .ImmBinOp => {
                 const alloc = self.reg(no);
                 const extra = no.extra(.ImmBinOp);
-                switch (extra.op) {
-                    inline .addi64, .muli64 => |t| {
-                        self.emit(t, .{ alloc, self.reg(inps[0]), @as(u64, @bitCast(extra.imm)) });
+
+                const chars = "BHWD";
+                const types = .{ u8, u16, u32, u64 };
+                switch (no.data_type) {
+                    inline .i8, .i16, .i32, .int => |t| {
+                        const idx = @intFromEnum(t) - @intFromEnum(graph.DataType.i8);
+                        self.emitLow(
+                            "RR" ++ chars[idx..][0..1],
+                            extra.op,
+                            .{ alloc, self.reg(inps[0]), @as(types[idx], @truncate(@as(u64, @bitCast(extra.imm)))) },
+                        );
                     },
                     else => unreachable,
                 }
@@ -474,11 +429,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     .rel = self.reloc(3, .rel16),
                 }) catch unreachable;
                 const extra = no.extra(.IfOp);
-                const args = .{ self.reg(inps[0]), self.reg(inps[1]), 0 };
-                switch (extra.op) {
-                    inline .jgtu, .jltu, .jlts, .jgts, .jne, .jeq => |op| self.emit(op, args),
-                    else => unreachable,
-                }
+                self.emitLow("RRP", extra.op, .{ self.reg(inps[0]), self.reg(inps[1]), 0 });
             },
             .If => {
                 self.local_relocs.append(.{
@@ -582,16 +533,18 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
     }
 }
 
-fn binop(self: *HbvmGen, comptime op: isa.Op, n: *Func.Node) void {
-    self.emit(op, .{ self.reg(n), self.reg(n.inputs()[1]), self.reg(n.inputs()[2]) });
-}
-
 fn reg(self: HbvmGen, n: ?*Func.Node) isa.Reg {
     return @enumFromInt(self.allocs[n.?.schedule]);
 }
 
-fn emit(self: *HbvmGen, comptime op: isa.Op, args: anytype) void {
-    self.out.appendSlice(&isa.pack(op, args)) catch unreachable;
+fn emit(self: *HbvmGen, comptime op: isa.Op, args: isa.TupleOf(isa.ArgsOf(op))) void {
+    self.emitLow(isa.spec[@intFromEnum(op)][1], op, args);
+}
+
+fn emitLow(self: *HbvmGen, comptime arg_str: []const u8, op: isa.Op, args: isa.TupleOf(isa.ArgsOfStr(arg_str))) void {
+    std.debug.assert(std.mem.eql(u8, isa.spec[@intFromEnum(op)][1], arg_str));
+    self.out.append(@intFromEnum(op)) catch unreachable;
+    self.out.appendSlice(std.mem.asBytes(&isa.packTo(isa.ArgsOfStr(arg_str), args))) catch unreachable;
 }
 
 pub fn reloc(self: *HbvmGen, sub_offset: u8, arg: isa.Arg) Reloc {

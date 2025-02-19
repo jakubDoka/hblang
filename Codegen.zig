@@ -538,7 +538,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             return .{};
         },
         .Call => |e| {
-            const func = self.types.resolveFunc(self.file, e.called);
+            const func = self.types.resolveTy(.init(self.file), e.called).data().Func;
             self.queue(.{ .Func = func });
             const fdata: *Types.FuncData = self.types.get(func);
 

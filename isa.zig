@@ -87,26 +87,39 @@ pub const Op = b: {
 };
 
 pub fn ArgsOf(comptime op: Op) type {
-    const cache = struct {
-        pub fn cache(comptime args: []const u8) type {
-            var fields: [args.len]std.builtin.Type.StructField = undefined;
-            for (args, &fields, 0..) |arg, *field, i| field.* = .{
-                .name = &[_:0]u8{ 'a', 'r', 'g', '0' + i },
-                .type = ArgType(Arg.fromChar(arg)),
-                .default_value_ptr = null,
-                .alignment = 1,
-                .is_comptime = false,
-            };
-            return @Type(.{ .@"struct" = .{
-                .fields = &fields,
-                .decls = &.{},
-                .is_tuple = false,
-                .layout = .@"extern",
-            } });
-        }
-    }.cache;
+    return ArgsOfStr(spec[@intFromEnum(op)][1]);
+}
 
-    return cache(spec[@intFromEnum(op)][1]);
+pub fn ArgsOfStr(comptime args: []const u8) type {
+    var fields: [args.len]std.builtin.Type.StructField = undefined;
+    for (args, &fields, 0..) |arg, *field, i| field.* = .{
+        .name = &[_:0]u8{ 'a', 'r', 'g', '0' + i },
+        .type = ArgType(Arg.fromChar(arg)),
+        .default_value_ptr = null,
+        .alignment = 1,
+        .is_comptime = false,
+    };
+    return @Type(.{ .@"struct" = .{
+        .fields = &fields,
+        .decls = &.{},
+        .is_tuple = false,
+        .layout = .@"extern",
+    } });
+}
+
+pub fn TupleOf(comptime Struct: type) type {
+    const field_info = std.meta.fields(Struct);
+    var fields: [field_info.len]type = undefined;
+    for (field_info, &fields) |arg, *field| field.* = arg.type;
+    return std.meta.Tuple(&fields);
+}
+
+pub fn packTo(comptime Args: type, args: TupleOf(Args)) Args {
+    var val: Args = undefined;
+    inline for (std.meta.fields(Args), std.meta.fields(@TypeOf(args))) |af, tf| {
+        @field(val, af.name) = @field(args, tf.name);
+    }
+    return val;
 }
 
 pub fn instrSize(comptime op: Op) comptime_int {

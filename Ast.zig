@@ -8,7 +8,9 @@ const root = @import("utils.zig");
 const Lexer = @import("Lexer.zig");
 const Fmt = @import("Fmt.zig");
 const Parser = @import("Parser.zig");
+const Types = @import("Types.zig");
 const Ast = @This();
+pub const Loader = Parser.Loader;
 pub const Store = root.EnumStore(Id, Expr);
 
 pub const Id = root.EnumId(Kind);
@@ -45,6 +47,7 @@ pub const Kind = enum {
     Fn,
     Struct,
     Arg,
+    Directive,
     Call,
     Field,
     Ctor,
@@ -58,6 +61,7 @@ pub const Kind = enum {
     Block,
     UnOp,
     BinOp,
+    Use,
     Integer,
     Bool,
 };
@@ -87,6 +91,10 @@ pub const Expr = union(Kind) {
     Arg: struct {
         bindings: Id,
         ty: Id,
+    },
+    Directive: struct {
+        pos: Pos,
+        args: Slice,
     },
     Call: struct {
         called: Id,
@@ -141,6 +149,10 @@ pub const Expr = union(Kind) {
         op: Lexer.Lexeme,
         rhs: Id,
     },
+    Use: struct {
+        pos: Pos,
+        file: Types.File,
+    },
     Integer: Pos,
     Bool: struct {
         pos: Pos,
@@ -159,10 +171,12 @@ pub const Pos = packed struct(Pos.Repr) {
     }
 };
 
-pub fn init(path: []const u8, code: []const u8, gpa: std.mem.Allocator) !Ast {
+pub fn init(gpa: std.mem.Allocator, current: Types.File, path: []const u8, code: []const u8, loader: Parser.Loader) !Ast {
     var lexer = Lexer.init(code, 0);
 
     var parser = Parser{
+        .current = current,
+        .loader = loader,
         .cur = lexer.next(),
         .lexer = lexer,
         .arena = std.heap.ArenaAllocator.init(gpa),

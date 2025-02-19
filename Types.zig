@@ -70,6 +70,7 @@ pub const Data = union(enum) {
     },
     Ptr: Id,
     Struct: *const Struct,
+    Func: Func,
 };
 
 pub const Struct = struct {
@@ -141,6 +142,7 @@ pub const Id = enum(usize) {
             .Builtin => .{ .Builtin = @enumFromInt(repr.data) },
             .Ptr => .{ .Ptr = @as(*const Id, @ptrFromInt(repr.data)).* },
             .Struct => .{ .Struct = @ptrFromInt(repr.data) },
+            .Func => .{ .Func = @enumFromInt(repr.data) },
         };
     }
 
@@ -166,6 +168,7 @@ pub const Id = enum(usize) {
                 siz = std.mem.alignForward(usize, siz, alignm);
                 return siz;
             },
+            .Func => unreachable,
         };
     }
 
@@ -180,6 +183,7 @@ pub const Id = enum(usize) {
                 }
                 return alignm;
             },
+            .Func => unreachable,
         };
     }
 
@@ -215,6 +219,7 @@ pub const Id = enum(usize) {
             .Ptr => |b| writer.print("^{}", .{b}),
             .Builtin => |b| writer.writeAll(@tagName(b)),
             .Struct => |b| writer.writeAll(b.name),
+            .Func => |b| writer.print("{}", .{b}),
         };
     }
 };
@@ -278,6 +283,7 @@ pub const Abi = enum {
             .Struct => |s| switch (self) {
                 .ableos => categorizeAbleosStruct(s),
             },
+            .Func => unreachable,
         };
     }
 
@@ -316,7 +322,7 @@ pub const FuncData = struct {
     args: []Id,
     ret: Id,
     file: File,
-    name: Ast.Pos,
+    name: []const u8,
     ast: Ast.Id,
     completion: std.EnumArray(Target, CompileState) = .{ .values = .{ .queued, .queued } },
 
@@ -335,7 +341,7 @@ pub const GlobalData = struct {
     data: []const u8,
     ty: Id,
     file: File,
-    name: Ast.Pos,
+    name: []const u8,
     ast: Ast.Id,
     completion: std.EnumArray(Target, CompileState) = .{ .values = .{ .queued, .queued } },
 
@@ -392,8 +398,12 @@ const Ctx = struct {
 };
 
 pub fn resolveTy(self: *Types, ctx: Ctx, expr: Ast.Id) Id {
+    return self.resolveTyExpr(ctx, expr, self.getFile(ctx.file).exprs.get(expr));
+}
+
+pub fn resolveTyExpr(self: *Types, ctx: Ctx, expr_id: Ast.Id, expr: Ast.Expr) Id {
     const ast = self.getFile(ctx.file);
-    return switch (ast.exprs.get(expr)) {
+    return switch (expr) {
         .Buty => |e| .fromLexeme(e.bt),
         .UnOp => |e| switch (e.op) {
             .@"^" => self.makePtr(self.resolveTy(ctx, e.oper)),
@@ -430,24 +440,38 @@ pub fn resolveTy(self: *Types, ctx: Ctx, expr: Ast.Id) Id {
             slot.key_ptr.* = Id.init(.Struct, @intFromPtr(struct_slot));
             return slot.key_ptr.*;
         },
-        else => std.debug.panic("{any}", .{expr.tag()}),
+        .Fn => {
+            const fn_ast = expr_id;
+
+            for (self.funcs.items, 0..) |f, i| {
+                if (f.ast == fn_ast and f.file == ctx.file) return Id.init(.Func, i);
+            }
+
+            return Id.init(.Func, @intFromEnum(self.addFunc(ctx.file, ctx.name, fn_ast)));
+        },
+        .Field => |e| {
+            const base = self.resolveTy(.init(ctx.file), e.base);
+            const name = ast.tokenSrc(e.field.index);
+            const other_file = base.data().Struct.file;
+            const other_ast = self.getFile(other_file);
+            const decl = other_ast.findDecl(name).?;
+            return self.resolveTy(
+                .{ .name = name, .file = other_file },
+                other_ast.exprs.get(decl).BinOp.rhs,
+            );
+        },
+        .Use => |e| {
+            return self.resolveTyExpr(
+                .{ .file = e.file, .name = self.getFile(e.file).path },
+                expr_id,
+                .{ .Struct = .{ .pos = .init(0), .fields = .{} } },
+            );
+        },
+        else => std.debug.panic("{any}", .{expr_id.tag()}),
     };
 }
 
-pub fn resolveFunc(self: *Types, file: File, called: Ast.Id) Func {
-    const ast = self.getFile(file);
-    const id = ast.exprs.get(called).Ident.id;
-    const decl_ast = ast.findDecl(id).?;
-    const fn_ast = ast.exprs.get(decl_ast).BinOp.rhs;
-
-    for (self.funcs.items, 0..) |f, i| {
-        if (f.ast == fn_ast) return @enumFromInt(i);
-    }
-
-    return self.addFunc(file, ast.posOf(decl_ast), fn_ast);
-}
-
-pub fn addFunc(self: *Types, file: File, name: Ast.Pos, func: Ast.Id) Func {
+pub fn addFunc(self: *Types, file: File, name: []const u8, func: Ast.Id) Func {
     const ast = self.getFile(file);
     const fn_ast = self.getAst(file, func).Fn;
 
@@ -477,7 +501,7 @@ pub fn addGlobal(self: *Types, file: File, name: Ast.Pos, decl: Ast.Id) Global {
     }
 
     self.globals.append(self.arena.child_allocator, .{
-        .name = name,
+        .name = ast.tokenSrc(name.index),
         .file = file,
         .ast = glob_ast,
         .data = undefined,

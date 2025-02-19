@@ -55,8 +55,53 @@ pub fn testBuilder(
     colors: std.io.tty.Config,
     verbose: bool,
 ) !void {
-    var ast = try Ast.init(name, code, gpa);
-    defer ast.deinit(gpa);
+    _ = name; // autofix
+    const FileRecord = struct {
+        path: []const u8,
+        source: []const u8,
+    };
+
+    const KnownLoader = struct {
+        files: []const FileRecord,
+
+        pub fn load(self: *@This(), opts: Ast.Loader.LoadOptions) Types.File {
+            return for (self.files, 0..) |fr, i| {
+                if (std.mem.eql(u8, fr.path, opts.path)) break @enumFromInt(i);
+            } else unreachable;
+        }
+    };
+
+    var files = std.ArrayList(FileRecord).init(gpa);
+    defer files.deinit();
+
+    const signifier = "// in: ";
+    var prev_name: []const u8 = "test";
+    var prev_end: usize = 0;
+    while (prev_end < code.len) {
+        const next_end = if (std.mem.indexOf(u8, code[prev_end..], signifier)) |idx| prev_end + idx else code.len;
+        const fr = FileRecord{
+            .path = prev_name,
+            .source = std.mem.trim(u8, code[prev_end..next_end], "\t \n"),
+        };
+        try files.append(fr);
+        prev_end = next_end + signifier.len;
+        if (prev_end < code.len) if (std.mem.indexOf(u8, code[prev_end..], "\n")) |idx| {
+            prev_name = code[prev_end..][0..idx];
+            prev_end += idx + 1;
+        };
+    }
+
+    var loader = KnownLoader{ .files = files.items };
+    const asts = gpa.alloc(Ast, files.items.len) catch unreachable;
+    defer {
+        for (asts) |*a| a.deinit(gpa);
+        gpa.free(asts);
+    }
+    for (asts, files.items, 0..) |*ast, fr, i| {
+        ast.* = try Ast.init(gpa, @enumFromInt(i), fr.path, fr.source, .init(&loader));
+    }
+
+    const ast = asts[0];
 
     var ret: u64 = 0;
     if (ast.findDecl("expectations")) |d| {
@@ -75,13 +120,13 @@ pub fn testBuilder(
     const main = ast.findDecl("main").?;
     const fn_ast = ast.exprs.get(main).BinOp.rhs;
 
-    var types = Types.init(gpa, &.{ast});
+    var types = Types.init(gpa, asts);
     defer types.deinit();
 
     var cg = Codegen.init(gpa, &types, .runtime, output);
     defer cg.deinit();
 
-    try cg.work_list.append(.{ .Func = types.addFunc(.root, ast.posOf(main), fn_ast) });
+    try cg.work_list.append(.{ .Func = types.resolveTy(.{ .file = .root, .name = "main" }, fn_ast).data().Func });
 
     var hbgen = HbvmGen.init(gpa);
     var gen = Mach.init(&hbgen);
@@ -92,12 +137,13 @@ pub fn testBuilder(
                 if (verbose) try header("SOURCE", output, colors);
                 var out_fmt = std.ArrayList(u8).init(gpa);
                 defer out_fmt.deinit();
-                try ast.fmtExpr(&out_fmt, types.get(func).ast);
+                try asts[@intFromEnum(types.get(func).file)].fmtExpr(&out_fmt, types.get(func).ast);
                 try output.writeAll(out_fmt.items);
             }
 
             if (verbose) try header("UNSCHEDULED SON", output, colors);
-            try cg.build(.root, func);
+            var tf = types.get(func);
+            try cg.build(tf.file, func);
             defer cg.bl.func.reset();
 
             const fnc: *graph.Func(HbvmGen.Node) = @ptrCast(&cg.bl.func);
@@ -113,10 +159,10 @@ pub fn testBuilder(
             fnc.gcm();
             if (verbose) fnc.fmtScheduled(output, colors);
 
-            const tf = types.get(func);
+            tf = types.get(func);
             gen.emitFunc(&cg.bl.func, .{
                 .id = @intFromEnum(func),
-                .name = types.getFile(tf.file).tokenSrc(tf.name.index),
+                .name = tf.name,
                 .entry = func == .main,
                 .optimizations = .none,
             });
@@ -124,7 +170,7 @@ pub fn testBuilder(
         .Global => |global| {
             const g = types.get(global);
             gen.emitData(.{
-                .name = ast.tokenSrc(g.name.index),
+                .name = g.name,
                 .id = @intFromEnum(global),
                 .value = .{ .init = g.data },
             });
@@ -164,7 +210,7 @@ pub fn testBuilder(
 pub fn testFmt(name: []const u8, path: []const u8, code: []const u8) !void {
     const gpa = std.testing.allocator;
 
-    var ast = try Ast.init(path, code, gpa);
+    var ast = try Ast.init(gpa, @enumFromInt(0), path, code, .noop);
     defer ast.deinit(gpa);
 
     const ast_overhead = @as(f64, @floatFromInt(ast.exprs.store.items.len)) /

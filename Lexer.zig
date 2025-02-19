@@ -19,6 +19,8 @@ pub const Lexeme = enum(u8) {
     i16,
     i32,
     int,
+    @"@" = '@',
+    @"\"" = '"',
     @"{" = '{',
     @"}" = '}',
     @"(" = '(',
@@ -61,6 +63,7 @@ pub const Lexeme = enum(u8) {
     @"<=" = '<' + 128,
     @">=" = '>' + 128,
 
+    // TODO: reverse the order because this does not look like precedence
     pub fn precedence(self: Lexeme) u8 {
         return switch (self) {
             .@":" => 16,
@@ -163,6 +166,13 @@ pub fn next(self: *Lexer) Token {
         self.cursor += 1;
         const kind: Lexeme = switch (self.source[pos]) {
             0...32 => continue,
+            '@' => b: {
+                while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
+                    'a'...'z', 'A'...'Z' => self.cursor += 1,
+                    else => break,
+                };
+                break :b .@"@";
+            },
             'a'...'z', 'A'...'Z', '_', 128...255 => b: {
                 while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
                     'a'...'z', 'A'...'Z', '0'...'9', '_', 128...255 => self.cursor += 1,
@@ -181,6 +191,15 @@ pub fn next(self: *Lexer) Token {
                     else => break,
                 };
                 break :b .Integer;
+            },
+            '"' => b: {
+                while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
+                    '"' => break,
+                    '\\' => self.cursor += 2,
+                    else => self.cursor += 1,
+                };
+                self.cursor += 1;
+                break :b .@"\"";
             },
             '/' => |c| if (self.advanceIf('*')) ml: {
                 var nesting: u8 = 1;

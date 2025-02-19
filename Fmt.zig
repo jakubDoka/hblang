@@ -68,6 +68,10 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.buf.appendSlice(": ");
             try self.fmtExpr(a.ty);
         },
+        .Directive => |d| {
+            try self.buf.appendSlice(Lexer.peekStr(self.ast.source, d.pos.index));
+            try self.fmtSlice(d.pos.indented, d.args, .@"(", .@",", .@")");
+        },
         .Call => |c| {
             try self.fmtExpr(c.called);
             try self.fmtSlice(c.arg_pos.indented, c.args, .@"(", .@",", .@")");
@@ -157,6 +161,9 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.buf.appendSlice(" ");
             try self.fmtExprPrec(o.rhs, o.op.precedence());
             if (prec < o.op.precedence()) try self.buf.appendSlice(")");
+        },
+        .Use => |use| {
+            try self.buf.writer().print("@use({s})", .{Lexer.peekStr(self.ast.source, use.pos.index)});
         },
         .Integer => |i| {
             const int_token = Lexer.peek(self.ast.source, i.index);
