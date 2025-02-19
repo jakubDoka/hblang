@@ -7,7 +7,7 @@ vm: Vm = .{},
 source: []const Ast,
 
 const std = @import("std");
-const Ast = @import("parser.zig");
+const Ast = @import("Ast.zig");
 const graph = @import("graph.zig");
 const Lexer = @import("Lexer.zig");
 const HbvmGen = @import("HbvmGen.zig");

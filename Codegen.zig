@@ -13,7 +13,7 @@ fdata: *const Types.FuncData = undefined,
 errored: bool = undefined,
 
 const std = @import("std");
-const Ast = @import("parser.zig");
+const Ast = @import("Ast.zig");
 const Vm = @import("Vm.zig");
 const isa = @import("isa.zig");
 const Types = @import("Types.zig");

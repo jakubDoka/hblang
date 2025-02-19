@@ -1,5 +1,5 @@
 pub const Lexer = @import("Lexer.zig");
-pub const Ast = @import("parser.zig");
+pub const Ast = @import("Ast.zig");
 pub const Vm = @import("Vm.zig");
 pub const Builder = @import("Builder.zig");
 pub const Codegen = @import("Codegen.zig");

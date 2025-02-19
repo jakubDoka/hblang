@@ -5,7 +5,7 @@ ret: ?*Func.Node = undefined,
 
 const std = @import("std");
 const graph = @import("graph.zig");
-const Ast = @import("parser.zig");
+const Ast = @import("Ast.zig");
 const Types = @import("Types.zig");
 const Builder = @This();
 const ScopeEntry = void;

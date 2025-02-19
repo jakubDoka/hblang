@@ -3,7 +3,7 @@ indent: u32 = 0,
 ast: *const Ast,
 
 const std = @import("std");
-const Ast = @import("parser.zig");
+const Ast = @import("Ast.zig");
 const Id = Ast.Id;
 const Slice = Ast.Slice;
 const Lexer = @import("Lexer.zig");

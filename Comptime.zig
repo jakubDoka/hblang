@@ -1,7 +1,7 @@
 const std = @import("std");
 const Codegen = @import("Codegen.zig");
 const Types = @import("Types.zig");
-const Ast = @import("parser.zig");
+const Ast = @import("Ast.zig");
 const Vm = @import("Vm.zig");
 
 const fdata = Types.FuncData{
