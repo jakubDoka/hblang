@@ -102,6 +102,17 @@ mne := fn(): i8 return -1
 mero := fn(): i8 return 0
 ```
 
+#### arithmetic 4
+```hb
+expectations := .{
+    return_value: 1,
+}
+
+main := fn(): bool {
+    return 3 == 2 * 2 - 1
+}
+```
+
 #### functions 1
 ```hb
 expectations := .{
@@ -515,6 +526,7 @@ main := fn(): uint {
     - [ ] labels
   - [ ] match
     - [ ] comptime
+  - [ ] defer
   - [ ] `die`
 - [ ] global variables
   - [ ] comptime evaluation

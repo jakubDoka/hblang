@@ -9,7 +9,7 @@ scope: std.ArrayList(ScopeEntry) = undefined,
 loops: std.ArrayList(*Builder.Loop) = undefined,
 file: Types.File = undefined,
 ast: Ast = undefined,
-fdata: *Types.FuncData = undefined,
+fdata: *const Types.FuncData = undefined,
 errored: bool = undefined,
 
 const std = @import("std");
@@ -84,17 +84,29 @@ pub inline fn arena(self: *Codegen) std.mem.Allocator {
     return self.bl.func.getTmpArena();
 }
 
-pub fn build(self: *Codegen, file: Types.File, func: Types.Func) !void {
+pub fn beginBuilder(
+    self: *Codegen,
+    file: Types.File,
+    func: *const Types.FuncData,
+    param_count: usize,
+    return_count: usize,
+) struct { Builder.BuildToken, []DataType, []DataType } {
     self.errored = false;
     self.file = file;
     self.ast = self.types.getFile(file).*;
-    self.fdata = self.types.get(func);
-
-    const param_count, const return_count, const ret_abi = self.fdata.computeAbiSize(self.abi);
-    const token, const params, const returns = self.bl.begin(param_count, return_count);
+    self.fdata = func;
+    const res = self.bl.begin(param_count, return_count);
 
     self.scope = .init(self.arena());
     self.loops = .init(self.arena());
+
+    return res;
+}
+
+pub fn build(self: *Codegen, file: Types.File, func: Types.Func) !void {
+    const fdata: Types.FuncData = self.types.get(func).*;
+    const param_count, const return_count, const ret_abi = fdata.computeAbiSize(self.abi);
+    const token, const params, const returns = self.beginBuilder(file, &fdata, param_count, return_count);
 
     var i: usize = 0;
 
@@ -261,7 +273,7 @@ pub fn emitGenericStore(self: *Codegen, loc: *Node, value: *Value) void {
     }
 }
 
-fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
+pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
     const file = self.types.getFile(self.file);
     switch (self.getAst(expr)) {
         .Comment => return .{},
@@ -298,94 +310,14 @@ fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             const gdata: *Types.GlobalData = self.types.get(global);
 
             if (gdata.completion.get(self.target) == .queued) {
-                var gen = Codegen.init(self.work_list.allocator, self.types, .@"comptime", self.diagnostics);
-                defer gen.deinit();
+                gdata.completion.set(self.target, .staged);
 
-                gen.errored = false;
-                gen.file = self.file;
-                gen.ast = file.*;
-
-                const token, const params, _ = gen.bl.begin(1, 0);
-
-                params[0] = .int;
-                const ptr = gen.bl.addParam(0);
-
-                var ret = gen.emit(.{ .ty = ty, .loc = ptr }, value);
-                gen.emitGenericStore(ptr, &ret);
-
-                gen.bl.end(token);
-
-                const id = gen.types.funcs.items.len;
-                gen.types.comptime_code.emitFunc(
-                    @ptrCast(&gen.bl.func),
-                    .{ .id = @intCast(id), .entry = true },
-                );
-
-                gen.types.funcs.append(gen.types.arena.child_allocator, .{
-                    .name = gdata.name,
-                    .args = &.{},
-                    .ret = ret.ty,
-                    .file = self.file,
-                    .ast = gdata.ast,
-                }) catch unreachable;
-
-                gen.bl.func.reset();
-
-                var fuel: usize = 10;
-                while (gen.nextTask()) |task| : (fuel -= 1) switch (task) {
-                    .Func => |func| {
-                        defer gen.bl.func.reset();
-                        gen.build(gen.file, func) catch {
-                            unreachable;
-                        };
-
-                        gen.types.comptime_code.emitFunc(
-                            @ptrCast(&gen.bl.func),
-                            .{ .id = @intFromEnum(func) },
-                        );
-                    },
-                    .Global => |glob| {
-                        const g = gen.types.get(glob);
-                        gen.types.comptime_code.emitData(.{
-                            .name = file.tokenSrc(g.name.index),
-                            .id = @intFromEnum(glob),
-                            .value = .{ .init = g.data },
-                        });
-                    },
-                };
-
-                _ = gen.types.comptime_code.link(false);
-                const stack_size = 1024 * 10;
-                const stack_end = stack_size - gen.types.comptime_code.out.items.len;
-
-                var stack: [stack_size]u8 = undefined;
-
-                @memcpy(stack[stack_end..], gen.types.comptime_code.out.items);
-
-                gen.types.vm.ip = stack_end + gen.types.comptime_code.funcs.items[id].offset;
-                gen.types.vm.fuel = 1024;
-                gen.types.vm.regs.set(isa.Reg.arg(0, 0), stack_end - ret.ty.size());
-                gen.types.vm.regs.set(.stack_addr, stack_end - ret.ty.size());
-                var vm_ctx = Vm.SafeContext{
-                    .writer = if (false) std.io.getStdErr().writer().any() else std.io.null_writer.any(),
-                    .color_cfg = .escape_codes,
-                    .memory = &stack,
-                    .code_start = 0,
-                    .code_end = 0,
-                };
-                const res = gen.types.vm.run(&vm_ctx) catch unreachable;
-                std.debug.assert(res == .tx);
-
-                const data = gen.types.arena.allocator().alloc(u8, ret.ty.size()) catch unreachable;
-                @memcpy(data, stack[stack_end - ret.ty.size() .. stack_end]);
-
-                gdata.data = data;
-                gdata.ty = ret.ty;
+                @import("Comptime.zig").evalGlobal(self, global, ty, value);
 
                 self.queue(.{ .Global = global });
             }
 
-            return mkp(gdata.ty, self.bl.addGlobalAddr(@intFromEnum(global)));
+            return mkp(self.types.get(global).ty, self.bl.addGlobalAddr(@intFromEnum(global)));
         },
         .Ctor => |e| {
             if (e.ty.tag() == .Void and ctx.ty == null) {

@@ -97,8 +97,7 @@ pub fn testBuilder(
     static.depht_fuel -= 1;
     defer static.depht_fuel += 1;
 
-    var fuel: usize = 10;
-    while (cg.nextTask()) |task| : (fuel -= 1) switch (task) {
+    while (cg.nextTask()) |task| switch (task) {
         .Func => |func| {
             if (verbose) {
                 if (verbose) try header("SOURCE", output, colors);

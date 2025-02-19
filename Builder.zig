@@ -40,7 +40,7 @@ pub fn deinit(self: *Builder) void {
     self.* = undefined;
 }
 
-const BuildToken = enum { @"please call Builder.begin() first, then Builder.end()" };
+pub const BuildToken = enum { @"please call Builder.begin() first, then Builder.end()" };
 
 pub fn begin(self: *Builder, param_count: usize, return_coutn: usize) struct { BuildToken, []DataType, []DataType } {
     _ = self.func.beginTmpAlloc();

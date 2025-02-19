@@ -311,7 +311,6 @@ pub const Abi = enum {
 };
 
 pub const Target = enum { @"comptime", runtime };
-pub const CompileState = enum { queued, compiled };
 
 pub const FuncData = struct {
     args: []Id,
@@ -320,6 +319,8 @@ pub const FuncData = struct {
     name: Ast.Pos,
     ast: Ast.Id,
     completion: std.EnumArray(Target, CompileState) = .{ .values = .{ .queued, .queued } },
+
+    pub const CompileState = enum { queued, compiled };
 
     pub fn computeAbiSize(self: FuncData, abi: Abi) struct { usize, usize, Abi.Spec } {
         const ret_abi = abi.categorize(self.ret);
@@ -337,6 +338,8 @@ pub const GlobalData = struct {
     name: Ast.Pos,
     ast: Ast.Id,
     completion: std.EnumArray(Target, CompileState) = .{ .values = .{ .queued, .queued } },
+
+    pub const CompileState = enum { queued, staged, compiled };
 };
 
 pub fn init(gpa: std.mem.Allocator, source: []const Ast) Types {
