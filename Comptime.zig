@@ -4,17 +4,17 @@ const Types = @import("Types.zig");
 const Ast = @import("parser.zig");
 const Vm = @import("Vm.zig");
 
+const fdata = Types.FuncData{
+    .name = .init(0),
+    .args = &.{},
+    .ret = .never,
+    .file = @enumFromInt(0),
+    .ast = .zeroSized(.Void),
+};
+
 pub fn evalGlobal(self: *Codegen, global: Types.Global, ty: ?Types.Id, value: Ast.Id) void {
     var gen = Codegen.init(self.work_list.allocator, self.types, .@"comptime", self.diagnostics);
     defer gen.deinit();
-
-    const fdata = Types.FuncData{
-        .name = .init(0),
-        .args = &.{},
-        .ret = .never,
-        .file = self.file,
-        .ast = .zeroSized(.Void),
-    };
 
     const token, const params, _ = gen.beginBuilder(self.file, &fdata, 1, 0);
 
@@ -40,6 +40,8 @@ pub fn evalGlobal(self: *Codegen, global: Types.Global, ty: ?Types.Id, value: As
         .ast = gen.types.get(global).ast,
     }) catch unreachable;
 
+    //gen.bl.func.fmtUnscheduled(std.io.getStdErr().writer().any(), .escape_codes);
+
     gen.bl.func.reset();
 
     while (gen.nextTask()) |task| switch (task) {
@@ -64,7 +66,7 @@ pub fn evalGlobal(self: *Codegen, global: Types.Global, ty: ?Types.Id, value: As
         },
     };
 
-    _ = gen.types.comptime_code.link(false);
+    _ = gen.types.comptime_code.link(true);
     const stack_size = 1024 * 10;
     const stack_end = stack_size - gen.types.comptime_code.out.items.len;
 

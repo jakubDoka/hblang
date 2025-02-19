@@ -1,5 +1,6 @@
 out: std.ArrayList(u8),
 funcs: std.ArrayList(FuncData),
+global_lookup: std.ArrayList(u32),
 globals: std.ArrayList(GlobalData),
 globals_appended: usize = 0,
 global_relocs: std.ArrayList(GloblReloc),
@@ -19,9 +20,9 @@ const HbvmGen = @This();
 pub const dir = "inputs";
 
 const GlobalData = struct {
-    name: []const u8 = &.{},
+    name: []const u8,
     ptr: ?[*]const u8 = null,
-    size: u32 = 0,
+    size: u32,
     offset: u32 = 0,
 };
 
@@ -187,16 +188,15 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 }
 
 pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
-    if (self.globals.items.len <= opts.id) {
-        const prev_len = self.globals.items.len;
-        self.globals.resize(opts.id + 1) catch unreachable;
-        @memset(self.globals.items[prev_len..], .{});
+    if (self.global_lookup.items.len <= opts.id) {
+        self.global_lookup.resize(opts.id + 1) catch unreachable;
     }
 
-    self.globals.items[opts.id] = switch (opts.value) {
+    self.global_lookup.items[opts.id] = @intCast(self.globals.items.len);
+    self.globals.append(switch (opts.value) {
         .init => |v| .{ .ptr = v.ptr, .size = @intCast(v.len), .name = opts.name },
         .uninit => |size| .{ .size = @intCast(size), .name = opts.name },
-    };
+    }) catch unreachable;
 }
 
 pub fn finalize(self: *HbvmGen) std.ArrayList(u8) {
@@ -225,6 +225,7 @@ pub fn init(gpa: std.mem.Allocator) HbvmGen {
     return .{
         .out = .init(gpa),
         .global_relocs = .init(gpa),
+        .global_lookup = .init(gpa),
         .funcs = .init(gpa),
         .globals = .init(gpa),
     };
@@ -234,6 +235,7 @@ pub fn deinit(self: *HbvmGen) void {
     self.global_relocs.deinit();
     self.funcs.deinit();
     self.globals.deinit();
+    self.global_lookup.deinit();
     self.* = undefined;
 }
 
@@ -268,7 +270,7 @@ pub fn link(self: *HbvmGen, push_uninit_memory: bool) usize {
     for (self.global_relocs.items) |r| {
         const offset = switch (r.kind) {
             .func => self.funcs.items[r.dest].offset,
-            .global => self.globals.items[r.dest].offset,
+            .global => self.globals.items[self.global_lookup.items[r.dest]].offset,
         };
         self.doReloc(r.rel, offset);
     }

@@ -509,6 +509,22 @@ main := fn(): uint {
 }
 ```
 
+#### global variables 3
+```hb
+expectations := .{
+    return_value: 3,
+}
+
+a := 0
+b := a + 1
+c := b + 1
+d := c + 1
+
+main := fn(): uint {
+    return d
+}
+```
+
 ## progress
 
 - [ ] control flow
@@ -528,8 +544,8 @@ main := fn(): uint {
     - [ ] comptime
   - [ ] defer
   - [ ] `die`
-- [ ] global variables
-  - [ ] comptime evaluation
+- [x] global variables
+  - [x] comptime evaluation
 - [ ] types
   - [ ] `idk`
   - [x] integers/bool
@@ -578,7 +594,8 @@ main := fn(): uint {
   - [ ] `@TypeOf(<expr>)`
   - [ ] `@as(<ty>, <expr>)`
   - [ ] `@intcast(<expr>)`
-  - [ ] `@sizeof(<ty>), @alignof(<ty>)`
+  - [ ] `@sizeof(<ty>)`
+  - [ ] `@alignof(<ty>)`
   - [ ] `@bitcast(<expr>)`
   - [ ] `@eca(...<expr>)`
   - [ ] `@embed(<string>)`
