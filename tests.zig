@@ -8,11 +8,11 @@ pub const Types = @import("Types.zig");
 pub const Regalloc = @import("Regalloc.zig");
 pub const graph = @import("graph.zig");
 pub const Mach = @import("Mach.zig");
+pub const Fuzz = @import("fuzz.zig");
 
 test {
     _ = @import("zig-out/tests.zig");
     _ = @import("zig-out/vendored_tests.zig");
-    _ = @import("fuzz.zig").main;
     std.testing.refAllDeclsRecursive(@This());
 }
 
@@ -85,13 +85,6 @@ pub fn testBuilder(
 
     var hbgen = HbvmGen.init(gpa);
     var gen = Mach.init(&hbgen);
-
-    const static = struct {
-        var depht_fuel: usize = 2;
-    };
-
-    static.depht_fuel -= 1;
-    defer static.depht_fuel += 1;
 
     while (cg.nextTask()) |task| switch (task) {
         .Func => |func| {
