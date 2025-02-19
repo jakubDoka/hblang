@@ -2,11 +2,11 @@ exprs: Store,
 path: []const u8,
 source: []const u8,
 items: Slice,
-decls: []const Decl,
 
 const std = @import("std");
 const root = @import("utils.zig");
 const Lexer = @import("Lexer.zig");
+const Fmt = @import("Fmt.zig");
 const Ast = @This();
 const Store = root.EnumStore(Id, Expr);
 
@@ -165,7 +165,6 @@ pub const Decl = struct {
 
 const Parser = struct {
     store: Store = .{},
-    decls: []Decl = &.{},
 
     gpa: std.mem.Allocator,
     arena: std.heap.ArenaAllocator,
@@ -194,16 +193,6 @@ const Parser = struct {
 
         self.undeclared_count = 0;
         const remining = self.finalizeVariablesLow(0);
-        self.decls = try self.gpa.alloc(Decl, self.active_syms.items.len);
-        for (self.active_syms.items, self.decls) |s, *d| {
-            if (s.decl.tag() == .Void) {
-                std.debug.panic("{s}\n", .{Lexer.peekStr(self.lexer.source, s.id.pos())});
-            }
-            d.* = .{
-                .name = s.id,
-                .expr = s.decl,
-            };
-        }
         for (self.active_syms.items[0..remining]) |s| {
             std.debug.print(
                 "undefined identifier: {s}\n",
@@ -509,206 +498,6 @@ const Parser = struct {
     }
 };
 
-const Fmt = struct {
-    buf: *std.ArrayList(u8),
-    indent: u32,
-    ast: *const Ast,
-
-    const Error = std.mem.Allocator.Error;
-
-    fn fmt(self: *Fmt) Error!void {
-        const items = self.ast.exprs.view(self.ast.items);
-        for (items, 1..) |id, i| {
-            try self.fmtExpr(id);
-            if (items.len > i) {
-                try self.autoInsertSemi(items[i]);
-                try self.preserveSpace(items[i]);
-            }
-            try self.buf.appendSlice("\n");
-        }
-    }
-
-    fn preserveSpace(self: *Fmt, id: Id) Error!void {
-        const pos = self.ast.posOf(id);
-        const preceding = self.ast.source[0..pos.index];
-        const preceding_whitespace = preceding[std.mem.trimRight(u8, preceding, " \t\r\n").len..];
-        const nline_count = std.mem.count(u8, preceding_whitespace, "\n");
-        if (nline_count > 1) try self.buf.appendSlice("\n");
-    }
-
-    fn autoInsertSemi(self: *Fmt, id: Id) Error!void {
-        const pos = self.ast.posOf(id);
-        const starting_token = Lexer.peek(self.ast.source, pos.index);
-        if (starting_token.kind.precedence() < 255) try self.buf.appendSlice(";");
-    }
-
-    fn fmtExpr(self: *Fmt, id: Id) Error!void {
-        return self.fmtExprPrec(id, 255);
-    }
-
-    fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
-        switch (self.ast.exprs.get(id)) {
-            .Void => {},
-            .Wildcard => try self.buf.appendSlice("_"),
-            .Comment => |c| {
-                const comment_token = Lexer.peek(self.ast.source, c.index);
-                const content = std.mem.trimRight(u8, comment_token.view(self.ast.source), "\n");
-                try self.buf.appendSlice(content);
-            },
-            .Ident => |i| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, i.pos.index)),
-            .Fn => |f| {
-                try self.buf.appendSlice("fn");
-                try self.fmtSlice(f.pos.indented, f.args, .@"(", .@",", .@")");
-                try self.buf.appendSlice(": ");
-                try self.fmtExpr(f.ret);
-                try self.buf.appendSlice(" ");
-                try self.fmtExpr(f.body);
-            },
-            .Struct => |s| {
-                try self.buf.appendSlice("struct");
-                if (s.pos.indented) try self.buf.appendSlice(" ");
-                try self.fmtSlice(s.pos.indented, s.fields, .@"{", .@",", .@"}");
-            },
-            .Arg => |a| {
-                try self.fmtExpr(a.bindings);
-                try self.buf.appendSlice(": ");
-                try self.fmtExpr(a.ty);
-            },
-            .Call => |c| {
-                try self.fmtExpr(c.called);
-                try self.fmtSlice(c.arg_pos.indented, c.args, .@"(", .@",", .@")");
-            },
-            .Field => |f| {
-                try self.fmtExpr(f.base);
-                try self.buf.appendSlice(".");
-                try self.buf.appendSlice(Lexer.peekStr(self.ast.source, f.field.index));
-            },
-            inline .Ctor, .Tupl => |v, t| {
-                try self.fmtExpr(v.ty);
-                const start = if (t == .Ctor) .@".{" else .@".(";
-                const end = if (t == .Ctor) .@"}" else .@")";
-                try self.fmtSlice(v.pos.indented, v.fields, start, .@",", end);
-            },
-            .CtorField => |f| {
-                try self.buf.appendSlice(Lexer.peekStr(self.ast.source, f.pos.index));
-                if (self.ast.exprs.getTyped(.Ident, f.value)) |ident|
-                    if (std.mem.eql(
-                        u8,
-                        Lexer.peekStr(self.ast.source, ident.pos.index),
-                        Lexer.peekStr(self.ast.source, f.pos.index),
-                    )) return;
-                try self.buf.appendSlice(": ");
-                try self.fmtExpr(f.value);
-            },
-            .Buty => |b| try self.buf.appendSlice(b.bt.repr()),
-            .Block => |b| {
-                const view = self.ast.exprs.view(b.stmts);
-
-                try self.buf.appendSlice("{\n");
-                self.indent += 1;
-                for (view, 1..) |stmt, i| {
-                    for (0..self.indent) |_| try self.buf.appendSlice("\t");
-                    try self.fmtExpr(stmt);
-                    if (view.len > i) {
-                        try self.autoInsertSemi(view[i]);
-                        try self.preserveSpace(view[i]);
-                    }
-                    try self.buf.appendSlice("\n");
-                }
-                self.indent -= 1;
-                for (0..self.indent) |_| try self.buf.appendSlice("\t");
-                try self.buf.appendSlice("}");
-            },
-            .If => |i| {
-                try self.buf.appendSlice("if ");
-                try self.fmtExpr(i.cond);
-                try self.buf.appendSlice(" ");
-                try self.fmtExpr(i.then);
-                if (i.else_.tag() != .Void) {
-                    try self.buf.appendSlice(" else ");
-                    try self.fmtExpr(i.else_);
-                }
-            },
-            .Loop => |l| {
-                try self.buf.appendSlice("loop ");
-                try self.fmtExpr(l.body);
-            },
-            .Break => try self.buf.appendSlice("break"),
-            .Continue => try self.buf.appendSlice("continue"),
-            .Return => |r| {
-                try self.buf.appendSlice("return");
-                if (r.value.tag() != .Void) {
-                    try self.buf.appendSlice(" ");
-                    try self.fmtExpr(r.value);
-                }
-            },
-            .UnOp => |o| {
-                const unprec = 1;
-                if (prec < unprec) try self.buf.appendSlice("(");
-                try self.buf.appendSlice(o.op.repr());
-                try self.fmtExprPrec(o.oper, unprec);
-                if (prec < unprec) try self.buf.appendSlice(")");
-            },
-            .BinOp => |co| {
-                var o = co;
-                if (o.op == .@"=" and self.ast.exprs.get(o.rhs) == .BinOp and self.ast.exprs.get(o.rhs).BinOp.lhs == o.lhs) {
-                    o.op = self.ast.exprs.get(o.rhs).BinOp.op.toAssignment();
-                    o.rhs = self.ast.exprs.get(o.rhs).BinOp.rhs;
-                }
-                if (prec < o.op.precedence()) try self.buf.appendSlice("(");
-                try self.fmtExprPrec(o.lhs, o.op.precedence());
-                // TODO: linebreaks
-                if (o.op != .@":") try self.buf.appendSlice(" ");
-                try self.buf.appendSlice(o.op.repr());
-                try self.buf.appendSlice(" ");
-                try self.fmtExprPrec(o.rhs, o.op.precedence());
-                if (prec < o.op.precedence()) try self.buf.appendSlice(")");
-            },
-            .Integer => |i| {
-                const int_token = Lexer.peek(self.ast.source, i.index);
-                try self.buf.appendSlice(self.ast.source[int_token.pos..int_token.end]);
-            },
-            .Bool => |b| {
-                try self.buf.appendSlice(if (b.value) "true" else "false");
-            },
-        }
-    }
-
-    fn fmtSlice(
-        self: *Fmt,
-        indent: bool,
-        slice: Slice,
-        start: Lexer.Lexeme,
-        sep: Lexer.Lexeme,
-        end: Lexer.Lexeme,
-    ) Error!void {
-        try self.buf.appendSlice(start.repr());
-
-        if (indent) {
-            self.indent += 1;
-            try self.buf.appendSlice("\n");
-        }
-
-        const view = self.ast.exprs.view(slice);
-        for (view, 0..) |id, i| {
-            if (indent) for (0..self.indent) |_| try self.buf.appendSlice("\t");
-            try self.fmtExpr(id);
-            if (indent or i != view.len - 1) {
-                try self.buf.appendSlice(sep.repr());
-                if (!indent) try self.buf.appendSlice(" ");
-            }
-            if (indent) try self.buf.appendSlice("\n");
-        }
-
-        if (indent) {
-            self.indent -= 1;
-            for (0..self.indent) |_| try self.buf.appendSlice("\t");
-        }
-
-        try self.buf.appendSlice(end.repr());
-    }
-};
-
 pub fn init(path: []const u8, code: []const u8, gpa: std.mem.Allocator) !Ast {
     var lexer = Lexer.init(code, 0);
 
@@ -724,21 +513,24 @@ pub fn init(path: []const u8, code: []const u8, gpa: std.mem.Allocator) !Ast {
     }
     errdefer {
         parser.store.deinit(gpa);
-        gpa.free(parser.decls);
     }
 
     return .{
         .items = try parser.parse(),
-        .decls = parser.decls,
         .exprs = parser.store,
         .source = code,
         .path = path,
     };
 }
 
-pub fn findDecl(self: *const Ast, id: Ident) ?Id {
-    return for (self.decls) |d| {
-        if (d.name == id) return d.expr;
+pub fn findDecl(self: *const Ast, id: anytype) ?Id {
+    return for (self.exprs.view(self.items)) |d| {
+        if (d.tag() != .BinOp) continue;
+        const ident = self.exprs.get(self.exprs.get(d).BinOp.lhs).Ident.id;
+        switch (@TypeOf(id)) {
+            Ident => if (ident == id) break d,
+            else => if (cmpLow(ident.pos(), self.source, id)) break d,
+        }
     } else null;
 }
 
@@ -772,25 +564,16 @@ fn posOfPayload(self: *const Ast, v: anytype) Pos {
 
 pub fn deinit(self: *Ast, gpa: std.mem.Allocator) void {
     self.exprs.deinit(gpa);
-    gpa.free(self.decls);
     self.* = undefined;
 }
 
 pub fn fmtExpr(self: *const Ast, buf: *std.ArrayList(u8), expr: Ast.Id) !void {
-    var ft = Fmt{
-        .buf = buf,
-        .indent = 0,
-        .ast = self,
-    };
+    var ft = Fmt{ .buf = buf, .ast = self };
     try ft.fmtExpr(expr);
 }
 
 pub fn fmt(self: *const Ast, buf: *std.ArrayList(u8)) !void {
-    var ft = Fmt{
-        .buf = buf,
-        .indent = 0,
-        .ast = self,
-    };
+    var ft = Fmt{ .buf = buf, .ast = self };
     try ft.fmt();
 }
 

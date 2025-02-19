@@ -59,24 +59,20 @@ pub fn testBuilder(
     defer ast.deinit(gpa);
 
     var ret: u64 = 0;
-    for (ast.decls) |d| {
-        if (std.mem.eql(u8, ast.tokenSrc(d.name.pos()), "expectations")) {
-            const decl = ast.exprs.get(d.expr).BinOp.rhs;
-            const ctor = ast.exprs.get(decl).Ctor;
-            for (ast.exprs.view(ctor.fields)) |f| {
-                const field = ast.exprs.get(f).CtorField;
-                const value = ast.exprs.get(field.value);
+    if (ast.findDecl("expectations")) |d| {
+        const decl = ast.exprs.get(d).BinOp.rhs;
+        const ctor = ast.exprs.get(decl).Ctor;
+        for (ast.exprs.view(ctor.fields)) |f| {
+            const field = ast.exprs.get(f).CtorField;
+            const value = ast.exprs.get(field.value);
 
-                if (std.mem.eql(u8, ast.tokenSrc(field.pos.index), "return_value")) {
-                    ret = @bitCast(try std.fmt.parseInt(i64, ast.tokenSrc(value.Integer.index), 10));
-                }
+            if (std.mem.eql(u8, ast.tokenSrc(field.pos.index), "return_value")) {
+                ret = @bitCast(try std.fmt.parseInt(i64, ast.tokenSrc(value.Integer.index), 10));
             }
         }
     }
 
-    const main = for (ast.decls) |d| {
-        if (std.mem.eql(u8, ast.tokenSrc(d.name.pos()), "main")) break d.expr;
-    } else unreachable;
+    const main = ast.findDecl("main").?;
     const fn_ast = ast.exprs.get(main).BinOp.rhs;
 
     var types = Types.init(gpa, &.{ast});
