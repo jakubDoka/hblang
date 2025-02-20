@@ -340,8 +340,7 @@ pub const Loop = struct {
         const start = 1;
         if (builder.scope) |backedge| {
             const update_values = getScopeValues(backedge);
-            for (init_values[start..], update_values[start..], start..) |ini, update, i| {
-                _ = i; // autofix
+            for (init_values[start..], update_values[start..]) |ini, update| {
                 if (update.kind != .Scope) {
                     std.debug.assert(ini.isLazyPhi(init_values[0]));
                     builder.func.setInputNoIntern(ini, 2, update);

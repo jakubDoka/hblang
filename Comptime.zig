@@ -23,7 +23,7 @@ pub fn evalGlobal(self: *Types, global: *Types.Global, ty: ?Types.Id, value: Ast
     params[0] = .int;
     const ptr = gen.bl.addParam(0);
 
-    var ret = gen.emit(.{ .ty = ty, .loc = ptr }, value);
+    var ret = gen.emit(.{ .scope = global.key.scope, .ty = ty, .loc = ptr }, value);
     gen.emitGenericStore(ptr, &ret);
 
     gen.bl.end(token);

@@ -158,6 +158,7 @@ pub const Id = enum(usize) {
     i16,
     i32,
     int,
+    type,
     _,
 
     const Repr = packed struct(usize) {
@@ -233,7 +234,7 @@ pub const Id = enum(usize) {
                 .u8, .i8, .bool => 1,
                 .u16, .i16 => 2,
                 .u32, .i32 => 4,
-                .uint, .int => 8,
+                .uint, .int, .type => 8,
             },
             .Ptr => 8,
             .Struct => |s| {
@@ -359,7 +360,7 @@ pub const Abi = enum {
                 .u8, .i8, .bool => .i8,
                 .u16, .i16 => .i16,
                 .u32, .i32 => .i32,
-                .uint, .int => .int,
+                .uint, .int, .type => .int,
             } },
             .Ptr => .{ .ByValue = .int },
             .Struct => |s| switch (self) {
@@ -455,8 +456,8 @@ pub fn makePtr(self: *Types, v: Id) Id {
 }
 
 const Ctx = struct {
-    name: []const u8 = &.{},
     scope: Id,
+    name: []const u8 = &.{},
 
     pub fn init(fl: Id) Ctx {
         return .{ .scope = fl };
@@ -483,14 +484,17 @@ const Ctx = struct {
     }
 };
 
-pub fn resolveTy(self: *Types, ctx: Ctx, expr: Ast.Id) Id {
+fn resolveTy(self: *Types, ctx: Ctx, expr: Ast.Id) Id {
     return self.resolveTyExpr(ctx, expr, self.getFile(ctx.file()).exprs.get(expr));
 }
 
 pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Key) struct { Map.GetOrPutResult, std.meta.TagPayload(Data, kind) } {
     const id = Id.init(kind, @intFromPtr(&key));
     const slot = self.interner.getOrPut(self.arena.child_allocator, id) catch unreachable;
-    if (slot.found_existing) return .{ slot, @field(slot.key_ptr.data(), @tagName(kind)) };
+    if (slot.found_existing) {
+        std.debug.assert(slot.key_ptr.data() == kind);
+        return .{ slot, @field(slot.key_ptr.data(), @tagName(kind)) };
+    }
     const alloc = self.arena.allocator().create(std.meta.Child(std.meta.TagPayload(Data, kind))) catch unreachable;
     alloc.key = key;
     slot.key_ptr.* = Id.init(kind, @intFromPtr(alloc));
