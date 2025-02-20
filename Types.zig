@@ -11,6 +11,7 @@ files: []const Ast,
 
 const std = @import("std");
 const Ast = @import("Ast.zig");
+const Codegen = @import("Codegen.zig");
 const graph = @import("graph.zig");
 const Lexer = @import("Lexer.zig");
 const HbvmGen = @import("HbvmGen.zig");
@@ -92,21 +93,21 @@ pub const Struct = struct {
         return Id.init(.Struct, @intFromPtr(self));
     }
 
-    pub fn getFields(self: *Struct, types: *Types) []const Field {
+    pub fn getFields(self: *Struct, cg: *Codegen) []const Field {
         if (self.fields) |f| return f;
-        const ast = types.getFile(self.key.file);
+        const ast = cg.types.getFile(self.key.file);
 
         var count: usize = 0;
         for (ast.exprs.view(self.ast_fields)) |f| count += @intFromBool(ast.exprs.get(f).BinOp.lhs.tag() == .Tag);
 
-        const fields = types.arena.allocator().alloc(Field, count) catch unreachable;
+        const fields = cg.types.arena.allocator().alloc(Field, count) catch unreachable;
         var i: usize = 0;
         for (ast.exprs.view(self.ast_fields)) |fast| {
             const field = ast.exprs.get(fast).BinOp;
             if (field.lhs.tag() != .Tag) continue;
             fields[i] = .{
                 .name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1),
-                .ty = types.resolveTy(.{ .scope = self.asTy() }, field.rhs),
+                .ty = cg.resolveTy(.{ .scope = self.asTy() }, field.rhs),
             };
             i += 1;
         }
@@ -125,7 +126,7 @@ pub const Func = struct {
 
     pub const CompileState = enum { queued, compiled };
 
-    pub fn computeAbiSize(self: Func, abi: Abi, types: *Types) struct { usize, usize, Abi.Spec } {
+    pub fn computeAbiSize(self: Func, abi: Abi, types: *Codegen) struct { usize, usize, Abi.Spec } {
         const ret_abi = abi.categorize(self.ret, types);
         var param_count: usize = @intFromBool(ret_abi == .ByRef);
         for (self.args) |ty| param_count += abi.categorize(ty, types).len(false);
@@ -226,7 +227,7 @@ pub const Id = enum(usize) {
         };
     }
 
-    pub fn size(self: Id, types: *Types) usize {
+    pub fn size(self: Id, types: *Codegen) usize {
         return switch (self.data()) {
             .Builtin => |b| switch (b) {
                 .never => unreachable,
@@ -253,7 +254,7 @@ pub const Id = enum(usize) {
         };
     }
 
-    pub fn alignment(self: Id, types: *Types) usize {
+    pub fn alignment(self: Id, types: *Codegen) usize {
         return switch (self.data()) {
             .Builtin => self.size(types),
             .Ptr => 8,
@@ -273,7 +274,7 @@ pub const Id = enum(usize) {
         return @enumFromInt(@max(@intFromEnum(lhs), @intFromEnum(rhs)));
     }
 
-    pub fn canUpcast(from: Id, to: Id, types: *Types) bool {
+    pub fn canUpcast(from: Id, to: Id, types: *Codegen) bool {
         if (from == .never) return true;
         if (from == to) return true;
         const is_bigger = from.size(types) < to.size(types);
@@ -284,7 +285,7 @@ pub const Id = enum(usize) {
         return false;
     }
 
-    pub fn binOpUpcast(lhs: Id, rhs: Id, types: *Types) !Id {
+    pub fn binOpUpcast(lhs: Id, rhs: Id, types: *Codegen) !Id {
         if (lhs == rhs) return lhs;
         if (lhs.data() == .Ptr and rhs.data() == .Ptr) return .uint;
         if (lhs.data() == .Ptr) return lhs;
@@ -352,7 +353,7 @@ pub const Abi = enum {
         }
     };
 
-    pub fn categorize(self: Abi, ty: Id, types: *Types) Spec {
+    pub fn categorize(self: Abi, ty: Id, types: *Codegen) Spec {
         return switch (ty.data()) {
             .Builtin => |b| .{ .ByValue = switch (b) {
                 .never => unreachable,
@@ -371,7 +372,7 @@ pub const Abi = enum {
         };
     }
 
-    pub fn categorizeAbleosStruct(stru: *Struct, types: *Types) Spec {
+    pub fn categorizeAbleosStruct(stru: *Struct, types: *Codegen) Spec {
         var res: Spec = .Imaginary;
         var offset: usize = 0;
         for (stru.getFields(types)) |f| {
@@ -484,10 +485,6 @@ const Ctx = struct {
     }
 };
 
-fn resolveTy(self: *Types, ctx: Ctx, expr: Ast.Id) Id {
-    return self.resolveTyExpr(ctx, expr, self.getFile(ctx.file()).exprs.get(expr));
-}
-
 pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Key) struct { Map.GetOrPutResult, std.meta.TagPayload(Data, kind) } {
     const id = Id.init(kind, @intFromPtr(&key));
     const slot = self.interner.getOrPut(self.arena.child_allocator, id) catch unreachable;
@@ -534,81 +531,4 @@ pub fn resolveGlobal(self: *Types, scope: Id, name: []const u8, ast: Ast.Id) Id 
         self.next_global += 1;
     }
     return slot.key_ptr.*;
-}
-
-pub fn resolveTyExpr(self: *Types, ctx: Ctx, expr_id: Ast.Id, expr: Ast.Expr) Id {
-    const ast = self.getFile(ctx.file());
-    return switch (expr) {
-        .Buty => |e| .fromLexeme(e.bt),
-        .UnOp => |e| switch (e.op) {
-            .@"^" => self.makePtr(self.resolveTy(ctx, e.oper)),
-            else => std.debug.panic("{any}", .{e.op}),
-        },
-        .Ident => |e| {
-            var cursor = ctx;
-            const decl = while (cursor.scope != .void) {
-                if (ast.findDecl(cursor.scope.items(), e.id)) |v| break v;
-                cursor.scope = cursor.scope.parent();
-            } else unreachable;
-
-            const vari = ast.exprs.get(decl).BinOp;
-            const ty: ?Types.Id, const value: Ast.Id = switch (vari.op) {
-                .@":" => .{ self.resolveTy(cursor.stripName(), ast.exprs.get(vari.rhs).BinOp.lhs), ast.exprs.get(vari.rhs).BinOp.rhs },
-                .@":=" => .{ null, vari.rhs },
-                else => unreachable,
-            };
-
-            if (ty) |typ| {
-                const global = self.resolveGlobal(cursor.scope, ast.tokenSrc(e.id.pos()), value);
-                @import("Comptime.zig").evalGlobal(self, global.data().Global, typ, value);
-                return global;
-            }
-            return self.resolveTy(cursor.addName(ast.tokenSrc(e.id.pos())), value);
-        },
-        .Struct => |e| self.resolveStruct(ctx.scope, ctx.file(), ctx.name, expr_id, e.fields),
-        .Fn => |e| {
-            const slot, const alloc = self.intern(.Func, .{
-                .scope = ctx.scope,
-                .file = ctx.file(),
-                .ast = expr_id,
-                .captures = &.{},
-            });
-            const id = slot.key_ptr.*;
-            if (!slot.found_existing) {
-                const args = self.arena.allocator().alloc(Id, e.args.len()) catch unreachable;
-                for (ast.exprs.view(e.args), args) |argid, *arg| {
-                    const ty = ast.exprs.get(argid).Arg.ty;
-                    arg.* = self.resolveTy(ctx.stripName(), ty);
-                }
-                const ret = self.resolveTy(ctx.stripName(), e.ret);
-                alloc.* = .{
-                    .id = self.next_func,
-                    .key = alloc.key,
-                    .args = args,
-                    .ret = ret,
-                    .name = ctx.name,
-                };
-                self.next_func += 1;
-            }
-            return id;
-        },
-        .Field => |e| {
-            const base = self.resolveTy(ctx.stripName(), e.base);
-            const name = ast.tokenSrc(e.field.index);
-            const other_file = base.file();
-            const other_ast = self.getFile(other_file);
-            const decl = other_ast.findDecl(base.items(), name).?;
-            return self.resolveTy(
-                .{ .name = name, .scope = base },
-                other_ast.exprs.get(decl).BinOp.rhs,
-            );
-        },
-        .Use => |e| {
-            return self.getScope(e.file);
-        },
-        .Directive => |e| if (std.mem.eql(u8, ast.tokenSrc(e.pos.index), "@CurrentScope")) {
-            return ctx.scope;
-        } else unreachable,
-        else => std.debug.panic("{any}", .{expr_id.tag()}),
-    };
 }

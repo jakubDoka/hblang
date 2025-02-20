@@ -68,8 +68,8 @@ pub fn evalGlobal(self: *Types, global: *Types.Global, ty: ?Types.Id, value: Ast
 
     gen.types.vm.ip = stack_end + gen.types.comptime_code.funcs.items[fdata.id].offset;
     gen.types.vm.fuel = 1024;
-    gen.types.vm.regs.set(.arg(0, 0), stack_end - ret.ty.size(self));
-    gen.types.vm.regs.set(.stack_addr, stack_end - ret.ty.size(self));
+    gen.types.vm.regs.set(.arg(0, 0), stack_end - ret.ty.size(&gen));
+    gen.types.vm.regs.set(.stack_addr, stack_end - ret.ty.size(&gen));
     var vm_ctx = Vm.SafeContext{
         .writer = if (false) std.io.getStdErr().writer().any() else std.io.null_writer.any(),
         .color_cfg = .escape_codes,
@@ -80,8 +80,8 @@ pub fn evalGlobal(self: *Types, global: *Types.Global, ty: ?Types.Id, value: Ast
     const res = gen.types.vm.run(&vm_ctx) catch unreachable;
     std.debug.assert(res == .tx);
 
-    const data = gen.types.arena.allocator().alloc(u8, ret.ty.size(self)) catch unreachable;
-    @memcpy(data, stack[stack_end - ret.ty.size(self) .. stack_end]);
+    const data = gen.types.arena.allocator().alloc(u8, ret.ty.size(&gen)) catch unreachable;
+    @memcpy(data, stack[stack_end - ret.ty.size(&gen) .. stack_end]);
 
     global.data = data;
     global.ty = ret.ty;
