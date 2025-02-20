@@ -514,6 +514,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .Call => |e| {
             const func = self.types.resolveTy(.init(self.scope_ty), e.called).data().Func;
+
             self.queue(.{ .Func = func });
 
             const param_count, const return_count, const ret_abi = func.computeAbiSize(self.abi, self.types);

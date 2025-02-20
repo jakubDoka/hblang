@@ -389,7 +389,7 @@ main := fn(): int {
     if inst.c != 3 {
         return 0
     }
-    if inst.ty.sum() != 0 {
+    if Ty.sum(inst.ty) != 0 {
         return 100
     }
     return pass(&inst.ty)

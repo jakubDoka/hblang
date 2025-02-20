@@ -437,7 +437,7 @@ pub fn getScope(self: *Types, file: File) Id {
             file,
             self.getFile(file).path,
             .zeroSized(.Void),
-            .{ .fields = self.getFile(file).items, .pos = .init(0) },
+            self.getFile(file).items,
         );
     }
 
@@ -497,7 +497,7 @@ pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Key) struct 
     return .{ slot, alloc };
 }
 
-pub fn resolveStruct(self: *Types, scope: Id, file: File, name: []const u8, ast: Ast.Id, e: std.meta.TagPayload(Ast.Expr, .Struct)) Id {
+pub fn resolveStruct(self: *Types, scope: Id, file: File, name: []const u8, ast: Ast.Id, fields: Ast.Slice) Id {
     const slot, const alloc = self.intern(.Struct, .{
         .scope = scope,
         .file = file,
@@ -507,7 +507,7 @@ pub fn resolveStruct(self: *Types, scope: Id, file: File, name: []const u8, ast:
     if (!slot.found_existing) {
         alloc.* = .{
             .key = alloc.key,
-            .ast_fields = e.fields,
+            .ast_fields = fields,
             .name = name,
         };
     }
@@ -561,7 +561,7 @@ pub fn resolveTyExpr(self: *Types, ctx: Ctx, expr_id: Ast.Id, expr: Ast.Expr) Id
             }
             return self.resolveTy(cursor.addName(ast.tokenSrc(e.id.pos())), value);
         },
-        .Struct => |e| self.resolveStruct(ctx.scope, ctx.file(), ctx.name, expr_id, e),
+        .Struct => |e| self.resolveStruct(ctx.scope, ctx.file(), ctx.name, expr_id, e.fields),
         .Fn => |e| {
             const slot, const alloc = self.intern(.Func, .{
                 .scope = ctx.scope,
