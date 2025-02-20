@@ -1,10 +1,13 @@
-funcs: std.ArrayListUnmanaged(FuncData) = .{},
-globals: std.ArrayListUnmanaged(GlobalData) = .{},
+next_struct: u32 = 0,
+next_func: u32 = 0,
+next_global: u32 = 0,
 arena: std.heap.ArenaAllocator,
-interner: std.hash_map.HashMapUnmanaged(Id, void, TypeCtx, 70) = .{},
+interner: Map = .{},
+file_scopes: []Id,
 comptime_code: HbvmGen,
 vm: Vm = .{},
-source: []const Ast,
+diagnostics: std.io.AnyWriter,
+files: []const Ast,
 
 const std = @import("std");
 const Ast = @import("Ast.zig");
@@ -13,49 +16,29 @@ const Lexer = @import("Lexer.zig");
 const HbvmGen = @import("HbvmGen.zig");
 const Vm = @import("Vm.zig");
 const Types = @This();
+const Map = std.hash_map.HashMapUnmanaged(Id, void, TypeCtx, 70);
 
 pub const TypeCtx = struct {
     pub fn eql(_: @This(), a: Id, b: Id) bool {
         const ad, const bd = .{ a.data(), b.data() };
-        if (std.meta.fields(@TypeOf(ad.Struct.*)).len != 4) @compileError("maybe we are capturing already");
-        if (ad == .Struct and bd == .Struct) {
-            return ad.Struct.file == bd.Struct.file and ad.Struct.pos == bd.Struct.pos;
-        }
+        if (std.meta.activeTag(ad) != std.meta.activeTag(bd)) return false;
 
-        return std.meta.eql(ad, bd);
+        return switch (ad) {
+            .Builtin, .Ptr => std.meta.eql(ad, bd),
+            inline else => |v, t| return v.key.eql(@field(bd, @tagName(t)).key),
+        };
     }
 
     pub fn hash(_: @This(), adapted_key: Id) u64 {
         var hasher = std.hash.Fnv1a_64.init();
         const adk = adapted_key.data();
-        if (adk == .Struct) {
-            std.hash.autoHashStrat(&hasher, adk.Struct.file, .Deep);
-            std.hash.autoHashStrat(&hasher, adk.Struct.pos, .Deep);
-        } else {
-            std.hash.autoHashStrat(&hasher, adk, .Deep);
+        switch (adk) {
+            .Builtin, .Ptr => std.hash.autoHash(&hasher, adk),
+            inline else => |v| {
+                std.hash.autoHashStrat(&hasher, v.key, .Deep);
+            },
         }
         return hasher.final();
-    }
-};
-
-pub const Func = enum(u32) {
-    main,
-    _,
-    const Data = FuncData;
-    const field = "funcs";
-
-    pub fn format(self: *const @This(), comptime _: anytype, _: anytype, writer: anytype) !void {
-        try writer.print("fn{}", .{@intFromEnum(self.*)});
-    }
-};
-
-pub const Global = enum(u32) {
-    _,
-    const Data = GlobalData;
-    const field = "globals";
-
-    pub fn format(self: *const @This(), comptime _: anytype, _: anytype, writer: anytype) !void {
-        try writer.print("gl{}", .{@intFromEnum(self.*)});
     }
 };
 
@@ -69,24 +52,98 @@ pub const Data = union(enum) {
         break :b @Type(enm);
     },
     Ptr: Id,
-    Struct: *const Struct,
-    Func: Func,
+    Struct: *Struct,
+    Func: *Func,
+    Global: *Global,
+};
+
+pub const Key = struct {
+    file: File,
+    scope: Id,
+    ast: Ast.Id,
+    captures: []const Id,
+
+    pub const dummy = Key{
+        .file = .root,
+        .scope = .void,
+        .ast = .zeroSized(.Void),
+        .captures = &.{},
+    };
+
+    pub fn eql(self: Key, other: Key) bool {
+        return self.file == other.file and self.scope == other.scope and self.ast == other.ast and
+            std.mem.eql(Id, self.captures, other.captures);
+    }
 };
 
 pub const Struct = struct {
-    file: File,
-    pos: Ast.Pos,
+    key: Key,
+
+    ast_fields: Ast.Slice,
     name: []const u8,
-    fields: []const Field,
+    fields: ?[]const Field = null,
 
     pub const Field = struct {
-        name: Ast.Pos,
+        name: []const u8,
         ty: Id,
     };
 
-    pub fn asTy(self: *const Struct) Id {
+    pub fn asTy(self: *Struct) Id {
         return Id.init(.Struct, @intFromPtr(self));
     }
+
+    pub fn getFields(self: *Struct, types: *Types) []const Field {
+        if (self.fields) |f| return f;
+        const ast = types.getFile(self.key.file);
+
+        var count: usize = 0;
+        for (ast.exprs.view(self.ast_fields)) |f| count += @intFromBool(ast.exprs.get(f).BinOp.lhs.tag() == .Tag);
+
+        const fields = types.arena.allocator().alloc(Field, count) catch unreachable;
+        var i: usize = 0;
+        for (ast.exprs.view(self.ast_fields)) |fast| {
+            const field = ast.exprs.get(fast).BinOp;
+            if (field.lhs.tag() != .Tag) continue;
+            fields[i] = .{
+                .name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1),
+                .ty = types.resolveTy(.{ .scope = self.asTy() }, field.rhs),
+            };
+            i += 1;
+        }
+        self.fields = fields;
+        return fields;
+    }
+};
+
+pub const Func = struct {
+    key: Key,
+    id: u32,
+    name: []const u8,
+    args: []Id,
+    ret: Id,
+    completion: std.EnumArray(Target, CompileState) = .{ .values = .{ .queued, .queued } },
+
+    pub const CompileState = enum { queued, compiled };
+
+    pub fn computeAbiSize(self: Func, abi: Abi, types: *Types) struct { usize, usize, Abi.Spec } {
+        const ret_abi = abi.categorize(self.ret, types);
+        var param_count: usize = @intFromBool(ret_abi == .ByRef);
+        for (self.args) |ty| param_count += abi.categorize(ty, types).len(false);
+        const return_count: usize = ret_abi.len(true);
+        return .{ param_count, return_count, ret_abi };
+    }
+};
+
+pub const Global = struct {
+    // captures are extra but whatever for now
+    key: Key,
+    id: u32,
+    name: []const u8,
+    ty: Id = .void,
+    data: []const u8 = &.{},
+    completion: std.EnumArray(Target, CompileState) = .{ .values = .{ .queued, .queued } },
+
+    pub const CompileState = enum { queued, staged, compiled };
 };
 
 pub const Id = enum(usize) {
@@ -124,6 +181,27 @@ pub const Id = enum(usize) {
         return @enumFromInt(@as(usize, @bitCast(Repr{ .flag = @intFromEnum(flg), .data = @intCast(dt) })));
     }
 
+    pub fn file(self: Id) File {
+        return switch (self.data()) {
+            .Builtin, .Ptr => unreachable,
+            inline else => |v| v.key.file,
+        };
+    }
+
+    pub fn items(self: Id) Ast.Slice {
+        return switch (self.data()) {
+            .Func, .Global, .Builtin, .Ptr => unreachable,
+            inline else => |v| v.ast_fields,
+        };
+    }
+
+    pub fn parent(self: Id) Id {
+        return switch (self.data()) {
+            .Func, .Global, .Builtin, .Ptr => unreachable,
+            inline else => |v| v.key.scope,
+        };
+    }
+
     pub fn isInteger(self: Id) bool {
         return self.isUnsigned() or self.isSigned();
     }
@@ -142,11 +220,12 @@ pub const Id = enum(usize) {
             .Builtin => .{ .Builtin = @enumFromInt(repr.data) },
             .Ptr => .{ .Ptr = @as(*const Id, @ptrFromInt(repr.data)).* },
             .Struct => .{ .Struct = @ptrFromInt(repr.data) },
-            .Func => .{ .Func = @enumFromInt(repr.data) },
+            .Func => .{ .Func = @ptrFromInt(repr.data) },
+            .Global => .{ .Global = @ptrFromInt(repr.data) },
         };
     }
 
-    pub fn size(self: Id) usize {
+    pub fn size(self: Id, types: *Types) usize {
         return switch (self.data()) {
             .Builtin => |b| switch (b) {
                 .never => unreachable,
@@ -160,30 +239,32 @@ pub const Id = enum(usize) {
             .Struct => |s| {
                 var siz: usize = 0;
                 var alignm: usize = 1;
-                for (s.fields) |f| {
-                    alignm = @max(alignm, f.ty.alignment());
-                    siz = std.mem.alignForward(usize, siz, f.ty.alignment());
-                    siz += f.ty.size();
+                for (s.getFields(types)) |f| {
+                    alignm = @max(alignm, f.ty.alignment(types));
+                    siz = std.mem.alignForward(usize, siz, f.ty.alignment(types));
+                    siz += f.ty.size(types);
                 }
                 siz = std.mem.alignForward(usize, siz, alignm);
                 return siz;
             },
             .Func => unreachable,
+            .Global => unreachable,
         };
     }
 
-    pub fn alignment(self: Id) usize {
+    pub fn alignment(self: Id, types: *Types) usize {
         return switch (self.data()) {
-            .Builtin => self.size(),
+            .Builtin => self.size(types),
             .Ptr => 8,
             .Struct => |s| {
                 var alignm: usize = 1;
-                for (s.fields) |f| {
-                    alignm = @max(alignm, f.ty.alignment());
+                for (s.getFields(types)) |f| {
+                    alignm = @max(alignm, f.ty.alignment(types));
                 }
                 return alignm;
             },
             .Func => unreachable,
+            .Global => unreachable,
         };
     }
 
@@ -191,10 +272,10 @@ pub const Id = enum(usize) {
         return @enumFromInt(@max(@intFromEnum(lhs), @intFromEnum(rhs)));
     }
 
-    pub fn canUpcast(from: Id, to: Id) bool {
+    pub fn canUpcast(from: Id, to: Id, types: *Types) bool {
         if (from == .never) return true;
         if (from == to) return true;
-        const is_bigger = from.size() < to.size();
+        const is_bigger = from.size(types) < to.size(types);
         if (from.isUnsigned() and to.isUnsigned()) return is_bigger;
         if (from.isSigned() and to.isSigned()) return is_bigger;
         if (from.isUnsigned() and to.isSigned()) return is_bigger;
@@ -202,14 +283,14 @@ pub const Id = enum(usize) {
         return false;
     }
 
-    pub fn binOpUpcast(lhs: Id, rhs: Id) !Id {
+    pub fn binOpUpcast(lhs: Id, rhs: Id, types: *Types) !Id {
         if (lhs == rhs) return lhs;
         if (lhs.data() == .Ptr and rhs.data() == .Ptr) return .uint;
         if (lhs.data() == .Ptr) return lhs;
         if (rhs.data() == .Ptr) return error.@"pointer must be on the left";
 
-        if (lhs.canUpcast(rhs)) return rhs;
-        if (rhs.canUpcast(lhs)) return lhs;
+        if (lhs.canUpcast(rhs, types)) return rhs;
+        if (rhs.canUpcast(lhs, types)) return lhs;
 
         return error.@"incompatible types";
     }
@@ -220,6 +301,7 @@ pub const Id = enum(usize) {
             .Builtin => |b| writer.writeAll(@tagName(b)),
             .Struct => |b| writer.writeAll(b.name),
             .Func => |b| writer.print("{}", .{b}),
+            .Global => |b| writer.print("{}", .{b}),
         };
     }
 };
@@ -269,7 +351,7 @@ pub const Abi = enum {
         }
     };
 
-    pub fn categorize(self: Abi, ty: Id) Spec {
+    pub fn categorize(self: Abi, ty: Id, types: *Types) Spec {
         return switch (ty.data()) {
             .Builtin => |b| .{ .ByValue = switch (b) {
                 .never => unreachable,
@@ -281,21 +363,22 @@ pub const Abi = enum {
             } },
             .Ptr => .{ .ByValue = .int },
             .Struct => |s| switch (self) {
-                .ableos => categorizeAbleosStruct(s),
+                .ableos => categorizeAbleosStruct(s, types),
             },
             .Func => unreachable,
+            .Global => unreachable,
         };
     }
 
-    pub fn categorizeAbleosStruct(stru: *const Struct) Spec {
+    pub fn categorizeAbleosStruct(stru: *Struct, types: *Types) Spec {
         var res: Spec = .Imaginary;
         var offset: usize = 0;
-        for (stru.fields) |f| {
-            const fspec = Abi.ableos.categorize(f.ty);
+        for (stru.getFields(types)) |f| {
+            const fspec = Abi.ableos.categorize(f.ty, types);
             if (fspec == .Imaginary) continue;
             if (res == .Imaginary) {
                 res = fspec;
-                offset += f.ty.size();
+                offset += f.ty.size(types);
                 continue;
             }
 
@@ -304,13 +387,13 @@ pub const Abi = enum {
             if (res == .ByValuePair) return .ByRef;
             std.debug.assert(res != .ByRef);
 
-            const off = std.mem.alignForward(usize, offset, f.ty.alignment());
+            const off = std.mem.alignForward(usize, offset, f.ty.alignment(types));
             res = .{ .ByValuePair = .{
                 .types = .{ res.ByValue, fspec.ByValue },
                 .padding = @intCast(off - offset),
             } };
 
-            offset = off + f.ty.size();
+            offset = off + f.ty.size(types);
         }
         return res;
     }
@@ -318,56 +401,25 @@ pub const Abi = enum {
 
 pub const Target = enum { @"comptime", runtime };
 
-pub const FuncData = struct {
-    args: []Id,
-    ret: Id,
-    file: File,
-    name: []const u8,
-    ast: Ast.Id,
-    completion: std.EnumArray(Target, CompileState) = .{ .values = .{ .queued, .queued } },
-
-    pub const CompileState = enum { queued, compiled };
-
-    pub fn computeAbiSize(self: FuncData, abi: Abi) struct { usize, usize, Abi.Spec } {
-        const ret_abi = abi.categorize(self.ret);
-        var param_count: usize = @intFromBool(ret_abi == .ByRef);
-        for (self.args) |ty| param_count += abi.categorize(ty).len(false);
-        const return_count: usize = ret_abi.len(true);
-        return .{ param_count, return_count, ret_abi };
-    }
-};
-
-pub const GlobalData = struct {
-    data: []const u8,
-    ty: Id,
-    file: File,
-    name: []const u8,
-    ast: Ast.Id,
-    completion: std.EnumArray(Target, CompileState) = .{ .values = .{ .queued, .queued } },
-
-    pub const CompileState = enum { queued, staged, compiled };
-};
-
-pub fn init(gpa: std.mem.Allocator, source: []const Ast) Types {
+pub fn init(gpa: std.mem.Allocator, source: []const Ast, diagnostics: std.io.AnyWriter) Types {
+    const scopes = gpa.alloc(Id, source.len) catch unreachable;
+    @memset(scopes, .void);
     return .{
-        .source = source,
+        .files = source,
+        .file_scopes = scopes,
         .arena = .init(gpa),
         .comptime_code = .init(gpa),
+        .diagnostics = diagnostics,
     };
 }
 
 pub fn deinit(self: *Types) void {
-    self.funcs.deinit(self.arena.child_allocator);
-    self.globals.deinit(self.arena.child_allocator);
     self.interner.deinit(self.arena.child_allocator);
+    self.arena.child_allocator.free(self.file_scopes);
     self.arena.deinit();
     self.comptime_code.out.deinit();
     self.comptime_code.deinit();
     self.* = undefined;
-}
-
-pub fn get(self: *Types, id: anytype) *@TypeOf(id).Data {
-    return &@field(self, @TypeOf(id).field).items[@intFromEnum(id)];
 }
 
 pub fn getAst(self: *Types, file: File, expr: Ast.Id) Ast.Expr {
@@ -375,7 +427,21 @@ pub fn getAst(self: *Types, file: File, expr: Ast.Id) Ast.Expr {
 }
 
 pub fn getFile(self: *Types, file: File) *const Ast {
-    return &self.source[@intFromEnum(file)];
+    return &self.files[@intFromEnum(file)];
+}
+
+pub fn getScope(self: *Types, file: File) Id {
+    if (self.file_scopes[@intFromEnum(file)] == .void) {
+        self.file_scopes[@intFromEnum(file)] = self.resolveStruct(
+            .void,
+            file,
+            self.getFile(file).path,
+            .zeroSized(.Void),
+            .{ .fields = self.getFile(file).items, .pos = .init(0) },
+        );
+    }
+
+    return self.file_scopes[@intFromEnum(file)];
 }
 
 pub fn makePtr(self: *Types, v: Id) Id {
@@ -390,19 +456,84 @@ pub fn makePtr(self: *Types, v: Id) Id {
 
 const Ctx = struct {
     name: []const u8 = &.{},
-    file: File,
+    scope: Id,
 
-    pub fn init(fl: File) Ctx {
-        return .{ .file = fl };
+    pub fn init(fl: Id) Ctx {
+        return .{ .scope = fl };
+    }
+
+    pub fn file(self: Ctx) File {
+        return self.scope.file();
+    }
+
+    pub fn items(self: Ctx) File {
+        return self.scope.items();
+    }
+
+    pub fn addName(self: Ctx, name: []const u8) Ctx {
+        var v = self;
+        v.name = name;
+        return v;
+    }
+
+    pub fn stripName(self: Ctx) Ctx {
+        var v = self;
+        v.name = &.{};
+        return v;
     }
 };
 
 pub fn resolveTy(self: *Types, ctx: Ctx, expr: Ast.Id) Id {
-    return self.resolveTyExpr(ctx, expr, self.getFile(ctx.file).exprs.get(expr));
+    return self.resolveTyExpr(ctx, expr, self.getFile(ctx.file()).exprs.get(expr));
+}
+
+pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Key) struct { Map.GetOrPutResult, std.meta.TagPayload(Data, kind) } {
+    const id = Id.init(kind, @intFromPtr(&key));
+    const slot = self.interner.getOrPut(self.arena.child_allocator, id) catch unreachable;
+    if (slot.found_existing) return .{ slot, @field(slot.key_ptr.data(), @tagName(kind)) };
+    const alloc = self.arena.allocator().create(std.meta.Child(std.meta.TagPayload(Data, kind))) catch unreachable;
+    alloc.key = key;
+    slot.key_ptr.* = Id.init(kind, @intFromPtr(alloc));
+    return .{ slot, alloc };
+}
+
+pub fn resolveStruct(self: *Types, scope: Id, file: File, name: []const u8, ast: Ast.Id, e: std.meta.TagPayload(Ast.Expr, .Struct)) Id {
+    const slot, const alloc = self.intern(.Struct, .{
+        .scope = scope,
+        .file = file,
+        .ast = ast,
+        .captures = &.{},
+    });
+    if (!slot.found_existing) {
+        alloc.* = .{
+            .key = alloc.key,
+            .ast_fields = e.fields,
+            .name = name,
+        };
+    }
+    return slot.key_ptr.*;
+}
+
+pub fn resolveGlobal(self: *Types, scope: Id, name: []const u8, ast: Ast.Id) Id {
+    const slot, const alloc = self.intern(.Global, .{
+        .scope = scope,
+        .file = scope.file(),
+        .ast = ast,
+        .captures = &.{},
+    });
+    if (!slot.found_existing) {
+        alloc.* = .{
+            .key = alloc.key,
+            .id = self.next_global,
+            .name = name,
+        };
+        self.next_global += 1;
+    }
+    return slot.key_ptr.*;
 }
 
 pub fn resolveTyExpr(self: *Types, ctx: Ctx, expr_id: Ast.Id, expr: Ast.Expr) Id {
-    const ast = self.getFile(ctx.file);
+    const ast = self.getFile(ctx.file());
     return switch (expr) {
         .Buty => |e| .fromLexeme(e.bt),
         .UnOp => |e| switch (e.op) {
@@ -410,103 +541,70 @@ pub fn resolveTyExpr(self: *Types, ctx: Ctx, expr_id: Ast.Id, expr: Ast.Expr) Id
             else => std.debug.panic("{any}", .{e.op}),
         },
         .Ident => |e| {
-            const decl = ast.findDecl(e.id) orelse unreachable;
-            return self.resolveTy(.{ .file = ctx.file, .name = ast.tokenSrc(e.id.pos()) }, ast.exprs.get(decl).BinOp.rhs);
-        },
-        .Struct => |e| {
-            var v: Struct = undefined;
-            v.file = ctx.file;
-            v.pos = e.pos;
-            const stru = Id.init(.Struct, @intFromPtr(&v));
-            const slot = self.interner.getOrPut(self.arena.child_allocator, stru) catch unreachable;
-            if (slot.found_existing) return slot.key_ptr.*;
-            const struct_slot = self.arena.allocator().create(Struct) catch unreachable;
-            struct_slot.* = .{
-                .file = ctx.file,
-                .pos = e.pos,
-                .name = ctx.name,
-                .fields = b: {
-                    const fields = self.arena.allocator().alloc(Struct.Field, e.fields.len()) catch unreachable;
-                    for (fields, ast.exprs.view(e.fields)) |*fslot, fast| {
-                        const field = ast.exprs.get(fast).CtorField;
-                        fslot.* = .{
-                            .name = field.pos,
-                            .ty = self.resolveTy(.{ .file = ctx.file }, field.value),
-                        };
-                    }
-                    break :b fields;
-                },
+            var cursor = ctx;
+            const decl = while (cursor.scope != .void) {
+                if (ast.findDecl(cursor.scope.items(), e.id)) |v| break v;
+                cursor.scope = cursor.scope.parent();
+            } else unreachable;
+
+            const vari = ast.exprs.get(decl).BinOp;
+            const ty: ?Types.Id, const value: Ast.Id = switch (vari.op) {
+                .@":" => .{ self.resolveTy(cursor.stripName(), ast.exprs.get(vari.rhs).BinOp.lhs), ast.exprs.get(vari.rhs).BinOp.rhs },
+                .@":=" => .{ null, vari.rhs },
+                else => unreachable,
             };
-            slot.key_ptr.* = Id.init(.Struct, @intFromPtr(struct_slot));
-            return slot.key_ptr.*;
-        },
-        .Fn => {
-            const fn_ast = expr_id;
 
-            for (self.funcs.items, 0..) |f, i| {
-                if (f.ast == fn_ast and f.file == ctx.file) return Id.init(.Func, i);
+            if (ty) |typ| {
+                const global = self.resolveGlobal(cursor.scope, ast.tokenSrc(e.id.pos()), value);
+                @import("Comptime.zig").evalGlobal(self, global.data().Global, typ, value);
+                return global;
             }
-
-            return Id.init(.Func, @intFromEnum(self.addFunc(ctx.file, ctx.name, fn_ast)));
+            return self.resolveTy(cursor.addName(ast.tokenSrc(e.id.pos())), value);
+        },
+        .Struct => |e| self.resolveStruct(ctx.scope, ctx.file(), ctx.name, expr_id, e),
+        .Fn => |e| {
+            const slot, const alloc = self.intern(.Func, .{
+                .scope = ctx.scope,
+                .file = ctx.file(),
+                .ast = expr_id,
+                .captures = &.{},
+            });
+            const id = slot.key_ptr.*;
+            if (!slot.found_existing) {
+                const args = self.arena.allocator().alloc(Id, e.args.len()) catch unreachable;
+                for (ast.exprs.view(e.args), args) |argid, *arg| {
+                    const ty = ast.exprs.get(argid).Arg.ty;
+                    arg.* = self.resolveTy(ctx.stripName(), ty);
+                }
+                const ret = self.resolveTy(ctx.stripName(), e.ret);
+                alloc.* = .{
+                    .id = self.next_func,
+                    .key = alloc.key,
+                    .args = args,
+                    .ret = ret,
+                    .name = ctx.name,
+                };
+                self.next_func += 1;
+            }
+            return id;
         },
         .Field => |e| {
-            const base = self.resolveTy(.init(ctx.file), e.base);
+            const base = self.resolveTy(ctx.stripName(), e.base);
             const name = ast.tokenSrc(e.field.index);
-            const other_file = base.data().Struct.file;
+            const other_file = base.file();
             const other_ast = self.getFile(other_file);
-            const decl = other_ast.findDecl(name).?;
+            const decl = other_ast.findDecl(base.items(), name).?;
             return self.resolveTy(
-                .{ .name = name, .file = other_file },
+                .{ .name = name, .scope = base },
                 other_ast.exprs.get(decl).BinOp.rhs,
             );
         },
         .Use => |e| {
-            return self.resolveTyExpr(
-                .{ .file = e.file, .name = self.getFile(e.file).path },
-                expr_id,
-                .{ .Struct = .{ .pos = .init(0), .fields = .{} } },
-            );
+            return self.getScope(e.file);
         },
+        .Directive => |e| if (std.mem.eql(u8, ast.tokenSrc(e.pos.index), "@CurrentScope")) {
+            return ctx.scope;
+        } else unreachable,
         else => std.debug.panic("{any}", .{expr_id.tag()}),
     };
-}
-
-pub fn addFunc(self: *Types, file: File, name: []const u8, func: Ast.Id) Func {
-    const ast = self.getFile(file);
-    const fn_ast = self.getAst(file, func).Fn;
-
-    const args = self.arena.allocator().alloc(Id, fn_ast.args.len()) catch unreachable;
-    for (ast.exprs.view(fn_ast.args), args) |argid, *arg| {
-        const ty = ast.exprs.get(argid).Arg.ty;
-        arg.* = self.resolveTy(.init(file), ty);
-    }
-
-    self.funcs.append(self.arena.child_allocator, .{
-        .args = args,
-        .name = name,
-        .file = file,
-        .ret = self.resolveTy(.init(file), fn_ast.ret),
-        .ast = func,
-    }) catch unreachable;
-
-    return @enumFromInt(self.funcs.items.len - 1);
-}
-
-pub fn addGlobal(self: *Types, file: File, name: Ast.Pos, decl: Ast.Id) Global {
-    const ast = self.getFile(file);
-    const glob_ast = ast.exprs.get(decl).BinOp.rhs;
-
-    for (self.globals.items, 0..) |g, i| {
-        if (g.ast == glob_ast) return @enumFromInt(i);
-    }
-
-    self.globals.append(self.arena.child_allocator, .{
-        .name = ast.tokenSrc(name.index),
-        .file = file,
-        .ast = glob_ast,
-        .data = undefined,
-        .ty = undefined,
-    }) catch unreachable;
-
-    return @enumFromInt(self.globals.items.len - 1);
 }

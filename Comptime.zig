@@ -4,19 +4,21 @@ const Types = @import("Types.zig");
 const Ast = @import("Ast.zig");
 const Vm = @import("Vm.zig");
 
-const fdata = Types.FuncData{
-    .name = "!",
-    .args = &.{},
-    .ret = .never,
-    .file = @enumFromInt(0),
-    .ast = .zeroSized(.Void),
-};
-
-pub fn evalGlobal(self: *Codegen, global: Types.Global, ty: ?Types.Id, value: Ast.Id) void {
-    var gen = Codegen.init(self.work_list.allocator, self.types, .@"comptime", self.diagnostics);
+pub fn evalGlobal(self: *Types, global: *Types.Global, ty: ?Types.Id, value: Ast.Id) void {
+    var gen = Codegen.init(self.arena.child_allocator, self, .@"comptime");
     defer gen.deinit();
 
-    const token, const params, _ = gen.beginBuilder(self.file, &fdata, 1, 0);
+    var fdata = Types.Func{
+        .id = self.next_func,
+        .key = global.key,
+        .name = "!",
+        .args = &.{},
+        .ret = .never,
+    };
+
+    self.next_func += 1;
+
+    const token, const params, _ = gen.beginBuilder(&fdata, 1, 0);
 
     params[0] = .int;
     const ptr = gen.bl.addParam(0);
@@ -26,19 +28,10 @@ pub fn evalGlobal(self: *Codegen, global: Types.Global, ty: ?Types.Id, value: As
 
     gen.bl.end(token);
 
-    const id = gen.types.funcs.items.len;
     gen.types.comptime_code.emitFunc(
         @ptrCast(&gen.bl.func),
-        .{ .id = @intCast(id), .entry = true },
+        .{ .id = fdata.id, .entry = true },
     );
-
-    gen.types.funcs.append(gen.types.arena.child_allocator, .{
-        .name = gen.types.get(global).name,
-        .args = &.{},
-        .ret = ret.ty,
-        .file = self.file,
-        .ast = gen.types.get(global).ast,
-    }) catch unreachable;
 
     //gen.bl.func.fmtUnscheduled(std.io.getStdErr().writer().any(), .escape_codes);
 
@@ -47,21 +40,20 @@ pub fn evalGlobal(self: *Codegen, global: Types.Global, ty: ?Types.Id, value: As
     while (gen.nextTask()) |task| switch (task) {
         .Func => |func| {
             defer gen.bl.func.reset();
-            gen.build(gen.file, func) catch {
+            gen.build(func) catch {
                 unreachable;
             };
 
             gen.types.comptime_code.emitFunc(
                 @ptrCast(&gen.bl.func),
-                .{ .id = @intFromEnum(func) },
+                .{ .id = func.id },
             );
         },
         .Global => |glob| {
-            const g = gen.types.get(glob);
             gen.types.comptime_code.emitData(.{
-                .name = g.name,
-                .id = @intFromEnum(glob),
-                .value = .{ .init = g.data },
+                .name = glob.name,
+                .id = glob.id,
+                .value = .{ .init = glob.data },
             });
         },
     };
@@ -74,10 +66,10 @@ pub fn evalGlobal(self: *Codegen, global: Types.Global, ty: ?Types.Id, value: As
 
     @memcpy(stack[stack_end..], gen.types.comptime_code.out.items);
 
-    gen.types.vm.ip = stack_end + gen.types.comptime_code.funcs.items[id].offset;
+    gen.types.vm.ip = stack_end + gen.types.comptime_code.funcs.items[fdata.id].offset;
     gen.types.vm.fuel = 1024;
-    gen.types.vm.regs.set(.arg(0, 0), stack_end - ret.ty.size());
-    gen.types.vm.regs.set(.stack_addr, stack_end - ret.ty.size());
+    gen.types.vm.regs.set(.arg(0, 0), stack_end - ret.ty.size(self));
+    gen.types.vm.regs.set(.stack_addr, stack_end - ret.ty.size(self));
     var vm_ctx = Vm.SafeContext{
         .writer = if (false) std.io.getStdErr().writer().any() else std.io.null_writer.any(),
         .color_cfg = .escape_codes,
@@ -88,9 +80,9 @@ pub fn evalGlobal(self: *Codegen, global: Types.Global, ty: ?Types.Id, value: As
     const res = gen.types.vm.run(&vm_ctx) catch unreachable;
     std.debug.assert(res == .tx);
 
-    const data = gen.types.arena.allocator().alloc(u8, ret.ty.size()) catch unreachable;
-    @memcpy(data, stack[stack_end - ret.ty.size() .. stack_end]);
+    const data = gen.types.arena.allocator().alloc(u8, ret.ty.size(self)) catch unreachable;
+    @memcpy(data, stack[stack_end - ret.ty.size(self) .. stack_end]);
 
-    gen.types.get(global).data = data;
-    gen.types.get(global).ty = ret.ty;
+    global.data = data;
+    global.ty = ret.ty;
 }

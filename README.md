@@ -7,7 +7,7 @@ Note: the examples are used to generate unit tests, `n = 1` from each group is m
 #### main fn 1
 ```hb
 expectations := .{
-    return_value: 42,
+    .return_value: 42;
 }
 
 main := fn(): uint {
@@ -105,7 +105,7 @@ mero := fn(): i8 return 0
 #### arithmetic 4
 ```hb
 expectations := .{
-    return_value: 1,
+    .return_value: 1;
 }
 
 main := fn(): bool {
@@ -116,7 +116,7 @@ main := fn(): bool {
 #### functions 1
 ```hb
 expectations := .{
-    return_value: 33,
+    .return_value: 33;
 }
 
 main := fn(): uint {
@@ -135,7 +135,7 @@ add_one := fn(x: uint): uint {
 #### functions 2
 ```hb
 expectations := .{
-    return_value: 33,
+    .return_value: 33;
 }
 
 main := @use("main.hb").main
@@ -179,7 +179,7 @@ foo := fn(comment: void): void return /* comment evaluates to void */
 #### if statements 1
 ```hb
 expectations := .{
-    return_value: 2,
+    .return_value: 2;
 }
 
 main := fn(): uint {
@@ -198,7 +198,7 @@ fib := fn(x: uint): uint {
 #### if statements 2
 ```hb
 expectations := .{
-    return_value: 2,
+    .return_value: 2;
 }
 
 main := fn(): uint {
@@ -229,7 +229,7 @@ main := fn(): uint {
 #### loops 1
 ```hb
 expectations := .{
-    return_value: 55,
+    .return_value: 55;
 }
 
 main := fn(): uint {
@@ -254,7 +254,7 @@ fib := fn(n: uint): uint {
 #### loops 2
 ```hb
 expectations := .{
-    return_value: 9,
+    .return_value: 9;
 }
 
 main := fn(): uint {
@@ -279,7 +279,7 @@ square := fn(size: uint): uint {
 #### loops 3
 ```hb
 expectations := .{
-    return_value: 4,
+    .return_value: 4;
 }
 
 main := fn(): uint {
@@ -316,7 +316,7 @@ drop := fn(a: uint): void {
 #### pointers 2
 ```hb
 expectations := .{
-    return_value: 1,
+    .return_value: 1;
 }
 
 main := fn(): uint {
@@ -341,7 +341,7 @@ swap := fn(a: ^uint, b: ^uint): void {
 #### pointers 3
 ```hb
 expectations := .{
-    return_value: 1,
+    .return_value: 1;
 }
 
 main := fn(): uint {
@@ -364,35 +364,35 @@ do_stuff := fn(v: ^uint): uint {
 #### structs 1
 ```hb
 expectations := .{
-    return_value: 3,
+    .return_value: 3;
 }
 
 Ty := struct {
-    a: int,
-    b: int,
+    .a: int;
+    .b: int
+
+    sum := fn(t: Ty): int {
+        t.a -= 2
+        t.b += 1
+        return t.a - t.b
+    }
 }
 
 Ty2 := struct {
-    ty: Ty,
-    c: int,
+    .ty: Ty;
+    .c: int;
 }
 
 main := fn(): int {
-    finst := Ty2.{ty: Ty.{a: 4, b: 1}, c: 3}
+    finst := Ty2.{.ty: Ty.{.a: 4; .b: 1}; .c: 3}
     inst := odher_pass(finst)
     if inst.c != 3 {
         return 0
     }
-    if sum(inst.ty) != 0 {
+    if inst.ty.sum() != 0 {
         return 100
     }
     return pass(&inst.ty)
-}
-
-sum := fn(t: Ty): int {
-    t.a -= 2
-    t.b += 1
-    return t.a - t.b
 }
 
 pass := fn(t: ^Ty): int {
@@ -409,18 +409,18 @@ odher_pass := fn(t: Ty2): Ty2 {
 #### structs 2
 ```hb
 expectations := .{
-    return_value: 3,
+    .return_value: 3;
 }
 
 Ty := struct {
-    a: int,
-    b: int,
-    c: int,
+    .a: int;
+    .b: int;
+    .c: int;
 }
 
 main := fn(): int {
-    a := Ty.{a: 0, b: 0, c: 0}
-    b := Ty.{a: 1, b: 1, c: 1}
+    a := Ty.{.a: 0; .b: 0; .c: 0}
+    b := Ty.{.a: 1; .b: 1; .c: 1}
     swap(&a, &b)
     return a.a + a.b + a.c
 }
@@ -434,8 +434,8 @@ swap := fn(a: ^Ty, b: ^Ty): void {
 
 #### structs 3 (call stress test)
 ```hb
-Pair := struct{a: u8, b: uint}
-Triple := struct{a: uint, b: uint, c: u8}
+Pair := struct{.a: u8; .b: uint}
+Triple := struct{.a: uint; .b: uint; .c: u8}
 
 main := fn(): uint {
     pr := return_pair()
@@ -447,11 +447,11 @@ main := fn(): uint {
 }
 
 return_pair := fn(): Pair {
-    return .{a: 1, b: 5}
+    return .{.a: 1; .b: 5}
 }
 
 return_triple := fn(): Triple {
-    return .{a: 1, b: 2, c: 3}
+    return .{.a: 1; .b: 2; .c: 3}
 }
 
 take_pair := fn(pair: Pair): uint {
@@ -463,23 +463,39 @@ take_triple := fn(triple: Triple): uint {
 }
 ```
 
+#### file structs 1
+```hb
+main := fn(): uint {
+    foo := @use("Foo.hb").init(2)
+    return foo.a - foo.b
+}
+
+// in: Foo.hb
+.a: uint;
+.b: uint
+
+init := fn(v: uint): @CurrentScope() {
+    return .(v, v)
+}
+```
+
 #### struct operators 1
 ```hb
 expectations := .{
-    return_value: 10,
+    .return_value: 10;
 }
 
 Point := struct {
-    x: uint,
-    y: uint,
+    .x: uint;
+    .y: uint;
 }
 
 Rect := struct {
-    a: Point,
-    b: Point,
+    .a: Point;
+    .b: Point;
 }
 
-Color := struct{b: u8, g: u8, r: u8, a: u8}
+Color := struct{.b: u8; .g: u8; .r: u8; .a: u8}
 
 main := fn(): uint {
     i := Color.(0, 0, 0, 0)
@@ -520,19 +536,19 @@ main := fn(): uint {
 #### global variables 2
 ```hb
 expectations := .{
-    return_value: 55,
+    .return_value: 55;
 }
 
-some_other := 10
+some_other: uint = 10
 
-some_fib := fib(some_other)
+some_fib: uint = fib(some_other)
 
 fib := fn(n: uint): uint {
     if n != 10 return 0
     return 55
 }
 
-bigon_era := some_other - 10
+bigon_era: uint = some_other - 10
 
 main := fn(): uint {
     return some_fib - bigon_era
@@ -542,13 +558,13 @@ main := fn(): uint {
 #### global variables 3
 ```hb
 expectations := .{
-    return_value: 3,
+    .return_value: 3;
 }
 
-a := 0
-b := a + 1
-c := b + 1
-d := c + 1
+a: uint = 0
+b: uint = a + 1
+c: uint = b + 1
+d: uint = c + 1
 
 main := fn(): uint {
     return d
@@ -601,9 +617,9 @@ main := fn(): uint {
   - [x] structs
     - [ ] indexing
     - [ ] packed
-    - [ ] constructors
+    - [X] constructors
       - [x] dictionary
-      - [ ] tuple
+      - [x] tuple
     - [ ] default values
     - [ ] scope
     - [ ] file

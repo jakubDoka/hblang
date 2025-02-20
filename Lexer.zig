@@ -50,6 +50,7 @@ pub const Lexeme = enum(u8) {
     @"break",
     @"continue",
     @"struct",
+    Self,
     true,
     false,
     @"_",
@@ -180,7 +181,7 @@ pub fn next(self: *Lexer) Token {
                 };
                 const ident = self.source[pos..self.cursor];
                 inline for (std.meta.fields(Lexeme)) |field| {
-                    if (comptime !std.ascii.isLower(field.name[0]) and field.name[0] != '_') continue;
+                    if (comptime !std.ascii.isLower(field.name[0]) and field.name[0] != '_' and !std.mem.eql(u8, field.name, "Self")) continue;
                     if (std.mem.eql(u8, field.name, ident)) break :b @field(Lexeme, field.name);
                 }
                 break :b .Ident;

@@ -1,4 +1,5 @@
 store: Ast.Store = .{},
+path: []const u8,
 current: Types.File,
 gpa: std.mem.Allocator,
 arena: std.heap.ArenaAllocator,
@@ -12,6 +13,7 @@ const std = @import("std");
 const Lexer = @import("Lexer.zig");
 const Ast = @import("Ast.zig");
 const Types = @import("Types.zig");
+const root = @import("utils.zig");
 const Ident = Ast.Ident;
 const Id = Ast.Id;
 const Parser = @This();
@@ -65,10 +67,7 @@ pub fn parse(self: *Parser) !Ast.Slice {
 
     const remining = self.finalizeVariablesLow(0);
     for (self.active_syms.items[0..remining]) |s| {
-        std.debug.print(
-            "undefined identifier: {s}\n",
-            .{Lexer.peekStr(self.lexer.source, s.id.pos())},
-        );
+        self.report(s.id.pos(), "undeclared identifier", .{});
     }
     std.debug.assert(remining == 0);
 
@@ -80,6 +79,7 @@ fn parseExpr(self: *Parser) Error!Id {
 }
 
 fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8) Error!Id {
+    if (lhs.tag() == .Comment) return lhs;
     var acum = lhs;
     while (true) {
         const op = self.cur.kind;
@@ -111,21 +111,24 @@ fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8) Error!Id {
     return acum;
 }
 
-fn declareExpr(self: *Parser, id: Id) usize {
-    const ident: Ident = self.store.getTypedPtr(.Ident, id).?.id;
+fn declareExpr(self: *Parser, id: Id) void {
+    const ident: Ident = (self.store.getTypedPtr(.Ident, id) orelse return).id;
     var iter = std.mem.reverseIterator(self.active_syms.items);
     const sym = while (iter.nextPtr()) |s| {
         if (s.id == ident) break s;
     } else unreachable;
     if (sym.declared and self.loader.data != Loader.noop.data) {
-        std.debug.panic("redeclaration of identifier: {s}", .{Lexer.peekStr(self.lexer.source, ident.pos())});
+        self.report(ident.pos(), "redeclaration of identifier", .{});
     }
     sym.declared = true;
-    return (@intFromPtr(sym) - @intFromPtr(self.active_syms.items.ptr)) / @sizeOf(Sym);
 }
 
 fn parseUnit(self: *Parser) Error!Id {
     var base = try self.parseUnitWithoutTail();
+    if (base.tag() == .Comment) {
+        return base;
+    }
+
     while (true) base = try self.store.allocDyn(self.gpa, switch (self.cur.kind) {
         .@"." => .{ .Field = .{
             .base = base,
@@ -141,7 +144,7 @@ fn parseUnit(self: *Parser) Error!Id {
         } },
         .@".{" => .{ .Ctor = .{
             .ty = base,
-            .fields = try self.parseList(.@".{", .@",", .@"}", parseCtorField),
+            .fields = try self.parseList(.@".{", .@";", .@"}", parseExpr),
             .pos = self.list_pos,
         } },
         .@".(" => .{ .Tupl = .{
@@ -152,6 +155,18 @@ fn parseUnit(self: *Parser) Error!Id {
         else => break,
     });
     return base;
+}
+
+fn report(self: *Parser, pos: u32, comptime msg: []const u8, args: anytype) void {
+    const line, const col = Ast.lineCol(self.lexer.source, pos);
+    std.debug.panic(
+        "{s}:{}:{}: " ++ msg ++ "\n{}\n",
+        .{ self.path, line, col } ++ args ++ .{self.codePointer(pos)},
+    );
+}
+
+fn codePointer(self: *const Parser, pos: usize) Ast.CodePointer {
+    return .{ .source = self.lexer.source, .index = pos };
 }
 
 fn parseUnitWithoutTail(self: *Parser) Error!Id {
@@ -184,15 +199,18 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             .pos = .init(token.pos),
         } } else .{ .Directive = .{
             .args = try self.parseList(.@"(", .@",", .@")", parseExpr),
-            .pos = self.list_pos,
+            .pos = .{ .index = @intCast(token.pos), .indented = self.list_pos.indented },
         } },
         .@"struct" => .{ .Struct = .{
-            .fields = try self.parseList(.@"{", .@",", .@"}", parseField),
+            .fields = try self.parseList(.@"{", .@";", .@"}", parseExpr),
             .pos = self.list_pos,
         } },
+        .@"." => b: {
+            break :b .{ .Tag = .init((try self.expectAdvance(.Ident)).pos - 1) };
+        },
         .@".{" => .{ .Ctor = .{
             .ty = .zeroSized(.Void),
-            .fields = try self.parseList(null, .@",", .@"}", parseCtorField),
+            .fields = try self.parseList(null, .@";", .@"}", parseExpr),
             .pos = self.list_pos,
         } },
         .@".(" => .{ .Tupl = .{
@@ -201,7 +219,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             .pos = self.list_pos,
         } },
         .@"{" => .{ .Block = .{
-            .pos = .init(token.pos),
+            .pos = .{ .index = @intCast(token.pos), .indented = true },
             .stmts = b: {
                 var buf = std.ArrayListUnmanaged(Id){};
                 while (!self.tryAdvance(.@"}")) {
@@ -250,7 +268,10 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         .Integer => .{ .Integer = .init(token.pos) },
         .true => .{ .Bool = .{ .value = true, .pos = .init(token.pos) } },
         .false => .{ .Bool = .{ .value = false, .pos = .init(token.pos) } },
-        else => |k| std.debug.panic("{any}", .{k}),
+        else => |k| {
+            self.report(token.pos, "no idea how to handle this: {s}", .{@tagName(k)});
+            unreachable;
+        },
     });
 }
 
@@ -306,7 +327,7 @@ fn parseList(
             self.list_pos.indented = sep == null;
             break;
         }
-        if (sep) |s| _ = try self.expectAdvance(s);
+        if (sep) |s| _ = self.tryAdvance(s);
         self.list_pos.indented = true;
     }
     return try self.store.allocSlice(Id, self.gpa, buf.items);
@@ -322,27 +343,6 @@ fn parseArg(self: *Parser) Error!Id {
     });
 }
 
-fn parseField(self: *Parser) Error!Id {
-    const name = try self.expectAdvance(.Ident);
-    _ = try self.expectAdvance(.@":");
-    return try self.store.alloc(self.gpa, .CtorField, .{
-        .pos = .init(name.pos),
-        .value = try self.parseExpr(),
-    });
-}
-
-fn parseCtorField(self: *Parser) Error!Id {
-    const name_tok = try self.expectAdvance(.Ident);
-    const value = if (self.tryAdvance(.@":"))
-        try self.parseExpr()
-    else
-        try self.resolveIdent(name_tok);
-    return try self.store.alloc(self.gpa, .CtorField, .{
-        .pos = .init(name_tok.pos),
-        .value = value,
-    });
-}
-
 inline fn tryAdvance(self: *Parser, expected: Lexer.Lexeme) bool {
     if (self.cur.kind != expected) return false;
     _ = self.advance();
@@ -351,7 +351,7 @@ inline fn tryAdvance(self: *Parser, expected: Lexer.Lexeme) bool {
 
 fn expectAdvance(self: *Parser, expected: Lexer.Lexeme) !Lexer.Token {
     if (self.cur.kind != expected) {
-        std.debug.panic("expected {s}, got {s}", .{ @tagName(expected), @tagName(self.cur.kind) });
+        self.report(self.cur.pos, "expected {s}, got {s}", .{ @tagName(expected), @tagName(self.cur.kind) });
     }
     return self.advance();
 }

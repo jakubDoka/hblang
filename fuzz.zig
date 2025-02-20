@@ -39,17 +39,17 @@ fn fuzz(seed: usize, arena: std.mem.Allocator) !void {
     var pcg = std.Random.Pcg.init(seed);
     const rng = pcg.random();
 
-    const funcs = try arena.alloc(Types.FuncData, func_count);
+    const funcs = try arena.alloc(Types.Func, func_count);
     defer {
         for (funcs) |*f| arena.free(f.args);
         arena.free(funcs);
     }
 
-    for (funcs) |*f| {
+    for (funcs, 0..) |*f, i| {
         f.* = .{
-            .file = .root,
-            .name = "mian",
-            .ast = undefined,
+            .id = @intCast(i),
+            .key = .dummy,
+            .name = "",
             .args = try arena.alloc(Types.Id, rng.intRangeAtMost(usize, 0, max_arg_count)),
             .ret = return_types[rng.intRangeLessThan(usize, 0, return_types.len)],
         };
@@ -62,39 +62,41 @@ fn fuzz(seed: usize, arena: std.mem.Allocator) !void {
     const structs = try arena.alloc(Types.Struct, struct_count);
     std.debug.assert(structs.len == 2);
     structs[0] = .{
+        .key = .dummy,
         .name = "foo",
         .fields = b: {
             const mem = try arena.alloc(Types.Struct.Field, 2);
             mem[0] = .{
-                .name = .init(0),
+                .name = "",
                 .ty = .uint,
             };
             mem[1] = .{
-                .name = .init(0),
+                .name = "",
                 .ty = .uint,
             };
             break :b mem;
         },
-        .file = @enumFromInt(0),
-        .pos = .init(0),
+        .ast_fields = .{},
     };
     structs[1] = .{
+        .key = .dummy,
         .name = "bar",
         .fields = b: {
             const mem = try arena.alloc(Types.Struct.Field, 2);
             mem[0] = .{
-                .name = .init(0),
+                .name = "",
                 .ty = Types.Id.init(.Struct, @intFromPtr(&structs[0])),
             };
             mem[1] = .{
-                .name = .init(0),
+                .name = "",
                 .ty = .uint,
             };
             break :b mem;
         },
-        .file = @enumFromInt(1),
-        .pos = .init(0),
+        .ast_fields = .{},
     };
+
+    for (structs, 0..) |*s, i| s.key.file = @enumFromInt(i);
 
     var file = try std.ArrayList(u8).initCapacity(arena, 1024 * 16);
     defer file.deinit();
@@ -102,10 +104,10 @@ fn fuzz(seed: usize, arena: std.mem.Allocator) !void {
 
     for (structs, 0..) |s, i| {
         try writer.print("{s}:=struct{{", .{names[i + funcs.len]});
-        for (s.fields, 0..) |*f, j| {
+        for (s.fields.?, 0..) |*f, j| {
             try writer.print("{s}:", .{names[j]});
             if (f.ty.data() == .Struct) {
-                try writer.writeAll(names[funcs.len + @intFromEnum(f.ty.data().Struct.file)]);
+                try writer.writeAll(names[funcs.len + @intFromEnum(f.ty.file())]);
             } else {
                 try writer.print("{}", .{f.ty});
             }
@@ -163,12 +165,13 @@ const generators = enum {
             .Ptr => 1,
             .Struct => |s| {
                 var depth_requirement: usize = 0;
-                for (s.fields) |f| {
+                for (s.fields.?) |f| {
                     depth_requirement = @max(depth_requirement, 1 + requredDepth(f.ty));
                 }
                 return depth_requirement;
             },
             .Func => unreachable,
+            .Global => unreachable,
         };
     }
 
@@ -220,8 +223,8 @@ const generators = enum {
         pub const depth_requirement = 0;
 
         pub fn gen(self: *ExprGen, ty: Types.Id) ExprGen.Error!void {
-            try self.out.print("{s}.{{", .{names[self.funcs.len + @intFromEnum(ty.data().Struct.file)]});
-            for (ty.data().Struct.fields, 0..) |f, i| {
+            try self.out.print("{s}.{{", .{names[self.funcs.len + @intFromEnum(ty.file())]});
+            for (ty.data().Struct.fields.?, 0..) |f, i| {
                 try self.out.print("{s}:", .{names[i]});
                 try self.genExpr(f.ty);
                 try self.out.writeAll(",\n");
@@ -352,8 +355,8 @@ const generators = enum {
 };
 
 const ExprGen = struct {
-    structs: []const Types.Struct,
-    funcs: []const Types.FuncData,
+    structs: []Types.Struct,
+    funcs: []Types.Func,
     func: usize,
     rng: std.Random,
     out: std.ArrayList(u8).Writer,

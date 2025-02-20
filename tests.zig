@@ -55,7 +55,6 @@ pub fn testBuilder(
     colors: std.io.tty.Config,
     verbose: bool,
 ) !void {
-    _ = name; // autofix
     const FileRecord = struct {
         path: []const u8,
         source: []const u8,
@@ -75,7 +74,7 @@ pub fn testBuilder(
     defer files.deinit();
 
     const signifier = "// in: ";
-    var prev_name: []const u8 = "test";
+    var prev_name: []const u8 = name;
     var prev_end: usize = 0;
     while (prev_end < code.len) {
         const next_end = if (std.mem.indexOf(u8, code[prev_end..], signifier)) |idx| prev_end + idx else code.len;
@@ -104,29 +103,29 @@ pub fn testBuilder(
     const ast = asts[0];
 
     var ret: u64 = 0;
-    if (ast.findDecl("expectations")) |d| {
+    if (ast.findDecl(ast.items, "expectations")) |d| {
         const decl = ast.exprs.get(d).BinOp.rhs;
         const ctor = ast.exprs.get(decl).Ctor;
         for (ast.exprs.view(ctor.fields)) |f| {
-            const field = ast.exprs.get(f).CtorField;
-            const value = ast.exprs.get(field.value);
+            const field = ast.exprs.get(f).BinOp;
+            const value = ast.exprs.get(field.rhs);
 
-            if (std.mem.eql(u8, ast.tokenSrc(field.pos.index), "return_value")) {
+            if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "return_value")) {
                 ret = @bitCast(try std.fmt.parseInt(i64, ast.tokenSrc(value.Integer.index), 10));
             }
         }
     }
 
-    const main = ast.findDecl("main").?;
+    const main = ast.findDecl(ast.items, "main").?;
     const fn_ast = ast.exprs.get(main).BinOp.rhs;
 
-    var types = Types.init(gpa, asts);
+    var types = Types.init(gpa, asts, output);
     defer types.deinit();
 
-    var cg = Codegen.init(gpa, &types, .runtime, output);
+    var cg = Codegen.init(gpa, &types, .runtime);
     defer cg.deinit();
 
-    try cg.work_list.append(.{ .Func = types.resolveTy(.{ .file = .root, .name = "main" }, fn_ast).data().Func });
+    try cg.work_list.append(.{ .Func = types.resolveTy(.{ .scope = types.getScope(.root), .name = "main" }, fn_ast).data().Func });
 
     var hbgen = HbvmGen.init(gpa);
     var gen = Mach.init(&hbgen);
@@ -137,13 +136,12 @@ pub fn testBuilder(
                 if (verbose) try header("SOURCE", output, colors);
                 var out_fmt = std.ArrayList(u8).init(gpa);
                 defer out_fmt.deinit();
-                try asts[@intFromEnum(types.get(func).file)].fmtExpr(&out_fmt, types.get(func).ast);
+                try asts[@intFromEnum(func.key.file)].fmtExpr(&out_fmt, func.key.ast);
                 try output.writeAll(out_fmt.items);
             }
 
             if (verbose) try header("UNSCHEDULED SON", output, colors);
-            var tf = types.get(func);
-            try cg.build(tf.file, func);
+            try cg.build(func);
             defer cg.bl.func.reset();
 
             const fnc: *graph.Func(HbvmGen.Node) = @ptrCast(&cg.bl.func);
@@ -159,19 +157,17 @@ pub fn testBuilder(
             fnc.gcm();
             if (verbose) fnc.fmtScheduled(output, colors);
 
-            tf = types.get(func);
             gen.emitFunc(&cg.bl.func, .{
-                .id = @intFromEnum(func),
-                .name = tf.name,
-                .entry = func == .main,
+                .id = func.id,
+                .name = func.name,
+                .entry = func.id == 0,
                 .optimizations = .none,
             });
         },
-        .Global => |global| {
-            const g = types.get(global);
+        .Global => |g| {
             gen.emitData(.{
                 .name = g.name,
-                .id = @intFromEnum(global),
+                .id = g.id,
                 .value = .{ .init = g.data },
             });
         },

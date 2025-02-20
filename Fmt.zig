@@ -15,7 +15,7 @@ pub fn fmt(self: *Fmt) Error!void {
     for (items, 1..) |id, i| {
         try self.fmtExpr(id);
         if (items.len > i) {
-            try self.autoInsertSemi(items[i]);
+            if (id.tag() != .Comment) try self.autoInsertSep(items[i], .@";");
             try self.preserveSpace(items[i]);
         }
         try self.buf.appendSlice("\n");
@@ -34,10 +34,10 @@ fn preserveSpace(self: *Fmt, id: Id) Error!void {
     if (nline_count > 1) try self.buf.appendSlice("\n");
 }
 
-fn autoInsertSemi(self: *Fmt, id: Id) Error!void {
+fn autoInsertSep(self: *Fmt, id: Id, sep: Lexer.Lexeme) Error!void {
     const pos = self.ast.posOf(id);
     const starting_token = Lexer.peek(self.ast.source, pos.index);
-    if (starting_token.kind.precedence() < 255) try self.buf.appendSlice(";");
+    if (starting_token.kind.precedence() < 255) try self.buf.appendSlice(@tagName(sep));
 }
 
 fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
@@ -60,8 +60,11 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
         },
         .Struct => |s| {
             try self.buf.appendSlice("struct");
-            if (s.pos.indented) try self.buf.appendSlice(" ");
-            try self.fmtSlice(s.pos.indented, s.fields, .@"{", .@",", .@"}");
+            const forced = for (self.ast.exprs.view(s.fields)) |e| {
+                if (self.ast.exprs.get(e).BinOp.lhs.tag() != .Tag) break true;
+            } else false;
+            if (s.pos.indented or forced) try self.buf.appendSlice(" ");
+            try self.fmtSliceLow(s.pos.indented or forced, forced, s.fields, .@"{", .@";", .@"}");
         },
         .Arg => |a| {
             try self.fmtExpr(a.bindings);
@@ -76,6 +79,10 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.fmtExpr(c.called);
             try self.fmtSlice(c.arg_pos.indented, c.args, .@"(", .@",", .@")");
         },
+        .Tag => |t| {
+            try self.buf.appendSlice(".");
+            try self.buf.appendSlice(Lexer.peekStr(self.ast.source, t.index + 1));
+        },
         .Field => |f| {
             try self.fmtExpr(f.base);
             try self.buf.appendSlice(".");
@@ -84,38 +91,13 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
         inline .Ctor, .Tupl => |v, t| {
             try self.fmtExpr(v.ty);
             const start = if (t == .Ctor) .@".{" else .@".(";
+            const sep = if (t == .Ctor) .@";" else .@",";
             const end = if (t == .Ctor) .@"}" else .@")";
-            try self.fmtSlice(v.pos.indented, v.fields, start, .@",", end);
-        },
-        .CtorField => |f| {
-            try self.buf.appendSlice(Lexer.peekStr(self.ast.source, f.pos.index));
-            if (self.ast.exprs.getTyped(.Ident, f.value)) |ident|
-                if (std.mem.eql(
-                    u8,
-                    Lexer.peekStr(self.ast.source, ident.pos.index),
-                    Lexer.peekStr(self.ast.source, f.pos.index),
-                )) return;
-            try self.buf.appendSlice(": ");
-            try self.fmtExpr(f.value);
+            try self.fmtSlice(v.pos.indented, v.fields, start, sep, end);
         },
         .Buty => |b| try self.buf.appendSlice(b.bt.repr()),
         .Block => |b| {
-            const view = self.ast.exprs.view(b.stmts);
-
-            try self.buf.appendSlice("{\n");
-            self.indent += 1;
-            for (view, 1..) |stmt, i| {
-                for (0..self.indent) |_| try self.buf.appendSlice("\t");
-                try self.fmtExpr(stmt);
-                if (view.len > i) {
-                    try self.autoInsertSemi(view[i]);
-                    try self.preserveSpace(view[i]);
-                }
-                try self.buf.appendSlice("\n");
-            }
-            self.indent -= 1;
-            for (0..self.indent) |_| try self.buf.appendSlice("\t");
-            try self.buf.appendSlice("}");
+            try self.fmtSliceLow(b.pos.indented, true, b.stmts, .@"{", .@";", .@"}");
         },
         .If => |i| {
             try self.buf.appendSlice("if ");
@@ -175,9 +157,21 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
     }
 }
 
-fn fmtSlice(
+inline fn fmtSlice(
     self: *Fmt,
     indent: bool,
+    slice: Slice,
+    start: Lexer.Lexeme,
+    sep: Lexer.Lexeme,
+    end: Lexer.Lexeme,
+) Error!void {
+    return self.fmtSliceLow(indent, false, slice, start, sep, end);
+}
+
+fn fmtSliceLow(
+    self: *Fmt,
+    indent: bool,
+    forced: bool,
     slice: Slice,
     start: Lexer.Lexeme,
     sep: Lexer.Lexeme,
@@ -191,10 +185,15 @@ fn fmtSlice(
     }
 
     const view = self.ast.exprs.view(slice);
-    for (view, 0..) |id, i| {
+    for (view, 1..) |id, i| {
         if (indent) for (0..self.indent) |_| try self.buf.appendSlice("\t");
         try self.fmtExpr(id);
-        if (indent or i != view.len - 1) {
+        if (forced) {
+            if (view.len > i and indent) {
+                try self.autoInsertSep(view[i], sep);
+                try self.preserveSpace(view[i]);
+            }
+        } else if (indent or i != view.len) {
             try self.buf.appendSlice(sep.repr());
             if (!indent) try self.buf.appendSlice(" ");
         }

@@ -1,15 +1,14 @@
 bl: Builder,
 types: *Types,
-diagnostics: std.io.AnyWriter,
 work_list: std.ArrayList(Task),
 target: Types.Target,
 comptime abi: Types.Abi = .ableos,
 struct_ret_ptr: ?*Node = undefined,
 scope: std.ArrayList(ScopeEntry) = undefined,
 loops: std.ArrayList(*Builder.Loop) = undefined,
-file: Types.File = undefined,
+scope_ty: Types.Id = undefined,
 ast: Ast = undefined,
-fdata: *const Types.FuncData = undefined,
+func: *Types.Func = undefined,
 errored: bool = undefined,
 
 const std = @import("std");
@@ -26,8 +25,8 @@ const Codegen = @This();
 const panic = std.debug.panic;
 
 const Task = union(enum) {
-    Func: Types.Func,
-    Global: Types.Global,
+    Func: *Types.Func,
+    Global: *Types.Global,
 };
 
 const ScopeEntry = struct {
@@ -39,10 +38,8 @@ pub fn init(
     gpa: std.mem.Allocator,
     types: *Types,
     target: Types.Target,
-    diagnostics: std.io.AnyWriter,
 ) Codegen {
     return .{
-        .diagnostics = diagnostics,
         .types = types,
         .target = target,
         .bl = .init(gpa),
@@ -59,8 +56,7 @@ pub fn deinit(self: *Codegen) void {
 pub fn queue(self: *Codegen, task: Task) void {
     switch (task) {
         inline else => |func| {
-            const fdata = self.types.get(func);
-            if (fdata.completion.get(self.target) == .compiled) return;
+            if (func.completion.get(self.target) == .compiled) return;
             self.work_list.append(task) catch unreachable;
         },
     }
@@ -71,9 +67,8 @@ pub fn nextTask(self: *Codegen) ?Task {
         const task = self.work_list.popOrNull() orelse return null;
         switch (task) {
             inline else => |func| {
-                const fdata = self.types.get(func);
-                if (fdata.completion.get(self.target) == .compiled) continue;
-                fdata.completion.set(self.target, .compiled);
+                if (func.completion.get(self.target) == .compiled) continue;
+                func.completion.set(self.target, .compiled);
             },
         }
         return task;
@@ -86,15 +81,14 @@ pub inline fn arena(self: *Codegen) std.mem.Allocator {
 
 pub fn beginBuilder(
     self: *Codegen,
-    file: Types.File,
-    func: *const Types.FuncData,
+    func: *Types.Func,
     param_count: usize,
     return_count: usize,
 ) struct { Builder.BuildToken, []DataType, []DataType } {
     self.errored = false;
-    self.file = file;
-    self.ast = self.types.getFile(file).*;
-    self.fdata = func;
+    self.scope_ty = func.key.scope;
+    self.ast = self.types.getFile(func.key.file).*;
+    self.func = func;
     const res = self.bl.begin(param_count, return_count);
 
     self.scope = .init(self.arena());
@@ -103,10 +97,9 @@ pub fn beginBuilder(
     return res;
 }
 
-pub fn build(self: *Codegen, file: Types.File, func: Types.Func) !void {
-    const fdata: Types.FuncData = self.types.get(func).*;
-    const param_count, const return_count, const ret_abi = fdata.computeAbiSize(self.abi);
-    const token, const params, const returns = self.beginBuilder(file, &fdata, param_count, return_count);
+pub fn build(self: *Codegen, func: *Types.Func) !void {
+    const param_count, const return_count, const ret_abi = func.computeAbiSize(self.abi, self.types);
+    const token, const params, const returns = self.beginBuilder(func, param_count, return_count);
 
     var i: usize = 0;
 
@@ -119,15 +112,15 @@ pub fn build(self: *Codegen, file: Types.File, func: Types.Func) !void {
         self.struct_ret_ptr = null;
     }
 
-    for (self.fdata.args, self.getAstSlice(self.getAst(self.fdata.ast).Fn.args)) |ty, aarg| {
-        const abi = self.abi.categorize(ty);
+    for (self.func.args, self.getAstSlice(self.getAst(self.func.key.ast).Fn.args)) |ty, aarg| {
+        const abi = self.abi.categorize(ty, self.types);
         abi.types(params[i..]);
 
         const arg = switch (abi) {
             .ByRef => self.bl.addParam(i),
             .ByValue => self.bl.addSpill(self.bl.addParam(i)),
             .ByValuePair => |p| b: {
-                const slot = self.bl.addLocal(ty.size());
+                const slot = self.bl.addLocal(ty.size(self.types));
                 for (p.offsets(), 0..) |off, j| {
                     const arg = self.bl.addParam(i + j);
                     self.bl.addFieldStore(slot, @intCast(off), arg.data_type, arg);
@@ -141,7 +134,7 @@ pub fn build(self: *Codegen, file: Types.File, func: Types.Func) !void {
         i += abi.len(false);
     }
 
-    _ = self.emit(.{}, self.getAst(self.fdata.ast).Fn.body);
+    _ = self.emit(.{}, self.getAst(self.func.key.ast).Fn.body);
 
     self.bl.end(token);
 
@@ -198,27 +191,27 @@ pub fn emitTyped(self: *Codegen, ty: Types.Id, expr: Ast.Id) Value {
 
 pub fn ensureLoaded(self: *Codegen, value: *Value) void {
     if (value.id == .Ptr) {
-        value.id = .{ .Value = self.bl.addLoad(value.id.Ptr, self.abi.categorize(value.ty).ByValue) };
+        value.id = .{ .Value = self.bl.addLoad(value.id.Ptr, self.abi.categorize(value.ty, self.types).ByValue) };
     }
 }
 
 pub fn typeCheck(self: *Codegen, expr: Ast.Id, got: *Value, expected: Types.Id) bool {
     if (got.ty == .never) return true;
 
-    if (!got.ty.canUpcast(expected)) {
+    if (!got.ty.canUpcast(expected, self.types)) {
         self.report(expr, "expected {} got {}", .{ expected, got.ty });
         got.* = .never;
         return true;
     }
 
     if (got.ty != expected) {
-        if (got.ty.isSigned() and got.ty.size() < expected.size()) {
-            got.id.Value = self.bl.addUnOp(.sext, self.abi.categorize(expected).ByValue, got.id.Value);
+        if (got.ty.isSigned() and got.ty.size(self.types) < expected.size(self.types)) {
+            got.id.Value = self.bl.addUnOp(.sext, self.abi.categorize(expected, self.types).ByValue, got.id.Value);
         }
 
-        if (got.ty.isUnsigned() and got.ty.size() < expected.size()) {
+        if (got.ty.isUnsigned() and got.ty.size(self.types) < expected.size(self.types)) {
             //self.report(expr, "{} {} {}", .{ got.ty, got.id.Value.data_type, expected });
-            got.id.Value = self.bl.addUnOp(.uext, self.abi.categorize(expected).ByValue, got.id.Value);
+            got.id.Value = self.bl.addUnOp(.uext, self.abi.categorize(expected, self.types).ByValue, got.id.Value);
         }
 
         got.ty = expected;
@@ -233,48 +226,48 @@ fn codePointer(self: *Codegen, ast: Ast.Id) Ast.CodePointer {
 
 fn report(self: *Codegen, expr: Ast.Id, comptime fmt: []const u8, args: anytype) void {
     self.errored = true;
-    const file = self.types.getFile(self.file);
-    const line, const col = file.lineCol(file.posOf(expr).index);
+    const file = self.types.getFile(self.scope_ty.file());
+    const line, const col = Ast.lineCol(file.source, file.posOf(expr).index);
 
-    self.diagnostics.print(
+    self.types.diagnostics.print(
         "{s}:{}:{}: " ++ fmt ++ "\n{}\n",
         .{ file.path, line, col } ++ args ++ .{file.codePointer(file.posOf(expr).index)},
     ) catch unreachable;
 }
 
-fn emitStructOp(self: *Codegen, ty: *const Types.Struct, op: Lexer.Lexeme, loc: *Node, lhs: *Node, rhs: *Node) void {
+fn emitStructOp(self: *Codegen, ty: *Types.Struct, op: Lexer.Lexeme, loc: *Node, lhs: *Node, rhs: *Node) void {
     var offset: usize = 0;
-    for (ty.fields) |field| {
-        offset = std.mem.alignForward(usize, offset, field.ty.alignment());
+    for (ty.getFields(self.types)) |field| {
+        offset = std.mem.alignForward(usize, offset, field.ty.alignment(self.types));
         const field_loc = self.bl.addFieldOffset(loc, @intCast(offset));
         const lhs_loc = self.bl.addFieldOffset(lhs, @intCast(offset));
         const rhs_loc = self.bl.addFieldOffset(rhs, @intCast(offset));
         if (field.ty.data() == .Struct) {
             self.emitStructOp(field.ty.data().Struct, op, field_loc, lhs_loc, rhs_loc);
         } else {
-            const dt = self.abi.categorize(field.ty).ByValue;
+            const dt = self.abi.categorize(field.ty, self.types).ByValue;
             const lhs_val = self.bl.addLoad(lhs_loc, dt);
             const rhs_val = self.bl.addLoad(rhs_loc, dt);
             const res = self.bl.addBinOp(op.toBinOp(field.ty), dt, lhs_val, rhs_val);
             _ = self.bl.addStore(field_loc, res.data_type, res);
         }
-        offset += field.ty.size();
+        offset += field.ty.size(self.types);
     }
 }
 
 pub fn emitGenericStore(self: *Codegen, loc: *Node, value: *Value) void {
     if (value.ty == .never) return;
 
-    if (self.abi.categorize(value.ty) == .ByValue) {
+    if (self.abi.categorize(value.ty, self.types) == .ByValue) {
         self.ensureLoaded(value);
-        _ = self.bl.addStore(loc, self.abi.categorize(value.ty).ByValue, value.id.Value);
+        _ = self.bl.addStore(loc, self.abi.categorize(value.ty, self.types).ByValue, value.id.Value);
     } else if (value.id.Ptr != loc) {
-        _ = self.bl.addFixedMemCpy(loc, value.id.Ptr, value.ty.size());
+        _ = self.bl.addFixedMemCpy(loc, value.id.Ptr, value.ty.size(self.types));
     }
 }
 
 pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
-    const file = self.types.getFile(self.file);
+    const file = self.types.getFile(self.scope_ty.file());
     switch (self.getAst(expr)) {
         .Comment => return .{},
         .Void => return .{},
@@ -287,7 +280,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return .never;
             }
             const parsed = std.fmt.parseInt(i64, self.tokenSrc(e.index), 10) catch unreachable;
-            return mkv(ty, self.bl.addIntImm(self.abi.categorize(ty).ByValue, parsed));
+            return mkv(ty, self.bl.addIntImm(self.abi.categorize(ty, self.types).ByValue, parsed));
         },
         .Bool => |e| {
             return mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(e.value)));
@@ -298,26 +291,9 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return mkp(se.ty, value);
             }
         } else {
-            const decl = self.types.getFile(self.file).findDecl(e.id).?;
-            const vari = self.getAst(decl).BinOp;
-            const ty: ?Types.Id, const value: Ast.Id = switch (vari.op) {
-                .@":" => .{ self.types.resolveTy(.init(self.file), self.getAst(vari.rhs).BinOp.lhs), self.getAst(vari.rhs).BinOp.rhs },
-                .@":=" => .{ null, vari.rhs },
-                else => unreachable,
-            };
-
-            const global = self.types.addGlobal(self.file, self.getAst(vari.lhs).Ident.pos, decl);
-            const gdata: *Types.GlobalData = self.types.get(global);
-
-            if (gdata.completion.get(self.target) == .queued) {
-                gdata.completion.set(self.target, .staged);
-
-                @import("Comptime.zig").evalGlobal(self, global, ty, value);
-
-                self.queue(.{ .Global = global });
-            }
-
-            return mkp(self.types.get(global).ty, self.bl.addGlobalAddr(@intFromEnum(global)));
+            const global = self.types.resolveTy(.init(self.scope_ty), expr).data().Global;
+            self.queue(.{ .Global = global });
+            return mkp(global.ty, self.bl.addGlobalAddr(global.id));
         },
         .Ctor => |e| {
             if (e.ty.tag() == .Void and ctx.ty == null) {
@@ -325,33 +301,33 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return .never;
             }
 
-            const ty = ctx.ty orelse self.types.resolveTy(.init(self.file), e.ty);
+            const ty = ctx.ty orelse self.types.resolveTy(.init(self.scope_ty), e.ty);
             if (ty.data() != .Struct) {
                 self.report(expr, "{} can not be constructed with '.{{..}}'", .{ty});
                 return .never;
             }
             const struct_ty = ty.data().Struct;
 
-            const struct_file = self.types.getFile(struct_ty.file);
-            const local = ctx.loc orelse self.bl.addLocal(ty.size());
+            const local = ctx.loc orelse self.bl.addLocal(ty.size(self.types));
 
             // TODO: diagnostics
 
             for (self.getAstSlice(e.fields)) |f| {
-                const field = self.getAst(f).CtorField;
+                const field = self.getAst(f).BinOp;
+                const fname = file.tokenSrc(self.getAst(field.lhs).Tag.index + 1);
                 var offset: usize = 0;
-                const ftype = for (struct_ty.fields) |tf| {
-                    offset = std.mem.alignForward(usize, offset, tf.ty.alignment());
-                    if (std.mem.eql(u8, file.tokenSrc(field.pos.index), struct_file.tokenSrc(tf.name.index))) break tf.ty;
-                    offset += tf.ty.size();
+                const ftype = for (struct_ty.getFields(self.types)) |tf| {
+                    offset = std.mem.alignForward(usize, offset, tf.ty.alignment(self.types));
+                    if (std.mem.eql(u8, tf.name, fname)) break tf.ty;
+                    offset += tf.ty.size(self.types);
                 } else {
-                    self.report(f, "{} does not have a field called {s} (TODO: list fields)", .{ ty, file.tokenSrc(field.pos.index) });
+                    self.report(f, "{} does not have a field called {s} (TODO: list fields)", .{ ty, fname });
                     continue;
                 };
 
                 const off = self.bl.addFieldOffset(local, @intCast(offset));
-                var value = self.emit(.{ .ty = ftype, .loc = off }, field.value);
-                if (self.typeCheck(field.value, &value, ftype)) continue;
+                var value = self.emit(.{ .ty = ftype, .loc = off }, field.rhs);
+                if (self.typeCheck(field.rhs, &value, ftype)) continue;
                 self.emitGenericStore(off, &value);
             }
 
@@ -363,27 +339,27 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return .never;
             }
 
-            const ty = ctx.ty orelse self.types.resolveTy(.init(self.file), e.ty);
+            const ty = ctx.ty orelse self.types.resolveTy(.init(self.scope_ty), e.ty);
             if (ty.data() != .Struct) {
                 self.report(expr, "{} can not be constructed with '.{{..}}'", .{ty});
                 return .never;
             }
             const struct_ty = ty.data().Struct;
 
-            const local = ctx.loc orelse self.bl.addLocal(ty.size());
+            const local = ctx.loc orelse self.bl.addLocal(ty.size(self.types));
 
             // TODO: diagnostics
 
             var offset: usize = 0;
-            for (self.getAstSlice(e.fields), struct_ty.fields) |field, sf| {
+            for (self.getAstSlice(e.fields), struct_ty.getFields(self.types)) |field, sf| {
                 const ftype = sf.ty;
-                offset = std.mem.alignForward(usize, offset, ftype.alignment());
+                offset = std.mem.alignForward(usize, offset, ftype.alignment(self.types));
 
                 const off = self.bl.addFieldOffset(local, @intCast(offset));
                 var value = self.emit(.{ .ty = ftype, .loc = off }, field);
                 if (self.typeCheck(field, &value, ftype)) continue;
                 self.emitGenericStore(off, &value);
-                offset += ftype.size();
+                offset += ftype.size(self.types);
             }
 
             return mkp(ty, local);
@@ -397,13 +373,12 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 base.id = .{ .Ptr = base.id.Value };
             }
             const struct_ty = base.ty.data().Struct;
-            const struct_file = self.types.getFile(struct_ty.file);
 
             var offset: usize = 0;
-            const ftype = for (struct_ty.fields) |tf| {
-                offset = std.mem.alignForward(usize, offset, tf.ty.alignment());
-                if (std.mem.eql(u8, file.tokenSrc(e.field.index), struct_file.tokenSrc(tf.name.index))) break tf.ty;
-                offset += tf.ty.size();
+            const ftype = for (struct_ty.getFields(self.types)) |tf| {
+                offset = std.mem.alignForward(usize, offset, tf.ty.alignment(self.types));
+                if (std.mem.eql(u8, file.tokenSrc(e.field.index), tf.name)) break tf.ty;
+                offset += tf.ty.size(self.types);
             } else {
                 unreachable;
             };
@@ -427,7 +402,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             .@"-" => {
                 var lhs = self.emit(ctx, e.oper);
                 if (ctx.ty) |ty| if (self.typeCheck(expr, &lhs, ty)) return .never;
-                return mkv(lhs.ty, self.bl.addUnOp(.neg, self.abi.categorize(lhs.ty).ByValue, lhs.id.Value));
+                return mkv(lhs.ty, self.bl.addUnOp(.neg, self.abi.categorize(lhs.ty, self.types).ByValue, lhs.id.Value));
             },
             else => std.debug.panic("{any}\n", .{self.getAst(expr)}),
         },
@@ -440,13 +415,13 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 else b: {
                     const assign = self.getAst(e.rhs).BinOp;
                     std.debug.assert(assign.op == .@"=");
-                    const ty = self.types.resolveTy(.init(self.file), assign.lhs);
+                    const ty = self.types.resolveTy(.init(self.scope_ty), assign.lhs);
                     var vl = self.emit(.{ .loc = loc, .ty = ty }, assign.rhs);
                     if (self.typeCheck(assign.rhs, &vl, ty)) break :b Value.never;
                     break :b vl;
                 };
 
-                self.bl.resizeLocal(loc, value.ty.size());
+                self.bl.resizeLocal(loc, value.ty.size(self.types));
                 self.emitGenericStore(loc, &value);
 
                 self.scope.append(.{ .ty = value.ty, .name = self.getAst(e.lhs).Ident.id }) catch unreachable;
@@ -467,7 +442,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 var rhs = self.emit(.{ .ty = lhs.ty }, e.rhs);
                 if (e.op.isComparison() and lhs.ty.isSigned() != rhs.ty.isSigned())
                     self.report(e.lhs, "mixed sign comparison ({} {})", .{ lhs.ty, rhs.ty });
-                const unified: Types.Id = ctx.ty orelse lhs.ty.binOpUpcast(rhs.ty) catch |err| {
+                const unified: Types.Id = ctx.ty orelse lhs.ty.binOpUpcast(rhs.ty, self.types) catch |err| {
                     self.report(expr, "{s} ({} and {})", .{ @errorName(err), lhs.ty, rhs.ty });
                     return .never;
                 };
@@ -476,7 +451,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     self.report(e.lhs, "\n", .{});
                     unreachable;
                 } else {
-                    const loc = ctx.loc orelse self.bl.addLocal(unified.size());
+                    const loc = ctx.loc orelse self.bl.addLocal(unified.size(self.types));
                     self.emitStructOp(unified.data().Struct, e.op, loc, lhs.id.Ptr, rhs.id.Ptr);
                     return mkp(unified, loc);
                 } else {
@@ -488,7 +463,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     if (lhs_fail or rhs_fail) return .{};
                     return mkv(unified, self.bl.addBinOp(
                         e.op.toBinOp(lhs.ty),
-                        self.abi.categorize(unified).ByValue,
+                        self.abi.categorize(unified, self.types).ByValue,
                         lhs.id.Value,
                         rhs.id.Value,
                     ));
@@ -538,24 +513,23 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             return .{};
         },
         .Call => |e| {
-            const func = self.types.resolveTy(.init(self.file), e.called).data().Func;
+            const func = self.types.resolveTy(.init(self.scope_ty), e.called).data().Func;
             self.queue(.{ .Func = func });
-            const fdata: *Types.FuncData = self.types.get(func);
 
-            const param_count, const return_count, const ret_abi = fdata.computeAbiSize(self.abi);
+            const param_count, const return_count, const ret_abi = func.computeAbiSize(self.abi, self.types);
             const args = self.bl.allocCallArgs(param_count, return_count);
 
             var i: usize = 0;
             if (ret_abi == .ByRef) {
                 ret_abi.types(args.params[0..1]);
-                args.arg_slots[i] = ctx.loc orelse self.bl.addLocal(fdata.ret.size());
+                args.arg_slots[i] = ctx.loc orelse self.bl.addLocal(func.ret.size(self.types));
                 i += 1;
             } else {
                 ret_abi.types(args.returns[0..return_count]);
             }
 
-            for (self.getAstSlice(e.args), fdata.args) |arg, ty| {
-                const abi = self.abi.categorize(ty);
+            for (self.getAstSlice(e.args), func.args) |arg, ty| {
+                const abi = self.abi.categorize(ty, self.types);
                 abi.types(args.params[i..]);
                 var value = self.emitTyped(ty, arg);
                 switch (abi) {
@@ -575,25 +549,25 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 i += abi.len(false);
             }
 
-            const rets = self.bl.addCall(@intFromEnum(func), args);
+            const rets = self.bl.addCall(func.id, args);
 
             return switch (ret_abi) {
                 .Imaginary => .{},
-                .ByValue => mkv(fdata.ret, rets[0]),
+                .ByValue => mkv(func.ret, rets[0]),
                 .ByValuePair => |pair| b: {
-                    const slot = ctx.loc orelse self.bl.addLocal(fdata.ret.size());
+                    const slot = ctx.loc orelse self.bl.addLocal(func.ret.size(self.types));
                     for (pair.types, pair.offsets(), rets) |ty, off, vl| {
                         self.bl.addFieldStore(slot, @intCast(off), ty, vl);
                     }
-                    break :b mkp(fdata.ret, slot);
+                    break :b mkp(func.ret, slot);
                 },
-                .ByRef => mkp(fdata.ret, args.arg_slots[0]),
+                .ByRef => mkp(func.ret, args.arg_slots[0]),
             };
         },
         .Return => |e| {
-            var value = self.emit(.{ .loc = self.struct_ret_ptr, .ty = self.fdata.ret }, e.value);
-            if (self.typeCheck(e.value, &value, self.fdata.ret)) return .never;
-            switch (self.abi.categorize(value.ty)) {
+            var value = self.emit(.{ .loc = self.struct_ret_ptr, .ty = self.func.ret }, e.value);
+            if (self.typeCheck(e.value, &value, self.func.ret)) return .never;
+            switch (self.abi.categorize(value.ty, self.types)) {
                 .Imaginary => self.bl.addReturn(&.{}),
                 .ByValue => {
                     self.ensureLoaded(&value);

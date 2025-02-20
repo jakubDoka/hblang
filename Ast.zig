@@ -49,9 +49,9 @@ pub const Kind = enum {
     Arg,
     Directive,
     Call,
+    Tag,
     Field,
     Ctor,
-    CtorField,
     Tupl,
     If,
     Loop,
@@ -101,6 +101,7 @@ pub const Expr = union(Kind) {
         arg_pos: Pos,
         args: Slice,
     },
+    Tag: Pos,
     Field: struct {
         base: Id,
         field: Pos,
@@ -109,10 +110,6 @@ pub const Expr = union(Kind) {
         pos: Pos,
         ty: Id,
         fields: Slice,
-    },
-    CtorField: struct {
-        pos: Pos,
-        value: Id,
     },
     Tupl: struct {
         pos: Pos,
@@ -175,6 +172,7 @@ pub fn init(gpa: std.mem.Allocator, current: Types.File, path: []const u8, code:
     var lexer = Lexer.init(code, 0);
 
     var parser = Parser{
+        .path = path,
         .current = current,
         .loader = loader,
         .cur = lexer.next(),
@@ -198,10 +196,12 @@ pub fn init(gpa: std.mem.Allocator, current: Types.File, path: []const u8, code:
     };
 }
 
-pub fn findDecl(self: *const Ast, id: anytype) ?Id {
-    return for (self.exprs.view(self.items)) |d| {
+pub fn findDecl(self: *const Ast, slice: Slice, id: anytype) ?Id {
+    return for (self.exprs.view(slice)) |d| {
         if (d.tag() != .BinOp) continue;
-        const ident = self.exprs.get(self.exprs.get(d).BinOp.lhs).Ident.id;
+        const decl = self.exprs.get(d).BinOp.lhs;
+        if (decl.tag() == .Tag) continue;
+        const ident = self.exprs.get(decl).Ident.id;
         switch (@TypeOf(id)) {
             Ident => if (ident == id) break d,
             else => if (cmpLow(ident.pos(), self.source, id)) break d,
@@ -253,32 +253,32 @@ pub fn fmt(self: *const Ast, buf: *std.ArrayList(u8)) !void {
 }
 
 pub const CodePointer = struct {
-    self: *const Ast,
+    source: []const u8,
     index: usize,
 
     pub fn format(slf: *const @This(), comptime _: anytype, _: anytype, writer: anytype) !void {
-        try slf.self.pointToCode(slf.index, writer);
+        try pointToCode(slf.source, slf.index, writer);
     }
 };
 
 pub fn codePointer(self: *const Ast, index: usize) CodePointer {
-    return .{ .self = self, .index = index };
+    return .{ .source = self.source, .index = index };
 }
 
-pub fn lineCol(self: *const Ast, index: isize) struct { usize, usize } {
+pub fn lineCol(source: []const u8, index: isize) struct { usize, usize } {
     var line: usize = 0;
     var last_nline: isize = -1;
-    for (self.source[0..@intCast(index)], 0..) |c, i| if (c == '\n') {
+    for (source[0..@intCast(index)], 0..) |c, i| if (c == '\n') {
         line += 1;
         last_nline = @intCast(i);
     };
     return .{ line + 1, @intCast(index - last_nline) };
 }
 
-fn pointToCode(self: *const Ast, index: usize, writer: anytype) !void {
-    const line_start = if (std.mem.lastIndexOfScalar(u8, self.source[0..index], '\n')) |l| l + 1 else 0;
-    const line_end = if (std.mem.indexOfScalar(u8, self.source[index..], '\n')) |l| l + index else self.source.len;
-    const the_line = self.source[line_start..line_end];
+fn pointToCode(source: []const u8, index: usize, writer: anytype) !void {
+    const line_start = if (std.mem.lastIndexOfScalar(u8, source[0..index], '\n')) |l| l + 1 else 0;
+    const line_end = if (std.mem.indexOfScalar(u8, source[index..], '\n')) |l| l + index else source.len;
+    const the_line = source[line_start..line_end];
 
     var buf: [256]u8 = undefined;
     var i: usize = 0;
