@@ -111,7 +111,11 @@ pub fn build(self: *Codegen, func: *Types.Func) !void {
 
     const ast = self.types.getFile(func.key.file);
 
-    for (func.args, ast.exprs.view(ast.exprs.get(func.key.ast).Fn.args)) |ty, aarg| {
+    var ty_idx: usize = 0;
+    for (ast.exprs.view(ast.exprs.get(func.key.ast).Fn.args)) |aarg| {
+        const ident = ast.exprs.get(aarg.bindings).Ident;
+        if (ident.pos.indented) continue;
+        const ty = func.args[ty_idx];
         const abi = self.abi.categorize(ty, self.types);
         abi.types(params[i..]);
 
@@ -128,12 +132,13 @@ pub fn build(self: *Codegen, func: *Types.Func) !void {
             },
             .Imaginary => continue,
         };
-        self.scope.append(.{ .ty = ty, .name = ast.exprs.get(ast.exprs.get(aarg).Arg.bindings).Ident.id }) catch unreachable;
+        self.scope.append(.{ .ty = ty, .name = ident.id }) catch unreachable;
         self.bl.pushScopeValue(arg);
         i += abi.len(false);
+        ty_idx += 1;
     }
 
-    _ = self.emit(.{ .scope = func.key.scope }, ast.exprs.get(func.key.ast).Fn.body);
+    _ = self.emit(.{ .scope = Types.Id.init(.Func, @intFromPtr(func)) }, ast.exprs.get(func.key.ast).Fn.body);
 
     self.bl.end(token);
 
@@ -318,7 +323,6 @@ pub fn lookupScopeItem(self: *Codegen, bsty: Types.Id, name: []const u8) Types.I
 }
 
 pub fn loadIdent(self: *Codegen, ctx: Ctx, pos: Ast.Pos, id: Ast.Ident) Value {
-    _ = pos;
     const ast = self.types.getFile(ctx.scope.file());
     for (self.scope.items, 0..) |se, i| {
         if (se.name == id) {
@@ -331,7 +335,7 @@ pub fn loadIdent(self: *Codegen, ctx: Ctx, pos: Ast.Pos, id: Ast.Ident) Value {
             if (ast.findDecl(cursor.scope.items(), id)) |v| break v;
             if (cursor.scope.findCapture(ast, id)) |c| return self.emitTyConst(c);
             cursor.scope = cursor.scope.parent();
-        } else unreachable;
+        } else std.debug.panic("\n{}\n", .{ast.codePointer(pos.index)});
 
         const vari = ast.exprs.get(decl).BinOp;
         const ty: ?Types.Id, const value: Ast.Id = switch (vari.op) {
@@ -592,7 +596,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             return .{};
         },
         .Call => |e| {
-            const typ: Types.Id, var caller: ?Value = if (e.called.tag() == .Field) b: {
+            var typ: Types.Id, var caller: ?Value = if (e.called.tag() == .Field) b: {
                 const field = ast.exprs.get(e.called).Field;
                 const value = self.emit(ctx.forwardScope(), field.base);
                 if (value.ty == .type) {
@@ -602,8 +606,63 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             } else b: {
                 break :b .{ self.resolveTy(ctx, e.called), null };
             };
-            const func = typ.data().Func;
 
+            var computed_args: ?[]Value = null;
+            if (typ.data() == .Template) {
+                const tmpl = typ.data().Template;
+
+                var scope = tmpl.*;
+                const tmpl_file = self.types.getFile(tmpl.key.file);
+                const tmpl_ast = tmpl_file.exprs.getTyped(.Fn, tmpl.key.ast).?;
+                const captures = self.arena().alloc(Types.Id, tmpl_ast.captures.len()) catch unreachable;
+                const arg_tys = self.arena().alloc(Types.Id, tmpl_ast.args.len() - tmpl_ast.captures.len()) catch unreachable;
+                const arg_exprs = self.arena().alloc(Value, arg_tys.len) catch unreachable;
+                var capture_idx: usize = 0;
+                var arg_idx: usize = 0;
+                for (tmpl_file.exprs.view(tmpl_ast.args), ast.exprs.view(e.args)) |param, arg| {
+                    if (tmpl_file.exprs.get(param.bindings).Ident.pos.indented) {
+                        captures[capture_idx] = self.resolveTy(ctx, arg);
+
+                        std.debug.assert(scope.key.capture_idents.len() == scope.key.captures.len);
+                        capture_idx += 1;
+                        scope.key.capture_idents = tmpl_ast.captures.slice(0, capture_idx);
+                        scope.key.captures = captures[0..capture_idx];
+                    } else {
+                        // this is in anticipation of the @Any
+                        arg_tys[arg_idx] = self.resolveTy(.{ .scope = Types.Id.init(.Template, @intFromPtr(&scope)) }, param.ty);
+                        arg_exprs[arg_idx] = self.emitTyped(ctx, arg_tys[arg_idx], arg);
+                        arg_idx += 1;
+                    }
+                }
+
+                std.debug.assert(scope.key.capture_idents.len() == scope.key.captures.len);
+                const ret = self.resolveTy(.{ .scope = Types.Id.init(.Template, @intFromPtr(&scope)) }, tmpl_ast.ret);
+
+                const slot, const alloc = self.types.intern(.Func, .{
+                    .scope = tmpl.key.scope,
+                    .file = tmpl.key.file,
+                    .ast = tmpl.key.ast,
+                    .capture_idents = tmpl_ast.captures,
+                    .captures = captures,
+                });
+
+                if (!slot.found_existing) {
+                    alloc.* = .{
+                        .id = self.types.next_func,
+                        .key = alloc.key,
+                        .args = arg_tys,
+                        .ret = ret,
+                        .name = "",
+                    };
+                    alloc.key.captures = self.types.arena.allocator().dupe(Types.Id, alloc.key.captures) catch unreachable;
+                    self.types.next_func += 1;
+                }
+
+                typ = slot.key_ptr.*;
+                computed_args = arg_exprs;
+            }
+
+            const func = typ.data().Func;
             self.queue(.{ .Func = func });
 
             const param_count, const return_count, const ret_abi = func.computeAbiSize(self.abi, self.types);
@@ -638,10 +697,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 i += abi.len(false);
             }
 
-            for (ast.exprs.view(e.args), func.args[@intFromBool(caller != null)..]) |arg, ty| {
+            const args_ast = ast.exprs.view(e.args);
+            for (func.args[@intFromBool(caller != null)..], 0..) |ty, k| {
                 const abi = self.abi.categorize(ty, self.types);
                 abi.types(args.params[i..]);
-                var value = self.emitTyped(ctx, ty, arg);
+                var value = if (computed_args) |a| a[k] else self.emitTyped(ctx, ty, args_ast[k]);
                 switch (abi) {
                     .Imaginary => {},
                     .ByValue => {
@@ -699,13 +759,14 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .Buty => |e| return self.emitTyConst(.fromLexeme(e.bt)),
         .Struct => |e| {
-            const prefix = 2;
+            const prefix = 3;
             const args = self.bl.allocCallArgs(prefix + e.captures.len(), 1);
             @memset(args.params, .int);
             @memset(args.returns, .int);
 
             args.arg_slots[0] = self.bl.addIntImm(.int, 0);
-            args.arg_slots[1] = self.bl.addIntImm(.int, @as(u32, @bitCast(expr)));
+            args.arg_slots[1] = self.bl.addIntImm(.int, @bitCast(@intFromEnum(ctx.scope)));
+            args.arg_slots[2] = self.bl.addIntImm(.int, @as(u32, @bitCast(expr)));
 
             for (ast.exprs.view(e.captures), args.arg_slots[prefix..]) |id, *slot| {
                 var val = self.loadIdent(ctx.forwardScope(), .init(0), id);
@@ -716,7 +777,16 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             const rets = self.bl.addCall(Comptime.eca, args);
             return mkv(.type, rets[0]);
         },
-        .Fn => |e| {
+        .Fn => |e| if (e.captures.len() != 0) {
+            const slot, _ = self.types.intern(.Template, .{
+                .scope = ctx.scope,
+                .file = ctx.file(),
+                .ast = expr,
+                .capture_idents = .{},
+                .captures = &.{},
+            });
+            return self.emitTyConst(slot.key_ptr.*);
+        } else {
             const slot, const alloc = self.types.intern(.Func, .{
                 .scope = ctx.scope,
                 .file = ctx.file(),
@@ -728,7 +798,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             if (!slot.found_existing) {
                 const args = self.types.arena.allocator().alloc(Types.Id, e.args.len()) catch unreachable;
                 for (ast.exprs.view(e.args), args) |argid, *arg| {
-                    const ty = ast.exprs.get(argid).Arg.ty;
+                    const ty = argid.ty;
                     arg.* = self.resolveTy(ctx.stripName(), ty);
                 }
                 const ret = self.resolveTy(ctx.stripName(), e.ret);

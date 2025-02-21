@@ -200,19 +200,23 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
     return try self.store.allocDyn(self.gpa, switch (token.kind) {
         .Comment => .{ .Comment = .init(token.pos) },
         ._ => .{ .Wildcard = .init(token.pos) },
-        .Ident => return try self.resolveIdent(token),
-        .@"fn" => .{ .Fn = .{
-            .args = try self.parseList(.@"(", .@",", .@")", parseArg),
-            .pos = self.list_pos,
-            .ret = b: {
-                _ = try self.expectAdvance(.@":");
-                break :b try self.parseExpr();
-            },
-            .body = b: {
-                defer self.finalizeVariables(scope_frame);
-                break :b try self.parseExpr();
-            },
-        } },
+        .@"$", .Ident => return try self.resolveIdent(token),
+        .@"fn" => b: {
+            const capture_base = self.captures.items.len;
+            const args = try self.parseListTyped(.@"(", .@",", .@")", Ast.Arg, parseArg);
+            const captures = try self.store.allocSlice(Ident, self.gpa, self.popCaptures(capture_base));
+            _ = try self.expectAdvance(.@":");
+            const ret = try self.parseExpr();
+            defer self.finalizeVariables(scope_frame);
+            const body = try self.parseExpr();
+            break :b .{ .Fn = .{
+                .args = args,
+                .captures = captures,
+                .pos = self.list_pos,
+                .ret = ret,
+                .body = body,
+            } };
+        },
         .@"@" => if (Ast.cmpLow(token.pos, self.lexer.source, "@use")) .{ .Use = .{
             .file = b: {
                 _ = try self.expectAdvance(.@"(");
@@ -329,19 +333,18 @@ fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
     for (self.active_syms.items, 0..) |*s, i| if (Ast.cmpLow(s.id.pos(), self.lexer.source, repr)) {
         if (i < self.capture_boundary and !s.unordered) try self.captures.append(self.gpa, s.id);
         return try self.store.alloc(self.gpa, .Ident, .{
-            .pos = .init(token.pos),
+            .pos = .{ .index = @intCast(token.pos), .indented = token.kind == .@"$" },
             .id = s.id,
         });
     };
 
     const id = Ident.init(token);
     const alloc = try self.store.alloc(self.gpa, .Ident, .{
-        .pos = .init(token.pos),
+        .pos = .{ .index = @intCast(token.pos), .indented = token.kind == .@"$" },
         .id = id,
     });
-    try self.active_syms.append(self.gpa, .{
-        .id = id,
-    });
+    if (token.kind == .@"$") try self.captures.append(self.gpa, id);
+    try self.active_syms.append(self.gpa, .{ .id = id });
     return alloc;
 }
 
@@ -352,9 +355,20 @@ fn parseList(
     end: Lexer.Lexeme,
     comptime parser: fn (*Parser) Error!Id,
 ) Error!Ast.Slice {
+    return self.parseListTyped(start, sep, end, Id, parser);
+}
+
+fn parseListTyped(
+    self: *Parser,
+    start: ?Lexer.Lexeme,
+    sep: ?Lexer.Lexeme,
+    end: Lexer.Lexeme,
+    comptime Elem: type,
+    comptime parser: fn (*Parser) Error!Elem,
+) Error!root.EnumSlice(Elem) {
     if (start) |s| _ = try self.expectAdvance(s);
     self.list_pos = .{ .index = @intCast(self.cur.pos) };
-    var buf = std.ArrayListUnmanaged(Id){};
+    var buf = std.ArrayListUnmanaged(Elem){};
     while (!self.tryAdvance(end)) {
         try buf.append(self.arena.allocator(), try parser(self));
         if (self.tryAdvance(end)) {
@@ -364,17 +378,17 @@ fn parseList(
         if (sep) |s| _ = self.tryAdvance(s);
         self.list_pos.indented = true;
     }
-    return try self.store.allocSlice(Id, self.gpa, buf.items);
+    return try self.store.allocSlice(Elem, self.gpa, buf.items);
 }
 
-fn parseArg(self: *Parser) Error!Id {
+fn parseArg(self: *Parser) Error!Ast.Arg {
     const bindings = try self.parseUnitWithoutTail();
     _ = self.declareExpr(bindings, false);
     _ = try self.expectAdvance(.@":");
-    return try self.store.alloc(self.gpa, .Arg, .{
+    return .{
         .bindings = bindings,
         .ty = try self.parseExpr(),
-    });
+    };
 }
 
 inline fn tryAdvance(self: *Parser, expected: Lexer.Lexeme) bool {

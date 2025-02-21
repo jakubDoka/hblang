@@ -26,7 +26,7 @@ pub fn fmtExpr(self: *Fmt, id: Id) Error!void {
     return self.fmtExprPrec(id, 255);
 }
 
-fn preserveSpace(self: *Fmt, id: Id) Error!void {
+fn preserveSpace(self: *Fmt, id: anytype) Error!void {
     const pos = self.ast.posOf(id);
     const preceding = self.ast.source[0..pos.index];
     const preceding_whitespace = preceding[std.mem.trimRight(u8, preceding, " \t\r\n").len..];
@@ -34,7 +34,7 @@ fn preserveSpace(self: *Fmt, id: Id) Error!void {
     if (nline_count > 1) try self.buf.appendSlice("\n");
 }
 
-fn autoInsertSep(self: *Fmt, id: Id, sep: Lexer.Lexeme) Error!void {
+fn autoInsertSep(self: *Fmt, id: anytype, sep: Lexer.Lexeme) Error!void {
     const pos = self.ast.posOf(id);
     const starting_token = Lexer.peek(self.ast.source, pos.index);
     if (starting_token.kind.precedence() < 255) try self.buf.appendSlice(@tagName(sep));
@@ -65,11 +65,6 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             } else false;
             if (s.pos.indented or forced) try self.buf.appendSlice(" ");
             try self.fmtSliceLow(s.pos.indented or forced, forced, s.fields, .@"{", .@";", .@"}");
-        },
-        .Arg => |a| {
-            try self.fmtExpr(a.bindings);
-            try self.buf.appendSlice(": ");
-            try self.fmtExpr(a.ty);
         },
         .Directive => |d| {
             try self.buf.appendSlice(Lexer.peekStr(self.ast.source, d.pos.index));
@@ -160,7 +155,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
 inline fn fmtSlice(
     self: *Fmt,
     indent: bool,
-    slice: Slice,
+    slice: anytype,
     start: Lexer.Lexeme,
     sep: Lexer.Lexeme,
     end: Lexer.Lexeme,
@@ -172,7 +167,7 @@ fn fmtSliceLow(
     self: *Fmt,
     indent: bool,
     forced: bool,
-    slice: Slice,
+    slice: anytype,
     start: Lexer.Lexeme,
     sep: Lexer.Lexeme,
     end: Lexer.Lexeme,
@@ -187,7 +182,11 @@ fn fmtSliceLow(
     const view = self.ast.exprs.view(slice);
     for (view, 1..) |id, i| {
         if (indent) for (0..self.indent) |_| try self.buf.appendSlice("\t");
-        try self.fmtExpr(id);
+        if (@TypeOf(id) == Ast.Arg) {
+            try self.fmtExpr(id.bindings);
+            try self.buf.appendSlice(": ");
+            try self.fmtExpr(id.ty);
+        } else try self.fmtExpr(id);
         if (forced) {
             if (view.len > i and indent) {
                 try self.autoInsertSep(view[i], sep);

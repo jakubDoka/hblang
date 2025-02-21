@@ -21,6 +21,7 @@ pub const Lexeme = enum(u8) {
     int,
     type,
     @"@" = '@',
+    @"$" = '$',
     @"\"" = '"',
     @"{" = '{',
     @"}" = '}',
@@ -174,6 +175,13 @@ pub fn next(self: *Lexer) Token {
                     else => break,
                 };
                 break :b .@"@";
+            },
+            '$' => b: {
+                while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
+                    'a'...'z', 'A'...'Z', '0'...'9', '_', 128...255 => self.cursor += 1,
+                    else => break,
+                };
+                break :b .@"$";
             },
             'a'...'z', 'A'...'Z', '_', 128...255 => b: {
                 while (self.cursor < self.source.len) switch (self.source[self.cursor]) {

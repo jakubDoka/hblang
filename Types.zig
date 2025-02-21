@@ -55,6 +55,7 @@ pub const Data = union(enum) {
     },
     Ptr: Id,
     Struct: *Struct,
+    Template: *Template,
     Func: *Func,
     Global: *Global,
 };
@@ -117,6 +118,10 @@ pub const Struct = struct {
         self.fields = fields;
         return fields;
     }
+};
+
+pub const Template = struct {
+    key: Key,
 };
 
 pub const Func = struct {
@@ -195,14 +200,22 @@ pub const Id = enum(usize) {
 
     pub fn items(self: Id) Ast.Slice {
         return switch (self.data()) {
-            .Func, .Global, .Builtin, .Ptr => unreachable,
+            .Global, .Builtin, .Ptr => unreachable,
+            .Template, .Func => .{},
             inline else => |v| v.ast_fields,
+        };
+    }
+
+    pub fn captures(self: Id) []const Id {
+        return switch (self.data()) {
+            .Global, .Builtin, .Ptr => unreachable,
+            inline else => |v| v.key.captures,
         };
     }
 
     pub fn findCapture(self: Id, ast: *const Ast, id: Ast.Ident) ?Id {
         return switch (self.data()) {
-            .Func, .Global, .Builtin, .Ptr => unreachable,
+            .Global, .Builtin, .Ptr => unreachable,
             inline else => |v| for (ast.exprs.view(v.key.capture_idents), v.key.captures) |cid, c| {
                 if (cid == id) break c;
             } else null,
@@ -211,7 +224,7 @@ pub const Id = enum(usize) {
 
     pub fn parent(self: Id) Id {
         return switch (self.data()) {
-            .Func, .Global, .Builtin, .Ptr => unreachable,
+            .Global, .Builtin, .Ptr => unreachable,
             inline else => |v| v.key.scope,
         };
     }
@@ -231,11 +244,9 @@ pub const Id = enum(usize) {
     pub fn data(self: Id) Data {
         const repr: Repr = @bitCast(@intFromEnum(self));
         return switch (repr.tag()) {
-            .Builtin => .{ .Builtin = @enumFromInt(repr.data) },
             .Ptr => .{ .Ptr = @as(*const Id, @ptrFromInt(repr.data)).* },
-            .Struct => .{ .Struct = @ptrFromInt(repr.data) },
-            .Func => .{ .Func = @ptrFromInt(repr.data) },
-            .Global => .{ .Global = @ptrFromInt(repr.data) },
+            .Builtin => .{ .Builtin = @enumFromInt(repr.data) },
+            inline else => |t| @unionInit(Data, @tagName(t), @ptrFromInt(repr.data)),
         };
     }
 
@@ -261,8 +272,7 @@ pub const Id = enum(usize) {
                 siz = std.mem.alignForward(usize, siz, alignm);
                 return siz;
             },
-            .Func => unreachable,
-            .Global => unreachable,
+            else => unreachable,
         };
     }
 
@@ -277,8 +287,7 @@ pub const Id = enum(usize) {
                 }
                 return alignm;
             },
-            .Func => unreachable,
-            .Global => unreachable,
+            else => unreachable,
         };
     }
 
@@ -314,6 +323,7 @@ pub const Id = enum(usize) {
             .Ptr => |b| writer.print("^{}", .{b}),
             .Builtin => |b| writer.writeAll(@tagName(b)),
             .Struct => |b| writer.writeAll(b.name),
+            .Template => |b| writer.print("{}", .{b}),
             .Func => |b| writer.print("{}", .{b}),
             .Global => |b| writer.print("{}", .{b}),
         };
@@ -379,8 +389,7 @@ pub const Abi = enum {
             .Struct => |s| switch (self) {
                 .ableos => categorizeAbleosStruct(s, types),
             },
-            .Func => unreachable,
-            .Global => unreachable,
+            else => unreachable,
         };
     }
 

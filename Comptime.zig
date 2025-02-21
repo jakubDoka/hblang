@@ -6,7 +6,7 @@ const Vm = @import("Vm.zig");
 
 pub const eca = @import("HbvmGen.zig").eca;
 
-pub fn runVm(self: *Types, ctx: Codegen.Ctx, entry_id: u32, return_loc: []u8) void {
+pub fn runVm(self: *Types, entry_id: u32, return_loc: []u8) void {
     const stack_size = 1024 * 10;
     const stack_end = stack_size - self.comptime_code.out.items.len;
 
@@ -30,16 +30,17 @@ pub fn runVm(self: *Types, ctx: Codegen.Ctx, entry_id: u32, return_loc: []u8) vo
         .tx => break,
         .eca => switch (self.vm.regs.get(.arg(1, 0))) {
             0 => {
-                const ast = self.getFile(ctx.file());
-                const struct_ast_id: Ast.Id = @bitCast(@as(u32, @truncate(self.vm.regs.get(.arg(1, 1)))));
+                const scope: Types.Id = @enumFromInt(self.vm.regs.get(.arg(1, 1)));
+                const ast = self.getFile(scope.file());
+                const struct_ast_id: Ast.Id = @bitCast(@as(u32, @truncate(self.vm.regs.get(.arg(1, 2)))));
                 const struct_ast = ast.exprs.getTyped(.Struct, struct_ast_id).?;
 
                 const captures = self.arena.allocator().alloc(Types.Id, struct_ast.captures.len()) catch unreachable;
-                for (captures, 2..) |*slot, i| {
+                for (captures, 3..) |*slot, i| {
                     slot.* = @enumFromInt(self.vm.regs.get(.arg(1, i)));
                 }
 
-                const res = self.resolveStruct(ctx.scope, ctx.file(), ctx.name, struct_ast_id, struct_ast.fields, struct_ast.captures, captures);
+                const res = self.resolveStruct(scope, scope.file(), "", struct_ast_id, struct_ast.fields, struct_ast.captures, captures);
                 self.vm.regs.set(.ret(0), @intFromEnum(res));
             },
             else => unreachable,
@@ -104,14 +105,14 @@ pub fn jitExpr(self: *Types, ctx: Codegen.Ctx, value: Ast.Id) struct { u32, Type
 pub fn evalTy(self: *Types, ctx: Codegen.Ctx, ty_expr: Ast.Id) Types.Id {
     const id, _ = jitExpr(self, ctx.addTy(.type), ty_expr);
     var data: [8]u8 = undefined;
-    runVm(self, ctx, id, &data);
+    runVm(self, id, &data);
     return @enumFromInt(@as(u64, @bitCast(data)));
 }
 
 pub fn evalGlobal(self: *Types, global: *Types.Global, ty: ?Types.Id, value: Ast.Id) void {
     const id, const fty = jitExpr(self, .{ .scope = global.key.scope, .ty = ty }, value);
     const data = self.arena.allocator().alloc(u8, fty.size(self)) catch unreachable;
-    runVm(self, .{ .scope = global.key.scope }, id, data);
+    runVm(self, id, data);
     global.data = data;
     global.ty = fty;
 }

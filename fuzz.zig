@@ -170,8 +170,7 @@ const generators = enum {
                 }
                 return depth_requirement;
             },
-            .Func => unreachable,
-            .Global => unreachable,
+            else => unreachable,
         };
     }
 

@@ -23,7 +23,7 @@ pub const Ident = enum(u32) {
     _,
 
     pub fn init(token: Lexer.Token) Ident {
-        return @enumFromInt(token.pos);
+        return @enumFromInt(token.pos + @intFromBool(token.kind == .@"$"));
     }
 
     pub fn pos(self: Ident) u32 {
@@ -47,7 +47,6 @@ pub const Kind = enum {
     Buty,
     Fn,
     Struct,
-    Arg,
     Directive,
     Call,
     Tag,
@@ -67,6 +66,11 @@ pub const Kind = enum {
     Bool,
 };
 
+pub const Arg = struct {
+    bindings: Id,
+    ty: Id,
+};
+
 pub const Expr = union(Kind) {
     Void,
     Comment: Pos,
@@ -81,7 +85,8 @@ pub const Expr = union(Kind) {
     },
     Fn: struct {
         pos: Pos,
-        args: Slice,
+        captures: Idents,
+        args: root.EnumSlice(Arg),
         ret: Id,
         body: Id,
     },
@@ -89,10 +94,6 @@ pub const Expr = union(Kind) {
         pos: Pos,
         captures: root.EnumSlice(Ident),
         fields: Slice,
-    },
-    Arg: struct {
-        bindings: Id,
-        ty: Id,
     },
     Directive: struct {
         pos: Pos,
