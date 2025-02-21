@@ -85,7 +85,7 @@ fn fuzz(seed: usize, arena: std.mem.Allocator) !void {
             const mem = try arena.alloc(Types.Struct.Field, 2);
             mem[0] = .{
                 .name = "",
-                .ty = Types.Id.init(.Struct, @intFromPtr(&structs[0])),
+                .ty = .init(.{ .Struct = &structs[0] }),
             };
             mem[1] = .{
                 .name = "",

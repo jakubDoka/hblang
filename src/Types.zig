@@ -26,7 +26,8 @@ pub const TypeCtx = struct {
         if (std.meta.activeTag(ad) != std.meta.activeTag(bd)) return false;
 
         return switch (ad) {
-            .Builtin, .Ptr => std.meta.eql(ad, bd),
+            .Builtin => std.meta.eql(ad, bd),
+            .Ptr => std.meta.eql(ad.Ptr.*, bd.Ptr.*),
             inline else => |v, t| return v.key.eql(@field(bd, @tagName(t)).key),
         };
     }
@@ -35,7 +36,7 @@ pub const TypeCtx = struct {
         var hasher = std.hash.Fnv1a_64.init();
         const adk = adapted_key.data();
         switch (adk) {
-            .Builtin, .Ptr => std.hash.autoHash(&hasher, adk),
+            .Builtin, .Ptr => std.hash.autoHashStrat(&hasher, adk, .Deep),
             inline else => |v| {
                 std.hash.autoHashStrat(&hasher, v.key, .Deep);
             },
@@ -53,7 +54,7 @@ pub const Data = union(enum) {
         enm.@"enum".decls = &.{};
         break :b @Type(enm);
     },
-    Ptr: Id,
+    Ptr: *Id,
     Struct: *Struct,
     Template: *Template,
     Func: *Func,
@@ -94,7 +95,7 @@ pub const Struct = struct {
     };
 
     pub fn asTy(self: *Struct) Id {
-        return Id.init(.Struct, @intFromPtr(self));
+        return Id.init(.{ .Struct = self });
     }
 
     pub fn getFields(self: *Struct, types: *Types) []const Field {
@@ -184,11 +185,17 @@ pub const Id = enum(usize) {
         return @enumFromInt(@as(isize, @intFromEnum(lexeme)) + off);
     }
 
-    pub inline fn init(flg: std.meta.Tag(Data), dt: usize) Id {
+    pub inline fn init(dt: Data) Id {
         comptime {
             std.debug.assert(fromLexeme(.i8) == .i8);
         }
-        return @enumFromInt(@as(usize, @bitCast(Repr{ .flag = @intFromEnum(flg), .data = @intCast(dt) })));
+        return @enumFromInt(@as(u64, @bitCast(Repr{
+            .flag = @intFromEnum(dt),
+            .data = @intCast(switch (dt) {
+                .Builtin => |b| @intFromEnum(b),
+                inline else => |b| @intFromPtr(b),
+            }),
+        })));
     }
 
     pub fn file(self: Id) File {
@@ -244,7 +251,6 @@ pub const Id = enum(usize) {
     pub fn data(self: Id) Data {
         const repr: Repr = @bitCast(@intFromEnum(self));
         return switch (repr.tag()) {
-            .Ptr => .{ .Ptr = @as(*const Id, @ptrFromInt(repr.data)).* },
             .Builtin => .{ .Builtin = @enumFromInt(repr.data) },
             inline else => |t| @unionInit(Data, @tagName(t), @ptrFromInt(repr.data)),
         };
@@ -470,12 +476,13 @@ pub fn getScope(self: *Types, file: File) Id {
 }
 
 pub fn makePtr(self: *Types, v: Id) Id {
-    const ptr = Id.init(.Ptr, @intFromPtr(&v));
+    var vl = v;
+    const ptr = Id.init(.{ .Ptr = &vl });
     const slot = self.interner.getOrPut(self.arena.child_allocator, ptr) catch unreachable;
     if (slot.found_existing) return slot.key_ptr.*;
     const ptr_slot = self.arena.allocator().create(Id) catch unreachable;
     ptr_slot.* = v;
-    slot.key_ptr.* = Id.init(.Ptr, @intFromPtr(ptr_slot));
+    slot.key_ptr.* = .init(.{ .Ptr = ptr_slot });
     return slot.key_ptr.*;
 }
 
@@ -509,15 +516,17 @@ const Ctx = struct {
 };
 
 pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Key) struct { Map.GetOrPutResult, std.meta.TagPayload(Data, kind) } {
-    const id = Id.init(kind, @intFromPtr(&key));
+    var ty: std.meta.Child(std.meta.TagPayload(Data, kind)) = undefined;
+    ty.key = key;
+    const id = Id.init(@unionInit(Data, @tagName(kind), &ty));
     const slot = self.interner.getOrPut(self.arena.child_allocator, id) catch unreachable;
     if (slot.found_existing) {
         std.debug.assert(slot.key_ptr.data() == kind);
         return .{ slot, @field(slot.key_ptr.data(), @tagName(kind)) };
     }
-    const alloc = self.arena.allocator().create(std.meta.Child(std.meta.TagPayload(Data, kind))) catch unreachable;
-    alloc.key = key;
-    slot.key_ptr.* = Id.init(kind, @intFromPtr(alloc));
+    const alloc = self.arena.allocator().create(@TypeOf(ty)) catch unreachable;
+    alloc.* = ty;
+    slot.key_ptr.* = Id.init(@unionInit(Data, @tagName(kind), alloc));
     return .{ slot, alloc };
 }
 

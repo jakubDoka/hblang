@@ -482,12 +482,12 @@ init := fn(v: uint): @CurrentScope() {
 #### generic structs 1
 ```hb
 main := fn(): uint {
-    vl: Vec(uint) = nvec(uint)
+    vl: Vec(uint) = nvec(uint, 1)
     return vl.sub()
 }
 
-nvec := fn($E: type): Vec(E) {
-    return .(1, 1)
+nvec := fn($E: type, v: uint): Vec(E) {
+    return .(v, v)
 }
 
 Vec := fn(E: type): type return struct {

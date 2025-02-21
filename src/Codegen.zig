@@ -138,7 +138,7 @@ pub fn build(self: *Codegen, func: *Types.Func) !void {
         ty_idx += 1;
     }
 
-    _ = self.emit(.{ .scope = Types.Id.init(.Func, @intFromPtr(func)) }, ast.exprs.get(func.key.ast).Fn.body);
+    _ = self.emit(.{ .scope = .init(.{ .Func = func }) }, ast.exprs.get(func.key.ast).Fn.body);
 
     self.bl.end(token);
 
@@ -449,7 +449,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
             if (base.ty.data() == .Ptr) {
                 self.ensureLoaded(&base);
-                base.ty = base.ty.data().Ptr;
+                base.ty = base.ty.data().Ptr.*;
                 base.id = .{ .Ptr = base.id.Value };
             }
 
@@ -480,7 +480,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 // TODO: better type inference
                 var oper = self.emit(ctx.forwardScope(), e.oper);
                 self.ensureLoaded(&oper);
-                const base = oper.ty.data().Ptr;
+                const base = oper.ty.data().Ptr.*;
                 return mkp(base, oper.id.Value);
             },
             .@"-" => {
@@ -614,9 +614,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 var scope = tmpl.*;
                 const tmpl_file = self.types.getFile(tmpl.key.file);
                 const tmpl_ast = tmpl_file.exprs.getTyped(.Fn, tmpl.key.ast).?;
+
                 const captures = self.arena().alloc(Types.Id, tmpl_ast.captures.len()) catch unreachable;
                 const arg_tys = self.arena().alloc(Types.Id, tmpl_ast.args.len() - tmpl_ast.captures.len()) catch unreachable;
                 const arg_exprs = self.arena().alloc(Value, arg_tys.len) catch unreachable;
+
                 var capture_idx: usize = 0;
                 var arg_idx: usize = 0;
                 for (tmpl_file.exprs.view(tmpl_ast.args), ast.exprs.view(e.args)) |param, arg| {
@@ -629,14 +631,14 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                         scope.key.captures = captures[0..capture_idx];
                     } else {
                         // this is in anticipation of the @Any
-                        arg_tys[arg_idx] = self.resolveTy(.{ .scope = Types.Id.init(.Template, @intFromPtr(&scope)) }, param.ty);
+                        arg_tys[arg_idx] = self.resolveTy(.{ .scope = .init(.{ .Template = &scope }) }, param.ty);
                         arg_exprs[arg_idx] = self.emitTyped(ctx, arg_tys[arg_idx], arg);
                         arg_idx += 1;
                     }
                 }
 
                 std.debug.assert(scope.key.capture_idents.len() == scope.key.captures.len);
-                const ret = self.resolveTy(.{ .scope = Types.Id.init(.Template, @intFromPtr(&scope)) }, tmpl_ast.ret);
+                const ret = self.resolveTy(.{ .scope = .init(.{ .Template = &scope }) }, tmpl_ast.ret);
 
                 const slot, const alloc = self.types.intern(.Func, .{
                     .scope = tmpl.key.scope,
@@ -650,7 +652,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     alloc.* = .{
                         .id = self.types.next_func,
                         .key = alloc.key,
-                        .args = arg_tys,
+                        .args = self.types.arena.allocator().dupe(Types.Id, arg_tys) catch unreachable,
                         .ret = ret,
                         .name = "",
                     };
