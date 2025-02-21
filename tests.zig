@@ -1,13 +1,13 @@
 const std = @import("std");
-pub const Ast = @import("Ast.zig");
-pub const Vm = @import("Vm.zig");
-pub const Builder = @import("Builder.zig");
-pub const Codegen = @import("Codegen.zig");
-pub const HbvmGen = @import("HbvmGen.zig");
-pub const Types = @import("Types.zig");
-pub const Regalloc = @import("Regalloc.zig");
-pub const graph = @import("graph.zig");
-pub const Mach = @import("Mach.zig");
+pub const Ast = @import("src/Ast.zig");
+pub const Vm = @import("src/Vm.zig");
+pub const Builder = @import("src/Builder.zig");
+pub const Codegen = @import("src/Codegen.zig");
+pub const HbvmGen = @import("src/HbvmGen.zig");
+pub const Types = @import("src/Types.zig");
+pub const Regalloc = @import("src/Regalloc.zig");
+pub const graph = @import("src/graph.zig");
+pub const Mach = @import("src/Mach.zig");
 pub const Fuzz = @import("fuzz.zig");
 
 test {

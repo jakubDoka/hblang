@@ -1,9 +1,9 @@
 const std = @import("std");
-const Types = @import("Types.zig");
-const Lexer = @import("Lexer.zig");
-const Ast = @import("Ast.zig");
+const Types = @import("src/Types.zig");
+const Lexer = @import("src/Lexer.zig");
+const Ast = @import("src/Ast.zig");
+const utils = @import("src/utils.zig");
 const tests = @import("tests.zig");
-const utils = @import("utils.zig");
 
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
