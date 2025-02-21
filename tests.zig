@@ -125,7 +125,8 @@ pub fn testBuilder(
     var cg = Codegen.init(gpa, &types, .runtime);
     defer cg.deinit();
 
-    try cg.work_list.append(.{ .Func = cg.resolveTy(.{ .scope = types.getScope(.root), .name = "main" }, fn_ast).data().Func });
+    const entry = cg.resolveTy(.{ .scope = types.getScope(.root), .name = "main" }, fn_ast).data().Func;
+    try cg.work_list.append(.{ .Func = entry });
 
     var hbgen = HbvmGen.init(gpa);
     var gen = Mach.init(&hbgen);
@@ -160,7 +161,7 @@ pub fn testBuilder(
             gen.emitFunc(&cg.bl.func, .{
                 .id = func.id,
                 .name = func.name,
-                .entry = func.id == 0,
+                .entry = func.id == entry.id,
                 .optimizations = .none,
             });
         },

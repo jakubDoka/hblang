@@ -19,6 +19,7 @@ pub const Lexeme = enum(u8) {
     i16,
     i32,
     int,
+    type,
     @"@" = '@',
     @"\"" = '"',
     @"{" = '{',

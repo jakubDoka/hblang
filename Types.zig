@@ -12,6 +12,7 @@ files: []const Ast,
 const std = @import("std");
 const Ast = @import("Ast.zig");
 const Codegen = @import("Codegen.zig");
+const Comptime = @import("Comptime.zig");
 const graph = @import("graph.zig");
 const Lexer = @import("Lexer.zig");
 const HbvmGen = @import("HbvmGen.zig");
@@ -62,12 +63,14 @@ pub const Key = struct {
     file: File,
     scope: Id,
     ast: Ast.Id,
+    capture_idents: Ast.Idents,
     captures: []const Id,
 
     pub const dummy = Key{
         .file = .root,
         .scope = .void,
         .ast = .zeroSized(.Void),
+        .capture_idents = .{},
         .captures = &.{},
     };
 
@@ -93,21 +96,21 @@ pub const Struct = struct {
         return Id.init(.Struct, @intFromPtr(self));
     }
 
-    pub fn getFields(self: *Struct, cg: *Codegen) []const Field {
+    pub fn getFields(self: *Struct, types: *Types) []const Field {
         if (self.fields) |f| return f;
-        const ast = cg.types.getFile(self.key.file);
+        const ast = types.getFile(self.key.file);
 
         var count: usize = 0;
         for (ast.exprs.view(self.ast_fields)) |f| count += @intFromBool(ast.exprs.get(f).BinOp.lhs.tag() == .Tag);
 
-        const fields = cg.types.arena.allocator().alloc(Field, count) catch unreachable;
+        const fields = types.arena.allocator().alloc(Field, count) catch unreachable;
         var i: usize = 0;
         for (ast.exprs.view(self.ast_fields)) |fast| {
             const field = ast.exprs.get(fast).BinOp;
             if (field.lhs.tag() != .Tag) continue;
             fields[i] = .{
                 .name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1),
-                .ty = cg.resolveTy(.{ .scope = self.asTy() }, field.rhs),
+                .ty = Comptime.evalTy(types, .{ .scope = self.asTy() }, field.rhs),
             };
             i += 1;
         }
@@ -126,7 +129,7 @@ pub const Func = struct {
 
     pub const CompileState = enum { queued, compiled };
 
-    pub fn computeAbiSize(self: Func, abi: Abi, types: *Codegen) struct { usize, usize, Abi.Spec } {
+    pub fn computeAbiSize(self: Func, abi: Abi, types: *Types) struct { usize, usize, Abi.Spec } {
         const ret_abi = abi.categorize(self.ret, types);
         var param_count: usize = @intFromBool(ret_abi == .ByRef);
         for (self.args) |ty| param_count += abi.categorize(ty, types).len(false);
@@ -197,6 +200,15 @@ pub const Id = enum(usize) {
         };
     }
 
+    pub fn findCapture(self: Id, ast: *const Ast, id: Ast.Ident) ?Id {
+        return switch (self.data()) {
+            .Func, .Global, .Builtin, .Ptr => unreachable,
+            inline else => |v| for (ast.exprs.view(v.key.capture_idents), v.key.captures) |cid, c| {
+                if (cid == id) break c;
+            } else null,
+        };
+    }
+
     pub fn parent(self: Id) Id {
         return switch (self.data()) {
             .Func, .Global, .Builtin, .Ptr => unreachable,
@@ -227,7 +239,7 @@ pub const Id = enum(usize) {
         };
     }
 
-    pub fn size(self: Id, types: *Codegen) usize {
+    pub fn size(self: Id, types: *Types) usize {
         return switch (self.data()) {
             .Builtin => |b| switch (b) {
                 .never => unreachable,
@@ -254,7 +266,7 @@ pub const Id = enum(usize) {
         };
     }
 
-    pub fn alignment(self: Id, types: *Codegen) usize {
+    pub fn alignment(self: Id, types: *Types) usize {
         return switch (self.data()) {
             .Builtin => self.size(types),
             .Ptr => 8,
@@ -274,7 +286,7 @@ pub const Id = enum(usize) {
         return @enumFromInt(@max(@intFromEnum(lhs), @intFromEnum(rhs)));
     }
 
-    pub fn canUpcast(from: Id, to: Id, types: *Codegen) bool {
+    pub fn canUpcast(from: Id, to: Id, types: *Types) bool {
         if (from == .never) return true;
         if (from == to) return true;
         const is_bigger = from.size(types) < to.size(types);
@@ -285,7 +297,7 @@ pub const Id = enum(usize) {
         return false;
     }
 
-    pub fn binOpUpcast(lhs: Id, rhs: Id, types: *Codegen) !Id {
+    pub fn binOpUpcast(lhs: Id, rhs: Id, types: *Types) !Id {
         if (lhs == rhs) return lhs;
         if (lhs.data() == .Ptr and rhs.data() == .Ptr) return .uint;
         if (lhs.data() == .Ptr) return lhs;
@@ -353,7 +365,7 @@ pub const Abi = enum {
         }
     };
 
-    pub fn categorize(self: Abi, ty: Id, types: *Codegen) Spec {
+    pub fn categorize(self: Abi, ty: Id, types: *Types) Spec {
         return switch (ty.data()) {
             .Builtin => |b| .{ .ByValue = switch (b) {
                 .never => unreachable,
@@ -372,7 +384,7 @@ pub const Abi = enum {
         };
     }
 
-    pub fn categorizeAbleosStruct(stru: *Struct, types: *Codegen) Spec {
+    pub fn categorizeAbleosStruct(stru: *Struct, types: *Types) Spec {
         var res: Spec = .Imaginary;
         var offset: usize = 0;
         for (stru.getFields(types)) |f| {
@@ -440,6 +452,8 @@ pub fn getScope(self: *Types, file: File) Id {
             self.getFile(file).path,
             .zeroSized(.Void),
             self.getFile(file).items,
+            .{},
+            &.{},
         );
     }
 
@@ -498,12 +512,22 @@ pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Key) struct 
     return .{ slot, alloc };
 }
 
-pub fn resolveStruct(self: *Types, scope: Id, file: File, name: []const u8, ast: Ast.Id, fields: Ast.Slice) Id {
+pub fn resolveStruct(
+    self: *Types,
+    scope: Id,
+    file: File,
+    name: []const u8,
+    ast: Ast.Id,
+    fields: Ast.Slice,
+    capture_idents: Ast.Idents,
+    captures: []const Id,
+) Id {
     const slot, const alloc = self.intern(.Struct, .{
         .scope = scope,
         .file = file,
         .ast = ast,
-        .captures = &.{},
+        .capture_idents = capture_idents,
+        .captures = captures,
     });
     if (!slot.found_existing) {
         alloc.* = .{
@@ -520,6 +544,7 @@ pub fn resolveGlobal(self: *Types, scope: Id, name: []const u8, ast: Ast.Id) Id 
         .scope = scope,
         .file = scope.file(),
         .ast = ast,
+        .capture_idents = .{},
         .captures = &.{},
     });
     if (!slot.found_existing) {

@@ -4,6 +4,8 @@ current: Types.File,
 gpa: std.mem.Allocator,
 arena: std.heap.ArenaAllocator,
 active_syms: std.ArrayListUnmanaged(Sym) = .{},
+capture_boundary: usize = 0,
+captures: std.ArrayListUnmanaged(Ident) = .{},
 lexer: Lexer,
 cur: Lexer.Token,
 list_pos: Ast.Pos = undefined,
@@ -22,6 +24,7 @@ const Error = error{UnexpectedToken} || std.mem.Allocator.Error;
 const Sym = struct {
     id: Ident,
     declared: bool = false,
+    unordered: bool = false,
 };
 
 pub const Loader = struct {
@@ -61,7 +64,7 @@ pub const Loader = struct {
 pub fn parse(self: *Parser) !Ast.Slice {
     var itemBuf = std.ArrayListUnmanaged(Id){};
     while (self.cur.kind != .Eof) {
-        try itemBuf.append(self.arena.allocator(), try self.parseExpr());
+        try itemBuf.append(self.arena.allocator(), try self.parseUnorderedExpr());
         _ = self.tryAdvance(.@";");
     }
 
@@ -75,10 +78,14 @@ pub fn parse(self: *Parser) !Ast.Slice {
 }
 
 fn parseExpr(self: *Parser) Error!Id {
-    return self.parseBinExpr(try self.parseUnit(), 254);
+    return self.parseBinExpr(try self.parseUnit(), 254, false);
 }
 
-fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8) Error!Id {
+fn parseUnorderedExpr(self: *Parser) Error!Id {
+    return self.parseBinExpr(try self.parseUnit(), 254, true);
+}
+
+fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8, unordered: bool) Error!Id {
     if (lhs.tag() == .Comment) return lhs;
     var acum = lhs;
     while (true) {
@@ -86,10 +93,10 @@ fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8) Error!Id {
         const prec = op.precedence();
         if (prec >= prevPrec) break;
 
-        if (op == .@":=" or op == .@":") _ = self.declareExpr(acum);
+        if (op == .@":=" or op == .@":") _ = self.declareExpr(acum, unordered);
 
         self.cur = self.lexer.next();
-        const rhs = try self.parseBinExpr(try self.parseUnit(), prec);
+        const rhs = try self.parseBinExpr(try self.parseUnit(), prec, false);
         if (op.innerOp()) |iop| {
             acum = try self.store.alloc(self.gpa, .BinOp, .{
                 .lhs = acum,
@@ -111,7 +118,7 @@ fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8) Error!Id {
     return acum;
 }
 
-fn declareExpr(self: *Parser, id: Id) void {
+fn declareExpr(self: *Parser, id: Id, unordered: bool) void {
     const ident: Ident = (self.store.getTypedPtr(.Ident, id) orelse return).id;
     var iter = std.mem.reverseIterator(self.active_syms.items);
     const sym = while (iter.nextPtr()) |s| {
@@ -121,6 +128,7 @@ fn declareExpr(self: *Parser, id: Id) void {
         self.report(ident.pos(), "redeclaration of identifier", .{});
     }
     sym.declared = true;
+    sym.unordered = unordered;
 }
 
 fn parseUnit(self: *Parser) Error!Id {
@@ -169,6 +177,23 @@ fn codePointer(self: *const Parser, pos: usize) Ast.CodePointer {
     return .{ .source = self.lexer.source, .index = pos };
 }
 
+fn popCaptures(self: *Parser, scope: usize) []const Ident {
+    const slc = self.captures.items[scope..];
+    self.captures.items.len = scope;
+    if (slc.len > 1) {
+        std.sort.pdq(u32, @ptrCast(slc), {}, std.sort.asc(u32));
+        var i: usize = 0;
+        for (slc[1..]) |s| {
+            if (s != slc[i]) {
+                i += 1;
+                slc[i] = s;
+            }
+        }
+        return slc[0 .. i + 1];
+    }
+    return slc;
+}
+
 fn parseUnitWithoutTail(self: *Parser) Error!Id {
     var token = self.advance();
     const scope_frame = self.active_syms.items.len;
@@ -201,10 +226,18 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             .args = try self.parseList(.@"(", .@",", .@")", parseExpr),
             .pos = .{ .index = @intCast(token.pos), .indented = self.list_pos.indented },
         } },
-        .@"struct" => .{ .Struct = .{
-            .fields = try self.parseList(.@"{", .@";", .@"}", parseExpr),
-            .pos = self.list_pos,
-        } },
+        .@"struct" => b: {
+            const prev_capture_boundary = self.capture_boundary;
+            self.capture_boundary = self.active_syms.items.len;
+            defer self.capture_boundary = prev_capture_boundary;
+
+            const capture_scope = self.captures.items.len;
+            break :b .{ .Struct = .{
+                .fields = try self.parseList(.@"{", .@";", .@"}", parseUnorderedExpr),
+                .captures = try self.store.allocSlice(Ident, self.gpa, self.popCaptures(capture_scope)),
+                .pos = self.list_pos,
+            } };
+        },
         .@"." => b: {
             break :b .{ .Tag = .init((try self.expectAdvance(.Ident)).pos - 1) };
         },
@@ -235,7 +268,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             _ = try self.expectAdvance(.@")");
             return expr;
         },
-        .bool, .u8, .u16, .u32, .uint, .i8, .i16, .i32, .int, .void => .{
+        .void, .bool, .u8, .u16, .u32, .uint, .i8, .i16, .i32, .int, .type => .{
             .Buty = .{ .pos = .init(token.pos), .bt = token.kind },
         },
         .@"&", .@"*", .@"^", .@"-" => |op| .{ .UnOp = .{
@@ -293,7 +326,8 @@ fn finalizeVariables(self: *Parser, start: usize) void {
 fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
     const repr = token.view(self.lexer.source);
 
-    for (self.active_syms.items) |*s| if (Ast.cmpLow(s.id.pos(), self.lexer.source, repr)) {
+    for (self.active_syms.items, 0..) |*s, i| if (Ast.cmpLow(s.id.pos(), self.lexer.source, repr)) {
+        if (i < self.capture_boundary and !s.unordered) try self.captures.append(self.gpa, s.id);
         return try self.store.alloc(self.gpa, .Ident, .{
             .pos = .init(token.pos),
             .id = s.id,
@@ -335,7 +369,7 @@ fn parseList(
 
 fn parseArg(self: *Parser) Error!Id {
     const bindings = try self.parseUnitWithoutTail();
-    _ = self.declareExpr(bindings);
+    _ = self.declareExpr(bindings, false);
     _ = try self.expectAdvance(.@":");
     return try self.store.alloc(self.gpa, .Arg, .{
         .bindings = bindings,

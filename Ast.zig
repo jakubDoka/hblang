@@ -15,6 +15,7 @@ pub const Store = root.EnumStore(Id, Expr);
 
 pub const Id = root.EnumId(Kind);
 pub const Slice = root.EnumSlice(Id);
+pub const Idents = root.EnumSlice(Ident);
 
 pub var colors: std.io.tty.Config = .no_color;
 
@@ -86,6 +87,7 @@ pub const Expr = union(Kind) {
     },
     Struct: struct {
         pos: Pos,
+        captures: root.EnumSlice(Ident),
         fields: Slice,
     },
     Arg: struct {
@@ -183,6 +185,7 @@ pub fn init(gpa: std.mem.Allocator, current: Types.File, path: []const u8, code:
     defer {
         parser.arena.deinit();
         parser.active_syms.deinit(gpa);
+        parser.captures.deinit(gpa);
     }
     errdefer {
         parser.store.deinit(gpa);

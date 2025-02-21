@@ -17,6 +17,7 @@ const Kind = Func.Kind;
 const Regalloc = @import("Regalloc.zig");
 const HbvmGen = @This();
 
+pub const eca = std.math.maxInt(u32);
 pub const dir = "inputs";
 
 const GlobalData = struct {
@@ -444,12 +445,16 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     self.emit(.cp, .{ isa.Reg.arg(extra.ret_count, i), self.reg(arg) });
                 }
 
-                self.global_relocs.append(.{
-                    .dest = extra.id,
-                    .kind = .func,
-                    .rel = self.reloc(3, .rel32),
-                }) catch unreachable;
-                self.emit(.jal, .{ .ret_addr, .null, 0 });
+                if (extra.id == eca) {
+                    self.emit(.eca, .{});
+                } else {
+                    self.global_relocs.append(.{
+                        .dest = extra.id,
+                        .kind = .func,
+                        .rel = self.reloc(3, .rel32),
+                    }) catch unreachable;
+                    self.emit(.jal, .{ .ret_addr, .null, 0 });
+                }
             },
             .Mem => {},
             .Ret => {

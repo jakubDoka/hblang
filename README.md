@@ -479,6 +479,23 @@ init := fn(v: uint): @CurrentScope() {
 }
 ```
 
+#### generic structs 1
+```hb
+main := fn(): uint {
+    vl: Vec(uint) = .(1, 1)
+    return vl.sub()
+}
+
+Vec := fn(E: type): type return struct {
+    .x: E;
+    .y: E
+
+    sub := fn(self: @CurrentScope()): uint {
+        return self.x - self.y
+    }
+}
+```
+
 #### struct operators 1
 ```hb
 expectations := .{
