@@ -500,6 +500,26 @@ Vec := fn(E: type): type return struct {
 }
 ```
 
+#### generic structs 2
+```hb
+main := fn(): uint {
+    vl: Foo(uint).Bar(u8) = .(1, 1)
+    return vl.sub()
+}
+
+Foo := fn(F: type): type return struct {
+    Bar := fn(B: type): type return struct {
+        .foo: F;
+        .bar: B
+
+        sub := fn(self: @CurrentScope()): uint {
+            return self.foo - self.bar
+        }
+    }
+}
+
+```
+
 #### struct operators 1
 ```hb
 expectations := .{

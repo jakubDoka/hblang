@@ -1,5 +1,5 @@
 next_struct: u32 = 0,
-next_func: u32 = 0,
+funcs: std.ArrayListUnmanaged(*Func) = .{},
 next_global: u32 = 0,
 arena: std.heap.ArenaAllocator,
 interner: Map = .{},
@@ -36,10 +36,8 @@ pub const TypeCtx = struct {
         var hasher = std.hash.Fnv1a_64.init();
         const adk = adapted_key.data();
         switch (adk) {
-            .Builtin, .Ptr => std.hash.autoHashStrat(&hasher, adk, .Deep),
-            inline else => |v| {
-                std.hash.autoHashStrat(&hasher, v.key, .Deep);
-            },
+            inline .Builtin, .Ptr => |v| std.hash.autoHashStrat(&hasher, v, .Deep),
+            inline else => |v| std.hash.autoHashStrat(&hasher, v.key, .Deep),
         }
         return hasher.final();
     }
@@ -444,6 +442,7 @@ pub fn init(gpa: std.mem.Allocator, source: []const Ast, diagnostics: std.io.Any
 
 pub fn deinit(self: *Types) void {
     self.interner.deinit(self.arena.child_allocator);
+    self.funcs.deinit(self.arena.child_allocator);
     self.arena.child_allocator.free(self.file_scopes);
     self.arena.deinit();
     self.comptime_code.out.deinit();

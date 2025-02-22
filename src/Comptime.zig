@@ -8,14 +8,16 @@ pub const eca = @import("HbvmGen.zig").eca;
 
 pub fn runVm(self: *Types, entry_id: u32, return_loc: []u8) void {
     const stack_size = 1024 * 10;
-    const stack_end = stack_size - self.comptime_code.out.items.len;
+    const stack_end = stack_size - self.comptime_code.out.items.len - 1;
 
     var stack: [stack_size]u8 = undefined;
 
-    @memcpy(stack[stack_end..], self.comptime_code.out.items);
+    stack[stack_end] = 1;
+    @memcpy(stack[stack_end + 1 ..], self.comptime_code.out.items);
 
-    self.vm.ip = stack_end + self.comptime_code.funcs.items[entry_id].offset;
+    self.vm.ip = stack_end + 1 + self.comptime_code.funcs.items[entry_id].offset;
     self.vm.fuel = 1024;
+    self.vm.regs.set(.ret_addr, stack_end);
     self.vm.regs.set(.arg(0, 0), stack_end - return_loc.len);
     self.vm.regs.set(.stack_addr, stack_end - return_loc.len);
     var vm_ctx = Vm.SafeContext{
@@ -48,16 +50,23 @@ pub fn runVm(self: *Types, entry_id: u32, return_loc: []u8) void {
         else => unreachable,
     };
 
-    //const data = self.arena.allocator().alloc(u8, return_loc.len) catch unreachable;
     @memcpy(return_loc, stack[stack_end - return_loc.len .. stack_end]);
+}
+
+pub fn jitFunc(self: *Types, fnc: *Types.Func) void {
+    var gen = Codegen.init(self.arena.child_allocator, self, .@"comptime");
+    defer gen.deinit();
+
+    gen.queue(.{ .Func = fnc });
+    compileDependencies(&gen);
 }
 
 pub fn jitExpr(self: *Types, ctx: Codegen.Ctx, value: Ast.Id) struct { u32, Types.Id } {
     var gen = Codegen.init(self.arena.child_allocator, self, .@"comptime");
     defer gen.deinit();
 
-    const id = self.next_func;
-    self.next_func += 1;
+    const id: u32 = @intCast(self.funcs.items.len);
+    self.funcs.append(self.arena.child_allocator, undefined) catch unreachable;
 
     const token, const params, _ = gen.beginBuilder(.never, 1, 0);
 
@@ -76,20 +85,26 @@ pub fn jitExpr(self: *Types, ctx: Codegen.Ctx, value: Ast.Id) struct { u32, Type
 
     gen.bl.func.reset();
 
-    while (gen.nextTask()) |task| switch (task) {
+    compileDependencies(&gen);
+
+    return .{ id, ret.ty };
+}
+
+pub fn compileDependencies(self: *Codegen) void {
+    while (self.nextTask()) |task| switch (task) {
         .Func => |func| {
-            defer gen.bl.func.reset();
-            gen.build(func) catch {
+            defer self.bl.func.reset();
+            self.build(func) catch {
                 unreachable;
             };
 
-            gen.types.comptime_code.emitFunc(
-                @ptrCast(&gen.bl.func),
+            self.types.comptime_code.emitFunc(
+                @ptrCast(&self.bl.func),
                 .{ .id = func.id },
             );
         },
         .Global => |glob| {
-            gen.types.comptime_code.emitData(.{
+            self.types.comptime_code.emitData(.{
                 .name = glob.name,
                 .id = glob.id,
                 .value = .{ .init = glob.data },
@@ -97,9 +112,7 @@ pub fn jitExpr(self: *Types, ctx: Codegen.Ctx, value: Ast.Id) struct { u32, Type
         },
     };
 
-    _ = gen.types.comptime_code.link(true);
-
-    return .{ id, ret.ty };
+    _ = self.types.comptime_code.link(true);
 }
 
 pub fn evalTy(self: *Types, ctx: Codegen.Ctx, ty_expr: Ast.Id) Types.Id {

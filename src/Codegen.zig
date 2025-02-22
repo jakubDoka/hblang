@@ -248,8 +248,8 @@ pub fn typeCheck(self: *Codegen, ctx: Ctx, expr: Ast.Id, got: *Value, expected: 
     return false;
 }
 
-fn codePointer(self: *Codegen, ast: Ast.Id) Ast.CodePointer {
-    return self.types.getFile(self.file).codePointer(self.types.getFile(self.file).posOf(ast).index);
+fn codePointer(self: *Codegen, ctx: Ctx, pos: usize) Ast.CodePointer {
+    return self.types.getFile(ctx.file()).codePointer(pos);
 }
 
 fn report(self: *Codegen, ctx: Ctx, expr: Ast.Id, comptime fmt: []const u8, args: anytype) void {
@@ -308,8 +308,55 @@ pub fn emitTyConst(self: *Codegen, ty: Types.Id) Value {
     return mkv(.type, self.bl.addIntImm(.int, @bitCast(@intFromEnum(ty))));
 }
 
-pub fn unwrapTyConst(_: *Codegen, cnst: *Node) Types.Id {
-    return @enumFromInt(@as(u64, @bitCast(cnst.extra(.CInt).*)));
+pub fn unwrapTyConst(self: *Codegen, cnst: *Node) Types.Id {
+    var eval_stack = std.ArrayList(*Node).initCapacity(self.arena(), 16) catch unreachable;
+
+    eval_stack.append(cnst) catch unreachable;
+
+    while (true) {
+        const curr = eval_stack.pop();
+        switch (curr.kind) {
+            .CInt => {
+                if (eval_stack.items.len == 0) {
+                    return @enumFromInt(@as(u64, @bitCast(curr.extra(.CInt).*)));
+                }
+            },
+            .Ret => {
+                eval_stack.append(curr.inputs()[0].?) catch unreachable;
+            },
+            .CallEnd => {
+                const call: *Node = curr.inputs()[0].?;
+                std.debug.assert(call.kind == .Call);
+                std.debug.assert(call.extra(.Call).ret_count == 1);
+
+                const func = self.types.funcs.items[call.extra(.Call).id];
+                if (func.completion.get(.@"comptime") == .queued) {
+                    Comptime.jitFunc(self.types, func);
+                    std.debug.assert(func.completion.get(.@"comptime") == .compiled);
+                }
+
+                var requeued = false;
+                for (call.inputs()[2..], 0..) |arg, arg_idx| {
+                    if (arg.?.kind != .CInt) {
+                        if (!requeued) eval_stack.append(curr) catch unreachable;
+                        eval_stack.append(arg.?) catch unreachable;
+                        requeued = true;
+                    } else {
+                        self.types.vm.regs.set(.arg(call.extra(.Call).ret_count, arg_idx), @bitCast(arg.?.extra(.CInt).*));
+                    }
+                }
+
+                if (requeued) continue;
+
+                Comptime.runVm(self.types, func.id, &.{});
+
+                const ret = self.types.vm.regs.get(.ret(0));
+                const ret_ty = self.abi.categorize(func.ret, self.types).ByValue;
+                eval_stack.append(self.bl.addIntImm(ret_ty, @bitCast(ret))) catch unreachable;
+            },
+            else => std.debug.panic("{}", .{curr}),
+        }
+    }
 }
 
 pub fn lookupScopeItem(self: *Codegen, bsty: Types.Id, name: []const u8) Types.Id {
@@ -650,14 +697,14 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
                 if (!slot.found_existing) {
                     alloc.* = .{
-                        .id = self.types.next_func,
+                        .id = @intCast(self.types.funcs.items.len),
                         .key = alloc.key,
                         .args = self.types.arena.allocator().dupe(Types.Id, arg_tys) catch unreachable,
                         .ret = ret,
                         .name = "",
                     };
+                    self.types.funcs.append(self.types.arena.child_allocator, alloc) catch unreachable;
                     alloc.key.captures = self.types.arena.allocator().dupe(Types.Id, alloc.key.captures) catch unreachable;
-                    self.types.next_func += 1;
                 }
 
                 typ = slot.key_ptr.*;
@@ -771,7 +818,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             args.arg_slots[2] = self.bl.addIntImm(.int, @as(u32, @bitCast(expr)));
 
             for (ast.exprs.view(e.captures), args.arg_slots[prefix..]) |id, *slot| {
-                var val = self.loadIdent(ctx.forwardScope(), .init(0), id);
+                var val = self.loadIdent(ctx.forwardScope(), .init(id.pos()), id);
                 self.ensureLoaded(&val);
                 slot.* = val.id.Value;
             }
@@ -805,13 +852,13 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 }
                 const ret = self.resolveTy(ctx.stripName(), e.ret);
                 alloc.* = .{
-                    .id = self.types.next_func,
+                    .id = @intCast(self.types.funcs.items.len),
                     .key = alloc.key,
                     .args = args,
                     .ret = ret,
                     .name = ctx.name,
                 };
-                self.types.next_func += 1;
+                self.types.funcs.append(self.types.arena.child_allocator, alloc) catch unreachable;
             }
             return self.emitTyConst(id);
         },

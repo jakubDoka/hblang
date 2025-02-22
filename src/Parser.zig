@@ -177,9 +177,9 @@ fn codePointer(self: *const Parser, pos: usize) Ast.CodePointer {
     return .{ .source = self.lexer.source, .index = pos };
 }
 
-fn popCaptures(self: *Parser, scope: usize) []const Ident {
+fn popCaptures(self: *Parser, scope: usize, preserve: bool) []const Ident {
     const slc = self.captures.items[scope..];
-    self.captures.items.len = scope;
+    if (!preserve) self.captures.items.len = scope;
     if (slc.len > 1) {
         std.sort.pdq(u32, @ptrCast(slc), {}, std.sort.asc(u32));
         var i: usize = 0;
@@ -189,6 +189,7 @@ fn popCaptures(self: *Parser, scope: usize) []const Ident {
                 slc[i] = s;
             }
         }
+        if (preserve) self.captures.items.len = scope + i;
         return slc[0 .. i + 1];
     }
     return slc;
@@ -204,7 +205,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         .@"fn" => b: {
             const capture_base = self.captures.items.len;
             const args = try self.parseListTyped(.@"(", .@",", .@")", Ast.Arg, parseArg);
-            const captures = try self.store.allocSlice(Ident, self.gpa, self.popCaptures(capture_base));
+            const captures = try self.store.allocSlice(Ident, self.gpa, self.popCaptures(capture_base, false));
             _ = try self.expectAdvance(.@":");
             const ret = try self.parseExpr();
             defer self.finalizeVariables(scope_frame);
@@ -212,7 +213,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             break :b .{ .Fn = .{
                 .args = args,
                 .captures = captures,
-                .pos = self.list_pos,
+                .pos = .{ .index = @intCast(token.pos), .indented = self.list_pos.indented },
                 .ret = ret,
                 .body = body,
             } };
@@ -238,8 +239,8 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             const capture_scope = self.captures.items.len;
             break :b .{ .Struct = .{
                 .fields = try self.parseList(.@"{", .@";", .@"}", parseUnorderedExpr),
-                .captures = try self.store.allocSlice(Ident, self.gpa, self.popCaptures(capture_scope)),
-                .pos = self.list_pos,
+                .captures = try self.store.allocSlice(Ident, self.gpa, self.popCaptures(capture_scope, prev_capture_boundary != 0)),
+                .pos = .{ .index = @intCast(token.pos), .indented = self.list_pos.indented },
             } };
         },
         .@"." => b: {
