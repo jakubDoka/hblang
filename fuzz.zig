@@ -2,14 +2,17 @@ const std = @import("std");
 const Types = @import("src/Types.zig");
 const Lexer = @import("src/Lexer.zig");
 const Ast = @import("src/Ast.zig");
-const utils = @import("src/utils.zig");
+const root = @import("src/utils.zig");
 const tests = @import("tests.zig");
 
 pub fn main() !void {
+    root.Arena.initScratch(1024 * 1024);
+    defer root.Arena.deinitScratch();
+
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     //var arena = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = arena.deinit();
-    for (14..10000) |i| {
+    for (0..10000) |i| {
         _ = arena.reset(.retain_capacity);
         try fuzz(i, arena.allocator());
     }
@@ -105,13 +108,13 @@ fn fuzz(seed: usize, arena: std.mem.Allocator) !void {
     for (structs, 0..) |s, i| {
         try writer.print("{s}:=struct{{", .{names[i + funcs.len]});
         for (s.fields.?, 0..) |*f, j| {
-            try writer.print("{s}:", .{names[j]});
+            try writer.print(".{s}:", .{names[j]});
             if (f.ty.data() == .Struct) {
                 try writer.writeAll(names[funcs.len + @intFromEnum(f.ty.file())]);
             } else {
                 try writer.print("{}", .{f.ty});
             }
-            try writer.writeAll(",");
+            try writer.writeAll(";");
         }
         try writer.writeAll("}");
     }
@@ -224,9 +227,9 @@ const generators = enum {
         pub fn gen(self: *ExprGen, ty: Types.Id) ExprGen.Error!void {
             try self.out.print("{s}.{{", .{names[self.funcs.len + @intFromEnum(ty.file())]});
             for (ty.data().Struct.fields.?, 0..) |f, i| {
-                try self.out.print("{s}:", .{names[i]});
+                try self.out.print(".{s}:", .{names[i]});
                 try self.genExpr(f.ty);
-                try self.out.writeAll(",\n");
+                try self.out.writeAll(";\n");
             }
             try self.out.writeAll("}");
         }
