@@ -1,16 +1,16 @@
 next_struct: u32 = 0,
 funcs: std.ArrayListUnmanaged(*Func) = .{},
 next_global: u32 = 0,
-arena: std.heap.ArenaAllocator,
+arena: Arena,
 interner: Map = .{},
 file_scopes: []Id,
-comptime_code: HbvmGen,
-vm: Vm = .{},
+ct: Comptime,
 diagnostics: std.io.AnyWriter,
 files: []const Ast,
 
 const std = @import("std");
 const Ast = @import("Ast.zig");
+const Arena = @import("utils.zig").Arena;
 const Codegen = @import("Codegen.zig");
 const Comptime = @import("Comptime.zig");
 const graph = @import("graph.zig");
@@ -103,14 +103,14 @@ pub const Struct = struct {
         var count: usize = 0;
         for (ast.exprs.view(self.ast_fields)) |f| count += @intFromBool(ast.exprs.get(f).BinOp.lhs.tag() == .Tag);
 
-        const fields = types.arena.allocator().alloc(Field, count) catch unreachable;
+        const fields = types.arena.alloc(Field, count);
         var i: usize = 0;
         for (ast.exprs.view(self.ast_fields)) |fast| {
             const field = ast.exprs.get(fast).BinOp;
             if (field.lhs.tag() != .Tag) continue;
             fields[i] = .{
                 .name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1),
-                .ty = Comptime.evalTy(types, .{ .scope = self.asTy() }, field.rhs),
+                .ty = types.ct.evalTy(.{ .scope = self.asTy() }, field.rhs),
             };
             i += 1;
         }
@@ -429,24 +429,22 @@ pub const Abi = enum {
 pub const Target = enum { @"comptime", runtime };
 
 pub fn init(gpa: std.mem.Allocator, source: []const Ast, diagnostics: std.io.AnyWriter) Types {
-    const scopes = gpa.alloc(Id, source.len) catch unreachable;
+    var arena = Arena.init(1024 * 1024);
+    const scopes = arena.alloc(Id, source.len);
     @memset(scopes, .void);
     return .{
         .files = source,
         .file_scopes = scopes,
-        .arena = .init(gpa),
-        .comptime_code = .init(gpa),
+        .arena = arena,
+        .ct = .init(gpa),
         .diagnostics = diagnostics,
     };
 }
 
 pub fn deinit(self: *Types) void {
-    self.interner.deinit(self.arena.child_allocator);
-    self.funcs.deinit(self.arena.child_allocator);
-    self.arena.child_allocator.free(self.file_scopes);
     self.arena.deinit();
-    self.comptime_code.out.deinit();
-    self.comptime_code.deinit();
+    self.ct.comptime_code.out.deinit();
+    self.ct.comptime_code.deinit();
     self.* = undefined;
 }
 
@@ -477,53 +475,24 @@ pub fn getScope(self: *Types, file: File) Id {
 pub fn makePtr(self: *Types, v: Id) Id {
     var vl = v;
     const ptr = Id.init(.{ .Ptr = &vl });
-    const slot = self.interner.getOrPut(self.arena.child_allocator, ptr) catch unreachable;
+    const slot = self.interner.getOrPut(self.arena.allocator(), ptr) catch unreachable;
     if (slot.found_existing) return slot.key_ptr.*;
-    const ptr_slot = self.arena.allocator().create(Id) catch unreachable;
+    const ptr_slot = self.arena.create(Id);
     ptr_slot.* = v;
     slot.key_ptr.* = .init(.{ .Ptr = ptr_slot });
     return slot.key_ptr.*;
 }
 
-const Ctx = struct {
-    scope: Id,
-    name: []const u8 = &.{},
-
-    pub fn init(fl: Id) Ctx {
-        return .{ .scope = fl };
-    }
-
-    pub fn file(self: Ctx) File {
-        return self.scope.file();
-    }
-
-    pub fn items(self: Ctx) File {
-        return self.scope.items();
-    }
-
-    pub fn addName(self: Ctx, name: []const u8) Ctx {
-        var v = self;
-        v.name = name;
-        return v;
-    }
-
-    pub fn stripName(self: Ctx) Ctx {
-        var v = self;
-        v.name = &.{};
-        return v;
-    }
-};
-
 pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Key) struct { Map.GetOrPutResult, std.meta.TagPayload(Data, kind) } {
     var ty: std.meta.Child(std.meta.TagPayload(Data, kind)) = undefined;
     ty.key = key;
     const id = Id.init(@unionInit(Data, @tagName(kind), &ty));
-    const slot = self.interner.getOrPut(self.arena.child_allocator, id) catch unreachable;
+    const slot = self.interner.getOrPut(self.arena.allocator(), id) catch unreachable;
     if (slot.found_existing) {
         std.debug.assert(slot.key_ptr.data() == kind);
         return .{ slot, @field(slot.key_ptr.data(), @tagName(kind)) };
     }
-    const alloc = self.arena.allocator().create(@TypeOf(ty)) catch unreachable;
+    const alloc = self.arena.create(@TypeOf(ty));
     alloc.* = ty;
     slot.key_ptr.* = Id.init(@unionInit(Data, @tagName(kind), alloc));
     return .{ slot, alloc };

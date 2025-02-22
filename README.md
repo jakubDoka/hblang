@@ -517,7 +517,26 @@ Foo := fn(F: type): type return struct {
         }
     }
 }
+```
 
+#### generic structs 3
+```hb
+expectations := .{
+    .return_value: 10;
+}
+
+main := fn(): uint {
+    vl: Foo(Foo(uint)) = .(.(10))
+    return vl.sub().sub()
+}
+
+Foo := fn(F: type): type return struct {
+    .foo: F
+
+    sub := fn(self: @CurrentScope()): F {
+        return self.foo
+    }
+}
 ```
 
 #### struct operators 1

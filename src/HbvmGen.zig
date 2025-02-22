@@ -4,11 +4,12 @@ global_lookup: std.ArrayList(u32),
 globals: std.ArrayList(GlobalData),
 globals_appended: usize = 0,
 global_relocs: std.ArrayList(GloblReloc),
-local_relocs: std.ArrayList(BlockReloc) = undefined,
+local_relocs: std.ArrayListUnmanaged(BlockReloc) = undefined,
 block_offsets: []i32 = undefined,
 allocs: []u8 = undefined,
 
 const std = @import("std");
+const root = @import("utils.zig");
 const isa = @import("isa.zig");
 const graph = @import("graph.zig");
 const Mach = @import("Mach.zig");
@@ -98,8 +99,8 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     const name = opts.name;
     const entry = opts.entry;
 
-    const tmp, const lock = func.beginTmpAlloc();
-    defer lock.unlock();
+    var tmp = root.Arena.scrath(null);
+    defer tmp.deinit();
 
     if (self.funcs.items.len <= id) {
         self.funcs.resize(id + 1) catch unreachable;
@@ -107,12 +108,12 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     self.funcs.items[id].offset = @intCast(self.out.items.len);
     self.funcs.items[id].name = name;
 
-    self.block_offsets = tmp.alloc(i32, func.block_count) catch unreachable;
-    self.local_relocs = .init(tmp);
+    self.block_offsets = tmp.arena.alloc(i32, func.block_count);
+    self.local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.block_count * 2));
     self.allocs = allocs;
 
-    var visited = std.DynamicBitSet.initEmpty(tmp, func.next_id) catch unreachable;
-    const postorder = func.collectPostorder(tmp, &visited);
+    var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), func.next_id) catch unreachable;
+    const postorder = func.collectPostorder(tmp.arena.allocator(), &visited);
     const is_tail = for (postorder) |bb| {
         if (bb.base.kind == .CallEnd) break false;
     } else true;
@@ -156,7 +157,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     for (postorder, 0..) |bb, i| {
         self.block_offsets[bb.base.schedule] = @intCast(self.out.items.len);
         std.debug.assert(bb.base.schedule == i);
-        self.emitBlockBody(tmp, &bb.base);
+        self.emitBlockBody(tmp.arena.allocator(), &bb.base);
         const last = bb.base.outputs()[bb.base.output_len - 1];
         if (last.outputs().len == 0) {
             std.debug.assert(last.kind == .Return);
@@ -175,10 +176,10 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
             // noop
         } else {
             std.debug.assert(last.outputs()[0].isBasicBlockStart());
-            self.local_relocs.append(.{
+            self.local_relocs.appendAssumeCapacity(.{
                 .dest_block = last.outputs()[@intFromBool(last.isSwapped())].schedule,
                 .rel = self.reloc(1, .rel32),
-            }) catch unreachable;
+            });
             self.emit(.jmp, .{0});
         }
     }
@@ -425,18 +426,18 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }
             },
             .IfOp => {
-                self.local_relocs.append(.{
+                self.local_relocs.appendAssumeCapacity(.{
                     .dest_block = no.outputs()[1].schedule,
                     .rel = self.reloc(3, .rel16),
-                }) catch unreachable;
+                });
                 const extra = no.extra(.IfOp);
                 self.emitLow("RRP", extra.op, .{ self.reg(inps[0]), self.reg(inps[1]), 0 });
             },
             .If => {
-                self.local_relocs.append(.{
+                self.local_relocs.appendAssumeCapacity(.{
                     .dest_block = no.outputs()[1].schedule,
                     .rel = self.reloc(3, .rel16),
-                }) catch unreachable;
+                });
                 self.emit(.jeq, .{ self.reg(inps[0]), .null, 0 });
             },
             .Call => {

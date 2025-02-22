@@ -1,4 +1,5 @@
 const std = @import("std");
+const root = @import("utils.zig");
 const graph = @import("graph.zig");
 
 pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u8 {
@@ -40,20 +41,21 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u8 {
         }
     };
 
-    const tmp, const lock = func.beginTmpAlloc();
-    defer lock.unlock();
+    var tmp = root.Arena.scrath(func.arena);
+    defer tmp.deinit();
 
-    const instrs = tmp.alloc(Instr, func.instr_count) catch unreachable;
+    const instrs = tmp.arena.alloc(Instr, func.instr_count);
 
+    // TODO: we can clean this up: arena should contruct the bitset
     for (instrs) |*b| b.* = .{
-        .liveins = Set.initEmpty(tmp, func.instr_count) catch unreachable,
-        .liveouts = Set.initEmpty(tmp, func.instr_count) catch unreachable,
-        .defs = Set.initEmpty(tmp, func.instr_count) catch unreachable,
-        .uses = Set.initEmpty(tmp, func.instr_count) catch unreachable,
+        .liveins = Set.initEmpty(tmp.arena.allocator(), func.instr_count) catch unreachable,
+        .liveouts = Set.initEmpty(tmp.arena.allocator(), func.instr_count) catch unreachable,
+        .defs = Set.initEmpty(tmp.arena.allocator(), func.instr_count) catch unreachable,
+        .uses = Set.initEmpty(tmp.arena.allocator(), func.instr_count) catch unreachable,
     };
 
-    var visited = std.DynamicBitSet.initEmpty(tmp, func.next_id) catch unreachable;
-    const postorder = func.collectPostorder(tmp, &visited);
+    var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), func.next_id) catch unreachable;
+    const postorder = func.collectPostorder(tmp.arena.allocator(), &visited);
     for (postorder) |bb| {
         const node = &bb.base;
         for (node.outputs(), 0..) |c, i| {
@@ -126,8 +128,8 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u8 {
     }
 
     // build interference => very wastefull
-    const interference_table = tmp.alloc(Set, func.instr_count) catch unreachable;
-    for (interference_table) |*r| r.* = Set.initEmpty(tmp, func.instr_count) catch unreachable;
+    const interference_table = tmp.arena.alloc(Set, func.instr_count);
+    for (interference_table) |*r| r.* = Set.initEmpty(tmp.arena.allocator(), func.instr_count) catch unreachable;
 
     for (instrs) |*ins| {
         var iter = ins.defs.iterator(.{});
@@ -136,30 +138,16 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u8 {
         }
     }
 
-    const tight_interference_table = tmp.alloc([]u16, func.instr_count) catch unreachable;
-    for (interference_table, tight_interference_table, 0..) |r, *tr, j| {
-        tr.* = tmp.alloc(u16, r.count() -| 1) catch unreachable;
-        var i: usize = 0;
+    const colors = func.arena.alloc(u8, func.instr_count);
+    @memset(colors, 0);
+    for (interference_table, colors, 0..) |r, *c, j| {
+        var selection_set: usize = 0;
         var iter = r.iterator(.{});
         while (iter.next()) |e| if (j != e) {
-            // std.debug.print("{} {}\n", .{ instrs[j].def, instrs[e].def });
-            tr.*[i] = @intCast(e);
-            i += 1;
-        };
-    }
-
-    // color => inefficient
-    const colors = func.arena.allocator().alloc(u8, func.instr_count) catch unreachable;
-    @memset(colors, 0);
-    for (tight_interference_table, colors) |slc, *c| {
-        // we set the bits of occupied colors
-        var selection_set: usize = 0;
-        for (slc) |e| {
             if (colors[e] != 0) {
                 selection_set |= @as(usize, 1) << @intCast(colors[e] - 1);
             }
-        }
-        // select the closest free bit as a new color
+        };
         c.* = @ctz(~selection_set) + 1;
     }
 

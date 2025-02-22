@@ -1,12 +1,16 @@
 const graph = @import("graph.zig");
+const root = @import("utils.zig");
 const std = @import("std");
 
 pub fn mem2reg(comptime MachNode: type, self: *graph.Func(MachNode)) void {
     const Self = @TypeOf(self.*);
     const Node = Self.Node;
 
-    const tmp, const lock = self.beginTmpAlloc();
-    defer lock.unlock();
+    // TODO: refactor to use tmpa directily
+    var tmpa = root.Arena.scrath(self.arena);
+    defer tmpa.deinit();
+
+    const tmp = tmpa.arena.allocator();
 
     var visited = std.DynamicBitSet.initEmpty(tmp, self.next_id) catch unreachable;
     const postorder = self.collectDfs(tmp, &visited)[1..];

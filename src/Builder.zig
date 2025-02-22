@@ -4,6 +4,7 @@ root_mem: *Func.Node = undefined,
 ret: ?*Func.Node = undefined,
 
 const std = @import("std");
+const root = @import("utils.zig");
 const graph = @import("graph.zig");
 const Ast = @import("Ast.zig");
 const Types = @import("Types.zig");
@@ -31,8 +32,8 @@ pub fn SpecificNode(comptime _: Kind) type {
     return *BuildNode;
 }
 
-pub fn init(gpa: std.mem.Allocator) Builder {
-    return .{ .func = .init(gpa) };
+pub fn init(arena: *root.Arena) Builder {
+    return .{ .func = .init(arena) };
 }
 
 pub fn deinit(self: *Builder) void {
@@ -43,13 +44,12 @@ pub fn deinit(self: *Builder) void {
 pub const BuildToken = enum { @"please call Builder.begin() first, then Builder.end()" };
 
 pub fn begin(self: *Builder, param_count: usize, return_coutn: usize) struct { BuildToken, []DataType, []DataType } {
-    _ = self.func.beginTmpAlloc();
     const ctrl = self.func.addNode(.Entry, &.{self.func.root}, .{});
     self.root_mem = self.func.addNode(.Mem, &.{self.func.root}, {});
     self.scope = self.func.addNode(.Scope, &.{ ctrl, self.root_mem }, {});
     self.ret = null;
 
-    const alloc = self.func.arena.allocator().alloc(DataType, param_count + return_coutn) catch unreachable;
+    const alloc = self.func.arena.alloc(DataType, param_count + return_coutn);
 
     self.func.params = alloc[0..param_count];
     self.func.returns = alloc[param_count..];
@@ -65,7 +65,6 @@ pub fn addParam(self: *Builder, idx: usize) SpecificNode(.Arg) {
 
 pub fn end(self: *Builder, _: BuildToken) void {
     if (self.ret == null) self.addReturn(&.{});
-    self.func.during_tmp_alloc.unlock();
     self.func.end = self.ret.?;
 }
 
@@ -166,7 +165,7 @@ pub fn pushScopeValue(self: *Builder, value: *BuildNode) void {
     const scope = self.scope.?;
     if (scope.input_ordered_len == scope.input_len) {
         const new_cap = scope.input_len * 2;
-        const new_alloc = self.func.getTmpArena().realloc(
+        const new_alloc = self.func.arena.allocator().realloc(
             scope.input_base[0..scope.input_len],
             new_cap,
         ) catch unreachable;
@@ -396,9 +395,9 @@ pub const CallArgs = struct {
 
 const arg_prefix_len = 2;
 
-pub fn allocCallArgs(self: *Builder, param_count: usize, return_count: usize) CallArgs {
-    const params = self.func.getTmpArena().alloc(DataType, param_count + return_count) catch unreachable;
-    const args = self.func.getTmpArena().alloc(*BuildNode, arg_prefix_len + param_count + return_count) catch unreachable;
+pub fn allocCallArgs(_: *Builder, scratch: *root.Arena, param_count: usize, return_count: usize) CallArgs {
+    const params = scratch.alloc(DataType, param_count + return_count);
+    const args = scratch.alloc(*BuildNode, arg_prefix_len + param_count + return_count);
     return .{
         .params = params[0..param_count],
         .returns = params[param_count..],

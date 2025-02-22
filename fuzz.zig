@@ -37,7 +37,7 @@ const return_types = [_]Types.Id{ .void, .uint };
 const arguments = [_]Types.Id{.uint};
 
 fn fuzz(seed: usize, arena: std.mem.Allocator) !void {
-    std.debug.print("seed: {}\n", .{seed});
+    // std.debug.print("seed: {}\n", .{seed});
 
     var pcg = std.Random.Pcg.init(seed);
     const rng = pcg.random();

@@ -1,4 +1,5 @@
 const graph = @import("graph.zig");
+const root = @import("utils.zig");
 const std = @import("std");
 
 pub fn gcm(comptime MachNode: type, self: *graph.Func(MachNode)) void {
@@ -6,14 +7,14 @@ pub fn gcm(comptime MachNode: type, self: *graph.Func(MachNode)) void {
     const CfgNode = Func.CfgNode;
     const Node = Func.Node;
 
-    const tmp, const lock = self.beginTmpAlloc();
-    defer lock.unlock();
+    var tmp = root.Arena.scrath(self.arena);
+    defer tmp.deinit();
 
-    var visited = std.DynamicBitSet.initEmpty(tmp, self.next_id * 2) catch unreachable;
-    var stack = std.ArrayList(Func.Frame).init(tmp);
+    var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), self.next_id * 2) catch unreachable;
+    var stack = std.ArrayList(Func.Frame).init(tmp.arena.allocator());
 
     const cfg_rpo = cfg_rpo: {
-        var rpo = std.ArrayList(*CfgNode).init(tmp);
+        var rpo = std.ArrayList(*CfgNode).init(tmp.arena.allocator());
 
         Func.traversePostorder(struct {
             rpo: *std.ArrayList(*CfgNode),
@@ -37,8 +38,9 @@ pub fn gcm(comptime MachNode: type, self: *graph.Func(MachNode)) void {
                 self.setInputNoIntern(&n.base, i, self.addNode(.Jmp, &.{n.base.inputs()[i].?}, .{}));
             }
 
-            for (tmp.dupe(*Node, n.base.outputs()) catch unreachable) |o| if (o.isDataPhi()) {
-                //std.debug.print("{}\n", .{o.inputs()[1].?});
+            var intmp = root.Arena.scrath(self.arena);
+            defer intmp.deinit();
+            for (intmp.arena.dupe(*Node, n.base.outputs())) |o| if (o.isDataPhi()) {
                 std.debug.assert(o.inputs().len == 3);
                 const lhs = self.addNode(.MachMove, &.{ null, o.inputs()[1].? }, {});
                 const rhs = self.addNode(.MachMove, &.{ null, o.inputs()[2].? }, {});
@@ -52,13 +54,15 @@ pub fn gcm(comptime MachNode: type, self: *graph.Func(MachNode)) void {
     sched_early: {
         for (cfg_rpo) |cfg| {
             for (cfg.base.inputs()) |oinp| if (oinp) |inp| {
-                shedEarly(MachNode, self, inp, cfg_rpo[1], &stack, &visited);
+                shedEarly(MachNode, self, inp, cfg_rpo[1], &visited);
             };
 
             if (cfg.base.kind == .Region or cfg.base.kind == .Loop) {
-                for (tmp.dupe(*Node, cfg.base.outputs()) catch unreachable) |o| {
+                var intmp = root.Arena.scrath(self.arena);
+                defer intmp.deinit();
+                for (intmp.arena.dupe(*Node, cfg.base.outputs())) |o| {
                     if (o.kind == .Phi) {
-                        shedEarly(MachNode, self, o, cfg_rpo[1], &stack, &visited);
+                        shedEarly(MachNode, self, o, cfg_rpo[1], &visited);
                     }
                 }
             }
@@ -68,11 +72,11 @@ pub fn gcm(comptime MachNode: type, self: *graph.Func(MachNode)) void {
     }
 
     sched_late: {
-        const late_scheds = tmp.alloc(?*CfgNode, self.next_id) catch unreachable;
+        const late_scheds = tmp.arena.alloc(?*CfgNode, self.next_id);
         @memset(late_scheds, null);
-        const nodes = tmp.alloc(?*Node, self.next_id) catch unreachable;
+        const nodes = tmp.arena.alloc(?*Node, self.next_id);
         @memset(nodes, null);
-        var work_list = std.ArrayList(*Node).init(tmp);
+        var work_list = std.ArrayList(*Node).init(tmp.arena.allocator());
         visited.setRangeValue(.{ .start = 0, .end = visited.capacity() }, false);
 
         work_list.append(self.end) catch unreachable;
@@ -103,8 +107,8 @@ pub fn gcm(comptime MachNode: type, self: *graph.Func(MachNode)) void {
 
                 schedule_late: {
                     const early = t.cfg0() orelse {
-                        var frointier = std.ArrayList(*Node).init(tmp);
-                        var seen = std.DynamicBitSet.initEmpty(tmp, self.next_id) catch unreachable;
+                        var frointier = std.ArrayList(*Node).init(tmp.arena.allocator());
+                        var seen = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), self.next_id) catch unreachable;
                         frointier.append(t) catch unreachable;
                         seen.set(t.id);
                         var i: usize = 0;
@@ -228,13 +232,13 @@ pub fn gcm(comptime MachNode: type, self: *graph.Func(MachNode)) void {
         self.instr_count = 0;
         self.root.schedule = 0;
 
-        const postorder = self.collectPostorder(tmp, &visited);
+        const postorder = self.collectPostorder(tmp.arena.allocator(), &visited);
         for (postorder) |bb| {
             const node = &bb.base;
             node.schedule = self.block_count;
             self.block_count += 1;
 
-            scheduleBlock(MachNode, tmp, node);
+            scheduleBlock(MachNode, tmp.arena.allocator(), node);
 
             for (node.outputs()) |o| {
                 o.schedule = self.instr_count;
@@ -321,7 +325,6 @@ fn shedEarly(
     self: *graph.Func(MachNode),
     node: *@TypeOf(self.*).Node,
     early: *@TypeOf(self.*).CfgNode,
-    stack: *std.ArrayList(@TypeOf(self.*).Frame),
     visited: *std.DynamicBitSet,
 ) void {
     std.debug.assert(early.base.kind != .Start);
@@ -329,7 +332,7 @@ fn shedEarly(
     visited.set(node.id);
 
     for (node.inputs()) |i| if (i) |ii| if (ii.kind != .Phi) {
-        shedEarly(MachNode, self, ii, early, stack, visited);
+        shedEarly(MachNode, self, ii, early, visited);
     };
 
     if (!node.isPinned()) {

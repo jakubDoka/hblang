@@ -1,4 +1,5 @@
 const std = @import("std");
+const root = @import("utils.zig");
 
 pub const BinOp = enum(u8) {
     iadd,
@@ -155,8 +156,7 @@ const mod = @This();
 
 pub fn Func(comptime MachNode: type) type {
     return struct {
-        arena: std.heap.ArenaAllocator,
-        tmp_arena: std.heap.ArenaAllocator,
+        arena: *root.Arena,
         interner: InternMap(Uninserter) = .{},
         params: []const mod.DataType = &.{},
         returns: []const mod.DataType = &.{},
@@ -165,7 +165,6 @@ pub fn Func(comptime MachNode: type) type {
         instr_count: u16 = undefined,
         root: *Node = undefined,
         end: *Node = undefined,
-        during_tmp_alloc: std.debug.SafetyLock = .{},
         after_gcm: std.debug.SafetyLock = .{},
 
         pub fn optApi(comptime decl_name: []const u8, comptime Ty: type) bool {
@@ -622,23 +621,17 @@ pub fn Func(comptime MachNode: type) type {
             }
         };
 
-        pub fn init(gpa: std.mem.Allocator) Self {
-            var self = Self{
-                .arena = .init(gpa),
-                .tmp_arena = .init(gpa),
-            };
+        pub fn init(arena: *root.Arena) Self {
+            var self = Self{ .arena = arena };
             self.root = self.addNode(.Start, &.{}, .{});
             return self;
         }
 
         pub fn deinit(self: *Self) void {
-            self.arena.deinit();
-            self.tmp_arena.deinit();
             self.* = undefined;
         }
 
         pub fn reset(self: *Self) void {
-            std.debug.assert(self.arena.reset(.free_all));
             self.next_id = 0;
             self.root = self.addNode(.Start, &.{}, .{});
             self.interner = .{};
@@ -701,10 +694,10 @@ pub fn Func(comptime MachNode: type) type {
             return null;
         }
 
-        pub fn connect(self: *Self, root: *Node, to: *Node) void {
+        pub fn connect(self: *Self, def: *Node, to: *Node) void {
             std.debug.assert(!Node.isInterned(to.kind, to.inputs()));
-            self.addUse(root, to);
-            self.addDep(to, root);
+            self.addUse(def, to);
+            self.addDep(to, def);
         }
 
         pub fn addTypedNode(self: *Self, comptime kind: Kind, ty: DataType, inputs: []const ?*Node, extra: ClassFor(kind)) *Node {
@@ -835,17 +828,6 @@ pub fn Func(comptime MachNode: type) type {
             def.output_len += 1;
         }
 
-        pub fn beginTmpAlloc(self: *Self) struct { std.mem.Allocator, *std.debug.SafetyLock } {
-            std.debug.assert(self.tmp_arena.reset(.retain_capacity));
-            self.during_tmp_alloc.lock();
-            return .{ self.tmp_arena.allocator(), &self.during_tmp_alloc };
-        }
-
-        pub fn getTmpArena(self: *Self) std.mem.Allocator {
-            self.during_tmp_alloc.assertLocked();
-            return self.tmp_arena.allocator();
-        }
-
         pub const Frame = struct { *Node, []const ?*Node };
 
         pub fn traversePostorder(ctx: anytype, inp: *Node, stack: *std.ArrayList(Frame), visited: *std.DynamicBitSet) void {
@@ -873,10 +855,10 @@ pub fn Func(comptime MachNode: type) type {
         pub fn iterPeeps(self: *Self, max_peep_iters: usize, strategy: fn (*Self, *Node, *WorkList) ?*Node) void {
             self.after_gcm.assertUnlocked();
 
-            const tmp, const lock = self.beginTmpAlloc();
-            defer lock.unlock();
+            var tmp = root.Arena.scrath(self.arena);
+            defer tmp.deinit();
 
-            var worklist = WorkList.init(tmp, self.next_id) catch unreachable;
+            var worklist = WorkList.init(tmp.arena.allocator(), self.next_id) catch unreachable;
             worklist.add(self.end);
             var i: usize = 0;
             while (i < worklist.list.items.len) : (i += 1) {
@@ -1194,14 +1176,14 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         pub fn fmtScheduled(self: *Self, writer: anytype, colors: std.io.tty.Config) void {
-            const tmp, const lock = self.beginTmpAlloc();
-            defer lock.unlock();
+            var tmp = root.Arena.scrath(self.arena);
+            defer tmp.deinit();
 
-            var visited = std.DynamicBitSet.initEmpty(tmp, self.next_id) catch unreachable;
+            var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), self.next_id) catch unreachable;
 
             self.root.fmt(self.block_count, writer, colors);
             writer.writeAll("\n") catch unreachable;
-            for (collectPostorder(self, tmp, &visited)) |p| {
+            for (collectPostorder(self, tmp.arena.allocator(), &visited)) |p| {
                 p.base.fmt(self.block_count, writer, colors);
 
                 writer.writeAll("\n") catch unreachable;
@@ -1214,10 +1196,10 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         pub fn fmtUnscheduled(self: *Self, writer: anytype, colors: std.io.tty.Config) void {
-            const tmp, const lock = self.beginTmpAlloc();
-            defer lock.unlock();
+            var tmp = root.Arena.scrath(self.arena);
+            defer tmp.deinit();
 
-            var worklist = Self.WorkList.init(tmp, self.next_id) catch unreachable;
+            var worklist = Self.WorkList.init(tmp.arena.allocator(), self.next_id) catch unreachable;
 
             worklist.add(self.end);
             var i: usize = 0;

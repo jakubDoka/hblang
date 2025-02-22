@@ -1,4 +1,5 @@
 const std = @import("std");
+const isa = @import("src/isa.zig");
 pub const Ast = @import("src/Ast.zig");
 pub const Vm = @import("src/Vm.zig");
 pub const Builder = @import("src/Builder.zig");
@@ -9,6 +10,7 @@ pub const Regalloc = @import("src/Regalloc.zig");
 pub const graph = @import("src/graph.zig");
 pub const Mach = @import("src/Mach.zig");
 pub const Fuzz = @import("fuzz.zig");
+pub const root = @import("src/utils.zig");
 
 test {
     _ = @import("zig-out/tests.zig");
@@ -17,6 +19,9 @@ test {
 }
 
 pub fn runTest(name: []const u8, code: []const u8) !void {
+    root.Arena.initScratch(1024 * 1024);
+    defer root.Arena.deinitScratch();
+
     const gpa = std.testing.allocator;
 
     try testFmt(name, name, code);
@@ -122,17 +127,26 @@ pub fn testBuilder(
     var types = Types.init(gpa, asts, output);
     defer types.deinit();
 
-    var cg = Codegen.init(gpa, &types, .runtime);
+    var func_arena = root.Arena.scrath(null);
+    defer func_arena.deinit();
+
+    var cg = Codegen.init(func_arena.arena, func_arena.arena, &types, .runtime);
     defer cg.deinit();
 
     const entry = cg.resolveTy(.{ .scope = types.getScope(.root), .name = "main" }, fn_ast).data().Func;
-    try cg.work_list.append(.{ .Func = entry });
+    cg.work_list.appendAssumeCapacity(.{ .Func = entry });
 
     var hbgen = HbvmGen.init(gpa);
     var gen = Mach.init(&hbgen);
 
     while (cg.nextTask()) |task| switch (task) {
         .Func => |func| {
+            var tmp = cg.bl.func.arena.checkpoint();
+            defer {
+                tmp.deinit();
+                cg.bl.func.reset();
+            }
+
             if (verbose) {
                 if (verbose) try header("SOURCE", output, colors);
                 var out_fmt = std.ArrayList(u8).init(gpa);
@@ -143,7 +157,6 @@ pub fn testBuilder(
 
             if (verbose) try header("UNSCHEDULED SON", output, colors);
             try cg.build(func);
-            defer cg.bl.func.reset();
 
             const fnc: *graph.Func(HbvmGen.Node) = @ptrCast(&cg.bl.func);
             if (verbose) fnc.fmtUnscheduled(output, colors);
@@ -200,8 +213,8 @@ pub fn testBuilder(
     };
     if (verbose) try header("EXECUTION", output, colors);
 
-    try std.testing.expectEqual(.tx, vm.run(&ctx));
-    try std.testing.expectEqual(ret, vm.regs.get(.ret(0)));
+    if (vm.run(&ctx) catch unreachable != isa.Op.tx) return error.TestExpectedEqual;
+    if (vm.regs.get(.ret(0)) != ret) return error.TestExpectedEqual;
 }
 
 pub fn testFmt(name: []const u8, path: []const u8, code: []const u8) !void {

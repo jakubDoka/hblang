@@ -1,15 +1,16 @@
 bl: Builder,
 types: *Types,
-work_list: std.ArrayList(Task),
+work_list: std.ArrayListUnmanaged(Task),
 target: Types.Target,
 comptime abi: Types.Abi = .ableos,
 struct_ret_ptr: ?*Node = undefined,
-scope: std.ArrayList(ScopeEntry) = undefined,
-loops: std.ArrayList(*Builder.Loop) = undefined,
+scope: std.ArrayListUnmanaged(ScopeEntry) = undefined,
+loops: std.ArrayListUnmanaged(Builder.Loop) = undefined,
 ret: Types.Id = undefined,
 errored: bool = undefined,
 
 const std = @import("std");
+const root = @import("utils.zig");
 const Ast = @import("Ast.zig");
 const Vm = @import("Vm.zig");
 const Comptime = @import("Comptime.zig");
@@ -34,21 +35,21 @@ const ScopeEntry = struct {
 };
 
 pub fn init(
-    gpa: std.mem.Allocator,
+    arena: *root.Arena,
+    scratch: *root.Arena,
     types: *Types,
     target: Types.Target,
 ) Codegen {
     return .{
         .types = types,
         .target = target,
-        .bl = .init(gpa),
-        .work_list = .init(gpa),
+        .bl = .init(arena),
+        .work_list = .initBuffer(scratch.alloc(Task, 1024)),
     };
 }
 
 pub fn deinit(self: *Codegen) void {
     self.bl.deinit();
-    self.work_list.deinit();
     self.* = undefined;
 }
 
@@ -56,7 +57,7 @@ pub fn queue(self: *Codegen, task: Task) void {
     switch (task) {
         inline else => |func| {
             if (func.completion.get(self.target) == .compiled) return;
-            self.work_list.append(task) catch unreachable;
+            self.work_list.appendAssumeCapacity(task);
         },
     }
 }
@@ -74,12 +75,9 @@ pub fn nextTask(self: *Codegen) ?Task {
     }
 }
 
-pub inline fn arena(self: *Codegen) std.mem.Allocator {
-    return self.bl.func.getTmpArena();
-}
-
 pub fn beginBuilder(
     self: *Codegen,
+    scratch: *root.Arena,
     ret: Types.Id,
     param_count: usize,
     return_count: usize,
@@ -88,15 +86,18 @@ pub fn beginBuilder(
     self.ret = ret;
     const res = self.bl.begin(param_count, return_count);
 
-    self.scope = .init(self.arena());
-    self.loops = .init(self.arena());
+    self.scope = .initBuffer(scratch.alloc(ScopeEntry, 1024));
+    self.loops = .initBuffer(scratch.alloc(Builder.Loop, 32));
 
     return res;
 }
 
 pub fn build(self: *Codegen, func: *Types.Func) !void {
+    var tmp = root.Arena.scrath(self.bl.func.arena);
+    defer tmp.deinit();
+
     const param_count, const return_count, const ret_abi = func.computeAbiSize(self.abi, self.types);
-    const token, const params, const returns = self.beginBuilder(func.ret, param_count, return_count);
+    const token, const params, const returns = self.beginBuilder(tmp.arena, func.ret, param_count, return_count);
 
     var i: usize = 0;
 
@@ -132,7 +133,7 @@ pub fn build(self: *Codegen, func: *Types.Func) !void {
             },
             .Imaginary => continue,
         };
-        self.scope.append(.{ .ty = ty, .name = ident.id }) catch unreachable;
+        self.scope.appendAssumeCapacity(.{ .ty = ty, .name = ident.id });
         self.bl.pushScopeValue(arg);
         i += abi.len(false);
         ty_idx += 1;
@@ -156,19 +157,15 @@ pub const Value = struct {
     };
 
     pub const never = Value{ .ty = .never };
+
+    inline fn mkv(ty: Types.Id, oid: ?*Node) Value {
+        return .{ .ty = ty, .id = if (oid) |id| .{ .Value = id } else .Imaginary };
+    }
+
+    inline fn mkp(ty: Types.Id, id: *Node) Value {
+        return .{ .ty = ty, .id = .{ .Ptr = id } };
+    }
 };
-
-inline fn mkv(ty: Types.Id, oid: ?*Node) Value {
-    return .{ .ty = ty, .id = if (oid) |id| .{ .Value = id } else .Imaginary };
-}
-
-inline fn mkp(ty: Types.Id, id: *Node) Value {
-    return .{ .ty = ty, .id = .{ .Ptr = id } };
-}
-
-inline fn mki(ty: Types.Id) Value {
-    return .{ .ty = ty };
-}
 
 pub const Ctx = struct {
     scope: Types.Id,
@@ -180,16 +177,8 @@ pub const Ctx = struct {
         return .{ .scope = self.scope };
     }
 
-    pub fn init(fl: Types.Id) Ctx {
-        return .{ .scope = fl };
-    }
-
     pub fn file(self: Ctx) Types.File {
         return self.scope.file();
-    }
-
-    pub fn items(self: Ctx) Ast.Slice {
-        return self.scope.items();
     }
 
     pub fn addName(self: Ctx, name: []const u8) Ctx {
@@ -295,7 +284,7 @@ pub fn emitGenericStore(self: *Codegen, loc: *Node, value: *Value) void {
 }
 
 pub fn resolveTy(self: *Codegen, ctx: Ctx, expr: Ast.Id) Types.Id {
-    return Comptime.evalTy(self.types, ctx, expr);
+    return self.types.ct.evalTy(ctx, expr);
 }
 
 pub fn emitTyped(self: *Codegen, ctx: Ctx, ty: Types.Id, expr: Ast.Id) Value {
@@ -305,58 +294,11 @@ pub fn emitTyped(self: *Codegen, ctx: Ctx, ty: Types.Id, expr: Ast.Id) Value {
 }
 
 pub fn emitTyConst(self: *Codegen, ty: Types.Id) Value {
-    return mkv(.type, self.bl.addIntImm(.int, @bitCast(@intFromEnum(ty))));
+    return .mkv(.type, self.bl.addIntImm(.int, @bitCast(@intFromEnum(ty))));
 }
 
 pub fn unwrapTyConst(self: *Codegen, cnst: *Node) Types.Id {
-    var eval_stack = std.ArrayList(*Node).initCapacity(self.arena(), 16) catch unreachable;
-
-    eval_stack.append(cnst) catch unreachable;
-
-    while (true) {
-        const curr = eval_stack.pop();
-        switch (curr.kind) {
-            .CInt => {
-                if (eval_stack.items.len == 0) {
-                    return @enumFromInt(@as(u64, @bitCast(curr.extra(.CInt).*)));
-                }
-            },
-            .Ret => {
-                eval_stack.append(curr.inputs()[0].?) catch unreachable;
-            },
-            .CallEnd => {
-                const call: *Node = curr.inputs()[0].?;
-                std.debug.assert(call.kind == .Call);
-                std.debug.assert(call.extra(.Call).ret_count == 1);
-
-                const func = self.types.funcs.items[call.extra(.Call).id];
-                if (func.completion.get(.@"comptime") == .queued) {
-                    Comptime.jitFunc(self.types, func);
-                    std.debug.assert(func.completion.get(.@"comptime") == .compiled);
-                }
-
-                var requeued = false;
-                for (call.inputs()[2..], 0..) |arg, arg_idx| {
-                    if (arg.?.kind != .CInt) {
-                        if (!requeued) eval_stack.append(curr) catch unreachable;
-                        eval_stack.append(arg.?) catch unreachable;
-                        requeued = true;
-                    } else {
-                        self.types.vm.regs.set(.arg(call.extra(.Call).ret_count, arg_idx), @bitCast(arg.?.extra(.CInt).*));
-                    }
-                }
-
-                if (requeued) continue;
-
-                Comptime.runVm(self.types, func.id, &.{});
-
-                const ret = self.types.vm.regs.get(.ret(0));
-                const ret_ty = self.abi.categorize(func.ret, self.types).ByValue;
-                eval_stack.append(self.bl.addIntImm(ret_ty, @bitCast(ret))) catch unreachable;
-            },
-            else => std.debug.panic("{}", .{curr}),
-        }
-    }
+    return @enumFromInt(self.types.ct.partialEval(&self.bl, cnst));
 }
 
 pub fn lookupScopeItem(self: *Codegen, bsty: Types.Id, name: []const u8) Types.Id {
@@ -374,7 +316,7 @@ pub fn loadIdent(self: *Codegen, ctx: Ctx, pos: Ast.Pos, id: Ast.Ident) Value {
     for (self.scope.items, 0..) |se, i| {
         if (se.name == id) {
             const value = self.bl.getScopeValue(i);
-            return mkp(se.ty, value);
+            return .mkp(se.ty, value);
         }
     } else {
         var cursor = ctx;
@@ -393,12 +335,12 @@ pub fn loadIdent(self: *Codegen, ctx: Ctx, pos: Ast.Pos, id: Ast.Ident) Value {
 
         const typ = if (ty) |typ| b: {
             const global = self.types.resolveGlobal(cursor.scope, ast.tokenSrc(id.pos()), value);
-            Comptime.evalGlobal(self.types, global.data().Global, typ, value);
+            self.types.ct.evalGlobal(global.data().Global, typ, value);
             break :b global;
         } else return self.emitTyConst(self.resolveTy(cursor.addName(ast.tokenSrc(id.pos())), value));
         const global = typ.data().Global;
         self.queue(.{ .Global = global });
-        return mkp(global.ty, self.bl.addGlobalAddr(global.id));
+        return .mkp(global.ty, self.bl.addGlobalAddr(global.id));
     }
 }
 
@@ -416,10 +358,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return .never;
             }
             const parsed = std.fmt.parseInt(i64, ast.tokenSrc(e.index), 10) catch unreachable;
-            return mkv(ty, self.bl.addIntImm(self.abi.categorize(ty, self.types).ByValue, parsed));
+            return .mkv(ty, self.bl.addIntImm(self.abi.categorize(ty, self.types).ByValue, parsed));
         },
         .Bool => |e| {
-            return mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(e.value)));
+            return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(e.value)));
         },
         .Ident => |e| return self.loadIdent(ctx, e.pos, e.id),
         .Ctor => |e| {
@@ -458,7 +400,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 self.emitGenericStore(off, &value);
             }
 
-            return mkp(ty, local);
+            return .mkp(ty, local);
         },
         .Tupl => |e| {
             if (e.ty.tag() == .Void and ctx.ty == null) {
@@ -489,7 +431,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 offset += ftype.size(self.types);
             }
 
-            return mkp(ty, local);
+            return .mkp(ty, local);
         },
         .Field => |e| {
             var base = self.emit(ctx.forwardScope(), e.base);
@@ -513,7 +455,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 offset += tf.ty.size(self.types);
             } else unreachable;
 
-            return mkp(ftype, self.bl.addFieldOffset(base.id.Ptr, @intCast(offset)));
+            return .mkp(ftype, self.bl.addFieldOffset(base.id.Ptr, @intCast(offset)));
         },
 
         // #OPS ========================================================================
@@ -521,19 +463,19 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             .@"^" => return self.emitTyConst(self.types.makePtr(self.resolveTy(ctx, e.oper))),
             .@"&" => {
                 const addrd = self.emit(ctx.forwardScope(), e.oper);
-                return mkv(self.types.makePtr(addrd.ty), addrd.id.Ptr);
+                return .mkv(self.types.makePtr(addrd.ty), addrd.id.Ptr);
             },
             .@"*" => {
                 // TODO: better type inference
                 var oper = self.emit(ctx.forwardScope(), e.oper);
                 self.ensureLoaded(&oper);
                 const base = oper.ty.data().Ptr.*;
-                return mkp(base, oper.id.Value);
+                return .mkp(base, oper.id.Value);
             },
             .@"-" => {
                 var lhs = self.emit(ctx, e.oper);
                 if (ctx.ty) |ty| if (self.typeCheck(ctx, expr, &lhs, ty)) return .never;
-                return mkv(lhs.ty, self.bl.addUnOp(.neg, self.abi.categorize(lhs.ty, self.types).ByValue, lhs.id.Value));
+                return .mkv(lhs.ty, self.bl.addUnOp(.neg, self.abi.categorize(lhs.ty, self.types).ByValue, lhs.id.Value));
             },
             else => std.debug.panic("{any}\n", .{ast.exprs.get(expr)}),
         },
@@ -553,7 +495,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 self.bl.resizeLocal(loc, value.ty.size(self.types));
                 self.emitGenericStore(loc, &value);
 
-                self.scope.append(.{ .ty = value.ty, .name = ast.exprs.get(e.lhs).Ident.id }) catch unreachable;
+                self.scope.appendAssumeCapacity(.{ .ty = value.ty, .name = ast.exprs.get(e.lhs).Ident.id });
                 self.bl.pushScopeValue(loc);
                 return .{};
             },
@@ -583,7 +525,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 } else {
                     const loc = ctx.loc orelse self.bl.addLocal(unified.size(self.types));
                     self.emitStructOp(unified.data().Struct, e.op, loc, lhs.id.Ptr, rhs.id.Ptr);
-                    return mkp(unified, loc);
+                    return .mkp(unified, loc);
                 } else {
                     const upcast_to: Types.Id = if (e.op.isComparison()) if (lhs.ty.isSigned()) .int else .uint else unified;
                     self.ensureLoaded(&lhs);
@@ -591,7 +533,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     const lhs_fail = self.typeCheck(ctx, e.lhs, &lhs, upcast_to);
                     const rhs_fail = self.typeCheck(ctx, e.rhs, &rhs, upcast_to);
                     if (lhs_fail or rhs_fail) return .{};
-                    return mkv(unified, self.bl.addBinOp(
+                    return .mkv(unified, self.bl.addBinOp(
                         e.op.toBinOp(lhs.ty),
                         self.abi.categorize(unified, self.types).ByValue,
                         lhs.id.Value,
@@ -627,22 +569,25 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .Loop => |e| {
             var loop = self.bl.addLoopAndBeginBody();
-            self.loops.append(&loop) catch unreachable;
+            self.loops.appendAssumeCapacity(loop);
             _ = self.emitTyped(ctx, .void, e.body);
-            _ = self.loops.pop();
+            loop = self.loops.pop();
             loop.end(&self.bl);
 
             return .{};
         },
         .Break => |_| {
-            self.loops.getLast().addLoopControl(&self.bl, .@"break");
+            self.loops.items[self.loops.items.len - 1].addLoopControl(&self.bl, .@"break");
             return .{};
         },
         .Continue => |_| {
-            self.loops.getLast().addLoopControl(&self.bl, .@"continue");
+            self.loops.items[self.loops.items.len - 1].addLoopControl(&self.bl, .@"continue");
             return .{};
         },
         .Call => |e| {
+            var tmp = root.Arena.scrath(self.bl.func.arena);
+            defer tmp.deinit();
+
             var typ: Types.Id, var caller: ?Value = if (e.called.tag() == .Field) b: {
                 const field = ast.exprs.get(e.called).Field;
                 const value = self.emit(ctx.forwardScope(), field.base);
@@ -662,9 +607,9 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 const tmpl_file = self.types.getFile(tmpl.key.file);
                 const tmpl_ast = tmpl_file.exprs.getTyped(.Fn, tmpl.key.ast).?;
 
-                const captures = self.arena().alloc(Types.Id, tmpl_ast.captures.len()) catch unreachable;
-                const arg_tys = self.arena().alloc(Types.Id, tmpl_ast.args.len() - tmpl_ast.captures.len()) catch unreachable;
-                const arg_exprs = self.arena().alloc(Value, arg_tys.len) catch unreachable;
+                const captures = tmp.arena.alloc(Types.Id, tmpl_ast.captures.len());
+                const arg_tys = tmp.arena.alloc(Types.Id, tmpl_ast.args.len() - tmpl_ast.captures.len());
+                const arg_exprs = tmp.arena.alloc(Value, arg_tys.len);
 
                 var capture_idx: usize = 0;
                 var arg_idx: usize = 0;
@@ -699,12 +644,12 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     alloc.* = .{
                         .id = @intCast(self.types.funcs.items.len),
                         .key = alloc.key,
-                        .args = self.types.arena.allocator().dupe(Types.Id, arg_tys) catch unreachable,
+                        .args = self.types.arena.dupe(Types.Id, arg_tys),
                         .ret = ret,
                         .name = "",
                     };
-                    self.types.funcs.append(self.types.arena.child_allocator, alloc) catch unreachable;
-                    alloc.key.captures = self.types.arena.allocator().dupe(Types.Id, alloc.key.captures) catch unreachable;
+                    self.types.funcs.append(self.types.arena.allocator(), alloc) catch unreachable;
+                    alloc.key.captures = self.types.arena.dupe(Types.Id, alloc.key.captures);
                 }
 
                 typ = slot.key_ptr.*;
@@ -715,7 +660,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             self.queue(.{ .Func = func });
 
             const param_count, const return_count, const ret_abi = func.computeAbiSize(self.abi, self.types);
-            const args = self.bl.allocCallArgs(param_count, return_count);
+            const args = self.bl.allocCallArgs(tmp.arena, param_count, return_count);
 
             var i: usize = 0;
             if (ret_abi == .ByRef) {
@@ -772,15 +717,15 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
             return switch (ret_abi) {
                 .Imaginary => .{},
-                .ByValue => mkv(func.ret, rets[0]),
+                .ByValue => .mkv(func.ret, rets[0]),
                 .ByValuePair => |pair| b: {
                     const slot = ctx.loc orelse self.bl.addLocal(func.ret.size(self.types));
                     for (pair.types, pair.offsets(), rets) |ty, off, vl| {
                         self.bl.addFieldStore(slot, @intCast(off), ty, vl);
                     }
-                    break :b mkp(func.ret, slot);
+                    break :b .mkp(func.ret, slot);
                 },
-                .ByRef => mkp(func.ret, args.arg_slots[0]),
+                .ByRef => .mkp(func.ret, args.arg_slots[0]),
             };
         },
         .Return => |e| {
@@ -808,12 +753,15 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .Buty => |e| return self.emitTyConst(.fromLexeme(e.bt)),
         .Struct => |e| {
+            var tmp = root.Arena.scrath(self.bl.func.arena);
+            defer tmp.deinit();
+
             const prefix = 3;
-            const args = self.bl.allocCallArgs(prefix + e.captures.len(), 1);
+            const args = self.bl.allocCallArgs(tmp.arena, prefix + e.captures.len(), 1);
             @memset(args.params, .int);
             @memset(args.returns, .int);
 
-            args.arg_slots[0] = self.bl.addIntImm(.int, 0);
+            args.arg_slots[0] = self.bl.addIntImm(.int, @intFromEnum(Comptime.InteruptCode.Struct));
             args.arg_slots[1] = self.bl.addIntImm(.int, @bitCast(@intFromEnum(ctx.scope)));
             args.arg_slots[2] = self.bl.addIntImm(.int, @as(u32, @bitCast(expr)));
 
@@ -824,7 +772,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             }
 
             const rets = self.bl.addCall(Comptime.eca, args);
-            return mkv(.type, rets[0]);
+            return .mkv(.type, rets[0]);
         },
         .Fn => |e| if (e.captures.len() != 0) {
             const slot, _ = self.types.intern(.Template, .{
@@ -845,7 +793,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             });
             const id = slot.key_ptr.*;
             if (!slot.found_existing) {
-                const args = self.types.arena.allocator().alloc(Types.Id, e.args.len()) catch unreachable;
+                const args = self.types.arena.alloc(Types.Id, e.args.len());
                 for (ast.exprs.view(e.args), args) |argid, *arg| {
                     const ty = argid.ty;
                     arg.* = self.resolveTy(ctx.stripName(), ty);
@@ -858,7 +806,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     .ret = ret,
                     .name = ctx.name,
                 };
-                self.types.funcs.append(self.types.arena.child_allocator, alloc) catch unreachable;
+                self.types.funcs.append(self.types.arena.allocator(), alloc) catch unreachable;
             }
             return self.emitTyConst(id);
         },
