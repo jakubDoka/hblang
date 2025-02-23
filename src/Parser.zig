@@ -6,6 +6,7 @@ arena: std.heap.ArenaAllocator,
 active_syms: std.ArrayListUnmanaged(Sym) = .{},
 capture_boundary: usize = 0,
 captures: std.ArrayListUnmanaged(Ident) = .{},
+comptime_idents: std.ArrayListUnmanaged(Ident) = .{},
 lexer: Lexer,
 cur: Lexer.Token,
 list_pos: Ast.Pos = undefined,
@@ -207,27 +208,30 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         ._ => .{ .Wildcard = .init(token.pos) },
         .@"$", .Ident => return try self.resolveIdent(token),
         .@"fn" => b: {
-            const capture_base = self.captures.items.len;
-            const args = try self.parseListTyped(.@"(", .@",", .@")", Ast.Arg, parseArg);
-            const comptime_args = try self.store.allocSlice(Ident, self.gpa, self.popCaptures(capture_base, false));
-            _ = try self.expectAdvance(.@":");
-            const ret = try self.parseExpr();
-
             const prev_capture_boundary = self.capture_boundary;
             self.capture_boundary = self.active_syms.items.len;
             defer self.capture_boundary = prev_capture_boundary;
+
+            const comptime_arg_start = self.comptime_idents.items.len;
+            defer self.comptime_idents.items.len = comptime_arg_start;
+            const args = try self.parseListTyped(.@"(", .@",", .@")", Ast.Arg, parseArg);
+            _ = try self.expectAdvance(.@":");
+            const ret = try self.parseExpr();
 
             const capture_scope = self.captures.items.len;
             const body = body: {
                 defer self.finalizeVariables(scope_frame);
                 break :body try self.parseExpr();
             };
-            const captures = self.popCaptures(capture_scope, prev_capture_boundary != 0);
+
+            const comptime_args = try self.store.allocSlice(Ident, self.gpa, self.comptime_idents.items[comptime_arg_start..]);
+            const captures = try self.store.allocSlice(Ident, self.gpa, self.popCaptures(capture_scope, prev_capture_boundary != 0));
+            std.debug.assert(comptime_args.end == captures.start);
 
             break :b .{ .Fn = .{
                 .args = args,
                 .comptime_args = comptime_args,
-                .captures = try self.store.allocSlice(Ident, self.gpa, captures),
+                .captures = captures,
                 .pos = .{ .index = @intCast(token.pos), .indented = self.list_pos.indented },
                 .ret = ret,
                 .body = body,
@@ -367,7 +371,7 @@ fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
         .pos = .{ .index = @intCast(token.pos), .indented = token.kind == .@"$" },
         .id = id,
     });
-    if (token.kind == .@"$") try self.captures.append(self.gpa, id);
+    if (token.kind == .@"$") self.comptime_idents.append(self.gpa, id) catch unreachable;
     try self.active_syms.append(self.gpa, .{ .id = id });
     return alloc;
 }

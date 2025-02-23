@@ -188,6 +188,7 @@ pub fn init(gpa: std.mem.Allocator, current: Types.File, path: []const u8, code:
         parser.arena.deinit();
         parser.active_syms.deinit(gpa);
         parser.captures.deinit(gpa);
+        parser.comptime_idents.deinit(gpa);
     }
     errdefer {
         parser.store.deinit(gpa);

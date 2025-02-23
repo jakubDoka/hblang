@@ -644,6 +644,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 const tmpl = typ.data().Template;
 
                 var scope = tmpl.*;
+                scope.key.scope = typ;
+                scope.key.capture_idents = .{};
+                scope.key.captures = &.{};
+
                 const tmpl_file = self.types.getFile(tmpl.key.file);
                 const tmpl_ast = tmpl_file.exprs.getTyped(.Fn, tmpl.key.ast).?;
 
@@ -671,8 +675,9 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
                 const ret = self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = &scope }) }, tmpl_ast.ret);
 
+                // TODO: the comptime_args + captures are continuous, we could remove the template from the scope tree in that case
                 const slot, const alloc = self.types.intern(.Func, .{
-                    .scope = tmpl.key.scope,
+                    .scope = typ,
                     .file = tmpl.key.file,
                     .ast = tmpl.key.ast,
                     .capture_idents = tmpl_ast.comptime_args,
@@ -813,16 +818,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             const rets = self.bl.addCall(Comptime.eca, args);
             return .mkv(.type, rets[0]);
         },
-        .Fn => |e| if (e.comptime_args.len() != 0) {
-            const slot, _ = self.types.intern(.Template, .{
-                .scope = self.parent_scope.perm(),
-                .file = self.parent_scope.file(),
-                .ast = expr,
-                .capture_idents = .{},
-                .captures = &.{},
-            });
-            return self.emitTyConst(slot.key_ptr.*);
-        } else {
+        .Fn => |e| {
             var tmp = root.Arena.scrath(null);
             defer tmp.deinit();
 
@@ -834,32 +830,46 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 slot.* = self.unwrapTyConst(val.id.Value);
             }
 
-            const slot, const alloc = self.types.intern(.Func, .{
-                .scope = self.parent_scope.perm(),
-                .file = self.parent_scope.file(),
-                .ast = expr,
-                .capture_idents = e.captures,
-                .captures = captures,
-            });
-            const id = slot.key_ptr.*;
-            if (!slot.found_existing) {
-                const args = self.types.arena.alloc(Types.Id, e.args.len());
-                for (ast.exprs.view(e.args), args) |argid, *arg| {
-                    const ty = argid.ty;
-                    arg.* = self.resolveAnonTy(ty);
+            if (e.comptime_args.len() != 0) {
+                const slot, const alloc = self.types.intern(.Template, .{
+                    .scope = self.parent_scope.perm(),
+                    .file = self.parent_scope.file(),
+                    .ast = expr,
+                    .capture_idents = e.captures,
+                    .captures = captures,
+                });
+                if (!slot.found_existing) {
+                    alloc.key.captures = self.types.arena.dupe(Types.Id, alloc.key.captures);
                 }
-                const ret = self.resolveAnonTy(e.ret);
-                alloc.* = .{
-                    .id = @intCast(self.types.funcs.items.len),
-                    .key = alloc.key,
-                    .args = args,
-                    .ret = ret,
-                    .name = self.name,
-                };
-                alloc.key.captures = self.types.arena.dupe(Types.Id, alloc.key.captures);
-                self.types.funcs.append(self.types.arena.allocator(), alloc) catch unreachable;
+                return self.emitTyConst(slot.key_ptr.*);
+            } else {
+                const slot, const alloc = self.types.intern(.Func, .{
+                    .scope = self.parent_scope.perm(),
+                    .file = self.parent_scope.file(),
+                    .ast = expr,
+                    .capture_idents = e.captures,
+                    .captures = captures,
+                });
+                const id = slot.key_ptr.*;
+                if (!slot.found_existing) {
+                    const args = self.types.arena.alloc(Types.Id, e.args.len());
+                    for (ast.exprs.view(e.args), args) |argid, *arg| {
+                        const ty = argid.ty;
+                        arg.* = self.resolveAnonTy(ty);
+                    }
+                    const ret = self.resolveAnonTy(e.ret);
+                    alloc.* = .{
+                        .id = @intCast(self.types.funcs.items.len),
+                        .key = alloc.key,
+                        .args = args,
+                        .ret = ret,
+                        .name = self.name,
+                    };
+                    alloc.key.captures = self.types.arena.dupe(Types.Id, alloc.key.captures);
+                    self.types.funcs.append(self.types.arena.allocator(), alloc) catch unreachable;
+                }
+                return self.emitTyConst(id);
             }
-            return self.emitTyConst(id);
         },
         .Use => |e| {
             return self.emitTyConst(self.types.getScope(e.file));

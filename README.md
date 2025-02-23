@@ -543,12 +543,12 @@ Foo := fn(F: type): type return struct {
 ```hb
 main := fn(): uint {
     some_int := uint
-    some_fn := fn(x: some_int): some_int {
+    some_fn := fn($ui: type, x: some_int): ui {
         val: some_int = x + 1
         return val * val
     }
 
-    return some_fn(9) - (some_fn(5) + some_fn(7))
+    return some_fn(some_int, 9) - (some_fn(some_int, 5) + some_fn(some_int, 7))
 }
 ```
 
