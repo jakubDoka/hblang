@@ -5,6 +5,7 @@ target: Types.Target,
 comptime abi: Types.Abi = .ableos,
 name: []const u8 = undefined,
 parent_scope: Scope = undefined,
+ast: *const Ast = undefined,
 struct_ret_ptr: ?*Node = undefined,
 scope: std.ArrayListUnmanaged(ScopeEntry) = undefined,
 loops: std.ArrayListUnmanaged(Builder.Loop) = undefined,
@@ -99,6 +100,7 @@ pub fn build(self: *Codegen, func: *Types.Func) !void {
 
     const param_count, const return_count, const ret_abi = func.computeAbiSize(self.abi, self.types);
     const token, const params, const returns = self.beginBuilder(tmp.arena, func.ret, param_count, return_count);
+    self.ast = self.types.getFile(func.key.file);
     self.parent_scope = .init(.{ .Func = func });
     self.name = "";
 
@@ -275,7 +277,8 @@ pub fn typeCheck(self: *Codegen, ctx: Ctx, expr: Ast.Id, got: *Value, expected: 
 }
 
 fn codePointer(self: *Codegen, ctx: Ctx, pos: usize) Ast.CodePointer {
-    return self.types.getFile(ctx.file()).codePointer(pos);
+    _ = ctx; // autofix
+    return self.ast.codePointer(pos);
 }
 
 fn report(self: *Codegen, ctx: Ctx, expr: Ast.Id, comptime fmt: []const u8, args: anytype) void {
@@ -350,9 +353,8 @@ pub fn lookupScopeItem(self: *Codegen, bsty: Types.Id, name: []const u8) Types.I
     return self.types.ct.evalTy(name, .{ .Perm = bsty }, other_ast.exprs.get(decl).BinOp.rhs);
 }
 
-pub fn loadIdent(self: *Codegen, ctx: Ctx, pos: Ast.Pos, id: Ast.Ident) Value {
-    _ = ctx; // autofix
-    const ast = self.types.getFile(self.parent_scope.file());
+pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) Value {
+    const ast = self.ast;
     for (self.scope.items, 0..) |se, i| {
         if (se.name == id) {
             const value = self.bl.getScopeValue(i);
@@ -384,8 +386,73 @@ pub fn loadIdent(self: *Codegen, ctx: Ctx, pos: Ast.Pos, id: Ast.Ident) Value {
     }
 }
 
+pub fn instantiateTemplate(
+    self: *Codegen,
+    tmp: root.Arena.Scratch,
+    e: std.meta.TagPayload(Ast.Expr, .Call),
+    typ: Types.Id,
+) struct { []Value, Types.Id } {
+    const ast = self.ast;
+    const tmpl = typ.data().Template;
+
+    var scope = tmpl.*;
+    scope.key.scope = typ;
+    scope.key.capture_idents = .{};
+    scope.key.captures = &.{};
+
+    const tmpl_file = self.types.getFile(tmpl.key.file);
+    const tmpl_ast = tmpl_file.exprs.getTyped(.Fn, tmpl.key.ast).?;
+
+    const captures = tmp.arena.alloc(Types.Id, tmpl_ast.comptime_args.len());
+    const arg_tys = tmp.arena.alloc(Types.Id, tmpl_ast.args.len() - captures.len);
+    const arg_exprs = tmp.arena.alloc(Value, arg_tys.len);
+
+    var capture_idx: usize = 0;
+    var arg_idx: usize = 0;
+    for (tmpl_file.exprs.view(tmpl_ast.args), ast.exprs.view(e.args)) |param, arg| {
+        if (tmpl_file.exprs.get(param.bindings).Ident.pos.indented) {
+            captures[capture_idx] = self.resolveAnonTy(arg);
+
+            std.debug.assert(scope.key.capture_idents.len() == scope.key.captures.len);
+            capture_idx += 1;
+            scope.key.capture_idents = tmpl_ast.comptime_args.slice(0, capture_idx);
+            scope.key.captures = captures[0..capture_idx];
+        } else {
+            // this is in anticipation of the @Any
+            arg_tys[arg_idx] = self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = &scope }) }, param.ty);
+            arg_exprs[arg_idx] = self.emitTyped(.{}, arg_tys[arg_idx], arg);
+            arg_idx += 1;
+        }
+    }
+
+    const ret = self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = &scope }) }, tmpl_ast.ret);
+
+    // TODO: the comptime_args + captures are continuous, we could remove the template from the scope tree in that case
+    const slot, const alloc = self.types.intern(.Func, .{
+        .scope = typ,
+        .file = tmpl.key.file,
+        .ast = tmpl.key.ast,
+        .capture_idents = tmpl_ast.comptime_args,
+        .captures = captures,
+    });
+
+    if (!slot.found_existing) {
+        alloc.* = .{
+            .id = @intCast(self.types.funcs.items.len),
+            .key = alloc.key,
+            .args = self.types.arena.dupe(Types.Id, arg_tys),
+            .ret = ret,
+            .name = "",
+        };
+        self.types.funcs.append(self.types.arena.allocator(), alloc) catch unreachable;
+        alloc.key.captures = self.types.arena.dupe(Types.Id, alloc.key.captures);
+    }
+
+    return .{ arg_exprs, slot.key_ptr.* };
+}
+
 pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
-    const ast = self.types.getFile(self.parent_scope.file());
+    const ast = self.ast;
     switch (ast.exprs.get(expr)) {
         .Comment => return .{},
         .Void => return .{},
@@ -403,7 +470,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         .Bool => |e| {
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(e.value)));
         },
-        .Ident => |e| return self.loadIdent(ctx, e.pos, e.id),
+        .Ident => |e| return self.loadIdent(e.pos, e.id),
         .Ctor => |e| {
             if (e.ty.tag() == .Void and ctx.ty == null) {
                 self.report(ctx, expr, "cant infer the type of this constructor, you can specify a type before the '.{{'", .{});
@@ -641,63 +708,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
             var computed_args: ?[]Value = null;
             if (typ.data() == .Template) {
-                const tmpl = typ.data().Template;
-
-                var scope = tmpl.*;
-                scope.key.scope = typ;
-                scope.key.capture_idents = .{};
-                scope.key.captures = &.{};
-
-                const tmpl_file = self.types.getFile(tmpl.key.file);
-                const tmpl_ast = tmpl_file.exprs.getTyped(.Fn, tmpl.key.ast).?;
-
-                const captures = tmp.arena.alloc(Types.Id, tmpl_ast.comptime_args.len());
-                const arg_tys = tmp.arena.alloc(Types.Id, tmpl_ast.args.len() - captures.len);
-                const arg_exprs = tmp.arena.alloc(Value, arg_tys.len);
-
-                var capture_idx: usize = 0;
-                var arg_idx: usize = 0;
-                for (tmpl_file.exprs.view(tmpl_ast.args), ast.exprs.view(e.args)) |param, arg| {
-                    if (tmpl_file.exprs.get(param.bindings).Ident.pos.indented) {
-                        captures[capture_idx] = self.resolveAnonTy(arg);
-
-                        std.debug.assert(scope.key.capture_idents.len() == scope.key.captures.len);
-                        capture_idx += 1;
-                        scope.key.capture_idents = tmpl_ast.comptime_args.slice(0, capture_idx);
-                        scope.key.captures = captures[0..capture_idx];
-                    } else {
-                        // this is in anticipation of the @Any
-                        arg_tys[arg_idx] = self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = &scope }) }, param.ty);
-                        arg_exprs[arg_idx] = self.emitTyped(ctx, arg_tys[arg_idx], arg);
-                        arg_idx += 1;
-                    }
-                }
-
-                const ret = self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = &scope }) }, tmpl_ast.ret);
-
-                // TODO: the comptime_args + captures are continuous, we could remove the template from the scope tree in that case
-                const slot, const alloc = self.types.intern(.Func, .{
-                    .scope = typ,
-                    .file = tmpl.key.file,
-                    .ast = tmpl.key.ast,
-                    .capture_idents = tmpl_ast.comptime_args,
-                    .captures = captures,
-                });
-
-                if (!slot.found_existing) {
-                    alloc.* = .{
-                        .id = @intCast(self.types.funcs.items.len),
-                        .key = alloc.key,
-                        .args = self.types.arena.dupe(Types.Id, arg_tys),
-                        .ret = ret,
-                        .name = "",
-                    };
-                    self.types.funcs.append(self.types.arena.allocator(), alloc) catch unreachable;
-                    alloc.key.captures = self.types.arena.dupe(Types.Id, alloc.key.captures);
-                }
-
-                typ = slot.key_ptr.*;
-                computed_args = arg_exprs;
+                computed_args, typ = self.instantiateTemplate(tmp, e, typ);
             }
 
             const func = typ.data().Func;
@@ -715,24 +726,30 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 ret_abi.types(args.returns[0..return_count]);
             }
 
+            const utils = struct {
+                fn pushParam(cg: *Codegen, call_args: Builder.CallArgs, abi: Types.Abi.Spec, idx: usize, value: *Value) usize {
+                    abi.types(call_args.params[idx..]);
+                    switch (abi) {
+                        .Imaginary => {},
+                        .ByValue => {
+                            cg.ensureLoaded(value);
+                            call_args.arg_slots[idx] = value.id.Value;
+                        },
+                        .ByValuePair => |pair| {
+                            for (pair.types, pair.offsets(), 0..) |t, off, j| {
+                                call_args.arg_slots[idx + j] =
+                                    cg.bl.addFieldLoad(value.id.Ptr, @intCast(off), t);
+                            }
+                        },
+                        .ByRef => call_args.arg_slots[idx] = value.id.Ptr,
+                    }
+                    return abi.len(false);
+                }
+            };
+
             if (caller) |*value| {
                 const abi = self.abi.categorize(value.ty, self.types);
-                abi.types(args.params[i..]);
-                switch (abi) {
-                    .Imaginary => {},
-                    .ByValue => {
-                        self.ensureLoaded(value);
-                        args.arg_slots[i] = value.id.Value;
-                    },
-                    .ByValuePair => |pair| {
-                        for (pair.types, pair.offsets(), 0..) |t, off, j| {
-                            args.arg_slots[i + j] =
-                                self.bl.addFieldLoad(value.id.Ptr, @intCast(off), t);
-                        }
-                    },
-                    .ByRef => args.arg_slots[i] = value.id.Ptr,
-                }
-                i += abi.len(false);
+                i += utils.pushParam(self, args, abi, i, value);
             }
 
             const args_ast = ast.exprs.view(e.args);
@@ -740,21 +757,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 const abi = self.abi.categorize(ty, self.types);
                 abi.types(args.params[i..]);
                 var value = if (computed_args) |a| a[k] else self.emitTyped(ctx, ty, args_ast[k]);
-                switch (abi) {
-                    .Imaginary => {},
-                    .ByValue => {
-                        self.ensureLoaded(&value);
-                        args.arg_slots[i] = value.id.Value;
-                    },
-                    .ByValuePair => |pair| {
-                        for (pair.types, pair.offsets(), 0..) |t, off, j| {
-                            args.arg_slots[i + j] =
-                                self.bl.addFieldLoad(value.id.Ptr, @intCast(off), t);
-                        }
-                    },
-                    .ByRef => args.arg_slots[i] = value.id.Ptr,
-                }
-                i += abi.len(false);
+                i += utils.pushParam(self, args, abi, i, &value);
             }
 
             const rets = self.bl.addCall(func.id, args);
@@ -810,7 +813,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             args.arg_slots[2] = self.bl.addIntImm(.int, @as(u32, @bitCast(expr)));
 
             for (ast.exprs.view(e.captures), args.arg_slots[prefix..]) |id, *slot| {
-                var val = self.loadIdent(.{}, .init(id.pos()), id);
+                var val = self.loadIdent(.init(id.pos()), id);
                 self.ensureLoaded(&val);
                 slot.* = val.id.Value;
             }
@@ -825,7 +828,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             const captures = tmp.arena.alloc(Types.Id, e.captures.len());
 
             for (ast.exprs.view(e.captures), captures) |id, *slot| {
-                var val = self.loadIdent(.{}, .init(id.pos()), id);
+                var val = self.loadIdent(.init(id.pos()), id);
                 self.ensureLoaded(&val);
                 slot.* = self.unwrapTyConst(val.id.Value);
             }

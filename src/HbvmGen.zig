@@ -202,14 +202,14 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
 }
 
 pub fn finalize(self: *HbvmGen) std.ArrayList(u8) {
-    _ = self.link(false);
+    _ = self.link(0, false);
 
     defer self.deinit();
     return self.out;
 }
 
 pub fn disasm(self: *HbvmGen, out: std.io.AnyWriter, colors: std.io.tty.Config) void {
-    const code_len = self.link(false);
+    const code_len = self.link(0, false);
 
     var arena = std.heap.ArenaAllocator.init(self.out.allocator);
     defer arena.deinit();
@@ -254,7 +254,7 @@ pub fn doReloc(self: *HbvmGen, rel: Reloc, dest: i64) void {
     @memcpy(self.out.items[location..][0..size], @as(*const [8]u8, @ptrCast(&jump))[0..size]);
 }
 
-pub fn link(self: *HbvmGen, push_uninit_memory: bool) usize {
+pub fn link(self: *HbvmGen, reloc_until: usize, push_uninit_memory: bool) usize {
     for (self.globals.items[self.globals_appended..]) |*ig| {
         const value = ig.ptr orelse continue;
         ig.offset = @intCast(self.out.items.len);
@@ -269,7 +269,7 @@ pub fn link(self: *HbvmGen, push_uninit_memory: bool) usize {
     }
     if (push_uninit_memory) self.out.resize(cursor) catch unreachable;
 
-    for (self.global_relocs.items) |r| {
+    for (self.global_relocs.items[reloc_until..]) |r| {
         const offset = switch (r.kind) {
             .func => self.funcs.items[r.dest].offset,
             .global => self.globals.items[self.global_lookup.items[r.dest]].offset,
@@ -277,7 +277,7 @@ pub fn link(self: *HbvmGen, push_uninit_memory: bool) usize {
         self.doReloc(r.rel, offset);
     }
 
-    self.global_relocs.items.len = 0;
+    self.global_relocs.items.len = reloc_until;
     self.globals_appended = self.globals.items.len;
 
     var data_size: usize = 0;

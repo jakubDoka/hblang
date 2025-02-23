@@ -552,6 +552,33 @@ main := fn(): uint {
 }
 ```
 
+#### comptime 2
+```hb
+expectations := .{
+    .return_value = 33;
+}
+
+main := fn(): uint {
+    some_int := uint
+
+    some_fn := fn(): some_int {
+        return 1
+    }
+
+    some_fn2 := fn(): some_int {
+        return some_fn() + 1
+    }
+
+    some_fn3 := fn($fnc: type): type {
+        return fn(): some_int {
+            return fnc() + 10
+        }
+    }
+
+    return some_fn3(some_fn)() + some_fn3(some_fn3(some_fn2))()
+}
+```
+
 #### struct operators 1
 ```hb
 expectations := .{

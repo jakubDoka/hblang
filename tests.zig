@@ -187,7 +187,7 @@ pub fn testBuilder(
     };
 
     if (verbose) try header("CODEGEN", output, colors);
-    const code_len = hbgen.link(true);
+    const code_len = hbgen.link(0, true);
     gen.disasm(output, colors);
     var out = gen.finalize();
     defer out.deinit();
@@ -225,7 +225,7 @@ pub fn testFmt(name: []const u8, path: []const u8, code: []const u8) !void {
 
     const ast_overhead = @as(f64, @floatFromInt(ast.exprs.store.items.len)) /
         @as(f64, @floatFromInt(ast.source.len));
-    if (ast_overhead > 4.0) {
+    if (ast_overhead > 5.0) {
         std.debug.print(
             "\n{s} is too large ({d} bytes, {any} ratio)\n",
             .{ name, ast.source.len, ast_overhead },

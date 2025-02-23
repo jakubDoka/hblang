@@ -129,7 +129,7 @@ pub fn runVm(self: *Comptime, entry_id: u32, return_loc: []u8) void {
         .code_end = 0,
     };
 
-    while (true) switch (self.vm.run(&vm_ctx) catch unreachable) {
+    while (true) switch (self.vm.run(&vm_ctx) catch @panic("no")) {
         .tx => break,
         .eca => {
             const InterruptFrame = extern struct {
@@ -194,7 +194,7 @@ pub fn jitFunc(self: *Comptime, fnc: *Types.Func) void {
     defer gen.deinit();
 
     gen.queue(.{ .Func = fnc });
-    compileDependencies(&gen);
+    compileDependencies(&gen, self.comptime_code.global_relocs.items.len);
 }
 
 pub fn jitExpr(self: *Comptime, name: []const u8, scope: Codegen.Scope, ctx: Codegen.Ctx, value: Ast.Id) struct { u32, Types.Id } {
@@ -208,6 +208,8 @@ pub fn jitExpr(self: *Comptime, name: []const u8, scope: Codegen.Scope, ctx: Cod
     var gen = Codegen.init(self.getGpa(), tmp.arena, types, .@"comptime");
     defer gen.deinit();
 
+    const reloc_frame = self.comptime_code.global_relocs.items.len;
+
     var ret: Codegen.Value = undefined;
     {
         var scratch = tmp.arena.checkpoint();
@@ -217,6 +219,7 @@ pub fn jitExpr(self: *Comptime, name: []const u8, scope: Codegen.Scope, ctx: Cod
         }
 
         const token, const params, _ = gen.beginBuilder(tmp.arena, .never, 1, 0);
+        gen.ast = types.getFile(scope.file());
         gen.parent_scope = scope;
         gen.name = name;
         gen.struct_ret_ptr = null;
@@ -235,12 +238,12 @@ pub fn jitExpr(self: *Comptime, name: []const u8, scope: Codegen.Scope, ctx: Cod
         );
     }
 
-    compileDependencies(&gen);
+    compileDependencies(&gen, reloc_frame);
 
     return .{ id, ret.ty };
 }
 
-pub fn compileDependencies(self: *Codegen) void {
+pub fn compileDependencies(self: *Codegen, reloc_util: usize) void {
     while (self.nextTask()) |task| switch (task) {
         .Func => |func| {
             defer {
@@ -265,7 +268,7 @@ pub fn compileDependencies(self: *Codegen) void {
         },
     };
 
-    _ = self.types.ct.comptime_code.link(true);
+    _ = self.types.ct.comptime_code.link(reloc_util, true);
 }
 
 pub fn evalTy(self: *Comptime, name: []const u8, scope: Codegen.Scope, ty_expr: Ast.Id) Types.Id {
