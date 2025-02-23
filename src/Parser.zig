@@ -43,6 +43,10 @@ pub const Loader = struct {
         from: Types.File,
     };
 
+    pub fn isNoop(self: Loader) bool {
+        return self._load == noop._load;
+    }
+
     pub fn init(value: anytype) Loader {
         const Ty = @TypeOf(value.*);
         return .{
@@ -124,7 +128,7 @@ fn declareExpr(self: *Parser, id: Id, unordered: bool) void {
     const sym = while (iter.nextPtr()) |s| {
         if (s.id == ident) break s;
     } else unreachable;
-    if (sym.declared and self.loader.data != Loader.noop.data) {
+    if (sym.declared and !self.loader.isNoop()) {
         self.report(ident.pos(), "redeclaration of identifier", .{});
     }
     sym.declared = true;
@@ -189,7 +193,7 @@ fn popCaptures(self: *Parser, scope: usize, preserve: bool) []const Ident {
                 slc[i] = s;
             }
         }
-        if (preserve) self.captures.items.len = scope + i;
+        if (preserve) self.captures.items.len = scope + i + 1;
         return slc[0 .. i + 1];
     }
     return slc;
@@ -205,14 +209,25 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         .@"fn" => b: {
             const capture_base = self.captures.items.len;
             const args = try self.parseListTyped(.@"(", .@",", .@")", Ast.Arg, parseArg);
-            const captures = try self.store.allocSlice(Ident, self.gpa, self.popCaptures(capture_base, false));
+            const comptime_args = try self.store.allocSlice(Ident, self.gpa, self.popCaptures(capture_base, false));
             _ = try self.expectAdvance(.@":");
             const ret = try self.parseExpr();
-            defer self.finalizeVariables(scope_frame);
-            const body = try self.parseExpr();
+
+            const prev_capture_boundary = self.capture_boundary;
+            self.capture_boundary = self.active_syms.items.len;
+            defer self.capture_boundary = prev_capture_boundary;
+
+            const capture_scope = self.captures.items.len;
+            const body = body: {
+                defer self.finalizeVariables(scope_frame);
+                break :body try self.parseExpr();
+            };
+            const captures = self.popCaptures(capture_scope, prev_capture_boundary != 0);
+
             break :b .{ .Fn = .{
                 .args = args,
-                .captures = captures,
+                .comptime_args = comptime_args,
+                .captures = try self.store.allocSlice(Ident, self.gpa, captures),
                 .pos = .{ .index = @intCast(token.pos), .indented = self.list_pos.indented },
                 .ret = ret,
                 .body = body,
@@ -237,9 +252,11 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             defer self.capture_boundary = prev_capture_boundary;
 
             const capture_scope = self.captures.items.len;
+            const fields = try self.parseList(.@"{", .@";", .@"}", parseUnorderedExpr);
+            const captures = self.popCaptures(capture_scope, prev_capture_boundary != 0);
             break :b .{ .Struct = .{
-                .fields = try self.parseList(.@"{", .@";", .@"}", parseUnorderedExpr),
-                .captures = try self.store.allocSlice(Ident, self.gpa, self.popCaptures(capture_scope, prev_capture_boundary != 0)),
+                .fields = fields,
+                .captures = try self.store.allocSlice(Ident, self.gpa, captures),
                 .pos = .{ .index = @intCast(token.pos), .indented = self.list_pos.indented },
             } };
         },
@@ -319,6 +336,10 @@ fn finalizeVariablesLow(self: *Parser, start: usize) usize {
         if (!s.declared) {
             self.active_syms.items[new_len] = s.*;
             new_len += 1;
+        } else {
+            while (std.mem.indexOfScalar(Ident, self.captures.items, s.id)) |idx| {
+                _ = self.captures.swapRemove(idx);
+            }
         }
     }
     return new_len;
@@ -332,7 +353,9 @@ fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
     const repr = token.view(self.lexer.source);
 
     for (self.active_syms.items, 0..) |*s, i| if (Ast.cmpLow(s.id.pos(), self.lexer.source, repr)) {
-        if (i < self.capture_boundary and !s.unordered) try self.captures.append(self.gpa, s.id);
+        if (i < self.capture_boundary and !s.unordered) {
+            try self.captures.append(self.gpa, s.id);
+        }
         return try self.store.alloc(self.gpa, .Ident, .{
             .pos = .{ .index = @intCast(token.pos), .indented = token.kind == .@"$" },
             .id = s.id,

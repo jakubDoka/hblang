@@ -24,7 +24,7 @@ pub fn main() !void {
         if (node.kind != .directory) std.debug.panic("vendored dir can only contain directories {s}", .{node.name});
 
         try stack.append(try std.fs.path.join(arena, &.{ node.name, example_dir }));
-        while (stack.popOrNull()) |path| {
+        while (stack.pop()) |path| {
             var edir = try vendored.openDir(path, .{ .iterate = true });
             var ewalker = edir.iterate();
             while (try ewalker.next()) |example| {

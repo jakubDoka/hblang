@@ -433,7 +433,6 @@ pub fn testRun(vm: *Vm, res: anyerror!isa.Op, regRes: anytype, comptime code: an
 
 test "sanity" {
     var vm = Vm{ .fuel = 1000 };
-    try testRun(&vm, .tx, 0, .{.{.tx}});
 
     try testRun(&vm, error.Unreachable, 1, .{
         .{ .li8, 1, 1 },

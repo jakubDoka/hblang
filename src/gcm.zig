@@ -7,7 +7,7 @@ pub fn gcm(comptime MachNode: type, self: *graph.Func(MachNode)) void {
     const CfgNode = Func.CfgNode;
     const Node = Func.Node;
 
-    var tmp = root.Arena.scrath(self.arena);
+    var tmp = root.Arena.scrath(null);
     defer tmp.deinit();
 
     var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), self.next_id * 2) catch unreachable;
@@ -38,7 +38,7 @@ pub fn gcm(comptime MachNode: type, self: *graph.Func(MachNode)) void {
                 self.setInputNoIntern(&n.base, i, self.addNode(.Jmp, &.{n.base.inputs()[i].?}, .{}));
             }
 
-            var intmp = root.Arena.scrath(self.arena);
+            var intmp = root.Arena.scrath(null);
             defer intmp.deinit();
             for (intmp.arena.dupe(*Node, n.base.outputs())) |o| if (o.isDataPhi()) {
                 std.debug.assert(o.inputs().len == 3);
@@ -58,7 +58,7 @@ pub fn gcm(comptime MachNode: type, self: *graph.Func(MachNode)) void {
             };
 
             if (cfg.base.kind == .Region or cfg.base.kind == .Loop) {
-                var intmp = root.Arena.scrath(self.arena);
+                var intmp = root.Arena.scrath(null);
                 defer intmp.deinit();
                 for (intmp.arena.dupe(*Node, cfg.base.outputs())) |o| {
                     if (o.kind == .Phi) {
@@ -82,7 +82,7 @@ pub fn gcm(comptime MachNode: type, self: *graph.Func(MachNode)) void {
         work_list.append(self.end) catch unreachable;
         visited.set(self.end.id);
 
-        task: while (work_list.popOrNull()) |t| {
+        task: while (work_list.pop()) |t| {
             visited.unset(t.id);
             std.debug.assert(late_scheds[t.id] == null);
 

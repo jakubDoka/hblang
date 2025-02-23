@@ -539,6 +539,19 @@ Foo := fn(F: type): type return struct {
 }
 ```
 
+#### comptime 1
+```hb
+main := fn(): uint {
+    some_int := uint
+    some_fn := fn(x: some_int): some_int {
+        val: some_int = x + 1
+        return val * val
+    }
+
+    return some_fn(9) - (some_fn(5) + some_fn(7))
+}
+```
+
 #### struct operators 1
 ```hb
 expectations := .{

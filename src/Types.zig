@@ -110,7 +110,7 @@ pub const Struct = struct {
             if (field.lhs.tag() != .Tag) continue;
             fields[i] = .{
                 .name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1),
-                .ty = types.ct.evalTy(.{ .scope = self.asTy() }, field.rhs),
+                .ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field.rhs),
             };
             i += 1;
         }

@@ -7,7 +7,7 @@ pub fn mem2reg(comptime MachNode: type, self: *graph.Func(MachNode)) void {
     const Node = Self.Node;
 
     // TODO: refactor to use tmpa directily
-    var tmpa = root.Arena.scrath(self.arena);
+    var tmpa = root.Arena.scrath(null);
     defer tmpa.deinit();
 
     const tmp = tmpa.arena.allocator();

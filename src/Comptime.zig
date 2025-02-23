@@ -32,6 +32,10 @@ inline fn getTypes(self: *Comptime) *Types {
     return @fieldParentPtr("ct", self);
 }
 
+inline fn getGpa(self: *Comptime) std.mem.Allocator {
+    return self.comptime_code.out.allocator;
+}
+
 pub inline fn ecaArg(self: *Comptime, idx: usize) u64 {
     return self.vm.regs.get(.arg(1, idx));
 }
@@ -40,7 +44,7 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) u64 {
     const abi: Types.Abi = .ableos;
     const types = self.getTypes();
 
-    var tmp = root.Arena.scrath(bl.func.arena);
+    var tmp = root.Arena.scrath(null);
     defer tmp.deinit();
 
     var eval_stack = std.ArrayListUnmanaged(*Node).initBuffer(tmp.arena.alloc(*Node, 32));
@@ -48,7 +52,7 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) u64 {
     eval_stack.appendAssumeCapacity(expr);
 
     while (true) {
-        const curr = eval_stack.pop();
+        const curr = eval_stack.pop().?;
         switch (curr.kind) {
             .CInt => {
                 if (eval_stack.items.len == 0) {
@@ -87,6 +91,19 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) u64 {
                 const ret = types.ct.vm.regs.get(.ret(0));
                 const ret_ty = abi.categorize(func.ret, types).ByValue;
                 eval_stack.appendAssumeCapacity(bl.addIntImm(ret_ty, @bitCast(ret)));
+            },
+            .Load => {
+                var cursor = curr.mem();
+                while (true) {
+                    if (cursor.isStore()) {
+                        if (cursor.base() != curr.base()) {
+                            cursor = cursor.mem();
+                        } else break;
+                    } else if (cursor.kind == .Mem) {
+                        cursor = cursor.inputs()[0].?.inputs()[0].?.inputs()[1].?;
+                    } else std.debug.panic("{}\n", .{cursor});
+                }
+                eval_stack.appendAssumeCapacity(cursor.value());
             },
             else => std.debug.panic("{}", .{curr}),
         }
@@ -173,14 +190,14 @@ pub fn runVm(self: *Comptime, entry_id: u32, return_loc: []u8) void {
 pub fn jitFunc(self: *Comptime, fnc: *Types.Func) void {
     var tmp = root.Arena.scrath(null);
     defer tmp.deinit();
-    var gen = Codegen.init(tmp.arena, tmp.arena, self.getTypes(), .@"comptime");
+    var gen = Codegen.init(self.getGpa(), tmp.arena, self.getTypes(), .@"comptime");
     defer gen.deinit();
 
     gen.queue(.{ .Func = fnc });
     compileDependencies(&gen);
 }
 
-pub fn jitExpr(self: *Comptime, ctx: Codegen.Ctx, value: Ast.Id) struct { u32, Types.Id } {
+pub fn jitExpr(self: *Comptime, name: []const u8, scope: Codegen.Scope, ctx: Codegen.Ctx, value: Ast.Id) struct { u32, Types.Id } {
     const types = self.getTypes();
     const id: u32 = @intCast(types.funcs.items.len);
     types.funcs.append(types.arena.allocator(), undefined) catch unreachable;
@@ -188,7 +205,7 @@ pub fn jitExpr(self: *Comptime, ctx: Codegen.Ctx, value: Ast.Id) struct { u32, T
     var tmp = root.Arena.scrath(null);
     defer tmp.deinit();
 
-    var gen = Codegen.init(tmp.arena, tmp.arena, types, .@"comptime");
+    var gen = Codegen.init(self.getGpa(), tmp.arena, types, .@"comptime");
     defer gen.deinit();
 
     var ret: Codegen.Value = undefined;
@@ -200,6 +217,9 @@ pub fn jitExpr(self: *Comptime, ctx: Codegen.Ctx, value: Ast.Id) struct { u32, T
         }
 
         const token, const params, _ = gen.beginBuilder(tmp.arena, .never, 1, 0);
+        gen.parent_scope = scope;
+        gen.name = name;
+        gen.struct_ret_ptr = null;
 
         params[0] = .int;
         const ptr = gen.bl.addParam(0);
@@ -223,9 +243,7 @@ pub fn jitExpr(self: *Comptime, ctx: Codegen.Ctx, value: Ast.Id) struct { u32, T
 pub fn compileDependencies(self: *Codegen) void {
     while (self.nextTask()) |task| switch (task) {
         .Func => |func| {
-            var tmp = self.bl.func.arena.checkpoint();
             defer {
-                tmp.deinit();
                 self.bl.func.reset();
             }
 
@@ -250,15 +268,15 @@ pub fn compileDependencies(self: *Codegen) void {
     _ = self.types.ct.comptime_code.link(true);
 }
 
-pub fn evalTy(self: *Comptime, ctx: Codegen.Ctx, ty_expr: Ast.Id) Types.Id {
-    const id, _ = self.jitExpr(ctx.addTy(.type), ty_expr);
+pub fn evalTy(self: *Comptime, name: []const u8, scope: Codegen.Scope, ty_expr: Ast.Id) Types.Id {
+    const id, _ = self.jitExpr(name, scope, .{ .ty = .type }, ty_expr);
     var data: [8]u8 = undefined;
     self.runVm(id, &data);
     return @enumFromInt(@as(u64, @bitCast(data)));
 }
 
-pub fn evalGlobal(self: *Comptime, global: *Types.Global, ty: ?Types.Id, value: Ast.Id) void {
-    const id, const fty = self.jitExpr(.{ .scope = global.key.scope, .ty = ty }, value);
+pub fn evalGlobal(self: *Comptime, name: []const u8, global: *Types.Global, ty: ?Types.Id, value: Ast.Id) void {
+    const id, const fty = self.jitExpr(name, .{ .Perm = global.key.scope }, .{ .ty = ty }, value);
     const data = self.getTypes().arena.allocator().alloc(u8, fty.size(self.getTypes())) catch unreachable;
     self.runVm(id, data);
     global.data = data;

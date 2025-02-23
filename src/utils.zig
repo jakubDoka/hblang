@@ -1,9 +1,11 @@
 const std = @import("std");
 
 pub const Arena = struct {
-    start: [*]align(std.mem.page_size) u8,
-    end: [*]align(std.mem.page_size) u8,
+    start: [*]align(page_size) u8,
+    end: [*]align(page_size) u8,
     pos: [*]u8,
+
+    const page_size = std.heap.pageSize();
 
     pub const Scratch = struct {
         prev_pos: [*]u8,
@@ -36,8 +38,8 @@ pub const Arena = struct {
     }
 
     pub fn init(cap: usize) Arena {
-        const pages = std.mem.alignForward(usize, cap, std.mem.page_size);
-        const ptr = std.heap.page_allocator.rawAlloc(pages, std.math.log2_int(usize, std.mem.page_size), @returnAddress()).?;
+        const pages = std.mem.alignForward(usize, cap, page_size);
+        const ptr = std.heap.page_allocator.rawAlloc(pages, .fromByteUnits(page_size), @returnAddress()).?;
         return .{
             .end = @alignCast(ptr + pages),
             .start = @alignCast(ptr),
@@ -47,15 +49,18 @@ pub const Arena = struct {
 
     pub fn allocator(self: *Arena) std.mem.Allocator {
         const alc_impl = enum {
-            fn alloc(ptr: *anyopaque, size: usize, alignment: u8, _: usize) ?[*]u8 {
+            fn alloc(ptr: *anyopaque, size: usize, alignment: std.mem.Alignment, _: usize) ?[*]u8 {
                 const slf: *Arena = @alignCast(@ptrCast(ptr));
-                const alignm = @as(usize, 1) << @intCast(alignment);
+                const alignm = alignment.toByteUnits();
                 slf.pos = @ptrFromInt(std.mem.alignBackward(usize, @intFromPtr(slf.pos - size), alignm));
                 std.debug.assert(@intFromPtr(slf.start) < @intFromPtr(slf.pos));
                 return slf.pos;
             }
-            fn free(_: *anyopaque, _: []u8, _: u8, _: usize) void {}
-            fn resize(_: *anyopaque, _: []u8, _: u8, _: usize, _: usize) bool {
+            fn free(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize) void {}
+            fn remap(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize, _: usize) ?[*]u8 {
+                return null;
+            }
+            fn resize(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize, _: usize) bool {
                 return false;
             }
         };
@@ -65,13 +70,14 @@ pub const Arena = struct {
             .vtable = &.{
                 .alloc = alc_impl.alloc,
                 .free = alc_impl.free,
+                .remap = alc_impl.remap,
                 .resize = alc_impl.resize,
             },
         };
     }
 
     pub fn deinit(self: *Arena) void {
-        std.heap.page_allocator.rawFree(self.start[0 .. self.end - self.start], std.math.log2_int(usize, std.mem.page_size), @returnAddress());
+        std.heap.page_allocator.rawFree(self.start[0 .. self.end - self.start], .fromByteUnits(page_size), @returnAddress());
         self.* = undefined;
     }
 
@@ -246,6 +252,8 @@ pub fn EnumStore(comptime SelfId: type, comptime T: type) type {
 }
 
 pub fn dbg(value: anytype) @TypeOf(value) {
+    if (@TypeOf(value) == []const u8)
+        std.debug.print("{s}\n", .{value});
     std.debug.print("{any}\n", .{value});
     return value;
 }

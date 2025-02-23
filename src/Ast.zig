@@ -85,6 +85,7 @@ pub const Expr = union(Kind) {
     },
     Fn: struct {
         pos: Pos,
+        comptime_args: Idents,
         captures: Idents,
         args: root.EnumSlice(Arg),
         ret: Id,

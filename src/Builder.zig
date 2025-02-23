@@ -32,8 +32,8 @@ pub fn SpecificNode(comptime _: Kind) type {
     return *BuildNode;
 }
 
-pub fn init(arena: *root.Arena) Builder {
-    return .{ .func = .init(arena) };
+pub fn init(gpa: std.mem.Allocator) Builder {
+    return .{ .func = .init(gpa) };
 }
 
 pub fn deinit(self: *Builder) void {
@@ -49,7 +49,7 @@ pub fn begin(self: *Builder, param_count: usize, return_coutn: usize) struct { B
     self.scope = self.func.addNode(.Scope, &.{ ctrl, self.root_mem }, {});
     self.ret = null;
 
-    const alloc = self.func.arena.alloc(DataType, param_count + return_coutn);
+    const alloc = self.func.arena.allocator().alloc(DataType, param_count + return_coutn) catch unreachable;
 
     self.func.params = alloc[0..param_count];
     self.func.returns = alloc[param_count..];

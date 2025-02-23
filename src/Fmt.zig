@@ -136,7 +136,13 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             if (o.op != .@":") try self.buf.appendSlice(" ");
             try self.buf.appendSlice(o.op.repr());
             try self.buf.appendSlice(" ");
-            try self.fmtExprPrec(o.rhs, o.op.precedence());
+            if (o.rhs.tag() == .BinOp and self.ast.exprs.get(o.rhs).BinOp.op.precedence() == o.op.precedence()) {
+                try self.buf.appendSlice("(");
+                try self.fmtExprPrec(o.rhs, 255);
+                try self.buf.appendSlice(")");
+            } else {
+                try self.fmtExprPrec(o.rhs, o.op.precedence());
+            }
             if (prec < o.op.precedence()) try self.buf.appendSlice(")");
         },
         .Use => |use| {

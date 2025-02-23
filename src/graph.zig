@@ -156,7 +156,7 @@ const mod = @This();
 
 pub fn Func(comptime MachNode: type) type {
     return struct {
-        arena: *root.Arena,
+        arena: std.heap.ArenaAllocator,
         interner: InternMap(Uninserter) = .{},
         params: []const mod.DataType = &.{},
         returns: []const mod.DataType = &.{},
@@ -213,9 +213,9 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             pub fn pop(self: *WorkList) ?*Node {
-                var node = self.list.popOrNull() orelse return null;
+                var node = self.list.pop() orelse return null;
                 while (node.id == std.math.maxInt(u16)) {
-                    node = self.list.popOrNull() orelse return null;
+                    node = self.list.pop() orelse return null;
                 }
                 self.in_list.unset(node.id);
                 return node;
@@ -621,17 +621,19 @@ pub fn Func(comptime MachNode: type) type {
             }
         };
 
-        pub fn init(arena: *root.Arena) Self {
-            var self = Self{ .arena = arena };
+        pub fn init(gpa: std.mem.Allocator) Self {
+            var self = Self{ .arena = .init(gpa) };
             self.root = self.addNode(.Start, &.{}, .{});
             return self;
         }
 
         pub fn deinit(self: *Self) void {
+            self.arena.deinit();
             self.* = undefined;
         }
 
         pub fn reset(self: *Self) void {
+            std.debug.assert(self.arena.reset(.retain_capacity));
             self.next_id = 0;
             self.root = self.addNode(.Start, &.{}, .{});
             self.interner = .{};
@@ -855,7 +857,7 @@ pub fn Func(comptime MachNode: type) type {
         pub fn iterPeeps(self: *Self, max_peep_iters: usize, strategy: fn (*Self, *Node, *WorkList) ?*Node) void {
             self.after_gcm.assertUnlocked();
 
-            var tmp = root.Arena.scrath(self.arena);
+            var tmp = root.Arena.scrath(null);
             defer tmp.deinit();
 
             var worklist = WorkList.init(tmp.arena.allocator(), self.next_id) catch unreachable;
@@ -1176,7 +1178,7 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         pub fn fmtScheduled(self: *Self, writer: anytype, colors: std.io.tty.Config) void {
-            var tmp = root.Arena.scrath(self.arena);
+            var tmp = root.Arena.scrath(null);
             defer tmp.deinit();
 
             var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), self.next_id) catch unreachable;
@@ -1196,7 +1198,7 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         pub fn fmtUnscheduled(self: *Self, writer: anytype, colors: std.io.tty.Config) void {
-            var tmp = root.Arena.scrath(self.arena);
+            var tmp = root.Arena.scrath(null);
             defer tmp.deinit();
 
             var worklist = Self.WorkList.init(tmp.arena.allocator(), self.next_id) catch unreachable;

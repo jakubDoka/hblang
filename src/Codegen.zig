@@ -3,6 +3,8 @@ types: *Types,
 work_list: std.ArrayListUnmanaged(Task),
 target: Types.Target,
 comptime abi: Types.Abi = .ableos,
+name: []const u8 = undefined,
+parent_scope: Scope = undefined,
 struct_ret_ptr: ?*Node = undefined,
 scope: std.ArrayListUnmanaged(ScopeEntry) = undefined,
 loops: std.ArrayListUnmanaged(Builder.Loop) = undefined,
@@ -22,7 +24,6 @@ const Func = Builder.Func;
 const Node = Builder.BuildNode;
 const DataType = Builder.DataType;
 const Codegen = @This();
-const panic = std.debug.panic;
 
 const Task = union(enum) {
     Func: *Types.Func,
@@ -35,7 +36,7 @@ const ScopeEntry = struct {
 };
 
 pub fn init(
-    arena: *root.Arena,
+    gpa: std.mem.Allocator,
     scratch: *root.Arena,
     types: *Types,
     target: Types.Target,
@@ -43,7 +44,7 @@ pub fn init(
     return .{
         .types = types,
         .target = target,
-        .bl = .init(arena),
+        .bl = .init(gpa),
         .work_list = .initBuffer(scratch.alloc(Task, 1024)),
     };
 }
@@ -64,7 +65,7 @@ pub fn queue(self: *Codegen, task: Task) void {
 
 pub fn nextTask(self: *Codegen) ?Task {
     while (true) {
-        const task = self.work_list.popOrNull() orelse return null;
+        const task = self.work_list.pop() orelse return null;
         switch (task) {
             inline else => |func| {
                 if (func.completion.get(self.target) == .compiled) continue;
@@ -86,18 +87,20 @@ pub fn beginBuilder(
     self.ret = ret;
     const res = self.bl.begin(param_count, return_count);
 
-    self.scope = .initBuffer(scratch.alloc(ScopeEntry, 1024));
-    self.loops = .initBuffer(scratch.alloc(Builder.Loop, 32));
+    self.scope = .initBuffer(scratch.alloc(ScopeEntry, 128));
+    self.loops = .initBuffer(scratch.alloc(Builder.Loop, 8));
 
     return res;
 }
 
 pub fn build(self: *Codegen, func: *Types.Func) !void {
-    var tmp = root.Arena.scrath(self.bl.func.arena);
+    var tmp = root.Arena.scrath(null);
     defer tmp.deinit();
 
     const param_count, const return_count, const ret_abi = func.computeAbiSize(self.abi, self.types);
     const token, const params, const returns = self.beginBuilder(tmp.arena, func.ret, param_count, return_count);
+    self.parent_scope = .init(.{ .Func = func });
+    self.name = "";
 
     var i: usize = 0;
 
@@ -139,7 +142,7 @@ pub fn build(self: *Codegen, func: *Types.Func) !void {
         ty_idx += 1;
     }
 
-    _ = self.emit(.{ .scope = .init(.{ .Func = func }) }, ast.exprs.get(func.key.ast).Fn.body);
+    _ = self.emit(.{}, ast.exprs.get(func.key.ast).Fn.body);
 
     self.bl.end(token);
 
@@ -167,25 +170,65 @@ pub const Value = struct {
     }
 };
 
+pub const Scope = union(enum) {
+    Tmp: *Codegen,
+    Perm: Types.Id,
+
+    pub fn init(td: Types.Data) Scope {
+        return .{ .Perm = .init(td) };
+    }
+
+    pub fn parent(self: Scope) Scope {
+        return switch (self) {
+            .Perm => |p| .{ .Perm = p.parent() },
+            .Tmp => |t| t.parent_scope,
+        };
+    }
+
+    pub fn perm(self: Scope) Types.Id {
+        return switch (self) {
+            .Perm => |p| p,
+            .Tmp => |t| t.parent_scope.perm(),
+        };
+    }
+
+    pub fn empty(self: Scope) bool {
+        return switch (self) {
+            .Perm => |p| p == .void,
+            .Tmp => false,
+        };
+    }
+
+    pub fn file(self: Scope) Types.File {
+        return switch (self) {
+            .Perm => |p| p.file(),
+            .Tmp => |t| t.parent_scope.file(),
+        };
+    }
+
+    pub fn items(self: Scope) Ast.Slice {
+        return switch (self) {
+            .Perm => |p| p.items(),
+            .Tmp => |t| t.parent_scope.items(),
+        };
+    }
+
+    pub fn findCapture(self: Scope, ast: *const Ast, id: Ast.Ident) ?Types.Id {
+        return switch (self) {
+            .Perm => |p| p.findCapture(ast, id),
+            .Tmp => |t| for (t.scope.items, 0..) |se, i| {
+                if (se.name == id) {
+                    const value = t.bl.getScopeValue(i);
+                    break t.unwrapTyConst(t.bl.addLoad(value, .int));
+                }
+            } else null,
+        };
+    }
+};
+
 pub const Ctx = struct {
-    scope: Types.Id,
     ty: ?Types.Id = null,
     loc: ?*Node = null,
-    name: []const u8 = &.{},
-
-    pub fn forwardScope(self: Ctx) Ctx {
-        return .{ .scope = self.scope };
-    }
-
-    pub fn file(self: Ctx) Types.File {
-        return self.scope.file();
-    }
-
-    pub fn addName(self: Ctx, name: []const u8) Ctx {
-        var v = self;
-        v.name = name;
-        return v;
-    }
 
     pub fn addLoc(self: Ctx, loc: ?*Node) Ctx {
         var v = self;
@@ -196,12 +239,6 @@ pub const Ctx = struct {
     pub fn addTy(self: Ctx, ty: Types.Id) Ctx {
         var v = self;
         v.ty = ty;
-        return v;
-    }
-
-    pub fn stripName(self: Ctx) Ctx {
-        var v = self;
-        v.name = &.{};
         return v;
     }
 };
@@ -242,8 +279,9 @@ fn codePointer(self: *Codegen, ctx: Ctx, pos: usize) Ast.CodePointer {
 }
 
 fn report(self: *Codegen, ctx: Ctx, expr: Ast.Id, comptime fmt: []const u8, args: anytype) void {
+    _ = ctx; // autofix
     self.errored = true;
-    const file = self.types.getFile(ctx.scope.file());
+    const file = self.types.getFile(self.parent_scope.file());
     const line, const col = Ast.lineCol(file.source, file.posOf(expr).index);
 
     self.types.diagnostics.print(
@@ -283,8 +321,12 @@ pub fn emitGenericStore(self: *Codegen, loc: *Node, value: *Value) void {
     }
 }
 
-pub fn resolveTy(self: *Codegen, ctx: Ctx, expr: Ast.Id) Types.Id {
-    return self.types.ct.evalTy(ctx, expr);
+pub fn resolveAnonTy(self: *Codegen, expr: Ast.Id) Types.Id {
+    return self.types.ct.evalTy("", .{ .Tmp = self }, expr);
+}
+
+pub fn resolveTy(self: *Codegen, name: []const u8, expr: Ast.Id) Types.Id {
+    return self.types.ct.evalTy(name, .{ .Tmp = self }, expr);
 }
 
 pub fn emitTyped(self: *Codegen, ctx: Ctx, ty: Types.Id, expr: Ast.Id) Value {
@@ -305,39 +347,37 @@ pub fn lookupScopeItem(self: *Codegen, bsty: Types.Id, name: []const u8) Types.I
     const other_file = bsty.file();
     const other_ast = self.types.getFile(other_file);
     const decl = other_ast.findDecl(bsty.items(), name).?;
-    return self.resolveTy(
-        .{ .name = name, .scope = bsty },
-        other_ast.exprs.get(decl).BinOp.rhs,
-    );
+    return self.types.ct.evalTy(name, .{ .Perm = bsty }, other_ast.exprs.get(decl).BinOp.rhs);
 }
 
 pub fn loadIdent(self: *Codegen, ctx: Ctx, pos: Ast.Pos, id: Ast.Ident) Value {
-    const ast = self.types.getFile(ctx.scope.file());
+    _ = ctx; // autofix
+    const ast = self.types.getFile(self.parent_scope.file());
     for (self.scope.items, 0..) |se, i| {
         if (se.name == id) {
             const value = self.bl.getScopeValue(i);
             return .mkp(se.ty, value);
         }
     } else {
-        var cursor = ctx;
-        const decl = while (cursor.scope != .void) {
-            if (ast.findDecl(cursor.scope.items(), id)) |v| break v;
-            if (cursor.scope.findCapture(ast, id)) |c| return self.emitTyConst(c);
-            cursor.scope = cursor.scope.parent();
+        var cursor = self.parent_scope;
+        const decl = while (!cursor.empty()) {
+            if (ast.findDecl(cursor.items(), id)) |v| break v;
+            if (cursor.findCapture(ast, id)) |c| return self.emitTyConst(c);
+            cursor = cursor.parent();
         } else std.debug.panic("\n{}\n", .{ast.codePointer(pos.index)});
 
         const vari = ast.exprs.get(decl).BinOp;
         const ty: ?Types.Id, const value: Ast.Id = switch (vari.op) {
-            .@":" => .{ self.resolveTy(cursor.stripName(), ast.exprs.get(vari.rhs).BinOp.lhs), ast.exprs.get(vari.rhs).BinOp.rhs },
+            .@":" => .{ self.resolveAnonTy(ast.exprs.get(vari.rhs).BinOp.lhs), ast.exprs.get(vari.rhs).BinOp.rhs },
             .@":=" => .{ null, vari.rhs },
             else => unreachable,
         };
 
         const typ = if (ty) |typ| b: {
-            const global = self.types.resolveGlobal(cursor.scope, ast.tokenSrc(id.pos()), value);
-            self.types.ct.evalGlobal(global.data().Global, typ, value);
+            const global = self.types.resolveGlobal(cursor.perm(), ast.tokenSrc(id.pos()), value);
+            self.types.ct.evalGlobal(ast.tokenSrc(id.pos()), global.data().Global, typ, value);
             break :b global;
-        } else return self.emitTyConst(self.resolveTy(cursor.addName(ast.tokenSrc(id.pos())), value));
+        } else return self.emitTyConst(self.types.ct.evalTy(ast.tokenSrc(id.pos()), cursor, value));
         const global = typ.data().Global;
         self.queue(.{ .Global = global });
         return .mkp(global.ty, self.bl.addGlobalAddr(global.id));
@@ -345,7 +385,7 @@ pub fn loadIdent(self: *Codegen, ctx: Ctx, pos: Ast.Pos, id: Ast.Ident) Value {
 }
 
 pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
-    const ast = self.types.getFile(ctx.scope.file());
+    const ast = self.types.getFile(self.parent_scope.file());
     switch (ast.exprs.get(expr)) {
         .Comment => return .{},
         .Void => return .{},
@@ -370,7 +410,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return .never;
             }
 
-            const ty = ctx.ty orelse self.resolveTy(ctx, e.ty);
+            const ty = ctx.ty orelse self.resolveAnonTy(e.ty);
             if (ty.data() != .Struct) {
                 self.report(ctx, expr, "{} can not be constructed with '.{{..}}'", .{ty});
                 return .never;
@@ -408,7 +448,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return .never;
             }
 
-            const ty = ctx.ty orelse self.resolveTy(ctx, e.ty);
+            const ty = ctx.ty orelse self.resolveAnonTy(e.ty);
             if (ty.data() != .Struct) {
                 self.report(ctx, expr, "{} can not be constructed with '.{{..}}'", .{ty});
                 return .never;
@@ -434,7 +474,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             return .mkp(ty, local);
         },
         .Field => |e| {
-            var base = self.emit(ctx.forwardScope(), e.base);
+            var base = self.emit(.{}, e.base);
 
             if (base.ty.data() == .Ptr) {
                 self.ensureLoaded(&base);
@@ -460,14 +500,14 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
         // #OPS ========================================================================
         .UnOp => |e| switch (e.op) {
-            .@"^" => return self.emitTyConst(self.types.makePtr(self.resolveTy(ctx, e.oper))),
+            .@"^" => return self.emitTyConst(self.types.makePtr(self.resolveAnonTy(e.oper))),
             .@"&" => {
-                const addrd = self.emit(ctx.forwardScope(), e.oper);
+                const addrd = self.emit(.{}, e.oper);
                 return .mkv(self.types.makePtr(addrd.ty), addrd.id.Ptr);
             },
             .@"*" => {
                 // TODO: better type inference
-                var oper = self.emit(ctx.forwardScope(), e.oper);
+                var oper = self.emit(.{}, e.oper);
                 self.ensureLoaded(&oper);
                 const base = oper.ty.data().Ptr.*;
                 return .mkp(base, oper.id.Value);
@@ -484,11 +524,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 const loc = self.bl.addLocal(0);
 
                 var value = if (t == .@":=")
-                    self.emit(ctx.forwardScope().addLoc(loc), e.rhs)
+                    self.emit(.{ .loc = loc }, e.rhs)
                 else b: {
                     const assign = ast.exprs.get(e.rhs).BinOp;
                     std.debug.assert(assign.op == .@"=");
-                    const ty = self.resolveTy(ctx, assign.lhs);
+                    const ty = self.resolveAnonTy(assign.lhs);
                     break :b self.emitTyped(ctx.addLoc(loc), ty, assign.rhs);
                 };
 
@@ -500,17 +540,17 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return .{};
             },
             .@"=" => if (e.lhs.tag() == .Wildcard) {
-                _ = self.emit(ctx.forwardScope(), e.rhs);
+                _ = self.emit(.{}, e.rhs);
                 return .{};
             } else {
-                const loc = self.emit(ctx.forwardScope(), e.lhs);
+                const loc = self.emit(.{}, e.lhs);
 
                 var val = self.emitTyped(ctx, loc.ty, e.rhs);
                 self.emitGenericStore(loc.id.Ptr, &val);
                 return .{};
             },
             else => {
-                var lhs = self.emit(if (e.op.isComparison()) ctx.forwardScope() else ctx, e.lhs);
+                var lhs = self.emit(if (e.op.isComparison()) .{} else ctx, e.lhs);
                 var rhs = self.emit(ctx.addTy(lhs.ty), e.rhs);
                 if (e.op.isComparison() and lhs.ty.isSigned() != rhs.ty.isSigned())
                     self.report(ctx, e.lhs, "mixed sign comparison ({} {})", .{ lhs.ty, rhs.ty });
@@ -571,7 +611,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             var loop = self.bl.addLoopAndBeginBody();
             self.loops.appendAssumeCapacity(loop);
             _ = self.emitTyped(ctx, .void, e.body);
-            loop = self.loops.pop();
+            loop = self.loops.pop().?;
             loop.end(&self.bl);
 
             return .{};
@@ -585,18 +625,18 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             return .{};
         },
         .Call => |e| {
-            var tmp = root.Arena.scrath(self.bl.func.arena);
+            var tmp = root.Arena.scrath(null);
             defer tmp.deinit();
 
             var typ: Types.Id, var caller: ?Value = if (e.called.tag() == .Field) b: {
                 const field = ast.exprs.get(e.called).Field;
-                const value = self.emit(ctx.forwardScope(), field.base);
+                const value = self.emit(.{}, field.base);
                 if (value.ty == .type) {
                     break :b .{ self.lookupScopeItem(self.unwrapTyConst(value.id.Value), ast.tokenSrc(field.field.index)), null };
                 }
                 break :b .{ self.lookupScopeItem(value.ty, ast.tokenSrc(field.field.index)), value };
             } else b: {
-                break :b .{ self.resolveTy(ctx, e.called), null };
+                break :b .{ self.resolveAnonTy(e.called), null };
             };
 
             var computed_args: ?[]Value = null;
@@ -607,36 +647,35 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 const tmpl_file = self.types.getFile(tmpl.key.file);
                 const tmpl_ast = tmpl_file.exprs.getTyped(.Fn, tmpl.key.ast).?;
 
-                const captures = tmp.arena.alloc(Types.Id, tmpl_ast.captures.len());
-                const arg_tys = tmp.arena.alloc(Types.Id, tmpl_ast.args.len() - tmpl_ast.captures.len());
+                const captures = tmp.arena.alloc(Types.Id, tmpl_ast.comptime_args.len());
+                const arg_tys = tmp.arena.alloc(Types.Id, tmpl_ast.args.len() - captures.len);
                 const arg_exprs = tmp.arena.alloc(Value, arg_tys.len);
 
                 var capture_idx: usize = 0;
                 var arg_idx: usize = 0;
                 for (tmpl_file.exprs.view(tmpl_ast.args), ast.exprs.view(e.args)) |param, arg| {
                     if (tmpl_file.exprs.get(param.bindings).Ident.pos.indented) {
-                        captures[capture_idx] = self.resolveTy(ctx, arg);
+                        captures[capture_idx] = self.resolveAnonTy(arg);
 
                         std.debug.assert(scope.key.capture_idents.len() == scope.key.captures.len);
                         capture_idx += 1;
-                        scope.key.capture_idents = tmpl_ast.captures.slice(0, capture_idx);
+                        scope.key.capture_idents = tmpl_ast.comptime_args.slice(0, capture_idx);
                         scope.key.captures = captures[0..capture_idx];
                     } else {
                         // this is in anticipation of the @Any
-                        arg_tys[arg_idx] = self.resolveTy(.{ .scope = .init(.{ .Template = &scope }) }, param.ty);
+                        arg_tys[arg_idx] = self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = &scope }) }, param.ty);
                         arg_exprs[arg_idx] = self.emitTyped(ctx, arg_tys[arg_idx], arg);
                         arg_idx += 1;
                     }
                 }
 
-                std.debug.assert(scope.key.capture_idents.len() == scope.key.captures.len);
-                const ret = self.resolveTy(.{ .scope = .init(.{ .Template = &scope }) }, tmpl_ast.ret);
+                const ret = self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = &scope }) }, tmpl_ast.ret);
 
                 const slot, const alloc = self.types.intern(.Func, .{
                     .scope = tmpl.key.scope,
                     .file = tmpl.key.file,
                     .ast = tmpl.key.ast,
-                    .capture_idents = tmpl_ast.captures,
+                    .capture_idents = tmpl_ast.comptime_args,
                     .captures = captures,
                 });
 
@@ -753,7 +792,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .Buty => |e| return self.emitTyConst(.fromLexeme(e.bt)),
         .Struct => |e| {
-            var tmp = root.Arena.scrath(self.bl.func.arena);
+            var tmp = root.Arena.scrath(null);
             defer tmp.deinit();
 
             const prefix = 3;
@@ -762,11 +801,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             @memset(args.returns, .int);
 
             args.arg_slots[0] = self.bl.addIntImm(.int, @intFromEnum(Comptime.InteruptCode.Struct));
-            args.arg_slots[1] = self.bl.addIntImm(.int, @bitCast(@intFromEnum(ctx.scope)));
+            args.arg_slots[1] = self.bl.addIntImm(.int, @bitCast(@intFromEnum(self.parent_scope.perm())));
             args.arg_slots[2] = self.bl.addIntImm(.int, @as(u32, @bitCast(expr)));
 
             for (ast.exprs.view(e.captures), args.arg_slots[prefix..]) |id, *slot| {
-                var val = self.loadIdent(ctx.forwardScope(), .init(id.pos()), id);
+                var val = self.loadIdent(.{}, .init(id.pos()), id);
                 self.ensureLoaded(&val);
                 slot.* = val.id.Value;
             }
@@ -774,38 +813,50 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             const rets = self.bl.addCall(Comptime.eca, args);
             return .mkv(.type, rets[0]);
         },
-        .Fn => |e| if (e.captures.len() != 0) {
+        .Fn => |e| if (e.comptime_args.len() != 0) {
             const slot, _ = self.types.intern(.Template, .{
-                .scope = ctx.scope,
-                .file = ctx.file(),
+                .scope = self.parent_scope.perm(),
+                .file = self.parent_scope.file(),
                 .ast = expr,
                 .capture_idents = .{},
                 .captures = &.{},
             });
             return self.emitTyConst(slot.key_ptr.*);
         } else {
+            var tmp = root.Arena.scrath(null);
+            defer tmp.deinit();
+
+            const captures = tmp.arena.alloc(Types.Id, e.captures.len());
+
+            for (ast.exprs.view(e.captures), captures) |id, *slot| {
+                var val = self.loadIdent(.{}, .init(id.pos()), id);
+                self.ensureLoaded(&val);
+                slot.* = self.unwrapTyConst(val.id.Value);
+            }
+
             const slot, const alloc = self.types.intern(.Func, .{
-                .scope = ctx.scope,
-                .file = ctx.file(),
+                .scope = self.parent_scope.perm(),
+                .file = self.parent_scope.file(),
                 .ast = expr,
-                .capture_idents = .{},
-                .captures = &.{},
+                .capture_idents = e.captures,
+                .captures = captures,
             });
             const id = slot.key_ptr.*;
             if (!slot.found_existing) {
                 const args = self.types.arena.alloc(Types.Id, e.args.len());
                 for (ast.exprs.view(e.args), args) |argid, *arg| {
                     const ty = argid.ty;
-                    arg.* = self.resolveTy(ctx.stripName(), ty);
+                    arg.* = self.resolveAnonTy(ty);
                 }
-                const ret = self.resolveTy(ctx.stripName(), e.ret);
+                const ret = self.resolveAnonTy(e.ret);
                 alloc.* = .{
                     .id = @intCast(self.types.funcs.items.len),
                     .key = alloc.key,
                     .args = args,
                     .ret = ret,
-                    .name = ctx.name,
+                    .name = self.name,
                 };
+                alloc.key.captures = self.types.arena.dupe(Types.Id, alloc.key.captures);
                 self.types.funcs.append(self.types.arena.allocator(), alloc) catch unreachable;
             }
             return self.emitTyConst(id);
@@ -815,7 +866,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .Directive => |e| {
             if (std.mem.eql(u8, ast.tokenSrc(e.pos.index), "@CurrentScope")) {
-                return self.emitTyConst(ctx.scope);
+                return self.emitTyConst(self.parent_scope.perm());
             } else unreachable;
         },
         else => std.debug.panic("{any}\n", .{ast.exprs.get(expr)}),

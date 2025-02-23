@@ -64,6 +64,7 @@ pub fn build(b: *std.Build) !void {
     const fuzz = b.addExecutable(.{
         .name = "fuzz",
         .root_source_file = b.path("fuzz.zig"),
+        .single_threaded = true,
         .target = target,
         .optimize = optimize,
     });
@@ -92,6 +93,8 @@ pub fn build(b: *std.Build) !void {
         .target = b.graph.host,
         .optimize = optimize,
         .filter = test_filter,
+        .use_llvm = false,
+        .use_lld = false,
     });
     unit_tests.step.dependOn(vendored_tests);
     unit_tests.step.dependOn(tests);

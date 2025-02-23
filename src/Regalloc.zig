@@ -41,7 +41,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u8 {
         }
     };
 
-    var tmp = root.Arena.scrath(func.arena);
+    var tmp = root.Arena.scrath(null);
     defer tmp.deinit();
 
     const instrs = tmp.arena.alloc(Instr, func.instr_count);
@@ -138,7 +138,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u8 {
         }
     }
 
-    const colors = func.arena.alloc(u8, func.instr_count);
+    const colors = func.arena.allocator().alloc(u8, func.instr_count) catch unreachable;
     @memset(colors, 0);
     for (interference_table, colors, 0..) |r, *c, j| {
         var selection_set: usize = 0;

@@ -130,10 +130,11 @@ pub fn testBuilder(
     var func_arena = root.Arena.scrath(null);
     defer func_arena.deinit();
 
-    var cg = Codegen.init(func_arena.arena, func_arena.arena, &types, .runtime);
+    var cg = Codegen.init(gpa, func_arena.arena, &types, .runtime);
     defer cg.deinit();
 
-    const entry = cg.resolveTy(.{ .scope = types.getScope(.root), .name = "main" }, fn_ast).data().Func;
+    cg.parent_scope = .{ .Perm = types.getScope(.root) };
+    const entry = cg.resolveTy("main", fn_ast).data().Func;
     cg.work_list.appendAssumeCapacity(.{ .Func = entry });
 
     var hbgen = HbvmGen.init(gpa);
@@ -141,9 +142,7 @@ pub fn testBuilder(
 
     while (cg.nextTask()) |task| switch (task) {
         .Func => |func| {
-            var tmp = cg.bl.func.arena.checkpoint();
             defer {
-                tmp.deinit();
                 cg.bl.func.reset();
             }
 
@@ -203,6 +202,7 @@ pub fn testBuilder(
     var vm = Vm{};
     vm.ip = stack_end;
     vm.fuel = 1024 * 10;
+    @memset(&vm.regs.values, 0);
     vm.regs.set(.stack_addr, stack_end);
     var ctx = Vm.SafeContext{
         .writer = if (verbose) output else std.io.null_writer.any(),
