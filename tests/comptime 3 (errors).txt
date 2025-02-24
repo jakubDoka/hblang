@@ -1,15 +1,6 @@
-comptime 3 (errors):6:2: expected type got uint
-    some_int := 1
-    ^
-comptime 3 (errors):8:19: ...because it is captured by this function
+comptime 3 (errors):9:10: can't access this value, (yet)
+        return some_int
+               ^
+comptime 3 (errors):8:30: function is missing a return value since uint has more then 1 possible value
     not_a_closure := fn(): uint {
-                     ^
-comptime 3 (errors):8:2: cant capture non-type value
-    not_a_closure := fn(): uint {
-    ^
-comptime 3 (errors):12:9: expected type got void
-    return not_a_closure()
-           ^
-comptime 3 (errors):5:20: function is missing a return value since uint has more then 1 possible value
-main := fn(): uint {
-                   ^
+                                ^

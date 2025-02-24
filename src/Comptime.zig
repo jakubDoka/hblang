@@ -3,6 +3,7 @@ comptime_code: HbvmGen,
 
 const std = @import("std");
 const isa = @import("isa.zig");
+const graph = @import("graph.zig");
 const root = @import("utils.zig");
 const Codegen = @import("Codegen.zig");
 const Types = @import("Types.zig");
@@ -24,7 +25,8 @@ pub fn init(gpa: std.mem.Allocator) Comptime {
     var self = Comptime{ .comptime_code = .init(gpa) };
     self.comptime_code.out.resize(stack_size) catch unreachable;
     self.comptime_code.out.items[self.comptime_code.out.items.len - 1] = @intFromEnum(isa.Op.tx);
-    self.vm.regs.set(.stack_addr, stack_size - 1);
+    self.comptime_code.out.items[self.comptime_code.out.items.len - 2] = @intFromEnum(isa.Op.eca);
+    self.vm.regs.set(.stack_addr, stack_size - 2);
     return self;
 }
 
@@ -67,10 +69,14 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) u64 {
                 std.debug.assert(call.kind == .Call);
                 std.debug.assert(call.extra(.Call).ret_count == 1);
 
-                const func = types.funcs.items[call.extra(.Call).id];
-                if (func.completion.get(.@"comptime") == .queued) {
-                    self.jitFunc(func);
-                    std.debug.assert(func.completion.get(.@"comptime") == .compiled);
+                var ret_ty: graph.DataType = .int;
+                if (call.extra(.Call).id != eca) {
+                    const func = types.funcs.items[call.extra(.Call).id];
+                    ret_ty = abi.categorize(func.ret, types).ByValue;
+                    if (func.completion.get(.@"comptime") == .queued) {
+                        self.jitFunc(func);
+                        std.debug.assert(func.completion.get(.@"comptime") == .compiled);
+                    }
                 }
 
                 var requeued = false;
@@ -86,11 +92,20 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) u64 {
 
                 if (requeued) continue;
 
-                types.ct.runVm("", func.id, &.{});
+                types.ct.runVm("", call.extra(.Call).id, &.{});
 
                 const ret = types.ct.vm.regs.get(.ret(0));
-                const ret_ty = abi.categorize(func.ret, types).ByValue;
-                eval_stack.appendAssumeCapacity(bl.addIntImm(ret_ty, @bitCast(ret)));
+                const ret_vl = bl.addIntImm(ret_ty, @bitCast(ret));
+                for (tmp.arena.dupe(*Node, curr.outputs())) |o| {
+                    if (o.kind == .Ret) {
+                        bl.func.subsume(ret_vl, o);
+                    }
+                    if (o.kind == .Mem) {
+                        bl.func.subsume(call.inputs()[1].?, o);
+                    }
+                }
+                bl.func.subsume(call.inputs()[0].?, curr);
+                eval_stack.appendAssumeCapacity(ret_vl);
             },
             .Load => {
                 var cursor = curr.mem();
@@ -118,7 +133,7 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
 
     const stack_end = self.vm.regs.get(.stack_addr);
 
-    self.vm.ip = self.comptime_code.funcs.items[entry_id].offset;
+    self.vm.ip = if (entry_id == eca) stack_size - 2 else self.comptime_code.funcs.items[entry_id].offset;
     self.vm.fuel = 1024;
     self.vm.regs.set(.ret_addr, stack_size - 1); // return to hardcoded tx
     self.vm.regs.set(.arg(0, 0), stack_end - return_loc.len);
@@ -164,9 +179,10 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
                     const struct_ast_id: Ast.Id = @bitCast(@as(u32, @truncate(self.ecaArg(2))));
                     const struct_ast = ast.exprs.getTyped(.Struct, struct_ast_id).?;
 
-                    const captures = types.arena.alloc(Types.Id, struct_ast.captures.len());
-                    for (captures, 3..) |*slot, i| {
-                        slot.* = @enumFromInt(self.ecaArg(i));
+                    const captures = types.arena.alloc(Types.Key.Capture, struct_ast.captures.len());
+
+                    for (captures, ast.exprs.view(struct_ast.captures), 0..) |*slot, id, i| {
+                        slot.* = .{ .id = id, .ty = @enumFromInt(self.ecaArg(3 + i * 2)), .value = self.ecaArg(3 + i * 2 + 1) };
                     }
 
                     const res = types.resolveStruct(
@@ -175,7 +191,6 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
                         name,
                         struct_ast_id,
                         struct_ast.fields,
-                        struct_ast.captures,
                         captures,
                     );
 

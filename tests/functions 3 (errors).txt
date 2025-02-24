@@ -1,6 +1,3 @@
-functions 3 (errors):6:2: cant capture non-type value
-    imaginary := /**/
-    ^
 functions 3 (errors):7:2: expected type got void
     imaginary()
     ^

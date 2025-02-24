@@ -221,17 +221,16 @@ pub const Scope = union(enum) {
         };
     }
 
-    pub fn findCapture(self: Scope, ast: *const Ast, id: Ast.Ident) !?Types.Id {
+    pub fn findCapture(self: Scope, id: Ast.Ident) ?Types.Key.Capture {
         return switch (self) {
-            .Perm => |p| p.findCapture(ast, id),
+            .Perm => |p| p.findCapture(id),
             .Tmp => |t| for (t.scope.items, 0..) |se, i| {
                 if (se.name == id) {
                     if (se.ty != .type) {
-                        // TODO: improve this error
-                        return error.@"cant capture non-type value";
+                        return .{ .id = id, .ty = se.ty };
                     }
                     const value = t.bl.getScopeValue(i);
-                    break t.unwrapTyConst(t.bl.addLoad(value, .int));
+                    break .{ .id = id, .ty = .type, .value = @intFromEnum(t.unwrapTyConst(t.bl.addLoad(value, .int))) };
                 }
             } else null,
         };
@@ -388,10 +387,15 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) Value {
         var cursor = self.parent_scope;
         const decl = while (!cursor.empty()) {
             if (ast.findDecl(cursor.items(), id)) |v| break v;
-            if (cursor.findCapture(ast, id) catch |e| {
-                self.report(id, "{s}", .{@errorName(e)});
-                return .{};
-            }) |c| return self.emitTyConst(c);
+            if (cursor.findCapture(id)) |c| {
+                return .{ .ty = c.ty, .id = if (c.ty == .type) .{ .Value = self.bl.addIntImm(.int, @bitCast(c.value)) } else b: {
+                    if (self.target != .@"comptime") {
+                        self.report(pos, "can't access this value, (yet)", .{});
+                        return .never;
+                    }
+                    break :b .{ .Imaginary = {} };
+                } };
+            }
             cursor = cursor.parent();
         } else {
             std.debug.panic("\n{}\n", .{ast.codePointer(pos.index)});
@@ -426,13 +430,13 @@ pub fn instantiateTemplate(
 
     var scope = tmpl.*;
     scope.key.scope = typ;
-    scope.key.capture_idents = .{};
     scope.key.captures = &.{};
 
     const tmpl_file = self.types.getFile(tmpl.key.file);
     const tmpl_ast = tmpl_file.exprs.getTyped(.Fn, tmpl.key.ast).?;
+    const comptime_args = ast.exprs.view(tmpl_ast.comptime_args);
 
-    const captures = tmp.arena.alloc(Types.Id, tmpl_ast.comptime_args.len());
+    const captures = tmp.arena.alloc(Types.Key.Capture, tmpl_ast.comptime_args.len());
     const arg_tys = tmp.arena.alloc(Types.Id, tmpl_ast.args.len() - captures.len);
     const arg_exprs = tmp.arena.alloc(Value, arg_tys.len);
 
@@ -440,11 +444,9 @@ pub fn instantiateTemplate(
     var arg_idx: usize = 0;
     for (tmpl_file.exprs.view(tmpl_ast.args), ast.exprs.view(e.args)) |param, arg| {
         if (tmpl_file.exprs.get(param.bindings).Ident.pos.indented) {
-            captures[capture_idx] = self.resolveAnonTy(arg);
+            captures[capture_idx] = .{ .id = comptime_args[capture_idx], .ty = .type, .value = @intFromEnum(self.resolveAnonTy(arg)) };
 
-            std.debug.assert(scope.key.capture_idents.len() == scope.key.captures.len);
             capture_idx += 1;
-            scope.key.capture_idents = tmpl_ast.comptime_args.slice(0, capture_idx);
             scope.key.captures = captures[0..capture_idx];
         } else {
             // this is in anticipation of the @Any
@@ -462,7 +464,6 @@ pub fn instantiateTemplate(
         .file = tmpl.key.file,
         .ast = tmpl.key.ast,
         .name = "",
-        .capture_idents = tmpl_ast.comptime_args,
         .captures = captures,
     });
 
@@ -474,7 +475,7 @@ pub fn instantiateTemplate(
             .ret = ret,
         };
         self.types.funcs.append(self.types.arena.allocator(), alloc) catch unreachable;
-        alloc.key.captures = self.types.arena.dupe(Types.Id, alloc.key.captures);
+        alloc.key.captures = self.types.arena.dupe(Types.Key.Capture, alloc.key.captures);
     }
 
     return .{ arg_exprs, slot.key_ptr.* };
@@ -609,6 +610,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .Field => |e| {
             var base = self.emit(.{}, e.base);
+
+            if (base.ty == .never) return .never;
 
             if (base.ty.data() == .Ptr) {
                 self.ensureLoaded(&base);
@@ -896,7 +899,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             defer tmp.deinit();
 
             const prefix = 3;
-            const args = self.bl.allocCallArgs(tmp.arena, prefix + e.captures.len(), 1);
+            const args = self.bl.allocCallArgs(tmp.arena, prefix + e.captures.len() * 2, 1);
             @memset(args.params, .int);
             @memset(args.returns, .int);
 
@@ -904,14 +907,16 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             args.arg_slots[1] = self.bl.addIntImm(.int, @bitCast(@intFromEnum(self.parent_scope.perm())));
             args.arg_slots[2] = self.bl.addIntImm(.int, @as(u32, @bitCast(expr)));
 
-            for (ast.exprs.view(e.captures), args.arg_slots[prefix..]) |id, *slot| {
+            for (ast.exprs.view(e.captures), 0..) |id, slot_idx| {
                 var val = self.loadIdent(.init(id.pos()), id);
-                if (self.typeCheck(id, &val, .type)) {
-                    self.report(expr, "...because it is captured by this struct", .{});
-                    return .never;
+                if (val.ty == .type) {
+                    self.ensureLoaded(&val);
+                    args.arg_slots[prefix + slot_idx * 2 ..][0..2].* =
+                        .{ self.emitTyConst(.type).id.Value, val.id.Value };
+                } else {
+                    args.arg_slots[prefix + slot_idx * 2 ..][0..2].* =
+                        .{ self.emitTyConst(val.ty).id.Value, self.bl.addIntImm(.int, 0) };
                 }
-                self.ensureLoaded(&val);
-                slot.* = val.id.Value;
             }
 
             const rets = self.bl.addCall(Comptime.eca, args);
@@ -921,16 +926,16 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             var tmp = root.Arena.scrath(null);
             defer tmp.deinit();
 
-            const captures = tmp.arena.alloc(Types.Id, e.captures.len());
+            const captures = tmp.arena.alloc(Types.Key.Capture, e.captures.len());
 
             for (ast.exprs.view(e.captures), captures) |id, *slot| {
                 var val = self.loadIdent(.init(id.pos()), id);
-                if (self.typeCheck(id, &val, .type)) {
-                    self.report(expr, "...because it is captured by this function", .{});
-                    return .never;
+                if (val.ty == .type) {
+                    self.ensureLoaded(&val);
+                    slot.* = .{ .id = id, .ty = .type, .value = @intFromEnum(self.unwrapTyConst(val.id.Value)) };
+                } else {
+                    slot.* = .{ .id = id, .ty = val.ty };
                 }
-                self.ensureLoaded(&val);
-                slot.* = self.unwrapTyConst(val.id.Value);
             }
 
             if (e.comptime_args.len() != 0) {
@@ -939,11 +944,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     .file = self.parent_scope.file(),
                     .ast = expr,
                     .name = self.name,
-                    .capture_idents = e.captures,
                     .captures = captures,
                 });
                 if (!slot.found_existing) {
-                    alloc.key.captures = self.types.arena.dupe(Types.Id, alloc.key.captures);
+                    alloc.key.captures = self.types.arena.dupe(Types.Key.Capture, alloc.key.captures);
                 }
                 return self.emitTyConst(slot.key_ptr.*);
             } else {
@@ -952,7 +956,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     .file = self.parent_scope.file(),
                     .ast = expr,
                     .name = self.name,
-                    .capture_idents = e.captures,
                     .captures = captures,
                 });
                 const id = slot.key_ptr.*;
@@ -969,7 +972,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                         .args = args,
                         .ret = ret,
                     };
-                    alloc.key.captures = self.types.arena.dupe(Types.Id, alloc.key.captures);
+                    alloc.key.captures = self.types.arena.dupe(Types.Key.Capture, alloc.key.captures);
                     self.types.funcs.append(self.types.arena.allocator(), alloc) catch unreachable;
                 }
                 return self.emitTyConst(id);
@@ -981,6 +984,9 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         .Directive => |e| {
             if (std.mem.eql(u8, ast.tokenSrc(e.pos.index), "@CurrentScope")) {
                 return self.emitTyConst(self.parent_scope.perm());
+            } else if (std.mem.eql(u8, ast.tokenSrc(e.pos.index), "@TypeOf")) {
+                const ty = self.types.ct.jitExpr("", .{ .Tmp = self }, .{}, ast.exprs.view(e.args)[0]).?[1];
+                return self.emitTyConst(ty);
             } else unreachable;
         },
         else => std.debug.panic("{any}\n", .{ast.exprs.get(expr)}),

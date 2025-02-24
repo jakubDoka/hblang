@@ -3,15 +3,15 @@ main:
      addi64 $254, $254, -32
        li64 $32, 9
          cp $2, $32
-        jal $31, $0, :main.some_fn(some_int: uint)(ui: uint)
+        jal $31, $0, :main.some_fn(some_int = uint)(ui = uint)
          cp $32, $1
        li64 $33, 5
          cp $2, $33
-        jal $31, $0, :main.some_fn(some_int: uint)(ui: uint)
+        jal $31, $0, :main.some_fn(some_int = uint)(ui = uint)
          cp $33, $1
        li64 $34, 7
          cp $2, $34
-        jal $31, $0, :main.some_fn(some_int: uint)(ui: uint)
+        jal $31, $0, :main.some_fn(some_int = uint)(ui = uint)
          cp $34, $1
       add64 $33, $33, $34
       sub64 $32, $32, $33
@@ -19,7 +19,7 @@ main:
      addi64 $254, $254, 32
          ld $31, $254, -32, 32
          tx
-main.some_fn(some_int: uint)(ui: uint):
+main.some_fn(some_int = uint)(ui = uint):
          cp $13, $2
      addi64 $13, $13, 1
       mul64 $13, $13, $13

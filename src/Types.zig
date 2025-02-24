@@ -64,21 +64,29 @@ pub const Key = struct {
     scope: Id,
     ast: Ast.Id,
     name: []const u8,
-    capture_idents: Ast.Idents,
-    captures: []const Id,
+    captures: []const Capture,
+
+    pub const Capture = struct {
+        id: Ast.Ident,
+        ty: Id,
+        value: u64 = 0,
+    };
 
     pub const dummy = Key{
         .file = .root,
         .scope = .void,
         .ast = .zeroSized(.Void),
         .name = "",
-        .capture_idents = .{},
         .captures = &.{},
     };
 
     pub fn eql(self: Key, other: Key) bool {
         return self.file == other.file and self.scope == other.scope and self.ast == other.ast and
-            std.mem.eql(Id, self.captures, other.captures);
+            self.captures.len == other.captures.len and
+            for (self.captures, other.captures) |a, b|
+        {
+            if (!std.meta.eql(a, b)) return false;
+        } else true;
     }
 };
 
@@ -210,18 +218,18 @@ pub const Id = enum(usize) {
         };
     }
 
-    pub fn captures(self: Id) []const Id {
+    pub fn captures(self: Id) []const Key.Capture {
         return switch (self.data()) {
             .Global, .Builtin, .Ptr => unreachable,
             inline else => |v| v.key.captures,
         };
     }
 
-    pub fn findCapture(self: Id, ast: *const Ast, id: Ast.Ident) ?Id {
+    pub fn findCapture(self: Id, id: Ast.Ident) ?Key.Capture {
         return switch (self.data()) {
             .Global, .Builtin, .Ptr => unreachable,
-            inline else => |v| for (ast.exprs.view(v.key.capture_idents), v.key.captures) |cid, c| {
-                if (cid == id) break c;
+            inline else => |v| for (v.key.captures) |cp| {
+                if (cp.id == id) break cp;
             } else null,
         };
     }
@@ -354,10 +362,10 @@ pub const Id = enum(usize) {
                     }
                     if (b.key.captures.len != 0) {
                         var written_paren = false;
-                        o: for (b.key.captures, self.tys.getFile(b.key.file).exprs.view(b.key.capture_idents)) |k, id| {
+                        o: for (b.key.captures) |capture| {
                             var cursor = b.key.scope;
                             while (cursor != .void and cursor.data() != .Ptr and cursor.data() != .Builtin) {
-                                if (cursor.findCapture(self.tys.getFile(cursor.file()), id) != null) continue :o;
+                                if (cursor.findCapture(capture.id) != null) continue :o;
                                 cursor = cursor.parent();
                             }
 
@@ -366,7 +374,12 @@ pub const Id = enum(usize) {
                                 try writer.writeAll("(");
                                 written_paren = true;
                             }
-                            try writer.print("{s}: {" ++ opts ++ "}", .{ self.tys.getFile(b.key.file).tokenSrc(id.pos()), k.fmt(self.tys) });
+                            const finty: Types.Id = if (capture.ty == .type) @enumFromInt(capture.value) else capture.ty;
+                            const op = if (capture.ty == .type) " =" else ":";
+                            try writer.print(
+                                "{s}{s} {" ++ opts ++ "}",
+                                .{ self.tys.getFile(b.key.file).tokenSrc(capture.id.pos()), op, finty.fmt(self.tys) },
+                            );
                         }
                         if (written_paren) try writer.writeAll(")");
                     }
@@ -511,7 +524,6 @@ pub fn getScope(self: *Types, file: File) Id {
             self.getFile(file).path,
             .zeroSized(.Void),
             self.getFile(file).items,
-            .{},
             &.{},
         );
     }
@@ -552,15 +564,13 @@ pub fn resolveStruct(
     name: []const u8,
     ast: Ast.Id,
     fields: Ast.Slice,
-    capture_idents: Ast.Idents,
-    captures: []const Id,
+    captures: []const Key.Capture,
 ) Id {
     const slot, const alloc = self.intern(.Struct, .{
         .scope = scope,
         .file = file,
         .ast = ast,
         .name = name,
-        .capture_idents = capture_idents,
         .captures = captures,
     });
     if (!slot.found_existing) {
@@ -578,7 +588,6 @@ pub fn resolveGlobal(self: *Types, scope: Id, name: []const u8, ast: Ast.Id) Id 
         .file = scope.file(),
         .ast = ast,
         .name = name,
-        .capture_idents = .{},
         .captures = &.{},
     });
     if (!slot.found_existing) {

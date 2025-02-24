@@ -664,6 +664,17 @@ main := fn(): uint {
 }
 ```
 
+#### comptime 4 (@TypeOf)
+```hb
+main := fn(): uint {
+    some_int := 0
+
+    Ty := struct{.field: @TypeOf(some_int)}
+
+    return Ty.(some_int).field
+}
+```
+
 #### struct operators 1
 ```hb
 expectations := .{
@@ -826,7 +837,7 @@ main := fn(): uint {
   - [ ] nullable types
 - [ ] directives
   - [x] `@use(<string>)`
-  - [ ] `@TypeOf(<expr>)`
+  - [x] `@TypeOf(<expr>)`
   - [ ] `@as(<ty>, <expr>)`
   - [ ] `@intcast(<expr>)`
   - [ ] `@sizeof(<ty>)`
