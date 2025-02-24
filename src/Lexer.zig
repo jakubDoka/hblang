@@ -171,7 +171,7 @@ pub fn next(self: *Lexer) Token {
             0...32 => continue,
             '@' => b: {
                 while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
-                    'a'...'z', 'A'...'Z' => self.cursor += 1,
+                    'a'...'z', 'A'...'Z', '_' => self.cursor += 1,
                     else => break,
                 };
                 break :b .@"@";

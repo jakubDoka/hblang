@@ -994,14 +994,14 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             } else if (eql(u8, name, "@TypeOf")) {
                 const ty = self.types.ct.jitExpr("", .{ .Tmp = self }, .{}, args[0]).?[1];
                 return self.emitTyConst(ty);
-            } else if (eql(u8, name, "@alignOf")) {
+            } else if (eql(u8, name, "@align_of")) {
                 return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(self.resolveAnonTy(args[0]).alignment(self.types))));
-            } else if (eql(u8, name, "@sizeOf")) {
+            } else if (eql(u8, name, "@size_of")) {
                 return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(self.resolveAnonTy(args[0]).size(self.types))));
             } else if (eql(u8, name, "@as")) {
                 const ty = self.resolveAnonTy(args[0]);
                 return self.emitTyped(ctx, ty, args[1]);
-            } else unreachable;
+            } else std.debug.panic("unhandled directive {s}", .{name});
         },
         else => std.debug.panic("{any}\n", .{ast.exprs.get(expr)}),
     }

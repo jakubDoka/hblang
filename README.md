@@ -767,14 +767,14 @@ main := fn(): uint {
 }
 ```
 
-#### directives 1 (@sizeOf, @alignOf)
+#### directives 1 (@size_of, @align_of)
 ```hb
 expectations := .{
     .return_value: 3;
 }
 
 main := fn(): uint {
-    return @sizeOf(struct{.b: u16; .a: u8}) - @alignOf(u8)
+    return @size_of(struct{.b: u16; .a: u8}) - @align_of(u8)
 }
 ```
 
@@ -864,15 +864,15 @@ main := fn(): uint {
   - [x] `@use(<string>)`
   - [x] `@TypeOf(<expr>)`
   - [x] `@as(<ty>, <expr>)`
-  - [ ] `@intCast(<expr>)`
-  - [X] `@sizeOf(<ty>)`
-  - [X] `@alignOf(<ty>)`
-  - [ ] `@bitCast(<expr>)`
+  - [ ] `@int_cast(<expr>)`
+  - [x] `@size_of(<ty>)`
+  - [x] `@align_of(<ty>)`
+  - [ ] `@bit_cast(<expr>)`
   - [ ] `@eca(...<expr>)`
   - [ ] `@embed(<string>)`
   - [ ] `@inline(<func>, ...<args>)`
-  - [ ] `@lenOf(<ty>)`
-  - [ ] `@kindOf(<ty>)`
+  - [ ] `@len_of(<ty>)`
+  - [ ] `@kind_of(<ty>)`
   - [ ] `@Any()`
   - [ ] `@error(...<expr>)`
   - [ ] `@ChildOf(<ty>)`
