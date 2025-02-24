@@ -63,6 +63,7 @@ pub const Key = struct {
     file: File,
     scope: Id,
     ast: Ast.Id,
+    name: []const u8,
     capture_idents: Ast.Idents,
     captures: []const Id,
 
@@ -70,6 +71,7 @@ pub const Key = struct {
         .file = .root,
         .scope = .void,
         .ast = .zeroSized(.Void),
+        .name = "",
         .capture_idents = .{},
         .captures = &.{},
     };
@@ -84,7 +86,6 @@ pub const Struct = struct {
     key: Key,
 
     ast_fields: Ast.Slice,
-    name: []const u8,
     fields: ?[]const Field = null,
 
     pub const Field = struct {
@@ -126,7 +127,6 @@ pub const Template = struct {
 pub const Func = struct {
     key: Key,
     id: u32,
-    name: []const u8,
     args: []Id,
     ret: Id,
     completion: std.EnumArray(Target, CompileState) = .{ .values = .{ .queued, .queued } },
@@ -146,7 +146,6 @@ pub const Global = struct {
     // captures are extra but whatever for now
     key: Key,
     id: u32,
-    name: []const u8,
     ty: Id = .void,
     data: []const u8 = &.{},
     completion: std.EnumArray(Target, CompileState) = .{ .values = .{ .queued, .queued } },
@@ -322,15 +321,55 @@ pub const Id = enum(usize) {
         return error.@"incompatible types";
     }
 
-    pub fn format(self: *const Id, comptime _: anytype, _: anytype, writer: anytype) !void {
-        try switch (self.data()) {
-            .Ptr => |b| writer.print("^{}", .{b}),
-            .Builtin => |b| writer.writeAll(@tagName(b)),
-            .Struct => |b| writer.writeAll(b.name),
-            .Template => |b| writer.print("{}", .{b}),
-            .Func => |b| writer.print("{}", .{b}),
-            .Global => |b| writer.print("{}", .{b}),
-        };
+    pub const Fmt = struct {
+        self: Id,
+        tys: *Types,
+
+        pub fn format(self: *const Fmt, comptime opts: []const u8, _: anytype, writer: anytype) !void {
+            try switch (self.self.data()) {
+                .Ptr => |b| writer.print("^{" ++ opts ++ "}", .{b.fmt(self.tys)}),
+                .Builtin => |b| writer.writeAll(@tagName(b)),
+                inline .Func, .Global, .Template, .Struct => |b| {
+                    if (b.key.scope != .void) {
+                        try writer.print("{" ++ opts ++ "}", .{b.key.scope.fmt(self.tys)});
+                    }
+                    if (b.key.name.len != 0) {
+                        if (b.key.scope != .void and (b.key.scope.data() != .Struct or b.key.scope.data().Struct.key.scope != .void or
+                            comptime !std.mem.eql(u8, opts, "test"))) try writer.writeAll(".");
+                        if (b.key.scope != .void) {
+                            try writer.print("{s}", .{b.key.name});
+                        } else {
+                            if (comptime !std.mem.eql(u8, opts, "test")) {
+                                try writer.print("\"{s}\"", .{b.key.name});
+                            }
+                        }
+                    }
+                    if (b.key.captures.len != 0) {
+                        var written_paren = false;
+                        o: for (b.key.captures, self.tys.getFile(b.key.file).exprs.view(b.key.capture_idents)) |k, id| {
+                            var cursor = b.key.scope;
+                            while (cursor != .void and cursor.data() != .Ptr and cursor.data() != .Builtin) {
+                                if (cursor.findCapture(self.tys.getFile(cursor.file()), id) != null) continue :o;
+                                cursor = cursor.parent();
+                            }
+
+                            if (written_paren) try writer.writeAll(", ");
+                            if (!written_paren) {
+                                try writer.writeAll("(");
+                                written_paren = true;
+                            }
+                            try writer.print("{s}: {" ++ opts ++ "}", .{ self.tys.getFile(b.key.file).tokenSrc(id.pos()), k.fmt(self.tys) });
+                        }
+                        if (written_paren) try writer.writeAll(")");
+                    }
+                    return;
+                },
+            };
+        }
+    };
+
+    pub fn fmt(self: Id, tys: *Types) Fmt {
+        return .{ .self = self, .tys = tys };
     }
 };
 
@@ -512,6 +551,7 @@ pub fn resolveStruct(
         .scope = scope,
         .file = file,
         .ast = ast,
+        .name = name,
         .capture_idents = capture_idents,
         .captures = captures,
     });
@@ -519,7 +559,6 @@ pub fn resolveStruct(
         alloc.* = .{
             .key = alloc.key,
             .ast_fields = fields,
-            .name = name,
         };
     }
     return slot.key_ptr.*;
@@ -530,6 +569,7 @@ pub fn resolveGlobal(self: *Types, scope: Id, name: []const u8, ast: Ast.Id) Id 
         .scope = scope,
         .file = scope.file(),
         .ast = ast,
+        .name = name,
         .capture_idents = .{},
         .captures = &.{},
     });
@@ -537,7 +577,6 @@ pub fn resolveGlobal(self: *Types, scope: Id, name: []const u8, ast: Ast.Id) Id 
         alloc.* = .{
             .key = alloc.key,
             .id = self.next_global,
-            .name = name,
         };
         self.next_global += 1;
     }

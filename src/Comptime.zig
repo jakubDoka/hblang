@@ -261,7 +261,6 @@ pub fn compileDependencies(self: *Codegen, reloc_util: usize) void {
         },
         .Global => |glob| {
             self.types.ct.comptime_code.emitData(.{
-                .name = glob.name,
                 .id = glob.id,
                 .value = .{ .init = glob.data },
             });

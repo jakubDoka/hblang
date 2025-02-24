@@ -29,11 +29,11 @@ pub fn runTest(name: []const u8, code: []const u8) !void {
     var out = std.ArrayList(u8).init(gpa);
     defer out.deinit();
 
-    errdefer {
-        const stderr = std.io.getStdErr();
-        const colors = std.io.tty.detectConfig(stderr);
-        testBuilder(name, code, gpa, stderr.writer().any(), colors, true) catch unreachable;
-    }
+    //  errdefer {
+    //     const stderr = std.io.getStdErr();
+    //     const colors = std.io.tty.detectConfig(stderr);
+    //     testBuilder(name, code, gpa, stderr.writer().any(), colors, true) catch unreachable;
+    // }
 
     try testBuilder(name, code, gpa, out.writer().any(), .no_color, false);
 
@@ -140,6 +140,9 @@ pub fn testBuilder(
     var hbgen = HbvmGen.init(gpa);
     var gen = Mach.init(&hbgen);
 
+    var syms = std.heap.ArenaAllocator.init(gpa);
+    defer syms.deinit();
+
     while (cg.nextTask()) |task| switch (task) {
         .Func => |func| {
             defer {
@@ -172,14 +175,14 @@ pub fn testBuilder(
 
             gen.emitFunc(&cg.bl.func, .{
                 .id = func.id,
-                .name = func.name,
+                .name = try std.fmt.allocPrint(syms.allocator(), "{test}", .{Types.Id.init(.{ .Func = func }).fmt(&types)}),
                 .entry = func.id == entry.id,
                 .optimizations = .none,
             });
         },
         .Global => |g| {
             gen.emitData(.{
-                .name = g.name,
+                .name = try std.fmt.allocPrint(syms.allocator(), "{test}", .{Types.Id.init(.{ .Global = g }).fmt(&types)}),
                 .id = g.id,
                 .value = .{ .init = g.data },
             });

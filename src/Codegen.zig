@@ -432,6 +432,7 @@ pub fn instantiateTemplate(
         .scope = typ,
         .file = tmpl.key.file,
         .ast = tmpl.key.ast,
+        .name = "",
         .capture_idents = tmpl_ast.comptime_args,
         .captures = captures,
     });
@@ -442,7 +443,6 @@ pub fn instantiateTemplate(
             .key = alloc.key,
             .args = self.types.arena.dupe(Types.Id, arg_tys),
             .ret = ret,
-            .name = "",
         };
         self.types.funcs.append(self.types.arena.allocator(), alloc) catch unreachable;
         alloc.key.captures = self.types.arena.dupe(Types.Id, alloc.key.captures);
@@ -589,6 +589,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         .BinOp => |e| switch (e.op) {
             inline .@":=", .@":" => |t| {
                 const loc = self.bl.addLocal(0);
+
+                const prev_name = self.name;
+                self.name = ast.tokenSrc(ast.exprs.get(e.lhs).Ident.id.pos());
+                defer self.name = prev_name;
 
                 var value = if (t == .@":=")
                     self.emit(.{ .loc = loc }, e.rhs)
@@ -838,6 +842,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     .scope = self.parent_scope.perm(),
                     .file = self.parent_scope.file(),
                     .ast = expr,
+                    .name = self.name,
                     .capture_idents = e.captures,
                     .captures = captures,
                 });
@@ -850,6 +855,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     .scope = self.parent_scope.perm(),
                     .file = self.parent_scope.file(),
                     .ast = expr,
+                    .name = self.name,
                     .capture_idents = e.captures,
                     .captures = captures,
                 });
@@ -866,7 +872,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                         .key = alloc.key,
                         .args = args,
                         .ret = ret,
-                        .name = self.name,
                     };
                     alloc.key.captures = self.types.arena.dupe(Types.Id, alloc.key.captures);
                     self.types.funcs.append(self.types.arena.allocator(), alloc) catch unreachable;

@@ -52,7 +52,6 @@ fn fuzz(seed: usize, arena: std.mem.Allocator) !void {
         f.* = .{
             .id = @intCast(i),
             .key = .dummy,
-            .name = "",
             .args = try arena.alloc(Types.Id, rng.intRangeAtMost(usize, 0, max_arg_count)),
             .ret = return_types[rng.intRangeLessThan(usize, 0, return_types.len)],
         };
@@ -66,7 +65,6 @@ fn fuzz(seed: usize, arena: std.mem.Allocator) !void {
     std.debug.assert(structs.len == 2);
     structs[0] = .{
         .key = .dummy,
-        .name = "foo",
         .fields = b: {
             const mem = try arena.alloc(Types.Struct.Field, 2);
             mem[0] = .{
@@ -83,7 +81,6 @@ fn fuzz(seed: usize, arena: std.mem.Allocator) !void {
     };
     structs[1] = .{
         .key = .dummy,
-        .name = "bar",
         .fields = b: {
             const mem = try arena.alloc(Types.Struct.Field, 2);
             mem[0] = .{
