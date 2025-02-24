@@ -394,18 +394,15 @@ fn parseListTyped(
     comptime Elem: type,
     comptime parser: fn (*Parser) Error!Elem,
 ) Error!root.EnumSlice(Elem) {
+    const pos = self.cur.pos;
     if (start) |s| _ = try self.expectAdvance(s);
-    self.list_pos = .{ .index = @intCast(self.cur.pos) };
     var buf = std.ArrayListUnmanaged(Elem){};
+    var indented = false;
     while (!self.tryAdvance(end)) {
         try buf.append(self.arena.allocator(), try parser(self));
-        if (self.tryAdvance(end)) {
-            self.list_pos.indented = sep == null;
-            break;
-        }
-        if (sep) |s| _ = self.tryAdvance(s);
-        self.list_pos.indented = true;
+        if (sep) |s| indented = self.tryAdvance(s);
     }
+    self.list_pos = .{ .index = @intCast(pos), .indented = indented };
     return try self.store.allocSlice(Elem, self.gpa, buf.items);
 }
 

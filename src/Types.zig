@@ -233,6 +233,14 @@ pub const Id = enum(usize) {
         };
     }
 
+    pub fn isBinaryOperand(self: Id) bool {
+        return switch (self.data()) {
+            .Builtin => self.isInteger() or self == .bool,
+            .Struct, .Ptr => true,
+            else => false,
+        };
+    }
+
     pub fn isInteger(self: Id) bool {
         return self.isUnsigned() or self.isSigned();
     }

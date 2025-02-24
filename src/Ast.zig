@@ -234,7 +234,8 @@ pub fn posOf(self: *const Ast, origin: anytype) Pos {
 
 fn posOfPayload(self: *const Ast, v: anytype) Pos {
     return switch (@TypeOf(v)) {
-        void => Pos.init(0),
+        void => .init(0),
+        Ident => .init(v.pos()),
         Pos => v,
         else => |Vt| if (@hasField(Vt, "pos"))
             v.pos

@@ -29,11 +29,11 @@ pub fn runTest(name: []const u8, code: []const u8) !void {
     var out = std.ArrayList(u8).init(gpa);
     defer out.deinit();
 
-    //  errdefer {
-    //     const stderr = std.io.getStdErr();
-    //     const colors = std.io.tty.detectConfig(stderr);
-    //     testBuilder(name, code, gpa, stderr.writer().any(), colors, true) catch unreachable;
-    // }
+    errdefer {
+        const stderr = std.io.getStdErr();
+        const colors = std.io.tty.detectConfig(stderr);
+        testBuilder(name, code, gpa, stderr.writer().any(), colors, true) catch unreachable;
+    }
 
     try testBuilder(name, code, gpa, out.writer().any(), .no_color, false);
 
@@ -108,6 +108,7 @@ pub fn testBuilder(
     const ast = asts[0];
 
     var ret: u64 = 0;
+    var should_error: bool = false;
     if (ast.findDecl(ast.items, "expectations")) |d| {
         const decl = ast.exprs.get(d).BinOp.rhs;
         const ctor = ast.exprs.get(decl).Ctor;
@@ -117,6 +118,10 @@ pub fn testBuilder(
 
             if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "return_value")) {
                 ret = @bitCast(try std.fmt.parseInt(i64, ast.tokenSrc(value.Integer.index), 10));
+            }
+
+            if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "should_error")) {
+                should_error = ast.exprs.get(field.rhs).Bool.value;
             }
         }
     }
@@ -158,7 +163,9 @@ pub fn testBuilder(
             }
 
             if (verbose) try header("UNSCHEDULED SON", output, colors);
-            try cg.build(func);
+            cg.build(func) catch {
+                continue;
+            };
 
             const fnc: *graph.Func(HbvmGen.Node) = @ptrCast(&cg.bl.func);
             if (verbose) fnc.fmtUnscheduled(output, colors);
@@ -188,6 +195,13 @@ pub fn testBuilder(
             });
         },
     };
+
+    try std.testing.expectEqual(should_error, cg.errored);
+    if (cg.errored) {
+        hbgen.out.deinit();
+        hbgen.deinit();
+        return;
+    }
 
     if (verbose) try header("CODEGEN", output, colors);
     const code_len = hbgen.link(0, true);

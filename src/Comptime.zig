@@ -86,7 +86,7 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) u64 {
 
                 if (requeued) continue;
 
-                types.ct.runVm(func.id, &.{});
+                types.ct.runVm("", func.id, &.{});
 
                 const ret = types.ct.vm.regs.get(.ret(0));
                 const ret_ty = abi.categorize(func.ret, types).ByValue;
@@ -100,6 +100,9 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) u64 {
                             cursor = cursor.mem();
                         } else break;
                     } else if (cursor.kind == .Mem) {
+                        if (cursor.inputs()[0].?.kind == .Start) {
+                            unreachable;
+                        }
                         cursor = cursor.inputs()[0].?.inputs()[0].?.inputs()[1].?;
                     } else std.debug.panic("{}\n", .{cursor});
                 }
@@ -110,7 +113,7 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) u64 {
     }
 }
 
-pub fn runVm(self: *Comptime, entry_id: u32, return_loc: []u8) void {
+pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8) void {
     const types = self.getTypes();
 
     const stack_end = self.vm.regs.get(.stack_addr);
@@ -169,7 +172,7 @@ pub fn runVm(self: *Comptime, entry_id: u32, return_loc: []u8) void {
                     const res = types.resolveStruct(
                         scope,
                         scope.file(),
-                        "",
+                        name,
                         struct_ast_id,
                         struct_ast.fields,
                         struct_ast.captures,
@@ -197,7 +200,7 @@ pub fn jitFunc(self: *Comptime, fnc: *Types.Func) void {
     compileDependencies(&gen, self.comptime_code.global_relocs.items.len);
 }
 
-pub fn jitExpr(self: *Comptime, name: []const u8, scope: Codegen.Scope, ctx: Codegen.Ctx, value: Ast.Id) struct { u32, Types.Id } {
+pub fn jitExpr(self: *Comptime, name: []const u8, scope: Codegen.Scope, ctx: Codegen.Ctx, value: Ast.Id) ?struct { u32, Types.Id } {
     const types = self.getTypes();
     const id: u32 = @intCast(types.funcs.items.len);
     types.funcs.append(types.arena.allocator(), undefined) catch unreachable;
@@ -228,6 +231,9 @@ pub fn jitExpr(self: *Comptime, name: []const u8, scope: Codegen.Scope, ctx: Cod
         const ptr = gen.bl.addParam(0);
 
         ret = gen.emit(ctx.addLoc(ptr), value);
+        if (ctx.ty) |ty| {
+            if (gen.typeCheck(value, &ret, ty)) return null;
+        }
         gen.emitGenericStore(ptr, &ret);
 
         gen.bl.end(token);
@@ -271,16 +277,20 @@ pub fn compileDependencies(self: *Codegen, reloc_util: usize) void {
 }
 
 pub fn evalTy(self: *Comptime, name: []const u8, scope: Codegen.Scope, ty_expr: Ast.Id) Types.Id {
-    const id, _ = self.jitExpr(name, scope, .{ .ty = .type }, ty_expr);
+    const id, _ = self.jitExpr(name, scope, .{ .ty = .type }, ty_expr) orelse return .never;
+
     var data: [8]u8 = undefined;
-    self.runVm(id, &data);
+    self.runVm(name, id, &data);
     return @enumFromInt(@as(u64, @bitCast(data)));
 }
 
 pub fn evalGlobal(self: *Comptime, name: []const u8, global: *Types.Global, ty: ?Types.Id, value: Ast.Id) void {
-    const id, const fty = self.jitExpr(name, .{ .Perm = global.key.scope }, .{ .ty = ty }, value);
+    const id, const fty = self.jitExpr(name, .{ .Perm = global.key.scope }, .{ .ty = ty }, value) orelse {
+        global.ty = .never;
+        return;
+    };
     const data = self.getTypes().arena.allocator().alloc(u8, fty.size(self.getTypes())) catch unreachable;
-    self.runVm(id, data);
+    self.runVm(name, id, data);
     global.data = data;
     global.ty = fty;
 }

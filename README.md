@@ -113,6 +113,18 @@ main := fn(): bool {
 }
 ```
 
+#### arithmetic 5 (errors)
+```hb
+expectations := .{
+    .should_error: true;
+}
+
+main := fn(): uint {
+    v := /**/
+    return 1 + v * 10
+}
+```
+
 #### functions 1
 ```hb
 expectations := .{
@@ -159,6 +171,27 @@ add := fn(x: uint): uint {
 
 add := fn(x: uint): uint {
     return x + 1
+}
+```
+
+#### functions 3 (errors)
+```hb
+expectations := .{
+    .should_error: true;
+}
+
+main := fn(): uint {
+    imaginary := /**/
+    imaginary()
+    some_fn()
+    _ = some_fn(0, 0, 0)
+    _ = some_fn(0, 0)
+    vl := some_fn(0, /**/, 0, 0)
+    return some_fn(vl, /**/, 0)
+}
+
+some_fn := fn(a: uint, b: void, c: u8): uint {
+    return
 }
 ```
 
@@ -361,6 +394,17 @@ do_stuff := fn(v: ^uint): uint {
 }
 ```
 
+#### pointers 4 (errors)
+```hb
+expectations := .{
+    .should_error: true;
+}
+
+main := fn(): uint {
+    return *0
+}
+```
+
 #### structs 1
 ```hb
 expectations := .{
@@ -460,6 +504,30 @@ take_pair := fn(pair: Pair): uint {
 
 take_triple := fn(triple: Triple): uint {
     return triple.a + triple.b + triple.c
+}
+```
+
+#### structs 4 (errors)
+```hb
+expectations := .{
+    .should_error: true;
+}
+
+Ty := struct{.a: uint; .b: uint}
+
+main := fn(): uint {
+    _ = .{}
+    _ = .()
+    _ = uint.{}
+    _ = uint.()
+    _ = Ty.{}
+    _ = Ty.()
+    _ = Ty.{.p: 10}
+    _ = Ty.{.a: 1; .b: 2; .p: 10}
+    _ = Ty.{.a: 1; .a: 2}
+    _ = Ty.(.{}, .(), /**/)
+    v := Ty.(0, 0, 0)
+    return Ty.(v, 0)
 }
 ```
 
@@ -579,6 +647,23 @@ main := fn(): uint {
 }
 ```
 
+#### comptime 3 (errors)
+```hb
+expectations := .{
+    .should_error: true;
+}
+
+main := fn(): uint {
+    some_int := 1
+
+    not_a_closure := fn(): uint {
+        return some_int
+    }
+
+    return not_a_closure()
+}
+```
+
 #### struct operators 1
 ```hb
 expectations := .{
@@ -678,7 +763,7 @@ main := fn(): uint {
 - [ ] control flow
   - [x] functions
     - [ ] inlining
-    - [ ] comptime parameters
+    - [x] comptime parameters
   - [x] ifs
     - [ ] comptime
   - [x] loops
@@ -721,9 +806,10 @@ main := fn(): uint {
       - [x] dictionary
       - [x] tuple
     - [ ] default values
-    - [ ] scope
-    - [ ] file
-    - [ ] operators
+    - [x] scope
+    - [x] file
+    - [x] operators
+    - [ ] comparison
   - [ ] enums
     - [ ] specific values
     - [ ] backing integer
