@@ -767,6 +767,31 @@ main := fn(): uint {
 }
 ```
 
+#### directives 1 (@sizeOf, @alignOf)
+```hb
+expectations := .{
+    .return_value: 3;
+}
+
+main := fn(): uint {
+    return @sizeOf(struct{.b: u16; .a: u8}) - @alignOf(u8)
+}
+```
+
+#### directives 2 (@as)
+```hb
+expectations := .{
+    .return_value: 3;
+}
+
+main := fn(): uint {
+    val := @as(struct{.a: uint}, .(3))
+    return val.a
+}
+```
+
+#### 
+
 ## progress
 
 - [ ] diagnostics
@@ -838,16 +863,16 @@ main := fn(): uint {
 - [ ] directives
   - [x] `@use(<string>)`
   - [x] `@TypeOf(<expr>)`
-  - [ ] `@as(<ty>, <expr>)`
-  - [ ] `@intcast(<expr>)`
-  - [ ] `@sizeof(<ty>)`
-  - [ ] `@alignof(<ty>)`
-  - [ ] `@bitcast(<expr>)`
+  - [x] `@as(<ty>, <expr>)`
+  - [ ] `@intCast(<expr>)`
+  - [X] `@sizeOf(<ty>)`
+  - [X] `@alignOf(<ty>)`
+  - [ ] `@bitCast(<expr>)`
   - [ ] `@eca(...<expr>)`
   - [ ] `@embed(<string>)`
   - [ ] `@inline(<func>, ...<args>)`
-  - [ ] `@lenof(<ty>)`
-  - [ ] `@kindof(<ty>)`
+  - [ ] `@lenOf(<ty>)`
+  - [ ] `@kindOf(<ty>)`
   - [ ] `@Any()`
   - [ ] `@error(...<expr>)`
   - [ ] `@ChildOf(<ty>)`

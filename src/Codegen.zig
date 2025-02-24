@@ -982,11 +982,25 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             return self.emitTyConst(self.types.getScope(e.file));
         },
         .Directive => |e| {
-            if (std.mem.eql(u8, ast.tokenSrc(e.pos.index), "@CurrentScope")) {
+            // TODO: type inference
+            // TODO: recovery
+
+            const eql = std.mem.eql;
+            const name = ast.tokenSrc(e.pos.index);
+            const args = ast.exprs.view(e.args);
+
+            if (eql(u8, name, "@CurrentScope")) {
                 return self.emitTyConst(self.parent_scope.perm());
-            } else if (std.mem.eql(u8, ast.tokenSrc(e.pos.index), "@TypeOf")) {
-                const ty = self.types.ct.jitExpr("", .{ .Tmp = self }, .{}, ast.exprs.view(e.args)[0]).?[1];
+            } else if (eql(u8, name, "@TypeOf")) {
+                const ty = self.types.ct.jitExpr("", .{ .Tmp = self }, .{}, args[0]).?[1];
                 return self.emitTyConst(ty);
+            } else if (eql(u8, name, "@alignOf")) {
+                return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(self.resolveAnonTy(args[0]).alignment(self.types))));
+            } else if (eql(u8, name, "@sizeOf")) {
+                return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(self.resolveAnonTy(args[0]).size(self.types))));
+            } else if (eql(u8, name, "@as")) {
+                const ty = self.resolveAnonTy(args[0]);
+                return self.emitTyped(ctx, ty, args[1]);
             } else unreachable;
         },
         else => std.debug.panic("{any}\n", .{ast.exprs.get(expr)}),
