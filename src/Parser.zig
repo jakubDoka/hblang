@@ -215,6 +215,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             const comptime_arg_start = self.comptime_idents.items.len;
             defer self.comptime_idents.items.len = comptime_arg_start;
             const args = try self.parseListTyped(.@"(", .@",", .@")", Ast.Arg, parseArg);
+            const indented_args = self.list_pos.indented;
             _ = try self.expectAdvance(.@":");
             const ret = try self.parseExpr();
 
@@ -232,7 +233,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 .args = args,
                 .comptime_args = comptime_args,
                 .captures = captures,
-                .pos = .{ .index = @intCast(token.pos), .indented = self.list_pos.indented },
+                .pos = .{ .index = @intCast(token.pos), .indented = indented_args },
                 .ret = ret,
                 .body = body,
             } };

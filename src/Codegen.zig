@@ -481,6 +481,52 @@ pub fn instantiateTemplate(
     return .{ arg_exprs, slot.key_ptr.* };
 }
 
+fn pushReturn(cg: *Codegen, call_args: Builder.CallArgs, ret_abi: Types.Abi.Spec, ret: Types.Id, ctx: Ctx) usize {
+    if (ret_abi == .ByRef) {
+        ret_abi.types(call_args.params[0..1]);
+        call_args.arg_slots[0] = ctx.loc orelse cg.bl.addLocal(ret.size(cg.types));
+        return 1;
+    } else {
+        ret_abi.types(call_args.returns);
+        return 0;
+    }
+}
+
+fn pushParam(cg: *Codegen, call_args: Builder.CallArgs, abi: Types.Abi.Spec, idx: usize, value: *Value) usize {
+    abi.types(call_args.params[idx..]);
+    switch (abi) {
+        .Imaginary => {},
+        .ByValue => {
+            cg.ensureLoaded(value);
+            call_args.arg_slots[idx] = value.id.Value;
+        },
+        .ByValuePair => |pair| {
+            for (pair.types, pair.offsets(), 0..) |t, off, j| {
+                call_args.arg_slots[idx + j] =
+                    cg.bl.addFieldLoad(value.id.Ptr, @intCast(off), t);
+            }
+        },
+        .ByRef => call_args.arg_slots[idx] = value.id.Ptr,
+    }
+    return abi.len(false);
+}
+
+fn assembleReturn(cg: *Codegen, id: u32, call_args: Builder.CallArgs, ctx: Ctx, ret: Types.Id, ret_abi: Types.Abi.Spec) Value {
+    const rets = cg.bl.addCall(id, call_args);
+    return switch (ret_abi) {
+        .Imaginary => .{},
+        .ByValue => .mkv(ret, rets[0]),
+        .ByValuePair => |pair| b: {
+            const slot = ctx.loc orelse cg.bl.addLocal(ret.size(cg.types));
+            for (pair.types, pair.offsets(), rets) |ty, off, vl| {
+                cg.bl.addFieldStore(slot, @intCast(off), ty, vl);
+            }
+            break :b .mkp(ret, slot);
+        },
+        .ByRef => .mkp(ret, call_args.arg_slots[0]),
+    };
+}
+
 pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
     const ast = self.ast;
     switch (ast.exprs.get(expr)) {
@@ -811,39 +857,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             const param_count, const return_count, const ret_abi = func.computeAbiSize(self.abi, self.types);
             const args = self.bl.allocCallArgs(tmp.arena, param_count, return_count);
 
-            var i: usize = 0;
-            if (ret_abi == .ByRef) {
-                ret_abi.types(args.params[0..1]);
-                args.arg_slots[i] = ctx.loc orelse self.bl.addLocal(func.ret.size(self.types));
-                i += 1;
-            } else {
-                ret_abi.types(args.returns[0..return_count]);
-            }
-
-            const utils = struct {
-                fn pushParam(cg: *Codegen, call_args: Builder.CallArgs, abi: Types.Abi.Spec, idx: usize, value: *Value) usize {
-                    abi.types(call_args.params[idx..]);
-                    switch (abi) {
-                        .Imaginary => {},
-                        .ByValue => {
-                            cg.ensureLoaded(value);
-                            call_args.arg_slots[idx] = value.id.Value;
-                        },
-                        .ByValuePair => |pair| {
-                            for (pair.types, pair.offsets(), 0..) |t, off, j| {
-                                call_args.arg_slots[idx + j] =
-                                    cg.bl.addFieldLoad(value.id.Ptr, @intCast(off), t);
-                            }
-                        },
-                        .ByRef => call_args.arg_slots[idx] = value.id.Ptr,
-                    }
-                    return abi.len(false);
-                }
-            };
+            var i: usize = self.pushReturn(args, ret_abi, func.ret, ctx);
 
             if (caller) |*value| {
                 const abi = self.abi.categorize(value.ty, self.types);
-                i += utils.pushParam(self, args, abi, i, value);
+                i += self.pushParam(args, abi, i, value);
             }
 
             const args_ast = ast.exprs.view(e.args);
@@ -852,23 +870,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 abi.types(args.params[i..]);
                 var value = if (computed_args) |a| a[k] else self.emitTyped(ctx, ty, args_ast[k]);
                 if (value.ty == .never) return .never;
-                i += utils.pushParam(self, args, abi, i, &value);
+                i += self.pushParam(args, abi, i, &value);
             }
 
-            const rets = self.bl.addCall(func.id, args);
-
-            return switch (ret_abi) {
-                .Imaginary => .{},
-                .ByValue => .mkv(func.ret, rets[0]),
-                .ByValuePair => |pair| b: {
-                    const slot = ctx.loc orelse self.bl.addLocal(func.ret.size(self.types));
-                    for (pair.types, pair.offsets(), rets) |ty, off, vl| {
-                        self.bl.addFieldStore(slot, @intCast(off), ty, vl);
-                    }
-                    break :b .mkp(func.ret, slot);
-                },
-                .ByRef => .mkp(func.ret, args.arg_slots[0]),
-            };
+            return self.assembleReturn(func.id, args, ctx, func.ret, ret_abi);
         },
         .Return => |e| {
             var value = self.emit(.{ .loc = self.struct_ret_ptr, .ty = self.ret }, e.value);
@@ -998,6 +1003,34 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(self.resolveAnonTy(args[0]).alignment(self.types))));
             } else if (eql(u8, name, "@size_of")) {
                 return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(self.resolveAnonTy(args[0]).size(self.types))));
+            } else if (eql(u8, name, "@ecall")) {
+                var tmp = root.Arena.scrath(null);
+                defer tmp.deinit();
+
+                const ret = ctx.ty orelse {
+                    self.report(expr, "type can not be inferred from the context, use `@as(<ty>, @ecall(...))`", .{});
+                    return .never;
+                };
+
+                const arg_nodes = tmp.arena.alloc(Value, args.len);
+                for (args, arg_nodes) |arg, *slot| {
+                    slot.* = self.emit(.{}, arg);
+                }
+
+                const ret_abi = self.abi.categorize(ret, self.types);
+                var param_count: usize = @intFromBool(ret_abi == .ByRef);
+                for (arg_nodes) |nod| param_count += self.abi.categorize(nod.ty, self.types).len(false);
+                const return_count: usize = ret_abi.len(true);
+
+                const call_args = self.bl.allocCallArgs(tmp.arena, param_count, return_count);
+
+                var i: usize = self.pushReturn(call_args, ret_abi, ret, ctx);
+
+                for (arg_nodes) |*arg| {
+                    i += self.pushParam(call_args, self.abi.categorize(arg.ty, self.types), i, arg);
+                }
+
+                return self.assembleReturn(Comptime.eca, call_args, ctx, ret, ret_abi);
             } else if (eql(u8, name, "@as")) {
                 const ty = self.resolveAnonTy(args[0]);
                 return self.emitTyped(ctx, ty, args[1]);

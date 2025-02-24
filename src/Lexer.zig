@@ -188,6 +188,7 @@ pub fn next(self: *Lexer) Token {
                     'a'...'z', 'A'...'Z', '0'...'9', '_', 128...255 => self.cursor += 1,
                     else => break,
                 };
+
                 const ident = self.source[pos..self.cursor];
                 inline for (std.meta.fields(Lexeme)) |field| {
                     if (comptime !std.ascii.isLower(field.name[0]) and field.name[0] != '_' and !std.mem.eql(u8, field.name, "Self")) continue;

@@ -790,6 +790,24 @@ main := fn(): uint {
 }
 ```
 
+#### directives 3 (@ecall)
+```hb
+expectations := .{
+    .return_value: 3;
+    .ecalls: .(
+        .(0, 1, 2): 3,
+    );
+}
+
+main := fn(): uint {
+    return @ecall(
+        0,
+        struct{.a: uint; .b: uint}.(1, 2),
+        struct{.a: uint; .b: uint; .c: uint}.(3, 4, 5),
+    )
+}
+```
+
 #### 
 
 ## progress
@@ -868,7 +886,7 @@ main := fn(): uint {
   - [x] `@size_of(<ty>)`
   - [x] `@align_of(<ty>)`
   - [ ] `@bit_cast(<expr>)`
-  - [ ] `@eca(...<expr>)`
+  - [ ] `@ecall(...<expr>)`
   - [ ] `@embed(<string>)`
   - [ ] `@inline(<func>, ...<args>)`
   - [ ] `@len_of(<ty>)`

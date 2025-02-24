@@ -109,6 +109,7 @@ pub fn testBuilder(
 
     var ret: u64 = 0;
     var should_error: bool = false;
+    var ecalls: []const Ast.Id = &.{};
     if (ast.findDecl(ast.items, "expectations")) |d| {
         const decl = ast.exprs.get(d).BinOp.rhs;
         const ctor = ast.exprs.get(decl).Ctor;
@@ -122,6 +123,10 @@ pub fn testBuilder(
 
             if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "should_error")) {
                 should_error = ast.exprs.get(field.rhs).Bool.value;
+            }
+
+            if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "ecalls")) {
+                ecalls = ast.exprs.view(ast.exprs.get(field.rhs).Tupl.fields);
             }
         }
     }
@@ -230,7 +235,26 @@ pub fn testBuilder(
     };
     if (verbose) try header("EXECUTION", output, colors);
 
-    if (vm.run(&ctx) catch unreachable != isa.Op.tx) return error.TestExpectedEqual;
+    var eca_idx: usize = 0;
+    while (true) switch (vm.run(&ctx) catch unreachable) {
+        .tx => break,
+        .eca => {
+            try std.testing.expect(eca_idx < ecalls.len);
+            const curr_eca = ast.exprs.get(ecalls[eca_idx]).BinOp;
+
+            for (ast.exprs.view(ast.exprs.get(curr_eca.lhs).Tupl.fields), 0..) |vl, i| {
+                const value = try std.fmt.parseInt(u64, ast.tokenSrc(ast.exprs.get(vl).Integer.index), 10);
+                try std.testing.expectEqual(value, vm.regs.get(.arg(1, i)));
+            }
+
+            const ret_value = try std.fmt.parseInt(u64, ast.tokenSrc(ast.exprs.get(curr_eca.rhs).Integer.index), 10);
+            vm.regs.set(.ret(0), ret_value);
+
+            eca_idx += 1;
+        },
+        else => unreachable,
+    };
+
     if (vm.regs.get(.ret(0)) != ret) return error.TestExpectedEqual;
 }
 
