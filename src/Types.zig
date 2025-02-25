@@ -269,6 +269,20 @@ pub const Id = enum(usize) {
         };
     }
 
+    pub fn child(self: Id, _: *Types) ?Id {
+        return switch (self.data()) {
+            .Ptr => |p| p.*,
+            else => null,
+        };
+    }
+
+    pub fn len(self: Id, types: *Types) ?usize {
+        return switch (self.data()) {
+            .Struct => |s| s.getFields(types).len,
+            else => null,
+        };
+    }
+
     pub fn size(self: Id, types: *Types) usize {
         return switch (self.data()) {
             .Builtin => |b| switch (b) {

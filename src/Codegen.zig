@@ -1075,6 +1075,26 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     self.ensureLoaded(&oper);
                     return oper;
                 }
+            } else if (eql(u8, name, "@ChildOf")) {
+                if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
+                const ty = self.resolveAnonTy(args[0]);
+                const child = ty.child(self.types) orelse {
+                    self.report(args[0], "directive only work on pointer types, {} is not", .{ty});
+                    return .never;
+                };
+                return self.emitTyConst(child);
+            } else if (eql(u8, name, "@kind_of")) {
+                if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
+                const len = self.resolveAnonTy(args[0]);
+                return .mkv(.uint, self.bl.addIntImm(.int, @intFromEnum(len.data())));
+            } else if (eql(u8, name, "@len_of")) {
+                if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
+                const ty = self.resolveAnonTy(args[0]);
+                const len = ty.len(self.types) orelse {
+                    self.report(args[0], "directive only works on structs, {} is not", .{ty});
+                    return .never;
+                };
+                return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(len)));
             } else if (eql(u8, name, "@align_of")) {
                 if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
                 return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(self.resolveAnonTy(args[0]).alignment(self.types))));

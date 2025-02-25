@@ -823,6 +823,44 @@ main := fn(): u32 {
 }
 ```
 
+#### directives 6 (@len_of)
+```hb
+expectations := .{
+    .return_value: 2;
+}
+
+main := fn(): uint {
+    return @len_of(struct{.a: u8; .b: u32})
+}
+```
+
+#### directives 7 (@kind_of)
+```hb
+expectations := .{
+    .return_value: 2;
+}
+
+main := fn(): uint {
+    return @kind_of(struct{})
+}
+```
+
+#### directives 8 (@ChildOf)
+```hb
+expectations := .{
+    .return_value: 1;
+}
+
+main := fn(): uint {
+    vl := 1
+    return deref(^uint, &vl)
+}
+
+deref := fn($T: type, arg: T): @ChildOf(T) {
+    return *arg
+}
+```
+
 ## progress
 
 - [ ] diagnostics
@@ -902,11 +940,11 @@ main := fn(): u32 {
   - [x] `@ecall(...<expr>)`
   - [ ] `@embed(<string>)`
   - [ ] `@inline(<func>, ...<args>)`
-  - [ ] `@len_of(<ty>)`
-  - [ ] `@kind_of(<ty>)`
+  - [x] `@len_of(<ty>)`
+  - [x] `@kind_of(<ty>)`
   - [ ] `@Any(<fn(type): bool/type>..)`
   - [ ] `@error(...<expr>)`
-  - [ ] `@ChildOf(<ty>)`
+  - [x] `@ChildOf(<ty>)`
   - [ ] `@target("<pat>")`
   - [ ] `@unwrap(<expr>)`
 
