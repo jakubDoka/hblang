@@ -178,7 +178,11 @@ pub const Pos = packed struct(Pos.Repr) {
     const Repr = u32;
 
     index: std.meta.Int(.unsigned, @bitSizeOf(Repr) - @bitSizeOf(bool)),
-    indented: bool = false,
+    flag: packed union {
+        indented: bool,
+        @"comptime": bool,
+        use_kind: Loader.LoadOptions.Kind,
+    } = .{ .indented = false },
 
     pub fn init(index: Lexer.Pos) Pos {
         return .{ .index = @intCast(index) };

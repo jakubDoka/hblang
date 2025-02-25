@@ -53,7 +53,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
         .Ident => |i| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, i.pos.index)),
         .Fn => |f| {
             try self.buf.appendSlice("fn");
-            try self.fmtSlice(f.pos.indented, f.args, .@"(", .@",", .@")");
+            try self.fmtSlice(f.pos.flag.indented, f.args, .@"(", .@",", .@")");
             try self.buf.appendSlice(": ");
             try self.fmtExpr(f.ret);
             try self.buf.appendSlice(" ");
@@ -64,12 +64,12 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             const forced = for (self.ast.exprs.view(s.fields)) |e| {
                 if (self.ast.exprs.get(e).BinOp.lhs.tag() != .Tag) break true;
             } else false;
-            if (s.pos.indented or forced) try self.buf.appendSlice(" ");
-            try self.fmtSliceLow(s.pos.indented or forced, forced, s.fields, .@"{", .@";", .@"}");
+            if (s.pos.flag.indented or forced) try self.buf.appendSlice(" ");
+            try self.fmtSliceLow(s.pos.flag.indented or forced, forced, s.fields, .@"{", .@";", .@"}");
         },
         .Directive => |d| {
             try self.buf.appendSlice(Lexer.peekStr(self.ast.source, d.pos.index));
-            try self.fmtSlice(d.pos.indented, d.args, .@"(", .@",", .@")");
+            try self.fmtSlice(d.pos.flag.indented, d.args, .@"(", .@",", .@")");
         },
         .Index => |i| {
             try self.fmtExpr(i.base);
@@ -79,7 +79,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
         },
         .Call => |c| {
             try self.fmtExpr(c.called);
-            try self.fmtSlice(c.arg_pos.indented, c.args, .@"(", .@",", .@")");
+            try self.fmtSlice(c.arg_pos.flag.indented, c.args, .@"(", .@",", .@")");
         },
         .Tag => |t| {
             try self.buf.appendSlice(".");
@@ -95,11 +95,11 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             const start = if (t == .Ctor) .@".{" else .@".(";
             const sep = if (t == .Ctor) .@";" else .@",";
             const end = if (t == .Ctor) .@"}" else .@")";
-            try self.fmtSlice(v.pos.indented, v.fields, start, sep, end);
+            try self.fmtSlice(v.pos.flag.indented, v.fields, start, sep, end);
         },
         .Buty => |b| try self.buf.appendSlice(b.bt.repr()),
         .Block => |b| {
-            try self.fmtSliceLow(b.pos.indented, true, b.stmts, .@"{", .@";", .@"}");
+            try self.fmtSliceLow(b.pos.flag.indented, true, b.stmts, .@"{", .@";", .@"}");
         },
         .SliceTy => |s| {
             try self.buf.appendSlice("[");
@@ -159,7 +159,10 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             if (prec < o.op.precedence()) try self.buf.appendSlice(")");
         },
         .Use => |use| {
-            try self.buf.writer().print("@use({s})", .{Lexer.peekStr(self.ast.source, use.pos.index)});
+            try self.buf.writer().print(
+                "@{s}({s})",
+                .{ @tagName(use.pos.flag.use_kind), Lexer.peekStr(self.ast.source, use.pos.index) },
+            );
         },
         .Integer => |i| {
             const int_token = Lexer.peek(self.ast.source, i.index);

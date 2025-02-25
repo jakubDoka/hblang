@@ -42,6 +42,9 @@ pub const Loader = struct {
     pub const LoadOptions = struct {
         path: []const u8,
         from: Types.File,
+        type: Kind,
+
+        pub const Kind = enum(u1) { use, embed };
     };
 
     pub fn isNoop(self: Loader) bool {
@@ -74,10 +77,12 @@ pub fn parse(self: *Parser) !Ast.Slice {
     }
 
     const remining = self.finalizeVariablesLow(0);
-    for (self.active_syms.items[0..remining]) |s| {
-        self.report(s.id.pos(), "undeclared identifier", .{});
+    if (!self.loader.isNoop()) {
+        for (self.active_syms.items[0..remining]) |s| {
+            self.report(s.id.pos(), "undeclared identifier", .{});
+        }
+        std.debug.assert(remining == 0);
     }
-    std.debug.assert(remining == 0);
 
     return self.store.allocSlice(Id, self.gpa, itemBuf.items);
 }
@@ -225,7 +230,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             const comptime_arg_start = self.comptime_idents.items.len;
             defer self.comptime_idents.items.len = comptime_arg_start;
             const args = try self.parseListTyped(.@"(", .@",", .@")", Ast.Arg, parseArg);
-            const indented_args = self.list_pos.indented;
+            const indented_args = self.list_pos.flag;
             _ = try self.expectAdvance(.@":");
             const ret = try self.parseExpr();
 
@@ -243,23 +248,36 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 .args = args,
                 .comptime_args = comptime_args,
                 .captures = captures,
-                .pos = .{ .index = @intCast(token.pos), .indented = indented_args },
+                .pos = .{ .index = @intCast(token.pos), .flag = indented_args },
                 .ret = ret,
                 .body = body,
             } };
         },
-        .@"@" => if (Ast.cmpLow(token.pos, self.lexer.source, "@use")) .{ .Use = .{
-            .file = b: {
-                _ = try self.expectAdvance(.@"(");
-                token = try self.expectAdvance(.@"\"");
-                const path = token.view(self.lexer.source);
-                _ = try self.expectAdvance(.@")");
-                break :b self.loader.load(.{ .from = self.current, .path = path[1 .. path.len - 1] });
-            },
-            .pos = .init(token.pos),
-        } } else .{ .Directive = .{
+        .@"@" => if (Ast.cmpLow(token.pos, self.lexer.source, "@use") or
+            Ast.cmpLow(token.pos, self.lexer.source, "@embed"))
+        b: {
+            const embed: Loader.LoadOptions.Kind =
+                if (Ast.cmpLow(token.pos, self.lexer.source, "@embed")) .embed else .use;
+
+            _ = try self.expectAdvance(.@"(");
+            token = try self.expectAdvance(.@"\"");
+            const path = token.view(self.lexer.source);
+            _ = try self.expectAdvance(.@")");
+
+            break :b .{ .Use = .{
+                .file = self.loader.load(.{
+                    .from = self.current,
+                    .path = path[1 .. path.len - 1],
+                    .type = embed,
+                }),
+                .pos = .{
+                    .index = @intCast(token.pos),
+                    .flag = .{ .use_kind = embed },
+                },
+            } };
+        } else .{ .Directive = .{
             .args = try self.parseList(.@"(", .@",", .@")", parseExpr),
-            .pos = .{ .index = @intCast(token.pos), .indented = self.list_pos.indented },
+            .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
         } },
         .@"struct" => b: {
             const prev_capture_boundary = self.capture_boundary;
@@ -272,7 +290,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             break :b .{ .Struct = .{
                 .fields = fields,
                 .captures = try self.store.allocSlice(Ident, self.gpa, captures),
-                .pos = .{ .index = @intCast(token.pos), .indented = self.list_pos.indented },
+                .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
             } };
         },
         .@"." => b: {
@@ -289,7 +307,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             .pos = self.list_pos,
         } },
         .@"{" => .{ .Block = .{
-            .pos = .{ .index = @intCast(token.pos), .indented = true },
+            .pos = .{ .index = @intCast(token.pos), .flag = .{ .indented = true } },
             .stmts = b: {
                 var buf = std.ArrayListUnmanaged(Id){};
                 while (!self.tryAdvance(.@"}")) {
@@ -381,14 +399,14 @@ fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
             try self.captures.append(self.gpa, s.id);
         }
         return try self.store.alloc(self.gpa, .Ident, .{
-            .pos = .{ .index = @intCast(token.pos), .indented = token.kind == .@"$" },
+            .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind == .@"$" } },
             .id = s.id,
         });
     };
 
     const id = Ident.init(token);
     const alloc = try self.store.alloc(self.gpa, .Ident, .{
-        .pos = .{ .index = @intCast(token.pos), .indented = token.kind == .@"$" },
+        .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind == .@"$" } },
         .id = id,
     });
     if (token.kind == .@"$") self.comptime_idents.append(self.gpa, id) catch unreachable;
@@ -422,7 +440,7 @@ fn parseListTyped(
         try buf.append(self.arena.allocator(), try parser(self));
         if (sep) |s| indented = self.tryAdvance(s);
     }
-    self.list_pos = .{ .index = @intCast(pos), .indented = indented };
+    self.list_pos = .{ .index = @intCast(pos), .flag = .{ .indented = indented } };
     return try self.store.allocSlice(Elem, self.gpa, buf.items);
 }
 

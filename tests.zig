@@ -103,7 +103,16 @@ pub fn testBuilder(
         gpa.free(asts);
     }
     for (asts, files.items, 0..) |*ast, fr, i| {
-        ast.* = try Ast.init(gpa, @enumFromInt(i), fr.path, fr.source, .init(&loader));
+        if (std.mem.endsWith(u8, fr.path, ".hb") or i == 0) {
+            ast.* = try Ast.init(gpa, @enumFromInt(i), fr.path, fr.source, .init(&loader));
+        } else {
+            ast.* = .{
+                .path = fr.path,
+                .source = fr.source,
+                .items = .{},
+                .exprs = .{},
+            };
+        }
     }
 
     const ast = asts[0];

@@ -91,7 +91,7 @@ pub fn addFieldLoad(self: *Builder, base: *BuildNode, offset: i64, ty: DataType)
 }
 
 pub fn addStore(self: *Builder, addr: *BuildNode, ty: DataType, value: *BuildNode) SpecificNode(.Store) {
-    std.debug.assert(value.data_type.size() != 0);
+    if (value.data_type.size() == 0) std.debug.panic("{}", .{value.data_type});
     const mem = self.memory();
     const ctrl = self.control();
     const store = self.func.addNode(.Store, &.{ ctrl, mem, addr, value }, .{});
@@ -131,7 +131,7 @@ pub fn addFixedMemCpy(self: *Builder, dst: *BuildNode, src: *BuildNode, size: us
 }
 
 pub fn addGlobalAddr(self: *Builder, arbitrary_global_id: u32) SpecificNode(.GlobalAddr) {
-    return self.func.addNode(.GlobalAddr, &.{null}, .{ .id = arbitrary_global_id });
+    return self.func.addTypedNode(.GlobalAddr, .int, &.{null}, .{ .id = arbitrary_global_id });
 }
 
 // #MATH =======================================================================

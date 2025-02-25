@@ -921,6 +921,21 @@ deref := fn($T: type, arg: T): @ChildOf(T) {
 }
 ```
 
+#### directives 9 (@embed)
+```hb
+expectations := .{
+    .return_value = 69;
+}
+
+main := fn(): uint {
+    val: ^[1]u8 = &@embed("mbed.txt")
+    return val[0]
+}
+
+// in: mbed.txt
+E
+```
+
 ## progress
 
 - [ ] diagnostics
@@ -1000,7 +1015,7 @@ deref := fn($T: type, arg: T): @ChildOf(T) {
   - [x] `@align_of(<ty>)`
   - [x] `@bit_cast(<expr>)`
   - [x] `@ecall(...<expr>)`
-  - [ ] `@embed(<string>)`
+  - [x] `@embed(<string>)`
   - [ ] `@inline(<func>, ...<args>)`
   - [x] `@len_of(<ty>)`
   - [x] `@kind_of(<ty>)`

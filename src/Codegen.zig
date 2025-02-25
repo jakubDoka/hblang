@@ -121,7 +121,7 @@ pub fn build(self: *Codegen, func: *Types.Func) !void {
     var ty_idx: usize = 0;
     for (ast.exprs.view(fn_ast.args)) |aarg| {
         const ident = ast.exprs.get(aarg.bindings).Ident;
-        if (ident.pos.indented) continue;
+        if (ident.pos.flag.@"comptime") continue;
         const ty = func.args[ty_idx];
         const abi = self.abi.categorize(ty, self.types);
         abi.types(params[i..]);
@@ -272,6 +272,8 @@ pub fn typeCheck(self: *Codegen, expr: anytype, got: *Value, expected: Types.Id)
     }
 
     if (got.ty != expected) {
+        self.ensureLoaded(got);
+
         if (got.ty.isSigned() and got.ty.size(self.types) < expected.size(self.types)) {
             got.id.Value = self.bl.addUnOp(.sext, self.abi.categorize(expected, self.types).ByValue, got.id.Value);
         }
@@ -411,10 +413,10 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) Value {
         const typ = if (ty) |typ| b: {
             const global = self.types.resolveGlobal(cursor.perm(), ast.tokenSrc(id.pos()), value);
             self.types.ct.evalGlobal(ast.tokenSrc(id.pos()), global.data().Global, typ, value);
+            self.queue(.{ .Global = global.data().Global });
             break :b global;
         } else return self.emitTyConst(self.types.ct.evalTy(ast.tokenSrc(id.pos()), cursor, value));
         const global = typ.data().Global;
-        self.queue(.{ .Global = global });
         return .mkp(global.ty, self.bl.addGlobalAddr(global.id));
     }
 }
@@ -443,7 +445,7 @@ pub fn instantiateTemplate(
     var capture_idx: usize = 0;
     var arg_idx: usize = 0;
     for (tmpl_file.exprs.view(tmpl_ast.args), ast.exprs.view(e.args)) |param, arg| {
-        if (tmpl_file.exprs.get(param.bindings).Ident.pos.indented) {
+        if (tmpl_file.exprs.get(param.bindings).Ident.pos.flag.@"comptime") {
             captures[capture_idx] = .{ .id = comptime_args[capture_idx], .ty = .type, .value = @intFromEnum(self.resolveAnonTy(arg)) };
 
             capture_idx += 1;
@@ -579,8 +581,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             const struct_ty = ty.data().Struct;
 
             const local = ctx.loc orelse self.bl.addLocal(ty.size(self.types));
-
-            // TODO: diagnostics
 
             const FillSlot = union(enum) {
                 RequiredOffset: usize,
@@ -1036,13 +1036,31 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return self.emitTyConst(id);
             }
         },
-        .Use => |e| {
-            return self.emitTyConst(self.types.getScope(e.file));
+        .Use => |e| switch (e.pos.flag.use_kind) {
+            .use => return self.emitTyConst(self.types.getScope(e.file)),
+            .embed => {
+                const file = self.types.getFile(e.file);
+                const slot, const alloc = self.types.intern(.Global, .{
+                    .scope = .void,
+                    .file = e.file,
+                    .ast = .zeroSized(.Void),
+                    .name = file.path,
+                    .captures = &.{},
+                });
+                if (!slot.found_existing) {
+                    alloc.* = .{
+                        .key = alloc.key,
+                        .id = self.types.next_global,
+                        .data = file.source,
+                        .ty = self.types.makeSlice(file.source.len, .u8),
+                    };
+                    self.types.next_global += 1;
+                }
+                self.queue(.{ .Global = alloc });
+                return .mkp(alloc.ty, self.bl.addGlobalAddr(alloc.id));
+            },
         },
         .Directive => |e| {
-            // TODO: type inference
-            // TODO: recovery
-
             const eql = std.mem.eql;
             const name = ast.tokenSrc(e.pos.index);
             const args = ast.exprs.view(e.args);
