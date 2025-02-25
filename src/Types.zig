@@ -27,7 +27,8 @@ pub const TypeCtx = struct {
 
         return switch (ad) {
             .Builtin => std.meta.eql(ad, bd),
-            .Ptr, .Slice => std.meta.eql(ad.Ptr.*, bd.Ptr.*),
+            .Ptr => std.meta.eql(ad.Ptr.*, bd.Ptr.*),
+            .Slice => std.meta.eql(ad.Slice.*, bd.Slice.*),
             inline else => |v, t| return v.key.eql(@field(bd, @tagName(t)).key),
         };
     }
@@ -278,6 +279,7 @@ pub const Id = enum(usize) {
     pub fn child(self: Id, _: *Types) ?Id {
         return switch (self.data()) {
             .Ptr => |p| p.*,
+            .Slice => |s| s.elem,
             else => null,
         };
     }

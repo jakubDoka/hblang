@@ -793,6 +793,40 @@ main := fn(): uint {
 }
 ```
 
+#### arrays 2
+```hb
+expectations := .{
+    .return_value = 9;
+}
+
+dim: uint = 3
+
+main := fn(): uint {
+    narr: [dim][dim]uint = idk
+
+    y := 0
+    loop if y == narr.len break else {
+        x := 0
+        loop if x == narr[y].len break else {
+            narr[y][x] = x * y
+            x += 1
+        }
+        y += 1
+    }
+
+    linarr: ^[dim * dim]uint = @bit_cast(&narr)
+
+    sum := 0
+    i := 0
+    loop if i == linarr.len break else {
+        sum += linarr[i]
+        i += 1
+    }
+
+    return sum
+}
+```
+
 #### directives 1 (@size_of, @align_of)
 ```hb
 expectations := .{

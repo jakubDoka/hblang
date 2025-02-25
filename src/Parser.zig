@@ -320,7 +320,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 _ = try self.expectAdvance(.@"]");
                 break :b expr;
             },
-            .elem = try self.parseUnitWithoutTail(),
+            .elem = try self.parseUnit(),
         } },
         .@"if" => .{ .If = .{
             .pos = .init(token.pos),

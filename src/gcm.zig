@@ -265,6 +265,8 @@ pub fn scheduleBlock(comptime MachNode: type, tmp: std.mem.Allocator, node: *gra
         o.schedule = @intCast(i);
         e.* = .{ .priority = if (o.isCfg())
             0
+        else if (o.kind == .MachMove)
+            10
         else if (o.kind == .Local)
             20
         else if (o.kind == .Phi or o.kind == .Mem or o.kind == .Ret)

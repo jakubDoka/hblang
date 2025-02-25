@@ -224,7 +224,7 @@ pub fn testBuilder(
 
     var vm = Vm{};
     vm.ip = stack_end;
-    vm.fuel = 1024 * 10;
+    vm.fuel = 1024;
     @memset(&vm.regs.values, 0);
     vm.regs.set(.stack_addr, stack_end);
     var ctx = Vm.SafeContext{
@@ -237,7 +237,7 @@ pub fn testBuilder(
     if (verbose) try header("EXECUTION", output, colors);
 
     var eca_idx: usize = 0;
-    while (true) switch (vm.run(&ctx) catch unreachable) {
+    while (true) switch (try vm.run(&ctx)) {
         .tx => break,
         .eca => {
             try std.testing.expect(eca_idx < ecalls.len);

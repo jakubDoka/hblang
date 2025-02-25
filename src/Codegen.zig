@@ -1132,7 +1132,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
                 const ty = self.resolveAnonTy(args[0]);
                 const child = ty.child(self.types) orelse {
-                    self.report(args[0], "directive only work on pointer types, {} is not", .{ty});
+                    self.report(args[0], "directive only work on pointer types and slices, {} is not", .{ty});
                     return .never;
                 };
                 return self.emitTyConst(child);
