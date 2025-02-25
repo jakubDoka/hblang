@@ -61,6 +61,28 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) u64 {
                     return @as(u64, @bitCast(curr.extra(.CInt).*));
                 }
             },
+            .BinOp => {
+                var requeued = false;
+                for (curr.inputs()[1..]) |arg| {
+                    if (arg.?.kind != .CInt) {
+                        if (!requeued) eval_stack.appendAssumeCapacity(curr);
+                        eval_stack.appendAssumeCapacity(arg.?);
+                        requeued = true;
+                    }
+                }
+                if (requeued) continue;
+
+                const lhs, const rhs = .{ curr.inputs()[1].?.extra(.CInt).*, curr.inputs()[2].?.extra(.CInt).* };
+
+                const res = bl.addIntImm(curr.data_type, switch (curr.extra(.BinOp).*) {
+                    .eq => @intFromBool(lhs == rhs),
+                    .iadd => lhs + rhs,
+                    else => |t| std.debug.panic("{s}", .{@tagName(t)}),
+                });
+
+                bl.func.subsume(res, curr);
+                eval_stack.appendAssumeCapacity(res);
+            },
             .Ret => {
                 eval_stack.appendAssumeCapacity(curr.inputs()[0].?);
             },
@@ -121,6 +143,7 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) u64 {
                         cursor = cursor.inputs()[0].?.inputs()[0].?.inputs()[1].?;
                     } else std.debug.panic("{}\n", .{cursor});
                 }
+                bl.func.subsume(cursor.value(), curr);
                 eval_stack.appendAssumeCapacity(cursor.value());
             },
             else => std.debug.panic("{}", .{curr}),

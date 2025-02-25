@@ -179,6 +179,11 @@ fn parseUnit(self: *Parser) Error!Id {
             .fields = try self.parseList(.@".(", .@",", .@")", parseExpr),
             .pos = self.list_pos,
         } },
+        .@".[" => .{ .Arry = .{
+            .ty = base,
+            .fields = try self.parseList(.@".[", .@",", .@"]", parseExpr),
+            .pos = self.list_pos,
+        } },
         else => break,
     });
     return base;
@@ -349,8 +354,8 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             else
                 .zeroSized(.Void),
         } },
-        .loop => .{ .Loop = .{
-            .pos = .init(token.pos),
+        .loop, .@"$loop" => .{ .Loop = .{
+            .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind != .loop } },
             .body = try self.parseExpr(),
         } },
         .@"break" => .{ .Break = .init(token.pos) },

@@ -331,6 +331,42 @@ main := fn(): uint {
 }
 ```
 
+#### loops 4 (comptime)
+```hb
+expectations := .{
+    .return_value: 10;
+}
+
+main := fn(): uint {
+    arr := uint.[1, 2, 3, 4]
+    i := 0
+    sum := 0
+    $loop $if i == arr.len break else {
+        sum += arr[i]
+        i += 1
+    }
+    return sum
+}
+```
+
+#### loops 5 (comptime|error)
+```hb
+expectations := .{
+    .should_error: true;
+}
+
+main := fn(): uint {
+    arr := uint.[1, 2, 3, 4]
+    i := 0
+    sum := 0
+    $loop if i == arr.len break else {
+        sum += arr[i]
+        i += 1
+    }
+    return sum
+}
+```
+
 #### pointers 1
 ```hb
 main := fn(): uint {
@@ -966,7 +1002,7 @@ main := fn(): uint {
   - [x] ifs
     - [x] comptime
   - [x] loops
-    - [ ] comptime
+    - [ ] comptime --DO
     - [x] break
     - [x] continue
     - [ ] labels
@@ -1016,7 +1052,7 @@ main := fn(): uint {
   - [ ] unions
     - [ ] tag + customizable
     - [ ] scope
-  - [ ] pointers
+  - [x] pointers
     - [ ] slicing
   - [ ] slices
     - [x] known size (arrays)

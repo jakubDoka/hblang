@@ -1,0 +1,6 @@
+loops 5 (comptime|error):9:2: reached $loop backedge
+    $loop if i == arr.len break else {
+    ^
+loops 5 (comptime|error):9:24: ...previous control reached here
+    $loop if i == arr.len break else {
+                          ^

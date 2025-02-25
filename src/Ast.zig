@@ -55,6 +55,7 @@ pub const Kind = enum {
     Field,
     Ctor,
     Tupl,
+    Arry,
     If,
     Loop,
     Break,
@@ -125,6 +126,11 @@ pub const Expr = union(Kind) {
         fields: Slice,
     },
     Tupl: struct {
+        pos: Pos,
+        ty: Id,
+        fields: Slice,
+    },
+    Arry: struct {
         pos: Pos,
         ty: Id,
         fields: Slice,

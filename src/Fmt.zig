@@ -90,11 +90,11 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.buf.appendSlice(".");
             try self.buf.appendSlice(Lexer.peekStr(self.ast.source, f.field.index));
         },
-        inline .Ctor, .Tupl => |v, t| {
+        inline .Ctor, .Tupl, .Arry => |v, t| {
             try self.fmtExpr(v.ty);
-            const start = if (t == .Ctor) .@".{" else .@".(";
+            const start = if (t == .Ctor) .@".{" else if (t == .Tupl) .@".(" else .@".[";
             const sep = if (t == .Ctor) .@";" else .@",";
-            const end = if (t == .Ctor) .@"}" else .@")";
+            const end = if (t == .Ctor) .@"}" else if (t == .Tupl) .@")" else .@"]";
             try self.fmtSlice(v.pos.flag.indented, v.fields, start, sep, end);
         },
         .Buty => |b| try self.buf.appendSlice(b.bt.repr()),
@@ -119,6 +119,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             }
         },
         .Loop => |l| {
+            if (l.pos.flag.@"comptime") try self.buf.appendSlice("$");
             try self.buf.appendSlice("loop ");
             try self.fmtExpr(l.body);
         },

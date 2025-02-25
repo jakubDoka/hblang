@@ -50,6 +50,7 @@ pub const Lexeme = enum(u8) {
     @"return",
     @"if",
     @"$if",
+    @"$loop",
     @"else",
     loop,
     @"break",
@@ -62,6 +63,7 @@ pub const Lexeme = enum(u8) {
     @"_",
     @".{",
     @".(",
+    @".[",
     @"+=" = '+' + 128,
     @"-=" = '-' + 128,
     @":=" = ':' + 128,
@@ -243,6 +245,8 @@ pub fn next(self: *Lexer) Token {
                 .@".{"
             else if (self.advanceIf('('))
                 .@".("
+            else if (self.advanceIf('['))
+                .@".["
             else
                 .@".",
             ':', '<', '>', '+', '-', '=', '!' => |c| @enumFromInt(if (self.advanceIf('=')) c + 128 else c),

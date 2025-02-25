@@ -2,13 +2,14 @@ bl: Builder,
 types: *Types,
 work_list: std.ArrayListUnmanaged(Task),
 target: Types.Target,
+comptime_unreachable: bool = false,
 comptime abi: Types.Abi = .ableos,
 name: []const u8 = undefined,
 parent_scope: Scope = undefined,
 ast: *const Ast = undefined,
 struct_ret_ptr: ?*Node = undefined,
 scope: std.ArrayListUnmanaged(ScopeEntry) = undefined,
-loops: std.ArrayListUnmanaged(Builder.Loop) = undefined,
+loops: std.ArrayListUnmanaged(Loop) = undefined,
 ret: Types.Id = undefined,
 errored: bool = undefined,
 
@@ -25,6 +26,15 @@ const Func = Builder.Func;
 const Node = Builder.BuildNode;
 const DataType = Builder.DataType;
 const Codegen = @This();
+
+const Loop = union(enum) {
+    Runtime: Builder.Loop,
+    Comptime: union(enum) {
+        Clean,
+        Continue: Ast.Pos,
+        Break: Ast.Pos,
+    },
+};
 
 const Task = union(enum) {
     Func: *Types.Func,
@@ -89,7 +99,7 @@ pub fn beginBuilder(
     const res = self.bl.begin(param_count, return_count);
 
     self.scope = .initBuffer(scratch.alloc(ScopeEntry, 128));
-    self.loops = .initBuffer(scratch.alloc(Builder.Loop, 8));
+    self.loops = .initBuffer(scratch.alloc(Loop, 8));
 
     return res;
 }
@@ -669,6 +679,25 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
             return .mkp(ty, local);
         },
+        .Arry => |e| {
+            if (e.ty.tag() == .Void and ctx.ty == null) {
+                self.report(expr, "cant infer the type of this constructor, you can specify a type: '<ty>.('", .{});
+                return .never;
+            }
+
+            const elem_ty = ctx.ty orelse self.resolveAnonTy(e.ty);
+            const array_ty = self.types.makeSlice(e.fields.len(), elem_ty);
+
+            const local = ctx.loc orelse self.bl.addLocal(array_ty.size(self.types));
+
+            for (ast.exprs.view(e.fields), 0..) |elem, i| {
+                const off = self.bl.addFieldOffset(local, @intCast(i * elem_ty.size(self.types)));
+                var value = self.emitTyped(.{ .loc = off }, elem_ty, elem);
+                self.emitGenericStore(off, &value);
+            }
+
+            return .mkp(array_ty, local);
+        },
 
         // #OPS ========================================================================
         .SliceTy => |e| {
@@ -840,7 +869,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             defer self.bl.truncateScope(prev_scope_height);
 
             for (ast.exprs.view(e.stmts)) |s| {
-                if (self.bl.isUnreachable()) break;
+                if (self.bl.isUnreachable() or self.comptime_unreachable) break;
                 _ = self.emitTyped(ctx, .void, s);
             }
 
@@ -865,24 +894,67 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             const end_else = if_builder.beginElse(&self.bl);
             _ = self.emitTyped(ctx, .void, e.else_);
             if_builder.end(&self.bl, end_else);
+            self.comptime_unreachable = false;
 
             return .{};
         },
-        .Loop => |e| {
+        .Loop => |e| if (e.pos.flag.@"comptime") {
+            self.loops.appendAssumeCapacity(.{ .Comptime = .Clean });
+            while (self.loops.items[self.loops.items.len - 1].Comptime != .Break and !self.errored) {
+                self.loops.items[self.loops.items.len - 1].Comptime = .Clean;
+                _ = self.emitTyped(.{}, .void, e.body);
+
+                if (!self.comptime_unreachable) switch (self.loops.items[self.loops.items.len - 1].Comptime) {
+                    .Clean => {},
+                    .Continue, .Break => |p| {
+                        self.report(expr, "reached $loop backedge", .{});
+                        self.report(p, "...previous control reached here", .{});
+                    },
+                };
+            }
+            self.comptime_unreachable = false;
+            _ = self.loops.pop().?;
+            return .{};
+        } else {
             var loop = self.bl.addLoopAndBeginBody();
-            self.loops.appendAssumeCapacity(loop);
+            self.loops.appendAssumeCapacity(.{ .Runtime = loop });
             _ = self.emitTyped(ctx, .void, e.body);
-            loop = self.loops.pop().?;
+            loop = self.loops.pop().?.Runtime;
             loop.end(&self.bl);
 
             return .{};
         },
-        .Break => |_| {
-            self.loops.items[self.loops.items.len - 1].addLoopControl(&self.bl, .@"break");
+        // TODO: detect conflicting control flow
+        .Break => |e| {
+            switch (self.loops.items[self.loops.items.len - 1]) {
+                .Runtime => |*l| l.addLoopControl(&self.bl, .@"break"),
+                .Comptime => |*l| {
+                    self.comptime_unreachable = true;
+                    switch (l.*) {
+                        .Clean => l.* = .{ .Break = e },
+                        .Continue, .Break => |p| {
+                            self.report(expr, "reached second $loop control", .{});
+                            self.report(p, "...previous one reached here", .{});
+                        },
+                    }
+                },
+            }
             return .{};
         },
-        .Continue => |_| {
-            self.loops.items[self.loops.items.len - 1].addLoopControl(&self.bl, .@"continue");
+        .Continue => |e| {
+            switch (self.loops.items[self.loops.items.len - 1]) {
+                .Runtime => |*l| l.addLoopControl(&self.bl, .@"continue"),
+                .Comptime => |*l| {
+                    self.comptime_unreachable = true;
+                    switch (l.*) {
+                        .Clean => l.* = .{ .Continue = e },
+                        .Continue, .Break => |p| {
+                            self.report(expr, "reached second $loop control", .{});
+                            self.report(p, "...previous one reached here", .{});
+                        },
+                    }
+                },
+            }
             return .{};
         },
         .Call => |e| {

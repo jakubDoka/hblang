@@ -26,6 +26,8 @@ pub fn build(b: *std.Build) !void {
             .root_source_file = b.path("gen_vendored_tests.zig"),
             .target = b.graph.host,
             .optimize = .Debug,
+            .use_llvm = false,
+            .use_lld = false,
         });
 
         const run_gen = b.addRunArtifact(grn);
@@ -43,6 +45,8 @@ pub fn build(b: *std.Build) !void {
             .root_source_file = b.path("gen_tests.zig"),
             .target = b.graph.host,
             .optimize = .Debug,
+            .use_llvm = false,
+            .use_lld = false,
         });
 
         const run_gen = b.addRunArtifact(gen);
