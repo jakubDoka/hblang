@@ -486,7 +486,7 @@ pub fn Func(comptime MachNode: type) type {
                 for (self.inputs()) |oi| if (oi) |i| {
                     i.removeUse(self);
                 };
-                //self.* = undefined;
+                self.* = undefined;
                 self.id = std.math.maxInt(u16);
             }
 
@@ -1083,35 +1083,11 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             if (node.kind == .Phi) {
-                const region, const l, const r = .{ inps[0].?, inps[1].?, inps[2].? };
+                _, const l, const r = .{ inps[0].?, inps[1].?, inps[2].? };
 
                 if (l == r) return l;
 
                 if (r == node) return l;
-
-                if (region.kind == .Loop) b: {
-                    var cursor = r;
-                    var looped = false;
-
-                    for (node.outputs()) |o| {
-                        if (o.kind != .Store and o.kind != .Return) break :b;
-                    }
-
-                    w: while (!looped) {
-                        for (cursor.outputs()) |o| {
-                            if (o == node) {
-                                looped = true;
-                            } else if (o.kind != .Store) {
-                                looped = false;
-                                break :w;
-                            }
-                        }
-                    }
-
-                    if (looped) {
-                        return l;
-                    }
-                }
             }
 
             return if (comptime optApi("idealize", @TypeOf(idealize))) MachNode.idealize(self, node, worklist) else null;

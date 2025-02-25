@@ -767,6 +767,32 @@ main := fn(): uint {
 }
 ```
 
+#### arrays 1
+```hb
+expectations := .{
+    .return_value = 28;
+}
+
+main := fn(): uint {
+    arr: [8]uint = idk
+
+    i := 0
+    loop if i == arr.len break else {
+        arr[i] = i
+        i += 1
+    }
+
+    i = 0
+    sum := 0
+    loop if i == arr.len break else {
+        sum += arr[i]
+        i += 1
+    }
+
+    return sum
+}
+```
+
 #### directives 1 (@size_of, @align_of)
 ```hb
 expectations := .{
@@ -826,11 +852,11 @@ main := fn(): u32 {
 #### directives 6 (@len_of)
 ```hb
 expectations := .{
-    .return_value: 2;
+    .return_value: 4;
 }
 
 main := fn(): uint {
-    return @len_of(struct{.a: u8; .b: u32})
+    return @len_of(struct{.a: u8; .b: u32}) + @len_of([2]u8)
 }
 ```
 
@@ -924,9 +950,11 @@ deref := fn($T: type, arg: T): @ChildOf(T) {
     - [ ] scope
   - [ ] pointers
     - [ ] slicing
-  - [ ] slices
-    - [ ] known size (arrays)
-    - [ ] field access
+  - [ ] slices --DO
+    - [x] known size (arrays)
+    - [ ] field access --DO
+    - [ ] indexing --DO
+    - [ ] slicing
   - [ ] tuples
   - [ ] nullable types
 - [ ] directives

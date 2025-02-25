@@ -547,6 +547,21 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(e.value)));
         },
         .Ident => |e| return self.loadIdent(e.pos, e.id),
+        .Idk => {
+            const ty: Types.Id = ctx.ty orelse {
+                self.report(expr, "cant infer the type of uninitialized memory," ++
+                    " you can specify a type: @as(<ty>, idk)", .{});
+                return .never;
+            };
+
+            const abi = self.abi.categorize(ty, self.types);
+            if (abi == .ByValue) {
+                return .mkv(ty, self.bl.addIntImm(abi.ByValue, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa))));
+            } else {
+                const loc = ctx.loc orelse self.bl.addLocal(ty.size(self.types));
+                return .mkp(ty, loc);
+            }
+        },
         .Ctor => |e| {
             var tmp = root.Arena.scrath(null);
             defer tmp.deinit();
@@ -654,34 +669,13 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
             return .mkp(ty, local);
         },
-        .Field => |e| {
-            var base = self.emit(.{}, e.base);
-
-            if (base.ty == .never) return .never;
-
-            if (base.ty.data() == .Ptr) {
-                self.ensureLoaded(&base);
-                base.ty = base.ty.data().Ptr.*;
-                base.id = .{ .Ptr = base.id.Value };
-            }
-
-            if (base.ty == .type) {
-                return self.emitTyConst(self.lookupScopeItem(self.unwrapTyConst(base.id.Value), ast.tokenSrc(e.field.index)));
-            }
-
-            const struct_ty = base.ty.data().Struct;
-
-            var offset: usize = 0;
-            const ftype = for (struct_ty.getFields(self.types)) |tf| {
-                offset = std.mem.alignForward(usize, offset, tf.ty.alignment(self.types));
-                if (std.mem.eql(u8, ast.tokenSrc(e.field.index), tf.name)) break tf.ty;
-                offset += tf.ty.size(self.types);
-            } else unreachable;
-
-            return .mkp(ftype, self.bl.addFieldOffset(base.id.Ptr, @intCast(offset)));
-        },
 
         // #OPS ========================================================================
+        .SliceTy => |e| {
+            const len: ?usize = if (e.len.tag() == .Void) null else @intCast(self.types.ct.evalIntConst(.{ .Tmp = self }, e.len));
+            const elem = self.resolveAnonTy(e.elem);
+            return self.emitTyConst(self.types.makeSlice(len, elem));
+        },
         .UnOp => |e| switch (e.op) {
             .@"^" => return self.emitTyConst(self.types.makePtr(self.resolveAnonTy(e.oper))),
             .@"&" => {
@@ -780,6 +774,64 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 }
             },
         },
+        .Field => |e| {
+            var base = self.emit(.{}, e.base);
+
+            if (base.ty == .never) return .never;
+
+            if (base.ty.data() == .Ptr) {
+                self.ensureLoaded(&base);
+                base.ty = base.ty.data().Ptr.*;
+                base.id = .{ .Ptr = base.id.Value };
+            }
+
+            if (base.ty == .type) {
+                return self.emitTyConst(self.lookupScopeItem(self.unwrapTyConst(base.id.Value), ast.tokenSrc(e.field.index)));
+            }
+
+            const fname = ast.tokenSrc(e.field.index);
+
+            switch (base.ty.data()) {
+                .Struct => |struct_ty| {
+                    var offset: usize = 0;
+                    const ftype = for (struct_ty.getFields(self.types)) |tf| {
+                        offset = std.mem.alignForward(usize, offset, tf.ty.alignment(self.types));
+                        if (std.mem.eql(u8, fname, tf.name)) break tf.ty;
+                        offset += tf.ty.size(self.types);
+                    } else unreachable;
+
+                    return .mkp(ftype, self.bl.addFieldOffset(base.id.Ptr, @intCast(offset)));
+                },
+                .Slice => |slice_ty| if (slice_ty.len) |l| {
+                    if (std.mem.eql(u8, fname, "len")) {
+                        return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(l)));
+                    } else unreachable;
+                } else unreachable,
+                else => {
+                    self.report(e.field, "field access is only allowed on structs and arrays, {} is not", .{base.ty});
+                    return .never;
+                },
+            }
+        },
+        .Index => |e| {
+            var base = self.emit(.{}, e.base);
+
+            if (base.ty == .never) return .never;
+
+            if (base.ty.data() == .Ptr) {
+                self.ensureLoaded(&base);
+                base.ty = base.ty.data().Ptr.*;
+                base.id = .{ .Ptr = base.id.Value };
+            }
+
+            const slice_ty = base.ty.data().Slice;
+            std.debug.assert(slice_ty.len != null);
+
+            var idx = self.emitTyped(.{}, .uint, e.subscript);
+            self.ensureLoaded(&idx);
+
+            return .mkp(slice_ty.elem, self.bl.addIndexOffset(base.id.Ptr, slice_ty.elem.size(self.types), idx.id.Value));
+        },
 
         // #CONTROL ====================================================================
         .Block => |e| {
@@ -797,6 +849,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         .If => |e| {
             var cond = self.emitTyped(ctx, .bool, e.cond);
             self.ensureLoaded(&cond);
+            if (cond.ty == .never) return .{};
             var if_builder = self.bl.addIfAndBeginThen(cond.id.Value);
             _ = self.emitTyped(ctx, .void, e.then);
             const end_else = if_builder.beginElse(&self.bl);
@@ -1091,7 +1144,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
                 const ty = self.resolveAnonTy(args[0]);
                 const len = ty.len(self.types) orelse {
-                    self.report(args[0], "directive only works on structs, {} is not", .{ty});
+                    self.report(args[0], "directive only works on structs and arrays, {} is not", .{ty});
                     return .never;
                 };
                 return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(len)));

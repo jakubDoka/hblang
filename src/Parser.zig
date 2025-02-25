@@ -150,6 +150,15 @@ fn parseUnit(self: *Parser) Error!Id {
                 break :b .init((try self.expectAdvance(.Ident)).pos);
             },
         } },
+        .@"[" => .{ .Index = .{
+            .base = base,
+            .subscript = b: {
+                _ = self.advance();
+                const expr = try self.parseExpr();
+                _ = try self.expectAdvance(.@"]");
+                break :b expr;
+            },
+        } },
         .@"(" => .{ .Call = .{
             .called = base,
             .args = try self.parseList(.@"(", .@",", .@")", parseExpr),
@@ -206,6 +215,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
     return try self.store.allocDyn(self.gpa, switch (token.kind) {
         .Comment => .{ .Comment = .init(token.pos) },
         ._ => .{ .Wildcard = .init(token.pos) },
+        .idk => .{ .Idk = .init(token.pos) },
         .@"$", .Ident => return try self.resolveIdent(token),
         .@"fn" => b: {
             const prev_capture_boundary = self.capture_boundary;
@@ -302,6 +312,15 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             .pos = .init(token.pos),
             .op = op,
             .oper = try self.parseUnit(),
+        } },
+        .@"[" => .{ .SliceTy = .{
+            .pos = .init(token.pos),
+            .len = if (self.tryAdvance(.@"]")) .zeroSized(.Void) else b: {
+                const expr = try self.parseExpr();
+                _ = try self.expectAdvance(.@"]");
+                break :b expr;
+            },
+            .elem = try self.parseUnitWithoutTail(),
         } },
         .@"if" => .{ .If = .{
             .pos = .init(token.pos),

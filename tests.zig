@@ -37,7 +37,8 @@ pub fn runTest(name: []const u8, code: []const u8) !void {
 
     try testBuilder(name, code, gpa, out.writer().any(), .no_color, false);
 
-    try checkOrUpdatePrintTest(name, out.items);
+    if (!hasEnv("SKIP_DIFF"))
+        try checkOrUpdatePrintTest(name, out.items);
 }
 
 pub fn runVendoredTest(path: []const u8) !void {

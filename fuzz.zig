@@ -10,13 +10,17 @@ pub fn main() !void {
     defer root.Arena.deinitScratch();
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    //var arena = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = arena.deinit();
-    for (0..10000) |i| {
-        _ = arena.reset(.retain_capacity);
-        try fuzz(i, arena.allocator());
-    }
-    std.debug.print("top mem: {}", .{arena.queryCapacity()});
+    tests.testBuilder("smh", "expectations := .{\n\t.return_value: 55;\n}\n\nmain := fn(): uint {\n\treturn fib(10)\n}\n\nfib := fn(n: uint): uint {\n\tb := 1\n\ta := 0\n\tloop {\n\t\tif n == 0 break\n\t\tc := a + b\n\t\ta = b\n\t\tb = c\n\t\tn -= 1\n\t\tcontinue\n\t}\n\treturn a\n}", arena.allocator(), std.io.getStdErr().writer().any(), std.io.tty.detectConfig(std.io.getStdErr()), false) catch |err| switch (err) {
+        error.TestExpectedEqual => {},
+        else => return err,
+    };
+    // //var arena = std.heap.GeneralPurposeAllocator(.{}){};
+    // defer _ = arena.deinit();
+    // for (0..10000) |i| {
+    //     _ = arena.reset(.retain_capacity);
+    //     try fuzz(i, arena.allocator());
+    // }
+    // std.debug.print("top mem: {}", .{arena.queryCapacity()});
 }
 
 const names = [_][]const u8{

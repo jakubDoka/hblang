@@ -81,7 +81,7 @@ pub fn resizeLocal(_: *Builder, here: SpecificNode(.Local), to_size: usize) void
 }
 
 pub fn addLoad(self: *Builder, addr: *BuildNode, ty: DataType) SpecificNode(.Store) {
-    const val = self.func.addNode(.Load, &.{ null, self.memory(), addr }, .{});
+    const val = self.func.addNode(.Load, &.{ if (addr.kind == .Local) null else self.control(), self.memory(), addr }, .{});
     val.data_type = ty;
     return val;
 }
@@ -108,6 +108,11 @@ pub fn addFieldOffset(self: *Builder, base: *BuildNode, offset: i64) *BuildNode 
 
 pub fn addFieldStore(self: *Builder, base: *BuildNode, offset: i64, ty: DataType, value: *BuildNode) void {
     _ = self.addStore(self.addFieldOffset(base, offset), ty, value);
+}
+
+pub fn addIndexOffset(self: *Builder, base: *BuildNode, elem_size: usize, subscript: *BuildNode) SpecificNode(.BinOp) {
+    const offset = self.addBinOp(.imul, .int, subscript, self.addIntImm(.int, @bitCast(elem_size)));
+    return self.addBinOp(.iadd, .int, base, offset);
 }
 
 pub fn addSpill(self: *Builder, value: *BuildNode) SpecificNode(.Local) {
@@ -282,7 +287,7 @@ pub const If = struct {
         builder.func.setInputNoIntern(
             builder.scope.?,
             0,
-            builder.func.addNode(.Then, &.{self.if_node}, .{}),
+            builder.func.addNode(.Else, &.{self.if_node}, .{}),
         );
         return @enumFromInt(0);
     }

@@ -49,6 +49,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             const content = std.mem.trimRight(u8, comment_token.view(self.ast.source), "\n");
             try self.buf.appendSlice(content);
         },
+        .Idk => try self.buf.appendSlice("idk"),
         .Ident => |i| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, i.pos.index)),
         .Fn => |f| {
             try self.buf.appendSlice("fn");
@@ -69,6 +70,12 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
         .Directive => |d| {
             try self.buf.appendSlice(Lexer.peekStr(self.ast.source, d.pos.index));
             try self.fmtSlice(d.pos.indented, d.args, .@"(", .@",", .@")");
+        },
+        .Index => |i| {
+            try self.fmtExpr(i.base);
+            try self.buf.appendSlice("[");
+            try self.fmtExpr(i.subscript);
+            try self.buf.appendSlice("]");
         },
         .Call => |c| {
             try self.fmtExpr(c.called);
@@ -93,6 +100,12 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
         .Buty => |b| try self.buf.appendSlice(b.bt.repr()),
         .Block => |b| {
             try self.fmtSliceLow(b.pos.indented, true, b.stmts, .@"{", .@";", .@"}");
+        },
+        .SliceTy => |s| {
+            try self.buf.appendSlice("[");
+            try self.fmtExpr(s.len);
+            try self.buf.appendSlice("]");
+            try self.fmtExpr(s.elem);
         },
         .If => |i| {
             try self.buf.appendSlice("if ");

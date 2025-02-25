@@ -43,11 +43,13 @@ pub const Kind = enum {
     Void,
     Comment,
     Wildcard,
+    Idk,
     Ident,
     Buty,
     Fn,
     Struct,
     Directive,
+    Index,
     Call,
     Tag,
     Field,
@@ -59,6 +61,7 @@ pub const Kind = enum {
     Continue,
     Return,
     Block,
+    SliceTy,
     UnOp,
     BinOp,
     Use,
@@ -75,6 +78,7 @@ pub const Expr = union(Kind) {
     Void,
     Comment: Pos,
     Wildcard: Pos,
+    Idk: Pos,
     Ident: struct {
         pos: Pos = Pos.init(0),
         id: Ident = Ident.init(Lexer.Token.init(0, 0, .Eof)),
@@ -99,6 +103,10 @@ pub const Expr = union(Kind) {
     Directive: struct {
         pos: Pos,
         args: Slice,
+    },
+    Index: struct {
+        base: Id,
+        subscript: Id,
     },
     Call: struct {
         called: Id,
@@ -139,6 +147,11 @@ pub const Expr = union(Kind) {
     Block: struct {
         pos: Pos,
         stmts: Slice,
+    },
+    SliceTy: struct {
+        pos: Pos,
+        len: Id,
+        elem: Id,
     },
     UnOp: struct {
         pos: Pos,

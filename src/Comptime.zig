@@ -299,6 +299,13 @@ pub fn evalTy(self: *Comptime, name: []const u8, scope: Codegen.Scope, ty_expr: 
     return @enumFromInt(@as(u64, @bitCast(data)));
 }
 
+pub fn evalIntConst(self: *Comptime, scope: Codegen.Scope, int_conts: Ast.Id) i64 {
+    const id, _ = self.jitExpr("", scope, .{ .ty = .uint }, int_conts) orelse return 0;
+    var data: [8]u8 = undefined;
+    self.runVm("", id, &data);
+    return @bitCast(data);
+}
+
 pub fn evalGlobal(self: *Comptime, name: []const u8, global: *Types.Global, ty: ?Types.Id, value: Ast.Id) void {
     const id, const fty = self.jitExpr(name, .{ .Perm = global.key.scope }, .{ .ty = ty }, value) orelse {
         global.ty = .never;

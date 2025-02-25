@@ -15,14 +15,6 @@ pub fn mem2reg(comptime MachNode: type, self: *graph.Func(MachNode)) void {
     var visited = std.DynamicBitSet.initEmpty(tmp, self.next_id) catch unreachable;
     const postorder = self.collectDfs(tmp, &visited)[1..];
 
-    for (postorder) |bb| {
-        if (bb.base.isBasicBlockStart()) {
-            @import("gcm.zig").scheduleBlock(MachNode, tmp, &bb.base);
-        }
-    }
-
-    for (postorder, 0..) |bb, i| bb.base.schedule = @intCast(i);
-
     var local_count: u16 = 0;
     std.debug.assert(self.root.outputs()[1].kind == .Mem);
     for (self.root.outputs()[1].outputs()) |o| {
@@ -97,7 +89,18 @@ pub fn mem2reg(comptime MachNode: type, self: *graph.Func(MachNode)) void {
             }
         }
 
+        // we do it here because some loads are scheduled already and removing them in this loop messes up the
+        // cheduling in other blocks, we need to hack this becaus there are no anty deps on loads yet, since this
+        // runs before gcm
+        if (bb.isBasicBlockStart()) {
+            @import("gcm.zig").scheduleBlock(MachNode, tmp, bb);
+        }
+
+        // TODO: this is super wastefull, we are basically fixing the block indexes
+        for (postorder, 0..) |bbb, i| bbb.base.schedule = @intCast(i);
+
         for (tmp.dupe(*Node, bb.outputs()) catch unreachable) |o| {
+            if (o.id == std.math.maxInt(u16)) continue;
             if (o.kind == .Phi or o.kind == .Mem or o.isStore()) {
                 if (o.isStore() and o.base().kind == .Local and o.base().schedule != std.math.maxInt(u16)) {
                     to_remove.append(o) catch unreachable;

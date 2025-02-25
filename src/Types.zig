@@ -27,7 +27,7 @@ pub const TypeCtx = struct {
 
         return switch (ad) {
             .Builtin => std.meta.eql(ad, bd),
-            .Ptr => std.meta.eql(ad.Ptr.*, bd.Ptr.*),
+            .Ptr, .Slice => std.meta.eql(ad.Ptr.*, bd.Ptr.*),
             inline else => |v, t| return v.key.eql(@field(bd, @tagName(t)).key),
         };
     }
@@ -36,7 +36,7 @@ pub const TypeCtx = struct {
         var hasher = std.hash.Fnv1a_64.init();
         const adk = adapted_key.data();
         switch (adk) {
-            inline .Builtin, .Ptr => |v| std.hash.autoHashStrat(&hasher, v, .Deep),
+            inline .Builtin, .Ptr, .Slice => |v| std.hash.autoHashStrat(&hasher, v, .Deep),
             inline else => |v| std.hash.autoHashStrat(&hasher, v.key, .Deep),
         }
         return hasher.final();
@@ -54,6 +54,7 @@ pub const Data = union(enum) {
     },
     Ptr: *Id,
     Struct: *Struct,
+    Slice: *Slice,
     Template: *Template,
     Func: *Func,
     Global: *Global,
@@ -88,6 +89,11 @@ pub const Key = struct {
             if (!std.meta.eql(a, b)) return false;
         } else true;
     }
+};
+
+pub const Slice = struct {
+    len: ?usize,
+    elem: Id,
 };
 
 pub const Struct = struct {
@@ -205,14 +211,14 @@ pub const Id = enum(usize) {
 
     pub fn file(self: Id) File {
         return switch (self.data()) {
-            .Builtin, .Ptr => unreachable,
+            .Builtin, .Ptr, .Slice => unreachable,
             inline else => |v| v.key.file,
         };
     }
 
     pub fn items(self: Id) Ast.Slice {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr => unreachable,
+            .Global, .Builtin, .Ptr, .Slice => unreachable,
             .Template, .Func => .{},
             inline else => |v| v.ast_fields,
         };
@@ -220,14 +226,14 @@ pub const Id = enum(usize) {
 
     pub fn captures(self: Id) []const Key.Capture {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr => unreachable,
+            .Global, .Builtin, .Ptr, .Slice => unreachable,
             inline else => |v| v.key.captures,
         };
     }
 
     pub fn findCapture(self: Id, id: Ast.Ident) ?Key.Capture {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr => unreachable,
+            .Global, .Builtin, .Ptr, .Slice => unreachable,
             inline else => |v| for (v.key.captures) |cp| {
                 if (cp.id == id) break cp;
             } else null,
@@ -236,7 +242,7 @@ pub const Id = enum(usize) {
 
     pub fn parent(self: Id) Id {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr => unreachable,
+            .Global, .Builtin, .Ptr, .Slice => unreachable,
             inline else => |v| v.key.scope,
         };
     }
@@ -279,6 +285,7 @@ pub const Id = enum(usize) {
     pub fn len(self: Id, types: *Types) ?usize {
         return switch (self.data()) {
             .Struct => |s| s.getFields(types).len,
+            .Slice => |s| s.len,
             else => null,
         };
     }
@@ -305,6 +312,7 @@ pub const Id = enum(usize) {
                 siz = std.mem.alignForward(usize, siz, alignm);
                 return siz;
             },
+            .Slice => |s| if (s.len) |l| l * s.elem.size(types) else 16,
             else => unreachable,
         };
     }
@@ -320,6 +328,7 @@ pub const Id = enum(usize) {
                 }
                 return alignm;
             },
+            .Slice => |s| if (s.len == null) 8 else s.elem.alignment(types),
             else => unreachable,
         };
     }
@@ -358,6 +367,13 @@ pub const Id = enum(usize) {
         pub fn format(self: *const Fmt, comptime opts: []const u8, _: anytype, writer: anytype) !void {
             try switch (self.self.data()) {
                 .Ptr => |b| writer.print("^{" ++ opts ++ "}", .{b.fmt(self.tys)}),
+                .Slice => |b| {
+                    try writer.writeAll("[");
+                    if (b.len) |l| try writer.print("{d}", .{l});
+                    try writer.writeAll("]");
+                    try writer.print("{" ++ opts ++ "}", .{b.elem.fmt(self.tys)});
+                    return;
+                },
                 .Builtin => |b| writer.writeAll(@tagName(b)),
                 inline .Func, .Global, .Template, .Struct => |b| {
                     if (b.key.scope != .void) {
@@ -467,8 +483,21 @@ pub const Abi = enum {
             .Struct => |s| switch (self) {
                 .ableos => categorizeAbleosStruct(s, types),
             },
+            .Slice => |s| switch (self) {
+                .ableos => categorizeAbleosSlice(s, types),
+            },
             else => unreachable,
         };
+    }
+
+    pub fn categorizeAbleosSlice(slice: *Slice, types: *Types) Spec {
+        if (slice.len == null) return .{ .ByValuePair = .{ .types = .{ .int, .int }, .padding = 0 } };
+        if (slice.len == 0) return .Imaginary;
+        const elem_abi = Abi.ableos.categorize(slice.elem, types);
+        if (elem_abi == .Imaginary) return .Imaginary;
+        if (slice.len == 1) return elem_abi;
+        if (slice.len == 2 and elem_abi == .ByValue) return .{ .ByValuePair = .{ .types = .{elem_abi.ByValue} ** 2, .padding = 0 } };
+        return .ByRef;
     }
 
     pub fn categorizeAbleosStruct(stru: *Struct, types: *Types) Spec {
@@ -543,6 +572,17 @@ pub fn getScope(self: *Types, file: File) Id {
     }
 
     return self.file_scopes[@intFromEnum(file)];
+}
+
+pub fn makeSlice(self: *Types, len: ?usize, elem: Id) Id {
+    var vl = Slice{ .len = len, .elem = elem };
+    const ptr = Id.init(.{ .Slice = &vl });
+    const slot = self.interner.getOrPut(self.arena.allocator(), ptr) catch unreachable;
+    if (slot.found_existing) return slot.key_ptr.*;
+    const ptr_slot = self.arena.create(Slice);
+    ptr_slot.* = vl;
+    slot.key_ptr.* = .init(.{ .Slice = ptr_slot });
+    return slot.key_ptr.*;
 }
 
 pub fn makePtr(self: *Types, v: Id) Id {
