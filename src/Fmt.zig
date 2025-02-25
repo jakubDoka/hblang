@@ -108,6 +108,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.fmtExpr(s.elem);
         },
         .If => |i| {
+            if (i.pos.flag.@"comptime") try self.buf.appendSlice("$");
             try self.buf.appendSlice("if ");
             try self.fmtExpr(i.cond);
             try self.buf.appendSlice(" ");
@@ -164,13 +165,9 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
                 .{ @tagName(use.pos.flag.use_kind), Lexer.peekStr(self.ast.source, use.pos.index) },
             );
         },
-        .Integer => |i| {
-            const int_token = Lexer.peek(self.ast.source, i.index);
-            try self.buf.appendSlice(self.ast.source[int_token.pos..int_token.end]);
-        },
-        .Bool => |b| {
-            try self.buf.appendSlice(if (b.value) "true" else "false");
-        },
+        .Integer => |i| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, i.index)),
+        .Bool => |b| try self.buf.appendSlice(if (b.value) "true" else "false"),
+        .String => |s| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, s.pos.index)),
     }
 }
 

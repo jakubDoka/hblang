@@ -248,6 +248,13 @@ fib := fn(x: uint): uint {
 }
 ```
 
+#### if statements 3 (comptime)
+```hb
+main := fn(): uint {
+    $if true return 0
+}
+```
+
 #### variables 1
 ```hb
 main := fn(): uint {
@@ -936,6 +943,18 @@ main := fn(): uint {
 E
 ```
 
+#### directives 10 (@error)
+```hb
+expectations := .{
+    .should_error = true;
+}
+
+main := fn(): uint {
+    $if false @error("never happens")
+    @error("no main in sight, here is a type: ", ^u8)
+}
+```
+
 ## progress
 
 - [ ] diagnostics
@@ -945,7 +964,7 @@ E
     - [ ] inlining
     - [x] comptime parameters
   - [x] ifs
-    - [ ] comptime
+    - [x] comptime
   - [x] loops
     - [ ] comptime
     - [x] break
@@ -999,10 +1018,10 @@ E
     - [ ] scope
   - [ ] pointers
     - [ ] slicing
-  - [ ] slices --DO
+  - [ ] slices
     - [x] known size (arrays)
-    - [ ] field access --DO
-    - [ ] indexing --DO
+    - [ ] field access
+    - [ ] indexing
     - [ ] slicing
   - [ ] tuples
   - [ ] nullable types
@@ -1020,7 +1039,7 @@ E
   - [x] `@len_of(<ty>)`
   - [x] `@kind_of(<ty>)`
   - [ ] `@Any(<fn(type): bool/type>..)`
-  - [ ] `@error(...<expr>)`
+  - [x] `@error(...<expr>)`
   - [x] `@ChildOf(<ty>)`
   - [ ] `@target("<pat>")`
   - [ ] `@unwrap(<expr>)`

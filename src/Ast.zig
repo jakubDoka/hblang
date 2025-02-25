@@ -67,6 +67,7 @@ pub const Kind = enum {
     Use,
     Integer,
     Bool,
+    String,
 };
 
 pub const Arg = struct {
@@ -171,6 +172,10 @@ pub const Expr = union(Kind) {
     Bool: struct {
         pos: Pos,
         value: bool,
+    },
+    String: struct {
+        pos: Pos,
+        end: u32,
     },
 };
 

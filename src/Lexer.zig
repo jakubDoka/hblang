@@ -49,6 +49,7 @@ pub const Lexeme = enum(u8) {
     @"fn",
     @"return",
     @"if",
+    @"$if",
     @"else",
     loop,
     @"break",
@@ -184,6 +185,13 @@ pub fn next(self: *Lexer) Token {
                     'a'...'z', 'A'...'Z', '0'...'9', '_', 128...255 => self.cursor += 1,
                     else => break,
                 };
+
+                const ident = self.source[pos..self.cursor];
+                inline for (std.meta.fields(Lexeme)) |field| {
+                    if (field.name[0] != '$') continue;
+                    if (std.mem.eql(u8, field.name, ident)) break :b @field(Lexeme, field.name);
+                }
+
                 break :b .@"$";
             },
             'a'...'z', 'A'...'Z', '_', 128...255 => b: {

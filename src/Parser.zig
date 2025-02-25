@@ -340,8 +340,8 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             },
             .elem = try self.parseUnit(),
         } },
-        .@"if" => .{ .If = .{
-            .pos = .init(token.pos),
+        .@"if", .@"$if" => .{ .If = .{
+            .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind == .@"$if" } },
             .cond = try self.parseExpr(),
             .then = try self.parseExpr(),
             .else_ = if (self.tryAdvance(.@"else"))
@@ -364,6 +364,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         } },
         .Integer => .{ .Integer = .init(token.pos) },
         .true => .{ .Bool = .{ .value = true, .pos = .init(token.pos) } },
+        .@"\"" => .{ .String = .{ .pos = .init(token.pos), .end = token.end } },
         .false => .{ .Bool = .{ .value = false, .pos = .init(token.pos) } },
         else => |k| {
             self.report(token.pos, "no idea how to handle this: {s}", .{@tagName(k)});

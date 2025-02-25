@@ -160,6 +160,7 @@ pub fn EnumStore(comptime SelfId: type, comptime T: type) type {
             }
             break :b max_align;
         };
+        const fields = @typeInfo(T).@"union".fields;
 
         store: std.ArrayListAlignedUnmanaged(u8, payload_align) = .{},
 
@@ -169,11 +170,15 @@ pub fn EnumStore(comptime SelfId: type, comptime T: type) type {
             };
         }
 
+        pub fn TagPayload(comptime kind: std.meta.Tag(T)) type {
+            return fields[@intFromEnum(kind)].type;
+        }
+
         pub fn alloc(
             self: *Self,
             gpa: std.mem.Allocator,
             comptime tag: std.meta.Tag(T),
-            value: std.meta.TagPayload(T, tag),
+            value: TagPayload(tag),
         ) !SelfId {
             const Value = @TypeOf(value);
             (try self.allocLow(gpa, Value, 1))[0] = value;
@@ -208,7 +213,7 @@ pub fn EnumStore(comptime SelfId: type, comptime T: type) type {
         pub fn get(self: *const Self, id: SelfId) T {
             switch (@as(std.meta.Tag(T), @enumFromInt(id.taga))) {
                 inline else => |t| {
-                    const Value = std.meta.TagPayload(T, t);
+                    const Value = TagPayload(t);
                     const loc: *const Value = if (Value != void) @ptrCast(@alignCast(&self.store.items[id.index])) else &{};
                     return @unionInit(T, @tagName(t), loc.*);
                 },
@@ -219,9 +224,9 @@ pub fn EnumStore(comptime SelfId: type, comptime T: type) type {
             self: *const Self,
             comptime tag: std.meta.Tag(T),
             id: SelfId,
-        ) ?std.meta.TagPayload(T, tag) {
+        ) ?TagPayload(tag) {
             if (tag != id.tag()) return null;
-            const Value = std.meta.TagPayload(T, tag);
+            const Value = TagPayload(tag);
             const loc: *Value = @ptrCast(@alignCast(&self.store.items[id.index]));
             return loc.*;
         }
@@ -230,9 +235,9 @@ pub fn EnumStore(comptime SelfId: type, comptime T: type) type {
             self: *Self,
             comptime tag: std.meta.Tag(T),
             id: SelfId,
-        ) ?*std.meta.TagPayload(T, tag) {
+        ) ?*TagPayload(tag) {
             if (tag != id.tag()) return null;
-            const Value = std.meta.TagPayload(T, tag);
+            const Value = TagPayload(tag);
             const loc: *Value = @ptrCast(@alignCast(&self.store.items[id.index]));
             return loc;
         }

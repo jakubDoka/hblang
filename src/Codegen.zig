@@ -846,7 +846,17 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
             return .{};
         },
-        .If => |e| {
+        .If => |e| if (e.pos.flag.@"comptime") {
+            var cond = self.emitTyped(ctx, .bool, e.cond);
+            self.ensureLoaded(&cond);
+            if (self.types.ct.partialEval(&self.bl, cond.id.Value) != 0) {
+                _ = self.emitTyped(ctx, .void, e.then);
+            } else {
+                _ = self.emitTyped(ctx, .void, e.else_);
+            }
+
+            return .{};
+        } else {
             var cond = self.emitTyped(ctx, .bool, e.cond);
             self.ensureLoaded(&cond);
             if (cond.ty == .never) return .{};
@@ -1205,6 +1215,29 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 if (utils.assertArgs(self, expr, args, "<ty>, <expr>")) return .never;
                 const ty = self.resolveAnonTy(args[0]);
                 return self.emitTyped(ctx, ty, args[1]);
+            } else if (eql(u8, name, "@error")) {
+                if (utils.assertArgs(self, expr, args, "<ty/string>..")) return .never;
+                var tmp = root.Arena.scrath(null);
+                defer tmp.deinit();
+
+                var msg = std.ArrayList(u8).init(tmp.arena.allocator());
+                for (args) |arg| switch (ast.exprs.get(arg)) {
+                    .String => |s| {
+                        msg.appendSlice(ast.source[s.pos.index + 1 .. s.end - 1]) catch unreachable;
+                    },
+                    else => {
+                        var value = self.emit(.{}, arg);
+                        if (value.ty == .type) {
+                            self.ensureLoaded(&value);
+                            msg.writer().print("{}", .{self.unwrapTyConst(value.id.Value).fmt(self.types)}) catch unreachable;
+                        } else {
+                            unreachable;
+                        }
+                    },
+                };
+
+                self.report(expr, "{s}", .{msg.items});
+                return .never;
             } else std.debug.panic("unhandled directive {s}", .{name});
         },
         else => std.debug.panic("{any}\n", .{ast.exprs.get(expr)}),
