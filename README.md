@@ -808,7 +808,20 @@ main := fn(): uint {
 }
 ```
 
-#### 
+#### directives 4 (@int_cast)
+```hb
+main := fn(): u8 {
+    v: uint = 0
+    return @int_cast(v)
+}
+```
+
+#### directives 5 (@bit_cast)
+```hb
+main := fn(): u32 {
+    return @bit_cast(@as(struct{.l: u16; .r: u16}, @bit_cast(@as(u32, 0))))
+}
+```
 
 ## progress
 
@@ -856,7 +869,7 @@ main := fn(): uint {
   - [x] structs
     - [ ] indexing
     - [ ] packed
-    - [X] constructors
+    - [x] constructors
       - [x] dictionary
       - [x] tuple
     - [ ] default values
@@ -882,16 +895,16 @@ main := fn(): uint {
   - [x] `@use(<string>)`
   - [x] `@TypeOf(<expr>)`
   - [x] `@as(<ty>, <expr>)`
-  - [ ] `@int_cast(<expr>)`
+  - [x] `@int_cast(<expr>)`
   - [x] `@size_of(<ty>)`
   - [x] `@align_of(<ty>)`
-  - [ ] `@bit_cast(<expr>)`
-  - [ ] `@ecall(...<expr>)`
+  - [x] `@bit_cast(<expr>)`
+  - [x] `@ecall(...<expr>)`
   - [ ] `@embed(<string>)`
   - [ ] `@inline(<func>, ...<args>)`
   - [ ] `@len_of(<ty>)`
   - [ ] `@kind_of(<ty>)`
-  - [ ] `@Any()`
+  - [ ] `@Any(<fn(type): bool/type>..)`
   - [ ] `@error(...<expr>)`
   - [ ] `@ChildOf(<ty>)`
   - [ ] `@target("<pat>")`

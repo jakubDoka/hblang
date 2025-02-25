@@ -402,6 +402,10 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                         const mask = (@as(u64, 1) << @intCast(inps[0].?.data_type.size() * 8)) - 1;
                         self.emit(.andi, .{ self.reg(no), self.reg(inps[0]), mask });
                     },
+                    .ired => {
+                        // TODO: idealize to nothing
+                        self.emit(.cp, .{ self.reg(no), self.reg(inps[0]) });
+                    },
                     .neg => {
                         self.emit(.neg, .{ self.reg(no), self.reg(inps[0]) });
                     },

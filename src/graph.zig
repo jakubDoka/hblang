@@ -23,6 +23,7 @@ pub const BinOp = enum(u8) {
 pub const UnOp = enum(u8) {
     sext,
     uext,
+    ired,
     neg,
 };
 

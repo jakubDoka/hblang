@@ -994,21 +994,100 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             const name = ast.tokenSrc(e.pos.index);
             const args = ast.exprs.view(e.args);
 
+            const utils = enum {
+                fn reportInferrence(cg: *Codegen, exr: anytype, ty: []const u8, dir_name: []const u8) void {
+                    cg.report(exr, "type can not be inferred from the context, use `@as(<{s}>, {s}(...))`", .{ ty, dir_name });
+                }
+
+                fn assertArgs(cg: *Codegen, exr: anytype, got: []const Ast.Id, comptime expected: []const u8) bool {
+                    const min_expected_args = comptime std.mem.count(u8, expected, ",") + @intFromBool(expected.len != 0);
+                    const varargs = comptime std.mem.endsWith(u8, expected, "..");
+                    if (got.len < min_expected_args or (!varargs and got.len > min_expected_args)) {
+                        const range = if (varargs) "at least " else "";
+                        cg.report(
+                            exr,
+                            "directive takes {s}{} arguments, got {} (" ++ expected ++ ")",
+                            .{ range, min_expected_args, got.len },
+                        );
+                        return true;
+                    }
+                    return false;
+                }
+            };
+
             if (eql(u8, name, "@CurrentScope")) {
+                if (utils.assertArgs(self, expr, args, "")) return .never;
                 return self.emitTyConst(self.parent_scope.perm());
             } else if (eql(u8, name, "@TypeOf")) {
+                if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
                 const ty = self.types.ct.jitExpr("", .{ .Tmp = self }, .{}, args[0]).?[1];
                 return self.emitTyConst(ty);
+            } else if (eql(u8, name, "@int_cast")) {
+                if (utils.assertArgs(self, expr, args, "<expr>")) return .never;
+
+                const ret: Types.Id = ctx.ty orelse {
+                    utils.reportInferrence(self, expr, "int-ty", name);
+                    return .never;
+                };
+
+                if (!ret.isInteger()) {
+                    self.report(expr, "inferred type must be an integer, {} is not", .{ret});
+                    return .never;
+                }
+
+                var oper = self.emit(.{}, args[0]);
+
+                if (!oper.ty.isInteger()) {
+                    self.report(args[0], "expeced integer, {} is not", .{oper.ty});
+                    return .never;
+                }
+
+                self.ensureLoaded(&oper);
+
+                return .mkv(ret, self.bl.addUnOp(.ired, self.abi.categorize(ret, self.types).ByValue, oper.id.Value));
+            } else if (eql(u8, name, "@bit_cast")) {
+                if (utils.assertArgs(self, expr, args, "<expr>")) return .never;
+
+                const ret: Types.Id = ctx.ty orelse {
+                    utils.reportInferrence(self, expr, "ty", name);
+                    return .never;
+                };
+
+                var oper = self.emit(.{}, args[0]);
+
+                if (oper.ty.size(self.types) != ret.size(self.types)) {
+                    self.report(
+                        args[0],
+                        "cant bitcast from {} to {} because sizes are not equal ({} != {})",
+                        .{ oper.ty, ret, oper.ty.size(self.types), ret.size(self.types) },
+                    );
+                    return .never;
+                }
+
+                const to_abi = self.abi.categorize(ret, self.types);
+
+                if (to_abi != .ByValue) {
+                    const loc = self.bl.addLocal(ret.size(self.types));
+                    self.emitGenericStore(loc, &oper);
+                    return .mkp(ret, loc);
+                } else {
+                    oper.ty = ret;
+                    self.ensureLoaded(&oper);
+                    return oper;
+                }
             } else if (eql(u8, name, "@align_of")) {
+                if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
                 return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(self.resolveAnonTy(args[0]).alignment(self.types))));
             } else if (eql(u8, name, "@size_of")) {
+                if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
                 return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(self.resolveAnonTy(args[0]).size(self.types))));
             } else if (eql(u8, name, "@ecall")) {
+                if (utils.assertArgs(self, expr, args, "<expr>..")) return .never;
                 var tmp = root.Arena.scrath(null);
                 defer tmp.deinit();
 
                 const ret = ctx.ty orelse {
-                    self.report(expr, "type can not be inferred from the context, use `@as(<ty>, @ecall(...))`", .{});
+                    utils.reportInferrence(self, expr, "ty", name);
                     return .never;
                 };
 
@@ -1032,6 +1111,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
                 return self.assembleReturn(Comptime.eca, call_args, ctx, ret, ret_abi);
             } else if (eql(u8, name, "@as")) {
+                if (utils.assertArgs(self, expr, args, "<ty>, <expr>")) return .never;
                 const ty = self.resolveAnonTy(args[0]);
                 return self.emitTyped(ctx, ty, args[1]);
             } else std.debug.panic("unhandled directive {s}", .{name});
