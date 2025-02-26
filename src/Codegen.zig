@@ -814,17 +814,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 if (addrd.ty == .never) return .never;
                 return .mkv(self.types.makePtr(addrd.ty), addrd.id.Ptr);
             },
-            .@"*" => {
-                // TODO: better type inference
-                var oper = self.emit(.{}, e.oper);
-                self.ensureLoaded(&oper);
-                if (oper.ty.data() != .Ptr) {
-                    self.report(expr, "{} is not a pointer", .{oper.ty});
-                    return .never;
-                }
-                const base = oper.ty.data().Ptr.*;
-                return .mkp(base, oper.id.Value);
-            },
             .@"-" => {
                 var lhs = self.emit(ctx, e.oper);
                 if (ctx.ty) |ty| if (self.typeCheck(expr, &lhs, ty)) return .never;
@@ -1004,6 +993,16 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             var base = self.emit(.{}, e.base);
 
             if (base.ty == .never) return .never;
+
+            if (e.subscript.tag() == .Void) {
+                // TODO: better type inference
+                self.ensureLoaded(&base);
+                if (base.ty.data() != .Ptr) {
+                    self.report(expr, "{} is not a pointer", .{base.ty});
+                    return .never;
+                }
+                return .mkp(base.ty.data().Ptr.*, base.id.Value);
+            }
 
             self.emitAutoDeref(&base);
 

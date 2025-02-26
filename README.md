@@ -373,18 +373,12 @@ main := fn(): uint {
     a := 1
     b := &a
     modify(b)
-    drop(a);
-    *b += 2
-    stack_reclamation_edge_case := 0
-    return *b - 4
+    b[] += 2
+    return b[] - 4
 }
 
 modify := fn(a: ^uint): void {
-    *a = 2
-    return
-}
-
-drop := fn(a: uint): void {
+    a[] = 2
     return
 }
 ```
@@ -408,9 +402,9 @@ main := fn(): uint {
 }
 
 swap := fn(a: ^uint, b: ^uint): void {
-    tmp := *b;
-    *b = *a;
-    *a = tmp
+    tmp := b[]
+    b[] = a[]
+    a[] = tmp
 }
 ```
 
@@ -427,12 +421,12 @@ main := fn(): uint {
 }
 
 do_stuff := fn(v: ^uint): uint {
-    if *v == 0 {
-        return 0;
-        *v = 2
+    if v[] == 0 {
+        return 0
+        v[] = 2
     } else {
-        return 1;
-        *v = 3
+        return 1
+        v[] = 3
     }
 }
 ```
@@ -444,7 +438,7 @@ expectations := .{
 }
 
 main := fn(): uint {
-    return *0
+    return 0[]
 }
 ```
 
@@ -513,9 +507,9 @@ main := fn(): int {
 }
 
 swap := fn(a: ^Ty, b: ^Ty): void {
-    tmp := *a;
-    *a = *b;
-    *b = tmp
+    tmp := a[]
+    a[] = b[]
+    b[] = tmp
 }
 ```
 
@@ -1008,7 +1002,7 @@ main := fn(): uint {
 }
 
 deref := fn($T: type, arg: T): @ChildOf(T) {
-    return *arg
+    return arg[]
 }
 ```
 

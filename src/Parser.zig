@@ -161,6 +161,7 @@ fn parseUnit(self: *Parser) Error!Id {
             .base = base,
             .subscript = b: {
                 _ = self.advance();
+                if (self.tryAdvance(.@"]")) break :b .zeroSized(.Void);
                 const expr = try self.parseExpr();
                 _ = try self.expectAdvance(.@"]");
                 break :b expr;
@@ -339,7 +340,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         .void, .bool, .u8, .u16, .u32, .uint, .i8, .i16, .i32, .int, .type => .{
             .Buty = .{ .pos = .init(token.pos), .bt = token.kind },
         },
-        .@"&", .@"*", .@"^", .@"-", .@"?" => |op| .{ .UnOp = .{
+        .@"&", .@"^", .@"-", .@"?" => |op| .{ .UnOp = .{
             .pos = .init(token.pos),
             .op = op,
             .oper = try self.parseUnit(),

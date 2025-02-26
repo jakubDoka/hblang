@@ -1,5 +1,5 @@
 pointers 4 (errors):6:9: uint is not a pointer
-    return *0
+    return 0[]
            ^
 pointers 4 (errors):5:20: function is missing a return value since uint has more then 1 possible value
 main := fn(): uint {
