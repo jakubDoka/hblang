@@ -599,6 +599,27 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         .Bool => |e| {
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(e.value)));
         },
+        .Null => {
+            const ty: Types.Id = ctx.ty orelse {
+                self.report(expr, "can't infer the type of nullable value, you can speciry a type: @as(?<ty>, null)", .{});
+                return .never;
+            };
+
+            if (ty.data() != .Nullable) {
+                self.report(expr, "only nullable types can be initialized with null, {} is not", .{ty});
+                return .never;
+            }
+
+            switch (self.abi.categorize(ty, self.types)) {
+                .Imaginary => unreachable,
+                .ByValue => return .mkv(ty, self.bl.addIntImm(.i8, 0)),
+                .ByValuePair, .ByRef => {
+                    const loc = ctx.loc orelse self.bl.addLocal(ty.size(self.types));
+                    _ = self.bl.addStore(loc, .i8, self.bl.addIntImm(.i8, 0));
+                    return .mkp(ty, loc);
+                },
+            }
+        },
         .Ident => |e| return self.loadIdent(e.pos, e.id),
         .Idk => {
             const ty: Types.Id = ctx.ty orelse {

@@ -27,8 +27,7 @@ pub const TypeCtx = struct {
 
         return switch (ad) {
             .Builtin => std.meta.eql(ad, bd),
-            .Ptr, .Nullable => std.meta.eql(ad.Ptr.*, bd.Ptr.*),
-            .Slice => std.meta.eql(ad.Slice.*, bd.Slice.*),
+            inline .Ptr, .Nullable, .Slice => |v, t| std.meta.eql(v.*, @field(bd, @tagName(t)).*),
             inline else => |v, t| return v.key.eql(@field(bd, @tagName(t)).key),
         };
     }

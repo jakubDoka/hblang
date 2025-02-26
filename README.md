@@ -881,6 +881,8 @@ main := fn(): uint {
 
     if ten == null return 1
 
+    if mknull(uint) != null return 2
+
     return ten.!
 }
 
@@ -1079,7 +1081,7 @@ main := fn(): uint {
     - [ ] indexing
     - [ ] slicing
   - [ ] tuples
-  - [ ] nullable types --DO
+  - [x] nullable types
 - [ ] directives
   - [x] `@use(<string>)`
   - [x] `@TypeOf(<expr>)`
