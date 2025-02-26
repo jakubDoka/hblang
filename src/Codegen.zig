@@ -768,6 +768,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 var ty = ret_ty;
                 if (ty.data() == .Nullable) {
                     ty = ty.data().Nullable.*;
+                    _ = self.bl.addStore(local, .i8, self.bl.addIntImm(.i8, 1));
                     start += 1;
                 }
 
