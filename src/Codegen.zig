@@ -31,8 +31,7 @@ const Loop = union(enum) {
     Runtime: Builder.Loop,
     Comptime: union(enum) {
         Clean,
-        Continue: Ast.Pos,
-        Break: Ast.Pos,
+        Controlled: Ast.Id,
     },
 };
 
@@ -274,6 +273,23 @@ pub fn ensureLoaded(self: *Codegen, value: *Value) void {
 
 pub fn typeCheck(self: *Codegen, expr: anytype, got: *Value, expected: Types.Id) bool {
     if (got.ty == .never) return true;
+
+    if (expected.data() == .Nullable and expected.data().Nullable.* == got.ty) {
+        const abi = self.abi.categorize(got.ty, self.types);
+        switch (abi) {
+            .Imaginary => {
+                got.* = .mkv(expected, self.bl.addIntImm(.i8, 1));
+            },
+            else => {
+                const loc = self.bl.addLocal(expected.size(self.types));
+                _ = self.bl.addStore(loc, .i8, self.bl.addIntImm(.i8, 1));
+                self.emitGenericStore(self.bl.addFieldOffset(loc, @bitCast(got.ty.alignment(self.types))), got);
+                got.* = .mkp(expected, loc);
+            },
+        }
+
+        return false;
+    }
 
     if (!got.ty.canUpcast(expected, self.types)) {
         self.report(expr, "expected {} got {}", .{ expected, got.ty });
@@ -539,6 +555,31 @@ fn assembleReturn(cg: *Codegen, id: u32, call_args: Builder.CallArgs, ctx: Ctx, 
     };
 }
 
+fn loopControl(self: *Codegen, kind: Builder.Loop.Control, ctrl: Ast.Id) void {
+    switch (self.loops.items[self.loops.items.len - 1]) {
+        .Runtime => |*l| l.addLoopControl(&self.bl, kind),
+        .Comptime => |*l| {
+            self.comptime_unreachable = true;
+            switch (l.*) {
+                .Clean => l.* = .{ .Controlled = ctrl },
+                .Controlled => |p| {
+                    self.report(ctrl, "reached second $loop control, this means control" ++
+                        " flow leading to it is runtime dependant", .{});
+                    self.report(p, "...previous one reached here", .{});
+                },
+            }
+        },
+    }
+}
+
+pub fn emitAutoDeref(self: *Codegen, value: *Value) void {
+    if (value.ty.data() == .Ptr) {
+        self.ensureLoaded(value);
+        value.ty = value.ty.data().Ptr.*;
+        value.id = .{ .Ptr = value.id.Value };
+    }
+}
+
 pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
     const ast = self.ast;
     switch (ast.exprs.get(expr)) {
@@ -707,6 +748,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .UnOp => |e| switch (e.op) {
             .@"^" => return self.emitTyConst(self.types.makePtr(self.resolveAnonTy(e.oper))),
+            .@"?" => return self.emitTyConst(self.types.makeNullable(self.resolveAnonTy(e.oper))),
             .@"&" => {
                 const addrd = self.emit(.{}, e.oper);
                 return .mkv(self.types.makePtr(addrd.ty), addrd.id.Ptr);
@@ -766,7 +808,44 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return .{};
             },
             else => {
+                if (e.lhs.tag() == .Null) {
+                    self.report(e.lhs, "null has to be on the right hand side", .{});
+                    return .never;
+                }
+
                 var lhs = self.emit(if (e.op.isComparison()) .{} else ctx, e.lhs);
+
+                if (e.rhs.tag() == .Null) switch (e.op) {
+                    .@"==", .@"!=" => {
+                        if (lhs.ty.data() != .Nullable) {
+                            self.report(e.lhs, "only nullable types can be compared with null, {} is not", .{lhs.ty});
+                            return .never;
+                        }
+
+                        const abi = self.abi.categorize(lhs.ty, self.types);
+                        var value = switch (abi) {
+                            .Imaginary => unreachable,
+                            .ByValue => b: {
+                                self.ensureLoaded(&lhs);
+                                break :b lhs.id.Value;
+                            },
+                            .ByValuePair, .ByRef => self.bl.addLoad(lhs.id.Ptr, .i8),
+                        };
+
+                        value = self.bl.addUnOp(.uext, .int, value);
+
+                        if (e.op == .@"==") {
+                            value = self.bl.addBinOp(.eq, .int, value, self.bl.addIntImm(.int, 0));
+                        }
+
+                        return .mkv(.bool, value);
+                    },
+                    else => {
+                        self.report(e.lhs, "only comparing against null is supported", .{});
+                        return .never;
+                    },
+                };
+
                 if (!lhs.ty.isBinaryOperand()) {
                     self.report(e.lhs, "{} can not be used in binary operations", .{lhs.ty});
                     return .never;
@@ -803,16 +882,33 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 }
             },
         },
+        .Unwrap => |e| {
+            // TODO: better type inference
+            var base = self.emit(.{}, e);
+
+            if (base.ty == .never) return .never;
+
+            self.emitAutoDeref(&base);
+
+            if (base.ty.data() != .Nullable) {
+                self.report(e, "only nullable types can be unwrapped, {} is not", .{base.ty});
+                return .never;
+            }
+
+            const ty = base.ty.data().Nullable.*;
+
+            switch (self.abi.categorize(base.ty, self.types)) {
+                .Imaginary => unreachable,
+                .ByValue => return .{ .ty = ty },
+                .ByRef, .ByValuePair => return .mkp(ty, self.bl.addFieldOffset(base.id.Ptr, @bitCast(ty.alignment(self.types)))),
+            }
+        },
         .Field => |e| {
             var base = self.emit(.{}, e.base);
 
             if (base.ty == .never) return .never;
 
-            if (base.ty.data() == .Ptr) {
-                self.ensureLoaded(&base);
-                base.ty = base.ty.data().Ptr.*;
-                base.id = .{ .Ptr = base.id.Value };
-            }
+            self.emitAutoDeref(&base);
 
             if (base.ty == .type) {
                 return self.emitTyConst(self.lookupScopeItem(self.unwrapTyConst(base.id.Value), ast.tokenSrc(e.field.index)));
@@ -847,11 +943,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
             if (base.ty == .never) return .never;
 
-            if (base.ty.data() == .Ptr) {
-                self.ensureLoaded(&base);
-                base.ty = base.ty.data().Ptr.*;
-                base.id = .{ .Ptr = base.id.Value };
-            }
+            self.emitAutoDeref(&base);
 
             const slice_ty = base.ty.data().Slice;
             std.debug.assert(slice_ty.len != null);
@@ -900,19 +992,13 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .Loop => |e| if (e.pos.flag.@"comptime") {
             self.loops.appendAssumeCapacity(.{ .Comptime = .Clean });
-            while (self.loops.items[self.loops.items.len - 1].Comptime != .Break and !self.errored) {
-                self.loops.items[self.loops.items.len - 1].Comptime = .Clean;
+            const loop = &self.loops.items[self.loops.items.len - 1];
+            while ((loop.Comptime != .Controlled or loop.Comptime.Controlled.tag() != .Break) and !self.errored) {
+                loop.Comptime = .Clean;
                 _ = self.emitTyped(.{}, .void, e.body);
-
-                if (!self.comptime_unreachable) switch (self.loops.items[self.loops.items.len - 1].Comptime) {
-                    .Clean => {},
-                    .Continue, .Break => |p| {
-                        self.report(expr, "reached $loop backedge", .{});
-                        self.report(p, "...previous control reached here", .{});
-                    },
-                };
+                if (!self.comptime_unreachable) self.loopControl(.@"continue", expr);
+                self.comptime_unreachable = false;
             }
-            self.comptime_unreachable = false;
             _ = self.loops.pop().?;
             return .{};
         } else {
@@ -925,36 +1011,12 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             return .{};
         },
         // TODO: detect conflicting control flow
-        .Break => |e| {
-            switch (self.loops.items[self.loops.items.len - 1]) {
-                .Runtime => |*l| l.addLoopControl(&self.bl, .@"break"),
-                .Comptime => |*l| {
-                    self.comptime_unreachable = true;
-                    switch (l.*) {
-                        .Clean => l.* = .{ .Break = e },
-                        .Continue, .Break => |p| {
-                            self.report(expr, "reached second $loop control", .{});
-                            self.report(p, "...previous one reached here", .{});
-                        },
-                    }
-                },
-            }
+        .Break => {
+            self.loopControl(.@"break", expr);
             return .{};
         },
-        .Continue => |e| {
-            switch (self.loops.items[self.loops.items.len - 1]) {
-                .Runtime => |*l| l.addLoopControl(&self.bl, .@"continue"),
-                .Comptime => |*l| {
-                    self.comptime_unreachable = true;
-                    switch (l.*) {
-                        .Clean => l.* = .{ .Continue = e },
-                        .Continue, .Break => |p| {
-                            self.report(expr, "reached second $loop control", .{});
-                            self.report(p, "...previous one reached here", .{});
-                        },
-                    }
-                },
-            }
+        .Continue => {
+            self.loopControl(.@"continue", expr);
             return .{};
         },
         .Call => |e| {

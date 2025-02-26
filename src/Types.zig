@@ -27,7 +27,7 @@ pub const TypeCtx = struct {
 
         return switch (ad) {
             .Builtin => std.meta.eql(ad, bd),
-            .Ptr => std.meta.eql(ad.Ptr.*, bd.Ptr.*),
+            .Ptr, .Nullable => std.meta.eql(ad.Ptr.*, bd.Ptr.*),
             .Slice => std.meta.eql(ad.Slice.*, bd.Slice.*),
             inline else => |v, t| return v.key.eql(@field(bd, @tagName(t)).key),
         };
@@ -37,7 +37,7 @@ pub const TypeCtx = struct {
         var hasher = std.hash.Fnv1a_64.init();
         const adk = adapted_key.data();
         switch (adk) {
-            inline .Builtin, .Ptr, .Slice => |v| std.hash.autoHashStrat(&hasher, v, .Deep),
+            inline .Builtin, .Ptr, .Slice, .Nullable => |v| std.hash.autoHashStrat(&hasher, v, .Deep),
             inline else => |v| std.hash.autoHashStrat(&hasher, v.key, .Deep),
         }
         return hasher.final();
@@ -54,8 +54,9 @@ pub const Data = union(enum) {
         break :b @Type(enm);
     },
     Ptr: *Id,
-    Struct: *Struct,
     Slice: *Slice,
+    Nullable: *Id,
+    Struct: *Struct,
     Template: *Template,
     Func: *Func,
     Global: *Global,
@@ -212,14 +213,14 @@ pub const Id = enum(usize) {
 
     pub fn file(self: Id) File {
         return switch (self.data()) {
-            .Builtin, .Ptr, .Slice => unreachable,
+            .Builtin, .Ptr, .Slice, .Nullable => std.debug.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| v.key.file,
         };
     }
 
     pub fn items(self: Id) Ast.Slice {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice => unreachable,
+            .Global, .Builtin, .Ptr, .Slice, .Nullable => std.debug.panic("{s}", .{@tagName(self.data())}),
             .Template, .Func => .{},
             inline else => |v| v.ast_fields,
         };
@@ -227,14 +228,14 @@ pub const Id = enum(usize) {
 
     pub fn captures(self: Id) []const Key.Capture {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice => unreachable,
+            .Global, .Builtin, .Ptr, .Slice, .Nullable => std.debug.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| v.key.captures,
         };
     }
 
     pub fn findCapture(self: Id, id: Ast.Ident) ?Key.Capture {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice => unreachable,
+            .Global, .Builtin, .Ptr, .Slice, .Nullable => std.debug.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| for (v.key.captures) |cp| {
                 if (cp.id == id) break cp;
             } else null,
@@ -243,7 +244,7 @@ pub const Id = enum(usize) {
 
     pub fn parent(self: Id) Id {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice => unreachable,
+            .Global, .Builtin, .Ptr, .Slice, .Nullable => std.debug.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| v.key.scope,
         };
     }
@@ -252,7 +253,7 @@ pub const Id = enum(usize) {
         return switch (self.data()) {
             .Builtin => self.isInteger() or self == .bool,
             .Struct, .Ptr => true,
-            else => false,
+            .Global, .Func, .Template, .Slice, .Nullable => false,
         };
     }
 
@@ -315,7 +316,8 @@ pub const Id = enum(usize) {
                 return siz;
             },
             .Slice => |s| if (s.len) |l| l * s.elem.size(types) else 16,
-            else => unreachable,
+            .Nullable => |n| n.alignment(types) + n.size(types),
+            .Global, .Func, .Template => std.debug.panic("{s}", .{@tagName(self.data())}),
         };
     }
 
@@ -323,6 +325,7 @@ pub const Id = enum(usize) {
         return switch (self.data()) {
             .Builtin => self.size(types),
             .Ptr => 8,
+            .Nullable => |n| n.alignment(types),
             .Struct => |s| {
                 var alignm: usize = 1;
                 for (s.getFields(types)) |f| {
@@ -331,7 +334,7 @@ pub const Id = enum(usize) {
                 return alignm;
             },
             .Slice => |s| if (s.len == null) 8 else s.elem.alignment(types),
-            else => unreachable,
+            .Global, .Func, .Template => std.debug.panic("{s}", .{@tagName(self.data())}),
         };
     }
 
@@ -369,6 +372,7 @@ pub const Id = enum(usize) {
         pub fn format(self: *const Fmt, comptime opts: []const u8, _: anytype, writer: anytype) !void {
             try switch (self.self.data()) {
                 .Ptr => |b| writer.print("^{" ++ opts ++ "}", .{b.fmt(self.tys)}),
+                .Nullable => |b| writer.print("?{" ++ opts ++ "}", .{b.fmt(self.tys)}),
                 .Slice => |b| {
                     try writer.writeAll("[");
                     if (b.len) |l| try writer.print("{d}", .{l});
@@ -488,8 +492,21 @@ pub const Abi = enum {
             .Slice => |s| switch (self) {
                 .ableos => categorizeAbleosSlice(s, types),
             },
-            else => unreachable,
+            .Nullable => |n| switch (self) {
+                .ableos => categorizeAbleosNullable(n, types),
+            },
+            .Global, .Func, .Template => std.debug.panic("{s}", .{@tagName(ty.data())}),
         };
+    }
+
+    pub fn categorizeAbleosNullable(nullable: *Id, types: *Types) Spec {
+        const base_abi = Abi.ableos.categorize(nullable.*, types);
+        if (base_abi == .Imaginary) return .{ .ByValue = .i8 };
+        if (base_abi == .ByValue) return .{ .ByValuePair = .{
+            .types = .{ .i8, base_abi.ByValue },
+            .padding = @intCast(base_abi.ByValue.size() - 1),
+        } };
+        return .ByRef;
     }
 
     pub fn categorizeAbleosSlice(slice: *Slice, types: *Types) Spec {
@@ -576,26 +593,27 @@ pub fn getScope(self: *Types, file: File) Id {
     return self.file_scopes[@intFromEnum(file)];
 }
 
-pub fn makeSlice(self: *Types, len: ?usize, elem: Id) Id {
-    var vl = Slice{ .len = len, .elem = elem };
-    const ptr = Id.init(.{ .Slice = &vl });
-    const slot = self.interner.getOrPut(self.arena.allocator(), ptr) catch unreachable;
+pub fn internPtr(self: *Types, comptime tag: std.meta.Tag(Data), payload: std.meta.Child(std.meta.TagPayload(Data, tag))) Id {
+    var vl = payload;
+    const id = Id.init(@unionInit(Data, @tagName(tag), &vl));
+    const slot = self.interner.getOrPut(self.arena.allocator(), id) catch unreachable;
     if (slot.found_existing) return slot.key_ptr.*;
-    const ptr_slot = self.arena.create(Slice);
-    ptr_slot.* = vl;
-    slot.key_ptr.* = .init(.{ .Slice = ptr_slot });
+    const alloc = self.arena.create(@TypeOf(payload));
+    alloc.* = payload;
+    slot.key_ptr.* = .init(@unionInit(Data, @tagName(tag), alloc));
     return slot.key_ptr.*;
 }
 
+pub fn makeSlice(self: *Types, len: ?usize, elem: Id) Id {
+    return self.internPtr(.Slice, .{ .len = len, .elem = elem });
+}
+
 pub fn makePtr(self: *Types, v: Id) Id {
-    var vl = v;
-    const ptr = Id.init(.{ .Ptr = &vl });
-    const slot = self.interner.getOrPut(self.arena.allocator(), ptr) catch unreachable;
-    if (slot.found_existing) return slot.key_ptr.*;
-    const ptr_slot = self.arena.create(Id);
-    ptr_slot.* = v;
-    slot.key_ptr.* = .init(.{ .Ptr = ptr_slot });
-    return slot.key_ptr.*;
+    return self.internPtr(.Ptr, v);
+}
+
+pub fn makeNullable(self: *Types, v: Id) Id {
+    return self.internPtr(.Nullable, v);
 }
 
 pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Key) struct { Map.GetOrPutResult, std.meta.TagPayload(Data, kind) } {

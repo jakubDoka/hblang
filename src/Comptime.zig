@@ -49,42 +49,46 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) u64 {
     var tmp = root.Arena.scrath(null);
     defer tmp.deinit();
 
-    var eval_stack = std.ArrayListUnmanaged(*Node).initBuffer(tmp.arena.alloc(*Node, 32));
+    var work_list = std.ArrayListUnmanaged(*Node).initBuffer(tmp.arena.alloc(*Node, 32));
 
-    eval_stack.appendAssumeCapacity(expr);
+    work_list.appendAssumeCapacity(expr);
 
     while (true) {
-        const curr = eval_stack.pop().?;
-        switch (curr.kind) {
+        const curr = work_list.pop().?;
+        const res = switch (curr.kind) {
             .CInt => {
-                if (eval_stack.items.len == 0) {
+                if (work_list.items.len == 0) {
                     return @as(u64, @bitCast(curr.extra(.CInt).*));
                 }
+
+                continue;
             },
-            .BinOp => {
+            .BinOp, .UnOp => |t| b: {
                 var requeued = false;
                 for (curr.inputs()[1..]) |arg| {
                     if (arg.?.kind != .CInt) {
-                        if (!requeued) eval_stack.appendAssumeCapacity(curr);
-                        eval_stack.appendAssumeCapacity(arg.?);
+                        if (!requeued) work_list.appendAssumeCapacity(curr);
+                        work_list.appendAssumeCapacity(arg.?);
                         requeued = true;
                     }
                 }
                 if (requeued) continue;
 
-                const lhs, const rhs = .{ curr.inputs()[1].?.extra(.CInt).*, curr.inputs()[2].?.extra(.CInt).* };
-
-                const res = bl.addIntImm(curr.data_type, switch (curr.extra(.BinOp).*) {
-                    .eq => @intFromBool(lhs == rhs),
-                    .iadd => lhs + rhs,
-                    else => |t| std.debug.panic("{s}", .{@tagName(t)}),
-                });
-
-                bl.func.subsume(res, curr);
-                eval_stack.appendAssumeCapacity(res);
+                switch (t) {
+                    .BinOp => {
+                        const lhs, const rhs = .{ curr.inputs()[1].?.extra(.CInt).*, curr.inputs()[2].?.extra(.CInt).* };
+                        break :b bl.addIntImm(curr.data_type, curr.extra(.BinOp).eval(lhs, rhs));
+                    },
+                    .UnOp => {
+                        const oper = curr.inputs()[1].?.extra(.CInt).*;
+                        break :b bl.addIntImm(curr.data_type, curr.extra(.UnOp).eval(curr.data_type, oper));
+                    },
+                    else => unreachable,
+                }
             },
             .Ret => {
-                eval_stack.appendAssumeCapacity(curr.inputs()[0].?);
+                work_list.appendAssumeCapacity(curr.inputs()[0].?);
+                continue;
             },
             .CallEnd => {
                 const call: *Node = curr.inputs()[0].?;
@@ -104,8 +108,8 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) u64 {
                 var requeued = false;
                 for (call.inputs()[2..], 0..) |arg, arg_idx| {
                     if (arg.?.kind != .CInt) {
-                        if (!requeued) eval_stack.appendAssumeCapacity(curr);
-                        eval_stack.appendAssumeCapacity(arg.?);
+                        if (!requeued) work_list.appendAssumeCapacity(curr);
+                        work_list.appendAssumeCapacity(arg.?);
                         requeued = true;
                     } else {
                         types.ct.vm.regs.set(.arg(call.extra(.Call).ret_count, arg_idx), @bitCast(arg.?.extra(.CInt).*));
@@ -127,15 +131,16 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) u64 {
                     }
                 }
                 bl.func.subsume(call.inputs()[0].?, curr);
-                eval_stack.appendAssumeCapacity(ret_vl);
+                work_list.appendAssumeCapacity(ret_vl);
+                continue;
             },
-            .Load => {
+            .Load => b: {
                 var cursor = curr.mem();
                 while (true) {
                     if (cursor.isStore()) {
                         if (cursor.base() != curr.base()) {
                             cursor = cursor.mem();
-                        } else break;
+                        } else break :b cursor.value();
                     } else if (cursor.kind == .Mem) {
                         if (cursor.inputs()[0].?.kind == .Start) {
                             unreachable;
@@ -143,11 +148,12 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) u64 {
                         cursor = cursor.inputs()[0].?.inputs()[0].?.inputs()[1].?;
                     } else std.debug.panic("{}\n", .{cursor});
                 }
-                bl.func.subsume(cursor.value(), curr);
-                eval_stack.appendAssumeCapacity(cursor.value());
             },
             else => std.debug.panic("{}", .{curr}),
-        }
+        };
+
+        bl.func.subsume(res, curr);
+        work_list.appendAssumeCapacity(res);
     }
 }
 

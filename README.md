@@ -870,6 +870,25 @@ main := fn(): uint {
 }
 ```
 
+#### nullable types 1
+```hb
+expectations := .{
+    .return_value: 10;
+}
+
+main := fn(): uint {
+    ten := mkval(uint, 10)
+
+    if ten == null return 1
+
+    return ten.!
+}
+
+mknull := fn($T: type): ?T return null
+mkval := fn($T: type, val: T): ?T return val
+```
+
+
 #### directives 1 (@size_of, @align_of)
 ```hb
 expectations := .{
@@ -940,7 +959,7 @@ main := fn(): uint {
 #### directives 7 (@kind_of)
 ```hb
 expectations := .{
-    .return_value: 2;
+    .return_value: 4;
 }
 
 main := fn(): uint {
@@ -1002,7 +1021,7 @@ main := fn(): uint {
   - [x] ifs
     - [x] comptime
   - [x] loops
-    - [ ] comptime --DO
+    - [x] comptime
     - [x] break
     - [x] continue
     - [ ] labels
@@ -1015,7 +1034,7 @@ main := fn(): uint {
 - [x] global variables
   - [x] comptime evaluation
 - [ ] types
-  - [ ] `idk`
+  - [x] `idk`
   - [x] integers/bool
     - [x] bool literals
     - [ ] integer literals
@@ -1060,7 +1079,7 @@ main := fn(): uint {
     - [ ] indexing
     - [ ] slicing
   - [ ] tuples
-  - [ ] nullable types
+  - [ ] nullable types --DO
 - [ ] directives
   - [x] `@use(<string>)`
   - [x] `@TypeOf(<expr>)`
@@ -1078,7 +1097,6 @@ main := fn(): uint {
   - [x] `@error(...<expr>)`
   - [x] `@ChildOf(<ty>)`
   - [ ] `@target("<pat>")`
-  - [ ] `@unwrap(<expr>)`
 
 ## vendored tests
 

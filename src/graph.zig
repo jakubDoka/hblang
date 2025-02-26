@@ -1,6 +1,10 @@
 const std = @import("std");
 const root = @import("utils.zig");
 
+fn tu(int: i64) u64 {
+    return @bitCast(int);
+}
+
 pub const BinOp = enum(u8) {
     iadd,
     isub,
@@ -18,6 +22,29 @@ pub const BinOp = enum(u8) {
     sge,
     ule,
     sle,
+
+    pub fn eval(self: BinOp, lhs: i64, rhs: i64) i64 {
+        return switch (self) {
+            .iadd => lhs +% rhs,
+            .isub => lhs -% rhs,
+            .imul => lhs *% rhs,
+            .udiv => @bitCast(tu(lhs) / tu(rhs)),
+            .sdiv => @divFloor(lhs, rhs),
+
+            .ne => @intFromBool(lhs != rhs),
+            .eq => @intFromBool(lhs == rhs),
+
+            .ugt => @intFromBool(tu(lhs) > tu(rhs)),
+            .ult => @intFromBool(tu(lhs) < tu(rhs)),
+            .uge => @intFromBool(tu(lhs) >= tu(rhs)),
+            .ule => @intFromBool(tu(lhs) <= tu(rhs)),
+
+            .sgt => @intFromBool(lhs > rhs),
+            .slt => @intFromBool(lhs < rhs),
+            .sge => @intFromBool(lhs >= rhs),
+            .sle => @intFromBool(lhs <= rhs),
+        };
+    }
 };
 
 pub const UnOp = enum(u8) {
@@ -25,6 +52,25 @@ pub const UnOp = enum(u8) {
     uext,
     ired,
     neg,
+
+    pub fn eval(self: UnOp, src: DataType, oper: i64) i64 {
+        return switch (self) {
+            .sext => switch (src) {
+                .i8 => @as(i8, @truncate(oper)),
+                .i16 => @as(i16, @truncate(oper)),
+                .i32 => @as(i32, @truncate(oper)),
+                else => unreachable,
+            },
+            .uext => switch (src) {
+                .i8 => @as(u8, @truncate(tu(oper))),
+                .i16 => @as(u16, @truncate(tu(oper))),
+                .i32 => @as(u32, @truncate(tu(oper))),
+                else => unreachable,
+            },
+            .ired => oper,
+            .neg => -oper,
+        };
+    }
 };
 
 pub const DataType = enum(u16) {
@@ -33,7 +79,7 @@ pub const DataType = enum(u16) {
     i16,
     i32,
     int,
-    dead,
+    bot,
 
     pub fn size(self: DataType) usize {
         return switch (self) {
@@ -756,7 +802,7 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         pub fn isDead(node: ?*Node) bool {
-            return node == null or node.?.data_type == .dead;
+            return node == null or node.?.data_type == .bot;
         }
 
         pub fn subsumeNoKill(self: *Self, this: *Node, target: *Node) void {
@@ -937,7 +983,7 @@ pub fn Func(comptime MachNode: type) type {
                 node.isCfg() and isDead(inps[0]));
 
             if (is_dead) {
-                node.data_type = .dead;
+                node.data_type = .bot;
                 for (node.outputs()) |o| worklist.add(o);
                 return null;
             }
@@ -999,7 +1045,7 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         pub fn idealize(self: *Self, node: *Node, worklist: *WorkList) ?*Node {
-            if (node.data_type == .dead) return null;
+            if (node.data_type == .bot) return null;
 
             if (self.idealizeDead(node, worklist)) |w| return w;
 

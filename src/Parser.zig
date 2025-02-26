@@ -148,13 +148,15 @@ fn parseUnit(self: *Parser) Error!Id {
     }
 
     while (true) base = try self.store.allocDyn(self.gpa, switch (self.cur.kind) {
-        .@"." => .{ .Field = .{
-            .base = base,
-            .field = b: {
-                _ = self.advance();
-                break :b .init((try self.expectAdvance(.Ident)).pos);
-            },
-        } },
+        .@"." => b: {
+            _ = self.advance();
+            break :b if (self.tryAdvance(.@"!")) .{
+                .Unwrap = base,
+            } else .{ .Field = .{
+                .base = base,
+                .field = .init((try self.expectAdvance(.Ident)).pos),
+            } };
+        },
         .@"[" => .{ .Index = .{
             .base = base,
             .subscript = b: {
@@ -226,6 +228,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         .Comment => .{ .Comment = .init(token.pos) },
         ._ => .{ .Wildcard = .init(token.pos) },
         .idk => .{ .Idk = .init(token.pos) },
+        .null => .{ .Null = .init(token.pos) },
         .@"$", .Ident => return try self.resolveIdent(token),
         .@"fn" => b: {
             const prev_capture_boundary = self.capture_boundary;
@@ -331,7 +334,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         .void, .bool, .u8, .u16, .u32, .uint, .i8, .i16, .i32, .int, .type => .{
             .Buty = .{ .pos = .init(token.pos), .bt = token.kind },
         },
-        .@"&", .@"*", .@"^", .@"-" => |op| .{ .UnOp = .{
+        .@"&", .@"*", .@"^", .@"-", .@"?" => |op| .{ .UnOp = .{
             .pos = .init(token.pos),
             .op = op,
             .oper = try self.parseUnit(),

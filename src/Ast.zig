@@ -52,6 +52,7 @@ pub const Kind = enum {
     Index,
     Call,
     Tag,
+    Unwrap,
     Field,
     Ctor,
     Tupl,
@@ -68,6 +69,7 @@ pub const Kind = enum {
     Use,
     Integer,
     Bool,
+    Null,
     String,
 };
 
@@ -116,6 +118,7 @@ pub const Expr = union(Kind) {
         args: Slice,
     },
     Tag: Pos,
+    Unwrap: Id,
     Field: struct {
         base: Id,
         field: Pos,
@@ -179,6 +182,7 @@ pub const Expr = union(Kind) {
         pos: Pos,
         value: bool,
     },
+    Null: Pos,
     String: struct {
         pos: Pos,
         end: u32,
@@ -265,6 +269,7 @@ fn posOfPayload(self: *const Ast, v: anytype) Pos {
         void => .init(0),
         Ident => .init(v.pos()),
         Pos => v,
+        Id => self.posOf(v),
         else => |Vt| if (@hasField(Vt, "pos"))
             v.pos
         else

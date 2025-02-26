@@ -1,6 +1,6 @@
-loops 5 (comptime|error):9:2: reached $loop backedge
+loops 5 (comptime|error):9:2: reached second $loop control, this means control flow leading to it is runtime dependant
     $loop if i == arr.len break else {
     ^
-loops 5 (comptime|error):9:24: ...previous control reached here
+loops 5 (comptime|error):9:24: ...previous one reached here
     $loop if i == arr.len break else {
                           ^

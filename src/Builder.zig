@@ -318,7 +318,7 @@ pub const Loop = struct {
     scope: SpecificNode(.Scope),
     control: std.EnumArray(Control, ?SpecificNode(.Scope)) = .{ .values = .{ null, null } },
 
-    const Control = enum { @"break", @"continue" };
+    pub const Control = enum { @"break", @"continue" };
 
     pub fn addLoopControl(self: *Loop, builder: *Builder, kind: Loop.Control) void {
         if (self.control.getPtr(kind).*) |ctrl| {
