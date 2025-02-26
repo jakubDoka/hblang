@@ -1055,11 +1055,12 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return .never;
             };
 
-            const start: Value = if (range.start.tag() == .Void)
+            var start: Value = if (range.start.tag() == .Void)
                 .mkv(.uint, self.bl.addIntImm(.int, 0))
             else
                 self.emitTyped(.{}, .uint, range.start);
-            const end: Value = if (range.end.tag() == .Void) switch (base.ty.data()) {
+            self.ensureLoaded(&start);
+            var end: Value = if (range.end.tag() == .Void) switch (base.ty.data()) {
                 .Slice => |slice_ty| if (slice_ty.len) |l|
                     .mkv(.uint, self.bl.addIntImm(.int, @bitCast(l)))
                 else
@@ -1069,6 +1070,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     return .never;
                 },
             } else self.emitTyped(.{}, .uint, range.end);
+            self.ensureLoaded(&end);
 
             const res_ty = self.types.makeSlice(null, elem);
 

@@ -913,6 +913,33 @@ main := fn(): uint {
 }
 ```
 
+#### slices 2
+```hb
+expectations := .{
+    .return_value: 25;
+}
+
+main := fn(): uint {
+    arr := uint.[1, 2, 3, 4]
+    slice := arr[..]
+
+    slices := ([]uint).[arr[..], arr[..arr[1]], arr[arr[1]..], arr[arr[0]..arr[2]]]
+
+    sum := 0
+    i := 0
+    loop if i == slices.len break else {
+        j := 0
+        loop if j == slices[i].len break else {
+            sum += slices[i][j]
+            j += 1
+        }
+        i += 1
+    }
+
+    return sum
+}
+```
+
 #### nullable types 1
 ```hb
 expectations := .{
@@ -1145,11 +1172,11 @@ main := fn(): uint {
     - [ ] scope
   - [x] pointers
     - [ ] slicing
-  - [ ] slices
+  - [x] slices
     - [x] known size (arrays)
-    - [ ] field access
-    - [ ] indexing
-    - [ ] slicing
+    - [x] field access
+    - [x] indexing
+    - [x] slicing
   - [ ] tuples
   - [x] nullable types
 - [ ] directives
