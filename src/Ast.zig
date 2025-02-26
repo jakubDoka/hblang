@@ -47,6 +47,7 @@ pub const Kind = enum {
     Ident,
     Buty,
     Fn,
+    Union,
     Struct,
     Directive,
     Range,
@@ -100,6 +101,11 @@ pub const Expr = union(Kind) {
         args: root.EnumSlice(Arg),
         ret: Id,
         body: Id,
+    },
+    Union: struct {
+        pos: Pos,
+        captures: root.EnumSlice(Ident),
+        fields: Slice,
     },
     Struct: struct {
         pos: Pos,

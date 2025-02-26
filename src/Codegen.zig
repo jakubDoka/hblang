@@ -656,76 +656,91 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 offset_cursor += ty.alignment(self.types);
             }
 
-            if (ty.data() != .Struct) {
-                self.report(expr, "{} can not be constructed with '.{{..}}'", .{ty});
-                return .never;
-            }
-            const struct_ty = ty.data().Struct;
+            switch (ty.data()) {
+                .Struct => |struct_ty| {
+                    // Existing struct constructor code...
+                    const FillSlot = union(enum) {
+                        RequiredOffset: usize,
+                        Filled: Ast.Id,
+                    };
 
-            const FillSlot = union(enum) {
-                RequiredOffset: usize,
-                Filled: Ast.Id,
-            };
-
-            const fields = struct_ty.getFields(self.types);
-            const slots = tmp.arena.alloc(FillSlot, fields.len);
-            {
-                for (slots, fields) |*s, tf| {
-                    offset_cursor = std.mem.alignForward(usize, offset_cursor, tf.ty.alignment(self.types));
-                    s.* = .{ .RequiredOffset = offset_cursor };
-                    offset_cursor += tf.ty.size(self.types);
-                }
-            }
-
-            for (ast.exprs.view(e.fields)) |f| {
-                const field = ast.exprs.get(f).BinOp;
-                const fname = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1);
-                const slot, const ftype = for (fields, slots) |tf, *s| {
-                    if (std.mem.eql(u8, tf.name, fname)) break .{ s, tf.ty };
-                } else {
-                    self.report(f, "{} does not have a field called {s} (TODO: list fields)", .{ ty, fname });
-                    continue;
-                };
-
-                switch (slot.*) {
-                    .RequiredOffset => |offset| {
-                        const off = self.bl.addFieldOffset(local, @intCast(offset));
-                        var value = self.emit(ctx.addTy(ftype).addLoc(off), field.rhs);
-                        if (self.typeCheck(field.rhs, &value, ftype)) continue;
-                        self.emitGenericStore(off, &value);
-                        slot.* = .{ .Filled = f };
-                    },
-                    .Filled => |pos| {
-                        self.report(f, "initializing the filed multiple times", .{});
-                        self.report(pos, "...arleady initialized here", .{});
-                    },
-                }
-            }
-
-            for (slots, fields) |s, f| {
-                if (s == .RequiredOffset) {
-                    if (f.defalut_value.tag() != .Void) {
-                        const prev_scope = self.parent_scope;
-                        const prev_scope_len = self.scope.items.len;
-                        defer {
-                            self.parent_scope = prev_scope;
-                            self.scope.items.len = prev_scope_len;
-                            self.ast = self.types.getFile(self.parent_scope.file());
+                    const fields = struct_ty.getFields(self.types);
+                    const slots = tmp.arena.alloc(FillSlot, fields.len);
+                    {
+                        for (slots, fields) |*s, tf| {
+                            offset_cursor = std.mem.alignForward(usize, offset_cursor, tf.ty.alignment(self.types));
+                            s.* = .{ .RequiredOffset = offset_cursor };
+                            offset_cursor += tf.ty.size(self.types);
                         }
-
-                        self.parent_scope = .{ .Perm = ty };
-                        self.scope.items.len = 0;
-
-                        self.ast = self.types.getFile(self.parent_scope.file());
-                        const off = self.bl.addFieldOffset(local, @intCast(s.RequiredOffset));
-
-                        var value = self.emit(.{ .loc = off, .ty = f.ty }, f.defalut_value);
-                        if (!self.typeCheck(f.defalut_value, &value, f.ty))
-                            self.emitGenericStore(off, &value);
-                    } else {
-                        self.report(expr, "field {s} on struct {} is not initialized", .{ f.name, ty });
                     }
-                }
+
+                    for (ast.exprs.view(e.fields)) |f| {
+                        const field = ast.exprs.get(f).BinOp;
+                        const fname = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1);
+                        const slot, const ftype = for (fields, slots) |tf, *s| {
+                            if (std.mem.eql(u8, tf.name, fname)) break .{ s, tf.ty };
+                        } else {
+                            self.report(f, "{} does not have a field called {s} (TODO: list fields)", .{ ty, fname });
+                            continue;
+                        };
+
+                        switch (slot.*) {
+                            .RequiredOffset => |offset| {
+                                const off = self.bl.addFieldOffset(local, @intCast(offset));
+                                var value = self.emit(ctx.addTy(ftype).addLoc(off), field.rhs);
+                                if (self.typeCheck(field.rhs, &value, ftype)) continue;
+                                self.emitGenericStore(off, &value);
+                                slot.* = .{ .Filled = f };
+                            },
+                            .Filled => |pos| {
+                                self.report(f, "initializing the filed multiple times", .{});
+                                self.report(pos, "...arleady initialized here", .{});
+                            },
+                        }
+                    }
+
+                    for (slots, fields) |s, f| {
+                        if (s == .RequiredOffset) {
+                            if (f.defalut_value) |value| {
+                                // TODO: we will need to optimize constants in the backend
+                                self.queue(.{ .Global = value });
+                                const off = self.bl.addFieldOffset(local, @intCast(s.RequiredOffset));
+                                const glob = self.bl.addGlobalAddr(value.id);
+                                self.bl.addFixedMemCpy(off, glob, f.ty.size(self.types));
+                            } else {
+                                self.report(expr, "field {s} on struct {} is not initialized", .{ f.name, ty });
+                            }
+                        }
+                    }
+                },
+                .Union => |union_ty| {
+                    if (e.fields.len() != 1) {
+                        self.report(expr, "union constructor must initialize only one field", .{});
+                        return .never;
+                    }
+
+                    const fields = union_ty.getFields(self.types);
+
+                    const field_ast = ast.exprs.get(ast.exprs.view(e.fields)[0]).BinOp;
+                    const fname = ast.tokenSrc(ast.exprs.get(field_ast.lhs).Tag.index + 1);
+
+                    const f = for (fields) |f| {
+                        if (std.mem.eql(u8, f.name, fname)) break f;
+                    } else {
+                        self.report(field_ast.lhs, "{} does not have a field called {s} (TODO: list fields)", .{ ty, fname });
+                        return .never;
+                    };
+
+                    offset_cursor = std.mem.alignForward(usize, offset_cursor, f.ty.alignment(self.types));
+                    const off = self.bl.addFieldOffset(local, @intCast(offset_cursor));
+                    var value = self.emit(.{ .ty = f.ty, .loc = off }, field_ast.rhs);
+                    if (self.typeCheck(field_ast.rhs, &value, f.ty)) return .never;
+                    self.emitGenericStore(off, &value);
+                },
+                else => {
+                    self.report(expr, "{} can not be constructed with '.{{..}}'", .{ty});
+                    return .never;
+                },
             }
 
             return .mkp(oty, local);
@@ -1019,6 +1034,16 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
                     return .mkp(ftype, self.bl.addFieldOffset(base.id.Ptr, @intCast(offset)));
                 },
+                .Union => |union_ty| {
+                    const ftype = for (union_ty.getFields(self.types)) |tf| {
+                        if (std.mem.eql(u8, fname, tf.name)) break tf.ty;
+                    } else {
+                        self.report(e.field, "no such field on {} (TODO: list fields)", .{base.ty});
+                        return .never;
+                    };
+
+                    return .mkp(ftype, self.bl.addFieldOffset(base.id.Ptr, 0));
+                },
                 .Slice => |slice_ty| {
                     if (std.mem.eql(u8, fname, "len")) {
                         if (slice_ty.len) |l| {
@@ -1280,7 +1305,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             return .{};
         },
         .Buty => |e| return self.emitTyConst(.fromLexeme(e.bt)),
-        .Struct => |e| {
+        inline .Struct, .Union => |e, t| {
             var tmp = root.Arena.scrath(null);
             defer tmp.deinit();
 
@@ -1289,7 +1314,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             @memset(args.params, .int);
             @memset(args.returns, .int);
 
-            args.arg_slots[0] = self.bl.addIntImm(.int, @intFromEnum(Comptime.InteruptCode.Struct));
+            args.arg_slots[0] = self.bl.addIntImm(.int, @intFromEnum(@field(Comptime.InteruptCode, @tagName(t))));
             args.arg_slots[1] = self.bl.addIntImm(.int, @bitCast(@intFromEnum(self.parent_scope.perm())));
             args.arg_slots[2] = self.bl.addIntImm(.int, @as(u32, @bitCast(expr)));
 

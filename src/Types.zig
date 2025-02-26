@@ -55,6 +55,7 @@ pub const Data = union(enum) {
     Ptr: *Id,
     Slice: *Slice,
     Nullable: *Id,
+    Union: *Union,
     Struct: *Struct,
     Template: *Template,
     Func: *Func,
@@ -100,6 +101,45 @@ pub const Slice = struct {
     pub const len_offset = 8;
 };
 
+pub const Union = struct {
+    key: Key,
+
+    ast_fields: Ast.Slice,
+    fields: ?[]const Field = null,
+
+    pub const Field = struct {
+        name: []const u8,
+        ty: Id,
+    };
+
+    pub fn asTy(self: *Union) Id {
+        return Id.init(.{ .Union = self });
+    }
+
+    pub fn getFields(self: *Union, types: *Types) []const Field {
+        if (self.fields) |f| return f;
+        const ast = types.getFile(self.key.file);
+
+        var count: usize = 0;
+        for (ast.exprs.view(self.ast_fields)) |f| count += @intFromBool(ast.exprs.get(f).BinOp.lhs.tag() == .Tag);
+
+        const fields = types.arena.alloc(Field, count);
+        var i: usize = 0;
+        for (ast.exprs.view(self.ast_fields)) |fast| {
+            const field = ast.exprs.get(fast).BinOp;
+            if (field.lhs.tag() != .Tag) continue;
+
+            fields[i] = .{
+                .name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1),
+                .ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field.rhs),
+            };
+            i += 1;
+        }
+        self.fields = fields;
+        return fields;
+    }
+};
+
 pub const Struct = struct {
     key: Key,
 
@@ -109,7 +149,7 @@ pub const Struct = struct {
     pub const Field = struct {
         name: []const u8,
         ty: Id,
-        defalut_value: Ast.Id = .zeroSized(.Void),
+        defalut_value: ?*Global = null,
     };
 
     pub fn asTy(self: *Struct) Id {
@@ -130,11 +170,24 @@ pub const Struct = struct {
             if (field.lhs.tag() != .Tag) continue;
             if (field.rhs.tag() == .BinOp and ast.exprs.get(field.rhs).BinOp.op == .@"=") {
                 const field_meta = ast.exprs.get(field.rhs).BinOp;
-                fields[i] = .{
-                    .name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1),
-                    .ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field_meta.lhs),
-                    .defalut_value = field_meta.rhs,
+                const name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1);
+                const ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field_meta.lhs);
+
+                const value = types.arena.create(Global);
+                value.* = .{
+                    .id = types.next_global,
+                    .key = .{
+                        .file = self.key.file,
+                        .name = name,
+                        .scope = self.asTy(),
+                        .ast = field_meta.rhs,
+                        .captures = &.{},
+                    },
                 };
+                types.ct.evalGlobal(name, value, ty, field_meta.rhs);
+                types.next_global += 1;
+
+                fields[i] = .{ .name = name, .ty = ty, .defalut_value = value };
             } else {
                 fields[i] = .{
                     .name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1),
@@ -265,7 +318,7 @@ pub const Id = enum(usize) {
         return switch (self.data()) {
             .Builtin => self.isInteger() or self == .bool,
             .Struct, .Ptr => true,
-            .Global, .Func, .Template, .Slice, .Nullable => false,
+            .Global, .Func, .Template, .Slice, .Nullable, .Union => false,
         };
     }
 
@@ -316,6 +369,16 @@ pub const Id = enum(usize) {
                 .uint, .int, .type => 8,
             },
             .Ptr => 8,
+            .Union => |u| {
+                var max_size: usize = 0;
+                var alignm: usize = 1;
+                for (u.getFields(types)) |f| {
+                    alignm = @max(alignm, f.ty.alignment(types));
+                    max_size = @max(max_size, f.ty.size(types));
+                }
+                max_size = std.mem.alignForward(usize, max_size, alignm);
+                return max_size;
+            },
             .Struct => |s| {
                 var siz: usize = 0;
                 var alignm: usize = 1;
@@ -338,7 +401,7 @@ pub const Id = enum(usize) {
             .Builtin => @max(1, self.size(types)),
             .Ptr => 8,
             .Nullable => |n| n.alignment(types),
-            .Struct => |s| {
+            inline .Union, .Struct => |s| {
                 var alignm: usize = 1;
                 for (s.getFields(types)) |f| {
                     alignm = @max(alignm, f.ty.alignment(types));
@@ -393,7 +456,7 @@ pub const Id = enum(usize) {
                     return;
                 },
                 .Builtin => |b| writer.writeAll(@tagName(b)),
-                inline .Func, .Global, .Template, .Struct => |b| {
+                inline .Func, .Global, .Template, .Struct, .Union => |b| {
                     if (b.key.scope != .void) {
                         try writer.print("{" ++ opts ++ "}", .{b.key.scope.fmt(self.tys)});
                     }
@@ -498,6 +561,9 @@ pub const Abi = enum {
                 .uint, .int, .type => .int,
             } },
             .Ptr => .{ .ByValue = .int },
+            .Union => |s| switch (self) {
+                .ableos => categorizeAbleosUnion(s, types),
+            },
             .Struct => |s| switch (self) {
                 .ableos => categorizeAbleosStruct(s, types),
             },
@@ -529,6 +595,17 @@ pub const Abi = enum {
         if (slice.len == 1) return elem_abi;
         if (slice.len == 2 and elem_abi == .ByValue) return .{ .ByValuePair = .{ .types = .{elem_abi.ByValue} ** 2, .padding = 0 } };
         return .ByRef;
+    }
+
+    pub fn categorizeAbleosUnion(unio: *Union, types: *Types) Spec {
+        const fields = unio.getFields(types);
+        if (fields.len == 0) return .Imaginary; // TODO: add .Impossible
+        const res = Abi.ableos.categorize(fields[0].ty, types);
+        for (fields[1..]) |f| {
+            const fspec = Abi.ableos.categorize(f.ty, types);
+            if (!std.meta.eql(res, fspec)) return .ByRef;
+        }
+        return res;
     }
 
     pub fn categorizeAbleosStruct(stru: *Struct, types: *Types) Spec {
@@ -641,6 +718,31 @@ pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Key) struct 
     alloc.* = ty;
     slot.key_ptr.* = Id.init(@unionInit(Data, @tagName(kind), alloc));
     return .{ slot, alloc };
+}
+
+pub fn resolveUnion(
+    self: *Types,
+    scope: Id,
+    file: File,
+    name: []const u8,
+    ast: Ast.Id,
+    fields: Ast.Slice,
+    captures: []const Key.Capture,
+) Id {
+    const slot, const alloc = self.intern(.Union, .{
+        .scope = scope,
+        .file = file,
+        .ast = ast,
+        .name = name,
+        .captures = captures,
+    });
+    if (!slot.found_existing) {
+        alloc.* = .{
+            .key = alloc.key,
+            .ast_fields = fields,
+        };
+    }
+    return slot.key_ptr.*;
 }
 
 pub fn resolveStruct(

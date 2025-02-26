@@ -294,7 +294,13 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             .args = try self.parseList(.@"(", .@",", .@")", parseExpr),
             .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
         } },
-        .@"struct" => b: {
+        inline .@"union", .@"struct" => |t| b: {
+            const name = comptime nm: {
+                var nm = @tagName(t)[0..].*;
+                nm[0] = std.ascii.toUpper(nm[0]);
+                break :nm nm[0..] ++ "";
+            };
+
             const prev_capture_boundary = self.capture_boundary;
             self.capture_boundary = self.active_syms.items.len;
             defer self.capture_boundary = prev_capture_boundary;
@@ -302,11 +308,11 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             const capture_scope = self.captures.items.len;
             const fields = try self.parseList(.@"{", .@";", .@"}", parseUnorderedExpr);
             const captures = self.popCaptures(capture_scope, prev_capture_boundary != 0);
-            break :b .{ .Struct = .{
+            break :b @unionInit(Ast.Expr, name, .{
                 .fields = fields,
                 .captures = try self.store.allocSlice(Ident, self.gpa, captures),
                 .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
-            } };
+            });
         },
         .@"." => b: {
             break :b .{ .Tag = .init((try self.expectAdvance(.Ident)).pos - 1) };

@@ -126,13 +126,12 @@ pub fn addSpill(self: *Builder, value: *BuildNode) SpecificNode(.Local) {
     return local;
 }
 
-pub fn addFixedMemCpy(self: *Builder, dst: *BuildNode, src: *BuildNode, size: usize) SpecificNode(.MemCpy) {
+pub fn addFixedMemCpy(self: *Builder, dst: *BuildNode, src: *BuildNode, size: usize) void {
     const mem = self.memory();
     const ctrl = self.control();
     const siz = self.addIntImm(.int, @intCast(size));
     const mcpy = self.func.addNode(.MemCpy, &.{ ctrl, mem, dst, src, siz }, .{});
     self.func.setInputNoIntern(self.scope.?, 1, mcpy);
-    return mcpy;
 }
 
 pub fn addGlobalAddr(self: *Builder, arbitrary_global_id: u32) SpecificNode(.GlobalAddr) {

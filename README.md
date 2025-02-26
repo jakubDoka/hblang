@@ -773,6 +773,42 @@ main := fn(): uint {
 }
 ```
 
+#### unions 1
+```hb
+expectations := .{
+    .return_value: 257;
+}
+
+main := fn(): uint {
+    Union := union {
+        .single: u16;
+        .pair: struct{.l: u8; .r: u8};
+    }
+
+    val := Union.{.pair: .(1, 1)}
+
+    return val.single
+}
+```
+
+#### unions 2
+```hb
+expectations := .{
+    .return_value: 42;
+}
+
+main := fn(): int {
+    Number := union {
+        ._int: int;
+        ._uint: uint;
+    }
+
+    n1 := Number.{._int: 42}
+
+    return n1._int
+}
+```
+
 #### global variables 1
 ```hb
 counter: uint = 0
@@ -923,7 +959,7 @@ main := fn(): uint {
     arr := uint.[1, 2, 3, 4]
     slice := arr[..]
 
-    slices := ([]uint).[arr[..], arr[..arr[1]], arr[arr[1]..], arr[arr[0]..arr[2]]]
+    slices := ([]uint).[arr[..], arr.ptr[..arr[1]], arr[arr[1]..], arr.ptr[arr[0]..arr[2]]]
 
     sum := 0
     i := 0
@@ -1058,7 +1094,7 @@ main := fn(): uint {
 #### directives 7 (@kind_of)
 ```hb
 expectations := .{
-    .return_value: 4;
+    .return_value: 5;
 }
 
 main := fn(): uint {
@@ -1130,8 +1166,10 @@ main := fn(): uint {
     - [ ] comptime
   - [ ] defer
   - [ ] `die`
+- [ ] import pattern matching
 - [x] global variables
   - [x] comptime evaluation
+  - [ ] immutable
 - [ ] types
   - [x] `idk`
   - [x] integers/bool

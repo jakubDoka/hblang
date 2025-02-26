@@ -19,6 +19,7 @@ pub const stack_size = 1024 * 100;
 
 pub const InteruptCode = enum(u64) {
     Struct,
+    Union,
 };
 
 pub fn init(gpa: std.mem.Allocator) Comptime {
@@ -220,6 +221,29 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
                         name,
                         struct_ast_id,
                         struct_ast.fields,
+                        captures,
+                    );
+
+                    self.vm.regs.set(.ret(0), @intFromEnum(res));
+                },
+                .Union => {
+                    const scope: Types.Id = @enumFromInt(self.ecaArg(1));
+                    const ast = types.getFile(scope.file());
+                    const union_ast_id: Ast.Id = @bitCast(@as(u32, @truncate(self.ecaArg(2))));
+                    const union_ast = ast.exprs.getTyped(.Union, union_ast_id).?;
+
+                    const captures = types.arena.alloc(Types.Key.Capture, union_ast.captures.len());
+
+                    for (captures, ast.exprs.view(union_ast.captures), 0..) |*slot, id, i| {
+                        slot.* = .{ .id = id, .ty = @enumFromInt(self.ecaArg(3 + i * 2)), .value = self.ecaArg(3 + i * 2 + 1) };
+                    }
+
+                    const res = types.resolveUnion(
+                        scope,
+                        scope.file(),
+                        name,
+                        union_ast_id,
+                        union_ast.fields,
                         captures,
                     );
 
