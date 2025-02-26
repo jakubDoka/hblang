@@ -106,6 +106,7 @@ pub const Struct = struct {
     pub const Field = struct {
         name: []const u8,
         ty: Id,
+        defalut_value: Ast.Id = .zeroSized(.Void),
     };
 
     pub fn asTy(self: *Struct) Id {
@@ -124,10 +125,19 @@ pub const Struct = struct {
         for (ast.exprs.view(self.ast_fields)) |fast| {
             const field = ast.exprs.get(fast).BinOp;
             if (field.lhs.tag() != .Tag) continue;
-            fields[i] = .{
-                .name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1),
-                .ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field.rhs),
-            };
+            if (field.rhs.tag() == .BinOp and ast.exprs.get(field.rhs).BinOp.op == .@"=") {
+                const field_meta = ast.exprs.get(field.rhs).BinOp;
+                fields[i] = .{
+                    .name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1),
+                    .ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field_meta.lhs),
+                    .defalut_value = field_meta.rhs,
+                };
+            } else {
+                fields[i] = .{
+                    .name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1),
+                    .ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field.rhs),
+                };
+            }
             i += 1;
         }
         self.fields = fields;
@@ -295,7 +305,7 @@ pub const Id = enum(usize) {
     pub fn size(self: Id, types: *Types) usize {
         return switch (self.data()) {
             .Builtin => |b| switch (b) {
-                .never => unreachable,
+                .never => 0,
                 .void => 0,
                 .u8, .i8, .bool => 1,
                 .u16, .i16 => 2,
@@ -322,7 +332,7 @@ pub const Id = enum(usize) {
 
     pub fn alignment(self: Id, types: *Types) usize {
         return switch (self.data()) {
-            .Builtin => self.size(types),
+            .Builtin => @max(1, self.size(types)),
             .Ptr => 8,
             .Nullable => |n| n.alignment(types),
             .Struct => |s| {
@@ -477,7 +487,7 @@ pub const Abi = enum {
     pub fn categorize(self: Abi, ty: Id, types: *Types) Spec {
         return switch (ty.data()) {
             .Builtin => |b| .{ .ByValue = switch (b) {
-                .never => unreachable,
+                .never => .bot,
                 .void => return .Imaginary,
                 .u8, .i8, .bool => .i8,
                 .u16, .i16 => .i16,

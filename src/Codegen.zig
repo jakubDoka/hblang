@@ -704,7 +704,27 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
             for (slots, fields) |s, f| {
                 if (s == .RequiredOffset) {
-                    self.report(expr, "field {s} on struct {} is not initialized", .{ f.name, ty });
+                    if (f.defalut_value.tag() != .Void) {
+                        const prev_scope = self.parent_scope;
+                        const prev_scope_len = self.scope.items.len;
+                        defer {
+                            self.parent_scope = prev_scope;
+                            self.scope.items.len = prev_scope_len;
+                            self.ast = self.types.getFile(self.parent_scope.file());
+                        }
+
+                        self.parent_scope = .{ .Perm = ty };
+                        self.scope.items.len = 0;
+
+                        self.ast = self.types.getFile(self.parent_scope.file());
+                        const off = self.bl.addFieldOffset(local, @intCast(s.RequiredOffset));
+
+                        var value = self.emit(.{ .loc = off, .ty = f.ty }, f.defalut_value);
+                        if (!self.typeCheck(f.defalut_value, &value, f.ty))
+                            self.emitGenericStore(off, &value);
+                    } else {
+                        self.report(expr, "field {s} on struct {} is not initialized", .{ f.name, ty });
+                    }
                 }
             }
 
@@ -854,6 +874,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 const loc = self.emit(.{}, e.lhs);
                 if (loc.ty == .never) return .{};
 
+                if (loc.id == .Value) {
+                    self.report(e.lhs, "can't assign to this", .{});
+                    return .{};
+                }
+
                 var val = self.emitTyped(ctx, loc.ty, e.rhs);
                 self.emitGenericStore(loc.id.Ptr, &val);
                 return .{};
@@ -994,25 +1019,51 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
             if (base.ty == .never) return .never;
 
-            if (e.subscript.tag() == .Void) {
-                // TODO: better type inference
-                self.ensureLoaded(&base);
-                if (base.ty.data() != .Ptr) {
-                    self.report(expr, "{} is not a pointer", .{base.ty});
+            if (e.subscript.tag() != .Void) self.emitAutoDeref(&base);
+
+            switch (base.ty.data()) {
+                .Ptr => |ptr_ty| {
+                    if (e.subscript.tag() != .Void) {
+                        self.report(e.subscript, "pointers cant be indexed with subscript, use `prt[]`", .{});
+                        return .never;
+                    }
+
+                    self.ensureLoaded(&base);
+                    return .mkp(ptr_ty.*, base.id.Value);
+                },
+                .Struct => |struct_ty| {
+                    var idx_value = self.emitTyped(.{}, .uint, e.subscript);
+                    if (idx_value.ty == .never) return .never;
+                    self.ensureLoaded(&idx_value);
+                    const idx = self.types.ct.partialEval(&self.bl, idx_value.id.Value);
+
+                    const fields = struct_ty.getFields(self.types);
+
+                    if (idx >= fields.len) {
+                        self.report(e.subscript, "struct has only {} fields, but idnex is {}", .{ fields.len, idx });
+                        return .never;
+                    }
+
+                    var offset: usize = 0;
+                    for (fields[0..idx], fields[1 .. idx + 1]) |tf, ntf| {
+                        offset += tf.ty.size(self.types);
+                        offset = std.mem.alignForward(usize, offset, ntf.ty.alignment(self.types));
+                    }
+
+                    return .mkp(fields[idx].ty, self.bl.addFieldOffset(base.id.Ptr, @intCast(offset)));
+                },
+                .Slice => |slice_ty| {
+                    std.debug.assert(slice_ty.len != null);
+                    var idx = self.emitTyped(.{}, .uint, e.subscript);
+                    self.ensureLoaded(&idx);
+
+                    return .mkp(slice_ty.elem, self.bl.addIndexOffset(base.id.Ptr, slice_ty.elem.size(self.types), idx.id.Value));
+                },
+                else => {
+                    self.report(expr, "only pointers, structs and slices can be indexed, {} is not", .{base.ty});
                     return .never;
-                }
-                return .mkp(base.ty.data().Ptr.*, base.id.Value);
+                },
             }
-
-            self.emitAutoDeref(&base);
-
-            const slice_ty = base.ty.data().Slice;
-            std.debug.assert(slice_ty.len != null);
-
-            var idx = self.emitTyped(.{}, .uint, e.subscript);
-            self.ensureLoaded(&idx);
-
-            return .mkp(slice_ty.elem, self.bl.addIndexOffset(base.id.Ptr, slice_ty.elem.size(self.types), idx.id.Value));
         },
 
         // #CONTROL ====================================================================

@@ -450,7 +450,7 @@ expectations := .{
 
 Ty := struct {
     .a: int;
-    .b: int
+    .b: int = 1
 
     sum := fn(t: Ty): int {
         t.a -= 2
@@ -465,7 +465,7 @@ Ty2 := struct {
 }
 
 main := fn(): int {
-    finst := Ty2.{.ty: Ty.{.a: 4; .b: 1}; .c: 3}
+    finst := Ty2.{.ty: Ty.{.a: 4}; .c: 3}
     inst := odher_pass(finst)
     if inst.c != 3 {
         return 0
@@ -565,6 +565,28 @@ main := fn(): uint {
     _ = Ty.(.{}, .(), /**/)
     v := Ty.(0, 0, 0)
     return Ty.(v, 0)
+}
+```
+
+#### structs 5 (comptime)
+```hb
+expectations := .{
+    .return_value: 6;
+}
+
+main := fn(): uint {
+    Ty := struct{.a: uint; .b: uint; .c: uint}
+
+    vl := Ty.(1, 2, 3)
+
+    i := 0
+    sum := 0
+    $loop $if i == @len_of(Ty) break else {
+        sum += vl[i]
+        i += 1
+    }
+
+    return sum
 }
 ```
 
@@ -1077,12 +1099,12 @@ main := fn(): uint {
     - [ ] unary operators
       - [ ] all
   - [x] structs
-    - [ ] indexing
-    - [ ] packed
+    - [x] indexing
+    - [ ] packed --DO
     - [x] constructors
       - [x] dictionary
       - [x] tuple
-    - [ ] default values
+    - [x] default values
     - [x] scope
     - [x] file
     - [x] operators
@@ -1113,7 +1135,7 @@ main := fn(): uint {
   - [x] `@bit_cast(<expr>)`
   - [x] `@ecall(...<expr>)`
   - [x] `@embed(<string>)`
-  - [ ] `@inline(<func>, ...<args>)`
+  - [ ] `@inline(<func>, ...<args>)` --DO
   - [x] `@len_of(<ty>)`
   - [x] `@kind_of(<ty>)`
   - [ ] `@Any(<fn(type): bool/type>..)`

@@ -91,6 +91,7 @@ pub fn addFieldLoad(self: *Builder, base: *BuildNode, offset: i64, ty: DataType)
 }
 
 pub fn addStore(self: *Builder, addr: *BuildNode, ty: DataType, value: *BuildNode) SpecificNode(.Store) {
+    if (value.data_type == .bot) return self.memory();
     if (value.data_type.size() == 0) std.debug.panic("{}", .{value.data_type});
     const mem = self.memory();
     const ctrl = self.control();
