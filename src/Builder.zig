@@ -90,15 +90,14 @@ pub fn addFieldLoad(self: *Builder, base: *BuildNode, offset: i64, ty: DataType)
     return self.addLoad(self.addFieldOffset(base, offset), ty);
 }
 
-pub fn addStore(self: *Builder, addr: *BuildNode, ty: DataType, value: *BuildNode) SpecificNode(.Store) {
-    if (value.data_type == .bot) return self.memory();
+pub fn addStore(self: *Builder, addr: *BuildNode, ty: DataType, value: *BuildNode) void {
+    if (value.data_type == .bot) return;
     if (value.data_type.size() == 0) std.debug.panic("{}", .{value.data_type});
     const mem = self.memory();
     const ctrl = self.control();
     const store = self.func.addNode(.Store, &.{ ctrl, mem, addr, value }, .{});
     store.data_type = ty;
     self.func.setInputNoIntern(self.scope.?, 1, store);
-    return store;
 }
 
 pub fn addFieldOffset(self: *Builder, base: *BuildNode, offset: i64) *BuildNode {
@@ -112,7 +111,12 @@ pub fn addFieldStore(self: *Builder, base: *BuildNode, offset: i64, ty: DataType
 }
 
 pub fn addIndexOffset(self: *Builder, base: *BuildNode, elem_size: usize, subscript: *BuildNode) SpecificNode(.BinOp) {
-    const offset = self.addBinOp(.imul, .int, subscript, self.addIntImm(.int, @bitCast(elem_size)));
+    const offset = if (elem_size == 1)
+        subscript
+    else if (subscript.kind == .CInt)
+        self.addIntImm(.int, subscript.extra(.CInt).* * @as(i64, @intCast(elem_size)))
+    else
+        self.addBinOp(.imul, .int, subscript, self.addIntImm(.int, @bitCast(elem_size)));
     return self.addBinOp(.iadd, .int, base, offset);
 }
 
@@ -144,8 +148,14 @@ pub fn addIntImm(self: *Builder, ty: DataType, value: i64) SpecificNode(.CInt) {
 }
 
 pub fn addBinOp(self: *Builder, op: BinOp, ty: DataType, lhs: *BuildNode, rhs: *BuildNode) SpecificNode(.BinOp) {
+    if (lhs.kind == .CInt and rhs.kind == .CInt) {
+        return self.addIntImm(ty, op.eval(lhs.extra(.CInt).*, rhs.extra(.CInt).*));
+    }
+    if ((op == .iadd or op == .iadd) and rhs.kind == .CInt and rhs.extra(.CInt).* == 0) {
+        return lhs;
+    }
     const val = self.func.addNode(.BinOp, &.{ null, lhs, rhs }, op);
-    val.data_type = val.data_type.meet(ty);
+    val.data_type = ty;
     return val;
 }
 
@@ -419,7 +429,7 @@ pub fn addCall(
     args_with_initialized_arg_slots: CallArgs,
 ) []const *BuildNode {
     const args = args_with_initialized_arg_slots;
-    for (args.arg_slots, args.params) |ar, pr| std.debug.assert(ar.data_type == pr);
+    for (args.arg_slots, args.params) |ar, pr| std.debug.assert(ar.data_type == ar.data_type.meet(pr));
     const full_args = (args.arg_slots.ptr - arg_prefix_len)[0 .. arg_prefix_len + args.params.len];
     full_args[0] = self.control();
     full_args[1] = self.memory();
@@ -442,7 +452,7 @@ pub fn addCall(
 }
 
 pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
-    for (values, self.func.returns) |val, rtt| if (val.data_type != rtt) std.debug.panic("{s} != {s}", .{ @tagName(val.data_type), @tagName(rtt) });
+    for (values, self.func.returns) |val, rtt| if (val.data_type != val.data_type.meet(rtt)) std.debug.panic("{s} != {s}", .{ @tagName(val.data_type), @tagName(rtt) });
 
     if (self.ret) |ret| {
         const inps = ret.inputs();
