@@ -886,6 +886,33 @@ main := fn(): uint {
 }
 ```
 
+#### slices 1
+```hb
+expectations := .{
+    .return_value: 50;
+}
+
+main := fn(): uint {
+    arr := u8.[1, 2, 3, 4]
+    slice := arr[..]
+
+    slices := ([]u8).[arr[..], arr[..2], arr[2..], arr[1..3], slice[..], slice[..2], slice[2..], slice[1..3]]
+
+    sum := 0
+    i := 0
+    loop if i == slices.len break else {
+        j := 0
+        loop if j == slices[i].len break else {
+            sum += slices[i][j]
+            j += 1
+        }
+        i += 1
+    }
+
+    return sum
+}
+```
+
 #### nullable types 1
 ```hb
 expectations := .{

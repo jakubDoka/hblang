@@ -163,10 +163,14 @@ fn parseUnit(self: *Parser) Error!Id {
             .base = base,
             .subscript = b: {
                 _ = self.advance();
-                if (self.tryAdvance(.@"]")) break :b .zeroSized(.Void);
-                const expr = try self.parseExpr();
+                const start: Id = if (self.cur.kind == .@"..") .zeroSized(.Void) else try self.parseExpr();
+                const is_range = self.tryAdvance(.@"..");
+                const end: Id = if (self.cur.kind == .@"]") .zeroSized(.Void) else try self.parseExpr();
                 _ = try self.expectAdvance(.@"]");
-                break :b expr;
+                break :b if (is_range)
+                    try self.store.allocDyn(self.gpa, .{ .Range = .{ .start = start, .end = end } })
+                else
+                    start;
             },
         } },
         .@"(" => .{ .Call = .{

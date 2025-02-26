@@ -49,6 +49,7 @@ pub const Kind = enum {
     Fn,
     Struct,
     Directive,
+    Range,
     Index,
     Call,
     Tag,
@@ -108,6 +109,10 @@ pub const Expr = union(Kind) {
     Directive: struct {
         pos: Pos,
         args: Slice,
+    },
+    Range: struct {
+        start: Id,
+        end: Id,
     },
     Index: struct {
         base: Id,

@@ -71,6 +71,11 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.buf.appendSlice(Lexer.peekStr(self.ast.source, d.pos.index));
             try self.fmtSlice(d.pos.flag.indented, d.args, .@"(", .@",", .@")");
         },
+        .Range => |r| {
+            try self.fmtExpr(r.start);
+            try self.buf.appendSlice("..");
+            try self.fmtExpr(r.end);
+        },
         .Index => |i| {
             try self.fmtExpr(i.base);
             try self.buf.appendSlice("[");
@@ -99,7 +104,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.buf.appendSlice(Lexer.peekStr(self.ast.source, f.field.index));
         },
         inline .Ctor, .Tupl, .Arry => |v, t| {
-            try self.fmtExpr(v.ty);
+            try self.fmtExprPrec(v.ty, 0);
             const start = if (t == .Ctor) .@".{" else if (t == .Tupl) .@".(" else .@".[";
             const sep = if (t == .Ctor) .@";" else .@",";
             const end = if (t == .Ctor) .@"}" else if (t == .Tupl) .@")" else .@"]";
@@ -110,10 +115,13 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.fmtSliceLow(b.pos.flag.indented, true, b.stmts, .@"{", .@";", .@"}");
         },
         .SliceTy => |s| {
+            const unprec = 1;
+            if (prec < unprec) try self.buf.appendSlice("(");
             try self.buf.appendSlice("[");
             try self.fmtExpr(s.len);
             try self.buf.appendSlice("]");
             try self.fmtExpr(s.elem);
+            if (prec < unprec) try self.buf.appendSlice(")");
         },
         .If => |i| {
             if (i.pos.flag.@"comptime") try self.buf.appendSlice("$");

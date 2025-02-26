@@ -1012,28 +1012,93 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                         offset = std.mem.alignForward(usize, offset, tf.ty.alignment(self.types));
                         if (std.mem.eql(u8, fname, tf.name)) break tf.ty;
                         offset += tf.ty.size(self.types);
-                    } else unreachable;
+                    } else {
+                        self.report(e.field, "no such field on {} (TODO: list fields)", .{base.ty});
+                        return .never;
+                    };
 
                     return .mkp(ftype, self.bl.addFieldOffset(base.id.Ptr, @intCast(offset)));
                 },
-                .Slice => |slice_ty| if (slice_ty.len) |l| {
+                .Slice => |slice_ty| {
                     if (std.mem.eql(u8, fname, "len")) {
-                        return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(l)));
-                    } else unreachable;
-                } else unreachable,
+                        if (slice_ty.len) |l| {
+                            return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(l)));
+                        } else {
+                            return .mkv(.uint, self.bl.addFieldLoad(base.id.Ptr, Types.Slice.len_offset, .int));
+                        }
+                    } else if (std.mem.eql(u8, fname, "ptr")) {
+                        const ptr_ty = self.types.makePtr(slice_ty.elem);
+                        if (slice_ty.len == null) {
+                            return .mkv(ptr_ty, self.bl.addFieldLoad(base.id.Ptr, Types.Slice.ptr_offset, .int));
+                        } else {
+                            return .mkv(ptr_ty, base.id.Ptr);
+                        }
+                    } else {
+                        self.report(e.field, "slices and arrays only support `.ptr` and `.len` field", .{});
+                        return .never;
+                    }
+                },
                 else => {
                     self.report(e.field, "field access is only allowed on structs and arrays, {} is not", .{base.ty});
                     return .never;
                 },
             }
         },
-        .Index => |e| {
+        .Index => |e| if (e.subscript.tag() == .Range) {
+            var base = self.emit(.{}, e.base);
+
+            if (base.ty == .never) return .never;
+            const range = ast.exprs.get(e.subscript).Range;
+
+            const elem = base.ty.child(self.types) orelse {
+                self.report(e.base, "only pointers, arrays and slices can be sliced, {} is not", .{base.ty});
+                return .never;
+            };
+
+            const start: Value = if (range.start.tag() == .Void)
+                .mkv(.uint, self.bl.addIntImm(.int, 0))
+            else
+                self.emitTyped(.{}, .uint, range.start);
+            const end: Value = if (range.end.tag() == .Void) switch (base.ty.data()) {
+                .Slice => |slice_ty| if (slice_ty.len) |l|
+                    .mkv(.uint, self.bl.addIntImm(.int, @bitCast(l)))
+                else
+                    .mkv(.uint, self.bl.addFieldLoad(base.id.Ptr, Types.Slice.len_offset, .int)),
+                else => {
+                    self.report(e.subscript, "unbound range is only allowed on arrays and slices, {} is not", .{base.ty});
+                    return .never;
+                },
+            } else self.emitTyped(.{}, .uint, range.end);
+
+            const res_ty = self.types.makeSlice(null, elem);
+
+            var ptr: Value = switch (base.ty.data()) {
+                .Ptr => base,
+                .Slice => |slice_ty| if (slice_ty.len == null)
+                    .mkv(self.types.makePtr(elem), self.bl.addFieldLoad(base.id.Ptr, Types.Slice.ptr_offset, .int))
+                else
+                    .mkv(self.types.makePtr(elem), base.id.Ptr),
+                else => {
+                    self.report(expr, "only structs and slices can be indexed, {} is not", .{base.ty});
+                    return .never;
+                },
+            };
+
+            ptr.id.Value = self.bl.addIndexOffset(ptr.id.Value, elem.size(self.types), start.id.Value);
+            const len = self.bl.addBinOp(.isub, .int, end.id.Value, start.id.Value);
+
+            const loc = ctx.loc orelse self.bl.addLocal(res_ty.size(self.types));
+            self.bl.addFieldStore(loc, Types.Slice.ptr_offset, .int, ptr.id.Value);
+            self.bl.addFieldStore(loc, Types.Slice.len_offset, .int, len);
+
+            return .mkp(res_ty, loc);
+        } else {
             var base = self.emit(.{}, e.base);
 
             if (base.ty == .never) return .never;
 
-            if (e.subscript.tag() != .Void) self.emitAutoDeref(&base);
-
+            // TODO: pointers to arrays are kind of an edge case
+            self.emitAutoDeref(&base);
             switch (base.ty.data()) {
                 .Struct => |struct_ty| {
                     var idx_value = self.emitTyped(.{}, .uint, e.subscript);
@@ -1057,11 +1122,12 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     return .mkp(fields[idx].ty, self.bl.addFieldOffset(base.id.Ptr, @intCast(offset)));
                 },
                 .Slice => |slice_ty| {
-                    std.debug.assert(slice_ty.len != null);
                     var idx = self.emitTyped(.{}, .uint, e.subscript);
                     self.ensureLoaded(&idx);
 
-                    return .mkp(slice_ty.elem, self.bl.addIndexOffset(base.id.Ptr, slice_ty.elem.size(self.types), idx.id.Value));
+                    const index_base = if (slice_ty.len == null) self.bl.addLoad(base.id.Ptr, .int) else base.id.Ptr;
+
+                    return .mkp(slice_ty.elem, self.bl.addIndexOffset(index_base, slice_ty.elem.size(self.types), idx.id.Value));
                 },
                 else => {
                     self.report(expr, "only structs and slices can be indexed, {} is not", .{base.ty});

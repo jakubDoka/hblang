@@ -95,6 +95,9 @@ pub const Key = struct {
 pub const Slice = struct {
     len: ?usize,
     elem: Id,
+
+    pub const ptr_offset = 0;
+    pub const len_offset = 8;
 };
 
 pub const Struct = struct {
