@@ -979,6 +979,19 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 .ByRef, .ByValuePair => return .mkp(ty, self.bl.addFieldOffset(base.id.Ptr, @bitCast(ty.alignment(self.types)))),
             }
         },
+        .Deref => |e| {
+            var base = self.emit(.{}, e);
+
+            if (base.ty == .never) return .never;
+
+            if (base.ty.data() != .Ptr) {
+                self.report(e, "only pointer types can be dereferenced, {} is not", .{base.ty});
+                return .never;
+            }
+
+            self.ensureLoaded(&base);
+            return .mkp(base.ty.data().Ptr.*, base.id.Value);
+        },
         .Field => |e| {
             var base = self.emit(.{}, e.base);
 
@@ -1022,15 +1035,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             if (e.subscript.tag() != .Void) self.emitAutoDeref(&base);
 
             switch (base.ty.data()) {
-                .Ptr => |ptr_ty| {
-                    if (e.subscript.tag() != .Void) {
-                        self.report(e.subscript, "pointers cant be indexed with subscript, use `prt[]`", .{});
-                        return .never;
-                    }
-
-                    self.ensureLoaded(&base);
-                    return .mkp(ptr_ty.*, base.id.Value);
-                },
                 .Struct => |struct_ty| {
                     var idx_value = self.emitTyped(.{}, .uint, e.subscript);
                     if (idx_value.ty == .never) return .never;
@@ -1060,7 +1064,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     return .mkp(slice_ty.elem, self.bl.addIndexOffset(base.id.Ptr, slice_ty.elem.size(self.types), idx.id.Value));
                 },
                 else => {
-                    self.report(expr, "only pointers, structs and slices can be indexed, {} is not", .{base.ty});
+                    self.report(expr, "only structs and slices can be indexed, {} is not", .{base.ty});
                     return .never;
                 },
             }

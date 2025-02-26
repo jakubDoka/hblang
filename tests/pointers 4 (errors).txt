@@ -1,5 +1,5 @@
-pointers 4 (errors):6:9: only pointers, structs and slices can be indexed, uint is not
-    return 0[]
+pointers 4 (errors):6:9: only pointer types can be dereferenced, uint is not
+    return 0.*
            ^
 pointers 4 (errors):5:20: function is missing a return value since uint has more then 1 possible value
 main := fn(): uint {

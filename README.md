@@ -373,12 +373,12 @@ main := fn(): uint {
     a := 1
     b := &a
     modify(b)
-    b[] += 2
-    return b[] - 4
+    b.* += 2
+    return b.* - 4
 }
 
 modify := fn(a: ^uint): void {
-    a[] = 2
+    a.* = 2
     return
 }
 ```
@@ -402,9 +402,9 @@ main := fn(): uint {
 }
 
 swap := fn(a: ^uint, b: ^uint): void {
-    tmp := b[]
-    b[] = a[]
-    a[] = tmp
+    tmp := b.*
+    b.* = a.*
+    a.* = tmp
 }
 ```
 
@@ -421,12 +421,12 @@ main := fn(): uint {
 }
 
 do_stuff := fn(v: ^uint): uint {
-    if v[] == 0 {
+    if v.* == 0 {
         return 0
-        v[] = 2
+        v.* = 2
     } else {
         return 1
-        v[] = 3
+        v.* = 3
     }
 }
 ```
@@ -438,7 +438,7 @@ expectations := .{
 }
 
 main := fn(): uint {
-    return 0[]
+    return 0.*
 }
 ```
 
@@ -507,9 +507,9 @@ main := fn(): int {
 }
 
 swap := fn(a: ^Ty, b: ^Ty): void {
-    tmp := a[]
-    a[] = b[]
-    b[] = tmp
+    tmp := a.*
+    a.* = b.*
+    b.* = tmp
 }
 ```
 
@@ -899,7 +899,7 @@ main := fn(): uint {
 
     if mknull(uint) != null return 2
 
-    return ten.!
+    return ten.?
 }
 
 mknull := fn($T: type): ?T return null
@@ -922,10 +922,10 @@ main := fn(): uint {
     if other == null return 2
     if othera == null return 3
 
-    nlbl.!.b = 1
-    take(&nlbl.!)
+    nlbl.?.b = 1
+    take(&nlbl.?)
 
-    return nlbl.!.a - nlbl.!.b
+    return nlbl.?.a - nlbl.?.b
 }
 
 take := fn(s: ^Stru): void {
@@ -1024,7 +1024,7 @@ main := fn(): uint {
 }
 
 deref := fn($T: type, arg: T): @ChildOf(T) {
-    return arg[]
+    return arg.*
 }
 ```
 

@@ -53,6 +53,7 @@ pub const Kind = enum {
     Call,
     Tag,
     Unwrap,
+    Deref,
     Field,
     Ctor,
     Tupl,
@@ -119,6 +120,7 @@ pub const Expr = union(Kind) {
     },
     Tag: Pos,
     Unwrap: Id,
+    Deref: Id,
     Field: struct {
         base: Id,
         field: Pos,

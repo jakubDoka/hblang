@@ -150,8 +150,10 @@ fn parseUnit(self: *Parser) Error!Id {
     while (true) base = try self.store.allocDyn(self.gpa, switch (self.cur.kind) {
         .@"." => b: {
             _ = self.advance();
-            break :b if (self.tryAdvance(.@"!")) .{
+            break :b if (self.tryAdvance(.@"?")) .{
                 .Unwrap = base,
+            } else if (self.tryAdvance(.@"*")) .{
+                .Deref = base,
             } else .{ .Field = .{
                 .base = base,
                 .field = .init((try self.expectAdvance(.Ident)).pos),

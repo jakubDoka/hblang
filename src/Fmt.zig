@@ -87,7 +87,11 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
         },
         .Unwrap => |u| {
             try self.fmtExpr(u);
-            try self.buf.appendSlice(".!");
+            try self.buf.appendSlice(".?");
+        },
+        .Deref => |u| {
+            try self.fmtExpr(u);
+            try self.buf.appendSlice(".*");
         },
         .Field => |f| {
             try self.fmtExpr(f.base);
