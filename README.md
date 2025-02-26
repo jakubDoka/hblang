@@ -890,6 +890,29 @@ mknull := fn($T: type): ?T return null
 mkval := fn($T: type, val: T): ?T return val
 ```
 
+#### nullable types 2
+```hb
+Stru := struct {
+    .a: uint;
+    .b: uint;
+}
+
+main := fn(): uint {
+    nlbl: ?Stru = .(0, 0)
+    _other: ?Stru = .{.a: 0; .b: 0}
+    _othera: ?[2]uint = .[0, 0]
+
+    nlbl.!.b = 1
+    take(&nlbl.!)
+
+    return nlbl.!.a - nlbl.!.b
+}
+
+take := fn(s: ^Stru): void {
+    s.a += 1
+}
+```
+
 
 #### directives 1 (@size_of, @align_of)
 ```hb

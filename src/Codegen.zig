@@ -645,14 +645,22 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return .never;
             }
 
-            const ty = ctx.ty orelse self.resolveAnonTy(e.ty);
+            const oty = ctx.ty orelse self.resolveAnonTy(e.ty);
+            var ty = oty;
+            const local = ctx.loc orelse self.bl.addLocal(ty.size(self.types));
+            var offset_cursor: usize = 0;
+
+            if (ty.data() == .Nullable) {
+                ty = ty.data().Nullable.*;
+                _ = self.bl.addStore(local, .i8, self.bl.addIntImm(.i8, 1));
+                offset_cursor += ty.alignment(self.types);
+            }
+
             if (ty.data() != .Struct) {
                 self.report(expr, "{} can not be constructed with '.{{..}}'", .{ty});
                 return .never;
             }
             const struct_ty = ty.data().Struct;
-
-            const local = ctx.loc orelse self.bl.addLocal(ty.size(self.types));
 
             const FillSlot = union(enum) {
                 RequiredOffset: usize,
@@ -662,11 +670,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             const fields = struct_ty.getFields(self.types);
             const slots = tmp.arena.alloc(FillSlot, fields.len);
             {
-                var offset: usize = 0;
                 for (slots, fields) |*s, tf| {
-                    offset = std.mem.alignForward(usize, offset, tf.ty.alignment(self.types));
-                    s.* = .{ .RequiredOffset = offset };
-                    offset += tf.ty.size(self.types);
+                    offset_cursor = std.mem.alignForward(usize, offset_cursor, tf.ty.alignment(self.types));
+                    s.* = .{ .RequiredOffset = offset_cursor };
+                    offset_cursor += tf.ty.size(self.types);
                 }
             }
 
@@ -701,7 +708,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 }
             }
 
-            return .mkp(ty, local);
+            return .mkp(oty, local);
         },
         .Tupl => |e| {
             if (e.ty.tag() == .Void and ctx.ty == null) {
@@ -709,7 +716,17 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return .never;
             }
 
-            const ty = ctx.ty orelse self.resolveAnonTy(e.ty);
+            const oty = ctx.ty orelse self.resolveAnonTy(e.ty);
+            var ty = oty;
+            const local = ctx.loc orelse self.bl.addLocal(oty.size(self.types));
+            var offset: usize = 0;
+
+            if (ty.data() == .Nullable) {
+                ty = ty.data().Nullable.*;
+                _ = self.bl.addStore(local, .i8, self.bl.addIntImm(.i8, 1));
+                offset += ty.alignment(self.types);
+            }
+
             if (ty.data() != .Struct) {
                 self.report(expr, "{} can not be constructed with '.(..)'", .{ty});
                 return .never;
@@ -725,9 +742,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return .never;
             }
 
-            const local = ctx.loc orelse self.bl.addLocal(ty.size(self.types));
-
-            var offset: usize = 0;
             for (ast.exprs.view(e.fields), struct_ty.getFields(self.types)) |field, sf| {
                 const ftype = sf.ty;
                 offset = std.mem.alignForward(usize, offset, ftype.alignment(self.types));
@@ -739,26 +753,50 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 offset += ftype.size(self.types);
             }
 
-            return .mkp(ty, local);
+            return .mkp(oty, local);
         },
         .Arry => |e| {
             if (e.ty.tag() == .Void and ctx.ty == null) {
-                self.report(expr, "cant infer the type of this constructor, you can specify a type: '<ty>.('", .{});
+                self.report(expr, "cant infer the type of this constructor, you can specify a type: '<elem-ty>.('", .{});
                 return .never;
             }
 
-            const elem_ty = ctx.ty orelse self.resolveAnonTy(e.ty);
-            const array_ty = self.types.makeSlice(e.fields.len(), elem_ty);
+            const local = ctx.loc orelse self.bl.addLocal(0);
+            var start: usize = 0;
 
-            const local = ctx.loc orelse self.bl.addLocal(array_ty.size(self.types));
+            const elem_ty, const res_ty: Types.Id = if (ctx.ty) |ret_ty| b: {
+                var ty = ret_ty;
+                if (ty.data() == .Nullable) {
+                    ty = ty.data().Nullable.*;
+                    start += 1;
+                }
 
-            for (ast.exprs.view(e.fields), 0..) |elem, i| {
+                if (ty.data() != .Slice or ty.data().Slice.len == null) {
+                    self.report(expr, "{} can not bi initialized with array syntax", .{ty});
+                    return .never;
+                }
+
+                if (ty.data().Slice.len != e.fields.len()) {
+                    self.report(expr, "expected array with {} element, got {}", .{ ty.data().Slice.len.?, e.fields.len() });
+                    return .never;
+                }
+
+                break :b .{ ty.data().Slice.elem, ret_ty };
+            } else b: {
+                const elem_ty = self.resolveAnonTy(e.ty);
+                const array_ty = self.types.makeSlice(e.fields.len(), elem_ty);
+                break :b .{ elem_ty, array_ty };
+            };
+
+            if (ctx.loc == null) self.bl.resizeLocal(local, res_ty.size(self.types));
+
+            for (ast.exprs.view(e.fields), start..) |elem, i| {
                 const off = self.bl.addFieldOffset(local, @intCast(i * elem_ty.size(self.types)));
                 var value = self.emitTyped(.{ .loc = off }, elem_ty, elem);
                 self.emitGenericStore(off, &value);
             }
 
-            return .mkp(array_ty, local);
+            return .mkp(res_ty, local);
         },
 
         // #OPS ========================================================================
@@ -772,6 +810,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             .@"?" => return self.emitTyConst(self.types.makeNullable(self.resolveAnonTy(e.oper))),
             .@"&" => {
                 const addrd = self.emit(.{}, e.oper);
+                if (addrd.ty == .never) return .never;
                 return .mkv(self.types.makePtr(addrd.ty), addrd.id.Ptr);
             },
             .@"*" => {
@@ -823,6 +862,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return .{};
             } else {
                 const loc = self.emit(.{}, e.lhs);
+                if (loc.ty == .never) return .{};
 
                 var val = self.emitTyped(ctx, loc.ty, e.rhs);
                 self.emitGenericStore(loc.id.Ptr, &val);

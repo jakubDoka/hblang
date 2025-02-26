@@ -314,6 +314,11 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             .fields = try self.parseList(null, .@",", .@")", parseExpr),
             .pos = self.list_pos,
         } },
+        .@".[" => .{ .Arry = .{
+            .ty = .zeroSized(.Void),
+            .fields = try self.parseList(null, .@",", .@"]", parseExpr),
+            .pos = self.list_pos,
+        } },
         .@"{" => .{ .Block = .{
             .pos = .{ .index = @intCast(token.pos), .flag = .{ .indented = true } },
             .stmts = b: {
