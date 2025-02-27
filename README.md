@@ -1170,6 +1170,20 @@ main := fn(): uint {
 foo := fn(vl: uint): uint return vl
 ```
 
+#### directives 13
+```hb
+expectations := .{
+    .return_value: 10;
+}
+
+main := fn(): uint {
+    return foo(5) + foo(@as(u8, 5))
+}
+
+foo := fn(vl: @Any()): @TypeOf(vl) {
+    return vl
+}
+```
 
 ## progress
 
@@ -1256,7 +1270,8 @@ foo := fn(vl: uint): uint return vl
   - [x] `@inline(<func>, ...<args>)`
   - [x] `@len_of(<ty>)`
   - [x] `@kind_of(<ty>)`
-  - [ ] `@Any(<fn(type): bool/type>..)`
+  - [x] `@Any(<fn(type): void/type>..)`
+    - [ ] type filters
   - [x] `@error(...<expr>)`
   - [x] `@ChildOf(<ty>)`
   - [x] `@target("<pat>")`

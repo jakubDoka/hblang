@@ -518,22 +518,30 @@ pub fn instantiateTemplate(
     const tmpl_ast = tmpl_file.exprs.getTyped(.Fn, tmpl.key.ast).?;
     const comptime_args = ast.exprs.view(tmpl_ast.comptime_args);
 
-    const captures = tmp.arena.alloc(Types.Key.Capture, tmpl_ast.comptime_args.len());
-    const arg_tys = tmp.arena.alloc(Types.Id, tmpl_ast.args.len() - captures.len);
+    const captures = tmp.arena.alloc(Types.Key.Capture, tmpl_ast.args.len());
+    const arg_tys = tmp.arena.alloc(Types.Id, tmpl_ast.args.len() - tmpl_ast.comptime_args.len());
     const arg_exprs = tmp.arena.alloc(Value, arg_tys.len);
 
     var capture_idx: usize = 0;
     var arg_idx: usize = 0;
     for (tmpl_file.exprs.view(tmpl_ast.args), ast.exprs.view(e.args)) |param, arg| {
-        if (tmpl_file.exprs.get(param.bindings).Ident.pos.flag.@"comptime") {
+        const binding = tmpl_file.exprs.get(param.bindings).Ident;
+        if (binding.pos.flag.@"comptime") {
             captures[capture_idx] = .{ .id = comptime_args[capture_idx], .ty = .type, .value = @intFromEnum(self.resolveAnonTy(arg)) };
-
             capture_idx += 1;
             scope.key.captures = captures[0..capture_idx];
         } else {
-            // this is in anticipation of the @Any
             arg_tys[arg_idx] = self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = &scope }) }, param.ty);
-            arg_exprs[arg_idx] = self.emitTyped(.{}, arg_tys[arg_idx], arg);
+            if (arg_tys[arg_idx] == .any) {
+                arg_exprs[arg_idx] = self.emit(.{}, arg);
+                arg_tys[arg_idx] = arg_exprs[arg_idx].ty;
+                captures[capture_idx] = .{ .id = binding.id, .ty = arg_tys[arg_idx] };
+                capture_idx += 1;
+                scope.key.captures = captures[0..capture_idx];
+            } else {
+                arg_exprs[arg_idx] = self.emitTyped(.{}, arg_tys[arg_idx], arg);
+            }
+
             arg_idx += 1;
         }
     }
@@ -546,7 +554,7 @@ pub fn instantiateTemplate(
         .file = tmpl.key.file,
         .ast = tmpl.key.ast,
         .name = "",
-        .captures = captures,
+        .captures = captures[0..capture_idx],
     });
 
     if (!slot.found_existing) {
@@ -1351,7 +1359,17 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 }
             }
 
-            if (e.comptime_args.len() != 0) {
+            const args = tmp.arena.alloc(Types.Id, e.args.len());
+            var has_anytypes = false;
+            if (e.comptime_args.len() == 0) {
+                for (ast.exprs.view(e.args), args) |argid, *arg| {
+                    const ty = argid.ty;
+                    arg.* = self.resolveAnonTy(ty);
+                    has_anytypes = has_anytypes or arg.* == .any;
+                }
+            }
+
+            if (e.comptime_args.len() != 0 or has_anytypes) {
                 const slot, const alloc = self.types.intern(.Template, .{
                     .scope = self.parent_scope.perm(),
                     .file = self.parent_scope.file(),
@@ -1373,16 +1391,15 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 });
                 const id = slot.key_ptr.*;
                 if (!slot.found_existing) {
-                    const args = self.types.arena.alloc(Types.Id, e.args.len());
-                    for (ast.exprs.view(e.args), args) |argid, *arg| {
+                    if (!has_anytypes) for (ast.exprs.view(e.args), args) |argid, *arg| {
                         const ty = argid.ty;
                         arg.* = self.resolveAnonTy(ty);
-                    }
+                    };
                     const ret = self.resolveAnonTy(e.ret);
                     alloc.* = .{
                         .id = @intCast(self.types.funcs.items.len),
                         .key = alloc.key,
-                        .args = args,
+                        .args = self.types.arena.dupe(Types.Id, args),
                         .ret = ret,
                     };
                     alloc.key.captures = self.types.arena.dupe(Types.Key.Capture, alloc.key.captures);
@@ -1677,6 +1694,6 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
             self.report(expr, "{s}", .{msg.items});
             return .never;
         },
-        .Any => unreachable,
+        .Any => return self.emitTyConst(.any),
     }
 }

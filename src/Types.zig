@@ -247,6 +247,7 @@ pub const Id = enum(usize) {
     i32,
     int,
     type,
+    any,
     _,
 
     const Repr = packed struct(usize) {
@@ -360,7 +361,7 @@ pub const Id = enum(usize) {
     pub fn size(self: Id, types: *Types) usize {
         return switch (self.data()) {
             .Builtin => |b| switch (b) {
-                .never => 0,
+                .never, .any => 0,
                 .void => 0,
                 .u8, .i8, .bool => 1,
                 .u16, .i16 => 2,
@@ -553,7 +554,7 @@ pub const Abi = enum {
     pub fn categorize(self: Abi, ty: Id, types: *Types) Spec {
         return switch (ty.data()) {
             .Builtin => |b| .{ .ByValue = switch (b) {
-                .never => .bot,
+                .never, .any => .bot,
                 .void => return .Imaginary,
                 .u8, .i8, .bool => .i8,
                 .u16, .i16 => .i16,
