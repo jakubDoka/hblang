@@ -358,12 +358,14 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     .imul => .mul8,
                     .udiv => .diru8,
                     .sdiv => .dirs8,
+                    .bor => .@"or",
+                    .band => .@"and",
                     .eq, .ne, .uge, .ule, .ugt, .ult => .cmpu,
                     .sge, .sle, .sgt, .slt => .cmps,
                 };
 
                 switch (extra) {
-                    .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => {},
+                    .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt, .bor, .band => {},
                     else => op = @enumFromInt(@intFromEnum(op) +
                         (@intFromEnum(no.data_type) - @intFromEnum(graph.DataType.i8))),
                 }
@@ -415,18 +417,26 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 const alloc = self.reg(no);
                 const extra = no.extra(.ImmBinOp);
 
-                const chars = "BHWD";
-                const types = .{ u8, u16, u32, u64 };
-                switch (no.data_type) {
-                    inline .i8, .i16, .i32, .int => |t| {
-                        const idx = @intFromEnum(t) - @intFromEnum(graph.DataType.i8);
-                        self.emitLow(
-                            "RR" ++ chars[idx..][0..1],
-                            extra.op,
-                            .{ alloc, self.reg(inps[0]), @as(types[idx], @truncate(@as(u64, @bitCast(extra.imm)))) },
-                        );
-                    },
-                    else => unreachable,
+                if (extra.op == .ori or extra.op == .andi) {
+                    self.emitLow(
+                        "RRD",
+                        extra.op,
+                        .{ alloc, self.reg(inps[0]), @as(u64, @bitCast(extra.imm)) },
+                    );
+                } else {
+                    const chars = "BHWD";
+                    const types = .{ u8, u16, u32, u64 };
+                    switch (no.data_type) {
+                        inline .i8, .i16, .i32, .int => |t| {
+                            const idx = @intFromEnum(t) - @intFromEnum(graph.DataType.i8);
+                            self.emitLow(
+                                "RR" ++ chars[idx..][0..1],
+                                @enumFromInt(@intFromEnum(extra.op) + idx),
+                                .{ alloc, self.reg(inps[0]), @as(types[idx], @truncate(@as(u64, @bitCast(extra.imm)))) },
+                            );
+                        },
+                        else => unreachable,
+                    }
                 }
             },
             .IfOp => {
@@ -552,7 +562,7 @@ fn emit(self: *HbvmGen, comptime op: isa.Op, args: isa.TupleOf(isa.ArgsOf(op))) 
 }
 
 fn emitLow(self: *HbvmGen, comptime arg_str: []const u8, op: isa.Op, args: isa.TupleOf(isa.ArgsOfStr(arg_str))) void {
-    std.debug.assert(std.mem.eql(u8, isa.spec[@intFromEnum(op)][1], arg_str));
+    if (!std.mem.eql(u8, isa.spec[@intFromEnum(op)][1], arg_str)) std.debug.panic("{} {s} {s}", .{ op, arg_str, isa.spec[@intFromEnum(op)][1] });
     self.out.append(@intFromEnum(op)) catch unreachable;
     self.out.appendSlice(std.mem.asBytes(&isa.packTo(isa.ArgsOfStr(arg_str), args))) catch unreachable;
 }
@@ -599,12 +609,14 @@ pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node
             var imm = inps[2].?.extra(.CInt).*;
 
             const instr: isa.Op = switch (op) {
-                .iadd => .addi64,
-                .imul => .muli64,
+                .iadd => .addi8,
+                .imul => .muli8,
                 .isub => m: {
                     imm *= -1;
-                    break :m .addi64;
+                    break :m .addi8;
                 },
+                .bor => .ori,
+                .band => .andi,
                 else => break :b,
             };
 

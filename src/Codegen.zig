@@ -15,6 +15,7 @@ errored: bool = undefined,
 
 const std = @import("std");
 const root = @import("utils.zig");
+const graph = @import("graph.zig");
 const Ast = @import("Ast.zig");
 const Vm = @import("Vm.zig");
 const Comptime = @import("Comptime.zig");
@@ -341,6 +342,29 @@ fn report(self: *Codegen, expr: anytype, comptime fmt: []const u8, args: anytype
         "{s}:{}:{}: " ++ fmt ++ "\n{}\n",
         .{ file.path, line, col } ++ rargs ++ .{file.codePointer(file.posOf(expr).index)},
     ) catch unreachable;
+}
+
+fn emitStructFoldOp(self: *Codegen, ty: *Types.Struct, op: Lexer.Lexeme, lhs: *Node, rhs: *Node) ?*Node {
+    var fold: ?*Node = null;
+    var offset: usize = 0;
+    for (ty.getFields(self.types)) |field| {
+        offset = std.mem.alignForward(usize, offset, field.ty.alignment(self.types));
+        const lhs_loc = self.bl.addFieldOffset(lhs, @intCast(offset));
+        const rhs_loc = self.bl.addFieldOffset(rhs, @intCast(offset));
+        const value = if (field.ty.data() == .Struct) b: {
+            break :b self.emitStructFoldOp(field.ty.data().Struct, op, lhs_loc, rhs_loc) orelse continue;
+        } else b: {
+            const dt = self.abi.categorize(field.ty, self.types).ByValue;
+            const lhs_val = self.bl.addLoad(lhs_loc, dt);
+            const rhs_val = self.bl.addLoad(rhs_loc, dt);
+            break :b self.bl.addBinOp(op.toBinOp(field.ty), .i8, lhs_val, rhs_val);
+        };
+        if (fold) |f| {
+            fold = self.bl.addBinOp(if (op == .@"==") .band else .bor, .i8, f, value);
+        } else fold = value;
+        offset += field.ty.size(self.types);
+    }
+    return fold;
 }
 
 fn emitStructOp(self: *Codegen, ty: *Types.Struct, op: Lexer.Lexeme, loc: *Node, lhs: *Node, rhs: *Node) void {
@@ -1121,9 +1145,9 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     return .never;
                 };
 
-                if (lhs.ty.data() == .Struct) if (e.op.isComparison()) {
-                    self.report(e.lhs, "\n", .{});
-                    unreachable;
+                if (lhs.ty.data() == .Struct) if (e.op == .@"==" or e.op == .@"!=") {
+                    const value = self.emitStructFoldOp(lhs.ty.data().Struct, e.op, lhs.id.Ptr, rhs.id.Ptr);
+                    return .mkv(unified, value orelse self.bl.addIntImm(.i8, 1));
                 } else {
                     const loc = ctx.loc orelse self.bl.addLocal(unified.size(self.types));
                     self.emitStructOp(unified.data().Struct, e.op, loc, lhs.id.Ptr, rhs.id.Ptr);

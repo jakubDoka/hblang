@@ -771,8 +771,8 @@ main := fn(): uint {
     i += .(1, 1, 1, 1)
     if i.r + i.g + i.b + i.a != 4 return 1001
 
-    //if Point.(1, 1) != Point.(1, 1) return 1002
-    //if Point.(1, 2) == Point.(1, 1) return 1003
+    if Point.(1, 1) != Point.(1, 1) return 1002
+    if Point.(1, 2) == Point.(1, 1) return 1003
 
     a := Point.(1, 2)
     b := Point.(3, 4)
@@ -1288,7 +1288,7 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
     - [x] scope
     - [x] file
     - [x] operators
-    - [ ] **comparison**
+    - [x] comparison
   - [x] enums
     - [ ] ? specific values
     - [ ] ? backing integer

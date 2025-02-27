@@ -12,6 +12,9 @@ pub const BinOp = enum(u8) {
     udiv,
     sdiv,
 
+    band,
+    bor,
+
     ne,
     eq,
     ugt,
@@ -30,6 +33,9 @@ pub const BinOp = enum(u8) {
             .imul => lhs *% rhs,
             .udiv => @bitCast(tu(lhs) / tu(rhs)),
             .sdiv => @divFloor(lhs, rhs),
+
+            .band => lhs & rhs,
+            .bor => lhs | rhs,
 
             .ne => @intFromBool(lhs != rhs),
             .eq => @intFromBool(lhs == rhs),
