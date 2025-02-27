@@ -307,11 +307,19 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             self.capture_boundary = self.active_syms.items.len;
             defer self.capture_boundary = prev_capture_boundary;
 
+            var alignment: Id = .zeroSized(.Void);
+            if (self.tryAdvance(.@"align")) {
+                _ = try self.expectAdvance(.@"(");
+                alignment = try self.parseExpr();
+                _ = try self.expectAdvance(.@")");
+            }
+
             const capture_scope = self.captures.items.len;
             const fields = try self.parseList(.@"{", .@";", .@"}", parseUnorderedExpr);
             const captures = self.popCaptures(capture_scope, prev_capture_boundary != 0);
             break :b @unionInit(Ast.Expr, name, .{
                 .fields = fields,
+                .alignment = alignment,
                 .captures = try self.store.allocSlice(Ident, self.gpa, captures),
                 .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
             });

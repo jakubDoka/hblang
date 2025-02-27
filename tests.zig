@@ -109,6 +109,7 @@ pub fn testBuilder(
             ast.* = .{
                 .path = fr.path,
                 .source = fr.source,
+                .root_struct = .zeroSized(.Void),
                 .items = .{},
                 .exprs = .{},
             };

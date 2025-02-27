@@ -105,7 +105,6 @@ pub const Slice = struct {
 pub const Enum = struct {
     key: Key,
 
-    ast_fields: Ast.Slice,
     fields: ?[]const Field = null,
 
     pub const Field = struct {
@@ -119,18 +118,16 @@ pub const Enum = struct {
     pub fn getFields(self: *Enum, types: *Types) []const Field {
         if (self.fields) |f| return f;
         const ast = types.getFile(self.key.file);
+        const enum_ast = ast.exprs.get(self.key.ast).Enum;
 
         var count: usize = 0;
-        for (ast.exprs.view(self.ast_fields)) |f| count += @intFromBool(f.tag() == .Tag);
+        for (ast.exprs.view(enum_ast.fields)) |f| count += @intFromBool(f.tag() == .Tag);
 
         const fields = types.arena.alloc(Field, count);
         var i: usize = 0;
-        for (ast.exprs.view(self.ast_fields)) |fast| {
+        for (ast.exprs.view(enum_ast.fields)) |fast| {
             if (fast.tag() != .Tag) continue;
-
-            fields[i] = .{
-                .name = ast.tokenSrc(ast.exprs.get(fast).Tag.index + 1),
-            };
+            fields[i] = .{ .name = ast.tokenSrc(ast.exprs.get(fast).Tag.index + 1) };
             i += 1;
         }
         self.fields = fields;
@@ -141,8 +138,9 @@ pub const Enum = struct {
 pub const Union = struct {
     key: Key,
 
-    ast_fields: Ast.Slice,
     fields: ?[]const Field = null,
+    size: ?usize = null,
+    alignment: ?usize = null,
 
     pub const Field = struct {
         name: []const u8,
@@ -156,16 +154,16 @@ pub const Union = struct {
     pub fn getFields(self: *Union, types: *Types) []const Field {
         if (self.fields) |f| return f;
         const ast = types.getFile(self.key.file);
+        const union_ast = ast.exprs.get(self.key.ast).Union;
 
         var count: usize = 0;
-        for (ast.exprs.view(self.ast_fields)) |f| count += @intFromBool(ast.exprs.get(f).BinOp.lhs.tag() == .Tag);
+        for (ast.exprs.view(union_ast.fields)) |f| count += @intFromBool(ast.exprs.get(f).BinOp.lhs.tag() == .Tag);
 
         const fields = types.arena.alloc(Field, count);
         var i: usize = 0;
-        for (ast.exprs.view(self.ast_fields)) |fast| {
+        for (ast.exprs.view(union_ast.fields)) |fast| {
             const field = ast.exprs.get(fast).BinOp;
             if (field.lhs.tag() != .Tag) continue;
-
             fields[i] = .{
                 .name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1),
                 .ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field.rhs),
@@ -180,8 +178,9 @@ pub const Union = struct {
 pub const Struct = struct {
     key: Key,
 
-    ast_fields: Ast.Slice,
     fields: ?[]const Field = null,
+    size: ?usize = null,
+    alignment: ?usize = null,
 
     pub const Field = struct {
         name: []const u8,
@@ -193,16 +192,51 @@ pub const Struct = struct {
         return Id.init(.{ .Struct = self });
     }
 
+    pub fn getSize(self: *Struct, types: *Types) usize {
+        if (self.size) |a| return a;
+
+        if (@hasField(Field, "alignment")) @compileError("");
+        const max_alignment = self.getAlignment(types);
+
+        var siz: usize = 0;
+        for (self.getFields(types)) |f| {
+            siz = std.mem.alignForward(usize, siz, @min(max_alignment, f.ty.alignment(types)));
+            siz += f.ty.size(types);
+        }
+        siz = std.mem.alignForward(usize, siz, max_alignment);
+        return siz;
+    }
+
+    pub fn getAlignment(self: *Struct, types: *Types) usize {
+        if (self.alignment) |a| return a;
+
+        const ast = types.getFile(self.key.file);
+        const struct_ast = ast.exprs.get(self.key.ast).Struct;
+
+        if (struct_ast.alignment.tag() != .Void) {
+            if (@hasField(Field, "alignment")) @compileError("assert fields <= alignment then base alignment");
+            self.alignment = @bitCast(types.ct.evalIntConst(.{ .Perm = self.asTy() }, struct_ast.alignment));
+            return self.alignment.?;
+        }
+
+        var alignm: usize = 1;
+        for (self.getFields(types)) |f| {
+            alignm = @max(alignm, f.ty.alignment(types));
+        }
+        return alignm;
+    }
+
     pub fn getFields(self: *Struct, types: *Types) []const Field {
         if (self.fields) |f| return f;
         const ast = types.getFile(self.key.file);
+        const struct_ast = ast.exprs.get(self.key.ast).Struct;
 
         var count: usize = 0;
-        for (ast.exprs.view(self.ast_fields)) |f| count += @intFromBool(ast.exprs.get(f).BinOp.lhs.tag() == .Tag);
+        for (ast.exprs.view(struct_ast.fields)) |f| count += @intFromBool(ast.exprs.get(f).BinOp.lhs.tag() == .Tag);
 
         const fields = types.arena.alloc(Field, count);
         var i: usize = 0;
-        for (ast.exprs.view(self.ast_fields)) |fast| {
+        for (ast.exprs.view(struct_ast.fields)) |fast| {
             const field = ast.exprs.get(fast).BinOp;
             if (field.lhs.tag() != .Tag) continue;
             if (field.rhs.tag() == .BinOp and ast.exprs.get(field.rhs).BinOp.op == .@"=") {
@@ -320,11 +354,11 @@ pub const Id = enum(usize) {
         };
     }
 
-    pub fn items(self: Id) Ast.Slice {
+    pub fn items(self: Id, ast: *const Ast) Ast.Slice {
         return switch (self.data()) {
             .Global, .Builtin, .Ptr, .Slice, .Nullable => std.debug.panic("{s}", .{@tagName(self.data())}),
             .Template, .Func => .{},
-            inline else => |v| v.ast_fields,
+            inline else => |v, t| @field(ast.exprs.get(v.key.ast), @tagName(t)).fields,
         };
     }
 
@@ -420,17 +454,7 @@ pub const Id = enum(usize) {
                 max_size = std.mem.alignForward(usize, max_size, alignm);
                 return max_size;
             },
-            .Struct => |s| {
-                var siz: usize = 0;
-                var alignm: usize = 1;
-                for (s.getFields(types)) |f| {
-                    alignm = @max(alignm, f.ty.alignment(types));
-                    siz = std.mem.alignForward(usize, siz, f.ty.alignment(types));
-                    siz += f.ty.size(types);
-                }
-                siz = std.mem.alignForward(usize, siz, alignm);
-                return siz;
-            },
+            .Struct => |s| s.getSize(types),
             .Slice => |s| if (s.len) |l| l * s.elem.size(types) else 16,
             .Nullable => |n| n.alignment(types) + n.size(types),
             .Global, .Func, .Template => std.debug.panic("{s}", .{@tagName(self.data())}),
@@ -442,7 +466,8 @@ pub const Id = enum(usize) {
             .Builtin, .Enum => @max(1, self.size(types)),
             .Ptr => 8,
             .Nullable => |n| n.alignment(types),
-            inline .Union, .Struct => |s| {
+            .Struct => |s| s.getAlignment(types),
+            inline .Union => |s| {
                 var alignm: usize = 1;
                 for (s.getFields(types)) |f| {
                     alignm = @max(alignm, f.ty.alignment(types));
@@ -726,8 +751,7 @@ pub fn getScope(self: *Types, file: File) Id {
             .void,
             file,
             self.getFile(file).path,
-            .zeroSized(.Void),
-            self.getFile(file).items,
+            self.getFile(file).root_struct,
             &.{},
         );
     }
@@ -780,7 +804,6 @@ pub fn resolveFielded(
     file: File,
     name: []const u8,
     ast: Ast.Id,
-    fields: Ast.Slice,
     captures: []const Key.Capture,
 ) Id {
     const slot, const alloc = self.intern(tag, .{
@@ -793,7 +816,6 @@ pub fn resolveFielded(
     if (!slot.found_existing) {
         alloc.* = .{
             .key = alloc.key,
-            .ast_fields = fields,
         };
     }
     return slot.key_ptr.*;

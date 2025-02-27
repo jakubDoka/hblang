@@ -590,6 +590,18 @@ main := fn(): uint {
 }
 ```
 
+#### structs 6 (packed)
+```hb
+expectations := .{
+    .return_value: 4;
+}
+
+main := fn(): uint {
+    Pckd := struct align(1){.a: u8; .b: u16}
+    return @size_of(Pckd) + @align_of(Pckd)
+}
+```
+
 #### file structs 1
 ```hb
 main := fn(): uint {
@@ -1268,7 +1280,7 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
       - [ ] **all**
   - [x] structs
     - [x] indexing
-    - [ ] **packed**
+    - [x] packed
     - [x] constructors
       - [x] dictionary
       - [x] tuple

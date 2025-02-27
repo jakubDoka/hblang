@@ -2,6 +2,7 @@ exprs: Store,
 path: []const u8,
 source: []const u8,
 items: Slice,
+root_struct: Id,
 
 const std = @import("std");
 const root = @import("utils.zig");
@@ -59,21 +60,9 @@ pub const Expr = union(enum) {
         ret: Id,
         body: Id,
     },
-    Enum: struct {
-        pos: Pos,
-        captures: root.EnumSlice(Ident),
-        fields: Slice,
-    },
-    Union: struct {
-        pos: Pos,
-        captures: root.EnumSlice(Ident),
-        fields: Slice,
-    },
-    Struct: struct {
-        pos: Pos,
-        captures: root.EnumSlice(Ident),
-        fields: Slice,
-    },
+    Enum: Type,
+    Union: Type,
+    Struct: Type,
     Directive: struct {
         pos: Pos,
         kind: Lexer.Lexeme.Directive,
@@ -163,6 +152,13 @@ pub const Expr = union(enum) {
         pos: Pos,
         end: u32,
     },
+
+    pub const Type = struct {
+        pos: Pos,
+        alignment: Id,
+        captures: root.EnumSlice(Ident),
+        fields: Slice,
+    };
 };
 
 pub const Pos = packed struct(Pos.Repr) {
@@ -202,11 +198,18 @@ pub fn init(gpa: std.mem.Allocator, current: Types.File, path: []const u8, code:
         parser.store.deinit(gpa);
     }
 
+    const items = try parser.parse();
     return .{
-        .items = try parser.parse(),
-        .exprs = parser.store,
+        .items = items,
         .source = code,
         .path = path,
+        .root_struct = try parser.store.alloc(parser.gpa, .Struct, .{
+            .pos = .init(0),
+            .alignment = .zeroSized(.Void),
+            .fields = items,
+            .captures = .{},
+        }),
+        .exprs = parser.store,
     };
 }
 

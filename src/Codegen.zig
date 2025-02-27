@@ -223,10 +223,10 @@ pub const Scope = union(enum) {
         };
     }
 
-    pub fn items(self: Scope) Ast.Slice {
+    pub fn items(self: Scope, ast: *const Ast) Ast.Slice {
         return switch (self) {
-            .Perm => |p| p.items(),
-            .Tmp => |t| t.parent_scope.items(),
+            .Perm => |p| p.items(ast),
+            .Tmp => |t| t.parent_scope.items(ast),
         };
     }
 
@@ -407,7 +407,8 @@ pub fn lookupScopeItem(self: *Codegen, pos: Ast.Pos, bsty: Types.Id, name: []con
             if (std.mem.eql(u8, f.name, name)) return .{ .cnst = i };
         }
     }
-    const decl = other_ast.findDecl(bsty.items(), name) orelse {
+    const ast = self.types.getFile(bsty.file());
+    const decl = other_ast.findDecl(bsty.items(ast), name) orelse {
         self.report(pos, "{} does not declare this", .{bsty});
         return .{ .ty = .never };
     };
@@ -424,7 +425,7 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) Value {
     } else {
         var cursor = self.parent_scope;
         const decl = while (!cursor.empty()) {
-            if (ast.findDecl(cursor.items(), id)) |v| break v;
+            if (ast.findDecl(cursor.items(ast), id)) |v| break v;
             if (cursor.findCapture(id)) |c| {
                 return .{ .ty = c.ty, .id = if (c.ty == .type) .{ .Value = self.bl.addIntImm(.int, @bitCast(c.value)) } else b: {
                     if (self.target != .@"comptime") {

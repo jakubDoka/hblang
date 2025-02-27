@@ -25,6 +25,7 @@ pub const Lexeme = enum(u16) {
     @"enum",
     @"union",
     @"struct",
+    @"align",
     null,
     idk,
     true,

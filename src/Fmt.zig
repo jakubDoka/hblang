@@ -67,6 +67,13 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             };
 
             try self.buf.appendSlice(name);
+
+            if (s.alignment.tag() != .Void) {
+                try self.buf.appendSlice(" align(");
+                try self.fmtExpr(s.alignment);
+                try self.buf.appendSlice(")");
+            }
+
             const forced = for (self.ast.exprs.view(s.fields)) |e| {
                 if (t == .Enum and e.tag() != .Tag) break true;
                 if (t != .Enum and self.ast.exprs.get(e).BinOp.lhs.tag() != .Tag) break true;

@@ -222,7 +222,6 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
                         scope.file(),
                         name,
                         struct_ast_id,
-                        struct_ast.fields,
                         captures,
                     );
 
