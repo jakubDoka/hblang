@@ -258,15 +258,14 @@ pub const Id = enum(usize) {
         }
     };
 
-    pub fn fromLexeme(lexeme: Lexer.Lexeme) Id {
-        const off = comptime @as(isize, @intFromEnum(Id.void)) - @intFromEnum(Lexer.Lexeme.void);
-        return @enumFromInt(@as(isize, @intFromEnum(lexeme)) + off);
+    pub fn fromLexeme(lexeme: Lexer.Lexeme.Type) Id {
+        comptime {
+            std.debug.assert(@intFromEnum(Lexer.Lexeme.Type.never) == @intFromEnum(Id.never));
+        }
+        return @enumFromInt(@intFromEnum(lexeme));
     }
 
     pub inline fn init(dt: Data) Id {
-        comptime {
-            std.debug.assert(fromLexeme(.i8) == .i8);
-        }
         return @enumFromInt(@as(u64, @bitCast(Repr{
             .flag = @intFromEnum(dt),
             .data = @intCast(switch (dt) {
@@ -352,7 +351,7 @@ pub const Id = enum(usize) {
 
     pub fn len(self: Id, types: *Types) ?usize {
         return switch (self.data()) {
-            .Struct => |s| s.getFields(types).len,
+            inline .Struct, .Union => |s| s.getFields(types).len,
             .Slice => |s| s.len,
             else => null,
         };
@@ -424,6 +423,7 @@ pub const Id = enum(usize) {
         if (from.isUnsigned() and to.isUnsigned()) return is_bigger;
         if (from.isSigned() and to.isSigned()) return is_bigger;
         if (from.isUnsigned() and to.isSigned()) return is_bigger;
+        if (from == .bool and to.isInteger()) return true;
 
         return false;
     }

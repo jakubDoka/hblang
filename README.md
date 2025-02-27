@@ -1145,6 +1145,32 @@ main := fn(): uint {
 }
 ```
 
+#### directives 11 (@target)
+```hb
+global: bool = @target("ableos")
+
+main := fn(): uint {
+    $if @target("comptime") @error("unecpected")
+
+    return global
+}
+```
+
+#### directives 12 (@inline)
+```hb
+expectations := .{
+    .return_value: 10;
+}
+
+main := fn(): uint {
+    // NOTE: does nothing right now
+    return @inline(foo, 10)
+}
+
+foo := fn(vl: uint): uint return vl
+```
+
+
 ## progress
 
 - [ ] diagnostics
@@ -1227,13 +1253,13 @@ main := fn(): uint {
   - [x] `@bit_cast(<expr>)`
   - [x] `@ecall(...<expr>)`
   - [x] `@embed(<string>)`
-  - [ ] `@inline(<func>, ...<args>)` --DO
+  - [x] `@inline(<func>, ...<args>)`
   - [x] `@len_of(<ty>)`
   - [x] `@kind_of(<ty>)`
   - [ ] `@Any(<fn(type): bool/type>..)`
   - [x] `@error(...<expr>)`
   - [x] `@ChildOf(<ty>)`
-  - [ ] `@target("<pat>")`
+  - [x] `@target("<pat>")`
 
 ## vendored tests
 

@@ -116,7 +116,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             const end = if (t == .Ctor) .@"}" else if (t == .Tupl) .@")" else .@"]";
             try self.fmtSlice(v.pos.flag.indented, v.fields, start, sep, end);
         },
-        .Buty => |b| try self.buf.appendSlice(b.bt.repr()),
+        .Buty => |b| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, b.pos.index)),
         .Block => |b| {
             try self.fmtSliceLow(b.pos.flag.indented, true, b.stmts, .@"{", .@";", .@"}");
         },

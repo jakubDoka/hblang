@@ -49,7 +49,7 @@ pub const Expr = union(enum) {
     },
     Buty: struct {
         pos: Pos,
-        bt: Lexer.Lexeme,
+        bt: Lexer.Lexeme.Type,
     },
     Fn: struct {
         pos: Pos,
@@ -71,7 +71,7 @@ pub const Expr = union(enum) {
     },
     Directive: struct {
         pos: Pos,
-        kind: Lexer.Lexeme,
+        kind: Lexer.Lexeme.Directive,
         args: Slice,
     },
     Range: struct {

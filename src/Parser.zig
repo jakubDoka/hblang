@@ -231,7 +231,7 @@ fn popCaptures(self: *Parser, scope: usize, preserve: bool) []const Ident {
 fn parseUnitWithoutTail(self: *Parser) Error!Id {
     var token = self.advance();
     const scope_frame = self.active_syms.items.len;
-    return try self.store.allocDyn(self.gpa, switch (token.kind) {
+    return try self.store.allocDyn(self.gpa, switch (token.kind.expand()) {
         .Comment => .{ .Comment = .init(token.pos) },
         ._ => .{ .Wildcard = .init(token.pos) },
         .idk => .{ .Idk = .init(token.pos) },
@@ -269,47 +269,34 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             } };
         },
 
-        .@"@CurrentScope",
-        .@"@TypeOf",
-        .@"@as",
-        .@"@int_cast",
-        .@"@size_of",
-        .@"@align_of",
-        .@"@bit_cast",
-        .@"@ecall",
-        .@"@inline",
-        .@"@len_of",
-        .@"@kind_of",
-        .@"@Any",
-        .@"@error",
-        .@"@ChildOf",
-        .@"@target",
-        => |k| .{ .Directive = .{
-            .kind = k,
-            .args = try self.parseList(.@"(", .@",", .@")", parseExpr),
-            .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
-        } },
-        inline .@"@use", .@"@embed" => |t| b: {
-            const ty = @field(Loader.LoadOptions.Kind, @tagName(t)[1..]);
+        .Directive => |k| switch (k) {
+            inline .use, .embed => |t| b: {
+                const ty = @field(Loader.LoadOptions.Kind, @tagName(t));
 
-            _ = try self.expectAdvance(.@"(");
-            token = try self.expectAdvance(.@"\"");
-            const path = token.view(self.lexer.source);
-            _ = try self.expectAdvance(.@")");
+                _ = try self.expectAdvance(.@"(");
+                token = try self.expectAdvance(.@"\"");
+                const path = token.view(self.lexer.source);
+                _ = try self.expectAdvance(.@")");
 
-            break :b .{ .Use = .{
-                .file = self.loader.load(.{
-                    .from = self.current,
-                    .path = path[1 .. path.len - 1],
-                    .type = ty,
-                }),
-                .pos = .{
-                    .index = @intCast(token.pos),
-                    .flag = .{ .use_kind = ty },
-                },
-            } };
+                break :b .{ .Use = .{
+                    .file = self.loader.load(.{
+                        .from = self.current,
+                        .path = path[1 .. path.len - 1],
+                        .type = ty,
+                    }),
+                    .pos = .{
+                        .index = @intCast(token.pos),
+                        .flag = .{ .use_kind = ty },
+                    },
+                } };
+            },
+            else => .{ .Directive = .{
+                .kind = k,
+                .args = try self.parseList(.@"(", .@",", .@")", parseExpr),
+                .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
+            } },
         },
-        inline .@"union", .@"struct" => |t| b: {
+        inline .@"union", .@"struct" => |_, t| b: {
             const name = comptime nm: {
                 var nm = @tagName(t)[0..].*;
                 nm[0] = std.ascii.toUpper(nm[0]);
@@ -364,12 +351,10 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             _ = try self.expectAdvance(.@")");
             return expr;
         },
-        .void, .bool, .u8, .u16, .u32, .uint, .i8, .i16, .i32, .int, .type => .{
-            .Buty = .{ .pos = .init(token.pos), .bt = token.kind },
-        },
-        .@"&", .@"^", .@"-", .@"?" => |op| .{ .UnOp = .{
+        .Type => |t| .{ .Buty = .{ .pos = .init(token.pos), .bt = t } },
+        .@"&", .@"^", .@"-", .@"?" => .{ .UnOp = .{
             .pos = .init(token.pos),
-            .op = op,
+            .op = token.kind,
             .oper = try self.parseUnit(),
         } },
         .@"[" => .{ .SliceTy = .{

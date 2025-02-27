@@ -304,8 +304,7 @@ pub fn typeCheck(self: *Codegen, expr: anytype, got: *Value, expected: Types.Id)
             got.id.Value = self.bl.addUnOp(.sext, self.abi.categorize(expected, self.types).ByValue, got.id.Value);
         }
 
-        if (got.ty.isUnsigned() and got.ty.size(self.types) < expected.size(self.types)) {
-            //self.report(, "{} {} {}", .{ got.ty, got.id.Value.data_type, expected });
+        if ((got.ty.isUnsigned() or got.ty == .bool) and got.ty.size(self.types) < expected.size(self.types)) {
             got.id.Value = self.bl.addUnOp(.uext, self.abi.categorize(expected, self.types).ByValue, got.id.Value);
         }
 
@@ -445,6 +444,61 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) Value {
         const global = typ.data().Global;
         return .mkp(global.ty, self.bl.addGlobalAddr(global.id));
     }
+}
+
+pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(.Call)) Value {
+    const ast = self.ast;
+    var tmp = root.Arena.scrath(null);
+    defer tmp.deinit();
+
+    var typ: Types.Id, var caller: ?Value = if (e.called.tag() == .Field) b: {
+        const field = ast.exprs.get(e.called).Field;
+        const value = self.emit(.{}, field.base);
+        if (value.ty == .type) {
+            break :b .{ self.lookupScopeItem(self.unwrapTyConst(value.id.Value), ast.tokenSrc(field.field.index)), null };
+        }
+        break :b .{ self.lookupScopeItem(value.ty, ast.tokenSrc(field.field.index)), value };
+    } else b: {
+        break :b .{ self.resolveAnonTy(e.called), null };
+    };
+
+    var computed_args: ?[]Value = null;
+    const was_template = typ.data() == .Template;
+    if (was_template) {
+        computed_args, typ = self.instantiateTemplate(tmp, e, typ);
+    }
+
+    if (typ == .never) return .never;
+
+    const func = typ.data().Func;
+    self.queue(.{ .Func = func });
+
+    const passed_args = e.args.len() + @intFromBool(caller != null);
+    if (!was_template and passed_args != func.args.len) {
+        self.report(expr, "expected {} arguments, got {}", .{ func.args.len, passed_args });
+        return .never;
+    }
+
+    const param_count, const return_count, const ret_abi = func.computeAbiSize(self.abi, self.types);
+    const args = self.bl.allocCallArgs(tmp.arena, param_count, return_count);
+
+    var i: usize = self.pushReturn(args, ret_abi, func.ret, ctx);
+
+    if (caller) |*value| {
+        const abi = self.abi.categorize(value.ty, self.types);
+        i += self.pushParam(args, abi, i, value);
+    }
+
+    const args_ast = ast.exprs.view(e.args);
+    for (func.args[@intFromBool(caller != null)..], 0..) |ty, k| {
+        const abi = self.abi.categorize(ty, self.types);
+        abi.types(args.params[i..]);
+        var value = if (computed_args) |a| a[k] else self.emitTyped(ctx, ty, args_ast[k]);
+        if (value.ty == .never) return .never;
+        i += self.pushParam(args, abi, i, &value);
+    }
+
+    return self.assembleReturn(func.id, args, ctx, func.ret, ret_abi);
 }
 
 pub fn instantiateTemplate(
@@ -1228,59 +1282,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             self.loopControl(.@"continue", expr);
             return .{};
         },
-        .Call => |e| {
-            var tmp = root.Arena.scrath(null);
-            defer tmp.deinit();
-
-            var typ: Types.Id, var caller: ?Value = if (e.called.tag() == .Field) b: {
-                const field = ast.exprs.get(e.called).Field;
-                const value = self.emit(.{}, field.base);
-                if (value.ty == .type) {
-                    break :b .{ self.lookupScopeItem(self.unwrapTyConst(value.id.Value), ast.tokenSrc(field.field.index)), null };
-                }
-                break :b .{ self.lookupScopeItem(value.ty, ast.tokenSrc(field.field.index)), value };
-            } else b: {
-                break :b .{ self.resolveAnonTy(e.called), null };
-            };
-
-            var computed_args: ?[]Value = null;
-            const was_template = typ.data() == .Template;
-            if (was_template) {
-                computed_args, typ = self.instantiateTemplate(tmp, e, typ);
-            }
-
-            if (typ == .never) return .never;
-
-            const func = typ.data().Func;
-            self.queue(.{ .Func = func });
-
-            const passed_args = e.args.len() + @intFromBool(caller != null);
-            if (!was_template and passed_args != func.args.len) {
-                self.report(expr, "expected {} arguments, got {}", .{ func.args.len, passed_args });
-                return .never;
-            }
-
-            const param_count, const return_count, const ret_abi = func.computeAbiSize(self.abi, self.types);
-            const args = self.bl.allocCallArgs(tmp.arena, param_count, return_count);
-
-            var i: usize = self.pushReturn(args, ret_abi, func.ret, ctx);
-
-            if (caller) |*value| {
-                const abi = self.abi.categorize(value.ty, self.types);
-                i += self.pushParam(args, abi, i, value);
-            }
-
-            const args_ast = ast.exprs.view(e.args);
-            for (func.args[@intFromBool(caller != null)..], 0..) |ty, k| {
-                const abi = self.abi.categorize(ty, self.types);
-                abi.types(args.params[i..]);
-                var value = if (computed_args) |a| a[k] else self.emitTyped(ctx, ty, args_ast[k]);
-                if (value.ty == .never) return .never;
-                i += self.pushParam(args, abi, i, &value);
-            }
-
-            return self.assembleReturn(func.id, args, ctx, func.ret, ret_abi);
-        },
+        .Call => |e| return self.emitCall(ctx, expr, e),
         .Return => |e| {
             var value = self.emit(.{ .loc = self.struct_ret_ptr, .ty = self.ret }, e.value);
             if (self.typeCheck(expr, &value, self.ret)) return .never;
@@ -1425,6 +1427,61 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
     const args = ast.exprs.view(e.args);
 
     const utils = enum {
+        const mem = std.mem;
+
+        pub fn matchTriple(pattern: []const u8, triple: []const u8) !bool {
+            // CAUTION: written by LLM
+
+            if (mem.eql(u8, pattern, "*")) {
+                return error.@"you can replace this with 'true'";
+            }
+
+            if (mem.endsWith(u8, pattern, "-*")) {
+                return error.@"trailing '*' is redundant";
+            }
+
+            var matcher = mem.splitScalar(u8, pattern, '-');
+            var matchee = mem.splitScalar(u8, triple, '-');
+            var eat_start = false;
+
+            while (matcher.next()) |pat| {
+                if (mem.eql(u8, pat, "*")) {
+                    if (eat_start) {
+                        return error.@"consecutive '*' are redundant";
+                    }
+                    if (matchee.next() == null) {
+                        return false;
+                    }
+                    eat_start = true;
+                } else if (eat_start) {
+                    var found = false;
+                    while (matchee.next()) |v| {
+                        if (mem.eql(u8, v, pat)) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        return false;
+                    }
+                } else if (!mem.eql(u8, matchee.next() orelse return false, pat)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        test "sanity match triple" {
+            try std.testing.expect(try matchTriple("a-b-c", "a-b-c"));
+            try std.testing.expect(try matchTriple("*-b-c", "a-b-c"));
+            try std.testing.expect(try matchTriple("*-c", "a-b-c"));
+            try std.testing.expect(try matchTriple("a", "a-b-c"));
+            try std.testing.expect(!try matchTriple("*-a", "a-b-c"));
+            try std.testing.expectError(error.@"consecutive '*' are redundant", matchTriple("*-*-a", "a-b-c"));
+            try std.testing.expectError(error.@"trailing '*' is redundant", matchTriple("*-b-*", "a-b-c"));
+        }
+
         fn reportInferrence(cg: *Codegen, exr: anytype, ty: []const u8, dir_name: []const u8) void {
             cg.report(exr, "type can not be inferred from the context, use `@as(<{s}>, {s}(...))`", .{ ty, dir_name });
         }
@@ -1446,17 +1503,25 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
     };
 
     switch (e.kind) {
-        .@"@CurrentScope" => {
+        .use, .embed => unreachable,
+        .CurrentScope => {
             if (utils.assertArgs(self, expr, args, "")) return .never;
             return self.emitTyConst(self.parent_scope.perm());
         },
-        .@"@TypeOf" => {
+        .TypeOf => {
             if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
             const ty = self.types.ct.jitExpr("", .{ .Tmp = self }, .{}, args[0]).?[1];
             return self.emitTyConst(ty);
         },
-
-        .@"@int_cast" => {
+        .@"inline" => {
+            if (utils.assertArgs(self, expr, args, "<called>, <args>..")) return .never;
+            return self.emitCall(ctx, expr, .{
+                .called = args[0],
+                .arg_pos = ast.posOf(args[0]),
+                .args = e.args.slice(1, e.args.len()),
+            });
+        },
+        .int_cast => {
             if (utils.assertArgs(self, expr, args, "<expr>")) return .never;
 
             const ret: Types.Id = ctx.ty orelse {
@@ -1480,7 +1545,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
 
             return .mkv(ret, self.bl.addUnOp(.ired, self.abi.categorize(ret, self.types).ByValue, oper.id.Value));
         },
-        .@"@bit_cast" => {
+        .bit_cast => {
             if (utils.assertArgs(self, expr, args, "<expr>")) return .never;
 
             const ret: Types.Id = ctx.ty orelse {
@@ -1511,7 +1576,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
                 return oper;
             }
         },
-        .@"@ChildOf" => {
+        .ChildOf => {
             if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
             const ty = self.resolveAnonTy(args[0]);
             const child = ty.child(self.types) orelse {
@@ -1520,12 +1585,12 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
             };
             return self.emitTyConst(child);
         },
-        .@"@kind_of" => {
+        .kind_of => {
             if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
             const len = self.resolveAnonTy(args[0]);
             return .mkv(.uint, self.bl.addIntImm(.int, @intFromEnum(len.data())));
         },
-        .@"@len_of" => {
+        .len_of => {
             if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
             const ty = self.resolveAnonTy(args[0]);
             const len = ty.len(self.types) orelse {
@@ -1534,15 +1599,26 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
             };
             return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(len)));
         },
-        .@"@align_of" => {
+        .align_of => {
             if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
             return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(self.resolveAnonTy(args[0]).alignment(self.types))));
         },
-        .@"@size_of" => {
+        .size_of => {
             if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
             return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(self.resolveAnonTy(args[0]).size(self.types))));
         },
-        .@"@ecall" => {
+        .target => {
+            if (utils.assertArgs(self, expr, args, "<string>")) return .never;
+            const content = ast.exprs.get(args[0]).String;
+            const str_content = ast.source[content.pos.index + 1 .. content.end - 1];
+            const triple = if (self.target == .runtime) @tagName(self.abi) else "comptime";
+            const matched = utils.matchTriple(str_content, triple) catch |err| {
+                self.report(args[0], "{s}", .{@errorName(err)});
+                return .never;
+            };
+            return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(matched)));
+        },
+        .ecall => {
             if (utils.assertArgs(self, expr, args, "<expr>..")) return .never;
             var tmp = root.Arena.scrath(null);
             defer tmp.deinit();
@@ -1572,12 +1648,12 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
 
             return self.assembleReturn(Comptime.eca, call_args, ctx, ret, ret_abi);
         },
-        .@"@as" => {
+        .as => {
             if (utils.assertArgs(self, expr, args, "<ty>, <expr>")) return .never;
             const ty = self.resolveAnonTy(args[0]);
             return self.emitTyped(ctx, ty, args[1]);
         },
-        .@"@error" => {
+        .@"error" => {
             if (utils.assertArgs(self, expr, args, "<ty/string>..")) return .never;
             var tmp = root.Arena.scrath(null);
             defer tmp.deinit();
@@ -1601,6 +1677,6 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
             self.report(expr, "{s}", .{msg.items});
             return .never;
         },
-        else => std.debug.panic("unhandled directive {s}", .{name}),
+        .Any => unreachable,
     }
 }

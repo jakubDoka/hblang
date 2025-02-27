@@ -7,19 +7,12 @@ const Types = @import("Types.zig");
 const Lexer = @This();
 pub const Pos = u32;
 
-pub const Lexeme = enum(u8) {
-    Eof = 0,
-    void,
-    bool,
-    u8,
-    u16,
-    u32,
-    uint,
-    i8,
-    i16,
-    i32,
-    int,
-    type,
+pub const Lexeme = enum(u16) {
+    Eof = 3,
+    Ident,
+    Comment,
+    Integer,
+
     @"fn",
     @"return",
     @"if",
@@ -35,34 +28,60 @@ pub const Lexeme = enum(u8) {
     idk,
     true,
     false,
-    @"@" = '@',
-    @"$" = '$',
-    @"\"" = '"',
-    @"{" = '{',
-    @"}" = '}',
-    @"[" = '[',
-    @"]" = ']',
+
+    @"!" = '!',
+    @"&" = '&',
     @"(" = '(',
     @")" = ')',
+    @"*" = '*',
+    @"+" = '+',
+    @"," = ',',
+    @"-" = '-',
+    @"." = '.',
+    @"/" = '/',
     @":" = ':',
     @";" = ';',
-    @"," = ',',
-    @"." = '.',
-    @"&" = '&',
-    @"^" = '^',
-    @"!" = '!',
-    @"?" = '?',
-    @"-" = '-',
-    @"+" = '+',
-    @"*" = '*',
-    @"/" = '/',
     @"<" = '<',
-    @">" = '>',
     @"=" = '=',
-    Ident = 128,
-    Comment,
-    Integer,
-    @"@CurrentScope",
+    @">" = '>',
+    @"?" = '?',
+    @"@" = '@',
+    @"[" = '[',
+    @"\"" = '"',
+    @"]" = ']',
+    @"^" = '^',
+    @"_" = '_',
+    @"{" = '{',
+    @"}" = '}',
+    @"$" = '$',
+
+    @".{" = '{' + 128,
+    @".(" = '(' + 128,
+    @".[" = '[' + 128,
+    @".." = '.' + 128,
+
+    @"!=" = '!' + 128,
+    @"+=" = '+' + 128,
+    @"-=" = '-' + 128,
+    @":=" = ':' + 128,
+    @"<=" = '<' + 128,
+    @"==" = '=' + 128,
+    @">=" = '>' + 128,
+
+    ty_never = 0x100,
+    ty_void,
+    ty_bool,
+    ty_u8,
+    ty_u16,
+    ty_u32,
+    ty_uint,
+    ty_i8,
+    ty_i16,
+    ty_i32,
+    ty_int,
+    ty_type,
+
+    @"@CurrentScope" = 0x200,
     @"@use",
     @"@TypeOf",
     @"@as",
@@ -79,18 +98,73 @@ pub const Lexeme = enum(u8) {
     @"@error",
     @"@ChildOf",
     @"@target",
-    @"_",
-    @".{",
-    @".(",
-    @".[",
-    @"..",
-    @"+=" = '+' + 128,
-    @"-=" = '-' + 128,
-    @":=" = ':' + 128,
-    @"==" = '=' + 128,
-    @"!=" = '!' + 128,
-    @"<=" = '<' + 128,
-    @">=" = '>' + 128,
+
+    comptime {
+        //std.debug.assert(Lexeme.@"@TypeOf".expand().Directive == .TypeOf);
+        //std.debug.assert(Lexeme.ty_never.expand().Type == .never);
+        //@compileLog(std.mem.asBytes(&Lexeme.@"@")[0..2].*, std.mem.asBytes(&Expanded.@"@")[0..2].*);
+        //std.debug.assert(Lexeme.@"@".expand() == .@"@");
+    }
+
+    const data = @typeInfo(Lexeme).@"enum";
+
+    fn SubEnum(comptime prefix: []const u8) type {
+        var type_count = 0;
+        var start = std.math.maxInt(u16) + 1;
+        for (data.fields, 0..) |f, i| if (f.name.len > prefix.len and std.mem.startsWith(u8, f.name, prefix)) {
+            type_count += 1;
+            start = @min(i, start);
+        };
+
+        var fields: [type_count]std.builtin.Type.EnumField = undefined;
+        for (&fields, data.fields[start..][0..type_count], 0..) |*v, ty, i| {
+            v.* = .{ .name = ty.name[prefix.len..], .value = i };
+        }
+
+        return @Type(.{ .@"enum" = .{
+            .tag_type = u8,
+            .fields = &fields,
+            .decls = &.{},
+            .is_exhaustive = true,
+        } });
+    }
+
+    pub const Type = SubEnum("ty_");
+    pub const Directive = SubEnum("@");
+
+    pub const Expanded = b: {
+        const void_variant_count = for (data.fields, 0..) |f, i| {
+            if (f.value > 255) break i;
+        } else unreachable;
+
+        const fields = data.fields[0..void_variant_count].* ++ [_]std.builtin.Type.EnumField{
+            .{ .name = "Type", .value = 1 },
+            .{ .name = "Directive", .value = 2 },
+        };
+
+        const tag = @Type(.{ .@"enum" = .{
+            .tag_type = u8,
+            .fields = &fields,
+            .decls = &.{},
+            .is_exhaustive = true,
+        } });
+
+        var variants: [void_variant_count + 2]std.builtin.Type.UnionField = undefined;
+        for (variants[0..void_variant_count], data.fields[0..void_variant_count]) |*v, vv| {
+            v.* = .{ .name = vv.name, .type = void, .alignment = 0 };
+        }
+
+        variants[void_variant_count + 0] = .{ .name = "Type", .type = Type, .alignment = @alignOf(Type) };
+        variants[void_variant_count + 1] = .{ .name = "Directive", .type = Directive, .alignment = @alignOf(Directive) };
+
+        break :b @Type(.{ .@"union" = .{ .layout = .@"extern", .tag_type = tag, .fields = &variants, .decls = &.{} } });
+    };
+
+    pub fn expand(self: Lexeme) Expanded {
+        var vl = @intFromEnum(self);
+        if (vl >= 256) vl = @byteSwap(vl);
+        return @bitCast(vl);
+    }
 
     // TODO: reverse the order because this does not look like precedence
     pub fn precedence(self: Lexeme) u8 {
@@ -146,7 +220,7 @@ pub const Lexeme = enum(u8) {
     }
 
     pub fn innerOp(self: Lexeme) ?Lexeme {
-        const byte: u8 = @intFromEnum(self);
+        const byte = @intFromEnum(self);
         switch (byte -| 128) {
             '+', '-' => return @enumFromInt(byte - 128),
             else => return null,
@@ -231,8 +305,9 @@ pub fn next(self: *Lexer) Token {
 
                 const ident = self.source[pos..self.cursor];
                 inline for (std.meta.fields(Lexeme)) |field| {
-                    if (comptime !std.ascii.isLower(field.name[0]) and field.name[0] != '_' and !std.mem.eql(u8, field.name, "Self")) continue;
-                    if (std.mem.eql(u8, field.name, ident)) break :b @field(Lexeme, field.name);
+                    if (comptime !std.ascii.isLower(field.name[0]) and field.name[0] != '_') continue;
+                    const start = comptime if (std.mem.startsWith(u8, field.name, "ty_")) 3 else 0;
+                    if (std.mem.eql(u8, field.name[start..], ident)) break :b @field(Lexeme, field.name);
                 }
                 break :b .Ident;
             },
