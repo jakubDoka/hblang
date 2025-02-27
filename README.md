@@ -882,6 +882,17 @@ main := fn(): uint {
 }
 ```
 
+#### strings
+```hb
+expectations := .{
+    .return_value: 69;
+}
+
+main := fn(): uint {
+    return "\t\{45}dvard\r\nඞ\0"[1]
+}
+```
+
 #### arrays 1
 ```hb
 expectations := .{
@@ -1230,6 +1241,7 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
   - [ ] **`die`**
 - [ ] **import pattern matching**
 - [x] global variables
+  - [x] strings
   - [x] comptime evaluation
   - [ ] ? references
   - [ ] ? immutable

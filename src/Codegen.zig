@@ -675,6 +675,56 @@ pub fn emitAutoDeref(self: *Codegen, value: *Value) void {
     }
 }
 
+pub const StringEncodeResutl = union(enum) {
+    ok: []const u8,
+    err: struct { reason: []const u8, pos: usize },
+};
+
+pub fn encodeString(
+    literal: []const u8,
+    buf: []u8,
+) StringEncodeResutl {
+    const SPECIAL_CHARS = "nrt\\'\"0";
+    const TO_BYTES = "\n\r\t\\\'\"\x00";
+
+    std.debug.assert(SPECIAL_CHARS.len == TO_BYTES.len);
+
+    var str = std.ArrayListUnmanaged(u8).initBuffer(buf);
+    var bytes = std.mem.splitScalar(u8, literal, '\\');
+
+    while (bytes.next()) |chunk| {
+        str.appendSliceAssumeCapacity(chunk);
+        if (bytes.rest().len == 0) break;
+        switch (bytes.rest()[0]) {
+            '{' => {
+                var hex_bytes = bytes.rest();
+                var i: usize = 1;
+                while (i < hex_bytes.len and hex_bytes[i] != '}') : (i += 2) {
+                    if (i + 1 >= hex_bytes.len) {
+                        return .{ .err = .{ .reason = "incomplete escape sequence", .pos = literal.len - bytes.rest().len } };
+                    }
+                    const byte_val = std.fmt.parseInt(u8, hex_bytes[i .. i + 2], 16) catch {
+                        return .{ .err = .{ .reason = "expected hex digit or '}'", .pos = literal.len - bytes.rest().len } };
+                    };
+                    str.appendAssumeCapacity(byte_val);
+                }
+                bytes.index.? += i + 1;
+            },
+            else => |b| {
+                for (SPECIAL_CHARS, TO_BYTES) |s, sb| {
+                    if (s == b) {
+                        str.appendAssumeCapacity(sb);
+                        break;
+                    }
+                } else return .{ .err = .{ .reason = "unknown escape sequence", .pos = literal.len - bytes.rest().len } };
+                bytes.index.? += 1;
+            },
+        }
+    }
+
+    return .{ .ok = str.items };
+}
+
 pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
     const ast = self.ast;
     switch (ast.exprs.get(expr)) {
@@ -682,6 +732,31 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         .Void => return .{},
 
         // #VALUES =====================================================================
+        .String => |e| {
+            const lit = ast.source[e.pos.index + 1 .. e.end - 1];
+
+            const data = switch (encodeString(lit, self.types.arena.alloc(u8, lit.len))) {
+                .ok => |dt| dt,
+                .err => |err| {
+                    var pos = e.pos;
+                    pos.index += @intCast(err.pos);
+                    self.report(pos, "{s}", .{err.reason});
+                    return .never;
+                },
+            };
+
+            const global = self.types.resolveGlobal(self.parent_scope.perm(), data, expr).data().Global;
+            global.data = data;
+            global.ty = self.types.makeSlice(data.len, .u8);
+            self.queue(.{ .Global = global });
+
+            const slice_ty = self.types.makeSlice(null, .u8);
+            const slice_loc = ctx.loc orelse self.bl.addLocal(slice_ty.size(self.types));
+            self.bl.addFieldStore(slice_loc, Types.Slice.ptr_offset, .int, self.bl.addGlobalAddr(global.id));
+            self.bl.addFieldStore(slice_loc, Types.Slice.len_offset, .int, self.bl.addIntImm(.int, @bitCast(data.len)));
+
+            return .mkp(slice_ty, slice_loc);
+        },
         .Integer => |e| {
             const ty = ctx.ty orelse .uint;
             if (!ty.isInteger()) {
