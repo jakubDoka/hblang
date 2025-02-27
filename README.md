@@ -1207,11 +1207,11 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
 
 ## progress
 
-- [ ] diagnostics
-  - [ ] don't crash on cycles
+- [ ] ? diagnostics
+  - [ ] ? don't crash on cycles
 - [ ] control flow
   - [x] functions
-    - [ ] inlining
+    - [ ] ? inlining
       - [x] noop compatibility
     - [x] scope inference
     - [x] comptime parameters
@@ -1221,40 +1221,42 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
     - [x] comptime
     - [x] break
     - [x] continue
-    - [ ] labels
+    - [ ] ? labels
   - [x] blocks
-    - [ ] labels
-  - [ ] match
-    - [ ] comptime
-  - [ ] defer
-  - [ ] `die`
-- [ ] import pattern matching
+    - [ ] ? labels
+  - [ ] **match**
+    - [ ] **comptime**
+  - [ ] **defer**
+  - [ ] **`die`**
+- [ ] **import pattern matching**
 - [x] global variables
   - [x] comptime evaluation
-  - [ ] immutable
+  - [ ] ? references
+  - [ ] ? immutable
+    - [x] noop compatibility
 - [ ] types
   - [x] `idk`
   - [x] integers/bool
     - [x] bool literals
     - [ ] integer literals
-      - [ ] binary
-      - [ ] octal
+      - [ ] **binary**
+      - [ ] **octal**
       - [x] decimal
-      - [ ] hexadecimal
+      - [ ] **hexadecimal**
     - [ ] binary operators
       - [x] `- + * / == != <= >= < >`
-      - [ ] others
+      - [ ] **others**
     - [ ] unary operators
       - [x] `-`
       - [ ] `! ~`
-  - [ ] floats
-    - [ ] binary operators
-      - [ ] all
-    - [ ] unary operators
-      - [ ] all
+  - [ ] **floats**
+    - [ ] **binary operators**
+      - [ ] **all**
+    - [ ] **unary operators**
+      - [ ] **all**
   - [x] structs
     - [x] indexing
-    - [ ] packed
+    - [ ] **packed**
     - [x] constructors
       - [x] dictionary
       - [x] tuple
@@ -1262,13 +1264,13 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
     - [x] scope
     - [x] file
     - [x] operators
-    - [ ] comparison
+    - [ ] **comparison**
   - [x] enums
-    - [ ] specific values
-    - [ ] backing integer
+    - [ ] ? specific values
+    - [ ] ? backing integer
     - [x] scope
   - [x] unions
-    - [ ] tag + customizable
+    - [ ] ? tag + customizable
     - [x] scope
   - [x] pointers
     - [x] slicing
@@ -1277,9 +1279,9 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
     - [x] field access
     - [x] indexing
     - [x] slicing
-  - [ ] tuples
+  - [ ] **tuples**
   - [x] nullable types
-- [ ] directives
+- [ ] ? directives
   - [x] `@use(<string>)`
   - [x] `@TypeOf(<expr>)`
   - [x] `@as(<ty>, <expr>)`
@@ -1289,12 +1291,12 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
   - [x] `@bit_cast(<expr>)`
   - [x] `@ecall(...<expr>)`
   - [x] `@embed(<string>)`
-  - [] `@inline(<func>, ...<args>)`
+  - [ ] ? `@inline(<func>, ...<args>)`
     - [x] noop compatibility
   - [x] `@len_of(<ty>)`
   - [x] `@kind_of(<ty>)`
   - [x] `@Any(<fn(type): void/type>..)`
-    - [ ] type filters
+    - [ ] ? type filters
   - [x] `@error(...<expr>)`
   - [x] `@ChildOf(<ty>)`
   - [x] `@target("<pat>")`
