@@ -59,6 +59,11 @@ pub const Expr = union(enum) {
         ret: Id,
         body: Id,
     },
+    Enum: struct {
+        pos: Pos,
+        captures: root.EnumSlice(Ident),
+        fields: Slice,
+    },
     Union: struct {
         pos: Pos,
         captures: root.EnumSlice(Ident),

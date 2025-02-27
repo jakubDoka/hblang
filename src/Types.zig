@@ -55,6 +55,7 @@ pub const Data = union(enum) {
     Ptr: *Id,
     Slice: *Slice,
     Nullable: *Id,
+    Enum: *Enum,
     Union: *Union,
     Struct: *Struct,
     Template: *Template,
@@ -99,6 +100,42 @@ pub const Slice = struct {
 
     pub const ptr_offset = 0;
     pub const len_offset = 8;
+};
+
+pub const Enum = struct {
+    key: Key,
+
+    ast_fields: Ast.Slice,
+    fields: ?[]const Field = null,
+
+    pub const Field = struct {
+        name: []const u8,
+    };
+
+    pub fn asTy(self: *Enum) Id {
+        return Id.init(.{ .Enum = self });
+    }
+
+    pub fn getFields(self: *Enum, types: *Types) []const Field {
+        if (self.fields) |f| return f;
+        const ast = types.getFile(self.key.file);
+
+        var count: usize = 0;
+        for (ast.exprs.view(self.ast_fields)) |f| count += @intFromBool(f.tag() == .Tag);
+
+        const fields = types.arena.alloc(Field, count);
+        var i: usize = 0;
+        for (ast.exprs.view(self.ast_fields)) |fast| {
+            if (fast.tag() != .Tag) continue;
+
+            fields[i] = .{
+                .name = ast.tokenSrc(ast.exprs.get(fast).Tag.index + 1),
+            };
+            i += 1;
+        }
+        self.fields = fields;
+        return fields;
+    }
 };
 
 pub const Union = struct {
@@ -317,7 +354,7 @@ pub const Id = enum(usize) {
     pub fn isBinaryOperand(self: Id) bool {
         return switch (self.data()) {
             .Builtin => self.isInteger() or self == .bool,
-            .Struct, .Ptr => true,
+            .Struct, .Ptr, .Enum => true,
             .Global, .Func, .Template, .Slice, .Nullable, .Union => false,
         };
     }
@@ -369,6 +406,10 @@ pub const Id = enum(usize) {
                 .uint, .int, .type => 8,
             },
             .Ptr => 8,
+            .Enum => |e| {
+                const var_count = e.getFields(types).len;
+                return std.math.ceilPowerOfTwo(usize, std.mem.alignForward(usize, std.math.log2_int(usize, var_count), 8) / 8) catch unreachable;
+            },
             .Union => |u| {
                 var max_size: usize = 0;
                 var alignm: usize = 1;
@@ -398,7 +439,7 @@ pub const Id = enum(usize) {
 
     pub fn alignment(self: Id, types: *Types) usize {
         return switch (self.data()) {
-            .Builtin => @max(1, self.size(types)),
+            .Builtin, .Enum => @max(1, self.size(types)),
             .Ptr => 8,
             .Nullable => |n| n.alignment(types),
             inline .Union, .Struct => |s| {
@@ -424,6 +465,8 @@ pub const Id = enum(usize) {
         if (from.isUnsigned() and to.isUnsigned()) return is_bigger;
         if (from.isSigned() and to.isSigned()) return is_bigger;
         if (from.isUnsigned() and to.isSigned()) return is_bigger;
+        if (from.data() == .Enum and to.isUnsigned()) return from.size(types) <= to.size(types);
+        if (from.data() == .Enum and to.isSigned()) return is_bigger;
         if (from == .bool and to.isInteger()) return true;
 
         return false;
@@ -457,7 +500,7 @@ pub const Id = enum(usize) {
                     return;
                 },
                 .Builtin => |b| writer.writeAll(@tagName(b)),
-                inline .Func, .Global, .Template, .Struct, .Union => |b| {
+                inline .Func, .Global, .Template, .Struct, .Union, .Enum => |b| {
                     if (b.key.scope != .void) {
                         try writer.print("{" ++ opts ++ "}", .{b.key.scope.fmt(self.tys)});
                     }
@@ -562,6 +605,14 @@ pub const Abi = enum {
                 .uint, .int, .type => .int,
             } },
             .Ptr => .{ .ByValue = .int },
+            .Enum => .{ .ByValue = switch (ty.size(types)) {
+                0 => return .Imaginary,
+                1 => .i8,
+                2 => .i16,
+                4 => .i32,
+                8 => .int,
+                else => unreachable,
+            } },
             .Union => |s| switch (self) {
                 .ableos => categorizeAbleosUnion(s, types),
             },
@@ -670,7 +721,8 @@ pub fn getFile(self: *Types, file: File) *const Ast {
 
 pub fn getScope(self: *Types, file: File) Id {
     if (self.file_scopes[@intFromEnum(file)] == .void) {
-        self.file_scopes[@intFromEnum(file)] = self.resolveStruct(
+        self.file_scopes[@intFromEnum(file)] = self.resolveFielded(
+            .Struct,
             .void,
             file,
             self.getFile(file).path,
@@ -721,8 +773,9 @@ pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Key) struct 
     return .{ slot, alloc };
 }
 
-pub fn resolveUnion(
+pub fn resolveFielded(
     self: *Types,
+    comptime tag: std.meta.Tag(Data),
     scope: Id,
     file: File,
     name: []const u8,
@@ -730,32 +783,7 @@ pub fn resolveUnion(
     fields: Ast.Slice,
     captures: []const Key.Capture,
 ) Id {
-    const slot, const alloc = self.intern(.Union, .{
-        .scope = scope,
-        .file = file,
-        .ast = ast,
-        .name = name,
-        .captures = captures,
-    });
-    if (!slot.found_existing) {
-        alloc.* = .{
-            .key = alloc.key,
-            .ast_fields = fields,
-        };
-    }
-    return slot.key_ptr.*;
-}
-
-pub fn resolveStruct(
-    self: *Types,
-    scope: Id,
-    file: File,
-    name: []const u8,
-    ast: Ast.Id,
-    fields: Ast.Slice,
-    captures: []const Key.Capture,
-) Id {
-    const slot, const alloc = self.intern(.Struct, .{
+    const slot, const alloc = self.intern(tag, .{
         .scope = scope,
         .file = file,
         .ast = ast,

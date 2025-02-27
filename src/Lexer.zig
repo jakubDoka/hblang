@@ -22,6 +22,7 @@ pub const Lexeme = enum(u16) {
     loop,
     @"break",
     @"continue",
+    @"enum",
     @"union",
     @"struct",
     null,

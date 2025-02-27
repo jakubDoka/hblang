@@ -59,7 +59,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.buf.appendSlice(" ");
             try self.fmtExpr(f.body);
         },
-        inline .Union, .Struct => |s, t| {
+        inline .Union, .Struct, .Enum => |s, t| {
             const name = comptime b: {
                 var nm = @tagName(t)[0..].*;
                 nm[0] = std.ascii.toLower(nm[0]);
@@ -68,7 +68,8 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
 
             try self.buf.appendSlice(name);
             const forced = for (self.ast.exprs.view(s.fields)) |e| {
-                if (self.ast.exprs.get(e).BinOp.lhs.tag() != .Tag) break true;
+                if (t == .Enum and e.tag() != .Tag) break true;
+                if (t != .Enum and self.ast.exprs.get(e).BinOp.lhs.tag() != .Tag) break true;
             } else false;
             if (s.pos.flag.indented or forced) try self.buf.appendSlice(" ");
             try self.fmtSliceLow(s.pos.flag.indented or forced, forced, s.fields, .@"{", .@";", .@"}");

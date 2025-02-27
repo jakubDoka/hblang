@@ -630,7 +630,7 @@ Vec := fn(E: type): type return struct {
 #### generic structs 2
 ```hb
 main := fn(): uint {
-    vl: Foo(uint).Bar(u8) = .(1, 1)
+    vl: Foo(uint).Bar(u8) = .init()
     return vl.sub()
 }
 
@@ -638,6 +638,8 @@ Foo := fn(F: type): type return struct {
     Bar := fn(B: type): type return struct {
         .foo: F;
         .bar: B
+
+        init := fn(): @CurrentScope() return .(1, 1)
 
         sub := fn(self: @CurrentScope()): uint {
             return self.foo - self.bar
@@ -806,6 +808,24 @@ main := fn(): int {
     n1 := Number.{._int: 42}
 
     return n1._int
+}
+```
+
+#### enums 1
+```hb
+expectations := .{
+    .return_value: 1;
+}
+
+main := fn(): uint {
+    Enum := enum{.A; .B; .C}
+
+    n1 := Enum.A
+    n2: Enum = .B
+
+    if n1 == n2 return 10
+
+    return @as(u8, n1) + n2
 }
 ```
 
@@ -1094,7 +1114,7 @@ main := fn(): uint {
 #### directives 7 (@kind_of)
 ```hb
 expectations := .{
-    .return_value: 5;
+    .return_value: 6;
 }
 
 main := fn(): uint {
@@ -1192,6 +1212,8 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
 - [ ] control flow
   - [x] functions
     - [ ] inlining
+      - [x] noop compatibility
+    - [x] scope inference
     - [x] comptime parameters
   - [x] ifs
     - [x] comptime
@@ -1232,7 +1254,7 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
       - [ ] all
   - [x] structs
     - [x] indexing
-    - [ ] packed --DO
+    - [ ] packed
     - [x] constructors
       - [x] dictionary
       - [x] tuple
@@ -1241,15 +1263,15 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
     - [x] file
     - [x] operators
     - [ ] comparison
-  - [ ] enums
+  - [x] enums
     - [ ] specific values
     - [ ] backing integer
-    - [ ] scope
+    - [x] scope
   - [x] unions
     - [ ] tag + customizable
     - [x] scope
   - [x] pointers
-    - [ ] slicing
+    - [x] slicing
   - [x] slices
     - [x] known size (arrays)
     - [x] field access
@@ -1267,7 +1289,8 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
   - [x] `@bit_cast(<expr>)`
   - [x] `@ecall(...<expr>)`
   - [x] `@embed(<string>)`
-  - [x] `@inline(<func>, ...<args>)`
+  - [] `@inline(<func>, ...<args>)`
+    - [x] noop compatibility
   - [x] `@len_of(<ty>)`
   - [x] `@kind_of(<ty>)`
   - [x] `@Any(<fn(type): void/type>..)`

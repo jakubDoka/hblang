@@ -238,8 +238,8 @@ pub const Scope = union(enum) {
                     if (se.ty != .type) {
                         return .{ .id = id, .ty = se.ty };
                     }
-                    const value = t.bl.getScopeValue(i);
-                    break .{ .id = id, .ty = .type, .value = @intFromEnum(t.unwrapTyConst(t.bl.addLoad(value, .int))) };
+                    var value = Codegen.Value{ .ty = .type, .id = .{ .Ptr = t.bl.getScopeValue(i) } };
+                    break .{ .id = id, .ty = .type, .value = @intFromEnum(t.unwrapTyConst(&value)) };
                 }
             } else null,
         };
@@ -392,15 +392,26 @@ pub fn emitTyConst(self: *Codegen, ty: Types.Id) Value {
     return .mkv(.type, self.bl.addIntImm(.int, @bitCast(@intFromEnum(ty))));
 }
 
-pub fn unwrapTyConst(self: *Codegen, cnst: *Node) Types.Id {
-    return @enumFromInt(self.types.ct.partialEval(&self.bl, cnst));
+pub fn unwrapTyConst(self: *Codegen, cnst: *Value) Types.Id {
+    self.ensureLoaded(cnst);
+    return @enumFromInt(self.types.ct.partialEval(&self.bl, cnst.id.Value));
 }
 
-pub fn lookupScopeItem(self: *Codegen, bsty: Types.Id, name: []const u8) Types.Id {
+pub const LookupResult = union(enum) { ty: Types.Id, cnst: u64 };
+
+pub fn lookupScopeItem(self: *Codegen, pos: Ast.Pos, bsty: Types.Id, name: []const u8) LookupResult {
     const other_file = bsty.file();
     const other_ast = self.types.getFile(other_file);
-    const decl = other_ast.findDecl(bsty.items(), name).?;
-    return self.types.ct.evalTy(name, .{ .Perm = bsty }, other_ast.exprs.get(decl).BinOp.rhs);
+    if (bsty.data() == .Enum) {
+        for (bsty.data().Enum.getFields(self.types), 0..) |f, i| {
+            if (std.mem.eql(u8, f.name, name)) return .{ .cnst = i };
+        }
+    }
+    const decl = other_ast.findDecl(bsty.items(), name) orelse {
+        self.report(pos, "{} does not declare this", .{bsty});
+        return .{ .ty = .never };
+    };
+    return .{ .ty = self.types.ct.evalTy(name, .{ .Perm = bsty }, other_ast.exprs.get(decl).BinOp.rhs) };
 }
 
 pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) Value {
@@ -451,16 +462,38 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
     var tmp = root.Arena.scrath(null);
     defer tmp.deinit();
 
-    var typ: Types.Id, var caller: ?Value = if (e.called.tag() == .Field) b: {
+    const typ_res: LookupResult, var caller: ?Value = if (e.called.tag() == .Tag) b: {
+        const pos = ast.exprs.get(e.called).Tag;
+        const name = ast.tokenSrc(pos.index + 1);
+        const ty = ctx.ty orelse {
+            self.report(
+                e.called,
+                "can infer the implicit access, you can specify the type: <ty>.{s}",
+                .{name},
+            );
+            return .never;
+        };
+
+        break :b .{ self.lookupScopeItem(pos, ty, name), null };
+    } else if (e.called.tag() == .Field) b: {
         const field = ast.exprs.get(e.called).Field;
-        const value = self.emit(.{}, field.base);
+        const name = ast.tokenSrc(field.field.index);
+        var value = self.emit(.{}, field.base);
+
         if (value.ty == .type) {
-            break :b .{ self.lookupScopeItem(self.unwrapTyConst(value.id.Value), ast.tokenSrc(field.field.index)), null };
+            break :b .{ self.lookupScopeItem(field.field, self.unwrapTyConst(&value), name), null };
         }
-        break :b .{ self.lookupScopeItem(value.ty, ast.tokenSrc(field.field.index)), value };
+        break :b .{ self.lookupScopeItem(field.field, value.ty, name), value };
     } else b: {
-        break :b .{ self.resolveAnonTy(e.called), null };
+        break :b .{ .{ .ty = self.resolveAnonTy(e.called) }, null };
     };
+
+    if (typ_res == .cnst) {
+        self.report(e.called, "enum variants are not callable", .{});
+        return .never;
+    }
+
+    var typ = typ_res.ty;
 
     var computed_args: ?[]Value = null;
     const was_template = typ.data() == .Template;
@@ -1069,6 +1102,18 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             self.ensureLoaded(&base);
             return .mkp(base.ty.data().Ptr.*, base.id.Value);
         },
+        .Tag => |e| {
+            const ty = ctx.ty orelse {
+                self.report(
+                    expr,
+                    "cant infer the type of the implicit access, you can specify the type: <ty>.{s}",
+                    .{ast.tokenSrc(e.index + 1)},
+                );
+                return .never;
+            };
+
+            return .mkv(ty, self.bl.addIntImm(self.abi.categorize(ty, self.types).ByValue, @intCast(self.lookupScopeItem(e, ty, ast.tokenSrc(e.index + 1)).cnst)));
+        },
         .Field => |e| {
             var base = self.emit(.{}, e.base);
 
@@ -1077,7 +1122,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             self.emitAutoDeref(&base);
 
             if (base.ty == .type) {
-                return self.emitTyConst(self.lookupScopeItem(self.unwrapTyConst(base.id.Value), ast.tokenSrc(e.field.index)));
+                const bsty = self.unwrapTyConst(&base);
+                switch (self.lookupScopeItem(e.field, bsty, ast.tokenSrc(e.field.index))) {
+                    .ty => |ty| return self.emitTyConst(ty),
+                    .cnst => |cnst| return .mkv(bsty, self.bl.addIntImm(self.abi.categorize(bsty, self.types).ByValue, @bitCast(cnst))),
+                }
             }
 
             const fname = ast.tokenSrc(e.field.index);
@@ -1315,7 +1364,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             return .{};
         },
         .Buty => |e| return self.emitTyConst(.fromLexeme(e.bt)),
-        inline .Struct, .Union => |e, t| {
+        inline .Struct, .Union, .Enum => |e, t| {
             var tmp = root.Arena.scrath(null);
             defer tmp.deinit();
 
@@ -1352,8 +1401,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             for (ast.exprs.view(e.captures), captures) |id, *slot| {
                 var val = self.loadIdent(.init(id.pos()), id);
                 if (val.ty == .type) {
-                    self.ensureLoaded(&val);
-                    slot.* = .{ .id = id, .ty = .type, .value = @intFromEnum(self.unwrapTyConst(val.id.Value)) };
+                    slot.* = .{ .id = id, .ty = .type, .value = @intFromEnum(self.unwrapTyConst(&val)) };
                 } else {
                     slot.* = .{ .id = id, .ty = val.ty };
                 }
@@ -1683,8 +1731,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
                 else => {
                     var value = self.emit(.{}, arg);
                     if (value.ty == .type) {
-                        self.ensureLoaded(&value);
-                        msg.writer().print("{}", .{self.unwrapTyConst(value.id.Value).fmt(self.types)}) catch unreachable;
+                        msg.writer().print("{}", .{self.unwrapTyConst(&value).fmt(self.types)}) catch unreachable;
                     } else {
                         unreachable;
                     }

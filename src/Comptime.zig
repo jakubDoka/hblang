@@ -20,6 +20,7 @@ pub const stack_size = 1024 * 100;
 pub const InteruptCode = enum(u64) {
     Struct,
     Union,
+    Enum,
 };
 
 pub fn init(gpa: std.mem.Allocator) Comptime {
@@ -203,7 +204,7 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
             }
 
             switch (@as(InteruptCode, @enumFromInt(self.vm.regs.get(.arg(1, 0))))) {
-                inline .Struct, .Union => |t| {
+                inline .Struct, .Union, .Enum => |t| {
                     const scope: Types.Id = @enumFromInt(self.ecaArg(1));
                     const ast = types.getFile(scope.file());
                     const struct_ast_id: Ast.Id = @enumFromInt(@as(u32, @truncate(self.ecaArg(2))));
@@ -215,8 +216,8 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
                         slot.* = .{ .id = id, .ty = @enumFromInt(self.ecaArg(3 + i * 2)), .value = self.ecaArg(3 + i * 2 + 1) };
                     }
 
-                    const res = @field(Types, "resolve" ++ @tagName(t))(
-                        types,
+                    const res = types.resolveFielded(
+                        @field(std.meta.Tag(Types.Data), @tagName(t)),
                         scope,
                         scope.file(),
                         name,

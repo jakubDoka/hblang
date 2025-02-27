@@ -296,7 +296,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
             } },
         },
-        inline .@"union", .@"struct" => |_, t| b: {
+        inline .@"enum", .@"union", .@"struct" => |_, t| b: {
             const name = comptime nm: {
                 var nm = @tagName(t)[0..].*;
                 nm[0] = std.ascii.toUpper(nm[0]);
