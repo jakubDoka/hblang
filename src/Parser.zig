@@ -268,11 +268,29 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 .body = body,
             } };
         },
-        .@"@" => if (Ast.cmpLow(token.pos, self.lexer.source, "@use") or
-            Ast.cmpLow(token.pos, self.lexer.source, "@embed"))
-        b: {
-            const embed: Loader.LoadOptions.Kind =
-                if (Ast.cmpLow(token.pos, self.lexer.source, "@embed")) .embed else .use;
+
+        .@"@CurrentScope",
+        .@"@TypeOf",
+        .@"@as",
+        .@"@int_cast",
+        .@"@size_of",
+        .@"@align_of",
+        .@"@bit_cast",
+        .@"@ecall",
+        .@"@inline",
+        .@"@len_of",
+        .@"@kind_of",
+        .@"@Any",
+        .@"@error",
+        .@"@ChildOf",
+        .@"@target",
+        => |k| .{ .Directive = .{
+            .kind = k,
+            .args = try self.parseList(.@"(", .@",", .@")", parseExpr),
+            .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
+        } },
+        inline .@"@use", .@"@embed" => |t| b: {
+            const ty = @field(Loader.LoadOptions.Kind, @tagName(t)[1..]);
 
             _ = try self.expectAdvance(.@"(");
             token = try self.expectAdvance(.@"\"");
@@ -283,17 +301,14 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 .file = self.loader.load(.{
                     .from = self.current,
                     .path = path[1 .. path.len - 1],
-                    .type = embed,
+                    .type = ty,
                 }),
                 .pos = .{
                     .index = @intCast(token.pos),
-                    .flag = .{ .use_kind = embed },
+                    .flag = .{ .use_kind = ty },
                 },
             } };
-        } else .{ .Directive = .{
-            .args = try self.parseList(.@"(", .@",", .@")", parseExpr),
-            .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
-        } },
+        },
         inline .@"union", .@"struct" => |t| b: {
             const name = comptime nm: {
                 var nm = @tagName(t)[0..].*;

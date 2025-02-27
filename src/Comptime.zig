@@ -203,11 +203,11 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
             }
 
             switch (@as(InteruptCode, @enumFromInt(self.vm.regs.get(.arg(1, 0))))) {
-                .Struct => {
+                inline .Struct, .Union => |t| {
                     const scope: Types.Id = @enumFromInt(self.ecaArg(1));
                     const ast = types.getFile(scope.file());
-                    const struct_ast_id: Ast.Id = @bitCast(@as(u32, @truncate(self.ecaArg(2))));
-                    const struct_ast = ast.exprs.getTyped(.Struct, struct_ast_id).?;
+                    const struct_ast_id: Ast.Id = @enumFromInt(@as(u32, @truncate(self.ecaArg(2))));
+                    const struct_ast = ast.exprs.getTyped(@field(std.meta.Tag(Ast.Expr), @tagName(t)), struct_ast_id).?;
 
                     const captures = types.arena.alloc(Types.Key.Capture, struct_ast.captures.len());
 
@@ -215,35 +215,13 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
                         slot.* = .{ .id = id, .ty = @enumFromInt(self.ecaArg(3 + i * 2)), .value = self.ecaArg(3 + i * 2 + 1) };
                     }
 
-                    const res = types.resolveStruct(
+                    const res = @field(Types, "resolve" ++ @tagName(t))(
+                        types,
                         scope,
                         scope.file(),
                         name,
                         struct_ast_id,
                         struct_ast.fields,
-                        captures,
-                    );
-
-                    self.vm.regs.set(.ret(0), @intFromEnum(res));
-                },
-                .Union => {
-                    const scope: Types.Id = @enumFromInt(self.ecaArg(1));
-                    const ast = types.getFile(scope.file());
-                    const union_ast_id: Ast.Id = @bitCast(@as(u32, @truncate(self.ecaArg(2))));
-                    const union_ast = ast.exprs.getTyped(.Union, union_ast_id).?;
-
-                    const captures = types.arena.alloc(Types.Key.Capture, union_ast.captures.len());
-
-                    for (captures, ast.exprs.view(union_ast.captures), 0..) |*slot, id, i| {
-                        slot.* = .{ .id = id, .ty = @enumFromInt(self.ecaArg(3 + i * 2)), .value = self.ecaArg(3 + i * 2 + 1) };
-                    }
-
-                    const res = types.resolveUnion(
-                        scope,
-                        scope.file(),
-                        name,
-                        union_ast_id,
-                        union_ast.fields,
                         captures,
                     );
 

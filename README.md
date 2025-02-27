@@ -1205,9 +1205,9 @@ main := fn(): uint {
     - [ ] specific values
     - [ ] backing integer
     - [ ] scope
-  - [ ] unions
+  - [x] unions
     - [ ] tag + customizable
-    - [ ] scope
+    - [x] scope
   - [x] pointers
     - [ ] slicing
   - [x] slices

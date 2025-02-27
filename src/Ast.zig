@@ -11,13 +11,11 @@ const Parser = @import("Parser.zig");
 const Types = @import("Types.zig");
 const Ast = @This();
 pub const Loader = Parser.Loader;
-pub const Store = root.EnumStore(Id, Expr);
+pub const Store = root.EnumStore(Expr);
 
-pub const Id = root.EnumId(Kind);
+pub const Id = Store.Id;
 pub const Slice = root.EnumSlice(Id);
 pub const Idents = root.EnumSlice(Ident);
-
-pub var colors: std.io.tty.Config = .no_color;
 
 pub const Ident = enum(u32) {
     _,
@@ -26,7 +24,7 @@ pub const Ident = enum(u32) {
         return @enumFromInt(token.pos + @intFromBool(token.kind == .@"$"));
     }
 
-    pub fn pos(self: Ident) u32 {
+    pub inline fn pos(self: Ident) u32 {
         return @intFromEnum(self);
     }
 };
@@ -35,53 +33,12 @@ pub fn cmpLow(pos: u32, source: []const u8, repr: []const u8) bool {
     return std.mem.eql(u8, Lexer.peekStr(source, pos), repr);
 }
 
-pub fn Payload(comptime kind: Kind) type {
-    return std.meta.TagPayload(Expr, kind);
-}
-
-pub const Kind = enum {
-    Void,
-    Comment,
-    Wildcard,
-    Idk,
-    Ident,
-    Buty,
-    Fn,
-    Union,
-    Struct,
-    Directive,
-    Range,
-    Index,
-    Call,
-    Tag,
-    Unwrap,
-    Deref,
-    Field,
-    Ctor,
-    Tupl,
-    Arry,
-    If,
-    Loop,
-    Break,
-    Continue,
-    Return,
-    Block,
-    SliceTy,
-    UnOp,
-    BinOp,
-    Use,
-    Integer,
-    Bool,
-    Null,
-    String,
-};
-
 pub const Arg = struct {
     bindings: Id,
     ty: Id,
 };
 
-pub const Expr = union(Kind) {
+pub const Expr = union(enum) {
     Void,
     Comment: Pos,
     Wildcard: Pos,
@@ -114,6 +71,7 @@ pub const Expr = union(Kind) {
     },
     Directive: struct {
         pos: Pos,
+        kind: Lexer.Lexeme,
         args: Slice,
     },
     Range: struct {
@@ -258,10 +216,6 @@ pub fn findDecl(self: *const Ast, slice: Slice, id: anytype) ?Id {
             else => if (cmpLow(ident.pos(), self.source, id)) break d,
         }
     } else null;
-}
-
-pub fn cmpIdent(self: *const Ast, id: Ident, to: []const u8) bool {
-    return cmpLow(id.pos(), self.source, to);
 }
 
 pub fn tokenSrc(self: *const Ast, pos: u32) []const u8 {

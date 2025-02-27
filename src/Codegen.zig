@@ -1316,7 +1316,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
             args.arg_slots[0] = self.bl.addIntImm(.int, @intFromEnum(@field(Comptime.InteruptCode, @tagName(t))));
             args.arg_slots[1] = self.bl.addIntImm(.int, @bitCast(@intFromEnum(self.parent_scope.perm())));
-            args.arg_slots[2] = self.bl.addIntImm(.int, @as(u32, @bitCast(expr)));
+            args.arg_slots[2] = self.bl.addIntImm(.int, @intFromEnum(expr));
 
             for (ast.exprs.view(e.captures), 0..) |id, slot_idx| {
                 var val = self.loadIdent(.init(id.pos()), id);
@@ -1413,176 +1413,194 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 return .mkp(alloc.ty, self.bl.addGlobalAddr(alloc.id));
             },
         },
-        .Directive => |e| {
-            const eql = std.mem.eql;
-            const name = ast.tokenSrc(e.pos.index);
-            const args = ast.exprs.view(e.args);
+        .Directive => |e| return self.emitDirective(ctx, expr, e),
+        else => std.debug.panic("{any}\n", .{ast.exprs.get(expr)}),
+    }
+}
 
-            const utils = enum {
-                fn reportInferrence(cg: *Codegen, exr: anytype, ty: []const u8, dir_name: []const u8) void {
-                    cg.report(exr, "type can not be inferred from the context, use `@as(<{s}>, {s}(...))`", .{ ty, dir_name });
-                }
+fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(.Directive)) Value {
+    const ast = self.ast;
 
-                fn assertArgs(cg: *Codegen, exr: anytype, got: []const Ast.Id, comptime expected: []const u8) bool {
-                    const min_expected_args = comptime std.mem.count(u8, expected, ",") + @intFromBool(expected.len != 0);
-                    const varargs = comptime std.mem.endsWith(u8, expected, "..");
-                    if (got.len < min_expected_args or (!varargs and got.len > min_expected_args)) {
-                        const range = if (varargs) "at least " else "";
-                        cg.report(
-                            exr,
-                            "directive takes {s}{} arguments, got {} (" ++ expected ++ ")",
-                            .{ range, min_expected_args, got.len },
-                        );
-                        return true;
-                    }
-                    return false;
-                }
+    const name = ast.tokenSrc(e.pos.index);
+    const args = ast.exprs.view(e.args);
+
+    const utils = enum {
+        fn reportInferrence(cg: *Codegen, exr: anytype, ty: []const u8, dir_name: []const u8) void {
+            cg.report(exr, "type can not be inferred from the context, use `@as(<{s}>, {s}(...))`", .{ ty, dir_name });
+        }
+
+        fn assertArgs(cg: *Codegen, exr: anytype, got: []const Ast.Id, comptime expected: []const u8) bool {
+            const min_expected_args = comptime std.mem.count(u8, expected, ",") + @intFromBool(expected.len != 0);
+            const varargs = comptime std.mem.endsWith(u8, expected, "..");
+            if (got.len < min_expected_args or (!varargs and got.len > min_expected_args)) {
+                const range = if (varargs) "at least " else "";
+                cg.report(
+                    exr,
+                    "directive takes {s}{} arguments, got {} (" ++ expected ++ ")",
+                    .{ range, min_expected_args, got.len },
+                );
+                return true;
+            }
+            return false;
+        }
+    };
+
+    switch (e.kind) {
+        .@"@CurrentScope" => {
+            if (utils.assertArgs(self, expr, args, "")) return .never;
+            return self.emitTyConst(self.parent_scope.perm());
+        },
+        .@"@TypeOf" => {
+            if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
+            const ty = self.types.ct.jitExpr("", .{ .Tmp = self }, .{}, args[0]).?[1];
+            return self.emitTyConst(ty);
+        },
+
+        .@"@int_cast" => {
+            if (utils.assertArgs(self, expr, args, "<expr>")) return .never;
+
+            const ret: Types.Id = ctx.ty orelse {
+                utils.reportInferrence(self, expr, "int-ty", name);
+                return .never;
             };
 
-            if (eql(u8, name, "@CurrentScope")) {
-                if (utils.assertArgs(self, expr, args, "")) return .never;
-                return self.emitTyConst(self.parent_scope.perm());
-            } else if (eql(u8, name, "@TypeOf")) {
-                if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
-                const ty = self.types.ct.jitExpr("", .{ .Tmp = self }, .{}, args[0]).?[1];
-                return self.emitTyConst(ty);
-            } else if (eql(u8, name, "@int_cast")) {
-                if (utils.assertArgs(self, expr, args, "<expr>")) return .never;
-
-                const ret: Types.Id = ctx.ty orelse {
-                    utils.reportInferrence(self, expr, "int-ty", name);
-                    return .never;
-                };
-
-                if (!ret.isInteger()) {
-                    self.report(expr, "inferred type must be an integer, {} is not", .{ret});
-                    return .never;
-                }
-
-                var oper = self.emit(.{}, args[0]);
-
-                if (!oper.ty.isInteger()) {
-                    self.report(args[0], "expeced integer, {} is not", .{oper.ty});
-                    return .never;
-                }
-
-                self.ensureLoaded(&oper);
-
-                return .mkv(ret, self.bl.addUnOp(.ired, self.abi.categorize(ret, self.types).ByValue, oper.id.Value));
-            } else if (eql(u8, name, "@bit_cast")) {
-                if (utils.assertArgs(self, expr, args, "<expr>")) return .never;
-
-                const ret: Types.Id = ctx.ty orelse {
-                    utils.reportInferrence(self, expr, "ty", name);
-                    return .never;
-                };
-
-                var oper = self.emit(.{}, args[0]);
-
-                if (oper.ty.size(self.types) != ret.size(self.types)) {
-                    self.report(
-                        args[0],
-                        "cant bitcast from {} to {} because sizes are not equal ({} != {})",
-                        .{ oper.ty, ret, oper.ty.size(self.types), ret.size(self.types) },
-                    );
-                    return .never;
-                }
-
-                const to_abi = self.abi.categorize(ret, self.types);
-
-                if (to_abi != .ByValue) {
-                    const loc = self.bl.addLocal(ret.size(self.types));
-                    self.emitGenericStore(loc, &oper);
-                    return .mkp(ret, loc);
-                } else {
-                    oper.ty = ret;
-                    self.ensureLoaded(&oper);
-                    return oper;
-                }
-            } else if (eql(u8, name, "@ChildOf")) {
-                if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
-                const ty = self.resolveAnonTy(args[0]);
-                const child = ty.child(self.types) orelse {
-                    self.report(args[0], "directive only work on pointer types and slices, {} is not", .{ty});
-                    return .never;
-                };
-                return self.emitTyConst(child);
-            } else if (eql(u8, name, "@kind_of")) {
-                if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
-                const len = self.resolveAnonTy(args[0]);
-                return .mkv(.uint, self.bl.addIntImm(.int, @intFromEnum(len.data())));
-            } else if (eql(u8, name, "@len_of")) {
-                if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
-                const ty = self.resolveAnonTy(args[0]);
-                const len = ty.len(self.types) orelse {
-                    self.report(args[0], "directive only works on structs and arrays, {} is not", .{ty});
-                    return .never;
-                };
-                return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(len)));
-            } else if (eql(u8, name, "@align_of")) {
-                if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
-                return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(self.resolveAnonTy(args[0]).alignment(self.types))));
-            } else if (eql(u8, name, "@size_of")) {
-                if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
-                return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(self.resolveAnonTy(args[0]).size(self.types))));
-            } else if (eql(u8, name, "@ecall")) {
-                if (utils.assertArgs(self, expr, args, "<expr>..")) return .never;
-                var tmp = root.Arena.scrath(null);
-                defer tmp.deinit();
-
-                const ret = ctx.ty orelse {
-                    utils.reportInferrence(self, expr, "ty", name);
-                    return .never;
-                };
-
-                const arg_nodes = tmp.arena.alloc(Value, args.len);
-                for (args, arg_nodes) |arg, *slot| {
-                    slot.* = self.emit(.{}, arg);
-                }
-
-                const ret_abi = self.abi.categorize(ret, self.types);
-                var param_count: usize = @intFromBool(ret_abi == .ByRef);
-                for (arg_nodes) |nod| param_count += self.abi.categorize(nod.ty, self.types).len(false);
-                const return_count: usize = ret_abi.len(true);
-
-                const call_args = self.bl.allocCallArgs(tmp.arena, param_count, return_count);
-
-                var i: usize = self.pushReturn(call_args, ret_abi, ret, ctx);
-
-                for (arg_nodes) |*arg| {
-                    i += self.pushParam(call_args, self.abi.categorize(arg.ty, self.types), i, arg);
-                }
-
-                return self.assembleReturn(Comptime.eca, call_args, ctx, ret, ret_abi);
-            } else if (eql(u8, name, "@as")) {
-                if (utils.assertArgs(self, expr, args, "<ty>, <expr>")) return .never;
-                const ty = self.resolveAnonTy(args[0]);
-                return self.emitTyped(ctx, ty, args[1]);
-            } else if (eql(u8, name, "@error")) {
-                if (utils.assertArgs(self, expr, args, "<ty/string>..")) return .never;
-                var tmp = root.Arena.scrath(null);
-                defer tmp.deinit();
-
-                var msg = std.ArrayList(u8).init(tmp.arena.allocator());
-                for (args) |arg| switch (ast.exprs.get(arg)) {
-                    .String => |s| {
-                        msg.appendSlice(ast.source[s.pos.index + 1 .. s.end - 1]) catch unreachable;
-                    },
-                    else => {
-                        var value = self.emit(.{}, arg);
-                        if (value.ty == .type) {
-                            self.ensureLoaded(&value);
-                            msg.writer().print("{}", .{self.unwrapTyConst(value.id.Value).fmt(self.types)}) catch unreachable;
-                        } else {
-                            unreachable;
-                        }
-                    },
-                };
-
-                self.report(expr, "{s}", .{msg.items});
+            if (!ret.isInteger()) {
+                self.report(expr, "inferred type must be an integer, {} is not", .{ret});
                 return .never;
-            } else std.debug.panic("unhandled directive {s}", .{name});
+            }
+
+            var oper = self.emit(.{}, args[0]);
+
+            if (!oper.ty.isInteger()) {
+                self.report(args[0], "expeced integer, {} is not", .{oper.ty});
+                return .never;
+            }
+
+            self.ensureLoaded(&oper);
+
+            return .mkv(ret, self.bl.addUnOp(.ired, self.abi.categorize(ret, self.types).ByValue, oper.id.Value));
         },
-        else => std.debug.panic("{any}\n", .{ast.exprs.get(expr)}),
+        .@"@bit_cast" => {
+            if (utils.assertArgs(self, expr, args, "<expr>")) return .never;
+
+            const ret: Types.Id = ctx.ty orelse {
+                utils.reportInferrence(self, expr, "ty", name);
+                return .never;
+            };
+
+            var oper = self.emit(.{}, args[0]);
+
+            if (oper.ty.size(self.types) != ret.size(self.types)) {
+                self.report(
+                    args[0],
+                    "cant bitcast from {} to {} because sizes are not equal ({} != {})",
+                    .{ oper.ty, ret, oper.ty.size(self.types), ret.size(self.types) },
+                );
+                return .never;
+            }
+
+            const to_abi = self.abi.categorize(ret, self.types);
+
+            if (to_abi != .ByValue) {
+                const loc = self.bl.addLocal(ret.size(self.types));
+                self.emitGenericStore(loc, &oper);
+                return .mkp(ret, loc);
+            } else {
+                oper.ty = ret;
+                self.ensureLoaded(&oper);
+                return oper;
+            }
+        },
+        .@"@ChildOf" => {
+            if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
+            const ty = self.resolveAnonTy(args[0]);
+            const child = ty.child(self.types) orelse {
+                self.report(args[0], "directive only work on pointer types and slices, {} is not", .{ty});
+                return .never;
+            };
+            return self.emitTyConst(child);
+        },
+        .@"@kind_of" => {
+            if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
+            const len = self.resolveAnonTy(args[0]);
+            return .mkv(.uint, self.bl.addIntImm(.int, @intFromEnum(len.data())));
+        },
+        .@"@len_of" => {
+            if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
+            const ty = self.resolveAnonTy(args[0]);
+            const len = ty.len(self.types) orelse {
+                self.report(args[0], "directive only works on structs and arrays, {} is not", .{ty});
+                return .never;
+            };
+            return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(len)));
+        },
+        .@"@align_of" => {
+            if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
+            return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(self.resolveAnonTy(args[0]).alignment(self.types))));
+        },
+        .@"@size_of" => {
+            if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
+            return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(self.resolveAnonTy(args[0]).size(self.types))));
+        },
+        .@"@ecall" => {
+            if (utils.assertArgs(self, expr, args, "<expr>..")) return .never;
+            var tmp = root.Arena.scrath(null);
+            defer tmp.deinit();
+
+            const ret = ctx.ty orelse {
+                utils.reportInferrence(self, expr, "ty", name);
+                return .never;
+            };
+
+            const arg_nodes = tmp.arena.alloc(Value, args.len);
+            for (args, arg_nodes) |arg, *slot| {
+                slot.* = self.emit(.{}, arg);
+            }
+
+            const ret_abi = self.abi.categorize(ret, self.types);
+            var param_count: usize = @intFromBool(ret_abi == .ByRef);
+            for (arg_nodes) |nod| param_count += self.abi.categorize(nod.ty, self.types).len(false);
+            const return_count: usize = ret_abi.len(true);
+
+            const call_args = self.bl.allocCallArgs(tmp.arena, param_count, return_count);
+
+            var i: usize = self.pushReturn(call_args, ret_abi, ret, ctx);
+
+            for (arg_nodes) |*arg| {
+                i += self.pushParam(call_args, self.abi.categorize(arg.ty, self.types), i, arg);
+            }
+
+            return self.assembleReturn(Comptime.eca, call_args, ctx, ret, ret_abi);
+        },
+        .@"@as" => {
+            if (utils.assertArgs(self, expr, args, "<ty>, <expr>")) return .never;
+            const ty = self.resolveAnonTy(args[0]);
+            return self.emitTyped(ctx, ty, args[1]);
+        },
+        .@"@error" => {
+            if (utils.assertArgs(self, expr, args, "<ty/string>..")) return .never;
+            var tmp = root.Arena.scrath(null);
+            defer tmp.deinit();
+
+            var msg = std.ArrayList(u8).init(tmp.arena.allocator());
+            for (args) |arg| switch (ast.exprs.get(arg)) {
+                .String => |s| {
+                    msg.appendSlice(ast.source[s.pos.index + 1 .. s.end - 1]) catch unreachable;
+                },
+                else => {
+                    var value = self.emit(.{}, arg);
+                    if (value.ty == .type) {
+                        self.ensureLoaded(&value);
+                        msg.writer().print("{}", .{self.unwrapTyConst(value.id.Value).fmt(self.types)}) catch unreachable;
+                    } else {
+                        unreachable;
+                    }
+                },
+            };
+
+            self.report(expr, "{s}", .{msg.items});
+            return .never;
+        },
+        else => std.debug.panic("unhandled directive {s}", .{name}),
     }
 }

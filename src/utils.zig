@@ -108,21 +108,33 @@ pub const Arena = struct {
 
 const IdRepr = u32;
 
-pub fn EnumId(comptime Tag: type) type {
-    return packed struct(IdRepr) {
-        taga: std.meta.Tag(Tag),
-        index: std.meta.Int(.unsigned, @bitSizeOf(IdRepr) - @bitSizeOf(Tag)),
+pub fn EnumId(comptime T: type) type {
+    return enum(IdRepr) {
+        _,
 
-        pub fn compact(taga: Tag, index: usize) @This() {
-            return .{ .taga = @intFromEnum(taga), .index = @intCast(index) };
+        const Tag = std.meta.Tag(T);
+
+        const Repr = packed struct(IdRepr) {
+            taga: std.meta.Tag(Tag),
+            index: std.meta.Int(.unsigned, @bitSizeOf(IdRepr) - @bitSizeOf(Tag)),
+        };
+
+        pub fn compact(taga: Tag, indexa: usize) @This() {
+            return @enumFromInt(@as(IdRepr, @bitCast(Repr{ .taga = @intFromEnum(taga), .index = @intCast(indexa) })));
         }
 
         pub fn zeroSized(taga: Tag) @This() {
-            return .{ .taga = @intFromEnum(taga), .index = 0 };
+            return compact(taga, 0);
         }
 
         pub fn tag(self: @This()) Tag {
-            return @enumFromInt(self.taga);
+            const repr: Repr = @bitCast(@intFromEnum(self));
+            return @enumFromInt(repr.taga);
+        }
+
+        pub fn index(self: @This()) u32 {
+            const repr: Repr = @bitCast(@intFromEnum(self));
+            return repr.index;
         }
     };
 }
@@ -150,8 +162,10 @@ pub fn EnumSlice(comptime T: type) type {
     };
 }
 
-pub fn EnumStore(comptime SelfId: type, comptime T: type) type {
+pub fn EnumStore(comptime T: type) type {
     return struct {
+        store: std.ArrayListAlignedUnmanaged(u8, payload_align) = .{},
+
         const Self = @This();
         const payload_align = b: {
             var max_align: u29 = 1;
@@ -162,9 +176,9 @@ pub fn EnumStore(comptime SelfId: type, comptime T: type) type {
         };
         const fields = @typeInfo(T).@"union".fields;
 
-        store: std.ArrayListAlignedUnmanaged(u8, payload_align) = .{},
+        pub const Id = EnumId(T);
 
-        pub fn allocDyn(self: *Self, gpa: std.mem.Allocator, value: T) !SelfId {
+        pub fn allocDyn(self: *Self, gpa: std.mem.Allocator, value: T) !Id {
             return switch (value) {
                 inline else => |v, t| try self.alloc(gpa, t, v),
             };
@@ -179,13 +193,10 @@ pub fn EnumStore(comptime SelfId: type, comptime T: type) type {
             gpa: std.mem.Allocator,
             comptime tag: std.meta.Tag(T),
             value: TagPayload(tag),
-        ) !SelfId {
+        ) !Id {
             const Value = @TypeOf(value);
             (try self.allocLow(gpa, Value, 1))[0] = value;
-            return SelfId{
-                .taga = @intFromEnum(tag),
-                .index = @intCast(self.store.items.len - @sizeOf(Value)),
-            };
+            return .compact(tag, self.store.items.len - @sizeOf(Value));
         }
 
         pub fn allocSlice(
@@ -210,11 +221,11 @@ pub fn EnumStore(comptime SelfId: type, comptime T: type) type {
             return dest[0..count];
         }
 
-        pub fn get(self: *const Self, id: SelfId) T {
-            switch (@as(std.meta.Tag(T), @enumFromInt(id.taga))) {
+        pub fn get(self: *const Self, id: Id) T {
+            switch (id.tag()) {
                 inline else => |t| {
                     const Value = TagPayload(t);
-                    const loc: *const Value = if (Value != void) @ptrCast(@alignCast(&self.store.items[id.index])) else &{};
+                    const loc: *const Value = if (Value != void) @ptrCast(@alignCast(&self.store.items[id.index()])) else &{};
                     return @unionInit(T, @tagName(t), loc.*);
                 },
             }
@@ -223,22 +234,22 @@ pub fn EnumStore(comptime SelfId: type, comptime T: type) type {
         pub fn getTyped(
             self: *const Self,
             comptime tag: std.meta.Tag(T),
-            id: SelfId,
+            id: Id,
         ) ?TagPayload(tag) {
             if (tag != id.tag()) return null;
             const Value = TagPayload(tag);
-            const loc: *Value = @ptrCast(@alignCast(&self.store.items[id.index]));
+            const loc: *Value = @ptrCast(@alignCast(&self.store.items[id.index()]));
             return loc.*;
         }
 
         pub fn getTypedPtr(
             self: *Self,
             comptime tag: std.meta.Tag(T),
-            id: SelfId,
+            id: Id,
         ) ?*TagPayload(tag) {
             if (tag != id.tag()) return null;
             const Value = TagPayload(tag);
-            const loc: *Value = @ptrCast(@alignCast(&self.store.items[id.index]));
+            const loc: *Value = @ptrCast(@alignCast(&self.store.items[id.index()]));
             return loc;
         }
 
