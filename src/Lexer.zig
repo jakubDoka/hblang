@@ -2,7 +2,7 @@ source: []const u8,
 cursor: u32,
 
 const std = @import("std");
-const Types = @import("Types.zig");
+//const Types = @import("Types.zig");
 
 const Lexer = @This();
 pub const Pos = u32;
@@ -33,6 +33,7 @@ pub const Lexeme = enum(u16) {
 
     @"!" = '!',
     @"&" = '&',
+    @"'" = '\'',
     @"(" = '(',
     @")" = ')',
     @"*" = '*',
@@ -48,14 +49,20 @@ pub const Lexeme = enum(u16) {
     @">" = '>',
     @"?" = '?',
     @"@" = '@',
+    @"%" = '%',
+    @"#" = '#',
     @"[" = '[',
     @"\"" = '"',
+    @"\\" = '\\',
     @"]" = ']',
     @"^" = '^',
     @"_" = '_',
     @"{" = '{',
     @"}" = '}',
     @"$" = '$',
+    @"`" = '`',
+    @"|" = '|',
+    @"~" = '~',
 
     @".{" = '{' + 128,
     @".(" = '(' + 128,
@@ -181,23 +188,6 @@ pub const Lexeme = enum(u16) {
         };
     }
 
-    pub fn toBinOp(self: Lexeme, ty: Types.Id) @import("graph.zig").BinOp {
-        const unsigned = ty.isUnsigned();
-        return switch (self) {
-            .@"+" => .iadd,
-            .@"-" => .isub,
-            .@"*" => .imul,
-            .@"/" => if (unsigned) .udiv else .sdiv,
-            .@"<" => if (unsigned) .ult else .slt,
-            .@">" => if (unsigned) .ugt else .sgt,
-            .@"<=" => if (unsigned) .ule else .sle,
-            .@">=" => if (unsigned) .uge else .sge,
-            .@"==" => .eq,
-            .@"!=" => .ne,
-            else => std.debug.panic("{s}", .{@tagName(self)}),
-        };
-    }
-
     pub fn isComparison(self: Lexeme) bool {
         return self.precedence() == 6;
     }
@@ -270,7 +260,7 @@ pub fn next(self: *Lexer) Token {
         const pos = self.cursor;
         self.cursor += 1;
         const kind: Lexeme = switch (self.source[pos]) {
-            0...32 => continue,
+            0...32, 127 => continue,
             '@' => b: {
                 while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
                     'a'...'z', 'A'...'Z', '_' => self.cursor += 1,
@@ -322,11 +312,14 @@ pub fn next(self: *Lexer) Token {
             },
             '"' => b: {
                 while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
-                    '"' => break,
+                    '"' => {
+                        self.cursor += 1;
+                        break;
+                    },
                     '\\' => self.cursor += 2,
                     else => self.cursor += 1,
                 };
-                self.cursor += 1;
+
                 break :b .@"\"";
             },
             '/' => |c| if (self.advanceIf('*')) ml: {
@@ -356,7 +349,7 @@ pub fn next(self: *Lexer) Token {
             else
                 .@".",
             ':', '<', '>', '+', '-', '=', '!' => |c| @enumFromInt(if (self.advanceIf('=')) c + 128 else c),
-            else => |c| @enumFromInt(c),
+            else => |c| std.meta.intToEnum(Lexeme, c) catch std.debug.panic("{c}", .{c}),
         };
         return Token.init(pos, self.cursor, kind);
     }

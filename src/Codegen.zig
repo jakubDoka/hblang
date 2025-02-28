@@ -344,6 +344,23 @@ fn report(self: *Codegen, expr: anytype, comptime fmt: []const u8, args: anytype
     ) catch unreachable;
 }
 
+pub fn lexemeToBinOp(self: Lexer.Lexeme, ty: Types.Id) graph.BinOp {
+    const unsigned = ty.isUnsigned();
+    return switch (self) {
+        .@"+" => .iadd,
+        .@"-" => .isub,
+        .@"*" => .imul,
+        .@"/" => if (unsigned) .udiv else .sdiv,
+        .@"<" => if (unsigned) .ult else .slt,
+        .@">" => if (unsigned) .ugt else .sgt,
+        .@"<=" => if (unsigned) .ule else .sle,
+        .@">=" => if (unsigned) .uge else .sge,
+        .@"==" => .eq,
+        .@"!=" => .ne,
+        else => std.debug.panic("{s}", .{@tagName(self)}),
+    };
+}
+
 fn emitStructFoldOp(self: *Codegen, ty: *Types.Struct, op: Lexer.Lexeme, lhs: *Node, rhs: *Node) ?*Node {
     var fold: ?*Node = null;
     var offset: usize = 0;
@@ -357,7 +374,7 @@ fn emitStructFoldOp(self: *Codegen, ty: *Types.Struct, op: Lexer.Lexeme, lhs: *N
             const dt = self.abi.categorize(field.ty, self.types).ByValue;
             const lhs_val = self.bl.addLoad(lhs_loc, dt);
             const rhs_val = self.bl.addLoad(rhs_loc, dt);
-            break :b self.bl.addBinOp(op.toBinOp(field.ty), .i8, lhs_val, rhs_val);
+            break :b self.bl.addBinOp(lexemeToBinOp(op, field.ty), .i8, lhs_val, rhs_val);
         };
         if (fold) |f| {
             fold = self.bl.addBinOp(if (op == .@"==") .band else .bor, .i8, f, value);
@@ -380,7 +397,7 @@ fn emitStructOp(self: *Codegen, ty: *Types.Struct, op: Lexer.Lexeme, loc: *Node,
             const dt = self.abi.categorize(field.ty, self.types).ByValue;
             const lhs_val = self.bl.addLoad(lhs_loc, dt);
             const rhs_val = self.bl.addLoad(rhs_loc, dt);
-            const res = self.bl.addBinOp(op.toBinOp(field.ty), dt, lhs_val, rhs_val);
+            const res = self.bl.addBinOp(lexemeToBinOp(op, field.ty), dt, lhs_val, rhs_val);
             _ = self.bl.addStore(field_loc, res.data_type, res);
         }
         offset += field.ty.size(self.types);
@@ -461,7 +478,8 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) Value {
             }
             cursor = cursor.parent();
         } else {
-            std.debug.panic("\n{}\n", .{ast.codePointer(pos.index)});
+            self.report(pos, "ICE: parser did not catch this", .{});
+            return .never;
         };
 
         const vari = ast.exprs.get(decl).BinOp;
@@ -1160,7 +1178,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     const rhs_fail = self.typeCheck(e.rhs, &rhs, upcast_to);
                     if (lhs_fail or rhs_fail) return .never;
                     return .mkv(unified, self.bl.addBinOp(
-                        e.op.toBinOp(lhs.ty),
+                        lexemeToBinOp(e.op, lhs.ty),
                         self.abi.categorize(unified, self.types).ByValue,
                         lhs.id.Value,
                         rhs.id.Value,

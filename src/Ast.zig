@@ -176,7 +176,7 @@ pub const Pos = packed struct(Pos.Repr) {
     }
 };
 
-pub fn init(gpa: std.mem.Allocator, current: Types.File, path: []const u8, code: []const u8, loader: Parser.Loader) !Ast {
+pub fn init(gpa: std.mem.Allocator, current: Types.File, path: []const u8, code: []const u8, loader: Parser.Loader, diagnostics: std.io.AnyWriter) !Ast {
     var lexer = Lexer.init(code, 0);
 
     var parser = Parser{
@@ -187,6 +187,7 @@ pub fn init(gpa: std.mem.Allocator, current: Types.File, path: []const u8, code:
         .lexer = lexer,
         .arena = std.heap.ArenaAllocator.init(gpa),
         .gpa = gpa,
+        .diagnostics = diagnostics,
     };
     defer {
         parser.arena.deinit();
@@ -199,6 +200,11 @@ pub fn init(gpa: std.mem.Allocator, current: Types.File, path: []const u8, code:
     }
 
     const items = try parser.parse();
+
+    if (parser.errored) {
+        return error.ParsingFailed;
+    }
+
     return .{
         .items = items,
         .source = code,
@@ -290,7 +296,7 @@ pub fn lineCol(source: []const u8, index: isize) struct { usize, usize } {
     return .{ line + 1, @intCast(index - last_nline) };
 }
 
-fn pointToCode(source: []const u8, index: usize, writer: anytype) !void {
+pub fn pointToCode(source: []const u8, index: usize, writer: anytype) !void {
     const line_start = if (std.mem.lastIndexOfScalar(u8, source[0..index], '\n')) |l| l + 1 else 0;
     const line_end = if (std.mem.indexOfScalar(u8, source[index..], '\n')) |l| l + index else source.len;
     const the_line = source[line_start..line_end];

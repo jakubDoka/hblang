@@ -11,6 +11,8 @@ lexer: Lexer,
 cur: Lexer.Token,
 list_pos: Ast.Pos = undefined,
 loader: Loader,
+diagnostics: std.io.AnyWriter,
+errored: bool = false,
 
 const std = @import("std");
 const Lexer = @import("Lexer.zig");
@@ -30,10 +32,10 @@ const Sym = struct {
 
 pub const Loader = struct {
     data: *anyopaque,
-    _load: *const fn (*anyopaque, LoadOptions) Types.File,
+    _load: *const fn (*anyopaque, LoadOptions) ?Types.File,
 
     var noop_state = struct {
-        pub fn load(_: *@This(), _: LoadOptions) Types.File {
+        pub fn load(_: *@This(), _: LoadOptions) ?Types.File {
             return @enumFromInt(0);
         }
     }{};
@@ -42,6 +44,8 @@ pub const Loader = struct {
     pub const LoadOptions = struct {
         path: []const u8,
         from: Types.File,
+        pos: u32,
+        diagnostics: std.io.AnyWriter,
         type: Kind,
 
         pub const Kind = enum(u1) { use, embed };
@@ -56,7 +60,7 @@ pub const Loader = struct {
         return .{
             .data = value,
             ._load = struct {
-                fn load(self: *anyopaque, opts: LoadOptions) Types.File {
+                fn load(self: *anyopaque, opts: LoadOptions) ?Types.File {
                     const slf: *Ty = @alignCast(@ptrCast(self));
                     return slf.load(opts);
                 }
@@ -64,7 +68,7 @@ pub const Loader = struct {
         };
     }
 
-    pub fn load(self: Loader, opts: LoadOptions) Types.File {
+    pub fn load(self: Loader, opts: LoadOptions) ?Types.File {
         return self._load(self.data, opts);
     }
 };
@@ -81,7 +85,6 @@ pub fn parse(self: *Parser) !Ast.Slice {
         for (self.active_syms.items[0..remining]) |s| {
             self.report(s.id.pos(), "undeclared identifier", .{});
         }
-        std.debug.assert(remining == 0);
     }
 
     return self.store.allocSlice(Id, self.gpa, itemBuf.items);
@@ -199,11 +202,12 @@ fn parseUnit(self: *Parser) Error!Id {
 }
 
 fn report(self: *Parser, pos: u32, comptime msg: []const u8, args: anytype) void {
+    self.errored = true;
     const line, const col = Ast.lineCol(self.lexer.source, pos);
-    std.debug.panic(
+    self.diagnostics.print(
         "{s}:{}:{}: " ++ msg ++ "\n{}\n",
         .{ self.path, line, col } ++ args ++ .{self.codePointer(pos)},
-    );
+    ) catch unreachable;
 }
 
 fn codePointer(self: *const Parser, pos: usize) Ast.CodePointer {
@@ -283,7 +287,12 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                         .from = self.current,
                         .path = path[1 .. path.len - 1],
                         .type = ty,
-                    }),
+                        .pos = token.pos,
+                        .diagnostics = self.diagnostics,
+                    }) orelse c: {
+                        self.errored = true;
+                        break :c .root;
+                    },
                     .pos = .{
                         .index = @intCast(token.pos),
                         .flag = .{ .use_kind = ty },
@@ -402,7 +411,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         .false => .{ .Bool = .{ .value = false, .pos = .init(token.pos) } },
         else => |k| {
             self.report(token.pos, "no idea how to handle this: {s}", .{@tagName(k)});
-            unreachable;
+            return error.UnexpectedToken;
         },
     });
 }
@@ -444,7 +453,7 @@ fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
         .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind == .@"$" } },
         .id = id,
     });
-    if (token.kind == .@"$") self.comptime_idents.append(self.gpa, id) catch unreachable;
+    if (token.kind == .@"$") try self.comptime_idents.append(self.gpa, id);
     try self.active_syms.append(self.gpa, .{ .id = id });
     return alloc;
 }

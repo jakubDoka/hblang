@@ -30,6 +30,7 @@ pub fn main() !void {
         body = try std.mem.replaceOwned(u8, arena, body, "    ", "\\t");
         body = try std.mem.replaceOwned(u8, arena, body, "\n", "\\n");
         body = try std.mem.replaceOwned(u8, arena, body, "\"", "\\\"");
+
         try writer.print(
             \\test "{s}" {{
             \\    try root.runTest(

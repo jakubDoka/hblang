@@ -65,44 +65,102 @@ pub fn build(b: *std.Build) !void {
         break :example_tests &installed.step;
     };
 
-    const fuzz = b.addExecutable(.{
-        .name = "fuzz",
-        .root_source_file = b.path("fuzz.zig"),
-        .single_threaded = true,
-        .target = target,
-        .optimize = optimize,
-    });
-    b.installArtifact(fuzz);
-
-    const fuzz_step = b.step("fuzz", "guzz");
-
-    fuzz_step.dependOn(&b.addInstallArtifact(fuzz, .{}).step);
-    fuzz_step.dependOn(&b.addRunArtifact(fuzz).step);
-
-    const check_unit_tests = b.addTest(.{
-        .root_source_file = b.path("tests.zig"),
-        .target = b.graph.host,
-        .optimize = optimize,
-    });
-    check_unit_tests.step.dependOn(vendored_tests);
-    check_unit_tests.step.dependOn(tests);
-
     const check_step = b.step("check", "Run the app");
-    check_step.dependOn(&check_unit_tests.step);
-
-    const test_filter = b.option([]const u8, "tf", "passed as a filter to tests");
-
-    const unit_tests = b.addTest(.{
-        .root_source_file = b.path("tests.zig"),
-        .target = b.graph.host,
-        .optimize = optimize,
-        .filter = test_filter,
-        .use_llvm = false,
-        .use_lld = false,
-    });
-    unit_tests.step.dependOn(vendored_tests);
-    unit_tests.step.dependOn(tests);
-
     const test_step = b.step("test", "Run the app");
-    test_step.dependOn(&b.addRunArtifact(unit_tests).step);
+
+    const fuzz_finding_tests = fuzzing: {
+        const dict_gen = b.addExecutable(.{
+            .name = "gen_fuzz_dict.zig",
+            .root_source_file = b.path("gen_fuzz_dict.zig"),
+            .target = b.graph.host,
+            .optimize = .Debug,
+            .use_llvm = false,
+            .use_lld = false,
+        });
+
+        const run_gen = b.addRunArtifact(dict_gen);
+        const dict_out = run_gen.addOutputFileArg("hblang.dict");
+        run_gen.addFileArg(b.path("README.md"));
+        const cases = run_gen.addOutputDirectoryArg("fuzz-cases");
+
+        const fuzz = b.addStaticLibrary(.{
+            .name = "fuzz",
+            .root_source_file = b.path("fuzz.zig"),
+            .single_threaded = true,
+            .target = b.graph.host,
+            .optimize = optimize,
+        });
+        fuzz.pie = true;
+        fuzz.want_lto = true;
+        fuzz.bundle_compiler_rt = true;
+
+        const afl_lto = b.addSystemCommand(&.{ "afl-clang-lto", "-o" });
+        const afl_lto_out = afl_lto.addOutputFileArg("fuzz");
+        afl_lto.addArtifactArg(fuzz);
+
+        const fuzz_duration = b.option([]const u8, "fuzz-duration", "n seconds to fuzz for") orelse "1";
+        const fuzz_tests = b.option(bool, "fuzz-tests", "also run the fuzz findings") orelse false;
+        const refuzz = b.option(bool, "refuzz", "rerun fuzzing") orelse b: {
+            _ = std.fs.cwd().statFile("zig-out/fuzz_finding_tests.zig") catch break :b true;
+            break :b false;
+        };
+
+        if (!refuzz) {
+            break :fuzzing null;
+        }
+
+        const run_afl = b.addSystemCommand(&.{"afl-fuzz"});
+        run_afl.addArg("-i");
+        run_afl.addDirectoryArg(cases);
+        run_afl.addArg("-o");
+        const out_dir = run_afl.addOutputDirectoryArg("findings");
+        run_afl.addArg("-x");
+        run_afl.addFileArg(dict_out);
+        run_afl.addArgs(&.{ "-V", fuzz_duration });
+        run_afl.addArg("--");
+        run_afl.addFileArg(afl_lto_out);
+
+        const gen_finding_tests = b.addExecutable(.{
+            .name = "gen_fuzz_finding_tests.zig",
+            .root_source_file = b.path("gen_fuzz_finding_tests.zig"),
+            .target = b.graph.host,
+            .optimize = .Debug,
+            .use_llvm = false,
+            .use_lld = false,
+        });
+
+        const run_gen_finding_tests = b.addRunArtifact(gen_finding_tests);
+        run_gen_finding_tests.addArg("tests.zig");
+        if (fuzz_tests) {
+            run_gen_finding_tests.addDirectoryArg(out_dir);
+            run_gen_finding_tests.addArg("enabled");
+        } else {
+            run_gen_finding_tests.addArg("");
+            run_gen_finding_tests.addArg("disabled");
+        }
+        const out_src = run_gen_finding_tests.addOutputFileArg("fuzz_finding_tests.zig");
+
+        break :fuzzing &b.addInstallFile(out_src, "fuzz_finding_tests.zig").step;
+    };
+
+    testing: {
+        const test_filter = b.option([]const u8, "tf", "passed as a filter to tests");
+
+        const unit_tests = b.addTest(.{
+            .root_source_file = b.path("tests.zig"),
+            .target = b.graph.host,
+            .optimize = optimize,
+            .filter = test_filter,
+            .use_llvm = false,
+            .use_lld = false,
+        });
+        unit_tests.step.dependOn(vendored_tests);
+        unit_tests.step.dependOn(tests);
+        if (fuzz_finding_tests) |fft| unit_tests.step.dependOn(fft);
+
+        check_step.dependOn(&unit_tests.step);
+
+        test_step.dependOn(&b.addRunArtifact(unit_tests).step);
+        break :testing;
+    }
 }
