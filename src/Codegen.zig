@@ -155,11 +155,11 @@ pub fn build(self: *Codegen, func: *Types.Func) !void {
         ty_idx += 1;
     }
 
-    _ = self.emit(.{}, ast.exprs.get(func.key.ast).Fn.body);
+    _ = self.emit(.{}, ast.exprs.get(func.key.ast).Fn.body) catch {};
 
     if (!self.bl.isUnreachable() and ret_abi != .Imaginary) {
         self.report(fn_ast.body, "function is missing a return value since" ++
-            " {} has more then 1 possible value", .{func.ret});
+            " {} has more then 1 possible value", .{func.ret}) catch {};
     }
 
     if (self.errored) return error.HasErrors;
@@ -176,8 +176,6 @@ pub const Value = struct {
         Value: *Node,
         Ptr: *Node,
     };
-
-    pub const never = Value{ .ty = .never };
 
     inline fn mkv(ty: Types.Id, oid: ?*Node) Value {
         return .{ .ty = ty, .id = if (oid) |id| .{ .Value = id } else .Imaginary };
@@ -240,7 +238,7 @@ pub const Scope = union(enum) {
                         return .{ .id = id, .ty = se.ty };
                     }
                     var value = Codegen.Value{ .ty = .type, .id = .{ .Ptr = t.bl.getScopeValue(i) } };
-                    break .{ .id = id, .ty = .type, .value = @intFromEnum(t.unwrapTyConst(&value)) };
+                    break .{ .id = id, .ty = .type, .value = @intFromEnum(t.unwrapTyConst(&value) catch .never) };
                 }
             } else null,
         };
@@ -272,9 +270,7 @@ pub fn ensureLoaded(self: *Codegen, value: *Value) void {
     }
 }
 
-pub fn typeCheck(self: *Codegen, expr: anytype, got: *Value, expected: Types.Id) bool {
-    if (got.ty == .never) return true;
-
+pub fn typeCheck(self: *Codegen, expr: anytype, got: *Value, expected: Types.Id) !void {
     if (expected.data() == .Nullable and expected.data().Nullable.* == got.ty) {
         const abi = self.abi.categorize(got.ty, self.types);
         switch (abi) {
@@ -289,13 +285,11 @@ pub fn typeCheck(self: *Codegen, expr: anytype, got: *Value, expected: Types.Id)
             },
         }
 
-        return false;
+        return;
     }
 
     if (!got.ty.canUpcast(expected, self.types)) {
-        self.report(expr, "expected {} got {}", .{ expected, got.ty });
-        got.* = .never;
-        return true;
+        return self.report(expr, "expected {} got {}", .{ expected, got.ty });
     }
 
     if (got.ty != expected) {
@@ -312,10 +306,10 @@ pub fn typeCheck(self: *Codegen, expr: anytype, got: *Value, expected: Types.Id)
         got.ty = expected;
     }
 
-    return false;
+    return;
 }
 
-fn report(self: *Codegen, expr: anytype, comptime fmt: []const u8, args: anytype) void {
+fn report(self: *Codegen, expr: anytype, comptime fmt: []const u8, args: anytype) EmitError {
     self.errored = true;
     const file = self.ast;
     const line, const col = Ast.lineCol(file.source, file.posOf(expr).index);
@@ -342,6 +336,8 @@ fn report(self: *Codegen, expr: anytype, comptime fmt: []const u8, args: anytype
         "{s}:{}:{}: " ++ fmt ++ "\n{}\n",
         .{ file.path, line, col } ++ rargs ++ .{file.codePointer(file.posOf(expr).index)},
     ) catch unreachable;
+
+    return error.Never;
 }
 
 pub fn lexemeToBinOp(self: Lexer.Lexeme, ty: Types.Id) graph.BinOp {
@@ -415,17 +411,17 @@ pub fn emitGenericStore(self: *Codegen, loc: *Node, value: *Value) void {
     }
 }
 
-pub fn resolveAnonTy(self: *Codegen, expr: Ast.Id) Types.Id {
+pub fn resolveAnonTy(self: *Codegen, expr: Ast.Id) !Types.Id {
     return self.types.ct.evalTy("", .{ .Tmp = self }, expr);
 }
 
-pub fn resolveTy(self: *Codegen, name: []const u8, expr: Ast.Id) Types.Id {
+pub fn resolveTy(self: *Codegen, name: []const u8, expr: Ast.Id) !Types.Id {
     return self.types.ct.evalTy(name, .{ .Tmp = self }, expr);
 }
 
-pub fn emitTyped(self: *Codegen, ctx: Ctx, ty: Types.Id, expr: Ast.Id) Value {
-    var value = self.emit(ctx.addTy(ty), expr);
-    if (self.typeCheck(expr, &value, ty)) return .never;
+pub fn emitTyped(self: *Codegen, ctx: Ctx, ty: Types.Id, expr: Ast.Id) !Value {
+    var value = try self.emit(ctx.addTy(ty), expr);
+    try self.typeCheck(expr, &value, ty);
     return value;
 }
 
@@ -433,14 +429,14 @@ pub fn emitTyConst(self: *Codegen, ty: Types.Id) Value {
     return .mkv(.type, self.bl.addIntImm(.int, @bitCast(@intFromEnum(ty))));
 }
 
-pub fn unwrapTyConst(self: *Codegen, cnst: *Value) Types.Id {
+pub fn unwrapTyConst(self: *Codegen, cnst: *Value) !Types.Id {
     self.ensureLoaded(cnst);
-    return @enumFromInt(self.types.ct.partialEval(&self.bl, cnst.id.Value));
+    return @enumFromInt(try self.types.ct.partialEval(&self.bl, cnst.id.Value));
 }
 
 pub const LookupResult = union(enum) { ty: Types.Id, cnst: u64 };
 
-pub fn lookupScopeItem(self: *Codegen, pos: Ast.Pos, bsty: Types.Id, name: []const u8) LookupResult {
+pub fn lookupScopeItem(self: *Codegen, pos: Ast.Pos, bsty: Types.Id, name: []const u8) !LookupResult {
     const other_file = bsty.file();
     const other_ast = self.types.getFile(other_file);
     if (bsty.data() == .Enum) {
@@ -450,13 +446,12 @@ pub fn lookupScopeItem(self: *Codegen, pos: Ast.Pos, bsty: Types.Id, name: []con
     }
     const ast = self.types.getFile(bsty.file());
     const decl = other_ast.findDecl(bsty.items(ast), name) orelse {
-        self.report(pos, "{} does not declare this", .{bsty});
-        return .{ .ty = .never };
+        return self.report(pos, "{} does not declare this", .{bsty});
     };
-    return .{ .ty = self.types.ct.evalTy(name, .{ .Perm = bsty }, other_ast.exprs.get(decl).BinOp.rhs) };
+    return .{ .ty = try self.types.ct.evalTy(name, .{ .Perm = bsty }, other_ast.exprs.get(decl).BinOp.rhs) };
 }
 
-pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) Value {
+pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
     const ast = self.ast;
     for (self.scope.items, 0..) |se, i| {
         if (se.name == id) {
@@ -470,37 +465,35 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) Value {
             if (cursor.findCapture(id)) |c| {
                 return .{ .ty = c.ty, .id = if (c.ty == .type) .{ .Value = self.bl.addIntImm(.int, @bitCast(c.value)) } else b: {
                     if (self.target != .@"comptime") {
-                        self.report(pos, "can't access this value, (yet)", .{});
-                        return .never;
+                        return self.report(pos, "can't access this value, (yet)", .{});
                     }
                     break :b .{ .Imaginary = {} };
                 } };
             }
             cursor = cursor.parent();
         } else {
-            self.report(pos, "ICE: parser did not catch this", .{});
-            return .never;
+            return self.report(pos, "ICE: parser did not catch this", .{});
         };
 
         const vari = ast.exprs.get(decl).BinOp;
         const ty: ?Types.Id, const value: Ast.Id = switch (vari.op) {
-            .@":" => .{ self.resolveAnonTy(ast.exprs.get(vari.rhs).BinOp.lhs), ast.exprs.get(vari.rhs).BinOp.rhs },
+            .@":" => .{ try self.resolveAnonTy(ast.exprs.get(vari.rhs).BinOp.lhs), ast.exprs.get(vari.rhs).BinOp.rhs },
             .@":=" => .{ null, vari.rhs },
             else => unreachable,
         };
 
         const typ = if (ty) |typ| b: {
             const global = self.types.resolveGlobal(cursor.perm(), ast.tokenSrc(id.pos()), value);
-            self.types.ct.evalGlobal(ast.tokenSrc(id.pos()), global.data().Global, typ, value);
+            try self.types.ct.evalGlobal(ast.tokenSrc(id.pos()), global.data().Global, typ, value);
             self.queue(.{ .Global = global.data().Global });
             break :b global;
-        } else return self.emitTyConst(self.types.ct.evalTy(ast.tokenSrc(id.pos()), cursor, value));
+        } else return self.emitTyConst(try self.types.ct.evalTy(ast.tokenSrc(id.pos()), cursor, value));
         const global = typ.data().Global;
         return .mkp(global.ty, self.bl.addGlobalAddr(global.id));
     }
 }
 
-pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(.Call)) Value {
+pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(.Call)) !Value {
     const ast = self.ast;
     var tmp = root.Arena.scrath(null);
     defer tmp.deinit();
@@ -509,31 +502,29 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
         const pos = ast.exprs.get(e.called).Tag;
         const name = ast.tokenSrc(pos.index + 1);
         const ty = ctx.ty orelse {
-            self.report(
+            return self.report(
                 e.called,
                 "can infer the implicit access, you can specify the type: <ty>.{s}",
                 .{name},
             );
-            return .never;
         };
 
-        break :b .{ self.lookupScopeItem(pos, ty, name), null };
+        break :b .{ try self.lookupScopeItem(pos, ty, name), null };
     } else if (e.called.tag() == .Field) b: {
         const field = ast.exprs.get(e.called).Field;
         const name = ast.tokenSrc(field.field.index);
-        var value = self.emit(.{}, field.base);
+        var value = try self.emit(.{}, field.base);
 
         if (value.ty == .type) {
-            break :b .{ self.lookupScopeItem(field.field, self.unwrapTyConst(&value), name), null };
+            break :b .{ try self.lookupScopeItem(field.field, try self.unwrapTyConst(&value), name), null };
         }
-        break :b .{ self.lookupScopeItem(field.field, value.ty, name), value };
+        break :b .{ try self.lookupScopeItem(field.field, value.ty, name), value };
     } else b: {
-        break :b .{ .{ .ty = self.resolveAnonTy(e.called) }, null };
+        break :b .{ .{ .ty = try self.resolveAnonTy(e.called) }, null };
     };
 
     if (typ_res == .cnst) {
-        self.report(e.called, "enum variants are not callable", .{});
-        return .never;
+        return self.report(e.called, "enum variants are not callable", .{});
     }
 
     var typ = typ_res.ty;
@@ -541,18 +532,15 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
     var computed_args: ?[]Value = null;
     const was_template = typ.data() == .Template;
     if (was_template) {
-        computed_args, typ = self.instantiateTemplate(tmp, e, typ);
+        computed_args, typ = try self.instantiateTemplate(tmp, e, typ);
     }
-
-    if (typ == .never) return .never;
 
     const func = typ.data().Func;
     self.queue(.{ .Func = func });
 
     const passed_args = e.args.len() + @intFromBool(caller != null);
     if (!was_template and passed_args != func.args.len) {
-        self.report(expr, "expected {} arguments, got {}", .{ func.args.len, passed_args });
-        return .never;
+        return self.report(expr, "expected {} arguments, got {}", .{ func.args.len, passed_args });
     }
 
     const param_count, const return_count, const ret_abi = func.computeAbiSize(self.abi, self.types);
@@ -569,8 +557,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
     for (func.args[@intFromBool(caller != null)..], 0..) |ty, k| {
         const abi = self.abi.categorize(ty, self.types);
         abi.types(args.params[i..]);
-        var value = if (computed_args) |a| a[k] else self.emitTyped(ctx, ty, args_ast[k]);
-        if (value.ty == .never) return .never;
+        var value = if (computed_args) |a| a[k] else try self.emitTyped(ctx, ty, args_ast[k]);
         i += self.pushParam(args, abi, i, &value);
     }
 
@@ -582,7 +569,7 @@ pub fn instantiateTemplate(
     tmp: root.Arena.Scratch,
     e: std.meta.TagPayload(Ast.Expr, .Call),
     typ: Types.Id,
-) struct { []Value, Types.Id } {
+) !struct { []Value, Types.Id } {
     const ast = self.ast;
     const tmpl = typ.data().Template;
 
@@ -603,26 +590,26 @@ pub fn instantiateTemplate(
     for (tmpl_file.exprs.view(tmpl_ast.args), ast.exprs.view(e.args)) |param, arg| {
         const binding = tmpl_file.exprs.get(param.bindings).Ident;
         if (binding.pos.flag.@"comptime") {
-            captures[capture_idx] = .{ .id = comptime_args[capture_idx], .ty = .type, .value = @intFromEnum(self.resolveAnonTy(arg)) };
+            captures[capture_idx] = .{ .id = comptime_args[capture_idx], .ty = .type, .value = @intFromEnum(try self.resolveAnonTy(arg)) };
             capture_idx += 1;
             scope.key.captures = captures[0..capture_idx];
         } else {
-            arg_tys[arg_idx] = self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = &scope }) }, param.ty);
+            arg_tys[arg_idx] = try self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = &scope }) }, param.ty);
             if (arg_tys[arg_idx] == .any) {
-                arg_exprs[arg_idx] = self.emit(.{}, arg);
+                arg_exprs[arg_idx] = try self.emit(.{}, arg);
                 arg_tys[arg_idx] = arg_exprs[arg_idx].ty;
                 captures[capture_idx] = .{ .id = binding.id, .ty = arg_tys[arg_idx] };
                 capture_idx += 1;
                 scope.key.captures = captures[0..capture_idx];
             } else {
-                arg_exprs[arg_idx] = self.emitTyped(.{}, arg_tys[arg_idx], arg);
+                arg_exprs[arg_idx] = try self.emitTyped(.{}, arg_tys[arg_idx], arg);
             }
 
             arg_idx += 1;
         }
     }
 
-    const ret = self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = &scope }) }, tmpl_ast.ret);
+    const ret = try self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = &scope }) }, tmpl_ast.ret);
 
     // TODO: the comptime_args + captures are continuous, we could remove the template from the scope tree in that case
     const slot, const alloc = self.types.intern(.Func, .{
@@ -702,8 +689,8 @@ fn loopControl(self: *Codegen, kind: Builder.Loop.Control, ctrl: Ast.Id) void {
                 .Clean => l.* = .{ .Controlled = ctrl },
                 .Controlled => |p| {
                     self.report(ctrl, "reached second $loop control, this means control" ++
-                        " flow leading to it is runtime dependant", .{});
-                    self.report(p, "...previous one reached here", .{});
+                        " flow leading to it is runtime dependant", .{}) catch {};
+                    self.report(p, "...previous one reached here", .{}) catch {};
                 },
             }
         },
@@ -768,7 +755,9 @@ pub fn encodeString(
     return .{ .ok = str.items };
 }
 
-pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
+pub const EmitError = error{Never};
+
+pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
     const ast = self.ast;
     switch (ast.exprs.get(expr)) {
         .Comment => return .{},
@@ -783,8 +772,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 .err => |err| {
                     var pos = e.pos;
                     pos.index += @intCast(err.pos);
-                    self.report(pos, "{s}", .{err.reason});
-                    return .never;
+                    return self.report(pos, "{s}", .{err.reason});
                 },
             };
 
@@ -803,8 +791,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         .Integer => |e| {
             const ty = ctx.ty orelse .uint;
             if (!ty.isInteger()) {
-                self.report(expr, "{} can not be constructed as integer literal", .{ty});
-                return .never;
+                return self.report(expr, "{} can not be constructed as integer literal", .{ty});
             }
             const parsed = std.fmt.parseInt(i64, ast.tokenSrc(e.index), 10) catch unreachable;
             return .mkv(ty, self.bl.addIntImm(self.abi.categorize(ty, self.types).ByValue, parsed));
@@ -814,13 +801,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .Null => {
             const ty: Types.Id = ctx.ty orelse {
-                self.report(expr, "can't infer the type of nullable value, you can speciry a type: @as(?<ty>, null)", .{});
-                return .never;
+                return self.report(expr, "can't infer the type of nullable value, you can speciry a type: @as(?<ty>, null)", .{});
             };
 
             if (ty.data() != .Nullable) {
-                self.report(expr, "only nullable types can be initialized with null, {} is not", .{ty});
-                return .never;
+                return self.report(expr, "only nullable types can be initialized with null, {} is not", .{ty});
             }
 
             switch (self.abi.categorize(ty, self.types)) {
@@ -836,9 +821,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         .Ident => |e| return self.loadIdent(e.pos, e.id),
         .Idk => {
             const ty: Types.Id = ctx.ty orelse {
-                self.report(expr, "cant infer the type of uninitialized memory," ++
+                return self.report(expr, "cant infer the type of uninitialized memory," ++
                     " you can specify a type: @as(<ty>, idk)", .{});
-                return .never;
             };
 
             const abi = self.abi.categorize(ty, self.types);
@@ -854,11 +838,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             defer tmp.deinit();
 
             if (e.ty.tag() == .Void and ctx.ty == null) {
-                self.report(expr, "cant infer the type of this constructor, you can specify a type: '<ty>.{{'", .{});
-                return .never;
+                return self.report(expr, "cant infer the type of this constructor, you can specify a type: '<ty>.{{'", .{});
             }
 
-            const oty = ctx.ty orelse self.resolveAnonTy(e.ty);
+            const oty = ctx.ty orelse try self.resolveAnonTy(e.ty);
             var ty = oty;
             const local = ctx.loc orelse self.bl.addLocal(ty.size(self.types));
             var offset_cursor: usize = 0;
@@ -893,21 +876,20 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                         const slot, const ftype = for (fields, slots) |tf, *s| {
                             if (std.mem.eql(u8, tf.name, fname)) break .{ s, tf.ty };
                         } else {
-                            self.report(f, "{} does not have a field called {s} (TODO: list fields)", .{ ty, fname });
-                            continue;
+                            self.report(f, "{} does not have a field called {s} (TODO: list fields)", .{ ty, fname }) catch continue;
                         };
 
                         switch (slot.*) {
                             .RequiredOffset => |offset| {
                                 const off = self.bl.addFieldOffset(local, @intCast(offset));
-                                var value = self.emit(ctx.addTy(ftype).addLoc(off), field.rhs);
-                                if (self.typeCheck(field.rhs, &value, ftype)) continue;
+                                var value = self.emit(ctx.addTy(ftype).addLoc(off), field.rhs) catch continue;
+                                try self.typeCheck(field.rhs, &value, ftype);
                                 self.emitGenericStore(off, &value);
                                 slot.* = .{ .Filled = f };
                             },
                             .Filled => |pos| {
-                                self.report(f, "initializing the filed multiple times", .{});
-                                self.report(pos, "...arleady initialized here", .{});
+                                self.report(f, "initializing the filed multiple times", .{}) catch {};
+                                self.report(pos, "...arleady initialized here", .{}) catch {};
                             },
                         }
                     }
@@ -921,15 +903,14 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                                 const glob = self.bl.addGlobalAddr(value.id);
                                 self.bl.addFixedMemCpy(off, glob, f.ty.size(self.types));
                             } else {
-                                self.report(expr, "field {s} on struct {} is not initialized", .{ f.name, ty });
+                                return self.report(expr, "field {s} on struct {} is not initialized", .{ f.name, ty });
                             }
                         }
                     }
                 },
                 .Union => |union_ty| {
                     if (e.fields.len() != 1) {
-                        self.report(expr, "union constructor must initialize only one field", .{});
-                        return .never;
+                        return self.report(expr, "union constructor must initialize only one field", .{});
                     }
 
                     const fields = union_ty.getFields(self.types);
@@ -940,19 +921,17 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     const f = for (fields) |f| {
                         if (std.mem.eql(u8, f.name, fname)) break f;
                     } else {
-                        self.report(field_ast.lhs, "{} does not have a field called {s} (TODO: list fields)", .{ ty, fname });
-                        return .never;
+                        return self.report(field_ast.lhs, "{} does not have a field called {s} (TODO: list fields)", .{ ty, fname });
                     };
 
                     offset_cursor = std.mem.alignForward(usize, offset_cursor, f.ty.alignment(self.types));
                     const off = self.bl.addFieldOffset(local, @intCast(offset_cursor));
-                    var value = self.emit(.{ .ty = f.ty, .loc = off }, field_ast.rhs);
-                    if (self.typeCheck(field_ast.rhs, &value, f.ty)) return .never;
+                    var value = try self.emit(.{ .ty = f.ty, .loc = off }, field_ast.rhs);
+                    try self.typeCheck(field_ast.rhs, &value, f.ty);
                     self.emitGenericStore(off, &value);
                 },
                 else => {
-                    self.report(expr, "{} can not be constructed with '.{{..}}'", .{ty});
-                    return .never;
+                    return self.report(expr, "{} can not be constructed with '.{{..}}'", .{ty});
                 },
             }
 
@@ -960,11 +939,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .Tupl => |e| {
             if (e.ty.tag() == .Void and ctx.ty == null) {
-                self.report(expr, "cant infer the type of this constructor, you can specify a type: '<ty>.('", .{});
-                return .never;
+                return self.report(expr, "cant infer the type of this constructor, you can specify a type: '<ty>.('", .{});
             }
 
-            const oty = ctx.ty orelse self.resolveAnonTy(e.ty);
+            const oty = ctx.ty orelse try self.resolveAnonTy(e.ty);
             var ty = oty;
             const local = ctx.loc orelse self.bl.addLocal(oty.size(self.types));
             var offset: usize = 0;
@@ -976,18 +954,16 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             }
 
             if (ty.data() != .Struct) {
-                self.report(expr, "{} can not be constructed with '.(..)'", .{ty});
-                return .never;
+                return self.report(expr, "{} can not be constructed with '.(..)'", .{ty});
             }
             const struct_ty = ty.data().Struct;
 
             if (e.fields.len() != struct_ty.getFields(self.types).len) {
-                self.report(
+                return self.report(
                     e.pos,
                     "{} has {} fields, but tuple constructor has {} values",
                     .{ ty, struct_ty.getFields(self.types).len, e.fields.len() },
                 );
-                return .never;
             }
 
             for (ast.exprs.view(e.fields), struct_ty.getFields(self.types)) |field, sf| {
@@ -995,8 +971,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 offset = std.mem.alignForward(usize, offset, ftype.alignment(self.types));
 
                 const off = self.bl.addFieldOffset(local, @intCast(offset));
-                var value = self.emit(ctx.addTy(ftype).addLoc(off), field);
-                if (self.typeCheck(field, &value, ftype)) continue;
+                var value = self.emit(ctx.addTy(ftype).addLoc(off), field) catch continue;
+                try self.typeCheck(field, &value, ftype);
                 self.emitGenericStore(off, &value);
                 offset += ftype.size(self.types);
             }
@@ -1005,8 +981,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .Arry => |e| {
             if (e.ty.tag() == .Void and ctx.ty == null) {
-                self.report(expr, "cant infer the type of this constructor, you can specify a type: '<elem-ty>.('", .{});
-                return .never;
+                return self.report(expr, "cant infer the type of this constructor, you can specify a type: '<elem-ty>.('", .{});
             }
 
             const local = ctx.loc orelse self.bl.addLocal(0);
@@ -1021,18 +996,16 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 }
 
                 if (ty.data() != .Slice or ty.data().Slice.len == null) {
-                    self.report(expr, "{} can not bi initialized with array syntax", .{ty});
-                    return .never;
+                    return self.report(expr, "{} can not bi initialized with array syntax", .{ty});
                 }
 
                 if (ty.data().Slice.len != e.fields.len()) {
-                    self.report(expr, "expected array with {} element, got {}", .{ ty.data().Slice.len.?, e.fields.len() });
-                    return .never;
+                    return self.report(expr, "expected array with {} element, got {}", .{ ty.data().Slice.len.?, e.fields.len() });
                 }
 
                 break :b .{ ty.data().Slice.elem, ret_ty };
             } else b: {
-                const elem_ty = self.resolveAnonTy(e.ty);
+                const elem_ty = try self.resolveAnonTy(e.ty);
                 const array_ty = self.types.makeSlice(e.fields.len(), elem_ty);
                 break :b .{ elem_ty, array_ty };
             };
@@ -1041,7 +1014,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
             for (ast.exprs.view(e.fields), start..) |elem, i| {
                 const off = self.bl.addFieldOffset(local, @intCast(i * elem_ty.size(self.types)));
-                var value = self.emitTyped(.{ .loc = off }, elem_ty, elem);
+                var value = self.emitTyped(.{ .loc = off }, elem_ty, elem) catch continue;
                 self.emitGenericStore(off, &value);
             }
 
@@ -1050,21 +1023,23 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
         // #OPS ========================================================================
         .SliceTy => |e| {
-            const len: ?usize = if (e.len.tag() == .Void) null else @intCast(self.types.ct.evalIntConst(.{ .Tmp = self }, e.len));
-            const elem = self.resolveAnonTy(e.elem);
+            const len: ?usize = if (e.len.tag() == .Void) null else @intCast(self.types.ct.evalIntConst(.{ .Tmp = self }, e.len) catch 0);
+            const elem = try self.resolveAnonTy(e.elem);
             return self.emitTyConst(self.types.makeSlice(len, elem));
         },
         .UnOp => |e| switch (e.op) {
-            .@"^" => return self.emitTyConst(self.types.makePtr(self.resolveAnonTy(e.oper))),
-            .@"?" => return self.emitTyConst(self.types.makeNullable(self.resolveAnonTy(e.oper))),
+            .@"^" => return self.emitTyConst(self.types.makePtr(try self.resolveAnonTy(e.oper))),
+            .@"?" => return self.emitTyConst(self.types.makeNullable(try self.resolveAnonTy(e.oper))),
             .@"&" => {
-                const addrd = self.emit(.{}, e.oper);
-                if (addrd.ty == .never) return .never;
+                const addrd = try self.emit(.{}, e.oper);
+                if (addrd.id == .Imaginary) {
+                    return .mkv(self.types.makePtr(addrd.ty), self.bl.addIntImm(.int, @intCast(addrd.ty.alignment(self.types))));
+                }
                 return .mkv(self.types.makePtr(addrd.ty), addrd.id.Ptr);
             },
             .@"-" => {
-                var lhs = self.emit(ctx, e.oper);
-                if (ctx.ty) |ty| if (self.typeCheck(expr, &lhs, ty)) return .never;
+                var lhs = try self.emit(ctx, e.oper);
+                if (ctx.ty) |ty| try self.typeCheck(expr, &lhs, ty);
                 return .mkv(lhs.ty, self.bl.addUnOp(.neg, self.abi.categorize(lhs.ty, self.types).ByValue, lhs.id.Value));
             },
             else => std.debug.panic("{any}\n", .{ast.exprs.get(expr)}),
@@ -1077,53 +1052,47 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 self.name = ast.tokenSrc(ast.exprs.get(e.lhs).Ident.id.pos());
                 defer self.name = prev_name;
 
-                var value = if (t == .@":=")
+                var value = try if (t == .@":=")
                     self.emit(.{ .loc = loc }, e.rhs)
                 else b: {
                     const assign = ast.exprs.get(e.rhs).BinOp;
                     std.debug.assert(assign.op == .@"=");
-                    const ty = self.resolveAnonTy(assign.lhs);
+                    const ty = try self.resolveAnonTy(assign.lhs);
                     break :b self.emitTyped(ctx.addLoc(loc), ty, assign.rhs);
                 };
 
-                if (value.ty != .never) {
-                    self.bl.resizeLocal(loc, value.ty.size(self.types));
-                    self.emitGenericStore(loc, &value);
-                }
+                self.bl.resizeLocal(loc, value.ty.size(self.types));
+                self.emitGenericStore(loc, &value);
 
                 self.scope.appendAssumeCapacity(.{ .ty = value.ty, .name = ast.exprs.get(e.lhs).Ident.id });
                 self.bl.pushScopeValue(loc);
                 return .{};
             },
             .@"=" => if (e.lhs.tag() == .Wildcard) {
-                _ = self.emit(.{}, e.rhs);
+                _ = try self.emit(.{}, e.rhs);
                 return .{};
             } else {
-                const loc = self.emit(.{}, e.lhs);
-                if (loc.ty == .never) return .{};
+                const loc = try self.emit(.{}, e.lhs);
 
                 if (loc.id == .Value) {
-                    self.report(e.lhs, "can't assign to this", .{});
-                    return .{};
+                    return self.report(e.lhs, "can't assign to this", .{});
                 }
 
-                var val = self.emitTyped(ctx, loc.ty, e.rhs);
+                var val = try self.emitTyped(ctx, loc.ty, e.rhs);
                 self.emitGenericStore(loc.id.Ptr, &val);
                 return .{};
             },
             else => {
                 if (e.lhs.tag() == .Null) {
-                    self.report(e.lhs, "null has to be on the right hand side", .{});
-                    return .never;
+                    return self.report(e.lhs, "null has to be on the right hand side", .{});
                 }
 
-                var lhs = self.emit(if (e.op.isComparison()) .{} else ctx, e.lhs);
+                var lhs = try self.emit(if (e.op.isComparison()) .{} else ctx, e.lhs);
 
                 if (e.rhs.tag() == .Null) switch (e.op) {
                     .@"==", .@"!=" => {
                         if (lhs.ty.data() != .Nullable) {
-                            self.report(e.lhs, "only nullable types can be compared with null, {} is not", .{lhs.ty});
-                            return .never;
+                            return self.report(e.lhs, "only nullable types can be compared with null, {} is not", .{lhs.ty});
                         }
 
                         const abi = self.abi.categorize(lhs.ty, self.types);
@@ -1145,22 +1114,19 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                         return .mkv(.bool, value);
                     },
                     else => {
-                        self.report(e.lhs, "only comparing against null is supported", .{});
-                        return .never;
+                        return self.report(e.lhs, "only comparing against null is supported", .{});
                     },
                 };
 
                 if (!lhs.ty.isBinaryOperand()) {
-                    self.report(e.lhs, "{} can not be used in binary operations", .{lhs.ty});
-                    return .never;
+                    return self.report(e.lhs, "{} can not be used in binary operations", .{lhs.ty});
                 }
 
-                var rhs = self.emit(ctx.addTy(lhs.ty), e.rhs);
+                var rhs = try self.emit(ctx.addTy(lhs.ty), e.rhs);
                 if (e.op.isComparison() and lhs.ty.isSigned() != rhs.ty.isSigned())
-                    self.report(e.lhs, "mixed sign comparison ({} {})", .{ lhs.ty, rhs.ty });
+                    return self.report(e.lhs, "mixed sign comparison ({} {})", .{ lhs.ty, rhs.ty });
                 const unified: Types.Id = ctx.ty orelse lhs.ty.binOpUpcast(rhs.ty, self.types) catch |err| {
-                    self.report(expr, "{s} ({} and {})", .{ @errorName(err), lhs.ty, rhs.ty });
-                    return .never;
+                    return self.report(expr, "{s} ({} and {})", .{ @errorName(err), lhs.ty, rhs.ty });
                 };
 
                 if (lhs.ty.data() == .Struct) if (e.op == .@"==" or e.op == .@"!=") {
@@ -1175,8 +1141,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     self.ensureLoaded(&lhs);
                     self.ensureLoaded(&rhs);
                     const lhs_fail = self.typeCheck(e.lhs, &lhs, upcast_to);
-                    const rhs_fail = self.typeCheck(e.rhs, &rhs, upcast_to);
-                    if (lhs_fail or rhs_fail) return .never;
+                    try self.typeCheck(e.rhs, &rhs, upcast_to);
+                    try lhs_fail;
                     return .mkv(unified, self.bl.addBinOp(
                         lexemeToBinOp(e.op, lhs.ty),
                         self.abi.categorize(unified, self.types).ByValue,
@@ -1188,15 +1154,12 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .Unwrap => |e| {
             // TODO: better type inference
-            var base = self.emit(.{}, e);
-
-            if (base.ty == .never) return .never;
+            var base = try self.emit(.{}, e);
 
             self.emitAutoDeref(&base);
 
             if (base.ty.data() != .Nullable) {
-                self.report(e, "only nullable types can be unwrapped, {} is not", .{base.ty});
-                return .never;
+                return self.report(e, "only nullable types can be unwrapped, {} is not", .{base.ty});
             }
 
             const ty = base.ty.data().Nullable.*;
@@ -1208,13 +1171,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             }
         },
         .Deref => |e| {
-            var base = self.emit(.{}, e);
-
-            if (base.ty == .never) return .never;
+            var base = try self.emit(.{}, e);
 
             if (base.ty.data() != .Ptr) {
-                self.report(e, "only pointer types can be dereferenced, {} is not", .{base.ty});
-                return .never;
+                return self.report(e, "only pointer types can be dereferenced, {} is not", .{base.ty});
             }
 
             self.ensureLoaded(&base);
@@ -1222,26 +1182,24 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .Tag => |e| {
             const ty = ctx.ty orelse {
-                self.report(
+                return self.report(
                     expr,
                     "cant infer the type of the implicit access, you can specify the type: <ty>.{s}",
                     .{ast.tokenSrc(e.index + 1)},
                 );
-                return .never;
             };
 
-            return .mkv(ty, self.bl.addIntImm(self.abi.categorize(ty, self.types).ByValue, @intCast(self.lookupScopeItem(e, ty, ast.tokenSrc(e.index + 1)).cnst)));
+            const itm = try self.lookupScopeItem(e, ty, ast.tokenSrc(e.index + 1));
+            return .mkv(ty, self.bl.addIntImm(self.abi.categorize(ty, self.types).ByValue, @intCast(itm.cnst)));
         },
         .Field => |e| {
-            var base = self.emit(.{}, e.base);
-
-            if (base.ty == .never) return .never;
+            var base = try self.emit(.{}, e.base);
 
             self.emitAutoDeref(&base);
 
             if (base.ty == .type) {
-                const bsty = self.unwrapTyConst(&base);
-                switch (self.lookupScopeItem(e.field, bsty, ast.tokenSrc(e.field.index))) {
+                const bsty = try self.unwrapTyConst(&base);
+                switch (try self.lookupScopeItem(e.field, bsty, ast.tokenSrc(e.field.index))) {
                     .ty => |ty| return self.emitTyConst(ty),
                     .cnst => |cnst| return .mkv(bsty, self.bl.addIntImm(self.abi.categorize(bsty, self.types).ByValue, @bitCast(cnst))),
                 }
@@ -1257,8 +1215,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                         if (std.mem.eql(u8, fname, tf.name)) break tf.ty;
                         offset += tf.ty.size(self.types);
                     } else {
-                        self.report(e.field, "no such field on {} (TODO: list fields)", .{base.ty});
-                        return .never;
+                        return self.report(e.field, "no such field on {} (TODO: list fields)", .{base.ty});
                     };
 
                     return .mkp(ftype, self.bl.addFieldOffset(base.id.Ptr, @intCast(offset)));
@@ -1267,8 +1224,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     const ftype = for (union_ty.getFields(self.types)) |tf| {
                         if (std.mem.eql(u8, fname, tf.name)) break tf.ty;
                     } else {
-                        self.report(e.field, "no such field on {} (TODO: list fields)", .{base.ty});
-                        return .never;
+                        return self.report(e.field, "no such field on {} (TODO: list fields)", .{base.ty});
                     };
 
                     return .mkp(ftype, self.bl.addFieldOffset(base.id.Ptr, 0));
@@ -1288,31 +1244,27 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                             return .mkv(ptr_ty, base.id.Ptr);
                         }
                     } else {
-                        self.report(e.field, "slices and arrays only support `.ptr` and `.len` field", .{});
-                        return .never;
+                        return self.report(e.field, "slices and arrays only support `.ptr` and `.len` field", .{});
                     }
                 },
                 else => {
-                    self.report(e.field, "field access is only allowed on structs and arrays, {} is not", .{base.ty});
-                    return .never;
+                    return self.report(e.field, "field access is only allowed on structs and arrays, {} is not", .{base.ty});
                 },
             }
         },
         .Index => |e| if (e.subscript.tag() == .Range) {
-            var base = self.emit(.{}, e.base);
+            var base = try self.emit(.{}, e.base);
 
-            if (base.ty == .never) return .never;
             const range = ast.exprs.get(e.subscript).Range;
 
             const elem = base.ty.child(self.types) orelse {
-                self.report(e.base, "only pointers, arrays and slices can be sliced, {} is not", .{base.ty});
-                return .never;
+                return self.report(e.base, "only pointers, arrays and slices can be sliced, {} is not", .{base.ty});
             };
 
             var start: Value = if (range.start.tag() == .Void)
                 .mkv(.uint, self.bl.addIntImm(.int, 0))
             else
-                self.emitTyped(.{}, .uint, range.start);
+                try self.emitTyped(.{}, .uint, range.start);
             self.ensureLoaded(&start);
             var end: Value = if (range.end.tag() == .Void) switch (base.ty.data()) {
                 .Slice => |slice_ty| if (slice_ty.len) |l|
@@ -1320,10 +1272,9 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 else
                     .mkv(.uint, self.bl.addFieldLoad(base.id.Ptr, Types.Slice.len_offset, .int)),
                 else => {
-                    self.report(e.subscript, "unbound range is only allowed on arrays and slices, {} is not", .{base.ty});
-                    return .never;
+                    return self.report(e.subscript, "unbound range is only allowed on arrays and slices, {} is not", .{base.ty});
                 },
-            } else self.emitTyped(.{}, .uint, range.end);
+            } else try self.emitTyped(.{}, .uint, range.end);
             self.ensureLoaded(&end);
 
             const res_ty = self.types.makeSlice(null, elem);
@@ -1335,8 +1286,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 else
                     .mkv(self.types.makePtr(elem), base.id.Ptr),
                 else => {
-                    self.report(expr, "only structs and slices can be indexed, {} is not", .{base.ty});
-                    return .never;
+                    return self.report(expr, "only structs and slices can be indexed, {} is not", .{base.ty});
                 },
             };
 
@@ -1349,24 +1299,20 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
             return .mkp(res_ty, loc);
         } else {
-            var base = self.emit(.{}, e.base);
-
-            if (base.ty == .never) return .never;
+            var base = try self.emit(.{}, e.base);
 
             // TODO: pointers to arrays are kind of an edge case
             self.emitAutoDeref(&base);
             switch (base.ty.data()) {
                 .Struct => |struct_ty| {
-                    var idx_value = self.emitTyped(.{}, .uint, e.subscript);
-                    if (idx_value.ty == .never) return .never;
+                    var idx_value = try self.emitTyped(.{}, .uint, e.subscript);
                     self.ensureLoaded(&idx_value);
-                    const idx = self.types.ct.partialEval(&self.bl, idx_value.id.Value);
+                    const idx = try self.types.ct.partialEval(&self.bl, idx_value.id.Value);
 
                     const fields = struct_ty.getFields(self.types);
 
                     if (idx >= fields.len) {
-                        self.report(e.subscript, "struct has only {} fields, but idnex is {}", .{ fields.len, idx });
-                        return .never;
+                        return self.report(e.subscript, "struct has only {} fields, but idnex is {}", .{ fields.len, idx });
                     }
 
                     var offset: usize = 0;
@@ -1378,7 +1324,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     return .mkp(fields[idx].ty, self.bl.addFieldOffset(base.id.Ptr, @intCast(offset)));
                 },
                 .Slice => |slice_ty| {
-                    var idx = self.emitTyped(.{}, .uint, e.subscript);
+                    var idx = try self.emitTyped(.{}, .uint, e.subscript);
                     self.ensureLoaded(&idx);
 
                     const index_base = if (slice_ty.len == null) self.bl.addLoad(base.id.Ptr, .int) else base.id.Ptr;
@@ -1386,8 +1332,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                     return .mkp(slice_ty.elem, self.bl.addIndexOffset(index_base, slice_ty.elem.size(self.types), idx.id.Value));
                 },
                 else => {
-                    self.report(expr, "only structs and slices can be indexed, {} is not", .{base.ty});
-                    return .never;
+                    return self.report(expr, "only structs and slices can be indexed, {} is not", .{base.ty});
                 },
             }
         },
@@ -1400,29 +1345,28 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
 
             for (ast.exprs.view(e.stmts)) |s| {
                 if (self.bl.isUnreachable() or self.comptime_unreachable) break;
-                _ = self.emitTyped(ctx, .void, s);
+                _ = self.emitTyped(ctx, .void, s) catch {};
             }
 
             return .{};
         },
         .If => |e| if (e.pos.flag.@"comptime") {
-            var cond = self.emitTyped(ctx, .bool, e.cond);
+            var cond = try self.emitTyped(ctx, .bool, e.cond);
             self.ensureLoaded(&cond);
-            if (self.types.ct.partialEval(&self.bl, cond.id.Value) != 0) {
-                _ = self.emitTyped(ctx, .void, e.then);
+            if (try self.types.ct.partialEval(&self.bl, cond.id.Value) != 0) {
+                _ = self.emitTyped(ctx, .void, e.then) catch {};
             } else {
-                _ = self.emitTyped(ctx, .void, e.else_);
+                _ = self.emitTyped(ctx, .void, e.else_) catch {};
             }
 
             return .{};
         } else {
-            var cond = self.emitTyped(ctx, .bool, e.cond);
+            var cond = try self.emitTyped(ctx, .bool, e.cond);
             self.ensureLoaded(&cond);
-            if (cond.ty == .never) return .{};
             var if_builder = self.bl.addIfAndBeginThen(cond.id.Value);
-            _ = self.emitTyped(ctx, .void, e.then);
+            _ = self.emitTyped(ctx, .void, e.then) catch {};
             const end_else = if_builder.beginElse(&self.bl);
-            _ = self.emitTyped(ctx, .void, e.else_);
+            _ = self.emitTyped(ctx, .void, e.else_) catch {};
             if_builder.end(&self.bl, end_else);
             self.comptime_unreachable = false;
 
@@ -1433,7 +1377,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             const loop = &self.loops.items[self.loops.items.len - 1];
             while ((loop.Comptime != .Controlled or loop.Comptime.Controlled.tag() != .Break) and !self.errored) {
                 loop.Comptime = .Clean;
-                _ = self.emitTyped(.{}, .void, e.body);
+                _ = self.emitTyped(.{}, .void, e.body) catch {};
                 if (!self.comptime_unreachable) self.loopControl(.@"continue", expr);
                 self.comptime_unreachable = false;
             }
@@ -1442,7 +1386,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         } else {
             var loop = self.bl.addLoopAndBeginBody();
             self.loops.appendAssumeCapacity(.{ .Runtime = loop });
-            _ = self.emitTyped(ctx, .void, e.body);
+            _ = self.emitTyped(ctx, .void, e.body) catch {};
             loop = self.loops.pop().?.Runtime;
             loop.end(&self.bl);
 
@@ -1459,8 +1403,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
         },
         .Call => |e| return self.emitCall(ctx, expr, e),
         .Return => |e| {
-            var value = self.emit(.{ .loc = self.struct_ret_ptr, .ty = self.ret }, e.value);
-            if (self.typeCheck(expr, &value, self.ret)) return .never;
+            var value = try self.emit(.{ .loc = self.struct_ret_ptr, .ty = self.ret }, e.value);
+            try self.typeCheck(expr, &value, self.ret);
             switch (self.abi.categorize(value.ty, self.types)) {
                 .Imaginary => self.bl.addReturn(&.{}),
                 .ByValue => {
@@ -1496,7 +1440,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             args.arg_slots[2] = self.bl.addIntImm(.int, @intFromEnum(expr));
 
             for (ast.exprs.view(e.captures), 0..) |id, slot_idx| {
-                var val = self.loadIdent(.init(id.pos()), id);
+                var val = try self.loadIdent(.init(id.pos()), id);
                 if (val.ty == .type) {
                     self.ensureLoaded(&val);
                     args.arg_slots[prefix + slot_idx * 2 ..][0..2].* =
@@ -1517,9 +1461,9 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             const captures = tmp.arena.alloc(Types.Key.Capture, e.captures.len());
 
             for (ast.exprs.view(e.captures), captures) |id, *slot| {
-                var val = self.loadIdent(.init(id.pos()), id);
+                var val = try self.loadIdent(.init(id.pos()), id);
                 if (val.ty == .type) {
-                    slot.* = .{ .id = id, .ty = .type, .value = @intFromEnum(self.unwrapTyConst(&val)) };
+                    slot.* = .{ .id = id, .ty = .type, .value = @intFromEnum(try self.unwrapTyConst(&val)) };
                 } else {
                     slot.* = .{ .id = id, .ty = val.ty };
                 }
@@ -1530,7 +1474,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
             if (e.comptime_args.len() == 0) {
                 for (ast.exprs.view(e.args), args) |argid, *arg| {
                     const ty = argid.ty;
-                    arg.* = self.resolveAnonTy(ty);
+                    arg.* = try self.resolveAnonTy(ty);
                     has_anytypes = has_anytypes or arg.* == .any;
                 }
             }
@@ -1559,9 +1503,9 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
                 if (!slot.found_existing) {
                     if (!has_anytypes) for (ast.exprs.view(e.args), args) |argid, *arg| {
                         const ty = argid.ty;
-                        arg.* = self.resolveAnonTy(ty);
+                        arg.* = try self.resolveAnonTy(ty);
                     };
-                    const ret = self.resolveAnonTy(e.ret);
+                    const ret = try self.resolveAnonTy(e.ret);
                     alloc.* = .{
                         .id = @intCast(self.types.funcs.items.len),
                         .key = alloc.key,
@@ -1603,7 +1547,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) Value {
     }
 }
 
-fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(.Directive)) Value {
+fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(.Directive)) !Value {
     const ast = self.ast;
 
     const name = ast.tokenSrc(e.pos.index);
@@ -1665,39 +1609,37 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
             try std.testing.expectError(error.@"trailing '*' is redundant", matchTriple("*-b-*", "a-b-c"));
         }
 
-        fn reportInferrence(cg: *Codegen, exr: anytype, ty: []const u8, dir_name: []const u8) void {
-            cg.report(exr, "type can not be inferred from the context, use `@as(<{s}>, {s}(...))`", .{ ty, dir_name });
+        fn reportInferrence(cg: *Codegen, exr: anytype, ty: []const u8, dir_name: []const u8) EmitError {
+            return cg.report(exr, "type can not be inferred from the context, use `@as(<{s}>, {s}(...))`", .{ ty, dir_name });
         }
 
-        fn assertArgs(cg: *Codegen, exr: anytype, got: []const Ast.Id, comptime expected: []const u8) bool {
+        fn assertArgs(cg: *Codegen, exr: anytype, got: []const Ast.Id, comptime expected: []const u8) !void {
             const min_expected_args = comptime std.mem.count(u8, expected, ",") + @intFromBool(expected.len != 0);
             const varargs = comptime std.mem.endsWith(u8, expected, "..");
             if (got.len < min_expected_args or (!varargs and got.len > min_expected_args)) {
                 const range = if (varargs) "at least " else "";
-                cg.report(
+                return cg.report(
                     exr,
                     "directive takes {s}{} arguments, got {} (" ++ expected ++ ")",
                     .{ range, min_expected_args, got.len },
                 );
-                return true;
             }
-            return false;
         }
     };
 
     switch (e.kind) {
         .use, .embed => unreachable,
         .CurrentScope => {
-            if (utils.assertArgs(self, expr, args, "")) return .never;
+            try utils.assertArgs(self, expr, args, "");
             return self.emitTyConst(self.parent_scope.perm());
         },
         .TypeOf => {
-            if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
-            const ty = self.types.ct.jitExpr("", .{ .Tmp = self }, .{}, args[0]).?[1];
+            try utils.assertArgs(self, expr, args, "<ty>");
+            const ty = (try self.types.ct.jitExpr("", .{ .Tmp = self }, .{}, args[0]))[1];
             return self.emitTyConst(ty);
         },
         .@"inline" => {
-            if (utils.assertArgs(self, expr, args, "<called>, <args>..")) return .never;
+            try utils.assertArgs(self, expr, args, "<called>, <args>..");
             return self.emitCall(ctx, expr, .{
                 .called = args[0],
                 .arg_pos = ast.posOf(args[0]),
@@ -1705,23 +1647,20 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
             });
         },
         .int_cast => {
-            if (utils.assertArgs(self, expr, args, "<expr>")) return .never;
+            try utils.assertArgs(self, expr, args, "<expr>");
 
             const ret: Types.Id = ctx.ty orelse {
-                utils.reportInferrence(self, expr, "int-ty", name);
-                return .never;
+                return utils.reportInferrence(self, expr, "int-ty", name);
             };
 
             if (!ret.isInteger()) {
-                self.report(expr, "inferred type must be an integer, {} is not", .{ret});
-                return .never;
+                return self.report(expr, "inferred type must be an integer, {} is not", .{ret});
             }
 
-            var oper = self.emit(.{}, args[0]);
+            var oper = try self.emit(.{}, args[0]);
 
             if (!oper.ty.isInteger()) {
-                self.report(args[0], "expeced integer, {} is not", .{oper.ty});
-                return .never;
+                return self.report(args[0], "expeced integer, {} is not", .{oper.ty});
             }
 
             self.ensureLoaded(&oper);
@@ -1729,22 +1668,20 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
             return .mkv(ret, self.bl.addUnOp(.ired, self.abi.categorize(ret, self.types).ByValue, oper.id.Value));
         },
         .bit_cast => {
-            if (utils.assertArgs(self, expr, args, "<expr>")) return .never;
+            try utils.assertArgs(self, expr, args, "<expr>");
 
             const ret: Types.Id = ctx.ty orelse {
-                utils.reportInferrence(self, expr, "ty", name);
-                return .never;
+                return utils.reportInferrence(self, expr, "ty", name);
             };
 
-            var oper = self.emit(.{}, args[0]);
+            var oper = try self.emit(.{}, args[0]);
 
             if (oper.ty.size(self.types) != ret.size(self.types)) {
-                self.report(
+                return self.report(
                     args[0],
                     "cant bitcast from {} to {} because sizes are not equal ({} != {})",
                     .{ oper.ty, ret, oper.ty.size(self.types), ret.size(self.types) },
                 );
-                return .never;
             }
 
             const to_abi = self.abi.categorize(ret, self.types);
@@ -1760,60 +1697,58 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
             }
         },
         .ChildOf => {
-            if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
-            const ty = self.resolveAnonTy(args[0]);
+            try utils.assertArgs(self, expr, args, "<ty>");
+            const ty = try self.resolveAnonTy(args[0]);
             const child = ty.child(self.types) orelse {
-                self.report(args[0], "directive only work on pointer types and slices, {} is not", .{ty});
-                return .never;
+                return self.report(args[0], "directive only work on pointer types and slices, {} is not", .{ty});
             };
             return self.emitTyConst(child);
         },
         .kind_of => {
-            if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
-            const len = self.resolveAnonTy(args[0]);
+            try utils.assertArgs(self, expr, args, "<ty>");
+            const len = try self.resolveAnonTy(args[0]);
             return .mkv(.uint, self.bl.addIntImm(.int, @intFromEnum(len.data())));
         },
         .len_of => {
-            if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
-            const ty = self.resolveAnonTy(args[0]);
+            try utils.assertArgs(self, expr, args, "<ty>");
+            const ty = try self.resolveAnonTy(args[0]);
             const len = ty.len(self.types) orelse {
-                self.report(args[0], "directive only works on structs and arrays, {} is not", .{ty});
-                return .never;
+                return self.report(args[0], "directive only works on structs and arrays, {} is not", .{ty});
             };
             return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(len)));
         },
         .align_of => {
-            if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
-            return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(self.resolveAnonTy(args[0]).alignment(self.types))));
+            try utils.assertArgs(self, expr, args, "<ty>");
+            const ty = try self.resolveAnonTy(args[0]);
+            return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(ty.alignment(self.types))));
         },
         .size_of => {
-            if (utils.assertArgs(self, expr, args, "<ty>")) return .never;
-            return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(self.resolveAnonTy(args[0]).size(self.types))));
+            try utils.assertArgs(self, expr, args, "<ty>");
+            const ty = try self.resolveAnonTy(args[0]);
+            return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(ty.size(self.types))));
         },
         .target => {
-            if (utils.assertArgs(self, expr, args, "<string>")) return .never;
+            try utils.assertArgs(self, expr, args, "<string>");
             const content = ast.exprs.get(args[0]).String;
             const str_content = ast.source[content.pos.index + 1 .. content.end - 1];
             const triple = if (self.target == .runtime) @tagName(self.abi) else "comptime";
             const matched = utils.matchTriple(str_content, triple) catch |err| {
-                self.report(args[0], "{s}", .{@errorName(err)});
-                return .never;
+                return self.report(args[0], "{s}", .{@errorName(err)});
             };
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(matched)));
         },
         .ecall => {
-            if (utils.assertArgs(self, expr, args, "<expr>..")) return .never;
+            try utils.assertArgs(self, expr, args, "<expr>..");
             var tmp = root.Arena.scrath(null);
             defer tmp.deinit();
 
             const ret = ctx.ty orelse {
-                utils.reportInferrence(self, expr, "ty", name);
-                return .never;
+                return utils.reportInferrence(self, expr, "ty", name);
             };
 
             const arg_nodes = tmp.arena.alloc(Value, args.len);
             for (args, arg_nodes) |arg, *slot| {
-                slot.* = self.emit(.{}, arg);
+                slot.* = try self.emit(.{}, arg);
             }
 
             const ret_abi = self.abi.categorize(ret, self.types);
@@ -1832,12 +1767,12 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
             return self.assembleReturn(Comptime.eca, call_args, ctx, ret, ret_abi);
         },
         .as => {
-            if (utils.assertArgs(self, expr, args, "<ty>, <expr>")) return .never;
-            const ty = self.resolveAnonTy(args[0]);
+            try utils.assertArgs(self, expr, args, "<ty>, <expr>");
+            const ty = try self.resolveAnonTy(args[0]);
             return self.emitTyped(ctx, ty, args[1]);
         },
         .@"error" => {
-            if (utils.assertArgs(self, expr, args, "<ty/string>..")) return .never;
+            try utils.assertArgs(self, expr, args, "<ty/string>..");
             var tmp = root.Arena.scrath(null);
             defer tmp.deinit();
 
@@ -1847,17 +1782,16 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
                     msg.appendSlice(ast.source[s.pos.index + 1 .. s.end - 1]) catch unreachable;
                 },
                 else => {
-                    var value = self.emit(.{}, arg);
+                    var value = try self.emit(.{}, arg);
                     if (value.ty == .type) {
-                        msg.writer().print("{}", .{self.unwrapTyConst(&value).fmt(self.types)}) catch unreachable;
+                        msg.writer().print("{}", .{(try self.unwrapTyConst(&value)).fmt(self.types)}) catch unreachable;
                     } else {
                         unreachable;
                     }
                 },
             };
 
-            self.report(expr, "{s}", .{msg.items});
-            return .never;
+            return self.report(expr, "{s}", .{msg.items});
         },
         .Any => return self.emitTyConst(.any),
     }

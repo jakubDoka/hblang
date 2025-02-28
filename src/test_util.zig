@@ -129,7 +129,7 @@ pub fn testBuilder(
     defer cg.deinit();
 
     cg.parent_scope = .{ .Perm = types.getScope(.root) };
-    const entry = cg.resolveTy("main", fn_ast).data().Func;
+    const entry = (try cg.resolveTy("main", fn_ast)).data().Func;
     cg.work_list.appendAssumeCapacity(.{ .Func = entry });
 
     var hbgen = HbvmGen.init(gpa);

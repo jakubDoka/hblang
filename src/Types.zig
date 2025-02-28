@@ -166,7 +166,7 @@ pub const Union = struct {
             if (field.lhs.tag() != .Tag) continue;
             fields[i] = .{
                 .name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1),
-                .ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field.rhs),
+                .ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field.rhs) catch .never,
             };
             i += 1;
         }
@@ -215,7 +215,7 @@ pub const Struct = struct {
 
         if (struct_ast.alignment.tag() != .Void) {
             if (@hasField(Field, "alignment")) @compileError("assert fields <= alignment then base alignment");
-            self.alignment = @bitCast(types.ct.evalIntConst(.{ .Perm = self.asTy() }, struct_ast.alignment));
+            self.alignment = @bitCast(types.ct.evalIntConst(.{ .Perm = self.asTy() }, struct_ast.alignment) catch 1);
             return self.alignment.?;
         }
 
@@ -242,7 +242,7 @@ pub const Struct = struct {
             if (field.rhs.tag() == .BinOp and ast.exprs.get(field.rhs).BinOp.op == .@"=") {
                 const field_meta = ast.exprs.get(field.rhs).BinOp;
                 const name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1);
-                const ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field_meta.lhs);
+                const ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field_meta.lhs) catch .never;
 
                 const value = types.arena.create(Global);
                 value.* = .{
@@ -255,14 +255,14 @@ pub const Struct = struct {
                         .captures = &.{},
                     },
                 };
-                types.ct.evalGlobal(name, value, ty, field_meta.rhs);
+                types.ct.evalGlobal(name, value, ty, field_meta.rhs) catch {};
                 types.next_global += 1;
 
                 fields[i] = .{ .name = name, .ty = ty, .defalut_value = value };
             } else {
                 fields[i] = .{
                     .name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1),
-                    .ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field.rhs),
+                    .ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field.rhs) catch .never,
                 };
             }
             i += 1;

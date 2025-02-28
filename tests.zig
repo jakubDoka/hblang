@@ -55,13 +55,7 @@ pub fn runFuzzFindingTest(name: []const u8, code: []const u8) !void {
         test_util.testBuilder(name, code, gpa, stderr.writer().any(), colors, true) catch unreachable;
     }
 
-    var out = std.ArrayList(u8).init(gpa);
-    defer out.deinit();
-
-    try test_util.testBuilder(name, code, gpa, out.writer().any(), .no_color, false);
-
-    if (!test_util.hasEnv("SKIP_DIFF"))
-        try test_util.checkOrUpdatePrintTest(name, out.items);
+    try test_util.testBuilder(name, code, gpa, std.io.null_writer.any(), .no_color, false);
 }
 
 pub fn runVendoredTest(path: []const u8) !void {

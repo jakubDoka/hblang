@@ -13,9 +13,6 @@ structs 4 (errors):11:10: uint can not be constructed with '.(..)'
 structs 4 (errors):12:8: field a on struct "structs 4 (errors)".Ty is not initialized
     _ = Ty.{}
           ^
-structs 4 (errors):12:8: field b on struct "structs 4 (errors)".Ty is not initialized
-    _ = Ty.{}
-          ^
 structs 4 (errors):13:8: "structs 4 (errors)".Ty has 2 fields, but tuple constructor has 0 values
     _ = Ty.()
           ^
@@ -23,9 +20,6 @@ structs 4 (errors):14:10: "structs 4 (errors)".Ty does not have a field called p
     _ = Ty.{.p: 10}
             ^
 structs 4 (errors):14:8: field a on struct "structs 4 (errors)".Ty is not initialized
-    _ = Ty.{.p: 10}
-          ^
-structs 4 (errors):14:8: field b on struct "structs 4 (errors)".Ty is not initialized
     _ = Ty.{.p: 10}
           ^
 structs 4 (errors):15:24: "structs 4 (errors)".Ty does not have a field called p (TODO: list fields)

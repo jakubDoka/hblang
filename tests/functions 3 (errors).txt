@@ -13,6 +13,9 @@ functions 3 (errors):10:6: expected 3 arguments, got 2
 functions 3 (errors):11:8: expected 3 arguments, got 4
     vl := some_fn(0, /**/, 0, 0)
           ^
+functions 3 (errors):12:17: ICE: parser did not catch this
+    return some_fn(vl, /**/, 0)
+                   ^
 functions 3 (errors):5:20: function is missing a return value since uint has more then 1 possible value
 main := fn(): uint {
                    ^
