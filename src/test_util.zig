@@ -59,6 +59,7 @@ pub fn parseExample(gpa: std.mem.Allocator, name: []const u8, code: []const u8, 
 
     var loader = KnownLoader{ .files = files.items };
     const asts = gpa.alloc(Ast, files.items.len) catch unreachable;
+    errdefer gpa.free(asts);
     for (asts, files.items, 0..) |*ast, fr, i| {
         if (std.mem.endsWith(u8, fr.path, ".hb") or i == 0) {
             ast.* = try Ast.init(gpa, @enumFromInt(i), fr.path, fr.source, .init(&loader), output);
@@ -99,7 +100,7 @@ pub fn testBuilder(
         const decl = ast.exprs.get(d).BinOp.rhs;
         const ctor = ast.exprs.get(decl).Ctor;
         for (ast.exprs.view(ctor.fields)) |f| {
-            const field = ast.exprs.get(f).BinOp;
+            const field = ast.exprs.getTyped(.BinOp, f) orelse continue;
             const value = ast.exprs.get(field.rhs);
 
             if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "return_value")) {
@@ -116,7 +117,7 @@ pub fn testBuilder(
         }
     }
 
-    const main = ast.findDecl(ast.items, "main").?;
+    const main = ast.findDecl(ast.items, "main") orelse return error.Never;
     const fn_ast = ast.exprs.get(main).BinOp.rhs;
 
     var types = Types.init(gpa, asts, output);
@@ -127,17 +128,26 @@ pub fn testBuilder(
 
     var cg = Codegen.init(gpa, func_arena.arena, &types, .runtime);
     defer cg.deinit();
+    cg.scope = .{};
 
     cg.parent_scope = .{ .Perm = types.getScope(.root) };
-    const entry = (try cg.resolveTy("main", fn_ast)).data().Func;
+    const entry_ty = (try cg.resolveTy("main", fn_ast));
+    if (entry_ty.data() != .Func) return error.Never;
+    const entry = entry_ty.data().Func;
     cg.work_list.appendAssumeCapacity(.{ .Func = entry });
 
     var hbgen = HbvmGen.init(gpa);
+    var finalized = false;
+    errdefer if (!finalized) {
+        hbgen.out.deinit();
+        hbgen.deinit();
+    };
     var gen = Mach.init(&hbgen);
 
     var syms = std.heap.ArenaAllocator.init(gpa);
     defer syms.deinit();
 
+    var errored = false;
     while (cg.nextTask()) |task| switch (task) {
         .Func => |func| {
             defer {
@@ -154,6 +164,7 @@ pub fn testBuilder(
 
             if (verbose) try header("UNSCHEDULED SON", output, colors);
             cg.build(func) catch {
+                errored = true;
                 continue;
             };
 
@@ -187,7 +198,7 @@ pub fn testBuilder(
     };
 
     try std.testing.expectEqual(should_error, cg.errored);
-    if (cg.errored) {
+    if (errored) {
         hbgen.out.deinit();
         hbgen.deinit();
         return;
@@ -197,6 +208,7 @@ pub fn testBuilder(
     const code_len = hbgen.link(0, true);
     gen.disasm(output, colors);
     var out = gen.finalize();
+    finalized = true;
     defer out.deinit();
 
     const stack_size = 1024 * 10;

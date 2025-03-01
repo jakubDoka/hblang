@@ -27,7 +27,8 @@ const Error = error{UnexpectedToken} || std.mem.Allocator.Error;
 const Sym = struct {
     id: Ident,
     declared: bool = false,
-    unordered: bool = false,
+    unordered: bool = true,
+    used: bool = false,
 };
 
 pub const Loader = struct {
@@ -94,6 +95,12 @@ fn parseExpr(self: *Parser) Error!Id {
     return self.parseBinExpr(try self.parseUnit(), 254, false);
 }
 
+fn parseScopedExpr(self: *Parser) !Id {
+    const scope = self.active_syms.items.len;
+    defer self.finalizeVariables(scope);
+    return self.parseExpr();
+}
+
 fn parseUnorderedExpr(self: *Parser) Error!Id {
     return self.parseBinExpr(try self.parseUnit(), 254, true);
 }
@@ -106,10 +113,9 @@ fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8, unordered: bool) Error!Id 
         const prec = op.precedence();
         if (prec >= prevPrec) break;
 
-        if (op == .@":=" or op == .@":") _ = self.declareExpr(acum, unordered);
-
         self.cur = self.lexer.next();
         const rhs = try self.parseBinExpr(try self.parseUnit(), prec, false);
+        if (op == .@":=" or op == .@":") _ = self.declareExpr(acum, unordered);
         if (op.innerOp()) |iop| {
             acum = try self.store.alloc(self.gpa, .BinOp, .{
                 .lhs = acum,
@@ -132,13 +138,17 @@ fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8, unordered: bool) Error!Id 
 }
 
 fn declareExpr(self: *Parser, id: Id, unordered: bool) void {
-    const ident: Ident = (self.store.getTypedPtr(.Ident, id) orelse return).id;
+    const ident = self.store.getTypedPtr(.Ident, id) orelse return;
     var iter = std.mem.reverseIterator(self.active_syms.items);
     const sym = while (iter.nextPtr()) |s| {
-        if (s.id == ident) break s;
+        if (s.id == ident.id) break s;
     } else unreachable;
     if (sym.declared and !self.loader.isNoop()) {
-        self.report(ident.pos(), "redeclaration of identifier", .{});
+        self.report(ident.pos.index, "redeclaration of identifier", .{});
+    } else if (!unordered and ident.pos.index > ident.id.pos()) {
+        self.report(ident.pos.index, "out of order declaration in ordered scope", .{});
+    } else if (!unordered and sym.used) {
+        self.report(ident.pos.index, "ordered declaration is used recursively", .{});
     }
     sym.declared = true;
     sym.unordered = unordered;
@@ -215,7 +225,7 @@ fn codePointer(self: *const Parser, pos: usize) Ast.CodePointer {
 }
 
 fn popCaptures(self: *Parser, scope: usize, preserve: bool) []const Ident {
-    const slc = self.captures.items[scope..];
+    const slc = self.captures.items[@min(scope, self.captures.items.len)..];
     if (!preserve) self.captures.items.len = scope;
     if (slc.len > 1) {
         std.sort.pdq(u32, @ptrCast(slc), {}, std.sort.asc(u32));
@@ -249,6 +259,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             const comptime_arg_start = self.comptime_idents.items.len;
             defer self.comptime_idents.items.len = comptime_arg_start;
             const args = try self.parseListTyped(.@"(", .@",", .@")", Ast.Arg, parseArg);
+            const comptime_idents_end = self.comptime_idents.items.len;
             const indented_args = self.list_pos.flag;
             _ = try self.expectAdvance(.@":");
             const ret = try self.parseExpr();
@@ -259,7 +270,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 break :body try self.parseExpr();
             };
 
-            const comptime_args = try self.store.allocSlice(Ident, self.gpa, self.comptime_idents.items[comptime_arg_start..]);
+            const comptime_args = try self.store.allocSlice(Ident, self.gpa, self.comptime_idents.items[comptime_arg_start..comptime_idents_end]);
             const captures = try self.store.allocSlice(Ident, self.gpa, self.popCaptures(capture_scope, prev_capture_boundary != 0));
             std.debug.assert(comptime_args.end == captures.start);
 
@@ -385,16 +396,16 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         } },
         .@"if", .@"$if" => .{ .If = .{
             .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind == .@"$if" } },
-            .cond = try self.parseExpr(),
-            .then = try self.parseExpr(),
+            .cond = try self.parseScopedExpr(),
+            .then = try self.parseScopedExpr(),
             .else_ = if (self.tryAdvance(.@"else"))
-                try self.parseExpr()
+                try self.parseScopedExpr()
             else
                 .zeroSized(.Void),
         } },
         .loop, .@"$loop" => .{ .Loop = .{
             .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind != .loop } },
-            .body = try self.parseExpr(),
+            .body = try self.parseScopedExpr(),
         } },
         .@"break" => .{ .Break = .init(token.pos) },
         .@"continue" => .{ .Continue = .init(token.pos) },
@@ -439,6 +450,7 @@ fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
     const repr = token.view(self.lexer.source);
 
     for (self.active_syms.items, 0..) |*s, i| if (Ast.cmpLow(s.id.pos(), self.lexer.source, repr)) {
+        s.used = true;
         if (i < self.capture_boundary and !s.unordered) {
             try self.captures.append(self.gpa, s.id);
         }
@@ -507,6 +519,7 @@ inline fn tryAdvance(self: *Parser, expected: Lexer.Lexeme) bool {
 fn expectAdvance(self: *Parser, expected: Lexer.Lexeme) !Lexer.Token {
     if (self.cur.kind != expected) {
         self.report(self.cur.pos, "expected {s}, got {s}", .{ @tagName(expected), @tagName(self.cur.kind) });
+        return error.UnexpectedToken;
     }
     return self.advance();
 }

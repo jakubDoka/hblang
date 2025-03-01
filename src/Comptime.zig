@@ -44,7 +44,12 @@ pub inline fn ecaArg(self: *Comptime, idx: usize) u64 {
     return self.vm.regs.get(.arg(1, idx));
 }
 
-pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) !u64 {
+pub const PartialEvalResult = union(enum) {
+    Resolved: u64,
+    Unsupported: *Node,
+};
+
+pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) PartialEvalResult {
     const abi: Types.Abi = .ableos;
     const types = self.getTypes();
 
@@ -60,7 +65,7 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) !u64 {
         const res = switch (curr.kind) {
             .CInt => {
                 if (work_list.items.len == 0) {
-                    return @as(u64, @bitCast(curr.extra(.CInt).*));
+                    return .{ .Resolved = @as(u64, @bitCast(curr.extra(.CInt).*)) };
                 }
 
                 continue;
@@ -102,7 +107,7 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) !u64 {
                     const func = types.funcs.items[call.extra(.Call).id];
                     ret_ty = abi.categorize(func.ret, types).ByValue;
                     if (func.completion.get(.@"comptime") == .queued) {
-                        self.jitFunc(func);
+                        self.jitFunc(func) catch unreachable;
                         std.debug.assert(func.completion.get(.@"comptime") == .compiled);
                     }
                 }
@@ -148,10 +153,10 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) !u64 {
                             unreachable;
                         }
                         cursor = cursor.inputs()[0].?.inputs()[0].?.inputs()[1].?;
-                    } else std.debug.panic("{}\n", .{cursor});
+                    } else return .{ .Unsupported = cursor };
                 }
             },
-            else => std.debug.panic("{}", .{curr}),
+            else => return .{ .Unsupported = curr },
         };
 
         bl.func.subsume(res, curr);
@@ -206,7 +211,7 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
             switch (@as(InteruptCode, @enumFromInt(self.vm.regs.get(.arg(1, 0))))) {
                 inline .Struct, .Union, .Enum => |t| {
                     const scope: Types.Id = @enumFromInt(self.ecaArg(1));
-                    const ast = types.getFile(scope.file());
+                    const ast = types.getFile(scope.file().?);
                     const struct_ast_id: Ast.Id = @enumFromInt(@as(u32, @truncate(self.ecaArg(2))));
                     const struct_ast = ast.exprs.getTyped(@field(std.meta.Tag(Ast.Expr), @tagName(t)), struct_ast_id).?;
 
@@ -219,7 +224,7 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
                     const res = types.resolveFielded(
                         @field(std.meta.Tag(Types.Data), @tagName(t)),
                         scope,
-                        scope.file(),
+                        scope.file().?,
                         name,
                         struct_ast_id,
                         captures,
@@ -236,17 +241,38 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
     self.vm.regs.set(.stack_addr, stack_end);
 }
 
-pub fn jitFunc(self: *Comptime, fnc: *Types.Func) void {
+pub fn jitFunc(self: *Comptime, fnc: *Types.Func) !void {
     var tmp = root.Arena.scrath(null);
     defer tmp.deinit();
     var gen = Codegen.init(self.getGpa(), tmp.arena, self.getTypes(), .@"comptime");
     defer gen.deinit();
 
     gen.queue(.{ .Func = fnc });
-    compileDependencies(&gen, self.comptime_code.global_relocs.items.len);
+    try compileDependencies(&gen, self.comptime_code.global_relocs.items.len);
 }
 
 pub fn jitExpr(self: *Comptime, name: []const u8, scope: Codegen.Scope, ctx: Codegen.Ctx, value: Ast.Id) !struct { u32, Types.Id } {
+    return self.jitExprLow(name, scope, ctx, false, value) catch {
+        if (scope == .Tmp) scope.Tmp.errored = true;
+        return error.Never;
+    };
+}
+
+pub fn inferType(self: *Comptime, name: []const u8, scope: Codegen.Scope, ctx: Codegen.Ctx, value: Ast.Id) !Types.Id {
+    return (self.jitExprLow(name, scope, ctx, true, value) catch {
+        if (scope == .Tmp) scope.Tmp.errored = true;
+        return error.Never;
+    })[1];
+}
+
+pub fn jitExprLow(
+    self: *Comptime,
+    name: []const u8,
+    scope: Codegen.Scope,
+    ctx: Codegen.Ctx,
+    only_inference: bool,
+    value: Ast.Id,
+) !struct { u32, Types.Id } {
     const types = self.getTypes();
     const id: u32 = @intCast(types.funcs.items.len);
     types.funcs.append(types.arena.allocator(), undefined) catch unreachable;
@@ -256,6 +282,8 @@ pub fn jitExpr(self: *Comptime, name: []const u8, scope: Codegen.Scope, ctx: Cod
 
     var gen = Codegen.init(self.getGpa(), tmp.arena, types, .@"comptime");
     defer gen.deinit();
+
+    gen.only_inference = only_inference;
 
     const reloc_frame = self.comptime_code.global_relocs.items.len;
 
@@ -284,27 +312,28 @@ pub fn jitExpr(self: *Comptime, name: []const u8, scope: Codegen.Scope, ctx: Cod
 
         gen.bl.end(token);
 
-        self.comptime_code.emitFunc(
-            @ptrCast(&gen.bl.func),
-            .{ .id = id, .entry = true },
-        );
+        if (!only_inference) {
+            self.comptime_code.emitFunc(
+                @ptrCast(&gen.bl.func),
+                .{ .id = id, .entry = true },
+            );
+        }
     }
 
-    compileDependencies(&gen, reloc_frame);
+    if (!only_inference)
+        compileDependencies(&gen, reloc_frame) catch return error.Never;
 
     return .{ id, ret.ty };
 }
 
-pub fn compileDependencies(self: *Codegen, reloc_util: usize) void {
+pub fn compileDependencies(self: *Codegen, reloc_util: usize) !void {
     while (self.nextTask()) |task| switch (task) {
         .Func => |func| {
             defer {
                 self.bl.func.reset();
             }
 
-            self.build(func) catch {
-                unreachable;
-            };
+            try self.build(func);
 
             self.types.ct.comptime_code.emitFunc(
                 @ptrCast(&self.bl.func),

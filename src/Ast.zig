@@ -201,7 +201,7 @@ pub fn init(gpa: std.mem.Allocator, current: Types.File, path: []const u8, code:
 
     const items = try parser.parse();
 
-    if (parser.errored) {
+    if (parser.errored and !loader.isNoop()) {
         return error.ParsingFailed;
     }
 
@@ -221,10 +221,9 @@ pub fn init(gpa: std.mem.Allocator, current: Types.File, path: []const u8, code:
 
 pub fn findDecl(self: *const Ast, slice: Slice, id: anytype) ?Id {
     return for (self.exprs.view(slice)) |d| {
-        if (d.tag() != .BinOp) continue;
-        const decl = self.exprs.get(d).BinOp.lhs;
-        if (decl.tag() == .Tag) continue;
-        const ident = self.exprs.get(decl).Ident.id;
+        const decl = self.exprs.getTyped(.BinOp, d) orelse continue;
+        if (decl.lhs.tag() == .Tag or (decl.op != .@":" and decl.op != .@":=")) continue;
+        const ident = (self.exprs.getTyped(.Ident, decl.lhs) orelse continue).id;
         switch (@TypeOf(id)) {
             Ident => if (ident == id) break d,
             else => if (cmpLow(ident.pos(), self.source, id)) break d,
@@ -289,42 +288,39 @@ pub fn codePointer(self: *const Ast, index: usize) CodePointer {
 pub fn lineCol(source: []const u8, index: isize) struct { usize, usize } {
     var line: usize = 0;
     var last_nline: isize = -1;
-    for (source[0..@intCast(index)], 0..) |c, i| if (c == '\n') {
+    for (source[0..@min(@as(usize, @intCast(index)), source.len - 1)], 0..) |c, i| if (c == '\n') {
         line += 1;
         last_nline = @intCast(i);
     };
     return .{ line + 1, @intCast(index - last_nline) };
 }
 
-pub fn pointToCode(source: []const u8, index: usize, writer: anytype) !void {
+pub fn pointToCode(source: []const u8, index_m: usize, writer: anytype) !void {
+    const index = @min(index_m, source.len - 1);
     const line_start = if (std.mem.lastIndexOfScalar(u8, source[0..index], '\n')) |l| l + 1 else 0;
     const line_end = if (std.mem.indexOfScalar(u8, source[index..], '\n')) |l| l + index else source.len;
     const the_line = source[line_start..line_end];
 
-    var buf: [256]u8 = undefined;
     var i: usize = 0;
 
     var extra_bytes: usize = 0;
     const code_start = for (the_line, 0..) |c, j| {
         if (c == ' ') {
-            buf[i] = ' ';
+            try writer.writeAll(" ");
             i += 1;
         } else if (c == '\t') {
-            @memset(buf[i..][0 .. 4 - i % 4], ' ');
+            try writer.writeAll("    "[0 .. 4 - i % 4]);
             i += 4 - i % 4;
             extra_bytes += 3 - i % 4;
         } else break j;
     } else the_line.len;
 
-    const remining = @min(buf.len - i, the_line.len - code_start);
-    @memcpy(buf[i..][0..remining], the_line[code_start..][0..remining]);
-    i += remining;
-    buf[i] = '\n';
-    i += 1;
-    try writer.writeAll(buf[0..i]);
+    try writer.writeAll(the_line[code_start..][0 .. the_line.len - code_start]);
+    try writer.writeAll("\n");
 
     const col = index - line_start + extra_bytes;
-    @memset(buf[0..col], ' ');
-    buf[col] = '^';
-    try writer.writeAll(buf[0 .. col + 1]);
+    for (0..col) |_| {
+        try writer.writeAll(" ");
+    }
+    try writer.writeAll("^");
 }

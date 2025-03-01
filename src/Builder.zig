@@ -368,12 +368,13 @@ pub const Loop = struct {
                 }
             }
             builder.func.subsume(init_values[0].inputs()[0].?, init_values[0]);
-            unreachable;
+            std.debug.print("hua\n", .{});
         }
 
         if (builder.scope) |scope| killScope(scope);
 
         builder.scope = self.control.get(.@"break");
+        defer killScope(self.scope);
         const exit = builder.scope orelse return;
 
         const exit_values = getScopeValues(exit);
@@ -382,8 +383,6 @@ pub const Loop = struct {
                 builder.func.setInputNoIntern(exit, i, ini);
             }
         }
-
-        killScope(self.scope);
     }
 };
 

@@ -316,7 +316,7 @@ pub fn next(self: *Lexer) Token {
                         self.cursor += 1;
                         break;
                     },
-                    '\\' => self.cursor += 2,
+                    '\\' => self.cursor = @min(self.cursor + 2, self.source.len),
                     else => self.cursor += 1,
                 };
 
@@ -366,7 +366,7 @@ inline fn advance(self: *Lexer) ?u8 {
 }
 
 inline fn advanceIf(self: *Lexer, c: u8) bool {
-    if (self.source[self.cursor] == c) {
+    if (self.cursor < self.source.len and self.source[self.cursor] == c) {
         self.cursor += 1;
         return true;
     }

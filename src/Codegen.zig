@@ -2,7 +2,7 @@ bl: Builder,
 types: *Types,
 work_list: std.ArrayListUnmanaged(Task),
 target: Types.Target,
-comptime_unreachable: bool = false,
+only_inference: bool = false,
 comptime abi: Types.Abi = .ableos,
 name: []const u8 = undefined,
 parent_scope: Scope = undefined,
@@ -108,9 +108,9 @@ pub fn build(self: *Codegen, func: *Types.Func) !void {
     var tmp = root.Arena.scrath(null);
     defer tmp.deinit();
 
+    self.ast = self.types.getFile(func.key.file);
     const param_count, const return_count, const ret_abi = func.computeAbiSize(self.abi, self.types);
     const token, const params, const returns = self.beginBuilder(tmp.arena, func.ret, param_count, return_count);
-    self.ast = self.types.getFile(func.key.file);
     self.parent_scope = .init(.{ .Func = func });
     self.name = "";
 
@@ -155,9 +155,13 @@ pub fn build(self: *Codegen, func: *Types.Func) !void {
         ty_idx += 1;
     }
 
-    _ = self.emit(.{}, ast.exprs.get(func.key.ast).Fn.body) catch {};
+    var termintes = false;
+    _ = self.emit(.{}, ast.exprs.get(func.key.ast).Fn.body) catch |err| switch (err) {
+        error.Never => {},
+        error.Unreachable => termintes = true,
+    };
 
-    if (!self.bl.isUnreachable() and ret_abi != .Imaginary) {
+    if (!termintes and ret_abi != .Imaginary) {
         self.report(fn_ast.body, "function is missing a return value since" ++
             " {} has more then 1 possible value", .{func.ret}) catch {};
     }
@@ -217,7 +221,7 @@ pub const Scope = union(enum) {
 
     pub fn file(self: Scope) Types.File {
         return switch (self) {
-            .Perm => |p| p.file(),
+            .Perm => |p| p.file().?,
             .Tmp => |t| t.parent_scope.file(),
         };
     }
@@ -229,7 +233,7 @@ pub const Scope = union(enum) {
         };
     }
 
-    pub fn findCapture(self: Scope, id: Ast.Ident) ?Types.Key.Capture {
+    pub fn findCapture(self: Scope, pos: Ast.Pos, id: Ast.Ident) ?Types.Key.Capture {
         return switch (self) {
             .Perm => |p| p.findCapture(id),
             .Tmp => |t| for (t.scope.items, 0..) |se, i| {
@@ -238,7 +242,7 @@ pub const Scope = union(enum) {
                         return .{ .id = id, .ty = se.ty };
                     }
                     var value = Codegen.Value{ .ty = .type, .id = .{ .Ptr = t.bl.getScopeValue(i) } };
-                    break .{ .id = id, .ty = .type, .value = @intFromEnum(t.unwrapTyConst(&value) catch .never) };
+                    break .{ .id = id, .ty = .type, .value = @intFromEnum(t.unwrapTyConst(pos, &value) catch .never) };
                 }
             } else null,
         };
@@ -287,6 +291,8 @@ pub fn typeCheck(self: *Codegen, expr: anytype, got: *Value, expected: Types.Id)
 
         return;
     }
+
+    if (got.ty == .never) return;
 
     if (!got.ty.canUpcast(expected, self.types)) {
         return self.report(expr, "expected {} got {}", .{ expected, got.ty });
@@ -429,23 +435,22 @@ pub fn emitTyConst(self: *Codegen, ty: Types.Id) Value {
     return .mkv(.type, self.bl.addIntImm(.int, @bitCast(@intFromEnum(ty))));
 }
 
-pub fn unwrapTyConst(self: *Codegen, cnst: *Value) !Types.Id {
+pub fn unwrapTyConst(self: *Codegen, pos: anytype, cnst: *Value) !Types.Id {
     self.ensureLoaded(cnst);
-    return @enumFromInt(try self.types.ct.partialEval(&self.bl, cnst.id.Value));
+    return @enumFromInt(try self.partialEval(pos, cnst.id.Value));
 }
 
 pub const LookupResult = union(enum) { ty: Types.Id, cnst: u64 };
 
 pub fn lookupScopeItem(self: *Codegen, pos: Ast.Pos, bsty: Types.Id, name: []const u8) !LookupResult {
-    const other_file = bsty.file();
+    const other_file = bsty.file() orelse return self.report(pos, "{} does not declare this", .{bsty});
     const other_ast = self.types.getFile(other_file);
     if (bsty.data() == .Enum) {
         for (bsty.data().Enum.getFields(self.types), 0..) |f, i| {
             if (std.mem.eql(u8, f.name, name)) return .{ .cnst = i };
         }
     }
-    const ast = self.types.getFile(bsty.file());
-    const decl = other_ast.findDecl(bsty.items(ast), name) orelse {
+    const decl = other_ast.findDecl(bsty.items(other_ast), name) orelse {
         return self.report(pos, "{} does not declare this", .{bsty});
     };
     return .{ .ty = try self.types.ct.evalTy(name, .{ .Perm = bsty }, other_ast.exprs.get(decl).BinOp.rhs) };
@@ -462,12 +467,21 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
         var cursor = self.parent_scope;
         const decl = while (!cursor.empty()) {
             if (ast.findDecl(cursor.items(ast), id)) |v| break v;
-            if (cursor.findCapture(id)) |c| {
+            if (cursor.findCapture(pos, id)) |c| {
                 return .{ .ty = c.ty, .id = if (c.ty == .type) .{ .Value = self.bl.addIntImm(.int, @bitCast(c.value)) } else b: {
                     if (self.target != .@"comptime") {
                         return self.report(pos, "can't access this value, (yet)", .{});
                     }
-                    break :b .{ .Imaginary = {} };
+
+                    if (!self.only_inference)
+                        return self.report(pos, "can't access non type value (yet) unless" ++
+                            " this is a type inference context (inside @TypeOf)", .{});
+
+                    break :b switch (self.abi.categorize(c.ty, self.types)) {
+                        .Imaginary => .Imaginary,
+                        .ByValue => |v| .{ .Value = self.bl.addIntImm(v, 0) },
+                        .ByValuePair, .ByRef => .{ .Ptr = self.bl.addLocal(c.ty.size(self.types)) },
+                    };
                 } };
             }
             cursor = cursor.parent();
@@ -477,14 +491,18 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
 
         const vari = ast.exprs.get(decl).BinOp;
         const ty: ?Types.Id, const value: Ast.Id = switch (vari.op) {
-            .@":" => .{ try self.resolveAnonTy(ast.exprs.get(vari.rhs).BinOp.lhs), ast.exprs.get(vari.rhs).BinOp.rhs },
+            .@":" => .{
+                try self.resolveAnonTy((ast.exprs.getTyped(.BinOp, vari.rhs) orelse
+                    return self.report(vari.rhs, "TODO: uninitialized variables", .{})).lhs),
+                ast.exprs.get(vari.rhs).BinOp.rhs,
+            },
             .@":=" => .{ null, vari.rhs },
             else => unreachable,
         };
 
         const typ = if (ty) |typ| b: {
-            const global = self.types.resolveGlobal(cursor.perm(), ast.tokenSrc(id.pos()), value);
-            try self.types.ct.evalGlobal(ast.tokenSrc(id.pos()), global.data().Global, typ, value);
+            const global, const new = self.types.resolveGlobal(cursor.perm(), ast.tokenSrc(id.pos()), value);
+            if (new) try self.types.ct.evalGlobal(ast.tokenSrc(id.pos()), global.data().Global, typ, value);
             self.queue(.{ .Global = global.data().Global });
             break :b global;
         } else return self.emitTyConst(try self.types.ct.evalTy(ast.tokenSrc(id.pos()), cursor, value));
@@ -516,7 +534,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
         var value = try self.emit(.{}, field.base);
 
         if (value.ty == .type) {
-            break :b .{ try self.lookupScopeItem(field.field, try self.unwrapTyConst(&value), name), null };
+            break :b .{ try self.lookupScopeItem(field.field, try self.unwrapTyConst(field.base, &value), name), null };
         }
         break :b .{ try self.lookupScopeItem(field.field, value.ty, name), value };
     } else b: {
@@ -533,6 +551,10 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
     const was_template = typ.data() == .Template;
     if (was_template) {
         computed_args, typ = try self.instantiateTemplate(tmp, e, typ);
+    }
+
+    if (typ.data() != .Func) {
+        return self.report(e.called, "{} is not callable", .{typ});
     }
 
     const func = typ.data().Func;
@@ -680,11 +702,15 @@ fn assembleReturn(cg: *Codegen, id: u32, call_args: Builder.CallArgs, ctx: Ctx, 
     };
 }
 
-fn loopControl(self: *Codegen, kind: Builder.Loop.Control, ctrl: Ast.Id) void {
+fn loopControl(self: *Codegen, kind: Builder.Loop.Control, ctrl: Ast.Id) !void {
+    if (self.loops.items.len == 0) {
+        self.report(ctrl, "{s} outside of the loop", .{@tagName(kind)}) catch {};
+        return;
+    }
+
     switch (self.loops.items[self.loops.items.len - 1]) {
         .Runtime => |*l| l.addLoopControl(&self.bl, kind),
         .Comptime => |*l| {
-            self.comptime_unreachable = true;
             switch (l.*) {
                 .Clean => l.* = .{ .Controlled = ctrl },
                 .Controlled => |p| {
@@ -695,6 +721,8 @@ fn loopControl(self: *Codegen, kind: Builder.Loop.Control, ctrl: Ast.Id) void {
             }
         },
     }
+
+    return error.Unreachable;
 }
 
 pub fn emitAutoDeref(self: *Codegen, value: *Value) void {
@@ -755,7 +783,16 @@ pub fn encodeString(
     return .{ .ok = str.items };
 }
 
-pub const EmitError = error{Never};
+pub fn partialEval(self: *Codegen, pos: anytype, node: *Builder.BuildNode) !u64 {
+    return switch (self.types.ct.partialEval(&self.bl, node)) {
+        .Resolved => |r| r,
+        .Unsupported => |n| {
+            return self.report(pos, "can't evaluate this at compile time (yet), (DEBUG: got stuck on {})", .{n});
+        },
+    };
+}
+
+pub const EmitError = error{ Never, Unreachable };
 
 pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
     const ast = self.ast;
@@ -776,7 +813,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 },
             };
 
-            const global = self.types.resolveGlobal(self.parent_scope.perm(), data, expr).data().Global;
+            const global = self.types.resolveGlobal(self.parent_scope.perm(), data, expr)[0].data().Global;
             global.data = data;
             global.ty = self.types.makeSlice(data.len, .u8);
             self.queue(.{ .Global = global });
@@ -793,8 +830,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             if (!ty.isInteger()) {
                 return self.report(expr, "{} can not be constructed as integer literal", .{ty});
             }
-            const parsed = std.fmt.parseInt(i64, ast.tokenSrc(e.index), 10) catch unreachable;
-            return .mkv(ty, self.bl.addIntImm(self.abi.categorize(ty, self.types).ByValue, parsed));
+            const parsed = std.fmt.parseInt(u64, ast.tokenSrc(e.index), 10) catch |err| switch (err) {
+                error.InvalidCharacter => unreachable,
+                error.Overflow => return self.report(expr, "number does not fit into 64 bits", .{}),
+            };
+            return .mkv(ty, self.bl.addIntImm(self.abi.categorize(ty, self.types).ByValue, @bitCast(parsed)));
         },
         .Bool => |e| {
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(e.value)));
@@ -871,8 +911,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     }
 
                     for (ast.exprs.view(e.fields)) |f| {
-                        const field = ast.exprs.get(f).BinOp;
-                        const fname = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1);
+                        const field = ast.exprs.getTyped(.BinOp, f) orelse continue;
+                        const fname = ast.tokenSrc((ast.exprs.getTyped(.Tag, field.lhs) orelse continue).index + 1);
                         const slot, const ftype = for (fields, slots) |tf, *s| {
                             if (std.mem.eql(u8, tf.name, fname)) break .{ s, tf.ty };
                         } else {
@@ -882,7 +922,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         switch (slot.*) {
                             .RequiredOffset => |offset| {
                                 const off = self.bl.addFieldOffset(local, @intCast(offset));
-                                var value = self.emit(ctx.addTy(ftype).addLoc(off), field.rhs) catch continue;
+                                var value = self.emit(ctx.addTy(ftype).addLoc(off), field.rhs) catch |err| switch (err) {
+                                    error.Never => continue,
+                                    error.Unreachable => return err,
+                                };
                                 try self.typeCheck(field.rhs, &value, ftype);
                                 self.emitGenericStore(off, &value);
                                 slot.* = .{ .Filled = f };
@@ -915,7 +958,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
                     const fields = union_ty.getFields(self.types);
 
-                    const field_ast = ast.exprs.get(ast.exprs.view(e.fields)[0]).BinOp;
+                    const field_ast = ast.exprs.getTyped(.BinOp, ast.exprs.view(e.fields)[0]) orelse
+                        return self.report(expr, "expected `.<field-name>: <value>`", .{});
                     const fname = ast.tokenSrc(ast.exprs.get(field_ast.lhs).Tag.index + 1);
 
                     const f = for (fields) |f| {
@@ -971,7 +1015,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 offset = std.mem.alignForward(usize, offset, ftype.alignment(self.types));
 
                 const off = self.bl.addFieldOffset(local, @intCast(offset));
-                var value = self.emit(ctx.addTy(ftype).addLoc(off), field) catch continue;
+                var value = self.emit(ctx.addTy(ftype).addLoc(off), field) catch |err| switch (err) {
+                    error.Never => continue,
+                    error.Unreachable => return err,
+                };
                 try self.typeCheck(field, &value, ftype);
                 self.emitGenericStore(off, &value);
                 offset += ftype.size(self.types);
@@ -1014,7 +1061,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             for (ast.exprs.view(e.fields), start..) |elem, i| {
                 const off = self.bl.addFieldOffset(local, @intCast(i * elem_ty.size(self.types)));
-                var value = self.emitTyped(.{ .loc = off }, elem_ty, elem) catch continue;
+                var value = self.emitTyped(.{ .loc = off }, elem_ty, elem) catch |err| switch (err) {
+                    error.Never => continue,
+                    error.Unreachable => return err,
+                };
                 self.emitGenericStore(off, &value);
             }
 
@@ -1032,14 +1082,15 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             .@"?" => return self.emitTyConst(self.types.makeNullable(try self.resolveAnonTy(e.oper))),
             .@"&" => {
                 const addrd = try self.emit(.{}, e.oper);
-                if (addrd.id == .Imaginary) {
-                    return .mkv(self.types.makePtr(addrd.ty), self.bl.addIntImm(.int, @intCast(addrd.ty.alignment(self.types))));
-                }
-                return .mkv(self.types.makePtr(addrd.ty), addrd.id.Ptr);
+                return .mkv(self.types.makePtr(addrd.ty), switch (addrd.id) {
+                    .Imaginary => self.bl.addIntImm(.int, @intCast(addrd.ty.alignment(self.types))),
+                    .Value => |v| self.bl.addSpill(v),
+                    .Ptr => |p| p,
+                });
             },
             .@"-" => {
                 var lhs = try self.emit(ctx, e.oper);
-                if (ctx.ty) |ty| try self.typeCheck(expr, &lhs, ty);
+                if (!lhs.ty.isSigned()) return self.report(expr, "only signed integer can be negated, {} is not", .{lhs.ty});
                 return .mkv(lhs.ty, self.bl.addUnOp(.neg, self.abi.categorize(lhs.ty, self.types).ByValue, lhs.id.Value));
             },
             else => std.debug.panic("{any}\n", .{ast.exprs.get(expr)}),
@@ -1049,14 +1100,21 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 const loc = self.bl.addLocal(0);
 
                 const prev_name = self.name;
-                self.name = ast.tokenSrc(ast.exprs.get(e.lhs).Ident.id.pos());
+                const ident = ast.exprs.getTyped(.Ident, e.lhs) orelse return self.report(expr, "TODO: pattern matching", .{});
+
+                errdefer |err| if (err != error.Unreachable) {
+                    self.scope.appendAssumeCapacity(.{ .ty = .never, .name = ident.id });
+                    self.bl.pushScopeValue(loc);
+                };
+
+                self.name = ast.tokenSrc(ident.id.pos());
                 defer self.name = prev_name;
 
                 var value = try if (t == .@":=")
                     self.emit(.{ .loc = loc }, e.rhs)
                 else b: {
-                    const assign = ast.exprs.get(e.rhs).BinOp;
-                    std.debug.assert(assign.op == .@"=");
+                    const assign = ast.exprs.getTyped(.BinOp, e.rhs) orelse return @as(EmitError!Value, self.report(e.rhs, "TODO: support this as uninitialized", .{}));
+                    if (assign.op != .@"=") return @as(EmitError!Value, self.report(e.lhs, "can't do that binary oprtator here, expected `=`", .{}));
                     const ty = try self.resolveAnonTy(assign.lhs);
                     break :b self.emitTyped(ctx.addLoc(loc), ty, assign.rhs);
                 };
@@ -1064,7 +1122,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 self.bl.resizeLocal(loc, value.ty.size(self.types));
                 self.emitGenericStore(loc, &value);
 
-                self.scope.appendAssumeCapacity(.{ .ty = value.ty, .name = ast.exprs.get(e.lhs).Ident.id });
+                self.scope.appendAssumeCapacity(.{ .ty = value.ty, .name = ident.id });
                 self.bl.pushScopeValue(loc);
                 return .{};
             },
@@ -1074,7 +1132,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             } else {
                 const loc = try self.emit(.{}, e.lhs);
 
-                if (loc.id == .Value) {
+                if (loc.id != .Ptr) {
                     return self.report(e.lhs, "can't assign to this", .{});
                 }
 
@@ -1123,26 +1181,36 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 }
 
                 var rhs = try self.emit(ctx.addTy(lhs.ty), e.rhs);
+
+                if (!rhs.ty.isBinaryOperand()) {
+                    return self.report(e.rhs, "{} can not be used in binary operations", .{rhs.ty});
+                }
+
                 if (e.op.isComparison() and lhs.ty.isSigned() != rhs.ty.isSigned())
                     return self.report(e.lhs, "mixed sign comparison ({} {})", .{ lhs.ty, rhs.ty });
                 const unified: Types.Id = ctx.ty orelse lhs.ty.binOpUpcast(rhs.ty, self.types) catch |err| {
                     return self.report(expr, "{s} ({} and {})", .{ @errorName(err), lhs.ty, rhs.ty });
                 };
 
+                if (!unified.isBinaryOperand()) {
+                    return self.report(e.lhs, "{} can not be used in binary operations", .{unified});
+                }
+
                 if (lhs.ty.data() == .Struct) if (e.op == .@"==" or e.op == .@"!=") {
                     const value = self.emitStructFoldOp(lhs.ty.data().Struct, e.op, lhs.id.Ptr, rhs.id.Ptr);
                     return .mkv(unified, value orelse self.bl.addIntImm(.i8, 1));
                 } else {
                     const loc = ctx.loc orelse self.bl.addLocal(unified.size(self.types));
-                    self.emitStructOp(unified.data().Struct, e.op, loc, lhs.id.Ptr, rhs.id.Ptr);
+                    self.emitStructOp(lhs.ty.data().Struct, e.op, loc, lhs.id.Ptr, rhs.id.Ptr);
                     return .mkp(unified, loc);
                 } else {
                     const upcast_to: Types.Id = if (e.op.isComparison()) if (lhs.ty.isSigned()) .int else .uint else unified;
-                    self.ensureLoaded(&lhs);
-                    self.ensureLoaded(&rhs);
                     const lhs_fail = self.typeCheck(e.lhs, &lhs, upcast_to);
                     try self.typeCheck(e.rhs, &rhs, upcast_to);
                     try lhs_fail;
+                    self.ensureLoaded(&lhs);
+                    self.ensureLoaded(&rhs);
+                    if (lhs.id == .Imaginary) std.debug.print("{}\n{}\n", .{ lhs.ty.fmt(self.types), self.ast.codePointer(self.ast.posOf(expr).index) });
                     return .mkv(unified, self.bl.addBinOp(
                         lexemeToBinOp(e.op, lhs.ty),
                         self.abi.categorize(unified, self.types).ByValue,
@@ -1198,7 +1266,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             self.emitAutoDeref(&base);
 
             if (base.ty == .type) {
-                const bsty = try self.unwrapTyConst(&base);
+                const bsty = try self.unwrapTyConst(e.base, &base);
                 switch (try self.lookupScopeItem(e.field, bsty, ast.tokenSrc(e.field.index))) {
                     .ty => |ty| return self.emitTyConst(ty),
                     .cnst => |cnst| return .mkv(bsty, self.bl.addIntImm(self.abi.categorize(bsty, self.types).ByValue, @bitCast(cnst))),
@@ -1307,7 +1375,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 .Struct => |struct_ty| {
                     var idx_value = try self.emitTyped(.{}, .uint, e.subscript);
                     self.ensureLoaded(&idx_value);
-                    const idx = try self.types.ct.partialEval(&self.bl, idx_value.id.Value);
+                    const idx = try self.partialEval(e.subscript, idx_value.id.Value);
 
                     const fields = struct_ty.getFields(self.types);
 
@@ -1344,8 +1412,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             defer self.bl.truncateScope(prev_scope_height);
 
             for (ast.exprs.view(e.stmts)) |s| {
-                if (self.bl.isUnreachable() or self.comptime_unreachable) break;
-                _ = self.emitTyped(ctx, .void, s) catch {};
+                _ = self.emitTyped(ctx, .void, s) catch |err| switch (err) {
+                    error.Never => {},
+                    error.Unreachable => return err,
+                };
             }
 
             return .{};
@@ -1353,22 +1423,34 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .If => |e| if (e.pos.flag.@"comptime") {
             var cond = try self.emitTyped(ctx, .bool, e.cond);
             self.ensureLoaded(&cond);
-            if (try self.types.ct.partialEval(&self.bl, cond.id.Value) != 0) {
-                _ = self.emitTyped(ctx, .void, e.then) catch {};
+            if (try self.partialEval(e.cond, cond.id.Value) != 0) {
+                _ = self.emitTyped(ctx, .void, e.then) catch |err| switch (err) {
+                    error.Never => {},
+                    error.Unreachable => return err,
+                };
             } else {
-                _ = self.emitTyped(ctx, .void, e.else_) catch {};
+                _ = self.emitTyped(ctx, .void, e.else_) catch |err| switch (err) {
+                    error.Never => {},
+                    error.Unreachable => return err,
+                };
             }
 
             return .{};
         } else {
             var cond = try self.emitTyped(ctx, .bool, e.cond);
             self.ensureLoaded(&cond);
+            var unreachable_count: usize = 0;
             var if_builder = self.bl.addIfAndBeginThen(cond.id.Value);
-            _ = self.emitTyped(ctx, .void, e.then) catch {};
+            _ = self.emitTyped(ctx, .void, e.then) catch |err| {
+                unreachable_count += @intFromBool(err == error.Unreachable);
+            };
             const end_else = if_builder.beginElse(&self.bl);
-            _ = self.emitTyped(ctx, .void, e.else_) catch {};
+            _ = self.emitTyped(ctx, .void, e.else_) catch |err| {
+                unreachable_count += @intFromBool(err == error.Unreachable);
+            };
             if_builder.end(&self.bl, end_else);
-            self.comptime_unreachable = false;
+
+            if (unreachable_count == 2) return error.Unreachable;
 
             return .{};
         },
@@ -1377,9 +1459,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             const loop = &self.loops.items[self.loops.items.len - 1];
             while ((loop.Comptime != .Controlled or loop.Comptime.Controlled.tag() != .Break) and !self.errored) {
                 loop.Comptime = .Clean;
-                _ = self.emitTyped(.{}, .void, e.body) catch {};
-                if (!self.comptime_unreachable) self.loopControl(.@"continue", expr);
-                self.comptime_unreachable = false;
+                _ = self.emitTyped(.{}, .void, e.body) catch |err| switch (err) {
+                    error.Never => {},
+                    error.Unreachable => continue,
+                };
+                self.loopControl(.@"continue", expr) catch {};
             }
             _ = self.loops.pop().?;
             return .{};
@@ -1390,15 +1474,17 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             loop = self.loops.pop().?.Runtime;
             loop.end(&self.bl);
 
+            if (self.bl.isUnreachable()) return error.Unreachable;
+
             return .{};
         },
         // TODO: detect conflicting control flow
         .Break => {
-            self.loopControl(.@"break", expr);
+            try self.loopControl(.@"break", expr);
             return .{};
         },
         .Continue => {
-            self.loopControl(.@"continue", expr);
+            try self.loopControl(.@"continue", expr);
             return .{};
         },
         .Call => |e| return self.emitCall(ctx, expr, e),
@@ -1423,7 +1509,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     self.bl.addReturn(&.{});
                 },
             }
-            return .{};
+            return error.Unreachable;
         },
         .Buty => |e| return self.emitTyConst(.fromLexeme(e.bt)),
         inline .Struct, .Union, .Enum => |e, t| {
@@ -1463,7 +1549,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             for (ast.exprs.view(e.captures), captures) |id, *slot| {
                 var val = try self.loadIdent(.init(id.pos()), id);
                 if (val.ty == .type) {
-                    slot.* = .{ .id = id, .ty = .type, .value = @intFromEnum(try self.unwrapTyConst(&val)) };
+                    slot.* = .{ .id = id, .ty = .type, .value = @intFromEnum(try self.unwrapTyConst(id, &val)) };
                 } else {
                     slot.* = .{ .id = id, .ty = val.ty };
                 }
@@ -1500,6 +1586,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     .captures = captures,
                 });
                 const id = slot.key_ptr.*;
+                errdefer _ = self.types.interner.remove(id);
                 if (!slot.found_existing) {
                     if (!has_anytypes) for (ast.exprs.view(e.args), args) |argid, *arg| {
                         const ty = argid.ty;
@@ -1543,7 +1630,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             },
         },
         .Directive => |e| return self.emitDirective(ctx, expr, e),
-        else => std.debug.panic("{any}\n", .{ast.exprs.get(expr)}),
+        .Wildcard => return self.report(expr, "wildcard does not make sense here", .{}),
+        else => {
+            std.debug.panic("{any}\n", .{ast.exprs.get(expr)});
+        },
     }
 }
 
@@ -1635,7 +1725,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
         },
         .TypeOf => {
             try utils.assertArgs(self, expr, args, "<ty>");
-            const ty = (try self.types.ct.jitExpr("", .{ .Tmp = self }, .{}, args[0]))[1];
+            const ty = try self.types.ct.inferType("", .{ .Tmp = self }, .{}, args[0]);
             return self.emitTyConst(ty);
         },
         .@"inline" => {
@@ -1729,7 +1819,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
         },
         .target => {
             try utils.assertArgs(self, expr, args, "<string>");
-            const content = ast.exprs.get(args[0]).String;
+            const content = ast.exprs.getTyped(.String, args[0]) orelse return self.report(expr, "@target takes a \"string\"", .{});
             const str_content = ast.source[content.pos.index + 1 .. content.end - 1];
             const triple = if (self.target == .runtime) @tagName(self.abi) else "comptime";
             const matched = utils.matchTriple(str_content, triple) catch |err| {
@@ -1784,9 +1874,9 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
                 else => {
                     var value = try self.emit(.{}, arg);
                     if (value.ty == .type) {
-                        msg.writer().print("{}", .{(try self.unwrapTyConst(&value)).fmt(self.types)}) catch unreachable;
+                        msg.writer().print("{}", .{(try self.unwrapTyConst(arg, &value)).fmt(self.types)}) catch unreachable;
                     } else {
-                        unreachable;
+                        return self.report(arg, "only types and strings are supported here, {} is not", .{value.ty});
                     }
                 },
             };

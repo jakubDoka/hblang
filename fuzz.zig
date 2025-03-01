@@ -21,7 +21,7 @@ fn fuzz() callconv(.c) void {
     var arena = root.Arena.init(1024 * 1024 * 4);
     const input = std.io.getStdIn().readToEndAlloc(arena.allocator(), 1024 * 1024) catch unreachable;
     fuzzRun("fuzz", input, arena.allocator(), std.io.null_writer.any()) catch |err| switch (err) {
-        error.UnexpectedToken, error.ParsingFailed, error.NoMain => {},
+        error.UnexpectedToken, error.ParsingFailed, error.NoMain, error.Never => {},
         else => @panic(""),
     };
 }

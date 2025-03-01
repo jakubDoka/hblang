@@ -213,11 +213,13 @@ pub fn EnumStore(comptime T: type) type {
         }
 
         fn allocLow(self: *Self, gpa: std.mem.Allocator, comptime E: type, count: usize) ![]E {
+            if (count == 0) return &.{};
+            std.debug.assert(@alignOf(E) <= payload_align);
             const alignment: usize = @alignOf(E);
-            const padded_len = alignTo(self.store.items.len, alignment);
+            const padded_len = std.mem.alignForward(usize, self.store.items.len, alignment);
             const required_space = padded_len + @sizeOf(E) * count;
             try self.store.resize(gpa, required_space);
-            const dest: [*]E = @ptrCast(@alignCast(self.store.items.ptr[padded_len..]));
+            const dest: [*]E = @alignCast(@ptrCast(self.store.items.ptr + padded_len));
             return dest[0..count];
         }
 

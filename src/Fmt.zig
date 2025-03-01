@@ -76,7 +76,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
 
             const forced = for (self.ast.exprs.view(s.fields)) |e| {
                 if (t == .Enum and e.tag() != .Tag) break true;
-                if (t != .Enum and self.ast.exprs.get(e).BinOp.lhs.tag() != .Tag) break true;
+                if (t != .Enum and (self.ast.exprs.getTyped(.BinOp, e) orelse continue).lhs.tag() != .Tag) break true;
             } else false;
             if (s.pos.flag.indented or forced) try self.buf.appendSlice(" ");
             try self.fmtSliceLow(s.pos.flag.indented or forced, forced, s.fields, .@"{", .@";", .@"}");

@@ -157,12 +157,12 @@ pub const Union = struct {
         const union_ast = ast.exprs.get(self.key.ast).Union;
 
         var count: usize = 0;
-        for (ast.exprs.view(union_ast.fields)) |f| count += @intFromBool(ast.exprs.get(f).BinOp.lhs.tag() == .Tag);
+        for (ast.exprs.view(union_ast.fields)) |f| count += @intFromBool(if (ast.exprs.getTyped(.BinOp, f)) |b| b.lhs.tag() == .Tag else false);
 
         const fields = types.arena.alloc(Field, count);
         var i: usize = 0;
         for (ast.exprs.view(union_ast.fields)) |fast| {
-            const field = ast.exprs.get(fast).BinOp;
+            const field = ast.exprs.getTyped(.BinOp, fast) orelse continue;
             if (field.lhs.tag() != .Tag) continue;
             fields[i] = .{
                 .name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1),
@@ -232,12 +232,12 @@ pub const Struct = struct {
         const struct_ast = ast.exprs.get(self.key.ast).Struct;
 
         var count: usize = 0;
-        for (ast.exprs.view(struct_ast.fields)) |f| count += @intFromBool(ast.exprs.get(f).BinOp.lhs.tag() == .Tag);
+        for (ast.exprs.view(struct_ast.fields)) |f| count += @intFromBool(if (ast.exprs.getTyped(.BinOp, f)) |b| b.lhs.tag() == .Tag else false);
 
         const fields = types.arena.alloc(Field, count);
         var i: usize = 0;
         for (ast.exprs.view(struct_ast.fields)) |fast| {
-            const field = ast.exprs.get(fast).BinOp;
+            const field = ast.exprs.getTyped(.BinOp, fast) orelse continue;
             if (field.lhs.tag() != .Tag) continue;
             if (field.rhs.tag() == .BinOp and ast.exprs.get(field.rhs).BinOp.op == .@"=") {
                 const field_meta = ast.exprs.get(field.rhs).BinOp;
@@ -347,9 +347,9 @@ pub const Id = enum(usize) {
         })));
     }
 
-    pub fn file(self: Id) File {
+    pub fn file(self: Id) ?File {
         return switch (self.data()) {
-            .Builtin, .Ptr, .Slice, .Nullable => std.debug.panic("{s}", .{@tagName(self.data())}),
+            .Builtin, .Ptr, .Slice, .Nullable => null,
             inline else => |v| v.key.file,
         };
     }
@@ -457,7 +457,7 @@ pub const Id = enum(usize) {
             .Struct => |s| s.getSize(types),
             .Slice => |s| if (s.len) |l| l * s.elem.size(types) else 16,
             .Nullable => |n| n.alignment(types) + n.size(types),
-            .Global, .Func, .Template => std.debug.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Func, .Template => 0,
         };
     }
 
@@ -475,7 +475,7 @@ pub const Id = enum(usize) {
                 return alignm;
             },
             .Slice => |s| if (s.len == null) 8 else s.elem.alignment(types),
-            .Global, .Func, .Template => std.debug.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Func, .Template => 1,
         };
     }
 
@@ -650,7 +650,7 @@ pub const Abi = enum {
             .Nullable => |n| switch (self) {
                 .ableos => categorizeAbleosNullable(n, types),
             },
-            .Global, .Func, .Template => std.debug.panic("{s}", .{@tagName(ty.data())}),
+            .Global, .Func, .Template => .Imaginary,
         };
     }
 
@@ -821,10 +821,10 @@ pub fn resolveFielded(
     return slot.key_ptr.*;
 }
 
-pub fn resolveGlobal(self: *Types, scope: Id, name: []const u8, ast: Ast.Id) Id {
+pub fn resolveGlobal(self: *Types, scope: Id, name: []const u8, ast: Ast.Id) struct { Id, bool } {
     const slot, const alloc = self.intern(.Global, .{
         .scope = scope,
-        .file = scope.file(),
+        .file = scope.file().?,
         .ast = ast,
         .name = name,
         .captures = &.{},
@@ -836,5 +836,5 @@ pub fn resolveGlobal(self: *Types, scope: Id, name: []const u8, ast: Ast.Id) Id 
         };
         self.next_global += 1;
     }
-    return slot.key_ptr.*;
+    return .{ slot.key_ptr.*, !slot.found_existing };
 }

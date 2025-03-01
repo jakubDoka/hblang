@@ -89,12 +89,11 @@ pub const DataType = enum(u16) {
 
     pub fn size(self: DataType) usize {
         return switch (self) {
-            .top => 0,
+            .top, .bot => 0,
             .i8 => 1,
             .i16 => 2,
             .i32 => 4,
             .int => 8,
-            else => unreachable,
         };
     }
 
@@ -114,7 +113,7 @@ pub const DataType = enum(u16) {
             return @enumFromInt(@max(@intFromEnum(self), @intFromEnum(other)));
         }
 
-        unreachable;
+        return .bot;
     }
 };
 
@@ -534,6 +533,7 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             pub fn kill(self: *Node) void {
+                if (self.output_len != 0) std.debug.panic("{s}\n", .{self.outputs()});
                 std.debug.assert(self.output_len == 0);
                 for (self.inputs()) |oi| if (oi) |i| {
                     i.removeUse(self);
