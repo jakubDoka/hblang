@@ -196,7 +196,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
                 .{ @tagName(use.pos.flag.use_kind), Lexer.peekStr(self.ast.source, use.pos.index) },
             );
         },
-        .Integer => |i| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, i.index)),
+        .Integer => |i| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, i.pos.index)),
         .Bool => |b| try self.buf.appendSlice(if (b.value) "true" else "false"),
         .String => |s| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, s.pos.index)),
         .Null => try self.buf.appendSlice("null"),

@@ -11,7 +11,6 @@ pub const Lexeme = enum(u16) {
     Eof = 3,
     Ident,
     Comment,
-    Integer,
 
     @"unterminated string",
 
@@ -65,6 +64,11 @@ pub const Lexeme = enum(u16) {
     @"`" = '`',
     @"|" = '|',
     @"~" = '~',
+
+    BinInteger = 128 | 2,
+    OctInteger = 128 | 8,
+    DecInteger = 128 | 10,
+    HexInteger = 128 | 16,
 
     @".{" = '{' + 128,
     @".(" = '(' + 128,
@@ -311,12 +315,32 @@ pub fn next(self: *Lexer) Token {
                 }
                 break :b .Ident;
             },
-            '0'...'9' => b: {
-                while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
-                    '0'...'9' => self.cursor += 1,
-                    else => break,
-                };
-                break :b .Integer;
+            '0'...'9' => |c| b: {
+                if (c == '0' and self.advanceIf('x')) {
+                    while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
+                        '0'...'9', 'a'...'f', 'A'...'F' => self.cursor += 1,
+                        else => break,
+                    };
+                    break :b .HexInteger;
+                } else if (c == '0' and self.advanceIf('o')) {
+                    while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
+                        '0'...'7' => self.cursor += 1,
+                        else => break,
+                    };
+                    break :b .OctInteger;
+                } else if (c == '0' and self.advanceIf('b')) {
+                    while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
+                        '0'...'1' => self.cursor += 1,
+                        else => break,
+                    };
+                    break :b .BinInteger;
+                } else {
+                    while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
+                        '0'...'9' => self.cursor += 1,
+                        else => break,
+                    };
+                    break :b .DecInteger;
+                }
             },
             '"' => b: {
                 while (self.cursor < self.source.len) switch (self.source[self.cursor]) {

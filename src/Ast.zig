@@ -142,7 +142,10 @@ pub const Expr = union(enum) {
         pos: Pos,
         file: Types.File,
     },
-    Integer: Pos,
+    Integer: struct {
+        pos: Pos,
+        base: u8,
+    },
     Bool: struct {
         pos: Pos,
         value: bool,

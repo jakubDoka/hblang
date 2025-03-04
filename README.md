@@ -142,6 +142,16 @@ main := fn(): uint {
 }
 ```
 
+#### literals 1
+```hb
+main := fn(): uint {
+    if 10 != 0xa return 16
+    if 10 != 0o12 return 8
+    if 10 != 0b1010 return 2
+    return 0
+}
+```
+
 #### functions 1
 ```hb
 expectations := .{
@@ -1295,11 +1305,11 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
   - [x] `idk`
   - [x] integers/bool
     - [x] bool literals
-    - [ ] integer literals
-      - [ ] **binary**
-      - [ ] **octal**
+    - [x] integer literals
+      - [x] binary
+      - [x] octal
       - [x] decimal
-      - [ ] **hexadecimal**
+      - [x] hexadecimal
     - [x] binary operators
       - [x] `- + * / == != <= >= < > << >> | ^ & %`
     - [x] unary operators

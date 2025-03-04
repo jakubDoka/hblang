@@ -105,7 +105,7 @@ pub fn testBuilder(
             const value = ast.exprs.get(field.rhs);
 
             if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "return_value")) {
-                ret = @bitCast(try std.fmt.parseInt(i64, ast.tokenSrc(value.Integer.index), 10));
+                ret = @bitCast(try std.fmt.parseInt(i64, ast.tokenSrc(value.Integer.pos.index), 10));
             }
 
             if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "should_error")) {
@@ -251,11 +251,11 @@ pub fn testBuilder(
             const curr_eca = ast.exprs.get(ecalls[eca_idx]).BinOp;
 
             for (ast.exprs.view(ast.exprs.get(curr_eca.lhs).Tupl.fields), 0..) |vl, i| {
-                const value = try std.fmt.parseInt(u64, ast.tokenSrc(ast.exprs.get(vl).Integer.index), 10);
+                const value = try std.fmt.parseInt(u64, ast.tokenSrc(ast.exprs.get(vl).Integer.pos.index), 10);
                 try std.testing.expectEqual(value, vm.regs.get(.arg(1, i)));
             }
 
-            const ret_value = try std.fmt.parseInt(u64, ast.tokenSrc(ast.exprs.get(curr_eca.rhs).Integer.index), 10);
+            const ret_value = try std.fmt.parseInt(u64, ast.tokenSrc(ast.exprs.get(curr_eca.rhs).Integer.pos.index), 10);
             vm.regs.set(.ret(0), ret_value);
 
             eca_idx += 1;

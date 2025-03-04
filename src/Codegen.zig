@@ -822,7 +822,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             if (!ty.isInteger()) {
                 return self.report(expr, "{} can not be constructed as integer literal", .{ty});
             }
-            const parsed = std.fmt.parseInt(u64, ast.tokenSrc(e.index), 10) catch |err| switch (err) {
+            const shift: u8 = if (e.base == 10) 0 else 2;
+            const parsed = std.fmt.parseInt(u64, ast.tokenSrc(e.pos.index + shift), e.base) catch |err| switch (err) {
                 error.InvalidCharacter => unreachable,
                 error.Overflow => return self.report(expr, "number does not fit into 64 bits", .{}),
             };
