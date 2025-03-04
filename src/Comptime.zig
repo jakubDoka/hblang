@@ -1,5 +1,6 @@
 vm: Vm = .{},
 comptime_code: HbvmGen,
+in_progress: std.ArrayListUnmanaged(Loc) = .{},
 
 const std = @import("std");
 const isa = @import("isa.zig");
@@ -16,6 +17,11 @@ const Node = Builder.BuildNode;
 
 pub const eca = @import("HbvmGen.zig").eca;
 pub const stack_size = 1024 * 100;
+
+pub const Loc = struct {
+    ast: Ast.Id,
+    file: Types.File,
+};
 
 pub const InteruptCode = enum(u64) {
     Struct,
@@ -150,7 +156,7 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) PartialEvalResult
                         } else break :b cursor.value();
                     } else if (cursor.kind == .Mem) {
                         if (cursor.inputs()[0].?.kind == .Start) {
-                            unreachable;
+                            return .{ .Unsupported = cursor };
                         }
                         cursor = cursor.inputs()[0].?.inputs()[0].?.inputs()[1].?;
                     } else return .{ .Unsupported = cursor };
@@ -282,6 +288,17 @@ pub fn jitExprLow(
 
     var gen = Codegen.init(self.getGpa(), tmp.arena, types, .@"comptime");
     defer gen.deinit();
+
+    for (self.in_progress.items, 0..) |p, i| {
+        if (std.meta.eql(p, .{ .ast = value, .file = scope.file() })) {
+            for (self.in_progress.items[i..]) |lc| {
+                types.report(lc.file, lc.ast, "cycle goes trough here", .{});
+            }
+            return error.Never;
+        }
+    }
+    self.in_progress.append(self.comptime_code.out.allocator, .{ .ast = value, .file = scope.file() }) catch unreachable;
+    defer _ = self.in_progress.pop().?;
 
     gen.only_inference = only_inference;
 

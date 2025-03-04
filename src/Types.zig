@@ -731,9 +731,38 @@ pub fn init(gpa: std.mem.Allocator, source: []const Ast, diagnostics: std.io.Any
 
 pub fn deinit(self: *Types) void {
     self.arena.deinit();
+    self.ct.in_progress.deinit(self.ct.comptime_code.out.allocator);
     self.ct.comptime_code.out.deinit();
     self.ct.comptime_code.deinit();
     self.* = undefined;
+}
+
+pub fn report(self: *Types, file_id: File, expr: anytype, comptime fmt: []const u8, args: anytype) void {
+    const file = self.getFile(file_id);
+    const line, const col = Ast.lineCol(file.source, file.posOf(expr).index);
+
+    const RemapedArgs = comptime b: {
+        var tupl = @typeInfo(@TypeOf(args)).@"struct";
+        var fields = tupl.fields[0..tupl.fields.len].*;
+        for (&fields) |*f| if (f.type == Types.Id) {
+            f.type = Types.Id.Fmt;
+        };
+        tupl.fields = &fields;
+        break :b @Type(.{ .@"struct" = tupl });
+    };
+
+    var rargs: RemapedArgs = undefined;
+    inline for (args, 0..) |v, i| {
+        if (@TypeOf(v) == Types.Id) {
+            rargs[i] = v.fmt(self);
+        } else {
+            rargs[i] = v;
+        }
+    }
+    self.diagnostics.print(
+        "{s}:{}:{}: " ++ fmt ++ "\n{}\n",
+        .{ file.path, line, col } ++ rargs ++ .{file.codePointer(file.posOf(expr).index)},
+    ) catch unreachable;
 }
 
 pub fn getAst(self: *Types, file: File, expr: Ast.Id) Ast.Expr {

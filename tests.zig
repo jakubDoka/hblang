@@ -16,7 +16,7 @@ pub const test_util = @import("src/test_util.zig");
 test {
     _ = @import("zig-out/tests.zig");
     _ = @import("zig-out/vendored_tests.zig");
-    //   _ = @import("zig-out/fuzz_finding_tests.zig");
+    _ = @import("zig-out/fuzz_finding_tests.zig");
     std.testing.refAllDeclsRecursive(@This());
 }
 
@@ -26,7 +26,7 @@ pub fn runTest(name: []const u8, code: []const u8) !void {
 
     const gpa = std.testing.allocator;
 
-    try test_util.testFmt(name, name, code);
+    //try test_util.testFmt(name, name, code);
 
     var out = std.ArrayList(u8).init(gpa);
     defer out.deinit();

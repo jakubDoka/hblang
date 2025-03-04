@@ -317,32 +317,7 @@ pub fn typeCheck(self: *Codegen, expr: anytype, got: *Value, expected: Types.Id)
 
 fn report(self: *Codegen, expr: anytype, comptime fmt: []const u8, args: anytype) EmitError {
     self.errored = true;
-    const file = self.ast;
-    const line, const col = Ast.lineCol(file.source, file.posOf(expr).index);
-
-    const RemapedArgs = comptime b: {
-        var tupl = @typeInfo(@TypeOf(args)).@"struct";
-        var fields = tupl.fields[0..tupl.fields.len].*;
-        for (&fields) |*f| if (f.type == Types.Id) {
-            f.type = Types.Id.Fmt;
-        };
-        tupl.fields = &fields;
-        break :b @Type(.{ .@"struct" = tupl });
-    };
-
-    var rargs: RemapedArgs = undefined;
-    inline for (args, 0..) |v, i| {
-        if (@TypeOf(v) == Types.Id) {
-            rargs[i] = v.fmt(self.types);
-        } else {
-            rargs[i] = v;
-        }
-    }
-    self.types.diagnostics.print(
-        "{s}:{}:{}: " ++ fmt ++ "\n{}\n",
-        .{ file.path, line, col } ++ rargs ++ .{file.codePointer(file.posOf(expr).index)},
-    ) catch unreachable;
-
+    self.types.report(self.parent_scope.file(), expr, fmt, args);
     return error.Never;
 }
 
@@ -353,6 +328,14 @@ pub fn lexemeToBinOp(self: Lexer.Lexeme, ty: Types.Id) graph.BinOp {
         .@"-" => .isub,
         .@"*" => .imul,
         .@"/" => if (unsigned) .udiv else .sdiv,
+        .@"%" => if (unsigned) .umod else .smod,
+
+        .@"<<" => .ishl,
+        .@">>" => if (unsigned) .ushr else .sshr,
+        .@"|" => .bor,
+        .@"&" => .band,
+        .@"^" => .bxor,
+
         .@"<" => if (unsigned) .ult else .slt,
         .@">" => if (unsigned) .ugt else .sgt,
         .@"<=" => if (unsigned) .ule else .sle,
@@ -460,6 +443,7 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
     const ast = self.ast;
     for (self.scope.items, 0..) |se, i| {
         if (se.name == id) {
+            if (se.ty == .never) return error.Never;
             const value = self.bl.getScopeValue(i);
             return .mkp(se.ty, value);
         }
@@ -550,7 +534,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
     var computed_args: ?[]Value = null;
     const was_template = typ.data() == .Template;
     if (was_template) {
-        computed_args, typ = try self.instantiateTemplate(tmp, e, typ);
+        computed_args, typ = try self.instantiateTemplate(tmp, expr, e, typ);
     }
 
     if (typ.data() != .Func) {
@@ -571,6 +555,8 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
     var i: usize = self.pushReturn(args, ret_abi, func.ret, ctx);
 
     if (caller) |*value| {
+        try self.typeCheck(e.called, value, func.args[0]);
+
         const abi = self.abi.categorize(value.ty, self.types);
         i += self.pushParam(args, abi, i, value);
     }
@@ -589,6 +575,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
 pub fn instantiateTemplate(
     self: *Codegen,
     tmp: root.Arena.Scratch,
+    expr: Ast.Id,
     e: std.meta.TagPayload(Ast.Expr, .Call),
     typ: Types.Id,
 ) !struct { []Value, Types.Id } {
@@ -602,6 +589,11 @@ pub fn instantiateTemplate(
     const tmpl_file = self.types.getFile(tmpl.key.file);
     const tmpl_ast = tmpl_file.exprs.getTyped(.Fn, tmpl.key.ast).?;
     const comptime_args = ast.exprs.view(tmpl_ast.comptime_args);
+
+    const passed_args = e.args.len();
+    if (passed_args != tmpl_ast.args.len()) {
+        return self.report(expr, "expected {} arguments, got {}", .{ tmpl_ast.args.len(), passed_args });
+    }
 
     const captures = tmp.arena.alloc(Types.Key.Capture, tmpl_ast.args.len());
     const arg_tys = tmp.arena.alloc(Types.Id, tmpl_ast.args.len() - tmpl_ast.comptime_args.len());
@@ -960,7 +952,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
                     const field_ast = ast.exprs.getTyped(.BinOp, ast.exprs.view(e.fields)[0]) orelse
                         return self.report(expr, "expected `.<field-name>: <value>`", .{});
-                    const fname = ast.tokenSrc(ast.exprs.get(field_ast.lhs).Tag.index + 1);
+                    const fname = ast.tokenSrc((ast.exprs.getTyped(.Tag, field_ast.lhs) orelse
+                        return self.report(field_ast.lhs, "expected `.<field-name>`", .{})).index + 1);
 
                     const f = for (fields) |f| {
                         if (std.mem.eql(u8, f.name, fname)) break f;
@@ -1012,6 +1005,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             for (ast.exprs.view(e.fields), struct_ty.getFields(self.types)) |field, sf| {
                 const ftype = sf.ty;
+                if (sf.ty == .never) return error.Never;
                 offset = std.mem.alignForward(usize, offset, ftype.alignment(self.types));
 
                 const off = self.bl.addFieldOffset(local, @intCast(offset));
@@ -1088,10 +1082,21 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     .Ptr => |p| p,
                 });
             },
-            .@"-" => {
+            inline .@"-", .@"!", .@"~" => |t| {
                 var lhs = try self.emit(ctx, e.oper);
-                if (!lhs.ty.isSigned()) return self.report(expr, "only signed integer can be negated, {} is not", .{lhs.ty});
-                return .mkv(lhs.ty, self.bl.addUnOp(.neg, self.abi.categorize(lhs.ty, self.types).ByValue, lhs.id.Value));
+                switch (t) {
+                    .@"-" => if (!lhs.ty.isInteger()) return self.report(expr, "only integers can be negated, {} is not", .{lhs.ty}),
+                    .@"!" => if (lhs.ty != .bool) return self.report(expr, "only booleans can be negated, {} is not", .{lhs.ty}),
+                    .@"~" => if (!lhs.ty.isInteger()) return self.report(expr, "only integers can invert their bits, {} is not", .{lhs.ty}),
+                    else => @compileError("wut"),
+                }
+                self.ensureLoaded(&lhs);
+                return .mkv(lhs.ty, self.bl.addUnOp(switch (t) {
+                    .@"-" => .neg,
+                    .@"!" => .not,
+                    .@"~" => .bnot,
+                    else => @compileError("wut"),
+                }, self.abi.categorize(lhs.ty, self.types).ByValue, lhs.id.Value));
             },
             else => std.debug.panic("{any}\n", .{ast.exprs.get(expr)}),
         },
@@ -1441,13 +1446,23 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             self.ensureLoaded(&cond);
             var unreachable_count: usize = 0;
             var if_builder = self.bl.addIfAndBeginThen(cond.id.Value);
-            _ = self.emitTyped(ctx, .void, e.then) catch |err| {
-                unreachable_count += @intFromBool(err == error.Unreachable);
-            };
+            {
+                const prev_scope_height = self.scope.items.len;
+                defer self.scope.items.len = prev_scope_height;
+                defer self.bl.truncateScope(prev_scope_height);
+                _ = self.emitTyped(ctx, .void, e.then) catch |err| {
+                    unreachable_count += @intFromBool(err == error.Unreachable);
+                };
+            }
             const end_else = if_builder.beginElse(&self.bl);
-            _ = self.emitTyped(ctx, .void, e.else_) catch |err| {
-                unreachable_count += @intFromBool(err == error.Unreachable);
-            };
+            {
+                const prev_scope_height = self.scope.items.len;
+                defer self.scope.items.len = prev_scope_height;
+                defer self.bl.truncateScope(prev_scope_height);
+                _ = self.emitTyped(ctx, .void, e.else_) catch |err| {
+                    unreachable_count += @intFromBool(err == error.Unreachable);
+                };
+            }
             if_builder.end(&self.bl, end_else);
 
             if (unreachable_count == 2) return error.Unreachable;
@@ -1457,7 +1472,13 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .Loop => |e| if (e.pos.flag.@"comptime") {
             self.loops.appendAssumeCapacity(.{ .Comptime = .Clean });
             const loop = &self.loops.items[self.loops.items.len - 1];
+            const default_iters = 200;
+            var fuel: usize = default_iters;
             while ((loop.Comptime != .Controlled or loop.Comptime.Controlled.tag() != .Break) and !self.errored) {
+                if (fuel == 0) {
+                    return self.report(expr, "loop exceeded {} comptime iterations (TODO: add @setComptimeIterLimit(val))", .{default_iters});
+                }
+                fuel -= 1;
                 loop.Comptime = .Clean;
                 _ = self.emitTyped(.{}, .void, e.body) catch |err| switch (err) {
                     error.Never => {},
@@ -1470,7 +1491,12 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         } else {
             var loop = self.bl.addLoopAndBeginBody();
             self.loops.appendAssumeCapacity(.{ .Runtime = loop });
-            _ = self.emitTyped(ctx, .void, e.body) catch {};
+            {
+                const prev_scope_height = self.scope.items.len;
+                defer self.scope.items.len = prev_scope_height;
+                defer self.bl.truncateScope(prev_scope_height);
+                _ = self.emitTyped(ctx, .void, e.body) catch {};
+            }
             loop = self.loops.pop().?.Runtime;
             loop.end(&self.bl);
 

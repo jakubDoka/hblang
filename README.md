@@ -125,6 +125,23 @@ main := fn(): uint {
 }
 ```
 
+#### arithmetic 6 (missing operators)
+```hb
+main := fn(): uint {
+    return 1 << 3 % 2 - 8 >> 3 | 4 & 2 ^ 0 
+}
+```
+
+#### arithmetic 7 (unary operators)
+```hb
+main := fn(): uint {
+    if !true return 1
+    if ~1 != -1 - 1 return 2
+    if -1 != ~1 + 1 return 3
+    return 0
+}
+```
+
 #### functions 1
 ```hb
 expectations := .{
@@ -364,6 +381,20 @@ main := fn(): uint {
         i += 1
     }
     return sum
+}
+```
+
+#### loops 6 (infinite)
+```hb
+expectations := .{
+    .times_out: true;
+}
+
+main := fn(): uint {
+    if true loop {
+    }
+
+    return 0
 }
 ```
 
@@ -1244,6 +1275,8 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
     - [x] comptime
     - [x] break
     - [x] continue
+    - [x] infinite
+      - [ ] ? clean up the hacky graph hierarchy
     - [ ] ? labels
   - [x] blocks
     - [ ] ? labels
@@ -1267,12 +1300,10 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
       - [ ] **octal**
       - [x] decimal
       - [ ] **hexadecimal**
-    - [ ] binary operators
-      - [x] `- + * / == != <= >= < >`
-      - [ ] **others**
-    - [ ] unary operators
-      - [x] `-`
-      - [ ] `! ~`
+    - [x] binary operators
+      - [x] `- + * / == != <= >= < > << >> | ^ & %`
+    - [x] unary operators
+      - [x] `- ! ~`
   - [ ] **floats**
     - [ ] **binary operators**
       - [ ] **all**

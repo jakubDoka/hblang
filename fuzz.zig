@@ -39,6 +39,11 @@ pub fn fuzzRun(
     const asts = try tests.parseExample(gpa, name, code, output);
     const ast = asts[0];
 
+    defer {
+        for (asts) |*a| a.deinit(gpa);
+        gpa.free(asts);
+    }
+
     const main_fn = ast.findDecl(ast.items, "main") orelse return error.NoMain;
     const fn_ast = ast.exprs.get(main_fn).BinOp.rhs;
 
@@ -52,35 +57,43 @@ pub fn fuzzRun(
     defer cg.deinit();
 
     cg.parent_scope = .{ .Perm = types.getScope(.root) };
-    const entry = (try cg.resolveTy("main", fn_ast)).data().Func;
+    const entry_ty = (try cg.resolveTy("main", fn_ast));
+    if (entry_ty.data() != .Func) return error.Never;
+    const entry = entry_ty.data().Func;
     cg.work_list.appendAssumeCapacity(.{ .Func = entry });
 
+    var finalized = false;
     var hbgen = HbvmGen.init(gpa);
+    errdefer if (!finalized) hbgen.deinit();
+    errdefer if (!finalized) hbgen.out.deinit();
     var gen = Mach.init(&hbgen);
 
+    var errored = false;
     while (cg.nextTask()) |task| switch (task) {
         .Func => |func| {
             defer cg.bl.func.reset();
 
             cg.build(func) catch {
+                errored = true;
                 continue;
             };
 
             gen.emitFunc(&cg.bl.func, .{
                 .id = func.id,
-                .name = try std.fmt.allocPrint(gpa, "{}", .{Types.Id.init(.{ .Func = func }).fmt(&types)}),
                 .entry = func.id == entry.id,
             });
         },
         .Global => |g| {
             gen.emitData(.{
-                .name = try std.fmt.allocPrint(gpa, "{}", .{Types.Id.init(.{ .Global = g }).fmt(&types)}),
                 .id = g.id,
                 .value = .{ .init = g.data },
             });
         },
     };
 
+    if (errored) return error.Never;
+
+    finalized = true;
     var out = gen.finalize();
     defer out.deinit();
 }

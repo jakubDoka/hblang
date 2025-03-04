@@ -95,6 +95,7 @@ pub fn testBuilder(
 
     var ret: u64 = 0;
     var should_error: bool = false;
+    var times_out: bool = false;
     var ecalls: []const Ast.Id = &.{};
     if (ast.findDecl(ast.items, "expectations")) |d| {
         const decl = ast.exprs.get(d).BinOp.rhs;
@@ -109,6 +110,10 @@ pub fn testBuilder(
 
             if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "should_error")) {
                 should_error = ast.exprs.get(field.rhs).Bool.value;
+            }
+
+            if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "times_out")) {
+                times_out = ast.exprs.get(field.rhs).Bool.value;
             }
 
             if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "ecalls")) {
@@ -173,12 +178,12 @@ pub fn testBuilder(
 
             if (verbose) try header("OPTIMIZED SON", output, colors);
             fnc.iterPeeps(10000, @TypeOf(fnc.*).idealizeDead);
-            fnc.mem2reg();
+            fnc.mem2reg.run();
             fnc.iterPeeps(10000, @TypeOf(fnc.*).idealize);
             if (verbose) fnc.fmtUnscheduled(output, colors);
 
             if (verbose) try header("SCHEDULED SON", output, colors);
-            fnc.gcm();
+            fnc.gcm.buildCfg();
             if (verbose) fnc.fmtScheduled(output, colors);
 
             gen.emitFunc(&cg.bl.func, .{
@@ -233,7 +238,13 @@ pub fn testBuilder(
     if (verbose) try header("EXECUTION", output, colors);
 
     var eca_idx: usize = 0;
-    while (true) switch (try vm.run(&ctx)) {
+    while (true) switch (vm.run(&ctx) catch |err| switch (err) {
+        error.Timeout => {
+            try std.testing.expect(times_out);
+            return;
+        },
+        else => unreachable,
+    }) {
         .tx => break,
         .eca => {
             try std.testing.expect(eca_idx < ecalls.len);

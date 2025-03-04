@@ -11,9 +11,15 @@ pub const BinOp = enum(u8) {
     imul,
     udiv,
     sdiv,
+    umod,
+    smod,
 
+    ishl,
+    ushr,
+    sshr,
     band,
     bor,
+    bxor,
 
     ne,
     eq,
@@ -33,9 +39,15 @@ pub const BinOp = enum(u8) {
             .imul => lhs *% rhs,
             .udiv => @bitCast(tu(lhs) / tu(rhs)),
             .sdiv => @divFloor(lhs, rhs),
+            .umod => @bitCast(tu(lhs) % tu(rhs)),
+            .smod => @rem(lhs, rhs),
 
+            .ishl => @shlWithOverflow(lhs, @as(u6, @truncate(tu(rhs))))[0],
+            .ushr => @bitCast(tu(lhs) >> @truncate(tu(rhs))),
+            .sshr => lhs >> @truncate(tu(rhs)),
             .band => lhs & rhs,
             .bor => lhs | rhs,
+            .bxor => lhs ^ rhs,
 
             .ne => @intFromBool(lhs != rhs),
             .eq => @intFromBool(lhs == rhs),
@@ -58,6 +70,8 @@ pub const UnOp = enum(u8) {
     uext,
     ired,
     neg,
+    not,
+    bnot,
 
     pub fn eval(self: UnOp, src: DataType, oper: i64) i64 {
         return switch (self) {
@@ -75,6 +89,8 @@ pub const UnOp = enum(u8) {
             },
             .ired => oper,
             .neg => -oper,
+            .not => @intFromBool(oper == 0),
+            .bnot => ~oper,
         };
     }
 };
@@ -125,6 +141,7 @@ pub const Builtin = union(enum) {
     Entry: Cfg,
     // [Start]
     Mem,
+    Never: Cfg,
     // [Cfg, ret]
     Return: Cfg,
     // [?Cfg]
@@ -177,7 +194,7 @@ pub const Builtin = union(enum) {
     MachMove,
 
     pub const is_basic_block_start = .{ .Entry, .CallEnd, .Then, .Else, .Region, .Loop };
-    pub const is_basic_block_end = .{ .Return, .Call, .If, .Jmp };
+    pub const is_basic_block_end = .{ .Return, .Call, .If, .Jmp, .Never };
     pub const is_mem_op = .{ .Load, .MemCpy, .Local, .Store, .Return, .Call, .Mem };
     pub const is_pinned = .{ .Ret, .Phi, .Mem };
 };
@@ -197,6 +214,7 @@ pub fn KindOf(comptime MachNode: type) type {
 pub const Cfg = extern struct {
     idepth: u16 = 0,
     antidep: u16 = 0,
+    loop: u16 = undefined,
 };
 pub const Load = extern struct {};
 pub const Store = extern struct {};
@@ -205,6 +223,8 @@ pub const MemCpy = extern struct {
 };
 
 const mod = @This();
+const gcm = @import("gcm.zig");
+const mem2reg = @import("mem2reg.zig");
 
 pub fn Func(comptime MachNode: type) type {
     return struct {
@@ -217,7 +237,8 @@ pub fn Func(comptime MachNode: type) type {
         instr_count: u16 = undefined,
         root: *Node = undefined,
         end: *Node = undefined,
-        after_gcm: std.debug.SafetyLock = .{},
+        gcm: gcm.GcmMixin(MachNode) = .{},
+        mem2reg: mem2reg.Mem2RegMixin(MachNode) = .{},
 
         pub fn optApi(comptime decl_name: []const u8, comptime Ty: type) bool {
             const prelude = @typeName(MachNode) ++ " requires this unless `pub const i_know_the_api = {}` is declared:";
@@ -690,7 +711,8 @@ pub fn Func(comptime MachNode: type) type {
             self.next_id = 0;
             self.root = self.addNode(.Start, &.{}, .{});
             self.interner = .{};
-            self.after_gcm = .{};
+            self.gcm.cfg_built = .{};
+            self.gcm.loop_tree_built = .{};
         }
 
         const Inserter = struct {
@@ -908,7 +930,7 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         pub fn iterPeeps(self: *Self, max_peep_iters: usize, strategy: fn (*Self, *Node, *WorkList) ?*Node) void {
-            self.after_gcm.assertUnlocked();
+            self.gcm.cfg_built.assertUnlocked();
 
             var tmp = root.Arena.scrath(null);
             defer tmp.deinit();
@@ -971,21 +993,11 @@ pub fn Func(comptime MachNode: type) type {
             for (node.outputs()) |o| if (o.isCfg()) collectPostorder3(self, o, arena, pos, visited, only_basic);
         }
 
-        pub fn gcm(self: *Self) void {
-            self.after_gcm.lock();
-            @import("gcm.zig").gcm(MachNode, self);
-        }
-
-        pub fn mem2reg(self: *Self) void {
-            self.after_gcm.assertUnlocked();
-            @import("mem2reg.zig").mem2reg(MachNode, self);
-        }
-
         pub fn idealizeDead(self: *Self, node: *Node, worklist: *WorkList) ?*Node {
             const inps = node.inputs();
 
             var is_dead = node.kind == .Region and isDead(inps[0]) and isDead(inps[1]);
-            is_dead = is_dead or (node.kind != .Start and node.kind != .Region and
+            is_dead = is_dead or (node.kind != .Start and node.kind != .Region and node.kind != .Return and
                 node.isCfg() and isDead(inps[0]));
 
             if (is_dead) {
@@ -1232,7 +1244,7 @@ pub fn Func(comptime MachNode: type) type {
 
             var worklist = Self.WorkList.init(tmp.arena.allocator(), self.next_id) catch unreachable;
 
-            worklist.add(self.end);
+            worklist.add(self.root);
             var i: usize = 0;
             while (i < worklist.list.items.len) : (i += 1) {
                 for (worklist.list.items[i].inputs()) |oi| if (oi) |o| {

@@ -97,7 +97,7 @@ pub const EmitOptions = struct {
 
         pub fn execute(self: @This(), comptime MachNode: type, func: *graph.Func(MachNode)) void {
             if (self.mem2reg) {
-                func.mem2reg();
+                func.mem2reg.run();
             }
 
             if (self.peephole_fuel != 0) {
@@ -105,7 +105,7 @@ pub const EmitOptions = struct {
             }
 
             if (self.do_gcm) {
-                func.gcm();
+                func.gcm.buildCfg();
             }
         }
     } = .{},

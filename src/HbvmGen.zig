@@ -5,6 +5,7 @@ globals: std.ArrayList(GlobalData),
 globals_appended: usize = 0,
 global_relocs: std.ArrayList(GloblReloc),
 local_relocs: std.ArrayListUnmanaged(BlockReloc) = undefined,
+ret_count: usize = undefined,
 block_offsets: []i32 = undefined,
 allocs: []u8 = undefined,
 
@@ -111,6 +112,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     self.block_offsets = tmp.arena.alloc(i32, func.block_count);
     self.local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.block_count * 2));
     self.allocs = allocs;
+    self.ret_count = func.returns.len;
 
     var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), func.next_id) catch unreachable;
     const postorder = func.collectPostorder(tmp.arena.allocator(), &visited);
@@ -173,6 +175,10 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
                 self.emit(.jala, .{ .null, .ret_addr, 0 });
             }
         } else if (i + 1 == last.outputs()[0].schedule) {
+            // noop
+        } else if (last.kind == .Never) {
+            // noop
+        } else if (last.kind == .Jmp and last.outputs()[0].kind == .Return) {
             // noop
         } else {
             std.debug.assert(last.outputs()[0].isBasicBlockStart());
@@ -358,14 +364,20 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     .imul => .mul8,
                     .udiv => .diru8,
                     .sdiv => .dirs8,
+                    .umod => .diru8,
+                    .smod => .dirs8,
+                    .ishl => .slu8,
+                    .ushr => .sru8,
+                    .sshr => .srs8,
                     .bor => .@"or",
                     .band => .@"and",
+                    .bxor => .xor,
                     .eq, .ne, .uge, .ule, .ugt, .ult => .cmpu,
                     .sge, .sle, .sgt, .slt => .cmps,
                 };
 
                 switch (extra) {
-                    .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt, .bor, .band => {},
+                    .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt, .bor, .band, .bxor => {},
                     else => op = @enumFromInt(@intFromEnum(op) +
                         (@intFromEnum(no.data_type) - @intFromEnum(graph.DataType.i8))),
                 }
@@ -373,6 +385,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 const lhs, const rhs = .{ self.reg(no.inputs()[1]), self.reg(no.inputs()[2]) };
                 switch (extra) {
                     .udiv, .sdiv => self.emitLow("RRRR", op, .{ self.reg(no), .null, lhs, rhs }),
+                    .umod, .smod => self.emitLow("RRRR", op, .{ .null, self.reg(no), lhs, rhs }),
                     else => self.emitLow("RRR", op, .{ self.reg(no), lhs, rhs }),
                 }
 
@@ -404,20 +417,18 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                         const mask = (@as(u64, 1) << @intCast(inps[0].?.data_type.size() * 8)) - 1;
                         self.emit(.andi, .{ self.reg(no), self.reg(inps[0]), mask });
                     },
-                    .ired => {
-                        // TODO: idealize to nothing
-                        self.emit(.cp, .{ self.reg(no), self.reg(inps[0]) });
-                    },
-                    .neg => {
-                        self.emit(.neg, .{ self.reg(no), self.reg(inps[0]) });
-                    },
+                    // TODO: idealize to nothing
+                    .ired => self.emit(.cp, .{ self.reg(no), self.reg(inps[0]) }),
+                    .neg => self.emit(.neg, .{ self.reg(no), self.reg(inps[0]) }),
+                    .not => self.emit(.not, .{ self.reg(no), self.reg(inps[0]) }),
+                    .bnot => self.emit(.xori, .{ self.reg(no), self.reg(inps[0]), std.math.maxInt(u64) }),
                 }
             },
             .ImmBinOp => {
                 const alloc = self.reg(no);
                 const extra = no.extra(.ImmBinOp);
 
-                if (extra.op == .ori or extra.op == .andi) {
+                if (extra.op == .ori or extra.op == .andi or extra.op == .xori) {
                     self.emitLow(
                         "RRD",
                         extra.op,
@@ -543,11 +554,12 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .Phi => {},
             .Return => {
-                std.debug.assert(inps.len < 3);
-                for (inps, 0..) |inp, i| {
+                if (Func.isDead(no.inputs()[0])) return;
+                for (inps[0..self.ret_count], 0..) |inp, i| {
                     self.emit(.cp, .{ isa.Reg.ret(i), self.reg(inp) });
                 }
             },
+            .Never => {},
             else => std.debug.panic("{any}", .{no.kind}),
         }
     }
@@ -616,6 +628,7 @@ pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node
                     break :m .addi8;
                 },
                 .bor => .ori,
+                .bxor => .xori,
                 .band => .andi,
                 else => break :b,
             };

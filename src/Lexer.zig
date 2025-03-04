@@ -13,6 +13,8 @@ pub const Lexeme = enum(u16) {
     Comment,
     Integer,
 
+    @"unterminated string",
+
     @"fn",
     @"return",
     @"if",
@@ -68,6 +70,9 @@ pub const Lexeme = enum(u16) {
     @".(" = '(' + 128,
     @".[" = '[' + 128,
     @".." = '.' + 128,
+
+    @"<<" = '<' - 10,
+    @">>" = '>' - 10,
 
     @"!=" = '!' + 128,
     @"+=" = '+' + 128,
@@ -180,16 +185,19 @@ pub const Lexeme = enum(u16) {
         return switch (self) {
             .@":" => 16,
             .@"=", .@":=", .@"+=", .@"-=" => 15,
-            .@"<", .@">", .@"<=", .@">=", .@"==", .@"!=" => 6,
+            .@"|", .@"&" => 8,
+            .@"<", .@">", .@"<=", .@">=", .@"==", .@"!=" => 7,
+            .@"^" => 6,
+            .@"<<", .@">>" => 5,
             .@"+", .@"-" => 4,
-            .@"*", .@"/" => 3,
+            .@"*", .@"/", .@"%" => 3,
             .@".", .@".{", .@".(", .@".[" => 0,
             else => 255,
         };
     }
 
     pub fn isComparison(self: Lexeme) bool {
-        return self.precedence() == 6;
+        return self.precedence() == 7;
     }
 
     pub fn repr(self: Lexeme) []const u8 {
@@ -318,7 +326,7 @@ pub fn next(self: *Lexer) Token {
                     },
                     '\\' => self.cursor = @min(self.cursor + 2, self.source.len),
                     else => self.cursor += 1,
-                };
+                } else break :b .@"unterminated string";
 
                 break :b .@"\"";
             },
@@ -348,7 +356,8 @@ pub fn next(self: *Lexer) Token {
                 .@".["
             else
                 .@".",
-            ':', '<', '>', '+', '-', '=', '!' => |c| @enumFromInt(if (self.advanceIf('=')) c + 128 else c),
+            '<', '>' => |c| @enumFromInt(if (self.advanceIf(c)) c - 10 else if (self.advanceIf('=')) c + 128 else c),
+            ':', '+', '-', '=', '!' => |c| @enumFromInt(if (self.advanceIf('=')) c + 128 else c),
             else => |c| std.meta.intToEnum(Lexeme, c) catch std.debug.panic("{c}", .{c}),
         };
         return Token.init(pos, self.cursor, kind);

@@ -64,8 +64,8 @@ pub fn addParam(self: *Builder, idx: usize) SpecificNode(.Arg) {
 }
 
 pub fn end(self: *Builder, _: BuildToken) void {
-    if (self.ret == null) self.addReturn(&.{});
-    self.func.end = self.ret.?;
+    if (self.ret == null and !self.isUnreachable()) self.addReturn(&.{});
+    self.func.end = self.ret orelse self.func.addNode(.Return, &.{ null, null }, .{});
 }
 
 // #MEM ========================================================================
@@ -368,7 +368,6 @@ pub const Loop = struct {
                 }
             }
             builder.func.subsume(init_values[0].inputs()[0].?, init_values[0]);
-            std.debug.print("hua\n", .{});
         }
 
         if (builder.scope) |scope| killScope(scope);

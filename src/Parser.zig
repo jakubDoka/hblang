@@ -380,7 +380,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             return expr;
         },
         .Type => |t| .{ .Buty = .{ .pos = .init(token.pos), .bt = t } },
-        .@"&", .@"^", .@"-", .@"?" => .{ .UnOp = .{
+        .@"&", .@"^", .@"-", .@"~", .@"!", .@"?" => .{ .UnOp = .{
             .pos = .init(token.pos),
             .op = token.kind,
             .oper = try self.parseUnit(),
