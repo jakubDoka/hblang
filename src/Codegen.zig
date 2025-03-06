@@ -917,28 +917,27 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         }
                     }
 
-                    for (ast.exprs.view(e.fields)) |f| {
-                        const field = ast.exprs.getTyped(.BinOp, f) orelse continue;
-                        const fname = ast.tokenSrc((ast.exprs.getTyped(.Tag, field.lhs) orelse continue).index + 1);
+                    for (ast.exprs.view(e.fields)) |field| {
+                        const fname = ast.tokenSrc(field.pos.index);
                         const slot, const ftype = for (fields, slots) |tf, *s| {
                             if (std.mem.eql(u8, tf.name, fname)) break .{ s, tf.ty };
                         } else {
-                            self.report(f, "{} does not have a field called {s} (TODO: list fields)", .{ ty, fname }) catch continue;
+                            self.report(field.pos, "{} does not have a field called {s} (TODO: list fields)", .{ ty, fname }) catch continue;
                         };
 
                         switch (slot.*) {
                             .RequiredOffset => |offset| {
                                 const off = self.bl.addFieldOffset(local, @intCast(offset));
-                                var value = self.emit(ctx.addTy(ftype).addLoc(off), field.rhs) catch |err| switch (err) {
+                                var value = self.emit(ctx.addTy(ftype).addLoc(off), field.value) catch |err| switch (err) {
                                     error.Never => continue,
                                     error.Unreachable => return err,
                                 };
-                                try self.typeCheck(field.rhs, &value, ftype);
+                                try self.typeCheck(field.value, &value, ftype);
                                 self.emitGenericStore(off, &value);
-                                slot.* = .{ .Filled = f };
+                                slot.* = .{ .Filled = field.value };
                             },
                             .Filled => |pos| {
-                                self.report(f, "initializing the filed multiple times", .{}) catch {};
+                                self.report(field.pos, "initializing the filed multiple times", .{}) catch {};
                                 self.report(pos, "...arleady initialized here", .{}) catch {};
                             },
                         }
@@ -965,21 +964,19 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
                     const fields = union_ty.getFields(self.types);
 
-                    const field_ast = ast.exprs.getTyped(.BinOp, ast.exprs.view(e.fields)[0]) orelse
-                        return self.report(expr, "expected `.<field-name>: <value>`", .{});
-                    const fname = ast.tokenSrc((ast.exprs.getTyped(.Tag, field_ast.lhs) orelse
-                        return self.report(field_ast.lhs, "expected `.<field-name>`", .{})).index + 1);
+                    const field_ast = ast.exprs.view(e.fields)[0];
+                    const fname = ast.tokenSrc(field_ast.pos.index);
 
                     const f = for (fields) |f| {
                         if (std.mem.eql(u8, f.name, fname)) break f;
                     } else {
-                        return self.report(field_ast.lhs, "{} does not have a field called {s} (TODO: list fields)", .{ ty, fname });
+                        return self.report(field_ast.value, "{} does not have a field called {s} (TODO: list fields)", .{ ty, fname });
                     };
 
                     offset_cursor = std.mem.alignForward(usize, offset_cursor, f.ty.alignment(self.types));
                     const off = self.bl.addFieldOffset(local, @intCast(offset_cursor));
-                    var value = try self.emit(.{ .ty = f.ty, .loc = off }, field_ast.rhs);
-                    try self.typeCheck(field_ast.rhs, &value, f.ty);
+                    var value = try self.emit(.{ .ty = f.ty, .loc = off }, field_ast.value);
+                    try self.typeCheck(field_ast.value, &value, f.ty);
                     self.emitGenericStore(off, &value);
                 },
                 else => {

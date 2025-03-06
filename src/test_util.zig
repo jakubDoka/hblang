@@ -101,28 +101,28 @@ pub fn testBuilder(
     if (ast.findDecl(ast.items, "expectations")) |d| {
         const decl = ast.exprs.get(d).BinOp.rhs;
         const ctor = ast.exprs.get(decl).Ctor;
-        for (ast.exprs.view(ctor.fields)) |f| {
-            const field = ast.exprs.getTyped(.BinOp, f) orelse continue;
-            const value = ast.exprs.get(field.rhs);
+        for (ast.exprs.view(ctor.fields)) |field| {
+            const value = ast.exprs.get(field.value);
+            const fname = ast.tokenSrc(field.pos.index);
 
-            if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "return_value")) {
+            if (std.mem.eql(u8, fname, "return_value")) {
                 ret = @bitCast(try std.fmt.parseInt(i64, ast.tokenSrc(value.Integer.pos.index), 10));
             }
 
-            if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "should_error")) {
-                should_error = ast.exprs.get(field.rhs).Bool.value;
+            if (std.mem.eql(u8, fname, "should_error")) {
+                should_error = value.Bool.value;
             }
 
-            if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "times_out")) {
-                times_out = ast.exprs.get(field.rhs).Bool.value;
+            if (std.mem.eql(u8, fname, "times_out")) {
+                times_out = value.Bool.value;
             }
 
-            if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "unreaches")) {
-                unreaches = ast.exprs.get(field.rhs).Bool.value;
+            if (std.mem.eql(u8, fname, "unreaches")) {
+                unreaches = value.Bool.value;
             }
 
-            if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "ecalls")) {
-                ecalls = ast.exprs.view(ast.exprs.get(field.rhs).Tupl.fields);
+            if (std.mem.eql(u8, fname, "ecalls")) {
+                ecalls = ast.exprs.view(value.Tupl.fields);
             }
         }
     }

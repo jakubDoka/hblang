@@ -39,6 +39,11 @@ pub const Arg = struct {
     ty: Id,
 };
 
+pub const CtorField = struct {
+    pos: Pos,
+    value: Id,
+};
+
 pub const Expr = union(enum) {
     Void,
     Comment: Pos,
@@ -93,7 +98,7 @@ pub const Expr = union(enum) {
     Ctor: struct {
         pos: Pos,
         ty: Id,
-        fields: Slice,
+        fields: root.EnumSlice(CtorField),
     },
     Tupl: struct {
         pos: Pos,

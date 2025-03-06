@@ -193,7 +193,7 @@ fn parseUnit(self: *Parser) Error!Id {
         } },
         .@".{" => .{ .Ctor = .{
             .ty = base,
-            .fields = try self.parseList(.@".{", .@";", .@"}", parseExpr),
+            .fields = try self.parseListTyped(.@".{", .@",", .@"}", Ast.CtorField, parseCtorField),
             .pos = self.list_pos,
         } },
         .@".(" => .{ .Tupl = .{
@@ -240,6 +240,17 @@ fn popCaptures(self: *Parser, scope: usize, preserve: bool) []const Ident {
         return slc[0 .. i + 1];
     }
     return slc;
+}
+
+fn parseCtorField(self: *Parser) Error!Ast.CtorField {
+    const id = try self.expectAdvance(.Ident);
+    return .{
+        .pos = .init(id.pos),
+        .value = if (self.tryAdvance(.@":"))
+            try self.parseExpr()
+        else
+            try self.resolveIdent(id),
+    };
 }
 
 fn parseUnitWithoutTail(self: *Parser) Error!Id {
@@ -349,7 +360,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         .@"defer" => .{ .Defer = try self.parseExpr() },
         .@".{" => .{ .Ctor = .{
             .ty = .zeroSized(.Void),
-            .fields = try self.parseList(null, .@";", .@"}", parseExpr),
+            .fields = try self.parseListTyped(null, .@",", .@"}", Ast.CtorField, parseCtorField),
             .pos = self.list_pos,
         } },
         .@".(" => .{ .Tupl = .{

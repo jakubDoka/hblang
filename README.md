@@ -8,7 +8,7 @@ Note: `expectations` contain the test case ecpectations that are asserted when `
 #### main fn 1
 ```hb
 expectations := .{
-    .return_value: 42;
+    return_value: 42,
 }
 
 main := fn(): uint {
@@ -106,7 +106,7 @@ mero := fn(): i8 return 0
 #### arithmetic 4
 ```hb
 expectations := .{
-    .return_value: 1;
+    return_value: 1,
 }
 
 main := fn(): bool {
@@ -117,7 +117,7 @@ main := fn(): bool {
 #### arithmetic 5 (errors)
 ```hb
 expectations := .{
-    .should_error: true;
+    should_error: true,
 }
 
 main := fn(): uint {
@@ -156,7 +156,7 @@ main := fn(): uint {
 #### functions 1
 ```hb
 expectations := .{
-    .return_value: 33;
+    return_value: 33,
 }
 
 main := fn(): uint {
@@ -175,7 +175,7 @@ add_one := fn(x: uint): uint {
 #### functions 2
 ```hb
 expectations := .{
-    .return_value: 33;
+    return_value: 33,
 }
 
 main := @use("main.hb").main
@@ -205,7 +205,7 @@ add := fn(x: uint): uint {
 #### functions 3 (errors)
 ```hb
 expectations := .{
-    .should_error: true;
+    should_error: true,
 }
 
 main := fn(): uint {
@@ -240,7 +240,7 @@ foo := fn(comment: void): void return /* comment evaluates to void */
 #### if statements 1
 ```hb
 expectations := .{
-    .return_value: 2;
+    return_value: 2,
 }
 
 main := fn(): uint {
@@ -259,7 +259,7 @@ fib := fn(x: uint): uint {
 #### if statements 2
 ```hb
 expectations := .{
-    .return_value: 2;
+    return_value: 2,
 }
 
 main := fn(): uint {
@@ -297,7 +297,7 @@ main := fn(): uint {
 #### loops 1
 ```hb
 expectations := .{
-    .return_value: 55;
+    return_value: 55,
 }
 
 main := fn(): uint {
@@ -322,7 +322,7 @@ fib := fn(n: uint): uint {
 #### loops 2
 ```hb
 expectations := .{
-    .return_value: 9;
+    return_value: 9,
 }
 
 main := fn(): uint {
@@ -347,7 +347,7 @@ square := fn(size: uint): uint {
 #### loops 3
 ```hb
 expectations := .{
-    .return_value: 4;
+    return_value: 4,
 }
 
 main := fn(): uint {
@@ -362,7 +362,7 @@ main := fn(): uint {
 #### loops 4 (comptime)
 ```hb
 expectations := .{
-    .return_value: 10;
+    return_value: 10,
 }
 
 main := fn(): uint {
@@ -380,7 +380,7 @@ main := fn(): uint {
 #### loops 5 (comptime|error)
 ```hb
 expectations := .{
-    .should_error: true;
+    should_error: true,
 }
 
 main := fn(): uint {
@@ -398,7 +398,7 @@ main := fn(): uint {
 #### loops 6 (infinite)
 ```hb
 expectations := .{
-    .times_out: true;
+    times_out: true,
 }
 
 main := fn(): uint {
@@ -428,7 +428,7 @@ modify := fn(a: ^uint): void {
 #### pointers 2
 ```hb
 expectations := .{
-    .return_value: 1;
+    return_value: 1,
 }
 
 main := fn(): uint {
@@ -453,7 +453,7 @@ swap := fn(a: ^uint, b: ^uint): void {
 #### pointers 3
 ```hb
 expectations := .{
-    .return_value: 1;
+    return_value: 1,
 }
 
 main := fn(): uint {
@@ -476,7 +476,7 @@ do_stuff := fn(v: ^uint): uint {
 #### pointers 4 (errors)
 ```hb
 expectations := .{
-    .should_error: true;
+    should_error: true,
 }
 
 main := fn(): uint {
@@ -487,7 +487,7 @@ main := fn(): uint {
 #### structs 1
 ```hb
 expectations := .{
-    .return_value: 3;
+    return_value: 3,
 }
 
 Ty := struct {
@@ -507,7 +507,7 @@ Ty2 := struct {
 }
 
 main := fn(): int {
-    finst := Ty2.{.ty: Ty.{.a: 4}; .c: 3}
+    finst := Ty2.{ty: Ty.{a: 4}, c: 3}
     inst := odher_pass(finst)
     if inst.c != 3 {
         return 0
@@ -532,7 +532,7 @@ odher_pass := fn(t: Ty2): Ty2 {
 #### structs 2
 ```hb
 expectations := .{
-    .return_value: 3;
+    return_value: 3,
 }
 
 Ty := struct {
@@ -542,8 +542,8 @@ Ty := struct {
 }
 
 main := fn(): int {
-    a := Ty.{.a: 0; .b: 0; .c: 0}
-    b := Ty.{.a: 1; .b: 1; .c: 1}
+    a := Ty.{a: 0, b: 0, c: 0}
+    b := Ty.{a: 1, b: 1, c: 1}
     swap(&a, &b)
     return a.a + a.b + a.c
 }
@@ -570,11 +570,11 @@ main := fn(): uint {
 }
 
 return_pair := fn(): Pair {
-    return .{.a: 1; .b: 5}
+    return .{a: 1, b: 5}
 }
 
 return_triple := fn(): Triple {
-    return .{.a: 1; .b: 2; .c: 3}
+    return .{a: 1, b: 2, c: 3}
 }
 
 take_pair := fn(pair: Pair): uint {
@@ -589,7 +589,7 @@ take_triple := fn(triple: Triple): uint {
 #### structs 4 (errors)
 ```hb
 expectations := .{
-    .should_error: true;
+    should_error: true,
 }
 
 Ty := struct{.a: uint; .b: uint}
@@ -601,9 +601,9 @@ main := fn(): uint {
     _ = uint.()
     _ = Ty.{}
     _ = Ty.()
-    _ = Ty.{.p: 10}
-    _ = Ty.{.a: 1; .b: 2; .p: 10}
-    _ = Ty.{.a: 1; .a: 2}
+    _ = Ty.{p: 10}
+    _ = Ty.{a: 1, b: 2, p: 10}
+    _ = Ty.{a: 1, a: 2}
     _ = Ty.(.{}, .(), /**/)
     v := Ty.(0, 0, 0)
     return Ty.(v, 0)
@@ -613,7 +613,7 @@ main := fn(): uint {
 #### structs 5 (comptime)
 ```hb
 expectations := .{
-    .return_value: 6;
+    return_value: 6,
 }
 
 main := fn(): uint {
@@ -635,7 +635,7 @@ main := fn(): uint {
 #### structs 6 (packed)
 ```hb
 expectations := .{
-    .return_value: 4;
+    return_value: 4,
 }
 
 main := fn(): uint {
@@ -705,7 +705,7 @@ Foo := fn(F: type): type return struct {
 #### generic structs 3
 ```hb
 expectations := .{
-    .return_value: 10;
+    return_value: 10,
 }
 
 main := fn(): uint {
@@ -725,7 +725,7 @@ Foo := fn(F: type): type return struct {
 #### generic structs 4
 ```hb
 expectations := .{
-    .return_value: 6;
+    return_value: 6,
 }
 
 main := fn(): uint {
@@ -768,7 +768,7 @@ main := fn(): uint {
 #### comptime 2
 ```hb
 expectations := .{
-    .return_value = 33;
+    return_value: 33,
 }
 
 main := fn(): uint {
@@ -795,7 +795,7 @@ main := fn(): uint {
 #### comptime 3 (errors)
 ```hb
 expectations := .{
-    .should_error: true;
+    should_error: true,
 }
 
 main := fn(): uint {
@@ -823,7 +823,7 @@ main := fn(): uint {
 #### struct operators 1
 ```hb
 expectations := .{
-    .return_value: 10;
+    return_value: 10,
 }
 
 Point := struct {
@@ -862,7 +862,7 @@ main := fn(): uint {
 #### unions 1
 ```hb
 expectations := .{
-    .return_value: 257;
+    return_value: 257,
 }
 
 main := fn(): uint {
@@ -871,7 +871,7 @@ main := fn(): uint {
         .pair: struct{.l: u8; .r: u8};
     }
 
-    val := Union.{.pair: .(1, 1)}
+    val := Union.{pair: .(1, 1)}
 
     return val.single
 }
@@ -880,7 +880,7 @@ main := fn(): uint {
 #### unions 2
 ```hb
 expectations := .{
-    .return_value: 42;
+    return_value: 42,
 }
 
 main := fn(): int {
@@ -889,7 +889,7 @@ main := fn(): int {
         ._uint: uint;
     }
 
-    n1 := Number.{._int: 42}
+    n1 := Number.{_int: 42}
 
     return n1._int
 }
@@ -898,7 +898,7 @@ main := fn(): int {
 #### enums 1
 ```hb
 expectations := .{
-    .return_value: 1;
+    return_value: 1,
 }
 
 main := fn(): uint {
@@ -976,7 +976,7 @@ main := fn(): uint {
 #### die
 ```hb
 expectations := .{
-    .unreaches: true;
+    unreaches: true,
 }
 
 main := fn(): uint {
@@ -1003,7 +1003,7 @@ main := fn(): uint {
 #### global variables 2
 ```hb
 expectations := .{
-    .return_value: 55;
+    return_value: 55,
 }
 
 some_other: uint = 10
@@ -1025,7 +1025,7 @@ main := fn(): uint {
 #### global variables 3
 ```hb
 expectations := .{
-    .return_value: 3;
+    return_value: 3,
 }
 
 a: uint = 0
@@ -1041,7 +1041,7 @@ main := fn(): uint {
 #### strings
 ```hb
 expectations := .{
-    .return_value: 69;
+    return_value: 69,
 }
 
 main := fn(): uint {
@@ -1052,7 +1052,7 @@ main := fn(): uint {
 #### arrays 1
 ```hb
 expectations := .{
-    .return_value = 28;
+    return_value: 28,
 }
 
 main := fn(): uint {
@@ -1078,7 +1078,7 @@ main := fn(): uint {
 #### arrays 2
 ```hb
 expectations := .{
-    .return_value = 9;
+    return_value: 9,
 }
 
 dim: uint = 3
@@ -1112,7 +1112,7 @@ main := fn(): uint {
 #### slices 1
 ```hb
 expectations := .{
-    .return_value: 50;
+    return_value: 50,
 }
 
 main := fn(): uint {
@@ -1139,7 +1139,7 @@ main := fn(): uint {
 #### slices 2
 ```hb
 expectations := .{
-    .return_value: 25;
+    return_value: 25,
 }
 
 main := fn(): uint {
@@ -1166,7 +1166,7 @@ main := fn(): uint {
 #### nullable types 1
 ```hb
 expectations := .{
-    .return_value: 10;
+    return_value: 10,
 }
 
 main := fn(): uint {
@@ -1192,7 +1192,7 @@ Stru := struct {
 
 main := fn(): uint {
     nlbl: ?Stru = .(0, 0)
-    other: ?Stru = .{.a: 0; .b: 0}
+    other: ?Stru = .{a: 0, b: 0}
     othera: ?[2]uint = .[0, 0]
 
     if nlbl == null return 1
@@ -1214,7 +1214,7 @@ take := fn(s: ^Stru): void {
 #### directives 1 (@size_of, @align_of)
 ```hb
 expectations := .{
-    .return_value: 3;
+    return_value: 3,
 }
 
 main := fn(): uint {
@@ -1225,7 +1225,7 @@ main := fn(): uint {
 #### directives 2 (@as)
 ```hb
 expectations := .{
-    .return_value: 3;
+    return_value: 3,
 }
 
 main := fn(): uint {
@@ -1237,10 +1237,10 @@ main := fn(): uint {
 #### directives 3 (@ecall)
 ```hb
 expectations := .{
-    .return_value: 3;
-    .ecalls: .(
+    return_value: 3,
+    ecalls: .(
         .(0, 1, 2): 3,
-    );
+    ),
 }
 
 main := fn(): uint {
@@ -1270,7 +1270,7 @@ main := fn(): u32 {
 #### directives 6 (@len_of)
 ```hb
 expectations := .{
-    .return_value: 4;
+    return_value: 4,
 }
 
 main := fn(): uint {
@@ -1281,7 +1281,7 @@ main := fn(): uint {
 #### directives 7 (@kind_of)
 ```hb
 expectations := .{
-    .return_value: 6;
+    return_value: 6,
 }
 
 main := fn(): uint {
@@ -1292,7 +1292,7 @@ main := fn(): uint {
 #### directives 8 (@ChildOf)
 ```hb
 expectations := .{
-    .return_value: 1;
+    return_value: 1,
 }
 
 main := fn(): uint {
@@ -1308,7 +1308,7 @@ deref := fn($T: type, arg: T): @ChildOf(T) {
 #### directives 9 (@embed)
 ```hb
 expectations := .{
-    .return_value = 69;
+    return_value: 69,
 }
 
 main := fn(): uint {
@@ -1323,7 +1323,7 @@ E
 #### directives 10 (@error)
 ```hb
 expectations := .{
-    .should_error = true;
+    should_error: true,
 }
 
 main := fn(): uint {
@@ -1346,7 +1346,7 @@ main := fn(): uint {
 #### directives 12 (@inline)
 ```hb
 expectations := .{
-    .return_value: 10;
+    return_value: 10,
 }
 
 main := fn(): uint {
@@ -1360,7 +1360,7 @@ foo := fn(vl: uint): uint return vl
 #### directives 13
 ```hb
 expectations := .{
-    .return_value: 10;
+    return_value: 10,
 }
 
 main := fn(): uint {

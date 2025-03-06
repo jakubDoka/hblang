@@ -125,7 +125,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
         inline .Ctor, .Tupl, .Arry => |v, t| {
             try self.fmtExprPrec(v.ty, 0);
             const start = if (t == .Ctor) .@".{" else if (t == .Tupl) .@".(" else .@".[";
-            const sep = if (t == .Ctor) .@";" else .@",";
+            const sep = .@",";
             const end = if (t == .Ctor) .@"}" else if (t == .Tupl) .@")" else .@"]";
             try self.fmtSlice(v.pos.flag.indented, v.fields, start, sep, end);
         },
@@ -249,6 +249,10 @@ fn fmtSliceLow(
             try self.fmtExpr(id.bindings);
             try self.buf.appendSlice(": ");
             try self.fmtExpr(id.ty);
+        } else if (@TypeOf(id) == Ast.CtorField) {
+            try self.buf.appendSlice(self.ast.tokenSrc(id.pos.index));
+            try self.buf.appendSlice(": ");
+            try self.fmtExpr(id.value);
         } else try self.fmtExpr(id);
         if (forced) {
             if (view.len > i and indent) {

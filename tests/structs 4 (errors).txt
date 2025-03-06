@@ -17,22 +17,22 @@ structs 4 (errors):13:8: "structs 4 (errors)".Ty has 2 fields, but tuple constru
     _ = Ty.()
           ^
 structs 4 (errors):14:10: "structs 4 (errors)".Ty does not have a field called p (TODO: list fields)
-    _ = Ty.{.p: 10}
+    _ = Ty.{p: 10}
             ^
 structs 4 (errors):14:8: field a on struct "structs 4 (errors)".Ty is not initialized
-    _ = Ty.{.p: 10}
+    _ = Ty.{p: 10}
           ^
-structs 4 (errors):15:24: "structs 4 (errors)".Ty does not have a field called p (TODO: list fields)
-    _ = Ty.{.a: 1; .b: 2; .p: 10}
-                          ^
-structs 4 (errors):16:17: initializing the filed multiple times
-    _ = Ty.{.a: 1; .a: 2}
-                   ^
-structs 4 (errors):16:10: ...arleady initialized here
-    _ = Ty.{.a: 1; .a: 2}
-            ^
+structs 4 (errors):15:22: "structs 4 (errors)".Ty does not have a field called p (TODO: list fields)
+    _ = Ty.{a: 1, b: 2, p: 10}
+                        ^
+structs 4 (errors):16:16: initializing the filed multiple times
+    _ = Ty.{a: 1, a: 2}
+                  ^
+structs 4 (errors):16:13: ...arleady initialized here
+    _ = Ty.{a: 1, a: 2}
+               ^
 structs 4 (errors):16:8: field b on struct "structs 4 (errors)".Ty is not initialized
-    _ = Ty.{.a: 1; .a: 2}
+    _ = Ty.{a: 1, a: 2}
           ^
 structs 4 (errors):17:8: "structs 4 (errors)".Ty has 2 fields, but tuple constructor has 3 values
     _ = Ty.(.{}, .(), /**/)
