@@ -1,0 +1,95 @@
+main:
+         st $31, $254, -48, 48
+     addi64 $254, $254, -72
+       li64 $32, 1
+       li64 $33, 2
+       li64 $34, 3
+       li64 $35, 0
+     addi64 $36, $254, 0
+         st $32, $254, 0, 8
+         st $33, $254, 8, 8
+         st $34, $254, 16, 8
+         ld $34, $254, 16, 8
+         st $34, $254, 16, 8
+         cp $2, $36
+         cp $3, $35
+        jal $31, $0, :Array(E = uint, Next = Array(E = uint, Next = Array(E = uint, Next = Array(E = uint)))).get
+         cp $34, $1
+         cp $2, $36
+         cp $3, $32
+        jal $31, $0, :Array(E = uint, Next = Array(E = uint, Next = Array(E = uint, Next = Array(E = uint)))).get
+         cp $32, $1
+         cp $2, $36
+         cp $3, $33
+        jal $31, $0, :Array(E = uint, Next = Array(E = uint, Next = Array(E = uint, Next = Array(E = uint)))).get
+         cp $33, $1
+      add64 $32, $34, $32
+      add64 $32, $32, $33
+         cp $1, $32
+     addi64 $254, $254, 72
+         ld $31, $254, -48, 48
+         tx
+Array(E = uint, Next = Array(E = uint, Next = Array(E = uint, Next = Array(E = uint)))).get:
+         st $31, $254, -32, 32
+     addi64 $254, $254, -32
+         cp $34, $2
+         cp $32, $3
+       li64 $33, 0
+        jne $32, $33, :1
+         ld $32, $34, 0, 8
+        jmp :2
+1:       ld $33, $34, 8, 8
+         ld $34, $34, 16, 8
+     addi64 $32, $32, -1
+         cp $2, $33
+         cp $3, $34
+         cp $4, $32
+        jal $31, $0, :Array(E = uint, Next = Array(E = uint, Next = Array(E = uint))).get
+         cp $32, $1
+2:       cp $1, $32
+     addi64 $254, $254, 32
+         ld $31, $254, -32, 32
+       jala $0, $31, 0
+Array(E = uint, Next = Array(E = uint, Next = Array(E = uint))).get:
+         st $31, $254, -48, 48
+     addi64 $254, $254, -64
+         cp $34, $2
+         cp $35, $3
+         cp $32, $4
+       li64 $33, 0
+     addi64 $36, $254, 0
+         st $34, $254, 0, 8
+         st $35, $254, 8, 8
+         ld $34, $254, 0, 8
+        jne $32, $33, :4
+         cp $32, $34
+        jmp :5
+4:       ld $33, $254, 8, 8
+     addi64 $32, $32, -1
+         cp $2, $33
+         cp $3, $32
+        jal $31, $0, :Array(E = uint, Next = Array(E = uint)).get
+         cp $32, $1
+5:       cp $1, $32
+     addi64 $254, $254, 64
+         ld $31, $254, -48, 48
+       jala $0, $31, 0
+Array(E = uint, Next = Array(E = uint)).get:
+         st $31, $254, -32, 32
+     addi64 $254, $254, -32
+         cp $34, $2
+         cp $32, $3
+       li64 $33, 0
+        jne $32, $33, :7
+         cp $32, $34
+        jmp :8
+7:   addi64 $32, $32, -1
+         cp $2, $32
+        jal $31, $0, :Array(E = uint).get
+         cp $32, $1
+8:       cp $1, $32
+     addi64 $254, $254, 32
+         ld $31, $254, -32, 32
+       jala $0, $31, 0
+Array(E = uint).get:
+         un

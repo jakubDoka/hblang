@@ -62,8 +62,10 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u8 {
             instrs[c.schedule].def = c;
             if (i + 1 < node.outputs().len) {
                 instrs[c.schedule].succ = node.outputs()[i + 1 ..][0..1];
-            } else {
+            } else if (c.kind != .Trap) {
                 instrs[c.schedule].succ = c.outputs();
+            } else {
+                instrs[c.schedule].succ = &.{};
             }
         }
     }

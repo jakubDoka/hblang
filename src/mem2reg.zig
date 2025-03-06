@@ -59,6 +59,9 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
             const postorder = self.collectDfs(tmp, &visited)[1..];
 
             var local_count: u16 = 0;
+
+            if (self.root.outputs().len == 1) return;
+
             std.debug.assert(self.root.outputs()[1].kind == .Mem);
             for (self.root.outputs()[1].outputs()) |o| {
                 if (o.kind == .Local) b: {

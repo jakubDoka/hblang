@@ -3,6 +3,7 @@
 ## Tour
 
 Note: the examples are used to generate unit tests, `n = 1` from each group is most interesting, others are more for testing purposes.
+Note: `expectations` contain the test case ecpectations that are asserted when `zig build test` is run
 
 #### main fn 1
 ```hb
@@ -717,6 +718,36 @@ Foo := fn(F: type): type return struct {
 
     sub := fn(self: @CurrentScope()): F {
         return self.foo
+    }
+}
+```
+
+#### generic structs 4
+```hb
+expectations := .{
+    .return_value: 6;
+}
+
+main := fn(): uint {
+    val: Array(uint, 3) = .(1, .(2, .(3, .())))
+    return val.get(0) + val.get(1) + val.get(2)
+}
+
+Array := fn(E: type, len: uint): type if len == 0 {
+    return struct {
+        get := fn(self: @CurrentScope(), i: uint): E die
+    }
+} else {
+    Next := Array(E, len - 1)
+    return struct {
+        .elem: E;
+        .next: Next
+
+        get := fn(self: @CurrentScope(), i: uint): E {
+            if i == 0 return self.elem
+
+            return self.next.get(i - 1)
+        }
     }
 }
 ```
