@@ -444,8 +444,7 @@ pub fn lookupScopeItem(self: *Codegen, pos: Ast.Pos, bsty: Types.Id, name: []con
     };
 
     var cur = try self.types.ct.evalTy(name, .{ .Perm = bsty }, other_ast.exprs.get(decl).BinOp.rhs);
-    var iter = std.mem.reverseIterator(path);
-    while (iter.next()) |ps| {
+    for (path) |ps| {
         cur = (try self.lookupScopeItem(ps, cur, other_ast.tokenSrc(ps.index))).ty;
     }
     return .{ .ty = cur };
@@ -505,8 +504,7 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
             break :b global;
         } else {
             var cur = try self.types.ct.evalTy(ast.tokenSrc(id.pos()), cursor, value);
-            var iter = std.mem.reverseIterator(path);
-            while (iter.next()) |ps| {
+            for (path) |ps| {
                 cur = (try self.lookupScopeItem(ps, cur, ast.tokenSrc(ps.index))).ty;
             }
             return self.emitTyConst(cur);

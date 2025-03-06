@@ -251,8 +251,10 @@ fn fmtSliceLow(
             try self.fmtExpr(id.ty);
         } else if (@TypeOf(id) == Ast.CtorField) {
             try self.buf.appendSlice(self.ast.tokenSrc(id.pos.index));
-            try self.buf.appendSlice(": ");
-            try self.fmtExpr(id.value);
+            if (id.pos.index != if (self.ast.exprs.getTyped(.Ident, id.value)) |ident| ident.pos.index else std.math.maxInt(u31)) {
+                try self.buf.appendSlice(": ");
+                try self.fmtExpr(id.value);
+            }
         } else try self.fmtExpr(id);
         if (forced) {
             if (view.len > i and indent) {

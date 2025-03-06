@@ -130,7 +130,7 @@ pub fn testBuilder(
         }
     }
 
-    const main, _ = ast.findDecl(ast.items, "main", gpa) orelse return error.Never;
+    const main, _ = ast.findDecl(ast.items, "main", func_arena.arena.allocator()) orelse return error.Never;
     const fn_ast = ast.exprs.get(main).BinOp.rhs;
 
     var types = Types.init(gpa, asts, output);

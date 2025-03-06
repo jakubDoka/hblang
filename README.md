@@ -1214,8 +1214,7 @@ take := fn(s: ^Stru): void {
 ```hb
 expectations := .{
     return_value: 3,
-}
-
+};
 foo.{bar, bas: .{baz: bax}} := @use("foo.hb")
 
 main := fn(): uint {
@@ -1225,7 +1224,7 @@ main := fn(): uint {
 // in: foo.hb
 foo := fn(): uint return 0
 bar := fn(): uint return 1
-bas := @use("bas")
+bas := @use("bas.hb")
 // in: bas.hb
 baz := fn(): uint return 2
 ```
