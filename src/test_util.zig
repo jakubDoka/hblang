@@ -93,13 +93,16 @@ pub fn testBuilder(
         gpa.free(asts);
     }
 
+    var func_arena = root.Arena.scrath(null);
+    defer func_arena.deinit();
+
     var ret: u64 = 0;
     var should_error: bool = false;
     var times_out: bool = false;
     var unreaches: bool = false;
     var ecalls: []const Ast.Id = &.{};
-    if (ast.findDecl(ast.items, "expectations")) |d| {
-        const decl = ast.exprs.get(d).BinOp.rhs;
+    if (ast.findDecl(ast.items, "expectations", func_arena.arena.allocator())) |d| {
+        const decl = ast.exprs.get(d[0]).BinOp.rhs;
         const ctor = ast.exprs.get(decl).Ctor;
         for (ast.exprs.view(ctor.fields)) |field| {
             const value = ast.exprs.get(field.value);
@@ -127,14 +130,11 @@ pub fn testBuilder(
         }
     }
 
-    const main = ast.findDecl(ast.items, "main") orelse return error.Never;
+    const main, _ = ast.findDecl(ast.items, "main", gpa) orelse return error.Never;
     const fn_ast = ast.exprs.get(main).BinOp.rhs;
 
     var types = Types.init(gpa, asts, output);
     defer types.deinit();
-
-    var func_arena = root.Arena.scrath(null);
-    defer func_arena.deinit();
 
     var cg = Codegen.init(gpa, func_arena.arena, &types, .runtime);
     defer cg.deinit();

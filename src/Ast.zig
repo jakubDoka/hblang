@@ -234,15 +234,37 @@ pub fn init(gpa: std.mem.Allocator, current: Types.File, path: []const u8, code:
     };
 }
 
-pub fn findDecl(self: *const Ast, slice: Slice, id: anytype) ?Id {
+pub fn searchBinding(self: *const Ast, cur: Ast.Id, id: anytype, fseq: *std.ArrayList(Pos)) bool {
+    switch (self.exprs.get(cur)) {
+        .Ident => |i| switch (@TypeOf(id)) {
+            Ident => if (i.id == id) return true,
+            else => if (cmpLow(i.id.pos(), self.source, id)) return true,
+        },
+        .Ctor => |c| {
+            if (self.searchBinding(c.ty, id, fseq)) return true;
+
+            for (self.exprs.view(c.fields)) |f| {
+                fseq.append(f.pos) catch unreachable;
+                if (self.searchBinding(f.value, id, fseq)) return true;
+                _ = fseq.pop().?;
+            }
+        },
+        else => {},
+    }
+    return false;
+}
+
+pub fn findDecl(
+    self: *const Ast,
+    slice: Slice,
+    id: anytype,
+    arena: std.mem.Allocator,
+) ?struct { Id, []Pos } {
+    var fseq = std.ArrayList(Pos).init(arena);
     return for (self.exprs.view(slice)) |d| {
         const decl = self.exprs.getTyped(.BinOp, d) orelse continue;
         if (decl.lhs.tag() == .Tag or (decl.op != .@":" and decl.op != .@":=")) continue;
-        const ident = (self.exprs.getTyped(.Ident, decl.lhs) orelse continue).id;
-        switch (@TypeOf(id)) {
-            Ident => if (ident == id) break d,
-            else => if (cmpLow(ident.pos(), self.source, id)) break d,
-        }
+        if (self.searchBinding(decl.lhs, id, &fseq)) return .{ d, fseq.items };
     } else null;
 }
 

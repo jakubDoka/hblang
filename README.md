@@ -1210,6 +1210,25 @@ take := fn(s: ^Stru): void {
 }
 ```
 
+#### struct patters 1
+```hb
+expectations := .{
+    return_value: 3,
+}
+
+foo.{bar, bas: .{baz: bax}} := @use("foo.hb")
+
+main := fn(): uint {
+    return foo.foo() + bar() + bax()
+}
+
+// in: foo.hb
+foo := fn(): uint return 0
+bar := fn(): uint return 1
+bas := @use("bas")
+// in: bas.hb
+baz := fn(): uint return 2
+```
 
 #### directives 1 (@size_of, @align_of)
 ```hb
@@ -1357,7 +1376,7 @@ main := fn(): uint {
 foo := fn(vl: uint): uint return vl
 ```
 
-#### directives 13
+#### directives 13 (@Any)
 ```hb
 expectations := .{
     return_value: 10,
@@ -1397,7 +1416,7 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
     - [x] comptime
   - [x] defer
   - [x] `die`
-- [ ] **import pattern matching**
+- [x] import pattern matching
 - [x] global variables
   - [x] strings
   - [x] comptime evaluation

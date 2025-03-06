@@ -438,10 +438,17 @@ pub fn lookupScopeItem(self: *Codegen, pos: Ast.Pos, bsty: Types.Id, name: []con
             if (std.mem.eql(u8, f.name, name)) return .{ .cnst = i };
         }
     }
-    const decl = other_ast.findDecl(bsty.items(other_ast), name) orelse {
+
+    const decl, const path = other_ast.findDecl(bsty.items(other_ast), name, undefined) orelse {
         return self.report(pos, "{} does not declare this", .{bsty});
     };
-    return .{ .ty = try self.types.ct.evalTy(name, .{ .Perm = bsty }, other_ast.exprs.get(decl).BinOp.rhs) };
+
+    var cur = try self.types.ct.evalTy(name, .{ .Perm = bsty }, other_ast.exprs.get(decl).BinOp.rhs);
+    var iter = std.mem.reverseIterator(path);
+    while (iter.next()) |ps| {
+        cur = (try self.lookupScopeItem(ps, cur, other_ast.tokenSrc(ps.index))).ty;
+    }
+    return .{ .ty = cur };
 }
 
 pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
@@ -454,8 +461,10 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
         }
     } else {
         var cursor = self.parent_scope;
-        const decl = while (!cursor.empty()) {
-            if (ast.findDecl(cursor.items(ast), id)) |v| break v;
+        var tmp = root.Arena.scrath(null);
+        defer tmp.deinit();
+        const decl, const path = while (!cursor.empty()) {
+            if (ast.findDecl(cursor.items(ast), id, tmp.arena.allocator())) |v| break v;
             if (cursor.findCapture(pos, id)) |c| {
                 return .{ .ty = c.ty, .id = if (c.ty == .type) .{ .Value = self.bl.addIntImm(.int, @bitCast(c.value)) } else b: {
                     if (self.target != .@"comptime") {
@@ -494,7 +503,14 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
             if (new) try self.types.ct.evalGlobal(ast.tokenSrc(id.pos()), global.data().Global, typ, value);
             self.queue(.{ .Global = global.data().Global });
             break :b global;
-        } else return self.emitTyConst(try self.types.ct.evalTy(ast.tokenSrc(id.pos()), cursor, value));
+        } else {
+            var cur = try self.types.ct.evalTy(ast.tokenSrc(id.pos()), cursor, value);
+            var iter = std.mem.reverseIterator(path);
+            while (iter.next()) |ps| {
+                cur = (try self.lookupScopeItem(ps, cur, ast.tokenSrc(ps.index))).ty;
+            }
+            return self.emitTyConst(cur);
+        };
         const global = typ.data().Global;
         return .mkp(global.ty, self.bl.addGlobalAddr(global.id));
     }

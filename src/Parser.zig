@@ -138,7 +138,15 @@ fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8, unordered: bool) Error!Id 
 }
 
 fn declareExpr(self: *Parser, id: Id, unordered: bool) void {
-    const ident = self.store.getTypedPtr(.Ident, id) orelse return;
+    const ident = switch (self.store.get(id)) {
+        .Ident => |i| i,
+        .Ctor => |c| {
+            if (c.ty.tag() != .Void) self.declareExpr(c.ty, unordered);
+            for (self.store.view(c.fields)) |f| self.declareExpr(f.value, unordered);
+            return;
+        },
+        else => return,
+    };
     var iter = std.mem.reverseIterator(self.active_syms.items);
     const sym = while (iter.nextPtr()) |s| {
         if (s.id == ident.id) break s;
