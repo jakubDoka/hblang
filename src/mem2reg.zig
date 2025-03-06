@@ -133,7 +133,7 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                 for (child.inputs()) |b| child_preds += @intFromBool(b != null and b.?.isCfg());
                 std.debug.assert(child_preds >= 1 and child_preds <= 2);
                 // handle joins
-                if (child_preds == 2) {
+                if (child_preds == 2 and child.kind != .Return) {
                     if (!(child.kind == .Region or child.kind == .Loop)) {
                         std.debug.panic("{}\n", .{child});
                     }
@@ -144,7 +144,7 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                             if (lhs == null) continue;
                             if (lhs.? == .Node and lhs.?.Node.isLazyPhi(s.ctrl)) {
                                 var rhs = rhsm;
-                                if (rhs.? == .Loop and rhs.?.Loop != s) {
+                                if (rhs.? == .Loop and (rhs.?.Loop != s or s.ctrl.preservesIdentityPhys())) {
                                     rhs = .{ .Node = Local.resolve(self, locals, i) };
                                 }
                                 if (rhs.? == .Node) {

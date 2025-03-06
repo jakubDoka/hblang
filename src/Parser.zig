@@ -249,6 +249,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         .Comment => .{ .Comment = .init(token.pos) },
         ._ => .{ .Wildcard = .init(token.pos) },
         .idk => .{ .Idk = .init(token.pos) },
+        .die => .{ .Die = .init(token.pos) },
         .null => .{ .Null = .init(token.pos) },
         .@"$", .Ident => return try self.resolveIdent(token),
         .@"fn" => b: {
@@ -344,9 +345,8 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
             });
         },
-        .@"." => b: {
-            break :b .{ .Tag = .init((try self.expectAdvance(.Ident)).pos - 1) };
-        },
+        .@"." => .{ .Tag = .init((try self.expectAdvance(.Ident)).pos - 1) },
+        .@"defer" => .{ .Defer = try self.parseExpr() },
         .@".{" => .{ .Ctor = .{
             .ty = .zeroSized(.Void),
             .fields = try self.parseList(null, .@";", .@"}", parseExpr),
@@ -402,6 +402,11 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 try self.parseScopedExpr()
             else
                 .zeroSized(.Void),
+        } },
+        .match, .@"$match" => .{ .Match = .{
+            .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind == .@"$match" } },
+            .value = try self.parseExpr(),
+            .arms = try self.parseList(.@"{", .@",", .@"}", parseExpr),
         } },
         .loop, .@"$loop" => .{ .Loop = .{
             .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind != .loop } },

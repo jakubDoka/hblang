@@ -16,10 +16,14 @@ pub const Lexeme = enum(u16) {
 
     @"fn",
     @"return",
+    @"defer",
+    die,
     @"if",
     @"$if",
-    @"$loop",
     @"else",
+    match,
+    @"$match",
+    @"$loop",
     loop,
     @"break",
     @"continue",
@@ -77,6 +81,7 @@ pub const Lexeme = enum(u16) {
 
     @"<<" = '<' - 10,
     @">>" = '>' - 10,
+    @"=>",
 
     @"!=" = '!' + 128,
     @"+=" = '+' + 128,
@@ -187,6 +192,7 @@ pub const Lexeme = enum(u16) {
     // TODO: reverse the order because this does not look like precedence
     pub fn precedence(self: Lexeme) u8 {
         return switch (self) {
+            .@"=>" => 17,
             .@":" => 16,
             .@"=", .@":=", .@"+=", .@"-=" => 15,
             .@"|", .@"&" => 8,
@@ -381,7 +387,7 @@ pub fn next(self: *Lexer) Token {
             else
                 .@".",
             '<', '>' => |c| @enumFromInt(if (self.advanceIf(c)) c - 10 else if (self.advanceIf('=')) c + 128 else c),
-            ':', '+', '-', '=', '!' => |c| @enumFromInt(if (self.advanceIf('=')) c + 128 else c),
+            ':', '+', '-', '=', '!' => |c| if (self.advanceIf('>')) .@"=>" else @enumFromInt(if (self.advanceIf('=')) c + 128 else c),
             else => |c| std.meta.intToEnum(Lexeme, c) catch std.debug.panic("{c}", .{c}),
         };
         return Token.init(pos, self.cursor, kind);

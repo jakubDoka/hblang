@@ -1,7 +1,6 @@
 func: Func,
 scope: ?*Func.Node = undefined,
 root_mem: *Func.Node = undefined,
-ret: ?*Func.Node = undefined,
 
 const std = @import("std");
 const root = @import("utils.zig");
@@ -47,7 +46,7 @@ pub fn begin(self: *Builder, param_count: usize, return_coutn: usize) struct { B
     const ctrl = self.func.addNode(.Entry, &.{self.func.root}, .{});
     self.root_mem = self.func.addNode(.Mem, &.{self.func.root}, {});
     self.scope = self.func.addNode(.Scope, &.{ ctrl, self.root_mem }, {});
-    self.ret = null;
+    self.func.end = self.func.addNode(.Return, &.{ null, null, null }, .{});
 
     const alloc = self.func.arena.allocator().alloc(DataType, param_count + return_coutn) catch unreachable;
 
@@ -64,8 +63,7 @@ pub fn addParam(self: *Builder, idx: usize) SpecificNode(.Arg) {
 }
 
 pub fn end(self: *Builder, _: BuildToken) void {
-    if (self.ret == null and !self.isUnreachable()) self.addReturn(&.{});
-    self.func.end = self.ret orelse self.func.addNode(.Return, &.{ null, null }, .{});
+    if (self.func.end.inputs()[0] == null and !self.isUnreachable()) self.addReturn(&.{});
 }
 
 // #MEM ========================================================================
@@ -330,9 +328,10 @@ pub const Loop = struct {
 
     pub const Control = enum { @"break", @"continue" };
 
-    pub fn addLoopControl(self: *Loop, builder: *Builder, kind: Loop.Control) void {
+    pub fn addControl(self: *Loop, builder: *Builder, kind: Loop.Control) void {
         if (self.control.getPtr(kind).*) |ctrl| {
             _ = mergeScopes(&builder.func, builder.scope.?, ctrl);
+            builder.control().extra(.Region).preserve_identity_phys = kind == .@"continue";
         } else {
             builder._truncateScope(builder.scope.?, self.scope.inputs().len);
             self.control.set(kind, builder.scope.?);
@@ -345,6 +344,7 @@ pub const Loop = struct {
         if (self.control.get(.@"continue")) |cscope| {
             if (builder.scope) |scope| {
                 builder.scope = mergeScopes(&builder.func, scope, cscope);
+                builder.control().extra(.Region).preserve_identity_phys = true;
             } else {
                 builder.scope = cscope;
             }
@@ -451,25 +451,34 @@ pub fn addCall(
 pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
     for (values, self.func.returns) |val, rtt| if (val.data_type != val.data_type.meet(rtt)) std.debug.panic("{s} != {s}", .{ @tagName(val.data_type), @tagName(rtt) });
 
-    if (self.ret) |ret| {
-        const inps = ret.inputs();
+    const ret = self.func.end;
+    const inps = ret.inputs();
+    if (inps[0] != null) {
         const new_ctrl = self.func.addNode(.Region, &.{ inps[0].?, self.control() }, .{});
         self.func.setInputNoIntern(ret, 0, new_ctrl);
         const new_mem = self.func.addNode(.Phi, &.{ new_ctrl, inps[1], self.memory() }, {});
         self.func.setInputNoIntern(ret, 1, new_mem);
-        for (inps[2..], values, 2..) |curr, next, vidx| {
+        for (inps[3..ret.input_ordered_len], values, 3..) |curr, next, vidx| {
             const new_value = self.func.addNode(.Phi, &.{ new_ctrl, curr, next }, {});
             self.func.setInputNoIntern(ret, vidx, new_value);
         }
     } else {
-        const return_prefix = 2;
-        // this must be enough, if not, just copy paste the function
-        var buf: [16]?*BuildNode = undefined;
-        buf[0] = self.control();
-        buf[1] = self.memory();
-        @memcpy(buf[return_prefix..][0..values.len], values);
-        self.ret = self.func.addNode(.Return, buf[0 .. return_prefix + values.len], .{});
+        self.func.setInputNoIntern(ret, 0, self.control());
+        self.func.setInputNoIntern(ret, 1, self.memory());
+
+        for (values) |v| {
+            self.func.addDep(ret, v);
+            self.func.addUse(v, ret);
+            ret.input_ordered_len += 1;
+        }
     }
+
+    killScope(self.scope.?);
+    self.scope = null;
+}
+
+pub fn addTrap(self: *Builder, code: u64) void {
+    self.func.addTrap(self.control(), code);
 
     killScope(self.scope.?);
     self.scope = null;

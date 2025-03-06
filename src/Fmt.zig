@@ -50,6 +50,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.buf.appendSlice(content);
         },
         .Idk => try self.buf.appendSlice("idk"),
+        .Die => try self.buf.appendSlice("die"),
         .Ident => |i| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, i.pos.index)),
         .Fn => |f| {
             try self.buf.appendSlice("fn");
@@ -104,6 +105,10 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.buf.appendSlice(".");
             try self.buf.appendSlice(Lexer.peekStr(self.ast.source, t.index + 1));
         },
+        .Defer => |d| {
+            try self.buf.appendSlice("defer ");
+            try self.fmtExpr(d);
+        },
         .Unwrap => |u| {
             try self.fmtExpr(u);
             try self.buf.appendSlice(".?");
@@ -147,6 +152,13 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
                 try self.buf.appendSlice(" else ");
                 try self.fmtExpr(i.else_);
             }
+        },
+        .Match => |m| {
+            if (m.pos.flag.@"comptime") try self.buf.appendSlice("$");
+            try self.buf.appendSlice("match ");
+            try self.fmtExpr(m.value);
+            try self.buf.appendSlice(" ");
+            try self.fmtSlice(true, m.arms, .@"{", .@",", .@"}");
         },
         .Loop => |l| {
             if (l.pos.flag.@"comptime") try self.buf.appendSlice("$");

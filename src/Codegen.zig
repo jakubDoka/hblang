@@ -4,6 +4,7 @@ work_list: std.ArrayListUnmanaged(Task),
 target: Types.Target,
 only_inference: bool = false,
 comptime abi: Types.Abi = .ableos,
+defers: std.ArrayListUnmanaged(Ast.Id) = undefined,
 name: []const u8 = undefined,
 parent_scope: Scope = undefined,
 ast: *const Ast = undefined,
@@ -28,11 +29,14 @@ const Node = Builder.BuildNode;
 const DataType = Builder.DataType;
 const Codegen = @This();
 
-const Loop = union(enum) {
-    Runtime: Builder.Loop,
-    Comptime: union(enum) {
-        Clean,
-        Controlled: Ast.Id,
+const Loop = struct {
+    defer_base: usize,
+    kind: union(enum) {
+        Runtime: Builder.Loop,
+        Comptime: union(enum) {
+            Clean,
+            Controlled: Ast.Id,
+        },
     },
 };
 
@@ -100,6 +104,7 @@ pub fn beginBuilder(
 
     self.scope = .initBuffer(scratch.alloc(ScopeEntry, 128));
     self.loops = .initBuffer(scratch.alloc(Loop, 8));
+    self.defers = .initBuffer(scratch.alloc(Ast.Id, 32));
 
     return res;
 }
@@ -694,14 +699,23 @@ fn assembleReturn(cg: *Codegen, id: u32, call_args: Builder.CallArgs, ctx: Ctx, 
     };
 }
 
+fn emitDefers(self: *Codegen, base: usize) void {
+    var iter = std.mem.reverseIterator(self.defers.items[base..]);
+    while (iter.next()) |e| {
+        _ = self.emitTyped(.{}, .void, e) catch {};
+    }
+}
+
 fn loopControl(self: *Codegen, kind: Builder.Loop.Control, ctrl: Ast.Id) !void {
     if (self.loops.items.len == 0) {
         self.report(ctrl, "{s} outside of the loop", .{@tagName(kind)}) catch {};
         return;
     }
 
-    switch (self.loops.items[self.loops.items.len - 1]) {
-        .Runtime => |*l| l.addLoopControl(&self.bl, kind),
+    const loops = &self.loops.items[self.loops.items.len - 1];
+    self.emitDefers(loops.defer_base);
+    switch (loops.kind) {
+        .Runtime => |*l| l.addControl(&self.bl, kind),
         .Comptime => |*l| {
             switch (l.*) {
                 .Clean => l.* = .{ .Controlled = ctrl },
@@ -1417,6 +1431,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             defer self.scope.items.len = prev_scope_height;
             defer self.bl.truncateScope(prev_scope_height);
 
+            const defer_scope = self.defers.items.len;
+            defer self.defers.items.len = defer_scope;
+            defer self.emitDefers(defer_scope);
+
             for (ast.exprs.view(e.stmts)) |s| {
                 _ = self.emitTyped(ctx, .void, s) catch |err| switch (err) {
                     error.Never => {},
@@ -1424,6 +1442,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 };
             }
 
+            return .{};
+        },
+        .Defer => |e| {
+            self.defers.appendAssumeCapacity(e);
             return .{};
         },
         .If => |e| if (e.pos.flag.@"comptime") {
@@ -1470,17 +1492,140 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             return .{};
         },
+        .Match => |e| {
+            var tmp = root.Arena.scrath(null);
+            defer tmp.deinit();
+
+            var value = try self.emit(.{}, e.value);
+
+            if (value.ty.data() != .Enum) return self.report(e.value, "can only match on enums right now, {} is not", .{value.ty});
+            const enm = value.ty.data().Enum;
+
+            const fields = enm.getFields(self.types);
+
+            if (fields.len == 0) return error.Unreachable;
+
+            if (e.arms.len() == 0) return self.report(e.pos, "the matched type has non zero possible values, " ++
+                "therefore empty match statement is invalid", .{});
+
+            const ArmSlot = union(enum) {
+                Unmatched,
+                Matched: Ast.Id,
+            };
+
+            const Matcher = struct {
+                iter_until: usize,
+                else_arm: ?Ast.Id = null,
+                slots: []ArmSlot,
+                ty: Types.Id,
+
+                pub fn decomposeArm(slf: *@This(), cg: *Codegen, i: usize, a: Ast.Id) !?struct { u64, Ast.Id } {
+                    const asta = cg.ast;
+
+                    const arm = asta.exprs.getTyped(.BinOp, a) orelse
+                        cg.report(a, "expected match arm `<pat> => <body>,`", .{}) catch return null;
+
+                    if (arm.lhs.tag() == .Wildcard or i == slf.iter_until) {
+                        if (slf.else_arm) |erm| {
+                            if (i == slf.iter_until) {
+                                cg.report(erm, "useless esle match arm, all cases are covered", .{}) catch {};
+                            } else {
+                                cg.report(a, "duplicate else match arm", .{}) catch {};
+                                cg.report(erm, "...previouslly matched here", .{}) catch {};
+                            }
+                        } else {
+                            slf.iter_until += 1;
+                            slf.else_arm = arm.rhs;
+                        }
+                        return null;
+                    }
+
+                    var match_pat = try cg.emitTyped(.{}, slf.ty, arm.lhs);
+                    cg.ensureLoaded(&match_pat);
+                    const idx = try cg.partialEval(arm.lhs, match_pat.id.Value);
+
+                    switch (slf.slots[idx]) {
+                        .Unmatched => slf.slots[idx] = .{ .Matched = a },
+                        .Matched => |pos| {
+                            cg.report(a, "duplicate match arm", .{}) catch {};
+                            cg.report(pos, "...previouslly matched here", .{}) catch {};
+                            return null;
+                        },
+                    }
+
+                    return .{ idx, arm.rhs };
+                }
+            };
+
+            var matcher = Matcher{
+                .iter_until = fields.len - 1,
+                .slots = tmp.arena.alloc(ArmSlot, fields.len),
+                .ty = value.ty,
+            };
+            @memset(matcher.slots, .Unmatched);
+
+            if (e.pos.flag.@"comptime") {
+                self.ensureLoaded(&value);
+                const value_idx = try self.partialEval(e.value, value.id.Value);
+
+                var matched_branch: ?Ast.Id = null;
+                for (ast.exprs.view(e.arms), 0..) |a, i| {
+                    const idx, const body = try matcher.decomposeArm(self, i, a) orelse continue;
+
+                    if (idx == value_idx) {
+                        std.debug.assert(matched_branch == null);
+                        matched_branch = body;
+                    }
+                }
+
+                const final_branch = matched_branch orelse matcher.else_arm orelse
+                    return self.report(e.pos, "not all branches are covered (TODO: list missing ones)", .{});
+
+                _ = try self.emitTyped(ctx, .void, final_branch);
+            } else {
+                self.ensureLoaded(&value);
+
+                var if_stack = std.ArrayListUnmanaged(Builder.If).initBuffer(tmp.arena.alloc(Builder.If, e.arms.len() - 1));
+
+                var unreachable_count: usize = 0;
+                for (ast.exprs.view(e.arms), 0..) |a, i| {
+                    const idx, const body = try matcher.decomposeArm(self, i, a) orelse continue;
+
+                    const cond = self.bl.addBinOp(.eq, .i8, self.bl.addUnOp(.sext, .int, value.id.Value), self.bl.addIntImm(.int, @bitCast(idx)));
+                    var if_builder = self.bl.addIfAndBeginThen(cond);
+                    _ = self.emitTyped(ctx, .void, body) catch |err| {
+                        unreachable_count += @intFromBool(err == error.Unreachable);
+                    };
+                    _ = if_builder.beginElse(&self.bl);
+                    if_stack.appendAssumeCapacity(if_builder);
+                }
+
+                const final_else = matcher.else_arm orelse return self.report(e.pos, "not all branches are covered (TODO: list missing ones)", .{});
+                _ = self.emitTyped(ctx, .void, final_else) catch |err| {
+                    unreachable_count += @intFromBool(err == error.Unreachable);
+                };
+
+                var iter = std.mem.reverseIterator(if_stack.items);
+                while (iter.nextPtr()) |br| br.end(&self.bl, @enumFromInt(0));
+
+                if (unreachable_count == e.arms.len()) return error.Unreachable;
+            }
+            return .{};
+        },
         .Loop => |e| if (e.pos.flag.@"comptime") {
-            self.loops.appendAssumeCapacity(.{ .Comptime = .Clean });
+            self.loops.appendAssumeCapacity(.{
+                .defer_base = self.defers.items.len,
+                .kind = .{ .Comptime = .Clean },
+            });
             const loop = &self.loops.items[self.loops.items.len - 1];
             const default_iters = 200;
             var fuel: usize = default_iters;
-            while ((loop.Comptime != .Controlled or loop.Comptime.Controlled.tag() != .Break) and !self.errored) {
+            while ((loop.kind.Comptime != .Controlled or loop.kind.Comptime.Controlled.tag() != .Break) and !self.errored) {
                 if (fuel == 0) {
                     return self.report(expr, "loop exceeded {} comptime iterations (TODO: add @setComptimeIterLimit(val))", .{default_iters});
                 }
                 fuel -= 1;
-                loop.Comptime = .Clean;
+                loop.kind.Comptime = .Clean;
                 _ = self.emitTyped(.{}, .void, e.body) catch |err| switch (err) {
                     error.Never => {},
                     error.Unreachable => continue,
@@ -1491,14 +1636,17 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             return .{};
         } else {
             var loop = self.bl.addLoopAndBeginBody();
-            self.loops.appendAssumeCapacity(.{ .Runtime = loop });
+            self.loops.appendAssumeCapacity(.{
+                .defer_base = self.defers.items.len,
+                .kind = .{ .Runtime = loop },
+            });
             {
                 const prev_scope_height = self.scope.items.len;
                 defer self.scope.items.len = prev_scope_height;
                 defer self.bl.truncateScope(prev_scope_height);
                 _ = self.emitTyped(ctx, .void, e.body) catch {};
             }
-            loop = self.loops.pop().?.Runtime;
+            loop = self.loops.pop().?.kind.Runtime;
             loop.end(&self.bl);
 
             if (self.bl.isUnreachable()) return error.Unreachable;
@@ -1518,6 +1666,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .Return => |e| {
             var value = try self.emit(.{ .loc = self.struct_ret_ptr, .ty = self.ret }, e.value);
             try self.typeCheck(expr, &value, self.ret);
+            self.emitDefers(0);
             switch (self.abi.categorize(value.ty, self.types)) {
                 .Imaginary => self.bl.addReturn(&.{}),
                 .ByValue => {
@@ -1536,6 +1685,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     self.bl.addReturn(&.{});
                 },
             }
+            return error.Unreachable;
+        },
+        .Die => {
+            self.bl.addTrap(0);
             return error.Unreachable;
         },
         .Buty => |e| return self.emitTyConst(.fromLexeme(e.bt)),

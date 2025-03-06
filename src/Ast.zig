@@ -44,6 +44,7 @@ pub const Expr = union(enum) {
     Comment: Pos,
     Wildcard: Pos,
     Idk: Pos,
+    Die: Pos,
     Ident: struct {
         pos: Pos = Pos.init(0),
         id: Ident = Ident.init(Lexer.Token.init(0, 0, .Eof)),
@@ -82,6 +83,7 @@ pub const Expr = union(enum) {
         args: Slice,
     },
     Tag: Pos,
+    Defer: Id,
     Unwrap: Id,
     Deref: Id,
     Field: struct {
@@ -108,6 +110,11 @@ pub const Expr = union(enum) {
         cond: Id,
         then: Id,
         else_: Id,
+    },
+    Match: struct {
+        pos: Pos,
+        value: Id,
+        arms: Slice,
     },
     Loop: struct {
         pos: Pos,

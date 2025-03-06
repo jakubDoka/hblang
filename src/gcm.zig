@@ -102,11 +102,9 @@ pub fn GcmMixin(comptime MachNode: type) type {
             const dead = func.addNode(.Never, &.{loop.base.inputs()[1].?}, .{});
             const then = func.addNode(.Then, &.{dead}, .{});
             const else_ = func.addNode(.Else, &.{dead}, .{});
-            const then_jmp = func.addNode(.Jmp, &.{then}, .{});
 
             func.setInputNoIntern(&loop.base, 1, else_);
-            func.addDep(end, then_jmp);
-            func.addUse(then_jmp, end);
+            func.addTrap(then, graph.infinite_loop_trap);
 
             return end.asCfg().?;
         }

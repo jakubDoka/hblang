@@ -128,7 +128,7 @@ main := fn(): uint {
 #### arithmetic 6 (missing operators)
 ```hb
 main := fn(): uint {
-    return 1 << 3 % 2 - 8 >> 3 | 4 & 2 ^ 0 
+    return 1 << 3 % 2 - 8 >> 3 | 4 & 2 ^ 0
 }
 ```
 
@@ -882,6 +882,78 @@ main := fn(): uint {
 }
 ```
 
+#### match 1
+```hb
+main := fn(): uint {
+    Nm := enum{.a; .b; .c}
+
+    match Nm.a {
+        .a => {
+        },
+        Nm.b => return 1,
+        .c => return 2,
+    }
+
+    match Nm.b {
+        .a => return 3,
+        _ => return 0,
+    }
+}
+```
+
+#### match 2 (comptime)
+```hb
+main := fn(): uint {
+    $match enum{.a; .b}.a {
+        .a => return 0,
+        .b => return 1,
+    }
+}
+```
+
+#### defer 1
+```hb
+main := fn(): uint {
+    i := 0
+    {
+        defer i += 1
+        if i == 1 return 1
+    }
+
+    if i != 1 return 2
+
+    loop {
+        defer i += 1
+        if i == 3 continue
+        if i == 4 break
+    }
+
+    if i != 5 return 3
+
+    ret_defer := fn(str: ^uint): void {
+        defer str.* += 1
+    }
+
+    v := 0
+    ret_defer(&v)
+    if v != 1 return 4
+
+    return 0
+}
+```
+
+#### die
+```hb
+expectations := .{
+    .unreaches: true;
+}
+
+main := fn(): uint {
+    if false return 1
+    die
+}
+```
+
 #### global variables 1
 ```hb
 counter: uint = 0
@@ -1290,10 +1362,10 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
     - [ ] ? labels
   - [x] blocks
     - [ ] ? labels
-  - [ ] **match** --DO
-    - [ ] **comptime**
-  - [ ] **defer**
-  - [ ] **`die`**
+  - [x] match
+    - [x] comptime
+  - [x] defer
+  - [x] `die`
 - [ ] **import pattern matching**
 - [x] global variables
   - [x] strings

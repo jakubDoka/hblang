@@ -178,7 +178,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
             // noop
         } else if (last.kind == .Never) {
             // noop
-        } else if (last.kind == .Jmp and last.outputs()[0].kind == .Return) {
+        } else if (last.kind == .Trap) {
             // noop
         } else {
             std.debug.assert(last.outputs()[0].isBasicBlockStart());
@@ -557,6 +557,15 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 if (Func.isDead(no.inputs()[0])) return;
                 for (inps[0..self.ret_count], 0..) |inp, i| {
                     self.emit(.cp, .{ isa.Reg.ret(i), self.reg(inp) });
+                }
+            },
+            .Trap => {
+                const code = no.extra(.Trap).code;
+                switch (code) {
+                    graph.infinite_loop_trap => return,
+                    0 => self.emit(.un, .{}),
+                    1 => self.emit(.tx, .{}),
+                    else => unreachable,
                 }
             },
             .Never => {},

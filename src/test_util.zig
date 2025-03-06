@@ -96,6 +96,7 @@ pub fn testBuilder(
     var ret: u64 = 0;
     var should_error: bool = false;
     var times_out: bool = false;
+    var unreaches: bool = false;
     var ecalls: []const Ast.Id = &.{};
     if (ast.findDecl(ast.items, "expectations")) |d| {
         const decl = ast.exprs.get(d).BinOp.rhs;
@@ -114,6 +115,10 @@ pub fn testBuilder(
 
             if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "times_out")) {
                 times_out = ast.exprs.get(field.rhs).Bool.value;
+            }
+
+            if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "unreaches")) {
+                unreaches = ast.exprs.get(field.rhs).Bool.value;
             }
 
             if (std.mem.eql(u8, ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1), "ecalls")) {
@@ -241,6 +246,10 @@ pub fn testBuilder(
     while (true) switch (vm.run(&ctx) catch |err| switch (err) {
         error.Timeout => {
             try std.testing.expect(times_out);
+            return;
+        },
+        error.Unreachable => {
+            try std.testing.expect(unreaches);
             return;
         },
         else => unreachable,

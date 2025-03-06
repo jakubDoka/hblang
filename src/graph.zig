@@ -5,6 +5,8 @@ fn tu(int: i64) u64 {
     return @bitCast(int);
 }
 
+pub const infinite_loop_trap = std.math.maxInt(u64);
+
 pub const BinOp = enum(u8) {
     iadd,
     isub,
@@ -144,6 +146,11 @@ pub const Builtin = union(enum) {
     Never: Cfg,
     // [Cfg, ret]
     Return: Cfg,
+    // [Cfg]
+    Trap: extern struct {
+        base: Cfg = .{},
+        code: u64,
+    },
     // [?Cfg]
     CInt: i64,
     // [?Cfg, lhs, rhs]
@@ -183,7 +190,12 @@ pub const Builtin = union(enum) {
     // [If]
     Else: Cfg,
     // [lCfg, rCfg]
-    Region: Cfg,
+    Region: extern struct {
+        base: Cfg = .{},
+        preserve_identity_phys: bool = false,
+    },
+    // [traps...]
+    TrapRegion: Cfg,
     // [entryCfg, backCfg]
     Loop: Cfg,
     // [Cfg]
@@ -193,8 +205,8 @@ pub const Builtin = union(enum) {
     // [Cfg, inp]
     MachMove,
 
-    pub const is_basic_block_start = .{ .Entry, .CallEnd, .Then, .Else, .Region, .Loop };
-    pub const is_basic_block_end = .{ .Return, .Call, .If, .Jmp, .Never };
+    pub const is_basic_block_start = .{ .Entry, .CallEnd, .Then, .Else, .Region, .Loop, .TrapRegion };
+    pub const is_basic_block_end = .{ .Return, .Call, .If, .Jmp, .Never, .Trap };
     pub const is_mem_op = .{ .Load, .MemCpy, .Local, .Store, .Return, .Call, .Mem };
     pub const is_pinned = .{ .Ret, .Phi, .Mem };
 };
@@ -394,6 +406,11 @@ pub fn Func(comptime MachNode: type) type {
             input_base: [*]?*Node,
             output_base: [*]*Node,
 
+            pub fn preservesIdentityPhys(self: *Node) bool {
+                std.debug.assert(self.kind == .Region or self.kind == .Loop);
+                return self.kind == .Region and self.extra(.Region).preserve_identity_phys;
+            }
+
             pub fn useBlock(self: *Node, use: *Node, scheds: []const ?*CfgNode) *CfgNode {
                 if (use.kind == .Phi) {
                     std.debug.assert(use.inputs()[0].?.kind == .Region or use.inputs()[0].?.kind == .Loop);
@@ -409,7 +426,7 @@ pub fn Func(comptime MachNode: type) type {
             pub fn dataDeps(self: *Node) []?*Node {
                 if ((self.kind == .Phi and !self.isDataPhi()) or self.kind == .Mem) return &.{};
                 const start: usize = @intFromBool(self.isMemOp());
-                return self.input_base[1 + start .. self.input_ordered_len];
+                return self.input_base[1 + start + @intFromBool(self.kind == .Return) .. self.input_ordered_len];
             }
 
             pub fn anyextra(self: *const Node) *const anyopaque {
@@ -783,6 +800,18 @@ pub fn Func(comptime MachNode: type) type {
             return node;
         }
 
+        pub fn addTrap(self: *Self, ctrl: *Node, code: u64) void {
+            if (self.end.inputs()[2] == null) {
+                self.setInputNoIntern(self.end, 2, self.addNode(.TrapRegion, &.{}, .{}));
+            }
+
+            const region = self.end.inputs()[2].?;
+            const trap = self.addNode(.Trap, &.{ctrl}, .{ .code = code });
+
+            self.addDep(region, trap);
+            self.addUse(trap, region);
+        }
+
         pub fn addNode(self: *Self, comptime kind: Kind, inputs: []const ?*Node, extra: ClassFor(kind)) *Node {
             const node = self.addNodeUntyped(kind, inputs, extra);
             if (kind == .Phi) node.data_type = node.inputs()[1].?.data_type;
@@ -1054,7 +1083,9 @@ pub fn Func(comptime MachNode: type) type {
             if (node.kind == .Phi) {
                 const l, const r = .{ inps[1].?, inps[2].? };
 
-                if (l == r) return l;
+                if (l == r and !node.cfg0().?.base.preservesIdentityPhys()) {
+                    return l;
+                }
 
                 if (r == node) return l;
             }
@@ -1149,7 +1180,9 @@ pub fn Func(comptime MachNode: type) type {
             if (node.kind == .Phi) {
                 _, const l, const r = .{ inps[0].?, inps[1].?, inps[2].? };
 
-                if (l == r) return l;
+                if (l == r and !node.cfg0().?.base.preservesIdentityPhys()) {
+                    return l;
+                }
 
                 if (r == node) return l;
             }
@@ -1193,6 +1226,7 @@ pub fn Func(comptime MachNode: type) type {
             comptime only_basic: bool,
         ) void {
             switch (node.kind) {
+                .TrapRegion => return,
                 .Region => {
                     if (!visited.isSet(node.id)) {
                         visited.set(node.id);
