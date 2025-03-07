@@ -503,19 +503,18 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
             else => unreachable,
         };
 
-        const typ = if (ty) |typ| b: {
-            const global, const new = self.types.resolveGlobal(cursor.perm(), ast.tokenSrc(id.pos()), value);
-            if (new) try self.types.ct.evalGlobal(ast.tokenSrc(id.pos()), global.data().Global, typ, value);
-            self.queue(.{ .Global = global.data().Global });
-            break :b global;
-        } else {
-            var cur = try self.types.ct.evalTy(ast.tokenSrc(id.pos()), cursor, value);
-            for (path) |ps| {
-                cur = (try self.lookupScopeItem(ps, cur, ast.tokenSrc(ps.index))).ty;
-            }
+        const global_ty, const new = self.types.resolveGlobal(cursor.perm(), ast.tokenSrc(id.pos()), value);
+        const global = global_ty.data().Global;
+        if (new) try self.types.ct.evalGlobal(ast.tokenSrc(id.pos()), global, ty, value);
+        self.queue(.{ .Global = global });
+
+        if (path.len != 0) {
+            if (global.ty != .type) return self.report(value, "expected a global holding a type, {} is not", .{global.ty});
+            var cur: Types.Id = @enumFromInt(@as(u64, @bitCast(global.data[0..8].*)));
+            for (path) |ps| cur = (try self.lookupScopeItem(ps, cur, ast.tokenSrc(ps.index))).ty;
             return self.emitTyConst(cur);
-        };
-        const global = typ.data().Global;
+        }
+
         return .mkp(global.ty, self.bl.addGlobalAddr(global.id));
     }
 }
@@ -1872,11 +1871,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 if (!slot.found_existing) {
                     alloc.* = .{
                         .key = alloc.key,
-                        .id = self.types.next_global,
+                        .id = @intCast(self.types.globals.items.len),
                         .data = file.source,
                         .ty = self.types.makeSlice(file.source.len, .u8),
                     };
-                    self.types.next_global += 1;
+                    self.types.globals.append(self.types.arena.allocator(), alloc) catch unreachable;
                 }
                 self.queue(.{ .Global = alloc });
                 return .mkp(alloc.ty, self.bl.addGlobalAddr(alloc.id));

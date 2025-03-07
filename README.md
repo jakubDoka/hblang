@@ -1121,7 +1121,7 @@ main := fn(): uint {
 
 #### global variables 1
 ```hb
-counter: uint = 0
+counter := 0
 
 dec := fn(): void {
     counter -= 1
@@ -1140,16 +1140,16 @@ expectations := .{
     return_value: 55,
 }
 
-some_other: uint = 10
+some_other := 10
 
-some_fib: uint = fib(some_other)
+some_fib := fib(some_other)
 
 fib := fn(n: uint): uint {
     if n != 10 return 0
     return 55
 }
 
-bigon_era: uint = some_other - 10
+bigon_era := some_other - 10
 
 main := fn(): uint {
     return some_fib - bigon_era

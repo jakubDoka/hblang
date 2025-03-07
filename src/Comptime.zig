@@ -148,6 +148,17 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) PartialEvalResult
                 continue;
             },
             .Load => b: {
+                if (curr.base().kind == .GlobalAddr) {
+                    const glob = types.globals.items[curr.base().extra(.GlobalAddr).id];
+
+                    std.debug.assert(curr.data_type.isInt());
+
+                    var mem: u64 = 0;
+                    @memcpy(@as([*]u8, @ptrCast(&mem))[0..curr.data_type.size()], glob.data[0..curr.data_type.size()]);
+
+                    break :b bl.addIntImm(curr.data_type, @bitCast(mem));
+                }
+
                 var cursor = curr.mem();
                 while (true) {
                     if (cursor.isStore()) {

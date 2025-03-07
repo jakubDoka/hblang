@@ -1,6 +1,6 @@
 next_struct: u32 = 0,
 funcs: std.ArrayListUnmanaged(*Func) = .{},
-next_global: u32 = 0,
+globals: std.ArrayListUnmanaged(*Global) = .{},
 arena: Arena,
 interner: Map = .{},
 file_scopes: []Id,
@@ -260,7 +260,7 @@ pub const Struct = struct {
 
                 const value = types.arena.create(Global);
                 value.* = .{
-                    .id = types.next_global,
+                    .id = @intCast(types.globals.items.len),
                     .key = .{
                         .file = self.key.file,
                         .name = name,
@@ -270,7 +270,7 @@ pub const Struct = struct {
                     },
                 };
                 types.ct.evalGlobal(name, value, ty, field_meta.rhs) catch {};
-                types.next_global += 1;
+                types.globals.append(types.arena.allocator(), value) catch unreachable;
 
                 fields[i] = .{ .name = name, .ty = ty, .defalut_value = value };
             } else {
@@ -912,9 +912,9 @@ pub fn resolveGlobal(self: *Types, scope: Id, name: []const u8, ast: Ast.Id) str
     if (!slot.found_existing) {
         alloc.* = .{
             .key = alloc.key,
-            .id = self.next_global,
+            .id = @intCast(self.globals.items.len),
         };
-        self.next_global += 1;
+        self.globals.append(self.arena.allocator(), alloc) catch unreachable;
     }
     return .{ slot.key_ptr.*, !slot.found_existing };
 }
