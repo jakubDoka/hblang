@@ -75,6 +75,7 @@ pub fn addLocal(self: *Builder, size: usize) SpecificNode(.Local) {
 }
 
 pub fn resizeLocal(_: *Builder, here: SpecificNode(.Local), to_size: usize) void {
+    std.debug.assert(here.extra(.Local).* == 0);
     here.extra(.Local).* = to_size;
 }
 

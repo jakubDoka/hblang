@@ -581,6 +581,17 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
     var i: usize = self.pushReturn(args, ret_abi, func.ret, ctx);
 
     if (caller) |*value| {
+        if (value.ty.data() == .Ptr and func.args[0].data() != .Ptr) {
+            self.ensureLoaded(value);
+            value.ty = value.ty.data().Ptr.*;
+            value.id = .{ .Ptr = value.id.Value };
+        }
+
+        if (value.ty.data() != .Ptr and func.args[0].data() == .Ptr) {
+            value.ty = self.types.makePtr(value.ty);
+            value.id = .{ .Value = value.id.Ptr };
+        }
+
         try self.typeCheck(e.called, value, func.args[0]);
 
         const abi = self.abi.categorize(value.ty, self.types);
@@ -1007,11 +1018,28 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             return .mkp(oty, local);
         },
-        .Tupl => |e| {
-            if (e.ty.tag() == .Void and ctx.ty == null) {
-                return self.report(expr, "cant infer the type of this constructor, you can specify a type: '<ty>.('", .{});
-            }
+        .Tupl => |e| if (e.ty.tag() == .Void and ctx.ty == null) {
+            var tmp = root.Arena.scrath(null);
+            defer tmp.deinit();
 
+            const local = ctx.loc orelse self.bl.addLocal(0);
+            var offset: usize = 0;
+            var alignment: usize = 1;
+            const tys = tmp.arena.alloc(Types.Id, e.fields.len());
+
+            for (ast.exprs.view(e.fields), tys) |field, *ty| {
+                var value = try self.emit(.{}, field);
+                ty.* = value.ty;
+                offset = std.mem.alignForward(usize, offset, value.ty.alignment(self.types));
+                self.emitGenericStore(self.bl.addFieldOffset(local, @bitCast(offset)), &value);
+                offset += value.ty.size(self.types);
+                alignment = @max(alignment, value.ty.alignment(self.types));
+            }
+            offset = std.mem.alignForward(usize, offset, alignment);
+            if (ctx.loc == null) self.bl.resizeLocal(local, offset);
+
+            return .mkp(self.types.makeTuple(tys), local);
+        } else {
             const oty = ctx.ty orelse try self.resolveAnonTy(e.ty);
             var ty = oty;
             const local = ctx.loc orelse self.bl.addLocal(oty.size(self.types));
@@ -1410,10 +1438,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             // TODO: pointers to arrays are kind of an edge case
             self.emitAutoDeref(&base);
+            var idx_value = try self.emitTyped(.{}, .uint, e.subscript);
+            self.ensureLoaded(&idx_value);
             switch (base.ty.data()) {
-                .Struct => |struct_ty| {
-                    var idx_value = try self.emitTyped(.{}, .uint, e.subscript);
-                    self.ensureLoaded(&idx_value);
+                inline .Struct, .Tuple => |struct_ty| {
                     const idx = try self.partialEval(e.subscript, idx_value.id.Value);
 
                     const fields = struct_ty.getFields(self.types);
@@ -1431,12 +1459,9 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     return .mkp(fields[idx].ty, self.bl.addFieldOffset(base.id.Ptr, @intCast(offset)));
                 },
                 .Slice => |slice_ty| {
-                    var idx = try self.emitTyped(.{}, .uint, e.subscript);
-                    self.ensureLoaded(&idx);
-
                     const index_base = if (slice_ty.len == null) self.bl.addLoad(base.id.Ptr, .int) else base.id.Ptr;
 
-                    return .mkp(slice_ty.elem, self.bl.addIndexOffset(index_base, slice_ty.elem.size(self.types), idx.id.Value));
+                    return .mkp(slice_ty.elem, self.bl.addIndexOffset(index_base, slice_ty.elem.size(self.types), idx_value.id.Value));
                 },
                 else => {
                     return self.report(expr, "only structs and slices can be indexed, {} is not", .{base.ty});

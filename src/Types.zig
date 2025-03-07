@@ -28,6 +28,7 @@ pub const TypeCtx = struct {
         return switch (ad) {
             .Builtin => std.meta.eql(ad, bd),
             inline .Ptr, .Nullable, .Slice => |v, t| std.meta.eql(v.*, @field(bd, @tagName(t)).*),
+            .Tuple => |v| std.mem.eql(Id, @ptrCast(v.fields), @ptrCast(bd.Tuple.fields)),
             inline else => |v, t| return v.key.eql(@field(bd, @tagName(t)).key),
         };
     }
@@ -36,7 +37,7 @@ pub const TypeCtx = struct {
         var hasher = std.hash.Fnv1a_64.init();
         const adk = adapted_key.data();
         switch (adk) {
-            inline .Builtin, .Ptr, .Slice, .Nullable => |v| std.hash.autoHashStrat(&hasher, v, .Deep),
+            inline .Builtin, .Ptr, .Slice, .Nullable, .Tuple => |v| std.hash.autoHashStrat(&hasher, v, .Deep),
             inline else => |v| std.hash.autoHashStrat(&hasher, v.key, .Deep),
         }
         return hasher.final();
@@ -55,6 +56,7 @@ pub const Data = union(enum) {
     Ptr: *Id,
     Slice: *Slice,
     Nullable: *Id,
+    Tuple: *Tuple,
     Enum: *Enum,
     Union: *Union,
     Struct: *Struct,
@@ -100,6 +102,18 @@ pub const Slice = struct {
 
     pub const ptr_offset = 0;
     pub const len_offset = 8;
+};
+
+pub const Tuple = struct {
+    fields: []Field,
+
+    pub const Field = struct {
+        ty: Id,
+    };
+
+    pub fn getFields(self: *Tuple, _: anytype) []Field {
+        return self.fields;
+    }
 };
 
 pub const Enum = struct {
@@ -349,14 +363,14 @@ pub const Id = enum(usize) {
 
     pub fn file(self: Id) ?File {
         return switch (self.data()) {
-            .Builtin, .Ptr, .Slice, .Nullable => null,
+            .Builtin, .Ptr, .Slice, .Nullable, .Tuple => null,
             inline else => |v| v.key.file,
         };
     }
 
     pub fn items(self: Id, ast: *const Ast) Ast.Slice {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice, .Nullable => std.debug.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => std.debug.panic("{s}", .{@tagName(self.data())}),
             .Template, .Func => .{},
             inline else => |v, t| @field(ast.exprs.get(v.key.ast), @tagName(t)).fields,
         };
@@ -364,14 +378,14 @@ pub const Id = enum(usize) {
 
     pub fn captures(self: Id) []const Key.Capture {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice, .Nullable => std.debug.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => std.debug.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| v.key.captures,
         };
     }
 
     pub fn findCapture(self: Id, id: Ast.Ident) ?Key.Capture {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice, .Nullable => std.debug.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => std.debug.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| for (v.key.captures) |cp| {
                 if (cp.id == id) break cp;
             } else null,
@@ -380,7 +394,7 @@ pub const Id = enum(usize) {
 
     pub fn parent(self: Id) Id {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice, .Nullable => std.debug.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => std.debug.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| v.key.scope,
         };
     }
@@ -389,7 +403,7 @@ pub const Id = enum(usize) {
         return switch (self.data()) {
             .Builtin => self.isInteger() or self == .bool,
             .Struct, .Ptr, .Enum => true,
-            .Global, .Func, .Template, .Slice, .Nullable, .Union => false,
+            .Global, .Func, .Template, .Slice, .Nullable, .Union, .Tuple => false,
         };
     }
 
@@ -444,6 +458,17 @@ pub const Id = enum(usize) {
                 const var_count = e.getFields(types).len;
                 return std.math.ceilPowerOfTwo(usize, std.mem.alignForward(usize, std.math.log2_int(usize, var_count), 8) / 8) catch unreachable;
             },
+            .Tuple => |t| {
+                var total_size: usize = 0;
+                var alignm: usize = 1;
+                for (t.fields) |f| {
+                    alignm = @max(alignm, f.ty.alignment(types));
+                    total_size = std.mem.alignForward(usize, total_size, f.ty.alignment(types));
+                    total_size += f.ty.size(types);
+                }
+                total_size = std.mem.alignForward(usize, total_size, alignm);
+                return total_size;
+            },
             .Union => |u| {
                 var max_size: usize = 0;
                 var alignm: usize = 1;
@@ -467,7 +492,7 @@ pub const Id = enum(usize) {
             .Ptr => 8,
             .Nullable => |n| n.alignment(types),
             .Struct => |s| s.getAlignment(types),
-            inline .Union => |s| {
+            inline .Union, .Tuple => |s| {
                 var alignm: usize = 1;
                 for (s.getFields(types)) |f| {
                     alignm = @max(alignm, f.ty.alignment(types));
@@ -522,6 +547,15 @@ pub const Id = enum(usize) {
                     if (b.len) |l| try writer.print("{d}", .{l});
                     try writer.writeAll("]");
                     try writer.print("{" ++ opts ++ "}", .{b.elem.fmt(self.tys)});
+                    return;
+                },
+                .Tuple => |b| {
+                    try writer.writeAll("(");
+                    for (b.fields, 0..) |f, i| {
+                        if (i != 0) try writer.writeAll(", ");
+                        try writer.print("{" ++ opts ++ "}", .{f.ty.fmt(self.tys)});
+                    }
+                    try writer.writeAll(")");
                     return;
                 },
                 .Builtin => |b| writer.writeAll(@tagName(b)),
@@ -641,8 +675,8 @@ pub const Abi = enum {
             .Union => |s| switch (self) {
                 .ableos => categorizeAbleosUnion(s, types),
             },
-            .Struct => |s| switch (self) {
-                .ableos => categorizeAbleosStruct(s, types),
+            inline .Struct, .Tuple => |s| switch (self) {
+                .ableos => categorizeAbleosRecord(s, types),
             },
             .Slice => |s| switch (self) {
                 .ableos => categorizeAbleosSlice(s, types),
@@ -685,7 +719,7 @@ pub const Abi = enum {
         return res;
     }
 
-    pub fn categorizeAbleosStruct(stru: *Struct, types: *Types) Spec {
+    pub fn categorizeAbleosRecord(stru: anytype, types: *Types) Spec {
         var res: Spec = .Imaginary;
         var offset: usize = 0;
         for (stru.getFields(types)) |f| {
@@ -794,7 +828,9 @@ pub fn internPtr(self: *Types, comptime tag: std.meta.Tag(Data), payload: std.me
     const slot = self.interner.getOrPut(self.arena.allocator(), id) catch unreachable;
     if (slot.found_existing) return slot.key_ptr.*;
     const alloc = self.arena.create(@TypeOf(payload));
-    alloc.* = payload;
+    if (@TypeOf(payload) == Tuple) {
+        alloc.fields = self.arena.dupe(Tuple.Field, payload.fields);
+    } else alloc.* = payload;
     slot.key_ptr.* = .init(@unionInit(Data, @tagName(tag), alloc));
     return slot.key_ptr.*;
 }
@@ -809,6 +845,10 @@ pub fn makePtr(self: *Types, v: Id) Id {
 
 pub fn makeNullable(self: *Types, v: Id) Id {
     return self.internPtr(.Nullable, v);
+}
+
+pub fn makeTuple(self: *Types, v: []Id) Id {
+    return self.internPtr(.Tuple, .{ .fields = @ptrCast(v) });
 }
 
 pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Key) struct { Map.GetOrPutResult, std.meta.TagPayload(Data, kind) } {

@@ -810,9 +810,9 @@ main := fn(): uint {
     citer := Chain(Chars, Chars).(.a, .(start), .(end))
 
     loop {
-        sc := (&siter).next()
+        sc := siter.next()
         if !sc.next break
-        rc := (&riter).next()
+        rc := riter.next()
         if !rc.next return 1
 
         if sc != rc return 2
@@ -820,9 +820,9 @@ main := fn(): uint {
 
     riter = .(ref)
     loop {
-        rc := (&riter).next()
+        rc := riter.next()
         if !rc.next break
-        sc := (&citer).next()
+        sc := citer.next()
         if !sc.next return 3
 
         if sc != rc return 4
@@ -897,6 +897,18 @@ main := fn(): uint {
     Ty := struct{.field: @TypeOf(some_int)}
 
     return Ty.(some_int).field
+}
+```
+
+#### tuples 1
+```hb
+expectations := .{
+    return_value: 6,
+}
+
+main := fn(): uint {
+    tuple := .(1, 2, 3)
+    return tuple[0] + tuple[1] + tuple[2]
 }
 ```
 
@@ -1294,7 +1306,8 @@ take := fn(s: ^Stru): void {
 ```hb
 expectations := .{
     return_value: 3,
-};
+}
+
 foo.{bar, bas: .{baz: bax}} := @use("foo.hb")
 
 main := fn(): uint {
@@ -1379,7 +1392,7 @@ main := fn(): uint {
 #### directives 7 (@kind_of)
 ```hb
 expectations := .{
-    return_value: 6,
+    return_value: 7,
 }
 
 main := fn(): uint {
@@ -1545,7 +1558,7 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
     - [x] field access
     - [x] indexing
     - [x] slicing
-  - [ ] **tuples** --DO
+  - [x] tuples
   - [x] nullable types
 - [ ] ? directives
   - [x] `@use(<string>)`
