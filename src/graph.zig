@@ -5,14 +5,22 @@ fn tu(int: i64) u64 {
     return @bitCast(int);
 }
 
+fn tf(int: i64) f64 {
+    return @bitCast(int);
+}
+
 pub const infinite_loop_trap = std.math.maxInt(u64);
 
 pub const BinOp = enum(u8) {
     iadd,
+    fadd,
     isub,
+    fsub,
     imul,
+    fmul,
     udiv,
     sdiv,
+    fdiv,
     umod,
     smod,
 
@@ -27,20 +35,28 @@ pub const BinOp = enum(u8) {
     eq,
     ugt,
     sgt,
+    fgt,
     ult,
     slt,
+    flt,
     uge,
     sge,
+    fge,
     ule,
     sle,
+    fle,
 
     pub fn eval(self: BinOp, lhs: i64, rhs: i64) i64 {
         return switch (self) {
             .iadd => lhs +% rhs,
+            .fadd => @bitCast(tf(lhs) + tf(rhs)),
             .isub => lhs -% rhs,
+            .fsub => @bitCast(tf(lhs) - tf(rhs)),
             .imul => lhs *% rhs,
+            .fmul => @bitCast(tf(lhs) * tf(rhs)),
             .udiv => @bitCast(tu(lhs) / tu(rhs)),
             .sdiv => @divFloor(lhs, rhs),
+            .fdiv => @bitCast(tf(lhs) / tf(rhs)),
             .umod => @bitCast(tu(lhs) % tu(rhs)),
             .smod => @rem(lhs, rhs),
 
@@ -59,6 +75,11 @@ pub const BinOp = enum(u8) {
             .uge => @intFromBool(tu(lhs) >= tu(rhs)),
             .ule => @intFromBool(tu(lhs) <= tu(rhs)),
 
+            .fgt => @intFromBool(tf(lhs) > tf(rhs)),
+            .flt => @intFromBool(tf(lhs) < tf(rhs)),
+            .fge => @intFromBool(tf(lhs) >= tf(rhs)),
+            .fle => @intFromBool(tf(lhs) <= tf(rhs)),
+
             .sgt => @intFromBool(lhs > rhs),
             .slt => @intFromBool(lhs < rhs),
             .sge => @intFromBool(lhs >= rhs),
@@ -71,9 +92,14 @@ pub const UnOp = enum(u8) {
     sext,
     uext,
     ired,
-    neg,
+    ineg,
+    fneg,
     not,
     bnot,
+    itf32,
+    itf64,
+    fti,
+    fcst,
 
     pub fn eval(self: UnOp, src: DataType, oper: i64) i64 {
         return switch (self) {
@@ -81,18 +107,24 @@ pub const UnOp = enum(u8) {
                 .i8 => @as(i8, @truncate(oper)),
                 .i16 => @as(i16, @truncate(oper)),
                 .i32 => @as(i32, @truncate(oper)),
-                else => unreachable,
+                .int => oper,
+                else => std.debug.panic("{}", .{src}),
             },
             .uext => switch (src) {
                 .i8 => @as(u8, @truncate(tu(oper))),
                 .i16 => @as(u16, @truncate(tu(oper))),
                 .i32 => @as(u32, @truncate(tu(oper))),
+                .int => oper,
                 else => unreachable,
             },
             .ired => oper,
-            .neg => -oper,
+            .ineg => -oper,
+            .fneg => @bitCast(-tf(oper)),
             .not => @intFromBool(oper == 0),
             .bnot => ~oper,
+            .fti => @intFromFloat(tf(oper)),
+            .itf64, .itf32 => @bitCast(@as(f64, @floatFromInt(oper))),
+            .fcst => oper,
         };
     }
 };
@@ -103,6 +135,8 @@ pub const DataType = enum(u16) {
     i16,
     i32,
     int,
+    f32,
+    f64,
     bot,
 
     pub fn size(self: DataType) usize {
@@ -110,8 +144,8 @@ pub const DataType = enum(u16) {
             .top, .bot => 0,
             .i8 => 1,
             .i16 => 2,
-            .i32 => 4,
-            .int => 8,
+            .i32, .f32 => 4,
+            .int, .f64 => 8,
         };
     }
 
@@ -125,9 +159,9 @@ pub const DataType = enum(u16) {
     pub fn meet(self: DataType, other: DataType) DataType {
         if (self == .top) return other;
         if (other == .top) return self;
+        if (self == other) return self;
 
-        if (self.isInt()) {
-            std.debug.assert(other.isInt());
+        if (self.isInt() and other.isInt()) {
             return @enumFromInt(@max(@intFromEnum(self), @intFromEnum(other)));
         }
 
@@ -153,6 +187,9 @@ pub const Builtin = union(enum) {
     },
     // [?Cfg]
     CInt: i64,
+    // [?Cfg]
+    CFlt32: f32,
+    CFlt64: f64,
     // [?Cfg, lhs, rhs]
     BinOp: mod.BinOp,
     // [?Cfg, lhs, rhs]

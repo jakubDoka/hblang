@@ -331,6 +331,8 @@ pub const Id = enum(usize) {
     i16,
     i32,
     int,
+    f32,
+    f64,
     type,
     any,
     _,
@@ -401,7 +403,7 @@ pub const Id = enum(usize) {
 
     pub fn isBinaryOperand(self: Id) bool {
         return switch (self.data()) {
-            .Builtin => self.isInteger() or self == .bool,
+            .Builtin => self.isInteger() or self.isFloat() or self == .bool,
             .Struct, .Ptr, .Enum => true,
             .Global, .Func, .Template, .Slice, .Nullable, .Union, .Tuple => false,
         };
@@ -409,6 +411,13 @@ pub const Id = enum(usize) {
 
     pub fn isInteger(self: Id) bool {
         return self.isUnsigned() or self.isSigned();
+    }
+
+    pub fn isFloat(self: Id) bool {
+        return switch (self) {
+            .f32, .f64 => true,
+            else => false,
+        };
     }
 
     pub fn isUnsigned(self: Id) bool {
@@ -450,8 +459,8 @@ pub const Id = enum(usize) {
                 .void => 0,
                 .u8, .i8, .bool => 1,
                 .u16, .i16 => 2,
-                .u32, .i32 => 4,
-                .uint, .int, .type => 8,
+                .u32, .i32, .f32 => 4,
+                .uint, .int, .f64, .type => 8,
             },
             .Ptr => 8,
             .Enum => |e| {
@@ -662,6 +671,8 @@ pub const Abi = enum {
                 .u16, .i16 => .i16,
                 .u32, .i32 => .i32,
                 .uint, .int, .type => .int,
+                .f32 => .f32,
+                .f64 => .f64,
             } },
             .Ptr => .{ .ByValue = .int },
             .Enum => .{ .ByValue = switch (ty.size(types)) {

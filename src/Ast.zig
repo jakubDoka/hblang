@@ -44,6 +44,12 @@ pub const CtorField = struct {
     value: Id,
 };
 
+pub const Ctor = struct {
+    pos: Pos,
+    ty: Id,
+    fields: root.EnumSlice(CtorField),
+};
+
 pub const Expr = union(enum) {
     Void,
     Comment: Pos,
@@ -95,11 +101,7 @@ pub const Expr = union(enum) {
         base: Id,
         field: Pos,
     },
-    Ctor: struct {
-        pos: Pos,
-        ty: Id,
-        fields: root.EnumSlice(CtorField),
-    },
+    Ctor: Ctor,
     Tupl: struct {
         pos: Pos,
         ty: Id,
@@ -158,6 +160,7 @@ pub const Expr = union(enum) {
         pos: Pos,
         base: u8,
     },
+    Float: Pos,
     Bool: struct {
         pos: Pos,
         value: bool,
@@ -287,6 +290,7 @@ fn posOfPayload(self: *const Ast, v: anytype) Pos {
         Ident => .init(v.pos()),
         Pos => v,
         Id => self.posOf(v),
+        Ctor => if (v.ty.tag() != .Void) self.posOf(v.ty) else v.pos,
         else => |Vt| if (@hasField(Vt, "pos"))
             v.pos
         else

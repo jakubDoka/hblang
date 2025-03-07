@@ -11,6 +11,7 @@ pub const Lexeme = enum(u16) {
     Eof = 3,
     Ident,
     Comment,
+    Float,
 
     @"unterminated string",
 
@@ -86,6 +87,7 @@ pub const Lexeme = enum(u16) {
     @"!=" = '!' + 128,
     @"+=" = '+' + 128,
     @"-=" = '-' + 128,
+    @"&=" = '&' + 128,
     @":=" = ':' + 128,
     @"<=" = '<' + 128,
     @"==" = '=' + 128,
@@ -102,6 +104,8 @@ pub const Lexeme = enum(u16) {
     ty_i16,
     ty_i32,
     ty_int,
+    ty_f32,
+    ty_f64,
     ty_type,
 
     @"@CurrentScope" = 0x200,
@@ -121,6 +125,9 @@ pub const Lexeme = enum(u16) {
     @"@error",
     @"@ChildOf",
     @"@target",
+    @"@int_to_float",
+    @"@float_to_int",
+    @"@float_cast",
 
     comptime {
         //std.debug.assert(Lexeme.@"@TypeOf".expand().Directive == .TypeOf);
@@ -194,7 +201,7 @@ pub const Lexeme = enum(u16) {
         return switch (self) {
             .@"=>" => 17,
             .@":" => 16,
-            .@"=", .@":=", .@"+=", .@"-=" => 15,
+            .@"=", .@":=", .@"+=", .@"-=", .@"&=" => 15,
             .@"|", .@"&" => 8,
             .@"<", .@">", .@"<=", .@">=", .@"==", .@"!=" => 7,
             .@"^" => 6,
@@ -232,7 +239,7 @@ pub const Lexeme = enum(u16) {
     pub fn innerOp(self: Lexeme) ?Lexeme {
         const byte = @intFromEnum(self);
         switch (byte -| 128) {
-            '+', '-' => return @enumFromInt(byte - 128),
+            '+', '-', '&' => return @enumFromInt(byte - 128),
             else => return null,
         }
     }
@@ -345,7 +352,22 @@ pub fn next(self: *Lexer) Token {
                         '0'...'9' => self.cursor += 1,
                         else => break,
                     };
-                    break :b .DecInteger;
+
+                    if (!self.advanceIf('.')) {
+                        break :b .DecInteger;
+                    }
+
+                    if (self.advanceIf('.')) {
+                        self.cursor -= 2;
+                        break :b .DecInteger;
+                    }
+
+                    while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
+                        '0'...'9' => self.cursor += 1,
+                        else => break,
+                    };
+
+                    break :b .Float;
                 }
             },
             '"' => b: {
@@ -387,7 +409,7 @@ pub fn next(self: *Lexer) Token {
             else
                 .@".",
             '<', '>' => |c| @enumFromInt(if (self.advanceIf(c)) c - 10 else if (self.advanceIf('=')) c + 128 else c),
-            ':', '+', '-', '=', '!' => |c| if (self.advanceIf('>')) .@"=>" else @enumFromInt(if (self.advanceIf('=')) c + 128 else c),
+            ':', '+', '-', '&', '=', '!' => |c| if (self.advanceIf('>')) .@"=>" else @enumFromInt(if (self.advanceIf('=')) c + 128 else c),
             else => |c| std.meta.intToEnum(Lexeme, c) catch std.debug.panic("{c}", .{c}),
         };
         return Token.init(pos, self.cursor, kind);

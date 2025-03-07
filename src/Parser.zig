@@ -442,6 +442,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 try self.parseExpr(),
         } },
         .BinInteger, .OctInteger, .DecInteger, .HexInteger => .{ .Integer = .{ .pos = .init(token.pos), .base = @intCast(@intFromEnum(token.kind) & ~@as(u8, 128)) } },
+        .Float => .{ .Float = .init(token.pos) },
         .true => .{ .Bool = .{ .value = true, .pos = .init(token.pos) } },
         .@"\"" => .{ .String = .{ .pos = .init(token.pos), .end = token.end } },
         .false => .{ .Bool = .{ .value = false, .pos = .init(token.pos) } },

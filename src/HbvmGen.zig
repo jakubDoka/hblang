@@ -300,8 +300,16 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
         switch (no.kind) {
             .CInt => {
                 const extra = no.extra(.CInt);
-                self.emit(.li64, .{ self.reg(no), @as(u64, @bitCast(extra.*)) });
+                switch (no.data_type) {
+                    .i8 => self.emit(.li8, .{ self.reg(no), @truncate(@as(u64, @bitCast(extra.*))) }),
+                    .i16 => self.emit(.li16, .{ self.reg(no), @truncate(@as(u64, @bitCast(extra.*))) }),
+                    .i32 => self.emit(.li32, .{ self.reg(no), @truncate(@as(u64, @bitCast(extra.*))) }),
+                    .int => self.emit(.li64, .{ self.reg(no), @bitCast(extra.*) }),
+                    else => std.debug.panic("{}\n", .{no.data_type}),
+                }
             },
+            .CFlt32 => self.emit(.li32, .{ self.reg(no), @bitCast(no.extra(.CFlt32).*) }),
+            .CFlt64 => self.emit(.li64, .{ self.reg(no), @bitCast(no.extra(.CFlt64).*) }),
             .Arg => {},
             .GlobalAddr => {
                 const extra = no.extra(.GlobalAddr);
@@ -360,10 +368,14 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
 
                 var op: isa.Op = switch (extra) {
                     .iadd => .add8,
+                    .fadd => .fadd32,
                     .isub => .sub8,
+                    .fsub => .fsub32,
                     .imul => .mul8,
+                    .fmul => .fmul32,
                     .udiv => .diru8,
                     .sdiv => .dirs8,
+                    .fdiv => .fdiv32,
                     .umod => .diru8,
                     .smod => .dirs8,
                     .ishl => .slu8,
@@ -372,12 +384,16 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     .bor => .@"or",
                     .band => .@"and",
                     .bxor => .xor,
+                    .fge, .flt => .fcmplt32,
+                    .fgt, .fle => .fcmpgt32,
                     .eq, .ne, .uge, .ule, .ugt, .ult => .cmpu,
                     .sge, .sle, .sgt, .slt => .cmps,
                 };
 
                 switch (extra) {
                     .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt, .bor, .band, .bxor => {},
+                    .fadd, .fsub, .fmul, .fdiv, .fge, .fle, .fgt, .flt => op = @enumFromInt(@intFromEnum(op) +
+                        (@intFromEnum(inps[0].?.data_type) - @intFromEnum(graph.DataType.f32))),
                     else => op = @enumFromInt(@intFromEnum(op) +
                         (@intFromEnum(no.data_type) - @intFromEnum(graph.DataType.i8))),
                 }
@@ -387,6 +403,11 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     .udiv, .sdiv => self.emitLow("RRRR", op, .{ self.reg(no), .null, lhs, rhs }),
                     .umod, .smod => self.emitLow("RRRR", op, .{ .null, self.reg(no), lhs, rhs }),
                     else => self.emitLow("RRR", op, .{ self.reg(no), lhs, rhs }),
+                }
+
+                switch (extra) {
+                    .fge, .fle => self.emit(.not, .{ self.reg(no), self.reg(no) }),
+                    else => {},
                 }
 
                 extra_comparison_instrs: {
@@ -419,9 +440,28 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     },
                     // TODO: idealize to nothing
                     .ired => self.emit(.cp, .{ self.reg(no), self.reg(inps[0]) }),
-                    .neg => self.emit(.neg, .{ self.reg(no), self.reg(inps[0]) }),
+                    .ineg => self.emit(.neg, .{ self.reg(no), self.reg(inps[0]) }),
+                    .fneg => if (no.data_type == .f32) {
+                        self.emit(.fsub32, .{ self.reg(no), .null, self.reg(inps[0]) });
+                    } else {
+                        self.emit(.fsub64, .{ self.reg(no), .null, self.reg(inps[0]) });
+                    },
                     .not => self.emit(.not, .{ self.reg(no), self.reg(inps[0]) }),
                     .bnot => self.emit(.xori, .{ self.reg(no), self.reg(inps[0]), std.math.maxInt(u64) }),
+                    .fti => if (inps[0].?.data_type == .f32) {
+                        self.emit(.fti32, .{ self.reg(no), self.reg(inps[0]), 0 });
+                    } else {
+                        std.debug.assert(inps[0].?.data_type == .f64);
+                        self.emit(.fti64, .{ self.reg(no), self.reg(inps[0]), 0 });
+                    },
+                    .itf32 => self.emit(.itf32, .{ self.reg(no), self.reg(inps[0]) }),
+                    .itf64 => self.emit(.itf64, .{ self.reg(no), self.reg(inps[0]) }),
+                    .fcst => if (no.data_type == .f32) {
+                        self.emit(.fc64t32, .{ self.reg(no), self.reg(inps[0]), 0 });
+                    } else {
+                        std.debug.assert(no.data_type == .f64);
+                        self.emit(.fc32t64, .{ self.reg(no), self.reg(inps[0]) });
+                    },
                 }
             },
             .ImmBinOp => {

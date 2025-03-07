@@ -140,14 +140,30 @@ pub fn addGlobalAddr(self: *Builder, arbitrary_global_id: u32) SpecificNode(.Glo
 // #MATH =======================================================================
 
 pub fn addIntImm(self: *Builder, ty: DataType, value: i64) SpecificNode(.CInt) {
+    std.debug.assert(ty != .bot);
     const val = self.func.addNode(.CInt, &.{null}, value);
     val.data_type = val.data_type.meet(ty);
+    std.debug.assert(val.data_type != .bot);
+    return val;
+}
+
+pub fn addFlt64Imm(self: *Builder, value: f64) SpecificNode(.CFlt64) {
+    const val = self.func.addNode(.CFlt64, &.{null}, value);
+    val.data_type = .f64;
+    return val;
+}
+
+pub fn addFlt32Imm(self: *Builder, value: f32) SpecificNode(.CFlt32) {
+    const val = self.func.addNode(.CFlt32, &.{null}, value);
+    val.data_type = .f32;
     return val;
 }
 
 pub fn addBinOp(self: *Builder, op: BinOp, ty: DataType, lhs: *BuildNode, rhs: *BuildNode) SpecificNode(.BinOp) {
     if (lhs.kind == .CInt and rhs.kind == .CInt) {
         return self.addIntImm(ty, op.eval(lhs.extra(.CInt).*, rhs.extra(.CInt).*));
+    } else if (lhs.kind == .CFlt64 and rhs.kind == .CFlt64) {
+        return self.addFlt64Imm(@bitCast(op.eval(@bitCast(lhs.extra(.CFlt64).*), @bitCast(rhs.extra(.CFlt64).*))));
     }
     if ((op == .iadd or op == .iadd) and rhs.kind == .CInt and rhs.extra(.CInt).* == 0) {
         return lhs;
@@ -158,6 +174,13 @@ pub fn addBinOp(self: *Builder, op: BinOp, ty: DataType, lhs: *BuildNode, rhs: *
 }
 
 pub fn addUnOp(self: *Builder, op: UnOp, ty: DataType, oper: *BuildNode) SpecificNode(.BinOp) {
+    if (oper.kind == .CInt and ty.isInt()) {
+        return self.addIntImm(ty, op.eval(oper.data_type, oper.extra(.CInt).*));
+    } else if (oper.kind == .CFlt64 and ty == .f64) {
+        return self.addFlt64Imm(@bitCast(op.eval(oper.data_type, @bitCast(oper.extra(.CFlt64).*))));
+    } else if (oper.kind == .CFlt32 and ty == .f32) {
+        return self.addFlt32Imm(@floatCast(@as(f64, @bitCast(op.eval(oper.data_type, @bitCast(@as(f64, @floatCast(oper.extra(.CFlt32).*))))))));
+    }
     const val = self.func.addNode(.UnOp, &.{ null, oper }, op);
     val.data_type = val.data_type.meet(ty);
     return val;

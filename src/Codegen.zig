@@ -328,11 +328,12 @@ fn report(self: *Codegen, expr: anytype, comptime fmt: []const u8, args: anytype
 
 pub fn lexemeToBinOp(self: Lexer.Lexeme, ty: Types.Id) graph.BinOp {
     const unsigned = ty.isUnsigned();
+    const float = ty.isFloat();
     return switch (self) {
-        .@"+" => .iadd,
-        .@"-" => .isub,
-        .@"*" => .imul,
-        .@"/" => if (unsigned) .udiv else .sdiv,
+        .@"+" => if (float) .fadd else .iadd,
+        .@"-" => if (float) .fsub else .isub,
+        .@"*" => if (float) .fmul else .imul,
+        .@"/" => if (float) .fdiv else if (unsigned) .udiv else .sdiv,
         .@"%" => if (unsigned) .umod else .smod,
 
         .@"<<" => .ishl,
@@ -341,10 +342,10 @@ pub fn lexemeToBinOp(self: Lexer.Lexeme, ty: Types.Id) graph.BinOp {
         .@"&" => .band,
         .@"^" => .bxor,
 
-        .@"<" => if (unsigned) .ult else .slt,
-        .@">" => if (unsigned) .ugt else .sgt,
-        .@"<=" => if (unsigned) .ule else .sle,
-        .@">=" => if (unsigned) .uge else .sge,
+        .@"<" => if (float) .flt else if (unsigned) .ult else .slt,
+        .@">" => if (float) .fgt else if (unsigned) .ugt else .sgt,
+        .@"<=" => if (float) .fle else if (unsigned) .ule else .sle,
+        .@">=" => if (float) .fge else if (unsigned) .uge else .sge,
         .@"==" => .eq,
         .@"!=" => .ne,
         else => std.debug.panic("{s}", .{@tagName(self)}),
@@ -875,6 +876,24 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             };
             return .mkv(ty, self.bl.addIntImm(self.abi.categorize(ty, self.types).ByValue, @bitCast(parsed)));
         },
+        .Float => |e| {
+            const ty = ctx.ty orelse .f32;
+            if (!ty.isFloat()) {
+                return self.report(expr, "{} can not be constructed as integer literal", .{ty});
+            }
+
+            if (ty == .f32) {
+                const parsed = std.fmt.parseFloat(f32, ast.tokenSrc(e.index)) catch |err| switch (err) {
+                    error.InvalidCharacter => unreachable,
+                };
+                return .mkv(ty, self.bl.addFlt32Imm(parsed));
+            } else {
+                const parsed = std.fmt.parseFloat(f64, ast.tokenSrc(e.index)) catch |err| switch (err) {
+                    error.InvalidCharacter => unreachable,
+                };
+                return .mkv(ty, self.bl.addFlt64Imm(parsed));
+            }
+        },
         .Bool => |e| {
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(e.value)));
         },
@@ -1146,7 +1165,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             inline .@"-", .@"!", .@"~" => |t| {
                 var lhs = try self.emit(ctx, e.oper);
                 switch (t) {
-                    .@"-" => if (!lhs.ty.isInteger()) return self.report(expr, "only integers can be negated, {} is not", .{lhs.ty}),
+                    .@"-" => if (!lhs.ty.isInteger() and !lhs.ty.isFloat()) return self.report(expr, "only integers can be negated, {} is not", .{lhs.ty}),
                     .@"!" => if (lhs.ty != .bool) return self.report(expr, "only booleans can be negated, {} is not", .{lhs.ty}),
                     .@"~" => if (!lhs.ty.isInteger()) return self.report(expr, "only integers can invert their bits, {} is not", .{lhs.ty}),
                     else => @compileError("wut"),
@@ -1154,7 +1173,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 self.ensureLoaded(&lhs);
                 if (t == .@"!") lhs.id.Value = self.bl.addUnOp(.uext, .int, lhs.id.Value);
                 return .mkv(lhs.ty, self.bl.addUnOp(switch (t) {
-                    .@"-" => .neg,
+                    .@"-" => if (lhs.ty.isFloat()) .fneg else .ineg,
                     .@"!" => .not,
                     .@"~" => .bnot,
                     else => @compileError("wut"),
@@ -1180,8 +1199,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 var value = try if (t == .@":=")
                     self.emit(.{ .loc = loc }, e.rhs)
                 else b: {
-                    const assign = ast.exprs.getTyped(.BinOp, e.rhs) orelse return @as(EmitError!Value, self.report(e.rhs, "TODO: support this as uninitialized", .{}));
-                    if (assign.op != .@"=") return @as(EmitError!Value, self.report(e.lhs, "can't do that binary oprtator here, expected `=`", .{}));
+                    const assign = ast.exprs.getTyped(.BinOp, e.rhs) orelse
+                        return @as(EmitError!Value, self.report(e.rhs, "TODO: support this as uninitialized", .{}));
+                    if (assign.op != .@"=")
+                        return @as(EmitError!Value, self.report(e.lhs, "can't do that binary oprtator here, expected `=`", .{}));
                     const ty = try self.resolveAnonTy(assign.lhs);
                     break :b self.emitTyped(ctx.addLoc(loc), ty, assign.rhs);
                 };
@@ -1271,12 +1292,19 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     self.emitStructOp(lhs.ty.data().Struct, e.op, loc, lhs.id.Ptr, rhs.id.Ptr);
                     return .mkp(unified, loc);
                 } else {
-                    const upcast_to: Types.Id = if (e.op.isComparison()) if (lhs.ty.isSigned()) .int else .uint else unified;
+                    const upcast_to: Types.Id = if (e.op.isComparison())
+                        if (lhs.ty.isFloat()) lhs.ty else if (lhs.ty.isSigned()) .int else .uint
+                    else
+                        unified;
                     const lhs_fail = self.typeCheck(e.lhs, &lhs, upcast_to);
                     try self.typeCheck(e.rhs, &rhs, upcast_to);
                     try lhs_fail;
                     self.ensureLoaded(&lhs);
                     self.ensureLoaded(&rhs);
+                    if (e.op == .@"!=" or e.op == .@"==" and lhs.ty == .f32) {
+                        lhs.id.Value = self.bl.addUnOp(.uext, .int, lhs.id.Value);
+                        rhs.id.Value = self.bl.addUnOp(.uext, .int, rhs.id.Value);
+                    }
                     if (lhs.id == .Imaginary) std.debug.print("{}\n{}\n", .{ lhs.ty.fmt(self.types), self.ast.codePointer(self.ast.posOf(expr).index) });
                     return .mkv(unified, self.bl.addBinOp(
                         lexemeToBinOp(e.op, lhs.ty),
@@ -1981,6 +2009,46 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
             self.ensureLoaded(&oper);
 
             return .mkv(ret, self.bl.addUnOp(.ired, self.abi.categorize(ret, self.types).ByValue, oper.id.Value));
+        },
+        .float_cast => {
+            try utils.assertArgs(self, expr, args, "<float>");
+
+            var oper = try self.emit(.{}, args[0]);
+            self.ensureLoaded(&oper);
+
+            const ret: Types.Id = switch (oper.ty) {
+                .f32 => .f64,
+                .f64 => .f32,
+                else => return self.report(expr, "expected float argument, {} is not", .{oper.ty}),
+            };
+
+            return .mkv(ret, self.bl.addUnOp(.fcst, self.abi.categorize(ret, self.types).ByValue, oper.id.Value));
+        },
+        .int_to_float => {
+            try utils.assertArgs(self, expr, args, "<float>");
+
+            const ret: Types.Id = ctx.ty orelse {
+                return utils.reportInferrence(self, expr, "float-ty", name);
+            };
+
+            if (!ret.isFloat()) return self.report(expr, "expected this to evaluate to float, {} is not", .{ret});
+
+            var oper = try self.emitTyped(.{}, .int, args[0]);
+            self.ensureLoaded(&oper);
+
+            return .mkv(ret, self.bl.addUnOp(if (ret == .f32) .itf32 else .itf64, self.abi.categorize(ret, self.types).ByValue, oper.id.Value));
+        },
+        .float_to_int => {
+            try utils.assertArgs(self, expr, args, "<float>");
+            const ret: Types.Id = .int;
+
+            var oper = try self.emit(.{}, args[0]);
+
+            if (!oper.ty.isFloat()) return self.report(args[0], "expected float, {} is not", .{oper.ty});
+
+            self.ensureLoaded(&oper);
+
+            return .mkv(ret, self.bl.addUnOp(.fti, .int, oper.id.Value));
         },
         .bit_cast => {
             try utils.assertArgs(self, expr, args, "<expr>");

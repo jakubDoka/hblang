@@ -375,14 +375,16 @@ pub fn GcmMixin(comptime MachNode: type) type {
                     0
                 else if (o.kind == .MachMove)
                     10
-                else if (o.kind == .Local)
-                    20
+                else if (o.kind == .Arg)
+                    99
                 else if (o.kind == .Phi or o.kind == .Mem or o.kind == .Ret)
                     100
+                else if (o.isStore())
+                    75
                 else
                     50 };
                 if (o.kind != .Phi) {
-                    for (o.inputs()[1..]) |j| if (j != null) if (j.?.inputs()[0] == o.inputs()[0]) {
+                    for (o.inputs()[1..]) |j| if (j != null) if (j.?.inputs()[0] == node) {
                         e.unscheduled_deps += 1;
                     };
                 }
@@ -405,11 +407,26 @@ pub fn GcmMixin(comptime MachNode: type) type {
                 for (outs[scheduled + 1 .. ready], scheduled + 1..) |o, i| {
                     if (extra[o.schedule].priority > extra[outs[pick].schedule].priority) {
                         pick = i;
+                    } else if (extra[o.schedule].priority == extra[outs[pick].schedule].priority and
+                        b: {
+                        var sum: usize = 1000;
+                        for (o.outputs()) |oo| if (oo.inputs()[0] == node) {
+                            sum = @min(sum, extra[oo.schedule].unscheduled_deps);
+                        };
+                        break :b sum;
+                    } < b: {
+                        var sum: usize = 1000;
+                        for (outs[pick].outputs()) |oo| if (oo.inputs()[0] == node) {
+                            sum = @min(sum, extra[oo.schedule].unscheduled_deps);
+                        };
+                        break :b sum;
+                    }) {
+                        pick = i;
                     }
                 }
 
                 const n = outs[pick];
-                for (n.outputs()) |def| if (def.inputs()[0] == n.inputs()[0] and def.kind != .Phi) {
+                for (n.outputs()) |def| if (node == def.inputs()[0] and def.kind != .Phi) {
                     extra[def.schedule].unscheduled_deps -= 1;
                 };
 

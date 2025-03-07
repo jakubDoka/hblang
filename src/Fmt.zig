@@ -110,15 +110,15 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.fmtExpr(d);
         },
         .Unwrap => |u| {
-            try self.fmtExpr(u);
+            try self.fmtExprPrec(u, 0);
             try self.buf.appendSlice(".?");
         },
         .Deref => |u| {
-            try self.fmtExpr(u);
+            try self.fmtExprPrec(u, 0);
             try self.buf.appendSlice(".*");
         },
         .Field => |f| {
-            try self.fmtExpr(f.base);
+            try self.fmtExprPrec(f.base, 0);
             try self.buf.appendSlice(".");
             try self.buf.appendSlice(Lexer.peekStr(self.ast.source, f.field.index));
         },
@@ -209,6 +209,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             );
         },
         .Integer => |i| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, i.pos.index)),
+        .Float => |f| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, f.index)),
         .Bool => |b| try self.buf.appendSlice(if (b.value) "true" else "false"),
         .String => |s| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, s.pos.index)),
         .Null => try self.buf.appendSlice("null"),

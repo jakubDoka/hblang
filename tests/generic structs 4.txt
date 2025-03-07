@@ -1,30 +1,30 @@
 main:
          st $31, $254, -48, 48
      addi64 $254, $254, -72
-       li64 $32, 1
-       li64 $33, 2
-       li64 $34, 3
+     addi64 $32, $254, 0
+       li64 $33, 1
+         st $33, $254, 0, 8
+       li64 $34, 2
+         st $34, $254, 8, 8
+       li64 $35, 3
+         st $35, $254, 16, 8
        li64 $35, 0
-     addi64 $36, $254, 0
-         st $32, $254, 0, 8
-         st $33, $254, 8, 8
-         st $34, $254, 16, 8
-         ld $34, $254, 16, 8
-         st $34, $254, 16, 8
-         cp $2, $36
+         ld $36, $254, 16, 8
+         st $36, $254, 16, 8
+         cp $2, $32
          cp $3, $35
         jal $31, $0, :Array(E = uint, Next = Array(E = uint, Next = Array(E = uint, Next = Array(E = uint)))).get
-         cp $34, $1
-         cp $2, $36
-         cp $3, $32
-        jal $31, $0, :Array(E = uint, Next = Array(E = uint, Next = Array(E = uint, Next = Array(E = uint)))).get
-         cp $32, $1
-         cp $2, $36
+         cp $35, $1
+         cp $2, $32
          cp $3, $33
         jal $31, $0, :Array(E = uint, Next = Array(E = uint, Next = Array(E = uint, Next = Array(E = uint)))).get
          cp $33, $1
-      add64 $32, $34, $32
-      add64 $32, $32, $33
+         cp $2, $32
+         cp $3, $34
+        jal $31, $0, :Array(E = uint, Next = Array(E = uint, Next = Array(E = uint, Next = Array(E = uint)))).get
+         cp $32, $1
+      add64 $33, $35, $33
+      add64 $32, $33, $32
          cp $1, $32
      addi64 $254, $254, 72
          ld $31, $254, -48, 48
@@ -32,21 +32,21 @@ main:
 Array(E = uint, Next = Array(E = uint, Next = Array(E = uint, Next = Array(E = uint)))).get:
          st $31, $254, -32, 32
      addi64 $254, $254, -32
-         cp $34, $2
+         cp $33, $2
          cp $32, $3
-       li64 $33, 0
-       cmpu $33, $32, $33
-      cmpui $33, $33, 0
-        not $33, $33
-       andi $33, $33, 255
-        jeq $33, $0, :1
-         ld $32, $34, 0, 8
+       li64 $34, 0
+       cmpu $34, $32, $34
+      cmpui $34, $34, 0
+        not $34, $34
+       andi $34, $34, 255
+        jeq $34, $0, :1
+         ld $32, $33, 0, 8
         jmp :2
-1:       ld $33, $34, 8, 8
-         ld $34, $34, 16, 8
+1:       ld $34, $33, 8, 8
+         ld $33, $33, 16, 8
      addi64 $32, $32, -1
-         cp $2, $33
-         cp $3, $34
+         cp $2, $34
+         cp $3, $33
          cp $4, $32
         jal $31, $0, :Array(E = uint, Next = Array(E = uint, Next = Array(E = uint))).get
          cp $32, $1
@@ -57,17 +57,17 @@ Array(E = uint, Next = Array(E = uint, Next = Array(E = uint, Next = Array(E = u
 Array(E = uint, Next = Array(E = uint, Next = Array(E = uint))).get:
          st $31, $254, -48, 48
      addi64 $254, $254, -64
-         cp $34, $2
-         cp $35, $3
+         cp $33, $2
+         cp $34, $3
          cp $32, $4
-       li64 $33, 0
-       cmpu $33, $32, $33
+       li64 $35, 0
+     addi64 $36, $254, 0
+         st $33, $254, 0, 8
+         st $34, $254, 8, 8
+       cmpu $33, $32, $35
       cmpui $33, $33, 0
         not $33, $33
        andi $33, $33, 255
-     addi64 $36, $254, 0
-         st $34, $254, 0, 8
-         st $35, $254, 8, 8
          ld $34, $254, 0, 8
         jeq $33, $0, :4
          cp $32, $34
@@ -85,15 +85,15 @@ Array(E = uint, Next = Array(E = uint, Next = Array(E = uint))).get:
 Array(E = uint, Next = Array(E = uint)).get:
          st $31, $254, -32, 32
      addi64 $254, $254, -32
-         cp $34, $2
+         cp $33, $2
          cp $32, $3
-       li64 $33, 0
-       cmpu $33, $32, $33
-      cmpui $33, $33, 0
-        not $33, $33
-       andi $33, $33, 255
-        jeq $33, $0, :7
-         cp $32, $34
+       li64 $34, 0
+       cmpu $34, $32, $34
+      cmpui $34, $34, 0
+        not $34, $34
+       andi $34, $34, 255
+        jeq $34, $0, :7
+         cp $32, $33
         jmp :8
 7:   addi64 $32, $32, -1
          cp $2, $32

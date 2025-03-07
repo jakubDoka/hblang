@@ -164,7 +164,7 @@ pub fn run(self: *Vm, ctx: anytype) !isa.Op {
             const res = switch (op) {
                 .not => @intFromBool(opera == 0),
                 .neg => -%opera,
-                .itf32 => @as(u32, @bitCast(@as(f32, @floatFromInt(toSigned(32, @truncate(opera)))))),
+                .itf32 => @as(u32, @bitCast(@as(f32, @floatFromInt(toSigned(64, @truncate(opera)))))),
                 .itf64 => @as(u64, @bitCast(@as(f64, @floatFromInt(toSigned(64, opera))))),
                 else => @compileError("baka"),
             };
