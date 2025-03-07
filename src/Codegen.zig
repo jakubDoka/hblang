@@ -364,7 +364,12 @@ fn emitStructFoldOp(self: *Codegen, ty: *Types.Struct, op: Lexer.Lexeme, lhs: *N
             const dt = self.abi.categorize(field.ty, self.types).ByValue;
             const lhs_val = self.bl.addLoad(lhs_loc, dt);
             const rhs_val = self.bl.addLoad(rhs_loc, dt);
-            break :b self.bl.addBinOp(lexemeToBinOp(op, field.ty), .i8, lhs_val, rhs_val);
+            break :b self.bl.addBinOp(
+                lexemeToBinOp(op, field.ty),
+                .i8,
+                self.bl.addUnOp(.uext, .int, lhs_val),
+                self.bl.addUnOp(.uext, .int, rhs_val),
+            );
         };
         if (fold) |f| {
             fold = self.bl.addBinOp(if (op == .@"==") .band else .bor, .i8, f, value);
@@ -539,7 +544,9 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
         if (value.ty == .type) {
             break :b .{ try self.lookupScopeItem(field.field, try self.unwrapTyConst(field.base, &value), name), null };
         }
-        break :b .{ try self.lookupScopeItem(field.field, value.ty, name), value };
+
+        const ty = if (value.ty.data() == .Ptr) value.ty.data().Ptr.* else value.ty;
+        break :b .{ try self.lookupScopeItem(field.field, ty, name), value };
     } else b: {
         break :b .{ .{ .ty = try self.resolveAnonTy(e.called) }, null };
     };
@@ -1117,6 +1124,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     else => @compileError("wut"),
                 }
                 self.ensureLoaded(&lhs);
+                if (t == .@"!") lhs.id.Value = self.bl.addUnOp(.uext, .int, lhs.id.Value);
                 return .mkv(lhs.ty, self.bl.addUnOp(switch (t) {
                     .@"-" => .neg,
                     .@"!" => .not,
@@ -1444,7 +1452,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             const defer_scope = self.defers.items.len;
             defer self.defers.items.len = defer_scope;
-            defer self.emitDefers(defer_scope);
 
             for (ast.exprs.view(e.stmts)) |s| {
                 _ = self.emitTyped(ctx, .void, s) catch |err| switch (err) {
@@ -1452,6 +1459,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     error.Unreachable => return err,
                 };
             }
+            self.emitDefers(defer_scope);
 
             return .{};
         },
@@ -1478,6 +1486,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         } else {
             var cond = try self.emitTyped(ctx, .bool, e.cond);
             self.ensureLoaded(&cond);
+            cond.id.Value = self.bl.addUnOp(.uext, .int, cond.id.Value);
             var unreachable_count: usize = 0;
             var if_builder = self.bl.addIfAndBeginThen(cond.id.Value);
             {

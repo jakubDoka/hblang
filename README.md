@@ -752,6 +752,86 @@ Array := fn(E: type, len: uint): type if len == 0 {
 }
 ```
 
+#### generic structs 5 (iterators)
+```hb
+main := fn(): uint {
+    ref := "abcd"
+
+    start := "ab"
+    end := "cd"
+
+    Next := fn(T: type): type return struct {
+        .next: bool;
+        .val: T
+        none := fn(): @CurrentScope() {
+            return .(false, idk)
+        }
+        some := fn(val: T): @CurrentScope() {
+            return .(true, val)
+        }
+    }
+
+    Chars := struct {
+        .slc: []u8
+        next := fn(self: ^@CurrentScope()): Next(u8) {
+            if self.slc.len == 0 return .none()
+            defer self.slc = self.slc[1..]
+            return .some(self.slc[0])
+        }
+    }
+
+
+    Chain := fn(A: type, B: type): type return struct {
+        .state: enum {.a; .b; .done};
+        .a: A;
+        .b: B
+
+        Elem := @TypeOf(A.next(idk))
+
+        next := fn(self: ^@CurrentScope()): Elem {
+            loop match self.state {
+                .a => {
+                    nxt := (&self.a).next()
+                    if nxt.next return nxt
+                    self.state = .b
+                },
+                .b => {
+                    nxt := (&self.b).next()
+                    if nxt.next return nxt
+                    self.state = .done
+                },
+                .done => return .none(),
+            }
+        }
+    }
+
+    siter := Chars.(start)
+    riter := Chars.(ref)
+    citer := Chain(Chars, Chars).(.a, .(start), .(end))
+
+    loop {
+        sc := (&siter).next()
+        if !sc.next break
+        rc := (&riter).next()
+        if !rc.next return 1
+
+        if sc != rc return 2
+    }
+
+    riter = .(ref)
+    loop {
+        rc := (&riter).next()
+        if !rc.next break
+        sc := (&citer).next()
+        if !sc.next return 3
+
+        if sc != rc return 4
+    }
+
+    return 0
+}
+```
+
 #### comptime 1
 ```hb
 main := fn(): uint {
@@ -1465,7 +1545,7 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
     - [x] field access
     - [x] indexing
     - [x] slicing
-  - [ ] **tuples**
+  - [ ] **tuples** --DO
   - [x] nullable types
 - [ ] ? directives
   - [x] `@use(<string>)`

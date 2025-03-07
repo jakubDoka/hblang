@@ -356,6 +356,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
 
             const capture_scope = self.captures.items.len;
             const fields = try self.parseList(.@"{", .@";", .@"}", parseUnorderedExpr);
+            self.finalizeVariables(scope_frame);
             const captures = self.popCaptures(capture_scope, prev_capture_boundary != 0);
             break :b @unionInit(Ast.Expr, name, .{
                 .fields = fields,

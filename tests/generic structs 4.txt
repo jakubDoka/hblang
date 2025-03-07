@@ -35,7 +35,11 @@ Array(E = uint, Next = Array(E = uint, Next = Array(E = uint, Next = Array(E = u
          cp $34, $2
          cp $32, $3
        li64 $33, 0
-        jne $32, $33, :1
+       cmpu $33, $32, $33
+      cmpui $33, $33, 0
+        not $33, $33
+       andi $33, $33, 255
+        jeq $33, $0, :1
          ld $32, $34, 0, 8
         jmp :2
 1:       ld $33, $34, 8, 8
@@ -57,11 +61,15 @@ Array(E = uint, Next = Array(E = uint, Next = Array(E = uint))).get:
          cp $35, $3
          cp $32, $4
        li64 $33, 0
+       cmpu $33, $32, $33
+      cmpui $33, $33, 0
+        not $33, $33
+       andi $33, $33, 255
      addi64 $36, $254, 0
          st $34, $254, 0, 8
          st $35, $254, 8, 8
          ld $34, $254, 0, 8
-        jne $32, $33, :4
+        jeq $33, $0, :4
          cp $32, $34
         jmp :5
 4:       ld $33, $254, 8, 8
@@ -80,7 +88,11 @@ Array(E = uint, Next = Array(E = uint)).get:
          cp $34, $2
          cp $32, $3
        li64 $33, 0
-        jne $32, $33, :7
+       cmpu $33, $32, $33
+      cmpui $33, $33, 0
+        not $33, $33
+       andi $33, $33, 255
+        jeq $33, $0, :7
          cp $32, $34
         jmp :8
 7:   addi64 $32, $32, -1

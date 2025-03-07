@@ -208,7 +208,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
 
                         if (t.isLoad()) {
                             for (t.mem().outputs()) |p| {
-                                if (p.isStore() and late_scheds[p.id] == null) {
+                                if ((p.isStore() or p.kind == .Call) and late_scheds[p.id] == null) {
                                     continue :task;
                                 }
                             }
