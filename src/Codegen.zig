@@ -851,17 +851,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 },
             };
 
-            const global = self.types.resolveGlobal(self.parent_scope.perm(), data, expr)[0].data().Global;
-            global.data = data;
-            global.ty = self.types.makeSlice(data.len, .u8);
-            self.queue(.{ .Global = global });
-
-            const slice_ty = self.types.makeSlice(null, .u8);
-            const slice_loc = ctx.loc orelse self.bl.addLocal(slice_ty.size(self.types));
-            self.bl.addFieldStore(slice_loc, Types.Slice.ptr_offset, .int, self.bl.addGlobalAddr(global.id));
-            self.bl.addFieldStore(slice_loc, Types.Slice.len_offset, .int, self.bl.addIntImm(.int, @bitCast(data.len)));
-
-            return .mkp(slice_ty, slice_loc);
+            return self.emitStirng(ctx, data, expr);
         },
         .Integer => |e| {
             const ty = ctx.ty orelse .uint;
@@ -1889,6 +1879,20 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
     }
 }
 
+fn emitStirng(self: *Codegen, ctx: Ctx, data: []const u8, expr: Ast.Id) Value {
+    const global = self.types.resolveGlobal(self.parent_scope.perm(), data, expr)[0].data().Global;
+    global.data = data;
+    global.ty = self.types.makeSlice(data.len, .u8);
+    self.queue(.{ .Global = global });
+
+    const slice_ty = self.types.makeSlice(null, .u8);
+    const slice_loc = ctx.loc orelse self.bl.addLocal(slice_ty.size(self.types));
+    self.bl.addFieldStore(slice_loc, Types.Slice.ptr_offset, .int, self.bl.addGlobalAddr(global.id));
+    self.bl.addFieldStore(slice_loc, Types.Slice.len_offset, .int, self.bl.addIntImm(.int, @bitCast(data.len)));
+
+    return .mkp(slice_ty, slice_loc);
+}
+
 fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(.Directive)) !Value {
     const ast = self.ast;
 
@@ -2098,6 +2102,14 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
                 return self.report(args[0], "directive only works on structs and arrays, {} is not", .{ty});
             };
             return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(len)));
+        },
+        .name_of => {
+            try utils.assertArgs(self, expr, args, "<ty>");
+
+            const ty = try self.resolveAnonTy(args[0]);
+            const data = std.fmt.allocPrint(self.types.arena.allocator(), "{}", .{ty.fmt(self.types)}) catch unreachable;
+
+            return self.emitStirng(ctx, data, expr);
         },
         .align_of => {
             try utils.assertArgs(self, expr, args, "<ty>");

@@ -1525,6 +1525,17 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
 }
 ```
 
+#### directives 14 (@name_of)
+```hb
+expectations := .{
+    return_value: 4,
+}
+
+main := fn(): uint {
+    return @name_of(uint).len
+}
+```
+
 ## progress
 
 - [ ] ? diagnostics
@@ -1624,6 +1635,7 @@ foo := fn(vl: @Any()): @TypeOf(vl) {
   - [x] `@int_to_float(<int>)`
   - [x] `@float_to_int(<float>)`
   - [x] `@float_cast(<float>)`
+  - [x] `@name_of`
   - [ ] ? `@recall(..<args>)`
 
 ## vendored tests
