@@ -130,9 +130,6 @@ pub fn testBuilder(
         }
     }
 
-    const main, _ = ast.findDecl(ast.items, "main", func_arena.arena.allocator()) orelse return error.Never;
-    const fn_ast = ast.exprs.get(main).BinOp.rhs;
-
     var types = Types.init(gpa, asts, output);
     defer types.deinit();
 
@@ -140,18 +137,14 @@ pub fn testBuilder(
     defer cg.deinit();
     cg.scope = .{};
 
-    cg.parent_scope = .{ .Perm = types.getScope(.root) };
-    const entry_ty = (try cg.resolveTy("main", fn_ast));
+    const entry_ty = (try cg.lookupScopeItem(.init(0), types.getScope(.root), "main")).ty;
+
     if (entry_ty.data() != .Func) return error.Never;
     const entry = entry_ty.data().Func;
     cg.work_list.appendAssumeCapacity(.{ .Func = entry });
 
-    var hbgen = HbvmGen.init(gpa);
-    var finalized = false;
-    errdefer if (!finalized) {
-        hbgen.out.deinit();
-        hbgen.deinit();
-    };
+    var hbgen = HbvmGen{ .gpa = gpa };
+    defer hbgen.deinit();
     var gen = Mach.init(&hbgen);
 
     var syms = std.heap.ArenaAllocator.init(gpa);
@@ -209,8 +202,6 @@ pub fn testBuilder(
 
     try std.testing.expectEqual(should_error, cg.errored);
     if (errored) {
-        hbgen.out.deinit();
-        hbgen.deinit();
         return;
     }
 
@@ -218,8 +209,7 @@ pub fn testBuilder(
     const code_len = hbgen.link(0, true);
     gen.disasm(output, colors);
     var out = gen.finalize();
-    finalized = true;
-    defer out.deinit();
+    defer out.deinit(gpa);
 
     const stack_size = 1024 * 10;
     const stack_end = stack_size - out.items.len;

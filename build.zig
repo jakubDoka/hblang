@@ -14,11 +14,13 @@ pub fn build(b: *std.Build) !void {
 
     const exe = b.addExecutable(.{
         .name = "hblang",
-        .root_source_file = b.path("main.zig"),
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
     b.installArtifact(exe);
+
+    exe.root_module.addImport("hblang", lib.root_module);
 
     const vendored_tests = vendored_tests: {
         const grn = b.addExecutable(.{
@@ -65,8 +67,12 @@ pub fn build(b: *std.Build) !void {
         break :example_tests &installed.step;
     };
 
-    const check_step = b.step("check", "Run the app");
-    const test_step = b.step("test", "Run the app");
+    const check_step = b.step("check", "type check");
+    const test_step = b.step("test", "run tests");
+    const run_step = b.step("run", "Run the app");
+
+    check_step.dependOn(&exe.step);
+    run_step.dependOn(&b.addRunArtifact(exe).step);
 
     const fuzz_finding_tests = fuzzing: {
         const dict_gen = b.addExecutable(.{

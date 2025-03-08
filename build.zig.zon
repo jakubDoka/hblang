@@ -1,5 +1,6 @@
 .{
-    .name = "hbkang",
+    .name = .hblang,
+    .fingerprint = 0xa6da53c767f0ddf0,
     .version = "0.0.0",
     .dependencies = .{},
     .paths = .{

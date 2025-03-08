@@ -313,6 +313,14 @@ pub fn fmt(self: *const Ast, buf: *std.ArrayList(u8)) !void {
     try ft.fmt();
 }
 
+pub fn report(path: []const u8, file: []const u8, pos: u32, comptime fmt_str: []const u8, args: anytype, out: anytype) void {
+    const line, const col = Ast.lineCol(file, pos);
+    out.print(
+        "{s}:{}:{}: " ++ fmt_str ++ "\n{}\n",
+        .{ path, line, col } ++ args ++ .{CodePointer{ .source = file, .index = pos }},
+    ) catch unreachable;
+}
+
 pub const CodePointer = struct {
     source: []const u8,
     index: usize,

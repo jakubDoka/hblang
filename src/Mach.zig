@@ -42,7 +42,7 @@ test init {
             unreachable;
         }
 
-        pub fn finalize(self: *@This()) std.ArrayList(u8) {
+        pub fn finalize(self: *@This()) std.ArrayListUnmanaged(u8) {
             _ = self;
             unreachable;
         }
@@ -62,7 +62,7 @@ test init {
 data: *anyopaque,
 _emitFunc: *const fn (self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void,
 _emitData: *const fn (self: *anyopaque, opts: DataOptions) void,
-_finalize: *const fn (self: *anyopaque) std.ArrayList(u8),
+_finalize: *const fn (self: *anyopaque) std.ArrayListUnmanaged(u8),
 _disasm: *const fn (self: *anyopaque, out: std.io.AnyWriter, colors: std.io.tty.Config) void,
 
 const std = @import("std");
@@ -131,7 +131,7 @@ pub fn init(data: anytype) Mach {
             }
         }.emitData,
         ._finalize = struct {
-            fn finalize(self: *anyopaque) std.ArrayList(u8) {
+            fn finalize(self: *anyopaque) std.ArrayListUnmanaged(u8) {
                 const slf: *Type = @alignCast(@ptrCast(self));
                 return slf.finalize();
             }
@@ -157,7 +157,7 @@ pub fn emitData(self: Mach, opts: DataOptions) void {
 }
 
 /// package the final output (.eg object file)
-pub fn finalize(self: Mach) std.ArrayList(u8) {
+pub fn finalize(self: Mach) std.ArrayListUnmanaged(u8) {
     return self._finalize(self.data);
 }
 

@@ -89,10 +89,9 @@ pub const Key = struct {
     pub fn eql(self: Key, other: Key) bool {
         return self.file == other.file and self.scope == other.scope and self.ast == other.ast and
             self.captures.len == other.captures.len and
-            for (self.captures, other.captures) |a, b|
-        {
-            if (!std.meta.eql(a, b)) return false;
-        } else true;
+            for (self.captures, other.captures) |a, b| {
+                if (!std.meta.eql(a, b)) return false;
+            } else true;
     }
 };
 
@@ -547,6 +546,10 @@ pub const Id = enum(usize) {
         self: Id,
         tys: *Types,
 
+        pub fn toString(self: *const Fmt, arena: std.mem.Allocator) ![]u8 {
+            return std.fmt.allocPrint(arena, "{}", .{self});
+        }
+
         pub fn format(self: *const Fmt, comptime opts: []const u8, _: anytype, writer: anytype) !void {
             try switch (self.self.data()) {
                 .Ptr => |b| writer.print("^{" ++ opts ++ "}", .{b.fmt(self.tys)}),
@@ -776,16 +779,12 @@ pub fn init(gpa: std.mem.Allocator, source: []const Ast, diagnostics: std.io.Any
 
 pub fn deinit(self: *Types) void {
     self.arena.deinit();
-    self.ct.in_progress.deinit(self.ct.comptime_code.out.allocator);
-    self.ct.comptime_code.out.deinit();
+    self.ct.in_progress.deinit(self.ct.comptime_code.gpa);
     self.ct.comptime_code.deinit();
     self.* = undefined;
 }
 
 pub fn report(self: *Types, file_id: File, expr: anytype, comptime fmt: []const u8, args: anytype) void {
-    const file = self.getFile(file_id);
-    const line, const col = Ast.lineCol(file.source, file.posOf(expr).index);
-
     const RemapedArgs = comptime b: {
         var tupl = @typeInfo(@TypeOf(args)).@"struct";
         var fields = tupl.fields[0..tupl.fields.len].*;
@@ -804,10 +803,9 @@ pub fn report(self: *Types, file_id: File, expr: anytype, comptime fmt: []const 
             rargs[i] = v;
         }
     }
-    self.diagnostics.print(
-        "{s}:{}:{}: " ++ fmt ++ "\n{}\n",
-        .{ file.path, line, col } ++ rargs ++ .{file.codePointer(file.posOf(expr).index)},
-    ) catch unreachable;
+
+    const file = self.getFile(file_id);
+    Ast.report(file.path, file.source, file.posOf(expr).index, fmt, rargs, self.diagnostics);
 }
 
 pub fn getAst(self: *Types, file: File, expr: Ast.Id) Ast.Expr {

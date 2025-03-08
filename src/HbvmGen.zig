@@ -1,9 +1,10 @@
-out: std.ArrayList(u8),
-funcs: std.ArrayList(FuncData),
-global_lookup: std.ArrayList(u32),
-globals: std.ArrayList(GlobalData),
+gpa: std.mem.Allocator,
+out: std.ArrayListUnmanaged(u8) = .empty,
+funcs: std.ArrayListUnmanaged(FuncData) = .empty,
+global_lookup: std.ArrayListUnmanaged(u32) = .empty,
+globals: std.ArrayListUnmanaged(GlobalData) = .empty,
 globals_appended: usize = 0,
-global_relocs: std.ArrayList(GloblReloc),
+global_relocs: std.ArrayListUnmanaged(GloblReloc) = .empty,
 local_relocs: std.ArrayListUnmanaged(BlockReloc) = undefined,
 ret_count: usize = undefined,
 block_offsets: []i32 = undefined,
@@ -104,7 +105,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     defer tmp.deinit();
 
     if (self.funcs.items.len <= id) {
-        self.funcs.resize(id + 1) catch unreachable;
+        self.funcs.resize(self.gpa, id + 1) catch unreachable;
     }
     self.funcs.items[id].offset = @intCast(self.out.items.len);
     self.funcs.items[id].name = name;
@@ -197,27 +198,27 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
 pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
     if (self.global_lookup.items.len <= opts.id) {
-        self.global_lookup.resize(opts.id + 1) catch unreachable;
+        self.global_lookup.resize(self.gpa, opts.id + 1) catch unreachable;
     }
 
     self.global_lookup.items[opts.id] = @intCast(self.globals.items.len);
-    self.globals.append(switch (opts.value) {
+    self.globals.append(self.gpa, switch (opts.value) {
         .init => |v| .{ .ptr = v.ptr, .size = @intCast(v.len), .name = opts.name },
         .uninit => |size| .{ .size = @intCast(size), .name = opts.name },
     }) catch unreachable;
 }
 
-pub fn finalize(self: *HbvmGen) std.ArrayList(u8) {
+pub fn finalize(self: *HbvmGen) std.ArrayListUnmanaged(u8) {
     _ = self.link(0, false);
 
-    defer self.deinit();
+    defer self.out = .empty;
     return self.out;
 }
 
 pub fn disasm(self: *HbvmGen, out: std.io.AnyWriter, colors: std.io.tty.Config) void {
     const code_len = self.link(0, false);
 
-    var arena = std.heap.ArenaAllocator.init(self.out.allocator);
+    var arena = std.heap.ArenaAllocator.init(self.gpa);
     defer arena.deinit();
     var map = std.AutoHashMap(u32, []const u8).init(arena.allocator());
     for (self.funcs.items) |gf| {
@@ -229,21 +230,12 @@ pub fn disasm(self: *HbvmGen, out: std.io.AnyWriter, colors: std.io.tty.Config) 
     isa.disasm(self.out.items[0..code_len], arena.allocator(), &map, out, colors) catch unreachable;
 }
 
-pub fn init(gpa: std.mem.Allocator) HbvmGen {
-    return .{
-        .out = .init(gpa),
-        .global_relocs = .init(gpa),
-        .global_lookup = .init(gpa),
-        .funcs = .init(gpa),
-        .globals = .init(gpa),
-    };
-}
-
 pub fn deinit(self: *HbvmGen) void {
-    self.global_relocs.deinit();
-    self.funcs.deinit();
-    self.globals.deinit();
-    self.global_lookup.deinit();
+    self.out.deinit(self.gpa);
+    self.global_relocs.deinit(self.gpa);
+    self.funcs.deinit(self.gpa);
+    self.globals.deinit(self.gpa);
+    self.global_lookup.deinit(self.gpa);
     self.* = undefined;
 }
 
@@ -264,7 +256,7 @@ pub fn link(self: *HbvmGen, reloc_until: usize, push_uninit_memory: bool) usize 
     for (self.globals.items[self.globals_appended..]) |*ig| {
         const value = ig.ptr orelse continue;
         ig.offset = @intCast(self.out.items.len);
-        self.out.appendSlice(value[0..ig.size]) catch unreachable;
+        self.out.appendSlice(self.gpa, value[0..ig.size]) catch unreachable;
     }
 
     var cursor = self.out.items.len;
@@ -273,7 +265,7 @@ pub fn link(self: *HbvmGen, reloc_until: usize, push_uninit_memory: bool) usize 
         ug.offset = @intCast(cursor);
         cursor += ug.size;
     }
-    if (push_uninit_memory) self.out.resize(cursor) catch unreachable;
+    if (push_uninit_memory) self.out.resize(self.gpa, cursor) catch unreachable;
 
     for (self.global_relocs.items[reloc_until..]) |r| {
         const offset = switch (r.kind) {
@@ -313,7 +305,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             .Arg => {},
             .GlobalAddr => {
                 const extra = no.extra(.GlobalAddr);
-                self.global_relocs.append(.{
+                self.global_relocs.append(self.gpa, .{
                     .kind = .global,
                     .dest = extra.id,
                     .rel = self.reloc(3, .rel32),
@@ -514,7 +506,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 if (extra.id == eca) {
                     self.emit(.eca, .{});
                 } else {
-                    self.global_relocs.append(.{
+                    self.global_relocs.append(self.gpa, .{
                         .dest = extra.id,
                         .kind = .func,
                         .rel = self.reloc(3, .rel32),
@@ -624,8 +616,8 @@ fn emit(self: *HbvmGen, comptime op: isa.Op, args: isa.TupleOf(isa.ArgsOf(op))) 
 
 fn emitLow(self: *HbvmGen, comptime arg_str: []const u8, op: isa.Op, args: isa.TupleOf(isa.ArgsOfStr(arg_str))) void {
     if (!std.mem.eql(u8, isa.spec[@intFromEnum(op)][1], arg_str)) std.debug.panic("{} {s} {s}", .{ op, arg_str, isa.spec[@intFromEnum(op)][1] });
-    self.out.append(@intFromEnum(op)) catch unreachable;
-    self.out.appendSlice(std.mem.asBytes(&isa.packTo(isa.ArgsOfStr(arg_str), args))) catch unreachable;
+    self.out.append(self.gpa, @intFromEnum(op)) catch unreachable;
+    self.out.appendSlice(self.gpa, std.mem.asBytes(&isa.packTo(isa.ArgsOfStr(arg_str), args))) catch unreachable;
 }
 
 pub fn reloc(self: *HbvmGen, sub_offset: u8, arg: isa.Arg) Reloc {

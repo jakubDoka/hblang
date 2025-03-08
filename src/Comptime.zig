@@ -30,8 +30,8 @@ pub const InteruptCode = enum(u64) {
 };
 
 pub fn init(gpa: std.mem.Allocator) Comptime {
-    var self = Comptime{ .comptime_code = .init(gpa) };
-    self.comptime_code.out.resize(stack_size) catch unreachable;
+    var self = Comptime{ .comptime_code = .{ .gpa = gpa } };
+    self.comptime_code.out.resize(gpa, stack_size) catch unreachable;
     self.comptime_code.out.items[self.comptime_code.out.items.len - 1] = @intFromEnum(isa.Op.tx);
     self.comptime_code.out.items[self.comptime_code.out.items.len - 2] = @intFromEnum(isa.Op.eca);
     self.vm.regs.set(.stack_addr, stack_size - 2);
@@ -43,7 +43,7 @@ inline fn getTypes(self: *Comptime) *Types {
 }
 
 inline fn getGpa(self: *Comptime) std.mem.Allocator {
-    return self.comptime_code.out.allocator;
+    return self.comptime_code.gpa;
 }
 
 pub inline fn ecaArg(self: *Comptime, idx: usize) u64 {
@@ -308,7 +308,7 @@ pub fn jitExprLow(
             return error.Never;
         }
     }
-    self.in_progress.append(self.comptime_code.out.allocator, .{ .ast = value, .file = scope.file() }) catch unreachable;
+    self.in_progress.append(self.comptime_code.gpa, .{ .ast = value, .file = scope.file() }) catch unreachable;
     defer _ = self.in_progress.pop().?;
 
     gen.only_inference = only_inference;

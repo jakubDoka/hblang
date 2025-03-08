@@ -320,7 +320,7 @@ pub fn typeCheck(self: *Codegen, expr: anytype, got: *Value, expected: Types.Id)
     return;
 }
 
-fn report(self: *Codegen, expr: anytype, comptime fmt: []const u8, args: anytype) EmitError {
+pub fn report(self: *Codegen, expr: anytype, comptime fmt: []const u8, args: anytype) EmitError {
     self.errored = true;
     self.types.report(self.parent_scope.file(), expr, fmt, args);
     return error.Never;
@@ -445,7 +445,10 @@ pub fn lookupScopeItem(self: *Codegen, pos: Ast.Pos, bsty: Types.Id, name: []con
         }
     }
 
-    const decl, const path = other_ast.findDecl(bsty.items(other_ast), name, undefined) orelse {
+    var tmp = root.Arena.scrath(null);
+    defer tmp.deinit();
+
+    const decl, const path = other_ast.findDecl(bsty.items(other_ast), name, tmp.arena.allocator()) orelse {
         return self.report(pos, "{} does not declare this", .{bsty});
     };
 

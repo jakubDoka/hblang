@@ -221,11 +221,7 @@ fn parseUnit(self: *Parser) Error!Id {
 
 fn report(self: *Parser, pos: u32, comptime msg: []const u8, args: anytype) void {
     self.errored = true;
-    const line, const col = Ast.lineCol(self.lexer.source, pos);
-    self.diagnostics.print(
-        "{s}:{}:{}: " ++ msg ++ "\n{}\n",
-        .{ self.path, line, col } ++ args ++ .{self.codePointer(pos)},
-    ) catch unreachable;
+    Ast.report(self.path, self.lexer.source, pos, msg, args, self.diagnostics);
 }
 
 fn codePointer(self: *const Parser, pos: usize) Ast.CodePointer {

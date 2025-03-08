@@ -62,10 +62,8 @@ pub fn fuzzRun(
     const entry = entry_ty.data().Func;
     cg.work_list.appendAssumeCapacity(.{ .Func = entry });
 
-    var finalized = false;
-    var hbgen = HbvmGen.init(gpa);
-    errdefer if (!finalized) hbgen.deinit();
-    errdefer if (!finalized) hbgen.out.deinit();
+    var hbgen = HbvmGen{ .gpa = gpa };
+    defer hbgen.deinit();
     var gen = Mach.init(&hbgen);
 
     var errored = false;
@@ -93,7 +91,6 @@ pub fn fuzzRun(
 
     if (errored) return error.Never;
 
-    finalized = true;
     var out = gen.finalize();
-    defer out.deinit();
+    defer out.deinit(gpa);
 }
