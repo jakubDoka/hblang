@@ -47,7 +47,7 @@ inline fn getGpa(self: *Comptime) std.mem.Allocator {
 }
 
 pub inline fn ecaArg(self: *Comptime, idx: usize) u64 {
-    return self.vm.regs.get(.arg(1, idx));
+    return self.vm.regs.get(.arg(idx));
 }
 
 pub const PartialEvalResult = union(enum) {
@@ -125,7 +125,7 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) PartialEvalResult
                         work_list.appendAssumeCapacity(arg.?);
                         requeued = true;
                     } else {
-                        types.ct.vm.regs.set(.arg(call.extra(.Call).ret_count, arg_idx), @bitCast(arg.?.extra(.CInt).*));
+                        types.ct.vm.regs.set(.arg(arg_idx), @bitCast(arg.?.extra(.CInt).*));
                     }
                 }
 
@@ -189,7 +189,7 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
     self.vm.ip = if (entry_id == eca) stack_size - 2 else self.comptime_code.funcs.items[entry_id].offset;
     self.vm.fuel = 1024;
     self.vm.regs.set(.ret_addr, stack_size - 1); // return to hardcoded tx
-    self.vm.regs.set(.arg(0, 0), stack_end - return_loc.len);
+    if (return_loc.len != 0) self.vm.regs.set(.arg(0), stack_end - return_loc.len);
     self.vm.regs.set(.stack_addr, stack_end - return_loc.len);
 
     var vm_ctx = Vm.SafeContext{
@@ -225,7 +225,7 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
                 break :end_interrupt;
             }
 
-            switch (@as(InteruptCode, @enumFromInt(self.vm.regs.get(.arg(1, 0))))) {
+            switch (@as(InteruptCode, @enumFromInt(self.vm.regs.get(.arg(0))))) {
                 inline .Struct, .Union, .Enum => |t| {
                     const scope: Types.Id = @enumFromInt(self.ecaArg(1));
                     const ast = types.getFile(scope.file().?);

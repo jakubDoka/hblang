@@ -169,7 +169,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
             const argn = for (postorder[0].base.outputs()) |o| {
                 if (o.kind == .Arg and o.extra(.Arg).* == i) break o;
             } else continue; // is dead
-            self.emit(.cp, .{ self.reg(argn), isa.Reg.arg(func.returns.len, i) });
+            self.emit(.cp, .{ self.reg(argn), isa.Reg.arg(i) });
         }
         break :prelude;
     }
@@ -523,7 +523,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             .Call => {
                 const extra = no.extra(.Call);
                 for (inps, 0..) |arg, i| {
-                    self.emit(.cp, .{ isa.Reg.arg(extra.ret_count, i), self.reg(arg) });
+                    self.emit(.cp, .{ isa.Reg.arg(i), self.reg(arg) });
                 }
 
                 if (extra.id == eca) {

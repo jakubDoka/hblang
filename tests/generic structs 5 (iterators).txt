@@ -33,7 +33,7 @@ main:
      addi64 $43, $254, 142
      addi64 $44, $254, 48
      addi64 $45, $254, 140
-d:       cp $3, $40
+d:       cp $1, $40
         jal $31, $0, :main(Next = main.Next).next
          cp $46, $1
          cp $47, $2
@@ -46,7 +46,7 @@ d:       cp $3, $40
         jeq $46, $0, :4
         bmc $33, $44, 16
         bmc $44, $35, 16
-a:       cp $3, $35
+a:       cp $1, $35
         jal $31, $0, :main(Next = main.Next).next
          cp $33, $1
          cp $37, $2
@@ -59,7 +59,7 @@ a:       cp $3, $35
         jeq $33, $0, :5
          cp $32, $36
         jmp :6
-5:       cp $3, $32
+5:       cp $1, $32
         jal $31, $0, :main.Chain(A = main(Next = main.Next), B = main(Next = main.Next)).next
          cp $33, $1
          cp $37, $2
@@ -88,7 +88,7 @@ a:       cp $3, $35
          cp $32, $34
         jmp :6
 9:      jmp :a
-4:       cp $3, $35
+4:       cp $1, $35
         jal $31, $0, :main(Next = main.Next).next
          cp $46, $1
          cp $47, $2
@@ -123,7 +123,7 @@ c:      jmp :d
 main.Chain(A = main(Next = main.Next), B = main(Next = main.Next)).next:
          st $31, $254, -96, 96
      addi64 $254, $254, -102
-         cp $32, $3
+         cp $32, $1
        li64 $33, 0
        li64 $34, 1
      addi64 $35, $254, 4
@@ -135,7 +135,7 @@ main.Chain(A = main(Next = main.Next), B = main(Next = main.Next)).next:
 15:       ld $41, $32, 0, 1
        sxt8 $41, $41
         jne $41, $33, :e
-         cp $3, $39
+         cp $1, $39
         jal $31, $0, :main(Next = main.Next).next
          cp $41, $1
          cp $42, $2
@@ -151,7 +151,7 @@ main.Chain(A = main(Next = main.Next), B = main(Next = main.Next)).next:
 f:       st $34, $32, 0, 1
         jmp :11
 e:      jne $41, $34, :12
-         cp $3, $40
+         cp $1, $40
         jal $31, $0, :main(Next = main.Next).next
          cp $41, $1
          cp $42, $2
@@ -195,7 +195,7 @@ main.Next(T = u8).none:
 main(Next = main.Next).next:
          st $31, $254, -48, 48
      addi64 $254, $254, -68
-         cp $32, $3
+         cp $32, $1
        li64 $33, 0
          ld $34, $32, 8, 8
        cmpu $33, $34, $33
@@ -215,7 +215,7 @@ main(Next = main.Next).next:
         jmp :18
 17:       ld $33, $32, 0, 8
          ld $33, $33, 0, 1
-         cp $3, $33
+         cp $1, $33
         jal $31, $0, :main.Next(T = u8).some
          cp $33, $1
          cp $35, $2
@@ -238,7 +238,7 @@ main(Next = main.Next).next:
        jala $0, $31, 0
 main.Next(T = u8).some:
      addi64 $254, $254, -2
-         cp $13, $3
+         cp $13, $1
        li64 $14, 1
      addi64 $15, $254, 0
          st $14, $254, 0, 1

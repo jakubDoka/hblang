@@ -248,7 +248,7 @@ pub fn testBuilder(
 
             for (ast.exprs.view(ast.exprs.get(curr_eca.lhs).Tupl.fields), 0..) |vl, i| {
                 const value = try std.fmt.parseInt(u64, ast.tokenSrc(ast.exprs.get(vl).Integer.pos.index), 10);
-                try std.testing.expectEqual(value, vm.regs.get(.arg(1, i)));
+                try std.testing.expectEqual(value, vm.regs.get(.arg(i)));
             }
 
             const ret_value = try std.fmt.parseInt(u64, ast.tokenSrc(ast.exprs.get(curr_eca.rhs).Integer.pos.index), 10);

@@ -2,10 +2,10 @@ main:
          st $31, $254, -16, 16
      addi64 $254, $254, -16
        li64 $32, 10
-         cp $2, $32
+         cp $1, $32
         jal $31, $0, :Foo(F = Foo(F = uint)).sub
          cp $32, $1
-         cp $2, $32
+         cp $1, $32
         jal $31, $0, :Foo(F = uint).sub
          cp $32, $1
          cp $1, $32
@@ -13,10 +13,10 @@ main:
          ld $31, $254, -16, 16
          tx
 Foo(F = uint).sub:
-         cp $13, $2
+         cp $13, $1
          cp $1, $13
        jala $0, $31, 0
 Foo(F = Foo(F = uint)).sub:
-         cp $13, $2
+         cp $13, $1
          cp $1, $13
        jala $0, $31, 0

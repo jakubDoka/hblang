@@ -7,8 +7,8 @@ pub const Reg = enum(u8) {
     max = 255,
     _,
 
-    pub fn arg(ret_count: usize, index: usize) Reg {
-        return @enumFromInt(1 + ret_count + index);
+    pub fn arg(index: usize) Reg {
+        return @enumFromInt(1 + index);
     }
 
     pub fn ret(index: usize) Reg {
