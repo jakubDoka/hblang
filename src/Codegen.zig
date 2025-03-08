@@ -549,6 +549,7 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
             }
             cursor = cursor.parent();
         } else {
+            std.debug.dumpCurrentStackTrace(@returnAddress());
             return self.report(pos, "ICE: parser did not catch this", .{});
         };
 
@@ -650,8 +651,8 @@ pub fn instantiateTemplate(
     e: std.meta.TagPayload(Ast.Expr, .Call),
     typ: Types.Id,
 ) !struct { []Value, Types.Id } {
-    const ast = self.ast;
     const tmpl = typ.data().Template;
+    const ast = self.ast;
 
     var scope = tmpl.*;
     scope.key.scope = typ;
@@ -659,7 +660,7 @@ pub fn instantiateTemplate(
 
     const tmpl_file = self.types.getFile(tmpl.key.file);
     const tmpl_ast = tmpl_file.exprs.getTyped(.Fn, tmpl.key.ast).?;
-    const comptime_args = ast.exprs.view(tmpl_ast.comptime_args);
+    const comptime_args = tmpl_file.exprs.view(tmpl_ast.comptime_args);
 
     const passed_args = e.args.len();
     if (passed_args != tmpl_ast.args.len()) {

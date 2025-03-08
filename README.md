@@ -881,6 +881,18 @@ main := fn(): uint {
 }
 ```
 
+#### generic structs 6 (more iterators)
+```hb
+main := fn(): uint {
+    _ = @use("foo.hb").foo(0, u8)
+    return 0
+}
+
+// in: foo.hb
+Map := fn(I: type, F: type): type return struct{}
+foo := fn(vl: int, $oo: type): Map(u8, oo) return .()
+```
+
 #### comptime 1
 ```hb
 main := fn(): uint {
