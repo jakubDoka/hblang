@@ -87,7 +87,10 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                 const bb = &bbc.base;
 
                 var parent_succs: usize = 0;
-                const parent = bb.inputs()[0] orelse continue;
+                const parent = bb.inputs()[0] orelse {
+                    std.debug.assert(bb.kind == .Return);
+                    continue;
+                };
                 std.debug.assert(parent.isCfg());
                 for (parent.outputs()) |o| parent_succs += @intFromBool(o.isCfg());
                 std.debug.assert(parent_succs >= 1 and parent_succs <= 2);
