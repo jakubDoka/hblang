@@ -479,6 +479,10 @@ pub fn lookupScopeItem(self: *Codegen, pos: Ast.Pos, bsty: Types.Id, name: []con
         return self.report(pos, "{} does not declare this", .{bsty});
     };
 
+    return self.somethingIdk(name, bsty, ast, decl, path);
+}
+
+pub fn somethingIdk(self: *Codegen, name: []const u8, bsty: Types.Id, ast: *const Ast, decl: Ast.Id, path: []Ast.Pos) EmitError!Value {
     const vari = ast.exprs.get(decl).BinOp;
     const ty: ?Types.Id, const value: Ast.Id = switch (vari.op) {
         .@":" => .{
@@ -544,33 +548,7 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
             return self.report(pos, "ICE: parser did not catch this", .{});
         };
 
-        const vari = ast.exprs.get(decl).BinOp;
-        const ty: ?Types.Id, const value: Ast.Id = switch (vari.op) {
-            .@":" => .{
-                try self.resolveAnonTy((ast.exprs.getTyped(.BinOp, vari.rhs) orelse
-                    return self.report(vari.rhs, "TODO: uninitialized variables", .{})).lhs),
-                ast.exprs.get(vari.rhs).BinOp.rhs,
-            },
-            .@":=" => .{ null, vari.rhs },
-            else => unreachable,
-        };
-
-        const global_ty, const new = self.types.resolveGlobal(cursor.perm(), ast.tokenSrc(id.pos()), value);
-        const global = global_ty.data().Global;
-        if (new) try self.types.ct.evalGlobal(ast.tokenSrc(id.pos()), global, ty, value);
-        self.queue(.{ .Global = global });
-
-        if (path.len != 0) {
-            if (global.ty != .type) return self.report(value, "expected a global holding a type, {} is not", .{global.ty});
-            var cur: Types.Id = @enumFromInt(@as(u64, @bitCast(global.data[0..8].*)));
-            for (path) |ps| {
-                var vl = try self.lookupScopeItem(ps, cur, ast.tokenSrc(ps.index));
-                cur = try self.unwrapTyConst(ps, &vl);
-            }
-            return self.emitTyConst(cur);
-        }
-
-        return .mkp(global.ty, self.bl.addGlobalAddr(global.id));
+        return self.somethingIdk(ast.tokenSrc(id.pos()), cursor.perm(), ast, decl, path);
     }
 }
 

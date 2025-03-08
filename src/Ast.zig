@@ -31,7 +31,9 @@ pub const Ident = enum(u32) {
 };
 
 pub fn cmpLow(pos: u32, source: []const u8, repr: []const u8) bool {
-    return std.mem.eql(u8, Lexer.peekStr(source, pos), repr);
+    var str = Lexer.peekStr(source, pos);
+    if (str[0] == '$') str = str[1..];
+    return std.mem.eql(u8, str, repr);
 }
 
 pub const Arg = struct {
