@@ -200,14 +200,11 @@ const Loader = struct {
     files: std.ArrayListUnmanaged(hb.Ast) = .{},
 
     pub fn load(self: *Loader, opts: hb.Ast.Loader.LoadOptions) ?hb.Types.File {
-        var tmp = Arena.scrath(null);
-        defer tmp.deinit();
-
         const base = self.base;
         const file = self.files.items[@intFromEnum(opts.from)];
         const rel_base = std.fs.path.dirname(file.path) orelse "";
         const path = self.path_projections.get(opts.path) orelse
-            std.fs.path.resolve(tmp.arena.allocator(), &.{ rel_base, opts.path }) catch return null;
+            std.fs.path.resolve(self.gpa, &.{ rel_base, opts.path }) catch return null;
 
         const canon = path[base.len..];
 
