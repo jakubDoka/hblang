@@ -483,7 +483,7 @@ pub const Id = enum(usize) {
 
     pub fn child(self: Id, _: *Types) ?Id {
         return switch (self.data()) {
-            .Ptr => |p| p.*,
+            inline .Ptr, .Nullable => |p| p.*,
             .Slice => |s| s.elem,
             else => null,
         };
