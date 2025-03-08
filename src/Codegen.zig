@@ -2158,10 +2158,11 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
             try utils.assertArgs(self, expr, args, "<string>");
             const content = ast.exprs.getTyped(.String, args[0]) orelse return self.report(expr, "@target takes a \"string\"", .{});
             const str_content = ast.source[content.pos.index + 1 .. content.end - 1];
-            const triple = if (self.target == .runtime) @tagName(self.abi) else "comptime";
-            const matched = utils.matchTriple(str_content, triple) catch |err| {
-                return self.report(args[0], "{s}", .{@errorName(err)});
-            };
+            const triple = @tagName(self.abi);
+            const matched = (self.target == .@"comptime" and std.mem.eql(u8, str_content, "target")) or
+                utils.matchTriple(str_content, triple) catch |err| {
+                    return self.report(args[0], "{s}", .{@errorName(err)});
+                };
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(matched)));
         },
         .ecall => {

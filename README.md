@@ -1526,6 +1526,10 @@ main := fn(): uint {
 
 #### directives 11 (@target)
 ```hb
+expectations := .{
+    return_value: 1,
+}
+
 global: bool = @target("ableos")
 
 main := fn(): uint {
