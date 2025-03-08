@@ -1545,27 +1545,10 @@ main := fn(): uint {
 
 #### tmp
 ```hb
-LogLevel := enum {
-    .Error;
-    .Warn;
-    .Info;
-    .Debug;
-    .Trace;
-}
-
-LogMsg := struct align(1) {
-    .level: u8;
-    .str_ptr: ^u8;
-    .str_len: uint;
-}
-
-log := fn(msg: []u8, level: LogLevel): void {
-    @ecall(3, 1, LogMsg.(@bit_cast(level), @bit_cast(0xABCDEF), 1), @size_of(LogMsg))
-}
-
 main := fn(): void {
-    msg := "hello"
-    log(msg, .Error)
+    a := 0
+    b := &a
+    if b.* != a die
 }
 ```
 

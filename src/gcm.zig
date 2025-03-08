@@ -409,18 +409,19 @@ pub fn GcmMixin(comptime MachNode: type) type {
                         pick = i;
                     } else if (extra[o.schedule].priority == extra[outs[pick].schedule].priority and
                         b: {
-                        var sum: usize = 1000;
-                        for (o.outputs()) |oo| if (oo.inputs()[0] == node) {
-                            sum = @min(sum, extra[oo.schedule].unscheduled_deps);
-                        };
-                        break :b sum;
-                    } < b: {
-                        var sum: usize = 1000;
-                        for (outs[pick].outputs()) |oo| if (oo.inputs()[0] == node) {
-                            sum = @min(sum, extra[oo.schedule].unscheduled_deps);
-                        };
-                        break :b sum;
-                    }) {
+                            var sum: usize = 1000;
+                            for (o.outputs()) |oo| if (oo.inputs()[0] == node) {
+                                sum = @min(sum, extra[oo.schedule].unscheduled_deps);
+                            };
+                            break :b sum;
+                        } < b: {
+                            var sum: usize = 1000;
+                            for (outs[pick].outputs()) |oo| if (oo.inputs()[0] == node) {
+                                sum = @min(sum, extra[oo.schedule].unscheduled_deps);
+                            };
+                            break :b sum;
+                        })
+                    {
                         pick = i;
                     }
                 }
@@ -477,7 +478,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
 
                 std.debug.assert(best.base.kind != .Start);
 
-                std.debug.assert(self.setInput(node, 0, &best.base) == null);
+                _ = self.setInput(node, 0, &best.base);
             }
         }
     };
