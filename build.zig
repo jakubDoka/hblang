@@ -71,7 +71,7 @@ pub fn build(b: *std.Build) !void {
     const test_step = b.step("test", "run tests");
     const run_step = b.step("run", "Run the app");
 
-    check_step.dependOn(&exe.step);
+    //check_step.dependOn(&exe.step);
     run_step.dependOn(&b.addRunArtifact(exe).step);
 
     const fuzz_finding_tests = fuzzing: {
@@ -149,6 +149,17 @@ pub fn build(b: *std.Build) !void {
         break :fuzzing &b.addInstallFile(out_src, "fuzz_finding_tests.zig").step;
     };
 
+    {
+        const unit_tests = b.addTest(.{
+            .root_source_file = b.path("tests.zig"),
+            .target = b.graph.host,
+            .optimize = optimize,
+            .use_llvm = false,
+            .use_lld = false,
+        });
+        check_step.dependOn(&unit_tests.step);
+    }
+
     testing: {
         const test_filter = b.option([]const u8, "tf", "passed as a filter to tests");
 
@@ -163,8 +174,6 @@ pub fn build(b: *std.Build) !void {
         unit_tests.step.dependOn(vendored_tests);
         unit_tests.step.dependOn(tests);
         if (fuzz_finding_tests) |fft| unit_tests.step.dependOn(fft);
-
-        check_step.dependOn(&unit_tests.step);
 
         test_step.dependOn(&b.addRunArtifact(unit_tests).step);
         break :testing;

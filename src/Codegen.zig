@@ -296,7 +296,11 @@ pub fn ensureLoaded(self: *Codegen, value: *Value) void {
 }
 
 pub fn typeCheck(self: *Codegen, expr: anytype, got: *Value, expected: Types.Id) !void {
-    if (expected.data() == .Nullable and expected.data().Nullable.* == got.ty) {
+    if (expected.data() == .Nullable and expected.data().Nullable.inner == got.ty) {
+        if (!expected.needsTag(self.types)) {
+            got.ty = expected;
+            return;
+        }
         const abi = self.abi.categorize(got.ty, self.types);
         switch (abi) {
             .Imaginary => {
@@ -925,14 +929,26 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 return self.report(expr, "only nullable types can be initialized with null, {} is not", .{ty});
             }
 
-            switch (self.abi.categorize(ty, self.types)) {
-                .Imaginary => unreachable,
-                .ByValue => return .mkv(ty, self.bl.addIntImm(.i8, 0)),
-                .ByValuePair, .ByRef => {
-                    const loc = ctx.loc orelse self.bl.addLocal(ty.size(self.types));
-                    _ = self.bl.addStore(loc, .i8, self.bl.addIntImm(.i8, 0));
-                    return .mkp(ty, loc);
-                },
+            if (ty.data().Nullable.nieche.offset(self.types)) |spec| {
+                switch (self.abi.categorize(ty.data().Nullable.inner, self.types)) {
+                    .Imaginary => unreachable,
+                    .ByValue => return .mkv(ty, self.bl.addIntImm(spec.kind.abi(), 0)),
+                    .ByValuePair, .ByRef => {
+                        const loc = ctx.loc orelse self.bl.addLocal(ty.data().Nullable.inner.size(self.types));
+                        _ = self.bl.addFieldStore(loc, spec.offset, spec.kind.abi(), self.bl.addIntImm(spec.kind.abi(), 0));
+                        return .mkp(ty, loc);
+                    },
+                }
+            } else {
+                switch (self.abi.categorize(ty, self.types)) {
+                    .Imaginary => unreachable,
+                    .ByValue => return .mkv(ty, self.bl.addIntImm(.i8, 0)),
+                    .ByValuePair, .ByRef => {
+                        const loc = ctx.loc orelse self.bl.addLocal(ty.size(self.types));
+                        _ = self.bl.addStore(loc, .i8, self.bl.addIntImm(.i8, 0));
+                        return .mkp(ty, loc);
+                    },
+                }
             }
         },
         .Ident => |e| return self.loadIdent(e.pos, e.id),
@@ -963,8 +979,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             const local = ctx.loc orelse self.bl.addLocal(ty.size(self.types));
             var offset_cursor: usize = 0;
 
-            if (ty.data() == .Nullable) {
-                ty = ty.data().Nullable.*;
+            if (ty.needsTag(self.types)) {
+                ty = ty.data().Nullable.inner;
                 _ = self.bl.addStore(local, .i8, self.bl.addIntImm(.i8, 1));
                 offset_cursor += ty.alignment(self.types);
             }
@@ -1084,8 +1100,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             const local = ctx.loc orelse self.bl.addLocal(oty.size(self.types));
             var init_offset: usize = 0;
 
-            if (ty.data() == .Nullable) {
-                ty = ty.data().Nullable.*;
+            if (ty.needsTag(self.types)) {
+                ty = ty.data().Nullable.inner;
                 _ = self.bl.addStore(local, .i8, self.bl.addIntImm(.i8, 1));
                 init_offset += ty.alignment(self.types);
             }
@@ -1131,8 +1147,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             const elem_ty, const res_ty: Types.Id = if (ctx.ty) |ret_ty| b: {
                 var ty = ret_ty;
-                if (ty.data() == .Nullable) {
-                    ty = ty.data().Nullable.*;
+                if (ty.needsTag(self.types)) {
+                    ty = ty.data().Nullable.inner;
                     _ = self.bl.addStore(local, .i8, self.bl.addIntImm(.i8, 1));
                     start += 1;
                 }
@@ -1346,7 +1362,9 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 return self.report(e, "only nullable types can be unwrapped, {} is not", .{base.ty});
             }
 
-            const ty = base.ty.data().Nullable.*;
+            const ty = base.ty.data().Nullable.inner;
+
+            if (!base.ty.needsTag(self.types)) return base;
 
             switch (self.abi.categorize(base.ty, self.types)) {
                 .Imaginary => unreachable,

@@ -27,7 +27,8 @@ pub const TypeCtx = struct {
 
         return switch (ad) {
             .Builtin => std.meta.eql(ad, bd),
-            inline .Ptr, .Nullable, .Slice => |v, t| std.meta.eql(v.*, @field(bd, @tagName(t)).*),
+            inline .Ptr, .Slice => |v, t| std.meta.eql(v.*, @field(bd, @tagName(t)).*),
+            .Nullable => |v| v.inner == bd.Nullable.inner,
             .Tuple => |v| std.mem.eql(Id, @ptrCast(v.fields), @ptrCast(bd.Tuple.fields)),
             inline else => |v, t| return v.key.eql(@field(bd, @tagName(t)).key),
         };
@@ -37,7 +38,8 @@ pub const TypeCtx = struct {
         var hasher = std.hash.Fnv1a_64.init();
         const adk = adapted_key.data();
         switch (adk) {
-            inline .Builtin, .Ptr, .Slice, .Nullable, .Tuple => |v| std.hash.autoHashStrat(&hasher, v, .Deep),
+            inline .Builtin, .Ptr, .Slice, .Tuple => |v| std.hash.autoHashStrat(&hasher, v, .Deep),
+            .Nullable => |v| std.hash.autoHash(&hasher, v.inner),
             inline else => |v| std.hash.autoHashStrat(&hasher, v.key, .Deep),
         }
         return hasher.final();
@@ -55,7 +57,7 @@ pub const Data = union(enum) {
     },
     Ptr: *Id,
     Slice: *Slice,
-    Nullable: *Id,
+    Nullable: *Nullable,
     Tuple: *Tuple,
     Enum: *Enum,
     Union: *Union,
@@ -70,11 +72,12 @@ pub const Nullable = struct {
     nieche: enum(usize) {
         unresolved = std.math.maxInt(usize) - 1,
         explicit,
+        _,
 
         pub fn offset(self: *@This(), types: *Types) ?NiecheSpec {
-            if (self == .unresolved) {
+            if (self.* == .unresolved) {
                 const nullable: *Nullable = @fieldParentPtr("nieche", self);
-                self.* = nullable.inner.findNieche(types);
+                self.* = if (nullable.inner.findNieche(types)) |n| @enumFromInt(@as(usize, @bitCast(n))) else .explicit;
             }
 
             return switch (self.*) {
@@ -85,8 +88,26 @@ pub const Nullable = struct {
         }
     } = .unresolved,
 
-    pub const NiecheSpec = packed struct {
-        kind: enum(u1) { bool, ptr },
+    pub fn isCompact(self: *Nullable, types: *Types) bool {
+        return self.nieche.offset(types) != null;
+    }
+
+    pub fn size(self: *Nullable, types: *Types) usize {
+        return self.inner.size(types) +
+            if (self.isCompact(types)) 0 else self.inner.alignment(types);
+    }
+
+    pub const NiecheSpec = packed struct(usize) {
+        kind: enum(u1) {
+            bool,
+            ptr,
+            pub fn abi(self: @This()) graph.DataType {
+                return switch (self) {
+                    .bool => .i8,
+                    .ptr => .int,
+                };
+            }
+        },
         offset: u63,
     };
 };
@@ -434,6 +455,10 @@ pub const Id = enum(usize) {
         })));
     }
 
+    pub fn needsTag(self: Id, types: *Types) bool {
+        return self.data() == .Nullable and !self.data().Nullable.isCompact(types);
+    }
+
     pub fn file(self: Id) ?File {
         return switch (self.data()) {
             .Builtin, .Ptr, .Slice, .Nullable, .Tuple => null,
@@ -509,7 +534,8 @@ pub const Id = enum(usize) {
 
     pub fn child(self: Id, _: *Types) ?Id {
         return switch (self.data()) {
-            inline .Ptr, .Nullable => |p| p.*,
+            .Ptr => |p| p.*,
+            .Nullable => |n| n.inner,
             .Slice => |s| s.elem,
             else => null,
         };
@@ -519,6 +545,15 @@ pub const Id = enum(usize) {
         return switch (self.data()) {
             inline .Struct, .Union => |s| s.getFields(types).len,
             .Slice => |s| s.len,
+            else => null,
+        };
+    }
+
+    pub fn findNieche(self: Id, types: *Types) ?Nullable.NiecheSpec {
+        _ = types; // autofix
+
+        return switch (self.data()) {
+            .Ptr => return .{ .offset = 0, .kind = .ptr },
             else => null,
         };
     }
@@ -562,7 +597,7 @@ pub const Id = enum(usize) {
             },
             .Struct => |s| s.getSize(types),
             .Slice => |s| if (s.len) |l| l * s.elem.size(types) else 16,
-            .Nullable => |n| n.alignment(types) + n.size(types),
+            .Nullable => |n| n.size(types),
             .Global, .Func, .Template => 0,
         };
     }
@@ -571,7 +606,7 @@ pub const Id = enum(usize) {
         return switch (self.data()) {
             .Builtin, .Enum => @max(1, self.size(types)),
             .Ptr => 8,
-            .Nullable => |n| n.alignment(types),
+            .Nullable => |n| n.inner.alignment(types),
             .Struct => |s| s.getAlignment(types),
             inline .Union, .Tuple => |s| {
                 var alignm: usize = 1;
@@ -626,7 +661,7 @@ pub const Id = enum(usize) {
         pub fn format(self: *const Fmt, comptime opts: []const u8, _: anytype, writer: anytype) !void {
             try switch (self.self.data()) {
                 .Ptr => |b| writer.print("^{" ++ opts ++ "}", .{b.fmt(self.tys)}),
-                .Nullable => |b| writer.print("?{" ++ opts ++ "}", .{b.fmt(self.tys)}),
+                .Nullable => |b| writer.print("?{" ++ opts ++ "}", .{b.inner.fmt(self.tys)}),
                 .Slice => |b| {
                     try writer.writeAll("[");
                     if (b.len) |l| try writer.print("{d}", .{l});
@@ -775,8 +810,9 @@ pub const Abi = enum {
         };
     }
 
-    pub fn categorizeAbleosNullable(nullable: *Id, types: *Types) Spec {
-        const base_abi = Abi.ableos.categorize(nullable.*, types);
+    pub fn categorizeAbleosNullable(nullable: *Nullable, types: *Types) Spec {
+        const base_abi = Abi.ableos.categorize(nullable.inner, types);
+        if (nullable.isCompact(types)) return base_abi;
         if (base_abi == .Imaginary) return .{ .ByValue = .i8 };
         if (base_abi == .ByValue) return .{ .ByValuePair = .{
             .types = .{ .i8, base_abi.ByValue },
@@ -926,7 +962,7 @@ pub fn makePtr(self: *Types, v: Id) Id {
 }
 
 pub fn makeNullable(self: *Types, v: Id) Id {
-    return self.internPtr(.Nullable, v);
+    return self.internPtr(.Nullable, .{ .inner = v });
 }
 
 pub fn makeTuple(self: *Types, v: []Id) Id {
