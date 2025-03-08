@@ -1639,7 +1639,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
                     var match_pat = try cg.emitTyped(.{}, slf.ty, arm.lhs);
                     cg.ensureLoaded(&match_pat);
-                    const idx = try cg.partialEval(arm.lhs, match_pat.id.Value);
+                    const idx = if (match_pat.id == .Imaginary) 0 else try cg.partialEval(arm.lhs, match_pat.id.Value);
 
                     switch (slf.slots[idx]) {
                         .Unmatched => slf.slots[idx] = .{ .Matched = a },
@@ -1661,9 +1661,9 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             };
             @memset(matcher.slots, .Unmatched);
 
+            self.ensureLoaded(&value);
             if (e.pos.flag.@"comptime") {
-                self.ensureLoaded(&value);
-                const value_idx = try self.partialEval(e.value, value.id.Value);
+                const value_idx = if (value.id == .Imaginary) 0 else try self.partialEval(e.value, value.id.Value);
 
                 var matched_branch: ?Ast.Id = null;
                 for (ast.exprs.view(e.arms), 0..) |a, i| {
@@ -1680,8 +1680,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
                 _ = try self.emitTyped(ctx, .void, final_branch);
             } else {
-                self.ensureLoaded(&value);
-
                 var if_stack = std.ArrayListUnmanaged(Builder.If).initBuffer(tmp.arena.alloc(Builder.If, e.arms.len() - 1));
 
                 var unreachable_count: usize = 0;

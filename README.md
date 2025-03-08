@@ -1056,8 +1056,6 @@ main := fn(): uint {
 
 #### enums 2 (one variant)
 ```hb
-#### lily 1
-```hb
 main := fn(): uint {
     return Target.current().Lib().page_size()
 }
@@ -1082,7 +1080,6 @@ Target := enum {
 // in: ableos.hb
 page_size := fn(): uint return 0
 ```
-```
 
 #### match 1
 ```hb
@@ -1106,6 +1103,11 @@ main := fn(): uint {
 #### match 2 (comptime)
 ```hb
 main := fn(): uint {
+    $match enum{.a}.a {
+        .a => {
+        },
+    }
+
     $match enum{.a; .b}.a {
         .a => return 0,
         .b => return 1,
@@ -1570,6 +1572,20 @@ expectations := .{
 
 main := fn(): uint {
     return @name_of(uint).len
+}
+```
+
+### tmp
+```hb
+fallible := fn(): ?^u8 {
+    return null
+}
+func := fn(thing: ^u8): void {
+}
+main := fn(): void {
+    a := fallible()
+    if a == null die
+    func(a.?)
 }
 ```
 
