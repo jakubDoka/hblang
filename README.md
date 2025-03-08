@@ -893,6 +893,20 @@ Map := fn(I: type, F: type): type return struct{}
 foo := fn(vl: int, $oo: type): Map(u8, oo) return .()
 ```
 
+#### generic structs 7 (template method call)
+```hb
+A := struct {
+    apply := fn(self: ^@CurrentScope(), $func: type): void {
+    }
+}
+
+main := fn(): void {
+    z := A.()
+    y := z.apply(fn(): void {
+    })
+}
+```
+
 #### comptime 1
 ```hb
 main := fn(): uint {

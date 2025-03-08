@@ -594,7 +594,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
     var computed_args: ?[]Value = null;
     const was_template = typ.data() == .Template;
     if (was_template) {
-        computed_args, typ = try self.instantiateTemplate(tmp, expr, e, typ);
+        computed_args, typ = try self.instantiateTemplate(caller, tmp, expr, e, typ);
     }
 
     if (typ.data() != .Func) {
@@ -646,6 +646,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
 
 pub fn instantiateTemplate(
     self: *Codegen,
+    caller: ?Value,
     tmp: root.Arena.Scratch,
     expr: Ast.Id,
     e: std.meta.TagPayload(Ast.Expr, .Call),
@@ -662,7 +663,7 @@ pub fn instantiateTemplate(
     const tmpl_ast = tmpl_file.exprs.getTyped(.Fn, tmpl.key.ast).?;
     const comptime_args = tmpl_file.exprs.view(tmpl_ast.comptime_args);
 
-    const passed_args = e.args.len();
+    const passed_args = e.args.len() + @intFromBool(caller != null);
     if (passed_args != tmpl_ast.args.len()) {
         return self.report(expr, "expected {} arguments, got {}", .{ tmpl_ast.args.len(), passed_args });
     }
@@ -673,7 +674,14 @@ pub fn instantiateTemplate(
 
     var capture_idx: usize = 0;
     var arg_idx: usize = 0;
-    for (tmpl_file.exprs.view(tmpl_ast.args), ast.exprs.view(e.args)) |param, arg| {
+    var arg_expr_idx: usize = 0;
+
+    if (caller) |c| {
+        arg_tys[arg_idx] = c.ty;
+        arg_idx += 1;
+    }
+
+    for (tmpl_file.exprs.view(tmpl_ast.args)[arg_idx..], ast.exprs.view(e.args)) |param, arg| {
         const binding = tmpl_file.exprs.get(param.bindings).Ident;
         if (binding.pos.flag.@"comptime") {
             captures[capture_idx] = .{ .id = comptime_args[capture_idx], .ty = .type, .value = @intFromEnum(try self.resolveAnonTy(arg)) };
@@ -682,16 +690,17 @@ pub fn instantiateTemplate(
         } else {
             arg_tys[arg_idx] = try self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = &scope }) }, param.ty);
             if (arg_tys[arg_idx] == .any) {
-                arg_exprs[arg_idx] = try self.emit(.{}, arg);
-                arg_tys[arg_idx] = arg_exprs[arg_idx].ty;
+                arg_exprs[arg_expr_idx] = try self.emit(.{}, arg);
+                arg_tys[arg_idx] = arg_exprs[arg_expr_idx].ty;
                 captures[capture_idx] = .{ .id = binding.id, .ty = arg_tys[arg_idx] };
                 capture_idx += 1;
                 scope.key.captures = captures[0..capture_idx];
             } else {
-                arg_exprs[arg_idx] = try self.emitTyped(.{}, arg_tys[arg_idx], arg);
+                arg_exprs[arg_expr_idx] = try self.emitTyped(.{}, arg_tys[arg_idx], arg);
             }
 
             arg_idx += 1;
+            arg_expr_idx += 1;
         }
     }
 
