@@ -1314,7 +1314,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     return .mkp(unified, loc);
                 } else {
                     const upcast_to: Types.Id = if (e.op.isComparison())
-                        if (lhs.ty.isFloat()) lhs.ty else if (lhs.ty.isSigned()) .int else .uint
+                        if (lhs.ty.isFloat() or lhs.ty.data() == .Ptr) lhs.ty else if (lhs.ty.isSigned()) .int else .uint
                     else
                         unified;
                     const lhs_fail = self.typeCheck(e.lhs, &lhs, upcast_to);
