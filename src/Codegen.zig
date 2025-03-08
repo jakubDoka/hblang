@@ -1458,7 +1458,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             const res_ty = self.types.makeSlice(null, elem);
 
             var ptr: Value = switch (base.ty.data()) {
-                .Ptr => base,
+                .Ptr => b: {
+                    self.ensureLoaded(&base);
+                    break :b base;
+                },
                 .Slice => |slice_ty| if (slice_ty.len == null)
                     .mkv(self.types.makePtr(elem), self.bl.addFieldLoad(base.id.Ptr, Types.Slice.ptr_offset, .int))
                 else

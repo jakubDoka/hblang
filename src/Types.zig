@@ -65,6 +65,32 @@ pub const Data = union(enum) {
     Global: *Global,
 };
 
+pub const Nullable = struct {
+    inner: Id,
+    nieche: enum(usize) {
+        unresolved = std.math.maxInt(usize) - 1,
+        explicit,
+
+        pub fn offset(self: *@This(), types: *Types) ?NiecheSpec {
+            if (self == .unresolved) {
+                const nullable: *Nullable = @fieldParentPtr("nieche", self);
+                self.* = nullable.inner.findNieche(types);
+            }
+
+            return switch (self.*) {
+                .explicit => null,
+                .unresolved => unreachable,
+                else => |v| @bitCast(@intFromEnum(v)),
+            };
+        }
+    } = .unresolved,
+
+    pub const NiecheSpec = packed struct {
+        kind: enum(u1) { bool, ptr },
+        offset: u63,
+    };
+};
+
 pub const Key = struct {
     file: File,
     scope: Id,
