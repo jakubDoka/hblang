@@ -367,19 +367,18 @@ pub fn lexemeToBinOp(self: Lexer.Lexeme, ty: Types.Id) graph.BinOp {
 
 fn emitStructFoldOp(self: *Codegen, ty: *Types.Struct, op: Lexer.Lexeme, lhs: *Node, rhs: *Node) ?*Node {
     var fold: ?*Node = null;
-    var offset: usize = 0;
-    for (ty.getFields(self.types)) |field| {
-        offset = std.mem.alignForward(usize, offset, field.ty.alignment(self.types));
-        const lhs_loc = self.bl.addFieldOffset(lhs, @intCast(offset));
-        const rhs_loc = self.bl.addFieldOffset(rhs, @intCast(offset));
-        const value = if (field.ty.data() == .Struct) b: {
-            break :b self.emitStructFoldOp(field.ty.data().Struct, op, lhs_loc, rhs_loc) orelse continue;
+    var iter = ty.offsetIter(self.types);
+    while (iter.next()) |elem| {
+        const lhs_loc = self.bl.addFieldOffset(lhs, @intCast(elem.offset));
+        const rhs_loc = self.bl.addFieldOffset(rhs, @intCast(elem.offset));
+        const value = if (elem.field.ty.data() == .Struct) b: {
+            break :b self.emitStructFoldOp(elem.field.ty.data().Struct, op, lhs_loc, rhs_loc) orelse continue;
         } else b: {
-            const dt = self.abi.categorize(field.ty, self.types).ByValue;
+            const dt = self.abi.categorize(elem.field.ty, self.types).ByValue;
             const lhs_val = self.bl.addLoad(lhs_loc, dt);
             const rhs_val = self.bl.addLoad(rhs_loc, dt);
             break :b self.bl.addBinOp(
-                lexemeToBinOp(op, field.ty),
+                lexemeToBinOp(op, elem.field.ty),
                 .i8,
                 self.bl.addUnOp(.uext, .int, lhs_val),
                 self.bl.addUnOp(.uext, .int, rhs_val),
@@ -388,28 +387,25 @@ fn emitStructFoldOp(self: *Codegen, ty: *Types.Struct, op: Lexer.Lexeme, lhs: *N
         if (fold) |f| {
             fold = self.bl.addBinOp(if (op == .@"==") .band else .bor, .i8, f, value);
         } else fold = value;
-        offset += field.ty.size(self.types);
     }
     return fold;
 }
 
 fn emitStructOp(self: *Codegen, ty: *Types.Struct, op: Lexer.Lexeme, loc: *Node, lhs: *Node, rhs: *Node) void {
-    var offset: usize = 0;
-    for (ty.getFields(self.types)) |field| {
-        offset = std.mem.alignForward(usize, offset, field.ty.alignment(self.types));
-        const field_loc = self.bl.addFieldOffset(loc, @intCast(offset));
-        const lhs_loc = self.bl.addFieldOffset(lhs, @intCast(offset));
-        const rhs_loc = self.bl.addFieldOffset(rhs, @intCast(offset));
-        if (field.ty.data() == .Struct) {
-            self.emitStructOp(field.ty.data().Struct, op, field_loc, lhs_loc, rhs_loc);
+    var iter = ty.offsetIter(self.types);
+    while (iter.next()) |elem| {
+        const field_loc = self.bl.addFieldOffset(loc, @intCast(elem.offset));
+        const lhs_loc = self.bl.addFieldOffset(lhs, @intCast(elem.offset));
+        const rhs_loc = self.bl.addFieldOffset(rhs, @intCast(elem.offset));
+        if (elem.field.ty.data() == .Struct) {
+            self.emitStructOp(elem.field.ty.data().Struct, op, field_loc, lhs_loc, rhs_loc);
         } else {
-            const dt = self.abi.categorize(field.ty, self.types).ByValue;
+            const dt = self.abi.categorize(elem.field.ty, self.types).ByValue;
             const lhs_val = self.bl.addLoad(lhs_loc, dt);
             const rhs_val = self.bl.addLoad(rhs_loc, dt);
-            const res = self.bl.addBinOp(lexemeToBinOp(op, field.ty), dt, lhs_val, rhs_val);
+            const res = self.bl.addBinOp(lexemeToBinOp(op, elem.field.ty), dt, lhs_val, rhs_val);
             _ = self.bl.addStore(field_loc, res.data_type, res);
         }
-        offset += field.ty.size(self.types);
     }
 }
 
@@ -987,10 +983,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     const fields = struct_ty.getFields(self.types);
                     const slots = tmp.arena.alloc(FillSlot, fields.len);
                     {
-                        for (slots, fields) |*s, tf| {
-                            offset_cursor = std.mem.alignForward(usize, offset_cursor, tf.ty.alignment(self.types));
-                            s.* = .{ .RequiredOffset = offset_cursor };
-                            offset_cursor += tf.ty.size(self.types);
+                        var iter = struct_ty.offsetIter(self.types);
+                        iter.offset = offset_cursor;
+                        for (slots) |*s| {
+                            const elem = iter.next().?;
+                            s.* = .{ .RequiredOffset = elem.offset };
                         }
                     }
 
@@ -1088,12 +1085,12 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             const oty = ctx.ty orelse try self.resolveAnonTy(e.ty);
             var ty = oty;
             const local = ctx.loc orelse self.bl.addLocal(oty.size(self.types));
-            var offset: usize = 0;
+            var init_offset: usize = 0;
 
             if (ty.data() == .Nullable) {
                 ty = ty.data().Nullable.*;
                 _ = self.bl.addStore(local, .i8, self.bl.addIntImm(.i8, 1));
-                offset += ty.alignment(self.types);
+                init_offset += ty.alignment(self.types);
             }
 
             if (ty.data() != .Struct) {
@@ -1109,19 +1106,20 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 );
             }
 
-            for (ast.exprs.view(e.fields), struct_ty.getFields(self.types)) |field, sf| {
-                const ftype = sf.ty;
-                if (sf.ty == .never) return error.Never;
-                offset = std.mem.alignForward(usize, offset, ftype.alignment(self.types));
+            var iter = struct_ty.offsetIter(self.types);
+            iter.offset = init_offset;
+            for (ast.exprs.view(e.fields)) |field| {
+                const elem = iter.next().?;
+                const ftype = elem.field.ty;
+                if (ftype == .never) return error.Never;
 
-                const off = self.bl.addFieldOffset(local, @intCast(offset));
+                const off = self.bl.addFieldOffset(local, @intCast(elem.offset));
                 var value = self.emit(ctx.addTy(ftype).addLoc(off), field) catch |err| switch (err) {
                     error.Never => continue,
                     error.Unreachable => return err,
                 };
                 try self.typeCheck(field, &value, ftype);
                 self.emitGenericStore(off, &value);
-                offset += ftype.size(self.types);
             }
 
             return .mkp(oty, local);
@@ -1394,11 +1392,9 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             switch (base.ty.data()) {
                 .Struct => |struct_ty| {
-                    var offset: usize = 0;
-                    const ftype = for (struct_ty.getFields(self.types)) |tf| {
-                        offset = std.mem.alignForward(usize, offset, tf.ty.alignment(self.types));
-                        if (std.mem.eql(u8, fname, tf.name)) break tf.ty;
-                        offset += tf.ty.size(self.types);
+                    var iter = struct_ty.offsetIter(self.types);
+                    const ftype, const offset = while (iter.next()) |elem| {
+                        if (std.mem.eql(u8, fname, elem.field.name)) break .{ elem.field.ty, elem.offset };
                     } else {
                         return self.report(e.field, "no such field on {} (TODO: list fields)", .{base.ty});
                     };
@@ -1494,19 +1490,16 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 inline .Struct, .Tuple => |struct_ty| {
                     const idx = try self.partialEval(e.subscript, idx_value.id.Value);
 
-                    const fields = struct_ty.getFields(self.types);
+                    var iter = struct_ty.offsetIter(self.types);
 
-                    if (idx >= fields.len) {
-                        return self.report(e.subscript, "struct has only {} fields, but idnex is {}", .{ fields.len, idx });
+                    if (idx >= iter.fields.len) {
+                        return self.report(e.subscript, "struct has only {} fields, but idnex is {}", .{ iter.fields.len, idx });
                     }
 
-                    var offset: usize = 0;
-                    for (fields[0..idx], fields[1 .. idx + 1]) |tf, ntf| {
-                        offset += tf.ty.size(self.types);
-                        offset = std.mem.alignForward(usize, offset, ntf.ty.alignment(self.types));
-                    }
+                    var elem: @TypeOf(iter.next().?) = undefined;
+                    for (0..idx + 1) |_| elem = iter.next().?;
 
-                    return .mkp(fields[idx].ty, self.bl.addFieldOffset(base.id.Ptr, @intCast(offset)));
+                    return .mkp(elem.field.ty, self.bl.addFieldOffset(base.id.Ptr, @intCast(elem.offset)));
                 },
                 .Slice => |slice_ty| {
                     const index_base = if (slice_ty.len == null) self.bl.addLoad(base.id.Ptr, .int) else base.id.Ptr;

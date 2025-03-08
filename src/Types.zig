@@ -113,6 +113,30 @@ pub const Tuple = struct {
     pub fn getFields(self: *Tuple, _: anytype) []Field {
         return self.fields;
     }
+
+    pub const OffIter = struct {
+        types: *Types,
+        fields: []const Field,
+        offset: usize = 0,
+
+        pub const Elem = struct { field: *const Field, offset: usize };
+
+        pub fn next(self: *OffIter) ?Elem {
+            if (self.fields.len == 0) return null;
+            self.offset = std.mem.alignForward(usize, self.offset, self.fields[0].ty.alignment(self.types));
+            const elem = Elem{ .field = &self.fields[0], .offset = self.offset };
+            self.fields = self.fields[1..];
+            self.offset += elem.field.ty.size(self.types);
+            return elem;
+        }
+    };
+
+    pub fn offsetIter(self: *Tuple, types: *Types) OffIter {
+        return .{
+            .types = types,
+            .fields = self.getFields(types),
+        };
+    }
 };
 
 pub const Enum = struct {
@@ -237,6 +261,28 @@ pub const Struct = struct {
             alignm = @max(alignm, f.ty.alignment(types));
         }
         return alignm;
+    }
+
+    pub const OffIter = struct {
+        types: *Types,
+        max_align: usize,
+        fields: []const Field,
+        offset: usize = 0,
+
+        pub const Elem = struct { field: *const Field, offset: usize };
+
+        pub fn next(self: *OffIter) ?Elem {
+            if (self.fields.len == 0) return null;
+            self.offset = std.mem.alignForward(usize, self.offset, @min(self.max_align, self.fields[0].ty.alignment(self.types)));
+            const elem = Elem{ .field = &self.fields[0], .offset = self.offset };
+            self.fields = self.fields[1..];
+            self.offset += elem.field.ty.size(self.types);
+            return elem;
+        }
+    };
+
+    pub fn offsetIter(self: *Struct, types: *Types) OffIter {
+        return .{ .types = types, .fields = self.getFields(types), .max_align = self.getAlignment(types) };
     }
 
     pub fn getFields(self: *Struct, types: *Types) []const Field {
