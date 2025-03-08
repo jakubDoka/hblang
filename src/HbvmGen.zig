@@ -1,4 +1,5 @@
 gpa: std.mem.Allocator,
+emit_header: bool = false,
 out: std.ArrayListUnmanaged(u8) = .empty,
 funcs: std.ArrayListUnmanaged(FuncData) = .empty,
 global_lookup: std.ArrayListUnmanaged(u32) = .empty,
@@ -22,6 +23,17 @@ const HbvmGen = @This();
 
 pub const eca = std.math.maxInt(u32);
 pub const dir = "inputs";
+
+const ExecHeader = extern struct {
+    magic_number: [3]u8 = .{ 0x15, 0x91, 0xD2 },
+    executable_version: u32 align(1) = 0,
+
+    code_length: u64 align(1) = 0,
+    data_length: u64 align(1) = 0,
+    debug_length: u64 align(1) = 0,
+    config_length: u64 align(1) = 0,
+    metadata_length: u64 align(1) = 0,
+};
 
 const GlobalData = struct {
     name: []const u8,
@@ -93,6 +105,11 @@ pub const Node = union(enum) {
 };
 
 pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
+    if (self.emit_header and self.out.items.len == 0) {
+        @branchHint(.cold);
+        _ = self.out.addManyAsArray(self.gpa, @sizeOf(ExecHeader)) catch unreachable;
+    }
+
     opts.optimizations.execute(Node, func);
 
     const allocs = Regalloc.ralloc(Node, func);
@@ -209,7 +226,13 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
 }
 
 pub fn finalize(self: *HbvmGen) std.ArrayListUnmanaged(u8) {
-    _ = self.link(0, false);
+    const code_size = self.link(0, false);
+    if (self.emit_header) {
+        @memcpy(self.out.items[0..@sizeOf(ExecHeader)], std.mem.asBytes(&ExecHeader{
+            .code_length = code_size,
+            .data_length = self.out.items.len - code_size,
+        }));
+    }
 
     defer self.out = .empty;
     return self.out;

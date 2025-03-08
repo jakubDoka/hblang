@@ -91,6 +91,19 @@ pub fn nextTask(self: *Codegen) ?Task {
     }
 }
 
+pub fn getEntry(self: *Codegen, file: Types.File, name: []const u8) !*Types.Func {
+    var tmp = root.Arena.scrath(null);
+    defer tmp.deinit();
+    _ = self.beginBuilder(tmp.arena, .never, 0, 0);
+    defer self.bl.func.reset();
+
+    var entry_vl = try self.lookupScopeItem(.init(0), self.types.getScope(file), name);
+    const entry_ty = try self.unwrapTyConst(Ast.Pos.init(0), &entry_vl);
+
+    if (entry_ty.data() != .Func) return error.Never;
+    return entry_ty.data().Func;
+}
+
 pub fn beginBuilder(
     self: *Codegen,
     scratch: *root.Arena,
@@ -430,33 +443,54 @@ pub fn emitTyConst(self: *Codegen, ty: Types.Id) Value {
 }
 
 pub fn unwrapTyConst(self: *Codegen, pos: anytype, cnst: *Value) !Types.Id {
+    if (cnst.ty != .type) return self.report(pos, "expected type, {} is not", .{cnst.ty});
     self.ensureLoaded(cnst);
     return @enumFromInt(try self.partialEval(pos, cnst.id.Value));
 }
 
 pub const LookupResult = union(enum) { ty: Types.Id, cnst: u64 };
 
-pub fn lookupScopeItem(self: *Codegen, pos: Ast.Pos, bsty: Types.Id, name: []const u8) !LookupResult {
+pub fn lookupScopeItem(self: *Codegen, pos: Ast.Pos, bsty: Types.Id, name: []const u8) !Value {
     const other_file = bsty.file() orelse return self.report(pos, "{} does not declare this", .{bsty});
-    const other_ast = self.types.getFile(other_file);
+    const ast = self.types.getFile(other_file);
     if (bsty.data() == .Enum) {
         for (bsty.data().Enum.getFields(self.types), 0..) |f, i| {
-            if (std.mem.eql(u8, f.name, name)) return .{ .cnst = i };
+            if (std.mem.eql(u8, f.name, name))
+                return .mkv(bsty, self.bl.addIntImm(self.abi.categorize(bsty, self.types).ByValue, @bitCast(i)));
         }
     }
 
     var tmp = root.Arena.scrath(null);
     defer tmp.deinit();
 
-    const decl, const path = other_ast.findDecl(bsty.items(other_ast), name, tmp.arena.allocator()) orelse {
+    const decl, const path = ast.findDecl(bsty.items(ast), name, tmp.arena.allocator()) orelse {
         return self.report(pos, "{} does not declare this", .{bsty});
     };
 
-    var cur = try self.types.ct.evalTy(name, .{ .Perm = bsty }, other_ast.exprs.get(decl).BinOp.rhs);
-    for (path) |ps| {
-        cur = (try self.lookupScopeItem(ps, cur, other_ast.tokenSrc(ps.index))).ty;
+    const vari = ast.exprs.get(decl).BinOp;
+    const ty: ?Types.Id, const value: Ast.Id = switch (vari.op) {
+        .@":" => .{
+            try self.resolveAnonTy((ast.exprs.getTyped(.BinOp, vari.rhs) orelse
+                return self.report(vari.rhs, "TODO: uninitialized variables", .{})).lhs),
+            ast.exprs.get(vari.rhs).BinOp.rhs,
+        },
+        .@":=" => .{ null, vari.rhs },
+        else => unreachable,
+    };
+
+    const global_ty, const new = self.types.resolveGlobal(bsty, name, value);
+    const global = global_ty.data().Global;
+    if (new) try self.types.ct.evalGlobal(name, global, ty, value);
+    self.queue(.{ .Global = global });
+
+    if (path.len != 0) {
+        if (global.ty != .type) return self.report(value, "expected a global holding a type, {} is not", .{global.ty});
+        var cur: Types.Id = @enumFromInt(@as(u64, @bitCast(global.data[0..8].*)));
+        for (path) |ps| cur = (try self.lookupScopeItem(ps, cur, ast.tokenSrc(ps.index))).ty;
+        return .{ .ty = cur };
     }
-    return .{ .ty = cur };
+
+    return .mkp(global.ty, self.bl.addGlobalAddr(global.id));
 }
 
 pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
@@ -514,7 +548,10 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
         if (path.len != 0) {
             if (global.ty != .type) return self.report(value, "expected a global holding a type, {} is not", .{global.ty});
             var cur: Types.Id = @enumFromInt(@as(u64, @bitCast(global.data[0..8].*)));
-            for (path) |ps| cur = (try self.lookupScopeItem(ps, cur, ast.tokenSrc(ps.index))).ty;
+            for (path) |ps| {
+                var vl = try self.lookupScopeItem(ps, cur, ast.tokenSrc(ps.index));
+                cur = try self.unwrapTyConst(ps, &vl);
+            }
             return self.emitTyConst(cur);
         }
 
@@ -527,7 +564,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
     var tmp = root.Arena.scrath(null);
     defer tmp.deinit();
 
-    const typ_res: LookupResult, var caller: ?Value = if (e.called.tag() == .Tag) b: {
+    var typ_res: Value, var caller: ?Value = if (e.called.tag() == .Tag) b: {
         const pos = ast.exprs.get(e.called).Tag;
         const name = ast.tokenSrc(pos.index + 1);
         const ty = ctx.ty orelse {
@@ -551,14 +588,10 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
         const ty = if (value.ty.data() == .Ptr) value.ty.data().Ptr.* else value.ty;
         break :b .{ try self.lookupScopeItem(field.field, ty, name), value };
     } else b: {
-        break :b .{ .{ .ty = try self.resolveAnonTy(e.called) }, null };
+        break :b .{ try self.emit(.{}, e.called), null };
     };
 
-    if (typ_res == .cnst) {
-        return self.report(e.called, "enum variants are not callable", .{});
-    }
-
-    var typ = typ_res.ty;
+    var typ: Types.Id = try self.unwrapTyConst(expr, &typ_res);
 
     var computed_args: ?[]Value = null;
     const was_template = typ.data() == .Template;
@@ -571,7 +604,8 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
     }
 
     const func = typ.data().Func;
-    self.queue(.{ .Func = func });
+    if (self.target != .runtime or func.ret != .type)
+        self.queue(.{ .Func = func });
 
     const passed_args = e.args.len() + @intFromBool(caller != null);
     if (!was_template and passed_args != func.args.len) {
@@ -1344,8 +1378,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 );
             };
 
-            const itm = try self.lookupScopeItem(e, ty, ast.tokenSrc(e.index + 1));
-            return .mkv(ty, self.bl.addIntImm(self.abi.categorize(ty, self.types).ByValue, @intCast(itm.cnst)));
+            return try self.lookupScopeItem(e, ty, ast.tokenSrc(e.index + 1));
         },
         .Field => |e| {
             var base = try self.emit(.{}, e.base);
@@ -1354,10 +1387,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             if (base.ty == .type) {
                 const bsty = try self.unwrapTyConst(e.base, &base);
-                switch (try self.lookupScopeItem(e.field, bsty, ast.tokenSrc(e.field.index))) {
-                    .ty => |ty| return self.emitTyConst(ty),
-                    .cnst => |cnst| return .mkv(bsty, self.bl.addIntImm(self.abi.categorize(bsty, self.types).ByValue, @bitCast(cnst))),
-                }
+                return try self.lookupScopeItem(e.field, bsty, ast.tokenSrc(e.field.index));
             }
 
             const fname = ast.tokenSrc(e.field.index);

@@ -1,4 +1,4 @@
-functions 3 (errors):7:2: can't access non type value (yet) unless this is a type inference context (inside @TypeOf)
+functions 3 (errors):7:2: expected type, void is not
     imaginary()
     ^
 functions 3 (errors):8:2: expected 3 arguments, got 0

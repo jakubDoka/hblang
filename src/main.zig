@@ -131,13 +131,13 @@ pub fn main() !void {
     var codegen = hb.Codegen.init(gpa, Arena.scrath(null).arena, &types, .runtime);
     defer codegen.deinit();
 
-    var hbg = hb.HbvmGen{ .gpa = gpa };
+    var hbg = hb.HbvmGen{ .gpa = gpa, .emit_header = !dump_asm };
     const backend = hb.Mach.init(&hbg);
 
     var syms = std.heap.ArenaAllocator.init(gpa);
     defer syms.deinit();
 
-    const entry_ty = (codegen.lookupScopeItem(.init(0), types.getScope(.root), "main") catch {
+    const entry = codegen.getEntry(.root, "main") catch {
         try diagnostics.writeAll(
             \\...you can define the `main` in the mentioned file:
             \\main := fn(): uint {
@@ -146,27 +146,9 @@ pub fn main() !void {
         );
 
         return;
-    }).ty;
+    };
 
-    if (entry_ty.data() != .Func) {
-        var tmp = Arena.scrath(null);
-        defer tmp.deinit();
-
-        const root = types.getFile(.root);
-        const expr, _ = root.findDecl(root.items, "main", tmp.arena.allocator()).?;
-
-        codegen.report(expr, "this, whatever that is, is not a function", .{}) catch {};
-        try diagnostics.writeAll(
-            \\...you can define the `main` as:
-            \\main := fn(): uint {
-            \\    return 0
-            \\}
-        );
-
-        return;
-    }
-
-    const entry = entry_ty.data().Func;
+    codegen.queue(.{ .Func = entry });
 
     var errored = false;
     while (codegen.nextTask()) |tsk| switch (tsk) {
@@ -183,7 +165,6 @@ pub fn main() !void {
                 .name = try hb.Types.Id.init(.{ .Func = func }).fmt(&types)
                     .toString(syms.allocator()),
                 .entry = func.id == entry.id,
-                .optimizations = .none,
             });
         },
         .Global => |global| {
@@ -207,7 +188,7 @@ pub fn main() !void {
     }
 
     var out = backend.finalize();
-    out.deinit(gpa);
+    defer out.deinit(gpa);
 
     try std.io.getStdOut().writeAll(out.items);
 }
@@ -236,7 +217,7 @@ const Loader = struct {
 
         const slot = self.files.addOne(self.gpa) catch return null;
         slot.path = canon;
-        slot.source = std.fs.cwd().readFileAlloc(self.gpa, rel_base, max_file_len) catch |err| {
+        slot.source = std.fs.cwd().readFileAlloc(self.gpa, path, max_file_len) catch |err| {
             hb.Ast.report(
                 file.path,
                 file.source,

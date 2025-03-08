@@ -137,10 +137,7 @@ pub fn testBuilder(
     defer cg.deinit();
     cg.scope = .{};
 
-    const entry_ty = (try cg.lookupScopeItem(.init(0), types.getScope(.root), "main")).ty;
-
-    if (entry_ty.data() != .Func) return error.Never;
-    const entry = entry_ty.data().Func;
+    const entry = try cg.getEntry(.root, "main");
     cg.work_list.appendAssumeCapacity(.{ .Func = entry });
 
     var hbgen = HbvmGen{ .gpa = gpa };
