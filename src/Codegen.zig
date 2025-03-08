@@ -287,7 +287,10 @@ pub const Ctx = struct {
 pub fn ensureLoaded(self: *Codegen, value: *Value) void {
     if (value.id == .Ptr) {
         const cata = self.abi.categorize(value.ty, self.types);
-        if (cata == .Imaginary) return;
+        if (cata == .Imaginary) {
+            value.id = .Imaginary;
+            return;
+        }
         value.id = .{ .Value = self.bl.addLoad(value.id.Ptr, cata.ByValue) };
     }
 }
@@ -443,6 +446,10 @@ pub fn unwrapTyConst(self: *Codegen, pos: anytype, cnst: *Value) !Types.Id {
         return self.report(pos, "expected type, {} is not", .{cnst.ty});
     }
     self.ensureLoaded(cnst);
+    if (cnst.id == .Imaginary) {
+        std.debug.dumpCurrentStackTrace(@returnAddress());
+        return self.report(pos, "what a fuck {}", .{cnst.ty});
+    }
     return @enumFromInt(try self.partialEval(pos, cnst.id.Value));
 }
 
@@ -491,8 +498,11 @@ pub fn lookupScopeItem(self: *Codegen, pos: Ast.Pos, bsty: Types.Id, name: []con
     if (path.len != 0) {
         if (global.ty != .type) return self.report(value, "expected a global holding a type, {} is not", .{global.ty});
         var cur: Types.Id = @enumFromInt(@as(u64, @bitCast(global.data[0..8].*)));
-        for (path) |ps| cur = (try self.lookupScopeItem(ps, cur, ast.tokenSrc(ps.index))).ty;
-        return .{ .ty = cur };
+        for (path) |ps| {
+            var vl = try self.lookupScopeItem(ps, cur, ast.tokenSrc(ps.index));
+            cur = try self.unwrapTyConst(ps, &vl);
+        }
+        return self.emitTyConst(cur);
     }
 
     return .mkp(global.ty, self.bl.addGlobalAddr(global.id));
