@@ -1524,7 +1524,7 @@ main := fn(): uint {
 }
 ```
 
-#### directives 11 (@target)
+#### directives 11 (@target, @isComptime)
 ```hb
 expectations := .{
     return_value: 1,
@@ -1533,7 +1533,7 @@ expectations := .{
 global: bool = @target("ableos")
 
 main := fn(): uint {
-    $if @target("comptime") @error("unecpected")
+    $if @isComptime() @error("unecpected")
 
     return global
 }
@@ -1689,6 +1689,7 @@ main := fn(): void {
   - [x] `@error(...<expr>)`
   - [x] `@ChildOf(<ty>)`
   - [x] `@target("<pat>")`
+  - [x] `@isComptime()`
   - [x] `@int_to_float(<int>)`
   - [x] `@float_to_int(<float>)`
   - [x] `@float_cast(<float>)`

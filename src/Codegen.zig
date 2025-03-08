@@ -2159,12 +2159,12 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
             const content = ast.exprs.getTyped(.String, args[0]) orelse return self.report(expr, "@target takes a \"string\"", .{});
             const str_content = ast.source[content.pos.index + 1 .. content.end - 1];
             const triple = @tagName(self.abi);
-            const matched = (self.target == .@"comptime" and std.mem.eql(u8, str_content, "target")) or
-                utils.matchTriple(str_content, triple) catch |err| {
-                    return self.report(args[0], "{s}", .{@errorName(err)});
-                };
+            const matched = utils.matchTriple(str_content, triple) catch |err| {
+                return self.report(args[0], "{s}", .{@errorName(err)});
+            };
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(matched)));
         },
+        .isComptime => return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(self.target == .@"comptime"))),
         .ecall => {
             try utils.assertArgs(self, expr, args, "<expr>..");
             var tmp = root.Arena.scrath(null);
