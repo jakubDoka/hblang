@@ -1,5 +1,12 @@
 # hblang
 
+## Build The Compiler
+
+```bash
+zig build install
+./zig-out/bin/hblang --help
+```
+
 ## Tour
 
 Note: the examples are used to generate unit tests, `n = 1` from each group is most interesting, others are more for testing purposes.
