@@ -87,7 +87,7 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                 const bb = &bbc.base;
 
                 var parent_succs: usize = 0;
-                const parent = bb.inputs()[0].?;
+                const parent = bb.inputs()[0] orelse continue;
                 std.debug.assert(parent.isCfg());
                 for (parent.outputs()) |o| parent_succs += @intFromBool(o.isCfg());
                 std.debug.assert(parent_succs >= 1 and parent_succs <= 2);
@@ -136,7 +136,7 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                 for (child.inputs()) |b| child_preds += @intFromBool(b != null and b.?.isCfg());
                 std.debug.assert(child_preds >= 1 and child_preds <= 2);
                 // handle joins
-                if (child_preds == 2 and child.kind != .Return) {
+                if (child_preds == 2 and child.kind != .TrapRegion and child.kind != .Return) {
                     if (!(child.kind == .Region or child.kind == .Loop)) {
                         std.debug.panic("{}\n", .{child});
                     }

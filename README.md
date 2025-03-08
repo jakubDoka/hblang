@@ -1146,7 +1146,7 @@ main := fn(): uint {
 }
 ```
 
-#### die
+#### die 1
 ```hb
 expectations := .{
     unreaches: true,
@@ -1154,6 +1154,23 @@ expectations := .{
 
 main := fn(): uint {
     if false return 1
+    die
+}
+```
+
+#### die 2
+```hb
+expectations := .{
+    unreaches: true,
+}
+
+fallible := fn(): ?^u8 {
+    return null
+}
+
+main := fn(): void {
+    a := fallible()
+    if a == null die
     die
 }
 ```
@@ -1576,20 +1593,6 @@ expectations := .{
 
 main := fn(): uint {
     return @name_of(uint).len
-}
-```
-
-### tmp
-```hb
-fallible := fn(): ?^u8 {
-    return null
-}
-func := fn(thing: ^u8): void {
-}
-main := fn(): void {
-    a := fallible()
-    if a == null die
-    func(a.?)
 }
 ```
 
