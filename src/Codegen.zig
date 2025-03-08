@@ -165,7 +165,7 @@ pub fn build(self: *Codegen, func: *Types.Func) !void {
                 }
                 break :b slot;
             },
-            .Imaginary => continue,
+            .Imaginary => self.bl.addLocal(0),
         };
         self.scope.appendAssumeCapacity(.{ .ty = ty, .name = ident.id });
         self.bl.pushScopeValue(arg);
@@ -439,7 +439,9 @@ pub fn emitTyConst(self: *Codegen, ty: Types.Id) Value {
 }
 
 pub fn unwrapTyConst(self: *Codegen, pos: anytype, cnst: *Value) !Types.Id {
-    if (cnst.ty != .type) return self.report(pos, "expected type, {} is not", .{cnst.ty});
+    if (cnst.ty != .type) {
+        return self.report(pos, "expected type, {} is not", .{cnst.ty});
+    }
     self.ensureLoaded(cnst);
     return @enumFromInt(try self.partialEval(pos, cnst.id.Value));
 }
@@ -447,12 +449,19 @@ pub fn unwrapTyConst(self: *Codegen, pos: anytype, cnst: *Value) !Types.Id {
 pub const LookupResult = union(enum) { ty: Types.Id, cnst: u64 };
 
 pub fn lookupScopeItem(self: *Codegen, pos: Ast.Pos, bsty: Types.Id, name: []const u8) !Value {
-    const other_file = bsty.file() orelse return self.report(pos, "{} does not declare this", .{bsty});
+    const other_file = bsty.file() orelse {
+        std.debug.dumpCurrentStackTrace(@returnAddress());
+        return self.report(pos, "{} does not declare this", .{bsty});
+    };
     const ast = self.types.getFile(other_file);
     if (bsty.data() == .Enum) {
-        for (bsty.data().Enum.getFields(self.types), 0..) |f, i| {
+        const fields = bsty.data().Enum.getFields(self.types);
+
+        for (fields, 0..) |f, i| {
             if (std.mem.eql(u8, f.name, name))
-                return .mkv(bsty, self.bl.addIntImm(self.abi.categorize(bsty, self.types).ByValue, @bitCast(i)));
+                if (fields.len <= 1) return .mkv(bsty, null) else {
+                    return .mkv(bsty, self.bl.addIntImm(self.abi.categorize(bsty, self.types).ByValue, @bitCast(i)));
+                };
         }
     }
 
@@ -751,7 +760,7 @@ fn pushParam(cg: *Codegen, call_args: Builder.CallArgs, abi: Types.Abi.Spec, idx
 fn assembleReturn(cg: *Codegen, id: u32, call_args: Builder.CallArgs, ctx: Ctx, ret: Types.Id, ret_abi: Types.Abi.Spec) Value {
     const rets = cg.bl.addCall(id, call_args);
     return switch (ret_abi) {
-        .Imaginary => .{},
+        .Imaginary => .mkv(ret, null),
         .ByValue => .mkv(ret, rets[0]),
         .ByValuePair => |pair| b: {
             const slot = ctx.loc orelse cg.bl.addLocal(ret.size(cg.types));

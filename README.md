@@ -1054,6 +1054,36 @@ main := fn(): uint {
 }
 ```
 
+#### enums 2 (one variant)
+```hb
+#### lily 1
+```hb
+main := fn(): uint {
+    return Target.current().Lib().page_size()
+}
+
+ableos := @use("ableos.hb")
+
+Target := enum {
+    .AbleOS
+
+    current := fn(): Target {
+        $if @target("ableos") return .AbleOS
+        @error("Unknown Target")
+    }
+
+    Lib := fn(target: Target): type {
+        match target {
+            .AbleOS => return ableos,
+        }
+    }
+}
+
+// in: ableos.hb
+page_size := fn(): uint return 0
+```
+```
+
 #### match 1
 ```hb
 main := fn(): uint {
@@ -1540,15 +1570,6 @@ expectations := .{
 
 main := fn(): uint {
     return @name_of(uint).len
-}
-```
-
-#### tmp
-```hb
-main := fn(): void {
-    a := 0
-    b := &a
-    if b.* != a die
 }
 ```
 

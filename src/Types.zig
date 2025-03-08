@@ -510,6 +510,7 @@ pub const Id = enum(usize) {
             .Ptr => 8,
             .Enum => |e| {
                 const var_count = e.getFields(types).len;
+                if (var_count <= 1) return 0;
                 return std.math.ceilPowerOfTwo(usize, std.mem.alignForward(usize, std.math.log2_int(usize, var_count), 8) / 8) catch unreachable;
             },
             .Tuple => |t| {

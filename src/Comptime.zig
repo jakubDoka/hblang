@@ -113,7 +113,7 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) PartialEvalResult
                     const func = types.funcs.items[call.extra(.Call).id];
                     ret_ty = abi.categorize(func.ret, types).ByValue;
                     if (func.completion.get(.@"comptime") == .queued) {
-                        self.jitFunc(func) catch unreachable;
+                        self.jitFunc(func) catch return .{ .Unsupported = curr };
                         std.debug.assert(func.completion.get(.@"comptime") == .compiled);
                     }
                 }
