@@ -13,20 +13,12 @@ pub const infinite_loop_trap = std.math.maxInt(u64);
 
 pub const BinOp = enum(u8) {
     iadd,
-    fadd,
     isub,
-    fsub,
     imul,
-    fmul,
     udiv,
-    sdiv,
-    fdiv,
     umod,
-    smod,
-
     ishl,
     ushr,
-    sshr,
     band,
     bor,
     bxor,
@@ -34,17 +26,48 @@ pub const BinOp = enum(u8) {
     ne,
     eq,
     ugt,
-    sgt,
-    fgt,
     ult,
-    slt,
-    flt,
     uge,
-    sge,
-    fge,
     ule,
+
+    sdiv,
+    smod,
+    sshr,
+
+    sgt,
+    slt,
+    sge,
     sle,
+
+    fadd,
+    fsub,
+    fmul,
+    fdiv,
+
+    fgt,
+    flt,
+    fge,
     fle,
+
+    pub fn isCmp(self: BinOp) bool {
+        return self.isInRange(.ne, .ule) or self.isInRange(.sgt, .sle) or self.isInRange(.fgt, .fle);
+    }
+
+    pub fn isUnsifned(self: BinOp) bool {
+        return self.isInRange(.iadd, .ule);
+    }
+
+    pub fn isSigned(self: BinOp) bool {
+        return self.isInRange(.sdiv, .sle);
+    }
+
+    pub fn isFloat(self: BinOp) bool {
+        return self.isInRange(.fadd, .fle);
+    }
+
+    pub inline fn isInRange(self: BinOp, min: BinOp, max: BinOp) bool {
+        return @intFromEnum(min) <= @intFromEnum(self) and @intFromEnum(self) <= @intFromEnum(max);
+    }
 
     pub fn eval(self: BinOp, lhs: i64, rhs: i64) i64 {
         return switch (self) {
@@ -742,10 +765,10 @@ pub fn Func(comptime MachNode: type) type {
                 return akind == bkind and
                     std.mem.eql(?*Node, ainputs, binputs) and
                     std.mem.eql(
-                    u8,
-                    @as([*]const u8, @ptrCast(aextra))[0..size_map[@intFromEnum(akind)]],
-                    @as([*]const u8, @ptrCast(bextra))[0..size_map[@intFromEnum(bkind)]],
-                );
+                        u8,
+                        @as([*]const u8, @ptrCast(aextra))[0..size_map[@intFromEnum(akind)]],
+                        @as([*]const u8, @ptrCast(bextra))[0..size_map[@intFromEnum(bkind)]],
+                    );
             }
         };
 
@@ -1206,7 +1229,13 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             if (node.kind == .UnOp) {
-                const op = node.extra(.UnOp).*;
+                const op: UnOp = node.extra(.UnOp).*;
+                const oper = inps[1].?;
+
+                if (oper.kind == .CInt and node.data_type.isInt()) {
+                    return self.addTypedNode(.CInt, node.data_type, &.{null}, op.eval(oper.data_type, oper.extra(.CInt).*));
+                }
+
                 if (node.data_type.meet(inps[1].?.data_type) == inps[1].?.data_type) {
                     if (op == .uext or op == .sext) {
                         return inps[1];

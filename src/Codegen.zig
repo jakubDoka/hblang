@@ -395,12 +395,7 @@ fn emitStructFoldOp(self: *Codegen, pos: anytype, ty: *Types.Struct, op: Lexer.L
             const dt = self.abi.categorize(elem.field.ty, self.types).ByValue;
             const lhs_val = self.bl.addLoad(lhs_loc, dt);
             const rhs_val = self.bl.addLoad(rhs_loc, dt);
-            break :b self.bl.addBinOp(
-                try self.lexemeToBinOp(pos, op, elem.field.ty),
-                .i8,
-                self.bl.addUnOp(.uext, .int, lhs_val),
-                self.bl.addUnOp(.uext, .int, rhs_val),
-            );
+            break :b self.bl.addBinOp(try self.lexemeToBinOp(pos, op, elem.field.ty), .i8, lhs_val, rhs_val);
         };
         if (fold) |f| {
             fold = self.bl.addBinOp(if (op == .@"==") .band else .bor, .i8, f, value);
@@ -1239,7 +1234,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     else => @compileError("wut"),
                 }
                 self.ensureLoaded(&lhs);
-                if (t == .@"!") lhs.id.Value = self.bl.addUnOp(.uext, .int, lhs.id.Value);
                 return .mkv(lhs.ty, self.bl.addUnOp(switch (t) {
                     .@"-" => if (lhs.ty.isFloat()) .fneg else .ineg,
                     .@"!" => .not,
@@ -1319,10 +1313,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                             .ByValuePair, .ByRef => self.bl.addLoad(lhs.id.Ptr, .i8),
                         };
 
-                        value = self.bl.addUnOp(.uext, .int, value);
-
                         if (e.op == .@"==") {
-                            value = self.bl.addBinOp(.eq, .int, value, self.bl.addIntImm(.int, 0));
+                            value = self.bl.addBinOp(.eq, .int, value, self.bl.addIntImm(.i8, 0));
                         }
 
                         return .mkv(.bool, value);
@@ -1347,28 +1339,21 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     },
                     .Builtin => {
                         const binop = try self.lexemeToBinOp(expr, e.op, lhs.ty);
-                        const upcast_ty = ctx.ty orelse self.binOpUpcast(lhs.ty, rhs.ty) catch |err|
+                        const upcast_ty = (if (e.op.isComparison()) null else ctx.ty) orelse
+                            self.binOpUpcast(lhs.ty, rhs.ty) catch |err|
                             return self.report(expr, "{s} ({} and {})", .{ @errorName(err), lhs.ty, rhs.ty });
-                        const dest_ty = if (e.op.isComparison()) .bool else upcast_ty;
 
                         self.ensureLoaded(&lhs);
                         self.ensureLoaded(&rhs);
 
                         if (lhs.ty.isFloat()) {
                             try self.typeCheck(expr, &rhs, lhs.ty);
-                            if ((e.op == .@"==" or e.op == .@"!=") and lhs.ty == .f32) {
-                                lhs.id.Value = self.bl.addUnOp(.uext, .int, lhs.id.Value);
-                                rhs.id.Value = self.bl.addUnOp(.uext, .int, rhs.id.Value);
-                            }
                         } else {
-                            const upcast: Types.Id = if (e.op.isComparison())
-                                if (lhs.ty == .type) .type else if (lhs.ty.isSigned()) .int else .uint
-                            else
-                                upcast_ty;
-                            try self.typeCheck(expr, &lhs, upcast);
-                            try self.typeCheck(expr, &rhs, upcast);
+                            try self.typeCheck(expr, &lhs, upcast_ty);
+                            try self.typeCheck(expr, &rhs, upcast_ty);
                         }
 
+                        const dest_ty = if (e.op.isComparison()) .bool else upcast_ty;
                         return .mkv(dest_ty, self.bl.addBinOp(
                             binop,
                             self.abi.categorize(dest_ty, self.types).ByValue,
@@ -1398,8 +1383,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         try self.typeCheck(e.rhs, &rhs, lhs.ty);
                         self.ensureLoaded(&lhs);
                         self.ensureLoaded(&rhs);
-                        lhs.id.Value = self.bl.addUnOp(.uext, .int, lhs.id.Value);
-                        rhs.id.Value = self.bl.addUnOp(.uext, .int, rhs.id.Value);
                         return .mkv(.bool, self.bl.addBinOp(binop, .i8, lhs.id.Value, rhs.id.Value));
                     },
                     else => return self.report(expr, "{} does not support binary operations", .{lhs.ty}),
@@ -1626,7 +1609,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         } else {
             var cond = try self.emitTyped(ctx, .bool, e.cond);
             self.ensureLoaded(&cond);
-            cond.id.Value = self.bl.addUnOp(.uext, .int, cond.id.Value);
             var unreachable_count: usize = 0;
             var if_builder = self.bl.addIfAndBeginThen(cond.id.Value);
             {

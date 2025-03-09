@@ -93,6 +93,7 @@ pub const Node = union(enum) {
     },
 
     pub const idealize = HbvmGen.idealize;
+    pub const idealizeMach = HbvmGen.idealizeMach;
 
     pub const is_basic_block_end: []const Kind = &.{.IfOp};
     pub const is_mem_op: []const Kind = &.{ .BlockCpy, .St, .Ld };
@@ -645,8 +646,36 @@ pub fn reloc(self: *HbvmGen, sub_offset: u8, arg: isa.Arg) Reloc {
     return .{ .offset = @intCast(self.out.items.len), .sub_offset = sub_offset, .operand = arg };
 }
 
-pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
+pub fn idealizeMach(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
     const inps = node.inputs();
+
+    if (node.kind == .BinOp) {
+        const op: graph.BinOp = node.extra(.BinOp).*;
+
+        if (inps[2].?.kind == .CInt) b: {
+            var imm = inps[2].?.extra(.CInt).*;
+
+            const instr: isa.Op = switch (op) {
+                .iadd => .addi8,
+                .imul => .muli8,
+                .isub => m: {
+                    imm *= -1;
+                    break :m .addi8;
+                },
+                .bor => .ori,
+                .bxor => .xori,
+                .band => .andi,
+                else => break :b,
+            };
+
+            return func.addTypedNode(
+                .ImmBinOp,
+                node.data_type,
+                &.{ null, node.inputs()[1] },
+                .{ .op = instr, .imm = imm },
+            );
+        }
+    }
 
     if (node.kind == .If) {
         if (inps[1].?.kind == .BinOp) b: {
@@ -674,33 +703,11 @@ pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node
                 .swapped = swap,
             });
         }
-    }
 
-    if (node.kind == .BinOp) {
-        const op = node.extra(.BinOp).*;
-
-        if (inps[2].?.kind == .CInt) b: {
-            var imm = inps[2].?.extra(.CInt).*;
-
-            const instr: isa.Op = switch (op) {
-                .iadd => .addi8,
-                .imul => .muli8,
-                .isub => m: {
-                    imm *= -1;
-                    break :m .addi8;
-                },
-                .bor => .ori,
-                .bxor => .xori,
-                .band => .andi,
-                else => break :b,
-            };
-
-            return func.addTypedNode(
-                .ImmBinOp,
-                node.data_type,
-                &.{ null, node.inputs()[1] },
-                .{ .op = instr, .imm = imm },
-            );
+        if (inps[1].?.data_type != .int) {
+            const new = func.addTypedNode(.UnOp, .int, &.{ null, inps[1].? }, .uext);
+            work.add(new);
+            _ = func.setInput(node, 1, new);
         }
     }
 
@@ -729,6 +736,36 @@ pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node
                 &.{ inps[0], inps[1], node.base().inputs()[1] },
                 .{ .offset = node.base().extra(.ImmBinOp).imm },
             );
+        }
+    }
+
+    return null;
+}
+
+pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
+    const inps = node.inputs();
+
+    if (node.kind == .BinOp) {
+        const op: graph.BinOp = node.extra(.BinOp).*;
+
+        if (op.isCmp() and !op.isFloat()) {
+            const ext_op: graph.UnOp = if (op.isSigned()) .sext else .uext;
+            inline for (inps[1..3], 1..) |inp, i| {
+                if (inp.?.data_type.size() != 8) {
+                    const new = func.addTypedNode(.UnOp, .int, &.{ null, inp.? }, ext_op);
+                    work.add(new);
+                    _ = func.setInput(node, i, new);
+                }
+            }
+        }
+    }
+
+    if (node.kind == .UnOp) {
+        const op: graph.UnOp = node.extra(.UnOp).*;
+        if (op == .not and inps[1].?.data_type != .int) {
+            const new = func.addTypedNode(.UnOp, .int, &.{ null, inps[1].? }, .uext);
+            work.add(new);
+            _ = func.setInput(node, 1, new);
         }
     }
 

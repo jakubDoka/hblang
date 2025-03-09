@@ -181,6 +181,7 @@ pub fn testBuilder(
             fnc.iterPeeps(10000, @TypeOf(fnc.*).idealizeDead);
             fnc.mem2reg.run();
             fnc.iterPeeps(10000, @TypeOf(fnc.*).idealize);
+            fnc.iterPeeps(10000, HbvmGen.idealizeMach);
             if (verbose) fnc.fmtUnscheduled(output, colors);
 
             if (verbose) try header("SCHEDULED SON", output, colors);

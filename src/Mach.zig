@@ -104,6 +104,10 @@ pub const EmitOptions = struct {
                 func.iterPeeps(self.peephole_fuel, @TypeOf(func.*).idealize);
             }
 
+            if (self.peephole_fuel != 0 and @hasDecl(MachNode, "idealizeMach")) {
+                func.iterPeeps(self.peephole_fuel, MachNode.idealizeMach);
+            }
+
             if (self.do_gcm) {
                 func.gcm.buildCfg();
             }
