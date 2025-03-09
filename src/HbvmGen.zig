@@ -739,7 +739,7 @@ pub fn idealizeMach(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.
         }
     }
 
-    return null;
+    return func.idealize(node, work);
 }
 
 pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {

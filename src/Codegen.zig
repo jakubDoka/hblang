@@ -206,6 +206,14 @@ pub const Value = struct {
     inline fn mkp(ty: Types.Id, id: *Node) Value {
         return .{ .ty = ty, .id = .{ .Ptr = id } };
     }
+
+    pub fn getValue(value: *Value, self: *Codegen) *Node {
+        if (value.id == .Ptr) {
+            const cata = self.abi.categorize(value.ty, self.types);
+            value.id = .{ .Value = self.bl.addLoad(value.id.Ptr, cata.ByValue) };
+        }
+        return value.id.Value;
+    }
 };
 
 pub const Scope = union(enum) {
@@ -291,17 +299,6 @@ pub const Ctx = struct {
     }
 };
 
-pub fn ensureLoaded(self: *Codegen, value: *Value) void {
-    if (value.id == .Ptr) {
-        const cata = self.abi.categorize(value.ty, self.types);
-        if (cata == .Imaginary) {
-            value.id = .Imaginary;
-            return;
-        }
-        value.id = .{ .Value = self.bl.addLoad(value.id.Ptr, cata.ByValue) };
-    }
-}
-
 pub fn typeCheck(self: *Codegen, expr: anytype, got: *Value, expected: Types.Id) !void {
     if (expected.data() == .Nullable and expected.data().Nullable.inner == got.ty) {
         if (!expected.needsTag(self.types)) {
@@ -331,14 +328,20 @@ pub fn typeCheck(self: *Codegen, expr: anytype, got: *Value, expected: Types.Id)
     }
 
     if (got.ty != expected) {
-        self.ensureLoaded(got);
-
         if (got.ty.isSigned() and got.ty.size(self.types) < expected.size(self.types)) {
-            got.id.Value = self.bl.addUnOp(.sext, self.abi.categorize(expected, self.types).ByValue, got.id.Value);
+            got.id = .{ .Value = self.bl.addUnOp(
+                .sext,
+                self.abi.categorize(expected, self.types).ByValue,
+                got.getValue(self),
+            ) };
         }
 
         if ((got.ty.isUnsigned() or got.ty == .bool) and got.ty.size(self.types) < expected.size(self.types)) {
-            got.id.Value = self.bl.addUnOp(.uext, self.abi.categorize(expected, self.types).ByValue, got.id.Value);
+            got.id = .{ .Value = self.bl.addUnOp(
+                .uext,
+                self.abi.categorize(expected, self.types).ByValue,
+                got.getValue(self),
+            ) };
         }
 
         got.ty = expected;
@@ -426,8 +429,7 @@ pub fn emitGenericStore(self: *Codegen, loc: *Node, value: *Value) void {
     if (value.id == .Imaginary) return;
 
     if (self.abi.categorize(value.ty, self.types) == .ByValue) {
-        self.ensureLoaded(value);
-        _ = self.bl.addStore(loc, self.abi.categorize(value.ty, self.types).ByValue, value.id.Value);
+        _ = self.bl.addStore(loc, self.abi.categorize(value.ty, self.types).ByValue, value.getValue(self));
     } else if (value.id.Ptr != loc) {
         _ = self.bl.addFixedMemCpy(loc, value.id.Ptr, value.ty.size(self.types));
     }
@@ -455,8 +457,7 @@ pub fn unwrapTyConst(self: *Codegen, pos: anytype, cnst: *Value) !Types.Id {
     if (cnst.ty != .type) {
         return self.report(pos, "expected type, {} is not", .{cnst.ty});
     }
-    self.ensureLoaded(cnst);
-    return @enumFromInt(try self.partialEval(pos, cnst.id.Value));
+    return @enumFromInt(try self.partialEval(pos, cnst.getValue(self)));
 }
 
 pub const LookupResult = union(enum) { ty: Types.Id, cnst: u64 };
@@ -617,9 +618,8 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
 
     if (caller) |*value| {
         if (value.ty.data() == .Ptr and func.args[0].data() != .Ptr) {
-            self.ensureLoaded(value);
+            value.id = .{ .Ptr = value.getValue(self) };
             value.ty = value.ty.data().Ptr.*;
-            value.id = .{ .Ptr = value.id.Value };
         }
 
         if (value.ty.data() != .Ptr and func.args[0].data() == .Ptr) {
@@ -758,8 +758,7 @@ fn pushParam(cg: *Codegen, call_args: Builder.CallArgs, abi: Types.Abi.Spec, idx
     switch (abi) {
         .Imaginary => {},
         .ByValue => {
-            cg.ensureLoaded(value);
-            call_args.arg_slots[idx] = value.id.Value;
+            call_args.arg_slots[idx] = value.getValue(cg);
         },
         .ByValuePair => |pair| {
             for (pair.types, pair.offsets(), 0..) |t, off, j| {
@@ -822,9 +821,8 @@ fn loopControl(self: *Codegen, kind: Builder.Loop.Control, ctrl: Ast.Id) !void {
 
 pub fn emitAutoDeref(self: *Codegen, value: *Value) void {
     if (value.ty.data() == .Ptr) {
-        self.ensureLoaded(value);
+        value.id = .{ .Ptr = value.getValue(self) };
         value.ty = value.ty.data().Ptr.*;
-        value.id = .{ .Ptr = value.id.Value };
     }
 }
 
@@ -1233,13 +1231,12 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     .@"~" => if (!lhs.ty.isInteger()) return self.report(expr, "only integers can invert their bits, {} is not", .{lhs.ty}),
                     else => @compileError("wut"),
                 }
-                self.ensureLoaded(&lhs);
                 return .mkv(lhs.ty, self.bl.addUnOp(switch (t) {
                     .@"-" => if (lhs.ty.isFloat()) .fneg else .ineg,
                     .@"!" => .not,
                     .@"~" => .bnot,
                     else => @compileError("wut"),
-                }, self.abi.categorize(lhs.ty, self.types).ByValue, lhs.id.Value));
+                }, self.abi.categorize(lhs.ty, self.types).ByValue, lhs.getValue(self)));
             },
             else => std.debug.panic("{any}\n", .{ast.exprs.get(expr)}),
         },
@@ -1306,10 +1303,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         const abi = self.abi.categorize(lhs.ty, self.types);
                         var value = switch (abi) {
                             .Imaginary => unreachable,
-                            .ByValue => b: {
-                                self.ensureLoaded(&lhs);
-                                break :b lhs.id.Value;
-                            },
+                            .ByValue => lhs.getValue(self),
                             .ByValuePair, .ByRef => self.bl.addLoad(lhs.id.Ptr, .i8),
                         };
 
@@ -1343,9 +1337,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                             self.binOpUpcast(lhs.ty, rhs.ty) catch |err|
                             return self.report(expr, "{s} ({} and {})", .{ @errorName(err), lhs.ty, rhs.ty });
 
-                        self.ensureLoaded(&lhs);
-                        self.ensureLoaded(&rhs);
-
                         if (lhs.ty.isFloat()) {
                             try self.typeCheck(expr, &rhs, lhs.ty);
                         } else {
@@ -1357,33 +1348,32 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         return .mkv(dest_ty, self.bl.addBinOp(
                             binop,
                             self.abi.categorize(dest_ty, self.types).ByValue,
-                            lhs.id.Value,
-                            rhs.id.Value,
+                            lhs.getValue(self),
+                            rhs.getValue(self),
                         ));
                     },
                     .Ptr => |ptr_ty| if (rhs.ty.data() == .Ptr) {
                         if (e.op != .@"-" and !e.op.isComparison()) return self.report(expr, "two pointers can only be subtracted or compared", .{});
                         const binop = try self.lexemeToBinOp(expr, e.op, lhs.ty);
                         try self.typeCheck(e.rhs, &rhs, lhs.ty);
-                        self.ensureLoaded(&lhs);
-                        self.ensureLoaded(&rhs);
                         const dest_ty: DataType = if (e.op.isComparison()) .i8 else .int;
-                        return .mkv(lhs.ty, self.bl.addBinOp(binop, dest_ty, lhs.id.Value, rhs.id.Value));
+                        return .mkv(lhs.ty, self.bl.addBinOp(binop, dest_ty, lhs.getValue(self), rhs.getValue(self)));
                     } else {
                         if (e.op != .@"-" and e.op != .@"+") return self.report(expr, "you can only subtract or add an integer to a pointer", .{});
                         const upcast: Types.Id = if (rhs.ty.isSigned()) .int else .uint;
                         try self.typeCheck(e.rhs, &rhs, upcast);
-                        self.ensureLoaded(&lhs);
-                        self.ensureLoaded(&rhs);
-                        return .mkv(lhs.ty, self.bl.addIndexOffset(lhs.id.Value, if (e.op == .@"-") .isub else .iadd, ptr_ty.size(self.types), rhs.id.Value));
+                        return .mkv(lhs.ty, self.bl.addIndexOffset(
+                            lhs.getValue(self),
+                            if (e.op == .@"-") .isub else .iadd,
+                            ptr_ty.size(self.types),
+                            rhs.getValue(self),
+                        ));
                     },
                     .Enum => {
                         if (e.op != .@"!=" and e.op != .@"==") return self.report(expr, "only comparison operators are allowed for enums", .{});
                         const binop = try self.lexemeToBinOp(expr, e.op, lhs.ty);
                         try self.typeCheck(e.rhs, &rhs, lhs.ty);
-                        self.ensureLoaded(&lhs);
-                        self.ensureLoaded(&rhs);
-                        return .mkv(.bool, self.bl.addBinOp(binop, .i8, lhs.id.Value, rhs.id.Value));
+                        return .mkv(.bool, self.bl.addBinOp(binop, .i8, lhs.getValue(self), rhs.getValue(self)));
                     },
                     else => return self.report(expr, "{} does not support binary operations", .{lhs.ty}),
                 }
@@ -1416,8 +1406,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 return self.report(e, "only pointer types can be dereferenced, {} is not", .{base.ty});
             }
 
-            self.ensureLoaded(&base);
-            return .mkp(base.ty.data().Ptr.*, base.id.Value);
+            return .mkp(base.ty.data().Ptr.*, base.getValue(self));
         },
         .Tag => |e| {
             const ty = ctx.ty orelse {
@@ -1498,7 +1487,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 .mkv(.uint, self.bl.addIntImm(.int, 0))
             else
                 try self.emitTyped(.{}, .uint, range.start);
-            self.ensureLoaded(&start);
             var end: Value = if (range.end.tag() == .Void) switch (base.ty.data()) {
                 .Slice => |slice_ty| if (slice_ty.len) |l|
                     .mkv(.uint, self.bl.addIntImm(.int, @bitCast(l)))
@@ -1508,15 +1496,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     return self.report(e.subscript, "unbound range is only allowed on arrays and slices, {} is not", .{base.ty});
                 },
             } else try self.emitTyped(.{}, .uint, range.end);
-            self.ensureLoaded(&end);
 
             const res_ty = self.types.makeSlice(null, elem);
 
             var ptr: Value = switch (base.ty.data()) {
-                .Ptr => b: {
-                    self.ensureLoaded(&base);
-                    break :b base;
-                },
+                .Ptr => base,
                 .Slice => |slice_ty| if (slice_ty.len == null)
                     .mkv(self.types.makePtr(elem), self.bl.addFieldLoad(base.id.Ptr, Types.Slice.ptr_offset, .int))
                 else
@@ -1526,11 +1510,16 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 },
             };
 
-            ptr.id.Value = self.bl.addIndexOffset(ptr.id.Value, .iadd, elem.size(self.types), start.id.Value);
-            const len = self.bl.addBinOp(.isub, .int, end.id.Value, start.id.Value);
+            ptr.id = .{ .Value = self.bl.addIndexOffset(
+                ptr.getValue(self),
+                .iadd,
+                elem.size(self.types),
+                start.getValue(self),
+            ) };
+            const len = self.bl.addBinOp(.isub, .int, end.getValue(self), start.getValue(self));
 
             const loc = ctx.loc orelse self.bl.addLocal(res_ty.size(self.types));
-            self.bl.addFieldStore(loc, Types.Slice.ptr_offset, .int, ptr.id.Value);
+            self.bl.addFieldStore(loc, Types.Slice.ptr_offset, .int, ptr.getValue(self));
             self.bl.addFieldStore(loc, Types.Slice.len_offset, .int, len);
 
             return .mkp(res_ty, loc);
@@ -1540,10 +1529,9 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             // TODO: pointers to arrays are kind of an edge case
             self.emitAutoDeref(&base);
             var idx_value = try self.emitTyped(.{}, .uint, e.subscript);
-            self.ensureLoaded(&idx_value);
             switch (base.ty.data()) {
                 inline .Struct, .Tuple => |struct_ty| {
-                    const idx = try self.partialEval(e.subscript, idx_value.id.Value);
+                    const idx = try self.partialEval(e.subscript, idx_value.getValue(self));
 
                     var iter = struct_ty.offsetIter(self.types);
 
@@ -1559,7 +1547,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 .Slice => |slice_ty| {
                     const index_base = if (slice_ty.len == null) self.bl.addLoad(base.id.Ptr, .int) else base.id.Ptr;
 
-                    return .mkp(slice_ty.elem, self.bl.addIndexOffset(index_base, .iadd, slice_ty.elem.size(self.types), idx_value.id.Value));
+                    return .mkp(slice_ty.elem, self.bl.addIndexOffset(index_base, .iadd, slice_ty.elem.size(self.types), idx_value.getValue(self)));
                 },
                 else => {
                     return self.report(expr, "only structs and slices can be indexed, {} is not", .{base.ty});
@@ -1592,8 +1580,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         },
         .If => |e| if (e.pos.flag.@"comptime") {
             var cond = try self.emitTyped(ctx, .bool, e.cond);
-            self.ensureLoaded(&cond);
-            if (try self.partialEval(e.cond, cond.id.Value) != 0) {
+            if (try self.partialEval(e.cond, cond.getValue(self)) != 0) {
                 _ = self.emitTyped(ctx, .void, e.then) catch |err| switch (err) {
                     error.Never => {},
                     error.Unreachable => return err,
@@ -1608,9 +1595,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             return .{};
         } else {
             var cond = try self.emitTyped(ctx, .bool, e.cond);
-            self.ensureLoaded(&cond);
             var unreachable_count: usize = 0;
-            var if_builder = self.bl.addIfAndBeginThen(cond.id.Value);
+            var if_builder = self.bl.addIfAndBeginThen(cond.getValue(self));
             {
                 const prev_scope_height = self.scope.items.len;
                 defer self.scope.items.len = prev_scope_height;
@@ -1683,8 +1669,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     }
 
                     var match_pat = try cg.emitTyped(.{}, slf.ty, arm.lhs);
-                    cg.ensureLoaded(&match_pat);
-                    const idx = if (match_pat.id == .Imaginary) 0 else try cg.partialEval(arm.lhs, match_pat.id.Value);
+                    const idx = if (match_pat.id == .Imaginary) 0 else try cg.partialEval(arm.lhs, match_pat.getValue(cg));
 
                     switch (slf.slots[idx]) {
                         .Unmatched => slf.slots[idx] = .{ .Matched = a },
@@ -1706,9 +1691,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             };
             @memset(matcher.slots, .Unmatched);
 
-            self.ensureLoaded(&value);
             if (e.pos.flag.@"comptime") {
-                const value_idx = if (value.id == .Imaginary) 0 else try self.partialEval(e.value, value.id.Value);
+                const value_idx = if (value.id == .Imaginary) 0 else try self.partialEval(e.value, value.getValue(self));
 
                 var matched_branch: ?Ast.Id = null;
                 for (ast.exprs.view(e.arms), 0..) |a, i| {
@@ -1731,7 +1715,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 for (ast.exprs.view(e.arms), 0..) |a, i| {
                     const idx, const body = try matcher.decomposeArm(self, i, a) orelse continue;
 
-                    const cond = self.bl.addBinOp(.eq, .i8, self.bl.addUnOp(.sext, .int, value.id.Value), self.bl.addIntImm(.int, @bitCast(idx)));
+                    const cond = self.bl.addBinOp(.eq, .i8, self.bl.addUnOp(.sext, .int, value.getValue(self)), self.bl.addIntImm(.int, @bitCast(idx)));
                     var if_builder = self.bl.addIfAndBeginThen(cond);
                     _ = self.emitTyped(ctx, .void, body) catch |err| {
                         unreachable_count += @intFromBool(err == error.Unreachable);
@@ -1810,8 +1794,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             switch (self.abi.categorize(value.ty, self.types)) {
                 .Imaginary => self.bl.addReturn(&.{}),
                 .ByValue => {
-                    self.ensureLoaded(&value);
-                    self.bl.addReturn(&.{value.id.Value});
+                    self.bl.addReturn(&.{value.getValue(self)});
                 },
                 .ByValuePair => |pair| {
                     var slots: [2]*Node = undefined;
@@ -1848,9 +1831,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             for (ast.exprs.view(e.captures), 0..) |id, slot_idx| {
                 var val = try self.loadIdent(.init(id.pos()), id);
                 if (val.ty == .type) {
-                    self.ensureLoaded(&val);
                     args.arg_slots[prefix + slot_idx * 2 ..][0..2].* =
-                        .{ self.emitTyConst(.type).id.Value, val.id.Value };
+                        .{ self.emitTyConst(.type).id.Value, val.getValue(self) };
                 } else {
                     args.arg_slots[prefix + slot_idx * 2 ..][0..2].* =
                         .{ self.emitTyConst(val.ty).id.Value, self.bl.addIntImm(.int, 0) };
@@ -2088,15 +2070,12 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
                 return self.report(args[0], "expeced integer, {} is not", .{oper.ty});
             }
 
-            self.ensureLoaded(&oper);
-
-            return .mkv(ret, self.bl.addUnOp(.ired, self.abi.categorize(ret, self.types).ByValue, oper.id.Value));
+            return .mkv(ret, self.bl.addUnOp(.ired, self.abi.categorize(ret, self.types).ByValue, oper.getValue(self)));
         },
         .float_cast => {
             try utils.assertArgs(self, expr, args, "<float>");
 
             var oper = try self.emit(.{}, args[0]);
-            self.ensureLoaded(&oper);
 
             const ret: Types.Id = switch (oper.ty) {
                 .f32 => .f64,
@@ -2104,7 +2083,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
                 else => return self.report(expr, "expected float argument, {} is not", .{oper.ty}),
             };
 
-            return .mkv(ret, self.bl.addUnOp(.fcst, self.abi.categorize(ret, self.types).ByValue, oper.id.Value));
+            return .mkv(ret, self.bl.addUnOp(.fcst, self.abi.categorize(ret, self.types).ByValue, oper.getValue(self)));
         },
         .int_to_float => {
             try utils.assertArgs(self, expr, args, "<float>");
@@ -2116,9 +2095,12 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
             if (!ret.isFloat()) return self.report(expr, "expected this to evaluate to float, {} is not", .{ret});
 
             var oper = try self.emitTyped(.{}, .int, args[0]);
-            self.ensureLoaded(&oper);
 
-            return .mkv(ret, self.bl.addUnOp(if (ret == .f32) .itf32 else .itf64, self.abi.categorize(ret, self.types).ByValue, oper.id.Value));
+            return .mkv(ret, self.bl.addUnOp(
+                if (ret == .f32) .itf32 else .itf64,
+                self.abi.categorize(ret, self.types).ByValue,
+                oper.getValue(self),
+            ));
         },
         .float_to_int => {
             try utils.assertArgs(self, expr, args, "<float>");
@@ -2128,9 +2110,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
 
             if (!oper.ty.isFloat()) return self.report(args[0], "expected float, {} is not", .{oper.ty});
 
-            self.ensureLoaded(&oper);
-
-            return .mkv(ret, self.bl.addUnOp(.fti, .int, oper.id.Value));
+            return .mkv(ret, self.bl.addUnOp(.fti, .int, oper.getValue(self)));
         },
         .bit_cast => {
             try utils.assertArgs(self, expr, args, "<expr>");
@@ -2157,7 +2137,6 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
                 return .mkp(ret, loc);
             } else {
                 oper.ty = ret;
-                self.ensureLoaded(&oper);
                 return oper;
             }
         },
