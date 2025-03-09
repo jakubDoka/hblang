@@ -1669,7 +1669,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     }
 
                     var match_pat = try cg.emitTyped(.{}, slf.ty, arm.lhs);
-                    const idx = if (match_pat.id == .Imaginary) 0 else try cg.partialEval(arm.lhs, match_pat.getValue(cg));
+                    const idx = if (cg.abi.categorize(match_pat.ty, cg.types) == .Imaginary) 0 else try cg.partialEval(arm.lhs, match_pat.getValue(cg));
 
                     switch (slf.slots[idx]) {
                         .Unmatched => slf.slots[idx] = .{ .Matched = a },
@@ -1692,7 +1692,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             @memset(matcher.slots, .Unmatched);
 
             if (e.pos.flag.@"comptime") {
-                const value_idx = if (value.id == .Imaginary) 0 else try self.partialEval(e.value, value.getValue(self));
+                const value_idx = if (self.abi.categorize(value.ty, self.types) == .Imaginary) 0 else try self.partialEval(e.value, value.getValue(self));
 
                 var matched_branch: ?Ast.Id = null;
                 for (ast.exprs.view(e.arms), 0..) |a, i| {
