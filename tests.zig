@@ -49,6 +49,8 @@ pub fn runFuzzFindingTest(name: []const u8, code: []const u8) !void {
 
     const gpa = std.testing.allocator;
 
+    std.debug.print("{s}\n", .{code});
+
     //errdefer {
     //    const stderr = std.io.getStdErr();
     //    const colors = std.io.tty.detectConfig(stderr);

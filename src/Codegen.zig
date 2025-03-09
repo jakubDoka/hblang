@@ -346,7 +346,11 @@ pub fn report(self: *Codegen, expr: anytype, comptime fmt: []const u8, args: any
     return error.Never;
 }
 
-pub fn lexemeToBinOp(self: Lexer.Lexeme, ty: Types.Id) graph.BinOp {
+pub fn lexemeToBinOp(self: *Codegen, pos: anytype, lx: Lexer.Lexeme, ty: Types.Id) !graph.BinOp {
+    return lexemeToBinOpLow(lx, ty) orelse self.report(pos, "the operator not supported for {}", .{ty});
+}
+
+pub fn lexemeToBinOpLow(self: Lexer.Lexeme, ty: Types.Id) ?graph.BinOp {
     const unsigned = ty.isUnsigned();
     const float = ty.isFloat();
     return switch (self) {
@@ -354,13 +358,13 @@ pub fn lexemeToBinOp(self: Lexer.Lexeme, ty: Types.Id) graph.BinOp {
         .@"-" => if (float) .fsub else .isub,
         .@"*" => if (float) .fmul else .imul,
         .@"/" => if (float) .fdiv else if (unsigned) .udiv else .sdiv,
-        .@"%" => if (unsigned) .umod else .smod,
+        .@"%" => if (float) null else if (unsigned) .umod else .smod,
 
-        .@"<<" => .ishl,
+        .@"<<" => if (float) null else .ishl,
         .@">>" => if (unsigned) .ushr else .sshr,
-        .@"|" => .bor,
-        .@"&" => .band,
-        .@"^" => .bxor,
+        .@"|" => if (float) null else .bor,
+        .@"&" => if (float) null else .band,
+        .@"^" => if (float) null else .bxor,
 
         .@"<" => if (float) .flt else if (unsigned) .ult else .slt,
         .@">" => if (float) .fgt else if (unsigned) .ugt else .sgt,
@@ -372,20 +376,20 @@ pub fn lexemeToBinOp(self: Lexer.Lexeme, ty: Types.Id) graph.BinOp {
     };
 }
 
-fn emitStructFoldOp(self: *Codegen, ty: *Types.Struct, op: Lexer.Lexeme, lhs: *Node, rhs: *Node) ?*Node {
+fn emitStructFoldOp(self: *Codegen, pos: anytype, ty: *Types.Struct, op: Lexer.Lexeme, lhs: *Node, rhs: *Node) !?*Node {
     var fold: ?*Node = null;
     var iter = ty.offsetIter(self.types);
     while (iter.next()) |elem| {
         const lhs_loc = self.bl.addFieldOffset(lhs, @intCast(elem.offset));
         const rhs_loc = self.bl.addFieldOffset(rhs, @intCast(elem.offset));
         const value = if (elem.field.ty.data() == .Struct) b: {
-            break :b self.emitStructFoldOp(elem.field.ty.data().Struct, op, lhs_loc, rhs_loc) orelse continue;
+            break :b try self.emitStructFoldOp(pos, elem.field.ty.data().Struct, op, lhs_loc, rhs_loc) orelse continue;
         } else b: {
             const dt = self.abi.categorize(elem.field.ty, self.types).ByValue;
             const lhs_val = self.bl.addLoad(lhs_loc, dt);
             const rhs_val = self.bl.addLoad(rhs_loc, dt);
             break :b self.bl.addBinOp(
-                lexemeToBinOp(op, elem.field.ty),
+                try self.lexemeToBinOp(pos, op, elem.field.ty),
                 .i8,
                 self.bl.addUnOp(.uext, .int, lhs_val),
                 self.bl.addUnOp(.uext, .int, rhs_val),
@@ -398,19 +402,19 @@ fn emitStructFoldOp(self: *Codegen, ty: *Types.Struct, op: Lexer.Lexeme, lhs: *N
     return fold;
 }
 
-fn emitStructOp(self: *Codegen, ty: *Types.Struct, op: Lexer.Lexeme, loc: *Node, lhs: *Node, rhs: *Node) void {
+fn emitStructOp(self: *Codegen, pos: anytype, ty: *Types.Struct, op: Lexer.Lexeme, loc: *Node, lhs: *Node, rhs: *Node) !void {
     var iter = ty.offsetIter(self.types);
     while (iter.next()) |elem| {
         const field_loc = self.bl.addFieldOffset(loc, @intCast(elem.offset));
         const lhs_loc = self.bl.addFieldOffset(lhs, @intCast(elem.offset));
         const rhs_loc = self.bl.addFieldOffset(rhs, @intCast(elem.offset));
         if (elem.field.ty.data() == .Struct) {
-            self.emitStructOp(elem.field.ty.data().Struct, op, field_loc, lhs_loc, rhs_loc);
+            try self.emitStructOp(pos, elem.field.ty.data().Struct, op, field_loc, lhs_loc, rhs_loc);
         } else {
             const dt = self.abi.categorize(elem.field.ty, self.types).ByValue;
             const lhs_val = self.bl.addLoad(lhs_loc, dt);
             const rhs_val = self.bl.addLoad(rhs_loc, dt);
-            const res = self.bl.addBinOp(lexemeToBinOp(op, elem.field.ty), dt, lhs_val, rhs_val);
+            const res = self.bl.addBinOp(try self.lexemeToBinOp(pos, op, elem.field.ty), dt, lhs_val, rhs_val);
             _ = self.bl.addStore(field_loc, res.data_type, res);
         }
     }
@@ -1317,7 +1321,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
                 if (e.op.isComparison() and lhs.ty.isSigned() != rhs.ty.isSigned())
                     return self.report(e.lhs, "mixed sign comparison ({} {})", .{ lhs.ty, rhs.ty });
-                const unified: Types.Id = ctx.ty orelse lhs.ty.binOpUpcast(rhs.ty, self.types) catch |err| {
+                const hint = if (e.op.isComparison()) .bool else if (ctx.ty != null and ctx.ty.?.isBinaryOperand()) ctx.ty else null;
+                const unified: Types.Id = hint orelse lhs.ty.binOpUpcast(rhs.ty, self.types) catch |err| {
                     return self.report(expr, "{s} ({} and {})", .{ @errorName(err), lhs.ty, rhs.ty });
                 };
 
@@ -1326,11 +1331,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 }
 
                 if (lhs.ty.data() == .Struct) if (e.op == .@"==" or e.op == .@"!=") {
-                    const value = self.emitStructFoldOp(lhs.ty.data().Struct, e.op, lhs.id.Ptr, rhs.id.Ptr);
+                    const value = try self.emitStructFoldOp(expr, lhs.ty.data().Struct, e.op, lhs.id.Ptr, rhs.id.Ptr);
                     return .mkv(unified, value orelse self.bl.addIntImm(.i8, 1));
                 } else {
                     const loc = ctx.loc orelse self.bl.addLocal(unified.size(self.types));
-                    self.emitStructOp(lhs.ty.data().Struct, e.op, loc, lhs.id.Ptr, rhs.id.Ptr);
+                    try self.emitStructOp(expr, lhs.ty.data().Struct, e.op, loc, lhs.id.Ptr, rhs.id.Ptr);
                     return .mkp(unified, loc);
                 } else {
                     const upcast_to: Types.Id = if (e.op.isComparison())
@@ -1348,7 +1353,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     }
                     if (lhs.id == .Imaginary) std.debug.print("{}\n{}\n", .{ lhs.ty.fmt(self.types), self.ast.codePointer(self.ast.posOf(expr).index) });
                     return .mkv(unified, self.bl.addBinOp(
-                        lexemeToBinOp(e.op, lhs.ty),
+                        try self.lexemeToBinOp(expr, e.op, lhs.ty),
                         self.abi.categorize(unified, self.types).ByValue,
                         lhs.id.Value,
                         rhs.id.Value,
@@ -1850,6 +1855,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     const ty = argid.ty;
                     arg.* = try self.resolveAnonTy(ty);
                     has_anytypes = has_anytypes or arg.* == .any;
+                    if (has_anytypes) break;
                 }
             }
 

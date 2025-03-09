@@ -1603,11 +1603,16 @@ expectations := .{
 }
 
 main := fn(): uint {
+    _ = func(@as(uint, 1), 2)
     return foo(5) + foo(@as(u8, 5))
 }
 
 foo := fn(vl: @Any()): @TypeOf(vl) {
     return vl
+}
+
+func := fn(a: @Any(), b: @TypeOf(a)): uint {
+    return 0
 }
 ```
 

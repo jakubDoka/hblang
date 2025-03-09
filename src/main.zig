@@ -10,9 +10,8 @@ pub fn main() !void {
     defer Arena.deinitScratch();
 
     var gpa_impl = std.heap.GeneralPurposeAllocator(.{}){};
-    defer {
-        _ = gpa_impl.deinit();
-    }
+    defer _ = gpa_impl.deinit();
+
     const gpa = gpa_impl.allocator();
 
     const diagnostics = std.io.getStdErr().writer().any();
