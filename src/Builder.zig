@@ -109,14 +109,17 @@ pub fn addFieldStore(self: *Builder, base: *BuildNode, offset: i64, ty: DataType
     _ = self.addStore(self.addFieldOffset(base, offset), ty, value);
 }
 
-pub fn addIndexOffset(self: *Builder, base: *BuildNode, elem_size: usize, subscript: *BuildNode) SpecificNode(.BinOp) {
+pub fn addIndexOffset(self: *Builder, base: *BuildNode, op: enum(u8) {
+    iadd = @intFromEnum(BinOp.iadd),
+    isub = @intFromEnum(BinOp.isub),
+}, elem_size: usize, subscript: *BuildNode) SpecificNode(.BinOp) {
     const offset = if (elem_size == 1)
         subscript
     else if (subscript.kind == .CInt)
         self.addIntImm(.int, subscript.extra(.CInt).* * @as(i64, @intCast(elem_size)))
     else
         self.addBinOp(.imul, .int, subscript, self.addIntImm(.int, @bitCast(elem_size)));
-    return self.addBinOp(.iadd, .int, base, offset);
+    return self.addBinOp(@enumFromInt(@intFromEnum(op)), .int, base, offset);
 }
 
 pub fn addSpill(self: *Builder, value: *BuildNode) SpecificNode(.Local) {

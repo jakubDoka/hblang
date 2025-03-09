@@ -203,6 +203,21 @@ main := fn(): uint {
 }
 ```
 
+#### literals 2
+```hb
+expectations := .{
+    return_value: 0,
+}
+
+hex := fn(): uint return 0x2d
+dec := fn(): uint return 45
+
+main := fn(): uint {
+    if hex() != dec() return 1
+    return 0
+}
+```
+
 #### functions 1
 ```hb
 expectations := .{
@@ -538,7 +553,7 @@ main := fn(): uint {
 ```hb
 main := fn(): uint {
     val := uint.[1, 0]
-    return (&val[0] + 1).*
+    return (val.ptr + 1).*
 }
 ```
 

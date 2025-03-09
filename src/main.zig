@@ -117,7 +117,10 @@ pub fn main() !void {
         return;
     }
 
-    const asts, const base = try Loader.loadAll(ast_arena.allocator(), path_projections, root_file, diagnostics) orelse return;
+    const asts, const base = try Loader.loadAll(ast_arena.allocator(), path_projections, root_file, diagnostics) orelse {
+        try diagnostics.print("failed due to previous errors (codegen skipped)\n", .{});
+        return;
+    };
 
     if (fmt) {
         for (asts) |ast| {

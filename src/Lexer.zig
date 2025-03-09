@@ -408,7 +408,7 @@ pub fn next(self: *Lexer) Token {
             } else if (self.advanceIf('/')) l: {
                 while (self.advance()) |ch| if (ch == '\n') break;
                 break :l .Comment;
-            } else @enumFromInt(c),
+            } else if (self.advanceIf('=')) @enumFromInt(c + 128) else @enumFromInt(c),
             '.' => if (self.advanceIf('{'))
                 .@".{"
             else if (self.advanceIf('('))
@@ -419,8 +419,8 @@ pub fn next(self: *Lexer) Token {
                 .@".["
             else
                 .@".",
-            '<', '>' => |c| @enumFromInt(if (self.advanceIf(c)) c - 10 else if (self.advanceIf('=')) c + 128 else c),
-            ':', '+', '-', '&', '=', '!' => |c| if (self.advanceIf('>')) .@"=>" else @enumFromInt(if (self.advanceIf('=')) c + 128 else c),
+            '<', '>' => |c| @enumFromInt(if (self.advanceIf(c)) c - 10 + if (self.advanceIf('=')) @as(u8, 128) else 0 else if (self.advanceIf('=')) c + 128 else c),
+            ':', '+', '-', '*', '%', '|', '^', '&', '=', '!' => |c| if (self.advanceIf('>')) .@"=>" else @enumFromInt(if (self.advanceIf('=')) c + 128 else c),
             else => |c| std.meta.intToEnum(Lexeme, c) catch std.debug.panic("{c}", .{c}),
         };
         return Token.init(pos, self.cursor, kind);

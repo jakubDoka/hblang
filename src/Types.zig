@@ -499,14 +499,6 @@ pub const Id = enum(usize) {
         };
     }
 
-    pub fn isBinaryOperand(self: Id, op: Lexer.Lexeme) bool {
-        return switch (self.data()) {
-            .Builtin => self.isInteger() or self.isFloat() or self == .bool or (self == .type and op.isComparison()),
-            .Struct, .Ptr, .Enum => true,
-            .Global, .Func, .Template, .Slice, .Nullable, .Union, .Tuple => false,
-        };
-    }
-
     pub fn isInteger(self: Id) bool {
         return self.isUnsigned() or self.isSigned();
     }

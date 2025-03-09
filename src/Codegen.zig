@@ -872,31 +872,10 @@ pub fn partialEval(self: *Codegen, pos: anytype, node: *Builder.BuildNode) !u64 
     };
 }
 
-pub fn binOpUpcast(self: *Codegen, lhs: Types.Id, rhs_val: *Codegen.Value) !Types.Id {
-    const rhs = rhs_val.ty;
+pub fn binOpUpcast(self: *Codegen, lhs: Types.Id, rhs: Types.Id) !Types.Id {
     if (lhs == rhs) return lhs;
-    if (lhs.data() == .Ptr and rhs.data() == .Ptr) return .uint;
-    if (lhs.data() == .Ptr and rhs.isInteger()) {
-        const size = lhs.data().Ptr.*.size(self.types);
-        self.ensureLoaded(rhs_val);
-
-        if (rhs_val.ty.isSigned() and rhs_val.ty.size(self.types) < DataType.int.size()) {
-            rhs_val.id.Value = self.bl.addUnOp(.sext, .int, rhs_val.id.Value);
-        }
-
-        if (rhs_val.ty.isUnsigned() and rhs_val.ty.size(self.types) < DataType.int.size()) {
-            rhs_val.id.Value = self.bl.addUnOp(.uext, .int, rhs_val.id.Value);
-        }
-
-        rhs_val.id.Value = self.bl.addBinOp(.imul, .int, rhs_val.id.Value, self.bl.addIntImm(.int, @bitCast(size)));
-        rhs_val.ty = lhs;
-    }
-    if (lhs.data() == .Ptr) return lhs;
-    if (rhs.data() == .Ptr) return error.@"pointer must be on the left";
-
     if (lhs.canUpcast(rhs, self.types)) return rhs;
     if (rhs.canUpcast(lhs, self.types)) return lhs;
-
     return error.@"incompatible types";
 }
 
@@ -927,7 +906,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             var ty = ctx.ty orelse .uint;
             if (!ty.isInteger()) ty = .uint;
             const shift: u8 = if (e.base == 10) 0 else 2;
-            const parsed = std.fmt.parseInt(u64, ast.tokenSrc(e.pos.index + shift), e.base) catch |err| switch (err) {
+            const parsed = std.fmt.parseInt(u64, ast.tokenSrc(e.pos.index)[shift..], e.base) catch |err| switch (err) {
                 error.InvalidCharacter => unreachable,
                 error.Overflow => return self.report(expr, "number does not fit into 64 bits", .{}),
             };
@@ -1333,55 +1312,77 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     },
                 };
 
-                if (!lhs.ty.isBinaryOperand(e.op)) {
-                    return self.report(e.lhs, "{} can not be used in binary operations", .{lhs.ty});
-                }
-
                 var rhs = try self.emit(ctx.addTy(lhs.ty), e.rhs);
 
-                if (!rhs.ty.isBinaryOperand(e.op)) {
-                    return self.report(e.rhs, "{} can not be used in binary operations", .{rhs.ty});
-                }
+                // TODO: make the builder do the upcasting
+                switch (lhs.ty.data()) {
+                    .Struct => |struct_ty| if (e.op.isComparison()) {
+                        if (e.op != .@"==" and e.op != .@"!=") return self.report(expr, "structs only support `!=` and `==`", .{});
+                        const value = try self.emitStructFoldOp(expr, struct_ty, e.op, lhs.id.Ptr, rhs.id.Ptr);
+                        return .mkv(.bool, value orelse self.bl.addIntImm(.i8, 1));
+                    } else {
+                        const loc = ctx.loc orelse self.bl.addLocal(lhs.ty.size(self.types));
+                        try self.emitStructOp(expr, struct_ty, e.op, loc, lhs.id.Ptr, rhs.id.Ptr);
+                        return .mkp(lhs.ty, loc);
+                    },
+                    .Builtin => {
+                        const binop = try self.lexemeToBinOp(expr, e.op, lhs.ty);
+                        const upcast_ty = ctx.ty orelse self.binOpUpcast(lhs.ty, rhs.ty) catch |err|
+                            return self.report(expr, "{s} ({} and {})", .{ @errorName(err), lhs.ty, rhs.ty });
+                        const dest_ty = if (e.op.isComparison()) .bool else upcast_ty;
 
-                if (e.op.isComparison() and lhs.ty.isSigned() != rhs.ty.isSigned())
-                    return self.report(e.lhs, "mixed sign comparison ({} {})", .{ lhs.ty, rhs.ty });
-                const hint = if (e.op.isComparison()) .bool else if (ctx.ty != null and ctx.ty.?.isBinaryOperand(e.op)) ctx.ty else null;
-                const unified: Types.Id = hint orelse self.binOpUpcast(lhs.ty, &rhs) catch |err| {
-                    return self.report(expr, "{s} ({} and {})", .{ @errorName(err), lhs.ty, rhs.ty });
-                };
+                        self.ensureLoaded(&lhs);
+                        self.ensureLoaded(&rhs);
 
-                if (!unified.isBinaryOperand(e.op)) {
-                    return self.report(e.lhs, "{} can not be used in binary operations", .{unified});
-                }
+                        if (lhs.ty.isFloat()) {
+                            try self.typeCheck(expr, &rhs, lhs.ty);
+                            if ((e.op == .@"==" or e.op == .@"!=") and lhs.ty == .f32) {
+                                lhs.id.Value = self.bl.addUnOp(.uext, .int, lhs.id.Value);
+                                rhs.id.Value = self.bl.addUnOp(.uext, .int, rhs.id.Value);
+                            }
+                        } else {
+                            const upcast: Types.Id = if (e.op.isComparison())
+                                if (lhs.ty == .type) .type else if (lhs.ty.isSigned()) .int else .uint
+                            else
+                                upcast_ty;
+                            try self.typeCheck(expr, &lhs, upcast);
+                            try self.typeCheck(expr, &rhs, upcast);
+                        }
 
-                if (lhs.ty.data() == .Struct) if (e.op == .@"==" or e.op == .@"!=") {
-                    const value = try self.emitStructFoldOp(expr, lhs.ty.data().Struct, e.op, lhs.id.Ptr, rhs.id.Ptr);
-                    return .mkv(unified, value orelse self.bl.addIntImm(.i8, 1));
-                } else {
-                    const loc = ctx.loc orelse self.bl.addLocal(unified.size(self.types));
-                    try self.emitStructOp(expr, lhs.ty.data().Struct, e.op, loc, lhs.id.Ptr, rhs.id.Ptr);
-                    return .mkp(unified, loc);
-                } else {
-                    const upcast_to: Types.Id = if (e.op.isComparison())
-                        if (lhs.ty.isFloat() or lhs.ty.data() == .Ptr or lhs.ty == .type) lhs.ty else if (lhs.ty.isSigned()) .int else .uint
-                    else
-                        unified;
-                    const lhs_fail = self.typeCheck(e.lhs, &lhs, upcast_to);
-                    try self.typeCheck(e.rhs, &rhs, upcast_to);
-                    try lhs_fail;
-                    self.ensureLoaded(&lhs);
-                    self.ensureLoaded(&rhs);
-                    if (e.op == .@"!=" or e.op == .@"==" and lhs.ty == .f32) {
+                        return .mkv(dest_ty, self.bl.addBinOp(
+                            binop,
+                            self.abi.categorize(dest_ty, self.types).ByValue,
+                            lhs.id.Value,
+                            rhs.id.Value,
+                        ));
+                    },
+                    .Ptr => |ptr_ty| if (rhs.ty.data() == .Ptr) {
+                        if (e.op != .@"-" and !e.op.isComparison()) return self.report(expr, "two pointers can only be subtracted or compared", .{});
+                        const binop = try self.lexemeToBinOp(expr, e.op, lhs.ty);
+                        try self.typeCheck(e.rhs, &rhs, lhs.ty);
+                        self.ensureLoaded(&lhs);
+                        self.ensureLoaded(&rhs);
+                        const dest_ty: DataType = if (e.op.isComparison()) .i8 else .int;
+                        return .mkv(lhs.ty, self.bl.addBinOp(binop, dest_ty, lhs.id.Value, rhs.id.Value));
+                    } else {
+                        if (e.op != .@"-" and e.op != .@"+") return self.report(expr, "you can only subtract or add an integer to a pointer", .{});
+                        const upcast: Types.Id = if (rhs.ty.isSigned()) .int else .uint;
+                        try self.typeCheck(e.rhs, &rhs, upcast);
+                        self.ensureLoaded(&lhs);
+                        self.ensureLoaded(&rhs);
+                        return .mkv(lhs.ty, self.bl.addIndexOffset(lhs.id.Value, if (e.op == .@"-") .isub else .iadd, ptr_ty.size(self.types), rhs.id.Value));
+                    },
+                    .Enum => {
+                        if (e.op != .@"!=" and e.op != .@"==") return self.report(expr, "only comparison operators are allowed for enums", .{});
+                        const binop = try self.lexemeToBinOp(expr, e.op, lhs.ty);
+                        try self.typeCheck(e.rhs, &rhs, lhs.ty);
+                        self.ensureLoaded(&lhs);
+                        self.ensureLoaded(&rhs);
                         lhs.id.Value = self.bl.addUnOp(.uext, .int, lhs.id.Value);
                         rhs.id.Value = self.bl.addUnOp(.uext, .int, rhs.id.Value);
-                    }
-                    if (lhs.id == .Imaginary) std.debug.print("{}\n{}\n", .{ lhs.ty.fmt(self.types), self.ast.codePointer(self.ast.posOf(expr).index) });
-                    return .mkv(unified, self.bl.addBinOp(
-                        try self.lexemeToBinOp(expr, e.op, lhs.ty),
-                        self.abi.categorize(unified, self.types).ByValue,
-                        lhs.id.Value,
-                        rhs.id.Value,
-                    ));
+                        return .mkv(.bool, self.bl.addBinOp(binop, .i8, lhs.id.Value, rhs.id.Value));
+                    },
+                    else => return self.report(expr, "{} does not support binary operations", .{lhs.ty}),
                 }
             },
         },
@@ -1522,7 +1523,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 },
             };
 
-            ptr.id.Value = self.bl.addIndexOffset(ptr.id.Value, elem.size(self.types), start.id.Value);
+            ptr.id.Value = self.bl.addIndexOffset(ptr.id.Value, .iadd, elem.size(self.types), start.id.Value);
             const len = self.bl.addBinOp(.isub, .int, end.id.Value, start.id.Value);
 
             const loc = ctx.loc orelse self.bl.addLocal(res_ty.size(self.types));
@@ -1555,7 +1556,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 .Slice => |slice_ty| {
                     const index_base = if (slice_ty.len == null) self.bl.addLoad(base.id.Ptr, .int) else base.id.Ptr;
 
-                    return .mkp(slice_ty.elem, self.bl.addIndexOffset(index_base, slice_ty.elem.size(self.types), idx_value.id.Value));
+                    return .mkp(slice_ty.elem, self.bl.addIndexOffset(index_base, .iadd, slice_ty.elem.size(self.types), idx_value.id.Value));
                 },
                 else => {
                     return self.report(expr, "only structs and slices can be indexed, {} is not", .{base.ty});
