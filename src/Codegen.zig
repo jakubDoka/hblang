@@ -872,6 +872,34 @@ pub fn partialEval(self: *Codegen, pos: anytype, node: *Builder.BuildNode) !u64 
     };
 }
 
+pub fn binOpUpcast(self: *Codegen, lhs: Types.Id, rhs_val: *Codegen.Value) !Types.Id {
+    const rhs = rhs_val.ty;
+    if (lhs == rhs) return lhs;
+    if (lhs.data() == .Ptr and rhs.data() == .Ptr) return .uint;
+    if (lhs.data() == .Ptr and rhs.isInteger()) {
+        const size = lhs.data().Ptr.*.size(self.types);
+        self.ensureLoaded(rhs_val);
+
+        if (rhs_val.ty.isSigned() and rhs_val.ty.size(self.types) < DataType.int.size()) {
+            rhs_val.id.Value = self.bl.addUnOp(.sext, .int, rhs_val.id.Value);
+        }
+
+        if (rhs_val.ty.isUnsigned() and rhs_val.ty.size(self.types) < DataType.int.size()) {
+            rhs_val.id.Value = self.bl.addUnOp(.uext, .int, rhs_val.id.Value);
+        }
+
+        rhs_val.id.Value = self.bl.addBinOp(.imul, .int, rhs_val.id.Value, self.bl.addIntImm(.int, @bitCast(size)));
+        rhs_val.ty = lhs;
+    }
+    if (lhs.data() == .Ptr) return lhs;
+    if (rhs.data() == .Ptr) return error.@"pointer must be on the left";
+
+    if (lhs.canUpcast(rhs, self.types)) return rhs;
+    if (rhs.canUpcast(lhs, self.types)) return lhs;
+
+    return error.@"incompatible types";
+}
+
 pub const EmitError = error{ Never, Unreachable };
 
 pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
@@ -896,10 +924,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             return self.emitStirng(ctx, data, expr);
         },
         .Integer => |e| {
-            const ty = ctx.ty orelse .uint;
-            if (!ty.isInteger()) {
-                return self.report(expr, "{} can not be constructed as integer literal", .{ty});
-            }
+            var ty = ctx.ty orelse .uint;
+            if (!ty.isInteger()) ty = .uint;
             const shift: u8 = if (e.base == 10) 0 else 2;
             const parsed = std.fmt.parseInt(u64, ast.tokenSrc(e.pos.index + shift), e.base) catch |err| switch (err) {
                 error.InvalidCharacter => unreachable,
@@ -908,10 +934,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             return .mkv(ty, self.bl.addIntImm(self.abi.categorize(ty, self.types).ByValue, @bitCast(parsed)));
         },
         .Float => |e| {
-            const ty = ctx.ty orelse .f32;
-            if (!ty.isFloat()) {
-                return self.report(expr, "{} can not be constructed as integer literal", .{ty});
-            }
+            var ty = ctx.ty orelse .f32;
+            if (!ty.isFloat()) ty = .f32;
 
             if (ty == .f32) {
                 const parsed = std.fmt.parseFloat(f32, ast.tokenSrc(e.index)) catch |err| switch (err) {
@@ -1309,24 +1333,24 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     },
                 };
 
-                if (!lhs.ty.isBinaryOperand()) {
+                if (!lhs.ty.isBinaryOperand(e.op)) {
                     return self.report(e.lhs, "{} can not be used in binary operations", .{lhs.ty});
                 }
 
                 var rhs = try self.emit(ctx.addTy(lhs.ty), e.rhs);
 
-                if (!rhs.ty.isBinaryOperand()) {
+                if (!rhs.ty.isBinaryOperand(e.op)) {
                     return self.report(e.rhs, "{} can not be used in binary operations", .{rhs.ty});
                 }
 
                 if (e.op.isComparison() and lhs.ty.isSigned() != rhs.ty.isSigned())
                     return self.report(e.lhs, "mixed sign comparison ({} {})", .{ lhs.ty, rhs.ty });
-                const hint = if (e.op.isComparison()) .bool else if (ctx.ty != null and ctx.ty.?.isBinaryOperand()) ctx.ty else null;
-                const unified: Types.Id = hint orelse lhs.ty.binOpUpcast(rhs.ty, self.types) catch |err| {
+                const hint = if (e.op.isComparison()) .bool else if (ctx.ty != null and ctx.ty.?.isBinaryOperand(e.op)) ctx.ty else null;
+                const unified: Types.Id = hint orelse self.binOpUpcast(lhs.ty, &rhs) catch |err| {
                     return self.report(expr, "{s} ({} and {})", .{ @errorName(err), lhs.ty, rhs.ty });
                 };
 
-                if (!unified.isBinaryOperand()) {
+                if (!unified.isBinaryOperand(e.op)) {
                     return self.report(e.lhs, "{} can not be used in binary operations", .{unified});
                 }
 
@@ -1339,7 +1363,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     return .mkp(unified, loc);
                 } else {
                     const upcast_to: Types.Id = if (e.op.isComparison())
-                        if (lhs.ty.isFloat() or lhs.ty.data() == .Ptr) lhs.ty else if (lhs.ty.isSigned()) .int else .uint
+                        if (lhs.ty.isFloat() or lhs.ty.data() == .Ptr or lhs.ty == .type) lhs.ty else if (lhs.ty.isSigned()) .int else .uint
                     else
                         unified;
                     const lhs_fail = self.typeCheck(e.lhs, &lhs, upcast_to);
@@ -2145,7 +2169,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
         .kind_of => {
             try utils.assertArgs(self, expr, args, "<ty>");
             const len = try self.resolveAnonTy(args[0]);
-            return .mkv(.uint, self.bl.addIntImm(.int, @intFromEnum(len.data())));
+            return .mkv(.u8, self.bl.addIntImm(.i8, @intFromEnum(len.data())));
         },
         .len_of => {
             try utils.assertArgs(self, expr, args, "<ty>");
@@ -2183,7 +2207,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
             };
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(matched)));
         },
-        .isComptime => return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(self.target == .@"comptime"))),
+        .is_comptime => return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(self.target == .@"comptime"))),
         .ecall => {
             try utils.assertArgs(self, expr, args, "<expr>..");
             var tmp = root.Arena.scrath(null);

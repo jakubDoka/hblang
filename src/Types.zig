@@ -497,9 +497,9 @@ pub const Id = enum(usize) {
         };
     }
 
-    pub fn isBinaryOperand(self: Id) bool {
+    pub fn isBinaryOperand(self: Id, op: Lexer.Lexeme) bool {
         return switch (self.data()) {
-            .Builtin => self.isInteger() or self.isFloat() or self == .bool,
+            .Builtin => self.isInteger() or self.isFloat() or self == .bool or (self == .type and op.isComparison()),
             .Struct, .Ptr, .Enum => true,
             .Global, .Func, .Template, .Slice, .Nullable, .Union, .Tuple => false,
         };
@@ -636,18 +636,6 @@ pub const Id = enum(usize) {
         if (from == .bool and to.isInteger()) return true;
 
         return false;
-    }
-
-    pub fn binOpUpcast(lhs: Id, rhs: Id, types: *Types) !Id {
-        if (lhs == rhs) return lhs;
-        if (lhs.data() == .Ptr and rhs.data() == .Ptr) return .uint;
-        if (lhs.data() == .Ptr) return lhs;
-        if (rhs.data() == .Ptr) return error.@"pointer must be on the left";
-
-        if (lhs.canUpcast(rhs, types)) return rhs;
-        if (rhs.canUpcast(lhs, types)) return lhs;
-
-        return error.@"incompatible types";
     }
 
     pub const Fmt = struct {

@@ -534,6 +534,14 @@ main := fn(): uint {
 }
 ```
 
+#### pointers 5 (math)
+```hb
+main := fn(): uint {
+    val := uint.[1, 0]
+    return (&val[0] + 1).*
+}
+```
+
 #### structs 1
 ```hb
 expectations := .{
@@ -713,6 +721,8 @@ init := fn(v: uint): @CurrentScope() {
 #### generic structs 1
 ```hb
 main := fn(): uint {
+    $if Vec(uint) != Vec(uint) return 100
+
     vl: Vec(uint) = nvec(uint, 1)
     return vl.sub()
 }
@@ -1567,7 +1577,7 @@ main := fn(): uint {
 }
 ```
 
-#### directives 11 (@target, @isComptime)
+#### directives 11 (@target, @is_comptime)
 ```hb
 expectations := .{
     return_value: 1,
@@ -1576,7 +1586,7 @@ expectations := .{
 global: bool = @target("ableos")
 
 main := fn(): uint {
-    $if @isComptime() @error("unecpected")
+    $if @is_comptime() @error("unecpected")
 
     return global
 }
@@ -1723,7 +1733,7 @@ main := fn(): uint {
   - [x] `@error(...<expr>)`
   - [x] `@ChildOf(<ty>)`
   - [x] `@target("<pat>")`
-  - [x] `@isComptime()`
+  - [x] `@is_comptime()`
   - [x] `@int_to_float(<int>)`
   - [x] `@float_to_int(<float>)`
   - [x] `@float_cast(<float>)`

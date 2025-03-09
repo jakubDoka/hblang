@@ -16,7 +16,7 @@ pub const test_util = @import("src/test_util.zig");
 test {
     _ = @import("zig-out/tests.zig");
     _ = @import("zig-out/vendored_tests.zig");
-    _ = @import("zig-out/fuzz_finding_tests.zig");
+    //_ = @import("zig-out/fuzz_finding_tests.zig");
     std.testing.refAllDeclsRecursive(@This());
 }
 

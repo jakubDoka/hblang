@@ -4,7 +4,7 @@ functions 3 (errors):7:2: expected type, void is not
 functions 3 (errors):8:2: expected 3 arguments, got 0
     some_fn()
     ^
-functions 3 (errors):9:17: void can not be constructed as integer literal
+functions 3 (errors):9:17: expected void got uint
     _ = some_fn(0, 0, 0)
                    ^
 functions 3 (errors):10:6: expected 3 arguments, got 2
