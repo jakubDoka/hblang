@@ -1,53 +1,53 @@
 main:
          st $31, $254, -24, 24
      addi64 $254, $254, -24
-        jal $31, $0, :main.some_fn3(some_int = uint)(fnc = main.some_fn)
+        jal $31, $0, :main.some_fn3(some_int = uint)(fnc = main.some_fn(some_int = uint))
          cp $32, $1
-        jal $31, $0, :main.some_fn3(some_int = uint)(fnc = main.some_fn3(some_int = uint)(fnc = main.some_fn2(some_fn = main.some_fn)))
+        jal $31, $0, :main.some_fn3(some_int = uint)(fnc = main.some_fn3(some_int = uint)(fnc = main.some_fn2(some_int = uint, some_fn = main.some_fn(some_int = uint))))
          cp $33, $1
       add64 $32, $32, $33
          cp $1, $32
      addi64 $254, $254, 24
          ld $31, $254, -24, 24
          tx
-main.some_fn3(some_int = uint)(fnc = main.some_fn3(some_int = uint)(fnc = main.some_fn2(some_fn = main.some_fn))):
+main.some_fn3(some_int = uint)(fnc = main.some_fn3(some_int = uint)(fnc = main.some_fn2(some_int = uint, some_fn = main.some_fn(some_int = uint)))):
          st $31, $254, -16, 16
      addi64 $254, $254, -16
-        jal $31, $0, :main.some_fn3(some_int = uint)(fnc = main.some_fn2(some_fn = main.some_fn))
+        jal $31, $0, :main.some_fn3(some_int = uint)(fnc = main.some_fn2(some_int = uint, some_fn = main.some_fn(some_int = uint)))
          cp $32, $1
      addi64 $32, $32, 10
          cp $1, $32
      addi64 $254, $254, 16
          ld $31, $254, -16, 16
        jala $0, $31, 0
-main.some_fn3(some_int = uint)(fnc = main.some_fn2(some_fn = main.some_fn)):
+main.some_fn3(some_int = uint)(fnc = main.some_fn2(some_int = uint, some_fn = main.some_fn(some_int = uint))):
          st $31, $254, -16, 16
      addi64 $254, $254, -16
-        jal $31, $0, :main.some_fn2(some_fn = main.some_fn)
+        jal $31, $0, :main.some_fn2(some_int = uint, some_fn = main.some_fn(some_int = uint))
          cp $32, $1
      addi64 $32, $32, 10
          cp $1, $32
      addi64 $254, $254, 16
          ld $31, $254, -16, 16
        jala $0, $31, 0
-main.some_fn2(some_fn = main.some_fn):
+main.some_fn2(some_int = uint, some_fn = main.some_fn(some_int = uint)):
          st $31, $254, -16, 16
      addi64 $254, $254, -16
-        jal $31, $0, :main.some_fn
+        jal $31, $0, :main.some_fn(some_int = uint)
          cp $32, $1
      addi64 $32, $32, 1
          cp $1, $32
      addi64 $254, $254, 16
          ld $31, $254, -16, 16
        jala $0, $31, 0
-main.some_fn:
+main.some_fn(some_int = uint):
        li64 $13, 1
          cp $1, $13
        jala $0, $31, 0
-main.some_fn3(some_int = uint)(fnc = main.some_fn):
+main.some_fn3(some_int = uint)(fnc = main.some_fn(some_int = uint)):
          st $31, $254, -16, 16
      addi64 $254, $254, -16
-        jal $31, $0, :main.some_fn
+        jal $31, $0, :main.some_fn(some_int = uint)
          cp $32, $1
      addi64 $32, $32, 10
          cp $1, $32

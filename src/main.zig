@@ -203,10 +203,37 @@ const Loader = struct {
         const base = self.base;
         const file = self.files.items[@intFromEnum(opts.from)];
         const rel_base = std.fs.path.dirname(file.path) orelse "";
-        const path = self.path_projections.get(opts.path) orelse
-            std.fs.path.resolve(self.gpa, &.{ rel_base, opts.path }) catch return null;
+        const mangled_path = self.path_projections.get(opts.path) orelse
+            std.fs.path.join(self.gpa, &.{ base, rel_base, opts.path }) catch return null;
+        const path = std.fs.cwd().realpathAlloc(self.gpa, mangled_path) catch mangled_path;
 
-        const canon = path[base.len..];
+        const canon = if (std.mem.startsWith(u8, path, base)) path[base.len + 1 ..] else b: {
+            var base_segments = std.fs.path.componentIterator(base) catch break :b path;
+            var path_segments = std.fs.path.componentIterator(path) catch break :b path;
+
+            while (true) {
+                if (std.mem.eql(
+                    u8,
+                    (base_segments.peekNext() orelse break).path,
+                    (path_segments.peekNext() orelse break).path,
+                )) {
+                    _ = base_segments.next();
+                    _ = path_segments.next();
+                } else break;
+            }
+
+            const rem = path_segments.path[path_segments.end_index + 1 ..];
+            var dd_count: usize = 0;
+            while (base_segments.next() != null) dd_count += 1;
+
+            const buf = self.gpa.alloc(u8, dd_count * 3 + rem.len) catch break :b path;
+            for (0..dd_count) |i| {
+                @memcpy(buf[i * 3 ..][0..3], "../");
+            }
+            @memcpy(buf[dd_count * 3 ..], rem);
+
+            break :b buf;
+        };
 
         for (self.files.items, 0..) |fl, i| {
             if (std.mem.eql(u8, fl.path, canon)) return @enumFromInt(i);
@@ -235,14 +262,16 @@ const Loader = struct {
         root: []const u8,
         diagnostics: std.io.AnyWriter,
     ) !?struct { []const hb.Ast, []const u8 } {
+        const real_root = std.fs.cwd().realpathAlloc(gpa, root) catch root;
+
         var self = Loader{
             .gpa = gpa,
-            .base = std.fs.path.dirname(root) orelse "",
+            .base = std.fs.path.dirname(real_root) orelse "",
             .path_projections = path_projections,
         };
 
         const slot = try self.files.addOne(self.gpa);
-        slot.path = root;
+        slot.path = std.fs.path.basename(root);
         slot.source = std.fs.cwd().readFileAlloc(self.gpa, root, max_file_len) catch {
             try diagnostics.print("could not read the root file: {s}", .{root});
             return null;

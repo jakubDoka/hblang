@@ -450,10 +450,6 @@ pub fn unwrapTyConst(self: *Codegen, pos: anytype, cnst: *Value) !Types.Id {
         return self.report(pos, "expected type, {} is not", .{cnst.ty});
     }
     self.ensureLoaded(cnst);
-    if (cnst.id == .Imaginary) {
-        std.debug.dumpCurrentStackTrace(@returnAddress());
-        return self.report(pos, "what a fuck {}", .{cnst.ty});
-    }
     return @enumFromInt(try self.partialEval(pos, cnst.id.Value));
 }
 
@@ -461,7 +457,6 @@ pub const LookupResult = union(enum) { ty: Types.Id, cnst: u64 };
 
 pub fn lookupScopeItem(self: *Codegen, pos: Ast.Pos, bsty: Types.Id, name: []const u8) !Value {
     const other_file = bsty.file() orelse {
-        std.debug.dumpCurrentStackTrace(@returnAddress());
         return self.report(pos, "{} does not declare this", .{bsty});
     };
     const ast = self.types.getFile(other_file);
@@ -549,7 +544,6 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
             }
             cursor = cursor.parent();
         } else {
-            std.debug.dumpCurrentStackTrace(@returnAddress());
             return self.report(pos, "ICE: parser did not catch this", .{});
         };
 

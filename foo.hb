@@ -1,10 +1,9 @@
-
 main := fn(): uint {
-    Map := fn(I: type, F: type): type return struct{}
+	Map := fn(I: type, F: type): type return struct {}
 
-	foo := fn(vl: int, $foo: type): Map(u8, foo) return .()
+	foo := fn(vl: int, $oo: type): Map(u8, oo) return .()
 
-	foo()
+	_ = foo(0, u8)
 
 	return 0
 }

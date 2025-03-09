@@ -272,6 +272,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             self.capture_boundary = self.active_syms.items.len;
             defer self.capture_boundary = prev_capture_boundary;
 
+            const capture_scope = self.captures.items.len;
             const comptime_arg_start = self.comptime_idents.items.len;
             defer self.comptime_idents.items.len = comptime_arg_start;
             const args = try self.parseListTyped(.@"(", .@",", .@")", Ast.Arg, parseArg);
@@ -280,7 +281,6 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             _ = try self.expectAdvance(.@":");
             const ret = try self.parseExpr();
 
-            const capture_scope = self.captures.items.len;
             const body = body: {
                 defer self.finalizeVariables(scope_frame);
                 break :body try self.parseExpr();

@@ -71,7 +71,7 @@ pub fn build(b: *std.Build) !void {
     const test_step = b.step("test", "run tests");
     const run_step = b.step("run", "Run the app");
 
-    //check_step.dependOn(&exe.step);
+    check_step.dependOn(&exe.step);
     run_step.dependOn(&b.addRunArtifact(exe).step);
 
     const fuzz_finding_tests = fuzzing: {
