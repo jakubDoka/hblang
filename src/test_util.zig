@@ -62,7 +62,13 @@ pub fn parseExample(gpa: std.mem.Allocator, name: []const u8, code: []const u8, 
     errdefer gpa.free(asts);
     for (asts, files.items, 0..) |*ast, fr, i| {
         if (std.mem.endsWith(u8, fr.path, ".hb") or i == 0) {
-            ast.* = try Ast.init(gpa, @enumFromInt(i), fr.path, fr.source, .init(&loader), output);
+            ast.* = try Ast.init(gpa, .{
+                .current = @enumFromInt(i),
+                .path = fr.path,
+                .code = fr.source,
+                .loader = .init(&loader),
+                .diagnostics = output,
+            });
         } else {
             ast.* = .{
                 .path = fr.path,
@@ -259,13 +265,13 @@ pub fn testBuilder(
         else => unreachable,
     };
 
-    //if (vm.regs.get(.ret(0)) != ret) return error.TestExpectedEqual;
+    if (vm.regs.get(.ret(0)) != ret) return error.TestExpectedEqual;
 }
 
 pub fn testFmt(name: []const u8, path: []const u8, code: []const u8) !void {
     const gpa = std.testing.allocator;
 
-    var ast = try Ast.init(gpa, @enumFromInt(0), path, code, .noop, std.io.null_writer.any());
+    var ast = try Ast.init(gpa, .{ .path = path, .code = code });
     defer ast.deinit(gpa);
 
     const ast_overhead = @as(f64, @floatFromInt(ast.exprs.store.items.len)) /

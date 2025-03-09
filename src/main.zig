@@ -10,6 +10,9 @@ pub fn main() !void {
     defer Arena.deinitScratch();
 
     var gpa_impl = std.heap.GeneralPurposeAllocator(.{}){};
+    defer {
+        _ = gpa_impl.deinit();
+    }
     const gpa = gpa_impl.allocator();
 
     const diagnostics = std.io.getStdErr().writer().any();
@@ -25,6 +28,7 @@ pub fn main() !void {
     var fmt = false; // format all files reachable from the root_file
     var fmt_stdout = false; // format only the root file and print it to stdout
     var dump_asm = false; // dump assembly of the program
+    var mangle_terminal = false; // dump the executable even if colors are supported
     // #OPTIONS (--target ableos)
     var target: []const u8 = "ableos"; // target triple to compile to (not used yet since we have only one target)
     var extra_threads: usize = 0; // extra threads used for the compilation (not used yet)
@@ -52,6 +56,7 @@ pub fn main() !void {
         fmt = fmt or std.mem.eql(u8, arg, "fmt");
         fmt_stdout = fmt_stdout or std.mem.eql(u8, arg, "fmt-stdout");
         dump_asm = dump_asm or std.mem.eql(u8, arg, "dump-asm");
+        mangle_terminal = mangle_terminal or std.mem.eql(u8, arg, "mangle-terminal");
 
         if (std.mem.eql(u8, arg, "target")) target = args.next() orelse {
             try diagnostics.writeAll("--target takes an argument");
@@ -100,7 +105,11 @@ pub fn main() !void {
 
     if (fmt_stdout) {
         const source = try std.fs.cwd().readFileAlloc(ast_arena.allocator(), root_file, max_file_len);
-        const ast = try hb.Ast.init(ast_arena.allocator(), .root, root_file, source, .noop, diagnostics);
+        const ast = try hb.Ast.init(ast_arena.allocator(), .{
+            .path = root_file,
+            .code = source,
+            .diagnostics = diagnostics,
+        });
 
         var buf = std.ArrayList(u8).init(ast_arena.allocator());
         try ast.fmt(&buf);
@@ -132,6 +141,8 @@ pub fn main() !void {
     defer codegen.deinit();
 
     var hbg = hb.HbvmGen{ .gpa = gpa, .emit_header = !dump_asm };
+    defer hbg.deinit();
+
     const backend = hb.Mach.init(&hbg);
 
     var syms = std.heap.ArenaAllocator.init(gpa);
@@ -182,30 +193,41 @@ pub fn main() !void {
         return;
     }
 
+    const colors = std.io.tty.detectConfig(std.io.getStdOut());
+    const output = std.io.getStdOut().writer().any();
+
     if (dump_asm) {
-        backend.disasm(std.io.getStdOut().writer().any(), std.io.tty.detectConfig(std.io.getStdOut()));
+        backend.disasm(output, colors);
         return;
     }
 
     var out = backend.finalize();
     defer out.deinit(gpa);
 
-    try std.io.getStdOut().writeAll(out.items);
+    if (colors == .no_color or mangle_terminal) {
+        try output.writeAll(out.items);
+    } else {
+        try diagnostics.writeAll("can't dump the executable to the stdout since it" ++
+            " supports colors (pass --mangle-terminal if you dont care)");
+    }
 }
 
 const Loader = struct {
-    gpa: std.mem.Allocator,
+    arena: std.mem.Allocator,
     base: []const u8,
     path_projections: std.StringHashMap([]const u8),
     files: std.ArrayListUnmanaged(hb.Ast) = .{},
 
     pub fn load(self: *Loader, opts: hb.Ast.Loader.LoadOptions) ?hb.Types.File {
+        var tmp = Arena.scrath(null);
+        defer tmp.deinit();
+
         const base = self.base;
         const file = self.files.items[@intFromEnum(opts.from)];
         const rel_base = std.fs.path.dirname(file.path) orelse "";
         const mangled_path = self.path_projections.get(opts.path) orelse
-            std.fs.path.join(self.gpa, &.{ base, rel_base, opts.path }) catch return null;
-        const path = std.fs.cwd().realpathAlloc(self.gpa, mangled_path) catch mangled_path;
+            std.fs.path.join(tmp.arena.allocator(), &.{ base, rel_base, opts.path }) catch return null;
+        const path = std.fs.cwd().realpathAlloc(tmp.arena.allocator(), mangled_path) catch mangled_path;
 
         const canon = if (std.mem.startsWith(u8, path, base)) path[base.len + 1 ..] else b: {
             var base_segments = std.fs.path.componentIterator(base) catch break :b path;
@@ -226,7 +248,7 @@ const Loader = struct {
             var dd_count: usize = 0;
             while (base_segments.next() != null) dd_count += 1;
 
-            const buf = self.gpa.alloc(u8, dd_count * 3 + rem.len) catch break :b path;
+            const buf = tmp.arena.alloc(u8, dd_count * 3 + rem.len);
             for (0..dd_count) |i| {
                 @memcpy(buf[i * 3 ..][0..3], "../");
             }
@@ -239,9 +261,9 @@ const Loader = struct {
             if (std.mem.eql(u8, fl.path, canon)) return @enumFromInt(i);
         }
 
-        const slot = self.files.addOne(self.gpa) catch return null;
-        slot.path = canon;
-        slot.source = std.fs.cwd().readFileAlloc(self.gpa, path, max_file_len) catch |err| {
+        const slot = self.files.addOne(self.arena) catch return null;
+        slot.path = self.arena.dupe(u8, canon) catch return null;
+        slot.source = std.fs.cwd().readFileAlloc(self.arena, path, max_file_len) catch |err| {
             hb.Ast.report(
                 file.path,
                 file.source,
@@ -257,22 +279,22 @@ const Loader = struct {
     }
 
     fn loadAll(
-        gpa: std.mem.Allocator,
+        arena: std.mem.Allocator,
         path_projections: std.StringHashMap([]const u8),
         root: []const u8,
         diagnostics: std.io.AnyWriter,
     ) !?struct { []const hb.Ast, []const u8 } {
-        const real_root = std.fs.cwd().realpathAlloc(gpa, root) catch root;
+        const real_root = std.fs.cwd().realpathAlloc(arena, root) catch root;
 
         var self = Loader{
-            .gpa = gpa,
+            .arena = arena,
             .base = std.fs.path.dirname(real_root) orelse "",
             .path_projections = path_projections,
         };
 
-        const slot = try self.files.addOne(self.gpa);
+        const slot = try self.files.addOne(self.arena);
         slot.path = std.fs.path.basename(root);
-        slot.source = std.fs.cwd().readFileAlloc(self.gpa, root, max_file_len) catch {
+        slot.source = std.fs.cwd().readFileAlloc(self.arena, root, max_file_len) catch {
             try diagnostics.print("could not read the root file: {s}", .{root});
             return null;
         };
@@ -280,12 +302,22 @@ const Loader = struct {
         var failed = false;
         var i: usize = 0;
         while (i < self.files.items.len) : (i += 1) {
+            var tmp = Arena.scrath(null);
+            defer tmp.deinit();
+
             const file = self.files.items[i];
             const fid: hb.Types.File = @enumFromInt(i);
 
-            const ast_res = hb.Ast.init(self.gpa, fid, file.path, file.source, .init(&self), diagnostics);
+            const ast_res = hb.Ast.init(tmp.arena.allocator(), .{
+                .current = fid,
+                .path = file.path,
+                .code = file.source,
+                .loader = .init(&self),
+                .diagnostics = diagnostics,
+            });
             if (ast_res) |ast| {
                 self.files.items[i] = ast;
+                self.files.items[i].exprs = try self.files.items[i].exprs.dupe(self.arena);
             } else |err| {
                 switch (err) {
                     error.ParsingFailed => {

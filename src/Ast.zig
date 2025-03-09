@@ -196,19 +196,31 @@ pub const Pos = packed struct(Pos.Repr) {
     }
 };
 
-pub fn init(gpa: std.mem.Allocator, current: Types.File, path: []const u8, code: []const u8, loader: Parser.Loader, diagnostics: std.io.AnyWriter) !Ast {
-    var lexer = Lexer.init(code, 0);
+pub const InitOptions = struct {
+    current: Types.File = .root,
+    path: []const u8,
+    code: []const u8,
+    loader: Parser.Loader = .noop,
+    diagnostics: std.io.AnyWriter = std.io.null_writer.any(),
+};
+
+pub fn init(
+    gpa: std.mem.Allocator,
+    opts: InitOptions,
+) !Ast {
+    var lexer = Lexer.init(opts.code, 0);
 
     var parser = Parser{
-        .path = path,
-        .current = current,
-        .loader = loader,
+        .path = opts.path,
+        .current = opts.current,
+        .loader = opts.loader,
         .cur = lexer.next(),
         .lexer = lexer,
         .arena = std.heap.ArenaAllocator.init(gpa),
         .gpa = gpa,
-        .diagnostics = diagnostics,
+        .diagnostics = opts.diagnostics,
     };
+
     defer {
         parser.arena.deinit();
         parser.active_syms.deinit(gpa);
@@ -219,16 +231,19 @@ pub fn init(gpa: std.mem.Allocator, current: Types.File, path: []const u8, code:
         parser.store.deinit(gpa);
     }
 
+    const source_to_ast_ratio = 5;
+    try parser.store.store.ensureTotalCapacity(gpa, opts.code.len * source_to_ast_ratio);
+
     const items = try parser.parse();
 
-    if (parser.errored and !loader.isNoop()) {
+    if (parser.errored and opts.diagnostics.writeFn != std.io.null_writer.any().writeFn) {
         return error.ParsingFailed;
     }
 
     return .{
         .items = items,
-        .source = code,
-        .path = path,
+        .path = opts.path,
+        .source = opts.code,
         .root_struct = try parser.store.alloc(parser.gpa, .Struct, .{
             .pos = .init(0),
             .alignment = .zeroSized(.Void),

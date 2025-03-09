@@ -178,6 +178,10 @@ pub fn EnumStore(comptime T: type) type {
 
         pub const Id = EnumId(T);
 
+        pub fn dupe(self: *const Self, gpa: std.mem.Allocator) !Self {
+            return .{ .store = try self.store.clone(gpa) };
+        }
+
         pub fn allocDyn(self: *Self, gpa: std.mem.Allocator, value: T) !Id {
             return switch (value) {
                 inline else => |v, t| try self.alloc(gpa, t, v),
