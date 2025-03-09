@@ -216,6 +216,13 @@ pub const Scope = union(enum) {
         return .{ .Perm = .init(td) };
     }
 
+    pub fn firstType(self: Scope) Types.Id {
+        return switch (self) {
+            .Perm => |p| p.firstType(),
+            .Tmp => |t| t.parent_scope.firstType(),
+        };
+    }
+
     pub fn parent(self: Scope) Scope {
         return switch (self) {
             .Perm => |p| .{ .Perm = p.parent() },
@@ -675,8 +682,21 @@ pub fn instantiateTemplate(
     var arg_expr_idx: usize = 0;
 
     if (caller) |c| {
-        arg_tys[arg_idx] = c.ty;
-        arg_idx += 1;
+        const param = tmpl_file.exprs.view(tmpl_ast.args)[0];
+
+        const binding = tmpl_file.exprs.get(param.bindings).Ident;
+        if (binding.pos.flag.@"comptime") {
+            unreachable;
+        } else {
+            arg_tys[arg_idx] = try self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = &scope }) }, param.ty);
+            if (arg_tys[arg_idx] == .any) {
+                arg_tys[arg_idx] = c.ty;
+                captures[capture_idx] = .{ .id = binding.id, .ty = arg_tys[arg_idx] };
+                capture_idx += 1;
+                scope.key.captures = captures[0..capture_idx];
+            }
+            arg_idx += 1;
+        }
     }
 
     for (tmpl_file.exprs.view(tmpl_ast.args)[arg_idx..], ast.exprs.view(e.args)) |param, arg| {
@@ -2054,7 +2074,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload
         .use, .embed => unreachable,
         .CurrentScope => {
             try utils.assertArgs(self, expr, args, "");
-            return self.emitTyConst(self.parent_scope.perm());
+            return self.emitTyConst(self.parent_scope.firstType());
         },
         .TypeOf => {
             try utils.assertArgs(self, expr, args, "<ty>");

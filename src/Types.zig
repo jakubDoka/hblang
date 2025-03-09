@@ -37,6 +37,7 @@ pub const TypeCtx = struct {
     pub fn hash(_: @This(), adapted_key: Id) u64 {
         var hasher = std.hash.Fnv1a_64.init();
         const adk = adapted_key.data();
+        std.hash.autoHash(&hasher, std.meta.activeTag(adk));
         switch (adk) {
             inline .Builtin, .Ptr, .Slice, .Tuple => |v| std.hash.autoHashStrat(&hasher, v, .Deep),
             .Nullable => |v| std.hash.autoHash(&hasher, v.inner),
@@ -459,6 +460,14 @@ pub const Id = enum(usize) {
 
     pub fn needsTag(self: Id, types: *Types) bool {
         return self.data() == .Nullable and !self.data().Nullable.isCompact(types);
+    }
+
+    pub fn firstType(self: Id) Id {
+        return switch (self.data()) {
+            .Struct, .Union, .Enum => self,
+            inline .Func, .Template, .Global => |t| t.key.scope.firstType(),
+            .Builtin, .Tuple, .Ptr, .Nullable, .Slice => unreachable,
+        };
     }
 
     pub fn file(self: Id) ?File {

@@ -925,10 +925,11 @@ A := struct {
     }
 }
 
-main := fn(): void {
+main := fn(): uint {
     z := A.()
     y := z.apply(fn(): void {
     })
+    return 0
 }
 ```
 
