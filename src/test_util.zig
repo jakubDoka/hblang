@@ -22,7 +22,7 @@ inline fn header(comptime name: []const u8, writer: anytype, corors: std.io.tty.
 pub fn parseExample(gpa: std.mem.Allocator, name: []const u8, code: []const u8, output: std.io.AnyWriter) ![]Ast {
     const FileRecord = struct {
         path: []const u8,
-        source: []const u8,
+        source: [:0]const u8,
     };
 
     const KnownLoader = struct {
@@ -47,7 +47,7 @@ pub fn parseExample(gpa: std.mem.Allocator, name: []const u8, code: []const u8, 
         const next_end = if (std.mem.indexOf(u8, code[prev_end..], signifier)) |idx| prev_end + idx else code.len;
         const fr = FileRecord{
             .path = prev_name,
-            .source = std.mem.trim(u8, code[prev_end..next_end], "\t \n"),
+            .source = gpa.dupeZ(u8, std.mem.trim(u8, code[prev_end..next_end], "\t \n")) catch unreachable,
         };
         try files.append(fr);
         prev_end = next_end + signifier.len;
@@ -95,7 +95,10 @@ pub fn testBuilder(
     const ast = asts[0];
 
     defer {
-        for (asts) |*a| a.deinit(gpa);
+        for (asts) |*a| {
+            gpa.free(a.source);
+            a.deinit(gpa);
+        }
         gpa.free(asts);
     }
 
@@ -269,7 +272,7 @@ pub fn testBuilder(
     if (vm.regs.get(.ret(0)) != ret) return error.TestExpectedEqual;
 }
 
-pub fn testFmt(name: []const u8, path: []const u8, code: []const u8) !void {
+pub fn testFmt(name: []const u8, path: []const u8, code: [:0]const u8) !void {
     const gpa = std.testing.allocator;
 
     var ast = try Ast.init(gpa, .{ .path = path, .code = code });

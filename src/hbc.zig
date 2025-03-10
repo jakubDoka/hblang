@@ -87,7 +87,7 @@ pub fn main() !void {
 
     if (help) {
         const help_str = comptime b: {
-            const source = @embedFile("main.zig");
+            const source = @embedFile("hbc.zig");
             const start_pat = "// #CLI start\n";
             const end_pat = "// #CLI end\n";
             const start = std.mem.indexOf(u8, source, start_pat).? + start_pat.len;

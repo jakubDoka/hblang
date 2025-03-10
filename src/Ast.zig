@@ -1,6 +1,6 @@
 exprs: Store,
 path: []const u8,
-source: []const u8,
+source: [:0]const u8,
 items: Slice,
 root_struct: Id,
 
@@ -30,7 +30,7 @@ pub const Ident = enum(u32) {
     }
 };
 
-pub fn cmpLow(pos: u32, source: []const u8, repr: []const u8) bool {
+pub fn cmpLow(pos: u32, source: [:0]const u8, repr: []const u8) bool {
     var str = Lexer.peekStr(source, pos);
     if (str[0] == '$') str = str[1..];
     return std.mem.eql(u8, str, repr);
@@ -199,7 +199,7 @@ pub const Pos = packed struct(Pos.Repr) {
 pub const InitOptions = struct {
     current: Types.File = .root,
     path: []const u8,
-    code: []const u8,
+    code: [:0]const u8,
     loader: Parser.Loader = .noop,
     diagnostics: std.io.AnyWriter = std.io.null_writer.any(),
 };

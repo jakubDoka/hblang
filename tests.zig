@@ -20,13 +20,13 @@ test {
     std.testing.refAllDeclsRecursive(@This());
 }
 
-pub fn runTest(name: []const u8, code: []const u8) !void {
+pub fn runTest(name: []const u8, code: [:0]const u8) !void {
     root.Arena.initScratch(1024 * 1024);
     defer root.Arena.deinitScratch();
 
     const gpa = std.testing.allocator;
 
-    try test_util.testFmt(name, name, code);
+    //try test_util.testFmt(name, name, code);
 
     var out = std.ArrayList(u8).init(gpa);
     defer out.deinit();

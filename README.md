@@ -4,7 +4,7 @@
 
 ```bash
 zig build install
-./zig-out/bin/hblang --help
+./zig-out/bin/hbc --help
 ```
 
 ## Tour
@@ -293,7 +293,7 @@ some_fn := fn(a: uint, b: void, c: u8): uint {
 // commant is an item
 main := fn(): uint {
     // comment is a statement
-    foo(/* comment is an exprression /* if you are crazy */ */)
+    foo(/* comment is an exprression */)
     return 0
 }
 

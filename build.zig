@@ -4,23 +4,13 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const lib = b.addStaticLibrary(.{
-        .name = "hblang",
-        .root_source_file = b.path("src/root.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    b.installArtifact(lib);
-
     const exe = b.addExecutable(.{
-        .name = "hblang",
-        .root_source_file = b.path("src/main.zig"),
+        .name = "hbc",
+        .root_source_file = b.path("src/hbc.zig"),
         .target = target,
         .optimize = optimize,
     });
     b.installArtifact(exe);
-
-    exe.root_module.addImport("hblang", lib.root_module);
 
     const vendored_tests = vendored_tests: {
         const grn = b.addExecutable(.{

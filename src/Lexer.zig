@@ -1,4 +1,4 @@
-source: []const u8,
+source: [:0]const u8,
 cursor: u32,
 
 const std = @import("std");
@@ -278,88 +278,323 @@ pub const Token = struct {
     }
 };
 
-pub fn init(source: []const u8, cursor: u32) Lexer {
+pub fn init(source: [:0]const u8, cursor: u32) Lexer {
     return Lexer{ .source = source, .cursor = cursor };
 }
 
-pub fn peek(source: []const u8, cursor: u32) Token {
+pub fn peek(source: [:0]const u8, cursor: u32) Token {
     var lexer = init(source, cursor);
     return lexer.next();
 }
 
-pub fn peekStr(source: []const u8, cursor: u32) []const u8 {
+pub fn peekStr(source: [:0]const u8, cursor: u32) []const u8 {
     return peek(source, cursor).view(source);
 }
 
+fn isKeyword(name: []const u8) bool {
+    return name[0] == '@' or name[0] == '$' or std.ascii.isLower(name[0]) or name[0] == '_';
+}
+
+const keyword_map = b: {
+    var count = 0;
+    for (std.meta.fields(Lexeme)) |f| count += @intFromBool(isKeyword(f.name));
+
+    var list: [count]struct { []const u8, Lexeme } = undefined;
+    var i: usize = 0;
+    for (std.meta.fields(Lexeme)) |field| {
+        if (!isKeyword(field.name)) continue;
+        const start = if (std.mem.startsWith(u8, field.name, "ty_")) 3 else 0;
+        list[i] = .{ field.name[start..], @enumFromInt(field.value) };
+        i += 1;
+    }
+
+    break :b std.StaticStringMap(Lexeme).initComptime(list);
+};
+
 pub fn next(self: *Lexer) Token {
-    while (self.cursor < self.source.len) {
+    const State = enum {
+        start,
+        ident,
+        equal,
+        op_equal,
+        angle_bracket,
+        shift,
+        dot,
+        slash,
+        block_comment,
+        block_comment_end,
+        line_commnet,
+        quotes,
+        quotes_slash,
+        zero,
+        bin,
+        oct,
+        dec,
+        hex,
+        dec_dot,
+        float,
+    };
+
+    var pos = self.cursor;
+    const kind: Lexeme = state: switch (State.start) {
+        .start => switch (self.source[self.cursor]) {
+            0 => break :state .Eof,
+            1...32, 127 => {
+                self.cursor += 1;
+                pos += 1;
+                continue :state .start;
+            },
+            '$', '@', 'a'...'z', 'A'...'Z', '_', 128...255 => continue :state .ident,
+            '0' => continue :state .zero,
+            '1'...'9' => continue :state .dec,
+            '"' => continue :state .quotes,
+            '/' => continue :state .slash,
+            '.' => continue :state .dot,
+            '=' => continue :state .equal,
+            '<', '>' => continue :state .angle_bracket,
+            ':', '+', '-', '*', '%', '|', '^', '&', '!' => continue :state .op_equal,
+            else => |c| {
+                self.cursor += 1;
+                break :state @enumFromInt(c);
+            },
+        },
+        .ident => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                'a'...'z', 'A'...'Z', '0'...'9', '_', 128...255 => continue :state .ident,
+                else => {
+                    if (keyword_map.get(self.source[pos..self.cursor])) |k| break :state k;
+                    const c = self.source[pos];
+                    if (c == '$' or c == '@') break :state @enumFromInt(c);
+                    break :state .Ident;
+                },
+            }
+        },
+        .equal => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                '=' => {
+                    self.cursor += 1;
+                    break :state .@"==";
+                },
+                '>' => {
+                    self.cursor += 1;
+                    break :state .@"=>";
+                },
+                else => break :state .@"=",
+            }
+        },
+        .op_equal => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                '=' => {
+                    self.cursor += 1;
+                    break :state @enumFromInt(self.source[self.cursor - 2] + 128);
+                },
+                else => break :state @enumFromInt(self.source[self.cursor - 1]),
+            }
+        },
+        .angle_bracket => {
+            if (self.source[self.cursor] == self.source[self.cursor + 1]) {
+                self.cursor += 1;
+                continue :state .shift;
+            }
+            continue :state .op_equal;
+        },
+        .shift => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                '=' => {
+                    self.cursor += 1;
+                    break :state @enumFromInt(self.source[self.cursor - 2] - 10 + 128);
+                },
+                else => break :state @enumFromInt(self.source[self.cursor - 2] - 10),
+            }
+        },
+        .dot => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                '{' => {
+                    self.cursor += 1;
+                    break :state .@".{";
+                },
+                '(' => {
+                    self.cursor += 1;
+                    break :state .@".(";
+                },
+                '[' => {
+                    self.cursor += 1;
+                    break :state .@".[";
+                },
+                '.' => {
+                    self.cursor += 1;
+                    break :state .@"..";
+                },
+                else => break :state .@".",
+            }
+        },
+        .slash => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                '/' => continue :state .line_commnet,
+                '*' => continue :state .block_comment,
+                '=' => {
+                    self.cursor += 1;
+                    break :state .@"/=";
+                },
+                else => break :state .@"/",
+            }
+        },
+        .block_comment => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                0 => break :state .Comment,
+                '*' => continue :state .block_comment_end,
+                else => continue :state .block_comment,
+            }
+        },
+        .block_comment_end => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                0 => break :state .Comment,
+                '/' => {
+                    self.cursor += 1;
+                    break :state .Comment;
+                },
+                else => continue :state .block_comment,
+            }
+        },
+        .line_commnet => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                '\n', 0 => break :state .Comment,
+                else => continue :state .line_commnet,
+            }
+        },
+        .quotes => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                '"' => {
+                    self.cursor += 1;
+                    break :state .@"\"";
+                },
+                '\\' => {
+                    self.cursor += 1;
+                    continue :state .quotes_slash;
+                },
+                0 => break :state .@"unterminated string",
+                else => continue :state .quotes,
+            }
+        },
+        .quotes_slash => switch (self.source[self.cursor]) {
+            0 => break :state .@"unterminated string",
+            else => continue :state .quotes,
+        },
+        .zero => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                'b' => continue :state .bin,
+                'o' => continue :state .oct,
+                else => {
+                    self.cursor -= 1;
+                    continue :state .dec;
+                },
+                'x' => continue :state .hex,
+            }
+        },
+        .bin => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                '0'...'1' => continue :state .bin,
+                else => break :state .BinInteger,
+            }
+        },
+        .oct => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                '0'...'7' => continue :state .oct,
+                else => break :state .OctInteger,
+            }
+        },
+        .dec => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                '0'...'9' => continue :state .dec,
+                '.' => continue :state .dec_dot,
+                else => break :state .DecInteger,
+            }
+        },
+        .hex => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                '0'...'9', 'a'...'f', 'A'...'F' => continue :state .hex,
+                else => break :state .HexInteger,
+            }
+        },
+        .dec_dot => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                '.' => {
+                    self.cursor -= 1;
+                    break :state .DecInteger;
+                },
+                else => continue :state .float,
+            }
+        },
+        .float => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                '0'...'9' => continue :state .float,
+                else => break :state .Float,
+            }
+        },
+    };
+
+    return Token.init(pos, self.cursor, kind);
+}
+
+pub fn next2(self: *Lexer) Token {
+    while (true) {
         const pos = self.cursor;
         self.cursor += 1;
         const kind: Lexeme = switch (self.source[pos]) {
-            0...32, 127 => continue,
-            '@' => b: {
-                while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
-                    'a'...'z', 'A'...'Z', '_' => self.cursor += 1,
-                    else => break,
-                };
-
-                const ident = self.source[pos..self.cursor];
-                inline for (std.meta.fields(Lexeme)) |field| {
-                    if (field.name[0] != '@') continue;
-                    if (std.mem.eql(u8, field.name, ident)) break :b @field(Lexeme, field.name);
-                }
-
-                break :b .@"@";
+            0 => b: {
+                self.cursor -= 1;
+                break :b .Eof;
             },
-            '$' => b: {
-                while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
+            1...32, 127 => continue,
+            '$', '@', 'a'...'z', 'A'...'Z', '_', 128...255 => |c| b: {
+                while (true) switch (self.source[self.cursor]) {
                     'a'...'z', 'A'...'Z', '0'...'9', '_', 128...255 => self.cursor += 1,
                     else => break,
                 };
 
-                const ident = self.source[pos..self.cursor];
-                inline for (std.meta.fields(Lexeme)) |field| {
-                    if (field.name[0] != '$') continue;
-                    if (std.mem.eql(u8, field.name, ident)) break :b @field(Lexeme, field.name);
-                }
+                if (keyword_map.get(self.source[pos..self.cursor])) |k| break :b k;
 
-                break :b .@"$";
-            },
-            'a'...'z', 'A'...'Z', '_', 128...255 => b: {
-                while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
-                    'a'...'z', 'A'...'Z', '0'...'9', '_', 128...255 => self.cursor += 1,
-                    else => break,
-                };
-
-                const ident = self.source[pos..self.cursor];
-                inline for (std.meta.fields(Lexeme)) |field| {
-                    if (comptime !std.ascii.isLower(field.name[0]) and field.name[0] != '_') continue;
-                    const start = comptime if (std.mem.startsWith(u8, field.name, "ty_")) 3 else 0;
-                    if (std.mem.eql(u8, field.name[start..], ident)) break :b @field(Lexeme, field.name);
-                }
+                if (c == '$' or c == '@') break :b @enumFromInt(c);
                 break :b .Ident;
             },
             '0'...'9' => |c| b: {
                 if (c == '0' and self.advanceIf('x')) {
-                    while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
+                    while (true) switch (self.source[self.cursor]) {
                         '0'...'9', 'a'...'f', 'A'...'F' => self.cursor += 1,
                         else => break,
                     };
                     break :b .HexInteger;
                 } else if (c == '0' and self.advanceIf('o')) {
-                    while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
+                    while (true) switch (self.source[self.cursor]) {
                         '0'...'7' => self.cursor += 1,
                         else => break,
                     };
                     break :b .OctInteger;
                 } else if (c == '0' and self.advanceIf('b')) {
-                    while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
+                    while (true) switch (self.source[self.cursor]) {
                         '0'...'1' => self.cursor += 1,
                         else => break,
                     };
                     break :b .BinInteger;
                 } else {
-                    while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
+                    while (true) switch (self.source[self.cursor]) {
                         '0'...'9' => self.cursor += 1,
                         else => break,
                     };
@@ -373,7 +608,7 @@ pub fn next(self: *Lexer) Token {
                         break :b .DecInteger;
                     }
 
-                    while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
+                    while (true) switch (self.source[self.cursor]) {
                         '0'...'9' => self.cursor += 1,
                         else => break,
                     };
@@ -382,31 +617,44 @@ pub fn next(self: *Lexer) Token {
                 }
             },
             '"' => b: {
-                while (self.cursor < self.source.len) switch (self.source[self.cursor]) {
+                while (true) switch (self.source[self.cursor]) {
                     '"' => {
                         self.cursor += 1;
                         break;
                     },
                     '\\' => self.cursor = @min(self.cursor + 2, self.source.len),
+                    0 => break :b .@"unterminated string",
                     else => self.cursor += 1,
-                } else break :b .@"unterminated string";
+                };
 
                 break :b .@"\"";
             },
             '/' => |c| if (self.advanceIf('*')) ml: {
                 var nesting: u8 = 1;
-                while (nesting > 0) switch (self.advance() orelse break) {
-                    '/' => if (self.advanceIf('*')) {
-                        nesting += 1;
+                while (true) switch (self.source[self.cursor]) {
+                    '/' => {
+                        self.cursor += 1;
+                        if (self.advanceIf('*')) {
+                            nesting += 1;
+                        }
                     },
-                    '*' => if (self.advanceIf('/')) {
-                        nesting -= 1;
+                    '*' => {
+                        self.cursor += 1;
+                        if (self.advanceIf('/')) {
+                            nesting -= 1;
+                            if (nesting == 0) break;
+                        }
                     },
-                    else => {},
+                    0 => break,
+                    else => self.cursor += 1,
                 };
                 break :ml .Comment;
             } else if (self.advanceIf('/')) l: {
-                while (self.advance()) |ch| if (ch == '\n') break;
+                while (true) {
+                    const ch = self.source[self.cursor];
+                    if (ch == '\n' or ch == 0) break;
+                    self.cursor += 1;
+                }
                 break :l .Comment;
             } else if (self.advanceIf('=')) @enumFromInt(c + 128) else @enumFromInt(c),
             '.' => if (self.advanceIf('{'))
@@ -419,8 +667,13 @@ pub fn next(self: *Lexer) Token {
                 .@".["
             else
                 .@".",
-            '<', '>' => |c| @enumFromInt(if (self.advanceIf(c)) c - 10 + if (self.advanceIf('=')) @as(u8, 128) else 0 else if (self.advanceIf('=')) c + 128 else c),
-            ':', '+', '-', '*', '%', '|', '^', '&', '=', '!' => |c| if (self.advanceIf('>')) .@"=>" else @enumFromInt(if (self.advanceIf('=')) c + 128 else c),
+            '<', '>' => |c| @enumFromInt(if (self.advanceIf(c))
+                c - 10 + if (self.advanceIf('=')) @as(u8, 128) else 0
+            else if (self.advanceIf('=')) c + 128 else c),
+            ':', '+', '-', '*', '%', '|', '^', '&', '=', '!' => |c| if (self.advanceIf('>'))
+                .@"=>"
+            else
+                @enumFromInt(if (self.advanceIf('=')) c + 128 else c),
             else => |c| std.meta.intToEnum(Lexeme, c) catch std.debug.panic("{c}", .{c}),
         };
         return Token.init(pos, self.cursor, kind);
@@ -429,16 +682,13 @@ pub fn next(self: *Lexer) Token {
     return Token.init(self.cursor, self.cursor, .Eof);
 }
 
-inline fn advance(self: *Lexer) ?u8 {
-    if (self.cursor < self.source.len) {
-        defer self.cursor += 1;
-        return self.source[self.cursor];
-    }
-    return null;
+inline fn advance(self: *Lexer) u8 {
+    defer self.cursor += 1;
+    return self.source[self.cursor];
 }
 
 inline fn advanceIf(self: *Lexer, c: u8) bool {
-    if (self.cursor < self.source.len and self.source[self.cursor] == c) {
+    if (self.source[self.cursor] == c) {
         self.cursor += 1;
         return true;
     }
