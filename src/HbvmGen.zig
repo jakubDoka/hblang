@@ -193,7 +193,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
             } else {
                 self.emit(.jala, .{ .null, .ret_addr, 0 });
             }
-        } else if (i + 1 == last.outputs()[0].schedule) {
+        } else if (i + 1 == last.outputs()[@intFromBool(last.isSwapped())].schedule) {
             // noop
         } else if (last.kind == .Never) {
             // noop
@@ -505,11 +505,11 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }
             },
             .IfOp => {
+                const extra = no.extra(.IfOp);
                 self.local_relocs.appendAssumeCapacity(.{
-                    .dest_block = no.outputs()[1].schedule,
+                    .dest_block = no.outputs()[@intFromBool(!extra.swapped)].schedule,
                     .rel = self.reloc(3, .rel16),
                 });
-                const extra = no.extra(.IfOp);
                 self.emitLow("RRP", extra.op, .{ self.reg(inps[0]), self.reg(inps[1]), 0 });
             },
             .If => {

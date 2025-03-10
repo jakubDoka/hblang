@@ -77,7 +77,7 @@ main := fn(): uint {
         o := one()
         z := zero()
 
-        if o < z return 13
+        if z < o return 13
         if o < o return 14
         if o <= z return 15
         if z > o return 16
@@ -96,6 +96,8 @@ main := fn(): uint {
         if z < o return 22
         if o < o return 23
         if z <= o return 24
+        if o != o return 25
+        if o == z return 26
     }
 
     return 0
