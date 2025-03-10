@@ -77,7 +77,7 @@ main := fn(): uint {
         o := one()
         z := zero()
 
-        if z < o return 13
+        if o < z return 13
         if o < o return 14
         if o <= z return 15
         if z > o return 16
@@ -149,6 +149,13 @@ main := fn(): uint {
     if ~1 != -1 - 1 return 2
     if -1 != ~1 + 1 return 3
     return 0
+}
+```
+
+#### arithmetic 8
+```hb
+main := fn(): uint {
+    return (0 < 1) - (1 + 0)
 }
 ```
 
