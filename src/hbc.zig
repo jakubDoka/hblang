@@ -5,6 +5,10 @@ const Arena = hb.utils.Arena;
 
 const max_file_len = std.math.maxInt(u31);
 
+pub inline fn panic(_: anytype, _: anytype, _: anytype) noreturn {
+    unreachable;
+}
+
 pub fn main() !void {
     Arena.initScratch(1024 * 1024 * 10);
     defer Arena.deinitScratch();
@@ -103,7 +107,7 @@ pub fn main() !void {
     defer ast_arena.deinit();
 
     if (fmt_stdout) {
-        const source = try std.fs.cwd().readFileAlloc(ast_arena.allocator(), root_file, max_file_len);
+        const source = try std.fs.cwd().readFileAllocOptions(ast_arena.allocator(), root_file, max_file_len, null, @alignOf(u8), 0);
         const ast = try hb.Ast.init(ast_arena.allocator(), .{
             .path = root_file,
             .code = source,
@@ -265,7 +269,7 @@ const Loader = struct {
 
         const slot = self.files.addOne(self.arena) catch return null;
         slot.path = self.arena.dupe(u8, canon) catch return null;
-        slot.source = std.fs.cwd().readFileAlloc(self.arena, path, max_file_len) catch |err| {
+        slot.source = std.fs.cwd().readFileAllocOptions(self.arena, path, max_file_len, null, @alignOf(u8), 0) catch |err| {
             hb.Ast.report(
                 file.path,
                 file.source,
@@ -296,7 +300,7 @@ const Loader = struct {
 
         const slot = try self.files.addOne(self.arena);
         slot.path = std.fs.path.basename(root);
-        slot.source = std.fs.cwd().readFileAlloc(self.arena, root, max_file_len) catch {
+        slot.source = std.fs.cwd().readFileAllocOptions(self.arena, root, max_file_len, null, @alignOf(u8), 0) catch {
             try diagnostics.print("could not read the root file: {s}", .{root});
             return null;
         };
