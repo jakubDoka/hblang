@@ -255,12 +255,13 @@ pub fn init(
 }
 
 pub fn searchBinding(self: *const Ast, cur: Ast.Id, id: anytype, fseq: *std.ArrayList(Pos)) bool {
-    switch (self.exprs.get(cur)) {
-        .Ident => |i| switch (@TypeOf(id)) {
-            Ident => if (i.id == id) return true,
-            else => if (cmpLow(i.id.pos(), self.source, id)) return true,
+    switch (cur.tag()) {
+        .Ident => switch (@TypeOf(id)) {
+            Ident => if (self.exprs.getTyped(.Ident, cur).?.id == id) return true,
+            else => if (cmpLow(self.exprs.getTyped(.Ident, cur).?.id.pos(), self.source, id)) return true,
         },
-        .Ctor => |c| {
+        .Ctor => {
+            const c = self.exprs.getTyped(.Ctor, cur).?;
             if (self.searchBinding(c.ty, id, fseq)) return true;
 
             for (self.exprs.view(c.fields)) |f| {
@@ -294,14 +295,15 @@ pub fn tokenSrc(self: *const Ast, pos: u32) []const u8 {
 
 pub fn posOf(self: *const Ast, origin: anytype) Pos {
     return switch (@TypeOf(origin)) {
-        Id => switch (self.exprs.get(origin)) {
-            inline else => |v| self.posOfPayload(v),
+        Id => switch (origin.tag()) {
+            inline else => |v| self.posOfPayload(self.exprs.getTyped(v, origin).?.*),
         },
         else => self.posOfPayload(origin),
     };
 }
 
 fn posOfPayload(self: *const Ast, v: anytype) Pos {
+    if (@typeInfo(@TypeOf(v)) == .pointer) return self.posOfPayload(v.*);
     return switch (@TypeOf(v)) {
         void => .init(0),
         Ident => .init(v.pos()),
@@ -351,14 +353,14 @@ pub fn codePointer(self: *const Ast, index: usize) CodePointer {
     return .{ .source = self.source, .index = index };
 }
 
-pub fn lineCol(source: []const u8, index: isize) struct { usize, usize } {
+pub fn lineCol(source: []const u8, index: usize) struct { usize, usize } {
     var line: usize = 0;
     var last_nline: isize = -1;
     for (source[0..@min(@as(usize, @intCast(index)), source.len - 1)], 0..) |c, i| if (c == '\n') {
         line += 1;
         last_nline = @intCast(i);
     };
-    return .{ line + 1, @intCast(index - last_nline) };
+    return .{ line + 1, @intCast(@as(isize, @bitCast(index)) - last_nline) };
 }
 
 pub fn pointToCode(source: []const u8, index_m: usize, writer: anytype) !void {

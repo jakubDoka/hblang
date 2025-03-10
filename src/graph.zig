@@ -131,7 +131,7 @@ pub const UnOp = enum(u8) {
                 .i16 => @as(i16, @truncate(oper)),
                 .i32 => @as(i32, @truncate(oper)),
                 .int => oper,
-                else => std.debug.panic("{}", .{src}),
+                else => root.panic("{}", .{src}),
             },
             .uext => switch (src) {
                 .i8 => @as(u8, @truncate(tu(oper))),
@@ -218,7 +218,7 @@ pub const Builtin = union(enum) {
     // [?Cfg, lhs, rhs]
     UnOp: mod.UnOp,
     // [?Cfg, Mem]
-    Local: usize,
+    Local: u64,
     // [?Cfg, thread, ptr]
     Load: Load,
     // [?Cfg, thread, ptr, value, ...antideps]
@@ -351,7 +351,7 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             pub fn add(self: *WorkList, node: *Node) void {
-                if (node.id == std.math.maxInt(u16)) std.debug.panic("{} {any}\n", .{ node, node.inputs() });
+                if (node.id == std.math.maxInt(u16)) root.panic("{} {any}\n", .{ node, node.inputs() });
                 if (self.in_list.isSet(node.id)) return;
                 self.in_list.set(node.id);
                 self.list.appendAssumeCapacity(node);
@@ -414,8 +414,8 @@ pub fn Func(comptime MachNode: type) type {
                 pub fn findLca(left: *CfgNode, right: *CfgNode) *CfgNode {
                     var lc, var rc = .{ left, right };
                     while (lc != rc) {
-                        if (!lc.base.isCfg()) std.debug.panic("{}", .{lc.base});
-                        if (!rc.base.isCfg()) std.debug.panic("{}", .{rc.base});
+                        if (!lc.base.isCfg()) root.panic("{}", .{lc.base});
+                        if (!rc.base.isCfg()) root.panic("{}", .{rc.base});
                         const diff = @as(i64, idepth(lc)) - idepth(rc);
                         if (diff >= 0) lc = lc.base.cfg0().?;
                         if (diff <= 0) rc = rc.base.cfg0().?;
@@ -631,7 +631,7 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             pub fn kill(self: *Node) void {
-                if (self.output_len != 0) std.debug.panic("{s}\n", .{self.outputs()});
+                if (self.output_len != 0) root.panic("{s}\n", .{self.outputs()});
                 std.debug.assert(self.output_len == 0);
                 for (self.inputs()) |oi| if (oi) |i| {
                     i.removeUse(self);
@@ -658,13 +658,13 @@ pub fn Func(comptime MachNode: type) type {
 
             pub fn extraConst(self: *const Node, comptime kind: Kind) *const ClassFor(kind) {
                 std.debug.assert(self.kind == kind);
-                const ptr: *const LayoutFor(kind) = @ptrCast(self);
+                const ptr: *const LayoutFor(kind) = @alignCast(@ptrCast(self));
                 return &ptr.ext;
             }
 
             pub fn extra(self: *Node, comptime kind: Kind) *ClassFor(kind) {
                 std.debug.assert(self.kind == kind);
-                const ptr: *LayoutFor(kind) = @ptrCast(self);
+                const ptr: *LayoutFor(kind) = @alignCast(@ptrCast(self));
                 return &ptr.ext;
             }
 
@@ -926,7 +926,7 @@ pub fn Func(comptime MachNode: type) type {
             for (self.arena.allocator().dupe(*Node, target.outputs()) catch unreachable) |use| {
                 if (use.id == std.math.maxInt(u16)) continue;
                 const index = std.mem.indexOfScalar(?*Node, use.inputs(), target) orelse {
-                    std.debug.panic("{} {any} {}", .{ this, target.outputs(), use });
+                    root.panic("{} {any} {}", .{ this, target.outputs(), use });
                 };
 
                 _ = self.setInput(use, index, this);

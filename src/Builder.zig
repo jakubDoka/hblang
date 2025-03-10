@@ -68,13 +68,13 @@ pub fn end(self: *Builder, _: BuildToken) void {
 
 // #MEM ========================================================================
 
-pub fn addLocal(self: *Builder, size: usize) SpecificNode(.Local) {
+pub fn addLocal(self: *Builder, size: u64) SpecificNode(.Local) {
     const local = self.func.addNode(.Local, &.{ null, self.root_mem }, size);
     local.data_type = .int;
     return local;
 }
 
-pub fn resizeLocal(_: *Builder, here: SpecificNode(.Local), to_size: usize) void {
+pub fn resizeLocal(_: *Builder, here: SpecificNode(.Local), to_size: u64) void {
     std.debug.assert(here.extra(.Local).* == 0);
     here.extra(.Local).* = to_size;
 }
@@ -91,7 +91,7 @@ pub fn addFieldLoad(self: *Builder, base: *BuildNode, offset: i64, ty: DataType)
 
 pub fn addStore(self: *Builder, addr: *BuildNode, ty: DataType, value: *BuildNode) void {
     if (value.data_type == .bot) return;
-    if (value.data_type.size() == 0) std.debug.panic("{}", .{value.data_type});
+    if (value.data_type.size() == 0) root.panic("{}", .{value.data_type});
     const mem = self.memory();
     const ctrl = self.control();
     const store = self.func.addNode(.Store, &.{ ctrl, mem, addr, value }, .{});
@@ -112,11 +112,11 @@ pub fn addFieldStore(self: *Builder, base: *BuildNode, offset: i64, ty: DataType
 pub fn addIndexOffset(self: *Builder, base: *BuildNode, op: enum(u8) {
     iadd = @intFromEnum(BinOp.iadd),
     isub = @intFromEnum(BinOp.isub),
-}, elem_size: usize, subscript: *BuildNode) SpecificNode(.BinOp) {
+}, elem_size: u64, subscript: *BuildNode) SpecificNode(.BinOp) {
     const offset = if (elem_size == 1)
         subscript
     else if (subscript.kind == .CInt)
-        self.addIntImm(.int, subscript.extra(.CInt).* * @as(i64, @intCast(elem_size)))
+        self.addIntImm(.int, subscript.extra(.CInt).* * @as(i64, @bitCast(elem_size)))
     else
         self.addBinOp(.imul, .int, subscript, self.addIntImm(.int, @bitCast(elem_size)));
     return self.addBinOp(@enumFromInt(@intFromEnum(op)), .int, base, offset);
@@ -128,10 +128,10 @@ pub fn addSpill(self: *Builder, value: *BuildNode) SpecificNode(.Local) {
     return local;
 }
 
-pub fn addFixedMemCpy(self: *Builder, dst: *BuildNode, src: *BuildNode, size: usize) void {
+pub fn addFixedMemCpy(self: *Builder, dst: *BuildNode, src: *BuildNode, size: u64) void {
     const mem = self.memory();
     const ctrl = self.control();
-    const siz = self.addIntImm(.int, @intCast(size));
+    const siz = self.addIntImm(.int, @bitCast(size));
     const mcpy = self.func.addNode(.MemCpy, &.{ ctrl, mem, dst, src, siz }, .{});
     self.func.setInputNoIntern(self.scope.?, 1, mcpy);
 }
@@ -476,7 +476,7 @@ pub fn addCall(
 }
 
 pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
-    for (values, self.func.returns) |val, rtt| if (val.data_type != val.data_type.meet(rtt)) std.debug.panic("{s} != {s}", .{ @tagName(val.data_type), @tagName(rtt) });
+    for (values, self.func.returns) |val, rtt| if (val.data_type != val.data_type.meet(rtt)) root.panic("{s} != {s}", .{ @tagName(val.data_type), @tagName(rtt) });
 
     const ret = self.func.end;
     const inps = ret.inputs();

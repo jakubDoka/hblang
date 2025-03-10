@@ -9,6 +9,7 @@ diagnostics: std.io.AnyWriter,
 files: []const Ast,
 
 const std = @import("std");
+const root = @import("utils.zig");
 const Ast = @import("Ast.zig");
 const Arena = @import("utils.zig").Arena;
 const Codegen = @import("Codegen.zig");
@@ -70,15 +71,15 @@ pub const Data = union(enum) {
 
 pub const Nullable = struct {
     inner: Id,
-    nieche: enum(usize) {
-        unresolved = std.math.maxInt(usize) - 1,
+    nieche: enum(u64) {
+        unresolved = std.math.maxInt(u64) - 1,
         explicit,
         _,
 
         pub fn offset(self: *@This(), types: *Types) ?NiecheSpec {
             if (self.* == .unresolved) {
                 const nullable: *Nullable = @fieldParentPtr("nieche", self);
-                self.* = if (nullable.inner.findNieche(types)) |n| @enumFromInt(@as(usize, @bitCast(n))) else .explicit;
+                self.* = if (nullable.inner.findNieche(types)) |n| @enumFromInt(@as(u64, @bitCast(n))) else .explicit;
             }
 
             return switch (self.*) {
@@ -93,12 +94,12 @@ pub const Nullable = struct {
         return self.nieche.offset(types) != null;
     }
 
-    pub fn size(self: *Nullable, types: *Types) usize {
+    pub fn size(self: *Nullable, types: *Types) u64 {
         return self.inner.size(types) +
             if (self.isCompact(types)) 0 else self.inner.alignment(types);
     }
 
-    pub const NiecheSpec = packed struct(usize) {
+    pub const NiecheSpec = packed struct(u64) {
         kind: enum(u1) {
             bool,
             ptr,
@@ -109,7 +110,7 @@ pub const Nullable = struct {
                 };
             }
         },
-        offset: u63,
+        offset: std.meta.Int(.unsigned, @bitSizeOf(u64) - 1),
     };
 };
 
@@ -165,13 +166,13 @@ pub const Tuple = struct {
     pub const OffIter = struct {
         types: *Types,
         fields: []const Field,
-        offset: usize = 0,
+        offset: u64 = 0,
 
-        pub const Elem = struct { field: *const Field, offset: usize };
+        pub const Elem = struct { field: *const Field, offset: u64 };
 
         pub fn next(self: *OffIter) ?Elem {
             if (self.fields.len == 0) return null;
-            self.offset = std.mem.alignForward(usize, self.offset, self.fields[0].ty.alignment(self.types));
+            self.offset = std.mem.alignForward(u64, self.offset, self.fields[0].ty.alignment(self.types));
             const elem = Elem{ .field = &self.fields[0], .offset = self.offset };
             self.fields = self.fields[1..];
             self.offset += elem.field.ty.size(self.types);
@@ -203,7 +204,7 @@ pub const Enum = struct {
     pub fn getFields(self: *Enum, types: *Types) []const Field {
         if (self.fields) |f| return f;
         const ast = types.getFile(self.key.file);
-        const enum_ast = ast.exprs.get(self.key.ast).Enum;
+        const enum_ast = ast.exprs.getTyped(.Enum, self.key.ast).?;
 
         var count: usize = 0;
         for (ast.exprs.view(enum_ast.fields)) |f| count += @intFromBool(f.tag() == .Tag);
@@ -212,7 +213,7 @@ pub const Enum = struct {
         var i: usize = 0;
         for (ast.exprs.view(enum_ast.fields)) |fast| {
             if (fast.tag() != .Tag) continue;
-            fields[i] = .{ .name = ast.tokenSrc(ast.exprs.get(fast).Tag.index + 1) };
+            fields[i] = .{ .name = ast.tokenSrc(ast.exprs.getTyped(.Tag, fast).?.index + 1) };
             i += 1;
         }
         self.fields = fields;
@@ -224,8 +225,8 @@ pub const Union = struct {
     key: Key,
 
     fields: ?[]const Field = null,
-    size: ?usize = null,
-    alignment: ?usize = null,
+    size: ?u64 = null,
+    alignment: ?u64 = null,
 
     pub const Field = struct {
         name: []const u8,
@@ -239,7 +240,7 @@ pub const Union = struct {
     pub fn getFields(self: *Union, types: *Types) []const Field {
         if (self.fields) |f| return f;
         const ast = types.getFile(self.key.file);
-        const union_ast = ast.exprs.get(self.key.ast).Union;
+        const union_ast = ast.exprs.getTyped(.Union, self.key.ast).?;
 
         var count: usize = 0;
         for (ast.exprs.view(union_ast.fields)) |f| count += @intFromBool(if (ast.exprs.getTyped(.BinOp, f)) |b| b.lhs.tag() == .Tag else false);
@@ -250,7 +251,7 @@ pub const Union = struct {
             const field = ast.exprs.getTyped(.BinOp, fast) orelse continue;
             if (field.lhs.tag() != .Tag) continue;
             fields[i] = .{
-                .name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1),
+                .name = ast.tokenSrc(ast.exprs.getTyped(.Tag, field.lhs).?.index + 1),
                 .ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field.rhs) catch .never,
             };
             i += 1;
@@ -264,8 +265,8 @@ pub const Struct = struct {
     key: Key,
 
     fields: ?[]const Field = null,
-    size: ?usize = null,
-    alignment: ?usize = null,
+    size: ?u64 = null,
+    alignment: ?u64 = null,
 
     pub const Field = struct {
         name: []const u8,
@@ -277,26 +278,26 @@ pub const Struct = struct {
         return Id.init(.{ .Struct = self });
     }
 
-    pub fn getSize(self: *Struct, types: *Types) usize {
+    pub fn getSize(self: *Struct, types: *Types) u64 {
         if (self.size) |a| return a;
 
         if (@hasField(Field, "alignment")) @compileError("");
         const max_alignment = self.getAlignment(types);
 
-        var siz: usize = 0;
+        var siz: u64 = 0;
         for (self.getFields(types)) |f| {
-            siz = std.mem.alignForward(usize, siz, @min(max_alignment, f.ty.alignment(types)));
+            siz = std.mem.alignForward(u64, siz, @min(max_alignment, f.ty.alignment(types)));
             siz += f.ty.size(types);
         }
-        siz = std.mem.alignForward(usize, siz, max_alignment);
+        siz = std.mem.alignForward(u64, siz, max_alignment);
         return siz;
     }
 
-    pub fn getAlignment(self: *Struct, types: *Types) usize {
+    pub fn getAlignment(self: *Struct, types: *Types) u64 {
         if (self.alignment) |a| return a;
 
         const ast = types.getFile(self.key.file);
-        const struct_ast = ast.exprs.get(self.key.ast).Struct;
+        const struct_ast = ast.exprs.getTyped(.Struct, self.key.ast).?;
 
         if (struct_ast.alignment.tag() != .Void) {
             if (@hasField(Field, "alignment")) @compileError("assert fields <= alignment then base alignment");
@@ -304,7 +305,7 @@ pub const Struct = struct {
             return self.alignment.?;
         }
 
-        var alignm: usize = 1;
+        var alignm: u64 = 1;
         for (self.getFields(types)) |f| {
             alignm = @max(alignm, f.ty.alignment(types));
         }
@@ -313,15 +314,15 @@ pub const Struct = struct {
 
     pub const OffIter = struct {
         types: *Types,
-        max_align: usize,
+        max_align: u64,
         fields: []const Field,
-        offset: usize = 0,
+        offset: u64 = 0,
 
-        pub const Elem = struct { field: *const Field, offset: usize };
+        pub const Elem = struct { field: *const Field, offset: u64 };
 
         pub fn next(self: *OffIter) ?Elem {
             if (self.fields.len == 0) return null;
-            self.offset = std.mem.alignForward(usize, self.offset, @min(self.max_align, self.fields[0].ty.alignment(self.types)));
+            self.offset = std.mem.alignForward(u64, self.offset, @min(self.max_align, self.fields[0].ty.alignment(self.types)));
             const elem = Elem{ .field = &self.fields[0], .offset = self.offset };
             self.fields = self.fields[1..];
             self.offset += elem.field.ty.size(self.types);
@@ -336,7 +337,7 @@ pub const Struct = struct {
     pub fn getFields(self: *Struct, types: *Types) []const Field {
         if (self.fields) |f| return f;
         const ast = types.getFile(self.key.file);
-        const struct_ast = ast.exprs.get(self.key.ast).Struct;
+        const struct_ast = ast.exprs.getTyped(.Struct, self.key.ast).?;
 
         var count: usize = 0;
         for (ast.exprs.view(struct_ast.fields)) |f| count += @intFromBool(if (ast.exprs.getTyped(.BinOp, f)) |b| b.lhs.tag() == .Tag else false);
@@ -346,9 +347,9 @@ pub const Struct = struct {
         for (ast.exprs.view(struct_ast.fields)) |fast| {
             const field = ast.exprs.getTyped(.BinOp, fast) orelse continue;
             if (field.lhs.tag() != .Tag) continue;
-            if (field.rhs.tag() == .BinOp and ast.exprs.get(field.rhs).BinOp.op == .@"=") {
-                const field_meta = ast.exprs.get(field.rhs).BinOp;
-                const name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1);
+            if (field.rhs.tag() == .BinOp and ast.exprs.getTyped(.BinOp, field.rhs).?.op == .@"=") {
+                const field_meta = ast.exprs.getTyped(.BinOp, field.rhs).?;
+                const name = ast.tokenSrc(ast.exprs.getTyped(.Tag, field.lhs).?.index + 1);
                 const ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field_meta.lhs) catch .never;
 
                 const value = types.arena.create(Global);
@@ -368,7 +369,7 @@ pub const Struct = struct {
                 fields[i] = .{ .name = name, .ty = ty, .defalut_value = value };
             } else {
                 fields[i] = .{
-                    .name = ast.tokenSrc(ast.exprs.get(field.lhs).Tag.index + 1),
+                    .name = ast.tokenSrc(ast.exprs.getTyped(.Tag, field.lhs).?.index + 1),
                     .ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field.rhs) catch .never,
                 };
             }
@@ -449,7 +450,7 @@ pub const Id = enum(usize) {
     }
 
     pub inline fn init(dt: Data) Id {
-        return @enumFromInt(@as(u64, @bitCast(Repr{
+        return @enumFromInt(@as(usize, @bitCast(Repr{
             .flag = @intFromEnum(dt),
             .data = @intCast(switch (dt) {
                 .Builtin => |b| @intFromEnum(b),
@@ -479,22 +480,22 @@ pub const Id = enum(usize) {
 
     pub fn items(self: Id, ast: *const Ast) Ast.Slice {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => std.debug.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => root.panic("{s}", .{@tagName(self.data())}),
             .Template, .Func => .{},
-            inline else => |v, t| @field(ast.exprs.get(v.key.ast), @tagName(t)).fields,
+            inline else => |v, t| ast.exprs.getTyped(@field(std.meta.Tag(Ast.Expr), @tagName(t)), v.key.ast).?.fields,
         };
     }
 
     pub fn captures(self: Id) []const Key.Capture {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => std.debug.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => root.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| v.key.captures,
         };
     }
 
     pub fn findCapture(self: Id, id: Ast.Ident) ?Key.Capture {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => std.debug.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => root.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| for (v.key.captures) |cp| {
                 if (cp.id == id) break cp;
             } else null,
@@ -503,7 +504,7 @@ pub const Id = enum(usize) {
 
     pub fn parent(self: Id) Id {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => std.debug.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => root.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| v.key.scope,
         };
     }
@@ -561,7 +562,7 @@ pub const Id = enum(usize) {
         };
     }
 
-    pub fn size(self: Id, types: *Types) usize {
+    pub fn size(self: Id, types: *Types) u64 {
         return switch (self.data()) {
             .Builtin => |b| switch (b) {
                 .never, .any => 0,
@@ -575,27 +576,27 @@ pub const Id = enum(usize) {
             .Enum => |e| {
                 const var_count = e.getFields(types).len;
                 if (var_count <= 1) return 0;
-                return std.math.ceilPowerOfTwo(usize, std.mem.alignForward(usize, std.math.log2_int(usize, var_count), 8) / 8) catch unreachable;
+                return std.math.ceilPowerOfTwo(u64, std.mem.alignForward(u64, std.math.log2_int(u64, var_count), 8) / 8) catch unreachable;
             },
             .Tuple => |t| {
-                var total_size: usize = 0;
-                var alignm: usize = 1;
+                var total_size: u64 = 0;
+                var alignm: u64 = 1;
                 for (t.fields) |f| {
                     alignm = @max(alignm, f.ty.alignment(types));
-                    total_size = std.mem.alignForward(usize, total_size, f.ty.alignment(types));
+                    total_size = std.mem.alignForward(u64, total_size, f.ty.alignment(types));
                     total_size += f.ty.size(types);
                 }
-                total_size = std.mem.alignForward(usize, total_size, alignm);
+                total_size = std.mem.alignForward(u64, total_size, alignm);
                 return total_size;
             },
             .Union => |u| {
-                var max_size: usize = 0;
-                var alignm: usize = 1;
+                var max_size: u64 = 0;
+                var alignm: u64 = 1;
                 for (u.getFields(types)) |f| {
                     alignm = @max(alignm, f.ty.alignment(types));
                     max_size = @max(max_size, f.ty.size(types));
                 }
-                max_size = std.mem.alignForward(usize, max_size, alignm);
+                max_size = std.mem.alignForward(u64, max_size, alignm);
                 return max_size;
             },
             .Struct => |s| s.getSize(types),
@@ -605,14 +606,14 @@ pub const Id = enum(usize) {
         };
     }
 
-    pub fn alignment(self: Id, types: *Types) usize {
+    pub fn alignment(self: Id, types: *Types) u64 {
         return switch (self.data()) {
             .Builtin, .Enum => @max(1, self.size(types)),
             .Ptr => 8,
             .Nullable => |n| n.inner.alignment(types),
             .Struct => |s| s.getAlignment(types),
             inline .Union, .Tuple => |s| {
-                var alignm: usize = 1;
+                var alignm: u64 = 1;
                 for (s.getFields(types)) |f| {
                     alignm = @max(alignm, f.ty.alignment(types));
                 }
@@ -670,7 +671,9 @@ pub const Id = enum(usize) {
                     return;
                 },
                 .Builtin => |b| writer.writeAll(@tagName(b)),
-                inline .Func, .Global, .Template, .Struct, .Union, .Enum => |b| {
+                .Func, .Global, .Template, .Struct, .Union, .Enum => {
+                    const repr: Repr = @bitCast(@intFromEnum(self.self));
+                    const b: *struct { key: Key } = @ptrFromInt(repr.data);
                     if (b.key.scope != .void) {
                         try writer.print("{" ++ opts ++ "}", .{b.key.scope.fmt(self.tys)});
                     }
@@ -728,7 +731,7 @@ pub const Abi = enum {
             types: [2]graph.DataType,
             padding: u16,
 
-            pub fn offsets(self: @This()) [2]usize {
+            pub fn offsets(self: @This()) [2]u64 {
                 return .{ 0, self.types[0].size() + self.padding };
             }
         },
@@ -738,12 +741,12 @@ pub const Abi = enum {
         const max_subtypes = 2;
 
         pub const Field = struct {
-            offset: usize = 0,
+            offset: u64 = 0,
             dt: graph.DataType,
         };
 
         const Dts = std.BoundedArray(graph.DataType, max_subtypes);
-        const Offs = std.BoundedArray(usize, max_subtypes);
+        const Offs = std.BoundedArray(u64, max_subtypes);
 
         pub fn types(self: Spec, buf: []graph.DataType) void {
             switch (self) {
@@ -835,7 +838,7 @@ pub const Abi = enum {
 
     pub fn categorizeAbleosRecord(stru: anytype, types: *Types) Spec {
         var res: Spec = .Imaginary;
-        var offset: usize = 0;
+        var offset: u64 = 0;
         for (stru.getFields(types)) |f| {
             const fspec = Abi.ableos.categorize(f.ty, types);
             if (fspec == .Imaginary) continue;
@@ -850,7 +853,7 @@ pub const Abi = enum {
             if (res == .ByValuePair) return .ByRef;
             std.debug.assert(res != .ByRef);
 
-            const off = std.mem.alignForward(usize, offset, f.ty.alignment(types));
+            const off = std.mem.alignForward(u64, offset, f.ty.alignment(types));
             res = .{ .ByValuePair = .{
                 .types = .{ res.ByValue, fspec.ByValue },
                 .padding = @intCast(off - offset),
@@ -906,10 +909,6 @@ pub fn report(self: *Types, file_id: File, expr: anytype, comptime fmt: []const 
 
     const file = self.getFile(file_id);
     Ast.report(file.path, file.source, file.posOf(expr).index, fmt, rargs, self.diagnostics);
-}
-
-pub fn getAst(self: *Types, file: File, expr: Ast.Id) Ast.Expr {
-    return self.getFile(file).exprs.get(expr);
 }
 
 pub fn getFile(self: *Types, file: File) *const Ast {

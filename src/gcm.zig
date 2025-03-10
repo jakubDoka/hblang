@@ -287,7 +287,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
                                                 break;
                                             }
                                         }
-                                    } else std.debug.panic("{any}", .{o.kind}),
+                                    } else root.panic("{any}", .{o.kind}),
                                 };
 
                                 break :add_antideps;
@@ -369,7 +369,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
             // init meta
             const extra = tmp.alloc(NodeMeta, node.outputs().len) catch unreachable;
             for (node.outputs(), extra, 0..) |o, *e, i| {
-                if (o.schedule != std.math.maxInt(u16) and !o.isCfg()) std.debug.panic("{} {}\n", .{ o, o.schedule });
+                if (o.schedule != std.math.maxInt(u16) and !o.isCfg()) root.panic("{} {}\n", .{ o, o.schedule });
                 o.schedule = @intCast(i);
                 e.* = .{ .priority = if (o.isCfg())
                     0

@@ -1,5 +1,9 @@
 const std = @import("std");
 
+pub inline fn panic(comptime format: []const u8, args: anytype) noreturn {
+    if (debug) std.debug.panic(format, args) else unreachable;
+}
+
 pub const Arena = struct {
     start: [*]align(page_size) u8,
     end: [*]align(page_size) u8,
@@ -18,7 +22,7 @@ pub const Arena = struct {
         }
     };
 
-    threadlocal var scratch: [2]Arena = undefined;
+    pub threadlocal var scratch: [2]Arena = undefined;
 
     pub fn initScratch(cap: usize) void {
         for (&scratch) |*slt| slt.* = init(cap);
@@ -227,25 +231,36 @@ pub fn EnumStore(comptime T: type) type {
             return dest[0..count];
         }
 
-        pub fn get(self: *const Self, id: Id) T {
-            switch (id.tag()) {
-                inline else => |t| {
-                    const Value = TagPayload(t);
-                    const loc: *const Value = if (Value != void) @ptrCast(@alignCast(&self.store.items[id.index()])) else &{};
-                    return @unionInit(T, @tagName(t), loc.*);
-                },
+        pub const AsRef = b: {
+            var field_arr = fields[0..].*;
+
+            for (&field_arr) |*f| {
+                if (f.type != void) {
+                    f.type = *const f.type;
+                    f.alignment = @alignOf(*const f.type);
+                }
             }
+
+            break :b @Type(.{ .@"union" = .{
+                .layout = .@"extern",
+                .tag_type = std.meta.Tag(T),
+                .fields = &field_arr,
+                .decls = &.{},
+            } });
+        };
+
+        pub fn get(self: *const Self, id: Id) AsRef {
+            const Layout = extern struct { ptr: *align(payload_align) const anyopaque, tag: usize };
+            return @bitCast(Layout{ .tag = @intFromEnum(id.tag()), .ptr = @ptrCast(@alignCast(&self.store.items[id.index()])) });
         }
 
-        pub fn getTyped(
+        pub inline fn getTyped(
             self: *const Self,
             comptime tag: std.meta.Tag(T),
             id: Id,
-        ) ?TagPayload(tag) {
+        ) ?*TagPayload(tag) {
             if (tag != id.tag()) return null;
-            const Value = TagPayload(tag);
-            const loc: *Value = @ptrCast(@alignCast(&self.store.items[id.index()]));
-            return loc.*;
+            return @ptrCast(@alignCast(&self.store.items[id.index()]));
         }
 
         pub fn getTypedPtr(
@@ -281,33 +296,6 @@ pub fn dbg(value: anytype) @TypeOf(value) {
 }
 
 const debug = @import("builtin").mode == .Debug;
-
-pub const StaticTrace = struct {
-    index: if (debug) usize else void,
-    frames: if (debug) [frame_limit]usize else void,
-
-    const frame_limit = 10;
-
-    pub fn init(return_addr: usize) StaticTrace {
-        if (!debug) return undefined;
-        var trace: StaticTrace = undefined;
-        var stack_trace = std.builtin.StackTrace{
-            .index = undefined,
-            .instruction_addresses = &trace.frames,
-        };
-        std.debug.captureStackTrace(return_addr, &stack_trace);
-        trace.index = stack_trace.index;
-        return trace;
-    }
-
-    pub fn dump(self: *StaticTrace) void {
-        if (!debug) return;
-        std.debug.dumpStackTrace(.{
-            .index = self.index,
-            .instruction_addresses = &self.frames,
-        });
-    }
-};
 
 pub fn isErr(value: anytype) bool {
     value catch return true;

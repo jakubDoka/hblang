@@ -321,7 +321,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     .i16 => self.emit(.li16, .{ self.reg(no), @truncate(@as(u64, @bitCast(extra.*))) }),
                     .i32 => self.emit(.li32, .{ self.reg(no), @truncate(@as(u64, @bitCast(extra.*))) }),
                     .int => self.emit(.li64, .{ self.reg(no), @bitCast(extra.*) }),
-                    else => std.debug.panic("{}\n", .{no.data_type}),
+                    else => root.panic("{}\n", .{no.data_type}),
                 }
             },
             .CFlt32 => self.emit(.li32, .{ self.reg(no), @bitCast(no.extra(.CFlt32).*) }),
@@ -343,7 +343,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             .Load => {
                 const size: u16 = @intCast(no.data_type.size());
                 if (inps[0].?.kind == .Local) {
-                    self.emit(.ld, .{ self.reg(no), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).*)), size });
+                    self.emit(.ld, .{ self.reg(no), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).*)), size });
                 } else {
                     self.emit(.ld, .{ self.reg(no), self.reg(inps[0]), 0, size });
                 }
@@ -352,7 +352,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 const size: u16 = @intCast(no.data_type.size());
                 const off = no.extra(.Ld).offset;
                 if (inps[0].?.kind == .Local) {
-                    self.emit(.ld, .{ self.reg(no), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).*)) + off, size });
+                    self.emit(.ld, .{ self.reg(no), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).*)) + off, size });
                 } else {
                     self.emit(.ld, .{ self.reg(no), self.reg(inps[0]), off, size });
                 }
@@ -360,7 +360,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             .Store => {
                 const size: u16 = @intCast(no.data_type.size());
                 if (inps[0].?.kind == .Local) {
-                    self.emit(.st, .{ self.reg(inps[1]), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).*)), size });
+                    self.emit(.st, .{ self.reg(inps[1]), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).*)), size });
                 } else {
                     self.emit(.st, .{ self.reg(inps[1]), self.reg(inps[0]), 0, size });
                 }
@@ -369,7 +369,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 const size: u16 = @intCast(no.data_type.size());
                 const off = no.extra(.St).offset;
                 if (inps[0].?.kind == .Local) {
-                    self.emit(.st, .{ self.reg(inps[1]), .stack_addr, @as(i64, @bitCast(inps[0].?.extra(.Local).*)) + off, size });
+                    self.emit(.st, .{ self.reg(inps[1]), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).*)) + off, size });
                 } else {
                     self.emit(.st, .{ self.reg(inps[1]), self.reg(inps[0]), off, size });
                 }
@@ -623,7 +623,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }
             },
             .Never => {},
-            else => std.debug.panic("{any}", .{no.kind}),
+            else => root.panic("{any}", .{no.kind}),
         }
     }
 }
@@ -637,7 +637,7 @@ fn emit(self: *HbvmGen, comptime op: isa.Op, args: isa.TupleOf(isa.ArgsOf(op))) 
 }
 
 fn emitLow(self: *HbvmGen, comptime arg_str: []const u8, op: isa.Op, args: isa.TupleOf(isa.ArgsOfStr(arg_str))) void {
-    if (!std.mem.eql(u8, isa.spec[@intFromEnum(op)][1], arg_str)) std.debug.panic("{} {s} {s}", .{ op, arg_str, isa.spec[@intFromEnum(op)][1] });
+    if (!std.mem.eql(u8, isa.spec[@intFromEnum(op)][1], arg_str)) root.panic("{} {s} {s}", .{ op, arg_str, isa.spec[@intFromEnum(op)][1] });
     self.out.append(self.gpa, @intFromEnum(op)) catch unreachable;
     self.out.appendSlice(self.gpa, std.mem.asBytes(&isa.packTo(isa.ArgsOfStr(arg_str), args))) catch unreachable;
 }

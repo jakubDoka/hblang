@@ -111,8 +111,8 @@ pub fn testBuilder(
     var unreaches: bool = false;
     var ecalls: []const Ast.Id = &.{};
     if (ast.findDecl(ast.items, "expectations", func_arena.arena.allocator())) |d| {
-        const decl = ast.exprs.get(d[0]).BinOp.rhs;
-        const ctor = ast.exprs.get(decl).Ctor;
+        const decl = ast.exprs.getTyped(.BinOp, d[0]).?.rhs;
+        const ctor = ast.exprs.getTyped(.Ctor, decl).?;
         for (ast.exprs.view(ctor.fields)) |field| {
             const value = ast.exprs.get(field.value);
             const fname = ast.tokenSrc(field.pos.index);
@@ -254,14 +254,14 @@ pub fn testBuilder(
         .tx => break,
         .eca => {
             try std.testing.expect(eca_idx < ecalls.len);
-            const curr_eca = ast.exprs.get(ecalls[eca_idx]).BinOp;
+            const curr_eca = ast.exprs.getTyped(.BinOp, ecalls[eca_idx]).?;
 
-            for (ast.exprs.view(ast.exprs.get(curr_eca.lhs).Tupl.fields), 0..) |vl, i| {
-                const value = try std.fmt.parseInt(u64, ast.tokenSrc(ast.exprs.get(vl).Integer.pos.index), 10);
+            for (ast.exprs.view(ast.exprs.getTyped(.Tupl, curr_eca.lhs).?.fields), 0..) |vl, i| {
+                const value = try std.fmt.parseInt(u64, ast.tokenSrc(ast.exprs.getTyped(.Integer, vl).?.pos.index), 10);
                 try std.testing.expectEqual(value, vm.regs.get(.arg(i)));
             }
 
-            const ret_value = try std.fmt.parseInt(u64, ast.tokenSrc(ast.exprs.get(curr_eca.rhs).Integer.pos.index), 10);
+            const ret_value = try std.fmt.parseInt(u64, ast.tokenSrc(ast.exprs.getTyped(.Integer, curr_eca.rhs).?.pos.index), 10);
             vm.regs.set(.ret(0), ret_value);
 
             eca_idx += 1;

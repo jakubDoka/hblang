@@ -177,8 +177,8 @@ pub fn run(self: *Vm, ctx: anytype) !isa.Op {
                 self.regs.get(args.arg1) +% toUnsigned(64, args.arg2);
             const regp: [*]u8 = @ptrCast(@alignCast(self.regs.getPtr(args.arg0)));
             switch (op) {
-                .st, .str, .str16 => try ctx.write(regp[0..args.arg3], ptr),
-                .ld, .ldr, .ldr16 => try ctx.read(ptr, regp[0..args.arg3]),
+                .st, .str, .str16 => try ctx.write(regp[0..args.arg3], @truncate(ptr)),
+                .ld, .ldr, .ldr16 => try ctx.read(@truncate(ptr), regp[0..args.arg3]),
                 else => @compileError("co"),
             }
         },
@@ -188,13 +188,13 @@ pub fn run(self: *Vm, ctx: anytype) !isa.Op {
         },
         inline .lra, .lra16 => |op| {
             const args = try self.readArgs(op, ctx);
-            const addr = self.ip -% isa.instrSize(op) +% self.regs.get(args.arg1) +% @as(usize, @bitCast(@as(i64, args.arg2)));
+            const addr = self.ip -% isa.instrSize(op) +% self.regs.get(args.arg1) +% @as(usize, @bitCast(@as(isize, args.arg2)));
             self.writeReg(args.arg0, addr);
         },
         .bmc => {
             const args = try self.readArgs(.bmc, ctx);
             // yep, retarded
-            try ctx.memmove(self.regs.get(args.arg1), self.regs.get(args.arg0), args.arg2);
+            try ctx.memmove(@truncate(self.regs.get(args.arg1)), @truncate(self.regs.get(args.arg0)), args.arg2);
         },
         .brc => {
             const args = try self.readArgs(.brc, ctx);
@@ -208,13 +208,13 @@ pub fn run(self: *Vm, ctx: anytype) !isa.Op {
         },
         inline .jmp, .jmp16 => |op| {
             const args = try self.readArgs(op, ctx);
-            self.ip +%= toUnsigned(64, args.arg0) -% isa.instrSize(op);
+            self.ip +%= @as(usize, @truncate(toUnsigned(64, args.arg0))) -% isa.instrSize(op);
         },
         inline .jal, .jala => |op| {
             const args = try self.readArgs(op, ctx);
             self.writeReg(args.arg0, self.ip);
             self.ip = (if (op == .jal) self.ip -% isa.instrSize(op) else 0);
-            self.ip +%= self.regs.get(args.arg1) +% toUnsigned(64, args.arg2);
+            self.ip +%= @as(usize, @truncate(self.regs.get(args.arg1))) +% @as(usize, @truncate(toUnsigned(64, args.arg2)));
         },
         inline .jltu, .jgtu, .jlts, .jgts, .jeq, .jne => |op| {
             const args = try self.readArgs(op, ctx);
@@ -229,7 +229,7 @@ pub fn run(self: *Vm, ctx: anytype) !isa.Op {
                 .jne => lhs != rhs,
                 else => @compileError("ke"),
             }) {
-                self.ip +%= toUnsigned(64, args.arg2) -% isa.instrSize(op);
+                self.ip +%= @as(usize, @truncate(toUnsigned(64, args.arg2))) -% isa.instrSize(op);
             }
         },
         inline .fadd32, .fadd64 => |op| try self.fbinOp(.fadd32, op, ctx),

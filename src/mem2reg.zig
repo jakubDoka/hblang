@@ -141,11 +141,11 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                 // handle joins
                 if (child_preds == 2 and child.kind != .TrapRegion and child.kind != .Return) {
                     if (!(child.kind == .Region or child.kind == .Loop)) {
-                        std.debug.panic("{}\n", .{child});
+                        root.panic("{}\n", .{child});
                     }
                     // eider we arrived from the back branch or the other side of the split
                     if (states[child.schedule].Join) |s| {
-                        if (s.ctrl != child) std.debug.panic("{} {} {} {}\n", .{ s.ctrl, s.ctrl.schedule, child, child.schedule });
+                        if (s.ctrl != child) root.panic("{} {} {} {}\n", .{ s.ctrl, s.ctrl.schedule, child, child.schedule });
                         for (s.items, locals, 0..) |lhs, rhsm, i| {
                             if (lhs == null) continue;
                             if (lhs.? == .Node and lhs.?.Node.isLazyPhi(s.ctrl)) {

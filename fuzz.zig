@@ -45,7 +45,7 @@ pub fn fuzzRun(
     }
 
     const main_fn, _ = ast.findDecl(ast.items, "main", gpa) orelse return error.NoMain;
-    const fn_ast = ast.exprs.get(main_fn).BinOp.rhs;
+    const fn_ast = ast.exprs.getTyped(.BinOp, main_fn).?.rhs;
 
     var types = Types.init(gpa, asts, output);
     defer types.deinit();

@@ -54,7 +54,6 @@ pub const Lexeme = enum(u16) {
     @"=" = '=',
     @">" = '>',
     @"?" = '?',
-    @"@" = '@',
     @"%" = '%',
     @"#" = '#',
     @"[" = '[',
@@ -292,7 +291,7 @@ pub fn peekStr(source: [:0]const u8, cursor: u32) []const u8 {
 }
 
 fn isKeyword(name: []const u8) bool {
-    return name[0] == '@' or name[0] == '$' or std.ascii.isLower(name[0]) or name[0] == '_';
+    return name[0] == '@' or (name[0] == '$' and name.len != 1) or std.ascii.isLower(name[0]) or name[0] == '_';
 }
 
 const keyword_map = b: {
@@ -353,7 +352,7 @@ pub fn next(self: *Lexer) Token {
             '=' => continue :state .equal,
             '<', '>' => continue :state .angle_bracket,
             ':', '+', '-', '*', '%', '|', '^', '&', '!' => continue :state .op_equal,
-            else => |c| {
+            '#', '\'', '(', ')', ',', ';', '?', '[', '\\', ']', '`', '{', '}', '~' => |c| {
                 self.cursor += 1;
                 break :state @enumFromInt(c);
             },
@@ -364,9 +363,10 @@ pub fn next(self: *Lexer) Token {
                 'a'...'z', 'A'...'Z', '0'...'9', '_', 128...255 => continue :state .ident,
                 else => {
                     if (keyword_map.get(self.source[pos..self.cursor])) |k| break :state k;
-                    const c = self.source[pos];
-                    if (c == '$' or c == '@') break :state @enumFromInt(c);
-                    break :state .Ident;
+                    switch (self.source[pos]) {
+                        '$', '@' => |c| break :state @enumFromInt(c),
+                        else => break :state .Ident,
+                    }
                 },
             }
         },
@@ -551,135 +551,6 @@ pub fn next(self: *Lexer) Token {
     };
 
     return Token.init(pos, self.cursor, kind);
-}
-
-pub fn next2(self: *Lexer) Token {
-    while (true) {
-        const pos = self.cursor;
-        self.cursor += 1;
-        const kind: Lexeme = switch (self.source[pos]) {
-            0 => b: {
-                self.cursor -= 1;
-                break :b .Eof;
-            },
-            1...32, 127 => continue,
-            '$', '@', 'a'...'z', 'A'...'Z', '_', 128...255 => |c| b: {
-                while (true) switch (self.source[self.cursor]) {
-                    'a'...'z', 'A'...'Z', '0'...'9', '_', 128...255 => self.cursor += 1,
-                    else => break,
-                };
-
-                if (keyword_map.get(self.source[pos..self.cursor])) |k| break :b k;
-
-                if (c == '$' or c == '@') break :b @enumFromInt(c);
-                break :b .Ident;
-            },
-            '0'...'9' => |c| b: {
-                if (c == '0' and self.advanceIf('x')) {
-                    while (true) switch (self.source[self.cursor]) {
-                        '0'...'9', 'a'...'f', 'A'...'F' => self.cursor += 1,
-                        else => break,
-                    };
-                    break :b .HexInteger;
-                } else if (c == '0' and self.advanceIf('o')) {
-                    while (true) switch (self.source[self.cursor]) {
-                        '0'...'7' => self.cursor += 1,
-                        else => break,
-                    };
-                    break :b .OctInteger;
-                } else if (c == '0' and self.advanceIf('b')) {
-                    while (true) switch (self.source[self.cursor]) {
-                        '0'...'1' => self.cursor += 1,
-                        else => break,
-                    };
-                    break :b .BinInteger;
-                } else {
-                    while (true) switch (self.source[self.cursor]) {
-                        '0'...'9' => self.cursor += 1,
-                        else => break,
-                    };
-
-                    if (!self.advanceIf('.')) {
-                        break :b .DecInteger;
-                    }
-
-                    if (self.advanceIf('.')) {
-                        self.cursor -= 2;
-                        break :b .DecInteger;
-                    }
-
-                    while (true) switch (self.source[self.cursor]) {
-                        '0'...'9' => self.cursor += 1,
-                        else => break,
-                    };
-
-                    break :b .Float;
-                }
-            },
-            '"' => b: {
-                while (true) switch (self.source[self.cursor]) {
-                    '"' => {
-                        self.cursor += 1;
-                        break;
-                    },
-                    '\\' => self.cursor = @min(self.cursor + 2, self.source.len),
-                    0 => break :b .@"unterminated string",
-                    else => self.cursor += 1,
-                };
-
-                break :b .@"\"";
-            },
-            '/' => |c| if (self.advanceIf('*')) ml: {
-                var nesting: u8 = 1;
-                while (true) switch (self.source[self.cursor]) {
-                    '/' => {
-                        self.cursor += 1;
-                        if (self.advanceIf('*')) {
-                            nesting += 1;
-                        }
-                    },
-                    '*' => {
-                        self.cursor += 1;
-                        if (self.advanceIf('/')) {
-                            nesting -= 1;
-                            if (nesting == 0) break;
-                        }
-                    },
-                    0 => break,
-                    else => self.cursor += 1,
-                };
-                break :ml .Comment;
-            } else if (self.advanceIf('/')) l: {
-                while (true) {
-                    const ch = self.source[self.cursor];
-                    if (ch == '\n' or ch == 0) break;
-                    self.cursor += 1;
-                }
-                break :l .Comment;
-            } else if (self.advanceIf('=')) @enumFromInt(c + 128) else @enumFromInt(c),
-            '.' => if (self.advanceIf('{'))
-                .@".{"
-            else if (self.advanceIf('('))
-                .@".("
-            else if (self.advanceIf('.'))
-                .@".."
-            else if (self.advanceIf('['))
-                .@".["
-            else
-                .@".",
-            '<', '>' => |c| @enumFromInt(if (self.advanceIf(c))
-                c - 10 + if (self.advanceIf('=')) @as(u8, 128) else 0
-            else if (self.advanceIf('=')) c + 128 else c),
-            ':', '+', '-', '*', '%', '|', '^', '&', '=', '!' => |c| if (self.advanceIf('>'))
-                .@"=>"
-            else
-                @enumFromInt(if (self.advanceIf('=')) c + 128 else c),
-            else => |c| std.meta.intToEnum(Lexeme, c) catch std.debug.panic("{c}", .{c}),
-        };
-        return Token.init(pos, self.cursor, kind);
-    }
-
-    return Token.init(self.cursor, self.cursor, .Eof);
 }
 
 inline fn advance(self: *Lexer) u8 {

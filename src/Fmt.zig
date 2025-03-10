@@ -107,14 +107,14 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
         },
         .Defer => |d| {
             try self.buf.appendSlice("defer ");
-            try self.fmtExpr(d);
+            try self.fmtExpr(d.*);
         },
         .Unwrap => |u| {
-            try self.fmtExprPrec(u, 0);
+            try self.fmtExprPrec(u.*, 0);
             try self.buf.appendSlice(".?");
         },
         .Deref => |u| {
-            try self.fmtExprPrec(u, 0);
+            try self.fmtExprPrec(u.*, 0);
             try self.buf.appendSlice(".*");
         },
         .Field => |f| {
@@ -182,10 +182,10 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             if (prec < unprec) try self.buf.appendSlice(")");
         },
         .BinOp => |co| {
-            var o = co;
-            if (o.op == .@"=" and self.ast.exprs.get(o.rhs) == .BinOp and self.ast.exprs.get(o.rhs).BinOp.lhs == o.lhs) {
-                o.op = self.ast.exprs.get(o.rhs).BinOp.op.toAssignment();
-                o.rhs = self.ast.exprs.get(o.rhs).BinOp.rhs;
+            var o = co.*;
+            if (o.op == .@"=" and o.rhs.tag() == .BinOp and self.ast.exprs.getTyped(.BinOp, o.rhs).?.lhs == o.lhs) {
+                o.op = self.ast.exprs.getTyped(.BinOp, o.rhs).?.op.toAssignment();
+                o.rhs = self.ast.exprs.getTyped(.BinOp, o.rhs).?.rhs;
             }
             if (prec < o.op.precedence()) try self.buf.appendSlice("(");
             try self.fmtExprPrec(o.lhs, o.op.precedence());
@@ -193,7 +193,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             if (o.op != .@":") try self.buf.appendSlice(" ");
             try self.buf.appendSlice(o.op.repr());
             try self.buf.appendSlice(" ");
-            if (o.rhs.tag() == .BinOp and self.ast.exprs.get(o.rhs).BinOp.op.precedence() == o.op.precedence()) {
+            if (o.rhs.tag() == .BinOp and self.ast.exprs.getTyped(.BinOp, o.rhs).?.op.precedence() == o.op.precedence()) {
                 try self.buf.appendSlice("(");
                 try self.fmtExprPrec(o.rhs, 255);
                 try self.buf.appendSlice(")");

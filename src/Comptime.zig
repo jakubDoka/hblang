@@ -204,13 +204,13 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
         .tx => break,
         .eca => {
             const InterruptFrame = extern struct {
-                ip: u64,
-                fuel: u64,
+                ip: usize,
+                fuel: usize,
             };
 
             begin_interrup: {
                 const stack_ptr = self.vm.regs.get(.stack_addr) - @sizeOf(InterruptFrame);
-                vm_ctx.memory[stack_ptr..][0..@sizeOf(InterruptFrame)].* =
+                vm_ctx.memory[@intCast(stack_ptr)..][0..@sizeOf(InterruptFrame)].* =
                     @bitCast(InterruptFrame{ .ip = self.vm.ip, .fuel = self.vm.fuel });
                 self.vm.regs.set(.stack_addr, stack_ptr);
                 break :begin_interrup;
@@ -218,7 +218,7 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
 
             defer end_interrupt: {
                 const stack_ptr = self.vm.regs.get(.stack_addr);
-                const frame: InterruptFrame = @bitCast(vm_ctx.memory[stack_ptr..][0..@sizeOf(InterruptFrame)].*);
+                const frame: InterruptFrame = @bitCast(vm_ctx.memory[@intCast(stack_ptr)..][0..@sizeOf(InterruptFrame)].*);
                 self.vm.ip = frame.ip;
                 self.vm.fuel = frame.fuel;
                 self.vm.regs.set(.stack_addr, stack_ptr + @sizeOf(InterruptFrame));
@@ -254,7 +254,7 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
         else => unreachable,
     };
 
-    @memcpy(return_loc, self.comptime_code.out.items[stack_end - return_loc.len .. stack_end]);
+    @memcpy(return_loc, self.comptime_code.out.items[@intCast(stack_end - return_loc.len)..@intCast(stack_end)]);
     self.vm.regs.set(.stack_addr, stack_end);
 }
 
@@ -396,7 +396,7 @@ pub fn evalIntConst(self: *Comptime, scope: Codegen.Scope, int_conts: Ast.Id) !i
 
 pub fn evalGlobal(self: *Comptime, name: []const u8, global: *Types.Global, ty: ?Types.Id, value: Ast.Id) !void {
     const id, const fty = try self.jitExpr(name, .{ .Perm = global.key.scope }, .{ .ty = ty }, value);
-    const data = self.getTypes().arena.allocator().alloc(u8, fty.size(self.getTypes())) catch unreachable;
+    const data = self.getTypes().arena.allocator().alloc(u8, @intCast(fty.size(self.getTypes()))) catch unreachable;
     self.runVm(name, id, data);
     global.data = data;
     global.ty = fty;

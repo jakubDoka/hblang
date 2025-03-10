@@ -138,9 +138,10 @@ fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8, unordered: bool) Error!Id 
 }
 
 fn declareExpr(self: *Parser, id: Id, unordered: bool) void {
-    const ident = switch (self.store.get(id)) {
-        .Ident => |i| i,
-        .Ctor => |c| {
+    const ident = switch (id.tag()) {
+        .Ident => self.store.getTyped(.Ident, id).?.*,
+        .Ctor => {
+            const c = self.store.getTyped(.Ctor, id).?;
             if (c.ty.tag() != .Void) self.declareExpr(c.ty, unordered);
             for (self.store.view(c.fields)) |f| self.declareExpr(f.value, unordered);
             return;
