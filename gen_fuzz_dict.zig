@@ -15,7 +15,11 @@ pub fn main() !void {
 
         inline for (@typeInfo(Lexer.Lexeme).@"enum".fields) |f| {
             if (comptime std.ascii.isUpper(f.name[0])) continue;
-            try writer.print("\"{s}\"", .{f.name});
+            if (f.name[0] == '"') {
+                try writer.print("\"\\\"\"\n", .{});
+            } else {
+                try writer.print("\"{s}\"\n", .{f.name});
+            }
         }
 
         break :generate_dict;

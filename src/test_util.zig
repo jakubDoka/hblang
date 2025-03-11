@@ -173,40 +173,6 @@ pub fn testBuilder(
         },
     };
 
-    var ret: u64 = 0;
-    var should_error: bool = false;
-    var times_out: bool = false;
-    var unreaches: bool = false;
-    var ecalls: []const Ast.Id = &.{};
-    if (ast.findDecl(ast.items, "expectations", func_arena.arena.allocator())) |d| {
-        const decl = ast.exprs.getTyped(.BinOp, d[0]).?.rhs;
-        const ctor = ast.exprs.getTyped(.Ctor, decl).?;
-        for (ast.exprs.view(ctor.fields)) |field| {
-            const value = ast.exprs.get(field.value);
-            const fname = ast.tokenSrc(field.pos.index);
-
-            if (std.mem.eql(u8, fname, "return_value")) {
-                ret = @bitCast(try std.fmt.parseInt(i64, ast.tokenSrc(value.Integer.pos.index), 10));
-            }
-
-            if (std.mem.eql(u8, fname, "should_error")) {
-                should_error = value.Bool.value;
-            }
-
-            if (std.mem.eql(u8, fname, "times_out")) {
-                times_out = value.Bool.value;
-            }
-
-            if (std.mem.eql(u8, fname, "unreaches")) {
-                unreaches = value.Bool.value;
-            }
-
-            if (std.mem.eql(u8, fname, "ecalls")) {
-                ecalls = ast.exprs.view(value.Tupl.fields);
-            }
-        }
-    }
-
     var out = std.ArrayListUnmanaged(u8).empty;
     var code_len: usize = 0;
     defer out.deinit(gpa);
@@ -220,7 +186,7 @@ pub fn testBuilder(
     try runVm(
         &ast,
         func_arena.arena.allocator(),
-        cg.errored,
+        errored,
         out.items,
         code_len,
         if (verbose) output else std.io.null_writer.any(),

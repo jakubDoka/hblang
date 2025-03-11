@@ -332,7 +332,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             if (!ty.isInteger()) ty = .uint;
             const shift: u8 = if (e.base == 10) 0 else 2;
             const parsed = std.fmt.parseInt(u64, ast.tokenSrc(e.pos.index)[shift..], e.base) catch |err| switch (err) {
-                error.InvalidCharacter => unreachable,
+                error.InvalidCharacter => return self.report(expr, "invalid integer literal", .{}),
                 error.Overflow => return self.report(expr, "number does not fit into 64 bits", .{}),
             };
             return .mkv(ty, self.bl.addIntImm(self.abiCata(ty).ByValue, @bitCast(parsed)));
@@ -343,12 +343,12 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             if (ty == .f32) {
                 const parsed = std.fmt.parseFloat(f32, ast.tokenSrc(e.index)) catch |err| switch (err) {
-                    error.InvalidCharacter => unreachable,
+                    error.InvalidCharacter => root.panic("{s}", .{ast.tokenSrc(e.index)}),
                 };
                 return .mkv(ty, self.bl.addFlt32Imm(parsed));
             } else {
                 const parsed = std.fmt.parseFloat(f64, ast.tokenSrc(e.index)) catch |err| switch (err) {
-                    error.InvalidCharacter => unreachable,
+                    error.InvalidCharacter => root.panic("{s}", .{ast.tokenSrc(e.index)}),
                 };
                 return .mkv(ty, self.bl.addFlt64Imm(parsed));
             }

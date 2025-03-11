@@ -202,7 +202,6 @@ main(Next = main.Next).next:
          cp $32, $1
        li64 $33, 0
          ld $34, $32, 8, 8
-     addi64 $35, $254, 2
         jne $34, $33, :17
         jal $31, $0, :main.Next(T = u8).none
          cp $32, $1
@@ -219,6 +218,7 @@ main(Next = main.Next).next:
         jal $31, $0, :main.Next(T = u8).some
          cp $33, $1
          cp $34, $2
+     addi64 $35, $254, 2
          st $33, $254, 2, 1
          st $34, $254, 3, 1
          ld $33, $32, 8, 8

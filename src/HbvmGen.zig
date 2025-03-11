@@ -9,7 +9,8 @@ global_relocs: std.ArrayListUnmanaged(GloblReloc) = .empty,
 local_relocs: std.ArrayListUnmanaged(BlockReloc) = undefined,
 ret_count: usize = undefined,
 block_offsets: []i32 = undefined,
-allocs: []u8 = undefined,
+allocs: []u16 = undefined,
+spill_base: usize = undefined,
 
 const std = @import("std");
 const root = @import("utils.zig");
@@ -23,6 +24,8 @@ const HbvmGen = @This();
 
 pub const eca = std.math.maxInt(u32);
 pub const dir = "inputs";
+pub const tmp_registers = 2;
+pub const max_alloc_regs = @intFromEnum(isa.Reg.stack_addr) - 1 - tmp_registers;
 
 pub const ExecHeader = extern struct {
     magic_number: [3]u8 = .{ 0x15, 0x91, 0xD2 },
@@ -141,9 +144,10 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     const reg_shift: u8 = if (is_tail) 12 else 31;
     for (self.allocs) |*r| r.* += reg_shift;
-    const used_registers = if (self.allocs.len == 0) 0 else std.mem.max(u8, self.allocs) -| 31;
+    const used_registers = if (self.allocs.len == 0) 0 else @min(std.mem.max(u16, self.allocs), max_alloc_regs) -| 31;
 
     const used_reg_size = @as(u16, (used_registers + @intFromBool(!is_tail))) * 8;
+    const spill_count = (std.mem.max(u16, self.allocs) -| max_alloc_regs) * 8;
 
     var local_size: i64 = 0;
     if (func.root.outputs().len > 1) {
@@ -156,7 +160,8 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         };
     }
 
-    const stack_size: i64 = used_reg_size + local_size;
+    const stack_size: i64 = used_reg_size + local_size + spill_count;
+    self.spill_base = @intCast(used_reg_size + local_size);
 
     prelude: {
         if (used_registers != 0) {
@@ -170,7 +175,8 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
             const argn = for (postorder[0].base.outputs()) |o| {
                 if (o.kind == .Arg and o.extra(.Arg).* == i) break o;
             } else continue; // is dead
-            self.emit(.cp, .{ self.reg(argn), isa.Reg.arg(i) });
+            self.emit(.cp, .{ self.outReg(argn), isa.Reg.arg(i) });
+            self.flushOutReg(argn);
         }
         break :prelude;
     }
@@ -317,15 +323,22 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             .CInt => {
                 const extra = no.extra(.CInt);
                 switch (no.data_type) {
-                    .i8 => self.emit(.li8, .{ self.reg(no), @truncate(@as(u64, @bitCast(extra.*))) }),
-                    .i16 => self.emit(.li16, .{ self.reg(no), @truncate(@as(u64, @bitCast(extra.*))) }),
-                    .i32 => self.emit(.li32, .{ self.reg(no), @truncate(@as(u64, @bitCast(extra.*))) }),
-                    .int => self.emit(.li64, .{ self.reg(no), @bitCast(extra.*) }),
+                    .i8 => self.emit(.li8, .{ self.outReg(no), @truncate(@as(u64, @bitCast(extra.*))) }),
+                    .i16 => self.emit(.li16, .{ self.outReg(no), @truncate(@as(u64, @bitCast(extra.*))) }),
+                    .i32 => self.emit(.li32, .{ self.outReg(no), @truncate(@as(u64, @bitCast(extra.*))) }),
+                    .int => self.emit(.li64, .{ self.outReg(no), @bitCast(extra.*) }),
                     else => root.panic("{}\n", .{no.data_type}),
                 }
+                self.flushOutReg(no);
             },
-            .CFlt32 => self.emit(.li32, .{ self.reg(no), @bitCast(no.extra(.CFlt32).*) }),
-            .CFlt64 => self.emit(.li64, .{ self.reg(no), @bitCast(no.extra(.CFlt64).*) }),
+            .CFlt32 => {
+                self.emit(.li32, .{ self.outReg(no), @bitCast(no.extra(.CFlt32).*) });
+                self.flushOutReg(no);
+            },
+            .CFlt64 => {
+                self.emit(.li64, .{ self.outReg(no), @bitCast(no.extra(.CFlt64).*) });
+                self.flushOutReg(no);
+            },
             .Arg => {},
             .GlobalAddr => {
                 const extra = no.extra(.GlobalAddr);
@@ -334,49 +347,53 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     .dest = extra.id,
                     .rel = self.reloc(3, .rel32),
                 }) catch unreachable;
-                self.emit(.lra, .{ self.reg(no), .null, 0 });
+                self.emit(.lra, .{ self.outReg(no), .null, 0 });
             },
             .Local => {
                 const extra = no.extra(.Local);
-                self.emit(.addi64, .{ self.reg(no), .stack_addr, extra.* });
+                self.emit(.addi64, .{ self.outReg(no), .stack_addr, extra.* });
             },
             .Load => {
                 const size: u16 = @intCast(no.data_type.size());
                 if (inps[0].?.kind == .Local) {
-                    self.emit(.ld, .{ self.reg(no), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).*)), size });
+                    self.emit(.ld, .{ self.outReg(no), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).*)), size });
                 } else {
-                    self.emit(.ld, .{ self.reg(no), self.reg(inps[0]), 0, size });
+                    self.emit(.ld, .{ self.outReg(no), self.inReg(0, inps[0]), 0, size });
                 }
+                self.flushOutReg(no);
             },
             .Ld => {
                 const size: u16 = @intCast(no.data_type.size());
                 const off = no.extra(.Ld).offset;
                 if (inps[0].?.kind == .Local) {
-                    self.emit(.ld, .{ self.reg(no), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).*)) + off, size });
+                    self.emit(.ld, .{ self.outReg(no), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).*)) + off, size });
                 } else {
-                    self.emit(.ld, .{ self.reg(no), self.reg(inps[0]), off, size });
+                    self.emit(.ld, .{ self.outReg(no), self.inReg(0, inps[0]), off, size });
                 }
+                self.flushOutReg(no);
             },
             .Store => {
                 const size: u16 = @intCast(no.data_type.size());
                 if (inps[0].?.kind == .Local) {
-                    self.emit(.st, .{ self.reg(inps[1]), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).*)), size });
+                    self.emit(.st, .{ self.outReg(inps[1]), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).*)), size });
                 } else {
-                    self.emit(.st, .{ self.reg(inps[1]), self.reg(inps[0]), 0, size });
+                    self.emit(.st, .{ self.outReg(inps[1]), self.inReg(0, inps[0]), 0, size });
                 }
+                self.flushOutReg(no);
             },
             .St => {
                 const size: u16 = @intCast(no.data_type.size());
                 const off = no.extra(.St).offset;
                 if (inps[0].?.kind == .Local) {
-                    self.emit(.st, .{ self.reg(inps[1]), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).*)) + off, size });
+                    self.emit(.st, .{ self.outReg(inps[1]), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).*)) + off, size });
                 } else {
-                    self.emit(.st, .{ self.reg(inps[1]), self.reg(inps[0]), off, size });
+                    self.emit(.st, .{ self.outReg(inps[1]), self.inReg(0, inps[0]), off, size });
                 }
+                self.flushOutReg(no);
             },
             .BlockCpy => {
                 // not a mistake, the bmc is retarded
-                self.emit(.bmc, .{ self.reg(inps[1]), self.reg(inps[0]), no.extra(.BlockCpy).size });
+                self.emit(.bmc, .{ self.inReg(0, inps[1]), self.inReg(1, inps[0]), no.extra(.BlockCpy).size });
             },
             .BinOp => {
                 const mone = std.math.maxInt(u64);
@@ -412,15 +429,15 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                         (@intFromEnum(no.data_type) - @intFromEnum(graph.DataType.i8))),
                 }
 
-                const lhs, const rhs = .{ self.reg(no.inputs()[1]), self.reg(no.inputs()[2]) };
+                const lhs, const rhs = .{ self.inReg(0, no.inputs()[1]), self.inReg(1, no.inputs()[2]) };
                 switch (extra) {
-                    .udiv, .sdiv => self.emitLow("RRRR", op, .{ self.reg(no), .null, lhs, rhs }),
-                    .umod, .smod => self.emitLow("RRRR", op, .{ .null, self.reg(no), lhs, rhs }),
-                    else => self.emitLow("RRR", op, .{ self.reg(no), lhs, rhs }),
+                    .udiv, .sdiv => self.emitLow("RRRR", op, .{ self.outReg(no), .null, lhs, rhs }),
+                    .umod, .smod => self.emitLow("RRRR", op, .{ .null, self.outReg(no), lhs, rhs }),
+                    else => self.emitLow("RRR", op, .{ self.outReg(no), lhs, rhs }),
                 }
 
                 switch (extra) {
-                    .fge, .fle => self.emit(.not, .{ self.reg(no), self.reg(no) }),
+                    .fge, .fle => self.emit(.not, .{ self.outReg(no), self.outReg(no) }),
                     else => {},
                 }
 
@@ -431,17 +448,19 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                         .ult, .slt, .uge, .sge => mone,
                         else => break :extra_comparison_instrs,
                     };
-                    self.emit(.cmpui, .{ self.reg(no), self.reg(no), compare_to });
+                    self.emit(.cmpui, .{ self.outReg(no), self.outReg(no), compare_to });
                     switch (extra) {
                         .eq, .ugt, .sgt, .ult, .slt => {
-                            self.emit(.not, .{ self.reg(no), self.reg(no) });
+                            self.emit(.not, .{ self.outReg(no), self.outReg(no) });
                         },
                         .ne, .uge, .sge, .ule, .sle => {
-                            self.emit(.andi, .{ self.reg(no), self.reg(no), 1 });
+                            self.emit(.andi, .{ self.outReg(no), self.outReg(no), 1 });
                         },
                         else => {},
                     }
                 }
+
+                self.flushOutReg(no);
             },
             .UnOp => {
                 const extra = no.extra(.UnOp);
@@ -449,47 +468,48 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     .sext => {
                         const op: isa.Op = @enumFromInt(@intFromEnum(isa.Op.sxt8) +
                             (@intFromEnum(inps[0].?.data_type) - @intFromEnum(graph.DataType.i8)));
-                        self.emitLow("RR", op, .{ self.reg(no), self.reg(inps[0]) });
+                        self.emitLow("RR", op, .{ self.outReg(no), self.inReg(0, inps[0]) });
                     },
                     .uext => {
                         const mask = (@as(u64, 1) << @intCast(inps[0].?.data_type.size() * 8)) - 1;
-                        self.emit(.andi, .{ self.reg(no), self.reg(inps[0]), mask });
+                        self.emit(.andi, .{ self.outReg(no), self.inReg(0, inps[0]), mask });
                     },
                     // TODO: idealize to nothing
-                    .ired => self.emit(.cp, .{ self.reg(no), self.reg(inps[0]) }),
-                    .ineg => self.emit(.neg, .{ self.reg(no), self.reg(inps[0]) }),
+                    .ired => self.emit(.cp, .{ self.outReg(no), self.inReg(0, inps[0]) }),
+                    .ineg => self.emit(.neg, .{ self.outReg(no), self.inReg(0, inps[0]) }),
                     .fneg => if (no.data_type == .f32) {
-                        self.emit(.fsub32, .{ self.reg(no), .null, self.reg(inps[0]) });
+                        self.emit(.fsub32, .{ self.outReg(no), .null, self.inReg(0, inps[0]) });
                     } else {
-                        self.emit(.fsub64, .{ self.reg(no), .null, self.reg(inps[0]) });
+                        self.emit(.fsub64, .{ self.outReg(no), .null, self.inReg(0, inps[0]) });
                     },
-                    .not => self.emit(.not, .{ self.reg(no), self.reg(inps[0]) }),
-                    .bnot => self.emit(.xori, .{ self.reg(no), self.reg(inps[0]), std.math.maxInt(u64) }),
+                    .not => self.emit(.not, .{ self.outReg(no), self.inReg(0, inps[0]) }),
+                    .bnot => self.emit(.xori, .{ self.outReg(no), self.inReg(0, inps[0]), std.math.maxInt(u64) }),
                     .fti => if (inps[0].?.data_type == .f32) {
-                        self.emit(.fti32, .{ self.reg(no), self.reg(inps[0]), 0 });
+                        self.emit(.fti32, .{ self.outReg(no), self.inReg(0, inps[0]), 0 });
                     } else {
                         std.debug.assert(inps[0].?.data_type == .f64);
-                        self.emit(.fti64, .{ self.reg(no), self.reg(inps[0]), 0 });
+                        self.emit(.fti64, .{ self.outReg(no), self.inReg(0, inps[0]), 0 });
                     },
-                    .itf32 => self.emit(.itf32, .{ self.reg(no), self.reg(inps[0]) }),
-                    .itf64 => self.emit(.itf64, .{ self.reg(no), self.reg(inps[0]) }),
+                    .itf32 => self.emit(.itf32, .{ self.outReg(no), self.inReg(0, inps[0]) }),
+                    .itf64 => self.emit(.itf64, .{ self.outReg(no), self.inReg(0, inps[0]) }),
                     .fcst => if (no.data_type == .f32) {
-                        self.emit(.fc64t32, .{ self.reg(no), self.reg(inps[0]), 0 });
+                        self.emit(.fc64t32, .{ self.outReg(no), self.inReg(0, inps[0]), 0 });
                     } else {
                         std.debug.assert(no.data_type == .f64);
-                        self.emit(.fc32t64, .{ self.reg(no), self.reg(inps[0]) });
+                        self.emit(.fc32t64, .{ self.outReg(no), self.inReg(0, inps[0]) });
                     },
                 }
+                self.flushOutReg(no);
             },
             .ImmBinOp => {
-                const alloc = self.reg(no);
+                const alloc = self.outReg(no);
                 const extra = no.extra(.ImmBinOp);
 
                 if (extra.op == .ori or extra.op == .andi or extra.op == .xori) {
                     self.emitLow(
                         "RRD",
                         extra.op,
-                        .{ alloc, self.reg(inps[0]), @as(u64, @bitCast(extra.imm)) },
+                        .{ alloc, self.inReg(0, inps[0]), @as(u64, @bitCast(extra.imm)) },
                     );
                 } else {
                     const chars = "BHWD";
@@ -500,12 +520,13 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                             self.emitLow(
                                 "RR" ++ chars[idx..][0..1],
                                 @enumFromInt(@intFromEnum(extra.op) + idx),
-                                .{ alloc, self.reg(inps[0]), @as(types[idx], @truncate(@as(u64, @bitCast(extra.imm)))) },
+                                .{ alloc, self.inReg(0, inps[0]), @as(types[idx], @truncate(@as(u64, @bitCast(extra.imm)))) },
                             );
                         },
                         else => unreachable,
                     }
                 }
+                self.flushOutReg(no);
             },
             .IfOp => {
                 const extra = no.extra(.IfOp);
@@ -513,19 +534,19 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     .dest_block = no.outputs()[@intFromBool(!extra.swapped)].schedule,
                     .rel = self.reloc(3, .rel16),
                 });
-                self.emitLow("RRP", extra.op, .{ self.reg(inps[0]), self.reg(inps[1]), 0 });
+                self.emitLow("RRP", extra.op, .{ self.inReg(0, inps[0]), self.inReg(1, inps[1]), 0 });
             },
             .If => {
                 self.local_relocs.appendAssumeCapacity(.{
                     .dest_block = no.outputs()[1].schedule,
                     .rel = self.reloc(3, .rel16),
                 });
-                self.emit(.jeq, .{ self.reg(inps[0]), .null, 0 });
+                self.emit(.jeq, .{ self.inReg(0, inps[0]), .null, 0 });
             },
             .Call => {
                 const extra = no.extra(.Call);
                 for (inps, 0..) |arg, i| {
-                    self.emit(.cp, .{ isa.Reg.arg(i), self.reg(arg) });
+                    self.emit(.cp, .{ isa.Reg.arg(i), self.inReg(1, arg) });
                 }
 
                 if (extra.id == eca) {
@@ -542,7 +563,8 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             .Mem => {},
             .Ret => {
                 const idx = no.extra(.Ret).*;
-                self.emit(.cp, .{ self.reg(no), isa.Reg.ret(idx) });
+                self.emit(.cp, .{ self.outReg(no), isa.Reg.ret(idx) });
+                self.flushOutReg(no);
             },
             .Jmp => if (no.outputs()[0].kind == .Region or no.outputs()[0].kind == .Loop) {
                 const idx = std.mem.indexOfScalar(?*Func.Node, no.outputs()[0].inputs(), no).? + 1;
@@ -554,7 +576,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 for (no.outputs()[0].outputs()) |o| {
                     if (o.isDataPhi()) {
                         std.debug.assert(o.inputs()[idx].?.kind == .MachMove);
-                        const dst, const src = .{ self.reg(o), self.reg(o.inputs()[idx].?.inputs()[1]) };
+                        const dst, const src = .{ self.outReg(o), self.inRegNoLoad(0, o.inputs()[idx].?.inputs()[1]) };
                         if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
                     }
                 }
@@ -613,7 +635,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             .Return => {
                 if (Func.isDead(no.inputs()[0])) return;
                 for (inps[0..self.ret_count], 0..) |inp, i| {
-                    self.emit(.cp, .{ isa.Reg.ret(i), self.reg(inp) });
+                    self.emit(.cp, .{ isa.Reg.ret(i), self.inReg(0, inp) });
                 }
             },
             .Trap => {
@@ -631,9 +653,46 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
     }
 }
 
-fn reg(self: HbvmGen, n: ?*Func.Node) isa.Reg {
-    return @enumFromInt(self.allocs[n.?.schedule]);
+fn inReg(self: *HbvmGen, i: usize, n: ?*Func.Node) isa.Reg {
+    std.debug.assert(i < tmp_registers);
+    if (self.allocs[n.?.schedule] < max_alloc_regs) {
+        return @enumFromInt(self.allocs[n.?.schedule]);
+    } else {
+        const idx = (self.allocs[n.?.schedule] - max_alloc_regs) * 8;
+        const reg: isa.Reg = @enumFromInt(max_alloc_regs + i);
+        self.emit(.ld, .{ reg, .stack_addr, @intCast(idx + self.spill_base), 8 });
+        return reg;
+    }
 }
+
+fn inRegNoLoad(self: *HbvmGen, i: usize, n: ?*Func.Node) isa.Reg {
+    std.debug.assert(i < tmp_registers);
+    if (self.allocs[n.?.schedule] < max_alloc_regs) {
+        return @enumFromInt(self.allocs[n.?.schedule]);
+    } else {
+        unreachable;
+    }
+}
+
+fn outReg(self: HbvmGen, n: ?*Func.Node) isa.Reg {
+    if (self.allocs[n.?.schedule] < max_alloc_regs) {
+        return @enumFromInt(self.allocs[n.?.schedule]);
+    } else {
+        return @enumFromInt(max_alloc_regs);
+    }
+}
+
+fn flushOutReg(self: *HbvmGen, n: ?*Func.Node) void {
+    if (self.allocs[n.?.schedule] < max_alloc_regs) {} else {
+        const idx = (self.allocs[n.?.schedule] - max_alloc_regs) * 8;
+        const reg: isa.Reg = @enumFromInt(max_alloc_regs);
+        self.emit(.st, .{ reg, .stack_addr, @intCast(idx + self.spill_base), 8 });
+    }
+}
+
+//fn reg(self: HbvmGen, n: ?*Func.Node) isa.Reg {
+//    return @enumFromInt(self.allocs[n.?.schedule]);
+//}
 
 fn emit(self: *HbvmGen, comptime op: isa.Op, args: isa.TupleOf(isa.ArgsOf(op))) void {
     self.emitLow(isa.spec[@intFromEnum(op)][1], op, args);

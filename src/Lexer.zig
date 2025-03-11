@@ -364,7 +364,7 @@ pub fn next(self: *Lexer) Token {
                 else => {
                     if (keyword_map.get(self.source[pos..self.cursor])) |k| break :state k;
                     switch (self.source[pos]) {
-                        '$', '@' => |c| break :state @enumFromInt(c),
+                        '$' => |c| break :state @enumFromInt(c),
                         else => break :state .Ident,
                     }
                 },
@@ -532,12 +532,8 @@ pub fn next(self: *Lexer) Token {
             }
         },
         .dec_dot => {
-            self.cursor += 1;
-            switch (self.source[self.cursor]) {
-                '.' => {
-                    self.cursor -= 1;
-                    break :state .DecInteger;
-                },
+            switch (self.source[self.cursor + 1]) {
+                '.' => break :state .DecInteger,
                 else => continue :state .float,
             }
         },

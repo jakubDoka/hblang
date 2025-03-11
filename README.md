@@ -1414,6 +1414,29 @@ main := fn(): uint {
 }
 ```
 
+#### slices 3
+```hb
+reverse := fn(slice: []u8): []u8 {
+    if slice.len == 0 return slice
+    j := slice.len - 1
+    i := 0
+    temp: u8 = 0
+    loop if i < j {
+        temp = slice[i]
+        slice[i] = slice[j]
+        slice[j] = temp
+        i += 1
+        j -= 1
+    } else return slice
+}
+
+main := fn(): uint {
+    arr := u8.[1, 2, 3]
+    _ = reverse(arr[..])
+    return arr[0] - arr[1] - arr[2]
+}
+```
+
 #### nullable types 1
 ```hb
 expectations := .{

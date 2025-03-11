@@ -2,7 +2,7 @@ const std = @import("std");
 const root = @import("utils.zig");
 const graph = @import("graph.zig");
 
-pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u8 {
+pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
     const Fn = graph.Func(Mach);
 
     const Set = std.DynamicBitSetUnmanaged;
@@ -140,14 +140,14 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u8 {
         }
     }
 
-    const colors = func.arena.allocator().alloc(u8, func.instr_count) catch unreachable;
+    const colors = func.arena.allocator().alloc(u16, func.instr_count) catch unreachable;
     @memset(colors, 0);
     for (interference_table, colors, 0..) |r, *c, j| {
-        var selection_set: usize = 0;
+        var selection_set: u256 = 0;
         var iter = r.iterator(.{});
         while (iter.next()) |e| if (j != e) {
             if (colors[e] != 0) {
-                selection_set |= @as(usize, 1) << @intCast(colors[e] - 1);
+                selection_set |= @as(u256, 1) << @intCast(colors[e] - 1);
             }
         };
         c.* = @ctz(~selection_set) + 1;

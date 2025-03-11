@@ -319,9 +319,9 @@ pub fn GcmMixin(comptime MachNode: type) type {
                             }
 
                             for (def.outputs()) |out| {
-                                if (out.isLoad() and late_scheds[out.id] == null and !visited.isSet(def.id)) {
-                                    visited.set(def.id);
-                                    work_list.append(def) catch unreachable;
+                                if (out.isLoad() and late_scheds[out.id] == null and !visited.isSet(out.id)) {
+                                    visited.set(out.id);
+                                    work_list.append(out) catch unreachable;
                                 }
                             }
                         }

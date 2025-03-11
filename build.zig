@@ -85,6 +85,7 @@ pub fn build(b: *std.Build) !void {
             .single_threaded = true,
             .target = b.graph.host,
             .optimize = optimize,
+            .strip = false,
         });
         fuzz.pie = true;
         fuzz.want_lto = true;
