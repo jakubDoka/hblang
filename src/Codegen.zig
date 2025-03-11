@@ -885,12 +885,12 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         if (slice_ty.len) |l| {
                             return .mkv(.uint, self.bl.addIntImm(.int, @intCast(l)));
                         } else {
-                            return .mkv(.uint, self.bl.addFieldLoad(base.id.Ptr, Types.Slice.len_offset, .int));
+                            return .mkp(.uint, self.bl.addFieldOffset(base.id.Ptr, Types.Slice.len_offset));
                         }
                     } else if (std.mem.eql(u8, fname, "ptr")) {
                         const ptr_ty = self.types.makePtr(slice_ty.elem);
                         if (slice_ty.len == null) {
-                            return .mkv(ptr_ty, self.bl.addFieldLoad(base.id.Ptr, Types.Slice.ptr_offset, .int));
+                            return .mkp(ptr_ty, self.bl.addFieldOffset(base.id.Ptr, Types.Slice.ptr_offset));
                         } else {
                             return .mkv(ptr_ty, base.id.Ptr);
                         }
