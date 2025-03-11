@@ -1168,7 +1168,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
                 _ = try self.emitTyped(ctx, .void, final_branch);
             } else {
-                var if_stack = std.ArrayListUnmanaged(Builder.If).initBuffer(tmp.arena.alloc(Builder.If, e.arms.len() - 1));
+                var if_stack = std.ArrayListUnmanaged(Builder.If).initBuffer(tmp.arena.alloc(Builder.If, e.arms.len()));
 
                 var unreachable_count: usize = 0;
                 for (ast.exprs.view(e.arms), 0..) |a, i| {
@@ -1812,7 +1812,6 @@ pub fn instantiateTemplate(
 
     const ret = try self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = &scope }) }, tmpl_ast.ret);
 
-    // TODO: the comptime_args + captures are continuous, we could remove the template from the scope tree in that case
     const slot, const alloc = self.types.intern(.Func, .{
         .scope = typ,
         .file = tmpl.key.file,

@@ -1176,6 +1176,31 @@ main := fn(): uint {
 }
 ```
 
+#### match 3 (errors)
+```hb
+expectations := .{
+    should_error: true,
+}
+
+main := fn(): void {
+    match enum{.a; .b}.a {
+    }
+
+    match enum{.a; .b}.a {
+        .a => {
+        },
+    }
+
+    $match enum{.a; .b}.a {
+    }
+
+    $match enum{.a; .b}.a {
+        .b => {
+        },
+    }
+}
+```
+
 #### defer 1
 ```hb
 main := fn(): uint {
@@ -1297,6 +1322,17 @@ expectations := .{
 
 main := fn(): uint {
     return "\t\{45}dvard\r\nඞ\0"[1]
+}
+```
+
+#### string errors
+```hb
+expectations := .{
+    should_error: true,
+}
+
+main := fn(): void {
+    _ = "\ඞ"
 }
 ```
 
