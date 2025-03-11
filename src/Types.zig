@@ -394,9 +394,9 @@ pub const Func = struct {
     pub const CompileState = enum { queued, compiled };
 
     pub fn computeAbiSize(self: Func, abi: Abi, types: *Types) struct { usize, usize, Abi.Spec } {
-        const ret_abi = abi.categorize(self.ret, types);
+        const ret_abi = abi.categorize(self.ret, types) orelse .Imaginary;
         var param_count: usize = @intFromBool(ret_abi == .ByRef);
-        for (self.args) |ty| param_count += abi.categorize(ty, types).len(false);
+        for (self.args) |ty| param_count += (abi.categorize(ty, types) orelse continue).len(false);
         const return_count: usize = ret_abi.len(true);
         return .{ param_count, return_count, ret_abi };
     }
@@ -767,10 +767,10 @@ pub const Abi = enum {
         }
     };
 
-    pub fn categorize(self: Abi, ty: Id, types: *Types) Spec {
+    pub fn categorize(self: Abi, ty: Id, types: *Types) ?Spec {
         return switch (ty.data()) {
             .Builtin => |b| .{ .ByValue = switch (b) {
-                .never, .any => .bot,
+                .never, .any => return null,
                 .void => return .Imaginary,
                 .u8, .i8, .bool => .i8,
                 .u16, .i16 => .i16,
@@ -804,8 +804,8 @@ pub const Abi = enum {
         };
     }
 
-    pub fn categorizeAbleosNullable(nullable: *Nullable, types: *Types) Spec {
-        const base_abi = Abi.ableos.categorize(nullable.inner, types);
+    pub fn categorizeAbleosNullable(nullable: *Nullable, types: *Types) ?Spec {
+        const base_abi = Abi.ableos.categorize(nullable.inner, types) orelse return null;
         if (nullable.isCompact(types)) return base_abi;
         if (base_abi == .Imaginary) return .{ .ByValue = .i8 };
         if (base_abi == .ByValue) return .{ .ByValuePair = .{
@@ -815,22 +815,22 @@ pub const Abi = enum {
         return .ByRef;
     }
 
-    pub fn categorizeAbleosSlice(slice: *Slice, types: *Types) Spec {
+    pub fn categorizeAbleosSlice(slice: *Slice, types: *Types) ?Spec {
         if (slice.len == null) return .{ .ByValuePair = .{ .types = .{ .int, .int }, .padding = 0 } };
         if (slice.len == 0) return .Imaginary;
-        const elem_abi = Abi.ableos.categorize(slice.elem, types);
+        const elem_abi = Abi.ableos.categorize(slice.elem, types) orelse return null;
         if (elem_abi == .Imaginary) return .Imaginary;
         if (slice.len == 1) return elem_abi;
         if (slice.len == 2 and elem_abi == .ByValue) return .{ .ByValuePair = .{ .types = .{elem_abi.ByValue} ** 2, .padding = 0 } };
         return .ByRef;
     }
 
-    pub fn categorizeAbleosUnion(unio: *Union, types: *Types) Spec {
+    pub fn categorizeAbleosUnion(unio: *Union, types: *Types) ?Spec {
         const fields = unio.getFields(types);
         if (fields.len == 0) return .Imaginary; // TODO: add .Impossible
-        const res = Abi.ableos.categorize(fields[0].ty, types);
+        const res = Abi.ableos.categorize(fields[0].ty, types) orelse return null;
         for (fields[1..]) |f| {
-            const fspec = Abi.ableos.categorize(f.ty, types);
+            const fspec = Abi.ableos.categorize(f.ty, types) orelse continue;
             if (!std.meta.eql(res, fspec)) return .ByRef;
         }
         return res;
@@ -840,7 +840,7 @@ pub const Abi = enum {
         var res: Spec = .Imaginary;
         var offset: u64 = 0;
         for (stru.getFields(types)) |f| {
-            const fspec = Abi.ableos.categorize(f.ty, types);
+            const fspec = Abi.ableos.categorize(f.ty, types) orelse continue;
             if (fspec == .Imaginary) continue;
             if (res == .Imaginary) {
                 res = fspec;

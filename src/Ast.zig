@@ -52,6 +52,11 @@ pub const Ctor = struct {
     fields: root.EnumSlice(CtorField),
 };
 
+pub const MatchArm = struct {
+    pat: Id,
+    body: Id,
+};
+
 pub const Expr = union(enum) {
     Void,
     Comment: Pos,
@@ -123,7 +128,7 @@ pub const Expr = union(enum) {
     Match: struct {
         pos: Pos,
         value: Id,
-        arms: Slice,
+        arms: root.EnumSlice(MatchArm),
     },
     Loop: struct {
         pos: Pos,
@@ -202,6 +207,7 @@ pub const InitOptions = struct {
     code: [:0]const u8,
     loader: Parser.Loader = .noop,
     diagnostics: std.io.AnyWriter = std.io.null_writer.any(),
+    ignore_errors: bool = false,
 };
 
 pub fn init(
@@ -236,7 +242,7 @@ pub fn init(
 
     const items = try parser.parse();
 
-    if (parser.errored and opts.diagnostics.writeFn != std.io.null_writer.any().writeFn) {
+    if (parser.errored and !opts.ignore_errors) {
         return error.ParsingFailed;
     }
 
@@ -356,7 +362,7 @@ pub fn codePointer(self: *const Ast, index: usize) CodePointer {
 pub fn lineCol(source: []const u8, index: usize) struct { usize, usize } {
     var line: usize = 0;
     var last_nline: isize = -1;
-    for (source[0..@min(@as(usize, @intCast(index)), source.len - 1)], 0..) |c, i| if (c == '\n') {
+    for (source[0..@min(@as(usize, @intCast(index)), source.len)], 0..) |c, i| if (c == '\n') {
         line += 1;
         last_nline = @intCast(i);
     };
@@ -364,7 +370,7 @@ pub fn lineCol(source: []const u8, index: usize) struct { usize, usize } {
 }
 
 pub fn pointToCode(source: []const u8, index_m: usize, writer: anytype) !void {
-    const index = @min(index_m, source.len - 1);
+    const index = @min(index_m, source.len -| 1); // might be an empty file
     const line_start = if (std.mem.lastIndexOfScalar(u8, source[0..index], '\n')) |l| l + 1 else 0;
     const line_end = if (std.mem.indexOfScalar(u8, source[index..], '\n')) |l| l + index else source.len;
     const the_line = source[line_start..line_end];

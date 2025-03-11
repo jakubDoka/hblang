@@ -256,6 +256,10 @@ fn fmtSliceLow(
                 try self.buf.appendSlice(": ");
                 try self.fmtExpr(id.value);
             }
+        } else if (@TypeOf(id) == Ast.MatchArm) {
+            try self.fmtExpr(id.pat);
+            try self.buf.appendSlice(" => ");
+            try self.fmtExpr(id.body);
         } else try self.fmtExpr(id);
         if (forced) {
             if (view.len > i and indent) {

@@ -423,7 +423,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         .match, .@"$match" => .{ .Match = .{
             .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind == .@"$match" } },
             .value = try self.parseExpr(),
-            .arms = try self.parseList(.@"{", .@",", .@"}", parseExpr),
+            .arms = try self.parseListTyped(.@"{", .@",", .@"}", Ast.MatchArm, parseMatchArm),
         } },
         .loop, .@"$loop" => .{ .Loop = .{
             .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind != .loop } },
@@ -523,8 +523,21 @@ fn parseListTyped(
     return try self.store.allocSlice(Elem, self.gpa, buf.items);
 }
 
+fn parseMatchArm(self: *Parser) Error!Ast.MatchArm {
+    const pat = try self.parseExpr();
+    _ = try self.expectAdvance(.@"=>");
+    return .{
+        .pat = pat,
+        .body = try self.parseExpr(),
+    };
+}
+
 fn parseArg(self: *Parser) Error!Ast.Arg {
+    const pos = self.cur.pos;
     const bindings = try self.parseUnitWithoutTail();
+    if (bindings.tag() != .Ident) {
+        self.report(pos, "expected ident", .{});
+    }
     _ = self.declareExpr(bindings, false);
     _ = try self.expectAdvance(.@":");
     return .{

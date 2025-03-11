@@ -143,6 +143,8 @@ pub fn testBuilder(
                 continue;
             };
 
+            std.debug.assert(!cg.errored);
+
             const fnc: *graph.Func(HbvmGen.Node) = @ptrCast(&cg.bl.func);
             if (verbose) fnc.fmtUnscheduled(output, colors);
 
@@ -299,7 +301,7 @@ pub fn runVm(
 pub fn testFmt(name: []const u8, path: []const u8, code: [:0]const u8) !void {
     const gpa = std.testing.allocator;
 
-    var ast = try Ast.init(gpa, .{ .path = path, .code = code });
+    var ast = try Ast.init(gpa, .{ .path = path, .code = code, .ignore_errors = true });
     defer ast.deinit(gpa);
 
     const ast_overhead = @as(f64, @floatFromInt(ast.exprs.store.items.len)) /

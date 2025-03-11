@@ -111,7 +111,7 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) PartialEvalResult
                 var ret_ty: graph.DataType = .int;
                 if (call.extra(.Call).id != eca) {
                     const func = types.funcs.items[call.extra(.Call).id];
-                    ret_ty = abi.categorize(func.ret, types).ByValue;
+                    ret_ty = (abi.categorize(func.ret, types) orelse return .{ .Unsupported = curr }).ByValue;
                     if (func.completion.get(.@"comptime") == .queued) {
                         self.jitFunc(func) catch return .{ .Unsupported = curr };
                         std.debug.assert(func.completion.get(.@"comptime") == .compiled);
@@ -346,6 +346,10 @@ pub fn jitExprLow(
                 .{ .id = id, .entry = true },
             );
         }
+    }
+
+    if (gen.errored) {
+        return error.Never;
     }
 
     if (!only_inference)

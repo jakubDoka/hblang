@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub inline fn panic(comptime format: []const u8, args: anytype) noreturn {
+pub fn panic(comptime format: []const u8, args: anytype) noreturn {
     if (debug) std.debug.panic(format, args) else unreachable;
 }
 

@@ -80,6 +80,7 @@ pub fn resizeLocal(_: *Builder, here: SpecificNode(.Local), to_size: u64) void {
 }
 
 pub fn addLoad(self: *Builder, addr: *BuildNode, ty: DataType) SpecificNode(.Store) {
+    //std.debug.assert(ty != .bot and ty != .top);
     const val = self.func.addNode(.Load, &.{ if (addr.kind == .Local) null else self.control(), self.memory(), addr }, .{});
     val.data_type = ty;
     return val;
@@ -146,7 +147,7 @@ pub fn addIntImm(self: *Builder, ty: DataType, value: i64) SpecificNode(.CInt) {
     std.debug.assert(ty != .bot);
     const val = self.func.addNode(.CInt, &.{null}, value);
     val.data_type = val.data_type.meet(ty);
-    std.debug.assert(val.data_type != .bot);
+    std.debug.assert(val.data_type.isInt());
     return val;
 }
 

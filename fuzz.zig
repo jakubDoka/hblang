@@ -21,7 +21,7 @@ fn fuzz() callconv(.c) void {
     var arena = root.Arena.init(1024 * 1024 * 4);
     const input = std.io.getStdIn().readToEndAlloc(arena.allocator(), 1024 * 1024) catch unreachable;
     fuzzRun("fuzz", input, arena.allocator(), std.io.null_writer.any()) catch |err| switch (err) {
-        error.UnexpectedToken, error.ParsingFailed, error.NoMain, error.Never => {},
+        error.UnexpectedToken, error.ParsingFailed, error.Never => {},
         else => @panic(""),
     };
 }
@@ -37,15 +37,11 @@ pub fn fuzzRun(
     output: std.io.AnyWriter,
 ) !void {
     const asts = try tests.parseExample(gpa, name, code, output);
-    const ast = asts[0];
 
     defer {
         for (asts) |*a| a.deinit(gpa);
         gpa.free(asts);
     }
-
-    const main_fn, _ = ast.findDecl(ast.items, "main", gpa) orelse return error.NoMain;
-    const fn_ast = ast.exprs.getTyped(.BinOp, main_fn).?.rhs;
 
     var types = Types.init(gpa, asts, output);
     defer types.deinit();
@@ -56,10 +52,8 @@ pub fn fuzzRun(
     var cg = Codegen.init(gpa, func_arena.arena, &types, .runtime);
     defer cg.deinit();
 
-    cg.parent_scope = .{ .Perm = types.getScope(.root) };
-    const entry_ty = (try cg.resolveTy("main", fn_ast));
-    if (entry_ty.data() != .Func) return error.Never;
-    const entry = entry_ty.data().Func;
+    const entry = try cg.getEntry(.root, "main");
+
     cg.work_list.appendAssumeCapacity(.{ .Func = entry });
 
     var hbgen = HbvmGen{ .gpa = gpa };

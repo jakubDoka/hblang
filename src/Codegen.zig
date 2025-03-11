@@ -204,15 +204,18 @@ pub fn nextTask(self: *Codegen) ?Task {
 }
 
 pub inline fn abiCata(self: *Codegen, ty: Types.Id) Types.Abi.Spec {
-    return self.abi.categorize(ty, self.types);
+    return self.abi.categorize(ty, self.types) orelse .Imaginary;
 }
 
 pub fn getEntry(self: *Codegen, file: Types.File, name: []const u8) !*Types.Func {
     var tmp = root.Arena.scrath(null);
     defer tmp.deinit();
 
+    self.ast = self.types.getFile(file);
     _ = self.beginBuilder(tmp.arena, .never, 0, 0);
     defer self.bl.func.reset();
+    self.parent_scope = .{ .Perm = self.types.getScope(file) };
+    self.name = "";
 
     var entry_vl = try self.lookupScopeItem(.init(0), self.types.getScope(file), name);
     const entry_ty = try self.unwrapTyConst(Ast.Pos.init(0), &entry_vl);
@@ -396,7 +399,13 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             const abi = self.abiCata(ty);
             if (abi == .ByValue) {
-                return .mkv(ty, self.bl.addIntImm(abi.ByValue, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa))));
+                if (abi.ByValue == .f32) {
+                    return .mkv(ty, self.bl.addFlt32Imm(@bitCast(@as(u32, 0xaaaaaaaa))));
+                } else if (abi.ByValue == .f64) {
+                    return .mkv(ty, self.bl.addFlt64Imm(@bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa))));
+                } else {
+                    return .mkv(ty, self.bl.addIntImm(abi.ByValue, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa))));
+                }
             } else {
                 const loc = ctx.loc orelse self.bl.addLocal(ty.size(self.types));
                 return .mkp(ty, loc);
@@ -1066,40 +1075,35 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 slots: []ArmSlot,
                 ty: Types.Id,
 
-                pub fn decomposeArm(slf: *@This(), cg: *Codegen, i: usize, a: Ast.Id) !?struct { u64, Ast.Id } {
-                    const asta = cg.ast;
-
-                    const arm = asta.exprs.getTyped(.BinOp, a) orelse
-                        cg.report(a, "expected match arm `<pat> => <body>,`", .{}) catch return null;
-
-                    if (arm.lhs.tag() == .Wildcard or i == slf.iter_until) {
+                pub fn decomposeArm(slf: *@This(), cg: *Codegen, i: usize, arm: Ast.MatchArm) !?struct { u64, Ast.Id } {
+                    if (arm.pat.tag() == .Wildcard or i == slf.iter_until) {
                         if (slf.else_arm) |erm| {
                             if (i == slf.iter_until) {
                                 cg.report(erm, "useless esle match arm, all cases are covered", .{}) catch {};
                             } else {
-                                cg.report(a, "duplicate else match arm", .{}) catch {};
+                                cg.report(arm.body, "duplicate else match arm", .{}) catch {};
                                 cg.report(erm, "...previouslly matched here", .{}) catch {};
                             }
                         } else {
                             slf.iter_until += 1;
-                            slf.else_arm = arm.rhs;
+                            slf.else_arm = arm.body;
                         }
                         return null;
                     }
 
-                    var match_pat = try cg.emitTyped(.{}, slf.ty, arm.lhs);
-                    const idx = if (cg.abiCata(match_pat.ty) == .Imaginary) 0 else try cg.partialEval(arm.lhs, match_pat.getValue(cg));
+                    var match_pat = try cg.emitTyped(.{}, slf.ty, arm.pat);
+                    const idx = if (cg.abiCata(match_pat.ty) == .Imaginary) 0 else try cg.partialEval(arm.pat, match_pat.getValue(cg));
 
                     switch (slf.slots[@intCast(idx)]) {
-                        .Unmatched => slf.slots[@intCast(idx)] = .{ .Matched = a },
+                        .Unmatched => slf.slots[@intCast(idx)] = .{ .Matched = arm.body },
                         .Matched => |pos| {
-                            cg.report(a, "duplicate match arm", .{}) catch {};
+                            cg.report(arm.body, "duplicate match arm", .{}) catch {};
                             cg.report(pos, "...previouslly matched here", .{}) catch {};
                             return null;
                         },
                     }
 
-                    return .{ idx, arm.rhs };
+                    return .{ idx, arm.body };
                 }
             };
 
@@ -1114,8 +1118,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 const value_idx = if (self.abiCata(value.ty) == .Imaginary) 0 else try self.partialEval(e.value, value.getValue(self));
 
                 var matched_branch: ?Ast.Id = null;
-                for (ast.exprs.view(e.arms), 0..) |a, i| {
-                    const idx, const body = try matcher.decomposeArm(self, i, a) orelse continue;
+                for (ast.exprs.view(e.arms), 0..) |arm, i| {
+                    const idx, const body = try matcher.decomposeArm(self, i, arm) orelse continue;
 
                     if (idx == value_idx) {
                         std.debug.assert(matched_branch == null);

@@ -209,7 +209,6 @@ pub const Lexeme = enum(u16) {
     // TODO: reverse the order because this does not look like precedence
     pub fn precedence(self: Lexeme) u8 {
         return switch (self) {
-            .@"=>" => 17,
             .@":" => 16,
             .@"=", .@":=", .@"+=", .@"-=", .@"*=", .@"/=", .@"%=", .@"|=", .@"^=", .@"&=", .@"<<=", .@">>=" => 15,
             .@"|", .@"&" => 8,
