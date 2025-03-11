@@ -20,7 +20,7 @@ fn fuzz() callconv(.c) void {
     root.Arena.initScratch(1024 * 1024);
     var arena = root.Arena.init(1024 * 1024 * 4);
     const input = std.io.getStdIn().readToEndAlloc(arena.allocator(), 1024 * 1024) catch unreachable;
-    fuzzRun("fuzz", input, arena.allocator(), std.io.null_writer.any()) catch |err| switch (err) {
+    fuzzRun("fuzz", input, &arena, std.io.null_writer.any()) catch |err| switch (err) {
         error.UnexpectedToken, error.ParsingFailed, error.Never => {},
         else => @panic(""),
     };
@@ -33,15 +33,12 @@ pub fn main() void {
 pub fn fuzzRun(
     name: []const u8,
     code: []const u8,
-    gpa: std.mem.Allocator,
+    arena: *root.Arena,
     output: std.io.AnyWriter,
 ) !void {
-    const asts = try tests.parseExample(gpa, name, code, output);
+    const asts = try tests.parseExample(arena, name, code, output);
 
-    defer {
-        for (asts) |*a| a.deinit(gpa);
-        gpa.free(asts);
-    }
+    const gpa = arena.allocator();
 
     var types = Types.init(gpa, asts, output);
     defer types.deinit();

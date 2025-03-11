@@ -216,34 +216,23 @@ pub const InitOptions = struct {
 };
 
 pub fn init(
-    gpa: std.mem.Allocator,
+    arena: *root.Arena,
     opts: InitOptions,
 ) !Ast {
     var lexer = Lexer.init(opts.code, 0);
 
     var parser = Parser{
+        .arena = arena,
         .path = opts.path,
         .current = opts.current,
         .loader = opts.loader,
         .cur = lexer.next(),
         .lexer = lexer,
-        .arena = std.heap.ArenaAllocator.init(gpa),
-        .gpa = gpa,
         .diagnostics = opts.diagnostics,
     };
 
-    defer {
-        parser.arena.deinit();
-        parser.active_syms.deinit(gpa);
-        parser.captures.deinit(gpa);
-        parser.comptime_idents.deinit(gpa);
-    }
-    errdefer {
-        parser.store.deinit(gpa);
-    }
-
     const source_to_ast_ratio = 5;
-    try parser.store.store.ensureTotalCapacity(gpa, opts.code.len * source_to_ast_ratio);
+    try parser.store.store.ensureTotalCapacity(arena.allocator(), opts.code.len * source_to_ast_ratio);
 
     const items = try parser.parse();
 
@@ -255,7 +244,7 @@ pub fn init(
         .items = items,
         .path = opts.path,
         .source = opts.code,
-        .root_struct = try parser.store.alloc(parser.gpa, .Struct, .{
+        .root_struct = try parser.store.alloc(arena.allocator(), .Struct, .{
             .pos = .init(0),
             .alignment = .zeroSized(.Void),
             .fields = items,

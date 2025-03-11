@@ -87,7 +87,7 @@ pub const CompileOptions = struct {
 };
 
 pub fn compile(opts: CompileOptions) !struct {
-    arena: std.heap.ArenaAllocator,
+    arena: Arena,
     ast: []const hb.Ast,
 } {
     if (opts.help) {
@@ -104,12 +104,12 @@ pub fn compile(opts: CompileOptions) !struct {
         return error.Failed;
     }
 
-    var ast_arena = std.heap.ArenaAllocator.init(opts.gpa);
+    var ast_arena = Arena.init(1024 * 1024 * 20);
     errdefer ast_arena.deinit();
 
     if (opts.fmt_stdout) {
         const source = try std.fs.cwd().readFileAllocOptions(ast_arena.allocator(), opts.root_file, max_file_len, null, @alignOf(u8), 0);
-        const ast = try hb.Ast.init(ast_arena.allocator(), .{
+        const ast = try hb.Ast.init(&ast_arena, .{
             .path = opts.root_file,
             .code = source,
             .diagnostics = opts.diagnostics,
@@ -118,11 +118,11 @@ pub fn compile(opts: CompileOptions) !struct {
         var buf = std.ArrayList(u8).init(ast_arena.allocator());
         try ast.fmt(&buf);
 
-        try std.io.getStdOut().writeAll(buf.items);
+        try opts.output.writeAll(buf.items);
         return error.Failed;
     }
 
-    const asts, const base = try Loader.loadAll(ast_arena.allocator(), opts.path_projections, opts.root_file, opts.diagnostics) orelse {
+    const asts, const base = try Loader.loadAll(&ast_arena, opts.path_projections, opts.root_file, opts.diagnostics) orelse {
         try opts.diagnostics.print("failed due to previous errors (codegen skipped)\n", .{});
         return error.Failed;
     };
@@ -180,16 +180,16 @@ pub fn compile(opts: CompileOptions) !struct {
 
             backend.emitFunc(&codegen.bl.func, .{
                 .id = func.id,
-                .name = try hb.Types.Id.init(.{ .Func = func }).fmt(&types)
-                    .toString(syms.allocator()),
+                .name = try hb.Types.Id.init(.{ .Func = func })
+                    .fmt(&types).toString(syms.allocator()),
                 .entry = func.id == entry.id,
             });
         },
         .Global => |global| {
             backend.emitData(.{
                 .id = global.id,
-                .name = try hb.Types.Id.init(.{ .Global = global }).fmt(&types)
-                    .toString(syms.allocator()),
+                .name = try hb.Types.Id.init(.{ .Global = global })
+                    .fmt(&types).toString(syms.allocator()),
                 .value = .{ .init = global.data },
             });
         },
@@ -239,8 +239,38 @@ pub fn main() !void {
     arena.deinit();
 }
 
+pub fn makeRelative(arena: std.mem.Allocator, path: []const u8, base: []const u8) ![]const u8 {
+    if (std.mem.startsWith(u8, path, base)) return path[base.len + 1 ..];
+
+    var base_segments = std.fs.path.componentIterator(base) catch return path;
+    var path_segments = std.fs.path.componentIterator(path) catch return path;
+
+    while (true) {
+        if (std.mem.eql(
+            u8,
+            (base_segments.peekNext() orelse break).path,
+            (path_segments.peekNext() orelse break).path,
+        )) {
+            _ = base_segments.next();
+            _ = path_segments.next();
+        } else break;
+    }
+
+    const rem = path_segments.path[path_segments.end_index + 1 ..];
+    var dd_count: usize = 0;
+    while (base_segments.next() != null) dd_count += 1;
+
+    const buf = try arena.alloc(u8, dd_count * 3 + rem.len);
+    for (0..dd_count) |i| {
+        @memcpy(buf[i * 3 ..][0..3], "../");
+    }
+    @memcpy(buf[dd_count * 3 ..], rem);
+
+    return buf;
+}
+
 const Loader = struct {
-    arena: std.mem.Allocator,
+    arena: *Arena,
     base: []const u8,
     path_projections: std.StringHashMapUnmanaged([]const u8),
     files: std.ArrayListUnmanaged(hb.Ast) = .{},
@@ -249,6 +279,8 @@ const Loader = struct {
         var tmp = Arena.scrath(null);
         defer tmp.deinit();
 
+        const arena = self.arena.allocator();
+
         const base = self.base;
         const file = self.files.items[@intFromEnum(opts.from)];
         const rel_base = std.fs.path.dirname(file.path) orelse "";
@@ -256,41 +288,15 @@ const Loader = struct {
             std.fs.path.join(tmp.arena.allocator(), &.{ base, rel_base, opts.path }) catch return null;
         const path = std.fs.cwd().realpathAlloc(tmp.arena.allocator(), mangled_path) catch mangled_path;
 
-        const canon = if (std.mem.startsWith(u8, path, base)) path[base.len + 1 ..] else b: {
-            var base_segments = std.fs.path.componentIterator(base) catch break :b path;
-            var path_segments = std.fs.path.componentIterator(path) catch break :b path;
-
-            while (true) {
-                if (std.mem.eql(
-                    u8,
-                    (base_segments.peekNext() orelse break).path,
-                    (path_segments.peekNext() orelse break).path,
-                )) {
-                    _ = base_segments.next();
-                    _ = path_segments.next();
-                } else break;
-            }
-
-            const rem = path_segments.path[path_segments.end_index + 1 ..];
-            var dd_count: usize = 0;
-            while (base_segments.next() != null) dd_count += 1;
-
-            const buf = tmp.arena.alloc(u8, dd_count * 3 + rem.len);
-            for (0..dd_count) |i| {
-                @memcpy(buf[i * 3 ..][0..3], "../");
-            }
-            @memcpy(buf[dd_count * 3 ..], rem);
-
-            break :b buf;
-        };
+        const canon = makeRelative(tmp.arena.allocator(), base, path) catch return null;
 
         for (self.files.items, 0..) |fl, i| {
             if (std.mem.eql(u8, fl.path, canon)) return @enumFromInt(i);
         }
 
-        const slot = self.files.addOne(self.arena) catch return null;
-        slot.path = self.arena.dupe(u8, canon) catch return null;
-        slot.source = std.fs.cwd().readFileAllocOptions(self.arena, path, max_file_len, null, @alignOf(u8), 0) catch |err| {
+        const slot = self.files.addOne(arena) catch return null;
+        slot.path = self.arena.dupe(u8, canon);
+        slot.source = std.fs.cwd().readFileAllocOptions(arena, path, max_file_len, null, @alignOf(u8), 0) catch |err| {
             hb.Ast.report(
                 file.path,
                 file.source,
@@ -306,12 +312,12 @@ const Loader = struct {
     }
 
     fn loadAll(
-        arena: std.mem.Allocator,
+        arena: *Arena,
         path_projections: std.StringHashMapUnmanaged([]const u8),
         root: []const u8,
         diagnostics: std.io.AnyWriter,
     ) !?struct { []const hb.Ast, []const u8 } {
-        const real_root = std.fs.cwd().realpathAlloc(arena, root) catch root;
+        const real_root = std.fs.cwd().realpathAlloc(arena.allocator(), root) catch root;
 
         var self = Loader{
             .arena = arena,
@@ -319,9 +325,9 @@ const Loader = struct {
             .path_projections = path_projections,
         };
 
-        const slot = try self.files.addOne(self.arena);
+        const slot = try self.files.addOne(self.arena.allocator());
         slot.path = std.fs.path.basename(root);
-        slot.source = std.fs.cwd().readFileAllocOptions(self.arena, root, max_file_len, null, @alignOf(u8), 0) catch {
+        slot.source = std.fs.cwd().readFileAllocOptions(arena.allocator(), root, max_file_len, null, @alignOf(u8), 0) catch {
             try diagnostics.print("could not read the root file: {s}\n", .{root});
             return null;
         };
@@ -329,22 +335,23 @@ const Loader = struct {
         var failed = false;
         var i: usize = 0;
         while (i < self.files.items.len) : (i += 1) {
-            var tmp = Arena.scrath(null);
+            var tmp = Arena.scrath(arena);
             defer tmp.deinit();
 
             const file = self.files.items[i];
             const fid: hb.Types.File = @enumFromInt(i);
 
-            const ast_res = hb.Ast.init(tmp.arena.allocator(), .{
+            const ast_res = hb.Ast.init(tmp.arena, .{
                 .current = fid,
                 .path = file.path,
                 .code = file.source,
                 .loader = .init(&self),
                 .diagnostics = diagnostics,
             });
+
             if (ast_res) |ast| {
                 self.files.items[i] = ast;
-                self.files.items[i].exprs = try self.files.items[i].exprs.dupe(self.arena);
+                self.files.items[i].exprs = try self.files.items[i].exprs.dupe(self.arena.allocator());
             } else |err| {
                 switch (err) {
                     error.ParsingFailed => {

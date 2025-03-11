@@ -106,16 +106,11 @@ pub fn build(b: *std.Build) !void {
             break :fuzzing null;
         }
 
-        const run_afl = b.addSystemCommand(&.{"afl-fuzz"});
-        run_afl.addArg("-i");
-        run_afl.addDirectoryArg(cases);
-        run_afl.addArg("-o");
-        const out_dir = run_afl.addOutputDirectoryArg("findings");
-        run_afl.addArg("-x");
-        run_afl.addFileArg(dict_out);
-        run_afl.addArgs(&.{ "-V", fuzz_duration });
-        run_afl.addArg("--");
-        run_afl.addFileArg(afl_lto_out);
+        const fuzzes = b.option(usize, "jobs", "amount of cores to fuzz on") orelse try std.Thread.getCpuCount();
+
+        // this is pure crap
+        const run_whatev = b.addSystemCommand(&.{"echo"});
+        const out_dir = run_whatev.addOutputDirectoryArg("findings");
 
         const gen_finding_tests = b.addExecutable(.{
             .name = "gen_fuzz_finding_tests.zig",
@@ -125,6 +120,26 @@ pub fn build(b: *std.Build) !void {
             .use_llvm = false,
             .use_lld = false,
         });
+
+        for (0..fuzzes) |i| {
+            const run_afl = b.addSystemCommand(&.{"afl-fuzz"});
+
+            run_afl.addArg("-i");
+            run_afl.addDirectoryArg(cases);
+            run_afl.addArg("-o");
+            run_afl.addDirectoryArg(out_dir);
+            run_afl.addArg(if (i == 0) "-M" else "-S");
+            run_afl.addArg(try std.fmt.allocPrint(b.allocator, "worker{}", .{i}));
+            run_afl.addArg("-x");
+            run_afl.addFileArg(dict_out);
+            run_afl.addArgs(&.{ "-V", fuzz_duration });
+            run_afl.addArg("--");
+            run_afl.addFileArg(afl_lto_out);
+            run_afl.stdio = .{ .check = .{} };
+            run_afl.has_side_effects = true;
+
+            gen_finding_tests.step.dependOn(&run_afl.step);
+        }
 
         const run_gen_finding_tests = b.addRunArtifact(gen_finding_tests);
         run_gen_finding_tests.addArg("tests.zig");

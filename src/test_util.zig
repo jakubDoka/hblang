@@ -19,7 +19,7 @@ inline fn header(comptime name: []const u8, writer: anytype, corors: std.io.tty.
     try corors.setColor(writer, .reset);
 }
 
-pub fn parseExample(gpa: std.mem.Allocator, name: []const u8, code: []const u8, output: std.io.AnyWriter) ![]Ast {
+pub fn parseExample(arena: *root.Arena, name: []const u8, code: []const u8, output: std.io.AnyWriter) ![]Ast {
     const FileRecord = struct {
         path: []const u8,
         source: [:0]const u8,
@@ -37,7 +37,9 @@ pub fn parseExample(gpa: std.mem.Allocator, name: []const u8, code: []const u8, 
         }
     };
 
-    var files = std.ArrayList(FileRecord).init(gpa);
+    var tmp = root.Arena.scrath(arena);
+    defer tmp.deinit();
+    var files = std.ArrayList(FileRecord).init(tmp.arena.allocator());
     defer files.deinit();
 
     const signifier = "// in: ";
@@ -47,7 +49,7 @@ pub fn parseExample(gpa: std.mem.Allocator, name: []const u8, code: []const u8, 
         const next_end = if (std.mem.indexOf(u8, code[prev_end..], signifier)) |idx| prev_end + idx else code.len;
         const fr = FileRecord{
             .path = prev_name,
-            .source = gpa.dupeZ(u8, std.mem.trim(u8, code[prev_end..next_end], "\t \n")) catch unreachable,
+            .source = arena.allocator().dupeZ(u8, std.mem.trim(u8, code[prev_end..next_end], "\t \n")) catch unreachable,
         };
         try files.append(fr);
         prev_end = next_end + signifier.len;
@@ -58,11 +60,10 @@ pub fn parseExample(gpa: std.mem.Allocator, name: []const u8, code: []const u8, 
     }
 
     var loader = KnownLoader{ .files = files.items };
-    const asts = gpa.alloc(Ast, files.items.len) catch unreachable;
-    errdefer gpa.free(asts);
+    const asts = arena.alloc(Ast, files.items.len);
     for (asts, files.items, 0..) |*ast, fr, i| {
         if (std.mem.endsWith(u8, fr.path, ".hb") or i == 0) {
-            ast.* = try Ast.init(gpa, .{
+            ast.* = try Ast.init(arena, .{
                 .current = @enumFromInt(i),
                 .path = fr.path,
                 .code = fr.source,
@@ -91,16 +92,10 @@ pub fn testBuilder(
     colors: std.io.tty.Config,
     verbose: bool,
 ) !void {
-    const asts = try parseExample(gpa, name, code, output);
-    const ast = asts[0];
+    var ast_arena = root.Arena.init(1024 * 1024);
 
-    defer {
-        for (asts) |*a| {
-            gpa.free(a.source);
-            a.deinit(gpa);
-        }
-        gpa.free(asts);
-    }
+    const asts = try parseExample(&ast_arena, name, code, output);
+    const ast = asts[0];
 
     var func_arena = root.Arena.scrath(null);
     defer func_arena.deinit();
@@ -299,10 +294,12 @@ pub fn runVm(
 }
 
 pub fn testFmt(name: []const u8, path: []const u8, code: [:0]const u8) !void {
-    const gpa = std.testing.allocator;
+    var tmp = root.Arena.scrath(null);
+    defer tmp.deinit();
 
-    var ast = try Ast.init(gpa, .{ .path = path, .code = code, .ignore_errors = true });
-    defer ast.deinit(gpa);
+    const gpa = tmp.arena.allocator();
+
+    var ast = try Ast.init(tmp.arena, .{ .path = path, .code = code, .ignore_errors = true });
 
     const ast_overhead = @as(f64, @floatFromInt(ast.exprs.store.items.len)) /
         @as(f64, @floatFromInt(ast.source.len));
