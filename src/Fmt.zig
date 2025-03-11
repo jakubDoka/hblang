@@ -77,7 +77,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
 
             const forced = for (self.ast.exprs.view(s.fields)) |e| {
                 if (t == .Enum and e.tag() != .Tag) break true;
-                if (t != .Enum and (self.ast.exprs.getTyped(.BinOp, e) orelse continue).lhs.tag() != .Tag) break true;
+                if (t != .Enum and (self.ast.exprs.getTyped(.Decl, e) orelse continue).bindings.tag() != .Tag) break true;
             } else false;
             if (s.pos.flag.indented or forced) try self.buf.appendSlice(" ");
             try self.fmtSliceLow(s.pos.flag.indented or forced, forced, s.fields, .@"{", .@";", .@"}");
@@ -181,6 +181,22 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.fmtExprPrec(o.oper, unprec);
             if (prec < unprec) try self.buf.appendSlice(")");
         },
+        .Decl => |d| {
+            try self.fmtExpr(d.bindings);
+            if (d.ty.tag() != .Void) {
+                try self.buf.appendSlice(": ");
+                try self.fmtExpr(d.ty);
+                if (d.value.tag() != .Void) {
+                    try self.buf.appendSlice(" ");
+                }
+            } else {
+                try self.buf.appendSlice(" :");
+            }
+            if (d.value.tag() != .Void) {
+                try self.buf.appendSlice("= ");
+                try self.fmtExpr(d.value);
+            }
+        },
         .BinOp => |co| {
             var o = co.*;
             if (o.op == .@"=" and o.rhs.tag() == .BinOp and self.ast.exprs.getTyped(.BinOp, o.rhs).?.lhs == o.lhs) {
@@ -190,7 +206,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             if (prec < o.op.precedence()) try self.buf.appendSlice("(");
             try self.fmtExprPrec(o.lhs, o.op.precedence());
             // TODO: linebreaks
-            if (o.op != .@":") try self.buf.appendSlice(" ");
+            try self.buf.appendSlice(" ");
             try self.buf.appendSlice(o.op.repr());
             try self.buf.appendSlice(" ");
             if (o.rhs.tag() == .BinOp and self.ast.exprs.getTyped(.BinOp, o.rhs).?.op.precedence() == o.op.precedence()) {

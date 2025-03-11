@@ -211,7 +211,7 @@ pub fn runVm(
     var unreaches: bool = false;
     var ecalls: []const Ast.Id = &.{};
     if (ast.findDecl(ast.items, "expectations", arena)) |d| {
-        const decl = ast.exprs.getTyped(.BinOp, d[0]).?.rhs;
+        const decl = ast.exprs.getTyped(.Decl, d[0]).?.value;
         const ctor = ast.exprs.getTyped(.Ctor, decl).?;
         for (ast.exprs.view(ctor.fields)) |field| {
             const value = ast.exprs.get(field.value);
@@ -280,14 +280,14 @@ pub fn runVm(
         .tx => break,
         .eca => {
             try std.testing.expect(eca_idx < ecalls.len);
-            const curr_eca = ast.exprs.getTyped(.BinOp, ecalls[eca_idx]).?;
+            const curr_eca = ast.exprs.getTyped(.Decl, ecalls[eca_idx]).?;
 
-            for (ast.exprs.view(ast.exprs.getTyped(.Tupl, curr_eca.lhs).?.fields), 0..) |vl, i| {
+            for (ast.exprs.view(ast.exprs.getTyped(.Tupl, curr_eca.bindings).?.fields), 0..) |vl, i| {
                 const value = try std.fmt.parseInt(u64, ast.tokenSrc(ast.exprs.getTyped(.Integer, vl).?.pos.index), 10);
                 try std.testing.expectEqual(value, vm.regs.get(.arg(i)));
             }
 
-            const ret_value = try std.fmt.parseInt(u64, ast.tokenSrc(ast.exprs.getTyped(.Integer, curr_eca.rhs).?.pos.index), 10);
+            const ret_value = try std.fmt.parseInt(u64, ast.tokenSrc(ast.exprs.getTyped(.Integer, curr_eca.ty).?.pos.index), 10);
             vm.regs.set(.ret(0), ret_value);
 
             eca_idx += 1;

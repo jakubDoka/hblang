@@ -728,7 +728,8 @@ pub fn Func(comptime MachNode: type) type {
 
             pub fn isDataPhi(self: *const Node) bool {
                 // TODO: get rid of this recursion
-                return self.kind == .Phi and (!self.input_base[1].?.isMemOp() or self.input_base[1].?.isLoad()) and (self.input_base[1].?.kind != .Phi or self.input_base[1].?.isDataPhi());
+                return self.kind == .Phi and (!self.input_base[1].?.isMemOp() or self.input_base[1].?.isLoad()) and
+                    (self.input_base[1].?.kind != .Phi or self.input_base[1].?.isDataPhi());
             }
 
             pub inline fn isBasicBlockStart(self: *const Node) bool {

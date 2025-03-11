@@ -114,8 +114,28 @@ fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8, unordered: bool) Error!Id 
         if (prec >= prevPrec) break;
 
         self.cur = self.lexer.next();
+        if (op == .@":=") {
+            _ = self.declareExpr(acum, unordered);
+            return try self.store.alloc(self.gpa, .Decl, .{
+                .bindings = acum,
+                .value = try self.parseExpr(),
+            });
+        } else if (op == .@":") {
+            const lover_prec = comptime Lexer.Lexeme.@"=".precedence() - 1;
+            const ty = try self.parseBinExpr(try self.parseUnit(), lover_prec, false);
+            _ = self.declareExpr(acum, unordered);
+
+            return try self.store.alloc(self.gpa, .Decl, .{
+                .bindings = acum,
+                .ty = ty,
+                .value = if (self.tryAdvance(.@"="))
+                    try self.parseExpr()
+                else
+                    .zeroSized(.Void),
+            });
+        }
+
         const rhs = try self.parseBinExpr(try self.parseUnit(), prec, false);
-        if (op == .@":=" or op == .@":") _ = self.declareExpr(acum, unordered);
         if (op.innerOp()) |iop| {
             acum = try self.store.alloc(self.gpa, .BinOp, .{
                 .lhs = acum,

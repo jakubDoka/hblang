@@ -243,16 +243,16 @@ pub const Union = struct {
         const union_ast = ast.exprs.getTyped(.Union, self.key.ast).?;
 
         var count: usize = 0;
-        for (ast.exprs.view(union_ast.fields)) |f| count += @intFromBool(if (ast.exprs.getTyped(.BinOp, f)) |b| b.lhs.tag() == .Tag else false);
+        for (ast.exprs.view(union_ast.fields)) |f| count += @intFromBool(if (ast.exprs.getTyped(.Decl, f)) |b| b.bindings.tag() == .Tag else false);
 
         const fields = types.arena.alloc(Field, count);
         var i: usize = 0;
         for (ast.exprs.view(union_ast.fields)) |fast| {
-            const field = ast.exprs.getTyped(.BinOp, fast) orelse continue;
-            if (field.lhs.tag() != .Tag) continue;
+            const field = ast.exprs.getTyped(.Decl, fast) orelse continue;
+            if (field.bindings.tag() != .Tag) continue;
             fields[i] = .{
-                .name = ast.tokenSrc(ast.exprs.getTyped(.Tag, field.lhs).?.index + 1),
-                .ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field.rhs) catch .never,
+                .name = ast.tokenSrc(ast.exprs.getTyped(.Tag, field.bindings).?.index + 1),
+                .ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field.ty) catch .never,
             };
             i += 1;
         }
@@ -340,18 +340,17 @@ pub const Struct = struct {
         const struct_ast = ast.exprs.getTyped(.Struct, self.key.ast).?;
 
         var count: usize = 0;
-        for (ast.exprs.view(struct_ast.fields)) |f| count += @intFromBool(if (ast.exprs.getTyped(.BinOp, f)) |b| b.lhs.tag() == .Tag else false);
+        for (ast.exprs.view(struct_ast.fields)) |f| count += @intFromBool(if (ast.exprs.getTyped(.Decl, f)) |b| b.bindings.tag() == .Tag else false);
 
         const fields = types.arena.alloc(Field, count);
         var i: usize = 0;
         for (ast.exprs.view(struct_ast.fields)) |fast| {
-            const field = ast.exprs.getTyped(.BinOp, fast) orelse continue;
-            if (field.lhs.tag() != .Tag) continue;
-            if (field.rhs.tag() == .BinOp and ast.exprs.getTyped(.BinOp, field.rhs).?.op == .@"=") {
-                const field_meta = ast.exprs.getTyped(.BinOp, field.rhs).?;
-                const name = ast.tokenSrc(ast.exprs.getTyped(.Tag, field.lhs).?.index + 1);
-                const ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field_meta.lhs) catch .never;
-
+            const field = ast.exprs.getTyped(.Decl, fast) orelse continue;
+            if (field.bindings.tag() != .Tag) continue;
+            const name = ast.tokenSrc(ast.exprs.getTyped(.Tag, field.bindings).?.index + 1);
+            const ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field.ty) catch .never;
+            fields[i] = .{ .name = name, .ty = ty };
+            if (field.value.tag() != .Void) {
                 const value = types.arena.create(Global);
                 value.* = .{
                     .id = @intCast(types.globals.items.len),
@@ -359,19 +358,15 @@ pub const Struct = struct {
                         .file = self.key.file,
                         .name = name,
                         .scope = self.asTy(),
-                        .ast = field_meta.rhs,
+                        .ast = field.value,
                         .captures = &.{},
                     },
                 };
-                types.ct.evalGlobal(name, value, ty, field_meta.rhs) catch {};
+
+                types.ct.evalGlobal(name, value, ty, field.value) catch {};
                 types.globals.append(types.arena.allocator(), value) catch unreachable;
 
-                fields[i] = .{ .name = name, .ty = ty, .defalut_value = value };
-            } else {
-                fields[i] = .{
-                    .name = ast.tokenSrc(ast.exprs.getTyped(.Tag, field.lhs).?.index + 1),
-                    .ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field.rhs) catch .never,
-                };
+                fields[i].defalut_value = value;
             }
             i += 1;
         }

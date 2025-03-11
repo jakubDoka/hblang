@@ -154,6 +154,11 @@ pub const Expr = union(enum) {
         op: Lexer.Lexeme,
         oper: Id,
     },
+    Decl: struct {
+        bindings: Id,
+        ty: Id = .zeroSized(.Void),
+        value: Id,
+    },
     BinOp: struct {
         lhs: Id,
         op: Lexer.Lexeme,
@@ -289,9 +294,8 @@ pub fn findDecl(
 ) ?struct { Id, []Pos } {
     var fseq = std.ArrayList(Pos).init(arena);
     return for (self.exprs.view(slice)) |d| {
-        const decl = self.exprs.getTyped(.BinOp, d) orelse continue;
-        if (decl.lhs.tag() == .Tag or (decl.op != .@":" and decl.op != .@":=")) continue;
-        if (self.searchBinding(decl.lhs, id, &fseq)) return .{ d, fseq.items };
+        const decl = self.exprs.getTyped(.Decl, d) orelse continue;
+        if (self.searchBinding(decl.bindings, id, &fseq)) return .{ d, fseq.items };
     } else null;
 }
 
