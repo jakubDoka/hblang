@@ -25,7 +25,7 @@ pub fn main() !void {
         std.debug.assert(std.mem.startsWith(u8, worker.name, "worker") and worker.kind == .directory);
 
         const worker_dir = try crash_dir.openDir(
-            try std.fs.path.join(arena, &.{ worker.name, "default/crashes" }),
+            try std.fs.path.join(arena, &.{ worker.name, "crashes" }),
             .{ .iterate = true },
         );
 
