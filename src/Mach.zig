@@ -96,6 +96,10 @@ pub const EmitOptions = struct {
         };
 
         pub fn execute(self: @This(), comptime MachNode: type, func: *graph.Func(MachNode)) void {
+            if (self.peephole_fuel != 0) {
+                func.iterPeeps(self.peephole_fuel, @TypeOf(func.*).idealizeDead);
+            }
+
             if (self.mem2reg) {
                 func.mem2reg.run();
             }

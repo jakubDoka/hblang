@@ -1,17 +1,7 @@
 const std = @import("std");
-const isa = @import("src/isa.zig");
-pub const Ast = @import("src/Ast.zig");
-pub const Vm = @import("src/Vm.zig");
-pub const Builder = @import("src/Builder.zig");
-pub const Codegen = @import("src/Codegen.zig");
-pub const HbvmGen = @import("src/HbvmGen.zig");
-pub const Types = @import("src/Types.zig");
-pub const Regalloc = @import("src/Regalloc.zig");
-pub const graph = @import("src/graph.zig");
-pub const Mach = @import("src/Mach.zig");
-pub const Fuzz = @import("fuzz.zig");
 pub const root = @import("src/utils.zig");
 pub const test_util = @import("src/test_util.zig");
+pub const hbc = @import("src/hbc.zig");
 
 test {
     _ = @import("zig-out/tests.zig");
@@ -26,7 +16,7 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
 
     const gpa = std.testing.allocator;
 
-    //try test_util.testFmt(name, name, code);
+    try test_util.testFmt(name, name, code);
 
     var out = std.ArrayList(u8).init(gpa);
     defer out.deinit();
@@ -61,5 +51,31 @@ pub fn runFuzzFindingTest(name: []const u8, code: []const u8) !void {
 }
 
 pub fn runVendoredTest(path: []const u8) !void {
-    _ = path;
+    root.Arena.initScratch(1024 * 1024);
+    defer root.Arena.deinitScratch();
+
+    var bin = std.ArrayListUnmanaged(u8).empty;
+    defer bin.deinit(std.testing.allocator);
+    var ast = try hbc.compile(.{
+        .gpa = std.testing.allocator,
+        .diagnostics = std.io.getStdErr().writer().any(),
+        .colors = std.io.tty.detectConfig(std.io.getStdErr()),
+        .output = bin.writer(std.testing.allocator).any(),
+        .mangle_terminal = true,
+        .root_file = path,
+    });
+    defer ast.arena.deinit();
+
+    const HbvmGen = @import("src/HbvmGen.zig");
+
+    const header: HbvmGen.ExecHeader = @bitCast(bin.items[0..@sizeOf(HbvmGen.ExecHeader)].*);
+    try test_util.runVm(
+        &ast.ast[0],
+        ast.arena.allocator(),
+        false,
+        bin.items[@sizeOf(HbvmGen.ExecHeader)..],
+        header.code_length,
+        std.io.null_writer.any(),
+        .no_color,
+    );
 }

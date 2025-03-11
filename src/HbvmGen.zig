@@ -24,7 +24,7 @@ const HbvmGen = @This();
 pub const eca = std.math.maxInt(u32);
 pub const dir = "inputs";
 
-const ExecHeader = extern struct {
+pub const ExecHeader = extern struct {
     magic_number: [3]u8 = .{ 0x15, 0x91, 0xD2 },
     executable_version: u32 align(1) = 0,
 
@@ -230,7 +230,7 @@ pub fn finalize(self: *HbvmGen) std.ArrayListUnmanaged(u8) {
     const code_size = self.link(0, false);
     if (self.emit_header) {
         @memcpy(self.out.items[0..@sizeOf(ExecHeader)], std.mem.asBytes(&ExecHeader{
-            .code_length = code_size,
+            .code_length = code_size - @sizeOf(ExecHeader),
             .data_length = self.out.items.len - code_size,
         }));
     }
@@ -435,6 +435,9 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     switch (extra) {
                         .eq, .ugt, .sgt, .ult, .slt => {
                             self.emit(.not, .{ self.reg(no), self.reg(no) });
+                        },
+                        .ne, .uge, .sge, .ule, .sle => {
+                            self.emit(.andi, .{ self.reg(no), self.reg(no), 1 });
                         },
                         else => {},
                     }

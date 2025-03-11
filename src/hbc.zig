@@ -5,91 +5,92 @@ const Arena = hb.utils.Arena;
 
 const max_file_len = std.math.maxInt(u31);
 
-pub inline fn panic(_: anytype, _: anytype, _: anytype) noreturn {
-    unreachable;
-}
-
-pub fn main() !void {
-    Arena.initScratch(1024 * 1024 * 10);
-    defer Arena.deinitScratch();
-
-    var gpa_impl = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa_impl.deinit();
-
-    const gpa = gpa_impl.allocator();
-
-    const diagnostics = std.io.getStdErr().writer().any();
-
-    var args = std.process.args();
-    _ = args.next();
+pub const CompileOptions = struct {
+    gpa: std.mem.Allocator,
+    diagnostics: std.io.AnyWriter = std.io.null_writer.any(),
+    colors: std.io.tty.Config = .no_color,
+    output: std.io.AnyWriter,
+    raw_binary: bool = false,
 
     // #CLI start
     // #ARGS (main.hb)
-    var root_file: []const u8 = "main.hb";
+    root_file: []const u8 = "main.hb",
     // #FLAGS (--help)
-    var help = false; // print this help message
-    var fmt = false; // format all files reachable from the root_file
-    var fmt_stdout = false; // format only the root file and print it to stdout
-    var dump_asm = false; // dump assembly of the program
-    var mangle_terminal = false; // dump the executable even if colors are supported
+    help: bool = false, // print this help message
+    fmt: bool = false, // format all files reachable from the root_file
+    fmt_stdout: bool = false, // format only the root file and print it to stdout
+    dump_asm: bool = false, // dump assembly of the program
+    mangle_terminal: bool = false, // dump the executable even if colors are supported
     // #OPTIONS (--target ableos)
-    var target: []const u8 = "ableos"; // target triple to compile to (not used yet since we have only one target)
-    var extra_threads: usize = 0; // extra threads used for the compilation (not used yet)
-    var path_projections = std.StringHashMap([]const u8).init(gpa); // can be specified multiple times
+    target: []const u8 = "ableos", // target triple to compile to (not used yet since we have only one target)
+    extra_threads: usize = 0, // extra threads used for the compilation (not used yet)
+    path_projections: std.StringHashMapUnmanaged([]const u8) = .{}, // can be specified multiple times
     // as `--path-projection name path`, when the `@use("name")` is encountered, its projected to `@use("path")`
     // #CLI end
 
-    defer path_projections.deinit();
-
-    var i: usize = 0;
-    while (args.next()) |a| {
-        var arg: []const u8 = a[0..];
-        if (!std.mem.startsWith(u8, arg, "--")) {
-            switch (i) {
-                0 => root_file = arg,
-                else => {},
-            }
-            i += 1;
-            continue;
-        }
-
-        arg = arg[2..];
-
-        help = help or std.mem.eql(u8, arg, "help");
-        fmt = fmt or std.mem.eql(u8, arg, "fmt");
-        fmt_stdout = fmt_stdout or std.mem.eql(u8, arg, "fmt-stdout");
-        dump_asm = dump_asm or std.mem.eql(u8, arg, "dump-asm");
-        mangle_terminal = mangle_terminal or std.mem.eql(u8, arg, "mangle-terminal");
-
-        if (std.mem.eql(u8, arg, "target")) target = args.next() orelse {
-            try diagnostics.writeAll("--target takes an argument");
-            return;
-        };
-        if (std.mem.eql(u8, arg, "extra-threads")) {
-            arg = args.next() orelse {
-                try diagnostics.writeAll("--extra-threads takes an integer argument");
-                return;
-            };
-            extra_threads = std.fmt.parseInt(usize, arg, 10) catch |err| {
-                try diagnostics.print("failed to parse --extra-threads argument: {s}", .{@errorName(err)});
-                return;
-            };
-        }
-        if (std.mem.eql(u8, arg, "path-projection")) {
-            const msg = "--path-projection takes two argumens: <key> <value>";
-            const key = args.next() orelse {
-                try diagnostics.writeAll(msg);
-                return;
-            };
-            const value = args.next() orelse {
-                try diagnostics.writeAll(msg);
-                return;
-            };
-            try path_projections.put(key, value);
-        }
+    pub fn deinit(self: *CompileOptions) void {
+        self.path_projections.deinit(self.gpa);
     }
 
-    if (help) {
+    pub fn loadCli(self: *CompileOptions) !void {
+        var args = std.process.args();
+        _ = args.next();
+
+        var i: usize = 0;
+        while (args.next()) |a| {
+            var arg: []const u8 = a[0..];
+            if (!std.mem.startsWith(u8, arg, "--")) {
+                switch (i) {
+                    0 => self.root_file = arg,
+                    else => {},
+                }
+                i += 1;
+                continue;
+            }
+
+            arg = arg[2..];
+
+            self.help = self.help or std.mem.eql(u8, arg, "help");
+            self.fmt = self.fmt or std.mem.eql(u8, arg, "fmt");
+            self.fmt_stdout = self.fmt_stdout or std.mem.eql(u8, arg, "fmt-stdout");
+            self.dump_asm = self.dump_asm or std.mem.eql(u8, arg, "dump-asm");
+            self.mangle_terminal = self.mangle_terminal or std.mem.eql(u8, arg, "mangle-terminal");
+
+            if (std.mem.eql(u8, arg, "target")) self.target = args.next() orelse {
+                try self.diagnostics.writeAll("--target takes an argument");
+                return;
+            };
+            if (std.mem.eql(u8, arg, "extra-threads")) {
+                arg = args.next() orelse {
+                    try self.diagnostics.writeAll("--extra-threads takes an integer argument");
+                    return;
+                };
+                self.extra_threads = std.fmt.parseInt(usize, arg, 10) catch |err| {
+                    try self.diagnostics.print("failed to parse --extra-threads argument: {s}", .{@errorName(err)});
+                    return;
+                };
+            }
+            if (std.mem.eql(u8, arg, "path-projection")) {
+                const msg = "--path-projection takes two argumens: <key> <value>";
+                const key = args.next() orelse {
+                    try self.diagnostics.writeAll(msg);
+                    return;
+                };
+                const value = args.next() orelse {
+                    try self.diagnostics.writeAll(msg);
+                    return;
+                };
+                try self.path_projections.put(self.gpa, key, value);
+            }
+        }
+    }
+};
+
+pub fn compile(opts: CompileOptions) !struct {
+    arena: std.heap.ArenaAllocator,
+    ast: []const hb.Ast,
+} {
+    if (opts.help) {
         const help_str = comptime b: {
             const source = @embedFile("hbc.zig");
             const start_pat = "// #CLI start\n";
@@ -99,34 +100,34 @@ pub fn main() !void {
             break :b std.mem.trimRight(u8, source[start..end], "\n\t ") ++ "";
         };
 
-        try diagnostics.writeAll(help_str);
-        return;
+        try opts.diagnostics.writeAll(help_str);
+        return error.Failed;
     }
 
-    var ast_arena = std.heap.ArenaAllocator.init(gpa);
-    defer ast_arena.deinit();
+    var ast_arena = std.heap.ArenaAllocator.init(opts.gpa);
+    errdefer ast_arena.deinit();
 
-    if (fmt_stdout) {
-        const source = try std.fs.cwd().readFileAllocOptions(ast_arena.allocator(), root_file, max_file_len, null, @alignOf(u8), 0);
+    if (opts.fmt_stdout) {
+        const source = try std.fs.cwd().readFileAllocOptions(ast_arena.allocator(), opts.root_file, max_file_len, null, @alignOf(u8), 0);
         const ast = try hb.Ast.init(ast_arena.allocator(), .{
-            .path = root_file,
+            .path = opts.root_file,
             .code = source,
-            .diagnostics = diagnostics,
+            .diagnostics = opts.diagnostics,
         });
 
         var buf = std.ArrayList(u8).init(ast_arena.allocator());
         try ast.fmt(&buf);
 
         try std.io.getStdOut().writeAll(buf.items);
-        return;
+        return error.Failed;
     }
 
-    const asts, const base = try Loader.loadAll(ast_arena.allocator(), path_projections, root_file, diagnostics) orelse {
-        try diagnostics.print("failed due to previous errors (codegen skipped)\n", .{});
-        return;
+    const asts, const base = try Loader.loadAll(ast_arena.allocator(), opts.path_projections, opts.root_file, opts.diagnostics) orelse {
+        try opts.diagnostics.print("failed due to previous errors (codegen skipped)\n", .{});
+        return error.Failed;
     };
 
-    if (fmt) {
+    if (opts.fmt) {
         for (asts) |ast| {
             var tmp = Arena.scrath(null);
             defer tmp.deinit();
@@ -137,32 +138,32 @@ pub fn main() !void {
             const path = try std.fs.path.join(tmp.arena.allocator(), &.{ base, ast.path });
             try std.fs.cwd().writeFile(.{ .sub_path = path, .data = buf.items });
         }
-        return;
+        return .{ .ast = asts, .arena = ast_arena };
     }
 
-    var types = hb.Types.init(gpa, asts, diagnostics);
+    var types = hb.Types.init(opts.gpa, asts, opts.diagnostics);
     defer types.deinit();
 
-    var codegen = hb.Codegen.init(gpa, Arena.scrath(null).arena, &types, .runtime);
+    var codegen = hb.Codegen.init(opts.gpa, Arena.scrath(null).arena, &types, .runtime);
     defer codegen.deinit();
 
-    var hbg = hb.HbvmGen{ .gpa = gpa, .emit_header = !dump_asm };
+    var hbg = hb.HbvmGen{ .gpa = opts.gpa, .emit_header = !opts.dump_asm and !opts.raw_binary };
     defer hbg.deinit();
 
     const backend = hb.Mach.init(&hbg);
 
-    var syms = std.heap.ArenaAllocator.init(gpa);
+    var syms = std.heap.ArenaAllocator.init(opts.gpa);
     defer syms.deinit();
 
     const entry = codegen.getEntry(.root, "main") catch {
-        try diagnostics.writeAll(
+        try opts.diagnostics.writeAll(
             \\...you can define the `main` in the mentioned file:
             \\main := fn(): uint {
             \\    return 0
             \\}
         );
 
-        return;
+        return error.Failed;
     };
 
     codegen.queue(.{ .Func = entry });
@@ -195,33 +196,53 @@ pub fn main() !void {
     };
 
     if (errored) {
-        try diagnostics.print("failed due to previous errors\n", .{});
-        return;
+        try opts.diagnostics.print("failed due to previous errors\n", .{});
+        return error.Failed;
     }
 
-    const colors = std.io.tty.detectConfig(std.io.getStdOut());
-    const output = std.io.getStdOut().writer().any();
-
-    if (dump_asm) {
-        backend.disasm(output, colors);
-        return;
+    if (opts.dump_asm) {
+        backend.disasm(opts.output, opts.colors);
+        return .{ .ast = asts, .arena = ast_arena };
     }
 
     var out = backend.finalize();
-    defer out.deinit(gpa);
+    defer out.deinit(opts.gpa);
 
-    if (colors == .no_color or mangle_terminal) {
-        try output.writeAll(out.items);
+    if (opts.colors == .no_color or opts.mangle_terminal) {
+        try opts.output.writeAll(out.items);
+        return .{ .ast = asts, .arena = ast_arena };
     } else {
-        try diagnostics.writeAll("can't dump the executable to the stdout since it" ++
+        try opts.diagnostics.writeAll("can't dump the executable to the stdout since it" ++
             " supports colors (pass --mangle-terminal if you dont care)");
+        return error.Failed;
     }
+}
+
+pub fn main() !void {
+    Arena.initScratch(1024 * 1024 * 10);
+    defer Arena.deinitScratch();
+
+    var gpa_impl = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa_impl.deinit();
+
+    var opts = CompileOptions{
+        .gpa = gpa_impl.allocator(),
+        .diagnostics = std.io.getStdErr().writer().any(),
+        .colors = std.io.tty.detectConfig(std.io.getStdOut()),
+        .output = std.io.getStdOut().writer().any(),
+    };
+    defer opts.deinit();
+
+    try opts.loadCli();
+
+    var arena = (try compile(opts)).arena;
+    arena.deinit();
 }
 
 const Loader = struct {
     arena: std.mem.Allocator,
     base: []const u8,
-    path_projections: std.StringHashMap([]const u8),
+    path_projections: std.StringHashMapUnmanaged([]const u8),
     files: std.ArrayListUnmanaged(hb.Ast) = .{},
 
     pub fn load(self: *Loader, opts: hb.Ast.Loader.LoadOptions) ?hb.Types.File {
@@ -286,7 +307,7 @@ const Loader = struct {
 
     fn loadAll(
         arena: std.mem.Allocator,
-        path_projections: std.StringHashMap([]const u8),
+        path_projections: std.StringHashMapUnmanaged([]const u8),
         root: []const u8,
         diagnostics: std.io.AnyWriter,
     ) !?struct { []const hb.Ast, []const u8 } {
@@ -301,7 +322,7 @@ const Loader = struct {
         const slot = try self.files.addOne(self.arena);
         slot.path = std.fs.path.basename(root);
         slot.source = std.fs.cwd().readFileAllocOptions(self.arena, root, max_file_len, null, @alignOf(u8), 0) catch {
-            try diagnostics.print("could not read the root file: {s}", .{root});
+            try diagnostics.print("could not read the root file: {s}\n", .{root});
             return null;
         };
 

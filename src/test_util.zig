@@ -105,40 +105,6 @@ pub fn testBuilder(
     var func_arena = root.Arena.scrath(null);
     defer func_arena.deinit();
 
-    var ret: u64 = 0;
-    var should_error: bool = false;
-    var times_out: bool = false;
-    var unreaches: bool = false;
-    var ecalls: []const Ast.Id = &.{};
-    if (ast.findDecl(ast.items, "expectations", func_arena.arena.allocator())) |d| {
-        const decl = ast.exprs.getTyped(.BinOp, d[0]).?.rhs;
-        const ctor = ast.exprs.getTyped(.Ctor, decl).?;
-        for (ast.exprs.view(ctor.fields)) |field| {
-            const value = ast.exprs.get(field.value);
-            const fname = ast.tokenSrc(field.pos.index);
-
-            if (std.mem.eql(u8, fname, "return_value")) {
-                ret = @bitCast(try std.fmt.parseInt(i64, ast.tokenSrc(value.Integer.pos.index), 10));
-            }
-
-            if (std.mem.eql(u8, fname, "should_error")) {
-                should_error = value.Bool.value;
-            }
-
-            if (std.mem.eql(u8, fname, "times_out")) {
-                times_out = value.Bool.value;
-            }
-
-            if (std.mem.eql(u8, fname, "unreaches")) {
-                unreaches = value.Bool.value;
-            }
-
-            if (std.mem.eql(u8, fname, "ecalls")) {
-                ecalls = ast.exprs.view(value.Tupl.fields);
-            }
-        }
-    }
-
     var types = Types.init(gpa, asts, output);
     defer types.deinit();
 
@@ -207,23 +173,115 @@ pub fn testBuilder(
         },
     };
 
-    try std.testing.expectEqual(should_error, cg.errored);
+    var ret: u64 = 0;
+    var should_error: bool = false;
+    var times_out: bool = false;
+    var unreaches: bool = false;
+    var ecalls: []const Ast.Id = &.{};
+    if (ast.findDecl(ast.items, "expectations", func_arena.arena.allocator())) |d| {
+        const decl = ast.exprs.getTyped(.BinOp, d[0]).?.rhs;
+        const ctor = ast.exprs.getTyped(.Ctor, decl).?;
+        for (ast.exprs.view(ctor.fields)) |field| {
+            const value = ast.exprs.get(field.value);
+            const fname = ast.tokenSrc(field.pos.index);
+
+            if (std.mem.eql(u8, fname, "return_value")) {
+                ret = @bitCast(try std.fmt.parseInt(i64, ast.tokenSrc(value.Integer.pos.index), 10));
+            }
+
+            if (std.mem.eql(u8, fname, "should_error")) {
+                should_error = value.Bool.value;
+            }
+
+            if (std.mem.eql(u8, fname, "times_out")) {
+                times_out = value.Bool.value;
+            }
+
+            if (std.mem.eql(u8, fname, "unreaches")) {
+                unreaches = value.Bool.value;
+            }
+
+            if (std.mem.eql(u8, fname, "ecalls")) {
+                ecalls = ast.exprs.view(value.Tupl.fields);
+            }
+        }
+    }
+
+    var out = std.ArrayListUnmanaged(u8).empty;
+    var code_len: usize = 0;
+    defer out.deinit(gpa);
+    if (!errored) {
+        if (verbose) try header("CODEGEN", output, colors);
+        code_len = hbgen.link(0, true);
+        gen.disasm(output, colors);
+        out = gen.finalize();
+    }
+
+    try runVm(
+        &ast,
+        func_arena.arena.allocator(),
+        cg.errored,
+        out.items,
+        code_len,
+        if (verbose) output else std.io.null_writer.any(),
+        colors,
+    );
+}
+
+pub fn runVm(
+    ast: *const Ast,
+    arena: std.mem.Allocator,
+    errored: bool,
+    code: []u8,
+    code_len: usize,
+    output: std.io.AnyWriter,
+    colors: std.io.tty.Config,
+) !void {
+    var ret: u64 = 0;
+    var should_error: bool = false;
+    var times_out: bool = false;
+    var unreaches: bool = false;
+    var ecalls: []const Ast.Id = &.{};
+    if (ast.findDecl(ast.items, "expectations", arena)) |d| {
+        const decl = ast.exprs.getTyped(.BinOp, d[0]).?.rhs;
+        const ctor = ast.exprs.getTyped(.Ctor, decl).?;
+        for (ast.exprs.view(ctor.fields)) |field| {
+            const value = ast.exprs.get(field.value);
+            const fname = ast.tokenSrc(field.pos.index);
+
+            if (std.mem.eql(u8, fname, "return_value")) {
+                ret = @bitCast(try std.fmt.parseInt(i64, ast.tokenSrc(value.Integer.pos.index), 10));
+            }
+
+            if (std.mem.eql(u8, fname, "should_error")) {
+                should_error = value.Bool.value;
+            }
+
+            if (std.mem.eql(u8, fname, "times_out")) {
+                times_out = value.Bool.value;
+            }
+
+            if (std.mem.eql(u8, fname, "unreaches")) {
+                unreaches = value.Bool.value;
+            }
+
+            if (std.mem.eql(u8, fname, "ecalls")) {
+                ecalls = ast.exprs.view(value.Tupl.fields);
+            }
+        }
+    }
+
+    try std.testing.expectEqual(should_error, errored);
     if (errored) {
         return;
     }
 
-    if (verbose) try header("CODEGEN", output, colors);
-    const code_len = hbgen.link(0, true);
-    gen.disasm(output, colors);
-    var out = gen.finalize();
-    defer out.deinit(gpa);
-
     const stack_size = 1024 * 10;
-    const stack_end = stack_size - out.items.len;
+    const stack_end = stack_size - code.len;
 
     var stack: [stack_size]u8 = undefined;
 
-    @memcpy(stack[stack_end..], out.items);
+    @memcpy(stack[stack_end..], code);
 
     var vm = Vm{};
     vm.ip = stack_end;
@@ -231,13 +289,13 @@ pub fn testBuilder(
     @memset(&vm.regs.values, 0);
     vm.regs.set(.stack_addr, stack_end);
     var ctx = Vm.SafeContext{
-        .writer = if (verbose) output else std.io.null_writer.any(),
+        .writer = output,
         .color_cfg = colors,
         .memory = &stack,
         .code_start = stack_end,
         .code_end = stack_end + code_len,
     };
-    if (verbose) try header("EXECUTION", output, colors);
+    try header("EXECUTION", output, colors);
 
     var eca_idx: usize = 0;
     while (true) switch (vm.run(&ctx) catch |err| switch (err) {
@@ -269,7 +327,7 @@ pub fn testBuilder(
         else => unreachable,
     };
 
-    if (vm.regs.get(.ret(0)) != ret) return error.TestExpectedEqual;
+    try std.testing.expectEqual(vm.regs.get(.ret(0)), ret);
 }
 
 pub fn testFmt(name: []const u8, path: []const u8, code: [:0]const u8) !void {

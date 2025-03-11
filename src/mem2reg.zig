@@ -93,7 +93,7 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                 };
                 std.debug.assert(parent.isCfg());
                 for (parent.outputs()) |o| parent_succs += @intFromBool(o.isCfg());
-                std.debug.assert(parent_succs >= 1 and parent_succs <= 2);
+                if (!(parent_succs >= 1 and parent_succs <= 2)) root.panic("{}\n", .{bb});
                 // handle fork
                 if (parent_succs == 2) {
                     // this is the second branch, restore the value
