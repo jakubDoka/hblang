@@ -1485,6 +1485,7 @@ reverse := fn(slice: []u8): []u8 {
 
 main := fn(): uint {
     arr := u8.[1, 2, 3]
+    _ = reverse(&.[])
     _ = reverse(arr[..])
     return arr[0] - arr[1] - arr[2]
 }
@@ -1813,6 +1814,7 @@ main := fn(): uint {
     - [x] field access
     - [x] indexing
     - [x] slicing
+    - [x] empty
   - [x] tuples
   - [x] nullable types
 - [ ] ? directives

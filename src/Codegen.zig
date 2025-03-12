@@ -651,6 +651,20 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             .@"^" => return self.emitTyConst(self.types.makePtr(try self.resolveAnonTy(e.oper))),
             .@"?" => return self.emitTyConst(self.types.makeNullable(try self.resolveAnonTy(e.oper))),
             .@"&" => {
+                if (ast.exprs.getTyped(.Arry, e.oper)) |a| {
+                    if (a.ty.tag() == .Void and a.fields.len() == 0) {
+                        const ty = ctx.ty orelse return self.report(expr, "empty slice need to have a known type", .{});
+                        if (ty.data() != .Slice or ty.data().Slice.len != null) return self.report(expr, "{} is not a slice but it was initialized as such", .{ty});
+
+                        const loc = ctx.loc orelse self.bl.addLocal(ty.size(self.types));
+                        const ptr = self.bl.addIntImm(.int, @bitCast(ty.data().Slice.elem.alignment(self.types)));
+                        self.bl.addFieldStore(loc, Types.Slice.ptr_offset, .int, ptr);
+                        self.bl.addFieldStore(loc, Types.Slice.len_offset, .int, self.bl.addIntImm(.int, 0));
+
+                        return .mkp(ty, loc);
+                    }
+                }
+
                 const addrd = try self.emit(.{}, e.oper);
                 return .mkv(self.types.makePtr(addrd.ty), switch (addrd.id) {
                     .Imaginary => self.bl.addIntImm(.int, @intCast(addrd.ty.alignment(self.types))),
