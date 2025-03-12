@@ -297,6 +297,38 @@ some_fn := fn(a: uint, b: void, c: u8): uint {
 }
 ```
 
+#### functions 4 (returning stack)
+```hb
+expectations := .{
+    should_error: true,
+}
+
+main := fn(): void {
+    rstack := return_direct_stack()
+    rstruct := return_indirect_stack()
+    v: ?^uint = null
+    ret := return_indirect_stack_but_not(&v)
+}
+
+return_direct_stack := fn(): ^uint {
+    a := 0
+    if true return &a
+
+    return &a
+}
+
+return_indirect_stack := fn(): struct{.u: uint; .b: uint; .c: ^uint} {
+    v := 0
+    return .(0, 0, &v)
+}
+
+return_indirect_stack_but_not := fn(arg: ^?^uint): void {
+    v := 0
+    arg.* = &v
+    arg.* = null
+}
+```
+
 #### comments 1
 ```hb
 // commant is an item
@@ -1791,7 +1823,8 @@ main := fn(): uint {
       - [x] `-`
   - [x] structs
     - [x] indexing
-    - [x] packed
+    - [x] alignment
+    - [ ] ? field alignment
     - [x] constructors
       - [x] dictionary
       - [x] tuple
@@ -1805,6 +1838,8 @@ main := fn(): uint {
     - [ ] ? backing integer
     - [x] scope
   - [x] unions
+    - [ ] ? alignment
+    - [ ] ? field alignment
     - [ ] ? tag + customizable
     - [x] scope
   - [x] pointers
@@ -1815,33 +1850,71 @@ main := fn(): uint {
     - [x] indexing
     - [x] slicing
     - [x] empty
+    - [ ] ? array slicing
   - [x] tuples
   - [x] nullable types
 - [ ] ? directives
-  - [x] `@use(<string>)`
-  - [x] `@TypeOf(<expr>)`
-  - [x] `@as(<ty>, <expr>)`
-  - [x] `@int_cast(<expr>)`
-  - [x] `@size_of(<ty>)`
-  - [x] `@align_of(<ty>)`
-  - [x] `@bit_cast(<expr>)`
-  - [x] `@ecall(...<expr>)`
-  - [x] `@embed(<string>)`
-  - [ ] ? `@inline(<func>, ...<args>)`
+  - [x] `@use(<string>): <struct>`
+  - [x] `@TypeOf(<expr>): type`
+  - [x] `@as(<ty>, <expr>): <ty>`
+  - [x] `@int_cast(<int>): <infered-int>`
+  - [x] `@size_of(<ty>): uint`
+  - [x] `@align_of(<ty>): uint`
+  - [x] `@bit_cast(<expr>): <infered-ty>`
+  - [x] `@ecall(...<expr>): <infered-ty>`
+  - [x] `@embed(<string>): [len]u8`
+  - [ ] ? `@inline(<func>, ...<args>): <func>.ret`
     - [x] noop compatibility
-  - [x] `@len_of(<ty>)`
-  - [x] `@kind_of(<ty>)`
-  - [x] `@Any(<fn(type): void/type>..)`
+  - [x] `@len_of(<ty>): uint`
+  - [x] `@kind_of(<ty>): u8`
+  - [x] `@Any(<fn(type): void/type>..): type`
     - [ ] ? type filters
-  - [x] `@error(...<expr>)`
-  - [x] `@ChildOf(<ty>)`
-  - [x] `@target("<pat>")`
-  - [x] `@is_comptime()`
-  - [x] `@int_to_float(<int>)`
-  - [x] `@float_to_int(<float>)`
-  - [x] `@float_cast(<float>)`
-  - [x] `@name_of`
-  - [ ] ? `@recall(..<args>)`
+  - [x] `@error(...<expr>): never`
+  - [ ] ? `@compiles(<expr>): bool`
+  - [x] `@ChildOf(<ty>): type`
+  - [x] `@target("<pat>"): bool`
+  - [x] `@is_comptime(): bool`
+  - [x] `@int_to_float(<int>): <float>`
+  - [x] `@float_to_int(<float>): int`
+  - [x] `@float_cast(<float>): <float>`
+  - [x] `@name_of(<ty>): []u8`
+  - [ ] ? `@recall(..<args>): never`
+- [ ] optimizations
+  - [ ] assumptions
+  - [ ] memory
+    - [ ] constant global loads
+    - [x] stack elimination
+    - [x] load alias reordering
+      - [x] around stores
+      - [ ] around calls
+    - [x] store->load forwarding
+    - [ ] splitting
+    - [ ] mem2reg
+      - [x] scalar locals
+      - [ ] arbitrary locals
+  - [ ] compute
+    - [ ] folding
+    - [ ] algebra
+  - [ ] control flow
+    - [ ] inlining (heuristic)
+    - [ ] loop unrolling
+    - [ ] folding
+  - [ ] clonable insructions
+- [ ] static analisys
+  - [ ] constraint propagation
+    - [ ] provenance
+  - [x] returning stack reference
+    - [x] trivial direct pointer
+    - [x] trough memory
+    - [ ] ? trough memcpy
+  - [ ] uninitialized reads
+  - [ ] unreachable loop breaks
+  - [ ] loop invariant conditions
+  - [ ] dead code reporting
+  - [ ] local out of bounds read/write
+  - [ ] semantic assertions
+    - [ ] null checks
+    - [ ] bound checks
 
 ## vendored tests
 

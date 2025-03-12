@@ -11,6 +11,7 @@ pub const graph = @import("graph.zig");
 pub const Mach = @import("Mach.zig");
 pub const root = @import("utils.zig");
 pub const hbc = @import("hbc.zig");
+pub const static_anal = @import("static_anal.zig");
 
 pub fn runVendoredTest(gpa: std.mem.Allocator, path: []const u8) !void {
     var ast = try hbc.compile(.{
@@ -131,6 +132,8 @@ pub fn testBuilder(
     var syms = std.heap.ArenaAllocator.init(gpa);
     defer syms.deinit();
 
+    var anal_errors = std.ArrayListUnmanaged(static_anal.Error){};
+
     var errored = false;
     while (cg.nextTask()) |task| switch (task) {
         .Func => |func| {
@@ -168,16 +171,34 @@ pub fn testBuilder(
             fnc.gcm.buildCfg();
             if (verbose) fnc.fmtScheduled(output, colors);
 
+            fnc.static_anal.analize(func_arena.arena, &anal_errors);
+
+            for (anal_errors.items) |err| switch (err) {
+                .ReturningStack => {
+                    cg.report(func.key.ast, "the function returns stack (TODO: where?)", .{}) catch {};
+                },
+            };
+            errored = errored or anal_errors.items.len != 0;
+            anal_errors.items.len = 0;
+
             gen.emitFunc(&cg.bl.func, .{
                 .id = func.id,
-                .name = try std.fmt.allocPrint(syms.allocator(), "{test}", .{Types.Id.init(.{ .Func = func }).fmt(&types)}),
+                .name = try std.fmt.allocPrint(
+                    syms.allocator(),
+                    "{test}",
+                    .{Types.Id.init(.{ .Func = func }).fmt(&types)},
+                ),
                 .entry = func.id == entry.id,
                 .optimizations = .none,
             });
         },
         .Global => |g| {
             gen.emitData(.{
-                .name = try std.fmt.allocPrint(syms.allocator(), "{test}", .{Types.Id.init(.{ .Global = g }).fmt(&types)}),
+                .name = try std.fmt.allocPrint(
+                    syms.allocator(),
+                    "{test}",
+                    .{Types.Id.init(.{ .Global = g }).fmt(&types)},
+                ),
                 .id = g.id,
                 .value = .{ .init = g.data },
             });

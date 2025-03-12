@@ -297,6 +297,7 @@ pub const MemCpy = extern struct {
 const mod = @This();
 const gcm = @import("gcm.zig");
 const mem2reg = @import("mem2reg.zig");
+const static_anal = @import("static_anal.zig");
 
 pub fn Func(comptime MachNode: type) type {
     return struct {
@@ -311,6 +312,7 @@ pub fn Func(comptime MachNode: type) type {
         end: *Node = undefined,
         gcm: gcm.GcmMixin(MachNode) = .{},
         mem2reg: mem2reg.Mem2RegMixin(MachNode) = .{},
+        static_anal: static_anal.StaticAnalMixin(MachNode) = .{},
 
         pub fn optApi(comptime decl_name: []const u8, comptime Ty: type) bool {
             const prelude = @typeName(MachNode) ++ " requires this unless `pub const i_know_the_api = {}` is declared:";
@@ -1250,8 +1252,8 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         pub fn knownStore(base: *Node) ?*Node {
-            if (base.kind == .Store) return base;
-            if (base.kind == .BinOp and base.outputs().len == 1 and base.outputs()[0].kind == .Store and base.outputs()[0].base() == base) {
+            if (base.isStore() and !base.isSub(MemCpy)) return base;
+            if (base.kind == .BinOp and base.outputs().len == 1 and base.outputs()[0].isStore() and !base.isSub(MemCpy) and base.outputs()[0].base() == base) {
                 return base.outputs()[0];
             }
             return null;

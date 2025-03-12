@@ -67,9 +67,11 @@ _disasm: *const fn (self: *anyopaque, out: std.io.AnyWriter, colors: std.io.tty.
 
 const std = @import("std");
 const graph = @import("graph.zig");
+const static_anal = @import("static_anal.zig");
 const Builder = @import("Builder.zig");
 const BuilderFunc = Builder.Func;
 const Mach = @This();
+const root = @import("utils.zig");
 
 pub const DataOptions = struct {
     id: u32,
@@ -88,6 +90,8 @@ pub const EmitOptions = struct {
         mem2reg: bool = true,
         peephole_fuel: usize = 1000,
         do_gcm: bool = true,
+        arena: ?*root.Arena = null,
+        error_buf: ?*std.ArrayListUnmanaged(static_anal.Error) = null,
 
         pub const none = @This(){
             .mem2reg = false,
@@ -114,6 +118,10 @@ pub const EmitOptions = struct {
 
             if (self.do_gcm) {
                 func.gcm.buildCfg();
+            }
+
+            if (self.error_buf) |eb| {
+                func.static_anal.analize(self.arena.?, eb);
             }
         }
     } = .{},
