@@ -23,6 +23,7 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
             self.tryHardToFindMemoryEscapes(arena, errors);
         }
 
+        // NOTE: this is a heuristic, it can miss things
         pub fn tryHardToFindMemoryEscapes(self: *Self, arena: *root.Arena, errors: *std.ArrayListUnmanaged(Error)) void {
             const func = self.getGraph();
             for (func.root.outputs()[0].outputs()) |arg| if (arg.kind == .Arg) {
@@ -31,7 +32,10 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
 
                 var local_stores = std.ArrayListUnmanaged(*Node){};
 
+                // find stores that store pointer to local variable
                 for (arg.outputs()) |ao| {
+                    // TODO: we skip MemCpy, this will miss a class of problesm,
+                    // but memcpy elimination might help and effort here would be redundant
                     const store = Func.knownStore(ao) orelse continue;
 
                     if (store.value().kind == .Local) {
@@ -41,6 +45,7 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
 
                 if (local_stores.items.len == 0) return;
 
+                // filter out the stores that are overriden
                 for (arg.outputs()) |unmarked| {
                     const store = Func.knownStore(unmarked) orelse continue;
 
@@ -98,6 +103,8 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
                 frontier.append(tmp.arena.allocator(), n orelse continue) catch unreachable;
             }
 
+            // walk trough phis
+            // note: assuming store->load peepholes are all applied, walking loads should be redundant
             while (frontier.pop()) |nd| {
                 if (nd.kind == .Local) {
                     errors.append(arena.allocator(), .{ .ReturningStack = .{ .slot = nd.id } }) catch unreachable;
