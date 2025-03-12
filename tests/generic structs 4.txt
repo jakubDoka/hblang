@@ -1,6 +1,6 @@
 main:
-         st $31, $254, -48, 48
-     addi64 $254, $254, -72
+         st $31, $254, -40, 40
+     addi64 $254, $254, -64
      addi64 $32, $254, 0
        li64 $33, 1
          st $33, $254, 0, 8
@@ -8,9 +8,8 @@ main:
          st $34, $254, 8, 8
        li64 $35, 3
          st $35, $254, 16, 8
+         st $35, $254, 16, 8
        li64 $35, 0
-         ld $36, $254, 16, 8
-         st $36, $254, 16, 8
          cp $1, $32
          cp $2, $35
         jal $31, $0, :Array(E = uint, Next = Array(E = uint, Next = Array(E = uint, Next = Array(E = uint)))).get
@@ -26,8 +25,8 @@ main:
       add64 $33, $35, $33
       add64 $32, $33, $32
          cp $1, $32
-     addi64 $254, $254, 72
-         ld $31, $254, -48, 48
+     addi64 $254, $254, 64
+         ld $31, $254, -40, 40
          tx
 Array(E = uint, Next = Array(E = uint, Next = Array(E = uint, Next = Array(E = uint)))).get:
          st $31, $254, -32, 32
@@ -51,28 +50,23 @@ Array(E = uint, Next = Array(E = uint, Next = Array(E = uint, Next = Array(E = u
          ld $31, $254, -32, 32
        jala $0, $31, 0
 Array(E = uint, Next = Array(E = uint, Next = Array(E = uint))).get:
-         st $31, $254, -48, 48
-     addi64 $254, $254, -64
-         cp $33, $1
-         cp $34, $2
+         st $31, $254, -40, 40
+     addi64 $254, $254, -40
+         cp $34, $1
+         cp $33, $2
          cp $32, $3
        li64 $35, 0
-     addi64 $36, $254, 0
-         st $33, $254, 0, 8
-         st $34, $254, 8, 8
-         ld $33, $254, 0, 8
         jne $32, $35, :4
-         cp $32, $33
+         cp $32, $34
         jmp :5
-4:       ld $33, $254, 8, 8
-     addi64 $32, $32, -1
+4:   addi64 $32, $32, -1
          cp $1, $33
          cp $2, $32
         jal $31, $0, :Array(E = uint, Next = Array(E = uint)).get
          cp $32, $1
 5:       cp $1, $32
-     addi64 $254, $254, 64
-         ld $31, $254, -48, 48
+     addi64 $254, $254, 40
+         ld $31, $254, -40, 40
        jala $0, $31, 0
 Array(E = uint, Next = Array(E = uint)).get:
          st $31, $254, -32, 32

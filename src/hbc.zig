@@ -288,7 +288,7 @@ const Loader = struct {
             std.fs.path.join(tmp.arena.allocator(), &.{ base, rel_base, opts.path }) catch return null;
         const path = std.fs.cwd().realpathAlloc(tmp.arena.allocator(), mangled_path) catch mangled_path;
 
-        const canon = makeRelative(tmp.arena.allocator(), base, path) catch return null;
+        const canon = makeRelative(tmp.arena.allocator(), path, base) catch return null;
 
         for (self.files.items, 0..) |fl, i| {
             if (std.mem.eql(u8, fl.path, canon)) return @enumFromInt(i);

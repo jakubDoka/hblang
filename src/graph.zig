@@ -1159,73 +1159,65 @@ pub fn Func(comptime MachNode: type) type {
 
             if (self.idealizeDead(node, worklist)) |w| return w;
 
+            var tmp = root.Arena.scrath(null);
+            defer tmp.deinit();
+
             const inps = node.inputs();
 
-            if (false and node.isStore()) {
-                if (node.base().kind == .Local and node.cfg0() != null) {
-                    const dinps = self.arena.allocator().dupe(?*Node, node.inputs()) catch unreachable;
+            if (node.kind == .Store) {
+                const base, _ = knownOffset(node.base());
+
+                if (base.kind == .Local) eliminate_stack: {
+                    for (base.outputs()) |o| {
+                        _ = knownStore(o) orelse {
+                            break :eliminate_stack;
+                        };
+                    }
+
+                    for (base.outputs()) |o| if (knownStore(o).? != node) {
+                        worklist.add(knownStore(o).?);
+                    };
+
+                    return node.mem();
+                }
+
+                if (base.kind == .Local and node.cfg0() != null) {
+                    const dinps = tmp.arena.dupe(?*Node, node.inputs());
                     dinps[0] = null;
-                    const st = self.addNode(.Store, dinps, {});
+                    const st = self.addTypedNode(.Store, node.data_type, dinps, .{});
+                    worklist.add(st);
+                    return st;
+                }
+            }
+
+            if (node.kind == .Load) {
+                var earlier = node.mem();
+                const base, _ = knownOffset(node.base());
+
+                if (base.kind == .Local and node.cfg0() != null) {
+                    const dinps = tmp.arena.dupe(?*Node, node.inputs());
+                    dinps[0] = null;
+                    const st = self.addTypedNode(.Load, node.data_type, dinps, .{});
                     worklist.add(st);
                     return st;
                 }
 
-                if (node.base().kind == .Local and node.outputs().len == 1 and node.outputs()[0].kind == .Return) {
-                    return node.mem();
-                }
-            }
-
-            if (false and node.kind == .Load) {
-                var earlier = node.mem();
-
-                if (node.base().kind == .Local and node.cfg0() != null) {
-                    const ld = self.addNode(.Load, &.{ null, inps[1], inps[2] }, {});
-                    worklist.add(ld);
-                    return ld;
-                }
-
-                while (earlier.isStore() and
+                while (earlier.kind == .Store and
                     (earlier.cfg0() == node.cfg0() or node.cfg0() == null) and
-                    noAlias(earlier.base(), node.base()))
+                    noAlias(earlier, node))
                 {
                     earlier = earlier.mem();
                 }
 
-                if (earlier.isStore() and
+                if (earlier.kind == .Store and
                     earlier.base() == node.base() and
                     earlier.data_type == node.data_type)
                 {
                     return earlier.value();
                 }
 
-                if (earlier.kind == .Phi) {
-                    std.debug.assert(earlier.inputs().len == 3);
-                    var l, var r = .{ earlier.inputs()[1].?, earlier.inputs()[2].? };
-
-                    while (l.isStore() and
-                        (l.cfg0() == node.cfg0() or node.cfg0() == null) and
-                        noAlias(l.base(), node.base()))
-                    {
-                        l = l.mem();
-                    }
-
-                    while (r.isStore() and
-                        (r.cfg0() == node.cfg0() or node.cfg0() == null) and
-                        noAlias(r.base(), node.base()))
-                    {
-                        r = r.mem();
-                    }
-
-                    if (l.isStore() and r.isStore() and
-                        l.base() == r.base() and l.base() == node.base() and
-                        l.data_type == r.data_type and l.data_type == node.data_type)
-                    {
-                        return self.addNode(.Phi, &.{ earlier.inputs()[0].?, l.value(), r.value() }, {});
-                    }
-                }
-
                 if (earlier != node.mem()) {
-                    return self.addNode(.Load, &.{ inps[0], earlier, inps[2] }, {});
+                    return self.addTypedNode(.Load, node.data_type, &.{ inps[0], earlier, inps[2] }, .{});
                 }
             }
 
@@ -1257,8 +1249,29 @@ pub fn Func(comptime MachNode: type) type {
             return if (comptime optApi("idealize", @TypeOf(idealize))) MachNode.idealize(self, node, worklist) else null;
         }
 
-        pub fn noAlias(lbase: *Node, rbase: *Node) bool {
-            if (lbase.kind == .Local and rbase.kind == .Local) return lbase != rbase;
+        pub fn knownStore(base: *Node) ?*Node {
+            if (base.kind == .Store) return base;
+            if (base.kind == .BinOp and base.outputs().len == 1 and base.outputs()[0].kind == .Store and base.outputs()[0].base() == base) {
+                return base.outputs()[0];
+            }
+            return null;
+        }
+
+        pub fn knownOffset(base: *Node) struct { *Node, i64 } {
+            if (base.kind == .BinOp and base.inputs()[2].?.kind == .CInt) {
+                return .{ base.inputs()[1].?, base.inputs()[2].?.extra(.CInt).* };
+            }
+            return .{ base, 0 };
+        }
+
+        pub fn noAlias(plnode: *Node, prnode: *Node) bool {
+            const lsize: i64 = @bitCast(plnode.data_type.size());
+            const rsize: i64 = @bitCast(prnode.data_type.size());
+            const lbase, const loff = knownOffset(plnode.base());
+            const rbase, const roff = knownOffset(prnode.base());
+
+            if (lbase.kind == .Local and rbase.kind == .Local)
+                return (lbase != rbase) or (loff + lsize <= roff) or (roff + rsize <= loff);
             if (lbase.kind == .Local and rbase.kind == .Arg) return true;
             if (lbase.kind == .Arg and rbase.kind == .Local) return true;
             return false;

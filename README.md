@@ -1142,6 +1142,23 @@ Target := enum {
 page_size := fn(): uint return 0
 ```
 
+#### enums 3 (customization)
+```!hb
+main := fn(): uint {
+    Enm := enum(u32) {
+        .a = 1;
+        .b;
+        .c = 0
+    }
+
+    if @as(Enm, @bit_cast(@as(u32, 1))) != .a return 1
+    if @as(Enm, @bit_cast(@as(u32, 2))) != .b return 2
+    if @as(Enm, @bit_cast(@as(u32, 0))) != .c return 3
+
+    return 0
+}
+```
+
 #### match 1
 ```hb
 main := fn(): uint {
@@ -1738,7 +1755,7 @@ main := fn(): uint {
     - [x] break
     - [x] continue
     - [x] infinite
-      - [ ] ? clean up the hacky graph hierarchy
+      - [x] clean up the hacky graph hierarchy
     - [ ] ? labels
   - [x] blocks
     - [ ] ? labels
