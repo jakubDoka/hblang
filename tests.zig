@@ -53,29 +53,5 @@ pub fn runFuzzFindingTest(name: []const u8, code: []const u8) !void {
 pub fn runVendoredTest(path: []const u8) !void {
     root.Arena.initScratch(1024 * 1024);
     defer root.Arena.deinitScratch();
-
-    var bin = std.ArrayListUnmanaged(u8).empty;
-    defer bin.deinit(std.testing.allocator);
-    var ast = try hbc.compile(.{
-        .gpa = std.testing.allocator,
-        .diagnostics = std.io.getStdErr().writer().any(),
-        .colors = std.io.tty.detectConfig(std.io.getStdErr()),
-        .output = bin.writer(std.testing.allocator).any(),
-        .mangle_terminal = true,
-        .root_file = path,
-    });
-    defer ast.arena.deinit();
-
-    const HbvmGen = @import("src/HbvmGen.zig");
-
-    const header: HbvmGen.ExecHeader = @bitCast(bin.items[0..@sizeOf(HbvmGen.ExecHeader)].*);
-    try test_util.runVm(
-        &ast.ast[0],
-        ast.arena.allocator(),
-        false,
-        bin.items[@sizeOf(HbvmGen.ExecHeader)..],
-        header.code_length,
-        std.io.null_writer.any(),
-        .no_color,
-    );
+    try test_util.runVendoredTest(std.testing.allocator, path);
 }

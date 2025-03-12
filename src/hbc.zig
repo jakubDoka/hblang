@@ -21,6 +21,7 @@ pub const CompileOptions = struct {
     fmt_stdout: bool = false, // format only the root file and print it to stdout
     dump_asm: bool = false, // dump assembly of the program
     mangle_terminal: bool = false, // dump the executable even if colors are supported
+    vendored_test: bool = false,
     // #OPTIONS (--target ableos)
     target: []const u8 = "ableos", // target triple to compile to (not used yet since we have only one target)
     extra_threads: usize = 0, // extra threads used for the compilation (not used yet)
@@ -55,6 +56,7 @@ pub const CompileOptions = struct {
             self.fmt_stdout = self.fmt_stdout or std.mem.eql(u8, arg, "fmt-stdout");
             self.dump_asm = self.dump_asm or std.mem.eql(u8, arg, "dump-asm");
             self.mangle_terminal = self.mangle_terminal or std.mem.eql(u8, arg, "mangle-terminal");
+            self.vendored_test = self.vendored_test or std.mem.eql(u8, arg, "vendored-test");
 
             if (std.mem.eql(u8, arg, "target")) self.target = args.next() orelse {
                 try self.diagnostics.writeAll("--target takes an argument");
@@ -86,7 +88,7 @@ pub const CompileOptions = struct {
     }
 };
 
-pub fn compile(opts: CompileOptions) !struct {
+pub fn compile(opts: CompileOptions) anyerror!struct {
     arena: Arena,
     ast: []const hb.Ast,
 } {
@@ -102,6 +104,11 @@ pub fn compile(opts: CompileOptions) !struct {
 
         try opts.diagnostics.writeAll(help_str);
         return error.Failed;
+    }
+
+    if (opts.vendored_test) {
+        @import("test_util.zig").runVendoredTest(opts.gpa, opts.root_file) catch {};
+        return .{ .arena = Arena.init(1024 * 1024), .ast = &.{} };
     }
 
     var ast_arena = Arena.init(1024 * 1024 * 20);

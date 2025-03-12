@@ -10,6 +10,45 @@ pub const Regalloc = @import("Regalloc.zig");
 pub const graph = @import("graph.zig");
 pub const Mach = @import("Mach.zig");
 pub const root = @import("utils.zig");
+pub const hbc = @import("hbc.zig");
+
+pub fn runVendoredTest(gpa: std.mem.Allocator, path: []const u8) !void {
+    var bin = std.ArrayListUnmanaged(u8).empty;
+    defer bin.deinit(gpa);
+    var ast = try hbc.compile(.{
+        .gpa = gpa,
+        .diagnostics = std.io.getStdErr().writer().any(),
+        .colors = std.io.tty.detectConfig(std.io.getStdErr()),
+        .output = bin.writer(gpa).any(),
+        .mangle_terminal = true,
+        .root_file = path,
+    });
+    defer ast.arena.deinit();
+
+    const head: HbvmGen.ExecHeader = @bitCast(bin.items[0..@sizeOf(HbvmGen.ExecHeader)].*);
+
+    errdefer {
+        runVm(
+            &ast.ast[0],
+            ast.arena.allocator(),
+            false,
+            bin.items[@sizeOf(HbvmGen.ExecHeader)..],
+            head.code_length,
+            std.io.getStdErr().writer().any(),
+            std.io.tty.detectConfig(std.io.getStdErr()),
+        ) catch {};
+    }
+
+    try runVm(
+        &ast.ast[0],
+        ast.arena.allocator(),
+        false,
+        bin.items[@sizeOf(HbvmGen.ExecHeader)..],
+        head.code_length,
+        std.io.null_writer.any(),
+        .no_color,
+    );
+}
 
 inline fn header(comptime name: []const u8, writer: anytype, corors: std.io.tty.Config) !void {
     const side = "========";
