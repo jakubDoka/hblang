@@ -13,41 +13,16 @@ pub const root = @import("utils.zig");
 pub const hbc = @import("hbc.zig");
 
 pub fn runVendoredTest(gpa: std.mem.Allocator, path: []const u8) !void {
-    var bin = std.ArrayListUnmanaged(u8).empty;
-    defer bin.deinit(gpa);
     var ast = try hbc.compile(.{
         .gpa = gpa,
         .diagnostics = std.io.getStdErr().writer().any(),
         .colors = std.io.tty.detectConfig(std.io.getStdErr()),
-        .output = bin.writer(gpa).any(),
+        .output = std.io.null_writer.any(),
         .mangle_terminal = true,
+        .vendored_test = true,
         .root_file = path,
     });
     defer ast.arena.deinit();
-
-    const head: HbvmGen.ExecHeader = @bitCast(bin.items[0..@sizeOf(HbvmGen.ExecHeader)].*);
-
-    errdefer {
-        runVm(
-            &ast.ast[0],
-            ast.arena.allocator(),
-            false,
-            bin.items[@sizeOf(HbvmGen.ExecHeader)..],
-            head.code_length,
-            std.io.getStdErr().writer().any(),
-            std.io.tty.detectConfig(std.io.getStdErr()),
-        ) catch {};
-    }
-
-    try runVm(
-        &ast.ast[0],
-        ast.arena.allocator(),
-        false,
-        bin.items[@sizeOf(HbvmGen.ExecHeader)..],
-        head.code_length,
-        std.io.null_writer.any(),
-        .no_color,
-    );
 }
 
 inline fn header(comptime name: []const u8, writer: anytype, corors: std.io.tty.Config) !void {
@@ -221,30 +196,33 @@ pub fn testBuilder(
 
     try runVm(
         &ast,
-        func_arena.arena.allocator(),
         errored,
         out.items,
         code_len,
         if (verbose) output else std.io.null_writer.any(),
         colors,
+        .{},
     );
 }
 
+pub const stack_size = 1024 * 10;
+
 pub fn runVm(
     ast: *const Ast,
-    arena: std.mem.Allocator,
     errored: bool,
     code: []u8,
     code_len: usize,
     output: std.io.AnyWriter,
     colors: std.io.tty.Config,
+    symbols: std.AutoHashMapUnmanaged(u32, []const u8),
 ) !void {
     var ret: u64 = 0;
     var should_error: bool = false;
     var times_out: bool = false;
     var unreaches: bool = false;
     var ecalls: []const Ast.Id = &.{};
-    if (ast.findDecl(ast.items, "expectations", arena)) |d| {
+
+    if (ast.findDecl(ast.items, "expectations", undefined)) |d| {
         const decl = ast.exprs.getTyped(.Decl, d[0]).?.value;
         const ctor = ast.exprs.getTyped(.Ctor, decl).?;
         for (ast.exprs.view(ctor.fields)) |field| {
@@ -278,7 +256,6 @@ pub fn runVm(
         return;
     }
 
-    const stack_size = 1024 * 10;
     const stack_end = stack_size - code.len;
 
     var stack: [stack_size]u8 = undefined;
@@ -292,6 +269,7 @@ pub fn runVm(
     vm.regs.set(.stack_addr, stack_end);
     var ctx = Vm.SafeContext{
         .writer = output,
+        .symbols = symbols,
         .color_cfg = colors,
         .memory = &stack,
         .code_start = stack_end,

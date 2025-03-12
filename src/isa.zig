@@ -177,7 +177,7 @@ const SymbolSpec = struct {
 pub fn disasm(
     code: []const u8,
     gpa: std.mem.Allocator,
-    symbols: *const std.AutoHashMap(u32, []const u8),
+    symbols: *const std.AutoHashMapUnmanaged(u32, []const u8),
     writer: anytype,
     colors: std.io.tty.Config,
 ) !void {
@@ -193,7 +193,7 @@ pub fn disasmOne(
     full_code: []const u8,
     cursor: usize,
     labelMap: *const std.AutoHashMap(u32, u32),
-    symbols: *const std.AutoHashMap(u32, []const u8),
+    symbols: *const std.AutoHashMapUnmanaged(u32, []const u8),
     writer: anytype,
     color: std.io.tty.Config,
 ) !usize {
@@ -232,7 +232,7 @@ fn disasmArg(
     cursor: i32,
     ptr: [*]const u8,
     labelMap: *const std.AutoHashMap(u32, u32),
-    symbols: *const std.AutoHashMap(u32, []const u8),
+    symbols: *const std.AutoHashMapUnmanaged(u32, []const u8),
     writer: anytype,
     colors: std.io.tty.Config,
 ) !usize {
@@ -266,7 +266,7 @@ fn disasmArg(
     return size;
 }
 
-fn makeLabelMap(code: []const u8, syms: *const std.AutoHashMap(u32, []const u8), gpa: std.mem.Allocator) !std.AutoHashMap(u32, u32) {
+fn makeLabelMap(code: []const u8, syms: *const std.AutoHashMapUnmanaged(u32, []const u8), gpa: std.mem.Allocator) !std.AutoHashMap(u32, u32) {
     var map = std.AutoHashMap(u32, u32).init(gpa);
     var cursor: i32 = 0;
     while (code.len > cursor) {

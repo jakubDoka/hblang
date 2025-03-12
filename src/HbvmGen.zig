@@ -245,18 +245,23 @@ pub fn finalize(self: *HbvmGen) std.ArrayListUnmanaged(u8) {
     return self.out;
 }
 
+pub fn makeSymMap(self: *HbvmGen, offset: u32, arena: std.mem.Allocator) std.AutoHashMapUnmanaged(u32, []const u8) {
+    var map = std.AutoHashMap(u32, []const u8).init(arena);
+    for (self.funcs.items) |gf| {
+        map.put(gf.offset - offset, gf.name) catch unreachable;
+    }
+    for (self.globals.items) |gf| {
+        map.put(gf.offset - offset, gf.name) catch unreachable;
+    }
+    return map.unmanaged;
+}
+
 pub fn disasm(self: *HbvmGen, out: std.io.AnyWriter, colors: std.io.tty.Config) void {
     const code_len = self.link(0, false);
 
     var arena = std.heap.ArenaAllocator.init(self.gpa);
     defer arena.deinit();
-    var map = std.AutoHashMap(u32, []const u8).init(arena.allocator());
-    for (self.funcs.items) |gf| {
-        map.put(gf.offset, gf.name) catch unreachable;
-    }
-    for (self.globals.items) |gf| {
-        map.put(gf.offset, gf.name) catch unreachable;
-    }
+    const map = self.makeSymMap(0, arena.allocator());
     isa.disasm(self.out.items[0..code_len], arena.allocator(), &map, out, colors) catch unreachable;
 }
 

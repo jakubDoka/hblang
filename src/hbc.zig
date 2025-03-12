@@ -106,11 +106,6 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         return error.Failed;
     }
 
-    if (opts.vendored_test) {
-        @import("test_util.zig").runVendoredTest(opts.gpa, opts.root_file) catch {};
-        return .{ .arena = Arena.init(1024 * 1024), .ast = &.{} };
-    }
-
     var ast_arena = Arena.init(1024 * 1024 * 20);
     errdefer ast_arena.deinit();
 
@@ -214,6 +209,37 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
 
     var out = backend.finalize();
     defer out.deinit(opts.gpa);
+
+    if (opts.vendored_test) {
+        const test_utils = @import("test_util.zig");
+
+        const head: hb.HbvmGen.ExecHeader = @bitCast(out.items[0..@sizeOf(hb.HbvmGen.ExecHeader)].*);
+
+        errdefer {
+            const symbols = hbg.makeSymMap(@sizeOf(hb.HbvmGen.ExecHeader), ast_arena.allocator());
+            test_utils.runVm(
+                &asts[0],
+                false,
+                out.items[@sizeOf(hb.HbvmGen.ExecHeader)..],
+                head.code_length,
+                std.io.getStdErr().writer().any(),
+                std.io.tty.detectConfig(std.io.getStdErr()),
+                symbols,
+            ) catch {};
+        }
+
+        try test_utils.runVm(
+            &asts[0],
+            false,
+            out.items[@sizeOf(hb.HbvmGen.ExecHeader)..],
+            head.code_length,
+            std.io.null_writer.any(),
+            .no_color,
+            .{},
+        );
+
+        return .{ .arena = ast_arena, .ast = asts };
+    }
 
     if (opts.colors == .no_color or opts.mangle_terminal) {
         try opts.output.writeAll(out.items);

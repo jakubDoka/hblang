@@ -13,6 +13,7 @@ const one: u64 = 1;
 pub const SafeContext = struct {
     color_cfg: std.io.tty.Config = .no_color,
     writer: std.io.AnyWriter = std.io.null_writer.any(),
+    symbols: std.AutoHashMapUnmanaged(u32, []const u8) = .{},
     memory: []u8,
     code_start: usize,
     code_end: usize,
@@ -367,16 +368,18 @@ fn readOp(self: *Vm, ctx: anytype) !isa.Op {
 }
 
 fn readOpArgs(self: *Vm, argTys: []const u8, ctx: anytype) !void {
+    const prev_ip = self.ip - 1;
     var seen_regs = std.EnumSet(isa.Reg){};
     for (argTys, 0..) |argTy, i| {
         const argt = isa.Arg.fromChar(argTy);
         if (i > 0) try ctx.writer.writeAll(", ") else try ctx.writer.writeAll(" ");
-        try self.displayArg(argt, ctx, &seen_regs);
+        try self.displayArg(prev_ip, argt, ctx, &seen_regs);
     }
 }
 
 fn displayArg(
     self: *Vm,
+    prev_ip: usize,
     arg: isa.Arg,
     ctx: anytype,
     seen_regs: *std.EnumSet(isa.Reg),
@@ -405,7 +408,10 @@ fn displayArg(
             const value = try self.progRead(isa.ArgType(t), ctx);
             self.ip += @sizeOf(isa.ArgType(t));
             try ctx.setColor(arg.color());
-            if (@typeInfo(@TypeOf(value)).int.signedness == .unsigned) {
+            const pos = if (t == .rel32) @as(i32, @intCast(prev_ip)) + value - @as(i32, @intCast(ctx.code_start)) else 0;
+            if (t == .rel32 and ctx.symbols.get(@intCast(pos)) != null) {
+                try ctx.writer.print("{s}", .{ctx.symbols.get(@intCast(pos)).?});
+            } else if (@typeInfo(@TypeOf(value)).int.signedness == .unsigned) {
                 try ctx.writer.print("{any}", .{@as(std.meta.Int(.signed, @bitSizeOf(@TypeOf(value))), @bitCast(value))});
             } else {
                 try ctx.writer.print("{any}", .{value});
