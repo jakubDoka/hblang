@@ -22,12 +22,12 @@ pub const SafeContext = struct {
     const Self = @This();
 
     fn read(self: *Self, src: usize, dst: []u8) !void {
-        self.assertOutsideCode(src);
+        try self.assertOutsideCode(src);
         @memcpy(dst, self.memory[src..][0..dst.len]);
     }
 
     fn write(self: *Self, src: []u8, dst: usize) !void {
-        self.assertOutsideCode(dst);
+        try self.assertOutsideCode(dst);
         @memcpy(self.memory[dst..][0..src.len], src);
     }
 
@@ -36,8 +36,8 @@ pub const SafeContext = struct {
     }
 
     fn memmove(self: *Self, dst: usize, src: usize, len: usize) !void {
-        self.assertOutsideCode(src);
-        self.assertOutsideCode(dst);
+        try self.assertOutsideCode(src);
+        try self.assertOutsideCode(dst);
         const srcp = self.memory[src..];
         const dstp = self.memory[dst..];
         if (dst + len <= src or src + len <= dst) {
@@ -49,8 +49,9 @@ pub const SafeContext = struct {
         }
     }
 
-    fn assertOutsideCode(self: *const Self, pos: usize) void {
-        if (self.code_start <= pos and pos < self.code_end) unreachable;
+    fn assertOutsideCode(self: *const Self, pos: usize) !void {
+        if (self.code_start <= pos and pos < self.code_end) return error.MemOob;
+        if (self.memory.len <= pos) return error.MemOob;
     }
 
     fn progRead(self: *Self, comptime T: type, src: usize) !*align(1) const T {

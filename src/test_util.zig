@@ -309,7 +309,7 @@ pub fn runVm(
             try std.testing.expect(unreaches);
             return;
         },
-        else => unreachable,
+        else => return err,
     }) {
         .tx => break,
         .eca => {
