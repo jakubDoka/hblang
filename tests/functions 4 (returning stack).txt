@@ -1,6 +1,6 @@
-functions 4 (returning stack):19:26: the function returns stack (TODO: where?)
-return_indirect_stack := fn(): struct{.u: uint; .b: uint; .c: ^uint} {
-                         ^
-functions 4 (returning stack):12:24: the function returns stack (TODO: where?)
-return_direct_stack := fn(): ^uint {
-                       ^
+functions 4 (returning stack):20:2: stack location escapes the function
+    v := 0
+    ^
+functions 4 (returning stack):13:2: stack location escapes the function
+    a := 0
+    ^

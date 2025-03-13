@@ -4,14 +4,14 @@ const root = @import("utils.zig");
 
 pub const Error = union(enum) {
     ReturningStack: struct {
-        slot: u32,
+        slot: graph.Sloc,
     },
     StackOob: struct {
-        slot: u32,
+        slot: graph.Sloc,
         op: u32,
     },
     LoopInvariantBreak: struct {
-        if_node: u32,
+        if_node: graph.Sloc,
     },
 };
 
@@ -55,7 +55,7 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
                         if (func.loopDepth(inp.?) == ld) break :b;
                     }
 
-                    errors.append(arena.allocator(), .{ .LoopInvariantBreak = .{ .if_node = node.id } }) catch unreachable;
+                    errors.append(arena.allocator(), .{ .LoopInvariantBreak = .{ .if_node = node.sloc } }) catch unreachable;
                 }
 
                 for (node.outputs()) |o| if (o.isCfg()) {
@@ -76,7 +76,7 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
                     if (mem_op.base() != local) continue;
                     const end_offset = offset + @as(i64, @intCast(mem_op.data_type.size()));
                     if (offset < 0 or end_offset > local.extra(.Local).*) {
-                        errors.append(arena.allocator(), .{ .StackOob = .{ .slot = local.id, .op = mem_op.id } }) catch unreachable;
+                        errors.append(arena.allocator(), .{ .StackOob = .{ .slot = local.sloc, .op = mem_op.id } }) catch unreachable;
                     }
                 }
             };
@@ -145,7 +145,7 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
                 }
 
                 for (local_stores.items) |marked| {
-                    errors.append(arena.allocator(), .{ .ReturningStack = .{ .slot = marked.id } }) catch unreachable;
+                    errors.append(arena.allocator(), .{ .ReturningStack = .{ .slot = marked.value().sloc } }) catch unreachable;
                 }
             };
         }
@@ -166,7 +166,7 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
             // note: assuming store->load peepholes are all applied, walking loads should be redundant
             while (frontier.pop()) |nd| {
                 if (nd.kind == .Local) {
-                    errors.append(arena.allocator(), .{ .ReturningStack = .{ .slot = nd.id } }) catch unreachable;
+                    errors.append(arena.allocator(), .{ .ReturningStack = .{ .slot = nd.sloc } }) catch unreachable;
                 } else if (nd.kind == .Phi) {
                     for (nd.inputs()[1..]) |n| {
                         frontier.append(tmp.arena.allocator(), n.?) catch unreachable;

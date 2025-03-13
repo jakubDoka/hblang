@@ -68,9 +68,10 @@ pub fn end(self: *Builder, _: BuildToken) void {
 
 // #MEM ========================================================================
 
-pub fn addLocal(self: *Builder, size: u64) SpecificNode(.Local) {
+pub fn addLocal(self: *Builder, sloc: graph.Sloc, size: u64) SpecificNode(.Local) {
     const local = self.func.addNode(.Local, &.{ null, self.root_mem }, size);
     local.data_type = .int;
+    local.sloc = sloc;
     return local;
 }
 
@@ -123,8 +124,8 @@ pub fn addIndexOffset(self: *Builder, base: *BuildNode, op: enum(u8) {
     return self.addBinOp(@enumFromInt(@intFromEnum(op)), .int, base, offset);
 }
 
-pub fn addSpill(self: *Builder, value: *BuildNode) SpecificNode(.Local) {
-    const local = self.addLocal(value.data_type.size());
+pub fn addSpill(self: *Builder, sloc: graph.Sloc, value: *BuildNode) SpecificNode(.Local) {
+    const local = self.addLocal(sloc, value.data_type.size());
     _ = self.addStore(local, value.data_type, value);
     return local;
 }
@@ -340,9 +341,10 @@ pub const If = struct {
     }
 };
 
-pub fn addIfAndBeginThen(self: *Builder, cond: *BuildNode) If {
+pub fn addIfAndBeginThen(self: *Builder, sloc: graph.Sloc, cond: *BuildNode) If {
     const else_ = self.cloneScope();
     const if_node = self.func.addNode(.If, &.{ self.control(), cond }, .{});
+    if_node.sloc = sloc;
     self.func.setInputNoIntern(self.scope.?, 0, self.func.addNode(.Then, &.{if_node}, .{}));
     return .{
         .if_node = if_node,

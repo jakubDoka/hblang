@@ -1933,6 +1933,7 @@ main := fn(): uint {
     - [ ] folding
   - [ ] clonable insructions
 - [ ] static analisys
+  - [ ] source locations
   - [ ] constraint propagation
     - [ ] provenance
   - [x] returning stack reference

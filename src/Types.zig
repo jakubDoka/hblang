@@ -10,6 +10,7 @@ files: []const Ast,
 
 const std = @import("std");
 const root = @import("utils.zig");
+const static_anal = @import("static_anal.zig");
 const Ast = @import("Ast.zig");
 const Arena = @import("utils.zig").Arena;
 const Codegen = @import("Codegen.zig");
@@ -882,6 +883,11 @@ pub fn deinit(self: *Types) void {
     self.* = undefined;
 }
 
+pub fn reportSloc(self: *Types, sloc: graph.Sloc, comptime fmt: []const u8, args: anytype) void {
+    std.debug.assert(sloc != graph.Sloc.none);
+    self.report(@enumFromInt(sloc.namespace), sloc.index, fmt, args);
+}
+
 pub fn report(self: *Types, file_id: File, expr: anytype, comptime fmt: []const u8, args: anytype) void {
     const RemapedArgs = comptime b: {
         var tupl = @typeInfo(@TypeOf(args)).@"struct";
@@ -991,6 +997,23 @@ pub fn resolveFielded(
         };
     }
     return slot.key_ptr.*;
+}
+
+pub fn dumpAnalErrors(self: *Types, func: *Types.Func, anal_errors: *std.ArrayListUnmanaged(static_anal.Error)) bool {
+    _ = func;
+    for (anal_errors.items) |err| switch (err) {
+        .ReturningStack => |loc| {
+            self.reportSloc(loc.slot, "stack location escapes the function", .{});
+        },
+        .StackOob => |loc| {
+            self.reportSloc(loc.slot, "this slot has a out of bounds read/write (TODO: show the index location as well)", .{});
+        },
+        .LoopInvariantBreak => |loc| {
+            self.reportSloc(loc.if_node, "the if condition is loop invariant but it decides wheter to break out ouf the loop", .{});
+        },
+    };
+    defer anal_errors.items.len = 0;
+    return anal_errors.items.len != 0;
 }
 
 pub fn resolveGlobal(self: *Types, scope: Id, name: []const u8, ast: Ast.Id) struct { Id, bool } {

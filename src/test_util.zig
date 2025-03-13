@@ -172,7 +172,7 @@ pub fn testBuilder(
             if (verbose) fnc.fmtScheduled(output, colors);
 
             fnc.static_anal.analize(func_arena.arena, &anal_errors);
-            errored = cg.dumpAnalErrors(func, &anal_errors) or errored;
+            errored = types.dumpAnalErrors(func, &anal_errors) or errored;
 
             gen.emitFunc(&cg.bl.func, .{
                 .id = func.id,

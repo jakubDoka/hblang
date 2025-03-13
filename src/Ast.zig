@@ -307,6 +307,7 @@ fn posOfPayload(self: *const Ast, v: anytype) Pos {
         void => .init(0),
         Ident => .init(v.pos()),
         Pos => v,
+        u32 => .init(v),
         Id => self.posOf(v),
         Ctor => if (v.ty.tag() != .Void) self.posOf(v.ty) else v.pos,
         else => |Vt| if (@hasField(Vt, "pos"))

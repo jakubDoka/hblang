@@ -11,6 +11,13 @@ fn tf(int: i64) f64 {
 
 pub const infinite_loop_trap = std.math.maxInt(u64);
 
+pub const Sloc = packed struct(u64) {
+    namespace: u32,
+    index: u32,
+
+    pub const none: Sloc = .{ .namespace = std.math.maxInt(u32), .index = std.math.maxInt(u32) };
+};
+
 pub const BinOp = enum(u8) {
     iadd,
     isub,
@@ -471,6 +478,7 @@ pub fn Func(comptime MachNode: type) type {
 
             input_base: [*]?*Node,
             output_base: [*]*Node,
+            sloc: Sloc = .none,
 
             pub fn preservesIdentityPhys(self: *Node) bool {
                 std.debug.assert(self.kind == .Region or self.kind == .Loop);
@@ -961,6 +969,7 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         pub fn subsume(self: *Self, this: *Node, target: *Node) void {
+            if (this.sloc == Sloc.none) this.sloc = target.sloc;
             self.subsumeNoKill(this, target);
             self.uninternNode(target);
             target.kill();

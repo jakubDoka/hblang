@@ -197,7 +197,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
                 },
             });
 
-            errored = codegen.dumpAnalErrors(func, &errors) or errored;
+            errored = types.dumpAnalErrors(func, &errors) or errored;
         },
         .Global => |global| {
             backend.emitData(.{
