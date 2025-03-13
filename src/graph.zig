@@ -670,6 +670,11 @@ pub fn Func(comptime MachNode: type) type {
                 return &ptr.ext;
             }
 
+            pub fn getStaticOffset(self: *Node) i64 {
+                std.debug.assert(self.isMemOp());
+                return if (@hasDecl(MachNode, "getStaticOffset")) MachNode.getStaticOffset(self) else 0;
+            }
+
             pub fn isSubbclass(Full: type, Sub: type) bool {
                 var Cursor = Full;
                 while (true) {
@@ -1255,6 +1260,14 @@ pub fn Func(comptime MachNode: type) type {
             if (base.isStore() and !base.isSub(MemCpy)) return base;
             if (base.kind == .BinOp and base.outputs().len == 1 and base.outputs()[0].isStore() and !base.isSub(MemCpy) and base.outputs()[0].base() == base) {
                 return base.outputs()[0];
+            }
+            return null;
+        }
+
+        pub fn knownMemOp(base: *Node) ?struct { *Node, i64 } {
+            if (base.isMemOp()) return .{ base, base.getStaticOffset() };
+            if (base.kind == .BinOp and base.inputs()[2].?.kind == .CInt and base.outputs().len == 1 and base.outputs()[0].isMemOp() and base.outputs()[0].base() == base) {
+                return .{ base.outputs()[0], base.inputs()[2].?.extra(.CInt).* };
             }
             return null;
         }

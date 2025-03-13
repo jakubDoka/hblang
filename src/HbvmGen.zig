@@ -105,6 +105,14 @@ pub const Node = union(enum) {
         return node.kind == .IfOp and node.extra(.IfOp).swapped;
     }
 
+    pub fn getStaticOffset(node: *Func.Node) i64 {
+        return switch (node.kind) {
+            .Ld => node.extra(.Ld).offset,
+            .St => node.extra(.St).offset,
+            else => 0,
+        };
+    }
+
     pub const i_know_the_api = {};
 };
 

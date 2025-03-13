@@ -172,14 +172,7 @@ pub fn testBuilder(
             if (verbose) fnc.fmtScheduled(output, colors);
 
             fnc.static_anal.analize(func_arena.arena, &anal_errors);
-
-            for (anal_errors.items) |err| switch (err) {
-                .ReturningStack => {
-                    cg.report(func.key.ast, "the function returns stack (TODO: where?)", .{}) catch {};
-                },
-            };
-            errored = errored or anal_errors.items.len != 0;
-            anal_errors.items.len = 0;
+            errored = cg.dumpAnalErrors(func, &anal_errors) or errored;
 
             gen.emitFunc(&cg.bl.func, .{
                 .id = func.id,

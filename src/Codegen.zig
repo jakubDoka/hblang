@@ -15,6 +15,7 @@ ret: Types.Id = undefined,
 errored: bool = undefined,
 
 const std = @import("std");
+const static_anal = @import("static_anal.zig");
 const root = @import("utils.zig");
 const graph = @import("graph.zig");
 const Ast = @import("Ast.zig");
@@ -307,6 +308,19 @@ pub fn build(self: *Codegen, func: *Types.Func) !void {
     if (self.errored) return error.HasErrors;
 
     self.bl.end(token);
+}
+
+pub fn dumpAnalErrors(self: *Codegen, func: *Types.Func, anal_errors: *std.ArrayListUnmanaged(static_anal.Error)) bool {
+    for (anal_errors.items) |err| switch (err) {
+        .ReturningStack => {
+            self.report(func.key.ast, "the function returns stack (TODO: where?)", .{}) catch {};
+        },
+        .StackOob => {
+            self.report(func.key.ast, "the function indexes out of bounds of a stack slot (TODO: where?)", .{}) catch {};
+        },
+    };
+    defer anal_errors.items.len = 0;
+    return anal_errors.items.len != 0;
 }
 
 pub fn listFileds(arena: *root.Arena, fields: anytype) []const u8 {

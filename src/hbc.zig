@@ -1,5 +1,6 @@
 const std = @import("std");
 const hb = @import("root.zig");
+const static_anal = @import("static_anal.zig");
 
 const Arena = hb.utils.Arena;
 
@@ -180,12 +181,23 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
                 continue;
             };
 
+            var tmp = Arena.scrath(null);
+            defer tmp.deinit();
+
+            var errors = std.ArrayListUnmanaged(static_anal.Error){};
+
             backend.emitFunc(&codegen.bl.func, .{
                 .id = func.id,
                 .name = try hb.Types.Id.init(.{ .Func = func })
                     .fmt(&types).toString(syms.allocator()),
                 .entry = func.id == entry.id,
+                .optimizations = .{
+                    .arena = tmp.arena,
+                    .error_buf = &errors,
+                },
             });
+
+            errored = codegen.dumpAnalErrors(func, &errors) or errored;
         },
         .Global => |global| {
             backend.emitData(.{

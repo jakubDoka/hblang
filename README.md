@@ -1445,6 +1445,18 @@ main := fn(): uint {
 }
 ```
 
+#### arrays 3 (errors)
+```hb
+expectations := .{
+    should_error: true,
+}
+
+main := fn(): uint {
+    arr := uint.[0, 1, 2]
+    return arr[3]
+}
+```
+
 #### slices 1
 ```hb
 expectations := .{
@@ -1470,6 +1482,8 @@ main := fn(): uint {
 
     return sum
 }
+
+opaque := fn(): uint return 0
 ```
 
 #### slices 2
@@ -1911,7 +1925,9 @@ main := fn(): uint {
   - [ ] unreachable loop breaks
   - [ ] loop invariant conditions
   - [ ] dead code reporting
-  - [ ] local out of bounds read/write
+  - [x] local out of bounds read/write
+    - [x] scalar read/write
+    - [ ] memcpy
   - [ ] semantic assertions
     - [ ] null checks
     - [ ] bound checks

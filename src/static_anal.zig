@@ -6,6 +6,10 @@ pub const Error = union(enum) {
     ReturningStack: struct {
         slot: u32,
     },
+    StackOob: struct {
+        slot: u32,
+        op: u32,
+    },
 };
 
 pub fn StaticAnalMixin(comptime Mach: type) type {
@@ -21,6 +25,25 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
         pub fn analize(self: *Self, arena: *root.Arena, errors: *std.ArrayListUnmanaged(Error)) void {
             self.findTrivialStackEscapes(arena, errors);
             self.tryHardToFindMemoryEscapes(arena, errors);
+            self.findConstantOobMemOps(arena, errors);
+        }
+
+        pub fn findConstantOobMemOps(self: *Self, arena: *root.Arena, errors: *std.ArrayListUnmanaged(Error)) void {
+            const func = self.getGraph();
+
+            if (func.root.outputs().len < 2 or func.root.outputs()[1].kind != .Mem) return;
+
+            for (func.root.outputs()[1].outputs()) |local| if (local.kind == .Local) {
+                for (local.outputs()) |op| {
+                    const mem_op, const offset = Func.knownMemOp(op) orelse continue;
+                    if ((!mem_op.isLoad() and !mem_op.isStore()) or mem_op.isSub(graph.MemCpy)) continue;
+                    if (mem_op.base() != local) continue;
+                    const end_offset = offset + @as(i64, @intCast(mem_op.data_type.size()));
+                    if (offset < 0 or end_offset > local.extra(.Local).*) {
+                        errors.append(arena.allocator(), .{ .StackOob = .{ .slot = local.id, .op = mem_op.id } }) catch unreachable;
+                    }
+                }
+            };
         }
 
         // NOTE: this is a heuristic, it can miss things
