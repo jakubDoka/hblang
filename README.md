@@ -515,6 +515,24 @@ main := fn(): uint {
 }
 ```
 
+#### loops 7 (loop invariant break)
+```hb
+expectations := .{
+    should_error: true,
+}
+
+main := fn(): uint {
+    arr := uint.[1, 2, 3, 4]
+    i := 0
+    sum := 0
+    loop if i == arr.len break else {
+        sum += arr[i]
+        //i += 1 // ups forgot to increment
+    }
+    return sum
+}
+```
+
 #### pointers 1
 ```hb
 main := fn(): uint {
@@ -1923,7 +1941,7 @@ main := fn(): uint {
     - [ ] ? trough memcpy
   - [ ] uninitialized reads
   - [ ] unreachable loop breaks
-  - [ ] loop invariant conditions
+  - [x] loop invariant conditions
   - [ ] dead code reporting
   - [x] local out of bounds read/write
     - [x] scalar read/write

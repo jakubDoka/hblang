@@ -244,7 +244,7 @@ pub const Builtin = union(enum) {
     // [CallEnd]
     Ret: usize,
     // [Cfg, cond],
-    If: Cfg,
+    If: If,
     // [If]
     Then: Cfg,
     // [If]
@@ -269,6 +269,10 @@ pub const Builtin = union(enum) {
     pub const is_basic_block_end = .{ .Return, .Call, .If, .Jmp, .Never, .Trap };
     pub const is_mem_op = .{ .Load, .MemCpy, .Local, .Store, .Return, .Call, .Mem };
     pub const is_pinned = .{ .Ret, .Phi, .Mem };
+};
+
+pub const If = extern struct {
+    base: Cfg = .{},
 };
 
 pub fn KindOf(comptime MachNode: type) type {
@@ -866,6 +870,18 @@ pub fn Func(comptime MachNode: type) type {
             const node = self.addNode(kind, inputs, extra);
             node.data_type = ty;
             return node;
+        }
+
+        pub fn loopDepth(self: *Self, node: *Node) u16 {
+            self.gcm.loop_tree_built.assertLocked();
+            const cfg = node.asCfg() orelse node.cfg0().?;
+            const tree = &self.gcm.loop_tree[cfg.ext.loop];
+            if (tree.depth != 0) return tree.depth;
+            if (tree.par == null) {
+                tree.par = tree.head.base.cfg0().?.base.cfg0().?.ext.loop;
+            }
+            tree.depth = self.loopDepth(&self.gcm.loop_tree[tree.par.?].head.base) + 1;
+            return tree.depth;
         }
 
         pub fn addTrap(self: *Self, ctrl: *Node, code: u64) void {

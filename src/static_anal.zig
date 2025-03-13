@@ -10,6 +10,9 @@ pub const Error = union(enum) {
         slot: u32,
         op: u32,
     },
+    LoopInvariantBreak: struct {
+        if_node: u32,
+    },
 };
 
 pub fn StaticAnalMixin(comptime Mach: type) type {
@@ -26,6 +29,39 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
             self.findTrivialStackEscapes(arena, errors);
             self.tryHardToFindMemoryEscapes(arena, errors);
             self.findConstantOobMemOps(arena, errors);
+            self.findLoopInvariantConditions(arena, errors);
+        }
+
+        pub fn findLoopInvariantConditions(self: *Self, arena: *root.Arena, errors: *std.ArrayListUnmanaged(Error)) void {
+            var tmp = root.Arena.scrath(arena);
+            defer tmp.deinit();
+
+            const func = self.getGraph();
+
+            var work = Func.WorkList.init(tmp.arena.allocator(), func.next_id) catch unreachable;
+
+            work.add(func.root);
+
+            var i: usize = 0;
+            while (i < work.list.items.len) : (i += 1) {
+                const node = work.list.items[i];
+                if (node.isSub(graph.If)) b: {
+                    const ld = func.loopDepth(node);
+                    for (node.outputs()) |o| {
+                        if (func.loopDepth(o) < ld) break;
+                    } else break :b;
+
+                    for (node.inputs()[1..]) |inp| {
+                        if (func.loopDepth(inp.?) == ld) break :b;
+                    }
+
+                    errors.append(arena.allocator(), .{ .LoopInvariantBreak = .{ .if_node = node.id } }) catch unreachable;
+                }
+
+                for (node.outputs()) |o| if (o.isCfg()) {
+                    work.add(o);
+                };
+            }
         }
 
         pub fn findConstantOobMemOps(self: *Self, arena: *root.Arena, errors: *std.ArrayListUnmanaged(Error)) void {

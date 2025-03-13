@@ -318,6 +318,9 @@ pub fn dumpAnalErrors(self: *Codegen, func: *Types.Func, anal_errors: *std.Array
         .StackOob => {
             self.report(func.key.ast, "the function indexes out of bounds of a stack slot (TODO: where?)", .{}) catch {};
         },
+        .LoopInvariantBreak => {
+            self.report(func.key.ast, "the function contains loop invariant break (TODO: where?)", .{}) catch {};
+        },
     };
     defer anal_errors.items.len = 0;
     return anal_errors.items.len != 0;

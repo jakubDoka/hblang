@@ -75,7 +75,7 @@ pub const Node = union(enum) {
     },
     // [?Cfg, lhs, rhs]
     IfOp: extern struct {
-        base: graph.Cfg = .{},
+        base: graph.If = .{},
         op: isa.Op,
         swapped: bool,
     },

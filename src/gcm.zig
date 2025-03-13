@@ -6,6 +6,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
     return struct {
         loop_tree_built: std.debug.SafetyLock = .{},
         cfg_built: std.debug.SafetyLock = .{},
+        loop_tree: []LoopTree = undefined,
 
         const Func = graph.Func(MachNode);
         const Self = @This();
@@ -19,6 +20,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
         pub const LoopTree = struct {
             head: *CfgNode,
             par: ?u16 = null,
+            depth: u16 = 0,
         };
 
         pub const LoopTreeBuilder = struct {
@@ -27,7 +29,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
             tree: std.ArrayList(LoopTree),
         };
 
-        pub fn buildLoopTree(gcm: *Self) []LoopTree {
+        pub fn buildLoopTree(gcm: *Self) void {
             gcm.loop_tree_built.lock();
             const self = gcm.getGraph();
 
@@ -41,24 +43,24 @@ pub fn GcmMixin(comptime MachNode: type) type {
             };
             @memset(builder.pre_levels, 0);
 
-            builder.tree.append(.{ .head = self.end.asCfg().?, .par = 0 }) catch unreachable;
+            builder.tree.append(.{ .head = self.root.asCfg().?, .par = 0, .depth = 1 }) catch unreachable;
             self.end.asCfg().?.ext.loop = 0;
             self.root.asCfg().?.ext.loop = 0;
 
-            postwaklBuildLoopTree(self, 2, self.root.asCfg().?, &builder);
+            _ = postwaklBuildLoopTree(self, 2, self.root.asCfg().?, &builder);
 
-            return self.arena.allocator().dupe(LoopTree, builder.tree.items) catch unreachable;
+            gcm.loop_tree = self.arena.allocator().dupe(LoopTree, builder.tree.items) catch unreachable;
         }
 
-        pub fn postwaklBuildLoopTree(self: *Func, par_preorder: u16, from: *CfgNode, builder: *LoopTreeBuilder) void {
+        pub fn postwaklBuildLoopTree(self: *Func, par_preorder: u16, from: *CfgNode, builder: *LoopTreeBuilder) u16 {
             // TODO: make the preorder globaly increase, but after we know why thats actually important
 
-            if (builder.pre_levels[from.base.id] != 0) return;
+            if (builder.pre_levels[from.base.id] != 0) return par_preorder;
             builder.pre_levels[from.base.id] = par_preorder;
-            const postorder = par_preorder + 1;
+            var postorder = par_preorder + 1;
 
             for (from.base.outputs()) |o| if (o.asCfg()) |oc| {
-                postwaklBuildLoopTree(self, postorder, oc, builder);
+                postorder = postwaklBuildLoopTree(self, postorder, oc, builder);
             };
 
             var inner: ?u16 = null;
@@ -76,6 +78,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
                 } else {
                     std.debug.assert(oc.base.kind == .Loop);
                     const id: u16 = @intCast(builder.tree.items.len);
+                    oc.ext.loop = id;
                     ltree = id;
                     builder.tree.append(.{ .head = oc }) catch unreachable;
                 }
@@ -84,6 +87,11 @@ pub fn GcmMixin(comptime MachNode: type) type {
                     inner = ltree;
                     continue;
                 };
+                if (cur == ltree) continue;
+
+                std.debug.assert(oc.base.kind != .Loop);
+                std.debug.assert(builder.pre_levels[builder.tree.items[cur].head.base.id] != 0);
+                std.debug.assert(builder.pre_levels[builder.tree.items[ltree].head.base.id] != 0);
 
                 const inner_greater = builder.pre_levels[builder.tree.items[cur].head.base.id] >
                     builder.pre_levels[builder.tree.items[ltree].head.base.id];
@@ -95,7 +103,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
             if (inner) |in| from.ext.loop = in;
             builder.post_walked.set(from.base.id);
 
-            return;
+            return postorder;
         }
 
         pub fn fixLoop(func: *Func, loop: *CfgNode, end: *Node) *CfgNode {
