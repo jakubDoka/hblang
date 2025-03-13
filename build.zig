@@ -4,13 +4,42 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const exe = b.addExecutable(.{
-        .name = "hbc",
-        .root_source_file = b.path("src/hbc.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    b.installArtifact(exe);
+    hbc: {
+        const exe = b.addExecutable(.{
+            .name = "hbc",
+            .root_source_file = b.path("src/hbc.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        b.installArtifact(exe);
+
+        break :hbc;
+    }
+
+    depell: {
+        const exe = b.addExecutable(.{
+            .name = "depell",
+            .root_source_file = b.path("src/depell.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        b.installArtifact(exe);
+
+        const zap = b.dependency("zap", .{
+            .target = target,
+            .optimize = optimize,
+            .openssl = false, // set to true to enable TLS support
+        });
+        exe.root_module.addImport("zap", zap.module("zap"));
+
+        const sqlite = b.dependency("sqlite", .{
+            .target = target,
+            .optimize = optimize,
+        });
+        exe.root_module.addImport("sqlite", sqlite.module("sqlite"));
+
+        break :depell;
+    }
 
     const vendored_tests = vendored_tests: {
         const grn = b.addExecutable(.{
@@ -57,12 +86,22 @@ pub fn build(b: *std.Build) !void {
         break :example_tests &installed.step;
     };
 
-    const check_step = b.step("check", "type check");
-    const test_step = b.step("test", "run tests");
-    const run_step = b.step("run", "Run the app");
+    check: {
+        const check_step = b.step("check", "type check");
+        const check_test = b.addTest(.{
+            .root_source_file = b.path("check_root.zig"),
+            .target = b.graph.host,
+            .optimize = optimize,
+        });
 
-    check_step.dependOn(&exe.step);
-    run_step.dependOn(&b.addRunArtifact(exe).step);
+        check_step.dependOn(vendored_tests);
+        check_step.dependOn(tests);
+        check_step.dependOn(&check_test.step);
+
+        break :check;
+    }
+
+    const test_step = b.step("test", "run tests");
 
     const fuzz_finding_tests = fuzzing: {
         const dict_gen = b.addExecutable(.{
@@ -154,17 +193,6 @@ pub fn build(b: *std.Build) !void {
 
         break :fuzzing &b.addInstallFile(out_src, "fuzz_finding_tests.zig").step;
     };
-
-    {
-        const unit_tests = b.addTest(.{
-            .root_source_file = b.path("tests.zig"),
-            .target = b.graph.host,
-            .optimize = optimize,
-            .use_llvm = false,
-            .use_lld = false,
-        });
-        check_step.dependOn(&unit_tests.step);
-    }
 
     testing: {
         const test_filter = b.option([]const u8, "tf", "passed as a filter to tests");

@@ -1006,10 +1006,12 @@ pub fn dumpAnalErrors(self: *Types, func: *Types.Func, anal_errors: *std.ArrayLi
             self.reportSloc(loc.slot, "stack location escapes the function", .{});
         },
         .StackOob => |loc| {
-            self.reportSloc(loc.slot, "this slot has a out of bounds read/write (TODO: show the index location as well)", .{});
+            self.reportSloc(loc.slot, "this slot has a out of bounds read/write" ++
+                " (TODO: show the index location as well)", .{});
         },
         .LoopInvariantBreak => |loc| {
-            self.reportSloc(loc.if_node, "the if condition is loop invariant but it decides wheter to break out ouf the loop", .{});
+            self.reportSloc(loc.if_node, "the if condition is loop invariant but it" ++
+                " decides wheter to break out ouf the loop", .{});
         },
     };
     defer anal_errors.items.len = 0;

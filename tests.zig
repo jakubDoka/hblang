@@ -7,7 +7,6 @@ test {
     _ = @import("zig-out/tests.zig");
     _ = @import("zig-out/vendored_tests.zig");
     _ = @import("zig-out/fuzz_finding_tests.zig");
-    std.testing.refAllDeclsRecursive(@This());
 }
 
 pub fn runTest(name: []const u8, code: [:0]const u8) !void {

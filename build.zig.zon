@@ -2,7 +2,16 @@
     .name = .hblang,
     .fingerprint = 0xa6da53c767f0ddf0,
     .version = "0.0.0",
-    .dependencies = .{},
+    .dependencies = .{
+        .sqlite = .{
+            .url = "git+https://github.com/vrischmann/zig-sqlite#59c06617d5b86546c0c739e73ae01d3965dbe8ce",
+            .hash = "sqlite-3.48.0-F2R_a_uGDgCfOH5UEJYjuOCe-HixnLjToxOdEGAEM3xk",
+        },
+        .zap = .{
+            .url = "git+https://github.com/zigzap/zap?ref=v0.9.1#ae5c9278335d8e1133cd6d22707323dda712e120",
+            .hash = "zap-0.8.0-AAAAAHquIwACI9dqts0y91vC4xRjsLQpu1srb6TOj2je",
+        },
+    },
     .paths = .{
         "build.zig",
         "build.zig.zon",
