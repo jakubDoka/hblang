@@ -1,5 +1,5 @@
 const std = @import("std");
-const root = @import("utils.zig");
+pub const utils = @import("../utils.zig");
 
 fn tu(int: i64) u64 {
     return @bitCast(int);
@@ -138,7 +138,7 @@ pub const UnOp = enum(u8) {
                 .i16 => @as(i16, @truncate(oper)),
                 .i32 => @as(i32, @truncate(oper)),
                 .int => oper,
-                else => root.panic("{}", .{src}),
+                else => utils.panic("{}", .{src}),
             },
             .uext => switch (src) {
                 .i8 => @as(u8, @truncate(tu(oper))),
@@ -364,7 +364,7 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             pub fn add(self: *WorkList, node: *Node) void {
-                if (node.id == std.math.maxInt(u16)) root.panic("{} {any}\n", .{ node, node.inputs() });
+                if (node.id == std.math.maxInt(u16)) utils.panic("{} {any}\n", .{ node, node.inputs() });
                 if (self.in_list.isSet(node.id)) return;
                 self.in_list.set(node.id);
                 self.list.appendAssumeCapacity(node);
@@ -427,8 +427,8 @@ pub fn Func(comptime MachNode: type) type {
                 pub fn findLca(left: *CfgNode, right: *CfgNode) *CfgNode {
                     var lc, var rc = .{ left, right };
                     while (lc != rc) {
-                        if (!lc.base.isCfg()) root.panic("{}", .{lc.base});
-                        if (!rc.base.isCfg()) root.panic("{}", .{rc.base});
+                        if (!lc.base.isCfg()) utils.panic("{}", .{lc.base});
+                        if (!rc.base.isCfg()) utils.panic("{}", .{rc.base});
                         const diff = @as(i64, idepth(lc)) - idepth(rc);
                         if (diff >= 0) lc = lc.base.cfg0().?;
                         if (diff <= 0) rc = rc.base.cfg0().?;
@@ -513,6 +513,59 @@ pub fn Func(comptime MachNode: type) type {
                 self.fmt(null, writer, colors);
             }
 
+            fn isVisibel(comptime Ty: type) bool {
+                switch (@typeInfo(Ty)) {
+                    .@"struct" => |s| {
+                        for (s.fields) |f| {
+                            if (isVisibel(f.type)) return true;
+                        }
+
+                        return false;
+                    },
+                    .void => {
+                        return false;
+                    },
+                    else => {},
+                }
+
+                return true;
+            }
+
+            fn logExtra(writ: anytype, ex: anytype, comptime fir: bool) !void {
+                switch (@typeInfo(@TypeOf(ex.*))) {
+                    .@"struct" => |s| {
+                        comptime var fields = std.mem.reverseIterator(s.fields);
+                        comptime var first = fir;
+                        inline while (fields.next()) |f| {
+                            if (comptime std.mem.eql(u8, f.name, "antidep") or !isVisibel(f.type)) {
+                                continue;
+                            }
+
+                            comptime var prefix: []const u8 = "";
+                            if (!first) prefix = ", ";
+                            first = false;
+
+                            const is_base = comptime std.mem.eql(u8, f.name, "base");
+                            if (!is_base) {
+                                prefix = prefix ++ f.name ++ ": ";
+                            }
+                            try writ.writeAll(prefix);
+                            _ = try logExtra(writ, &@field(ex, f.name), true);
+                        }
+                    },
+                    .@"enum" => |e| {
+                        if (e.is_exhaustive) {
+                            try writ.print("{s}", .{@tagName(ex.*)});
+                        } else {
+                            try writ.print("{}", .{ex.*});
+                        }
+                    },
+                    else => {
+                        try writ.print("{}", .{ex.*});
+                    },
+                }
+            }
+
             pub fn fmt(
                 self: *const Node,
                 scheduled: ?u16,
@@ -526,69 +579,14 @@ pub fn Func(comptime MachNode: type) type {
 
                 var add_colon_space = false;
 
-                const utils = struct {
-                    fn isVisibel(comptime Ty: type) bool {
-                        switch (@typeInfo(Ty)) {
-                            .@"struct" => |s| {
-                                for (s.fields) |f| {
-                                    if (isVisibel(f.type)) return true;
-                                }
-
-                                return false;
-                            },
-                            .void => {
-                                return false;
-                            },
-                            else => {},
-                        }
-
-                        return true;
-                    }
-
-                    fn logExtra(writ: anytype, ex: anytype, comptime fir: bool) !void {
-                        switch (@typeInfo(@TypeOf(ex.*))) {
-                            .@"struct" => |s| {
-                                comptime var fields = std.mem.reverseIterator(s.fields);
-                                comptime var first = fir;
-                                inline while (fields.next()) |f| {
-                                    if (comptime std.mem.eql(u8, f.name, "antidep") or !isVisibel(f.type)) {
-                                        continue;
-                                    }
-
-                                    comptime var prefix: []const u8 = "";
-                                    if (!first) prefix = ", ";
-                                    first = false;
-
-                                    const is_base = comptime std.mem.eql(u8, f.name, "base");
-                                    if (!is_base) {
-                                        prefix = prefix ++ f.name ++ ": ";
-                                    }
-                                    try writ.writeAll(prefix);
-                                    _ = try logExtra(writ, &@field(ex, f.name), true);
-                                }
-                            },
-                            .@"enum" => |e| {
-                                if (e.is_exhaustive) {
-                                    try writ.print("{s}", .{@tagName(ex.*)});
-                                } else {
-                                    try writ.print("{}", .{ex.*});
-                                }
-                            },
-                            else => {
-                                try writ.print("{}", .{ex.*});
-                            },
-                        }
-                    }
-                };
-
                 switch (self.kind) {
                     inline else => |t| {
                         const ext = self.extraConst(t);
                         if (@TypeOf(ext.*) != void) {
-                            if (comptime utils.isVisibel(@TypeOf(ext.*))) {
+                            if (comptime isVisibel(@TypeOf(ext.*))) {
                                 writer.writeAll(": ") catch unreachable;
                                 add_colon_space = true;
-                                utils.logExtra(writer, ext, true) catch unreachable;
+                                logExtra(writer, ext, true) catch unreachable;
                             }
                         }
                     },
@@ -645,7 +643,7 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             pub fn kill(self: *Node) void {
-                if (self.output_len != 0) root.panic("{s}\n", .{self.outputs()});
+                if (self.output_len != 0) utils.panic("{s}\n", .{self.outputs()});
                 std.debug.assert(self.output_len == 0);
                 for (self.inputs()) |oi| if (oi) |i| {
                     i.removeUse(self);
@@ -958,7 +956,7 @@ pub fn Func(comptime MachNode: type) type {
             for (self.arena.allocator().dupe(*Node, target.outputs()) catch unreachable) |use| {
                 if (use.id == std.math.maxInt(u16)) continue;
                 const index = std.mem.indexOfScalar(?*Node, use.inputs(), target) orelse {
-                    root.panic("{} {any} {}", .{ this, target.outputs(), use });
+                    utils.panic("{} {any} {}", .{ this, target.outputs(), use });
                 };
 
                 _ = self.setInput(use, index, this);
@@ -1054,7 +1052,7 @@ pub fn Func(comptime MachNode: type) type {
         pub fn iterPeeps(self: *Self, max_peep_iters: usize, strategy: fn (*Self, *Node, *WorkList) ?*Node) void {
             self.gcm.cfg_built.assertUnlocked();
 
-            var tmp = root.Arena.scrath(null);
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             var worklist = WorkList.init(tmp.arena.allocator(), self.next_id) catch unreachable;
@@ -1191,7 +1189,7 @@ pub fn Func(comptime MachNode: type) type {
 
             if (self.idealizeDead(node, worklist)) |w| return w;
 
-            var tmp = root.Arena.scrath(null);
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             const inps = node.inputs();
@@ -1373,7 +1371,7 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         pub fn fmtScheduled(self: *Self, writer: anytype, colors: std.io.tty.Config) void {
-            var tmp = root.Arena.scrath(null);
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), self.next_id) catch unreachable;
@@ -1393,7 +1391,7 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         pub fn fmtUnscheduled(self: *Self, writer: anytype, colors: std.io.tty.Config) void {
-            var tmp = root.Arena.scrath(null);
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             var worklist = Self.WorkList.init(tmp.arena.allocator(), self.next_id) catch unreachable;

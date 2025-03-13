@@ -1,5 +1,5 @@
 const std = @import("std");
-const root = @import("utils.zig");
+const utils = graph.utils;
 const graph = @import("graph.zig");
 
 pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
@@ -41,7 +41,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
         }
     };
 
-    var tmp = root.Arena.scrath(null);
+    var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
     const instrs = tmp.arena.alloc(Instr, func.instr_count);

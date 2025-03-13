@@ -1,6 +1,6 @@
-const graph = @import("graph.zig");
 const std = @import("std");
-const root = @import("utils.zig");
+const graph = @import("graph.zig");
+const root = @import("../utils.zig");
 
 pub const Error = union(enum) {
     ReturningStack: struct {

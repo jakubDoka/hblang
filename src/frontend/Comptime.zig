@@ -1,21 +1,26 @@
+const std = @import("std");
+
+const root = @import("../root.zig");
+const isa = root.hbvm.isa;
+const Types = root.frontend.Types;
+const Builder = root.backend.Builder;
+const Node = Builder.BuildNode;
+const graph = root.backend.graph;
+const utils = root.utils;
+const static_anal = root.backend.static_anal;
+const Ast = root.frontend.Ast;
+const Arena = utils.Arena;
+const Codegen = root.frontend.Codegen;
+const Comptime = root.frontend.Comptime;
+const Lexer = root.frontend.Lexer;
+const HbvmGen = root.hbvm.HbvmGen;
+const Vm = root.hbvm.Vm;
+pub const eca = HbvmGen.eca;
+
 vm: Vm = .{},
 comptime_code: HbvmGen,
 in_progress: std.ArrayListUnmanaged(Loc) = .{},
 
-const std = @import("std");
-const isa = @import("isa.zig");
-const graph = @import("graph.zig");
-const root = @import("utils.zig");
-const Codegen = @import("Codegen.zig");
-const Types = @import("Types.zig");
-const Ast = @import("Ast.zig");
-const Vm = @import("Vm.zig");
-const HbvmGen = @import("HbvmGen.zig");
-const Comptime = @import("Comptime.zig");
-const Builder = @import("Builder.zig");
-const Node = Builder.BuildNode;
-
-pub const eca = @import("HbvmGen.zig").eca;
 pub const stack_size = 1024 * 100;
 
 pub const Loc = struct {
@@ -59,7 +64,7 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) PartialEvalResult
     const abi: Types.Abi = .ableos;
     const types = self.getTypes();
 
-    var tmp = root.Arena.scrath(null);
+    var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
     var work_list = std.ArrayListUnmanaged(*Node).initBuffer(tmp.arena.alloc(*Node, 32));
@@ -259,7 +264,7 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
 }
 
 pub fn jitFunc(self: *Comptime, fnc: *Types.Func) !void {
-    var tmp = root.Arena.scrath(null);
+    var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
     var gen = Codegen.init(self.getGpa(), tmp.arena, self.getTypes(), .@"comptime");
     defer gen.deinit();
@@ -294,7 +299,7 @@ pub fn jitExprLow(
     const id: u32 = @intCast(types.funcs.items.len);
     types.funcs.append(types.arena.allocator(), undefined) catch unreachable;
 
-    var tmp = root.Arena.scrath(null);
+    var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
     var gen = Codegen.init(self.getGpa(), tmp.arena, types, .@"comptime");

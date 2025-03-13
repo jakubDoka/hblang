@@ -1,5 +1,5 @@
 const graph = @import("graph.zig");
-const root = @import("utils.zig");
+const root = graph.utils;
 const std = @import("std");
 
 pub fn GcmMixin(comptime MachNode: type) type {

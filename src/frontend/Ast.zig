@@ -5,18 +5,19 @@ items: Slice,
 root_struct: Id,
 
 const std = @import("std");
-const root = @import("utils.zig");
-const Lexer = @import("Lexer.zig");
-const Fmt = @import("Fmt.zig");
-const Parser = @import("Parser.zig");
-const Types = @import("Types.zig");
+const root = @import("../root.zig");
+const utils = root.utils;
+const Lexer = root.frontend.Lexer;
+const Fmt = root.frontend.Fmt;
+const Parser = root.frontend.Parser;
+const Types = root.frontend.Types;
 const Ast = @This();
 pub const Loader = Parser.Loader;
-pub const Store = root.EnumStore(Expr);
+pub const Store = utils.EnumStore(Expr);
 
 pub const Id = Store.Id;
-pub const Slice = root.EnumSlice(Id);
-pub const Idents = root.EnumSlice(Ident);
+pub const Slice = utils.EnumSlice(Id);
+pub const Idents = utils.EnumSlice(Ident);
 
 pub const Ident = enum(u32) {
     _,
@@ -49,7 +50,7 @@ pub const CtorField = struct {
 pub const Ctor = struct {
     pos: Pos,
     ty: Id,
-    fields: root.EnumSlice(CtorField),
+    fields: utils.EnumSlice(CtorField),
 };
 
 pub const MatchArm = struct {
@@ -75,7 +76,7 @@ pub const Expr = union(enum) {
         pos: Pos,
         comptime_args: Idents,
         captures: Idents,
-        args: root.EnumSlice(Arg),
+        args: utils.EnumSlice(Arg),
         ret: Id,
         body: Id,
     },
@@ -128,7 +129,7 @@ pub const Expr = union(enum) {
     Match: struct {
         pos: Pos,
         value: Id,
-        arms: root.EnumSlice(MatchArm),
+        arms: utils.EnumSlice(MatchArm),
     },
     Loop: struct {
         pos: Pos,
@@ -186,7 +187,7 @@ pub const Expr = union(enum) {
     pub const Type = struct {
         pos: Pos,
         alignment: Id,
-        captures: root.EnumSlice(Ident),
+        captures: utils.EnumSlice(Ident),
         fields: Slice,
     };
 };
@@ -216,7 +217,7 @@ pub const InitOptions = struct {
 };
 
 pub fn init(
-    arena: *root.Arena,
+    arena: *utils.Arena,
     opts: InitOptions,
 ) !Ast {
     var lexer = Lexer.init(opts.code, 0);

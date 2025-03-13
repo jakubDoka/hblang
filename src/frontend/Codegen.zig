@@ -1,3 +1,18 @@
+const std = @import("std");
+
+const root = @import("../root.zig");
+const graph = root.backend.graph;
+const utils = root.utils;
+const static_anal = root.backend.static_anal;
+const Builder = root.backend.Builder;
+const Ast = root.frontend.Ast;
+const Arena = utils.Arena;
+const Comptime = root.frontend.Comptime;
+const Lexer = root.frontend.Lexer;
+const Types = root.frontend.Types;
+const HbvmGen = root.hbvm.HbvmGen;
+const Vm = root.hbvm.Vm;
+
 bl: Builder,
 types: *Types,
 work_list: std.ArrayListUnmanaged(Task),
@@ -14,17 +29,6 @@ loops: std.ArrayListUnmanaged(Loop) = undefined,
 ret: Types.Id = undefined,
 errored: bool = undefined,
 
-const std = @import("std");
-const static_anal = @import("static_anal.zig");
-const root = @import("utils.zig");
-const graph = @import("graph.zig");
-const Ast = @import("Ast.zig");
-const Vm = @import("Vm.zig");
-const Comptime = @import("Comptime.zig");
-const isa = @import("isa.zig");
-const Types = @import("Types.zig");
-const Builder = @import("Builder.zig");
-const Lexer = @import("Lexer.zig");
 const Func = Builder.Func;
 const Node = Builder.BuildNode;
 const DataType = Builder.DataType;
@@ -170,7 +174,7 @@ pub const Ctx = struct {
 
 pub fn init(
     gpa: std.mem.Allocator,
-    scratch: *root.Arena,
+    scratch: *utils.Arena,
     types: *Types,
     target: Types.Target,
 ) Codegen {
@@ -214,7 +218,7 @@ pub inline fn abiCata(self: *Codegen, ty: Types.Id) Types.Abi.Spec {
 }
 
 pub fn getEntry(self: *Codegen, file: Types.File, name: []const u8) !*Types.Func {
-    var tmp = root.Arena.scrath(null);
+    var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
     self.ast = self.types.getFile(file);
@@ -232,7 +236,7 @@ pub fn getEntry(self: *Codegen, file: Types.File, name: []const u8) !*Types.Func
 
 pub fn beginBuilder(
     self: *Codegen,
-    scratch: *root.Arena,
+    scratch: *utils.Arena,
     ret: Types.Id,
     param_count: usize,
     return_count: usize,
@@ -249,7 +253,7 @@ pub fn beginBuilder(
 }
 
 pub fn build(self: *Codegen, func: *Types.Func) !void {
-    var tmp = root.Arena.scrath(null);
+    var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
     self.ast = self.types.getFile(func.key.file);
@@ -319,7 +323,7 @@ pub fn sloc(self: *Codegen, loc: anytype) graph.Sloc {
     return .{ .namespace = @intFromEnum(self.parent_scope.file()), .index = self.ast.posOf(loc).index };
 }
 
-pub fn listFileds(arena: *root.Arena, fields: anytype) []const u8 {
+pub fn listFileds(arena: *utils.Arena, fields: anytype) []const u8 {
     if (fields.len == 0) return "none actually";
 
     var field_list = std.ArrayList(u8).init(arena.allocator());
@@ -365,12 +369,12 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             if (ty == .f32) {
                 const parsed = std.fmt.parseFloat(f32, ast.tokenSrc(e.index)) catch |err| switch (err) {
-                    error.InvalidCharacter => root.panic("{s}", .{ast.tokenSrc(e.index)}),
+                    error.InvalidCharacter => utils.panic("{s}", .{ast.tokenSrc(e.index)}),
                 };
                 return .mkv(ty, self.bl.addFlt32Imm(parsed));
             } else {
                 const parsed = std.fmt.parseFloat(f64, ast.tokenSrc(e.index)) catch |err| switch (err) {
-                    error.InvalidCharacter => root.panic("{s}", .{ast.tokenSrc(e.index)}),
+                    error.InvalidCharacter => utils.panic("{s}", .{ast.tokenSrc(e.index)}),
                 };
                 return .mkv(ty, self.bl.addFlt64Imm(parsed));
             }
@@ -431,7 +435,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             }
         },
         .Ctor => |e| {
-            var tmp = root.Arena.scrath(null);
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             if (e.ty.tag() == .Void and ctx.ty == null) {
@@ -544,7 +548,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             return .mkp(oty, local);
         },
         .Tupl => |e| if (e.ty.tag() == .Void and ctx.ty == null) {
-            var tmp = root.Arena.scrath(null);
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             const local = ctx.loc orelse self.bl.addLocal(self.sloc(expr), 0);
@@ -894,7 +898,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             return try self.lookupScopeItem(e.*, ty, ast.tokenSrc(e.index + 1));
         },
         .Field => |e| {
-            var tmp = root.Arena.scrath(null);
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             var base = try self.emit(.{}, e.base);
@@ -1096,7 +1100,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             return .{};
         },
         .Match => |e| {
-            var tmp = root.Arena.scrath(null);
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             var value = try self.emit(.{}, e.value);
@@ -1122,7 +1126,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 slots: []ArmSlot,
                 ty: Types.Id,
 
-                pub fn missingBranches(slf: *@This(), arena: *root.Arena, filds: []const Types.Enum.Field) []const u8 {
+                pub fn missingBranches(slf: *@This(), arena: *utils.Arena, filds: []const Types.Enum.Field) []const u8 {
                     var missing_list = std.ArrayList(u8).init(arena.allocator());
                     for (slf.slots, filds) |p, f| if (p == .Unmatched) {
                         missing_list.writer().print(", `.{s}`", .{f.name}) catch unreachable;
@@ -1302,7 +1306,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .Buty => |e| return self.emitTyConst(.fromLexeme(e.bt)),
         // TODO: unify under single ast
         inline .Struct, .Union, .Enum => |e, t| {
-            var tmp = root.Arena.scrath(null);
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             const prefix = 3;
@@ -1329,7 +1333,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             return .mkv(.type, rets[0]);
         },
         .Fn => |e| {
-            var tmp = root.Arena.scrath(null);
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             const captures = tmp.arena.alloc(Types.Key.Capture, e.captures.len());
@@ -1507,7 +1511,7 @@ pub fn lexemeToBinOpLow(self: Lexer.Lexeme, ty: Types.Id) ?graph.BinOp {
         .@">=" => if (float) .fge else if (unsigned) .uge else .sge,
         .@"==" => .eq,
         .@"!=" => .ne,
-        else => root.panic("{s}", .{@tagName(self)}),
+        else => utils.panic("{s}", .{@tagName(self)}),
     };
 }
 
@@ -1603,7 +1607,7 @@ pub fn lookupScopeItem(self: *Codegen, pos: Ast.Pos, bsty: Types.Id, name: []con
         }
     }
 
-    var tmp = root.Arena.scrath(null);
+    var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
     const decl, const path = ast.findDecl(bsty.items(ast), name, tmp.arena.allocator()) orelse {
@@ -1645,7 +1649,7 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
         }
     } else {
         var cursor = self.parent_scope;
-        var tmp = root.Arena.scrath(null);
+        var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
         const decl, const path = while (!cursor.empty()) {
             if (ast.findDecl(cursor.items(ast), id, tmp.arena.allocator())) |v| break v;
@@ -1677,7 +1681,7 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
 
 pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(.Call)) !Value {
     const ast = self.ast;
-    var tmp = root.Arena.scrath(null);
+    var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
     var typ_res: Value, var caller: ?Value = if (e.called.tag() == .Tag) b: {
@@ -1764,7 +1768,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
 pub fn instantiateTemplate(
     self: *Codegen,
     caller: ?Value,
-    tmp: root.Arena.Scratch,
+    tmp: utils.Arena.Scratch,
     expr: Ast.Id,
     e: std.meta.TagPayload(Ast.Expr, .Call),
     typ: Types.Id,
@@ -2037,7 +2041,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
     const name = ast.tokenSrc(e.pos.index);
     const args = ast.exprs.view(e.args);
 
-    const utils = enum {
+    const static = enum {
         const mem = std.mem;
 
         pub fn matchTriple(pattern: []const u8, triple: []const u8) !bool {
@@ -2118,16 +2122,16 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
     switch (e.kind) {
         .use, .embed => unreachable,
         .CurrentScope => {
-            try utils.assertArgs(self, expr, args, "");
+            try static.assertArgs(self, expr, args, "");
             return self.emitTyConst(self.parent_scope.firstType());
         },
         .TypeOf => {
-            try utils.assertArgs(self, expr, args, "<ty>");
+            try static.assertArgs(self, expr, args, "<ty>");
             const ty = try self.types.ct.inferType("", .{ .Tmp = self }, .{}, args[0]);
             return self.emitTyConst(ty);
         },
         .@"inline" => {
-            try utils.assertArgs(self, expr, args, "<called>, <args>..");
+            try static.assertArgs(self, expr, args, "<called>, <args>..");
             return self.emitCall(ctx, expr, .{
                 .called = args[0],
                 .arg_pos = ast.posOf(args[0]),
@@ -2135,10 +2139,10 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             });
         },
         .int_cast => {
-            try utils.assertArgs(self, expr, args, "<expr>");
+            try static.assertArgs(self, expr, args, "<expr>");
 
             const ret: Types.Id = ctx.ty orelse {
-                return utils.reportInferrence(self, expr, "int-ty", name);
+                return static.reportInferrence(self, expr, "int-ty", name);
             };
 
             if (!ret.isInteger()) {
@@ -2154,7 +2158,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             return .mkv(ret, self.bl.addUnOp(.ired, self.abiCata(ret).ByValue, oper.getValue(self)));
         },
         .float_cast => {
-            try utils.assertArgs(self, expr, args, "<float>");
+            try static.assertArgs(self, expr, args, "<float>");
 
             var oper = try self.emit(.{}, args[0]);
 
@@ -2167,10 +2171,10 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             return .mkv(ret, self.bl.addUnOp(.fcst, self.abiCata(ret).ByValue, oper.getValue(self)));
         },
         .int_to_float => {
-            try utils.assertArgs(self, expr, args, "<float>");
+            try static.assertArgs(self, expr, args, "<float>");
 
             const ret: Types.Id = ctx.ty orelse {
-                return utils.reportInferrence(self, expr, "float-ty", name);
+                return static.reportInferrence(self, expr, "float-ty", name);
             };
 
             if (!ret.isFloat()) return self.report(expr, "expected this to evaluate to float, {} is not", .{ret});
@@ -2184,7 +2188,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             ));
         },
         .float_to_int => {
-            try utils.assertArgs(self, expr, args, "<float>");
+            try static.assertArgs(self, expr, args, "<float>");
             const ret: Types.Id = .int;
 
             var oper = try self.emit(.{}, args[0]);
@@ -2194,10 +2198,10 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             return .mkv(ret, self.bl.addUnOp(.fti, .int, oper.getValue(self)));
         },
         .bit_cast => {
-            try utils.assertArgs(self, expr, args, "<expr>");
+            try static.assertArgs(self, expr, args, "<expr>");
 
             const ret: Types.Id = ctx.ty orelse {
-                return utils.reportInferrence(self, expr, "ty", name);
+                return static.reportInferrence(self, expr, "ty", name);
             };
 
             var oper = try self.emit(.{}, args[0]);
@@ -2222,7 +2226,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             }
         },
         .ChildOf => {
-            try utils.assertArgs(self, expr, args, "<ty>");
+            try static.assertArgs(self, expr, args, "<ty>");
             const ty = try self.resolveAnonTy(args[0]);
             const child = ty.child(self.types) orelse {
                 return self.report(args[0], "directive only work on pointer types and slices, {} is not", .{ty});
@@ -2230,12 +2234,12 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             return self.emitTyConst(child);
         },
         .kind_of => {
-            try utils.assertArgs(self, expr, args, "<ty>");
+            try static.assertArgs(self, expr, args, "<ty>");
             const len = try self.resolveAnonTy(args[0]);
             return .mkv(.u8, self.bl.addIntImm(.i8, @intFromEnum(len.data())));
         },
         .len_of => {
-            try utils.assertArgs(self, expr, args, "<ty>");
+            try static.assertArgs(self, expr, args, "<ty>");
             const ty = try self.resolveAnonTy(args[0]);
             const len = ty.len(self.types) orelse {
                 return self.report(args[0], "directive only works on structs and arrays, {} is not", .{ty});
@@ -2243,7 +2247,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             return .mkv(.uint, self.bl.addIntImm(.int, @intCast(len)));
         },
         .name_of => {
-            try utils.assertArgs(self, expr, args, "<ty>");
+            try static.assertArgs(self, expr, args, "<ty>");
 
             const ty = try self.resolveAnonTy(args[0]);
             const data = std.fmt.allocPrint(self.types.arena.allocator(), "{}", .{ty.fmt(self.types)}) catch unreachable;
@@ -2251,33 +2255,33 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             return self.emitStirng(ctx, data, expr);
         },
         .align_of => {
-            try utils.assertArgs(self, expr, args, "<ty>");
+            try static.assertArgs(self, expr, args, "<ty>");
             const ty = try self.resolveAnonTy(args[0]);
             return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(ty.alignment(self.types))));
         },
         .size_of => {
-            try utils.assertArgs(self, expr, args, "<ty>");
+            try static.assertArgs(self, expr, args, "<ty>");
             const ty = try self.resolveAnonTy(args[0]);
             return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(ty.size(self.types))));
         },
         .target => {
-            try utils.assertArgs(self, expr, args, "<string>");
+            try static.assertArgs(self, expr, args, "<string>");
             const content = ast.exprs.getTyped(.String, args[0]) orelse return self.report(expr, "@target takes a \"string\"", .{});
             const str_content = ast.source[content.pos.index + 1 .. content.end - 1];
             const triple = @tagName(self.abi);
-            const matched = utils.matchTriple(str_content, triple) catch |err| {
+            const matched = static.matchTriple(str_content, triple) catch |err| {
                 return self.report(args[0], "{s}", .{@errorName(err)});
             };
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(matched)));
         },
         .is_comptime => return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(self.target == .@"comptime"))),
         .ecall => {
-            try utils.assertArgs(self, expr, args, "<expr>..");
-            var tmp = root.Arena.scrath(null);
+            try static.assertArgs(self, expr, args, "<expr>..");
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             const ret = ctx.ty orelse {
-                return utils.reportInferrence(self, expr, "ty", name);
+                return static.reportInferrence(self, expr, "ty", name);
             };
 
             const arg_nodes = tmp.arena.alloc(Value, args.len);
@@ -2301,13 +2305,13 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             return self.assembleReturn(expr, Comptime.eca, call_args, ctx, ret, ret_abi);
         },
         .as => {
-            try utils.assertArgs(self, expr, args, "<ty>, <expr>");
+            try static.assertArgs(self, expr, args, "<ty>, <expr>");
             const ty = try self.resolveAnonTy(args[0]);
             return self.emitTyped(ctx, ty, args[1]);
         },
         .@"error" => {
-            try utils.assertArgs(self, expr, args, "<ty/string>..");
-            var tmp = root.Arena.scrath(null);
+            try static.assertArgs(self, expr, args, "<ty/string>..");
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             var msg = std.ArrayList(u8).init(tmp.arena.allocator());

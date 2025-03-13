@@ -71,7 +71,7 @@ const static_anal = @import("static_anal.zig");
 const Builder = @import("Builder.zig");
 const BuilderFunc = Builder.Func;
 const Mach = @This();
-const root = @import("utils.zig");
+const root = @import("../utils.zig");
 
 pub const DataOptions = struct {
     id: u32,

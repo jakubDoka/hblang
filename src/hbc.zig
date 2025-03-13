@@ -1,7 +1,7 @@
 const std = @import("std");
-const hb = @import("root.zig");
-const static_anal = @import("static_anal.zig");
 
+const hb = @import("root.zig");
+const static_anal = hb.backend.static_anal;
 const Arena = hb.utils.Arena;
 
 const max_file_len = std.math.maxInt(u31);
@@ -91,7 +91,7 @@ pub const CompileOptions = struct {
 
 pub fn compile(opts: CompileOptions) anyerror!struct {
     arena: Arena,
-    ast: []const hb.Ast,
+    ast: []const hb.frontend.Ast,
 } {
     if (opts.help) {
         const help_str = comptime b: {
@@ -112,7 +112,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
 
     if (opts.fmt_stdout) {
         const source = try std.fs.cwd().readFileAllocOptions(ast_arena.allocator(), opts.root_file, max_file_len, null, @alignOf(u8), 0);
-        const ast = try hb.Ast.init(&ast_arena, .{
+        const ast = try hb.frontend.Ast.init(&ast_arena, .{
             .path = opts.root_file,
             .code = source,
             .diagnostics = opts.diagnostics,
@@ -144,16 +144,16 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         return .{ .ast = asts, .arena = ast_arena };
     }
 
-    var types = hb.Types.init(opts.gpa, asts, opts.diagnostics);
+    var types = hb.frontend.Types.init(opts.gpa, asts, opts.diagnostics);
     defer types.deinit();
 
-    var codegen = hb.Codegen.init(opts.gpa, Arena.scrath(null).arena, &types, .runtime);
+    var codegen = hb.frontend.Codegen.init(opts.gpa, Arena.scrath(null).arena, &types, .runtime);
     defer codegen.deinit();
 
-    var hbg = hb.HbvmGen{ .gpa = opts.gpa, .emit_header = !opts.dump_asm and !opts.raw_binary };
+    var hbg = hb.hbvm.HbvmGen{ .gpa = opts.gpa, .emit_header = !opts.dump_asm and !opts.raw_binary };
     defer hbg.deinit();
 
-    const backend = hb.Mach.init(&hbg);
+    const backend = hb.backend.Mach.init(&hbg);
 
     var syms = std.heap.ArenaAllocator.init(opts.gpa);
     defer syms.deinit();
@@ -188,7 +188,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
 
             backend.emitFunc(&codegen.bl.func, .{
                 .id = func.id,
-                .name = try hb.Types.Id.init(.{ .Func = func })
+                .name = try hb.frontend.Types.Id.init(.{ .Func = func })
                     .fmt(&types).toString(syms.allocator()),
                 .entry = func.id == entry.id,
                 .optimizations = .{
@@ -202,7 +202,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         .Global => |global| {
             backend.emitData(.{
                 .id = global.id,
-                .name = try hb.Types.Id.init(.{ .Global = global })
+                .name = try hb.frontend.Types.Id.init(.{ .Global = global })
                     .fmt(&types).toString(syms.allocator()),
                 .value = .{ .init = global.data },
             });
@@ -225,14 +225,14 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     if (opts.vendored_test) {
         const test_utils = @import("test_util.zig");
 
-        const head: hb.HbvmGen.ExecHeader = @bitCast(out.items[0..@sizeOf(hb.HbvmGen.ExecHeader)].*);
+        const head: hb.hbvm.HbvmGen.ExecHeader = @bitCast(out.items[0..@sizeOf(hb.hbvm.HbvmGen.ExecHeader)].*);
 
         errdefer {
-            const symbols = hbg.makeSymMap(@sizeOf(hb.HbvmGen.ExecHeader), ast_arena.allocator());
+            const symbols = hbg.makeSymMap(@sizeOf(hb.hbvm.HbvmGen.ExecHeader), ast_arena.allocator());
             test_utils.runVm(
                 &asts[0],
                 false,
-                out.items[@sizeOf(hb.HbvmGen.ExecHeader)..],
+                out.items[@sizeOf(hb.hbvm.HbvmGen.ExecHeader)..],
                 head.code_length,
                 std.io.getStdErr().writer().any(),
                 std.io.tty.detectConfig(std.io.getStdErr()),
@@ -243,7 +243,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         try test_utils.runVm(
             &asts[0],
             false,
-            out.items[@sizeOf(hb.HbvmGen.ExecHeader)..],
+            out.items[@sizeOf(hb.hbvm.HbvmGen.ExecHeader)..],
             head.code_length,
             std.io.null_writer.any(),
             .no_color,
@@ -318,9 +318,9 @@ const Loader = struct {
     arena: *Arena,
     base: []const u8,
     path_projections: std.StringHashMapUnmanaged([]const u8),
-    files: std.ArrayListUnmanaged(hb.Ast) = .{},
+    files: std.ArrayListUnmanaged(hb.frontend.Ast) = .{},
 
-    pub fn load(self: *Loader, opts: hb.Ast.Loader.LoadOptions) ?hb.Types.File {
+    pub fn load(self: *Loader, opts: hb.frontend.Ast.Loader.LoadOptions) ?hb.frontend.Types.File {
         var tmp = Arena.scrath(null);
         defer tmp.deinit();
 
@@ -342,7 +342,7 @@ const Loader = struct {
         const slot = self.files.addOne(arena) catch return null;
         slot.path = self.arena.dupe(u8, canon);
         slot.source = std.fs.cwd().readFileAllocOptions(arena, path, max_file_len, null, @alignOf(u8), 0) catch |err| {
-            hb.Ast.report(
+            hb.frontend.Ast.report(
                 file.path,
                 file.source,
                 opts.pos,
@@ -361,7 +361,7 @@ const Loader = struct {
         path_projections: std.StringHashMapUnmanaged([]const u8),
         root: []const u8,
         diagnostics: std.io.AnyWriter,
-    ) !?struct { []const hb.Ast, []const u8 } {
+    ) !?struct { []const hb.frontend.Ast, []const u8 } {
         const real_root = std.fs.cwd().realpathAlloc(arena.allocator(), root) catch root;
 
         var self = Loader{
@@ -384,9 +384,9 @@ const Loader = struct {
             defer tmp.deinit();
 
             const file = self.files.items[i];
-            const fid: hb.Types.File = @enumFromInt(i);
+            const fid: hb.frontend.Types.File = @enumFromInt(i);
 
-            const ast_res = hb.Ast.init(tmp.arena, .{
+            const ast_res = hb.frontend.Ast.init(tmp.arena, .{
                 .current = fid,
                 .path = file.path,
                 .code = file.source,

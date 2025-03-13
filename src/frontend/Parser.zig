@@ -1,5 +1,17 @@
+const std = @import("std");
+
+const root = @import("../root.zig");
+const utils = root.utils;
+const Lexer = root.frontend.Lexer;
+const Fmt = root.frontend.Fmt;
+const Types = root.frontend.Types;
+const Arena = utils.Arena;
+const Ast = root.frontend.Ast;
+const Ident = Ast.Ident;
+const Id = Ast.Id;
+
 store: Ast.Store = .{},
-arena: *root.Arena,
+arena: *utils.Arena,
 active_syms: std.ArrayListUnmanaged(Sym) = .{},
 capture_boundary: usize = 0,
 captures: std.ArrayListUnmanaged(Ident) = .{},
@@ -13,15 +25,7 @@ diagnostics: std.io.AnyWriter,
 list_pos: Ast.Pos = undefined,
 errored: bool = false,
 
-const std = @import("std");
-const Lexer = @import("Lexer.zig");
-const Ast = @import("Ast.zig");
-const Types = @import("Types.zig");
-const root = @import("utils.zig");
-const Ident = Ast.Ident;
-const Id = Ast.Id;
 const Parser = @This();
-const Arena = root.Arena;
 const Error = error{UnexpectedToken} || std.mem.Allocator.Error;
 
 const Sym = struct {
@@ -535,7 +539,7 @@ fn parseListTyped(
     end: Lexer.Lexeme,
     comptime Elem: type,
     comptime parser: fn (*Parser) Error!Elem,
-) Error!root.EnumSlice(Elem) {
+) Error!utils.EnumSlice(Elem) {
     var tmp = Arena.scrath(self.arena);
     defer tmp.deinit();
 

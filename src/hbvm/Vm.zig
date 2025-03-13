@@ -4,7 +4,7 @@ fuel: usize = 0,
 
 const std = @import("std");
 const isa = @import("isa.zig");
-const root = @import("utils.zig");
+const root = @import("../utils.zig");
 const Vm = @This();
 const debug = @import("builtin").mode == .Debug;
 

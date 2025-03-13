@@ -13,13 +13,14 @@ allocs: []u16 = undefined,
 spill_base: usize = undefined,
 
 const std = @import("std");
-const root = @import("utils.zig");
+const utils = @import("../utils.zig");
+const root = @import("../root.zig");
 const isa = @import("isa.zig");
-const graph = @import("graph.zig");
-const Mach = @import("Mach.zig");
+const graph = root.backend.graph;
+const Mach = root.backend.Mach;
 const Func = graph.Func(Node);
 const Kind = Func.Kind;
-const Regalloc = @import("Regalloc.zig");
+const Regalloc = root.backend.Regalloc;
 const HbvmGen = @This();
 
 pub const eca = std.math.maxInt(u32);
@@ -130,7 +131,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     const name = opts.name;
     const entry = opts.entry;
 
-    var tmp = root.Arena.scrath(null);
+    var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
     if (self.funcs.items.len <= id) {
@@ -340,7 +341,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     .i16 => self.emit(.li16, .{ self.outReg(no), @truncate(@as(u64, @bitCast(extra.*))) }),
                     .i32 => self.emit(.li32, .{ self.outReg(no), @truncate(@as(u64, @bitCast(extra.*))) }),
                     .int => self.emit(.li64, .{ self.outReg(no), @bitCast(extra.*) }),
-                    else => root.panic("{}\n", .{no.data_type}),
+                    else => utils.panic("{}\n", .{no.data_type}),
                 }
                 self.flushOutReg(no);
             },
@@ -661,7 +662,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }
             },
             .Never => {},
-            else => root.panic("{any}", .{no.kind}),
+            else => utils.panic("{any}", .{no.kind}),
         }
     }
 }
@@ -712,7 +713,7 @@ fn emit(self: *HbvmGen, comptime op: isa.Op, args: isa.TupleOf(isa.ArgsOf(op))) 
 }
 
 fn emitLow(self: *HbvmGen, comptime arg_str: []const u8, op: isa.Op, args: isa.TupleOf(isa.ArgsOfStr(arg_str))) void {
-    if (!std.mem.eql(u8, isa.spec[@intFromEnum(op)][1], arg_str)) root.panic("{} {s} {s}", .{ op, arg_str, isa.spec[@intFromEnum(op)][1] });
+    if (!std.mem.eql(u8, isa.spec[@intFromEnum(op)][1], arg_str)) utils.panic("{} {s} {s}", .{ op, arg_str, isa.spec[@intFromEnum(op)][1] });
     self.out.append(self.gpa, @intFromEnum(op)) catch unreachable;
     self.out.appendSlice(self.gpa, std.mem.asBytes(&isa.packTo(isa.ArgsOfStr(arg_str), args))) catch unreachable;
 }

@@ -18,18 +18,18 @@ export fn compile(ptr: [*c]u8, len: usize) void {
     var ast_arena = std.heap.ArenaAllocator.init(gpa);
     defer ast_arena.deinit();
 
-    const asts = &.{hb.Ast.init(ast_arena.allocator(), .{ .code = source, .path = "" }) catch unreachable};
+    const asts = &.{hb.fronted.Ast.init(ast_arena.allocator(), .{ .code = source, .path = "" }) catch unreachable};
 
-    var types = hb.Types.init(gpa, asts, diagnostics);
+    var types = hb.fronted.Types.init(gpa, asts, diagnostics);
     defer types.deinit();
 
-    var codegen = hb.Codegen.init(gpa, Arena.scrath(null).arena, &types, .runtime);
+    var codegen = hb.fronted.Codegen.init(gpa, Arena.scrath(null).arena, &types, .runtime);
     defer codegen.deinit();
 
-    var hbg = hb.HbvmGen{ .gpa = gpa };
+    var hbg = hb.backend.HbvmGen{ .gpa = gpa };
     defer hbg.deinit();
 
-    const backend = hb.Mach.init(&hbg);
+    const backend = hb.backend.Mach.init(&hbg);
 
     var syms = std.heap.ArenaAllocator.init(gpa);
     defer syms.deinit();
@@ -59,7 +59,7 @@ export fn compile(ptr: [*c]u8, len: usize) void {
 
             backend.emitFunc(&codegen.bl.func, .{
                 .id = func.id,
-                .name = hb.Types.Id.init(.{ .Func = func }).fmt(&types)
+                .name = hb.fronted.Types.Id.init(.{ .Func = func }).fmt(&types)
                     .toString(syms.allocator()) catch unreachable,
                 .entry = func.id == entry.id,
             });
@@ -67,7 +67,7 @@ export fn compile(ptr: [*c]u8, len: usize) void {
         .Global => |global| {
             backend.emitData(.{
                 .id = global.id,
-                .name = hb.Types.Id.init(.{ .Global = global }).fmt(&types)
+                .name = hb.fronted.Types.Id.init(.{ .Global = global }).fmt(&types)
                     .toString(syms.allocator()) catch unreachable,
                 .value = .{ .init = global.data },
             });

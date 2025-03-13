@@ -3,13 +3,9 @@ scope: ?*Func.Node = undefined,
 root_mem: *Func.Node = undefined,
 
 const std = @import("std");
-const root = @import("utils.zig");
+const root = graph.utils;
 const graph = @import("graph.zig");
-const Ast = @import("Ast.zig");
-const Types = @import("Types.zig");
 const Builder = @This();
-const ScopeEntry = void;
-const Scope = void;
 
 pub const Func = graph.Func(Node);
 pub const BuildNode = Func.Node;

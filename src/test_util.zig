@@ -1,17 +1,15 @@
 const std = @import("std");
-const isa = @import("isa.zig");
-pub const Ast = @import("Ast.zig");
-pub const Vm = @import("Vm.zig");
-pub const Builder = @import("Builder.zig");
-pub const Codegen = @import("Codegen.zig");
-pub const HbvmGen = @import("HbvmGen.zig");
-pub const Types = @import("Types.zig");
-pub const Regalloc = @import("Regalloc.zig");
-pub const graph = @import("graph.zig");
-pub const Mach = @import("Mach.zig");
-pub const root = @import("utils.zig");
-pub const hbc = @import("hbc.zig");
-pub const static_anal = @import("static_anal.zig");
+const Vm = root.hbvm.Vm;
+const HbvmGen = root.hbvm.HbvmGen;
+const graph = root.backend.graph;
+const Mach = root.backend.Mach;
+const Ast = root.frontend.Ast;
+const Codegen = root.frontend.Codegen;
+const Types = root.frontend.Types;
+const root = @import("root.zig");
+const utils = root.utils;
+const hbc = @import("hbc.zig");
+pub const static_anal = root.backend.static_anal;
 
 pub fn runVendoredTest(gpa: std.mem.Allocator, path: []const u8) !void {
     var ast = try hbc.compile(.{
@@ -34,7 +32,7 @@ inline fn header(comptime name: []const u8, writer: anytype, corors: std.io.tty.
     try corors.setColor(writer, .reset);
 }
 
-pub fn parseExample(arena: *root.Arena, name: []const u8, code: []const u8, output: std.io.AnyWriter) ![]Ast {
+pub fn parseExample(arena: *utils.Arena, name: []const u8, code: []const u8, output: std.io.AnyWriter) ![]Ast {
     const FileRecord = struct {
         path: []const u8,
         source: [:0]const u8,
@@ -52,7 +50,7 @@ pub fn parseExample(arena: *root.Arena, name: []const u8, code: []const u8, outp
         }
     };
 
-    var tmp = root.Arena.scrath(arena);
+    var tmp = utils.Arena.scrath(arena);
     defer tmp.deinit();
     var files = std.ArrayList(FileRecord).init(tmp.arena.allocator());
     defer files.deinit();
@@ -107,12 +105,12 @@ pub fn testBuilder(
     colors: std.io.tty.Config,
     verbose: bool,
 ) !void {
-    var ast_arena = root.Arena.init(1024 * 1024);
+    var ast_arena = utils.Arena.init(1024 * 1024);
 
     const asts = try parseExample(&ast_arena, name, code, output);
     const ast = asts[0];
 
-    var func_arena = root.Arena.scrath(null);
+    var func_arena = utils.Arena.scrath(null);
     defer func_arena.deinit();
 
     var types = Types.init(gpa, asts, output);
@@ -325,7 +323,7 @@ pub fn runVm(
 }
 
 pub fn testFmt(name: []const u8, path: []const u8, code: [:0]const u8) !void {
-    var tmp = root.Arena.scrath(null);
+    var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
     const gpa = tmp.arena.allocator();

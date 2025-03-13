@@ -19,7 +19,7 @@ pub fn build(b: *std.Build) !void {
     depell: {
         const exe = b.addExecutable(.{
             .name = "depell",
-            .root_source_file = b.path("src/depell.zig"),
+            .root_source_file = b.path("depell.zig"),
             .target = target,
             .optimize = optimize,
         });

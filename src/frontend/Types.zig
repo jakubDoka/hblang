@@ -1,3 +1,17 @@
+const std = @import("std");
+
+const root = @import("../root.zig");
+const graph = root.backend.graph;
+const utils = root.utils;
+const static_anal = root.backend.static_anal;
+const Ast = root.frontend.Ast;
+const Arena = utils.Arena;
+const Codegen = root.frontend.Codegen;
+const Comptime = root.frontend.Comptime;
+const Lexer = root.frontend.Lexer;
+const HbvmGen = root.hbvm.HbvmGen;
+const Vm = root.hbvm.Vm;
+
 next_struct: u32 = 0,
 funcs: std.ArrayListUnmanaged(*Func) = .{},
 globals: std.ArrayListUnmanaged(*Global) = .{},
@@ -8,17 +22,6 @@ ct: Comptime,
 diagnostics: std.io.AnyWriter,
 files: []const Ast,
 
-const std = @import("std");
-const root = @import("utils.zig");
-const static_anal = @import("static_anal.zig");
-const Ast = @import("Ast.zig");
-const Arena = @import("utils.zig").Arena;
-const Codegen = @import("Codegen.zig");
-const Comptime = @import("Comptime.zig");
-const graph = @import("graph.zig");
-const Lexer = @import("Lexer.zig");
-const HbvmGen = @import("HbvmGen.zig");
-const Vm = @import("Vm.zig");
 const Types = @This();
 const Map = std.hash_map.HashMapUnmanaged(Id, void, TypeCtx, 70);
 
@@ -476,7 +479,7 @@ pub const Id = enum(usize) {
 
     pub fn items(self: Id, ast: *const Ast) Ast.Slice {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => root.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
             .Template, .Func => .{},
             inline else => |v, t| ast.exprs.getTyped(@field(std.meta.Tag(Ast.Expr), @tagName(t)), v.key.ast).?.fields,
         };
@@ -484,14 +487,14 @@ pub const Id = enum(usize) {
 
     pub fn captures(self: Id) []const Key.Capture {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => root.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| v.key.captures,
         };
     }
 
     pub fn findCapture(self: Id, id: Ast.Ident) ?Key.Capture {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => root.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| for (v.key.captures) |cp| {
                 if (cp.id == id) break cp;
             } else null,
@@ -500,7 +503,7 @@ pub const Id = enum(usize) {
 
     pub fn parent(self: Id) Id {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => root.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| v.key.scope,
         };
     }
