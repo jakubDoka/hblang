@@ -5,14 +5,14 @@ pub fn main() !void {
     const arena = arena_state.allocator();
 
     const args = try std.process.argsAlloc(arena);
-    const case_dir, const switch_arg, const out = args[1..5].*;
+    const case_dir, const switch_arg, const out = args[1..4].*;
 
     const out_file = try std.fs.cwd().createFile(out, .{});
     defer out_file.close();
     const writer = out_file.writer();
 
     try writer.print(
-        \\const root = @import("root");
+        \\const utils = @import("utils");
         \\
         \\
     , .{});
@@ -52,7 +52,7 @@ pub fn main() !void {
 
             try writer.print(
                 \\test "{s}" {{
-                \\    try root.runFuzzFindingTest(
+                \\    try utils.runFuzzFindingTest(
                 \\        "{s}",
                 \\        "{s}",
                 \\

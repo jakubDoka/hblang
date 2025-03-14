@@ -18,16 +18,6 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const zap = b.dependency("zap", .{
-        .target = target,
-        .optimize = optimize,
-        .openssl = true,
-    }).module("zap");
-    const sqlite = b.dependency("sqlite", .{
-        .target = target,
-        .optimize = optimize,
-    }).module("sqlite");
-
     hbc: {
         const exe = b.addExecutable(.{
             .name = "hbc",
@@ -40,11 +30,11 @@ pub fn build(b: *std.Build) !void {
         break :hbc;
     }
 
-    const options = b.addOptions();
+    const test_step = b.step("test", "run tests");
 
-    const vendored_tests = vendored_tests: {
+    vendored_tests: {
         const grn = b.addExecutable(.{
-            .name = "gen_tests.zig",
+            .name = "gen_vendored_tests",
             .root_source_file = b.path("scripts/gen_vendored_tests.zig"),
             .target = b.graph.host,
             .optimize = .Debug,
@@ -57,10 +47,23 @@ pub fn build(b: *std.Build) !void {
         run_gen.addDirectoryArg(b.path("vendored-tests"));
         run_gen.addArg("hbc-tests");
         const out = run_gen.addOutputFileArg("vendored_tests.zig");
-        break :vendored_tests out;
-    };
 
-    const tests = example_tests: {
+        const test_run = b.addTest(.{
+            .name = "vendored_tests",
+            .root_source_file = out,
+            .target = b.graph.host,
+            .optimize = optimize,
+            .use_llvm = false,
+            .use_lld = false,
+        });
+
+        test_run.root_module.addAnonymousImport("utils", .{ .root_source_file = b.path("src/tests.zig") });
+        test_step.dependOn(&b.addRunArtifact(test_run).step);
+
+        break :vendored_tests;
+    }
+
+    example_tests: {
         const gen = b.addExecutable(.{
             .name = "gen_tests.zig",
             .root_source_file = b.path("scripts/gen_tests.zig"),
@@ -71,18 +74,23 @@ pub fn build(b: *std.Build) !void {
         });
 
         const run_gen = b.addRunArtifact(gen);
-        run_gen.has_side_effects = true;
         run_gen.addFileArg(b.path("README.md"));
         const out = run_gen.addOutputFileArg("tests.zig");
 
-        {
-            const rdm_stat = try std.fs.cwd().statFile("README.md");
-            const stat = if (std.fs.cwd().statFile("zig-out/tests.zig")) |s| s.mtime else |_| 0;
-            run_gen.has_side_effects = rdm_stat.mtime > stat;
-        }
+        const test_run = b.addTest(.{
+            .name = "vendored_tests",
+            .root_source_file = out,
+            .target = b.graph.host,
+            .optimize = optimize,
+            .use_llvm = false,
+            .use_lld = false,
+        });
 
-        break :example_tests out;
-    };
+        test_run.root_module.addAnonymousImport("utils", .{ .root_source_file = b.path("src/tests.zig") });
+        test_step.dependOn(&b.addRunArtifact(test_run).step);
+
+        break :example_tests;
+    }
 
     const test_module = test_module: {
         const module = b.addModule("test", .{
@@ -90,12 +98,6 @@ pub fn build(b: *std.Build) !void {
             .target = b.graph.host,
             .optimize = optimize,
         });
-
-        module.addOptions("options", options);
-        module.addImport("zap", zap);
-        module.addImport("sqlite", sqlite);
-        module.addAnonymousImport("vendored-tests", .{ .root_source_file = vendored_tests });
-        module.addAnonymousImport("tests", .{ .root_source_file = tests });
 
         break :test_module module;
     };
@@ -106,8 +108,6 @@ pub fn build(b: *std.Build) !void {
         break :check;
     }
 
-    const test_step = b.step("test", "run tests");
-
     const fuzz_finding_tests = fuzzing: {
         const dict_gen = b.addExecutable(.{
             .name = "gen_fuzz_dict.zig",
@@ -117,6 +117,8 @@ pub fn build(b: *std.Build) !void {
             .use_llvm = false,
             .use_lld = false,
         });
+
+        dict_gen.root_module.addAnonymousImport("Lexer", .{ .root_source_file = b.path("src/frontend/Lexer.zig") });
 
         const run_gen = b.addRunArtifact(dict_gen);
         const dict_out = run_gen.addOutputFileArg("hblang.dict");
@@ -156,7 +158,7 @@ pub fn build(b: *std.Build) !void {
 
         const gen_finding_tests = b.addExecutable(.{
             .name = "gen_fuzz_finding_tests.zig",
-            .root_source_file = b.path("gen_fuzz_finding_tests.zig"),
+            .root_source_file = b.path("scripts/gen_fuzz_finding_tests.zig"),
             .target = b.graph.host,
             .optimize = .Debug,
             .use_llvm = false,

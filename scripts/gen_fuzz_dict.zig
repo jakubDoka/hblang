@@ -1,5 +1,5 @@
 const std = @import("std");
-const Lexer = @import("src/Lexer.zig");
+const Lexer = @import("Lexer");
 
 pub fn main() !void {
     var arena_state = std.heap.ArenaAllocator.init(std.heap.page_allocator);

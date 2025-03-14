@@ -12,7 +12,7 @@ pub fn main() !void {
     const writer = out_file.writer();
 
     try writer.print(
-        \\const root = @import("root");
+        \\const utils = @import("utils");
         \\
         \\
     , .{});
@@ -37,7 +37,7 @@ pub fn main() !void {
                 const name = try std.fs.path.join(arena, &.{ vendored_tests, path, example.name });
                 try writer.print(
                     \\test "{s}" {{
-                    \\    try root.runVendoredTest("{s}");
+                    \\    try utils.runVendoredTest("{s}");
                     \\}}
                     \\
                     \\

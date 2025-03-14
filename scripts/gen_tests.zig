@@ -14,7 +14,7 @@ pub fn main() !void {
     const writer = out_file.writer();
 
     try writer.print(
-        \\const root = @import("root");
+        \\const utils = @import("utils");
         \\
         \\
     , .{});
@@ -33,7 +33,7 @@ pub fn main() !void {
 
         try writer.print(
             \\test "{s}" {{
-            \\    try root.runTest(
+            \\    try utils.runTest(
             \\        "{s}",
             \\        "{s}",
             \\

@@ -4,12 +4,8 @@ pub const test_util = @import("test_util.zig");
 pub const hbc = @import("hbc.zig");
 pub const fuzz = @import("fuzz.zig");
 
-test {
-    _ = @import("tests");
-    _ = @import("vendored-tests");
-    //_ = @import("zig-out/fuzz_finding_tests.zig");
-
-    std.testing.refAllDeclsRecursive(@This());
+comptime {
+    if (@import("root") == @This()) std.testing.refAllDeclsRecursive(@This());
 }
 
 pub fn runTest(name: []const u8, code: [:0]const u8) !void {
