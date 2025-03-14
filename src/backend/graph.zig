@@ -171,7 +171,7 @@ pub const DataType = enum(u16) {
 
     pub fn size(self: DataType) usize {
         return switch (self) {
-            .top, .bot => 0,
+            .top, .bot => unreachable,
             .i8 => 1,
             .i16 => 2,
             .i32, .f32 => 4,
@@ -792,7 +792,7 @@ pub fn Func(comptime MachNode: type) type {
 
         pub fn init(gpa: std.mem.Allocator) Self {
             var self = Self{ .arena = .init(gpa) };
-            self.root = self.addNode(.Start, &.{}, .{});
+            self.root = self.addNode(.Start, .top, &.{}, .{});
             return self;
         }
 
@@ -804,7 +804,7 @@ pub fn Func(comptime MachNode: type) type {
         pub fn reset(self: *Self) void {
             std.debug.assert(self.arena.reset(.retain_capacity));
             self.next_id = 0;
-            self.root = self.addNode(.Start, &.{}, .{});
+            self.root = self.addNode(.Start, .top, &.{}, .{});
             self.interner = .{};
             self.gcm.cfg_built = .{};
             self.gcm.loop_tree_built = .{};
@@ -872,12 +872,6 @@ pub fn Func(comptime MachNode: type) type {
             self.addDep(to, def);
         }
 
-        pub fn addTypedNode(self: *Self, comptime kind: Kind, ty: DataType, inputs: []const ?*Node, extra: ClassFor(kind)) *Node {
-            const node = self.addNode(kind, inputs, extra);
-            node.data_type = ty;
-            return node;
-        }
-
         pub fn loopDepth(self: *Self, node: *Node) u16 {
             self.gcm.loop_tree_built.assertLocked();
             const cfg = node.asCfg() orelse node.cfg0().?;
@@ -892,33 +886,38 @@ pub fn Func(comptime MachNode: type) type {
 
         pub fn addTrap(self: *Self, ctrl: *Node, code: u64) void {
             if (self.end.inputs()[2] == null) {
-                self.setInputNoIntern(self.end, 2, self.addNode(.TrapRegion, &.{}, .{}));
+                self.setInputNoIntern(self.end, 2, self.addNode(.TrapRegion, .top, &.{}, .{}));
             }
 
             const region = self.end.inputs()[2].?;
-            const trap = self.addNode(.Trap, &.{ctrl}, .{ .code = code });
+            const trap = self.addNode(.Trap, .top, &.{ctrl}, .{ .code = code });
 
             self.addDep(region, trap);
             self.addUse(trap, region);
         }
 
-        pub fn addNode(self: *Self, comptime kind: Kind, inputs: []const ?*Node, extra: ClassFor(kind)) *Node {
-            const node = self.addNodeUntyped(kind, inputs, extra);
+        pub fn addNode(self: *Self, comptime kind: Kind, ty: DataType, inputs: []const ?*Node, extra: ClassFor(kind)) *Node {
+            const node = self.addNodeUntyped(kind, ty, inputs, extra);
             if (kind == .Phi) node.data_type = node.inputs()[1].?.data_type;
             return node;
         }
 
-        pub fn addNodeUntyped(self: *Self, kind: Kind, inputs: []const ?*Node, extra: anytype) *Node {
+        pub fn addNodeUntyped(self: *Self, kind: Kind, ty: DataType, inputs: []const ?*Node, extra: anytype) *Node {
             if (Node.isInterned(kind, inputs)) {
                 const entry = self.internNode(kind, inputs, &extra);
-                if (!entry.found_existing) entry.key_ptr.node = self.addNodeNoIntern(kind, inputs, extra);
+                if (!entry.found_existing) {
+                    entry.key_ptr.node = self.addNodeNoIntern(kind, ty, inputs, extra);
+                } else {
+                    entry.key_ptr.node.data_type = entry.key_ptr.node.data_type.meet(ty);
+                }
+
                 return entry.key_ptr.node;
             } else {
-                return self.addNodeNoIntern(kind, inputs, extra);
+                return self.addNodeNoIntern(kind, ty, inputs, extra);
             }
         }
 
-        pub fn addNodeNoIntern(self: *Self, kind: Kind, inputs: []const ?*Node, extra: anytype) *Node {
+        pub fn addNodeNoIntern(self: *Self, kind: Kind, ty: DataType, inputs: []const ?*Node, extra: anytype) *Node {
             const Layout = extern struct {
                 base: Node,
                 extra: @TypeOf(extra),
@@ -935,6 +934,7 @@ pub fn Func(comptime MachNode: type) type {
                     .output_base = @ptrFromInt(@alignOf(*Node)),
                     .kind = kind,
                     .id = self.next_id,
+                    .data_type = ty,
                 },
                 .extra = extra,
             };
@@ -1214,7 +1214,7 @@ pub fn Func(comptime MachNode: type) type {
                 if (base.kind == .Local and node.cfg0() != null) {
                     const dinps = tmp.arena.dupe(?*Node, node.inputs());
                     dinps[0] = null;
-                    const st = self.addTypedNode(.Store, node.data_type, dinps, .{});
+                    const st = self.addNode(.Store, node.data_type, dinps, .{});
                     worklist.add(st);
                     return st;
                 }
@@ -1227,7 +1227,7 @@ pub fn Func(comptime MachNode: type) type {
                 if (base.kind == .Local and node.cfg0() != null) {
                     const dinps = tmp.arena.dupe(?*Node, node.inputs());
                     dinps[0] = null;
-                    const st = self.addTypedNode(.Load, node.data_type, dinps, .{});
+                    const st = self.addNode(.Load, node.data_type, dinps, .{});
                     worklist.add(st);
                     return st;
                 }
@@ -1247,7 +1247,7 @@ pub fn Func(comptime MachNode: type) type {
                 }
 
                 if (earlier != node.mem()) {
-                    return self.addTypedNode(.Load, node.data_type, &.{ inps[0], earlier, inps[2] }, .{});
+                    return self.addNode(.Load, node.data_type, &.{ inps[0], earlier, inps[2] }, .{});
                 }
             }
 
@@ -1256,7 +1256,7 @@ pub fn Func(comptime MachNode: type) type {
                 const oper = inps[1].?;
 
                 if (oper.kind == .CInt and node.data_type.isInt()) {
-                    return self.addTypedNode(.CInt, node.data_type, &.{null}, op.eval(oper.data_type, oper.extra(.CInt).*));
+                    return self.addNode(.CInt, node.data_type, &.{null}, op.eval(oper.data_type, oper.extra(.CInt).*));
                 }
 
                 if (node.data_type.meet(inps[1].?.data_type) == inps[1].?.data_type) {

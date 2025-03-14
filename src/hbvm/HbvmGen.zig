@@ -744,7 +744,7 @@ pub fn idealizeMach(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.
                 else => break :b,
             };
 
-            return func.addTypedNode(
+            return func.addNode(
                 .ImmBinOp,
                 node.data_type,
                 &.{ null, node.inputs()[1] },
@@ -774,14 +774,14 @@ pub fn idealizeMach(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.
             };
             const op_inps = inps[1].?.inputs();
 
-            return func.addNode(.IfOp, &.{ inps[0], op_inps[1], op_inps[2] }, .{
+            return func.addNode(.IfOp, .top, &.{ inps[0], op_inps[1], op_inps[2] }, .{
                 .op = instr,
                 .swapped = swap,
             });
         }
 
         if (inps[1].?.data_type != .int) {
-            const new = func.addTypedNode(.UnOp, .int, &.{ null, inps[1].? }, .uext);
+            const new = func.addNode(.UnOp, .int, &.{ null, inps[1].? }, .uext);
             work.add(new);
             _ = func.setInput(node, 1, new);
         }
@@ -789,13 +789,18 @@ pub fn idealizeMach(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.
 
     if (node.kind == .MemCpy) {
         if (inps[4].?.kind == .CInt) {
-            return func.addNode(.BlockCpy, &.{ inps[0], inps[1], inps[2], inps[3] }, .{ .size = @intCast(inps[4].?.extra(.CInt).*) });
+            return func.addNode(
+                .BlockCpy,
+                .top,
+                &.{ inps[0], inps[1], inps[2], inps[3] },
+                .{ .size = @intCast(inps[4].?.extra(.CInt).*) },
+            );
         }
     }
 
     if (node.kind == .Store) {
         if (node.base().kind == .ImmBinOp) {
-            return func.addTypedNode(
+            return func.addNode(
                 .St,
                 node.data_type,
                 &.{ inps[0], inps[1], node.base().inputs()[1], inps[3] },
@@ -806,7 +811,7 @@ pub fn idealizeMach(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.
 
     if (node.kind == .Load) {
         if (node.base().kind == .ImmBinOp) {
-            return func.addTypedNode(
+            return func.addNode(
                 .Ld,
                 node.data_type,
                 &.{ inps[0], inps[1], node.base().inputs()[1] },
@@ -828,7 +833,7 @@ pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node
             const ext_op: graph.UnOp = if (op.isSigned()) .sext else .uext;
             inline for (inps[1..3], 1..) |inp, i| {
                 if (inp.?.data_type.size() != 8) {
-                    const new = func.addTypedNode(.UnOp, .int, &.{ null, inp.? }, ext_op);
+                    const new = func.addNode(.UnOp, .int, &.{ null, inp.? }, ext_op);
                     work.add(new);
                     _ = func.setInput(node, i, new);
                 }
@@ -839,7 +844,7 @@ pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node
     if (node.kind == .UnOp) {
         const op: graph.UnOp = node.extra(.UnOp).*;
         if (op == .not and inps[1].?.data_type != .int) {
-            const new = func.addTypedNode(.UnOp, .int, &.{ null, inps[1].? }, .uext);
+            const new = func.addNode(.UnOp, .int, &.{ null, inps[1].? }, .uext);
             work.add(new);
             _ = func.setInput(node, 1, new);
         }

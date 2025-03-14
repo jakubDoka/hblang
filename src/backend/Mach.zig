@@ -24,7 +24,7 @@ test init {
                 _ = worklist;
                 // relpace node whih the return value
                 if (node.kind == .Start)
-                    return func.addNode(.CustomNode, &.{}, false);
+                    return func.addNode(.CustomNode, .top, &.{}, false);
 
                 return null;
             }

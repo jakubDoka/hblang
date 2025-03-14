@@ -39,10 +39,10 @@ pub fn deinit(self: *Builder) void {
 pub const BuildToken = enum { @"please call Builder.begin() first, then Builder.end()" };
 
 pub fn begin(self: *Builder, param_count: usize, return_coutn: usize) struct { BuildToken, []DataType, []DataType } {
-    const ctrl = self.func.addNode(.Entry, &.{self.func.root}, .{});
-    self.root_mem = self.func.addNode(.Mem, &.{self.func.root}, {});
-    self.scope = self.func.addNode(.Scope, &.{ ctrl, self.root_mem }, {});
-    self.func.end = self.func.addNode(.Return, &.{ null, null, null }, .{});
+    const ctrl = self.func.addNode(.Entry, .top, &.{self.func.root}, .{});
+    self.root_mem = self.func.addNode(.Mem, .top, &.{self.func.root}, {});
+    self.scope = self.func.addNode(.Scope, .top, &.{ ctrl, self.root_mem }, {});
+    self.func.end = self.func.addNode(.Return, .top, &.{ null, null, null }, .{});
 
     const alloc = self.func.arena.allocator().alloc(DataType, param_count + return_coutn) catch unreachable;
 
@@ -53,9 +53,7 @@ pub fn begin(self: *Builder, param_count: usize, return_coutn: usize) struct { B
 }
 
 pub fn addParam(self: *Builder, idx: usize) SpecificNode(.Arg) {
-    const arg = self.func.addNode(.Arg, &.{self.func.root}, idx);
-    arg.data_type = self.func.params[idx];
-    return arg;
+    return self.func.addNode(.Arg, self.func.params[idx], &.{self.func.root}, idx);
 }
 
 pub fn end(self: *Builder, _: BuildToken) void {
@@ -65,8 +63,7 @@ pub fn end(self: *Builder, _: BuildToken) void {
 // #MEM ========================================================================
 
 pub fn addLocal(self: *Builder, sloc: graph.Sloc, size: u64) SpecificNode(.Local) {
-    const local = self.func.addNode(.Local, &.{ null, self.root_mem }, size);
-    local.data_type = .int;
+    const local = self.func.addNode(.Local, .int, &.{ null, self.root_mem }, size);
     local.sloc = sloc;
     return local;
 }
@@ -78,8 +75,7 @@ pub fn resizeLocal(_: *Builder, here: SpecificNode(.Local), to_size: u64) void {
 
 pub fn addLoad(self: *Builder, addr: *BuildNode, ty: DataType) SpecificNode(.Store) {
     //std.debug.assert(ty != .bot and ty != .top);
-    const val = self.func.addNode(.Load, &.{ if (addr.kind == .Local) null else self.control(), self.memory(), addr }, .{});
-    val.data_type = ty;
+    const val = self.func.addNode(.Load, ty, &.{ if (addr.kind == .Local) null else self.control(), self.memory(), addr }, .{});
     return val;
 }
 
@@ -92,8 +88,7 @@ pub fn addStore(self: *Builder, addr: *BuildNode, ty: DataType, value: *BuildNod
     if (value.data_type.size() == 0) root.panic("{}", .{value.data_type});
     const mem = self.memory();
     const ctrl = self.control();
-    const store = self.func.addNode(.Store, &.{ ctrl, mem, addr, value }, .{});
-    store.data_type = ty;
+    const store = self.func.addNode(.Store, ty, &.{ ctrl, mem, addr, value }, .{});
     self.func.setInputNoIntern(self.scope.?, 1, store);
 }
 
@@ -130,34 +125,29 @@ pub fn addFixedMemCpy(self: *Builder, dst: *BuildNode, src: *BuildNode, size: u6
     const mem = self.memory();
     const ctrl = self.control();
     const siz = self.addIntImm(.int, @bitCast(size));
-    const mcpy = self.func.addNode(.MemCpy, &.{ ctrl, mem, dst, src, siz }, .{});
+    const mcpy = self.func.addNode(.MemCpy, .top, &.{ ctrl, mem, dst, src, siz }, .{});
     self.func.setInputNoIntern(self.scope.?, 1, mcpy);
 }
 
 pub fn addGlobalAddr(self: *Builder, arbitrary_global_id: u32) SpecificNode(.GlobalAddr) {
-    return self.func.addTypedNode(.GlobalAddr, .int, &.{null}, .{ .id = arbitrary_global_id });
+    return self.func.addNode(.GlobalAddr, .int, &.{null}, .{ .id = arbitrary_global_id });
 }
 
 // #MATH =======================================================================
 
 pub fn addIntImm(self: *Builder, ty: DataType, value: i64) SpecificNode(.CInt) {
     std.debug.assert(ty != .bot);
-    const val = self.func.addNode(.CInt, &.{null}, value);
-    val.data_type = val.data_type.meet(ty);
+    const val = self.func.addNode(.CInt, ty, &.{null}, value);
     std.debug.assert(val.data_type.isInt());
     return val;
 }
 
 pub fn addFlt64Imm(self: *Builder, value: f64) SpecificNode(.CFlt64) {
-    const val = self.func.addNode(.CFlt64, &.{null}, value);
-    val.data_type = .f64;
-    return val;
+    return self.func.addNode(.CFlt64, .f64, &.{null}, value);
 }
 
 pub fn addFlt32Imm(self: *Builder, value: f32) SpecificNode(.CFlt32) {
-    const val = self.func.addNode(.CFlt32, &.{null}, value);
-    val.data_type = .f32;
-    return val;
+    return self.func.addNode(.CFlt32, .f32, &.{null}, value);
 }
 
 pub fn addBinOp(self: *Builder, op: BinOp, ty: DataType, lhs: *BuildNode, rhs: *BuildNode) SpecificNode(.BinOp) {
@@ -169,9 +159,7 @@ pub fn addBinOp(self: *Builder, op: BinOp, ty: DataType, lhs: *BuildNode, rhs: *
     if ((op == .iadd or op == .iadd) and rhs.kind == .CInt and rhs.extra(.CInt).* == 0) {
         return lhs;
     }
-    const val = self.func.addNode(.BinOp, &.{ null, lhs, rhs }, op);
-    val.data_type = ty;
-    return val;
+    return self.func.addNode(.BinOp, ty, &.{ null, lhs, rhs }, op);
 }
 
 pub fn addUnOp(self: *Builder, op: UnOp, ty: DataType, oper: *BuildNode) SpecificNode(.BinOp) {
@@ -182,9 +170,9 @@ pub fn addUnOp(self: *Builder, op: UnOp, ty: DataType, oper: *BuildNode) Specifi
     } else if (oper.kind == .CFlt32 and ty == .f32) {
         return self.addFlt32Imm(@floatCast(@as(f64, @bitCast(op.eval(oper.data_type, @bitCast(@as(f64, @floatCast(oper.extra(.CFlt32).*))))))));
     }
-    const val = self.func.addNode(.UnOp, &.{ null, oper }, op);
-    val.data_type = val.data_type.meet(ty);
-    return val;
+    const opa = self.func.addNode(.UnOp, ty, &.{ null, oper }, op);
+    std.debug.assert(opa.data_type == ty);
+    return opa;
 }
 
 // #SCOPE ======================================================================
@@ -238,7 +226,7 @@ pub fn getScopeValueMulty(func: *Func, scope: *BuildNode, index: usize) *Func.No
             const initVal = getScopeValueMulty(func, loop, index);
             const items = getScopeValues(loop);
             if (!items[index].isLazyPhi(items[0])) {
-                const phi = func.addNode(.Phi, &.{ items[0], initVal, null }, {});
+                const phi = func.addNode(.Phi, .top, &.{ items[0], initVal, null }, {});
                 std.debug.assert(phi.isLazyPhi(items[0]));
                 func.setInputNoIntern(loop, index, phi);
             }
@@ -260,14 +248,14 @@ pub fn mergeScopes(
 
     const relevant_size = @min(lhs_values.len, rhs_values.len);
 
-    const new_ctrl = func.addNode(.Region, &.{ lhs_values[0], rhs_values[0] }, .{});
+    const new_ctrl = func.addNode(.Region, .top, &.{ lhs_values[0], rhs_values[0] }, .{});
 
     const start = 1;
     for (lhs_values[start..relevant_size], rhs_values[start..relevant_size], start..) |lh, rh, i| {
         if (lh == rh) continue;
         const thn = getScopeValueMulty(func, lhs, i);
         const els = getScopeValueMulty(func, rhs, i);
-        const phi = func.addNode(.Phi, &.{ new_ctrl, thn, els }, {});
+        const phi = func.addNode(.Phi, .top, &.{ new_ctrl, thn, els }, {});
         func.setInputNoIntern(rhs, i, phi);
     }
 
@@ -279,7 +267,7 @@ pub fn mergeScopes(
 
 pub fn cloneScope(self: *Builder) SpecificNode(.Scope) {
     const values = getScopeValues(self.scope.?);
-    return self.func.addNode(.Scope, values, {});
+    return self.func.addNode(.Scope, .top, values, {});
 }
 
 pub inline fn truncateScope(self: *Builder, back_to: usize) void {
@@ -320,7 +308,7 @@ pub const If = struct {
         builder.func.setInputNoIntern(
             builder.scope.?,
             0,
-            builder.func.addNode(.Else, &.{self.if_node}, .{}),
+            builder.func.addNode(.Else, .top, &.{self.if_node}, .{}),
         );
         return @enumFromInt(0);
     }
@@ -339,9 +327,9 @@ pub const If = struct {
 
 pub fn addIfAndBeginThen(self: *Builder, sloc: graph.Sloc, cond: *BuildNode) If {
     const else_ = self.cloneScope();
-    const if_node = self.func.addNode(.If, &.{ self.control(), cond }, .{});
+    const if_node = self.func.addNode(.If, .top, &.{ self.control(), cond }, .{});
     if_node.sloc = sloc;
-    self.func.setInputNoIntern(self.scope.?, 0, self.func.addNode(.Then, &.{if_node}, .{}));
+    self.func.setInputNoIntern(self.scope.?, 0, self.func.addNode(.Then, .top, &.{if_node}, .{}));
     return .{
         .if_node = if_node,
         .saved_branch = .{ .else_ = else_ },
@@ -412,7 +400,7 @@ pub const Loop = struct {
 };
 
 pub fn addLoopAndBeginBody(self: *Builder) Loop {
-    const loop = self.func.addNode(.Loop, &.{
+    const loop = self.func.addNode(.Loop, .top, &.{
         self.control(),
         null,
     }, .{});
@@ -457,18 +445,17 @@ pub fn addCall(
     full_args[0] = self.control();
     full_args[1] = self.memory();
 
-    const call = self.func.addNode(.Call, full_args, .{
+    const call = self.func.addNode(.Call, .top, full_args, .{
         .id = arbitrary_call_id,
         .ret_count = @intCast(args.returns.len),
     });
-    const call_end = self.func.addNode(.CallEnd, &.{call}, .{});
+    const call_end = self.func.addNode(.CallEnd, .top, &.{call}, .{});
     self.func.setInputNoIntern(self.scope.?, 0, call_end);
-    const call_mem = self.func.addNode(.Mem, &.{call_end}, {});
+    const call_mem = self.func.addNode(.Mem, .top, &.{call_end}, {});
     self.func.setInputNoIntern(self.scope.?, 1, call_mem);
 
     for (args.return_slots, args.returns, 0..) |*slt, rty, i| {
-        slt.* = self.func.addNode(.Ret, &.{call_end}, i);
-        slt.*.data_type = rty;
+        slt.* = self.func.addNode(.Ret, rty, &.{call_end}, i);
     }
 
     return args.return_slots;
@@ -480,12 +467,12 @@ pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
     const ret = self.func.end;
     const inps = ret.inputs();
     if (inps[0] != null) {
-        const new_ctrl = self.func.addNode(.Region, &.{ inps[0].?, self.control() }, .{});
+        const new_ctrl = self.func.addNode(.Region, .top, &.{ inps[0].?, self.control() }, .{});
         self.func.setInputNoIntern(ret, 0, new_ctrl);
-        const new_mem = self.func.addNode(.Phi, &.{ new_ctrl, inps[1], self.memory() }, {});
+        const new_mem = self.func.addNode(.Phi, .top, &.{ new_ctrl, inps[1], self.memory() }, {});
         self.func.setInputNoIntern(ret, 1, new_mem);
         for (inps[3..ret.input_ordered_len], values, 3..) |curr, next, vidx| {
-            const new_value = self.func.addNode(.Phi, &.{ new_ctrl, curr, next }, {});
+            const new_value = self.func.addNode(.Phi, .top, &.{ new_ctrl, curr, next }, {});
             self.func.setInputNoIntern(ret, vidx, new_value);
         }
     } else {

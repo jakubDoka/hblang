@@ -107,9 +107,9 @@ pub fn GcmMixin(comptime MachNode: type) type {
         }
 
         pub fn fixLoop(func: *Func, loop: *CfgNode, end: *Node) *CfgNode {
-            const dead = func.addNode(.Never, &.{loop.base.inputs()[1].?}, .{});
-            const then = func.addNode(.Then, &.{dead}, .{});
-            const else_ = func.addNode(.Else, &.{dead}, .{});
+            const dead = func.addNode(.Never, .top, &.{loop.base.inputs()[1].?}, .{});
+            const then = func.addNode(.Then, .top, &.{dead}, .{});
+            const else_ = func.addNode(.Else, .top, &.{dead}, .{});
 
             func.setInputNoIntern(&loop.base, 1, else_);
             func.addTrap(then, graph.infinite_loop_trap);
@@ -152,16 +152,16 @@ pub fn GcmMixin(comptime MachNode: type) type {
             add_mach_moves: {
                 for (cfg_rpo) |n| if (n.base.kind == .Loop or n.base.kind == .Region) {
                     for (0..2) |i| {
-                        self.setInputNoIntern(&n.base, i, self.addNode(.Jmp, &.{n.base.inputs()[i].?}, .{}));
+                        self.setInputNoIntern(&n.base, i, self.addNode(.Jmp, .top, &.{n.base.inputs()[i].?}, .{}));
                     }
 
                     var intmp = root.Arena.scrath(null);
                     defer intmp.deinit();
                     for (intmp.arena.dupe(*Node, n.base.outputs())) |o| if (o.isDataPhi()) {
                         std.debug.assert(o.inputs().len == 3);
-                        const lhs = self.addNode(.MachMove, &.{ null, o.inputs()[1].? }, {});
-                        const rhs = self.addNode(.MachMove, &.{ null, o.inputs()[2].? }, {});
-                        const new_phy = self.addNode(.Phi, &.{ &n.base, lhs, rhs }, {});
+                        const lhs = self.addNode(.MachMove, .top, &.{ null, o.inputs()[1].? }, {});
+                        const rhs = self.addNode(.MachMove, .top, &.{ null, o.inputs()[2].? }, {});
+                        const new_phy = self.addNode(.Phi, .top, &.{ &n.base, lhs, rhs }, {});
                         self.subsume(new_phy, o);
                     };
                 };
