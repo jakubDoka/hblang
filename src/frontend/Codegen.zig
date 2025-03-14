@@ -342,7 +342,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .String => |e| {
             const lit = ast.source[e.pos.index + 1 .. e.end - 1];
 
-            const data = switch (encodeString(lit, self.types.arena.alloc(u8, lit.len))) {
+            const data = switch (encodeString(lit, self.types.arena.alloc(u8, lit.len)) catch unreachable) {
                 .ok => |dt| dt,
                 .err => |err| {
                     var pos = e.pos;
@@ -352,6 +352,24 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             };
 
             return self.emitStirng(ctx, data, expr);
+        },
+        .Quotes => |e| {
+            const lit = ast.source[e.pos.index + 1 .. e.end - 1];
+
+            var char: [1]u8 = undefined;
+
+            const data = switch (encodeString(lit, &char) catch {
+                return self.report(expr, "the char encodes into more then 1 byte", .{});
+            }) {
+                .ok => |dt| dt,
+                .err => |err| {
+                    var pos = e.pos;
+                    pos.index += @intCast(err.pos);
+                    return self.report(pos, "{s}", .{err.reason});
+                },
+            };
+
+            return .mkv(.u8, self.bl.addIntImm(.i8, data[0]));
         },
         .Integer => |e| {
             var ty = ctx.ty orelse .uint;
@@ -657,7 +675,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
         // #OPS ========================================================================
         .SliceTy => |e| {
-            const len: ?usize = if (e.len.tag() == .Void) null else @intCast(self.types.ct.evalIntConst(.{ .Tmp = self }, e.len) catch 0);
+            var value = if (e.len.tag() == .Void) null else try self.emitTyped(.{}, .uint, e.len);
+            const len: ?usize = if (value) |*vl| @intCast(self.partialEval(expr, vl.getValue(self)) catch 0) else null;
             const elem = try self.resolveAnonTy(e.elem);
             return self.emitTyConst(self.types.makeSlice(len, elem));
         },
@@ -1954,7 +1973,7 @@ pub const StringEncodeResutl = union(enum) {
 pub fn encodeString(
     literal: []const u8,
     buf: []u8,
-) StringEncodeResutl {
+) !StringEncodeResutl {
     const SPECIAL_CHARS = "nrt\\'\"0";
     const TO_BYTES = "\n\r\t\\\'\"\x00";
 
@@ -1964,7 +1983,7 @@ pub fn encodeString(
     var bytes = std.mem.splitScalar(u8, literal, '\\');
 
     while (bytes.next()) |chunk| {
-        str.appendSliceAssumeCapacity(chunk);
+        try str.appendSlice(std.testing.failing_allocator, chunk);
         if (bytes.rest().len == 0) break;
         switch (bytes.rest()[0]) {
             '{' => {
@@ -1977,14 +1996,14 @@ pub fn encodeString(
                     const byte_val = std.fmt.parseInt(u8, hex_bytes[i .. i + 2], 16) catch {
                         return .{ .err = .{ .reason = "expected hex digit or '}'", .pos = literal.len - bytes.rest().len } };
                     };
-                    str.appendAssumeCapacity(byte_val);
+                    try str.append(std.testing.failing_allocator, byte_val);
                 }
                 bytes.index.? += i + 1;
             },
             else => |b| {
                 for (SPECIAL_CHARS, TO_BYTES) |s, sb| {
                     if (s == b) {
-                        str.appendAssumeCapacity(sb);
+                        try str.append(std.testing.failing_allocator, sb);
                         break;
                     }
                 } else return .{ .err = .{ .reason = "unknown escape sequence", .pos = literal.len - bytes.rest().len } };
@@ -2249,8 +2268,22 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
         .name_of => {
             try static.assertArgs(self, expr, args, "<ty>");
 
-            const ty = try self.resolveAnonTy(args[0]);
-            const data = std.fmt.allocPrint(self.types.arena.allocator(), "{}", .{ty.fmt(self.types)}) catch unreachable;
+            var value = try self.emit(.{}, args[0]);
+
+            const data = if (value.ty == .type) dt: {
+                const ty = try self.unwrapTyConst(args[0], &value);
+                break :dt std.fmt.allocPrint(self.types.arena.allocator(), "{}", .{ty.fmt(self.types)}) catch unreachable;
+            } else switch (value.ty.data()) {
+                .Enum => |enum_ty| dt: {
+                    if (enum_ty.getFields(self.types).len == 1) {
+                        break :dt enum_ty.getFields(self.types)[0].name;
+                    }
+
+                    const id = try self.partialEval(args[0], value.getValue(self));
+                    break :dt enum_ty.getFields(self.types)[@intCast(id)].name;
+                },
+                else => return self.report(args[0], "can't compute a name of {}", .{value.ty}),
+            };
 
             return self.emitStirng(ctx, data, expr);
         },

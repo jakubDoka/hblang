@@ -1,0 +1,32 @@
+main:
+         st $31, $254, -24, 24
+     addi64 $254, $254, -24
+        lra $32, $0, :map
+       li64 $33, 0
+         cp $1, $32
+         cp $2, $33
+        jal $31, $0, :NameMap(Enum = Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get
+         cp $32, $1
+         ld $32, $32, 0, 1
+       andi $32, $32, 255
+         cp $1, $32
+     addi64 $254, $254, 24
+         ld $31, $254, -24, 24
+         tx
+NameMap(Enum = Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get:
+         cp $13, $1
+         cp $14, $2
+       andi $15, $14, 255
+     addi64 $15, $15, 1
+     addi64 $16, $13, 8
+     muli64 $14, $14, 8
+     muli64 $15, $15, 8
+      add64 $14, $16, $14
+      add64 $15, $16, $15
+         ld $14, $14, 0, 8
+         ld $15, $15, 0, 8
+      add64 $13, $13, $14
+      sub64 $14, $15, $14
+         cp $1, $13
+         cp $2, $14
+       jala $0, $31, 0

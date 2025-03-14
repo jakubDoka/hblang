@@ -471,6 +471,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         .Float => .{ .Float = .init(token.pos) },
         .true => .{ .Bool = .{ .value = true, .pos = .init(token.pos) } },
         .@"\"" => .{ .String = .{ .pos = .init(token.pos), .end = token.end } },
+        .@"'" => .{ .Quotes = .{ .pos = .init(token.pos), .end = token.end } },
         .false => .{ .Bool = .{ .value = false, .pos = .init(token.pos) } },
         else => |k| {
             self.report(token.pos, "no idea how to handle this: {s}", .{@tagName(k)});

@@ -183,6 +183,10 @@ pub const Expr = union(enum) {
         pos: Pos,
         end: u32,
     },
+    Quotes: struct {
+        pos: Pos,
+        end: u32,
+    },
 
     pub const Type = struct {
         pos: Pos,

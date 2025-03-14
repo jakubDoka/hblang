@@ -546,7 +546,7 @@ pub const Id = enum(usize) {
 
     pub fn len(self: Id, types: *Types) ?usize {
         return switch (self.data()) {
-            inline .Struct, .Union => |s| s.getFields(types).len,
+            inline .Struct, .Union, .Enum => |s| s.getFields(types).len,
             .Slice => |s| s.len,
             else => null,
         };

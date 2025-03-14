@@ -227,6 +227,17 @@ main := fn(): uint {
 }
 ```
 
+#### literals 3
+```hb
+expectations := .{
+    return_value: 69,
+}
+
+main := fn(): uint {
+    return 'E'
+}
+```
+
 #### functions 1
 ```hb
 expectations := .{
@@ -1209,6 +1220,64 @@ main := fn(): uint {
 }
 ```
 
+#### enums 4
+```hb
+expectations := .{
+    return_value: 69,
+}
+
+NameMap := fn($Enum: type): type {
+    sum := 0
+    i: u8 = 0
+    $loop $if i == @len_of(Enum) break else {
+        sum += @int_cast(@name_of(@as(Enum, @bit_cast(i))).len)
+        i += 1
+    }
+
+    StrBuf := [sum]u8
+    IndexBuf := [@len_of(Enum) + 1]uint
+    return struct {
+        .buf: StrBuf;
+        .index: IndexBuf
+
+        new := fn(): @CurrentScope() {
+            buf: StrBuf = idk
+            index: IndexBuf = idk
+            index[0] = 0
+
+            ii: u8 = 0
+            bi := 0
+            $loop $if ii == @len_of(Enum) break else {
+                name := @name_of(@as(Enum, @bit_cast(ii)))
+                ij := 0
+                $loop $if ij == name.len break else {
+                    buf[bi + ij] = name[ij]
+                    ij += 1
+                }
+
+                bi += @int_cast(name.len)
+                ii += 1
+                index[ii] = bi
+            }
+
+            return .(buf, index)
+        }
+
+        get := fn(self: ^@CurrentScope(), k: Enum): []u8 {
+            return self.buf[self.index[k]..self.index[@as(u8, k) + 1]]
+        }
+    }
+}
+
+Nm := enum{.E; .bcd; .cd}
+
+map := NameMap(Nm).new()
+
+main := fn(): uint {
+    return map.get(.E)[0]
+}
+```
+
 #### match 1
 ```hb
 main := fn(): uint {
@@ -1795,11 +1864,11 @@ func := fn(a: @Any(), b: @TypeOf(a)): uint {
 #### directives 14 (@name_of)
 ```hb
 expectations := .{
-    return_value: 4,
+    return_value: 7,
 }
 
 main := fn(): uint {
-    return @name_of(uint).len
+    return @name_of(uint).len + @name_of(enum{.foo}.foo).len
 }
 ```
 

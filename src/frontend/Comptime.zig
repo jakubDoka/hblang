@@ -73,6 +73,7 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) PartialEvalResult
 
     while (true) {
         const curr = work_list.pop().?;
+        if (curr.id == std.math.maxInt(u16)) continue;
         const res = switch (curr.kind) {
             .CInt => {
                 if (work_list.items.len == 0) {

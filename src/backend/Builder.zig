@@ -102,19 +102,6 @@ pub fn addFieldStore(self: *Builder, base: *BuildNode, offset: i64, ty: DataType
     _ = self.addStore(self.addFieldOffset(base, offset), ty, value);
 }
 
-pub fn addIndexOffset(self: *Builder, base: *BuildNode, op: enum(u8) {
-    iadd = @intFromEnum(BinOp.iadd),
-    isub = @intFromEnum(BinOp.isub),
-}, elem_size: u64, subscript: *BuildNode) SpecificNode(.BinOp) {
-    const offset = if (elem_size == 1)
-        subscript
-    else if (subscript.kind == .CInt)
-        self.addIntImm(.int, subscript.extra(.CInt).* * @as(i64, @bitCast(elem_size)))
-    else
-        self.addBinOp(.imul, .int, subscript, self.addIntImm(.int, @bitCast(elem_size)));
-    return self.addBinOp(@enumFromInt(@intFromEnum(op)), .int, base, offset);
-}
-
 pub fn addSpill(self: *Builder, sloc: graph.Sloc, value: *BuildNode) SpecificNode(.Local) {
     const local = self.addLocal(sloc, value.data_type.size());
     _ = self.addStore(local, value.data_type, value);
@@ -134,6 +121,19 @@ pub fn addGlobalAddr(self: *Builder, arbitrary_global_id: u32) SpecificNode(.Glo
 }
 
 // #MATH =======================================================================
+
+pub fn addIndexOffset(self: *Builder, base: *BuildNode, op: enum(u8) {
+    iadd = @intFromEnum(BinOp.iadd),
+    isub = @intFromEnum(BinOp.isub),
+}, elem_size: u64, subscript: *BuildNode) SpecificNode(.BinOp) {
+    const offset = if (elem_size == 1)
+        subscript
+    else if (subscript.kind == .CInt)
+        self.addIntImm(.int, subscript.extra(.CInt).* * @as(i64, @bitCast(elem_size)))
+    else
+        self.addBinOp(.imul, .int, subscript, self.addIntImm(.int, @bitCast(elem_size)));
+    return self.addBinOp(@enumFromInt(@intFromEnum(op)), .int, base, offset);
+}
 
 pub fn addIntImm(self: *Builder, ty: DataType, value: i64) SpecificNode(.CInt) {
     std.debug.assert(ty != .bot);

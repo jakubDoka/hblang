@@ -31,6 +31,7 @@ pub fn build(b: *std.Build) !void {
     }
 
     const test_step = b.step("test", "run tests");
+    const test_filter = b.option([]const u8, "tf", "passed as a filter to tests");
 
     vendored_tests: {
         const grn = b.addExecutable(.{
@@ -53,6 +54,7 @@ pub fn build(b: *std.Build) !void {
             .root_source_file = out,
             .target = b.graph.host,
             .optimize = optimize,
+            .filter = test_filter,
             .use_llvm = false,
             .use_lld = false,
         });
@@ -82,6 +84,7 @@ pub fn build(b: *std.Build) !void {
             .root_source_file = out,
             .target = b.graph.host,
             .optimize = optimize,
+            .filter = test_filter,
             .use_llvm = false,
             .use_lld = false,
         });
@@ -199,7 +202,6 @@ pub fn build(b: *std.Build) !void {
     };
 
     testing: {
-        const test_filter = b.option([]const u8, "tf", "passed as a filter to tests");
         const unit_tests = b.addTest(.{
             .root_module = test_module,
             .filter = test_filter,

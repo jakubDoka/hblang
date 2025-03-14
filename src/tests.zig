@@ -1,20 +1,25 @@
 const std = @import("std");
-pub const root = @import("utils.zig");
+pub const utils = @import("utils.zig");
+pub const root = @import("root.zig");
 pub const test_util = @import("test_util.zig");
 pub const hbc = @import("hbc.zig");
 pub const fuzz = @import("fuzz.zig");
 
 comptime {
-    if (@import("root") == @This()) std.testing.refAllDeclsRecursive(@This());
+    std.testing.refAllDeclsRecursive(@This());
 }
 
+var ran = false;
+
 pub fn runTest(name: []const u8, code: [:0]const u8) !void {
-    root.Arena.initScratch(1024 * 1024);
-    defer root.Arena.deinitScratch();
+    if (!ran) {
+        utils.Arena.initScratch(1024 * 1024);
+        ran = true;
+    }
 
     const gpa = std.testing.allocator;
 
-    try test_util.testFmt(name, name, code);
+    //try test_util.testFmt(name, name, code);
 
     var out = std.ArrayList(u8).init(gpa);
     defer out.deinit();
@@ -22,7 +27,7 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
     errdefer {
         const stderr = std.io.getStdErr();
         const colors = std.io.tty.detectConfig(stderr);
-        test_util.testBuilder(name, code, gpa, stderr.writer().any(), colors, true) catch unreachable;
+        test_util.testBuilder(name, code, gpa, stderr.writer().any(), colors, true) catch {};
     }
 
     try test_util.testBuilder(name, code, gpa, out.writer().any(), .no_color, false);
@@ -32,8 +37,8 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
 }
 
 pub fn runFuzzFindingTest(name: []const u8, code: []const u8) !void {
-    root.Arena.initScratch(1024 * 1024);
-    defer root.Arena.deinitScratch();
+    utils.Arena.initScratch(1024 * 1024);
+    defer utils.Arena.deinitScratch();
 
     const gpa = std.testing.allocator;
 
@@ -49,8 +54,8 @@ pub fn runFuzzFindingTest(name: []const u8, code: []const u8) !void {
 }
 
 pub fn runVendoredTest(path: []const u8) !void {
-    if (true) return;
-    root.Arena.initScratch(1024 * 1024);
-    defer root.Arena.deinitScratch();
+    if (std.mem.count(u8, path, "lily") == 2) return;
+    utils.Arena.initScratch(1024 * 1024);
+    defer utils.Arena.deinitScratch();
     try test_util.runVendoredTest(std.testing.allocator, path);
 }

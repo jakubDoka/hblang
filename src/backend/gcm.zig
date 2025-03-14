@@ -409,7 +409,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
 
             var scheduled: usize = 0;
             if (ready != scheduled) while (scheduled < outs.len) {
-                std.debug.assert(ready != scheduled);
+                if (ready == scheduled) root.panic("{} {} {}", .{ scheduled, outs.len, node });
 
                 var pick = scheduled;
                 for (outs[scheduled + 1 .. ready], scheduled + 1..) |o, i| {

@@ -317,6 +317,8 @@ pub fn next(self: *Lexer) Token {
         block_comment,
         block_comment_end,
         line_commnet,
+        double_quotes,
+        double_quotes_slash,
         quotes,
         quotes_slash,
         zero,
@@ -340,13 +342,14 @@ pub fn next(self: *Lexer) Token {
             '$', '@', 'a'...'z', 'A'...'Z', '_', 128...255 => continue :state .ident,
             '0' => continue :state .zero,
             '1'...'9' => continue :state .dec,
-            '"' => continue :state .quotes,
+            '"' => continue :state .double_quotes,
+            '\'' => continue :state .quotes,
             '/' => continue :state .slash,
             '.' => continue :state .dot,
             '=' => continue :state .equal,
             '<', '>' => continue :state .angle_bracket,
             ':', '+', '-', '*', '%', '|', '^', '&', '!' => continue :state .op_equal,
-            '#', '\'', '(', ')', ',', ';', '?', '[', '\\', ']', '`', '{', '}', '~' => |c| {
+            '#', '(', ')', ',', ';', '?', '[', '\\', ']', '`', '{', '}', '~' => |c| {
                 self.cursor += 1;
                 break :state @enumFromInt(c);
             },
@@ -468,9 +471,9 @@ pub fn next(self: *Lexer) Token {
         .quotes => {
             self.cursor += 1;
             switch (self.source[self.cursor]) {
-                '"' => {
+                '\'' => {
                     self.cursor += 1;
-                    break :state .@"\"";
+                    break :state .@"'";
                 },
                 '\\' => {
                     self.cursor += 1;
@@ -483,6 +486,25 @@ pub fn next(self: *Lexer) Token {
         .quotes_slash => switch (self.source[self.cursor]) {
             0 => break :state .@"unterminated string",
             else => continue :state .quotes,
+        },
+        .double_quotes => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                '"' => {
+                    self.cursor += 1;
+                    break :state .@"\"";
+                },
+                '\\' => {
+                    self.cursor += 1;
+                    continue :state .double_quotes_slash;
+                },
+                0 => break :state .@"unterminated string",
+                else => continue :state .double_quotes,
+            }
+        },
+        .double_quotes_slash => switch (self.source[self.cursor]) {
+            0 => break :state .@"unterminated string",
+            else => continue :state .double_quotes,
         },
         .zero => {
             self.cursor += 1;
