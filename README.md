@@ -1278,6 +1278,22 @@ main := fn(): uint {
 }
 ```
 
+#### enums 5
+```hb
+expectations := .{
+    return_value: 0,
+}
+
+Enum := enum{.A; .B; .C}
+
+main := fn(): uint {
+    if Enum.C > .A {
+        return 0
+    }
+    return 1
+}
+```
+
 #### match 1
 ```hb
 main := fn(): uint {

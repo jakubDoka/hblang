@@ -142,15 +142,46 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
 
     const colors = func.arena.allocator().alloc(u16, func.instr_count) catch unreachable;
     @memset(colors, 0);
-    for (interference_table, colors, 0..) |r, *c, j| {
-        var selection_set: u256 = 0;
-        var iter = r.iterator(.{});
-        while (iter.next()) |e| if (j != e) {
-            if (colors[e] != 0) {
-                selection_set |= @as(u256, 1) << @intCast(colors[e] - 1);
-            }
+    // colorint in reverse so that the destiination color propagates
+    var i: usize = 0;
+    while (i < instrs.len) {
+        defer i += 1;
+
+        const set = u256;
+
+        const it_row, const color, const instr = .{ interference_table[i], &colors[i], instrs[i].def };
+        var selection_set: set = 0;
+        var iter = it_row.iterator(.{});
+        while (iter.next()) |e| if (i != e) {
+            if (colors[e] != 0) selection_set |= @as(set, 1) << @intCast(colors[e] - 1);
+            selection_set |= instrs[e].def.clobbers();
         };
-        c.* = @ctz(~selection_set) + 1;
+
+        const bias = instr.regBias(colors);
+        if (bias != null and selection_set & (@as(set, 1) << @intCast(bias.?)) == 0) {
+            color.* = bias.? + 1;
+        } else {
+            color.* = @ctz(~selection_set) + 1;
+        }
+    }
+
+    while (i > 0) {
+        i -= 1;
+
+        const set = u256;
+
+        const it_row, const color, const instr = .{ interference_table[i], &colors[i], instrs[i].def };
+        var selection_set: set = 0;
+        var iter = it_row.iterator(.{});
+        while (iter.next()) |e| if (i != e) {
+            selection_set |= @as(set, 1) << @intCast(colors[e] - 1);
+            selection_set |= instrs[e].def.clobbers();
+        };
+
+        const bias = instr.regBias(colors);
+        if (bias != null and selection_set & (@as(set, 1) << @intCast(bias.?)) == 0) {
+            color.* = bias.? + 1;
+        }
     }
 
     return colors;

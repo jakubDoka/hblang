@@ -857,13 +857,13 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         ));
                     },
                     .Enum => {
-                        if (e.op != .@"!=" and e.op != .@"==")
+                        if (!e.op.isComparison())
                             return self.report(expr, "only comparison operators are allowed for enums", .{});
 
                         const binop = try self.lexemeToBinOp(expr, e.op, lhs.ty);
                         try self.typeCheck(e.rhs, &rhs, lhs.ty);
 
-                        return .mkv(.bool, self.bl.addBinOp(binop, .i8, lhs.getValue(self), rhs.getValue(self)));
+                        return .mkv(.bool, self.bl.addBinOp(binop, self.abiCata(lhs.ty).ByValue, lhs.getValue(self), rhs.getValue(self)));
                     },
                     else => return self.report(expr, "{} does not support binary operations", .{lhs.ty}),
                 }

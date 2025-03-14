@@ -503,6 +503,14 @@ pub fn Func(comptime MachNode: type) type {
                 return self.input_base[1 + start + @intFromBool(self.kind == .Return) .. self.input_ordered_len];
             }
 
+            pub fn regBias(self: *const Node, colors: []u16) ?u16 {
+                return if (@hasDecl(MachNode, "regBias")) MachNode.regBias(self, colors) else null;
+            }
+
+            pub fn clobbers(self: *const Node) u64 {
+                return if (@hasDecl(MachNode, "clobbers")) MachNode.clobbers(self) else 0;
+            }
+
             pub fn anyextra(self: *const Node) *const anyopaque {
                 const any: *const extern struct { n: Node, ex: u8 } = @ptrCast(self);
                 return &any.ex;

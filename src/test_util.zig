@@ -277,7 +277,7 @@ pub fn runVm(
     var vm = Vm{};
     vm.ip = stack_end;
     vm.fuel = 1024 * 10;
-    //@memset(&vm.regs.values, 0);
+    @memset(&vm.regs.values, 0);
     vm.regs.set(.stack_addr, stack_end);
     var ctx = Vm.SafeContext{
         .writer = output,
