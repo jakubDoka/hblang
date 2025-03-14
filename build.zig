@@ -1,8 +1,32 @@
 const std = @import("std");
 
+fn wasmAsset(b: *std.Build, optimize: std.builtin.OptimizeMode, comptime name: []const u8, expeors: []const []const u8) std.Build.LazyPath {
+    const exe = b.addExecutable(.{
+        .name = name,
+        .root_source_file = b.path("src/depell/" ++ name ++ ".zig"),
+        .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding }),
+        .optimize = optimize,
+    });
+
+    exe.entry = .disabled;
+    exe.root_module.export_symbol_names = expeors;
+
+    return exe.getEmittedBin();
+}
+
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    const zap = b.dependency("zap", .{
+        .target = target,
+        .optimize = optimize,
+        .openssl = true,
+    }).module("zap");
+    const sqlite = b.dependency("sqlite", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("sqlite");
 
     hbc: {
         const exe = b.addExecutable(.{
@@ -16,35 +40,12 @@ pub fn build(b: *std.Build) !void {
         break :hbc;
     }
 
-    depell: {
-        const exe = b.addExecutable(.{
-            .name = "depell",
-            .root_source_file = b.path("depell.zig"),
-            .target = target,
-            .optimize = optimize,
-        });
-        b.installArtifact(exe);
-
-        const zap = b.dependency("zap", .{
-            .target = target,
-            .optimize = optimize,
-            .openssl = false, // set to true to enable TLS support
-        });
-        exe.root_module.addImport("zap", zap.module("zap"));
-
-        const sqlite = b.dependency("sqlite", .{
-            .target = target,
-            .optimize = optimize,
-        });
-        exe.root_module.addImport("sqlite", sqlite.module("sqlite"));
-
-        break :depell;
-    }
+    const options = b.addOptions();
 
     const vendored_tests = vendored_tests: {
         const grn = b.addExecutable(.{
             .name = "gen_tests.zig",
-            .root_source_file = b.path("gen_vendored_tests.zig"),
+            .root_source_file = b.path("scripts/gen_vendored_tests.zig"),
             .target = b.graph.host,
             .optimize = .Debug,
             .use_llvm = false,
@@ -54,16 +55,15 @@ pub fn build(b: *std.Build) !void {
         const run_gen = b.addRunArtifact(grn);
         run_gen.has_side_effects = true;
         run_gen.addDirectoryArg(b.path("vendored-tests"));
-        run_gen.addArg("tests.zig");
         run_gen.addArg("hbc-tests");
         const out = run_gen.addOutputFileArg("vendored_tests.zig");
-        break :vendored_tests &b.addInstallFile(out, "vendored_tests.zig").step;
+        break :vendored_tests out;
     };
 
     const tests = example_tests: {
         const gen = b.addExecutable(.{
             .name = "gen_tests.zig",
-            .root_source_file = b.path("gen_tests.zig"),
+            .root_source_file = b.path("scripts/gen_tests.zig"),
             .target = b.graph.host,
             .optimize = .Debug,
             .use_llvm = false,
@@ -73,9 +73,7 @@ pub fn build(b: *std.Build) !void {
         const run_gen = b.addRunArtifact(gen);
         run_gen.has_side_effects = true;
         run_gen.addFileArg(b.path("README.md"));
-        run_gen.addArg("tests.zig");
         const out = run_gen.addOutputFileArg("tests.zig");
-        const installed = b.addInstallFile(out, "tests.zig");
 
         {
             const rdm_stat = try std.fs.cwd().statFile("README.md");
@@ -83,21 +81,28 @@ pub fn build(b: *std.Build) !void {
             run_gen.has_side_effects = rdm_stat.mtime > stat;
         }
 
-        break :example_tests &installed.step;
+        break :example_tests out;
     };
 
-    check: {
-        const check_step = b.step("check", "type check");
-        const check_test = b.addTest(.{
-            .root_source_file = b.path("check_root.zig"),
+    const test_module = test_module: {
+        const module = b.addModule("test", .{
+            .root_source_file = b.path("src/tests.zig"),
             .target = b.graph.host,
             .optimize = optimize,
         });
 
-        check_step.dependOn(vendored_tests);
-        check_step.dependOn(tests);
-        check_step.dependOn(&check_test.step);
+        module.addOptions("options", options);
+        module.addImport("zap", zap);
+        module.addImport("sqlite", sqlite);
+        module.addAnonymousImport("vendored-tests", .{ .root_source_file = vendored_tests });
+        module.addAnonymousImport("tests", .{ .root_source_file = tests });
 
+        break :test_module module;
+    };
+
+    check: {
+        const check_step = b.step("check", "type check");
+        check_step.dependOn(&b.addTest(.{ .root_module = test_module }).step);
         break :check;
     }
 
@@ -106,7 +111,7 @@ pub fn build(b: *std.Build) !void {
     const fuzz_finding_tests = fuzzing: {
         const dict_gen = b.addExecutable(.{
             .name = "gen_fuzz_dict.zig",
-            .root_source_file = b.path("gen_fuzz_dict.zig"),
+            .root_source_file = b.path("scripts/gen_fuzz_dict.zig"),
             .target = b.graph.host,
             .optimize = .Debug,
             .use_llvm = false,
@@ -120,7 +125,7 @@ pub fn build(b: *std.Build) !void {
 
         const fuzz = b.addStaticLibrary(.{
             .name = "fuzz",
-            .root_source_file = b.path("fuzz.zig"),
+            .root_source_file = b.path("src/fuzz.zig"),
             .single_threaded = true,
             .target = b.graph.host,
             .optimize = optimize,
@@ -141,9 +146,7 @@ pub fn build(b: *std.Build) !void {
             break :b false;
         };
 
-        if (!refuzz) {
-            break :fuzzing null;
-        }
+        if (!refuzz) break :fuzzing null;
 
         const fuzzes = b.option(usize, "jobs", "amount of cores to fuzz on") orelse try std.Thread.getCpuCount();
 
@@ -181,7 +184,6 @@ pub fn build(b: *std.Build) !void {
         }
 
         const run_gen_finding_tests = b.addRunArtifact(gen_finding_tests);
-        run_gen_finding_tests.addArg("tests.zig");
         if (fuzz_tests) {
             run_gen_finding_tests.addDirectoryArg(out_dir);
             run_gen_finding_tests.addArg("enabled");
@@ -196,20 +198,15 @@ pub fn build(b: *std.Build) !void {
 
     testing: {
         const test_filter = b.option([]const u8, "tf", "passed as a filter to tests");
-
         const unit_tests = b.addTest(.{
-            .root_source_file = b.path("tests.zig"),
-            .target = b.graph.host,
-            .optimize = optimize,
+            .root_module = test_module,
             .filter = test_filter,
             .use_llvm = false,
             .use_lld = false,
         });
-        unit_tests.step.dependOn(vendored_tests);
-        unit_tests.step.dependOn(tests);
         if (fuzz_finding_tests) |fft| unit_tests.step.dependOn(fft);
-
         test_step.dependOn(&b.addRunArtifact(unit_tests).step);
+
         break :testing;
     }
 }

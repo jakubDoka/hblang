@@ -5,17 +5,17 @@ pub fn main() !void {
     const arena = arena_state.allocator();
 
     const args = try std.process.argsAlloc(arena);
-    const vendored_tests, const root, const example_dir, const out = args[1..5].*;
+    const vendored_tests, const example_dir, const out = args[1..4].*;
 
     const out_file = try std.fs.cwd().createFile(out, .{});
     defer out_file.close();
     const writer = out_file.writer();
 
     try writer.print(
-        \\const root = @import("../{s}");
+        \\const root = @import("root");
         \\
         \\
-    , .{root});
+    , .{});
 
     var stack = std.ArrayList([]const u8).init(arena);
     var vendored = try std.fs.cwd().openDir(vendored_tests, .{ .iterate = true });

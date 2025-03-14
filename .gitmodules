@@ -1,3 +1,9 @@
 [submodule "vendored-tests/lily"]
 	path = vendored-tests/lily
 	url = https://git.ablecorp.us/lily-org/lily.git
+[submodule "vendored-tests/mumd"]
+	path = vendored-tests/mumd
+	url = https://github.com/Ducklett/mumd.git
+[submodule "vendored/mumd"]
+	path = vendored/mumd
+	url = https://github.com/Ducklett/mumd.git

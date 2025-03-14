@@ -233,10 +233,6 @@ pub const Lexeme = enum(u16) {
         return self.precedence() == 15;
     }
 
-    pub fn assOp(self: Lexeme) Lexeme {
-        return @enumFromInt(@as(u8, @intFromEnum(self) - 128));
-    }
-
     pub fn cantStartExpression(self: Lexeme) bool {
         return switch (self) {
             .@"}", .@";", .@",", .@")" => true,

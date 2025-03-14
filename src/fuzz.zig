@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const root = @import("src/root.zig");
+const root = @import("root.zig");
 const isa = root.hbvm.isa;
 const Types = root.frontend.Types;
 const Builder = root.backend.Builder;
@@ -16,10 +16,10 @@ const Comptime = root.frontend.Comptime;
 const Lexer = root.frontend.Lexer;
 const HbvmGen = root.hbvm.HbvmGen;
 const Vm = root.hbvm.Vm;
-const tests = @import("src/test_util.zig");
+const tests = @import("test_util.zig");
 
 comptime {
-    @export(&fuzz, .{ .name = "main", .linkage = .strong });
+    if (@import("root") == @This()) @export(&fuzz, .{ .name = "main", .linkage = .strong });
 }
 
 fn fuzz() callconv(.c) void {

@@ -5,7 +5,7 @@ pub fn main() !void {
     const arena = arena_state.allocator();
 
     const args = try std.process.argsAlloc(arena);
-    const case_path, const root, const out = args[1..4].*;
+    const case_path, const out = args[1..3].*;
 
     const readme = try std.fs.cwd().readFileAlloc(arena, case_path, 1024 * 1024);
 
@@ -14,10 +14,10 @@ pub fn main() !void {
     const writer = out_file.writer();
 
     try writer.print(
-        \\const root = @import("../{s}");
+        \\const root = @import("root");
         \\
         \\
-    , .{root});
+    , .{});
 
     var iter = std.mem.splitSequence(u8, readme, "#### ");
     while (iter.next()) |segment| {

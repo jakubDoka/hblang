@@ -5,17 +5,17 @@ pub fn main() !void {
     const arena = arena_state.allocator();
 
     const args = try std.process.argsAlloc(arena);
-    const root, const case_dir, const switch_arg, const out = args[1..5].*;
+    const case_dir, const switch_arg, const out = args[1..5].*;
 
     const out_file = try std.fs.cwd().createFile(out, .{});
     defer out_file.close();
     const writer = out_file.writer();
 
     try writer.print(
-        \\const root = @import("../{s}");
+        \\const root = @import("root");
         \\
         \\
-    , .{root});
+    , .{});
 
     if (std.mem.eql(u8, switch_arg, "disabled")) return;
 
