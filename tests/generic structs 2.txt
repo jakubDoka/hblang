@@ -7,20 +7,14 @@ main:
          cp $1, $32
          cp $2, $33
         jal $31, $0, :Foo(F = uint).Bar(B = u8).sub
-         cp $32, $1
-         cp $1, $32
      addi64 $254, $254, 24
          ld $31, $254, -24, 24
          tx
 Foo(F = uint).Bar(B = u8).sub:
-         cp $14, $1
-         cp $13, $2
-       andi $13, $13, 255
-      sub64 $13, $14, $13
-         cp $1, $13
+       andi $2, $2, 255
+      sub64 $1, $1, $2
        jala $0, $31, 0
 Foo(F = uint).Bar(B = u8).init:
-       li64 $13, 1
-         cp $1, $13
-         cp $2, $13
+       li64 $1, 1
+         cp $2, $1
        jala $0, $31, 0

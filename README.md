@@ -1976,29 +1976,36 @@ main := fn(): uint {
   - [x] `@as(<ty>, <expr>): <ty>`
   - [x] `@int_cast(<int>): <infered-int>`
   - [x] `@size_of(<ty>): uint`
+    - [ ] comptime interrupt
   - [x] `@align_of(<ty>): uint`
+    - [ ] comptime interrupt
   - [x] `@bit_cast(<expr>): <infered-ty>`
   - [x] `@ecall(...<expr>): <infered-ty>`
   - [x] `@embed(<string>): [len]u8`
   - [ ] ? `@inline(<func>, ...<args>): <func>.ret`
     - [x] noop compatibility
   - [x] `@len_of(<ty>): uint`
+    - [ ] comptime interrupt
   - [x] `@kind_of(<ty>): u8`
+    - [ ] comptime interrupt
   - [x] `@Any(<fn(type): void/type>..): type`
     - [ ] ? type filters
   - [x] `@error(...<expr>): never`
   - [ ] ? `@compiles(<expr>): bool`
   - [x] `@ChildOf(<ty>): type`
+    - [ ] comptime interrupt
   - [x] `@target("<pat>"): bool`
   - [x] `@is_comptime(): bool`
   - [x] `@int_to_float(<int>): <float>`
   - [x] `@float_to_int(<float>): int`
   - [x] `@float_cast(<float>): <float>`
   - [x] `@name_of(<ty>): []u8`
+    - [ ] comptime interrupt
   - [ ] ? `@recall(..<args>): never`
 - [ ] optimizations
   - [ ] assumptions
   - [ ] memory
+    - [ ] uninitialized global memory
     - [ ] constant global loads
     - [x] stack elimination
     - [x] load alias reordering
@@ -2017,6 +2024,7 @@ main := fn(): uint {
     - [ ] loop unrolling
     - [ ] folding
   - [ ] clonable insructions
+  - [x] allocate abi registers
 - [ ] static analisys
   - [ ] source locations
   - [ ] constraint propagation

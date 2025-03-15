@@ -12,6 +12,7 @@ pub const Reg = enum(u8) {
     }
 
     pub fn ret(index: usize) Reg {
+        std.debug.assert(index < 2);
         return @enumFromInt(1 + index);
     }
 };

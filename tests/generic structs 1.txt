@@ -9,19 +9,12 @@ main:
          cp $1, $32
          cp $2, $33
         jal $31, $0, :Vec(E = uint).sub
-         cp $32, $1
-         cp $1, $32
      addi64 $254, $254, 24
          ld $31, $254, -24, 24
          tx
 Vec(E = uint).sub:
-         cp $13, $1
-         cp $14, $2
-      sub64 $13, $13, $14
-         cp $1, $13
+      sub64 $1, $1, $2
        jala $0, $31, 0
 nvec(E = uint):
-         cp $13, $1
-         cp $1, $13
-         cp $2, $13
+         cp $2, $1
        jala $0, $31, 0

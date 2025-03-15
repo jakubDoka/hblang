@@ -102,6 +102,32 @@ pub const Node = union(enum) {
     pub const is_basic_block_end: []const Kind = &.{.IfOp};
     pub const is_mem_op: []const Kind = &.{ .BlockCpy, .St, .Ld };
 
+    pub fn regBias(node: *Func.Node) ?u16 {
+        return switch (node.kind) {
+            .Arg => @intCast(node.extraConst(.Arg).*),
+            else => {
+                for (node.outputs()) |o| {
+                    if (o.kind == .Call) {
+                        const idx = std.mem.indexOfScalar(?*Func.Node, o.dataDeps(), node) orelse continue;
+                        return @intCast(idx);
+                    }
+
+                    if (o.kind == .Phi and o.inputs()[0].?.kind != .Loop) {
+                        return o.regBias();
+                    }
+                }
+                return null;
+            },
+        };
+    }
+
+    pub fn clobbers(node: *Func.Node) u64 {
+        return switch (node.kind) {
+            .Call => (1 << 31) - 1,
+            else => 0,
+        };
+    }
+
     pub fn isSwapped(node: *Func.Node) bool {
         return node.kind == .IfOp and node.extra(.IfOp).swapped;
     }
@@ -151,7 +177,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         if (bb.base.kind == .CallEnd) break false;
     } else true;
 
-    const reg_shift: u8 = if (is_tail) 12 else 31;
+    const reg_shift: u8 = 1; //if (is_tail) 12 else 32;
     for (self.allocs) |*r| r.* += reg_shift;
     const used_registers = if (self.allocs.len == 0) 0 else @min(std.mem.max(u16, self.allocs), max_alloc_regs) -| 31;
 
@@ -173,7 +199,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     self.spill_base = @intCast(used_reg_size + local_size);
 
     prelude: {
-        if (used_registers != 0) {
+        if (used_reg_size != 0) {
             self.emit(.st, .{ .ret_addr, .stack_addr, -@as(i64, used_reg_size), used_reg_size });
         }
         if (stack_size != 0) {
@@ -184,8 +210,10 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
             const argn = for (postorder[0].base.outputs()) |o| {
                 if (o.kind == .Arg and o.extra(.Arg).* == i) break o;
             } else continue; // is dead
-            self.emit(.cp, .{ self.outReg(argn), isa.Reg.arg(i) });
-            self.flushOutReg(argn);
+            if (self.outReg(argn) != isa.Reg.arg(i)) {
+                self.emit(.cp, .{ self.outReg(argn), isa.Reg.arg(i) });
+                self.flushOutReg(argn);
+            }
         }
         break :prelude;
     }
@@ -200,7 +228,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
             if (stack_size != 0) {
                 self.emit(.addi64, .{ .stack_addr, .stack_addr, @as(u64, @bitCast(stack_size)) });
             }
-            if (used_registers != 0) {
+            if (used_reg_size != 0) {
                 self.emit(.ld, .{ .ret_addr, .stack_addr, -@as(i64, used_reg_size), used_reg_size });
             }
             if (entry) {
@@ -559,9 +587,13 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .Call => {
                 const extra = no.extra(.Call);
+
+                var moves = std.ArrayList(Move).init(tmp);
                 for (inps, 0..) |arg, i| {
-                    self.emit(.cp, .{ isa.Reg.arg(i), self.inReg(1, arg) });
+                    const dst, const src = .{ isa.Reg.arg(i), self.inReg(0, arg) };
+                    if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
                 }
+                self.orderMoves(moves.items);
 
                 if (extra.id == eca) {
                     self.emit(.eca, .{});
@@ -577,15 +609,14 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             .Mem => {},
             .Ret => {
                 const idx = no.extra(.Ret).*;
-                self.emit(.cp, .{ self.outReg(no), isa.Reg.ret(idx) });
-                self.flushOutReg(no);
+                if (self.outReg(no) != isa.Reg.ret(idx)) {
+                    self.emit(.cp, .{ self.outReg(no), isa.Reg.ret(idx) });
+                    self.flushOutReg(no);
+                }
             },
             .Jmp => if (no.outputs()[0].kind == .Region or no.outputs()[0].kind == .Loop) {
                 const idx = std.mem.indexOfScalar(?*Func.Node, no.outputs()[0].inputs(), no).? + 1;
 
-                const Depth = u8;
-
-                const Move = struct { isa.Reg, isa.Reg, Depth };
                 var moves = std.ArrayList(Move).init(tmp);
                 for (no.outputs()[0].outputs()) |o| {
                     if (o.isDataPhi()) {
@@ -595,51 +626,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     }
                 }
 
-                // code makes sure all moves are ordered so that register is only moved
-                // into after all its uses
-                //
-                // in case of cycles, swaps are used instead in which case the conflicting
-                // move is removed and remining moves are replaced with swaps
-
-                const cycle_sentinel = std.math.maxInt(Depth);
-
-                var reg_graph = std.EnumArray(isa.Reg, isa.Reg).initFill(.null);
-                for (moves.items) |m| {
-                    reg_graph.set(m[0], m[1]);
-                }
-
-                o: for (moves.items) |*m| {
-                    var seen = std.EnumSet(isa.Reg).initEmpty();
-                    var c = m[1];
-                    while (c != m[0]) {
-                        c = reg_graph.get(c);
-                        m[2] += 1;
-                        if (c == .null or seen.contains(c)) continue :o;
-                        seen.insert(c);
-                    }
-
-                    reg_graph.set(c, .null);
-                    m[2] = cycle_sentinel;
-                }
-
-                std.sort.pdq(Move, moves.items, {}, struct {
-                    fn lt(_: void, lhs: Move, rhs: Move) bool {
-                        return rhs[2] < lhs[2];
-                    }
-                }.lt);
-
-                for (moves.items) |*m| {
-                    if (m[2] == cycle_sentinel) {
-                        while (reg_graph.get(m[1]) != .null) {
-                            self.emit(.swa, .{ m[0], m[1] });
-                            m[0] = m[1];
-                            std.mem.swap(isa.Reg, reg_graph.getPtr(m[1]), &m[1]);
-                        }
-                        reg_graph.set(m[1], m[1]);
-                    } else if (reg_graph.get(m[1]) != m[1]) {
-                        self.emit(.cp, .{ m[0], m[1] });
-                    }
-                }
+                self.orderMoves(moves.items);
             },
             .MachMove => {
                 //std.debug.assert(no.outputs()[0].kind == .Phi);
@@ -648,9 +635,12 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             .Phi => {},
             .Return => {
                 if (Func.isDead(no.inputs()[0])) return;
+                var moves = std.ArrayList(Move).init(tmp);
                 for (inps[0..self.ret_count], 0..) |inp, i| {
-                    self.emit(.cp, .{ isa.Reg.ret(i), self.inReg(0, inp) });
+                    const dst, const src = .{ isa.Reg.ret(i), self.inReg(0, inp) };
+                    if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
                 }
+                self.orderMoves(moves.items);
             },
             .Trap => {
                 const code = no.extra(.Trap).code;
@@ -663,6 +653,59 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .Never => {},
             else => utils.panic("{any}", .{no.kind}),
+        }
+    }
+}
+
+const Depth = u8;
+
+const Move = struct { isa.Reg, isa.Reg, Depth };
+
+fn orderMoves(self: *HbvmGen, moves: []Move) void {
+
+    // code makes sure all moves are ordered so that register is only moved
+    // into after all its uses
+    //
+    // in case of cycles, swaps are used instead in which case the conflicting
+    // move is removed and remining moves are replaced with swaps
+
+    const cycle_sentinel = std.math.maxInt(Depth);
+
+    var reg_graph = std.EnumArray(isa.Reg, isa.Reg).initFill(.null);
+    for (moves) |m| {
+        reg_graph.set(m[0], m[1]);
+    }
+
+    o: for (moves) |*m| {
+        var seen = std.EnumSet(isa.Reg).initEmpty();
+        var c = m[1];
+        while (c != m[0]) {
+            c = reg_graph.get(c);
+            m[2] += 1;
+            if (c == .null or seen.contains(c)) continue :o;
+            seen.insert(c);
+        }
+
+        reg_graph.set(c, .null);
+        m[2] = cycle_sentinel;
+    }
+
+    std.sort.pdq(Move, moves, {}, struct {
+        fn lt(_: void, lhs: Move, rhs: Move) bool {
+            return rhs[2] < lhs[2];
+        }
+    }.lt);
+
+    for (moves) |*m| {
+        if (m[2] == cycle_sentinel) {
+            while (reg_graph.get(m[1]) != .null) {
+                self.emit(.swa, .{ m[0], m[1] });
+                m[0] = m[1];
+                std.mem.swap(isa.Reg, reg_graph.getPtr(m[1]), &m[1]);
+            }
+            reg_graph.set(m[1], m[1]);
+        } else if (reg_graph.get(m[1]) != m[1]) {
+            self.emit(.cp, .{ m[0], m[1] });
         }
     }
 }

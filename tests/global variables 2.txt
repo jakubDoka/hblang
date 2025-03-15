@@ -1,8 +1,7 @@
 main:
-        lra $13, $0, :some_fib
-        lra $14, $0, :bigon_era
-         ld $13, $13, 0, 8
-         ld $14, $14, 0, 8
-      sub64 $13, $13, $14
-         cp $1, $13
+        lra $1, $0, :some_fib
+        lra $2, $0, :bigon_era
+         ld $1, $1, 0, 8
+         ld $2, $2, 0, 8
+      sub64 $1, $1, $2
          tx
