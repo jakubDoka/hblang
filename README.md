@@ -1640,6 +1640,29 @@ main := fn(): uint {
 }
 ```
 
+#### slices 4
+```hb
+equals := fn(lhs: []u8, rhs: []u8): bool {
+    if lhs.len != rhs.len return false
+    if lhs.ptr == rhs.ptr return true
+    i := 0
+    loop if i == lhs.len break else {
+        if lhs[i] != rhs[i] return false
+        i += 1
+    }
+    return true
+}
+
+main := fn(): uint {
+    abc := "abc"
+    a_b_c := u8.['a', 'b', 'c'][..]
+    if !equals(abc, abc) return 1
+    if !equals(a_b_c, abc) return 1
+
+    return 0
+}
+```
+
 #### nullable types 1
 ```hb
 expectations := .{

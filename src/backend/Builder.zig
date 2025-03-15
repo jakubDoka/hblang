@@ -57,7 +57,7 @@ pub fn addParam(self: *Builder, idx: usize) SpecificNode(.Arg) {
 }
 
 pub fn end(self: *Builder, _: BuildToken) void {
-    if (self.func.end.inputs()[0] == null and !self.isUnreachable()) self.addReturn(&.{});
+    if (!self.isUnreachable()) self.addReturn(&.{});
 }
 
 // #MEM ========================================================================

@@ -184,6 +184,11 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             var tmp = Arena.scrath(null);
             defer tmp.deinit();
 
+            //var out_fmt = std.ArrayList(u8).init(tmp.arena.allocator());
+            //defer out_fmt.deinit();
+            //try asts[@intFromEnum(func.key.file)].fmtExpr(&out_fmt, func.key.ast);
+            //try std.io.getStdErr().writeAll(out_fmt.items);
+
             var errors = std.ArrayListUnmanaged(static_anal.Error){};
 
             backend.emitFunc(&codegen.bl.func, .{

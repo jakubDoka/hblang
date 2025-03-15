@@ -1207,13 +1207,13 @@ pub fn Func(comptime MachNode: type) type {
 
                 if (base.kind == .Local) eliminate_stack: {
                     for (base.outputs()) |o| {
-                        _ = knownStore(o) orelse {
+                        _ = knownStore(o, base) orelse {
                             break :eliminate_stack;
                         };
                     }
 
-                    for (base.outputs()) |o| if (knownStore(o).? != node) {
-                        worklist.add(knownStore(o).?);
+                    for (base.outputs()) |o| if (knownStore(o, base).? != node) {
+                        worklist.add(knownStore(o, base).?);
                     };
 
                     return node.mem();
@@ -1287,8 +1287,8 @@ pub fn Func(comptime MachNode: type) type {
             return if (comptime optApi("idealize", @TypeOf(idealize))) MachNode.idealize(self, node, worklist) else null;
         }
 
-        pub fn knownStore(base: *Node) ?*Node {
-            if (base.isStore() and !base.isSub(MemCpy)) return base;
+        pub fn knownStore(base: *Node, root: *Node) ?*Node {
+            if (base.isStore() and !base.isSub(MemCpy) and base.base() == root) return base;
             if (base.kind == .BinOp and base.outputs().len == 1 and base.outputs()[0].isStore() and !base.isSub(MemCpy) and base.outputs()[0].base() == base) {
                 return base.outputs()[0];
             }

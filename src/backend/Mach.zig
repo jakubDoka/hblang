@@ -86,6 +86,7 @@ pub const EmitOptions = struct {
     name: []const u8 = &.{},
     entry: bool = false,
     optimizations: struct {
+        verbose: bool = false,
         dead_code_fuel: usize = 1000,
         mem2reg: bool = true,
         peephole_fuel: usize = 1000,
@@ -119,6 +120,8 @@ pub const EmitOptions = struct {
             if (self.do_gcm) {
                 func.gcm.buildCfg();
             }
+
+            if (self.verbose) func.fmtScheduled(std.io.getStdErr().writer().any(), .escape_codes);
 
             if (self.error_buf) |eb| {
                 func.static_anal.analize(self.arena.?, eb);

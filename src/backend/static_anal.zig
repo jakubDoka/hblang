@@ -95,7 +95,7 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
                 for (arg.outputs()) |ao| {
                     // TODO: we skip MemCpy, this will miss a class of problesm,
                     // but memcpy elimination might help and effort here would be redundant
-                    const store = Func.knownStore(ao) orelse continue;
+                    const store = Func.knownStore(ao, arg) orelse continue;
 
                     if (store.value().kind == .Local) {
                         local_stores.append(tmp.arena.allocator(), store) catch unreachable;
@@ -106,7 +106,7 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
 
                 // filter out the stores that are overriden
                 for (arg.outputs()) |unmarked| {
-                    const store = Func.knownStore(unmarked) orelse continue;
+                    const store = Func.knownStore(unmarked, arg) orelse continue;
 
                     if (store.value().kind == .Local) continue;
 

@@ -139,14 +139,6 @@ pub fn testBuilder(
                 cg.bl.func.reset();
             }
 
-            if (verbose) {
-                if (verbose) try header("SOURCE", output, colors);
-                var out_fmt = std.ArrayList(u8).init(gpa);
-                defer out_fmt.deinit();
-                try asts[@intFromEnum(func.key.file)].fmtExpr(&out_fmt, func.key.ast);
-                try output.writeAll(out_fmt.items);
-            }
-
             if (verbose) try header("UNSCHEDULED SON", output, colors);
             cg.build(func) catch {
                 errored = true;

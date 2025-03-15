@@ -285,9 +285,11 @@ pub fn finalize(self: *HbvmGen) std.ArrayListUnmanaged(u8) {
 pub fn makeSymMap(self: *HbvmGen, offset: u32, arena: std.mem.Allocator) std.AutoHashMapUnmanaged(u32, []const u8) {
     var map = std.AutoHashMap(u32, []const u8).init(arena);
     for (self.funcs.items) |gf| {
+        if (gf.offset < offset) continue;
         map.put(gf.offset - offset, gf.name) catch unreachable;
     }
     for (self.globals.items) |gf| {
+        if (gf.offset < offset) continue;
         map.put(gf.offset - offset, gf.name) catch unreachable;
     }
     return map.unmanaged;
@@ -797,6 +799,8 @@ pub fn idealizeMach(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.
     }
 
     if (node.kind == .If) {
+        //if (node.outputs().len != 2) utils.panic("{} {} {}\n", .{ node, node.outputs()[0], node.data_type });
+
         if (inps[1].?.kind == .BinOp) b: {
             work.add(inps[1].?);
             const op = inps[1].?.extra(.BinOp).*;
