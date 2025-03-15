@@ -1065,6 +1065,7 @@ pub fn Func(comptime MachNode: type) type {
 
             var worklist = WorkList.init(tmp.arena.allocator(), self.next_id) catch unreachable;
             worklist.add(self.end);
+            worklist.add(self.root);
             var i: usize = 0;
             while (i < worklist.list.items.len) : (i += 1) {
                 for (worklist.list.items[i].inputs()) |oi| if (oi) |o| {
@@ -1186,7 +1187,9 @@ pub fn Func(comptime MachNode: type) type {
                     return l;
                 }
 
-                if (r == node) return l;
+                if (r == node) {
+                    return l;
+                }
             }
 
             return null;
@@ -1281,7 +1284,9 @@ pub fn Func(comptime MachNode: type) type {
                     return l;
                 }
 
-                if (r == node) return l;
+                if (r == node) {
+                    return l;
+                }
             }
 
             return if (comptime optApi("idealize", @TypeOf(idealize))) MachNode.idealize(self, node, worklist) else null;
