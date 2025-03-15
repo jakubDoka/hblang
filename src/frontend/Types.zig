@@ -13,8 +13,8 @@ const HbvmGen = root.hbvm.HbvmGen;
 const Vm = root.hbvm.Vm;
 
 next_struct: u32 = 0,
-funcs: std.ArrayListUnmanaged(*Func) = .{},
-globals: std.ArrayListUnmanaged(*Global) = .{},
+funcs: std.ArrayListUnmanaged(*FuncData) = .{},
+globals: std.ArrayListUnmanaged(*GlobalData) = .{},
 arena: Arena,
 interner: Map = .{},
 file_scopes: []Id,
@@ -54,6 +54,10 @@ pub const TypeCtx = struct {
 
 pub const File = enum(u16) { root, _ };
 
+//pub const Func = extern struct {
+//    _,
+//};
+
 pub const Data = union(enum) {
     Builtin: b: {
         var enm = @typeInfo(Id);
@@ -62,18 +66,18 @@ pub const Data = union(enum) {
         break :b @Type(enm);
     },
     Ptr: *Id,
-    Slice: *Slice,
-    Nullable: *Nullable,
-    Tuple: *Tuple,
-    Enum: *Enum,
-    Union: *Union,
-    Struct: *Struct,
-    Template: *Template,
-    Func: *Func,
-    Global: *Global,
+    Slice: *SliceData,
+    Nullable: *NullableData,
+    Tuple: *TupleData,
+    Enum: *EnumData,
+    Union: *UnionData,
+    Struct: *StructData,
+    Template: *TemplateData,
+    Func: *FuncData,
+    Global: *GlobalData,
 };
 
-pub const Nullable = struct {
+pub const NullableData = struct {
     inner: Id,
     nieche: enum(u64) {
         unresolved = std.math.maxInt(u64) - 1,
@@ -82,7 +86,7 @@ pub const Nullable = struct {
 
         pub fn offset(self: *@This(), types: *Types) ?NiecheSpec {
             if (self.* == .unresolved) {
-                const nullable: *Nullable = @fieldParentPtr("nieche", self);
+                const nullable: *NullableData = @fieldParentPtr("nieche", self);
                 self.* = if (nullable.inner.findNieche(types)) |n| @enumFromInt(@as(u64, @bitCast(n))) else .explicit;
             }
 
@@ -94,11 +98,11 @@ pub const Nullable = struct {
         }
     } = .unresolved,
 
-    pub fn isCompact(self: *Nullable, types: *Types) bool {
+    pub fn isCompact(self: *NullableData, types: *Types) bool {
         return self.nieche.offset(types) != null;
     }
 
-    pub fn size(self: *Nullable, types: *Types) u64 {
+    pub fn size(self: *NullableData, types: *Types) u64 {
         return self.inner.size(types) +
             if (self.isCompact(types)) 0 else self.inner.alignment(types);
     }
@@ -148,7 +152,7 @@ pub const Key = struct {
     }
 };
 
-pub const Slice = struct {
+pub const SliceData = struct {
     len: ?usize,
     elem: Id,
 
@@ -156,14 +160,14 @@ pub const Slice = struct {
     pub const len_offset = 8;
 };
 
-pub const Tuple = struct {
+pub const TupleData = struct {
     fields: []Field,
 
     pub const Field = struct {
         ty: Id,
     };
 
-    pub fn getFields(self: *Tuple, _: anytype) []Field {
+    pub fn getFields(self: *TupleData, _: anytype) []Field {
         return self.fields;
     }
 
@@ -184,7 +188,7 @@ pub const Tuple = struct {
         }
     };
 
-    pub fn offsetIter(self: *Tuple, types: *Types) OffIter {
+    pub fn offsetIter(self: *TupleData, types: *Types) OffIter {
         return .{
             .types = types,
             .fields = self.getFields(types),
@@ -192,7 +196,7 @@ pub const Tuple = struct {
     }
 };
 
-pub const Enum = struct {
+pub const EnumData = struct {
     key: Key,
 
     fields: ?[]const Field = null,
@@ -201,11 +205,11 @@ pub const Enum = struct {
         name: []const u8,
     };
 
-    pub fn asTy(self: *Enum) Id {
+    pub fn asTy(self: *EnumData) Id {
         return Id.init(.{ .Enum = self });
     }
 
-    pub fn getFields(self: *Enum, types: *Types) []const Field {
+    pub fn getFields(self: *EnumData, types: *Types) []const Field {
         if (self.fields) |f| return f;
         const ast = types.getFile(self.key.file);
         const enum_ast = ast.exprs.getTyped(.Enum, self.key.ast).?;
@@ -225,7 +229,7 @@ pub const Enum = struct {
     }
 };
 
-pub const Union = struct {
+pub const UnionData = struct {
     key: Key,
 
     fields: ?[]const Field = null,
@@ -237,11 +241,11 @@ pub const Union = struct {
         ty: Id,
     };
 
-    pub fn asTy(self: *Union) Id {
+    pub fn asTy(self: *UnionData) Id {
         return Id.init(.{ .Union = self });
     }
 
-    pub fn getFields(self: *Union, types: *Types) []const Field {
+    pub fn getFields(self: *UnionData, types: *Types) []const Field {
         if (self.fields) |f| return f;
         const ast = types.getFile(self.key.file);
         const union_ast = ast.exprs.getTyped(.Union, self.key.ast).?;
@@ -265,7 +269,7 @@ pub const Union = struct {
     }
 };
 
-pub const Struct = struct {
+pub const StructData = struct {
     key: Key,
 
     fields: ?[]const Field = null,
@@ -275,14 +279,14 @@ pub const Struct = struct {
     pub const Field = struct {
         name: []const u8,
         ty: Id,
-        defalut_value: ?*Global = null,
+        defalut_value: ?*GlobalData = null,
     };
 
-    pub fn asTy(self: *Struct) Id {
+    pub fn asTy(self: *StructData) Id {
         return Id.init(.{ .Struct = self });
     }
 
-    pub fn getSize(self: *Struct, types: *Types) u64 {
+    pub fn getSize(self: *StructData, types: *Types) u64 {
         if (self.size) |a| return a;
 
         if (@hasField(Field, "alignment")) @compileError("");
@@ -297,7 +301,7 @@ pub const Struct = struct {
         return siz;
     }
 
-    pub fn getAlignment(self: *Struct, types: *Types) u64 {
+    pub fn getAlignment(self: *StructData, types: *Types) u64 {
         if (self.alignment) |a| return a;
 
         const ast = types.getFile(self.key.file);
@@ -334,11 +338,11 @@ pub const Struct = struct {
         }
     };
 
-    pub fn offsetIter(self: *Struct, types: *Types) OffIter {
+    pub fn offsetIter(self: *StructData, types: *Types) OffIter {
         return .{ .types = types, .fields = self.getFields(types), .max_align = self.getAlignment(types) };
     }
 
-    pub fn getFields(self: *Struct, types: *Types) []const Field {
+    pub fn getFields(self: *StructData, types: *Types) []const Field {
         if (self.fields) |f| return f;
         const ast = types.getFile(self.key.file);
         const struct_ast = ast.exprs.getTyped(.Struct, self.key.ast).?;
@@ -355,7 +359,7 @@ pub const Struct = struct {
             const ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field.ty) catch .never;
             fields[i] = .{ .name = name, .ty = ty };
             if (field.value.tag() != .Void) {
-                const value = types.arena.create(Global);
+                const value = types.arena.create(GlobalData);
                 value.* = .{
                     .id = @intCast(types.globals.items.len),
                     .key = .{
@@ -379,11 +383,11 @@ pub const Struct = struct {
     }
 };
 
-pub const Template = struct {
+pub const TemplateData = struct {
     key: Key,
 };
 
-pub const Func = struct {
+pub const FuncData = struct {
     key: Key,
     id: u32,
     args: []Id,
@@ -392,7 +396,7 @@ pub const Func = struct {
 
     pub const CompileState = enum { queued, compiled };
 
-    pub fn computeAbiSize(self: Func, abi: Abi, types: *Types) struct { usize, usize, Abi.Spec } {
+    pub fn computeAbiSize(self: FuncData, abi: Abi, types: *Types) struct { usize, usize, Abi.Spec } {
         const ret_abi = abi.categorize(self.ret, types) orelse .Imaginary;
         var param_count: usize = @intFromBool(ret_abi == .ByRef);
         for (self.args) |ty| param_count += (abi.categorize(ty, types) orelse continue).len(false);
@@ -401,7 +405,7 @@ pub const Func = struct {
     }
 };
 
-pub const Global = struct {
+pub const GlobalData = struct {
     // captures are extra but whatever for now
     key: Key,
     id: u32,
@@ -552,7 +556,7 @@ pub const Id = enum(usize) {
         };
     }
 
-    pub fn findNieche(self: Id, types: *Types) ?Nullable.NiecheSpec {
+    pub fn findNieche(self: Id, types: *Types) ?NullableData.NiecheSpec {
         _ = types; // autofix
 
         return switch (self.data()) {
@@ -803,7 +807,7 @@ pub const Abi = enum {
         };
     }
 
-    pub fn categorizeAbleosNullable(nullable: *Nullable, types: *Types) ?Spec {
+    pub fn categorizeAbleosNullable(nullable: *NullableData, types: *Types) ?Spec {
         const base_abi = Abi.ableos.categorize(nullable.inner, types) orelse return null;
         if (nullable.isCompact(types)) return base_abi;
         if (base_abi == .Imaginary) return .{ .ByValue = .i8 };
@@ -814,7 +818,7 @@ pub const Abi = enum {
         return .ByRef;
     }
 
-    pub fn categorizeAbleosSlice(slice: *Slice, types: *Types) ?Spec {
+    pub fn categorizeAbleosSlice(slice: *SliceData, types: *Types) ?Spec {
         if (slice.len == null) return .{ .ByValuePair = .{ .types = .{ .int, .int }, .padding = 0 } };
         if (slice.len == 0) return .Imaginary;
         const elem_abi = Abi.ableos.categorize(slice.elem, types) orelse return null;
@@ -824,7 +828,7 @@ pub const Abi = enum {
         return .ByRef;
     }
 
-    pub fn categorizeAbleosUnion(unio: *Union, types: *Types) ?Spec {
+    pub fn categorizeAbleosUnion(unio: *UnionData, types: *Types) ?Spec {
         const fields = unio.getFields(types);
         if (fields.len == 0) return .Imaginary; // TODO: add .Impossible
         const res = Abi.ableos.categorize(fields[0].ty, types) orelse return null;
@@ -940,8 +944,8 @@ pub fn internPtr(self: *Types, comptime tag: std.meta.Tag(Data), payload: std.me
     const slot = self.interner.getOrPut(self.arena.allocator(), id) catch unreachable;
     if (slot.found_existing) return slot.key_ptr.*;
     const alloc = self.arena.create(@TypeOf(payload));
-    if (@TypeOf(payload) == Tuple) {
-        alloc.fields = self.arena.dupe(Tuple.Field, payload.fields);
+    if (@TypeOf(payload) == TupleData) {
+        alloc.fields = self.arena.dupe(TupleData.Field, payload.fields);
     } else alloc.* = payload;
     slot.key_ptr.* = .init(@unionInit(Data, @tagName(tag), alloc));
     return slot.key_ptr.*;
@@ -1002,7 +1006,7 @@ pub fn resolveFielded(
     return slot.key_ptr.*;
 }
 
-pub fn dumpAnalErrors(self: *Types, func: *Types.Func, anal_errors: *std.ArrayListUnmanaged(static_anal.Error)) bool {
+pub fn dumpAnalErrors(self: *Types, func: *Types.FuncData, anal_errors: *std.ArrayListUnmanaged(static_anal.Error)) bool {
     _ = func;
     for (anal_errors.items) |err| switch (err) {
         .ReturningStack => |loc| {

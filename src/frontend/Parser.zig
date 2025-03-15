@@ -23,6 +23,7 @@ path: []const u8,
 loader: Loader,
 diagnostics: std.io.AnyWriter,
 list_pos: Ast.Pos = undefined,
+deferring: bool = false,
 errored: bool = false,
 
 const Parser = @This();
@@ -390,7 +391,11 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             });
         },
         .@"." => .{ .Tag = .init((try self.expectAdvance(.Ident)).pos - 1) },
-        .@"defer" => .{ .Defer = try self.parseExpr() },
+        .@"defer" => .{ .Defer = b: {
+            self.deferring = true;
+            defer self.deferring = false;
+            break :b try self.parseExpr();
+        } },
         .@".{" => .{ .Ctor = .{
             .ty = .zeroSized(.Void),
             .fields = try self.parseListTyped(null, .@",", .@"}", Ast.CtorField, parseCtorField),
@@ -462,10 +467,14 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         .@"continue" => .{ .Continue = .init(token.pos) },
         .@"return" => .{ .Return = .{
             .pos = .init(token.pos),
-            .value = if (self.cur.kind.cantStartExpression())
-                .zeroSized(.Void)
-            else
-                try self.parseExpr(),
+            .value = b: {
+                if (self.deferring) self.report(token.pos, "can not return from a defer", .{});
+
+                break :b if (self.cur.kind.cantStartExpression())
+                    .zeroSized(.Void)
+                else
+                    try self.parseExpr();
+            },
         } },
         .BinInteger, .OctInteger, .DecInteger, .HexInteger => .{ .Integer = .{ .pos = .init(token.pos), .base = @intCast(@intFromEnum(token.kind) & ~@as(u8, 128)) } },
         .Float => .{ .Float = .init(token.pos) },

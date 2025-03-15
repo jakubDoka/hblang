@@ -53,8 +53,8 @@ const Loop = struct {
 };
 
 const Task = union(enum) {
-    Func: *Types.Func,
-    Global: *Types.Global,
+    Func: *Types.FuncData,
+    Global: *Types.GlobalData,
 };
 
 const ScopeEntry = struct {
@@ -217,7 +217,7 @@ pub inline fn abiCata(self: *Codegen, ty: Types.Id) Types.Abi.Spec {
     return self.abi.categorize(ty, self.types) orelse .Imaginary;
 }
 
-pub fn getEntry(self: *Codegen, file: Types.File, name: []const u8) !*Types.Func {
+pub fn getEntry(self: *Codegen, file: Types.File, name: []const u8) !*Types.FuncData {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
@@ -252,7 +252,7 @@ pub fn beginBuilder(
     return res;
 }
 
-pub fn build(self: *Codegen, func: *Types.Func) !void {
+pub fn build(self: *Codegen, func: *Types.FuncData) !void {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
@@ -368,6 +368,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     return self.report(pos, "{s}", .{err.reason});
                 },
             };
+
+            if (data.len == 0) return self.report(expr, "expected the character to encode to exactly one byte", .{});
 
             return .mkv(.u8, self.bl.addIntImm(.i8, data[0]));
         },
@@ -678,6 +680,12 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             var value = if (e.len.tag() == .Void) null else try self.emitTyped(.{}, .uint, e.len);
             const len: ?usize = if (value) |*vl| @intCast(self.partialEval(expr, vl.getValue(self)) catch 0) else null;
             const elem = try self.resolveAnonTy(e.elem);
+
+            const res, const ov = @mulWithOverflow(len orelse 0, elem.size(self.types));
+            if (ov != 0 or res > std.math.maxInt(u48)) {
+                return self.report(expr, "the array is bigger then most modern virtual memory spaces", .{});
+            }
+
             return self.emitTyConst(self.types.makeSlice(len, elem));
         },
         .UnOp => |e| switch (e.op) {
@@ -691,8 +699,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
                         const loc = ctx.loc orelse self.bl.addLocal(self.sloc(expr), ty.size(self.types));
                         const ptr = self.bl.addIntImm(.int, @bitCast(ty.data().Slice.elem.alignment(self.types)));
-                        self.bl.addFieldStore(loc, Types.Slice.ptr_offset, .int, ptr);
-                        self.bl.addFieldStore(loc, Types.Slice.len_offset, .int, self.bl.addIntImm(.int, 0));
+                        self.bl.addFieldStore(loc, Types.SliceData.ptr_offset, .int, ptr);
+                        self.bl.addFieldStore(loc, Types.SliceData.len_offset, .int, self.bl.addIntImm(.int, 0));
 
                         return .mkp(ty, loc);
                     }
@@ -964,14 +972,14 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         if (slice_ty.len) |l| {
                             return .mkv(.uint, self.bl.addIntImm(.int, @intCast(l)));
                         } else {
-                            return .mkp(.uint, self.bl.addFieldOffset(base.id.Ptr, Types.Slice.len_offset));
+                            return .mkp(.uint, self.bl.addFieldOffset(base.id.Ptr, Types.SliceData.len_offset));
                         }
                     } else if (std.mem.eql(u8, fname, "ptr")) {
                         const ptr_ty = self.types.makePtr(slice_ty.elem);
                         if (slice_ty.len != null) {
                             return .mkv(ptr_ty, base.id.Ptr);
                         } else {
-                            return .mkp(ptr_ty, self.bl.addFieldOffset(base.id.Ptr, Types.Slice.ptr_offset));
+                            return .mkp(ptr_ty, self.bl.addFieldOffset(base.id.Ptr, Types.SliceData.ptr_offset));
                         }
                     } else {
                         return self.report(e.field, "slices and arrays only support `.ptr` and `.len` field", .{});
@@ -999,7 +1007,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 .Slice => |slice_ty| if (slice_ty.len) |l|
                     .mkv(.uint, self.bl.addIntImm(.int, @intCast(l)))
                 else
-                    .mkv(.uint, self.bl.addFieldLoad(base.id.Ptr, Types.Slice.len_offset, .int)),
+                    .mkv(.uint, self.bl.addFieldLoad(base.id.Ptr, Types.SliceData.len_offset, .int)),
                 else => {
                     return self.report(e.subscript, "unbound range is only allowed on arrays and slices, {} is not", .{base.ty});
                 },
@@ -1010,7 +1018,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             var ptr: Value = switch (base.ty.data()) {
                 .Ptr => base,
                 .Slice => |slice_ty| if (slice_ty.len == null)
-                    .mkv(self.types.makePtr(elem), self.bl.addFieldLoad(base.id.Ptr, Types.Slice.ptr_offset, .int))
+                    .mkv(self.types.makePtr(elem), self.bl.addFieldLoad(base.id.Ptr, Types.SliceData.ptr_offset, .int))
                 else
                     .mkv(self.types.makePtr(elem), base.id.Ptr),
                 else => {
@@ -1027,8 +1035,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             const len = self.bl.addBinOp(.isub, .int, end.getValue(self), start.getValue(self));
 
             const loc = ctx.loc orelse self.bl.addLocal(self.sloc(expr), res_ty.size(self.types));
-            self.bl.addFieldStore(loc, Types.Slice.ptr_offset, .int, ptr.getValue(self));
-            self.bl.addFieldStore(loc, Types.Slice.len_offset, .int, len);
+            self.bl.addFieldStore(loc, Types.SliceData.ptr_offset, .int, ptr.getValue(self));
+            self.bl.addFieldStore(loc, Types.SliceData.len_offset, .int, len);
 
             return .mkp(res_ty, loc);
         } else {
@@ -1145,7 +1153,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 slots: []ArmSlot,
                 ty: Types.Id,
 
-                pub fn missingBranches(slf: *@This(), arena: *utils.Arena, filds: []const Types.Enum.Field) []const u8 {
+                pub fn missingBranches(slf: *@This(), arena: *utils.Arena, filds: []const Types.EnumData.Field) []const u8 {
                     var missing_list = std.ArrayList(u8).init(arena.allocator());
                     for (slf.slots, filds) |p, f| if (p == .Unmatched) {
                         missing_list.writer().print(", `.{s}`", .{f.name}) catch unreachable;
@@ -1265,7 +1273,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 }
                 fuel -= 1;
                 loop.kind.Comptime = .Clean;
-                if (self.emitBranch(e.body) != 0) continue;
+                if (self.emitBranch(e.body) != 0) {
+                    if (self.bl.isUnreachable()) return error.Unreachable;
+                    continue;
+                }
                 self.loopControl(.@"continue", expr) catch {};
             }
             _ = self.loops.pop().?;
@@ -1534,7 +1545,7 @@ pub fn lexemeToBinOpLow(self: Lexer.Lexeme, ty: Types.Id) ?graph.BinOp {
     };
 }
 
-fn emitStructFoldOp(self: *Codegen, pos: anytype, ty: *Types.Struct, op: Lexer.Lexeme, lhs: *Node, rhs: *Node) !?*Node {
+fn emitStructFoldOp(self: *Codegen, pos: anytype, ty: *Types.StructData, op: Lexer.Lexeme, lhs: *Node, rhs: *Node) !?*Node {
     var fold: ?*Node = null;
     var iter = ty.offsetIter(self.types);
     while (iter.next()) |elem| {
@@ -1555,7 +1566,7 @@ fn emitStructFoldOp(self: *Codegen, pos: anytype, ty: *Types.Struct, op: Lexer.L
     return fold;
 }
 
-fn emitStructOp(self: *Codegen, pos: anytype, ty: *Types.Struct, op: Lexer.Lexeme, loc: *Node, lhs: *Node, rhs: *Node) !void {
+fn emitStructOp(self: *Codegen, pos: anytype, ty: *Types.StructData, op: Lexer.Lexeme, loc: *Node, lhs: *Node, rhs: *Node) !void {
     var iter = ty.offsetIter(self.types);
     while (iter.next()) |elem| {
         const field_loc = self.bl.addFieldOffset(loc, @intCast(elem.offset));
@@ -2016,7 +2027,7 @@ pub fn encodeString(
 }
 
 pub fn partialEval(self: *Codegen, pos: anytype, node: *Builder.BuildNode) !u64 {
-    return switch (self.types.ct.partialEval(&self.bl, node)) {
+    return switch (self.types.ct.partialEval(self.parent_scope.file(), pos, &self.bl, node)) {
         .Resolved => |r| r,
         .Unsupported => |n| {
             return self.report(pos, "can't evaluate this at compile time (yet), (DEBUG: got stuck on {})", .{n});
@@ -2048,8 +2059,8 @@ fn emitStirng(self: *Codegen, ctx: Ctx, data: []const u8, expr: Ast.Id) Value {
 
     const slice_ty = self.types.makeSlice(null, .u8);
     const slice_loc = ctx.loc orelse self.bl.addLocal(self.sloc(expr), slice_ty.size(self.types));
-    self.bl.addFieldStore(slice_loc, Types.Slice.ptr_offset, .int, self.bl.addGlobalAddr(global.id));
-    self.bl.addFieldStore(slice_loc, Types.Slice.len_offset, .int, self.bl.addIntImm(.int, @intCast(data.len)));
+    self.bl.addFieldStore(slice_loc, Types.SliceData.ptr_offset, .int, self.bl.addGlobalAddr(global.id));
+    self.bl.addFieldStore(slice_loc, Types.SliceData.len_offset, .int, self.bl.addIntImm(.int, @intCast(data.len)));
 
     return .mkp(slice_ty, slice_loc);
 }

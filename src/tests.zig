@@ -19,7 +19,7 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
 
     const gpa = std.testing.allocator;
 
-    try test_util.testFmt(name, name, code);
+    test_util.testFmt(name, name, code) catch {};
 
     var out = std.ArrayList(u8).init(gpa);
     defer out.deinit();

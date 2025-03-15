@@ -60,7 +60,7 @@ pub const PartialEvalResult = union(enum) {
     Unsupported: *Node,
 };
 
-pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) PartialEvalResult {
+pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder, expr: *Node) PartialEvalResult {
     const abi: Types.Abi = .ableos;
     const types = self.getTypes();
 
@@ -137,7 +137,7 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) PartialEvalResult
 
                 if (requeued) continue;
 
-                types.ct.runVm("", call.extra(.Call).id, &.{});
+                try types.ct.runVm(file, pos, "", call.extra(.Call).id, &.{});
 
                 const ret = types.ct.vm.regs.get(.ret(0));
                 const ret_vl = bl.addIntImm(ret_ty, @bitCast(ret));
@@ -187,7 +187,7 @@ pub fn partialEval(self: *Comptime, bl: *Builder, expr: *Node) PartialEvalResult
     }
 }
 
-pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8) void {
+pub fn runVm(self: *Comptime, file: Types.File, pos: anytype, name: []const u8, entry_id: u32, return_loc: []u8) !void {
     const types = self.getTypes();
 
     const stack_end = self.vm.regs.get(.stack_addr);
@@ -206,7 +206,9 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
         .code_end = 0,
     };
 
-    while (true) switch (self.vm.run(&vm_ctx) catch @panic("no")) {
+    while (true) switch (self.vm.run(&vm_ctx) catch |err| {
+        return types.report(file, pos, "comptime execution failed: {s}", .{@errorName(err)});
+    }) {
         .tx => break,
         .eca => {
             const InterruptFrame = extern struct {
@@ -264,7 +266,7 @@ pub fn runVm(self: *Comptime, name: []const u8, entry_id: u32, return_loc: []u8)
     self.vm.regs.set(.stack_addr, stack_end);
 }
 
-pub fn jitFunc(self: *Comptime, fnc: *Types.Func) !void {
+pub fn jitFunc(self: *Comptime, fnc: *Types.FuncData) !void {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
     var gen = Codegen.init(self.getGpa(), tmp.arena, self.getTypes(), .@"comptime");
@@ -393,21 +395,21 @@ pub fn evalTy(self: *Comptime, name: []const u8, scope: Codegen.Scope, ty_expr: 
     const id, _ = try self.jitExpr(name, scope, .{ .ty = .type }, ty_expr);
 
     var data: [8]u8 = undefined;
-    self.runVm(name, id, &data);
+    try self.runVm(scope.file(), ty_expr, name, id, &data);
     return @enumFromInt(@as(u64, @bitCast(data)));
 }
 
 pub fn evalIntConst(self: *Comptime, scope: Codegen.Scope, int_conts: Ast.Id) !i64 {
     const id, _ = try self.jitExpr("", scope, .{ .ty = .uint }, int_conts);
     var data: [8]u8 = undefined;
-    self.runVm("", id, &data);
+    try self.runVm(scope.file(), int_conts, "", id, &data);
     return @bitCast(data);
 }
 
-pub fn evalGlobal(self: *Comptime, name: []const u8, global: *Types.Global, ty: ?Types.Id, value: Ast.Id) !void {
+pub fn evalGlobal(self: *Comptime, name: []const u8, global: *Types.GlobalData, ty: ?Types.Id, value: Ast.Id) !void {
     const id, const fty = try self.jitExpr(name, .{ .Perm = global.key.scope }, .{ .ty = ty }, value);
     const data = self.getTypes().arena.allocator().alloc(u8, @intCast(fty.size(self.getTypes()))) catch unreachable;
-    self.runVm(name, id, data);
+    try self.runVm(global.key.file, value, name, id, data);
     global.data = data;
     global.ty = fty;
 }

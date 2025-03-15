@@ -95,6 +95,23 @@ pub fn build(b: *std.Build) !void {
         break :example_tests;
     }
 
+    example_tests: {
+        const test_run = b.addTest(.{
+            .name = "fuzz_finding_tests",
+            .root_source_file = b.path("src/fuzz_finding_tests.zig"),
+            .target = b.graph.host,
+            .optimize = optimize,
+            .filter = test_filter,
+            .use_llvm = false,
+            .use_lld = false,
+        });
+
+        test_run.root_module.addAnonymousImport("utils", .{ .root_source_file = b.path("src/tests.zig") });
+        test_step.dependOn(&b.addRunArtifact(test_run).step);
+
+        break :example_tests;
+    }
+
     const test_module = test_module: {
         const module = b.addModule("test", .{
             .root_source_file = b.path("src/tests.zig"),
@@ -111,7 +128,7 @@ pub fn build(b: *std.Build) !void {
         break :check;
     }
 
-    const fuzz_finding_tests = fuzzing: {
+    fuzzing: {
         const dict_gen = b.addExecutable(.{
             .name = "gen_fuzz_dict.zig",
             .root_source_file = b.path("scripts/gen_fuzz_dict.zig"),
@@ -145,18 +162,12 @@ pub fn build(b: *std.Build) !void {
         afl_lto.addArtifactArg(fuzz);
 
         const fuzz_duration = b.option([]const u8, "fuzz-duration", "n seconds to fuzz for") orelse "1";
-        const fuzz_tests = b.option(bool, "fuzz-tests", "also run the fuzz findings") orelse false;
-        const refuzz = b.option(bool, "refuzz", "rerun fuzzing") orelse b: {
-            _ = std.fs.cwd().statFile("zig-out/fuzz_finding_tests.zig") catch break :b true;
-            break :b false;
-        };
-
-        if (!refuzz) break :fuzzing null;
 
         const fuzzes = b.option(usize, "jobs", "amount of cores to fuzz on") orelse try std.Thread.getCpuCount();
 
         // this is pure crap
         const run_whatev = b.addSystemCommand(&.{"echo"});
+        run_whatev.has_side_effects = true;
         const out_dir = run_whatev.addOutputDirectoryArg("findings");
 
         const gen_finding_tests = b.addExecutable(.{
@@ -167,6 +178,15 @@ pub fn build(b: *std.Build) !void {
             .use_llvm = false,
             .use_lld = false,
         });
+
+        const run_gen_finding_tests = b.addRunArtifact(gen_finding_tests);
+        run_gen_finding_tests.addDirectoryArg(out_dir);
+        run_gen_finding_tests.addArg("enabled");
+        const fuzz_out = run_gen_finding_tests.addOutputFileArg("fuzz_finding_tests.zig");
+
+        const cleanup = b.addSystemCommand(&.{ "killall", "afl-fuzz" });
+        if (fuzzes != 1) run_gen_finding_tests.step.dependOn(&cleanup.step);
+        run_gen_finding_tests.has_side_effects = true;
 
         for (0..fuzzes) |i| {
             const run_afl = b.addSystemCommand(&.{"afl-fuzz"});
@@ -182,35 +202,19 @@ pub fn build(b: *std.Build) !void {
             run_afl.addArgs(&.{ "-V", fuzz_duration });
             run_afl.addArg("--");
             run_afl.addFileArg(afl_lto_out);
-            run_afl.stdio = .{ .check = .{} };
             run_afl.has_side_effects = true;
 
-            gen_finding_tests.step.dependOn(&run_afl.step);
+            _ = run_afl.captureStdErr();
+            if (i != 0) _ = run_afl.captureStdOut();
+
+            run_gen_finding_tests.step.dependOn(&run_afl.step);
+
+            if (i == 0 and fuzzes != 1) cleanup.step.dependOn(&run_afl.step);
         }
 
-        const run_gen_finding_tests = b.addRunArtifact(gen_finding_tests);
-        if (fuzz_tests) {
-            run_gen_finding_tests.addDirectoryArg(out_dir);
-            run_gen_finding_tests.addArg("enabled");
-        } else {
-            run_gen_finding_tests.addArg("");
-            run_gen_finding_tests.addArg("disabled");
-        }
-        const out_src = run_gen_finding_tests.addOutputFileArg("fuzz_finding_tests.zig");
+        const fuzz_step = b.step("fuzz", "run the fuzzer");
+        fuzz_step.dependOn(&b.addInstallFile(fuzz_out, "fuzz_finding_tests.zig").step);
 
-        break :fuzzing &b.addInstallFile(out_src, "fuzz_finding_tests.zig").step;
-    };
-
-    testing: {
-        const unit_tests = b.addTest(.{
-            .root_module = test_module,
-            .filter = test_filter,
-            .use_llvm = false,
-            .use_lld = false,
-        });
-        if (fuzz_finding_tests) |fft| unit_tests.step.dependOn(fft);
-        test_step.dependOn(&b.addRunArtifact(unit_tests).step);
-
-        break :testing;
+        break :fuzzing;
     }
 }

@@ -24,7 +24,9 @@ comptime {
 
 fn fuzz() callconv(.c) void {
     utils.Arena.initScratch(1024 * 1024);
+    defer utils.Arena.deinitScratch();
     var arena = utils.Arena.init(1024 * 1024 * 4);
+    defer arena.deinit();
     const input = std.io.getStdIn().readToEndAlloc(arena.allocator(), 1024 * 1024) catch unreachable;
     fuzzRun("fuzz", input, &arena, std.io.null_writer.any()) catch |err| switch (err) {
         error.UnexpectedToken, error.ParsingFailed, error.Never => {},

@@ -369,9 +369,12 @@ pub const Loop = struct {
         if (builder.scope) |backedge| {
             const update_values = getScopeValues(backedge);
             for (init_values[start..], update_values[start..]) |ini, update| {
-                if (update.kind != .Scope) {
-                    std.debug.assert(ini.isLazyPhi(init_values[0]));
-                    builder.func.setInputNoIntern(ini, 2, update);
+                if (ini.isLazyPhi(init_values[0])) {
+                    if (update.kind == .Scope) {
+                        builder.func.subsume(ini.inputs()[1].?, ini);
+                    } else {
+                        builder.func.setInputNoIntern(ini, 2, update);
+                    }
                 }
             }
             builder.func.setInputNoIntern(init_values[0], 1, update_values[0]);
@@ -388,7 +391,9 @@ pub const Loop = struct {
 
         builder.scope = self.control.get(.@"break");
         defer killScope(self.scope);
-        const exit = builder.scope orelse return;
+        const exit = builder.scope orelse {
+            return;
+        };
 
         const exit_values = getScopeValues(exit);
         for (init_values[start..], exit_values[start..], start..) |ini, exi, i| {

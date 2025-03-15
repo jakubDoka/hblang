@@ -392,7 +392,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
                 else
                     50 };
                 if (o.kind != .Phi) {
-                    for (o.inputs()[1..]) |j| if (j != null) if (j.?.inputs()[0] == node) {
+                    for (o.inputs()[1..]) |j| if (j != null and !j.?.isCfg() and j.?.inputs()[0] == node) {
                         e.unscheduled_deps += 1;
                     };
                 }
@@ -408,8 +408,8 @@ pub fn GcmMixin(comptime MachNode: type) type {
             }
 
             var scheduled: usize = 0;
-            if (ready != scheduled) while (scheduled < outs.len) {
-                if (ready == scheduled) root.panic("{} {} {}", .{ scheduled, outs.len, node });
+            if (ready != scheduled) while (scheduled < outs.len - 1) {
+                if (ready == scheduled) root.panic("{} {} {} {any}", .{ scheduled, outs.len, node, outs[scheduled..] });
 
                 var pick = scheduled;
                 for (outs[scheduled + 1 .. ready], scheduled + 1..) |o, i| {
