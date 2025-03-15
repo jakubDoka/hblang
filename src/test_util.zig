@@ -224,6 +224,7 @@ pub fn runVm(
     var should_error: bool = false;
     var times_out: bool = false;
     var unreaches: bool = false;
+    var emulate_ecalls: bool = false;
     var ecalls: []const Ast.Id = &.{};
 
     if (ast.findDecl(ast.items, "expectations", undefined)) |d| {
@@ -247,6 +248,10 @@ pub fn runVm(
 
             if (std.mem.eql(u8, fname, "unreaches")) {
                 unreaches = value.Bool.value;
+            }
+
+            if (std.mem.eql(u8, fname, "emulate_ecalls")) {
+                emulate_ecalls = value.Bool.value;
             }
 
             if (std.mem.eql(u8, fname, "ecalls")) {
@@ -281,6 +286,7 @@ pub fn runVm(
     };
     try header("EXECUTION", output, colors);
 
+    var page_cursor: usize = 1;
     var eca_idx: usize = 0;
     while (true) switch (vm.run(&ctx) catch |err| switch (err) {
         error.Timeout => {
@@ -294,7 +300,56 @@ pub fn runVm(
         else => return err,
     }) {
         .tx => break,
-        .eca => {
+        .eca => if (emulate_ecalls) {
+            const page_size = 1024 * 4;
+            switch (vm.regs.get(.arg(0))) {
+                3 => switch (vm.regs.get(.arg(1))) {
+                    2 => switch (ctx.memory[vm.regs.get(.arg(2))]) {
+                        0 => {
+                            const Msg = extern struct { pad: u8, pages_new: u64 align(1), zeroed: bool };
+
+                            const msg: Msg = @bitCast(ctx.memory[vm.regs.get(.arg(2))..][0..@sizeOf(Msg)].*);
+
+                            const base = page_size * page_cursor;
+                            page_cursor += msg.pages_new;
+
+                            if (msg.zeroed) @memset(ctx.memory[base..][0 .. msg.pages_new * page_size], 0);
+
+                            vm.regs.set(.ret(0), base);
+                        },
+                        7, 1 => {},
+                        5 => {
+                            const Msg = extern struct { pad: u8, count: u64 align(1), len: u64 align(1), src: u64 align(1), dest: u64 align(1) };
+                            const msg: Msg = @bitCast(ctx.memory[vm.regs.get(.arg(2))..][0..@sizeOf(Msg)].*);
+                            const dst, const src = .{ ctx.memory[msg.dest..][0..msg.len], ctx.memory[msg.src..][0..msg.count] };
+
+                            for (0..msg.len / msg.count) |i| {
+                                @memcpy(dst[i * msg.count ..][0..msg.count], src);
+                            }
+                        },
+                        4, 6 => |v| {
+                            const Msg = extern struct { pad: u8, len: u64 align(1), src: u64 align(1), dest: u64 align(1) };
+                            const msg: Msg = @bitCast(ctx.memory[vm.regs.get(.arg(2))..][0..@sizeOf(Msg)].*);
+                            const dst, const src = .{ ctx.memory[msg.dest..][0..msg.len], ctx.memory[msg.src..][0..msg.len] };
+
+                            if (v == 4) {
+                                @memcpy(dst, src);
+                            } else {
+                                if (msg.src < msg.dest) {
+                                    std.mem.copyBackwards(u8, dst, src);
+                                } else {
+                                    std.mem.copyForwards(u8, dst, src);
+                                }
+                            }
+                        },
+                        else => unreachable,
+                    },
+                    7 => utils.panic("I don't think I will", .{}),
+                    else => unreachable,
+                },
+                else => unreachable,
+            }
+        } else {
             try std.testing.expect(eca_idx < ecalls.len);
             const curr_eca = ast.exprs.getTyped(.Decl, ecalls[eca_idx]).?;
 
