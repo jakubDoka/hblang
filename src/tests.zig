@@ -6,6 +6,7 @@ pub const hbc = @import("hbc.zig");
 pub const fuzz = @import("fuzz.zig");
 
 comptime {
+    @setEvalBranchQuota(2000);
     std.testing.refAllDeclsRecursive(@This());
 }
 

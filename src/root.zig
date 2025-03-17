@@ -20,6 +20,7 @@ pub const frontend = enum {
     pub const Parser = @import("frontend/Parser.zig");
     pub const Fmt = @import("frontend/Fmt.zig");
     pub const Types = @import("frontend/Types.zig");
+    pub const types = @import("frontend/types.zig");
     pub const Codegen = @import("frontend/Codegen.zig");
     pub const Comptime = @import("frontend/Comptime.zig");
 };

@@ -11,10 +11,10 @@ const Comptime = root.frontend.Comptime;
 const Lexer = root.frontend.Lexer;
 const HbvmGen = root.hbvm.HbvmGen;
 const Vm = root.hbvm.Vm;
+const tys = root.frontend.types;
 
 next_struct: u32 = 0,
-funcs: std.ArrayListUnmanaged(*FuncData) = .{},
-globals: std.ArrayListUnmanaged(*GlobalData) = .{},
+store: utils.EntStore(root.frontend.types) = .{},
 arena: Arena,
 interner: Map = .{},
 file_scopes: []Id,
@@ -25,105 +25,8 @@ files: []const Ast,
 const Types = @This();
 const Map = std.hash_map.HashMapUnmanaged(Id, void, TypeCtx, 70);
 
-pub const TypeCtx = struct {
-    pub fn eql(_: @This(), a: Id, b: Id) bool {
-        const ad, const bd = .{ a.data(), b.data() };
-        if (std.meta.activeTag(ad) != std.meta.activeTag(bd)) return false;
-
-        return switch (ad) {
-            .Builtin => std.meta.eql(ad, bd),
-            inline .Ptr, .Slice => |v, t| std.meta.eql(v.*, @field(bd, @tagName(t)).*),
-            .Nullable => |v| v.inner == bd.Nullable.inner,
-            .Tuple => |v| std.mem.eql(Id, @ptrCast(v.fields), @ptrCast(bd.Tuple.fields)),
-            inline else => |v, t| return v.key.eql(@field(bd, @tagName(t)).key),
-        };
-    }
-
-    pub fn hash(_: @This(), adapted_key: Id) u64 {
-        var hasher = std.hash.Fnv1a_64.init();
-        const adk = adapted_key.data();
-        std.hash.autoHash(&hasher, std.meta.activeTag(adk));
-        switch (adk) {
-            inline .Builtin, .Ptr, .Slice, .Tuple => |v| std.hash.autoHashStrat(&hasher, v, .Deep),
-            .Nullable => |v| std.hash.autoHash(&hasher, v.inner),
-            inline else => |v| std.hash.autoHashStrat(&hasher, v.key, .Deep),
-        }
-        return hasher.final();
-    }
-};
-
-pub const File = enum(u16) { root, _ };
-
-//pub const Func = extern struct {
-//    _,
-//};
-
-pub const Data = union(enum) {
-    Builtin: b: {
-        var enm = @typeInfo(Id);
-        enm.@"enum".is_exhaustive = true;
-        enm.@"enum".decls = &.{};
-        break :b @Type(enm);
-    },
-    Ptr: *Id,
-    Slice: *SliceData,
-    Nullable: *NullableData,
-    Tuple: *TupleData,
-    Enum: *EnumData,
-    Union: *UnionData,
-    Struct: *StructData,
-    Template: *TemplateData,
-    Func: *FuncData,
-    Global: *GlobalData,
-};
-
-pub const NullableData = struct {
-    inner: Id,
-    nieche: enum(u64) {
-        unresolved = std.math.maxInt(u64) - 1,
-        explicit,
-        _,
-
-        pub fn offset(self: *@This(), types: *Types) ?NiecheSpec {
-            if (self.* == .unresolved) {
-                const nullable: *NullableData = @fieldParentPtr("nieche", self);
-                self.* = if (nullable.inner.findNieche(types)) |n| @enumFromInt(@as(u64, @bitCast(n))) else .explicit;
-            }
-
-            return switch (self.*) {
-                .explicit => null,
-                .unresolved => unreachable,
-                else => |v| @bitCast(@intFromEnum(v)),
-            };
-        }
-    } = .unresolved,
-
-    pub fn isCompact(self: *NullableData, types: *Types) bool {
-        return self.nieche.offset(types) != null;
-    }
-
-    pub fn size(self: *NullableData, types: *Types) u64 {
-        return self.inner.size(types) +
-            if (self.isCompact(types)) 0 else self.inner.alignment(types);
-    }
-
-    pub const NiecheSpec = packed struct(u64) {
-        kind: enum(u1) {
-            bool,
-            ptr,
-            pub fn abi(self: @This()) graph.DataType {
-                return switch (self) {
-                    .bool => .i8,
-                    .ptr => .int,
-                };
-            }
-        },
-        offset: std.meta.Int(.unsigned, @bitSizeOf(u64) - 1),
-    };
-};
-
-pub const Key = struct {
-    file: File,
+pub const Scope = struct {
+    file: Types.File,
     scope: Id,
     ast: Ast.Id,
     name: []const u8,
@@ -135,7 +38,7 @@ pub const Key = struct {
         value: u64 = 0,
     };
 
-    pub const dummy = Key{
+    pub const dummy = Scope{
         .file = .root,
         .scope = .void,
         .ast = .zeroSized(.Void),
@@ -143,7 +46,7 @@ pub const Key = struct {
         .captures = &.{},
     };
 
-    pub fn eql(self: Key, other: Key) bool {
+    pub fn eql(self: Scope, other: Scope) bool {
         return self.file == other.file and self.scope == other.scope and self.ast == other.ast and
             self.captures.len == other.captures.len and
             for (self.captures, other.captures) |a, b| {
@@ -152,271 +55,61 @@ pub const Key = struct {
     }
 };
 
-pub const SliceData = struct {
-    len: ?usize,
-    elem: Id,
+pub const TypeCtx = struct {
+    types: *Types,
 
-    pub const ptr_offset = 0;
-    pub const len_offset = 8;
-};
+    pub fn eql(self: @This(), a: Id, b: Id) bool {
+        const ad, const bd = .{ a.data(), b.data() };
+        if (std.meta.activeTag(ad) != std.meta.activeTag(bd)) return false;
 
-pub const TupleData = struct {
-    fields: []Field,
-
-    pub const Field = struct {
-        ty: Id,
-    };
-
-    pub fn getFields(self: *TupleData, _: anytype) []Field {
-        return self.fields;
-    }
-
-    pub const OffIter = struct {
-        types: *Types,
-        fields: []const Field,
-        offset: u64 = 0,
-
-        pub const Elem = struct { field: *const Field, offset: u64 };
-
-        pub fn next(self: *OffIter) ?Elem {
-            if (self.fields.len == 0) return null;
-            self.offset = std.mem.alignForward(u64, self.offset, self.fields[0].ty.alignment(self.types));
-            const elem = Elem{ .field = &self.fields[0], .offset = self.offset };
-            self.fields = self.fields[1..];
-            self.offset += elem.field.ty.size(self.types);
-            return elem;
-        }
-    };
-
-    pub fn offsetIter(self: *TupleData, types: *Types) OffIter {
-        return .{
-            .types = types,
-            .fields = self.getFields(types),
+        return switch (ad) {
+            .Builtin => |bl| bl == bd.Builtin,
+            .Pointer => |s| std.meta.eql(self.types.store.get(s).*, self.types.store.get(bd.Pointer).*),
+            .Slice => |s| std.meta.eql(self.types.store.get(s).*, self.types.store.get(bd.Slice).*),
+            .Nullable => |n| std.meta.eql(self.types.store.get(n).inner, self.types.store.get(bd.Nullable).inner),
+            .Tuple => |n| std.mem.eql(Id, @ptrCast(self.types.store.get(n).fields), @ptrCast(self.types.store.get(bd.Tuple).fields)),
+            inline .Enum, .Union, .Struct, .Func, .Template, .Global => |v, t| self.types.store.get(v).key.eql(self.types.store.get(@field(bd, @tagName(t))).key),
         };
     }
-};
 
-pub const EnumData = struct {
-    key: Key,
-
-    fields: ?[]const Field = null,
-
-    pub const Field = struct {
-        name: []const u8,
-    };
-
-    pub fn asTy(self: *EnumData) Id {
-        return Id.init(.{ .Enum = self });
-    }
-
-    pub fn getFields(self: *EnumData, types: *Types) []const Field {
-        if (self.fields) |f| return f;
-        const ast = types.getFile(self.key.file);
-        const enum_ast = ast.exprs.getTyped(.Enum, self.key.ast).?;
-
-        var count: usize = 0;
-        for (ast.exprs.view(enum_ast.fields)) |f| count += @intFromBool(f.tag() == .Tag);
-
-        const fields = types.arena.alloc(Field, count);
-        var i: usize = 0;
-        for (ast.exprs.view(enum_ast.fields)) |fast| {
-            if (fast.tag() != .Tag) continue;
-            fields[i] = .{ .name = ast.tokenSrc(ast.exprs.getTyped(.Tag, fast).?.index + 1) };
-            i += 1;
+    pub fn hash(self: @This(), adapted_key: Id) u64 {
+        var hasher = std.hash.Fnv1a_64.init();
+        const adk = adapted_key.data();
+        std.hash.autoHash(&hasher, std.meta.activeTag(adk));
+        switch (adk) {
+            .Builtin => |bl| std.hash.autoHash(&hasher, bl),
+            .Pointer => |s| std.hash.autoHash(&hasher, self.types.store.get(s).*),
+            .Slice => |s| std.hash.autoHash(&hasher, self.types.store.get(s).*),
+            .Nullable => |n| std.hash.autoHash(&hasher, self.types.store.get(n).inner),
+            .Tuple => |n| std.hash.autoHashStrat(&hasher, self.types.store.get(n).fields, .Deep),
+            inline .Enum, .Union, .Struct, .Func, .Template, .Global => |v| std.hash.autoHashStrat(&hasher, self.types.store.get(v).key, .Deep),
         }
-        self.fields = fields;
-        return fields;
+        return hasher.final();
     }
 };
 
-pub const UnionData = struct {
-    key: Key,
+pub const File = enum(u16) { root, _ };
 
-    fields: ?[]const Field = null,
-    size: ?u64 = null,
-    alignment: ?u64 = null,
+pub const IdRepr = u32;
+pub const IdTagRepr = u4;
+pub const IfPayloadRepr = u28;
 
-    pub const Field = struct {
-        name: []const u8,
-        ty: Id,
-    };
-
-    pub fn asTy(self: *UnionData) Id {
-        return Id.init(.{ .Union = self });
-    }
-
-    pub fn getFields(self: *UnionData, types: *Types) []const Field {
-        if (self.fields) |f| return f;
-        const ast = types.getFile(self.key.file);
-        const union_ast = ast.exprs.getTyped(.Union, self.key.ast).?;
-
-        var count: usize = 0;
-        for (ast.exprs.view(union_ast.fields)) |f| count += @intFromBool(if (ast.exprs.getTyped(.Decl, f)) |b| b.bindings.tag() == .Tag else false);
-
-        const fields = types.arena.alloc(Field, count);
-        var i: usize = 0;
-        for (ast.exprs.view(union_ast.fields)) |fast| {
-            const field = ast.exprs.getTyped(.Decl, fast) orelse continue;
-            if (field.bindings.tag() != .Tag) continue;
-            fields[i] = .{
-                .name = ast.tokenSrc(ast.exprs.getTyped(.Tag, field.bindings).?.index + 1),
-                .ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field.ty) catch .never,
-            };
-            i += 1;
-        }
-        self.fields = fields;
-        return fields;
-    }
+pub const ids = enum {
+    pub const Ptr = enum(IdRepr) { _ };
+    pub const Slice = enum(IdRepr) { _ };
+    pub const Nullable = enum(IdRepr) { _ };
+    pub const Tuple = enum(IdRepr) { _ };
+    pub const Enum = enum(IdRepr) { _ };
+    pub const Union = enum(IdRepr) { _ };
+    pub const Struct = enum(IdRepr) { _ };
+    pub const Template = enum(IdRepr) { _ };
+    pub const Func = enum(IdRepr) { _ };
+    pub const Global = enum(IdRepr) { _ };
 };
 
-pub const StructData = struct {
-    key: Key,
+pub const Data = utils.EntStore(root.frontend.types).Data;
 
-    fields: ?[]const Field = null,
-    size: ?u64 = null,
-    alignment: ?u64 = null,
-
-    pub const Field = struct {
-        name: []const u8,
-        ty: Id,
-        defalut_value: ?*GlobalData = null,
-    };
-
-    pub fn asTy(self: *StructData) Id {
-        return Id.init(.{ .Struct = self });
-    }
-
-    pub fn getSize(self: *StructData, types: *Types) u64 {
-        if (self.size) |a| return a;
-
-        if (@hasField(Field, "alignment")) @compileError("");
-        const max_alignment = self.getAlignment(types);
-
-        var siz: u64 = 0;
-        for (self.getFields(types)) |f| {
-            siz = std.mem.alignForward(u64, siz, @min(max_alignment, f.ty.alignment(types)));
-            siz += f.ty.size(types);
-        }
-        siz = std.mem.alignForward(u64, siz, max_alignment);
-        return siz;
-    }
-
-    pub fn getAlignment(self: *StructData, types: *Types) u64 {
-        if (self.alignment) |a| return a;
-
-        const ast = types.getFile(self.key.file);
-        const struct_ast = ast.exprs.getTyped(.Struct, self.key.ast).?;
-
-        if (struct_ast.alignment.tag() != .Void) {
-            if (@hasField(Field, "alignment")) @compileError("assert fields <= alignment then base alignment");
-            self.alignment = @bitCast(types.ct.evalIntConst(.{ .Perm = self.asTy() }, struct_ast.alignment) catch 1);
-            return self.alignment.?;
-        }
-
-        var alignm: u64 = 1;
-        for (self.getFields(types)) |f| {
-            alignm = @max(alignm, f.ty.alignment(types));
-        }
-        return alignm;
-    }
-
-    pub const OffIter = struct {
-        types: *Types,
-        max_align: u64,
-        fields: []const Field,
-        offset: u64 = 0,
-
-        pub const Elem = struct { field: *const Field, offset: u64 };
-
-        pub fn next(self: *OffIter) ?Elem {
-            if (self.fields.len == 0) return null;
-            self.offset = std.mem.alignForward(u64, self.offset, @min(self.max_align, self.fields[0].ty.alignment(self.types)));
-            const elem = Elem{ .field = &self.fields[0], .offset = self.offset };
-            self.fields = self.fields[1..];
-            self.offset += elem.field.ty.size(self.types);
-            return elem;
-        }
-    };
-
-    pub fn offsetIter(self: *StructData, types: *Types) OffIter {
-        return .{ .types = types, .fields = self.getFields(types), .max_align = self.getAlignment(types) };
-    }
-
-    pub fn getFields(self: *StructData, types: *Types) []const Field {
-        if (self.fields) |f| return f;
-        const ast = types.getFile(self.key.file);
-        const struct_ast = ast.exprs.getTyped(.Struct, self.key.ast).?;
-
-        var count: usize = 0;
-        for (ast.exprs.view(struct_ast.fields)) |f| count += @intFromBool(if (ast.exprs.getTyped(.Decl, f)) |b| b.bindings.tag() == .Tag else false);
-
-        const fields = types.arena.alloc(Field, count);
-        var i: usize = 0;
-        for (ast.exprs.view(struct_ast.fields)) |fast| {
-            const field = ast.exprs.getTyped(.Decl, fast) orelse continue;
-            if (field.bindings.tag() != .Tag) continue;
-            const name = ast.tokenSrc(ast.exprs.getTyped(.Tag, field.bindings).?.index + 1);
-            const ty = types.ct.evalTy("", .{ .Perm = self.asTy() }, field.ty) catch .never;
-            fields[i] = .{ .name = name, .ty = ty };
-            if (field.value.tag() != .Void) {
-                const value = types.arena.create(GlobalData);
-                value.* = .{
-                    .id = @intCast(types.globals.items.len),
-                    .key = .{
-                        .file = self.key.file,
-                        .name = name,
-                        .scope = self.asTy(),
-                        .ast = field.value,
-                        .captures = &.{},
-                    },
-                };
-
-                types.ct.evalGlobal(name, value, ty, field.value) catch {};
-                types.globals.append(types.arena.allocator(), value) catch unreachable;
-
-                fields[i].defalut_value = value;
-            }
-            i += 1;
-        }
-        self.fields = fields;
-        return fields;
-    }
-};
-
-pub const TemplateData = struct {
-    key: Key,
-};
-
-pub const FuncData = struct {
-    key: Key,
-    id: u32,
-    args: []Id,
-    ret: Id,
-    completion: std.EnumArray(Target, CompileState) = .{ .values = .{ .queued, .queued } },
-
-    pub const CompileState = enum { queued, compiled };
-
-    pub fn computeAbiSize(self: FuncData, abi: Abi, types: *Types) struct { usize, usize, Abi.Spec } {
-        const ret_abi = abi.categorize(self.ret, types) orelse .Imaginary;
-        var param_count: usize = @intFromBool(ret_abi == .ByRef);
-        for (self.args) |ty| param_count += (abi.categorize(ty, types) orelse continue).len(false);
-        const return_count: usize = ret_abi.len(true);
-        return .{ param_count, return_count, ret_abi };
-    }
-};
-
-pub const GlobalData = struct {
-    // captures are extra but whatever for now
-    key: Key,
-    id: u32,
-    ty: Id = .void,
-    data: []const u8 = &.{},
-    completion: std.EnumArray(Target, CompileState) = .{ .values = .{ .queued, .queued } },
-
-    pub const CompileState = enum { queued, staged, compiled };
-};
-
-pub const Id = enum(usize) {
+pub const Id = enum(IdRepr) {
     never,
     void,
     bool,
@@ -436,14 +129,35 @@ pub const Id = enum(usize) {
     any,
     _,
 
-    const Repr = packed struct(usize) {
-        data: std.meta.Int(.unsigned, @bitSizeOf(usize) - @bitSizeOf(std.meta.Tag(Data))),
+    const Repr = packed struct(IdRepr) {
+        data: std.meta.Int(.unsigned, @bitSizeOf(IdRepr) - @bitSizeOf(std.meta.Tag(Data))),
         flag: std.meta.Tag(std.meta.Tag(Data)),
 
         inline fn tag(self: Repr) std.meta.Tag(Data) {
             return @enumFromInt(self.flag);
         }
     };
+
+    const RawData = extern struct {
+        id: u32,
+        tag: u32,
+    };
+
+    pub fn fromRaw(raw: u32, types: *Types) ?Id {
+        const repr: Repr = @bitCast(raw);
+        if (repr.flag >= std.meta.fields(Data).len) return null;
+
+        switch (repr.tag()) {
+            .Builtin => {
+                if (repr.data >= std.meta.fields(tys.Builtin).len) return null;
+            },
+            inline else => |t| {
+                if (!types.store.isValid(t, repr.data)) return null;
+            },
+        }
+
+        return @enumFromInt(raw);
+    }
 
     pub fn fromLexeme(lexeme: Lexer.Lexeme.Type) Id {
         comptime {
@@ -453,62 +167,58 @@ pub const Id = enum(usize) {
     }
 
     pub inline fn init(dt: Data) Id {
-        return @enumFromInt(@as(usize, @bitCast(Repr{
-            .flag = @intFromEnum(dt),
-            .data = @intCast(switch (dt) {
-                .Builtin => |b| @intFromEnum(b),
-                inline else => |b| @intFromPtr(b),
-            }),
-        })));
+        const raw: *const RawData = @ptrCast(&dt);
+        const raw_id = Repr{ .flag = @intFromEnum(dt), .data = @intCast(raw.id) };
+        return @enumFromInt(@as(IdRepr, @bitCast(raw_id)));
     }
 
     pub fn needsTag(self: Id, types: *Types) bool {
-        return self.data() == .Nullable and !self.data().Nullable.isCompact(types);
+        return self.data() == .Nullable and !types.store.get(self.data().Nullable).isCompact(types);
     }
 
-    pub fn firstType(self: Id) Id {
+    pub fn firstType(self: Id, types: *Types) Id {
         return switch (self.data()) {
             .Struct, .Union, .Enum => self,
-            inline .Func, .Template, .Global => |t| t.key.scope.firstType(),
-            .Builtin, .Tuple, .Ptr, .Nullable, .Slice => unreachable,
+            inline .Func, .Template, .Global => |t| types.store.get(t).key.scope.firstType(types),
+            .Builtin, .Tuple, .Pointer, .Nullable, .Slice => unreachable,
         };
     }
 
-    pub fn file(self: Id) ?File {
+    pub fn file(self: Id, types: *Types) ?File {
         return switch (self.data()) {
-            .Builtin, .Ptr, .Slice, .Nullable, .Tuple => null,
-            inline else => |v| v.key.file,
+            .Builtin, .Pointer, .Slice, .Nullable, .Tuple => null,
+            inline else => |v| types.store.get(v).key.file,
         };
     }
 
-    pub fn items(self: Id, ast: *const Ast) Ast.Slice {
+    pub fn items(self: Id, ast: *const Ast, types: *Types) Ast.Slice {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
             .Template, .Func => .{},
-            inline else => |v, t| ast.exprs.getTyped(@field(std.meta.Tag(Ast.Expr), @tagName(t)), v.key.ast).?.fields,
+            inline else => |v, t| ast.exprs.getTyped(@field(std.meta.Tag(Ast.Expr), @tagName(t)), types.store.get(v).key.ast).?.fields,
         };
     }
 
-    pub fn captures(self: Id) []const Key.Capture {
+    pub fn captures(self: Id, types: *Types) []const Scope.Capture {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
-            inline else => |v| v.key.captures,
+            .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
+            inline else => |v| types.store.get(v).key.captures,
         };
     }
 
-    pub fn findCapture(self: Id, id: Ast.Ident) ?Key.Capture {
+    pub fn findCapture(self: Id, id: Ast.Ident, types: *Types) ?Scope.Capture {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
-            inline else => |v| for (v.key.captures) |cp| {
+            .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
+            inline else => |v| for (types.store.get(v).key.captures) |cp| {
                 if (cp.id == id) break cp;
             } else null,
         };
     }
 
-    pub fn parent(self: Id) Id {
+    pub fn parent(self: Id, types: *Types) Id {
         return switch (self.data()) {
-            .Global, .Builtin, .Ptr, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
-            inline else => |v| v.key.scope,
+            .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
+            inline else => |v| types.store.get(v).key.scope,
         };
     }
 
@@ -533,34 +243,32 @@ pub const Id = enum(usize) {
 
     pub fn data(self: Id) Data {
         const repr: Repr = @bitCast(@intFromEnum(self));
-        return switch (repr.tag()) {
-            .Builtin => .{ .Builtin = @enumFromInt(repr.data) },
-            inline else => |t| @unionInit(Data, @tagName(t), @ptrFromInt(repr.data)),
-        };
+        const raw = RawData{ .tag = repr.flag, .id = repr.data };
+        return @as(*const Data, @ptrCast(&raw)).*;
     }
 
-    pub fn child(self: Id, _: *Types) ?Id {
+    pub fn child(self: Id, types: *Types) ?Id {
         return switch (self.data()) {
-            .Ptr => |p| p.*,
-            .Nullable => |n| n.inner,
-            .Slice => |s| s.elem,
+            .Pointer => |p| types.store.get(p).*,
+            .Nullable => |n| types.store.get(n).inner,
+            .Slice => |s| types.store.get(s).elem,
             else => null,
         };
     }
 
     pub fn len(self: Id, types: *Types) ?usize {
         return switch (self.data()) {
-            inline .Struct, .Union, .Enum => |s| s.getFields(types).len,
-            .Slice => |s| s.len,
+            inline .Struct, .Union, .Enum => |s| @TypeOf(s).Data.getFields(s, types).len,
+            .Slice => |s| types.store.get(s).len,
             else => null,
         };
     }
 
-    pub fn findNieche(self: Id, types: *Types) ?NullableData.NiecheSpec {
-        _ = types; // autofix
+    pub fn findNieche(self: Id, types: *Types) ?root.frontend.types.Nullable.NiecheSpec {
+        _ = types;
 
         return switch (self.data()) {
-            .Ptr => return .{ .offset = 0, .kind = .ptr },
+            .Pointer => return .{ .offset = 0, .kind = .ptr },
             else => null,
         };
     }
@@ -575,16 +283,16 @@ pub const Id = enum(usize) {
                 .u32, .i32, .f32 => 4,
                 .uint, .int, .f64, .type, .u64, .i64 => 8,
             },
-            .Ptr => 8,
+            .Pointer => 8,
             .Enum => |e| {
-                const var_count = e.getFields(types).len;
+                const var_count = @TypeOf(e).Data.getFields(e, types).len;
                 if (var_count <= 1) return 0;
                 return std.math.ceilPowerOfTwo(u64, std.mem.alignForward(u64, std.math.log2_int(u64, var_count), 8) / 8) catch unreachable;
             },
             .Tuple => |t| {
                 var total_size: u64 = 0;
                 var alignm: u64 = 1;
-                for (t.fields) |f| {
+                for (types.store.get(t).fields) |f| {
                     alignm = @max(alignm, f.ty.alignment(types));
                     total_size = std.mem.alignForward(u64, total_size, f.ty.alignment(types));
                     total_size += f.ty.size(types);
@@ -595,16 +303,16 @@ pub const Id = enum(usize) {
             .Union => |u| {
                 var max_size: u64 = 0;
                 var alignm: u64 = 1;
-                for (u.getFields(types)) |f| {
+                for (@TypeOf(u).Data.getFields(u, types)) |f| {
                     alignm = @max(alignm, f.ty.alignment(types));
                     max_size = @max(max_size, f.ty.size(types));
                 }
                 max_size = std.mem.alignForward(u64, max_size, alignm);
                 return max_size;
             },
-            .Struct => |s| s.getSize(types),
-            .Slice => |s| if (s.len) |l| l * s.elem.size(types) else 16,
-            .Nullable => |n| n.size(types),
+            .Struct => |s| @TypeOf(s).Data.getSize(s, types),
+            .Slice => |s| if (types.store.get(s).len) |l| l * types.store.get(s).elem.size(types) else 16,
+            .Nullable => |n| types.store.get(n).size(types),
             .Global, .Func, .Template => 0,
         };
     }
@@ -612,17 +320,17 @@ pub const Id = enum(usize) {
     pub fn alignment(self: Id, types: *Types) u64 {
         return switch (self.data()) {
             .Builtin, .Enum => @max(1, self.size(types)),
-            .Ptr => 8,
-            .Nullable => |n| n.inner.alignment(types),
-            .Struct => |s| s.getAlignment(types),
+            .Pointer => 8,
+            .Nullable => |n| types.store.get(n).inner.alignment(types),
+            .Struct => |s| @TypeOf(s).Data.getAlignment(s, types),
             inline .Union, .Tuple => |s| {
                 var alignm: u64 = 1;
-                for (s.getFields(types)) |f| {
+                for (@TypeOf(s).Data.getFields(s, types)) |f| {
                     alignm = @max(alignm, f.ty.alignment(types));
                 }
                 return alignm;
             },
-            .Slice => |s| if (s.len == null) 8 else s.elem.alignment(types),
+            .Slice => |s| if (types.store.get(s).len == null) 8 else types.store.get(s).elem.alignment(types),
             .Global, .Func, .Template => 1,
         };
     }
@@ -655,18 +363,18 @@ pub const Id = enum(usize) {
 
         pub fn format(self: *const Fmt, comptime opts: []const u8, _: anytype, writer: anytype) !void {
             try switch (self.self.data()) {
-                .Ptr => |b| writer.print("^{" ++ opts ++ "}", .{b.fmt(self.tys)}),
-                .Nullable => |b| writer.print("?{" ++ opts ++ "}", .{b.inner.fmt(self.tys)}),
+                .Pointer => |b| writer.print("^{" ++ opts ++ "}", .{self.tys.store.get(b).fmt(self.tys)}),
+                .Nullable => |b| writer.print("?{" ++ opts ++ "}", .{self.tys.store.get(b).inner.fmt(self.tys)}),
                 .Slice => |b| {
                     try writer.writeAll("[");
-                    if (b.len) |l| try writer.print("{d}", .{l});
+                    if (self.tys.store.get(b).len) |l| try writer.print("{d}", .{l});
                     try writer.writeAll("]");
-                    try writer.print("{" ++ opts ++ "}", .{b.elem.fmt(self.tys)});
+                    try writer.print("{" ++ opts ++ "}", .{self.tys.store.get(b).elem.fmt(self.tys)});
                     return;
                 },
                 .Tuple => |b| {
                     try writer.writeAll("(");
-                    for (b.fields, 0..) |f, i| {
+                    for (self.tys.store.get(b).fields, 0..) |f, i| {
                         if (i != 0) try writer.writeAll(", ");
                         try writer.print("{" ++ opts ++ "}", .{f.ty.fmt(self.tys)});
                     }
@@ -674,14 +382,13 @@ pub const Id = enum(usize) {
                     return;
                 },
                 .Builtin => |b| writer.writeAll(@tagName(b)),
-                .Func, .Global, .Template, .Struct, .Union, .Enum => {
-                    const repr: Repr = @bitCast(@intFromEnum(self.self));
-                    const b: *struct { key: Key } = @ptrFromInt(repr.data);
+                inline .Func, .Global, .Template, .Struct, .Union, .Enum => |v| {
+                    const b = self.tys.store.get(v);
                     if (b.key.scope != .void) {
                         try writer.print("{" ++ opts ++ "}", .{b.key.scope.fmt(self.tys)});
                     }
                     if (b.key.name.len != 0) {
-                        if (b.key.scope != .void and (b.key.scope.data() != .Struct or b.key.scope.data().Struct.key.scope != .void or
+                        if (b.key.scope != .void and (b.key.scope.data() != .Struct or self.tys.store.get(b.key.scope.data().Struct).key.scope != .void or
                             comptime !std.mem.eql(u8, opts, "test"))) try writer.writeAll(".");
                         if (b.key.scope != .void) {
                             try writer.print("{s}", .{b.key.name});
@@ -695,9 +402,9 @@ pub const Id = enum(usize) {
                         var written_paren = false;
                         o: for (b.key.captures) |capture| {
                             var cursor = b.key.scope;
-                            while (cursor != .void and cursor.data() != .Ptr and cursor.data() != .Builtin) {
-                                if (cursor.findCapture(capture.id) != null) continue :o;
-                                cursor = cursor.parent();
+                            while (cursor != .void and cursor.data() != .Pointer and cursor.data() != .Builtin) {
+                                if (cursor.findCapture(capture.id, self.tys) != null) continue :o;
+                                cursor = cursor.parent(self.tys);
                             }
 
                             if (written_paren) try writer.writeAll(", ");
@@ -720,8 +427,8 @@ pub const Id = enum(usize) {
         }
     };
 
-    pub fn fmt(self: Id, tys: *Types) Fmt {
-        return .{ .self = self, .tys = tys };
+    pub fn fmt(self: Id, types: *Types) Fmt {
+        return .{ .self = self, .tys = types };
     }
 };
 
@@ -782,7 +489,7 @@ pub const Abi = enum {
                 .f32 => .f32,
                 .f64 => .f64,
             } },
-            .Ptr => .{ .ByValue = .int },
+            .Pointer => .{ .ByValue = .int },
             .Enum => .{ .ByValue = switch (ty.size(types)) {
                 0 => return .Imaginary,
                 1 => .i8,
@@ -807,7 +514,8 @@ pub const Abi = enum {
         };
     }
 
-    pub fn categorizeAbleosNullable(nullable: *NullableData, types: *Types) ?Spec {
+    pub fn categorizeAbleosNullable(id: utils.EntId(tys.Nullable), types: *Types) ?Spec {
+        const nullable = types.store.get(id);
         const base_abi = Abi.ableos.categorize(nullable.inner, types) orelse return null;
         if (nullable.isCompact(types)) return base_abi;
         if (base_abi == .Imaginary) return .{ .ByValue = .i8 };
@@ -818,7 +526,8 @@ pub const Abi = enum {
         return .ByRef;
     }
 
-    pub fn categorizeAbleosSlice(slice: *SliceData, types: *Types) ?Spec {
+    pub fn categorizeAbleosSlice(id: utils.EntId(tys.Slice), types: *Types) ?Spec {
+        const slice = types.store.get(id);
         if (slice.len == null) return .{ .ByValuePair = .{ .types = .{ .int, .int }, .padding = 0 } };
         if (slice.len == 0) return .Imaginary;
         const elem_abi = Abi.ableos.categorize(slice.elem, types) orelse return null;
@@ -828,8 +537,8 @@ pub const Abi = enum {
         return .ByRef;
     }
 
-    pub fn categorizeAbleosUnion(unio: *UnionData, types: *Types) ?Spec {
-        const fields = unio.getFields(types);
+    pub fn categorizeAbleosUnion(id: utils.EntId(tys.Union), types: *Types) ?Spec {
+        const fields = @TypeOf(id).Data.getFields(id, types);
         if (fields.len == 0) return .Imaginary; // TODO: add .Impossible
         const res = Abi.ableos.categorize(fields[0].ty, types) orelse return null;
         for (fields[1..]) |f| {
@@ -842,7 +551,7 @@ pub const Abi = enum {
     pub fn categorizeAbleosRecord(stru: anytype, types: *Types) Spec {
         var res: Spec = .Imaginary;
         var offset: u64 = 0;
-        for (stru.getFields(types)) |f| {
+        for (@TypeOf(stru).Data.getFields(stru, types)) |f| {
             const fspec = Abi.ableos.categorize(f.ty, types) orelse continue;
             if (fspec == .Imaginary) continue;
             if (res == .Imaginary) {
@@ -901,6 +610,7 @@ pub fn report(self: *Types, file_id: File, expr: anytype, comptime fmt: []const 
         var fields = tupl.fields[0..tupl.fields.len].*;
         for (&fields) |*f| if (f.type == Types.Id) {
             f.type = Types.Id.Fmt;
+            f.alignment = @alignOf(f.type);
         };
         tupl.fields = &fields;
         break :b @Type(.{ .@"struct" = tupl });
@@ -938,16 +648,17 @@ pub fn getScope(self: *Types, file: File) Id {
     return self.file_scopes[@intFromEnum(file)];
 }
 
-pub fn internPtr(self: *Types, comptime tag: std.meta.Tag(Data), payload: std.meta.Child(std.meta.TagPayload(Data, tag))) Id {
-    var vl = payload;
-    const id = Id.init(@unionInit(Data, @tagName(tag), &vl));
-    const slot = self.interner.getOrPut(self.arena.allocator(), id) catch unreachable;
-    if (slot.found_existing) return slot.key_ptr.*;
-    const alloc = self.arena.create(@TypeOf(payload));
-    if (@TypeOf(payload) == TupleData) {
-        alloc.fields = self.arena.dupe(TupleData.Field, payload.fields);
-    } else alloc.* = payload;
-    slot.key_ptr.* = .init(@unionInit(Data, @tagName(tag), alloc));
+pub fn internPtr(self: *Types, comptime tag: std.meta.Tag(Data), payload: std.meta.TagPayload(Data, tag).Data) Id {
+    const vl = self.store.add(self.arena.allocator(), payload);
+    const id = Id.init(@unionInit(Data, @tagName(tag), vl));
+    const slot = self.interner.getOrPutContext(self.arena.allocator(), id, .{ .types = self }) catch unreachable;
+    if (slot.found_existing) {
+        self.store.pop(vl);
+        return slot.key_ptr.*;
+    }
+    if (@TypeOf(payload) == tys.Tuple) {
+        self.store.get(vl).fields = self.arena.dupe(tys.Tuple.Field, payload.fields);
+    } else self.store.get(vl).* = payload;
     return slot.key_ptr.*;
 }
 
@@ -956,7 +667,7 @@ pub fn makeSlice(self: *Types, len: ?usize, elem: Id) Id {
 }
 
 pub fn makePtr(self: *Types, v: Id) Id {
-    return self.internPtr(.Ptr, v);
+    return self.internPtr(.Pointer, v);
 }
 
 pub fn makeNullable(self: *Types, v: Id) Id {
@@ -967,19 +678,18 @@ pub fn makeTuple(self: *Types, v: []Id) Id {
     return self.internPtr(.Tuple, .{ .fields = @ptrCast(v) });
 }
 
-pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Key) struct { Map.GetOrPutResult, std.meta.TagPayload(Data, kind) } {
-    var ty: std.meta.Child(std.meta.TagPayload(Data, kind)) = undefined;
-    ty.key = key;
-    const id = Id.init(@unionInit(Data, @tagName(kind), &ty));
-    const slot = self.interner.getOrPut(self.arena.allocator(), id) catch unreachable;
+pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Scope) struct { Map.GetOrPutResult, std.meta.TagPayload(Data, kind) } {
+    var mem: std.meta.TagPayload(Data, kind).Data = undefined;
+    mem.key = key;
+    const ty = self.store.add(self.arena.allocator(), mem);
+    const id = Id.init(@unionInit(Data, @tagName(kind), ty));
+    const slot = self.interner.getOrPutContext(self.arena.allocator(), id, .{ .types = self }) catch unreachable;
     if (slot.found_existing) {
         std.debug.assert(slot.key_ptr.data() == kind);
+        self.store.pop(ty);
         return .{ slot, @field(slot.key_ptr.data(), @tagName(kind)) };
     }
-    const alloc = self.arena.create(@TypeOf(ty));
-    alloc.* = ty;
-    slot.key_ptr.* = Id.init(@unionInit(Data, @tagName(kind), alloc));
-    return .{ slot, alloc };
+    return .{ slot, ty };
 }
 
 pub fn resolveFielded(
@@ -989,7 +699,7 @@ pub fn resolveFielded(
     file: File,
     name: []const u8,
     ast: Ast.Id,
-    captures: []const Key.Capture,
+    captures: []const Scope.Capture,
 ) Id {
     const slot, const alloc = self.intern(tag, .{
         .scope = scope,
@@ -999,15 +709,14 @@ pub fn resolveFielded(
         .captures = captures,
     });
     if (!slot.found_existing) {
-        alloc.* = .{
-            .key = alloc.key,
+        self.store.get(alloc).* = .{
+            .key = self.store.get(alloc).key,
         };
     }
     return slot.key_ptr.*;
 }
 
-pub fn dumpAnalErrors(self: *Types, func: *Types.FuncData, anal_errors: *std.ArrayListUnmanaged(static_anal.Error)) bool {
-    _ = func;
+pub fn dumpAnalErrors(self: *Types, anal_errors: *std.ArrayListUnmanaged(static_anal.Error)) bool {
     for (anal_errors.items) |err| switch (err) {
         .ReturningStack => |loc| {
             self.reportSloc(loc.slot, "stack location escapes the function", .{});
@@ -1028,17 +737,15 @@ pub fn dumpAnalErrors(self: *Types, func: *Types.FuncData, anal_errors: *std.Arr
 pub fn resolveGlobal(self: *Types, scope: Id, name: []const u8, ast: Ast.Id) struct { Id, bool } {
     const slot, const alloc = self.intern(.Global, .{
         .scope = scope,
-        .file = scope.file().?,
+        .file = scope.file(self).?,
         .ast = ast,
         .name = name,
         .captures = &.{},
     });
     if (!slot.found_existing) {
-        alloc.* = .{
-            .key = alloc.key,
-            .id = @intCast(self.globals.items.len),
+        self.store.get(alloc).* = .{
+            .key = self.store.get(alloc).key,
         };
-        self.globals.append(self.arena.allocator(), alloc) catch unreachable;
     }
     return .{ slot.key_ptr.*, !slot.found_existing };
 }

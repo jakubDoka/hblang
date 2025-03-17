@@ -358,3 +358,98 @@ pub fn TupleOf(comptime T: type) type {
         .layout = .auto,
     } });
 }
+
+pub fn EntStore(comptime M: type) type {
+    return struct {
+        const Tag = std.meta.DeclEnum(M);
+        pub const Data = b: {
+            var fields: [decls.len]std.builtin.Type.UnionField = undefined;
+
+            for (decls, &fields) |d, *f| {
+                const Ty = @field(M, d.name);
+                const Dt = if (@hasDecl(Ty, "identity")) Ty else EntId(Ty);
+                f.* = .{
+                    .name = d.name,
+                    .type = Dt,
+                    .alignment = @alignOf(Dt),
+                };
+            }
+
+            break :b @Type(.{ .@"union" = .{
+                .layout = .auto,
+                .tag_type = Tag,
+                .fields = &fields,
+                .decls = &.{},
+            } });
+        };
+
+        rpr: Store = .{},
+
+        const decls = std.meta.declarations(M);
+        const Store = b: {
+            var fields: [decls.len]std.builtin.Type.StructField = undefined;
+
+            for (decls, &fields) |d, *f| {
+                const Arr = std.ArrayListUnmanaged(@field(M, d.name));
+                f.* = .{
+                    .name = d.name,
+                    .type = Arr,
+                    .alignment = @alignOf(Arr),
+                    .is_comptime = false,
+                    .default_value_ptr = &Arr.empty,
+                };
+            }
+
+            break :b @Type(.{ .@"struct" = .{
+                .layout = .auto,
+                .fields = &fields,
+                .decls = &.{},
+                .is_tuple = false,
+            } });
+        };
+        const store_fields = std.meta.fields(Store);
+        const Self = @This();
+
+        pub inline fn isValid(self: *Self, comptime kind: Tag, idx: usize) bool {
+            return idx < @field(self.rpr, @tagName(kind)).items.len;
+        }
+
+        pub inline fn fieldName(comptime Ty: type) std.builtin.Type.StructField {
+            return for (decls, store_fields) |d, sf| {
+                if (@field(M, d.name) == Ty) return sf;
+            } else @compileError(@typeName(Ty));
+        }
+
+        pub inline fn add(self: *Self, gpa: std.mem.Allocator, vl: anytype) EntId(@TypeOf(vl)) {
+            @field(self.rpr, fieldName(@TypeOf(vl)).name).append(gpa, vl) catch unreachable;
+            return @enumFromInt(@field(self.rpr, fieldName(@TypeOf(vl)).name).items.len - 1);
+        }
+
+        pub inline fn pop(self: *Self, vl: anytype) void {
+            std.debug.assert(@field(self.rpr, fieldName(@TypeOf(vl).Data).name).items.len == @intFromEnum(vl) + 1);
+            _ = @field(self.rpr, fieldName(@TypeOf(vl).Data).name).pop().?;
+        }
+
+        pub inline fn get(self: *Self, id: anytype) if (@hasDecl(@TypeOf(id), "identity")) @TypeOf(id) else *@TypeOf(id).Data {
+            if (@hasDecl(@TypeOf(id), "identity")) return id;
+            return &@field(self.rpr, fieldName(@TypeOf(id).Data).name).items[@intFromEnum(id)];
+        }
+
+        pub inline fn unwrap(self: *Self, id: Data, comptime kind: Tag) ?*if (@hasDecl(std.meta.TagPayload(Data, kind), "identity"))
+            std.meta.TagPayload(Data, kind)
+        else
+            std.meta.TagPayload(Data, kind).Data {
+            if (id != kind) return null;
+            const i = @field(id, @tagName(kind));
+            if (@hasDecl(std.meta.TagPayload(Data, kind), "identity")) return i;
+            return &@field(self.rpr, @tagName(kind)).items[@intFromEnum(i)];
+        }
+    };
+}
+
+pub fn EntId(comptime D: type) type {
+    return enum(u32) {
+        _,
+        pub const Data = D;
+    };
+}

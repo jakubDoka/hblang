@@ -67,7 +67,8 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    var work_list = std.ArrayListUnmanaged(*Node).initBuffer(tmp.arena.alloc(*Node, 32));
+    // TODO: maybe use the vm stack instead
+    var work_list = std.ArrayListUnmanaged(*Node).initBuffer(tmp.arena.alloc(*Node, 1024));
 
     work_list.appendAssumeCapacity(expr);
 
@@ -116,11 +117,12 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
 
                 var ret_ty: graph.DataType = .int;
                 if (call.extra(.Call).id != eca) {
-                    const func = types.funcs.items[call.extra(.Call).id];
+                    const func_id: utils.EntId(root.frontend.types.Func) = @enumFromInt(call.extra(.Call).id);
+                    const func = types.store.get(func_id);
                     ret_ty = (abi.categorize(func.ret, types) orelse return .{ .Unsupported = curr }).ByValue;
                     if (func.completion.get(.@"comptime") == .queued) {
-                        self.jitFunc(func) catch return .{ .Unsupported = curr };
-                        std.debug.assert(func.completion.get(.@"comptime") == .compiled);
+                        self.jitFunc(func_id) catch return .{ .Unsupported = curr };
+                        std.debug.assert(types.store.get(func_id).completion.get(.@"comptime") == .compiled);
                     }
                 }
 
@@ -155,7 +157,8 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
             },
             .Load => b: {
                 if (curr.base().kind == .GlobalAddr) {
-                    const glob = types.globals.items[curr.base().extra(.GlobalAddr).id];
+                    const glob_id: utils.EntId(root.frontend.types.Global) = @enumFromInt(curr.base().extra(.GlobalAddr).id);
+                    const glob = types.store.get(glob_id);
 
                     std.debug.assert(curr.data_type.isInt());
 
@@ -236,11 +239,11 @@ pub fn runVm(self: *Comptime, file: Types.File, pos: anytype, name: []const u8, 
             switch (@as(InteruptCode, @enumFromInt(self.vm.regs.get(.arg(0))))) {
                 inline .Struct, .Union, .Enum => |t| {
                     const scope: Types.Id = @enumFromInt(self.ecaArg(1));
-                    const ast = types.getFile(scope.file().?);
+                    const ast = types.getFile(scope.file(types).?);
                     const struct_ast_id: Ast.Id = @enumFromInt(@as(u32, @truncate(self.ecaArg(2))));
                     const struct_ast = ast.exprs.getTyped(@field(std.meta.Tag(Ast.Expr), @tagName(t)), struct_ast_id).?;
 
-                    const captures = types.arena.alloc(Types.Key.Capture, struct_ast.captures.len());
+                    const captures = types.arena.alloc(Types.Scope.Capture, struct_ast.captures.len());
 
                     for (captures, ast.exprs.view(struct_ast.captures), 0..) |*slot, id, i| {
                         slot.* = .{ .id = id, .ty = @enumFromInt(self.ecaArg(3 + i * 2)), .value = self.ecaArg(3 + i * 2 + 1) };
@@ -249,7 +252,7 @@ pub fn runVm(self: *Comptime, file: Types.File, pos: anytype, name: []const u8, 
                     const res = types.resolveFielded(
                         @field(std.meta.Tag(Types.Data), @tagName(t)),
                         scope,
-                        scope.file().?,
+                        scope.file(types).?,
                         name,
                         struct_ast_id,
                         captures,
@@ -266,7 +269,7 @@ pub fn runVm(self: *Comptime, file: Types.File, pos: anytype, name: []const u8, 
     self.vm.regs.set(.stack_addr, stack_end);
 }
 
-pub fn jitFunc(self: *Comptime, fnc: *Types.FuncData) !void {
+pub fn jitFunc(self: *Comptime, fnc: utils.EntId(root.frontend.types.Func)) !void {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
     var gen = Codegen.init(self.getGpa(), tmp.arena, self.getTypes(), .@"comptime");
@@ -276,7 +279,13 @@ pub fn jitFunc(self: *Comptime, fnc: *Types.FuncData) !void {
     try compileDependencies(&gen, self.comptime_code.global_relocs.items.len);
 }
 
-pub fn jitExpr(self: *Comptime, name: []const u8, scope: Codegen.Scope, ctx: Codegen.Ctx, value: Ast.Id) !struct { u32, Types.Id } {
+pub fn jitExpr(
+    self: *Comptime,
+    name: []const u8,
+    scope: Codegen.Scope,
+    ctx: Codegen.Ctx,
+    value: Ast.Id,
+) !struct { utils.EntId(root.frontend.types.Func), Types.Id } {
     return self.jitExprLow(name, scope, ctx, false, value) catch {
         if (scope == .Tmp) scope.Tmp.errored = true;
         return error.Never;
@@ -297,10 +306,9 @@ pub fn jitExprLow(
     ctx: Codegen.Ctx,
     only_inference: bool,
     value: Ast.Id,
-) !struct { u32, Types.Id } {
+) !struct { utils.EntId(root.frontend.types.Func), Types.Id } {
     const types = self.getTypes();
-    const id: u32 = @intCast(types.funcs.items.len);
-    types.funcs.append(types.arena.allocator(), undefined) catch unreachable;
+    const id = types.store.add(types.arena.allocator(), @as(root.frontend.types.Func, undefined));
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
@@ -309,14 +317,14 @@ pub fn jitExprLow(
     defer gen.deinit();
 
     for (self.in_progress.items, 0..) |p, i| {
-        if (std.meta.eql(p, .{ .ast = value, .file = scope.file() })) {
+        if (std.meta.eql(p, .{ .ast = value, .file = scope.file(types) })) {
             for (self.in_progress.items[i..]) |lc| {
                 types.report(lc.file, lc.ast, "cycle goes trough here", .{});
             }
             return error.Never;
         }
     }
-    self.in_progress.append(self.comptime_code.gpa, .{ .ast = value, .file = scope.file() }) catch unreachable;
+    self.in_progress.append(self.comptime_code.gpa, .{ .ast = value, .file = scope.file(types) }) catch unreachable;
     defer _ = self.in_progress.pop().?;
 
     gen.only_inference = only_inference;
@@ -332,7 +340,7 @@ pub fn jitExprLow(
         }
 
         const token, const params, _ = gen.beginBuilder(tmp.arena, .never, 1, 0);
-        gen.ast = types.getFile(scope.file());
+        gen.ast = types.getFile(scope.file(types));
         gen.parent_scope = scope;
         gen.name = name;
         gen.struct_ret_ptr = null;
@@ -351,7 +359,7 @@ pub fn jitExprLow(
         if (!only_inference) {
             self.comptime_code.emitFunc(
                 @ptrCast(&gen.bl.func),
-                .{ .id = id, .entry = true },
+                .{ .id = @intFromEnum(id), .entry = true },
             );
         }
     }
@@ -377,13 +385,13 @@ pub fn compileDependencies(self: *Codegen, reloc_util: usize) !void {
 
             self.types.ct.comptime_code.emitFunc(
                 @ptrCast(&self.bl.func),
-                .{ .id = func.id },
+                .{ .id = @intFromEnum(func) },
             );
         },
         .Global => |glob| {
             self.types.ct.comptime_code.emitData(.{
-                .id = glob.id,
-                .value = .{ .init = glob.data },
+                .id = @intFromEnum(glob),
+                .value = .{ .init = self.types.store.get(glob).data },
             });
         },
     };
@@ -395,21 +403,24 @@ pub fn evalTy(self: *Comptime, name: []const u8, scope: Codegen.Scope, ty_expr: 
     const id, _ = try self.jitExpr(name, scope, .{ .ty = .type }, ty_expr);
 
     var data: [8]u8 = undefined;
-    try self.runVm(scope.file(), ty_expr, name, id, &data);
-    return @enumFromInt(@as(u64, @bitCast(data)));
+    try self.runVm(scope.file(self.getTypes()), ty_expr, name, @intFromEnum(id), &data);
+    return Types.Id.fromRaw(@bitCast(data[0..4].*), self.getTypes()) orelse {
+        self.getTypes().report(scope.file(self.getTypes()), ty_expr, "resulting type has a corrupted value", .{});
+        return error.Never;
+    };
 }
 
 pub fn evalIntConst(self: *Comptime, scope: Codegen.Scope, int_conts: Ast.Id) !i64 {
     const id, _ = try self.jitExpr("", scope, .{ .ty = .uint }, int_conts);
     var data: [8]u8 = undefined;
-    try self.runVm(scope.file(), int_conts, "", id, &data);
+    try self.runVm(scope.file(self.getTypes()), int_conts, "", @intFromEnum(id), &data);
     return @bitCast(data);
 }
 
-pub fn evalGlobal(self: *Comptime, name: []const u8, global: *Types.GlobalData, ty: ?Types.Id, value: Ast.Id) !void {
-    const id, const fty = try self.jitExpr(name, .{ .Perm = global.key.scope }, .{ .ty = ty }, value);
+pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(root.frontend.types.Global), ty: ?Types.Id, value: Ast.Id) !void {
+    const id, const fty = try self.jitExpr(name, .{ .Perm = self.getTypes().store.get(global).key.scope }, .{ .ty = ty }, value);
     const data = self.getTypes().arena.allocator().alloc(u8, @intCast(fty.size(self.getTypes()))) catch unreachable;
-    try self.runVm(global.key.file, value, name, id, data);
-    global.data = data;
-    global.ty = fty;
+    try self.runVm(self.getTypes().store.get(global).key.file, value, name, @intFromEnum(id), data);
+    self.getTypes().store.get(global).data = data;
+    self.getTypes().store.get(global).ty = fty;
 }

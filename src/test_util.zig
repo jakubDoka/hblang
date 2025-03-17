@@ -162,16 +162,16 @@ pub fn testBuilder(
             if (verbose) fnc.fmtScheduled(output, colors);
 
             fnc.static_anal.analize(func_arena.arena, &anal_errors);
-            errored = types.dumpAnalErrors(func, &anal_errors) or errored;
+            errored = types.dumpAnalErrors(&anal_errors) or errored;
 
             gen.emitFunc(&cg.bl.func, .{
-                .id = func.id,
+                .id = @intFromEnum(func),
                 .name = try std.fmt.allocPrint(
                     syms.allocator(),
                     "{test}",
                     .{Types.Id.init(.{ .Func = func }).fmt(&types)},
                 ),
-                .entry = func.id == entry.id,
+                .entry = func == entry,
                 .optimizations = .none,
             });
         },
@@ -182,8 +182,8 @@ pub fn testBuilder(
                     "{test}",
                     .{Types.Id.init(.{ .Global = g }).fmt(&types)},
                 ),
-                .id = g.id,
-                .value = .{ .init = g.data },
+                .id = @intFromEnum(g),
+                .value = .{ .init = types.store.get(g).data },
             });
         },
     };

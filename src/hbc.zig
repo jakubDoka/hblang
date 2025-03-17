@@ -192,24 +192,24 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             var errors = std.ArrayListUnmanaged(static_anal.Error){};
 
             backend.emitFunc(&codegen.bl.func, .{
-                .id = func.id,
+                .id = @intFromEnum(func),
                 .name = try hb.frontend.Types.Id.init(.{ .Func = func })
                     .fmt(&types).toString(syms.allocator()),
-                .entry = func.id == entry.id,
+                .entry = func == entry,
                 .optimizations = .{
                     .arena = tmp.arena,
                     .error_buf = &errors,
                 },
             });
 
-            errored = types.dumpAnalErrors(func, &errors) or errored;
+            errored = types.dumpAnalErrors(&errors) or errored;
         },
         .Global => |global| {
             backend.emitData(.{
-                .id = global.id,
+                .id = @intFromEnum(global),
                 .name = try hb.frontend.Types.Id.init(.{ .Global = global })
                     .fmt(&types).toString(syms.allocator()),
-                .value = .{ .init = global.data },
+                .value = .{ .init = types.store.get(global).data },
             });
         },
     };

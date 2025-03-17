@@ -48,7 +48,7 @@ const GlobalData = struct {
 
 const FuncData = struct {
     name: []const u8,
-    offset: u32 = 0,
+    offset: u32 = std.math.maxInt(u32),
 };
 
 const GloblReloc = struct {
@@ -161,7 +161,9 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     defer tmp.deinit();
 
     if (self.funcs.items.len <= id) {
+        const prev_len = self.funcs.items.len;
         self.funcs.resize(self.gpa, id + 1) catch unreachable;
+        @memset(self.funcs.items[prev_len..], .{ .name = "" });
     }
     self.funcs.items[id].offset = @intCast(self.out.items.len);
     self.funcs.items[id].name = name;

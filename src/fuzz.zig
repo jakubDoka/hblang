@@ -76,14 +76,14 @@ pub fn fuzzRun(
             };
 
             gen.emitFunc(&cg.bl.func, .{
-                .id = func.id,
-                .entry = func.id == entry.id,
+                .id = @intFromEnum(func),
+                .entry = func == entry,
             });
         },
         .Global => |g| {
             gen.emitData(.{
-                .id = g.id,
-                .value = .{ .init = g.data },
+                .id = @intFromEnum(g),
+                .value = .{ .init = types.store.get(g).data },
             });
         },
     };
