@@ -48,4 +48,4 @@ sin:
      fmul32 $1, $2, $1
      fadd32 $1, $4, $1
        jala $0, $31, 0
-code size: 1328
+code size: 1320

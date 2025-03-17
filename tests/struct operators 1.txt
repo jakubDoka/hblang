@@ -93,4 +93,4 @@ main:
       add64 $1, $1, $2
 5:   addi64 $254, $254, 120
          tx
-code size: 922
+code size: 906

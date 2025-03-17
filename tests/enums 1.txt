@@ -6,4 +6,4 @@ main:
         jmp :1
 0:   addi64 $1, $1, 1
 1:       tx
-code size: 56
+code size: 52

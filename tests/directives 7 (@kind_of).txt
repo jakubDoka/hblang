@@ -1,4 +1,4 @@
 main:
     li64 $1, 7
       tx
-code size: 15
+code size: 11

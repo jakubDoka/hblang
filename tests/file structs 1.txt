@@ -11,4 +11,4 @@ main:
 init:
          cp $2, $1
        jala $0, $31, 0
-code size: 95
+code size: 87

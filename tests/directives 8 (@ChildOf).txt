@@ -12,4 +12,4 @@ main:
 deref(T = ^uint):
          ld $1, $1, 0, 8
        jala $0, $31, 0
-code size: 125
+code size: 117

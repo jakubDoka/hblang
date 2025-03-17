@@ -25,4 +25,4 @@ square:
      addi64 $4, $4, 1
       add64 $6, $6, $7
         jmp :4
-code size: 169
+code size: 161

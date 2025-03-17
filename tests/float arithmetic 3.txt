@@ -45,4 +45,4 @@ main:
 9:      jmp :b
 a:     li64 $1, 0
 b:       tx
-code size: 317
+code size: 313

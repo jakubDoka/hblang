@@ -18,4 +18,4 @@ Foo(F = uint).Bar(B = u8).init:
        li64 $1, 1
          cp $2, $1
        jala $0, $31, 0
-code size: 145
+code size: 125

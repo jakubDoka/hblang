@@ -31,4 +31,4 @@ take:
      addi64 $2, $2, 1
          st $2, $1, 0, 8
        jala $0, $31, 0
-code size: 296
+code size: 284

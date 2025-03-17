@@ -17,4 +17,4 @@ dec:
 hex:
        li64 $1, 45
        jala $0, $31, 0
-code size: 150
+code size: 138

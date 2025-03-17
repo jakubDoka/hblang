@@ -56,4 +56,4 @@ main:
          cp $7, $4
          cp $4, $9
         jmp :3
-code size: 552
+code size: 548

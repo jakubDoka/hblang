@@ -54,4 +54,4 @@ Ty.sum:
 odher_pass:
         bmc $2, $1, 24
        jala $0, $31, 0
-code size: 490
+code size: 470

@@ -5,4 +5,4 @@ main:
          ld $2, $2, 0, 8
       sub64 $1, $1, $2
          tx
-code size: 65
+code size: 61

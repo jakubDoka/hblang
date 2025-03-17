@@ -17,4 +17,4 @@ modify:
        li64 $2, 2
          st $2, $1, 0, 8
        jala $0, $31, 0
-code size: 183
+code size: 175

@@ -8,4 +8,4 @@ main:
     andi $1, $1, 65535
   addi64 $254, $254, 2
       tx
-code size: 98
+code size: 94

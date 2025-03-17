@@ -26,4 +26,4 @@ fib:
 2:   addi64 $254, $254, 24
          ld $31, $254, -24, 24
        jala $0, $31, 0
-code size: 218
+code size: 210
