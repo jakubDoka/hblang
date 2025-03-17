@@ -24,3 +24,4 @@ NameMap(Enum = Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get:
       add64 $1, $1, $2
       sub64 $2, $3, $2
        jala $0, $31, 0
+code size: 259

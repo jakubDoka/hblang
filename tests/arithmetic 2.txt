@@ -10,3 +10,4 @@ main:
    sxt32 $1, $1
    add64 $1, $2, $1
       tx
+code size: 65

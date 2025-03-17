@@ -10,3 +10,4 @@ match 3 (errors):14:2: the matched type has non zero possible values, therefore 
 match 3 (errors):17:2: not all branches are covered: `.a`
     $match enum{.a; .b}.a {
     ^
+code size: 0

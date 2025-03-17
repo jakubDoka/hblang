@@ -22,3 +22,4 @@ functions 3 (errors):16:2: expected uint got void
 functions 3 (errors):15:46: function is missing a return value since uint has more then 1 possible value
 some_fn := fn(a: uint, b: void, c: u8): uint {
                                              ^
+code size: 0

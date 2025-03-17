@@ -18,3 +18,4 @@ add:
 add:
      addi64 $1, $1, 1
        jala $0, $31, 0
+code size: 160

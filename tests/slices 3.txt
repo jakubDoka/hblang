@@ -55,3 +55,4 @@ reverse:
          st $7, $1, 0, 1
          cp $1, $6
         jmp :4
+code size: 501

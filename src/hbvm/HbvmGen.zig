@@ -43,7 +43,7 @@ const GlobalData = struct {
     name: []const u8,
     ptr: ?[*]const u8 = null,
     size: u32,
-    offset: u32 = 0,
+    offset: u32 = std.math.maxInt(u32),
 };
 
 const FuncData = struct {
@@ -274,7 +274,7 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
 }
 
 pub fn finalize(self: *HbvmGen) std.ArrayListUnmanaged(u8) {
-    const code_size = self.link(0, false);
+    const code_size = self.link(0, false, true);
     if (self.emit_header) {
         @memcpy(self.out.items[0..@sizeOf(ExecHeader)], std.mem.asBytes(&ExecHeader{
             .code_length = code_size - @sizeOf(ExecHeader),
@@ -300,7 +300,7 @@ pub fn makeSymMap(self: *HbvmGen, offset: u32, arena: std.mem.Allocator) std.Aut
 }
 
 pub fn disasm(self: *HbvmGen, out: std.io.AnyWriter, colors: std.io.tty.Config) void {
-    const code_len = self.link(0, false);
+    const code_len = self.link(0, false, true);
 
     var arena = std.heap.ArenaAllocator.init(self.gpa);
     defer arena.deinit();
@@ -330,8 +330,17 @@ pub fn doReloc(self: *HbvmGen, rel: Reloc, dest: i64) void {
     @memcpy(self.out.items[location..][0..size], @as(*const [8]u8, @ptrCast(&jump))[0..size]);
 }
 
-pub fn link(self: *HbvmGen, reloc_until: usize, push_uninit_memory: bool) usize {
+pub fn link(self: *HbvmGen, reloc_until: usize, push_uninit_memory: bool, eliminate: bool) usize {
+    //const eliminate = false;
+    std.debug.assert(reloc_until == 0 or !eliminate);
+    if (eliminate) for (self.global_relocs.items[reloc_until..]) |r| {
+        if (r.kind == .global) {
+            self.globals.items[self.global_lookup.items[r.dest]].offset = 0;
+        }
+    };
+
     for (self.globals.items[self.globals_appended..]) |*ig| {
+        if (eliminate and ig.offset == std.math.maxInt(u32)) continue;
         const value = ig.ptr orelse continue;
         ig.offset = @intCast(self.out.items.len);
         self.out.appendSlice(self.gpa, value[0..ig.size]) catch unreachable;
@@ -339,6 +348,7 @@ pub fn link(self: *HbvmGen, reloc_until: usize, push_uninit_memory: bool) usize 
 
     var cursor = self.out.items.len;
     for (self.globals.items[self.globals_appended..]) |*ug| {
+        if (eliminate and ug.offset == std.math.maxInt(u32)) continue;
         if (ug.ptr != null) continue;
         ug.offset = @intCast(cursor);
         cursor += ug.size;
@@ -357,7 +367,9 @@ pub fn link(self: *HbvmGen, reloc_until: usize, push_uninit_memory: bool) usize 
     self.globals_appended = self.globals.items.len;
 
     var data_size: usize = 0;
-    for (self.globals.items[0..self.globals_appended]) |g| if (push_uninit_memory or g.ptr != null) {
+    for (self.globals.items[0..self.globals_appended]) |g| if ((push_uninit_memory or g.ptr != null) and
+        (g.offset != std.math.maxInt(u32)))
+    {
         data_size += g.size;
     };
 

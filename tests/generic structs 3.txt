@@ -14,3 +14,4 @@ Foo(F = uint).sub:
        jala $0, $31, 0
 Foo(F = Foo(F = uint)).sub:
        jala $0, $31, 0
+code size: 120

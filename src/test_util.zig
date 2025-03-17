@@ -193,10 +193,12 @@ pub fn testBuilder(
     defer out.deinit(gpa);
     if (!errored) {
         if (verbose) try header("CODEGEN", output, colors);
-        code_len = hbgen.link(0, true);
+        code_len = hbgen.link(0, true, true);
         gen.disasm(output, colors);
         out = gen.finalize();
     }
+
+    try output.print("code size: {}\n", .{out.items.len});
 
     try runVm(
         &ast,

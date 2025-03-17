@@ -5,3 +5,4 @@ main:
          tx
 0:   addi64 $1, $1, 1
         jmp :1
+code size: 46

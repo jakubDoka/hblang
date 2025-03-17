@@ -10,3 +10,4 @@ main:
          tx
 foo(oo = u8):
        jala $0, $31, 0
+code size: 91

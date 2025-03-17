@@ -28,3 +28,4 @@ main:
    add64 $1, $1, $2
   addi64 $254, $254, 32
       tx
+code size: 268

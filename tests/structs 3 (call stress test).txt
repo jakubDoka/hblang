@@ -49,3 +49,4 @@ return_pair:
         li8 $1, 1
        li64 $2, 5
        jala $0, $31, 0
+code size: 414

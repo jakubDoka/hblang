@@ -4,3 +4,4 @@ functions 4 (returning stack):20:2: stack location escapes the function
 functions 4 (returning stack):13:2: stack location escapes the function
     a := 0
     ^
+code size: 0

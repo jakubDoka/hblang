@@ -4,3 +4,4 @@ main:
   addi64 $1, $1, 2
   addi64 $1, $1, 3
       tx
+code size: 48

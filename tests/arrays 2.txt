@@ -33,3 +33,4 @@ main:
          st $8, $9, 0, 8
          cp $8, $10
         jmp :5
+code size: 242

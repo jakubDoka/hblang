@@ -2,3 +2,4 @@ main:
     li64 $1, 4
   addi64 $1, $1, 3
       tx
+code size: 33

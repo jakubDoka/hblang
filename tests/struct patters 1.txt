@@ -20,3 +20,4 @@ bar:
 foo:
        li64 $1, 0
        jala $0, $31, 0
+code size: 179

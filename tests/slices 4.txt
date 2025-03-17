@@ -70,3 +70,4 @@ a:    add64 $7, $1, $6
 9:     jala $0, $31, 0
 b:   addi64 $6, $6, 1
         jmp :c
+code size: 546

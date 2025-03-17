@@ -2,3 +2,4 @@ main:
         lra $1, $0, :d
          ld $1, $1, 0, 8
          tx
+code size: 33

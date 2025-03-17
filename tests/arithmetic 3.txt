@@ -206,3 +206,4 @@ one:
        jala $0, $31, 0
 cond:
        jala $0, $31, 0
+code size: 1361

@@ -19,3 +19,4 @@ fib:
      addi64 $1, $1, -1
         swa $3, $4
         jmp :2
+code size: 145

@@ -30,3 +30,4 @@ swap:
         bmc $3, $2, 24
      addi64 $254, $254, 24
        jala $0, $31, 0
+code size: 300

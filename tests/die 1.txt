@@ -4,3 +4,4 @@ main:
        li64 $1, 1
          tx
 0:       un
+code size: 31

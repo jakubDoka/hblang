@@ -1,3 +1,4 @@
 string errors:6:7: unknown escape sequence
     _ = "\ඞ"
          ^
+code size: 0

@@ -399,7 +399,7 @@ pub fn compileDependencies(self: *Codegen, reloc_util: usize) !void {
         },
     };
 
-    _ = self.types.ct.comptime_code.link(reloc_util, true);
+    _ = self.types.ct.comptime_code.link(reloc_util, true, false);
 }
 
 pub fn evalTy(self: *Comptime, name: []const u8, scope: Codegen.Scope, ty_expr: Ast.Id) !Types.Id {

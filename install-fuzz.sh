@@ -50,5 +50,3 @@ fi
 
 
 ssh -p $SSH_ARGS "export IN_SCRIPT=true; export DURATION=$DURATION; $(cat $0)"
-
-scp -P $SSH_ARGS:/root/hblang/zig-out/arch.gz zig-out/

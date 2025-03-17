@@ -8,3 +8,4 @@ main:
          tx
 foo:
        jala $0, $31, 0
+code size: 85

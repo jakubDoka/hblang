@@ -10,3 +10,4 @@ main:
          tx
 A.apply(func = main):
        jala $0, $31, 0
+code size: 103

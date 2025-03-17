@@ -4,3 +4,4 @@ loops 5 (comptime|error):9:2: reached second $loop control, this means control f
 loops 5 (comptime|error):9:24: ...previous one reached here
     $loop if i == arr.len break else {
                           ^
+code size: 0

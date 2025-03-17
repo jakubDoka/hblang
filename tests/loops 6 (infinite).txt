@@ -4,3 +4,4 @@ main:
 1:      jmp :1
 0:     li64 $1, 0
          tx
+code size: 35

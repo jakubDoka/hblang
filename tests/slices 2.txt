@@ -50,3 +50,4 @@ main:
          cp $6, $4
          cp $4, $7
         jmp :3
+code size: 457

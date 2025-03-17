@@ -11,3 +11,4 @@ page_size:
        jala $0, $31, 0
 Target.current:
        jala $0, $31, 0
+code size: 115
