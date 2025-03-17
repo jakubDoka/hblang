@@ -25,9 +25,12 @@ diagnostics: std.io.AnyWriter,
 list_pos: Ast.Pos = undefined,
 deferring: bool = false,
 errored: bool = false,
+stack_base: usize,
+
+const stack_limit = 1024 * (512 + 256);
 
 const Parser = @This();
-const Error = error{UnexpectedToken} || std.mem.Allocator.Error;
+const Error = error{ UnexpectedToken, StackOverflow } || std.mem.Allocator.Error;
 
 const Sym = struct {
     id: Ident,
@@ -286,7 +289,18 @@ fn parseCtorField(self: *Parser) Error!Ast.CtorField {
     };
 }
 
+fn checkStack(self: *Parser) !void {
+    const distance = @abs(@as(isize, @bitCast(@frameAddress() -% self.stack_base)));
+    if (distance > stack_limit) {
+        self.report(self.cur.pos, "the tree is too deep", .{});
+        return error.StackOverflow;
+    }
+    //std.debug.print("{}\n", .{distance});
+}
+
 fn parseUnitWithoutTail(self: *Parser) Error!Id {
+    try self.checkStack();
+
     var token = self.advance();
     const scope_frame = self.active_syms.items.len;
     return try self.store.allocDyn(self.arena.allocator(), switch (token.kind.expand()) {

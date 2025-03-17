@@ -259,6 +259,7 @@ pub const Id = enum(IdRepr) {
     }
 
     pub fn size(self: Id, types: *Types) u64 {
+        // TODO: what about uninhabited types?
         return switch (self.data()) {
             .Builtin => |b| switch (b) {
                 .never, .any => 0,
@@ -278,7 +279,7 @@ pub const Id = enum(IdRepr) {
             .Tuple => |t| {
                 var total_size: u64 = 0;
                 var alignm: u64 = 1;
-                for (types.store.get(t).fields) |f| {
+                for (t.getFields(types)) |f| {
                     alignm = @max(alignm, f.ty.alignment(types));
                     total_size = std.mem.alignForward(u64, total_size, f.ty.alignment(types));
                     total_size += f.ty.size(types);

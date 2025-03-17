@@ -51,5 +51,4 @@ fi
 
 ssh -p $SSH_ARGS "export IN_SCRIPT=true; export DURATION=$DURATION; $(cat $0)"
 
-sleep $(($DURATION + 3))
-scp -P $SSH_ARGS:/root/hblang/zig-out/fuzz_finding_tests.zig ./src/fuzz_finding_tests.zig
+scp -P $SSH_ARGS:/root/hblang/zig-out/arch.gz zig-out/

@@ -90,7 +90,9 @@ pub fn build(b: *std.Build) !void {
         });
 
         test_run.root_module.addAnonymousImport("utils", .{ .root_source_file = b.path("src/tests.zig") });
-        test_step.dependOn(&b.addRunArtifact(test_run).step);
+        const run = b.addRunArtifact(test_run);
+        run.has_side_effects = true;
+        test_step.dependOn(&run.step);
 
         break :example_tests;
     }
@@ -107,7 +109,9 @@ pub fn build(b: *std.Build) !void {
         });
 
         test_run.root_module.addAnonymousImport("utils", .{ .root_source_file = b.path("src/tests.zig") });
-        test_step.dependOn(&b.addRunArtifact(test_run).step);
+        const run = b.addRunArtifact(test_run);
+        run.has_side_effects = true;
+        test_step.dependOn(&run.step);
 
         break :example_tests;
     }
@@ -180,6 +184,7 @@ pub fn build(b: *std.Build) !void {
         });
 
         const run_gen_finding_tests = b.addRunArtifact(gen_finding_tests);
+        run_gen_finding_tests.has_side_effects = true;
         run_gen_finding_tests.addDirectoryArg(out_dir);
         run_gen_finding_tests.addArg("enabled");
         const fuzz_out = run_gen_finding_tests.addOutputFileArg("fuzz_finding_tests.zig");

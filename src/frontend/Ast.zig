@@ -227,6 +227,7 @@ pub fn init(
     var lexer = Lexer.init(opts.code, 0);
 
     var parser = Parser{
+        .stack_base = @frameAddress(),
         .arena = arena,
         .path = opts.path,
         .current = opts.current,
@@ -239,7 +240,10 @@ pub fn init(
     const source_to_ast_ratio = 5;
     try parser.store.store.ensureTotalCapacity(arena.allocator(), opts.code.len * source_to_ast_ratio);
 
-    const items = try parser.parse();
+    const items: Slice = parser.parse() catch |err| switch (err) {
+        error.UnexpectedToken, error.StackOverflow => .{},
+        error.OutOfMemory => return err,
+    };
 
     if (parser.errored and !opts.ignore_errors) {
         return error.ParsingFailed;

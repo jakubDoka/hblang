@@ -150,21 +150,22 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
     const colors = func.arena.allocator().alloc(u16, func.instr_count) catch unreachable;
     @memset(colors, sentinel);
 
+    var selection_set = Set.initEmpty(tmp.arena.allocator(), func.instr_count + 64) catch unreachable;
     for (interference_table, colors, instrs, 0..) |it_row, *color, instr, i| {
-        const set = u256;
+        @memset(Block.setMasks(selection_set), 0);
 
-        var selection_set: set = 0;
         var iter = it_row.iterator(.{});
         while (iter.next()) |e| if (i != e) {
-            if (colors[e] != sentinel) selection_set |= @as(set, 1) << @intCast(colors[e]);
-            selection_set |= instrs[e].def.clobbers();
+            if (colors[e] != sentinel) selection_set.set(colors[e]);
+            Block.setMasks(selection_set)[0] |= instrs[e].def.clobbers();
         };
 
         const bias = instr.def.regBias();
-        if (bias != null and selection_set & (@as(set, 1) << @intCast(bias.?)) == 0) {
+        if (bias != null and !selection_set.isSet(bias.?)) {
             color.* = bias.?;
         } else {
-            color.* = @ctz(~selection_set);
+            var it = selection_set.iterator(.{ .kind = .unset });
+            color.* = @intCast(it.next().?);
         }
     }
 
