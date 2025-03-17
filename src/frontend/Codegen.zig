@@ -1350,8 +1350,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             const prefix = 3;
             const args = self.bl.allocCallArgs(tmp.arena, prefix + e.captures.len() * 2, 1);
-            @memset(args.params, .int);
-            @memset(args.returns, .int);
+            @memset(args.params, self.abiCata(.type).ByValue);
+            args.params[0] = .int;
+            args.params[2] = .int;
+            args.returns[0] = self.abiCata(.type).ByValue;
 
             args.arg_slots[0] = self.bl.addIntImm(.int, @intFromEnum(@field(Comptime.InteruptCode, @tagName(t))));
             args.arg_slots[1] = self.emitTyConst(self.parent_scope.perm()).id.Value;
@@ -1634,7 +1636,7 @@ pub fn emitTyped(self: *Codegen, ctx: Ctx, ty: Types.Id, expr: Ast.Id) !Value {
 }
 
 pub fn emitTyConst(self: *Codegen, ty: Types.Id) Value {
-    return .mkv(.type, self.bl.addIntImm(.int, @intCast(@as(isize, @intFromEnum(ty)))));
+    return .mkv(.type, self.bl.addIntImm(self.abiCata(.type).ByValue, @intCast(@as(isize, @intFromEnum(ty)))));
 }
 
 pub fn unwrapTyConst(self: *Codegen, pos: anytype, cnst: *Value) !Types.Id {
@@ -1691,7 +1693,7 @@ pub fn resolveGlobal(self: *Codegen, name: []const u8, bsty: Types.Id, ast: *con
     const global = self.types.store.get(global_id).*;
     if (path.len != 0) {
         if (global.ty != .type) return self.report(vari.value, "expected a global holding a type, {} is not", .{global.ty});
-        var cur: Types.Id = @enumFromInt(@as(u64, @bitCast(global.data[0..8].*)));
+        var cur: Types.Id = @enumFromInt(@as(Types.IdRepr, @bitCast(global.data[0..@sizeOf(Types.Id)].*)));
         for (path) |ps| {
             var vl = try self.lookupScopeItem(ps, cur, ast.tokenSrc(ps.index));
             cur = try self.unwrapTyConst(ps, &vl);
