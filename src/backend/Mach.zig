@@ -87,9 +87,9 @@ pub const EmitOptions = struct {
     entry: bool = false,
     optimizations: struct {
         verbose: bool = false,
-        dead_code_fuel: usize = 1000,
+        dead_code_fuel: usize = 10000,
         mem2reg: bool = true,
-        peephole_fuel: usize = 1000,
+        peephole_fuel: usize = 10000,
         do_gcm: bool = true,
         arena: ?*root.Arena = null,
         error_buf: ?*std.ArrayListUnmanaged(static_anal.Error) = null,

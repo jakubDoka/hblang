@@ -179,12 +179,14 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         if (bb.base.kind == .CallEnd) break false;
     } else true;
 
-    const reg_shift: u8 = 1; //if (is_tail) 12 else 32;
+    const reg_shift: u8 = 1;
     for (self.allocs) |*r| r.* += reg_shift;
-    const used_registers = if (self.allocs.len == 0) 0 else @min(std.mem.max(u16, self.allocs), max_alloc_regs) -| 31;
+    const max_reg = std.mem.max(u16, self.allocs);
+    const used_registers = if (self.allocs.len == 0) 0 else @min(max_reg, max_alloc_regs) -|
+        (@intFromEnum(isa.Reg.ret_addr) - @intFromBool(is_tail));
 
     const used_reg_size = @as(u16, (used_registers + @intFromBool(!is_tail))) * 8;
-    const spill_count = (std.mem.max(u16, self.allocs) -| max_alloc_regs) * 8;
+    const spill_count = (max_reg -| max_alloc_regs) * 8;
 
     var local_size: i64 = 0;
     if (func.root.outputs().len > 1) {

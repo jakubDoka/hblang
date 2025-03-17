@@ -651,7 +651,7 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             pub fn kill(self: *Node) void {
-                if (self.output_len != 0) utils.panic("{s}\n", .{self.outputs()});
+                if (self.output_len != 0) utils.panic("{any} {}\n", .{ self.outputs(), self });
                 std.debug.assert(self.output_len == 0);
                 for (self.inputs()) |oi| if (oi) |i| {
                     i.removeUse(self);
@@ -961,23 +961,38 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         pub fn subsumeNoKill(self: *Self, this: *Node, target: *Node) void {
+            std.debug.assert(this != target);
+            //std.debug.print("{} {} {any}\n", .{ target, this, target.outputs() });
+
             for (self.arena.allocator().dupe(*Node, target.outputs()) catch unreachable) |use| {
                 if (use.id == std.math.maxInt(u16)) continue;
                 const index = std.mem.indexOfScalar(?*Node, use.inputs(), target) orelse {
                     utils.panic("{} {any} {}", .{ this, target.outputs(), use });
                 };
 
-                _ = self.setInput(use, index, this);
+                if (use == target) {
+                    target.inputs()[index] = null;
+                    target.removeUse(target);
+                } else {
+                    _ = self.setInput(use, index, this);
+                }
             }
 
-            var iter = self.interner.iterator();
-            while (iter.next()) |e| std.debug.assert(e.key_ptr.node.id != std.math.maxInt(u16));
+            if (@import("builtin").mode == .Debug) {
+                var iter = self.interner.iterator();
+                while (iter.next()) |e| std.debug.assert(e.key_ptr.node.id != std.math.maxInt(u16));
+            }
+
+            //if (target.outputs().len != 0)
+            //    utils.panic("-- {any}\n", .{target.outputs()})
+            //else
+            //    std.debug.print("--\n", .{});
         }
 
         pub fn subsume(self: *Self, this: *Node, target: *Node) void {
             if (this.sloc == Sloc.none) this.sloc = target.sloc;
-            self.subsumeNoKill(this, target);
             self.uninternNode(target);
+            self.subsumeNoKill(this, target);
             target.kill();
         }
 

@@ -408,6 +408,7 @@ pub fn EntStore(comptime M: type) type {
             } });
         };
         const store_fields = std.meta.fields(Store);
+        const data_fields = std.meta.fields(Data);
         const Self = @This();
 
         pub inline fn isValid(self: *Self, comptime kind: Tag, idx: usize) bool {
@@ -435,19 +436,25 @@ pub fn EntStore(comptime M: type) type {
             return &@field(self.rpr, fieldName(@TypeOf(id).Data).name).items[@intFromEnum(id)];
         }
 
-        pub inline fn unwrap(self: *Self, id: Data, comptime kind: Tag) ?*if (@hasDecl(std.meta.TagPayload(Data, kind), "identity"))
-            std.meta.TagPayload(Data, kind)
+        pub fn TagPayload(comptime kind: Tag) type {
+            return data_fields[@intFromEnum(kind)].type;
+        }
+
+        pub inline fn unwrap(self: *Self, id: Data, comptime kind: Tag) ?*if (@hasDecl(TagPayload(kind), "identity"))
+            TagPayload(kind)
         else
-            std.meta.TagPayload(Data, kind).Data {
+            TagPayload(kind).Data {
             if (id != kind) return null;
             const i = @field(id, @tagName(kind));
-            if (@hasDecl(std.meta.TagPayload(Data, kind), "identity")) return i;
+            if (@hasDecl(TagPayload(kind), "identity")) return i;
             return &@field(self.rpr, @tagName(kind)).items[@intFromEnum(i)];
         }
     };
 }
 
 pub fn EntId(comptime D: type) type {
+    if (@hasDecl(D, "Id")) return D.Id;
+
     return enum(u32) {
         _,
         pub const Data = D;

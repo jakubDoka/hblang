@@ -9,7 +9,6 @@ if [[ -n "$IN_SCRIPT" ]]; then
 	if ! command -v zig >/dev/null 2>&1; then
 		wget https://ziglang.org/download/0.14.0/zig-linux-x86_64-0.14.0.tar.xz
 		tar -xf zig-linux-x86_64-0.14.0.tar.xz
-
 		ln -s /root/zig-linux-x86_64-0.14.0/zig /usr/bin/
 	fi
 
@@ -43,8 +42,8 @@ if [[ -n "$IN_SCRIPT" ]]; then
 
 	systemctl daemon-reload
 	systemctl enable $SERVICE_NAME
-	systemctl stop $SERVICE_NAME 
-	systemctl start $SERVICE_NAME
+	systemctl stop   $SERVICE_NAME 
+	systemctl start  $SERVICE_NAME
 
 	exit
 fi

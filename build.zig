@@ -80,7 +80,7 @@ pub fn build(b: *std.Build) !void {
         const out = run_gen.addOutputFileArg("tests.zig");
 
         const test_run = b.addTest(.{
-            .name = "vendored_tests",
+            .name = "example_tests",
             .root_source_file = out,
             .target = b.graph.host,
             .optimize = optimize,
@@ -184,10 +184,6 @@ pub fn build(b: *std.Build) !void {
         run_gen_finding_tests.addArg("enabled");
         const fuzz_out = run_gen_finding_tests.addOutputFileArg("fuzz_finding_tests.zig");
 
-        const cleanup = b.addSystemCommand(&.{ "killall", "afl-fuzz" });
-        if (fuzzes != 1) run_gen_finding_tests.step.dependOn(&cleanup.step);
-        run_gen_finding_tests.has_side_effects = true;
-
         for (0..fuzzes) |i| {
             const run_afl = b.addSystemCommand(&.{"afl-fuzz"});
 
@@ -208,8 +204,6 @@ pub fn build(b: *std.Build) !void {
             if (i != 0) _ = run_afl.captureStdOut();
 
             run_gen_finding_tests.step.dependOn(&run_afl.step);
-
-            if (i == 0 and fuzzes != 1) cleanup.step.dependOn(&run_afl.step);
         }
 
         const fuzz_step = b.step("fuzz", "run the fuzzer");

@@ -91,21 +91,6 @@ pub const TypeCtx = struct {
 pub const File = enum(u16) { root, _ };
 
 pub const IdRepr = u32;
-pub const IdTagRepr = u4;
-pub const IfPayloadRepr = u28;
-
-pub const ids = enum {
-    pub const Ptr = enum(IdRepr) { _ };
-    pub const Slice = enum(IdRepr) { _ };
-    pub const Nullable = enum(IdRepr) { _ };
-    pub const Tuple = enum(IdRepr) { _ };
-    pub const Enum = enum(IdRepr) { _ };
-    pub const Union = enum(IdRepr) { _ };
-    pub const Struct = enum(IdRepr) { _ };
-    pub const Template = enum(IdRepr) { _ };
-    pub const Func = enum(IdRepr) { _ };
-    pub const Global = enum(IdRepr) { _ };
-};
 
 pub const Data = utils.EntStore(root.frontend.types).Data;
 
@@ -173,7 +158,7 @@ pub const Id = enum(IdRepr) {
     }
 
     pub fn needsTag(self: Id, types: *Types) bool {
-        return self.data() == .Nullable and !types.store.get(self.data().Nullable).isCompact(types);
+        return self.data() == .Nullable and !self.data().Nullable.isCompact(types);
     }
 
     pub fn firstType(self: Id, types: *Types) Id {
@@ -258,7 +243,7 @@ pub const Id = enum(IdRepr) {
 
     pub fn len(self: Id, types: *Types) ?usize {
         return switch (self.data()) {
-            inline .Struct, .Union, .Enum => |s| @TypeOf(s).Data.getFields(s, types).len,
+            inline .Struct, .Union, .Enum => |s| s.getFields(types).len,
             .Slice => |s| types.store.get(s).len,
             else => null,
         };
@@ -285,7 +270,7 @@ pub const Id = enum(IdRepr) {
             },
             .Pointer => 8,
             .Enum => |e| {
-                const var_count = @TypeOf(e).Data.getFields(e, types).len;
+                const var_count = e.getFields(types).len;
                 if (var_count <= 1) return 0;
                 return std.math.ceilPowerOfTwo(u64, std.mem.alignForward(u64, std.math.log2_int(u64, var_count), 8) / 8) catch unreachable;
             },
@@ -303,16 +288,16 @@ pub const Id = enum(IdRepr) {
             .Union => |u| {
                 var max_size: u64 = 0;
                 var alignm: u64 = 1;
-                for (@TypeOf(u).Data.getFields(u, types)) |f| {
+                for (u.getFields(types)) |f| {
                     alignm = @max(alignm, f.ty.alignment(types));
                     max_size = @max(max_size, f.ty.size(types));
                 }
                 max_size = std.mem.alignForward(u64, max_size, alignm);
                 return max_size;
             },
-            .Struct => |s| @TypeOf(s).Data.getSize(s, types),
+            .Struct => |s| s.getSize(types),
             .Slice => |s| if (types.store.get(s).len) |l| l * types.store.get(s).elem.size(types) else 16,
-            .Nullable => |n| types.store.get(n).size(types),
+            .Nullable => |n| n.size(types),
             .Global, .Func, .Template => 0,
         };
     }
@@ -322,10 +307,10 @@ pub const Id = enum(IdRepr) {
             .Builtin, .Enum => @max(1, self.size(types)),
             .Pointer => 8,
             .Nullable => |n| types.store.get(n).inner.alignment(types),
-            .Struct => |s| @TypeOf(s).Data.getAlignment(s, types),
+            .Struct => |s| s.getAlignment(types),
             inline .Union, .Tuple => |s| {
                 var alignm: u64 = 1;
-                for (@TypeOf(s).Data.getFields(s, types)) |f| {
+                for (s.getFields(types)) |f| {
                     alignm = @max(alignm, f.ty.alignment(types));
                 }
                 return alignm;
@@ -517,7 +502,7 @@ pub const Abi = enum {
     pub fn categorizeAbleosNullable(id: utils.EntId(tys.Nullable), types: *Types) ?Spec {
         const nullable = types.store.get(id);
         const base_abi = Abi.ableos.categorize(nullable.inner, types) orelse return null;
-        if (nullable.isCompact(types)) return base_abi;
+        if (id.isCompact(types)) return base_abi;
         if (base_abi == .Imaginary) return .{ .ByValue = .i8 };
         if (base_abi == .ByValue) return .{ .ByValuePair = .{
             .types = .{ .i8, base_abi.ByValue },
@@ -538,7 +523,7 @@ pub const Abi = enum {
     }
 
     pub fn categorizeAbleosUnion(id: utils.EntId(tys.Union), types: *Types) ?Spec {
-        const fields = @TypeOf(id).Data.getFields(id, types);
+        const fields = id.getFields(types);
         if (fields.len == 0) return .Imaginary; // TODO: add .Impossible
         const res = Abi.ableos.categorize(fields[0].ty, types) orelse return null;
         for (fields[1..]) |f| {
@@ -551,16 +536,16 @@ pub const Abi = enum {
     pub fn categorizeAbleosRecord(stru: anytype, types: *Types) Spec {
         var res: Spec = .Imaginary;
         var offset: u64 = 0;
-        for (@TypeOf(stru).Data.getFields(stru, types)) |f| {
+        for (stru.getFields(types)) |f| {
             const fspec = Abi.ableos.categorize(f.ty, types) orelse continue;
             if (fspec == .Imaginary) continue;
+            if (fspec == .ByRef) return fspec;
             if (res == .Imaginary) {
                 res = fspec;
                 offset += f.ty.size(types);
                 continue;
             }
 
-            if (fspec == .ByRef) return fspec;
             if (fspec == .ByValuePair) return .ByRef;
             if (res == .ByValuePair) return .ByRef;
             std.debug.assert(res != .ByRef);

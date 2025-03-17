@@ -12,10 +12,10 @@ main:
          ld $31, $254, -24, 24
          tx
 NameMap(Enum = Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get:
-       andi $3, $2, 255
-     addi64 $3, $3, 1
-     addi64 $4, $1, 8
+       andi $2, $2, 255
+     addi64 $3, $2, 1
      muli64 $2, $2, 8
+     addi64 $4, $1, 8
      muli64 $3, $3, 8
       add64 $2, $4, $2
       add64 $3, $4, $3

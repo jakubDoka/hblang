@@ -484,10 +484,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         Filled: Ast.Id,
                     };
 
-                    const fields = @TypeOf(struct_ty).Data.getFields(struct_ty, self.types);
+                    const fields = struct_ty.getFields(self.types);
                     const slots = tmp.arena.alloc(FillSlot, fields.len);
                     {
-                        var iter = @TypeOf(struct_ty).Data.offsetIter(struct_ty, self.types);
+                        var iter = struct_ty.offsetIter(self.types);
                         iter.offset = offset_cursor;
                         for (slots) |*s| {
                             const elem = iter.next().?;
@@ -543,7 +543,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         return self.report(expr, "union constructor must initialize only one field", .{});
                     }
 
-                    const fields = @TypeOf(union_ty).Data.getFields(union_ty, self.types);
+                    const fields = union_ty.getFields(self.types);
 
                     const field_ast = ast.exprs.view(e.fields)[0];
                     const fname = ast.tokenSrc(field_ast.pos.index);
@@ -608,15 +608,15 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             }
             const struct_ty = ty.data().Struct;
 
-            if (e.fields.len() != @TypeOf(struct_ty).Data.getFields(struct_ty, self.types).len) {
+            if (e.fields.len() != struct_ty.getFields(self.types).len) {
                 return self.report(
                     e.pos,
                     "{} has {} fields, but tuple constructor has {} values",
-                    .{ ty, @TypeOf(struct_ty).Data.getFields(struct_ty, self.types).len, e.fields.len() },
+                    .{ ty, struct_ty.getFields(self.types).len, e.fields.len() },
                 );
             }
 
-            var iter = @TypeOf(struct_ty).Data.offsetIter(struct_ty, self.types);
+            var iter = struct_ty.offsetIter(self.types);
             iter.offset = init_offset;
             for (ast.exprs.view(e.fields)) |field| {
                 const elem = iter.next().?;
@@ -947,27 +947,27 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             switch (base.ty.data()) {
                 .Struct => |struct_ty| {
-                    var iter = @TypeOf(struct_ty).Data.offsetIter(struct_ty, self.types);
+                    var iter = struct_ty.offsetIter(self.types);
                     const ftype, const offset = while (iter.next()) |elem| {
                         if (std.mem.eql(u8, fname, elem.field.name)) break .{ elem.field.ty, elem.offset };
                     } else {
                         return self.report(
                             e.field,
                             "no such field on {}, but it has: {s}",
-                            .{ base.ty, listFileds(tmp.arena, @TypeOf(struct_ty).Data.getFields(struct_ty, self.types)) },
+                            .{ base.ty, listFileds(tmp.arena, struct_ty.getFields(self.types)) },
                         );
                     };
 
                     return .mkp(ftype, self.bl.addFieldOffset(base.id.Pointer, @intCast(offset)));
                 },
                 .Union => |union_ty| {
-                    const ftype = for (@TypeOf(union_ty).Data.getFields(union_ty, self.types)) |tf| {
+                    const ftype = for (union_ty.getFields(self.types)) |tf| {
                         if (std.mem.eql(u8, fname, tf.name)) break tf.ty;
                     } else {
                         return self.report(
                             e.field,
                             "no such field on {}, but it has: {s}",
-                            .{ base.ty, listFileds(tmp.arena, @TypeOf(union_ty).Data.getFields(union_ty, self.types)) },
+                            .{ base.ty, listFileds(tmp.arena, union_ty.getFields(self.types)) },
                         );
                     };
 
@@ -1055,7 +1055,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 inline .Struct, .Tuple => |struct_ty| {
                     const idx = try self.partialEval(e.subscript, idx_value.getValue(self));
 
-                    var iter = @TypeOf(struct_ty).Data.offsetIter(struct_ty, self.types);
+                    var iter = struct_ty.offsetIter(self.types);
 
                     if (idx >= iter.fields.len) {
                         return self.report(e.subscript, "struct has only {} fields, but idnex is {}", .{ iter.fields.len, idx });
@@ -1144,7 +1144,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 return self.report(e.value, "can only match on enums right now, {} is not", .{value.ty});
             };
 
-            const fields = @TypeOf(value.ty.data().Enum).Data.getFields(value.ty.data().Enum, self.types);
+            const fields = value.ty.data().Enum.getFields(self.types);
 
             if (fields.len == 0) return error.Unreachable;
 
@@ -1510,6 +1510,19 @@ pub fn typeCheck(self: *Codegen, expr: anytype, got: *Value, expected: Types.Id)
             ) };
         }
 
+        if (got.ty.data() == .Enum) {
+            const len = got.ty.data().Enum.getFields(self.types).len;
+            if (len <= 1) {
+                got.id = .{ .Value = self.bl.addIntImm(self.abiCata(expected).ByValue, 0) };
+            } else if (got.ty.size(self.types) < expected.size(self.types)) {
+                got.id = .{ .Value = self.bl.addUnOp(
+                    .uext,
+                    self.abiCata(expected).ByValue,
+                    got.getValue(self),
+                ) };
+            }
+        }
+
         got.ty = expected;
     }
 
@@ -1554,7 +1567,7 @@ pub fn lexemeToBinOpLow(self: Lexer.Lexeme, ty: Types.Id) ?graph.BinOp {
 
 fn emitStructFoldOp(self: *Codegen, pos: anytype, ty: utils.EntId(root.frontend.types.Struct), op: Lexer.Lexeme, lhs: *Node, rhs: *Node) !?*Node {
     var fold: ?*Node = null;
-    var iter = @TypeOf(ty).Data.offsetIter(ty, self.types);
+    var iter = ty.offsetIter(self.types);
     while (iter.next()) |elem| {
         const lhs_loc = self.bl.addFieldOffset(lhs, @intCast(elem.offset));
         const rhs_loc = self.bl.addFieldOffset(rhs, @intCast(elem.offset));
@@ -1574,7 +1587,7 @@ fn emitStructFoldOp(self: *Codegen, pos: anytype, ty: utils.EntId(root.frontend.
 }
 
 fn emitStructOp(self: *Codegen, pos: anytype, ty: utils.EntId(root.frontend.types.Struct), op: Lexer.Lexeme, loc: *Node, lhs: *Node, rhs: *Node) !void {
-    var iter = @TypeOf(ty).Data.offsetIter(ty, self.types);
+    var iter = ty.offsetIter(self.types);
     while (iter.next()) |elem| {
         const field_loc = self.bl.addFieldOffset(loc, @intCast(elem.offset));
         const lhs_loc = self.bl.addFieldOffset(lhs, @intCast(elem.offset));
@@ -1602,7 +1615,12 @@ pub fn emitGenericStore(self: *Codegen, loc: *Node, value: *Value) void {
 }
 
 pub fn resolveAnonTy(self: *Codegen, expr: Ast.Id) !Types.Id {
-    return self.types.ct.evalTy("", .{ .Tmp = self }, expr);
+    const prev_name = self.name;
+    defer self.name = prev_name;
+    self.name = "";
+
+    var vl = try self.emitTyped(.{}, .type, expr);
+    return self.unwrapTyConst(expr, &vl);
 }
 
 pub fn resolveTy(self: *Codegen, name: []const u8, expr: Ast.Id) !Types.Id {
@@ -1636,7 +1654,7 @@ pub fn lookupScopeItem(self: *Codegen, pos: Ast.Pos, bsty: Types.Id, name: []con
     };
     const ast = self.types.getFile(other_file);
     if (bsty.data() == .Enum) {
-        const fields = @TypeOf(bsty.data().Enum).Data.getFields(bsty.data().Enum, self.types);
+        const fields = bsty.data().Enum.getFields(self.types);
 
         for (fields, 0..) |f, i| {
             if (std.mem.eql(u8, f.name, name))
@@ -1658,6 +1676,11 @@ pub fn lookupScopeItem(self: *Codegen, pos: Ast.Pos, bsty: Types.Id, name: []con
 
 pub fn resolveGlobal(self: *Codegen, name: []const u8, bsty: Types.Id, ast: *const Ast, decl: Ast.Id, path: []Ast.Pos) EmitError!Value {
     const vari = ast.exprs.getTyped(.Decl, decl).?;
+
+    // NOTE: we do this here particularly because the explicit type can contain a cycle
+    try self.types.ct.addInProgress(vari.value, bsty.file(self.types).?);
+    defer _ = self.types.ct.in_progress.pop().?;
+
     const ty = if (vari.ty.tag() == .Void) null else try self.resolveAnonTy(vari.ty);
 
     const global_ty, const new = self.types.resolveGlobal(bsty, name, vari.value);
@@ -1810,7 +1833,7 @@ pub fn instantiateTemplate(
     caller: ?Value,
     tmp: *utils.Arena,
     expr: Ast.Id,
-    e: std.meta.TagPayload(Ast.Expr, .Call),
+    e: Ast.Store.TagPayload(.Call),
     typ: Types.Id,
 ) !struct { []Value, Types.Id } {
     const tmpl = self.types.store.get(typ.data().Template).*;
@@ -2296,7 +2319,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
                 break :dt std.fmt.allocPrint(self.types.arena.allocator(), "{}", .{ty.fmt(self.types)}) catch unreachable;
             } else switch (value.ty.data()) {
                 .Enum => |enum_ty| dt: {
-                    const fields = @TypeOf(enum_ty).Data.getFields(enum_ty, self.types);
+                    const fields = enum_ty.getFields(self.types);
                     if (fields.len == 1) {
                         break :dt fields[0].name;
                     }
