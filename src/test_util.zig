@@ -229,7 +229,10 @@ pub fn runVm(
     var emulate_ecalls: bool = false;
     var ecalls: []const Ast.Id = &.{};
 
-    if (ast.findDecl(ast.items, "expectations", undefined)) |d| {
+    var stack: [stack_size]u8 = undefined;
+    var tmp = std.heap.FixedBufferAllocator.init(&stack);
+
+    if (ast.findDecl(ast.items, "expectations", tmp.allocator())) |d| {
         const decl = ast.exprs.getTyped(.Decl, d[0]).?.value;
         const ctor = ast.exprs.getTyped(.Ctor, decl).?;
         for (ast.exprs.view(ctor.fields)) |field| {
@@ -268,8 +271,6 @@ pub fn runVm(
     }
 
     const stack_end = stack_size - code.len;
-
-    var stack: [stack_size]u8 = undefined;
 
     @memcpy(stack[stack_end..], code);
 

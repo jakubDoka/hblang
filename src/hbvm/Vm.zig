@@ -266,7 +266,12 @@ inline fn fbinOp(self: *Vm, comptime base: isa.Op, comptime op: isa.Op, ctx: any
         .fcmpgt32 => lhs > rhs,
         .fc32t64 => @as(f64, @floatCast(lhs)),
         .fc64t32 => @as(f32, @floatCast(lhs)),
-        .fti32 => @as(if (Repr == f32) i32 else i64, @intFromFloat(lhs)),
+        .fti32 => b: {
+            const ty = if (Repr == f32) i32 else i64;
+            if (lhs > std.math.maxInt(ty)) return error.FloatToIntOverflow;
+            if (lhs < std.math.minInt(ty)) return error.FloatToIntOverflow;
+            break :b @as(ty, @intFromFloat(lhs));
+        },
         else => |t| @compileError(std.fmt.comptimePrint("unspupported op {any}", .{t})),
     };
     self.writeReg(args.arg0, switch (@TypeOf(res)) {

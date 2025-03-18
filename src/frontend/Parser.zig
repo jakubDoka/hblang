@@ -27,7 +27,7 @@ deferring: bool = false,
 errored: bool = false,
 stack_base: usize,
 
-const stack_limit = 1024 * (512 + 256);
+pub const stack_limit = 1024 * 1024;
 
 const Parser = @This();
 const Error = error{ UnexpectedToken, StackOverflow } || std.mem.Allocator.Error;
@@ -295,7 +295,6 @@ fn checkStack(self: *Parser) !void {
         self.report(self.cur.pos, "the tree is too deep", .{});
         return error.StackOverflow;
     }
-    //std.debug.print("{}\n", .{distance});
 }
 
 fn parseUnitWithoutTail(self: *Parser) Error!Id {
@@ -477,8 +476,14 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind != .loop } },
             .body = try self.parseScopedExpr(),
         } },
-        .@"break" => .{ .Break = .init(token.pos) },
-        .@"continue" => .{ .Continue = .init(token.pos) },
+        .@"break" => b: {
+            if (self.deferring) self.report(token.pos, "can not break from a defer", .{});
+            break :b .{ .Break = .init(token.pos) };
+        },
+        .@"continue" => b: {
+            if (self.deferring) self.report(token.pos, "can not continue from a defer", .{});
+            break :b .{ .Continue = .init(token.pos) };
+        },
         .@"return" => .{ .Return = .{
             .pos = .init(token.pos),
             .value = b: {
@@ -596,6 +601,9 @@ fn parseArg(self: *Parser) Error!Ast.Arg {
     }
     _ = self.declareExpr(bindings, false);
     _ = try self.expectAdvance(.@":");
+
+    const prev = self.comptime_idents.items.len;
+    defer self.comptime_idents.items.len = prev;
     return .{
         .bindings = bindings,
         .ty = try self.parseExpr(),

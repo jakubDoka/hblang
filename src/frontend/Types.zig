@@ -21,6 +21,7 @@ file_scopes: []Id,
 ct: Comptime,
 diagnostics: std.io.AnyWriter,
 files: []const Ast,
+stack_base: usize,
 
 const Types = @This();
 const Map = std.hash_map.HashMapUnmanaged(Id, void, TypeCtx, 70);
@@ -155,6 +156,15 @@ pub const Id = enum(IdRepr) {
         const raw: *const RawData = @ptrCast(&dt);
         const raw_id = Repr{ .flag = @intFromEnum(dt), .data = @intCast(raw.id) };
         return @enumFromInt(@as(IdRepr, @bitCast(raw_id)));
+    }
+
+    pub fn perm(self: Id, types: *Types) Id {
+        switch (self.data()) {
+            .Template => |t| if (types.store.get(t).temporary) return types.store.get(t).key.scope,
+            else => {},
+        }
+
+        return self;
     }
 
     pub fn needsTag(self: Id, types: *Types) bool {
@@ -536,6 +546,18 @@ pub const Abi = enum {
     }
 
     pub fn categorizeAbleosRecord(stru: anytype, types: *Types) Spec {
+        if (@TypeOf(stru) == tys.Struct.Id) {
+            const self = types.store.get(stru);
+            if (self.recursion_lock) {
+                types.report(self.key.file, self.key.ast, "the struct has undecidable alignment (cycle)", .{});
+                return .Imaginary;
+            }
+            self.recursion_lock = true;
+        }
+        defer if (@TypeOf(stru) == tys.Struct.Id) {
+            types.store.get(stru).recursion_lock = false;
+        };
+
         var res: Spec = .Imaginary;
         var offset: u64 = 0;
         for (stru.getFields(types)) |f| {
@@ -571,12 +593,21 @@ pub fn init(gpa: std.mem.Allocator, source: []const Ast, diagnostics: std.io.Any
     const scopes = arena.alloc(Id, source.len);
     @memset(scopes, .void);
     return .{
+        .stack_base = @frameAddress(),
         .files = source,
         .file_scopes = scopes,
         .arena = arena,
         .ct = .init(gpa),
         .diagnostics = diagnostics,
     };
+}
+
+pub fn checkStack(self: *Types, file: File, pos: anytype) !void {
+    const distance = @abs(@as(isize, @bitCast(@frameAddress() -% self.stack_base)));
+    if (distance > root.frontend.Parser.stack_limit) {
+        self.report(file, pos, "the tree is too deep", .{});
+        return error.StackOverflow;
+    }
 }
 
 pub fn deinit(self: *Types) void {

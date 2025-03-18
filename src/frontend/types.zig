@@ -222,6 +222,7 @@ pub const Struct = struct {
     fields: ?[]const Field = null,
     size: ?u64 = null,
     alignment: ?u64 = null,
+    recursion_lock: bool = false,
 
     pub const Field = struct {
         name: []const u8,
@@ -235,26 +236,44 @@ pub const Struct = struct {
         pub const Data = Struct;
 
         pub fn getSize(id: Id, types: *Types) u64 {
-            const self = types.store.get(id);
+            var self = types.store.get(id);
 
             if (self.size) |a| return a;
 
-            if (@hasField(Field, "alignment")) @compileError("");
             const max_alignment = getAlignment(id, types);
 
+            if (self.recursion_lock) {
+                types.report(self.key.file, self.key.ast, "the struct has infinite size", .{});
+                return 0;
+            }
+            self.recursion_lock = true;
+            defer self.recursion_lock = false;
+
+            if (@hasField(Field, "alignment")) @compileError("");
+
             var siz: u64 = 0;
-            for (getFields(id, types)) |f| {
+            for (id.getFields(types)) |f| {
                 siz = std.mem.alignForward(u64, siz, @min(max_alignment, f.ty.alignment(types)));
                 siz += f.ty.size(types);
             }
             siz = std.mem.alignForward(u64, siz, max_alignment);
+
+            self = types.store.get(id);
+            self.size = siz;
             return siz;
         }
 
         pub fn getAlignment(id: Id, types: *Types) u64 {
-            const self = types.store.get(id);
+            var self = types.store.get(id);
 
             if (self.alignment) |a| return a;
+
+            if (self.recursion_lock) {
+                types.report(self.key.file, self.key.ast, "the struct has undecidable alignment (cycle)", .{});
+                return 1;
+            }
+            self.recursion_lock = true;
+            defer self.recursion_lock = false;
 
             const ast = types.getFile(self.key.file);
             const struct_ast = ast.exprs.getTyped(.Struct, self.key.ast).?;
@@ -262,13 +281,22 @@ pub const Struct = struct {
             if (struct_ast.alignment.tag() != .Void) {
                 if (@hasField(Field, "alignment")) @compileError("assert fields <= alignment then base alignment");
                 self.alignment = @bitCast(types.ct.evalIntConst(.{ .Perm = .init(.{ .Struct = id }) }, struct_ast.alignment) catch 1);
-                return self.alignment.?;
+                if (self.alignment == 0 or !std.math.isPowerOfTwo(self.alignment.?)) {
+                    self = types.store.get(id);
+                    types.report(self.key.file, struct_ast.alignment, "the alignment needs to be power of 2, got {}", .{self.alignment.?});
+                    self.alignment = 1;
+                    return 1;
+                }
+                return @max(self.alignment.?, 1);
             }
 
             var alignm: u64 = 1;
-            for (getFields(id, types)) |f| {
+            for (id.getFields(types)) |f| {
                 alignm = @max(alignm, f.ty.alignment(types));
             }
+
+            self = types.store.get(id);
+            self.alignment = alignm;
             return alignm;
         }
 
@@ -337,12 +365,15 @@ pub const Struct = struct {
 
 pub const Template = struct {
     key: Scope,
+    temporary: bool = false,
 };
 
 pub const Func = struct {
     key: Scope,
     args: []TyId,
     ret: TyId,
+    errored: bool = false,
+    recursion_lock: bool = false,
     completion: std.EnumArray(Types.Target, CompileState) = .{ .values = .{ .queued, .queued } },
 
     pub const CompileState = enum { queued, compiled };

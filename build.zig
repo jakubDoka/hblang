@@ -1,22 +1,18 @@
 const std = @import("std");
 
-fn wasmAsset(b: *std.Build, optimize: std.builtin.OptimizeMode, comptime name: []const u8, expeors: []const []const u8) std.Build.LazyPath {
-    const exe = b.addExecutable(.{
-        .name = name,
-        .root_source_file = b.path("src/depell/" ++ name ++ ".zig"),
-        .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding }),
-        .optimize = optimize,
-    });
-
-    exe.entry = .disabled;
-    exe.root_module.export_symbol_names = expeors;
-
-    return exe.getEmittedBin();
-}
-
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    hb: {
+        _ = b.addModule("hb", .{
+            .root_source_file = b.path("src/root.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+
+        break :hb;
+    }
 
     hbc: {
         const exe = b.addExecutable(.{
@@ -204,9 +200,6 @@ pub fn build(b: *std.Build) !void {
             run_afl.addArg("--");
             run_afl.addFileArg(afl_lto_out);
             run_afl.has_side_effects = true;
-
-            _ = run_afl.captureStdErr();
-            if (i != 0) _ = run_afl.captureStdOut();
 
             run_gen_finding_tests.step.dependOn(&run_afl.step);
         }

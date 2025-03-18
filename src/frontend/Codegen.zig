@@ -112,10 +112,10 @@ pub const Scope = union(enum) {
         };
     }
 
-    pub fn perm(self: Scope) Types.Id {
+    pub fn perm(self: Scope, types: *Types) Types.Id {
         return switch (self) {
-            .Perm => |p| p,
-            .Tmp => |t| t.parent_scope.perm(),
+            .Perm => |p| p.perm(types),
+            .Tmp => |t| t.parent_scope.perm(types),
         };
     }
 
@@ -226,6 +226,7 @@ pub fn getEntry(self: *Codegen, file: Types.File, name: []const u8) !utils.EntId
     _ = self.beginBuilder(tmp.arena, .never, 0, 0);
     defer self.bl.func.reset();
     self.parent_scope = .{ .Perm = self.types.getScope(file) };
+    self.struct_ret_ptr = null;
     self.name = "";
 
     var entry_vl = try self.lookupScopeItem(.init(0), self.types.getScope(file), name);
@@ -254,16 +255,29 @@ pub fn beginBuilder(
 }
 
 pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !void {
+    errdefer {
+        self.types.store.get(func_id).errored = true;
+    }
+
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    const func = self.types.store.get(func_id).*;
+    var func = self.types.store.get(func_id);
 
     self.ast = self.types.getFile(func.key.file);
     const param_count, const return_count, const ret_abi = func.computeAbiSize(self.abi, self.types);
     const token, const params, const returns = self.beginBuilder(tmp.arena, func.ret, param_count, return_count);
     self.parent_scope = .init(.{ .Func = func_id });
     self.name = "";
+
+    self.types.checkStack(func.key.file, func.key.ast) catch return error.HasErrors;
+
+    if (func.recursion_lock) {
+        self.report(func.key.ast, "the functions types most likely depend on it being evaluated", .{}) catch {};
+        return error.HasErrors;
+    }
+    func.recursion_lock = true;
+    defer func.recursion_lock = false;
 
     var i: usize = 0;
 
@@ -283,6 +297,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
     for (ast.exprs.view(fn_ast.args)) |aarg| {
         const ident = ast.exprs.getTyped(.Ident, aarg.bindings).?;
         if (ident.pos.flag.@"comptime") continue;
+        func = self.types.store.get(func_id);
         const ty = func.args[ty_idx];
         const abi = self.abiCata(ty);
         abi.types(params[i..]);
@@ -307,12 +322,14 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
     }
 
     var termintes = false;
+    func = self.types.store.get(func_id);
     _ = self.emit(.{}, ast.exprs.getTyped(.Fn, func.key.ast).?.body) catch |err| switch (err) {
         error.Never => {},
         error.Unreachable => termintes = true,
     };
 
     if (!termintes and ret_abi != .Imaginary) {
+        func = self.types.store.get(func_id);
         self.report(fn_ast.body, "function is missing a return value since" ++
             " {} has more then 1 possible value", .{func.ret}) catch {};
     }
@@ -654,7 +671,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 };
 
                 if (slice.len != e.fields.len()) {
-                    return self.report(expr, "expected array with {} element, got {}", .{ slice.len.?, e.fields.len() });
+                    return self.report(expr, "expected array with {?} element, got {}", .{ slice.len, e.fields.len() });
                 }
 
                 break :b .{ slice.elem, ret_ty };
@@ -958,6 +975,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         );
                     };
 
+                    if (ftype == .never) {
+                        return self.report(e.field, "accessing malformed field (the type is 'never')", .{});
+                    }
+
                     return .mkp(ftype, self.bl.addFieldOffset(base.id.Pointer, @intCast(offset)));
                 },
                 .Union => |union_ty| {
@@ -970,6 +991,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                             .{ base.ty, listFileds(tmp.arena, union_ty.getFields(self.types)) },
                         );
                     };
+
+                    if (ftype == .never) {
+                        return self.report(e.field, "accessing malformed field (the type is 'never')", .{});
+                    }
 
                     return .mkp(ftype, self.bl.addFieldOffset(base.id.Pointer, 0));
                 },
@@ -1098,7 +1123,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     error.Unreachable => return err,
                 };
             }
-            self.emitDefers(defer_scope);
+            try self.emitDefers(defer_scope);
 
             return .{};
         },
@@ -1146,7 +1171,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             const fields = value.ty.data().Enum.getFields(self.types);
 
-            if (fields.len == 0) return error.Unreachable;
+            if (fields.len == 0) {
+                self.bl.addTrap(0);
+                return error.Unreachable;
+            }
 
             if (e.arms.len() == 0) return self.report(e.pos, "the matched type has non zero possible values, " ++
                 "therefore empty match statement is invalid", .{});
@@ -1236,7 +1264,9 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
                 var unreachable_count: usize = 0;
                 for (ast.exprs.view(e.arms), 0..) |a, i| {
-                    const idx, const body = try matcher.decomposeArm(self, i, a) orelse continue;
+                    const idx, const body = try matcher.decomposeArm(self, i, a) orelse {
+                        continue;
+                    };
 
                     const vl = self.bl.addUnOp(.sext, .int, value.getValue(self));
                     const cond = self.bl.addBinOp(.eq, .i8, vl, self.bl.addIntImm(.int, @bitCast(idx)));
@@ -1318,7 +1348,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             // we dont use .emitTyped because the ecpression is different
             var value = try self.emit(.{ .loc = self.struct_ret_ptr, .ty = self.ret }, e.value);
             try self.typeCheck(expr, &value, self.ret);
-            self.emitDefers(0);
+            try self.emitDefers(0);
             switch (self.abiCata(value.ty)) {
                 .Imaginary => self.bl.addReturn(&.{}),
                 .ByValue => {
@@ -1356,7 +1386,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             args.returns[0] = self.abiCata(.type).ByValue;
 
             args.arg_slots[0] = self.bl.addIntImm(.int, @intFromEnum(@field(Comptime.InteruptCode, @tagName(t))));
-            args.arg_slots[1] = self.emitTyConst(self.parent_scope.perm()).id.Value;
+            args.arg_slots[1] = self.emitTyConst(self.parent_scope.perm(self.types)).id.Value;
             args.arg_slots[2] = self.bl.addIntImm(.int, @intFromEnum(expr));
 
             for (ast.exprs.view(e.captures), 0..) |id, slot_idx| {
@@ -1401,7 +1431,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             if (e.comptime_args.len() != 0 or has_anytypes) {
                 const slot, const alloc = self.types.intern(.Template, .{
-                    .scope = self.parent_scope.perm(),
+                    .scope = self.parent_scope.perm(self.types),
                     .file = self.parent_scope.file(self.types),
                     .ast = expr,
                     .name = self.name,
@@ -1414,7 +1444,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 return self.emitTyConst(slot.key_ptr.*);
             } else {
                 const slot, const alloc = self.types.intern(.Func, .{
-                    .scope = self.parent_scope.perm(),
+                    .scope = self.parent_scope.perm(self.types),
                     .file = self.parent_scope.file(self.types),
                     .ast = expr,
                     .name = self.name,
@@ -1542,8 +1572,9 @@ pub fn lexemeToBinOp(self: *Codegen, pos: anytype, lx: Lexer.Lexeme, ty: Types.I
 }
 
 pub fn lexemeToBinOpLow(self: Lexer.Lexeme, ty: Types.Id) ?graph.BinOp {
-    const unsigned = ty.isUnsigned();
+    const unsigned = ty.isUnsigned() or ty == .bool or ty.data() == .Pointer or ty.data() == .Enum or ty == .type;
     const float = ty.isFloat();
+    if (!unsigned and !ty.isSigned() and !float) return null;
     return switch (self) {
         .@"+" => if (float) .fadd else .iadd,
         .@"-" => if (float) .fsub else .isub,
@@ -1576,6 +1607,9 @@ fn emitStructFoldOp(self: *Codegen, pos: anytype, ty: utils.EntId(root.frontend.
         const value = if (elem.field.ty.data() == .Struct) b: {
             break :b try self.emitStructFoldOp(pos, elem.field.ty.data().Struct, op, lhs_loc, rhs_loc) orelse continue;
         } else b: {
+            if (self.abiCata(elem.field.ty) != .ByValue) {
+                return self.report(pos, "cant apply the operator on field of {}", .{elem.field.ty});
+            }
             const dt = self.abiCata(elem.field.ty).ByValue;
             const lhs_val = self.bl.addLoad(lhs_loc, dt);
             const rhs_val = self.bl.addLoad(rhs_loc, dt);
@@ -1597,6 +1631,9 @@ fn emitStructOp(self: *Codegen, pos: anytype, ty: utils.EntId(root.frontend.type
         if (elem.field.ty.data() == .Struct) {
             try self.emitStructOp(pos, elem.field.ty.data().Struct, op, field_loc, lhs_loc, rhs_loc);
         } else {
+            if (self.abiCata(elem.field.ty) != .ByValue) {
+                return self.report(pos, "cant apply the operator on field of {}", .{elem.field.ty});
+            }
             const dt = self.abiCata(elem.field.ty).ByValue;
             const lhs_val = self.bl.addLoad(lhs_loc, dt);
             const rhs_val = self.bl.addLoad(rhs_loc, dt);
@@ -1683,6 +1720,14 @@ pub fn resolveGlobal(self: *Codegen, name: []const u8, bsty: Types.Id, ast: *con
     try self.types.ct.addInProgress(vari.value, bsty.file(self.types).?);
     defer _ = self.types.ct.in_progress.pop().?;
 
+    const prev_scope = self.parent_scope;
+    defer {
+        self.parent_scope = prev_scope;
+        self.ast = self.types.getFile(prev_scope.file(self.types));
+    }
+    self.parent_scope = .{ .Perm = bsty };
+    self.ast = self.types.getFile(self.parent_scope.file(self.types));
+
     const ty = if (vari.ty.tag() == .Void) null else try self.resolveAnonTy(vari.ty);
 
     const global_ty, const new = self.types.resolveGlobal(bsty, name, vari.value);
@@ -1730,7 +1775,7 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
 
                     break :b switch (self.abiCata(c.ty)) {
                         .Imaginary => .Imaginary,
-                        .ByValue => |v| .{ .Value = self.bl.addIntImm(v, 0) },
+                        .ByValue => |v| .{ .Value = if (v.isInt()) self.bl.addIntImm(v, 0) else if (v == .f32) self.bl.addFlt32Imm(0) else self.bl.addFlt64Imm(0) },
                         .ByValuePair, .ByRef => .{ .Pointer = self.bl.addLocal(self.sloc(pos), c.ty.size(self.types)) },
                     };
                 } };
@@ -1740,7 +1785,7 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
             return self.report(pos, "ICE: parser did not catch this", .{});
         };
 
-        return self.resolveGlobal(ast.tokenSrc(id.pos()), cursor.perm(), ast, decl, path);
+        return self.resolveGlobal(ast.tokenSrc(id.pos()), cursor.perm(self.types), ast, decl, path);
     }
 }
 
@@ -1781,7 +1826,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
     var computed_args: ?[]Value = null;
     const was_template = typ.data() == .Template;
     if (was_template) {
-        computed_args, typ = try self.instantiateTemplate(caller, tmp.arena, expr, e, typ);
+        computed_args, typ = try self.instantiateTemplate(&caller, tmp.arena, expr, e, typ);
     }
 
     if (typ.data() != .Func) {
@@ -1832,7 +1877,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
 
 pub fn instantiateTemplate(
     self: *Codegen,
-    caller: ?Value,
+    caller: *?Value,
     tmp: *utils.Arena,
     expr: Ast.Id,
     e: Ast.Store.TagPayload(.Call),
@@ -1842,6 +1887,7 @@ pub fn instantiateTemplate(
     const ast = self.ast;
 
     const scope = self.types.store.add(self.types.arena.allocator(), tmpl);
+    self.types.store.get(scope).temporary = true;
     self.types.store.get(scope).key.scope = typ;
     self.types.store.get(scope).key.captures = &.{};
 
@@ -1849,7 +1895,7 @@ pub fn instantiateTemplate(
     const tmpl_ast = tmpl_file.exprs.getTyped(.Fn, tmpl.key.ast).?;
     const comptime_args = tmpl_file.exprs.view(tmpl_ast.comptime_args);
 
-    const passed_args = e.args.len() + @intFromBool(caller != null);
+    const passed_args = e.args.len() + @intFromBool(caller.* != null);
     if (passed_args != tmpl_ast.args.len()) {
         return self.report(expr, "expected {} arguments, got {}", .{ tmpl_ast.args.len(), passed_args });
     }
@@ -1862,12 +1908,14 @@ pub fn instantiateTemplate(
     var arg_idx: usize = 0;
     var arg_expr_idx: usize = 0;
 
-    if (caller) |c| {
+    if (caller.*) |*c| {
         const param = tmpl_file.exprs.view(tmpl_ast.args)[0];
 
         const binding = tmpl_file.exprs.getTyped(.Ident, param.bindings).?;
         if (binding.pos.flag.@"comptime") {
-            unreachable;
+            captures[capture_idx] = .{ .id = comptime_args[capture_idx], .ty = .type, .value = @intFromEnum(try self.unwrapTyConst(expr, c)) };
+            capture_idx += 1;
+            self.types.store.get(scope).key.captures = captures[0..capture_idx];
         } else {
             arg_tys[arg_idx] = try self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = scope }) }, param.ty);
             if (arg_tys[arg_idx] == .any) {
@@ -1971,10 +2019,10 @@ fn assembleReturn(cg: *Codegen, expr: anytype, id: u32, call_args: Builder.CallA
     };
 }
 
-fn emitDefers(self: *Codegen, base: usize) void {
+fn emitDefers(self: *Codegen, base: usize) !void {
     var iter = std.mem.reverseIterator(self.defers.items[base..]);
     while (iter.next()) |e| {
-        _ = self.emitTyped(.{}, .void, e) catch {};
+        _ = try self.emitTyped(.{}, .void, e);
     }
 }
 
@@ -1985,7 +2033,7 @@ fn loopControl(self: *Codegen, kind: Builder.Loop.Control, ctrl: Ast.Id) !void {
     }
 
     const loops = &self.loops.items[self.loops.items.len - 1];
-    self.emitDefers(loops.defer_base);
+    try self.emitDefers(loops.defer_base);
     switch (loops.kind) {
         .Runtime => |*l| l.addControl(&self.bl, kind),
         .Comptime => |*l| {
@@ -2081,13 +2129,21 @@ pub fn emitBranch(self: *Codegen, block: Ast.Id) usize {
     const prev_scope_height = self.scope.items.len;
     defer self.scope.items.len = prev_scope_height;
     defer self.bl.truncateScope(prev_scope_height);
+
+    const prev_defer_height = self.defers.items.len;
+    defer self.defers.items.len = prev_defer_height;
+
     _ = self.emitTyped(.{}, .void, block) catch |err|
         return @intFromBool(err == error.Unreachable);
+
+    self.emitDefers(prev_defer_height) catch |err|
+        return @intFromBool(err == error.Unreachable);
+
     return 0;
 }
 
 fn emitStirng(self: *Codegen, ctx: Ctx, data: []const u8, expr: Ast.Id) Value {
-    const global = self.types.resolveGlobal(self.parent_scope.perm(), data, expr)[0].data().Global;
+    const global = self.types.resolveGlobal(self.parent_scope.perm(self.types), data, expr)[0].data().Global;
     self.types.store.get(global).data = data;
     self.types.store.get(global).ty = self.types.makeSlice(data.len, .u8);
     self.queue(.{ .Global = global });
@@ -2357,6 +2413,10 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
         },
         .is_comptime => return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(self.target == .@"comptime"))),
         .ecall => {
+            if (self.target == .@"comptime") {
+                return self.report(expr, "cant do na ecall during comptime", .{});
+            }
+
             try static.assertArgs(self, expr, args, "<expr>..");
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();

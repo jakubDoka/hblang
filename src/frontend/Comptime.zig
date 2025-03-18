@@ -113,17 +113,29 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
             .CallEnd => {
                 const call: *Node = curr.inputs()[0].?;
                 std.debug.assert(call.kind == .Call);
-                std.debug.assert(call.extra(.Call).ret_count == 1);
+
+                if (call.extra(.Call).ret_count != 1) {
+                    types.report(file, pos, "the function returns something we cant handle", .{});
+                    return .{ .Unsupported = curr };
+                }
 
                 var ret_ty: graph.DataType = .int;
                 if (call.extra(.Call).id != eca) {
                     const func_id: utils.EntId(root.frontend.types.Func) = @enumFromInt(call.extra(.Call).id);
                     const func = types.store.get(func_id);
+
+                    if (func.recursion_lock) {
+                        types.report(func.key.file, func.key.ast, "the functions types most likely depend on it being evaluated", .{});
+                        return .{ .Unsupported = curr };
+                    }
+
                     ret_ty = (abi.categorize(func.ret, types) orelse return .{ .Unsupported = curr }).ByValue;
                     if (func.completion.get(.@"comptime") == .queued) {
                         self.jitFunc(func_id) catch return .{ .Unsupported = curr };
-                        std.debug.assert(types.store.get(func_id).completion.get(.@"comptime") == .compiled);
                     }
+                    if (types.store.get(func_id).errored) return .{ .Unsupported = curr };
+                    std.debug.assert(types.store.get(func_id).completion.get(.@"comptime") == .compiled);
+                    std.debug.assert(self.comptime_code.funcs.items.len > call.extra(.Call).id);
                 }
 
                 var requeued = false;
@@ -139,7 +151,9 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
 
                 if (requeued) continue;
 
-                try types.ct.runVm(file, pos, "", call.extra(.Call).id, &.{});
+                types.ct.runVm(file, pos, "", call.extra(.Call).id, &.{}) catch {
+                    return .{ .Unsupported = curr };
+                };
 
                 const ret = types.ct.vm.regs.get(.ret(0));
                 const ret_vl = bl.addIntImm(ret_ty, @bitCast(ret));
@@ -196,6 +210,8 @@ pub fn runVm(self: *Comptime, file: Types.File, pos: anytype, name: []const u8, 
     const stack_end = self.vm.regs.get(.stack_addr);
 
     self.vm.ip = if (entry_id == eca) stack_size - 2 else self.comptime_code.funcs.items[entry_id].offset;
+    std.debug.assert(self.vm.ip < self.comptime_code.out.items.len);
+
     self.vm.fuel = 1024;
     self.vm.regs.set(.ret_addr, stack_size - 1); // return to hardcoded tx
     if (return_loc.len != 0) self.vm.regs.set(.arg(0), stack_end - return_loc.len);
@@ -210,7 +226,8 @@ pub fn runVm(self: *Comptime, file: Types.File, pos: anytype, name: []const u8, 
     };
 
     while (true) switch (self.vm.run(&vm_ctx) catch |err| {
-        return types.report(file, pos, "comptime execution failed: {s}", .{@errorName(err)});
+        types.report(file, pos, "comptime execution failed: {s}", .{@errorName(err)});
+        return error.Never;
     }) {
         .tx => break,
         .eca => {

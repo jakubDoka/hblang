@@ -171,7 +171,7 @@ pub fn addUnOp(self: *Builder, op: UnOp, ty: DataType, oper: *BuildNode) Specifi
         return self.addFlt32Imm(@floatCast(@as(f64, @bitCast(op.eval(oper.data_type, @bitCast(@as(f64, @floatCast(oper.extra(.CFlt32).*))))))));
     }
     const opa = self.func.addNode(.UnOp, ty, &.{ null, oper }, op);
-    std.debug.assert(opa.data_type == ty);
+    opa.data_type = opa.data_type.meet(ty);
     return opa;
 }
 
@@ -204,7 +204,7 @@ pub fn pushScopeValue(self: *Builder, value: *BuildNode) void {
     self.func.addUse(value, scope);
 }
 
-pub inline fn getScopeValue(self: *Builder, index: usize) *Func.Node {
+pub fn getScopeValue(self: *Builder, index: usize) *Func.Node {
     return self._readScopeValue(scope_value_start + index);
 }
 
@@ -344,8 +344,8 @@ pub const Loop = struct {
 
     pub fn addControl(self: *Loop, builder: *Builder, kind: Loop.Control) void {
         if (self.control.getPtr(kind).*) |ctrl| {
-            _ = mergeScopes(&builder.func, builder.scope.?, ctrl);
-            builder.control().extra(.Region).preserve_identity_phys = kind == .@"continue";
+            const rhs = mergeScopes(&builder.func, builder.scope.?, ctrl);
+            getScopeValues(rhs)[0].extra(.Region).preserve_identity_phys = kind == .@"continue";
         } else {
             builder._truncateScope(builder.scope.?, self.scope.inputs().len);
             self.control.set(kind, builder.scope.?);

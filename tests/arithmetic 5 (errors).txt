@@ -1,4 +1,4 @@
-arithmetic 5 (errors):7:13: expected uint got void
+arithmetic 5 (errors):7:13: the operator not supported for void
     return 1 + v * 10
                ^
 arithmetic 5 (errors):5:20: function is missing a return value since uint has more then 1 possible value

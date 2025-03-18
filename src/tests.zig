@@ -50,13 +50,23 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
         try test_util.checkOrUpdatePrintTest(name, out.items);
 }
 
-pub fn runFuzzFindingTest(name: []const u8, code: []const u8) !void {
+pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
     utils.Arena.initScratch(1024 * 1024 * 10);
     defer utils.Arena.deinitScratch();
 
     const gpa = std.testing.allocator;
 
-    std.debug.print("{s}\n", .{code});
+    var tmp = utils.Arena.scrath(null);
+    const ast = try root.frontend.Ast.init(tmp.arena, .{
+        .path = name,
+        .code = code,
+        .diagnostics = std.io.getStdErr().writer().any(),
+    });
+
+    var buf = std.ArrayList(u8).init(tmp.arena.allocator());
+    try ast.fmt(&buf);
+
+    std.debug.print("{s}\n", .{buf.items});
 
     //errdefer {
     //const stderr = std.io.getStdErr();

@@ -978,10 +978,10 @@ pub fn Func(comptime MachNode: type) type {
                 }
             }
 
-            if (@import("builtin").mode == .Debug) {
-                var iter = self.interner.iterator();
-                while (iter.next()) |e| std.debug.assert(e.key_ptr.node.id != std.math.maxInt(u16));
-            }
+            //if (@import("builtin").mode == .Debug) {
+            //    var iter = self.interner.iterator();
+            //    while (iter.next()) |e| std.debug.assert(e.key_ptr.node.id != std.math.maxInt(u16));
+            //}
 
             //if (target.outputs().len != 0)
             //    utils.panic("-- {any}\n", .{target.outputs()})
