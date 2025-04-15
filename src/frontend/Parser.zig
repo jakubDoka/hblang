@@ -528,8 +528,9 @@ fn finalizeVariables(self: *Parser, start: usize) void {
 }
 
 fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
-    const repr = token.view(self.lexer.source);
-
+    var repr = token.view(self.lexer.source);
+    if (token.kind == @"$ident") repr = repr[1..];
+    
     for (self.active_syms.items, 0..) |*s, i| if (Ast.cmpLow(s.id.pos(), self.lexer.source, repr)) {
         s.used = true;
         if (i < self.capture_boundary and !s.unordered) {
