@@ -277,7 +277,10 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
         return error.HasErrors;
     }
     func.recursion_lock = true;
-    defer func.recursion_lock = false;
+    defer {
+        func = self.types.store.get(func_id);
+        func.recursion_lock = false;
+    }
 
     var i: usize = 0;
 
