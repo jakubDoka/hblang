@@ -1735,7 +1735,10 @@ pub fn resolveGlobal(self: *Codegen, name: []const u8, bsty: Types.Id, ast: *con
 
     const global_ty, const new = self.types.resolveGlobal(bsty, name, vari.value);
     const global_id = global_ty.data().Global;
-    if (new) try self.types.ct.evalGlobal(name, global_id, ty, vari.value);
+    if (new) {
+        errdefer self.errored = true;
+        try self.types.ct.evalGlobal(name, global_id, ty, vari.value);
+    }
     self.queue(.{ .Global = global_id });
 
     const global = self.types.store.get(global_id).*;
