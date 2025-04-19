@@ -4,6 +4,9 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const use_llvm = b.option(bool, "use-llvm", "use llvm, last resort option") orelse (b.graph.host.result.os.tag == .windows);
+    const use_lld = b.option(bool, "use-lld", "use lld, last resort option") orelse (b.graph.host.result.os.tag == .windows);
+
     hb: {
         _ = b.addModule("hb", .{
             .root_source_file = b.path("src/root.zig"),
@@ -35,8 +38,8 @@ pub fn build(b: *std.Build) !void {
             .root_source_file = b.path("scripts/gen_vendored_tests.zig"),
             .target = b.graph.host,
             .optimize = .Debug,
-            .use_llvm = false,
-            .use_lld = false,
+            .use_llvm = use_llvm,
+            .use_lld = use_lld,
         });
 
         const run_gen = b.addRunArtifact(grn);
@@ -51,8 +54,8 @@ pub fn build(b: *std.Build) !void {
             .target = b.graph.host,
             .optimize = optimize,
             .filter = test_filter,
-            .use_llvm = false,
-            .use_lld = false,
+            .use_llvm = use_llvm,
+            .use_lld = use_lld,
         });
 
         test_run.root_module.addAnonymousImport("utils", .{ .root_source_file = b.path("src/tests.zig") });
@@ -67,8 +70,8 @@ pub fn build(b: *std.Build) !void {
             .root_source_file = b.path("scripts/gen_tests.zig"),
             .target = b.graph.host,
             .optimize = .Debug,
-            .use_llvm = false,
-            .use_lld = false,
+            .use_llvm = use_llvm,
+            .use_lld = use_lld,
         });
 
         const run_gen = b.addRunArtifact(gen);
@@ -81,8 +84,8 @@ pub fn build(b: *std.Build) !void {
             .target = b.graph.host,
             .optimize = optimize,
             .filter = test_filter,
-            .use_llvm = false,
-            .use_lld = false,
+            .use_llvm = use_llvm,
+            .use_lld = use_lld,
         });
 
         test_run.root_module.addAnonymousImport("utils", .{ .root_source_file = b.path("src/tests.zig") });
@@ -100,8 +103,8 @@ pub fn build(b: *std.Build) !void {
             .target = b.graph.host,
             .optimize = optimize,
             .filter = test_filter,
-            .use_llvm = false,
-            .use_lld = false,
+            .use_llvm = use_llvm,
+            .use_lld = use_lld,
         });
 
         test_run.root_module.addAnonymousImport("utils", .{ .root_source_file = b.path("src/tests.zig") });
@@ -134,8 +137,8 @@ pub fn build(b: *std.Build) !void {
             .root_source_file = b.path("scripts/gen_fuzz_dict.zig"),
             .target = b.graph.host,
             .optimize = .Debug,
-            .use_llvm = false,
-            .use_lld = false,
+            .use_llvm = use_llvm,
+            .use_lld = use_lld,
         });
 
         dict_gen.root_module.addAnonymousImport("Lexer", .{ .root_source_file = b.path("src/frontend/Lexer.zig") });
@@ -175,8 +178,8 @@ pub fn build(b: *std.Build) !void {
             .root_source_file = b.path("scripts/gen_fuzz_finding_tests.zig"),
             .target = b.graph.host,
             .optimize = .Debug,
-            .use_llvm = false,
-            .use_lld = false,
+            .use_llvm = use_llvm,
+            .use_lld = use_lld,
         });
 
         const run_gen_finding_tests = b.addRunArtifact(gen_finding_tests);

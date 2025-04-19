@@ -35,7 +35,8 @@ pub const CompileOptions = struct {
     }
 
     pub fn loadCli(self: *CompileOptions) !void {
-        var args = std.process.args();
+        var args = try std.process.ArgIterator.initWithAllocator(self.gpa);
+        defer args.deinit();
         _ = args.next();
 
         var i: usize = 0;
@@ -63,6 +64,7 @@ pub const CompileOptions = struct {
                 try self.diagnostics.writeAll("--target takes an argument");
                 return;
             };
+
             if (std.mem.eql(u8, arg, "extra-threads")) {
                 arg = args.next() orelse {
                     try self.diagnostics.writeAll("--extra-threads takes an integer argument");
@@ -73,6 +75,7 @@ pub const CompileOptions = struct {
                     return;
                 };
             }
+
             if (std.mem.eql(u8, arg, "path-projection")) {
                 const msg = "--path-projection takes two argumens: <key> <value>";
                 const key = args.next() orelse {
@@ -96,11 +99,11 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     if (opts.help) {
         const help_str = comptime b: {
             const source = @embedFile("hbc.zig");
-            const start_pat = "// #CLI start\n";
-            const end_pat = "// #CLI end\n";
+            const start_pat = "// #CLI start";
+            const end_pat = "// #CLI end";
             const start = std.mem.indexOf(u8, source, start_pat).? + start_pat.len;
             const end = std.mem.indexOfPos(u8, source, start, end_pat).?;
-            break :b std.mem.trimRight(u8, source[start..end], "\n\t ") ++ "";
+            break :b std.mem.trimRight(u8, source[start..end], "\n\t\r ") ++ "";
         };
 
         try opts.diagnostics.writeAll(help_str);

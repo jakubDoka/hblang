@@ -60,7 +60,9 @@ pub const Arena = struct {
                 std.debug.assert(@intFromPtr(slf.start) < @intFromPtr(slf.pos));
                 return slf.pos;
             }
-            fn free(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize) void {}
+            fn free(_: *anyopaque, mem: []u8, _: std.mem.Alignment, _: usize) void {
+                @memset(mem, undefined);
+            }
             fn remap(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize, _: usize) ?[*]u8 {
                 return null;
             }

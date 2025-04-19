@@ -34,7 +34,7 @@ pub fn main() !void {
                 if (example.kind != .file) continue;
                 if (!std.mem.endsWith(u8, example.name, ".hb")) continue;
 
-                const name = try std.fs.path.join(arena, &.{ vendored_tests, path, example.name });
+                const name = try std.mem.replaceOwned(u8, arena, try std.fs.path.join(arena, &.{ vendored_tests, path, example.name }), "\\", "\\\\");
                 try writer.print(
                     \\test "{s}" {{
                     \\    try utils.runVendoredTest("{s}");

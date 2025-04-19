@@ -494,7 +494,7 @@ main := fn(): uint {
 }
 ```
 
-#### loops 5 (comptime|error)
+#### loops 5 (comptime or error)
 ```hb
 expectations := .{
     should_error: true,
