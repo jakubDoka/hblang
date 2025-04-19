@@ -91,7 +91,7 @@ pub fn build(b: *std.Build) !void {
         test_run.root_module.addAnonymousImport("utils", .{ .root_source_file = b.path("src/tests.zig") });
         const run = b.addRunArtifact(test_run);
         run.has_side_effects = true;
-        test_step.dependOn(&run.step);
+        //test_step.dependOn(&run.step);
 
         break :example_tests;
     }

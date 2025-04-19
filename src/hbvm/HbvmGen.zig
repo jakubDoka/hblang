@@ -623,15 +623,21 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     }) catch unreachable;
                     self.emit(.jal, .{ .ret_addr, .null, 0 });
                 }
+
+                const cend = for(no.outputs()) |o| {
+                    if (o.kind == .CallEnd) break o;
+                } else unreachable;
+                moves.items.len = 0;
+                for (cend.outputs()) |r| {
+                    if (r.kind == .Ret) {
+                        const dst, const src = .{self.outReg(r), isa.Reg.ret(r.extra(.Ret).*)};
+                        if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
+                    }
+                }
+                self.orderMoves(moves.items);
             },
             .Mem => {},
-            .Ret => {
-                const idx = no.extra(.Ret).*;
-                if (self.outReg(no) != isa.Reg.ret(idx)) {
-                    self.emit(.cp, .{ self.outReg(no), isa.Reg.ret(idx) });
-                    self.flushOutReg(no);
-                }
-            },
+            .Ret => {},
             .Jmp => if (no.outputs()[0].kind == .Region or no.outputs()[0].kind == .Loop) {
                 const idx = std.mem.indexOfScalar(?*Func.Node, no.outputs()[0].inputs(), no).? + 1;
 
