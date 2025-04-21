@@ -1,8 +1,9 @@
-foo := @use("bar")
-goo := @use("fa.hb")
-mfoo := @use("../foo.hb")
+//foo := @use("bar")
+//goo := @use("fa.hb")
+//mfoo := @use("../foo.hb")
 
 main := fn(): uint {
-	_ = mfoo.main()
-	return goo.fun + foo.fun
+	//_ = mfoo.main()
+	return 69
+	//goo.fun + foo.fun
 }

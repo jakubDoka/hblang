@@ -181,6 +181,12 @@ pub const Coff = struct {
 
             return .{ .LongName = .{ .Offset = @intCast(pos) } };
         }
+
+        pub fn deinit(self: *Builder, gpa: std.mem.Allocator) void {
+            self.text.deinit(gpa);
+            self.symbol_table.deinit(gpa);
+            self.string_table.deinit(gpa);
+        }
     };
 
     pub fn splatName(name: []const u8) ?[8]u8 {

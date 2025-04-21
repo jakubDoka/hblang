@@ -34,9 +34,8 @@ pub const CompileOptions = struct {
         self.path_projections.deinit(self.gpa);
     }
 
-    pub fn loadCli(self: *CompileOptions) !void {
-        var args = try std.process.ArgIterator.initWithAllocator(self.gpa);
-        defer args.deinit();
+    pub fn loadCli(self: *CompileOptions, arena: std.mem.Allocator) !void {
+        var args = try std.process.ArgIterator.initWithAllocator(arena);
         _ = args.next();
 
         var i: usize = 0;
@@ -153,10 +152,23 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     var codegen = hb.frontend.Codegen.init(opts.gpa, Arena.scrath(null).arena, &types, .runtime);
     defer codegen.deinit();
 
-    var hbg = hb.hbvm.HbvmGen{ .gpa = opts.gpa, .emit_header = !opts.dump_asm and !opts.raw_binary };
-    defer hbg.deinit();
 
-    const backend = hb.backend.Mach.init(&hbg);
+    var backend = if (std.mem.eql(u8, opts.target, "ableos")) backend: {
+        const slot = ast_arena.create(hb.hbvm.HbvmGen);
+        slot.* = hb.hbvm.HbvmGen{ .gpa = opts.gpa, .emit_header = !opts.dump_asm and !opts.raw_binary };
+        break :backend hb.backend.Mach.init(slot);
+    } else if (std.mem.eql(u8, opts.target, "x86_64-windows")) backend: {
+        const slot = ast_arena.create(hb.x86_64.X86_64Gen);
+        slot.* = hb.x86_64.X86_64Gen{.gpa = opts.gpa};
+        break :backend hb.backend.Mach.init(slot);
+    } else {
+        try opts.diagnostics.print(
+            "{s} is unsupported target, only `x86_64-windows` and `ableos` are supported",
+            .{opts.target},
+        );
+        return error.Failed;
+    };
+    defer backend.deinit();
 
     var syms = std.heap.ArenaAllocator.init(opts.gpa);
     defer syms.deinit();
@@ -236,7 +248,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         const head: hb.hbvm.HbvmGen.ExecHeader = @bitCast(out.items[0..@sizeOf(hb.hbvm.HbvmGen.ExecHeader)].*);
 
         errdefer {
-            const symbols = hbg.makeSymMap(@sizeOf(hb.hbvm.HbvmGen.ExecHeader), ast_arena.allocator());
+            const symbols = backend.downcast(hb.hbvm.HbvmGen).makeSymMap(@sizeOf(hb.hbvm.HbvmGen.ExecHeader), ast_arena.allocator());
             test_utils.runVm(
                 &asts[0],
                 false,
@@ -271,6 +283,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     }
 }
 
+
 pub fn main() !void {
     Arena.initScratch(1024 * 1024 * 10);
     defer Arena.deinitScratch();
@@ -286,7 +299,10 @@ pub fn main() !void {
     };
     defer opts.deinit();
 
-    try opts.loadCli();
+    var cli_buff: [1024 * 8]u8 = undefined;
+    var cli_scratch = std.heap.FixedBufferAllocator.init(&cli_buff);
+
+    try opts.loadCli(cli_scratch.allocator());
 
     var arena = (try compile(opts)).arena;
     arena.deinit();

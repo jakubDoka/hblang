@@ -64,6 +64,7 @@ _emitFunc: *const fn (self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) v
 _emitData: *const fn (self: *anyopaque, opts: DataOptions) void,
 _finalize: *const fn (self: *anyopaque) std.ArrayListUnmanaged(u8),
 _disasm: *const fn (self: *anyopaque, out: std.io.AnyWriter, colors: std.io.tty.Config) void,
+_deinit: *const fn (self: *anyopaque) void,
 
 const std = @import("std");
 const graph = @import("graph.zig");
@@ -134,35 +135,43 @@ pub fn init(data: anytype) Mach {
     const Type = @TypeOf(data.*);
     if (!@hasDecl(Type, "Node")) @compileError("expected `pub const Node = enum(union) { ... }` to be present");
 
+    const fns = struct {
+        fn emitFunc(self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void {
+            const slf: *Type = @alignCast(@ptrCast(self));
+            const fnc: *graph.Func(Type.Node) = @alignCast(@ptrCast(func));
+            slf.emitFunc(fnc, opts);
+        }
+        fn emitData(self: *anyopaque, opts: DataOptions) void {
+            const slf: *Type = @alignCast(@ptrCast(self));
+            slf.emitData(opts);
+        }
+        fn finalize(self: *anyopaque) std.ArrayListUnmanaged(u8) {
+            const slf: *Type = @alignCast(@ptrCast(self));
+            return slf.finalize();
+        }
+        fn disasm(self: *anyopaque, out: std.io.AnyWriter, colors: std.io.tty.Config) void {
+            const slf: *Type = @alignCast(@ptrCast(self));
+            return slf.disasm(out, colors);
+        }
+        fn deinit(self: *anyopaque) void {
+            const slf: *Type = @alignCast(@ptrCast(self));
+            slf.deinit();
+        }
+    };
+
     return .{
         .data = data,
-        ._emitFunc = struct {
-            fn emitFunc(self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void {
-                const slf: *Type = @alignCast(@ptrCast(self));
-                const fnc: *graph.Func(Type.Node) = @alignCast(@ptrCast(func));
-                slf.emitFunc(fnc, opts);
-            }
-        }.emitFunc,
-        ._emitData = struct {
-            fn emitData(self: *anyopaque, opts: DataOptions) void {
-                const slf: *Type = @alignCast(@ptrCast(self));
-                slf.emitData(opts);
-            }
-        }.emitData,
-        ._finalize = struct {
-            fn finalize(self: *anyopaque) std.ArrayListUnmanaged(u8) {
-                const slf: *Type = @alignCast(@ptrCast(self));
-                return slf.finalize();
-            }
-        }.finalize,
-        ._disasm = struct {
-            fn disasm(self: *anyopaque, out: std.io.AnyWriter, colors: std.io.tty.Config) void {
-                const slf: *Type = @alignCast(@ptrCast(self));
-                return slf.disasm(out, colors);
-            }
-        }.disasm,
+        ._emitFunc = fns.emitFunc,
+        ._emitData = fns.emitData,
+        ._finalize = fns.finalize,
+        ._disasm = fns.disasm,
+        ._deinit = fns.deinit,
     };
 }
+
+pub fn downcast(self: Mach, comptime T: type) *T {
+    return @alignCast(@ptrCast(self.data));
+} 
 
 /// generate apropriate final output for a function
 ///
@@ -184,4 +193,10 @@ pub fn finalize(self: Mach) std.ArrayListUnmanaged(u8) {
 /// for registers for better readability
 pub fn disasm(self: Mach, out: std.io.AnyWriter, colors: std.io.tty.Config) void {
     self._disasm(self.data, out, colors);
+}
+
+/// frees the internal resources
+pub fn deinit(self: *Mach) void {
+    self._deinit(self.data);
+    self.* = undefined;
 }
