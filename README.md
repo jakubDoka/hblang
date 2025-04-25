@@ -1710,6 +1710,33 @@ take := fn(s: ^Stru): void {
 }
 ```
 
+#### nullable types 3 (unwrap inference)
+```hb
+Stru := struct {
+    .a: uint;
+    .b: uint;
+}
+
+main := fn(): uint {
+    nlbl: ?Stru = .(0, 0)
+    other: ?Stru = .{a: 0, b: 0}
+    othera: ?[2]uint = .[0, 0]
+
+    if nlbl == null return 1
+    if other == null return 2
+    if othera == null return 3
+
+    nlbl.b = 1
+    take(&nlbl)
+
+    return nlbl.a - nlbl.b
+}
+
+take := fn(s: ^Stru): void {
+    s.a += 1
+}
+```
+
 #### struct patters 1
 ```hb
 expectations := .{
