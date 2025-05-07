@@ -177,7 +177,10 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
                     std.debug.assert(curr.data_type.isInt());
 
                     var mem: u64 = 0;
-                    @memcpy(@as([*]u8, @ptrCast(&mem))[0..curr.data_type.size()], glob.data[0..curr.data_type.size()]);
+                    @memcpy(
+                        @as([*]u8, @ptrCast(&mem))[0..@intCast(curr.data_type.size())],
+                        glob.data[0..@intCast(curr.data_type.size())],
+                    );
 
                     break :b bl.addIntImm(curr.data_type, @bitCast(mem));
                 }

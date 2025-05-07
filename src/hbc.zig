@@ -152,14 +152,13 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     var codegen = hb.frontend.Codegen.init(opts.gpa, Arena.scrath(null).arena, &types, .runtime);
     defer codegen.deinit();
 
-
     var backend = if (std.mem.eql(u8, opts.target, "ableos")) backend: {
         const slot = ast_arena.create(hb.hbvm.HbvmGen);
         slot.* = hb.hbvm.HbvmGen{ .gpa = opts.gpa, .emit_header = !opts.dump_asm and !opts.raw_binary };
         break :backend hb.backend.Mach.init(slot);
     } else if (std.mem.eql(u8, opts.target, "x86_64-windows")) backend: {
         const slot = ast_arena.create(hb.x86_64.X86_64Gen);
-        slot.* = hb.x86_64.X86_64Gen{.gpa = opts.gpa};
+        slot.* = hb.x86_64.X86_64Gen{ .gpa = opts.gpa };
         break :backend hb.backend.Mach.init(slot);
     } else {
         try opts.diagnostics.print(
@@ -282,7 +281,6 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         return error.Failed;
     }
 }
-
 
 pub fn main() !void {
     Arena.initScratch(1024 * 1024 * 10);

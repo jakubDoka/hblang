@@ -169,7 +169,7 @@ pub const DataType = enum(u16) {
     f64,
     bot,
 
-    pub fn size(self: DataType) usize {
+    pub fn size(self: DataType) u64 {
         return switch (self) {
             .top, .bot => unreachable,
             .i8 => 1,
@@ -1344,9 +1344,11 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         pub fn logNid(wr: anytype, nid: usize, cc: std.io.tty.Config) void {
-            cc.setColor(wr, @enumFromInt(1 + nid % 15)) catch unreachable;
-            wr.print("%{d}", .{nid}) catch unreachable;
-            cc.setColor(wr, .reset) catch unreachable;
+            errdefer unreachable;
+
+            try utils.setColor(cc, wr, @enumFromInt(1 + nid % 15));
+            try wr.print("%{d}", .{nid});
+            try utils.setColor(cc, wr, .reset);
         }
 
         pub fn collectPostorder(self: *Self, arena: std.mem.Allocator, visited: *std.DynamicBitSet) []*CfgNode {

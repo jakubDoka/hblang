@@ -157,7 +157,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
         var iter = it_row.iterator(.{});
         while (iter.next()) |e| if (i != e) {
             if (colors[e] != sentinel) selection_set.set(colors[e]);
-            Block.setMasks(selection_set)[0] |= instrs[e].def.clobbers();
+            @as(*align(@alignOf(usize)) u64, @ptrCast(&Block.setMasks(selection_set)[0])).* |= instrs[e].def.clobbers();
         };
 
         const bias = instr.def.regBias();

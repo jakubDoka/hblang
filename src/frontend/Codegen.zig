@@ -1676,7 +1676,7 @@ pub fn emitTyped(self: *Codegen, ctx: Ctx, ty: Types.Id, expr: Ast.Id) !Value {
 }
 
 pub fn emitTyConst(self: *Codegen, ty: Types.Id) Value {
-    return .mkv(.type, self.bl.addIntImm(self.abiCata(.type).ByValue, @intCast(@as(isize, @intFromEnum(ty)))));
+    return .mkv(.type, self.bl.addIntImm(self.abiCata(.type).ByValue, @bitCast(@as(u64, @intFromEnum(ty)))));
 }
 
 pub fn unwrapTyConst(self: *Codegen, pos: anytype, cnst: *Value) !Types.Id {

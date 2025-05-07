@@ -15,7 +15,7 @@ pub const hbvm = enum {
 };
 
 pub const x86_64 = enum {
-    pub const X86_64Gen = @import("x86_64/x86_64Gen.zig");
+    pub const X86_64Gen = @import("x86_64/X86_64Gen.zig");
 };
 
 pub const frontend = enum {

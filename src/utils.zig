@@ -4,6 +4,10 @@ pub fn panic(comptime format: []const u8, args: anytype) noreturn {
     if (debug) std.debug.panic(format, args) else unreachable;
 }
 
+pub fn setColor(cfg: std.io.tty.Config, writer: std.io.AnyWriter, color: std.io.tty.Color) !void {
+    if (@import("builtin").target.os.tag != .freestanding) try cfg.setColor(writer, color);
+}
+
 pub const Arena = struct {
     start: [*]align(page_size) u8,
     end: [*]align(page_size) u8,
@@ -30,6 +34,14 @@ pub const Arena = struct {
 
     pub fn deinitScratch() void {
         for (&scratch) |*slt| slt.deinit();
+    }
+
+    pub fn resetScratch() void {
+        for (&scratch) |*slt| slt.reset();
+    }
+
+    pub fn reset(arena: *Arena) void {
+        arena.pos = arena.end;
     }
 
     pub fn allocated(self: *Arena) usize {

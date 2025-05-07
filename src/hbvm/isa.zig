@@ -1,4 +1,5 @@
 const std = @import("std");
+const utils = @import("../utils.zig");
 
 pub const Reg = enum(u8) {
     null,
@@ -237,7 +238,7 @@ fn disasmArg(
     writer: anytype,
     colors: std.io.tty.Config,
 ) !usize {
-    try colors.setColor(writer, arg.color());
+    try utils.setColor(colors, writer, arg.color());
     var size: usize = 0;
     switch (arg) {
         inline else => |t| {
@@ -256,14 +257,14 @@ fn disasmArg(
                 },
                 .reg => {
                     const col: std.io.tty.Color = @enumFromInt(3 + @intFromEnum(value.*) % 12);
-                    try colors.setColor(writer, col);
+                    try utils.setColor(colors, writer, col);
                     try writer.print("${d}", .{@intFromEnum(value.*)});
                 },
                 else => try writer.print("{any}", .{@as(std.meta.Int(.signed, @bitSizeOf(@TypeOf(value.*))), @bitCast(value.*))}),
             }
         },
     }
-    try colors.setColor(writer, .reset);
+    try utils.setColor(colors, writer, .reset);
     return size;
 }
 

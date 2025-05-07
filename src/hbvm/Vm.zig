@@ -33,7 +33,7 @@ pub const SafeContext = struct {
     }
 
     fn setColor(self: *Self, color: std.io.tty.Color) !void {
-        try self.color_cfg.setColor(self.writer, color);
+        try root.setColor(self.color_cfg, self.writer, color);
     }
 
     fn memmove(self: *Self, dst: usize, src: usize, len: usize) !void {
@@ -81,7 +81,7 @@ pub fn UnsafeCtx(comptime Writer: type) type {
         }
 
         fn setColor(self: *Self, color: std.io.tty.Color) !void {
-            try self.color_cfg.setColor(self.writer, color);
+            if (debug) try root.setColor(self.color_cfg, self.writer, color);
         }
 
         fn memmove(_: *Self, dst: usize, src: usize, len: usize) !void {

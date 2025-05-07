@@ -122,7 +122,7 @@ pub const EmitOptions = struct {
                 func.gcm.buildCfg();
             }
 
-            if (self.verbose) func.fmtScheduled(std.io.getStdErr().writer().any(), .escape_codes);
+            //if (self.verbose) func.fmtScheduled(std.io.getStdErr().writer().any(), .escape_codes);
 
             if (self.error_buf) |eb| {
                 func.static_anal.analize(self.arena.?, eb);
@@ -171,7 +171,7 @@ pub fn init(data: anytype) Mach {
 
 pub fn downcast(self: Mach, comptime T: type) *T {
     return @alignCast(@ptrCast(self.data));
-} 
+}
 
 /// generate apropriate final output for a function
 ///

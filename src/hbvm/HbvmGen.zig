@@ -624,13 +624,13 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     self.emit(.jal, .{ .ret_addr, .null, 0 });
                 }
 
-                const cend = for(no.outputs()) |o| {
+                const cend = for (no.outputs()) |o| {
                     if (o.kind == .CallEnd) break o;
                 } else unreachable;
                 moves.items.len = 0;
                 for (cend.outputs()) |r| {
                     if (r.kind == .Ret) {
-                        const dst, const src = .{self.outReg(r), isa.Reg.ret(r.extra(.Ret).*)};
+                        const dst, const src = .{ self.outReg(r), isa.Reg.ret(r.extra(.Ret).*) };
                         if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
                     }
                 }
