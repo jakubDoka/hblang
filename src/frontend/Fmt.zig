@@ -10,6 +10,75 @@ const Lexer = @import("Lexer.zig");
 const Error = std.mem.Allocator.Error;
 const Fmt = @This();
 
+pub fn needsSpace(c: u8) bool {
+    return (c >= 'a' and c <= 'z') or
+        (c >= 'A' and c <= 'Z') or
+        (c >= '0' and c <= '9') or
+        (c >= 127);
+}
+
+pub fn minify(source: [:0]u8) usize {
+    var writer = source.ptr;
+    var reader = source;
+    var prevNeedsWhitespace = false;
+    var prevNeedsNewline = false;
+
+    while (true) {
+        var lexer = Lexer.init(reader, 0);
+        const token = lexer.next();
+
+        switch (token.kind) {
+            .Eof => break,
+            else => {},
+        }
+
+        const cpyLen = token.end - token.pos;
+
+        var prefix: ?u8 = null;
+        if (prevNeedsWhitespace and needsSpace(reader[token.pos])) {
+            prefix = ' ';
+            std.debug.assert(token.pos != 0);
+        }
+
+        prevNeedsWhitespace = needsSpace(reader[token.end - 1]);
+
+        const inbetweenNewlines =
+            std.mem.count(u8, reader[0..token.pos], "\n") +
+            if (Lexer.Lexeme.precedence(token.kind) != 255) @as(usize, 1) else 0;
+
+        const extraPrefixNewlines =
+            if (inbetweenNewlines > 1)
+                @as(usize, 1) + @intFromBool(Lexer.Lexeme.precedence(token.kind) == 255)
+            else
+                @intFromBool(prevNeedsNewline);
+
+        if (token.kind == .Comment and reader[token.end - 1] != '/') {
+            prevNeedsNewline = true;
+            prevNeedsWhitespace = false;
+        } else {
+            prevNeedsNewline = false;
+        }
+
+        const sstr = reader[token.pos..token.end];
+        reader = reader[token.end..];
+
+        if (extraPrefixNewlines != 0) {
+            for (0..extraPrefixNewlines) |_| {
+                writer[0] = '\n';
+                writer += 1;
+            }
+        } else if (prefix) |p| {
+            writer[0] = p;
+            writer += 1;
+        }
+
+        std.mem.copyForwards(u8, writer[0..cpyLen], sstr);
+        writer += cpyLen;
+    }
+
+    return @intCast(writer - source.ptr);
+}
+
 pub fn fmt(self: *Fmt) Error!void {
     const items = self.ast.exprs.view(self.ast.items);
     for (items, 1..) |id, i| {
