@@ -31,3 +31,4 @@ pub const frontend = enum {
 
 pub const utils = @import("utils.zig");
 pub const test_utils = @import("test_util.zig");
+pub const Object = @import("Object.zig");

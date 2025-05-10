@@ -158,7 +158,11 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         break :backend hb.backend.Mach.init(slot);
     } else if (std.mem.eql(u8, opts.target, "x86_64-windows")) backend: {
         const slot = ast_arena.create(hb.x86_64.X86_64Gen);
-        slot.* = hb.x86_64.X86_64Gen{ .gpa = opts.gpa };
+        slot.* = hb.x86_64.X86_64Gen{ .gpa = opts.gpa, .builder = hb.Object.init(.windows, .x86_64) };
+        break :backend hb.backend.Mach.init(slot);
+    } else if (std.mem.eql(u8, opts.target, "x86_64-linux")) backend: {
+        const slot = ast_arena.create(hb.x86_64.X86_64Gen);
+        slot.* = hb.x86_64.X86_64Gen{ .gpa = opts.gpa, .builder = hb.Object.init(.linux, .x86_64) };
         break :backend hb.backend.Mach.init(slot);
     } else {
         try opts.diagnostics.print(

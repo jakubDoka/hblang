@@ -299,7 +299,7 @@ inline fn ibinOp(self: *Vm, comptime base: isa.Op, comptime op: isa.Op, ctx: any
         .add8, .addi8 => lhs +% rhs,
         .sub8 => lhs -% rhs,
         .mul8, .muli8 => lhs *% rhs,
-        .slu8, .slui8 => @shlWithOverflow(lhs, @as(std.math.Log2Int(@TypeOf(rhs)), @truncate(rhs)))[1],
+        .slu8, .slui8 => @shlWithOverflow(lhs, @as(std.math.Log2Int(@TypeOf(rhs)), @truncate(rhs)))[0],
         .sru8, .srui8 => lhs >> @truncate(rhs),
         .srs8, .srsi8 => toUnsigned(width, toSigned(width, lhs) >> @truncate(rhs)),
         else => |t| @compileError(std.fmt.comptimePrint("unspupported op {any}", .{t})),

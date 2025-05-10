@@ -53,6 +53,10 @@ test init {
             _ = colors;
             unreachable;
         }
+
+        pub fn deinit(self: *@This()) void {
+            _ = self;
+        }
     };
 
     var em = ExampleMachine{};

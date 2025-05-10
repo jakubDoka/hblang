@@ -4,6 +4,6 @@
 
 main := fn(): uint {
 	//_ = mfoo.main()
-	return 69
+	return 100
 	//goo.fun + foo.fun
 }
