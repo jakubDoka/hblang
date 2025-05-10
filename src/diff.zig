@@ -1,37 +1,39 @@
 const std = @import("std");
 
-pub fn printDiff(a: []const u8, b: []const u8, arena: std.mem.Allocator, out: std.io.Read) !void {
-    const stdout = std.io.getStdOut().writer();
-    const linesA = try splitLines(allocator, a);
-    const linesB = try splitLines(allocator, b);
-    const lcs = try lcsLines(a, b, allocator);
+pub fn printDiff(a: []const u8, b: []const u8, arena: std.mem.Allocator) !void {
+    const stdout = std.io.getStdErr().writer();
+    const linesA = try splitLines(arena, a);
+    const linesB = try splitLines(arena, b);
+    const lcs = try lcsLines(a, b, arena);
 
     var i: usize = 0;
     var j: usize = 0;
     var k: usize = 0;
 
-    const color = std.io.tty.detectConfig(std.io.getStdOut());
+    const color = std.io.tty.detectConfig(std.io.getStdErr());
 
+    var fuel: usize = 5;
     while (i < linesA.len or j < linesB.len) {
-        if (k < lcs.len and i < linesA.len and j < linesB.len and 
-            std.mem.eql(u8, linesA[i], lcs[k]) and 
-            std.mem.eql(u8, linesB[j], lcs[k])) 
+        fuel -= 1;
+        if (k < lcs.len and i < linesA.len and j < linesB.len and
+            std.mem.eql(u8, linesA[i], lcs[k]) and
+            std.mem.eql(u8, linesB[j], lcs[k]))
         {
             try stdout.print(" {s}\n", .{linesA[i]});
             i += 1;
             j += 1;
             k += 1;
         } else if (j < linesB.len and (k >= lcs.len or !std.mem.eql(u8, linesB[j], lcs[k]))) {
-            try color.setColor(std.io.getStdOut(), .green);
+            try color.setColor(std.io.getStdErr(), .green);
             try stdout.print("+{s}\n", .{linesB[j]});
-            try color.setColor(std.io.getStdOut(), .reset);
+            try color.setColor(std.io.getStdErr(), .reset);
             j += 1;
         } else if (i < linesA.len and (k >= lcs.len or !std.mem.eql(u8, linesA[i], lcs[k]))) {
-            try color.setColor(std.io.getStdOut(), .red);
+            try color.setColor(std.io.getStdErr(), .red);
             try stdout.print("-{s}\n", .{linesA[i]});
-            try color.setColor(std.io.getStdOut(), .reset);
+            try color.setColor(std.io.getStdErr(), .reset);
             i += 1;
-        }
+        } else unreachable;
     }
 }
 
@@ -63,7 +65,9 @@ fn lcsLines(a: []const u8, b: []const u8, arena: std.mem.Allocator) ![][]const u
     var j = lenB;
     var k: usize = dp[lenA][lenB];
 
+    var fuel: usize = 100000;
     while (i > 0 and j > 0) {
+        fuel -= 1;
         if (std.mem.eql(u8, linesA[i - 1], linesB[j - 1])) {
             k -= 1;
             result[k] = linesA[i - 1];

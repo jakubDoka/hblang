@@ -9,6 +9,7 @@ const Types = root.frontend.Types;
 const root = @import("root.zig");
 const utils = root.utils;
 const hbc = @import("hbc.zig");
+const diff = @import("diff.zig");
 pub const static_anal = root.backend.static_anal;
 
 pub fn runVendoredTest(gpa: std.mem.Allocator, path: []const u8) !void {
@@ -394,62 +395,25 @@ pub fn testFmt(name: []const u8, path: []const u8, code: [:0]const u8) !void {
 
     try ast.fmt(&fmtd);
 
-    var dir = std.testing.tmpDir(.{});
-    defer dir.cleanup();
-
-    const old, const new = .{
-        try std.mem.concat(gpa, u8, &.{ name, ".old.txt" }),
-        try std.mem.concat(gpa, u8, &.{ name, ".new.txt" }),
-    };
-    defer gpa.free(old);
-    defer gpa.free(new);
-
-    try dir.dir.writeFile(.{ .sub_path = new, .data = std.mem.trim(u8, fmtd.items, "\n") });
-    try dir.dir.writeFile(.{ .sub_path = old, .data = std.mem.trim(u8, code, "\n") });
-    try runDiff(gpa, dir, old, new);
-}
-
-pub fn runDiff(gpa: std.mem.Allocator, tmp: std.testing.TmpDir, old: []const u8, new: []const u8) !void {
-    var child = std.process.Child.init(&.{ "diff", "--unified", "--color", old, new }, gpa);
-    child.cwd = try tmp.dir.realpathAlloc(gpa, ".");
-    defer gpa.free(child.cwd.?);
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Pipe;
-
-    try child.spawn();
-
-    const stdout = try child.stderr.?.readToEndAlloc(gpa, 1024 * 100);
-    defer gpa.free(stdout);
-    const stderr = try child.stdout.?.readToEndAlloc(gpa, 1024 * 100);
-    defer gpa.free(stderr);
-
-    const exit = (try child.wait()).Exited;
-    if (exit != 0) {
-        const new_data = try tmp.dir.readFileAlloc(gpa, new, 1024 * 1024);
-        defer gpa.free(new_data);
-        const old_data = try tmp.dir.readFileAlloc(gpa, old, 1024 * 1024);
-        defer gpa.free(old_data);
-        const new_line_count: isize = @intCast(std.mem.count(u8, new_data, "\n"));
-        const old_line_count: isize = @intCast(std.mem.count(u8, old_data, "\n"));
-        std.debug.print("line count change: {d}\n", .{new_line_count - old_line_count});
-        if (stdout.len > 0) std.debug.print("stdout:\n{s}", .{stdout});
-        if (stderr.len > 0) std.debug.print("stderr:\n{s}", .{stderr});
+    if (!std.mem.eql(
+        u8,
+        std.mem.trim(u8, code, "\n"),
+        std.mem.trim(u8, fmtd.items, "\n"),
+    )) {
+        try diff.printDiff(fmtd.items, code, gpa);
+        return error.TestFailed;
     }
-    try std.testing.expectEqual(0, exit);
 }
 
 pub fn checkOrUpdatePrintTest(name: []const u8, output: []const u8) !void {
-    const gpa = std.testing.allocator;
     var tests = try std.fs.cwd().openDir("tests", .{});
     defer tests.close();
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    const old, const new = .{
-        try std.mem.concat(gpa, u8, &.{ name, "tmp.txt" }),
-        try std.mem.concat(gpa, u8, &.{ name, ".txt" }),
-    };
-    defer gpa.free(old);
-    defer gpa.free(new);
+
+    var scrath = utils.Arena.scrath(null);
+    defer scrath.deinit();
+    const gpa = scrath.arena.allocator();
+
+    const new = try std.mem.concat(gpa, u8, &.{ name, ".txt" });
 
     if (hasEnv("PT_UPDATE")) {
         try tests.writeFile(.{
@@ -457,17 +421,19 @@ pub fn checkOrUpdatePrintTest(name: []const u8, output: []const u8) !void {
             .data = std.mem.trim(u8, output, "\n"),
         });
     } else {
-        try tmp.dir.writeFile(.{
-            .sub_path = new,
-            .data = std.mem.trim(u8, output, "\n"),
-        });
-
-        tests.copyFile(new, tmp.dir, old, .{}) catch |err| switch (err) {
+        const old = tests.readFileAlloc(gpa, new, 1024 * 1024) catch |err| switch (err) {
             error.FileNotFound => return error.NewTestFound,
             else => return err,
         };
 
-        try runDiff(gpa, tmp, old, new);
+        if (!std.mem.eql(
+            u8,
+            std.mem.trim(u8, output, "\n"),
+            std.mem.trim(u8, old, "\n"),
+        )) {
+            try diff.printDiff(old, output, gpa);
+            return error.TestFailed;
+        }
     }
 }
 
