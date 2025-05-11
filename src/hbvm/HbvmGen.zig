@@ -22,6 +22,7 @@ const Func = graph.Func(Node);
 const Kind = Func.Kind;
 const Regalloc = root.backend.Regalloc;
 const ExecHeader = isa.ExecHeader;
+const Move = utils.Move(isa.Reg);
 const HbvmGen = @This();
 
 pub const eca = std.math.maxInt(u32);
@@ -794,57 +795,16 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
     }
 }
 
-const Depth = u8;
-
-const Move = struct { isa.Reg, isa.Reg, Depth };
-
 fn orderMoves(self: *HbvmGen, moves: []Move) void {
+    utils.orderMoves(self, isa.Reg, moves);
+}
 
-    // code makes sure all moves are ordered so that register is only moved
-    // into after all its uses
-    //
-    // in case of cycles, swaps are used instead in which case the conflicting
-    // move is removed and remining moves are replaced with swaps
+pub fn emitSwap(self: *HbvmGen, lhs: isa.Reg, rhs: isa.Reg) void {
+    self.emit(.swa, .{ lhs, rhs });
+}
 
-    const cycle_sentinel = std.math.maxInt(Depth);
-
-    var reg_graph = std.EnumArray(isa.Reg, isa.Reg).initFill(.null);
-    for (moves) |m| {
-        reg_graph.set(m[0], m[1]);
-    }
-
-    o: for (moves) |*m| {
-        var seen = std.EnumSet(isa.Reg).initEmpty();
-        var c = m[1];
-        while (c != m[0]) {
-            c = reg_graph.get(c);
-            m[2] += 1;
-            if (c == .null or seen.contains(c)) continue :o;
-            seen.insert(c);
-        }
-
-        reg_graph.set(c, .null);
-        m[2] = cycle_sentinel;
-    }
-
-    std.sort.pdq(Move, moves, {}, struct {
-        fn lt(_: void, lhs: Move, rhs: Move) bool {
-            return rhs[2] < lhs[2];
-        }
-    }.lt);
-
-    for (moves) |*m| {
-        if (m[2] == cycle_sentinel) {
-            while (reg_graph.get(m[1]) != .null) {
-                self.emit(.swa, .{ m[0], m[1] });
-                m[0] = m[1];
-                std.mem.swap(isa.Reg, reg_graph.getPtr(m[1]), &m[1]);
-            }
-            reg_graph.set(m[1], m[1]);
-        } else if (reg_graph.get(m[1]) != m[1]) {
-            self.emit(.cp, .{ m[0], m[1] });
-        }
-    }
+pub fn emitCp(self: *HbvmGen, dst: isa.Reg, src: isa.Reg) void {
+    self.emit(.cp, .{ dst, src });
 }
 
 fn inReg(self: *HbvmGen, i: usize, n: ?*Func.Node) isa.Reg {

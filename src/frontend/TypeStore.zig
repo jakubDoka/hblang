@@ -385,12 +385,15 @@ pub const Id = enum(IdRepr) {
                         try writer.print("{" ++ opts ++ "}", .{b.key.scope.fmt(self.tys)});
                     }
                     if (b.key.name.len != 0) {
-                        if (b.key.scope != .void and (b.key.scope.data() != .Struct or self.tys.store.get(b.key.scope.data().Struct).key.scope != .void or
-                            comptime !std.mem.eql(u8, opts, "test"))) try writer.writeAll(".");
+                        const testing = comptime !std.mem.eql(u8, opts, "test") or true;
+                        if (b.key.scope != .void and
+                            (b.key.scope.data() != .Struct or
+                                self.tys.store.get(b.key.scope.data().Struct).key.scope != .void or
+                                testing)) try writer.writeAll(".");
                         if (b.key.scope != .void) {
                             try writer.print("{s}", .{b.key.name});
                         } else {
-                            if (comptime !std.mem.eql(u8, opts, "test")) {
+                            if (testing) {
                                 try writer.print("\"{s}\"", .{b.key.name});
                             }
                         }

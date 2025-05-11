@@ -8,6 +8,60 @@ pub fn setColor(cfg: std.io.tty.Config, writer: std.io.AnyWriter, color: std.io.
     if (@import("builtin").target.os.tag != .freestanding) try cfg.setColor(writer, color);
 }
 
+pub const Depth = u8;
+
+pub fn Move(comptime R: type) type {
+    return struct { R, R, Depth };
+}
+
+pub fn orderMoves(self: anytype, comptime R: type, moves: []Move(R)) void {
+    // code makes sure all moves are ordered so that register is only moved
+    // into after all its uses
+    //
+    // in case of cycles, swaps are used instead in which case the conflicting
+    // move is removed and remining moves are replaced with swaps
+
+    const cycle_sentinel = std.math.maxInt(Depth);
+
+    var reg_graph = std.EnumArray(R, R).initFill(.null);
+    for (moves) |m| {
+        reg_graph.set(m[0], m[1]);
+    }
+
+    o: for (moves) |*m| {
+        var seen = std.EnumSet(R).initEmpty();
+        var c = m[1];
+        while (c != m[0]) {
+            c = reg_graph.get(c);
+            m[2] += 1;
+            if (c == .null or seen.contains(c)) continue :o;
+            seen.insert(c);
+        }
+
+        reg_graph.set(c, .null);
+        m[2] = cycle_sentinel;
+    }
+
+    std.sort.pdq(Move(R), moves, {}, struct {
+        fn lt(_: void, lhs: Move(R), rhs: Move(R)) bool {
+            return rhs[2] < lhs[2];
+        }
+    }.lt);
+
+    for (moves) |*m| {
+        if (m[2] == cycle_sentinel) {
+            while (reg_graph.get(m[1]) != .null) {
+                self.emitSwap(m[0], m[1]);
+                m[0] = m[1];
+                std.mem.swap(R, reg_graph.getPtr(m[1]), &m[1]);
+            }
+            reg_graph.set(m[1], m[1]);
+        } else if (reg_graph.get(m[1]) != m[1]) {
+            self.emitCp(m[0], m[1]);
+        }
+    }
+}
+
 pub const Arena = struct {
     start: [*]align(page_size) u8,
     end: [*]align(page_size) u8,

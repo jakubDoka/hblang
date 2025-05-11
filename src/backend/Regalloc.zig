@@ -154,10 +154,14 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
     for (interference_table, colors, instrs, 0..) |it_row, *color, instr, i| {
         @memset(Block.setMasks(selection_set), 0);
 
+        @as(*align(@alignOf(usize)) u64, @ptrCast(&Block.setMasks(selection_set)[0])).* |=
+            if (@hasDecl(Mach, "reserved_regs")) Mach.reserved_regs else 0;
+
         var iter = it_row.iterator(.{});
         while (iter.next()) |e| if (i != e) {
             if (colors[e] != sentinel) selection_set.set(colors[e]);
-            @as(*align(@alignOf(usize)) u64, @ptrCast(&Block.setMasks(selection_set)[0])).* |= instrs[e].def.clobbers();
+            @as(*align(@alignOf(usize)) u64, @ptrCast(&Block.setMasks(selection_set)[0])).* |=
+                instrs[e].def.clobbers();
         };
 
         if (instrs[i].def.carried()) |c| {

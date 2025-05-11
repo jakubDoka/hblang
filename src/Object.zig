@@ -83,7 +83,7 @@ pub fn deinit(self: *Object, gpa: std.mem.Allocator) void {
     }
 }
 
-pub const Func = enum(u32) { _ };
+pub const Func = enum(u32) { invalid = std.math.maxInt(u32), _ };
 
 pub const Linkage = enum {
     local,

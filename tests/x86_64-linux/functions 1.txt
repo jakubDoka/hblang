@@ -1,0 +1,37 @@
+functions 1.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <main>:
+   0:	53                   	push   %rbx
+   1:	55                   	push   %rbp
+   2:	48 bb 0a 00 00 00 00 	movabs $0xa,%rbx
+   9:	00 00 00 
+   c:	48 89 df             	mov    %rbx,%rdi
+   f:	e8 32 00 00 00       	call   46 <"functions 1".add_two>
+  14:	48 89 c3             	mov    %rax,%rbx
+  17:	48 bd 14 00 00 00 00 	movabs $0x14,%rbp
+  1e:	00 00 00 
+  21:	48 89 ef             	mov    %rbp,%rdi
+  24:	e8 0c 00 00 00       	call   35 <"functions 1".add_one>
+  29:	48 89 d9             	mov    %rbx,%rcx
+  2c:	48 01 c1             	add    %rax,%rcx
+  2f:	48 89 c8             	mov    %rcx,%rax
+  32:	5b                   	pop    %rbx
+  33:	5d                   	pop    %rbp
+  34:	c3                   	ret
+
+0000000000000035 <"functions 1".add_one>:
+  35:	48 89 f8             	mov    %rdi,%rax
+  38:	48 b9 01 00 00 00 00 	movabs $0x1,%rcx
+  3f:	00 00 00 
+  42:	48 01 c8             	add    %rcx,%rax
+  45:	c3                   	ret
+
+0000000000000046 <"functions 1".add_two>:
+  46:	48 89 f8             	mov    %rdi,%rax
+  49:	48 b9 02 00 00 00 00 	movabs $0x2,%rcx
+  50:	00 00 00 
+  53:	48 01 c8             	add    %rcx,%rax
+  56:	c3                   	ret

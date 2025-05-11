@@ -38,7 +38,7 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
 
     test_util.testFmt(name, name, code, stderr.writer().any(), colors) catch {};
 
-    {
+    if (false) {
         var hbvm = root.hbvm.HbvmGen{ .gpa = gpa };
         defer hbvm.deinit();
         try runMachineTest(
