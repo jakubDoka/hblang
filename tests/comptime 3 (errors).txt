@@ -1,7 +1,0 @@
-comptime 3 (errors):9:10: can't access this value, (yet)
-        return some_int
-               ^
-comptime 3 (errors):8:30: function is missing a return value since uint has more then 1 possible value
-    not_a_closure := fn(): uint {
-                                ^
-code size: 0

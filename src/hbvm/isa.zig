@@ -176,18 +176,59 @@ const SymbolSpec = struct {
     offset: u32,
 };
 
+pub const ExecHeader = extern struct {
+    magic_number: [3]u8 = .{ 0x15, 0x91, 0xD2 },
+    executable_version: u32 align(1) = 0,
+
+    code_length: u64 align(1) = 0,
+    data_length: u64 align(1) = 0,
+    debug_length: u64 align(1) = 0,
+    symbol_count: u64 align(1) = 0,
+    config_length: u64 align(1) = 0,
+    metadata_length: u64 align(1) = 0,
+};
+
+pub const Symbol = extern struct {
+    name: u32,
+    kind: enum(u32) { func, data },
+    offset: u64,
+};
+
 pub fn disasm(
     code: []const u8,
-    gpa: std.mem.Allocator,
-    symbols: *const std.AutoHashMapUnmanaged(u32, []const u8),
+    arena: std.mem.Allocator,
     writer: anytype,
     colors: std.io.tty.Config,
 ) !void {
-    var labelMap = try makeLabelMap(code, symbols, gpa);
+    const header: ExecHeader = @bitCast(code[0..@sizeOf(ExecHeader)].*);
+    const sym_start = @sizeOf(ExecHeader) + header.code_length + header.data_length;
+    const sym_end = header.symbol_count * @sizeOf(Symbol);
+    const syms: []align(1) const Symbol =
+        @ptrCast(code[sym_start..][0..sym_end]);
+
+    const string_table = code[sym_start..][sym_end..header.debug_length];
+
+    var symbols = std.AutoHashMapUnmanaged(u32, []const u8){};
+    for (syms) |sym| {
+        const len = std.mem.indexOfScalar(u8, string_table[sym.name..], 0).?;
+        try symbols.put(
+            arena,
+            @intCast(sym.offset - @sizeOf(ExecHeader)),
+            string_table[sym.name..][0..len],
+        );
+    }
+
+    var labelMap = try makeLabelMap(
+        code[@sizeOf(ExecHeader)..][0..header.code_length],
+        &symbols,
+        arena,
+    );
     defer labelMap.deinit();
     var cursor: usize = 0;
-    while (code.len > cursor) {
-        cursor += try disasmOne(code, cursor, &labelMap, symbols, writer, colors);
+
+    const code_section = code[@sizeOf(ExecHeader)..][0..header.code_length];
+    while (code_section.len > cursor) {
+        cursor += try disasmOne(code_section, cursor, &labelMap, &symbols, writer, colors);
     }
 }
 

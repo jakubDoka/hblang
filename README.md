@@ -1711,7 +1711,7 @@ take := fn(s: ^Stru): void {
 ```
 
 #### nullable types 3 (unwrap inference)
-```hb
+``` hb
 Stru := struct {
     .a: uint;
     .b: uint;
@@ -1784,14 +1784,11 @@ main := fn(): uint {
 ```hb
 expectations := .{
     return_value: 3,
-    ecalls: .(
-        .(0, 1, 2): 3,
-    ),
 }
 
 main := fn(): uint {
     return @ecall(
-        0,
+        100,
         struct{.a: uint; .b: uint}.(1, 2),
         struct{.a: uint; .b: uint; .c: uint}.(3, 4, 5),
     )
@@ -1938,8 +1935,12 @@ main := fn(): uint {
 }
 ```
 
+
 ## progress
 
+- [x] hbvm-ableos target
+- [ ] x86_64-linux target
+- [ ] x86_64-windows target
 - [ ] ? diagnostics
   - [ ] ? don't crash on cycles
 - [ ] control flow
@@ -2093,6 +2094,26 @@ main := fn(): uint {
   - [ ] semantic assertions
     - [ ] null checks
     - [ ] bound checks
+
+## scrubmling
+
+So, now that I am starting to support other architectures (starting with x86_64-(linux|windows)) I need to modify the testing suite to run tests for all architectures. If the arch is not native, it needs a VM.
+
+I guess an interface like this would be nice:
+```
+@interface Machine
+    - addFunc
+    - addData
+    - finalize
+    - disasm
+    - run(stderr, stdout) -> (exit code, error)
+```
+
+For now, lets just pretend only linux exists. I can write the file to a temporary directory and run it as a child process, capture outs and return exit code, optionally some error as well.
+
+Disasm is also solvable with objdump for now, the windows story witn this is hard, maybe just disable the tests for now.
+
+Since we are making this API, maybe its good to exose it trough CLI as well.
 
 ## vendored tests
 

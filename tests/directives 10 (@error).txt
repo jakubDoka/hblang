@@ -1,7 +1,0 @@
-directives 10 (@error):7:2: no main in sight, here is a type: ^u8
-    @error("no main in sight, here is a type: ", ^u8)
-    ^
-directives 10 (@error):5:20: function is missing a return value since uint has more then 1 possible value
-main := fn(): uint {
-                   ^
-code size: 0

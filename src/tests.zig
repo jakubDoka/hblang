@@ -33,21 +33,68 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
 
     const gpa = std.testing.allocator;
 
-    test_util.testFmt(name, name, code) catch {};
+    const stderr = std.io.getStdErr();
+    const colors = std.io.tty.detectConfig(stderr);
 
-    var out = std.ArrayList(u8).init(gpa);
-    defer out.deinit();
+    test_util.testFmt(name, name, code, stderr.writer().any(), colors) catch {};
 
-    errdefer {
-        const stderr = std.io.getStdErr();
-        const colors = std.io.tty.detectConfig(stderr);
-        test_util.testBuilder(name, code, gpa, stderr.writer().any(), colors, true) catch {};
+    {
+        var hbvm = root.hbvm.HbvmGen{ .gpa = gpa };
+        defer hbvm.deinit();
+        try runMachineTest(
+            name,
+            "hbvm-ableos",
+            code,
+            .init(&hbvm),
+            gpa,
+            stderr.writer().any(),
+            colors,
+        );
     }
 
-    try test_util.testBuilder(name, code, gpa, out.writer().any(), .no_color, false);
+    {
+        var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa, .builder = .init(.linux, .x86_64) };
+        defer x86_64.deinit();
+        try runMachineTest(
+            name,
+            "x86_64-linux",
+            code,
+            .init(&x86_64),
+            gpa,
+            stderr.writer().any(),
+            colors,
+        );
+    }
+}
+
+pub fn runMachineTest(
+    name: []const u8,
+    category: []const u8,
+    code: [:0]const u8,
+    machine: root.backend.Machine,
+    gpa: std.mem.Allocator,
+    out: std.io.AnyWriter,
+    color: std.io.tty.Config,
+) !void {
+    var output = std.ArrayList(u8).init(gpa);
+    defer output.deinit();
+
+    errdefer {
+        test_util.testBuilder(name, code, gpa, out, machine, color, true) catch {};
+    }
+
+    try test_util.testBuilder(
+        name,
+        code,
+        gpa,
+        output.writer().any(),
+        machine,
+        .no_color,
+        false,
+    );
 
     if (!test_util.hasEnv("SKIP_DIFF"))
-        try test_util.checkOrUpdatePrintTest(name, out.items);
+        try test_util.checkOrUpdatePrintTest(name, category, output.items, out, color);
 }
 
 pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
@@ -74,7 +121,17 @@ pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
     //test_util.testBuilder(name, code, gpa, stderr.writer().any(), colors, true) catch {};
     //}
 
-    try test_util.testBuilder(name, code, gpa, std.io.null_writer.any(), .no_color, false);
+    var hbvm = root.hbvm.HbvmGen{ .gpa = gpa };
+
+    try test_util.testBuilder(
+        name,
+        code,
+        gpa,
+        std.io.null_writer.any(),
+        .init(&hbvm),
+        .no_color,
+        false,
+    );
 }
 
 pub fn runVendoredTest(path: []const u8) !void {

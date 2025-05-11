@@ -1,0 +1,19 @@
+arithmetic 2.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <main>:
+   0:	48 b8 00 00 00 00 00 	movabs $0x0,%rax
+   7:	00 00 00 
+   a:	48 b9 01 00 00 00 00 	movabs $0x1,%rcx
+  11:	00 00 00 
+  14:	48 89 c2             	mov    %rax,%rdx
+  17:	48 01 ca             	add    %rcx,%rdx
+  1a:	48 29 c8             	sub    %rcx,%rax
+  1d:	48 01 ca             	add    %rcx,%rdx
+  20:	48 29 c8             	sub    %rcx,%rax
+  23:	48 89 d1             	mov    %rdx,%rcx
+  26:	48 01 c1             	add    %rax,%rcx
+  29:	48 89 c8             	mov    %rcx,%rax
+  2c:	c3                   	ret

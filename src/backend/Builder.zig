@@ -58,6 +58,29 @@ pub fn addParam(self: *Builder, idx: usize) SpecificNode(.Arg) {
 
 pub fn end(self: *Builder, _: BuildToken) void {
     if (!self.isUnreachable()) self.addReturn(&.{});
+
+    if (std.debug.runtime_safety) {
+        var tmp = root.Arena.scrath(null);
+        defer tmp.deinit();
+
+        var worklist = Func.WorkList.init(tmp.arena.allocator(), self.func.next_id) catch unreachable;
+        worklist.add(self.func.end);
+        worklist.add(self.func.root);
+        var i: usize = 0;
+        while (i < worklist.list.items.len) : (i += 1) {
+            for (worklist.list.items[i].inputs()) |oi| if (oi) |o| {
+                worklist.add(o);
+            };
+
+            for (worklist.list.items[i].outputs()) |o| {
+                worklist.add(o);
+            }
+        }
+
+        for (worklist.list.items) |node| {
+            std.debug.assert(node.kind != .Scope);
+        }
+    }
 }
 
 // #MEM ========================================================================

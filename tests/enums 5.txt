@@ -1,7 +1,0 @@
-main:
-       li64 $1, 1
-        jeq $1, $0, :0
-       li64 $1, 0
-        jmp :0
-0:       tx
-code size: 31

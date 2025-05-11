@@ -1,5 +1,5 @@
 gpa: std.mem.Allocator,
-emit_header: bool = false,
+emit_debug: bool = true,
 out: std.ArrayListUnmanaged(u8) = .empty,
 funcs: std.ArrayListUnmanaged(FuncData) = .empty,
 global_lookup: std.ArrayListUnmanaged(u32) = .empty,
@@ -17,27 +17,17 @@ const utils = @import("../utils.zig");
 const root = @import("../root.zig");
 const isa = @import("isa.zig");
 const graph = root.backend.graph;
-const Mach = root.backend.Mach;
+const Mach = root.backend.Machine;
 const Func = graph.Func(Node);
 const Kind = Func.Kind;
 const Regalloc = root.backend.Regalloc;
+const ExecHeader = isa.ExecHeader;
 const HbvmGen = @This();
 
 pub const eca = std.math.maxInt(u32);
 pub const dir = "inputs";
 pub const tmp_registers = 2;
 pub const max_alloc_regs = @intFromEnum(isa.Reg.stack_addr) - 1 - tmp_registers;
-
-pub const ExecHeader = extern struct {
-    magic_number: [3]u8 = .{ 0x15, 0x91, 0xD2 },
-    executable_version: u32 align(1) = 0,
-
-    code_length: u64 align(1) = 0,
-    data_length: u64 align(1) = 0,
-    debug_length: u64 align(1) = 0,
-    config_length: u64 align(1) = 0,
-    metadata_length: u64 align(1) = 0,
-};
 
 const GlobalData = struct {
     name: []const u8,
@@ -144,7 +134,7 @@ pub const Node = union(enum) {
 };
 
 pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
-    if (self.emit_header and self.out.items.len == 0) {
+    if (self.out.items.len == 0) {
         @branchHint(.cold);
         _ = self.out.addManyAsArray(self.gpa, @sizeOf(ExecHeader)) catch unreachable;
     }
@@ -274,38 +264,161 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
 }
 
 pub fn finalize(self: *HbvmGen) std.ArrayListUnmanaged(u8) {
+    errdefer unreachable;
+
     const code_size = self.link(0, false, true);
-    if (self.emit_header) {
-        @memcpy(self.out.items[0..@sizeOf(ExecHeader)], std.mem.asBytes(&ExecHeader{
-            .code_length = code_size - @sizeOf(ExecHeader),
-            .data_length = self.out.items.len - code_size,
-        }));
+    const prev_size = self.out.items.len;
+    var string_table_cursor: u32 = 1; // null byte
+
+    var symbol_count: u64 = 0;
+    if (self.emit_debug) {
+        symbol_count += self.funcs.items.len;
+
+        for (self.funcs.items) |f| {
+            try self.out.writer(self.gpa).writeStruct(isa.Symbol{
+                .name = string_table_cursor,
+                .offset = f.offset,
+                .kind = .func,
+            });
+            string_table_cursor += @intCast(f.name.len);
+            string_table_cursor += 1;
+        }
+
+        for (self.globals.items) |g| if (g.offset != std.math.maxInt(u32)) {
+            symbol_count += 1;
+            try self.out.writer(self.gpa).writeStruct(isa.Symbol{
+                .name = string_table_cursor,
+                .kind = .data,
+                .offset = g.offset,
+            });
+            string_table_cursor += @intCast(g.name.len);
+            string_table_cursor += 1;
+        };
+
+        try self.out.append(self.gpa, 0);
+
+        for (self.funcs.items) |f| {
+            try self.out.appendSlice(self.gpa, f.name);
+            try self.out.append(self.gpa, 0);
+        }
+
+        for (self.globals.items) |g| if (g.offset != std.math.maxInt(u32)) {
+            try self.out.appendSlice(self.gpa, g.name);
+            try self.out.append(self.gpa, 0);
+        };
     }
 
-    defer self.out = .empty;
+    @memcpy(self.out.items[0..@sizeOf(ExecHeader)], std.mem.asBytes(&ExecHeader{
+        .code_length = code_size - @sizeOf(ExecHeader),
+        .data_length = prev_size - code_size,
+        .debug_length = self.out.items.len - prev_size,
+        .symbol_count = symbol_count,
+    }));
+
+    defer {
+        self.out = .empty;
+        self.out.items.len = 0;
+        self.funcs.items.len = 0;
+        self.global_lookup.items.len = 0;
+        self.globals.items.len = 0;
+        self.globals_appended = 0;
+        self.global_relocs.items.len = 0;
+    }
     return self.out;
 }
 
-pub fn makeSymMap(self: *HbvmGen, offset: u32, arena: std.mem.Allocator) std.AutoHashMapUnmanaged(u32, []const u8) {
-    var map = std.AutoHashMap(u32, []const u8).init(arena);
-    for (self.funcs.items) |gf| {
-        if (gf.offset < offset) continue;
-        map.put(gf.offset - offset, gf.name) catch unreachable;
-    }
-    for (self.globals.items) |gf| {
-        if (gf.offset < offset) continue;
-        map.put(gf.offset - offset, gf.name) catch unreachable;
-    }
-    return map.unmanaged;
+pub fn disasm(_: *HbvmGen, opts: Mach.DisasmOpts) void {
+    var tmp = utils.Arena.scrath(null);
+    isa.disasm(opts.bin, tmp.arena.allocator(), opts.out, opts.colors) catch unreachable;
 }
 
-pub fn disasm(self: *HbvmGen, out: std.io.AnyWriter, colors: std.io.tty.Config) void {
-    const code_len = self.link(0, false, true);
+pub fn run(self: *HbvmGen, env: Mach.RunEnv) !usize {
+    _ = self;
 
-    var arena = std.heap.ArenaAllocator.init(self.gpa);
-    defer arena.deinit();
-    const map = self.makeSymMap(0, arena.allocator());
-    isa.disasm(self.out.items[0..code_len], arena.allocator(), &map, out, colors) catch unreachable;
+    const stack_size = 1024 * 128;
+
+    var stack: [stack_size]u8 = undefined;
+
+    const code = env.code;
+    const head: root.hbvm.HbvmGen.ExecHeader = @bitCast(code[0..@sizeOf(root.hbvm.HbvmGen.ExecHeader)].*);
+
+    const stack_end = stack_size - code.len + @sizeOf(root.hbvm.HbvmGen.ExecHeader);
+    @memcpy(stack[stack_end..], code[@sizeOf(root.hbvm.HbvmGen.ExecHeader)..]);
+
+    var vm = root.hbvm.Vm{};
+    vm.ip = stack_end;
+    vm.fuel = 1024 * 10;
+    @memset(&vm.regs.values, 0);
+    vm.regs.set(.stack_addr, stack_end);
+    var ctx = root.hbvm.Vm.SafeContext{
+        .writer = env.output,
+        .symbols = env.symbols,
+        .color_cfg = env.colors,
+        .memory = &stack,
+        .code_start = stack_end,
+        .code_end = stack_end + @as(usize, @intCast(head.code_length)),
+    };
+
+    var page_cursor: usize = 1;
+    const page_size = 1024 * 4;
+    while (true) switch (try vm.run(&ctx)) {
+        .tx => break,
+        .eca => switch (vm.regs.get(.arg(0))) {
+            100 => {
+                std.debug.assert(vm.regs.get(.arg(1)) == 1);
+                std.debug.assert(vm.regs.get(.arg(2)) == 2);
+                vm.regs.set(.ret(0), 3);
+            },
+            3 => switch (vm.regs.get(.arg(1))) {
+                2 => switch (ctx.memory[vm.regs.get(.arg(2))]) {
+                    0 => {
+                        const Msg = extern struct { pad: u8, pages_new: u64 align(1), zeroed: bool };
+
+                        const msg: Msg = @bitCast(ctx.memory[vm.regs.get(.arg(2))..][0..@sizeOf(Msg)].*);
+
+                        const base = page_size * page_cursor;
+                        page_cursor += msg.pages_new;
+
+                        if (msg.zeroed) @memset(ctx.memory[base..][0 .. msg.pages_new * page_size], 0);
+
+                        vm.regs.set(.ret(0), base);
+                    },
+                    7, 1 => {},
+                    5 => {
+                        const Msg = extern struct { pad: u8, count: u64 align(1), len: u64 align(1), src: u64 align(1), dest: u64 align(1) };
+                        const msg: Msg = @bitCast(ctx.memory[vm.regs.get(.arg(2))..][0..@sizeOf(Msg)].*);
+                        const dst, const src = .{ ctx.memory[msg.dest..][0..msg.len], ctx.memory[msg.src..][0..msg.count] };
+
+                        for (0..msg.len / msg.count) |i| {
+                            @memcpy(dst[i * msg.count ..][0..msg.count], src);
+                        }
+                    },
+                    4, 6 => |v| {
+                        const Msg = extern struct { pad: u8, len: u64 align(1), src: u64 align(1), dest: u64 align(1) };
+                        const msg: Msg = @bitCast(ctx.memory[vm.regs.get(.arg(2))..][0..@sizeOf(Msg)].*);
+                        const dst, const src = .{ ctx.memory[msg.dest..][0..msg.len], ctx.memory[msg.src..][0..msg.len] };
+
+                        if (v == 4) {
+                            @memcpy(dst, src);
+                        } else {
+                            if (msg.src < msg.dest) {
+                                std.mem.copyBackwards(u8, dst, src);
+                            } else {
+                                std.mem.copyForwards(u8, dst, src);
+                            }
+                        }
+                    },
+                    else => unreachable,
+                },
+                7 => utils.panic("I don't think I will", .{}),
+                else => unreachable,
+            },
+            else => unreachable,
+        },
+        else => unreachable,
+    };
+
+    return vm.regs.get(.ret(0));
 }
 
 pub fn deinit(self: *HbvmGen) void {

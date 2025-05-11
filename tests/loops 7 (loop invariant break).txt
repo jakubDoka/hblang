@@ -1,4 +1,0 @@
-loops 7 (loop invariant break):9:7: the if condition is loop invariant but it decides wheter to break out ouf the loop
-    loop if i == arr.len break else {
-         ^
-code size: 0

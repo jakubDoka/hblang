@@ -256,7 +256,7 @@ pub const Elf = struct {
         symbol_table: std.ArrayListUnmanaged(Symbol) = .{},
         string_table: std.ArrayListUnmanaged(u8) = .{},
 
-        pub fn flush(self: Builder, arch: Arch, writer: std.io.AnyWriter) !void {
+        pub fn flush(self: *Builder, arch: Arch, writer: std.io.AnyWriter) !void {
             comptime var positions: [sections.len]Word = undefined;
             const section_name_table = comptime b: {
                 var fs: []const u8 = "";
@@ -325,6 +325,10 @@ pub const Elf = struct {
             try writer.writeStruct(Symbol.first);
             for (self.symbol_table.items) |s| try writer.writeStruct(s);
             try writer.writeAll(self.text.items);
+
+            self.symbol_table.items.len = 0;
+            self.string_table.items.len = 0;
+            self.text.items.len = 0;
         }
 
         pub fn addName(self: *Builder, gpa: std.mem.Allocator, name: []const u8) !SymbolName {
@@ -480,7 +484,7 @@ pub const Coff = struct {
 
         string_table: std.ArrayListUnmanaged(u8) = .{},
 
-        pub fn flush(self: Builder, arch: Arch, writer: std.io.AnyWriter) !void {
+        pub fn flush(self: *Builder, arch: Arch, writer: std.io.AnyWriter) !void {
             const section_data_start = @sizeOf(FileHeader) + @sizeOf(SectionHeader);
             const header = FileHeader{
                 .Machine = switch (arch) {
@@ -523,6 +527,10 @@ pub const Coff = struct {
 
             try writer.writeInt(u32, @intCast(4 + self.string_table.items.len), .little);
             try writer.writeAll(self.string_table.items);
+
+            self.symbol_table.items.len = 0;
+            self.string_table.items.len = 0;
+            self.text.items.len = 0;
         }
 
         pub fn addName(self: *Builder, gpa: std.mem.Allocator, name: []const u8) !SymbolName {

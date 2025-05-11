@@ -160,6 +160,14 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
             @as(*align(@alignOf(usize)) u64, @ptrCast(&Block.setMasks(selection_set)[0])).* |= instrs[e].def.clobbers();
         };
 
+        if (instrs[i].def.carried()) |c| {
+            for (instrs[i].def.dataDeps(), 0..) |d, k| {
+                if (k != c) {
+                    selection_set.set(colors[d.?.schedule]);
+                }
+            }
+        }
+
         const bias = instr.def.regBias();
         if (bias != null and !selection_set.isSet(bias.?)) {
             color.* = bias.?;

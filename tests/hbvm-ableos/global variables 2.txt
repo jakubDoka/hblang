@@ -1,0 +1,7 @@
+main:
+        lra $1, $0, :some_fib
+        lra $2, $0, :bigon_era
+         ld $1, $1, 0, 8
+         ld $2, $2, 0, 8
+      sub64 $1, $1, $2
+         tx

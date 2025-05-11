@@ -507,6 +507,10 @@ pub fn Func(comptime MachNode: type) type {
                 return if (@hasDecl(MachNode, "regBias")) MachNode.regBias(self) else null;
             }
 
+            pub fn carried(self: *Node) ?usize {
+                return if (@hasDecl(MachNode, "carried")) MachNode.carried(self) else null;
+            }
+
             pub fn clobbers(self: *Node) u64 {
                 return if (@hasDecl(MachNode, "clobbers")) MachNode.clobbers(self) else 0;
             }
@@ -1401,21 +1405,23 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         pub fn fmtScheduled(self: *Self, writer: anytype, colors: std.io.tty.Config) void {
+            errdefer unreachable;
+
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), self.next_id) catch unreachable;
+            var visited = try std.DynamicBitSet.initEmpty(tmp.arena.allocator(), self.next_id);
 
             self.root.fmt(self.block_count, writer, colors);
-            writer.writeAll("\n") catch unreachable;
+            try writer.writeAll("\n");
             for (collectPostorder(self, tmp.arena.allocator(), &visited)) |p| {
                 p.base.fmt(self.block_count, writer, colors);
 
-                writer.writeAll("\n") catch unreachable;
+                try writer.writeAll("\n");
                 for (p.base.outputs()) |o| {
-                    writer.writeAll("  ") catch unreachable;
+                    try writer.writeAll("  ");
                     o.fmt(self.instr_count, writer, colors);
-                    writer.writeAll("\n") catch unreachable;
+                    try writer.writeAll("\n");
                 }
             }
         }

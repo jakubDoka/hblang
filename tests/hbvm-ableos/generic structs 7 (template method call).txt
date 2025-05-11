@@ -1,0 +1,12 @@
+main:
+         st $31, $254, -16, 16
+     addi64 $254, $254, -16
+     addi64 $32, $254, 0
+         cp $1, $32
+        jal $31, $0, :A.apply(func = main)
+       li64 $1, 0
+     addi64 $254, $254, 16
+         ld $31, $254, -16, 16
+         tx
+A.apply(func = main):
+       jala $0, $31, 0

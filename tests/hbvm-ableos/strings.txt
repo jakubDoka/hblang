@@ -1,0 +1,6 @@
+main:
+        lra $1, $0, :main.	Edvard
+ඞ
+         ld $1, $1, 1, 1
+       andi $1, $1, 255
+         tx

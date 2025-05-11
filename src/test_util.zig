@@ -2,7 +2,7 @@ const std = @import("std");
 const Vm = root.hbvm.Vm;
 const HbvmGen = root.hbvm.HbvmGen;
 const graph = root.backend.graph;
-const Mach = root.backend.Mach;
+const Mach = root.backend.Machine;
 const Ast = root.frontend.Ast;
 const Codegen = root.frontend.Codegen;
 const Types = root.frontend.Types;
@@ -11,6 +11,60 @@ const utils = root.utils;
 const hbc = @import("hbc.zig");
 const diff = @import("diff.zig");
 pub const static_anal = root.backend.static_anal;
+
+pub const Expectations = struct {
+    return_value: u64 = 0,
+    should_error: bool = false,
+    times_out: bool = false,
+    unreaches: bool = false,
+
+    pub fn init(ast: *const Ast, gpa: std.mem.Allocator) Expectations {
+        errdefer unreachable;
+
+        var slf: Expectations = .{};
+
+        if (ast.findDecl(ast.items, "expectations", gpa)) |d| {
+            const decl = ast.exprs.getTyped(.Decl, d[0]).?.value;
+            const ctor = ast.exprs.getTyped(.Ctor, decl).?;
+            for (ast.exprs.view(ctor.fields)) |field| {
+                const value = ast.exprs.get(field.value);
+                const fname = ast.tokenSrc(field.pos.index);
+
+                inline for (std.meta.fields(Expectations)) |f| {
+                    if (std.mem.eql(u8, fname, f.name)) @field(slf, f.name) =
+                        switch (f.type) {
+                            u64 => @bitCast(try std.fmt.parseInt(
+                                i64,
+                                ast.tokenSrc(value.Integer.pos.index),
+                                10,
+                            )),
+                            bool => value.Bool.value,
+                            []const Ast.Id => ast.exprs.view(value.Tupl.fields),
+                            else => comptime unreachable,
+                        };
+                }
+            }
+        }
+
+        return slf;
+    }
+
+    pub fn assert(expectations: Expectations, res: anyerror!usize) !void {
+        const ret = res catch |err| switch (err) {
+            error.Timeout => {
+                try std.testing.expect(expectations.times_out);
+                return;
+            },
+            error.Unreachable => {
+                try std.testing.expect(expectations.unreaches);
+                return;
+            },
+            else => return err,
+        };
+
+        try std.testing.expectEqual(expectations.return_value, ret);
+    }
+};
 
 pub fn runVendoredTest(gpa: std.mem.Allocator, path: []const u8) !void {
     var ast = try hbc.compile(.{
@@ -103,6 +157,7 @@ pub fn testBuilder(
     code: []const u8,
     gpa: std.mem.Allocator,
     output: std.io.AnyWriter,
+    gen: root.backend.Machine,
     colors: std.io.tty.Config,
     verbose: bool,
 ) !void {
@@ -124,10 +179,6 @@ pub fn testBuilder(
     const entry = try cg.getEntry(.root, "main");
     cg.work_list.appendAssumeCapacity(.{ .Func = entry });
 
-    var hbgen = HbvmGen{ .gpa = gpa };
-    defer hbgen.deinit();
-    var gen = Mach.init(&hbgen);
-
     var syms = std.heap.ArenaAllocator.init(gpa);
     defer syms.deinit();
 
@@ -140,7 +191,6 @@ pub fn testBuilder(
                 cg.bl.func.reset();
             }
 
-            if (verbose) try header("UNSCHEDULED SON", output, colors);
             cg.build(func) catch {
                 errored = true;
                 continue;
@@ -148,23 +198,7 @@ pub fn testBuilder(
 
             std.debug.assert(!cg.errored);
 
-            const fnc: *graph.Func(HbvmGen.Node) = @ptrCast(&cg.bl.func);
-            if (verbose) fnc.fmtUnscheduled(output, colors);
-
             if (verbose) try header("OPTIMIZED SON", output, colors);
-            fnc.iterPeeps(10000, @TypeOf(fnc.*).idealizeDead);
-            fnc.mem2reg.run();
-            fnc.iterPeeps(10000, @TypeOf(fnc.*).idealize);
-            fnc.iterPeeps(10000, HbvmGen.idealizeMach);
-            if (verbose) fnc.fmtUnscheduled(output, colors);
-
-            if (verbose) try header("SCHEDULED SON", output, colors);
-            fnc.gcm.buildCfg();
-            if (verbose) fnc.fmtScheduled(output, colors);
-
-            fnc.static_anal.analize(func_arena.arena, &anal_errors);
-            errored = types.dumpAnalErrors(&anal_errors) or errored;
-
             gen.emitFunc(&cg.bl.func, .{
                 .id = @intFromEnum(func),
                 .name = try std.fmt.allocPrint(
@@ -173,8 +207,14 @@ pub fn testBuilder(
                     .{Types.Id.init(.{ .Func = func }).fmt(&types)},
                 ),
                 .entry = func == entry,
-                .optimizations = .none,
+                .optimizations = .{
+                    .verbose = verbose,
+                    .arena = func_arena.arena,
+                    .error_buf = &anal_errors,
+                },
             });
+
+            errored = types.dumpAnalErrors(&anal_errors) or errored;
         },
         .Global => |g| {
             gen.emitData(.{
@@ -189,191 +229,39 @@ pub fn testBuilder(
         },
     };
 
-    var out = std.ArrayListUnmanaged(u8).empty;
-    var code_len: usize = 0;
+    const expectations: Expectations = .init(&ast, syms.allocator());
+
+    try std.testing.expectEqual(expectations.should_error, errored);
+    if (expectations.should_error) return;
+
+    if (verbose) try header("CODEGEN", output, colors);
+    var out = gen.finalize();
     defer out.deinit(gpa);
-    if (!errored) {
-        if (verbose) try header("CODEGEN", output, colors);
-        code_len = hbgen.link(0, true, true);
-        gen.disasm(output, colors);
-        out = gen.finalize();
-    }
 
-    try output.print("code size: {}\n", .{out.items.len});
+    gen.disasm(.{
+        .name = name,
+        .bin = out.items,
+        .out = output,
+        .colors = colors,
+    });
 
-    try runVm(
-        &ast,
-        errored,
-        out.items,
-        code_len,
-        if (verbose) output else std.io.null_writer.any(),
-        colors,
-        .{},
-    );
+    try expectations.assert(gen.run(.{
+        .name = name,
+        .code = out.items,
+        .colors = colors,
+        .output = if (verbose) output else std.io.null_writer.any(),
+    }));
 }
 
 pub const stack_size = 1024 * 10;
 
-pub fn runVm(
-    ast: *const Ast,
-    errored: bool,
-    code: []u8,
-    code_len: usize,
-    output: std.io.AnyWriter,
-    colors: std.io.tty.Config,
-    symbols: std.AutoHashMapUnmanaged(u32, []const u8),
+pub fn testFmt(
+    name: []const u8,
+    path: []const u8,
+    code: [:0]const u8,
+    out: std.io.AnyWriter,
+    color: std.io.tty.Config,
 ) !void {
-    var ret: u64 = 0;
-    var should_error: bool = false;
-    var times_out: bool = false;
-    var unreaches: bool = false;
-    var emulate_ecalls: bool = false;
-    var ecalls: []const Ast.Id = &.{};
-
-    var stack: [stack_size]u8 = undefined;
-    var tmp = std.heap.FixedBufferAllocator.init(&stack);
-
-    if (ast.findDecl(ast.items, "expectations", tmp.allocator())) |d| {
-        const decl = ast.exprs.getTyped(.Decl, d[0]).?.value;
-        const ctor = ast.exprs.getTyped(.Ctor, decl).?;
-        for (ast.exprs.view(ctor.fields)) |field| {
-            const value = ast.exprs.get(field.value);
-            const fname = ast.tokenSrc(field.pos.index);
-
-            if (std.mem.eql(u8, fname, "return_value")) {
-                ret = @bitCast(try std.fmt.parseInt(i64, ast.tokenSrc(value.Integer.pos.index), 10));
-            }
-
-            if (std.mem.eql(u8, fname, "should_error")) {
-                should_error = value.Bool.value;
-            }
-
-            if (std.mem.eql(u8, fname, "times_out")) {
-                times_out = value.Bool.value;
-            }
-
-            if (std.mem.eql(u8, fname, "unreaches")) {
-                unreaches = value.Bool.value;
-            }
-
-            if (std.mem.eql(u8, fname, "emulate_ecalls")) {
-                emulate_ecalls = value.Bool.value;
-            }
-
-            if (std.mem.eql(u8, fname, "ecalls")) {
-                ecalls = ast.exprs.view(value.Tupl.fields);
-            }
-        }
-    }
-
-    try std.testing.expectEqual(should_error, errored);
-    if (errored) {
-        return;
-    }
-
-    const stack_end = stack_size - code.len;
-
-    @memcpy(stack[stack_end..], code);
-
-    var vm = Vm{};
-    vm.ip = stack_end;
-    vm.fuel = 1024 * 10;
-    @memset(&vm.regs.values, 0);
-    vm.regs.set(.stack_addr, stack_end);
-    var ctx = Vm.SafeContext{
-        .writer = output,
-        .symbols = symbols,
-        .color_cfg = colors,
-        .memory = &stack,
-        .code_start = stack_end,
-        .code_end = stack_end + code_len,
-    };
-    try header("EXECUTION", output, colors);
-
-    var page_cursor: usize = 1;
-    var eca_idx: usize = 0;
-    while (true) switch (vm.run(&ctx) catch |err| switch (err) {
-        error.Timeout => {
-            try std.testing.expect(times_out);
-            return;
-        },
-        error.Unreachable => {
-            try std.testing.expect(unreaches);
-            return;
-        },
-        else => return err,
-    }) {
-        .tx => break,
-        .eca => if (emulate_ecalls) {
-            const page_size = 1024 * 4;
-            switch (vm.regs.get(.arg(0))) {
-                3 => switch (vm.regs.get(.arg(1))) {
-                    2 => switch (ctx.memory[vm.regs.get(.arg(2))]) {
-                        0 => {
-                            const Msg = extern struct { pad: u8, pages_new: u64 align(1), zeroed: bool };
-
-                            const msg: Msg = @bitCast(ctx.memory[vm.regs.get(.arg(2))..][0..@sizeOf(Msg)].*);
-
-                            const base = page_size * page_cursor;
-                            page_cursor += msg.pages_new;
-
-                            if (msg.zeroed) @memset(ctx.memory[base..][0 .. msg.pages_new * page_size], 0);
-
-                            vm.regs.set(.ret(0), base);
-                        },
-                        7, 1 => {},
-                        5 => {
-                            const Msg = extern struct { pad: u8, count: u64 align(1), len: u64 align(1), src: u64 align(1), dest: u64 align(1) };
-                            const msg: Msg = @bitCast(ctx.memory[vm.regs.get(.arg(2))..][0..@sizeOf(Msg)].*);
-                            const dst, const src = .{ ctx.memory[msg.dest..][0..msg.len], ctx.memory[msg.src..][0..msg.count] };
-
-                            for (0..msg.len / msg.count) |i| {
-                                @memcpy(dst[i * msg.count ..][0..msg.count], src);
-                            }
-                        },
-                        4, 6 => |v| {
-                            const Msg = extern struct { pad: u8, len: u64 align(1), src: u64 align(1), dest: u64 align(1) };
-                            const msg: Msg = @bitCast(ctx.memory[vm.regs.get(.arg(2))..][0..@sizeOf(Msg)].*);
-                            const dst, const src = .{ ctx.memory[msg.dest..][0..msg.len], ctx.memory[msg.src..][0..msg.len] };
-
-                            if (v == 4) {
-                                @memcpy(dst, src);
-                            } else {
-                                if (msg.src < msg.dest) {
-                                    std.mem.copyBackwards(u8, dst, src);
-                                } else {
-                                    std.mem.copyForwards(u8, dst, src);
-                                }
-                            }
-                        },
-                        else => unreachable,
-                    },
-                    7 => utils.panic("I don't think I will", .{}),
-                    else => unreachable,
-                },
-                else => unreachable,
-            }
-        } else {
-            try std.testing.expect(eca_idx < ecalls.len);
-            const curr_eca = ast.exprs.getTyped(.Decl, ecalls[eca_idx]).?;
-
-            for (ast.exprs.view(ast.exprs.getTyped(.Tupl, curr_eca.bindings).?.fields), 0..) |vl, i| {
-                const value = try std.fmt.parseInt(u64, ast.tokenSrc(ast.exprs.getTyped(.Integer, vl).?.pos.index), 10);
-                try std.testing.expectEqual(value, vm.regs.get(.arg(i)));
-            }
-
-            const ret_value = try std.fmt.parseInt(u64, ast.tokenSrc(ast.exprs.getTyped(.Integer, curr_eca.ty).?.pos.index), 10);
-            vm.regs.set(.ret(0), ret_value);
-
-            eca_idx += 1;
-        },
-        else => unreachable,
-    };
-
-    try std.testing.expectEqual(vm.regs.get(.ret(0)), ret);
-}
-
-pub fn testFmt(name: []const u8, path: []const u8, code: [:0]const u8) !void {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
@@ -400,13 +288,22 @@ pub fn testFmt(name: []const u8, path: []const u8, code: [:0]const u8) !void {
         std.mem.trim(u8, code, "\n"),
         std.mem.trim(u8, fmtd.items, "\n"),
     )) {
-        try diff.printDiff(fmtd.items, code, gpa);
+        try diff.printDiff(fmtd.items, code, gpa, out, color);
         return error.TestFailed;
     }
 }
 
-pub fn checkOrUpdatePrintTest(name: []const u8, output: []const u8) !void {
-    var tests = try std.fs.cwd().openDir("tests", .{});
+pub fn checkOrUpdatePrintTest(
+    name: []const u8,
+    category: []const u8,
+    output: []const u8,
+    out: std.io.AnyWriter,
+    color: std.io.tty.Config,
+) !void {
+    var tests_root = try std.fs.cwd().openDir("tests", .{});
+    defer tests_root.close();
+
+    var tests = try tests_root.openDir(category, .{});
     defer tests.close();
 
     var scrath = utils.Arena.scrath(null);
@@ -431,7 +328,7 @@ pub fn checkOrUpdatePrintTest(name: []const u8, output: []const u8) !void {
             std.mem.trim(u8, output, "\n"),
             std.mem.trim(u8, old, "\n"),
         )) {
-            try diff.printDiff(old, output, gpa);
+            try diff.printDiff(old, output, gpa, out, color);
             return error.TestFailed;
         }
     }

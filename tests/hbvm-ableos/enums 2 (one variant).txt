@@ -1,0 +1,13 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        jal $31, $0, :Target.current
+        jal $31, $0, :page_size
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+page_size:
+       li64 $1, 0
+       jala $0, $31, 0
+Target.current:
+       jala $0, $31, 0
