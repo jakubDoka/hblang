@@ -299,6 +299,16 @@ pub const Elf = struct {
             });
             section_alloc_cursor += self.string_table.items.len;
 
+            std.sort.pdq(Symbol, self.symbol_table.items, {}, struct {
+                fn lessThen(_: void, lhs: Symbol, rhs: Symbol) bool {
+                    return @intFromEnum(lhs.info.bind) < @intFromEnum(rhs.info.bind);
+                }
+            }.lessThen);
+
+            var local_sim_count: Word = 0;
+            while (self.symbol_table.items[local_sim_count].info.bind == .local)
+                local_sim_count += 1;
+
             try writer.writeStruct(SectionHeader{
                 .sh_name = positions[3],
                 .sh_type = .symtab,
@@ -307,7 +317,7 @@ pub const Elf = struct {
                 .sh_size = @intCast((self.symbol_table.items.len + 1) * @sizeOf(Symbol)),
                 .sh_entsize = @sizeOf(Symbol),
                 .sh_link = 2,
-                .sh_info = 1,
+                .sh_info = local_sim_count + 1,
             });
             section_alloc_cursor += (self.symbol_table.items.len + 1) * @sizeOf(Symbol);
 

@@ -108,23 +108,59 @@ pub fn reg(self: X86_64, node: ?*FuncNode) u16 {
     return self.allocs[node.?.schedule];
 }
 
-pub fn emitBinOp(self: *X86_64, opcode: enum(u8) {
+pub const Opcode = enum(u8) {
     add = 0x01,
+    addimm = 0x81,
     sub = 0x29,
     xchg = 0x87,
     mov = 0x89,
-}, lhs: u16, rhs: u16) void {
+    cmp = 0x3b,
+    movmr = 0x8b,
+};
+
+pub fn rex(lhs: u16, rhs: u16) u8 {
+    var rx: u8 = 0x48;
+
+    if (lhs > 8) rx |= 0b001;
+    if (rhs > 8) rx |= 0b100;
+
+    return rx;
+}
+
+pub fn modrm(mode: u8, lhs: u16, rhs: u16) u8 {
+    return @intCast(mode << 6 | ((rhs & 0b111) << 3) | (lhs & 0b111));
+}
+
+pub fn emitBinOp(self: *X86_64, opcode: Opcode, lhs: u16, rhs: u16) void {
     errdefer unreachable;
+    try self.func_bodies.appendSlice(self.gpa, &.{
+        rex(lhs, rhs),
+        @intFromEnum(opcode),
+        modrm(0b11, lhs, rhs),
+    });
+}
 
-    var rex: u8 = 0x48;
+pub fn emitBinOpMem(self: *X86_64, opcode: Opcode, lhs: u16, rhs: u16, offset: u32) void {
+    errdefer unreachable;
+    try self.func_bodies.appendSlice(self.gpa, &.{
+        rex(lhs, 0),
+        @intFromEnum(opcode),
+        modrm(0b10, lhs, rhs),
+    });
+    if (lhs == 12) {
+        try self.func_bodies.append(self.gpa, 0x24);
+    }
+    try self.func_bodies.writer(self.gpa).writeInt(u32, offset, .little);
+}
 
-    if (lhs > 8) rex |= 1;
-    if (rhs > 8) rex |= 0b100;
-
-    const mode = 0b11 << 6;
-    const args: u8 = @intCast(mode | ((rhs & 0b111) << 3) | (lhs & 0b111));
-
-    try self.func_bodies.appendSlice(self.gpa, &.{ rex, @intFromEnum(opcode), args });
+pub fn emitImmBinOp(self: *X86_64, opcode: Opcode, lhs: u16, rhs: u32) void {
+    errdefer unreachable;
+    try self.func_bodies.appendSlice(self.gpa, &.{
+        rex(lhs, 0),
+        @intFromEnum(opcode),
+        modrm(0b11, lhs, 0),
+    });
+    try self.func_bodies.writer(self.gpa).writeInt(u32, rhs, .little);
 }
 
 pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
@@ -138,8 +174,9 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     const id = opts.id;
     const entry = opts.entry;
     const name = if (entry) "main" else opts.name;
+    const linkage: Object.Linkage = if (entry) .global else .local;
 
-    const ob_id = try self.builder.declareFunc(self.gpa, name, .global);
+    const ob_id = try self.builder.declareFunc(self.gpa, name, linkage);
 
     if (id >= self.func_map.items.len) {
         const prev_len = self.func_map.items.len;
@@ -190,14 +227,17 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
                     try self.func_bodies.append(self.gpa, 0x41);
                 }
                 const opcode_base = 0x50;
-                try self.func_bodies.append(self.gpa, opcode_base + (@intFromEnum(r)));
+                try self.func_bodies.append(self.gpa, opcode_base + (@intFromEnum(r) & 0b111));
             }
         }
 
         if (stack_size != 0) {
             // sub rsp, stack_size
-            try self.func_bodies.appendSlice(self.gpa, &.{ 0x48, 0x81, 0xEC });
-            try self.func_bodies.writer(self.gpa).writeInt(i32, @intCast(stack_size), .little);
+            self.emitImmBinOp(
+                .addimm,
+                @intFromEnum(Reg.rsp),
+                @bitCast(@as(i32, @intCast(-stack_size))),
+            );
         }
 
         for (0..func.params.len) |i| {
@@ -222,9 +262,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
             std.debug.assert(last.kind == .Return);
 
             if (stack_size != 0) {
-                // add rsp, stack_size
-                try self.func_bodies.appendSlice(self.gpa, &.{ 0x48, 0x81, 0xC4 });
-                try self.func_bodies.writer(self.gpa).writeInt(i32, @intCast(stack_size), .little);
+                self.emitImmBinOp(.addimm, @intFromEnum(Reg.rsp), @intCast(stack_size));
             }
 
             for (Reg.system_v.callee_saved) |r| {
@@ -233,7 +271,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
                         try self.func_bodies.append(self.gpa, 0x41);
                     }
                     const opcode_base = 0x58;
-                    try self.func_bodies.append(self.gpa, opcode_base + @intFromEnum(r));
+                    try self.func_bodies.append(self.gpa, opcode_base + (@intFromEnum(r) & 0b111));
                 }
             }
 
@@ -290,23 +328,40 @@ pub fn emitBlockBody(self: *X86_64, arena: std.mem.Allocator, block: *FuncNode) 
     for (block.outputs()) |instr| switch (instr.kind) {
         .CInt => {
             const imm64 = instr.extra(.CInt).*;
-            var reg_index: u8 = @intCast(self.reg(instr));
-
-            var rex: u8 = 0x48;
-
-            if (reg_index >= 8) {
-                rex |= 0x01;
-                reg_index -= 8;
-            }
+            const reg_index: u8 = @intCast(self.reg(instr));
 
             const opcode_base = 0xB8;
 
             const opcode = opcode_base + reg_index;
 
-            try self.func_bodies.appendSlice(self.gpa, &.{ rex, opcode });
+            try self.func_bodies.appendSlice(self.gpa, &.{ rex(reg_index, 0), opcode });
             try self.func_bodies.writer(self.gpa).writeInt(i64, imm64, .little);
         },
-        .Local => {},
+        .Local => {
+            self.emitBinOp(.mov, self.reg(instr), @intFromEnum(Reg.rsp));
+            self.emitImmBinOp(.addimm, self.reg(instr), @intCast(instr.extra(.Local).*));
+        },
+        .Load => {
+            std.debug.assert(instr.data_type.size() == 8);
+
+            const dst = self.reg(instr);
+            const bse = self.reg(instr.inputs()[2]);
+
+            const offset: u32 = 0;
+
+            self.emitBinOpMem(.movmr, bse, dst, offset);
+        },
+        .Store => {
+            std.debug.assert(instr.data_type.size() == 8);
+
+            const dst = self.reg(instr.inputs()[2]);
+            const vl = self.reg(instr.inputs()[3]);
+
+            const offset: u32 = 0;
+
+            std.debug.print("{} {}\n", .{ dst, vl });
+            self.emitBinOpMem(.mov, dst, vl, offset);
+        },
         .Call => {
             const call = instr.extra(.Call);
 

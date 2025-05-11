@@ -32,7 +32,11 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
             self.findLoopInvariantConditions(arena, errors);
         }
 
-        pub fn findLoopInvariantConditions(self: *Self, arena: *root.Arena, errors: *std.ArrayListUnmanaged(Error)) void {
+        pub fn findLoopInvariantConditions(
+            self: *Self,
+            arena: *root.Arena,
+            errors: *std.ArrayListUnmanaged(Error),
+        ) void {
             var tmp = root.Arena.scrath(arena);
             defer tmp.deinit();
 
@@ -55,7 +59,9 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
                         if (func.loopDepth(inp.?) == ld) break :b;
                     }
 
-                    errors.append(arena.allocator(), .{ .LoopInvariantBreak = .{ .if_node = node.sloc } }) catch unreachable;
+                    errors.append(arena.allocator(), .{
+                        .LoopInvariantBreak = .{ .if_node = node.sloc },
+                    }) catch unreachable;
                 }
 
                 for (node.outputs()) |o| if (o.isCfg()) {
@@ -64,7 +70,11 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
             }
         }
 
-        pub fn findConstantOobMemOps(self: *Self, arena: *root.Arena, errors: *std.ArrayListUnmanaged(Error)) void {
+        pub fn findConstantOobMemOps(
+            self: *Self,
+            arena: *root.Arena,
+            errors: *std.ArrayListUnmanaged(Error),
+        ) void {
             const func = self.getGraph();
 
             if (func.root.outputs().len < 2 or func.root.outputs()[1].kind != .Mem) return;
@@ -83,7 +93,11 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
         }
 
         // NOTE: this is a heuristic, it can miss things
-        pub fn tryHardToFindMemoryEscapes(self: *Self, arena: *root.Arena, errors: *std.ArrayListUnmanaged(Error)) void {
+        pub fn tryHardToFindMemoryEscapes(
+            self: *Self,
+            arena: *root.Arena,
+            errors: *std.ArrayListUnmanaged(Error),
+        ) void {
             const func = self.getGraph();
             for (func.root.outputs()[0].outputs()) |arg| if (arg.kind == .Arg) {
                 var tmp = root.Arena.scrath(arena);
@@ -112,15 +126,15 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
 
                     var kept: usize = 0;
                     o: for (local_stores.items) |marked| {
-                        if (Func.noAlias(unmarked, marked)) {
+                        if (Func.noAlias(store, marked)) {
                             local_stores.items[kept] = marked;
                             kept += 1;
                             continue :o;
                         }
 
-                        var curcor = unmarked.cfg0().?;
+                        var curcor = store.cfg0().?;
                         while (true) {
-                            if (marked.cfg0().? == unmarked.cfg0().?) break;
+                            if (marked.cfg0().? == store.cfg0().?) break;
                             if (marked.cfg0().? == curcor) continue :o;
                             if (curcor.idepth() < marked.cfg0().?.idepth()) {
                                 local_stores.items[kept] = marked;
@@ -132,7 +146,7 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
                         }
 
                         const unmarked_is_first = for (curcor.base.outputs()) |bo| {
-                            if (bo == unmarked) break false;
+                            if (bo == store) break false;
                             if (bo == marked) break true;
                         } else unreachable;
 
@@ -145,12 +159,18 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
                 }
 
                 for (local_stores.items) |marked| {
-                    errors.append(arena.allocator(), .{ .ReturningStack = .{ .slot = marked.value().sloc } }) catch unreachable;
+                    errors.append(arena.allocator(), .{
+                        .ReturningStack = .{ .slot = marked.value().sloc },
+                    }) catch unreachable;
                 }
             };
         }
 
-        pub fn findTrivialStackEscapes(self: *Self, arena: *root.Arena, errors: *std.ArrayListUnmanaged(Error)) void {
+        pub fn findTrivialStackEscapes(
+            self: *Self,
+            arena: *root.Arena,
+            errors: *std.ArrayListUnmanaged(Error),
+        ) void {
             const func = self.getGraph();
             if (func.end.inputs()[0] == null) return;
 
