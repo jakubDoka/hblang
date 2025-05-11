@@ -258,16 +258,11 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         const expectations: test_utils.Expectations = .init(&asts[0], ast_arena.allocator());
 
         errdefer {
-            // TODO: the debug symbols need to be in the executable
-            //const symbols = backend.downcast(hb.hbvm.HbvmGen)
-            //    .makeSymMap(@sizeOf(hb.hbvm.HbvmGen.ExecHeader), ast_arena.allocator());
-
             expectations.assert(backend.run(.{
                 .name = name,
                 .code = out.items,
                 .output = std.io.getStdErr().writer().any(),
                 .colors = std.io.tty.detectConfig(std.io.getStdErr()),
-                //.symbols = symbols,
             })) catch {};
         }
 

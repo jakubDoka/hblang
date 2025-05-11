@@ -16,9 +16,11 @@ builder: Object,
 gpa: std.mem.Allocator,
 func_bodies: std.ArrayListUnmanaged(u8) = .{},
 func_map: std.ArrayListUnmanaged(FuncData) = .{},
-global_relocs: std.ArrayListUnmanaged(Reloc) = .{},
+global_relocs: std.ArrayListUnmanaged(GlobalReloc) = .{},
 allocs: []u16 = undefined,
 ret_count: usize = undefined,
+local_relocs: std.ArrayListUnmanaged(Reloc) = undefined,
+block_offsets: []u32 = undefined,
 
 pub const Reg = enum(u8) {
     rax,
@@ -56,6 +58,13 @@ pub const FuncData = struct {
 };
 
 pub const Reloc = struct {
+    offset: u32,
+    dest: u32,
+    class: enum { rel32 },
+    off: u8,
+};
+
+pub const GlobalReloc = struct {
     offset: u32,
     dest: u32,
     class: enum { rel32 },
@@ -127,8 +136,8 @@ pub fn rex(lhs: u16, rhs: u16) u8 {
     return rx;
 }
 
-pub fn modrm(mode: u8, lhs: u16, rhs: u16) u8 {
-    return @intCast(mode << 6 | ((rhs & 0b111) << 3) | (lhs & 0b111));
+pub fn modrm(mode: u8, rm: u16, rg: u16) u8 {
+    return @intCast(mode << 6 | ((rg & 0b111) << 3) | (rm & 0b111));
 }
 
 pub fn emitBinOp(self: *X86_64, opcode: Opcode, lhs: u16, rhs: u16) void {
@@ -166,10 +175,10 @@ pub fn emitImmBinOp(self: *X86_64, opcode: Opcode, lhs: u16, rhs: u32) void {
 pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     errdefer unreachable;
 
-    opts.optimizations.execute(Node, func);
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
 
-    self.allocs = Regalloc.ralloc(Node, func);
-    self.ret_count = func.returns.len;
+    opts.optimizations.execute(Node, func);
 
     const id = opts.id;
     const entry = opts.entry;
@@ -185,14 +194,16 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     }
     const prev_len = self.func_bodies.items.len;
 
-    var tmp = utils.Arena.scrath(null);
-    defer tmp.deinit();
-
     //self.block_offsets = tmp.arena.alloc(i32, func.block_count);
     //self.local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.block_count * 2));
 
     var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), func.next_id) catch unreachable;
     const postorder = func.collectPostorder(tmp.arena.allocator(), &visited);
+
+    self.allocs = Regalloc.ralloc(Node, func);
+    self.ret_count = func.returns.len;
+    self.local_relocs = .initBuffer(tmp.arena.alloc(Reloc, 128));
+    self.block_offsets = tmp.arena.alloc(u32, postorder.len);
 
     const reg_shift: u8 = 0;
     for (self.allocs) |*r| r.* += reg_shift;
@@ -253,9 +264,9 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     }
 
     for (postorder, 0..) |bb, i| {
-        _ = i;
-        //self.block_offsets[bb.base.schedule] = @intCast(self.out.items.len);
-        //std.debug.assert(bb.base.schedule == i);
+        self.block_offsets[bb.base.schedule] = @intCast(self.func_bodies.items.len);
+        std.debug.assert(bb.base.schedule == i);
+
         self.emitBlockBody(tmp.arena.allocator(), &bb.base);
         const last = bb.base.outputs()[bb.base.output_len - 1];
         if (last.outputs().len == 0) {
@@ -277,26 +288,40 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
 
             const ret_op = 0xc3;
             try self.func_bodies.append(self.gpa, ret_op);
+        } else if (i + 1 == last.outputs()[@intFromBool(last.isSwapped())].schedule) {
+            // noop
+        } else if (last.kind == .Never) {
+            // noop
+        } else if (last.kind == .Trap) {
+            // noop
+        } else {
+            std.debug.assert(last.outputs()[0].isBasicBlockStart());
+            self.local_relocs.appendAssumeCapacity(.{
+                .dest = last.outputs()[@intFromBool(last.isSwapped())].schedule,
+                .offset = @intCast(self.func_bodies.items.len),
+                .off = 1,
+                .class = .rel32,
+            });
+            try self.func_bodies.appendSlice(self.gpa, &.{ 0xE9, 0, 0, 0, 0 });
         }
-        // else if (i + 1 == last.outputs()[@intFromBool(last.isSwapped())].schedule) {
-        //    // noop
-        //} else if (last.kind == .Never) {
-        //    // noop
-        //} else if (last.kind == .Trap) {
-        //    // noop
-        //} else {
-        //    std.debug.assert(last.outputs()[0].isBasicBlockStart());
-        //    self.local_relocs.appendAssumeCapacity(.{
-        //        .dest_block = last.outputs()[@intFromBool(last.isSwapped())].schedule,
-        //        .rel = self.reloc(1, .rel32),
-        //    });
-        //    self.emit(.jmp, .{0});
-        //}
     }
 
-    //for (self.local_relocs.items) |lr| {
-    //    self.doReloc(lr.rel, self.block_offsets[lr.dest_block]);
-    //}
+    for (self.local_relocs.items) |rl| {
+        // TODO: copypasted nono
+
+        // TODO: make the class hold the values directly
+        const size = switch (rl.class) {
+            .rel32 => 4,
+        };
+
+        const dst_offset: i64 = self.block_offsets[rl.dest];
+        const jump = dst_offset - rl.offset - size - rl.off; // welp we learned
+
+        @memcpy(
+            self.func_bodies.items[rl.offset + rl.off ..][0..size],
+            @as(*const [8]u8, @ptrCast(&jump))[0..size],
+        );
+    }
 
     self.func_map.items[id] = .{
         .id = ob_id,
@@ -337,6 +362,8 @@ pub fn emitBlockBody(self: *X86_64, arena: std.mem.Allocator, block: *FuncNode) 
             try self.func_bodies.appendSlice(self.gpa, &.{ rex(reg_index, 0), opcode });
             try self.func_bodies.writer(self.gpa).writeInt(i64, imm64, .little);
         },
+        .MachMove => {},
+        .Phi => {},
         .Local => {
             self.emitBinOp(.mov, self.reg(instr), @intFromEnum(Reg.rsp));
             self.emitImmBinOp(.addimm, self.reg(instr), @intCast(instr.extra(.Local).*));
@@ -417,10 +444,57 @@ pub fn emitBlockBody(self: *X86_64, arena: std.mem.Allocator, block: *FuncNode) 
                 .isub => {
                     self.emitBinOp(.sub, dst, rhs);
                 },
+                .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => |t| {
+                    self.emitBinOp(.cmp, dst, rhs);
+
+                    const opcode_2: u8 = switch (t) {
+                        .eq => 0x94,
+                        .ne => 0x95,
+                        .ult => 0x9C,
+                        .ule => 0x9E,
+                        .ugt => 0x9F,
+                        .uge => 0x9D,
+                        .slt => 0x92,
+                        .sle => 0x96,
+                        .sgt => 0x97,
+                        .sge => 0x93,
+                        else => unreachable,
+                    };
+
+                    try self.func_bodies.appendSlice(self.gpa, &.{
+                        rex(dst, 0),
+                        0x0f,
+                        opcode_2,
+                        modrm(0x11, dst, 0),
+                    });
+                },
                 else => {
                     std.debug.panic("{any}", .{instr});
                 },
             }
+        },
+        .If => {
+            self.local_relocs.appendAssumeCapacity(.{
+                .dest = instr.outputs()[1].schedule,
+                .offset = @intCast(self.func_bodies.items.len),
+                .class = .rel32,
+                .off = 2,
+            });
+            try self.func_bodies.appendSlice(self.gpa, &.{ 0x0F, 0x84, 0, 0, 0, 0 });
+        },
+        .Jmp => if (instr.outputs()[0].kind == .Region or instr.outputs()[0].kind == .Loop) {
+            const idx = std.mem.indexOfScalar(?*Func.Node, instr.outputs()[0].inputs(), instr).? + 1;
+
+            var moves = std.ArrayList(Move).init(tmp.arena.allocator());
+            for (instr.outputs()[0].outputs()) |o| {
+                if (o.isDataPhi()) {
+                    std.debug.assert(o.inputs()[idx].?.kind == .MachMove);
+                    const dst, const src = .{ self.reg(o), self.reg(o.inputs()[idx].?.inputs()[1]) };
+                    if (dst != src) try moves.append(.{ @enumFromInt(dst), @enumFromInt(src), 0 });
+                }
+            }
+
+            self.orderMoves(moves.items);
         },
         .UnOp => {
             const op = instr.extra(.UnOp).*;
@@ -553,7 +627,7 @@ pub fn run(_: *X86_64, env: Mach.RunEnv) !usize {
 }
 
 pub fn deinit(self: *X86_64) void {
-    if (std.meta.fields(X86_64).len != 7) @compileError("reminder: deinit");
+    if (std.meta.fields(X86_64).len != 9) @compileError("reminder: deinit");
 
     self.builder.deinit(self.gpa);
     self.func_bodies.deinit(self.gpa);

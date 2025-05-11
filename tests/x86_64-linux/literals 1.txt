@@ -1,0 +1,21 @@
+literals 1.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <main>:
+   0:	48 b8 00 00 00 00 00 	movabs $0x0,%rax
+   7:	00 00 00 
+   a:	0f 84 0f 00 00 00    	je     1f <main+0x1f>
+  10:	48 b8 10 00 00 00 00 	movabs $0x10,%rax
+  17:	00 00 00 
+  1a:	e9 10 00 00 00       	jmp    2f <main+0x2f>
+  1f:	0f 84 0f 00 00 00    	je     34 <main+0x34>
+  25:	48 b8 08 00 00 00 00 	movabs $0x8,%rax
+  2c:	00 00 00 
+  2f:	e9 10 00 00 00       	jmp    44 <main+0x44>
+  34:	0f 84 0f 00 00 00    	je     49 <main+0x49>
+  3a:	48 b8 02 00 00 00 00 	movabs $0x2,%rax
+  41:	00 00 00 
+  44:	e9 00 00 00 00       	jmp    49 <main+0x49>
+  49:	c3                   	ret

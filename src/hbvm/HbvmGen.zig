@@ -333,18 +333,19 @@ pub fn disasm(_: *HbvmGen, opts: Mach.DisasmOpts) void {
     isa.disasm(opts.bin, tmp.arena.allocator(), opts.out, opts.colors) catch unreachable;
 }
 
-pub fn run(self: *HbvmGen, env: Mach.RunEnv) !usize {
-    _ = self;
+pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
 
     const stack_size = 1024 * 128;
 
     var stack: [stack_size]u8 = undefined;
 
     const code = env.code;
-    const head: root.hbvm.HbvmGen.ExecHeader = @bitCast(code[0..@sizeOf(root.hbvm.HbvmGen.ExecHeader)].*);
 
-    const stack_end = stack_size - code.len + @sizeOf(root.hbvm.HbvmGen.ExecHeader);
-    @memcpy(stack[stack_end..], code[@sizeOf(root.hbvm.HbvmGen.ExecHeader)..]);
+    const head: ExecHeader = @bitCast(code[0..@sizeOf(ExecHeader)].*);
+    const stack_end = stack_size - code.len + @sizeOf(ExecHeader);
+    @memcpy(stack[stack_end..], code[@sizeOf(ExecHeader)..]);
 
     var vm = root.hbvm.Vm{};
     vm.ip = stack_end;
@@ -353,7 +354,7 @@ pub fn run(self: *HbvmGen, env: Mach.RunEnv) !usize {
     vm.regs.set(.stack_addr, stack_end);
     var ctx = root.hbvm.Vm.SafeContext{
         .writer = env.output,
-        .symbols = env.symbols,
+        .symbols = try root.hbvm.isa.loadSymMap(tmp.arena.allocator(), code),
         .color_cfg = env.colors,
         .memory = &stack,
         .code_start = stack_end,

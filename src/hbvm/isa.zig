@@ -194,12 +194,7 @@ pub const Symbol = extern struct {
     offset: u64,
 };
 
-pub fn disasm(
-    code: []const u8,
-    arena: std.mem.Allocator,
-    writer: anytype,
-    colors: std.io.tty.Config,
-) !void {
+pub fn loadSymMap(arena: std.mem.Allocator, code: []const u8) !std.AutoHashMapUnmanaged(u32, []const u8) {
     const header: ExecHeader = @bitCast(code[0..@sizeOf(ExecHeader)].*);
     const sym_start = @sizeOf(ExecHeader) + header.code_length + header.data_length;
     const sym_end = header.symbol_count * @sizeOf(Symbol);
@@ -217,6 +212,19 @@ pub fn disasm(
             string_table[sym.name..][0..len],
         );
     }
+
+    return symbols;
+}
+
+pub fn disasm(
+    code: []const u8,
+    arena: std.mem.Allocator,
+    writer: anytype,
+    colors: std.io.tty.Config,
+) !void {
+    const header: ExecHeader = @bitCast(code[0..@sizeOf(ExecHeader)].*);
+
+    const symbols = try loadSymMap(arena, code);
 
     var labelMap = try makeLabelMap(
         code[@sizeOf(ExecHeader)..][0..header.code_length],

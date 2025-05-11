@@ -88,7 +88,6 @@ pub const RunEnv = struct {
     name: []const u8,
     code: []const u8,
     output: std.io.AnyWriter = std.io.null_writer.any(),
-    symbols: std.AutoHashMapUnmanaged(u32, []const u8) = .{},
     colors: std.io.tty.Config = .no_color,
 };
 
