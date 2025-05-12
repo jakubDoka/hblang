@@ -6,16 +6,19 @@ Disassembly of section .text:
 0000000000000000 <main>:
    0:	48 b8 00 00 00 00 00 	movabs $0x0,%rax
    7:	00 00 00 
-   a:	0f 84 0f 00 00 00    	je     1f <main+0x1f>
-  10:	48 b8 01 00 00 00 00 	movabs $0x1,%rax
-  17:	00 00 00 
-  1a:	e9 10 00 00 00       	jmp    2f <main+0x2f>
-  1f:	0f 84 0f 00 00 00    	je     34 <main+0x34>
-  25:	48 b8 02 00 00 00 00 	movabs $0x2,%rax
-  2c:	00 00 00 
-  2f:	e9 10 00 00 00       	jmp    44 <main+0x44>
-  34:	0f 84 0f 00 00 00    	je     49 <main+0x49>
-  3a:	48 b8 03 00 00 00 00 	movabs $0x3,%rax
-  41:	00 00 00 
-  44:	e9 00 00 00 00       	jmp    49 <main+0x49>
-  49:	c3                   	ret
+   a:	48 85 c0             	test   %rax,%rax
+   d:	0f 84 0f 00 00 00    	je     22 <main+0x22>
+  13:	48 b8 01 00 00 00 00 	movabs $0x1,%rax
+  1a:	00 00 00 
+  1d:	e9 13 00 00 00       	jmp    35 <main+0x35>
+  22:	48 85 c0             	test   %rax,%rax
+  25:	0f 84 0f 00 00 00    	je     3a <main+0x3a>
+  2b:	48 b8 02 00 00 00 00 	movabs $0x2,%rax
+  32:	00 00 00 
+  35:	e9 13 00 00 00       	jmp    4d <main+0x4d>
+  3a:	48 85 c0             	test   %rax,%rax
+  3d:	0f 84 0f 00 00 00    	je     52 <main+0x52>
+  43:	48 b8 03 00 00 00 00 	movabs $0x3,%rax
+  4a:	00 00 00 
+  4d:	e9 00 00 00 00       	jmp    52 <main+0x52>
+  52:	c3                   	ret

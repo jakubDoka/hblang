@@ -1,0 +1,37 @@
+loops 1.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <main>:
+   0:	53                   	push   %rbx
+   1:	48 bb 0a 00 00 00 00 	movabs $0xa,%rbx
+   8:	00 00 00 
+   b:	48 89 df             	mov    %rbx,%rdi
+   e:	e8 02 00 00 00       	call   15 <"loops 1".fib>
+  13:	5b                   	pop    %rbx
+  14:	c3                   	ret
+
+0000000000000015 <"loops 1".fib>:
+  15:	53                   	push   %rbx
+  16:	55                   	push   %rbp
+  17:	48 89 f8             	mov    %rdi,%rax
+  1a:	48 b9 00 00 00 00 00 	movabs $0x0,%rcx
+  21:	00 00 00 
+  24:	48 ba 01 00 00 00 00 	movabs $0x1,%rdx
+  2b:	00 00 00 
+  2e:	48 89 cb             	mov    %rcx,%rbx
+  31:	48 89 d5             	mov    %rdx,%rbp
+  34:	48 3b c8             	cmp    %rax,%rcx
+  37:	48 0f 94 c6          	rex.W sete %sil
+  3b:	48 0f b6 f6          	movzbq %sil,%rsi
+  3f:	48 85 f6             	test   %rsi,%rsi
+  42:	0f 84 06 00 00 00    	je     4e <"loops 1".fib+0x39>
+  48:	48 89 d8             	mov    %rbx,%rax
+  4b:	5b                   	pop    %rbx
+  4c:	5d                   	pop    %rbp
+  4d:	c3                   	ret
+  4e:	48 01 eb             	add    %rbp,%rbx
+  51:	48 29 d0             	sub    %rdx,%rax
+  54:	48 87 eb             	xchg   %rbp,%rbx
+  57:	e9 d8 ff ff ff       	jmp    34 <"loops 1".fib+0x1f>

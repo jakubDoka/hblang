@@ -182,8 +182,6 @@ pub fn testBuilder(
     var syms = std.heap.ArenaAllocator.init(gpa);
     defer syms.deinit();
 
-    var anal_errors = std.ArrayListUnmanaged(static_anal.Error){};
-
     var errored = false;
     while (cg.nextTask()) |task| switch (task) {
         .Func => |func| {
@@ -199,6 +197,11 @@ pub fn testBuilder(
             std.debug.assert(!cg.errored);
 
             if (verbose) try header("OPTIMIZED SON", output, colors);
+
+            var tmp = ast_arena.checkpoint();
+            defer tmp.deinit();
+
+            var anal_errors: std.ArrayListUnmanaged(static_anal.Error) = .empty;
             gen.emitFunc(&cg.bl.func, .{
                 .id = @intFromEnum(func),
                 .name = try std.fmt.allocPrint(
@@ -209,7 +212,7 @@ pub fn testBuilder(
                 .entry = func == entry,
                 .optimizations = .{
                     .verbose = verbose,
-                    .arena = func_arena.arena,
+                    .arena = tmp.arena,
                     .error_buf = &anal_errors,
                 },
             });

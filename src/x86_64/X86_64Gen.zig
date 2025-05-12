@@ -120,7 +120,9 @@ pub fn reg(self: X86_64, node: ?*FuncNode) u16 {
 pub const Opcode = enum(u8) {
     add = 0x01,
     addimm = 0x81,
+    @"test" = 0x85,
     sub = 0x29,
+    mul = 0xf7,
     xchg = 0x87,
     mov = 0x89,
     cmp = 0x3b,
@@ -137,7 +139,7 @@ pub fn rex(lhs: u16, rhs: u16) u8 {
 }
 
 pub fn modrm(mode: u8, rm: u16, rg: u16) u8 {
-    return @intCast(mode << 6 | ((rg & 0b111) << 3) | (rm & 0b111));
+    return @intCast((mode << 6) | ((rg & 0b111) << 3) | (rm & 0b111));
 }
 
 pub fn emitBinOp(self: *X86_64, opcode: Opcode, lhs: u16, rhs: u16) void {
@@ -357,7 +359,7 @@ pub fn emitBlockBody(self: *X86_64, arena: std.mem.Allocator, block: *FuncNode) 
 
             const opcode_base = 0xB8;
 
-            const opcode = opcode_base + reg_index;
+            const opcode = opcode_base + (reg_index & 0b111);
 
             try self.func_bodies.appendSlice(self.gpa, &.{ rex(reg_index, 0), opcode });
             try self.func_bodies.writer(self.gpa).writeInt(i64, imm64, .little);
@@ -386,7 +388,6 @@ pub fn emitBlockBody(self: *X86_64, arena: std.mem.Allocator, block: *FuncNode) 
 
             const offset: u32 = 0;
 
-            std.debug.print("{} {}\n", .{ dst, vl });
             self.emitBinOpMem(.mov, dst, vl, offset);
         },
         .Call => {
@@ -435,25 +436,29 @@ pub fn emitBlockBody(self: *X86_64, arena: std.mem.Allocator, block: *FuncNode) 
             const lhs = self.reg(instr.inputs()[1]);
             const rhs = self.reg(instr.inputs()[2]);
 
-            if (dst != lhs) self.emitBinOp(.mov, dst, lhs);
-
             switch (op) {
                 .iadd => {
+                    if (dst != lhs) self.emitBinOp(.mov, dst, lhs);
                     self.emitBinOp(.add, dst, rhs);
                 },
                 .isub => {
+                    if (dst != lhs) self.emitBinOp(.mov, dst, lhs);
                     self.emitBinOp(.sub, dst, rhs);
                 },
+                .imul => {
+                    if (dst != lhs) self.emitBinOp(.mov, dst, lhs);
+                    self.emitBinOp(.mul, dst, rhs);
+                },
                 .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => |t| {
-                    self.emitBinOp(.cmp, dst, rhs);
+                    self.emitBinOp(.cmp, lhs, rhs);
 
                     const opcode_2: u8 = switch (t) {
                         .eq => 0x94,
                         .ne => 0x95,
-                        .ult => 0x9C,
-                        .ule => 0x9E,
-                        .ugt => 0x9F,
-                        .uge => 0x9D,
+                        .ult => 0x9F,
+                        .ule => 0x9D,
+                        .ugt => 0x9C,
+                        .uge => 0x9E,
                         .slt => 0x92,
                         .sle => 0x96,
                         .sgt => 0x97,
@@ -461,11 +466,20 @@ pub fn emitBlockBody(self: *X86_64, arena: std.mem.Allocator, block: *FuncNode) 
                         else => unreachable,
                     };
 
+                    // set(opcode_2) dstl
                     try self.func_bodies.appendSlice(self.gpa, &.{
                         rex(dst, 0),
                         0x0f,
                         opcode_2,
-                        modrm(0x11, dst, 0),
+                        modrm(0b11, dst, 0),
+                    });
+
+                    // movzx dst, dstl
+                    try self.func_bodies.appendSlice(self.gpa, &.{
+                        rex(dst, dst),
+                        0x0f,
+                        0xb6,
+                        modrm(0b11, dst, dst),
                     });
                 },
                 else => {
@@ -474,12 +488,15 @@ pub fn emitBlockBody(self: *X86_64, arena: std.mem.Allocator, block: *FuncNode) 
             }
         },
         .If => {
+            const cond = self.reg(instr.inputs()[1]);
+            self.emitBinOp(.@"test", cond, cond);
             self.local_relocs.appendAssumeCapacity(.{
                 .dest = instr.outputs()[1].schedule,
                 .offset = @intCast(self.func_bodies.items.len),
                 .class = .rel32,
                 .off = 2,
             });
+            // je 0
             try self.func_bodies.appendSlice(self.gpa, &.{ 0x0F, 0x84, 0, 0, 0, 0 });
         },
         .Jmp => if (instr.outputs()[0].kind == .Region or instr.outputs()[0].kind == .Loop) {
@@ -531,21 +548,29 @@ pub fn finalize(self: *X86_64) std.ArrayListUnmanaged(u8) {
     for (self.global_relocs.items) |rl| {
         switch (rl.kind) {
             .func => {
-                const dst_offset: i64 = self.func_map.items[rl.dest].offset;
-                const jump = dst_offset - rl.offset - 5; // welp we learned
-
                 // TODO: make the class hold the values directly
                 const size = switch (rl.class) {
                     .rel32 => 4,
                 };
 
+                const off = 1;
+
+                const dst_offset: i64 = self.func_map.items[rl.dest].offset;
+                const jump = dst_offset - rl.offset - size - off; // welp we learned
+
                 @memcpy(
-                    self.func_bodies.items[rl.offset + 1 ..][0..size],
+                    self.func_bodies.items[rl.offset + off ..][0..size],
                     @as(*const [8]u8, @ptrCast(&jump))[0..size],
                 );
             },
         }
     }
+
+    std.sort.pdq(FuncData, self.func_map.items, {}, struct {
+        fn lessThen(_: void, lhs: FuncData, rhs: FuncData) bool {
+            return lhs.id != .invalid and (lhs.offset < rhs.offset or rhs.id == .invalid);
+        }
+    }.lessThen);
 
     for (self.func_map.items) |f| {
         if (f.id == .invalid) continue;
@@ -553,8 +578,13 @@ pub fn finalize(self: *X86_64) std.ArrayListUnmanaged(u8) {
         try self.builder.defineFunc(self.gpa, f.id, body);
     }
 
+    self.func_bodies.items.len = 0;
+    self.func_map.items.len = 0;
+    self.global_relocs.items.len = 0;
+
     var out = std.ArrayListUnmanaged(u8){};
     self.builder.flush(out.writer(self.gpa).any()) catch unreachable;
+
     return out;
 }
 

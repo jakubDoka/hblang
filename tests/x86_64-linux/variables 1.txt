@@ -1,0 +1,15 @@
+variables 1.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <main>:
+   0:	48 b8 01 00 00 00 00 	movabs $0x1,%rax
+   7:	00 00 00 
+   a:	48 b9 02 00 00 00 00 	movabs $0x2,%rcx
+  11:	00 00 00 
+  14:	48 89 c2             	mov    %rax,%rdx
+  17:	48 01 c2             	add    %rax,%rdx
+  1a:	48 89 d0             	mov    %rdx,%rax
+  1d:	48 29 c8             	sub    %rcx,%rax
+  20:	c3                   	ret
