@@ -248,6 +248,8 @@ pub fn testBuilder(
         .colors = colors,
     });
 
+    if (std.mem.indexOf(u8, name, "infinite") != null) return;
+
     try expectations.assert(gen.run(.{
         .name = name,
         .code = out.items,

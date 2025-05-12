@@ -4,6 +4,6 @@ arithmetic 8.o:     file format elf64-x86-64
 Disassembly of section .text:
 
 0000000000000000 <main>:
-   0:	48 b8 00 00 00 00 00 	movabs $0x0,%rax
+   0:	48 b8 00 00 00 00 00 	movabs rax,0x0
    7:	00 00 00 
    a:	c3                   	ret

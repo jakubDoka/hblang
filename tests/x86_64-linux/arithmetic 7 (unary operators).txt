@@ -4,21 +4,21 @@ arithmetic 7 (unary operators).o:     file format elf64-x86-64
 Disassembly of section .text:
 
 0000000000000000 <main>:
-   0:	48 b8 00 00 00 00 00 	movabs $0x0,%rax
+   0:	48 b8 00 00 00 00 00 	movabs rax,0x0
    7:	00 00 00 
-   a:	48 85 c0             	test   %rax,%rax
+   a:	48 85 c0             	test   rax,rax
    d:	0f 84 0f 00 00 00    	je     22 <main+0x22>
-  13:	48 b8 01 00 00 00 00 	movabs $0x1,%rax
+  13:	48 b8 01 00 00 00 00 	movabs rax,0x1
   1a:	00 00 00 
   1d:	e9 13 00 00 00       	jmp    35 <main+0x35>
-  22:	48 85 c0             	test   %rax,%rax
+  22:	48 85 c0             	test   rax,rax
   25:	0f 84 0f 00 00 00    	je     3a <main+0x3a>
-  2b:	48 b8 02 00 00 00 00 	movabs $0x2,%rax
+  2b:	48 b8 02 00 00 00 00 	movabs rax,0x2
   32:	00 00 00 
   35:	e9 13 00 00 00       	jmp    4d <main+0x4d>
-  3a:	48 85 c0             	test   %rax,%rax
+  3a:	48 85 c0             	test   rax,rax
   3d:	0f 84 0f 00 00 00    	je     52 <main+0x52>
-  43:	48 b8 03 00 00 00 00 	movabs $0x3,%rax
+  43:	48 b8 03 00 00 00 00 	movabs rax,0x3
   4a:	00 00 00 
   4d:	e9 00 00 00 00       	jmp    52 <main+0x52>
   52:	c3                   	ret

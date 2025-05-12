@@ -145,6 +145,13 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
         }
     }
 
+    for (interference_table, 0..) |it_row, j| {
+        var iter = it_row.iterator(.{});
+        while (iter.next()) |i| {
+            interference_table[i].set(j);
+        }
+    }
+
     const sentinel = std.math.maxInt(u16);
 
     const colors = func.arena.allocator().alloc(u16, func.instr_count) catch unreachable;
@@ -158,7 +165,9 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
             if (@hasDecl(Mach, "reserved_regs")) Mach.reserved_regs else 0;
 
         var iter = it_row.iterator(.{});
+        //std.debug.print("| {}\n", .{instrs[i].def});
         while (iter.next()) |e| if (i != e) {
+            //std.debug.print("|  {}\n", .{instrs[e].def});
             if (colors[e] != sentinel) selection_set.set(colors[e]);
             @as(*align(@alignOf(usize)) u64, @ptrCast(&Block.setMasks(selection_set)[0])).* |=
                 instrs[e].def.clobbers();

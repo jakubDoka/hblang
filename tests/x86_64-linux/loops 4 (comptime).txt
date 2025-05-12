@@ -1,0 +1,65 @@
+loops 4 (comptime).o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <main>:
+   0:	53                   	push   rbx
+   1:	55                   	push   rbp
+   2:	48 81 c4 e0 ff ff ff 	add    rsp,0xffffffffffffffe0
+   9:	48 89 e0             	mov    rax,rsp
+   c:	48 81 c0 00 00 00 00 	add    rax,0x0
+  13:	48 b9 01 00 00 00 00 	movabs rcx,0x1
+  1a:	00 00 00 
+  1d:	48 89 88 00 00 00 00 	mov    QWORD PTR [rax+0x0],rcx
+  24:	48 ba 10 00 00 00 00 	movabs rdx,0x10
+  2b:	00 00 00 
+  2e:	48 bb 18 00 00 00 00 	movabs rbx,0x18
+  35:	00 00 00 
+  38:	48 bd 08 00 00 00 00 	movabs rbp,0x8
+  3f:	00 00 00 
+  42:	48 be 02 00 00 00 00 	movabs rsi,0x2
+  49:	00 00 00 
+  4c:	48 bf 00 00 00 00 00 	movabs rdi,0x0
+  53:	00 00 00 
+  56:	49 b8 03 00 00 00 00 	movabs r8,0x3
+  5d:	00 00 00 
+  60:	49 89 c1             	mov    r9,rax
+  63:	49 01 e9             	add    r9,rbp
+  66:	49 89 b1 00 00 00 00 	mov    QWORD PTR [r9+0x0],rsi
+  6d:	48 0f af cd          	imul   rcx,rbp
+  71:	48 0f af f5          	imul   rsi,rbp
+  75:	49 89 f9             	mov    r9,rdi
+  78:	4c 0f af cd          	imul   r9,rbp
+  7c:	4d 89 c2             	mov    r10,r8
+  7f:	4c 0f af d5          	imul   r10,rbp
+  83:	48 89 c5             	mov    rbp,rax
+  86:	48 01 d5             	add    rbp,rdx
+  89:	4c 89 85 00 00 00 00 	mov    QWORD PTR [rbp+0x0],r8
+  90:	48 89 c2             	mov    rdx,rax
+  93:	48 01 da             	add    rdx,rbx
+  96:	48 bb 04 00 00 00 00 	movabs rbx,0x4
+  9d:	00 00 00 
+  a0:	48 89 9a 00 00 00 00 	mov    QWORD PTR [rdx+0x0],rbx
+  a7:	48 89 c2             	mov    rdx,rax
+  aa:	4c 01 ca             	add    rdx,r9
+  ad:	48 89 c3             	mov    rbx,rax
+  b0:	4c 01 d3             	add    rbx,r10
+  b3:	48 89 c5             	mov    rbp,rax
+  b6:	48 01 cd             	add    rbp,rcx
+  b9:	48 01 f0             	add    rax,rsi
+  bc:	48 8b 8a 00 00 00 00 	mov    rcx,QWORD PTR [rdx+0x0]
+  c3:	48 8b 93 00 00 00 00 	mov    rdx,QWORD PTR [rbx+0x0]
+  ca:	48 8b 9d 00 00 00 00 	mov    rbx,QWORD PTR [rbp+0x0]
+  d1:	48 89 fd             	mov    rbp,rdi
+  d4:	48 01 cd             	add    rbp,rcx
+  d7:	48 8b 80 00 00 00 00 	mov    rax,QWORD PTR [rax+0x0]
+  de:	48 89 e9             	mov    rcx,rbp
+  e1:	48 01 d9             	add    rcx,rbx
+  e4:	48 01 c1             	add    rcx,rax
+  e7:	48 89 c8             	mov    rax,rcx
+  ea:	48 01 d0             	add    rax,rdx
+  ed:	48 81 c4 20 00 00 00 	add    rsp,0x20
+  f4:	5d                   	pop    rbp
+  f5:	5b                   	pop    rbx
+  f6:	c3                   	ret

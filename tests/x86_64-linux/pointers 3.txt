@@ -1,0 +1,37 @@
+pointers 3.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <main>:
+   0:	53                   	push   rbx
+   1:	55                   	push   rbp
+   2:	48 81 c4 f8 ff ff ff 	add    rsp,0xfffffffffffffff8
+   9:	48 89 e3             	mov    rbx,rsp
+   c:	48 81 c3 00 00 00 00 	add    rbx,0x0
+  13:	48 bd 01 00 00 00 00 	movabs rbp,0x1
+  1a:	00 00 00 
+  1d:	48 89 ab 00 00 00 00 	mov    QWORD PTR [rbx+0x0],rbp
+  24:	48 89 df             	mov    rdi,rbx
+  27:	e8 11 00 00 00       	call   3d <"pointers 3".do_stuff>
+  2c:	48 8b 83 00 00 00 00 	mov    rax,QWORD PTR [rbx+0x0]
+  33:	48 81 c4 08 00 00 00 	add    rsp,0x8
+  3a:	5d                   	pop    rbp
+  3b:	5b                   	pop    rbx
+  3c:	c3                   	ret
+
+000000000000003d <"pointers 3".do_stuff>:
+  3d:	48 89 f8             	mov    rax,rdi
+  40:	48 b9 00 00 00 00 00 	movabs rcx,0x0
+  47:	00 00 00 
+  4a:	48 8b 80 00 00 00 00 	mov    rax,QWORD PTR [rax+0x0]
+  51:	48 3b c8             	cmp    rcx,rax
+  54:	48 0f 94 c0          	rex.W sete al
+  58:	48 0f b6 c0          	movzx  rax,al
+  5c:	48 85 c0             	test   rax,rax
+  5f:	0f 84 08 00 00 00    	je     6d <"pointers 3".do_stuff+0x30>
+  65:	48 89 c8             	mov    rax,rcx
+  68:	e9 0a 00 00 00       	jmp    77 <"pointers 3".do_stuff+0x3a>
+  6d:	48 b8 01 00 00 00 00 	movabs rax,0x1
+  74:	00 00 00 
+  77:	c3                   	ret

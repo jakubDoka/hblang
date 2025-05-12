@@ -4,34 +4,34 @@ functions 2.o:     file format elf64-x86-64
 Disassembly of section .text:
 
 0000000000000000 <main>:
-   0:	53                   	push   %rbx
-   1:	55                   	push   %rbp
-   2:	48 bb 0a 00 00 00 00 	movabs $0xa,%rbx
+   0:	53                   	push   rbx
+   1:	55                   	push   rbp
+   2:	48 bb 0a 00 00 00 00 	movabs rbx,0xa
    9:	00 00 00 
-   c:	48 89 df             	mov    %rbx,%rdi
+   c:	48 89 df             	mov    rdi,rbx
    f:	e8 32 00 00 00       	call   46 <"one.hb".add>
-  14:	48 89 c3             	mov    %rax,%rbx
-  17:	48 bd 14 00 00 00 00 	movabs $0x14,%rbp
+  14:	48 89 c3             	mov    rbx,rax
+  17:	48 bd 14 00 00 00 00 	movabs rbp,0x14
   1e:	00 00 00 
-  21:	48 89 ef             	mov    %rbp,%rdi
+  21:	48 89 ef             	mov    rdi,rbp
   24:	e8 0c 00 00 00       	call   35 <"two.hb".add>
-  29:	48 89 d9             	mov    %rbx,%rcx
-  2c:	48 01 c1             	add    %rax,%rcx
-  2f:	48 89 c8             	mov    %rcx,%rax
-  32:	5b                   	pop    %rbx
-  33:	5d                   	pop    %rbp
+  29:	48 89 d9             	mov    rcx,rbx
+  2c:	48 01 c1             	add    rcx,rax
+  2f:	48 89 c8             	mov    rax,rcx
+  32:	5d                   	pop    rbp
+  33:	5b                   	pop    rbx
   34:	c3                   	ret
 
 0000000000000035 <"two.hb".add>:
-  35:	48 89 f8             	mov    %rdi,%rax
-  38:	48 b9 02 00 00 00 00 	movabs $0x2,%rcx
+  35:	48 89 f8             	mov    rax,rdi
+  38:	48 b9 02 00 00 00 00 	movabs rcx,0x2
   3f:	00 00 00 
-  42:	48 01 c8             	add    %rcx,%rax
+  42:	48 01 c8             	add    rax,rcx
   45:	c3                   	ret
 
 0000000000000046 <"one.hb".add>:
-  46:	48 89 f8             	mov    %rdi,%rax
-  49:	48 b9 01 00 00 00 00 	movabs $0x1,%rcx
+  46:	48 89 f8             	mov    rax,rdi
+  49:	48 b9 01 00 00 00 00 	movabs rcx,0x1
   50:	00 00 00 
-  53:	48 01 c8             	add    %rcx,%rax
+  53:	48 01 c8             	add    rax,rcx
   56:	c3                   	ret

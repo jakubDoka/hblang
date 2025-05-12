@@ -4,41 +4,41 @@ pointers 2.o:     file format elf64-x86-64
 Disassembly of section .text:
 
 0000000000000000 <main>:
-   0:	53                   	push   %rbx
-   1:	55                   	push   %rbp
-   2:	41 54                	push   %r12
-   4:	48 81 c4 f0 ff ff ff 	add    $0xfffffffffffffff0,%rsp
-   b:	48 89 e3             	mov    %rsp,%rbx
-   e:	48 81 c3 00 00 00 00 	add    $0x0,%rbx
-  15:	48 bd 01 00 00 00 00 	movabs $0x1,%rbp
+   0:	53                   	push   rbx
+   1:	55                   	push   rbp
+   2:	41 54                	push   r12
+   4:	48 81 c4 f0 ff ff ff 	add    rsp,0xfffffffffffffff0
+   b:	48 89 e3             	mov    rbx,rsp
+   e:	48 81 c3 00 00 00 00 	add    rbx,0x0
+  15:	48 bd 01 00 00 00 00 	movabs rbp,0x1
   1c:	00 00 00 
-  1f:	48 89 ab 00 00 00 00 	mov    %rbp,0x0(%rbx)
-  26:	48 bd 02 00 00 00 00 	movabs $0x2,%rbp
+  1f:	48 89 ab 00 00 00 00 	mov    QWORD PTR [rbx+0x0],rbp
+  26:	48 bd 02 00 00 00 00 	movabs rbp,0x2
   2d:	00 00 00 
-  30:	49 89 e4             	mov    %rsp,%r12
-  33:	49 81 c4 08 00 00 00 	add    $0x8,%r12
-  3a:	49 89 ac 24 00 00 00 	mov    %rbp,0x0(%r12)
+  30:	49 89 e4             	mov    r12,rsp
+  33:	49 81 c4 08 00 00 00 	add    r12,0x8
+  3a:	49 89 ac 24 00 00 00 	mov    QWORD PTR [r12+0x0],rbp
   41:	00 
-  42:	48 89 df             	mov    %rbx,%rdi
-  45:	4c 89 e6             	mov    %r12,%rsi
+  42:	48 89 df             	mov    rdi,rbx
+  45:	4c 89 e6             	mov    rsi,r12
   48:	e8 1e 00 00 00       	call   6b <"pointers 2".swap>
-  4d:	48 8b 83 00 00 00 00 	mov    0x0(%rbx),%rax
-  54:	49 8b 8c 24 00 00 00 	mov    0x0(%r12),%rcx
+  4d:	48 8b 83 00 00 00 00 	mov    rax,QWORD PTR [rbx+0x0]
+  54:	49 8b 8c 24 00 00 00 	mov    rcx,QWORD PTR [r12+0x0]
   5b:	00 
-  5c:	48 29 c8             	sub    %rcx,%rax
-  5f:	48 81 c4 10 00 00 00 	add    $0x10,%rsp
-  66:	5b                   	pop    %rbx
-  67:	5d                   	pop    %rbp
-  68:	41 5c                	pop    %r12
+  5c:	48 29 c8             	sub    rax,rcx
+  5f:	48 81 c4 10 00 00 00 	add    rsp,0x10
+  66:	41 5c                	pop    r12
+  68:	5d                   	pop    rbp
+  69:	5b                   	pop    rbx
   6a:	c3                   	ret
 
 000000000000006b <"pointers 2".swap>:
-  6b:	53                   	push   %rbx
-  6c:	48 89 f9             	mov    %rdi,%rcx
-  6f:	48 89 f0             	mov    %rsi,%rax
-  72:	48 8b 90 00 00 00 00 	mov    0x0(%rax),%rdx
-  79:	48 8b 99 00 00 00 00 	mov    0x0(%rcx),%rbx
-  80:	48 89 98 00 00 00 00 	mov    %rbx,0x0(%rax)
-  87:	48 89 91 00 00 00 00 	mov    %rdx,0x0(%rcx)
-  8e:	5b                   	pop    %rbx
+  6b:	53                   	push   rbx
+  6c:	48 89 f9             	mov    rcx,rdi
+  6f:	48 89 f0             	mov    rax,rsi
+  72:	48 8b 90 00 00 00 00 	mov    rdx,QWORD PTR [rax+0x0]
+  79:	48 8b 99 00 00 00 00 	mov    rbx,QWORD PTR [rcx+0x0]
+  80:	48 89 98 00 00 00 00 	mov    QWORD PTR [rax+0x0],rbx
+  87:	48 89 91 00 00 00 00 	mov    QWORD PTR [rcx+0x0],rdx
+  8e:	5b                   	pop    rbx
   8f:	c3                   	ret

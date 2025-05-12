@@ -122,7 +122,6 @@ pub const Opcode = enum(u8) {
     addimm = 0x81,
     @"test" = 0x85,
     sub = 0x29,
-    mul = 0xf7,
     xchg = 0x87,
     mov = 0x89,
     cmp = 0x3b,
@@ -132,8 +131,8 @@ pub const Opcode = enum(u8) {
 pub fn rex(lhs: u16, rhs: u16) u8 {
     var rx: u8 = 0x48;
 
-    if (lhs > 8) rx |= 0b001;
-    if (rhs > 8) rx |= 0b100;
+    if (lhs >= 8) rx |= 0b001;
+    if (rhs >= 8) rx |= 0b100;
 
     return rx;
 }
@@ -154,7 +153,7 @@ pub fn emitBinOp(self: *X86_64, opcode: Opcode, lhs: u16, rhs: u16) void {
 pub fn emitBinOpMem(self: *X86_64, opcode: Opcode, lhs: u16, rhs: u16, offset: u32) void {
     errdefer unreachable;
     try self.func_bodies.appendSlice(self.gpa, &.{
-        rex(lhs, 0),
+        rex(lhs, rhs),
         @intFromEnum(opcode),
         modrm(0b10, lhs, rhs),
     });
@@ -278,7 +277,8 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
                 self.emitImmBinOp(.addimm, @intFromEnum(Reg.rsp), @intCast(stack_size));
             }
 
-            for (Reg.system_v.callee_saved) |r| {
+            var iter = std.mem.reverseIterator(Reg.system_v.callee_saved);
+            while (iter.next()) |r| {
                 if (used_regs.contains(r)) {
                     if (@intFromEnum(r) >= 8) {
                         try self.func_bodies.append(self.gpa, 0x41);
@@ -369,6 +369,7 @@ pub fn emitBlockBody(self: *X86_64, arena: std.mem.Allocator, block: *FuncNode) 
         .Local => {
             self.emitBinOp(.mov, self.reg(instr), @intFromEnum(Reg.rsp));
             self.emitImmBinOp(.addimm, self.reg(instr), @intCast(instr.extra(.Local).*));
+            //std.debug.print("{}\n", .{instr.extra(.Local).*});
         },
         .Load => {
             std.debug.assert(instr.data_type.size() == 8);
@@ -424,6 +425,14 @@ pub fn emitBlockBody(self: *X86_64, arena: std.mem.Allocator, block: *FuncNode) 
         .Arg => {},
         .Ret => {},
         .Mem => {},
+        .Never => {},
+        .Trap => {
+            switch (instr.extra(.Trap).code) {
+                graph.infinite_loop_trap => return,
+                0 => try self.func_bodies.appendSlice(self.gpa, &.{ 0x0F, 0x0B }),
+                else => unreachable,
+            }
+        },
         .Return => {
             for (instr.dataDeps()[0..self.ret_count]) |inp| {
                 const src = self.reg(inp);
@@ -447,7 +456,13 @@ pub fn emitBlockBody(self: *X86_64, arena: std.mem.Allocator, block: *FuncNode) 
                 },
                 .imul => {
                     if (dst != lhs) self.emitBinOp(.mov, dst, lhs);
-                    self.emitBinOp(.mul, dst, rhs);
+                    try self.func_bodies.appendSlice(self.gpa, &.{
+                        rex(rhs, dst),
+                        0x0f,
+                        0xaf,
+                        modrm(0b11, rhs, dst),
+                    });
+                    //std.debug.print("{}\n", .{.{ dst, lhs, rhs }});
                 },
                 .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => |t| {
                     self.emitBinOp(.cmp, lhs, rhs);
@@ -601,8 +616,7 @@ pub fn disasm(_: *X86_64, opts: Mach.DisasmOpts) void {
 
     try std.fs.cwd().writeFile(.{ .sub_path = name, .data = opts.bin });
     defer std.fs.cwd().deleteFile(name) catch unreachable;
-
-    var dump = std.process.Child.init(&.{ "objdump", "-d", name }, tmp.arena.allocator());
+    var dump = std.process.Child.init(&.{ "objdump", "-d", "-M", "intel", "-S", name }, tmp.arena.allocator());
     dump.stdout_behavior = .Pipe;
     try dump.spawn();
 
@@ -626,32 +640,36 @@ pub fn disasm(_: *X86_64, opts: Mach.DisasmOpts) void {
 }
 
 pub fn run(_: *X86_64, env: Mach.RunEnv) !usize {
-    errdefer unreachable;
+    const res = b: {
+        errdefer unreachable;
 
-    var tmp = root.utils.Arena.scrath(null);
-    defer tmp.deinit();
+        var tmp = root.utils.Arena.scrath(null);
+        defer tmp.deinit();
 
-    const name = try std.fmt.allocPrint(tmp.arena.allocator(), "tmp_{s}.o", .{env.name});
-    const exe_name = try std.fmt.allocPrint(tmp.arena.allocator(), "./tmp_{s}", .{env.name});
+        const name = try std.fmt.allocPrint(tmp.arena.allocator(), "tmp_{s}.o", .{env.name});
+        const exe_name = try std.fmt.allocPrint(tmp.arena.allocator(), "./tmp_{s}", .{env.name});
 
-    try std.fs.cwd().writeFile(.{ .sub_path = name, .data = env.code });
-    defer std.fs.cwd().deleteFile(name) catch unreachable;
+        try std.fs.cwd().writeFile(.{ .sub_path = name, .data = env.code });
+        defer std.fs.cwd().deleteFile(name) catch unreachable;
 
-    var compile = std.process.Child.init(
-        &.{ "gcc", name, "-o", exe_name },
-        tmp.arena.allocator(),
-    );
-    _ = try compile.spawnAndWait();
-    defer std.fs.cwd().deleteFile(exe_name) catch unreachable;
+        var compile = std.process.Child.init(
+            &.{ "gcc", name, "-o", exe_name },
+            tmp.arena.allocator(),
+        );
+        _ = try compile.spawnAndWait();
+        defer std.fs.cwd().deleteFile(exe_name) catch unreachable;
 
-    var run_exe = std.process.Child.init(
-        &.{exe_name},
-        tmp.arena.allocator(),
-    );
-    const res = try run_exe.spawnAndWait();
+        var run_exe = std.process.Child.init(
+            &.{exe_name},
+            tmp.arena.allocator(),
+        );
+        break :b try run_exe.spawnAndWait();
+    };
 
     if (res != .Exited) {
-        return res.Signal;
+        if (res.Signal == 4) {
+            return error.Unreachable;
+        } else std.debug.panic("{}\n", .{res});
     }
     return res.Exited;
 }

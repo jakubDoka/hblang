@@ -5,7 +5,7 @@ Disassembly of section .text:
 
 0000000000000000 <main>:
    0:	e8 0b 00 00 00       	call   10 <"comments 1".foo>
-   5:	48 b8 00 00 00 00 00 	movabs $0x0,%rax
+   5:	48 b8 00 00 00 00 00 	movabs rax,0x0
    c:	00 00 00 
    f:	c3                   	ret
 

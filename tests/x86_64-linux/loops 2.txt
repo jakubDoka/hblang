@@ -1,0 +1,50 @@
+loops 2.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <main>:
+   0:	53                   	push   rbx
+   1:	48 bb 03 00 00 00 00 	movabs rbx,0x3
+   8:	00 00 00 
+   b:	48 89 df             	mov    rdi,rbx
+   e:	e8 02 00 00 00       	call   15 <"loops 2".square>
+  13:	5b                   	pop    rbx
+  14:	c3                   	ret
+
+0000000000000015 <"loops 2".square>:
+  15:	53                   	push   rbx
+  16:	55                   	push   rbp
+  17:	48 89 f8             	mov    rax,rdi
+  1a:	48 b9 00 00 00 00 00 	movabs rcx,0x0
+  21:	00 00 00 
+  24:	48 ba 01 00 00 00 00 	movabs rdx,0x1
+  2b:	00 00 00 
+  2e:	48 89 cb             	mov    rbx,rcx
+  31:	48 89 cd             	mov    rbp,rcx
+  34:	48 3b c3             	cmp    rax,rbx
+  37:	48 0f 94 c6          	rex.W sete sil
+  3b:	48 0f b6 f6          	movzx  rsi,sil
+  3f:	48 85 f6             	test   rsi,rsi
+  42:	0f 84 06 00 00 00    	je     4e <"loops 2".square+0x39>
+  48:	48 89 e8             	mov    rax,rbp
+  4b:	5d                   	pop    rbp
+  4c:	5b                   	pop    rbx
+  4d:	c3                   	ret
+  4e:	48 89 de             	mov    rsi,rbx
+  51:	48 01 d6             	add    rsi,rdx
+  54:	48 89 ef             	mov    rdi,rbp
+  57:	48 89 cd             	mov    rbp,rcx
+  5a:	48 3b c5             	cmp    rax,rbp
+  5d:	49 0f 94 c0          	rex.WB sete r8b
+  61:	4d 0f b6 c0          	movzx  r8,r8b
+  65:	4d 85 c0             	test   r8,r8
+  68:	0f 84 0b 00 00 00    	je     79 <"loops 2".square+0x64>
+  6e:	48 89 f3             	mov    rbx,rsi
+  71:	48 89 fd             	mov    rbp,rdi
+  74:	e9 bb ff ff ff       	jmp    34 <"loops 2".square+0x1f>
+  79:	49 89 e8             	mov    r8,rbp
+  7c:	4c 0f af c3          	imul   r8,rbx
+  80:	48 01 d5             	add    rbp,rdx
+  83:	4c 01 c7             	add    rdi,r8
+  86:	e9 cf ff ff ff       	jmp    5a <"loops 2".square+0x45>

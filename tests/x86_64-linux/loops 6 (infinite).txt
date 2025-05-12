@@ -1,0 +1,14 @@
+loops 6 (infinite).o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <main>:
+   0:	48 b8 01 00 00 00 00 	movabs rax,0x1
+   7:	00 00 00 
+   a:	48 85 c0             	test   rax,rax
+   d:	0f 84 05 00 00 00    	je     18 <main+0x18>
+  13:	e9 fb ff ff ff       	jmp    13 <main+0x13>
+  18:	48 b8 00 00 00 00 00 	movabs rax,0x0
+  1f:	00 00 00 
+  22:	c3                   	ret
