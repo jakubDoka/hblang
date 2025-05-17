@@ -414,7 +414,7 @@ fn displayArg(
             self.ip += @sizeOf(isa.ArgType(t));
             try ctx.setColor(arg.color());
             const pos = if (t == .rel32) @as(i32, @intCast(prev_ip)) + value - @as(i32, @intCast(ctx.code_start)) else 0;
-            if (t == .rel32 and ctx.symbols.get(@intCast(pos)) != null) {
+            if (t == .rel32 and pos > 0 and ctx.symbols.get(@intCast(pos)) != null) {
                 try ctx.writer.print("{s}", .{ctx.symbols.get(@intCast(pos)).?});
             } else if (@typeInfo(@TypeOf(value)).int.signedness == .unsigned) {
                 try ctx.writer.print("{any}", .{@as(std.meta.Int(.signed, @bitSizeOf(@TypeOf(value))), @bitCast(value))});

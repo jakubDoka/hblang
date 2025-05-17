@@ -1,8 +1,8 @@
-main:
+"slices 4".main:
          st $31, $254, -56, 56
      addi64 $254, $254, -91
      addi64 $32, $254, 0
-        lra $33, $0, :main.abc
+        lra $33, $0, :"slices 4".main.abc
          st $33, $254, 0, 8
        li64 $34, 3
          st $34, $254, 8, 8
@@ -20,7 +20,7 @@ main:
          cp $2, $34
          cp $3, $33
          cp $4, $34
-        jal $31, $0, :equals
+        jal $31, $0, :"slices 4".equals
          cp $33, $1
        andi $33, $33, 255
         not $33, $33
@@ -35,7 +35,7 @@ main:
          cp $2, $35
          cp $3, $32
          cp $4, $34
-        jal $31, $0, :equals
+        jal $31, $0, :"slices 4".equals
        andi $1, $1, 255
         not $1, $1
        andi $1, $1, 255
@@ -46,7 +46,7 @@ main:
 5:   addi64 $254, $254, 91
          ld $31, $254, -56, 56
          tx
-equals:
+"slices 4".equals:
        li64 $5, 0
         jeq $2, $4, :6
          cp $1, $5

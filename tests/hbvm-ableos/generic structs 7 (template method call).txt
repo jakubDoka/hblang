@@ -1,12 +1,12 @@
-main:
+"generic structs 7 (template method call)".main:
          st $31, $254, -16, 16
      addi64 $254, $254, -16
      addi64 $32, $254, 0
          cp $1, $32
-        jal $31, $0, :A.apply(func = main)
+        jal $31, $0, :"generic structs 7 (template method call)".A.apply(func = "generic structs 7 (template method call)".main)
        li64 $1, 0
      addi64 $254, $254, 16
          ld $31, $254, -16, 16
          tx
-A.apply(func = main):
+"generic structs 7 (template method call)".A.apply(func = "generic structs 7 (template method call)".main):
        jala $0, $31, 0

@@ -1,4 +1,4 @@
-main:
+"enums 5".main:
        li64 $1, 1
         jeq $1, $0, :0
        li64 $1, 0

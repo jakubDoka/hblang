@@ -1,17 +1,17 @@
-main:
+"enums 4".main:
          st $31, $254, -24, 24
      addi64 $254, $254, -24
-        lra $32, $0, :map
+        lra $32, $0, :"enums 4".map
        li64 $33, 0
          cp $1, $32
          cp $2, $33
-        jal $31, $0, :NameMap(Enum = Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get
+        jal $31, $0, :"enums 4".NameMap(Enum = "enums 4".Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get
          ld $1, $1, 0, 1
        andi $1, $1, 255
      addi64 $254, $254, 24
          ld $31, $254, -24, 24
          tx
-NameMap(Enum = Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get:
+"enums 4".NameMap(Enum = "enums 4".Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get:
        andi $2, $2, 255
      addi64 $3, $2, 1
      muli64 $2, $2, 8

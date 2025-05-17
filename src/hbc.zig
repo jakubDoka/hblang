@@ -156,17 +156,13 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         const slot = ast_arena.create(hb.hbvm.HbvmGen);
         slot.* = hb.hbvm.HbvmGen{ .gpa = opts.gpa };
         break :backend hb.backend.Machine.init(slot);
-    } else if (std.mem.eql(u8, opts.target, "x86_64-windows")) backend: {
+    } else if (std.mem.startsWith(u8, opts.target, "x86_64-")) backend: {
         const slot = ast_arena.create(hb.x86_64.X86_64Gen);
-        slot.* = hb.x86_64.X86_64Gen{ .gpa = opts.gpa, .builder = hb.Object.init(.windows, .x86_64) };
-        break :backend hb.backend.Machine.init(slot);
-    } else if (std.mem.eql(u8, opts.target, "x86_64-linux")) backend: {
-        const slot = ast_arena.create(hb.x86_64.X86_64Gen);
-        slot.* = hb.x86_64.X86_64Gen{ .gpa = opts.gpa, .builder = hb.Object.init(.linux, .x86_64) };
+        slot.* = hb.x86_64.X86_64Gen{ .gpa = opts.gpa };
         break :backend hb.backend.Machine.init(slot);
     } else {
         try opts.diagnostics.print(
-            "{s} is unsupported target, only `x86_64-windows` and `ableos` are supported",
+            "{s} is unsupported target, only `x86_64-(windows|linux)` and `ableos` are supported",
             .{opts.target},
         );
         return error.Failed;
@@ -188,6 +184,9 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     };
 
     codegen.queue(.{ .Func = entry });
+
+    var out_data: hb.backend.Machine.Data = .{};
+    defer out_data.deinit(opts.gpa);
 
     var errored = false;
     while (codegen.nextTask()) |tsk| switch (tsk) {
@@ -213,6 +212,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
                 .id = @intFromEnum(func),
                 .name = try hb.frontend.Types.Id.init(.{ .Func = func })
                     .fmt(&types).toString(syms.allocator()),
+                .out = &out_data,
                 .entry = func == entry,
                 .optimizations = .{
                     .arena = tmp.arena,
@@ -225,6 +225,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         .Global => |global| {
             backend.emitData(.{
                 .id = @intFromEnum(global),
+                .out = &out_data,
                 .name = try hb.frontend.Types.Id.init(.{ .Global = global })
                     .fmt(&types).toString(syms.allocator()),
                 .value = .{ .init = types.store.get(global).data },
@@ -237,8 +238,17 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         return error.Failed;
     }
 
-    var out = backend.finalize();
+    const encoder: *const fn (hb.backend.Machine.Data, arch: hb.Object.Arch, std.io.AnyWriter) anyerror!void =
+        if (std.mem.eql(u8, opts.target, "ableos"))
+            hb.Object.Ableos.flush
+        else if (std.mem.endsWith(u8, opts.target, "linux"))
+            hb.Object.Elf.flush
+        else
+            unreachable;
+
+    var out = std.ArrayListUnmanaged(u8).empty;
     defer out.deinit(opts.gpa);
+    try encoder(out_data, .x86_64, out.writer(opts.gpa).any());
 
     const name = try std.mem.replaceOwned(u8, ast_arena.allocator(), opts.root_file, "/", "\\/");
 

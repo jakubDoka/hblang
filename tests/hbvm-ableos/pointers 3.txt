@@ -1,16 +1,16 @@
-main:
+"pointers 3".main:
          st $31, $254, -24, 24
      addi64 $254, $254, -32
      addi64 $32, $254, 0
        li64 $33, 1
          st $33, $254, 0, 8
          cp $1, $32
-        jal $31, $0, :do_stuff
+        jal $31, $0, :"pointers 3".do_stuff
          ld $1, $254, 0, 8
      addi64 $254, $254, 32
          ld $31, $254, -24, 24
          tx
-do_stuff:
+"pointers 3".do_stuff:
        li64 $2, 0
          ld $1, $1, 0, 8
         jne $1, $2, :1

@@ -1,4 +1,4 @@
-main:
+"arithmetic 2".main:
     li16 $1, 0
   addi16 $2, $1, 1
   addi16 $1, $1, -1

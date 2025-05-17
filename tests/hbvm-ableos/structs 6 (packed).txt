@@ -1,3 +1,3 @@
-main:
+"structs 6 (packed)".main:
     li64 $1, 4
       tx

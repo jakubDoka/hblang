@@ -1,4 +1,4 @@
-main:
+"pointers 2".main:
          st $31, $254, -32, 32
      addi64 $254, $254, -48
      addi64 $32, $254, 0
@@ -9,14 +9,14 @@ main:
          st $33, $254, 8, 8
          cp $1, $32
          cp $2, $34
-        jal $31, $0, :swap
+        jal $31, $0, :"pointers 2".swap
          ld $1, $254, 0, 8
          ld $2, $254, 8, 8
       sub64 $1, $1, $2
      addi64 $254, $254, 48
          ld $31, $254, -32, 32
          tx
-swap:
+"pointers 2".swap:
          ld $3, $2, 0, 8
          ld $4, $1, 0, 8
          st $4, $2, 0, 8

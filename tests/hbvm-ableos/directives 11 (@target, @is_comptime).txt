@@ -1,5 +1,5 @@
-main:
-        lra $1, $0, :global
+"directives 11 (@target, @is_comptime)".main:
+        lra $1, $0, :"directives 11 (@target, @is_comptime)".global
          ld $1, $1, 0, 1
        andi $1, $1, 255
          tx

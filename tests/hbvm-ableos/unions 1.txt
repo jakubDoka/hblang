@@ -1,4 +1,4 @@
-main:
+"unions 1".main:
   addi64 $254, $254, -2
   addi64 $1, $254, 0
     li64 $2, 1

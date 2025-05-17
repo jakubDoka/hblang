@@ -1,5 +1,14 @@
 const std = @import("std");
 
+pub fn ensureSlot(self: anytype, gpa: std.mem.Allocator, id: usize) !*std.meta.Child(@TypeOf(self.items)) {
+    if (self.items.len <= id) {
+        const prev_len = self.items.len;
+        try self.resize(gpa, id + 1);
+        @memset(self.items[prev_len..], .invalid);
+    }
+    return &self.items[id];
+}
+
 pub fn panic(comptime format: []const u8, args: anytype) noreturn {
     if (debug) std.debug.panic(format, args) else unreachable;
 }

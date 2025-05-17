@@ -1,13 +1,13 @@
-main:
+"loops 1".main:
          st $31, $254, -16, 16
      addi64 $254, $254, -16
        li64 $32, 10
          cp $1, $32
-        jal $31, $0, :fib
+        jal $31, $0, :"loops 1".fib
      addi64 $254, $254, 16
          ld $31, $254, -16, 16
          tx
-fib:
+"loops 1".fib:
        li64 $2, 0
        li64 $3, 1
          cp $4, $3

@@ -38,7 +38,7 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
 
     test_util.testFmt(name, name, code, stderr.writer().any(), colors) catch {};
 
-    if (false) {
+    {
         var hbvm = root.hbvm.HbvmGen{ .gpa = gpa };
         defer hbvm.deinit();
         try runMachineTest(
@@ -46,16 +46,17 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
             "hbvm-ableos",
             code,
             .init(&hbvm),
+            root.Object.Ableos.flush,
             gpa,
             stderr.writer().any(),
             colors,
         );
     }
 
-    {
+    if (false) {
         if (std.mem.indexOf(u8, name, "float") != null) return;
 
-        var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa, .builder = .init(.linux, .x86_64) };
+        var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa };
         defer x86_64.deinit();
         try runMachineTest(
             name,
@@ -74,6 +75,7 @@ pub fn runMachineTest(
     category: []const u8,
     code: [:0]const u8,
     machine: root.backend.Machine,
+    flush: root.Object.Flush,
     gpa: std.mem.Allocator,
     out: std.io.AnyWriter,
     color: std.io.tty.Config,
@@ -82,7 +84,7 @@ pub fn runMachineTest(
     defer output.deinit();
 
     errdefer {
-        test_util.testBuilder(name, code, gpa, out, machine, color, true) catch {};
+        test_util.testBuilder(name, code, gpa, out, machine, flush, color, true) catch {};
     }
 
     try test_util.testBuilder(
@@ -91,6 +93,7 @@ pub fn runMachineTest(
         gpa,
         output.writer().any(),
         machine,
+        flush,
         .no_color,
         false,
     );
@@ -131,6 +134,7 @@ pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
         gpa,
         std.io.null_writer.any(),
         .init(&hbvm),
+        root.Object.Ableos.flush,
         .no_color,
         false,
     );

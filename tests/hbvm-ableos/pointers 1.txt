@@ -1,11 +1,11 @@
-main:
+"pointers 1".main:
          st $31, $254, -24, 24
      addi64 $254, $254, -32
      addi64 $32, $254, 0
        li64 $33, 1
          st $33, $254, 0, 8
          cp $1, $32
-        jal $31, $0, :modify
+        jal $31, $0, :"pointers 1".modify
          ld $1, $254, 0, 8
      addi64 $1, $1, 2
          st $1, $254, 0, 8
@@ -13,7 +13,7 @@ main:
      addi64 $254, $254, 32
          ld $31, $254, -24, 24
          tx
-modify:
+"pointers 1".modify:
        li64 $2, 2
          st $2, $1, 0, 8
        jala $0, $31, 0

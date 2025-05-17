@@ -171,11 +171,6 @@ pub fn packMany(comptime instrs: anytype) []const u8 {
     return &outa;
 }
 
-const SymbolSpec = struct {
-    name: []const u8,
-    offset: u32,
-};
-
 pub const ExecHeader = extern struct {
     magic_number: [3]u8 = .{ 0x15, 0x91, 0xD2 },
     executable_version: u32 align(1) = 0,
@@ -296,12 +291,16 @@ fn disasmArg(
 
             switch (t) {
                 .rel16, .rel32 => {
-                    const pos: u32 = @intCast(cursor + value.*);
-                    if (symbols.get(pos)) |s| {
-                        try writer.print(":{s}", .{s});
+                    if (cursor < -value.*) {
+                        try writer.print(":!{x}", .{value.*});
                     } else {
-                        const label = labelMap.get(pos).?;
-                        try writer.print(":{x}", .{label});
+                        const pos: u32 = @intCast(cursor + value.*);
+                        if (symbols.get(pos)) |s| {
+                            try writer.print(":{s}", .{s});
+                        } else {
+                            const label = labelMap.get(pos) orelse 42069;
+                            try writer.print(":{x}", .{label});
+                        }
                     }
                 },
                 .reg => {
@@ -323,6 +322,10 @@ fn makeLabelMap(code: []const u8, syms: *const std.AutoHashMapUnmanaged(u32, []c
     while (code.len > cursor) {
         const cursor_snap = cursor;
 
+        if (code[@intCast(cursor)] > instr_count) {
+            cursor += 1;
+            continue;
+        }
         const op: Op = @enumFromInt(code[@intCast(cursor)]);
         cursor += 1;
         const args = spec[@intFromEnum(op)][1];
@@ -331,6 +334,9 @@ fn makeLabelMap(code: []const u8, syms: *const std.AutoHashMapUnmanaged(u32, []c
                 inline .rel16, .rel32 => |ty| {
                     const arg: *align(1) const ArgType(ty) =
                         @ptrCast(@alignCast(&code[@intCast(cursor)]));
+                    if (cursor_snap < -arg.*) {
+                        continue;
+                    }
                     const pos: u32 = @intCast(cursor_snap + arg.*);
                     if (!syms.contains(pos)) {
                         std.debug.assert(code[pos] < instr_count);

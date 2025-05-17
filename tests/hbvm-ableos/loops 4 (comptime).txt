@@ -1,4 +1,4 @@
-main:
+"loops 4 (comptime)".main:
   addi64 $254, $254, -32
     li64 $1, 1
   addi64 $2, $254, 0

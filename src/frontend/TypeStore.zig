@@ -615,8 +615,9 @@ pub fn checkStack(self: *Types, file: File, pos: anytype) !void {
 
 pub fn deinit(self: *Types) void {
     self.arena.deinit();
-    self.ct.in_progress.deinit(self.ct.comptime_code.gpa);
-    self.ct.comptime_code.deinit();
+    self.ct.in_progress.deinit(self.ct.gen.gpa);
+    self.ct.comptime_code.deinit(self.ct.gen.gpa);
+    self.ct.gen.deinit();
     self.* = undefined;
 }
 

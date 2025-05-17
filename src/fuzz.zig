@@ -65,6 +65,8 @@ pub fn fuzzRun(
     defer hbgen.deinit();
     var gen = Mach.init(&hbgen);
 
+    var out_data: Mach.Data = .{};
+
     var errored = false;
     while (cg.nextTask()) |task| switch (task) {
         .Func => |func| {
@@ -78,11 +80,13 @@ pub fn fuzzRun(
             gen.emitFunc(&cg.bl.func, .{
                 .id = @intFromEnum(func),
                 .entry = func == entry,
+                .out = &out_data,
             });
         },
         .Global => |g| {
             gen.emitData(.{
                 .id = @intFromEnum(g),
+                .out = &out_data,
                 .value = .{ .init = types.store.get(g).data },
             });
         },

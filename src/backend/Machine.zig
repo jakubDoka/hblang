@@ -84,6 +84,110 @@ const BuilderFunc = Builder.Func;
 const Machine = @This();
 const root = @import("../utils.zig");
 
+pub const Data = struct {
+    pub const Sym = struct {
+        name: u32,
+        offset: u32,
+        size: u32,
+        reloc_offset: u32,
+        reloc_count: u32,
+        kind: Kind,
+        linkage: Linkage,
+    };
+
+    pub const Kind = enum(u16) {
+        func,
+        data,
+        prealloc,
+
+        invalid,
+    };
+
+    pub const Linkage = enum(u16) {
+        local,
+        exported,
+        imported,
+    };
+
+    pub const Reloc = struct {
+        target: SymIdx,
+        offset: u32,
+        addend: u16,
+        slot_size: u16,
+    };
+
+    pub const SymIdx = enum(u32) { invalid = std.math.maxInt(u32), _ };
+
+    declaring_sym: ?SymIdx = null,
+    syms: std.ArrayListUnmanaged(Sym) = .empty,
+    names: std.ArrayListUnmanaged(u8) = .empty,
+    code: std.ArrayListUnmanaged(u8) = .empty,
+    relocs: std.ArrayListUnmanaged(Reloc) = .empty,
+
+    pub fn addReloc(self: *Data, gpa: std.mem.Allocator, target: *SymIdx, slot_size: u8, addend: u16) !void {
+        try self.relocs.append(gpa, .{
+            .target = try self.declSym(gpa, target),
+            .offset = @intCast(self.code.items.len),
+            .addend = addend,
+            .slot_size = slot_size,
+        });
+    }
+
+    pub fn deinit(self: *Data, gpa: std.mem.Allocator) void {
+        self.syms.deinit(gpa);
+        self.names.deinit(gpa);
+        self.code.deinit(gpa);
+        self.relocs.deinit(gpa);
+    }
+
+    pub fn declSym(
+        self: *Data,
+        gpa: std.mem.Allocator,
+        slot: *SymIdx,
+    ) !SymIdx {
+        if (slot.* == .invalid) {
+            (try self.syms.addOne(gpa)).kind = .invalid;
+            slot.* = @enumFromInt(self.syms.items.len - 1);
+        }
+        return slot.*;
+    }
+
+    pub fn startDefineSym(
+        self: *Data,
+        gpa: std.mem.Allocator,
+        sym: *SymIdx,
+        name: []const u8,
+        kind: Kind,
+        linkage: Linkage,
+    ) !void {
+        _ = try self.declSym(gpa, sym);
+
+        std.debug.assert(self.declaring_sym == null);
+        self.declaring_sym = sym.*;
+
+        self.syms.items[@intFromEnum(sym.*)] = .{
+            .name = @intCast(self.names.items.len),
+            .offset = @intCast(self.code.items.len),
+            .size = undefined,
+            .reloc_offset = @intCast(self.relocs.items.len),
+            .reloc_count = undefined,
+            .kind = kind,
+            .linkage = linkage,
+        };
+        try self.names.appendSlice(gpa, name);
+        try self.names.append(gpa, 0);
+    }
+
+    pub fn endDefineSym(self: *Data, sym: SymIdx) void {
+        std.debug.assert(self.declaring_sym != null);
+        self.declaring_sym = null;
+
+        const slot = &self.syms.items[@intFromEnum(sym)];
+        slot.size = @intCast(self.code.items.len - slot.offset);
+        slot.reloc_count = @intCast(self.relocs.items.len - slot.reloc_offset);
+    }
+};
+
 pub const RunEnv = struct {
     name: []const u8,
     code: []const u8,
@@ -95,6 +199,7 @@ pub const DataOptions = struct {
     id: u32,
     name: []const u8 = &.{},
     value: ValueSpec,
+    out: *Data,
 
     pub const ValueSpec = union(enum) { init: []const u8, uninit: usize };
 };
@@ -103,6 +208,7 @@ pub const EmitOptions = struct {
     id: u32,
     name: []const u8 = &.{},
     entry: bool = false,
+    out: *Data,
     optimizations: struct {
         verbose: bool = false,
         dead_code_fuel: usize = 10000,

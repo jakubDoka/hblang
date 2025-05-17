@@ -1,7 +1,7 @@
-main:
+"structs 3 (call stress test)".main:
          st $31, $254, -32, 32
      addi64 $254, $254, -72
-        jal $31, $0, :return_pair
+        jal $31, $0, :"structs 3 (call stress test)".return_pair
          cp $32, $1
          cp $33, $2
      addi64 $34, $254, 0
@@ -9,15 +9,15 @@ main:
          st $33, $254, 8, 8
      addi64 $32, $254, 16
          cp $1, $32
-        jal $31, $0, :return_triple
+        jal $31, $0, :"structs 3 (call stress test)".return_triple
          ld $33, $254, 0, 1
          ld $34, $254, 8, 8
          cp $1, $33
          cp $2, $34
-        jal $31, $0, :take_pair
+        jal $31, $0, :"structs 3 (call stress test)".take_pair
          cp $33, $1
          cp $1, $32
-        jal $31, $0, :take_triple
+        jal $31, $0, :"structs 3 (call stress test)".take_triple
         jeq $33, $1, :4
        li64 $1, 1
         jmp :5
@@ -25,19 +25,11 @@ main:
 5:   addi64 $254, $254, 72
          ld $31, $254, -32, 32
          tx
-take_triple:
-         ld $2, $1, 16, 1
-         ld $3, $1, 8, 8
-         ld $1, $1, 0, 8
-       andi $2, $2, 255
-      add64 $1, $1, $3
-      add64 $1, $1, $2
+"structs 3 (call stress test)".return_pair:
+        li8 $1, 1
+       li64 $2, 5
        jala $0, $31, 0
-take_pair:
-       andi $1, $1, 255
-      add64 $1, $1, $2
-       jala $0, $31, 0
-return_triple:
+"structs 3 (call stress test)".return_triple:
        li64 $2, 1
          st $2, $1, 0, 8
        li64 $2, 2
@@ -45,7 +37,15 @@ return_triple:
         li8 $2, 3
          st $2, $1, 16, 1
        jala $0, $31, 0
-return_pair:
-        li8 $1, 1
-       li64 $2, 5
+"structs 3 (call stress test)".take_pair:
+       andi $1, $1, 255
+      add64 $1, $1, $2
+       jala $0, $31, 0
+"structs 3 (call stress test)".take_triple:
+         ld $2, $1, 16, 1
+         ld $3, $1, 8, 8
+         ld $1, $1, 0, 8
+       andi $2, $2, 255
+      add64 $1, $1, $3
+      add64 $1, $1, $2
        jala $0, $31, 0

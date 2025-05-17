@@ -1,9 +1,9 @@
-main:
+"literals 2".main:
          st $31, $254, -16, 16
      addi64 $254, $254, -16
-        jal $31, $0, :hex
+        jal $31, $0, :"literals 2".hex
          cp $32, $1
-        jal $31, $0, :dec
+        jal $31, $0, :"literals 2".dec
         jeq $32, $1, :2
        li64 $1, 1
         jmp :3
@@ -11,9 +11,9 @@ main:
 3:   addi64 $254, $254, 16
          ld $31, $254, -16, 16
          tx
-dec:
+"literals 2".hex:
        li64 $1, 45
        jala $0, $31, 0
-hex:
+"literals 2".dec:
        li64 $1, 45
        jala $0, $31, 0

@@ -1,16 +1,16 @@
-main:
+"float arithmetic 2".main:
          st $31, $254, -16, 16
      addi64 $254, $254, -16
        li32 $32, 1148846080
          cp $1, $32
-        jal $31, $0, :sin
+        jal $31, $0, :"float arithmetic 2".sin
        li32 $2, 1148846080
      fmul32 $1, $1, $2
       fti32 $1, $1, 0
      addi64 $254, $254, 16
          ld $31, $254, -16, 16
          tx
-sin:
+"float arithmetic 2".sin:
        li64 $2, 256
        li32 $3, 1078530011
        li64 $4, 4
@@ -18,7 +18,7 @@ sin:
     fc32t64 $6, $1
        li32 $7, 1056964608
        li32 $8, 1073741824
-        lra $9, $0, :sin_table
+        lra $9, $0, :"float arithmetic 2".sin_table
       itf64 $10, $2
      fmul64 $5, $6, $5
       itf32 $6, $2

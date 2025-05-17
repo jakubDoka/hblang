@@ -1,4 +1,4 @@
-main:
+"float arithmetic 3".main:
        li32 $1, 1065353216
        li32 $2, 1073741824
    fcmpgt32 $1, $1, $2

@@ -18,7 +18,8 @@ const Vm = root.hbvm.Vm;
 pub const eca = HbvmGen.eca;
 
 vm: Vm = .{},
-comptime_code: HbvmGen,
+comptime_code: root.backend.Machine.Data = .{},
+gen: HbvmGen,
 in_progress: std.ArrayListUnmanaged(Loc) = .{},
 
 pub const stack_size = 1024 * 100;
@@ -35,10 +36,10 @@ pub const InteruptCode = enum(u64) {
 };
 
 pub fn init(gpa: std.mem.Allocator) Comptime {
-    var self = Comptime{ .comptime_code = .{ .gpa = gpa } };
-    self.comptime_code.out.resize(gpa, stack_size) catch unreachable;
-    self.comptime_code.out.items[self.comptime_code.out.items.len - 1] = @intFromEnum(isa.Op.tx);
-    self.comptime_code.out.items[self.comptime_code.out.items.len - 2] = @intFromEnum(isa.Op.eca);
+    var self = Comptime{ .gen = .{ .gpa = gpa } };
+    self.comptime_code.code.resize(gpa, stack_size) catch unreachable;
+    self.comptime_code.code.items[self.comptime_code.code.items.len - 1] = @intFromEnum(isa.Op.tx);
+    self.comptime_code.code.items[self.comptime_code.code.items.len - 2] = @intFromEnum(isa.Op.eca);
     self.vm.regs.set(.stack_addr, stack_size - 2);
     return self;
 }
@@ -48,7 +49,7 @@ inline fn getTypes(self: *Comptime) *Types {
 }
 
 inline fn getGpa(self: *Comptime) std.mem.Allocator {
-    return self.comptime_code.gpa;
+    return self.gen.gpa;
 }
 
 pub inline fn ecaArg(self: *Comptime, idx: usize) u64 {
@@ -135,7 +136,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
                     }
                     if (types.store.get(func_id).errored) return .{ .Unsupported = curr };
                     std.debug.assert(types.store.get(func_id).completion.get(.@"comptime") == .compiled);
-                    std.debug.assert(self.comptime_code.funcs.items.len > call.extra(.Call).id);
+                    std.debug.assert(self.gen.funcs.items.len > call.extra(.Call).id);
                 }
 
                 var requeued = false;
@@ -207,13 +208,23 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
     }
 }
 
-pub fn runVm(self: *Comptime, file: Types.File, pos: anytype, name: []const u8, entry_id: u32, return_loc: []u8) !void {
+pub fn runVm(
+    self: *Comptime,
+    file: Types.File,
+    pos: anytype,
+    name: []const u8,
+    entry_id: u32,
+    return_loc: []u8,
+) !void {
     const types = self.getTypes();
 
     const stack_end = self.vm.regs.get(.stack_addr);
 
-    self.vm.ip = if (entry_id == eca) stack_size - 2 else self.comptime_code.funcs.items[entry_id].offset;
-    std.debug.assert(self.vm.ip < self.comptime_code.out.items.len);
+    self.vm.ip = if (entry_id == eca)
+        stack_size - 2
+    else
+        self.comptime_code.syms.items[@intFromEnum(self.gen.funcs.items[entry_id])].offset;
+    std.debug.assert(self.vm.ip < self.comptime_code.code.items.len);
 
     self.vm.fuel = 1024;
     self.vm.regs.set(.ret_addr, stack_size - 1); // return to hardcoded tx
@@ -223,7 +234,7 @@ pub fn runVm(self: *Comptime, file: Types.File, pos: anytype, name: []const u8, 
     var vm_ctx = Vm.SafeContext{
         .writer = if (false) std.io.getStdErr().writer().any() else std.io.null_writer.any(),
         .color_cfg = .escape_codes,
-        .memory = self.comptime_code.out.items,
+        .memory = self.comptime_code.code.items,
         .code_start = 0,
         .code_end = 0,
     };
@@ -285,7 +296,7 @@ pub fn runVm(self: *Comptime, file: Types.File, pos: anytype, name: []const u8, 
         else => unreachable,
     };
 
-    @memcpy(return_loc, self.comptime_code.out.items[@intCast(stack_end - return_loc.len)..@intCast(stack_end)]);
+    @memcpy(return_loc, self.comptime_code.code.items[@intCast(stack_end - return_loc.len)..@intCast(stack_end)]);
     self.vm.regs.set(.stack_addr, stack_end);
 }
 
@@ -296,7 +307,7 @@ pub fn jitFunc(self: *Comptime, fnc: utils.EntId(root.frontend.types.Func)) !voi
     defer gen.deinit();
 
     gen.queue(.{ .Func = fnc });
-    try compileDependencies(&gen, self.comptime_code.global_relocs.items.len);
+    try compileDependencies(&gen, self.comptime_code.relocs.items.len);
 }
 
 pub fn jitExpr(
@@ -330,7 +341,7 @@ pub fn addInProgress(self: *Comptime, expr: Ast.Id, file: Types.File) !void {
             return error.Never;
         }
     }
-    self.in_progress.append(self.comptime_code.gpa, .{ .ast = expr, .file = file }) catch unreachable;
+    self.in_progress.append(self.getGpa(), .{ .ast = expr, .file = file }) catch unreachable;
 }
 
 pub fn jitExprLow(
@@ -352,7 +363,7 @@ pub fn jitExprLow(
 
     gen.only_inference = only_inference;
 
-    const reloc_frame = self.comptime_code.global_relocs.items.len;
+    const reloc_frame = self.comptime_code.relocs.items.len;
 
     var ret: Codegen.Value = undefined;
     {
@@ -380,9 +391,13 @@ pub fn jitExprLow(
         gen.bl.end(token);
 
         if (!only_inference) {
-            self.comptime_code.emitFunc(
+            self.gen.emitFunc(
                 @ptrCast(&gen.bl.func),
-                .{ .id = @intFromEnum(id), .entry = true },
+                .{
+                    .id = @intFromEnum(id),
+                    .entry = true,
+                    .out = &self.comptime_code,
+                },
             );
         }
     }
@@ -397,7 +412,7 @@ pub fn jitExprLow(
     return .{ id, ret.ty };
 }
 
-pub fn compileDependencies(self: *Codegen, reloc_util: usize) !void {
+pub fn compileDependencies(self: *Codegen, reloc_after: usize) !void {
     while (self.nextTask()) |task| switch (task) {
         .Func => |func| {
             defer {
@@ -406,20 +421,24 @@ pub fn compileDependencies(self: *Codegen, reloc_util: usize) !void {
 
             try self.build(func);
 
-            self.types.ct.comptime_code.emitFunc(
+            self.types.ct.gen.emitFunc(
                 @ptrCast(&self.bl.func),
-                .{ .id = @intFromEnum(func) },
+                .{
+                    .id = @intFromEnum(func),
+                    .out = &self.types.ct.comptime_code,
+                },
             );
         },
         .Global => |glob| {
-            self.types.ct.comptime_code.emitData(.{
+            self.types.ct.gen.emitData(.{
                 .id = @intFromEnum(glob),
                 .value = .{ .init = self.types.store.get(glob).data },
+                .out = &self.types.ct.comptime_code,
             });
         },
     };
 
-    _ = self.types.ct.comptime_code.link(reloc_util, true, false);
+    root.Object.Ableos.jitLink(self.types.ct.comptime_code, reloc_after);
 }
 
 pub fn evalTy(self: *Comptime, name: []const u8, scope: Codegen.Scope, ty_expr: Ast.Id) !Types.Id {

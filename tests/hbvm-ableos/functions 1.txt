@@ -1,20 +1,20 @@
-main:
+"functions 1".main:
          st $31, $254, -24, 24
      addi64 $254, $254, -24
        li64 $32, 10
          cp $1, $32
-        jal $31, $0, :add_one
+        jal $31, $0, :"functions 1".add_one
          cp $32, $1
        li64 $33, 20
          cp $1, $33
-        jal $31, $0, :add_two
+        jal $31, $0, :"functions 1".add_two
       add64 $1, $32, $1
      addi64 $254, $254, 24
          ld $31, $254, -24, 24
          tx
-add_two:
-     addi64 $1, $1, 2
-       jala $0, $31, 0
-add_one:
+"functions 1".add_one:
      addi64 $1, $1, 1
+       jala $0, $31, 0
+"functions 1".add_two:
+     addi64 $1, $1, 2
        jala $0, $31, 0

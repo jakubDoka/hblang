@@ -1,103 +1,95 @@
 const std = @import("std");
 
 const Object = @This();
-
-arch: Arch,
-builder: union(enum) {
-    Elf: Elf.Builder,
-    Coff: Coff.Builder,
-},
-
-pub fn init(os: Os, arch: Arch) Object {
-    return .{
-        .builder = switch (os) {
-            .linux => .{ .Elf = .{} },
-            .windows => .{ .Coff = .{} },
-        },
-        .arch = arch,
-    };
-}
-
-pub fn declareFunc(self: *Object, gpa: std.mem.Allocator, name: []const u8, linkage: Linkage) !Func {
-    switch (self.builder) {
-        .Elf => |*e| {
-            try e.symbol_table.append(gpa, .{
-                .name = try e.addName(gpa, name),
-                .info = .{
-                    .bind = switch (linkage) {
-                        .local => .local,
-                        .global => .global,
-                        .import => .global,
-                    },
-                    .type = .func,
-                },
-                .value = if (linkage == .import) 0 else undefined,
-                .size = if (linkage == .import) 0 else undefined,
-                .shndx = if (linkage == .import) .undef else @enumFromInt(4),
-            });
-
-            return @enumFromInt(e.symbol_table.items.len - 1);
-        },
-        .Coff => |*e| {
-            try e.symbol_table.append(gpa, .{
-                .Name = try e.addName(gpa, name),
-                .Value = if (linkage == .import) 0 else undefined,
-                .SectionNumber = if (linkage == .import) unreachable else @enumFromInt(1),
-                .Type = .FUNCTION,
-                .StorageClass = switch (linkage) {
-                    .global, .import => .EXTERNAL,
-                    .local => .STATIC,
-                },
-                .NumberOfAuxSymbols = 0,
-            });
-
-            return @enumFromInt(e.symbol_table.items.len - 1);
-        },
-    }
-}
-
-pub fn defineFunc(self: *Object, gpa: std.mem.Allocator, id: Func, body: []const u8) !void {
-    switch (self.builder) {
-        .Elf => |*e| {
-            const sym = &e.symbol_table.items[@intFromEnum(id)];
-            sym.size = body.len;
-            sym.value = e.text.items.len;
-            try e.text.appendSlice(gpa, body);
-        },
-        .Coff => |*e| {
-            const sym = &e.symbol_table.items[@intFromEnum(id)];
-            sym.Value = @intCast(e.text.items.len);
-        },
-    }
-}
-
-pub fn flush(self: *Object, writer: std.io.AnyWriter) !void {
-    switch (self.builder) {
-        inline else => |*v| try v.flush(self.arch, writer),
-    }
-}
-
-pub fn deinit(self: *Object, gpa: std.mem.Allocator) void {
-    switch (self.builder) {
-        inline else => |*v| v.deinit(gpa),
-    }
-}
-
-pub const Func = enum(u32) { invalid = std.math.maxInt(u32), _ };
-
-pub const Linkage = enum {
-    local,
-    global,
-    import,
-};
-
-pub const Os = enum {
-    linux,
-    windows,
-};
+const root = @import("root.zig");
 
 pub const Arch = enum {
     x86_64,
+};
+
+pub const Flush = fn (root.backend.Machine.Data, Arch, std.io.AnyWriter) anyerror!void;
+
+pub const Ableos = struct {
+    const ExecHeader = root.hbvm.isa.ExecHeader;
+
+    pub fn jitLink(self: root.backend.Machine.Data, after: usize) void {
+        for (self.relocs.items[after..]) |rel| {
+            const dest = self.syms.items[@intFromEnum(rel.target)].offset;
+            const jump = @as(i64, dest) - rel.offset;
+            const location: usize = @intCast(rel.offset + rel.addend);
+
+            @memcpy(
+                self.code.items[location..][0..rel.slot_size],
+                @as(*const [8]u8, @ptrCast(&jump))[0..rel.slot_size],
+            );
+        }
+    }
+
+    pub fn flush(self: root.backend.Machine.Data, _: Arch, writer: std.io.AnyWriter) anyerror!void {
+        var tmp = root.utils.Arena.scrath(null);
+        defer tmp.deinit();
+
+        const offset_lookup = tmp.arena.alloc(u32, self.syms.items.len);
+
+        var code_cursor: u32 = @sizeOf(ExecHeader);
+        var lengths: struct { func: u32, data: u32, prealloc: u32 } = undefined;
+        const sets = .{ .func, .data, .prealloc };
+        var prev_len: u32 = code_cursor;
+        inline for (sets) |v| {
+            for (offset_lookup, self.syms.items) |*slot, sym| if (sym.kind == v) {
+                slot.* = code_cursor;
+                code_cursor += sym.size;
+            };
+            @field(lengths, @tagName(v)) = code_cursor - prev_len;
+            prev_len = code_cursor;
+        }
+
+        for (self.syms.items, offset_lookup) |sym, olp| if (sym.kind == .func) {
+            for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |*rel| {
+                const dest = offset_lookup[@intFromEnum(rel.target)];
+                const jump = @as(i64, dest) - (rel.offset - sym.offset + olp);
+                const location: usize = @intCast(rel.offset + rel.addend);
+
+                @memcpy(
+                    self.code.items[location..][0..rel.slot_size],
+                    @as(*const [8]u8, @ptrCast(&jump))[0..rel.slot_size],
+                );
+            }
+        };
+
+        var sym_count: usize = 0;
+        for (self.syms.items) |sym| {
+            sym_count += @intFromBool(sym.kind != .invalid);
+        }
+
+        try writer.writeStruct(ExecHeader{
+            .code_length = lengths.func,
+            .data_length = lengths.data,
+            .debug_length = sym_count * @sizeOf(root.hbvm.isa.Symbol) + self.names.items.len + 1,
+            .symbol_count = sym_count,
+        });
+
+        inline for (sets) |v| {
+            for (self.syms.items) |sym| if (sym.kind == v) {
+                try writer.writeAll(self.code.items[sym.offset..][0..sym.size]);
+            };
+        }
+
+        for (offset_lookup, self.syms.items) |off, sym| {
+            try writer.writeStruct(root.hbvm.isa.Symbol{
+                .name = sym.name + 1,
+                .offset = off,
+                .kind = switch (sym.kind) {
+                    .func => .func,
+                    .data, .prealloc => .data,
+                    .invalid => continue,
+                },
+            });
+        }
+
+        try writer.writeByte(0);
+        try writer.writeAll(self.names.items);
+    }
 };
 
 pub const Elf = struct {
@@ -140,6 +132,9 @@ pub const Elf = struct {
         ".strtab",
         ".symtab",
         ".text",
+        ".rel.text",
+        ".data",
+        ".rel.data",
     };
 
     pub const FileHeader = extern struct {
@@ -163,6 +158,16 @@ pub const Elf = struct {
         shentsize: Half = @sizeOf(SectionHeader),
         shnum: Half = sections.len,
         shstrndx: SectionIndex = @enumFromInt(1),
+    };
+
+    pub const Rel = extern struct {
+        offset: Addr,
+        info: packed struct {
+            type: enum(u32) {
+                R_X86_64_PC32 = 2,
+            } = .R_X86_64_PC32,
+            sym: u32,
+        },
     };
 
     pub const SectionIndex = enum(Half) {
@@ -251,114 +256,182 @@ pub const Elf = struct {
         pub const first = std.mem.zeroes(Symbol);
     };
 
-    pub const Builder = struct {
-        text: std.ArrayListUnmanaged(u8) = .{},
-        symbol_table: std.ArrayListUnmanaged(Symbol) = .{},
-        string_table: std.ArrayListUnmanaged(u8) = .{},
+    pub fn flush(self: root.backend.Machine.Data, arch: Arch, writer: std.io.AnyWriter) anyerror!void {
+        var tmp = root.utils.Arena.scrath(null);
+        defer tmp.deinit();
 
-        pub fn flush(self: *Builder, arch: Arch, writer: std.io.AnyWriter) !void {
-            comptime var positions: [sections.len]Word = undefined;
-            const section_name_table = comptime b: {
-                var fs: []const u8 = "";
-                for (sections, &positions) |s, *ps| {
-                    ps.* = fs.len;
-                    fs = fs ++ s ++ "\x00";
-                }
-                break :b fs;
-            };
-
-            var section_alloc_cursor: usize = 0;
-
-            const header = FileHeader{
-                .machine = switch (arch) {
-                    .x86_64 => .EM_x86_64,
-                },
-            };
-
-            try writer.writeStruct(header);
-            section_alloc_cursor += @sizeOf(FileHeader);
-            section_alloc_cursor += @sizeOf(SectionHeader) * sections.len;
-
-            try writer.writeStruct(SectionHeader.first);
-
-            try writer.writeStruct(SectionHeader{
-                .sh_name = positions[1],
-                .sh_type = .strtab,
-                .sh_flags = .empty,
-                .sh_offset = @intCast(section_alloc_cursor),
-                .sh_size = @intCast(section_name_table.len),
-            });
-            section_alloc_cursor += section_name_table.len;
-
-            try writer.writeStruct(SectionHeader{
-                .sh_name = positions[2],
-                .sh_type = .strtab,
-                .sh_flags = .empty,
-                .sh_offset = @intCast(section_alloc_cursor),
-                .sh_size = @intCast(self.string_table.items.len),
-            });
-            section_alloc_cursor += self.string_table.items.len;
-
-            std.sort.pdq(Symbol, self.symbol_table.items, {}, struct {
-                fn lessThen(_: void, lhs: Symbol, rhs: Symbol) bool {
-                    return @intFromEnum(lhs.info.bind) < @intFromEnum(rhs.info.bind);
-                }
-            }.lessThen);
-
-            var local_sim_count: Word = 0;
-            while (self.symbol_table.items[local_sim_count].info.bind == .local)
-                local_sim_count += 1;
-
-            try writer.writeStruct(SectionHeader{
-                .sh_name = positions[3],
-                .sh_type = .symtab,
-                .sh_flags = .empty,
-                .sh_offset = @intCast(section_alloc_cursor),
-                .sh_size = @intCast((self.symbol_table.items.len + 1) * @sizeOf(Symbol)),
-                .sh_entsize = @sizeOf(Symbol),
-                .sh_link = 2,
-                .sh_info = local_sim_count + 1,
-            });
-            section_alloc_cursor += (self.symbol_table.items.len + 1) * @sizeOf(Symbol);
-
-            try writer.writeStruct(SectionHeader{
-                .sh_name = positions[4],
-                .sh_type = .progbits,
-                .sh_flags = .{ .alloc = true, .execinstr = true, .write = false },
-                .sh_offset = @intCast(section_alloc_cursor),
-                .sh_size = @intCast(self.text.items.len),
-            });
-            section_alloc_cursor += self.text.items.len;
-
-            try writer.writeAll(section_name_table);
-            try writer.writeAll(self.string_table.items);
-            try writer.writeStruct(Symbol.first);
-            for (self.symbol_table.items) |s| try writer.writeStruct(s);
-            try writer.writeAll(self.text.items);
-
-            self.symbol_table.items.len = 0;
-            self.string_table.items.len = 0;
-            self.text.items.len = 0;
-        }
-
-        pub fn addName(self: *Builder, gpa: std.mem.Allocator, name: []const u8) !SymbolName {
-            if (self.string_table.items.len == 0) {
-                @branchHint(.cold);
-                try self.string_table.append(gpa, 0);
+        comptime var positions: [sections.len]Word = undefined;
+        const section_name_table = comptime b: {
+            var fs: []const u8 = "";
+            for (sections, &positions) |s, *ps| {
+                ps.* = fs.len;
+                fs = fs ++ s ++ "\x00";
             }
+            break :b fs;
+        };
 
-            const pos = self.string_table.items.len;
-            try self.string_table.appendSlice(gpa, name);
-            try self.string_table.append(gpa, 0);
-            return @enumFromInt(pos);
+        var section_alloc_cursor: usize = 0;
+
+        const header = FileHeader{
+            .machine = switch (arch) {
+                .x86_64 => .EM_x86_64,
+            },
+        };
+
+        try writer.writeStruct(header);
+        section_alloc_cursor += @sizeOf(FileHeader);
+        section_alloc_cursor += @sizeOf(SectionHeader) * sections.len;
+
+        try writer.writeStruct(SectionHeader.first);
+
+        try writer.writeStruct(SectionHeader{
+            .sh_name = positions[1],
+            .sh_type = .strtab,
+            .sh_flags = .empty,
+            .sh_offset = @intCast(section_alloc_cursor),
+            .sh_size = @intCast(section_name_table.len),
+        });
+        section_alloc_cursor += section_name_table.len;
+
+        try writer.writeStruct(SectionHeader{
+            .sh_name = positions[2],
+            .sh_type = .strtab,
+            .sh_flags = .empty,
+            .sh_offset = @intCast(section_alloc_cursor),
+            .sh_size = @intCast(self.names.items.len + 1),
+        });
+        section_alloc_cursor += self.names.items.len + 1;
+
+        const projection = tmp.arena.alloc(u32, self.syms.items.len);
+        for (0..self.syms.items.len) |i| projection[i] = @intCast(i);
+        // TODO: we are sorting by a bool, so faster algorithm is available
+        std.sort.pdq(u32, projection, self.syms.items, struct {
+            fn lessThen(syms: []root.backend.Machine.Data.Sym, lhs: u32, rhs: u32) bool {
+                return @intFromEnum(syms[lhs].linkage) < @intFromEnum(syms[rhs].linkage);
+            }
+        }.lessThen);
+
+        var local_sim_count: Word = 0;
+        while (self.syms.items[projection[local_sim_count]].linkage == .local)
+            local_sim_count += 1;
+
+        try writer.writeStruct(SectionHeader{
+            .sh_name = positions[3],
+            .sh_type = .symtab,
+            .sh_flags = .empty,
+            .sh_offset = @intCast(section_alloc_cursor),
+            .sh_size = @intCast((self.syms.items.len + 1) * @sizeOf(Symbol)),
+            .sh_entsize = @sizeOf(Symbol),
+            .sh_link = 2,
+            .sh_info = local_sim_count + 1,
+        });
+        section_alloc_cursor += (self.syms.items.len + 1) * @sizeOf(Symbol);
+
+        var text_size: usize = 0;
+        var data_size: usize = 0;
+        var text_rel_count: usize = 0;
+        for (self.syms.items) |sm| if (sm.kind == .func) {
+            text_size += sm.size;
+            text_rel_count += sm.reloc_count;
+        } else if (sm.kind == .data) {
+            data_size += sm.size;
+        } else unreachable;
+
+        try writer.writeStruct(SectionHeader{
+            .sh_name = positions[4],
+            .sh_type = .progbits,
+            .sh_flags = .{ .alloc = true, .execinstr = true, .write = false },
+            .sh_offset = @intCast(section_alloc_cursor),
+            .sh_size = @intCast(text_size),
+        });
+        section_alloc_cursor += text_size;
+
+        try writer.writeStruct(SectionHeader{
+            .sh_name = positions[5],
+            .sh_type = .rel,
+            .sh_flags = .empty,
+            .sh_offset = @intCast(section_alloc_cursor),
+            .sh_size = @intCast(text_rel_count * @sizeOf(Rel)),
+        });
+        section_alloc_cursor += text_rel_count;
+
+        try writer.writeStruct(SectionHeader{
+            .sh_name = positions[6],
+            .sh_type = .progbits,
+            .sh_flags = .{ .alloc = true, .write = true, .execinstr = false },
+            .sh_offset = @intCast(section_alloc_cursor),
+            .sh_size = @intCast(text_rel_count * @sizeOf(Rel)),
+        });
+        section_alloc_cursor += text_rel_count;
+
+        try writer.writeAll(section_name_table);
+        try writer.writeByte(0);
+        try writer.writeAll(self.names.items);
+        try writer.writeStruct(Symbol.first);
+        var text_offset_cursor: u32 = 0;
+        var data_offset_cursor: u32 = 0;
+        var prealloc_offset_cursor: u32 = 0;
+        for (projection) |symid| {
+            const sym = &self.syms.items[symid];
+            sym.offset = switch (sym.kind) {
+                .func => text_offset_cursor,
+                .data => data_offset_cursor,
+                .prealloc => prealloc_offset_cursor,
+                .invalid => continue,
+            };
+            try writer.writeStruct(Elf.Symbol{
+                .name = @enumFromInt(sym.name + 1),
+                .size = sym.size,
+                .value = sym.offset,
+                .info = .{
+                    .type = switch (sym.kind) {
+                        .func => .func,
+                        .data, .prealloc => .object,
+                        .invalid => unreachable,
+                    },
+                    .bind = switch (sym.linkage) {
+                        .exported => .global,
+                        .imported, .local => .local,
+                    },
+                },
+                .shndx = switch (sym.kind) {
+                    .func => @enumFromInt(4),
+                    .data => @enumFromInt(6),
+                    .prealloc => unreachable,
+                    .invalid => unreachable,
+                },
+            });
+
+            switch (sym.kind) {
+                .func => text_offset_cursor += sym.size,
+                .data => data_offset_cursor += sym.size,
+                .prealloc => prealloc_offset_cursor += sym.size,
+                .invalid => unreachable,
+            }
         }
 
-        pub fn deinit(self: *Builder, gpa: std.mem.Allocator) void {
-            self.text.deinit(gpa);
-            self.symbol_table.deinit(gpa);
-            self.string_table.deinit(gpa);
+        for (projection) |symid| {
+            const sym = &self.syms.items[symid];
+            try writer.writeAll(self.code.items[sym.offset..][0..sym.size]);
         }
-    };
+
+        for (projection) |symid| {
+            const sym = &self.syms.items[symid];
+            if (sym.kind != .func) continue;
+            for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |rl| {
+                try writer.writeStruct(Rel{
+                    .offset = self.syms.items[@intFromEnum(rl.target)].offset + rl.offset,
+                    .info = .{
+                        .type = switch (rl.slot_size) {
+                            4 => .R_X86_64_PC32,
+                            else => unreachable,
+                        },
+                        .sym = projection[@intFromEnum(rl.target)],
+                    },
+                });
+            }
+        }
+    }
 };
 
 pub const Coff = struct {
@@ -568,24 +641,24 @@ pub const Coff = struct {
     }
 };
 
-pub fn main() !void {
-    const stdout = std.io.getStdOut().writer();
-    const file = try std.fs.cwd().createFile("obj.obj", .{});
-    defer file.close();
-    const writer = file.writer();
-
-    var arena_impl = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    const arena = arena_impl.allocator();
-
-    var builder = Object.init(if (true) .linux else .windows, .x86_64);
-
-    const main_fn = try builder.declareFunc(arena, "main", .global);
-
-    // Machine code: xor eax, eax; ret
-    const code = [_]u8{ 0xB8, 0x40, 0x00, 0x00, 0x00, 0xC3 };
-    try builder.defineFunc(arena, main_fn, &code);
-
-    try builder.flush(writer.any());
-
-    try stdout.print("ELF object written to obj.obj\n", .{});
-}
+//pub fn main() !void {
+//    const stdout = std.io.getStdOut().writer();
+//    const file = try std.fs.cwd().createFile("obj.obj", .{});
+//    defer file.close();
+//    const writer = file.writer();
+//
+//    var arena_impl = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+//    const arena = arena_impl.allocator();
+//
+//    var builder = Object.init(if (true) .linux else .windows, .x86_64);
+//
+//    const main_fn = try builder.declareFunc(arena, "main", .global);
+//
+//    // Machine code: xor eax, eax; ret
+//    const code = [_]u8{ 0xB8, 0x40, 0x00, 0x00, 0x00, 0xC3 };
+//    try builder.defineFunc(arena, main_fn, &code);
+//
+//    try builder.flush(writer.any());
+//
+//    try stdout.print("ELF object written to obj.obj\n", .{});
+//}
