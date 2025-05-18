@@ -59,7 +59,9 @@ pub fn build(b: *std.Build) !void {
         });
 
         test_run.root_module.addAnonymousImport("utils", .{ .root_source_file = b.path("src/tests.zig") });
-        test_step.dependOn(&b.addRunArtifact(test_run).step);
+        const tr = b.addRunArtifact(test_run);
+        tr.has_side_effects = true;
+        test_step.dependOn(&tr.step);
 
         break :vendored_tests;
     }

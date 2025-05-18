@@ -63,6 +63,7 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
             "x86_64-linux",
             code,
             .init(&x86_64),
+            root.Object.Elf.flush,
             gpa,
             stderr.writer().any(),
             colors,
@@ -84,7 +85,7 @@ pub fn runMachineTest(
     defer output.deinit();
 
     errdefer {
-        test_util.testBuilder(name, code, gpa, out, machine, flush, color, true) catch {};
+        test_util.testBuilder(name, code, gpa, out, machine, flush, color, true) catch unreachable;
     }
 
     try test_util.testBuilder(

@@ -590,7 +590,7 @@ pub fn run(_: *X86_64, env: Mach.RunEnv) !usize {
         const exe_name = try std.fmt.allocPrint(tmp.arena.allocator(), "./tmp_{s}", .{env.name});
 
         try std.fs.cwd().writeFile(.{ .sub_path = name, .data = env.code });
-        defer std.fs.cwd().deleteFile(name) catch unreachable;
+        //defer std.fs.cwd().deleteFile(name) catch unreachable;
 
         var compile = std.process.Child.init(
             &.{ "gcc", name, "-o", exe_name },

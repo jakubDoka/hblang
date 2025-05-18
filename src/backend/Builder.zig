@@ -1,6 +1,7 @@
 func: Func,
 scope: ?*Func.Node = undefined,
 root_mem: *Func.Node = undefined,
+pins: *Func.Node = undefined,
 
 const std = @import("std");
 const root = graph.utils;
@@ -43,6 +44,7 @@ pub fn begin(self: *Builder, param_count: usize, return_coutn: usize) struct { B
     self.root_mem = self.func.addNode(.Mem, .top, &.{self.func.root}, {});
     self.scope = self.func.addNode(.Scope, .top, &.{ ctrl, self.root_mem }, {});
     self.func.end = self.func.addNode(.Return, .top, &.{ null, null, null }, .{});
+    self.pins = self.func.addNode(.Scope, .top, &.{}, {});
 
     const alloc = self.func.arena.allocator().alloc(DataType, param_count + return_coutn) catch unreachable;
 
@@ -57,6 +59,9 @@ pub fn addParam(self: *Builder, idx: usize) SpecificNode(.Arg) {
 }
 
 pub fn end(self: *Builder, _: BuildToken) void {
+    //std.debug.assert(getScopeValues(self.pins).len == 0);
+    killScope(self.pins);
+
     if (!self.isUnreachable()) self.addReturn(&.{});
 
     if (std.debug.runtime_safety) {
@@ -210,10 +215,17 @@ pub fn control(self: *Builder) *Func.Node {
 
 pub const scope_value_start = 2;
 
+pub fn pushPin(self: *Builder, value: *BuildNode) void {
+    self.pushToScope(self.pins, value);
+}
+
 pub fn pushScopeValue(self: *Builder, value: *BuildNode) void {
-    const scope = self.scope.?;
+    self.pushToScope(self.scope.?, value);
+}
+
+fn pushToScope(self: *Builder, scope: *BuildNode, value: *BuildNode) void {
     if (scope.input_ordered_len == scope.input_len) {
-        const new_cap = scope.input_len * 2;
+        const new_cap = @max(1, scope.input_len) * 2;
         const new_alloc = self.func.arena.allocator().realloc(
             scope.input_base[0..scope.input_len],
             new_cap,
@@ -225,6 +237,10 @@ pub fn pushScopeValue(self: *Builder, value: *BuildNode) void {
     scope.input_base[scope.input_ordered_len] = value;
     scope.input_ordered_len += 1;
     self.func.addUse(value, scope);
+}
+
+pub fn getPinValue(self: *Builder, index: usize) *Func.Node {
+    return getScopeValueMulty(&self.func, self.pins, index);
 }
 
 pub fn getScopeValue(self: *Builder, index: usize) *Func.Node {
@@ -295,6 +311,10 @@ pub fn cloneScope(self: *Builder) SpecificNode(.Scope) {
 
 pub inline fn truncateScope(self: *Builder, back_to: usize) void {
     self._truncateScope(self.scope orelse return, scope_value_start + back_to);
+}
+
+pub inline fn truncatePins(self: *Builder, back_to: usize) void {
+    self._truncateScope(self.pins, back_to);
 }
 
 pub fn _truncateScope(self: *Builder, scope: SpecificNode(.Scope), back_to: usize) void {

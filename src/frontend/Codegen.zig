@@ -148,7 +148,7 @@ pub const Scope = union(enum) {
                     if (se.ty != .type) {
                         return .{ .id = id, .ty = se.ty };
                     }
-                    var value = Codegen.Value{ .ty = .type, .id = .{ .Pointer = t.bl.getScopeValue(i) } };
+                    var value = Codegen.Value{ .ty = .type, .id = .{ .Pointer = t.bl.getPinValue(i) } };
                     break .{ .id = id, .ty = .type, .value = @intFromEnum(t.unwrapTyConst(pos, &value) catch .never) };
                 }
             } else null,
@@ -319,7 +319,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
             .Imaginary => self.bl.addLocal(.none, 0),
         };
         self.scope.appendAssumeCapacity(.{ .ty = ty, .name = ident.id });
-        self.bl.pushScopeValue(arg);
+        self.bl.pushPin(arg);
         i += abi.len(false);
         ty_idx += 1;
     }
@@ -766,7 +766,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             errdefer |err| if (err != error.Unreachable) {
                 self.scope.appendAssumeCapacity(.{ .ty = .never, .name = ident.id });
-                self.bl.pushScopeValue(loc);
+                self.bl.pushPin(loc);
             };
 
             self.name = ast.tokenSrc(ident.id.pos());
@@ -783,7 +783,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             self.emitGenericStore(loc, &value);
 
             self.scope.appendAssumeCapacity(.{ .ty = value.ty, .name = ident.id });
-            self.bl.pushScopeValue(loc);
+            self.bl.pushPin(loc);
             return .{};
         },
         .BinOp => |e| switch (e.op) {
@@ -1115,7 +1115,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .Block => |e| {
             const prev_scope_height = self.scope.items.len;
             defer self.scope.items.len = prev_scope_height;
-            defer self.bl.truncateScope(prev_scope_height);
+            defer self.bl.truncatePins(prev_scope_height);
 
             const defer_scope = self.defers.items.len;
             defer self.defers.items.len = defer_scope;
@@ -1760,7 +1760,7 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
     for (self.scope.items, 0..) |se, i| {
         if (se.name == id) {
             if (se.ty == .never) return error.Never;
-            const value = self.bl.getScopeValue(i);
+            const value = self.bl.getPinValue(i);
             return .mkp(se.ty, value);
         }
     } else {
@@ -2134,7 +2134,7 @@ pub fn binOpUpcast(self: *Codegen, lhs: Types.Id, rhs: Types.Id) !Types.Id {
 pub fn emitBranch(self: *Codegen, block: Ast.Id) usize {
     const prev_scope_height = self.scope.items.len;
     defer self.scope.items.len = prev_scope_height;
-    defer self.bl.truncateScope(prev_scope_height);
+    defer self.bl.truncatePins(prev_scope_height);
 
     const prev_defer_height = self.defers.items.len;
     defer self.defers.items.len = prev_defer_height;

@@ -133,8 +133,6 @@ pub const Elf = struct {
         ".symtab",
         ".text",
         ".rel.text",
-        ".data",
-        ".rel.data",
     };
 
     pub const FileHeader = extern struct {
@@ -307,7 +305,9 @@ pub const Elf = struct {
         // TODO: we are sorting by a bool, so faster algorithm is available
         std.sort.pdq(u32, projection, self.syms.items, struct {
             fn lessThen(syms: []root.backend.Machine.Data.Sym, lhs: u32, rhs: u32) bool {
-                return @intFromEnum(syms[lhs].linkage) < @intFromEnum(syms[rhs].linkage);
+                return (syms[rhs].kind != .invalid or
+                    @intFromEnum(syms[lhs].linkage) < @intFromEnum(syms[rhs].linkage)) and
+                    syms[lhs].kind != .invalid;
             }
         }.lessThen);
 
@@ -315,17 +315,20 @@ pub const Elf = struct {
         while (self.syms.items[projection[local_sim_count]].linkage == .local)
             local_sim_count += 1;
 
+        var sym_count: Word = 1;
+        for (self.syms.items) |s| sym_count += @intFromBool(s.kind != .invalid);
+
         try writer.writeStruct(SectionHeader{
             .sh_name = positions[3],
             .sh_type = .symtab,
             .sh_flags = .empty,
             .sh_offset = @intCast(section_alloc_cursor),
-            .sh_size = @intCast((self.syms.items.len + 1) * @sizeOf(Symbol)),
+            .sh_size = @intCast(sym_count * @sizeOf(Symbol)),
             .sh_entsize = @sizeOf(Symbol),
             .sh_link = 2,
             .sh_info = local_sim_count + 1,
         });
-        section_alloc_cursor += (self.syms.items.len + 1) * @sizeOf(Symbol);
+        section_alloc_cursor += sym_count * @sizeOf(Symbol);
 
         var text_size: usize = 0;
         var data_size: usize = 0;
@@ -335,7 +338,7 @@ pub const Elf = struct {
             text_rel_count += sm.reloc_count;
         } else if (sm.kind == .data) {
             data_size += sm.size;
-        } else unreachable;
+        };
 
         try writer.writeStruct(SectionHeader{
             .sh_name = positions[4],
@@ -352,17 +355,20 @@ pub const Elf = struct {
             .sh_flags = .empty,
             .sh_offset = @intCast(section_alloc_cursor),
             .sh_size = @intCast(text_rel_count * @sizeOf(Rel)),
+            .sh_entsize = @sizeOf(Rel),
+            .sh_info = 4,
+            .sh_link = 3,
         });
-        section_alloc_cursor += text_rel_count;
+        section_alloc_cursor += text_rel_count * @sizeOf(Rel);
 
-        try writer.writeStruct(SectionHeader{
-            .sh_name = positions[6],
-            .sh_type = .progbits,
-            .sh_flags = .{ .alloc = true, .write = true, .execinstr = false },
-            .sh_offset = @intCast(section_alloc_cursor),
-            .sh_size = @intCast(text_rel_count * @sizeOf(Rel)),
-        });
-        section_alloc_cursor += text_rel_count;
+        //try writer.writeStruct(SectionHeader{
+        //    .sh_name = positions[6],
+        //    .sh_type = .progbits,
+        //    .sh_flags = .{ .alloc = true, .write = true, .execinstr = false },
+        //    .sh_offset = @intCast(section_alloc_cursor),
+        //    .sh_size = @intCast(data_size),
+        //});
+        //section_alloc_cursor += data_size;
 
         try writer.writeAll(section_name_table);
         try writer.writeByte(0);
@@ -371,9 +377,12 @@ pub const Elf = struct {
         var text_offset_cursor: u32 = 0;
         var data_offset_cursor: u32 = 0;
         var prealloc_offset_cursor: u32 = 0;
-        for (projection) |symid| {
+
+        const projected_offsets = tmp.arena.alloc(u32, projection.len);
+
+        for (projection, projected_offsets) |symid, *poff| {
             const sym = &self.syms.items[symid];
-            sym.offset = switch (sym.kind) {
+            poff.* = switch (sym.kind) {
                 .func => text_offset_cursor,
                 .data => data_offset_cursor,
                 .prealloc => prealloc_offset_cursor,
@@ -382,7 +391,7 @@ pub const Elf = struct {
             try writer.writeStruct(Elf.Symbol{
                 .name = @enumFromInt(sym.name + 1),
                 .size = sym.size,
-                .value = sym.offset,
+                .value = poff.*,
                 .info = .{
                     .type = switch (sym.kind) {
                         .func => .func,
@@ -412,15 +421,16 @@ pub const Elf = struct {
 
         for (projection) |symid| {
             const sym = &self.syms.items[symid];
+            if (sym.kind != .func) continue;
             try writer.writeAll(self.code.items[sym.offset..][0..sym.size]);
         }
 
-        for (projection) |symid| {
+        for (projection, projected_offsets) |symid, poff| {
             const sym = &self.syms.items[symid];
             if (sym.kind != .func) continue;
             for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |rl| {
                 try writer.writeStruct(Rel{
-                    .offset = self.syms.items[@intFromEnum(rl.target)].offset + rl.offset,
+                    .offset = (rl.offset - sym.offset) + poff,
                     .info = .{
                         .type = switch (rl.slot_size) {
                             4 => .R_X86_64_PC32,

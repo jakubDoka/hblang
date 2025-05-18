@@ -84,6 +84,15 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
 
                 continue;
             },
+            .Phi => b: {
+                if (curr.inputs()[0].?.kind == .Loop and curr.inputs()[2] == null) {
+                    if (true) unreachable;
+                    break :b curr.inputs()[1].?;
+                } else {
+                    if (true) unreachable;
+                    return .{ .Unsupported = curr };
+                }
+            },
             .BinOp, .UnOp => |t| b: {
                 var requeued = false;
                 for (curr.inputs()[1..]) |arg| {
@@ -187,7 +196,9 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
                 }
 
                 var cursor = curr.mem();
+                //std.debug.print("--- {}\n", .{curr.base()});
                 while (true) {
+                    //std.debug.print("{}\n", .{cursor});
                     if (cursor.isStore()) {
                         if (cursor.base() != curr.base()) {
                             cursor = cursor.mem();
@@ -197,7 +208,11 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
                             return .{ .Unsupported = cursor };
                         }
                         cursor = cursor.inputs()[0].?.inputs()[0].?.inputs()[1].?;
-                    } else return .{ .Unsupported = cursor };
+                    } else if (cursor.kind == .Phi) {
+                        cursor = cursor.inputs()[1].?;
+                    } else {
+                        return .{ .Unsupported = cursor };
+                    }
                 }
             },
             else => return .{ .Unsupported = curr },
