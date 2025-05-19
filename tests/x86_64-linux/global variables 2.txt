@@ -1,0 +1,12 @@
+global variables 2.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <main>:
+   0:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 7 <main+0x7>
+   7:	48 8d 0d 00 00 00 00 	lea    rcx,[rip+0x0]        # e <main+0xe>
+   e:	48 8b 80 00 00 00 00 	mov    rax,QWORD PTR [rax+0x0]
+  15:	48 8b 89 00 00 00 00 	mov    rcx,QWORD PTR [rcx+0x0]
+  1c:	48 29 c8             	sub    rax,rcx
+  1f:	c3                   	ret

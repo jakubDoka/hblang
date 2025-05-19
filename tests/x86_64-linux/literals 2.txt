@@ -3,30 +3,30 @@ literals 2.o:     file format elf64-x86-64
 
 Disassembly of section .text:
 
-0000000000000000 <main>:
-   0:	53                   	push   rbx
-   1:	e8 42 00 00 00       	call   48 <"literals 2".hex>
-   6:	48 89 c3             	mov    rbx,rax
-   9:	e8 2f 00 00 00       	call   3d <"literals 2".dec>
-   e:	48 3b c3             	cmp    rax,rbx
-  11:	48 0f 95 c1          	rex.W setne cl
-  15:	48 0f b6 c9          	movzx  rcx,cl
-  19:	48 85 c9             	test   rcx,rcx
-  1c:	0f 84 0f 00 00 00    	je     31 <main+0x31>
-  22:	48 b8 01 00 00 00 00 	movabs rax,0x1
-  29:	00 00 00 
-  2c:	e9 0a 00 00 00       	jmp    3b <main+0x3b>
-  31:	48 b8 00 00 00 00 00 	movabs rax,0x0
-  38:	00 00 00 
-  3b:	5b                   	pop    rbx
-  3c:	c3                   	ret
+0000000000000000 <"literals 2".dec>:
+   0:	48 b8 2d 00 00 00 00 	movabs rax,0x2d
+   7:	00 00 00 
+   a:	c3                   	ret
 
-000000000000003d <"literals 2".dec>:
-  3d:	48 b8 2d 00 00 00 00 	movabs rax,0x2d
-  44:	00 00 00 
-  47:	c3                   	ret
+000000000000000b <"literals 2".hex>:
+   b:	48 b8 2d 00 00 00 00 	movabs rax,0x2d
+  12:	00 00 00 
+  15:	c3                   	ret
 
-0000000000000048 <"literals 2".hex>:
-  48:	48 b8 2d 00 00 00 00 	movabs rax,0x2d
-  4f:	00 00 00 
+0000000000000016 <main>:
+  16:	53                   	push   rbx
+  17:	e8 00 00 00 00       	call   1c <main+0x6>
+  1c:	48 89 c3             	mov    rbx,rax
+  1f:	e8 00 00 00 00       	call   24 <main+0xe>
+  24:	48 3b c3             	cmp    rax,rbx
+  27:	48 0f 95 c1          	rex.W setne cl
+  2b:	48 0f b6 c9          	movzx  rcx,cl
+  2f:	48 85 c9             	test   rcx,rcx
+  32:	0f 84 0f 00 00 00    	je     47 <main+0x31>
+  38:	48 b8 01 00 00 00 00 	movabs rax,0x1
+  3f:	00 00 00 
+  42:	e9 0a 00 00 00       	jmp    51 <main+0x3b>
+  47:	48 b8 00 00 00 00 00 	movabs rax,0x0
+  4e:	00 00 00 
+  51:	5b                   	pop    rbx
   52:	c3                   	ret

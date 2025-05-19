@@ -3,34 +3,34 @@ pointers 1.o:     file format elf64-x86-64
 
 Disassembly of section .text:
 
-0000000000000000 <main>:
-   0:	53                   	push   rbx
-   1:	55                   	push   rbp
-   2:	48 81 c4 f8 ff ff ff 	add    rsp,0xfffffffffffffff8
-   9:	48 89 e3             	mov    rbx,rsp
-   c:	48 81 c3 00 00 00 00 	add    rbx,0x0
-  13:	48 bd 01 00 00 00 00 	movabs rbp,0x1
-  1a:	00 00 00 
-  1d:	48 89 ab 00 00 00 00 	mov    QWORD PTR [rbx+0x0],rbp
-  24:	48 89 df             	mov    rdi,rbx
-  27:	e8 35 00 00 00       	call   61 <"pointers 1".modify>
-  2c:	48 b8 02 00 00 00 00 	movabs rax,0x2
-  33:	00 00 00 
-  36:	48 8b 8b 00 00 00 00 	mov    rcx,QWORD PTR [rbx+0x0]
-  3d:	48 01 c1             	add    rcx,rax
-  40:	48 89 8b 00 00 00 00 	mov    QWORD PTR [rbx+0x0],rcx
-  47:	48 b8 04 00 00 00 00 	movabs rax,0x4
-  4e:	00 00 00 
-  51:	48 29 c1             	sub    rcx,rax
-  54:	48 89 c8             	mov    rax,rcx
-  57:	48 81 c4 08 00 00 00 	add    rsp,0x8
-  5e:	5d                   	pop    rbp
-  5f:	5b                   	pop    rbx
-  60:	c3                   	ret
+0000000000000000 <"pointers 1".modify>:
+   0:	48 89 f8             	mov    rax,rdi
+   3:	48 b9 02 00 00 00 00 	movabs rcx,0x2
+   a:	00 00 00 
+   d:	48 89 88 00 00 00 00 	mov    QWORD PTR [rax+0x0],rcx
+  14:	c3                   	ret
 
-0000000000000061 <"pointers 1".modify>:
-  61:	48 89 f8             	mov    rax,rdi
-  64:	48 b9 02 00 00 00 00 	movabs rcx,0x2
-  6b:	00 00 00 
-  6e:	48 89 88 00 00 00 00 	mov    QWORD PTR [rax+0x0],rcx
+0000000000000015 <main>:
+  15:	53                   	push   rbx
+  16:	55                   	push   rbp
+  17:	48 81 c4 f8 ff ff ff 	add    rsp,0xfffffffffffffff8
+  1e:	48 89 e3             	mov    rbx,rsp
+  21:	48 81 c3 00 00 00 00 	add    rbx,0x0
+  28:	48 bd 01 00 00 00 00 	movabs rbp,0x1
+  2f:	00 00 00 
+  32:	48 89 ab 00 00 00 00 	mov    QWORD PTR [rbx+0x0],rbp
+  39:	48 89 df             	mov    rdi,rbx
+  3c:	e8 00 00 00 00       	call   41 <main+0x2c>
+  41:	48 b8 02 00 00 00 00 	movabs rax,0x2
+  48:	00 00 00 
+  4b:	48 8b 8b 00 00 00 00 	mov    rcx,QWORD PTR [rbx+0x0]
+  52:	48 01 c1             	add    rcx,rax
+  55:	48 89 8b 00 00 00 00 	mov    QWORD PTR [rbx+0x0],rcx
+  5c:	48 b8 04 00 00 00 00 	movabs rax,0x4
+  63:	00 00 00 
+  66:	48 29 c1             	sub    rcx,rax
+  69:	48 89 c8             	mov    rax,rcx
+  6c:	48 81 c4 08 00 00 00 	add    rsp,0x8
+  73:	5d                   	pop    rbp
+  74:	5b                   	pop    rbx
   75:	c3                   	ret

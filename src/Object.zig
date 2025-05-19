@@ -16,7 +16,7 @@ pub const Ableos = struct {
         for (self.relocs.items[after..]) |rel| {
             const dest = self.syms.items[@intFromEnum(rel.target)].offset;
             const jump = @as(i64, dest) - rel.offset;
-            const location: usize = @intCast(rel.offset + rel.addend);
+            const location: usize = @intCast(rel.offset + @as(u32, @intCast(rel.addend)));
 
             @memcpy(
                 self.code.items[location..][0..rel.slot_size],
@@ -48,7 +48,7 @@ pub const Ableos = struct {
             for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |*rel| {
                 const dest = offset_lookup[@intFromEnum(rel.target)];
                 const jump = @as(i64, dest) - (rel.offset - sym.offset + olp);
-                const location: usize = @intCast(rel.offset + rel.addend);
+                const location: usize = @intCast(rel.offset + @as(u32, @intCast(rel.addend)));
 
                 @memcpy(
                     self.code.items[location..][0..rel.slot_size],
@@ -132,7 +132,8 @@ pub const Elf = struct {
         ".strtab",
         ".symtab",
         ".text",
-        ".rel.text",
+        ".rela.text",
+        ".data",
     };
 
     pub const FileHeader = extern struct {
@@ -158,14 +159,16 @@ pub const Elf = struct {
         shstrndx: SectionIndex = @enumFromInt(1),
     };
 
-    pub const Rel = extern struct {
+    pub const Rela = extern struct {
         offset: Addr,
         info: packed struct {
             type: enum(u32) {
                 R_X86_64_PC32 = 2,
+                R_X86_64_PLT32 = 4,
             } = .R_X86_64_PC32,
             sym: u32,
         },
+        addend: SXWord,
     };
 
     pub const SectionIndex = enum(Half) {
@@ -350,36 +353,35 @@ pub const Elf = struct {
         section_alloc_cursor += text_size;
 
         try writer.writeStruct(SectionHeader{
+            .sh_name = positions[6],
+            .sh_type = .progbits,
+            .sh_flags = .{ .alloc = true, .write = true, .execinstr = false },
+            .sh_offset = @intCast(section_alloc_cursor),
+            .sh_size = @intCast(data_size),
+        });
+        section_alloc_cursor += data_size;
+
+        try writer.writeStruct(SectionHeader{
             .sh_name = positions[5],
-            .sh_type = .rel,
+            .sh_type = .rela,
             .sh_flags = .empty,
             .sh_offset = @intCast(section_alloc_cursor),
-            .sh_size = @intCast(text_rel_count * @sizeOf(Rel)),
-            .sh_entsize = @sizeOf(Rel),
+            .sh_size = @intCast(text_rel_count * @sizeOf(Rela)),
+            .sh_entsize = @sizeOf(Rela),
             .sh_info = 4,
             .sh_link = 3,
         });
-        section_alloc_cursor += text_rel_count * @sizeOf(Rel);
-
-        //try writer.writeStruct(SectionHeader{
-        //    .sh_name = positions[6],
-        //    .sh_type = .progbits,
-        //    .sh_flags = .{ .alloc = true, .write = true, .execinstr = false },
-        //    .sh_offset = @intCast(section_alloc_cursor),
-        //    .sh_size = @intCast(data_size),
-        //});
-        //section_alloc_cursor += data_size;
+        section_alloc_cursor += text_rel_count * @sizeOf(Rela);
 
         try writer.writeAll(section_name_table);
         try writer.writeByte(0);
         try writer.writeAll(self.names.items);
         try writer.writeStruct(Symbol.first);
+
+        const projected_offsets = tmp.arena.alloc(u32, projection.len);
         var text_offset_cursor: u32 = 0;
         var data_offset_cursor: u32 = 0;
         var prealloc_offset_cursor: u32 = 0;
-
-        const projected_offsets = tmp.arena.alloc(u32, projection.len);
-
         for (projection, projected_offsets) |symid, *poff| {
             const sym = &self.syms.items[symid];
             poff.* = switch (sym.kind) {
@@ -405,7 +407,7 @@ pub const Elf = struct {
                 },
                 .shndx = switch (sym.kind) {
                     .func => @enumFromInt(4),
-                    .data => @enumFromInt(6),
+                    .data => @enumFromInt(5),
                     .prealloc => unreachable,
                     .invalid => unreachable,
                 },
@@ -419,25 +421,28 @@ pub const Elf = struct {
             }
         }
 
-        for (projection) |symid| {
-            const sym = &self.syms.items[symid];
-            if (sym.kind != .func) continue;
-            try writer.writeAll(self.code.items[sym.offset..][0..sym.size]);
+        inline for (.{ .func, .data }) |k| {
+            for (projection) |symid| {
+                const sym = &self.syms.items[symid];
+                if (sym.kind != k) continue;
+                try writer.writeAll(self.code.items[sym.offset..][0..sym.size]);
+            }
         }
 
         for (projection, projected_offsets) |symid, poff| {
             const sym = &self.syms.items[symid];
             if (sym.kind != .func) continue;
             for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |rl| {
-                try writer.writeStruct(Rel{
+                try writer.writeStruct(Rela{
                     .offset = (rl.offset - sym.offset) + poff,
                     .info = .{
                         .type = switch (rl.slot_size) {
                             4 => .R_X86_64_PC32,
                             else => unreachable,
                         },
-                        .sym = projection[@intFromEnum(rl.target)],
+                        .sym = projection[@intFromEnum(rl.target)] + 1,
                     },
+                    .addend = rl.addend,
                 });
             }
         }

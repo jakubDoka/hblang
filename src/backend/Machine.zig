@@ -112,7 +112,7 @@ pub const Data = struct {
     pub const Reloc = struct {
         target: SymIdx,
         offset: u32,
-        addend: u16,
+        addend: i16,
         slot_size: u16,
     };
 
@@ -124,7 +124,7 @@ pub const Data = struct {
     code: std.ArrayListUnmanaged(u8) = .empty,
     relocs: std.ArrayListUnmanaged(Reloc) = .empty,
 
-    pub fn addReloc(self: *Data, gpa: std.mem.Allocator, target: *SymIdx, slot_size: u8, addend: u16) !void {
+    pub fn addReloc(self: *Data, gpa: std.mem.Allocator, target: *SymIdx, slot_size: u8, addend: i16) !void {
         try self.relocs.append(gpa, .{
             .target = try self.declSym(gpa, target),
             .offset = @intCast(self.code.items.len),

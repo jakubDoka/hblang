@@ -3,35 +3,35 @@ loops 1.o:     file format elf64-x86-64
 
 Disassembly of section .text:
 
-0000000000000000 <main>:
+0000000000000000 <"loops 1".fib>:
    0:	53                   	push   rbx
-   1:	48 bb 0a 00 00 00 00 	movabs rbx,0xa
-   8:	00 00 00 
-   b:	48 89 df             	mov    rdi,rbx
-   e:	e8 02 00 00 00       	call   15 <"loops 1".fib>
-  13:	5b                   	pop    rbx
-  14:	c3                   	ret
+   1:	55                   	push   rbp
+   2:	48 89 f8             	mov    rax,rdi
+   5:	48 b9 00 00 00 00 00 	movabs rcx,0x0
+   c:	00 00 00 
+   f:	48 ba 01 00 00 00 00 	movabs rdx,0x1
+  16:	00 00 00 
+  19:	48 89 d3             	mov    rbx,rdx
+  1c:	48 89 cd             	mov    rbp,rcx
+  1f:	48 3b c8             	cmp    rcx,rax
+  22:	48 0f 94 c6          	rex.W sete sil
+  26:	48 0f b6 f6          	movzx  rsi,sil
+  2a:	48 85 f6             	test   rsi,rsi
+  2d:	0f 84 06 00 00 00    	je     39 <"loops 1".fib+0x39>
+  33:	48 89 e8             	mov    rax,rbp
+  36:	5d                   	pop    rbp
+  37:	5b                   	pop    rbx
+  38:	c3                   	ret
+  39:	48 01 dd             	add    rbp,rbx
+  3c:	48 29 d0             	sub    rax,rdx
+  3f:	48 87 eb             	xchg   rbx,rbp
+  42:	e9 d8 ff ff ff       	jmp    1f <"loops 1".fib+0x1f>
 
-0000000000000015 <"loops 1".fib>:
-  15:	53                   	push   rbx
-  16:	55                   	push   rbp
-  17:	48 89 f8             	mov    rax,rdi
-  1a:	48 b9 00 00 00 00 00 	movabs rcx,0x0
-  21:	00 00 00 
-  24:	48 ba 01 00 00 00 00 	movabs rdx,0x1
-  2b:	00 00 00 
-  2e:	48 89 cb             	mov    rbx,rcx
-  31:	48 89 d5             	mov    rbp,rdx
-  34:	48 3b c8             	cmp    rcx,rax
-  37:	48 0f 94 c6          	rex.W sete sil
-  3b:	48 0f b6 f6          	movzx  rsi,sil
-  3f:	48 85 f6             	test   rsi,rsi
-  42:	0f 84 06 00 00 00    	je     4e <"loops 1".fib+0x39>
-  48:	48 89 d8             	mov    rax,rbx
-  4b:	5d                   	pop    rbp
-  4c:	5b                   	pop    rbx
-  4d:	c3                   	ret
-  4e:	48 01 eb             	add    rbx,rbp
-  51:	48 29 d0             	sub    rax,rdx
-  54:	48 87 eb             	xchg   rbx,rbp
-  57:	e9 d8 ff ff ff       	jmp    34 <"loops 1".fib+0x1f>
+0000000000000047 <main>:
+  47:	53                   	push   rbx
+  48:	48 bb 0a 00 00 00 00 	movabs rbx,0xa
+  4f:	00 00 00 
+  52:	48 89 df             	mov    rdi,rbx
+  55:	e8 00 00 00 00       	call   5a <main+0x13>
+  5a:	5b                   	pop    rbx
+  5b:	c3                   	ret

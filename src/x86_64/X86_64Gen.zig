@@ -137,7 +137,20 @@ pub fn emitBinOp(self: *X86_64, opcode: Opcode, lhs: u16, rhs: u16) void {
     });
 }
 
+pub fn emitBinOpMemDeferOff(self: *X86_64, opcode: Opcode, lhs: u16, rhs: u16) void {
+    errdefer unreachable;
+    try self.out.code.appendSlice(self.gpa, &.{
+        rex(lhs, rhs),
+        @intFromEnum(opcode),
+        modrm(0b00, lhs, rhs),
+    });
+    if (lhs == 12) {
+        try self.out.code.append(self.gpa, 0x24);
+    }
+}
+
 pub fn emitBinOpMem(self: *X86_64, opcode: Opcode, lhs: u16, rhs: u16, offset: u32) void {
+    errdefer unreachable;
     errdefer unreachable;
     try self.out.code.appendSlice(self.gpa, &.{
         rex(lhs, rhs),
@@ -345,7 +358,10 @@ pub fn emitBlockBody(self: *X86_64, arena: std.mem.Allocator, block: *FuncNode) 
         .MachMove => {},
         .Phi => {},
         .GlobalAddr => {
-            self.emitBinOpMem(.lea, self.reg(instr), 0b101, 0);
+            self.emitBinOpMemDeferOff(.lea, 0b101, self.reg(instr));
+            const slot = try utils.ensureSlot(&self.global_map, self.gpa, instr.extra(.GlobalAddr).id);
+            try self.out.addReloc(self.gpa, slot, 4, -4);
+            try self.out.code.appendNTimes(self.gpa, 0, 4);
         },
         .Local => {
             self.emitBinOp(.mov, self.reg(instr), @intFromEnum(Reg.rsp));
@@ -384,7 +400,7 @@ pub fn emitBlockBody(self: *X86_64, arena: std.mem.Allocator, block: *FuncNode) 
             const opcode = 0xE8;
             try self.out.code.append(self.gpa, opcode);
             const slot = try utils.ensureSlot(&self.func_map, self.gpa, call.id);
-            try self.out.addReloc(self.gpa, slot, 4, 0);
+            try self.out.addReloc(self.gpa, slot, 4, -4);
             try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
 
             const cend = for (instr.outputs()) |o| {
@@ -590,7 +606,7 @@ pub fn run(_: *X86_64, env: Mach.RunEnv) !usize {
         const exe_name = try std.fmt.allocPrint(tmp.arena.allocator(), "./tmp_{s}", .{env.name});
 
         try std.fs.cwd().writeFile(.{ .sub_path = name, .data = env.code });
-        //defer std.fs.cwd().deleteFile(name) catch unreachable;
+        defer std.fs.cwd().deleteFile(name) catch unreachable;
 
         var compile = std.process.Child.init(
             &.{ "gcc", name, "-o", exe_name },

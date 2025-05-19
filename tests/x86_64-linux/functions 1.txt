@@ -3,35 +3,35 @@ functions 1.o:     file format elf64-x86-64
 
 Disassembly of section .text:
 
-0000000000000000 <main>:
-   0:	53                   	push   rbx
-   1:	55                   	push   rbp
-   2:	48 bb 0a 00 00 00 00 	movabs rbx,0xa
-   9:	00 00 00 
-   c:	48 89 df             	mov    rdi,rbx
-   f:	e8 32 00 00 00       	call   46 <"functions 1".add_one>
-  14:	48 89 c3             	mov    rbx,rax
-  17:	48 bd 14 00 00 00 00 	movabs rbp,0x14
-  1e:	00 00 00 
-  21:	48 89 ef             	mov    rdi,rbp
-  24:	e8 0c 00 00 00       	call   35 <"functions 1".add_two>
-  29:	48 89 d9             	mov    rcx,rbx
-  2c:	48 01 c1             	add    rcx,rax
-  2f:	48 89 c8             	mov    rax,rcx
-  32:	5d                   	pop    rbp
-  33:	5b                   	pop    rbx
-  34:	c3                   	ret
+0000000000000000 <"functions 1".add_two>:
+   0:	48 89 f8             	mov    rax,rdi
+   3:	48 b9 02 00 00 00 00 	movabs rcx,0x2
+   a:	00 00 00 
+   d:	48 01 c8             	add    rax,rcx
+  10:	c3                   	ret
 
-0000000000000035 <"functions 1".add_two>:
-  35:	48 89 f8             	mov    rax,rdi
-  38:	48 b9 02 00 00 00 00 	movabs rcx,0x2
-  3f:	00 00 00 
-  42:	48 01 c8             	add    rax,rcx
-  45:	c3                   	ret
+0000000000000011 <"functions 1".add_one>:
+  11:	48 89 f8             	mov    rax,rdi
+  14:	48 b9 01 00 00 00 00 	movabs rcx,0x1
+  1b:	00 00 00 
+  1e:	48 01 c8             	add    rax,rcx
+  21:	c3                   	ret
 
-0000000000000046 <"functions 1".add_one>:
-  46:	48 89 f8             	mov    rax,rdi
-  49:	48 b9 01 00 00 00 00 	movabs rcx,0x1
-  50:	00 00 00 
-  53:	48 01 c8             	add    rax,rcx
+0000000000000022 <main>:
+  22:	53                   	push   rbx
+  23:	55                   	push   rbp
+  24:	48 bb 0a 00 00 00 00 	movabs rbx,0xa
+  2b:	00 00 00 
+  2e:	48 89 df             	mov    rdi,rbx
+  31:	e8 00 00 00 00       	call   36 <main+0x14>
+  36:	48 89 c3             	mov    rbx,rax
+  39:	48 bd 14 00 00 00 00 	movabs rbp,0x14
+  40:	00 00 00 
+  43:	48 89 ef             	mov    rdi,rbp
+  46:	e8 00 00 00 00       	call   4b <main+0x29>
+  4b:	48 89 d9             	mov    rcx,rbx
+  4e:	48 01 c1             	add    rcx,rax
+  51:	48 89 c8             	mov    rax,rcx
+  54:	5d                   	pop    rbp
+  55:	5b                   	pop    rbx
   56:	c3                   	ret

@@ -3,45 +3,45 @@ if statements 1.o:     file format elf64-x86-64
 
 Disassembly of section .text:
 
-0000000000000000 <main>:
+0000000000000000 <"if statements 1".fib>:
    0:	53                   	push   rbx
-   1:	48 bb 03 00 00 00 00 	movabs rbx,0x3
-   8:	00 00 00 
-   b:	48 89 df             	mov    rdi,rbx
-   e:	e8 02 00 00 00       	call   15 <"if statements 1".fib>
-  13:	5b                   	pop    rbx
-  14:	c3                   	ret
-
-0000000000000015 <"if statements 1".fib>:
-  15:	53                   	push   rbx
-  16:	55                   	push   rbp
-  17:	41 54                	push   r12
-  19:	41 55                	push   r13
-  1b:	48 89 fb             	mov    rbx,rdi
-  1e:	48 bd 02 00 00 00 00 	movabs rbp,0x2
+   1:	55                   	push   rbp
+   2:	41 54                	push   r12
+   4:	41 55                	push   r13
+   6:	48 89 fb             	mov    rbx,rdi
+   9:	48 bd 02 00 00 00 00 	movabs rbp,0x2
+  10:	00 00 00 
+  13:	48 3b eb             	cmp    rbp,rbx
+  16:	49 0f 9d c4          	rex.WB setge r12b
+  1a:	4d 0f b6 e4          	movzx  r12,r12b
+  1e:	49 bd 01 00 00 00 00 	movabs r13,0x1
   25:	00 00 00 
-  28:	48 3b eb             	cmp    rbp,rbx
-  2b:	49 0f 9d c4          	rex.WB setge r12b
-  2f:	4d 0f b6 e4          	movzx  r12,r12b
-  33:	49 bd 01 00 00 00 00 	movabs r13,0x1
-  3a:	00 00 00 
-  3d:	4d 85 e4             	test   r12,r12
-  40:	0f 84 08 00 00 00    	je     4e <"if statements 1".fib+0x39>
-  46:	4c 89 e8             	mov    rax,r13
-  49:	e9 25 00 00 00       	jmp    73 <"if statements 1".fib+0x5e>
-  4e:	49 89 dc             	mov    r12,rbx
-  51:	4d 29 ec             	sub    r12,r13
-  54:	4c 89 e7             	mov    rdi,r12
-  57:	e8 b9 ff ff ff       	call   15 <"if statements 1".fib>
-  5c:	49 89 c4             	mov    r12,rax
-  5f:	48 29 eb             	sub    rbx,rbp
-  62:	48 89 df             	mov    rdi,rbx
-  65:	e8 ab ff ff ff       	call   15 <"if statements 1".fib>
-  6a:	4c 89 e1             	mov    rcx,r12
-  6d:	48 01 c1             	add    rcx,rax
-  70:	48 89 c8             	mov    rax,rcx
-  73:	41 5d                	pop    r13
-  75:	41 5c                	pop    r12
-  77:	5d                   	pop    rbp
+  28:	4d 85 e4             	test   r12,r12
+  2b:	0f 84 08 00 00 00    	je     39 <"if statements 1".fib+0x39>
+  31:	4c 89 e8             	mov    rax,r13
+  34:	e9 25 00 00 00       	jmp    5e <"if statements 1".fib+0x5e>
+  39:	49 89 dc             	mov    r12,rbx
+  3c:	4d 29 ec             	sub    r12,r13
+  3f:	4c 89 e7             	mov    rdi,r12
+  42:	e8 00 00 00 00       	call   47 <"if statements 1".fib+0x47>
+  47:	49 89 c4             	mov    r12,rax
+  4a:	48 29 eb             	sub    rbx,rbp
+  4d:	48 89 df             	mov    rdi,rbx
+  50:	e8 00 00 00 00       	call   55 <"if statements 1".fib+0x55>
+  55:	4c 89 e1             	mov    rcx,r12
+  58:	48 01 c1             	add    rcx,rax
+  5b:	48 89 c8             	mov    rax,rcx
+  5e:	41 5d                	pop    r13
+  60:	41 5c                	pop    r12
+  62:	5d                   	pop    rbp
+  63:	5b                   	pop    rbx
+  64:	c3                   	ret
+
+0000000000000065 <main>:
+  65:	53                   	push   rbx
+  66:	48 bb 03 00 00 00 00 	movabs rbx,0x3
+  6d:	00 00 00 
+  70:	48 89 df             	mov    rdi,rbx
+  73:	e8 00 00 00 00       	call   78 <main+0x13>
   78:	5b                   	pop    rbx
   79:	c3                   	ret

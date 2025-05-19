@@ -191,12 +191,12 @@ pub const Symbol = extern struct {
 
 pub fn loadSymMap(arena: std.mem.Allocator, code: []const u8) !std.AutoHashMapUnmanaged(u32, []const u8) {
     const header: ExecHeader = @bitCast(code[0..@sizeOf(ExecHeader)].*);
-    const sym_start = @sizeOf(ExecHeader) + header.code_length + header.data_length;
-    const sym_end = header.symbol_count * @sizeOf(Symbol);
+    const sym_start: usize = @intCast(@sizeOf(ExecHeader) + header.code_length + header.data_length);
+    const sym_end: usize = @intCast(header.symbol_count * @sizeOf(Symbol));
     const syms: []align(1) const Symbol =
         @ptrCast(code[sym_start..][0..sym_end]);
 
-    const string_table = code[sym_start..][sym_end..header.debug_length];
+    const string_table = code[sym_start..][sym_end..@intCast(header.debug_length)];
 
     var symbols = std.AutoHashMapUnmanaged(u32, []const u8){};
     for (syms) |sym| {
