@@ -1,0 +1,135 @@
+structs 1.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <"structs 1".odher_pass>:
+   0:	48 89 f8             	mov    rax,rdi
+   3:	48 89 f1             	mov    rcx,rsi
+   6:	48 ba 18 00 00 00 00 	movabs rdx,0x18
+   d:	00 00 00 
+  10:	48 89 c7             	mov    rdi,rax
+  13:	48 89 ce             	mov    rsi,rcx
+  16:	e8 00 00 00 00       	call   1b <"structs 1".odher_pass+0x1b>
+  1b:	c3                   	ret
+
+000000000000001c <"structs 1".Ty.sum>:
+  1c:	53                   	push   rbx
+  1d:	55                   	push   rbp
+  1e:	48 81 c4 f0 ff ff ff 	add    rsp,0xfffffffffffffff0
+  25:	48 89 f8             	mov    rax,rdi
+  28:	48 89 f1             	mov    rcx,rsi
+  2b:	48 89 e2             	mov    rdx,rsp
+  2e:	48 81 c2 00 00 00 00 	add    rdx,0x0
+  35:	48 89 82 00 00 00 00 	mov    QWORD PTR [rdx+0x0],rax
+  3c:	48 bb 02 00 00 00 00 	movabs rbx,0x2
+  43:	00 00 00 
+  46:	48 bd 01 00 00 00 00 	movabs rbp,0x1
+  4d:	00 00 00 
+  50:	48 be 08 00 00 00 00 	movabs rsi,0x8
+  57:	00 00 00 
+  5a:	48 89 d7             	mov    rdi,rdx
+  5d:	48 01 f7             	add    rdi,rsi
+  60:	48 89 8f 00 00 00 00 	mov    QWORD PTR [rdi+0x0],rcx
+  67:	48 29 d8             	sub    rax,rbx
+  6a:	48 89 82 00 00 00 00 	mov    QWORD PTR [rdx+0x0],rax
+  71:	48 01 e9             	add    rcx,rbp
+  74:	48 89 8f 00 00 00 00 	mov    QWORD PTR [rdi+0x0],rcx
+  7b:	48 29 c8             	sub    rax,rcx
+  7e:	48 81 c4 10 00 00 00 	add    rsp,0x10
+  85:	5d                   	pop    rbp
+  86:	5b                   	pop    rbx
+  87:	c3                   	ret
+
+0000000000000088 <"structs 1".pass>:
+  88:	53                   	push   rbx
+  89:	48 89 f8             	mov    rax,rdi
+  8c:	48 b9 08 00 00 00 00 	movabs rcx,0x8
+  93:	00 00 00 
+  96:	48 ba 01 00 00 00 00 	movabs rdx,0x1
+  9d:	00 00 00 
+  a0:	48 8b 98 00 00 00 00 	mov    rbx,QWORD PTR [rax+0x0]
+  a7:	48 29 d3             	sub    rbx,rdx
+  aa:	48 89 98 00 00 00 00 	mov    QWORD PTR [rax+0x0],rbx
+  b1:	48 01 d3             	add    rbx,rdx
+  b4:	48 89 98 00 00 00 00 	mov    QWORD PTR [rax+0x0],rbx
+  bb:	48 01 c8             	add    rax,rcx
+  be:	48 8b 80 00 00 00 00 	mov    rax,QWORD PTR [rax+0x0]
+  c5:	48 89 d9             	mov    rcx,rbx
+  c8:	48 29 c1             	sub    rcx,rax
+  cb:	48 89 c8             	mov    rax,rcx
+  ce:	5b                   	pop    rbx
+  cf:	c3                   	ret
+
+00000000000000d0 <main>:
+  d0:	53                   	push   rbx
+  d1:	55                   	push   rbp
+  d2:	41 54                	push   r12
+  d4:	41 55                	push   r13
+  d6:	41 56                	push   r14
+  d8:	41 57                	push   r15
+  da:	48 81 c4 d0 ff ff ff 	add    rsp,0xffffffffffffffd0
+  e1:	48 89 e3             	mov    rbx,rsp
+  e4:	48 81 c3 00 00 00 00 	add    rbx,0x0
+  eb:	48 bd 04 00 00 00 00 	movabs rbp,0x4
+  f2:	00 00 00 
+  f5:	48 89 ab 00 00 00 00 	mov    QWORD PTR [rbx+0x0],rbp
+  fc:	48 bd 10 00 00 00 00 	movabs rbp,0x10
+ 103:	00 00 00 
+ 106:	49 bc 08 00 00 00 00 	movabs r12,0x8
+ 10d:	00 00 00 
+ 110:	49 89 e5             	mov    r13,rsp
+ 113:	49 81 c5 18 00 00 00 	add    r13,0x18
+ 11a:	4c 8d 35 00 00 00 00 	lea    r14,[rip+0x0]        # 121 <main+0x51>
+ 121:	49 89 df             	mov    r15,rbx
+ 124:	4d 01 e7             	add    r15,r12
+ 127:	4c 89 ff             	mov    rdi,r15
+ 12a:	4c 89 f6             	mov    rsi,r14
+ 12d:	4c 89 e2             	mov    rdx,r12
+ 130:	e8 00 00 00 00       	call   135 <main+0x65>
+ 135:	49 be 03 00 00 00 00 	movabs r14,0x3
+ 13c:	00 00 00 
+ 13f:	49 89 df             	mov    r15,rbx
+ 142:	49 01 ef             	add    r15,rbp
+ 145:	4d 89 b7 00 00 00 00 	mov    QWORD PTR [r15+0x0],r14
+ 14c:	4c 89 ef             	mov    rdi,r13
+ 14f:	48 89 de             	mov    rsi,rbx
+ 152:	e8 00 00 00 00       	call   157 <main+0x87>
+ 157:	4c 89 eb             	mov    rbx,r13
+ 15a:	48 01 eb             	add    rbx,rbp
+ 15d:	4c 89 ed             	mov    rbp,r13
+ 160:	4c 01 e5             	add    rbp,r12
+ 163:	48 8b 9b 00 00 00 00 	mov    rbx,QWORD PTR [rbx+0x0]
+ 16a:	4c 3b f3             	cmp    r14,rbx
+ 16d:	48 0f 95 c3          	rex.W setne bl
+ 171:	48 0f b6 db          	movzx  rbx,bl
+ 175:	49 bc 00 00 00 00 00 	movabs r12,0x0
+ 17c:	00 00 00 
+ 17f:	48 8b ad 00 00 00 00 	mov    rbp,QWORD PTR [rbp+0x0]
+ 186:	4d 8b b5 00 00 00 00 	mov    r14,QWORD PTR [r13+0x0]
+ 18d:	48 85 db             	test   rbx,rbx
+ 190:	0f 84 08 00 00 00    	je     19e <main+0xce>
+ 196:	4c 89 e0             	mov    rax,r12
+ 199:	e9 2c 00 00 00       	jmp    1ca <main+0xfa>
+ 19e:	4c 89 f7             	mov    rdi,r14
+ 1a1:	48 89 ee             	mov    rsi,rbp
+ 1a4:	e8 00 00 00 00       	call   1a9 <main+0xd9>
+ 1a9:	48 89 c3             	mov    rbx,rax
+ 1ac:	4c 3b e3             	cmp    r12,rbx
+ 1af:	48 0f 95 c3          	rex.W setne bl
+ 1b3:	48 0f b6 db          	movzx  rbx,bl
+ 1b7:	48 85 db             	test   rbx,rbx
+ 1ba:	0f 84 0f 00 00 00    	je     1cf <main+0xff>
+ 1c0:	48 b8 64 00 00 00 00 	movabs rax,0x64
+ 1c7:	00 00 00 
+ 1ca:	e9 08 00 00 00       	jmp    1d7 <main+0x107>
+ 1cf:	4c 89 ef             	mov    rdi,r13
+ 1d2:	e8 00 00 00 00       	call   1d7 <main+0x107>
+ 1d7:	48 81 c4 30 00 00 00 	add    rsp,0x30
+ 1de:	41 5f                	pop    r15
+ 1e0:	41 5e                	pop    r14
+ 1e2:	41 5d                	pop    r13
+ 1e4:	41 5c                	pop    r12
+ 1e6:	5d                   	pop    rbp
+ 1e7:	5b                   	pop    rbx
+ 1e8:	c3                   	ret

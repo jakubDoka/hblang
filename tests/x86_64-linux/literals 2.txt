@@ -3,12 +3,12 @@ literals 2.o:     file format elf64-x86-64
 
 Disassembly of section .text:
 
-0000000000000000 <"literals 2".dec>:
+0000000000000000 <"literals 2".hex>:
    0:	48 b8 2d 00 00 00 00 	movabs rax,0x2d
    7:	00 00 00 
    a:	c3                   	ret
 
-000000000000000b <"literals 2".hex>:
+000000000000000b <"literals 2".dec>:
    b:	48 b8 2d 00 00 00 00 	movabs rax,0x2d
   12:	00 00 00 
   15:	c3                   	ret

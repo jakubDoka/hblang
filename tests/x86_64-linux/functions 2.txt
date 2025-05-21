@@ -3,16 +3,16 @@ functions 2.o:     file format elf64-x86-64
 
 Disassembly of section .text:
 
-0000000000000000 <"two.hb".add>:
+0000000000000000 <"one.hb".add>:
    0:	48 89 f8             	mov    rax,rdi
-   3:	48 b9 02 00 00 00 00 	movabs rcx,0x2
+   3:	48 b9 01 00 00 00 00 	movabs rcx,0x1
    a:	00 00 00 
    d:	48 01 c8             	add    rax,rcx
   10:	c3                   	ret
 
-0000000000000011 <"one.hb".add>:
+0000000000000011 <"two.hb".add>:
   11:	48 89 f8             	mov    rax,rdi
-  14:	48 b9 01 00 00 00 00 	movabs rcx,0x1
+  14:	48 b9 02 00 00 00 00 	movabs rcx,0x2
   1b:	00 00 00 
   1e:	48 01 c8             	add    rax,rcx
   21:	c3                   	ret

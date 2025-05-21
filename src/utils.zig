@@ -308,25 +308,7 @@ pub fn EnumStore(comptime T: type) type {
             return dest[0..count];
         }
 
-        pub const AsRef = b: {
-            var field_arr = fields[0..].*;
-
-            for (&field_arr) |*f| {
-                if (f.type != void) {
-                    f.type = *const f.type;
-                    f.alignment = @alignOf(*const f.type);
-                }
-            }
-
-            break :b @Type(.{ .@"union" = .{
-                .layout = .@"extern",
-                .tag_type = std.meta.Tag(T),
-                .fields = &field_arr,
-                .decls = &.{},
-            } });
-        };
-
-        pub fn get(self: *const Self, id: Id) AsRef {
+        pub fn get(self: *const Self, id: Id) AsRef(T) {
             const Layout = extern struct { ptr: *align(payload_align) const anyopaque, tag: usize };
             return @bitCast(Layout{ .tag = @intFromEnum(id.tag()), .ptr = @ptrCast(@alignCast(&self.store.items[id.index()])) });
         }
@@ -363,6 +345,26 @@ pub fn EnumStore(comptime T: type) type {
             self.* = undefined;
         }
     };
+}
+
+pub fn AsRef(comptime E: type) type {
+    const info = @typeInfo(E).@"union";
+
+    var field_arr = info.fields[0..].*;
+
+    for (&field_arr) |*f| {
+        if (f.type != void) {
+            f.type = *const f.type;
+            f.alignment = @alignOf(*const f.type);
+        }
+    }
+
+    return @Type(.{ .@"union" = .{
+        .layout = .@"extern",
+        .tag_type = std.meta.Tag(E),
+        .fields = &field_arr,
+        .decls = &.{},
+    } });
 }
 
 pub fn dbg(value: anytype) @TypeOf(value) {

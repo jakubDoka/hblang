@@ -308,9 +308,8 @@ pub const Elf = struct {
         // TODO: we are sorting by a bool, so faster algorithm is available
         std.sort.pdq(u32, projection, self.syms.items, struct {
             fn lessThen(syms: []root.backend.Machine.Data.Sym, lhs: u32, rhs: u32) bool {
-                return (syms[rhs].kind != .invalid or
-                    @intFromEnum(syms[lhs].linkage) < @intFromEnum(syms[rhs].linkage)) and
-                    syms[lhs].kind != .invalid;
+                return syms[lhs].kind != .invalid and (syms[rhs].kind == .invalid or
+                    @intFromEnum(syms[lhs].linkage) < @intFromEnum(syms[rhs].linkage));
             }
         }.lessThen);
 
@@ -379,19 +378,23 @@ pub const Elf = struct {
         try writer.writeStruct(Symbol.first);
 
         const projected_offsets = tmp.arena.alloc(u32, projection.len);
+        const reloc_proj = tmp.arena.alloc(u32, projection.len);
+
         var text_offset_cursor: u32 = 0;
         var data_offset_cursor: u32 = 0;
         var prealloc_offset_cursor: u32 = 0;
-        for (projection, projected_offsets) |symid, *poff| {
+        for (projection, projected_offsets, 0..) |symid, *poff, i| {
+            reloc_proj[symid] = @intCast(i);
+
             const sym = &self.syms.items[symid];
             poff.* = switch (sym.kind) {
                 .func => text_offset_cursor,
                 .data => data_offset_cursor,
                 .prealloc => prealloc_offset_cursor,
-                .invalid => continue,
+                .invalid => unreachable,
             };
             try writer.writeStruct(Elf.Symbol{
-                .name = @enumFromInt(sym.name + 1),
+                .name = @enumFromInt(sym.name + 1 + @intFromBool(sym.kind == .data)),
                 .size = sym.size,
                 .value = poff.*,
                 .info = .{
@@ -401,15 +404,18 @@ pub const Elf = struct {
                         .invalid => unreachable,
                     },
                     .bind = switch (sym.linkage) {
-                        .exported => .global,
-                        .imported, .local => .local,
+                        .imported, .exported => .global,
+                        .local => .local,
                     },
                 },
-                .shndx = switch (sym.kind) {
-                    .func => @enumFromInt(4),
-                    .data => @enumFromInt(5),
-                    .prealloc => unreachable,
-                    .invalid => unreachable,
+                .shndx = switch (sym.linkage) {
+                    .local, .exported => switch (sym.kind) {
+                        .func => @enumFromInt(4),
+                        .data => @enumFromInt(5),
+                        .prealloc => unreachable,
+                        .invalid => unreachable,
+                    },
+                    .imported => @enumFromInt(0),
                 },
             });
 
@@ -437,10 +443,13 @@ pub const Elf = struct {
                     .offset = (rl.offset - sym.offset) + poff,
                     .info = .{
                         .type = switch (rl.slot_size) {
-                            4 => .R_X86_64_PC32,
+                            4 => if (self.syms.items[@intFromEnum(rl.target)].linkage == .imported)
+                                .R_X86_64_PLT32
+                            else
+                                .R_X86_64_PC32,
                             else => unreachable,
                         },
-                        .sym = projection[@intFromEnum(rl.target)] + 1,
+                        .sym = (reloc_proj[@intFromEnum(rl.target)]) + 1,
                     },
                     .addend = rl.addend,
                 });

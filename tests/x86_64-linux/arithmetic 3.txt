@@ -3,27 +3,27 @@ arithmetic 3.o:     file format elf64-x86-64
 
 Disassembly of section .text:
 
-0000000000000000 <"arithmetic 3".mero>:
-   0:	48 b8 00 00 00 00 00 	movabs rax,0x0
+0000000000000000 <"arithmetic 3".one>:
+   0:	48 b8 01 00 00 00 00 	movabs rax,0x1
    7:	00 00 00 
    a:	c3                   	ret
 
-000000000000000b <"arithmetic 3".mne>:
-   b:	48 b8 ff ff ff ff ff 	movabs rax,0xffffffffffffffff
-  12:	ff ff ff 
+000000000000000b <"arithmetic 3".zero>:
+   b:	48 b8 00 00 00 00 00 	movabs rax,0x0
+  12:	00 00 00 
   15:	c3                   	ret
 
 0000000000000016 <"arithmetic 3".cond>:
   16:	48 89 f8             	mov    rax,rdi
   19:	c3                   	ret
 
-000000000000001a <"arithmetic 3".zero>:
-  1a:	48 b8 00 00 00 00 00 	movabs rax,0x0
-  21:	00 00 00 
+000000000000001a <"arithmetic 3".mne>:
+  1a:	48 b8 ff ff ff ff ff 	movabs rax,0xffffffffffffffff
+  21:	ff ff ff 
   24:	c3                   	ret
 
-0000000000000025 <"arithmetic 3".one>:
-  25:	48 b8 01 00 00 00 00 	movabs rax,0x1
+0000000000000025 <"arithmetic 3".mero>:
+  25:	48 b8 00 00 00 00 00 	movabs rax,0x0
   2c:	00 00 00 
   2f:	c3                   	ret
 

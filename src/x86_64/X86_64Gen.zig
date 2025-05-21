@@ -15,6 +15,7 @@ const Move = utils.Move(Reg);
 gpa: std.mem.Allocator,
 func_map: std.ArrayListUnmanaged(Mach.Data.SymIdx) = .{},
 global_map: std.ArrayListUnmanaged(Mach.Data.SymIdx) = .{},
+memcpy: Mach.Data.SymIdx = .invalid,
 out: *Mach.Data = undefined,
 allocs: []u16 = undefined,
 ret_count: usize = undefined,
@@ -355,6 +356,21 @@ pub fn emitBlockBody(self: *X86_64, arena: std.mem.Allocator, block: *FuncNode) 
             try self.out.code.appendSlice(self.gpa, &.{ rex(reg_index, 0), opcode });
             try self.out.code.writer(self.gpa).writeInt(i64, imm64, .little);
         },
+        .MemCpy => {
+            var moves = std.ArrayList(Move).init(tmp.arena.allocator());
+            for (instr.dataDeps(), 0..) |arg, i| {
+                const dst, const src: Reg = .{ Reg.system_v.args[i], @enumFromInt(self.reg(arg)) };
+                if (!std.meta.eql(dst, src)) moves.append(.{ dst, src, 0 }) catch unreachable;
+            }
+            self.orderMoves(moves.items);
+
+            const opcode = 0xE8;
+            try self.out.code.append(self.gpa, opcode);
+            const slot = &self.memcpy;
+            try self.out.importSym(self.gpa, slot, "memcpy", .func);
+            try self.out.addReloc(self.gpa, slot, 4, -4);
+            try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
+        },
         .MachMove => {},
         .Phi => {},
         .GlobalAddr => {
@@ -556,6 +572,7 @@ pub fn emitData(self: *X86_64, opts: Mach.DataOptions) void {
 pub fn finalize(self: *X86_64) std.ArrayListUnmanaged(u8) {
     self.func_map.items.len = 0;
     self.global_map.items.len = 0;
+    self.memcpy = .invalid;
     return .empty;
 }
 

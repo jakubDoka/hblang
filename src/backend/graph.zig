@@ -282,6 +282,15 @@ pub const If = extern struct {
     base: Cfg = .{},
 };
 
+pub fn UnionOf(comptime MachNode: type) type {
+    var builtin = @typeInfo(Builtin);
+    builtin.@"union".decls = &.{};
+    builtin.@"union".tag_type = KindOf(MachNode);
+    const field_ref = std.meta.fields(MachNode);
+    builtin.@"union".fields = builtin.@"union".fields ++ field_ref;
+    return @Type(builtin);
+}
+
 pub fn KindOf(comptime MachNode: type) type {
     var builtin = @typeInfo(std.meta.Tag(Builtin));
     builtin.@"enum".tag_type = u16;
@@ -388,6 +397,7 @@ pub fn Func(comptime MachNode: type) type {
         pub const CfgNode = LayoutOf(Cfg);
 
         pub const Kind = KindOf(MachNode);
+        pub const Union = UnionOf(MachNode);
 
         pub fn bakeBitset(comptime name: []const u8) std.EnumSet(Kind) {
             var set = std.EnumSet(Kind).initEmpty();
@@ -690,6 +700,13 @@ pub fn Func(comptime MachNode: type) type {
                 std.debug.assert(self.kind == kind);
                 const ptr: *LayoutFor(kind) = @alignCast(@ptrCast(self));
                 return &ptr.ext;
+            }
+
+            pub fn extra2(self: *Node) utils.AsRef(Union) {
+                const Repr = extern struct { data: *anyopaque, kind: Kind };
+
+                const ptr: *extern struct { base: Node, ext: u8 } = @alignCast(@ptrCast(self));
+                return @bitCast(Repr{ .kind = self.kind, .data = &ptr.ext });
             }
 
             pub fn getStaticOffset(self: *Node) i64 {

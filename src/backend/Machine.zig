@@ -152,6 +152,27 @@ pub const Data = struct {
         return slot.*;
     }
 
+    pub fn importSym(
+        self: *Data,
+        gpa: std.mem.Allocator,
+        sym: *SymIdx,
+        name: []const u8,
+        kind: Kind,
+    ) !void {
+        _ = try self.declSym(gpa, sym);
+        self.syms.items[@intFromEnum(sym.*)] = .{
+            .name = @intCast(self.names.items.len),
+            .offset = 0,
+            .size = 0,
+            .reloc_offset = 0,
+            .reloc_count = 0,
+            .kind = kind,
+            .linkage = .imported,
+        };
+        try self.names.appendSlice(gpa, name);
+        try self.names.append(gpa, 0);
+    }
+
     pub fn startDefineSym(
         self: *Data,
         gpa: std.mem.Allocator,
