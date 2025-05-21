@@ -32,22 +32,22 @@ pub fn orderMoves(self: anytype, comptime R: type, moves: []Move(R)) void {
 
     const cycle_sentinel = std.math.maxInt(Depth);
 
-    var reg_graph = std.EnumArray(R, R).initFill(.null);
+    var reg_graph = std.EnumArray(R, ?R).initFill(null);
     for (moves) |m| {
         reg_graph.set(m[0], m[1]);
     }
 
     o: for (moves) |*m| {
         var seen = std.EnumSet(R).initEmpty();
-        var c = m[1];
+        var c: ?R = m[1];
         while (c != m[0]) {
-            c = reg_graph.get(c);
+            c = reg_graph.get(c.?);
             m[2] += 1;
-            if (c == .null or seen.contains(c)) continue :o;
-            seen.insert(c);
+            if (c == null or seen.contains(c.?)) continue :o;
+            seen.insert(c.?);
         }
 
-        reg_graph.set(c, .null);
+        reg_graph.set(c.?, null);
         m[2] = cycle_sentinel;
     }
 
@@ -59,10 +59,10 @@ pub fn orderMoves(self: anytype, comptime R: type, moves: []Move(R)) void {
 
     for (moves) |*m| {
         if (m[2] == cycle_sentinel) {
-            while (reg_graph.get(m[1]) != .null) {
+            while (reg_graph.get(m[1]) != null) {
                 self.emitSwap(m[0], m[1]);
                 m[0] = m[1];
-                std.mem.swap(R, reg_graph.getPtr(m[1]), &m[1]);
+                std.mem.swap(R, &reg_graph.getPtr(m[1]).*.?, &m[1]);
             }
             reg_graph.set(m[1], m[1]);
         } else if (reg_graph.get(m[1]) != m[1]) {

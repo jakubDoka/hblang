@@ -1762,6 +1762,22 @@ take := fn(s: ^Stru): void {
 }
 ```
 
+#### nullable types 4 (pointer optimization)
+```hb
+main := fn(): uint {
+    if @size_of(?^u8) != @size_of(^u8) return 1
+    if @size_of(?struct{.v: ^u8}) != @size_of(^u8) return 2
+
+    v := 3
+    ptr := opaque(&v)
+    ptr.?.* = 0
+
+    return v
+}
+
+opaque := fn(v: @Any()): ?@TypeOf(v) return v
+```
+
 #### struct patters 1
 ```hb
 expectations := .{

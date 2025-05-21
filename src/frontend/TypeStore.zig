@@ -260,10 +260,20 @@ pub const Id = enum(IdRepr) {
     }
 
     pub fn findNieche(self: Id, types: *Types) ?root.frontend.types.Nullable.NiecheSpec {
-        _ = types;
-
         return switch (self.data()) {
             .Pointer => return .{ .offset = 0, .kind = .ptr },
+            .Struct => |s| {
+                var offs: tys.Struct.Id.OffIter = s.offsetIter(types);
+
+                while (offs.next()) |o| {
+                    if (o.field.ty.findNieche(types)) |n| return .{
+                        .offset = @as(@TypeOf(n.offset), @intCast(o.offset)) + n.offset,
+                        .kind = n.kind,
+                    };
+                }
+
+                return null;
+            },
             else => null,
         };
     }

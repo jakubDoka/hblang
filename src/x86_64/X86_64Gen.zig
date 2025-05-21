@@ -39,8 +39,7 @@ pub const Reg = enum(u8) {
     r13,
     r14,
     r15,
-
-    null = 255,
+    _, // spills
 
     const system_v = struct {
         const args: []const Reg = &.{ .rdi, .rsi, .rdx, .rcx, .r8, .r9 };

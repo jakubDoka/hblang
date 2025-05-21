@@ -918,7 +918,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 return self.report(e, "only nullable types can be unwrapped, {} is not", .{base.ty});
             };
 
-            if (!base.ty.needsTag(self.types)) return base;
+            if (!base.ty.needsTag(self.types)) {
+                base.ty = nullable.inner;
+                return base;
+            }
 
             switch (self.abiCata(base.ty)) {
                 .Imaginary => unreachable,
