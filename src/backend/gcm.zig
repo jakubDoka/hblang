@@ -223,21 +223,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
                         }
 
                         schedule_late: {
-                            const early = t.cfg0() orelse {
-                                var frointier = std.ArrayList(*Node).init(tmp.arena.allocator());
-                                var seen = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), self.next_id) catch unreachable;
-                                frointier.append(t) catch unreachable;
-                                seen.set(t.id);
-                                var i: usize = 0;
-                                while (i < frointier.items.len) : (i += 1) {
-                                    for (frointier.items[i].inputs()) |oinp| if (oinp) |inp| {
-                                        if (seen.isSet(inp.id) or inp.cfg0() != null) continue;
-                                        seen.set(inp.id);
-                                        frointier.append(inp) catch unreachable;
-                                    };
-                                }
-                                unreachable;
-                            };
+                            const early = t.cfg0().?;
 
                             var olca: ?*CfgNode = null;
                             for (t.outputs()) |o| {
@@ -317,6 +303,15 @@ pub fn GcmMixin(comptime MachNode: type) type {
 
                             break :schedule_late;
                         }
+                    }
+
+                    if (t.kind == .Loop or t.kind == .Region) {
+                        for (t.outputs()) |o| if (late_scheds[o.id] == null) {
+                            if (!visited.isSet(o.id)) {
+                                visited.set(o.id);
+                                work_list.append(o) catch unreachable;
+                            }
+                        };
                     }
 
                     for (t.inputs()) |odef| if (odef) |def| {

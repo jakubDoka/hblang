@@ -531,7 +531,7 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             pub fn format(self: *const Node, comptime _: anytype, _: anytype, writer: anytype) !void {
-                const colors = .escape_codes;
+                const colors = .no_color;
                 self.fmt(null, writer, colors);
             }
 
