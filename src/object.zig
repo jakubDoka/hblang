@@ -9,90 +9,7 @@ pub const Arch = enum {
 
 pub const Flush = fn (root.backend.Machine.Data, Arch, std.io.AnyWriter) anyerror!void;
 
-pub const Ableos = struct {
-    const ExecHeader = root.hbvm.isa.ExecHeader;
-
-    pub fn jitLink(self: root.backend.Machine.Data, after: usize) void {
-        for (self.relocs.items[after..]) |rel| {
-            const dest = self.syms.items[@intFromEnum(rel.target)].offset;
-            const jump = @as(i64, dest) - rel.offset;
-            const location: usize = @intCast(rel.offset + @as(u32, @intCast(rel.addend)));
-
-            @memcpy(
-                self.code.items[location..][0..rel.slot_size],
-                @as(*const [8]u8, @ptrCast(&jump))[0..rel.slot_size],
-            );
-        }
-    }
-
-    pub fn flush(self: root.backend.Machine.Data, _: Arch, writer: std.io.AnyWriter) anyerror!void {
-        var tmp = root.utils.Arena.scrath(null);
-        defer tmp.deinit();
-
-        const offset_lookup = tmp.arena.alloc(u32, self.syms.items.len);
-
-        var code_cursor: u32 = @sizeOf(ExecHeader);
-        var lengths: struct { func: u32, data: u32, prealloc: u32 } = undefined;
-        const sets = .{ .func, .data, .prealloc };
-        var prev_len: u32 = code_cursor;
-        inline for (sets) |v| {
-            for (offset_lookup, self.syms.items) |*slot, sym| if (sym.kind == v) {
-                slot.* = code_cursor;
-                code_cursor += sym.size;
-            };
-            @field(lengths, @tagName(v)) = code_cursor - prev_len;
-            prev_len = code_cursor;
-        }
-
-        for (self.syms.items, offset_lookup) |sym, olp| if (sym.kind == .func) {
-            for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |*rel| {
-                const dest = offset_lookup[@intFromEnum(rel.target)];
-                const jump = @as(i64, dest) - (rel.offset - sym.offset + olp);
-                const location: usize = @intCast(rel.offset + @as(u32, @intCast(rel.addend)));
-
-                @memcpy(
-                    self.code.items[location..][0..rel.slot_size],
-                    @as(*const [8]u8, @ptrCast(&jump))[0..rel.slot_size],
-                );
-            }
-        };
-
-        var sym_count: usize = 0;
-        for (self.syms.items) |sym| {
-            sym_count += @intFromBool(sym.kind != .invalid);
-        }
-
-        try writer.writeStruct(ExecHeader{
-            .code_length = lengths.func,
-            .data_length = lengths.data,
-            .debug_length = sym_count * @sizeOf(root.hbvm.isa.Symbol) + self.names.items.len + 1,
-            .symbol_count = sym_count,
-        });
-
-        inline for (sets) |v| {
-            for (self.syms.items) |sym| if (sym.kind == v) {
-                try writer.writeAll(self.code.items[sym.offset..][0..sym.size]);
-            };
-        }
-
-        for (offset_lookup, self.syms.items) |off, sym| {
-            try writer.writeStruct(root.hbvm.isa.Symbol{
-                .name = sym.name + 1,
-                .offset = off,
-                .kind = switch (sym.kind) {
-                    .func => .func,
-                    .data, .prealloc => .data,
-                    .invalid => continue,
-                },
-            });
-        }
-
-        try writer.writeByte(0);
-        try writer.writeAll(self.names.items);
-    }
-};
-
-pub const Elf = struct {
+pub const elf = struct {
     const Addr = u64;
     const Half = u16;
     const Off = u64;
@@ -393,7 +310,7 @@ pub const Elf = struct {
                 .prealloc => prealloc_offset_cursor,
                 .invalid => unreachable,
             };
-            try writer.writeStruct(Elf.Symbol{
+            try writer.writeStruct(elf.Symbol{
                 .name = @enumFromInt(sym.name + 1 + @intFromBool(sym.kind == .data)),
                 .size = sym.size,
                 .value = poff.*,
@@ -458,7 +375,7 @@ pub const Elf = struct {
     }
 };
 
-pub const Coff = struct {
+pub const coff = struct {
     pub const FileHeader = extern struct {
         Machine: Machine,
         NumberOfSections: u16,

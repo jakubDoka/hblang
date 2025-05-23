@@ -156,9 +156,13 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         const slot = ast_arena.create(hb.hbvm.HbvmGen);
         slot.* = hb.hbvm.HbvmGen{ .gpa = opts.gpa };
         break :backend hb.backend.Machine.init(slot);
-    } else if (std.mem.startsWith(u8, opts.target, "x86_64-")) backend: {
+    } else if (std.mem.eql(u8, opts.target, "x86_64-windows")) backend: {
         const slot = ast_arena.create(hb.x86_64.X86_64Gen);
-        slot.* = hb.x86_64.X86_64Gen{ .gpa = opts.gpa };
+        slot.* = hb.x86_64.X86_64Gen{ .gpa = opts.gpa, .object_format = .coff };
+        break :backend hb.backend.Machine.init(slot);
+    } else if (std.mem.eql(u8, opts.target, "x86_64-linux")) backend: {
+        const slot = ast_arena.create(hb.x86_64.X86_64Gen);
+        slot.* = hb.x86_64.X86_64Gen{ .gpa = opts.gpa, .object_format = .elf };
         break :backend hb.backend.Machine.init(slot);
     } else {
         try opts.diagnostics.print(
@@ -185,9 +189,6 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
 
     codegen.queue(.{ .Func = entry });
 
-    var out_data: hb.backend.Machine.Data = .{};
-    defer out_data.deinit(opts.gpa);
-
     var errored = false;
     while (codegen.nextTask()) |tsk| switch (tsk) {
         .Func => |func| {
@@ -212,7 +213,6 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
                 .id = @intFromEnum(func),
                 .name = try hb.frontend.Types.Id.init(.{ .Func = func })
                     .fmt(&types).toString(syms.allocator()),
-                .out = &out_data,
                 .entry = func == entry,
                 .optimizations = .{
                     .arena = tmp.arena,
@@ -225,7 +225,6 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         .Global => |global| {
             backend.emitData(.{
                 .id = @intFromEnum(global),
-                .out = &out_data,
                 .name = try hb.frontend.Types.Id.init(.{ .Global = global })
                     .fmt(&types).toString(syms.allocator()),
                 .value = .{ .init = types.store.get(global).data },
@@ -238,21 +237,11 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         return error.Failed;
     }
 
-    const encoder: *const fn (hb.backend.Machine.Data, arch: hb.Object.Arch, std.io.AnyWriter) anyerror!void =
-        if (std.mem.eql(u8, opts.target, "ableos"))
-            hb.Object.Ableos.flush
-        else if (std.mem.endsWith(u8, opts.target, "linux"))
-            hb.Object.Elf.flush
-        else
-            unreachable;
-
-    var out = std.ArrayListUnmanaged(u8).empty;
-    defer out.deinit(opts.gpa);
-    try encoder(out_data, .x86_64, out.writer(opts.gpa).any());
-
     const name = try std.mem.replaceOwned(u8, ast_arena.allocator(), opts.root_file, "/", "\\/");
 
     if (opts.dump_asm) {
+        const out = backend.finalizeBytes(ast_arena.allocator());
+
         backend.disasm(.{
             .name = name,
             .bin = out.items,
@@ -266,6 +255,8 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         const test_utils = @import("test_util.zig");
 
         const expectations: test_utils.Expectations = .init(&asts[0], ast_arena.allocator());
+
+        const out = backend.finalizeBytes(ast_arena.allocator());
 
         errdefer {
             expectations.assert(backend.run(.{
@@ -285,7 +276,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     }
 
     if (opts.colors == .no_color or opts.mangle_terminal) {
-        try opts.output.writeAll(out.items);
+        backend.finalize(opts.output);
         return .{ .ast = asts, .arena = ast_arena };
     } else {
         try opts.diagnostics.writeAll("can't dump the executable to the stdout since it" ++

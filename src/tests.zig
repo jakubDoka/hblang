@@ -46,7 +46,6 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
             "hbvm-ableos",
             code,
             .init(&hbvm),
-            root.Object.Ableos.flush,
             gpa,
             stderr.writer().any(),
             colors,
@@ -76,7 +75,6 @@ pub fn runMachineTest(
     category: []const u8,
     code: [:0]const u8,
     machine: root.backend.Machine,
-    flush: root.Object.Flush,
     gpa: std.mem.Allocator,
     out: std.io.AnyWriter,
     color: std.io.tty.Config,
@@ -85,7 +83,7 @@ pub fn runMachineTest(
     defer output.deinit();
 
     errdefer {
-        test_util.testBuilder(name, code, gpa, out, machine, flush, color, true) catch {};
+        test_util.testBuilder(name, code, gpa, out, machine, color, true) catch {};
     }
 
     try test_util.testBuilder(
@@ -94,7 +92,6 @@ pub fn runMachineTest(
         gpa,
         output.writer().any(),
         machine,
-        flush,
         .no_color,
         false,
     );
@@ -135,7 +132,6 @@ pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
         gpa,
         std.io.null_writer.any(),
         .init(&hbvm),
-        root.Object.Ableos.flush,
         .no_color,
         false,
     );

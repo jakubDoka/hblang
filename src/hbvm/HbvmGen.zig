@@ -1,7 +1,7 @@
 gpa: std.mem.Allocator,
 funcs: std.ArrayListUnmanaged(Mach.Data.SymIdx) = .empty,
 globals: std.ArrayListUnmanaged(Mach.Data.SymIdx) = .empty,
-out: *Mach.Data = undefined,
+out: Mach.Data = .{},
 local_relocs: std.ArrayListUnmanaged(BlockReloc) = undefined,
 ret_count: usize = undefined,
 block_offsets: []i32 = undefined,
@@ -17,7 +17,7 @@ const Mach = root.backend.Machine;
 const Func = graph.Func(Node);
 const Kind = Func.Kind;
 const Regalloc = root.backend.Regalloc;
-const ExecHeader = isa.ExecHeader;
+const ExecHeader = root.hbvm.object.ExecHeader;
 const Move = utils.Move(isa.Reg);
 const HbvmGen = @This();
 
@@ -115,8 +115,6 @@ pub const Node = union(enum) {
 pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     errdefer unreachable;
 
-    self.out = opts.out;
-
     opts.optimizations.execute(Node, func);
 
     const allocs = Regalloc.ralloc(Node, func);
@@ -129,9 +127,9 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     defer tmp.deinit();
 
     const slot = try utils.ensureSlot(&self.funcs, self.gpa, id);
-    try opts.out.startDefineSym(self.gpa, slot, name, .func, .local);
+    try self.out.startDefineSym(self.gpa, slot, name, .func, .local);
     const sym = slot.*;
-    defer opts.out.endDefineSym(sym);
+    defer self.out.endDefineSym(sym);
 
     self.block_offsets = tmp.arena.alloc(i32, func.block_count);
     self.local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.block_count * 2));
@@ -230,28 +228,28 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
     errdefer unreachable;
 
     const slot = try utils.ensureSlot(&self.globals, self.gpa, opts.id);
-    try opts.out.startDefineSym(
+    try self.out.startDefineSym(
         self.gpa,
         slot,
         opts.name,
         if (opts.value == .init) .data else .prealloc,
         .local,
     );
-    defer opts.out.endDefineSym(self.globals.items[opts.id]);
+    defer self.out.endDefineSym(self.globals.items[opts.id]);
     switch (opts.value) {
-        .init => |v| try opts.out.code.appendSlice(self.gpa, v),
+        .init => |v| try self.out.code.appendSlice(self.gpa, v),
         .uninit => unreachable,
     }
 }
 
-pub fn finalize(self: *HbvmGen) std.ArrayListUnmanaged(u8) {
+pub fn finalize(self: *HbvmGen, out: std.io.AnyWriter) void {
     errdefer unreachable;
 
-    defer {
-        self.funcs.items.len = 0;
-        self.globals.items.len = 0;
-    }
-    return .empty;
+    try root.hbvm.object.flush(self.out, out);
+
+    self.funcs.items.len = 0;
+    self.globals.items.len = 0;
+    self.out.reset();
 }
 
 pub fn disasm(_: *HbvmGen, opts: Mach.DisasmOpts) void {
@@ -280,7 +278,7 @@ pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
     vm.regs.set(.stack_addr, stack_end);
     var ctx = root.hbvm.Vm.SafeContext{
         .writer = env.output,
-        .symbols = try root.hbvm.isa.loadSymMap(tmp.arena.allocator(), code),
+        .symbols = try root.hbvm.object.loadSymMap(tmp.arena.allocator(), code),
         .color_cfg = env.colors,
         .memory = &stack,
         .code_start = stack_end,
@@ -352,6 +350,7 @@ pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
 pub fn deinit(self: *HbvmGen) void {
     self.funcs.deinit(self.gpa);
     self.globals.deinit(self.gpa);
+    self.out.deinit(self.gpa);
     self.* = undefined;
 }
 

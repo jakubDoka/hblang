@@ -12,13 +12,14 @@ pub const hbvm = enum {
     pub const Vm = @import("hbvm/Vm.zig");
     pub const isa = @import("hbvm/isa.zig");
     pub const HbvmGen = @import("hbvm/HbvmGen.zig");
+    pub const object = @import("hbvm/object.zig");
 };
 
 pub const x86_64 = enum {
     pub const X86_64Gen = @import("x86_64/X86_64Gen.zig");
 };
 
-pub const Object = @import("Object.zig");
+pub const object = @import("object.zig");
 
 pub const frontend = enum {
     pub const Lexer = @import("frontend/Lexer.zig");

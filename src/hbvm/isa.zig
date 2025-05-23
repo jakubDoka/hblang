@@ -1,5 +1,6 @@
 const std = @import("std");
-const utils = @import("../utils.zig");
+const root = @import("../root.zig");
+const utils = root.utils;
 
 pub const Reg = enum(u8) {
     null,
@@ -171,55 +172,16 @@ pub fn packMany(comptime instrs: anytype) []const u8 {
     return &outa;
 }
 
-pub const ExecHeader = extern struct {
-    magic_number: [3]u8 = .{ 0x15, 0x91, 0xD2 },
-    executable_version: u32 align(1) = 0,
-
-    code_length: u64 align(1) = 0,
-    data_length: u64 align(1) = 0,
-    debug_length: u64 align(1) = 0,
-    symbol_count: u64 align(1) = 0,
-    config_length: u64 align(1) = 0,
-    metadata_length: u64 align(1) = 0,
-};
-
-pub const Symbol = extern struct {
-    name: u32,
-    kind: enum(u32) { func, data },
-    offset: u64,
-};
-
-pub fn loadSymMap(arena: std.mem.Allocator, code: []const u8) !std.AutoHashMapUnmanaged(u32, []const u8) {
-    const header: ExecHeader = @bitCast(code[0..@sizeOf(ExecHeader)].*);
-    const sym_start: usize = @intCast(@sizeOf(ExecHeader) + header.code_length + header.data_length);
-    const sym_end: usize = @intCast(header.symbol_count * @sizeOf(Symbol));
-    const syms: []align(1) const Symbol =
-        @ptrCast(code[sym_start..][0..sym_end]);
-
-    const string_table = code[sym_start..][sym_end..@intCast(header.debug_length)];
-
-    var symbols = std.AutoHashMapUnmanaged(u32, []const u8){};
-    for (syms) |sym| {
-        const len = std.mem.indexOfScalar(u8, string_table[sym.name..], 0).?;
-        try symbols.put(
-            arena,
-            @intCast(sym.offset - @sizeOf(ExecHeader)),
-            string_table[sym.name..][0..len],
-        );
-    }
-
-    return symbols;
-}
-
 pub fn disasm(
     code: []const u8,
     arena: std.mem.Allocator,
     writer: anytype,
     colors: std.io.tty.Config,
 ) !void {
+    const ExecHeader = root.hbvm.object.ExecHeader;
     const header: ExecHeader = @bitCast(code[0..@sizeOf(ExecHeader)].*);
 
-    const symbols = try loadSymMap(arena, code);
+    const symbols = try root.hbvm.object.loadSymMap(arena, code);
 
     var labelMap = try makeLabelMap(
         code[@sizeOf(ExecHeader)..][0..header.code_length],

@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Object = @import("../Object.zig");
+const object = root.object;
 const root = @import("../root.zig");
 const graph = root.backend.graph;
 const Mach = root.backend.Machine;
@@ -13,10 +13,11 @@ const FuncNode = Func.Node;
 const Move = utils.Move(Reg);
 
 gpa: std.mem.Allocator,
+object_format: enum { elf, coff },
 func_map: std.ArrayListUnmanaged(Mach.Data.SymIdx) = .{},
 global_map: std.ArrayListUnmanaged(Mach.Data.SymIdx) = .{},
 memcpy: Mach.Data.SymIdx = .invalid,
-out: *Mach.Data = undefined,
+out: Mach.Data = .{},
 allocs: []u16 = undefined,
 ret_count: usize = undefined,
 local_relocs: std.ArrayListUnmanaged(Reloc) = undefined,
@@ -187,9 +188,9 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     const linkage: Mach.Data.Linkage = if (entry) .exported else .local;
 
     const slot = try utils.ensureSlot(&self.func_map, self.gpa, id);
-    try opts.out.startDefineSym(self.gpa, slot, name, .func, linkage);
+    try self.out.startDefineSym(self.gpa, slot, name, .func, linkage);
     const sym = slot.*;
-    defer opts.out.endDefineSym(sym);
+    defer self.out.endDefineSym(sym);
 
     //self.block_offsets = tmp.arena.alloc(i32, func.block_count);
     //self.local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.block_count * 2));
@@ -201,7 +202,6 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     self.ret_count = func.returns.len;
     self.local_relocs = .initBuffer(tmp.arena.alloc(Reloc, 128));
     self.block_offsets = tmp.arena.alloc(u32, postorder.len);
-    self.out = opts.out;
 
     const reg_shift: u8 = 0;
     for (self.allocs) |*r| r.* += reg_shift;
@@ -562,17 +562,24 @@ pub fn emitData(self: *X86_64, opts: Mach.DataOptions) void {
     errdefer unreachable;
 
     const slot = try utils.ensureSlot(&self.global_map, self.gpa, opts.id);
-    try opts.out.startDefineSym(self.gpa, slot, opts.name, .data, .local);
-    defer opts.out.endDefineSym(slot.*);
+    try self.out.startDefineSym(self.gpa, slot, opts.name, .data, .local);
+    defer self.out.endDefineSym(slot.*);
 
-    try opts.out.code.appendSlice(self.gpa, opts.value.init);
+    try self.out.code.appendSlice(self.gpa, opts.value.init);
 }
 
-pub fn finalize(self: *X86_64) std.ArrayListUnmanaged(u8) {
+pub fn finalize(self: *X86_64, out: std.io.AnyWriter) void {
+    errdefer unreachable;
+
+    try switch (self.object_format) {
+        .elf => root.object.elf.flush(self.out, .x86_64, out),
+        .coff => unreachable, //root.object.coff.flush(self.out, .x86_64, out),
+    };
+
     self.func_map.items.len = 0;
     self.global_map.items.len = 0;
     self.memcpy = .invalid;
-    return .empty;
+    self.out.reset();
 }
 
 pub fn disasm(_: *X86_64, opts: Mach.DisasmOpts) void {
@@ -649,4 +656,5 @@ pub fn run(_: *X86_64, env: Mach.RunEnv) !usize {
 pub fn deinit(self: *X86_64) void {
     self.global_map.deinit(self.gpa);
     self.func_map.deinit(self.gpa);
+    self.out.deinit(self.gpa);
 }

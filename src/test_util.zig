@@ -158,7 +158,6 @@ pub fn testBuilder(
     gpa: std.mem.Allocator,
     output: std.io.AnyWriter,
     gen: root.backend.Machine,
-    flush: root.Object.Flush,
     colors: std.io.tty.Config,
     verbose: bool,
 ) !void {
@@ -182,9 +181,6 @@ pub fn testBuilder(
 
     var syms = std.heap.ArenaAllocator.init(gpa);
     defer syms.deinit();
-
-    var out_data: Mach.Data = .{};
-    defer out_data.deinit(gpa);
 
     var errored = false;
     while (cg.nextTask()) |task| switch (task) {
@@ -213,7 +209,6 @@ pub fn testBuilder(
                     "{test}",
                     .{Types.Id.init(.{ .Func = func }).fmt(&types)},
                 ),
-                .out = &out_data,
                 .entry = func == entry,
                 .optimizations = .{
                     .verbose = verbose,
@@ -231,7 +226,6 @@ pub fn testBuilder(
                     "{test}",
                     .{Types.Id.init(.{ .Global = g }).fmt(&types)},
                 ),
-                .out = &out_data,
                 .id = @intFromEnum(g),
                 .value = .{ .init = types.store.get(g).data },
             });
@@ -244,10 +238,8 @@ pub fn testBuilder(
     if (expectations.should_error) return;
 
     if (verbose) try header("CODEGEN", output, colors);
-    var out = std.ArrayListUnmanaged(u8){};
-    try flush(out_data, .x86_64, out.writer(gpa).any());
+    var out = gen.finalizeBytes(gpa);
     defer out.deinit(gpa);
-    _ = gen.finalize();
 
     gen.disasm(.{
         .name = name,

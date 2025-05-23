@@ -42,7 +42,8 @@ test init {
             unreachable;
         }
 
-        pub fn finalize(self: *@This()) std.ArrayListUnmanaged(u8) {
+        pub fn finalize(self: *@This(), out: std.io.AnyWriter) void {
+            _ = out;
             _ = self;
             unreachable;
         }
@@ -71,7 +72,7 @@ test init {
 data: *anyopaque,
 _emitFunc: *const fn (self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void,
 _emitData: *const fn (self: *anyopaque, opts: DataOptions) void,
-_finalize: *const fn (self: *anyopaque) std.ArrayListUnmanaged(u8),
+_finalize: *const fn (self: *anyopaque, out: std.io.AnyWriter) void,
 _disasm: *const fn (self: *anyopaque, opts: DisasmOpts) void,
 _run: *const fn (self: *anyopaque, env: RunEnv) anyerror!usize,
 _deinit: *const fn (self: *anyopaque) void,
@@ -124,6 +125,12 @@ pub const Data = struct {
     code: std.ArrayListUnmanaged(u8) = .empty,
     relocs: std.ArrayListUnmanaged(Reloc) = .empty,
 
+    pub fn reset(self: *Data) void {
+        inline for (std.meta.fields(Data)[1..]) |f| {
+            @field(self, f.name).items.len = 0;
+        }
+    }
+
     pub fn addReloc(self: *Data, gpa: std.mem.Allocator, target: *SymIdx, slot_size: u8, addend: i16) !void {
         try self.relocs.append(gpa, .{
             .target = try self.declSym(gpa, target),
@@ -134,10 +141,10 @@ pub const Data = struct {
     }
 
     pub fn deinit(self: *Data, gpa: std.mem.Allocator) void {
-        self.syms.deinit(gpa);
-        self.names.deinit(gpa);
-        self.code.deinit(gpa);
-        self.relocs.deinit(gpa);
+        inline for (std.meta.fields(Data)[1..]) |f| {
+            @field(self, f.name).deinit(gpa);
+        }
+        self.* = undefined;
     }
 
     pub fn declSym(
@@ -220,7 +227,6 @@ pub const DataOptions = struct {
     id: u32,
     name: []const u8 = &.{},
     value: ValueSpec,
-    out: *Data,
 
     pub const ValueSpec = union(enum) { init: []const u8, uninit: usize };
 };
@@ -229,7 +235,6 @@ pub const EmitOptions = struct {
     id: u32,
     name: []const u8 = &.{},
     entry: bool = false,
-    out: *Data,
     optimizations: struct {
         verbose: bool = false,
         dead_code_fuel: usize = 10000,
@@ -302,9 +307,9 @@ pub fn init(data: anytype) Machine {
             const slf: *Type = @alignCast(@ptrCast(self));
             slf.emitData(opts);
         }
-        fn finalize(self: *anyopaque) std.ArrayListUnmanaged(u8) {
+        fn finalize(self: *anyopaque, out: std.io.AnyWriter) void {
             const slf: *Type = @alignCast(@ptrCast(self));
-            return slf.finalize();
+            return slf.finalize(out);
         }
         fn disasm(self: *anyopaque, opts: DisasmOpts) void {
             const slf: *Type = @alignCast(@ptrCast(self));
@@ -344,8 +349,14 @@ pub fn emitData(self: Machine, opts: DataOptions) void {
 
 /// package the final output (.eg object file)
 /// this function should also restart the state for next emmiting
-pub fn finalize(self: Machine) std.ArrayListUnmanaged(u8) {
-    return self._finalize(self.data);
+pub fn finalize(self: Machine, out: std.io.AnyWriter) void {
+    return self._finalize(self.data, out);
+}
+
+pub fn finalizeBytes(self: Machine, gpa: std.mem.Allocator) std.ArrayListUnmanaged(u8) {
+    var out = std.ArrayListUnmanaged(u8).empty;
+    self.finalize(out.writer(gpa).any());
+    return out;
 }
 
 /// visualize already compiled code, its best to include different colors
