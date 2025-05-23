@@ -107,7 +107,7 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
 
                 // find stores that store pointer to local variable
                 for (arg.outputs()) |ao| {
-                    // TODO: we skip MemCpy, this will miss a class of problesm,
+                    // TODO: we skip MemCpy, this will miss a class of problems,
                     // but memcpy elimination might help and effort here would be redundant
                     const store = Func.knownStore(ao, arg) orelse continue;
 
