@@ -2136,26 +2136,6 @@ main := fn(): uint {
     - [ ] null checks
     - [ ] bound checks
 
-## scrubmling
-
-So, now that I am starting to support other architectures (starting with x86_64-(linux|windows)) I need to modify the testing suite to run tests for all architectures. If the arch is not native, it needs a VM.
-
-I guess an interface like this would be nice:
-```
-@interface Machine
-    - addFunc
-    - addData
-    - finalize
-    - disasm
-    - run(stderr, stdout) -> (exit code, error)
-```
-
-For now, lets just pretend only linux exists. I can write the file to a temporary directory and run it as a child process, capture outs and return exit code, optionally some error as well.
-
-Disasm is also solvable with objdump for now, the windows story witn this is hard, maybe just disable the tests for now.
-
-Since we are making this API, maybe its good to exose it trough CLI as well.
-
 ## vendored tests
 
 ```bash
@@ -2168,5 +2148,11 @@ git submodule update --remote --rebase -- vendored-tests/lily/                  
 
 When contributing make sure to:
 1. Mark what you completed in [progress](#progress), as the part of your changes. Stuff that is not in the checklist needs an issue. TODO: make an issue template
-2. Add apropriate examples to test the functionality, `zig build test` will automatically generate a test for the example and run it with rverithing else. It's preferable to add `#### <feature> <n>` and use `n = 1` for demonstration and other examples to cover all ways to use the frature you can think of.
-3. Extend the fuzzer to generate newly added syntax and run `zig build fuzz`.
+1. Add apropriate examples to test the functionality, `zig build test` will automatically generate a test for the example and run it with rverithing else. It's preferable to add `#### <feature> <n>` and use `n = 1` for demonstration and other examples to cover all ways to use the frature you can think of.
+
+### Relevant things to contribute with
+
+- implementing frontend features mentioned in progress
+- implementing more peephole optimizations (located inside `fn idealize*`)
+- implementing new target triple (the [Machine](./src/backend/Machine.zig))
+  - look at [HbvmGen](./src/hbvm/HbvmGen.zig)
