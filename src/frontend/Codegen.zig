@@ -985,6 +985,9 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         return self.report(e.field, "accessing malformed field (the type is 'never')", .{});
                     }
 
+                    // this can happen in the @TypeOf
+                    if (base.id == .Value) return .mkv(ftype, base.id.Value);
+
                     return .mkp(ftype, self.bl.addFieldOffset(base.id.Pointer, @intCast(offset)));
                 },
                 .Union => |union_ty| {
