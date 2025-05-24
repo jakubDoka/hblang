@@ -120,6 +120,9 @@ pub const Data = struct {
     pub const SymIdx = enum(u32) { invalid = std.math.maxInt(u32), _ };
 
     declaring_sym: ?SymIdx = null,
+
+    funcs: std.ArrayListUnmanaged(SymIdx) = .empty,
+    globals: std.ArrayListUnmanaged(SymIdx) = .empty,
     syms: std.ArrayListUnmanaged(Sym) = .empty,
     names: std.ArrayListUnmanaged(u8) = .empty,
     code: std.ArrayListUnmanaged(u8) = .empty,
@@ -129,6 +132,14 @@ pub const Data = struct {
         inline for (std.meta.fields(Data)[1..]) |f| {
             @field(self, f.name).items.len = 0;
         }
+    }
+
+    pub fn addFuncReloc(self: *Data, gpa: std.mem.Allocator, target: u32, slot_size: u8, addend: i16) !void {
+        return self.addReloc(gpa, try root.ensureSlot(&self.funcs, gpa, target), slot_size, addend);
+    }
+
+    pub fn addGlobalReloc(self: *Data, gpa: std.mem.Allocator, target: u32, slot_size: u8, addend: i16) !void {
+        return self.addReloc(gpa, try root.ensureSlot(&self.globals, gpa, target), slot_size, addend);
     }
 
     pub fn addReloc(self: *Data, gpa: std.mem.Allocator, target: *SymIdx, slot_size: u8, addend: i16) !void {
@@ -145,6 +156,14 @@ pub const Data = struct {
             @field(self, f.name).deinit(gpa);
         }
         self.* = undefined;
+    }
+
+    pub fn declGlobal(self: *Data, gpa: std.mem.Allocator, id: u32) !SymIdx {
+        return self.declSym(gpa, try root.ensureSlot(&self.globals, gpa, id));
+    }
+
+    pub fn declFunc(self: *Data, gpa: std.mem.Allocator, id: u32) !SymIdx {
+        return self.declSym(gpa, try root.ensureSlot(&self.funcs, gpa, id));
     }
 
     pub fn declSym(
@@ -180,6 +199,43 @@ pub const Data = struct {
         try self.names.append(gpa, 0);
     }
 
+    pub fn startDefineFunc(
+        self: *Data,
+        gpa: std.mem.Allocator,
+        id: u32,
+        name: []const u8,
+        kind: Kind,
+        linkage: Linkage,
+    ) !void {
+        return self.startDefineSym(
+            gpa,
+            try root.ensureSlot(&self.funcs, gpa, id),
+            name,
+            kind,
+            linkage,
+        );
+    }
+
+    pub fn defineGlobal(
+        self: *Data,
+        gpa: std.mem.Allocator,
+        id: u32,
+        name: []const u8,
+        kind: Kind,
+        linkage: Linkage,
+        data: []const u8,
+    ) !void {
+        try self.startDefineSym(
+            gpa,
+            try root.ensureSlot(&self.globals, gpa, id),
+            name,
+            kind,
+            linkage,
+        );
+        try self.code.appendSlice(gpa, data);
+        self.endDefineSym(self.globals.items[id]);
+    }
+
     pub fn startDefineSym(
         self: *Data,
         gpa: std.mem.Allocator,
@@ -204,6 +260,10 @@ pub const Data = struct {
         };
         try self.names.appendSlice(gpa, name);
         try self.names.append(gpa, 0);
+    }
+
+    pub fn endDefineFunc(self: *Data, id: u32) void {
+        self.endDefineSym(self.funcs.items[id]);
     }
 
     pub fn endDefineSym(self: *Data, sym: SymIdx) void {

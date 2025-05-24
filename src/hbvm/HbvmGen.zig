@@ -1,6 +1,4 @@
 gpa: std.mem.Allocator,
-funcs: std.ArrayListUnmanaged(Mach.Data.SymIdx) = .empty,
-globals: std.ArrayListUnmanaged(Mach.Data.SymIdx) = .empty,
 out: Mach.Data = .{},
 local_relocs: std.ArrayListUnmanaged(BlockReloc) = undefined,
 ret_count: usize = undefined,
@@ -126,10 +124,8 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    const slot = try utils.ensureSlot(&self.funcs, self.gpa, id);
-    try self.out.startDefineSym(self.gpa, slot, name, .func, .local);
-    const sym = slot.*;
-    defer self.out.endDefineSym(sym);
+    try self.out.startDefineFunc(self.gpa, id, name, .func, .local);
+    defer self.out.endDefineFunc(id);
 
     self.block_offsets = tmp.arena.alloc(i32, func.block_count);
     self.local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.block_count * 2));
@@ -227,17 +223,15 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
     errdefer unreachable;
 
-    const slot = try utils.ensureSlot(&self.globals, self.gpa, opts.id);
-    try self.out.startDefineSym(
-        self.gpa,
-        slot,
-        opts.name,
-        if (opts.value == .init) .data else .prealloc,
-        .local,
-    );
-    defer self.out.endDefineSym(self.globals.items[opts.id]);
     switch (opts.value) {
-        .init => |v| try self.out.code.appendSlice(self.gpa, v),
+        .init => |v| try self.out.defineGlobal(
+            self.gpa,
+            opts.id,
+            opts.name,
+            if (opts.value == .init) .data else .prealloc,
+            .local,
+            v,
+        ),
         .uninit => unreachable,
     }
 }
@@ -247,8 +241,6 @@ pub fn finalize(self: *HbvmGen, out: std.io.AnyWriter) void {
 
     try root.hbvm.object.flush(self.out, out);
 
-    self.funcs.items.len = 0;
-    self.globals.items.len = 0;
     self.out.reset();
 }
 
@@ -348,8 +340,6 @@ pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
 }
 
 pub fn deinit(self: *HbvmGen) void {
-    self.funcs.deinit(self.gpa);
-    self.globals.deinit(self.gpa);
     self.out.deinit(self.gpa);
     self.* = undefined;
 }
@@ -371,9 +361,8 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
     errdefer unreachable;
     for (node.outputs()) |no| {
         const inps = no.dataDeps();
-        switch (no.kind) {
-            .CInt => {
-                const extra = no.extra(.CInt);
+        switch (no.extra2()) {
+            .CInt => |extra| {
                 switch (no.data_type) {
                     .i8 => self.emit(.li8, .{ self.outReg(no), @truncate(@as(u64, @bitCast(extra.*))) }),
                     .i16 => self.emit(.li16, .{ self.outReg(no), @truncate(@as(u64, @bitCast(extra.*))) }),
@@ -392,14 +381,11 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 self.flushOutReg(no);
             },
             .Arg => {},
-            .GlobalAddr => {
-                const extra = no.extra(.GlobalAddr);
-                const slot = try utils.ensureSlot(&self.globals, self.gpa, extra.id);
-                try self.out.addReloc(self.gpa, slot, 4, 3);
+            .GlobalAddr => |extra| {
+                try self.out.addGlobalReloc(self.gpa, extra.id, 4, 3);
                 self.emit(.lra, .{ self.outReg(no), .null, 0 });
             },
-            .Local => {
-                const extra = no.extra(.Local);
+            .Local => |extra| {
                 self.emit(.addi64, .{ self.outReg(no), .stack_addr, extra.* });
             },
             .Load => {
@@ -411,9 +397,9 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }
                 self.flushOutReg(no);
             },
-            .Ld => {
+            .Ld => |extra| {
                 const size: u16 = @intCast(no.data_type.size());
-                const off = no.extra(.Ld).offset;
+                const off = extra.offset;
                 if (inps[0].?.kind == .Local) {
                     self.emit(.ld, .{ self.outReg(no), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).*)) + off, size });
                 } else {
@@ -430,9 +416,9 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }
                 self.flushOutReg(no);
             },
-            .St => {
+            .St => |extra| {
                 const size: u16 = @intCast(no.data_type.size());
-                const off = no.extra(.St).offset;
+                const off = extra.offset;
                 if (inps[0].?.kind == .Local) {
                     self.emit(.st, .{ self.outReg(inps[1]), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).*)) + off, size });
                 } else {
@@ -444,11 +430,10 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 // not a mistake, the bmc is retarded
                 self.emit(.bmc, .{ self.inReg(0, inps[1]), self.inReg(1, inps[0]), no.extra(.BlockCpy).size });
             },
-            .BinOp => {
+            .BinOp => |extra| {
                 const mone = std.math.maxInt(u64);
-                const extra = no.extra(.BinOp).*;
 
-                var op: isa.Op = switch (extra) {
+                var op: isa.Op = switch (extra.*) {
                     .iadd => .add8,
                     .fadd => .fadd32,
                     .isub => .sub8,
@@ -470,7 +455,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     .sge, .sle, .sgt, .slt => .cmps,
                 };
 
-                switch (extra) {
+                switch (extra.*) {
                     .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt, .bor, .band, .bxor => {},
                     .fadd, .fsub, .fmul, .fdiv, .fge, .fle, .fgt, .flt => op = @enumFromInt(@intFromEnum(op) +
                         (@intFromEnum(inps[0].?.data_type) - @intFromEnum(graph.DataType.f32))),
@@ -479,26 +464,26 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }
 
                 const lhs, const rhs = .{ self.inReg(0, no.inputs()[1]), self.inReg(1, no.inputs()[2]) };
-                switch (extra) {
+                switch (extra.*) {
                     .udiv, .sdiv => self.emitLow("RRRR", op, .{ self.outReg(no), .null, lhs, rhs }),
                     .umod, .smod => self.emitLow("RRRR", op, .{ .null, self.outReg(no), lhs, rhs }),
                     else => self.emitLow("RRR", op, .{ self.outReg(no), lhs, rhs }),
                 }
 
-                switch (extra) {
+                switch (extra.*) {
                     .fge, .fle => self.emit(.not, .{ self.outReg(no), self.outReg(no) }),
                     else => {},
                 }
 
                 extra_comparison_instrs: {
-                    const compare_to: u64 = switch (extra) {
+                    const compare_to: u64 = switch (extra.*) {
                         .eq, .ne => 0,
                         .ugt, .sgt, .ule, .sle => 1,
                         .ult, .slt, .uge, .sge => mone,
                         else => break :extra_comparison_instrs,
                     };
                     self.emit(.cmpui, .{ self.outReg(no), self.outReg(no), compare_to });
-                    switch (extra) {
+                    switch (extra.*) {
                         .eq, .ugt, .sgt, .ult, .slt => {
                             self.emit(.not, .{ self.outReg(no), self.outReg(no) });
                         },
@@ -511,8 +496,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
 
                 self.flushOutReg(no);
             },
-            .UnOp => {
-                const extra = no.extra(.UnOp);
+            .UnOp => |extra| {
                 switch (extra.*) {
                     .sext => {
                         const op: isa.Op = @enumFromInt(@intFromEnum(isa.Op.sxt8) +
@@ -550,9 +534,8 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }
                 self.flushOutReg(no);
             },
-            .ImmBinOp => {
+            .ImmBinOp => |extra| {
                 const alloc = self.outReg(no);
-                const extra = no.extra(.ImmBinOp);
 
                 if (extra.op == .ori or extra.op == .andi or extra.op == .xori) {
                     self.emitLow(
@@ -577,8 +560,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }
                 self.flushOutReg(no);
             },
-            .IfOp => {
-                const extra = no.extra(.IfOp);
+            .IfOp => |extra| {
                 self.local_relocs.appendAssumeCapacity(.{
                     .dest_block = no.outputs()[@intFromBool(!extra.swapped)].schedule,
                     .rel = self.reloc(3, .rel16),
@@ -592,9 +574,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 });
                 self.emit(.jeq, .{ self.inReg(0, inps[0]), .null, 0 });
             },
-            .Call => {
-                const extra = no.extra(.Call);
-
+            .Call => |extra| {
                 var moves = std.ArrayList(Move).init(tmp);
                 for (inps, 0..) |arg, i| {
                     const dst, const src = .{ isa.Reg.arg(i), self.inReg(0, arg) };
@@ -605,14 +585,14 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 if (extra.id == eca) {
                     self.emit(.eca, .{});
                 } else {
-                    const slot = try utils.ensureSlot(&self.funcs, self.gpa, extra.id);
-                    try self.out.addReloc(self.gpa, slot, 4, 3);
+                    try self.out.addFuncReloc(self.gpa, extra.id, 4, 3);
                     self.emit(.jal, .{ .ret_addr, .null, 0 });
                 }
 
                 const cend = for (no.outputs()) |o| {
                     if (o.kind == .CallEnd) break o;
                 } else unreachable;
+
                 moves.items.len = 0;
                 for (cend.outputs()) |r| {
                     if (r.kind == .Ret) {
@@ -652,9 +632,8 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }
                 self.orderMoves(moves.items);
             },
-            .Trap => {
-                const code = no.extra(.Trap).code;
-                switch (code) {
+            .Trap => |extra| {
+                switch (extra.code) {
                     graph.infinite_loop_trap => return,
                     0 => self.emit(.un, .{}),
                     1 => self.emit(.tx, .{}),
@@ -662,7 +641,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }
             },
             .Never => {},
-            else => utils.panic("{any}", .{no.kind}),
+            else => |e| utils.panic("{any}", .{e}),
         }
     }
 }
@@ -715,10 +694,6 @@ fn flushOutReg(self: *HbvmGen, n: ?*Func.Node) void {
         self.emit(.st, .{ reg, .stack_addr, @intCast(idx + self.spill_base), 8 });
     }
 }
-
-//fn reg(self: HbvmGen, n: ?*Func.Node) isa.Reg {
-//    return @enumFromInt(self.allocs[n.?.schedule]);
-//}
 
 fn emit(self: *HbvmGen, comptime op: isa.Op, args: isa.TupleOf(isa.ArgsOf(op))) void {
     self.emitLow(isa.spec[@intFromEnum(op)][1], op, args);

@@ -144,7 +144,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
                     }
                     if (types.store.get(func_id).errored) return .{ .Unsupported = curr };
                     std.debug.assert(types.store.get(func_id).completion.get(.@"comptime") == .compiled);
-                    std.debug.assert(self.gen.funcs.items.len > call.extra(.Call).id);
+                    std.debug.assert(self.gen.out.funcs.items.len > call.extra(.Call).id);
                 }
 
                 var requeued = false;
@@ -237,7 +237,7 @@ pub fn runVm(
     self.vm.ip = if (entry_id == eca)
         stack_size - 2
     else
-        self.gen.out.syms.items[@intFromEnum(self.gen.funcs.items[entry_id])].offset;
+        self.gen.out.syms.items[@intFromEnum(self.gen.out.funcs.items[entry_id])].offset;
     std.debug.assert(self.vm.ip < self.gen.out.code.items.len);
 
     self.vm.fuel = 1024;
