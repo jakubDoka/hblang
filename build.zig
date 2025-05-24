@@ -7,15 +7,52 @@ pub fn build(b: *std.Build) !void {
     const use_llvm = b.option(bool, "use-llvm", "use llvm, last resort option") orelse (b.graph.host.result.os.tag == .windows);
     const use_lld = b.option(bool, "use-lld", "use lld, last resort option") orelse (b.graph.host.result.os.tag == .windows);
 
-    hb: {
-        _ = b.addModule("hb", .{
+    const zydis = zydis: {
+        const m = b.addModule("zidis", .{
+            .root_source_file = b.path("src/zydis.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        });
+
+        m.addIncludePath(b.path("vendored/zydis/include/"));
+        m.addIncludePath(b.path("vendored/zydis/src/"));
+        m.addIncludePath(b.path("vendored/zydis/dependencies/zycore/include/"));
+
+        var files = std.ArrayListUnmanaged([]const u8).empty;
+        var dir = try std.fs.cwd().openDir("vendored/zydis/src/", .{ .iterate = true });
+        var iter = try dir.walk(b.allocator);
+
+        while (try iter.next()) |fl| {
+            if (std.mem.endsWith(u8, fl.path, ".c") or
+                std.mem.endsWith(u8, fl.path, ".h"))
+            {
+                try files.append(
+                    b.allocator,
+                    try std.mem.concat(b.allocator, u8, &.{ "vendored/zydis/src/", fl.path }),
+                );
+            }
+        }
+
+        m.addCSourceFiles(.{
+            .files = files.items,
+        });
+
+        break :zydis m;
+    };
+
+    const hb = hb: {
+        const hb = b.addModule("hb", .{
             .root_source_file = b.path("src/root.zig"),
             .target = target,
             .optimize = optimize,
         });
 
-        break :hb;
-    }
+        hb.addImport("zydis", zydis);
+        hb.addImport("hb", hb);
+
+        break :hb hb;
+    };
 
     hbc: {
         const exe = b.addExecutable(.{
@@ -26,11 +63,27 @@ pub fn build(b: *std.Build) !void {
         });
         b.installArtifact(exe);
 
+        exe.root_module.addImport("zydis", zydis);
+        exe.root_module.addImport("hb", hb);
+
         break :hbc;
     }
 
     const test_step = b.step("test", "run tests");
     const test_filter = b.option([]const u8, "tf", "passed as a filter to tests");
+
+    const test_module = test_module: {
+        const module = b.addModule("test", .{
+            .root_source_file = b.path("src/tests.zig"),
+            .target = b.graph.host,
+            .optimize = optimize,
+        });
+
+        module.addImport("hb", hb);
+        module.addImport("zydis", zydis);
+
+        break :test_module module;
+    };
 
     vendored_tests: {
         const grn = b.addExecutable(.{
@@ -58,7 +111,7 @@ pub fn build(b: *std.Build) !void {
             .use_lld = use_lld,
         });
 
-        test_run.root_module.addAnonymousImport("utils", .{ .root_source_file = b.path("src/tests.zig") });
+        test_run.root_module.addImport("utils", test_module);
         const tr = b.addRunArtifact(test_run);
         tr.has_side_effects = true;
         test_step.dependOn(&tr.step);
@@ -90,7 +143,7 @@ pub fn build(b: *std.Build) !void {
             .use_lld = use_lld,
         });
 
-        test_run.root_module.addAnonymousImport("utils", .{ .root_source_file = b.path("src/tests.zig") });
+        test_run.root_module.addImport("utils", test_module);
         const run = b.addRunArtifact(test_run);
         run.has_side_effects = true;
         test_step.dependOn(&run.step);
@@ -109,7 +162,7 @@ pub fn build(b: *std.Build) !void {
             .use_lld = use_lld,
         });
 
-        test_run.root_module.addAnonymousImport("utils", .{ .root_source_file = b.path("src/tests.zig") });
+        test_run.root_module.addImport("utils", test_module);
         const run = b.addRunArtifact(test_run);
         run.has_side_effects = true;
         test_step.dependOn(&run.step);
@@ -117,19 +170,11 @@ pub fn build(b: *std.Build) !void {
         break :example_tests;
     }
 
-    const test_module = test_module: {
-        const module = b.addModule("test", .{
-            .root_source_file = b.path("src/tests.zig"),
-            .target = b.graph.host,
-            .optimize = optimize,
-        });
-
-        break :test_module module;
-    };
-
     check: {
         const check_step = b.step("check", "type check");
-        check_step.dependOn(&b.addTest(.{ .root_module = test_module }).step);
+        const t = b.addTest(.{ .root_module = test_module });
+        const r = b.addRunArtifact(t);
+        check_step.dependOn(&r.step);
         break :check;
     }
 

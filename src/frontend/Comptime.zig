@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const root = @import("../root.zig");
+const root = @import("hb");
 const isa = root.hbvm.isa;
 const Types = root.frontend.Types;
 const Builder = root.backend.Builder;

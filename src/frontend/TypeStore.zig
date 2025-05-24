@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const root = @import("../root.zig");
+const root = @import("hb");
 const graph = root.backend.graph;
 const utils = root.utils;
 const static_anal = root.backend.static_anal;

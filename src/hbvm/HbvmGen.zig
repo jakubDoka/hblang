@@ -7,8 +7,8 @@ allocs: []u16 = undefined,
 spill_base: usize = undefined,
 
 const std = @import("std");
-const utils = @import("../utils.zig");
-const root = @import("../root.zig");
+const utils = root.utils;
+const root = @import("hb");
 const isa = @import("isa.zig");
 const graph = root.backend.graph;
 const Mach = root.backend.Machine;

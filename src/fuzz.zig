@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const root = @import("root.zig");
+const root = @import("hb");
 const isa = root.hbvm.isa;
 const Types = root.frontend.Types;
 const Builder = root.backend.Builder;
@@ -16,7 +16,7 @@ const Comptime = root.frontend.Comptime;
 const Lexer = root.frontend.Lexer;
 const HbvmGen = root.hbvm.HbvmGen;
 const Vm = root.hbvm.Vm;
-const tests = @import("test_util.zig");
+const tests = root.test_utils;
 
 comptime {
     if (@import("root") == @This()) @export(&fuzz, .{ .name = "main", .linkage = .strong });

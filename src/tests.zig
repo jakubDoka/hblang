@@ -1,8 +1,7 @@
 const std = @import("std");
-pub const utils = @import("utils.zig");
-pub const root = @import("root.zig");
-pub const test_util = @import("test_util.zig");
-pub const hbc = @import("hbc.zig");
+pub const utils = root.utils;
+pub const root = @import("hb");
+pub const test_util = root.test_utils;
 pub const fuzz = @import("fuzz.zig");
 
 comptime {
@@ -52,17 +51,16 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
         );
     }
 
-    if (false) {
+    {
         if (std.mem.indexOf(u8, name, "float") != null) return;
 
-        var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa };
+        var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
         defer x86_64.deinit();
         try runMachineTest(
             name,
             "x86_64-linux",
             code,
             .init(&x86_64),
-            root.Object.Elf.flush,
             gpa,
             stderr.writer().any(),
             colors,

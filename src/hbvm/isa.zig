@@ -1,5 +1,5 @@
 const std = @import("std");
-const root = @import("../root.zig");
+const root = @import("hb");
 const utils = root.utils;
 
 pub const Reg = enum(u8) {

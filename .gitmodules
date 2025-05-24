@@ -1,3 +1,6 @@
 [submodule "vendored-tests/lily"]
 	path = vendored-tests/lily
 	url = https://github.com/koniifer/lily
+[submodule "vendored/zydis"]
+	path = vendored/zydis
+	url = https://github.com/zyantific/zydis.git

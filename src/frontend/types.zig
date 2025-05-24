@@ -1,4 +1,4 @@
-const root = @import("../root.zig");
+const root = @import("hb");
 const Types = root.frontend.Types;
 const Ast = root.frontend.Ast;
 const graph = root.backend.graph;

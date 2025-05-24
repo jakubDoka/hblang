@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Object = @This();
-const root = @import("root.zig");
+const root = @import("hb");
 
 pub const Arch = enum {
     x86_64,

@@ -5,7 +5,7 @@ items: Slice,
 root_struct: Id,
 
 const std = @import("std");
-const root = @import("../root.zig");
+const root = @import("hb");
 const utils = root.utils;
 const Lexer = root.frontend.Lexer;
 const Fmt = root.frontend.Fmt;

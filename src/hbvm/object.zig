@@ -1,5 +1,5 @@
 const std = @import("std");
-const root = @import("../root.zig");
+const root = @import("hb");
 
 pub const ExecHeader = extern struct {
     magic_number: [3]u8 = .{ 0x15, 0x91, 0xD2 },

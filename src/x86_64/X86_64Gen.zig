@@ -1,11 +1,12 @@
 const std = @import("std");
 
 const object = root.object;
-const root = @import("../root.zig");
+const root = @import("hb");
 const graph = root.backend.graph;
 const Mach = root.backend.Machine;
 const Regalloc = root.backend.Regalloc;
 const utils = root.utils;
+const zydis = @import("zydis").exports;
 
 const X86_64 = @This();
 const Func = graph.Func(Node);
@@ -22,6 +23,9 @@ allocs: []u16 = undefined,
 ret_count: usize = undefined,
 local_relocs: std.ArrayListUnmanaged(Reloc) = undefined,
 block_offsets: []u32 = undefined,
+buf: [zydis.ZYDIS_MAX_INSTRUCTION_LENGTH]u8 = undefined,
+len: usize = undefined,
+req: zydis.ZydisEncoderRequest = undefined,
 
 pub const Reg = enum(u8) {
     rax,
@@ -40,6 +44,7 @@ pub const Reg = enum(u8) {
     r13,
     r14,
     r15,
+    reg_max,
     _, // spills
 
     const system_v = struct {
@@ -47,6 +52,33 @@ pub const Reg = enum(u8) {
         const caller_saved: []const Reg = &.{ .rax, .rcx, .rdx, .rsi, .rdi, .r8, .r9, .r10, .r11 };
         const callee_saved: []const Reg = &.{ .rbx, .rbp, .r12, .r13, .r14, .r15 };
     };
+
+    pub fn asZydisOp(self: Reg, size: usize) zydis.ZydisEncoderOperand {
+        if (@intFromEnum(self) < @intFromEnum(Reg.reg_max)) {
+            return .{
+                .type = zydis.ZYDIS_OPERAND_TYPE_REGISTER,
+                .reg = .{ .value = @intCast(switch (size) {
+                    1 => zydis.ZYDIS_REGISTER_AL,
+                    2 => zydis.ZYDIS_REGISTER_AX,
+                    4 => zydis.ZYDIS_REGISTER_EAX,
+                    8 => zydis.ZYDIS_REGISTER_RAX,
+                    else => unreachable,
+                } + @intFromEnum(self)) },
+            };
+        } else {
+            return .{
+                .type = zydis.ZYDIS_OPERAND_TYPE_MEMORY,
+                .mem = .{
+                    .base = zydis.ZYDIS_REGISTER_RSP,
+                    .size = @intCast(size),
+                    .displacement = @as(
+                        c_int,
+                        @intFromEnum(self) - @intFromEnum(Reg.reg_max),
+                    ) * 8,
+                },
+            };
+        }
+    }
 };
 
 const max_alloc_regs = 16;
@@ -100,78 +132,8 @@ pub const Node = union(enum) {
     }
 };
 
-pub fn reg(self: X86_64, node: ?*FuncNode) u16 {
-    return self.allocs[node.?.schedule];
-}
-
-pub const Opcode = enum(u8) {
-    add = 0x01,
-    addimm = 0x81,
-    @"test" = 0x85,
-    sub = 0x29,
-    xchg = 0x87,
-    mov = 0x89,
-    lea = 0x8D,
-    cmp = 0x3b,
-    movmr = 0x8b,
-};
-
-pub fn rex(lhs: u16, rhs: u16) u8 {
-    var rx: u8 = 0x48;
-
-    if (lhs >= 8) rx |= 0b001;
-    if (rhs >= 8) rx |= 0b100;
-
-    return rx;
-}
-
-pub fn modrm(mode: u8, rm: u16, rg: u16) u8 {
-    return @intCast((mode << 6) | ((rg & 0b111) << 3) | (rm & 0b111));
-}
-
-pub fn emitBinOp(self: *X86_64, opcode: Opcode, lhs: u16, rhs: u16) void {
-    errdefer unreachable;
-    try self.out.code.appendSlice(self.gpa, &.{
-        rex(lhs, rhs),
-        @intFromEnum(opcode),
-        modrm(0b11, lhs, rhs),
-    });
-}
-
-pub fn emitBinOpMemDeferOff(self: *X86_64, opcode: Opcode, lhs: u16, rhs: u16) void {
-    errdefer unreachable;
-    try self.out.code.appendSlice(self.gpa, &.{
-        rex(lhs, rhs),
-        @intFromEnum(opcode),
-        modrm(0b00, lhs, rhs),
-    });
-    if (lhs == 12) {
-        try self.out.code.append(self.gpa, 0x24);
-    }
-}
-
-pub fn emitBinOpMem(self: *X86_64, opcode: Opcode, lhs: u16, rhs: u16, offset: u32) void {
-    errdefer unreachable;
-    errdefer unreachable;
-    try self.out.code.appendSlice(self.gpa, &.{
-        rex(lhs, rhs),
-        @intFromEnum(opcode),
-        modrm(0b10, lhs, rhs),
-    });
-    if (lhs == 12) {
-        try self.out.code.append(self.gpa, 0x24);
-    }
-    try self.out.code.writer(self.gpa).writeInt(u32, offset, .little);
-}
-
-pub fn emitImmBinOp(self: *X86_64, opcode: Opcode, lhs: u16, rhs: u32) void {
-    errdefer unreachable;
-    try self.out.code.appendSlice(self.gpa, &.{
-        rex(lhs, 0),
-        @intFromEnum(opcode),
-        modrm(0b11, lhs, 0),
-    });
-    try self.out.code.writer(self.gpa).writeInt(u32, rhs, .little);
+pub fn getReg(self: X86_64, node: ?*FuncNode) Reg {
+    return @enumFromInt(self.allocs[node.?.schedule]);
 }
 
 pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
@@ -232,29 +194,24 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     prelude: {
         for (Reg.system_v.callee_saved) |r| {
             if (used_regs.contains(r)) {
-                if (@intFromEnum(r) >= 8) {
-                    try self.out.code.append(self.gpa, 0x41);
-                }
-                const opcode_base = 0x50;
-                try self.out.code.append(self.gpa, opcode_base + (@intFromEnum(r) & 0b111));
+                self.emitInstr(8, zydis.ZYDIS_MNEMONIC_PUSH, .{r});
             }
         }
 
         if (stack_size != 0) {
-            // sub rsp, stack_size
-            self.emitImmBinOp(
-                .addimm,
-                @intFromEnum(Reg.rsp),
-                @bitCast(@as(i32, @intCast(-stack_size))),
-            );
+            self.emitInstr(8, zydis.ZYDIS_MNEMONIC_SUB, .{ Reg.rsp, stack_size });
         }
 
         for (0..func.params.len) |i| {
             const argn = for (postorder[0].base.outputs()) |o| {
                 if (o.kind == .Arg and o.extra(.Arg).* == i) break o;
             } else continue; // is dead
-            if (self.reg(argn) != @intFromEnum(Reg.system_v.args[i])) {
-                self.emitBinOp(.mov, self.reg(argn), @intFromEnum(Reg.system_v.args[i]));
+            if (self.getReg(argn) != Reg.system_v.args[i]) {
+                self.emitInstr(
+                    8,
+                    zydis.ZYDIS_MNEMONIC_MOV,
+                    .{ self.getReg(argn), Reg.system_v.args[i] },
+                );
             }
         }
 
@@ -265,28 +222,26 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
         self.block_offsets[bb.base.schedule] = @intCast(self.out.code.items.len);
         std.debug.assert(bb.base.schedule == i);
 
-        self.emitBlockBody(tmp.arena.allocator(), &bb.base);
+        self.emitBlockBody(&bb.base);
         const last = bb.base.outputs()[bb.base.output_len - 1];
         if (last.outputs().len == 0) {
             std.debug.assert(last.kind == .Return);
 
             if (stack_size != 0) {
-                self.emitImmBinOp(.addimm, @intFromEnum(Reg.rsp), @intCast(stack_size));
+                self.emitInstr(8, zydis.ZYDIS_MNEMONIC_ADD, .{
+                    Reg.rsp,
+                    stack_size,
+                });
             }
 
             var iter = std.mem.reverseIterator(Reg.system_v.callee_saved);
             while (iter.next()) |r| {
                 if (used_regs.contains(r)) {
-                    if (@intFromEnum(r) >= 8) {
-                        try self.out.code.append(self.gpa, 0x41);
-                    }
-                    const opcode_base = 0x58;
-                    try self.out.code.append(self.gpa, opcode_base + (@intFromEnum(r) & 0b111));
+                    self.emitInstr(8, zydis.ZYDIS_MNEMONIC_POP, .{r});
                 }
             }
 
-            const ret_op = 0xc3;
-            try self.out.code.append(self.gpa, ret_op);
+            self.emitInstr(8, zydis.ZYDIS_MNEMONIC_RET, .{});
         } else if (i + 1 == last.outputs()[@intFromBool(last.isSwapped())].schedule) {
             // noop
         } else if (last.kind == .Never) {
@@ -328,234 +283,284 @@ fn orderMoves(self: *X86_64, moves: []Move) void {
 }
 
 pub fn emitSwap(self: *X86_64, lhs: Reg, rhs: Reg) void {
-    self.emitBinOp(.xchg, @intFromEnum(lhs), @intFromEnum(rhs));
+    self.emitInstr(8, zydis.ZYDIS_MNEMONIC_XCHG, .{ lhs, rhs });
 }
 
 pub fn emitCp(self: *X86_64, dst: Reg, src: Reg) void {
-    self.emitBinOp(.mov, @intFromEnum(dst), @intFromEnum(src));
+    self.emitInstr(8, zydis.ZYDIS_MNEMONIC_MOV, .{ dst, src });
 }
 
-pub fn emitBlockBody(self: *X86_64, arena: std.mem.Allocator, block: *FuncNode) void {
-    _ = arena;
+pub fn emitInstr(self: *X86_64, size: usize, mnemonic: c_uint, args: anytype) void {
+    errdefer unreachable;
 
+    const fields = std.meta.fields(@TypeOf(args));
+
+    self.req = .{
+        .mnemonic = mnemonic,
+        .machine_mode = zydis.ZYDIS_MACHINE_MODE_LONG_64,
+        .operand_count = fields.len,
+    };
+
+    inline for (fields, 0..) |f, i| {
+        self.req.operands[i] = switch (f.type) {
+            Reg => @field(args, f.name).asZydisOp(size),
+            i64, i32 => .{
+                .type = zydis.ZYDIS_OPERAND_TYPE_IMMEDIATE,
+                .imm = .{ .s = @field(args, f.name) },
+            },
+            u64, u32 => .{
+                .type = zydis.ZYDIS_OPERAND_TYPE_IMMEDIATE,
+                .imm = .{ .u = @field(args, f.name) },
+            },
+            else => comptime unreachable,
+        };
+    }
+
+    if (zydis.ZYAN_FAILED(zydis.ZydisEncoderEncodeInstruction(&self.req, &self.buf, &self.len)) != 0) {
+        unreachable;
+    }
+
+    try self.out.code.appendSlice(self.gpa, self.buf[0..self.len]);
+}
+
+pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
     errdefer unreachable;
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    for (block.outputs()) |instr| switch (instr.kind) {
-        .CInt => {
-            const imm64 = instr.extra(.CInt).*;
-            const reg_index: u8 = @intCast(self.reg(instr));
+    for (block.outputs()) |instr| {
+        var buf: [zydis.ZYDIS_MAX_INSTRUCTION_LENGTH]u8 = undefined;
+        var len: usize = @sizeOf(@TypeOf(buf));
+        var req = zydis.ZydisEncoderRequest{
+            .machine_mode = zydis.ZYDIS_MACHINE_MODE_LONG_64,
+        };
+        const reg = self.getReg(instr);
 
-            const opcode_base = 0xB8;
+        switch (instr.extra2()) {
+            .CInt => |extra| {
+                req.mnemonic = zydis.ZYDIS_MNEMONIC_MOV;
+                req.operand_count = 2;
+                req.operands[0] = reg.asZydisOp(8);
+                req.operands[1] = .{
+                    .type = zydis.ZYDIS_OPERAND_TYPE_IMMEDIATE,
+                    .imm = .{ .s = extra.* },
+                };
+            },
+            //.MemCpy => {
+            //    var moves = std.ArrayList(Move).init(tmp.arena.allocator());
+            //    for (instr.dataDeps(), 0..) |arg, i| {
+            //        const dst, const src: Reg = .{ Reg.system_v.args[i], self.getReg(arg) };
+            //        if (!std.meta.eql(dst, src)) moves.append(.{ dst, src, 0 }) catch unreachable;
+            //    }
+            //    self.orderMoves(moves.items);
 
-            const opcode = opcode_base + (reg_index & 0b111);
+            //    const opcode = 0xE8;
+            //    try self.out.code.append(self.gpa, opcode);
+            //    const slot = &self.memcpy;
+            //    try self.out.importSym(self.gpa, slot, "memcpy", .func);
+            //    try self.out.addReloc(self.gpa, slot, 4, -4);
+            //    try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
+            //},
+            //.MachMove => {},
+            //.Phi => {},
+            //.GlobalAddr => {
+            //    self.emitBinOpMemDeferOff(.lea, .rbp, self.getReg(instr));
+            //    const slot = try utils.ensureSlot(&self.global_map, self.gpa, instr.extra(.GlobalAddr).id);
+            //    try self.out.addReloc(self.gpa, slot, 4, -4);
+            //    try self.out.code.appendNTimes(self.gpa, 0, 4);
+            //},
+            //.Local => {
+            //    self.emitBinOp(.mov, self.getReg(instr), .rsp);
+            //    self.emitImmBinOp(.addimm, self.getReg(instr), @intCast(instr.extra(.Local).*));
+            //},
+            //.Load => {
+            //    std.debug.assert(instr.data_type.size() == 8);
 
-            try self.out.code.appendSlice(self.gpa, &.{ rex(reg_index, 0), opcode });
-            try self.out.code.writer(self.gpa).writeInt(i64, imm64, .little);
-        },
-        .MemCpy => {
-            var moves = std.ArrayList(Move).init(tmp.arena.allocator());
-            for (instr.dataDeps(), 0..) |arg, i| {
-                const dst, const src: Reg = .{ Reg.system_v.args[i], @enumFromInt(self.reg(arg)) };
-                if (!std.meta.eql(dst, src)) moves.append(.{ dst, src, 0 }) catch unreachable;
-            }
-            self.orderMoves(moves.items);
+            //    const dst = self.getReg(instr);
+            //    const bse = self.getReg(instr.inputs()[2]);
 
-            const opcode = 0xE8;
-            try self.out.code.append(self.gpa, opcode);
-            const slot = &self.memcpy;
-            try self.out.importSym(self.gpa, slot, "memcpy", .func);
-            try self.out.addReloc(self.gpa, slot, 4, -4);
-            try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
-        },
-        .MachMove => {},
-        .Phi => {},
-        .GlobalAddr => {
-            self.emitBinOpMemDeferOff(.lea, 0b101, self.reg(instr));
-            const slot = try utils.ensureSlot(&self.global_map, self.gpa, instr.extra(.GlobalAddr).id);
-            try self.out.addReloc(self.gpa, slot, 4, -4);
-            try self.out.code.appendNTimes(self.gpa, 0, 4);
-        },
-        .Local => {
-            self.emitBinOp(.mov, self.reg(instr), @intFromEnum(Reg.rsp));
-            self.emitImmBinOp(.addimm, self.reg(instr), @intCast(instr.extra(.Local).*));
-        },
-        .Load => {
-            std.debug.assert(instr.data_type.size() == 8);
+            //    const offset: u32 = 0;
 
-            const dst = self.reg(instr);
-            const bse = self.reg(instr.inputs()[2]);
+            //    self.emitBinOpMem(.movmr, bse, dst, offset);
+            //},
+            //.Store => {
+            //    std.debug.assert(instr.data_type.size() == 8);
 
-            const offset: u32 = 0;
+            //    const dst = self.getReg(instr.inputs()[2]);
+            //    const vl = self.getReg(instr.inputs()[3]);
 
-            self.emitBinOpMem(.movmr, bse, dst, offset);
-        },
-        .Store => {
-            std.debug.assert(instr.data_type.size() == 8);
+            //    const offset: u32 = 0;
 
-            const dst = self.reg(instr.inputs()[2]);
-            const vl = self.reg(instr.inputs()[3]);
+            //    self.emitBinOpMem(.mov, dst, vl, offset);
+            //},
+            //.Call => {
+            //    const call = instr.extra(.Call);
 
-            const offset: u32 = 0;
+            //    var moves = std.ArrayList(Move).init(tmp.arena.allocator());
+            //    for (instr.dataDeps(), 0..) |arg, i| {
+            //        const dst, const src: Reg = .{ Reg.system_v.args[i], self.getReg(arg) };
+            //        if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
+            //    }
+            //    self.orderMoves(moves.items);
 
-            self.emitBinOpMem(.mov, dst, vl, offset);
-        },
-        .Call => {
-            const call = instr.extra(.Call);
+            //    const opcode = 0xE8;
+            //    try self.out.code.append(self.gpa, opcode);
+            //    const slot = try utils.ensureSlot(&self.func_map, self.gpa, call.id);
+            //    try self.out.addReloc(self.gpa, slot, 4, -4);
+            //    try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
 
-            var moves = std.ArrayList(Move).init(tmp.arena.allocator());
-            for (instr.dataDeps(), 0..) |arg, i| {
-                const dst, const src: Reg = .{ Reg.system_v.args[i], @enumFromInt(self.reg(arg)) };
-                if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
-            }
-            self.orderMoves(moves.items);
-
-            const opcode = 0xE8;
-            try self.out.code.append(self.gpa, opcode);
-            const slot = try utils.ensureSlot(&self.func_map, self.gpa, call.id);
-            try self.out.addReloc(self.gpa, slot, 4, -4);
-            try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
-
-            const cend = for (instr.outputs()) |o| {
-                if (o.kind == .CallEnd) break o;
-            } else unreachable;
-            moves.items.len = 0;
-            for (cend.outputs()) |r| {
-                if (r.kind == .Ret) {
-                    const dst: Reg, const src = .{ @enumFromInt(self.reg(r)), Reg.rax };
-                    if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
+            //    const cend = for (instr.outputs()) |o| {
+            //        if (o.kind == .CallEnd) break o;
+            //    } else unreachable;
+            //    moves.items.len = 0;
+            //    for (cend.outputs()) |r| {
+            //        if (r.kind == .Ret) {
+            //            const dst: Reg, const src = .{ self.getReg(r), Reg.rax };
+            //            if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
+            //        }
+            //    }
+            //    self.orderMoves(moves.items);
+            //},
+            //.Arg => {},
+            //.Ret => {},
+            //.Mem => {},
+            //.Never => {},
+            //.Trap => {
+            //    switch (instr.extra(.Trap).code) {
+            //        graph.infinite_loop_trap => return,
+            //        0 => try self.out.code.appendSlice(self.gpa, &.{ 0x0F, 0x0B }),
+            //        else => unreachable,
+            //    }
+            //},
+            .Return => {
+                for (instr.dataDeps()[0..self.ret_count]) |inp| {
+                    const src = self.getReg(inp);
+                    if (src != .rax) self.emitInstr(
+                        8,
+                        zydis.ZYDIS_MNEMONIC_MOV,
+                        .{ Reg.rax, src },
+                    );
                 }
-            }
-            self.orderMoves(moves.items);
-        },
-        .Arg => {},
-        .Ret => {},
-        .Mem => {},
-        .Never => {},
-        .Trap => {
-            switch (instr.extra(.Trap).code) {
-                graph.infinite_loop_trap => return,
-                0 => try self.out.code.appendSlice(self.gpa, &.{ 0x0F, 0x0B }),
-                else => unreachable,
-            }
-        },
-        .Return => {
-            for (instr.dataDeps()[0..self.ret_count]) |inp| {
-                const src = self.reg(inp);
-                if (src != 0) self.emitBinOp(.mov, 0, src);
-            }
-        },
-        .BinOp => {
-            const op = instr.extra(.BinOp).*;
-            const dst = self.reg(instr);
-            const lhs = self.reg(instr.inputs()[1]);
-            const rhs = self.reg(instr.inputs()[2]);
 
-            switch (op) {
-                .iadd => {
-                    if (dst != lhs) self.emitBinOp(.mov, dst, lhs);
-                    self.emitBinOp(.add, dst, rhs);
-                },
-                .isub => {
-                    if (dst != lhs) self.emitBinOp(.mov, dst, lhs);
-                    self.emitBinOp(.sub, dst, rhs);
-                },
-                .imul => {
-                    if (dst != lhs) self.emitBinOp(.mov, dst, lhs);
-                    try self.out.code.appendSlice(self.gpa, &.{
-                        rex(rhs, dst),
-                        0x0f,
-                        0xaf,
-                        modrm(0b11, rhs, dst),
-                    });
-                },
-                .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => |t| {
-                    self.emitBinOp(.cmp, lhs, rhs);
+                continue;
+            },
+            //.BinOp => {
+            //    const op = instr.extra(.BinOp).*;
+            //    const dst = self.getReg(instr);
+            //    const lhs = self.getReg(instr.inputs()[1]);
+            //    const rhs = self.getReg(instr.inputs()[2]);
 
-                    const opcode_2: u8 = switch (t) {
-                        .eq => 0x94,
-                        .ne => 0x95,
-                        .ult => 0x9F,
-                        .ule => 0x9D,
-                        .ugt => 0x9C,
-                        .uge => 0x9E,
-                        .slt => 0x92,
-                        .sle => 0x96,
-                        .sgt => 0x97,
-                        .sge => 0x93,
-                        else => unreachable,
-                    };
+            //    switch (op) {
+            //        .iadd => {
+            //            if (dst != lhs) self.emitBinOp(.mov, dst, lhs);
+            //            self.emitBinOp(.add, dst, rhs);
+            //        },
+            //        .isub => {
+            //            if (dst != lhs) self.emitBinOp(.mov, dst, lhs);
+            //            self.emitBinOp(.sub, dst, rhs);
+            //        },
+            //        .imul => {
+            //            if (dst != lhs) self.emitBinOp(.mov, dst, lhs);
+            //            try self.out.code.appendSlice(self.gpa, &.{
+            //                rex(@intFromEnum(rhs), @intFromEnum(dst)),
+            //                0x0f,
+            //                0xaf,
+            //                modrm(0b11, @intFromEnum(rhs), @intFromEnum(dst)),
+            //            });
+            //        },
+            //        .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => |t| {
+            //            self.emitBinOp(.cmp, lhs, rhs);
 
-                    // set(opcode_2) dstl
-                    try self.out.code.appendSlice(self.gpa, &.{
-                        rex(dst, 0),
-                        0x0f,
-                        opcode_2,
-                        modrm(0b11, dst, 0),
-                    });
+            //            const opcode_2: u8 = switch (t) {
+            //                .eq => 0x94,
+            //                .ne => 0x95,
+            //                .ult => 0x9F,
+            //                .ule => 0x9D,
+            //                .ugt => 0x9C,
+            //                .uge => 0x9E,
+            //                .slt => 0x92,
+            //                .sle => 0x96,
+            //                .sgt => 0x97,
+            //                .sge => 0x93,
+            //                else => unreachable,
+            //            };
 
-                    // movzx dst, dstl
-                    try self.out.code.appendSlice(self.gpa, &.{
-                        rex(dst, dst),
-                        0x0f,
-                        0xb6,
-                        modrm(0b11, dst, dst),
-                    });
-                },
-                else => {
-                    std.debug.panic("{any}", .{instr});
-                },
-            }
-        },
-        .If => {
-            const cond = self.reg(instr.inputs()[1]);
-            self.emitBinOp(.@"test", cond, cond);
-            self.local_relocs.appendAssumeCapacity(.{
-                .dest = instr.outputs()[1].schedule,
-                .offset = @intCast(self.out.code.items.len),
-                .class = .rel32,
-                .off = 2,
-            });
-            // je 0
-            try self.out.code.appendSlice(self.gpa, &.{ 0x0F, 0x84, 0, 0, 0, 0 });
-        },
-        .Jmp => if (instr.outputs()[0].kind == .Region or instr.outputs()[0].kind == .Loop) {
-            const idx = std.mem.indexOfScalar(?*Func.Node, instr.outputs()[0].inputs(), instr).? + 1;
+            //            // set(opcode_2) dstl
+            //            try self.out.code.appendSlice(self.gpa, &.{
+            //                rex(@intFromEnum(dst), 0),
+            //                0x0f,
+            //                opcode_2,
+            //                modrm(0b11, @intFromEnum(dst), 0),
+            //            });
 
-            var moves = std.ArrayList(Move).init(tmp.arena.allocator());
-            for (instr.outputs()[0].outputs()) |o| {
-                if (o.isDataPhi()) {
-                    std.debug.assert(o.inputs()[idx].?.kind == .MachMove);
-                    const dst, const src = .{ self.reg(o), self.reg(o.inputs()[idx].?.inputs()[1]) };
-                    if (dst != src) try moves.append(.{ @enumFromInt(dst), @enumFromInt(src), 0 });
-                }
-            }
+            //            // movzx dst, dstl
+            //            try self.out.code.appendSlice(self.gpa, &.{
+            //                rex(@intFromEnum(dst), @intFromEnum(dst)),
+            //                0x0f,
+            //                0xb6,
+            //                modrm(0b11, @intFromEnum(dst), @intFromEnum(dst)),
+            //            });
+            //        },
+            //        else => {
+            //            std.debug.panic("{any}", .{instr});
+            //        },
+            //    }
+            //},
+            //.If => {
+            //    const cond = self.getReg(instr.inputs()[1]);
+            //    self.emitBinOp(.@"test", cond, cond);
+            //    self.local_relocs.appendAssumeCapacity(.{
+            //        .dest = instr.outputs()[1].schedule,
+            //        .offset = @intCast(self.out.code.items.len),
+            //        .class = .rel32,
+            //        .off = 2,
+            //    });
+            //    // je 0
+            //    try self.out.code.appendSlice(self.gpa, &.{ 0x0F, 0x84, 0, 0, 0, 0 });
+            //},
+            //.Jmp => if (instr.outputs()[0].kind == .Region or instr.outputs()[0].kind == .Loop) {
+            //    const idx = std.mem.indexOfScalar(?*Func.Node, instr.outputs()[0].inputs(), instr).? + 1;
 
-            self.orderMoves(moves.items);
-        },
-        .UnOp => {
-            const op = instr.extra(.UnOp).*;
-            const dst = self.reg(instr);
-            const src = self.reg(instr.inputs()[1]);
+            //    var moves = std.ArrayList(Move).init(tmp.arena.allocator());
+            //    for (instr.outputs()[0].outputs()) |o| {
+            //        if (o.isDataPhi()) {
+            //            std.debug.assert(o.inputs()[idx].?.kind == .MachMove);
+            //            const dst, const src = .{ self.getReg(o), self.getReg(o.inputs()[idx].?.inputs()[1]) };
+            //            if (dst != src) try moves.append(.{ dst, src, 0 });
+            //        }
+            //    }
 
-            switch (op) {
-                .uext => {
-                    if (dst != src) self.emitBinOp(.mov, dst, src);
-                },
-                .sext => {
-                    if (dst != src) self.emitBinOp(.mov, dst, src);
-                },
-                else => {
-                    std.debug.panic("{any}", .{instr});
-                },
-            }
-        },
-        else => {
-            std.debug.panic("{any}", .{instr});
-        },
-    };
+            //    self.orderMoves(moves.items);
+            //},
+            //.UnOp => {
+            //    const op = instr.extra(.UnOp).*;
+            //    const dst = self.getReg(instr);
+            //    const src = self.getReg(instr.inputs()[1]);
+
+            //    switch (op) {
+            //        .uext => {
+            //            if (dst != src) self.emitBinOp(.mov, dst, src);
+            //        },
+            //        .sext => {
+            //            if (dst != src) self.emitBinOp(.mov, dst, src);
+            //        },
+            //        else => {
+            //            std.debug.panic("{any}", .{instr});
+            //        },
+            //    }
+            //},
+            else => {
+                std.debug.panic("{any}", .{instr});
+            },
+        }
+
+        if (zydis.ZYAN_FAILED(zydis.ZydisEncoderEncodeInstruction(&req, &buf, &len)) != 0) {
+            unreachable;
+        }
+
+        try self.out.code.appendSlice(self.gpa, buf[0..len]);
+    }
 }
 
 pub fn emitData(self: *X86_64, opts: Mach.DataOptions) void {

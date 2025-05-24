@@ -6,10 +6,9 @@ const Mach = root.backend.Machine;
 const Ast = root.frontend.Ast;
 const Codegen = root.frontend.Codegen;
 const Types = root.frontend.Types;
-const root = @import("root.zig");
+const root = @import("hb");
+const diff = root.diff;
 const utils = root.utils;
-const hbc = @import("hbc.zig");
-const diff = @import("diff.zig");
 pub const static_anal = root.backend.static_anal;
 
 pub const Expectations = struct {
@@ -67,7 +66,7 @@ pub const Expectations = struct {
 };
 
 pub fn runVendoredTest(gpa: std.mem.Allocator, path: []const u8) !void {
-    var ast = try hbc.compile(.{
+    var ast = try root.compile(.{
         .gpa = gpa,
         .diagnostics = std.io.getStdErr().writer().any(),
         .colors = std.io.tty.detectConfig(std.io.getStdErr()),

@@ -4,6 +4,5 @@ main fn 1.o:     file format elf64-x86-64
 Disassembly of section .text:
 
 0000000000000000 <main>:
-   0:	48 b8 2a 00 00 00 00 	movabs rax,0x2a
-   7:	00 00 00 
-   a:	c3                   	ret
+   0:	48 c7 c0 2a 00 00 00 	mov    rax,0x2a
+   7:	c3                   	ret
