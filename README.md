@@ -823,7 +823,7 @@ A := struct {
 }
 
 main := fn(): uint {
-    x := 0
+    x: u8 = 0
     a := A.(&x)
     return @size_of(@TypeOf(a.a.?.*)) != @size_of(u8)
 }
