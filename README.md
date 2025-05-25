@@ -812,6 +812,23 @@ main := fn(): uint {
 }
 ```
 
+#### structs 7
+```hb
+expectations := .{
+    return_value: 0,
+}
+
+A := struct {
+    .a: ?^u8;
+}
+
+main := fn(): uint {
+    x := 0
+    a := A.(&x)
+    return @size_of(@TypeOf(a.a.?.*)) != @size_of(u8)
+}
+```
+
 #### file structs 1
 ```hb
 main := fn(): uint {
@@ -1180,6 +1197,27 @@ main := fn(): int {
     n1 := Number.{_int: 42}
 
     return n1._int
+}
+```
+
+#### unions 3
+```hb
+expectations := .{
+    return_value: 8,
+}
+
+main := fn(): uint {
+    return TypeInfo(uint).builtin.size
+}
+
+TypeInfo := fn($T: type): union {
+    .builtin: Builtin;
+} {
+    return @bit_cast(Builtin.(@size_of(T)))
+}
+
+Builtin := struct {
+    .size: uint;
 }
 ```
 
@@ -2139,9 +2177,9 @@ main := fn(): uint {
 ## vendored tests
 
 ```bash
-git submodule add https://git.ablecorp.us/lily-org/lily.git vendored-tests/lily # add a new
+git submodule add https://git.ablecorp.eu/lily-org/lily.git vendored-tests/lily # add a new
 git submodule update --init --recursive                                         # fetch
-git submodule update --remote --rebase -- vendored-tests/lily/                  # update a
+git submodule update --remote vendored-tests/lily                               # update a
 ```
 
 ## Contributing
