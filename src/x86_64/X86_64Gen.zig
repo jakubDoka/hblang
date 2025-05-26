@@ -58,7 +58,7 @@ pub const Reg = enum(u8) {
             return .{
                 .type = zydis.ZYDIS_OPERAND_TYPE_REGISTER,
                 .reg = .{ .value = @intCast(switch (size) {
-                    1 => zydis.ZYDIS_REGISTER_AL,
+                    1 => zydis.ZYDIS_REGISTER_AL + if (@intFromEnum(self) > 4) @as(u8, 4) else 0,
                     2 => zydis.ZYDIS_REGISTER_AX,
                     4 => zydis.ZYDIS_REGISTER_EAX,
                     8 => zydis.ZYDIS_REGISTER_RAX,
@@ -194,12 +194,12 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     prelude: {
         for (Reg.system_v.callee_saved) |r| {
             if (used_regs.contains(r)) {
-                self.emitInstr(8, zydis.ZYDIS_MNEMONIC_PUSH, .{r});
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_PUSH, .{r});
             }
         }
 
         if (stack_size != 0) {
-            self.emitInstr(8, zydis.ZYDIS_MNEMONIC_SUB, .{ Reg.rsp, stack_size });
+            self.emitInstr(zydis.ZYDIS_MNEMONIC_SUB, .{ Reg.rsp, stack_size });
         }
 
         for (0..func.params.len) |i| {
@@ -208,7 +208,6 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
             } else continue; // is dead
             if (self.getReg(argn) != Reg.system_v.args[i]) {
                 self.emitInstr(
-                    8,
                     zydis.ZYDIS_MNEMONIC_MOV,
                     .{ self.getReg(argn), Reg.system_v.args[i] },
                 );
@@ -228,7 +227,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
             std.debug.assert(last.kind == .Return);
 
             if (stack_size != 0) {
-                self.emitInstr(8, zydis.ZYDIS_MNEMONIC_ADD, .{
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_ADD, .{
                     Reg.rsp,
                     stack_size,
                 });
@@ -237,11 +236,11 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
             var iter = std.mem.reverseIterator(Reg.system_v.callee_saved);
             while (iter.next()) |r| {
                 if (used_regs.contains(r)) {
-                    self.emitInstr(8, zydis.ZYDIS_MNEMONIC_POP, .{r});
+                    self.emitInstr(zydis.ZYDIS_MNEMONIC_POP, .{r});
                 }
             }
 
-            self.emitInstr(8, zydis.ZYDIS_MNEMONIC_RET, .{});
+            self.emitInstr(zydis.ZYDIS_MNEMONIC_RET, .{});
         } else if (i + 1 == last.outputs()[@intFromBool(last.isSwapped())].schedule) {
             // noop
         } else if (last.kind == .Never) {
@@ -283,14 +282,17 @@ fn orderMoves(self: *X86_64, moves: []Move) void {
 }
 
 pub fn emitSwap(self: *X86_64, lhs: Reg, rhs: Reg) void {
-    self.emitInstr(8, zydis.ZYDIS_MNEMONIC_XCHG, .{ lhs, rhs });
+    self.emitInstr(zydis.ZYDIS_MNEMONIC_XCHG, .{ lhs, rhs });
 }
 
 pub fn emitCp(self: *X86_64, dst: Reg, src: Reg) void {
-    self.emitInstr(8, zydis.ZYDIS_MNEMONIC_MOV, .{ dst, src });
+    self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ dst, src });
 }
 
-pub fn emitInstr(self: *X86_64, size: usize, mnemonic: c_uint, args: anytype) void {
+pub const SReg = struct { Reg, usize };
+pub const BRegOff = struct { Reg, u32, u16 };
+
+pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
     errdefer unreachable;
 
     const fields = std.meta.fields(@TypeOf(args));
@@ -300,23 +302,37 @@ pub fn emitInstr(self: *X86_64, size: usize, mnemonic: c_uint, args: anytype) vo
         .machine_mode = zydis.ZYDIS_MACHINE_MODE_LONG_64,
         .operand_count = fields.len,
     };
+    self.len = @sizeOf(@TypeOf(self.buf));
 
     inline for (fields, 0..) |f, i| {
+        const val = @field(args, f.name);
         self.req.operands[i] = switch (f.type) {
-            Reg => @field(args, f.name).asZydisOp(size),
+            Reg => val.asZydisOp(8),
+            SReg => val[0].asZydisOp(val[1]),
+            BRegOff => .{
+                .type = zydis.ZYDIS_OPERAND_TYPE_MEMORY,
+                .mem = .{
+                    .base = val[0].asZydisOp(8).reg.value,
+                    .displacement = val[1],
+                    .size = val[2],
+                },
+            },
             i64, i32 => .{
                 .type = zydis.ZYDIS_OPERAND_TYPE_IMMEDIATE,
-                .imm = .{ .s = @field(args, f.name) },
+                .imm = .{ .s = val },
             },
             u64, u32 => .{
                 .type = zydis.ZYDIS_OPERAND_TYPE_IMMEDIATE,
-                .imm = .{ .u = @field(args, f.name) },
+                .imm = .{ .u = val },
             },
             else => comptime unreachable,
         };
     }
 
-    if (zydis.ZYAN_FAILED(zydis.ZydisEncoderEncodeInstruction(&self.req, &self.buf, &self.len)) != 0) {
+    //std.debug.print("{}\n", .{self.req.operands[0]});
+
+    const status = zydis.ZydisEncoderEncodeInstruction(&self.req, &self.buf, &self.len);
+    if (zydis.ZYAN_FAILED(status) != 0) {
         unreachable;
     }
 
@@ -330,114 +346,127 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
     defer tmp.deinit();
 
     for (block.outputs()) |instr| {
-        var buf: [zydis.ZYDIS_MAX_INSTRUCTION_LENGTH]u8 = undefined;
-        var len: usize = @sizeOf(@TypeOf(buf));
-        var req = zydis.ZydisEncoderRequest{
-            .machine_mode = zydis.ZYDIS_MACHINE_MODE_LONG_64,
-        };
-        const reg = self.getReg(instr);
-
         switch (instr.extra2()) {
             .CInt => |extra| {
-                req.mnemonic = zydis.ZYDIS_MNEMONIC_MOV;
-                req.operand_count = 2;
-                req.operands[0] = reg.asZydisOp(8);
-                req.operands[1] = .{
-                    .type = zydis.ZYDIS_OPERAND_TYPE_IMMEDIATE,
-                    .imm = .{ .s = extra.* },
-                };
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), extra.* });
             },
-            //.MemCpy => {
-            //    var moves = std.ArrayList(Move).init(tmp.arena.allocator());
-            //    for (instr.dataDeps(), 0..) |arg, i| {
-            //        const dst, const src: Reg = .{ Reg.system_v.args[i], self.getReg(arg) };
-            //        if (!std.meta.eql(dst, src)) moves.append(.{ dst, src, 0 }) catch unreachable;
-            //    }
-            //    self.orderMoves(moves.items);
+            .MemCpy => {
+                var moves = std.ArrayList(Move).init(tmp.arena.allocator());
+                for (instr.dataDeps(), 0..) |arg, i| {
+                    const dst, const src: Reg = .{ Reg.system_v.args[i], self.getReg(arg) };
+                    if (!std.meta.eql(dst, src)) moves.append(.{ dst, src, 0 }) catch unreachable;
+                }
+                self.orderMoves(moves.items);
 
-            //    const opcode = 0xE8;
-            //    try self.out.code.append(self.gpa, opcode);
-            //    const slot = &self.memcpy;
-            //    try self.out.importSym(self.gpa, slot, "memcpy", .func);
-            //    try self.out.addReloc(self.gpa, slot, 4, -4);
-            //    try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
-            //},
-            //.MachMove => {},
-            //.Phi => {},
-            //.GlobalAddr => {
-            //    self.emitBinOpMemDeferOff(.lea, .rbp, self.getReg(instr));
-            //    const slot = try utils.ensureSlot(&self.global_map, self.gpa, instr.extra(.GlobalAddr).id);
-            //    try self.out.addReloc(self.gpa, slot, 4, -4);
-            //    try self.out.code.appendNTimes(self.gpa, 0, 4);
-            //},
-            //.Local => {
-            //    self.emitBinOp(.mov, self.getReg(instr), .rsp);
-            //    self.emitImmBinOp(.addimm, self.getReg(instr), @intCast(instr.extra(.Local).*));
-            //},
-            //.Load => {
-            //    std.debug.assert(instr.data_type.size() == 8);
+                const opcode = 0xE8;
+                try self.out.code.append(self.gpa, opcode);
+                const slot = &self.memcpy;
+                try self.out.importSym(self.gpa, slot, "memcpy", .func);
+                try self.out.addReloc(self.gpa, slot, 4, -4);
+                try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
+            },
+            .MachMove => {},
+            .Phi => {},
+            .GlobalAddr => {
+                self.req = .{
+                    .mnemonic = zydis.ZYDIS_MNEMONIC_LEA,
+                    .machine_mode = zydis.ZYDIS_MACHINE_MODE_LONG_64,
+                    .operand_count = 2,
+                };
+                self.len = @sizeOf(@TypeOf(self.buf));
+                self.req.operands[0] = self.getReg(instr).asZydisOp(8);
+                self.req.operands[1] = .{
+                    .type = zydis.ZYDIS_OPERAND_TYPE_MEMORY,
+                    .mem = .{
+                        .base = zydis.ZYDIS_REGISTER_RIP,
+                        .size = 8,
+                    },
+                };
+                const status = zydis.ZydisEncoderEncodeInstruction(&self.req, &self.buf, &self.len);
+                if (zydis.ZYAN_FAILED(status) != 0) {
+                    std.debug.print("{x}\n", .{status});
+                    unreachable;
+                }
+                try self.out.code.appendSlice(self.gpa, self.buf[0 .. self.len - 4]);
 
-            //    const dst = self.getReg(instr);
-            //    const bse = self.getReg(instr.inputs()[2]);
+                const slot = try utils.ensureSlot(&self.global_map, self.gpa, instr.extra(.GlobalAddr).id);
+                try self.out.addReloc(self.gpa, slot, 4, -4);
 
-            //    const offset: u32 = 0;
+                try self.out.code.appendSlice(self.gpa, self.buf[self.len - 4 .. self.len]);
+            },
+            .Local => {
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), Reg.rsp });
+                self.emitInstr(
+                    zydis.ZYDIS_MNEMONIC_ADD,
+                    .{ self.getReg(instr), instr.extra(.Local).* },
+                );
+            },
+            .Load => {
+                std.debug.assert(instr.data_type.size() == 8);
 
-            //    self.emitBinOpMem(.movmr, bse, dst, offset);
-            //},
-            //.Store => {
-            //    std.debug.assert(instr.data_type.size() == 8);
+                const dst = self.getReg(instr);
+                const bse = self.getReg(instr.inputs()[2]);
 
-            //    const dst = self.getReg(instr.inputs()[2]);
-            //    const vl = self.getReg(instr.inputs()[3]);
+                const offset: u32 = 0;
 
-            //    const offset: u32 = 0;
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
+                    dst,
+                    BRegOff{ bse, offset, 8 },
+                });
+            },
+            .Store => {
+                std.debug.assert(instr.data_type.size() == 8);
 
-            //    self.emitBinOpMem(.mov, dst, vl, offset);
-            //},
-            //.Call => {
-            //    const call = instr.extra(.Call);
+                const dst = self.getReg(instr.inputs()[2]);
+                const vl = self.getReg(instr.inputs()[3]);
 
-            //    var moves = std.ArrayList(Move).init(tmp.arena.allocator());
-            //    for (instr.dataDeps(), 0..) |arg, i| {
-            //        const dst, const src: Reg = .{ Reg.system_v.args[i], self.getReg(arg) };
-            //        if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
-            //    }
-            //    self.orderMoves(moves.items);
+                const offset: u32 = 0;
 
-            //    const opcode = 0xE8;
-            //    try self.out.code.append(self.gpa, opcode);
-            //    const slot = try utils.ensureSlot(&self.func_map, self.gpa, call.id);
-            //    try self.out.addReloc(self.gpa, slot, 4, -4);
-            //    try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ BRegOff{ dst, offset, 8 }, vl });
+            },
+            .Call => {
+                const call = instr.extra(.Call);
 
-            //    const cend = for (instr.outputs()) |o| {
-            //        if (o.kind == .CallEnd) break o;
-            //    } else unreachable;
-            //    moves.items.len = 0;
-            //    for (cend.outputs()) |r| {
-            //        if (r.kind == .Ret) {
-            //            const dst: Reg, const src = .{ self.getReg(r), Reg.rax };
-            //            if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
-            //        }
-            //    }
-            //    self.orderMoves(moves.items);
-            //},
-            //.Arg => {},
-            //.Ret => {},
-            //.Mem => {},
-            //.Never => {},
-            //.Trap => {
-            //    switch (instr.extra(.Trap).code) {
-            //        graph.infinite_loop_trap => return,
-            //        0 => try self.out.code.appendSlice(self.gpa, &.{ 0x0F, 0x0B }),
-            //        else => unreachable,
-            //    }
-            //},
+                var moves = std.ArrayList(Move).init(tmp.arena.allocator());
+                for (instr.dataDeps(), 0..) |arg, i| {
+                    const dst, const src: Reg = .{ Reg.system_v.args[i], self.getReg(arg) };
+                    if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
+                }
+                self.orderMoves(moves.items);
+
+                const opcode = 0xE8;
+                try self.out.code.append(self.gpa, opcode);
+                const slot = try utils.ensureSlot(&self.func_map, self.gpa, call.id);
+                try self.out.addReloc(self.gpa, slot, 4, -4);
+                try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
+
+                const cend = for (instr.outputs()) |o| {
+                    if (o.kind == .CallEnd) break o;
+                } else unreachable;
+                moves.items.len = 0;
+                for (cend.outputs()) |r| {
+                    if (r.kind == .Ret) {
+                        const dst: Reg, const src = .{ self.getReg(r), Reg.rax };
+                        if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
+                    }
+                }
+                self.orderMoves(moves.items);
+            },
+            .Arg => {},
+            .Ret => {},
+            .Mem => {},
+            .Never => {},
+            .Trap => {
+                switch (instr.extra(.Trap).code) {
+                    graph.infinite_loop_trap => return,
+                    0 => self.emitInstr(zydis.ZYDIS_MNEMONIC_UD2, .{}),
+                    else => unreachable,
+                }
+            },
             .Return => {
                 for (instr.dataDeps()[0..self.ret_count]) |inp| {
                     const src = self.getReg(inp);
                     if (src != .rax) self.emitInstr(
-                        8,
                         zydis.ZYDIS_MNEMONIC_MOV,
                         .{ Reg.rax, src },
                     );
@@ -445,121 +474,101 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
 
                 continue;
             },
-            //.BinOp => {
-            //    const op = instr.extra(.BinOp).*;
-            //    const dst = self.getReg(instr);
-            //    const lhs = self.getReg(instr.inputs()[1]);
-            //    const rhs = self.getReg(instr.inputs()[2]);
+            .BinOp => {
+                const op = instr.extra(.BinOp).*;
+                const dst = self.getReg(instr);
+                const lhs = self.getReg(instr.inputs()[1]);
+                const rhs = self.getReg(instr.inputs()[2]);
 
-            //    switch (op) {
-            //        .iadd => {
-            //            if (dst != lhs) self.emitBinOp(.mov, dst, lhs);
-            //            self.emitBinOp(.add, dst, rhs);
-            //        },
-            //        .isub => {
-            //            if (dst != lhs) self.emitBinOp(.mov, dst, lhs);
-            //            self.emitBinOp(.sub, dst, rhs);
-            //        },
-            //        .imul => {
-            //            if (dst != lhs) self.emitBinOp(.mov, dst, lhs);
-            //            try self.out.code.appendSlice(self.gpa, &.{
-            //                rex(@intFromEnum(rhs), @intFromEnum(dst)),
-            //                0x0f,
-            //                0xaf,
-            //                modrm(0b11, @intFromEnum(rhs), @intFromEnum(dst)),
-            //            });
-            //        },
-            //        .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => |t| {
-            //            self.emitBinOp(.cmp, lhs, rhs);
+                switch (op) {
+                    .iadd, .isub, .imul => {
+                        if (dst != lhs) {
+                            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ dst, lhs });
+                        }
+                    },
+                    else => {},
+                }
 
-            //            const opcode_2: u8 = switch (t) {
-            //                .eq => 0x94,
-            //                .ne => 0x95,
-            //                .ult => 0x9F,
-            //                .ule => 0x9D,
-            //                .ugt => 0x9C,
-            //                .uge => 0x9E,
-            //                .slt => 0x92,
-            //                .sle => 0x96,
-            //                .sgt => 0x97,
-            //                .sge => 0x93,
-            //                else => unreachable,
-            //            };
+                const mnemonic: c_uint = switch (op) {
+                    .iadd => zydis.ZYDIS_MNEMONIC_ADD,
+                    .isub => zydis.ZYDIS_MNEMONIC_SUB,
+                    .imul => zydis.ZYDIS_MNEMONIC_IMUL,
 
-            //            // set(opcode_2) dstl
-            //            try self.out.code.appendSlice(self.gpa, &.{
-            //                rex(@intFromEnum(dst), 0),
-            //                0x0f,
-            //                opcode_2,
-            //                modrm(0b11, @intFromEnum(dst), 0),
-            //            });
+                    .eq => zydis.ZYDIS_MNEMONIC_SETZ,
+                    .ne => zydis.ZYDIS_MNEMONIC_SETNZ,
 
-            //            // movzx dst, dstl
-            //            try self.out.code.appendSlice(self.gpa, &.{
-            //                rex(@intFromEnum(dst), @intFromEnum(dst)),
-            //                0x0f,
-            //                0xb6,
-            //                modrm(0b11, @intFromEnum(dst), @intFromEnum(dst)),
-            //            });
-            //        },
-            //        else => {
-            //            std.debug.panic("{any}", .{instr});
-            //        },
-            //    }
-            //},
-            //.If => {
-            //    const cond = self.getReg(instr.inputs()[1]);
-            //    self.emitBinOp(.@"test", cond, cond);
-            //    self.local_relocs.appendAssumeCapacity(.{
-            //        .dest = instr.outputs()[1].schedule,
-            //        .offset = @intCast(self.out.code.items.len),
-            //        .class = .rel32,
-            //        .off = 2,
-            //    });
-            //    // je 0
-            //    try self.out.code.appendSlice(self.gpa, &.{ 0x0F, 0x84, 0, 0, 0, 0 });
-            //},
-            //.Jmp => if (instr.outputs()[0].kind == .Region or instr.outputs()[0].kind == .Loop) {
-            //    const idx = std.mem.indexOfScalar(?*Func.Node, instr.outputs()[0].inputs(), instr).? + 1;
+                    .ult => zydis.ZYDIS_MNEMONIC_SETB,
+                    .ule => zydis.ZYDIS_MNEMONIC_SETBE,
+                    .ugt => zydis.ZYDIS_MNEMONIC_SETNBE,
+                    .uge => zydis.ZYDIS_MNEMONIC_SETNB,
 
-            //    var moves = std.ArrayList(Move).init(tmp.arena.allocator());
-            //    for (instr.outputs()[0].outputs()) |o| {
-            //        if (o.isDataPhi()) {
-            //            std.debug.assert(o.inputs()[idx].?.kind == .MachMove);
-            //            const dst, const src = .{ self.getReg(o), self.getReg(o.inputs()[idx].?.inputs()[1]) };
-            //            if (dst != src) try moves.append(.{ dst, src, 0 });
-            //        }
-            //    }
+                    .slt => zydis.ZYDIS_MNEMONIC_SETL,
+                    .sle => zydis.ZYDIS_MNEMONIC_SETLE,
+                    .sgt => zydis.ZYDIS_MNEMONIC_SETNLE,
+                    .sge => zydis.ZYDIS_MNEMONIC_SETNL,
 
-            //    self.orderMoves(moves.items);
-            //},
-            //.UnOp => {
-            //    const op = instr.extra(.UnOp).*;
-            //    const dst = self.getReg(instr);
-            //    const src = self.getReg(instr.inputs()[1]);
+                    else => unreachable,
+                };
 
-            //    switch (op) {
-            //        .uext => {
-            //            if (dst != src) self.emitBinOp(.mov, dst, src);
-            //        },
-            //        .sext => {
-            //            if (dst != src) self.emitBinOp(.mov, dst, src);
-            //        },
-            //        else => {
-            //            std.debug.panic("{any}", .{instr});
-            //        },
-            //    }
-            //},
+                switch (op) {
+                    .iadd, .isub, .imul => {
+                        self.emitInstr(mnemonic, .{ dst, rhs });
+                    },
+                    .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => {
+                        self.emitInstr(zydis.ZYDIS_MNEMONIC_CMP, .{ lhs, rhs });
+                        self.emitInstr(mnemonic, .{SReg{ dst, 1 }});
+                        self.emitInstr(zydis.ZYDIS_MNEMONIC_MOVZX, .{ dst, SReg{ dst, 1 } });
+                    },
+                    else => unreachable,
+                }
+            },
+            .If => {
+                const cond = self.getReg(instr.inputs()[1]);
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_TEST, .{ cond, cond });
+                self.local_relocs.appendAssumeCapacity(.{
+                    .dest = instr.outputs()[1].schedule,
+                    .offset = @intCast(self.out.code.items.len),
+                    .class = .rel32,
+                    .off = 2,
+                });
+                // je 0
+                try self.out.code.appendSlice(self.gpa, &.{ 0x0F, 0x84, 0, 0, 0, 0 });
+            },
+            .Jmp => if (instr.outputs()[0].kind == .Region or instr.outputs()[0].kind == .Loop) {
+                const idx = std.mem.indexOfScalar(?*Func.Node, instr.outputs()[0].inputs(), instr).? + 1;
+
+                var moves = std.ArrayList(Move).init(tmp.arena.allocator());
+                for (instr.outputs()[0].outputs()) |o| {
+                    if (o.isDataPhi()) {
+                        std.debug.assert(o.inputs()[idx].?.kind == .MachMove);
+                        const dst, const src = .{ self.getReg(o), self.getReg(o.inputs()[idx].?.inputs()[1]) };
+                        if (dst != src) try moves.append(.{ dst, src, 0 });
+                    }
+                }
+
+                self.orderMoves(moves.items);
+            },
+            .UnOp => {
+                const op = instr.extra(.UnOp).*;
+                const dst = self.getReg(instr);
+                const src = self.getReg(instr.inputs()[1]);
+
+                switch (op) {
+                    .sext, .uext => {
+                        if (dst != src) self.emitInstr(
+                            zydis.ZYDIS_MNEMONIC_MOV,
+                            .{ dst, src },
+                        );
+                    },
+                    else => {
+                        std.debug.panic("{any}", .{instr});
+                    },
+                }
+            },
             else => {
                 std.debug.panic("{any}", .{instr});
             },
         }
-
-        if (zydis.ZYAN_FAILED(zydis.ZydisEncoderEncodeInstruction(&req, &buf, &len)) != 0) {
-            unreachable;
-        }
-
-        try self.out.code.appendSlice(self.gpa, buf[0..len]);
     }
 }
 
@@ -653,6 +662,8 @@ pub fn run(_: *X86_64, env: Mach.RunEnv) !usize {
     if (res != .Exited) {
         if (res.Signal == 4) {
             return error.Unreachable;
+        } else if (res.Signal == 11) {
+            return error.Fucked;
         } else std.debug.panic("{}\n", .{res});
     }
     return res.Exited;

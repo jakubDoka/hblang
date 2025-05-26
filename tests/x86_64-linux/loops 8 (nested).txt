@@ -6,40 +6,36 @@ Disassembly of section .text:
 0000000000000000 <main>:
    0:	53                   	push   rbx
    1:	55                   	push   rbp
-   2:	48 b8 00 00 00 00 00 	movabs rax,0x0
-   9:	00 00 00 
-   c:	48 b9 01 00 00 00 00 	movabs rcx,0x1
-  13:	00 00 00 
-  16:	48 ba 0a 00 00 00 00 	movabs rdx,0xa
-  1d:	00 00 00 
-  20:	48 bb 09 00 00 00 00 	movabs rbx,0x9
-  27:	00 00 00 
-  2a:	48 89 c5             	mov    rbp,rax
-  2d:	48 89 c6             	mov    rsi,rax
-  30:	48 3b d5             	cmp    rdx,rbp
-  33:	48 0f 94 c7          	rex.W sete dil
-  37:	48 0f b6 ff          	movzx  rdi,dil
-  3b:	48 85 ff             	test   rdi,rdi
-  3e:	0f 84 06 00 00 00    	je     4a <main+0x4a>
-  44:	48 89 f0             	mov    rax,rsi
-  47:	5d                   	pop    rbp
-  48:	5b                   	pop    rbx
-  49:	c3                   	ret
-  4a:	48 01 cd             	add    rbp,rcx
-  4d:	49 89 f0             	mov    r8,rsi
-  50:	48 89 c6             	mov    rsi,rax
-  53:	48 89 cf             	mov    rdi,rcx
-  56:	49 89 c1             	mov    r9,rax
-  59:	48 3b de             	cmp    rbx,rsi
-  5c:	49 0f 94 c2          	rex.WB sete r10b
-  60:	4d 0f b6 d2          	movzx  r10,r10b
-  64:	4d 85 d2             	test   r10,r10
-  67:	0f 84 08 00 00 00    	je     75 <main+0x75>
-  6d:	4c 89 c6             	mov    rsi,r8
-  70:	e9 bb ff ff ff       	jmp    30 <main+0x30>
-  75:	4d 89 c8             	mov    r8,r9
-  78:	49 01 f8             	add    r8,rdi
-  7b:	48 01 ce             	add    rsi,rcx
-  7e:	49 89 f9             	mov    r9,rdi
-  81:	4c 89 c7             	mov    rdi,r8
-  84:	e9 d0 ff ff ff       	jmp    59 <main+0x59>
+   2:	48 c7 c0 00 00 00 00 	mov    rax,0x0
+   9:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
+  10:	48 c7 c2 0a 00 00 00 	mov    rdx,0xa
+  17:	48 c7 c3 09 00 00 00 	mov    rbx,0x9
+  1e:	48 89 c5             	mov    rbp,rax
+  21:	48 89 c6             	mov    rsi,rax
+  24:	48 39 d5             	cmp    rbp,rdx
+  27:	40 0f 94 c7          	sete   dil
+  2b:	48 0f b6 ff          	movzx  rdi,dil
+  2f:	48 85 ff             	test   rdi,rdi
+  32:	0f 84 06 00 00 00    	je     3e <main+0x3e>
+  38:	48 89 f0             	mov    rax,rsi
+  3b:	5d                   	pop    rbp
+  3c:	5b                   	pop    rbx
+  3d:	c3                   	ret
+  3e:	48 01 cd             	add    rbp,rcx
+  41:	49 89 f0             	mov    r8,rsi
+  44:	48 89 c6             	mov    rsi,rax
+  47:	48 89 cf             	mov    rdi,rcx
+  4a:	49 89 c1             	mov    r9,rax
+  4d:	48 39 de             	cmp    rsi,rbx
+  50:	41 0f 94 c2          	sete   r10b
+  54:	4d 0f b6 d2          	movzx  r10,r10b
+  58:	4d 85 d2             	test   r10,r10
+  5b:	0f 84 08 00 00 00    	je     69 <main+0x69>
+  61:	4c 89 c6             	mov    rsi,r8
+  64:	e9 bb ff ff ff       	jmp    24 <main+0x24>
+  69:	4d 89 c8             	mov    r8,r9
+  6c:	49 01 f8             	add    r8,rdi
+  6f:	48 01 ce             	add    rsi,rcx
+  72:	49 89 f9             	mov    r9,rdi
+  75:	4c 89 c7             	mov    rdi,r8
+  78:	e9 d0 ff ff ff       	jmp    4d <main+0x4d>

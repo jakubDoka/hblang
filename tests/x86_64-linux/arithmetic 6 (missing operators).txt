@@ -4,6 +4,5 @@ arithmetic 6 (missing operators).o:     file format elf64-x86-64
 Disassembly of section .text:
 
 0000000000000000 <main>:
-   0:	48 b8 00 00 00 00 00 	movabs rax,0x0
-   7:	00 00 00 
-   a:	c3                   	ret
+   0:	48 c7 c0 00 00 00 00 	mov    rax,0x0
+   7:	c3                   	ret

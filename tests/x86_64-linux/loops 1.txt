@@ -7,31 +7,28 @@ Disassembly of section .text:
    0:	53                   	push   rbx
    1:	55                   	push   rbp
    2:	48 89 f8             	mov    rax,rdi
-   5:	48 b9 00 00 00 00 00 	movabs rcx,0x0
-   c:	00 00 00 
-   f:	48 ba 01 00 00 00 00 	movabs rdx,0x1
-  16:	00 00 00 
-  19:	48 89 d3             	mov    rbx,rdx
-  1c:	48 89 cd             	mov    rbp,rcx
-  1f:	48 3b c8             	cmp    rcx,rax
-  22:	48 0f 94 c6          	rex.W sete sil
-  26:	48 0f b6 f6          	movzx  rsi,sil
-  2a:	48 85 f6             	test   rsi,rsi
-  2d:	0f 84 06 00 00 00    	je     39 <"loops 1".fib+0x39>
-  33:	48 89 e8             	mov    rax,rbp
-  36:	5d                   	pop    rbp
-  37:	5b                   	pop    rbx
-  38:	c3                   	ret
-  39:	48 01 dd             	add    rbp,rbx
-  3c:	48 29 d0             	sub    rax,rdx
-  3f:	48 87 eb             	xchg   rbx,rbp
-  42:	e9 d8 ff ff ff       	jmp    1f <"loops 1".fib+0x1f>
+   5:	48 c7 c1 00 00 00 00 	mov    rcx,0x0
+   c:	48 c7 c2 01 00 00 00 	mov    rdx,0x1
+  13:	48 89 d3             	mov    rbx,rdx
+  16:	48 89 cd             	mov    rbp,rcx
+  19:	48 39 c8             	cmp    rax,rcx
+  1c:	40 0f 94 c6          	sete   sil
+  20:	48 0f b6 f6          	movzx  rsi,sil
+  24:	48 85 f6             	test   rsi,rsi
+  27:	0f 84 06 00 00 00    	je     33 <"loops 1".fib+0x33>
+  2d:	48 89 e8             	mov    rax,rbp
+  30:	5d                   	pop    rbp
+  31:	5b                   	pop    rbx
+  32:	c3                   	ret
+  33:	48 01 dd             	add    rbp,rbx
+  36:	48 29 d0             	sub    rax,rdx
+  39:	48 87 eb             	xchg   rbx,rbp
+  3c:	e9 d8 ff ff ff       	jmp    19 <"loops 1".fib+0x19>
 
-0000000000000047 <main>:
-  47:	53                   	push   rbx
-  48:	48 bb 0a 00 00 00 00 	movabs rbx,0xa
-  4f:	00 00 00 
-  52:	48 89 df             	mov    rdi,rbx
-  55:	e8 00 00 00 00       	call   5a <main+0x13>
-  5a:	5b                   	pop    rbx
-  5b:	c3                   	ret
+0000000000000041 <main>:
+  41:	53                   	push   rbx
+  42:	48 c7 c3 0a 00 00 00 	mov    rbx,0xa
+  49:	48 89 df             	mov    rdi,rbx
+  4c:	e8 00 00 00 00       	call   51 <main+0x10>
+  51:	5b                   	pop    rbx
+  52:	c3                   	ret

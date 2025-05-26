@@ -4,21 +4,17 @@ literals 1.o:     file format elf64-x86-64
 Disassembly of section .text:
 
 0000000000000000 <main>:
-   0:	48 b8 00 00 00 00 00 	movabs rax,0x0
-   7:	00 00 00 
-   a:	48 85 c0             	test   rax,rax
-   d:	0f 84 0f 00 00 00    	je     22 <main+0x22>
-  13:	48 b8 10 00 00 00 00 	movabs rax,0x10
-  1a:	00 00 00 
-  1d:	e9 13 00 00 00       	jmp    35 <main+0x35>
-  22:	48 85 c0             	test   rax,rax
-  25:	0f 84 0f 00 00 00    	je     3a <main+0x3a>
-  2b:	48 b8 08 00 00 00 00 	movabs rax,0x8
-  32:	00 00 00 
-  35:	e9 13 00 00 00       	jmp    4d <main+0x4d>
-  3a:	48 85 c0             	test   rax,rax
-  3d:	0f 84 0f 00 00 00    	je     52 <main+0x52>
-  43:	48 b8 02 00 00 00 00 	movabs rax,0x2
-  4a:	00 00 00 
-  4d:	e9 00 00 00 00       	jmp    52 <main+0x52>
-  52:	c3                   	ret
+   0:	48 c7 c0 00 00 00 00 	mov    rax,0x0
+   7:	48 85 c0             	test   rax,rax
+   a:	0f 84 0c 00 00 00    	je     1c <main+0x1c>
+  10:	48 c7 c0 10 00 00 00 	mov    rax,0x10
+  17:	e9 10 00 00 00       	jmp    2c <main+0x2c>
+  1c:	48 85 c0             	test   rax,rax
+  1f:	0f 84 0c 00 00 00    	je     31 <main+0x31>
+  25:	48 c7 c0 08 00 00 00 	mov    rax,0x8
+  2c:	e9 10 00 00 00       	jmp    41 <main+0x41>
+  31:	48 85 c0             	test   rax,rax
+  34:	0f 84 0c 00 00 00    	je     46 <main+0x46>
+  3a:	48 c7 c0 02 00 00 00 	mov    rax,0x2
+  41:	e9 00 00 00 00       	jmp    46 <main+0x46>
+  46:	c3                   	ret

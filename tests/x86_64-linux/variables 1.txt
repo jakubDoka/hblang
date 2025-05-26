@@ -4,12 +4,10 @@ variables 1.o:     file format elf64-x86-64
 Disassembly of section .text:
 
 0000000000000000 <main>:
-   0:	48 b8 01 00 00 00 00 	movabs rax,0x1
-   7:	00 00 00 
-   a:	48 b9 02 00 00 00 00 	movabs rcx,0x2
-  11:	00 00 00 
-  14:	48 89 c2             	mov    rdx,rax
-  17:	48 01 c2             	add    rdx,rax
-  1a:	48 89 d0             	mov    rax,rdx
-  1d:	48 29 c8             	sub    rax,rcx
-  20:	c3                   	ret
+   0:	48 c7 c0 01 00 00 00 	mov    rax,0x1
+   7:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+   e:	48 89 c2             	mov    rdx,rax
+  11:	48 01 c2             	add    rdx,rax
+  14:	48 89 d0             	mov    rax,rdx
+  17:	48 29 c8             	sub    rax,rcx
+  1a:	c3                   	ret

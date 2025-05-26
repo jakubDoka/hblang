@@ -11,7 +11,7 @@ pub fn build(b: *std.Build) !void {
         const m = b.addModule("zidis", .{
             .root_source_file = b.path("src/zydis.zig"),
             .target = target,
-            .optimize = optimize,
+            .optimize = .ReleaseFast,
             .link_libc = true,
         });
 

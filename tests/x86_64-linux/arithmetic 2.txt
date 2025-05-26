@@ -4,16 +4,14 @@ arithmetic 2.o:     file format elf64-x86-64
 Disassembly of section .text:
 
 0000000000000000 <main>:
-   0:	48 b8 00 00 00 00 00 	movabs rax,0x0
-   7:	00 00 00 
-   a:	48 b9 01 00 00 00 00 	movabs rcx,0x1
-  11:	00 00 00 
-  14:	48 89 c2             	mov    rdx,rax
+   0:	48 c7 c0 00 00 00 00 	mov    rax,0x0
+   7:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
+   e:	48 89 c2             	mov    rdx,rax
+  11:	48 01 ca             	add    rdx,rcx
+  14:	48 29 c8             	sub    rax,rcx
   17:	48 01 ca             	add    rdx,rcx
   1a:	48 29 c8             	sub    rax,rcx
-  1d:	48 01 ca             	add    rdx,rcx
-  20:	48 29 c8             	sub    rax,rcx
-  23:	48 89 d1             	mov    rcx,rdx
-  26:	48 01 c1             	add    rcx,rax
-  29:	48 89 c8             	mov    rax,rcx
-  2c:	c3                   	ret
+  1d:	48 89 d1             	mov    rcx,rdx
+  20:	48 01 c1             	add    rcx,rax
+  23:	48 89 c8             	mov    rax,rcx
+  26:	c3                   	ret
