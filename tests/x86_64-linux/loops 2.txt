@@ -6,42 +6,46 @@ Disassembly of section .text:
 0000000000000000 <"loops 2".square>:
    0:	53                   	push   rbx
    1:	55                   	push   rbp
-   2:	48 89 f8             	mov    rax,rdi
-   5:	48 c7 c1 00 00 00 00 	mov    rcx,0x0
-   c:	48 c7 c2 01 00 00 00 	mov    rdx,0x1
-  13:	48 89 cb             	mov    rbx,rcx
-  16:	48 89 cd             	mov    rbp,rcx
-  19:	48 39 c3             	cmp    rbx,rax
-  1c:	40 0f 94 c6          	sete   sil
-  20:	48 0f b6 f6          	movzx  rsi,sil
-  24:	48 85 f6             	test   rsi,rsi
-  27:	0f 84 06 00 00 00    	je     33 <"loops 2".square+0x33>
-  2d:	48 89 e8             	mov    rax,rbp
-  30:	5d                   	pop    rbp
-  31:	5b                   	pop    rbx
-  32:	c3                   	ret
-  33:	48 89 de             	mov    rsi,rbx
-  36:	48 01 d6             	add    rsi,rdx
-  39:	48 89 ef             	mov    rdi,rbp
-  3c:	48 89 cd             	mov    rbp,rcx
-  3f:	48 39 c5             	cmp    rbp,rax
-  42:	41 0f 94 c0          	sete   r8b
-  46:	4d 0f b6 c0          	movzx  r8,r8b
-  4a:	4d 85 c0             	test   r8,r8
-  4d:	0f 84 0b 00 00 00    	je     5e <"loops 2".square+0x5e>
-  53:	48 89 f3             	mov    rbx,rsi
-  56:	48 89 fd             	mov    rbp,rdi
-  59:	e9 bb ff ff ff       	jmp    19 <"loops 2".square+0x19>
-  5e:	49 89 e8             	mov    r8,rbp
-  61:	4c 0f af c3          	imul   r8,rbx
-  65:	48 01 d5             	add    rbp,rdx
-  68:	4c 01 c7             	add    rdi,r8
-  6b:	e9 cf ff ff ff       	jmp    3f <"loops 2".square+0x3f>
+   2:	41 57                	push   r15
+   4:	48 89 f8             	mov    rax,rdi
+   7:	48 c7 c1 00 00 00 00 	mov    rcx,0x0
+   e:	48 c7 c2 01 00 00 00 	mov    rdx,0x1
+  15:	48 89 cb             	mov    rbx,rcx
+  18:	48 89 cd             	mov    rbp,rcx
+  1b:	48 39 c3             	cmp    rbx,rax
+  1e:	40 0f 94 c6          	sete   sil
+  22:	48 0f b6 f6          	movzx  rsi,sil
+  26:	48 85 f6             	test   rsi,rsi
+  29:	0f 84 08 00 00 00    	je     37 <"loops 2".square+0x37>
+  2f:	48 89 e8             	mov    rax,rbp
+  32:	41 5f                	pop    r15
+  34:	5d                   	pop    rbp
+  35:	5b                   	pop    rbx
+  36:	c3                   	ret
+  37:	48 89 de             	mov    rsi,rbx
+  3a:	48 01 d6             	add    rsi,rdx
+  3d:	48 89 ef             	mov    rdi,rbp
+  40:	48 89 cd             	mov    rbp,rcx
+  43:	48 39 c5             	cmp    rbp,rax
+  46:	41 0f 94 c0          	sete   r8b
+  4a:	4d 0f b6 c0          	movzx  r8,r8b
+  4e:	4d 85 c0             	test   r8,r8
+  51:	0f 84 0b 00 00 00    	je     62 <"loops 2".square+0x62>
+  57:	48 89 f3             	mov    rbx,rsi
+  5a:	48 89 fd             	mov    rbp,rdi
+  5d:	e9 b9 ff ff ff       	jmp    1b <"loops 2".square+0x1b>
+  62:	49 89 e8             	mov    r8,rbp
+  65:	4c 0f af c3          	imul   r8,rbx
+  69:	48 01 d5             	add    rbp,rdx
+  6c:	4c 01 c7             	add    rdi,r8
+  6f:	e9 cf ff ff ff       	jmp    43 <"loops 2".square+0x43>
 
-0000000000000070 <main>:
-  70:	53                   	push   rbx
-  71:	48 c7 c3 03 00 00 00 	mov    rbx,0x3
-  78:	48 89 df             	mov    rdi,rbx
-  7b:	e8 00 00 00 00       	call   80 <main+0x10>
-  80:	5b                   	pop    rbx
-  81:	c3                   	ret
+0000000000000074 <main>:
+  74:	53                   	push   rbx
+  75:	41 57                	push   r15
+  77:	48 c7 c3 03 00 00 00 	mov    rbx,0x3
+  7e:	48 89 df             	mov    rdi,rbx
+  81:	e8 00 00 00 00       	call   86 <main+0x12>
+  86:	41 5f                	pop    r15
+  88:	5b                   	pop    rbx
+  89:	c3                   	ret

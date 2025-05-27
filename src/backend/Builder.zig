@@ -265,7 +265,7 @@ pub fn getScopeValueMulty(func: *Func, scope: *BuildNode, index: usize) *Func.No
             const initVal = getScopeValueMulty(func, loop, index);
             const items = getScopeValues(loop);
             if (!items[index].isLazyPhi(items[0])) {
-                const phi = func.addNode(.Phi, .top, &.{ items[0], initVal, null }, {});
+                const phi = func.addNode(.Phi, initVal.data_type, &.{ items[0], initVal, null }, {});
                 std.debug.assert(phi.isLazyPhi(items[0]));
                 func.setInputNoIntern(loop, index, phi);
             }
@@ -294,7 +294,7 @@ pub fn mergeScopes(
         if (lh == rh) continue;
         const thn = getScopeValueMulty(func, lhs, i);
         const els = getScopeValueMulty(func, rhs, i);
-        const phi = func.addNode(.Phi, .top, &.{ new_ctrl, thn, els }, {});
+        const phi = func.addNode(.Phi, thn.data_type.meet(els.data_type), &.{ new_ctrl, thn, els }, {});
         func.setInputNoIntern(rhs, i, phi);
     }
 
@@ -520,7 +520,7 @@ pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
         const new_mem = self.func.addNode(.Phi, .top, &.{ new_ctrl, inps[1], self.memory() }, {});
         self.func.setInputNoIntern(ret, 1, new_mem);
         for (inps[3..ret.input_ordered_len], values, 3..) |curr, next, vidx| {
-            const new_value = self.func.addNode(.Phi, .top, &.{ new_ctrl, curr, next }, {});
+            const new_value = self.func.addNode(.Phi, curr.?.data_type.meet(next.data_type), &.{ new_ctrl, curr, next }, {});
             self.func.setInputNoIntern(ret, vidx, new_value);
         }
     } else {

@@ -4,25 +4,31 @@ literals 2.o:     file format elf64-x86-64
 Disassembly of section .text:
 
 0000000000000000 <"literals 2".hex>:
-   0:	48 c7 c0 2d 00 00 00 	mov    rax,0x2d
-   7:	c3                   	ret
+   0:	41 57                	push   r15
+   2:	48 c7 c0 2d 00 00 00 	mov    rax,0x2d
+   9:	41 5f                	pop    r15
+   b:	c3                   	ret
 
-0000000000000008 <"literals 2".dec>:
-   8:	48 c7 c0 2d 00 00 00 	mov    rax,0x2d
-   f:	c3                   	ret
+000000000000000c <"literals 2".dec>:
+   c:	41 57                	push   r15
+   e:	48 c7 c0 2d 00 00 00 	mov    rax,0x2d
+  15:	41 5f                	pop    r15
+  17:	c3                   	ret
 
-0000000000000010 <main>:
-  10:	53                   	push   rbx
-  11:	e8 00 00 00 00       	call   16 <main+0x6>
-  16:	48 89 c3             	mov    rbx,rax
-  19:	e8 00 00 00 00       	call   1e <main+0xe>
-  1e:	48 39 c3             	cmp    rbx,rax
-  21:	0f 95 c1             	setne  cl
-  24:	48 0f b6 c9          	movzx  rcx,cl
-  28:	48 85 c9             	test   rcx,rcx
-  2b:	0f 84 0c 00 00 00    	je     3d <main+0x2d>
-  31:	48 c7 c0 01 00 00 00 	mov    rax,0x1
-  38:	e9 07 00 00 00       	jmp    44 <main+0x34>
-  3d:	48 c7 c0 00 00 00 00 	mov    rax,0x0
-  44:	5b                   	pop    rbx
-  45:	c3                   	ret
+0000000000000018 <main>:
+  18:	53                   	push   rbx
+  19:	41 57                	push   r15
+  1b:	e8 00 00 00 00       	call   20 <main+0x8>
+  20:	48 89 c3             	mov    rbx,rax
+  23:	e8 00 00 00 00       	call   28 <main+0x10>
+  28:	48 39 c3             	cmp    rbx,rax
+  2b:	0f 95 c1             	setne  cl
+  2e:	48 0f b6 c9          	movzx  rcx,cl
+  32:	48 85 c9             	test   rcx,rcx
+  35:	0f 84 0c 00 00 00    	je     47 <main+0x2f>
+  3b:	48 c7 c0 01 00 00 00 	mov    rax,0x1
+  42:	e9 07 00 00 00       	jmp    4e <main+0x36>
+  47:	48 c7 c0 00 00 00 00 	mov    rax,0x0
+  4e:	41 5f                	pop    r15
+  50:	5b                   	pop    rbx
+  51:	c3                   	ret

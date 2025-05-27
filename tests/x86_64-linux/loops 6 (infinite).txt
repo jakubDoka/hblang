@@ -4,9 +4,11 @@ loops 6 (infinite).o:     file format elf64-x86-64
 Disassembly of section .text:
 
 0000000000000000 <main>:
-   0:	48 c7 c0 01 00 00 00 	mov    rax,0x1
-   7:	48 85 c0             	test   rax,rax
-   a:	0f 84 05 00 00 00    	je     15 <main+0x15>
-  10:	e9 fb ff ff ff       	jmp    10 <main+0x10>
-  15:	48 c7 c0 00 00 00 00 	mov    rax,0x0
-  1c:	c3                   	ret
+   0:	41 57                	push   r15
+   2:	48 c7 c0 01 00 00 00 	mov    rax,0x1
+   9:	48 85 c0             	test   rax,rax
+   c:	0f 84 05 00 00 00    	je     17 <main+0x17>
+  12:	e9 fb ff ff ff       	jmp    12 <main+0x12>
+  17:	48 c7 c0 00 00 00 00 	mov    rax,0x0
+  1e:	41 5f                	pop    r15
+  20:	c3                   	ret

@@ -5,36 +5,40 @@ Disassembly of section .text:
 
 0000000000000000 <"pointers 2".swap>:
    0:	53                   	push   rbx
-   1:	48 89 f9             	mov    rcx,rdi
-   4:	48 89 f0             	mov    rax,rsi
-   7:	48 8b 10             	mov    rdx,QWORD PTR [rax]
-   a:	48 8b 19             	mov    rbx,QWORD PTR [rcx]
-   d:	48 89 18             	mov    QWORD PTR [rax],rbx
-  10:	48 89 11             	mov    QWORD PTR [rcx],rdx
-  13:	5b                   	pop    rbx
-  14:	c3                   	ret
+   1:	41 57                	push   r15
+   3:	48 89 f9             	mov    rcx,rdi
+   6:	48 89 f0             	mov    rax,rsi
+   9:	48 8b 10             	mov    rdx,QWORD PTR [rax]
+   c:	48 8b 19             	mov    rbx,QWORD PTR [rcx]
+   f:	48 89 18             	mov    QWORD PTR [rax],rbx
+  12:	48 89 11             	mov    QWORD PTR [rcx],rdx
+  15:	41 5f                	pop    r15
+  17:	5b                   	pop    rbx
+  18:	c3                   	ret
 
-0000000000000015 <main>:
-  15:	53                   	push   rbx
-  16:	55                   	push   rbp
-  17:	41 54                	push   r12
-  19:	48 83 ec 10          	sub    rsp,0x10
-  1d:	48 89 e3             	mov    rbx,rsp
-  20:	48 83 c3 00          	add    rbx,0x0
-  24:	48 c7 c5 01 00 00 00 	mov    rbp,0x1
-  2b:	48 89 2b             	mov    QWORD PTR [rbx],rbp
-  2e:	48 c7 c5 02 00 00 00 	mov    rbp,0x2
-  35:	49 89 e4             	mov    r12,rsp
-  38:	49 83 c4 08          	add    r12,0x8
-  3c:	49 89 2c 24          	mov    QWORD PTR [r12],rbp
-  40:	48 89 df             	mov    rdi,rbx
-  43:	4c 89 e6             	mov    rsi,r12
-  46:	e8 00 00 00 00       	call   4b <main+0x36>
-  4b:	48 8b 03             	mov    rax,QWORD PTR [rbx]
-  4e:	49 8b 0c 24          	mov    rcx,QWORD PTR [r12]
-  52:	48 29 c8             	sub    rax,rcx
-  55:	48 83 c4 10          	add    rsp,0x10
-  59:	41 5c                	pop    r12
-  5b:	5d                   	pop    rbp
-  5c:	5b                   	pop    rbx
-  5d:	c3                   	ret
+0000000000000019 <main>:
+  19:	53                   	push   rbx
+  1a:	55                   	push   rbp
+  1b:	41 54                	push   r12
+  1d:	41 57                	push   r15
+  1f:	48 83 ec 10          	sub    rsp,0x10
+  23:	48 89 e3             	mov    rbx,rsp
+  26:	48 83 c3 00          	add    rbx,0x0
+  2a:	48 c7 c5 01 00 00 00 	mov    rbp,0x1
+  31:	48 89 2b             	mov    QWORD PTR [rbx],rbp
+  34:	48 c7 c5 02 00 00 00 	mov    rbp,0x2
+  3b:	49 89 e4             	mov    r12,rsp
+  3e:	49 83 c4 08          	add    r12,0x8
+  42:	49 89 2c 24          	mov    QWORD PTR [r12],rbp
+  46:	48 89 df             	mov    rdi,rbx
+  49:	4c 89 e6             	mov    rsi,r12
+  4c:	e8 00 00 00 00       	call   51 <main+0x38>
+  51:	48 8b 03             	mov    rax,QWORD PTR [rbx]
+  54:	49 8b 0c 24          	mov    rcx,QWORD PTR [r12]
+  58:	48 29 c8             	sub    rax,rcx
+  5b:	48 83 c4 10          	add    rsp,0x10
+  5f:	41 5f                	pop    r15
+  61:	41 5c                	pop    r12
+  63:	5d                   	pop    rbp
+  64:	5b                   	pop    rbx
+  65:	c3                   	ret

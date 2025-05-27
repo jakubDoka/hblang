@@ -1,0 +1,88 @@
+structs 2.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <"structs 2".swap>:
+   0:	53                   	push   rbx
+   1:	55                   	push   rbp
+   2:	41 54                	push   r12
+   4:	41 55                	push   r13
+   6:	41 57                	push   r15
+   8:	48 83 ec 18          	sub    rsp,0x18
+   c:	48 89 fb             	mov    rbx,rdi
+   f:	48 89 f5             	mov    rbp,rsi
+  12:	49 c7 c4 18 00 00 00 	mov    r12,0x18
+  19:	49 89 e5             	mov    r13,rsp
+  1c:	49 83 c5 00          	add    r13,0x0
+  20:	4c 89 ef             	mov    rdi,r13
+  23:	48 89 de             	mov    rsi,rbx
+  26:	4c 89 e2             	mov    rdx,r12
+  29:	e8 00 00 00 00       	call   2e <"structs 2".swap+0x2e>
+  2e:	48 89 df             	mov    rdi,rbx
+  31:	48 89 ee             	mov    rsi,rbp
+  34:	4c 89 e2             	mov    rdx,r12
+  37:	e8 00 00 00 00       	call   3c <"structs 2".swap+0x3c>
+  3c:	48 89 ef             	mov    rdi,rbp
+  3f:	4c 89 ee             	mov    rsi,r13
+  42:	4c 89 e2             	mov    rdx,r12
+  45:	e8 00 00 00 00       	call   4a <"structs 2".swap+0x4a>
+  4a:	48 83 c4 18          	add    rsp,0x18
+  4e:	41 5f                	pop    r15
+  50:	41 5d                	pop    r13
+  52:	41 5c                	pop    r12
+  54:	5d                   	pop    rbp
+  55:	5b                   	pop    rbx
+  56:	c3                   	ret
+
+0000000000000057 <main>:
+  57:	53                   	push   rbx
+  58:	55                   	push   rbp
+  59:	41 54                	push   r12
+  5b:	41 55                	push   r13
+  5d:	41 56                	push   r14
+  5f:	41 57                	push   r15
+  61:	48 83 ec 48          	sub    rsp,0x48
+  65:	48 89 e3             	mov    rbx,rsp
+  68:	48 83 c3 18          	add    rbx,0x18
+  6c:	48 c7 c5 00 00 00 00 	mov    rbp,0x0
+  73:	48 89 2b             	mov    QWORD PTR [rbx],rbp
+  76:	49 c7 c4 10 00 00 00 	mov    r12,0x10
+  7d:	49 89 e5             	mov    r13,rsp
+  80:	49 83 c5 30          	add    r13,0x30
+  84:	49 c7 c6 08 00 00 00 	mov    r14,0x8
+  8b:	48 89 1c 24          	mov    QWORD PTR [rsp],rbx
+  8f:	4c 01 34 24          	add    QWORD PTR [rsp],r14
+  93:	4c 8b 3c 24          	mov    r15,QWORD PTR [rsp]
+  97:	49 89 2f             	mov    QWORD PTR [r15],rbp
+  9a:	48 89 5c 24 08       	mov    QWORD PTR [rsp+0x8],rbx
+  9f:	4c 01 64 24 08       	add    QWORD PTR [rsp+0x8],r12
+  a4:	4c 8b 7c 24 08       	mov    r15,QWORD PTR [rsp+0x8]
+  a9:	49 89 2f             	mov    QWORD PTR [r15],rbp
+  ac:	48 c7 c5 01 00 00 00 	mov    rbp,0x1
+  b3:	49 89 6d 00          	mov    QWORD PTR [r13+0x0],rbp
+  b7:	4c 89 6c 24 10       	mov    QWORD PTR [rsp+0x10],r13
+  bc:	4c 01 74 24 10       	add    QWORD PTR [rsp+0x10],r14
+  c1:	4c 8b 7c 24 10       	mov    r15,QWORD PTR [rsp+0x10]
+  c6:	49 89 2f             	mov    QWORD PTR [r15],rbp
+  c9:	4d 89 ee             	mov    r14,r13
+  cc:	4d 01 e6             	add    r14,r12
+  cf:	49 89 2e             	mov    QWORD PTR [r14],rbp
+  d2:	48 89 df             	mov    rdi,rbx
+  d5:	4c 89 ee             	mov    rsi,r13
+  d8:	e8 00 00 00 00       	call   dd <main+0x86>
+  dd:	48 8b 03             	mov    rax,QWORD PTR [rbx]
+  e0:	4c 8b 3c 24          	mov    r15,QWORD PTR [rsp]
+  e4:	49 8b 0f             	mov    rcx,QWORD PTR [r15]
+  e7:	4c 8b 7c 24 08       	mov    r15,QWORD PTR [rsp+0x8]
+  ec:	49 8b 17             	mov    rdx,QWORD PTR [r15]
+  ef:	48 01 c8             	add    rax,rcx
+  f2:	48 01 d0             	add    rax,rdx
+  f5:	48 83 c4 48          	add    rsp,0x48
+  f9:	41 5f                	pop    r15
+  fb:	41 5e                	pop    r14
+  fd:	41 5d                	pop    r13
+  ff:	41 5c                	pop    r12
+ 101:	5d                   	pop    rbp
+ 102:	5b                   	pop    rbx
+ 103:	c3                   	ret

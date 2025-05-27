@@ -71,7 +71,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
     }
 
     for (instrs, 0..) |*instr, i| {
-        if (instr.def.outputs().len != 0 and instr.def.kind != .MachMove and !instr.def.isStore() and
+        if (instr.def.outputs().len != 0 and instr.def.kind != .MachMove and (!instr.def.isStore() or instr.def.kind == .MemCpy) and
             instr.def.kind != .Mem and !instr.def.isCfg() and (instr.def.kind != .Phi or instr.def.isDataPhi()))
         {
             instr.defs.set(i);

@@ -1,0 +1,34 @@
+generic structs 2.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <"generic structs 2".Foo(F = uint).Bar(B = u8).init>:
+   0:	41 57                	push   r15
+   2:	48 c7 c0 01 00 00 00 	mov    rax,0x1
+   9:	41 5f                	pop    r15
+   b:	c3                   	ret
+
+000000000000000c <"generic structs 2".Foo(F = uint).Bar(B = u8).sub>:
+   c:	41 57                	push   r15
+   e:	48 89 f9             	mov    rcx,rdi
+  11:	48 89 f0             	mov    rax,rsi
+  14:	48 29 c1             	sub    rcx,rax
+  17:	48 89 c8             	mov    rax,rcx
+  1a:	41 5f                	pop    r15
+  1c:	c3                   	ret
+
+000000000000001d <main>:
+  1d:	53                   	push   rbx
+  1e:	55                   	push   rbp
+  1f:	41 57                	push   r15
+  21:	e8 00 00 00 00       	call   26 <main+0x9>
+  26:	48 89 c3             	mov    rbx,rax
+  29:	48 89 c5             	mov    rbp,rax
+  2c:	48 89 df             	mov    rdi,rbx
+  2f:	48 89 ee             	mov    rsi,rbp
+  32:	e8 00 00 00 00       	call   37 <main+0x1a>
+  37:	41 5f                	pop    r15
+  39:	5d                   	pop    rbp
+  3a:	5b                   	pop    rbx
+  3b:	c3                   	ret

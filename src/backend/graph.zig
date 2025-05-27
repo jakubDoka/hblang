@@ -927,7 +927,6 @@ pub fn Func(comptime MachNode: type) type {
 
         pub fn addNode(self: *Self, comptime kind: Kind, ty: DataType, inputs: []const ?*Node, extra: ClassFor(kind)) *Node {
             const node = self.addNodeUntyped(kind, ty, inputs, extra);
-            if (kind == .Phi) node.data_type = node.inputs()[1].?.data_type;
             return node;
         }
 

@@ -28,7 +28,12 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                             const initVal = resolve(func, loop.items, index);
 
                             if (!loop.items[index].?.Node.isLazyPhi(loop.ctrl)) {
-                                loop.items[index].? = .{ .Node = func.addNode(.Phi, .top, &.{ loop.ctrl, initVal, null }, {}) };
+                                loop.items[index].? = .{ .Node = func.addNode(
+                                    .Phi,
+                                    initVal.data_type,
+                                    &.{ loop.ctrl, initVal, null },
+                                    {},
+                                ) };
                             }
                         }
                         scope[index] = loop.items[index];

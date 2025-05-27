@@ -161,7 +161,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
                         std.debug.assert(o.inputs().len == 3);
                         const lhs = self.addNode(.MachMove, .top, &.{ null, o.inputs()[1].? }, {});
                         const rhs = self.addNode(.MachMove, .top, &.{ null, o.inputs()[2].? }, {});
-                        const new_phy = self.addNode(.Phi, .top, &.{ &n.base, lhs, rhs }, {});
+                        const new_phy = self.addNode(.Phi, o.data_type, &.{ &n.base, lhs, rhs }, {});
                         self.subsume(new_phy, o);
                     };
                 };

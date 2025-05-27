@@ -4,264 +4,276 @@ arithmetic 3.o:     file format elf64-x86-64
 Disassembly of section .text:
 
 0000000000000000 <"arithmetic 3".one>:
-   0:	48 c7 c0 01 00 00 00 	mov    rax,0x1
-   7:	c3                   	ret
+   0:	41 57                	push   r15
+   2:	48 c7 c0 01 00 00 00 	mov    rax,0x1
+   9:	41 5f                	pop    r15
+   b:	c3                   	ret
 
-0000000000000008 <"arithmetic 3".zero>:
-   8:	48 c7 c0 00 00 00 00 	mov    rax,0x0
-   f:	c3                   	ret
+000000000000000c <"arithmetic 3".zero>:
+   c:	41 57                	push   r15
+   e:	48 c7 c0 00 00 00 00 	mov    rax,0x0
+  15:	41 5f                	pop    r15
+  17:	c3                   	ret
 
-0000000000000010 <"arithmetic 3".cond>:
-  10:	48 89 f8             	mov    rax,rdi
-  13:	c3                   	ret
+0000000000000018 <"arithmetic 3".cond>:
+  18:	41 57                	push   r15
+  1a:	48 89 f8             	mov    rax,rdi
+  1d:	41 5f                	pop    r15
+  1f:	c3                   	ret
 
-0000000000000014 <"arithmetic 3".mne>:
-  14:	48 c7 c0 ff ff ff ff 	mov    rax,0xffffffffffffffff
-  1b:	c3                   	ret
+0000000000000020 <"arithmetic 3".mne>:
+  20:	41 57                	push   r15
+  22:	48 c7 c0 ff ff ff ff 	mov    rax,0xffffffffffffffff
+  29:	41 5f                	pop    r15
+  2b:	c3                   	ret
 
-000000000000001c <"arithmetic 3".mero>:
-  1c:	48 c7 c0 00 00 00 00 	mov    rax,0x0
-  23:	c3                   	ret
+000000000000002c <"arithmetic 3".mero>:
+  2c:	41 57                	push   r15
+  2e:	48 c7 c0 00 00 00 00 	mov    rax,0x0
+  35:	41 5f                	pop    r15
+  37:	c3                   	ret
 
-0000000000000024 <main>:
-  24:	53                   	push   rbx
-  25:	55                   	push   rbp
-  26:	41 54                	push   r12
-  28:	e8 00 00 00 00       	call   2d <main+0x9>
-  2d:	48 89 c3             	mov    rbx,rax
-  30:	e8 00 00 00 00       	call   35 <main+0x11>
-  35:	48 89 c5             	mov    rbp,rax
-  38:	48 39 eb             	cmp    rbx,rbp
-  3b:	41 0f 92 c4          	setb   r12b
-  3f:	4d 0f b6 e4          	movzx  r12,r12b
-  43:	4c 89 e7             	mov    rdi,r12
-  46:	e8 00 00 00 00       	call   4b <main+0x27>
-  4b:	49 89 c4             	mov    r12,rax
-  4e:	4d 85 e4             	test   r12,r12
-  51:	0f 84 0c 00 00 00    	je     63 <main+0x3f>
-  57:	48 c7 c0 01 00 00 00 	mov    rax,0x1
-  5e:	e9 26 00 00 00       	jmp    89 <main+0x65>
-  63:	48 39 db             	cmp    rbx,rbx
-  66:	41 0f 92 c4          	setb   r12b
-  6a:	4d 0f b6 e4          	movzx  r12,r12b
-  6e:	4c 89 e7             	mov    rdi,r12
-  71:	e8 00 00 00 00       	call   76 <main+0x52>
-  76:	49 89 c4             	mov    r12,rax
-  79:	4d 85 e4             	test   r12,r12
-  7c:	0f 84 0c 00 00 00    	je     8e <main+0x6a>
-  82:	48 c7 c0 02 00 00 00 	mov    rax,0x2
-  89:	e9 26 00 00 00       	jmp    b4 <main+0x90>
-  8e:	48 39 eb             	cmp    rbx,rbp
-  91:	41 0f 96 c4          	setbe  r12b
-  95:	4d 0f b6 e4          	movzx  r12,r12b
-  99:	4c 89 e7             	mov    rdi,r12
-  9c:	e8 00 00 00 00       	call   a1 <main+0x7d>
-  a1:	49 89 c4             	mov    r12,rax
-  a4:	4d 85 e4             	test   r12,r12
-  a7:	0f 84 0c 00 00 00    	je     b9 <main+0x95>
-  ad:	48 c7 c0 03 00 00 00 	mov    rax,0x3
-  b4:	e9 26 00 00 00       	jmp    df <main+0xbb>
-  b9:	48 39 dd             	cmp    rbp,rbx
-  bc:	41 0f 97 c4          	seta   r12b
-  c0:	4d 0f b6 e4          	movzx  r12,r12b
-  c4:	4c 89 e7             	mov    rdi,r12
-  c7:	e8 00 00 00 00       	call   cc <main+0xa8>
-  cc:	49 89 c4             	mov    r12,rax
-  cf:	4d 85 e4             	test   r12,r12
-  d2:	0f 84 0c 00 00 00    	je     e4 <main+0xc0>
-  d8:	48 c7 c0 04 00 00 00 	mov    rax,0x4
-  df:	e9 26 00 00 00       	jmp    10a <main+0xe6>
-  e4:	48 39 db             	cmp    rbx,rbx
-  e7:	41 0f 97 c4          	seta   r12b
-  eb:	4d 0f b6 e4          	movzx  r12,r12b
-  ef:	4c 89 e7             	mov    rdi,r12
-  f2:	e8 00 00 00 00       	call   f7 <main+0xd3>
-  f7:	49 89 c4             	mov    r12,rax
-  fa:	4d 85 e4             	test   r12,r12
-  fd:	0f 84 0c 00 00 00    	je     10f <main+0xeb>
- 103:	48 c7 c0 05 00 00 00 	mov    rax,0x5
- 10a:	e9 26 00 00 00       	jmp    135 <main+0x111>
- 10f:	48 39 dd             	cmp    rbp,rbx
- 112:	40 0f 93 c5          	setae  bpl
- 116:	48 0f b6 ed          	movzx  rbp,bpl
- 11a:	48 89 ef             	mov    rdi,rbp
- 11d:	e8 00 00 00 00       	call   122 <main+0xfe>
- 122:	48 89 c3             	mov    rbx,rax
- 125:	48 85 db             	test   rbx,rbx
- 128:	0f 84 0c 00 00 00    	je     13a <main+0x116>
- 12e:	48 c7 c0 06 00 00 00 	mov    rax,0x6
- 135:	e9 36 00 00 00       	jmp    170 <main+0x14c>
- 13a:	e8 00 00 00 00       	call   13f <main+0x11b>
- 13f:	48 89 c3             	mov    rbx,rax
- 142:	e8 00 00 00 00       	call   147 <main+0x123>
- 147:	48 89 c5             	mov    rbp,rax
- 14a:	48 39 eb             	cmp    rbx,rbp
- 14d:	41 0f 9f c4          	setg   r12b
- 151:	4d 0f b6 e4          	movzx  r12,r12b
- 155:	4c 89 e7             	mov    rdi,r12
- 158:	e8 00 00 00 00       	call   15d <main+0x139>
- 15d:	49 89 c4             	mov    r12,rax
- 160:	4d 85 e4             	test   r12,r12
- 163:	0f 84 0c 00 00 00    	je     175 <main+0x151>
- 169:	48 c7 c0 07 00 00 00 	mov    rax,0x7
- 170:	e9 26 00 00 00       	jmp    19b <main+0x177>
- 175:	48 39 db             	cmp    rbx,rbx
- 178:	41 0f 9f c4          	setg   r12b
- 17c:	4d 0f b6 e4          	movzx  r12,r12b
- 180:	4c 89 e7             	mov    rdi,r12
- 183:	e8 00 00 00 00       	call   188 <main+0x164>
- 188:	49 89 c4             	mov    r12,rax
- 18b:	4d 85 e4             	test   r12,r12
- 18e:	0f 84 0c 00 00 00    	je     1a0 <main+0x17c>
- 194:	48 c7 c0 08 00 00 00 	mov    rax,0x8
- 19b:	e9 26 00 00 00       	jmp    1c6 <main+0x1a2>
- 1a0:	48 39 eb             	cmp    rbx,rbp
- 1a3:	41 0f 9d c4          	setge  r12b
- 1a7:	4d 0f b6 e4          	movzx  r12,r12b
- 1ab:	4c 89 e7             	mov    rdi,r12
- 1ae:	e8 00 00 00 00       	call   1b3 <main+0x18f>
- 1b3:	49 89 c4             	mov    r12,rax
- 1b6:	4d 85 e4             	test   r12,r12
- 1b9:	0f 84 0c 00 00 00    	je     1cb <main+0x1a7>
- 1bf:	48 c7 c0 09 00 00 00 	mov    rax,0x9
- 1c6:	e9 26 00 00 00       	jmp    1f1 <main+0x1cd>
- 1cb:	48 39 dd             	cmp    rbp,rbx
- 1ce:	41 0f 9c c4          	setl   r12b
- 1d2:	4d 0f b6 e4          	movzx  r12,r12b
- 1d6:	4c 89 e7             	mov    rdi,r12
- 1d9:	e8 00 00 00 00       	call   1de <main+0x1ba>
- 1de:	49 89 c4             	mov    r12,rax
- 1e1:	4d 85 e4             	test   r12,r12
- 1e4:	0f 84 0c 00 00 00    	je     1f6 <main+0x1d2>
- 1ea:	48 c7 c0 0a 00 00 00 	mov    rax,0xa
- 1f1:	e9 26 00 00 00       	jmp    21c <main+0x1f8>
- 1f6:	48 39 db             	cmp    rbx,rbx
- 1f9:	41 0f 9c c4          	setl   r12b
- 1fd:	4d 0f b6 e4          	movzx  r12,r12b
- 201:	4c 89 e7             	mov    rdi,r12
- 204:	e8 00 00 00 00       	call   209 <main+0x1e5>
- 209:	49 89 c4             	mov    r12,rax
- 20c:	4d 85 e4             	test   r12,r12
- 20f:	0f 84 0c 00 00 00    	je     221 <main+0x1fd>
- 215:	48 c7 c0 0b 00 00 00 	mov    rax,0xb
- 21c:	e9 26 00 00 00       	jmp    247 <main+0x223>
- 221:	48 39 dd             	cmp    rbp,rbx
- 224:	40 0f 9e c5          	setle  bpl
- 228:	48 0f b6 ed          	movzx  rbp,bpl
- 22c:	48 89 ef             	mov    rdi,rbp
- 22f:	e8 00 00 00 00       	call   234 <main+0x210>
- 234:	48 89 c3             	mov    rbx,rax
- 237:	48 85 db             	test   rbx,rbx
- 23a:	0f 84 0c 00 00 00    	je     24c <main+0x228>
- 240:	48 c7 c0 0c 00 00 00 	mov    rax,0xc
- 247:	e9 2b 00 00 00       	jmp    277 <main+0x253>
- 24c:	e8 00 00 00 00       	call   251 <main+0x22d>
- 251:	48 89 c3             	mov    rbx,rax
- 254:	e8 00 00 00 00       	call   259 <main+0x235>
- 259:	48 89 c5             	mov    rbp,rax
- 25c:	48 39 eb             	cmp    rbx,rbp
- 25f:	41 0f 92 c4          	setb   r12b
- 263:	4d 0f b6 e4          	movzx  r12,r12b
- 267:	4d 85 e4             	test   r12,r12
- 26a:	0f 84 0c 00 00 00    	je     27c <main+0x258>
- 270:	48 c7 c0 0d 00 00 00 	mov    rax,0xd
- 277:	e9 1b 00 00 00       	jmp    297 <main+0x273>
- 27c:	48 39 db             	cmp    rbx,rbx
- 27f:	41 0f 92 c4          	setb   r12b
- 283:	4d 0f b6 e4          	movzx  r12,r12b
- 287:	4d 85 e4             	test   r12,r12
- 28a:	0f 84 0c 00 00 00    	je     29c <main+0x278>
- 290:	48 c7 c0 0e 00 00 00 	mov    rax,0xe
- 297:	e9 1b 00 00 00       	jmp    2b7 <main+0x293>
- 29c:	48 39 eb             	cmp    rbx,rbp
- 29f:	41 0f 96 c4          	setbe  r12b
- 2a3:	4d 0f b6 e4          	movzx  r12,r12b
- 2a7:	4d 85 e4             	test   r12,r12
- 2aa:	0f 84 0c 00 00 00    	je     2bc <main+0x298>
- 2b0:	48 c7 c0 0f 00 00 00 	mov    rax,0xf
- 2b7:	e9 1b 00 00 00       	jmp    2d7 <main+0x2b3>
- 2bc:	48 39 dd             	cmp    rbp,rbx
- 2bf:	41 0f 97 c4          	seta   r12b
- 2c3:	4d 0f b6 e4          	movzx  r12,r12b
- 2c7:	4d 85 e4             	test   r12,r12
- 2ca:	0f 84 0c 00 00 00    	je     2dc <main+0x2b8>
- 2d0:	48 c7 c0 10 00 00 00 	mov    rax,0x10
- 2d7:	e9 1b 00 00 00       	jmp    2f7 <main+0x2d3>
- 2dc:	48 39 db             	cmp    rbx,rbx
- 2df:	41 0f 97 c4          	seta   r12b
- 2e3:	4d 0f b6 e4          	movzx  r12,r12b
- 2e7:	4d 85 e4             	test   r12,r12
- 2ea:	0f 84 0c 00 00 00    	je     2fc <main+0x2d8>
- 2f0:	48 c7 c0 11 00 00 00 	mov    rax,0x11
- 2f7:	e9 1b 00 00 00       	jmp    317 <main+0x2f3>
- 2fc:	48 39 dd             	cmp    rbp,rbx
- 2ff:	40 0f 93 c5          	setae  bpl
- 303:	48 0f b6 ed          	movzx  rbp,bpl
- 307:	48 85 ed             	test   rbp,rbp
- 30a:	0f 84 0c 00 00 00    	je     31c <main+0x2f8>
- 310:	48 c7 c0 12 00 00 00 	mov    rax,0x12
- 317:	e9 27 00 00 00       	jmp    343 <main+0x31f>
- 31c:	e8 00 00 00 00       	call   321 <main+0x2fd>
- 321:	48 89 c3             	mov    rbx,rax
- 324:	e8 00 00 00 00       	call   329 <main+0x305>
- 329:	48 39 c3             	cmp    rbx,rax
- 32c:	0f 9f c1             	setg   cl
- 32f:	48 0f b6 c9          	movzx  rcx,cl
- 333:	48 85 c9             	test   rcx,rcx
- 336:	0f 84 0c 00 00 00    	je     348 <main+0x324>
- 33c:	48 c7 c0 13 00 00 00 	mov    rax,0x13
- 343:	e9 1a 00 00 00       	jmp    362 <main+0x33e>
- 348:	48 39 db             	cmp    rbx,rbx
- 34b:	0f 9f c1             	setg   cl
- 34e:	48 0f b6 c9          	movzx  rcx,cl
- 352:	48 85 c9             	test   rcx,rcx
- 355:	0f 84 0c 00 00 00    	je     367 <main+0x343>
- 35b:	48 c7 c0 14 00 00 00 	mov    rax,0x14
- 362:	e9 1a 00 00 00       	jmp    381 <main+0x35d>
- 367:	48 39 c3             	cmp    rbx,rax
- 36a:	0f 9d c1             	setge  cl
- 36d:	48 0f b6 c9          	movzx  rcx,cl
- 371:	48 85 c9             	test   rcx,rcx
- 374:	0f 84 0c 00 00 00    	je     386 <main+0x362>
- 37a:	48 c7 c0 15 00 00 00 	mov    rax,0x15
- 381:	e9 1a 00 00 00       	jmp    3a0 <main+0x37c>
- 386:	48 39 d8             	cmp    rax,rbx
- 389:	0f 9c c1             	setl   cl
- 38c:	48 0f b6 c9          	movzx  rcx,cl
- 390:	48 85 c9             	test   rcx,rcx
- 393:	0f 84 0c 00 00 00    	je     3a5 <main+0x381>
- 399:	48 c7 c0 16 00 00 00 	mov    rax,0x16
- 3a0:	e9 1a 00 00 00       	jmp    3bf <main+0x39b>
- 3a5:	48 39 db             	cmp    rbx,rbx
- 3a8:	0f 9c c1             	setl   cl
- 3ab:	48 0f b6 c9          	movzx  rcx,cl
- 3af:	48 85 c9             	test   rcx,rcx
- 3b2:	0f 84 0c 00 00 00    	je     3c4 <main+0x3a0>
- 3b8:	48 c7 c0 17 00 00 00 	mov    rax,0x17
- 3bf:	e9 1a 00 00 00       	jmp    3de <main+0x3ba>
- 3c4:	48 39 d8             	cmp    rax,rbx
- 3c7:	0f 9e c1             	setle  cl
- 3ca:	48 0f b6 c9          	movzx  rcx,cl
- 3ce:	48 85 c9             	test   rcx,rcx
- 3d1:	0f 84 0c 00 00 00    	je     3e3 <main+0x3bf>
- 3d7:	48 c7 c0 18 00 00 00 	mov    rax,0x18
- 3de:	e9 1a 00 00 00       	jmp    3fd <main+0x3d9>
- 3e3:	48 39 db             	cmp    rbx,rbx
- 3e6:	0f 95 c1             	setne  cl
- 3e9:	48 0f b6 c9          	movzx  rcx,cl
- 3ed:	48 85 c9             	test   rcx,rcx
- 3f0:	0f 84 0c 00 00 00    	je     402 <main+0x3de>
- 3f6:	48 c7 c0 19 00 00 00 	mov    rax,0x19
- 3fd:	e9 1a 00 00 00       	jmp    41c <main+0x3f8>
- 402:	48 39 c3             	cmp    rbx,rax
- 405:	0f 94 c1             	sete   cl
- 408:	48 0f b6 c9          	movzx  rcx,cl
- 40c:	48 85 c9             	test   rcx,rcx
- 40f:	0f 84 0c 00 00 00    	je     421 <main+0x3fd>
- 415:	48 c7 c0 1a 00 00 00 	mov    rax,0x1a
- 41c:	e9 07 00 00 00       	jmp    428 <main+0x404>
- 421:	48 c7 c0 00 00 00 00 	mov    rax,0x0
- 428:	41 5c                	pop    r12
- 42a:	5d                   	pop    rbp
- 42b:	5b                   	pop    rbx
- 42c:	c3                   	ret
+0000000000000038 <main>:
+  38:	53                   	push   rbx
+  39:	55                   	push   rbp
+  3a:	41 54                	push   r12
+  3c:	41 57                	push   r15
+  3e:	e8 00 00 00 00       	call   43 <main+0xb>
+  43:	48 89 c3             	mov    rbx,rax
+  46:	e8 00 00 00 00       	call   4b <main+0x13>
+  4b:	48 89 c5             	mov    rbp,rax
+  4e:	48 39 eb             	cmp    rbx,rbp
+  51:	41 0f 92 c4          	setb   r12b
+  55:	4d 0f b6 e4          	movzx  r12,r12b
+  59:	4c 89 e7             	mov    rdi,r12
+  5c:	e8 00 00 00 00       	call   61 <main+0x29>
+  61:	49 89 c4             	mov    r12,rax
+  64:	4d 85 e4             	test   r12,r12
+  67:	0f 84 0c 00 00 00    	je     79 <main+0x41>
+  6d:	48 c7 c0 01 00 00 00 	mov    rax,0x1
+  74:	e9 26 00 00 00       	jmp    9f <main+0x67>
+  79:	48 39 db             	cmp    rbx,rbx
+  7c:	41 0f 92 c4          	setb   r12b
+  80:	4d 0f b6 e4          	movzx  r12,r12b
+  84:	4c 89 e7             	mov    rdi,r12
+  87:	e8 00 00 00 00       	call   8c <main+0x54>
+  8c:	49 89 c4             	mov    r12,rax
+  8f:	4d 85 e4             	test   r12,r12
+  92:	0f 84 0c 00 00 00    	je     a4 <main+0x6c>
+  98:	48 c7 c0 02 00 00 00 	mov    rax,0x2
+  9f:	e9 26 00 00 00       	jmp    ca <main+0x92>
+  a4:	48 39 eb             	cmp    rbx,rbp
+  a7:	41 0f 96 c4          	setbe  r12b
+  ab:	4d 0f b6 e4          	movzx  r12,r12b
+  af:	4c 89 e7             	mov    rdi,r12
+  b2:	e8 00 00 00 00       	call   b7 <main+0x7f>
+  b7:	49 89 c4             	mov    r12,rax
+  ba:	4d 85 e4             	test   r12,r12
+  bd:	0f 84 0c 00 00 00    	je     cf <main+0x97>
+  c3:	48 c7 c0 03 00 00 00 	mov    rax,0x3
+  ca:	e9 26 00 00 00       	jmp    f5 <main+0xbd>
+  cf:	48 39 dd             	cmp    rbp,rbx
+  d2:	41 0f 97 c4          	seta   r12b
+  d6:	4d 0f b6 e4          	movzx  r12,r12b
+  da:	4c 89 e7             	mov    rdi,r12
+  dd:	e8 00 00 00 00       	call   e2 <main+0xaa>
+  e2:	49 89 c4             	mov    r12,rax
+  e5:	4d 85 e4             	test   r12,r12
+  e8:	0f 84 0c 00 00 00    	je     fa <main+0xc2>
+  ee:	48 c7 c0 04 00 00 00 	mov    rax,0x4
+  f5:	e9 26 00 00 00       	jmp    120 <main+0xe8>
+  fa:	48 39 db             	cmp    rbx,rbx
+  fd:	41 0f 97 c4          	seta   r12b
+ 101:	4d 0f b6 e4          	movzx  r12,r12b
+ 105:	4c 89 e7             	mov    rdi,r12
+ 108:	e8 00 00 00 00       	call   10d <main+0xd5>
+ 10d:	49 89 c4             	mov    r12,rax
+ 110:	4d 85 e4             	test   r12,r12
+ 113:	0f 84 0c 00 00 00    	je     125 <main+0xed>
+ 119:	48 c7 c0 05 00 00 00 	mov    rax,0x5
+ 120:	e9 26 00 00 00       	jmp    14b <main+0x113>
+ 125:	48 39 dd             	cmp    rbp,rbx
+ 128:	40 0f 93 c5          	setae  bpl
+ 12c:	48 0f b6 ed          	movzx  rbp,bpl
+ 130:	48 89 ef             	mov    rdi,rbp
+ 133:	e8 00 00 00 00       	call   138 <main+0x100>
+ 138:	48 89 c3             	mov    rbx,rax
+ 13b:	48 85 db             	test   rbx,rbx
+ 13e:	0f 84 0c 00 00 00    	je     150 <main+0x118>
+ 144:	48 c7 c0 06 00 00 00 	mov    rax,0x6
+ 14b:	e9 36 00 00 00       	jmp    186 <main+0x14e>
+ 150:	e8 00 00 00 00       	call   155 <main+0x11d>
+ 155:	48 89 c3             	mov    rbx,rax
+ 158:	e8 00 00 00 00       	call   15d <main+0x125>
+ 15d:	48 89 c5             	mov    rbp,rax
+ 160:	48 39 eb             	cmp    rbx,rbp
+ 163:	41 0f 9f c4          	setg   r12b
+ 167:	4d 0f b6 e4          	movzx  r12,r12b
+ 16b:	4c 89 e7             	mov    rdi,r12
+ 16e:	e8 00 00 00 00       	call   173 <main+0x13b>
+ 173:	49 89 c4             	mov    r12,rax
+ 176:	4d 85 e4             	test   r12,r12
+ 179:	0f 84 0c 00 00 00    	je     18b <main+0x153>
+ 17f:	48 c7 c0 07 00 00 00 	mov    rax,0x7
+ 186:	e9 26 00 00 00       	jmp    1b1 <main+0x179>
+ 18b:	48 39 db             	cmp    rbx,rbx
+ 18e:	41 0f 9f c4          	setg   r12b
+ 192:	4d 0f b6 e4          	movzx  r12,r12b
+ 196:	4c 89 e7             	mov    rdi,r12
+ 199:	e8 00 00 00 00       	call   19e <main+0x166>
+ 19e:	49 89 c4             	mov    r12,rax
+ 1a1:	4d 85 e4             	test   r12,r12
+ 1a4:	0f 84 0c 00 00 00    	je     1b6 <main+0x17e>
+ 1aa:	48 c7 c0 08 00 00 00 	mov    rax,0x8
+ 1b1:	e9 26 00 00 00       	jmp    1dc <main+0x1a4>
+ 1b6:	48 39 eb             	cmp    rbx,rbp
+ 1b9:	41 0f 9d c4          	setge  r12b
+ 1bd:	4d 0f b6 e4          	movzx  r12,r12b
+ 1c1:	4c 89 e7             	mov    rdi,r12
+ 1c4:	e8 00 00 00 00       	call   1c9 <main+0x191>
+ 1c9:	49 89 c4             	mov    r12,rax
+ 1cc:	4d 85 e4             	test   r12,r12
+ 1cf:	0f 84 0c 00 00 00    	je     1e1 <main+0x1a9>
+ 1d5:	48 c7 c0 09 00 00 00 	mov    rax,0x9
+ 1dc:	e9 26 00 00 00       	jmp    207 <main+0x1cf>
+ 1e1:	48 39 dd             	cmp    rbp,rbx
+ 1e4:	41 0f 9c c4          	setl   r12b
+ 1e8:	4d 0f b6 e4          	movzx  r12,r12b
+ 1ec:	4c 89 e7             	mov    rdi,r12
+ 1ef:	e8 00 00 00 00       	call   1f4 <main+0x1bc>
+ 1f4:	49 89 c4             	mov    r12,rax
+ 1f7:	4d 85 e4             	test   r12,r12
+ 1fa:	0f 84 0c 00 00 00    	je     20c <main+0x1d4>
+ 200:	48 c7 c0 0a 00 00 00 	mov    rax,0xa
+ 207:	e9 26 00 00 00       	jmp    232 <main+0x1fa>
+ 20c:	48 39 db             	cmp    rbx,rbx
+ 20f:	41 0f 9c c4          	setl   r12b
+ 213:	4d 0f b6 e4          	movzx  r12,r12b
+ 217:	4c 89 e7             	mov    rdi,r12
+ 21a:	e8 00 00 00 00       	call   21f <main+0x1e7>
+ 21f:	49 89 c4             	mov    r12,rax
+ 222:	4d 85 e4             	test   r12,r12
+ 225:	0f 84 0c 00 00 00    	je     237 <main+0x1ff>
+ 22b:	48 c7 c0 0b 00 00 00 	mov    rax,0xb
+ 232:	e9 26 00 00 00       	jmp    25d <main+0x225>
+ 237:	48 39 dd             	cmp    rbp,rbx
+ 23a:	40 0f 9e c5          	setle  bpl
+ 23e:	48 0f b6 ed          	movzx  rbp,bpl
+ 242:	48 89 ef             	mov    rdi,rbp
+ 245:	e8 00 00 00 00       	call   24a <main+0x212>
+ 24a:	48 89 c3             	mov    rbx,rax
+ 24d:	48 85 db             	test   rbx,rbx
+ 250:	0f 84 0c 00 00 00    	je     262 <main+0x22a>
+ 256:	48 c7 c0 0c 00 00 00 	mov    rax,0xc
+ 25d:	e9 2b 00 00 00       	jmp    28d <main+0x255>
+ 262:	e8 00 00 00 00       	call   267 <main+0x22f>
+ 267:	48 89 c3             	mov    rbx,rax
+ 26a:	e8 00 00 00 00       	call   26f <main+0x237>
+ 26f:	48 89 c5             	mov    rbp,rax
+ 272:	48 39 eb             	cmp    rbx,rbp
+ 275:	41 0f 92 c4          	setb   r12b
+ 279:	4d 0f b6 e4          	movzx  r12,r12b
+ 27d:	4d 85 e4             	test   r12,r12
+ 280:	0f 84 0c 00 00 00    	je     292 <main+0x25a>
+ 286:	48 c7 c0 0d 00 00 00 	mov    rax,0xd
+ 28d:	e9 1b 00 00 00       	jmp    2ad <main+0x275>
+ 292:	48 39 db             	cmp    rbx,rbx
+ 295:	41 0f 92 c4          	setb   r12b
+ 299:	4d 0f b6 e4          	movzx  r12,r12b
+ 29d:	4d 85 e4             	test   r12,r12
+ 2a0:	0f 84 0c 00 00 00    	je     2b2 <main+0x27a>
+ 2a6:	48 c7 c0 0e 00 00 00 	mov    rax,0xe
+ 2ad:	e9 1b 00 00 00       	jmp    2cd <main+0x295>
+ 2b2:	48 39 eb             	cmp    rbx,rbp
+ 2b5:	41 0f 96 c4          	setbe  r12b
+ 2b9:	4d 0f b6 e4          	movzx  r12,r12b
+ 2bd:	4d 85 e4             	test   r12,r12
+ 2c0:	0f 84 0c 00 00 00    	je     2d2 <main+0x29a>
+ 2c6:	48 c7 c0 0f 00 00 00 	mov    rax,0xf
+ 2cd:	e9 1b 00 00 00       	jmp    2ed <main+0x2b5>
+ 2d2:	48 39 dd             	cmp    rbp,rbx
+ 2d5:	41 0f 97 c4          	seta   r12b
+ 2d9:	4d 0f b6 e4          	movzx  r12,r12b
+ 2dd:	4d 85 e4             	test   r12,r12
+ 2e0:	0f 84 0c 00 00 00    	je     2f2 <main+0x2ba>
+ 2e6:	48 c7 c0 10 00 00 00 	mov    rax,0x10
+ 2ed:	e9 1b 00 00 00       	jmp    30d <main+0x2d5>
+ 2f2:	48 39 db             	cmp    rbx,rbx
+ 2f5:	41 0f 97 c4          	seta   r12b
+ 2f9:	4d 0f b6 e4          	movzx  r12,r12b
+ 2fd:	4d 85 e4             	test   r12,r12
+ 300:	0f 84 0c 00 00 00    	je     312 <main+0x2da>
+ 306:	48 c7 c0 11 00 00 00 	mov    rax,0x11
+ 30d:	e9 1b 00 00 00       	jmp    32d <main+0x2f5>
+ 312:	48 39 dd             	cmp    rbp,rbx
+ 315:	40 0f 93 c5          	setae  bpl
+ 319:	48 0f b6 ed          	movzx  rbp,bpl
+ 31d:	48 85 ed             	test   rbp,rbp
+ 320:	0f 84 0c 00 00 00    	je     332 <main+0x2fa>
+ 326:	48 c7 c0 12 00 00 00 	mov    rax,0x12
+ 32d:	e9 27 00 00 00       	jmp    359 <main+0x321>
+ 332:	e8 00 00 00 00       	call   337 <main+0x2ff>
+ 337:	48 89 c3             	mov    rbx,rax
+ 33a:	e8 00 00 00 00       	call   33f <main+0x307>
+ 33f:	48 39 c3             	cmp    rbx,rax
+ 342:	0f 9f c1             	setg   cl
+ 345:	48 0f b6 c9          	movzx  rcx,cl
+ 349:	48 85 c9             	test   rcx,rcx
+ 34c:	0f 84 0c 00 00 00    	je     35e <main+0x326>
+ 352:	48 c7 c0 13 00 00 00 	mov    rax,0x13
+ 359:	e9 1a 00 00 00       	jmp    378 <main+0x340>
+ 35e:	48 39 db             	cmp    rbx,rbx
+ 361:	0f 9f c1             	setg   cl
+ 364:	48 0f b6 c9          	movzx  rcx,cl
+ 368:	48 85 c9             	test   rcx,rcx
+ 36b:	0f 84 0c 00 00 00    	je     37d <main+0x345>
+ 371:	48 c7 c0 14 00 00 00 	mov    rax,0x14
+ 378:	e9 1a 00 00 00       	jmp    397 <main+0x35f>
+ 37d:	48 39 c3             	cmp    rbx,rax
+ 380:	0f 9d c1             	setge  cl
+ 383:	48 0f b6 c9          	movzx  rcx,cl
+ 387:	48 85 c9             	test   rcx,rcx
+ 38a:	0f 84 0c 00 00 00    	je     39c <main+0x364>
+ 390:	48 c7 c0 15 00 00 00 	mov    rax,0x15
+ 397:	e9 1a 00 00 00       	jmp    3b6 <main+0x37e>
+ 39c:	48 39 d8             	cmp    rax,rbx
+ 39f:	0f 9c c1             	setl   cl
+ 3a2:	48 0f b6 c9          	movzx  rcx,cl
+ 3a6:	48 85 c9             	test   rcx,rcx
+ 3a9:	0f 84 0c 00 00 00    	je     3bb <main+0x383>
+ 3af:	48 c7 c0 16 00 00 00 	mov    rax,0x16
+ 3b6:	e9 1a 00 00 00       	jmp    3d5 <main+0x39d>
+ 3bb:	48 39 db             	cmp    rbx,rbx
+ 3be:	0f 9c c1             	setl   cl
+ 3c1:	48 0f b6 c9          	movzx  rcx,cl
+ 3c5:	48 85 c9             	test   rcx,rcx
+ 3c8:	0f 84 0c 00 00 00    	je     3da <main+0x3a2>
+ 3ce:	48 c7 c0 17 00 00 00 	mov    rax,0x17
+ 3d5:	e9 1a 00 00 00       	jmp    3f4 <main+0x3bc>
+ 3da:	48 39 d8             	cmp    rax,rbx
+ 3dd:	0f 9e c1             	setle  cl
+ 3e0:	48 0f b6 c9          	movzx  rcx,cl
+ 3e4:	48 85 c9             	test   rcx,rcx
+ 3e7:	0f 84 0c 00 00 00    	je     3f9 <main+0x3c1>
+ 3ed:	48 c7 c0 18 00 00 00 	mov    rax,0x18
+ 3f4:	e9 1a 00 00 00       	jmp    413 <main+0x3db>
+ 3f9:	48 39 db             	cmp    rbx,rbx
+ 3fc:	0f 95 c1             	setne  cl
+ 3ff:	48 0f b6 c9          	movzx  rcx,cl
+ 403:	48 85 c9             	test   rcx,rcx
+ 406:	0f 84 0c 00 00 00    	je     418 <main+0x3e0>
+ 40c:	48 c7 c0 19 00 00 00 	mov    rax,0x19
+ 413:	e9 1a 00 00 00       	jmp    432 <main+0x3fa>
+ 418:	48 39 c3             	cmp    rbx,rax
+ 41b:	0f 94 c1             	sete   cl
+ 41e:	48 0f b6 c9          	movzx  rcx,cl
+ 422:	48 85 c9             	test   rcx,rcx
+ 425:	0f 84 0c 00 00 00    	je     437 <main+0x3ff>
+ 42b:	48 c7 c0 1a 00 00 00 	mov    rax,0x1a
+ 432:	e9 07 00 00 00       	jmp    43e <main+0x406>
+ 437:	48 c7 c0 00 00 00 00 	mov    rax,0x0
+ 43e:	41 5f                	pop    r15
+ 440:	41 5c                	pop    r12
+ 442:	5d                   	pop    rbp
+ 443:	5b                   	pop    rbx
+ 444:	c3                   	ret
