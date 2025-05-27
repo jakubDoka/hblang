@@ -119,6 +119,7 @@ pub const BinOp = enum(u8) {
 };
 
 pub const UnOp = enum(u8) {
+    cast,
     sext,
     uext,
     ired,
@@ -133,6 +134,7 @@ pub const UnOp = enum(u8) {
 
     pub fn eval(self: UnOp, src: DataType, oper: i64) i64 {
         return switch (self) {
+            .cast => oper,
             .sext => switch (src) {
                 .i8 => @as(i8, @truncate(oper)),
                 .i16 => @as(i16, @truncate(oper)),
@@ -774,7 +776,8 @@ pub fn Func(comptime MachNode: type) type {
 
             pub fn isDataPhi(self: *const Node) bool {
                 // TODO: get rid of this recursion
-                return self.kind == .Phi and (!self.input_base[1].?.isMemOp() or self.input_base[1].?.isLoad()) and
+                return self.kind == .Phi and //and self.data_type != .top;
+                    (!self.input_base[1].?.isMemOp() or self.input_base[1].?.isLoad()) and
                     (self.input_base[1].?.kind != .Phi or self.input_base[1].?.isDataPhi());
             }
 

@@ -150,6 +150,10 @@ pub fn addGlobalAddr(self: *Builder, arbitrary_global_id: u32) SpecificNode(.Glo
 
 // #MATH =======================================================================
 
+pub fn addCast(self: *Builder, to: DataType, value: *BuildNode) SpecificNode(.UnOp) {
+    return self.func.addNode(.UnOp, to, &.{ null, value }, .cast);
+}
+
 pub fn addIndexOffset(self: *Builder, base: *BuildNode, op: enum(u8) {
     iadd = @intFromEnum(BinOp.iadd),
     isub = @intFromEnum(BinOp.isub),

@@ -531,6 +531,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                         std.debug.assert(no.data_type == .f64);
                         self.emit(.fc32t64, .{ self.outReg(no), self.inReg(0, inps[0]) });
                     },
+                    .cast => unreachable,
                 }
                 self.flushOutReg(no);
             },
@@ -739,6 +740,8 @@ pub fn idealizeMach(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.
             );
         }
     }
+
+    if (node.kind == .UnOp and node.extra(.UnOp).* == .cast) return inps[1];
 
     if (node.kind == .If) {
         //if (node.outputs().len != 2) utils.panic("{} {} {}\n", .{ node, node.outputs()[0], node.data_type });

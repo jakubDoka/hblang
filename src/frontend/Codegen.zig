@@ -2357,6 +2357,9 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
                 self.emitGenericStore(loc, &oper);
                 return .mkp(ret, loc);
             } else {
+                if ((oper.ty.isInteger() and ret.isFloat()) or (oper.ty.isFloat() and ret.isInteger())) {
+                    oper.id.Value = self.bl.addCast(to_abi.ByValue, oper.id.Value);
+                }
                 oper.ty = ret;
                 return oper;
             }
