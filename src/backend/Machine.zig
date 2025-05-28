@@ -134,6 +134,10 @@ pub const Data = struct {
         }
     }
 
+    pub fn lookupName(self: *const Data, name: u32) [:0]const u8 {
+        return self.names.items[name..][0..std.mem.indexOfScalar(u8, self.names.items[name..], 0).? :0];
+    }
+
     pub fn addFuncReloc(self: *Data, gpa: std.mem.Allocator, target: u32, slot_size: u8, addend: i16) !void {
         return self.addReloc(gpa, try root.ensureSlot(&self.funcs, gpa, target), slot_size, addend);
     }

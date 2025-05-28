@@ -1,38 +1,32 @@
-pointers 3.o:     file format elf64-x86-64
-
-
-Disassembly of section .text:
-
-0000000000000000 <"pointers 3".do_stuff>:
-   0:	41 57                	push   r15
-   2:	48 89 f8             	mov    rax,rdi
-   5:	48 c7 c1 00 00 00 00 	mov    rcx,0x0
-   c:	48 8b 00             	mov    rax,QWORD PTR [rax]
-   f:	48 39 c8             	cmp    rax,rcx
-  12:	0f 94 c0             	sete   al
-  15:	48 0f b6 c0          	movzx  rax,al
-  19:	48 85 c0             	test   rax,rax
-  1c:	0f 84 08 00 00 00    	je     2a <"pointers 3".do_stuff+0x2a>
-  22:	48 89 c8             	mov    rax,rcx
-  25:	e9 07 00 00 00       	jmp    31 <"pointers 3".do_stuff+0x31>
-  2a:	48 c7 c0 01 00 00 00 	mov    rax,0x1
-  31:	41 5f                	pop    r15
-  33:	c3                   	ret
-
-0000000000000034 <main>:
-  34:	53                   	push   rbx
-  35:	55                   	push   rbp
-  36:	41 57                	push   r15
-  38:	48 83 ec 08          	sub    rsp,0x8
-  3c:	48 89 e3             	mov    rbx,rsp
-  3f:	48 83 c3 00          	add    rbx,0x0
-  43:	48 c7 c5 01 00 00 00 	mov    rbp,0x1
-  4a:	48 89 2b             	mov    QWORD PTR [rbx],rbp
-  4d:	48 89 df             	mov    rdi,rbx
-  50:	e8 00 00 00 00       	call   55 <main+0x21>
-  55:	48 8b 03             	mov    rax,QWORD PTR [rbx]
-  58:	48 83 c4 08          	add    rsp,0x8
-  5c:	41 5f                	pop    r15
-  5e:	5d                   	pop    rbp
-  5f:	5b                   	pop    rbx
-  60:	c3                   	ret
+"pointers 3".do_stuff:
+	push r15
+	mov rax, rdi
+	mov rcx, 0x00
+	mov rax, [rax]
+	cmp rax, rcx
+	setz al
+	movzx rax, al
+	test rax, rax
+	jz 0x000000000000000E
+	mov rax, rcx
+	jmp 0x000000000000000C
+	mov rax, 0x01
+	pop r15
+	ret
+main:
+	push rbx
+	push rbp
+	push r15
+	sub rsp, 0x08
+	mov rbx, rsp
+	add rbx, 0x00
+	mov rbp, 0x01
+	mov [rbx], rbp
+	mov rdi, rbx
+	call 0x0000000000000005
+	mov rax, [rbx]
+	add rsp, 0x08
+	pop r15
+	pop rbp
+	pop rbx
+	ret

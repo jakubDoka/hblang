@@ -1,21 +1,16 @@
-loops 3.o:     file format elf64-x86-64
-
-
-Disassembly of section .text:
-
-0000000000000000 <main>:
-   0:	53                   	push   rbx
-   1:	41 57                	push   r15
-   3:	48 c7 c0 00 00 00 00 	mov    rax,0x0
-   a:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
-  11:	48 c7 c2 04 00 00 00 	mov    rdx,0x4
-  18:	48 39 d0             	cmp    rax,rdx
-  1b:	0f 94 c3             	sete   bl
-  1e:	48 0f b6 db          	movzx  rbx,bl
-  22:	48 85 db             	test   rbx,rbx
-  25:	0f 84 04 00 00 00    	je     2f <main+0x2f>
-  2b:	41 5f                	pop    r15
-  2d:	5b                   	pop    rbx
-  2e:	c3                   	ret
-  2f:	48 01 c8             	add    rax,rcx
-  32:	e9 e1 ff ff ff       	jmp    18 <main+0x18>
+main:
+	push rbx
+	push r15
+	mov rax, 0x00
+	mov rcx, 0x01
+	mov rdx, 0x04
+	cmp rax, rdx
+	setz bl
+	movzx rbx, bl
+	test rbx, rbx
+	jz 0x000000000000000A
+	pop r15
+	pop rbx
+	ret
+	add rax, rcx
+	jmp 0xFFFFFFFFFFFFFFE6

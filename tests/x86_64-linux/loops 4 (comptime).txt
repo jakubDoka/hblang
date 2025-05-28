@@ -1,59 +1,54 @@
-loops 4 (comptime).o:     file format elf64-x86-64
-
-
-Disassembly of section .text:
-
-0000000000000000 <main>:
-   0:	53                   	push   rbx
-   1:	55                   	push   rbp
-   2:	41 57                	push   r15
-   4:	48 83 ec 20          	sub    rsp,0x20
-   8:	48 89 e0             	mov    rax,rsp
-   b:	48 83 c0 00          	add    rax,0x0
-   f:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
-  16:	48 89 08             	mov    QWORD PTR [rax],rcx
-  19:	48 c7 c2 10 00 00 00 	mov    rdx,0x10
-  20:	48 c7 c3 18 00 00 00 	mov    rbx,0x18
-  27:	48 c7 c5 08 00 00 00 	mov    rbp,0x8
-  2e:	48 c7 c6 02 00 00 00 	mov    rsi,0x2
-  35:	48 c7 c7 00 00 00 00 	mov    rdi,0x0
-  3c:	49 c7 c0 03 00 00 00 	mov    r8,0x3
-  43:	49 89 c1             	mov    r9,rax
-  46:	49 01 e9             	add    r9,rbp
-  49:	49 89 31             	mov    QWORD PTR [r9],rsi
-  4c:	48 0f af cd          	imul   rcx,rbp
-  50:	48 0f af f5          	imul   rsi,rbp
-  54:	49 89 f9             	mov    r9,rdi
-  57:	4c 0f af cd          	imul   r9,rbp
-  5b:	4d 89 c2             	mov    r10,r8
-  5e:	4c 0f af d5          	imul   r10,rbp
-  62:	48 89 c5             	mov    rbp,rax
-  65:	48 01 d5             	add    rbp,rdx
-  68:	4c 89 45 00          	mov    QWORD PTR [rbp+0x0],r8
-  6c:	48 89 c2             	mov    rdx,rax
-  6f:	48 01 da             	add    rdx,rbx
-  72:	48 c7 c3 04 00 00 00 	mov    rbx,0x4
-  79:	48 89 1a             	mov    QWORD PTR [rdx],rbx
-  7c:	48 89 c2             	mov    rdx,rax
-  7f:	4c 01 ca             	add    rdx,r9
-  82:	48 89 c3             	mov    rbx,rax
-  85:	4c 01 d3             	add    rbx,r10
-  88:	48 89 c5             	mov    rbp,rax
-  8b:	48 01 cd             	add    rbp,rcx
-  8e:	48 01 f0             	add    rax,rsi
-  91:	48 8b 0a             	mov    rcx,QWORD PTR [rdx]
-  94:	48 8b 13             	mov    rdx,QWORD PTR [rbx]
-  97:	48 8b 5d 00          	mov    rbx,QWORD PTR [rbp+0x0]
-  9b:	48 89 fd             	mov    rbp,rdi
-  9e:	48 01 cd             	add    rbp,rcx
-  a1:	48 8b 00             	mov    rax,QWORD PTR [rax]
-  a4:	48 89 e9             	mov    rcx,rbp
-  a7:	48 01 d9             	add    rcx,rbx
-  aa:	48 01 c1             	add    rcx,rax
-  ad:	48 89 c8             	mov    rax,rcx
-  b0:	48 01 d0             	add    rax,rdx
-  b3:	48 83 c4 20          	add    rsp,0x20
-  b7:	41 5f                	pop    r15
-  b9:	5d                   	pop    rbp
-  ba:	5b                   	pop    rbx
-  bb:	c3                   	ret
+main:
+	push rbx
+	push rbp
+	push r15
+	sub rsp, 0x20
+	mov rax, rsp
+	add rax, 0x00
+	mov rcx, 0x01
+	mov [rax], rcx
+	mov rdx, 0x10
+	mov rbx, 0x18
+	mov rbp, 0x08
+	mov rsi, 0x02
+	mov rdi, 0x00
+	mov r8, 0x03
+	mov r9, rax
+	add r9, rbp
+	mov [r9], rsi
+	imul rcx, rbp
+	imul rsi, rbp
+	mov r9, rdi
+	imul r9, rbp
+	mov r10, r8
+	imul r10, rbp
+	mov rbp, rax
+	add rbp, rdx
+	mov [rbp], r8
+	mov rdx, rax
+	add rdx, rbx
+	mov rbx, 0x04
+	mov [rdx], rbx
+	mov rdx, rax
+	add rdx, r9
+	mov rbx, rax
+	add rbx, r10
+	mov rbp, rax
+	add rbp, rcx
+	add rax, rsi
+	mov rcx, [rdx]
+	mov rdx, [rbx]
+	mov rbx, [rbp]
+	mov rbp, rdi
+	add rbp, rcx
+	mov rax, [rax]
+	mov rcx, rbp
+	add rcx, rbx
+	add rcx, rax
+	mov rax, rcx
+	add rax, rdx
+	add rsp, 0x20
+	pop r15
+	pop rbp
+	pop rbx
+	ret

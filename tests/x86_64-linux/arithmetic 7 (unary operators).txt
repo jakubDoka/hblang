@@ -1,22 +1,17 @@
-arithmetic 7 (unary operators).o:     file format elf64-x86-64
-
-
-Disassembly of section .text:
-
-0000000000000000 <main>:
-   0:	41 57                	push   r15
-   2:	48 c7 c0 00 00 00 00 	mov    rax,0x0
-   9:	48 85 c0             	test   rax,rax
-   c:	0f 84 0c 00 00 00    	je     1e <main+0x1e>
-  12:	48 c7 c0 01 00 00 00 	mov    rax,0x1
-  19:	e9 10 00 00 00       	jmp    2e <main+0x2e>
-  1e:	48 85 c0             	test   rax,rax
-  21:	0f 84 0c 00 00 00    	je     33 <main+0x33>
-  27:	48 c7 c0 02 00 00 00 	mov    rax,0x2
-  2e:	e9 10 00 00 00       	jmp    43 <main+0x43>
-  33:	48 85 c0             	test   rax,rax
-  36:	0f 84 0c 00 00 00    	je     48 <main+0x48>
-  3c:	48 c7 c0 03 00 00 00 	mov    rax,0x3
-  43:	e9 00 00 00 00       	jmp    48 <main+0x48>
-  48:	41 5f                	pop    r15
-  4a:	c3                   	ret
+main:
+	push r15
+	mov rax, 0x00
+	test rax, rax
+	jz 0x0000000000000012
+	mov rax, 0x01
+	jmp 0x0000000000000015
+	test rax, rax
+	jz 0x0000000000000012
+	mov rax, 0x02
+	jmp 0x0000000000000015
+	test rax, rax
+	jz 0x0000000000000012
+	mov rax, 0x03
+	jmp 0x0000000000000005
+	pop r15
+	ret

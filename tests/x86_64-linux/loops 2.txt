@@ -1,51 +1,45 @@
-loops 2.o:     file format elf64-x86-64
-
-
-Disassembly of section .text:
-
-0000000000000000 <"loops 2".square>:
-   0:	53                   	push   rbx
-   1:	55                   	push   rbp
-   2:	41 57                	push   r15
-   4:	48 89 f8             	mov    rax,rdi
-   7:	48 c7 c1 00 00 00 00 	mov    rcx,0x0
-   e:	48 c7 c2 01 00 00 00 	mov    rdx,0x1
-  15:	48 89 cb             	mov    rbx,rcx
-  18:	48 89 cd             	mov    rbp,rcx
-  1b:	48 39 c3             	cmp    rbx,rax
-  1e:	40 0f 94 c6          	sete   sil
-  22:	48 0f b6 f6          	movzx  rsi,sil
-  26:	48 85 f6             	test   rsi,rsi
-  29:	0f 84 08 00 00 00    	je     37 <"loops 2".square+0x37>
-  2f:	48 89 e8             	mov    rax,rbp
-  32:	41 5f                	pop    r15
-  34:	5d                   	pop    rbp
-  35:	5b                   	pop    rbx
-  36:	c3                   	ret
-  37:	48 89 de             	mov    rsi,rbx
-  3a:	48 01 d6             	add    rsi,rdx
-  3d:	48 89 ef             	mov    rdi,rbp
-  40:	48 89 cd             	mov    rbp,rcx
-  43:	48 39 c5             	cmp    rbp,rax
-  46:	41 0f 94 c0          	sete   r8b
-  4a:	4d 0f b6 c0          	movzx  r8,r8b
-  4e:	4d 85 c0             	test   r8,r8
-  51:	0f 84 0b 00 00 00    	je     62 <"loops 2".square+0x62>
-  57:	48 89 f3             	mov    rbx,rsi
-  5a:	48 89 fd             	mov    rbp,rdi
-  5d:	e9 b9 ff ff ff       	jmp    1b <"loops 2".square+0x1b>
-  62:	49 89 e8             	mov    r8,rbp
-  65:	4c 0f af c3          	imul   r8,rbx
-  69:	48 01 d5             	add    rbp,rdx
-  6c:	4c 01 c7             	add    rdi,r8
-  6f:	e9 cf ff ff ff       	jmp    43 <"loops 2".square+0x43>
-
-0000000000000074 <main>:
-  74:	53                   	push   rbx
-  75:	41 57                	push   r15
-  77:	48 c7 c3 03 00 00 00 	mov    rbx,0x3
-  7e:	48 89 df             	mov    rdi,rbx
-  81:	e8 00 00 00 00       	call   86 <main+0x12>
-  86:	41 5f                	pop    r15
-  88:	5b                   	pop    rbx
-  89:	c3                   	ret
+"loops 2".square:
+	push rbx
+	push rbp
+	push r15
+	mov rax, rdi
+	mov rcx, 0x00
+	mov rdx, 0x01
+	mov rbx, rcx
+	mov rbp, rcx
+	cmp rbx, rax
+	setz sil
+	movzx rsi, sil
+	test rsi, rsi
+	jz 0x000000000000000E
+	mov rax, rbp
+	pop r15
+	pop rbp
+	pop rbx
+	ret
+	mov rsi, rbx
+	add rsi, rdx
+	mov rdi, rbp
+	mov rbp, rcx
+	cmp rbp, rax
+	setz r8b
+	movzx r8, r8b
+	test r8, r8
+	jz 0x0000000000000011
+	mov rbx, rsi
+	mov rbp, rdi
+	jmp 0xFFFFFFFFFFFFFFBE
+	mov r8, rbp
+	imul r8, rbx
+	add rbp, rdx
+	add rdi, r8
+	jmp 0xFFFFFFFFFFFFFFD4
+main:
+	push rbx
+	push r15
+	mov rbx, 0x03
+	mov rdi, rbx
+	call 0x0000000000000005
+	pop r15
+	pop rbx
+	ret

@@ -1,43 +1,38 @@
-loops 8 (nested).o:     file format elf64-x86-64
-
-
-Disassembly of section .text:
-
-0000000000000000 <main>:
-   0:	53                   	push   rbx
-   1:	55                   	push   rbp
-   2:	41 57                	push   r15
-   4:	48 c7 c0 00 00 00 00 	mov    rax,0x0
-   b:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
-  12:	48 c7 c2 0a 00 00 00 	mov    rdx,0xa
-  19:	48 c7 c3 09 00 00 00 	mov    rbx,0x9
-  20:	48 89 c5             	mov    rbp,rax
-  23:	48 89 c6             	mov    rsi,rax
-  26:	48 39 d5             	cmp    rbp,rdx
-  29:	40 0f 94 c7          	sete   dil
-  2d:	48 0f b6 ff          	movzx  rdi,dil
-  31:	48 85 ff             	test   rdi,rdi
-  34:	0f 84 08 00 00 00    	je     42 <main+0x42>
-  3a:	48 89 f0             	mov    rax,rsi
-  3d:	41 5f                	pop    r15
-  3f:	5d                   	pop    rbp
-  40:	5b                   	pop    rbx
-  41:	c3                   	ret
-  42:	48 01 cd             	add    rbp,rcx
-  45:	49 89 f0             	mov    r8,rsi
-  48:	48 89 c6             	mov    rsi,rax
-  4b:	48 89 cf             	mov    rdi,rcx
-  4e:	49 89 c1             	mov    r9,rax
-  51:	48 39 de             	cmp    rsi,rbx
-  54:	41 0f 94 c2          	sete   r10b
-  58:	4d 0f b6 d2          	movzx  r10,r10b
-  5c:	4d 85 d2             	test   r10,r10
-  5f:	0f 84 08 00 00 00    	je     6d <main+0x6d>
-  65:	4c 89 c6             	mov    rsi,r8
-  68:	e9 b9 ff ff ff       	jmp    26 <main+0x26>
-  6d:	4d 89 c8             	mov    r8,r9
-  70:	49 01 f8             	add    r8,rdi
-  73:	48 01 ce             	add    rsi,rcx
-  76:	49 89 f9             	mov    r9,rdi
-  79:	4c 89 c7             	mov    rdi,r8
-  7c:	e9 d0 ff ff ff       	jmp    51 <main+0x51>
+main:
+	push rbx
+	push rbp
+	push r15
+	mov rax, 0x00
+	mov rcx, 0x01
+	mov rdx, 0x0A
+	mov rbx, 0x09
+	mov rbp, rax
+	mov rsi, rax
+	cmp rbp, rdx
+	setz dil
+	movzx rdi, dil
+	test rdi, rdi
+	jz 0x000000000000000E
+	mov rax, rsi
+	pop r15
+	pop rbp
+	pop rbx
+	ret
+	add rbp, rcx
+	mov r8, rsi
+	mov rsi, rax
+	mov rdi, rcx
+	mov r9, rax
+	cmp rsi, rbx
+	setz r10b
+	movzx r10, r10b
+	test r10, r10
+	jz 0x000000000000000E
+	mov rsi, r8
+	jmp 0xFFFFFFFFFFFFFFBE
+	mov r8, r9
+	add r8, rdi
+	add rsi, rcx
+	mov r9, rdi
+	mov rdi, r8
+	jmp 0xFFFFFFFFFFFFFFD5

@@ -1,39 +1,32 @@
-functions 1.o:     file format elf64-x86-64
-
-
-Disassembly of section .text:
-
-0000000000000000 <"functions 1".add_one>:
-   0:	41 57                	push   r15
-   2:	48 89 f8             	mov    rax,rdi
-   5:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
-   c:	48 01 c8             	add    rax,rcx
-   f:	41 5f                	pop    r15
-  11:	c3                   	ret
-
-0000000000000012 <"functions 1".add_two>:
-  12:	41 57                	push   r15
-  14:	48 89 f8             	mov    rax,rdi
-  17:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
-  1e:	48 01 c8             	add    rax,rcx
-  21:	41 5f                	pop    r15
-  23:	c3                   	ret
-
-0000000000000024 <main>:
-  24:	53                   	push   rbx
-  25:	55                   	push   rbp
-  26:	41 57                	push   r15
-  28:	48 c7 c3 0a 00 00 00 	mov    rbx,0xa
-  2f:	48 89 df             	mov    rdi,rbx
-  32:	e8 00 00 00 00       	call   37 <main+0x13>
-  37:	48 89 c3             	mov    rbx,rax
-  3a:	48 c7 c5 14 00 00 00 	mov    rbp,0x14
-  41:	48 89 ef             	mov    rdi,rbp
-  44:	e8 00 00 00 00       	call   49 <main+0x25>
-  49:	48 89 d9             	mov    rcx,rbx
-  4c:	48 01 c1             	add    rcx,rax
-  4f:	48 89 c8             	mov    rax,rcx
-  52:	41 5f                	pop    r15
-  54:	5d                   	pop    rbp
-  55:	5b                   	pop    rbx
-  56:	c3                   	ret
+"functions 1".add_one:
+	push r15
+	mov rax, rdi
+	mov rcx, 0x01
+	add rax, rcx
+	pop r15
+	ret
+"functions 1".add_two:
+	push r15
+	mov rax, rdi
+	mov rcx, 0x02
+	add rax, rcx
+	pop r15
+	ret
+main:
+	push rbx
+	push rbp
+	push r15
+	mov rbx, 0x0A
+	mov rdi, rbx
+	call 0x0000000000000005
+	mov rbx, rax
+	mov rbp, 0x14
+	mov rdi, rbp
+	call 0x0000000000000005
+	mov rcx, rbx
+	add rcx, rax
+	mov rax, rcx
+	pop r15
+	pop rbp
+	pop rbx
+	ret

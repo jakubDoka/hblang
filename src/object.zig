@@ -174,6 +174,58 @@ pub const elf = struct {
         pub const first = std.mem.zeroes(Symbol);
     };
 
+    fn find_section_header(sctions: []align(1) const SectionHeader, shstr_table: []const u8, name: []const u8) ?*align(1) const SectionHeader {
+        return for (sctions) |*s| {
+            if (std.mem.startsWith(u8, shstr_table[s.sh_name..], name)) break s;
+        } else unreachable;
+    }
+
+    pub fn read(bytes: []const u8, gpa: std.mem.Allocator) anyerror!root.backend.Machine.Data {
+        const header: FileHeader = @bitCast(bytes[0..@sizeOf(FileHeader)].*);
+        const sctions: []align(1) const SectionHeader = @ptrCast(bytes[header.shoff..][0 .. header.shnum * header.shentsize]);
+        const shstr_table: []const u8 = bytes[sctions[@intFromEnum(header.shstrndx)].sh_offset..][0..sctions[@intFromEnum(header.shstrndx)].sh_size];
+
+        const sym_tab = find_section_header(sctions, shstr_table, ".symtab").?;
+        const symbols: []align(1) const Symbol = @ptrCast(bytes[sym_tab.sh_offset..][0..sym_tab.sh_size]);
+
+        const str_tab = find_section_header(sctions, shstr_table, ".strtab").?;
+        const str_table: []const u8 = bytes[str_tab.sh_offset..][0..str_tab.sh_size];
+
+        var data = root.backend.Machine.Data{};
+
+        for (symbols[1..]) |s| {
+            var slot: @TypeOf(data).SymIdx = .invalid;
+
+            var name = str_table[@intFromEnum(s.name)..];
+            name = name[0..std.mem.indexOfScalar(u8, name, 0).?];
+
+            try data.startDefineSym(
+                gpa,
+                &slot,
+                name,
+                switch (s.info.type) {
+                    .func => .func,
+                    .object => .data,
+                    else => unreachable,
+                },
+                switch (s.info.bind) {
+                    .local => if (s.shndx == .undef) .imported else .local,
+                    .global => .exported,
+                    else => unreachable,
+                },
+            );
+
+            if (s.shndx != .undef) {
+                const sction = sctions[@intFromEnum(s.shndx)];
+                const section = bytes[sction.sh_offset..][0..sction.sh_size];
+                try data.code.appendSlice(gpa, section[s.value..][0..s.size]);
+            }
+            data.endDefineSym(slot);
+        }
+
+        return data;
+    }
+
     pub fn flush(self: root.backend.Machine.Data, arch: Arch, writer: std.io.AnyWriter) anyerror!void {
         var tmp = root.utils.Arena.scrath(null);
         defer tmp.deinit();

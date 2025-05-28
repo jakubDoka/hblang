@@ -618,7 +618,7 @@ pub fn finalize(self: *X86_64, out: std.io.AnyWriter) void {
     self.out.reset();
 }
 
-pub fn disasm(_: *X86_64, opts: Mach.DisasmOpts) void {
+pub fn disasm(self: *X86_64, opts: Mach.DisasmOpts) void {
     // TODO: maybe we can do this in more platform independend way?
     // Compiling a library in?
 
@@ -627,31 +627,69 @@ pub fn disasm(_: *X86_64, opts: Mach.DisasmOpts) void {
     var tmp = root.utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    const name = try std.fmt.allocPrint(tmp.arena.allocator(), "{s}.o", .{opts.name});
+    std.debug.assert(self.object_format == .elf);
+    const data = try object.elf.read(opts.bin, tmp.arena.allocator());
 
-    try std.fs.cwd().writeFile(.{ .sub_path = name, .data = opts.bin });
-    defer std.fs.cwd().deleteFile(name) catch unreachable;
-    var dump = std.process.Child.init(&.{ "objdump", "-d", "-M", "intel", "-S", name }, tmp.arena.allocator());
-    dump.stdout_behavior = .Pipe;
-    try dump.spawn();
+    var decoder = zydis.ZydisDecoder{};
+    _ = zydis.ZydisDecoderInit(&decoder, zydis.ZYDIS_MACHINE_MODE_LONG_64, zydis.ZYDIS_STACK_WIDTH_64);
 
-    if (opts.colors == .no_color) {
-        var buf: [1024 * 4]u8 = undefined;
-        while (true) {
-            const red = try dump.stdout.?.read(&buf);
-            if (red == 0) break;
-            try opts.out.writeAll(buf[0..red]);
-        }
-    } else {
-        var buf: [1024 * 4]u8 = undefined;
-        while (true) {
-            const red = try dump.stdout.?.read(&buf);
-            if (red == 0) break;
-            try std.io.getStdErr().writeAll(buf[0..red]);
+    var formatter = zydis.ZydisFormatter{};
+    _ = zydis.ZydisFormatterInit(&formatter, zydis.ZYDIS_FORMATTER_STYLE_INTEL);
+
+    for (data.syms.items) |v| {
+        const name = data.lookupName(v.name);
+        const bytes = data.code.items[v.offset..][0..v.size];
+        switch (v.kind) {
+            .func => {
+                {
+                    const fmt, const args = .{ "{s}:\n", .{name} };
+                    if (opts.colors == .no_color) {
+                        try opts.out.print(fmt, args);
+                    } else {
+                        try std.io.getStdErr().writer().print(fmt, args);
+                    }
+                }
+
+                var inst = zydis.ZydisDecodedInstruction{};
+                var ops: [zydis.ZYDIS_MAX_OPERAND_COUNT]zydis.ZydisDecodedOperand = undefined;
+
+                var addr: usize = 0;
+                while (addr < bytes.len) : (addr += inst.length) {
+                    var status = zydis.ZydisDecoderDecodeFull(
+                        &decoder,
+                        bytes.ptr + addr,
+                        bytes.len - addr,
+                        &inst,
+                        &ops,
+                    );
+                    std.debug.assert(zydis.ZYAN_SUCCESS(status));
+
+                    var buf: [256]u8 = undefined;
+                    status = zydis.ZydisFormatterFormatInstruction(
+                        &formatter,
+                        &inst,
+                        &ops,
+                        inst.operand_count_visible,
+                        &buf,
+                        @sizeOf(@TypeOf(buf)),
+                        0,
+                        null,
+                    );
+                    std.debug.assert(zydis.ZYAN_SUCCESS(status));
+
+                    const printed = buf[0..std.mem.indexOfScalar(u8, &buf, 0).?];
+
+                    const fmt, const args = .{ "\t{s}\n", .{printed} };
+                    if (opts.colors == .no_color) {
+                        try opts.out.print(fmt, args);
+                    } else {
+                        try std.io.getStdErr().writer().print(fmt, args);
+                    }
+                }
+            },
+            else => {},
         }
     }
-
-    _ = try dump.wait();
 }
 
 pub fn run(_: *X86_64, env: Mach.RunEnv) !usize {

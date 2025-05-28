@@ -1,16 +1,10 @@
-comments 1.o:     file format elf64-x86-64
-
-
-Disassembly of section .text:
-
-0000000000000000 <"comments 1".foo>:
-   0:	41 57                	push   r15
-   2:	41 5f                	pop    r15
-   4:	c3                   	ret
-
-0000000000000005 <main>:
-   5:	41 57                	push   r15
-   7:	e8 00 00 00 00       	call   c <main+0x7>
-   c:	48 c7 c0 00 00 00 00 	mov    rax,0x0
-  13:	41 5f                	pop    r15
-  15:	c3                   	ret
+"comments 1".foo:
+	push r15
+	pop r15
+	ret
+main:
+	push r15
+	call 0x0000000000000005
+	mov rax, 0x00
+	pop r15
+	ret

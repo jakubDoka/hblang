@@ -1,130 +1,123 @@
-structs 1.o:     file format elf64-x86-64
-
-
-Disassembly of section .text:
-
-0000000000000000 <"structs 1".odher_pass>:
-   0:	41 57                	push   r15
-   2:	48 89 f8             	mov    rax,rdi
-   5:	48 89 f1             	mov    rcx,rsi
-   8:	48 c7 c2 18 00 00 00 	mov    rdx,0x18
-   f:	48 89 c7             	mov    rdi,rax
-  12:	48 89 ce             	mov    rsi,rcx
-  15:	e8 00 00 00 00       	call   1a <"structs 1".odher_pass+0x1a>
-  1a:	41 5f                	pop    r15
-  1c:	c3                   	ret
-
-000000000000001d <"structs 1".Ty.sum>:
-  1d:	53                   	push   rbx
-  1e:	55                   	push   rbp
-  1f:	41 57                	push   r15
-  21:	48 83 ec 10          	sub    rsp,0x10
-  25:	48 89 f8             	mov    rax,rdi
-  28:	48 89 f1             	mov    rcx,rsi
-  2b:	48 89 e2             	mov    rdx,rsp
-  2e:	48 83 c2 00          	add    rdx,0x0
-  32:	48 89 02             	mov    QWORD PTR [rdx],rax
-  35:	48 c7 c3 02 00 00 00 	mov    rbx,0x2
-  3c:	48 c7 c5 01 00 00 00 	mov    rbp,0x1
-  43:	48 c7 c6 08 00 00 00 	mov    rsi,0x8
-  4a:	48 89 d7             	mov    rdi,rdx
-  4d:	48 01 f7             	add    rdi,rsi
-  50:	48 89 0f             	mov    QWORD PTR [rdi],rcx
-  53:	48 29 d8             	sub    rax,rbx
-  56:	48 89 02             	mov    QWORD PTR [rdx],rax
-  59:	48 01 e9             	add    rcx,rbp
-  5c:	48 89 0f             	mov    QWORD PTR [rdi],rcx
-  5f:	48 29 c8             	sub    rax,rcx
-  62:	48 83 c4 10          	add    rsp,0x10
-  66:	41 5f                	pop    r15
-  68:	5d                   	pop    rbp
-  69:	5b                   	pop    rbx
-  6a:	c3                   	ret
-
-000000000000006b <"structs 1".pass>:
-  6b:	53                   	push   rbx
-  6c:	41 57                	push   r15
-  6e:	48 89 f8             	mov    rax,rdi
-  71:	48 c7 c1 08 00 00 00 	mov    rcx,0x8
-  78:	48 c7 c2 01 00 00 00 	mov    rdx,0x1
-  7f:	48 8b 18             	mov    rbx,QWORD PTR [rax]
-  82:	48 29 d3             	sub    rbx,rdx
-  85:	48 89 18             	mov    QWORD PTR [rax],rbx
-  88:	48 01 d3             	add    rbx,rdx
-  8b:	48 89 18             	mov    QWORD PTR [rax],rbx
-  8e:	48 01 c8             	add    rax,rcx
-  91:	48 8b 00             	mov    rax,QWORD PTR [rax]
-  94:	48 89 d9             	mov    rcx,rbx
-  97:	48 29 c1             	sub    rcx,rax
-  9a:	48 89 c8             	mov    rax,rcx
-  9d:	41 5f                	pop    r15
-  9f:	5b                   	pop    rbx
-  a0:	c3                   	ret
-
-00000000000000a1 <main>:
-  a1:	53                   	push   rbx
-  a2:	55                   	push   rbp
-  a3:	41 54                	push   r12
-  a5:	41 55                	push   r13
-  a7:	41 56                	push   r14
-  a9:	41 57                	push   r15
-  ab:	48 83 ec 40          	sub    rsp,0x40
-  af:	48 89 e3             	mov    rbx,rsp
-  b2:	48 83 c3 10          	add    rbx,0x10
-  b6:	48 c7 c5 04 00 00 00 	mov    rbp,0x4
-  bd:	48 89 2b             	mov    QWORD PTR [rbx],rbp
-  c0:	48 c7 c5 10 00 00 00 	mov    rbp,0x10
-  c7:	49 c7 c4 08 00 00 00 	mov    r12,0x8
-  ce:	49 89 e5             	mov    r13,rsp
-  d1:	49 83 c5 28          	add    r13,0x28
-  d5:	4c 8d 35 00 00 00 00 	lea    r14,[rip+0x0]        # dc <main+0x3b>
-  dc:	48 89 1c 24          	mov    QWORD PTR [rsp],rbx
-  e0:	4c 01 24 24          	add    QWORD PTR [rsp],r12
-  e4:	48 8b 3c 24          	mov    rdi,QWORD PTR [rsp]
-  e8:	4c 89 f6             	mov    rsi,r14
-  eb:	4c 89 e2             	mov    rdx,r12
-  ee:	e8 00 00 00 00       	call   f3 <main+0x52>
-  f3:	49 c7 c6 03 00 00 00 	mov    r14,0x3
-  fa:	48 89 1c 24          	mov    QWORD PTR [rsp],rbx
-  fe:	48 01 2c 24          	add    QWORD PTR [rsp],rbp
- 102:	4c 8b 3c 24          	mov    r15,QWORD PTR [rsp]
- 106:	4d 89 37             	mov    QWORD PTR [r15],r14
- 109:	4c 89 ef             	mov    rdi,r13
- 10c:	48 89 de             	mov    rsi,rbx
- 10f:	e8 00 00 00 00       	call   114 <main+0x73>
- 114:	4c 89 eb             	mov    rbx,r13
- 117:	48 01 eb             	add    rbx,rbp
- 11a:	4c 89 ed             	mov    rbp,r13
- 11d:	4c 01 e5             	add    rbp,r12
- 120:	48 8b 1b             	mov    rbx,QWORD PTR [rbx]
- 123:	4c 39 f3             	cmp    rbx,r14
- 126:	0f 95 c3             	setne  bl
- 129:	48 0f b6 db          	movzx  rbx,bl
- 12d:	49 c7 c4 00 00 00 00 	mov    r12,0x0
- 134:	48 8b 6d 00          	mov    rbp,QWORD PTR [rbp+0x0]
- 138:	4d 8b 75 00          	mov    r14,QWORD PTR [r13+0x0]
- 13c:	48 85 db             	test   rbx,rbx
- 13f:	0f 84 08 00 00 00    	je     14d <main+0xac>
- 145:	4c 89 e0             	mov    rax,r12
- 148:	e9 28 00 00 00       	jmp    175 <main+0xd4>
- 14d:	4c 89 f7             	mov    rdi,r14
- 150:	48 89 ee             	mov    rsi,rbp
- 153:	e8 00 00 00 00       	call   158 <main+0xb7>
- 158:	48 89 c3             	mov    rbx,rax
- 15b:	4c 39 e3             	cmp    rbx,r12
- 15e:	0f 95 c3             	setne  bl
- 161:	48 0f b6 db          	movzx  rbx,bl
- 165:	48 85 db             	test   rbx,rbx
- 168:	0f 84 0c 00 00 00    	je     17a <main+0xd9>
- 16e:	48 c7 c0 64 00 00 00 	mov    rax,0x64
- 175:	e9 08 00 00 00       	jmp    182 <main+0xe1>
- 17a:	4c 89 ef             	mov    rdi,r13
- 17d:	e8 00 00 00 00       	call   182 <main+0xe1>
- 182:	48 83 c4 40          	add    rsp,0x40
- 186:	41 5f                	pop    r15
- 188:	41 5e                	pop    r14
- 18a:	41 5d                	pop    r13
- 18c:	41 5c                	pop    r12
- 18e:	5d                   	pop    rbp
- 18f:	5b                   	pop    rbx
- 190:	c3                   	ret
+"structs 1".odher_pass:
+	push r15
+	mov rax, rdi
+	mov rcx, rsi
+	mov rdx, 0x18
+	mov rdi, rax
+	mov rsi, rcx
+	call 0x0000000000000005
+	pop r15
+	ret
+"structs 1".Ty.sum:
+	push rbx
+	push rbp
+	push r15
+	sub rsp, 0x10
+	mov rax, rdi
+	mov rcx, rsi
+	mov rdx, rsp
+	add rdx, 0x00
+	mov [rdx], rax
+	mov rbx, 0x02
+	mov rbp, 0x01
+	mov rsi, 0x08
+	mov rdi, rdx
+	add rdi, rsi
+	mov [rdi], rcx
+	sub rax, rbx
+	mov [rdx], rax
+	add rcx, rbp
+	mov [rdi], rcx
+	sub rax, rcx
+	add rsp, 0x10
+	pop r15
+	pop rbp
+	pop rbx
+	ret
+"structs 1".pass:
+	push rbx
+	push r15
+	mov rax, rdi
+	mov rcx, 0x08
+	mov rdx, 0x01
+	mov rbx, [rax]
+	sub rbx, rdx
+	mov [rax], rbx
+	add rbx, rdx
+	mov [rax], rbx
+	add rax, rcx
+	mov rax, [rax]
+	mov rcx, rbx
+	sub rcx, rax
+	mov rax, rcx
+	pop r15
+	pop rbx
+	ret
+main:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	push r14
+	push r15
+	sub rsp, 0x40
+	mov rbx, rsp
+	add rbx, 0x10
+	mov rbp, 0x04
+	mov [rbx], rbp
+	mov rbp, 0x10
+	mov r12, 0x08
+	mov r13, rsp
+	add r13, 0x28
+	lea r14, [0x0000000000000007]
+	mov [rsp], rbx
+	add [rsp], r12
+	mov rdi, [rsp]
+	mov rsi, r14
+	mov rdx, r12
+	call 0x0000000000000005
+	mov r14, 0x03
+	mov [rsp], rbx
+	add [rsp], rbp
+	mov r15, [rsp]
+	mov [r15], r14
+	mov rdi, r13
+	mov rsi, rbx
+	call 0x0000000000000005
+	mov rbx, r13
+	add rbx, rbp
+	mov rbp, r13
+	add rbp, r12
+	mov rbx, [rbx]
+	cmp rbx, r14
+	setnz bl
+	movzx rbx, bl
+	mov r12, 0x00
+	mov rbp, [rbp]
+	mov r14, [r13]
+	test rbx, rbx
+	jz 0x000000000000000E
+	mov rax, r12
+	jmp 0x000000000000002D
+	mov rdi, r14
+	mov rsi, rbp
+	call 0x0000000000000005
+	mov rbx, rax
+	cmp rbx, r12
+	setnz bl
+	movzx rbx, bl
+	test rbx, rbx
+	jz 0x0000000000000012
+	mov rax, 0x64
+	jmp 0x000000000000000D
+	mov rdi, r13
+	call 0x0000000000000005
+	add rsp, 0x40
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
+	ret
+memcpy:

@@ -1,279 +1,269 @@
-arithmetic 3.o:     file format elf64-x86-64
-
-
-Disassembly of section .text:
-
-0000000000000000 <"arithmetic 3".one>:
-   0:	41 57                	push   r15
-   2:	48 c7 c0 01 00 00 00 	mov    rax,0x1
-   9:	41 5f                	pop    r15
-   b:	c3                   	ret
-
-000000000000000c <"arithmetic 3".zero>:
-   c:	41 57                	push   r15
-   e:	48 c7 c0 00 00 00 00 	mov    rax,0x0
-  15:	41 5f                	pop    r15
-  17:	c3                   	ret
-
-0000000000000018 <"arithmetic 3".cond>:
-  18:	41 57                	push   r15
-  1a:	48 89 f8             	mov    rax,rdi
-  1d:	41 5f                	pop    r15
-  1f:	c3                   	ret
-
-0000000000000020 <"arithmetic 3".mne>:
-  20:	41 57                	push   r15
-  22:	48 c7 c0 ff ff ff ff 	mov    rax,0xffffffffffffffff
-  29:	41 5f                	pop    r15
-  2b:	c3                   	ret
-
-000000000000002c <"arithmetic 3".mero>:
-  2c:	41 57                	push   r15
-  2e:	48 c7 c0 00 00 00 00 	mov    rax,0x0
-  35:	41 5f                	pop    r15
-  37:	c3                   	ret
-
-0000000000000038 <main>:
-  38:	53                   	push   rbx
-  39:	55                   	push   rbp
-  3a:	41 54                	push   r12
-  3c:	41 57                	push   r15
-  3e:	e8 00 00 00 00       	call   43 <main+0xb>
-  43:	48 89 c3             	mov    rbx,rax
-  46:	e8 00 00 00 00       	call   4b <main+0x13>
-  4b:	48 89 c5             	mov    rbp,rax
-  4e:	48 39 eb             	cmp    rbx,rbp
-  51:	41 0f 92 c4          	setb   r12b
-  55:	4d 0f b6 e4          	movzx  r12,r12b
-  59:	4c 89 e7             	mov    rdi,r12
-  5c:	e8 00 00 00 00       	call   61 <main+0x29>
-  61:	49 89 c4             	mov    r12,rax
-  64:	4d 85 e4             	test   r12,r12
-  67:	0f 84 0c 00 00 00    	je     79 <main+0x41>
-  6d:	48 c7 c0 01 00 00 00 	mov    rax,0x1
-  74:	e9 26 00 00 00       	jmp    9f <main+0x67>
-  79:	48 39 db             	cmp    rbx,rbx
-  7c:	41 0f 92 c4          	setb   r12b
-  80:	4d 0f b6 e4          	movzx  r12,r12b
-  84:	4c 89 e7             	mov    rdi,r12
-  87:	e8 00 00 00 00       	call   8c <main+0x54>
-  8c:	49 89 c4             	mov    r12,rax
-  8f:	4d 85 e4             	test   r12,r12
-  92:	0f 84 0c 00 00 00    	je     a4 <main+0x6c>
-  98:	48 c7 c0 02 00 00 00 	mov    rax,0x2
-  9f:	e9 26 00 00 00       	jmp    ca <main+0x92>
-  a4:	48 39 eb             	cmp    rbx,rbp
-  a7:	41 0f 96 c4          	setbe  r12b
-  ab:	4d 0f b6 e4          	movzx  r12,r12b
-  af:	4c 89 e7             	mov    rdi,r12
-  b2:	e8 00 00 00 00       	call   b7 <main+0x7f>
-  b7:	49 89 c4             	mov    r12,rax
-  ba:	4d 85 e4             	test   r12,r12
-  bd:	0f 84 0c 00 00 00    	je     cf <main+0x97>
-  c3:	48 c7 c0 03 00 00 00 	mov    rax,0x3
-  ca:	e9 26 00 00 00       	jmp    f5 <main+0xbd>
-  cf:	48 39 dd             	cmp    rbp,rbx
-  d2:	41 0f 97 c4          	seta   r12b
-  d6:	4d 0f b6 e4          	movzx  r12,r12b
-  da:	4c 89 e7             	mov    rdi,r12
-  dd:	e8 00 00 00 00       	call   e2 <main+0xaa>
-  e2:	49 89 c4             	mov    r12,rax
-  e5:	4d 85 e4             	test   r12,r12
-  e8:	0f 84 0c 00 00 00    	je     fa <main+0xc2>
-  ee:	48 c7 c0 04 00 00 00 	mov    rax,0x4
-  f5:	e9 26 00 00 00       	jmp    120 <main+0xe8>
-  fa:	48 39 db             	cmp    rbx,rbx
-  fd:	41 0f 97 c4          	seta   r12b
- 101:	4d 0f b6 e4          	movzx  r12,r12b
- 105:	4c 89 e7             	mov    rdi,r12
- 108:	e8 00 00 00 00       	call   10d <main+0xd5>
- 10d:	49 89 c4             	mov    r12,rax
- 110:	4d 85 e4             	test   r12,r12
- 113:	0f 84 0c 00 00 00    	je     125 <main+0xed>
- 119:	48 c7 c0 05 00 00 00 	mov    rax,0x5
- 120:	e9 26 00 00 00       	jmp    14b <main+0x113>
- 125:	48 39 dd             	cmp    rbp,rbx
- 128:	40 0f 93 c5          	setae  bpl
- 12c:	48 0f b6 ed          	movzx  rbp,bpl
- 130:	48 89 ef             	mov    rdi,rbp
- 133:	e8 00 00 00 00       	call   138 <main+0x100>
- 138:	48 89 c3             	mov    rbx,rax
- 13b:	48 85 db             	test   rbx,rbx
- 13e:	0f 84 0c 00 00 00    	je     150 <main+0x118>
- 144:	48 c7 c0 06 00 00 00 	mov    rax,0x6
- 14b:	e9 36 00 00 00       	jmp    186 <main+0x14e>
- 150:	e8 00 00 00 00       	call   155 <main+0x11d>
- 155:	48 89 c3             	mov    rbx,rax
- 158:	e8 00 00 00 00       	call   15d <main+0x125>
- 15d:	48 89 c5             	mov    rbp,rax
- 160:	48 39 eb             	cmp    rbx,rbp
- 163:	41 0f 9f c4          	setg   r12b
- 167:	4d 0f b6 e4          	movzx  r12,r12b
- 16b:	4c 89 e7             	mov    rdi,r12
- 16e:	e8 00 00 00 00       	call   173 <main+0x13b>
- 173:	49 89 c4             	mov    r12,rax
- 176:	4d 85 e4             	test   r12,r12
- 179:	0f 84 0c 00 00 00    	je     18b <main+0x153>
- 17f:	48 c7 c0 07 00 00 00 	mov    rax,0x7
- 186:	e9 26 00 00 00       	jmp    1b1 <main+0x179>
- 18b:	48 39 db             	cmp    rbx,rbx
- 18e:	41 0f 9f c4          	setg   r12b
- 192:	4d 0f b6 e4          	movzx  r12,r12b
- 196:	4c 89 e7             	mov    rdi,r12
- 199:	e8 00 00 00 00       	call   19e <main+0x166>
- 19e:	49 89 c4             	mov    r12,rax
- 1a1:	4d 85 e4             	test   r12,r12
- 1a4:	0f 84 0c 00 00 00    	je     1b6 <main+0x17e>
- 1aa:	48 c7 c0 08 00 00 00 	mov    rax,0x8
- 1b1:	e9 26 00 00 00       	jmp    1dc <main+0x1a4>
- 1b6:	48 39 eb             	cmp    rbx,rbp
- 1b9:	41 0f 9d c4          	setge  r12b
- 1bd:	4d 0f b6 e4          	movzx  r12,r12b
- 1c1:	4c 89 e7             	mov    rdi,r12
- 1c4:	e8 00 00 00 00       	call   1c9 <main+0x191>
- 1c9:	49 89 c4             	mov    r12,rax
- 1cc:	4d 85 e4             	test   r12,r12
- 1cf:	0f 84 0c 00 00 00    	je     1e1 <main+0x1a9>
- 1d5:	48 c7 c0 09 00 00 00 	mov    rax,0x9
- 1dc:	e9 26 00 00 00       	jmp    207 <main+0x1cf>
- 1e1:	48 39 dd             	cmp    rbp,rbx
- 1e4:	41 0f 9c c4          	setl   r12b
- 1e8:	4d 0f b6 e4          	movzx  r12,r12b
- 1ec:	4c 89 e7             	mov    rdi,r12
- 1ef:	e8 00 00 00 00       	call   1f4 <main+0x1bc>
- 1f4:	49 89 c4             	mov    r12,rax
- 1f7:	4d 85 e4             	test   r12,r12
- 1fa:	0f 84 0c 00 00 00    	je     20c <main+0x1d4>
- 200:	48 c7 c0 0a 00 00 00 	mov    rax,0xa
- 207:	e9 26 00 00 00       	jmp    232 <main+0x1fa>
- 20c:	48 39 db             	cmp    rbx,rbx
- 20f:	41 0f 9c c4          	setl   r12b
- 213:	4d 0f b6 e4          	movzx  r12,r12b
- 217:	4c 89 e7             	mov    rdi,r12
- 21a:	e8 00 00 00 00       	call   21f <main+0x1e7>
- 21f:	49 89 c4             	mov    r12,rax
- 222:	4d 85 e4             	test   r12,r12
- 225:	0f 84 0c 00 00 00    	je     237 <main+0x1ff>
- 22b:	48 c7 c0 0b 00 00 00 	mov    rax,0xb
- 232:	e9 26 00 00 00       	jmp    25d <main+0x225>
- 237:	48 39 dd             	cmp    rbp,rbx
- 23a:	40 0f 9e c5          	setle  bpl
- 23e:	48 0f b6 ed          	movzx  rbp,bpl
- 242:	48 89 ef             	mov    rdi,rbp
- 245:	e8 00 00 00 00       	call   24a <main+0x212>
- 24a:	48 89 c3             	mov    rbx,rax
- 24d:	48 85 db             	test   rbx,rbx
- 250:	0f 84 0c 00 00 00    	je     262 <main+0x22a>
- 256:	48 c7 c0 0c 00 00 00 	mov    rax,0xc
- 25d:	e9 2b 00 00 00       	jmp    28d <main+0x255>
- 262:	e8 00 00 00 00       	call   267 <main+0x22f>
- 267:	48 89 c3             	mov    rbx,rax
- 26a:	e8 00 00 00 00       	call   26f <main+0x237>
- 26f:	48 89 c5             	mov    rbp,rax
- 272:	48 39 eb             	cmp    rbx,rbp
- 275:	41 0f 92 c4          	setb   r12b
- 279:	4d 0f b6 e4          	movzx  r12,r12b
- 27d:	4d 85 e4             	test   r12,r12
- 280:	0f 84 0c 00 00 00    	je     292 <main+0x25a>
- 286:	48 c7 c0 0d 00 00 00 	mov    rax,0xd
- 28d:	e9 1b 00 00 00       	jmp    2ad <main+0x275>
- 292:	48 39 db             	cmp    rbx,rbx
- 295:	41 0f 92 c4          	setb   r12b
- 299:	4d 0f b6 e4          	movzx  r12,r12b
- 29d:	4d 85 e4             	test   r12,r12
- 2a0:	0f 84 0c 00 00 00    	je     2b2 <main+0x27a>
- 2a6:	48 c7 c0 0e 00 00 00 	mov    rax,0xe
- 2ad:	e9 1b 00 00 00       	jmp    2cd <main+0x295>
- 2b2:	48 39 eb             	cmp    rbx,rbp
- 2b5:	41 0f 96 c4          	setbe  r12b
- 2b9:	4d 0f b6 e4          	movzx  r12,r12b
- 2bd:	4d 85 e4             	test   r12,r12
- 2c0:	0f 84 0c 00 00 00    	je     2d2 <main+0x29a>
- 2c6:	48 c7 c0 0f 00 00 00 	mov    rax,0xf
- 2cd:	e9 1b 00 00 00       	jmp    2ed <main+0x2b5>
- 2d2:	48 39 dd             	cmp    rbp,rbx
- 2d5:	41 0f 97 c4          	seta   r12b
- 2d9:	4d 0f b6 e4          	movzx  r12,r12b
- 2dd:	4d 85 e4             	test   r12,r12
- 2e0:	0f 84 0c 00 00 00    	je     2f2 <main+0x2ba>
- 2e6:	48 c7 c0 10 00 00 00 	mov    rax,0x10
- 2ed:	e9 1b 00 00 00       	jmp    30d <main+0x2d5>
- 2f2:	48 39 db             	cmp    rbx,rbx
- 2f5:	41 0f 97 c4          	seta   r12b
- 2f9:	4d 0f b6 e4          	movzx  r12,r12b
- 2fd:	4d 85 e4             	test   r12,r12
- 300:	0f 84 0c 00 00 00    	je     312 <main+0x2da>
- 306:	48 c7 c0 11 00 00 00 	mov    rax,0x11
- 30d:	e9 1b 00 00 00       	jmp    32d <main+0x2f5>
- 312:	48 39 dd             	cmp    rbp,rbx
- 315:	40 0f 93 c5          	setae  bpl
- 319:	48 0f b6 ed          	movzx  rbp,bpl
- 31d:	48 85 ed             	test   rbp,rbp
- 320:	0f 84 0c 00 00 00    	je     332 <main+0x2fa>
- 326:	48 c7 c0 12 00 00 00 	mov    rax,0x12
- 32d:	e9 27 00 00 00       	jmp    359 <main+0x321>
- 332:	e8 00 00 00 00       	call   337 <main+0x2ff>
- 337:	48 89 c3             	mov    rbx,rax
- 33a:	e8 00 00 00 00       	call   33f <main+0x307>
- 33f:	48 39 c3             	cmp    rbx,rax
- 342:	0f 9f c1             	setg   cl
- 345:	48 0f b6 c9          	movzx  rcx,cl
- 349:	48 85 c9             	test   rcx,rcx
- 34c:	0f 84 0c 00 00 00    	je     35e <main+0x326>
- 352:	48 c7 c0 13 00 00 00 	mov    rax,0x13
- 359:	e9 1a 00 00 00       	jmp    378 <main+0x340>
- 35e:	48 39 db             	cmp    rbx,rbx
- 361:	0f 9f c1             	setg   cl
- 364:	48 0f b6 c9          	movzx  rcx,cl
- 368:	48 85 c9             	test   rcx,rcx
- 36b:	0f 84 0c 00 00 00    	je     37d <main+0x345>
- 371:	48 c7 c0 14 00 00 00 	mov    rax,0x14
- 378:	e9 1a 00 00 00       	jmp    397 <main+0x35f>
- 37d:	48 39 c3             	cmp    rbx,rax
- 380:	0f 9d c1             	setge  cl
- 383:	48 0f b6 c9          	movzx  rcx,cl
- 387:	48 85 c9             	test   rcx,rcx
- 38a:	0f 84 0c 00 00 00    	je     39c <main+0x364>
- 390:	48 c7 c0 15 00 00 00 	mov    rax,0x15
- 397:	e9 1a 00 00 00       	jmp    3b6 <main+0x37e>
- 39c:	48 39 d8             	cmp    rax,rbx
- 39f:	0f 9c c1             	setl   cl
- 3a2:	48 0f b6 c9          	movzx  rcx,cl
- 3a6:	48 85 c9             	test   rcx,rcx
- 3a9:	0f 84 0c 00 00 00    	je     3bb <main+0x383>
- 3af:	48 c7 c0 16 00 00 00 	mov    rax,0x16
- 3b6:	e9 1a 00 00 00       	jmp    3d5 <main+0x39d>
- 3bb:	48 39 db             	cmp    rbx,rbx
- 3be:	0f 9c c1             	setl   cl
- 3c1:	48 0f b6 c9          	movzx  rcx,cl
- 3c5:	48 85 c9             	test   rcx,rcx
- 3c8:	0f 84 0c 00 00 00    	je     3da <main+0x3a2>
- 3ce:	48 c7 c0 17 00 00 00 	mov    rax,0x17
- 3d5:	e9 1a 00 00 00       	jmp    3f4 <main+0x3bc>
- 3da:	48 39 d8             	cmp    rax,rbx
- 3dd:	0f 9e c1             	setle  cl
- 3e0:	48 0f b6 c9          	movzx  rcx,cl
- 3e4:	48 85 c9             	test   rcx,rcx
- 3e7:	0f 84 0c 00 00 00    	je     3f9 <main+0x3c1>
- 3ed:	48 c7 c0 18 00 00 00 	mov    rax,0x18
- 3f4:	e9 1a 00 00 00       	jmp    413 <main+0x3db>
- 3f9:	48 39 db             	cmp    rbx,rbx
- 3fc:	0f 95 c1             	setne  cl
- 3ff:	48 0f b6 c9          	movzx  rcx,cl
- 403:	48 85 c9             	test   rcx,rcx
- 406:	0f 84 0c 00 00 00    	je     418 <main+0x3e0>
- 40c:	48 c7 c0 19 00 00 00 	mov    rax,0x19
- 413:	e9 1a 00 00 00       	jmp    432 <main+0x3fa>
- 418:	48 39 c3             	cmp    rbx,rax
- 41b:	0f 94 c1             	sete   cl
- 41e:	48 0f b6 c9          	movzx  rcx,cl
- 422:	48 85 c9             	test   rcx,rcx
- 425:	0f 84 0c 00 00 00    	je     437 <main+0x3ff>
- 42b:	48 c7 c0 1a 00 00 00 	mov    rax,0x1a
- 432:	e9 07 00 00 00       	jmp    43e <main+0x406>
- 437:	48 c7 c0 00 00 00 00 	mov    rax,0x0
- 43e:	41 5f                	pop    r15
- 440:	41 5c                	pop    r12
- 442:	5d                   	pop    rbp
- 443:	5b                   	pop    rbx
- 444:	c3                   	ret
+"arithmetic 3".one:
+	push r15
+	mov rax, 0x01
+	pop r15
+	ret
+"arithmetic 3".zero:
+	push r15
+	mov rax, 0x00
+	pop r15
+	ret
+"arithmetic 3".cond:
+	push r15
+	mov rax, rdi
+	pop r15
+	ret
+"arithmetic 3".mne:
+	push r15
+	mov rax, 0xFFFFFFFFFFFFFFFF
+	pop r15
+	ret
+"arithmetic 3".mero:
+	push r15
+	mov rax, 0x00
+	pop r15
+	ret
+main:
+	push rbx
+	push rbp
+	push r12
+	push r15
+	call 0x0000000000000005
+	mov rbx, rax
+	call 0x0000000000000005
+	mov rbp, rax
+	cmp rbx, rbp
+	setb r12b
+	movzx r12, r12b
+	mov rdi, r12
+	call 0x0000000000000005
+	mov r12, rax
+	test r12, r12
+	jz 0x0000000000000012
+	mov rax, 0x01
+	jmp 0x000000000000002B
+	cmp rbx, rbx
+	setb r12b
+	movzx r12, r12b
+	mov rdi, r12
+	call 0x0000000000000005
+	mov r12, rax
+	test r12, r12
+	jz 0x0000000000000012
+	mov rax, 0x02
+	jmp 0x000000000000002B
+	cmp rbx, rbp
+	setbe r12b
+	movzx r12, r12b
+	mov rdi, r12
+	call 0x0000000000000005
+	mov r12, rax
+	test r12, r12
+	jz 0x0000000000000012
+	mov rax, 0x03
+	jmp 0x000000000000002B
+	cmp rbp, rbx
+	setnbe r12b
+	movzx r12, r12b
+	mov rdi, r12
+	call 0x0000000000000005
+	mov r12, rax
+	test r12, r12
+	jz 0x0000000000000012
+	mov rax, 0x04
+	jmp 0x000000000000002B
+	cmp rbx, rbx
+	setnbe r12b
+	movzx r12, r12b
+	mov rdi, r12
+	call 0x0000000000000005
+	mov r12, rax
+	test r12, r12
+	jz 0x0000000000000012
+	mov rax, 0x05
+	jmp 0x000000000000002B
+	cmp rbp, rbx
+	setnb bpl
+	movzx rbp, bpl
+	mov rdi, rbp
+	call 0x0000000000000005
+	mov rbx, rax
+	test rbx, rbx
+	jz 0x0000000000000012
+	mov rax, 0x06
+	jmp 0x000000000000003B
+	call 0x0000000000000005
+	mov rbx, rax
+	call 0x0000000000000005
+	mov rbp, rax
+	cmp rbx, rbp
+	setnle r12b
+	movzx r12, r12b
+	mov rdi, r12
+	call 0x0000000000000005
+	mov r12, rax
+	test r12, r12
+	jz 0x0000000000000012
+	mov rax, 0x07
+	jmp 0x000000000000002B
+	cmp rbx, rbx
+	setnle r12b
+	movzx r12, r12b
+	mov rdi, r12
+	call 0x0000000000000005
+	mov r12, rax
+	test r12, r12
+	jz 0x0000000000000012
+	mov rax, 0x08
+	jmp 0x000000000000002B
+	cmp rbx, rbp
+	setnl r12b
+	movzx r12, r12b
+	mov rdi, r12
+	call 0x0000000000000005
+	mov r12, rax
+	test r12, r12
+	jz 0x0000000000000012
+	mov rax, 0x09
+	jmp 0x000000000000002B
+	cmp rbp, rbx
+	setl r12b
+	movzx r12, r12b
+	mov rdi, r12
+	call 0x0000000000000005
+	mov r12, rax
+	test r12, r12
+	jz 0x0000000000000012
+	mov rax, 0x0A
+	jmp 0x000000000000002B
+	cmp rbx, rbx
+	setl r12b
+	movzx r12, r12b
+	mov rdi, r12
+	call 0x0000000000000005
+	mov r12, rax
+	test r12, r12
+	jz 0x0000000000000012
+	mov rax, 0x0B
+	jmp 0x000000000000002B
+	cmp rbp, rbx
+	setle bpl
+	movzx rbp, bpl
+	mov rdi, rbp
+	call 0x0000000000000005
+	mov rbx, rax
+	test rbx, rbx
+	jz 0x0000000000000012
+	mov rax, 0x0C
+	jmp 0x0000000000000030
+	call 0x0000000000000005
+	mov rbx, rax
+	call 0x0000000000000005
+	mov rbp, rax
+	cmp rbx, rbp
+	setb r12b
+	movzx r12, r12b
+	test r12, r12
+	jz 0x0000000000000012
+	mov rax, 0x0D
+	jmp 0x0000000000000020
+	cmp rbx, rbx
+	setb r12b
+	movzx r12, r12b
+	test r12, r12
+	jz 0x0000000000000012
+	mov rax, 0x0E
+	jmp 0x0000000000000020
+	cmp rbx, rbp
+	setbe r12b
+	movzx r12, r12b
+	test r12, r12
+	jz 0x0000000000000012
+	mov rax, 0x0F
+	jmp 0x0000000000000020
+	cmp rbp, rbx
+	setnbe r12b
+	movzx r12, r12b
+	test r12, r12
+	jz 0x0000000000000012
+	mov rax, 0x10
+	jmp 0x0000000000000020
+	cmp rbx, rbx
+	setnbe r12b
+	movzx r12, r12b
+	test r12, r12
+	jz 0x0000000000000012
+	mov rax, 0x11
+	jmp 0x0000000000000020
+	cmp rbp, rbx
+	setnb bpl
+	movzx rbp, bpl
+	test rbp, rbp
+	jz 0x0000000000000012
+	mov rax, 0x12
+	jmp 0x000000000000002C
+	call 0x0000000000000005
+	mov rbx, rax
+	call 0x0000000000000005
+	cmp rbx, rax
+	setnle cl
+	movzx rcx, cl
+	test rcx, rcx
+	jz 0x0000000000000012
+	mov rax, 0x13
+	jmp 0x000000000000001F
+	cmp rbx, rbx
+	setnle cl
+	movzx rcx, cl
+	test rcx, rcx
+	jz 0x0000000000000012
+	mov rax, 0x14
+	jmp 0x000000000000001F
+	cmp rbx, rax
+	setnl cl
+	movzx rcx, cl
+	test rcx, rcx
+	jz 0x0000000000000012
+	mov rax, 0x15
+	jmp 0x000000000000001F
+	cmp rax, rbx
+	setl cl
+	movzx rcx, cl
+	test rcx, rcx
+	jz 0x0000000000000012
+	mov rax, 0x16
+	jmp 0x000000000000001F
+	cmp rbx, rbx
+	setl cl
+	movzx rcx, cl
+	test rcx, rcx
+	jz 0x0000000000000012
+	mov rax, 0x17
+	jmp 0x000000000000001F
+	cmp rax, rbx
+	setle cl
+	movzx rcx, cl
+	test rcx, rcx
+	jz 0x0000000000000012
+	mov rax, 0x18
+	jmp 0x000000000000001F
+	cmp rbx, rbx
+	setnz cl
+	movzx rcx, cl
+	test rcx, rcx
+	jz 0x0000000000000012
+	mov rax, 0x19
+	jmp 0x000000000000001F
+	cmp rbx, rax
+	setz cl
+	movzx rcx, cl
+	test rcx, rcx
+	jz 0x0000000000000012
+	mov rax, 0x1A
+	jmp 0x000000000000000C
+	mov rax, 0x00
+	pop r15
+	pop r12
+	pop rbp
+	pop rbx
+	ret

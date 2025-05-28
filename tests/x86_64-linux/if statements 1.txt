@@ -1,48 +1,42 @@
-if statements 1.o:     file format elf64-x86-64
-
-
-Disassembly of section .text:
-
-0000000000000000 <"if statements 1".fib>:
-   0:	53                   	push   rbx
-   1:	55                   	push   rbp
-   2:	41 54                	push   r12
-   4:	41 55                	push   r13
-   6:	41 57                	push   r15
-   8:	48 89 fb             	mov    rbx,rdi
-   b:	48 c7 c5 02 00 00 00 	mov    rbp,0x2
-  12:	48 39 eb             	cmp    rbx,rbp
-  15:	41 0f 96 c4          	setbe  r12b
-  19:	4d 0f b6 e4          	movzx  r12,r12b
-  1d:	49 c7 c5 01 00 00 00 	mov    r13,0x1
-  24:	4d 85 e4             	test   r12,r12
-  27:	0f 84 08 00 00 00    	je     35 <"if statements 1".fib+0x35>
-  2d:	4c 89 e8             	mov    rax,r13
-  30:	e9 25 00 00 00       	jmp    5a <"if statements 1".fib+0x5a>
-  35:	49 89 dc             	mov    r12,rbx
-  38:	4d 29 ec             	sub    r12,r13
-  3b:	4c 89 e7             	mov    rdi,r12
-  3e:	e8 00 00 00 00       	call   43 <"if statements 1".fib+0x43>
-  43:	49 89 c4             	mov    r12,rax
-  46:	48 29 eb             	sub    rbx,rbp
-  49:	48 89 df             	mov    rdi,rbx
-  4c:	e8 00 00 00 00       	call   51 <"if statements 1".fib+0x51>
-  51:	4c 89 e1             	mov    rcx,r12
-  54:	48 01 c1             	add    rcx,rax
-  57:	48 89 c8             	mov    rax,rcx
-  5a:	41 5f                	pop    r15
-  5c:	41 5d                	pop    r13
-  5e:	41 5c                	pop    r12
-  60:	5d                   	pop    rbp
-  61:	5b                   	pop    rbx
-  62:	c3                   	ret
-
-0000000000000063 <main>:
-  63:	53                   	push   rbx
-  64:	41 57                	push   r15
-  66:	48 c7 c3 03 00 00 00 	mov    rbx,0x3
-  6d:	48 89 df             	mov    rdi,rbx
-  70:	e8 00 00 00 00       	call   75 <main+0x12>
-  75:	41 5f                	pop    r15
-  77:	5b                   	pop    rbx
-  78:	c3                   	ret
+"if statements 1".fib:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	push r15
+	mov rbx, rdi
+	mov rbp, 0x02
+	cmp rbx, rbp
+	setbe r12b
+	movzx r12, r12b
+	mov r13, 0x01
+	test r12, r12
+	jz 0x000000000000000E
+	mov rax, r13
+	jmp 0x000000000000002A
+	mov r12, rbx
+	sub r12, r13
+	mov rdi, r12
+	call 0x0000000000000005
+	mov r12, rax
+	sub rbx, rbp
+	mov rdi, rbx
+	call 0x0000000000000005
+	mov rcx, r12
+	add rcx, rax
+	mov rax, rcx
+	pop r15
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
+	ret
+main:
+	push rbx
+	push r15
+	mov rbx, 0x03
+	mov rdi, rbx
+	call 0x0000000000000005
+	pop r15
+	pop rbx
+	ret

@@ -1,10 +1,5 @@
-main fn 1.o:     file format elf64-x86-64
-
-
-Disassembly of section .text:
-
-0000000000000000 <main>:
-   0:	41 57                	push   r15
-   2:	48 c7 c0 2a 00 00 00 	mov    rax,0x2a
-   9:	41 5f                	pop    r15
-   b:	c3                   	ret
+main:
+	push r15
+	mov rax, 0x2A
+	pop r15
+	ret
