@@ -157,6 +157,7 @@ pub fn testBuilder(
     gpa: std.mem.Allocator,
     output: std.io.AnyWriter,
     gen: root.backend.Machine,
+    abi: root.frontend.Types.Abi,
     colors: std.io.tty.Config,
     verbose: bool,
 ) !void {
@@ -171,7 +172,7 @@ pub fn testBuilder(
     var types = Types.init(gpa, asts, output);
     defer types.deinit();
 
-    var cg = Codegen.init(gpa, func_arena.arena, &types, .runtime);
+    var cg = Codegen.init(gpa, func_arena.arena, &types, .runtime, abi);
     defer cg.deinit();
     cg.scope = .{};
 

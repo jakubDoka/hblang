@@ -1,5 +1,4 @@
 "pointers 3".do_stuff:
-	push r15
 	mov rax, rdi
 	mov rcx, 0x00
 	mov rax, [rax]
@@ -11,12 +10,10 @@
 	mov rax, rcx
 	jmp 0x000000000000000C
 	mov rax, 0x01
-	pop r15
 	ret
 main:
 	push rbx
 	push rbp
-	push r15
 	sub rsp, 0x08
 	mov rbx, rsp
 	add rbx, 0x00
@@ -26,7 +23,6 @@ main:
 	call 0x0000000000000005
 	mov rax, [rbx]
 	add rsp, 0x08
-	pop r15
 	pop rbp
 	pop rbx
 	ret

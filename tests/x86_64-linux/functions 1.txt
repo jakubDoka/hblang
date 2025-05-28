@@ -1,21 +1,16 @@
 "functions 1".add_one:
-	push r15
 	mov rax, rdi
 	mov rcx, 0x01
 	add rax, rcx
-	pop r15
 	ret
 "functions 1".add_two:
-	push r15
 	mov rax, rdi
 	mov rcx, 0x02
 	add rax, rcx
-	pop r15
 	ret
 main:
 	push rbx
 	push rbp
-	push r15
 	mov rbx, 0x0A
 	mov rdi, rbx
 	call 0x0000000000000005
@@ -26,7 +21,6 @@ main:
 	mov rcx, rbx
 	add rcx, rax
 	mov rax, rcx
-	pop r15
 	pop rbp
 	pop rbx
 	ret

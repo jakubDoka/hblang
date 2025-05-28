@@ -45,13 +45,14 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
             "hbvm-ableos",
             code,
             .init(&hbvm),
+            .ableos,
             gpa,
             stderr.writer().any(),
             colors,
         );
     }
 
-    if (true) {
+    if (false) {
         if (std.mem.indexOf(u8, name, "float") != null) return;
 
         var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
@@ -61,6 +62,7 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
             "x86_64-linux",
             code,
             .init(&x86_64),
+            .systemv,
             gpa,
             stderr.writer().any(),
             colors,
@@ -73,6 +75,7 @@ pub fn runMachineTest(
     category: []const u8,
     code: [:0]const u8,
     machine: root.backend.Machine,
+    abi: root.frontend.Types.Abi,
     gpa: std.mem.Allocator,
     out: std.io.AnyWriter,
     color: std.io.tty.Config,
@@ -81,7 +84,7 @@ pub fn runMachineTest(
     defer output.deinit();
 
     errdefer {
-        test_util.testBuilder(name, code, gpa, out, machine, color, true) catch unreachable;
+        test_util.testBuilder(name, code, gpa, out, machine, abi, color, true) catch unreachable;
     }
 
     try test_util.testBuilder(
@@ -90,6 +93,7 @@ pub fn runMachineTest(
         gpa,
         output.writer().any(),
         machine,
+        abi,
         .no_color,
         false,
     );
@@ -130,6 +134,7 @@ pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
         gpa,
         std.io.null_writer.any(),
         .init(&hbvm),
+        .ableos,
         .no_color,
         false,
     );

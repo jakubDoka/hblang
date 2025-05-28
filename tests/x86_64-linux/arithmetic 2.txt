@@ -1,5 +1,4 @@
 main:
-	push r15
 	mov rax, 0x00
 	mov rcx, 0x01
 	mov rdx, rax
@@ -10,5 +9,4 @@ main:
 	mov rcx, rdx
 	add rcx, rax
 	mov rax, rcx
-	pop r15
 	ret

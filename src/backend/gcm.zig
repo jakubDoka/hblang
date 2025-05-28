@@ -13,6 +13,12 @@ pub fn GcmMixin(comptime MachNode: type) type {
         const CfgNode = Func.CfgNode;
         const Node = Func.Node;
 
+        pub fn loopDepthOf(self: *Self, node: *CfgNode) u16 {
+            const slot = &self.loop_tree[node.ext.loop];
+            if (slot.depth == 0) slot.depth = self.loopDepthOf(self.loop_tree[slot.par.?].head) + 1;
+            return slot.depth;
+        }
+
         pub fn getGraph(self: *Self) *Func {
             return @alignCast(@fieldParentPtr("gcm", self));
         }
@@ -291,7 +297,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
                             var cursor = best.base.cfg0().?;
                             while (cursor != early.idom()) : (cursor = cursor.idom()) {
                                 std.debug.assert(cursor.base.kind != .Start);
-                                if (cursor.better(best, t)) best = cursor;
+                                if (cursor.better(best, t, self)) best = cursor;
                             }
 
                             if (best.base.isBasicBlockEnd()) {

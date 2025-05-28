@@ -1,9 +1,7 @@
 main:
-	push r15
 	mov rax, 0x01
 	test rax, rax
 	jz 0x000000000000000B
 	jmp 0x0000000000000000
 	mov rax, 0x00
-	pop r15
 	ret

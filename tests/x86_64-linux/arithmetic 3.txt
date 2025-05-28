@@ -1,33 +1,22 @@
 "arithmetic 3".one:
-	push r15
 	mov rax, 0x01
-	pop r15
 	ret
 "arithmetic 3".zero:
-	push r15
 	mov rax, 0x00
-	pop r15
 	ret
 "arithmetic 3".cond:
-	push r15
 	mov rax, rdi
-	pop r15
 	ret
 "arithmetic 3".mne:
-	push r15
 	mov rax, 0xFFFFFFFFFFFFFFFF
-	pop r15
 	ret
 "arithmetic 3".mero:
-	push r15
 	mov rax, 0x00
-	pop r15
 	ret
 main:
 	push rbx
 	push rbp
 	push r12
-	push r15
 	call 0x0000000000000005
 	mov rbx, rax
 	call 0x0000000000000005
@@ -262,7 +251,6 @@ main:
 	mov rax, 0x1A
 	jmp 0x000000000000000C
 	mov rax, 0x00
-	pop r15
 	pop r12
 	pop rbp
 	pop rbx

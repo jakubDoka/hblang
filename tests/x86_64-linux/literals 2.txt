@@ -1,16 +1,11 @@
 "literals 2".hex:
-	push r15
 	mov rax, 0x2D
-	pop r15
 	ret
 "literals 2".dec:
-	push r15
 	mov rax, 0x2D
-	pop r15
 	ret
 main:
 	push rbx
-	push r15
 	call 0x0000000000000005
 	mov rbx, rax
 	call 0x0000000000000005
@@ -22,6 +17,5 @@ main:
 	mov rax, 0x01
 	jmp 0x000000000000000C
 	mov rax, 0x00
-	pop r15
 	pop rbx
 	ret

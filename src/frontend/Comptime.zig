@@ -317,7 +317,7 @@ pub fn runVm(
 pub fn jitFunc(self: *Comptime, fnc: utils.EntId(root.frontend.types.Func)) !void {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
-    var gen = Codegen.init(self.getGpa(), tmp.arena, self.getTypes(), .@"comptime");
+    var gen = Codegen.init(self.getGpa(), tmp.arena, self.getTypes(), .@"comptime", .ableos);
     defer gen.deinit();
 
     gen.queue(.{ .Func = fnc });
@@ -372,7 +372,7 @@ pub fn jitExprLow(
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    var gen = Codegen.init(self.getGpa(), tmp.arena, types, .@"comptime");
+    var gen = Codegen.init(self.getGpa(), tmp.arena, types, .@"comptime", .ableos);
     defer gen.deinit();
 
     gen.only_inference = only_inference;

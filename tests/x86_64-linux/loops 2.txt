@@ -1,7 +1,6 @@
 "loops 2".square:
 	push rbx
 	push rbp
-	push r15
 	mov rax, rdi
 	mov rcx, 0x00
 	mov rdx, 0x01
@@ -11,9 +10,8 @@
 	setz sil
 	movzx rsi, sil
 	test rsi, rsi
-	jz 0x000000000000000E
+	jz 0x000000000000000C
 	mov rax, rbp
-	pop r15
 	pop rbp
 	pop rbx
 	ret
@@ -28,7 +26,7 @@
 	jz 0x0000000000000011
 	mov rbx, rsi
 	mov rbp, rdi
-	jmp 0xFFFFFFFFFFFFFFBE
+	jmp 0xFFFFFFFFFFFFFFC0
 	mov r8, rbp
 	imul r8, rbx
 	add rbp, rdx
@@ -36,10 +34,8 @@
 	jmp 0xFFFFFFFFFFFFFFD4
 main:
 	push rbx
-	push r15
 	mov rbx, 0x03
 	mov rdi, rbx
 	call 0x0000000000000005
-	pop r15
 	pop rbx
 	ret

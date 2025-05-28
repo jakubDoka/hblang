@@ -188,7 +188,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
 
     prelude: {
         for (Reg.system_v.callee_saved) |r| {
-            if (r == .r15) {
+            if (r == .r15 and spill_slot_count > 0) {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_PUSH, .{Tmp{}});
             } else if (used_regs.contains(r)) {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_PUSH, .{r});
@@ -232,7 +232,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
 
             var iter = std.mem.reverseIterator(Reg.system_v.callee_saved);
             while (iter.next()) |r| {
-                if (r == .r15) {
+                if (r == .r15 and spill_slot_count > 0) {
                     self.emitInstr(zydis.ZYDIS_MNEMONIC_POP, .{Tmp{}});
                 } else if (used_regs.contains(r)) {
                     self.emitInstr(zydis.ZYDIS_MNEMONIC_POP, .{r});
@@ -350,7 +350,7 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
 
     const status = zydis.ZydisEncoderEncodeInstruction(&req, &buf, &len);
     if (zydis.ZYAN_FAILED(status) != 0) {
-        std.debug.print("{x}\n", .{status});
+        std.debug.print("{x} {}\n", .{ status, args });
         unreachable;
     }
 
@@ -424,27 +424,26 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 );
             },
             .Load => {
-                std.debug.assert(instr.data_type.size() == 8);
-
                 const dst = self.getReg(instr);
                 const bse = self.getReg(instr.inputs()[2]);
 
                 const offset: u32 = 0;
 
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
-                    dst,
-                    BRegOff{ bse, offset, 8 },
+                    SReg{ dst, instr.data_type.size() },
+                    BRegOff{ bse, offset, @intCast(instr.data_type.size()) },
                 });
             },
             .Store => {
-                std.debug.assert(instr.data_type.size() == 8);
-
                 const dst = self.getReg(instr.inputs()[2]);
                 const vl = self.getReg(instr.inputs()[3]);
 
                 const offset: u32 = 0;
 
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ BRegOff{ dst, offset, 8 }, vl });
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
+                    BRegOff{ dst, offset, @intCast(instr.data_type.size()) },
+                    SReg{ vl, instr.data_type.size() },
+                });
             },
             .Call => {
                 const call = instr.extra(.Call);

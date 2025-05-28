@@ -444,6 +444,8 @@ pub const Id = enum(IdRepr) {
 
 pub const Abi = enum {
     ableos,
+    fastcall,
+    systemv,
 
     pub const Spec = union(enum) {
         ByValue: graph.DataType,
@@ -510,15 +512,20 @@ pub const Abi = enum {
             } },
             .Union => |s| switch (self) {
                 .ableos => categorizeAbleosUnion(s, types),
+                else => unreachable,
             },
             inline .Struct, .Tuple => |s| switch (self) {
                 .ableos => categorizeAbleosRecord(s, types),
+                .systemv => categorizeSystemvRecord(s, types),
+                else => unreachable,
             },
             .Slice => |s| switch (self) {
                 .ableos => categorizeAbleosSlice(s, types),
+                else => unreachable,
             },
             .Nullable => |n| switch (self) {
                 .ableos => categorizeAbleosNullable(n, types),
+                else => unreachable,
             },
             .Global, .Func, .Template => .Imaginary,
         };
@@ -558,15 +565,53 @@ pub const Abi = enum {
         return res;
     }
 
-    pub fn categorizeAbleosRecord(stru: anytype, types: *Types) Spec {
-        if (@TypeOf(stru) == tys.Struct.Id) {
+    pub fn checkCycles(stru: anytype, types: *Types) bool {
+        if (@TypeOf(stru) == tys.Struct.Id or @TypeOf(stru) == tys.Union.Id) {
             const self = types.store.get(stru);
             if (self.recursion_lock) {
                 types.report(self.key.file, self.key.ast, "the struct has undecidable alignment (cycle)", .{});
-                return .Imaginary;
+                return true;
             }
             self.recursion_lock = true;
         }
+        return false;
+    }
+
+    pub fn categorizeSystemvRecord(stru: anytype, types: *Types) Spec {
+        if (checkCycles(stru, types)) return .Imaginary;
+        defer if (@TypeOf(stru) == tys.Struct.Id) {
+            types.store.get(stru).recursion_lock = false;
+        };
+
+        var res: Spec = .Imaginary;
+        var offset: u64 = 0;
+        for (stru.getFields(types)) |f| {
+            const fspec = Abi.ableos.categorize(f.ty, types) orelse continue;
+            if (fspec == .Imaginary) continue;
+            if (fspec == .ByRef) return fspec;
+            if (res == .Imaginary) {
+                res = fspec;
+                offset += f.ty.size(types);
+                continue;
+            }
+
+            if (fspec == .ByValuePair) return .ByRef;
+            if (res == .ByValuePair) return .ByRef;
+            std.debug.assert(res != .ByRef);
+
+            const off = std.mem.alignForward(u64, offset, f.ty.alignment(types));
+            res = .{ .ByValuePair = .{
+                .types = .{ res.ByValue, fspec.ByValue },
+                .padding = @intCast(off - offset),
+            } };
+
+            offset = off + f.ty.size(types);
+        }
+        return res;
+    }
+
+    pub fn categorizeAbleosRecord(stru: anytype, types: *Types) Spec {
+        if (checkCycles(stru, types)) return .Imaginary;
         defer if (@TypeOf(stru) == tys.Struct.Id) {
             types.store.get(stru).recursion_lock = false;
         };

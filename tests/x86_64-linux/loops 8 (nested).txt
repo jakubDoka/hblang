@@ -1,7 +1,6 @@
 main:
 	push rbx
 	push rbp
-	push r15
 	mov rax, 0x00
 	mov rcx, 0x01
 	mov rdx, 0x0A
@@ -12,9 +11,8 @@ main:
 	setz dil
 	movzx rdi, dil
 	test rdi, rdi
-	jz 0x000000000000000E
+	jz 0x000000000000000C
 	mov rax, rsi
-	pop r15
 	pop rbp
 	pop rbx
 	ret
@@ -29,7 +27,7 @@ main:
 	test r10, r10
 	jz 0x000000000000000E
 	mov rsi, r8
-	jmp 0xFFFFFFFFFFFFFFBE
+	jmp 0xFFFFFFFFFFFFFFC0
 	mov r8, r9
 	add r8, rdi
 	add rsi, rcx

@@ -1,14 +1,11 @@
 "pointers 1".modify:
-	push r15
 	mov rax, rdi
 	mov rcx, 0x02
 	mov [rax], rcx
-	pop r15
 	ret
 main:
 	push rbx
 	push rbp
-	push r15
 	sub rsp, 0x08
 	mov rbx, rsp
 	add rbx, 0x00
@@ -24,7 +21,6 @@ main:
 	sub rcx, rax
 	mov rax, rcx
 	add rsp, 0x08
-	pop r15
 	pop rbp
 	pop rbx
 	ret

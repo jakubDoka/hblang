@@ -184,24 +184,18 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         return .{ .ast = asts, .arena = ast_arena };
     }
 
-    var types = hb.frontend.Types.init(opts.gpa, asts, opts.diagnostics);
-    defer types.deinit();
-
-    var codegen = hb.frontend.Codegen.init(opts.gpa, Arena.scrath(null).arena, &types, .runtime);
-    defer codegen.deinit();
-
-    var bckend = if (std.mem.eql(u8, opts.target, "ableos")) backend: {
+    var bckend, const abi: hb.frontend.Types.Abi = if (std.mem.eql(u8, opts.target, "ableos")) backend: {
         const slot = ast_arena.create(hb.hbvm.HbvmGen);
         slot.* = hb.hbvm.HbvmGen{ .gpa = opts.gpa };
-        break :backend hb.backend.Machine.init(slot);
+        break :backend .{ hb.backend.Machine.init(slot), .ableos };
     } else if (std.mem.eql(u8, opts.target, "x86_64-windows")) backend: {
         const slot = ast_arena.create(hb.x86_64.X86_64Gen);
         slot.* = hb.x86_64.X86_64Gen{ .gpa = opts.gpa, .object_format = .coff };
-        break :backend hb.backend.Machine.init(slot);
+        break :backend .{ hb.backend.Machine.init(slot), .fastcall };
     } else if (std.mem.eql(u8, opts.target, "x86_64-linux")) backend: {
         const slot = ast_arena.create(hb.x86_64.X86_64Gen);
         slot.* = hb.x86_64.X86_64Gen{ .gpa = opts.gpa, .object_format = .elf };
-        break :backend hb.backend.Machine.init(slot);
+        break :backend .{ hb.backend.Machine.init(slot), .systemv };
     } else {
         try opts.diagnostics.print(
             "{s} is unsupported target, only `x86_64-(windows|linux)` and `ableos` are supported",
@@ -210,6 +204,12 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         return error.Failed;
     };
     defer bckend.deinit();
+
+    var types = hb.frontend.Types.init(opts.gpa, asts, opts.diagnostics);
+    defer types.deinit();
+
+    var codegen = hb.frontend.Codegen.init(opts.gpa, Arena.scrath(null).arena, &types, .runtime, abi);
+    defer codegen.deinit();
 
     var syms = std.heap.ArenaAllocator.init(opts.gpa);
     defer syms.deinit();
@@ -295,6 +295,13 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         const out = bckend.finalizeBytes(ast_arena.allocator());
 
         errdefer {
+            bckend.disasm(.{
+                .name = name,
+                .bin = out.items,
+                .out = std.io.getStdErr().writer().any(),
+                .colors = std.io.tty.detectConfig(std.io.getStdErr()),
+            });
+
             expectations.assert(bckend.run(.{
                 .name = name,
                 .code = out.items,

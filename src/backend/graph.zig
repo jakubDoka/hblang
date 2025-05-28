@@ -455,10 +455,10 @@ pub fn Func(comptime MachNode: type) type {
                     };
                 }
 
-                pub fn better(cfg: *CfgNode, best: *CfgNode, to_sched: *Node) bool {
-                    return idepth(cfg) > idepth(best) or
-                        (cfg.base.kind == .Jmp and cfg.base.outputs()[0].kind == .Loop and to_sched.kind != .MachMove) or
-                        best.base.isBasicBlockEnd();
+                pub fn better(cfg: *CfgNode, best: *CfgNode, to_sched: *Node, func: *Self) bool {
+                    return !cfg.base.isBasicBlockEnd() and (idepth(cfg) > idepth(best) or
+                        best.base.isBasicBlockEnd() or
+                        (to_sched.kind != .MachMove and func.gcm.loopDepthOf(cfg) < func.gcm.loopDepthOf(best)));
                 }
 
                 pub fn format(self: *const CfgNode, comptime a: anytype, b: anytype, writer: anytype) !void {

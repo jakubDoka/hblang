@@ -1,17 +1,14 @@
 "structs 1".odher_pass:
-	push r15
 	mov rax, rdi
 	mov rcx, rsi
 	mov rdx, 0x18
 	mov rdi, rax
 	mov rsi, rcx
 	call 0x0000000000000005
-	pop r15
 	ret
 "structs 1".Ty.sum:
 	push rbx
 	push rbp
-	push r15
 	sub rsp, 0x10
 	mov rax, rdi
 	mov rcx, rsi
@@ -30,13 +27,11 @@
 	mov [rdi], rcx
 	sub rax, rcx
 	add rsp, 0x10
-	pop r15
 	pop rbp
 	pop rbx
 	ret
 "structs 1".pass:
 	push rbx
-	push r15
 	mov rax, rdi
 	mov rcx, 0x08
 	mov rdx, 0x01
@@ -50,7 +45,6 @@
 	mov rcx, rbx
 	sub rcx, rax
 	mov rax, rcx
-	pop r15
 	pop rbx
 	ret
 main:

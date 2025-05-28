@@ -3,7 +3,6 @@
 	push rbp
 	push r12
 	push r13
-	push r15
 	sub rsp, 0x18
 	mov rbx, rdi
 	mov rbp, rsi
@@ -23,7 +22,6 @@
 	mov rdx, r12
 	call 0x0000000000000005
 	add rsp, 0x18
-	pop r15
 	pop r13
 	pop r12
 	pop rbp

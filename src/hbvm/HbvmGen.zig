@@ -265,7 +265,7 @@ pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
 
     var vm = root.hbvm.Vm{};
     vm.ip = stack_end;
-    vm.fuel = 1024 * 10;
+    vm.fuel = 1024;
     @memset(&vm.regs.values, 0);
     vm.regs.set(.stack_addr, stack_end);
     var ctx = root.hbvm.Vm.SafeContext{

@@ -54,7 +54,7 @@ pub fn fuzzRun(
     var func_arena = utils.Arena.scrath(null);
     defer func_arena.deinit();
 
-    var cg = Codegen.init(gpa, func_arena.arena, &types, .runtime);
+    var cg = Codegen.init(gpa, func_arena.arena, &types, .runtime, .ableos);
     defer cg.deinit();
 
     const entry = try cg.getEntry(.root, "main");

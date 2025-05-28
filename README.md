@@ -569,6 +569,58 @@ main := fn(): uint {
 }
 ```
 
+#### loops 9
+```hb
+main := fn(): uint {
+    abc := "abc"
+    i := 0
+    loop {
+        if i >= 1 return 0
+        if false & abc[0] != 0 {
+            n := 0
+            loop if n == 0 break else {
+                n *= 0
+            }
+        }
+        i += 1
+    }
+}
+```
+
+#### loops 10 (multiple continues)
+```hb
+main := fn(): uint {
+    i := 0
+    loop {
+        if i > 0 return 0
+        x := true
+        if false  {
+            x = false
+        }
+        if x {
+            i += 1
+            continue
+        }
+    }
+}
+```
+
+#### loops 11 (multiple breaks)
+```hb
+main := fn(): uint {
+    i := 0
+    loop {
+        if i == 0 break
+        if i == 1 {
+            i = 1
+            break
+        }
+        i = 1
+    }
+    return i
+}
+```
+
 #### pointers 1
 ```hb
 main := fn(): uint {

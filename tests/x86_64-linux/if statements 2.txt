@@ -3,7 +3,6 @@
 	push rbp
 	push r12
 	push r13
-	push r15
 	mov rbx, rdi
 	mov rbp, 0x02
 	cmp rbx, rbp
@@ -25,7 +24,6 @@
 	mov rcx, r12
 	add rcx, rax
 	mov rax, rcx
-	pop r15
 	pop r13
 	pop r12
 	pop rbp
@@ -33,10 +31,8 @@
 	ret
 main:
 	push rbx
-	push r15
 	mov rbx, 0x03
 	mov rdi, rbx
 	call 0x0000000000000005
-	pop r15
 	pop rbx
 	ret

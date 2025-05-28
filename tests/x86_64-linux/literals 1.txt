@@ -1,5 +1,4 @@
 main:
-	push r15
 	mov rax, 0x00
 	test rax, rax
 	jz 0x0000000000000012
@@ -13,5 +12,4 @@ main:
 	jz 0x0000000000000012
 	mov rax, 0x02
 	jmp 0x0000000000000005
-	pop r15
 	ret

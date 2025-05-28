@@ -1,7 +1,6 @@
 "loops 1".fib:
 	push rbx
 	push rbp
-	push r15
 	mov rax, rdi
 	mov rcx, 0x00
 	mov rdx, 0x01
@@ -11,22 +10,19 @@
 	setz sil
 	movzx rsi, sil
 	test rsi, rsi
-	jz 0x000000000000000E
+	jz 0x000000000000000C
 	mov rax, rbp
-	pop r15
 	pop rbp
 	pop rbx
 	ret
 	add rbp, rbx
 	sub rax, rdx
 	xchg rbx, rbp
-	jmp 0xFFFFFFFFFFFFFFDB
+	jmp 0xFFFFFFFFFFFFFFDD
 main:
 	push rbx
-	push r15
 	mov rbx, 0x0A
 	mov rdi, rbx
 	call 0x0000000000000005
-	pop r15
 	pop rbx
 	ret

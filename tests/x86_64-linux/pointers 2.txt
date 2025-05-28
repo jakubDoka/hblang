@@ -1,20 +1,17 @@
 "pointers 2".swap:
 	push rbx
-	push r15
 	mov rcx, rdi
 	mov rax, rsi
 	mov rdx, [rax]
 	mov rbx, [rcx]
 	mov [rax], rbx
 	mov [rcx], rdx
-	pop r15
 	pop rbx
 	ret
 main:
 	push rbx
 	push rbp
 	push r12
-	push r15
 	sub rsp, 0x10
 	mov rbx, rsp
 	add rbx, 0x00
@@ -31,7 +28,6 @@ main:
 	mov rcx, [r12]
 	sub rax, rcx
 	add rsp, 0x10
-	pop r15
 	pop r12
 	pop rbp
 	pop rbx

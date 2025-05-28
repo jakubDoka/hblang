@@ -1,6 +1,5 @@
 main:
 	push rbx
-	push r15
 	mov rax, 0x00
 	mov rcx, 0x01
 	mov rdx, 0x04
@@ -8,9 +7,8 @@ main:
 	setz bl
 	movzx rbx, bl
 	test rbx, rbx
-	jz 0x000000000000000A
-	pop r15
+	jz 0x0000000000000008
 	pop rbx
 	ret
 	add rax, rcx
-	jmp 0xFFFFFFFFFFFFFFE6
+	jmp 0xFFFFFFFFFFFFFFE8

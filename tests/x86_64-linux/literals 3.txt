@@ -1,5 +1,3 @@
 main:
-	push r15
 	mov rax, 0x45
-	pop r15
 	ret
