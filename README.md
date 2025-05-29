@@ -594,7 +594,7 @@ main := fn(): uint {
     loop {
         if i > 0 return 0
         x := true
-        if false  {
+        if false {
             x = false
         }
         if x {

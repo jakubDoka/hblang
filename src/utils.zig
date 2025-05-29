@@ -57,7 +57,6 @@ pub fn orderMoves(self: anytype, comptime R: type, moves: []Move(R)) void {
         }
     }.lt);
 
-    std.debug.print("{any}\n", .{moves});
     for (moves) |*m| {
         if (m[2] == cycle_sentinel) {
             while (reg_graph.get(m[1]) != null) {

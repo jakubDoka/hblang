@@ -158,6 +158,7 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                                 if (rhs.? == .Loop and (rhs.?.Loop != s or s.ctrl.preservesIdentityPhys())) {
                                     rhs = .{ .Node = Local.resolve(self, locals, i) };
                                 }
+
                                 if (rhs.? == .Node) {
                                     if (self.setInput(lhs.?.Node, 2, rhs.?.Node)) |nlhs| {
                                         s.items[i].?.Node = nlhs;
@@ -166,6 +167,13 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                                     const prev = lhs.?.Node.inputs()[1].?;
                                     self.subsume(prev, lhs.?.Node);
                                     s.items[i].?.Node = prev;
+                                }
+
+                                if (child.inputs()[0] == bb) {
+                                    // TODO: foo bar
+                                    const lhss, const rhss = s.items[i].?.Node.inputs()[1..3].*;
+                                    if (self.setInput(s.items[i].?.Node, 1, rhss)) |v| s.items[i].?.Node = v;
+                                    if (self.setInput(s.items[i].?.Node, 2, lhss)) |v| s.items[i].?.Node = v;
                                 }
                             }
                         }

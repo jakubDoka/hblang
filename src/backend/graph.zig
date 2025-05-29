@@ -659,7 +659,8 @@ pub fn Func(comptime MachNode: type) type {
 
             pub fn isLazyPhi(self: *Node, on_loop: *Node) bool {
                 std.debug.assert(on_loop.kind == .Loop or on_loop.kind == .Region);
-                return self.kind == .Phi and self.inputs()[0] == on_loop and self.inputs()[2] == null;
+                return self.kind == .Phi and self.inputs()[0] == on_loop and
+                    (self.inputs()[2] == null or self.inputs()[1] == null);
             }
 
             pub fn inputs(self: *Node) []?*Node {

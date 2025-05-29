@@ -240,7 +240,7 @@ pub fn runVm(
         self.gen.out.syms.items[@intFromEnum(self.gen.out.funcs.items[entry_id])].offset;
     std.debug.assert(self.vm.ip < self.gen.out.code.items.len);
 
-    self.vm.fuel = 1024;
+    self.vm.fuel = 1024 * 128;
     self.vm.regs.set(.ret_addr, stack_size - 1); // return to hardcoded tx
     if (return_loc.len != 0) self.vm.regs.set(.arg(0), stack_end - return_loc.len);
     self.vm.regs.set(.stack_addr, stack_end - return_loc.len);
