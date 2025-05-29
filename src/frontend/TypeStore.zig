@@ -253,7 +253,7 @@ pub const Id = enum(IdRepr) {
 
     pub fn len(self: Id, types: *Types) ?usize {
         return switch (self.data()) {
-            inline .Struct, .Union, .Enum => |s| s.getFields(types).len,
+            inline .Struct, .Union, .Enum, .Tuple => |s| s.getFields(types).len,
             .Slice => |s| types.store.get(s).len,
             else => null,
         };
@@ -404,7 +404,8 @@ pub const Id = enum(IdRepr) {
                             try writer.print("{s}", .{b.key.name});
                         } else {
                             if (testing) {
-                                try writer.print("\"{s}\"", .{b.key.name});
+                                var path = std.mem.splitBackwardsAny(u8, b.key.name, "/");
+                                try writer.print("\"{s}\"", .{path.first()});
                             }
                         }
                     }
