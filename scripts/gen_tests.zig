@@ -5,9 +5,11 @@ pub fn main() !void {
     const arena = arena_state.allocator();
 
     const args = try std.process.argsAlloc(arena);
-    const case_path, const out = args[1..3].*;
+    const case_path, const other_case_path, const out = args[1..4].*;
 
     const readme = try std.fs.cwd().readFileAlloc(arena, case_path, 1024 * 1024);
+    const bugfix = try std.fs.cwd().readFileAlloc(arena, other_case_path, 1024 * 1024);
+    const full = try std.mem.concat(arena, u8, &.{ readme, bugfix });
 
     const out_file = try std.fs.cwd().createFile(out, .{});
     defer out_file.close();
@@ -19,7 +21,7 @@ pub fn main() !void {
         \\
     , .{});
 
-    var iter = std.mem.splitSequence(u8, readme, "#### ");
+    var iter = std.mem.splitSequence(u8, full, "#### ");
     while (iter.next()) |segment| {
         const pos = std.mem.indexOf(u8, segment, "\n```hb") orelse continue;
         const name = std.mem.trim(u8, segment[0..pos], "\n\r\t ");

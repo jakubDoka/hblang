@@ -131,6 +131,7 @@ pub fn build(b: *std.Build) !void {
 
         const run_gen = b.addRunArtifact(gen);
         run_gen.addFileArg(b.path("README.md"));
+        run_gen.addFileArg(b.path("BUGFIX.md"));
         const out = run_gen.addOutputFileArg("tests.zig");
 
         const test_run = b.addTest(.{
@@ -193,6 +194,7 @@ pub fn build(b: *std.Build) !void {
         const run_gen = b.addRunArtifact(dict_gen);
         const dict_out = run_gen.addOutputFileArg("hblang.dict");
         run_gen.addFileArg(b.path("README.md"));
+        run_gen.addFileArg(b.path("BUGFIX.md"));
         const cases = run_gen.addOutputDirectoryArg("fuzz-cases");
 
         const fuzz = b.addStaticLibrary(.{
