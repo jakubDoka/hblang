@@ -380,9 +380,9 @@ pub const Func = struct {
 
     pub fn computeAbiSize(self: Func, abi: Types.Abi, types: *Types) struct { usize, usize, Types.Abi.Spec } {
         const ret_abi = abi.categorize(self.ret, types) orelse .Imaginary;
-        var param_count: usize = @intFromBool(ret_abi == .ByRef);
-        for (self.args) |ty| param_count += (abi.categorize(ty, types) orelse continue).len(false);
-        const return_count: usize = ret_abi.len(true);
+        var param_count: usize = @intFromBool(ret_abi.isByRefRet(abi));
+        for (self.args) |ty| param_count += (abi.categorize(ty, types) orelse continue).len(false, abi);
+        const return_count: usize = ret_abi.len(true, abi);
         return .{ param_count, return_count, ret_abi };
     }
 };

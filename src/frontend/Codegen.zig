@@ -19,6 +19,7 @@ types: *Types,
 work_list: std.ArrayListUnmanaged(Task),
 target: Types.Target,
 only_inference: bool = false,
+partial_eval: bool = false,
 abi: Types.Abi,
 defers: std.ArrayListUnmanaged(Ast.Id) = undefined,
 name: []const u8 = undefined,
@@ -264,7 +265,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    var func = self.types.store.get(func_id);
+    var func: *root.frontend.types.Func = self.types.store.get(func_id);
 
     self.ast = self.types.getFile(func.key.file);
     const param_count, const return_count, const ret_abi = func.computeAbiSize(self.abi, self.types);
@@ -286,7 +287,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
 
     var i: usize = 0;
 
-    if (ret_abi == .ByRef) {
+    if (ret_abi.isByRefRet(self.abi)) {
         ret_abi.types(params[0..1]);
         self.struct_ret_ptr = self.bl.addParam(i);
         i += 1;
@@ -322,7 +323,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
         };
         self.scope.appendAssumeCapacity(.{ .ty = ty, .name = ident.id });
         self.bl.pushPin(arg);
-        i += abi.len(false);
+        i += abi.len(false, self.abi);
         ty_idx += 1;
     }
 
@@ -1850,7 +1851,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
         return self.report(e.called, "{} is not callable", .{typ});
     }
 
-    const func = self.types.store.get(typ.data().Func).*;
+    const func: root.frontend.types.Func = self.types.store.get(typ.data().Func).*;
     if (self.target != .runtime or func.ret != .type)
         self.queue(.{ .Func = typ.data().Func });
 
@@ -1992,7 +1993,7 @@ pub fn instantiateTemplate(
 }
 
 fn pushReturn(cg: *Codegen, pos: anytype, call_args: Builder.CallArgs, ret_abi: Types.Abi.Spec, ret: Types.Id, ctx: Ctx) usize {
-    if (ret_abi == .ByRef) {
+    if (ret_abi.isByRefRet(cg.abi)) {
         ret_abi.types(call_args.params[0..1]);
         call_args.arg_slots[0] = ctx.loc orelse cg.bl.addLocal(cg.sloc(pos), ret.size(cg.types));
         return 1;
@@ -2017,7 +2018,7 @@ fn pushParam(cg: *Codegen, call_args: Builder.CallArgs, abi: Types.Abi.Spec, idx
         },
         .ByRef => call_args.arg_slots[idx] = value.id.Pointer,
     }
-    return abi.len(false);
+    return abi.len(false, cg.abi);
 }
 
 fn assembleReturn(cg: *Codegen, expr: anytype, id: u32, call_args: Builder.CallArgs, ctx: Ctx, ret: Types.Id, ret_abi: Types.Abi.Spec) Value {
@@ -2451,9 +2452,9 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             }
 
             const ret_abi = self.abiCata(ret);
-            var param_count: usize = @intFromBool(ret_abi == .ByRef);
-            for (arg_nodes) |nod| param_count += self.abiCata(nod.ty).len(false);
-            const return_count: usize = ret_abi.len(true);
+            var param_count: usize = @intFromBool(ret_abi.isByRefRet(self.abi));
+            for (arg_nodes) |nod| param_count += self.abiCata(nod.ty).len(false, self.abi);
+            const return_count: usize = ret_abi.len(true, self.abi);
 
             const call_args = self.bl.allocCallArgs(tmp.arena, param_count, return_count);
 

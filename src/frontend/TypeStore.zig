@@ -79,8 +79,7 @@ pub const TypeCtx = struct {
         std.hash.autoHash(&hasher, std.meta.activeTag(adk));
         switch (adk) {
             .Builtin => |bl| std.hash.autoHash(&hasher, bl),
-            .Pointer => |s| std.hash.autoHash(&hasher, self.types.store.get(s).*),
-            .Slice => |s| std.hash.autoHash(&hasher, self.types.store.get(s).*),
+            inline .Pointer, .Slice => |s| std.hash.autoHash(&hasher, self.types.store.get(s).*),
             .Nullable => |n| std.hash.autoHash(&hasher, self.types.store.get(n).inner),
             .Tuple => |n| std.hash.autoHashStrat(&hasher, self.types.store.get(n).fields, .Deep),
             inline .Enum, .Union, .Struct, .Func, .Template, .Global => |v| std.hash.autoHashStrat(&hasher, self.types.store.get(v).key, .Deep),
@@ -480,12 +479,35 @@ pub const Abi = enum {
             }
         }
 
-        pub fn len(self: Spec, is_ret: bool) usize {
-            return switch (self) {
-                .Imaginary => 0,
-                .ByValue => 1,
-                .ByValuePair => 2,
-                .ByRef => 1 - @intFromBool(is_ret),
+        pub fn isByRefRet(self: Spec, abi: Abi) bool {
+            return switch (abi) {
+                .ableos => switch (self) {
+                    .ByRef => true,
+                    else => false,
+                },
+                .systemv => switch (self) {
+                    .ByValue => false,
+                    else => true,
+                },
+                else => unreachable,
+            };
+        }
+
+        pub fn len(self: Spec, is_ret: bool, abi: Abi) usize {
+            return switch (abi) {
+                .ableos => switch (self) {
+                    .Imaginary => 0,
+                    .ByValue => 1,
+                    .ByValuePair => 2,
+                    .ByRef => if (is_ret) 0 else 1,
+                },
+                .systemv => switch (self) {
+                    .Imaginary => 0,
+                    .ByValue => 1,
+                    .ByValuePair => if (is_ret) 0 else 2,
+                    .ByRef => if (is_ret) 0 else 1,
+                },
+                else => unreachable,
             };
         }
     };
@@ -526,7 +548,7 @@ pub const Abi = enum {
             },
             .Nullable => |n| switch (self) {
                 .ableos => categorizeAbleosNullable(n, types),
-                else => unreachable,
+                else => categorizeSystemvNullable(n, types),
             },
             .Global, .Func, .Template => .Imaginary,
         };
@@ -535,6 +557,18 @@ pub const Abi = enum {
     pub fn categorizeAbleosNullable(id: utils.EntId(tys.Nullable), types: *Types) ?Spec {
         const nullable = types.store.get(id);
         const base_abi = Abi.ableos.categorize(nullable.inner, types) orelse return null;
+        if (id.isCompact(types)) return base_abi;
+        if (base_abi == .Imaginary) return .{ .ByValue = .i8 };
+        if (base_abi == .ByValue) return .{ .ByValuePair = .{
+            .types = .{ .i8, base_abi.ByValue },
+            .padding = @intCast(base_abi.ByValue.size() - 1),
+        } };
+        return .ByRef;
+    }
+
+    pub fn categorizeSystemvNullable(id: utils.EntId(tys.Nullable), types: *Types) ?Spec {
+        const nullable = types.store.get(id);
+        const base_abi = Abi.systemv.categorize(nullable.inner, types) orelse return null;
         if (id.isCompact(types)) return base_abi;
         if (base_abi == .Imaginary) return .{ .ByValue = .i8 };
         if (base_abi == .ByValue) return .{ .ByValuePair = .{
@@ -587,7 +621,7 @@ pub const Abi = enum {
         var res: Spec = .Imaginary;
         var offset: u64 = 0;
         for (stru.getFields(types)) |f| {
-            const fspec = Abi.ableos.categorize(f.ty, types) orelse continue;
+            const fspec = Abi.systemv.categorize(f.ty, types) orelse continue;
             if (fspec == .Imaginary) continue;
             if (fspec == .ByRef) return fspec;
             if (res == .Imaginary) {

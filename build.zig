@@ -12,7 +12,6 @@ pub fn build(b: *std.Build) !void {
             .root_source_file = b.path("src/zydis.zig"),
             .target = target,
             .optimize = .ReleaseFast,
-            .link_libc = target.result.os.tag != .freestanding,
         });
 
         m.addIncludePath(b.path("vendored/zydis/include/"));
@@ -21,7 +20,10 @@ pub fn build(b: *std.Build) !void {
 
         var files = std.ArrayListUnmanaged([]const u8).empty;
 
-        inline for (.{ "vendored/zydis/src/", "vendored/zydis/dependencies/zycore/src/" }) |p| {
+        inline for (.{
+            "vendored/zydis/src/",
+            "vendored/zydis/dependencies/zycore/src/",
+        }) |p| {
             const path = b.path(p).getPath(b);
             var dir = try std.fs.openDirAbsolute(path, .{ .iterate = true });
             var iter = try dir.walk(b.allocator);
@@ -40,7 +42,7 @@ pub fn build(b: *std.Build) !void {
 
         m.addCSourceFiles(.{
             .files = files.items,
-            .flags = if (target.result.os.tag != .freestanding) &.{} else &.{"-DZYAN_NO_LIBC"},
+            .flags = &.{"-DZYAN_NO_LIBC"},
         });
 
         break :zydis m;
