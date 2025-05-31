@@ -1,0 +1,7 @@
+main:
+	mov rax, 0x01
+	mov rcx, 0x02
+	mov rdx, 0x03
+	add rax, rcx
+	add rax, rdx
+	ret

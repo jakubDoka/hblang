@@ -1,0 +1,10 @@
+"foo.hb".foo(oo = u8):
+	ret
+main:
+	push rbx
+	mov rbx, 0x00
+	mov rdi, rbx
+	call 0x0000000000000005
+	mov rax, rbx
+	pop rbx
+	ret

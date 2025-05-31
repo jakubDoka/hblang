@@ -1,0 +1,33 @@
+"comptime 2".main.some_fn3(some_int = uint)(fnc = "comptime 2".main.some_fn(some_int = uint)):
+	call 0x0000000000000005
+	mov rcx, 0x0A
+	add rax, rcx
+	ret
+"comptime 2".main.some_fn3(some_int = uint)(fnc = "comptime 2".main.some_fn3(some_int = uint)(fnc = "comptime 2".main.some_fn2(some_int = uint, some_fn = "comptime 2".main.some_fn(some_int = uint)))):
+	call 0x0000000000000005
+	mov rcx, 0x0A
+	add rax, rcx
+	ret
+"comptime 2".main.some_fn3(some_int = uint)(fnc = "comptime 2".main.some_fn2(some_int = uint, some_fn = "comptime 2".main.some_fn(some_int = uint))):
+	call 0x0000000000000005
+	mov rcx, 0x0A
+	add rax, rcx
+	ret
+"comptime 2".main.some_fn2(some_int = uint, some_fn = "comptime 2".main.some_fn(some_int = uint)):
+	call 0x0000000000000005
+	mov rcx, 0x01
+	add rax, rcx
+	ret
+"comptime 2".main.some_fn(some_int = uint):
+	mov rax, 0x01
+	ret
+main:
+	push rbx
+	call 0x0000000000000005
+	mov rbx, rax
+	call 0x0000000000000005
+	mov rcx, rbx
+	add rcx, rax
+	mov rax, rcx
+	pop rbx
+	ret

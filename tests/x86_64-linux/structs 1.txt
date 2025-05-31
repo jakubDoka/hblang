@@ -54,26 +54,28 @@ main:
 	push r13
 	push r14
 	push r15
-	sub rsp, 0x40
+	sub rsp, 0x48
 	mov rbx, rsp
-	add rbx, 0x10
+	add rbx, 0x18
 	mov rbp, 0x04
 	mov [rbx], rbp
 	mov rbp, 0x10
 	mov r12, 0x08
 	mov r13, rsp
-	add r13, 0x28
-	lea r14, [0x0000000000000007]
-	mov [rsp], rbx
-	add [rsp], r12
-	mov rdi, [rsp]
-	mov rsi, r14
+	add r13, 0x30
+	lea r15, [0x0000000000000007]
+	mov [rsp], r15
+	mov [rsp+0x08], rbx
+	add [rsp+0x08], r12
+	mov rdi, [rsp+0x08]
+	mov rsi, [rsp]
 	mov rdx, r12
 	call 0x0000000000000005
-	mov r14, 0x03
-	mov [rsp], rbx
-	add [rsp], rbp
-	mov r15, [rsp]
+	mov qword ptr [rsp], 0x03
+	mov [rsp+0x08], rbx
+	add [rsp+0x08], rbp
+	mov r15, [rsp+0x08]
+	mov r14, [rsp]
 	mov [r15], r14
 	mov rdi, r13
 	mov rsi, rbx
@@ -83,17 +85,18 @@ main:
 	mov rbp, r13
 	add rbp, r12
 	mov rbx, [rbx]
-	cmp rbx, r14
+	cmp rbx, [rsp]
 	setnz bl
 	movzx rbx, bl
 	mov r12, 0x00
 	mov rbp, [rbp]
-	mov r14, [r13]
+	mov r15, [r13]
+	mov [rsp], r15
 	test rbx, rbx
 	jz 0x000000000000000E
 	mov rax, r12
-	jmp 0x000000000000002D
-	mov rdi, r14
+	jmp 0x000000000000002E
+	mov rdi, [rsp]
 	mov rsi, rbp
 	call 0x0000000000000005
 	mov rbx, rax
@@ -106,7 +109,7 @@ main:
 	jmp 0x000000000000000D
 	mov rdi, r13
 	call 0x0000000000000005
-	add rsp, 0x40
+	add rsp, 0x48
 	pop r15
 	pop r14
 	pop r13

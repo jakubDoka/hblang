@@ -52,18 +52,22 @@ pub const Reg = enum(u8) {
         const callee_saved: []const Reg = &.{ .rbx, .rbp, .r12, .r13, .r14, .r15 };
     };
 
+    pub fn asZydisOpReg(self: Reg, size: usize) zydis.ZydisEncoderOperand {
+        return .{
+            .type = zydis.ZYDIS_OPERAND_TYPE_REGISTER,
+            .reg = .{ .value = @intCast(switch (size) {
+                1 => zydis.ZYDIS_REGISTER_AL + if (@intFromEnum(self) > 4) @as(u8, 4) else 0,
+                2 => zydis.ZYDIS_REGISTER_AX,
+                4 => zydis.ZYDIS_REGISTER_EAX,
+                8 => zydis.ZYDIS_REGISTER_RAX,
+                else => unreachable,
+            } + @intFromEnum(self)) },
+        };
+    }
+
     pub fn asZydisOp(self: Reg, size: usize) zydis.ZydisEncoderOperand {
         if (@intFromEnum(self) < @intFromEnum(Reg.r14)) {
-            return .{
-                .type = zydis.ZYDIS_OPERAND_TYPE_REGISTER,
-                .reg = .{ .value = @intCast(switch (size) {
-                    1 => zydis.ZYDIS_REGISTER_AL + if (@intFromEnum(self) > 4) @as(u8, 4) else 0,
-                    2 => zydis.ZYDIS_REGISTER_AX,
-                    4 => zydis.ZYDIS_REGISTER_EAX,
-                    8 => zydis.ZYDIS_REGISTER_RAX,
-                    else => unreachable,
-                } + @intFromEnum(self)) },
-            };
+            return self.asZydisOpReg(size);
         } else {
             return .{
                 .type = zydis.ZYDIS_OPERAND_TYPE_MEMORY,
@@ -314,27 +318,47 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
     };
     len = @sizeOf(@TypeOf(buf));
 
-    var tmp_allocs: u8 = 0;
+    var tmp_allocs: u8 = tmp_count;
+
+    var size: ?usize = null;
+    inline for (fields) |f| {
+        const val = @field(args, f.name);
+        const op_size: ?usize = switch (f.type) {
+            Reg => 8,
+            SReg => val[1],
+            BRegOff => val[2],
+            zydis.ZydisEncoderOperand => b: {
+                const t = val.mem.size;
+                break :b t;
+            },
+            else => null,
+        };
+
+        if (mnemonic != zydis.ZYDIS_MNEMONIC_MOVZX and size != null and op_size != null) std.debug.assert(op_size == size);
+        size = size orelse op_size;
+    }
+
+    if (fields.len == 0) size = 0;
+    if (mnemonic == zydis.ZYDIS_MNEMONIC_PUSH or mnemonic == zydis.ZYDIS_MNEMONIC_POP) size = 8;
+
+    const fsize = size.?;
 
     inline for (fields, 0..) |f, i| {
         const val = @field(args, f.name);
+
         req.operands[i] = switch (f.type) {
-            Reg => val.asZydisOp(8),
-            Tmp => .{
-                .type = zydis.ZYDIS_OPERAND_TYPE_REGISTER,
-                .reg = .{ .value = @intCast(zydis.ZYDIS_REGISTER_R14 + val[0]) },
-            },
+            Reg => val.asZydisOp(fsize),
+            Tmp => @as(Reg, @enumFromInt(@intFromEnum(Reg.r14) + val[0])).asZydisOpReg(fsize),
             SReg => val[0].asZydisOp(val[1]),
             BRegOff => b: {
                 var base = val[0].asZydisOp(8);
                 if (base.type != zydis.ZYDIS_OPERAND_TYPE_REGISTER) {
-                    std.debug.assert(tmp_allocs < 2); // bruh
+                    tmp_allocs -= 1;
                     self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{tmp_allocs}, val[0] });
                     base = .{
                         .type = zydis.ZYDIS_OPERAND_TYPE_REGISTER,
                         .reg = .{ .value = @intCast(zydis.ZYDIS_REGISTER_R14 + tmp_allocs) },
                     };
-                    tmp_allocs += 1;
                 }
                 std.debug.assert(base.reg.value != 0);
                 break :b .{
@@ -354,15 +378,24 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
                 .type = zydis.ZYDIS_OPERAND_TYPE_IMMEDIATE,
                 .imm = .{ .u = val },
             },
+            zydis.ZydisEncoderOperand => val,
             else => comptime unreachable,
         };
     }
 
-    if (fields.len == 2 and
+    const should_flush_to_mem =
+        mnemonic == zydis.ZYDIS_MNEMONIC_MOVZX and
+        req.operands[0].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY;
+    var prev_oper: zydis.ZydisEncoderOperand = undefined;
+    if (should_flush_to_mem) {
+        prev_oper = req.operands[0];
+        req.operands[0] = Reg.r15.asZydisOpReg(req.operands[0].mem.size);
+    } else if (fields.len == 2 and
         req.operands[0].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY and
         req.operands[1].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY)
     {
-        unreachable;
+        self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{tmp_allocs -| 1}, req.operands[1] });
+        req.operands[1] = @as(Reg, @enumFromInt(@intFromEnum(Reg.r14) + (tmp_allocs -| 1))).asZydisOpReg(req.operands[1].mem.size);
     }
 
     const status = zydis.ZydisEncoderEncodeInstruction(&req, &buf, &len);
@@ -372,6 +405,10 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
     }
 
     try self.out.code.appendSlice(self.gpa, buf[0..len]);
+
+    if (should_flush_to_mem) {
+        self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ prev_oper, Tmp{1} });
+    }
 }
 
 pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
@@ -418,6 +455,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 if (spilled) {
                     req.operands[0] = .{
                         .type = zydis.ZYDIS_OPERAND_TYPE_REGISTER,
+                        .reg = .{ .value = zydis.ZYDIS_REGISTER_R15 },
                     };
                 }
                 req.operands[1] = .{
@@ -438,6 +476,10 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 try self.out.addReloc(self.gpa, slot, 4, -4);
 
                 try self.out.code.appendSlice(self.gpa, buf[len - 4 .. len]);
+
+                if (spilled) {
+                    self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), Tmp{1} });
+                }
             },
             .Local => {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), Reg.rsp });
@@ -551,11 +593,14 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     .sgt => zydis.ZYDIS_MNEMONIC_SETNLE,
                     .sge => zydis.ZYDIS_MNEMONIC_SETNL,
 
-                    else => unreachable,
+                    .bor => zydis.ZYDIS_MNEMONIC_OR,
+                    .band => zydis.ZYDIS_MNEMONIC_AND,
+
+                    else => std.debug.panic("{}", .{instr}),
                 };
 
                 switch (op) {
-                    .iadd, .isub, .imul => {
+                    .iadd, .isub, .imul, .bor, .band => {
                         self.emitInstr(mnemonic, .{ dst, rhs });
                     },
                     .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => {
@@ -563,7 +608,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                         self.emitInstr(mnemonic, .{SReg{ dst, 1 }});
                         self.emitInstr(zydis.ZYDIS_MNEMONIC_MOVZX, .{ dst, SReg{ dst, 1 } });
                     },
-                    else => unreachable,
+                    else => std.debug.panic("{}", .{instr}),
                 }
             },
             .If => {
@@ -597,12 +642,14 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 const dst = self.getReg(instr);
                 const src = self.getReg(instr.inputs()[1]);
 
+                if (dst != src) {
+                    self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ dst, src });
+                }
+
                 switch (op) {
-                    .sext, .uext => {
-                        if (dst != src) self.emitInstr(
-                            zydis.ZYDIS_MNEMONIC_MOV,
-                            .{ dst, src },
-                        );
+                    .sext, .uext => {},
+                    .not => {
+                        self.emitInstr(zydis.ZYDIS_MNEMONIC_NOT, .{dst});
                     },
                     else => {
                         std.debug.panic("{any}", .{instr});

@@ -34,43 +34,46 @@ main:
 	push r13
 	push r14
 	push r15
-	sub rsp, 0x48
+	sub rsp, 0x50
 	mov rbx, rsp
-	add rbx, 0x18
+	add rbx, 0x20
 	mov rbp, 0x00
 	mov [rbx], rbp
 	mov r12, 0x10
 	mov r13, rsp
-	add r13, 0x30
-	mov r14, 0x08
-	mov [rsp], rbx
-	add [rsp], r14
-	mov r15, [rsp]
-	mov [r15], rbp
+	add r13, 0x38
+	mov qword ptr [rsp], 0x08
 	mov [rsp+0x08], rbx
-	add [rsp+0x08], r12
+	mov r15, [rsp]
+	add [rsp+0x08], r15
 	mov r15, [rsp+0x08]
+	mov [r15], rbp
+	mov [rsp+0x10], rbx
+	add [rsp+0x10], r12
+	mov r15, [rsp+0x10]
 	mov [r15], rbp
 	mov rbp, 0x01
 	mov [r13], rbp
-	mov [rsp+0x10], r13
-	add [rsp+0x10], r14
-	mov r15, [rsp+0x10]
+	mov [rsp+0x18], r13
+	mov r15, [rsp]
+	add [rsp+0x18], r15
+	mov r15, [rsp+0x18]
 	mov [r15], rbp
-	mov r14, r13
-	add r14, r12
-	mov [r14], rbp
+	mov [rsp], r13
+	add [rsp], r12
+	mov r15, [rsp]
+	mov [r15], rbp
 	mov rdi, rbx
 	mov rsi, r13
 	call 0x0000000000000005
 	mov rax, [rbx]
-	mov r15, [rsp]
-	mov rcx, [r15]
 	mov r15, [rsp+0x08]
+	mov rcx, [r15]
+	mov r15, [rsp+0x10]
 	mov rdx, [r15]
 	add rax, rcx
 	add rax, rdx
-	add rsp, 0x48
+	add rsp, 0x50
 	pop r15
 	pop r14
 	pop r13

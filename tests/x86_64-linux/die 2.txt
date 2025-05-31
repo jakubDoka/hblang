@@ -1,0 +1,13 @@
+"die 2".fallible:
+	mov rax, 0x00
+	ret
+main:
+	call 0x0000000000000005
+	mov rcx, 0x00
+	cmp rax, rcx
+	setz al
+	movzx rax, al
+	test rax, rax
+	jz 0x0000000000000008
+	ud2
+	ud2

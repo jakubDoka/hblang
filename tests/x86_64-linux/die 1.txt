@@ -1,0 +1,7 @@
+main:
+	mov rax, 0x00
+	test rax, rax
+	jz 0x000000000000000E
+	mov rax, 0x01
+	ret
+	ud2

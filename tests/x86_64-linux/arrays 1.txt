@@ -1,0 +1,43 @@
+main:
+	push rbx
+	push rbp
+	sub rsp, 0x40
+	mov rax, 0x00
+	mov rcx, rsp
+	add rcx, 0x00
+	mov rdx, 0x08
+	mov rbx, 0x01
+	mov rbp, rax
+	cmp rbp, rdx
+	setz sil
+	movzx rsi, sil
+	test rsi, rsi
+	jz 0x0000000000000042
+	mov rbp, rax
+	mov rsi, rax
+	imul rsi, rdx
+	cmp rax, rdx
+	setz dil
+	movzx rdi, dil
+	mov r8, rcx
+	add r8, rsi
+	test rdi, rdi
+	jz 0x0000000000000010
+	mov rax, rbp
+	add rsp, 0x40
+	pop rbp
+	pop rbx
+	ret
+	mov rsi, [r8]
+	add rax, rbx
+	add rbp, rsi
+	jmp 0xFFFFFFFFFFFFFFCC
+	mov rsi, rbp
+	imul rsi, rdx
+	mov rdi, rbp
+	add rdi, rbx
+	mov r8, rcx
+	add r8, rsi
+	mov [r8], rbp
+	mov rbp, rdi
+	jmp 0xFFFFFFFFFFFFFF97

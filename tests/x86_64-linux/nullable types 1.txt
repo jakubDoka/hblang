@@ -1,0 +1,67 @@
+"nullable types 1".mkval(T = uint):
+	push rbx
+	push rbp
+	sub rsp, 0x10
+	mov rcx, rdi
+	mov rax, rsi
+	mov rdx, 0x08
+	mov rbx, rsp
+	add rbx, 0x00
+	mov rbp, 0x01
+	mov [rbx], bpl
+	mov rbp, rbx
+	add rbp, rdx
+	mov [rbp], rax
+	mov rax, 0x10
+	mov rdi, rcx
+	mov rsi, rbx
+	mov rdx, rax
+	call 0x0000000000000005
+	add rsp, 0x10
+	pop rbp
+	pop rbx
+	ret
+"nullable types 1".mknull(T = uint):
+	mov rax, rdi
+	mov rcx, 0x00
+	mov [rax], cl
+	ret
+main:
+	push rbx
+	push rbp
+	push r12
+	sub rsp, 0x20
+	mov rbx, rsp
+	add rbx, 0x00
+	mov rbp, 0x0A
+	mov rdi, rbx
+	mov rsi, rbp
+	call 0x0000000000000005
+	mov rbp, 0x00
+	mov r12b, [rbx]
+	cmp r12, rbp
+	setz r12b
+	movzx r12, r12b
+	test r12, r12
+	jz 0x0000000000000012
+	mov rax, 0x01
+	jmp 0x0000000000000037
+	mov rbp, rsp
+	add rbp, 0x10
+	mov rdi, rbp
+	call 0x0000000000000005
+	mov rax, 0x08
+	mov cl, [rbp]
+	mov rdx, rbx
+	add rdx, rax
+	mov rax, [rdx]
+	test rcx, rcx
+	jz 0x0000000000000012
+	mov rax, 0x02
+	jmp 0x0000000000000005
+	add rsp, 0x20
+	pop r12
+	pop rbp
+	pop rbx
+	ret
+memcpy:

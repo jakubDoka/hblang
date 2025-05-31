@@ -1,0 +1,11 @@
+"generic structs 7 (template method call)".A.apply(func = "generic structs 7 (template method call)".main):
+	ret
+main:
+	push rbx
+	mov rbx, rsp
+	add rbx, 0x00
+	mov rdi, rbx
+	call 0x0000000000000005
+	mov rax, 0x00
+	pop rbx
+	ret

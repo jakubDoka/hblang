@@ -547,7 +547,7 @@ pub const Abi = enum {
                 else => unreachable,
             } },
             .Union => |s| switch (self) {
-                .ableos => categorizeAbleosUnion(s, types),
+                .ableos, .systemv => categorizeAbleosUnion(s, types),
                 else => unreachable,
             },
             inline .Struct, .Tuple => |s| switch (self) {
@@ -561,7 +561,8 @@ pub const Abi = enum {
             },
             .Nullable => |n| switch (self) {
                 .ableos => categorizeAbleosNullable(n, types),
-                else => categorizeSystemvNullable(n, types),
+                .systemv => categorizeSystemvNullable(n, types),
+                else => unreachable,
             },
             .Global, .Func, .Template => .Imaginary,
         };

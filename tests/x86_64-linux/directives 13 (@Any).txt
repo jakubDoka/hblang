@@ -1,0 +1,29 @@
+"directives 13 (@Any)".func(a: uint):
+	mov rax, 0x00
+	ret
+"directives 13 (@Any)".foo(vl: uint):
+	mov rax, rdi
+	ret
+"directives 13 (@Any)".foo(vl: u8):
+	mov rax, rdi
+	ret
+main:
+	push rbx
+	push rbp
+	mov rbx, 0x01
+	mov rbp, 0x02
+	mov rdi, rbx
+	mov rsi, rbp
+	call 0x0000000000000005
+	mov rbx, 0x05
+	mov rdi, rbx
+	call 0x0000000000000005
+	mov rbp, rax
+	mov rdi, rbx
+	call 0x0000000000000005
+	mov rcx, rbp
+	add rcx, rax
+	mov rax, rcx
+	pop rbp
+	pop rbx
+	ret

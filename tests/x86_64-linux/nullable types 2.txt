@@ -1,0 +1,63 @@
+"nullable types 2".take:
+	mov rax, rdi
+	mov rcx, 0x01
+	mov rdx, [rax]
+	add rdx, rcx
+	mov [rax], rdx
+	ret
+main:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	push r14
+	push r15
+	sub rsp, 0x30
+	mov rbx, 0x01
+	mov rbp, 0x00
+	mov r12, rsp
+	add r12, 0x18
+	mov [r12], bl
+	mov r13, 0x10
+	cmp rbx, rbp
+	setz [rsp]
+	movzx r15, byte ptr [rsp]
+	mov [rsp], r15
+	mov qword ptr [rsp+0x08], 0x08
+	mov [rsp+0x10], r12
+	mov r15, [rsp+0x08]
+	add [rsp+0x10], r15
+	mov r15, [rsp+0x10]
+	mov [r15], rbp
+	add r12, r13
+	mov [r12], rbp
+	mov r15, [rsp]
+	test [rsp], r15
+	jz 0x000000000000000E
+	mov rax, rbx
+	jmp 0x000000000000001A
+	mov r15, [rsp]
+	test [rsp], r15
+	jz 0x0000000000000012
+	mov rax, 0x02
+	jmp 0x000000000000001A
+	mov r15, [rsp]
+	test [rsp], r15
+	jz 0x0000000000000012
+	mov rax, 0x03
+	jmp 0x0000000000000022
+	mov [r12], rbx
+	mov rdi, [rsp+0x10]
+	call 0x0000000000000005
+	mov r15, [rsp+0x10]
+	mov rax, [r15]
+	mov rcx, [r12]
+	sub rax, rcx
+	add rsp, 0x30
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
+	ret

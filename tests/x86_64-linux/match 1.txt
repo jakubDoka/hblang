@@ -1,0 +1,16 @@
+main:
+	mov rax, 0x01
+	mov rcx, 0x00
+	test rax, rax
+	jz 0x0000000000000023
+	test rcx, rcx
+	jz 0x0000000000000012
+	mov rax, 0x03
+	jmp 0x0000000000000022
+	mov rax, rcx
+	jmp 0x000000000000001A
+	test rcx, rcx
+	jz 0x000000000000000B
+	jmp 0x000000000000000C
+	mov rax, 0x02
+	ret

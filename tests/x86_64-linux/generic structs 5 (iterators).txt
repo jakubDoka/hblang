@@ -1,0 +1,351 @@
+"generic structs 5 (iterators)".main(Next = "generic structs 5 (iterators)".main.Next).next:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	push r14
+	push r15
+	sub rsp, 0x20
+	mov rbp, rdi
+	mov rbx, rsi
+	mov r12, 0x08
+	mov r13, rbx
+	add r13, r12
+	mov qword ptr [rsp], 0x00
+	mov r15, [r13]
+	mov [rsp+0x08], r15
+	mov r15, [rsp]
+	cmp [rsp+0x08], r15
+	setz [rsp+0x08]
+	movzx r15, byte ptr [rsp+0x08]
+	mov [rsp+0x08], r15
+	mov r15, [rsp+0x08]
+	test [rsp+0x08], r15
+	jz 0x0000000000000013
+	mov rdi, rbp
+	call 0x0000000000000005
+	jmp 0x000000000000005F
+	mov r15, [rbx]
+	mov [rsp], r15
+	mov r15, [rsp]
+	mov r14b, [r15]
+	mov [rsp], r14b
+	mov rdi, rbp
+	mov rsi, [rsp]
+	call 0x0000000000000005
+	mov rax, rsp
+	add rax, 0x10
+	mov rcx, 0x01
+	mov rdx, [rbx]
+	mov rbp, [r13]
+	add rdx, rcx
+	mov [rax], rdx
+	mov rdx, rax
+	add rdx, r12
+	sub rbp, rcx
+	mov [rdx], rbp
+	mov rcx, 0x10
+	mov rdi, rbx
+	mov rsi, rax
+	mov rdx, rcx
+	call 0x0000000000000005
+	add rsp, 0x20
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
+	ret
+"generic structs 5 (iterators)".main.Chain(A = "generic structs 5 (iterators)".main(Next = "generic structs 5 (iterators)".main.Next), B = "generic structs 5 (iterators)".main(Next = "generic structs 5 (iterators)".main.Next)).next:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	push r14
+	push r15
+	sub rsp, 0x40
+	mov rbp, rdi
+	mov rbx, rsi
+	mov r12, 0x18
+	mov r13, 0x08
+	mov [rsp], rsp
+	add qword ptr [rsp], 0x38
+	mov qword ptr [rsp+0x08], 0x00
+	mov [rsp+0x10], rsp
+	add qword ptr [rsp+0x10], 0x3A
+	mov qword ptr [rsp+0x18], 0x01
+	mov qword ptr [rsp+0x20], 0x02
+	mov [rsp+0x28], rbx
+	add [rsp+0x28], r12
+	mov r12, rbx
+	add r12, r13
+	mov r13b, [rbx]
+	cmp r13, [rsp+0x08]
+	setz [rsp+0x30]
+	movzx r15, byte ptr [rsp+0x30]
+	mov [rsp+0x30], r15
+	mov r15, [rsp+0x30]
+	test [rsp+0x30], r15
+	jz 0x0000000000000048
+	mov rdi, [rsp+0x10]
+	mov rsi, r12
+	call 0x0000000000000005
+	mov r15, [rsp+0x10]
+	mov r13b, [r15]
+	test r13, r13
+	jz 0x000000000000001D
+	mov rdi, rbp
+	mov rsi, [rsp+0x10]
+	mov rdx, [rsp+0x20]
+	call 0x0000000000000005
+	jmp 0x0000000000000057
+	mov r15b, [rsp+0x18]
+	mov [rbx], r15b
+	jmp 0x0000000000000057
+	cmp r13, [rsp+0x18]
+	setz r13b
+	movzx r13, r13b
+	test r13, r13
+	jz 0x0000000000000047
+	mov rdi, [rsp]
+	mov rsi, [rsp+0x28]
+	call 0x0000000000000005
+	mov r15, [rsp]
+	mov r13b, [r15]
+	test r13, r13
+	jz 0x000000000000001C
+	mov rdi, rbp
+	mov rsi, [rsp]
+	mov rdx, [rsp+0x20]
+	call 0x0000000000000005
+	jmp 0x000000000000001A
+	mov r15b, [rsp+0x20]
+	mov [rbx], r15b
+	jmp 0xFFFFFFFFFFFFFF44
+	mov rdi, rbp
+	call 0x0000000000000005
+	add rsp, 0x40
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
+	ret
+"generic structs 5 (iterators)".main.Next(T = u8).none:
+	mov rax, rdi
+	mov rcx, 0x00
+	mov [rax], cl
+	mov rcx, 0x01
+	mov rdx, 0xAAAAAAAAAAAAAAAA
+	add rax, rcx
+	mov [rax], dl
+	ret
+"generic structs 5 (iterators)".main.Next(T = u8).some:
+	mov rax, rdi
+	mov rcx, rsi
+	mov rdx, 0x01
+	mov [rax], dl
+	add rax, rdx
+	mov [rax], cl
+	ret
+main:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	push r14
+	push r15
+	sub rsp, 0x108
+	mov rbx, rsp
+	add rbx, 0x78
+	lea rbp, [0x0000000000000007]
+	mov [rbx], rbp
+	mov rbp, 0x08
+	mov r12, rsp
+	add r12, 0x88
+	mov r13, rsp
+	add r13, 0x98
+	mov [rsp], rsp
+	add qword ptr [rsp], 0xDC
+	mov qword ptr [rsp+0x08], 0x18
+	mov qword ptr [rsp+0x10], 0x04
+	mov [rsp+0x18], rbx
+	add [rsp+0x18], rbp
+	mov r15, [rsp+0x18]
+	mov r14, [rsp+0x10]
+	mov [r15], r14
+	lea r15, [0x0000000000000007]
+	mov [rsp+0x18], r15
+	mov r15, [rsp+0x18]
+	mov [r12], r15
+	mov qword ptr [rsp+0x18], 0x00
+	mov qword ptr [rsp+0x20], 0x02
+	mov [rsp+0x28], r12
+	add [rsp+0x28], rbp
+	mov r15, [rsp+0x28]
+	mov r14, [rsp+0x20]
+	mov [r15], r14
+	lea r15, [0x0000000000000007]
+	mov [rsp+0x28], r15
+	mov r15, [rsp+0x28]
+	mov [r13], r15
+	mov [rsp+0x28], r13
+	add [rsp+0x28], rbp
+	mov r15, [rsp+0x28]
+	mov r14, [rsp+0x20]
+	mov [r15], r14
+	mov qword ptr [rsp+0x28], 0x10
+	mov [rsp+0x30], rsp
+	add qword ptr [rsp+0x30], 0xBC
+	mov rdi, [rsp+0x30]
+	mov rsi, r12
+	mov rdx, [rsp+0x28]
+	call 0x0000000000000005
+	mov [rsp+0x38], rsp
+	add qword ptr [rsp+0x38], 0xCC
+	mov rdi, [rsp+0x38]
+	mov rsi, rbx
+	mov rdx, [rsp+0x28]
+	call 0x0000000000000005
+	mov r15, [rsp]
+	mov r14b, [rsp+0x18]
+	mov [r15], r14b
+	mov r15, [rsp]
+	mov [rsp+0x40], r15
+	add [rsp+0x40], rbp
+	mov rdi, [rsp+0x40]
+	mov rsi, r12
+	mov rdx, [rsp+0x28]
+	call 0x0000000000000005
+	mov rbp, [rsp]
+	add rbp, [rsp+0x08]
+	mov rdi, rbp
+	mov rsi, r13
+	mov rdx, [rsp+0x28]
+	call 0x0000000000000005
+	mov rbp, rsp
+	add rbp, 0x106
+	mov r12, 0x01
+	mov r13, rsp
+	add r13, 0x104
+	mov [rsp+0x08], rbp
+	add [rsp+0x08], r12
+	mov [rsp+0x40], r13
+	add [rsp+0x40], r12
+	mov rdi, r13
+	mov rsi, [rsp+0x30]
+	call 0x0000000000000005
+	mov r15b, [r13]
+	mov [rsp+0x50], r15b
+	not [rsp+0x50]
+	mov r15, [rsp+0x50]
+	test [rsp+0x50], r15
+	jz 0x0000000000000115
+	mov rbp, rsp
+	add rbp, 0xA8
+	mov rdi, rbp
+	mov rsi, rbx
+	mov rdx, [rsp+0x28]
+	call 0x0000000000000005
+	mov rdi, [rsp+0x38]
+	mov rsi, rbp
+	mov rdx, [rsp+0x28]
+	call 0x0000000000000005
+	mov rbx, rsp
+	add rbx, 0xBA
+	mov rbp, rsp
+	add rbp, 0xB8
+	mov r13, rbx
+	add r13, r12
+	mov [rsp+0x08], rbp
+	add [rsp+0x08], r12
+	mov rdi, rbp
+	mov rsi, [rsp+0x38]
+	call 0x0000000000000005
+	mov r12b, [rbp]
+	not r12
+	test r12, r12
+	jz 0x0000000000000010
+	mov rax, [rsp+0x18]
+	jmp 0x0000000000000150
+	mov rdi, rbx
+	mov rsi, [rsp]
+	call 0x0000000000000005
+	mov r12b, [rbx]
+	mov [rsp+0x20], r12
+	not [rsp+0x20]
+	mov r15, [rsp+0x08]
+	mov r14b, [r15]
+	mov [rsp+0x28], r14b
+	mov r15b, [r13]
+	mov [rsp+0x30], r15b
+	mov r15b, [rbp]
+	mov [rsp+0x40], r15b
+	mov r15, [rsp+0x20]
+	test [rsp+0x20], r15
+	jz 0x0000000000000012
+	mov rax, 0x03
+	jmp 0x00000000000000FC
+	cmp r12, [rsp+0x40]
+	setnz r12b
+	movzx r12, r12b
+	mov r15, [rsp+0x28]
+	cmp [rsp+0x30], r15
+	setnz [rsp+0x20]
+	movzx r15, byte ptr [rsp+0x20]
+	mov [rsp+0x20], r15
+	or r12, [rsp+0x20]
+	test r12, r12
+	jz 0x0000000000000010
+	mov rax, [rsp+0x10]
+	jmp 0x00000000000000BD
+	jmp 0xFFFFFFFFFFFFFF46
+	mov rdi, rbp
+	mov rsi, [rsp+0x38]
+	call 0x0000000000000005
+	mov r15b, [rbp]
+	mov [rsp+0x50], r15b
+	mov r15, [rsp+0x50]
+	mov [rsp+0x58], r15
+	not [rsp+0x58]
+	mov r15, [rsp+0x08]
+	mov r14b, [r15]
+	mov [rsp+0x60], r14b
+	mov r15, [rsp+0x40]
+	mov r14b, [r15]
+	mov [rsp+0x68], r14b
+	mov r15b, [r13]
+	mov [rsp+0x70], r15b
+	mov r15, [rsp+0x58]
+	test [rsp+0x58], r15
+	jz 0x000000000000000E
+	mov rax, r12
+	jmp 0x0000000000000058
+	mov r15, [rsp+0x50]
+	cmp [rsp+0x70], r15
+	setnz [rsp+0x58]
+	movzx r15, byte ptr [rsp+0x58]
+	mov [rsp+0x58], r15
+	mov r15, [rsp+0x60]
+	cmp [rsp+0x68], r15
+	setnz [rsp+0x50]
+	movzx r15, byte ptr [rsp+0x50]
+	mov [rsp+0x50], r15
+	mov r15, [rsp+0x50]
+	or [rsp+0x58], r15
+	mov r15, [rsp+0x58]
+	test [rsp+0x58], r15
+	jz 0x000000000000001D
+	mov rax, [rsp+0x20]
+	add rsp, 0x108
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
+	ret
+	jmp 0xFFFFFFFFFFFFFE01
+memcpy:

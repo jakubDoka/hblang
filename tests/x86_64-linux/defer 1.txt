@@ -1,0 +1,85 @@
+"defer 1".main.ret_defer:
+	mov rax, rdi
+	mov rcx, 0x01
+	mov rdx, [rax]
+	add rdx, rcx
+	mov [rax], rdx
+	ret
+main:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	push r14
+	push r15
+	sub rsp, 0x20
+	mov rbx, 0x00
+	mov rbp, 0x01
+	cmp rbx, rbp
+	setz r12b
+	movzx r12, r12b
+	test r12, r12
+	jz 0x000000000000000E
+	mov rax, rbp
+	jmp 0x0000000000000026
+	mov r12, rbx
+	add r12, rbp
+	cmp r12, rbp
+	setnz r13b
+	movzx r13, r13b
+	test r13, r13
+	jz 0x0000000000000012
+	mov rax, 0x02
+	jmp 0x000000000000008F
+	mov r13, 0x03
+	mov qword ptr [rsp], 0x04
+	cmp r12, r13
+	setz [rsp+0x08]
+	movzx r15, byte ptr [rsp+0x08]
+	mov [rsp+0x08], r15
+	mov [rsp+0x10], r12
+	add [rsp+0x10], rbp
+	mov r15, [rsp+0x08]
+	test [rsp+0x08], r15
+	jz 0x0000000000000010
+	mov r12, [rsp+0x10]
+	jmp 0x0000000000000098
+	cmp r12, [rsp]
+	setz r12b
+	movzx r12, r12b
+	test r12, r12
+	jz 0x000000000000007F
+	mov r12, 0x05
+	cmp [rsp+0x10], r12
+	setnz [rsp+0x08]
+	movzx r15, byte ptr [rsp+0x08]
+	mov [rsp+0x08], r15
+	mov r15, [rsp+0x08]
+	test [rsp+0x08], r15
+	jz 0x000000000000000E
+	mov rax, r13
+	jmp 0x0000000000000033
+	mov r12, rsp
+	add r12, 0x18
+	mov [r12], rbx
+	mov rdi, r12
+	call 0x0000000000000005
+	mov rax, [r12]
+	cmp rax, rbp
+	setnz al
+	movzx rax, al
+	test rax, rax
+	jz 0x000000000000000F
+	mov rax, [rsp]
+	jmp 0x0000000000000008
+	mov rax, rbx
+	add rsp, 0x20
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
+	ret
+	mov r12, [rsp+0x10]
+	jmp 0xFFFFFFFFFFFFFF36

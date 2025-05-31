@@ -1,0 +1,41 @@
+"adding difference to a pointer 1".one:
+	mov rax, 0x01
+	ret
+main:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	push r14
+	sub rsp, 0x10
+	mov rbx, rsp
+	add rbx, 0x08
+	mov rbp, 0x00
+	mov [rbx], bpl
+	mov rbp, 0x02
+	mov r12, 0x03
+	mov r13, 0x01
+	mov [rsp], rbx
+	add [rsp], r13
+	mov r15, [rsp]
+	mov [r15], r13b
+	mov [rsp], rbx
+	add [rsp], rbp
+	mov r15, [rsp]
+	mov [r15], bpl
+	mov rbp, rbx
+	add rbp, r12
+	mov [rbp], r12b
+	call 0x0000000000000005
+	mov rcx, r13
+	sub rcx, rax
+	mov rax, rbx
+	add rax, rcx
+	mov al, [rax]
+	add rsp, 0x10
+	pop r14
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
+	ret

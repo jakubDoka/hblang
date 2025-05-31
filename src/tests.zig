@@ -52,8 +52,9 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
         );
     }
 
-    if (false) {
+    if (true) {
         if (std.mem.indexOf(u8, name, "float") != null) return;
+        if (std.mem.indexOf(u8, name, "ecall") != null) return;
 
         var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
         defer x86_64.deinit();
@@ -84,7 +85,7 @@ pub fn runMachineTest(
     defer output.deinit();
 
     errdefer {
-        test_util.testBuilder(name, code, gpa, out, machine, abi, color, true) catch unreachable;
+        test_util.testBuilder(name, code, gpa, out, machine, abi, color, true) catch {};
     }
 
     try test_util.testBuilder(
