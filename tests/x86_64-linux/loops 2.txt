@@ -15,22 +15,20 @@
 	pop rbp
 	pop rbx
 	ret
-	mov rsi, rbx
-	add rsi, rdx
-	mov rdi, rbp
+	mov rsi, rbp
 	mov rbp, rcx
 	cmp rbp, rax
-	setz r8b
-	movzx r8, r8b
-	test r8, r8
+	setz dil
+	movzx rdi, dil
+	test rdi, rdi
 	jz 0x0000000000000011
-	mov rbx, rsi
-	mov rbp, rdi
-	jmp 0xFFFFFFFFFFFFFFC0
-	mov r8, rbp
-	imul r8, rbx
+	add rbx, rdx
+	mov rbp, rsi
+	jmp 0xFFFFFFFFFFFFFFC6
+	mov rdi, rbp
+	imul rdi, rbx
 	add rbp, rdx
-	add rdi, r8
+	add rsi, rdi
 	jmp 0xFFFFFFFFFFFFFFD4
 main:
 	push rbx

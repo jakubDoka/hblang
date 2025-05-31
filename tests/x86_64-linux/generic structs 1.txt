@@ -1,16 +1,15 @@
-"generic structs 2".Foo(F = uint).Bar(B = u8).init:
+"generic structs 1".nvec(E = uint):
 	mov rax, rdi
-	mov rcx, 0x01
+	mov rcx, rsi
 	mov [rax], rcx
 	mov rdx, 0x08
 	add rax, rdx
-	mov [rax], cl
+	mov [rax], rcx
 	ret
-"generic structs 2".Foo(F = uint).Bar(B = u8).sub:
-	mov rcx, rdi
-	mov rax, rsi
-	sub rcx, rax
-	mov rax, rcx
+"generic structs 1".Vec(E = uint).sub:
+	mov rax, rdi
+	mov rcx, rsi
+	sub rax, rcx
 	ret
 main:
 	push rbx
@@ -19,13 +18,15 @@ main:
 	sub rsp, 0x10
 	mov rbx, rsp
 	add rbx, 0x00
+	mov rbp, 0x01
 	mov rdi, rbx
+	mov rsi, rbp
 	call 0x0000000000000005
 	mov rbp, 0x08
 	mov r12, rbx
 	add r12, rbp
 	mov rbx, [rbx]
-	mov bpl, [r12]
+	mov rbp, [r12]
 	mov rdi, rbx
 	mov rsi, rbp
 	call 0x0000000000000005

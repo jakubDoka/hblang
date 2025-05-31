@@ -1,0 +1,28 @@
+"Foo.hb".init:
+	mov rax, rdi
+	mov rcx, rsi
+	mov [rax], rcx
+	mov rdx, 0x08
+	add rax, rdx
+	mov [rax], rcx
+	ret
+main:
+	push rbx
+	push rbp
+	sub rsp, 0x10
+	mov rbx, rsp
+	add rbx, 0x00
+	mov rbp, 0x02
+	mov rdi, rbx
+	mov rsi, rbp
+	call 0x0000000000000005
+	mov rax, 0x08
+	mov rcx, rbx
+	add rcx, rax
+	mov rax, [rbx]
+	mov rcx, [rcx]
+	sub rax, rcx
+	add rsp, 0x10
+	pop rbp
+	pop rbx
+	ret

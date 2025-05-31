@@ -1,0 +1,16 @@
+"generic structs 3".Foo(F = "generic structs 3".Foo(F = uint)).sub:
+	mov rax, rdi
+	ret
+"generic structs 3".Foo(F = uint).sub:
+	mov rax, rdi
+	ret
+main:
+	push rbx
+	mov rbx, 0x0A
+	mov rdi, rbx
+	call 0x0000000000000005
+	mov rbx, rax
+	mov rdi, rbx
+	call 0x0000000000000005
+	pop rbx
+	ret

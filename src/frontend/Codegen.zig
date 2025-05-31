@@ -288,11 +288,11 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
     var i: usize = 0;
 
     if (ret_abi.isByRefRet(self.abi)) {
-        ret_abi.types(params[0..1]);
+        ret_abi.types(params[0..1], true, self.abi);
         self.struct_ret_ptr = self.bl.addParam(i);
         i += 1;
     } else {
-        ret_abi.types(returns);
+        ret_abi.types(returns, true, self.abi);
         self.struct_ret_ptr = null;
     }
 
@@ -306,7 +306,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
         func = self.types.store.get(func_id);
         const ty = func.args[ty_idx];
         const abi = self.abiCata(ty);
-        abi.types(params[i..]);
+        abi.types(params[i..], false, self.abi);
 
         const arg = switch (abi) {
             .ByRef => self.bl.addParam(i),
@@ -1376,7 +1376,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 .ByValue => {
                     self.bl.addReturn(&.{value.getValue(self)});
                 },
-                .ByValuePair => |pair| {
+                .ByValuePair => |pair| if (self.abiCata(value.ty).isByRefRet(self.abi)) {
+                    self.emitGenericStore(self.struct_ret_ptr.?, &value);
+                    self.bl.addReturn(&.{});
+                } else {
                     var slots: [2]*Node = undefined;
                     for (pair.types, pair.offsets(), &slots) |t, off, *slt| {
                         slt.* = self.bl.addFieldLoad(value.id.Pointer, @intCast(off), t);
@@ -1631,7 +1634,7 @@ fn emitInternalEca(self: *Codegen, ctx: Ctx, ic: Comptime.InteruptCode, args: []
     c_args.arg_slots[0] = self.bl.addIntImm(.int, @intCast(@intFromEnum(ic)));
     @memcpy(c_args.arg_slots[1..], args);
 
-    self.abiCata(ret_ty).types(c_args.returns);
+    self.abiCata(ret_ty).types(c_args.returns, true, self.abi);
 
     return self.assembleReturn(Ast.Id.zeroSized(.Void), Comptime.eca, c_args, ctx, ret_ty, self.abiCata(ret_ty));
 }
@@ -1908,10 +1911,12 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
     const args_ast = ast.exprs.view(e.args);
     for (func.args[@intFromBool(caller != null)..], 0..) |ty, k| {
         const abi = self.abiCata(ty);
-        abi.types(args.params[i..]);
+        abi.types(args.params[i..], false, self.abi);
         var value = if (computed_args) |a| a[k] else try self.emitTyped(ctx, ty, args_ast[k]);
         i += self.pushParam(args, abi, i, &value);
     }
+
+    std.debug.assert(i == param_count);
 
     return self.assembleReturn(expr, @intFromEnum(typ.data().Func), args, ctx, func.ret, ret_abi);
 }
@@ -2017,44 +2022,46 @@ pub fn instantiateTemplate(
     return .{ arg_exprs, slot.key_ptr.* };
 }
 
-fn pushReturn(cg: *Codegen, pos: anytype, call_args: Builder.CallArgs, ret_abi: Types.Abi.Spec, ret: Types.Id, ctx: Ctx) usize {
-    if (ret_abi.isByRefRet(cg.abi)) {
-        ret_abi.types(call_args.params[0..1]);
-        call_args.arg_slots[0] = ctx.loc orelse cg.bl.addLocal(cg.sloc(pos), ret.size(cg.types));
+fn pushReturn(self: *Codegen, pos: anytype, call_args: Builder.CallArgs, ret_abi: Types.Abi.Spec, ret: Types.Id, ctx: Ctx) usize {
+    if (ret_abi.isByRefRet(self.abi)) {
+        ret_abi.types(call_args.params[0..1], true, self.abi);
+        call_args.arg_slots[0] = ctx.loc orelse self.bl.addLocal(self.sloc(pos), ret.size(self.types));
         return 1;
     } else {
-        ret_abi.types(call_args.returns);
+        ret_abi.types(call_args.returns, true, self.abi);
         return 0;
     }
 }
 
-fn pushParam(cg: *Codegen, call_args: Builder.CallArgs, abi: Types.Abi.Spec, idx: usize, value: *Value) usize {
-    abi.types(call_args.params[idx..]);
+fn pushParam(self: *Codegen, call_args: Builder.CallArgs, abi: Types.Abi.Spec, idx: usize, value: *Value) usize {
+    abi.types(call_args.params[idx..], false, self.abi);
     switch (abi) {
         .Imaginary => {},
         .ByValue => {
-            call_args.arg_slots[idx] = value.getValue(cg);
+            call_args.arg_slots[idx] = value.getValue(self);
         },
         .ByValuePair => |pair| {
             for (pair.types, pair.offsets(), 0..) |t, off, j| {
                 call_args.arg_slots[idx + j] =
-                    cg.bl.addFieldLoad(value.id.Pointer, @intCast(off), t);
+                    self.bl.addFieldLoad(value.id.Pointer, @intCast(off), t);
             }
         },
         .ByRef => call_args.arg_slots[idx] = value.id.Pointer,
     }
-    return abi.len(false, cg.abi);
+    return abi.len(false, self.abi);
 }
 
-fn assembleReturn(cg: *Codegen, expr: anytype, id: u32, call_args: Builder.CallArgs, ctx: Ctx, ret: Types.Id, ret_abi: Types.Abi.Spec) Value {
-    const rets = cg.bl.addCall(id, call_args);
+fn assembleReturn(self: *Codegen, expr: anytype, id: u32, call_args: Builder.CallArgs, ctx: Ctx, ret: Types.Id, ret_abi: Types.Abi.Spec) Value {
+    const rets = self.bl.addCall(id, call_args);
     return switch (ret_abi) {
         .Imaginary => .mkv(ret, null),
         .ByValue => .mkv(ret, rets[0]),
-        .ByValuePair => |pair| b: {
-            const slot = ctx.loc orelse cg.bl.addLocal(cg.sloc(expr), ret.size(cg.types));
+        .ByValuePair => |pair| if (ret_abi.isByRefRet(self.abi)) b: {
+            break :b .mkp(ret, call_args.arg_slots[0]);
+        } else b: {
+            const slot = ctx.loc orelse self.bl.addLocal(self.sloc(expr), ret.size(self.types));
             for (pair.types, pair.offsets(), rets) |ty, off, vl| {
-                cg.bl.addFieldStore(slot, @intCast(off), ty, vl);
+                self.bl.addFieldStore(slot, @intCast(off), ty, vl);
             }
             break :b .mkp(ret, slot);
         },
@@ -2282,8 +2289,6 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
     const name = ast.tokenSrc(e.pos.index);
     const args = ast.exprs.view(e.args);
 
-    if (self.target == .@"comptime") if (try self.emitDirectiveAsEca(ctx, expr, e)) |vl| return vl;
-
     switch (e.kind) {
         .use, .embed => unreachable,
         .CurrentScope => {
@@ -2415,7 +2420,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             return .mkv(.uint, self.bl.addIntImm(.int, @intCast(len)));
         },
         .name_of => {
-            try assertDirectiveArgs(self, expr, args, "<ty>");
+            try assertDirectiveArgs(self, expr, args, "<ty/enum-variant>");
 
             var value = try self.emit(.{}, args[0]);
 
@@ -2424,6 +2429,21 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
                 break :dt std.fmt.allocPrint(self.types.arena.allocator(), "{}", .{ty.fmt(self.types)}) catch unreachable;
             } else switch (value.ty.data()) {
                 .Enum => |enum_ty| dt: {
+                    if (self.target == .@"comptime") {
+                        var vl = try self.emit(.{}, args[0]);
+                        if (vl.ty.data() != .Enum) {
+                            return self.report(args[0], "this only works on enum values, {} is not", .{vl.ty});
+                        }
+
+                        const string = self.types.makeSlice(null, .u8);
+                        return self.emitInternalEca(
+                            ctx,
+                            .name_of,
+                            &.{ self.emitTyConst(vl.ty).id.Value, vl.getValue(self) },
+                            string,
+                        );
+                    }
+
                     const fields = enum_ty.getFields(self.types);
                     if (fields.len == 1) {
                         break :dt fields[0].name;
@@ -2536,31 +2556,5 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
 
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(!self.errored)));
         },
-    }
-}
-
-fn emitDirectiveAsEca(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.TagPayload(.Directive)) !?Value {
-    const ast = self.ast;
-
-    const name = ast.tokenSrc(e.pos.index);
-    _ = name; // autofix
-    const args = ast.exprs.view(e.args);
-
-    var tmp = utils.Arena.scrath(null);
-    defer tmp.deinit();
-
-    switch (e.kind) {
-        .name_of => {
-            try self.assertDirectiveArgs(expr, args, "<enum-variant>");
-
-            var vl = try self.emit(.{}, args[0]);
-            if (vl.ty.data() != .Enum) {
-                return self.report(args[0], "this only works on enum values, {} is not", .{vl.ty});
-            }
-
-            const string = self.types.makeSlice(null, .u8);
-            return self.emitInternalEca(ctx, .name_of, &.{ self.emitTyConst(vl.ty).id.Value, vl.getValue(self) }, string);
-        },
-        else => return null,
     }
 }

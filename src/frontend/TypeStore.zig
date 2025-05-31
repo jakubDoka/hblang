@@ -470,12 +470,25 @@ pub const Abi = enum {
         const Dts = std.BoundedArray(graph.DataType, max_subtypes);
         const Offs = std.BoundedArray(u64, max_subtypes);
 
-        pub fn types(self: Spec, buf: []graph.DataType) void {
-            switch (self) {
-                .Imaginary => {},
-                .ByValue => |d| buf[0] = d,
-                .ByValuePair => |pair| buf[0..2].* = pair.types,
-                .ByRef => buf[0] = .int,
+        pub fn types(self: Spec, buf: []graph.DataType, is_ret: bool, abi: Abi) void {
+            switch (abi) {
+                .ableos => switch (self) {
+                    .Imaginary => {},
+                    .ByValue => |d| buf[0] = d,
+                    .ByValuePair => |pair| buf[0..2].* = pair.types,
+                    .ByRef => buf[0] = .int,
+                },
+                .systemv => switch (self) {
+                    .Imaginary => {},
+                    .ByValue => |d| buf[0] = d,
+                    .ByValuePair => |pair| if (is_ret and self.isByRefRet(abi)) {
+                        buf[0] = .int;
+                    } else {
+                        buf[0..2].* = pair.types;
+                    },
+                    .ByRef => buf[0] = .int,
+                },
+                else => unreachable,
             }
         }
 
@@ -486,7 +499,7 @@ pub const Abi = enum {
                     else => false,
                 },
                 .systemv => switch (self) {
-                    .ByValue => false,
+                    .Imaginary, .ByValue => false,
                     else => true,
                 },
                 else => unreachable,
@@ -543,7 +556,7 @@ pub const Abi = enum {
                 else => unreachable,
             },
             .Slice => |s| switch (self) {
-                .ableos => categorizeAbleosSlice(s, types),
+                .ableos, .systemv => categorizeAbleosSlice(s, types),
                 else => unreachable,
             },
             .Nullable => |n| switch (self) {
