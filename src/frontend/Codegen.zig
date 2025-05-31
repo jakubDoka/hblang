@@ -2254,6 +2254,7 @@ pub fn matchTriple(pattern: []const u8, triple: []const u8) !bool {
 
 test "sanity match triple" {
     try std.testing.expect(try matchTriple("a-b-c", "a-b-c"));
+    try std.testing.expect(try matchTriple("hbvm-ableos", "hbvm-ableos"));
     try std.testing.expect(try matchTriple("*-b-c", "a-b-c"));
     try std.testing.expect(try matchTriple("*-c", "a-b-c"));
     try std.testing.expect(try matchTriple("a", "a-b-c"));

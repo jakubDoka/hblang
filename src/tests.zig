@@ -84,12 +84,23 @@ pub fn runMachineTest(
     defer output.deinit();
 
     errdefer {
-        test_util.testBuilder(name, code, gpa, out, machine, abi, color, true) catch {};
+        test_util.testBuilder(
+            name,
+            code,
+            category,
+            gpa,
+            out,
+            machine,
+            abi,
+            color,
+            true,
+        ) catch {};
     }
 
     try test_util.testBuilder(
         name,
         code,
+        category,
         gpa,
         output.writer().any(),
         machine,
@@ -131,6 +142,7 @@ pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
     try test_util.testBuilder(
         name,
         code,
+        "hbvm-ableos",
         gpa,
         std.io.null_writer.any(),
         .init(&hbvm),

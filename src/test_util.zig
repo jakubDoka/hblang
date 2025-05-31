@@ -74,6 +74,7 @@ pub fn runVendoredTest(gpa: std.mem.Allocator, path: []const u8) !void {
         .mangle_terminal = true,
         .vendored_test = true,
         .root_file = path,
+        .target = "hbvm-ableos",
     });
     defer ast.arena.deinit();
 }
@@ -154,6 +155,7 @@ pub fn parseExample(arena: *utils.Arena, name: []const u8, code: []const u8, out
 pub fn testBuilder(
     name: []const u8,
     code: []const u8,
+    target: []const u8,
     gpa: std.mem.Allocator,
     output: std.io.AnyWriter,
     gen: root.backend.Machine,
@@ -170,7 +172,7 @@ pub fn testBuilder(
     defer func_arena.deinit();
 
     var types = Types.init(gpa, asts, output);
-    types.target = code;
+    types.target = target;
     defer types.deinit();
 
     var cg = Codegen.init(gpa, func_arena.arena, &types, .runtime, abi);
