@@ -148,23 +148,30 @@ main := fn(): uint {
 }
 
 ableos := @use("ableos.hb")
+linux := @use("ableos.hb")
 
 Target := enum {
-    .AbleOS
+    .AbleOS;
+    .x86_64_linux
 
     current := fn(): Target {
         $if @target("ableos") return .AbleOS
-        @error("Unknown Target")
+        $if @target("systemv") return .x86_64_linux
+        @error("Unknown target")
     }
 
     Lib := fn(target: Target): type {
         match target {
             .AbleOS => return ableos,
+            .x86_64_linux => return linux,
         }
     }
 }
 
 // in: ableos.hb
+page_size := fn(): uint return 0
+
+// in: linux.hb
 page_size := fn(): uint return 0
 ```
 

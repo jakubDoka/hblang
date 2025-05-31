@@ -125,6 +125,7 @@ pub const Lexeme = enum(u16) {
     @"@align_of",
     @"@bit_cast",
     @"@ecall",
+    @"@syscall",
     @"@embed",
     @"@inline",
     @"@len_of",

@@ -27,6 +27,8 @@ local_base: u32 = undefined,
 
 const tmp_count = 2;
 
+const syscall = std.math.maxInt(u32);
+
 pub const Reg = enum(u8) {
     rax,
     rcx,
@@ -384,7 +386,7 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
     }
 
     const should_flush_to_mem =
-        mnemonic == zydis.ZYDIS_MNEMONIC_MOVZX and
+        (mnemonic == zydis.ZYDIS_MNEMONIC_MOVZX or mnemonic == zydis.ZYDIS_MNEMONIC_IMUL) and
         req.operands[0].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY;
     var prev_oper: zydis.ZydisEncoderOperand = undefined;
     if (should_flush_to_mem) {
@@ -400,7 +402,7 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
 
     const status = zydis.ZydisEncoderEncodeInstruction(&req, &buf, &len);
     if (zydis.ZYAN_FAILED(status) != 0) {
-        std.debug.print("{x} {} {any}\n", .{ status, args, req.operands[0..fields.len] });
+        std.debug.print("{x} {s} {} {any}\n", .{ status, zydis.ZydisMnemonicGetString(mnemonic), args, req.operands[0..fields.len] });
         unreachable;
     }
 
@@ -510,7 +512,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     SReg{ vl, instr.data_type.size() },
                 });
             },
-            .Call => {
+            .Call => |extra| {
                 const call = instr.extra(.Call);
 
                 var moves = std.ArrayList(Move).init(tmp.arena.allocator());
@@ -520,11 +522,15 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 }
                 self.orderMoves(moves.items);
 
-                const opcode = 0xE8;
-                try self.out.code.append(self.gpa, opcode);
-                const slot = try utils.ensureSlot(&self.func_map, self.gpa, call.id);
-                try self.out.addReloc(self.gpa, slot, 4, -4);
-                try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
+                if (extra.id == syscall) {
+                    self.emitInstr(zydis.ZYDIS_MNEMONIC_SYSCALL, .{});
+                } else {
+                    const opcode = 0xE8;
+                    try self.out.code.append(self.gpa, opcode);
+                    const slot = try utils.ensureSlot(&self.func_map, self.gpa, call.id);
+                    try self.out.addReloc(self.gpa, slot, 4, -4);
+                    try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
+                }
 
                 const cend = for (instr.outputs()) |o| {
                     if (o.kind == .CallEnd) break o;

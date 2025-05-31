@@ -1,0 +1,22 @@
+main:
+	push rbx
+	mov rax, 0x00
+	mov rcx, 0x01
+	mov rdx, rax
+	cmp rdx, rax
+	setz bl
+	movzx rbx, bl
+	test rbx, rbx
+	jz 0x000000000000000E
+	mov rax, rdx
+	jmp 0x000000000000001B
+	cmp rdx, rcx
+	setz dl
+	movzx rdx, dl
+	test rdx, rdx
+	jz 0x000000000000000B
+	mov rax, rcx
+	pop rbx
+	ret
+	mov rdx, rcx
+	jmp 0xFFFFFFFFFFFFFFCA

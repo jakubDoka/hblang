@@ -1,0 +1,129 @@
+"slices 4".equals:
+	push rbx
+	push rbp
+	mov rdx, rdi
+	mov rax, rsi
+	mov rbx, rdx
+	cmp rax, rcx
+	setnz bpl
+	movzx rbp, bpl
+	mov rcx, 0x00
+	test rbp, rbp
+	jz 0x000000000000000E
+	mov rax, rcx
+	jmp 0x0000000000000023
+	cmp rdx, rbx
+	setz bpl
+	movzx rbp, bpl
+	mov rsi, 0x01
+	test rbp, rbp
+	jz 0x000000000000000E
+	mov rax, rsi
+	jmp 0x000000000000004D
+	mov rbp, rcx
+	cmp rbp, rax
+	setz dil
+	movzx rdi, dil
+	test rdi, rdi
+	jz 0x000000000000000E
+	mov rax, rsi
+	jmp 0x000000000000002E
+	mov rdi, rdx
+	add rdi, rbp
+	mov r8, rbx
+	add r8, rbp
+	mov dil, [rdi]
+	mov r8b, [r8]
+	cmp rdi, r8
+	setnz dil
+	movzx rdi, dil
+	test rdi, rdi
+	jz 0x000000000000000C
+	mov rax, rcx
+	pop rbp
+	pop rbx
+	ret
+	add rbp, rsi
+	jmp 0xFFFFFFFFFFFFFFB5
+main:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	push r14
+	push r15
+	sub rsp, 0x60
+	mov rbx, rsp
+	add rbx, 0x38
+	lea rbp, [0x0000000000000007]
+	mov [rbx], rbp
+	mov r12, 0x08
+	mov r13, rsp
+	add r13, 0x48
+	mov qword ptr [rsp], 0x01
+	mov [rsp+0x08], rsp
+	add qword ptr [rsp+0x08], 0x58
+	mov qword ptr [rsp+0x10], 0x02
+	mov qword ptr [rsp+0x18], 0x61
+	mov qword ptr [rsp+0x20], 0x03
+	mov [rsp+0x28], rbx
+	add [rsp+0x28], r12
+	mov r15, [rsp+0x28]
+	mov r14, [rsp+0x20]
+	mov [r15], r14
+	mov r15, [rsp+0x08]
+	mov r14b, [rsp+0x18]
+	mov [r15], r14b
+	mov [rsp+0x18], r13
+	add [rsp+0x18], r12
+	mov r12, [rsp+0x08]
+	add r12, [rsp]
+	mov qword ptr [rsp+0x30], 0x62
+	mov r15b, [rsp+0x30]
+	mov [r12], r15b
+	mov r12, [rsp+0x08]
+	add r12, [rsp+0x10]
+	mov qword ptr [rsp+0x10], 0x63
+	mov r15b, [rsp+0x10]
+	mov [r12], r15b
+	mov r15, [rsp+0x08]
+	mov [r13], r15
+	mov r15, [rsp+0x18]
+	mov r14, [rsp+0x20]
+	mov [r15], r14
+	mov rdi, rbp
+	mov rsi, [rsp+0x20]
+	mov rdx, rbp
+	mov rcx, [rsp+0x20]
+	call 0x0000000000000005
+	mov rbp, rax
+	not rbp
+	mov r15, [rsp+0x18]
+	mov r12, [r15]
+	mov rbx, [rbx]
+	mov r15, [rsp+0x28]
+	mov r14, [r15]
+	mov [rsp+0x08], r14
+	mov r13, [r13]
+	test rbp, rbp
+	jz 0x000000000000000B
+	jmp 0x0000000000000024
+	mov rdi, r13
+	mov rsi, r12
+	mov rdx, rbx
+	mov rcx, [rsp+0x08]
+	call 0x0000000000000005
+	not rax
+	test rax, rax
+	jz 0x000000000000000F
+	mov rax, [rsp]
+	jmp 0x000000000000000C
+	mov rax, 0x00
+	add rsp, 0x60
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
+	ret

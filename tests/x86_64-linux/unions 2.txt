@@ -1,0 +1,3 @@
+main:
+	mov rax, 0x2A
+	ret

@@ -1,0 +1,6 @@
+"unions 3".TypeInfo(T = uint):
+	mov rax, 0x08
+	ret
+main:
+	call 0x0000000000000005
+	ret

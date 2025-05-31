@@ -1341,7 +1341,9 @@ pub fn Func(comptime MachNode: type) type {
 
         pub fn knownMemOp(base: *Node) ?struct { *Node, i64 } {
             if (base.isMemOp()) return .{ base, base.getStaticOffset() };
-            if (base.kind == .BinOp and base.inputs()[2].?.kind == .CInt and base.outputs().len == 1 and base.outputs()[0].isMemOp() and base.outputs()[0].base() == base) {
+            if (base.kind == .BinOp and base.inputs()[2].?.kind == .CInt and
+                (base.outputs().len) == 1 and (base.outputs()[0].isMemOp()) and (base.outputs()[0].base()) == (base))
+            {
                 return .{ base.outputs()[0], base.inputs()[2].?.extra(.CInt).* };
             }
             return null;

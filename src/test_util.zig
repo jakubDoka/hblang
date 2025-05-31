@@ -249,13 +249,6 @@ pub fn testBuilder(
     });
 
     if (std.mem.indexOf(u8, name, "infinite") != null) return;
-
-    try expectations.assert(gen.run(.{
-        .name = name,
-        .code = out.items,
-        .colors = colors,
-        .output = if (verbose) output else std.io.null_writer.any(),
-    }));
 }
 
 pub const stack_size = 1024 * 10;

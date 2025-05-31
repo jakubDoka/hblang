@@ -16,7 +16,6 @@ main:
 	pop rbp
 	pop rbx
 	ret
-	add rbp, rcx
 	mov r8, rsi
 	mov rsi, rax
 	mov rdi, rcx
@@ -25,7 +24,8 @@ main:
 	setz r10b
 	movzx r10, r10b
 	test r10, r10
-	jz 0x000000000000000E
+	jz 0x0000000000000011
+	add rbp, rcx
 	mov rsi, r8
 	jmp 0xFFFFFFFFFFFFFFC0
 	mov r8, r9
@@ -33,4 +33,4 @@ main:
 	add rsi, rcx
 	mov r9, rdi
 	mov rdi, r8
-	jmp 0xFFFFFFFFFFFFFFD5
+	jmp 0xFFFFFFFFFFFFFFD2

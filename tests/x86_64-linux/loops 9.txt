@@ -1,0 +1,33 @@
+main:
+	push rbx
+	push rbp
+	mov rax, 0x00
+	mov rcx, 0x01
+	lea rdx, [0x0000000000000007]
+	mov rbx, rax
+	cmp rbx, rcx
+	setnb bpl
+	movzx rbp, bpl
+	test rbp, rbp
+	jz 0x0000000000000009
+	pop rbp
+	pop rbx
+	ret
+	mov bpl, [rdx]
+	cmp rbp, rax
+	setnz bpl
+	movzx rbp, bpl
+	and rsi, rbp
+	test rsi, rsi
+	jz 0x000000000000002B
+	mov rbp, rax
+	cmp rbp, rax
+	setz sil
+	movzx rsi, sil
+	test rsi, rsi
+	jz 0x000000000000000B
+	jmp 0x000000000000000E
+	imul rbp, rax
+	jmp 0xFFFFFFFFFFFFFFE3
+	add rbx, rcx
+	jmp 0xFFFFFFFFFFFFFFA7

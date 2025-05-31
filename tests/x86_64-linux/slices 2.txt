@@ -1,0 +1,121 @@
+main:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	push r14
+	push r15
+	sub rsp, 0x80
+	mov rax, 0x00
+	mov rcx, 0x02
+	mov rdx, 0x04
+	mov rbx, 0x08
+	mov rbp, rsp
+	add rbp, 0x20
+	mov rsi, 0x01
+	mov [rbp], rsi
+	mov rdi, 0x10
+	mov r8, 0x03
+	mov r9, 0x18
+	mov r10, rsp
+	add r10, 0x40
+	mov r11, 0x20
+	mov r12, 0x28
+	mov r13, 0x30
+	mov qword ptr [rsp], 0x38
+	mov [rsp+0x08], rcx
+	imul r15, rbx
+	mov [rsp+0x08], r15
+	mov [rsp+0x10], rbp
+	add [rsp+0x10], rbx
+	mov r15, [rsp+0x10]
+	mov [r15], rcx
+	mov [rsp+0x10], rsi
+	imul r15, rbx
+	mov [rsp+0x10], r15
+	mov [rsp+0x18], rbp
+	add [rsp+0x18], rdi
+	mov r15, [rsp+0x18]
+	mov [r15], r8
+	mov [rsp+0x18], rbp
+	add [rsp+0x18], r9
+	mov r15, [rsp+0x18]
+	mov [r15], rdx
+	mov [r10], rbp
+	mov [rsp+0x18], r10
+	add [rsp+0x18], rbx
+	mov r15, [rsp+0x18]
+	mov [r15], rdx
+	mov [rsp+0x18], r10
+	add [rsp+0x18], rdi
+	mov r15, [rsp+0x18]
+	mov [r15], rbp
+	mov [rsp+0x18], r10
+	add [rsp+0x18], r9
+	mov r9, rcx
+	sub r9, rax
+	mov r15, [rsp+0x18]
+	mov [r15], r9
+	mov r9, rbp
+	add r9, [rsp+0x08]
+	mov [rsp+0x08], r10
+	add [rsp+0x08], r11
+	mov r15, [rsp+0x08]
+	mov [r15], r9
+	mov r9, rdx
+	sub r9, rcx
+	mov rcx, r10
+	add rcx, r12
+	mov [rcx], r9
+	mov rcx, rbp
+	add rcx, [rsp+0x10]
+	mov rbp, r10
+	add rbp, r13
+	mov [rbp], rcx
+	mov rcx, r8
+	sub rcx, rsi
+	mov rbp, r10
+	add rbp, [rsp]
+	mov [rbp], rcx
+	mov rcx, rax
+	mov rbp, rax
+	cmp rcx, rdx
+	setz r8b
+	movzx r8, r8b
+	test r8, r8
+	jz 0x000000000000001B
+	mov rax, rbp
+	add rsp, 0x80
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
+	ret
+	mov r8, rcx
+	imul r8, rdi
+	mov r9, r10
+	add r9, r8
+	mov r8, r9
+	add r8, rbx
+	mov r11, rbp
+	mov rbp, rax
+	mov r12, [r8]
+	cmp rbp, r12
+	setz r13b
+	movzx r13, r13b
+	test r13, r13
+	jz 0x0000000000000011
+	add rcx, rsi
+	mov rbp, r11
+	jmp 0xFFFFFFFFFFFFFFA1
+	mov r12, rbp
+	add r12, rsi
+	mov r13, [r9]
+	imul rbp, rbx
+	add r13, rbp
+	mov rbp, [r13]
+	add r11, rbp
+	mov rbp, r12
+	jmp 0xFFFFFFFFFFFFFFC4

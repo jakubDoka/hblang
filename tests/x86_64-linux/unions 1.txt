@@ -1,0 +1,12 @@
+main:
+	sub rsp, 0x08
+	mov rax, rsp
+	add rax, 0x00
+	mov rcx, 0x01
+	mov [rax], cl
+	mov rdx, rax
+	add rdx, rcx
+	mov [rdx], cl
+	mov ax, [rax]
+	add rsp, 0x08
+	ret

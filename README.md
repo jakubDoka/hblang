@@ -1574,11 +1574,12 @@ expectations := .{
 }
 
 main := fn(): uint {
-    return @ecall(
+    $if @target("ableos") return @ecall(
         100,
         struct{.a: uint; .b: uint}.(1, 2),
         struct{.a: uint; .b: uint; .c: uint}.(3, 4, 5),
     )
+    return @syscall(60, 3)
 }
 ```
 

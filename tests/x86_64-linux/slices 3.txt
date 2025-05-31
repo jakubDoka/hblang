@@ -1,0 +1,110 @@
+"slices 3".reverse:
+	push rbx
+	push rbp
+	sub rsp, 0x10
+	mov rdx, rdi
+	mov rcx, rsi
+	mov rax, rdx
+	mov rbx, 0x00
+	mov rbp, rsp
+	add rbp, 0x00
+	mov [rbp], rcx
+	cmp rax, rbx
+	setz cl
+	movzx rcx, cl
+	mov rsi, 0x08
+	mov rdi, rbp
+	add rdi, rsi
+	mov [rdi], rax
+	mov rsi, 0x10
+	test rcx, rcx
+	jz 0x0000000000000019
+	mov rdi, rdx
+	mov rdx, rsi
+	mov rsi, rbp
+	call 0x0000000000000005
+	jmp 0x000000000000006D
+	mov rcx, 0x01
+	sub rax, rcx
+	xchg rax, rbx
+	cmp rax, rbx
+	setb dil
+	movzx rdi, dil
+	test rdi, rdi
+	jz 0x000000000000003F
+	mov rdi, [rbp]
+	mov r8, rax
+	add r8, rcx
+	mov r9, rbx
+	sub r9, rcx
+	mov r10, rdi
+	add r10, rax
+	mov rax, rdi
+	add rax, rbx
+	mov dil, [r10]
+	mov al, [rax]
+	mov [r10], al
+	mov rax, [rbp]
+	add rax, rbx
+	mov [rax], dil
+	mov rax, r8
+	mov rbx, r9
+	jmp 0xFFFFFFFFFFFFFFB8
+	mov rdi, rdx
+	mov rdx, rsi
+	mov rsi, rbp
+	call 0x0000000000000005
+	add rsp, 0x10
+	pop rbp
+	pop rbx
+	ret
+main:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	push r14
+	push r15
+	sub rsp, 0x40
+	mov rbx, rsp
+	add rbx, 0x18
+	mov rbp, 0x01
+	mov [rbx], bpl
+	mov r12, 0x02
+	mov r13, rbx
+	add r13, rbp
+	mov [r13], r12b
+	mov qword ptr [rsp], 0x03
+	mov [rsp+0x08], rbx
+	add [rsp+0x08], r12
+	mov r15, [rsp+0x08]
+	mov r14b, [rsp]
+	mov [r15], r14b
+	mov r12, 0x00
+	mov [rsp+0x10], rsp
+	add qword ptr [rsp+0x10], 0x1B
+	mov rdi, [rsp+0x10]
+	mov rsi, rbp
+	mov rdx, r12
+	call 0x0000000000000005
+	mov rbp, rsp
+	add rbp, 0x2B
+	mov rdi, rbp
+	mov rsi, rbx
+	mov rdx, [rsp]
+	call 0x0000000000000005
+	mov al, [rbx]
+	mov cl, [r13]
+	mov r15, [rsp+0x08]
+	mov dl, [r15]
+	sub rax, rcx
+	sub rax, rdx
+	add rsp, 0x40
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
+	ret
+memcpy:

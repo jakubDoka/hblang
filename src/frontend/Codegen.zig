@@ -2479,9 +2479,13 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(matched)));
         },
         .is_comptime => return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(self.target == .@"comptime"))),
-        .ecall => {
+        .ecall, .syscall => {
             if (self.target == .@"comptime") {
-                return self.report(expr, "cant do na ecall during comptime", .{});
+                return self.report(expr, "cant do na ecall/syscall during comptime", .{});
+            }
+
+            if (e.kind == .ecall and self.abi != .ableos) {
+                return self.report(expr, "@ecall is specific to vm targets use @syscall instead", .{});
             }
 
             try assertDirectiveArgs(self, expr, args, "<expr>..");

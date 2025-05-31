@@ -1,0 +1,87 @@
+"structs 3 (call stress test)".return_pair:
+	mov rax, rdi
+	mov rcx, 0x01
+	mov [rax], cl
+	mov rcx, 0x08
+	mov rdx, 0x05
+	add rax, rcx
+	mov [rax], rdx
+	ret
+"structs 3 (call stress test)".return_triple:
+	push rbx
+	push rbp
+	mov rax, rdi
+	mov rcx, 0x01
+	mov [rax], rcx
+	mov rcx, 0x10
+	mov rdx, 0x08
+	mov rbx, 0x02
+	mov rbp, rax
+	add rbp, rdx
+	mov [rbp], rbx
+	mov rdx, 0x03
+	add rax, rcx
+	mov [rax], dl
+	pop rbp
+	pop rbx
+	ret
+"structs 3 (call stress test)".take_pair:
+	mov rax, rdi
+	mov rcx, rsi
+	add rax, rcx
+	ret
+"structs 3 (call stress test)".take_triple:
+	push rbx
+	mov rax, rdi
+	mov rcx, 0x08
+	mov rdx, 0x10
+	mov rbx, rax
+	add rbx, rcx
+	mov rcx, rax
+	add rcx, rdx
+	mov cl, [rcx]
+	mov rdx, [rbx]
+	mov rax, [rax]
+	add rax, rdx
+	add rax, rcx
+	pop rbx
+	ret
+main:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	sub rsp, 0x28
+	mov rbx, rsp
+	add rbx, 0x00
+	mov rdi, rbx
+	call 0x0000000000000005
+	mov rbp, rsp
+	add rbp, 0x10
+	mov rdi, rbp
+	call 0x0000000000000005
+	mov r12, 0x08
+	mov r13, rbx
+	add r13, r12
+	mov bl, [rbx]
+	mov r12, [r13]
+	mov rdi, rbx
+	mov rsi, r12
+	call 0x0000000000000005
+	mov rbx, rax
+	mov rdi, rbp
+	call 0x0000000000000005
+	cmp rbx, rax
+	setnz cl
+	movzx rcx, cl
+	test rcx, rcx
+	jz 0x0000000000000012
+	mov rax, 0x01
+	jmp 0x000000000000000C
+	mov rax, 0x00
+	add rsp, 0x28
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
+	ret
