@@ -32,6 +32,8 @@ pub const InteruptCode = enum(u64) {
     Struct,
     Union,
     Enum,
+    name_of,
+    make_array,
 };
 
 pub fn init(gpa: std.mem.Allocator) Comptime {
@@ -304,6 +306,34 @@ pub fn runVm(
                     );
 
                     self.vm.regs.set(.ret(0), @intFromEnum(res));
+                },
+                .name_of => {
+                    const ty: Types.Id = @enumFromInt(self.ecaArg(1));
+                    const value = self.ecaArg(2);
+                    //const lfile: Types.File = @enumFromInt(@as(u32, @truncate(self.ecaArg(2))));
+                    //const expr: Ast.Id = @enumFromInt(@as(u32, @truncate(self.ecaArg(3))));
+
+                    const enm: root.frontend.types.Enum.Id = ty.data().Enum;
+                    const fields = enm.getFields(types);
+
+                    if (value > fields.len) {
+                        //   types.report(lfile, expr, "the enum value is out of bounds, it has no name", .{});
+                        unreachable; // TODO: the enum value is corrupted
+                    }
+
+                    const ret_addr = self.gen.out.code.items.len;
+
+                    self.gen.out.code.appendSlice(self.getGpa(), fields[@intCast(value)].name) catch unreachable;
+                    vm_ctx.memory = self.gen.out.code.items;
+
+                    self.vm.regs.set(.ret(0), ret_addr);
+                    self.vm.regs.set(.ret(1), fields[@intCast(value)].name.len);
+                },
+                .make_array => {
+                    const len = self.ecaArg(1);
+                    const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+                    const slice = types.makeSlice(@intCast(len), ty);
+                    self.vm.regs.set(.ret(0), @intFromEnum(slice));
                 },
             }
         },

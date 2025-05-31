@@ -492,7 +492,9 @@ pub fn addCall(
     args_with_initialized_arg_slots: CallArgs,
 ) []const *BuildNode {
     const args = args_with_initialized_arg_slots;
-    for (args.arg_slots, args.params) |ar, pr| std.debug.assert(ar.data_type == ar.data_type.meet(pr));
+    for (args.arg_slots, args.params) |ar, pr| if (ar.data_type != ar.data_type.meet(pr)) {
+        std.debug.panic("{} != {}", .{ ar.data_type, ar.data_type.meet(pr) });
+    };
     const full_args = (args.arg_slots.ptr - arg_prefix_len)[0 .. arg_prefix_len + args.params.len];
     full_args[0] = self.control();
     full_args[1] = self.memory();

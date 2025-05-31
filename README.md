@@ -1054,7 +1054,7 @@ expectations := .{
 NameMap := fn($Enum: type): type {
     sum := 0
     i: u8 = 0
-    $loop $if i == @len_of(Enum) break else {
+    loop if i == @len_of(Enum) break else {
         sum += @int_cast(@name_of(@as(Enum, @bit_cast(i))).len)
         i += 1
     }
@@ -1072,10 +1072,10 @@ NameMap := fn($Enum: type): type {
 
             ii: u8 = 0
             bi := 0
-            $loop $if ii == @len_of(Enum) break else {
+            loop if ii == @len_of(Enum) break else {
                 name := @name_of(@as(Enum, @bit_cast(ii)))
                 ij := 0
-                $loop $if ij == name.len break else {
+                loop if ij == name.len break else {
                     buf[bi + ij] = name[ij]
                     ij += 1
                 }

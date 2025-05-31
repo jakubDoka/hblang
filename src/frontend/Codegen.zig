@@ -703,16 +703,24 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
         // #OPS ========================================================================
         .SliceTy => |e| {
-            var value = if (e.len.tag() == .Void) null else try self.emitTyped(.{}, .uint, e.len);
-            const len: ?usize = if (value) |*vl| @intCast(self.partialEval(expr, vl.getValue(self)) catch 0) else null;
-            const elem = try self.resolveAnonTy(e.elem);
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
 
-            const res, const ov = @mulWithOverflow(len orelse 0, elem.size(self.types));
-            if (ov != 0 or res > std.math.maxInt(u48)) {
-                return self.report(expr, "the array is bigger then most modern virtual memory spaces", .{});
+            if (e.len.tag() != .Void) {
+                var len = try self.emitTyped(.{}, .uint, e.len);
+                var ty = try self.emitTyped(.{}, .type, e.elem);
+                return self.emitInternalEca(ctx, .make_array, &.{ len.getValue(self), ty.getValue(self) }, .type);
+            } else {
+                const len: ?usize = null;
+                const elem = try self.resolveAnonTy(e.elem);
+
+                const res, const ov = @mulWithOverflow(len orelse 0, elem.size(self.types));
+                if (ov != 0 or res > std.math.maxInt(u48)) {
+                    return self.report(expr, "the array is bigger then most modern virtual memory spaces", .{});
+                }
+
+                return self.emitTyConst(self.types.makeSlice(len, elem));
             }
-
-            return self.emitTyConst(self.types.makeSlice(len, elem));
         },
         .UnOp => |e| switch (e.op) {
             .@"^" => return self.emitTyConst(self.types.makePtr(try self.resolveAnonTy(e.oper))),
@@ -1612,6 +1620,22 @@ pub fn lexemeToBinOpLow(self: Lexer.Lexeme, ty: Types.Id) ?graph.BinOp {
     };
 }
 
+fn emitInternalEca(self: *Codegen, ctx: Ctx, ic: Comptime.InteruptCode, args: []const *Node, ret_ty: Types.Id) Value {
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    const c_args = self.bl.allocCallArgs(tmp.arena, 1 + args.len, self.abiCata(ret_ty).len(true, .ableos));
+
+    c_args.params[0] = .int;
+    for (args, c_args.params[1..]) |a, *ca| ca.* = a.data_type;
+    c_args.arg_slots[0] = self.bl.addIntImm(.int, @intCast(@intFromEnum(ic)));
+    @memcpy(c_args.arg_slots[1..], args);
+
+    self.abiCata(ret_ty).types(c_args.returns);
+
+    return self.assembleReturn(Ast.Id.zeroSized(.Void), Comptime.eca, c_args, ctx, ret_ty, self.abiCata(ret_ty));
+}
+
 fn emitStructFoldOp(self: *Codegen, pos: anytype, ty: utils.EntId(root.frontend.types.Struct), op: Lexer.Lexeme, lhs: *Node, rhs: *Node) !?*Node {
     var fold: ?*Node = null;
     var iter = ty.offsetIter(self.types);
@@ -2176,103 +2200,103 @@ fn emitStirng(self: *Codegen, ctx: Ctx, data: []const u8, expr: Ast.Id) Value {
     return .mkp(slice_ty, slice_loc);
 }
 
+const mem = std.mem;
+
+pub fn matchTriple(pattern: []const u8, triple: []const u8) !bool {
+    // CAUTION: written by LLM
+
+    if (mem.eql(u8, pattern, "*")) {
+        return error.@"you can replace this with 'true'";
+    }
+
+    if (mem.endsWith(u8, pattern, "-*")) {
+        return error.@"trailing '*' is redundant";
+    }
+
+    var matcher = mem.splitScalar(u8, pattern, '-');
+    var matchee = mem.splitScalar(u8, triple, '-');
+    var eat_start = false;
+
+    while (matcher.next()) |pat| {
+        if (mem.eql(u8, pat, "*")) {
+            if (eat_start) {
+                return error.@"consecutive '*' are redundant";
+            }
+            if (matchee.next() == null) {
+                return false;
+            }
+            eat_start = true;
+        } else if (eat_start) {
+            var found = false;
+            while (matchee.next()) |v| {
+                if (mem.eql(u8, v, pat)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        } else if (!mem.eql(u8, matchee.next() orelse return false, pat)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+test "sanity match triple" {
+    try std.testing.expect(try matchTriple("a-b-c", "a-b-c"));
+    try std.testing.expect(try matchTriple("*-b-c", "a-b-c"));
+    try std.testing.expect(try matchTriple("*-c", "a-b-c"));
+    try std.testing.expect(try matchTriple("a", "a-b-c"));
+    try std.testing.expect(!try matchTriple("*-a", "a-b-c"));
+    try std.testing.expectError(error.@"consecutive '*' are redundant", matchTriple("*-*-a", "a-b-c"));
+    try std.testing.expectError(error.@"trailing '*' is redundant", matchTriple("*-b-*", "a-b-c"));
+}
+
+fn reportInferrence(cg: *Codegen, exr: anytype, ty: []const u8, dir_name: []const u8) EmitError {
+    return cg.report(exr, "type can not be inferred from the context, use `@as(<{s}>, {s}(...))`", .{ ty, dir_name });
+}
+
+inline fn assertDirectiveArgs(cg: *Codegen, exr: anytype, got: []const Ast.Id, comptime expected: []const u8) !void {
+    const min_expected_args = comptime std.mem.count(u8, expected, ",") + @intFromBool(expected.len != 0);
+    const varargs = comptime std.mem.endsWith(u8, expected, "..");
+    try assertDirectiveArgsLow(cg, exr, got, expected, min_expected_args, varargs);
+}
+
+fn assertDirectiveArgsLow(cg: *Codegen, exr: anytype, got: []const Ast.Id, expected: []const u8, min_expected_args: usize, varargs: bool) !void {
+    if (got.len < min_expected_args or (!varargs and got.len > min_expected_args)) {
+        const range = if (varargs) "at least " else "";
+        return cg.report(
+            exr,
+            "directive takes {s}{} arguments, got {} ({s})",
+            .{ range, min_expected_args, got.len, expected },
+        );
+    }
+}
+
 fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.TagPayload(.Directive)) !Value {
     const ast = self.ast;
 
     const name = ast.tokenSrc(e.pos.index);
     const args = ast.exprs.view(e.args);
 
-    const static = enum {
-        const mem = std.mem;
-
-        pub fn matchTriple(pattern: []const u8, triple: []const u8) !bool {
-            // CAUTION: written by LLM
-
-            if (mem.eql(u8, pattern, "*")) {
-                return error.@"you can replace this with 'true'";
-            }
-
-            if (mem.endsWith(u8, pattern, "-*")) {
-                return error.@"trailing '*' is redundant";
-            }
-
-            var matcher = mem.splitScalar(u8, pattern, '-');
-            var matchee = mem.splitScalar(u8, triple, '-');
-            var eat_start = false;
-
-            while (matcher.next()) |pat| {
-                if (mem.eql(u8, pat, "*")) {
-                    if (eat_start) {
-                        return error.@"consecutive '*' are redundant";
-                    }
-                    if (matchee.next() == null) {
-                        return false;
-                    }
-                    eat_start = true;
-                } else if (eat_start) {
-                    var found = false;
-                    while (matchee.next()) |v| {
-                        if (mem.eql(u8, v, pat)) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        return false;
-                    }
-                } else if (!mem.eql(u8, matchee.next() orelse return false, pat)) {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        test "sanity match triple" {
-            try std.testing.expect(try matchTriple("a-b-c", "a-b-c"));
-            try std.testing.expect(try matchTriple("*-b-c", "a-b-c"));
-            try std.testing.expect(try matchTriple("*-c", "a-b-c"));
-            try std.testing.expect(try matchTriple("a", "a-b-c"));
-            try std.testing.expect(!try matchTriple("*-a", "a-b-c"));
-            try std.testing.expectError(error.@"consecutive '*' are redundant", matchTriple("*-*-a", "a-b-c"));
-            try std.testing.expectError(error.@"trailing '*' is redundant", matchTriple("*-b-*", "a-b-c"));
-        }
-
-        fn reportInferrence(cg: *Codegen, exr: anytype, ty: []const u8, dir_name: []const u8) EmitError {
-            return cg.report(exr, "type can not be inferred from the context, use `@as(<{s}>, {s}(...))`", .{ ty, dir_name });
-        }
-
-        inline fn assertArgs(cg: *Codegen, exr: anytype, got: []const Ast.Id, comptime expected: []const u8) !void {
-            const min_expected_args = comptime std.mem.count(u8, expected, ",") + @intFromBool(expected.len != 0);
-            const varargs = comptime std.mem.endsWith(u8, expected, "..");
-            try assertArgsLow(cg, exr, got, expected, min_expected_args, varargs);
-        }
-
-        fn assertArgsLow(cg: *Codegen, exr: anytype, got: []const Ast.Id, expected: []const u8, min_expected_args: usize, varargs: bool) !void {
-            if (got.len < min_expected_args or (!varargs and got.len > min_expected_args)) {
-                const range = if (varargs) "at least " else "";
-                return cg.report(
-                    exr,
-                    "directive takes {s}{} arguments, got {} ({s})",
-                    .{ range, min_expected_args, got.len, expected },
-                );
-            }
-        }
-    };
+    if (self.target == .@"comptime") if (try self.emitDirectiveAsEca(ctx, expr, e)) |vl| return vl;
 
     switch (e.kind) {
         .use, .embed => unreachable,
         .CurrentScope => {
-            try static.assertArgs(self, expr, args, "");
+            try assertDirectiveArgs(self, expr, args, "");
             return self.emitTyConst(self.parent_scope.firstType(self.types));
         },
         .TypeOf => {
-            try static.assertArgs(self, expr, args, "<ty>");
+            try assertDirectiveArgs(self, expr, args, "<ty>");
             const ty = try self.types.ct.inferType("", .{ .Tmp = self }, .{}, args[0]);
             return self.emitTyConst(ty);
         },
         .@"inline" => {
-            try static.assertArgs(self, expr, args, "<called>, <args>..");
+            try assertDirectiveArgs(self, expr, args, "<called>, <args>..");
             return self.emitCall(ctx, expr, .{
                 .called = args[0],
                 .arg_pos = ast.posOf(args[0]),
@@ -2280,10 +2304,10 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             });
         },
         .int_cast => {
-            try static.assertArgs(self, expr, args, "<expr>");
+            try assertDirectiveArgs(self, expr, args, "<expr>");
 
             const ret: Types.Id = ctx.ty orelse {
-                return static.reportInferrence(self, expr, "int-ty", name);
+                return reportInferrence(self, expr, "int-ty", name);
             };
 
             if (!ret.isInteger()) {
@@ -2299,7 +2323,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             return .mkv(ret, self.bl.addUnOp(.ired, self.abiCata(ret).ByValue, oper.getValue(self)));
         },
         .float_cast => {
-            try static.assertArgs(self, expr, args, "<float>");
+            try assertDirectiveArgs(self, expr, args, "<float>");
 
             var oper = try self.emit(.{}, args[0]);
 
@@ -2312,10 +2336,10 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             return .mkv(ret, self.bl.addUnOp(.fcst, self.abiCata(ret).ByValue, oper.getValue(self)));
         },
         .int_to_float => {
-            try static.assertArgs(self, expr, args, "<float>");
+            try assertDirectiveArgs(self, expr, args, "<float>");
 
             const ret: Types.Id = ctx.ty orelse {
-                return static.reportInferrence(self, expr, "float-ty", name);
+                return reportInferrence(self, expr, "float-ty", name);
             };
 
             if (!ret.isFloat()) return self.report(expr, "expected this to evaluate to float, {} is not", .{ret});
@@ -2329,7 +2353,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             ));
         },
         .float_to_int => {
-            try static.assertArgs(self, expr, args, "<float>");
+            try assertDirectiveArgs(self, expr, args, "<float>");
             const ret: Types.Id = .int;
 
             var oper = try self.emit(.{}, args[0]);
@@ -2339,10 +2363,10 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             return .mkv(ret, self.bl.addUnOp(.fti, .int, oper.getValue(self)));
         },
         .bit_cast => {
-            try static.assertArgs(self, expr, args, "<expr>");
+            try assertDirectiveArgs(self, expr, args, "<expr>");
 
             const ret: Types.Id = ctx.ty orelse {
-                return static.reportInferrence(self, expr, "ty", name);
+                return reportInferrence(self, expr, "ty", name);
             };
 
             var oper = try self.emit(.{}, args[0]);
@@ -2370,7 +2394,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             }
         },
         .ChildOf => {
-            try static.assertArgs(self, expr, args, "<ty>");
+            try assertDirectiveArgs(self, expr, args, "<ty>");
             const ty = try self.resolveAnonTy(args[0]);
             const child = ty.child(self.types) orelse {
                 return self.report(args[0], "directive only work on pointer types and slices, {} is not", .{ty});
@@ -2378,12 +2402,12 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             return self.emitTyConst(child);
         },
         .kind_of => {
-            try static.assertArgs(self, expr, args, "<ty>");
+            try assertDirectiveArgs(self, expr, args, "<ty>");
             const len = try self.resolveAnonTy(args[0]);
             return .mkv(.u8, self.bl.addIntImm(.i8, @intFromEnum(len.data())));
         },
         .len_of => {
-            try static.assertArgs(self, expr, args, "<ty>");
+            try assertDirectiveArgs(self, expr, args, "<ty>");
             const ty = try self.resolveAnonTy(args[0]);
             const len = ty.len(self.types) orelse {
                 return self.report(args[0], "directive only works on structs and arrays, {} is not", .{ty});
@@ -2391,7 +2415,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             return .mkv(.uint, self.bl.addIntImm(.int, @intCast(len)));
         },
         .name_of => {
-            try static.assertArgs(self, expr, args, "<ty>");
+            try assertDirectiveArgs(self, expr, args, "<ty>");
 
             var value = try self.emit(.{}, args[0]);
 
@@ -2415,21 +2439,21 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             return self.emitStirng(ctx, data, expr);
         },
         .align_of => {
-            try static.assertArgs(self, expr, args, "<ty>");
+            try assertDirectiveArgs(self, expr, args, "<ty>");
             const ty = try self.resolveAnonTy(args[0]);
             return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(ty.alignment(self.types))));
         },
         .size_of => {
-            try static.assertArgs(self, expr, args, "<ty>");
+            try assertDirectiveArgs(self, expr, args, "<ty>");
             const ty = try self.resolveAnonTy(args[0]);
             return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(ty.size(self.types))));
         },
         .target => {
-            try static.assertArgs(self, expr, args, "<string>");
+            try assertDirectiveArgs(self, expr, args, "<string>");
             const content = ast.exprs.getTyped(.String, args[0]) orelse return self.report(expr, "@target takes a \"string\"", .{});
             const str_content = ast.source[content.pos.index + 1 .. content.end - 1];
             const triple = @tagName(self.abi);
-            const matched = static.matchTriple(str_content, triple) catch |err| {
+            const matched = matchTriple(str_content, triple) catch |err| {
                 return self.report(args[0], "{s}", .{@errorName(err)});
             };
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(matched)));
@@ -2440,12 +2464,12 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
                 return self.report(expr, "cant do na ecall during comptime", .{});
             }
 
-            try static.assertArgs(self, expr, args, "<expr>..");
+            try assertDirectiveArgs(self, expr, args, "<expr>..");
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             const ret = ctx.ty orelse {
-                return static.reportInferrence(self, expr, "ty", name);
+                return reportInferrence(self, expr, "ty", name);
             };
 
             const arg_nodes = tmp.arena.alloc(Value, args.len);
@@ -2469,12 +2493,12 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             return self.assembleReturn(expr, Comptime.eca, call_args, ctx, ret, ret_abi);
         },
         .as => {
-            try static.assertArgs(self, expr, args, "<ty>, <expr>");
+            try assertDirectiveArgs(self, expr, args, "<ty>, <expr>");
             const ty = try self.resolveAnonTy(args[0]);
             return self.emitTyped(ctx, ty, args[1]);
         },
         .@"error" => {
-            try static.assertArgs(self, expr, args, "<ty/string>..");
+            try assertDirectiveArgs(self, expr, args, "<ty/string>..");
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
@@ -2498,7 +2522,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
         },
         .Any => return self.emitTyConst(.any),
         .compiles => {
-            try static.assertArgs(self, expr, args, "<expr>");
+            try assertDirectiveArgs(self, expr, args, "<expr>");
 
             const prev_buff = self.types.diagnostics;
             defer self.types.diagnostics = prev_buff;
@@ -2512,5 +2536,31 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
 
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(!self.errored)));
         },
+    }
+}
+
+fn emitDirectiveAsEca(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.TagPayload(.Directive)) !?Value {
+    const ast = self.ast;
+
+    const name = ast.tokenSrc(e.pos.index);
+    _ = name; // autofix
+    const args = ast.exprs.view(e.args);
+
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    switch (e.kind) {
+        .name_of => {
+            try self.assertDirectiveArgs(expr, args, "<enum-variant>");
+
+            var vl = try self.emit(.{}, args[0]);
+            if (vl.ty.data() != .Enum) {
+                return self.report(args[0], "this only works on enum values, {} is not", .{vl.ty});
+            }
+
+            const string = self.types.makeSlice(null, .u8);
+            return self.emitInternalEca(ctx, .name_of, &.{ self.emitTyConst(vl.ty).id.Value, vl.getValue(self) }, string);
+        },
+        else => return null,
     }
 }
