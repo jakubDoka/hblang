@@ -3,8 +3,8 @@ main:
 	push rbp
 	mov rbx, 0x3C
 	mov rbp, 0x03
-	mov rdi, rbx
-	mov rsi, rbp
+	mov rax, rbx
+	mov rdi, rbp
 	syscall
 	pop rbp
 	pop rbx

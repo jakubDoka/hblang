@@ -61,11 +61,12 @@ main:
 	test rax, rax
 	jz 0x0000000000000012
 	mov rax, 0x3E9
-	jmp 0x0000000000000027
+	jmp 0x000000000000002A
 	mov r15, [rsp]
 	cmp [rsp], r15
 	setnz al
 	movzx rax, al
+	mov rcx, rax
 	or rcx, rax
 	test rcx, rcx
 	jz 0x0000000000000012

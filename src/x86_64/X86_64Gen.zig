@@ -49,6 +49,7 @@ pub const Reg = enum(u8) {
     _, // spills
 
     const system_v = struct {
+        const syscall_args: []const Reg = &[_]Reg{.rax} ++ args;
         const args: []const Reg = &.{ .rdi, .rsi, .rdx, .rcx, .r8, .r9 };
         const caller_saved: []const Reg = &.{ .rax, .rcx, .rdx, .rsi, .rdi, .r8, .r9, .r10, .r11 };
         const callee_saved: []const Reg = &.{ .rbx, .rbp, .r12, .r13, .r14, .r15 };
@@ -375,7 +376,7 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
                     },
                 };
             },
-            i64, i32 => .{
+            comptime_int, i64, i32 => .{
                 .type = zydis.ZYDIS_OPERAND_TYPE_IMMEDIATE,
                 .imm = .{ .s = val },
             },
@@ -518,9 +519,14 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
             .Call => |extra| {
                 const call = instr.extra(.Call);
 
+                const call_conv = if (extra.id == syscall)
+                    Reg.system_v.syscall_args
+                else
+                    Reg.system_v.args;
+
                 var moves = std.ArrayList(Move).init(tmp.arena.allocator());
                 for (instr.dataDeps(), 0..) |arg, i| {
-                    const dst, const src: Reg = .{ Reg.system_v.args[i], self.getReg(arg) };
+                    const dst, const src: Reg = .{ call_conv[i], self.getReg(arg) };
                     if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
                 }
                 self.orderMoves(moves.items);
@@ -569,14 +575,14 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
 
                 continue;
             },
-            .BinOp => {
-                const op = instr.extra(.BinOp).*;
+            .BinOp => |extra| {
+                const op = extra.*;
                 const dst = self.getReg(instr);
                 const lhs = self.getReg(instr.inputs()[1]);
                 const rhs = self.getReg(instr.inputs()[2]);
 
                 switch (op) {
-                    .iadd, .isub, .imul => {
+                    .iadd, .isub, .imul, .bor, .band, .bxor => {
                         if (dst != lhs) {
                             self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ dst, lhs });
                         }
@@ -588,6 +594,12 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     .iadd => zydis.ZYDIS_MNEMONIC_ADD,
                     .isub => zydis.ZYDIS_MNEMONIC_SUB,
                     .imul => zydis.ZYDIS_MNEMONIC_IMUL,
+
+                    .udiv,
+                    .umod,
+                    .sdiv,
+                    .smod,
+                    => unreachable,
 
                     .eq => zydis.ZYDIS_MNEMONIC_SETZ,
                     .ne => zydis.ZYDIS_MNEMONIC_SETNZ,
@@ -604,12 +616,25 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
 
                     .bor => zydis.ZYDIS_MNEMONIC_OR,
                     .band => zydis.ZYDIS_MNEMONIC_AND,
+                    .bxor => zydis.ZYDIS_MNEMONIC_XOR,
 
-                    else => std.debug.panic("{}", .{instr}),
+                    .ushr => zydis.ZYDIS_MNEMONIC_SHR,
+                    .ishl => zydis.ZYDIS_MNEMONIC_SHL,
+                    .sshr => zydis.ZYDIS_MNEMONIC_SAR,
+
+                    .fadd,
+                    .fsub,
+                    .fmul,
+                    .fdiv,
+                    .fgt,
+                    .flt,
+                    .fge,
+                    .fle,
+                    => std.debug.panic("floating point ops are postponed: {}", .{instr}),
                 };
 
                 switch (op) {
-                    .iadd, .isub, .imul, .bor, .band => {
+                    .iadd, .isub, .imul, .bor, .band, .bxor => {
                         self.emitInstr(mnemonic, .{ dst, rhs });
                     },
                     .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => {
@@ -658,6 +683,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 }
 
                 switch (op) {
+                    .ired => {},
                     .sext => switch (src_size) {
                         1, 2 => self.emitInstr(
                             zydis.ZYDIS_MNEMONIC_MOVSX,
@@ -674,11 +700,21 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                         .{ SReg{ dst, size }, SReg{ dst, 1 } },
                     ),
                     .not => {
+                        self.emitInstr(zydis.ZYDIS_MNEMONIC_XOR, .{ SReg{ dst, size }, 1 });
+                    },
+                    .bnot => {
                         self.emitInstr(zydis.ZYDIS_MNEMONIC_NOT, .{SReg{ dst, size }});
                     },
-                    else => {
-                        std.debug.panic("{any}", .{instr});
+                    .ineg => {
+                        self.emitInstr(zydis.ZYDIS_MNEMONIC_NEG, .{SReg{ dst, size }});
                     },
+                    .itf32,
+                    .itf64,
+                    .fti,
+                    .fcst,
+                    .cast,
+                    .fneg,
+                    => std.debug.panic("floating point ops are postponed: {any}", .{instr}),
                 }
             },
             else => {
@@ -801,7 +837,7 @@ pub fn run(_: *X86_64, env: Mach.RunEnv) !usize {
         defer if (cleanup) std.fs.cwd().deleteFile(name) catch unreachable;
 
         var compile = std.process.Child.init(
-            &.{ "gcc", name, "-o", exe_name },
+            &.{ "zig", "cc", name, "-o", exe_name },
             tmp.arena.allocator(),
         );
         _ = try compile.spawnAndWait();
