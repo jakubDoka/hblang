@@ -1574,7 +1574,7 @@ expectations := .{
 }
 
 main := fn(): uint {
-    $if @target("ableos") return @ecall(
+    $if @target("hbvm-ableos") return @ecall(
         100,
         struct{.a: uint; .b: uint}.(1, 2),
         struct{.a: uint; .b: uint; .c: uint}.(3, 4, 5),

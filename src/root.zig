@@ -61,7 +61,7 @@ pub const CompileOptions = struct {
     mangle_terminal: bool = false, // dump the executable even if colors are supported
     vendored_test: bool = false,
     // #OPTIONS (--target ableos)
-    target: []const u8 = "ableos", // target triple to compile to (not used yet since we have only one target)
+    target: []const u8 = "hbvm-ableos", // target triple to compile to (not used yet since we have only one target)
     extra_threads: usize = 0, // extra threads used for the compilation (not used yet)
     path_projections: std.StringHashMapUnmanaged([]const u8) = .{}, // can be specified multiple times
     // as `--path-projection name path`, when the `@use("name")` is encountered, its projected to `@use("path")`
@@ -184,7 +184,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         return .{ .ast = asts, .arena = ast_arena };
     }
 
-    var bckend, const abi: hb.frontend.Types.Abi = if (std.mem.eql(u8, opts.target, "ableos")) backend: {
+    var bckend, const abi: hb.frontend.Types.Abi = if (std.mem.eql(u8, opts.target, "hbvm-ableos")) backend: {
         const slot = ast_arena.create(hb.hbvm.HbvmGen);
         slot.* = hb.hbvm.HbvmGen{ .gpa = opts.gpa };
         break :backend .{ hb.backend.Machine.init(slot), .ableos };
@@ -198,7 +198,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         break :backend .{ hb.backend.Machine.init(slot), .systemv };
     } else {
         try opts.diagnostics.print(
-            "{s} is unsupported target, only `x86_64-(windows|linux)` and `ableos` are supported",
+            "{s} is unsupported target, only `x86_64-(windows|linux)` and `hbvm-ableos` are supported",
             .{opts.target},
         );
         return error.Failed;
@@ -206,6 +206,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     defer bckend.deinit();
 
     var types = hb.frontend.Types.init(opts.gpa, asts, opts.diagnostics);
+    types.target = opts.target;
     defer types.deinit();
 
     var codegen = hb.frontend.Codegen.init(opts.gpa, Arena.scrath(null).arena, &types, .runtime, abi);

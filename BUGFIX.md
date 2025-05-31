@@ -155,8 +155,8 @@ Target := enum {
     .x86_64_linux
 
     current := fn(): Target {
-        $if @target("ableos") return .AbleOS
-        $if @target("systemv") return .x86_64_linux
+        $if @target("hbvm-ableos") return .AbleOS
+        $if @target("x86_64-linux") return .x86_64_linux
         @error("Unknown target")
     }
 

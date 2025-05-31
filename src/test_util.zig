@@ -170,6 +170,7 @@ pub fn testBuilder(
     defer func_arena.deinit();
 
     var types = Types.init(gpa, asts, output);
+    types.target = code;
     defer types.deinit();
 
     var cg = Codegen.init(gpa, func_arena.arena, &types, .runtime, abi);

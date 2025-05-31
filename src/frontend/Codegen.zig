@@ -2472,7 +2472,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             try assertDirectiveArgs(self, expr, args, "<string>");
             const content = ast.exprs.getTyped(.String, args[0]) orelse return self.report(expr, "@target takes a \"string\"", .{});
             const str_content = ast.source[content.pos.index + 1 .. content.end - 1];
-            const triple = @tagName(self.abi);
+            const triple = self.types.target;
             const matched = matchTriple(str_content, triple) catch |err| {
                 return self.report(args[0], "{s}", .{@errorName(err)});
             };

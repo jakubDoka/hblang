@@ -22,6 +22,7 @@ ct: Comptime,
 diagnostics: std.io.AnyWriter,
 files: []const Ast,
 stack_base: usize,
+target: []const u8 = "hbvm-ableos",
 
 const Types = @This();
 const Map = std.hash_map.HashMapUnmanaged(Id, void, TypeCtx, 70);
