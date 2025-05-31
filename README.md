@@ -1722,6 +1722,23 @@ main := fn(): uint {
 }
 ```
 
+#### directives 15 (@compiles)
+```hb
+main := fn(): uint {
+    $if @compiles(scp.bar) {
+        return scp.bar
+    }
+
+    $if @compiles(scp.foo) {
+        return scp.foo
+    }
+}
+
+scp := enum {
+    foo := 0
+}
+```
+
 
 ## progress
 

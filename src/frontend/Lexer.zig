@@ -138,13 +138,7 @@ pub const Lexeme = enum(u16) {
     @"@int_to_float",
     @"@float_to_int",
     @"@float_cast",
-
-    comptime {
-        //std.debug.assert(Lexeme.@"@TypeOf".expand().Directive == .TypeOf);
-        //std.debug.assert(Lexeme.ty_never.expand().Type == .never);
-        //@compileLog(std.mem.asBytes(&Lexeme.@"@")[0..2].*, std.mem.asBytes(&Expanded.@"@")[0..2].*);
-        //std.debug.assert(Lexeme.@"@".expand() == .@"@");
-    }
+    @"@compiles",
 
     const data = @typeInfo(Lexeme).@"enum";
 

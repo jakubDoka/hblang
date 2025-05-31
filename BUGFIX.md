@@ -9,6 +9,42 @@ main := fn(): uint {
 }
 ```
 
+#### adding difference to a pointer 1
+```hb
+main := fn(): uint {
+    arr := u8.[0, 1, 2, 3]
+    ptr := &arr[0]
+    ptr += @size_of(u8) - one()
+    return ptr.*
+}
+
+one := fn(): uint return 1
+```
+
+#### error propagation 1
+```hb
+expectations := .{
+    should_error: true,
+}
+
+Broken := fn($T: type): type struct{}
+broken := fn($T: type): ?Broken(T) {
+    return .()
+}
+
+main := fn(): uint {
+    i := 0
+    loop {
+        if broken(u8) != null {
+            break
+        } else {
+            break
+        }
+    }
+    return 0
+}
+```
+
 #### structs 4 (errors)
 ```hb
 expectations := .{

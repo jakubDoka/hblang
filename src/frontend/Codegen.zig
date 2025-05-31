@@ -851,11 +851,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     },
                     .Builtin => {
                         const binop = try self.lexemeToBinOp(expr, e.op, lhs.ty);
-                        const upcast_ty = self.binOpUpcast(
-                            (if (e.op.isComparison()) null else ctx.ty) orelse lhs.ty,
-                            rhs.ty,
-                        ) catch |err|
-                            return self.report(expr, "{s} ({} and {})", .{ @errorName(err), lhs.ty, rhs.ty });
+                        const lhs_ty = (if (e.op.isComparison() or
+                            (ctx.ty != null and ctx.ty.?.data() == .Pointer)) null else ctx.ty) orelse lhs.ty;
+                        const upcast_ty = self.binOpUpcast(lhs_ty, rhs.ty) catch |err|
+                            return self.report(expr, "{s} ({} and {})", .{ @errorName(err), lhs_ty, rhs.ty });
 
                         if (lhs.ty.isFloat()) {
                             try self.typeCheck(expr, &rhs, lhs.ty);
@@ -1901,6 +1900,8 @@ pub fn instantiateTemplate(
     e: Ast.Store.TagPayload(.Call),
     typ: Types.Id,
 ) !struct { []Value, Types.Id } {
+    errdefer self.errored = true;
+
     const tmpl = self.types.store.get(typ.data().Template).*;
     const ast = self.ast;
 
@@ -2131,7 +2132,8 @@ pub fn partialEval(self: *Codegen, pos: anytype, node: *Builder.BuildNode) !u64 
     return switch (self.types.ct.partialEval(self.parent_scope.file(self.types), pos, &self.bl, node)) {
         .Resolved => |r| r,
         .Unsupported => |n| {
-            return self.report(pos, "can't evaluate this at compile time (yet), (DEBUG: got stuck on {})", .{n});
+            return self.report(pos, "can't evaluate this at compile time (yet)," ++
+                " (DEBUG: got stuck on {})", .{n});
         },
     };
 }
@@ -2495,5 +2497,20 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             return self.report(expr, "{s}", .{msg.items});
         },
         .Any => return self.emitTyConst(.any),
+        .compiles => {
+            try static.assertArgs(self, expr, args, "<expr>");
+
+            const prev_buff = self.types.diagnostics;
+            defer self.types.diagnostics = prev_buff;
+            self.types.diagnostics = std.io.null_writer.any();
+
+            const prev_errored = self.errored;
+            defer self.errored = prev_errored;
+            self.errored = false;
+
+            _ = try self.types.ct.inferType("", .{ .Tmp = self }, .{}, args[0]);
+
+            return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(!self.errored)));
+        },
     }
 }
