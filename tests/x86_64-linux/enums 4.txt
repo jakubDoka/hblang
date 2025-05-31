@@ -5,6 +5,7 @@
 	mov rcx, rsi
 	mov rax, rdx
 	mov rbx, 0x08
+	movzx rax, al
 	mov rbp, 0x01
 	mov rsi, rax
 	add rsi, rbp
@@ -42,6 +43,7 @@ main:
 	call 0x0000000000000005
 	mov rax, [rbx]
 	mov al, [rax]
+	movzx rax, al
 	add rsp, 0x10
 	pop r12
 	pop rbp

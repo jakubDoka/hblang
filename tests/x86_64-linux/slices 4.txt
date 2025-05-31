@@ -97,7 +97,7 @@ main:
 	mov rcx, [rsp+0x20]
 	call 0x0000000000000005
 	mov rbp, rax
-	not rbp
+	not bpl
 	mov r15, [rsp+0x18]
 	mov r12, [r15]
 	mov rbx, [rbx]
@@ -107,13 +107,13 @@ main:
 	mov r13, [r13]
 	test rbp, rbp
 	jz 0x000000000000000B
-	jmp 0x0000000000000024
+	jmp 0x0000000000000023
 	mov rdi, r13
 	mov rsi, r12
 	mov rdx, rbx
 	mov rcx, [rsp+0x08]
 	call 0x0000000000000005
-	not rax
+	not al
 	test rax, rax
 	jz 0x000000000000000F
 	mov rax, [rsp]

@@ -32,6 +32,7 @@ main:
 	mov rax, rbx
 	add rax, rcx
 	mov al, [rax]
+	movzx rax, al
 	add rsp, 0x10
 	pop r14
 	pop r13

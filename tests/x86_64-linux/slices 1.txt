@@ -144,6 +144,7 @@ main:
 	add r10, rbp
 	add r9, rdx
 	mov dl, [r9]
+	movzx rdx, dl
 	add r8, rdx
 	mov rdx, r10
-	jmp 0xFFFFFFFFFFFFFFC9
+	jmp 0xFFFFFFFFFFFFFFC5

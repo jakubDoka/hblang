@@ -4,9 +4,11 @@ main:
 	mov rdx, rax
 	add rdx, rcx
 	sub rax, rcx
+	movsx eax, ax
 	add rdx, rcx
 	sub rax, rcx
 	mov rcx, rdx
+	movsxd rax, eax
 	add rcx, rax
 	mov rax, rcx
 	ret

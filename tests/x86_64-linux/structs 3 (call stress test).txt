@@ -28,6 +28,7 @@
 "structs 3 (call stress test)".take_pair:
 	mov rax, rdi
 	mov rcx, rsi
+	movzx rax, al
 	add rax, rcx
 	ret
 "structs 3 (call stress test)".take_triple:
@@ -42,6 +43,7 @@
 	mov cl, [rcx]
 	mov rdx, [rbx]
 	mov rax, [rax]
+	movzx rcx, cl
 	add rax, rdx
 	add rax, rcx
 	pop rbx

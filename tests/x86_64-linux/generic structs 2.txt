@@ -9,6 +9,7 @@
 "generic structs 2".Foo(F = uint).Bar(B = u8).sub:
 	mov rcx, rdi
 	mov rax, rsi
+	movzx rax, al
 	sub rcx, rax
 	mov rax, rcx
 	ret

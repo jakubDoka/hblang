@@ -21,6 +21,7 @@ main:
 	mov rbp, rax
 	mov rdi, rbx
 	call 0x0000000000000005
+	movzx rax, al
 	mov rcx, rbp
 	add rcx, rax
 	mov rax, rcx

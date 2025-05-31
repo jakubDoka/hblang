@@ -336,7 +336,10 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
             else => null,
         };
 
-        if (mnemonic != zydis.ZYDIS_MNEMONIC_MOVZX and size != null and op_size != null) std.debug.assert(op_size == size);
+        if (mnemonic != zydis.ZYDIS_MNEMONIC_MOVZX and
+            mnemonic != zydis.ZYDIS_MNEMONIC_MOVSX and
+            mnemonic != zydis.ZYDIS_MNEMONIC_MOVSXD and
+            size != null and op_size != null) std.debug.assert(op_size == size);
         size = size orelse op_size;
     }
 
@@ -645,7 +648,9 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
             },
             .UnOp => {
                 const op = instr.extra(.UnOp).*;
+                const size = instr.data_type.size();
                 const dst = self.getReg(instr);
+                const src_size = instr.inputs()[1].?.data_type.size();
                 const src = self.getReg(instr.inputs()[1]);
 
                 if (dst != src) {
@@ -653,9 +658,23 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 }
 
                 switch (op) {
-                    .sext, .uext => {},
+                    .sext => switch (src_size) {
+                        1, 2 => self.emitInstr(
+                            zydis.ZYDIS_MNEMONIC_MOVSX,
+                            .{ SReg{ dst, size }, SReg{ dst, src_size } },
+                        ),
+                        4 => self.emitInstr(
+                            zydis.ZYDIS_MNEMONIC_MOVSXD,
+                            .{ SReg{ dst, size }, SReg{ dst, src_size } },
+                        ),
+                        else => unreachable,
+                    },
+                    .uext => if (instr.inputs()[1].?.data_type.size() == 1) self.emitInstr(
+                        zydis.ZYDIS_MNEMONIC_MOVZX,
+                        .{ SReg{ dst, size }, SReg{ dst, 1 } },
+                    ),
                     .not => {
-                        self.emitInstr(zydis.ZYDIS_MNEMONIC_NOT, .{dst});
+                        self.emitInstr(zydis.ZYDIS_MNEMONIC_NOT, .{SReg{ dst, size }});
                     },
                     else => {
                         std.debug.panic("{any}", .{instr});

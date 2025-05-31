@@ -81,6 +81,7 @@
 	mov r12, rbx
 	add r12, r13
 	mov r13b, [rbx]
+	movsx r13, r13b
 	cmp r13, [rsp+0x08]
 	setz [rsp+0x30]
 	movzx r15, byte ptr [rsp+0x30]
@@ -122,7 +123,7 @@
 	jmp 0x000000000000001A
 	mov r15b, [rsp+0x20]
 	mov [rbx], r15b
-	jmp 0xFFFFFFFFFFFFFF44
+	jmp 0xFFFFFFFFFFFFFF40
 	mov rdi, rbp
 	call 0x0000000000000005
 	add rsp, 0x40
@@ -242,7 +243,7 @@ main:
 	not [rsp+0x50]
 	mov r15, [rsp+0x50]
 	test [rsp+0x50], r15
-	jz 0x0000000000000115
+	jz 0x0000000000000114
 	mov rbp, rsp
 	add rbp, 0xA8
 	mov rdi, rbp
@@ -265,11 +266,11 @@ main:
 	mov rsi, [rsp+0x38]
 	call 0x0000000000000005
 	mov r12b, [rbp]
-	not r12
+	not r12b
 	test r12, r12
 	jz 0x0000000000000010
 	mov rax, [rsp+0x18]
-	jmp 0x0000000000000150
+	jmp 0x000000000000014E
 	mov rdi, rbx
 	mov rsi, [rsp]
 	call 0x0000000000000005
@@ -287,7 +288,7 @@ main:
 	test [rsp+0x20], r15
 	jz 0x0000000000000012
 	mov rax, 0x03
-	jmp 0x00000000000000FC
+	jmp 0x00000000000000FB
 	cmp r12, [rsp+0x40]
 	setnz r12b
 	movzx r12, r12b
@@ -300,8 +301,8 @@ main:
 	test r12, r12
 	jz 0x0000000000000010
 	mov rax, [rsp+0x10]
-	jmp 0x00000000000000BD
-	jmp 0xFFFFFFFFFFFFFF46
+	jmp 0x00000000000000BC
+	jmp 0xFFFFFFFFFFFFFF47
 	mov rdi, rbp
 	mov rsi, [rsp+0x38]
 	call 0x0000000000000005
@@ -347,5 +348,5 @@ main:
 	pop rbp
 	pop rbx
 	ret
-	jmp 0xFFFFFFFFFFFFFE01
+	jmp 0xFFFFFFFFFFFFFE04
 memcpy:

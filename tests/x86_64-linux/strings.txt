@@ -3,4 +3,5 @@ main:
 	mov rcx, 0x01
 	add rax, rcx
 	mov al, [rax]
+	movzx rax, al
 	ret
