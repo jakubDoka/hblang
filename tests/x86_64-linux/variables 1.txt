@@ -1,8 +1,5 @@
 main:
 	mov rax, 0x01
-	mov rcx, 0x02
-	mov rdx, rax
-	add rdx, rax
-	mov rax, rdx
-	sub rax, rcx
+	add rax, 0x01
+	sub rax, 0x02
 	ret

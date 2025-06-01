@@ -1,24 +1,21 @@
 "loops 1".fib:
 	push rbx
-	push rbp
 	mov rax, rdi
 	mov rcx, 0x00
 	mov rdx, 0x01
-	mov rbx, rdx
-	mov rbp, rcx
-	cmp rax, rcx
-	setz sil
-	movzx rsi, sil
-	test rsi, rsi
-	jz 0x000000000000000C
-	mov rax, rbp
-	pop rbp
+	xchg rcx, rdx
+	cmp rax, 0x00
+	setz bl
+	movzx rbx, bl
+	test bl, bl
+	jz 0x000000000000000B
+	mov rax, rdx
 	pop rbx
 	ret
-	add rbp, rbx
-	sub rax, rdx
-	xchg rbx, rbp
-	jmp 0xFFFFFFFFFFFFFFDD
+	add rdx, rcx
+	sub rax, 0x01
+	xchg rcx, rdx
+	jmp 0xFFFFFFFFFFFFFFDE
 main:
 	push rbx
 	sub rsp, 0x08

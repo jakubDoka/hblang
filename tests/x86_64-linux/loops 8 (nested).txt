@@ -3,34 +3,32 @@ main:
 	push rbp
 	mov rax, 0x00
 	mov rcx, 0x01
-	mov rdx, 0x0A
-	mov rbx, 0x09
-	mov rbp, rax
-	mov rsi, rax
-	cmp rbp, rdx
-	setz dil
-	movzx rdi, dil
-	test rdi, rdi
+	mov rdx, rax
+	mov rbx, rax
+	cmp rdx, 0x0A
+	setz bpl
+	movzx rbp, bpl
+	test bpl, bpl
 	jz 0x000000000000000C
-	mov rax, rsi
+	mov rax, rbx
 	pop rbp
 	pop rbx
 	ret
-	mov r8, rsi
-	mov rsi, rax
-	mov rdi, rcx
-	mov r9, rax
-	cmp rsi, rbx
-	setz r10b
-	movzx r10, r10b
-	test r10, r10
-	jz 0x0000000000000011
-	add rbp, rcx
-	mov rsi, r8
-	jmp 0xFFFFFFFFFFFFFFC0
-	mov r8, r9
-	add r8, rdi
-	add rsi, rcx
-	mov r9, rdi
-	mov rdi, r8
-	jmp 0xFFFFFFFFFFFFFFD2
+	mov rsi, rbx
+	mov rbx, rax
+	mov rbp, rcx
+	mov rdi, rax
+	cmp rbx, 0x09
+	setz r8b
+	movzx r8, r8b
+	test r8b, r8b
+	jz 0x0000000000000012
+	add rdx, 0x01
+	mov rbx, rsi
+	jmp 0xFFFFFFFFFFFFFFBD
+	mov rsi, rdi
+	add rsi, rbp
+	add rbx, 0x01
+	mov rdi, rbp
+	mov rbp, rsi
+	jmp 0xFFFFFFFFFFFFFFCF

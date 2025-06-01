@@ -4,11 +4,8 @@ main:
 	add rax, 0x00
 	mov rcx, 0x01
 	mov [rax], cl
-	mov rdx, rax
-	add rdx, rcx
-	mov [rdx], cl
+	mov [rax+0x01], cl
 	mov ax, [rax]
-	mov rcx, 0x100
-	sub rax, rcx
+	sub rax, 0x100
 	add rsp, 0x18
 	ret

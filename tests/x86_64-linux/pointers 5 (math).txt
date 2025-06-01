@@ -1,3 +1,9 @@
 main:
-	mov rax, 0x00
+	sub rsp, 0x20
+	mov rax, rsp
+	add rax, 0x00
+	mov rcx, 0x00
+	mov [rax+0x08], rcx
+	mov rax, rcx
+	add rsp, 0x20
 	ret

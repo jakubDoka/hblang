@@ -1,9 +1,8 @@
 "global variables 1".dec:
 	lea rax, [0x0000000000000007]
-	mov rcx, 0x01
-	mov rdx, [rax]
-	sub rdx, rcx
-	mov [rax], rdx
+	mov rcx, [rax]
+	sub rcx, 0x01
+	mov [rax], rcx
 	ret
 main:
 	push rbx

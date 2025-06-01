@@ -1,12 +1,10 @@
 "functions 1".add_one:
 	mov rax, rdi
-	mov rcx, 0x01
-	add rax, rcx
+	add rax, 0x01
 	ret
 "functions 1".add_two:
 	mov rax, rdi
-	mov rcx, 0x02
-	add rax, rcx
+	add rax, 0x02
 	ret
 main:
 	push rbx

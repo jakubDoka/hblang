@@ -5,54 +5,50 @@
 	mov rax, rdx
 	mov rdx, rdi
 	mov rcx, rsi
-	mov rbx, 0x00
-	mov rbp, rsp
-	add rbp, 0x00
-	mov [rbp], rcx
-	cmp rax, rbx
+	mov rbx, rsp
+	add rbx, 0x00
+	mov [rbx], rcx
+	mov [rbx+0x08], rax
+	cmp rax, 0x00
 	setz cl
 	movzx rcx, cl
-	mov rsi, 0x08
-	mov rdi, rbp
-	add rdi, rsi
-	mov [rdi], rax
-	mov rsi, 0x10
-	test rcx, rcx
+	mov rbp, 0x10
+	test cl, cl
 	jz 0x0000000000000019
 	mov rdi, rdx
-	mov rdx, rsi
-	mov rsi, rbp
+	mov rsi, rbx
+	mov rdx, rbp
 	call 0x0000000000000005
-	jmp 0x000000000000006D
-	mov rcx, 0x01
-	sub rax, rcx
-	xchg rax, rbx
-	cmp rax, rbx
-	setb dil
-	movzx rdi, dil
-	test rdi, rdi
+	jmp 0x000000000000006E
+	mov rcx, 0x00
+	sub rax, 0x01
+	xchg rax, rcx
+	cmp rax, rcx
+	setb sil
+	movzx rsi, sil
+	test sil, sil
 	jz 0x000000000000003F
-	mov rdi, [rbp]
+	mov rsi, [rbx]
+	mov rdi, rcx
+	sub rdi, 0x01
 	mov r8, rax
-	add r8, rcx
-	mov r9, rbx
-	sub r9, rcx
-	mov r10, rdi
-	add r10, rax
-	mov rax, rdi
-	add rax, rbx
-	mov dil, [r10]
+	add r8, 0x01
+	mov r9, rsi
+	add r9, rax
+	mov rax, rsi
+	add rax, rcx
+	mov sil, [r9]
 	mov al, [rax]
-	mov [r10], al
-	mov rax, [rbp]
-	add rax, rbx
-	mov [rax], dil
+	mov [r9], al
+	mov rax, [rbx]
+	add rax, rcx
+	mov [rax], sil
 	mov rax, r8
-	mov rbx, r9
+	mov rcx, rdi
 	jmp 0xFFFFFFFFFFFFFFB8
 	mov rdi, rdx
-	mov rdx, rsi
-	mov rsi, rbp
+	mov rsi, rbx
+	mov rdx, rbp
 	call 0x0000000000000005
 	add rsp, 0x20
 	pop rbp
@@ -64,46 +60,47 @@ main:
 	push r12
 	push r13
 	push r14
-	push r15
-	sub rsp, 0x78
+	sub rsp, 0x98
 	mov rbx, rsp
-	add rbx, 0x18
+	add rbx, 0x08
 	mov rbp, 0x01
 	mov [rbx], bpl
 	mov r12, 0x02
-	mov r13, rbx
-	add r13, rbp
-	mov [r13], r12b
-	mov qword ptr [rsp], 0x03
-	mov [rsp+0x08], rbx
-	add [rsp+0x08], r12
-	mov r15, [rsp+0x08]
-	mov r14b, [rsp]
-	mov [r15], r14b
-	mov r12, 0x00
-	mov [rsp+0x10], rsp
-	add qword ptr [rsp+0x10], 0x1B
-	mov rdi, [rsp+0x10]
+	mov [rbx+0x01], r12b
+	mov r12, 0x03
+	mov [rbx+0x02], r12b
+	mov r13, 0x00
+	mov [rsp], rsp
+	add qword ptr [rsp], 0x1B
+	mov r15, [rsp]
+	mov [r15+0x08], r13
+	mov [rsp], rsp
+	add qword ptr [rsp], 0x0B
+	mov rdi, [rsp]
+	mov rsi, rbp
+	mov rdx, r13
+	call 0x0000000000000005
+	mov rbp, rsp
+	add rbp, 0x3B
+	mov [rbp], rbx
+	mov [rbp+0x08], r12
+	mov r13, rsp
+	add r13, 0x2B
+	mov rbp, [rbp]
+	mov rdi, r13
 	mov rsi, rbp
 	mov rdx, r12
 	call 0x0000000000000005
-	mov rbp, rsp
-	add rbp, 0x2B
-	mov rdi, rbp
-	mov rsi, rbx
-	mov rdx, [rsp]
-	call 0x0000000000000005
-	mov al, [rbx]
-	mov cl, [r13]
-	mov r15, [rsp+0x08]
-	mov dl, [r15]
+	mov al, [rbx+0x01]
+	mov cl, [rbx+0x02]
+	mov dl, [rbx]
 	movzx rax, al
-	movzx rcx, cl
 	movzx rdx, dl
+	movzx rcx, cl
+	sub rdx, rax
+	mov rax, rdx
 	sub rax, rcx
-	sub rax, rdx
-	add rsp, 0x78
-	pop r15
+	add rsp, 0x98
 	pop r14
 	pop r13
 	pop r12

@@ -95,8 +95,21 @@ pub const Reloc = struct {
 };
 
 pub const Node = union(enum) {
+    OffsetLoad: extern struct {
+        base: graph.Load = .{},
+        dis: u32,
+    },
+    OffsetStore: extern struct {
+        base: graph.Store = .{},
+        dis: u32,
+    },
+    ImmOp: extern struct {
+        base: graph.BinOp,
+        imm: i64,
+    },
+
     pub const is_basic_block_start: []const Func.Kind = &.{};
-    pub const is_mem_op: []const Func.Kind = &.{};
+    pub const is_mem_op: []const Func.Kind = &.{ .OffsetLoad, .OffsetStore };
     pub const is_basic_block_end: []const Func.Kind = &.{};
     pub const is_pinned: []const Func.Kind = &.{};
     pub const reserved_regs = @as(u64, 1) << @intFromEnum(Reg.rsp);
@@ -140,10 +153,69 @@ pub const Node = union(enum) {
     }
 
     pub fn idealize(func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
-        _ = func;
-        _ = node;
         _ = worklist;
+        if (node.kind == .Load and node.base().kind == .BinOp and
+            node.base().inputs()[2].?.kind == .CInt)
+        {
+            std.debug.assert(node.base().extra(.BinOp).* == .iadd or node.base().extra(.BinOp).* == .isub);
+            return func.addNode(
+                .OffsetLoad,
+                node.data_type,
+                &.{ node.inputs()[0], node.mem(), node.base().inputs()[1] },
+                .{ .dis = @intCast(node.base().inputs()[2].?.extra(.CInt).*) },
+            );
+        }
+
+        if (node.kind == .Load and node.base().kind == .ImmOp) {
+            std.debug.assert(node.base().extra(.ImmOp).base == .iadd or node.base().extra(.ImmOp).base == .isub);
+            return func.addNode(
+                .OffsetLoad,
+                node.data_type,
+                &.{ node.inputs()[0], node.mem(), node.base().inputs()[1] },
+                .{ .dis = @intCast(node.base().extra(.ImmOp).imm) },
+            );
+        }
+
+        if (node.kind == .Store and node.base().kind == .BinOp and
+            node.base().inputs()[2].?.kind == .CInt)
+        {
+            std.debug.assert(node.base().extra(.BinOp).* == .iadd or node.base().extra(.BinOp).* == .isub);
+            return func.addNode(
+                .OffsetStore,
+                node.data_type,
+                &.{ node.inputs()[0], node.mem(), node.base().inputs()[1], node.value() },
+                .{ .dis = @intCast(node.base().inputs()[2].?.extra(.CInt).*) },
+            );
+        }
+
+        if (node.kind == .Store and node.base().kind == .ImmOp) {
+            std.debug.assert(node.base().extra(.ImmOp).base == .iadd or node.base().extra(.BinOp).* == .isub);
+            return func.addNode(
+                .OffsetStore,
+                node.data_type,
+                &.{ node.inputs()[0], node.mem(), node.base().inputs()[1], node.value() },
+                .{ .dis = @intCast(node.base().extra(.ImmOp).imm) },
+            );
+        }
+
+        if (node.kind == .BinOp and node.inputs()[2].?.kind == .CInt and
+            node.extra(.BinOp).* != .imul)
+        {
+            return func.addNode(.ImmOp, node.data_type, node.inputs()[0..2], .{
+                .base = node.extra(.BinOp).*,
+                .imm = node.inputs()[2].?.extra(.CInt).*,
+            });
+        }
+
         return null;
+    }
+
+    pub fn getStaticOffset(node: *Func.Node) i64 {
+        return switch (node.kind) {
+            .OffsetLoad => node.extra(.OffsetLoad).dis,
+            .OffsetStore => node.extra(.OffsetStore).dis,
+            else => 0,
+        };
     }
 };
 
@@ -418,6 +490,7 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
 
     const should_flush_to_mem =
         (mnemonic == zydis.ZYDIS_MNEMONIC_MOVZX or
+            mnemonic == zydis.ZYDIS_MNEMONIC_MOVSX or
             mnemonic == zydis.ZYDIS_MNEMONIC_IMUL
                 //mnemonic == zydis.ZYDIS_MNEMONIC_SHR or
                 //mnemonic == zydis.ZYDIS_MNEMONIC_SAR or
@@ -539,11 +612,33 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     BRegOff{ bse, offset, @intCast(instr.data_type.size()) },
                 });
             },
+            .OffsetLoad => |extra| {
+                const dst = self.getReg(instr);
+                const bse = self.getReg(instr.inputs()[2]);
+
+                const offset: u32 = extra.dis;
+
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
+                    SReg{ dst, instr.data_type.size() },
+                    BRegOff{ bse, offset, @intCast(instr.data_type.size()) },
+                });
+            },
             .Store => {
                 const dst = self.getReg(instr.inputs()[2]);
                 const vl = self.getReg(instr.inputs()[3]);
 
                 const offset: u32 = 0;
+
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
+                    BRegOff{ dst, offset, @intCast(instr.data_type.size()) },
+                    SReg{ vl, instr.data_type.size() },
+                });
+            },
+            .OffsetStore => |extra| {
+                const dst = self.getReg(instr.inputs()[2]);
+                const vl = self.getReg(instr.inputs()[3]);
+
+                const offset: u32 = extra.dis;
 
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
                     BRegOff{ dst, offset, @intCast(instr.data_type.size()) },
@@ -608,6 +703,60 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
 
                 continue;
             },
+            .ImmOp => |extra| {
+                const op = extra.base;
+                const size = instr.data_type.size();
+                const opsize = instr.inputs()[1].?.data_type.size();
+                const dst = self.getReg(instr);
+                const lhs = self.getReg(instr.inputs()[1]);
+                const rhs = extra.imm;
+
+                switch (op) {
+                    .imul => unreachable,
+                    .iadd, .isub, .bor, .band, .bxor, .ushr, .ishl, .sshr => {
+                        if (dst != lhs) {
+                            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ dst, lhs });
+                        }
+                    },
+                    else => {},
+                }
+
+                const mnemonic = binopToMnemonic(op);
+
+                switch (op) {
+                    .imul => unreachable,
+                    .ushr, .ishl, .sshr => {
+                        self.emitInstr(mnemonic, .{ dst, rhs });
+                    },
+                    .iadd, .isub, .bor, .band, .bxor => {
+                        self.emitInstr(mnemonic, .{ dst, rhs });
+                    },
+                    .udiv, .sdiv, .smod, .umod => switch (size) {
+                        1, 2, 4, 8 => {
+                            if (size == 1) {
+                                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOVZX, .{ Reg.rdx, SReg{ .rdx, 1 } });
+                            } else {
+                                self.emitInstr(zydis.ZYDIS_MNEMONIC_XOR, .{ Reg.rdx, Reg.rdx });
+                            }
+                            self.emitInstr(mnemonic, .{rhs});
+
+                            const dest_reg: Reg = if (op == .udiv or op == .sdiv) .rax else .rdx;
+
+                            if (dst != dest_reg) self.emitInstr(
+                                zydis.ZYDIS_MNEMONIC_MOV,
+                                .{ SReg{ dst, size }, SReg{ dest_reg, size } },
+                            );
+                        },
+                        else => unreachable,
+                    },
+                    .fadd, .fsub, .fmul, .fdiv, .fgt, .flt, .fge, .fle => unreachable,
+                    .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => {
+                        self.emitInstr(zydis.ZYDIS_MNEMONIC_CMP, .{ SReg{ lhs, opsize }, rhs });
+                        self.emitInstr(mnemonic, .{SReg{ dst, 1 }});
+                        self.emitInstr(zydis.ZYDIS_MNEMONIC_MOVZX, .{ dst, SReg{ dst, 1 } });
+                    },
+                }
+            },
             .BinOp => |extra| {
                 const op = extra.*;
                 const size = instr.data_type.size();
@@ -625,45 +774,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     else => {},
                 }
 
-                const mnemonic: c_uint = switch (op) {
-                    .iadd => zydis.ZYDIS_MNEMONIC_ADD,
-                    .isub => zydis.ZYDIS_MNEMONIC_SUB,
-                    .imul => zydis.ZYDIS_MNEMONIC_IMUL,
-
-                    .udiv, .umod => zydis.ZYDIS_MNEMONIC_DIV,
-                    .sdiv, .smod => zydis.ZYDIS_MNEMONIC_IDIV,
-
-                    .eq => zydis.ZYDIS_MNEMONIC_SETZ,
-                    .ne => zydis.ZYDIS_MNEMONIC_SETNZ,
-
-                    .ult => zydis.ZYDIS_MNEMONIC_SETB,
-                    .ule => zydis.ZYDIS_MNEMONIC_SETBE,
-                    .ugt => zydis.ZYDIS_MNEMONIC_SETNBE,
-                    .uge => zydis.ZYDIS_MNEMONIC_SETNB,
-
-                    .slt => zydis.ZYDIS_MNEMONIC_SETL,
-                    .sle => zydis.ZYDIS_MNEMONIC_SETLE,
-                    .sgt => zydis.ZYDIS_MNEMONIC_SETNLE,
-                    .sge => zydis.ZYDIS_MNEMONIC_SETNL,
-
-                    .bor => zydis.ZYDIS_MNEMONIC_OR,
-                    .band => zydis.ZYDIS_MNEMONIC_AND,
-                    .bxor => zydis.ZYDIS_MNEMONIC_XOR,
-
-                    .ushr => zydis.ZYDIS_MNEMONIC_SHR,
-                    .ishl => zydis.ZYDIS_MNEMONIC_SHL,
-                    .sshr => zydis.ZYDIS_MNEMONIC_SAR,
-
-                    .fadd,
-                    .fsub,
-                    .fmul,
-                    .fdiv,
-                    .fgt,
-                    .flt,
-                    .fge,
-                    .fle,
-                    => std.debug.panic("floating point ops are postponed: {}", .{instr}),
-                };
+                const mnemonic = binopToMnemonic(op);
 
                 switch (op) {
                     .ushr, .ishl, .sshr => {
@@ -935,4 +1046,46 @@ pub fn run(_: *X86_64, env: Mach.RunEnv) !usize {
 
 pub fn deinit(self: *X86_64) void {
     self.out.deinit(self.gpa);
+}
+
+pub fn binopToMnemonic(op: graph.BinOp) zydis.ZydisMnemonic {
+    return switch (op) {
+        .iadd => zydis.ZYDIS_MNEMONIC_ADD,
+        .isub => zydis.ZYDIS_MNEMONIC_SUB,
+        .imul => zydis.ZYDIS_MNEMONIC_IMUL,
+
+        .udiv, .umod => zydis.ZYDIS_MNEMONIC_DIV,
+        .sdiv, .smod => zydis.ZYDIS_MNEMONIC_IDIV,
+
+        .eq => zydis.ZYDIS_MNEMONIC_SETZ,
+        .ne => zydis.ZYDIS_MNEMONIC_SETNZ,
+
+        .ult => zydis.ZYDIS_MNEMONIC_SETB,
+        .ule => zydis.ZYDIS_MNEMONIC_SETBE,
+        .ugt => zydis.ZYDIS_MNEMONIC_SETNBE,
+        .uge => zydis.ZYDIS_MNEMONIC_SETNB,
+
+        .slt => zydis.ZYDIS_MNEMONIC_SETL,
+        .sle => zydis.ZYDIS_MNEMONIC_SETLE,
+        .sgt => zydis.ZYDIS_MNEMONIC_SETNLE,
+        .sge => zydis.ZYDIS_MNEMONIC_SETNL,
+
+        .bor => zydis.ZYDIS_MNEMONIC_OR,
+        .band => zydis.ZYDIS_MNEMONIC_AND,
+        .bxor => zydis.ZYDIS_MNEMONIC_XOR,
+
+        .ushr => zydis.ZYDIS_MNEMONIC_SHR,
+        .ishl => zydis.ZYDIS_MNEMONIC_SHL,
+        .sshr => zydis.ZYDIS_MNEMONIC_SAR,
+
+        .fadd,
+        .fsub,
+        .fmul,
+        .fdiv,
+        .fgt,
+        .flt,
+        .fge,
+        .fle,
+        => std.debug.panic("floating point ops are postponed: {}", .{op}),
+    };
 }

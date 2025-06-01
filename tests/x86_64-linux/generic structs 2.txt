@@ -2,36 +2,34 @@
 	mov rax, rdi
 	mov rcx, 0x01
 	mov [rax], rcx
-	mov rdx, 0x08
-	add rax, rdx
-	mov [rax], cl
+	mov [rax+0x08], cl
 	ret
 "generic structs 2".Foo(F = uint).Bar(B = u8).sub:
+	sub rsp, 0x20
 	mov rcx, rdi
 	mov rax, rsi
+	mov rdx, rsp
+	add rdx, 0x00
+	mov [rdx+0x08], al
 	movzx rax, al
 	sub rcx, rax
 	mov rax, rcx
+	add rsp, 0x20
 	ret
 main:
 	push rbx
 	push rbp
-	push r12
 	sub rsp, 0x18
 	mov rbx, rsp
 	add rbx, 0x00
 	mov rdi, rbx
 	call 0x0000000000000005
-	mov rbp, 0x08
-	mov r12, rbx
-	add r12, rbp
+	mov bpl, [rbx+0x08]
 	mov rbx, [rbx]
-	mov bpl, [r12]
 	mov rdi, rbx
 	mov rsi, rbp
 	call 0x0000000000000005
 	add rsp, 0x18
-	pop r12
 	pop rbp
 	pop rbx
 	ret

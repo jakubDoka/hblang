@@ -1,14 +1,10 @@
 main:
-	push rbx
 	mov rax, 0x00
-	mov rcx, 0x01
-	mov rdx, 0x04
-	cmp rax, rdx
-	setz bl
-	movzx rbx, bl
-	test rbx, rbx
-	jz 0x0000000000000008
-	pop rbx
+	cmp rax, 0x04
+	setz cl
+	movzx rcx, cl
+	test cl, cl
+	jz 0x0000000000000007
 	ret
-	add rax, rcx
+	add rax, 0x01
 	jmp 0xFFFFFFFFFFFFFFE8

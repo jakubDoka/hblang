@@ -1,9 +1,8 @@
 "nullable types 2".take:
 	mov rax, rdi
-	mov rcx, 0x01
-	mov rdx, [rax]
-	add rdx, rcx
-	mov [rax], rdx
+	mov rcx, [rax]
+	add rcx, 0x01
+	mov [rax], rcx
 	ret
 main:
 	push rbx
@@ -12,48 +11,66 @@ main:
 	push r13
 	push r14
 	push r15
-	sub rsp, 0x58
-	mov rbx, 0x01
-	mov rbp, 0x00
-	mov r12, rsp
-	add r12, 0x18
-	mov [r12], bl
-	mov r13, 0x10
-	cmp rbx, rbp
-	setz [rsp]
-	movzx r15, byte ptr [rsp]
-	mov [rsp], r15
-	mov qword ptr [rsp+0x08], 0x08
-	mov [rsp+0x10], r12
-	mov r15, [rsp+0x08]
-	add [rsp+0x10], r15
-	mov r15, [rsp+0x10]
-	mov [r15], rbp
-	add r12, r13
-	mov [r12], rbp
+	sub rsp, 0xB8
+	mov rbx, rsp
+	add rbx, 0x18
+	mov rbp, 0x01
+	mov [rbx], bpl
+	mov r12, 0x00
+	mov [rbx+0x08], r12
+	mov [rbx+0x10], r12
+	mov r13, rsp
+	add r13, 0x30
+	mov [r13], bpl
+	mov [r13+0x08], r12
+	mov [r13+0x10], r12
+	mov [rsp], rsp
+	add qword ptr [rsp], 0x48
 	mov r15, [rsp]
-	test [rsp], r15
+	mov [r15], bpl
+	mov r15, [rsp]
+	mov [r15+0x08], r12
+	mov r15b, [rbx]
+	mov [rsp+0x08], r15b
+	cmp byte ptr [rsp+0x08], 0x00
+	setz [rsp+0x08]
+	movzx r15, byte ptr [rsp+0x08]
+	mov [rsp+0x08], r15
+	mov r15, [rsp]
+	mov r14b, [r15]
+	mov [rsp+0x10], r14b
+	mov r13b, [r13]
+	mov r15, [rsp]
+	mov [r15+0x10], r12
+	mov r15b, [rsp+0x08]
+	test [rsp+0x08], r15b
 	jz 0x000000000000000E
-	mov rax, rbx
-	jmp 0x000000000000001A
-	mov r15, [rsp]
-	test [rsp], r15
+	mov rax, rbp
+	jmp 0x0000000000000021
+	cmp r13b, 0x00
+	setz r12b
+	movzx r12, r12b
+	test r12b, r12b
 	jz 0x0000000000000012
 	mov rax, 0x02
-	jmp 0x000000000000001A
-	mov r15, [rsp]
-	test [rsp], r15
+	jmp 0x0000000000000022
+	cmp byte ptr [rsp+0x10], 0x00
+	setz r12b
+	movzx r12, r12b
+	test r12b, r12b
 	jz 0x0000000000000012
 	mov rax, 0x03
-	jmp 0x0000000000000022
-	mov [r12], rbx
-	mov rdi, [rsp+0x10]
+	jmp 0x0000000000000026
+	mov [rbx+0x10], rbp
+	mov rbp, rbx
+	add rbp, 0x08
+	mov rdi, rbp
 	call 0x0000000000000005
-	mov r15, [rsp+0x10]
-	mov rax, [r15]
-	mov rcx, [r12]
-	sub rax, rcx
-	add rsp, 0x58
+	mov rax, [rbx+0x10]
+	mov rcx, [rbx+0x08]
+	sub rcx, rax
+	mov rax, rcx
+	add rsp, 0xB8
 	pop r15
 	pop r14
 	pop r13

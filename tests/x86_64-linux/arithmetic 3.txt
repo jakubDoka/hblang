@@ -28,7 +28,7 @@ main:
 	mov rdi, r12
 	call 0x0000000000000005
 	mov r12, rax
-	test r12, r12
+	test r12b, r12b
 	jz 0x0000000000000012
 	mov rax, 0x01
 	jmp 0x000000000000002A
@@ -38,7 +38,7 @@ main:
 	mov rdi, r12
 	call 0x0000000000000005
 	mov r12, rax
-	test r12, r12
+	test r12b, r12b
 	jz 0x0000000000000012
 	mov rax, 0x02
 	jmp 0x000000000000002B
@@ -48,7 +48,7 @@ main:
 	mov rdi, r12
 	call 0x0000000000000005
 	mov r12, rax
-	test r12, r12
+	test r12b, r12b
 	jz 0x0000000000000012
 	mov rax, 0x03
 	jmp 0x000000000000002B
@@ -58,7 +58,7 @@ main:
 	mov rdi, r12
 	call 0x0000000000000005
 	mov r12, rax
-	test r12, r12
+	test r12b, r12b
 	jz 0x0000000000000012
 	mov rax, 0x04
 	jmp 0x000000000000002A
@@ -68,17 +68,17 @@ main:
 	mov rdi, r12
 	call 0x0000000000000005
 	mov r12, rax
-	test r12, r12
+	test r12b, r12b
 	jz 0x0000000000000012
 	mov rax, 0x05
-	jmp 0x000000000000002B
+	jmp 0x000000000000002A
 	cmp bpl, bl
 	setnb bpl
 	movzx rbp, bpl
 	mov rdi, rbp
 	call 0x0000000000000005
 	mov rbx, rax
-	test rbx, rbx
+	test bl, bl
 	jz 0x0000000000000012
 	mov rax, 0x06
 	jmp 0x000000000000003B
@@ -92,7 +92,7 @@ main:
 	mov rdi, r12
 	call 0x0000000000000005
 	mov r12, rax
-	test r12, r12
+	test r12b, r12b
 	jz 0x0000000000000012
 	mov rax, 0x07
 	jmp 0x000000000000002A
@@ -102,7 +102,7 @@ main:
 	mov rdi, r12
 	call 0x0000000000000005
 	mov r12, rax
-	test r12, r12
+	test r12b, r12b
 	jz 0x0000000000000012
 	mov rax, 0x08
 	jmp 0x000000000000002B
@@ -112,7 +112,7 @@ main:
 	mov rdi, r12
 	call 0x0000000000000005
 	mov r12, rax
-	test r12, r12
+	test r12b, r12b
 	jz 0x0000000000000012
 	mov rax, 0x09
 	jmp 0x000000000000002B
@@ -122,7 +122,7 @@ main:
 	mov rdi, r12
 	call 0x0000000000000005
 	mov r12, rax
-	test r12, r12
+	test r12b, r12b
 	jz 0x0000000000000012
 	mov rax, 0x0A
 	jmp 0x000000000000002A
@@ -132,17 +132,17 @@ main:
 	mov rdi, r12
 	call 0x0000000000000005
 	mov r12, rax
-	test r12, r12
+	test r12b, r12b
 	jz 0x0000000000000012
 	mov rax, 0x0B
-	jmp 0x000000000000002B
+	jmp 0x000000000000002A
 	cmp bpl, bl
 	setle bpl
 	movzx rbp, bpl
 	mov rdi, rbp
 	call 0x0000000000000005
 	mov rbx, rax
-	test rbx, rbx
+	test bl, bl
 	jz 0x0000000000000012
 	mov rax, 0x0C
 	jmp 0x0000000000000030
@@ -153,101 +153,101 @@ main:
 	cmp bl, bpl
 	setb r12b
 	movzx r12, r12b
-	test r12, r12
+	test r12b, r12b
 	jz 0x0000000000000012
 	mov rax, 0x0D
 	jmp 0x000000000000001F
 	cmp bl, bl
 	setb r12b
 	movzx r12, r12b
-	test r12, r12
+	test r12b, r12b
 	jz 0x0000000000000012
 	mov rax, 0x0E
 	jmp 0x0000000000000020
 	cmp bl, bpl
 	setbe r12b
 	movzx r12, r12b
-	test r12, r12
+	test r12b, r12b
 	jz 0x0000000000000012
 	mov rax, 0x0F
 	jmp 0x0000000000000020
 	cmp bpl, bl
 	setnbe r12b
 	movzx r12, r12b
-	test r12, r12
+	test r12b, r12b
 	jz 0x0000000000000012
 	mov rax, 0x10
 	jmp 0x000000000000001F
 	cmp bl, bl
 	setnbe r12b
 	movzx r12, r12b
-	test r12, r12
+	test r12b, r12b
 	jz 0x0000000000000012
 	mov rax, 0x11
 	jmp 0x0000000000000020
 	cmp bpl, bl
 	setnb bpl
 	movzx rbp, bpl
-	test rbp, rbp
+	test bpl, bpl
 	jz 0x0000000000000012
 	mov rax, 0x12
-	jmp 0x000000000000002B
+	jmp 0x000000000000002A
 	call 0x0000000000000005
 	mov rbx, rax
 	call 0x0000000000000005
 	cmp bl, al
 	setnle cl
 	movzx rcx, cl
-	test rcx, rcx
+	test cl, cl
 	jz 0x0000000000000012
 	mov rax, 0x13
-	jmp 0x000000000000001E
+	jmp 0x000000000000001D
 	cmp bl, bl
 	setnle cl
 	movzx rcx, cl
-	test rcx, rcx
+	test cl, cl
 	jz 0x0000000000000012
 	mov rax, 0x14
-	jmp 0x000000000000001E
+	jmp 0x000000000000001D
 	cmp bl, al
 	setnl cl
 	movzx rcx, cl
-	test rcx, rcx
+	test cl, cl
 	jz 0x0000000000000012
 	mov rax, 0x15
-	jmp 0x000000000000001E
+	jmp 0x000000000000001D
 	cmp al, bl
 	setl cl
 	movzx rcx, cl
-	test rcx, rcx
+	test cl, cl
 	jz 0x0000000000000012
 	mov rax, 0x16
-	jmp 0x000000000000001E
+	jmp 0x000000000000001D
 	cmp bl, bl
 	setl cl
 	movzx rcx, cl
-	test rcx, rcx
+	test cl, cl
 	jz 0x0000000000000012
 	mov rax, 0x17
-	jmp 0x000000000000001E
+	jmp 0x000000000000001D
 	cmp al, bl
 	setle cl
 	movzx rcx, cl
-	test rcx, rcx
+	test cl, cl
 	jz 0x0000000000000012
 	mov rax, 0x18
-	jmp 0x000000000000001E
+	jmp 0x000000000000001D
 	cmp bl, bl
 	setnz cl
 	movzx rcx, cl
-	test rcx, rcx
+	test cl, cl
 	jz 0x0000000000000012
 	mov rax, 0x19
-	jmp 0x000000000000001E
+	jmp 0x000000000000001D
 	cmp bl, al
 	setz cl
 	movzx rcx, cl
-	test rcx, rcx
+	test cl, cl
 	jz 0x0000000000000012
 	mov rax, 0x1A
 	jmp 0x000000000000000C

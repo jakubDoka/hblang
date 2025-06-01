@@ -1,61 +1,56 @@
 main:
 	push rbx
 	push rbp
-	push r12
 	sub rsp, 0x98
 	mov rax, 0x00
-	mov rcx, 0x01
-	mov rdx, 0x03
-	mov rbx, rsp
-	add rbx, 0x00
-	mov rbp, 0x18
-	mov rsi, 0x08
-	mov rdi, rax
-	cmp rdi, rdx
-	setz r8b
-	movzx r8, r8b
-	test r8, r8
-	jz 0x000000000000004E
-	mov rdx, 0x09
+	mov rcx, rsp
+	add rcx, 0x00
+	mov rdx, 0x18
+	mov rbx, 0x08
 	mov rbp, rax
-	cmp rax, rdx
-	setz dil
-	movzx rdi, dil
-	test rdi, rdi
-	jz 0x0000000000000015
-	mov rax, rbp
+	cmp rbp, 0x03
+	setz sil
+	movzx rsi, sil
+	test sil, sil
+	jz 0x0000000000000047
+	mov rdx, rax
+	cmp rax, 0x09
+	setz bpl
+	movzx rbp, bpl
+	test bpl, bpl
+	jz 0x0000000000000013
+	mov rax, rdx
 	add rsp, 0x98
-	pop r12
 	pop rbp
 	pop rbx
 	ret
-	mov rdi, rax
-	imul rdi, rsi
-	add rax, rcx
-	mov r8, rbx
-	add r8, rdi
-	mov rdi, [r8]
-	add rbp, rdi
+	mov rbp, rax
+	imul rbp, rbx
+	add rax, 0x01
+	mov rsi, rcx
+	add rsi, rbp
+	mov rbp, [rsi]
+	add rdx, rbp
 	jmp 0xFFFFFFFFFFFFFFC7
-	mov r8, rdi
-	imul r8, rbp
-	mov r9, rbx
-	add r9, r8
-	mov r8, rax
-	cmp r8, rdx
-	setz r10b
-	movzx r10, r10b
-	test r10, r10
-	jz 0x000000000000000E
-	add rdi, rcx
-	jmp 0xFFFFFFFFFFFFFF7D
-	mov r10, r8
-	imul r10, rsi
-	mov r11, r8
-	add r11, rcx
-	imul r8, rdi
-	mov r12, r9
-	add r12, r10
-	mov [r12], r8
-	mov r8, r11
-	jmp 0xFFFFFFFFFFFFFFC6
+	mov rsi, rbp
+	imul rsi, rdx
+	mov rdi, rcx
+	add rdi, rsi
+	mov rsi, rax
+	cmp rsi, 0x03
+	setz r8b
+	movzx r8, r8b
+	test r8b, r8b
+	jz 0x000000000000000F
+	add rbp, 0x01
+	jmp 0xFFFFFFFFFFFFFF81
+	mov r8, rsi
+	imul r8, rbx
+	mov r9, rsi
+	add r9, 0x01
+	imul rsi, rbp
+	mov r10, rdi
+	add r10, r8
+	mov [r10], rsi
+	mov rsi, r9
+	jmp 0xFFFFFFFFFFFFFFC4

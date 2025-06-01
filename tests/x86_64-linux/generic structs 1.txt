@@ -2,19 +2,22 @@
 	mov rax, rdi
 	mov rcx, rsi
 	mov [rax], rcx
-	mov rdx, 0x08
-	add rax, rdx
-	mov [rax], rcx
+	mov [rax+0x08], rcx
 	ret
 "generic structs 1".Vec(E = uint).sub:
-	mov rax, rdi
-	mov rcx, rsi
-	sub rax, rcx
+	sub rsp, 0x20
+	mov rcx, rdi
+	mov rax, rsi
+	mov rdx, rsp
+	add rdx, 0x00
+	mov [rdx+0x08], rax
+	sub rcx, rax
+	mov rax, rcx
+	add rsp, 0x20
 	ret
 main:
 	push rbx
 	push rbp
-	push r12
 	sub rsp, 0x18
 	mov rbx, rsp
 	add rbx, 0x00
@@ -22,16 +25,12 @@ main:
 	mov rdi, rbx
 	mov rsi, rbp
 	call 0x0000000000000005
-	mov rbp, 0x08
-	mov r12, rbx
-	add r12, rbp
+	mov rbp, [rbx+0x08]
 	mov rbx, [rbx]
-	mov rbp, [r12]
 	mov rdi, rbx
 	mov rsi, rbp
 	call 0x0000000000000005
 	add rsp, 0x18
-	pop r12
 	pop rbp
 	pop rbx
 	ret

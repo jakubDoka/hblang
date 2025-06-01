@@ -5,37 +5,25 @@ main:
 	push rbx
 	push rbp
 	push r12
-	push r13
-	push r14
-	sub rsp, 0x18
+	sub rsp, 0x10
 	mov rbx, rsp
-	add rbx, 0x08
+	add rbx, 0x00
 	mov rbp, 0x00
 	mov [rbx], bpl
-	mov rbp, 0x02
+	mov rbp, 0x01
+	mov [rbx+0x01], bpl
+	mov r12, 0x02
+	mov [rbx+0x02], r12b
 	mov r12, 0x03
-	mov r13, 0x01
-	mov [rsp], rbx
-	add [rsp], r13
-	mov r15, [rsp]
-	mov [r15], r13b
-	mov [rsp], rbx
-	add [rsp], rbp
-	mov r15, [rsp]
-	mov [r15], bpl
-	mov rbp, rbx
-	add rbp, r12
-	mov [rbp], r12b
+	mov [rbx+0x03], r12b
 	call 0x0000000000000005
-	mov rcx, r13
+	mov rcx, rbp
 	sub rcx, rax
 	mov rax, rbx
 	add rax, rcx
 	mov al, [rax]
 	movzx rax, al
-	add rsp, 0x18
-	pop r14
-	pop r13
+	add rsp, 0x10
 	pop r12
 	pop rbp
 	pop rbx

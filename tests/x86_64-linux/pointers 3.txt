@@ -1,13 +1,12 @@
 "pointers 3".do_stuff:
 	mov rax, rdi
-	mov rcx, 0x00
 	mov rax, [rax]
-	cmp rax, rcx
+	cmp rax, 0x00
 	setz al
 	movzx rax, al
-	test rax, rax
-	jz 0x000000000000000E
-	mov rax, rcx
+	test al, al
+	jz 0x0000000000000012
+	mov rax, 0x00
 	jmp 0x000000000000000C
 	mov rax, 0x01
 	ret

@@ -6,46 +6,37 @@ main:
 	add rax, 0x00
 	mov rcx, 0x01
 	mov [rax], rcx
-	mov rdx, 0x10
-	mov rbx, 0x18
-	mov rbp, 0x08
+	mov rdx, 0x08
+	mov rbx, 0x00
+	mov rbp, 0x03
 	mov rsi, 0x02
-	mov rdi, 0x00
-	mov r8, 0x03
-	mov r9, rax
-	add r9, rbp
-	mov [r9], rsi
-	imul rcx, rbp
-	imul rsi, rbp
-	mov r9, rdi
-	imul r9, rbp
-	mov r10, r8
-	imul r10, rbp
-	mov rbp, rax
-	add rbp, rdx
-	mov [rbp], r8
+	mov [rax+0x08], rsi
+	mov [rax+0x10], rbp
+	mov rdi, rbx
+	imul rdi, rdx
+	imul rbp, rdx
+	mov r8, 0x04
+	mov [rax+0x18], r8
+	imul rcx, rdx
+	mov r8, rax
+	add r8, rdi
+	mov rdi, rax
+	add rdi, rbp
+	mov rbp, rsi
+	imul rbp, rdx
 	mov rdx, rax
-	add rdx, rbx
-	mov rbx, 0x04
-	mov [rdx], rbx
-	mov rdx, rax
-	add rdx, r9
-	mov rbx, rax
-	add rbx, r10
-	mov rbp, rax
-	add rbp, rcx
-	add rax, rsi
-	mov rcx, [rdx]
-	mov rdx, [rbx]
-	mov rbx, [rbp]
-	mov rbp, rdi
-	add rbp, rcx
+	add rdx, rcx
+	mov rcx, [r8]
+	add rax, rbp
+	mov rbp, [rdi]
+	mov rdx, [rdx]
+	add rbx, rcx
 	mov rax, [rax]
-	mov rcx, rbp
-	add rcx, rbx
+	mov rcx, rbx
+	add rcx, rdx
 	add rcx, rax
 	mov rax, rcx
-	add rax, rdx
+	add rax, rbp
 	add rsp, 0x40
 	pop rbp
 	pop rbx

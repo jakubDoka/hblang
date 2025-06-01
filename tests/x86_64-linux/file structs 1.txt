@@ -2,9 +2,7 @@
 	mov rax, rdi
 	mov rcx, rsi
 	mov [rax], rcx
-	mov rdx, 0x08
-	add rax, rdx
-	mov [rax], rcx
+	mov [rax+0x08], rcx
 	ret
 main:
 	push rbx
@@ -16,12 +14,10 @@ main:
 	mov rdi, rbx
 	mov rsi, rbp
 	call 0x0000000000000005
-	mov rax, 0x08
-	mov rcx, rbx
-	add rcx, rax
-	mov rax, [rbx]
-	mov rcx, [rcx]
-	sub rax, rcx
+	mov rax, [rbx+0x08]
+	mov rcx, [rbx]
+	sub rcx, rax
+	mov rax, rcx
 	add rsp, 0x18
 	pop rbp
 	pop rbx

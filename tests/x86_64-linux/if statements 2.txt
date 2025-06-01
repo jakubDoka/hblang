@@ -1,33 +1,27 @@
 "if statements 2".fib:
 	push rbx
 	push rbp
-	push r12
-	push r13
 	sub rsp, 0x08
 	mov rbx, rdi
-	mov rbp, 0x02
-	cmp rbx, rbp
-	setbe r12b
-	movzx r12, r12b
-	mov r13, 0x01
-	test r12, r12
-	jz 0x000000000000000E
-	mov rax, r13
-	jmp 0x000000000000002A
-	mov r12, rbx
-	sub r12, r13
-	mov rdi, r12
+	cmp rbx, 0x02
+	setbe bpl
+	movzx rbp, bpl
+	test bpl, bpl
+	jz 0x0000000000000012
+	mov rax, 0x01
+	jmp 0x000000000000002C
+	mov rbp, rbx
+	sub rbp, 0x01
+	mov rdi, rbp
 	call 0x0000000000000005
-	mov r12, rax
-	sub rbx, rbp
+	mov rbp, rax
+	sub rbx, 0x02
 	mov rdi, rbx
 	call 0x0000000000000005
-	mov rcx, r12
+	mov rcx, rbp
 	add rcx, rax
 	mov rax, rcx
 	add rsp, 0x08
-	pop r13
-	pop r12
 	pop rbp
 	pop rbx
 	ret

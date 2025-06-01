@@ -6,38 +6,37 @@ main:
 	mov rcx, rsp
 	add rcx, 0x00
 	mov rdx, 0x08
-	mov rbx, 0x01
+	mov rbx, rax
+	cmp rbx, 0x08
+	setz bpl
+	movzx rbp, bpl
+	test bpl, bpl
+	jz 0x0000000000000047
+	mov rbx, rax
 	mov rbp, rax
-	cmp rbp, rdx
+	imul rbp, rdx
+	cmp rax, 0x08
 	setz sil
 	movzx rsi, sil
-	test rsi, rsi
-	jz 0x0000000000000045
-	mov rbp, rax
-	mov rsi, rax
-	imul rsi, rdx
-	cmp rax, rdx
-	setz dil
-	movzx rdi, dil
-	mov r8, rcx
-	add r8, rsi
-	test rdi, rdi
+	mov rdi, rcx
+	add rdi, rbp
+	test sil, sil
 	jz 0x0000000000000013
-	mov rax, rbp
+	mov rax, rbx
 	add rsp, 0x80
 	pop rbp
 	pop rbx
 	ret
-	mov rsi, [r8]
-	add rax, rbx
-	add rbp, rsi
-	jmp 0xFFFFFFFFFFFFFFC9
-	mov rsi, rbp
-	imul rsi, rdx
-	mov rdi, rbp
-	add rdi, rbx
-	mov r8, rcx
-	add r8, rsi
-	mov [r8], rbp
-	mov rbp, rdi
-	jmp 0xFFFFFFFFFFFFFF94
+	mov rbp, [rdi]
+	add rax, 0x01
+	add rbx, rbp
+	jmp 0xFFFFFFFFFFFFFFC7
+	mov rbp, rbx
+	imul rbp, rdx
+	mov rsi, rbx
+	add rsi, 0x01
+	mov rdi, rcx
+	add rdi, rbp
+	mov [rdi], rbx
+	mov rbx, rsi
+	jmp 0xFFFFFFFFFFFFFF90

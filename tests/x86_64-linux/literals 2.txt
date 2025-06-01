@@ -13,7 +13,7 @@ main:
 	cmp rbx, rax
 	setnz cl
 	movzx rcx, cl
-	test rcx, rcx
+	test cl, cl
 	jz 0x0000000000000012
 	mov rax, 0x01
 	jmp 0x000000000000000C

@@ -1,6 +1,6 @@
 main:
 	mov rax, 0x01
-	test rax, rax
+	test al, al
 	jz 0x0000000000000012
 	mov rax, 0x00
 	jmp 0x0000000000000005

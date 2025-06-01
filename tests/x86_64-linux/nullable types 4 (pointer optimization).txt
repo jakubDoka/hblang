@@ -7,11 +7,11 @@ main:
 	push r12
 	sub rsp, 0x10
 	mov rbx, 0x00
-	test rbx, rbx
+	test bl, bl
 	jz 0x0000000000000012
 	mov rax, 0x01
-	jmp 0x0000000000000015
-	test rbx, rbx
+	jmp 0x0000000000000014
+	test bl, bl
 	jz 0x0000000000000012
 	mov rax, 0x02
 	jmp 0x0000000000000026

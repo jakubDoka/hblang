@@ -1,12 +1,10 @@
 "one.hb".add:
 	mov rax, rdi
-	mov rcx, 0x01
-	add rax, rcx
+	add rax, 0x01
 	ret
 "two.hb".add:
 	mov rax, rdi
-	mov rcx, 0x02
-	add rax, rcx
+	add rax, 0x02
 	ret
 main:
 	push rbx

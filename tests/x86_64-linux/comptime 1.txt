@@ -1,7 +1,6 @@
 "comptime 1".main.some_fn(some_int = uint)(ui = uint):
 	mov rax, rdi
-	mov rcx, 0x01
-	add rax, rcx
+	add rax, 0x01
 	mov rcx, rax
 	imul rcx, rax
 	mov rax, rcx

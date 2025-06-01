@@ -1,13 +1,11 @@
 main:
 	mov rax, 0x00
-	mov rcx, 0x01
-	mov rdx, rax
-	add rdx, rcx
-	sub rax, rcx
+	mov rcx, rax
+	add rcx, 0x01
+	sub rax, 0x01
 	movsx eax, ax
-	add rdx, rcx
-	sub rax, rcx
-	mov rcx, rdx
+	add rcx, 0x01
+	sub rax, 0x01
 	movsxd rax, eax
 	add rcx, rax
 	mov rax, rcx

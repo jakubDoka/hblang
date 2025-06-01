@@ -1,14 +1,14 @@
 main:
 	mov rax, 0x00
-	test rax, rax
+	test al, al
 	jz 0x0000000000000012
 	mov rax, 0x10
-	jmp 0x0000000000000015
-	test rax, rax
+	jmp 0x0000000000000014
+	test al, al
 	jz 0x0000000000000012
 	mov rax, 0x08
-	jmp 0x0000000000000015
-	test rax, rax
+	jmp 0x0000000000000014
+	test al, al
 	jz 0x0000000000000012
 	mov rax, 0x02
 	jmp 0x0000000000000005

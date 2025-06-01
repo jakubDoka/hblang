@@ -1,12 +1,11 @@
 main:
 	mov rax, 0x00
-	mov rcx, 0x01
-	cmp rax, rcx
-	setz dl
-	movzx rdx, dl
-	test rdx, rdx
+	cmp rax, 0x01
+	setz cl
+	movzx rcx, cl
+	test cl, cl
 	jz 0x0000000000000012
 	mov rax, 0x0A
-	jmp 0x0000000000000008
-	add rax, rcx
+	jmp 0x0000000000000009
+	add rax, 0x01
 	ret

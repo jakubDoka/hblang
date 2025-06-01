@@ -13,13 +13,10 @@ main:
 	mov [rbx], rbp
 	mov rdi, rbx
 	call 0x0000000000000005
-	mov rax, 0x02
-	mov rcx, [rbx]
-	add rcx, rax
-	mov [rbx], rcx
-	mov rax, 0x04
-	sub rcx, rax
-	mov rax, rcx
+	mov rax, [rbx]
+	add rax, 0x02
+	mov [rbx], rax
+	sub rax, 0x04
 	add rsp, 0x10
 	pop rbp
 	pop rbx
