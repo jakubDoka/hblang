@@ -218,7 +218,7 @@ pub fn nextTask(self: *Codegen) ?Task {
 }
 
 pub inline fn abiCata(self: *Codegen, ty: Types.Id) Types.Abi.Spec {
-    return self.abi.categorize(ty, self.types) orelse .Imaginary;
+    return @as(Types.Abi.TmpSpec, self.abi.categorize(ty, self.types) orelse .Imaginary).toPerm(ty, self.types);
 }
 
 pub fn getEntry(self: *Codegen, file: Types.File, name: []const u8) !utils.EntId(root.frontend.types.Func) {

@@ -448,17 +448,33 @@ pub const Abi = enum {
     fastcall,
     systemv,
 
+    pub const Pair = struct {
+        types: [2]graph.DataType,
+        padding: u16,
+
+        pub fn offsets(self: @This()) [2]u64 {
+            return .{ 0, self.types[0].size() + self.padding };
+        }
+    };
+
+    pub const TmpSpec = union(enum) {
+        ByValue: graph.DataType,
+        ByValuePair: Pair,
+        ByRef,
+        Imaginary,
+
+        pub fn toPerm(self: TmpSpec, ty: Id, types: *Types) Spec {
+            return switch (self) {
+                .ByRef => .{ .ByRef = ty.size(types) },
+                inline else => |v, t| @unionInit(Spec, @tagName(t), v),
+            };
+        }
+    };
+
     pub const Spec = union(enum) {
         ByValue: graph.DataType,
-        ByValuePair: struct {
-            types: [2]graph.DataType,
-            padding: u16,
-
-            pub fn offsets(self: @This()) [2]u64 {
-                return .{ 0, self.types[0].size() + self.padding };
-            }
-        },
-        ByRef,
+        ByValuePair: Pair,
+        ByRef: u64,
         Imaginary,
 
         const max_subtypes = 2;
@@ -526,7 +542,7 @@ pub const Abi = enum {
         }
     };
 
-    pub fn categorize(self: Abi, ty: Id, types: *Types) ?Spec {
+    pub fn categorize(self: Abi, ty: Id, types: *Types) ?TmpSpec {
         return switch (ty.data()) {
             .Builtin => |b| .{ .ByValue = switch (b) {
                 .never, .any => return null,
@@ -552,8 +568,7 @@ pub const Abi = enum {
                 else => unreachable,
             },
             inline .Struct, .Tuple => |s| switch (self) {
-                .ableos => categorizeAbleosRecord(s, types),
-                .systemv => categorizeSystemvRecord(s, types),
+                .ableos, .systemv => categorizeAbleosRecord(s, types),
                 else => unreachable,
             },
             .Slice => |s| switch (self) {
@@ -561,15 +576,14 @@ pub const Abi = enum {
                 else => unreachable,
             },
             .Nullable => |n| switch (self) {
-                .ableos => categorizeAbleosNullable(n, types),
-                .systemv => categorizeSystemvNullable(n, types),
+                .systemv, .ableos => categorizeAbleosNullable(n, types),
                 else => unreachable,
             },
             .Global, .Func, .Template => .Imaginary,
         };
     }
 
-    pub fn categorizeAbleosNullable(id: utils.EntId(tys.Nullable), types: *Types) ?Spec {
+    pub fn categorizeAbleosNullable(id: utils.EntId(tys.Nullable), types: *Types) ?TmpSpec {
         const nullable = types.store.get(id);
         const base_abi = Abi.ableos.categorize(nullable.inner, types) orelse return null;
         if (id.isCompact(types)) return base_abi;
@@ -581,19 +595,7 @@ pub const Abi = enum {
         return .ByRef;
     }
 
-    pub fn categorizeSystemvNullable(id: utils.EntId(tys.Nullable), types: *Types) ?Spec {
-        const nullable = types.store.get(id);
-        const base_abi = Abi.systemv.categorize(nullable.inner, types) orelse return null;
-        if (id.isCompact(types)) return base_abi;
-        if (base_abi == .Imaginary) return .{ .ByValue = .i8 };
-        if (base_abi == .ByValue) return .{ .ByValuePair = .{
-            .types = .{ .i8, base_abi.ByValue },
-            .padding = @intCast(base_abi.ByValue.size() - 1),
-        } };
-        return .ByRef;
-    }
-
-    pub fn categorizeAbleosSlice(id: utils.EntId(tys.Slice), types: *Types) ?Spec {
+    pub fn categorizeAbleosSlice(id: utils.EntId(tys.Slice), types: *Types) ?TmpSpec {
         const slice = types.store.get(id);
         if (slice.len == null) return .{ .ByValuePair = .{ .types = .{ .int, .int }, .padding = 0 } };
         if (slice.len == 0) return .Imaginary;
@@ -604,7 +606,7 @@ pub const Abi = enum {
         return .ByRef;
     }
 
-    pub fn categorizeAbleosUnion(id: utils.EntId(tys.Union), types: *Types) ?Spec {
+    pub fn categorizeAbleosUnion(id: utils.EntId(tys.Union), types: *Types) ?TmpSpec {
         const fields = id.getFields(types);
         if (fields.len == 0) return .Imaginary; // TODO: add .Impossible
         const res = Abi.ableos.categorize(fields[0].ty, types) orelse return null;
@@ -627,46 +629,13 @@ pub const Abi = enum {
         return false;
     }
 
-    pub fn categorizeSystemvRecord(stru: anytype, types: *Types) Spec {
+    pub fn categorizeAbleosRecord(stru: anytype, types: *Types) TmpSpec {
         if (checkCycles(stru, types)) return .Imaginary;
         defer if (@TypeOf(stru) == tys.Struct.Id) {
             types.store.get(stru).recursion_lock = false;
         };
 
-        var res: Spec = .Imaginary;
-        var offset: u64 = 0;
-        for (stru.getFields(types)) |f| {
-            const fspec = Abi.systemv.categorize(f.ty, types) orelse continue;
-            if (fspec == .Imaginary) continue;
-            if (fspec == .ByRef) return fspec;
-            if (res == .Imaginary) {
-                res = fspec;
-                offset += f.ty.size(types);
-                continue;
-            }
-
-            if (fspec == .ByValuePair) return .ByRef;
-            if (res == .ByValuePair) return .ByRef;
-            std.debug.assert(res != .ByRef);
-
-            const off = std.mem.alignForward(u64, offset, f.ty.alignment(types));
-            res = .{ .ByValuePair = .{
-                .types = .{ res.ByValue, fspec.ByValue },
-                .padding = @intCast(off - offset),
-            } };
-
-            offset = off + f.ty.size(types);
-        }
-        return res;
-    }
-
-    pub fn categorizeAbleosRecord(stru: anytype, types: *Types) Spec {
-        if (checkCycles(stru, types)) return .Imaginary;
-        defer if (@TypeOf(stru) == tys.Struct.Id) {
-            types.store.get(stru).recursion_lock = false;
-        };
-
-        var res: Spec = .Imaginary;
+        var res: TmpSpec = .Imaginary;
         var offset: u64 = 0;
         for (stru.getFields(types)) |f| {
             const fspec = Abi.ableos.categorize(f.ty, types) orelse continue;
