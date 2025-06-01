@@ -15,15 +15,10 @@
 	mov [rax+0x10], cl
 	ret
 "structs 3 (call stress test)".take_pair:
-	sub rsp, 0x20
 	mov rax, rdi
 	mov rcx, rsi
-	mov rdx, rsp
-	add rdx, 0x00
-	mov [rdx+0x08], rcx
 	movzx rax, al
 	add rax, rcx
-	add rsp, 0x20
 	ret
 "structs 3 (call stress test)".take_triple:
 	mov rax, rdi

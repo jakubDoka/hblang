@@ -1,16 +1,4 @@
 main:
-	sub rsp, 0x40
-	mov rax, rsp
-	add rax, 0x00
-	lea rcx, [0x0000000000000007]
-	mov [rax], rcx
-	mov rcx, 0x04
-	mov [rax+0x08], rcx
-	mov rcx, rsp
-	add rcx, 0x10
-	mov rdx, 0x03
-	mov [rcx+0x08], rdx
-	mov rax, [rax+0x08]
+	mov rax, 0x04
 	add rax, 0x03
-	add rsp, 0x40
 	ret

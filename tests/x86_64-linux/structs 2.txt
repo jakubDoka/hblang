@@ -47,11 +47,10 @@ main:
 	mov rdi, rbx
 	mov rsi, r12
 	call 0x0000000000000005
-	mov rax, [rbx+0x08]
-	mov rcx, [rbx]
+	mov rax, [rbx]
+	mov rcx, [rbx+0x08]
 	mov rdx, [rbx+0x10]
-	add rcx, rax
-	mov rax, rcx
+	add rax, rcx
 	add rax, rdx
 	add rsp, 0x58
 	pop r12

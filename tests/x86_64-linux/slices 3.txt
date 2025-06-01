@@ -60,7 +60,7 @@ main:
 	push r12
 	push r13
 	push r14
-	sub rsp, 0x98
+	sub rsp, 0x58
 	mov rbx, rsp
 	add rbx, 0x08
 	mov rbp, 0x01
@@ -69,38 +69,28 @@ main:
 	mov [rbx+0x01], r12b
 	mov r12, 0x03
 	mov [rbx+0x02], r12b
-	mov r13, 0x00
-	mov [rsp], rsp
-	add qword ptr [rsp], 0x1B
-	mov r15, [rsp]
-	mov [r15+0x08], r13
-	mov [rsp], rsp
-	add qword ptr [rsp], 0x0B
-	mov rdi, [rsp]
-	mov rsi, rbp
-	mov rdx, r13
-	call 0x0000000000000005
-	mov rbp, rsp
-	add rbp, 0x3B
-	mov [rbp], rbx
-	mov [rbp+0x08], r12
 	mov r13, rsp
-	add r13, 0x2B
-	mov rbp, [rbp]
+	add r13, 0x0B
+	mov qword ptr [rsp], 0x00
 	mov rdi, r13
 	mov rsi, rbp
+	mov rdx, [rsp]
+	call 0x0000000000000005
+	mov rbp, rsp
+	add rbp, 0x1B
+	mov rdi, rbp
+	mov rsi, rbx
 	mov rdx, r12
 	call 0x0000000000000005
-	mov al, [rbx+0x01]
-	mov cl, [rbx+0x02]
-	mov dl, [rbx]
+	mov al, [rbx]
+	mov cl, [rbx+0x01]
+	mov dl, [rbx+0x02]
 	movzx rax, al
-	movzx rdx, dl
 	movzx rcx, cl
-	sub rdx, rax
-	mov rax, rdx
+	movzx rdx, dl
 	sub rax, rcx
-	add rsp, 0x98
+	sub rax, rdx
+	add rsp, 0x58
 	pop r14
 	pop r13
 	pop r12

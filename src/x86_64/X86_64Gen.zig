@@ -1,11 +1,11 @@
 const std = @import("std");
 
-const object = root.object;
 const root = @import("hb");
 const graph = root.backend.graph;
 const Mach = root.backend.Machine;
 const Regalloc = root.backend.Regalloc;
 const utils = root.utils;
+const object = root.object;
 const zydis = @import("zydis").exports;
 
 const X86_64 = @This();
@@ -153,6 +153,13 @@ pub const Node = union(enum) {
     }
 
     pub fn idealize(func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
+        _ = func;
+        _ = node;
+        _ = worklist;
+        return null;
+    }
+
+    pub fn idealizeMach(func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
         _ = worklist;
         if (node.kind == .Load and node.base().kind == .BinOp and
             node.base().inputs()[2].?.kind == .CInt)

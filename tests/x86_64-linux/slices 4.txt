@@ -1,64 +1,50 @@
 "slices 4".equals:
 	push rbx
 	push rbp
-	sub rsp, 0x40
 	mov rbx, rdx
-	mov rax, rdi
-	mov rdx, rsi
-	mov rbp, rsp
-	add rbp, 0x00
-	mov [rbp], rax
-	mov [rbp+0x08], rdx
-	mov rdx, rsp
-	add rdx, 0x10
-	mov [rdx], rbx
-	mov [rdx+0x08], rcx
-	mov rsi, [rbp+0x08]
-	cmp rsi, rcx
-	setnz sil
-	movzx rsi, sil
+	mov rdx, rdi
+	mov rax, rsi
+	cmp rax, rcx
+	setnz bpl
+	movzx rbp, bpl
 	mov rcx, 0x00
-	test sil, sil
+	test bpl, bpl
 	jz 0x000000000000000E
 	mov rax, rcx
-	jmp 0x0000000000000021
-	cmp rax, rbx
-	setz al
-	movzx rax, al
-	mov rbx, 0x01
-	test al, al
+	jmp 0x0000000000000023
+	cmp rdx, rbx
+	setz bpl
+	movzx rbp, bpl
+	mov rsi, 0x01
+	test bpl, bpl
 	jz 0x000000000000000E
-	mov rax, rbx
-	jmp 0x0000000000000058
-	mov rax, [rbp]
-	mov rdx, [rdx]
-	mov rsi, rcx
-	mov rdi, [rbp+0x08]
-	cmp rsi, rdi
-	setz r8b
-	movzx r8, r8b
-	test r8b, r8b
+	mov rax, rsi
+	jmp 0x000000000000004D
+	mov rbp, rcx
+	cmp rbp, rax
+	setz dil
+	movzx rdi, dil
+	test dil, dil
 	jz 0x000000000000000E
-	mov rax, rbx
+	mov rax, rsi
 	jmp 0x000000000000002E
-	mov rdi, rax
-	add rdi, rsi
-	mov r8, rdx
-	add r8, rsi
+	mov rdi, rdx
+	add rdi, rbp
+	mov r8, rbx
+	add r8, rbp
 	mov dil, [rdi]
 	mov r8b, [r8]
 	cmp dil, r8b
 	setnz dil
 	movzx rdi, dil
 	test dil, dil
-	jz 0x0000000000000010
+	jz 0x000000000000000C
 	mov rax, rcx
-	add rsp, 0x40
 	pop rbp
 	pop rbx
 	ret
-	add rsi, 0x01
-	jmp 0xFFFFFFFFFFFFFFAC
+	add rbp, 0x01
+	jmp 0xFFFFFFFFFFFFFFB4
 main:
 	push rbx
 	push rbp
@@ -92,7 +78,6 @@ main:
 	mov r15, [rsp]
 	mov [r13], r15
 	mov [r13+0x08], r12
-	mov r12, [rbx+0x08]
 	mov rdi, rbp
 	mov rsi, r12
 	mov rdx, rbp

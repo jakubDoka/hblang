@@ -38,17 +38,18 @@ main:
 	test bpl, bpl
 	jz 0x0000000000000012
 	mov rax, 0x01
-	jmp 0x0000000000000026
+	jmp 0x000000000000002A
 	mov rbp, rsp
 	add rbp, 0x10
 	mov rdi, rbp
 	call 0x0000000000000005
 	mov al, [rbp]
+	mov rcx, [rbx+0x08]
 	test al, al
 	jz 0x0000000000000012
 	mov rax, 0x02
-	jmp 0x0000000000000009
-	mov rax, [rbx+0x08]
+	jmp 0x0000000000000008
+	mov rax, rcx
 	add rsp, 0x38
 	pop rbp
 	pop rbx

@@ -1,22 +1,14 @@
 main:
 	push rbx
 	push rbp
-	sub rsp, 0x20
 	mov rax, 0x00
-	mov rcx, rsp
-	add rcx, 0x00
-	lea rdx, [0x0000000000000007]
-	mov [rcx], rdx
-	mov rdx, 0x03
-	mov [rcx+0x08], rdx
-	mov rcx, [rcx]
+	lea rcx, [0x0000000000000007]
 	mov rdx, rax
 	cmp rdx, 0x01
 	setnb bl
 	movzx rbx, bl
 	test bl, bl
-	jz 0x000000000000000D
-	add rsp, 0x20
+	jz 0x0000000000000009
 	pop rbp
 	pop rbx
 	ret
@@ -38,4 +30,4 @@ main:
 	imul rbx, rax
 	jmp 0xFFFFFFFFFFFFFFE2
 	add rdx, 0x01
-	jmp 0xFFFFFFFFFFFFFFA1
+	jmp 0xFFFFFFFFFFFFFFA5

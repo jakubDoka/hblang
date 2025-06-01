@@ -16,7 +16,6 @@
 	mov [rdx+0x08], rcx
 	sub rax, 0x02
 	mov [rdx], rax
-	mov rcx, [rdx+0x08]
 	add rcx, 0x01
 	mov [rdx+0x08], rcx
 	sub rax, rcx

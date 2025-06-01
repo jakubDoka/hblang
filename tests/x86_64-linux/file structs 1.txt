@@ -14,10 +14,9 @@ main:
 	mov rdi, rbx
 	mov rsi, rbp
 	call 0x0000000000000005
-	mov rax, [rbx+0x08]
-	mov rcx, [rbx]
-	sub rcx, rax
-	mov rax, rcx
+	mov rax, [rbx]
+	mov rcx, [rbx+0x08]
+	sub rax, rcx
 	add rsp, 0x18
 	pop rbp
 	pop rbx

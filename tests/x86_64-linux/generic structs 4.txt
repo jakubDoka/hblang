@@ -29,27 +29,22 @@
 	push rbp
 	push r12
 	push r13
-	sub rsp, 0x18
-	mov rbp, rdi
-	mov r12, rsi
+	sub rsp, 0x08
+	mov r12, rdi
+	mov rbp, rsi
 	mov rbx, rdx
-	mov r13, rsp
-	add r13, 0x00
-	mov [r13], rbp
-	mov [r13+0x08], r12
 	cmp rbx, 0x00
-	setz bpl
-	movzx rbp, bpl
-	mov r13, [r13]
-	test bpl, bpl
+	setz r13b
+	movzx r13, r13b
+	test r13b, r13b
 	jz 0x000000000000000E
-	mov rax, r13
+	mov rax, r12
 	jmp 0x0000000000000014
 	sub rbx, 0x01
-	mov rdi, r12
+	mov rdi, rbp
 	mov rsi, rbx
 	call 0x0000000000000005
-	add rsp, 0x18
+	add rsp, 0x08
 	pop r13
 	pop r12
 	pop rbp
