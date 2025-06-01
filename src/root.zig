@@ -276,7 +276,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         return error.Failed;
     }
 
-    const name = try std.mem.replaceOwned(u8, ast_arena.allocator(), opts.root_file, "/", "\\/");
+    const name = try std.mem.replaceOwned(u8, ast_arena.allocator(), opts.root_file, "/", "_");
 
     if (opts.dump_asm) {
         const out = bckend.finalizeBytes(ast_arena.allocator());

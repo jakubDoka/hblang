@@ -12,7 +12,7 @@ main:
 	push r13
 	push r14
 	push r15
-	sub rsp, 0x30
+	sub rsp, 0x58
 	mov rbx, 0x01
 	mov rbp, 0x00
 	mov r12, rsp
@@ -21,7 +21,6 @@ main:
 	mov r13, 0x10
 	cmp rbx, rbp
 	setz [rsp]
-	mov r15, [rsp]
 	movzx r15, byte ptr [rsp]
 	mov [rsp], r15
 	mov qword ptr [rsp+0x08], 0x08
@@ -54,7 +53,7 @@ main:
 	mov rax, [r15]
 	mov rcx, [r12]
 	sub rax, rcx
-	add rsp, 0x30
+	add rsp, 0x58
 	pop r15
 	pop r14
 	pop r13

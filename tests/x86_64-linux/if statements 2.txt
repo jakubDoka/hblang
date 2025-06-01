@@ -3,9 +3,10 @@
 	push rbp
 	push r12
 	push r13
+	sub rsp, 0x08
 	mov rbx, rdi
 	mov rbp, 0x02
-	cmp bl, bpl
+	cmp rbx, rbp
 	setbe r12b
 	movzx r12, r12b
 	mov r13, 0x01
@@ -24,6 +25,7 @@
 	mov rcx, r12
 	add rcx, rax
 	mov rax, rcx
+	add rsp, 0x08
 	pop r13
 	pop r12
 	pop rbp
@@ -31,8 +33,10 @@
 	ret
 main:
 	push rbx
+	sub rsp, 0x08
 	mov rbx, 0x03
 	mov rdi, rbx
 	call 0x0000000000000005
+	add rsp, 0x08
 	pop rbx
 	ret

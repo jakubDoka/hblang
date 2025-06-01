@@ -366,6 +366,30 @@ pub fn GcmMixin(comptime MachNode: type) type {
 
                 break :compact_ids;
             }
+
+            if (std.debug.runtime_safety) validate_ssa: {
+                for (cfg_rpo[1..]) |bb| if (bb.base.isBasicBlockStart()) {
+                    for (bb.base.outputs()[0 .. bb.base.outputs().len - 1]) |o| {
+                        if (o.cfg0() == null) {
+                            std.debug.assert(o.kind == .Return);
+                            continue;
+                        }
+                        if (o.kind == .Phi) continue;
+                        for (o.inputs()[1..]) |i| if (i != null) {
+                            var cursor = o.cfg0().?;
+                            while (cursor.idepth() > i.?.cfg0().?.idepth()) {
+                                cursor = cursor.idom();
+                            }
+                            if (cursor != i.?.cfg0().?) {
+                                self.fmtScheduled(std.io.getStdErr().writer().any(), .escape_codes);
+                                std.debug.print("{}\n{}\n", .{ o, i.? });
+                            }
+                        };
+                    }
+                };
+
+                break :validate_ssa;
+            }
         }
 
         pub fn scheduleBlock(tmp: std.mem.Allocator, node: *Func.Node) void {

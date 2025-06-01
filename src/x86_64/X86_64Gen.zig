@@ -15,8 +15,6 @@ const Move = utils.Move(Reg);
 
 gpa: std.mem.Allocator,
 object_format: enum { elf, coff },
-func_map: std.ArrayListUnmanaged(Mach.Data.SymIdx) = .{},
-global_map: std.ArrayListUnmanaged(Mach.Data.SymIdx) = .{},
 memcpy: Mach.Data.SymIdx = .invalid,
 out: Mach.Data = .{},
 allocs: []u16 = undefined,
@@ -126,6 +124,17 @@ pub const Node = union(enum) {
                 }
                 break :b vl;
             },
+            .BinOp => switch (node.extra(.BinOp).*) {
+                .udiv, .sdiv, .umod, .smod => {
+                    var base = @as(u64, 1) << @intFromEnum(Reg.rax);
+                    if (node.data_type.size() != 1) {
+                        base |= @as(u64, 1) << @intFromEnum(Reg.rdx);
+                    }
+                    return base;
+                },
+                .ishl, .ushr, .sshr => @as(u64, 1) << @intFromEnum(Reg.rcx),
+                else => 0,
+            },
             else => 0,
         };
     }
@@ -155,13 +164,8 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     const name = if (entry) "main" else opts.name;
     const linkage: Mach.Data.Linkage = if (entry) .exported else .local;
 
-    const slot = try utils.ensureSlot(&self.func_map, self.gpa, id);
-    try self.out.startDefineSym(self.gpa, slot, name, .func, linkage);
-    const sym = slot.*;
-    defer self.out.endDefineSym(sym);
-
-    //self.block_offsets = tmp.arena.alloc(i32, func.block_count);
-    //self.local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.block_count * 2));
+    try self.out.startDefineFunc(self.gpa, id, name, .func, linkage);
+    defer self.out.endDefineFunc(id);
 
     var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), func.next_id) catch unreachable;
     const postorder = func.collectPostorder(tmp.arena.allocator(), &visited);
@@ -192,7 +196,22 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     }
 
     const spill_slot_count = std.mem.max(u16, self.allocs) -| (@intFromEnum(Reg.r15) - tmp_count);
-    const stack_size: i64 = std.mem.alignForward(i64, local_size, 8) + spill_slot_count * 8; //used_reg_size + local_size + spill_count;
+    var stack_size: i64 = std.mem.alignForward(i64, local_size, 8) + spill_slot_count * 8; //used_reg_size + local_size + spill_count;
+
+    const padding = std.mem.alignForward(i64, stack_size, 16);
+
+    const has_call = for (postorder) |bb| {
+        if (bb.base.kind == .CallEnd) break true;
+    } else false;
+
+    if (has_call and padding > 8) {
+        stack_size += padding - 8;
+    } else if (has_call) {
+        stack_size += padding + 8;
+    } else {
+        stack_size += padding;
+    }
+
     self.local_base = spill_slot_count * 8;
 
     prelude: {
@@ -339,6 +358,9 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
         if (mnemonic != zydis.ZYDIS_MNEMONIC_MOVZX and
             mnemonic != zydis.ZYDIS_MNEMONIC_MOVSX and
             mnemonic != zydis.ZYDIS_MNEMONIC_MOVSXD and
+            mnemonic != zydis.ZYDIS_MNEMONIC_SHR and
+            mnemonic != zydis.ZYDIS_MNEMONIC_SHL and
+            mnemonic != zydis.ZYDIS_MNEMONIC_SAR and
             size != null and op_size != null) std.debug.assert(op_size == size);
         size = size orelse op_size;
     }
@@ -388,13 +410,26 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
         };
     }
 
+    if (mnemonic == zydis.ZYDIS_MNEMONIC_XCHG and
+        req.operands[1].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY)
+    {
+        std.mem.swap(@TypeOf(req.operands[1]), &req.operands[0], &req.operands[1]);
+    }
+
     const should_flush_to_mem =
-        (mnemonic == zydis.ZYDIS_MNEMONIC_MOVZX or mnemonic == zydis.ZYDIS_MNEMONIC_IMUL) and
+        (mnemonic == zydis.ZYDIS_MNEMONIC_MOVZX or
+            mnemonic == zydis.ZYDIS_MNEMONIC_IMUL
+                //mnemonic == zydis.ZYDIS_MNEMONIC_SHR or
+                //mnemonic == zydis.ZYDIS_MNEMONIC_SAR or
+                //mnemonic == zydis.ZYDIS_MNEMONIC_SHL
+        ) and
         req.operands[0].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY;
     var prev_oper: zydis.ZydisEncoderOperand = undefined;
     if (should_flush_to_mem) {
         prev_oper = req.operands[0];
-        self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{1}, prev_oper });
+        if (mnemonic != zydis.ZYDIS_MNEMONIC_MOVZX) {
+            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{1}, prev_oper });
+        }
         req.operands[0] = Reg.r15.asZydisOpReg(req.operands[0].mem.size);
     } else if (fields.len == 2 and
         req.operands[0].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY and
@@ -478,8 +513,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 }
                 try self.out.code.appendSlice(self.gpa, buf[0 .. len - 4]);
 
-                const slot = try utils.ensureSlot(&self.global_map, self.gpa, instr.extra(.GlobalAddr).id);
-                try self.out.addReloc(self.gpa, slot, 4, -4);
+                try self.out.addGlobalReloc(self.gpa, instr.extra(.GlobalAddr).id, 4, -4);
 
                 try self.out.code.appendSlice(self.gpa, buf[len - 4 .. len]);
 
@@ -536,8 +570,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 } else {
                     const opcode = 0xE8;
                     try self.out.code.append(self.gpa, opcode);
-                    const slot = try utils.ensureSlot(&self.func_map, self.gpa, call.id);
-                    try self.out.addReloc(self.gpa, slot, 4, -4);
+                    try self.out.addFuncReloc(self.gpa, call.id, 4, -4);
                     try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
                 }
 
@@ -578,6 +611,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
             .BinOp => |extra| {
                 const op = extra.*;
                 const size = instr.data_type.size();
+                const opsize = instr.inputs()[1].?.data_type.size();
                 const dst = self.getReg(instr);
                 const lhs = self.getReg(instr.inputs()[1]);
                 const rhs = self.getReg(instr.inputs()[2]);
@@ -632,13 +666,59 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 };
 
                 switch (op) {
-                    .iadd, .isub, .imul, .bor, .band, .bxor, .ushr, .ishl, .sshr => {
+                    .ushr, .ishl, .sshr => {
+                        var oper = dst;
+                        if (dst == .rcx and rhs != .rcx) {
+                            self.emitInstr(zydis.ZYDIS_MNEMONIC_XCHG, .{ dst, rhs });
+                            oper = rhs;
+                        } else if (rhs != .rcx) self.emitInstr(
+                            zydis.ZYDIS_MNEMONIC_MOV,
+                            .{ SReg{ Reg.rcx, size }, SReg{ rhs, size } },
+                        );
+                        self.emitInstr(mnemonic, .{ oper, SReg{ .rcx, 1 } });
+                        if (dst == .rcx and rhs != .rcx) {
+                            self.emitInstr(zydis.ZYDIS_MNEMONIC_XCHG, .{ dst, rhs });
+                        }
+                    },
+                    .iadd, .isub, .imul, .bor, .band, .bxor => {
                         self.emitInstr(mnemonic, .{ dst, rhs });
                     },
-                    .udiv, .umod, .sdiv, .smod => unreachable,
+                    .udiv, .sdiv, .smod, .umod => switch (size) {
+                        1, 2, 4, 8 => {
+                            // this is kind of fucked but eh,
+                            // we need a better support from the regalloc
+                            var oper = rhs;
+                            if (rhs == .rax and lhs != .rax) {
+                                self.emitInstr(zydis.ZYDIS_MNEMONIC_XCHG, .{ rhs, lhs });
+                                oper = lhs;
+                            } else if (lhs != .rax) self.emitInstr(
+                                zydis.ZYDIS_MNEMONIC_MOV,
+                                .{ SReg{ Reg.rax, size }, SReg{ lhs, size } },
+                            );
+
+                            if (size == 1) {
+                                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOVZX, .{ Reg.rdx, SReg{ .rdx, 1 } });
+                            } else {
+                                self.emitInstr(zydis.ZYDIS_MNEMONIC_XOR, .{ Reg.rdx, Reg.rdx });
+                            }
+                            self.emitInstr(mnemonic, .{oper});
+
+                            const dest_reg: Reg = if (op == .udiv or op == .sdiv) .rax else .rdx;
+
+                            if (dst != dest_reg) self.emitInstr(
+                                zydis.ZYDIS_MNEMONIC_MOV,
+                                .{ SReg{ dst, size }, SReg{ dest_reg, size } },
+                            );
+
+                            if (rhs == .rax and lhs != .rax) {
+                                self.emitInstr(zydis.ZYDIS_MNEMONIC_XCHG, .{ rhs, lhs });
+                            }
+                        },
+                        else => unreachable,
+                    },
                     .fadd, .fsub, .fmul, .fdiv, .fgt, .flt, .fge, .fle => unreachable,
                     .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => {
-                        self.emitInstr(zydis.ZYDIS_MNEMONIC_CMP, .{ SReg{ lhs, size }, SReg{ rhs, size } });
+                        self.emitInstr(zydis.ZYDIS_MNEMONIC_CMP, .{ SReg{ lhs, opsize }, SReg{ rhs, opsize } });
                         self.emitInstr(mnemonic, .{SReg{ dst, 1 }});
                         self.emitInstr(zydis.ZYDIS_MNEMONIC_MOVZX, .{ dst, SReg{ dst, 1 } });
                     },
@@ -726,11 +806,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
 pub fn emitData(self: *X86_64, opts: Mach.DataOptions) void {
     errdefer unreachable;
 
-    const slot = try utils.ensureSlot(&self.global_map, self.gpa, opts.id);
-    try self.out.startDefineSym(self.gpa, slot, opts.name, .data, .local);
-    defer self.out.endDefineSym(slot.*);
-
-    try self.out.code.appendSlice(self.gpa, opts.value.init);
+    try self.out.defineGlobal(self.gpa, opts.id, opts.name, .data, .local, opts.value.init);
 }
 
 pub fn finalize(self: *X86_64, out: std.io.AnyWriter) void {
@@ -741,8 +817,6 @@ pub fn finalize(self: *X86_64, out: std.io.AnyWriter) void {
         .coff => unreachable, //root.object.coff.flush(self.out, .x86_64, out),
     };
 
-    self.func_map.items.len = 0;
-    self.global_map.items.len = 0;
     self.memcpy = .invalid;
     self.out.reset();
 }
@@ -852,7 +926,7 @@ pub fn run(_: *X86_64, env: Mach.RunEnv) !usize {
     if (res != .Exited) {
         if (res.Signal == 4) {
             return error.Unreachable;
-        } else if (res.Signal == 11) {
+        } else if (res.Signal == 11 or res.Signal == 8) {
             return error.Fucked;
         } else std.debug.panic("{}\n", .{res});
     }
@@ -860,7 +934,5 @@ pub fn run(_: *X86_64, env: Mach.RunEnv) !usize {
 }
 
 pub fn deinit(self: *X86_64) void {
-    self.global_map.deinit(self.gpa);
-    self.func_map.deinit(self.gpa);
     self.out.deinit(self.gpa);
 }

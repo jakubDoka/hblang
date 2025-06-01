@@ -5,5 +5,7 @@
 	mov rax, 0x01
 	ret
 main:
+	sub rsp, 0x08
 	call 0x0000000000000005
+	add rsp, 0x08
 	ret

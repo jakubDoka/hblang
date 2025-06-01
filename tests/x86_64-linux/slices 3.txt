@@ -1,7 +1,7 @@
 "slices 3".reverse:
 	push rbx
 	push rbp
-	sub rsp, 0x10
+	sub rsp, 0x20
 	mov rax, rdx
 	mov rdx, rdi
 	mov rcx, rsi
@@ -9,7 +9,7 @@
 	mov rbp, rsp
 	add rbp, 0x00
 	mov [rbp], rcx
-	cmp al, bl
+	cmp rax, rbx
 	setz cl
 	movzx rcx, cl
 	mov rsi, 0x08
@@ -23,11 +23,11 @@
 	mov rdx, rsi
 	mov rsi, rbp
 	call 0x0000000000000005
-	jmp 0x000000000000006C
+	jmp 0x000000000000006D
 	mov rcx, 0x01
 	sub rax, rcx
 	xchg rax, rbx
-	cmp al, bl
+	cmp rax, rbx
 	setb dil
 	movzx rdi, dil
 	test rdi, rdi
@@ -49,12 +49,12 @@
 	mov [rax], dil
 	mov rax, r8
 	mov rbx, r9
-	jmp 0xFFFFFFFFFFFFFFB9
+	jmp 0xFFFFFFFFFFFFFFB8
 	mov rdi, rdx
 	mov rdx, rsi
 	mov rsi, rbp
 	call 0x0000000000000005
-	add rsp, 0x10
+	add rsp, 0x20
 	pop rbp
 	pop rbx
 	ret
@@ -65,7 +65,7 @@ main:
 	push r13
 	push r14
 	push r15
-	sub rsp, 0x40
+	sub rsp, 0x78
 	mov rbx, rsp
 	add rbx, 0x18
 	mov rbp, 0x01
@@ -102,7 +102,7 @@ main:
 	movzx rdx, dl
 	sub rax, rcx
 	sub rax, rdx
-	add rsp, 0x40
+	add rsp, 0x78
 	pop r15
 	pop r14
 	pop r13

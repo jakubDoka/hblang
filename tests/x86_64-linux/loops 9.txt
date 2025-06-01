@@ -5,7 +5,7 @@ main:
 	mov rcx, 0x01
 	lea rdx, [0x0000000000000007]
 	mov rbx, rax
-	cmp bl, cl
+	cmp rbx, rcx
 	setnb bpl
 	movzx rbp, bpl
 	test rbp, rbp
@@ -22,7 +22,7 @@ main:
 	test rsi, rsi
 	jz 0x000000000000002B
 	mov rbp, rax
-	cmp bpl, al
+	cmp rbp, rax
 	setz sil
 	movzx rsi, sil
 	test rsi, rsi
@@ -31,4 +31,4 @@ main:
 	imul rbp, rax
 	jmp 0xFFFFFFFFFFFFFFE3
 	add rbx, rcx
-	jmp 0xFFFFFFFFFFFFFFA5
+	jmp 0xFFFFFFFFFFFFFFA4

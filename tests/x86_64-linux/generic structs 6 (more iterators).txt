@@ -2,9 +2,11 @@
 	ret
 main:
 	push rbx
+	sub rsp, 0x08
 	mov rbx, 0x00
 	mov rdi, rbx
 	call 0x0000000000000005
 	mov rax, rbx
+	add rsp, 0x08
 	pop rbx
 	ret

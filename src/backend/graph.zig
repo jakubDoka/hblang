@@ -429,7 +429,7 @@ pub fn Func(comptime MachNode: type) type {
                         .Start => return 0,
                         .Region => @max(
                             cfg.base.inputs()[0].?.asCfg().?.idepth(),
-                            cfg.base.inputs()[0].?.asCfg().?.idepth(),
+                            cfg.base.inputs()[1].?.asCfg().?.idepth(),
                         ) + 1,
                         else => idepth(cfg.base.cfg0().?) + 1,
                     };
@@ -442,8 +442,8 @@ pub fn Func(comptime MachNode: type) type {
                         if (!lc.base.isCfg()) utils.panic("{}", .{lc.base});
                         if (!rc.base.isCfg()) utils.panic("{}", .{rc.base});
                         const diff = @as(i64, idepth(lc)) - idepth(rc);
-                        if (diff >= 0) lc = lc.base.cfg0().?;
-                        if (diff <= 0) rc = rc.base.cfg0().?;
+                        if (diff >= 0) lc = lc.idom();
+                        if (diff <= 0) rc = rc.idom();
                     }
                     return lc;
                 }

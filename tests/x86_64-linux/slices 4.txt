@@ -4,15 +4,15 @@
 	mov rbx, rdx
 	mov rdx, rdi
 	mov rax, rsi
-	cmp al, cl
+	cmp rax, rcx
 	setnz bpl
 	movzx rbp, bpl
 	mov rcx, 0x00
 	test rbp, rbp
 	jz 0x000000000000000E
 	mov rax, rcx
-	jmp 0x0000000000000022
-	cmp dl, bl
+	jmp 0x0000000000000023
+	cmp rdx, rbx
 	setz bpl
 	movzx rbp, bpl
 	mov rsi, 0x01
@@ -21,7 +21,7 @@
 	mov rax, rsi
 	jmp 0x000000000000004D
 	mov rbp, rcx
-	cmp bpl, al
+	cmp rbp, rax
 	setz dil
 	movzx rdi, dil
 	test rdi, rdi
@@ -52,7 +52,7 @@ main:
 	push r13
 	push r14
 	push r15
-	sub rsp, 0x60
+	sub rsp, 0xB8
 	mov rbx, rsp
 	add rbx, 0x38
 	lea rbp, [0x0000000000000007]
@@ -119,7 +119,7 @@ main:
 	mov rax, [rsp]
 	jmp 0x000000000000000C
 	mov rax, 0x00
-	add rsp, 0x60
+	add rsp, 0xB8
 	pop r15
 	pop r14
 	pop r13

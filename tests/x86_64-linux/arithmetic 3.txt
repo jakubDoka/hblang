@@ -17,6 +17,7 @@ main:
 	push rbx
 	push rbp
 	push r12
+	sub rsp, 0x08
 	call 0x0000000000000005
 	mov rbx, rax
 	call 0x0000000000000005
@@ -251,6 +252,7 @@ main:
 	mov rax, 0x1A
 	jmp 0x000000000000000C
 	mov rax, 0x00
+	add rsp, 0x08
 	pop r12
 	pop rbp
 	pop rbx

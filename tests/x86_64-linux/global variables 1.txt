@@ -8,11 +8,13 @@
 main:
 	push rbx
 	push rbp
+	sub rsp, 0x08
 	lea rbx, [0x0000000000000007]
 	mov rbp, 0x01
 	mov [rbx], rbp
 	call 0x0000000000000005
 	mov rax, [rbx]
+	add rsp, 0x08
 	pop rbp
 	pop rbx
 	ret

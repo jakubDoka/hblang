@@ -3,14 +3,14 @@ main:
 	mov rax, 0x00
 	mov rcx, 0x01
 	mov rdx, rax
-	cmp dl, al
+	cmp rdx, rax
 	setz bl
 	movzx rbx, bl
 	test rbx, rbx
 	jz 0x000000000000000E
 	mov rax, rdx
-	jmp 0x000000000000001A
-	cmp dl, cl
+	jmp 0x000000000000001B
+	cmp rdx, rcx
 	setz dl
 	movzx rdx, dl
 	test rdx, rdx
@@ -19,4 +19,4 @@ main:
 	pop rbx
 	ret
 	mov rdx, rcx
-	jmp 0xFFFFFFFFFFFFFFCC
+	jmp 0xFFFFFFFFFFFFFFCA

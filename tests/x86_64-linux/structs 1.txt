@@ -9,7 +9,7 @@
 "structs 1".Ty.sum:
 	push rbx
 	push rbp
-	sub rsp, 0x10
+	sub rsp, 0x20
 	mov rax, rdi
 	mov rcx, rsi
 	mov rdx, rsp
@@ -26,7 +26,7 @@
 	add rcx, rbp
 	mov [rdi], rcx
 	sub rax, rcx
-	add rsp, 0x10
+	add rsp, 0x20
 	pop rbp
 	pop rbx
 	ret
@@ -54,7 +54,7 @@ main:
 	push r13
 	push r14
 	push r15
-	sub rsp, 0x48
+	sub rsp, 0x90
 	mov rbx, rsp
 	add rbx, 0x18
 	mov rbp, 0x04
@@ -85,7 +85,7 @@ main:
 	mov rbp, r13
 	add rbp, r12
 	mov rbx, [rbx]
-	cmp bl, [rsp]
+	cmp rbx, [rsp]
 	setnz bl
 	movzx rbx, bl
 	mov r12, 0x00
@@ -100,7 +100,7 @@ main:
 	mov rsi, rbp
 	call 0x0000000000000005
 	mov rbx, rax
-	cmp bl, r12b
+	cmp rbx, r12
 	setnz bl
 	movzx rbx, bl
 	test rbx, rbx
@@ -109,7 +109,7 @@ main:
 	jmp 0x000000000000000D
 	mov rdi, r13
 	call 0x0000000000000005
-	add rsp, 0x48
+	add rsp, 0x90
 	pop r15
 	pop r14
 	pop r13

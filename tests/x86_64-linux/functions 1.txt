@@ -11,6 +11,7 @@
 main:
 	push rbx
 	push rbp
+	sub rsp, 0x08
 	mov rbx, 0x0A
 	mov rdi, rbx
 	call 0x0000000000000005
@@ -21,6 +22,7 @@ main:
 	mov rcx, rbx
 	add rcx, rax
 	mov rax, rcx
+	add rsp, 0x08
 	pop rbp
 	pop rbx
 	ret

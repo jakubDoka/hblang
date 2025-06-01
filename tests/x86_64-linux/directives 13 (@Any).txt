@@ -10,6 +10,7 @@
 main:
 	push rbx
 	push rbp
+	sub rsp, 0x08
 	mov rbx, 0x01
 	mov rbp, 0x02
 	mov rdi, rbx
@@ -25,6 +26,7 @@ main:
 	mov rcx, rbp
 	add rcx, rax
 	mov rax, rcx
+	add rsp, 0x08
 	pop rbp
 	pop rbx
 	ret

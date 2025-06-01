@@ -9,6 +9,34 @@ main := fn(): uint {
 }
 ```
 
+#### forced shl 1
+```hb
+expectations := .{
+    return_value: 4,
+}
+
+main := fn(): uint {
+    return two() << one()
+}
+
+one := fn(): uint return 1
+two := fn(): uint return 2
+```
+
+#### forced div 1
+```hb
+expectations := .{
+    return_value: 2,
+}
+
+main := fn(): uint {
+    return two() / one()
+}
+
+one := fn(): uint return 1
+two := fn(): uint return 2
+```
+
 #### adding difference to a pointer 1
 ```hb
 main := fn(): uint {

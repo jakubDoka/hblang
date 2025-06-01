@@ -7,7 +7,7 @@ main:
 	mov rbx, 0x09
 	mov rbp, rax
 	mov rsi, rax
-	cmp bpl, dl
+	cmp rbp, rdx
 	setz dil
 	movzx rdi, dil
 	test rdi, rdi
@@ -20,7 +20,7 @@ main:
 	mov rsi, rax
 	mov rdi, rcx
 	mov r9, rax
-	cmp sil, bl
+	cmp rsi, rbx
 	setz r10b
 	movzx r10, r10b
 	test r10, r10

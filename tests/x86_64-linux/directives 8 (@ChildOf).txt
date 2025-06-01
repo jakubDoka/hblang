@@ -5,14 +5,14 @@
 main:
 	push rbx
 	push rbp
-	sub rsp, 0x08
+	sub rsp, 0x10
 	mov rbx, rsp
 	add rbx, 0x00
 	mov rbp, 0x01
 	mov [rbx], rbp
 	mov rdi, rbx
 	call 0x0000000000000005
-	add rsp, 0x08
+	add rsp, 0x10
 	pop rbp
 	pop rbx
 	ret

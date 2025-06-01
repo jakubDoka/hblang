@@ -2,7 +2,7 @@ main:
 	push rbx
 	push rbp
 	push r12
-	sub rsp, 0x48
+	sub rsp, 0x98
 	mov rax, 0x00
 	mov rcx, 0x01
 	mov rdx, 0x03
@@ -11,20 +11,20 @@ main:
 	mov rbp, 0x18
 	mov rsi, 0x08
 	mov rdi, rax
-	cmp dil, dl
+	cmp rdi, rdx
 	setz r8b
 	movzx r8, r8b
 	test r8, r8
-	jz 0x000000000000004A
+	jz 0x000000000000004E
 	mov rdx, 0x09
 	mov rbp, rax
-	cmp al, dl
+	cmp rax, rdx
 	setz dil
 	movzx rdi, dil
 	test rdi, rdi
-	jz 0x0000000000000012
+	jz 0x0000000000000015
 	mov rax, rbp
-	add rsp, 0x48
+	add rsp, 0x98
 	pop r12
 	pop rbp
 	pop rbx
@@ -36,19 +36,19 @@ main:
 	add r8, rdi
 	mov rdi, [r8]
 	add rbp, rdi
-	jmp 0xFFFFFFFFFFFFFFCB
+	jmp 0xFFFFFFFFFFFFFFC7
 	mov r8, rdi
 	imul r8, rbp
 	mov r9, rbx
 	add r9, r8
 	mov r8, rax
-	cmp r8b, dl
+	cmp r8, rdx
 	setz r10b
 	movzx r10, r10b
 	test r10, r10
 	jz 0x000000000000000E
 	add rdi, rcx
-	jmp 0xFFFFFFFFFFFFFF81
+	jmp 0xFFFFFFFFFFFFFF7D
 	mov r10, r8
 	imul r10, rsi
 	mov r11, r8

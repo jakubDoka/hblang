@@ -315,7 +315,7 @@ pub const EmitOptions = struct {
         };
 
         pub fn execute(self: @This(), comptime MachNode: type, func: *graph.Func(MachNode)) void {
-            const freestanding = @import("builtin").target.os.tag != .freestanding;
+            //const freestanding = @import("builtin").target.os.tag == .freestanding;
 
             if (self.peephole_fuel != 0) {
                 func.iterPeeps(self.peephole_fuel, @TypeOf(func.*).idealizeDead);
@@ -337,11 +337,11 @@ pub const EmitOptions = struct {
                 func.gcm.buildCfg();
             }
 
-            if (freestanding and self.verbose)
-                func.fmtScheduled(
-                    std.io.getStdErr().writer().any(),
-                    std.io.tty.detectConfig(std.io.getStdErr()),
-                );
+            //if (!freestanding and self.verbose)
+            if (false) func.fmtScheduled(
+                std.io.getStdErr().writer().any(),
+                std.io.tty.detectConfig(std.io.getStdErr()),
+            );
 
             if (self.error_buf) |eb| {
                 func.static_anal.analize(self.arena.?, eb);

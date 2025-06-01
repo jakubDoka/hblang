@@ -5,7 +5,7 @@ main:
 	push r13
 	push r14
 	push r15
-	sub rsp, 0xE0
+	sub rsp, 0x1C0
 	mov rax, 0x00
 	mov rcx, 0x04
 	mov rdx, 0x02
@@ -108,13 +108,13 @@ main:
 	mov [r12], rdx
 	mov rcx, rax
 	mov rdx, rax
-	cmp cl, [rsp+0x20]
+	cmp rcx, [rsp+0x20]
 	setz bl
 	movzx rbx, bl
 	test rbx, rbx
 	jz 0x000000000000001B
 	mov rax, rdx
-	add rsp, 0xE0
+	add rsp, 0x1C0
 	pop r15
 	pop r14
 	pop r13
@@ -131,14 +131,14 @@ main:
 	mov r8, rdx
 	mov rdx, rax
 	mov r9, [rbx]
-	cmp dl, r9b
+	cmp rdx, r9
 	setz r10b
 	movzx r10, r10b
 	test r10, r10
 	jz 0x0000000000000011
 	add rcx, rbp
 	mov rdx, r8
-	jmp 0xFFFFFFFFFFFFFF9D
+	jmp 0xFFFFFFFFFFFFFF9C
 	mov r9, [rdi]
 	mov r10, rdx
 	add r10, rbp

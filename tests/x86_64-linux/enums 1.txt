@@ -1,7 +1,7 @@
 main:
 	mov rax, 0x00
 	mov rcx, 0x01
-	cmp al, cl
+	cmp rax, rcx
 	setz dl
 	movzx rdx, dl
 	test rdx, rdx

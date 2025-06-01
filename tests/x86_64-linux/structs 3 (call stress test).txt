@@ -53,7 +53,7 @@ main:
 	push rbp
 	push r12
 	push r13
-	sub rsp, 0x28
+	sub rsp, 0x50
 	mov rbx, rsp
 	add rbx, 0x00
 	mov rdi, rbx
@@ -73,7 +73,7 @@ main:
 	mov rbx, rax
 	mov rdi, rbp
 	call 0x0000000000000005
-	cmp bl, al
+	cmp rbx, rax
 	setnz cl
 	movzx rcx, cl
 	test rcx, rcx
@@ -81,7 +81,7 @@ main:
 	mov rax, 0x01
 	jmp 0x000000000000000C
 	mov rax, 0x00
-	add rsp, 0x28
+	add rsp, 0x50
 	pop r13
 	pop r12
 	pop rbp

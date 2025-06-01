@@ -1,0 +1,21 @@
+"forced div 1".two:
+	mov rax, 0x02
+	ret
+"forced div 1".one:
+	mov rax, 0x01
+	ret
+main:
+	push rbx
+	sub rsp, 0x08
+	call 0x0000000000000005
+	mov rbx, rax
+	call 0x0000000000000005
+	xchg rax, rbx
+	xor rdx, rdx
+	div rbx
+	mov rcx, rax
+	xchg rax, rbx
+	mov rax, rcx
+	add rsp, 0x08
+	pop rbx
+	ret
