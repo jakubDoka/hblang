@@ -49,7 +49,7 @@ pub const Reg = enum(u8) {
     _, // spills
 
     const system_v = struct {
-        const syscall_args: []const Reg = &[_]Reg{.rax} ++ args;
+        const syscall_args: []const Reg = &.{ .rax, .rdi, .rsi, .rdx, .r10, .r8, .r9 };
         const args: []const Reg = &.{ .rdi, .rsi, .rdx, .rcx, .r8, .r9 };
         const caller_saved: []const Reg = &.{ .rax, .rcx, .rdx, .rsi, .rdi, .r8, .r9, .r10, .r11 };
         const callee_saved: []const Reg = &.{ .rbx, .rbp, .r12, .r13, .r14, .r15 };
@@ -210,17 +210,16 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
             self.emitInstr(zydis.ZYDIS_MNEMONIC_SUB, .{ Reg.rsp, stack_size });
         }
 
+        var moves = std.ArrayList(Move).init(tmp.arena.allocator());
         for (0..func.params.len) |i| {
             const argn = for (postorder[0].base.outputs()) |o| {
                 if (o.kind == .Arg and o.extra(.Arg).* == i) break o;
             } else continue; // is dead
             if (self.getReg(argn) != Reg.system_v.args[i]) {
-                self.emitInstr(
-                    zydis.ZYDIS_MNEMONIC_MOV,
-                    .{ self.getReg(argn), Reg.system_v.args[i] },
-                );
+                moves.append(.{ self.getReg(argn), Reg.system_v.args[i], 0 }) catch unreachable;
             }
         }
+        self.orderMoves(moves.items);
 
         break :prelude;
     }
@@ -395,6 +394,7 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
     var prev_oper: zydis.ZydisEncoderOperand = undefined;
     if (should_flush_to_mem) {
         prev_oper = req.operands[0];
+        self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{1}, prev_oper });
         req.operands[0] = Reg.r15.asZydisOpReg(req.operands[0].mem.size);
     } else if (fields.len == 2 and
         req.operands[0].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY and
@@ -577,12 +577,13 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
             },
             .BinOp => |extra| {
                 const op = extra.*;
+                const size = instr.data_type.size();
                 const dst = self.getReg(instr);
                 const lhs = self.getReg(instr.inputs()[1]);
                 const rhs = self.getReg(instr.inputs()[2]);
 
                 switch (op) {
-                    .iadd, .isub, .imul, .bor, .band, .bxor => {
+                    .iadd, .isub, .imul, .bor, .band, .bxor, .ushr, .ishl, .sshr => {
                         if (dst != lhs) {
                             self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ dst, lhs });
                         }
@@ -595,11 +596,8 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     .isub => zydis.ZYDIS_MNEMONIC_SUB,
                     .imul => zydis.ZYDIS_MNEMONIC_IMUL,
 
-                    .udiv,
-                    .umod,
-                    .sdiv,
-                    .smod,
-                    => unreachable,
+                    .udiv, .umod => zydis.ZYDIS_MNEMONIC_DIV,
+                    .sdiv, .smod => zydis.ZYDIS_MNEMONIC_IDIV,
 
                     .eq => zydis.ZYDIS_MNEMONIC_SETZ,
                     .ne => zydis.ZYDIS_MNEMONIC_SETNZ,
@@ -634,15 +632,16 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 };
 
                 switch (op) {
-                    .iadd, .isub, .imul, .bor, .band, .bxor => {
+                    .iadd, .isub, .imul, .bor, .band, .bxor, .ushr, .ishl, .sshr => {
                         self.emitInstr(mnemonic, .{ dst, rhs });
                     },
+                    .udiv, .umod, .sdiv, .smod => unreachable,
+                    .fadd, .fsub, .fmul, .fdiv, .fgt, .flt, .fge, .fle => unreachable,
                     .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => {
-                        self.emitInstr(zydis.ZYDIS_MNEMONIC_CMP, .{ lhs, rhs });
+                        self.emitInstr(zydis.ZYDIS_MNEMONIC_CMP, .{ SReg{ lhs, size }, SReg{ rhs, size } });
                         self.emitInstr(mnemonic, .{SReg{ dst, 1 }});
                         self.emitInstr(zydis.ZYDIS_MNEMONIC_MOVZX, .{ dst, SReg{ dst, 1 } });
                     },
-                    else => std.debug.panic("{}", .{instr}),
                 }
             },
             .If => {

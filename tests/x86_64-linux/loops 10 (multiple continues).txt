@@ -3,7 +3,7 @@ main:
 	mov rax, 0x00
 	mov rcx, 0x01
 	mov rdx, rax
-	cmp rdx, rax
+	cmp dl, al
 	setnbe bl
 	movzx rbx, bl
 	test rbx, rbx
@@ -19,4 +19,4 @@ main:
 	jz 0x000000000000000E
 	add rdx, rcx
 	jmp 0x0000000000000005
-	jmp 0xFFFFFFFFFFFFFFC6
+	jmp 0xFFFFFFFFFFFFFFC7

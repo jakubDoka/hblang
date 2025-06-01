@@ -2,14 +2,14 @@
 	push rbx
 	push rbp
 	sub rsp, 0x10
+	mov rax, rdx
 	mov rdx, rdi
 	mov rcx, rsi
-	mov rax, rdx
 	mov rbx, 0x00
 	mov rbp, rsp
 	add rbp, 0x00
 	mov [rbp], rcx
-	cmp rax, rbx
+	cmp al, bl
 	setz cl
 	movzx rcx, cl
 	mov rsi, 0x08
@@ -23,11 +23,11 @@
 	mov rdx, rsi
 	mov rsi, rbp
 	call 0x0000000000000005
-	jmp 0x000000000000006D
+	jmp 0x000000000000006C
 	mov rcx, 0x01
 	sub rax, rcx
 	xchg rax, rbx
-	cmp rax, rbx
+	cmp al, bl
 	setb dil
 	movzx rdi, dil
 	test rdi, rdi
@@ -49,7 +49,7 @@
 	mov [rax], dil
 	mov rax, r8
 	mov rbx, r9
-	jmp 0xFFFFFFFFFFFFFFB8
+	jmp 0xFFFFFFFFFFFFFFB9
 	mov rdi, rdx
 	mov rdx, rsi
 	mov rsi, rbp

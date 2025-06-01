@@ -2,7 +2,7 @@
 	mov rax, rdi
 	mov rcx, 0x00
 	mov rax, [rax]
-	cmp rax, rcx
+	cmp al, cl
 	setz al
 	movzx rax, al
 	test rax, rax

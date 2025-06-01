@@ -6,7 +6,7 @@
 	mov rdx, 0x01
 	mov rbx, rcx
 	mov rbp, rcx
-	cmp rbx, rax
+	cmp bl, al
 	setz sil
 	movzx rsi, sil
 	test rsi, rsi
@@ -17,14 +17,14 @@
 	ret
 	mov rsi, rbp
 	mov rbp, rcx
-	cmp rbp, rax
+	cmp bpl, al
 	setz dil
 	movzx rdi, dil
 	test rdi, rdi
 	jz 0x0000000000000011
 	add rbx, rdx
 	mov rbp, rsi
-	jmp 0xFFFFFFFFFFFFFFC6
+	jmp 0xFFFFFFFFFFFFFFC7
 	mov rdi, rbp
 	imul rdi, rbx
 	add rbp, rdx

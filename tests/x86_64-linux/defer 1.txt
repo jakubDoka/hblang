@@ -15,7 +15,7 @@ main:
 	sub rsp, 0x20
 	mov rbx, 0x00
 	mov rbp, 0x01
-	cmp rbx, rbp
+	cmp bl, bpl
 	setz r12b
 	movzx r12, r12b
 	test r12, r12
@@ -24,17 +24,18 @@ main:
 	jmp 0x0000000000000026
 	mov r12, rbx
 	add r12, rbp
-	cmp r12, rbp
+	cmp r12b, bpl
 	setnz r13b
 	movzx r13, r13b
 	test r13, r13
 	jz 0x0000000000000012
 	mov rax, 0x02
-	jmp 0x000000000000008F
+	jmp 0x0000000000000099
 	mov r13, 0x03
 	mov qword ptr [rsp], 0x04
-	cmp r12, r13
+	cmp r12b, r13b
 	setz [rsp+0x08]
+	mov r15, [rsp+0x08]
 	movzx r15, byte ptr [rsp+0x08]
 	mov [rsp+0x08], r15
 	mov [rsp+0x10], r12
@@ -43,15 +44,16 @@ main:
 	test [rsp+0x08], r15
 	jz 0x0000000000000010
 	mov r12, [rsp+0x10]
-	jmp 0x0000000000000098
-	cmp r12, [rsp]
+	jmp 0x000000000000009D
+	cmp r12b, [rsp]
 	setz r12b
 	movzx r12, r12b
 	test r12, r12
-	jz 0x000000000000007F
+	jz 0x0000000000000084
 	mov r12, 0x05
-	cmp [rsp+0x10], r12
+	cmp [rsp+0x10], r12b
 	setnz [rsp+0x08]
+	mov r15, [rsp+0x08]
 	movzx r15, byte ptr [rsp+0x08]
 	mov [rsp+0x08], r15
 	mov r15, [rsp+0x08]
@@ -65,7 +67,7 @@ main:
 	mov rdi, r12
 	call 0x0000000000000005
 	mov rax, [r12]
-	cmp rax, rbp
+	cmp al, bpl
 	setnz al
 	movzx rax, al
 	test rax, rax
@@ -82,4 +84,4 @@ main:
 	pop rbx
 	ret
 	mov r12, [rsp+0x10]
-	jmp 0xFFFFFFFFFFFFFF36
+	jmp 0xFFFFFFFFFFFFFF2C

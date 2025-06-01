@@ -995,7 +995,7 @@ main := fn(): uint {
 #### unions 1
 ```hb
 expectations := .{
-    return_value: 257,
+    return_value: 1,
 }
 
 main := fn(): uint {
@@ -1006,7 +1006,7 @@ main := fn(): uint {
 
     val := Union.{pair: .(1, 1)}
 
-    return val.single
+    return val.single - 256
 }
 ```
 
@@ -1669,7 +1669,7 @@ expectations := .{
     return_value: 1,
 }
 
-global: bool = @target("ableos")
+global: bool = @target("hbvm-ableos") | @target("x86_64-linux")
 
 main := fn(): uint {
     $if @is_comptime() @error("unecpected")

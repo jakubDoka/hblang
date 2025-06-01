@@ -6,7 +6,7 @@
 	mov rdx, 0x01
 	mov rbx, rdx
 	mov rbp, rcx
-	cmp rax, rcx
+	cmp al, cl
 	setz sil
 	movzx rsi, sil
 	test rsi, rsi
@@ -18,7 +18,7 @@
 	add rbp, rbx
 	sub rax, rdx
 	xchg rbx, rbp
-	jmp 0xFFFFFFFFFFFFFFDD
+	jmp 0xFFFFFFFFFFFFFFDE
 main:
 	push rbx
 	mov rbx, 0x0A

@@ -5,7 +5,7 @@
 	push r13
 	mov rbx, rdi
 	mov rbp, 0x02
-	cmp rbx, rbp
+	cmp bl, bpl
 	setbe r12b
 	movzx r12, r12b
 	mov r13, 0x01

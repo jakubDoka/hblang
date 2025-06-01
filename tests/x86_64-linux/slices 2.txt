@@ -24,6 +24,7 @@ main:
 	mov r13, 0x30
 	mov qword ptr [rsp], 0x38
 	mov [rsp+0x08], rcx
+	mov r15, [rsp+0x08]
 	imul r15, rbx
 	mov [rsp+0x08], r15
 	mov [rsp+0x10], rbp
@@ -31,6 +32,7 @@ main:
 	mov r15, [rsp+0x10]
 	mov [r15], rcx
 	mov [rsp+0x10], rsi
+	mov r15, [rsp+0x10]
 	imul r15, rbx
 	mov [rsp+0x10], r15
 	mov [rsp+0x18], rbp
@@ -79,7 +81,7 @@ main:
 	mov [rbp], rcx
 	mov rcx, rax
 	mov rbp, rax
-	cmp rcx, rdx
+	cmp cl, dl
 	setz r8b
 	movzx r8, r8b
 	test r8, r8
@@ -102,14 +104,14 @@ main:
 	mov r11, rbp
 	mov rbp, rax
 	mov r12, [r8]
-	cmp rbp, r12
+	cmp bpl, r12b
 	setz r13b
 	movzx r13, r13b
 	test r13, r13
 	jz 0x0000000000000011
 	add rcx, rsi
 	mov rbp, r11
-	jmp 0xFFFFFFFFFFFFFFA1
+	jmp 0xFFFFFFFFFFFFFFA2
 	mov r12, rbp
 	add r12, rsi
 	mov r13, [r9]

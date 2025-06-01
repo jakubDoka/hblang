@@ -1,9 +1,9 @@
 "enums 4".NameMap(Enum = "enums 4".Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get:
 	push rbx
 	push rbp
+	mov rax, rdx
 	mov rdx, rdi
 	mov rcx, rsi
-	mov rax, rdx
 	mov rbx, 0x08
 	movzx rax, al
 	mov rbp, 0x01

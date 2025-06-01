@@ -85,7 +85,7 @@ main:
 	mov rbp, r13
 	add rbp, r12
 	mov rbx, [rbx]
-	cmp rbx, [rsp]
+	cmp bl, [rsp]
 	setnz bl
 	movzx rbx, bl
 	mov r12, 0x00
@@ -100,7 +100,7 @@ main:
 	mov rsi, rbp
 	call 0x0000000000000005
 	mov rbx, rax
-	cmp rbx, r12
+	cmp bl, r12b
 	setnz bl
 	movzx rbx, bl
 	test rbx, rbx

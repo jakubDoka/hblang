@@ -55,15 +55,15 @@ main:
 	mov cl, [r15]
 	add rax, rdx
 	add rax, rcx
-	cmp rax, [rsp+0x20]
+	cmp al, [rsp+0x20]
 	setnz al
 	movzx rax, al
 	test rax, rax
 	jz 0x0000000000000012
 	mov rax, 0x3E9
 	jmp 0x000000000000002A
-	mov r15, [rsp]
-	cmp [rsp], r15
+	mov r15b, [rsp]
+	cmp [rsp], r15b
 	setnz al
 	movzx rax, al
 	mov rcx, rax
@@ -72,11 +72,11 @@ main:
 	jz 0x0000000000000012
 	mov rax, 0x3EA
 	jmp 0x0000000000000032
-	mov r15, [rsp]
-	cmp [rsp], r15
+	mov r15b, [rsp]
+	cmp [rsp], r15b
 	setz al
 	movzx rax, al
-	cmp r12, [rsp]
+	cmp r12b, [rsp]
 	setz cl
 	movzx rcx, cl
 	and rax, rcx

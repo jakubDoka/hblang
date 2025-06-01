@@ -108,7 +108,7 @@ main:
 	mov [r12], rdx
 	mov rcx, rax
 	mov rdx, rax
-	cmp rcx, [rsp+0x20]
+	cmp cl, [rsp+0x20]
 	setz bl
 	movzx rbx, bl
 	test rbx, rbx
@@ -131,14 +131,14 @@ main:
 	mov r8, rdx
 	mov rdx, rax
 	mov r9, [rbx]
-	cmp rdx, r9
+	cmp dl, r9b
 	setz r10b
 	movzx r10, r10b
 	test r10, r10
 	jz 0x0000000000000011
 	add rcx, rbp
 	mov rdx, r8
-	jmp 0xFFFFFFFFFFFFFF9C
+	jmp 0xFFFFFFFFFFFFFF9D
 	mov r9, [rdi]
 	mov r10, rdx
 	add r10, rbp

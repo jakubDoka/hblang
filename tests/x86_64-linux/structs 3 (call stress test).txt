@@ -73,7 +73,7 @@ main:
 	mov rbx, rax
 	mov rdi, rbp
 	call 0x0000000000000005
-	cmp rbx, rax
+	cmp bl, al
 	setnz cl
 	movzx rcx, cl
 	test rcx, rcx

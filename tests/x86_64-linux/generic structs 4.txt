@@ -9,7 +9,7 @@
 	mov rbp, rdi
 	mov rbx, rsi
 	mov r12, 0x00
-	cmp rbx, r12
+	cmp bl, r12b
 	setz r13b
 	movzx r13, r13b
 	test r13, r13
@@ -49,8 +49,9 @@
 	mov rbp, rsi
 	mov rbx, rdx
 	mov r13, 0x00
-	cmp rbx, r13
+	cmp bl, r13b
 	setz [rsp]
+	mov r15, [rsp]
 	movzx r15, byte ptr [rsp]
 	mov [rsp], r15
 	mov r15, [rsp]
@@ -78,7 +79,7 @@
 	mov rbp, rdi
 	mov rbx, rsi
 	mov r12, 0x00
-	cmp rbx, r12
+	cmp bl, r12b
 	setz r13b
 	movzx r13, r13b
 	test r13, r13
