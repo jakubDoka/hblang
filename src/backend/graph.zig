@@ -515,6 +515,45 @@ pub fn Func(comptime MachNode: type) type {
                 return self.input_base[1 + start + @intFromBool(self.kind == .Return) .. self.input_ordered_len];
             }
 
+            pub fn knownStore(self: *Node, root: *Node) ?*Node {
+                if (self.isStore() and !self.isSub(MemCpy) and self.base() == root) return self;
+                if (self.kind == .BinOp and self.outputs().len == 1 and self.outputs()[0].isStore() and !self.isSub(MemCpy) and self.outputs()[0].base() == self) {
+                    return self.outputs()[0];
+                }
+                return null;
+            }
+
+            pub fn knownMemOp(self: *Node) ?struct { *Node, i64 } {
+                if (self.isMemOp()) return .{ self, self.getStaticOffset() };
+                if (self.kind == .BinOp and self.inputs()[2].?.kind == .CInt and
+                    (self.outputs().len) == 1 and (self.outputs()[0].isStore() or self.outputs()[0].isLoad()) and (self.outputs()[0].base()) == (self))
+                {
+                    return .{ self.outputs()[0], self.inputs()[2].?.extra(.CInt).* };
+                }
+                return null;
+            }
+
+            pub fn knownOffset(self: *Node) struct { *Node, i64 } {
+                if (self.kind == .BinOp and self.inputs()[2].?.kind == .CInt) {
+                    return .{ self.inputs()[1].?, self.inputs()[2].?.extra(.CInt).* };
+                }
+                if (@hasDecl(MachNode, "knownOffset")) return MachNode.knownOffset(self);
+                return .{ self, 0 };
+            }
+
+            pub fn noAlias(self: *Node, other: *Node) bool {
+                const lsize: i64 = @bitCast(self.data_type.size());
+                const rsize: i64 = @bitCast(other.data_type.size());
+                const lbase, const loff = knownOffset(self.base());
+                const rbase, const roff = knownOffset(other.base());
+
+                if (lbase.kind == .Local and rbase.kind == .Local)
+                    return (lbase != rbase) or (loff + lsize <= roff) or (roff + rsize <= loff);
+                if (lbase.kind == .Local and rbase.kind == .Arg) return true;
+                if (lbase.kind == .Arg and rbase.kind == .Local) return true;
+                return false;
+            }
+
             pub fn regBias(self: *Node) ?u16 {
                 return if (@hasDecl(MachNode, "regBias")) MachNode.regBias(self) else null;
             }
@@ -1245,17 +1284,17 @@ pub fn Func(comptime MachNode: type) type {
             const inps = node.inputs();
 
             if (node.kind == .Store) {
-                const base, _ = knownOffset(node.base());
+                const base, _ = node.base().knownOffset();
 
                 if (base.kind == .Local) eliminate_stack: {
                     for (base.outputs()) |o| {
-                        _ = knownStore(o, base) orelse {
+                        _ = o.knownStore(base) orelse {
                             break :eliminate_stack;
                         };
                     }
 
-                    for (base.outputs()) |o| if (knownStore(o, base).? != node) {
-                        worklist.add(knownStore(o, base).?);
+                    for (base.outputs()) |o| if (o.knownStore(base).? != node) {
+                        worklist.add(o.knownStore(base).?);
                     };
 
                     return node.mem();
@@ -1272,7 +1311,7 @@ pub fn Func(comptime MachNode: type) type {
 
             if (node.kind == .Load) {
                 var earlier = node.mem();
-                const base, _ = knownOffset(node.base());
+                const base, _ = node.base().knownOffset();
 
                 if (base.kind == .Local and node.cfg0() != null) {
                     const dinps = tmp.arena.dupe(?*Node, node.inputs());
@@ -1284,7 +1323,7 @@ pub fn Func(comptime MachNode: type) type {
 
                 while (earlier.kind == .Store and
                     (earlier.cfg0() == node.cfg0() or node.cfg0() == null) and
-                    noAlias(earlier, node))
+                    earlier.noAlias(node))
                 {
                     earlier = earlier.mem();
                 }
@@ -1329,44 +1368,6 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             return if (comptime optApi("idealize", @TypeOf(idealize))) MachNode.idealize(self, node, worklist) else null;
-        }
-
-        pub fn knownStore(base: *Node, root: *Node) ?*Node {
-            if (base.isStore() and !base.isSub(MemCpy) and base.base() == root) return base;
-            if (base.kind == .BinOp and base.outputs().len == 1 and base.outputs()[0].isStore() and !base.isSub(MemCpy) and base.outputs()[0].base() == base) {
-                return base.outputs()[0];
-            }
-            return null;
-        }
-
-        pub fn knownMemOp(base: *Node) ?struct { *Node, i64 } {
-            if (base.isMemOp()) return .{ base, base.getStaticOffset() };
-            if (base.kind == .BinOp and base.inputs()[2].?.kind == .CInt and
-                (base.outputs().len) == 1 and (base.outputs()[0].isStore() or base.outputs()[0].isLoad()) and (base.outputs()[0].base()) == (base))
-            {
-                return .{ base.outputs()[0], base.inputs()[2].?.extra(.CInt).* };
-            }
-            return null;
-        }
-
-        pub fn knownOffset(base: *Node) struct { *Node, i64 } {
-            if (base.kind == .BinOp and base.inputs()[2].?.kind == .CInt) {
-                return .{ base.inputs()[1].?, base.inputs()[2].?.extra(.CInt).* };
-            }
-            return .{ base, 0 };
-        }
-
-        pub fn noAlias(plnode: *Node, prnode: *Node) bool {
-            const lsize: i64 = @bitCast(plnode.data_type.size());
-            const rsize: i64 = @bitCast(prnode.data_type.size());
-            const lbase, const loff = knownOffset(plnode.base());
-            const rbase, const roff = knownOffset(prnode.base());
-
-            if (lbase.kind == .Local and rbase.kind == .Local)
-                return (lbase != rbase) or (loff + lsize <= roff) or (roff + rsize <= loff);
-            if (lbase.kind == .Local and rbase.kind == .Arg) return true;
-            if (lbase.kind == .Arg and rbase.kind == .Local) return true;
-            return false;
         }
 
         pub fn logNid(wr: anytype, nid: usize, cc: std.io.tty.Config) void {

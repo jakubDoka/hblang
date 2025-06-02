@@ -97,19 +97,25 @@ pub const Reloc = struct {
 pub const Node = union(enum) {
     OffsetLoad: extern struct {
         base: graph.Load = .{},
-        dis: u32,
+        dis: i32,
     },
     OffsetStore: extern struct {
         base: graph.Store = .{},
-        dis: u32,
+        dis: i32,
     },
     ImmOp: extern struct {
         base: graph.BinOp,
         imm: i64,
     },
+    InPlaceImmOp: extern struct {
+        base: graph.MemCpy = .{},
+        op: graph.BinOp,
+        dis: i32,
+        imm: i64,
+    },
 
     pub const is_basic_block_start: []const Func.Kind = &.{};
-    pub const is_mem_op: []const Func.Kind = &.{ .OffsetLoad, .OffsetStore };
+    pub const is_mem_op: []const Func.Kind = &.{ .OffsetLoad, .OffsetStore, .InPlaceImmOp };
     pub const is_basic_block_end: []const Func.Kind = &.{};
     pub const is_pinned: []const Func.Kind = &.{};
     pub const reserved_regs = @as(u64, 1) << @intFromEnum(Reg.rsp);
@@ -183,55 +189,58 @@ pub const Node = union(enum) {
         });
     }
 
+    pub fn knownOffset(node: *Func.Node) struct { *Func.Node, i64 } {
+        return switch (node.extra2()) {
+            .ImmOp => |extra| .{ node.inputs()[1].?, extra.imm },
+            else => .{ node, 0 },
+        };
+    }
+
     pub fn idealizeMach(func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
-        _ = worklist;
+        //if (node.kind == .OffsetStore and node.value().isSub(graph.BinOp) and
+        //    node.value().inputs()[1].?.isSub(graph.Load) and
+        //    node.value().inputs()[1].?.getStaticOffset() == 0 and
+        //    node.value().outputs().len == 1 and
+        //    node.value().inputs()[1].?.base() == node.base())
+        //{
+        //    if (node.value().kind == .ImmOp and switch (node.value().extra(.ImmOp).base) {
+        //        .ushr, .ishl, .sshr, .iadd, .isub, .bor, .band, .bxor => true,
+        //        else => false,
+        //    }) {
+        //        worklist.add(node.value());
 
-        if (node.kind == .Load and node.base().kind == .BinOp and
-            node.base().inputs()[2].?.kind == .CInt)
-        {
-            std.debug.assert(node.base().extra(.BinOp).* == .iadd or
-                node.base().extra(.BinOp).* == .isub);
+        //        return func.addNode(
+        //            .InPlaceImmOp,
+        //            node.data_type,
+        //            &.{ node.inputs()[0], node.mem(), node.base() },
+        //            .{
+        //                .op = node.value().extra(.ImmOp).base,
+        //                .dis = node.extra(.OffsetStore).dis,
+        //                .imm = node.value().extra(.ImmOp).imm,
+        //            },
+        //        );
+        //    }
+        //}
+
+        if (node.kind == .Load) {
+            const base, const offset = node.base().knownOffset();
             return func.addNode(
                 .OffsetLoad,
                 node.data_type,
-                &.{ node.inputs()[0], node.mem(), node.base().inputs()[1] },
-                .{ .dis = @intCast(node.base().inputs()[2].?.extra(.CInt).*) },
+                &.{ node.inputs()[0], node.mem(), base },
+                .{ .dis = @intCast(offset) },
             );
         }
 
-        if (node.kind == .Load and node.base().kind == .ImmOp) {
-            std.debug.assert(node.base().extra(.ImmOp).base == .iadd or
-                node.base().extra(.ImmOp).base == .isub);
-            return func.addNode(
-                .OffsetLoad,
-                node.data_type,
-                &.{ node.inputs()[0], node.mem(), node.base().inputs()[1] },
-                .{ .dis = @intCast(node.base().extra(.ImmOp).imm) },
-            );
-        }
-
-        if (node.kind == .Store and node.base().kind == .BinOp and
-            node.base().inputs()[2].?.kind == .CInt)
-        {
-            std.debug.assert(node.base().extra(.BinOp).* == .iadd or
-                node.base().extra(.BinOp).* == .isub);
-            return func.addNode(
+        if (node.kind == .Store) {
+            const base, const offset = node.base().knownOffset();
+            const res = func.addNode(
                 .OffsetStore,
                 node.data_type,
-                &.{ node.inputs()[0], node.mem(), node.base().inputs()[1], node.value() },
-                .{ .dis = @intCast(node.base().inputs()[2].?.extra(.CInt).*) },
+                &.{ node.inputs()[0], node.mem(), base, node.value() },
+                .{ .dis = @intCast(offset) },
             );
-        }
-
-        if (node.kind == .Store and node.base().kind == .ImmOp) {
-            std.debug.assert(node.base().extra(.ImmOp).base == .iadd or
-                node.base().extra(.BinOp).* == .isub);
-            return func.addNode(
-                .OffsetStore,
-                node.data_type,
-                &.{ node.inputs()[0], node.mem(), node.base().inputs()[1], node.value() },
-                .{ .dis = @intCast(node.base().extra(.ImmOp).imm) },
-            );
+            return idealizeMach(func, res, worklist) orelse res;
         }
 
         if (node.kind == .BinOp and node.inputs()[2].?.kind == .CInt and
@@ -443,7 +452,7 @@ pub fn emitCp(self: *X86_64, dst: Reg, src: Reg) void {
 }
 
 pub const SReg = struct { Reg, usize };
-pub const BRegOff = struct { Reg, u32, u16 };
+pub const BRegOff = struct { Reg, i32, u16 };
 pub const Tmp = struct { u8 };
 
 pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
@@ -645,44 +654,22 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     .{ self.getReg(instr), instr.extra(.Local).* + self.local_base },
                 );
             },
-            .Load => {
-                const dst = self.getReg(instr);
-                const bse = self.getReg(instr.inputs()[2]);
-
-                const offset: u32 = 0;
-
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
-                    SReg{ dst, instr.data_type.size() },
-                    BRegOff{ bse, offset, @intCast(instr.data_type.size()) },
-                });
-            },
             .OffsetLoad => |extra| {
                 const dst = self.getReg(instr);
                 const bse = self.getReg(instr.inputs()[2]);
 
-                const offset: u32 = extra.dis;
+                const offset: i32 = extra.dis;
 
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
                     SReg{ dst, instr.data_type.size() },
                     BRegOff{ bse, offset, @intCast(instr.data_type.size()) },
-                });
-            },
-            .Store => {
-                const dst = self.getReg(instr.inputs()[2]);
-                const vl = self.getReg(instr.inputs()[3]);
-
-                const offset: u32 = 0;
-
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
-                    BRegOff{ dst, offset, @intCast(instr.data_type.size()) },
-                    SReg{ vl, instr.data_type.size() },
                 });
             },
             .OffsetStore => |extra| {
                 const dst = self.getReg(instr.inputs()[2]);
                 const vl = self.getReg(instr.inputs()[3]);
 
-                const offset: u32 = extra.dis;
+                const offset: i32 = extra.dis;
 
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
                     BRegOff{ dst, offset, @intCast(instr.data_type.size()) },
@@ -746,6 +733,25 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 }
 
                 continue;
+            },
+            .InPlaceImmOp => |extra| {
+                const op = extra.op;
+                const size = instr.data_type.size();
+                const dis = extra.dis;
+                const lhs = self.getReg(instr.inputs()[2]);
+                const rhs = extra.imm;
+
+                const mnemonic = binopToMnemonic(op);
+
+                switch (op) {
+                    .imul => unreachable,
+                    .ushr, .ishl, .sshr, .iadd, .isub, .bor, .band, .bxor => {
+                        self.emitInstr(mnemonic, .{ BRegOff{ lhs, dis, @intCast(size) }, rhs });
+                    },
+                    .udiv, .sdiv, .smod, .umod => unreachable,
+                    .fadd, .fsub, .fmul, .fdiv, .fgt, .flt, .fge, .fle => unreachable,
+                    .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => unreachable,
+                }
             },
             .ImmOp => |extra| {
                 const op = extra.base;
