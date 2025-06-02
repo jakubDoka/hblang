@@ -40,6 +40,8 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
             var tmp = root.Arena.scrath(arena);
             defer tmp.deinit();
 
+            std.debug.assert(tmp.arena != arena);
+
             const func = self.getGraph();
 
             var work = Func.WorkList.init(tmp.arena.allocator(), func.next_id) catch unreachable;

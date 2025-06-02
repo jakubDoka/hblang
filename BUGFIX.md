@@ -9,6 +9,30 @@ main := fn(): uint {
 }
 ```
 
+#### static analisys 1
+```hb
+expectations := .{
+    should_error: true,
+}
+
+main := fn(): uint {
+    a := 1
+    b := &a
+
+    loop {
+        if (b.* & 1) != 0 {
+            x := 0
+            loop if x >= 8 break else {
+                if b.* == 0 {
+                    return 1
+                }
+                x += 1
+            }
+        }
+    }
+}
+```
+
 #### big constant 1
 ```hb
 main := fn(): uint {

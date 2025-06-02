@@ -121,7 +121,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     const name = opts.name;
     const entry = opts.entry;
 
-    var tmp = utils.Arena.scrath(null);
+    var tmp = utils.Arena.scrath(opts.optimizations.arena);
     defer tmp.deinit();
 
     try self.out.startDefineFunc(self.gpa, id, name, .func, .local);

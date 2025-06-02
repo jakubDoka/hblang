@@ -279,10 +279,10 @@ pub fn getReg(self: X86_64, node: ?*FuncNode) Reg {
 pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     errdefer unreachable;
 
-    var tmp = utils.Arena.scrath(null);
-    defer tmp.deinit();
-
     opts.optimizations.execute(Node, func);
+
+    var tmp = utils.Arena.scrath(opts.optimizations.arena);
+    defer tmp.deinit();
 
     const id = opts.id;
     const entry = opts.entry;
@@ -556,9 +556,10 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
         (mnemonic == zydis.ZYDIS_MNEMONIC_MOVZX or
             mnemonic == zydis.ZYDIS_MNEMONIC_MOVSX or
             mnemonic == zydis.ZYDIS_MNEMONIC_IMUL or
-            (mnemonic == zydis.ZYDIS_MNEMONIC_MOV and
-                req.operands[1].type == zydis.ZYDIS_OPERAND_TYPE_IMMEDIATE and
-                req.operands[1].imm.u > 0x7fffffff) or
+            (req.operands[1].type == zydis.ZYDIS_OPERAND_TYPE_IMMEDIATE and
+                ((mnemonic == zydis.ZYDIS_MNEMONIC_MOV and req.operands[1].imm.u > 0x7fffffff) //or
+                    //mnemonic == zydis.ZYDIS_MNEMONIC_ADD
+                )) or
             mnemonic == zydis.ZYDIS_MNEMONIC_LEA) and
         req.operands[0].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY;
     var prev_oper: zydis.ZydisEncoderOperand = undefined;

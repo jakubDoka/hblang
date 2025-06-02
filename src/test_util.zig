@@ -201,7 +201,7 @@ pub fn testBuilder(
 
             if (verbose) try header("OPTIMIZED SON", output, colors);
 
-            var tmp = ast_arena.checkpoint();
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             var anal_errors: std.ArrayListUnmanaged(static_anal.Error) = .empty;
