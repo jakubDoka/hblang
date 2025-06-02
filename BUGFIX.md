@@ -9,6 +9,16 @@ main := fn(): uint {
 }
 ```
 
+#### arithmetic 9 (force imm ops)
+```hb
+main := fn(): uint {
+    if box(~0) ^ ~0 != 0 return 1
+    return 0
+}
+
+box := fn(v: @Any()): @TypeOf(v) return v
+```
+
 #### forced shl 1
 ```hb
 expectations := .{

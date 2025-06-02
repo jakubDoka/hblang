@@ -208,10 +208,12 @@ pub const Node = union(enum) {
         if (node.kind == .BinOp and node.inputs()[2].?.kind == .CInt and
             node.extra(.BinOp).* != .imul)
         {
-            return func.addNode(.ImmOp, node.data_type, node.inputs()[0..2], .{
-                .base = node.extra(.BinOp).*,
-                .imm = node.inputs()[2].?.extra(.CInt).*,
-            });
+            if (std.math.cast(i32, node.inputs()[2].?.extra(.CInt).*)) |imm| {
+                return func.addNode(.ImmOp, node.data_type, node.inputs()[0..2], .{
+                    .base = node.extra(.BinOp).*,
+                    .imm = imm,
+                });
+            }
         }
 
         return null;

@@ -1,0 +1,17 @@
+"arithmetic 9 (force imm ops)".main:
+         st $31, $254, -16, 16
+     addi64 $254, $254, -16
+       li64 $32, -1
+         cp $1, $32
+        jal $31, $0, :"arithmetic 9 (force imm ops)".box(v: uint)
+       li64 $2, 0
+       xori $1, $1, -1
+        jeq $1, $2, :1
+       li64 $1, 1
+        jmp :2
+1:       cp $1, $2
+2:   addi64 $254, $254, 16
+         ld $31, $254, -16, 16
+         tx
+"arithmetic 9 (force imm ops)".box(v: uint):
+       jala $0, $31, 0

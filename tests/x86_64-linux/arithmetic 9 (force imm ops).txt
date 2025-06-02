@@ -1,0 +1,21 @@
+"arithmetic 9 (force imm ops)".box(v: uint):
+	mov rax, rdi
+	ret
+main:
+	push rbx
+	sub rsp, 0x08
+	mov rbx, 0xFFFFFFFFFFFFFFFF
+	mov rdi, rbx
+	call 0x0000000000000005
+	xor rax, 0xFFFFFFFFFFFFFFFF
+	cmp rax, 0x00
+	setnz al
+	movzx rax, al
+	test al, al
+	jz 0x0000000000000012
+	mov rax, 0x01
+	jmp 0x000000000000000C
+	mov rax, 0x00
+	add rsp, 0x08
+	pop rbx
+	ret
