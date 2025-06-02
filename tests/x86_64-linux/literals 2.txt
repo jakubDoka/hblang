@@ -7,17 +7,17 @@
 main:
 	push rbx
 	sub rsp, 0x08
-	call 0x0000000000000005
+	call :"literals 2".hex
 	mov rbx, rax
-	call 0x0000000000000005
+	call :"literals 2".dec
 	cmp rbx, rax
 	setnz cl
 	movzx rcx, cl
 	test cl, cl
-	jz 0x0000000000000012
+	jz :0
 	mov rax, 0x01
-	jmp 0x000000000000000C
-	mov rax, 0x00
-	add rsp, 0x08
+	jmp :1
+0:	mov rax, 0x00
+1:	add rsp, 0x08
 	pop rbx
 	ret

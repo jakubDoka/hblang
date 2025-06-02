@@ -32,31 +32,29 @@ main:
 	push rbp
 	push r12
 	sub rsp, 0x50
-	mov rbx, rsp
-	add rbx, 0x18
+	lea rbx, [rsp+0x18]
 	mov rdi, rbx
-	call 0x0000000000000005
-	mov rbp, rsp
-	add rbp, 0x00
+	call :"structs 3 (call stress test)".return_pair
+	lea rbp, [rsp]
 	mov rdi, rbp
-	call 0x0000000000000005
+	call :"structs 3 (call stress test)".return_triple
 	mov r12b, [rbx]
 	mov rbx, [rbx+0x08]
 	mov rdi, r12
 	mov rsi, rbx
-	call 0x0000000000000005
+	call :"structs 3 (call stress test)".take_pair
 	mov rbx, rax
 	mov rdi, rbp
-	call 0x0000000000000005
+	call :"structs 3 (call stress test)".take_triple
 	cmp rbx, rax
 	setnz cl
 	movzx rcx, cl
 	test cl, cl
-	jz 0x0000000000000012
+	jz :0
 	mov rax, 0x01
-	jmp 0x000000000000000C
-	mov rax, 0x00
-	add rsp, 0x50
+	jmp :1
+0:	mov rax, 0x00
+1:	add rsp, 0x50
 	pop r12
 	pop rbp
 	pop rbx

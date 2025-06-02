@@ -544,7 +544,8 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
     const should_flush_to_mem =
         (mnemonic == zydis.ZYDIS_MNEMONIC_MOVZX or
             mnemonic == zydis.ZYDIS_MNEMONIC_MOVSX or
-            mnemonic == zydis.ZYDIS_MNEMONIC_IMUL
+            mnemonic == zydis.ZYDIS_MNEMONIC_IMUL or
+            mnemonic == zydis.ZYDIS_MNEMONIC_LEA
                 //mnemonic == zydis.ZYDIS_MNEMONIC_SHR or
                 //mnemonic == zydis.ZYDIS_MNEMONIC_SAR or
                 //mnemonic == zydis.ZYDIS_MNEMONIC_SHL
@@ -553,7 +554,7 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
     var prev_oper: zydis.ZydisEncoderOperand = undefined;
     if (should_flush_to_mem) {
         prev_oper = req.operands[0];
-        if (mnemonic != zydis.ZYDIS_MNEMONIC_MOVZX) {
+        if (mnemonic != zydis.ZYDIS_MNEMONIC_MOVZX and mnemonic != zydis.ZYDIS_MNEMONIC_LEA) {
             self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{1}, prev_oper });
         }
         req.operands[0] = Reg.r15.asZydisOpReg(req.operands[0].mem.size);
@@ -648,11 +649,10 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 }
             },
             .Local => {
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), Reg.rsp });
-                self.emitInstr(
-                    zydis.ZYDIS_MNEMONIC_ADD,
-                    .{ self.getReg(instr), instr.extra(.Local).* + self.local_base },
-                );
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_LEA, .{
+                    self.getReg(instr),
+                    BRegOff{ .rsp, @intCast(instr.extra(.Local).* + self.local_base), 8 },
+                });
             },
             .OffsetLoad => |extra| {
                 const dst = self.getReg(instr);
@@ -985,6 +985,15 @@ pub fn disasm(self: *X86_64, opts: Mach.DisasmOpts) void {
     std.debug.assert(self.object_format == .elf);
     const data = try object.elf.read(opts.bin, tmp.arena.allocator());
 
+    const func_map = b: {
+        var map = std.AutoArrayHashMapUnmanaged(usize, []const u8).empty;
+        for (data.relocs.items) |r| {
+            const target = &data.syms.items[@intFromEnum(r.target)];
+            try map.put(tmp.arena.allocator(), r.offset, data.lookupName(target.name));
+        }
+        break :b map;
+    };
+
     var decoder = zydis.ZydisDecoder{};
     _ = zydis.ZydisDecoderInit(&decoder, zydis.ZYDIS_MACHINE_MODE_LONG_64, zydis.ZYDIS_STACK_WIDTH_64);
 
@@ -1008,12 +1017,35 @@ pub fn disasm(self: *X86_64, opts: Mach.DisasmOpts) void {
                 var inst = zydis.ZydisDecodedInstruction{};
                 var ops: [zydis.ZYDIS_MAX_OPERAND_COUNT]zydis.ZydisDecodedOperand = undefined;
 
-                var addr: usize = 0;
+                const label_map = b: {
+                    var map = std.AutoArrayHashMapUnmanaged(usize, usize).empty;
+
+                    var addr: isize = 0;
+                    while (addr < bytes.len) : (addr += inst.length) {
+                        const uaddr: usize = @intCast(addr);
+                        const status = zydis.ZydisDecoderDecodeFull(
+                            &decoder,
+                            bytes.ptr + uaddr,
+                            bytes.len - uaddr,
+                            &inst,
+                            &ops,
+                        );
+                        std.debug.assert(zydis.ZYAN_SUCCESS(status));
+
+                        if (inst.mnemonic == zydis.ZYDIS_MNEMONIC_JMP or inst.mnemonic == zydis.ZYDIS_MNEMONIC_JZ) {
+                            try map.put(tmp.arena.allocator(), @intCast(addr + ops[0].unnamed_0.imm.value.s + inst.length), map.count());
+                        }
+                    }
+                    break :b map;
+                };
+
+                var addr: isize = 0;
                 while (addr < bytes.len) : (addr += inst.length) {
+                    const uaddr: usize = @intCast(addr);
                     var status = zydis.ZydisDecoderDecodeFull(
                         &decoder,
-                        bytes.ptr + addr,
-                        bytes.len - addr,
+                        bytes.ptr + uaddr,
+                        bytes.len - uaddr,
                         &inst,
                         &ops,
                     );
@@ -1034,11 +1066,38 @@ pub fn disasm(self: *X86_64, opts: Mach.DisasmOpts) void {
 
                     const printed = buf[0..std.mem.indexOfScalar(u8, &buf, 0).?];
 
-                    const fmt, const args = .{ "\t{s}\n", .{printed} };
-                    if (opts.colors == .no_color) {
-                        try opts.out.print(fmt, args);
+                    if (label_map.get(uaddr)) |nm| {
+                        const fmt, const args = .{ "{x}:", .{nm} };
+                        if (opts.colors == .no_color) {
+                            try opts.out.print(fmt, args);
+                        } else {
+                            try std.io.getStdErr().writer().print(fmt, args);
+                        }
+                    }
+
+                    if (inst.mnemonic == zydis.ZYDIS_MNEMONIC_JMP or inst.mnemonic == zydis.ZYDIS_MNEMONIC_JZ) {
+                        const label = label_map.get(@intCast(addr + ops[0].unnamed_0.imm.value.s + inst.length)).?;
+                        const fmt, const args = .{ "\t{s} :{}\n", .{ zydis.ZydisMnemonicGetString(inst.mnemonic), label } };
+                        if (opts.colors == .no_color) {
+                            try opts.out.print(fmt, args);
+                        } else {
+                            try std.io.getStdErr().writer().print(fmt, args);
+                        }
+                    } else if (inst.mnemonic == zydis.ZYDIS_MNEMONIC_CALL) {
+                        const nm = func_map.get(v.offset + uaddr + 1) orelse continue;
+                        const fmt, const args = .{ "\tcall :{s}\n", .{nm} };
+                        if (opts.colors == .no_color) {
+                            try opts.out.print(fmt, args);
+                        } else {
+                            try std.io.getStdErr().writer().print(fmt, args);
+                        }
                     } else {
-                        try std.io.getStdErr().writer().print(fmt, args);
+                        const fmt, const args = .{ "\t{s}\n", .{printed} };
+                        if (opts.colors == .no_color) {
+                            try opts.out.print(fmt, args);
+                        } else {
+                            try std.io.getStdErr().writer().print(fmt, args);
+                        }
                     }
                 }
             },

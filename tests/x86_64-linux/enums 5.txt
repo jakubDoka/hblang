@@ -1,7 +1,7 @@
 main:
 	mov rax, 0x01
 	test al, al
-	jz 0x0000000000000012
+	jz :1
 	mov rax, 0x00
-	jmp 0x0000000000000005
-	ret
+	jmp :1
+1:	ret

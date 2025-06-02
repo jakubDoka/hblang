@@ -10,8 +10,7 @@ main:
 	push r13
 	sub rsp, 0x30
 	mov rbx, 0x01
-	mov rbp, rsp
-	add rbp, 0x00
+	lea rbp, [rsp]
 	mov [rbp], bl
 	cmp rbx, 0x00
 	setz r12b
@@ -20,26 +19,26 @@ main:
 	mov [rbp+0x08], r13
 	mov [rbp+0x10], r13
 	test r12b, r12b
-	jz 0x000000000000000E
+	jz :0
 	mov rax, rbx
-	jmp 0x0000000000000015
-	test r12b, r12b
-	jz 0x0000000000000012
+	jmp :1
+0:	test r12b, r12b
+	jz :2
 	mov rax, 0x02
-	jmp 0x0000000000000015
-	test r12b, r12b
-	jz 0x0000000000000012
+1:	jmp :3
+2:	test r12b, r12b
+	jz :4
 	mov rax, 0x03
-	jmp 0x0000000000000023
-	mov [rbp+0x10], rbx
+3:	jmp :5
+4:	mov [rbp+0x10], rbx
 	mov rbx, rbp
 	add rbx, 0x08
 	mov rdi, rbx
-	call 0x0000000000000005
+	call :"nullable types 2".take
 	mov rax, [rbp+0x08]
 	mov rcx, [rbp+0x10]
 	sub rax, rcx
-	add rsp, 0x30
+5:	add rsp, 0x30
 	pop r13
 	pop r12
 	pop rbp

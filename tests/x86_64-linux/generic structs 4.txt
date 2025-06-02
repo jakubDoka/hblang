@@ -9,17 +9,17 @@
 	setz r12b
 	movzx r12, r12b
 	test r12b, r12b
-	jz 0x000000000000000F
+	jz :0
 	mov rax, [rbp]
-	jmp 0x000000000000001F
-	mov r12, [rbp+0x08]
+	jmp :1
+0:	mov r12, [rbp+0x08]
 	mov rbp, [rbp+0x10]
 	sub rbx, 0x01
 	mov rdi, r12
 	mov rsi, rbp
 	mov rdx, rbx
-	call 0x0000000000000005
-	add rsp, 0x08
+	call :"generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint))).get
+1:	add rsp, 0x08
 	pop r12
 	pop rbp
 	pop rbx
@@ -37,14 +37,14 @@
 	setz r13b
 	movzx r13, r13b
 	test r13b, r13b
-	jz 0x000000000000000E
+	jz :0
 	mov rax, r12
-	jmp 0x0000000000000014
-	sub rbx, 0x01
+	jmp :1
+0:	sub rbx, 0x01
 	mov rdi, rbp
 	mov rsi, rbx
-	call 0x0000000000000005
-	add rsp, 0x08
+	call :"generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint)).get
+1:	add rsp, 0x08
 	pop r13
 	pop r12
 	pop rbp
@@ -61,13 +61,13 @@
 	setz r12b
 	movzx r12, r12b
 	test r12b, r12b
-	jz 0x000000000000000E
+	jz :0
 	mov rax, rbp
-	jmp 0x0000000000000011
-	sub rbx, 0x01
+	jmp :1
+0:	sub rbx, 0x01
 	mov rdi, rbx
-	call 0x0000000000000005
-	add rsp, 0x08
+	call :"generic structs 4".Array(E = uint).get
+1:	add rsp, 0x08
 	pop r12
 	pop rbp
 	pop rbx
@@ -80,8 +80,7 @@ main:
 	push r12
 	push r13
 	sub rsp, 0x30
-	mov rbx, rsp
-	add rbx, 0x00
+	lea rbx, [rsp]
 	mov rbp, 0x01
 	mov [rbx], rbp
 	mov r12, 0x02
@@ -92,15 +91,15 @@ main:
 	mov r13, 0x00
 	mov rdi, rbx
 	mov rsi, r13
-	call 0x0000000000000005
+	call :"generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint)))).get
 	mov r13, rax
 	mov rdi, rbx
 	mov rsi, rbp
-	call 0x0000000000000005
+	call :"generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint)))).get
 	mov rbp, rax
 	mov rdi, rbx
 	mov rsi, r12
-	call 0x0000000000000005
+	call :"generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint)))).get
 	mov rcx, r13
 	add rcx, rbp
 	add rcx, rax

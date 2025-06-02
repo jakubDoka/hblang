@@ -7,21 +7,21 @@
 	setbe bpl
 	movzx rbp, bpl
 	test bpl, bpl
-	jz 0x0000000000000012
+	jz :0
 	mov rax, 0x01
-	jmp 0x000000000000002C
-	mov rbp, rbx
+	jmp :1
+0:	mov rbp, rbx
 	sub rbp, 0x01
 	mov rdi, rbp
-	call 0x0000000000000005
+	call :"if statements 1".fib
 	mov rbp, rax
 	sub rbx, 0x02
 	mov rdi, rbx
-	call 0x0000000000000005
+	call :"if statements 1".fib
 	mov rcx, rbp
 	add rcx, rax
 	mov rax, rcx
-	add rsp, 0x08
+1:	add rsp, 0x08
 	pop rbp
 	pop rbx
 	ret
@@ -30,7 +30,7 @@ main:
 	sub rsp, 0x08
 	mov rbx, 0x03
 	mov rdi, rbx
-	call 0x0000000000000005
+	call :"if statements 1".fib
 	add rsp, 0x08
 	pop rbx
 	ret

@@ -5,30 +5,30 @@ main:
 	mov rcx, 0x01
 	mov rdx, rax
 	mov rbx, rax
-	cmp rdx, 0x0A
+2:	cmp rdx, 0x0A
 	setz bpl
 	movzx rbp, bpl
 	test bpl, bpl
-	jz 0x000000000000000C
+	jz :0
 	mov rax, rbx
 	pop rbp
 	pop rbx
 	ret
-	mov rsi, rbx
+0:	mov rsi, rbx
 	mov rbx, rax
 	mov rbp, rcx
 	mov rdi, rax
-	cmp rbx, 0x09
+3:	cmp rbx, 0x09
 	setz r8b
 	movzx r8, r8b
 	test r8b, r8b
-	jz 0x0000000000000012
+	jz :1
 	add rdx, 0x01
 	mov rbx, rsi
-	jmp 0xFFFFFFFFFFFFFFBD
-	mov rsi, rdi
+	jmp :2
+1:	mov rsi, rdi
 	add rsi, rbp
 	add rbx, 0x01
 	mov rdi, rbp
 	mov rbp, rsi
-	jmp 0xFFFFFFFFFFFFFFCF
+	jmp :3

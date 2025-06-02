@@ -15,13 +15,13 @@ main:
 	mov rbp, 0x02
 	mov rdi, rbx
 	mov rsi, rbp
-	call 0x0000000000000005
+	call :"directives 13 (@Any)".func(a: uint)
 	mov rbx, 0x05
 	mov rdi, rbx
-	call 0x0000000000000005
+	call :"directives 13 (@Any)".foo(vl: uint)
 	mov rbp, rax
 	mov rdi, rbx
-	call 0x0000000000000005
+	call :"directives 13 (@Any)".foo(vl: u8)
 	movzx rax, al
 	mov rcx, rbp
 	add rcx, rax

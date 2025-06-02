@@ -1,10 +1,10 @@
 main:
 	mov rax, 0x00
-	cmp rax, 0x04
+1:	cmp rax, 0x04
 	setz cl
 	movzx rcx, cl
 	test cl, cl
-	jz 0x0000000000000007
+	jz :0
 	ret
-	add rax, 0x01
-	jmp 0xFFFFFFFFFFFFFFE8
+0:	add rax, 0x01
+	jmp :1

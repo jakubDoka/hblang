@@ -8,22 +8,21 @@ main:
 	sub rsp, 0x10
 	mov rbx, 0x00
 	test bl, bl
-	jz 0x0000000000000012
+	jz :0
 	mov rax, 0x01
-	jmp 0x0000000000000014
-	test bl, bl
-	jz 0x0000000000000012
+	jmp :1
+0:	test bl, bl
+	jz :2
 	mov rax, 0x02
-	jmp 0x0000000000000026
-	mov rbp, 0x03
-	mov r12, rsp
-	add r12, 0x00
+1:	jmp :3
+2:	mov rbp, 0x03
+	lea r12, [rsp]
 	mov [r12], rbp
 	mov rdi, r12
-	call 0x0000000000000005
+	call :"nullable types 4 (pointer optimization)".opaque(v: ^uint)
 	mov [rax], rbx
 	mov rax, [r12]
-	add rsp, 0x10
+3:	add rsp, 0x10
 	pop r12
 	pop rbp
 	pop rbx

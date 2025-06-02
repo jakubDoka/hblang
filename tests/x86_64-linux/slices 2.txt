@@ -8,8 +8,7 @@ main:
 	mov rbx, 0x04
 	mov rbp, 0x08
 	mov rsi, 0x01
-	mov rdi, rsp
-	add rdi, 0x40
+	lea rdi, [rsp+0x40]
 	mov [rdi], rsi
 	mov [rdi+0x08], rcx
 	mov [rdi+0x10], rdx
@@ -17,8 +16,7 @@ main:
 	mov r8, rcx
 	imul r8, rbp
 	imul rsi, rbp
-	mov r9, rsp
-	add r9, 0x00
+	lea r9, [rsp]
 	mov [r9], rdi
 	mov [r9+0x08], rbx
 	mov [r9+0x10], rdi
@@ -39,32 +37,32 @@ main:
 	mov rcx, 0x10
 	mov rdx, rax
 	mov rbx, rax
-	cmp rdx, 0x04
+2:	cmp rdx, 0x04
 	setz sil
 	movzx rsi, sil
 	test sil, sil
-	jz 0x0000000000000013
+	jz :0
 	mov rax, rbx
 	add rsp, 0xC0
 	pop rbp
 	pop rbx
 	ret
-	mov rsi, rdx
+0:	mov rsi, rdx
 	imul rsi, rcx
 	mov rdi, r9
 	add rdi, rsi
 	mov rsi, rbx
 	mov rbx, rax
-	mov r8, [rdi+0x08]
+3:	mov r8, [rdi+0x08]
 	cmp rbx, r8
 	setz r10b
 	movzx r10, r10b
 	test r10b, r10b
-	jz 0x0000000000000012
+	jz :1
 	add rdx, 0x01
 	mov rbx, rsi
-	jmp 0xFFFFFFFFFFFFFFAC
-	mov r8, rbx
+	jmp :2
+1:	mov r8, rbx
 	add r8, 0x01
 	mov r10, [rdi]
 	imul rbx, rbp
@@ -72,4 +70,4 @@ main:
 	mov rbx, [r10]
 	add rsi, rbx
 	mov rbx, r8
-	jmp 0xFFFFFFFFFFFFFFC2
+	jmp :3

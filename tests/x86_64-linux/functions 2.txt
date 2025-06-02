@@ -12,11 +12,11 @@ main:
 	sub rsp, 0x08
 	mov rbx, 0x0A
 	mov rdi, rbx
-	call 0x0000000000000005
+	call :"one.hb".add
 	mov rbx, rax
 	mov rbp, 0x14
 	mov rdi, rbp
-	call 0x0000000000000005
+	call :"two.hb".add
 	mov rcx, rbx
 	add rcx, rax
 	mov rax, rcx

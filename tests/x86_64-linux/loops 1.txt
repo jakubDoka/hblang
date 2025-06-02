@@ -4,24 +4,24 @@
 	mov rcx, 0x01
 	mov rdx, rax
 	mov rax, rdi
-	cmp rax, 0x00
+1:	cmp rax, 0x00
 	setz bl
 	movzx rbx, bl
 	test bl, bl
-	jz 0x000000000000000B
+	jz :0
 	mov rax, rdx
 	pop rbx
 	ret
-	add rdx, rcx
+0:	add rdx, rcx
 	sub rax, 0x01
 	xchg rcx, rdx
-	jmp 0xFFFFFFFFFFFFFFDE
+	jmp :1
 main:
 	push rbx
 	sub rsp, 0x08
 	mov rbx, 0x0A
 	mov rdi, rbx
-	call 0x0000000000000005
+	call :"loops 1".fib
 	add rsp, 0x08
 	pop rbx
 	ret

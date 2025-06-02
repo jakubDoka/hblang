@@ -10,17 +10,16 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x18
-	mov rbx, rsp
-	add rbx, 0x00
+	lea rbx, [rsp]
 	mov rbp, 0x01
 	mov rdi, rbx
 	mov rsi, rbp
-	call 0x0000000000000005
+	call :"generic structs 1".nvec(E = uint)
 	mov rbp, [rbx]
 	mov rbx, [rbx+0x08]
 	mov rdi, rbp
 	mov rsi, rbx
-	call 0x0000000000000005
+	call :"generic structs 1".Vec(E = uint).sub
 	add rsp, 0x18
 	pop rbp
 	pop rbx

@@ -6,7 +6,7 @@ main:
 	sub rsp, 0x08
 	mov rbx, 0x0A
 	mov rdi, rbx
-	call 0x0000000000000005
+	call :"directives 12 (@inline)".foo
 	add rsp, 0x08
 	pop rbx
 	ret

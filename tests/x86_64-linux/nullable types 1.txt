@@ -1,14 +1,13 @@
 "nullable types 1".mkval(T = uint):
 	sub rsp, 0x20
-	mov rax, rsp
-	add rax, 0x00
+	lea rax, [rsp]
 	mov rcx, 0x01
 	mov [rax], cl
 	mov [rax+0x08], rsi
 	mov rcx, 0x10
 	mov rsi, rax
 	mov rdx, rcx
-	call 0x0000000000000005
+	call :memcpy
 	add rsp, 0x20
 	ret
 "nullable types 1".mknull(T = uint):
@@ -19,32 +18,30 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x38
-	mov rbx, rsp
-	add rbx, 0x00
+	lea rbx, [rsp]
 	mov rbp, 0x0A
 	mov rdi, rbx
 	mov rsi, rbp
-	call 0x0000000000000005
+	call :"nullable types 1".mkval(T = uint)
 	mov bpl, [rbx]
 	cmp bpl, 0x00
 	setz bpl
 	movzx rbp, bpl
 	test bpl, bpl
-	jz 0x0000000000000012
+	jz :0
 	mov rax, 0x01
-	jmp 0x000000000000002A
-	mov rbp, rsp
-	add rbp, 0x10
+	jmp :1
+0:	lea rbp, [rsp+0x10]
 	mov rdi, rbp
-	call 0x0000000000000005
+	call :"nullable types 1".mknull(T = uint)
 	mov al, [rbp]
 	mov rcx, [rbx+0x08]
 	test al, al
-	jz 0x0000000000000012
+	jz :2
 	mov rax, 0x02
-	jmp 0x0000000000000008
-	mov rax, rcx
-	add rsp, 0x38
+1:	jmp :3
+2:	mov rax, rcx
+3:	add rsp, 0x38
 	pop rbp
 	pop rbx
 	ret

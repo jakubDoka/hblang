@@ -3,20 +3,20 @@ main:
 	mov rax, 0x00
 	mov rcx, 0x01
 	mov rdx, rax
-	cmp rdx, 0x00
+4:	cmp rdx, 0x00
 	setnbe bl
 	movzx rbx, bl
 	test bl, bl
-	jz 0x0000000000000008
+	jz :0
 	pop rbx
 	ret
-	test al, al
-	jz 0x000000000000000E
+0:	test al, al
+	jz :1
 	mov rbx, rax
-	jmp 0x0000000000000008
-	mov rbx, rcx
-	test bl, bl
-	jz 0x000000000000000F
+	jmp :2
+1:	mov rbx, rcx
+2:	test bl, bl
+	jz :4
 	add rdx, 0x01
-	jmp 0x0000000000000005
-	jmp 0xFFFFFFFFFFFFFFC7
+	jmp :4
+4:	jmp :4

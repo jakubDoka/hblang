@@ -6,16 +6,14 @@ main:
 	push r14
 	sub rsp, 0x100
 	mov rbx, 0x00
-	mov rbp, rsp
-	add rbp, 0x78
+	lea rbp, [rsp+0x78]
 	mov [rbp], bl
 	mov [rbp+0x01], bl
 	mov [rbp+0x02], bl
 	mov [rbp+0x03], bl
 	mov al, bl
 	add al, 0x01
-	mov rcx, rsp
-	add rcx, 0x7C
+	lea rcx, [rsp+0x7C]
 	mov [rcx], al
 	mov [rcx+0x01], al
 	mov [rcx+0x02], al
@@ -24,7 +22,7 @@ main:
 	mov rdi, rbp
 	mov rsi, rcx
 	mov rdx, r12
-	call 0x0000000000000005
+	call :memcpy
 	mov al, [rbp+0x02]
 	mov cl, [rbp+0x01]
 	mov dl, [rbp]
@@ -36,20 +34,20 @@ main:
 	setnz al
 	movzx rax, al
 	test al, al
-	jz 0x0000000000000012
+	jz :0
 	mov rax, 0x3E9
-	jmp 0x000000000000002C
-	mov rax, 0x01
+	jmp :1
+0:	mov rax, 0x01
 	cmp rax, 0x01
 	setnz cl
 	movzx rcx, cl
 	mov rdx, rcx
 	or rdx, rcx
 	test dl, dl
-	jz 0x0000000000000012
+	jz :2
 	mov rax, 0x3EA
-	jmp 0x0000000000000035
-	mov rcx, 0x02
+1:	jmp :3
+2:	mov rcx, 0x02
 	cmp rax, 0x01
 	setz dl
 	movzx rdx, dl
@@ -58,19 +56,17 @@ main:
 	movzx rbp, bpl
 	and rdx, rbp
 	test dl, dl
-	jz 0x0000000000000012
+	jz :4
 	mov rax, 0x3EB
-	jmp 0x0000000000000120
-	mov rdx, 0x03
-	mov rbp, rsp
-	add rbp, 0x68
+3:	jmp :5
+4:	mov rdx, 0x03
+	lea rbp, [rsp+0x68]
 	mov [rbp], rax
 	mov [rbp+0x08], rcx
-	mov r13, rsp
-	add r13, 0x48
+	lea r13, [rsp+0x48]
 	add rax, 0x03
-	mov [rsp], rsp
-	add qword ptr [rsp], 0x28
+	lea r15, [rsp+0x28]
+	mov [rsp], r15
 	mov r15, [rsp]
 	mov [r15], rax
 	mov rax, rcx
@@ -97,7 +93,7 @@ main:
 	mov rdi, rcx
 	mov rsi, rbp
 	mov rdx, rax
-	call 0x0000000000000005
+	call :memcpy
 	mov rax, [r13]
 	mov r15, [rsp]
 	mov rcx, [r15]
@@ -110,8 +106,7 @@ main:
 	mov rdi, [r13+0x10]
 	mov r15, [rsp]
 	mov r8, [r15+0x10]
-	mov r9, rsp
-	add r9, 0x08
+	lea r9, [rsp+0x08]
 	add rax, rcx
 	mov [r9], rax
 	mov rax, rdx
@@ -127,16 +122,17 @@ main:
 	mov rdi, r13
 	mov rsi, r9
 	mov rdx, rax
-	call 0x0000000000000005
-	mov rax, [r13+0x18]
-	mov rcx, [r13+0x08]
+	call :memcpy
+	mov rax, [r13+0x08]
+	mov rcx, [r13+0x18]
 	mov rdx, [r13]
 	mov rbx, [r13+0x10]
-	add rcx, rax
-	mov rax, rdx
-	add rax, rbx
 	add rax, rcx
-	add rsp, 0x100
+	mov rcx, rdx
+	add rcx, rbx
+	add rcx, rax
+	mov rax, rcx
+5:	add rsp, 0x100
 	pop r14
 	pop r13
 	pop r12

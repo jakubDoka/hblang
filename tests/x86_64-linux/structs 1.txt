@@ -1,12 +1,11 @@
 "structs 1".odher_pass:
 	mov rax, 0x18
 	mov rdx, rax
-	call 0x0000000000000005
+	call :memcpy
 	ret
 "structs 1".Ty.sum:
 	sub rsp, 0x20
-	mov rax, rsp
-	add rax, 0x00
+	lea rax, [rsp]
 	mov [rax], rdi
 	mov [rax+0x08], rsi
 	sub rdi, 0x02
@@ -34,13 +33,11 @@ main:
 	push r14
 	push r15
 	sub rsp, 0x90
-	mov rbx, rsp
-	add rbx, 0x18
+	lea rbx, [rsp+0x18]
 	mov rbp, 0x04
 	mov [rbx], rbp
 	mov rbp, 0x03
-	mov r12, rsp
-	add r12, 0x30
+	lea r12, [rsp+0x30]
 	mov r13, 0x08
 	mov [rsp], rbx
 	add qword ptr [rsp], 0x08
@@ -49,11 +46,11 @@ main:
 	mov rdi, [rsp]
 	mov rsi, [rsp+0x08]
 	mov rdx, r13
-	call 0x0000000000000005
+	call :memcpy
 	mov [rbx+0x10], rbp
 	mov rdi, r12
 	mov rsi, rbx
-	call 0x0000000000000005
+	call :"structs 1".odher_pass
 	mov rbx, [r12+0x10]
 	cmp rbx, 0x03
 	setnz bl
@@ -61,23 +58,23 @@ main:
 	mov rbp, [r12+0x08]
 	mov r13, [r12]
 	test bl, bl
-	jz 0x0000000000000012
+	jz :0
 	mov rax, 0x00
-	jmp 0x000000000000002D
-	mov rdi, r13
+	jmp :1
+0:	mov rdi, r13
 	mov rsi, rbp
-	call 0x0000000000000005
+	call :"structs 1".Ty.sum
 	mov rbx, rax
 	cmp rbx, 0x00
 	setnz bl
 	movzx rbx, bl
 	test bl, bl
-	jz 0x0000000000000012
+	jz :2
 	mov rax, 0x64
-	jmp 0x000000000000000D
-	mov rdi, r12
-	call 0x0000000000000005
-	add rsp, 0x90
+1:	jmp :3
+2:	mov rdi, r12
+	call :"structs 1".pass
+3:	add rsp, 0x90
 	pop r15
 	pop r14
 	pop r13

@@ -18,241 +18,241 @@ main:
 	push rbp
 	push r12
 	sub rsp, 0x08
-	call 0x0000000000000005
+	call :"arithmetic 3".one
 	mov rbx, rax
-	call 0x0000000000000005
+	call :"arithmetic 3".zero
 	mov rbp, rax
 	cmp bl, bpl
 	setb r12b
 	movzx r12, r12b
 	mov rdi, r12
-	call 0x0000000000000005
+	call :"arithmetic 3".cond
 	mov r12, rax
 	test r12b, r12b
-	jz 0x0000000000000012
+	jz :0
 	mov rax, 0x01
-	jmp 0x000000000000002A
-	cmp bl, bl
+	jmp :1
+0:	cmp bl, bl
 	setb r12b
 	movzx r12, r12b
 	mov rdi, r12
-	call 0x0000000000000005
+	call :"arithmetic 3".cond
 	mov r12, rax
 	test r12b, r12b
-	jz 0x0000000000000012
+	jz :2
 	mov rax, 0x02
-	jmp 0x000000000000002B
-	cmp bl, bpl
+1:	jmp :3
+2:	cmp bl, bpl
 	setbe r12b
 	movzx r12, r12b
 	mov rdi, r12
-	call 0x0000000000000005
+	call :"arithmetic 3".cond
 	mov r12, rax
 	test r12b, r12b
-	jz 0x0000000000000012
+	jz :4
 	mov rax, 0x03
-	jmp 0x000000000000002B
-	cmp bpl, bl
+3:	jmp :5
+4:	cmp bpl, bl
 	setnbe r12b
 	movzx r12, r12b
 	mov rdi, r12
-	call 0x0000000000000005
+	call :"arithmetic 3".cond
 	mov r12, rax
 	test r12b, r12b
-	jz 0x0000000000000012
+	jz :6
 	mov rax, 0x04
-	jmp 0x000000000000002A
-	cmp bl, bl
+5:	jmp :7
+6:	cmp bl, bl
 	setnbe r12b
 	movzx r12, r12b
 	mov rdi, r12
-	call 0x0000000000000005
+	call :"arithmetic 3".cond
 	mov r12, rax
 	test r12b, r12b
-	jz 0x0000000000000012
+	jz :8
 	mov rax, 0x05
-	jmp 0x000000000000002A
-	cmp bpl, bl
+7:	jmp :9
+8:	cmp bpl, bl
 	setnb bpl
 	movzx rbp, bpl
 	mov rdi, rbp
-	call 0x0000000000000005
+	call :"arithmetic 3".cond
 	mov rbx, rax
 	test bl, bl
-	jz 0x0000000000000012
+	jz :10
 	mov rax, 0x06
-	jmp 0x000000000000003B
-	call 0x0000000000000005
+9:	jmp :11
+a:	call :"arithmetic 3".mne
 	mov rbx, rax
-	call 0x0000000000000005
+	call :"arithmetic 3".mero
 	mov rbp, rax
 	cmp bl, bpl
 	setnle r12b
 	movzx r12, r12b
 	mov rdi, r12
-	call 0x0000000000000005
+	call :"arithmetic 3".cond
 	mov r12, rax
 	test r12b, r12b
-	jz 0x0000000000000012
+	jz :12
 	mov rax, 0x07
-	jmp 0x000000000000002A
-	cmp bl, bl
+b:	jmp :13
+c:	cmp bl, bl
 	setnle r12b
 	movzx r12, r12b
 	mov rdi, r12
-	call 0x0000000000000005
+	call :"arithmetic 3".cond
 	mov r12, rax
 	test r12b, r12b
-	jz 0x0000000000000012
+	jz :14
 	mov rax, 0x08
-	jmp 0x000000000000002B
-	cmp bl, bpl
+d:	jmp :15
+e:	cmp bl, bpl
 	setnl r12b
 	movzx r12, r12b
 	mov rdi, r12
-	call 0x0000000000000005
+	call :"arithmetic 3".cond
 	mov r12, rax
 	test r12b, r12b
-	jz 0x0000000000000012
+	jz :16
 	mov rax, 0x09
-	jmp 0x000000000000002B
-	cmp bpl, bl
+f:	jmp :17
+10:	cmp bpl, bl
 	setl r12b
 	movzx r12, r12b
 	mov rdi, r12
-	call 0x0000000000000005
+	call :"arithmetic 3".cond
 	mov r12, rax
 	test r12b, r12b
-	jz 0x0000000000000012
+	jz :18
 	mov rax, 0x0A
-	jmp 0x000000000000002A
-	cmp bl, bl
+11:	jmp :19
+12:	cmp bl, bl
 	setl r12b
 	movzx r12, r12b
 	mov rdi, r12
-	call 0x0000000000000005
+	call :"arithmetic 3".cond
 	mov r12, rax
 	test r12b, r12b
-	jz 0x0000000000000012
+	jz :20
 	mov rax, 0x0B
-	jmp 0x000000000000002A
-	cmp bpl, bl
+13:	jmp :21
+14:	cmp bpl, bl
 	setle bpl
 	movzx rbp, bpl
 	mov rdi, rbp
-	call 0x0000000000000005
+	call :"arithmetic 3".cond
 	mov rbx, rax
 	test bl, bl
-	jz 0x0000000000000012
+	jz :22
 	mov rax, 0x0C
-	jmp 0x0000000000000030
-	call 0x0000000000000005
+15:	jmp :23
+16:	call :"arithmetic 3".one
 	mov rbx, rax
-	call 0x0000000000000005
+	call :"arithmetic 3".zero
 	mov rbp, rax
 	cmp bl, bpl
 	setb r12b
 	movzx r12, r12b
 	test r12b, r12b
-	jz 0x0000000000000012
+	jz :24
 	mov rax, 0x0D
-	jmp 0x000000000000001F
-	cmp bl, bl
+17:	jmp :25
+18:	cmp bl, bl
 	setb r12b
 	movzx r12, r12b
 	test r12b, r12b
-	jz 0x0000000000000012
+	jz :26
 	mov rax, 0x0E
-	jmp 0x0000000000000020
-	cmp bl, bpl
+19:	jmp :27
+1a:	cmp bl, bpl
 	setbe r12b
 	movzx r12, r12b
 	test r12b, r12b
-	jz 0x0000000000000012
+	jz :28
 	mov rax, 0x0F
-	jmp 0x0000000000000020
-	cmp bpl, bl
+1b:	jmp :29
+1c:	cmp bpl, bl
 	setnbe r12b
 	movzx r12, r12b
 	test r12b, r12b
-	jz 0x0000000000000012
+	jz :30
 	mov rax, 0x10
-	jmp 0x000000000000001F
-	cmp bl, bl
+1d:	jmp :31
+1e:	cmp bl, bl
 	setnbe r12b
 	movzx r12, r12b
 	test r12b, r12b
-	jz 0x0000000000000012
+	jz :32
 	mov rax, 0x11
-	jmp 0x0000000000000020
-	cmp bpl, bl
+1f:	jmp :33
+20:	cmp bpl, bl
 	setnb bpl
 	movzx rbp, bpl
 	test bpl, bpl
-	jz 0x0000000000000012
+	jz :34
 	mov rax, 0x12
-	jmp 0x000000000000002A
-	call 0x0000000000000005
+21:	jmp :35
+22:	call :"arithmetic 3".mne
 	mov rbx, rax
-	call 0x0000000000000005
+	call :"arithmetic 3".mero
 	cmp bl, al
 	setnle cl
 	movzx rcx, cl
 	test cl, cl
-	jz 0x0000000000000012
+	jz :36
 	mov rax, 0x13
-	jmp 0x000000000000001D
-	cmp bl, bl
+23:	jmp :37
+24:	cmp bl, bl
 	setnle cl
 	movzx rcx, cl
 	test cl, cl
-	jz 0x0000000000000012
+	jz :38
 	mov rax, 0x14
-	jmp 0x000000000000001D
-	cmp bl, al
+25:	jmp :39
+26:	cmp bl, al
 	setnl cl
 	movzx rcx, cl
 	test cl, cl
-	jz 0x0000000000000012
+	jz :40
 	mov rax, 0x15
-	jmp 0x000000000000001D
-	cmp al, bl
+27:	jmp :41
+28:	cmp al, bl
 	setl cl
 	movzx rcx, cl
 	test cl, cl
-	jz 0x0000000000000012
+	jz :42
 	mov rax, 0x16
-	jmp 0x000000000000001D
-	cmp bl, bl
+29:	jmp :43
+2a:	cmp bl, bl
 	setl cl
 	movzx rcx, cl
 	test cl, cl
-	jz 0x0000000000000012
+	jz :44
 	mov rax, 0x17
-	jmp 0x000000000000001D
-	cmp al, bl
+2b:	jmp :45
+2c:	cmp al, bl
 	setle cl
 	movzx rcx, cl
 	test cl, cl
-	jz 0x0000000000000012
+	jz :46
 	mov rax, 0x18
-	jmp 0x000000000000001D
-	cmp bl, bl
+2d:	jmp :47
+2e:	cmp bl, bl
 	setnz cl
 	movzx rcx, cl
 	test cl, cl
-	jz 0x0000000000000012
+	jz :48
 	mov rax, 0x19
-	jmp 0x000000000000001D
-	cmp bl, al
+2f:	jmp :49
+30:	cmp bl, al
 	setz cl
 	movzx rcx, cl
 	test cl, cl
-	jz 0x0000000000000012
+	jz :50
 	mov rax, 0x1A
-	jmp 0x000000000000000C
-	mov rax, 0x00
-	add rsp, 0x08
+31:	jmp :51
+32:	mov rax, 0x00
+33:	add rsp, 0x08
 	pop r12
 	pop rbp
 	pop rbx

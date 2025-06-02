@@ -2,8 +2,7 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x40
-	mov rax, rsp
-	add rax, 0x00
+	lea rax, [rsp]
 	mov rcx, 0x01
 	mov [rax], rcx
 	mov rdx, 0x08

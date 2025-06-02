@@ -11,11 +11,11 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x08
-	call 0x0000000000000005
+	call :"foo.hb".foo
 	mov rbx, rax
-	call 0x0000000000000005
+	call :"foo.hb".bar
 	mov rbp, rax
-	call 0x0000000000000005
+	call :"bas.hb".baz
 	mov rcx, rbx
 	add rcx, rbp
 	add rcx, rax

@@ -1,7 +1,6 @@
 main:
 	sub rsp, 0x18
-	mov rax, rsp
-	add rax, 0x00
+	lea rax, [rsp]
 	mov rcx, 0x01
 	mov [rax], cl
 	mov [rax+0x01], cl

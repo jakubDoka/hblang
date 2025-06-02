@@ -6,12 +6,11 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x18
-	mov rbx, rsp
-	add rbx, 0x00
+	lea rbx, [rsp]
 	mov rbp, 0x02
 	mov rdi, rbx
 	mov rsi, rbp
-	call 0x0000000000000005
+	call :"Foo.hb".init
 	mov rax, [rbx]
 	mov rcx, [rbx+0x08]
 	sub rax, rcx

@@ -4,8 +4,8 @@ main:
 	setz cl
 	movzx rcx, cl
 	test cl, cl
-	jz 0x0000000000000012
+	jz :0
 	mov rax, 0x0A
-	jmp 0x0000000000000009
-	add rax, 0x01
-	ret
+	jmp :1
+0:	add rax, 0x01
+1:	ret

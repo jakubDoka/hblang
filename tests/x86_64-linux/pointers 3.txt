@@ -4,21 +4,20 @@
 	setz al
 	movzx rax, al
 	test al, al
-	jz 0x0000000000000012
+	jz :0
 	mov rax, 0x00
-	jmp 0x000000000000000C
-	mov rax, 0x01
-	ret
+	jmp :1
+0:	mov rax, 0x01
+1:	ret
 main:
 	push rbx
 	push rbp
 	sub rsp, 0x10
-	mov rbx, rsp
-	add rbx, 0x00
+	lea rbx, [rsp]
 	mov rbp, 0x01
 	mov [rbx], rbp
 	mov rdi, rbx
-	call 0x0000000000000005
+	call :"pointers 3".do_stuff
 	mov rax, [rbx]
 	add rsp, 0x10
 	pop rbp

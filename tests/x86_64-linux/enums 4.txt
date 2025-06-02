@@ -26,14 +26,13 @@ main:
 	push rbp
 	push r12
 	sub rsp, 0x18
-	mov rbx, rsp
-	add rbx, 0x00
+	lea rbx, [rsp]
 	lea rbp, [0x0000000000000007]
 	mov r12, 0x00
 	mov rdi, rbx
 	mov rsi, rbp
 	mov rdx, r12
-	call 0x0000000000000005
+	call :"enums 4".NameMap(Enum = "enums 4".Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get
 	mov rax, [rbx]
 	mov al, [rax]
 	movzx rax, al

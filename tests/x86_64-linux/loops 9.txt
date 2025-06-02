@@ -4,30 +4,30 @@ main:
 	mov rax, 0x00
 	lea rcx, [0x0000000000000007]
 	mov rdx, rax
-	cmp rdx, 0x01
+4:	cmp rdx, 0x01
 	setnb bl
 	movzx rbx, bl
 	test bl, bl
-	jz 0x0000000000000009
+	jz :0
 	pop rbp
 	pop rbx
 	ret
-	mov bl, [rcx]
+0:	mov bl, [rcx]
 	cmp bl, 0x00
 	setnz bl
 	movzx rbx, bl
 	mov rbp, rax
 	and rbp, rbx
 	test bpl, bpl
-	jz 0x000000000000002C
+	jz :3
 	mov rbx, rax
-	cmp rbx, 0x00
+3:	cmp rbx, 0x00
 	setz bpl
 	movzx rbp, bpl
 	test bpl, bpl
-	jz 0x000000000000000B
-	jmp 0x000000000000000E
-	imul rbx, rax
-	jmp 0xFFFFFFFFFFFFFFE2
-	add rdx, 0x01
-	jmp 0xFFFFFFFFFFFFFFA5
+	jz :2
+	jmp :3
+2:	imul rbx, rax
+	jmp :3
+3:	add rdx, 0x01
+	jmp :4

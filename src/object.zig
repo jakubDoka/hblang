@@ -191,7 +191,14 @@ pub const elf = struct {
         const str_tab = find_section_header(sctions, shstr_table, ".strtab").?;
         const str_table: []const u8 = bytes[str_tab.sh_offset..][0..str_tab.sh_size];
 
+        const text_rela: []align(1) const Rela = if (find_section_header(sctions, shstr_table, ".rela.text")) |relocs|
+            @ptrCast(bytes[relocs.sh_offset..][0..relocs.sh_size])
+        else
+            &.{};
+
         var data = root.backend.Machine.Data{};
+
+        try data.relocs.ensureTotalCapacity(gpa, text_rela.len);
 
         for (symbols[1..]) |s| {
             var slot: @TypeOf(data).SymIdx = .invalid;
@@ -219,6 +226,21 @@ pub const elf = struct {
                 const sction = sctions[@intFromEnum(s.shndx)];
                 const section = bytes[sction.sh_offset..][0..sction.sh_size];
                 try data.code.appendSlice(gpa, section[s.value..][0..s.size]);
+            }
+
+            if (s.info.type == .func) {
+                for (text_rela) |r| {
+                    if (r.offset > s.value and r.offset - s.value <= s.size) {
+                        data.relocs.appendAssumeCapacity(.{
+                            .target = @enumFromInt(r.info.sym - 1),
+                            .offset = @intCast((r.offset - s.value) + data.syms.items[@intFromEnum(slot)].offset),
+                            .addend = @intCast(r.addend),
+                            .slot_size = switch (r.info.type) {
+                                .R_X86_64_PC32, .R_X86_64_PLT32 => 4,
+                            },
+                        });
+                    }
+                }
             }
             data.endDefineSym(slot);
         }

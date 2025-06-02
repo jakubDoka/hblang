@@ -3,48 +3,47 @@ main:
 	push rbp
 	sub rsp, 0x98
 	mov rax, 0x00
-	mov rcx, rsp
-	add rcx, 0x00
+	lea rcx, [rsp]
 	mov rdx, 0x18
 	mov rbx, 0x08
 	mov rbp, rax
-	cmp rbp, 0x03
+4:	cmp rbp, 0x03
 	setz sil
 	movzx rsi, sil
 	test sil, sil
-	jz 0x0000000000000047
+	jz :0
 	mov rdx, rax
-	cmp rax, 0x09
+2:	cmp rax, 0x09
 	setz bpl
 	movzx rbp, bpl
 	test bpl, bpl
-	jz 0x0000000000000013
+	jz :1
 	mov rax, rdx
 	add rsp, 0x98
 	pop rbp
 	pop rbx
 	ret
-	mov rbp, rax
+1:	mov rbp, rax
 	imul rbp, rbx
 	add rax, 0x01
 	mov rsi, rcx
 	add rsi, rbp
 	mov rbp, [rsi]
 	add rdx, rbp
-	jmp 0xFFFFFFFFFFFFFFC7
-	mov rsi, rbp
+	jmp :2
+0:	mov rsi, rbp
 	imul rsi, rdx
 	mov rdi, rcx
 	add rdi, rsi
 	mov rsi, rax
-	cmp rsi, 0x03
+5:	cmp rsi, 0x03
 	setz r8b
 	movzx r8, r8b
 	test r8b, r8b
-	jz 0x000000000000000F
+	jz :3
 	add rbp, 0x01
-	jmp 0xFFFFFFFFFFFFFF81
-	mov r8, rsi
+	jmp :4
+3:	mov r8, rsi
 	imul r8, rbx
 	mov r9, rsi
 	add r9, 0x01
@@ -53,4 +52,4 @@ main:
 	add r10, r8
 	mov [r10], rsi
 	mov rsi, r9
-	jmp 0xFFFFFFFFFFFFFFC4
+	jmp :5

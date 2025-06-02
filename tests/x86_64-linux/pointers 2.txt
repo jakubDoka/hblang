@@ -9,17 +9,15 @@ main:
 	push rbp
 	push r12
 	sub rsp, 0x18
-	mov rbx, rsp
-	add rbx, 0x00
+	lea rbx, [rsp]
 	mov rbp, 0x01
 	mov [rbx], rbp
 	mov rbp, 0x02
-	mov r12, rsp
-	add r12, 0x08
+	lea r12, [rsp+0x08]
 	mov [r12], rbp
 	mov rdi, rbx
 	mov rsi, r12
-	call 0x0000000000000005
+	call :"pointers 2".swap
 	mov rax, [rbx]
 	mov rcx, [r12]
 	sub rax, rcx
