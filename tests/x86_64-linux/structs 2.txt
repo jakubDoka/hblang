@@ -1,4 +1,4 @@
-"structs 2".swap:
+structs 2.swap:
 	push rbx
 	push rbp
 	push r12
@@ -43,7 +43,7 @@ main:
 	mov [r12+0x10], rbp
 	mov rdi, rbx
 	mov rsi, r12
-	call :"structs 2".swap
+	call :structs 2.swap
 	mov rax, [rbx]
 	mov rcx, [rbx+0x08]
 	mov rdx, [rbx+0x10]

@@ -1,15 +1,15 @@
-"forced shl 1".two:
+forced shl 1.two:
 	mov rax, 0x02
 	ret
-"forced shl 1".one:
+forced shl 1.one:
 	mov rax, 0x01
 	ret
 main:
 	push rbx
 	sub rsp, 0x08
-	call :"forced shl 1".two
+	call :forced shl 1.two
 	mov rbx, rax
-	call :"forced shl 1".one
+	call :forced shl 1.one
 	mov rcx, rbx
 	xchg rcx, rax
 	shl rax, cl

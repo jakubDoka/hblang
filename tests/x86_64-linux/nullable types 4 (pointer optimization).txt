@@ -1,4 +1,4 @@
-"nullable types 4 (pointer optimization)".opaque(v: ^uint):
+nullable types 4 (pointer optimization).opaque(v: ^uint):
 	mov rax, rdi
 	ret
 main:
@@ -19,7 +19,7 @@ main:
 	lea r12, [rsp]
 	mov [r12], rbp
 	mov rdi, r12
-	call :"nullable types 4 (pointer optimization)".opaque(v: ^uint)
+	call :nullable types 4 (pointer optimization).opaque(v: ^uint)
 	mov [rax], rbx
 	mov rax, [r12]
 3:	add rsp, 0x10

@@ -1,4 +1,4 @@
-"enums 4".NameMap(Enum = "enums 4".Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get:
+enums 4.NameMap(Enum = enums 4.Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get:
 	push rbx
 	mov rax, rdx
 	movzx rax, al
@@ -32,7 +32,7 @@ main:
 	mov rdi, rbx
 	mov rsi, rbp
 	mov rdx, r12
-	call :"enums 4".NameMap(Enum = "enums 4".Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get
+	call :enums 4.NameMap(Enum = enums 4.Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get
 	mov rax, [rbx]
 	mov al, [rax]
 	movzx rax, al

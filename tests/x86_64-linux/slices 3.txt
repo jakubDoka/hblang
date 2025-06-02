@@ -1,4 +1,4 @@
-"slices 3".reverse:
+slices 3.reverse:
 	push rbx
 	push rbp
 	sub rsp, 0x20
@@ -66,12 +66,12 @@ main:
 	mov rdi, r13
 	mov rsi, rbp
 	mov rdx, [rsp]
-	call :"slices 3".reverse
+	call :slices 3.reverse
 	lea rbp, [rsp+0x18]
 	mov rdi, rbp
 	mov rsi, rbx
 	mov rdx, r12
-	call :"slices 3".reverse
+	call :slices 3.reverse
 	mov al, [rbx]
 	mov cl, [rbx+0x01]
 	mov dl, [rbx+0x02]

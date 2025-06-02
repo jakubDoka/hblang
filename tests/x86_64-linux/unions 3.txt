@@ -1,8 +1,8 @@
-"unions 3".TypeInfo(T = uint):
+unions 3.TypeInfo(T = uint):
 	mov rax, 0x08
 	ret
 main:
 	sub rsp, 0x08
-	call :"unions 3".TypeInfo(T = uint)
+	call :unions 3.TypeInfo(T = uint)
 	add rsp, 0x08
 	ret

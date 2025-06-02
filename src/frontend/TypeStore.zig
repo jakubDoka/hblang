@@ -405,7 +405,7 @@ pub const Id = enum(IdRepr) {
                         } else {
                             if (testing) {
                                 var path = std.mem.splitBackwardsAny(u8, b.key.name, "/");
-                                try writer.print("\"{s}\"", .{path.first()});
+                                try writer.print("{s}", .{path.first()});
                             }
                         }
                     }

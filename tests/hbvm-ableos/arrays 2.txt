@@ -1,4 +1,4 @@
-"arrays 2".main:
+arrays 2.main:
      addi64 $254, $254, -72
        li64 $1, 0
        li64 $2, 3

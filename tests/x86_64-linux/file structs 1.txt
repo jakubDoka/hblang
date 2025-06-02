@@ -1,4 +1,4 @@
-"Foo.hb".init:
+Foo.hb.init:
 	mov [rdi], rsi
 	mov [rdi+0x08], rsi
 	ret
@@ -10,7 +10,7 @@ main:
 	mov rbp, 0x02
 	mov rdi, rbx
 	mov rsi, rbp
-	call :"Foo.hb".init
+	call :Foo.hb.init
 	mov rax, [rbx]
 	mov rcx, [rbx+0x08]
 	sub rax, rcx

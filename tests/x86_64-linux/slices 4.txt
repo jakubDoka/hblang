@@ -1,4 +1,4 @@
-"slices 4".equals:
+slices 4.equals:
 	push rbx
 	push rbp
 	cmp rsi, rcx
@@ -77,7 +77,7 @@ main:
 	mov rsi, r12
 	mov rdx, rbp
 	mov rcx, r12
-	call :"slices 4".equals
+	call :slices 4.equals
 	mov rbp, rax
 	xor bpl, 0x01
 	mov r12, [r13+0x08]
@@ -92,7 +92,7 @@ main:
 	mov rsi, r12
 	mov rdx, [rsp]
 	mov rcx, rbx
-	call :"slices 4".equals
+	call :slices 4.equals
 	xor al, 0x01
 	test al, al
 	jz :2

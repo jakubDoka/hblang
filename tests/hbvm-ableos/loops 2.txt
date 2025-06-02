@@ -1,13 +1,13 @@
-"loops 2".main:
+loops 2.main:
          st $31, $254, -16, 16
      addi64 $254, $254, -16
        li64 $32, 3
          cp $1, $32
-        jal $31, $0, :"loops 2".square
+        jal $31, $0, :loops 2.square
      addi64 $254, $254, 16
          ld $31, $254, -16, 16
          tx
-"loops 2".square:
+loops 2.square:
        li64 $2, 0
          cp $3, $2
          cp $4, $2

@@ -1,10 +1,10 @@
-"structs 3 (call stress test)".return_pair:
+structs 3 (call stress test).return_pair:
 	mov rax, 0x01
 	mov [rdi], al
 	mov rax, 0x05
 	mov [rdi+0x08], rax
 	ret
-"structs 3 (call stress test)".return_triple:
+structs 3 (call stress test).return_triple:
 	mov rax, 0x01
 	mov [rdi], rax
 	mov rax, 0x02
@@ -12,12 +12,12 @@
 	mov rax, 0x03
 	mov [rdi+0x10], al
 	ret
-"structs 3 (call stress test)".take_pair:
+structs 3 (call stress test).take_pair:
 	mov rax, rdi
 	movzx rax, al
 	add rax, rsi
 	ret
-"structs 3 (call stress test)".take_triple:
+structs 3 (call stress test).take_triple:
 	mov al, [rdi+0x10]
 	mov rcx, [rdi+0x08]
 	mov rdx, [rdi]
@@ -34,18 +34,18 @@ main:
 	sub rsp, 0x50
 	lea rbx, [rsp+0x18]
 	mov rdi, rbx
-	call :"structs 3 (call stress test)".return_pair
+	call :structs 3 (call stress test).return_pair
 	lea rbp, [rsp]
 	mov rdi, rbp
-	call :"structs 3 (call stress test)".return_triple
+	call :structs 3 (call stress test).return_triple
 	mov r12b, [rbx]
 	mov rbx, [rbx+0x08]
 	mov rdi, r12
 	mov rsi, rbx
-	call :"structs 3 (call stress test)".take_pair
+	call :structs 3 (call stress test).take_pair
 	mov rbx, rax
 	mov rdi, rbp
-	call :"structs 3 (call stress test)".take_triple
+	call :structs 3 (call stress test).take_triple
 	cmp rbx, rax
 	setnz cl
 	movzx rcx, cl

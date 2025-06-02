@@ -191,7 +191,13 @@ pub const Node = union(enum) {
 
     pub fn knownOffset(node: *Func.Node) struct { *Func.Node, i64 } {
         return switch (node.extra2()) {
-            .ImmOp => |extra| .{ node.inputs()[1].?, extra.imm },
+            .ImmOp => |extra| {
+                std.debug.assert(extra.base == .iadd or extra.base == .isub);
+                return .{ node.inputs()[1].?, if (extra.base == .iadd)
+                    extra.imm
+                else
+                    -extra.imm };
+            },
             else => .{ node, 0 },
         };
     }
@@ -454,6 +460,7 @@ pub fn emitCp(self: *X86_64, dst: Reg, src: Reg) void {
 pub const SReg = struct { Reg, usize };
 pub const BRegOff = struct { Reg, i32, u16 };
 pub const Tmp = struct { u8 };
+pub const SizeHint = struct { bytes: u64 };
 
 pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
     errdefer unreachable;
@@ -531,6 +538,10 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
                 .imm = .{ .u = val },
             },
             zydis.ZydisEncoderOperand => val,
+            SizeHint => {
+                req.operand_size_hint = @intCast(zydis.ZYDIS_OPERAND_SIZE_HINT_8 + val.bytes);
+                continue;
+            },
             else => comptime unreachable,
         };
     }
@@ -781,7 +792,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                                 self.emitInstr(zydis.ZYDIS_MNEMONIC_XOR, .{ Reg.rdx, Reg.rdx });
                             }
 
-                            self.emitInstr(mnemonic, .{rhs});
+                            self.emitInstr(mnemonic, .{ rhs, SizeHint{ .bytes = size } });
 
                             const dest_reg: Reg = if (op == .udiv or op == .sdiv) .rax else .rdx;
 
@@ -851,18 +862,26 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                             );
 
                             if (size == 1) {
-                                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOVZX, .{ Reg.rdx, SReg{ .rdx, 1 } });
+                                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOVZX, .{ Reg.rax, SReg{ .rax, 1 } });
                             } else {
+                                std.debug.assert(oper != .rdx);
                                 self.emitInstr(zydis.ZYDIS_MNEMONIC_XOR, .{ SReg{ Reg.rdx, size }, Reg.rdx });
                             }
-                            self.emitInstr(mnemonic, .{oper});
+                            std.debug.assert(oper != .rdx);
+                            self.emitInstr(mnemonic, .{SReg{ oper, size }});
 
                             const dest_reg: Reg = if (op == .udiv or op == .sdiv) .rax else .rdx;
-
-                            if (dst != dest_reg) self.emitInstr(
-                                zydis.ZYDIS_MNEMONIC_MOV,
-                                .{ SReg{ dst, size }, SReg{ dest_reg, size } },
-                            );
+                            if (size == 1 and dest_reg == .rdx) {
+                                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ SReg{ dst, 1 }, zydis.ZydisEncoderOperand{
+                                    .type = zydis.ZYDIS_OPERAND_TYPE_REGISTER,
+                                    .reg = .{ .value = zydis.ZYDIS_REGISTER_AH },
+                                } });
+                            } else {
+                                if (dst != dest_reg) self.emitInstr(
+                                    zydis.ZYDIS_MNEMONIC_MOV,
+                                    .{ SReg{ dst, size }, SReg{ dest_reg, size } },
+                                );
+                            }
 
                             if (rhs == .rax and lhs != .rax) {
                                 self.emitInstr(zydis.ZYDIS_MNEMONIC_XCHG, .{ SReg{ rhs, size }, lhs });

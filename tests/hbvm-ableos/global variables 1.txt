@@ -1,16 +1,16 @@
-"global variables 1".main:
+global variables 1.main:
          st $31, $254, -24, 24
      addi64 $254, $254, -24
-        lra $32, $0, :"global variables 1".counter
+        lra $32, $0, :global variables 1.counter
        li64 $33, 1
          st $33, $32, 0, 8
-        jal $31, $0, :"global variables 1".dec
+        jal $31, $0, :global variables 1.dec
          ld $1, $32, 0, 8
      addi64 $254, $254, 24
          ld $31, $254, -24, 24
          tx
-"global variables 1".dec:
-        lra $1, $0, :"global variables 1".counter
+global variables 1.dec:
+        lra $1, $0, :global variables 1.counter
          ld $2, $1, 0, 8
      addi64 $2, $2, -1
          st $2, $1, 0, 8

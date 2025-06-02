@@ -1,7 +1,7 @@
-"loops 9".main:
+loops 9.main:
        li64 $1, 0
        li64 $2, 1
-        lra $3, $0, :"loops 9".main.abc
+        lra $3, $0, :loops 9.main.abc
          cp $4, $1
 5:     jltu $4, $2, :1
          tx

@@ -1,4 +1,4 @@
-"nullable types 2".take:
+nullable types 2.take:
 	mov rax, [rdi]
 	add rax, 0x01
 	mov [rdi], rax
@@ -34,7 +34,7 @@ main:
 	mov rbx, rbp
 	add rbx, 0x08
 	mov rdi, rbx
-	call :"nullable types 2".take
+	call :nullable types 2.take
 	mov rax, [rbp+0x08]
 	mov rcx, [rbp+0x10]
 	sub rax, rcx

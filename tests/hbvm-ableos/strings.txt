@@ -1,5 +1,5 @@
-"strings".main:
-        lra $1, $0, :"strings".main.	Edvard
+strings.main:
+        lra $1, $0, :strings.main.	Edvard
 ඞ
          ld $1, $1, 1, 1
        andi $1, $1, 255

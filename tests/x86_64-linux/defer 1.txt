@@ -1,4 +1,4 @@
-"defer 1".main.ret_defer:
+defer 1.main.ret_defer:
 	mov rax, [rdi]
 	add rax, 0x01
 	mov [rdi], rax
@@ -50,7 +50,7 @@ b:	cmp rbp, 0x03
 7:	lea rbp, [rsp]
 	mov [rbp], rbx
 	mov rdi, rbp
-	call :"defer 1".main.ret_defer
+	call :defer 1.main.ret_defer
 	mov rax, [rbp]
 	cmp rax, 0x01
 	setnz al

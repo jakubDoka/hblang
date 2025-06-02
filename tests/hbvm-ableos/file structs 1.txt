@@ -1,13 +1,13 @@
-"file structs 1".main:
+file structs 1.main:
          st $31, $254, -16, 16
      addi64 $254, $254, -16
        li64 $32, 2
          cp $1, $32
-        jal $31, $0, :"Foo.hb".init
+        jal $31, $0, :Foo.hb.init
       sub64 $1, $1, $2
      addi64 $254, $254, 16
          ld $31, $254, -16, 16
          tx
-"Foo.hb".init:
+Foo.hb.init:
          cp $2, $1
        jala $0, $31, 0

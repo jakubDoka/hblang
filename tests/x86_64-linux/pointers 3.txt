@@ -1,4 +1,4 @@
-"pointers 3".do_stuff:
+pointers 3.do_stuff:
 	mov rax, [rdi]
 	cmp rax, 0x00
 	setz al
@@ -17,7 +17,7 @@ main:
 	mov rbp, 0x01
 	mov [rbx], rbp
 	mov rdi, rbx
-	call :"pointers 3".do_stuff
+	call :pointers 3.do_stuff
 	mov rax, [rbx]
 	add rsp, 0x10
 	pop rbp

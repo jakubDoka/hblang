@@ -1,4 +1,4 @@
-"die 1".main:
+die 1.main:
        li64 $1, 0
         jeq $1, $0, :0
        li64 $1, 1

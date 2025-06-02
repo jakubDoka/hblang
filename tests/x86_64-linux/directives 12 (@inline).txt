@@ -1,4 +1,4 @@
-"directives 12 (@inline)".foo:
+directives 12 (@inline).foo:
 	mov rax, rdi
 	ret
 main:
@@ -6,7 +6,7 @@ main:
 	sub rsp, 0x08
 	mov rbx, 0x0A
 	mov rdi, rbx
-	call :"directives 12 (@inline)".foo
+	call :directives 12 (@inline).foo
 	add rsp, 0x08
 	pop rbx
 	ret

@@ -1,4 +1,4 @@
-"adding difference to a pointer 1".one:
+adding difference to a pointer 1.one:
 	mov rax, 0x01
 	ret
 main:
@@ -15,7 +15,7 @@ main:
 	mov [rbx+0x02], r12b
 	mov r12, 0x03
 	mov [rbx+0x03], r12b
-	call :"adding difference to a pointer 1".one
+	call :adding difference to a pointer 1.one
 	mov rcx, rbp
 	sub rcx, rax
 	mov rax, rbx

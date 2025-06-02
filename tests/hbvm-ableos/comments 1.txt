@@ -1,10 +1,10 @@
-"comments 1".main:
+comments 1.main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        jal $31, $0, :"comments 1".foo
+        jal $31, $0, :comments 1.foo
        li64 $1, 0
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
-"comments 1".foo:
+comments 1.foo:
        jala $0, $31, 0

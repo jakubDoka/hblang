@@ -1,4 +1,4 @@
-"directives 14 (@name_of)".main:
+directives 14 (@name_of).main:
     li64 $1, 4
   addi64 $1, $1, 3
       tx

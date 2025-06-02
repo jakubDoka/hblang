@@ -1,4 +1,4 @@
-"variables 1".main:
+variables 1.main:
     li64 $1, 1
   addi64 $1, $1, 1
   addi64 $1, $1, -2

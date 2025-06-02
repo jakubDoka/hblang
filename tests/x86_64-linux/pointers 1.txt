@@ -1,4 +1,4 @@
-"pointers 1".modify:
+pointers 1.modify:
 	mov rax, 0x02
 	mov [rdi], rax
 	ret
@@ -10,7 +10,7 @@ main:
 	mov rbp, 0x01
 	mov [rbx], rbp
 	mov rdi, rbx
-	call :"pointers 1".modify
+	call :pointers 1.modify
 	mov rax, [rbx]
 	add rax, 0x02
 	mov [rbx], rax

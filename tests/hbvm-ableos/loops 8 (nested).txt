@@ -1,4 +1,4 @@
-"loops 8 (nested)".main:
+loops 8 (nested).main:
        li64 $1, 0
        li64 $2, 10
        li64 $3, 1

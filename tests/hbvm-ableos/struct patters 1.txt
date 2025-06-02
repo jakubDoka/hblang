@@ -1,22 +1,22 @@
-"struct patters 1".main:
+struct patters 1.main:
          st $31, $254, -24, 24
      addi64 $254, $254, -24
-        jal $31, $0, :"foo.hb".foo
+        jal $31, $0, :foo.hb.foo
          cp $32, $1
-        jal $31, $0, :"foo.hb".bar
+        jal $31, $0, :foo.hb.bar
          cp $33, $1
-        jal $31, $0, :"bas.hb".baz
+        jal $31, $0, :bas.hb.baz
       add64 $2, $32, $33
       add64 $1, $2, $1
      addi64 $254, $254, 24
          ld $31, $254, -24, 24
          tx
-"foo.hb".foo:
+foo.hb.foo:
        li64 $1, 0
        jala $0, $31, 0
-"foo.hb".bar:
+foo.hb.bar:
        li64 $1, 1
        jala $0, $31, 0
-"bas.hb".baz:
+bas.hb.baz:
        li64 $1, 2
        jala $0, $31, 0

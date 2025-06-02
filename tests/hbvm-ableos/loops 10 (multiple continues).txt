@@ -1,4 +1,4 @@
-"loops 10 (multiple continues)".main:
+loops 10 (multiple continues).main:
        li64 $1, 0
        li64 $2, 1
          cp $3, $1

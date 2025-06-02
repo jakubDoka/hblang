@@ -1,4 +1,4 @@
-"slices 3".main:
+slices 3.main:
          st $31, $254, -40, 40
      addi64 $254, $254, -43
      addi64 $32, $254, 0
@@ -11,10 +11,10 @@
        li64 $35, 0
          cp $1, $33
          cp $2, $35
-        jal $31, $0, :"slices 3".reverse
+        jal $31, $0, :slices 3.reverse
          cp $1, $32
          cp $2, $34
-        jal $31, $0, :"slices 3".reverse
+        jal $31, $0, :slices 3.reverse
          ld $1, $254, 0, 1
          ld $2, $254, 1, 1
          ld $3, $254, 2, 1
@@ -26,7 +26,7 @@
      addi64 $254, $254, 43
          ld $31, $254, -40, 40
          tx
-"slices 3".reverse:
+slices 3.reverse:
      addi64 $254, $254, -16
      addi64 $3, $254, 0
          st $1, $254, 0, 8

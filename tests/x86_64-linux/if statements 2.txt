@@ -1,4 +1,4 @@
-"if statements 2".fib:
+if statements 2.fib:
 	push rbx
 	push rbp
 	sub rsp, 0x08
@@ -13,11 +13,11 @@
 0:	mov rbp, rbx
 	sub rbp, 0x01
 	mov rdi, rbp
-	call :"if statements 2".fib
+	call :if statements 2.fib
 	mov rbp, rax
 	sub rbx, 0x02
 	mov rdi, rbx
-	call :"if statements 2".fib
+	call :if statements 2.fib
 	mov rcx, rbp
 	add rcx, rax
 	mov rax, rcx
@@ -30,7 +30,7 @@ main:
 	sub rsp, 0x08
 	mov rbx, 0x03
 	mov rdi, rbx
-	call :"if statements 2".fib
+	call :if statements 2.fib
 	add rsp, 0x08
 	pop rbx
 	ret

@@ -1,4 +1,4 @@
-"defer 1".main:
+defer 1.main:
          st $31, $254, -56, 56
      addi64 $254, $254, -64
        li64 $32, 0
@@ -24,7 +24,7 @@ c:   addi64 $37, $34, 1
 7:   addi64 $34, $254, 0
          st $32, $254, 0, 8
          cp $1, $34
-        jal $31, $0, :"defer 1".main.ret_defer
+        jal $31, $0, :defer 1.main.ret_defer
          ld $1, $254, 0, 8
         jeq $1, $33, :a
          cp $1, $36
@@ -35,7 +35,7 @@ b:   addi64 $254, $254, 64
          tx
 6:       cp $34, $37
 5:      jmp :c
-"defer 1".main.ret_defer:
+defer 1.main.ret_defer:
          ld $2, $1, 0, 8
      addi64 $2, $2, 1
          st $2, $1, 0, 8

@@ -1,4 +1,4 @@
-"nullable types 1".mkval(T = uint):
+nullable types 1.mkval(T = uint):
 	sub rsp, 0x20
 	lea rax, [rsp]
 	mov rcx, 0x01
@@ -10,7 +10,7 @@
 	call :memcpy
 	add rsp, 0x20
 	ret
-"nullable types 1".mknull(T = uint):
+nullable types 1.mknull(T = uint):
 	mov rax, 0x00
 	mov [rdi], al
 	ret
@@ -22,7 +22,7 @@ main:
 	mov rbp, 0x0A
 	mov rdi, rbx
 	mov rsi, rbp
-	call :"nullable types 1".mkval(T = uint)
+	call :nullable types 1.mkval(T = uint)
 	mov bpl, [rbx]
 	cmp bpl, 0x00
 	setz bpl
@@ -33,7 +33,7 @@ main:
 	jmp :1
 0:	lea rbp, [rsp+0x10]
 	mov rdi, rbp
-	call :"nullable types 1".mknull(T = uint)
+	call :nullable types 1.mknull(T = uint)
 	mov al, [rbp]
 	mov rcx, [rbx+0x08]
 	test al, al

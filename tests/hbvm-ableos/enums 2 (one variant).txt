@@ -1,13 +1,13 @@
-"enums 2 (one variant)".main:
+enums 2 (one variant).main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        jal $31, $0, :"ableos.hb".page_size
+        jal $31, $0, :ableos.hb.page_size
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
-"ableos.hb".page_size:
+ableos.hb.page_size:
        li64 $1, 0
        jala $0, $31, 0
-"enums 2 (one variant)".Target.current:
+enums 2 (one variant).Target.current:
         li8 $1, 0
        jala $0, $31, 0

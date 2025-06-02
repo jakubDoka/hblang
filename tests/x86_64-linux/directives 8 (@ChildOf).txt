@@ -1,4 +1,4 @@
-"directives 8 (@ChildOf)".deref(T = ^uint):
+directives 8 (@ChildOf).deref(T = ^uint):
 	mov rax, [rdi]
 	ret
 main:
@@ -9,7 +9,7 @@ main:
 	mov rbp, 0x01
 	mov [rbx], rbp
 	mov rdi, rbx
-	call :"directives 8 (@ChildOf)".deref(T = ^uint)
+	call :directives 8 (@ChildOf).deref(T = ^uint)
 	add rsp, 0x10
 	pop rbp
 	pop rbx

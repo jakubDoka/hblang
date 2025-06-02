@@ -1,4 +1,4 @@
-"global variables 1".dec:
+global variables 1.dec:
 	lea rax, [0x0000000000000007]
 	mov rcx, [rax]
 	sub rcx, 0x01
@@ -11,7 +11,7 @@ main:
 	lea rbx, [0x0000000000000007]
 	mov rbp, 0x01
 	mov [rbx], rbp
-	call :"global variables 1".dec
+	call :global variables 1.dec
 	mov rax, [rbx]
 	add rsp, 0x08
 	pop rbp

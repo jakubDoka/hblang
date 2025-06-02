@@ -1,4 +1,4 @@
-"generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint)))).get:
+generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get:
 	push rbx
 	push rbp
 	push r12
@@ -18,13 +18,13 @@
 	mov rdi, r12
 	mov rsi, rbp
 	mov rdx, rbx
-	call :"generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint))).get
+	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint))).get
 1:	add rsp, 0x08
 	pop r12
 	pop rbp
 	pop rbx
 	ret
-"generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint))).get:
+generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint))).get:
 	push rbx
 	push rbp
 	push r12
@@ -43,14 +43,14 @@
 0:	sub rbx, 0x01
 	mov rdi, rbp
 	mov rsi, rbx
-	call :"generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint)).get
+	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)).get
 1:	add rsp, 0x08
 	pop r13
 	pop r12
 	pop rbp
 	pop rbx
 	ret
-"generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint)).get:
+generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)).get:
 	push rbx
 	push rbp
 	push r12
@@ -66,13 +66,13 @@
 	jmp :1
 0:	sub rbx, 0x01
 	mov rdi, rbx
-	call :"generic structs 4".Array(E = uint).get
+	call :generic structs 4.Array(E = uint).get
 1:	add rsp, 0x08
 	pop r12
 	pop rbp
 	pop rbx
 	ret
-"generic structs 4".Array(E = uint).get:
+generic structs 4.Array(E = uint).get:
 	ud2
 main:
 	push rbx
@@ -91,15 +91,15 @@ main:
 	mov r13, 0x00
 	mov rdi, rbx
 	mov rsi, r13
-	call :"generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint)))).get
+	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get
 	mov r13, rax
 	mov rdi, rbx
 	mov rsi, rbp
-	call :"generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint)))).get
+	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get
 	mov rbp, rax
 	mov rdi, rbx
 	mov rsi, r12
-	call :"generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint, Next = "generic structs 4".Array(E = uint)))).get
+	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get
 	mov rcx, r13
 	add rcx, rbp
 	add rcx, rax

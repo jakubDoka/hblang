@@ -1,4 +1,4 @@
-"generic structs 5 (iterators)".main(Next = "generic structs 5 (iterators)".main.Next).next:
+generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next).next:
 	push rbx
 	push rbp
 	push r12
@@ -12,13 +12,13 @@
 	test r12b, r12b
 	jz :0
 	mov rdi, rbp
-	call :"generic structs 5 (iterators)".main.Next(T = u8).none
+	call :generic structs 5 (iterators).main.Next(T = u8).none
 	jmp :1
 0:	mov r12, [rbx]
 	mov r12b, [r12]
 	mov rdi, rbp
 	mov rsi, r12
-	call :"generic structs 5 (iterators)".main.Next(T = u8).some
+	call :generic structs 5 (iterators).main.Next(T = u8).some
 	mov rax, [rbx+0x08]
 	mov rcx, [rbx]
 	lea rdx, [rsp]
@@ -36,7 +36,7 @@
 	pop rbp
 	pop rbx
 	ret
-"generic structs 5 (iterators)".main.Chain(A = "generic structs 5 (iterators)".main(Next = "generic structs 5 (iterators)".main.Next), B = "generic structs 5 (iterators)".main(Next = "generic structs 5 (iterators)".main.Next)).next:
+generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next), B = generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next)).next:
 	push rbx
 	push rbp
 	push r12
@@ -68,7 +68,7 @@
 	jz :0
 	mov rdi, r13
 	mov rsi, [rsp+0x18]
-	call :"generic structs 5 (iterators)".main(Next = "generic structs 5 (iterators)".main.Next).next
+	call :generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next).next
 	mov r15b, [r13]
 	mov [rsp+0x20], r15b
 	mov r15b, [rsp+0x20]
@@ -91,7 +91,7 @@
 	jz :4
 	mov rdi, r12
 	mov rsi, [rsp+0x10]
-	call :"generic structs 5 (iterators)".main(Next = "generic structs 5 (iterators)".main.Next).next
+	call :generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next).next
 	mov r15b, [r12]
 	mov [rsp+0x20], r15b
 	mov r15b, [rsp+0x20]
@@ -106,7 +106,7 @@
 	mov [rbx], r15b
 3:	jmp :7
 4:	mov rdi, rbp
-	call :"generic structs 5 (iterators)".main.Next(T = u8).none
+	call :generic structs 5 (iterators).main.Next(T = u8).none
 6:	add rsp, 0x70
 	pop r15
 	pop r14
@@ -115,13 +115,13 @@
 	pop rbp
 	pop rbx
 	ret
-"generic structs 5 (iterators)".main.Next(T = u8).none:
+generic structs 5 (iterators).main.Next(T = u8).none:
 	mov rax, 0x00
 	mov [rdi], al
 	mov rax, 0xAAAAAAAAAAAAAAAA
 	mov [rdi+0x01], al
 	ret
-"generic structs 5 (iterators)".main.Next(T = u8).some:
+generic structs 5 (iterators).main.Next(T = u8).some:
 	mov rax, 0x01
 	mov [rdi], al
 	mov [rdi+0x01], sil
@@ -194,7 +194,7 @@ main:
 	mov [rsp+0x10], r15
 8:	mov rdi, [rsp]
 	mov rsi, [rsp+0x20]
-	call :"generic structs 5 (iterators)".main(Next = "generic structs 5 (iterators)".main.Next).next
+	call :generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next).next
 	mov r15, [rsp]
 	mov r14b, [r15]
 	mov [rsp+0x30], r14b
@@ -217,7 +217,7 @@ main:
 	mov [rsp], r15
 5:	mov rdi, [rsp]
 	mov rsi, [rsp+0x28]
-	call :"generic structs 5 (iterators)".main(Next = "generic structs 5 (iterators)".main.Next).next
+	call :generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next).next
 	mov r15, [rsp]
 	mov r14b, [r15]
 	mov [rsp+0x08], r14b
@@ -229,7 +229,7 @@ main:
 	jmp :7
 1:	mov rdi, rbp
 	mov rsi, rbx
-	call :"generic structs 5 (iterators)".main.Chain(A = "generic structs 5 (iterators)".main(Next = "generic structs 5 (iterators)".main.Next), B = "generic structs 5 (iterators)".main(Next = "generic structs 5 (iterators)".main.Next)).next
+	call :generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next), B = generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next)).next
 	mov r15b, [rbp]
 	mov [rsp+0x08], r15b
 	mov r15b, [rsp+0x08]
@@ -268,7 +268,7 @@ main:
 4:	jmp :5
 0:	mov rdi, [rsp+0x10]
 	mov rsi, [rsp+0x28]
-	call :"generic structs 5 (iterators)".main(Next = "generic structs 5 (iterators)".main.Next).next
+	call :generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next).next
 	mov r15, [rsp+0x10]
 	mov r14b, [r15]
 	mov [rsp+0x30], r14b

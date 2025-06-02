@@ -1,4 +1,4 @@
-"pointers 2".swap:
+pointers 2.swap:
 	mov rax, [rsi]
 	mov rcx, [rdi]
 	mov [rsi], rcx
@@ -17,7 +17,7 @@ main:
 	mov [r12], rbp
 	mov rdi, rbx
 	mov rsi, r12
-	call :"pointers 2".swap
+	call :pointers 2.swap
 	mov rax, [rbx]
 	mov rcx, [r12]
 	sub rax, rcx

@@ -1,4 +1,4 @@
-"comptime 1".main.some_fn(some_int = uint)(ui = uint):
+comptime 1.main.some_fn(some_int = uint)(ui = uint):
 	add rdi, 0x01
 	mov rax, rdi
 	imul rax, rdi
@@ -10,15 +10,15 @@ main:
 	sub rsp, 0x08
 	mov rbx, 0x09
 	mov rdi, rbx
-	call :"comptime 1".main.some_fn(some_int = uint)(ui = uint)
+	call :comptime 1.main.some_fn(some_int = uint)(ui = uint)
 	mov rbx, rax
 	mov rbp, 0x05
 	mov rdi, rbp
-	call :"comptime 1".main.some_fn(some_int = uint)(ui = uint)
+	call :comptime 1.main.some_fn(some_int = uint)(ui = uint)
 	mov rbp, rax
 	mov r12, 0x07
 	mov rdi, r12
-	call :"comptime 1".main.some_fn(some_int = uint)(ui = uint)
+	call :comptime 1.main.some_fn(some_int = uint)(ui = uint)
 	mov rcx, rbp
 	add rcx, rax
 	mov rax, rbx

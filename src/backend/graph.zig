@@ -535,7 +535,11 @@ pub fn Func(comptime MachNode: type) type {
 
             pub fn knownOffset(self: *Node) struct { *Node, i64 } {
                 if (self.kind == .BinOp and self.inputs()[2].?.kind == .CInt) {
-                    return .{ self.inputs()[1].?, self.inputs()[2].?.extra(.CInt).* };
+                    std.debug.assert(self.extra(.BinOp).* == .iadd or self.extra(.BinOp).* == .isub);
+                    return .{ self.inputs()[1].?, if (self.extra(.BinOp).* == .iadd)
+                        self.inputs()[2].?.extra(.CInt).*
+                    else
+                        -self.inputs()[2].?.extra(.CInt).* };
                 }
                 if (@hasDecl(MachNode, "knownOffset")) return MachNode.knownOffset(self);
                 return .{ self, 0 };

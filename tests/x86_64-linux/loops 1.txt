@@ -1,4 +1,4 @@
-"loops 1".fib:
+loops 1.fib:
 	push rbx
 	mov rax, 0x00
 	mov rcx, 0x01
@@ -21,7 +21,7 @@ main:
 	sub rsp, 0x08
 	mov rbx, 0x0A
 	mov rdi, rbx
-	call :"loops 1".fib
+	call :loops 1.fib
 	add rsp, 0x08
 	pop rbx
 	ret

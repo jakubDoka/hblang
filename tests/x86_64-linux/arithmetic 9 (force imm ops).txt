@@ -1,4 +1,4 @@
-"arithmetic 9 (force imm ops)".box(v: uint):
+arithmetic 9 (force imm ops).box(v: uint):
 	mov rax, rdi
 	ret
 main:
@@ -6,7 +6,7 @@ main:
 	sub rsp, 0x08
 	mov rbx, 0xFFFFFFFFFFFFFFFF
 	mov rdi, rbx
-	call :"arithmetic 9 (force imm ops)".box(v: uint)
+	call :arithmetic 9 (force imm ops).box(v: uint)
 	xor rax, 0xFFFFFFFFFFFFFFFF
 	cmp rax, 0x00
 	setnz al

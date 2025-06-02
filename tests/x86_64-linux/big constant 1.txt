@@ -1,4 +1,4 @@
-"big constant 1".uninit:
+big constant 1.uninit:
 	mov rax, 0xAAAAAAAAAAAAAAAA
 	mov [rdi], rax
 	mov rax, 0x00
@@ -11,7 +11,7 @@ main:
 	mov rbp, 0x00
 	mov [rbx], rbp
 	mov rdi, rbx
-	call :"big constant 1".uninit
+	call :big constant 1.uninit
 	add rsp, 0x10
 	pop rbp
 	pop rbx
