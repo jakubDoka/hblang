@@ -138,16 +138,16 @@ main:
 	push r15
 	sub rsp, 0x1D8
 	mov rbx, rsp
-	add rbx, 0xC4
+	add rbx, 0x60
 	mov rbp, rsp
-	add rbp, 0x60
+	add rbp, 0x88
 	lea r12, [0x0000000000000007]
 	mov [rbp], r12
 	mov r12, 0x04
 	mov [rbp+0x08], r12
 	mov r13, 0x00
 	mov [rsp], rsp
-	add qword ptr [rsp], 0x70
+	add qword ptr [rsp], 0x98
 	lea r15, [0x0000000000000007]
 	mov [rsp+0x08], r15
 	mov r15, [rsp]
@@ -158,7 +158,7 @@ main:
 	mov r14, [rsp+0x08]
 	mov [r15+0x08], r14
 	mov [rsp+0x10], rsp
-	add qword ptr [rsp+0x10], 0x80
+	add qword ptr [rsp+0x10], 0xA8
 	lea r15, [0x0000000000000007]
 	mov [rsp+0x18], r15
 	mov r15, [rsp+0x10]
@@ -169,13 +169,13 @@ main:
 	mov [r15+0x08], r14
 	mov qword ptr [rsp+0x18], 0x10
 	mov [rsp+0x20], rsp
-	add qword ptr [rsp+0x20], 0xA4
+	add qword ptr [rsp+0x20], 0xC8
 	mov rdi, [rsp+0x20]
 	mov rsi, [rsp]
 	mov rdx, [rsp+0x18]
 	call 0x0000000000000005
 	mov [rsp+0x28], rsp
-	add qword ptr [rsp+0x28], 0xB4
+	add qword ptr [rsp+0x28], 0xD8
 	mov rdi, [rsp+0x28]
 	mov rsi, rbp
 	mov rdx, [rsp+0x18]
@@ -208,7 +208,7 @@ main:
 	test [rsp+0x30], r15b
 	jz 0x000000000000013F
 	mov [rsp], rsp
-	add qword ptr [rsp], 0x90
+	add qword ptr [rsp], 0xB8
 	mov rdi, [rsp]
 	mov rsi, rbp
 	mov rdx, [rsp+0x18]
@@ -218,9 +218,9 @@ main:
 	mov rdx, [rsp+0x18]
 	call 0x0000000000000005
 	mov rbp, rsp
-	add rbp, 0xA2
+	add rbp, 0xEA
 	mov [rsp], rsp
-	add qword ptr [rsp], 0xA0
+	add qword ptr [rsp], 0xE8
 	mov rdi, [rsp]
 	mov rsi, [rsp+0x28]
 	call 0x0000000000000005

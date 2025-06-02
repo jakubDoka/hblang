@@ -4,7 +4,7 @@ main:
 	sub rsp, 0x118
 	mov rax, 0x00
 	mov rcx, rsp
-	add rcx, 0x00
+	add rcx, 0x80
 	mov rdx, 0x01
 	mov [rcx], dl
 	mov rdx, 0x02
@@ -14,7 +14,7 @@ main:
 	mov rbx, 0x04
 	mov [rcx+0x03], bl
 	mov rbp, rsp
-	add rbp, 0x04
+	add rbp, 0x00
 	mov [rbp], rcx
 	mov [rbp+0x08], rbx
 	mov [rbp+0x10], rcx

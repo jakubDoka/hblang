@@ -9,7 +9,7 @@ main:
 	mov rbp, 0x08
 	mov rsi, 0x01
 	mov rdi, rsp
-	add rdi, 0x00
+	add rdi, 0x40
 	mov [rdi], rsi
 	mov [rdi+0x08], rcx
 	mov [rdi+0x10], rdx
@@ -18,7 +18,7 @@ main:
 	imul r8, rbp
 	imul rsi, rbp
 	mov r9, rsp
-	add r9, 0x20
+	add r9, 0x00
 	mov [r9], rdi
 	mov [r9+0x08], rbx
 	mov [r9+0x10], rdi

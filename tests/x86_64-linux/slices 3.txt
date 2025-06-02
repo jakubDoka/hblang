@@ -56,7 +56,7 @@ main:
 	push r14
 	sub rsp, 0x58
 	mov rbx, rsp
-	add rbx, 0x08
+	add rbx, 0x28
 	mov rbp, 0x01
 	mov [rbx], bpl
 	mov r12, 0x02
@@ -64,14 +64,14 @@ main:
 	mov r12, 0x03
 	mov [rbx+0x02], r12b
 	mov r13, rsp
-	add r13, 0x0B
+	add r13, 0x08
 	mov qword ptr [rsp], 0x00
 	mov rdi, r13
 	mov rsi, rbp
 	mov rdx, [rsp]
 	call 0x0000000000000005
 	mov rbp, rsp
-	add rbp, 0x1B
+	add rbp, 0x18
 	mov rdi, rbp
 	mov rsi, rbx
 	mov rdx, r12

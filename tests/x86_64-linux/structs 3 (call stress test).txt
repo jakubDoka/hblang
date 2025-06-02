@@ -33,11 +33,11 @@ main:
 	push r12
 	sub rsp, 0x50
 	mov rbx, rsp
-	add rbx, 0x00
+	add rbx, 0x18
 	mov rdi, rbx
 	call 0x0000000000000005
 	mov rbp, rsp
-	add rbp, 0x10
+	add rbp, 0x00
 	mov rdi, rbp
 	call 0x0000000000000005
 	mov r12b, [rbx]
