@@ -9,6 +9,8 @@ zig build install
 
 ## Tour
 
+Try ot the examples on [depell](depell.mlokis.tech).
+
 Note: the examples are used to generate unit tests, `n = 1` from each group is most interesting, others are more for testing purposes.
 Note: `expectations` contain the test case ecpectations that are asserted when `zig build test` is run
 
@@ -1819,6 +1821,7 @@ scp := enum {
     - [x] slicing
   - [x] slices
     - [x] known size (arrays)
+      - [x] comptime interrupt
     - [x] field access
     - [x] indexing
     - [x] slicing
@@ -1847,7 +1850,7 @@ scp := enum {
   - [x] `@Any(<fn(type): void/type>..): type`
     - [ ] ? type filters
   - [x] `@error(...<expr>): never`
-  - [ ] ? `@compiles(<expr>): bool`
+  - [x] `@compiles(<expr>): bool`
   - [x] `@ChildOf(<ty>): type`
     - [ ] comptime interrupt
   - [x] `@target("<pat>"): bool`
@@ -1856,7 +1859,7 @@ scp := enum {
   - [x] `@float_to_int(<float>): int`
   - [x] `@float_cast(<float>): <float>`
   - [x] `@name_of(<ty>): []u8`
-    - [ ] comptime interrupt
+    - [x] comptime interrupt
   - [ ] ? `@recall(..<args>): never`
 - [ ] optimizations
   - [ ] assumptions

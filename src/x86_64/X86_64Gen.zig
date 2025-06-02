@@ -545,11 +545,7 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
         (mnemonic == zydis.ZYDIS_MNEMONIC_MOVZX or
             mnemonic == zydis.ZYDIS_MNEMONIC_MOVSX or
             mnemonic == zydis.ZYDIS_MNEMONIC_IMUL or
-            mnemonic == zydis.ZYDIS_MNEMONIC_LEA
-                //mnemonic == zydis.ZYDIS_MNEMONIC_SHR or
-                //mnemonic == zydis.ZYDIS_MNEMONIC_SAR or
-                //mnemonic == zydis.ZYDIS_MNEMONIC_SHL
-        ) and
+            mnemonic == zydis.ZYDIS_MNEMONIC_LEA) and
         req.operands[0].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY;
     var prev_oper: zydis.ZydisEncoderOperand = undefined;
     if (should_flush_to_mem) {
