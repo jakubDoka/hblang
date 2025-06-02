@@ -1,0 +1,16 @@
+"big constant 1".main:
+         st $31, $254, -24, 24
+     addi64 $254, $254, -32
+     addi64 $32, $254, 0
+       li64 $33, 0
+         st $33, $254, 0, 8
+         cp $1, $32
+        jal $31, $0, :"big constant 1".uninit
+     addi64 $254, $254, 32
+         ld $31, $254, -24, 24
+         tx
+"big constant 1".uninit:
+       li64 $2, -6148914691236517206
+         st $2, $1, 0, 8
+       li64 $1, 0
+       jala $0, $31, 0

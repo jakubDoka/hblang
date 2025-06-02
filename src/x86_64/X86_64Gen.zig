@@ -545,12 +545,18 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
         (mnemonic == zydis.ZYDIS_MNEMONIC_MOVZX or
             mnemonic == zydis.ZYDIS_MNEMONIC_MOVSX or
             mnemonic == zydis.ZYDIS_MNEMONIC_IMUL or
+            (mnemonic == zydis.ZYDIS_MNEMONIC_MOV and
+                req.operands[1].type == zydis.ZYDIS_OPERAND_TYPE_IMMEDIATE and
+                req.operands[1].imm.u > 0x7fffffff) or
             mnemonic == zydis.ZYDIS_MNEMONIC_LEA) and
         req.operands[0].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY;
     var prev_oper: zydis.ZydisEncoderOperand = undefined;
     if (should_flush_to_mem) {
         prev_oper = req.operands[0];
-        if (mnemonic != zydis.ZYDIS_MNEMONIC_MOVZX and mnemonic != zydis.ZYDIS_MNEMONIC_LEA) {
+        if (mnemonic != zydis.ZYDIS_MNEMONIC_MOVZX and
+            mnemonic != zydis.ZYDIS_MNEMONIC_LEA and
+            mnemonic != zydis.ZYDIS_MNEMONIC_MOV)
+        {
             self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{1}, prev_oper });
         }
         req.operands[0] = Reg.r15.asZydisOpReg(req.operands[0].mem.size);

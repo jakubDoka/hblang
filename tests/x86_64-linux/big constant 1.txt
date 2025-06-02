@@ -1,0 +1,18 @@
+"big constant 1".uninit:
+	mov rax, 0xAAAAAAAAAAAAAAAA
+	mov [rdi], rax
+	mov rax, 0x00
+	ret
+main:
+	push rbx
+	push rbp
+	sub rsp, 0x10
+	lea rbx, [rsp]
+	mov rbp, 0x00
+	mov [rbx], rbp
+	mov rdi, rbx
+	call :"big constant 1".uninit
+	add rsp, 0x10
+	pop rbp
+	pop rbx
+	ret

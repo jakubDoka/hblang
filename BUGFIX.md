@@ -9,6 +9,18 @@ main := fn(): uint {
 }
 ```
 
+#### big constant 1
+```hb
+main := fn(): uint {
+    return uninit(&0)
+}
+
+uninit := fn(p: ^uint): uint {
+    p.* = idk
+    return 0
+}
+```
+
 #### arithmetic 9 (force imm ops)
 ```hb
 main := fn(): uint {
