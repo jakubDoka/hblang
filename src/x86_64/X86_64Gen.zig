@@ -314,7 +314,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
         if (bb.base.kind == .CallEnd) break true;
     } else false;
 
-    if (has_call and padding > 8) {
+    if (has_call and padding >= 8) {
         stack_size += padding - 8;
     } else if (has_call) {
         stack_size += padding + 8;
