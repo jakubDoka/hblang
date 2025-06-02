@@ -119,18 +119,15 @@
 	pop rbx
 	ret
 "generic structs 5 (iterators)".main.Next(T = u8).none:
-	mov rax, rdi
-	mov rcx, 0x00
-	mov [rax], cl
-	mov rcx, 0xAAAAAAAAAAAAAAAA
-	mov [rax+0x01], cl
+	mov rax, 0x00
+	mov [rdi], al
+	mov rax, 0xAAAAAAAAAAAAAAAA
+	mov [rdi+0x01], al
 	ret
 "generic structs 5 (iterators)".main.Next(T = u8).some:
-	mov rax, rdi
-	mov rcx, rsi
-	mov rdx, 0x01
-	mov [rax], dl
-	mov [rax+0x01], cl
+	mov rax, 0x01
+	mov [rdi], al
+	mov [rdi+0x01], sil
 	ret
 main:
 	push rbx

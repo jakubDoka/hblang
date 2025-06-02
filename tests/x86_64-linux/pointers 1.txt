@@ -1,7 +1,6 @@
 "pointers 1".modify:
-	mov rax, rdi
-	mov rcx, 0x02
-	mov [rax], rcx
+	mov rax, 0x02
+	mov [rdi], rax
 	ret
 main:
 	push rbx

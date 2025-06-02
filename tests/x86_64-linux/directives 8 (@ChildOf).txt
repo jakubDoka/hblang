@@ -1,6 +1,5 @@
 "directives 8 (@ChildOf)".deref(T = ^uint):
-	mov rax, rdi
-	mov rax, [rax]
+	mov rax, [rdi]
 	ret
 main:
 	push rbx

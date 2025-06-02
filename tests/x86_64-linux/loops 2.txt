@@ -1,33 +1,32 @@
 "loops 2".square:
 	push rbx
 	push rbp
-	mov rax, rdi
-	mov rcx, 0x00
-	mov rdx, rcx
-	mov rbx, rcx
-	cmp rdx, rax
-	setz bpl
-	movzx rbp, bpl
-	test bpl, bpl
+	mov rax, 0x00
+	mov rcx, rax
+	mov rdx, rax
+	cmp rcx, rdi
+	setz bl
+	movzx rbx, bl
+	test bl, bl
 	jz 0x000000000000000C
-	mov rax, rbx
+	mov rax, rdx
 	pop rbp
 	pop rbx
 	ret
-	mov rbp, rbx
-	mov rbx, rcx
-	cmp rbx, rax
-	setz sil
-	movzx rsi, sil
-	test sil, sil
+	mov rbx, rdx
+	mov rdx, rax
+	cmp rdx, rdi
+	setz bpl
+	movzx rbp, bpl
+	test bpl, bpl
 	jz 0x0000000000000012
+	add rcx, 0x01
+	mov rdx, rbx
+	jmp 0xFFFFFFFFFFFFFFC7
+	mov rbp, rdx
+	imul rbp, rcx
 	add rdx, 0x01
-	mov rbx, rbp
-	jmp 0xFFFFFFFFFFFFFFC5
-	mov rsi, rbx
-	imul rsi, rdx
-	add rbx, 0x01
-	add rbp, rsi
+	add rbx, rbp
 	jmp 0xFFFFFFFFFFFFFFD2
 main:
 	push rbx

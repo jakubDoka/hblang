@@ -1,6 +1,5 @@
 "pointers 3".do_stuff:
-	mov rax, rdi
-	mov rax, [rax]
+	mov rax, [rdi]
 	cmp rax, 0x00
 	setz al
 	movzx rax, al

@@ -1,8 +1,6 @@
 "Foo.hb".init:
-	mov rax, rdi
-	mov rcx, rsi
-	mov [rax], rcx
-	mov [rax+0x08], rcx
+	mov [rdi], rsi
+	mov [rdi+0x08], rsi
 	ret
 main:
 	push rbx

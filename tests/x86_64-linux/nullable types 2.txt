@@ -1,8 +1,7 @@
 "nullable types 2".take:
-	mov rax, rdi
-	mov rcx, [rax]
-	add rcx, 0x01
-	mov [rax], rcx
+	mov rax, [rdi]
+	add rax, 0x01
+	mov [rdi], rax
 	ret
 main:
 	push rbx

@@ -1,9 +1,9 @@
 "loops 1".fib:
 	push rbx
+	mov rax, 0x00
+	mov rcx, 0x01
+	mov rdx, rax
 	mov rax, rdi
-	mov rcx, 0x00
-	mov rdx, 0x01
-	xchg rcx, rdx
 	cmp rax, 0x00
 	setz bl
 	movzx rbx, bl

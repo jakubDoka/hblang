@@ -159,6 +159,30 @@ pub const Node = union(enum) {
         return null;
     }
 
+    pub fn regBias(node: *Func.Node) ?u16 {
+        return @intFromEnum(switch (node.kind) {
+            .Arg => Reg.system_v.args[node.extraConst(.Arg).*],
+            else => b: {
+                for (node.outputs()) |o| {
+                    if (o.kind == .Call) {
+                        const idx = std.mem.indexOfScalar(?*Func.Node, o.dataDeps(), node) orelse continue;
+                        break :b Reg.system_v.args[idx];
+                    }
+
+                    if (o.kind == .Phi and o.inputs()[0].?.kind != .Loop) {
+                        return o.regBias();
+                    }
+                }
+
+                if (node.isSub(graph.BinOp)) {
+                    return node.inputs()[1].?.regBias();
+                }
+
+                return null;
+            },
+        });
+    }
+
     pub fn idealizeMach(func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
         _ = worklist;
         if (node.kind == .Load and node.base().kind == .BinOp and
@@ -208,10 +232,10 @@ pub const Node = union(enum) {
         if (node.kind == .BinOp and node.inputs()[2].?.kind == .CInt and
             node.extra(.BinOp).* != .imul)
         {
-            if (std.math.cast(i32, node.inputs()[2].?.extra(.CInt).*)) |imm| {
+            if (std.math.cast(i32, node.inputs()[2].?.extra(.CInt).*) != null) {
                 return func.addNode(.ImmOp, node.data_type, node.inputs()[0..2], .{
                     .base = node.extra(.BinOp).*,
-                    .imm = imm,
+                    .imm = node.inputs()[2].?.extra(.CInt).*,
                 });
             }
         }
@@ -720,24 +744,14 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 const lhs = self.getReg(instr.inputs()[1]);
                 const rhs = extra.imm;
 
-                switch (op) {
-                    .imul => unreachable,
-                    .iadd, .isub, .bor, .band, .bxor, .ushr, .ishl, .sshr => {
-                        if (dst != lhs) {
-                            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ dst, lhs });
-                        }
-                    },
-                    else => {},
-                }
-
                 const mnemonic = binopToMnemonic(op);
 
                 switch (op) {
                     .imul => unreachable,
-                    .ushr, .ishl, .sshr => {
-                        self.emitInstr(mnemonic, .{ dst, rhs });
-                    },
-                    .iadd, .isub, .bor, .band, .bxor => {
+                    .ushr, .ishl, .sshr, .iadd, .isub, .bor, .band, .bxor => {
+                        if (dst != lhs) {
+                            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ dst, lhs });
+                        }
                         self.emitInstr(mnemonic, .{ dst, rhs });
                     },
                     .udiv, .sdiv, .smod, .umod => switch (size) {
@@ -747,6 +761,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                             } else {
                                 self.emitInstr(zydis.ZYDIS_MNEMONIC_XOR, .{ Reg.rdx, Reg.rdx });
                             }
+
                             self.emitInstr(mnemonic, .{rhs});
 
                             const dest_reg: Reg = if (op == .udiv or op == .sdiv) .rax else .rdx;

@@ -2,53 +2,47 @@
 	push rbx
 	push rbp
 	sub rsp, 0x20
-	mov rax, rdx
-	mov rdx, rdi
-	mov rcx, rsi
-	mov rbx, rsp
-	add rbx, 0x00
-	mov [rbx], rcx
-	mov [rbx+0x08], rax
-	cmp rax, 0x00
+	mov rax, rsp
+	add rax, 0x00
+	mov [rax], rsi
+	mov [rax+0x08], rdx
+	cmp rdx, 0x00
 	setz cl
 	movzx rcx, cl
-	mov rbp, 0x10
+	mov rbx, 0x10
 	test cl, cl
-	jz 0x0000000000000019
-	mov rdi, rdx
-	mov rsi, rbx
-	mov rdx, rbp
+	jz 0x0000000000000016
+	mov rsi, rax
+	mov rdx, rbx
 	call 0x0000000000000005
-	jmp 0x000000000000006E
+	jmp 0x0000000000000068
 	mov rcx, 0x00
-	sub rax, 0x01
-	xchg rax, rcx
-	cmp rax, rcx
-	setb sil
-	movzx rsi, sil
-	test sil, sil
+	sub rdx, 0x01
+	cmp rcx, rdx
+	setb bpl
+	movzx rbp, bpl
+	test bpl, bpl
 	jz 0x000000000000003F
-	mov rsi, [rbx]
-	mov rdi, rcx
-	sub rdi, 0x01
-	mov r8, rax
+	mov rbp, [rax]
+	mov rsi, rdx
+	sub rsi, 0x01
+	mov r8, rcx
 	add r8, 0x01
-	mov r9, rsi
-	add r9, rax
-	mov rax, rsi
-	add rax, rcx
-	mov sil, [r9]
-	mov al, [rax]
-	mov [r9], al
-	mov rax, [rbx]
-	add rax, rcx
-	mov [rax], sil
-	mov rax, r8
-	mov rcx, rdi
+	mov r9, rbp
+	add r9, rcx
+	mov rcx, rbp
+	add rcx, rdx
+	mov bpl, [r9]
+	mov cl, [rcx]
+	mov [r9], cl
+	mov rcx, [rax]
+	add rcx, rdx
+	mov [rcx], bpl
+	mov rcx, r8
+	mov rdx, rsi
 	jmp 0xFFFFFFFFFFFFFFB8
-	mov rdi, rdx
-	mov rsi, rbx
-	mov rdx, rbp
+	mov rsi, rax
+	mov rdx, rbx
 	call 0x0000000000000005
 	add rsp, 0x20
 	pop rbp

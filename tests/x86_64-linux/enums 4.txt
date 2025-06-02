@@ -1,29 +1,24 @@
 "enums 4".NameMap(Enum = "enums 4".Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get:
 	push rbx
-	push rbp
-	mov rcx, rdx
-	mov rdx, rdi
-	mov rax, rsi
-	movzx rcx, cl
-	mov rbx, 0x08
-	mov rbp, rcx
-	add rbp, 0x01
-	mov rsi, rax
-	add rsi, 0x08
-	imul rcx, rbx
-	imul rbp, rbx
+	mov rax, rdx
+	movzx rax, al
+	mov rcx, 0x08
+	mov rdx, rax
+	add rdx, 0x01
 	mov rbx, rsi
-	add rbx, rcx
-	mov rcx, rsi
-	add rcx, rbp
-	mov rbx, [rbx]
+	add rbx, 0x08
+	imul rax, rcx
+	imul rdx, rcx
+	mov rcx, rbx
+	add rcx, rax
+	mov rax, rbx
+	add rax, rdx
 	mov rcx, [rcx]
-	add rax, rbx
-	mov [rdx], rax
-	mov rax, rcx
-	sub rax, rbx
-	mov [rdx+0x08], rax
-	pop rbp
+	mov rax, [rax]
+	add rsi, rcx
+	mov [rdi], rsi
+	sub rax, rcx
+	mov [rdi+0x08], rax
 	pop rbx
 	ret
 main:

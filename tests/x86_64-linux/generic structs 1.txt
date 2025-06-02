@@ -1,13 +1,10 @@
 "generic structs 1".nvec(E = uint):
-	mov rax, rdi
-	mov rcx, rsi
-	mov [rax], rcx
-	mov [rax+0x08], rcx
+	mov [rdi], rsi
+	mov [rdi+0x08], rsi
 	ret
 "generic structs 1".Vec(E = uint).sub:
+	sub rdi, rsi
 	mov rax, rdi
-	mov rcx, rsi
-	sub rax, rcx
 	ret
 main:
 	push rbx

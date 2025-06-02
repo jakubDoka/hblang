@@ -1,25 +1,19 @@
 "nullable types 1".mkval(T = uint):
-	push rbx
 	sub rsp, 0x20
-	mov rcx, rdi
-	mov rax, rsi
-	mov rdx, rsp
-	add rdx, 0x00
-	mov rbx, 0x01
-	mov [rdx], bl
-	mov [rdx+0x08], rax
-	mov rax, 0x10
-	mov rsi, rdx
-	mov rdi, rcx
-	mov rdx, rax
+	mov rax, rsp
+	add rax, 0x00
+	mov rcx, 0x01
+	mov [rax], cl
+	mov [rax+0x08], rsi
+	mov rcx, 0x10
+	mov rsi, rax
+	mov rdx, rcx
 	call 0x0000000000000005
 	add rsp, 0x20
-	pop rbx
 	ret
 "nullable types 1".mknull(T = uint):
-	mov rax, rdi
-	mov rcx, 0x00
-	mov [rax], cl
+	mov rax, 0x00
+	mov [rdi], al
 	ret
 main:
 	push rbx

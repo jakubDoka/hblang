@@ -1,15 +1,13 @@
 "generic structs 2".Foo(F = uint).Bar(B = u8).init:
-	mov rax, rdi
-	mov rcx, 0x01
-	mov [rax], rcx
-	mov [rax+0x08], cl
+	mov rax, 0x01
+	mov [rdi], rax
+	mov [rdi+0x08], al
 	ret
 "generic structs 2".Foo(F = uint).Bar(B = u8).sub:
-	mov rcx, rdi
 	mov rax, rsi
 	movzx rax, al
-	sub rcx, rax
-	mov rax, rcx
+	sub rdi, rax
+	mov rax, rdi
 	ret
 main:
 	push rbx

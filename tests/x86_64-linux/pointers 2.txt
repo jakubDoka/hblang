@@ -1,12 +1,8 @@
 "pointers 2".swap:
-	push rbx
-	mov rcx, rdi
-	mov rax, rsi
-	mov rdx, [rax]
-	mov rbx, [rcx]
-	mov [rax], rbx
-	mov [rcx], rdx
-	pop rbx
+	mov rax, [rsi]
+	mov rcx, [rdi]
+	mov [rsi], rcx
+	mov [rdi], rax
 	ret
 main:
 	push rbx

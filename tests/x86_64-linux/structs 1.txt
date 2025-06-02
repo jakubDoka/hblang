@@ -1,36 +1,30 @@
 "structs 1".odher_pass:
-	mov rax, rdi
-	mov rcx, rsi
-	mov rdx, 0x18
-	mov rdi, rax
-	mov rsi, rcx
+	mov rax, 0x18
+	mov rdx, rax
 	call 0x0000000000000005
 	ret
 "structs 1".Ty.sum:
 	sub rsp, 0x20
+	mov rax, rsp
+	add rax, 0x00
+	mov [rax], rdi
+	mov [rax+0x08], rsi
+	sub rdi, 0x02
+	mov [rax], rdi
+	add rsi, 0x01
+	mov [rax+0x08], rsi
+	sub rdi, rsi
 	mov rax, rdi
-	mov rcx, rsi
-	mov rdx, rsp
-	add rdx, 0x00
-	mov [rdx], rax
-	mov [rdx+0x08], rcx
-	sub rax, 0x02
-	mov [rdx], rax
-	add rcx, 0x01
-	mov [rdx+0x08], rcx
-	sub rax, rcx
 	add rsp, 0x20
 	ret
 "structs 1".pass:
-	mov rax, rdi
-	mov rcx, [rax]
-	sub rcx, 0x01
-	mov [rax], rcx
-	add rcx, 0x01
-	mov [rax], rcx
-	mov rax, [rax+0x08]
-	sub rcx, rax
-	mov rax, rcx
+	mov rax, [rdi]
+	sub rax, 0x01
+	mov [rdi], rax
+	add rax, 0x01
+	mov [rdi], rax
+	mov rcx, [rdi+0x08]
+	sub rax, rcx
 	ret
 main:
 	push rbx
