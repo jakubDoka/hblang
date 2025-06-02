@@ -185,10 +185,12 @@ pub const Node = union(enum) {
 
     pub fn idealizeMach(func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
         _ = worklist;
+
         if (node.kind == .Load and node.base().kind == .BinOp and
             node.base().inputs()[2].?.kind == .CInt)
         {
-            std.debug.assert(node.base().extra(.BinOp).* == .iadd or node.base().extra(.BinOp).* == .isub);
+            std.debug.assert(node.base().extra(.BinOp).* == .iadd or
+                node.base().extra(.BinOp).* == .isub);
             return func.addNode(
                 .OffsetLoad,
                 node.data_type,
@@ -198,7 +200,8 @@ pub const Node = union(enum) {
         }
 
         if (node.kind == .Load and node.base().kind == .ImmOp) {
-            std.debug.assert(node.base().extra(.ImmOp).base == .iadd or node.base().extra(.ImmOp).base == .isub);
+            std.debug.assert(node.base().extra(.ImmOp).base == .iadd or
+                node.base().extra(.ImmOp).base == .isub);
             return func.addNode(
                 .OffsetLoad,
                 node.data_type,
@@ -210,7 +213,8 @@ pub const Node = union(enum) {
         if (node.kind == .Store and node.base().kind == .BinOp and
             node.base().inputs()[2].?.kind == .CInt)
         {
-            std.debug.assert(node.base().extra(.BinOp).* == .iadd or node.base().extra(.BinOp).* == .isub);
+            std.debug.assert(node.base().extra(.BinOp).* == .iadd or
+                node.base().extra(.BinOp).* == .isub);
             return func.addNode(
                 .OffsetStore,
                 node.data_type,
@@ -220,7 +224,8 @@ pub const Node = union(enum) {
         }
 
         if (node.kind == .Store and node.base().kind == .ImmOp) {
-            std.debug.assert(node.base().extra(.ImmOp).base == .iadd or node.base().extra(.BinOp).* == .isub);
+            std.debug.assert(node.base().extra(.ImmOp).base == .iadd or
+                node.base().extra(.BinOp).* == .isub);
             return func.addNode(
                 .OffsetStore,
                 node.data_type,
@@ -460,13 +465,6 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
             else => null,
         };
 
-        if (mnemonic != zydis.ZYDIS_MNEMONIC_MOVZX and
-            mnemonic != zydis.ZYDIS_MNEMONIC_MOVSX and
-            mnemonic != zydis.ZYDIS_MNEMONIC_MOVSXD and
-            mnemonic != zydis.ZYDIS_MNEMONIC_SHR and
-            mnemonic != zydis.ZYDIS_MNEMONIC_SHL and
-            mnemonic != zydis.ZYDIS_MNEMONIC_SAR and
-            size != null and op_size != null) std.debug.assert(op_size == size);
         size = size orelse op_size;
     }
 
@@ -750,9 +748,9 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     .imul => unreachable,
                     .ushr, .ishl, .sshr, .iadd, .isub, .bor, .band, .bxor => {
                         if (dst != lhs) {
-                            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ dst, lhs });
+                            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ SReg{ dst, size }, SReg{ lhs, size } });
                         }
-                        self.emitInstr(mnemonic, .{ dst, rhs });
+                        self.emitInstr(mnemonic, .{ SReg{ dst, size }, rhs });
                     },
                     .udiv, .sdiv, .smod, .umod => switch (size) {
                         1, 2, 4, 8 => {
@@ -804,7 +802,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     .ushr, .ishl, .sshr => {
                         var oper = dst;
                         if (dst == .rcx and rhs != .rcx) {
-                            self.emitInstr(zydis.ZYDIS_MNEMONIC_XCHG, .{ dst, rhs });
+                            self.emitInstr(zydis.ZYDIS_MNEMONIC_XCHG, .{ SReg{ dst, size }, rhs });
                             oper = rhs;
                         } else if (rhs != .rcx) self.emitInstr(
                             zydis.ZYDIS_MNEMONIC_MOV,
@@ -812,7 +810,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                         );
                         self.emitInstr(mnemonic, .{ oper, SReg{ .rcx, 1 } });
                         if (dst == .rcx and rhs != .rcx) {
-                            self.emitInstr(zydis.ZYDIS_MNEMONIC_XCHG, .{ dst, rhs });
+                            self.emitInstr(zydis.ZYDIS_MNEMONIC_XCHG, .{ SReg{ dst, size }, rhs });
                         }
                     },
                     .iadd, .isub, .imul, .bor, .band, .bxor => {
@@ -824,7 +822,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                             // we need a better support from the regalloc
                             var oper = rhs;
                             if (rhs == .rax and lhs != .rax) {
-                                self.emitInstr(zydis.ZYDIS_MNEMONIC_XCHG, .{ rhs, lhs });
+                                self.emitInstr(zydis.ZYDIS_MNEMONIC_XCHG, .{ SReg{ rhs, size }, lhs });
                                 oper = lhs;
                             } else if (lhs != .rax) self.emitInstr(
                                 zydis.ZYDIS_MNEMONIC_MOV,
@@ -834,7 +832,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                             if (size == 1) {
                                 self.emitInstr(zydis.ZYDIS_MNEMONIC_MOVZX, .{ Reg.rdx, SReg{ .rdx, 1 } });
                             } else {
-                                self.emitInstr(zydis.ZYDIS_MNEMONIC_XOR, .{ Reg.rdx, Reg.rdx });
+                                self.emitInstr(zydis.ZYDIS_MNEMONIC_XOR, .{ SReg{ Reg.rdx, size }, Reg.rdx });
                             }
                             self.emitInstr(mnemonic, .{oper});
 
@@ -846,7 +844,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                             );
 
                             if (rhs == .rax and lhs != .rax) {
-                                self.emitInstr(zydis.ZYDIS_MNEMONIC_XCHG, .{ rhs, lhs });
+                                self.emitInstr(zydis.ZYDIS_MNEMONIC_XCHG, .{ SReg{ rhs, size }, lhs });
                             }
                         },
                         else => unreachable,
@@ -893,7 +891,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 const src = self.getReg(instr.inputs()[1]);
 
                 if (dst != src) {
-                    self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ dst, src });
+                    self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ SReg{ dst, size }, src });
                 }
 
                 switch (op) {

@@ -238,8 +238,8 @@ main:
 	call 0x0000000000000005
 	mov r15b, [rbp]
 	mov [rsp+0x08], r15b
-	mov r15, [rsp+0x08]
-	mov [rsp+0x10], r15
+	mov r15b, [rsp+0x08]
+	mov [rsp+0x10], r15b
 	xor byte ptr [rsp+0x10], 0x01
 	mov r15, [rsp]
 	mov r14b, [r15+0x01]
@@ -278,8 +278,8 @@ main:
 	mov r15, [rsp+0x10]
 	mov r14b, [r15]
 	mov [rsp+0x30], r14b
-	mov r15, [rsp+0x30]
-	mov [rsp+0x40], r15
+	mov r15b, [rsp+0x30]
+	mov [rsp+0x40], r15b
 	xor byte ptr [rsp+0x40], 0x01
 	mov r15, [rsp+0x10]
 	mov r14b, [r15+0x01]

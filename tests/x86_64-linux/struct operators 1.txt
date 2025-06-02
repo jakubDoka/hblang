@@ -12,8 +12,8 @@ main:
 	mov [rbp+0x01], bl
 	mov [rbp+0x02], bl
 	mov [rbp+0x03], bl
-	mov rax, rbx
-	add rax, 0x01
+	mov al, bl
+	add al, 0x01
 	mov rcx, rsp
 	add rcx, 0x1C
 	mov [rcx], al
