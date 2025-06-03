@@ -2557,7 +2557,7 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             defer self.errored = prev_errored;
             self.errored = false;
 
-            _ = try self.types.ct.inferType("", .{ .Tmp = self }, .{}, args[0]);
+            _ = self.types.ct.inferType("", .{ .Tmp = self }, .{}, args[0]) catch {};
 
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(!self.errored)));
         },
