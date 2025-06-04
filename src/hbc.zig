@@ -5,7 +5,7 @@ const static_anal = hb.backend.static_anal;
 const Arena = hb.utils.Arena;
 
 pub fn main() !void {
-    Arena.initScratch(1024 * 1024 * 10);
+    Arena.initScratch(1024 * 1024 * 128);
     defer Arena.deinitScratch();
 
     var gpa_impl = std.heap.GeneralPurposeAllocator(.{}){};
