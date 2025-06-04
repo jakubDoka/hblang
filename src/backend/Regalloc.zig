@@ -46,12 +46,8 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
 
     const instrs = tmp.arena.alloc(Instr, func.instr_count);
 
-    //var work_list = std.ArrayListUnmanaged(u16).initBuffer(tmp.arena.alloc(u16, instrs.len));
-    //var in_work_list = std.DynamicBitSetUnmanaged.initEmpty(tmp.arena.allocator(), instrs.len) catch unreachable;
-
     // TODO: we can clean this up: arena should contruct the bitset
     for (instrs) |*b| {
-        //   work_list.appendAssumeCapacity(@intCast(instrs.len - i - 1));
         b.* = .{
             .liveins = Set.initEmpty(tmp.arena.allocator(), func.instr_count) catch unreachable,
             .liveouts = Set.initEmpty(tmp.arena.allocator(), func.instr_count) catch unreachable,
@@ -83,76 +79,51 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
         }
     }
 
-    for (instrs, 0..) |*instr, i| {
-        if (instr.def.outputs().len != 0 and instr.def.kind != .MachMove and (!instr.def.isStore() or instr.def.kind == .MemCpy) and
-            instr.def.kind != .Mem and !instr.def.isCfg() and (instr.def.kind != .Phi or instr.def.isDataPhi()))
-        {
-            instr.defs.set(i);
-        }
+    var work_list = std.ArrayListUnmanaged(u16).initBuffer(tmp.arena.alloc(u16, instrs.len));
+    var in_work_list = std.DynamicBitSetUnmanaged.initEmpty(tmp.arena.allocator(), instrs.len) catch unreachable;
 
-        if (instr.def.kind == .Call) {
-            instr.liveouts.set(i);
-        }
+    {
+        var i: u16 = @intCast(instrs.len);
+        var iter = std.mem.reverseIterator(instrs);
+        while (iter.nextPtr()) |instr_| {
+            const instr: *Instr = instr_;
+            i -= 1;
+            var is_used = false;
+            if (instr.def.outputs().len != 0 and instr.def.kind != .MachMove and (!instr.def.isStore() or instr.def.kind == .MemCpy) and
+                instr.def.kind != .Mem and !instr.def.isCfg() and (instr.def.kind != .Phi or instr.def.isDataPhi()))
+            {
+                is_used = true;
+                instr.defs.set(i);
+            }
 
-        if (instr.def.kind == .Phi) continue;
-        for (instr.def.dataDeps()) |use| if (use) |uuse| {
-            instrs[instr.def.schedule].uses.set(uuse.schedule);
-        };
+            if (instr.def.kind == .Call) {
+                is_used = true;
+                instr.liveouts.set(i);
+            }
+
+            if (instr.def.kind == .Phi) continue;
+            for (instr.def.dataDeps()) |use| if (use) |uuse| {
+                is_used = true;
+                instr.uses.set(uuse.schedule);
+            };
+
+            if (is_used) {
+                if (!in_work_list.isSet(i)) {
+                    in_work_list.set(i);
+                    work_list.appendAssumeCapacity(i);
+                }
+            }
+        }
     }
 
     // compute liveins and liveouts
 
-    //    while (work_list.pop()) |task| {
-    //        const i = instrs[task];
-    //        var changed: usize = 0;
-    //        for (
-    //            Block.setMasks(i.liveins),
-    //            Block.setMasks(i.liveouts),
-    //            Block.setMasks(i.uses),
-    //            Block.setMasks(i.defs),
-    //        ) |*lin, *lot, us, df| {
-    //            const previ = lin.*;
-    //            lin.* = us | (lot.* & ~df);
-    //
-    //            changed |= (previ ^ lin.*);
-    //        }
-    //
-    //        if (changed != 0) {
-    //            for (i.preds) |p| {
-    //                if (!in_work_list.isSet(p.schedule)) {
-    //                    in_work_list.set(p.schedule);
-    //                    work_list.appendAssumeCapacity(p.schedule);
-    //                }
-    //            }
-    //        }
-    //
-    //        for (i.succ) |bo| {
-    //            changed = 0;
-    //            for (
-    //                Block.setMasks(i.liveouts),
-    //                Block.setMasks(instrs[if (bo.isCfg() and bo.isBasicBlockStart()) bo.outputs()[0].schedule else bo.schedule].liveins),
-    //            ) |*lot, sin| {
-    //                const prevo = lot.*;
-    //                lot.* |= sin;
-    //                changed |= (prevo ^ lot.*);
-    //            }
-    //
-    //            if (changed != 0) {
-    //                if (!in_work_list.isSet(bo.schedule)) {
-    //                    in_work_list.set(bo.schedule);
-    //                    work_list.appendAssumeCapacity(bo.schedule);
-    //                }
-    //            }
-    //        }
-    //    }
-    //
-
-    var changed: Set.MaskInt = 1;
-    while (changed != 0) {
-        changed = 0;
-
-        var ite = std.mem.reverseIterator(instrs);
-        while (ite.next()) |i| {
+    while (work_list.pop()) |task| {
+        in_work_list.unset(task);
+        const i = instrs[task];
+        var changed: Set.MaskInt = 1;
+        while (changed != 0) {
+            changed = 0;
             for (
                 Block.setMasks(i.liveins),
                 Block.setMasks(i.liveouts),
@@ -165,16 +136,72 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                 changed |= (previ ^ lin.*);
             }
 
+            if (changed != 0) {
+                for (i.preds) |p| {
+                    if (!in_work_list.isSet(p.schedule)) {
+                        in_work_list.set(p.schedule);
+                        work_list.appendAssumeCapacity(p.schedule);
+                    }
+                }
+            }
+
             for (i.succ) |bo| {
+                var sub_changed: Set.MaskInt = 0;
+                const schedule = if (bo.isCfg() and bo.isBasicBlockStart()) bo.outputs()[0].schedule else bo.schedule;
                 for (
                     Block.setMasks(i.liveouts),
-                    Block.setMasks(instrs[if (bo.isCfg() and bo.isBasicBlockStart()) bo.outputs()[0].schedule else bo.schedule].liveins),
+                    Block.setMasks(instrs[schedule].liveins),
                 ) |*lot, sin| {
                     const prevo = lot.*;
                     lot.* |= sin;
-                    changed |= (prevo ^ lot.*);
+                    sub_changed |= (prevo ^ lot.*);
+                }
+
+                if (sub_changed != 0) {
+                    if (!in_work_list.isSet(schedule)) {
+                        in_work_list.set(schedule);
+                        work_list.appendAssumeCapacity(schedule);
+                    }
+                }
+
+                changed |= sub_changed;
+            }
+        }
+    }
+
+    if (std.debug.runtime_safety) {
+        var changed: Set.MaskInt = 1;
+        while (changed != 0) {
+            changed = 0;
+
+            var ite = std.mem.reverseIterator(instrs);
+            while (ite.next()) |i| {
+                for (
+                    Block.setMasks(i.liveins),
+                    Block.setMasks(i.liveouts),
+                    Block.setMasks(i.uses),
+                    Block.setMasks(i.defs),
+                ) |*lin, *lot, us, df| {
+                    const previ = lin.*;
+                    lin.* = us | (lot.* & ~df);
+
+                    changed |= (previ ^ lin.*);
+                }
+
+                for (i.succ) |bo| {
+                    const schedule = if (bo.isCfg() and bo.isBasicBlockStart()) bo.outputs()[0].schedule else bo.schedule;
+                    for (
+                        Block.setMasks(i.liveouts),
+                        Block.setMasks(instrs[schedule].liveins),
+                    ) |*lot, sin| {
+                        const prevo = lot.*;
+                        lot.* |= sin;
+                        changed |= (prevo ^ lot.*);
+                    }
                 }
             }
+
+            std.debug.assert(changed == 0);
         }
     }
 

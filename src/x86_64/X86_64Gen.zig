@@ -252,6 +252,7 @@ pub const Node = union(enum) {
         if (node.kind == .BinOp and node.inputs()[2].?.kind == .CInt and
             switch (node.extra(.BinOp).*) {
                 .udiv, .sdiv, .umod, .smod, .imul => false,
+                .band, .bor, .bxor => node.inputs()[2].?.data_type.size() > 1,
                 .eq,
                 .ne,
                 .uge,
@@ -590,6 +591,14 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
         req.operands[0].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY and
         req.operands[1].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY)
     {
+        if (mnemonic == zydis.ZYDIS_MNEMONIC_XCHG) {
+            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{0}, req.operands[1] });
+            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{1}, req.operands[0] });
+            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ req.operands[0], Tmp{0} });
+            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ req.operands[1], Tmp{1} });
+            return;
+        }
+
         self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{tmp_allocs -| 1}, req.operands[1] });
         req.operands[1] = @as(Reg, @enumFromInt(@intFromEnum(Reg.r14) + (tmp_allocs -| 1))).asZydisOpReg(req.operands[1].mem.size);
     }
