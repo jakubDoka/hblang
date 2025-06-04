@@ -12,45 +12,84 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
             return @alignCast(@fieldParentPtr("mem2reg", self));
         }
 
-        const Local = union(enum) {
-            Node: *Node,
-            Loop: *Join,
+        // TODO: make this compact
+        const Local = packed struct(usize) {
+            flag: enum(u2) { null, node, loop } = .null,
+            data: std.meta.Int(.unsigned, @bitSizeOf(usize) - 2) = 0,
 
-            const Join = struct { done: bool, ctrl: *Node, items: []?L };
+            fn expand(self: Local) ?Expanded {
+                return switch (self.flag) {
+                    .null => null,
+                    .node => .{ .Node = @ptrFromInt(self.data << 2) },
+                    .loop => .{ .Loop = @ptrFromInt(self.data << 2) },
+                };
+            }
+
+            fn compact(self: Expanded) Local {
+                return switch (self) {
+                    .Node => |n| .{ .flag = .node, .data = @truncate(@intFromPtr(n) >> 2) },
+                    .Loop => |l| .{ .flag = .loop, .data = @truncate(@intFromPtr(l) >> 2) },
+                };
+            }
+
+            const Expanded = union(enum) {
+                Node: *Node,
+                Loop: *Join,
+            };
+
+            const Join = struct { done: bool, ctrl: *Node, items: []L };
 
             const L = @This();
 
-            fn resolve(func: *Func, scope: []?L, index: usize) *Node {
-                return switch (scope[index].?) {
+            fn resolve(func: *Func, scope: []L, index: usize) *Node {
+                return switch (scope[index].expand().?) {
                     .Node => |n| n,
                     .Loop => |loop| {
                         if (!loop.done) {
                             const initVal = resolve(func, loop.items, index);
 
-                            if (!loop.items[index].?.Node.isLazyPhi(loop.ctrl)) {
-                                loop.items[index].? = .{ .Node = func.addNode(
+                            if (!loop.items[index].expand().?.Node.isLazyPhi(loop.ctrl)) {
+                                loop.items[index] = .compact(.{ .Node = func.addNode(
                                     .Phi,
                                     initVal.data_type,
                                     &.{ loop.ctrl, initVal, null },
                                     {},
-                                ) };
+                                ) });
                             }
                         }
                         scope[index] = loop.items[index];
-                        if (scope[index].? == .Loop) {
-                            scope[index].? = .{ .Node = resolve(func, loop.items, index) };
+                        if (scope[index].expand().? == .Loop) {
+                            scope[index] = .compact(.{ .Node = resolve(func, loop.items, index) });
                         }
-                        return scope[index].?.Node;
+                        return scope[index].expand().?.Node;
                     },
                 };
             }
         };
 
-        const BBState = struct {
-            Fork: ?struct {
-                saved: []?Local,
-            } = null,
-            Join: ?*Local.Join = null,
+        const BBState = packed struct(usize) {
+            flag: enum(u2) { uninit, fork, join } = .uninit,
+            data: std.meta.Int(.unsigned, @bitSizeOf(usize) - 2) = undefined,
+
+            fn expand(self: BBState, len: usize) Expanded {
+                return switch (self.flag) {
+                    .uninit => .{},
+                    .fork => .{ .Fork = .{ .saved = @as([*]Local, @ptrFromInt(self.data << 2))[0..len] } },
+                    .join => .{ .Join = @ptrFromInt(self.data << 2) },
+                };
+            }
+
+            fn compact(self: Expanded) BBState {
+                std.debug.assert(self.Fork == null or self.Join == null);
+                if (self.Fork) |f| return .{ .flag = .fork, .data = @truncate(@intFromPtr(f.saved.ptr) >> 2) };
+                if (self.Join) |j| return .{ .flag = .join, .data = @truncate(@intFromPtr(j) >> 2) };
+                return .{};
+            }
+
+            const Expanded = struct {
+                Fork: ?struct { saved: []Local } = null,
+                Join: ?*Local.Join = null,
+            };
         };
 
         pub fn run(m2r: *Self) void {
@@ -84,8 +123,8 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                 }
             }
 
-            var locals = tmp.alloc(?Local, local_count) catch unreachable;
-            @memset(locals, null);
+            var locals = tmp.alloc(Local, local_count) catch unreachable;
+            @memset(locals, .{});
 
             var states = tmp.alloc(BBState, postorder.len) catch unreachable;
             @memset(states, .{});
@@ -105,11 +144,11 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                 // handle fork
                 if (parent_succs == 2) {
                     // this is the second branch, restore the value
-                    if (states[parent.schedule].Fork) |s| {
+                    if (states[parent.schedule].expand(locals.len).Fork) |s| {
                         locals = s.saved;
                     } else {
                         // we will visit this eventually
-                        states[parent.schedule].Fork = .{ .saved = tmp.dupe(?Local, locals) catch unreachable };
+                        states[parent.schedule] = .compact(.{ .Fork = .{ .saved = tmp.dupe(Local, locals) catch unreachable } });
                     }
                 }
 
@@ -128,7 +167,7 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                     if (o.kind == .Phi or o.kind == .Mem or o.isStore()) {
                         if (o.isStore() and o.base().kind == .Local and o.base().schedule != std.math.maxInt(u16)) {
                             to_remove.append(o) catch unreachable;
-                            locals[o.base().schedule] = .{ .Node = o.value() };
+                            locals[o.base().schedule] = .compact(.{ .Node = o.value() });
                         }
 
                         for (tmp.dupe(*Node, o.outputs()) catch unreachable) |lo| {
@@ -152,32 +191,36 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                         root.panic("{}\n", .{child});
                     }
                     // eider we arrived from the back branch or the other side of the split
-                    if (states[child.schedule].Join) |s| {
+                    if (states[child.schedule].expand(locals.len).Join) |s| {
                         if (s.ctrl != child) root.panic("{} {} {} {}\n", .{ s.ctrl, s.ctrl.schedule, child, child.schedule });
-                        for (s.items, locals, 0..) |lhs, rhsm, i| {
-                            if (lhs == null) continue;
-                            if (lhs.? == .Node and lhs.?.Node.isLazyPhi(s.ctrl)) {
-                                var rhs = rhsm;
-                                if (rhs.? == .Loop and (rhs.?.Loop != s or s.ctrl.preservesIdentityPhys())) {
+                        for (s.items, locals, 0..) |clhs, crhsm, i| {
+                            var lhs = clhs.expand() orelse continue;
+                            if (lhs == .Node and lhs.Node.isLazyPhi(s.ctrl)) {
+                                var rhs = crhsm.expand().?;
+                                if (rhs == .Loop and (rhs.Loop != s or s.ctrl.preservesIdentityPhys())) {
                                     rhs = .{ .Node = Local.resolve(self, locals, i) };
                                 }
 
-                                if (rhs.? == .Node) {
-                                    if (self.setInput(lhs.?.Node, 2, rhs.?.Node)) |nlhs| {
-                                        s.items[i].?.Node = nlhs;
+                                if (rhs == .Node) {
+                                    if (self.setInput(lhs.Node, 2, rhs.Node)) |nlhs| {
+                                        lhs = .{ .Node = nlhs };
                                     }
                                 } else {
-                                    const prev = lhs.?.Node.inputs()[1].?;
-                                    self.subsume(prev, lhs.?.Node);
-                                    s.items[i].?.Node = prev;
+                                    const prev = lhs.Node.inputs()[1].?;
+                                    self.subsume(prev, lhs.Node);
+                                    lhs = .{ .Node = prev };
                                 }
 
                                 if (child.inputs()[0] == bb) {
-                                    // TODO: foo bar
-                                    const lhss, const rhss = s.items[i].?.Node.inputs()[1..3].*;
-                                    if (self.setInput(s.items[i].?.Node, 1, rhss)) |v| s.items[i].?.Node = v;
-                                    if (self.setInput(s.items[i].?.Node, 2, lhss)) |v| s.items[i].?.Node = v;
+                                    // TODO: maybe make all previous code more
+                                    // complicated so that his is not needed as
+                                    // it's kind of slow
+                                    const lhss, const rhss = lhs.Node.inputs()[1..3].*;
+                                    if (self.setInput(lhs.Node, 1, rhss)) |v| lhs = .{ .Node = v };
+                                    if (self.setInput(lhs.Node, 2, lhss)) |v| lhs = .{ .Node = v };
                                 }
+
+                                s.items[i] = .compact(lhs);
                             }
                         }
                         s.done = true;
@@ -187,10 +230,10 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                         loop.* = .{
                             .done = false,
                             .ctrl = child,
-                            .items = tmp.dupe(?Local, locals) catch unreachable,
+                            .items = tmp.dupe(Local, locals) catch unreachable,
                         };
-                        @memset(locals, .{ .Loop = loop });
-                        states[child.schedule].Join = loop;
+                        @memset(locals, .compact(.{ .Loop = loop }));
+                        states[child.schedule] = .compact(.{ .Join = loop });
                     }
                 }
             }

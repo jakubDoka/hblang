@@ -158,7 +158,7 @@ pub fn runVendoredTest(path: []const u8) !void {
     if (std.mem.indexOf(u8, path, "float") != null) return;
     if (std.mem.indexOf(u8, path, "inf") != null) return;
 
-    utils.Arena.initScratch(1024 * 1024 * 100);
+    utils.Arena.initScratch(1024 * 1024 * 32);
     defer utils.Arena.deinitScratch();
     try test_util.runVendoredTest(std.testing.allocator, path, "hbvm-ableos");
     try test_util.runVendoredTest(std.testing.allocator, path, "x86_64-linux");
