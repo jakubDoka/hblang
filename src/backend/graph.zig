@@ -1460,6 +1460,7 @@ pub fn Func(comptime MachNode: type) type {
             var worklist = Self.WorkList.init(tmp.arena.allocator(), self.next_id) catch unreachable;
 
             worklist.add(self.root);
+            worklist.add(self.end);
             var i: usize = 0;
             while (i < worklist.list.items.len) : (i += 1) {
                 for (worklist.list.items[i].inputs()) |oi| if (oi) |o| {

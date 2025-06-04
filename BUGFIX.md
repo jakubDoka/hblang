@@ -9,6 +9,62 @@ main := fn(): uint {
 }
 ```
 
+#### mem2reg crash 1
+```hb
+main := fn(): uint {
+    return insert(0, 1)
+}
+
+bar := fn(): void {
+}
+
+insert := fn(a: uint, b: uint): uint {
+    if a == 0 bar()
+    idx := 0
+    loop {
+        offset := 0
+        loop if offset >= 8 break else {
+            if offset == b {
+                return a
+            }
+            offset += 1
+        }
+        idx += 1
+    }
+}
+```
+
+#### mem2reg crash 2
+```hb
+main := fn(): uint {
+    s := Self.{entries: Entry.[.{key: 1, value: 0}][..]}
+
+    return insert(&s, 1, 0).?.*
+}
+
+Entry := struct{.key: uint; .value: uint}
+Self := struct {
+    .entries: []Entry;
+}
+
+insert := fn(self: ^Self, key: uint, value: uint): ?^uint {
+    if true {
+    }
+    idx := 0
+    loop {
+        offset := 0
+        loop if offset >= 8 break else {
+            entry := self.entries.ptr
+            if entry.key == key {
+                return &entry.value
+            }
+            offset += 1
+        }
+        idx += 1
+    }
+}
+```
+
 #### static analisys 1
 ```hb
 expectations := .{

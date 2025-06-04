@@ -2,3 +2,5 @@
 /zig-out
 /core.*
 *.wasm*
+/a.out
+/main.o

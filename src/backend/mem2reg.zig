@@ -37,6 +37,9 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                             }
                         }
                         scope[index] = loop.items[index];
+                        if (scope[index].? == .Loop) {
+                            scope[index].? = .{ .Node = resolve(func, loop.items, index) };
+                        }
                         return scope[index].?.Node;
                     },
                 };
