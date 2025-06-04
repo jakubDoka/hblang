@@ -9,11 +9,12 @@ directives 13 (@Any).main:
        li64 $32, 5
          cp $1, $32
         jal $31, $0, :directives 13 (@Any).foo(vl: uint)
-         cp $33, $1
-         cp $1, $32
+         cp $32, $1
+        li8 $33, 5
+         cp $1, $33
         jal $31, $0, :directives 13 (@Any).foo(vl: u8)
        andi $1, $1, 255
-      add64 $1, $33, $1
+      add64 $1, $32, $1
      addi64 $254, $254, 24
          ld $31, $254, -24, 24
          tx

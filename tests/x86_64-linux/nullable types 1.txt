@@ -17,17 +17,19 @@ nullable types 1.mknull(T = uint):
 main:
 	push rbx
 	push rbp
+	push r12
 	sub rsp, 0x38
 	lea rbx, [rsp]
 	mov rbp, 0x0A
 	mov rdi, rbx
 	mov rsi, rbp
 	call :nullable types 1.mkval(T = uint)
-	mov bpl, [rbx]
-	cmp bpl, 0x00
-	setz bpl
-	movzx rbp, bpl
-	test bpl, bpl
+	mov rbp, 0x00
+	mov r12b, [rbx]
+	cmp r12b, bpl
+	setz r12b
+	movzx r12, r12b
+	test r12b, r12b
 	jz :0
 	mov rax, 0x01
 	jmp :1
@@ -42,6 +44,7 @@ main:
 1:	jmp :3
 2:	mov rax, rcx
 3:	add rsp, 0x38
+	pop r12
 	pop rbp
 	pop rbx
 	ret

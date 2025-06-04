@@ -17,7 +17,7 @@ slices 4.equals:
 	jz :2
 	mov rax, rbx
 1:	jmp :5
-2:	mov rax, rcx
+2:	mov rax, 0x00
 6:	cmp rax, rsi
 	setz bpl
 	movzx rbp, bpl

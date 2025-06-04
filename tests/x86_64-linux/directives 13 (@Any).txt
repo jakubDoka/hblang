@@ -19,11 +19,12 @@ main:
 	mov rbx, 0x05
 	mov rdi, rbx
 	call :directives 13 (@Any).foo(vl: uint)
-	mov rbp, rax
-	mov rdi, rbx
+	mov rbx, rax
+	mov rbp, 0x05
+	mov rdi, rbp
 	call :directives 13 (@Any).foo(vl: u8)
 	movzx rax, al
-	mov rcx, rbp
+	mov rcx, rbx
 	add rcx, rax
 	mov rax, rcx
 	add rsp, 0x08

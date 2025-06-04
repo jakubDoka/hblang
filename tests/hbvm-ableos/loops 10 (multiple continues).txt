@@ -1,14 +1,16 @@
 loops 10 (multiple continues).main:
        li64 $1, 0
-       li64 $2, 1
-         cp $3, $1
-4:     jgtu $3, $1, :0
-        jeq $1, $0, :1
+        li8 $2, 0
+        li8 $3, 1
          cp $4, $1
+4:     jgtu $4, $1, :0
+        jeq $1, $0, :1
+         cp $5, $2
         jmp :2
-1:       cp $4, $2
-2:      jeq $4, $0, :3
-     addi64 $3, $3, 1
+1:       cp $5, $3
+2:     andi $5, $5, 255
+        jeq $5, $0, :3
+     addi64 $4, $4, 1
         jmp :3
 3:      jmp :4
 0:       tx

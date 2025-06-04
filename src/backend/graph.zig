@@ -848,9 +848,10 @@ pub fn Func(comptime MachNode: type) type {
                 break :b m;
             };
 
-            pub fn hash(kind: Kind, inpts: []const ?*Node, extr: *const anyopaque) u64 {
+            pub fn hash(kind: Kind, dt: DataType, inpts: []const ?*Node, extr: *const anyopaque) u64 {
                 var hasher = std.hash.Fnv1a_64.init();
                 hasher.update(@as(*const [2]u8, @ptrCast(&kind)));
+                hasher.update(@as(*const [1]u8, @ptrCast(&dt)));
                 hasher.update(@as([*]const u8, @ptrCast(inpts.ptr))[0 .. inpts.len * @sizeOf(?*Node)]);
                 hasher.update(@as([*]const u8, @ptrCast(extr))[0..size_map[@intFromEnum(kind)]]);
                 return hasher.final();
@@ -859,6 +860,8 @@ pub fn Func(comptime MachNode: type) type {
             pub fn cmp(
                 akind: Kind,
                 bkind: Kind,
+                adt: DataType,
+                bdt: DataType,
                 ainputs: []const ?*Node,
                 binputs: []const ?*Node,
                 aextra: *const anyopaque,
@@ -866,6 +869,7 @@ pub fn Func(comptime MachNode: type) type {
             ) bool {
                 return akind == bkind and
                     std.mem.eql(?*Node, ainputs, binputs) and
+                    adt == bdt and
                     std.mem.eql(
                         u8,
                         @as([*]const u8, @ptrCast(aextra))[0..size_map[@intFromEnum(akind)]],
@@ -896,6 +900,7 @@ pub fn Func(comptime MachNode: type) type {
 
         const Inserter = struct {
             kind: Kind,
+            dt: DataType,
             inputs: []const ?*Node,
             extra: *const anyopaque,
 
@@ -905,19 +910,28 @@ pub fn Func(comptime MachNode: type) type {
 
             pub fn eql(s: @This(), a: InternedNode, b: InternedNode) bool {
                 if (a.hash != b.hash) return false;
-                return Node.cmp(s.kind, b.node.kind, s.inputs, b.node.inputs(), s.extra, b.node.anyextra());
+                return Node.cmp(
+                    s.kind,
+                    b.node.kind,
+                    s.dt,
+                    b.node.data_type,
+                    s.inputs,
+                    b.node.inputs(),
+                    s.extra,
+                    b.node.anyextra(),
+                );
             }
         };
 
         const InsertMap = InternMap(Inserter);
 
-        pub fn internNode(self: *Self, kind: Kind, inputs: []const ?*Node, extra: *const anyopaque) InsertMap.GetOrPutResult {
+        pub fn internNode(self: *Self, kind: Kind, dt: DataType, inputs: []const ?*Node, extra: *const anyopaque) InsertMap.GetOrPutResult {
             const map: *InsertMap = @ptrCast(&self.interner);
 
             return map.getOrPutContext(self.arena.allocator(), .{
                 .node = undefined,
-                .hash = Node.hash(kind, inputs, extra),
-            }, Inserter{ .kind = kind, .inputs = inputs, .extra = extra }) catch unreachable;
+                .hash = Node.hash(kind, dt, inputs, extra),
+            }, Inserter{ .kind = kind, .inputs = inputs, .dt = dt, .extra = extra }) catch unreachable;
         }
 
         const Uninserter = struct {
@@ -932,13 +946,13 @@ pub fn Func(comptime MachNode: type) type {
 
         pub fn uninternNode(self: *Self, node: *Node) void {
             if (Node.isInterned(node.kind, node.inputs())) {
-                std.debug.assert(self.interner.remove(.{ .node = node, .hash = Node.hash(node.kind, node.inputs(), node.anyextra()) }));
+                std.debug.assert(self.interner.remove(.{ .node = node, .hash = Node.hash(node.kind, node.data_type, node.inputs(), node.anyextra()) }));
             }
         }
 
         pub fn reinternNode(self: *Self, node: *Node) ?*Node {
             if (Node.isInterned(node.kind, node.inputs())) {
-                const entry = self.internNode(node.kind, node.inputs(), node.anyextra());
+                const entry = self.internNode(node.kind, node.data_type, node.inputs(), node.anyextra());
 
                 if (entry.found_existing) {
                     return entry.key_ptr.node;
@@ -985,18 +999,18 @@ pub fn Func(comptime MachNode: type) type {
             return node;
         }
 
-        pub fn addNodeUntyped(self: *Self, kind: Kind, ty: DataType, inputs: []const ?*Node, extra: anytype) *Node {
+        pub fn addNodeUntyped(self: *Self, kind: Kind, dt: DataType, inputs: []const ?*Node, extra: anytype) *Node {
             if (Node.isInterned(kind, inputs)) {
-                const entry = self.internNode(kind, inputs, &extra);
+                const entry = self.internNode(kind, dt, inputs, &extra);
                 if (!entry.found_existing) {
-                    entry.key_ptr.node = self.addNodeNoIntern(kind, ty, inputs, extra);
+                    entry.key_ptr.node = self.addNodeNoIntern(kind, dt, inputs, extra);
                 } else {
-                    entry.key_ptr.node.data_type = entry.key_ptr.node.data_type.meet(ty);
+                    entry.key_ptr.node.data_type = entry.key_ptr.node.data_type.meet(dt);
                 }
 
                 return entry.key_ptr.node;
             } else {
-                return self.addNodeNoIntern(kind, ty, inputs, extra);
+                return self.addNodeNoIntern(kind, dt, inputs, extra);
             }
         }
 

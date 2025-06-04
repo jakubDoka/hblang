@@ -3,37 +3,36 @@ main:
 	push rbp
 	push r12
 	push r13
-	push r14
-	sub rsp, 0x100
-	mov rbx, 0x00
-	lea rbp, [rsp+0x78]
-	mov [rbp], bl
-	mov [rbp+0x01], bl
-	mov [rbp+0x02], bl
-	mov [rbp+0x03], bl
-	mov al, bl
+	sub rsp, 0xF8
+	mov rax, 0x00
+	lea rbx, [rsp+0x70]
+	mov [rbx], al
+	mov [rbx+0x01], al
+	mov [rbx+0x02], al
+	mov [rbx+0x03], al
+	lea rcx, [rsp+0x74]
 	add al, 0x01
-	lea rcx, [rsp+0x7C]
 	mov [rcx], al
 	mov [rcx+0x01], al
 	mov [rcx+0x02], al
 	mov [rcx+0x03], al
-	mov r12, 0x04
-	mov rdi, rbp
+	mov rbp, 0x04
+	mov rdi, rbx
 	mov rsi, rcx
-	mov rdx, r12
+	mov rdx, rbp
 	call :memcpy
-	mov al, [rbp+0x02]
-	mov cl, [rbp+0x01]
-	mov dl, [rbp]
-	add rax, rcx
-	mov cl, [rbp+0x03]
-	add rax, rdx
-	add rax, rcx
-	cmp al, 0x04
-	setnz al
-	movzx rax, al
-	test al, al
+	mov rax, 0x04
+	mov cl, [rbx+0x02]
+	mov dl, [rbx+0x01]
+	mov sil, [rbx]
+	add rcx, rdx
+	mov dl, [rbx+0x03]
+	add rcx, rsi
+	add rcx, rdx
+	cmp cl, al
+	setnz cl
+	movzx rcx, cl
+	test cl, cl
 	jz :0
 	mov rax, 0x3E9
 	jmp :1
@@ -52,88 +51,79 @@ main:
 	setz dl
 	movzx rdx, dl
 	cmp rcx, 0x01
-	setz bpl
-	movzx rbp, bpl
-	and rdx, rbp
+	setz bl
+	movzx rbx, bl
+	and rdx, rbx
 	test dl, dl
 	jz :4
 	mov rax, 0x3EB
 3:	jmp :5
 4:	mov rdx, 0x03
-	lea rbp, [rsp+0x68]
-	mov [rbp], rax
-	mov [rbp+0x08], rcx
-	lea r13, [rsp+0x48]
+	lea rbx, [rsp+0x60]
+	mov [rbx], rax
+	mov [rbx+0x08], rcx
+	mov rsi, 0x00
+	lea r12, [rsp+0x40]
 	add rax, 0x03
-	lea r15, [rsp+0x28]
-	mov [rsp], r15
-	mov r15, [rsp]
-	mov [r15], rax
+	lea r13, [rsp+0x20]
+	mov [r13], rax
 	mov rax, rcx
 	add rax, 0x04
-	mov r15, [rsp]
-	mov [r15+0x08], rax
+	mov [r13+0x08], rax
 	mov rax, rdx
 	sub rax, 0x01
-	mov r15, [rsp]
-	mov [r15+0x10], rax
-	mov rax, r12
+	mov [r13+0x10], rax
+	mov rax, rbp
 	sub rax, 0x02
-	mov r15, [rsp]
-	mov [r15+0x18], rax
-	mov rax, rbx
+	mov [r13+0x18], rax
+	mov rax, rsi
 	sub rax, 0x03
-	mov [r13], rax
-	mov rax, rbx
+	mov [r12], rax
+	mov rax, rsi
 	sub rax, 0x04
-	mov [r13+0x08], rax
+	mov [r12+0x08], rax
 	mov rax, 0x10
-	mov rcx, r13
+	mov rcx, r12
 	add rcx, 0x10
 	mov rdi, rcx
-	mov rsi, rbp
+	mov rsi, rbx
 	mov rdx, rax
 	call :memcpy
-	mov rax, [r13]
-	mov r15, [rsp]
-	mov rcx, [r15]
-	mov rdx, [r13+0x08]
-	mov r15, [rsp]
-	mov rbx, [r15+0x08]
-	mov rbp, [r13+0x18]
-	mov r15, [rsp]
-	mov rsi, [r15+0x18]
-	mov rdi, [r13+0x10]
-	mov r15, [rsp]
-	mov r8, [r15+0x10]
-	lea r9, [rsp+0x08]
+	mov rax, [r12]
+	mov rcx, [r13]
+	mov rdx, [r12+0x08]
+	mov rbx, [r13+0x08]
+	mov rbp, [r13+0x10]
+	mov rsi, [r12+0x10]
+	mov rdi, [r12+0x18]
+	mov r8, [r13+0x18]
+	lea r9, [rsp]
 	add rax, rcx
 	mov [r9], rax
 	mov rax, rdx
 	add rax, rbx
 	mov [r9+0x08], rax
+	mov rax, rsi
+	add rax, rbp
+	mov [r9+0x10], rax
 	mov rax, rdi
 	add rax, r8
-	mov [r9+0x10], rax
-	mov rax, rbp
-	add rax, rsi
 	mov [r9+0x18], rax
 	mov rax, 0x20
-	mov rdi, r13
+	mov rdi, r12
 	mov rsi, r9
 	mov rdx, rax
 	call :memcpy
-	mov rax, [r13+0x08]
-	mov rcx, [r13+0x18]
-	mov rdx, [r13]
-	mov rbx, [r13+0x10]
-	add rax, rcx
-	mov rcx, rdx
-	add rcx, rbx
+	mov rax, [r12+0x10]
+	mov rcx, [r12]
+	mov rdx, [r12+0x18]
+	mov rbx, [r12+0x08]
+	add rcx, rax
+	mov rax, rbx
+	add rax, rdx
 	add rcx, rax
 	mov rax, rcx
-5:	add rsp, 0x100
-	pop r14
+5:	add rsp, 0xF8
 	pop r13
 	pop r12
 	pop rbp

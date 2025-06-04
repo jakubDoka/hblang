@@ -250,7 +250,21 @@ pub const Node = union(enum) {
         }
 
         if (node.kind == .BinOp and node.inputs()[2].?.kind == .CInt and
-            node.extra(.BinOp).* != .imul)
+            switch (node.extra(.BinOp).*) {
+                .udiv, .sdiv, .umod, .smod, .imul => false,
+                .eq,
+                .ne,
+                .uge,
+                .ule,
+                .ugt,
+                .ult,
+                .sge,
+                .sle,
+                .sgt,
+                .slt,
+                => node.inputs()[2].?.data_type.size() > 2,
+                else => true,
+            })
         {
             if (std.math.cast(i32, node.inputs()[2].?.extra(.CInt).*) != null) {
                 return func.addNode(.ImmOp, node.data_type, node.inputs()[0..2], .{
@@ -297,7 +311,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
 
     self.allocs = Regalloc.ralloc(Node, func);
     self.ret_count = func.returns.len;
-    self.local_relocs = .initBuffer(tmp.arena.alloc(Reloc, 128));
+    self.local_relocs = .initBuffer(tmp.arena.alloc(Reloc, 1024 * 10));
     self.block_offsets = tmp.arena.alloc(u32, postorder.len);
 
     var used_regs = std.EnumSet(Reg){};
@@ -354,9 +368,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
 
     prelude: {
         for (Reg.system_v.callee_saved) |r| {
-            if (@intFromEnum(r) > @intFromEnum(Reg.r15) - tmp_count and
-                spill_slot_count >= @intFromEnum(r) - (@intFromEnum(Reg.r15) - tmp_count))
-            {
+            if (@intFromEnum(r) > @intFromEnum(Reg.r15) - tmp_count and spill_slot_count > 0) {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_PUSH, .{Tmp{@intFromEnum(r) - (@intFromEnum(Reg.r15) - tmp_count + 1)}});
             } else if (used_regs.contains(r)) {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_PUSH, .{r});
@@ -400,7 +412,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
             var iter = std.mem.reverseIterator(Reg.system_v.callee_saved);
             while (iter.next()) |r| {
                 if (@intFromEnum(r) > @intFromEnum(Reg.r15) - tmp_count and
-                    spill_slot_count >= @intFromEnum(r) - (@intFromEnum(Reg.r15) - tmp_count))
+                    spill_slot_count > 0)
                 {
                     self.emitInstr(zydis.ZYDIS_MNEMONIC_POP, .{Tmp{@intFromEnum(r) - (@intFromEnum(Reg.r15) - tmp_count + 1)}});
                 } else if (used_regs.contains(r)) {
@@ -487,6 +499,7 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
             Reg => 8,
             SReg => val[1],
             BRegOff => val[2],
+            SizeHint => val.bytes,
             zydis.ZydisEncoderOperand => b: {
                 const t = val.mem.size;
                 break :b t;
@@ -539,6 +552,7 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
             },
             zydis.ZydisEncoderOperand => val,
             SizeHint => {
+                req.operand_count -= 1;
                 req.operand_size_hint = @intCast(zydis.ZYDIS_OPERAND_SIZE_HINT_8 + val.bytes);
                 continue;
             },

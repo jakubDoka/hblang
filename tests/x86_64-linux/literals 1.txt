@@ -9,7 +9,8 @@ main:
 	mov rax, 0x08
 1:	jmp :3
 2:	test al, al
-	jz :5
+	jz :4
 	mov rax, 0x02
 3:	jmp :5
+4:	mov rax, 0x00
 5:	ret

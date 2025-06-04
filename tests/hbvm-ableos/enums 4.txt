@@ -2,7 +2,7 @@ enums 4.main:
          st $31, $254, -24, 24
      addi64 $254, $254, -24
         lra $32, $0, :enums 4.map
-       li64 $33, 0
+        li8 $33, 0
          cp $1, $32
          cp $2, $33
         jal $31, $0, :enums 4.NameMap(Enum = enums 4.Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get

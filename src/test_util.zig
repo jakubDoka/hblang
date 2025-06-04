@@ -65,7 +65,7 @@ pub const Expectations = struct {
     }
 };
 
-pub fn runVendoredTest(gpa: std.mem.Allocator, path: []const u8) !void {
+pub fn runVendoredTest(gpa: std.mem.Allocator, path: []const u8, target: []const u8) !void {
     var ast = try root.compile(.{
         .gpa = gpa,
         .diagnostics = std.io.getStdErr().writer().any(),
@@ -74,7 +74,7 @@ pub fn runVendoredTest(gpa: std.mem.Allocator, path: []const u8) !void {
         .mangle_terminal = true,
         .vendored_test = true,
         .root_file = path,
-        .target = "hbvm-ableos",
+        .target = target,
     });
     defer ast.arena.deinit();
 }

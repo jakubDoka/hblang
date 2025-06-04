@@ -4,26 +4,24 @@ adding difference to a pointer 1.one:
 main:
 	push rbx
 	push rbp
-	push r12
 	sub rsp, 0x10
 	lea rbx, [rsp]
 	mov rbp, 0x00
 	mov [rbx], bpl
 	mov rbp, 0x01
 	mov [rbx+0x01], bpl
-	mov r12, 0x02
-	mov [rbx+0x02], r12b
-	mov r12, 0x03
-	mov [rbx+0x03], r12b
+	mov rbp, 0x02
+	mov [rbx+0x02], bpl
+	mov rbp, 0x03
+	mov [rbx+0x03], bpl
 	call :adding difference to a pointer 1.one
-	mov rcx, rbp
+	mov rcx, 0x01
 	sub rcx, rax
 	mov rax, rbx
 	add rax, rcx
 	mov al, [rax]
 	movzx rax, al
 	add rsp, 0x10
-	pop r12
 	pop rbp
 	pop rbx
 	ret

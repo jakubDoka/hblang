@@ -52,22 +52,23 @@ main:
 	push rbp
 	push r12
 	push r13
-	push r14
-	sub rsp, 0x58
-	lea rbx, [rsp+0x28]
+	sub rsp, 0x50
+	lea rbx, [rsp+0x20]
 	mov rbp, 0x01
 	mov [rbx], bpl
-	mov r12, 0x02
-	mov [rbx+0x01], r12b
-	mov r12, 0x03
-	mov [rbx+0x02], r12b
-	lea r13, [rsp+0x08]
-	mov qword ptr [rsp], 0x00
-	mov rdi, r13
+	mov rbp, 0x02
+	mov [rbx+0x01], bpl
+	mov rbp, 0x03
+	mov [rbx+0x02], bpl
+	mov rbp, 0x01
+	lea r12, [rsp]
+	mov r13, 0x00
+	mov rdi, r12
 	mov rsi, rbp
-	mov rdx, [rsp]
+	mov rdx, r13
 	call :slices 3.reverse
-	lea rbp, [rsp+0x18]
+	lea rbp, [rsp+0x10]
+	mov r12, 0x03
 	mov rdi, rbp
 	mov rsi, rbx
 	mov rdx, r12
@@ -80,8 +81,7 @@ main:
 	movzx rdx, dl
 	sub rax, rcx
 	sub rax, rdx
-	add rsp, 0x58
-	pop r14
+	add rsp, 0x50
 	pop r13
 	pop r12
 	pop rbp
