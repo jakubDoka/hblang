@@ -20,8 +20,8 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
     };
 
     const Instr = struct {
-        prev: *Fn.Node = undefined,
         def: *Fn.Node = undefined,
+        preds: []const *Fn.Node = undefined,
         succ: []const *Fn.Node = undefined,
         liveins: Set,
         liveouts: Set,
@@ -46,13 +46,19 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
 
     const instrs = tmp.arena.alloc(Instr, func.instr_count);
 
+    //var work_list = std.ArrayListUnmanaged(u16).initBuffer(tmp.arena.alloc(u16, instrs.len));
+    //var in_work_list = std.DynamicBitSetUnmanaged.initEmpty(tmp.arena.allocator(), instrs.len) catch unreachable;
+
     // TODO: we can clean this up: arena should contruct the bitset
-    for (instrs) |*b| b.* = .{
-        .liveins = Set.initEmpty(tmp.arena.allocator(), func.instr_count) catch unreachable,
-        .liveouts = Set.initEmpty(tmp.arena.allocator(), func.instr_count) catch unreachable,
-        .defs = Set.initEmpty(tmp.arena.allocator(), func.instr_count) catch unreachable,
-        .uses = Set.initEmpty(tmp.arena.allocator(), func.instr_count) catch unreachable,
-    };
+    for (instrs) |*b| {
+        //   work_list.appendAssumeCapacity(@intCast(instrs.len - i - 1));
+        b.* = .{
+            .liveins = Set.initEmpty(tmp.arena.allocator(), func.instr_count) catch unreachable,
+            .liveouts = Set.initEmpty(tmp.arena.allocator(), func.instr_count) catch unreachable,
+            .defs = Set.initEmpty(tmp.arena.allocator(), func.instr_count) catch unreachable,
+            .uses = Set.initEmpty(tmp.arena.allocator(), func.instr_count) catch unreachable,
+        };
+    }
 
     var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), func.next_id) catch unreachable;
     const postorder = func.collectPostorder(tmp.arena.allocator(), &visited);
@@ -60,12 +66,19 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
         const node = &bb.base;
         for (node.outputs(), 0..) |c, i| {
             instrs[c.schedule].def = c;
+
             if (i + 1 < node.outputs().len) {
                 instrs[c.schedule].succ = node.outputs()[i + 1 ..][0..1];
             } else if (c.kind != .Trap) {
                 instrs[c.schedule].succ = c.outputs();
             } else {
                 instrs[c.schedule].succ = &.{};
+            }
+
+            if (i == 0) {
+                instrs[c.schedule].preds = @ptrCast(bb.base.inputs());
+            } else {
+                instrs[c.schedule].preds = node.outputs()[i - 1 ..][0..1];
             }
         }
     }
@@ -88,6 +101,52 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
     }
 
     // compute liveins and liveouts
+
+    //    while (work_list.pop()) |task| {
+    //        const i = instrs[task];
+    //        var changed: usize = 0;
+    //        for (
+    //            Block.setMasks(i.liveins),
+    //            Block.setMasks(i.liveouts),
+    //            Block.setMasks(i.uses),
+    //            Block.setMasks(i.defs),
+    //        ) |*lin, *lot, us, df| {
+    //            const previ = lin.*;
+    //            lin.* = us | (lot.* & ~df);
+    //
+    //            changed |= (previ ^ lin.*);
+    //        }
+    //
+    //        if (changed != 0) {
+    //            for (i.preds) |p| {
+    //                if (!in_work_list.isSet(p.schedule)) {
+    //                    in_work_list.set(p.schedule);
+    //                    work_list.appendAssumeCapacity(p.schedule);
+    //                }
+    //            }
+    //        }
+    //
+    //        for (i.succ) |bo| {
+    //            changed = 0;
+    //            for (
+    //                Block.setMasks(i.liveouts),
+    //                Block.setMasks(instrs[if (bo.isCfg() and bo.isBasicBlockStart()) bo.outputs()[0].schedule else bo.schedule].liveins),
+    //            ) |*lot, sin| {
+    //                const prevo = lot.*;
+    //                lot.* |= sin;
+    //                changed |= (prevo ^ lot.*);
+    //            }
+    //
+    //            if (changed != 0) {
+    //                if (!in_work_list.isSet(bo.schedule)) {
+    //                    in_work_list.set(bo.schedule);
+    //                    work_list.appendAssumeCapacity(bo.schedule);
+    //                }
+    //            }
+    //        }
+    //    }
+    //
+
     var changed: Set.MaskInt = 1;
     while (changed != 0) {
         changed = 0;

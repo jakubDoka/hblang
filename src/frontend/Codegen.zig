@@ -226,7 +226,7 @@ pub fn getEntry(self: *Codegen, file: Types.File, name: []const u8) !utils.EntId
     defer tmp.deinit();
 
     self.ast = self.types.getFile(file);
-    _ = self.beginBuilder(tmp.arena, .never, 0, 0);
+    _ = self.beginBuilder(tmp.arena, .never, .{});
     defer self.bl.func.reset();
     self.parent_scope = .{ .Perm = self.types.getScope(file) };
     self.struct_ret_ptr = null;
@@ -243,15 +243,19 @@ pub fn beginBuilder(
     self: *Codegen,
     scratch: *utils.Arena,
     ret: Types.Id,
-    param_count: usize,
-    return_count: usize,
+    caps: struct {
+        scope_cap: usize = 0,
+        loop_cap: usize = 0,
+        param_count: usize = 0,
+        return_count: usize = 0,
+    },
 ) struct { Builder.BuildToken, []DataType, []DataType } {
     self.errored = false;
     self.ret = ret;
-    const res = self.bl.begin(param_count, return_count);
+    const res = self.bl.begin(caps.param_count, caps.return_count);
 
-    self.scope = .initBuffer(scratch.alloc(ScopeEntry, 128));
-    self.loops = .initBuffer(scratch.alloc(Loop, 8));
+    self.scope = .initBuffer(scratch.alloc(ScopeEntry, caps.scope_cap));
+    self.loops = .initBuffer(scratch.alloc(Loop, caps.loop_cap));
     self.defers = .initBuffer(scratch.alloc(Ast.Id, 32));
 
     return res;
@@ -268,8 +272,17 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
     var func: *root.frontend.types.Func = self.types.store.get(func_id);
 
     self.ast = self.types.getFile(func.key.file);
+    const ast = self.ast;
+
+    const fn_ast = ast.exprs.getTyped(.Fn, func.key.ast).?;
+
     const param_count, const return_count, const ret_abi = func.computeAbiSize(self.abi, self.types);
-    const token, const params, const returns = self.beginBuilder(tmp.arena, func.ret, param_count, return_count);
+    const token, const params, const returns = self.beginBuilder(tmp.arena, func.ret, .{
+        .param_count = param_count,
+        .return_count = return_count,
+        .scope_cap = fn_ast.peak_vars,
+        .loop_cap = fn_ast.peak_loops,
+    });
     self.parent_scope = .init(.{ .Func = func_id });
     self.name = "";
 
@@ -295,9 +308,6 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
         ret_abi.types(returns, true, self.abi);
         self.struct_ret_ptr = null;
     }
-
-    const ast = self.types.getFile(func.key.file);
-    const fn_ast = ast.exprs.getTyped(.Fn, func.key.ast).?;
 
     var ty_idx: usize = 0;
     for (ast.exprs.view(fn_ast.args)) |aarg| {

@@ -156,7 +156,7 @@ pub fn runVendoredTest(path: []const u8) !void {
     // TODO: fix
     if (std.mem.indexOf(u8, path, "struct-niches.hb") != null) return;
 
-    utils.Arena.initScratch(1024 * 1024);
+    utils.Arena.initScratch(1024 * 1024 * 100);
     defer utils.Arena.deinitScratch();
     try test_util.runVendoredTest(std.testing.allocator, path);
 }

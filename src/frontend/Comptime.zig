@@ -417,7 +417,7 @@ pub fn jitExprLow(
             gen.bl.func.reset();
         }
 
-        const token, const params, _ = gen.beginBuilder(tmp.arena, .never, 1, 0);
+        const token, const params, _ = gen.beginBuilder(tmp.arena, .never, .{ .param_count = 1 });
         gen.ast = types.getFile(scope.file(types));
         gen.parent_scope = scope;
         gen.name = name;

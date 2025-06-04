@@ -262,6 +262,7 @@ pub const Builtin = union(enum) {
     Region: extern struct {
         base: Cfg = .{},
         preserve_identity_phys: bool = false,
+        cached_lca: ?*align(8) anyopaque = null,
     },
     // [traps...]
     TrapRegion: Cfg,
@@ -450,7 +451,13 @@ pub fn Func(comptime MachNode: type) type {
 
                 pub fn idom(cfg: *CfgNode) *CfgNode {
                     return switch (cfg.base.kind) {
-                        .Region => findLca(cfg.base.inputs()[0].?.asCfg().?, cfg.base.inputs()[1].?.asCfg().?),
+                        .Region => if (cfg.base.extra(.Region).cached_lca) |cached|
+                            @ptrCast(cached)
+                        else {
+                            const lca = findLca(cfg.base.inputs()[0].?.asCfg().?, cfg.base.inputs()[1].?.asCfg().?);
+                            cfg.base.extra(.Region).cached_lca = lca;
+                            return lca;
+                        },
                         else => cfg.base.cfg0().?,
                     };
                 }
@@ -627,6 +634,7 @@ pub fn Func(comptime MachNode: type) type {
                             try writ.print("{}", .{ex.*});
                         }
                     },
+                    .optional => try writ.print("{?}", .{ex.*}),
                     else => {
                         try writ.print("{}", .{ex.*});
                     },

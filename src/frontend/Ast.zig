@@ -79,6 +79,8 @@ pub const Expr = union(enum) {
         args: utils.EnumSlice(Arg),
         ret: Id,
         body: Id,
+        peak_vars: u16,
+        peak_loops: u16,
     },
     Enum: Type,
     Union: Type,

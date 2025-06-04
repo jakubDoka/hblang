@@ -26,13 +26,22 @@ list_pos: Ast.Pos = undefined,
 deferring: bool = false,
 errored: bool = false,
 stack_base: usize,
+func_stats: FuncStats = .{},
 
 pub const stack_limit = 1024 * 1024;
 
 const Parser = @This();
 const Error = error{ UnexpectedToken, StackOverflow } || std.mem.Allocator.Error;
 
+const FuncStats = struct {
+    loop_depth: u16 = 0,
+    max_loop_depth: u16 = 0,
+    max_variable_count: u16 = 0,
+    variable_count: u16 = 0,
+};
+
 const Sym = struct {
+    name: []const u8,
     id: Ident,
     declared: bool = false,
     unordered: bool = true,
@@ -192,6 +201,10 @@ fn declareExpr(self: *Parser, id: Id, unordered: bool) void {
     }
     sym.declared = true;
     sym.unordered = unordered;
+
+    self.func_stats.variable_count += 1;
+    self.func_stats.max_variable_count =
+        @max(self.func_stats.max_variable_count, self.func_stats.variable_count);
 }
 
 fn parseUnit(self: *Parser) Error!Id {
@@ -310,6 +323,10 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         .null => .{ .Null = .init(token.pos) },
         .@"$", .Ident => return try self.resolveIdent(token),
         .@"fn" => b: {
+            const prev_func_stats = self.func_stats;
+            defer self.func_stats = prev_func_stats;
+            self.func_stats = .{};
+
             const prev_capture_boundary = self.capture_boundary;
             self.capture_boundary = self.active_syms.items.len;
             defer self.capture_boundary = prev_capture_boundary;
@@ -339,6 +356,8 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 .pos = .{ .index = @intCast(token.pos), .flag = indented_args },
                 .ret = ret,
                 .body = body,
+                .peak_vars = self.func_stats.max_variable_count,
+                .peak_loops = self.func_stats.max_loop_depth,
             } };
         },
 
@@ -380,6 +399,9 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 nm[0] = std.ascii.toUpper(nm[0]);
                 break :nm nm[0..] ++ "";
             };
+
+            const prev_func_stats = self.func_stats;
+            defer self.func_stats = prev_func_stats;
 
             const prev_capture_boundary = self.capture_boundary;
             self.capture_boundary = self.active_syms.items.len;
@@ -474,7 +496,13 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         } },
         .loop, .@"$loop" => .{ .Loop = .{
             .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind != .loop } },
-            .body = try self.parseScopedExpr(),
+            .body = b: {
+                self.func_stats.loop_depth += 1;
+                self.func_stats.max_loop_depth =
+                    @max(self.func_stats.max_loop_depth, self.func_stats.loop_depth);
+                defer self.func_stats.loop_depth -= 1;
+                break :b try self.parseScopedExpr();
+            },
         } },
         .@"break" => b: {
             if (self.deferring) self.report(token.pos, "can not break from a defer", .{});
@@ -520,6 +548,7 @@ fn finalizeVariablesLow(self: *Parser, start: usize) usize {
             }
         }
     }
+    self.func_stats.variable_count -= @intCast(self.active_syms.items.len - new_len);
     return new_len;
 }
 
@@ -530,17 +559,22 @@ fn finalizeVariables(self: *Parser, start: usize) void {
 fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
     var repr = token.view(self.lexer.source);
     if (token.kind == .@"$") repr = repr[1..];
-    
-    for (self.active_syms.items, 0..) |*s, i| if (Ast.cmpLow(s.id.pos(), self.lexer.source, repr)) {
-        s.used = true;
-        if (i < self.capture_boundary and !s.unordered) {
-            try self.captures.append(self.arena.allocator(), s.id);
+
+    var iter = std.mem.reverseIterator(self.active_syms.items);
+    var i = self.active_syms.items.len;
+    while (iter.nextPtr()) |s| {
+        i -= 1;
+        if (std.mem.eql(u8, s.name, repr)) {
+            s.used = true;
+            if (i < self.capture_boundary and !s.unordered) {
+                try self.captures.append(self.arena.allocator(), s.id);
+            }
+            return try self.store.alloc(self.arena.allocator(), .Ident, .{
+                .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind == .@"$" } },
+                .id = s.id,
+            });
         }
-        return try self.store.alloc(self.arena.allocator(), .Ident, .{
-            .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind == .@"$" } },
-            .id = s.id,
-        });
-    };
+    }
 
     const id = Ident.init(token);
     const alloc = try self.store.alloc(self.arena.allocator(), .Ident, .{
@@ -548,7 +582,7 @@ fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
         .id = id,
     });
     if (token.kind == .@"$") try self.comptime_idents.append(self.arena.allocator(), id);
-    try self.active_syms.append(self.arena.allocator(), .{ .id = id });
+    try self.active_syms.append(self.arena.allocator(), .{ .name = repr, .id = id });
     return alloc;
 }
 
