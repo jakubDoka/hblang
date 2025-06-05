@@ -79,7 +79,7 @@ main:
 	push rbp
 	push r12
 	push r13
-	sub rsp, 0x30
+	sub rsp, 0x18
 	lea rbx, [rsp]
 	mov rbp, 0x01
 	mov [rbx], rbp
@@ -104,7 +104,7 @@ main:
 	add rcx, rbp
 	add rcx, rax
 	mov rax, rcx
-	add rsp, 0x30
+	add rsp, 0x18
 	pop r13
 	pop r12
 	pop rbp

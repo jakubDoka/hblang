@@ -349,9 +349,9 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     }
 
     const spill_slot_count = std.mem.max(u16, self.allocs) -| (@intFromEnum(Reg.r15) - tmp_count);
-    var stack_size: i64 = std.mem.alignForward(i64, local_size, 8) + spill_slot_count * 8; //used_reg_size + local_size + spill_count;
+    var stack_size: i64 = std.mem.alignForward(i64, local_size, 8) + spill_slot_count * 8;
 
-    const padding = std.mem.alignForward(i64, stack_size, 16);
+    const padding = std.mem.alignForward(i64, stack_size, 16) - stack_size;
 
     const has_call = for (postorder) |bb| {
         if (bb.base.kind == .CallEnd) break true;
@@ -971,10 +971,17 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                         ),
                         else => unreachable,
                     },
-                    .uext => if (instr.inputs()[1].?.data_type.size() == 1) self.emitInstr(
-                        zydis.ZYDIS_MNEMONIC_MOVZX,
-                        .{ SReg{ dst, size }, SReg{ dst, 1 } },
-                    ),
+                    .uext => if (instr.inputs()[1].?.data_type.size() == 1) {
+                        self.emitInstr(
+                            zydis.ZYDIS_MNEMONIC_MOVZX,
+                            .{ SReg{ dst, size }, SReg{ dst, 1 } },
+                        );
+                    } else {
+                        self.emitInstr(
+                            zydis.ZYDIS_MNEMONIC_MOV,
+                            .{ SReg{ dst, instr.inputs()[1].?.data_type.size() }, dst },
+                        );
+                    },
                     .not => {
                         self.emitInstr(zydis.ZYDIS_MNEMONIC_XOR, .{ SReg{ dst, size }, 1 });
                     },

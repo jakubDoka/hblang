@@ -4,7 +4,7 @@ structs 1.odher_pass:
 	call :memcpy
 	ret
 structs 1.Ty.sum:
-	sub rsp, 0x20
+	sub rsp, 0x10
 	lea rax, [rsp]
 	mov [rax], rdi
 	mov [rax+0x08], rsi
@@ -14,7 +14,7 @@ structs 1.Ty.sum:
 	mov [rax+0x08], rsi
 	sub rdi, rsi
 	mov rax, rdi
-	add rsp, 0x20
+	add rsp, 0x10
 	ret
 structs 1.pass:
 	mov rax, [rdi]
@@ -32,7 +32,7 @@ main:
 	push r13
 	push r14
 	push r15
-	sub rsp, 0x90
+	sub rsp, 0x48
 	lea rbx, [rsp+0x18]
 	mov rbp, 0x04
 	mov [rbx], rbp
@@ -74,7 +74,7 @@ main:
 1:	jmp :3
 2:	mov rdi, r12
 	call :structs 1.pass
-3:	add rsp, 0x90
+3:	add rsp, 0x48
 	pop r15
 	pop r14
 	pop r13

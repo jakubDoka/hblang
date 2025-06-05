@@ -30,7 +30,7 @@ main:
 	push rbp
 	push r12
 	push r13
-	sub rsp, 0x38
+	sub rsp, 0x28
 	lea rbx, [rsp+0x10]
 	mov rbp, 0x01
 	mov [rbx], rbp
@@ -44,7 +44,7 @@ main:
 	mov rdx, r12
 	call :mem2reg crash 2.insert
 	mov rax, [rax]
-	add rsp, 0x38
+	add rsp, 0x28
 	pop r13
 	pop r12
 	pop rbp

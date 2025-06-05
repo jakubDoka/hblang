@@ -1,10 +1,11 @@
 main:
-	sub rsp, 0x18
+	sub rsp, 0x10
 	lea rax, [rsp]
 	mov rcx, 0x01
 	mov [rax], cl
 	mov [rax+0x01], cl
 	mov ax, [rax]
+	mov ax, ax
 	sub rax, 0x100
-	add rsp, 0x18
+	add rsp, 0x10
 	ret

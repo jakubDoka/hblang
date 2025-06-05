@@ -17,6 +17,8 @@ pub fn main() !void {
         \\
     , .{});
 
+    const cwd = try std.fs.cwd().realpathAlloc(arena, "vendored-tests");
+
     var stack = std.ArrayList([]const u8).init(arena);
     var vendored = try std.fs.cwd().openDir(vendored_tests, .{ .iterate = true });
     var walker = vendored.iterate();
@@ -41,7 +43,10 @@ pub fn main() !void {
                     \\}}
                     \\
                     \\
-                , .{ name, name });
+                , .{
+                    try std.mem.replaceOwned(u8, arena, name[cwd.len..], example_dir, ""),
+                    name,
+                });
             }
         }
     }

@@ -1,7 +1,7 @@
 main:
 	push rbx
 	push rbp
-	sub rsp, 0x98
+	sub rsp, 0x50
 	mov rax, 0x00
 	lea rcx, [rsp]
 	mov rdx, 0x18
@@ -19,7 +19,7 @@ main:
 	test bpl, bpl
 	jz :1
 	mov rax, rdx
-	add rsp, 0x98
+	add rsp, 0x50
 	pop rbp
 	pop rbx
 	ret

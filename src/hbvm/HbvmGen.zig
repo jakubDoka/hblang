@@ -69,6 +69,16 @@ pub const Node = union(enum) {
     pub const is_basic_block_end: []const Kind = &.{.IfOp};
     pub const is_mem_op: []const Kind = &.{ .BlockCpy, .St, .Ld };
 
+    pub fn knownOffset(node: *Func.Node) struct { *Func.Node, i64 } {
+        return switch (node.extra2()) {
+            .ImmBinOp => |i| {
+                std.debug.assert(i.op == .addi8);
+                return .{ node.inputs()[1].?, i.imm };
+            },
+            else => .{ node, 0 },
+        };
+    }
+
     pub fn regBias(node: *Func.Node) ?u16 {
         return switch (node.kind) {
             .Arg => @intCast(node.extraConst(.Arg).*),
@@ -303,7 +313,7 @@ pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
                     },
                     7, 1 => {},
                     5 => {
-                        const Msg = extern struct { pad: u8, count: u64 align(1), len: u64 align(1), src: u64 align(1), dest: u64 align(1) };
+                        const Msg = extern struct { pad: u8, len: u64 align(1), count: u64 align(1), src: u64 align(1), dest: u64 align(1) };
                         const msg: Msg = @bitCast(ctx.memory[vm.regs.get(.arg(2))..][0..@sizeOf(Msg)].*);
                         const dst, const src = .{ ctx.memory[msg.dest..][0..msg.len], ctx.memory[msg.src..][0..msg.count] };
 
@@ -326,10 +336,24 @@ pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
                             }
                         }
                     },
-                    else => unreachable,
+                    else => |v| utils.panic("{}", .{v}),
                 },
                 7 => utils.panic("I don't think I will", .{}),
-                else => unreachable,
+                1 => {
+                    const LogLevel = enum(u8) {
+                        Error,
+                        Warn,
+                        Info,
+                        Debug,
+                        Trace,
+                    };
+                    const Msg = extern struct { level: LogLevel, str_ptr: u64 align(1), str_len: u64 align(1) };
+                    const msg: Msg = @bitCast(ctx.memory[vm.regs.get(.arg(2))..][0..@sizeOf(Msg)].*);
+                    const str = ctx.memory[msg.str_ptr..][0..msg.str_len];
+
+                    std.debug.print("{s}\n", .{str});
+                },
+                else => |v| utils.panic("{}", .{v}),
             },
             else => unreachable,
         },
@@ -792,22 +816,24 @@ pub fn idealizeMach(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.
 
     if (node.kind == .Store) {
         if (node.base().kind == .ImmBinOp) {
+            const base, const offset = node.base().knownOffset();
             return func.addNode(
                 .St,
                 node.data_type,
-                &.{ inps[0], inps[1], node.base().inputs()[1], inps[3] },
-                .{ .offset = node.base().extra(.ImmBinOp).imm },
+                &.{ inps[0], inps[1], base, inps[3] },
+                .{ .offset = offset },
             );
         }
     }
 
     if (node.kind == .Load) {
         if (node.base().kind == .ImmBinOp) {
+            const base, const offset = node.base().knownOffset();
             return func.addNode(
                 .Ld,
                 node.data_type,
-                &.{ inps[0], inps[1], node.base().inputs()[1] },
-                .{ .offset = node.base().extra(.ImmBinOp).imm },
+                &.{ inps[0], inps[1], base },
+                .{ .offset = offset },
             );
         }
     }

@@ -6,13 +6,13 @@ big constant 1.uninit:
 main:
 	push rbx
 	push rbp
-	sub rsp, 0x10
+	sub rsp, 0x08
 	lea rbx, [rsp]
 	mov rbp, 0x00
 	mov [rbx], rbp
 	mov rdi, rbx
 	call :big constant 1.uninit
-	add rsp, 0x10
+	add rsp, 0x08
 	pop rbp
 	pop rbx
 	ret

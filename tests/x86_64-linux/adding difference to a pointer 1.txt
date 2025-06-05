@@ -4,7 +4,7 @@ adding difference to a pointer 1.one:
 main:
 	push rbx
 	push rbp
-	sub rsp, 0x10
+	sub rsp, 0x08
 	lea rbx, [rsp]
 	mov rbp, 0x00
 	mov [rbx], bpl
@@ -21,7 +21,7 @@ main:
 	add rax, rcx
 	mov al, [rax]
 	movzx rax, al
-	add rsp, 0x10
+	add rsp, 0x08
 	pop rbp
 	pop rbx
 	ret

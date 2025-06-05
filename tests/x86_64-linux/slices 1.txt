@@ -1,7 +1,7 @@
 main:
 	push rbx
 	push rbp
-	sub rsp, 0x118
+	sub rsp, 0x90
 	mov rax, 0x00
 	lea rcx, [rsp+0x80]
 	mov rdx, 0x01
@@ -48,7 +48,7 @@ main:
 	test sil, sil
 	jz :0
 	mov rax, rbp
-	add rsp, 0x118
+	add rsp, 0x90
 	pop rbp
 	pop rbx
 	ret

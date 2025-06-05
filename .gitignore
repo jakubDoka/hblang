@@ -4,3 +4,5 @@
 *.wasm*
 /a.out
 /main.o
+/main.hb
+/main.py

@@ -1,7 +1,7 @@
 slices 3.reverse:
 	push rbx
 	push rbp
-	sub rsp, 0x20
+	sub rsp, 0x10
 	lea rax, [rsp]
 	mov [rax], rsi
 	mov [rax+0x08], rdx
@@ -43,7 +43,7 @@ slices 3.reverse:
 2:	mov rsi, rax
 	mov rdx, rbx
 	call :memcpy
-1:	add rsp, 0x20
+1:	add rsp, 0x10
 	pop rbp
 	pop rbx
 	ret
@@ -52,7 +52,7 @@ main:
 	push rbp
 	push r12
 	push r13
-	sub rsp, 0x50
+	sub rsp, 0x28
 	lea rbx, [rsp+0x20]
 	mov rbp, 0x01
 	mov [rbx], bpl
@@ -81,7 +81,7 @@ main:
 	movzx rdx, dl
 	sub rax, rcx
 	sub rax, rdx
-	add rsp, 0x50
+	add rsp, 0x28
 	pop r13
 	pop r12
 	pop rbp
