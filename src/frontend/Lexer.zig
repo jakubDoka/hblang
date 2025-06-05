@@ -140,7 +140,7 @@ pub const Lexeme = enum(u16) {
     @"@int_to_float",
     @"@float_to_int",
     @"@float_cast",
-    @"@compiles",
+    @"@has_decl",
     @"@import",
 
     const data = @typeInfo(Lexeme).@"enum";

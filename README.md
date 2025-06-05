@@ -1725,14 +1725,14 @@ main := fn(): uint {
 }
 ```
 
-#### directives 15 (@compiles)
+#### directives 15 (@has_decl)
 ```hb
 main := fn(): uint {
-    $if @compiles(scp.bar) {
+    $if @has_decl(scp, "bar") {
         return scp.bar
     }
 
-    $if @compiles(scp.foo) {
+    $if @has_decl(scp, "foo") {
         return scp.foo
     }
 }
@@ -1773,7 +1773,7 @@ main := fn(): uint {
 // in: lib.hb
 
 some_num := fn(): uint {
-    $if @compiles(@RootScope().custom_num) return @RootScope().custom_num
+    $if @has_decl(@RootScope(), "custom_num") return @RootScope().custom_num
     return 1
 }
 ```

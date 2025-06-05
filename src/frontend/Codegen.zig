@@ -2572,20 +2572,24 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             return self.report(expr, "{s}", .{msg.items});
         },
         .Any => return self.emitTyConst(.any),
-        .compiles => {
-            try assertDirectiveArgs(self, expr, args, "<expr>");
+        .has_decl => {
+            try assertDirectiveArgs(self, expr, args, "<expr>, <string-name>");
 
-            const prev_buff = self.types.diagnostics;
-            defer self.types.diagnostics = prev_buff;
-            self.types.diagnostics = std.io.null_writer.any();
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
 
-            const prev_errored = self.errored;
-            defer self.errored = prev_errored;
-            self.errored = false;
+            const name_ast = ast.exprs.get(args[1]);
+            if (name_ast != .String) return self.report(args[1], "the name needs to be hardcoded (for now)", .{});
+            const name_str = ast.source[name_ast.String.pos.index + 1 .. name_ast.String.end - 1];
 
-            _ = self.types.ct.inferType("", .{ .Tmp = self }, .{}, args[0]) catch {};
+            var ty_val = try self.emitTyped(.{}, .type, args[0]);
+            const ty = try self.unwrapTyConst(args[0], &ty_val);
 
-            return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(!self.errored)));
+            const file = ty.file(self.types) orelse return .mkv(.bool, self.bl.addIntImm(.i8, 0));
+            const ty_ast = self.types.getFile(file);
+            const has_decl = ty_ast.findDecl((Scope{ .Perm = ty }).items(ty_ast, self.types), name_str, tmp.arena.allocator()) != null;
+
+            return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(has_decl)));
         },
         .import => unreachable,
     }

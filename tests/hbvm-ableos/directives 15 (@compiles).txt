@@ -1,4 +1,0 @@
-directives 15 (@compiles).main:
-        lra $1, $0, :directives 15 (@compiles).scp.foo
-         ld $1, $1, 0, 8
-         tx
