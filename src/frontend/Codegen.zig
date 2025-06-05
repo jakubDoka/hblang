@@ -276,6 +276,19 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
 
     const fn_ast = ast.exprs.getTyped(.Fn, func.key.ast).?;
 
+    if (fn_ast.body.tag() == .Directive and ast.exprs.get(fn_ast.body).Directive.kind == .import) {
+        const args = ast.exprs.view(ast.exprs.get(fn_ast.body).Directive.args);
+
+        if (args.len != 0) {
+            const string = ast.exprs.get(args[0]).String;
+            func.key.name = ast.source[string.pos.index + 1 .. string.end - 1];
+        }
+
+        func.visibility = .imported;
+
+        return;
+    }
+
     const param_count, const return_count, const ret_abi = func.computeAbiSize(self.abi, self.types);
     const token, const params, const returns = self.beginBuilder(tmp.arena, func.ret, .{
         .param_count = param_count,
@@ -1380,27 +1393,26 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             // we dont use .emitTyped because the ecpression is different
             var value = try self.emit(.{ .loc = self.struct_ret_ptr, .ty = self.ret }, e.value);
             try self.typeCheck(expr, &value, self.ret);
-            try self.emitDefers(0);
-            switch (self.abiCata(value.ty)) {
-                .Imaginary => self.bl.addReturn(&.{}),
-                .ByValue => {
-                    self.bl.addReturn(&.{value.getValue(self)});
-                },
-                .ByValuePair => |pair| if (self.abiCata(value.ty).isByRefRet(self.abi)) {
+            var slots: [2]*Node = undefined;
+            const rets = switch (self.abiCata(value.ty)) {
+                .Imaginary => &.{},
+                .ByValue => &.{value.getValue(self)},
+                .ByValuePair => |pair| if (self.abiCata(value.ty).isByRefRet(self.abi)) b: {
                     self.emitGenericStore(self.struct_ret_ptr.?, &value);
-                    self.bl.addReturn(&.{});
-                } else {
-                    var slots: [2]*Node = undefined;
+                    break :b &.{};
+                } else b: {
                     for (pair.types, pair.offsets(), &slots) |t, off, *slt| {
                         slt.* = self.bl.addFieldLoad(value.id.Pointer, @intCast(off), t);
                     }
-                    self.bl.addReturn(&slots);
+                    break :b &slots;
                 },
-                .ByRef => {
+                .ByRef => b: {
                     self.emitGenericStore(self.struct_ret_ptr.?, &value);
-                    self.bl.addReturn(&.{});
+                    break :b &.{};
                 },
-            }
+            };
+            try self.emitDefers(0);
+            self.bl.addReturn(rets);
             return error.Unreachable;
         },
         .Die => {
@@ -2571,5 +2583,6 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
 
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(!self.errored)));
         },
+        .import => unreachable,
     }
 }

@@ -374,6 +374,7 @@ pub const Func = struct {
     ret: TyId,
     errored: bool = false,
     recursion_lock: bool = false,
+    visibility: root.backend.Machine.Data.Linkage = .local,
     completion: std.EnumArray(Types.Target, CompileState) = .{ .values = .{ .queued, .queued } },
 
     pub const CompileState = enum { queued, compiled };

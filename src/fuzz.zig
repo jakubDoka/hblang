@@ -78,6 +78,7 @@ pub fn fuzzRun(
             gen.emitFunc(&cg.bl.func, .{
                 .id = @intFromEnum(func),
                 .entry = func == entry,
+                .linkage = types.store.get(func).visibility,
             });
         },
         .Global => |g| {

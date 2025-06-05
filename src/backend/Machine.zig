@@ -299,6 +299,7 @@ pub const EmitOptions = struct {
     id: u32,
     name: []const u8 = &.{},
     entry: bool = false,
+    linkage: Data.Linkage,
     optimizations: struct {
         verbose: bool = false,
         dead_code_fuel: usize = 10000,
@@ -315,7 +316,7 @@ pub const EmitOptions = struct {
         };
 
         pub fn execute(self: @This(), comptime MachNode: type, func: *graph.Func(MachNode)) void {
-            //const freestanding = @import("builtin").target.os.tag == .freestanding;
+            const freestanding = @import("builtin").target.os.tag == .freestanding;
 
             if (self.peephole_fuel != 0) {
                 func.iterPeeps(self.peephole_fuel, @TypeOf(func.*).idealizeDead);
@@ -337,11 +338,11 @@ pub const EmitOptions = struct {
                 func.gcm.buildCfg();
             }
 
-            //if (!freestanding and self.verbose)
-            if (false) func.fmtScheduled(
-                std.io.getStdErr().writer().any(),
-                std.io.tty.detectConfig(std.io.getStdErr()),
-            );
+            if (!freestanding and self.verbose)
+                func.fmtScheduled(
+                    std.io.getStdErr().writer().any(),
+                    std.io.tty.detectConfig(std.io.getStdErr()),
+                );
 
             if (self.error_buf) |eb| {
                 func.static_anal.analize(self.arena.?, eb);
@@ -349,6 +350,8 @@ pub const EmitOptions = struct {
         }
     } = .{},
 };
+
+const Vidsibility = enum { local, exported, imported };
 
 pub const DisasmOpts = struct {
     name: []const u8,

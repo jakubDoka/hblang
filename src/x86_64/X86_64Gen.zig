@@ -294,18 +294,20 @@ pub fn getReg(self: X86_64, node: ?*FuncNode) Reg {
 pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     errdefer unreachable;
 
+    const id = opts.id;
+    const entry = opts.entry;
+    const name = if (entry) "main" else opts.name;
+    const linkage: Mach.Data.Linkage = if (entry) .exported else opts.linkage;
+
+    try self.out.startDefineFunc(self.gpa, id, name, .func, linkage);
+    defer self.out.endDefineFunc(id);
+
+    if (opts.linkage == .imported) return;
+
     opts.optimizations.execute(Node, func);
 
     var tmp = utils.Arena.scrath(opts.optimizations.arena);
     defer tmp.deinit();
-
-    const id = opts.id;
-    const entry = opts.entry;
-    const name = if (entry) "main" else opts.name;
-    const linkage: Mach.Data.Linkage = if (entry) .exported else .local;
-
-    try self.out.startDefineFunc(self.gpa, id, name, .func, linkage);
-    defer self.out.endDefineFunc(id);
 
     var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), func.next_id) catch unreachable;
     const postorder = func.collectPostorder(tmp.arena.allocator(), &visited);

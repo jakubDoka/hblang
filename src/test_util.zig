@@ -205,14 +205,17 @@ pub fn testBuilder(
             defer tmp.deinit();
 
             var anal_errors: std.ArrayListUnmanaged(static_anal.Error) = .empty;
+
+            const func_data: *root.frontend.types.Func = types.store.get(func);
             gen.emitFunc(&cg.bl.func, .{
                 .id = @intFromEnum(func),
-                .name = try std.fmt.allocPrint(
-                    syms.allocator(),
-                    "{test}",
-                    .{Types.Id.init(.{ .Func = func }).fmt(&types)},
-                ),
+                .name = if (func_data.visibility != .local)
+                    func_data.key.name
+                else
+                    try root.frontend.Types.Id.init(.{ .Func = func })
+                        .fmt(&types).toString(syms.allocator()),
                 .entry = func == entry,
+                .linkage = func_data.visibility,
                 .optimizations = .{
                     .verbose = verbose,
                     .arena = tmp.arena,

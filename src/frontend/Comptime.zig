@@ -440,6 +440,7 @@ pub fn jitExprLow(
                 .{
                     .id = @intFromEnum(id),
                     .entry = true,
+                    .linkage = .local,
                 },
             );
         }
@@ -468,6 +469,7 @@ pub fn compileDependencies(self: *Codegen, reloc_after: usize) !void {
                 @ptrCast(&self.bl.func),
                 .{
                     .id = @intFromEnum(func),
+                    .linkage = .local,
                 },
             );
         },

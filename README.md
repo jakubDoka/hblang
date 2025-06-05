@@ -1742,6 +1742,26 @@ scp := enum {
 }
 ```
 
+#### directives 16 (@import())
+```hb
+expectations := .{
+    return_value: 10,
+}
+
+create := fn(size: uint): ^void @import("malloc")
+destroy := fn(ptr: ^void): void @import("free")
+
+main := fn(): uint {
+    $if @target("hbvm-ableos") return 10
+    // wont work
+
+    ptr: ^uint = @bit_cast(create(8))
+    defer destroy(@bit_cast(ptr))
+    ptr.* = 10
+    return ptr.*
+}
+```
+
 
 ## progress
 
@@ -1860,6 +1880,8 @@ scp := enum {
   - [x] `@float_cast(<float>): <float>`
   - [x] `@name_of(<ty>): []u8`
     - [x] comptime interrupt
+  - [ ] `@import("<name>")`
+  - [ ] `@export("<name>", &fn)`
   - [ ] ? `@recall(..<args>): never`
 - [ ] optimizations
   - [ ] assumptions

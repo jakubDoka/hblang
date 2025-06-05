@@ -1,0 +1,19 @@
+main:
+	push rbx
+	push rbp
+	sub rsp, 0x08
+	mov rbx, 0x08
+	mov rdi, rbx
+	call :malloc
+	mov rbx, rax
+	mov rbp, 0x0A
+	mov [rbx], rbp
+	mov rdi, rbx
+	call :free
+	mov rax, rbp
+	add rsp, 0x08
+	pop rbp
+	pop rbx
+	ret
+malloc:
+free:
