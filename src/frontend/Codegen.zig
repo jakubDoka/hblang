@@ -2318,6 +2318,10 @@ fn emitDirective(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *const Ast.Store.Tag
             try assertDirectiveArgs(self, expr, args, "");
             return self.emitTyConst(self.parent_scope.firstType(self.types));
         },
+        .RootScope => {
+            try assertDirectiveArgs(self, expr, args, "");
+            return self.emitTyConst(self.types.file_scopes[0]);
+        },
         .TypeOf => {
             try assertDirectiveArgs(self, expr, args, "<ty>");
             const ty = try self.types.ct.inferType("", .{ .Tmp = self }, .{}, args[0]);

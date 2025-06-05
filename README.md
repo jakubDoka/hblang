@@ -1762,6 +1762,22 @@ main := fn(): uint {
 }
 ```
 
+#### directives 17 (@RootScope())
+```hb
+custom_num := 0
+
+main := fn(): uint {
+    return @use("lib.hb").some_num()
+}
+
+// in: lib.hb
+
+some_num := fn(): uint {
+    $if @compiles(@RootScope().custom_num) return @RootScope().custom_num
+    return 1
+}
+```
+
 
 ## progress
 

@@ -117,6 +117,7 @@ pub const Lexeme = enum(u16) {
     ty_type,
 
     @"@CurrentScope" = 0x200,
+    @"@RootScope",
     @"@use",
     @"@TypeOf",
     @"@as",
