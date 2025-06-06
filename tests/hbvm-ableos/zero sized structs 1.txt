@@ -1,0 +1,13 @@
+zero sized structs 1.main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        jal $31, $0, :zero sized structs 1.main.new
+        jal $31, $0, :zero sized structs 1.main.test
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+zero sized structs 1.main.new:
+       jala $0, $31, 0
+zero sized structs 1.main.test:
+       li64 $1, 0
+       jala $0, $31, 0

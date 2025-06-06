@@ -16,6 +16,23 @@ main := fn(): uint {
 }
 ```
 
+#### zero sized structs 1
+```hb
+main := fn(): uint {
+    X := struct {
+        .x: struct {
+            test := fn(self: @CurrentScope()): uint {
+                return 0
+            }
+        }
+        new := fn(): @CurrentScope() {
+            return .(.())
+        }
+    }
+    return X.new().x.test()
+}
+```
+
 #### invalid item 3
 ```hb
 expectations := .{

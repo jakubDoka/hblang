@@ -1,0 +1,6 @@
+async 2:26:29: can not access the identifier
+                p: ^f.Poll = @bit_cast(&self.poller)
+                                        ^
+async 2:15:13: the idnet is declared here
+    bind := fn(self: @CurrentScope(), $f: type): Async(T, struct {
+               ^

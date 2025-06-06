@@ -1035,6 +1035,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                             " (the type is 'never')", .{});
                     }
 
+                    if (base.id == .Imaginary) return .mkv(ftype, null);
+
                     // this can happen in the @TypeOf
                     if (base.id == .Value) return .mkv(ftype, base.id.Value);
 
@@ -1054,6 +1056,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     if (ftype == .never) {
                         return self.report(e.field, "accessing malformed field (the type is 'never')", .{});
                     }
+
+                    if (base.id == .Imaginary) return .mkv(ftype, null);
 
                     // this can happen when immediately accessing union field
                     if (base.id == .Value) return .mkv(ftype, base.id.Value);
@@ -1165,6 +1169,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
                     var elem: @TypeOf(iter.next().?) = undefined;
                     for (0..@as(usize, @intCast(idx)) + 1) |_| elem = iter.next().?;
+
+                    if (base.id == .Imaginary) return .mkv(elem.field.ty, null);
+
+                    if (base.id == .Value) return .mkv(elem.field.ty, base.id.Value);
 
                     return .mkp(
                         elem.field.ty,
