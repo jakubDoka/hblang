@@ -35,7 +35,7 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
     const stderr = std.io.getStdErr();
     const colors = std.io.tty.detectConfig(stderr);
 
-    test_util.testFmt(name, name, code, stderr.writer().any(), colors) catch {};
+    const failed_fmt = test_util.testFmt(name, name, code, stderr.writer().any(), colors);
 
     if (true) {
         var hbvm = root.hbvm.HbvmGen{ .gpa = gpa };
@@ -68,6 +68,8 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
             colors,
         );
     }
+
+    try failed_fmt;
 }
 
 pub fn runMachineTest(
