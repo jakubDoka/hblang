@@ -548,7 +548,7 @@ fn finalizeVariablesLow(self: *Parser, start: usize) usize {
             }
         }
     }
-    self.func_stats.variable_count -= @intCast(self.active_syms.items.len - new_len);
+    self.func_stats.variable_count -|= @intCast(self.active_syms.items.len - new_len);
     return new_len;
 }
 

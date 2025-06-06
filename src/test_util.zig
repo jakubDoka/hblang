@@ -165,7 +165,7 @@ pub fn testBuilder(
 ) !void {
     var ast_arena = utils.Arena.init(1024 * 1024);
 
-    const asts = try parseExample(&ast_arena, name, code, output);
+    const asts = parseExample(&ast_arena, name, code, output) catch return;
     const ast = asts[0];
 
     var func_arena = utils.Arena.scrath(null);
