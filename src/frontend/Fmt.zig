@@ -106,7 +106,9 @@ fn preserveSpace(self: *Fmt, id: anytype) Error!void {
 fn autoInsertSep(self: *Fmt, id: anytype, sep: Lexer.Lexeme) Error!void {
     const pos = self.ast.posOf(id);
     const starting_token = Lexer.peek(self.ast.source, pos.index);
-    if (starting_token.kind.precedence() < 255) try self.buf.appendSlice(@tagName(sep));
+    const trimmed = std.mem.trimRight(u8, self.ast.source[0..pos.index], "\n\r\t ;");
+    if (starting_token.kind.precedence() < 255 or
+        std.mem.endsWith(u8, trimmed, "return")) try self.buf.appendSlice(@tagName(sep));
 }
 
 fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
@@ -122,12 +124,15 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
         .Die => try self.buf.appendSlice("die"),
         .Ident => |i| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, i.pos.index)),
         .Fn => |f| {
+            const fn_prec = 1;
+            if (prec < fn_prec) try self.buf.appendSlice("(");
             try self.buf.appendSlice("fn");
             try self.fmtSlice(f.pos.flag.indented, f.args, .@"(", .@",", .@")");
             try self.buf.appendSlice(": ");
             try self.fmtExpr(f.ret);
             try self.buf.appendSlice(" ");
             try self.fmtExpr(f.body);
+            if (prec < fn_prec) try self.buf.appendSlice(")");
         },
         inline .Union, .Struct, .Enum => |s, t| {
             const name = comptime b: {
@@ -167,7 +172,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.buf.appendSlice("]");
         },
         .Call => |c| {
-            try self.fmtExpr(c.called);
+            try self.fmtExprPrec(c.called, 0);
             try self.fmtSlice(c.arg_pos.flag.indented, c.args, .@"(", .@",", .@")");
         },
         .Tag => |t| {

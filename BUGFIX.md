@@ -9,6 +9,27 @@ main := fn(): uint {
 }
 ```
 
+#### fmt prec 1
+```hb
+main := fn(): uint {
+    return (fn(): uint return 0)()
+}
+```
+
+#### fmt prec 2
+```hb
+
+main := fn(): uint {
+    f()
+    return 0
+}
+
+f := fn(): void {
+    if true return;
+    return
+}
+```
+
 #### mixing @Any and comptime args 1
 ```hb
 bind := fn(val: @Any(), $f: type): @TypeOf(f(idk)) {

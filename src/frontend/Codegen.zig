@@ -21,13 +21,13 @@ target: Types.Target,
 only_inference: bool = false,
 partial_eval: bool = false,
 abi: Types.Abi,
-defers: std.ArrayListUnmanaged(Ast.Id) = undefined,
 name: []const u8 = undefined,
 parent_scope: Scope = undefined,
 ast: *const Ast = undefined,
 struct_ret_ptr: ?*Node = undefined,
 scope: std.ArrayListUnmanaged(ScopeEntry) = undefined,
 loops: std.ArrayListUnmanaged(Loop) = undefined,
+defers: std.ArrayListUnmanaged(Ast.Id) = undefined,
 ret: Types.Id = undefined,
 errored: bool = undefined,
 
@@ -382,6 +382,9 @@ pub fn listFileds(arena: *utils.Arena, fields: anytype) []const u8 {
 }
 
 pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
     const ast = self.ast;
     switch (ast.exprs.get(expr)) {
         .Comment => return .{},
@@ -504,9 +507,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             }
         },
         .Ctor => |e| {
-            var tmp = utils.Arena.scrath(null);
-            defer tmp.deinit();
-
             if (e.ty.tag() == .Void and ctx.ty == null) {
                 return self.report(expr, "cant infer the type of this constructor, you can specify a type: '<ty>.{{'", .{});
             }
@@ -617,9 +617,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             return .mkp(oty, local);
         },
         .Tupl => |e| if (e.ty.tag() == .Void and ctx.ty == null) {
-            var tmp = utils.Arena.scrath(null);
-            defer tmp.deinit();
-
             const local = ctx.loc orelse self.bl.addLocal(self.sloc(expr), 0);
             var offset: u64 = 0;
             var alignment: u64 = 1;
@@ -726,9 +723,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
         // #OPS ========================================================================
         .SliceTy => |e| {
-            var tmp = utils.Arena.scrath(null);
-            defer tmp.deinit();
-
             if (e.len.tag() != .Void) {
                 var len = try self.emitTyped(.{}, .uint, e.len);
                 var ty = try self.emitTyped(.{}, .type, e.elem);
@@ -992,9 +986,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             return try self.lookupScopeItem(e.*, ty, ast.tokenSrc(e.index + 1));
         },
         .Field => |e| {
-            var tmp = utils.Arena.scrath(null);
-            defer tmp.deinit();
-
             var base = try self.emit(.{}, e.base);
 
             self.emitAutoDeref(&base);
@@ -1210,9 +1201,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             return .{};
         },
         .Match => |e| {
-            var tmp = utils.Arena.scrath(null);
-            defer tmp.deinit();
-
             var value = try self.emit(.{}, e.value);
 
             _ = self.types.store.unwrap(value.ty.data(), .Enum) orelse {
@@ -1427,9 +1415,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .Buty => |e| return self.emitTyConst(.fromLexeme(e.bt)),
         // TODO: unify under single ast
         inline .Struct, .Union, .Enum => |e, t| {
-            var tmp = utils.Arena.scrath(null);
-            defer tmp.deinit();
-
             const prefix = 3;
             const args = self.bl.allocCallArgs(tmp.arena, prefix + e.captures.len() * 2, 1);
             @memset(args.params, self.abiCata(.type).ByValue);
@@ -1456,9 +1441,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             return .mkv(.type, rets[0]);
         },
         .Fn => |e| {
-            var tmp = utils.Arena.scrath(null);
-            defer tmp.deinit();
-
             const captures = tmp.arena.alloc(Types.Scope.Capture, e.captures.len());
 
             for (ast.exprs.view(e.captures), captures) |id, *slot| {

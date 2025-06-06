@@ -1,0 +1,8 @@
+fmt prec 2.f:
+	ret
+main:
+	sub rsp, 0x08
+	call :fmt prec 2.f
+	mov rax, 0x00
+	add rsp, 0x08
+	ret
