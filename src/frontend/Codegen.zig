@@ -343,7 +343,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
                 }
                 break :b slot;
             },
-            .Imaginary => self.bl.addLocal(.none, 0),
+            .Imaginary => self.bl.addLocal(self.sloc(aarg), 0),
         };
         self.scope.appendAssumeCapacity(.{ .ty = ty, .name = ident.id });
         self.bl.pushPin(arg);

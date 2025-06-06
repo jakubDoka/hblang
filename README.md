@@ -9,10 +9,12 @@ zig build install
 
 ## Tour
 
-Try ot the examples on [depell](depell.mlokis.tech).
+Try out the examples on [depell](depell.mlokis.tech).
 
-Note: the examples are used to generate unit tests, `n = 1` from each group is most interesting, others are more for testing purposes.
-Note: `expectations` contain the test case ecpectations that are asserted when `zig build test` is run
+Note: the examples are used to generate unit tests, `n = 1` from each group is
+most interesting, others are more for testing purposes.
+Note: `expectations` contain the test case expectations that are asserted when
+`zig build test` is run
 
 #### main fn 1
 ```hb

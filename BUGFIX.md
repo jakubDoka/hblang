@@ -9,6 +9,24 @@ main := fn(): uint {
 }
 ```
 
+#### bad oob diagnostic 1
+```hb
+expectations := .{
+    should_error: true,
+}
+
+Union := union {
+    vl := fn(self: @CurrentScope()): uint {
+        v: ^uint = @bit_cast(&self)
+        return v.*
+    }
+}
+
+main := fn(): uint {
+    return Union.vl(idk)
+}
+```
+
 #### fmt prec 1
 ```hb
 main := fn(): uint {
