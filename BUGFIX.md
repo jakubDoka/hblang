@@ -9,6 +9,22 @@ main := fn(): uint {
 }
 ```
 
+#### mixing @Any and comptime args 1
+```hb
+bind := fn(val: @Any(), $f: type): @TypeOf(f(idk)) {
+    if val != null {
+        return f(val.?)
+    }
+    return null
+}
+
+main := fn(): uint {
+    b: ?i32 = @as(i32, 0)
+    a := bind(b, fn(x: i32): ?i32 return x + 5)
+    return 0
+}
+```
+
 #### mem2reg crash 1
 ```hb
 main := fn(): uint {

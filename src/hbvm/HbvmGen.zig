@@ -287,6 +287,7 @@ pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
         .code_end = stack_end + @as(usize, @intCast(head.code_length)),
     };
 
+    var prng = std.Random.Pcg.init(0);
     var page_cursor: usize = 1;
     const page_size = 1024 * 4;
     while (true) switch (try vm.run(&ctx)) {
@@ -352,6 +353,10 @@ pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
                     const str = ctx.memory[msg.str_ptr..][0..msg.str_len];
 
                     std.debug.print("{s}\n", .{str});
+                },
+                4 => {
+                    const dest = ctx.memory[vm.regs.get(.arg(3))..][0..vm.regs.get(.arg(4))];
+                    prng.fill(dest);
                 },
                 else => |v| utils.panic("{}", .{v}),
             },

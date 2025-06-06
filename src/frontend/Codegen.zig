@@ -1975,24 +1975,32 @@ pub fn instantiateTemplate(
     const arg_exprs = tmp.alloc(Value, arg_tys.len);
 
     var capture_idx: usize = 0;
+    var comptime_idx: usize = 0;
     var arg_idx: usize = 0;
     var arg_expr_idx: usize = 0;
+
+    const template_scope: Scope = .{ .Perm = .init(.{ .Template = scope }) };
 
     if (caller.*) |*c| {
         const param = tmpl_file.exprs.view(tmpl_ast.args)[0];
 
         const binding = tmpl_file.exprs.getTyped(.Ident, param.bindings).?;
         if (binding.pos.flag.@"comptime") {
-            captures[capture_idx] = .{ .id = comptime_args[capture_idx], .ty = .type, .value = @intFromEnum(try self.unwrapTyConst(expr, c)) };
+            captures[capture_idx] = .{
+                .id = comptime_args[comptime_idx],
+                .ty = .type,
+                .value = @intFromEnum(try self.unwrapTyConst(expr, c)),
+            };
             capture_idx += 1;
-            self.types.store.get(scope).key.captures = captures[0..capture_idx];
+            comptime_idx += 1;
+            self.types.store.get(template_scope).key.captures = captures[0..capture_idx];
         } else {
-            arg_tys[arg_idx] = try self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = scope }) }, param.ty);
+            arg_tys[arg_idx] = try self.types.ct.evalTy("", template_scope, param.ty);
             if (arg_tys[arg_idx] == .any) {
                 arg_tys[arg_idx] = c.ty;
                 captures[capture_idx] = .{ .id = binding.id, .ty = arg_tys[arg_idx] };
                 capture_idx += 1;
-                self.types.store.get(scope).key.captures = captures[0..capture_idx];
+                self.types.store.get(template_scope).key.captures = captures[0..capture_idx];
             }
             arg_idx += 1;
         }
@@ -2001,17 +2009,22 @@ pub fn instantiateTemplate(
     for (tmpl_file.exprs.view(tmpl_ast.args)[arg_idx..], ast.exprs.view(e.args)) |param, arg| {
         const binding = tmpl_file.exprs.getTyped(.Ident, param.bindings).?;
         if (binding.pos.flag.@"comptime") {
-            captures[capture_idx] = .{ .id = comptime_args[capture_idx], .ty = .type, .value = @intFromEnum(try self.resolveAnonTy(arg)) };
+            captures[capture_idx] = .{
+                .id = comptime_args[comptime_idx],
+                .ty = .type,
+                .value = @intFromEnum(try self.resolveAnonTy(arg)),
+            };
             capture_idx += 1;
-            self.types.store.get(scope).key.captures = captures[0..capture_idx];
+            comptime_idx += 1;
+            self.types.store.get(template_scope).key.captures = captures[0..capture_idx];
         } else {
-            arg_tys[arg_idx] = try self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = scope }) }, param.ty);
+            arg_tys[arg_idx] = try self.types.ct.evalTy("", template_scope, param.ty);
             if (arg_tys[arg_idx] == .any) {
                 arg_exprs[arg_expr_idx] = try self.emit(.{}, arg);
                 arg_tys[arg_idx] = arg_exprs[arg_expr_idx].ty;
                 captures[capture_idx] = .{ .id = binding.id, .ty = arg_tys[arg_idx] };
                 capture_idx += 1;
-                self.types.store.get(scope).key.captures = captures[0..capture_idx];
+                self.types.store.get(template_scope).key.captures = captures[0..capture_idx];
             } else {
                 arg_exprs[arg_expr_idx] = try self.emitTyped(.{}, arg_tys[arg_idx], arg);
             }
@@ -2021,7 +2034,7 @@ pub fn instantiateTemplate(
         }
     }
 
-    const ret = try self.types.ct.evalTy("", .{ .Perm = .init(.{ .Template = scope }) }, tmpl_ast.ret);
+    const ret = try self.types.ct.evalTy("", template_scope, tmpl_ast.ret);
 
     const slot, const alloc = self.types.intern(.Func, .{
         .scope = typ,
