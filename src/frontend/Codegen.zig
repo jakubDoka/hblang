@@ -1978,60 +1978,51 @@ pub fn instantiateTemplate(
     var comptime_idx: usize = 0;
     var arg_idx: usize = 0;
     var arg_expr_idx: usize = 0;
+    var expr_idx: usize = 0;
+    var caller_slot: ?*Value = if (caller.*) |*c| c else null;
 
     const template_scope: Scope = .{ .Perm = .init(.{ .Template = scope }) };
 
-    if (caller.*) |*c| {
-        const param = tmpl_file.exprs.view(tmpl_ast.args)[0];
+    for (tmpl_file.exprs.view(tmpl_ast.args)) |param| {
+        const arg: union(enum) { Value: *Value, Expr: Ast.Id } =
+            if (caller_slot) |c| .{ .Value = c } else .{ .Expr = ast.exprs.view(e.args)[expr_idx] };
 
         const binding = tmpl_file.exprs.getTyped(.Ident, param.bindings).?;
         if (binding.pos.flag.@"comptime") {
             captures[capture_idx] = .{
                 .id = comptime_args[comptime_idx],
                 .ty = .type,
-                .value = @intFromEnum(try self.unwrapTyConst(expr, c)),
+                .value = @intFromEnum(switch (arg) {
+                    .Value => |v| try self.unwrapTyConst(expr, v),
+                    .Expr => |ex| try self.resolveAnonTy(ex),
+                }),
             };
             capture_idx += 1;
             comptime_idx += 1;
-            self.types.store.get(template_scope).key.captures = captures[0..capture_idx];
+            self.types.store.get(scope).key.captures = captures[0..capture_idx];
         } else {
             arg_tys[arg_idx] = try self.types.ct.evalTy("", template_scope, param.ty);
             if (arg_tys[arg_idx] == .any) {
-                arg_tys[arg_idx] = c.ty;
+                arg_tys[arg_idx] = switch (arg) {
+                    .Value => |v| v.ty,
+                    .Expr => |ar| b: {
+                        arg_exprs[arg_expr_idx] = try self.emit(.{}, ar);
+                        break :b arg_exprs[arg_expr_idx].ty;
+                    },
+                };
                 captures[capture_idx] = .{ .id = binding.id, .ty = arg_tys[arg_idx] };
                 capture_idx += 1;
-                self.types.store.get(template_scope).key.captures = captures[0..capture_idx];
-            }
-            arg_idx += 1;
-        }
-    }
-
-    for (tmpl_file.exprs.view(tmpl_ast.args)[arg_idx..], ast.exprs.view(e.args)) |param, arg| {
-        const binding = tmpl_file.exprs.getTyped(.Ident, param.bindings).?;
-        if (binding.pos.flag.@"comptime") {
-            captures[capture_idx] = .{
-                .id = comptime_args[comptime_idx],
-                .ty = .type,
-                .value = @intFromEnum(try self.resolveAnonTy(arg)),
-            };
-            capture_idx += 1;
-            comptime_idx += 1;
-            self.types.store.get(template_scope).key.captures = captures[0..capture_idx];
-        } else {
-            arg_tys[arg_idx] = try self.types.ct.evalTy("", template_scope, param.ty);
-            if (arg_tys[arg_idx] == .any) {
-                arg_exprs[arg_expr_idx] = try self.emit(.{}, arg);
-                arg_tys[arg_idx] = arg_exprs[arg_expr_idx].ty;
-                captures[capture_idx] = .{ .id = binding.id, .ty = arg_tys[arg_idx] };
-                capture_idx += 1;
-                self.types.store.get(template_scope).key.captures = captures[0..capture_idx];
-            } else {
-                arg_exprs[arg_expr_idx] = try self.emitTyped(.{}, arg_tys[arg_idx], arg);
+                self.types.store.get(scope).key.captures = captures[0..capture_idx];
+            } else if (arg == .Expr) {
+                arg_exprs[arg_expr_idx] = try self.emitTyped(.{}, arg_tys[arg_idx], arg.Expr);
             }
 
             arg_idx += 1;
-            arg_expr_idx += 1;
+            arg_expr_idx += @intFromBool(caller_slot == null);
         }
+
+        expr_idx += @intFromBool(caller_slot == null);
+        caller_slot = null;
     }
 
     const ret = try self.types.ct.evalTy("", template_scope, tmpl_ast.ret);
