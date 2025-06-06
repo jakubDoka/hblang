@@ -16,6 +16,91 @@ main := fn(): uint {
 }
 ```
 
+#### invalid item 3
+```hb
+expectations := .{
+    should_error: true,
+}
+
+InvalidUnion := union {
+    .invalid = u32;
+    .invalid;
+}
+
+main := fn(): uint {
+    uni := InvalidUnion.{invalid: 10}
+    return uni.invalid
+}
+```
+
+#### async 2
+```hb
+expectations := .{
+    should_error: true,
+}
+
+Async := fn($T: type, $Poller: type): type return struct {
+    .poller: Poller
+    new := fn(x: Input): @CurrentScope() {
+        return .(Poller.new1(x))
+    }
+    Input := T
+    Poll := Poller
+    poll := fn(self: @CurrentScope()): @TypeOf(Poller.poll1(idk)) {
+        return self.poller.poll1()
+    }
+    bind := fn(self: @CurrentScope(), $f: type): Async(T, struct {
+        .done1: bool;
+        .poller: union {
+            .left: Poll;
+            .right: f.Poll;
+        }
+        new1 := fn(x: Poll): @CurrentScope() {
+            return .(false, @bit_cast(x))
+        }
+        poll1 := fn(self1: @CurrentScope()): @TypeOf(f.Poll.poll1(idk)) {
+            loop if self1.done1 {
+                p: ^f.Poll = @bit_cast(&self.poller)
+                return p.poll1()
+            } else {
+                p: ^Poll = @bit_cast(&self.poller)
+                ret := p.poll1()
+                if ret == null {
+                    return null
+                }
+                self1.done1 = true
+                self1.poller.right = f.Poll.new(ret.?)
+            }
+        }
+    }) {
+        return .(.(false, .(.left = self)))
+    }
+}
+
+main := fn(): uint {
+    T := Async(i32, struct {
+        new1 := fn(x: i32): @CurrentScope() {
+            return .()
+        }
+        poll1 := fn(self: @CurrentScope()): ?uint {
+            return 1
+        }
+    })
+    U := Async(uint, struct {
+        new1 := fn(x: uint): @CurrentScope() {
+            return .()
+        }
+        poll1 := fn(self: @CurrentScope()): ?i32 {
+            return 2
+        }
+    })
+    a := T.new(0).bind(U).bind(T)
+    x := a.poll()
+    loop if x == null break else x = a.poll()
+    return x.?
+}
+```
+
 #### async 1
 ```hb
 expectations := .{

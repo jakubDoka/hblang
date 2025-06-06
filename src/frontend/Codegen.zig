@@ -1485,8 +1485,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             args.arg_slots[1] = self.emitTyConst(self.parent_scope.perm(self.types)).id.Value;
             args.arg_slots[2] = self.bl.addIntImm(.int, @intFromEnum(expr));
 
-            for (ast.exprs.view(e.captures), 0..) |id, slot_idx| {
-                var val = try self.loadIdent(.init(id.pos()), id);
+            for (ast.exprs.view(e.captures), 0..) |cp, slot_idx| {
+                var val = try self.loadIdent(cp.pos, cp.id);
                 if (val.ty == .type) {
                     args.arg_slots[prefix + slot_idx * 2 ..][0..2].* =
                         .{ self.emitTyConst(.type).id.Value, val.getValue(self) };
@@ -1502,12 +1502,12 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .Fn => |e| {
             const captures = tmp.arena.alloc(Types.Scope.Capture, e.captures.len());
 
-            for (ast.exprs.view(e.captures), captures) |id, *slot| {
-                var val = try self.loadIdent(.init(id.pos()), id);
+            for (ast.exprs.view(e.captures), captures) |cp, *slot| {
+                var val = try self.loadIdent(cp.pos, cp.id);
                 if (val.ty == .type) {
-                    slot.* = .{ .id = id, .ty = .type, .value = @intFromEnum(try self.unwrapTyConst(id, &val)) };
+                    slot.* = .{ .id = cp.id, .ty = .type, .value = @intFromEnum(try self.unwrapTyConst(cp.id, &val)) };
                 } else {
-                    slot.* = .{ .id = id, .ty = val.ty };
+                    slot.* = .{ .id = cp.id, .ty = val.ty };
                 }
             }
 
@@ -1976,7 +1976,8 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
             }
             cursor = cursor.parent(self.types);
         } else {
-            return self.report(pos, "ICE: parser did not catch this", .{});
+            self.report(pos, "can not access the identifier", .{}) catch {};
+            return self.report(id, "the idnet is declared here", .{});
         };
 
         return self.resolveGlobal(

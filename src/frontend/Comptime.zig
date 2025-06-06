@@ -292,8 +292,8 @@ pub fn runVm(
 
                     const captures = types.arena.alloc(Types.Scope.Capture, struct_ast.captures.len());
 
-                    for (captures, ast.exprs.view(struct_ast.captures), 0..) |*slot, id, i| {
-                        slot.* = .{ .id = id, .ty = @enumFromInt(self.ecaArg(3 + i * 2)), .value = self.ecaArg(3 + i * 2 + 1) };
+                    for (captures, ast.exprs.view(struct_ast.captures), 0..) |*slot, cp, i| {
+                        slot.* = .{ .id = cp.id, .ty = @enumFromInt(self.ecaArg(3 + i * 2)), .value = self.ecaArg(3 + i * 2 + 1) };
                     }
 
                     const res = types.resolveFielded(

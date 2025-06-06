@@ -18,6 +18,9 @@ pub const Store = utils.EnumStore(Expr);
 pub const Id = Store.Id;
 pub const Slice = utils.EnumSlice(Id);
 pub const Idents = utils.EnumSlice(Ident);
+pub const Captures = utils.EnumSlice(Capture);
+
+pub const Capture = struct { id: Ident, pos: Pos };
 
 pub const Ident = enum(u32) {
     _,
@@ -75,7 +78,7 @@ pub const Expr = union(enum) {
     Fn: struct {
         pos: Pos,
         comptime_args: Idents,
-        captures: Idents,
+        captures: Captures,
         args: utils.EnumSlice(Arg),
         ret: Id,
         body: Id,
@@ -193,7 +196,7 @@ pub const Expr = union(enum) {
     pub const Type = struct {
         pos: Pos,
         alignment: Id,
-        captures: utils.EnumSlice(Ident),
+        captures: Captures,
         fields: Slice,
     };
 };

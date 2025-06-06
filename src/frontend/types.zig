@@ -163,7 +163,15 @@ pub const Enum = struct {
             const fields = types.arena.alloc(Field, count);
             var i: usize = 0;
             for (ast.exprs.view(enum_ast.fields)) |fast| {
-                if (fast.tag() != .Tag) continue;
+                if (fast.tag() == .Comment) continue;
+                if (fast.tag() != .Tag) {
+                    if (fast.tag() != .Decl) {
+                        types.report(self.key.file, fast, "unexpected item," ++
+                            " only field declarations (.variant_name)," ++
+                            " and declarations (decl_name := expr)", .{});
+                    }
+                    continue;
+                }
                 fields[i] = .{ .name = ast.tokenSrc(ast.exprs.getTyped(.Tag, fast).?.index + 1) };
                 i += 1;
             }
@@ -189,7 +197,7 @@ pub const Union = struct {
         pub const Data = Union;
 
         pub fn getFields(id: Id, types: *Types) []const Field {
-            const self = types.store.get(id);
+            const self: *Union = types.store.get(id);
 
             if (self.fields) |f| return f;
             const ast = types.getFile(self.key.file);
@@ -202,7 +210,13 @@ pub const Union = struct {
             const fields = types.arena.alloc(Field, count);
             var i: usize = 0;
             for (ast.exprs.view(union_ast.fields)) |fast| {
-                const field = ast.exprs.getTyped(.Decl, fast) orelse continue;
+                if (fast.tag() == .Comment) continue;
+                const field = ast.exprs.getTyped(.Decl, fast) orelse {
+                    types.report(self.key.file, fast, "unexpected item," ++
+                        " only field declarations (.field_name: field_type)," ++
+                        " and declarations (decl_name := expr)", .{});
+                    continue;
+                };
                 if (field.bindings.tag() != .Tag) continue;
                 fields[i] = .{
                     .name = ast.tokenSrc(ast.exprs.getTyped(.Tag, field.bindings).?.index + 1),
@@ -335,7 +349,13 @@ pub const Struct = struct {
             const fields = types.arena.alloc(Field, count);
             var i: usize = 0;
             for (ast.exprs.view(struct_ast.fields)) |fast| {
-                const field = ast.exprs.getTyped(.Decl, fast) orelse continue;
+                if (fast.tag() == .Comment) continue;
+                const field = ast.exprs.getTyped(.Decl, fast) orelse {
+                    types.report(self.key.file, fast, "unexpected item," ++
+                        " only field declarations (.field_name: field_type [= default_value])," ++
+                        " and declarations (decl_name := expr)", .{});
+                    continue;
+                };
                 if (field.bindings.tag() != .Tag) continue;
                 const name = ast.tokenSrc(ast.exprs.getTyped(.Tag, field.bindings).?.index + 1);
                 const ty = types.ct.evalTy("", .{ .Perm = .init(.{ .Struct = id }) }, field.ty) catch .never;

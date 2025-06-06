@@ -9,12 +9,13 @@ const Arena = utils.Arena;
 const Ast = root.frontend.Ast;
 const Ident = Ast.Ident;
 const Id = Ast.Id;
+const Capture = Ast.Capture;
 
 store: Ast.Store = .{},
 arena: *utils.Arena,
 active_syms: std.ArrayListUnmanaged(Sym) = .{},
 capture_boundary: usize = 0,
-captures: std.ArrayListUnmanaged(Ident) = .{},
+captures: std.ArrayListUnmanaged(Capture) = .{},
 comptime_idents: std.ArrayListUnmanaged(Ident) = .{},
 lexer: Lexer,
 cur: Lexer.Token,
@@ -273,14 +274,18 @@ fn codePointer(self: *const Parser, pos: usize) Ast.CodePointer {
     return .{ .source = self.lexer.source, .index = pos };
 }
 
-fn popCaptures(self: *Parser, scope: usize, preserve: bool) []const Ident {
+fn popCaptures(self: *Parser, scope: usize, preserve: bool) []const Capture {
     const slc = self.captures.items[@min(scope, self.captures.items.len)..];
     if (!preserve) self.captures.items.len = scope;
     if (slc.len > 1) {
-        std.sort.pdq(u32, @ptrCast(slc), {}, std.sort.asc(u32));
+        std.sort.pdq(Capture, slc, {}, struct {
+            pub fn inner(_: void, a: Capture, b: Capture) bool {
+                return a.id.pos() < b.id.pos();
+            }
+        }.inner);
         var i: usize = 0;
         for (slc[1..]) |s| {
-            if (s != slc[i]) {
+            if (s.id != slc[i].id) {
                 i += 1;
                 slc[i] = s;
             }
@@ -345,8 +350,16 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 break :body try self.parseExpr();
             };
 
-            const comptime_args = try self.store.allocSlice(Ident, self.arena.allocator(), self.comptime_idents.items[comptime_arg_start..comptime_idents_end]);
-            const captures = try self.store.allocSlice(Ident, self.arena.allocator(), self.popCaptures(capture_scope, prev_capture_boundary != 0));
+            const comptime_args = try self.store.allocSlice(
+                Ident,
+                self.arena.allocator(),
+                self.comptime_idents.items[comptime_arg_start..comptime_idents_end],
+            );
+            const captures = try self.store.allocSlice(
+                Capture,
+                self.arena.allocator(),
+                self.popCaptures(capture_scope, prev_capture_boundary != 0),
+            );
             std.debug.assert(comptime_args.end == captures.start);
 
             break :b .{ .Fn = .{
@@ -421,7 +434,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             break :b @unionInit(Ast.Expr, name, .{
                 .fields = fields,
                 .alignment = alignment,
-                .captures = try self.store.allocSlice(Ident, self.arena.allocator(), captures),
+                .captures = try self.store.allocSlice(Capture, self.arena.allocator(), captures),
                 .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
             });
         },
@@ -543,7 +556,9 @@ fn finalizeVariablesLow(self: *Parser, start: usize) usize {
             self.active_syms.items[new_len] = s.*;
             new_len += 1;
         } else {
-            while (std.mem.indexOfScalar(Ident, self.captures.items, s.id)) |idx| {
+            while (for (self.captures.items, 0..) |c, i| {
+                if (c.id == s.id) break i;
+            } else null) |idx| {
                 _ = self.captures.swapRemove(idx);
             }
         }
@@ -567,7 +582,7 @@ fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
         if (std.mem.eql(u8, s.name, repr)) {
             s.used = true;
             if (i < self.capture_boundary and !s.unordered) {
-                try self.captures.append(self.arena.allocator(), s.id);
+                try self.captures.append(self.arena.allocator(), .{ .id = s.id, .pos = .init(token.pos) });
             }
             return try self.store.alloc(self.arena.allocator(), .Ident, .{
                 .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind == .@"$" } },
