@@ -883,7 +883,12 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     .Builtin => {
                         const binop = try self.lexemeToBinOp(expr, e.op, lhs.ty);
                         const lhs_ty = (if (e.op.isComparison() or
-                            (ctx.ty != null and ctx.ty.?.data() == .Pointer)) null else ctx.ty) orelse lhs.ty;
+                            (ctx.ty != null and (ctx.ty.?.data() == .Pointer)))
+                            null
+                        else if (ctx.ty != null and ctx.ty.?.data() == .Nullable)
+                            self.types.store.get(ctx.ty.?.data().Nullable).inner
+                        else
+                            ctx.ty) orelse lhs.ty;
                         const upcast_ty = self.binOpUpcast(lhs_ty, rhs.ty) catch |err|
                             return self.report(expr, "{s} ({} and {})", .{ @errorName(err), lhs_ty, rhs.ty });
 
