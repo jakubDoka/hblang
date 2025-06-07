@@ -311,8 +311,6 @@ pub fn next(self: *Lexer) Token {
         shift,
         dot,
         slash,
-        block_comment,
-        block_comment_end,
         line_commnet,
         double_quotes,
         double_quotes_slash,
@@ -431,31 +429,11 @@ pub fn next(self: *Lexer) Token {
             self.cursor += 1;
             switch (self.source[self.cursor]) {
                 '/' => continue :state .line_commnet,
-                '*' => continue :state .block_comment,
                 '=' => {
                     self.cursor += 1;
                     break :state .@"/=";
                 },
                 else => break :state .@"/",
-            }
-        },
-        .block_comment => {
-            self.cursor += 1;
-            switch (self.source[self.cursor]) {
-                0 => break :state .Comment,
-                '*' => continue :state .block_comment_end,
-                else => continue :state .block_comment,
-            }
-        },
-        .block_comment_end => {
-            self.cursor += 1;
-            switch (self.source[self.cursor]) {
-                0 => break :state .Comment,
-                '/' => {
-                    self.cursor += 1;
-                    break :state .Comment;
-                },
-                else => continue :state .block_comment,
             }
         },
         .line_commnet => {

@@ -2,6 +2,19 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### format comment correctly
+```hb
+Foo := struct {
+    .foo: int;
+    // smh
+    .boo: int;
+}
+
+main := fn(): uint {
+    return 0
+}
+```
+
 #### arithmetic 8
 ```hb
 main := fn(): uint {
@@ -420,7 +433,8 @@ main := fn(): uint {
     _ = Ty.{p: 10}
     _ = Ty.{a: 1, b: 2, p: 10}
     _ = Ty.{a: 1, a: 2}
-    _ = Ty.(.{}, .(), /**/)
+    _ = Ty.(.{}, .(), {
+    })
     v := Ty.(0, 0, 0)
     return Ty.(v, 0)
 }

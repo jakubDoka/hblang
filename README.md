@@ -66,7 +66,8 @@ expectations := .{
 }
 
 main := fn(): uint {
-    v := /**/
+    v := {
+    }
     return 1 + v * 10
 }
 ```
@@ -223,13 +224,16 @@ expectations := .{
 }
 
 main := fn(): uint {
-    imaginary := /**/
+    imaginary := {
+    }
     imaginary()
     some_fn()
     _ = some_fn(0, 0, 0)
     _ = some_fn(0, 0)
-    vl := some_fn(0, /**/, 0, 0)
-    return some_fn(vl, /**/, 0)
+    vl := some_fn(0, {
+    }, 0, 0)
+    return some_fn(vl, {
+    }, 0)
 }
 
 some_fn := fn(a: uint, b: void, c: u8): uint {
@@ -274,11 +278,13 @@ return_indirect_stack_but_not := fn(arg: ^?^uint): void {
 // commant is an item
 main := fn(): uint {
     // comment is a statement
-    foo(/* comment is an exprression */)
+    foo(
+        // comment is an exprression
+    )
     return 0
 }
 
-foo := fn(comment: void): void return /* comment evaluates to void */
+foo := fn(comment: void): void return // comment evaluates to void
 
 // comments might be formatted in the future
 ```

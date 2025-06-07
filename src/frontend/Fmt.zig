@@ -8,6 +8,7 @@ const Id = Ast.Id;
 const Slice = Ast.Slice;
 const Lexer = @import("Lexer.zig");
 const Error = std.mem.Allocator.Error;
+const root = @import("hb");
 const Fmt = @This();
 
 pub fn needsSpace(c: u8) bool {
@@ -104,11 +105,28 @@ fn preserveSpace(self: *Fmt, id: anytype) Error!void {
 }
 
 fn autoInsertSep(self: *Fmt, id: anytype, sep: Lexer.Lexeme) Error!void {
+    errdefer unreachable;
+
     const pos = self.ast.posOf(id);
     const starting_token = Lexer.peek(self.ast.source, pos.index);
     const trimmed = std.mem.trimRight(u8, self.ast.source[0..pos.index], "\n\r\t ;");
-    if (starting_token.kind.precedence() < 255 or
-        std.mem.endsWith(u8, trimmed, "return")) try self.buf.appendSlice(@tagName(sep));
+    const prev_line = std.mem.lastIndexOfScalar(u8, trimmed, '\n') orelse 0;
+
+    var tmp = root.utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    var lexer = Lexer.init(try tmp.arena.allocator().dupeZ(u8, self.ast.source[prev_line..pos.index]), 0);
+    var last_token: Lexer.Lexeme = .Eof;
+    while (true) {
+        var next = lexer.next();
+        while (next.kind == .@";") : (next = lexer.next()) {}
+        if (next.kind == .Eof) break;
+        // semicolon should never be last
+        last_token = next.kind;
+    }
+
+    if ((starting_token.kind.precedence() < 255 or last_token == .@"return") and last_token != .Comment)
+        try self.buf.appendSlice(@tagName(sep));
 }
 
 fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
@@ -320,7 +338,7 @@ inline fn fmtSlice(
 
 fn fmtSliceLow(
     self: *Fmt,
-    indent: bool,
+    indent_hint: bool,
     forced: bool,
     slice: anytype,
     start: Lexer.Lexeme,
@@ -329,12 +347,18 @@ fn fmtSliceLow(
 ) Error!void {
     try self.buf.appendSlice(start.repr());
 
+    const view = self.ast.exprs.view(slice);
+
+    const indent = indent_hint or
+        (@TypeOf(view[0]) == Ast.Id and for (view) |v| {
+            if (v.tag() == .Comment) break true;
+        } else false);
+
     if (indent) {
         self.indent += 1;
         try self.buf.appendSlice("\n");
     }
 
-    const view = self.ast.exprs.view(slice);
     for (view, 1..) |id, i| {
         if (indent) for (0..self.indent) |_| try self.buf.appendSlice("\t");
         if (@TypeOf(id) == Ast.Arg) {
@@ -358,7 +382,8 @@ fn fmtSliceLow(
                 try self.preserveSpace(view[i]);
             }
         } else if (indent or i != view.len) {
-            try self.buf.appendSlice(sep.repr());
+            if (@TypeOf(id) != Ast.Id or id.tag() != .Comment)
+                try self.buf.appendSlice(sep.repr());
             if (!indent) try self.buf.appendSlice(" ");
         }
         if (indent) try self.buf.appendSlice("\n");
