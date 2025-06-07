@@ -1,0 +1,18 @@
+false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main)).test:
+	sub rsp, 0x08
+	call :false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main).test
+	add rsp, 0x08
+	ret
+false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main).test:
+	sub rsp, 0x08
+	call :false positive in cycle detection.main.test
+	add rsp, 0x08
+	ret
+false positive in cycle detection.main.test:
+	ret
+main:
+	sub rsp, 0x08
+	call :false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main)).test
+	mov rax, 0x00
+	add rsp, 0x08
+	ret

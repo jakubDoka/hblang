@@ -328,10 +328,35 @@ fib := fn(x: uint): uint {
 }
 ```
 
+
 #### if statements 3 (comptime)
 ```hb
 main := fn(): uint {
     $if true return 0
+}
+```
+
+#### if statements 4 (short circuit)
+```hb
+global := 0
+
+main := fn(): uint {
+    if false || true || effectfull(1) {
+    }
+    if true && false && effectfull(2) {
+    }
+
+    v := false
+    v &&= effectfull(4)
+    v = true
+    v ||= effectfull(5)
+
+    return global
+}
+
+effectfull := fn(vl: uint): bool {
+    global = vl
+    return true
 }
 ```
 

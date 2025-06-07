@@ -1,0 +1,43 @@
+if statements 4 (short circuit).effectfull:
+	lea rax, [0x0000000000000007]
+	mov [rax], rdi
+	mov rax, 0x01
+	ret
+main:
+	push rbx
+	push rbp
+	push r12
+	sub rsp, 0x08
+	mov rbx, 0x01
+	test bl, bl
+	jz :0
+	jmp :1
+0:	mov rbp, 0x01
+	mov rdi, rbp
+	call :if statements 4 (short circuit).effectfull
+1:	mov rbp, 0x00
+	test bpl, bpl
+	jz :3
+	mov r12, 0x02
+	mov rdi, r12
+	call :if statements 4 (short circuit).effectfull
+	jmp :3
+3:	test bpl, bpl
+	jz :4
+	mov rbp, 0x04
+	mov rdi, rbp
+	call :if statements 4 (short circuit).effectfull
+	jmp :4
+4:	test bl, bl
+	jz :4
+	jmp :5
+4:	mov rbx, 0x05
+	mov rdi, rbx
+	call :if statements 4 (short circuit).effectfull
+5:	lea rax, [0x0000000000000007]
+	mov rax, [rax]
+	add rsp, 0x08
+	pop r12
+	pop rbp
+	pop rbx
+	ret

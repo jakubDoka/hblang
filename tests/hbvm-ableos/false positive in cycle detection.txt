@@ -1,0 +1,24 @@
+false positive in cycle detection.main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        jal $31, $0, :false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main)).test
+       li64 $1, 0
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main)).test:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        jal $31, $0, :false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main).test
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+       jala $0, $31, 0
+false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main).test:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        jal $31, $0, :false positive in cycle detection.main.test
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+       jala $0, $31, 0
+false positive in cycle detection.main.test:
+       jala $0, $31, 0

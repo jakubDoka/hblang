@@ -838,6 +838,40 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 self.emitGenericStore(loc.id.Pointer, &val);
                 return .{};
             },
+            .@"&&" => {
+                const variable = self.bl.addLocal(.none, 1);
+
+                var lhs = try self.emitTyped(.{}, .bool, e.lhs);
+                var builder = self.bl.addIfAndBeginThen(self.sloc(expr), lhs.getValue(self));
+                {
+                    var rhs = try self.emitTyped(.{ .loc = variable }, .i8, e.rhs);
+                    self.emitGenericStore(variable, &rhs);
+                }
+                const token = builder.beginElse(&self.bl);
+                {
+                    self.bl.addStore(variable, .i8, self.bl.addIntImm(.i8, 0));
+                }
+                builder.end(&self.bl, token);
+
+                return .mkp(.bool, variable);
+            },
+            .@"||" => {
+                const variable = self.bl.addLocal(.none, 1);
+
+                var lhs = try self.emitTyped(.{}, .bool, e.lhs);
+                var builder = self.bl.addIfAndBeginThen(self.sloc(expr), lhs.getValue(self));
+                {
+                    self.bl.addStore(variable, .i8, self.bl.addIntImm(.i8, 1));
+                }
+                const token = builder.beginElse(&self.bl);
+                {
+                    var rhs = try self.emitTyped(.{ .loc = variable }, .i8, e.rhs);
+                    self.emitGenericStore(variable, &rhs);
+                }
+                builder.end(&self.bl, token);
+
+                return .mkp(.bool, variable);
+            },
             else => {
                 if (e.lhs.tag() == .Null) {
                     return self.report(e.lhs, "null has to be on the right hand side", .{});
@@ -1906,7 +1940,8 @@ pub fn resolveGlobal(
 ) EmitError!Value {
     const vari = ast.exprs.getTyped(.Decl, decl).?;
 
-    // NOTE: we do this here particularly because the explicit type can contain a cycle
+    // NOTE: we do this here particularly because the explicit type can contain
+    // a cycle
     try self.types.ct.addInProgress(vari.value, bsty);
     defer _ = self.types.ct.in_progress.pop().?;
 

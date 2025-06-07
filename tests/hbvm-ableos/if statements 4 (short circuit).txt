@@ -1,0 +1,34 @@
+if statements 4 (short circuit).main:
+         st $31, $254, -32, 32
+     addi64 $254, $254, -32
+       li64 $32, 1
+        jeq $32, $0, :0
+        jmp :1
+0:       cp $1, $32
+        jal $31, $0, :if statements 4 (short circuit).effectfull
+1:     li64 $33, 0
+        jeq $33, $0, :3
+       li64 $34, 2
+         cp $1, $34
+        jal $31, $0, :if statements 4 (short circuit).effectfull
+        jmp :3
+3:      jeq $33, $0, :4
+       li64 $33, 4
+         cp $1, $33
+        jal $31, $0, :if statements 4 (short circuit).effectfull
+        jmp :4
+4:      jeq $32, $0, :5
+        jmp :6
+5:     li64 $32, 5
+         cp $1, $32
+        jal $31, $0, :if statements 4 (short circuit).effectfull
+6:      lra $1, $0, :if statements 4 (short circuit).global
+         ld $1, $1, 0, 8
+     addi64 $254, $254, 32
+         ld $31, $254, -32, 32
+         tx
+if statements 4 (short circuit).effectfull:
+        lra $2, $0, :if statements 4 (short circuit).global
+         st $1, $2, 0, 8
+        li8 $1, 1
+       jala $0, $31, 0

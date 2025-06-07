@@ -98,6 +98,11 @@ pub const Lexeme = enum(u16) {
     @"<=" = '<' + 128,
     @"==" = '=' + 128,
     @">=" = '>' + 128,
+    @"||=" = '|' + 32 + 128,
+    @"&&=" = '&' + 32 + 128,
+
+    @"||" = '|' + 32,
+    @"&&" = '&' + 32,
 
     ty_never = 0x100,
     ty_void,
@@ -206,8 +211,23 @@ pub const Lexeme = enum(u16) {
     // TODO: reverse the order because this does not look like precedence
     pub fn precedence(self: Lexeme) u8 {
         return switch (self) {
-            .@":", .@":=", .@"=", .@"+=", .@"-=", .@"*=", .@"/=", .@"%=", .@"|=", .@"^=", .@"&=", .@"<<=", .@">>=" => 15,
-            .@"|", .@"&" => 8,
+            .@":",
+            .@":=",
+            .@"=",
+            .@"+=",
+            .@"-=",
+            .@"*=",
+            .@"/=",
+            .@"%=",
+            .@"|=",
+            .@"^=",
+            .@"&=",
+            .@"<<=",
+            .@">>=",
+            .@"&&=",
+            .@"||=",
+            => 15,
+            .@"|", .@"&", .@"||", .@"&&" => 8,
             .@"<", .@">", .@"<=", .@">=", .@"==", .@"!=" => 7,
             .@"^" => 6,
             .@"<<", .@">>" => 5,
@@ -240,7 +260,19 @@ pub const Lexeme = enum(u16) {
     pub fn innerOp(self: Lexeme) ?Lexeme {
         const byte = @intFromEnum(self);
         switch (byte -| 128) {
-            '+', '-', '*', '/', '%', '&', '^', '|', '<' - 10, '>' - 10 => return @enumFromInt(byte - 128),
+            '+',
+            '-',
+            '*',
+            '/',
+            '%',
+            '&',
+            '^',
+            '|',
+            '<' - 10,
+            '>' - 10,
+            '|' + 32,
+            '&' + 32,
+            => return @enumFromInt(byte - 128),
             else => return null,
         }
     }
@@ -316,6 +348,8 @@ pub fn next(self: *Lexer) Token {
         double_quotes_slash,
         quotes,
         quotes_slash,
+        and_or,
+        short_circuit,
         zero,
         bin,
         oct,
@@ -343,7 +377,8 @@ pub fn next(self: *Lexer) Token {
             '.' => continue :state .dot,
             '=' => continue :state .equal,
             '<', '>' => continue :state .angle_bracket,
-            ':', '+', '-', '*', '%', '|', '^', '&', '!' => continue :state .op_equal,
+            '|', '&' => continue :state .and_or,
+            ':', '+', '-', '*', '%', '^', '!' => continue :state .op_equal,
             '#', '(', ')', ',', ';', '?', '[', '\\', ']', '`', '{', '}', '~' => |c| {
                 self.cursor += 1;
                 break :state @enumFromInt(c);
@@ -386,12 +421,29 @@ pub fn next(self: *Lexer) Token {
                 else => break :state @enumFromInt(self.source[self.cursor - 1]),
             }
         },
+        .and_or => {
+            if (self.source[self.cursor] == self.source[self.cursor + 1]) {
+                self.cursor += 1;
+                continue :state .short_circuit;
+            }
+            continue :state .op_equal;
+        },
         .angle_bracket => {
             if (self.source[self.cursor] == self.source[self.cursor + 1]) {
                 self.cursor += 1;
                 continue :state .shift;
             }
             continue :state .op_equal;
+        },
+        .short_circuit => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                '=' => {
+                    self.cursor += 1;
+                    break :state @enumFromInt(@as(u16, self.source[self.cursor - 2]) + 32 + 128);
+                },
+                else => break :state @enumFromInt(self.source[self.cursor - 2] + 32),
+            }
         },
         .shift => {
             self.cursor += 1;
