@@ -1,0 +1,6 @@
+confusing error message:6:16: expected frontend.types.Slice{ .len = null, .elem = frontend.TypeStore.Id.type }, got array with 2 elements
+    x: []type = .[i32, i32]
+                  ^
+confusing error message:5:20: function is missing a return value since uint has more then 1 possible value
+main := fn(): uint {
+                   ^

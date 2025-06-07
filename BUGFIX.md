@@ -2,6 +2,17 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### confusing error message
+```hb
+expectations := .{
+    should_error: true,
+}
+
+main := fn(): uint {
+    x: []type = .[i32, i32]
+}
+```
+
 #### format comment correctly
 ```hb
 Foo := struct {

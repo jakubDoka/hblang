@@ -702,9 +702,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     return self.report(expr, "{} can not bi initialized with array syntax", .{ty});
                 };
 
-                if (slice.len != e.fields.len()) {
-                    return self.report(expr, "expected array with {?} element, got {}", .{ slice.len, e.fields.len() });
-                }
+                if (slice.len != e.fields.len()) if (slice.len) |len| {
+                    return self.report(expr, "expected array with {} element, got {}", .{ len, e.fields.len() });
+                } else {
+                    return self.report(expr, "expected {}, got array with {} elements", .{ slice, e.fields.len() });
+                };
 
                 break :b .{ slice.elem, ret_ty };
             } else b: {
