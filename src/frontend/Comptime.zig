@@ -23,9 +23,9 @@ in_progress: std.ArrayListUnmanaged(Loc) = .{},
 
 pub const stack_size = 1024 * 100;
 
-pub const Loc = struct {
+pub const Loc = packed struct(u64) {
     ast: Ast.Id,
-    file: Types.File,
+    scope: Types.Id,
 };
 
 pub const InteruptCode = enum(u64) {
@@ -374,18 +374,20 @@ pub fn inferType(self: *Comptime, name: []const u8, scope: Codegen.Scope, ctx: C
     })[1];
 }
 
-pub fn addInProgress(self: *Comptime, expr: Ast.Id, file: Types.File) !void {
+pub fn addInProgress(self: *Comptime, expr: Ast.Id, scope: Types.Id) !void {
     const types = self.getTypes();
 
-    for (self.in_progress.items, 0..) |p, i| {
-        if (std.meta.eql(p, .{ .ast = expr, .file = file })) {
-            for (self.in_progress.items[i..]) |lc| {
-                types.report(lc.file, lc.ast, "cycle goes trough here", .{});
-            }
-            return error.Never;
+    if (std.mem.indexOfScalar(Loc, self.in_progress.items, .{
+        .ast = expr,
+        .scope = scope,
+    })) |idx| {
+        for (self.in_progress.items[idx..]) |lc| {
+            types.report(lc.scope.file(self.getTypes()).?, lc.ast, "cycle goes trough here", .{});
         }
+        return error.Never;
     }
-    self.in_progress.append(self.getGpa(), .{ .ast = expr, .file = file }) catch unreachable;
+
+    self.in_progress.append(self.getGpa(), .{ .ast = expr, .scope = scope }) catch unreachable;
 }
 
 pub fn jitExprLow(

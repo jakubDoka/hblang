@@ -1907,7 +1907,7 @@ pub fn resolveGlobal(
     const vari = ast.exprs.getTyped(.Decl, decl).?;
 
     // NOTE: we do this here particularly because the explicit type can contain a cycle
-    try self.types.ct.addInProgress(vari.value, bsty.file(self.types).?);
+    try self.types.ct.addInProgress(vari.value, bsty);
     defer _ = self.types.ct.in_progress.pop().?;
 
     const prev_scope = self.parent_scope;

@@ -2,6 +2,26 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### false positive in cycle detection
+```hb
+main := fn(): uint {
+    Wrapper := fn($T: type): type return struct{.x: T}
+    Wrap := fn($T: type): type return struct {
+        test := fn(): Wrapper(@TypeOf(T.test())) {
+            return .(T.test())
+        }
+    }
+    A := struct {
+        test := fn(): void {
+        }
+    }
+    B := Wrap(A)
+    C := Wrap(B)
+    _ = C.test()
+    return 0
+}
+```
+
 #### confusing error message
 ```hb
 expectations := .{
