@@ -513,6 +513,11 @@ pub fn Func(comptime MachNode: type) type {
                         }
                     }
                 }
+
+                if (scheds.len == 0) {
+                    return use.cfg0().?;
+                }
+
                 return scheds[use.id].?;
             }
 
@@ -550,6 +555,18 @@ pub fn Func(comptime MachNode: type) type {
                 }
                 if (@hasDecl(MachNode, "knownOffset")) return MachNode.knownOffset(self);
                 return .{ self, 0 };
+            }
+
+            pub fn allowedRegsFor(self: *Node, idx: usize, tmp: *utils.Arena) ?std.DynamicBitSetUnmanaged {
+                return if (comptime optApi("allowedRegsFor", @TypeOf(allowedRegsFor))) MachNode.allowedRegsFor(self, idx, tmp) else null;
+            }
+
+            pub fn regKills(self: *Node, tmp: *utils.Arena) ?std.DynamicBitSetUnmanaged {
+                return if (comptime optApi("regKills", @TypeOf(regKills))) MachNode.regKills(self, tmp) else null;
+            }
+
+            pub fn inPlaceSlot(self: *Node) ?usize {
+                return if (comptime optApi("inPlaceSlot", @TypeOf(inPlaceSlot))) MachNode.inPlaceSlot(self) else null;
             }
 
             pub fn noAlias(self: *Node, other: *Node) bool {
@@ -992,6 +1009,10 @@ pub fn Func(comptime MachNode: type) type {
 
             self.addDep(region, trap);
             self.addUse(trap, region);
+        }
+
+        pub fn addSplit(self: *Self, ctrl: *Node, def: *Node) *Node {
+            return if (comptime optApi("addSplit", @TypeOf(addSplit))) MachNode.addSplit(self, ctrl, def) else unreachable;
         }
 
         pub fn addNode(self: *Self, comptime kind: Kind, ty: DataType, inputs: []const ?*Node, extra: ClassFor(kind)) *Node {

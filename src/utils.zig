@@ -182,8 +182,12 @@ pub const Arena = struct {
         return mem;
     }
 
+    pub fn makeArrayList(self: *Arena, comptime T: type, cap: usize) std.ArrayListUnmanaged(T) {
+        return .initBuffer(self.alloc(T, cap));
+    }
+
     pub fn create(self: *Arena, comptime T: type) *T {
-        return &@call(.always_inline, alloc, .{ self, T, 1 }).ptr[0];
+        return &self.alloc(T, 1).ptr[0];
     }
 };
 

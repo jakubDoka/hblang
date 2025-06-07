@@ -3,6 +3,8 @@ const utils = graph.utils;
 const graph = @import("graph.zig");
 
 pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
+    func.gcm.cfg_built.assertLocked();
+
     const Fn = graph.Func(Mach);
 
     const Set = std.DynamicBitSetUnmanaged;
@@ -56,9 +58,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
         };
     }
 
-    var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), func.next_id) catch unreachable;
-    const postorder = func.collectPostorder(tmp.arena.allocator(), &visited);
-    for (postorder) |bb| {
+    for (func.gcm.postorder) |bb| {
         const node = &bb.base;
         for (node.outputs(), 0..) |c, i| {
             instrs[c.schedule].def = c;
@@ -129,11 +129,11 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                 Block.setMasks(i.liveouts),
                 Block.setMasks(i.uses),
                 Block.setMasks(i.defs),
-            ) |*lin, *lot, us, df| {
-                const previ = lin.*;
-                lin.* = us | (lot.* & ~df);
+            ) |*livein, *liveout, use, def| {
+                const previ = livein.*;
+                livein.* = use | (liveout.* & ~def);
 
-                changed |= (previ ^ lin.*);
+                changed |= (previ ^ livein.*);
             }
 
             if (changed != 0) {
@@ -151,10 +151,10 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                 for (
                     Block.setMasks(i.liveouts),
                     Block.setMasks(instrs[schedule].liveins),
-                ) |*lot, sin| {
-                    const prevo = lot.*;
-                    lot.* |= sin;
-                    sub_changed |= (prevo ^ lot.*);
+                ) |*live_outs, succ_livein| {
+                    const prevo = live_outs.*;
+                    live_outs.* |= succ_livein;
+                    sub_changed |= (prevo ^ live_outs.*);
                 }
 
                 if (sub_changed != 0) {
@@ -181,11 +181,11 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                     Block.setMasks(i.liveouts),
                     Block.setMasks(i.uses),
                     Block.setMasks(i.defs),
-                ) |*lin, *lot, us, df| {
-                    const previ = lin.*;
-                    lin.* = us | (lot.* & ~df);
+                ) |*livein, *liveout, use, def| {
+                    const previ = livein.*;
+                    livein.* = use | (liveout.* & ~def);
 
-                    changed |= (previ ^ lin.*);
+                    changed |= (previ ^ livein.*);
                 }
 
                 for (i.succ) |bo| {
@@ -193,10 +193,10 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                     for (
                         Block.setMasks(i.liveouts),
                         Block.setMasks(instrs[schedule].liveins),
-                    ) |*lot, sin| {
-                        const prevo = lot.*;
-                        lot.* |= sin;
-                        changed |= (prevo ^ lot.*);
+                    ) |*live_outs, succ_livein| {
+                        const prevo = live_outs.*;
+                        live_outs.* |= succ_livein;
+                        changed |= (prevo ^ live_outs.*);
                     }
                 }
             }
@@ -211,7 +211,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
         }
     }
 
-    for (postorder) |bb| {
+    for (func.gcm.postorder) |bb| {
         for (bb.base.outputs()) |o| {
             if (o.kind == .Phi) continue;
             for (o.dataDeps()) |i| if (i) |ii| {

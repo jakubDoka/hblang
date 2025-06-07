@@ -15,6 +15,7 @@ const Mach = root.backend.Machine;
 const Func = graph.Func(Node);
 const Kind = Func.Kind;
 const Regalloc = root.backend.Regalloc;
+const Regalloc2 = root.backend.Regalloc2;
 const ExecHeader = root.hbvm.object.ExecHeader;
 const Move = utils.Move(isa.Reg);
 const HbvmGen = @This();
@@ -36,6 +37,8 @@ const Reloc = struct {
 };
 
 pub const Node = union(enum) {
+    // [?Cfg, inp]
+    MachSplit,
     // [?Cfg, lhs]
     ImmBinOp: extern struct {
         op: isa.Op,
@@ -68,6 +71,7 @@ pub const Node = union(enum) {
 
     pub const is_basic_block_end: []const Kind = &.{.IfOp};
     pub const is_mem_op: []const Kind = &.{ .BlockCpy, .St, .Ld };
+    pub const reg_mask_cap = 254 + 32;
 
     pub fn knownOffset(node: *Func.Node) struct { *Func.Node, i64 } {
         return switch (node.extra2()) {
@@ -115,6 +119,49 @@ pub const Node = union(enum) {
             .St => node.extra(.St).offset,
             else => 0,
         };
+    }
+
+    const Set = std.DynamicBitSetUnmanaged;
+
+    pub fn allowedRegsFor(node: *Func.Node, idx: usize, arena: *utils.Arena) ?Set {
+        errdefer unreachable;
+        return switch (node.extra2()) {
+            inline .Ret, .Arg => |id| arg: {
+                std.debug.assert(idx == 0);
+                var set = try Set.initEmpty(arena.allocator(), reg_mask_cap);
+                set.set(id.*);
+                break :arg set;
+            },
+            .Call => switch (idx) {
+                0, 1 => null,
+                else => arg: {
+                    var set = try Set.initEmpty(arena.allocator(), reg_mask_cap);
+                    set.set(idx - 1);
+                    break :arg set;
+                },
+            },
+            else => {
+                var set = try Set.initEmpty(arena.allocator(), reg_mask_cap);
+                set.setRangeValue(.{ .start = 0, .end = @intFromEnum(isa.Reg.stack_addr) - 1 }, true);
+                return set;
+            },
+        };
+    }
+
+    pub fn regKills(node: *Func.Node, arena: *utils.Arena) ?Set {
+        errdefer unreachable;
+        return switch (node.kind) {
+            .Call => clobbers: {
+                var set = try Set.initEmpty(arena.allocator(), reg_mask_cap);
+                set.setRangeValue(.{ .start = 0, .end = @intFromEnum(isa.Reg.ret_addr) - 1 }, true);
+                break :clobbers set;
+            },
+            else => null,
+        };
+    }
+
+    pub fn addSplit(self: *Func, ctrl: *Func.Node, def: *Func.Node) *Func.Node {
+        return self.addNode(.Split, def.data_type, &.{ ctrl, def }, {});
     }
 
     pub const i_know_the_api = {};

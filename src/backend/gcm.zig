@@ -7,6 +7,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
         loop_tree_built: std.debug.SafetyLock = .{},
         cfg_built: std.debug.SafetyLock = .{},
         loop_tree: []LoopTree = undefined,
+        postorder: []*CfgNode = undefined,
 
         const Func = graph.Func(MachNode);
         const Self = @This();
@@ -366,6 +367,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
                     }
                 }
 
+                gcm.postorder = self.arena.allocator().dupe(*CfgNode, postorder) catch unreachable;
                 break :compact_ids;
             }
 
