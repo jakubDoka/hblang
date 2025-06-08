@@ -113,6 +113,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
 
         const live_ranges = build_live_ranges: {
             const slots = tmp.arena.alloc(?*LiveRange, func.instr_count);
+            @memset(slots, null);
 
             // TODO: use the second temp arena here
 
@@ -126,17 +127,16 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
 
                     if (instr.isDataPhi()) {
                         slot.* = slots[instr.inputs()[1].?.schedule];
-                        // std.debug.assert(slot.* != null);
+                        std.debug.assert(slot.* != null);
 
                         for (instr.inputs()[2..]) |def| {
-                            slot.* = slot.*.?.tryMerge(slots[def.?.schedule].?) orelse {
+                            slot.* = slot.*.?.tryMerge(slots[def.?.schedule] orelse continue) orelse {
                                 _ = insert(&splits, slot.*.?);
                                 break;
                             };
                         }
                     } else {
                         const allowed_set = instr.allowedRegsFor(0, tmp.arena) orelse {
-                            slot.* = null;
                             continue;
                         };
 
@@ -178,10 +178,18 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                 }
             }
 
-            for (slots) |*s| {
-                if (s.*) |*slot| {
-                    slot.* = slot.*.get();
+            unify: {
+                for (slots) |*s| {
+                    if (s.*) |*slot| {
+                        slot.* = slot.*.get();
+                    }
                 }
+
+                for (splits.items) |*spill| {
+                    spill.* = spill.*.get();
+                }
+
+                break :unify;
             }
 
             break :build_live_ranges slots;
@@ -215,6 +223,8 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                     const node: *Func.Node = n;
                     // we should skip this right?
 
+                    if (node.kind == .Phi) continue;
+
                     kills: {
                         var reg_kills = node.regKills(tmp.arena) orelse break :kills;
                         reg_kills.toggleAll();
@@ -232,8 +242,9 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                     }
 
                     if (live_ranges[node.schedule]) |node_live_range| {
-                        if (indexOfScalar(*LiveRange, active_nodes.items, node_live_range)) |idx|
-                            _ = active_nodes.swapRemove(idx);
+                        std.debug.print("{} {}\n", .{ node_live_range.def, node });
+                        const idx = indexOfScalar(*LiveRange, active_nodes.items, node_live_range).?;
+                        _ = active_nodes.swapRemove(idx);
 
                         if (node_live_range.allowed_set.count() < active_nodes.items.len and
                             node_live_range.allowed_set.count() != 1)
@@ -242,6 +253,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                         }
 
                         for (active_nodes.items) |active_live_range| {
+                            std.debug.assert(active_live_range != node_live_range);
                             const node_allow_set_masks = getMasks(node_live_range.allowed_set);
                             const active_allow_set_masks = getMasks(active_live_range.allowed_set);
 
@@ -477,6 +489,8 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
             for (splits.items) |live_range| {
                 var split_at_some_point = false;
                 for (tmp.arena.dupe(*Func.Node, live_range.def.outputs())) |use| {
+                    //if (live_range.def.kind == .Phi) unreachable;
+
                     const block = &use.useBlock(live_range.def, &.{}).base;
 
                     const def_pos = indexOfScalar(?*Func.Node, use.inputs(), live_range.def).?;
@@ -494,7 +508,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                 }
 
                 if (split_at_some_point) {
-                    func.fmtScheduled(std.io.getStdErr().writer().any(), .escape_codes);
+                    func.fmtScheduled(std.io.getStdErr().writer().any(), std.io.tty.detectConfig(std.io.getStdErr()));
                     utils.panic("{}", .{live_range.def});
                 }
             }
@@ -507,7 +521,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                 }
             }
 
-            func.fmtScheduled(std.io.getStdErr().writer().any(), .escape_codes);
+            func.fmtScheduled(std.io.getStdErr().writer().any(), std.io.tty.detectConfig(std.io.getStdErr()));
             std.debug.print("================ retry regalloc ================\n", .{});
 
             break :insert_split;

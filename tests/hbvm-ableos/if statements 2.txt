@@ -9,17 +9,17 @@ if statements 2.main:
 if statements 2.fib:
          st $31, $254, -24, 24
      addi64 $254, $254, -24
-         cp $33, $1
+         cp $32, $1
        li64 $1, 2
-       jgtu $33, $1, :1
+       jgtu $32, $1, :1
        li64 $1, 1
         jmp :2
-1:   addi64 $1, $33, -1
+1:   addi64 $1, $32, -1
         jal $31, $0, :if statements 2.fib
-         cp $32, $1
-     addi64 $1, $33, -2
+         cp $33, $1
+     addi64 $1, $32, -2
         jal $31, $0, :if statements 2.fib
-      add64 $1, $32, $1
+      add64 $1, $33, $1
 2:   addi64 $254, $254, 24
          ld $31, $254, -24, 24
        jala $0, $31, 0

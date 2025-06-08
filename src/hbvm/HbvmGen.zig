@@ -157,7 +157,7 @@ pub const Node = union(enum) {
                 },
             },
             else => {
-                if (node.isCfg()) return null;
+                if (node.isCfg() or (node.isStore() and idx < 2) or node.kind == .Mem) return null;
 
                 var set = try Set.initEmpty(arena.allocator(), reg_mask_cap);
                 set.setRangeValue(.{ .start = 0, .end = @intFromEnum(isa.Reg.stack_addr) - 1 }, true);
