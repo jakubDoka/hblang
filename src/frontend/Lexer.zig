@@ -74,6 +74,8 @@ pub const Lexeme = enum(u16) {
     DecInteger = 128 | 10,
     HexInteger = 128 | 16,
 
+    @".*",
+    @".?",
     @".{" = '{' + 128,
     @".(" = '(' + 128,
     @".[" = '[' + 128,
@@ -233,7 +235,7 @@ pub const Lexeme = enum(u16) {
             .@"<<", .@">>" => 5,
             .@"+", .@"-" => 4,
             .@"*", .@"/", .@"%" => 3,
-            .@".", .@".{", .@".(", .@".[" => 0,
+            .@".", .@".{", .@".(", .@".[", .@".?", .@".*" => 0,
             else => 255,
         };
     }
@@ -473,6 +475,14 @@ pub fn next(self: *Lexer) Token {
                 '.' => {
                     self.cursor += 1;
                     break :state .@"..";
+                },
+                '?' => {
+                    self.cursor += 1;
+                    break :state .@".?";
+                },
+                '*' => {
+                    self.cursor += 1;
+                    break :state .@".*";
                 },
                 else => break :state .@".",
             }

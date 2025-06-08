@@ -217,11 +217,7 @@ fn parseUnit(self: *Parser) Error!Id {
     while (true) base = try self.store.allocDyn(self.arena.allocator(), switch (self.cur.kind) {
         .@"." => b: {
             _ = self.advance();
-            break :b if (self.tryAdvance(.@"?")) .{
-                .Unwrap = base,
-            } else if (self.tryAdvance(.@"*")) .{
-                .Deref = base,
-            } else .{ .Field = .{
+            break :b .{ .Field = .{
                 .base = base,
                 .field = .init((try self.expectAdvance(.Ident)).pos),
             } };
@@ -260,6 +256,14 @@ fn parseUnit(self: *Parser) Error!Id {
             .fields = try self.parseList(.@".[", .@",", .@"]", parseExpr),
             .pos = self.list_pos,
         } },
+        .@".?" => b: {
+            _ = self.advance();
+            break :b .{ .Unwrap = base };
+        },
+        .@".*" => b: {
+            _ = self.advance();
+            break :b .{ .Deref = base };
+        },
         else => break,
     });
     return base;
