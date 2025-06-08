@@ -79,7 +79,7 @@ pub fn runVendoredTest(gpa: std.mem.Allocator, path: []const u8, target: []const
     defer ast.arena.deinit();
 }
 
-inline fn header(comptime name: []const u8, writer: anytype, corors: std.io.tty.Config) !void {
+pub inline fn header(comptime name: []const u8, writer: anytype, corors: std.io.tty.Config) !void {
     const side = "========";
     const msg = "\n" ++ side ++ " " ++ name ++ " " ++ side ++ "\n";
     try corors.setColor(writer, .dim);
@@ -175,70 +175,13 @@ pub fn testBuilder(
     types.target = target;
     defer types.deinit();
 
-    var cg = Codegen.init(gpa, func_arena.arena, &types, .runtime, abi);
-    defer cg.deinit();
-    cg.scope = .{};
+    const errored = Codegen.emitReachable(gpa, func_arena.arena, &types, abi, gen, .{
+        .verbose = verbose,
+        .colors = colors,
+        .output = output,
+    });
 
-    const entry = try cg.getEntry(.root, "main");
-    cg.work_list.appendAssumeCapacity(.{ .Func = entry });
-
-    var syms = std.heap.ArenaAllocator.init(gpa);
-    defer syms.deinit();
-
-    var errored = false;
-    while (cg.nextTask()) |task| switch (task) {
-        .Func => |func| {
-            defer {
-                cg.bl.func.reset();
-            }
-
-            cg.build(func) catch {
-                errored = true;
-                continue;
-            };
-
-            std.debug.assert(!cg.errored);
-
-            if (verbose) try header("OPTIMIZED SON", output, colors);
-
-            var tmp = utils.Arena.scrath(null);
-            defer tmp.deinit();
-
-            var anal_errors: std.ArrayListUnmanaged(static_anal.Error) = .empty;
-
-            const func_data: *root.frontend.types.Func = types.store.get(func);
-            gen.emitFunc(&cg.bl.func, .{
-                .id = @intFromEnum(func),
-                .name = if (func_data.visibility != .local)
-                    func_data.key.name
-                else
-                    try root.frontend.Types.Id.init(.{ .Func = func })
-                        .fmt(&types).toString(syms.allocator()),
-                .entry = func == entry,
-                .linkage = func_data.visibility,
-                .optimizations = .{
-                    .verbose = verbose,
-                    .arena = tmp.arena,
-                    .error_buf = &anal_errors,
-                },
-            });
-
-            errored = types.dumpAnalErrors(&anal_errors) or errored;
-        },
-        .Global => |g| {
-            gen.emitData(.{
-                .name = try std.fmt.allocPrint(
-                    syms.allocator(),
-                    "{test}",
-                    .{Types.Id.init(.{ .Global = g }).fmt(&types)},
-                ),
-                .id = @intFromEnum(g),
-                .value = .{ .init = types.store.get(g).data },
-            });
-        },
-    };
-
-    const expectations: Expectations = .init(&ast, syms.allocator());
+    const expectations: Expectations = .init(&ast, func_arena.arena.allocator());
 
     try std.testing.expectEqual(expectations.should_error, errored);
     if (expectations.should_error) return;

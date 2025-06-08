@@ -206,15 +206,15 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     var bckend, const abi: hb.frontend.Types.Abi = if (std.mem.eql(u8, opts.target, "hbvm-ableos")) backend: {
         const slot = ast_arena.create(hb.hbvm.HbvmGen);
         slot.* = hb.hbvm.HbvmGen{ .gpa = opts.gpa };
-        break :backend .{ hb.backend.Machine.init(slot), .ableos };
+        break :backend .{ hb.backend.Machine.init(opts.target, slot), .ableos };
     } else if (std.mem.eql(u8, opts.target, "x86_64-windows")) backend: {
         const slot = ast_arena.create(hb.x86_64.X86_64Gen);
         slot.* = hb.x86_64.X86_64Gen{ .gpa = opts.gpa, .object_format = .coff };
-        break :backend .{ hb.backend.Machine.init(slot), .fastcall };
+        break :backend .{ hb.backend.Machine.init(opts.target, slot), .fastcall };
     } else if (std.mem.eql(u8, opts.target, "x86_64-linux")) backend: {
         const slot = ast_arena.create(hb.x86_64.X86_64Gen);
         slot.* = hb.x86_64.X86_64Gen{ .gpa = opts.gpa, .object_format = .elf };
-        break :backend .{ hb.backend.Machine.init(slot), .systemv };
+        break :backend .{ hb.backend.Machine.init(opts.target, slot), .systemv };
     } else {
         try opts.diagnostics.print(
             "{s} is unsupported target, only `x86_64-(windows|linux)` and `hbvm-ableos` are supported",
@@ -228,73 +228,10 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     types.target = opts.target;
     defer types.deinit();
 
-    var codegen = hb.frontend.Codegen.init(opts.gpa, Arena.scrath(null).arena, &types, .runtime, abi);
-    defer codegen.deinit();
+    var root_tmp = utils.Arena.scrath(null);
+    defer root_tmp.deinit();
 
-    var syms = std.heap.ArenaAllocator.init(opts.gpa);
-    defer syms.deinit();
-
-    const entry = codegen.getEntry(.root, "main") catch {
-        try opts.diagnostics.writeAll(
-            \\...you can define the `main` in the mentioned file:
-            \\main := fn(): uint {
-            \\    return 0
-            \\}
-        );
-
-        return error.Failed;
-    };
-
-    codegen.queue(.{ .Func = entry });
-
-    var errored = false;
-    while (codegen.nextTask()) |tsk| switch (tsk) {
-        .Func => |func| {
-            defer codegen.bl.func.reset();
-
-            codegen.build(func) catch {
-                errored = true;
-                continue;
-            };
-
-            var tmp = Arena.scrath(null);
-            defer tmp.deinit();
-
-            //var out_fmt = std.ArrayList(u8).init(tmp.arena.allocator());
-            //defer out_fmt.deinit();
-            //try asts[@intFromEnum(func.key.file)].fmtExpr(&out_fmt, func.key.ast);
-            //try std.io.getStdErr().writeAll(out_fmt.items);
-
-            var errors = std.ArrayListUnmanaged(static_anal.Error){};
-
-            const func_data: *frontend.types.Func = types.store.get(func);
-            bckend.emitFunc(&codegen.bl.func, .{
-                .id = @intFromEnum(func),
-                .name = if (func_data.visibility != .local)
-                    func_data.key.name
-                else
-                    try hb.frontend.Types.Id.init(.{ .Func = func })
-                        .fmt(&types).toString(syms.allocator()),
-                .entry = func == entry,
-                .linkage = func_data.visibility,
-                .optimizations = .{
-                    .arena = tmp.arena,
-                    .error_buf = &errors,
-                },
-            });
-
-            errored = types.dumpAnalErrors(&errors) or errored;
-        },
-        .Global => |global| {
-            bckend.emitData(.{
-                .id = @intFromEnum(global),
-                .name = try hb.frontend.Types.Id.init(.{ .Global = global })
-                    .fmt(&types).toString(syms.allocator()),
-                .value = .{ .init = types.store.get(global).data },
-            });
-        },
-    };
-
+    const errored = hb.frontend.Codegen.emitReachable(opts.gpa, root_tmp.arena, &types, abi, bckend, .{});
     if (errored) {
         try opts.diagnostics.print("failed due to previous errors\n", .{});
         return error.Failed;

@@ -303,6 +303,8 @@ pub fn finalize(self: *HbvmGen, out: std.io.AnyWriter) void {
 
 pub fn disasm(_: *HbvmGen, opts: Mach.DisasmOpts) void {
     var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
     isa.disasm(opts.bin, tmp.arena.allocator(), opts.out, opts.colors) catch unreachable;
 }
 
@@ -346,33 +348,43 @@ pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
                 vm.regs.set(.ret(0), 3);
             },
             3 => switch (vm.regs.get(.arg(1))) {
-                2 => switch (ctx.memory[vm.regs.get(.arg(2))]) {
+                2 => switch (ctx.memory[@intCast(vm.regs.get(.arg(2)))]) {
                     0 => {
                         const Msg = extern struct { pad: u8, pages_new: u64 align(1), zeroed: bool };
 
-                        const msg: Msg = @bitCast(ctx.memory[vm.regs.get(.arg(2))..][0..@sizeOf(Msg)].*);
+                        const msg: Msg =
+                            @bitCast(ctx.memory[@intCast(vm.regs.get(.arg(2)))..][0..@sizeOf(Msg)].*);
 
                         const base = page_size * page_cursor;
-                        page_cursor += msg.pages_new;
+                        page_cursor += @intCast(msg.pages_new);
 
-                        if (msg.zeroed) @memset(ctx.memory[base..][0 .. msg.pages_new * page_size], 0);
+                        if (msg.zeroed) @memset(
+                            ctx.memory[@intCast(base)..][0..@intCast(msg.pages_new * page_size)],
+                            0,
+                        );
 
                         vm.regs.set(.ret(0), base);
                     },
                     7, 1 => {},
                     5 => {
                         const Msg = extern struct { pad: u8, len: u64 align(1), count: u64 align(1), src: u64 align(1), dest: u64 align(1) };
-                        const msg: Msg = @bitCast(ctx.memory[vm.regs.get(.arg(2))..][0..@sizeOf(Msg)].*);
-                        const dst, const src = .{ ctx.memory[msg.dest..][0..msg.len], ctx.memory[msg.src..][0..msg.count] };
+                        const msg: Msg = @bitCast(ctx.memory[@intCast(vm.regs.get(.arg(2)))..][0..@sizeOf(Msg)].*);
+                        const dst, const src = .{
+                            ctx.memory[@intCast(msg.dest)..][0..@intCast(msg.len)],
+                            ctx.memory[@intCast(msg.src)..][0..@intCast(msg.count)],
+                        };
 
-                        for (0..msg.len / msg.count) |i| {
-                            @memcpy(dst[i * msg.count ..][0..msg.count], src);
+                        for (0..@intCast(msg.len / msg.count)) |i| {
+                            @memcpy(dst[@intCast(i * msg.count)..][0..@intCast(msg.count)], src);
                         }
                     },
                     4, 6 => |v| {
                         const Msg = extern struct { pad: u8, len: u64 align(1), src: u64 align(1), dest: u64 align(1) };
-                        const msg: Msg = @bitCast(ctx.memory[vm.regs.get(.arg(2))..][0..@sizeOf(Msg)].*);
-                        const dst, const src = .{ ctx.memory[msg.dest..][0..msg.len], ctx.memory[msg.src..][0..msg.len] };
+                        const msg: Msg = @bitCast(ctx.memory[@intCast(vm.regs.get(.arg(2)))..][0..@sizeOf(Msg)].*);
+                        const dst, const src = .{
+                            ctx.memory[@intCast(msg.dest)..][0..@intCast(msg.len)],
+                            ctx.memory[@intCast(msg.src)..][0..@intCast(msg.len)],
+                        };
 
                         if (v == 4) {
                             @memcpy(dst, src);
@@ -396,13 +408,13 @@ pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
                         Trace,
                     };
                     const Msg = extern struct { level: LogLevel, str_ptr: u64 align(1), str_len: u64 align(1) };
-                    const msg: Msg = @bitCast(ctx.memory[vm.regs.get(.arg(2))..][0..@sizeOf(Msg)].*);
-                    const str = ctx.memory[msg.str_ptr..][0..msg.str_len];
+                    const msg: Msg = @bitCast(ctx.memory[@intCast(vm.regs.get(.arg(2)))..][0..@sizeOf(Msg)].*);
+                    const str = ctx.memory[@intCast(msg.str_ptr)..][0..@intCast(msg.str_len)];
 
-                    std.debug.print("{s}\n", .{str});
+                    env.logs.print("{s}\n", .{str}) catch {};
                 },
                 4 => {
-                    const dest = ctx.memory[vm.regs.get(.arg(3))..][0..vm.regs.get(.arg(4))];
+                    const dest = ctx.memory[@intCast(vm.regs.get(.arg(3)))..][0..@intCast(vm.regs.get(.arg(4)))];
                     prng.fill(dest);
                 },
                 else => |v| utils.panic("{}", .{v}),
@@ -412,7 +424,7 @@ pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
         else => unreachable,
     };
 
-    return vm.regs.get(.ret(0));
+    return @intCast(vm.regs.get(.ret(0)));
 }
 
 pub fn deinit(self: *HbvmGen) void {

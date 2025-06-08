@@ -191,6 +191,106 @@ pub fn init(
     };
 }
 
+/// returns true when errored
+pub fn emitReachable(
+    gpa: std.mem.Allocator,
+    scrath: *utils.Arena,
+    types: *Types,
+    abi: Types.Abi,
+    backend: root.backend.Machine,
+    log_opts: struct {
+        colors: std.io.tty.Config = .no_color,
+        output: std.io.AnyWriter = std.io.null_writer.any(),
+        verbose: bool = false,
+    },
+) bool {
+    errdefer unreachable;
+
+    var root_tmp = utils.Arena.scrath(scrath);
+    defer root_tmp.deinit();
+
+    var codegen = Codegen.init(gpa, root_tmp.arena, types, .runtime, abi);
+    defer codegen.deinit();
+
+    const entry = codegen.getEntry(.root, "main") catch {
+        try types.diagnostics.writeAll(
+            \\...you can define the `main` in the mentioned file:
+            \\main := fn(): uint {
+            \\    return 0
+            \\}
+        );
+
+        return true;
+    };
+
+    codegen.work_list.items.len = 0;
+
+    codegen.queue(.{ .Func = entry });
+
+    var errored = false;
+    while (codegen.nextTask()) |tsk| switch (tsk) {
+        .Func => |func| {
+            var task_scope = codegen.work_list.items.len;
+
+            defer codegen.bl.func.reset();
+
+            const err = codegen.build(func);
+            var tmp = root_tmp.arena.checkpoint();
+            defer tmp.deinit();
+
+            // make the globals available for constant folding
+            for (codegen.work_list.items[task_scope..]) |task| {
+                switch (task) {
+                    .Global => |global| {
+                        backend.emitData(.{
+                            .id = @intFromEnum(global),
+                            .name = try root.frontend.Types.Id.init(.{ .Global = global })
+                                .fmt(types).toString(scrath.allocator()),
+                            .value = .{ .init = types.store.get(global).data },
+                        });
+                    },
+                    .Func => {
+                        codegen.work_list.items[task_scope] = task;
+                        task_scope += 1;
+                    },
+                }
+            }
+            codegen.work_list.items.len = task_scope;
+
+            err catch {
+                errored = true;
+                continue;
+            };
+
+            var errors = std.ArrayListUnmanaged(static_anal.Error){};
+
+            if (log_opts.verbose) try root.test_utils.header("CODEGEN", log_opts.output, log_opts.colors);
+
+            const func_data: *root.frontend.types.Func = types.store.get(func);
+            backend.emitFunc(&codegen.bl.func, .{
+                .id = @intFromEnum(func),
+                .name = if (func_data.visibility != .local)
+                    func_data.key.name
+                else
+                    try root.frontend.Types.Id.init(.{ .Func = func })
+                        .fmt(types).toString(scrath.allocator()),
+                .entry = func == entry,
+                .linkage = func_data.visibility,
+                .optimizations = .{
+                    .arena = tmp.arena,
+                    .error_buf = &errors,
+                    .verbose = log_opts.verbose,
+                },
+            });
+
+            errored = types.dumpAnalErrors(&errors) or errored;
+        },
+        .Global => unreachable,
+    };
+
+    return errored;
+}
+
 pub fn deinit(self: *Codegen) void {
     self.bl.deinit();
     self.* = undefined;

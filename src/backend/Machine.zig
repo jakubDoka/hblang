@@ -70,6 +70,7 @@ test init {
 }
 
 data: *anyopaque,
+name: []const u8,
 _emitFunc: *const fn (self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void,
 _emitData: *const fn (self: *anyopaque, opts: DataOptions) void,
 _finalize: *const fn (self: *anyopaque, out: std.io.AnyWriter) void,
@@ -284,6 +285,7 @@ pub const RunEnv = struct {
     name: []const u8,
     code: []const u8,
     output: std.io.AnyWriter = std.io.null_writer.any(),
+    logs: std.io.AnyWriter = std.io.null_writer.any(),
     colors: std.io.tty.Config = .no_color,
 };
 
@@ -360,7 +362,7 @@ pub const DisasmOpts = struct {
     colors: std.io.tty.Config = .no_color,
 };
 
-pub fn init(data: anytype) Machine {
+pub fn init(name: []const u8, data: anytype) Machine {
     const Type = @TypeOf(data.*);
     if (!@hasDecl(Type, "Node")) @compileError("expected `pub const Node = enum(union) { ... }` to be present");
 
@@ -394,6 +396,7 @@ pub fn init(data: anytype) Machine {
 
     return .{
         .data = data,
+        .name = name,
         ._emitFunc = fns.emitFunc,
         ._emitData = fns.emitData,
         ._finalize = fns.finalize,

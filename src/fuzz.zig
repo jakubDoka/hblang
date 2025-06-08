@@ -24,9 +24,7 @@ comptime {
 
 fn fuzz() callconv(.c) void {
     utils.Arena.initScratch(1024 * 1024);
-    defer utils.Arena.deinitScratch();
     var arena = utils.Arena.init(1024 * 1024 * 4);
-    defer arena.deinit();
     const input = std.io.getStdIn().readToEndAlloc(arena.allocator(), 1024 * 1024) catch unreachable;
     fuzzRun("fuzz", input, &arena, std.io.null_writer.any()) catch |err| switch (err) {
         error.UnexpectedToken, error.ParsingFailed, error.Never => {},
@@ -63,31 +61,9 @@ pub fn fuzzRun(
 
     var hbgen = HbvmGen{ .gpa = gpa };
     defer hbgen.deinit();
-    var gen = Mach.init(&hbgen);
+    var gen = Mach.init("hbvm-ableos", &hbgen);
 
-    var errored = false;
-    while (cg.nextTask()) |task| switch (task) {
-        .Func => |func| {
-            defer cg.bl.func.reset();
-
-            cg.build(func) catch {
-                errored = true;
-                continue;
-            };
-
-            gen.emitFunc(&cg.bl.func, .{
-                .id = @intFromEnum(func),
-                .entry = func == entry,
-                .linkage = types.store.get(func).visibility,
-            });
-        },
-        .Global => |g| {
-            gen.emitData(.{
-                .id = @intFromEnum(g),
-                .value = .{ .init = types.store.get(g).data },
-            });
-        },
-    };
+    const errored = root.frontend.Codegen.emitReachable(gpa, func_arena.arena, &types, .ableos, gen, .{});
 
     if (errored) return error.Never;
 

@@ -38,13 +38,14 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
     const failed_fmt = test_util.testFmt(name, name, code, stderr.writer().any(), colors);
 
     if (true) {
+        const target = "hbvm-ableos";
         var hbvm = root.hbvm.HbvmGen{ .gpa = gpa };
         defer hbvm.deinit();
         try runMachineTest(
             name,
-            "hbvm-ableos",
+            target,
             code,
-            .init(&hbvm),
+            .init(target, &hbvm),
             .ableos,
             gpa,
             stderr.writer().any(),
@@ -55,13 +56,14 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
     if (true) {
         if (std.mem.indexOf(u8, name, "float") != null) return;
 
+        const target = "x86_64-linux";
         var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
         defer x86_64.deinit();
         try runMachineTest(
             name,
-            "x86_64-linux",
+            target,
             code,
-            .init(&x86_64),
+            .init(target, &x86_64),
             .systemv,
             gpa,
             stderr.writer().any(),
@@ -147,7 +149,7 @@ pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
         "hbvm-ableos",
         gpa,
         std.io.null_writer.any(),
-        .init(&hbvm),
+        .init("hbvm-ableos", &hbvm),
         .ableos,
         .no_color,
         false,

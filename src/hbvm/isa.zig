@@ -184,14 +184,14 @@ pub fn disasm(
     const symbols = try root.hbvm.object.loadSymMap(arena, code);
 
     var labelMap = try makeLabelMap(
-        code[@sizeOf(ExecHeader)..][0..header.code_length],
+        code[@sizeOf(ExecHeader)..][0..@intCast(header.code_length)],
         &symbols,
         arena,
     );
     defer labelMap.deinit();
     var cursor: usize = 0;
 
-    const code_section = code[@sizeOf(ExecHeader)..][0..header.code_length];
+    const code_section = code[@sizeOf(ExecHeader)..][0..@intCast(header.code_length)];
     while (code_section.len > cursor) {
         cursor += try disasmOne(code_section, cursor, &labelMap, &symbols, writer, colors);
     }
