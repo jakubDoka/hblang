@@ -223,6 +223,9 @@ pub const InitOptions = struct {
     loader: Parser.Loader = .noop,
     diagnostics: std.io.AnyWriter = std.io.null_writer.any(),
     ignore_errors: bool = false,
+    mode: Mode = .latest,
+
+    pub const Mode = enum { legacy, latest };
 };
 
 pub fn init(
@@ -237,6 +240,7 @@ pub fn init(
         .path = opts.path,
         .current = opts.current,
         .loader = opts.loader,
+        .mode = opts.mode,
         .cur = lexer.next(),
         .lexer = lexer,
         .diagnostics = opts.diagnostics,

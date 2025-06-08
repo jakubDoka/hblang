@@ -55,6 +55,7 @@ pub const CompileOptions = struct {
     // #ARGS (main.hb)
     root_file: []const u8 = "main.hb",
     // #FLAGS (--help)
+    parser_mode: hb.frontend.Ast.InitOptions.Mode = .latest, // or "legacy" for migrating code
     help: bool = false, // print this help message
     fmt: bool = false, // format all files reachable from the root_file
     fmt_stdout: bool = false, // format only the root file and print it to stdout
@@ -98,23 +99,33 @@ pub const CompileOptions = struct {
             self.vendored_test = self.vendored_test or std.mem.eql(u8, arg, "vendored-test");
 
             if (std.mem.eql(u8, arg, "target")) self.target = args.next() orelse {
-                try self.diagnostics.writeAll("--target takes an argument");
+                try self.diagnostics.writeAll("--target <triple>");
                 return;
             };
 
+            if (std.mem.eql(u8, arg, "parser-mode")) {
+                self.parser_mode = std.meta.stringToEnum(@TypeOf(self.parser_mode), args.next() orelse {
+                    try self.diagnostics.writeAll("--parser-mode <mode>");
+                    return;
+                }) orelse {
+                    try self.diagnostics.writeAll("--parser-mode <latest/legacy>");
+                    return;
+                };
+            }
+
             if (std.mem.eql(u8, arg, "extra-threads")) {
                 arg = args.next() orelse {
-                    try self.diagnostics.writeAll("--extra-threads takes an integer argument");
+                    try self.diagnostics.writeAll("--extra-threads <integer>");
                     return;
                 };
                 self.extra_threads = std.fmt.parseInt(usize, arg, 10) catch |err| {
-                    try self.diagnostics.print("failed to parse --extra-threads argument: {s}", .{@errorName(err)});
+                    try self.diagnostics.print("--extra-threads <1..>: {s}", .{@errorName(err)});
                     return;
                 };
             }
 
             if (std.mem.eql(u8, arg, "path-projection")) {
-                const msg = "--path-projection takes two argumens: <key> <value>";
+                const msg = "--path-projection <key> <value>";
                 const key = args.next() orelse {
                     try self.diagnostics.writeAll(msg);
                     return;
@@ -157,6 +168,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             .path = opts.root_file,
             .code = source,
             .diagnostics = opts.diagnostics,
+            .mode = opts.parser_mode,
         });
 
         var buf = std.ArrayList(u8).init(ast_arena.allocator());
@@ -166,7 +178,13 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         return error.Failed;
     }
 
-    const asts, const base = try Loader.loadAll(&ast_arena, opts.path_projections, opts.root_file, opts.diagnostics) orelse {
+    const asts, const base = try Loader.loadAll(
+        &ast_arena,
+        opts.path_projections,
+        opts.root_file,
+        opts.diagnostics,
+        opts.parser_mode,
+    ) orelse {
         try opts.diagnostics.print("failed due to previous errors (codegen skipped)\n", .{});
         return error.Failed;
     };
@@ -407,11 +425,12 @@ const Loader = struct {
         return @enumFromInt(self.files.items.len - 1);
     }
 
-    fn loadAll(
+    pub fn loadAll(
         arena: *Arena,
         path_projections: std.StringHashMapUnmanaged([]const u8),
         root: []const u8,
         diagnostics: std.io.AnyWriter,
+        parser_mode: hb.frontend.Ast.InitOptions.Mode,
     ) !?struct { []const hb.frontend.Ast, []const u8 } {
         const real_root = std.fs.cwd().realpathAlloc(arena.allocator(), root) catch root;
 
@@ -443,6 +462,7 @@ const Loader = struct {
                 .code = file.source,
                 .loader = .init(&self),
                 .diagnostics = diagnostics,
+                .mode = parser_mode,
             });
 
             if (ast_res) |ast| {

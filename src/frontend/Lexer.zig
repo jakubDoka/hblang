@@ -320,15 +320,34 @@ fn isKeyword(name: []const u8) bool {
 }
 
 const keyword_map = b: {
+    const auto_migration_mapping = [_]struct { []const u8, Lexeme }{
+        .{ "@sizeof", .@"@size_of" },
+        .{ "@alignof", .@"@align_of" },
+        .{ "@bitcast", .@"@bit_cast" },
+        .{ "@eca", .@"@ecall" },
+        .{ "@lenof", .@"@len_of" },
+        .{ "@kindof", .@"@kind_of" },
+        .{ "@intcast", .@"@int_cast" },
+        .{ "@nameof", .@"@name_of" },
+        .{ "@itf", .@"@int_to_float" },
+        .{ "@fti", .@"@float_to_int" },
+        .{ "@floatcast", .@"@float_cast" },
+    };
+
     var count = 0;
     for (std.meta.fields(Lexeme)) |f| count += @intFromBool(isKeyword(f.name));
 
-    var list: [count]struct { []const u8, Lexeme } = undefined;
+    var list: [count + auto_migration_mapping.len]struct { []const u8, Lexeme } = undefined;
     var i: usize = 0;
     for (std.meta.fields(Lexeme)) |field| {
         if (!isKeyword(field.name)) continue;
         const start = if (std.mem.startsWith(u8, field.name, "ty_")) 3 else 0;
         list[i] = .{ field.name[start..], @enumFromInt(field.value) };
+        i += 1;
+    }
+
+    for (auto_migration_mapping) |em| {
+        list[i] = em;
         i += 1;
     }
 

@@ -23,6 +23,7 @@ current: Types.File,
 path: []const u8,
 loader: Loader,
 diagnostics: std.io.AnyWriter,
+mode: Ast.InitOptions.Mode,
 list_pos: Ast.Pos = undefined,
 deferring: bool = false,
 errored: bool = false,
@@ -483,20 +484,57 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             return expr;
         },
         .Type => |t| .{ .Buty = .{ .pos = .init(token.pos), .bt = t } },
+        .@"*" => switch (self.mode) {
+            .legacy => .{ .Deref = try self.parseUnit() },
+            .latest => {
+                self.report(token.pos, "this is legacy defer syntax," ++
+                    " use `<expr>.*` instead", .{});
+                return error.UnexpectedToken;
+            },
+        },
         .@"&", .@"^", .@"-", .@"~", .@"!", .@"?" => .{ .UnOp = .{
             .pos = .init(token.pos),
             .op = token.kind,
             .oper = try self.parseUnit(),
         } },
-        .@"[" => .{ .SliceTy = .{
-            .pos = .init(token.pos),
-            .len = if (self.tryAdvance(.@"]")) .zeroSized(.Void) else b: {
-                const expr = try self.parseExpr();
-                _ = try self.expectAdvance(.@"]");
-                break :b expr;
+        .@"[" => switch (self.mode) {
+            .legacy => slice: {
+                const pos = Ast.Pos.init(token.pos);
+                var is_legacy = false;
+                const len_or_legacy_elem: Ast.Id = if (self.tryAdvance(.@"]")) .zeroSized(.Void) else b: {
+                    const expr = try self.parseExpr();
+                    if (self.tryAdvance(.@";")) {
+                        is_legacy = true;
+                    } else _ = try self.expectAdvance(.@"]");
+                    break :b expr;
+                };
+
+                if (is_legacy) {
+                    const res: Ast.Expr = .{ .SliceTy = .{
+                        .pos = pos,
+                        .elem = len_or_legacy_elem,
+                        .len = try self.parseExpr(),
+                    } };
+                    _ = try self.expectAdvance(.@"]");
+                    break :slice res;
+                } else {
+                    break :slice .{ .SliceTy = .{
+                        .pos = pos,
+                        .elem = try self.parseUnit(),
+                        .len = len_or_legacy_elem,
+                    } };
+                }
             },
-            .elem = try self.parseUnit(),
-        } },
+            .latest => .{ .SliceTy = .{
+                .pos = .init(token.pos),
+                .len = if (self.tryAdvance(.@"]")) .zeroSized(.Void) else b: {
+                    const expr = try self.parseExpr();
+                    _ = try self.expectAdvance(.@"]");
+                    break :b expr;
+                },
+                .elem = try self.parseUnit(),
+            } },
+        },
         .@"if", .@"$if" => .{ .If = .{
             .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind == .@"$if" } },
             .cond = try self.parseScopedExpr(),

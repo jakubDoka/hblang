@@ -177,7 +177,8 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.fmtSliceLow(s.pos.flag.indented or forced, forced, s.fields, .@"{", .@";", .@"}");
         },
         .Directive => |d| {
-            try self.buf.appendSlice(Lexer.peekStr(self.ast.source, d.pos.index));
+            try self.buf.appendSlice("@");
+            try self.buf.appendSlice(@tagName(d.kind));
             try self.fmtSlice(d.pos.flag.indented, d.args, .@"(", .@",", .@")");
         },
         .Range => |r| {
