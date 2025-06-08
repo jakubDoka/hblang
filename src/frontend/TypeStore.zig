@@ -23,6 +23,8 @@ diagnostics: std.io.AnyWriter,
 files: []const Ast,
 stack_base: usize,
 target: []const u8 = "hbvm-ableos",
+func_work_list: std.EnumArray(Target, std.ArrayListUnmanaged(utils.EntId(tys.Func))),
+global_work_list: std.EnumArray(Target, std.ArrayListUnmanaged(utils.EntId(tys.Global))),
 
 const Types = @This();
 const Map = std.hash_map.HashMapUnmanaged(Id, void, TypeCtx, 70);
@@ -665,11 +667,60 @@ pub const Abi = enum {
 
 pub const Target = enum { @"comptime", runtime };
 
+pub fn retainGlobals(self: *Types, target: Target, backend: anytype, scratch: ?std.mem.Allocator) void {
+    errdefer unreachable;
+
+    const work_list = self.global_work_list.getPtr(target);
+    for (work_list.items) |global| {
+        backend.emitData(.{
+            .id = @intFromEnum(global),
+            .name = if (scratch) |s| try root.frontend.Types.Id.init(.{ .Global = global })
+                .fmt(self).toString(s) else "",
+            .value = .{ .init = self.store.get(global).data },
+            .readonly = self.store.get(global).readonly,
+        });
+    }
+    work_list.items.len = 0;
+}
+
+pub fn queue(self: *Types, target: Target, task: Id) void {
+    errdefer unreachable;
+    switch (task.data()) {
+        .Func => |func| {
+            if (self.store.get(func).completion.get(target) == .compiled) return;
+            self.func_work_list.getPtr(target).appendAssumeCapacity(func);
+        },
+        .Global => |global| {
+            if (self.store.get(global).completion.get(target) == .compiled) return;
+            self.global_work_list.getPtr(target).appendAssumeCapacity(global);
+        },
+        else => unreachable,
+    }
+}
+
+pub fn nextTask(self: *Types, target: Target, pop_limit: usize) ?utils.EntId(tys.Func) {
+    while (self.func_work_list.get(target).items.len > pop_limit) {
+        const func = self.func_work_list.getPtr(target).pop() orelse return null;
+        if (self.store.get(func).completion.get(target) == .compiled) continue;
+        self.store.get(func).completion.set(target, .compiled);
+        return func;
+    }
+    return null;
+}
+
 pub fn init(gpa: std.mem.Allocator, source: []const Ast, diagnostics: std.io.AnyWriter) Types {
     var arena = Arena.init(1024 * 1024);
     const scopes = arena.alloc(Id, source.len);
     @memset(scopes, .void);
     return .{
+        .func_work_list = .{ .values = .{
+            arena.makeArrayList(utils.EntId(tys.Func), 1024),
+            arena.makeArrayList(utils.EntId(tys.Func), 1024),
+        } },
+        .global_work_list = .{ .values = .{
+            arena.makeArrayList(utils.EntId(tys.Global), 1024),
+            arena.makeArrayList(utils.EntId(tys.Global), 1024),
+        } },
         .stack_base = @frameAddress(),
         .files = source,
         .file_scopes = scopes,
@@ -682,7 +733,8 @@ pub fn init(gpa: std.mem.Allocator, source: []const Ast, diagnostics: std.io.Any
 pub fn checkStack(self: *Types, file: File, pos: anytype) !void {
     const distance = @abs(@as(isize, @bitCast(@frameAddress() -% self.stack_base)));
     if (distance > root.frontend.Parser.stack_limit) {
-        self.report(file, pos, "the tree is too deep", .{});
+        self.report(file, pos, "the comptime evaluation recurses too deep", .{});
+        std.debug.dumpCurrentStackTrace(@returnAddress());
         return error.StackOverflow;
     }
 }
@@ -829,7 +881,13 @@ pub fn dumpAnalErrors(self: *Types, anal_errors: *std.ArrayListUnmanaged(static_
     return anal_errors.items.len != 0;
 }
 
-pub fn resolveGlobal(self: *Types, scope: Id, name: []const u8, ast: Ast.Id) struct { Id, bool } {
+pub fn resolveGlobal(
+    self: *Types,
+    scope: Id,
+    name: []const u8,
+    ast: Ast.Id,
+    readonly: bool,
+) struct { Id, bool } {
     const slot, const alloc = self.intern(.Global, .{
         .scope = scope,
         .file = scope.file(self).?,
@@ -840,6 +898,7 @@ pub fn resolveGlobal(self: *Types, scope: Id, name: []const u8, ast: Ast.Id) str
     if (!slot.found_existing) {
         self.store.get(alloc).* = .{
             .key = self.store.get(alloc).key,
+            .readonly = readonly,
         };
     }
     return .{ slot.key_ptr.*, !slot.found_existing };

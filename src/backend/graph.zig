@@ -1182,7 +1182,12 @@ pub fn Func(comptime MachNode: type) type {
             }
         }
 
-        pub fn iterPeeps(self: *Self, max_peep_iters: usize, strategy: fn (*Self, *Node, *WorkList) ?*Node) void {
+        pub fn iterPeeps(
+            self: *Self,
+            max_peep_iters: usize,
+            ctx: anytype,
+            strategy: fn (@TypeOf(ctx), *Self, *Node, *WorkList) ?*Node,
+        ) void {
             self.gcm.cfg_built.assertUnlocked();
 
             var tmp = utils.Arena.scrath(null);
@@ -1216,7 +1221,7 @@ pub fn Func(comptime MachNode: type) type {
                     continue;
                 }
 
-                if (strategy(self, t, &worklist)) |nt| {
+                if (strategy(ctx, self, t, &worklist)) |nt| {
                     for (t.inputs()) |ii| if (ii) |ia| worklist.add(ia);
                     for (t.outputs()) |o| worklist.add(o);
                     self.subsume(nt, t);
@@ -1247,7 +1252,7 @@ pub fn Func(comptime MachNode: type) type {
             for (node.outputs()) |o| if (o.isCfg()) collectPostorder3(self, o, arena, pos, visited, only_basic);
         }
 
-        pub fn idealizeDead(self: *Self, node: *Node, worklist: *WorkList) ?*Node {
+        pub fn idealizeDead(_: void, self: *Self, node: *Node, worklist: *WorkList) ?*Node {
             const inps = node.inputs();
 
             var is_dead = node.kind == .Region and isDead(inps[0]) and isDead(inps[1]);
@@ -1320,10 +1325,10 @@ pub fn Func(comptime MachNode: type) type {
             return null;
         }
 
-        pub fn idealize(self: *Self, node: *Node, worklist: *WorkList) ?*Node {
+        pub fn idealize(_: void, self: *Self, node: *Node, worklist: *WorkList) ?*Node {
             if (node.data_type == .bot) return null;
 
-            if (self.idealizeDead(node, worklist)) |w| return w;
+            if (idealizeDead({}, self, node, worklist)) |w| return w;
 
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
@@ -1414,7 +1419,7 @@ pub fn Func(comptime MachNode: type) type {
                 }
             }
 
-            return if (comptime optApi("idealize", @TypeOf(idealize))) MachNode.idealize(self, node, worklist) else null;
+            return if (comptime optApi("idealize", @TypeOf(idealize))) MachNode.idealize({}, self, node, worklist) else null;
         }
 
         pub fn logNid(wr: anytype, nid: usize, cc: std.io.tty.Config) void {

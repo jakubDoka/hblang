@@ -1,5 +1,3 @@
 directives 9 (@embed).main:
-        lra $1, $0, :mbed.txt
-         ld $1, $1, 0, 1
-       andi $1, $1, 255
-         tx
+    li64 $1, 69
+      tx

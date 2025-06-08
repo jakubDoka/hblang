@@ -95,6 +95,7 @@ pub const Data = struct {
         reloc_count: u32,
         kind: Kind,
         linkage: Linkage,
+        readonly: bool,
     };
 
     pub const Kind = enum(u16) {
@@ -199,6 +200,7 @@ pub const Data = struct {
             .reloc_count = 0,
             .kind = kind,
             .linkage = .imported,
+            .readonly = true,
         };
         try self.names.appendSlice(gpa, name);
         try self.names.append(gpa, 0);
@@ -218,6 +220,7 @@ pub const Data = struct {
             name,
             kind,
             linkage,
+            true,
         );
     }
 
@@ -229,6 +232,7 @@ pub const Data = struct {
         kind: Kind,
         linkage: Linkage,
         data: []const u8,
+        readonly: bool,
     ) !void {
         try self.startDefineSym(
             gpa,
@@ -236,6 +240,7 @@ pub const Data = struct {
             name,
             kind,
             linkage,
+            readonly,
         );
         try self.code.appendSlice(gpa, data);
         self.endDefineSym(self.globals.items[id]);
@@ -248,6 +253,7 @@ pub const Data = struct {
         name: []const u8,
         kind: Kind,
         linkage: Linkage,
+        readonly: bool,
     ) !void {
         _ = try self.declSym(gpa, sym);
 
@@ -262,6 +268,7 @@ pub const Data = struct {
             .reloc_count = undefined,
             .kind = kind,
             .linkage = linkage,
+            .readonly = readonly,
         };
         try self.names.appendSlice(gpa, name);
         try self.names.append(gpa, 0);
@@ -293,6 +300,7 @@ pub const DataOptions = struct {
     id: u32,
     name: []const u8 = &.{},
     value: ValueSpec,
+    readonly: bool,
 
     pub const ValueSpec = union(enum) { init: []const u8, uninit: usize };
 };
@@ -317,11 +325,11 @@ pub const EmitOptions = struct {
             .do_gcm = false,
         };
 
-        pub fn execute(self: @This(), comptime MachNode: type, func: *graph.Func(MachNode)) void {
+        pub fn execute(self: @This(), comptime MachNode: type, ctx: anytype, func: *graph.Func(MachNode)) void {
             const freestanding = @import("builtin").target.os.tag == .freestanding;
 
             if (self.peephole_fuel != 0) {
-                func.iterPeeps(self.peephole_fuel, @TypeOf(func.*).idealizeDead);
+                func.iterPeeps(self.peephole_fuel, {}, @TypeOf(func.*).idealizeDead);
             }
 
             if (self.mem2reg) {
@@ -329,11 +337,11 @@ pub const EmitOptions = struct {
             }
 
             if (self.peephole_fuel != 0) {
-                func.iterPeeps(self.peephole_fuel, @TypeOf(func.*).idealize);
+                func.iterPeeps(self.peephole_fuel, {}, @TypeOf(func.*).idealize);
             }
 
             if (self.peephole_fuel != 0 and @hasDecl(MachNode, "idealizeMach")) {
-                func.iterPeeps(self.peephole_fuel, MachNode.idealizeMach);
+                func.iterPeeps(self.peephole_fuel, ctx, MachNode.idealizeMach);
             }
 
             if (self.do_gcm) {

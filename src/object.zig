@@ -220,6 +220,7 @@ pub const elf = struct {
                     .global => .exported,
                     else => unreachable,
                 },
+                true,
             );
 
             if (s.shndx != .undef) {

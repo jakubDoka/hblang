@@ -347,11 +347,16 @@ pub fn runVm(
 pub fn jitFunc(self: *Comptime, fnc: utils.EntId(root.frontend.types.Func)) !void {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
-    var gen = Codegen.init(self.getGpa(), tmp.arena, self.getTypes(), .@"comptime", .ableos);
+
+    const gen = Codegen.init(self.getGpa(), tmp.arena, self.getTypes(), .@"comptime", .ableos);
     defer gen.deinit();
 
-    gen.queue(.{ .Func = fnc });
-    try compileDependencies(&gen, self.gen.out.relocs.items.len);
+    self.getTypes().queue(gen.target, .init(.{ .Func = fnc }));
+    try compileDependencies(
+        gen,
+        self.gen.out.relocs.items.len,
+        self.getTypes().func_work_list.get(gen.target).items.len - 1,
+    );
 }
 
 pub fn jitExpr(
@@ -404,20 +409,19 @@ pub fn jitExprLow(
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    var gen = Codegen.init(self.getGpa(), tmp.arena, types, .@"comptime", .ableos);
+    const gen = Codegen.init(self.getGpa(), tmp.arena, types, .@"comptime", .ableos);
     defer gen.deinit();
 
     gen.only_inference = only_inference;
 
     const reloc_frame = self.gen.out.relocs.items.len;
+    const pop_until = types.func_work_list.get(.@"comptime").items.len;
 
     var ret: Codegen.Value = undefined;
     {
         var scratch = tmp.arena.checkpoint();
-        defer {
-            scratch.deinit();
-            gen.bl.func.reset();
-        }
+        defer scratch.deinit();
+        defer gen.bl.func.reset();
 
         const token, const params, _ = gen.beginBuilder(tmp.arena, .never, .{ .param_count = 1 });
         gen.ast = types.getFile(scope.file(types));
@@ -437,6 +441,8 @@ pub fn jitExprLow(
         gen.bl.end(token);
 
         if (!only_inference) {
+            self.getTypes().retainGlobals(.@"comptime", &self.gen, null);
+
             self.gen.emitFunc(
                 @ptrCast(&gen.bl.func),
                 .{
@@ -453,35 +459,27 @@ pub fn jitExprLow(
     }
 
     if (!only_inference)
-        compileDependencies(&gen, reloc_frame) catch return error.Never;
+        compileDependencies(gen, reloc_frame, pop_until) catch return error.Never;
 
     return .{ id, ret.ty };
 }
 
-pub fn compileDependencies(self: *Codegen, reloc_after: usize) !void {
-    while (self.nextTask()) |task| switch (task) {
-        .Func => |func| {
-            defer {
-                self.bl.func.reset();
-            }
+pub fn compileDependencies(self: *Codegen, reloc_after: usize, pop_until: usize) !void {
+    while (self.types.nextTask(self.target, pop_until)) |func| {
+        defer self.bl.func.reset();
 
-            try self.build(func);
+        try self.build(func);
 
-            self.types.ct.gen.emitFunc(
-                @ptrCast(&self.bl.func),
-                .{
-                    .id = @intFromEnum(func),
-                    .linkage = .local,
-                },
-            );
-        },
-        .Global => |glob| {
-            self.types.ct.gen.emitData(.{
-                .id = @intFromEnum(glob),
-                .value = .{ .init = self.types.store.get(glob).data },
-            });
-        },
-    };
+        self.types.retainGlobals(self.target, &self.types.ct.gen, null);
+
+        self.types.ct.gen.emitFunc(
+            @ptrCast(&self.bl.func),
+            .{
+                .id = @intFromEnum(func),
+                .linkage = .local,
+            },
+        );
+    }
 
     root.hbvm.object.jitLink(self.types.ct.gen.out, reloc_after);
 }

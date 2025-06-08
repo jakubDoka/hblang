@@ -170,7 +170,7 @@ pub const Node = union(enum) {
 pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     errdefer unreachable;
 
-    opts.optimizations.execute(Node, func);
+    opts.optimizations.execute(Node, self, func);
 
     const allocs = Regalloc.ralloc(Node, func);
 
@@ -288,6 +288,7 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
             if (opts.value == .init) .data else .prealloc,
             .local,
             v,
+            opts.readonly,
         ),
         .uninit => unreachable,
     }
@@ -798,13 +799,20 @@ pub fn reloc(self: *HbvmGen, sub_offset: u8, arg: isa.Arg) Reloc {
     return .{ .offset = @intCast(self.out.code.items.len), .sub_offset = sub_offset, .operand = arg };
 }
 
-pub fn idealizeMach(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
+pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
     const inps = node.inputs();
 
     if (node.kind == .BinOp) {
         const op: graph.BinOp = node.extra(.BinOp).*;
 
         if (inps[2].?.kind == .CInt) b: {
+            if (inps[1].?.kind == .CInt) {
+                return func.addNode(.CInt, node.data_type, &.{null}, op.eval(
+                    inps[1].?.extra(.CInt).*,
+                    inps[2].?.extra(.CInt).*,
+                ));
+            }
+
             var imm = inps[2].?.extra(.CInt).*;
 
             const instr: isa.Op = switch (op) {
@@ -879,33 +887,50 @@ pub fn idealizeMach(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.
     }
 
     if (node.kind == .Store) {
-        if (node.base().kind == .ImmBinOp) {
-            const base, const offset = node.base().knownOffset();
-            return func.addNode(
-                .St,
-                node.data_type,
-                &.{ inps[0], inps[1], base, inps[3] },
-                .{ .offset = offset },
-            );
-        }
+        const base, const offset = node.base().knownOffset();
+        const st = func.addNode(
+            .St,
+            node.data_type,
+            &.{ inps[0], inps[1], base, inps[3] },
+            .{ .offset = offset },
+        );
+        work.add(st);
+        return st;
     }
 
     if (node.kind == .Load) {
-        if (node.base().kind == .ImmBinOp) {
-            const base, const offset = node.base().knownOffset();
-            return func.addNode(
-                .Ld,
-                node.data_type,
-                &.{ inps[0], inps[1], base },
-                .{ .offset = offset },
+        const base, const offset = node.base().knownOffset();
+        const ld = func.addNode(
+            .Ld,
+            node.data_type,
+            &.{ inps[0], inps[1], base },
+            .{ .offset = offset },
+        );
+        work.add(ld);
+        return ld;
+    }
+
+    if (node.kind == .Ld) {
+        if (node.base().kind == .GlobalAddr) fold_const_read: {
+            const sym = &self.out.syms.items[@intFromEnum(self.out.globals.items[node.base().extra(.GlobalAddr).id])];
+
+            if (!sym.readonly) break :fold_const_read;
+
+            var value: i64 = 0;
+
+            @memcpy(
+                @as(*[@sizeOf(@TypeOf(value))]u8, @ptrCast(&value))[0..node.data_type.size()],
+                self.out.code.items[@intCast(sym.offset + node.extra(.Ld).offset)..][0..node.data_type.size()],
             );
+
+            return func.addNode(.CInt, node.data_type, &.{null}, value);
         }
     }
 
-    return func.idealize(node, work);
+    return Func.idealize({}, func, node, work);
 }
 
-pub fn idealize(func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
+pub fn idealize(_: void, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
     const inps = node.inputs();
 
     if (node.kind == .BinOp) {

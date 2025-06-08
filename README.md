@@ -1310,6 +1310,20 @@ main := fn(): uint {
 }
 ```
 
+#### constants 1
+```hb
+expectations := .{
+    return_value: 42,
+}
+
+$ans := 32
+$wer: u8 = 10
+
+main := fn(): uint {
+    return ans + wer
+}
+```
+
 #### string errors
 ```hb
 expectations := .{

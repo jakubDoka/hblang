@@ -369,6 +369,7 @@ pub const Struct = struct {
                             .ast = field.value,
                             .captures = &.{},
                         },
+                        .readonly = true,
                     });
 
                     types.ct.evalGlobal(name, value, ty, field.value) catch {};
@@ -414,6 +415,7 @@ pub const Global = struct {
     key: Scope,
     ty: TyId = .void,
     data: []const u8 = &.{},
+    readonly: bool,
     completion: std.EnumArray(Types.Target, CompileState) = .{ .values = .{ .queued, .queued } },
 
     pub const CompileState = enum { queued, staged, compiled };

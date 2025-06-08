@@ -17,11 +17,10 @@ const tys = root.frontend.types;
 
 bl: Builder,
 types: *Types,
-work_list: std.ArrayListUnmanaged(Task),
 target: Types.Target,
+abi: Types.Abi,
 only_inference: bool = false,
 partial_eval: bool = false,
-abi: Types.Abi,
 name: []const u8 = undefined,
 parent_scope: Scope = undefined,
 ast: *const Ast = undefined,
@@ -181,14 +180,15 @@ pub fn init(
     types: *Types,
     target: Types.Target,
     abi: Types.Abi,
-) Codegen {
-    return .{
+) *Codegen {
+    const res = scratch.create(Codegen);
+    res.* = .{
         .types = types,
         .abi = abi,
         .target = target,
         .bl = .init(gpa),
-        .work_list = .initBuffer(scratch.alloc(Task, 1024)),
     };
+    return res;
 }
 
 /// returns true when errored
@@ -209,7 +209,7 @@ pub fn emitReachable(
     var root_tmp = utils.Arena.scrath(scrath);
     defer root_tmp.deinit();
 
-    var codegen = Codegen.init(gpa, root_tmp.arena, types, .runtime, abi);
+    const codegen = Codegen.init(gpa, root_tmp.arena, types, .runtime, abi);
     defer codegen.deinit();
 
     const entry = codegen.getEntry(.root, "main") catch {
@@ -223,70 +223,47 @@ pub fn emitReachable(
         return true;
     };
 
-    codegen.work_list.items.len = 0;
-
-    codegen.queue(.{ .Func = entry });
+    types.queue(.runtime, .init(.{ .Func = entry }));
 
     var errored = false;
-    while (codegen.nextTask()) |tsk| switch (tsk) {
-        .Func => |func| {
-            var task_scope = codegen.work_list.items.len;
+    while (types.nextTask(.runtime, 0)) |func| {
+        defer codegen.bl.func.reset();
 
-            defer codegen.bl.func.reset();
+        const err = codegen.build(func);
 
-            const err = codegen.build(func);
-            var tmp = root_tmp.arena.checkpoint();
-            defer tmp.deinit();
+        types.retainGlobals(.runtime, backend, scrath.allocator());
 
-            // make the globals available for constant folding
-            for (codegen.work_list.items[task_scope..]) |task| {
-                switch (task) {
-                    .Global => |global| {
-                        backend.emitData(.{
-                            .id = @intFromEnum(global),
-                            .name = try root.frontend.Types.Id.init(.{ .Global = global })
-                                .fmt(types).toString(scrath.allocator()),
-                            .value = .{ .init = types.store.get(global).data },
-                        });
-                    },
-                    .Func => {
-                        codegen.work_list.items[task_scope] = task;
-                        task_scope += 1;
-                    },
-                }
-            }
-            codegen.work_list.items.len = task_scope;
+        err catch {
+            errored = true;
+            continue;
+        };
 
-            err catch {
-                errored = true;
-                continue;
-            };
+        var errors = std.ArrayListUnmanaged(static_anal.Error){};
 
-            var errors = std.ArrayListUnmanaged(static_anal.Error){};
+        if (log_opts.verbose) try root.test_utils.header("CODEGEN", log_opts.output, log_opts.colors);
 
-            if (log_opts.verbose) try root.test_utils.header("CODEGEN", log_opts.output, log_opts.colors);
+        var tmp = root_tmp.arena.checkpoint();
+        defer tmp.deinit();
 
-            const func_data: *root.frontend.types.Func = types.store.get(func);
-            backend.emitFunc(&codegen.bl.func, .{
-                .id = @intFromEnum(func),
-                .name = if (func_data.visibility != .local)
-                    func_data.key.name
-                else
-                    try root.frontend.Types.Id.init(.{ .Func = func })
-                        .fmt(types).toString(scrath.allocator()),
-                .entry = func == entry,
-                .linkage = func_data.visibility,
-                .optimizations = .{
-                    .arena = tmp.arena,
-                    .error_buf = &errors,
-                    .verbose = log_opts.verbose,
-                },
-            });
+        const func_data: *root.frontend.types.Func = types.store.get(func);
+        backend.emitFunc(&codegen.bl.func, .{
+            .id = @intFromEnum(func),
+            .name = if (func_data.visibility != .local)
+                func_data.key.name
+            else
+                try root.frontend.Types.Id.init(.{ .Func = func })
+                    .fmt(types).toString(scrath.allocator()),
+            .entry = func == entry,
+            .linkage = func_data.visibility,
+            .optimizations = .{
+                .arena = tmp.arena,
+                .error_buf = &errors,
+                .verbose = log_opts.verbose,
+            },
+        });
 
-            errored = types.dumpAnalErrors(&errors) or errored;
-        },
-        .Global => unreachable,
-    };
+        errored = types.dumpAnalErrors(&errors) or errored;
+    }
 
     return errored;
 }
@@ -294,28 +271,6 @@ pub fn emitReachable(
 pub fn deinit(self: *Codegen) void {
     self.bl.deinit();
     self.* = undefined;
-}
-
-pub fn queue(self: *Codegen, task: Task) void {
-    switch (task) {
-        inline else => |func| {
-            if (self.types.store.get(func).completion.get(self.target) == .compiled) return;
-            self.work_list.appendAssumeCapacity(task);
-        },
-    }
-}
-
-pub fn nextTask(self: *Codegen) ?Task {
-    while (true) {
-        const task = self.work_list.pop() orelse return null;
-        switch (task) {
-            inline else => |func| {
-                if (self.types.store.get(func).completion.get(self.target) == .compiled) continue;
-                self.types.store.get(func).completion.set(self.target, .compiled);
-            },
-        }
-        return task;
-    }
 }
 
 pub inline fn abiCata(self: *Codegen, ty: Types.Id) Types.Abi.Spec {
@@ -679,7 +634,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         if (s == .RequiredOffset) {
                             if (f.defalut_value) |value| {
                                 // TODO: we will need to optimize constants in the backend
-                                self.queue(.{ .Global = value });
+                                self.types.queue(self.target, .init(.{ .Global = value }));
                                 const off = self.bl.addFieldOffset(local, @intCast(s.RequiredOffset));
                                 const glob = self.bl.addGlobalAddr(@intFromEnum(value));
                                 self.bl.addFixedMemCpy(off, glob, f.ty.size(self.types));
@@ -1725,9 +1680,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         .key = self.types.store.get(alloc).key,
                         .data = file.source,
                         .ty = self.types.makeSlice(file.source.len, .u8),
+                        .readonly = true,
                     };
                 }
-                self.queue(.{ .Global = alloc });
+                self.types.queue(self.target, .init(.{ .Global = alloc }));
                 return .mkp(
                     self.types.store.get(alloc).ty,
                     self.bl.addGlobalAddr(@intFromEnum(alloc)),
@@ -2023,11 +1979,12 @@ pub fn lookupScopeItem(
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    const decl, const path = ast.findDecl(bsty.items(ast, self.types), name, tmp.arena.allocator()) orelse {
-        return self.report(pos, "{} does not declare this", .{bsty});
-    };
+    const decl, const path, const ident =
+        ast.findDecl(bsty.items(ast, self.types), name, tmp.arena.allocator()) orelse {
+            return self.report(pos, "{} does not declare this", .{bsty});
+        };
 
-    return self.resolveGlobal(name, bsty, ast, decl, path);
+    return self.resolveGlobal(name, bsty, ast, decl, path, ident.isComptime(ast.source));
 }
 
 pub fn resolveGlobal(
@@ -2037,6 +1994,7 @@ pub fn resolveGlobal(
     ast: *const Ast,
     decl: Ast.Id,
     path: []Ast.Pos,
+    readonly: bool,
 ) EmitError!Value {
     const vari = ast.exprs.getTyped(.Decl, decl).?;
 
@@ -2055,13 +2013,13 @@ pub fn resolveGlobal(
 
     const ty = if (vari.ty.tag() == .Void) null else try self.resolveAnonTy(vari.ty);
 
-    const global_ty, const new = self.types.resolveGlobal(bsty, name, vari.value);
+    const global_ty, const new = self.types.resolveGlobal(bsty, name, vari.value, readonly);
     const global_id = global_ty.data().Global;
     if (new) {
         errdefer self.errored = true;
         try self.types.ct.evalGlobal(name, global_id, ty, vari.value);
     }
-    self.queue(.{ .Global = global_id });
+    self.types.queue(self.target, .init(.{ .Global = global_id }));
 
     const global = self.types.store.get(global_id).*;
     if (path.len != 0) {
@@ -2094,7 +2052,7 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
         var cursor = self.parent_scope;
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
-        const decl, const path = while (!cursor.empty()) {
+        const decl, const path, const ident = while (!cursor.empty()) {
             if (ast.findDecl(cursor.items(ast, self.types), id, tmp.arena.allocator())) |v| break v;
             if (cursor.findCapture(pos, id, self.types)) |c| {
                 return .{ .ty = c.ty, .id = if (c.ty == .type)
@@ -2131,6 +2089,7 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
             ast,
             decl,
             path,
+            ident.isComptime(ast.source),
         );
     }
 }
@@ -2188,7 +2147,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
 
     const func: root.frontend.types.Func = self.types.store.get(typ.data().Func).*;
     if (self.target != .runtime or func.ret != .type)
-        self.queue(.{ .Func = typ.data().Func });
+        self.types.queue(self.target, .init(.{ .Func = typ.data().Func }));
 
     const passed_args = e.args.len() + @intFromBool(caller != null);
     if (!was_template and passed_args != func.args.len) {
@@ -2562,10 +2521,11 @@ fn emitStirng(self: *Codegen, ctx: Ctx, data: []const u8, expr: Ast.Id) Value {
         self.parent_scope.perm(self.types),
         data,
         expr,
+        true,
     )[0].data().Global;
     self.types.store.get(global).data = data;
     self.types.store.get(global).ty = self.types.makeSlice(data.len, .u8);
-    self.queue(.{ .Global = global });
+    self.types.queue(self.target, .init(.{ .Global = global }));
 
     const slice_ty = self.types.makeSlice(null, .u8);
     const slice_loc = ctx.loc orelse

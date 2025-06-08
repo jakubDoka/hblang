@@ -52,12 +52,12 @@ pub fn fuzzRun(
     var func_arena = utils.Arena.scrath(null);
     defer func_arena.deinit();
 
-    var cg = Codegen.init(gpa, func_arena.arena, &types, .runtime, .ableos);
+    const cg = Codegen.init(gpa, func_arena.arena, &types, .runtime, .ableos);
     defer cg.deinit();
 
     const entry = try cg.getEntry(.root, "main");
 
-    cg.work_list.appendAssumeCapacity(.{ .Func = entry });
+    types.queue(.runtime, .init(.{ .Func = entry }));
 
     var hbgen = HbvmGen{ .gpa = gpa };
     defer hbgen.deinit();

@@ -1,6 +1,3 @@
 strings.main:
-        lra $1, $0, :strings.main.	Edvard
-ඞ
-         ld $1, $1, 1, 1
-       andi $1, $1, 255
-         tx
+    li64 $1, 69
+      tx

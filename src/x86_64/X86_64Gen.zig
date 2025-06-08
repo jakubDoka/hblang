@@ -158,7 +158,7 @@ pub const Node = union(enum) {
         };
     }
 
-    pub fn idealize(func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
+    pub fn idealize(_: void, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
         _ = func;
         _ = node;
         _ = worklist;
@@ -202,7 +202,7 @@ pub const Node = union(enum) {
         };
     }
 
-    pub fn idealizeMach(func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
+    pub fn idealizeMach(self: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
         //if (node.kind == .OffsetStore and node.value().isSub(graph.BinOp) and
         //    node.value().inputs()[1].?.isSub(graph.Load) and
         //    node.value().inputs()[1].?.getStaticOffset() == 0 and
@@ -230,12 +230,14 @@ pub const Node = union(enum) {
 
         if (node.kind == .Load) {
             const base, const offset = node.base().knownOffset();
-            return func.addNode(
+            const res = func.addNode(
                 .OffsetLoad,
                 node.data_type,
                 &.{ node.inputs()[0], node.mem(), base },
                 .{ .dis = @intCast(offset) },
             );
+            worklist.add(res);
+            return res;
         }
 
         if (node.kind == .Store) {
@@ -246,7 +248,25 @@ pub const Node = union(enum) {
                 &.{ node.inputs()[0], node.mem(), base, node.value() },
                 .{ .dis = @intCast(offset) },
             );
-            return idealizeMach(func, res, worklist) orelse res;
+            worklist.add(res);
+            return res;
+        }
+
+        if (node.kind == .OffsetLoad) {
+            if (node.base().kind == .GlobalAddr) fold_const_read: {
+                const sym = &self.out.syms.items[@intFromEnum(self.out.globals.items[node.base().extra(.GlobalAddr).id])];
+
+                if (!sym.readonly) break :fold_const_read;
+
+                var value: i64 = 0;
+
+                @memcpy(
+                    @as(*[@sizeOf(@TypeOf(value))]u8, @ptrCast(&value))[0..node.data_type.size()],
+                    self.out.code.items[@intCast(sym.offset + @as(i64, node.extra(.OffsetLoad).dis))..][0..node.data_type.size()],
+                );
+
+                return func.addNode(.CInt, node.data_type, &.{null}, value);
+            }
         }
 
         if (node.kind == .BinOp and node.inputs()[2].?.kind == .CInt and
@@ -304,7 +324,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
 
     if (opts.linkage == .imported) return;
 
-    opts.optimizations.execute(Node, func);
+    opts.optimizations.execute(Node, self, func);
 
     var tmp = utils.Arena.scrath(opts.optimizations.arena);
     defer tmp.deinit();
@@ -1012,7 +1032,15 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
 pub fn emitData(self: *X86_64, opts: Mach.DataOptions) void {
     errdefer unreachable;
 
-    try self.out.defineGlobal(self.gpa, opts.id, opts.name, .data, .local, opts.value.init);
+    try self.out.defineGlobal(
+        self.gpa,
+        opts.id,
+        opts.name,
+        .data,
+        .local,
+        opts.value.init,
+        opts.readonly,
+    );
 }
 
 pub fn finalize(self: *X86_64, out: std.io.AnyWriter) void {

@@ -32,6 +32,10 @@ pub const Ident = enum(u32) {
     pub inline fn pos(self: Ident) u32 {
         return @intFromEnum(self);
     }
+
+    pub fn isComptime(self: Ident, source: []const u8) bool {
+        return @intFromEnum(self) != 0 and source[@intFromEnum(self) - 1] == '$';
+    }
 };
 
 pub fn cmpLow(pos: u32, source: [:0]const u8, repr: []const u8) bool {
@@ -272,25 +276,26 @@ pub fn init(
     };
 }
 
-pub fn searchBinding(self: *const Ast, cur: Ast.Id, id: anytype, fseq: *std.ArrayList(Pos)) bool {
+pub fn searchBinding(self: *const Ast, cur: Ast.Id, id: anytype, fseq: *std.ArrayList(Pos)) ?Ident {
     switch (cur.tag()) {
         .Ident => switch (@TypeOf(id)) {
-            Ident => if (self.exprs.getTyped(.Ident, cur).?.id == id) return true,
-            else => if (cmpLow(self.exprs.getTyped(.Ident, cur).?.id.pos(), self.source, id)) return true,
+            Ident => if (self.exprs.getTyped(.Ident, cur).?.id == id) return id,
+            else => if (cmpLow(self.exprs.getTyped(.Ident, cur).?.id.pos(), self.source, id))
+                return self.exprs.getTyped(.Ident, cur).?.id,
         },
         .Ctor => {
             const c = self.exprs.getTyped(.Ctor, cur).?;
-            if (self.searchBinding(c.ty, id, fseq)) return true;
+            if (self.searchBinding(c.ty, id, fseq)) |r| return r;
 
             for (self.exprs.view(c.fields)) |f| {
                 fseq.append(f.pos) catch unreachable;
-                if (self.searchBinding(f.value, id, fseq)) return true;
+                if (self.searchBinding(f.value, id, fseq)) |r| return r;
                 _ = fseq.pop().?;
             }
         },
         else => {},
     }
-    return false;
+    return null;
 }
 
 pub fn findDecl(
@@ -298,11 +303,11 @@ pub fn findDecl(
     slice: Slice,
     id: anytype,
     arena: std.mem.Allocator,
-) ?struct { Id, []Pos } {
+) ?struct { Id, []Pos, Ident } {
     var fseq = std.ArrayList(Pos).init(arena);
     return for (self.exprs.view(slice)) |d| {
         const decl = self.exprs.getTyped(.Decl, d) orelse continue;
-        if (self.searchBinding(decl.bindings, id, &fseq)) return .{ d, fseq.items };
+        if (self.searchBinding(decl.bindings, id, &fseq)) |ident| return .{ d, fseq.items, ident };
     } else null;
 }
 
