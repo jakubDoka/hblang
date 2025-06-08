@@ -278,6 +278,8 @@ pub const Builtin = union(enum) {
     Phi,
     // [Cfg, inp]
     MachMove,
+    // [?Cfg, inp]
+    MachSplit,
 
     pub const is_basic_block_start = .{ .Entry, .CallEnd, .Then, .Else, .Region, .Loop, .TrapRegion };
     pub const is_basic_block_end = .{ .Return, .Call, .If, .Jmp, .Never, .Trap };

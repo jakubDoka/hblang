@@ -36,8 +36,6 @@ const Reloc = struct {
 };
 
 pub const Node = union(enum) {
-    // [?Cfg, inp]
-    MachSplit,
     // [?Cfg, lhs]
     ImmBinOp: extern struct {
         op: isa.Op,
@@ -124,6 +122,9 @@ pub const Node = union(enum) {
 
     pub fn allowedRegsFor(node: *Func.Node, idx: usize, arena: *utils.Arena) ?Set {
         errdefer unreachable;
+
+        // The regs are shifted by one since the reg0 is not allocable
+
         return switch (node.extra2()) {
             inline .Ret, .Arg => |id| arg: {
                 std.debug.assert(idx == 0);
@@ -135,11 +136,29 @@ pub const Node = union(enum) {
                 0, 1 => null,
                 else => arg: {
                     var set = try Set.initEmpty(arena.allocator(), reg_mask_cap);
-                    set.set(idx - 1);
+                    set.set(idx - 2);
                     break :arg set;
                 },
             },
+            .Return => switch (idx) {
+                0...2 => null,
+                else => ret: {
+                    var set = try Set.initEmpty(arena.allocator(), reg_mask_cap);
+                    set.set(idx - 3);
+                    break :ret set;
+                },
+            },
+            .IfOp, .If => switch (idx) {
+                0 => null,
+                else => {
+                    var set = try Set.initEmpty(arena.allocator(), reg_mask_cap);
+                    set.setRangeValue(.{ .start = 0, .end = @intFromEnum(isa.Reg.stack_addr) - 1 }, true);
+                    return set;
+                },
+            },
             else => {
+                if (node.isCfg()) return null;
+
                 var set = try Set.initEmpty(arena.allocator(), reg_mask_cap);
                 set.setRangeValue(.{ .start = 0, .end = @intFromEnum(isa.Reg.stack_addr) - 1 }, true);
                 return set;
@@ -152,7 +171,7 @@ pub const Node = union(enum) {
         return switch (node.kind) {
             .Call => clobbers: {
                 var set = try Set.initEmpty(arena.allocator(), reg_mask_cap);
-                set.setRangeValue(.{ .start = 0, .end = @intFromEnum(isa.Reg.ret_addr) - 1 }, true);
+                set.setRangeValue(.{ .start = 0, .end = @intFromEnum(isa.Reg.ret_addr) }, true);
                 break :clobbers set;
             },
             else => null,
@@ -160,7 +179,7 @@ pub const Node = union(enum) {
     }
 
     pub fn addSplit(self: *Func, ctrl: *Func.Node, def: *Func.Node) *Func.Node {
-        return self.addNode(.Split, def.data_type, &.{ ctrl, def }, {});
+        return self.addNode(.MachSplit, def.data_type, &.{ ctrl, def }, {});
     }
 
     pub const i_know_the_api = {};
@@ -171,7 +190,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     opts.optimizations.execute(Node, self, func);
 
-    const allocs = Regalloc.ralloc(Node, func);
+    const allocs = Regalloc2.ralloc(Node, func);
 
     const id = opts.id;
     const name = opts.name;
@@ -243,7 +262,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         self.emitBlockBody(tmp.arena.allocator(), &bb.base);
         const last = bb.base.outputs()[bb.base.output_len - 1];
         if (last.outputs().len == 0) {
-            std.debug.assert(last.kind == .Return);
+            if (last.kind != .Return) utils.panic("{}", .{last});
             if (stack_size != 0) {
                 self.emit(.addi64, .{ .stack_addr, .stack_addr, @as(u64, @bitCast(stack_size)) });
             }
@@ -566,6 +585,10 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
 
                 self.flushOutReg(no);
             },
+            .MachSplit => {
+                self.emit(.cp, .{ self.outReg(no), self.inReg(0, no.inputs()[1]) });
+                self.flushOutReg(no);
+            },
             .UnOp => |extra| {
                 switch (extra.*) {
                     .sext => {
@@ -673,7 +696,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }
                 self.orderMoves(moves.items);
             },
-            .Jmp => if (no.outputs()[0].kind == .Region or no.outputs()[0].kind == .Loop) {
+            .Jmp => if (false) if (no.outputs()[0].kind == .Region or no.outputs()[0].kind == .Loop) {
                 const idx = std.mem.indexOfScalar(?*Func.Node, no.outputs()[0].inputs(), no).? + 1;
 
                 var moves = std.ArrayList(Move).init(tmp);

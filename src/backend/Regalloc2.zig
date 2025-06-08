@@ -47,21 +47,25 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
         // TODO: we dont need this, it can be computed
         idx: usize,
         // valid during coloring
-        reg: usize = undefined,
+        reg: usize = failed_reg,
         adjacent: []*LiveRange = &.{},
         active_adjacent: usize = undefined,
 
         const LiveRange = @This();
 
         pub fn tryMerge(self: *LiveRange, other: *LiveRange) ?*LiveRange {
+            std.debug.assert(self != other);
             if (self.idx > other.idx)
                 other.parent = self
             else
-                self.parent = other.parent;
+                self.parent = other;
 
             self.allowed_set.setIntersection(other.allowed_set);
 
-            if (self.allowed_set.count() == 0) return null;
+            if (self.allowed_set.count() == 0) {
+                std.debug.print("wug\n", .{});
+                return null;
+            }
 
             return if (self.idx > other.idx) self else other;
         }
@@ -72,11 +76,16 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
 
             self.parent = rollup: {
                 var root = parent_parent;
-                while (root.parent) |p| : (root = p) {}
+                var limit: usize = 100;
+                while (root.parent) |p| : (root = p) {
+                    limit -= 1;
+                }
 
                 var cursor = parent_parent;
+                limit = 100;
                 while (cursor.parent) |p| : (cursor = p) {
                     cursor.parent = root;
+                    limit -= 1;
                 }
 
                 break :rollup root;
@@ -91,12 +100,15 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
     };
 
     //var total_spill_count = 0;
+    var limt: usize = 7;
     while (true) {
+        limt -= 1;
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
 
         var live_range_slots = tmp.arena.makeArrayList(LiveRange, func.instr_count);
         var splits = tmp.arena.makeArrayList(*LiveRange, func.instr_count);
+        var kills = tmp.arena.makeArrayList(*LiveRange, func.instr_count);
         var spill_count: usize = 0;
 
         const live_ranges = build_live_ranges: {
@@ -105,13 +117,18 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
             // TODO: use the second temp arena here
 
             for (func.gcm.postorder) |bb| {
+                std.debug.assert(bb.base.isBasicBlockStart());
                 for (bb.base.outputs()) |instr| {
+                    if (instr.isCfg() and !instr.isBasicBlockEnd()) {
+                        utils.panic("{} {}", .{ instr, &bb.base });
+                    }
                     const slot = &slots[instr.schedule];
 
                     if (instr.isDataPhi()) {
-                        slot.* = slots[instr.inputs()[0].?.schedule];
+                        slot.* = slots[instr.inputs()[1].?.schedule];
+                        // std.debug.assert(slot.* != null);
 
-                        for (instr.inputs()[1..]) |def| {
+                        for (instr.inputs()[2..]) |def| {
                             slot.* = slot.*.?.tryMerge(slots[def.?.schedule].?) orelse {
                                 _ = insert(&splits, slot.*.?);
                                 break;
@@ -127,6 +144,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                             const other_liverange = slots[instr.inputs()[idx].?.schedule].?.get();
                             other_liverange.allowed_set.setIntersection(allowed_set);
                             if (allowed_set.count() == 0) {
+                                std.debug.print("frn\n", .{});
                                 _ = insert(&splits, slot.*.?);
                                 continue;
                             }
@@ -149,11 +167,20 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                             slot.*.?.allowed_set.setIntersection(other);
 
                             if (slot.*.?.allowed_set.count() == 0) {
+                                std.debug.print("pop {}\n", .{instr});
                                 _ = insert(&splits, slot.*.?);
                                 break;
                             }
                         }
                     }
+
+                    std.debug.assert(slot.* != null);
+                }
+            }
+
+            for (slots) |*s| {
+                if (s.*) |*slot| {
+                    slot.* = slot.*.get();
                 }
             }
 
@@ -161,7 +188,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
         };
 
         build_interference: {
-            if (spill_count != 0 or splits.items.len != 0) break :build_interference;
+            if (spill_count + splits.items.len + kills.items.len != 0) break :build_interference;
 
             const blocks = tmp.arena.alloc(Block, func.gcm.postorder.len);
             @memset(blocks, .{});
@@ -174,7 +201,9 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
             for (interference_matrix) |*slot| slot.* = try Set.initEmpty(tmp.arena.allocator(), live_range_slots.items.len);
 
             var active_nodes = tmp.arena.makeArrayList(*LiveRange, func.instr_count);
+            var limit: usize = 10000;
             while (work_list.pop()) |bb| {
+                limit -= 1;
                 active_nodes.items.len = 0;
 
                 const block = &blocks[bb.base.schedule];
@@ -185,48 +214,51 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                 while (iter.next()) |n| {
                     const node: *Func.Node = n;
                     // we should skip this right?
-                    const node_live_range = live_ranges[node.schedule] orelse continue;
 
                     kills: {
                         var reg_kills = node.regKills(tmp.arena) orelse break :kills;
                         reg_kills.toggleAll();
 
                         for (active_nodes.items) |active_node| {
+                            // this means its a self conflict so split insead
                             active_node.allowed_set.setIntersection(reg_kills);
                             if (active_node.allowed_set.count() == 0) {
                                 _ = insert(&splits, active_node);
+                                _ = insert(&kills, active_node);
                             }
                         }
 
                         break :kills;
                     }
 
-                    if (indexOfScalar(*LiveRange, active_nodes.items, node_live_range)) |idx|
-                        _ = active_nodes.swapRemove(idx);
+                    if (live_ranges[node.schedule]) |node_live_range| {
+                        if (indexOfScalar(*LiveRange, active_nodes.items, node_live_range)) |idx|
+                            _ = active_nodes.swapRemove(idx);
 
-                    if (node_live_range.allowed_set.count() < active_nodes.items.len and
-                        node_live_range.allowed_set.count() != 1)
-                    {
-                        spill_count += 1;
-                    }
+                        if (node_live_range.allowed_set.count() < active_nodes.items.len and
+                            node_live_range.allowed_set.count() != 1)
+                        {
+                            spill_count += 1;
+                        }
 
-                    for (active_nodes.items) |active_live_range| {
-                        const node_allow_set_masks = getMasks(node_live_range.allowed_set);
-                        const active_allow_set_masks = getMasks(active_live_range.allowed_set);
+                        for (active_nodes.items) |active_live_range| {
+                            const node_allow_set_masks = getMasks(node_live_range.allowed_set);
+                            const active_allow_set_masks = getMasks(active_live_range.allowed_set);
 
-                        if (active_live_range.allowed_set.count() == 1) {
-                            for (node_allow_set_masks, active_allow_set_masks) |*a, b| a.* &= ~b;
-                            if (node_live_range.allowed_set.count() == 0) {
-                                _ = insert(&splits, node_live_range);
+                            if (node_live_range.allowed_set.count() == 1) {
+                                for (active_allow_set_masks, node_allow_set_masks) |*a, b| a.* &= ~b;
+                                if (active_live_range.allowed_set.count() == 0) {
+                                    _ = insert(&splits, active_live_range);
+                                }
+                            } else if (active_live_range.allowed_set.count() == 1) {
+                                for (node_allow_set_masks, active_allow_set_masks) |*a, b| a.* &= ~b;
+                                if (node_live_range.allowed_set.count() == 0) {
+                                    _ = insert(&splits, node_live_range);
+                                }
+                            } else {
+                                interference_matrix[node_live_range.idx].set(active_live_range.idx);
+                                interference_matrix[active_live_range.idx].set(node_live_range.idx);
                             }
-                        } else if (node_live_range.allowed_set.count() == 1) {
-                            for (active_allow_set_masks, node_allow_set_masks) |*a, b| a.* &= ~b;
-                            if (active_live_range.allowed_set.count() == 0) {
-                                _ = insert(&splits, active_live_range);
-                            }
-                        } else {
-                            interference_matrix[node_live_range.idx].set(active_live_range.idx);
-                            interference_matrix[active_live_range.idx].set(node_live_range.idx);
                         }
                     }
 
@@ -262,7 +294,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
         }
 
         color: {
-            if (spill_count != 0 or splits.items.len != 0) break :color;
+            if (spill_count + splits.items.len + kills.items.len != 0) break :color;
 
             var done_frontier: usize = 0;
             var known_frontier: usize = 0;
@@ -389,7 +421,9 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
             var iter = std.mem.reverseIterator(color_stack);
             while (iter.next()) |c| {
                 const to_color: *LiveRange = c;
-                for (to_color.adjacent[0..to_color.active_adjacent]) |adj| {
+                for (to_color.adjacent) |adj| {
+                    std.debug.assert(adj.adjacent[adj.active_adjacent] == to_color);
+                    adj.active_adjacent += 1;
                     if (adj.reg == failed_reg) continue;
                     to_color.allowed_set.unset(adj.reg);
                 }
@@ -419,22 +453,49 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
         }
 
         insert_split: {
-            for (splits.items) |live_range| {
+            for (kills.items) |live_range| {
+                std.debug.assert(!live_range.def.isCfg());
+
+                const block = &live_range.def.cfg0().?.base;
+
+                const split = func.addSplit(block, live_range.def);
+
+                const is_pinned = live_range.def.allowedRegsFor(0, tmp.arena).?.count() == 1;
+
                 for (tmp.arena.dupe(*Func.Node, live_range.def.outputs())) |use| {
-                    if ((live_ranges[use.schedule] orelse continue).allowed_set.count() != 1) continue;
+                    if (use == split) continue;
+                    const use_idx = indexOfScalar(?*Func.Node, use.inputs(), live_range.def).?;
+                    if (!is_pinned and use.allowedRegsFor(use_idx, tmp.arena).?.count() != 1) continue;
+                    func.setInputNoIntern(use, use_idx, split);
+                }
 
+                const def_pos = indexOfScalar(*Func.Node, block.outputs(), live_range.def).?;
+                const to_rotate = block.outputs()[def_pos + 1 ..];
+                std.mem.rotate(*Func.Node, to_rotate, to_rotate.len - 1);
+            }
+
+            for (splits.items) |live_range| {
+                var split_at_some_point = false;
+                for (tmp.arena.dupe(*Func.Node, live_range.def.outputs())) |use| {
                     const block = &use.useBlock(live_range.def, &.{}).base;
+
+                    const def_pos = indexOfScalar(?*Func.Node, use.inputs(), live_range.def).?;
+                    if (use.allowedRegsFor(def_pos, tmp.arena).?.count() != 1) {
+                        continue;
+                    }
+                    split_at_some_point = true;
+
                     const split = func.addSplit(block, live_range.def);
+                    func.setInputNoIntern(use, def_pos, split);
 
-                    const use_pos = indexOfScalar(?*Func.Node, use.inputs(), live_range.def).?;
-                    func.setInputNoIntern(use, use_pos, split);
+                    const use_pos = indexOfScalar(*Func.Node, block.outputs(), use).?;
+                    const to_rotate = block.outputs()[use_pos..];
+                    std.mem.rotate(*Func.Node, to_rotate, to_rotate.len - 1);
+                }
 
-                    const def_pos = indexOfScalar(*Func.Node, block.outputs(), live_range.def).?;
-                    std.mem.rotate(
-                        *Func.Node,
-                        block.outputs()[def_pos..],
-                        block.outputs().len - def_pos - 1,
-                    );
+                if (split_at_some_point) {
+                    func.fmtScheduled(std.io.getStdErr().writer().any(), .escape_codes);
+                    utils.panic("{}", .{live_range.def});
                 }
             }
 
@@ -445,6 +506,9 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                     func.instr_count += 1;
                 }
             }
+
+            func.fmtScheduled(std.io.getStdErr().writer().any(), .escape_codes);
+            std.debug.print("================ retry regalloc ================\n", .{});
 
             break :insert_split;
         }

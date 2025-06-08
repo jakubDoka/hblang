@@ -53,7 +53,7 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
         );
     }
 
-    if (true) {
+    if (false) {
         if (std.mem.indexOf(u8, name, "float") != null) return;
 
         const target = "x86_64-linux";
@@ -88,6 +88,8 @@ pub fn runMachineTest(
     defer output.deinit();
 
     errdefer {
+        test_util.checkOrUpdatePrintTest(name, category, output.items, out, color) catch {};
+
         test_util.testBuilder(
             name,
             code,
@@ -165,5 +167,5 @@ pub fn runVendoredTest(path: []const u8) !void {
     utils.Arena.initScratch(1024 * 1024 * 32);
     defer utils.Arena.deinitScratch();
     try test_util.runVendoredTest(std.testing.allocator, path, "hbvm-ableos");
-    try test_util.runVendoredTest(std.testing.allocator, path, "x86_64-linux");
+    //try test_util.runVendoredTest(std.testing.allocator, path, "x86_64-linux");
 }

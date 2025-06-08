@@ -1,28 +1,25 @@
 if statements 1.main:
-         st $31, $254, -16, 16
-     addi64 $254, $254, -16
-       li64 $32, 3
-         cp $1, $32
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+       li64 $1, 3
         jal $31, $0, :if statements 1.fib
-     addi64 $254, $254, 16
-         ld $31, $254, -16, 16
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
          tx
 if statements 1.fib:
          st $31, $254, -24, 24
      addi64 $254, $254, -24
-         cp $32, $1
-       li64 $33, 2
-       jgtu $32, $33, :1
+         cp $33, $1
+       li64 $1, 2
+       jgtu $33, $1, :1
        li64 $1, 1
         jmp :2
-1:   addi64 $33, $32, -1
-         cp $1, $33
+1:   addi64 $1, $33, -1
         jal $31, $0, :if statements 1.fib
-         cp $33, $1
-     addi64 $32, $32, -2
-         cp $1, $32
+         cp $32, $1
+     addi64 $1, $33, -2
         jal $31, $0, :if statements 1.fib
-      add64 $1, $33, $1
+      add64 $1, $32, $1
 2:   addi64 $254, $254, 24
          ld $31, $254, -24, 24
        jala $0, $31, 0
