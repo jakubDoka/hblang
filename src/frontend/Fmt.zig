@@ -112,17 +112,19 @@ fn autoInsertSep(self: *Fmt, id: anytype, sep: Lexer.Lexeme) Error!void {
     const trimmed = std.mem.trimRight(u8, self.ast.source[0..pos.index], "\n\r\t ;");
     const prev_line = std.mem.lastIndexOfScalar(u8, trimmed, '\n') orelse 0;
 
-    var tmp = root.utils.Arena.scrath(null);
-    defer tmp.deinit();
-
-    var lexer = Lexer.init(try tmp.arena.allocator().dupeZ(u8, self.ast.source[prev_line..pos.index]), 0);
     var last_token: Lexer.Lexeme = .Eof;
-    while (true) {
-        var next = lexer.next();
-        while (next.kind == .@";") : (next = lexer.next()) {}
-        if (next.kind == .Eof) break;
-        // semicolon should never be last
-        last_token = next.kind;
+    {
+        var tmp = root.utils.Arena.scrath(null);
+        defer tmp.deinit();
+
+        var lexer = Lexer.init(try tmp.arena.allocator().dupeZ(u8, self.ast.source[prev_line..pos.index]), 0);
+        while (true) {
+            var next = lexer.next();
+            while (next.kind == .@";") : (next = lexer.next()) {}
+            if (next.kind == .Eof) break;
+            // semicolon should never be last
+            last_token = next.kind;
+        }
     }
 
     if ((starting_token.kind.precedence() < 255 or last_token == .@"return") and last_token != .Comment)

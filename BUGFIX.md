@@ -22,6 +22,14 @@ main := fn(): uint {
 }
 ```
 
+#### comptime short circuit failure 1
+```!hb
+main := fn(): uint {
+    $if @kind_of(uint) == 7 && @align_of(uint) == 8 return 1
+    return 0
+}
+```
+
 #### confusing error message
 ```hb
 expectations := .{

@@ -384,10 +384,6 @@ pub fn GcmMixin(comptime MachNode: type) type {
                             while (cursor.idepth() > i.?.cfg0().?.idepth()) {
                                 cursor = cursor.idom();
                             }
-                            if (cursor != i.?.cfg0().?) {
-                                self.fmtScheduled(std.io.getStdErr().writer().any(), .escape_codes);
-                                std.debug.print("{}\n{}\n", .{ o, i.? });
-                            }
                         };
                     }
                 };
