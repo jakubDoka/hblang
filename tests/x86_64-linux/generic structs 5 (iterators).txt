@@ -119,7 +119,7 @@ generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main(
 generic structs 5 (iterators).main.Next(T = u8).none:
 	mov rax, 0x00
 	mov [rdi], al
-	mov rax, 0xAA
+	mov rax, 0xAAAAAAAAAAAAAAAA
 	mov [rdi+0x01], al
 	ret
 generic structs 5 (iterators).main.Next(T = u8).some:

@@ -77,7 +77,6 @@ pub const BinOp = enum(u8) {
     }
 
     pub fn eval(self: BinOp, dt: DataType, lhs: i64, rhs: i64) i64 {
-        const mask: i64 = if (dt.size() == 8) -1 else (@as(i64, 1) << @intCast(dt.size() * 8)) - 1;
         return @as(i64, switch (self) {
             .iadd => lhs +% rhs,
             .fadd => @bitCast(tf(lhs) + tf(rhs)),
@@ -115,7 +114,7 @@ pub const BinOp = enum(u8) {
             .slt => @intFromBool(lhs < rhs),
             .sge => @intFromBool(lhs >= rhs),
             .sle => @intFromBool(lhs <= rhs),
-        }) & mask;
+        }) & dt.mask();
     }
 };
 
@@ -134,14 +133,13 @@ pub const UnOp = enum(u8) {
     fcst,
 
     pub fn eval(self: UnOp, src: DataType, oper: i64) i64 {
-        const mask: i64 = if (src.size() == 8) -1 else (@as(i64, 1) << @intCast(src.size() * 8)) - 1;
         return @as(i64, switch (self) {
             .cast => oper,
             .sext => return switch (src) {
                 .i8 => @as(i8, @truncate(oper)),
                 .i16 => @as(i16, @truncate(oper)),
                 .i32 => @as(i32, @truncate(oper)),
-                .int => oper,
+                .i64 => oper,
                 else => utils.panic("{}", .{src}),
             },
             .uext => oper,
@@ -149,11 +147,11 @@ pub const UnOp = enum(u8) {
             .ineg => -oper,
             .fneg => @bitCast(-tf(oper)),
             .not => @intFromBool(oper == 0),
-            .bnot => ~oper & mask,
+            .bnot => ~oper,
             .fti => @intFromFloat(tf(oper)),
             .itf64, .itf32 => @bitCast(@as(f64, @floatFromInt(oper))),
             .fcst => oper,
-        }) & mask;
+        }) & src.mask();
     }
 };
 
@@ -162,7 +160,7 @@ pub const DataType = enum(u16) {
     i8,
     i16,
     i32,
-    int,
+    i64,
     f32,
     f64,
     bot,
@@ -173,13 +171,23 @@ pub const DataType = enum(u16) {
             .i8 => 1,
             .i16 => 2,
             .i32, .f32 => 4,
-            .int, .f64 => 8,
+            .i64, .f64 => 8,
+        };
+    }
+
+    pub fn mask(self: DataType) i64 {
+        return switch (self) {
+            .top, .bot => unreachable,
+            .i8 => 0xFF,
+            .i16 => 0xFFFF,
+            .i32, .f32 => 0xFFFFFFFF,
+            .i64, .f64 => -1,
         };
     }
 
     pub fn isInt(self: DataType) bool {
         return switch (self) {
-            .i8, .i16, .i32, .int => true,
+            .i8, .i16, .i32, .i64 => true,
             else => false,
         };
     }
@@ -995,6 +1003,78 @@ pub fn Func(comptime MachNode: type) type {
             return tree.depth;
         }
 
+        pub fn addFieldOffset(self: *Self, base: *Node, offset: i64) *Node {
+            return if (offset != 0) if (base.kind == .BinOp and base.inputs()[2].?.kind == .CInt) b: {
+                break :b self.addBinOp(.iadd, .i64, base.inputs()[1].?, self.addIntImm(
+                    .i64,
+                    base.inputs()[2].?.extra(.CInt).* + offset,
+                ));
+            } else self.addBinOp(.iadd, .i64, base, self.addIntImm(.i64, offset)) else base;
+        }
+
+        pub fn addGlobalAddr(self: *Self, arbitrary_global_id: u32) *Node {
+            return self.addNode(.GlobalAddr, .i64, &.{null}, .{ .id = arbitrary_global_id });
+        }
+
+        pub fn addCast(self: *Self, to: DataType, value: *Node) *Node {
+            return self.addNode(.UnOp, to, &.{ null, value }, .cast);
+        }
+
+        pub const OffsetDirection = enum(u8) {
+            iadd = @intFromEnum(BinOp.iadd),
+            isub = @intFromEnum(BinOp.isub),
+        };
+
+        pub fn addIndexOffset(self: *Self, base: *Node, op: OffsetDirection, elem_size: u64, subscript: *Node) *Node {
+            const offset = if (elem_size == 1)
+                subscript
+            else if (subscript.kind == .CInt)
+                self.addIntImm(.i64, subscript.extra(.CInt).* * @as(i64, @bitCast(elem_size)))
+            else
+                self.addBinOp(.imul, .i64, subscript, self.addIntImm(.i64, @bitCast(elem_size)));
+            return self.addBinOp(@enumFromInt(@intFromEnum(op)), .i64, base, offset);
+        }
+
+        pub fn addIntImm(self: *Self, ty: DataType, value: i64) *Node {
+            std.debug.assert(ty != .bot);
+            const val = self.addNode(.CInt, ty, &.{null}, value);
+            std.debug.assert(val.data_type.isInt());
+            return val;
+        }
+
+        pub fn addFlt64Imm(self: *Self, value: f64) *Node {
+            return self.addNode(.CFlt64, .f64, &.{null}, value);
+        }
+
+        pub fn addFlt32Imm(self: *Self, value: f32) *Node {
+            return self.addNode(.CFlt32, .f32, &.{null}, value);
+        }
+
+        pub fn addBinOp(self: *Self, op: BinOp, ty: DataType, lhs: *Node, rhs: *Node) *Node {
+            if (lhs.kind == .CInt and rhs.kind == .CInt) {
+                return self.addIntImm(ty, op.eval(ty, lhs.extra(.CInt).*, rhs.extra(.CInt).*));
+            } else if (lhs.kind == .CFlt64 and rhs.kind == .CFlt64) {
+                return self.addFlt64Imm(@bitCast(op.eval(ty, @bitCast(lhs.extra(.CFlt64).*), @bitCast(rhs.extra(.CFlt64).*))));
+            }
+            if ((op == .iadd or op == .iadd) and rhs.kind == .CInt and rhs.extra(.CInt).* == 0) {
+                return lhs;
+            }
+            return self.addNode(.BinOp, ty, &.{ null, lhs, rhs }, op);
+        }
+
+        pub fn addUnOp(self: *Self, op: UnOp, ty: DataType, oper: *Node) *Node {
+            if (oper.kind == .CInt and ty.isInt()) {
+                return self.addIntImm(ty, op.eval(oper.data_type, oper.extra(.CInt).*));
+            } else if (oper.kind == .CFlt64 and ty == .f64) {
+                return self.addFlt64Imm(@bitCast(op.eval(oper.data_type, @bitCast(oper.extra(.CFlt64).*))));
+            } else if (oper.kind == .CFlt32 and ty == .f32) {
+                return self.addFlt32Imm(@floatCast(@as(f64, @bitCast(op.eval(oper.data_type, @bitCast(@as(f64, @floatCast(oper.extra(.CFlt32).*))))))));
+            }
+            const opa = self.addNode(.UnOp, ty, &.{ null, oper }, op);
+            opa.data_type = opa.data_type.meet(ty);
+            return opa;
+        }
+
         pub fn addTrap(self: *Self, ctrl: *Node, code: u64) void {
             if (self.end.inputs()[2] == null) {
                 self.setInputNoIntern(self.end, 2, self.addNode(.TrapRegion, .top, &.{}, .{}));
@@ -1393,7 +1473,7 @@ pub fn Func(comptime MachNode: type) type {
                 const oper = inps[1].?;
 
                 if (oper.kind == .CInt and node.data_type.isInt()) {
-                    return self.addNode(.CInt, node.data_type, &.{null}, op.eval(oper.data_type, oper.extra(.CInt).*));
+                    return self.addIntImm(node.data_type, op.eval(oper.data_type, oper.extra(.CInt).*));
                 }
 
                 if (node.data_type.meet(inps[1].?.data_type) == inps[1].?.data_type) {

@@ -814,9 +814,9 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         };
 
                         const loc = ctx.loc orelse self.bl.addLocal(self.sloc(expr), ty.size(self.types));
-                        const ptr = self.bl.addIntImm(.int, @bitCast(slice.elem.alignment(self.types)));
-                        self.bl.addFieldStore(loc, TySlice.ptr_offset, .int, ptr);
-                        self.bl.addFieldStore(loc, TySlice.len_offset, .int, self.bl.addIntImm(.int, 0));
+                        const ptr = self.bl.addIntImm(.i64, @bitCast(slice.elem.alignment(self.types)));
+                        self.bl.addFieldStore(loc, TySlice.ptr_offset, .i64, ptr);
+                        self.bl.addFieldStore(loc, TySlice.len_offset, .i64, self.bl.addIntImm(.i64, 0));
 
                         return .mkp(ty, loc);
                     }
@@ -824,7 +824,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
                 const addrd = try self.emit(.{}, e.oper);
                 return .mkv(self.types.makePtr(addrd.ty), switch (addrd.id) {
-                    .Imaginary => self.bl.addIntImm(.int, @intCast(addrd.ty.alignment(self.types))),
+                    .Imaginary => self.bl.addIntImm(.i64, @intCast(addrd.ty.alignment(self.types))),
                     .Value => |v| self.bl.addSpill(self.sloc(expr), v),
                     .Pointer => |p| p,
                 });
@@ -948,7 +948,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         };
 
                         if (e.op == .@"==") {
-                            value = self.bl.addBinOp(.eq, .int, value, self.bl.addIntImm(.i8, 0));
+                            value = self.bl.addBinOp(.eq, .i64, value, self.bl.addIntImm(.i8, 0));
                         }
 
                         return .mkv(.bool, value);
@@ -1159,7 +1159,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     const slice = self.types.store.get(slice_ty);
                     if (std.mem.eql(u8, fname, "len")) {
                         if (slice.len) |l| {
-                            return .mkv(.uint, self.bl.addIntImm(.int, @intCast(l)));
+                            return .mkv(.uint, self.bl.addIntImm(.i64, @intCast(l)));
                         } else {
                             return .mkp(.uint, self.bl.addFieldOffset(
                                 base.id.Pointer,
@@ -1198,14 +1198,14 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             };
 
             var start: Value = if (range.start.tag() == .Void)
-                .mkv(.uint, self.bl.addIntImm(.int, 0))
+                .mkv(.uint, self.bl.addIntImm(.i64, 0))
             else
                 try self.emitTyped(.{}, .uint, range.start);
             var end: Value = if (range.end.tag() == .Void) switch (base.ty.data()) {
                 .Slice => |slice_ty| if (self.types.store.get(slice_ty).len) |l|
-                    .mkv(.uint, self.bl.addIntImm(.int, @intCast(l)))
+                    .mkv(.uint, self.bl.addIntImm(.i64, @intCast(l)))
                 else
-                    .mkv(.uint, self.bl.addFieldLoad(base.id.Pointer, TySlice.len_offset, .int)),
+                    .mkv(.uint, self.bl.addFieldLoad(base.id.Pointer, TySlice.len_offset, .i64)),
                 else => {
                     return self.report(e.subscript, "unbound range is only allowed" ++
                         " on arrays and slices, {} is not", .{base.ty});
@@ -1219,7 +1219,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 .Slice => |slice_ty| if (self.types.store.get(slice_ty).len == null)
                     .mkv(
                         self.types.makePtr(elem),
-                        self.bl.addFieldLoad(base.id.Pointer, TySlice.ptr_offset, .int),
+                        self.bl.addFieldLoad(base.id.Pointer, TySlice.ptr_offset, .i64),
                     )
                 else
                     .mkv(self.types.makePtr(elem), base.id.Pointer),
@@ -1235,11 +1235,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 elem.size(self.types),
                 start.getValue(self),
             ) };
-            const len = self.bl.addBinOp(.isub, .int, end.getValue(self), start.getValue(self));
+            const len = self.bl.addBinOp(.isub, .i64, end.getValue(self), start.getValue(self));
 
             const loc = ctx.loc orelse self.bl.addLocal(self.sloc(expr), res_ty.size(self.types));
-            self.bl.addFieldStore(loc, TySlice.ptr_offset, .int, ptr.getValue(self));
-            self.bl.addFieldStore(loc, TySlice.len_offset, .int, len);
+            self.bl.addFieldStore(loc, TySlice.ptr_offset, .i64, ptr.getValue(self));
+            self.bl.addFieldStore(loc, TySlice.len_offset, .i64, len);
 
             return .mkp(res_ty, loc);
         } else {
@@ -1273,7 +1273,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 .Slice => |slice_ty| {
                     const slice = self.types.store.get(slice_ty);
                     const index_base = if (slice.len == null)
-                        self.bl.addLoad(base.id.Pointer, .int)
+                        self.bl.addLoad(base.id.Pointer, .i64)
                     else
                         base.id.Pointer;
 
@@ -1465,8 +1465,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         continue;
                     };
 
-                    const vl = self.bl.addUnOp(.sext, .int, value.getValue(self));
-                    const cond = self.bl.addBinOp(.eq, .i8, vl, self.bl.addIntImm(.int, @bitCast(idx)));
+                    const vl = self.bl.addUnOp(.sext, .i64, value.getValue(self));
+                    const cond = self.bl.addBinOp(.eq, .i8, vl, self.bl.addIntImm(.i64, @bitCast(idx)));
                     var if_builder = self.bl.addIfAndBeginThen(self.sloc(body), cond);
 
                     unreachable_count += self.emitBranch(body);
@@ -1576,23 +1576,20 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             const prefix = 3;
             const args = self.bl.allocCallArgs(tmp.arena, prefix + e.captures.len() * 2, 1);
             @memset(args.params, self.abiCata(.type).ByValue);
-            args.params[0] = .int;
-            args.params[2] = .int;
+            args.params[0] = .i64;
+            args.params[2] = .i64;
             args.returns[0] = self.abiCata(.type).ByValue;
 
-            args.arg_slots[0] = self.bl.addIntImm(.int, @intFromEnum(@field(Comptime.InteruptCode, @tagName(t))));
+            args.arg_slots[0] = self.bl.addIntImm(.i64, @intFromEnum(@field(Comptime.InteruptCode, @tagName(t))));
             args.arg_slots[1] = self.emitTyConst(self.parent_scope.perm(self.types)).id.Value;
-            args.arg_slots[2] = self.bl.addIntImm(.int, @intFromEnum(expr));
+            args.arg_slots[2] = self.bl.addIntImm(.i64, @intFromEnum(expr));
 
             for (ast.exprs.view(e.captures), 0..) |cp, slot_idx| {
                 var val = try self.loadIdent(cp.pos, cp.id);
-                if (val.ty == .type) {
-                    args.arg_slots[prefix + slot_idx * 2 ..][0..2].* =
-                        .{ self.emitTyConst(.type).id.Value, val.getValue(self) };
-                } else {
-                    args.arg_slots[prefix + slot_idx * 2 ..][0..2].* =
-                        .{ self.emitTyConst(val.ty).id.Value, self.bl.addIntImm(.int, 0) };
-                }
+                args.arg_slots[prefix + slot_idx * 2 ..][0..2].* = switch (self.abiCata(val.ty)) {
+                    .Imaginary, .ByRef, .ByValuePair => .{ self.emitTyConst(val.ty).id.Value, self.bl.addIntImm(.i64, 0) },
+                    .ByValue => .{ self.emitTyConst(val.ty).id.Value, val.getValue(self) },
+                };
             }
 
             const rets = self.bl.addCall(Comptime.eca, args);
@@ -1603,11 +1600,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             for (ast.exprs.view(e.captures), captures) |cp, *slot| {
                 var val = try self.loadIdent(cp.pos, cp.id);
-                if (val.ty == .type) {
-                    slot.* = .{ .id = cp.id, .ty = .type, .value = @intFromEnum(try self.unwrapTyConst(cp.id, &val)) };
-                } else {
-                    slot.* = .{ .id = cp.id, .ty = val.ty };
-                }
+
+                slot.* = switch (self.abiCata(val.ty)) {
+                    .Imaginary, .ByRef, .ByValuePair => .{ .id = cp.id, .ty = val.ty },
+                    .ByValue => .{ .id = cp.id, .ty = val.ty, .value = try self.partialEval(cp.id, val.getValue(self)) },
+                };
             }
 
             const args = tmp.arena.alloc(Types.Id, e.args.len());
@@ -1819,9 +1816,9 @@ fn emitInternalEca(
         self.abiCata(ret_ty).len(true, .ableos),
     );
 
-    c_args.params[0] = .int;
+    c_args.params[0] = .i64;
     for (args, c_args.params[1..]) |a, *ca| ca.* = a.data_type;
-    c_args.arg_slots[0] = self.bl.addIntImm(.int, @intCast(@intFromEnum(ic)));
+    c_args.arg_slots[0] = self.bl.addIntImm(.i64, @intCast(@intFromEnum(ic)));
     @memcpy(c_args.arg_slots[1..], args);
 
     self.abiCata(ret_ty).types(c_args.returns, true, self.abi);
@@ -2055,26 +2052,27 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
         const decl, const path, const ident = while (!cursor.empty()) {
             if (ast.findDecl(cursor.items(ast, self.types), id, tmp.arena.allocator())) |v| break v;
             if (cursor.findCapture(pos, id, self.types)) |c| {
-                return .{ .ty = c.ty, .id = if (c.ty == .type)
-                    .{ .Value = self.bl.addIntImm(.int, @bitCast(c.value)) }
-                else b: {
-                    if (self.target != .@"comptime") {
-                        return self.report(pos, "can't access this value, (yet)", .{});
-                    }
+                return .{ .ty = c.ty, .id = switch (self.abiCata(c.ty)) {
+                    .Imaginary => .Imaginary,
+                    .ByValue => |v| .{ .Value = if (v.isInt())
+                        self.bl.addIntImm(.i64, @bitCast(c.value))
+                    else if (v == .f32)
+                        self.bl.addFlt32Imm(@bitCast(@as(u32, @truncate(c.value))))
+                    else
+                        self.bl.addFlt64Imm(@bitCast(c.value)) },
+                    .ByValuePair, .ByRef => b: {
+                        if (self.target != .@"comptime") {
+                            return self.report(pos, "can't access this value, (yet)", .{});
+                        }
 
-                    if (!self.only_inference)
-                        return self.report(pos, "can't access non type value (yet) unless" ++
-                            " this is a type inference context (inside @TypeOf)", .{});
+                        if (!self.only_inference)
+                            return self.report(pos, "can't access non type value (yet) unless" ++
+                                " this is a type inference context (inside @TypeOf)", .{});
 
-                    break :b switch (self.abiCata(c.ty)) {
-                        .Imaginary => .Imaginary,
-                        .ByValue => |v| .{ .Value = if (v.isInt())
-                            self.bl.addIntImm(v, 0)
-                        else if (v == .f32) self.bl.addFlt32Imm(0) else self.bl.addFlt64Imm(0) },
-                        .ByValuePair, .ByRef => .{
+                        break :b .{
                             .Pointer = self.bl.addLocal(self.sloc(pos), c.ty.size(self.types)),
-                        },
-                    };
+                        };
+                    },
                 } };
             }
             cursor = cursor.parent(self.types);
@@ -2103,11 +2101,8 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
         const pos = ast.exprs.getTyped(.Tag, e.called).?;
         const name = ast.tokenSrc(pos.index + 1);
         const ty = ctx.ty orelse {
-            return self.report(
-                e.called,
-                "can infer the implicit access, you can specify the type: <ty>.{s}",
-                .{name},
-            );
+            return self.report(e.called, "can infer the implicit access," ++
+                " you can specify the type: <ty>.{s}", .{name});
         };
 
         break :b .{ try self.lookupScopeItem(pos.*, ty, name), null };
@@ -2248,13 +2243,22 @@ pub fn instantiateTemplate(
 
         const binding = tmpl_file.exprs.getTyped(.Ident, param.bindings).?;
         if (binding.pos.flag.@"comptime") {
+            const ty = try self.types.ct.evalTy("", template_scope, param.ty);
             captures[capture_idx] = .{
                 .id = comptime_args[comptime_idx],
-                .ty = .type,
-                .value = @intFromEnum(switch (arg) {
-                    .Value => |v| try self.unwrapTyConst(expr, v),
-                    .Expr => |ex| try self.resolveAnonTy(ex),
-                }),
+                .ty = ty,
+                .value = if (ty == .type)
+                    @intFromEnum(switch (arg) {
+                        .Value => |v| try self.unwrapTyConst(expr, v),
+                        .Expr => |ex| try self.resolveAnonTy(ex),
+                    })
+                else switch (arg) {
+                    .Value => |v| try self.partialEval(expr, v.getValue(self)),
+                    .Expr => |ar| try self.partialEval(ar, b: {
+                        var a = try self.emitTyped(.{}, ty, ar);
+                        break :b a.getValue(self);
+                    }),
+                },
             };
             capture_idx += 1;
             comptime_idx += 1;
@@ -2277,8 +2281,8 @@ pub fn instantiateTemplate(
                     try self.emitTyped(.{}, arg_tys[arg_idx], arg.Expr);
             }
 
-            arg_idx += 1;
             arg_expr_idx += @intFromBool(caller_slot == null);
+            arg_idx += 1;
         }
 
         expr_idx += @intFromBool(caller_slot == null);
@@ -2533,14 +2537,14 @@ fn emitStirng(self: *Codegen, ctx: Ctx, data: []const u8, expr: Ast.Id) Value {
     self.bl.addFieldStore(
         slice_loc,
         TySlice.ptr_offset,
-        .int,
+        .i64,
         self.bl.addGlobalAddr(@intFromEnum(global)),
     );
     self.bl.addFieldStore(
         slice_loc,
         TySlice.len_offset,
-        .int,
-        self.bl.addIntImm(.int, @intCast(data.len)),
+        .i64,
+        self.bl.addIntImm(.i64, @intCast(data.len)),
     );
 
     return .mkp(slice_ty, slice_loc);
@@ -2746,7 +2750,7 @@ fn emitDirective(
             if (!oper.ty.isFloat())
                 return self.report(args[0], "expected float, {} is not", .{oper.ty});
 
-            return .mkv(ret, self.bl.addUnOp(.fti, .int, oper.getValue(self)));
+            return .mkv(ret, self.bl.addUnOp(.fti, .i64, oper.getValue(self)));
         },
         .bit_cast => {
             try assertDirectiveArgs(self, expr, args, "<expr>");
@@ -2802,7 +2806,7 @@ fn emitDirective(
                 return self.report(args[0], "directive only works on structs" ++
                     " and arrays, {} is not", .{ty});
             };
-            return .mkv(.uint, self.bl.addIntImm(.int, @intCast(len)));
+            return .mkv(.uint, self.bl.addIntImm(.i64, @intCast(len)));
         },
         .name_of => {
             try assertDirectiveArgs(self, expr, args, "<ty/enum-variant>");
@@ -2857,12 +2861,12 @@ fn emitDirective(
         .align_of => {
             try assertDirectiveArgs(self, expr, args, "<ty>");
             const ty = try self.resolveAnonTy(args[0]);
-            return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(ty.alignment(self.types))));
+            return .mkv(.uint, self.bl.addIntImm(.i64, @bitCast(ty.alignment(self.types))));
         },
         .size_of => {
             try assertDirectiveArgs(self, expr, args, "<ty>");
             const ty = try self.resolveAnonTy(args[0]);
-            return .mkv(.uint, self.bl.addIntImm(.int, @bitCast(ty.size(self.types))));
+            return .mkv(.uint, self.bl.addIntImm(.i64, @bitCast(ty.size(self.types))));
         },
         .target => {
             try assertDirectiveArgs(self, expr, args, "<string>");

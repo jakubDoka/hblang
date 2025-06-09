@@ -949,7 +949,7 @@ main := fn(): uint {
 ```
 
 #### comptime 3 (errors)
-```hb
+```!hb
 expectations := .{
     should_error: true,
 }
@@ -973,6 +973,27 @@ main := fn(): uint {
     Ty := struct{.field: @TypeOf(some_int)}
 
     return Ty.(some_int).field
+}
+```
+
+#### comptime 5 (integers)
+```hb
+main := fn(): uint {
+    value := 1
+
+    Ty := struct {
+        global_value := value
+    }
+
+    func := fn(): uint return value
+
+    param := fn($i: uint): type {
+        return struct {
+            global_value := i - 1
+        }
+    }
+
+    return Ty.global_value - func() + param(value).global_value
 }
 ```
 

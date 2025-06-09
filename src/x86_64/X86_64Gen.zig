@@ -254,16 +254,11 @@ pub const Node = union(enum) {
 
         if (node.kind == .OffsetLoad) {
             if (node.base().kind == .GlobalAddr) fold_const_read: {
-                const sym = &self.out.syms.items[@intFromEnum(self.out.globals.items[node.base().extra(.GlobalAddr).id])];
-
-                if (!sym.readonly) break :fold_const_read;
-
-                var value: i64 = 0;
-
-                @memcpy(
-                    @as(*[@sizeOf(@TypeOf(value))]u8, @ptrCast(&value))[0..node.data_type.size()],
-                    self.out.code.items[@intCast(sym.offset + @as(i64, node.extra(.OffsetLoad).dis))..][0..node.data_type.size()],
-                );
+                const value = self.out.readFromSym(
+                    node.base().extra(.GlobalAddr).id,
+                    node.extra(.OffsetLoad).dis,
+                    node.data_type.size(),
+                ) orelse break :fold_const_read;
 
                 return func.addNode(.CInt, node.data_type, &.{null}, value);
             }
@@ -401,7 +396,8 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     prelude: {
         for (Reg.system_v.callee_saved) |r| {
             if (@intFromEnum(r) > @intFromEnum(Reg.r15) - tmp_count and spill_slot_count > 0) {
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_PUSH, .{Tmp{@intFromEnum(r) - (@intFromEnum(Reg.r15) - tmp_count + 1)}});
+                const tp = Tmp{@intFromEnum(r) - (@intFromEnum(Reg.r15) - tmp_count + 1)};
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_PUSH, .{tp});
             } else if (used_regs.contains(r)) {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_PUSH, .{r});
             }
@@ -446,7 +442,8 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
                 if (@intFromEnum(r) > @intFromEnum(Reg.r15) - tmp_count and
                     spill_slot_count > 0)
                 {
-                    self.emitInstr(zydis.ZYDIS_MNEMONIC_POP, .{Tmp{@intFromEnum(r) - (@intFromEnum(Reg.r15) - tmp_count + 1)}});
+                    const tp = Tmp{@intFromEnum(r) - (@intFromEnum(Reg.r15) - tmp_count + 1)};
+                    self.emitInstr(zydis.ZYDIS_MNEMONIC_POP, .{tp});
                 } else if (used_regs.contains(r)) {
                     self.emitInstr(zydis.ZYDIS_MNEMONIC_POP, .{r});
                 }
@@ -543,7 +540,8 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
     }
 
     if (fields.len == 0) size = 0;
-    if (mnemonic == zydis.ZYDIS_MNEMONIC_PUSH or mnemonic == zydis.ZYDIS_MNEMONIC_POP) size = 8;
+    if (mnemonic == zydis.ZYDIS_MNEMONIC_PUSH or
+        mnemonic == zydis.ZYDIS_MNEMONIC_POP) size = 8;
 
     const fsize = size.?;
 
@@ -603,9 +601,8 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
             mnemonic == zydis.ZYDIS_MNEMONIC_MOVSX or
             mnemonic == zydis.ZYDIS_MNEMONIC_IMUL or
             (req.operands[1].type == zydis.ZYDIS_OPERAND_TYPE_IMMEDIATE and
-                ((mnemonic == zydis.ZYDIS_MNEMONIC_MOV and req.operands[1].imm.u > 0x7fffffff) //or
-                    //mnemonic == zydis.ZYDIS_MNEMONIC_ADD
-                )) or
+                (mnemonic == zydis.ZYDIS_MNEMONIC_MOV and
+                    req.operands[1].imm.u > 0x7fffffff)) or
             mnemonic == zydis.ZYDIS_MNEMONIC_LEA) and
         req.operands[0].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY;
     var prev_oper: zydis.ZydisEncoderOperand = undefined;
@@ -656,8 +653,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
     for (block.outputs()) |instr| {
         switch (instr.extra2()) {
             .CInt => |extra| {
-                const mask: i64 = if (instr.data_type.size() == 8) -1 else (@as(i64, 1) << @intCast(instr.data_type.size() * 8)) - 1;
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), extra.* & mask });
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), extra.* });
             },
             .MemCpy => {
                 var moves = std.ArrayList(Move).init(tmp.arena.allocator());
@@ -836,14 +832,20 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     .imul => unreachable,
                     .ushr, .ishl, .sshr, .iadd, .isub, .bor, .band, .bxor => {
                         if (dst != lhs) {
-                            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ SReg{ dst, size }, SReg{ lhs, size } });
+                            self.emitInstr(
+                                zydis.ZYDIS_MNEMONIC_MOV,
+                                .{ SReg{ dst, size }, SReg{ lhs, size } },
+                            );
                         }
                         self.emitInstr(mnemonic, .{ SReg{ dst, size }, rhs });
                     },
                     .udiv, .sdiv, .smod, .umod => switch (size) {
                         1, 2, 4, 8 => {
                             if (size == 1) {
-                                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOVZX, .{ Reg.rdx, SReg{ .rdx, 1 } });
+                                self.emitInstr(
+                                    zydis.ZYDIS_MNEMONIC_MOVZX,
+                                    .{ Reg.rdx, SReg{ .rdx, 1 } },
+                                );
                             } else {
                                 self.emitInstr(zydis.ZYDIS_MNEMONIC_XOR, .{ Reg.rdx, Reg.rdx });
                             }
@@ -1087,7 +1089,11 @@ pub fn disasm(self: *X86_64, opts: Mach.DisasmOpts) void {
     };
 
     var decoder = zydis.ZydisDecoder{};
-    _ = zydis.ZydisDecoderInit(&decoder, zydis.ZYDIS_MACHINE_MODE_LONG_64, zydis.ZYDIS_STACK_WIDTH_64);
+    _ = zydis.ZydisDecoderInit(
+        &decoder,
+        zydis.ZYDIS_MACHINE_MODE_LONG_64,
+        zydis.ZYDIS_STACK_WIDTH_64,
+    );
 
     var formatter = zydis.ZydisFormatter{};
     _ = zydis.ZydisFormatterInit(&formatter, zydis.ZYDIS_FORMATTER_STYLE_INTEL);
@@ -1124,8 +1130,14 @@ pub fn disasm(self: *X86_64, opts: Mach.DisasmOpts) void {
                         );
                         std.debug.assert(zydis.ZYAN_SUCCESS(status));
 
-                        if (inst.mnemonic == zydis.ZYDIS_MNEMONIC_JMP or inst.mnemonic == zydis.ZYDIS_MNEMONIC_JZ) {
-                            try map.put(tmp.arena.allocator(), @intCast(addr + ops[0].unnamed_0.imm.value.s + inst.length), map.count());
+                        if (inst.mnemonic == zydis.ZYDIS_MNEMONIC_JMP or
+                            inst.mnemonic == zydis.ZYDIS_MNEMONIC_JZ)
+                        {
+                            try map.put(
+                                tmp.arena.allocator(),
+                                @intCast(addr + ops[0].unnamed_0.imm.value.s + inst.length),
+                                map.count(),
+                            );
                         }
                     }
                     break :b map;
@@ -1167,9 +1179,15 @@ pub fn disasm(self: *X86_64, opts: Mach.DisasmOpts) void {
                         }
                     }
 
-                    if (inst.mnemonic == zydis.ZYDIS_MNEMONIC_JMP or inst.mnemonic == zydis.ZYDIS_MNEMONIC_JZ) {
-                        const label = label_map.get(@intCast(addr + ops[0].unnamed_0.imm.value.s + inst.length)).?;
-                        const fmt, const args = .{ "\t{s} :{}\n", .{ zydis.ZydisMnemonicGetString(inst.mnemonic), label } };
+                    if (inst.mnemonic == zydis.ZYDIS_MNEMONIC_JMP or
+                        inst.mnemonic == zydis.ZYDIS_MNEMONIC_JZ)
+                    {
+                        const label = label_map.get(@intCast(addr +
+                            ops[0].unnamed_0.imm.value.s + inst.length)).?;
+                        const fmt, const args = .{
+                            "\t{s} :{}\n",
+                            .{ zydis.ZydisMnemonicGetString(inst.mnemonic), label },
+                        };
                         if (opts.colors == .no_color) {
                             try opts.out.print(fmt, args);
                         } else {
@@ -1206,8 +1224,16 @@ pub fn run(_: *X86_64, env: Mach.RunEnv) !usize {
         var tmp = root.utils.Arena.scrath(null);
         defer tmp.deinit();
 
-        const name = try std.fmt.allocPrint(tmp.arena.allocator(), "tmp_{s}.o", .{env.name});
-        const exe_name = try std.fmt.allocPrint(tmp.arena.allocator(), "./tmp_{s}", .{env.name});
+        const name = try std.fmt.allocPrint(
+            tmp.arena.allocator(),
+            "tmp_{s}.o",
+            .{env.name},
+        );
+        const exe_name = try std.fmt.allocPrint(
+            tmp.arena.allocator(),
+            "./tmp_{s}",
+            .{env.name},
+        );
 
         try std.fs.cwd().writeFile(.{ .sub_path = name, .data = env.code });
         defer if (cleanup) std.fs.cwd().deleteFile(name) catch unreachable;

@@ -290,7 +290,7 @@ pub const Id = enum(IdRepr) {
                 .u16, .i16 => 2,
                 .type => @sizeOf(Id),
                 .u32, .i32, .f32 => 4,
-                .uint, .int, .f64, .u64, .i64 => 8,
+                .uint, .i64, .f64, .u64, .int => 8,
             },
             .Pointer => 8,
             .Enum => |e| {
@@ -495,17 +495,17 @@ pub const Abi = enum {
                     .Imaginary => {},
                     .ByValue => |d| buf[0] = d,
                     .ByValuePair => |pair| buf[0..2].* = pair.types,
-                    .ByRef => buf[0] = .int,
+                    .ByRef => buf[0] = .i64,
                 },
                 .systemv => switch (self) {
                     .Imaginary => {},
                     .ByValue => |d| buf[0] = d,
                     .ByValuePair => |pair| if (is_ret and self.isByRefRet(abi)) {
-                        buf[0] = .int;
+                        buf[0] = .i64;
                     } else {
                         buf[0..2].* = pair.types;
                     },
-                    .ByRef => buf[0] = .int,
+                    .ByRef => buf[0] = .i64,
                 },
                 else => unreachable,
             }
@@ -552,17 +552,17 @@ pub const Abi = enum {
                 .u8, .i8, .bool => .i8,
                 .u16, .i16 => .i16,
                 .u32, .type, .i32 => .i32,
-                .uint, .int, .i64, .u64 => .int,
+                .uint, .i64, .int, .u64 => .i64,
                 .f32 => .f32,
                 .f64 => .f64,
             } },
-            .Pointer => .{ .ByValue = .int },
+            .Pointer => .{ .ByValue = .i64 },
             .Enum => .{ .ByValue = switch (ty.size(types)) {
                 0 => return .Imaginary,
                 1 => .i8,
                 2 => .i16,
                 4 => .i32,
-                8 => .int,
+                8 => .i64,
                 else => unreachable,
             } },
             .Union => |s| switch (self) {
@@ -599,7 +599,7 @@ pub const Abi = enum {
 
     pub fn categorizeAbleosSlice(id: utils.EntId(tys.Slice), types: *Types) ?TmpSpec {
         const slice = types.store.get(id);
-        if (slice.len == null) return .{ .ByValuePair = .{ .types = .{ .int, .int }, .padding = 0 } };
+        if (slice.len == null) return .{ .ByValuePair = .{ .types = .{ .i64, .i64 }, .padding = 0 } };
         if (slice.len == 0) return .Imaginary;
         const elem_abi = Abi.ableos.categorize(slice.elem, types) orelse return null;
         if (elem_abi == .Imaginary) return .Imaginary;

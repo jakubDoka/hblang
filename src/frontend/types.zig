@@ -86,7 +86,7 @@ pub const Nullable = struct {
             pub fn abi(self: @This()) graph.DataType {
                 return switch (self) {
                     .bool => .i8,
-                    .ptr => .int,
+                    .ptr => .i64,
                 };
             }
         },

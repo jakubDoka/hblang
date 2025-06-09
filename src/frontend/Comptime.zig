@@ -130,7 +130,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
                     return .{ .Unsupported = curr };
                 }
 
-                var ret_ty: graph.DataType = .int;
+                var ret_ty: graph.DataType = .i64;
                 if (call.extra(.Call).id != eca) {
                     const func_id: utils.EntId(root.frontend.types.Func) = @enumFromInt(call.extra(.Call).id);
                     const func = types.store.get(func_id);
@@ -429,7 +429,7 @@ pub fn jitExprLow(
         gen.name = name;
         gen.struct_ret_ptr = null;
 
-        params[0] = .int;
+        params[0] = .i64;
         const ptr = gen.bl.addParam(0);
 
         ret = try gen.emit(ctx.addLoc(ptr), value);

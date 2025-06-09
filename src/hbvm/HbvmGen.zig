@@ -21,7 +21,6 @@ const Move = utils.Move(isa.Reg);
 const HbvmGen = @This();
 
 pub const eca = std.math.maxInt(u32);
-pub const dir = "inputs";
 pub const tmp_registers = 2;
 pub const max_alloc_regs = @intFromEnum(isa.Reg.stack_addr) - 1 - tmp_registers;
 
@@ -453,10 +452,10 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
         switch (no.extra2()) {
             .CInt => |extra| {
                 switch (no.data_type) {
-                    .i8 => self.emit(.li8, .{ self.outReg(no), @truncate(@as(u64, @bitCast(extra.*))) }),
-                    .i16 => self.emit(.li16, .{ self.outReg(no), @truncate(@as(u64, @bitCast(extra.*))) }),
-                    .i32 => self.emit(.li32, .{ self.outReg(no), @truncate(@as(u64, @bitCast(extra.*))) }),
-                    .int => self.emit(.li64, .{ self.outReg(no), @bitCast(extra.*) }),
+                    inline .i8, .i16, .i32, .i64 => |t| self.emit(
+                        @field(isa.Op, "l" ++ @tagName(t)),
+                        .{ self.outReg(no), @truncate(@as(u64, @bitCast(extra.*))) },
+                    ),
                     else => utils.panic("{}\n", .{no.data_type}),
                 }
                 self.flushOutReg(no);
@@ -477,15 +476,6 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             .Local => |extra| {
                 self.emit(.addi64, .{ self.outReg(no), .stack_addr, extra.* });
             },
-            .Load => {
-                const size: u16 = @intCast(no.data_type.size());
-                if (inps[0].?.kind == .Local) {
-                    self.emit(.ld, .{ self.outReg(no), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).*)), size });
-                } else {
-                    self.emit(.ld, .{ self.outReg(no), self.inReg(0, inps[0]), 0, size });
-                }
-                self.flushOutReg(no);
-            },
             .Ld => |extra| {
                 const size: u16 = @intCast(no.data_type.size());
                 const off = extra.offset;
@@ -493,15 +483,6 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     self.emit(.ld, .{ self.outReg(no), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).*)) + off, size });
                 } else {
                     self.emit(.ld, .{ self.outReg(no), self.inReg(0, inps[0]), off, size });
-                }
-                self.flushOutReg(no);
-            },
-            .Store => {
-                const size: u16 = @intCast(no.data_type.size());
-                if (inps[0].?.kind == .Local) {
-                    self.emit(.st, .{ self.outReg(inps[1]), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).*)), size });
-                } else {
-                    self.emit(.st, .{ self.outReg(inps[1]), self.inReg(0, inps[0]), 0, size });
                 }
                 self.flushOutReg(no);
             },
@@ -637,7 +618,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     const chars = "BHWD";
                     const types = .{ u8, u16, u32, u64 };
                     switch (no.data_type) {
-                        inline .i8, .i16, .i32, .int => |t| {
+                        inline .i8, .i16, .i32, .i64 => |t| {
                             const idx = @intFromEnum(t) - @intFromEnum(graph.DataType.i8);
                             self.emitLow(
                                 "RR" ++ chars[idx..][0..1],
@@ -692,8 +673,6 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 }
                 self.orderMoves(moves.items);
             },
-            .Mem => {},
-            .Ret => {},
             .Jmp => if (no.outputs()[0].kind == .Region or no.outputs()[0].kind == .Loop) {
                 const idx = std.mem.indexOfScalar(?*Func.Node, no.outputs()[0].inputs(), no).? + 1;
 
@@ -708,11 +687,6 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
 
                 self.orderMoves(moves.items);
             },
-            .MachMove => {
-                //std.debug.assert(no.outputs()[0].kind == .Phi);
-                //self.emit(.cp, .{ self.reg(no.outputs()[0]), self.reg(inps[0]) });
-            },
-            .Phi => {},
             .Return => {
                 if (Func.isDead(no.inputs()[0])) return;
                 var moves = std.ArrayList(Move).init(tmp);
@@ -730,7 +704,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     else => unreachable,
                 }
             },
-            .Never => {},
+            .Never, .MachMove, .Mem, .Ret, .Phi => {},
             else => |e| utils.panic("{any}", .{e}),
         }
     }
@@ -807,7 +781,7 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
 
         if (inps[2].?.kind == .CInt) b: {
             if (inps[1].?.kind == .CInt) {
-                return func.addNode(.CInt, node.data_type, &.{null}, op.eval(
+                return func.addIntImm(node.data_type, op.eval(
                     node.data_type,
                     inps[1].?.extra(.CInt).*,
                     inps[2].?.extra(.CInt).*,
@@ -841,8 +815,6 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
     if (node.kind == .UnOp and node.extra(.UnOp).* == .cast) return inps[1];
 
     if (node.kind == .If) {
-        //if (node.outputs().len != 2) utils.panic("{} {} {}\n", .{ node, node.outputs()[0], node.data_type });
-
         if (inps[1].?.kind == .BinOp) b: {
             work.add(inps[1].?);
             const op = inps[1].?.extra(.BinOp).*;
@@ -869,8 +841,8 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
             });
         }
 
-        if (inps[1].?.data_type != .int) {
-            const new = func.addNode(.UnOp, .int, &.{ null, inps[1].? }, .uext);
+        if (inps[1].?.data_type != .i64) {
+            const new = func.addUnOp(.uext, .i64, inps[1].?);
             work.add(new);
             _ = func.setInput(node, 1, new);
         }
@@ -913,18 +885,13 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
 
     if (node.kind == .Ld) {
         if (node.base().kind == .GlobalAddr) fold_const_read: {
-            const sym = &self.out.syms.items[@intFromEnum(self.out.globals.items[node.base().extra(.GlobalAddr).id])];
+            const value = self.out.readFromSym(
+                node.base().extra(.GlobalAddr).id,
+                node.extra(.Ld).offset,
+                node.data_type.size(),
+            ) orelse break :fold_const_read;
 
-            if (!sym.readonly) break :fold_const_read;
-
-            var value: i64 = 0;
-
-            @memcpy(
-                @as(*[@sizeOf(@TypeOf(value))]u8, @ptrCast(&value))[0..@intCast(node.data_type.size())],
-                self.out.code.items[@intCast(sym.offset + node.extra(.Ld).offset)..][0..@intCast(node.data_type.size())],
-            );
-
-            return func.addNode(.CInt, node.data_type, &.{null}, value);
+            return func.addIntImm(node.data_type, value);
         }
     }
 
@@ -941,7 +908,7 @@ pub fn idealize(_: void, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*
             const ext_op: graph.UnOp = if (op.isSigned()) .sext else .uext;
             inline for (inps[1..3], 1..) |inp, i| {
                 if (inp.?.data_type.size() != 8) {
-                    const new = func.addNode(.UnOp, .int, &.{ null, inp.? }, ext_op);
+                    const new = func.addUnOp(ext_op, .i64, inp.?);
                     work.add(new);
                     _ = func.setInput(node, i, new);
                 }
@@ -951,8 +918,8 @@ pub fn idealize(_: void, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*
 
     if (node.kind == .UnOp) {
         const op: graph.UnOp = node.extra(.UnOp).*;
-        if (op == .not and inps[1].?.data_type != .int) {
-            const new = func.addNode(.UnOp, .int, &.{ null, inps[1].? }, .uext);
+        if (op == .not and inps[1].?.data_type != .i64) {
+            const new = func.addUnOp(.uext, .i64, inps[1].?);
             work.add(new);
             _ = func.setInput(node, 1, new);
         }

@@ -91,7 +91,7 @@ pub fn end(self: *Builder, _: BuildToken) void {
 // #MEM ========================================================================
 
 pub fn addLocal(self: *Builder, sloc: graph.Sloc, size: u64) SpecificNode(.Local) {
-    const local = self.func.addNode(.Local, .int, &.{ null, self.root_mem }, size);
+    const local = self.func.addNode(.Local, .i64, &.{ null, self.root_mem }, size);
     local.sloc = sloc;
     return local;
 }
@@ -102,9 +102,8 @@ pub fn resizeLocal(_: *Builder, here: SpecificNode(.Local), to_size: u64) void {
 }
 
 pub fn addLoad(self: *Builder, addr: *BuildNode, ty: DataType) SpecificNode(.Store) {
-    //std.debug.assert(ty != .bot and ty != .top);
-    const val = self.func.addNode(.Load, ty, &.{ if (addr.kind == .Local) null else self.control(), self.memory(), addr }, .{});
-    return val;
+    const ctrl = if (addr.kind == .Local) null else self.control();
+    return self.func.addNode(.Load, ty, &.{ ctrl, self.memory(), addr }, .{});
 }
 
 pub fn addFieldLoad(self: *Builder, base: *BuildNode, offset: i64, ty: DataType) *BuildNode {
@@ -120,12 +119,6 @@ pub fn addStore(self: *Builder, addr: *BuildNode, ty: DataType, value: *BuildNod
     self.func.setInputNoIntern(self.scope.?, 1, store);
 }
 
-pub fn addFieldOffset(self: *Builder, base: *BuildNode, offset: i64) *BuildNode {
-    return if (offset != 0) if (base.kind == .BinOp and base.inputs()[2].?.kind == .CInt) b: {
-        break :b self.addBinOp(.iadd, .int, base.inputs()[1].?, self.addIntImm(.int, base.inputs()[2].?.extra(.CInt).* + offset));
-    } else self.addBinOp(.iadd, .int, base, self.addIntImm(.int, offset)) else base;
-}
-
 pub fn addFieldStore(self: *Builder, base: *BuildNode, offset: i64, ty: DataType, value: *BuildNode) void {
     _ = self.addStore(self.addFieldOffset(base, offset), ty, value);
 }
@@ -139,72 +132,53 @@ pub fn addSpill(self: *Builder, sloc: graph.Sloc, value: *BuildNode) SpecificNod
 pub fn addFixedMemCpy(self: *Builder, dst: *BuildNode, src: *BuildNode, size: u64) void {
     const mem = self.memory();
     const ctrl = self.control();
-    const siz = self.addIntImm(.int, @bitCast(size));
+    const siz = self.addIntImm(.i64, @bitCast(size));
     const mcpy = self.func.addNode(.MemCpy, .top, &.{ ctrl, mem, dst, src, siz }, .{});
     self.func.setInputNoIntern(self.scope.?, 1, mcpy);
 }
 
+pub fn addFieldOffset(self: *Builder, base: *BuildNode, offset: i64) *BuildNode {
+    return self.func.addFieldOffset(base, offset);
+}
+
 pub fn addGlobalAddr(self: *Builder, arbitrary_global_id: u32) SpecificNode(.GlobalAddr) {
-    return self.func.addNode(.GlobalAddr, .int, &.{null}, .{ .id = arbitrary_global_id });
+    return self.func.addGlobalAddr(arbitrary_global_id);
 }
 
 // #MATH =======================================================================
 
 pub fn addCast(self: *Builder, to: DataType, value: *BuildNode) SpecificNode(.UnOp) {
-    return self.func.addNode(.UnOp, to, &.{ null, value }, .cast);
+    return self.func.addCast(to, value);
 }
 
-pub fn addIndexOffset(self: *Builder, base: *BuildNode, op: enum(u8) {
-    iadd = @intFromEnum(BinOp.iadd),
-    isub = @intFromEnum(BinOp.isub),
-}, elem_size: u64, subscript: *BuildNode) SpecificNode(.BinOp) {
-    const offset = if (elem_size == 1)
-        subscript
-    else if (subscript.kind == .CInt)
-        self.addIntImm(.int, subscript.extra(.CInt).* * @as(i64, @bitCast(elem_size)))
-    else
-        self.addBinOp(.imul, .int, subscript, self.addIntImm(.int, @bitCast(elem_size)));
-    return self.addBinOp(@enumFromInt(@intFromEnum(op)), .int, base, offset);
+pub fn addIndexOffset(
+    self: *Builder,
+    base: *BuildNode,
+    op: Func.OffsetDirection,
+    elem_size: u64,
+    subscript: *BuildNode,
+) SpecificNode(.BinOp) {
+    return self.func.addIndexOffset(base, op, elem_size, subscript);
 }
 
 pub fn addIntImm(self: *Builder, ty: DataType, value: i64) SpecificNode(.CInt) {
-    std.debug.assert(ty != .bot);
-    const val = self.func.addNode(.CInt, ty, &.{null}, value);
-    std.debug.assert(val.data_type.isInt());
-    return val;
+    return self.func.addIntImm(ty, value);
 }
 
 pub fn addFlt64Imm(self: *Builder, value: f64) SpecificNode(.CFlt64) {
-    return self.func.addNode(.CFlt64, .f64, &.{null}, value);
+    return self.func.addFlt64Imm(value);
 }
 
 pub fn addFlt32Imm(self: *Builder, value: f32) SpecificNode(.CFlt32) {
-    return self.func.addNode(.CFlt32, .f32, &.{null}, value);
+    return self.func.addFlt32Imm(value);
 }
 
 pub fn addBinOp(self: *Builder, op: BinOp, ty: DataType, lhs: *BuildNode, rhs: *BuildNode) SpecificNode(.BinOp) {
-    if (lhs.kind == .CInt and rhs.kind == .CInt) {
-        return self.addIntImm(ty, op.eval(ty, lhs.extra(.CInt).*, rhs.extra(.CInt).*));
-    } else if (lhs.kind == .CFlt64 and rhs.kind == .CFlt64) {
-        return self.addFlt64Imm(@bitCast(op.eval(ty, @bitCast(lhs.extra(.CFlt64).*), @bitCast(rhs.extra(.CFlt64).*))));
-    }
-    if ((op == .iadd or op == .iadd) and rhs.kind == .CInt and rhs.extra(.CInt).* == 0) {
-        return lhs;
-    }
-    return self.func.addNode(.BinOp, ty, &.{ null, lhs, rhs }, op);
+    return self.func.addBinOp(op, ty, lhs, rhs);
 }
 
 pub fn addUnOp(self: *Builder, op: UnOp, ty: DataType, oper: *BuildNode) SpecificNode(.BinOp) {
-    if (oper.kind == .CInt and ty.isInt()) {
-        return self.addIntImm(ty, op.eval(oper.data_type, oper.extra(.CInt).*));
-    } else if (oper.kind == .CFlt64 and ty == .f64) {
-        return self.addFlt64Imm(@bitCast(op.eval(oper.data_type, @bitCast(oper.extra(.CFlt64).*))));
-    } else if (oper.kind == .CFlt32 and ty == .f32) {
-        return self.addFlt32Imm(@floatCast(@as(f64, @bitCast(op.eval(oper.data_type, @bitCast(@as(f64, @floatCast(oper.extra(.CFlt32).*))))))));
-    }
-    const opa = self.func.addNode(.UnOp, ty, &.{ null, oper }, op);
-    opa.data_type = opa.data_type.meet(ty);
-    return opa;
+    return self.func.addUnOp(op, ty, oper);
 }
 
 // #SCOPE ======================================================================

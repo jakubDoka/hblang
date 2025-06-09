@@ -130,6 +130,21 @@ pub const Data = struct {
     code: std.ArrayListUnmanaged(u8) = .empty,
     relocs: std.ArrayListUnmanaged(Reloc) = .empty,
 
+    pub fn readFromSym(self: *const Data, id: u32, offset: i64, size: u64) ?i64 {
+        const sym = &self.syms.items[@intFromEnum(self.globals.items[id])];
+
+        if (!sym.readonly) return null;
+
+        var value: i64 = 0;
+
+        @memcpy(
+            @as(*[@sizeOf(@TypeOf(value))]u8, @ptrCast(&value))[0..@intCast(size)],
+            self.code.items[@intCast(sym.offset + offset)..][0..@intCast(size)],
+        );
+
+        return value;
+    }
+
     pub fn reset(self: *Data) void {
         inline for (std.meta.fields(Data)[1..]) |f| {
             @field(self, f.name).items.len = 0;
