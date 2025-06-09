@@ -22,6 +22,23 @@ main := fn(): uint {
 }
 ```
 
+#### recursion broken codegen 1
+```hb
+
+checkOdd := fn(x: int): bool {
+    if x == 0 return false
+    return checkEaven(x - 1)
+}
+checkEaven := fn(x: int): bool {
+    if x == 0 return true
+    return checkOdd(x - 1)
+}
+
+main := fn(): uint {
+    return checkEaven(1)
+}
+```
+
 #### typeof is not comptime 1
 ```hb
 
