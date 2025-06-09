@@ -269,6 +269,10 @@ pub const Node = union(enum) {
             }
         }
 
+        if (node.kind == .BinOp and node.inputs()[1].?.kind == .CInt and
+            node.inputs()[2].?.kind == .CInt)
+        {}
+
         if (node.kind == .BinOp and node.inputs()[2].?.kind == .CInt and
             switch (node.extra(.BinOp).*) {
                 .udiv, .sdiv, .umod, .smod, .imul => false,

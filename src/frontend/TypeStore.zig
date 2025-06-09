@@ -709,7 +709,7 @@ pub fn nextTask(self: *Types, target: Target, pop_limit: usize) ?utils.EntId(tys
 }
 
 pub fn init(gpa: std.mem.Allocator, source: []const Ast, diagnostics: std.io.AnyWriter) *Types {
-    var arena = Arena.init(1024 * 1024);
+    var arena = Arena.init(1024 * 1024 * 128);
     const scopes = arena.alloc(Id, source.len);
     @memset(scopes, .void);
     const slot = arena.create(Types);

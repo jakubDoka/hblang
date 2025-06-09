@@ -159,7 +159,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         return error.Failed;
     }
 
-    var ast_arena = Arena.init(1024 * 1024 * 20);
+    var ast_arena = Arena.init(1024 * 1024 * 128);
     errdefer ast_arena.deinit();
 
     if (opts.fmt_stdout) {
