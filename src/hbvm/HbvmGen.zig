@@ -808,6 +808,7 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
         if (inps[2].?.kind == .CInt) b: {
             if (inps[1].?.kind == .CInt) {
                 return func.addNode(.CInt, node.data_type, &.{null}, op.eval(
+                    node.data_type,
                     inps[1].?.extra(.CInt).*,
                     inps[2].?.extra(.CInt).*,
                 ));

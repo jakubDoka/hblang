@@ -3,71 +3,62 @@ main:
 	push rbp
 	sub rsp, 0x60
 	mov rax, 0x00
-	mov rcx, 0x02
-	mov rdx, 0x03
+	lea rcx, [rsp+0x40]
+	mov rdx, 0x01
+	mov [rcx], rdx
+	mov rdx, 0x02
+	mov [rcx+0x08], rdx
+	mov rbx, 0x03
+	mov [rcx+0x10], rbx
 	mov rbx, 0x04
-	mov rbp, 0x08
-	mov rsi, 0x01
-	lea rdi, [rsp+0x40]
-	mov [rdi], rsi
-	mov [rdi+0x08], rcx
-	mov [rdi+0x10], rdx
-	mov [rdi+0x18], rbx
-	mov r8, rcx
-	imul r8, rbp
-	imul rsi, rbp
-	lea r9, [rsp]
-	mov [r9], rdi
-	mov [r9+0x08], rbx
-	mov [r9+0x10], rdi
-	sub rcx, 0x00
-	mov [r9+0x18], rcx
-	mov rcx, rdi
-	add rcx, r8
-	mov [r9+0x20], rcx
-	mov rcx, rbx
-	sub rcx, 0x02
-	mov [r9+0x28], rcx
-	mov rcx, rdi
-	add rcx, rsi
-	mov [r9+0x30], rcx
-	mov rcx, rdx
-	sub rcx, 0x01
-	mov [r9+0x38], rcx
+	mov [rcx+0x18], rbx
+	lea rbp, [rsp]
+	mov [rbp], rcx
+	mov [rbp+0x08], rbx
+	mov [rbp+0x10], rcx
+	mov [rbp+0x18], rdx
+	mov rbx, rcx
+	add rbx, 0x10
+	mov [rbp+0x20], rbx
+	mov [rbp+0x28], rdx
+	add rcx, 0x08
+	mov [rbp+0x30], rcx
+	mov [rbp+0x38], rdx
 	mov rcx, 0x10
-	mov rdx, rax
+	mov rdx, 0x08
 	mov rbx, rax
-2:	cmp rdx, 0x04
-	setz sil
-	movzx rsi, sil
-	test sil, sil
+	mov rsi, rax
+2:	cmp rbx, 0x04
+	setz dil
+	movzx rdi, dil
+	test dil, dil
 	jz :0
-	mov rax, rbx
+	mov rax, rsi
 	add rsp, 0x60
 	pop rbp
 	pop rbx
 	ret
-0:	mov rsi, rdx
-	imul rsi, rcx
-	mov rdi, r9
-	add rdi, rsi
-	mov rsi, rbx
-	mov rbx, rax
-3:	mov r8, [rdi+0x08]
-	cmp rbx, r8
+0:	mov rdi, rbx
+	imul rdi, rcx
+	mov r8, rbp
+	add r8, rdi
+	mov rdi, rsi
+	mov rsi, rax
+3:	mov r9, [r8+0x08]
+	cmp rsi, r9
 	setz r10b
 	movzx r10, r10b
 	test r10b, r10b
 	jz :1
-	add rdx, 0x01
-	mov rbx, rsi
+	add rbx, 0x01
+	mov rsi, rdi
 	jmp :2
-1:	mov r8, rbx
-	add r8, 0x01
-	mov r10, [rdi]
-	imul rbx, rbp
-	add r10, rbx
-	mov rbx, [r10]
-	add rsi, rbx
-	mov rbx, r8
+1:	mov r9, rsi
+	add r9, 0x01
+	mov r10, [r8]
+	imul rsi, rdx
+	add r10, rsi
+	mov rsi, [r10]
+	add rdi, rsi
+	mov rsi, r9
 	jmp :3

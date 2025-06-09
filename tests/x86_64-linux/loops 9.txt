@@ -3,11 +3,6 @@ main:
 	push rbp
 	mov rax, 0x00
 	mov rcx, 0x00
-	mov rdx, 0x61
-	cmp dl, cl
-	setnz dl
-	movzx rdx, dl
-	and rcx, rdx
 	mov rdx, rax
 4:	cmp rdx, 0x01
 	setnb bl

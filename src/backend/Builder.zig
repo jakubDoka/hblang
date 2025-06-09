@@ -184,9 +184,9 @@ pub fn addFlt32Imm(self: *Builder, value: f32) SpecificNode(.CFlt32) {
 
 pub fn addBinOp(self: *Builder, op: BinOp, ty: DataType, lhs: *BuildNode, rhs: *BuildNode) SpecificNode(.BinOp) {
     if (lhs.kind == .CInt and rhs.kind == .CInt) {
-        return self.addIntImm(ty, op.eval(lhs.extra(.CInt).*, rhs.extra(.CInt).*));
+        return self.addIntImm(ty, op.eval(ty, lhs.extra(.CInt).*, rhs.extra(.CInt).*));
     } else if (lhs.kind == .CFlt64 and rhs.kind == .CFlt64) {
-        return self.addFlt64Imm(@bitCast(op.eval(@bitCast(lhs.extra(.CFlt64).*), @bitCast(rhs.extra(.CFlt64).*))));
+        return self.addFlt64Imm(@bitCast(op.eval(ty, @bitCast(lhs.extra(.CFlt64).*), @bitCast(rhs.extra(.CFlt64).*))));
     }
     if ((op == .iadd or op == .iadd) and rhs.kind == .CInt and rhs.extra(.CInt).* == 0) {
         return lhs;

@@ -7,47 +7,44 @@ main:
 	push rbx
 	push rbp
 	push r12
-	push r13
 	sub rsp, 0x08
 	mov rbx, 0x00
-	cmp rbx, 0x01
-	setz bpl
-	movzx rbp, bpl
-	test bpl, bpl
+	mov rbp, 0x01
+	test bl, bl
 	jz :0
-	mov rax, 0x01
+	mov rax, rbp
 	jmp :1
-0:	mov rbp, rbx
-	add rbp, 0x01
-	cmp rbp, 0x01
-	setnz r12b
-	movzx r12, r12b
-	test r12b, r12b
-	jz :11
+0:	cmp rbp, 0x01
+	setnz bl
+	movzx rbx, bl
+	test bl, bl
+	jz :2
 	mov rax, 0x02
 1:	jmp :3
-b:	cmp rbp, 0x03
-	setz r12b
-	movzx r12, r12b
-	mov r13, rbp
-	add r13, 0x01
-	test r12b, r12b
-	jz :4
-	mov rbp, r13
-	jmp :5
-4:	cmp rbp, 0x04
+2:	mov rbx, rbp
+b:	cmp rbx, 0x03
 	setz bpl
 	movzx rbp, bpl
+	mov r12, rbx
+	add r12, 0x01
 	test bpl, bpl
+	jz :4
+	mov rbx, r12
+	jmp :5
+4:	cmp rbx, 0x04
+	setz bl
+	movzx rbx, bl
+	test bl, bl
 	jz :6
-	cmp r13, 0x05
-	setnz bpl
-	movzx rbp, bpl
-	test bpl, bpl
+	cmp r12, 0x05
+	setnz bl
+	movzx rbx, bl
+	test bl, bl
 	jz :7
 	mov rax, 0x03
 3:	jmp :8
-7:	lea rbp, [rsp]
+7:	mov rbx, 0x00
+	lea rbp, [rsp]
 	mov [rbp], rbx
 	mov rdi, rbp
 	call :defer 1.main.ret_defer
@@ -61,10 +58,9 @@ b:	cmp rbp, 0x03
 8:	jmp :10
 9:	mov rax, rbx
 a:	add rsp, 0x08
-	pop r13
 	pop r12
 	pop rbp
 	pop rbx
 	ret
-6:	mov rbp, r13
+6:	mov rbx, r12
 5:	jmp :11

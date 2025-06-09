@@ -108,7 +108,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
                 switch (t) {
                     .BinOp => {
                         const lhs, const rhs = .{ curr.inputs()[1].?.extra(.CInt).*, curr.inputs()[2].?.extra(.CInt).* };
-                        break :b bl.addIntImm(curr.data_type, curr.extra(.BinOp).eval(lhs, rhs));
+                        break :b bl.addIntImm(curr.data_type, curr.extra(.BinOp).eval(curr.data_type, lhs, rhs));
                     },
                     .UnOp => {
                         const oper = curr.inputs()[1].?.extra(.CInt).*;

@@ -8,7 +8,7 @@ arithmetic 3.cond:
 	mov rax, rdi
 	ret
 arithmetic 3.mne:
-	mov rax, 0xFFFFFFFFFFFFFFFF
+	mov rax, 0xFF
 	ret
 arithmetic 3.mero:
 	mov rax, 0x00

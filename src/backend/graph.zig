@@ -76,8 +76,9 @@ pub const BinOp = enum(u8) {
         return @intFromEnum(min) <= @intFromEnum(self) and @intFromEnum(self) <= @intFromEnum(max);
     }
 
-    pub fn eval(self: BinOp, lhs: i64, rhs: i64) i64 {
-        return switch (self) {
+    pub fn eval(self: BinOp, dt: DataType, lhs: i64, rhs: i64) i64 {
+        const mask: i64 = if (dt.size() == 8) -1 else (@as(i64, 1) << @intCast(dt.size() * 8)) - 1;
+        return @as(i64, switch (self) {
             .iadd => lhs +% rhs,
             .fadd => @bitCast(tf(lhs) + tf(rhs)),
             .isub => lhs -% rhs,
@@ -114,7 +115,7 @@ pub const BinOp = enum(u8) {
             .slt => @intFromBool(lhs < rhs),
             .sge => @intFromBool(lhs >= rhs),
             .sle => @intFromBool(lhs <= rhs),
-        };
+        }) & mask;
     }
 };
 
@@ -133,31 +134,26 @@ pub const UnOp = enum(u8) {
     fcst,
 
     pub fn eval(self: UnOp, src: DataType, oper: i64) i64 {
-        return switch (self) {
+        const mask: i64 = if (src.size() == 8) -1 else (@as(i64, 1) << @intCast(src.size() * 8)) - 1;
+        return @as(i64, switch (self) {
             .cast => oper,
-            .sext => switch (src) {
+            .sext => return switch (src) {
                 .i8 => @as(i8, @truncate(oper)),
                 .i16 => @as(i16, @truncate(oper)),
                 .i32 => @as(i32, @truncate(oper)),
                 .int => oper,
                 else => utils.panic("{}", .{src}),
             },
-            .uext => switch (src) {
-                .i8 => @as(u8, @truncate(tu(oper))),
-                .i16 => @as(u16, @truncate(tu(oper))),
-                .i32 => @as(u32, @truncate(tu(oper))),
-                .int => oper,
-                else => unreachable,
-            },
+            .uext => oper,
             .ired => oper,
             .ineg => -oper,
             .fneg => @bitCast(-tf(oper)),
             .not => @intFromBool(oper == 0),
-            .bnot => ~oper,
+            .bnot => ~oper & mask,
             .fti => @intFromFloat(tf(oper)),
             .itf64, .itf32 => @bitCast(@as(f64, @floatFromInt(oper))),
             .fcst => oper,
-        };
+        }) & mask;
     }
 };
 

@@ -1,13 +1,8 @@
 main:
 	mov rax, 0x00
-	mov rcx, 0x01
-	cmp al, cl
-	setz al
-	movzx rax, al
 	test al, al
 	jz :0
 	mov rax, 0x0A
 	jmp :1
-0:	mov rax, 0x00
-	add rax, 0x01
+0:	mov rax, 0x01
 1:	ret

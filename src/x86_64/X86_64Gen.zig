@@ -269,9 +269,14 @@ pub const Node = union(enum) {
             }
         }
 
-        if (node.kind == .BinOp and node.inputs()[1].?.kind == .CInt and
-            node.inputs()[2].?.kind == .CInt)
-        {}
+        if (node.kind == .BinOp and node.inputs()[1].?.kind == .CInt and node.inputs()[2].?.kind == .CInt) {
+            return func.addNode(
+                .CInt,
+                node.data_type,
+                &.{null},
+                node.extra(.BinOp).*.eval(node.data_type, node.inputs()[1].?.extra(.CInt).*, node.inputs()[2].?.extra(.CInt).*),
+            );
+        }
 
         if (node.kind == .BinOp and node.inputs()[2].?.kind == .CInt and
             switch (node.extra(.BinOp).*) {
@@ -651,7 +656,8 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
     for (block.outputs()) |instr| {
         switch (instr.extra2()) {
             .CInt => |extra| {
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), extra.* });
+                const mask: i64 = if (instr.data_type.size() == 8) -1 else (@as(i64, 1) << @intCast(instr.data_type.size() * 8)) - 1;
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), extra.* & mask });
             },
             .MemCpy => {
                 var moves = std.ArrayList(Move).init(tmp.arena.allocator());

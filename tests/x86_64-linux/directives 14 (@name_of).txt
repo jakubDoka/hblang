@@ -1,4 +1,3 @@
 main:
-	mov rax, 0x04
-	add rax, 0x03
+	mov rax, 0x07
 	ret
