@@ -22,6 +22,27 @@ main := fn(): uint {
 }
 ```
 
+#### wired string comparison 1
+```hb
+Out := struct {
+    .left: []u8;
+    .right: []u8;
+}
+In := struct {
+    .left: u8;
+    .right: []u8;
+}
+broken := fn(v: In): Out {
+    return .(v.right, v.right)
+}
+
+main := fn(): uint {
+    data := "test"
+    x := broken(.(0, data))
+    return x.right.ptr != data.ptr
+}
+```
+
 #### comptime short circuit failure 1
 ```!hb
 main := fn(): uint {

@@ -2182,7 +2182,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
     for (func.args[@intFromBool(caller != null)..], 0..) |ty, k| {
         const abi = self.abiCata(ty);
         abi.types(args.params[i..], false, self.abi);
-        var value = if (computed_args) |a| a[k] else try self.emitTyped(ctx, ty, args_ast[k]);
+        var value = if (computed_args) |a| a[k] else try self.emitTyped(.{}, ty, args_ast[k]);
         i += self.pushParam(args, abi, i, &value);
     }
 

@@ -1,0 +1,32 @@
+wired string comparison 1.main:
+         st $31, $254, -32, 32
+     addi64 $254, $254, -104
+     addi64 $32, $254, 48
+        lra $33, $0, :wired string comparison 1.main.test
+     addi64 $34, $254, 0
+         st $33, $254, 0, 8
+       li64 $33, 4
+         st $33, $254, 8, 8
+        li8 $33, 0
+         st $33, $254, 48, 1
+     addi64 $33, $32, 8
+        bmc $34, $33, 16
+     addi64 $33, $254, 16
+         cp $1, $33
+         cp $2, $32
+        jal $31, $0, :wired string comparison 1.broken
+         ld $1, $254, 32, 8
+         ld $2, $254, 0, 8
+       cmpu $1, $1, $2
+      cmpui $1, $1, 0
+       andi $1, $1, 1
+       andi $1, $1, 255
+     addi64 $254, $254, 104
+         ld $31, $254, -32, 32
+         tx
+wired string comparison 1.broken:
+     addi64 $2, $2, 8
+        bmc $2, $1, 16
+     addi64 $1, $1, 16
+        bmc $2, $1, 16
+       jala $0, $31, 0
