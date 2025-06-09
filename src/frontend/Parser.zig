@@ -30,7 +30,7 @@ errored: bool = false,
 stack_base: usize,
 func_stats: FuncStats = .{},
 
-pub const stack_limit = 1024 * 1024;
+pub const stack_limit = @import("options").stack_size - 1024 * 16;
 
 const Parser = @This();
 const Error = error{ UnexpectedToken, StackOverflow } || std.mem.Allocator.Error;

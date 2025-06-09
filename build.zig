@@ -6,6 +6,10 @@ pub fn build(b: *std.Build) !void {
 
     const use_llvm = b.option(bool, "use-llvm", "use llvm, last resort option") orelse (b.graph.host.result.os.tag == .windows);
     const use_lld = b.option(bool, "use-lld", "use lld, last resort option") orelse (b.graph.host.result.os.tag == .windows);
+    const stack_size = b.option(usize, "stack-size", "the amount of stack for the build") orelse 1024 * 1024 * 16;
+
+    const options = b.addOptions();
+    options.addOption(usize, "stack_size", stack_size);
 
     const zydis = zydis: {
         const m = b.addModule("zidis", .{
@@ -55,6 +59,7 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
         });
 
+        hb.addOptions("options", options);
         hb.addImport("zydis", zydis);
         hb.addImport("hb", hb);
 
@@ -68,6 +73,7 @@ pub fn build(b: *std.Build) !void {
             .target = target,
             .optimize = optimize,
         });
+        exe.stack_size = stack_size;
         b.installArtifact(exe);
 
         exe.root_module.addImport("zydis", zydis);
