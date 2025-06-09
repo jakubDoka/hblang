@@ -52,7 +52,7 @@ pub fn fuzzRun(
     var func_arena = utils.Arena.scrath(null);
     defer func_arena.deinit();
 
-    const cg = Codegen.init(gpa, func_arena.arena, &types, .runtime, .ableos);
+    const cg = Codegen.init(gpa, func_arena.arena, types, .runtime, .ableos);
     defer cg.deinit();
 
     const entry = try cg.getEntry(.root, "main");
@@ -63,7 +63,7 @@ pub fn fuzzRun(
     defer hbgen.deinit();
     var gen = Mach.init("hbvm-ableos", &hbgen);
 
-    const errored = root.frontend.Codegen.emitReachable(gpa, func_arena.arena, &types, .ableos, gen, .{});
+    const errored = root.frontend.Codegen.emitReachable(gpa, func_arena.arena, types, .ableos, gen, .{});
 
     if (errored) return error.Never;
 

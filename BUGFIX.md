@@ -22,6 +22,23 @@ main := fn(): uint {
 }
 ```
 
+#### typeof is not comptime 1
+```hb
+
+broken1 := fn(): uint {
+    $if @target("hbvm-ableos") {
+        AllocEcall := struct align(1){.pad: u8; .pages_new: uint; .zeroed: bool}
+        @ecall(3, 2, AllocEcall.(0, 1, false), @size_of(AllocEcall))
+    } else {
+        @syscall(1, 2, "".ptr, 0)
+    }
+    return 0
+}
+main := fn(): @TypeOf(broken1()) {
+    return broken1()
+}
+```
+
 #### wired string comparison 1
 ```hb
 Out := struct {

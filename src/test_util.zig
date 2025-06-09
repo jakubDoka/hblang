@@ -171,11 +171,11 @@ pub fn testBuilder(
     var func_arena = utils.Arena.scrath(null);
     defer func_arena.deinit();
 
-    var types = Types.init(gpa, asts, output);
+    const types = Types.init(gpa, asts, output);
     types.target = target;
     defer types.deinit();
 
-    const errored = Codegen.emitReachable(gpa, func_arena.arena, &types, abi, gen, .{
+    const errored = Codegen.emitReachable(gpa, func_arena.arena, types, abi, gen, .{
         .verbose = verbose,
         .colors = colors,
         .output = output,

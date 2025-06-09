@@ -1,0 +1,28 @@
+typeof is not comptime 1.main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        jal $31, $0, :typeof is not comptime 1.broken1
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+typeof is not comptime 1.broken1:
+         st $31, $254, -40, 40
+     addi64 $254, $254, -50
+     addi64 $32, $254, 0
+        li8 $33, 0
+         st $33, $254, 0, 1
+       li64 $34, 1
+         st $34, $254, 1, 8
+         st $33, $254, 9, 1
+       li64 $33, 3
+       li64 $34, 2
+       li64 $35, 10
+         cp $1, $33
+         cp $2, $34
+         cp $3, $32
+         cp $4, $35
+        eca
+       li64 $1, 0
+     addi64 $254, $254, 50
+         ld $31, $254, -40, 40
+       jala $0, $31, 0

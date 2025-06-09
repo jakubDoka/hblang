@@ -224,14 +224,14 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     };
     defer bckend.deinit();
 
-    var types = hb.frontend.Types.init(opts.gpa, asts, opts.diagnostics);
+    const types = hb.frontend.Types.init(opts.gpa, asts, opts.diagnostics);
     types.target = opts.target;
     defer types.deinit();
 
     var root_tmp = utils.Arena.scrath(null);
     defer root_tmp.deinit();
 
-    const errored = hb.frontend.Codegen.emitReachable(opts.gpa, root_tmp.arena, &types, abi, bckend, .{});
+    const errored = hb.frontend.Codegen.emitReachable(opts.gpa, root_tmp.arena, types, abi, bckend, .{});
     if (errored) {
         try opts.diagnostics.print("failed due to previous errors\n", .{});
         return error.Failed;

@@ -708,11 +708,12 @@ pub fn nextTask(self: *Types, target: Target, pop_limit: usize) ?utils.EntId(tys
     return null;
 }
 
-pub fn init(gpa: std.mem.Allocator, source: []const Ast, diagnostics: std.io.AnyWriter) Types {
+pub fn init(gpa: std.mem.Allocator, source: []const Ast, diagnostics: std.io.AnyWriter) *Types {
     var arena = Arena.init(1024 * 1024);
     const scopes = arena.alloc(Id, source.len);
     @memset(scopes, .void);
-    return .{
+    const slot = arena.create(Types);
+    slot.* = .{
         .func_work_list = .{ .values = .{
             arena.makeArrayList(utils.EntId(tys.Func), 1024),
             arena.makeArrayList(utils.EntId(tys.Func), 1024),
@@ -728,6 +729,7 @@ pub fn init(gpa: std.mem.Allocator, source: []const Ast, diagnostics: std.io.Any
         .ct = .init(gpa),
         .diagnostics = diagnostics,
     };
+    return slot;
 }
 
 pub fn checkStack(self: *Types, file: File, pos: anytype) !void {
@@ -740,10 +742,11 @@ pub fn checkStack(self: *Types, file: File, pos: anytype) !void {
 }
 
 pub fn deinit(self: *Types) void {
-    self.arena.deinit();
+    var arena = self.arena;
     self.ct.in_progress.deinit(self.ct.gen.gpa);
     self.ct.gen.deinit();
     self.* = undefined;
+    arena.deinit();
 }
 
 pub fn reportSloc(self: *Types, sloc: graph.Sloc, comptime fmt: []const u8, args: anytype) void {

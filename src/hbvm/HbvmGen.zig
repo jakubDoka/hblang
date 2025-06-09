@@ -919,8 +919,8 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
             var value: i64 = 0;
 
             @memcpy(
-                @as(*[@sizeOf(@TypeOf(value))]u8, @ptrCast(&value))[0..node.data_type.size()],
-                self.out.code.items[@intCast(sym.offset + node.extra(.Ld).offset)..][0..node.data_type.size()],
+                @as(*[@sizeOf(@TypeOf(value))]u8, @ptrCast(&value))[0..@intCast(node.data_type.size())],
+                self.out.code.items[@intCast(sym.offset + node.extra(.Ld).offset)..][0..@intCast(node.data_type.size())],
             );
 
             return func.addNode(.CInt, node.data_type, &.{null}, value);

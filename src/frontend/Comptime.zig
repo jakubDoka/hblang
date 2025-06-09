@@ -458,8 +458,11 @@ pub fn jitExprLow(
         return error.Never;
     }
 
-    if (!only_inference)
+    if (!only_inference) {
         compileDependencies(gen, reloc_frame, pop_until) catch return error.Never;
+    } else {
+        types.func_work_list.getPtr(.@"comptime").items.len = pop_until;
+    }
 
     return .{ id, ret.ty };
 }
