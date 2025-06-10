@@ -129,9 +129,13 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
             var states = tmp.alloc(BBState, postorder.len) catch unreachable;
             @memset(states, .{});
 
+            for (postorder, 0..) |bb, i| bb.base.schedule = @intCast(i);
+
             var to_remove = std.ArrayList(*Node).init(tmp);
             for (postorder) |bbc| {
                 const bb = &bbc.base;
+
+                if (bb.outputs().len == 0) continue;
 
                 var parent_succs: usize = 0;
                 const parent = bb.inputs()[0] orelse {
@@ -155,12 +159,27 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                 // we do it here because some loads are scheduled already and removing them in this loop messes up the
                 // cheduling in other blocks, we need to hack this becaus there are no anty deps on loads yet, since this
                 // runs before gcm
-                if (bb.isBasicBlockStart()) {
-                    @TypeOf(self.gcm).scheduleBlock(tmp, bb);
-                }
+                //
+                {
+                    // carefull, the scheduleBlock messes up the node.schedule
+                    //
+                    var buf: [2]*Func.Node = undefined;
+                    var scheds: [2]u16 = undefined;
+                    var len: usize = 0;
+                    for (bb.outputs()) |use| {
+                        if (use.isCfg()) {
+                            buf[len] = use;
+                            scheds[len] = use.schedule;
+                            len += 1;
+                        }
+                    }
 
-                // TODO: this is super wastefull, we are basically fixing the block indexes
-                for (postorder, 0..) |bbb, i| bbb.base.schedule = @intCast(i);
+                    if (bb.isBasicBlockStart()) {
+                        @TypeOf(self.gcm).scheduleBlock(tmp, bb);
+                    }
+
+                    for (buf[0..len], scheds[0..len]) |n, s| n.schedule = s;
+                }
 
                 for (tmp.dupe(*Node, bb.outputs()) catch unreachable) |o| {
                     if (o.id == std.math.maxInt(u16)) continue;

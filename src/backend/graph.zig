@@ -436,7 +436,7 @@ pub fn Func(comptime MachNode: type) type {
                             cfg.base.inputs()[0].?.asCfg().?.idepth(),
                             cfg.base.inputs()[1].?.asCfg().?.idepth(),
                         ) + 1,
-                        else => idepth(cfg.base.cfg0().?) + 1,
+                        else => idepth(cfg.base.cfg0()) + 1,
                     };
                     return extra.idepth;
                 }
@@ -462,7 +462,7 @@ pub fn Func(comptime MachNode: type) type {
                             cfg.base.extra(.Region).cached_lca = lca;
                             return lca;
                         },
-                        else => cfg.base.cfg0().?,
+                        else => cfg.base.cfg0(),
                     };
                 }
 
@@ -519,7 +519,7 @@ pub fn Func(comptime MachNode: type) type {
                 }
 
                 if (scheds.len == 0) {
-                    return use.cfg0().?;
+                    return use.cfg0();
                 }
 
                 return scheds[use.id].?;
@@ -749,9 +749,14 @@ pub fn Func(comptime MachNode: type) type {
                 self.id = std.math.maxInt(u16);
             }
 
-            pub fn cfg0(self: *Node) ?*CfgNode {
-                if (self.kind == .Start) return subclass(self, Cfg);
-                return subclass((self.inputs()[0] orelse return null), Cfg);
+            pub fn tryCfg0(self: *Node) ?*CfgNode {
+                if (self.kind == .Start) return self.asCfg().?;
+                return (self.inputs()[0] orelse return null).subclass(Cfg);
+            }
+
+            pub fn cfg0(self: *Node) *CfgNode {
+                if (self.kind == .Start) return forceSubclass(self, Cfg);
+                return forceSubclass((self.inputs()[0].?), Cfg);
             }
 
             pub fn removeUse(self: *Node, use: *Node) void {
@@ -823,6 +828,11 @@ pub fn Func(comptime MachNode: type) type {
 
             pub fn subclass(self: *Node, comptime Sub: type) ?*LayoutOf(Sub) {
                 if (!self.isSub(Sub)) return null;
+                return @ptrCast(self);
+            }
+
+            pub fn forceSubclass(self: *Node, comptime Sub: type) *LayoutOf(Sub) {
+                std.debug.assert(self.isSub(Sub));
                 return @ptrCast(self);
             }
 
@@ -1004,11 +1014,11 @@ pub fn Func(comptime MachNode: type) type {
 
         pub fn loopDepth(self: *Self, node: *Node) u16 {
             self.gcm.loop_tree_built.assertLocked();
-            const cfg = node.asCfg() orelse node.cfg0().?;
+            const cfg = node.asCfg() orelse node.cfg0();
             const tree = &self.gcm.loop_tree[cfg.ext.loop];
             if (tree.depth != 0) return tree.depth;
             if (tree.par == null) {
-                tree.par = tree.head.base.cfg0().?.base.cfg0().?.ext.loop;
+                tree.par = tree.head.base.cfg0().base.cfg0().ext.loop;
             }
             tree.depth = self.loopDepth(&self.gcm.loop_tree[tree.par.?].head.base) + 1;
             return tree.depth;
@@ -1400,7 +1410,7 @@ pub fn Func(comptime MachNode: type) type {
             if (node.kind == .Phi) {
                 const l, const r = .{ inps[1].?, inps[2].? };
 
-                if (l == r and !node.cfg0().?.base.preservesIdentityPhys()) {
+                if (l == r and !node.cfg0().base.preservesIdentityPhys()) {
                     return l;
                 }
 
@@ -1439,7 +1449,7 @@ pub fn Func(comptime MachNode: type) type {
                     return node.mem();
                 }
 
-                if (base.kind == .Local and node.cfg0() != null) {
+                if (base.kind == .Local and node.tryCfg0() != null) {
                     const dinps = tmp.arena.dupe(?*Node, node.inputs());
                     dinps[0] = null;
                     const st = self.addNode(.Store, node.data_type, dinps, .{});
@@ -1452,7 +1462,7 @@ pub fn Func(comptime MachNode: type) type {
                 var earlier = node.mem();
                 const base, _ = node.base().knownOffset();
 
-                if (base.kind == .Local and node.cfg0() != null) {
+                if (base.kind == .Local and node.tryCfg0() != null) {
                     const dinps = tmp.arena.dupe(?*Node, node.inputs());
                     dinps[0] = null;
                     const st = self.addNode(.Load, node.data_type, dinps, .{});
@@ -1461,7 +1471,7 @@ pub fn Func(comptime MachNode: type) type {
                 }
 
                 while (earlier.kind == .Store and
-                    (earlier.cfg0() == node.cfg0() or node.cfg0() == null) and
+                    (earlier.tryCfg0() == node.tryCfg0() or node.tryCfg0() == null) and
                     earlier.noAlias(node))
                 {
                     earlier = earlier.mem();
@@ -1497,7 +1507,7 @@ pub fn Func(comptime MachNode: type) type {
             if (node.kind == .Phi) {
                 _, const l, const r = .{ inps[0].?, inps[1].?, inps[2].? };
 
-                if (l == r and !node.cfg0().?.base.preservesIdentityPhys()) {
+                if (l == r and !node.cfg0().base.preservesIdentityPhys()) {
                     return l;
                 }
 

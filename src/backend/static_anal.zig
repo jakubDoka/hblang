@@ -136,17 +136,17 @@ pub fn StaticAnalMixin(comptime Mach: type) type {
                             continue :o;
                         }
 
-                        var curcor = store.cfg0().?;
+                        var curcor = store.cfg0();
                         while (true) {
-                            if (marked.cfg0().? == store.cfg0().?) break;
-                            if (marked.cfg0().? == curcor) continue :o;
-                            if (curcor.idepth() < marked.cfg0().?.idepth()) {
+                            if (marked.cfg0() == store.cfg0()) break;
+                            if (marked.cfg0() == curcor) continue :o;
+                            if (curcor.idepth() < marked.cfg0().idepth()) {
                                 local_stores.items[kept] = marked;
                                 kept += 1;
                                 continue :o;
                             }
 
-                            curcor = curcor.base.cfg0().?;
+                            curcor = curcor.base.cfg0();
                         }
 
                         const unmarked_is_first = for (curcor.base.outputs()) |bo| {

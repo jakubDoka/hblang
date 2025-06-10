@@ -179,6 +179,9 @@ pub fn GcmMixin(comptime MachNode: type) type {
 
             sched_early: {
                 for (cfg_rpo) |cfg| {
+                    if (cfg.base.kind != .Return or cfg.base.inputs()[0] != null)
+                        _ = cfg.idom();
+
                     for (cfg.base.inputs()) |oinp| if (oinp) |inp| {
                         gcm.shedEarly(inp, cfg_rpo[1], &visited);
                     };
@@ -213,9 +216,9 @@ pub fn GcmMixin(comptime MachNode: type) type {
                     std.debug.assert(late_scheds[t.id] == null);
 
                     if (t.asCfg()) |c| {
-                        late_scheds[c.base.id] = if (c.base.isBasicBlockStart()) c else c.base.cfg0();
+                        late_scheds[c.base.id] = if (c.base.isBasicBlockStart()) c else c.base.tryCfg0();
                     } else if (t.isPinned() or t.kind == .Arg) {
-                        late_scheds[t.id] = t.cfg0().?;
+                        late_scheds[t.id] = t.cfg0();
                     } else {
                         for (t.outputs()) |o| {
                             if (late_scheds[o.id] == null) {
@@ -232,7 +235,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
                         }
 
                         schedule_late: {
-                            const early = t.cfg0().?;
+                            const early = t.cfg0();
 
                             var olca: ?*CfgNode = null;
                             for (t.outputs()) |o| {
@@ -251,7 +254,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
                                 // TODO: might be dangerosa
                                 for (t.mem().outputs()) |o| switch (o.kind) {
                                     .Call => {
-                                        const sdef = o.cfg0().?;
+                                        const sdef = o.cfg0();
                                         var lcar = late_scheds[o.id].?;
                                         while (lcar != sdef.idom()) : (lcar = lcar.idom()) {
                                             if (lcar.ext.antidep == t.id) {
@@ -265,8 +268,8 @@ pub fn GcmMixin(comptime MachNode: type) type {
                                         }
                                     },
                                     .Phi => {
-                                        for (o.inputs()[1..], o.cfg0().?.base.inputs()) |inp, oblk| if (inp.? == t.mem()) {
-                                            const sdef = t.mem().cfg0().?;
+                                        for (o.inputs()[1..], o.cfg0().base.inputs()) |inp, oblk| if (inp.? == t.mem()) {
+                                            const sdef = t.mem().cfg0();
                                             var lcar = oblk.?.asCfg().?;
                                             while (lcar != sdef.idom()) : (lcar = lcar.idom()) {
                                                 if (lcar.ext.antidep == t.id) {
@@ -278,7 +281,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
                                     .Local => {},
                                     .Return => {},
                                     else => if (o.isLoad()) {} else if (o.isStore()) {
-                                        const sdef = o.cfg0().?;
+                                        const sdef = o.cfg0();
                                         var lcar = late_scheds[o.id].?;
                                         while (lcar != sdef.idom()) : (lcar = lcar.idom()) {
                                             if (lcar.ext.antidep == t.id) {
@@ -297,7 +300,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
                             }
 
                             var best = lca;
-                            var cursor = best.base.cfg0().?;
+                            var cursor = best.base.cfg0();
                             while (cursor != early.idom()) : (cursor = cursor.idom()) {
                                 std.debug.assert(cursor.base.kind != .Start);
                                 if (cursor.better(best, t, self)) best = cursor;
@@ -374,14 +377,14 @@ pub fn GcmMixin(comptime MachNode: type) type {
             if (std.debug.runtime_safety) validate_ssa: {
                 for (cfg_rpo[1..]) |bb| if (bb.base.isBasicBlockStart()) {
                     for (bb.base.outputs()[0 .. bb.base.outputs().len - 1]) |o| {
-                        if (o.cfg0() == null) {
+                        if (o.tryCfg0() == null) {
                             std.debug.assert(o.kind == .Return);
                             continue;
                         }
                         if (o.kind == .Phi) continue;
                         for (o.inputs()[1..]) |i| if (i != null) {
-                            var cursor = o.cfg0().?;
-                            while (cursor.idepth() > i.?.cfg0().?.idepth()) {
+                            var cursor = o.cfg0();
+                            while (cursor.idepth() > i.?.cfg0().idepth()) {
                                 cursor = cursor.idom();
                             }
                         };
@@ -476,8 +479,10 @@ pub fn GcmMixin(comptime MachNode: type) type {
                 }
             };
 
-            for (node.outputs()) |o| {
-                o.schedule = std.math.maxInt(u16);
+            if (std.debug.runtime_safety) {
+                for (node.outputs()) |o| {
+                    o.schedule = std.math.maxInt(u16);
+                }
             }
         }
 
@@ -504,8 +509,8 @@ pub fn GcmMixin(comptime MachNode: type) type {
                 };
 
                 for (node.inputs()[1..]) |oin| if (oin) |in| {
-                    if (in.cfg0().?.idepth() > best.idepth()) {
-                        best = in.cfg0().?;
+                    if (in.cfg0().idepth() > best.idepth()) {
+                        best = in.cfg0();
                     }
                 };
 
