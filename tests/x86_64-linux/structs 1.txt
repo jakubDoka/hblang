@@ -1,83 +1,86 @@
 structs 1.odher_pass:
+	push rbp
+	mov rbp, rsi
+	mov rsi, rdi
 	mov rax, 0x18
+	mov rdi, rsi
+	mov rsi, rbp
 	mov rdx, rax
 	call :memcpy
+	pop rbp
 	ret
 structs 1.Ty.sum:
+	push rbp
 	sub rsp, 0x10
+	mov rbp, rsi
+	mov rsi, rdi
 	lea rax, [rsp]
-	mov [rax], rdi
-	mov [rax+0x08], rsi
-	sub rdi, 0x02
-	mov [rax], rdi
-	add rsi, 0x01
-	mov [rax+0x08], rsi
-	sub rdi, rsi
-	mov rax, rdi
+	mov [rax], rsi
+	mov [rax+0x08], rbp
+	sub rsi, 0x02
+	mov [rax], rsi
+	add rbp, 0x01
+	mov [rax+0x08], rbp
+	sub rsi, rbp
+	mov rax, rsi
 	add rsp, 0x10
+	pop rbp
 	ret
 structs 1.pass:
-	mov rax, [rdi]
+	mov rsi, rdi
+	mov rax, [rsi]
 	sub rax, 0x01
-	mov [rdi], rax
+	mov [rsi], rax
 	add rax, 0x01
-	mov [rdi], rax
-	mov rcx, [rdi+0x08]
+	mov [rsi], rax
+	mov rcx, [rsi+0x08]
 	sub rax, rcx
 	ret
 main:
 	push rbx
 	push rbp
 	push r12
-	push r13
-	push r14
-	push r15
-	sub rsp, 0x48
-	lea rbx, [rsp+0x18]
-	mov rbp, 0x04
-	mov [rbx], rbp
-	mov rbp, 0x03
-	lea r12, [rsp+0x30]
-	mov r13, 0x08
-	mov [rsp], rbx
-	add qword ptr [rsp], 0x08
-	lea r15, [0x0000000000000007]
-	mov [rsp+0x08], r15
-	mov rdi, [rsp]
-	mov rsi, [rsp+0x08]
-	mov rdx, r13
+	sub rsp, 0x38
+	lea rbp, [rsp]
+	mov rax, 0x04
+	mov [rbp], rax
+	mov rbx, 0x03
+	lea r12, [rsp+0x18]
+	mov rax, 0x08
+	mov rcx, rbp
+	add rcx, 0x08
+	lea rdx, [0x0000000000000007]
+	mov rsi, rdx
+	mov rdi, rcx
+	mov rdx, rax
 	call :memcpy
-	mov [rbx+0x10], rbp
+	mov [rbp+0x10], rbx
 	mov rdi, r12
-	mov rsi, rbx
+	mov rsi, rbp
 	call :structs 1.odher_pass
-	mov rbx, [r12+0x10]
-	cmp rbx, 0x03
-	setnz bl
-	movzx rbx, bl
+	mov rax, [r12+0x10]
+	cmp rax, 0x03
+	setnz al
+	movzx rax, al
 	mov rbp, [r12+0x08]
-	mov r13, [r12]
-	test bl, bl
+	mov rsi, [r12]
+	test al, al
 	jz :0
 	mov rax, 0x00
 	jmp :1
-0:	mov rdi, r13
+0:	mov rdi, rsi
 	mov rsi, rbp
 	call :structs 1.Ty.sum
-	mov rbx, rax
-	cmp rbx, 0x00
-	setnz bl
-	movzx rbx, bl
-	test bl, bl
+	cmp rax, 0x00
+	setnz al
+	movzx rax, al
+	test al, al
 	jz :2
 	mov rax, 0x64
 1:	jmp :3
 2:	mov rdi, r12
 	call :structs 1.pass
-3:	add rsp, 0x48
-	pop r15
-	pop r14
-	pop r13
+3:	add rsp, 0x38
 	pop r12
 	pop rbp
 	pop rbx

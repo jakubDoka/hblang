@@ -1,30 +1,29 @@
 comptime 1.main.some_fn(some_int = uint)(ui = uint):
-	add rdi, 0x01
-	mov rax, rdi
-	imul rax, rdi
+	mov rsi, rdi
+	add rsi, 0x01
+	mov rax, rsi
+	imul rax, rsi
 	ret
 main:
 	push rbx
 	push rbp
-	push r12
 	sub rsp, 0x08
-	mov rbx, 0x09
-	mov rdi, rbx
+	mov rsi, 0x09
+	mov rdi, rsi
 	call :comptime 1.main.some_fn(some_int = uint)(ui = uint)
 	mov rbx, rax
-	mov rbp, 0x05
-	mov rdi, rbp
+	mov rsi, 0x05
+	mov rdi, rsi
 	call :comptime 1.main.some_fn(some_int = uint)(ui = uint)
 	mov rbp, rax
-	mov r12, 0x07
-	mov rdi, r12
+	mov rsi, 0x07
+	mov rdi, rsi
 	call :comptime 1.main.some_fn(some_int = uint)(ui = uint)
 	mov rcx, rbp
 	add rcx, rax
 	mov rax, rbx
 	sub rax, rcx
 	add rsp, 0x08
-	pop r12
 	pop rbp
 	pop rbx
 	ret

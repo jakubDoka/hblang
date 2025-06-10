@@ -1,12 +1,10 @@
 generic structs 7 (template method call).A.apply(func = generic structs 7 (template method call).main):
 	ret
 main:
-	push rbx
 	sub rsp, 0x08
-	lea rbx, [rsp]
-	mov rdi, rbx
+	lea rsi, [rsp]
+	mov rdi, rsi
 	call :generic structs 7 (template method call).A.apply(func = generic structs 7 (template method call).main)
 	mov rax, 0x00
 	add rsp, 0x08
-	pop rbx
 	ret

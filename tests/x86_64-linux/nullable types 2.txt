@@ -1,42 +1,39 @@
 nullable types 2.take:
-	mov rax, [rdi]
+	mov rsi, rdi
+	mov rax, [rsi]
 	add rax, 0x01
-	mov [rdi], rax
+	mov [rsi], rax
 	ret
 main:
 	push rbx
-	push rbp
-	push r12
 	sub rsp, 0x18
-	mov rbx, 0x00
-	lea rbp, [rsp]
-	mov r12, 0x01
-	mov [rbp], r12b
-	mov [rbp+0x08], rbx
-	mov [rbp+0x10], rbx
-	mov r12, 0x01
-	test bl, bl
+	mov rax, 0x00
+	lea rbx, [rsp]
+	mov rcx, 0x01
+	mov [rbx], cl
+	mov [rbx+0x08], rax
+	mov [rbx+0x10], rax
+	mov rcx, 0x01
+	test al, al
 	jz :0
-	mov rax, r12
+	mov rax, rcx
 	jmp :1
-0:	test bl, bl
+0:	test al, al
 	jz :2
 	mov rax, 0x02
 1:	jmp :3
-2:	test bl, bl
+2:	test al, al
 	jz :4
 	mov rax, 0x03
 3:	jmp :5
-4:	mov [rbp+0x10], r12
-	mov rbx, rbp
-	add rbx, 0x08
-	mov rdi, rbx
+4:	mov [rbx+0x10], rcx
+	mov rsi, rbx
+	add rsi, 0x08
+	mov rdi, rsi
 	call :nullable types 2.take
-	mov rax, [rbp+0x08]
-	mov rcx, [rbp+0x10]
+	mov rax, [rbx+0x08]
+	mov rcx, [rbx+0x10]
 	sub rax, rcx
 5:	add rsp, 0x18
-	pop r12
-	pop rbp
 	pop rbx
 	ret

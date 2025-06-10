@@ -5,7 +5,8 @@ arithmetic 3.zero:
 	mov rax, 0x00
 	ret
 arithmetic 3.cond:
-	mov rax, rdi
+	mov rsi, rdi
+	mov rax, rsi
 	ret
 arithmetic 3.mne:
 	mov rax, 0xFF
@@ -16,69 +17,62 @@ arithmetic 3.mero:
 main:
 	push rbx
 	push rbp
-	push r12
 	sub rsp, 0x08
 	call :arithmetic 3.one
 	mov rbx, rax
 	call :arithmetic 3.zero
 	mov rbp, rax
 	cmp bl, bpl
-	setb r12b
-	movzx r12, r12b
-	mov rdi, r12
+	setb sil
+	movzx rsi, sil
+	mov rdi, rsi
 	call :arithmetic 3.cond
-	mov r12, rax
-	test r12b, r12b
+	test al, al
 	jz :0
 	mov rax, 0x01
 	jmp :1
 0:	cmp bl, bl
-	setb r12b
-	movzx r12, r12b
-	mov rdi, r12
+	setb sil
+	movzx rsi, sil
+	mov rdi, rsi
 	call :arithmetic 3.cond
-	mov r12, rax
-	test r12b, r12b
+	test al, al
 	jz :2
 	mov rax, 0x02
 1:	jmp :3
 2:	cmp bl, bpl
-	setbe r12b
-	movzx r12, r12b
-	mov rdi, r12
+	setbe sil
+	movzx rsi, sil
+	mov rdi, rsi
 	call :arithmetic 3.cond
-	mov r12, rax
-	test r12b, r12b
+	test al, al
 	jz :4
 	mov rax, 0x03
 3:	jmp :5
 4:	cmp bpl, bl
-	setnbe r12b
-	movzx r12, r12b
-	mov rdi, r12
+	setnbe sil
+	movzx rsi, sil
+	mov rdi, rsi
 	call :arithmetic 3.cond
-	mov r12, rax
-	test r12b, r12b
+	test al, al
 	jz :6
 	mov rax, 0x04
 5:	jmp :7
 6:	cmp bl, bl
-	setnbe r12b
-	movzx r12, r12b
-	mov rdi, r12
+	setnbe sil
+	movzx rsi, sil
+	mov rdi, rsi
 	call :arithmetic 3.cond
-	mov r12, rax
-	test r12b, r12b
+	test al, al
 	jz :8
 	mov rax, 0x05
 7:	jmp :9
 8:	cmp bpl, bl
-	setnb bpl
-	movzx rbp, bpl
-	mov rdi, rbp
+	setnb sil
+	movzx rsi, sil
+	mov rdi, rsi
 	call :arithmetic 3.cond
-	mov rbx, rax
-	test bl, bl
+	test al, al
 	jz :10
 	mov rax, 0x06
 9:	jmp :11
@@ -87,108 +81,101 @@ a:	call :arithmetic 3.mne
 	call :arithmetic 3.mero
 	mov rbp, rax
 	cmp bl, bpl
-	setnle r12b
-	movzx r12, r12b
-	mov rdi, r12
+	setnle sil
+	movzx rsi, sil
+	mov rdi, rsi
 	call :arithmetic 3.cond
-	mov r12, rax
-	test r12b, r12b
+	test al, al
 	jz :12
 	mov rax, 0x07
 b:	jmp :13
 c:	cmp bl, bl
-	setnle r12b
-	movzx r12, r12b
-	mov rdi, r12
+	setnle sil
+	movzx rsi, sil
+	mov rdi, rsi
 	call :arithmetic 3.cond
-	mov r12, rax
-	test r12b, r12b
+	test al, al
 	jz :14
 	mov rax, 0x08
 d:	jmp :15
 e:	cmp bl, bpl
-	setnl r12b
-	movzx r12, r12b
-	mov rdi, r12
+	setnl sil
+	movzx rsi, sil
+	mov rdi, rsi
 	call :arithmetic 3.cond
-	mov r12, rax
-	test r12b, r12b
+	test al, al
 	jz :16
 	mov rax, 0x09
 f:	jmp :17
 10:	cmp bpl, bl
-	setl r12b
-	movzx r12, r12b
-	mov rdi, r12
+	setl sil
+	movzx rsi, sil
+	mov rdi, rsi
 	call :arithmetic 3.cond
-	mov r12, rax
-	test r12b, r12b
+	test al, al
 	jz :18
 	mov rax, 0x0A
 11:	jmp :19
 12:	cmp bl, bl
-	setl r12b
-	movzx r12, r12b
-	mov rdi, r12
+	setl sil
+	movzx rsi, sil
+	mov rdi, rsi
 	call :arithmetic 3.cond
-	mov r12, rax
-	test r12b, r12b
+	test al, al
 	jz :20
 	mov rax, 0x0B
 13:	jmp :21
 14:	cmp bpl, bl
-	setle bpl
-	movzx rbp, bpl
-	mov rdi, rbp
+	setle sil
+	movzx rsi, sil
+	mov rdi, rsi
 	call :arithmetic 3.cond
-	mov rbx, rax
-	test bl, bl
+	test al, al
 	jz :22
 	mov rax, 0x0C
 15:	jmp :23
 16:	call :arithmetic 3.one
 	mov rbx, rax
 	call :arithmetic 3.zero
-	mov rbp, rax
-	cmp bl, bpl
-	setb r12b
-	movzx r12, r12b
-	test r12b, r12b
+	cmp bl, al
+	setb cl
+	movzx rcx, cl
+	test cl, cl
 	jz :24
 	mov rax, 0x0D
 17:	jmp :25
 18:	cmp bl, bl
-	setb r12b
-	movzx r12, r12b
-	test r12b, r12b
+	setb cl
+	movzx rcx, cl
+	test cl, cl
 	jz :26
 	mov rax, 0x0E
 19:	jmp :27
-1a:	cmp bl, bpl
-	setbe r12b
-	movzx r12, r12b
-	test r12b, r12b
+1a:	cmp bl, al
+	setbe cl
+	movzx rcx, cl
+	test cl, cl
 	jz :28
 	mov rax, 0x0F
 1b:	jmp :29
-1c:	cmp bpl, bl
-	setnbe r12b
-	movzx r12, r12b
-	test r12b, r12b
+1c:	cmp al, bl
+	setnbe cl
+	movzx rcx, cl
+	test cl, cl
 	jz :30
 	mov rax, 0x10
 1d:	jmp :31
 1e:	cmp bl, bl
-	setnbe r12b
-	movzx r12, r12b
-	test r12b, r12b
+	setnbe cl
+	movzx rcx, cl
+	test cl, cl
 	jz :32
 	mov rax, 0x11
 1f:	jmp :33
-20:	cmp bpl, bl
-	setnb bpl
-	movzx rbp, bpl
-	test bpl, bpl
+20:	cmp al, bl
+	setnb al
+	movzx rax, al
+	test al, al
 	jz :34
 	mov rax, 0x12
 21:	jmp :35
@@ -253,7 +240,6 @@ f:	jmp :17
 31:	jmp :51
 32:	mov rax, 0x00
 33:	add rsp, 0x08
-	pop r12
 	pop rbp
 	pop rbx
 	ret

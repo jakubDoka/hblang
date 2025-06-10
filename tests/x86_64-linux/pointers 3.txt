@@ -1,5 +1,6 @@
 pointers 3.do_stuff:
-	mov rax, [rdi]
+	mov rsi, rdi
+	mov rax, [rsi]
 	cmp rax, 0x00
 	setz al
 	movzx rax, al
@@ -11,15 +12,13 @@ pointers 3.do_stuff:
 1:	ret
 main:
 	push rbx
-	push rbp
 	sub rsp, 0x08
 	lea rbx, [rsp]
-	mov rbp, 0x01
-	mov [rbx], rbp
+	mov rax, 0x01
+	mov [rbx], rax
 	mov rdi, rbx
 	call :pointers 3.do_stuff
 	mov rax, [rbx]
 	add rsp, 0x08
-	pop rbp
 	pop rbx
 	ret

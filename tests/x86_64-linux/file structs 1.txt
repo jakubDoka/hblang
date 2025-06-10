@@ -1,6 +1,10 @@
 Foo.hb.init:
-	mov [rdi], rsi
-	mov [rdi+0x08], rsi
+	push rbp
+	mov rbp, rsi
+	mov rsi, rdi
+	mov [rsi], rbp
+	mov [rsi+0x08], rbp
+	pop rbp
 	ret
 main:
 	push rbx

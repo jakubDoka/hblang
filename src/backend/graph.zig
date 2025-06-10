@@ -784,6 +784,17 @@ pub fn Func(comptime MachNode: type) type {
                 return @bitCast(Repr{ .kind = self.kind, .data = &ptr.ext });
             }
 
+            pub fn isDef(self: *Node) bool {
+                return !self.isStore() and
+                    !self.isCfg() and
+                    (self.kind != .Phi or self.isDataPhi()) and
+                    self.kind != .Mem;
+            }
+
+            pub fn kills(self: *Node) bool {
+                return self.clobbers() != 0;
+            }
+
             pub fn getStaticOffset(self: *Node) i64 {
                 std.debug.assert(self.isMemOp());
                 return if (@hasDecl(MachNode, "getStaticOffset")) MachNode.getStaticOffset(self) else 0;

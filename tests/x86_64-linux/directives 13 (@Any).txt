@@ -2,26 +2,28 @@ directives 13 (@Any).func(a: uint):
 	mov rax, 0x00
 	ret
 directives 13 (@Any).foo(vl: uint):
-	mov rax, rdi
+	mov rsi, rdi
+	mov rax, rsi
 	ret
 directives 13 (@Any).foo(vl: u8):
-	mov rax, rdi
+	mov rsi, rdi
+	mov rax, rsi
 	ret
 main:
 	push rbx
 	push rbp
 	sub rsp, 0x08
-	mov rbx, 0x01
+	mov rsi, 0x01
 	mov rbp, 0x02
-	mov rdi, rbx
+	mov rdi, rsi
 	mov rsi, rbp
 	call :directives 13 (@Any).func(a: uint)
-	mov rbx, 0x05
-	mov rdi, rbx
+	mov rsi, 0x05
+	mov rdi, rsi
 	call :directives 13 (@Any).foo(vl: uint)
 	mov rbx, rax
-	mov rbp, 0x05
-	mov rdi, rbp
+	mov rsi, 0x05
+	mov rdi, rsi
 	call :directives 13 (@Any).foo(vl: u8)
 	movzx rax, al
 	mov rcx, rbx

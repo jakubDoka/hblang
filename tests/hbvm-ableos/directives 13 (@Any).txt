@@ -1,22 +1,18 @@
 directives 13 (@Any).main:
-         st $31, $254, -24, 24
-     addi64 $254, $254, -24
-       li64 $32, 1
-       li64 $33, 2
-         cp $1, $32
-         cp $2, $33
+         st $31, $254, -16, 16
+     addi64 $254, $254, -16
+       li64 $1, 1
+       li64 $2, 2
         jal $31, $0, :directives 13 (@Any).func(a: uint)
-       li64 $32, 5
-         cp $1, $32
+       li64 $1, 5
         jal $31, $0, :directives 13 (@Any).foo(vl: uint)
          cp $32, $1
-        li8 $33, 5
-         cp $1, $33
+        li8 $1, 5
         jal $31, $0, :directives 13 (@Any).foo(vl: u8)
        andi $1, $1, 255
       add64 $1, $32, $1
-     addi64 $254, $254, 24
-         ld $31, $254, -24, 24
+     addi64 $254, $254, 16
+         ld $31, $254, -16, 16
          tx
 directives 13 (@Any).func(a: uint):
        li64 $1, 0

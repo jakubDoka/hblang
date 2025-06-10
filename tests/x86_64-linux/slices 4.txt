@@ -1,97 +1,85 @@
 slices 4.equals:
 	push rbx
 	push rbp
-	cmp rsi, rcx
-	setnz al
-	movzx rax, al
-	mov rcx, 0x00
-	test al, al
-	jz :0
+	mov rbp, rsi
 	mov rax, rcx
+	mov rsi, rdi
+	mov rcx, rdx
+	cmp rbp, rax
+	setnz dl
+	movzx rdx, dl
+	mov rax, 0x00
+	test dl, dl
+	jz :0
 	jmp :1
-0:	cmp rdi, rdx
-	setz al
-	movzx rax, al
+0:	cmp rsi, rcx
+	setz dl
+	movzx rdx, dl
 	mov rbx, 0x01
-	test al, al
+	test dl, dl
 	jz :2
 	mov rax, rbx
 1:	jmp :5
-2:	mov rax, 0x00
-6:	cmp rax, rsi
-	setz bpl
-	movzx rbp, bpl
-	test bpl, bpl
+2:	mov rdx, 0x00
+6:	cmp rdx, rbp
+	setz dil
+	movzx rdi, dil
+	test dil, dil
 	jz :4
 	mov rax, rbx
 	jmp :5
-4:	mov rbp, rdi
-	add rbp, rax
-	mov r8, rdx
-	add r8, rax
-	mov bpl, [rbp]
+4:	mov rdi, rsi
+	add rdi, rdx
+	mov r8, rcx
+	add r8, rdx
+	mov dil, [rdi]
 	mov r8b, [r8]
-	cmp bpl, r8b
-	setnz bpl
-	movzx rbp, bpl
-	test bpl, bpl
+	cmp dil, r8b
+	setnz dil
+	movzx rdi, dil
+	test dil, dil
 	jz :5
-	mov rax, rcx
 5:	pop rbp
 	pop rbx
 	ret
-5:	add rax, 0x01
+5:	add rdx, 0x01
 	jmp :6
 main:
 	push rbx
 	push rbp
 	push r12
-	push r13
-	push r14
-	push r15
-	sub rsp, 0x38
-	lea rbx, [rsp+0x10]
-	lea rbp, [0x0000000000000007]
-	mov [rbx], rbp
-	mov r12, 0x03
-	mov [rbx+0x08], r12
-	lea r13, [rsp+0x20]
-	lea r15, [rsp+0x30]
-	mov [rsp], r15
-	mov qword ptr [rsp+0x08], 0x61
-	mov r15, [rsp]
-	mov r14b, [rsp+0x08]
-	mov [r15], r14b
-	mov qword ptr [rsp+0x08], 0x62
-	mov r15, [rsp]
-	mov r14b, [rsp+0x08]
-	mov [r15+0x01], r14b
-	mov qword ptr [rsp+0x08], 0x63
-	mov r15, [rsp]
-	mov r14b, [rsp+0x08]
-	mov [r15+0x02], r14b
-	mov r15, [rsp]
-	mov [r13], r15
-	mov [r13+0x08], r12
-	mov rdi, rbp
-	mov rsi, r12
-	mov rdx, rbp
-	mov rcx, r12
+	sub rsp, 0x28
+	lea rbx, [rsp]
+	lea rsi, [0x0000000000000007]
+	mov [rbx], rsi
+	mov rbp, 0x03
+	mov [rbx+0x08], rbp
+	lea r12, [rsp+0x10]
+	lea rax, [rsp+0x20]
+	mov rcx, 0x61
+	mov [rax], cl
+	mov rcx, 0x62
+	mov [rax+0x01], cl
+	mov rcx, 0x63
+	mov [rax+0x02], cl
+	mov [r12], rax
+	mov [r12+0x08], rbp
+	mov rdi, rsi
+	mov rdx, rsi
+	mov rsi, rbp
+	mov rcx, rbp
 	call :slices 4.equals
-	mov rbp, rax
-	xor bpl, 0x01
-	mov r12, [r13+0x08]
-	mov r15, [rbx]
-	mov [rsp], r15
-	mov rbx, [rbx+0x08]
-	mov r13, [r13]
-	test bpl, bpl
+	xor al, 0x01
+	mov rbp, [r12+0x08]
+	mov rcx, [rbx]
+	mov rdx, [rbx+0x08]
+	mov rsi, [r12]
+	test al, al
 	jz :0
 	jmp :1
-0:	mov rdi, r13
-	mov rsi, r12
-	mov rdx, [rsp]
-	mov rcx, rbx
+0:	xchg rdx, rcx
+	mov rdi, rsi
+	mov rsi, rbp
 	call :slices 4.equals
 	xor al, 0x01
 	test al, al
@@ -99,10 +87,7 @@ main:
 1:	mov rax, 0x01
 	jmp :3
 2:	mov rax, 0x00
-3:	add rsp, 0x38
-	pop r15
-	pop r14
-	pop r13
+3:	add rsp, 0x28
 	pop r12
 	pop rbp
 	pop rbx

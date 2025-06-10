@@ -15,7 +15,6 @@ const Mach = root.backend.Machine;
 const Func = graph.Func(Node);
 const Kind = Func.Kind;
 const Regalloc = root.backend.Regalloc;
-const Regalloc2 = root.backend.Regalloc2;
 const ExecHeader = root.hbvm.object.ExecHeader;
 const Move = utils.Move(isa.Reg);
 const HbvmGen = @This();
@@ -196,7 +195,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     const reg_shift: u8 = 1;
     for (self.allocs) |*r| r.* += reg_shift;
-    const max_reg = std.mem.max(u16, self.allocs);
+    const max_reg = if (self.allocs.len == 0) 0 else std.mem.max(u16, self.allocs);
     const used_registers = if (self.allocs.len == 0) 0 else @min(max_reg, max_alloc_regs) -|
         (@intFromEnum(isa.Reg.ret_addr) - @intFromBool(is_tail));
 
@@ -225,15 +224,15 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
             self.emit(.addi64, .{ .stack_addr, .stack_addr, @as(u64, @bitCast(-stack_size)) });
         }
 
+        var moves = std.ArrayList(Move).init(tmp.arena.allocator());
         for (0..func.params.len) |i| {
             const argn = for (postorder[0].base.outputs()) |o| {
                 if (o.kind == .Arg and o.extra(.Arg).* == i) break o;
             } else continue; // is dead
-            if (self.outReg(argn) != isa.Reg.arg(i)) {
-                self.emit(.cp, .{ self.outReg(argn), isa.Reg.arg(i) });
-                self.flushOutReg(argn);
-            }
+            const dst, const src = .{ self.outReg(argn), isa.Reg.arg(i) };
+            if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
         }
+        self.orderMoves(moves.items);
         break :prelude;
     }
 
@@ -494,7 +493,6 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 } else {
                     self.emit(.st, .{ self.outReg(inps[1]), self.inReg(0, inps[0]), off, size });
                 }
-                self.flushOutReg(no);
             },
             .BlockCpy => {
                 // not a mistake, the bmc is retarded

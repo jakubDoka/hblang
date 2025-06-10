@@ -1,13 +1,11 @@
 mem2reg crash 1.main:
-         st $31, $254, -24, 24
-     addi64 $254, $254, -24
-       li64 $32, 0
-       li64 $33, 1
-         cp $1, $32
-         cp $2, $33
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+       li64 $1, 0
+       li64 $2, 1
         jal $31, $0, :mem2reg crash 1.insert
-     addi64 $254, $254, 24
-         ld $31, $254, -24, 24
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
          tx
 mem2reg crash 1.insert:
          st $31, $254, -32, 32

@@ -1,17 +1,14 @@
 nullable types 1.main:
-         st $31, $254, -32, 32
-     addi64 $254, $254, -48
-       li64 $32, 10
-         cp $1, $32
+         st $31, $254, -16, 16
+     addi64 $254, $254, -32
+       li64 $1, 10
         jal $31, $0, :nullable types 1.mkval(T = uint)
-         cp $32, $1
-         cp $33, $2
-     addi64 $34, $254, 0
-         st $32, $254, 0, 1
-         st $33, $254, 8, 8
-       li64 $33, 0
-       andi $32, $32, 255
-        jne $32, $33, :1
+     addi64 $32, $254, 0
+         st $1, $254, 0, 1
+         st $2, $254, 8, 8
+       li64 $2, 0
+       andi $1, $1, 255
+        jne $1, $2, :1
        li64 $1, 1
         jmp :2
 1:      jal $31, $0, :nullable types 1.mknull(T = uint)
@@ -21,8 +18,8 @@ nullable types 1.main:
        li64 $1, 2
 2:      jmp :5
 4:       cp $1, $2
-5:   addi64 $254, $254, 48
-         ld $31, $254, -32, 32
+5:   addi64 $254, $254, 32
+         ld $31, $254, -16, 16
          tx
 nullable types 1.mkval(T = uint):
         li8 $2, 1

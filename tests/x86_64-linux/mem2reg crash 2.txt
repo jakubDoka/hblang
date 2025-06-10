@@ -1,6 +1,8 @@
 mem2reg crash 2.insert:
 	push rbx
 	push rbp
+	mov rbp, rsi
+	mov rsi, rdi
 	mov rax, 0x00
 	mov rcx, rax
 1:	mov rdx, rax
@@ -11,12 +13,12 @@ mem2reg crash 2.insert:
 	jz :0
 	add rcx, 0x01
 	jmp :1
-0:	mov rbx, [rdi]
-	mov rbp, [rbx]
-	cmp rbp, rsi
-	setz bpl
-	movzx rbp, bpl
-	test bpl, bpl
+0:	mov rbx, [rsi]
+	mov rdi, [rbx]
+	cmp rdi, rbp
+	setz dil
+	movzx rdi, dil
+	test dil, dil
 	jz :2
 	mov rax, rbx
 	add rax, 0x08
@@ -26,27 +28,21 @@ mem2reg crash 2.insert:
 2:	add rdx, 0x01
 	jmp :3
 main:
-	push rbx
 	push rbp
-	push r12
-	push r13
 	sub rsp, 0x28
-	lea rbx, [rsp+0x10]
+	lea rax, [rsp+0x10]
 	mov rbp, 0x01
-	mov [rbx], rbp
-	mov r12, 0x00
-	mov [rbx+0x08], r12
-	lea r13, [rsp]
-	mov [r13], rbx
-	mov [r13+0x08], rbp
-	mov rdi, r13
+	mov [rax], rbp
+	mov rcx, 0x00
+	mov [rax+0x08], rcx
+	lea rsi, [rsp]
+	mov [rsi], rax
+	mov [rsi+0x08], rbp
+	mov rdi, rsi
 	mov rsi, rbp
-	mov rdx, r12
+	mov rdx, rcx
 	call :mem2reg crash 2.insert
 	mov rax, [rax]
 	add rsp, 0x28
-	pop r13
-	pop r12
 	pop rbp
-	pop rbx
 	ret

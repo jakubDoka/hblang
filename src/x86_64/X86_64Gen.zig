@@ -374,7 +374,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
         }
     }
 
-    const spill_slot_count = std.mem.max(u16, self.allocs) -| (@intFromEnum(Reg.r15) - tmp_count);
+    const spill_slot_count = if (self.allocs.len == 0) 0 else std.mem.max(u16, self.allocs) -| (@intFromEnum(Reg.r15) - tmp_count);
     var stack_size: i64 = std.mem.alignForward(i64, local_size, 8) + spill_slot_count * 8;
 
     const padding = std.mem.alignForward(i64, stack_size, 16) - stack_size;

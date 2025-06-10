@@ -1,20 +1,17 @@
 generic structs 2.main:
-         st $31, $254, -24, 24
-     addi64 $254, $254, -24
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
         jal $31, $0, :generic structs 2.Foo(F = uint).Bar(B = u8).init
-         cp $32, $1
-         cp $33, $2
-         cp $1, $32
-         cp $2, $33
         jal $31, $0, :generic structs 2.Foo(F = uint).Bar(B = u8).sub
-     addi64 $254, $254, 24
-         ld $31, $254, -24, 24
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
          tx
 generic structs 2.Foo(F = uint).Bar(B = u8).init:
        li64 $1, 1
         li8 $2, 1
        jala $0, $31, 0
 generic structs 2.Foo(F = uint).Bar(B = u8).sub:
-       andi $2, $2, 255
-      sub64 $1, $1, $2
+        swa $2, $1
+       andi $1, $1, 255
+      sub64 $1, $2, $1
        jala $0, $31, 0

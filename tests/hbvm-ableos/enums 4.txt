@@ -1,15 +1,13 @@
 enums 4.main:
-         st $31, $254, -24, 24
-     addi64 $254, $254, -24
-        lra $32, $0, :enums 4.map
-        li8 $33, 0
-         cp $1, $32
-         cp $2, $33
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        lra $1, $0, :enums 4.map
+        li8 $2, 0
         jal $31, $0, :enums 4.NameMap(Enum = enums 4.Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get
          ld $1, $1, 0, 1
        andi $1, $1, 255
-     addi64 $254, $254, 24
-         ld $31, $254, -24, 24
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
          tx
 enums 4.NameMap(Enum = enums 4.Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get:
        andi $2, $2, 255

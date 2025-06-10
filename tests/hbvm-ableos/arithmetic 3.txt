@@ -1,152 +1,125 @@
 arithmetic 3.main:
-         st $31, $254, -32, 32
-     addi64 $254, $254, -32
+         st $31, $254, -24, 24
+     addi64 $254, $254, -24
         jal $31, $0, :arithmetic 3.one
          cp $32, $1
         jal $31, $0, :arithmetic 3.zero
-         cp $33, $1
        andi $32, $32, 255
-       andi $33, $33, 255
-       cmpu $34, $32, $33
-      cmpui $34, $34, -1
-        not $34, $34
-         cp $1, $34
+       andi $33, $1, 255
+       cmpu $1, $32, $33
+      cmpui $1, $1, -1
+        not $1, $1
         jal $31, $0, :arithmetic 3.cond
-         cp $34, $1
-       andi $34, $34, 255
-        jeq $34, $0, :3
+       andi $1, $1, 255
+        jeq $1, $0, :3
        li64 $1, 1
         jmp :4
-3:     cmpu $34, $32, $32
-      cmpui $34, $34, -1
-        not $34, $34
-         cp $1, $34
+3:     cmpu $1, $32, $32
+      cmpui $1, $1, -1
+        not $1, $1
         jal $31, $0, :arithmetic 3.cond
-         cp $34, $1
-       andi $34, $34, 255
-        jeq $34, $0, :5
+       andi $1, $1, 255
+        jeq $1, $0, :5
        li64 $1, 2
 4:      jmp :6
-5:     cmpu $34, $32, $33
-      cmpui $34, $34, 1
-       andi $34, $34, 1
-         cp $1, $34
+5:     cmpu $1, $32, $33
+      cmpui $1, $1, 1
+       andi $1, $1, 1
         jal $31, $0, :arithmetic 3.cond
-         cp $34, $1
-       andi $34, $34, 255
-        jeq $34, $0, :7
+       andi $1, $1, 255
+        jeq $1, $0, :7
        li64 $1, 3
 6:      jmp :8
-7:     cmpu $34, $33, $32
-      cmpui $34, $34, 1
-        not $34, $34
-         cp $1, $34
+7:     cmpu $1, $33, $32
+      cmpui $1, $1, 1
+        not $1, $1
         jal $31, $0, :arithmetic 3.cond
-         cp $34, $1
-       andi $34, $34, 255
-        jeq $34, $0, :9
+       andi $1, $1, 255
+        jeq $1, $0, :9
        li64 $1, 4
 8:      jmp :a
-9:     cmpu $34, $32, $32
-      cmpui $34, $34, 1
-        not $34, $34
-         cp $1, $34
+9:     cmpu $1, $32, $32
+      cmpui $1, $1, 1
+        not $1, $1
         jal $31, $0, :arithmetic 3.cond
-         cp $34, $1
-       andi $34, $34, 255
-        jeq $34, $0, :b
+       andi $1, $1, 255
+        jeq $1, $0, :b
        li64 $1, 5
 a:      jmp :c
-b:     cmpu $32, $33, $32
-      cmpui $32, $32, -1
-       andi $32, $32, 1
-         cp $1, $32
+b:     cmpu $1, $33, $32
+      cmpui $1, $1, -1
+       andi $1, $1, 1
         jal $31, $0, :arithmetic 3.cond
-         cp $32, $1
-       andi $32, $32, 255
-        jeq $32, $0, :d
+       andi $1, $1, 255
+        jeq $1, $0, :d
        li64 $1, 6
 c:      jmp :e
 d:      jal $31, $0, :arithmetic 3.mne
          cp $32, $1
         jal $31, $0, :arithmetic 3.mero
-         cp $33, $1
        sxt8 $32, $32
-       sxt8 $33, $33
-       cmps $34, $32, $33
-      cmpui $34, $34, 1
-        not $34, $34
-         cp $1, $34
+       sxt8 $33, $1
+       cmps $1, $32, $33
+      cmpui $1, $1, 1
+        not $1, $1
         jal $31, $0, :arithmetic 3.cond
-         cp $34, $1
-       andi $34, $34, 255
-        jeq $34, $0, :11
+       andi $1, $1, 255
+        jeq $1, $0, :11
        li64 $1, 7
 e:      jmp :12
-11:     cmps $34, $32, $32
-      cmpui $34, $34, 1
-        not $34, $34
-         cp $1, $34
+11:     cmps $1, $32, $32
+      cmpui $1, $1, 1
+        not $1, $1
         jal $31, $0, :arithmetic 3.cond
-         cp $34, $1
-       andi $34, $34, 255
-        jeq $34, $0, :13
+       andi $1, $1, 255
+        jeq $1, $0, :13
        li64 $1, 8
 12:      jmp :14
-13:     cmps $34, $32, $33
-      cmpui $34, $34, -1
-       andi $34, $34, 1
-         cp $1, $34
+13:     cmps $1, $32, $33
+      cmpui $1, $1, -1
+       andi $1, $1, 1
         jal $31, $0, :arithmetic 3.cond
-         cp $34, $1
-       andi $34, $34, 255
-        jeq $34, $0, :15
+       andi $1, $1, 255
+        jeq $1, $0, :15
        li64 $1, 9
 14:      jmp :16
-15:     cmps $34, $33, $32
-      cmpui $34, $34, -1
-        not $34, $34
-         cp $1, $34
+15:     cmps $1, $33, $32
+      cmpui $1, $1, -1
+        not $1, $1
         jal $31, $0, :arithmetic 3.cond
-         cp $34, $1
-       andi $34, $34, 255
-        jeq $34, $0, :17
+       andi $1, $1, 255
+        jeq $1, $0, :17
        li64 $1, 10
 16:      jmp :18
-17:     cmps $34, $32, $32
-      cmpui $34, $34, -1
-        not $34, $34
-         cp $1, $34
+17:     cmps $1, $32, $32
+      cmpui $1, $1, -1
+        not $1, $1
         jal $31, $0, :arithmetic 3.cond
-         cp $34, $1
-       andi $34, $34, 255
-        jeq $34, $0, :19
+       andi $1, $1, 255
+        jeq $1, $0, :19
        li64 $1, 11
 18:      jmp :1a
-19:     cmps $32, $33, $32
-      cmpui $32, $32, 1
-       andi $32, $32, 1
-         cp $1, $32
+19:     cmps $1, $33, $32
+      cmpui $1, $1, 1
+       andi $1, $1, 1
         jal $31, $0, :arithmetic 3.cond
-         cp $32, $1
-       andi $32, $32, 255
-        jeq $32, $0, :1b
+       andi $1, $1, 255
+        jeq $1, $0, :1b
        li64 $1, 12
 1a:      jmp :1c
 1b:      jal $31, $0, :arithmetic 3.one
          cp $32, $1
         jal $31, $0, :arithmetic 3.zero
-         cp $33, $1
-       andi $32, $32, 255
-       andi $33, $33, 255
-       jltu $32, $33, :1d
-       jltu $32, $32, :1e
-       jgtu $32, $33, :1f
+       andi $2, $32, 255
+       andi $1, $1, 255
+       jltu $2, $1, :1d
+       jltu $2, $2, :1e
+       jgtu $2, $1, :1f
        li64 $1, 15
         jmp :1c
-1f:     jgtu $33, $32, :20
-       jgtu $32, $32, :21
-       jltu $33, $32, :22
+1f:     jgtu $1, $2, :20
+       jgtu $2, $2, :21
+       jltu $1, $2, :22
        li64 $1, 18
         jmp :1c
 22:      jal $31, $0, :arithmetic 3.mne
@@ -189,8 +162,8 @@ e:      jmp :12
 1e:     li64 $1, 14
         jmp :1c
 1d:     li64 $1, 13
-1c:   addi64 $254, $254, 32
-         ld $31, $254, -32, 32
+1c:   addi64 $254, $254, 24
+         ld $31, $254, -24, 24
          tx
 arithmetic 3.one:
         li8 $1, 1

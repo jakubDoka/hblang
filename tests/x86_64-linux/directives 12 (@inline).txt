@@ -1,12 +1,11 @@
 directives 12 (@inline).foo:
-	mov rax, rdi
+	mov rsi, rdi
+	mov rax, rsi
 	ret
 main:
-	push rbx
 	sub rsp, 0x08
-	mov rbx, 0x0A
-	mov rdi, rbx
+	mov rsi, 0x0A
+	mov rdi, rsi
 	call :directives 12 (@inline).foo
 	add rsp, 0x08
-	pop rbx
 	ret

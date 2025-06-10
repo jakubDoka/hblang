@@ -1,10 +1,18 @@
 generic structs 1.nvec(E = uint):
-	mov [rdi], rsi
-	mov [rdi+0x08], rsi
+	push rbp
+	mov rbp, rsi
+	mov rsi, rdi
+	mov [rsi], rbp
+	mov [rsi+0x08], rbp
+	pop rbp
 	ret
 generic structs 1.Vec(E = uint).sub:
-	sub rdi, rsi
-	mov rax, rdi
+	push rbp
+	mov rbp, rsi
+	mov rsi, rdi
+	sub rsi, rbp
+	mov rax, rsi
+	pop rbp
 	ret
 main:
 	push rbx
@@ -15,10 +23,10 @@ main:
 	mov rdi, rbx
 	mov rsi, rbp
 	call :generic structs 1.nvec(E = uint)
-	mov rbp, [rbx]
-	mov rbx, [rbx+0x08]
-	mov rdi, rbp
-	mov rsi, rbx
+	mov rsi, [rbx]
+	mov rbp, [rbx+0x08]
+	mov rdi, rsi
+	mov rsi, rbp
 	call :generic structs 1.Vec(E = uint).sub
 	add rsp, 0x18
 	pop rbp

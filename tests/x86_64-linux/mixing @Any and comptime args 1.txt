@@ -1,65 +1,62 @@
 mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime args 1.main):
-	push rbx
 	push rbp
-	push r12
 	sub rsp, 0x08
-	mov rbp, rdi
-	mov rbx, rsi
-	mov r12, rdx
-	test bl, bl
+	mov rbp, rsi
+	mov rsi, rdi
+	mov rcx, rdx
+	test bpl, bpl
 	jz :0
-	mov rdi, rbp
-	mov rsi, r12
+	mov rdi, rsi
+	mov rsi, rcx
 	call :mixing @Any and comptime args 1.main
 	jmp :1
 0:	mov rax, 0x00
-	mov [rbp], al
+	mov [rsi], al
 1:	add rsp, 0x08
-	pop r12
 	pop rbp
-	pop rbx
 	ret
 mixing @Any and comptime args 1.main:
+	push rbp
 	sub rsp, 0x10
+	mov rbp, rsi
+	mov rsi, rdi
 	lea rax, [rsp]
 	mov rcx, 0x01
 	mov [rax], cl
-	add esi, 0x05
-	mov [rax+0x04], esi
+	add ebp, 0x05
+	mov [rax+0x04], ebp
 	mov rcx, 0x08
+	mov rdi, rsi
 	mov rsi, rax
 	mov rdx, rcx
 	call :memcpy
 	add rsp, 0x10
+	pop rbp
 	ret
 main:
 	push rbx
 	push rbp
-	push r12
-	push r13
 	sub rsp, 0x18
-	lea rbx, [rsp+0x08]
-	mov rbp, 0x01
-	mov [rbx], bpl
-	mov rbp, 0x00
-	mov [rbx+0x04], ebp
-	lea rbp, [rsp]
-	mov r12, 0x08
-	mov rdi, rbp
-	mov rsi, rbx
-	mov rdx, r12
-	call :memcpy
-	lea rbx, [rsp+0x10]
-	mov r12b, [rbp]
-	mov ebp, [rbp+0x04]
+	lea rax, [rsp+0x08]
+	mov rcx, 0x01
+	mov [rax], cl
+	mov rcx, 0x00
+	mov [rax+0x04], ecx
+	lea rbx, [rsp]
+	mov rcx, 0x08
 	mov rdi, rbx
-	mov rsi, r12
-	mov rdx, rbp
+	mov rsi, rax
+	mov rdx, rcx
+	call :memcpy
+	lea rsi, [rsp+0x10]
+	mov bpl, [rbx]
+	mov ecx, [rbx+0x04]
+	mov rdi, rsi
+	mov rsi, rbp
+	mov rdx, rcx
 	call :mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime args 1.main)
 	mov rax, 0x00
 	add rsp, 0x18
-	pop r13
-	pop r12
 	pop rbp
 	pop rbx
 	ret

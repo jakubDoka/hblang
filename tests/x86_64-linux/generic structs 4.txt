@@ -1,76 +1,64 @@
 generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get:
-	push rbx
 	push rbp
-	push r12
 	sub rsp, 0x08
-	mov rbp, rdi
-	mov rbx, rsi
-	cmp rbx, 0x00
-	setz r12b
-	movzx r12, r12b
-	test r12b, r12b
+	mov rbp, rsi
+	mov rsi, rdi
+	cmp rbp, 0x00
+	setz al
+	movzx rax, al
+	test al, al
 	jz :0
-	mov rax, [rbp]
+	mov rax, [rsi]
 	jmp :1
-0:	mov r12, [rbp+0x08]
-	mov rbp, [rbp+0x10]
-	sub rbx, 0x01
-	mov rdi, r12
-	mov rsi, rbp
-	mov rdx, rbx
+0:	mov rax, [rsi+0x08]
+	mov rcx, [rsi+0x10]
+	mov rdx, rbp
+	sub rdx, 0x01
+	mov rdi, rax
+	mov rsi, rcx
 	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint))).get
 1:	add rsp, 0x08
-	pop r12
 	pop rbp
-	pop rbx
 	ret
 generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint))).get:
-	push rbx
 	push rbp
-	push r12
-	push r13
 	sub rsp, 0x08
-	mov r12, rdi
 	mov rbp, rsi
-	mov rbx, rdx
-	cmp rbx, 0x00
-	setz r13b
-	movzx r13, r13b
-	test r13b, r13b
+	mov rsi, rdi
+	mov rcx, rdx
+	cmp rcx, 0x00
+	setz al
+	movzx rax, al
+	test al, al
 	jz :0
-	mov rax, r12
+	mov rax, rsi
 	jmp :1
-0:	sub rbx, 0x01
+0:	mov rax, rcx
+	sub rax, 0x01
 	mov rdi, rbp
-	mov rsi, rbx
+	mov rsi, rax
 	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)).get
 1:	add rsp, 0x08
-	pop r13
-	pop r12
 	pop rbp
-	pop rbx
 	ret
 generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)).get:
-	push rbx
 	push rbp
-	push r12
 	sub rsp, 0x08
-	mov rbp, rdi
-	mov rbx, rsi
-	cmp rbx, 0x00
-	setz r12b
-	movzx r12, r12b
-	test r12b, r12b
+	mov rbp, rsi
+	mov rsi, rdi
+	cmp rbp, 0x00
+	setz al
+	movzx rax, al
+	test al, al
 	jz :0
-	mov rax, rbp
+	mov rax, rsi
 	jmp :1
-0:	sub rbx, 0x01
-	mov rdi, rbx
+0:	mov rsi, rbp
+	sub rsi, 0x01
+	mov rdi, rsi
 	call :generic structs 4.Array(E = uint).get
 1:	add rsp, 0x08
-	pop r12
 	pop rbp
-	pop rbx
 	ret
 generic structs 4.Array(E = uint).get:
 	ud2
@@ -85,12 +73,12 @@ main:
 	mov [rbx], rbp
 	mov r12, 0x02
 	mov [rbx+0x08], r12
-	mov r13, 0x03
-	mov [rbx+0x10], r13
-	mov [rbx+0x10], r13
-	mov r13, 0x00
+	mov rax, 0x03
+	mov [rbx+0x10], rax
+	mov [rbx+0x10], rax
+	mov rax, 0x00
 	mov rdi, rbx
-	mov rsi, r13
+	mov rsi, rax
 	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get
 	mov r13, rax
 	mov rdi, rbx

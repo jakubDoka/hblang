@@ -1,6 +1,6 @@
 nullable types 4 (pointer optimization).main:
-         st $31, $254, -32, 32
-     addi64 $254, $254, -40
+         st $31, $254, -24, 24
+     addi64 $254, $254, -32
        li64 $32, 0
         jeq $32, $0, :0
        li64 $1, 1
@@ -9,14 +9,14 @@ nullable types 4 (pointer optimization).main:
        li64 $1, 2
 1:      jmp :3
 2:   addi64 $33, $254, 0
-       li64 $34, 3
-         st $34, $254, 0, 8
+       li64 $1, 3
+         st $1, $254, 0, 8
          cp $1, $33
         jal $31, $0, :nullable types 4 (pointer optimization).opaque(v: ^uint)
          st $32, $1, 0, 8
          ld $1, $254, 0, 8
-3:   addi64 $254, $254, 40
-         ld $31, $254, -32, 32
+3:   addi64 $254, $254, 32
+         ld $31, $254, -24, 24
          tx
 nullable types 4 (pointer optimization).opaque(v: ^uint):
        jala $0, $31, 0

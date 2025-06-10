@@ -1,16 +1,11 @@
 generic structs 1.main:
-         st $31, $254, -24, 24
-     addi64 $254, $254, -24
-       li64 $32, 1
-         cp $1, $32
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+       li64 $1, 1
         jal $31, $0, :generic structs 1.nvec(E = uint)
-         cp $32, $1
-         cp $33, $2
-         cp $1, $32
-         cp $2, $33
         jal $31, $0, :generic structs 1.Vec(E = uint).sub
-     addi64 $254, $254, 24
-         ld $31, $254, -24, 24
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
          tx
 generic structs 1.nvec(E = uint):
          cp $2, $1

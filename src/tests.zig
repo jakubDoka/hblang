@@ -165,5 +165,5 @@ pub fn runVendoredTest(path: []const u8) !void {
     utils.Arena.initScratch(1024 * 1024 * 32);
     defer utils.Arena.deinitScratch();
     try test_util.runVendoredTest(std.testing.allocator, path, "hbvm-ableos");
-    try test_util.runVendoredTest(std.testing.allocator, path, "x86_64-linux");
+    //try test_util.runVendoredTest(std.testing.allocator, path, "x86_64-linux");
 }

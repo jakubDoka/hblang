@@ -2,7 +2,6 @@ pub const backend = enum {
     pub const Builder = @import("backend/Builder.zig");
     pub const Machine = @import("backend/Machine.zig");
     pub const Regalloc = @import("backend/Regalloc.zig");
-    pub const Regalloc2 = @import("backend/Regalloc2.zig");
     pub const mem2reg = @import("backend/mem2reg.zig");
     pub const gcm = @import("backend/gcm.zig");
     pub const static_anal = @import("backend/static_anal.zig");

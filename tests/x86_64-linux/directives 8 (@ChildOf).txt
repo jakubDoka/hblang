@@ -1,16 +1,13 @@
 directives 8 (@ChildOf).deref(T = ^uint):
-	mov rax, [rdi]
+	mov rsi, rdi
+	mov rax, [rsi]
 	ret
 main:
-	push rbx
-	push rbp
 	sub rsp, 0x08
-	lea rbx, [rsp]
-	mov rbp, 0x01
-	mov [rbx], rbp
-	mov rdi, rbx
+	lea rsi, [rsp]
+	mov rax, 0x01
+	mov [rsi], rax
+	mov rdi, rsi
 	call :directives 8 (@ChildOf).deref(T = ^uint)
 	add rsp, 0x08
-	pop rbp
-	pop rbx
 	ret
