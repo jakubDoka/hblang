@@ -99,6 +99,31 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
         liveouts: std.AutoArrayHashMapUnmanaged(*LiveRange, *Func.Node) = .empty,
     };
 
+    const Conflict = struct {
+        in: *LiveRange,
+        at: *Func.Node,
+
+        const Conflict = @This();
+
+        fn add(
+            its: *std.ArrayListUnmanaged(Conflict),
+            active: *std.AutoArrayHashMapUnmanaged(*LiveRange, *Func.Node),
+            live_range: *LiveRange,
+            node: *Func.Node,
+        ) void {
+            if (active.get(live_range)) |curr_node| {
+                if (curr_node != node) {
+                    _ = indexOfScalar(*anyopaque, @ptrCast(its.items), node) orelse {
+                        its.appendAssumeCapacity(.{ .in = live_range, .at = node });
+                    };
+                    _ = indexOfScalar(*anyopaque, @ptrCast(its.items), node) orelse {
+                        its.appendAssumeCapacity(.{ .in = live_range, .at = curr_node });
+                    };
+                }
+            }
+        }
+    };
+
     //var total_spill_count = 0;
     var limt: usize = 7;
     while (true) {
@@ -109,7 +134,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
         var live_range_slots = tmp.arena.makeArrayList(LiveRange, func.instr_count);
         var splits = tmp.arena.makeArrayList(*LiveRange, func.instr_count);
         var kills = tmp.arena.makeArrayList(*LiveRange, func.instr_count);
-        var self_conflicts = tmp.arena.makeArrayList(struct { *LiveRange, *Func.Node }, func.instr_count);
+        var conflicts = tmp.arena.makeArrayList(Conflict, func.instr_count);
         var spill_count: usize = 0;
 
         const live_ranges = build_live_ranges: {
@@ -127,16 +152,31 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                     const slot = &slots[instr.schedule];
 
                     if (instr.isDataPhi()) {
+                        if (instr.inputs()[1].?.schedule == std.math.maxInt(u16)) {
+                            std.debug.print("{}\n", .{instr.inputs()[1].?.inputs()[0].?});
+                        }
                         slot.* = slots[instr.inputs()[1].?.schedule];
                         std.debug.assert(slot.* != null);
 
                         for (instr.inputs()[2..]) |def| {
-                            slot.* = slot.*.?.tryMerge(slots[def.?.schedule] orelse continue) orelse {
+                            const lr = slots[def.?.schedule] orelse {
+                                const allowed_set = def.?.allowedRegsFor(0, tmp.arena) orelse {
+                                    continue;
+                                };
+                                slot.*.?.allowed_set.setIntersection(allowed_set);
+                                if (slot.*.?.allowed_set.count() == 0) {
+                                    _ = insert(&splits, slot.*.?);
+                                }
+
+                                slots[def.?.schedule] = slot.*;
+                                continue;
+                            };
+                            slot.* = slot.*.?.tryMerge(lr) orelse {
                                 _ = insert(&splits, slot.*.?);
                                 break;
                             };
                         }
-                    } else {
+                    } else if (slot.* == null) {
                         const allowed_set = instr.allowedRegsFor(0, tmp.arena) orelse {
                             continue;
                         };
@@ -213,6 +253,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
             try active_nodes.ensureTotalCapacity(tmp.arena.allocator(), live_range_slots.items.len);
             var limit: usize = 10000;
             while (work_list.pop()) |bb| {
+                std.debug.print("{}\n", .{&bb.base});
                 limit -= 1;
                 active_nodes.clearRetainingCapacity();
 
@@ -245,25 +286,8 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                     }
 
                     if (live_ranges[node.schedule]) |node_live_range| {
-                        self_conflict: {
-                            if (active_nodes.get(node_live_range)) |current_node| {
-                                if (node != current_node) {
-                                    // INVARIANT: LiveRange and Node never alias
-                                    _ = indexOfScalar(*anyopaque, @ptrCast(self_conflicts.items), node) orelse {
-                                        self_conflicts.appendAssumeCapacity(.{ node_live_range, node });
-                                    };
-                                    _ = indexOfScalar(*anyopaque, @ptrCast(self_conflicts.items), current_node) orelse {
-                                        self_conflicts.appendAssumeCapacity(.{ node_live_range, current_node });
-                                    };
-                                }
-                            }
-
-                            break :self_conflict;
-                        }
-
                         _ = active_nodes.swapRemove(node_live_range);
-
-                        if (node.kind == .Phi) continue;
+                        Conflict.add(&conflicts, &active_nodes, node_live_range, node);
 
                         if (node_live_range.allowed_set.count() < active_nodes.entries.len and
                             node_live_range.allowed_set.count() != 1)
@@ -278,14 +302,14 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
 
                             if (node_live_range.allowed_set.count() == 1) {
                                 for (active_allow_set_masks, node_allow_set_masks) |*a, b| a.* &= ~b;
+                                std.debug.print("wha {} {}\n", .{ node_live_range.def, active_live_range.def });
                                 if (active_live_range.allowed_set.count() == 0) {
-                                    std.debug.print("wha {} {}\n", .{ node_live_range.def, active_live_range.def });
                                     _ = insert(&splits, active_live_range);
                                 }
                             } else if (active_live_range.allowed_set.count() == 1) {
                                 for (node_allow_set_masks, active_allow_set_masks) |*a, b| a.* &= ~b;
+                                std.debug.print("bha {} {}\n", .{ node_live_range.def, active_live_range.def });
                                 if (node_live_range.allowed_set.count() == 0) {
-                                    std.debug.print("bha\n", .{});
                                     _ = insert(&splits, node_live_range);
                                 }
                             } else {
@@ -295,45 +319,66 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                         }
                     }
 
+                    if (node.kind == .Phi) {
+                        continue;
+                    }
+
                     for (node.dataDeps()) |def| {
-                        const def_live_range = live_ranges[def.?.schedule] orelse unreachable; // hmm? maybe the mem ops?
-
-                        self_conflict: {
-                            if (active_nodes.get(def_live_range)) |current_node| {
-                                if (def != current_node) {
-                                    // INVARIANT: LiveRange and Node never alias
-                                    _ = indexOfScalar(*anyopaque, @ptrCast(self_conflicts.items), def.?) orelse {
-                                        self_conflicts.appendAssumeCapacity(.{ def_live_range, def.? });
-                                    };
-                                    _ = indexOfScalar(*anyopaque, @ptrCast(self_conflicts.items), current_node) orelse {
-                                        self_conflicts.appendAssumeCapacity(.{ def_live_range, current_node });
-                                    };
-                                }
-                            }
-
-                            break :self_conflict;
-                        }
+                        const def_live_range = live_ranges[def.?.schedule] orelse unreachable;
+                        Conflict.add(&conflicts, &active_nodes, def_live_range, def.?);
+                        std.debug.print("-- {}\n", .{def.?});
                         active_nodes.putAssumeCapacity(def_live_range, def.?);
                     }
                 }
 
-                if (bb.base.kind == .Entry) continue;
+                if (bb.base.kind == .Entry) {
+                    std.debug.assert(active_nodes.count() == 0);
+                    continue;
+                }
 
-                for (bb.base.inputs()) |pred_block_term| {
-                    const pred = pred_block_term.?.inputs()[0].?.asCfg().?;
+                for (bb.base.inputs(), 0..) |pred_block_term, i| {
+                    const pred: *Func.CfgNode = pred_block_term.?.inputs()[0].?.asCfg().?;
+                    std.debug.print("|| {}\n", .{pred});
+                    std.debug.assert(pred.base.isBasicBlockStart());
                     const pred_block = &blocks[pred.base.schedule];
+                    if (bb.base.kind == .Loop or bb.base.kind == .Region) {
+                        for (bb.base.outputs()) |use| {
+                            if (use.kind == .Phi) {
+                                const active_node: *Func.Node = use.inputs()[i + 1].?;
+                                const active_live_range = live_ranges[use.schedule].?;
+
+                                if (pred_block.liveouts.get(active_live_range) != null) {
+                                    Conflict.add(&conflicts, &pred_block.liveouts, active_live_range, active_node);
+                                } else {
+                                    try pred_block.liveouts.put(tmp.arena.allocator(), active_live_range, active_node);
+                                    _ = insert(&work_list, pred);
+                                }
+                            }
+                        }
+                    }
                     for (
                         active_nodes.entries.items(.key),
                         active_nodes.entries.items(.value),
-                    ) |active_live_range, active_node| {
-                        if (try pred_block.liveouts.fetchPut(
-                            tmp.arena.allocator(),
-                            active_live_range,
-                            active_node,
-                        ) == null) {
+                    ) |active_live_range, active| {
+                        var active_node: *Func.Node = active;
+                        if (active_node.kind == .Phi and active_node.cfg0().? == pred) {
+                            active_node = active_node.inputs()[i + 1].?;
+                        }
+
+                        if (pred_block.liveouts.get(active_live_range) != null) {
+                            Conflict.add(&conflicts, &pred_block.liveouts, active_live_range, active_node);
+                        } else {
+                            try pred_block.liveouts.put(tmp.arena.allocator(), active_live_range, active_node);
                             _ = insert(&work_list, pred);
                         }
                     }
+                }
+            }
+
+            for (blocks, func.gcm.postorder) |bl, bb| {
+                std.debug.print("{}\n", .{&bb.base});
+                for (bl.liveouts.entries.items(.value)) |l| {
+                    std.debug.print("-- {}\n", .{l});
                 }
             }
 
@@ -351,7 +396,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
 
         color: {
             if (spill_count + splits.items.len + kills.items.len +
-                self_conflicts.items.len != 0) break :color;
+                conflicts.items.len != 0) break :color;
 
             var done_frontier: usize = 0;
             var known_frontier: usize = 0;
@@ -478,13 +523,21 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
             var iter = std.mem.reverseIterator(color_stack);
             while (iter.next()) |c| {
                 const to_color: *LiveRange = c;
+                std.debug.print("{}\n", .{to_color.def});
                 for (to_color.adjacent) |adj| {
                     std.debug.assert(adj.adjacent[adj.active_adjacent] == to_color);
                     adj.active_adjacent += 1;
-                    if (adj.reg == failed_reg) continue;
+                    std.debug.print("-- {}\n", .{adj.def});
+                    if (adj.reg == failed_reg) {
+                        continue;
+                    }
+                    std.debug.assert(adj.allowed_set.count() != 1 or !to_color.allowed_set.isSet(adj.reg));
                     to_color.allowed_set.unset(adj.reg);
                 }
 
+                var it = to_color.allowed_set.iterator(.{});
+                while (it.next()) |i| if (i < 10) std.debug.print("{} ", .{i});
+                std.debug.print("\n", .{});
                 if (to_color.allowed_set.findFirstSet()) |reg| {
                     // TODO: do bias selection
                     to_color.reg = reg;
@@ -496,12 +549,15 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
 
             const allocs = try func.arena.allocator().alloc(u16, func.instr_count);
             for (func.gcm.postorder) |bb| {
+                std.debug.print("{}\n", .{bb});
                 for (bb.base.outputs()) |instr| {
                     const live_range = live_ranges[instr.schedule] orelse {
+                        std.debug.print("      {}\n", .{instr});
                         allocs[instr.schedule] = 0;
                         continue;
                     };
                     std.debug.assert(live_range.parent == null);
+                    std.debug.print("  {} {} {}\n", .{ live_range.idx, live_range.reg, instr });
                     allocs[instr.schedule] = @intCast(live_range.reg);
                 }
             }
@@ -510,109 +566,77 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
         }
 
         insert_splits: {
-            for (self_conflicts.items) |conflict| {
-                _, const conflict_node: *Func.Node = conflict;
-
-                for (conflict_node.outputs()) |use| {
-                    const def_pos = indexOfScalar(?*Func.Node, use.inputs(), conflict_node).?;
-                    if (use.kind == .Phi or use.inPlaceSlot() == def_pos) {
-                        const block = &use.useBlock(conflict_node, &.{}).base;
-
-                        const split = func.addSplit(block, conflict_node);
-                        func.setInputNoIntern(use, def_pos, split);
-
-                        if (use.kind != .Phi) {
-                            const use_pos = indexOfScalar(*Func.Node, block.outputs(), use).?;
-                            const to_rotate = block.outputs()[use_pos..];
-                            std.mem.rotate(*Func.Node, to_rotate, to_rotate.len - 1);
-                        } else {
-                            const elems = block.outputs();
-                            std.mem.swap(*Func.Node, &elems[elems.len - 1], &elems[elems.len - 2]);
-                        }
-                    }
-                }
-
-                if (conflict_node.kind == .Phi) {
+            for (conflicts.items) |conflict| {
+                for (conflict.at.outputs()) |use| {
+                    const def_pos = indexOfScalar(?*Func.Node, use.inputs(), conflict.at).?;
+                    if ((use.kind == .Phi and
+                        !(use.cfg0().?.base.kind == .Loop and def_pos == 2 and
+                            conflict.at.cfg0().?.idepth() > use.cfg0().?.idepth())) or
+                        use.inPlaceSlot() == def_pos)
                     {
-                        const block = &conflict_node.cfg0().?.base;
-
-                        const split = func.addSplit(block, conflict_node);
-
-                        for (tmp.arena.dupe(*Func.Node, conflict_node.outputs())) |use| {
-                            if (use == split) continue;
-                            const use_idx = indexOfScalar(?*Func.Node, use.inputs(), conflict_node).?;
-                            func.setInputNoIntern(use, use_idx, split);
-                        }
-
-                        const def_pos = indexOfScalar(*Func.Node, block.outputs(), conflict_node).?;
-                        const to_rotate = block.outputs()[def_pos + 1 ..];
-                        std.mem.rotate(*Func.Node, to_rotate, to_rotate.len - 1);
-                    }
-
-                    const block = &conflict_node.useBlock(conflict_node.inputs()[2].?, &.{}).base;
-                    std.debug.print("{}\n", .{block});
-
-                    const split = func.addSplit(block, conflict_node.inputs()[2].?);
-                    func.setInputNoIntern(conflict_node, 2, split);
-
-                    const elems = block.outputs();
-                    std.mem.swap(*Func.Node, &elems[elems.len - 1], &elems[elems.len - 2]);
-                }
-            }
-
-            for (kills.items) |live_range| {
-                std.debug.assert(!live_range.def.isCfg());
-
-                const block = &live_range.def.cfg0().?.base;
-
-                const split = func.addSplit(block, live_range.def);
-
-                const is_pinned = live_range.def.allowedRegsFor(0, tmp.arena).?.count() == 1;
-
-                for (tmp.arena.dupe(*Func.Node, live_range.def.outputs())) |use| {
-                    if (use == split) continue;
-                    const use_idx = indexOfScalar(?*Func.Node, use.inputs(), live_range.def).?;
-                    if (!is_pinned and use.allowedRegsFor(use_idx, tmp.arena).?.count() != 1) continue;
-                    func.setInputNoIntern(use, use_idx, split);
-                }
-
-                const def_pos = indexOfScalar(*Func.Node, block.outputs(), live_range.def).?;
-                const to_rotate = block.outputs()[def_pos + 1 ..];
-                std.mem.rotate(*Func.Node, to_rotate, to_rotate.len - 1);
-            }
-
-            for (splits.items) |live_range| {
-                var split_at_some_point = false;
-                for (tmp.arena.dupe(*Func.Node, live_range.def.outputs())) |use| {
-                    //if (live_range.def.kind == .Phi) unreachable;
-
-                    const block = &use.useBlock(live_range.def, &.{}).base;
-                    const locked = live_range.def.allowedRegsFor(0, tmp.arena).?.count() == 1;
-
-                    const def_pos = indexOfScalar(?*Func.Node, use.inputs(), live_range.def).?;
-                    if (!locked and use.allowedRegsFor(def_pos, tmp.arena).?.count() != 1) {
-                        continue;
-                    }
-                    split_at_some_point = true;
-
-                    const split = func.addSplit(block, live_range.def);
-                    func.setInputNoIntern(use, def_pos, split);
-
-                    if (use.kind != .Phi) {
-                        const use_pos = indexOfScalar(*Func.Node, block.outputs(), use).?;
-                        const to_rotate = block.outputs()[use_pos..];
-                        std.mem.rotate(*Func.Node, to_rotate, to_rotate.len - 1);
-                    } else {
-                        const elems = block.outputs();
-                        std.mem.swap(*Func.Node, &elems[elems.len - 1], &elems[elems.len - 2]);
+                        func.splitBefore(use, conflict.at);
                     }
                 }
 
-                if (!split_at_some_point) {
-                    func.fmtScheduled(std.io.getStdErr().writer().any(), std.io.tty.detectConfig(std.io.getStdErr()));
-                    utils.panic("{}", .{live_range.def});
+                if (conflict.at.kind == .Phi) {
+                    func.splitAfterSubsume(conflict.at);
+                    func.splitBefore(conflict.at, conflict.at.inputs()[1].?);
                 }
             }
+
+            //for (kills.items) |live_range| {
+            //    std.debug.assert(!live_range.def.isCfg());
+
+            //    const block = &live_range.def.cfg0().?.base;
+
+            //    const split = func.addSplit(block, live_range.def);
+
+            //    const is_pinned = live_range.def.allowedRegsFor(0, tmp.arena).?.count() == 1;
+
+            //    for (tmp.arena.dupe(*Func.Node, live_range.def.outputs())) |use| {
+            //        if (use == split) continue;
+            //        const use_idx = indexOfScalar(?*Func.Node, use.inputs(), live_range.def).?;
+            //        if (!is_pinned and use.allowedRegsFor(use_idx, tmp.arena).?.count() != 1) continue;
+            //        func.setInputNoIntern(use, use_idx, split);
+            //    }
+
+            //    const def_pos = indexOfScalar(*Func.Node, block.outputs(), live_range.def).?;
+            //    const to_rotate = block.outputs()[def_pos + 1 ..];
+            //    std.mem.rotate(*Func.Node, to_rotate, to_rotate.len - 1);
+            //}
+
+            //for (splits.items) |live_range| {
+            //    var split_at_some_point = false;
+            //    for (tmp.arena.dupe(*Func.Node, live_range.def.outputs())) |use| {
+            //        //if (live_range.def.kind == .Phi) unreachable;
+
+            //        const block = &use.useBlock(live_range.def, &.{}).base;
+            //        const locked = live_range.def.allowedRegsFor(0, tmp.arena).?.count() == 1;
+
+            //        const def_pos = indexOfScalar(?*Func.Node, use.inputs(), live_range.def).?;
+            //        if (!locked and use.allowedRegsFor(def_pos, tmp.arena).?.count() != 1) {
+            //            continue;
+            //        }
+            //        split_at_some_point = true;
+
+            //        const split = func.addSplit(block, live_range.def);
+            //        func.setInputNoIntern(use, def_pos, split);
+
+            //        if (use.kind != .Phi) {
+            //            const use_pos = indexOfScalar(*Func.Node, block.outputs(), use).?;
+            //            const to_rotate = block.outputs()[use_pos..];
+            //            std.mem.rotate(*Func.Node, to_rotate, to_rotate.len - 1);
+            //        } else {
+            //            const elems = block.outputs();
+            //            std.mem.swap(*Func.Node, &elems[elems.len - 1], &elems[elems.len - 2]);
+            //        }
+            //    }
+
+            //    if (!split_at_some_point) {
+            //        func.fmtScheduled(std.io.getStdErr().writer().any(), std.io.tty.detectConfig(std.io.getStdErr()));
+            //        utils.panic("{}", .{live_range.def});
+            //    }
+            //}
 
             func.instr_count = 0;
             for (func.gcm.postorder) |bb| {
@@ -626,7 +650,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
             std.debug.print("================ retry regalloc ================\n", .{});
             std.debug.print("================ splits: {} conflicts: {} kills: {}\n", .{
                 splits.items.len,
-                self_conflicts.items.len,
+                conflicts.items.len,
                 kills.items.len,
             });
 

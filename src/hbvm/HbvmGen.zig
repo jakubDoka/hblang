@@ -343,7 +343,7 @@ pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
 
     var vm = root.hbvm.Vm{};
     vm.ip = stack_end;
-    vm.fuel = 1024 * 128;
+    vm.fuel = 1024 * 1; //28;
     @memset(&vm.regs.values, 0);
     vm.regs.set(.stack_addr, stack_end);
     var ctx = root.hbvm.Vm.SafeContext{
@@ -586,8 +586,12 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 self.flushOutReg(no);
             },
             .MachSplit => {
-                self.emit(.cp, .{ self.outReg(no), self.inReg(0, no.inputs()[1]) });
-                self.flushOutReg(no);
+                // TODO: will byte us
+                const out, const in = .{ self.outReg(no), self.inReg(0, no.inputs()[1]) };
+                if (out != in) {
+                    self.emit(.cp, .{ self.outReg(no), self.inReg(0, no.inputs()[1]) });
+                    self.flushOutReg(no);
+                }
             },
             .UnOp => |extra| {
                 switch (extra.*) {

@@ -130,6 +130,7 @@ pub const Data = struct {
     code: std.ArrayListUnmanaged(u8) = .empty,
     relocs: std.ArrayListUnmanaged(Reloc) = .empty,
 
+    // TODO: call this from the Func(..).idealize
     pub fn readFromSym(self: *const Data, id: u32, offset: i64, size: u64) ?i64 {
         const sym = &self.syms.items[@intFromEnum(self.globals.items[id])];
 

@@ -606,7 +606,7 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             pub fn format(self: *const Node, comptime _: anytype, _: anytype, writer: anytype) !void {
-                const colors = .no_color;
+                const colors = .escape_codes;
                 self.fmt(null, writer, colors);
             }
 
@@ -1003,6 +1003,46 @@ pub fn Func(comptime MachNode: type) type {
             }
             tree.depth = self.loopDepth(&self.gcm.loop_tree[tree.par.?].head.base) + 1;
             return tree.depth;
+        }
+
+        pub fn splitAfterSubsume(self: *Self, target_def: *Node) void {
+            self.gcm.cfg_built.assertLocked();
+            std.debug.assert(!target_def.isCfg());
+
+            var tmp = utils.Arena.scrath(null);
+
+            const block = &target_def.cfg0().?.base;
+            const split = self.addSplit(block, target_def);
+
+            for (tmp.arena.dupe(*Node, target_def.outputs())) |use| {
+                if (use == split) continue;
+                const use_idx = std.mem.indexOfScalar(?*Node, use.inputs(), target_def).?;
+                self.setInputNoIntern(use, use_idx, split);
+            }
+
+            const def_pos = std.mem.indexOfScalar(*Node, block.outputs(), target_def).?;
+            const to_rotate = block.outputs()[def_pos + 1 ..];
+            std.mem.rotate(*Node, to_rotate, to_rotate.len - 1);
+        }
+
+        pub fn splitBefore(self: *Self, target_use: *Node, target_def: *Node) void {
+            self.gcm.cfg_built.assertLocked();
+            std.debug.assert(!target_def.isCfg());
+            std.debug.assert(!target_use.isCfg());
+
+            const idx = std.mem.indexOfScalar(?*Node, target_use.inputs(), target_def).?;
+            var block = &target_use.cfg0().?.base;
+            if (target_use.kind == .Phi) block = block.inputs()[idx - 1].?.inputs()[0].?;
+
+            const split = self.addSplit(block, target_def);
+            self.setInputNoIntern(target_use, idx, split);
+
+            const use_pos = if (target_use.kind == .Phi)
+                block.outputs().len - 2
+            else
+                std.mem.indexOfScalar(*Node, block.outputs(), target_use).?;
+            const to_rotate = block.outputs()[use_pos..];
+            std.mem.rotate(*Node, to_rotate, to_rotate.len - 1);
         }
 
         pub fn addFieldOffset(self: *Self, base: *Node, offset: i64) *Node {
