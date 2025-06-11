@@ -113,7 +113,9 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
             if (@hasDecl(Mach, "reserved_regs")) Mach.reserved_regs << 1 else 0;
 
         var row_iter = row.iterator(.{});
+        //std.debug.print("{}\n", .{instr_table[j]});
         while (row_iter.next()) |i| {
+            //std.debug.print("-- {}\n", .{instr_table[i]});
             selection_set.set(outs[i]);
             @as(*align(@alignOf(usize)) u64, @ptrCast(&setMasks(selection_set)[0])).* |=
                 instr_table[i].clobbers() << 1;

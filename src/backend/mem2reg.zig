@@ -175,7 +175,7 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                     }
 
                     if (bb.isBasicBlockStart()) {
-                        @TypeOf(self.gcm).scheduleBlock(tmp, bb);
+                        @TypeOf(self.gcm).scheduleBlock(bb);
                     }
 
                     for (buf[0..len], scheds[0..len]) |n, s| n.schedule = s;

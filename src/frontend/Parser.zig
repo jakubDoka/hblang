@@ -13,7 +13,7 @@ const Capture = Ast.Capture;
 
 store: Ast.Store = .{},
 arena: *utils.Arena,
-active_syms: std.ArrayListUnmanaged(Sym) = .{},
+active_syms: std.MultiArrayList(SymEntry) = .{},
 capture_boundary: usize = 0,
 captures: std.ArrayListUnmanaged(Capture) = .{},
 comptime_idents: std.ArrayListUnmanaged(Ident) = .{},
@@ -40,6 +40,11 @@ const FuncStats = struct {
     max_loop_depth: u16 = 0,
     max_variable_count: u16 = 0,
     variable_count: u16 = 0,
+};
+
+const SymEntry = struct {
+    hash: u64,
+    sym: Sym,
 };
 
 const Sym = struct {
@@ -105,7 +110,7 @@ pub fn parse(self: *Parser) !Ast.Slice {
 
     const remining = self.finalizeVariablesLow(0);
     if (!self.loader.isNoop()) {
-        for (self.active_syms.items[0..remining]) |s| {
+        for (self.active_syms.items(.sym)[0..remining]) |s| {
             self.report(s.id.pos(), "undeclared identifier", .{});
         }
     }
@@ -118,7 +123,7 @@ fn parseExpr(self: *Parser) Error!Id {
 }
 
 fn parseScopedExpr(self: *Parser) !Id {
-    const scope = self.active_syms.items.len;
+    const scope = self.active_syms.len;
     defer self.finalizeVariables(scope);
     return self.parseExpr();
 }
@@ -190,7 +195,7 @@ fn declareExpr(self: *Parser, id: Id, unordered: bool) void {
         },
         else => return,
     };
-    var iter = std.mem.reverseIterator(self.active_syms.items);
+    var iter = std.mem.reverseIterator(self.active_syms.items(.sym));
     const sym = while (iter.nextPtr()) |s| {
         if (s.id == ident.id) break s;
     } else unreachable;
@@ -324,7 +329,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
     try self.checkStack();
 
     var token = self.advance();
-    const scope_frame = self.active_syms.items.len;
+    const scope_frame = self.active_syms.len;
     return try self.store.allocDyn(self.arena.allocator(), switch (token.kind.expand()) {
         .Comment => .{ .Comment = .init(token.pos) },
         ._ => .{ .Wildcard = .init(token.pos) },
@@ -338,7 +343,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             self.func_stats = .{};
 
             const prev_capture_boundary = self.capture_boundary;
-            self.capture_boundary = self.active_syms.items.len;
+            self.capture_boundary = self.active_syms.len;
             defer self.capture_boundary = prev_capture_boundary;
 
             const capture_scope = self.captures.items.len;
@@ -422,7 +427,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             defer self.func_stats = prev_func_stats;
 
             const prev_capture_boundary = self.capture_boundary;
-            self.capture_boundary = self.active_syms.items.len;
+            self.capture_boundary = self.active_syms.len;
             defer self.capture_boundary = prev_capture_boundary;
 
             var alignment: Id = .zeroSized(.Void);
@@ -593,9 +598,13 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
 
 fn finalizeVariablesLow(self: *Parser, start: usize) usize {
     var new_len = start;
-    for (self.active_syms.items[start..]) |*s| {
+    for (
+        self.active_syms.items(.sym)[start..],
+        self.active_syms.items(.hash)[start..],
+    ) |s, h| {
         if (!s.declared) {
-            self.active_syms.items[new_len] = s.*;
+            self.active_syms.items(.sym)[new_len] = s;
+            self.active_syms.items(.hash)[new_len] = h;
             new_len += 1;
         } else {
             while (for (self.captures.items, 0..) |c, i| {
@@ -605,22 +614,23 @@ fn finalizeVariablesLow(self: *Parser, start: usize) usize {
             }
         }
     }
-    self.func_stats.variable_count -|= @intCast(self.active_syms.items.len - new_len);
+    self.func_stats.variable_count -|= @intCast(self.active_syms.len - new_len);
     return new_len;
 }
 
 fn finalizeVariables(self: *Parser, start: usize) void {
-    self.active_syms.items.len = self.finalizeVariablesLow(start);
+    self.active_syms.len = self.finalizeVariablesLow(start);
 }
 
 fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
     var repr = token.view(self.lexer.source);
     if (token.kind == .@"$") repr = repr[1..];
 
-    var iter = std.mem.reverseIterator(self.active_syms.items);
-    var i = self.active_syms.items.len;
-    while (iter.nextPtr()) |s| {
-        i -= 1;
+    const hash = std.hash.Fnv1a_64.hash(repr);
+
+    var from = self.active_syms.len;
+    while (std.mem.lastIndexOfScalar(u64, self.active_syms.items(.hash)[0..from], hash)) |i| : (from = i) {
+        const s = &self.active_syms.items(.sym)[i];
         if (std.mem.eql(u8, s.name, repr)) {
             s.used = true;
             if (i < self.capture_boundary and !s.unordered) {
@@ -639,7 +649,7 @@ fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
         .id = id,
     });
     if (token.kind == .@"$") try self.comptime_idents.append(self.arena.allocator(), id);
-    try self.active_syms.append(self.arena.allocator(), .{ .name = repr, .id = id });
+    try self.active_syms.append(self.arena.allocator(), .{ .sym = .{ .name = repr, .id = id }, .hash = hash });
     return alloc;
 }
 

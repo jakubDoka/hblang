@@ -362,7 +362,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
                     node.schedule = self.block_count;
                     self.block_count += 1;
 
-                    scheduleBlock(tmp.arena.allocator(), node);
+                    scheduleBlock(node);
 
                     for (node.outputs()) |o| {
                         o.schedule = self.instr_count;
@@ -395,15 +395,18 @@ pub fn GcmMixin(comptime MachNode: type) type {
             }
         }
 
-        pub fn scheduleBlock(tmp: std.mem.Allocator, node: *Func.Node) void {
+        pub fn scheduleBlock(node: *Func.Node) void {
             const NodeMeta = struct {
                 unscheduled_deps: u16 = 0,
                 ready_unscheduled_deps: u16 = 0,
                 priority: u16,
             };
 
+            var tmp = root.Arena.scrath(null);
+            defer tmp.deinit();
+
             // init meta
-            const extra = tmp.alloc(NodeMeta, node.outputs().len) catch unreachable;
+            const extra = tmp.arena.alloc(NodeMeta, node.outputs().len);
             for (node.outputs(), extra, 0..) |o, *e, i| {
                 if (o.schedule != std.math.maxInt(u16) and !o.isCfg()) root.panic("{} {}\n", .{ o, o.schedule });
                 o.schedule = @intCast(i);
@@ -479,10 +482,8 @@ pub fn GcmMixin(comptime MachNode: type) type {
                 }
             };
 
-            if (std.debug.runtime_safety) {
-                for (node.outputs()) |o| {
-                    o.schedule = std.math.maxInt(u16);
-                }
+            for (node.outputs()) |o| {
+                o.schedule = std.math.maxInt(u16);
             }
         }
 

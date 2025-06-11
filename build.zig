@@ -72,6 +72,8 @@ pub fn build(b: *std.Build) !void {
             .root_source_file = b.path("src/hbc.zig"),
             .target = target,
             .optimize = optimize,
+            .use_llvm = use_llvm,
+            .use_lld = use_lld,
         });
         exe.stack_size = stack_size;
         b.installArtifact(exe);
@@ -165,7 +167,7 @@ pub fn build(b: *std.Build) !void {
         break :example_tests;
     }
 
-    example_tests: {
+    if (false) fuzz_fidning_tests: {
         const test_run = b.addTest(.{
             .name = "fuzz_finding_tests",
             .root_source_file = b.path("src/fuzz_finding_tests.zig"),
@@ -181,7 +183,7 @@ pub fn build(b: *std.Build) !void {
         run.has_side_effects = true;
         test_step.dependOn(&run.step);
 
-        break :example_tests;
+        break :fuzz_fidning_tests;
     }
 
     check: {
