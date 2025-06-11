@@ -13,7 +13,8 @@ const Capture = Ast.Capture;
 
 store: Ast.Store = .{},
 arena: *utils.Arena,
-active_syms: std.MultiArrayList(SymEntry) = .{},
+active_sym_table: std.HashMapUnmanaged(u32, void, Hasher, 70) = .{},
+active_syms: std.ArrayListUnmanaged(Sym) = .{},
 capture_boundary: usize = 0,
 captures: std.ArrayListUnmanaged(Capture) = .{},
 comptime_idents: std.ArrayListUnmanaged(Ident) = .{},
@@ -30,7 +31,20 @@ errored: bool = false,
 stack_base: usize,
 func_stats: FuncStats = .{},
 
+const Hasher = struct {
+    syms: []const Sym,
+
+    pub fn hash(h: Hasher, vl: u32) u64 {
+        return std.hash.Fnv1a_64.hash(h.syms[vl].name);
+    }
+
+    pub fn eql(h: Hasher, a: u32, b: u32) bool {
+        return std.mem.eql(u8, h.syms[a].name, h.syms[b].name);
+    }
+};
+
 pub const stack_limit = @import("options").stack_size - 1024 * 16;
+pub const sym_bloom_fns = 3;
 
 const Parser = @This();
 const Error = error{ UnexpectedToken, StackOverflow } || std.mem.Allocator.Error;
@@ -43,7 +57,6 @@ const FuncStats = struct {
 };
 
 const SymEntry = struct {
-    hash: u64,
     sym: Sym,
 };
 
@@ -102,20 +115,20 @@ pub fn parse(self: *Parser) !Ast.Slice {
     var tmp = Arena.scrath(self.arena);
     defer tmp.deinit();
 
-    var itemBuf = std.ArrayListUnmanaged(Id){};
+    var item_buf = std.ArrayListUnmanaged(Id){};
     while (self.cur.kind != .Eof) {
-        try itemBuf.append(tmp.arena.allocator(), try self.parseUnorderedExpr());
+        try item_buf.append(tmp.arena.allocator(), try self.parseUnorderedExpr());
         _ = self.tryAdvance(.@";");
     }
 
     const remining = self.finalizeVariablesLow(0);
     if (!self.loader.isNoop()) {
-        for (self.active_syms.items(.sym)[0..remining]) |s| {
+        for (self.active_syms.items[0..remining]) |s| {
             self.report(s.id.pos(), "undeclared identifier", .{});
         }
     }
 
-    return self.store.allocSlice(Id, self.arena.allocator(), itemBuf.items);
+    return self.store.allocSlice(Id, self.arena.allocator(), item_buf.items);
 }
 
 fn parseExpr(self: *Parser) Error!Id {
@@ -123,7 +136,7 @@ fn parseExpr(self: *Parser) Error!Id {
 }
 
 fn parseScopedExpr(self: *Parser) !Id {
-    const scope = self.active_syms.len;
+    const scope = self.active_syms.items.len;
     defer self.finalizeVariables(scope);
     return self.parseExpr();
 }
@@ -195,7 +208,7 @@ fn declareExpr(self: *Parser, id: Id, unordered: bool) void {
         },
         else => return,
     };
-    var iter = std.mem.reverseIterator(self.active_syms.items(.sym));
+    var iter = std.mem.reverseIterator(self.active_syms.items);
     const sym = while (iter.nextPtr()) |s| {
         if (s.id == ident.id) break s;
     } else unreachable;
@@ -329,7 +342,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
     try self.checkStack();
 
     var token = self.advance();
-    const scope_frame = self.active_syms.len;
+    const scope_frame = self.active_syms.items.len;
     return try self.store.allocDyn(self.arena.allocator(), switch (token.kind.expand()) {
         .Comment => .{ .Comment = .init(token.pos) },
         ._ => .{ .Wildcard = .init(token.pos) },
@@ -343,7 +356,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             self.func_stats = .{};
 
             const prev_capture_boundary = self.capture_boundary;
-            self.capture_boundary = self.active_syms.len;
+            self.capture_boundary = self.active_syms.items.len;
             defer self.capture_boundary = prev_capture_boundary;
 
             const capture_scope = self.captures.items.len;
@@ -427,7 +440,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             defer self.func_stats = prev_func_stats;
 
             const prev_capture_boundary = self.capture_boundary;
-            self.capture_boundary = self.active_syms.len;
+            self.capture_boundary = self.active_syms.items.len;
             defer self.capture_boundary = prev_capture_boundary;
 
             var alignment: Id = .zeroSized(.Void);
@@ -598,13 +611,17 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
 
 fn finalizeVariablesLow(self: *Parser, start: usize) usize {
     var new_len = start;
-    for (
-        self.active_syms.items(.sym)[start..],
-        self.active_syms.items(.hash)[start..],
-    ) |s, h| {
+    for (self.active_syms.items[start..], start..) |s, j| {
         if (!s.declared) {
-            self.active_syms.items(.sym)[new_len] = s;
-            self.active_syms.items(.hash)[new_len] = h;
+            if (new_len != j) {
+                std.debug.assert(self.active_sym_table.removeContext(@intCast(j), .{
+                    .syms = self.active_syms.items,
+                }));
+                self.active_syms.items[new_len] = s;
+                self.active_sym_table.putAssumeCapacityNoClobberContext(@intCast(new_len), {}, .{
+                    .syms = self.active_syms.items,
+                });
+            }
             new_len += 1;
         } else {
             while (for (self.captures.items, 0..) |c, i| {
@@ -612,35 +629,49 @@ fn finalizeVariablesLow(self: *Parser, start: usize) usize {
             } else null) |idx| {
                 _ = self.captures.swapRemove(idx);
             }
+            std.debug.assert(self.active_sym_table.removeContext(@intCast(j), .{
+                .syms = self.active_syms.items,
+            }));
         }
     }
-    self.func_stats.variable_count -|= @intCast(self.active_syms.len - new_len);
+    self.func_stats.variable_count -|= @intCast(self.active_syms.items.len - new_len);
     return new_len;
 }
 
 fn finalizeVariables(self: *Parser, start: usize) void {
-    self.active_syms.len = self.finalizeVariablesLow(start);
+    self.active_syms.items.len = self.finalizeVariablesLow(start);
 }
 
 fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
     var repr = token.view(self.lexer.source);
     if (token.kind == .@"$") repr = repr[1..];
 
-    const hash = std.hash.Fnv1a_64.hash(repr);
+    const slot = self.active_sym_table.getOrPutContextAdapted(self.arena.allocator(), repr, struct {
+        syms: []const Sym,
 
-    var from = self.active_syms.len;
-    while (std.mem.lastIndexOfScalar(u64, self.active_syms.items(.hash)[0..from], hash)) |i| : (from = i) {
-        const s = &self.active_syms.items(.sym)[i];
-        if (std.mem.eql(u8, s.name, repr)) {
-            s.used = true;
-            if (i < self.capture_boundary and !s.unordered) {
-                try self.captures.append(self.arena.allocator(), .{ .id = s.id, .pos = .init(token.pos) });
-            }
-            return try self.store.alloc(self.arena.allocator(), .Ident, .{
-                .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind == .@"$" } },
-                .id = s.id,
-            });
+        pub fn hash(_: @This(), vl: []const u8) u64 {
+            return std.hash.Fnv1a_64.hash(vl);
         }
+
+        pub fn eql(h: @This(), a: []const u8, b: u32) bool {
+            return std.mem.eql(u8, a, h.syms[b].name);
+        }
+    }{
+        .syms = self.active_syms.items,
+    }, .{
+        .syms = self.active_syms.items,
+    }) catch unreachable;
+    if (slot.found_existing) {
+        const i = slot.key_ptr.*;
+        const s = &self.active_syms.items[i];
+        s.used = true;
+        if (i < self.capture_boundary and !s.unordered) {
+            try self.captures.append(self.arena.allocator(), .{ .id = s.id, .pos = .init(token.pos) });
+        }
+        return try self.store.alloc(self.arena.allocator(), .Ident, .{
+            .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind == .@"$" } },
+            .id = s.id,
+        });
     }
 
     const id = Ident.init(token);
@@ -649,7 +680,8 @@ fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
         .id = id,
     });
     if (token.kind == .@"$") try self.comptime_idents.append(self.arena.allocator(), id);
-    try self.active_syms.append(self.arena.allocator(), .{ .sym = .{ .name = repr, .id = id }, .hash = hash });
+    slot.key_ptr.* = @intCast(self.active_syms.items.len);
+    try self.active_syms.append(self.arena.allocator(), .{ .name = repr, .id = id });
     return alloc;
 }
 

@@ -278,10 +278,24 @@ pub fn init(
 
 pub const Index = struct {
     linear: std.MultiArrayList(Entry),
+    map: HashMap,
+
+    const HashMap = std.HashMapUnmanaged(u32, void, Hasher, 70);
+
+    const Hasher = struct {
+        syms: []const Entry.Meta,
+
+        pub fn hash(h: Hasher, vl: u32) u64 {
+            return std.hash.Fnv1a_64.hash(h.syms[vl].name);
+        }
+
+        pub fn eql(h: Hasher, a: u32, b: u32) bool {
+            return std.mem.eql(u8, h.syms[a].name, h.syms[b].name);
+        }
+    };
 
     pub const Entry = struct {
         id: Ident,
-        hash: u64,
         meta: Meta,
 
         pub const Meta = struct {
@@ -304,10 +318,8 @@ pub const Index = struct {
         switch (bindings.tag()) {
             .Ident => {
                 const name = ast.tokenSrc(ast.exprs.get(bindings).Ident.id.pos());
-
                 try into.append(scratch.allocator(), .{
                     .id = ast.exprs.get(bindings).Ident.id,
-                    .hash = std.hash.Fnv1a_64.hash(name),
                     .meta = .{
                         .name = name,
                         .path = try arena.dupe(Pos, pos_stack.items),
@@ -342,28 +354,77 @@ pub const Index = struct {
             collectBindings(ast, decl.bindings, d, &fseq, &entries, arena, tmp.arena);
         }
 
+        std.sort.pdq(Entry, entries.items, {}, struct {
+            fn lt(_: void, lhs: Entry, rhs: Entry) bool {
+                return @intFromEnum(lhs.id) < @intFromEnum(rhs.id);
+            }
+        }.lt);
+
         var linear = std.MultiArrayList(Entry){};
         try linear.setCapacity(arena, entries.items.len);
-        for (entries.items) |it| linear.appendAssumeCapacity(it);
+        var map = HashMap{};
+        try map.ensureTotalCapacityContext(arena, @intCast(entries.items.len), undefined);
+        for (entries.items, 0..) |it, i| {
+            linear.appendAssumeCapacity(it);
 
-        return .{ .linear = linear };
+            const slot = map.getOrPutAssumeCapacityAdapted(it.meta.name, struct {
+                syms: []const Entry,
+
+                pub fn hash(_: @This(), vl: []const u8) u64 {
+                    return std.hash.Fnv1a_64.hash(vl);
+                }
+
+                pub fn eql(h: @This(), a: []const u8, b: u32) bool {
+                    return std.mem.eql(u8, a, h.syms[b].meta.name);
+                }
+            }{
+                .syms = entries.items,
+            });
+
+            slot.key_ptr.* = @intCast(i);
+        }
+
+        return .{ .linear = linear, .map = map };
     }
 
     pub fn search(self: Index, id: anytype) ?struct { Id, []Pos, Ident } {
         switch (@TypeOf(id)) {
             Ident => {
-                if (std.mem.indexOfScalar(Ident, self.linear.items(.id), id)) |pos|
-                    return .{
-                        self.linear.items(.meta)[pos].decl,
-                        self.linear.items(.meta)[pos].path,
-                        id,
-                    };
+                if (self.linear.len > 4096) {
+                    if (std.sort.binarySearch(u32, @ptrCast(self.linear.items(.id)), @intFromEnum(id), struct {
+                        fn ord(a: u32, b: u32) std.math.Order {
+                            return std.math.order(a, b);
+                        }
+                    }.ord)) |pos|
+                        return .{
+                            self.linear.items(.meta)[pos].decl,
+                            self.linear.items(.meta)[pos].path,
+                            id,
+                        };
+                } else {
+                    if (std.mem.indexOfScalar(Ident, self.linear.items(.id), id)) |pos|
+                        return .{
+                            self.linear.items(.meta)[pos].decl,
+                            self.linear.items(.meta)[pos].path,
+                            id,
+                        };
+                }
             },
             []const u8 => {
-                const hash = std.hash.Fnv1a_64.hash(id);
-                var from: usize = 0;
-                while (std.mem.indexOfScalarPos(u64, self.linear.items(.hash), from, hash)) |pos| : (from = pos + 1) {
-                    if (std.mem.eql(u8, self.linear.items(.meta)[pos].name, id)) return .{
+                if (self.map.getKeyAdapted(id, struct {
+                    syms: []const Entry.Meta,
+
+                    pub fn hash(_: @This(), vl: []const u8) u64 {
+                        return std.hash.Fnv1a_64.hash(vl);
+                    }
+
+                    pub fn eql(h: @This(), a: []const u8, b: u32) bool {
+                        return std.mem.eql(u8, a, h.syms[b].name);
+                    }
+                }{
+                    .syms = self.linear.items(.meta),
+                })) |pos| {
+                    return .{
                         self.linear.items(.meta)[pos].decl,
                         self.linear.items(.meta)[pos].path,
                         self.linear.items(.id)[pos],

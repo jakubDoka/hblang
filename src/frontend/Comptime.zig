@@ -365,7 +365,7 @@ pub fn jitExpr(
     scope: Codegen.Scope,
     ctx: Codegen.Ctx,
     value: Ast.Id,
-) !struct { utils.EntId(root.frontend.types.Func), Types.Id } {
+) !struct { JitResult, Types.Id } {
     return self.jitExprLow(name, scope, ctx, false, value) catch {
         if (scope == .Tmp) scope.Tmp.errored = true;
         return error.Never;
@@ -395,6 +395,11 @@ pub fn addInProgress(self: *Comptime, expr: Ast.Id, scope: Types.Id) !void {
     self.in_progress.append(self.getGpa(), .{ .ast = expr, .scope = scope }) catch unreachable;
 }
 
+pub const JitResult = union(enum) {
+    func: utils.EntId(root.frontend.types.Func),
+    constant: i64,
+};
+
 pub fn jitExprLow(
     self: *Comptime,
     name: []const u8,
@@ -402,7 +407,7 @@ pub fn jitExprLow(
     ctx: Codegen.Ctx,
     only_inference: bool,
     value: Ast.Id,
-) !struct { utils.EntId(root.frontend.types.Func), Types.Id } {
+) !struct { JitResult, Types.Id } {
     const types = self.getTypes();
     const id = types.store.add(types.arena.allocator(), @as(root.frontend.types.Func, undefined));
 
@@ -436,6 +441,12 @@ pub fn jitExprLow(
         if (ctx.ty) |ty| {
             try gen.typeCheck(value, &ret, ty);
         }
+
+        if (ret.id == .Value and ret.id.Value.kind == .CInt) {
+            types.func_work_list.getPtr(.@"comptime").items.len = pop_until;
+            return .{ .{ .constant = ret.id.Value.extra(.CInt).* }, ret.ty };
+        }
+
         gen.emitGenericStore(ptr, &ret);
 
         gen.bl.end(token);
@@ -464,7 +475,7 @@ pub fn jitExprLow(
         types.func_work_list.getPtr(.@"comptime").items.len = pop_until;
     }
 
-    return .{ id, ret.ty };
+    return .{ .{ .func = id }, ret.ty };
 }
 
 pub fn compileDependencies(self: *Codegen, reloc_after: usize, pop_until: usize) !void {
@@ -488,27 +499,49 @@ pub fn compileDependencies(self: *Codegen, reloc_after: usize, pop_until: usize)
 }
 
 pub fn evalTy(self: *Comptime, name: []const u8, scope: Codegen.Scope, ty_expr: Ast.Id) !Types.Id {
-    const id, _ = try self.jitExpr(name, scope, .{ .ty = .type }, ty_expr);
+    const res, _ = try self.jitExpr(name, scope, .{ .ty = .type }, ty_expr);
 
-    var data: [8]u8 = undefined;
-    try self.runVm(scope.file(self.getTypes()), ty_expr, name, @intFromEnum(id), &data);
-    return Types.Id.fromRaw(@bitCast(data[0..4].*), self.getTypes()) orelse {
-        self.getTypes().report(scope.file(self.getTypes()), ty_expr, "resulting type has a corrupted value", .{});
-        return error.Never;
-    };
+    switch (res) {
+        .func => |id| {
+            var data: [8]u8 = undefined;
+            try self.runVm(scope.file(self.getTypes()), ty_expr, name, @intFromEnum(id), &data);
+            return Types.Id.fromRaw(@bitCast(data[0..4].*), self.getTypes()) orelse {
+                self.getTypes().report(scope.file(self.getTypes()), ty_expr, "resulting type has a corrupted value", .{});
+                return error.Never;
+            };
+        },
+        .constant => |vl| {
+            return Types.Id.fromRaw(@truncate(@as(u64, @bitCast(vl))), self.getTypes()) orelse {
+                self.getTypes().report(scope.file(self.getTypes()), ty_expr, "resulting type has a corrupted value", .{});
+                return error.Never;
+            };
+        },
+    }
 }
 
 pub fn evalIntConst(self: *Comptime, scope: Codegen.Scope, int_conts: Ast.Id) !i64 {
-    const id, _ = try self.jitExpr("", scope, .{ .ty = .uint }, int_conts);
-    var data: [8]u8 = undefined;
-    try self.runVm(scope.file(self.getTypes()), int_conts, "", @intFromEnum(id), &data);
-    return @bitCast(data);
+    const res, _ = try self.jitExpr("", scope, .{ .ty = .uint }, int_conts);
+    switch (res) {
+        .func => |id| {
+            var data: [8]u8 = undefined;
+            try self.runVm(scope.file(self.getTypes()), int_conts, "", @intFromEnum(id), &data);
+            return @bitCast(data);
+        },
+        .constant => |c| return c,
+    }
 }
 
 pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(root.frontend.types.Global), ty: ?Types.Id, value: Ast.Id) !void {
-    const id, const fty = try self.jitExpr(name, .{ .Perm = self.getTypes().store.get(global).key.scope }, .{ .ty = ty }, value);
+    const res, const fty = try self.jitExpr(name, .{ .Perm = self.getTypes().store.get(global).key.scope }, .{ .ty = ty }, value);
     const data = self.getTypes().arena.allocator().alloc(u8, @intCast(fty.size(self.getTypes()))) catch unreachable;
-    try self.runVm(self.getTypes().store.get(global).key.file, value, name, @intFromEnum(id), data);
+    switch (res) {
+        .func => |id| {
+            try self.runVm(self.getTypes().store.get(global).key.file, value, name, @intFromEnum(id), data);
+        },
+        .constant => |c| {
+            @memcpy(data, @as(*const [@sizeOf(@TypeOf(c))]u8, @ptrCast(&c))[0..data.len]);
+        },
+    }
     self.getTypes().store.get(global).data = data;
     self.getTypes().store.get(global).ty = fty;
 }
