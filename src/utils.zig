@@ -111,6 +111,11 @@ pub const Arena = struct {
         return @intFromPtr(self.end) - @intFromPtr(self.pos);
     }
 
+    pub fn scrathFromAlloc(except: std.mem.Allocator) Scratch {
+        for (&scratch) |*slt| if (@as(*anyopaque, slt) != except.ptr) return slt.checkpoint();
+        unreachable;
+    }
+
     pub fn scrath(except: ?*Arena) Scratch {
         for (&scratch) |*slt| if (slt != except) return slt.checkpoint();
         unreachable;

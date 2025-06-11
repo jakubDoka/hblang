@@ -140,6 +140,7 @@ pub const Enum = struct {
     key: Scope,
 
     fields: ?[]const Field = null,
+    index: Ast.Index,
 
     pub const Field = struct {
         name: []const u8,
@@ -185,6 +186,7 @@ pub const Union = struct {
     key: Scope,
 
     fields: ?[]const Field = null,
+    index: Ast.Index,
 
     pub const Field = struct {
         name: []const u8,
@@ -237,6 +239,8 @@ pub const Struct = struct {
     size: ?u64 = null,
     alignment: ?u64 = null,
     recursion_lock: bool = false,
+
+    index: Ast.Index,
 
     pub const Field = struct {
         name: []const u8,

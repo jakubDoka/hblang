@@ -188,6 +188,13 @@ pub const Id = enum(IdRepr) {
         };
     }
 
+    pub fn index(self: Id, types: *Types) ?Ast.Index {
+        return switch (self.data()) {
+            inline .Struct, .Union, .Enum => |v| types.store.get(v).index,
+            else => null,
+        };
+    }
+
     pub fn items(self: Id, ast: *const Ast, types: *Types) Ast.Slice {
         return switch (self.data()) {
             .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
@@ -861,6 +868,11 @@ pub fn resolveFielded(
     if (!slot.found_existing) {
         self.store.get(alloc).* = .{
             .key = self.store.get(alloc).key,
+            .index = Ast.Index.build(
+                self.getFile(file),
+                @field(self.getFile(file).exprs.get(ast), @tagName(tag)).fields,
+                self.arena.allocator(),
+            ),
         };
     }
     return slot.key_ptr.*;

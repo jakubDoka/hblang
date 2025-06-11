@@ -276,40 +276,106 @@ pub fn init(
     };
 }
 
-pub fn searchBinding(self: *const Ast, cur: Ast.Id, id: anytype, fseq: *std.ArrayList(Pos)) ?Ident {
-    switch (cur.tag()) {
-        .Ident => switch (@TypeOf(id)) {
-            Ident => if (self.exprs.getTyped(.Ident, cur).?.id == id) return id,
-            else => if (cmpLow(self.exprs.getTyped(.Ident, cur).?.id.pos(), self.source, id))
-                return self.exprs.getTyped(.Ident, cur).?.id,
-        },
-        .Ctor => {
-            const c = self.exprs.getTyped(.Ctor, cur).?;
-            if (self.searchBinding(c.ty, id, fseq)) |r| return r;
+pub const Index = struct {
+    linear: std.MultiArrayList(Entry),
 
-            for (self.exprs.view(c.fields)) |f| {
-                fseq.append(f.pos) catch unreachable;
-                if (self.searchBinding(f.value, id, fseq)) |r| return r;
-                _ = fseq.pop().?;
-            }
-        },
-        else => {},
+    pub const Entry = struct {
+        id: Ident,
+        hash: u64,
+        meta: Meta,
+
+        pub const Meta = struct {
+            name: []const u8,
+            path: []Pos,
+            decl: Id,
+        };
+    };
+
+    pub fn collectBindings(
+        ast: *const Ast,
+        bindings: Ast.Id,
+        value: Ast.Id,
+        pos_stack: *std.ArrayListUnmanaged(Pos),
+        into: *std.ArrayListUnmanaged(Entry),
+        arena: std.mem.Allocator,
+        scratch: *utils.Arena,
+    ) void {
+        errdefer unreachable;
+        switch (bindings.tag()) {
+            .Ident => {
+                const name = ast.tokenSrc(ast.exprs.get(bindings).Ident.id.pos());
+
+                try into.append(scratch.allocator(), .{
+                    .id = ast.exprs.get(bindings).Ident.id,
+                    .hash = std.hash.Fnv1a_64.hash(name),
+                    .meta = .{
+                        .name = name,
+                        .path = try arena.dupe(Pos, pos_stack.items),
+                        .decl = value,
+                    },
+                });
+            },
+            .Ctor => {
+                const c = ast.exprs.get(bindings).Ctor;
+                collectBindings(ast, c.ty, value, pos_stack, into, arena, scratch);
+
+                for (ast.exprs.view(c.fields)) |f| {
+                    pos_stack.appendAssumeCapacity(f.pos);
+                    collectBindings(ast, f.value, value, pos_stack, into, arena, scratch);
+                    _ = pos_stack.pop().?;
+                }
+            },
+            else => {},
+        }
     }
-    return null;
-}
 
-pub fn findDecl(
-    self: *const Ast,
-    slice: Slice,
-    id: anytype,
-    arena: std.mem.Allocator,
-) ?struct { Id, []Pos, Ident } {
-    var fseq = std.ArrayList(Pos).init(arena);
-    return for (self.exprs.view(slice)) |d| {
-        const decl = self.exprs.getTyped(.Decl, d) orelse continue;
-        if (self.searchBinding(decl.bindings, id, &fseq)) |ident| return .{ d, fseq.items, ident };
-    } else null;
-}
+    pub fn build(ast: *const Ast, slice: Slice, arena: std.mem.Allocator) Index {
+        errdefer unreachable;
+
+        var tmp = utils.Arena.scrathFromAlloc(arena);
+        defer tmp.deinit();
+
+        var fseq = std.ArrayListUnmanaged(Pos).initBuffer(tmp.arena.alloc(Pos, 128));
+        var entries = std.ArrayListUnmanaged(Entry).initBuffer(tmp.arena.alloc(Entry, slice.len() * 5 / 4 + 3));
+        for (ast.exprs.view(slice)) |d| {
+            const decl = ast.exprs.getTyped(.Decl, d) orelse continue;
+            collectBindings(ast, decl.bindings, d, &fseq, &entries, arena, tmp.arena);
+        }
+
+        var linear = std.MultiArrayList(Entry){};
+        try linear.setCapacity(arena, entries.items.len);
+        for (entries.items) |it| linear.appendAssumeCapacity(it);
+
+        return .{ .linear = linear };
+    }
+
+    pub fn search(self: Index, id: anytype) ?struct { Id, []Pos, Ident } {
+        switch (@TypeOf(id)) {
+            Ident => {
+                if (std.mem.indexOfScalar(Ident, self.linear.items(.id), id)) |pos|
+                    return .{
+                        self.linear.items(.meta)[pos].decl,
+                        self.linear.items(.meta)[pos].path,
+                        id,
+                    };
+            },
+            []const u8 => {
+                const hash = std.hash.Fnv1a_64.hash(id);
+                var from: usize = 0;
+                while (std.mem.indexOfScalarPos(u64, self.linear.items(.hash), from, hash)) |pos| : (from = pos + 1) {
+                    if (std.mem.eql(u8, self.linear.items(.meta)[pos].name, id)) return .{
+                        self.linear.items(.meta)[pos].decl,
+                        self.linear.items(.meta)[pos].path,
+                        self.linear.items(.id)[pos],
+                    };
+                }
+            },
+            else => comptime unreachable,
+        }
+
+        return null;
+    }
+};
 
 pub fn tokenSrc(self: *const Ast, pos: u32) []const u8 {
     return Lexer.peekStr(self.source, pos);

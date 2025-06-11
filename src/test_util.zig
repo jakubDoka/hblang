@@ -22,7 +22,9 @@ pub const Expectations = struct {
 
         var slf: Expectations = .{};
 
-        if (ast.findDecl(ast.items, "expectations", gpa)) |d| {
+        const idx = Ast.Index.build(ast, ast.items, gpa);
+
+        if (idx.search(@as([]const u8, "expectations"))) |d| {
             const decl = ast.exprs.getTyped(.Decl, d[0]).?.value;
             const ctor = ast.exprs.getTyped(.Ctor, decl).?;
             for (ast.exprs.view(ctor.fields)) |field| {

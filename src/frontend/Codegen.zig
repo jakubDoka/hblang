@@ -134,6 +134,13 @@ pub const Scope = union(enum) {
         };
     }
 
+    pub fn index(self: Scope, types: *Types) ?Ast.Index {
+        return switch (self) {
+            .Perm => |p| p.index(types),
+            .Tmp => |t| t.parent_scope.index(types),
+        };
+    }
+
     pub fn items(self: Scope, ast: *const Ast, types: *Types) Ast.Slice {
         return switch (self) {
             .Perm => |p| p.items(ast, types),
@@ -1977,7 +1984,7 @@ pub fn lookupScopeItem(
     defer tmp.deinit();
 
     const decl, const path, const ident =
-        ast.findDecl(bsty.items(ast, self.types), name, tmp.arena.allocator()) orelse {
+        bsty.index(self.types).?.search(name) orelse {
             return self.report(pos, "{} does not declare this", .{bsty});
         };
 
@@ -2050,7 +2057,7 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
         const decl, const path, const ident = while (!cursor.empty()) {
-            if (ast.findDecl(cursor.items(ast, self.types), id, tmp.arena.allocator())) |v| break v;
+            if (cursor.index(self.types)) |idx| if (idx.search(id)) |v| break v;
             if (cursor.findCapture(pos, id, self.types)) |c| {
                 return .{ .ty = c.ty, .id = switch (self.abiCata(c.ty)) {
                     .Imaginary => .Imaginary,
@@ -2967,13 +2974,9 @@ fn emitDirective(
             var ty_val = try self.emitTyped(.{}, .type, args[0]);
             const ty = try self.unwrapTyConst(args[0], &ty_val);
 
-            const file = ty.file(self.types) orelse return .mkv(.bool, self.bl.addIntImm(.i8, 0));
-            const ty_ast = self.types.getFile(file);
-            const has_decl = ty_ast.findDecl(
-                (Scope{ .Perm = ty }).items(ty_ast, self.types),
-                name_str,
-                tmp.arena.allocator(),
-            ) != null;
+            const has_decl = (ty.index(self.types) orelse
+                return .mkv(.bool, self.bl.addIntImm(.i8, 0)))
+                .search(name_str) != null;
 
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(has_decl)));
         },
