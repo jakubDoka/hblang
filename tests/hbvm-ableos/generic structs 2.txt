@@ -11,7 +11,6 @@ generic structs 2.Foo(F = uint).Bar(B = u8).init:
         li8 $2, 1
        jala $0, $31, 0
 generic structs 2.Foo(F = uint).Bar(B = u8).sub:
-        swa $2, $1
-       andi $1, $1, 255
-      sub64 $1, $2, $1
+       andi $2, $2, 255
+      sub64 $1, $1, $2
        jala $0, $31, 0

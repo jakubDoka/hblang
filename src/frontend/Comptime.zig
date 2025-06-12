@@ -290,7 +290,7 @@ pub fn runVm(
                     const struct_ast_id: Ast.Id = @enumFromInt(@as(u32, @truncate(self.ecaArg(2))));
                     const struct_ast = ast.exprs.getTyped(@field(std.meta.Tag(Ast.Expr), @tagName(t)), struct_ast_id).?;
 
-                    const captures = types.arena.alloc(Types.Scope.Capture, struct_ast.captures.len());
+                    const captures = types.pool.arena.alloc(Types.Scope.Capture, struct_ast.captures.len());
 
                     for (captures, ast.exprs.view(struct_ast.captures), 0..) |*slot, cp, i| {
                         slot.* = .{ .id = cp.id, .ty = @enumFromInt(self.ecaArg(3 + i * 2)), .value = self.ecaArg(3 + i * 2 + 1) };
@@ -348,7 +348,7 @@ pub fn jitFunc(self: *Comptime, fnc: utils.EntId(root.frontend.types.Func)) !voi
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    const gen = Codegen.init(self.getGpa(), tmp.arena, self.getTypes(), .@"comptime", .ableos);
+    const gen = Codegen.init(tmp.arena, self.getTypes(), .@"comptime", .ableos);
     defer gen.deinit();
 
     self.getTypes().queue(gen.target, .init(.{ .Func = fnc }));
@@ -409,12 +409,12 @@ pub fn jitExprLow(
     value: Ast.Id,
 ) !struct { JitResult, Types.Id } {
     const types = self.getTypes();
-    const id = types.store.add(types.arena.allocator(), @as(root.frontend.types.Func, undefined));
+    const id = types.store.add(types.pool.allocator(), @as(root.frontend.types.Func, undefined));
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    const gen = Codegen.init(self.getGpa(), tmp.arena, types, .@"comptime", .ableos);
+    const gen = Codegen.init(tmp.arena, types, .@"comptime", .ableos);
     defer gen.deinit();
 
     gen.only_inference = only_inference;
@@ -460,6 +460,9 @@ pub fn jitExprLow(
                     .id = @intFromEnum(id),
                     .entry = true,
                     .linkage = .local,
+                    .optimizations = .{
+                        .verbose = false,
+                    },
                 },
             );
         }
@@ -533,7 +536,7 @@ pub fn evalIntConst(self: *Comptime, scope: Codegen.Scope, int_conts: Ast.Id) !i
 
 pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(root.frontend.types.Global), ty: ?Types.Id, value: Ast.Id) !void {
     const res, const fty = try self.jitExpr(name, .{ .Perm = self.getTypes().store.get(global).key.scope }, .{ .ty = ty }, value);
-    const data = self.getTypes().arena.allocator().alloc(u8, @intCast(fty.size(self.getTypes()))) catch unreachable;
+    const data = self.getTypes().pool.arena.allocator().alloc(u8, @intCast(fty.size(self.getTypes()))) catch unreachable;
     switch (res) {
         .func => |id| {
             try self.runVm(self.getTypes().store.get(global).key.file, value, name, @intFromEnum(id), data);

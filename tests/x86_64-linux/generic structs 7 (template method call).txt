@@ -2,8 +2,7 @@ generic structs 7 (template method call).A.apply(func = generic structs 7 (templ
 	ret
 main:
 	sub rsp, 0x08
-	lea rsi, [rsp]
-	mov rdi, rsi
+	lea rdi, [rsp]
 	call :generic structs 7 (template method call).A.apply(func = generic structs 7 (template method call).main)
 	mov rax, 0x00
 	add rsp, 0x08

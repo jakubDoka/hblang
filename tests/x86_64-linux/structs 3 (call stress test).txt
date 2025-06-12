@@ -1,33 +1,26 @@
 structs 3 (call stress test).return_pair:
-	mov rsi, rdi
 	mov rax, 0x01
-	mov [rsi], al
+	mov [rdi], al
 	mov rax, 0x05
-	mov [rsi+0x08], rax
+	mov [rdi+0x08], rax
 	ret
 structs 3 (call stress test).return_triple:
-	mov rsi, rdi
 	mov rax, 0x01
-	mov [rsi], rax
+	mov [rdi], rax
 	mov rax, 0x02
-	mov [rsi+0x08], rax
+	mov [rdi+0x08], rax
 	mov rax, 0x03
-	mov [rsi+0x10], al
+	mov [rdi+0x10], al
 	ret
 structs 3 (call stress test).take_pair:
-	push rbp
-	mov rbp, rsi
-	mov rsi, rdi
-	mov rax, rsi
+	mov rax, rdi
 	movzx rax, al
-	add rax, rbp
-	pop rbp
+	add rax, rsi
 	ret
 structs 3 (call stress test).take_triple:
-	mov rsi, rdi
-	mov al, [rsi+0x10]
-	mov rcx, [rsi+0x08]
-	mov rdx, [rsi]
+	mov al, [rdi+0x10]
+	mov rcx, [rdi+0x08]
+	mov rdx, [rdi]
 	movzx rax, al
 	add rdx, rcx
 	mov rcx, rdx
@@ -44,10 +37,8 @@ main:
 	lea rbp, [rsp]
 	mov rdi, rbp
 	call :structs 3 (call stress test).return_triple
-	mov sil, [rbx]
-	mov rax, [rbx+0x08]
-	mov rdi, rsi
-	mov rsi, rax
+	mov dil, [rbx]
+	mov rsi, [rbx+0x08]
 	call :structs 3 (call stress test).take_pair
 	mov rbx, rax
 	mov rdi, rbp

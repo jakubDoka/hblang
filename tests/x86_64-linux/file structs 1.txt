@@ -1,24 +1,17 @@
 Foo.hb.init:
-	push rbp
-	mov rbp, rsi
-	mov rsi, rdi
-	mov [rsi], rbp
-	mov [rsi+0x08], rbp
-	pop rbp
+	mov [rdi], rsi
+	mov [rdi+0x08], rsi
 	ret
 main:
 	push rbx
-	push rbp
 	sub rsp, 0x18
 	lea rbx, [rsp]
-	mov rbp, 0x02
+	mov rsi, 0x02
 	mov rdi, rbx
-	mov rsi, rbp
 	call :Foo.hb.init
 	mov rax, [rbx]
 	mov rcx, [rbx+0x08]
 	sub rax, rcx
 	add rsp, 0x18
-	pop rbp
 	pop rbx
 	ret

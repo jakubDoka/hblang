@@ -15,7 +15,7 @@ const tys = root.frontend.types;
 
 next_struct: u32 = 0,
 store: utils.EntStore(root.frontend.types) = .{},
-arena: Arena,
+pool: utils.Pool,
 interner: Map = .{},
 file_scopes: []Id,
 ct: Comptime,
@@ -715,8 +715,8 @@ pub fn nextTask(self: *Types, target: Target, pop_limit: usize) ?utils.EntId(tys
     return null;
 }
 
-pub fn init(gpa: std.mem.Allocator, source: []const Ast, diagnostics: std.io.AnyWriter) *Types {
-    var arena = Arena.init(1024 * 1024 * 128);
+pub fn init(arena_: Arena, source: []const Ast, diagnostics: std.io.AnyWriter) *Types {
+    var arena = arena_;
     const scopes = arena.alloc(Id, source.len);
     @memset(scopes, .void);
     const slot = arena.create(Types);
@@ -732,8 +732,10 @@ pub fn init(gpa: std.mem.Allocator, source: []const Ast, diagnostics: std.io.Any
         .stack_base = @frameAddress(),
         .files = source,
         .file_scopes = scopes,
-        .arena = arena,
-        .ct = .init(gpa),
+        .pool = .{
+            .arena = arena,
+        },
+        .ct = .init(slot.pool.allocator()),
         .diagnostics = diagnostics,
     };
     return slot;
@@ -749,7 +751,7 @@ pub fn checkStack(self: *Types, file: File, pos: anytype) !void {
 }
 
 pub fn deinit(self: *Types) void {
-    var arena = self.arena;
+    var arena = self.pool.arena;
     self.ct.in_progress.deinit(self.ct.gen.gpa);
     self.ct.gen.deinit();
     self.* = undefined;
@@ -806,15 +808,15 @@ pub fn getScope(self: *Types, file: File) Id {
 }
 
 pub fn internPtr(self: *Types, comptime tag: std.meta.Tag(Data), payload: std.meta.TagPayload(Data, tag).Data) Id {
-    const vl = self.store.add(self.arena.allocator(), payload);
+    const vl = self.store.add(self.pool.allocator(), payload);
     const id = Id.init(@unionInit(Data, @tagName(tag), vl));
-    const slot = self.interner.getOrPutContext(self.arena.allocator(), id, .{ .types = self }) catch unreachable;
+    const slot = self.interner.getOrPutContext(self.pool.allocator(), id, .{ .types = self }) catch unreachable;
     if (slot.found_existing) {
         self.store.pop(vl);
         return slot.key_ptr.*;
     }
     if (@TypeOf(payload) == tys.Tuple) {
-        self.store.get(vl).fields = self.arena.dupe(tys.Tuple.Field, payload.fields);
+        self.store.get(vl).fields = self.pool.arena.dupe(tys.Tuple.Field, payload.fields);
     } else self.store.get(vl).* = payload;
     return slot.key_ptr.*;
 }
@@ -838,9 +840,9 @@ pub fn makeTuple(self: *Types, v: []Id) Id {
 pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Scope) struct { Map.GetOrPutResult, std.meta.TagPayload(Data, kind) } {
     var mem: std.meta.TagPayload(Data, kind).Data = undefined;
     mem.key = key;
-    const ty = self.store.add(self.arena.allocator(), mem);
+    const ty = self.store.add(self.pool.allocator(), mem);
     const id = Id.init(@unionInit(Data, @tagName(kind), ty));
-    const slot = self.interner.getOrPutContext(self.arena.allocator(), id, .{ .types = self }) catch unreachable;
+    const slot = self.interner.getOrPutContext(self.pool.allocator(), id, .{ .types = self }) catch unreachable;
     if (slot.found_existing) {
         std.debug.assert(slot.key_ptr.data() == kind);
         self.store.pop(ty);
@@ -871,7 +873,7 @@ pub fn resolveFielded(
             .index = Ast.Index.build(
                 self.getFile(file),
                 @field(self.getFile(file).exprs.get(ast), @tagName(tag)).fields,
-                self.arena.allocator(),
+                self.pool.arena.allocator(),
             ),
         };
     }

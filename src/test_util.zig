@@ -67,9 +67,8 @@ pub const Expectations = struct {
     }
 };
 
-pub fn runVendoredTest(gpa: std.mem.Allocator, path: []const u8, target: []const u8) !void {
+pub fn runVendoredTest(path: []const u8, target: []const u8) !void {
     var ast = try root.compile(.{
-        .gpa = gpa,
         .diagnostics = std.io.getStdErr().writer().any(),
         .colors = std.io.tty.detectConfig(std.io.getStdErr()),
         .output = std.io.null_writer.any(),
@@ -165,19 +164,19 @@ pub fn testBuilder(
     colors: std.io.tty.Config,
     verbose: bool,
 ) !void {
-    var ast_arena = utils.Arena.init(1024 * 1024);
+    var type_system_arena = utils.Arena.init(1024 * 1024);
 
-    const asts = parseExample(&ast_arena, name, code, output) catch return;
+    const asts = parseExample(&type_system_arena, name, code, output) catch return;
     const ast = asts[0];
 
     var func_arena = utils.Arena.scrath(null);
     defer func_arena.deinit();
 
-    const types = Types.init(gpa, asts, output);
+    const types = Types.init(type_system_arena, asts, output);
     types.target = target;
     defer types.deinit();
 
-    const errored = Codegen.emitReachable(gpa, func_arena.arena, types, abi, gen, .{
+    const errored = Codegen.emitReachable(func_arena.arena, types, abi, gen, .{
         .verbose = verbose,
         .colors = colors,
         .output = output,

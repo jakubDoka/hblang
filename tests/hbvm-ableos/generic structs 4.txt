@@ -9,8 +9,7 @@ generic structs 4.main:
        li64 $1, 3
          st $1, $254, 16, 8
          st $1, $254, 16, 8
-       li64 $1, 0
-         cp $2, $1
+       li64 $2, 0
          cp $1, $32
         jal $31, $0, :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get
          cp $35, $1
@@ -29,15 +28,15 @@ generic structs 4.main:
 generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        swa $2, $1
        li64 $3, 0
-        jne $1, $3, :1
-         ld $1, $2, 0, 8
+        jne $2, $3, :1
+         ld $1, $1, 0, 8
         jmp :2
-1:       ld $3, $2, 8, 8
-         ld $2, $2, 16, 8
-     addi64 $1, $1, -1
+1:       ld $3, $1, 8, 8
+         ld $1, $1, 16, 8
+     addi64 $2, $2, -1
         swa $1, $3
+        swa $3, $2
         jal $31, $0, :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint))).get
 2:   addi64 $254, $254, 8
          ld $31, $254, -8, 8
@@ -45,13 +44,11 @@ generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next 
 generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint))).get:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        swa $3, $1
-        swa $1, $2
        li64 $4, 0
-        jne $2, $4, :4
-         cp $1, $3
+        jne $3, $4, :4
         jmp :5
-4:   addi64 $2, $2, -1
+4:   addi64 $1, $3, -1
+        swa $1, $2
         jal $31, $0, :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)).get
 5:   addi64 $254, $254, 8
          ld $31, $254, -8, 8
@@ -59,12 +56,10 @@ generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next 
 generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)).get:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        swa $2, $1
        li64 $3, 0
-        jne $1, $3, :7
-         cp $1, $2
+        jne $2, $3, :7
         jmp :8
-7:   addi64 $1, $1, -1
+7:   addi64 $1, $2, -1
         jal $31, $0, :generic structs 4.Array(E = uint).get
 8:   addi64 $254, $254, 8
          ld $31, $254, -8, 8

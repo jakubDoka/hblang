@@ -1,15 +1,13 @@
 big constant 1.uninit:
-	mov rsi, rdi
 	mov rax, 0xAAAAAAAAAAAAAAAA
-	mov [rsi], rax
+	mov [rdi], rax
 	mov rax, 0x00
 	ret
 main:
 	sub rsp, 0x08
-	lea rsi, [rsp]
+	lea rdi, [rsp]
 	mov rax, 0x00
-	mov [rsi], rax
-	mov rdi, rsi
+	mov [rdi], rax
 	call :big constant 1.uninit
 	add rsp, 0x08
 	ret

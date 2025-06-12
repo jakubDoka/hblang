@@ -1,6 +1,5 @@
 nullable types 4 (pointer optimization).opaque(v: ^uint):
-	mov rsi, rdi
-	mov rax, rsi
+	mov rax, rdi
 	ret
 main:
 	push rbx

@@ -1,8 +1,7 @@
 nullable types 2.take:
-	mov rsi, rdi
-	mov rax, [rsi]
+	mov rax, [rdi]
 	add rax, 0x01
-	mov [rsi], rax
+	mov [rdi], rax
 	ret
 main:
 	push rbx
@@ -27,9 +26,8 @@ main:
 	mov rax, 0x03
 3:	jmp :5
 4:	mov [rbx+0x10], rcx
-	mov rsi, rbx
-	add rsi, 0x08
-	mov rdi, rsi
+	mov rdi, rbx
+	add rdi, 0x08
 	call :nullable types 2.take
 	mov rax, [rbx+0x08]
 	mov rcx, [rbx+0x10]

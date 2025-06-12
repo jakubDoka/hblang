@@ -161,7 +161,7 @@ pub const Enum = struct {
             var count: usize = 0;
             for (ast.exprs.view(enum_ast.fields)) |f| count += @intFromBool(f.tag() == .Tag);
 
-            const fields = types.arena.alloc(Field, count);
+            const fields = types.pool.arena.alloc(Field, count);
             var i: usize = 0;
             for (ast.exprs.view(enum_ast.fields)) |fast| {
                 if (fast.tag() == .Comment) continue;
@@ -209,7 +209,7 @@ pub const Union = struct {
             for (ast.exprs.view(union_ast.fields)) |f| count +=
                 @intFromBool(if (ast.exprs.getTyped(.Decl, f)) |b| b.bindings.tag() == .Tag else false);
 
-            const fields = types.arena.alloc(Field, count);
+            const fields = types.pool.arena.alloc(Field, count);
             var i: usize = 0;
             for (ast.exprs.view(union_ast.fields)) |fast| {
                 if (fast.tag() == .Comment) continue;
@@ -350,7 +350,7 @@ pub const Struct = struct {
             var count: usize = 0;
             for (ast.exprs.view(struct_ast.fields)) |f| count += @intFromBool(if (ast.exprs.getTyped(.Decl, f)) |b| b.bindings.tag() == .Tag else false);
 
-            const fields = types.arena.alloc(Field, count);
+            const fields = types.pool.arena.alloc(Field, count);
             var i: usize = 0;
             for (ast.exprs.view(struct_ast.fields)) |fast| {
                 if (fast.tag() == .Comment) continue;
@@ -365,7 +365,7 @@ pub const Struct = struct {
                 const ty = types.ct.evalTy("", .{ .Perm = .init(.{ .Struct = id }) }, field.ty) catch .never;
                 fields[i] = .{ .name = name, .ty = ty };
                 if (field.value.tag() != .Void) {
-                    const value = types.store.add(types.arena.allocator(), Global{
+                    const value = types.store.add(types.pool.allocator(), Global{
                         .key = .{
                             .file = self.key.file,
                             .name = name,

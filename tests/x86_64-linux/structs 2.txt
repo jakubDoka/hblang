@@ -28,7 +28,6 @@ structs 2.swap:
 	ret
 main:
 	push rbx
-	push rbp
 	sub rsp, 0x38
 	lea rbx, [rsp]
 	mov rax, 0x00
@@ -36,12 +35,11 @@ main:
 	mov [rbx+0x08], rax
 	mov [rbx+0x10], rax
 	mov rax, 0x01
-	lea rbp, [rsp+0x18]
-	mov [rbp], rax
-	mov [rbp+0x08], rax
-	mov [rbp+0x10], rax
+	lea rsi, [rsp+0x18]
+	mov [rsi], rax
+	mov [rsi+0x08], rax
+	mov [rsi+0x10], rax
 	mov rdi, rbx
-	mov rsi, rbp
 	call :structs 2.swap
 	mov rax, [rbx]
 	mov rcx, [rbx+0x08]
@@ -49,7 +47,6 @@ main:
 	add rax, rcx
 	add rax, rdx
 	add rsp, 0x38
-	pop rbp
 	pop rbx
 	ret
 memcpy:

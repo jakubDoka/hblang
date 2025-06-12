@@ -5,9 +5,9 @@ mem2reg crash 1.insert:
 	mov rbx, rdi
 	mov rbp, rsi
 	cmp rbx, 0x00
-	setz sil
-	movzx rsi, sil
-	test sil, sil
+	setz dil
+	movzx rdi, dil
+	test dil, dil
 	jz :1
 	call :mem2reg crash 1.bar
 	jmp :1
@@ -36,13 +36,9 @@ mem2reg crash 1.insert:
 mem2reg crash 1.bar:
 	ret
 main:
-	push rbp
 	sub rsp, 0x08
-	mov rsi, 0x00
-	mov rbp, 0x01
-	mov rdi, rsi
-	mov rsi, rbp
+	mov rdi, 0x00
+	mov rsi, 0x01
 	call :mem2reg crash 1.insert
 	add rsp, 0x08
-	pop rbp
 	ret

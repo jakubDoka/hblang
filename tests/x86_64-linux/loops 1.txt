@@ -1,10 +1,9 @@
 loops 1.fib:
 	push rbx
-	mov rsi, rdi
 	mov rax, 0x00
 	mov rcx, 0x01
 	mov rdx, rax
-	mov rax, rsi
+	mov rax, rdi
 1:	cmp rax, 0x00
 	setz bl
 	movzx rbx, bl
@@ -19,8 +18,7 @@ loops 1.fib:
 	jmp :1
 main:
 	sub rsp, 0x08
-	mov rsi, 0x0A
-	mov rdi, rsi
+	mov rdi, 0x0A
 	call :loops 1.fib
 	add rsp, 0x08
 	ret

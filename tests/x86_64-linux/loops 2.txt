@@ -1,11 +1,10 @@
 loops 2.square:
 	push rbx
 	push rbp
-	mov rsi, rdi
 	mov rax, 0x00
 	mov rcx, rax
 	mov rdx, rax
-2:	cmp rcx, rsi
+2:	cmp rcx, rdi
 	setz bl
 	movzx rbx, bl
 	test bl, bl
@@ -16,7 +15,7 @@ loops 2.square:
 	ret
 0:	mov rbx, rdx
 	mov rdx, rax
-3:	cmp rdx, rsi
+3:	cmp rdx, rdi
 	setz bpl
 	movzx rbp, bpl
 	test bpl, bpl
@@ -31,8 +30,7 @@ loops 2.square:
 	jmp :3
 main:
 	sub rsp, 0x08
-	mov rsi, 0x03
-	mov rdi, rsi
+	mov rdi, 0x03
 	call :loops 2.square
 	add rsp, 0x08
 	ret

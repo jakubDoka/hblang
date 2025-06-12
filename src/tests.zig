@@ -88,6 +88,7 @@ pub fn runMachineTest(
     defer output.deinit();
 
     errdefer {
+        test_util.checkOrUpdatePrintTest(name, category, output.items, out, color) catch {};
         test_util.testBuilder(
             name,
             code,
@@ -164,6 +165,6 @@ pub fn runVendoredTest(path: []const u8) !void {
 
     utils.Arena.initScratch(1024 * 1024 * 32);
     defer utils.Arena.deinitScratch();
-    try test_util.runVendoredTest(std.testing.allocator, path, "hbvm-ableos");
-    try test_util.runVendoredTest(std.testing.allocator, path, "x86_64-linux");
+    try test_util.runVendoredTest(path, "hbvm-ableos");
+    try test_util.runVendoredTest(path, "x86_64-linux");
 }

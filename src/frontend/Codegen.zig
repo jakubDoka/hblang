@@ -182,7 +182,6 @@ pub const Ctx = struct {
 };
 
 pub fn init(
-    gpa: std.mem.Allocator,
     scratch: *utils.Arena,
     types: *Types,
     target: Types.Target,
@@ -193,14 +192,13 @@ pub fn init(
         .types = types,
         .abi = abi,
         .target = target,
-        .bl = .init(gpa),
+        .bl = .init(types.pool.allocator()),
     };
     return res;
 }
 
 /// returns true when errored
 pub fn emitReachable(
-    gpa: std.mem.Allocator,
     scrath: *utils.Arena,
     types: *Types,
     abi: Types.Abi,
@@ -216,7 +214,7 @@ pub fn emitReachable(
     var root_tmp = utils.Arena.scrath(scrath);
     defer root_tmp.deinit();
 
-    const codegen = Codegen.init(gpa, root_tmp.arena, types, .runtime, abi);
+    const codegen = Codegen.init(root_tmp.arena, types, .runtime, abi);
     defer codegen.deinit();
 
     const entry = codegen.getEntry(.root, "main") catch {
@@ -457,7 +455,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .String => |e| {
             const lit = ast.source[e.pos.index + 1 .. e.end - 1];
 
-            const data = switch (encodeString(lit, self.types.arena.alloc(u8, lit.len)) catch unreachable) {
+            const data = switch (encodeString(lit, self.types.pool.arena.alloc(u8, lit.len)) catch unreachable) {
                 .ok => |dt| dt,
                 .err => |err| {
                     var pos = e.pos;
@@ -1635,7 +1633,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 });
                 if (!slot.found_existing) {
                     self.types.store.get(alloc).key.captures =
-                        self.types.arena.dupe(Types.Scope.Capture, self.types.store.get(alloc).key.captures);
+                        self.types.pool.arena.dupe(Types.Scope.Capture, self.types.store.get(alloc).key.captures);
                 }
                 return self.emitTyConst(slot.key_ptr.*);
             } else {
@@ -1656,11 +1654,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     const ret = try self.resolveAnonTy(e.ret);
                     self.types.store.get(alloc).* = .{
                         .key = self.types.store.get(alloc).key,
-                        .args = self.types.arena.dupe(Types.Id, args),
+                        .args = self.types.pool.arena.dupe(Types.Id, args),
                         .ret = ret,
                     };
                     self.types.store.get(alloc).key.captures =
-                        self.types.arena.dupe(
+                        self.types.pool.arena.dupe(
                             Types.Scope.Capture,
                             self.types.store.get(alloc).key.captures,
                         );
@@ -2213,7 +2211,7 @@ pub fn instantiateTemplate(
     const tmpl = self.types.store.get(typ.data().Template).*;
     const ast = self.ast;
 
-    const scope = self.types.store.add(self.types.arena.allocator(), tmpl);
+    const scope = self.types.store.add(self.types.pool.allocator(), tmpl);
     self.types.store.get(scope).temporary = true;
     self.types.store.get(scope).key.scope = typ;
     self.types.store.get(scope).key.captures = &.{};
@@ -2310,11 +2308,11 @@ pub fn instantiateTemplate(
         const alc = self.types.store.get(alloc);
         alc.* = .{
             .key = alc.key,
-            .args = self.types.arena.dupe(Types.Id, arg_tys),
+            .args = self.types.pool.arena.dupe(Types.Id, arg_tys),
             .ret = ret,
         };
         alc.key.captures =
-            self.types.arena.dupe(Types.Scope.Capture, alc.key.captures);
+            self.types.pool.arena.dupe(Types.Scope.Capture, alc.key.captures);
     }
 
     return .{ arg_exprs, slot.key_ptr.* };
@@ -2823,7 +2821,7 @@ fn emitDirective(
             const data = if (value.ty == .type) dt: {
                 const ty = try self.unwrapTyConst(args[0], &value);
                 break :dt std.fmt.allocPrint(
-                    self.types.arena.allocator(),
+                    self.types.pool.arena.allocator(),
                     "{}",
                     .{ty.fmt(self.types)},
                 ) catch unreachable;

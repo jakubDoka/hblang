@@ -1,33 +1,24 @@
 generic structs 2.Foo(F = uint).Bar(B = u8).init:
-	mov rsi, rdi
 	mov rax, 0x01
-	mov [rsi], rax
+	mov [rdi], rax
 	mov rax, 0x01
-	mov [rsi+0x08], al
+	mov [rdi+0x08], al
 	ret
 generic structs 2.Foo(F = uint).Bar(B = u8).sub:
-	push rbp
-	mov rbp, rsi
-	mov rsi, rdi
-	mov rax, rbp
-	movzx rax, al
-	sub rsi, rax
 	mov rax, rsi
-	pop rbp
+	movzx rax, al
+	sub rdi, rax
+	mov rax, rdi
 	ret
 main:
 	push rbx
-	push rbp
 	sub rsp, 0x18
 	lea rbx, [rsp]
 	mov rdi, rbx
 	call :generic structs 2.Foo(F = uint).Bar(B = u8).init
-	mov rsi, [rbx]
-	mov bpl, [rbx+0x08]
-	mov rdi, rsi
-	mov rsi, rbp
+	mov rdi, [rbx]
+	mov sil, [rbx+0x08]
 	call :generic structs 2.Foo(F = uint).Bar(B = u8).sub
 	add rsp, 0x18
-	pop rbp
 	pop rbx
 	ret

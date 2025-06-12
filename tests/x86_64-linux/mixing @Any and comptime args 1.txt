@@ -1,41 +1,29 @@
 mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime args 1.main):
-	push rbp
 	sub rsp, 0x08
-	mov rbp, rsi
-	mov rsi, rdi
-	mov rcx, rdx
-	test bpl, bpl
+	test sil, sil
 	jz :0
-	mov rdi, rsi
-	mov rsi, rcx
+	mov rsi, rdx
 	call :mixing @Any and comptime args 1.main
 	jmp :1
 0:	mov rax, 0x00
-	mov [rsi], al
+	mov [rdi], al
 1:	add rsp, 0x08
-	pop rbp
 	ret
 mixing @Any and comptime args 1.main:
-	push rbp
 	sub rsp, 0x10
-	mov rbp, rsi
-	mov rsi, rdi
 	lea rax, [rsp]
 	mov rcx, 0x01
 	mov [rax], cl
-	add ebp, 0x05
-	mov [rax+0x04], ebp
+	add esi, 0x05
+	mov [rax+0x04], esi
 	mov rcx, 0x08
-	mov rdi, rsi
 	mov rsi, rax
 	mov rdx, rcx
 	call :memcpy
 	add rsp, 0x10
-	pop rbp
 	ret
 main:
 	push rbx
-	push rbp
 	sub rsp, 0x18
 	lea rax, [rsp+0x08]
 	mov rcx, 0x01
@@ -48,16 +36,12 @@ main:
 	mov rsi, rax
 	mov rdx, rcx
 	call :memcpy
-	lea rsi, [rsp+0x10]
-	mov bpl, [rbx]
-	mov ecx, [rbx+0x04]
-	mov rdi, rsi
-	mov rsi, rbp
-	mov rdx, rcx
+	lea rdi, [rsp+0x10]
+	mov sil, [rbx]
+	mov edx, [rbx+0x04]
 	call :mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime args 1.main)
 	mov rax, 0x00
 	add rsp, 0x18
-	pop rbp
 	pop rbx
 	ret
 memcpy:

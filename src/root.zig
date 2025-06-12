@@ -44,7 +44,6 @@ const Arena = hb.utils.Arena;
 const max_file_len = std.math.maxInt(u31);
 
 pub const CompileOptions = struct {
-    gpa: std.mem.Allocator,
     diagnostics: std.io.AnyWriter = std.io.null_writer.any(),
     colors: std.io.tty.Config = .no_color,
     output: std.io.AnyWriter,
@@ -60,17 +59,15 @@ pub const CompileOptions = struct {
     fmt_stdout: bool = false, // format only the root file and print it to stdout
     dump_asm: bool = false, // dump assembly of the program
     mangle_terminal: bool = false, // dump the executable even if colors are supported
-    vendored_test: bool = false,
+    vendored_test: bool = false, // run the file in a vendored test setting
+    type_system_memory: usize = 1024 * 1024 * 256, // how much memory can type system use
+    scratch_memory: usize = 1024 * 1024 * 128, // how much memory can each scratch arena use (there are 2)
     // #OPTIONS (--target ableos)
     target: []const u8 = "hbvm-ableos", // target triple to compile to (not used yet since we have only one target)
     extra_threads: usize = 0, // extra threads used for the compilation (not used yet)
     path_projections: std.StringHashMapUnmanaged([]const u8) = .{}, // can be specified multiple times
     // as `--path-projection name path`, when the `@use("name")` is encountered, its projected to `@use("path")`
     // #CLI end
-
-    pub fn deinit(self: *CompileOptions) void {
-        self.path_projections.deinit(self.gpa);
-    }
 
     pub fn loadCli(self: *CompileOptions, arena: std.mem.Allocator) !void {
         var args = try std.process.ArgIterator.initWithAllocator(arena);
@@ -90,50 +87,39 @@ pub const CompileOptions = struct {
 
             arg = arg[2..];
 
-            self.help = self.help or std.mem.eql(u8, arg, "help");
-            self.fmt = self.fmt or std.mem.eql(u8, arg, "fmt");
-            self.fmt_stdout = self.fmt_stdout or std.mem.eql(u8, arg, "fmt-stdout");
-            self.dump_asm = self.dump_asm or std.mem.eql(u8, arg, "dump-asm");
-            self.mangle_terminal = self.mangle_terminal or std.mem.eql(u8, arg, "mangle-terminal");
-            self.vendored_test = self.vendored_test or std.mem.eql(u8, arg, "vendored-test");
+            inline for (std.meta.fields(CompileOptions)[5..]) |f| flag: {
+                const name = comptime b: {
+                    var mem = f.name[0..f.name.len].*;
+                    for (&mem) |*c| if (c.* == '_') {
+                        c.* = '-';
+                    };
+                    break :b mem ++ "";
+                };
 
-            if (std.mem.eql(u8, arg, "target")) self.target = args.next() orelse {
-                try self.diagnostics.writeAll("--target <triple>");
-                return;
-            };
+                if (!std.mem.eql(u8, arg, name)) break :flag;
 
-            if (std.mem.eql(u8, arg, "parser-mode")) {
-                self.parser_mode = std.meta.stringToEnum(@TypeOf(self.parser_mode), args.next() orelse {
-                    try self.diagnostics.writeAll("--parser-mode <mode>");
-                    return;
-                }) orelse {
-                    try self.diagnostics.writeAll("--parser-mode <latest/legacy>");
-                    return;
-                };
-            }
+                const val = &@field(self, f.name);
 
-            if (std.mem.eql(u8, arg, "extra-threads")) {
-                arg = args.next() orelse {
-                    try self.diagnostics.writeAll("--extra-threads <integer>");
-                    return;
-                };
-                self.extra_threads = std.fmt.parseInt(usize, arg, 10) catch |err| {
-                    try self.diagnostics.print("--extra-threads <1..>: {s}", .{@errorName(err)});
-                    return;
-                };
-            }
+                errdefer |err| {
+                    self.diagnostics.print("--parser-mode <{s}>", .{@errorName(err)}) catch unreachable;
+                    std.process.exit(1);
+                }
 
-            if (std.mem.eql(u8, arg, "path-projection")) {
-                const msg = "--path-projection <key> <value>";
-                const key = args.next() orelse {
-                    try self.diagnostics.writeAll(msg);
-                    return;
-                };
-                const value = args.next() orelse {
-                    try self.diagnostics.writeAll(msg);
-                    return;
-                };
-                try self.path_projections.put(self.gpa, key, value);
+                switch (f.type) {
+                    bool => val.* = true,
+                    frontend.Ast.InitOptions.Mode => val.* = std.meta.stringToEnum(
+                        @TypeOf(self.parser_mode),
+                        args.next() orelse return error.mode,
+                    ) orelse return error.@"legacy/latest",
+                    []const u8 => val.* = args.next() orelse return error.target,
+                    usize => val.* = try std.fmt.parseInt(usize, args.next() orelse return error.integer, 10),
+                    std.StringHashMapUnmanaged([]const u8) => {
+                        const key = args.next() orelse return error.@"key> <value";
+                        const value = args.next() orelse return error.@"key> <value";
+                        try val.put(arena, key, value);
+                    },
+                    else => @compileError(@typeName(f.type)),
+                }
             }
         }
     }
@@ -158,19 +144,28 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         return error.Failed;
     }
 
-    var ast_arena = Arena.init(1024 * 1024 * 128);
-    errdefer ast_arena.deinit();
+    utils.Arena.initScratch(opts.scratch_memory);
+
+    var type_system_memory = Arena.init(opts.type_system_memory);
+    errdefer type_system_memory.deinit();
 
     if (opts.fmt_stdout) {
-        const source = try std.fs.cwd().readFileAllocOptions(ast_arena.allocator(), opts.root_file, max_file_len, null, @alignOf(u8), 0);
-        const ast = try hb.frontend.Ast.init(&ast_arena, .{
+        const source = try std.fs.cwd().readFileAllocOptions(
+            type_system_memory.allocator(),
+            opts.root_file,
+            max_file_len,
+            null,
+            @alignOf(u8),
+            0,
+        );
+        const ast = try hb.frontend.Ast.init(&type_system_memory, .{
             .path = opts.root_file,
             .code = source,
             .diagnostics = opts.diagnostics,
             .mode = opts.parser_mode,
         });
 
-        var buf = std.ArrayList(u8).init(ast_arena.allocator());
+        var buf = std.ArrayList(u8).init(type_system_memory.allocator());
         try ast.fmt(&buf);
 
         try opts.output.writeAll(buf.items);
@@ -178,7 +173,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     }
 
     const asts, const base = try Loader.loadAll(
-        &ast_arena,
+        &type_system_memory,
         opts.path_projections,
         opts.root_file,
         opts.diagnostics,
@@ -199,20 +194,24 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             const path = try std.fs.path.join(tmp.arena.allocator(), &.{ base, ast.path });
             try std.fs.cwd().writeFile(.{ .sub_path = path, .data = buf.items });
         }
-        return .{ .ast = asts, .arena = ast_arena };
+        return .{ .ast = asts, .arena = type_system_memory };
     }
 
+    const types = hb.frontend.Types.init(type_system_memory, asts, opts.diagnostics);
+    types.target = opts.target;
+    defer if (std.debug.runtime_safety) types.deinit();
+
     var bckend, const abi: hb.frontend.Types.Abi = if (std.mem.eql(u8, opts.target, "hbvm-ableos")) backend: {
-        const slot = ast_arena.create(hb.hbvm.HbvmGen);
-        slot.* = hb.hbvm.HbvmGen{ .gpa = opts.gpa };
+        const slot = types.pool.arena.create(hb.hbvm.HbvmGen);
+        slot.* = hb.hbvm.HbvmGen{ .gpa = types.pool.allocator() };
         break :backend .{ hb.backend.Machine.init(opts.target, slot), .ableos };
     } else if (std.mem.eql(u8, opts.target, "x86_64-windows")) backend: {
-        const slot = ast_arena.create(hb.x86_64.X86_64Gen);
-        slot.* = hb.x86_64.X86_64Gen{ .gpa = opts.gpa, .object_format = .coff };
+        const slot = types.pool.arena.create(hb.x86_64.X86_64Gen);
+        slot.* = hb.x86_64.X86_64Gen{ .gpa = types.pool.allocator(), .object_format = .coff };
         break :backend .{ hb.backend.Machine.init(opts.target, slot), .fastcall };
     } else if (std.mem.eql(u8, opts.target, "x86_64-linux")) backend: {
-        const slot = ast_arena.create(hb.x86_64.X86_64Gen);
-        slot.* = hb.x86_64.X86_64Gen{ .gpa = opts.gpa, .object_format = .elf };
+        const slot = types.pool.arena.create(hb.x86_64.X86_64Gen);
+        slot.* = hb.x86_64.X86_64Gen{ .gpa = types.pool.allocator(), .object_format = .elf };
         break :backend .{ hb.backend.Machine.init(opts.target, slot), .systemv };
     } else {
         try opts.diagnostics.print(
@@ -223,23 +222,19 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     };
     defer bckend.deinit();
 
-    const types = hb.frontend.Types.init(opts.gpa, asts, opts.diagnostics);
-    types.target = opts.target;
-    defer types.deinit();
-
     var root_tmp = utils.Arena.scrath(null);
     defer root_tmp.deinit();
 
-    const errored = hb.frontend.Codegen.emitReachable(opts.gpa, root_tmp.arena, types, abi, bckend, .{});
+    const errored = hb.frontend.Codegen.emitReachable(root_tmp.arena, types, abi, bckend, .{});
     if (errored) {
         try opts.diagnostics.print("failed due to previous errors\n", .{});
         return error.Failed;
     }
 
-    const name = try std.mem.replaceOwned(u8, ast_arena.allocator(), opts.root_file, "/", "_");
+    const name = try std.mem.replaceOwned(u8, types.pool.arena.allocator(), opts.root_file, "/", "_");
 
     if (opts.dump_asm) {
-        const out = bckend.finalizeBytes(ast_arena.allocator());
+        const out = bckend.finalizeBytes(types.pool.arena.allocator());
 
         bckend.disasm(.{
             .name = name,
@@ -247,13 +242,13 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             .out = opts.output,
             .colors = opts.colors,
         });
-        return .{ .ast = asts, .arena = ast_arena };
+        return .{ .ast = asts, .arena = types.pool.arena };
     }
 
     if (opts.vendored_test) {
-        const expectations: test_utils.Expectations = .init(&asts[0], ast_arena.allocator());
+        const expectations: test_utils.Expectations = .init(&asts[0], types.pool.arena.allocator());
 
-        const out = bckend.finalizeBytes(ast_arena.allocator());
+        const out = bckend.finalizeBytes(types.pool.arena.allocator());
 
         errdefer {
             bckend.disasm(.{
@@ -276,12 +271,12 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             .code = out.items,
         }));
 
-        return .{ .arena = ast_arena, .ast = asts };
+        return .{ .arena = types.pool.arena, .ast = asts };
     }
 
     if (opts.colors == .no_color or opts.mangle_terminal) {
         bckend.finalize(opts.output);
-        return .{ .ast = asts, .arena = ast_arena };
+        return .{ .ast = asts, .arena = types.pool.arena };
     } else {
         try opts.diagnostics.writeAll("can't dump the executable to the stdout since it" ++
             " supports colors (pass --mangle-terminal if you dont care)");

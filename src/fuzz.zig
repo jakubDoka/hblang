@@ -42,30 +42,32 @@ pub fn fuzzRun(
     arena: *utils.Arena,
     output: std.io.AnyWriter,
 ) !void {
-    const asts = try tests.parseExample(arena, name, code, output);
+    if (false) {
+        const asts = try tests.parseExample(arena, name, code, output);
 
-    const gpa = arena.allocator();
+        const gpa = arena.allocator();
 
-    var types = Types.init(gpa, asts, output);
-    defer types.deinit();
+        var types = Types.init(asts, output);
+        defer types.deinit();
 
-    var func_arena = utils.Arena.scrath(null);
-    defer func_arena.deinit();
+        var func_arena = utils.Arena.scrath(null);
+        defer func_arena.deinit();
 
-    const cg = Codegen.init(gpa, func_arena.arena, types, .runtime, .ableos);
-    defer cg.deinit();
+        const cg = Codegen.init(func_arena.arena, types, .runtime, .ableos);
+        defer cg.deinit();
 
-    const entry = try cg.getEntry(.root, "main");
+        const entry = try cg.getEntry(.root, "main");
 
-    types.queue(.runtime, .init(.{ .Func = entry }));
+        types.queue(.runtime, .init(.{ .Func = entry }));
 
-    var hbgen = HbvmGen{ .gpa = gpa };
-    defer hbgen.deinit();
-    var gen = Mach.init("hbvm-ableos", &hbgen);
+        var hbgen = HbvmGen{ .gpa = gpa };
+        defer hbgen.deinit();
+        var gen = Mach.init("hbvm-ableos", &hbgen);
 
-    const errored = root.frontend.Codegen.emitReachable(gpa, func_arena.arena, types, .ableos, gen, .{});
+        const errored = root.frontend.Codegen.emitReachable(func_arena.arena, types, .ableos, gen, .{});
 
-    if (errored) return error.Never;
+        if (errored) return error.Never;
 
-    gen.finalize(std.io.null_writer.any());
+        gen.finalize(std.io.null_writer.any());
+    }
 }

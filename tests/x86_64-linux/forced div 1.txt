@@ -10,12 +10,10 @@ main:
 	call :forced div 1.two
 	mov rbx, rax
 	call :forced div 1.one
-	xchg rax, rbx
-	xor rdx, rdx
-	div rbx
 	mov rcx, rax
-	xchg rax, rbx
-	mov rax, rcx
+	mov rax, rbx
+	xor rdx, rdx
+	div rcx
 	add rsp, 0x08
 	pop rbx
 	ret

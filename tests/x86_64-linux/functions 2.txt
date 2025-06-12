@@ -1,22 +1,18 @@
 one.hb.add:
-	mov rsi, rdi
-	add rsi, 0x01
-	mov rax, rsi
+	add rdi, 0x01
+	mov rax, rdi
 	ret
 two.hb.add:
-	mov rsi, rdi
-	add rsi, 0x02
-	mov rax, rsi
+	add rdi, 0x02
+	mov rax, rdi
 	ret
 main:
 	push rbx
 	sub rsp, 0x08
-	mov rsi, 0x0A
-	mov rdi, rsi
+	mov rdi, 0x0A
 	call :one.hb.add
 	mov rbx, rax
-	mov rsi, 0x14
-	mov rdi, rsi
+	mov rdi, 0x14
 	call :two.hb.add
 	mov rcx, rbx
 	add rcx, rax

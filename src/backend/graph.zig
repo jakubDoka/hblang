@@ -145,12 +145,12 @@ pub const UnOp = enum(u8) {
             .uext => oper,
             .ired => oper,
             .ineg => -oper,
-            .fneg => @bitCast(-tf(oper)),
+            .fneg => return @bitCast(-tf(oper)),
             .not => @intFromBool(oper == 0),
             .bnot => ~oper,
             .fti => @intFromFloat(tf(oper)),
-            .itf64, .itf32 => @bitCast(@as(f64, @floatFromInt(oper))),
-            .fcst => oper,
+            .itf64, .itf32 => return @bitCast(@as(f64, @floatFromInt(oper))),
+            .fcst => return oper,
         }) & src.mask();
     }
 };
@@ -604,7 +604,10 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             pub fn format(self: *const Node, comptime _: anytype, _: anytype, writer: anytype) !void {
-                const colors = .no_color;
+                const colors: std.io.tty.Config = if (writer.writeFn == std.io.getStdErr().writer().any().writeFn)
+                    std.io.tty.detectConfig(std.io.getStdErr())
+                else
+                    .no_color;
                 self.fmt(null, writer, colors);
             }
 

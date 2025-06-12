@@ -1,11 +1,9 @@
 arithmetic 9 (force imm ops).box(v: uint):
-	mov rsi, rdi
-	mov rax, rsi
+	mov rax, rdi
 	ret
 main:
 	sub rsp, 0x08
-	mov rsi, 0xFFFFFFFFFFFFFFFF
-	mov rdi, rsi
+	mov rdi, 0xFFFFFFFFFFFFFFFF
 	call :arithmetic 9 (force imm ops).box(v: uint)
 	xor rax, 0xFFFFFFFFFFFFFFFF
 	cmp rax, 0x00

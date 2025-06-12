@@ -1,7 +1,6 @@
 if statements 4 (short circuit).effectfull:
-	mov rsi, rdi
 	lea rax, [0x0000000000000007]
-	mov [rax], rsi
+	mov [rax], rdi
 	mov rax, 0x01
 	ret
 main:
@@ -12,27 +11,23 @@ main:
 	test bl, bl
 	jz :0
 	jmp :1
-0:	mov rsi, 0x01
-	mov rdi, rsi
+0:	mov rdi, 0x01
 	call :if statements 4 (short circuit).effectfull
 1:	mov rbp, 0x00
 	test bpl, bpl
 	jz :3
-	mov rsi, 0x02
-	mov rdi, rsi
+	mov rdi, 0x02
 	call :if statements 4 (short circuit).effectfull
 	jmp :3
 3:	test bpl, bpl
 	jz :4
-	mov rsi, 0x04
-	mov rdi, rsi
+	mov rdi, 0x04
 	call :if statements 4 (short circuit).effectfull
 	jmp :4
 4:	test bl, bl
 	jz :4
 	jmp :5
-4:	mov rsi, 0x05
-	mov rdi, rsi
+4:	mov rdi, 0x05
 	call :if statements 4 (short circuit).effectfull
 5:	lea rax, [0x0000000000000007]
 	mov rax, [rax]

@@ -71,6 +71,76 @@ pub fn orderMoves(self: anytype, comptime R: type, moves: []Move(R)) void {
     }
 }
 
+// designed to be used with arena
+pub const Pool = struct {
+    arena: Arena,
+    free: [sclass_count]?*Header = @splat(null),
+
+    const max_alloc_size = 1024 * 1024 * 256;
+    const sclass_offset = std.math.log2_int(usize, std.heap.pageSize());
+    const sclass_count = std.math.log2_int(usize, max_alloc_size) - sclass_offset;
+    comptime {
+        std.debug.assert(sclass_count == 16);
+    }
+
+    const Header = struct {
+        next: ?*Header,
+    };
+
+    pub fn sclassOf(size: usize) usize {
+        std.debug.assert(size <= max_alloc_size);
+        return std.math.log2_int_ceil(usize, size) -| sclass_offset;
+    }
+
+    pub fn allocator(self: *Pool) std.mem.Allocator {
+        const alc_impl = enum {
+            fn alloc(ptr: *anyopaque, size: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
+                const slf: *Pool = @alignCast(@ptrCast(ptr));
+                const alignm = @max(alignment.toByteUnits(), @alignOf(Header));
+                std.debug.assert(alignm <= comptime std.heap.pageSize());
+                const size_class = sclassOf(size);
+
+                if (slf.free[size_class]) |fr| {
+                    slf.free[size_class] = fr.next;
+                    return @ptrCast(fr);
+                }
+
+                return slf.arena.allocator().rawAlloc(
+                    @as(usize, 1) << @intCast(size_class + sclass_offset),
+                    std.mem.Alignment.fromByteUnits(alignm),
+                    ret_addr,
+                );
+            }
+            fn free(ptr: *anyopaque, mem: []u8, _: std.mem.Alignment, _: usize) void {
+                @memset(mem, undefined);
+                const slf: *Pool = @alignCast(@ptrCast(ptr));
+                const size_class = sclassOf(mem.len);
+                const header: *Header = @alignCast(@ptrCast(mem.ptr));
+                header.next = slf.free[size_class];
+                slf.free[size_class] = header;
+            }
+            fn remap(_: *anyopaque, mem: []u8, _: std.mem.Alignment, new_len: usize, _: usize) ?[*]u8 {
+                return if (sclassOf(mem.len) == sclassOf(new_len)) return mem.ptr else null;
+            }
+            fn resize(_: *anyopaque, mem: []u8, _: std.mem.Alignment, new_len: usize, _: usize) bool {
+                return sclassOf(mem.len) == sclassOf(new_len);
+            }
+        };
+
+        return .{
+            .ptr = self,
+            .vtable = &.{
+                .alloc = alc_impl.alloc,
+                .free = alc_impl.free,
+                .remap = alc_impl.remap,
+                .resize = alc_impl.resize,
+            },
+        };
+    }
+};
+
+pub const PooledArena = struct {};
+
 pub const Arena = struct {
     start: [*]align(page_size) u8,
     end: [*]align(page_size) u8,

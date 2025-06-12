@@ -44,6 +44,22 @@ pub const Reg = enum(u8) {
     r13,
     r14,
     r15,
+    xmm0,
+    xmm1,
+    xmm2,
+    xmm3,
+    xmm4,
+    xmm5,
+    xmm6,
+    xmm7,
+    xmm8,
+    xmm9,
+    xmm10,
+    xmm11,
+    xmm12,
+    xmm13,
+    xmm14,
+    xmm15,
     _, // spills
 
     const system_v = struct {
@@ -52,6 +68,38 @@ pub const Reg = enum(u8) {
         const caller_saved: []const Reg = &.{ .rax, .rcx, .rdx, .rsi, .rdi, .r8, .r9, .r10, .r11 };
         const callee_saved: []const Reg = &.{ .rbx, .rbp, .r12, .r13, .r14, .r15 };
     };
+
+    // stack slots are separate so that register allocator knows they dont interfere
+    //
+    pub const set_cap = 128;
+    pub const stack_per_mask = (set_cap - (@intFromEnum(Reg.xmm15) + 3)) / 2;
+
+    pub fn floatMask(tmp: *utils.Arena) std.DynamicBitSetUnmanaged {
+        var set = std.DynamicBitSetUnmanaged.initFull(tmp.allocator(), set_cap) catch unreachable;
+        set.setRangeValue(.{ .start = @intFromEnum(Reg.rax), .end = @intFromEnum(Reg.r15) + 2 }, false);
+        set.setRangeValue(.{
+            .start = @intFromEnum(Reg.xmm15) + 1,
+            .end = @intFromEnum(Reg.xmm15) + 2 + stack_per_mask,
+        }, false);
+        return set;
+    }
+
+    // TODO: fix the explodiated stack frames due to slipped spill slots
+    //
+    pub fn intMask(tmp: *utils.Arena) std.DynamicBitSetUnmanaged {
+        var set = std.DynamicBitSetUnmanaged.initFull(tmp.allocator(), set_cap) catch unreachable;
+        set.unset(0);
+        set.unset(@intFromEnum(Reg.rsp) + 1);
+        set.setRangeValue(.{
+            .start = @intFromEnum(Reg.xmm0) + 1,
+            .end = @intFromEnum(Reg.xmm15) + 2,
+        }, false);
+        set.setRangeValue(.{
+            .start = @intFromEnum(Reg.xmm15) + 2 + stack_per_mask,
+            .end = set_cap,
+        }, false);
+        return set;
+    }
 
     pub fn asZydisOpReg(self: Reg, size: usize) zydis.ZydisEncoderOperand {
         return .{
@@ -118,7 +166,7 @@ pub const Node = union(enum) {
     pub const is_mem_op: []const Func.Kind = &.{ .OffsetLoad, .OffsetStore, .InPlaceImmOp };
     pub const is_basic_block_end: []const Func.Kind = &.{};
     pub const is_pinned: []const Func.Kind = &.{};
-    pub const reserved_regs = @as(u64, 1) << @intFromEnum(Reg.rsp);
+    pub const reg_count = 32;
 
     pub fn carried(node: *Func.Node) ?usize {
         return if (node.kind == .BinOp) 0 else null;
@@ -269,7 +317,11 @@ pub const Node = union(enum) {
                 .CInt,
                 node.data_type,
                 &.{null},
-                node.extra(.BinOp).*.eval(node.data_type, node.inputs()[1].?.extra(.CInt).*, node.inputs()[2].?.extra(.CInt).*),
+                node.extra(.BinOp).*.eval(
+                    node.data_type,
+                    node.inputs()[1].?.extra(.CInt).*,
+                    node.inputs()[2].?.extra(.CInt).*,
+                ),
             );
         }
 
@@ -300,6 +352,17 @@ pub const Node = union(enum) {
         }
 
         return null;
+    }
+
+    pub fn allowedRegsFor(
+        node: *Func.Node,
+        ids: usize,
+        tmp: *utils.Arena,
+    ) ?std.DynamicBitSetUnmanaged {
+        _ = node;
+        _ = ids;
+
+        return Reg.intMask(tmp);
     }
 
     pub fn getStaticOffset(node: *Func.Node) i64 {

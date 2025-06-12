@@ -6,28 +6,19 @@ const Arena = hb.utils.Arena;
 
 var gpa_impl = std.heap.DebugAllocator(.{}){};
 const gpa = if (std.debug.runtime_safety) gpa_impl.allocator() else std.heap.smp_allocator;
+var cli_buff: [1024 * 8]u8 = undefined;
 
 pub fn main() !void {
-    Arena.initScratch(1024 * 1024 * 128);
-    defer Arena.deinitScratch();
-
-    defer if (std.debug.runtime_safety) {
-        _ = gpa_impl.deinit();
-    };
-
     var opts = hb.CompileOptions{
-        .gpa = gpa,
         .diagnostics = std.io.getStdErr().writer().any(),
         .colors = std.io.tty.detectConfig(std.io.getStdOut()),
         .output = std.io.getStdOut().writer().any(),
     };
-    defer opts.deinit();
 
-    var cli_buff: [1024 * 8]u8 = undefined;
     var cli_scratch = std.heap.FixedBufferAllocator.init(&cli_buff);
 
     try opts.loadCli(cli_scratch.allocator());
 
     var arena = (try hb.compile(opts)).arena;
-    arena.deinit();
+    if (std.debug.runtime_safety) arena.deinit();
 }

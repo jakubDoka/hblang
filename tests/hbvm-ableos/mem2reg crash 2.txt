@@ -16,7 +16,6 @@ mem2reg crash 2.main:
          ld $31, $254, -8, 8
          tx
 mem2reg crash 2.insert:
-        swa $2, $1
        li64 $3, 0
        li64 $4, 8
          cp $5, $3
@@ -24,9 +23,9 @@ mem2reg crash 2.insert:
 4:     jltu $6, $4, :1
      addi64 $5, $5, 1
         jmp :2
-1:       ld $7, $2, 0, 8
+1:       ld $7, $1, 0, 8
          ld $8, $7, 0, 8
-        jne $8, $1, :3
+        jne $8, $2, :3
      addi64 $1, $7, 8
        jala $0, $31, 0
 3:   addi64 $6, $6, 1

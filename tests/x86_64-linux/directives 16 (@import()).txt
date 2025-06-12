@@ -1,13 +1,11 @@
 main:
 	push rbx
 	sub rsp, 0x08
-	mov rsi, 0x08
-	mov rdi, rsi
+	mov rdi, 0x08
 	call :malloc
-	mov rsi, rax
+	mov rdi, rax
 	mov rbx, 0x0A
-	mov [rsi], rbx
-	mov rdi, rsi
+	mov [rdi], rbx
 	call :free
 	mov rax, rbx
 	add rsp, 0x08

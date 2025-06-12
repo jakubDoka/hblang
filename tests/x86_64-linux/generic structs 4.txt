@@ -1,64 +1,50 @@
 generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get:
-	push rbp
 	sub rsp, 0x08
-	mov rbp, rsi
-	mov rsi, rdi
-	cmp rbp, 0x00
+	cmp rsi, 0x00
 	setz al
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, [rsi]
+	mov rax, [rdi]
 	jmp :1
-0:	mov rax, [rsi+0x08]
-	mov rcx, [rsi+0x10]
-	mov rdx, rbp
+0:	mov rax, [rdi+0x08]
+	mov rcx, [rdi+0x10]
+	mov rdx, rsi
 	sub rdx, 0x01
 	mov rdi, rax
 	mov rsi, rcx
 	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint))).get
 1:	add rsp, 0x08
-	pop rbp
 	ret
 generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint))).get:
-	push rbp
 	sub rsp, 0x08
-	mov rbp, rsi
-	mov rsi, rdi
-	mov rcx, rdx
-	cmp rcx, 0x00
+	cmp rdx, 0x00
 	setz al
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, rsi
+	mov rax, rdi
 	jmp :1
-0:	mov rax, rcx
+0:	mov rax, rdx
 	sub rax, 0x01
-	mov rdi, rbp
+	mov rdi, rsi
 	mov rsi, rax
 	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)).get
 1:	add rsp, 0x08
-	pop rbp
 	ret
 generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)).get:
-	push rbp
 	sub rsp, 0x08
-	mov rbp, rsi
-	mov rsi, rdi
-	cmp rbp, 0x00
+	cmp rsi, 0x00
 	setz al
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, rsi
+	mov rax, rdi
 	jmp :1
-0:	mov rsi, rbp
-	sub rsi, 0x01
-	mov rdi, rsi
+0:	mov rdi, rsi
+	sub rdi, 0x01
 	call :generic structs 4.Array(E = uint).get
 1:	add rsp, 0x08
-	pop rbp
 	ret
 generic structs 4.Array(E = uint).get:
 	ud2
@@ -76,9 +62,8 @@ main:
 	mov rax, 0x03
 	mov [rbx+0x10], rax
 	mov [rbx+0x10], rax
-	mov rax, 0x00
+	mov rsi, 0x00
 	mov rdi, rbx
-	mov rsi, rax
 	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get
 	mov r13, rax
 	mov rdi, rbx

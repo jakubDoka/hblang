@@ -1,18 +1,14 @@
 generic structs 3.Foo(F = generic structs 3.Foo(F = uint)).sub:
-	mov rsi, rdi
-	mov rax, rsi
+	mov rax, rdi
 	ret
 generic structs 3.Foo(F = uint).sub:
-	mov rsi, rdi
-	mov rax, rsi
+	mov rax, rdi
 	ret
 main:
 	sub rsp, 0x08
-	mov rsi, 0x0A
-	mov rdi, rsi
+	mov rdi, 0x0A
 	call :generic structs 3.Foo(F = generic structs 3.Foo(F = uint)).sub
-	mov rsi, rax
-	mov rdi, rsi
+	mov rdi, rax
 	call :generic structs 3.Foo(F = uint).sub
 	add rsp, 0x08
 	ret

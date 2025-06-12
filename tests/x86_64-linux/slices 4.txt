@@ -1,60 +1,57 @@
 slices 4.equals:
 	push rbx
 	push rbp
-	mov rbp, rsi
-	mov rax, rcx
-	mov rsi, rdi
-	mov rcx, rdx
-	cmp rbp, rax
-	setnz dl
-	movzx rdx, dl
-	mov rax, 0x00
-	test dl, dl
+	cmp rsi, rcx
+	setnz al
+	movzx rax, al
+	mov rcx, 0x00
+	test al, al
 	jz :0
+	mov rax, rcx
 	jmp :1
-0:	cmp rsi, rcx
-	setz dl
-	movzx rdx, dl
+0:	cmp rdi, rdx
+	setz al
+	movzx rax, al
 	mov rbx, 0x01
-	test dl, dl
+	test al, al
 	jz :2
 	mov rax, rbx
 1:	jmp :5
-2:	mov rdx, 0x00
-6:	cmp rdx, rbp
-	setz dil
-	movzx rdi, dil
-	test dil, dil
+2:	mov rax, 0x00
+6:	cmp rax, rsi
+	setz bpl
+	movzx rbp, bpl
+	test bpl, bpl
 	jz :4
 	mov rax, rbx
 	jmp :5
-4:	mov rdi, rsi
-	add rdi, rdx
-	mov r8, rcx
-	add r8, rdx
-	mov dil, [rdi]
+4:	mov rbp, rdi
+	add rbp, rax
+	mov r8, rdx
+	add r8, rax
+	mov bpl, [rbp]
 	mov r8b, [r8]
-	cmp dil, r8b
-	setnz dil
-	movzx rdi, dil
-	test dil, dil
+	cmp bpl, r8b
+	setnz bpl
+	movzx rbp, bpl
+	test bpl, bpl
 	jz :5
+	mov rax, rcx
 5:	pop rbp
 	pop rbx
 	ret
-5:	add rdx, 0x01
+5:	add rax, 0x01
 	jmp :6
 main:
 	push rbx
 	push rbp
-	push r12
 	sub rsp, 0x28
 	lea rbx, [rsp]
-	lea rsi, [0x0000000000000007]
-	mov [rbx], rsi
-	mov rbp, 0x03
-	mov [rbx+0x08], rbp
-	lea r12, [rsp+0x10]
+	lea rdi, [0x0000000000000007]
+	mov [rbx], rdi
+	mov rsi, 0x03
+	mov [rbx+0x08], rsi
+	lea rbp, [rsp+0x10]
 	lea rax, [rsp+0x20]
 	mov rcx, 0x61
 	mov [rax], cl
@@ -62,25 +59,20 @@ main:
 	mov [rax+0x01], cl
 	mov rcx, 0x63
 	mov [rax+0x02], cl
-	mov [r12], rax
-	mov [r12+0x08], rbp
-	mov rdi, rsi
-	mov rdx, rsi
-	mov rsi, rbp
-	mov rcx, rbp
+	mov [rbp], rax
+	mov [rbp+0x08], rsi
+	mov rdx, rdi
+	mov rcx, rsi
 	call :slices 4.equals
 	xor al, 0x01
-	mov rbp, [r12+0x08]
-	mov rcx, [rbx]
-	mov rdx, [rbx+0x08]
-	mov rsi, [r12]
+	mov rsi, [rbp+0x08]
+	mov rdx, [rbx]
+	mov rcx, [rbx+0x08]
+	mov rdi, [rbp]
 	test al, al
 	jz :0
 	jmp :1
-0:	xchg rdx, rcx
-	mov rdi, rsi
-	mov rsi, rbp
-	call :slices 4.equals
+0:	call :slices 4.equals
 	xor al, 0x01
 	test al, al
 	jz :2
@@ -88,7 +80,6 @@ main:
 	jmp :3
 2:	mov rax, 0x00
 3:	add rsp, 0x28
-	pop r12
 	pop rbp
 	pop rbx
 	ret

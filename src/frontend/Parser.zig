@@ -11,24 +11,24 @@ const Ident = Ast.Ident;
 const Id = Ast.Id;
 const Capture = Ast.Capture;
 
-store: Ast.Store = .{},
 arena: *utils.Arena,
-active_sym_table: std.HashMapUnmanaged(u32, void, Hasher, 70) = .{},
-active_syms: std.ArrayListUnmanaged(Sym) = .{},
-capture_boundary: usize = 0,
-captures: std.ArrayListUnmanaged(Capture) = .{},
-comptime_idents: std.ArrayListUnmanaged(Ident) = .{},
 lexer: Lexer,
 cur: Lexer.Token,
 current: Types.File,
 path: []const u8,
 loader: Loader,
 diagnostics: std.io.AnyWriter,
+stack_base: usize,
+store: Ast.Store = .{},
+active_sym_table: std.HashMapUnmanaged(u32, void, Hasher, 70) = .{},
+active_syms: std.ArrayListUnmanaged(Sym) = .{},
+capture_boundary: usize = 0,
+captures: std.ArrayListUnmanaged(Capture) = .{},
+comptime_idents: std.ArrayListUnmanaged(Ident) = .{},
 mode: Ast.InitOptions.Mode,
 list_pos: Ast.Pos = undefined,
 deferring: bool = false,
 errored: bool = false,
-stack_base: usize,
 func_stats: FuncStats = .{},
 
 const Hasher = struct {
@@ -222,9 +222,11 @@ fn declareExpr(self: *Parser, id: Id, unordered: bool) void {
     sym.declared = true;
     sym.unordered = unordered;
 
-    self.func_stats.variable_count += 1;
-    self.func_stats.max_variable_count =
-        @max(self.func_stats.max_variable_count, self.func_stats.variable_count);
+    if (!unordered) {
+        self.func_stats.variable_count += 1;
+        self.func_stats.max_variable_count =
+            @max(self.func_stats.max_variable_count, self.func_stats.variable_count);
+    }
 }
 
 fn parseUnit(self: *Parser) Error!Id {
@@ -396,7 +398,6 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 .peak_loops = self.func_stats.max_loop_depth,
             } };
         },
-
         .Directive => |k| switch (k) {
             inline .use, .embed => |t| b: {
                 const ty = @field(Loader.LoadOptions.Kind, @tagName(t));
@@ -519,7 +520,9 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             .legacy => slice: {
                 const pos = Ast.Pos.init(token.pos);
                 var is_legacy = false;
-                const len_or_legacy_elem: Ast.Id = if (self.tryAdvance(.@"]")) .zeroSized(.Void) else b: {
+                const len_or_legacy_elem: Ast.Id = if (self.tryAdvance(.@"]"))
+                    .zeroSized(.Void)
+                else b: {
                     const expr = try self.parseExpr();
                     if (self.tryAdvance(.@";")) {
                         is_legacy = true;
@@ -596,7 +599,10 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                     try self.parseExpr();
             },
         } },
-        .BinInteger, .OctInteger, .DecInteger, .HexInteger => .{ .Integer = .{ .pos = .init(token.pos), .base = @intCast(@intFromEnum(token.kind) & ~@as(u8, 128)) } },
+        .BinInteger, .OctInteger, .DecInteger, .HexInteger => .{ .Integer = .{
+            .pos = .init(token.pos),
+            .base = @intCast(@intFromEnum(token.kind) & ~@as(u8, 128)),
+        } },
         .Float => .{ .Float = .init(token.pos) },
         .true => .{ .Bool = .{ .value = true, .pos = .init(token.pos) } },
         .@"\"" => .{ .String = .{ .pos = .init(token.pos), .end = token.end } },
@@ -634,7 +640,8 @@ fn finalizeVariablesLow(self: *Parser, start: usize) usize {
             }));
         }
     }
-    self.func_stats.variable_count -|= @intCast(self.active_syms.items.len - new_len);
+    if (new_len != 0) self.func_stats.variable_count -|=
+        @intCast(self.active_syms.items.len - new_len);
     return new_len;
 }
 

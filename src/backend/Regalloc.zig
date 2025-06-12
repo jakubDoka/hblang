@@ -8,6 +8,10 @@ pub fn setMasks(s: Set) []Set.MaskInt {
     return s.masks[0 .. (s.bit_length + @bitSizeOf(Set.MaskInt) - 1) / @bitSizeOf(Set.MaskInt)];
 }
 
+pub inline fn swap(a: anytype, b: @TypeOf(a)) void {
+    std.mem.swap(@TypeOf(a.*), a, b);
+}
+
 pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
     func.gcm.cfg_built.assertLocked();
 
@@ -19,7 +23,8 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
     defer tmp.deinit();
 
     // small overcommit is fine
-    const instr_table = tmp.arena.alloc(*Func.Node, func.instr_count);
+    var instr_table = tmp.arena.alloc(*Func.Node, func.instr_count);
+    var instr_masks = tmp.arena.alloc(Set, func.instr_count);
 
     // compress the instruction count, the non defs dont need to be represented
     // in the interference_table
@@ -30,12 +35,18 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
             if (instr.isDef() or instr.kills()) {
                 instr.schedule = func.instr_count;
                 instr_table[func.instr_count] = instr;
+                instr_masks[func.instr_count] = instr.allowedRegsFor(0, tmp.arena).?;
                 func.instr_count += 1;
             } else {
                 instr.schedule = std.math.maxInt(u16);
             }
         }
     }
+
+    if (func.instr_count == 0) return &.{};
+
+    instr_table = instr_table[0..func.instr_count];
+    instr_masks = instr_masks[0..func.instr_count];
 
     const block_liveouts = tmp.arena.alloc(Set, func.gcm.postorder.len);
     for (block_liveouts) |*b| b.* = try Set.initEmpty(tmp.arena.allocator(), func.instr_count);
@@ -60,12 +71,30 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
         while (iter.next()) |n| {
             const node: *Func.Node = n;
 
+            if (node.carried()) |c| {
+                for (node.dataDeps(), 0..) |d, k| {
+                    if (k != c) {
+                        interference_table[node.schedule].set(d.?.schedule);
+                        interference_table[d.?.schedule].set(node.schedule);
+                    }
+                }
+            }
+
             if (node.isDef() or node.kills()) {
                 slider.unset(node.schedule);
+                const node_masks = setMasks(instr_masks[node.schedule]);
 
                 var siter = slider.iterator(.{});
                 while (siter.next()) |elem| {
                     std.debug.assert(elem != node.schedule);
+
+                    // backends should ensure incompatible registers dont overlap
+                    // this way the type of the register is also encoded
+                    //
+                    for (setMasks(instr_masks[elem]), node_masks) |a, b| {
+                        if (a & b != 0) break;
+                    } else continue;
+
                     interference_table[elem].set(node.schedule);
                     interference_table[node.schedule].set(elem);
                 }
@@ -100,41 +129,149 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
         }
     }
 
-    const sentinel = 0;
-    // alocate to the arena and then copy later for sequential access
-    const outs = tmp.arena.alloc(u16, func.instr_count);
-    @memset(outs, sentinel);
-    var selection_set = try Set.initEmpty(tmp.arena.allocator(), @max(func.instr_count + 1, 256));
-    for (interference_table, outs, 0..) |row, *slot, j| {
-        selection_set.unsetAll();
-        selection_set.set(sentinel);
+    const edge_table = tmp.arena.alloc([]u16, func.instr_count);
+    for (edge_table, interference_table) |*edges, row| {
+        edges.* = tmp.arena.alloc(u16, row.count());
+        var iter = row.iterator(.{});
+        var j: usize = 0;
+        while (iter.next()) |k| : (j += 1) edges.*[j] = @intCast(k);
+    }
 
-        @as(*align(@alignOf(usize)) u64, @ptrCast(&setMasks(selection_set)[0])).* |=
-            if (@hasDecl(Mach, "reserved_regs")) Mach.reserved_regs << 1 else 0;
+    var color_stack = tmp.arena.alloc(u16, func.instr_count);
+    for (color_stack, 0..func.instr_count) |*slt, i| slt.* = @intCast(i);
+    var done_cursor: usize = 0;
+    var known_cursor: usize = 0;
 
-        var row_iter = row.iterator(.{});
-        //std.debug.print("{}\n", .{instr_table[j]});
-        while (row_iter.next()) |i| {
-            //std.debug.print("-- {}\n", .{instr_table[i]});
-            selection_set.set(outs[i]);
-            @as(*align(@alignOf(usize)) u64, @ptrCast(&setMasks(selection_set)[0])).* |=
-                instr_table[i].clobbers() << 1;
+    // TODO: count range
+    const allowed_reg_counts = tmp.arena.alloc(u16, func.instr_count);
+    const loop_scores = tmp.arena.alloc(u16, func.instr_count);
+    var tmp_mask = try Set.initEmpty(tmp.arena.allocator(), instr_masks[0].bit_length);
+    if (false) for (
+        edge_table,
+        instr_masks,
+        instr_table,
+        color_stack,
+        allowed_reg_counts,
+        loop_scores,
+    ) |edges, mask, instr, *slot, *arc, *ls| {
+        ls.* = func.loopDepth(instr);
+        for (instr.outputs()) |o| ls.* = @max(func.loopDepth(o), ls.*);
+
+        tmp_mask.setRangeValue(.{ .start = 0, .end = Mach.reg_count + 1 }, true);
+        tmp_mask.setIntersection(mask);
+        arc.* = @intCast(tmp_mask.count());
+        if (arc.* > edges.len) {
+            swap(&color_stack[known_cursor], slot);
+            known_cursor += 1;
+        }
+    };
+
+    if (false) while (done_cursor != color_stack.len) : (done_cursor += 1) {
+        if (done_cursor == known_cursor) {
+            // TODO: add the heuristic
+            //
+            //var best = known_cursor;
+            //for (color_stack[known_cursor + 1], known_cursor + 1..) |color, i| {
+            //    if ()
+            //}
+            known_cursor += 1;
         }
 
-        if (instr_table[j].carried()) |c| {
-            for (instr_table[j].dataDeps(), 0..) |d, k| {
-                if (k != c) {
-                    selection_set.set(outs[d.?.schedule]);
-                }
+        var best: usize = done_cursor;
+        for (
+            color_stack[done_cursor + 1 .. known_cursor],
+            done_cursor + 1..known_cursor,
+        ) |color, i| {
+            if (allowed_reg_counts[color] > allowed_reg_counts[best] or
+                loop_scores[color] < loop_scores[best])
+            {
+                best = i;
             }
         }
 
-        const bias = instr_table[j].regBias();
-        if (bias != null and !selection_set.isSet(bias.?)) {
-            slot.* = bias.?;
-        } else {
-            var it = selection_set.iterator(.{ .kind = .unset });
-            slot.* = @intCast(it.next().?);
+        swap(&color_stack[done_cursor], &color_stack[best]);
+        const instr = color_stack[done_cursor];
+
+        for (edge_table[instr]) |adj| {
+            std.debug.assert(instr != adj);
+            {
+                const adj_edges = edge_table[adj];
+                const idx = std.mem.indexOfScalar(u16, adj_edges, instr).?;
+                swap(&adj_edges[idx], &adj_edges[adj_edges.len - 1]);
+                edge_table[adj].len -= 1;
+            }
+
+            if (edge_table[adj].len + 1 == allowed_reg_counts[adj]) {
+                const idx = std.mem.indexOfScalarPos(u16, color_stack, known_cursor, adj).?;
+                swap(&color_stack[known_cursor], &color_stack[idx]);
+                known_cursor += 1;
+                continue;
+            }
+        }
+    };
+
+    // alocate to the arena and then copy later for sequential access
+    //
+    const sentinel = 0;
+    const outs = tmp.arena.alloc(u16, func.instr_count);
+    @memset(outs, sentinel);
+
+    if (false) {
+        std.mem.reverse(u16, color_stack);
+        var iter = std.mem.reverseIterator(color_stack);
+        while (iter.next()) |to_color| {
+            const selection_set = &instr_masks[to_color];
+            //std.debug.print("to_color {}\n", .{instr_table[to_color].id});
+            for (edge_table[to_color]) |adj| {
+                //std.debug.print("{} ", .{instr_table[adj].id});
+                //edge_table[adj].len += 1;
+                //const adj_edges = edge_table[adj];
+                //std.debug.assert(adj_edges[adj_edges.len - 1] == to_color);
+                selection_set.unset(outs[adj]);
+                @as(*align(@alignOf(usize)) u64, @ptrCast(&setMasks(selection_set.*)[0])).* &=
+                    ~(instr_table[adj].clobbers() << 1);
+            }
+            //std.debug.print("\n", .{});
+
+            if (instr_table[to_color].carried()) |c| {
+                for (instr_table[to_color].dataDeps(), 0..) |d, k| {
+                    if (k != c) {
+                        selection_set.unset(outs[d.?.schedule]);
+                    }
+                }
+            }
+
+            const out = &outs[to_color];
+            const bias = instr_table[to_color].regBias();
+            if (bias != null and !selection_set.isSet(bias.? + 1)) {
+                out.* = bias.? + 1;
+            } else {
+                var it = selection_set.iterator(.{});
+                out.* = @intCast(it.next().?);
+            }
+            std.debug.assert(out.* != 0);
+        }
+    }
+
+    if (true) {
+        for (interference_table, outs, instr_masks, 0..) |row, *slot, *selection_set, j| {
+            selection_set.toggleAll();
+            std.debug.assert(selection_set.isSet(sentinel));
+
+            var row_iter = row.iterator(.{});
+            while (row_iter.next()) |i| {
+                selection_set.set(outs[i]);
+                @as(*align(@alignOf(usize)) u64, @ptrCast(&setMasks(selection_set.*)[0])).* |=
+                    instr_table[i].clobbers() << 1;
+            }
+
+            const bias = instr_table[j].regBias();
+            if (bias != null and !selection_set.isSet(bias.? + 1)) {
+                slot.* = bias.? + 1;
+            } else {
+                var it = selection_set.iterator(.{ .kind = .unset });
+                slot.* = @intCast(it.next().?);
+            }
         }
     }
 

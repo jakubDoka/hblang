@@ -1,33 +1,26 @@
 nullable types 1.mkval(T = uint):
-	push rbp
 	sub rsp, 0x10
-	mov rbp, rsi
-	mov rsi, rdi
 	lea rax, [rsp]
 	mov rcx, 0x01
 	mov [rax], cl
-	mov [rax+0x08], rbp
+	mov [rax+0x08], rsi
 	mov rcx, 0x10
-	mov rdi, rsi
 	mov rsi, rax
 	mov rdx, rcx
 	call :memcpy
 	add rsp, 0x10
-	pop rbp
 	ret
 nullable types 1.mknull(T = uint):
-	mov rsi, rdi
 	mov rax, 0x00
-	mov [rsi], al
+	mov [rdi], al
 	ret
 main:
 	push rbx
 	push rbp
 	sub rsp, 0x28
 	lea rbx, [rsp]
-	mov rbp, 0x0A
+	mov rsi, 0x0A
 	mov rdi, rbx
-	mov rsi, rbp
 	call :nullable types 1.mkval(T = uint)
 	mov rax, 0x00
 	mov cl, [rbx]

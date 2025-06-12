@@ -4,20 +4,18 @@ if statements 2.fib:
 	sub rsp, 0x08
 	mov rbx, rdi
 	cmp rbx, 0x02
-	setbe sil
-	movzx rsi, sil
-	test sil, sil
+	setbe dil
+	movzx rdi, dil
+	test dil, dil
 	jz :0
 	mov rax, 0x01
 	jmp :1
-0:	mov rsi, rbx
-	sub rsi, 0x01
-	mov rdi, rsi
+0:	mov rdi, rbx
+	sub rdi, 0x01
 	call :if statements 2.fib
 	mov rbp, rax
-	mov rsi, rbx
-	sub rsi, 0x02
-	mov rdi, rsi
+	mov rdi, rbx
+	sub rdi, 0x02
 	call :if statements 2.fib
 	mov rcx, rbp
 	add rcx, rax
@@ -28,8 +26,7 @@ if statements 2.fib:
 	ret
 main:
 	sub rsp, 0x08
-	mov rsi, 0x03
-	mov rdi, rsi
+	mov rdi, 0x03
 	call :if statements 2.fib
 	add rsp, 0x08
 	ret

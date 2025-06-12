@@ -1,8 +1,7 @@
 defer 1.main.ret_defer:
-	mov rsi, rdi
-	mov rax, [rsi]
+	mov rax, [rdi]
 	add rax, 0x01
-	mov [rsi], rax
+	mov [rdi], rax
 	ret
 main:
 	push rbx
