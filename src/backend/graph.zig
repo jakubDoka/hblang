@@ -263,11 +263,7 @@ pub const Builtin = union(enum) {
     // [If]
     Else: Cfg,
     // [lCfg, rCfg]
-    Region: extern struct {
-        base: Cfg = .{},
-        preserve_identity_phys: bool = false,
-        cached_lca: ?*align(8) anyopaque = null,
-    },
+    Region: Region,
     // [traps...]
     TrapRegion: Cfg,
     // [entryCfg, backCfg]
@@ -287,6 +283,12 @@ pub const Builtin = union(enum) {
 
 pub const If = extern struct {
     base: Cfg = .{},
+};
+
+pub const Region = extern struct {
+    base: Cfg = .{},
+    preserve_identity_phys: bool = false,
+    cached_lca: ?*align(8) anyopaque = null,
 };
 
 pub fn UnionOf(comptime MachNode: type) type {
@@ -326,6 +328,10 @@ const gcm = @import("gcm.zig");
 const mem2reg = @import("mem2reg.zig");
 const static_anal = @import("static_anal.zig");
 
+pub fn FuncNode(comptime MachNode: type) type {
+    return Func(MachNode).Node;
+}
+
 pub fn Func(comptime MachNode: type) type {
     return struct {
         arena: std.heap.ArenaAllocator,
@@ -333,8 +339,6 @@ pub fn Func(comptime MachNode: type) type {
         params: []const mod.DataType = &.{},
         returns: []const mod.DataType = &.{},
         next_id: u16 = 0,
-        block_count: u16 = undefined,
-        instr_count: u16 = undefined,
         root: *Node = undefined,
         end: *Node = undefined,
         gcm: gcm.GcmMixin(MachNode) = .{},
@@ -370,7 +374,7 @@ pub fn Func(comptime MachNode: type) type {
 
         pub const WorkList = struct {
             list: std.ArrayList(*Node),
-            in_list: std.DynamicBitSet,
+            in_list: std.DynamicBitSetUnmanaged,
 
             pub fn init(gpa: std.mem.Allocator, cap: usize) !WorkList {
                 return .{
@@ -380,10 +384,20 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             pub fn add(self: *WorkList, node: *Node) void {
+                errdefer unreachable;
+
                 if (node.id == std.math.maxInt(u16)) utils.panic("{} {any}\n", .{ node, node.inputs() });
+                if (self.in_list.bit_length <= node.id) {
+                    try self.in_list.resize(
+                        self.list.allocator,
+                        try std.math.ceilPowerOfTwo(usize, node.id + 1),
+                        false,
+                    );
+                }
+
                 if (self.in_list.isSet(node.id)) return;
                 self.in_list.set(node.id);
-                self.list.appendAssumeCapacity(node);
+                try self.list.append(node);
             }
 
             pub fn pop(self: *WorkList) ?*Node {
@@ -444,6 +458,8 @@ pub fn Func(comptime MachNode: type) type {
                 pub fn findLca(left: *CfgNode, right: *CfgNode) *CfgNode {
                     var lc, var rc = .{ left, right };
                     while (lc != rc) {
+                        std.debug.assert(lc.base.kind != .Start);
+                        std.debug.assert(rc.base.kind != .Start);
                         if (!lc.base.isCfg()) utils.panic("{}", .{lc.base});
                         if (!rc.base.isCfg()) utils.panic("{}", .{rc.base});
                         const diff = @as(i64, idepth(lc)) - idepth(rc);
@@ -893,6 +909,10 @@ pub fn Func(comptime MachNode: type) type {
                 break :b m;
             };
 
+            pub fn size(node: *Node) usize {
+                return @sizeOf(Node) + std.mem.alignForward(usize, size_map[@intFromEnum(node.kind)], @alignOf(Node));
+            }
+
             pub fn hash(kind: Kind, dt: DataType, inpts: []const ?*Node, extr: *const anyopaque) u64 {
                 var hasher = std.hash.Fnv1a_64.init();
                 hasher.update(@as(*const [2]u8, @ptrCast(&kind)));
@@ -1171,10 +1191,13 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         pub fn subsumeNoKill(self: *Self, this: *Node, target: *Node) void {
-            std.debug.assert(this != target);
+            if (this == target) {
+                utils.panic("{} {}\n", .{ this, target });
+            }
+            errdefer unreachable;
             //std.debug.print("{} {} {any}\n", .{ target, this, target.outputs() });
 
-            for (self.arena.allocator().dupe(*Node, target.outputs()) catch unreachable) |use| {
+            for (try self.arena.allocator().dupe(*Node, target.outputs())) |use| {
                 if (use.id == std.math.maxInt(u16)) continue;
                 const index = std.mem.indexOfScalar(?*Node, use.inputs(), target) orelse {
                     utils.panic("{} {any} {}", .{ this, target.outputs(), use });
@@ -1284,7 +1307,6 @@ pub fn Func(comptime MachNode: type) type {
 
         pub fn iterPeeps(
             self: *Self,
-            max_peep_iters: usize,
             ctx: anytype,
             strategy: fn (@TypeOf(ctx), *Self, *Node, *WorkList) ?*Node,
         ) void {
@@ -1293,7 +1315,7 @@ pub fn Func(comptime MachNode: type) type {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            var worklist = WorkList.init(tmp.arena.allocator(), self.next_id) catch unreachable;
+            var worklist = WorkList.init(tmp.arena.allocator(), self.next_id * 2) catch unreachable;
             worklist.add(self.end);
             worklist.add(self.root);
             var i: usize = 0;
@@ -1307,11 +1329,7 @@ pub fn Func(comptime MachNode: type) type {
                 }
             }
 
-            var fuel = max_peep_iters;
             while (worklist.pop()) |t| {
-                if (fuel == 0) break;
-                fuel -= 1;
-
                 if (t.id == std.math.maxInt(u16)) continue;
 
                 if (t.outputs().len == 0 and t != self.end) {
@@ -1587,15 +1605,15 @@ pub fn Func(comptime MachNode: type) type {
 
             var visited = try std.DynamicBitSet.initEmpty(tmp.arena.allocator(), self.next_id);
 
-            self.root.fmt(self.block_count, writer, colors);
+            self.root.fmt(self.gcm.block_count, writer, colors);
             try writer.writeAll("\n");
             for (collectPostorder(self, tmp.arena.allocator(), &visited)) |p| {
-                p.base.fmt(self.block_count, writer, colors);
+                p.base.fmt(self.gcm.block_count, writer, colors);
 
                 try writer.writeAll("\n");
                 for (p.base.outputs()) |o| {
                     try writer.writeAll("  ");
-                    o.fmt(self.instr_count, writer, colors);
+                    o.fmt(self.gcm.instr_count, writer, colors);
                     try writer.writeAll("\n");
                 }
             }

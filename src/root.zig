@@ -239,7 +239,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     const name = try std.mem.replaceOwned(u8, types.pool.arena.allocator(), opts.root_file, "/", "_");
 
     if (opts.dump_asm) {
-        const out = bckend.finalizeBytes(types.pool.arena.allocator());
+        const out = bckend.finalizeBytes(.{ .gpa = types.pool.arena.allocator() });
 
         bckend.disasm(.{
             .name = name,
@@ -253,7 +253,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     if (opts.vendored_test) {
         const expectations: test_utils.Expectations = .init(&asts[0], types.pool.arena.allocator());
 
-        const out = bckend.finalizeBytes(types.pool.arena.allocator());
+        const out = bckend.finalizeBytes(.{ .gpa = types.pool.arena.allocator() });
 
         errdefer {
             bckend.disasm(.{
@@ -280,7 +280,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     }
 
     if (opts.colors == .no_color or opts.mangle_terminal) {
-        bckend.finalize(opts.output);
+        bckend.finalize(.{ .output = opts.output });
         return .{ .ast = asts, .arena = types.pool.arena };
     } else {
         try opts.diagnostics.writeAll("can't dump the executable to the stdout since it" ++

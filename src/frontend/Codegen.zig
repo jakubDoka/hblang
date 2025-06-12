@@ -258,6 +258,7 @@ pub fn emitReachable(
             else
                 try root.frontend.Types.Id.init(.{ .Func = func })
                     .fmt(types).toString(scrath.allocator()),
+            .is_inline = func_data.is_inline,
             .entry = func == entry,
             .linkage = func_data.visibility,
             .optimizations = .{

@@ -460,8 +460,10 @@ pub fn jitExprLow(
                     .id = @intFromEnum(id),
                     .entry = true,
                     .linkage = .local,
+                    .is_inline = false,
                     .optimizations = .{
                         .verbose = false,
+                        .do_inlining = false,
                     },
                 },
             );
@@ -494,6 +496,10 @@ pub fn compileDependencies(self: *Codegen, reloc_after: usize, pop_until: usize)
             .{
                 .id = @intFromEnum(func),
                 .linkage = .local,
+                .is_inline = false,
+                .optimizations = .{
+                    .do_inlining = false,
+                },
             },
         );
     }
@@ -545,6 +551,15 @@ pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(root.fr
             @memcpy(data, @as(*const [@sizeOf(@TypeOf(c))]u8, @ptrCast(&c))[0..data.len]);
         },
     }
+
+    if (fty == .type) {
+        const typ: Types.Id = @enumFromInt(@as(u32, @bitCast(data[0..4].*)));
+        if (typ.data() == .Func) {
+            self.getTypes().store.get(typ.data().Func).is_inline =
+                self.getTypes().store.get(global).readonly;
+        }
+    }
+
     self.getTypes().store.get(global).data = data;
     self.getTypes().store.get(global).ty = fty;
 }

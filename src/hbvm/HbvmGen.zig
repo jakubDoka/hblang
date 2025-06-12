@@ -5,6 +5,7 @@ ret_count: usize = undefined,
 block_offsets: []i32 = undefined,
 allocs: []u16 = undefined,
 spill_base: usize = undefined,
+entry: u32 = undefined,
 
 const std = @import("std");
 const utils = root.utils;
@@ -174,22 +175,31 @@ pub const Node = union(enum) {
 pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     errdefer unreachable;
 
-    opts.optimizations.execute(Node, self, func);
-
-    const allocs = Regalloc.ralloc(Node, func);
-
     const id = opts.id;
     const name = opts.name;
     const entry = opts.entry;
 
+    if (entry) self.entry = id;
+
+    try self.out.startDefineFunc(self.gpa, id, name, .func, .local, opts.is_inline);
+    defer self.out.endDefineFunc(id);
+
+    if (opts.optimizations.do_inlining or opts.is_inline) {
+        opts.optimizations.asPreInline().execute(Node, self, func);
+        self.out.setInlineFunc(self.gpa, Node, func, id);
+    }
+
+    if (opts.optimizations.do_inlining) return;
+
+    opts.optimizations.execute(Node, self, func);
+
+    const allocs = Regalloc.ralloc(Node, func);
+
     var tmp = utils.Arena.scrath(opts.optimizations.arena);
     defer tmp.deinit();
 
-    try self.out.startDefineFunc(self.gpa, id, name, .func, .local);
-    defer self.out.endDefineFunc(id);
-
-    self.block_offsets = tmp.arena.alloc(i32, func.block_count);
-    self.local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.block_count * 2));
+    self.block_offsets = tmp.arena.alloc(i32, func.gcm.block_count);
+    self.local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.gcm.block_count * 2));
     self.allocs = allocs;
     self.ret_count = func.returns.len;
 
@@ -298,10 +308,81 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
     }
 }
 
-pub fn finalize(self: *HbvmGen, out: std.io.AnyWriter) void {
+pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {
     errdefer unreachable;
 
-    try root.hbvm.object.flush(self.out, out);
+    if (opts.optimizations.do_inlining) {
+        var tmp = utils.Arena.scrath(opts.optimizations.arena);
+        defer tmp.deinit();
+
+        // do the exhausitve optimization pass with inlining, this should
+        // hanlde stacked inlines as well
+        //
+        const pi_opts = opts.optimizations.asPostInlining();
+        var arena = self.out.inline_func_nodes.promote(self.gpa);
+        const funcs = tmp.arena.alloc(Func, self.out.inline_funcs.items.len);
+        for (self.out.funcs.items) |sym_id| {
+            if (sym_id == .invalid) continue;
+            const sym = &self.out.syms.items[@intFromEnum(sym_id)];
+            const inline_func = &self.out.inline_funcs.items[sym.nodes];
+            funcs[sym.nodes] = inline_func.toFunc(&arena, Node);
+            pi_opts.execute(Node, self, &funcs[sym.nodes]);
+            inline_func.node_count = funcs[sym.nodes].next_id;
+
+            arena = funcs[sym.nodes].arena;
+
+            std.debug.print("{s}\n", .{self.out.lookupName(sym.name)});
+        }
+
+        // we take out the current `out` that just encodes the code spec and
+        // and emit all functions to the new out without and opts
+        //
+        var out: Mach.Data = .{};
+        defer out.deinit(self.gpa);
+        std.mem.swap(Mach.Data, &out, &self.out);
+        std.mem.swap(
+            std.heap.ArenaAllocator.State,
+            &out.inline_func_nodes,
+            &self.out.inline_func_nodes,
+        );
+
+        for (out.funcs.items, 0..) |sym_id, i| {
+            if (sym_id == .invalid) continue;
+            const sym = &out.syms.items[@intFromEnum(sym_id)];
+            var func = &funcs[sym.nodes];
+            func.arena = arena;
+            self.emitFunc(func, .{
+                .name = out.lookupName(sym.name),
+                .id = @intCast(i),
+                .entry = i == self.entry,
+                .linkage = sym.linkage,
+                .is_inline = false,
+                .optimizations = b: {
+                    var op = Mach.OptOptions.none;
+                    op.do_gcm = true;
+                    op.error_buf = opts.optimizations.error_buf;
+                    op.arena = opts.optimizations.arena;
+                    break :b op;
+                },
+            });
+            arena = func.arena;
+        }
+
+        // blit the globals as well
+        //
+        for (out.globals.items, 0..) |sym_id, i| {
+            if (sym_id == .invalid) continue;
+            const sym = &out.syms.items[@intFromEnum(sym_id)];
+            self.emitData(.{
+                .name = out.lookupName(sym.name),
+                .id = @intCast(i),
+                .value = .{ .init = out.code.items[sym.offset..][0..sym.size] },
+                .readonly = sym.readonly,
+            });
+        }
+    }
+
+    try root.hbvm.object.flush(self.out, opts.output);
 
     self.out.reset();
 }
@@ -896,6 +977,13 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
             ) orelse break :fold_const_read;
 
             return func.addIntImm(node.data_type, value);
+        }
+    }
+
+    if (node.kind == .Call) {
+        if (self.out.getInlineFunc(node.extra(.Call).id)) |inline_func| {
+            inline_func.inlineInto(Node, func, node, work);
+            return null;
         }
     }
 

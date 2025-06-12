@@ -276,6 +276,13 @@ pub const Node = union(enum) {
         //    }
         //}
 
+        if (node.kind == .Call) {
+            if (self.out.getInlineFunc(node.extra(.Call).id)) |inline_func| {
+                inline_func.inlineInto(Node, func, node, worklist);
+                return null;
+            }
+        }
+
         if (node.kind == .Load) {
             const base, const offset = node.base().knownOffset();
             const res = func.addNode(
@@ -386,8 +393,15 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     const name = if (entry) "main" else opts.name;
     const linkage: Mach.Data.Linkage = if (entry) .exported else opts.linkage;
 
-    try self.out.startDefineFunc(self.gpa, id, name, .func, linkage);
+    try self.out.startDefineFunc(self.gpa, id, name, .func, linkage, opts.is_inline);
     defer self.out.endDefineFunc(id);
+
+    if (opts.optimizations.do_inlining or opts.is_inline) {
+        opts.optimizations.asPreInline().execute(Node, self, func);
+        self.out.setInlineFunc(self.gpa, Node, func, id);
+    }
+
+    if (opts.optimizations.do_inlining) return;
 
     if (opts.linkage == .imported) return;
 
@@ -1118,11 +1132,17 @@ pub fn emitData(self: *X86_64, opts: Mach.DataOptions) void {
     );
 }
 
-pub fn finalize(self: *X86_64, out: std.io.AnyWriter) void {
+pub fn finalize(self: *X86_64, opts: Mach.FinalizeOptions) void {
     errdefer unreachable;
 
+    if (opts.optimizations.do_inlining) {
+        //for (self.out.syms) |sym| {
+        //    const func = Func{};
+        //}
+    }
+
     try switch (self.object_format) {
-        .elf => root.object.elf.flush(self.out, .x86_64, out),
+        .elf => root.object.elf.flush(self.out, .x86_64, opts.output),
         .coff => unreachable, //root.object.coff.flush(self.out, .x86_64, out),
     };
 

@@ -8,6 +8,8 @@ pub fn GcmMixin(comptime MachNode: type) type {
         cfg_built: std.debug.SafetyLock = .{},
         loop_tree: []LoopTree = undefined,
         postorder: []*CfgNode = undefined,
+        block_count: u16 = undefined,
+        instr_count: u16 = undefined,
 
         const Func = graph.Func(MachNode);
         const Self = @This();
@@ -75,6 +77,12 @@ pub fn GcmMixin(comptime MachNode: type) type {
                 var ltree: u16 = undefined;
                 if (builder.post_walked.isSet(oc.base.id)) {
                     ltree = oc.ext.loop;
+                    if (ltree > builder.tree.items.len) {
+                        self.fmtUnscheduled(
+                            std.io.getStdErr().writer().any(),
+                            .escape_codes,
+                        );
+                    }
                     const tree = &builder.tree.items[ltree];
                     if (tree.head == oc) {
                         ltree = tree.par orelse b: {
@@ -352,22 +360,19 @@ pub fn GcmMixin(comptime MachNode: type) type {
 
             compact_ids: {
                 visited.setRangeValue(.{ .start = 0, .end = visited.capacity() }, false);
-                self.block_count = 0;
-                self.instr_count = 0;
+                self.gcm.block_count = 0;
+                self.gcm.instr_count = 0;
                 self.root.schedule = 0;
 
                 const postorder = self.collectPostorder(tmp.arena.allocator(), &visited);
                 for (postorder) |bb| {
                     const node = &bb.base;
-                    node.schedule = self.block_count;
-                    self.block_count += 1;
+                    node.schedule = self.gcm.block_count;
+                    self.gcm.block_count += 1;
 
                     scheduleBlock(node);
 
-                    for (node.outputs()) |o| {
-                        o.schedule = self.instr_count;
-                        self.instr_count += 1;
-                    }
+                    self.gcm.instr_count += @intCast(node.outputs().len);
                 }
 
                 gcm.postorder = self.arena.allocator().dupe(*CfgNode, postorder) catch unreachable;
@@ -504,6 +509,14 @@ pub fn GcmMixin(comptime MachNode: type) type {
             };
 
             if (!node.isPinned()) {
+                //if (node.isCfg()) {
+                //    // self.fmtUnscheduled(
+                //    //     std.io.getStdErr().writer().any(),
+                //    //     .escape_codes,
+                //    // );
+                //    root.panic("{}\n", .{node});
+                //}
+
                 var best = early;
                 if (node.inputs()[0]) |n| if (n.asCfg()) |cn| {
                     if (n.kind != .Start) best = cn;

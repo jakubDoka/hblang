@@ -188,7 +188,7 @@ pub fn testBuilder(
     if (expectations.should_error) return;
 
     if (verbose) try header("CODEGEN", output, colors);
-    var out = gen.finalizeBytes(gpa);
+    var out = gen.finalizeBytes(.{ .gpa = gpa });
     defer out.deinit(gpa);
 
     gen.disasm(.{

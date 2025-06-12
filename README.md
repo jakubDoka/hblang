@@ -273,6 +273,15 @@ return_indirect_stack_but_not := fn(arg: ^?^uint): void {
 }
 ```
 
+#### functions 5 (inline)
+```hb
+main := fn(): uint {
+    return foo()
+}
+
+$foo := fn(): uint return 0
+```
+
 #### comments 1
 ```hb
 // commant is an item

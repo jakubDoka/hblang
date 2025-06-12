@@ -221,6 +221,7 @@ pub const elf = struct {
                     else => unreachable,
                 },
                 true,
+                false,
             );
 
             if (s.shndx != .undef) {

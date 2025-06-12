@@ -23,42 +23,42 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
     defer tmp.deinit();
 
     // small overcommit is fine
-    var instr_table = tmp.arena.alloc(*Func.Node, func.instr_count);
-    var instr_masks = tmp.arena.alloc(Set, func.instr_count);
+    var instr_table = tmp.arena.alloc(*Func.Node, func.gcm.instr_count);
+    var instr_masks = tmp.arena.alloc(Set, func.gcm.instr_count);
 
     // compress the instruction count, the non defs dont need to be represented
     // in the interference_table
     //
-    func.instr_count = 0;
+    func.gcm.instr_count = 0;
     for (func.gcm.postorder) |bb| {
         for (bb.base.outputs()) |instr| {
             if (instr.isDef() or instr.kills()) {
-                instr.schedule = func.instr_count;
-                instr_table[func.instr_count] = instr;
-                instr_masks[func.instr_count] = instr.allowedRegsFor(0, tmp.arena).?;
-                func.instr_count += 1;
+                instr.schedule = func.gcm.instr_count;
+                instr_table[func.gcm.instr_count] = instr;
+                instr_masks[func.gcm.instr_count] = instr.allowedRegsFor(0, tmp.arena).?;
+                func.gcm.instr_count += 1;
             } else {
                 instr.schedule = std.math.maxInt(u16);
             }
         }
     }
 
-    if (func.instr_count == 0) return &.{};
+    if (func.gcm.instr_count == 0) return &.{};
 
-    instr_table = instr_table[0..func.instr_count];
-    instr_masks = instr_masks[0..func.instr_count];
+    instr_table = instr_table[0..func.gcm.instr_count];
+    instr_masks = instr_masks[0..func.gcm.instr_count];
 
     const block_liveouts = tmp.arena.alloc(Set, func.gcm.postorder.len);
-    for (block_liveouts) |*b| b.* = try Set.initEmpty(tmp.arena.allocator(), func.instr_count);
+    for (block_liveouts) |*b| b.* = try Set.initEmpty(tmp.arena.allocator(), func.gcm.instr_count);
 
     var in_interference_work = try Set.initFull(tmp.arena.allocator(), func.gcm.postorder.len);
     var interference_work = tmp.arena.makeArrayList(u16, func.gcm.postorder.len);
     for (0..interference_work.capacity) |i| interference_work.appendAssumeCapacity(@intCast(i));
 
-    const interference_table = tmp.arena.alloc(Set, func.instr_count);
-    for (interference_table) |*r| r.* = Set.initEmpty(tmp.arena.allocator(), func.instr_count) catch unreachable;
+    const interference_table = tmp.arena.alloc(Set, func.gcm.instr_count);
+    for (interference_table) |*r| r.* = Set.initEmpty(tmp.arena.allocator(), func.gcm.instr_count) catch unreachable;
 
-    var slider = try Set.initEmpty(tmp.arena.allocator(), func.instr_count);
+    var slider = try Set.initEmpty(tmp.arena.allocator(), func.gcm.instr_count);
 
     while (interference_work.pop()) |w| {
         in_interference_work.unset(w);
@@ -129,8 +129,8 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
         }
     }
 
-    const edge_table = tmp.arena.alloc([]u16, func.instr_count);
-    const lens = tmp.arena.alloc(u16, func.instr_count);
+    const edge_table = tmp.arena.alloc([]u16, func.gcm.instr_count);
+    const lens = tmp.arena.alloc(u16, func.gcm.instr_count);
     for (edge_table, lens, interference_table) |*edges, *len, row| {
         edges.* = tmp.arena.alloc(u16, row.count());
         len.* = @intCast(edges.len);
@@ -142,17 +142,17 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
     // alocate to the arena and then copy later for sequential access
     //
     const sentinel = 0;
-    const outs = tmp.arena.alloc(u16, func.instr_count);
+    const outs = tmp.arena.alloc(u16, func.gcm.instr_count);
     @memset(outs, sentinel);
     if (false) {
-        var color_stack = tmp.arena.alloc(u16, func.instr_count);
-        for (color_stack, 0..func.instr_count) |*slt, i| slt.* = @intCast(i);
+        var color_stack = tmp.arena.alloc(u16, func.gcm.instr_count);
+        for (color_stack, 0..func.gcm.instr_count) |*slt, i| slt.* = @intCast(i);
         var done_cursor: usize = 0;
         var known_cursor: usize = 0;
 
         // TODO: count range
-        const allowed_reg_counts = tmp.arena.alloc(u16, func.instr_count);
-        const loop_scores = tmp.arena.alloc(u16, func.instr_count);
+        const allowed_reg_counts = tmp.arena.alloc(u16, func.gcm.instr_count);
+        const loop_scores = tmp.arena.alloc(u16, func.gcm.instr_count);
         var tmp_mask = try Set.initEmpty(tmp.arena.allocator(), instr_masks[0].bit_length);
         for (
             edge_table,
@@ -217,7 +217,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
                 }
             }
 
-            var overlap_set = try Set.initEmpty(tmp.arena.allocator(), func.instr_count);
+            var overlap_set = try Set.initEmpty(tmp.arena.allocator(), func.gcm.instr_count);
             for (color_stack) |c| {
                 std.debug.assert(!overlap_set.isSet(c));
                 overlap_set.set(c);
