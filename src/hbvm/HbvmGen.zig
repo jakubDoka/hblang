@@ -236,7 +236,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
                 if (o.kind == .Arg and o.extra(.Arg).* == i) break o;
             } else continue; // is dead
             const dst, const src = .{ self.outReg(argn), isa.Reg.arg(i) };
-            if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
+            if (dst != src) moves.append(.init(dst, src)) catch unreachable;
         }
         self.orderMoves(moves.items);
         break :prelude;
@@ -653,7 +653,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 var moves = std.ArrayList(Move).init(tmp);
                 for (inps, 0..) |arg, i| {
                     const dst, const src = .{ isa.Reg.arg(i), self.inReg(0, arg) };
-                    if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
+                    if (dst != src) moves.append(.init(dst, src)) catch unreachable;
                 }
                 self.orderMoves(moves.items);
 
@@ -672,7 +672,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 for (cend.outputs()) |r| {
                     if (r.kind == .Ret) {
                         const dst, const src = .{ self.outReg(r), isa.Reg.ret(r.extra(.Ret).*) };
-                        if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
+                        if (dst != src) moves.append(.init(dst, src)) catch unreachable;
                     }
                 }
                 self.orderMoves(moves.items);
@@ -685,7 +685,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     if (o.isDataPhi()) {
                         std.debug.assert(o.inputs()[idx].?.kind == .MachMove);
                         const dst, const src = .{ self.outReg(o), self.inRegNoLoad(0, o.inputs()[idx].?.inputs()[1]) };
-                        if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
+                        if (dst != src) moves.append(.init(dst, src)) catch unreachable;
                     }
                 }
 
@@ -696,7 +696,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 var moves = std.ArrayList(Move).init(tmp);
                 for (inps[0..self.ret_count], 0..) |inp, i| {
                     const dst, const src = .{ isa.Reg.ret(i), self.inReg(0, inp) };
-                    if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
+                    if (dst != src) moves.append(.init(dst, src)) catch unreachable;
                 }
                 self.orderMoves(moves.items);
             },

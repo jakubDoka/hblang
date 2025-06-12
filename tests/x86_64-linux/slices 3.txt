@@ -2,46 +2,52 @@ slices 3.reverse:
 	push rbx
 	push rbp
 	sub rsp, 0x10
-	lea rax, [rsp]
-	mov [rax], rsi
-	mov [rax+0x08], rdx
-	cmp rdx, 0x00
-	setz cl
-	movzx rcx, cl
-	mov rbx, 0x10
-	test cl, cl
+	mov r9, rdi
+	mov rcx, rdx
+	lea r8, [rsp]
+	mov [r8], rsi
+	mov [r8+0x08], rcx
+	cmp rcx, 0x00
+	setz dl
+	movzx rdx, dl
+	mov rdi, 0x10
+	test dl, dl
 	jz :0
-	mov rsi, rax
-	mov rdx, rbx
+	mov rdx, rdi
+	mov rdi, r9
+	mov rsi, r8
 	call :memcpy
 	jmp :1
-0:	mov rcx, 0x00
+0:	mov rax, 0x00
+	mov rdx, rcx
 	sub rdx, 0x01
-3:	cmp rcx, rdx
-	setb bpl
-	movzx rbp, bpl
-	test bpl, bpl
+	mov rcx, rax
+	mov rsi, rdx
+3:	cmp rcx, rsi
+	setb al
+	movzx rax, al
+	test al, al
 	jz :2
-	mov rbp, rdx
+	mov rbp, rsi
 	sub rbp, 0x01
-	mov rsi, rcx
-	add rsi, 0x01
-	mov r8, [rax]
-	mov r9, r8
-	add r9, rcx
-	mov rcx, r8
-	add rcx, rdx
-	mov r8b, [r9]
-	mov cl, [rcx]
-	mov [r9], cl
-	mov rcx, [rax]
-	add rcx, rdx
-	mov [rcx], r8b
-	mov rcx, rsi
-	mov rdx, rbp
+	mov rbx, rcx
+	add rbx, 0x01
+	mov rax, [r8]
+	mov rdx, rax
+	add rdx, rcx
+	add rax, rsi
+	mov cl, [rdx]
+	mov al, [rax]
+	mov [rdx], al
+	mov rax, [r8]
+	add rax, rsi
+	mov [rax], cl
+	mov rcx, rbx
+	mov rsi, rbp
 	jmp :3
-2:	mov rsi, rax
-	mov rdx, rbx
+2:	mov rdx, rdi
+	mov rdi, r9
+	mov rsi, r8
 	call :memcpy
 1:	add rsp, 0x10
 	pop rbp
@@ -66,13 +72,13 @@ main:
 	mov rsi, rbx
 	call :slices 3.reverse
 	mov al, [rbx]
-	mov cl, [rbx+0x01]
-	mov dl, [rbx+0x02]
+	mov dl, [rbx+0x01]
+	mov cl, [rbx+0x02]
 	movzx rax, al
-	movzx rcx, cl
 	movzx rdx, dl
-	sub rax, rcx
+	movzx rcx, cl
 	sub rax, rdx
+	sub rax, rcx
 	add rsp, 0x28
 	pop rbx
 	ret

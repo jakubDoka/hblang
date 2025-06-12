@@ -476,7 +476,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
                 if (o.kind == .Arg and o.extra(.Arg).* == i) break o;
             } else continue; // is dead
             if (self.getReg(argn) != Reg.system_v.args[i]) {
-                moves.append(.{ self.getReg(argn), Reg.system_v.args[i], 0 }) catch unreachable;
+                moves.append(.init(self.getReg(argn), Reg.system_v.args[i])) catch unreachable;
             }
         }
         self.orderMoves(moves.items);
@@ -722,7 +722,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 var moves = std.ArrayList(Move).init(tmp.arena.allocator());
                 for (instr.dataDeps(), 0..) |arg, i| {
                     const dst, const src: Reg = .{ Reg.system_v.args[i], self.getReg(arg) };
-                    if (!std.meta.eql(dst, src)) moves.append(.{ dst, src, 0 }) catch unreachable;
+                    if (!std.meta.eql(dst, src)) moves.append(.init(dst, src)) catch unreachable;
                 }
                 self.orderMoves(moves.items);
 
@@ -815,7 +815,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 var moves = std.ArrayList(Move).init(tmp.arena.allocator());
                 for (instr.dataDeps(), 0..) |arg, i| {
                     const dst, const src: Reg = .{ call_conv[i], self.getReg(arg) };
-                    if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
+                    if (dst != src) moves.append(.init(dst, src)) catch unreachable;
                 }
                 self.orderMoves(moves.items);
 
@@ -835,7 +835,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 for (cend.outputs()) |r| {
                     if (r.kind == .Ret) {
                         const dst: Reg, const src = .{ self.getReg(r), Reg.rax };
-                        if (dst != src) moves.append(.{ dst, src, 0 }) catch unreachable;
+                        if (dst != src) moves.append(.init(dst, src)) catch unreachable;
                     }
                 }
                 self.orderMoves(moves.items);
@@ -1038,7 +1038,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     if (o.isDataPhi()) {
                         std.debug.assert(o.inputs()[idx].?.kind == .MachMove);
                         const dst, const src = .{ self.getReg(o), self.getReg(o.inputs()[idx].?.inputs()[1]) };
-                        if (dst != src) try moves.append(.{ dst, src, 0 });
+                        if (dst != src) try moves.append(.init(dst, src));
                     }
                 }
 

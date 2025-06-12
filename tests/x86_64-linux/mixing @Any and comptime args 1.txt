@@ -11,30 +11,30 @@ mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime arg
 	ret
 mixing @Any and comptime args 1.main:
 	sub rsp, 0x10
-	lea rax, [rsp]
-	mov rcx, 0x01
-	mov [rax], cl
+	lea rcx, [rsp]
+	mov rax, 0x01
+	mov [rcx], al
 	add esi, 0x05
-	mov [rax+0x04], esi
-	mov rcx, 0x08
-	mov rsi, rax
-	mov rdx, rcx
+	mov [rcx+0x04], esi
+	mov rax, 0x08
+	mov rsi, rcx
+	mov rdx, rax
 	call :memcpy
 	add rsp, 0x10
 	ret
 main:
 	push rbx
 	sub rsp, 0x18
-	lea rax, [rsp+0x08]
-	mov rcx, 0x01
-	mov [rax], cl
-	mov rcx, 0x00
-	mov [rax+0x04], ecx
+	lea rcx, [rsp+0x08]
+	mov rax, 0x01
+	mov [rcx], al
+	mov rax, 0x00
+	mov [rcx+0x04], eax
 	lea rbx, [rsp]
-	mov rcx, 0x08
+	mov rax, 0x08
 	mov rdi, rbx
-	mov rsi, rax
-	mov rdx, rcx
+	mov rsi, rcx
+	mov rdx, rax
 	call :memcpy
 	lea rdi, [rsp+0x10]
 	mov sil, [rbx]

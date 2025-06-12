@@ -7,24 +7,24 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x08
-	mov rbx, 0x01
-	test bl, bl
+	mov rbp, 0x01
+	test bpl, bpl
 	jz :0
 	jmp :1
 0:	mov rdi, 0x01
 	call :if statements 4 (short circuit).effectfull
-1:	mov rbp, 0x00
-	test bpl, bpl
+1:	mov rbx, 0x00
+	test bl, bl
 	jz :3
 	mov rdi, 0x02
 	call :if statements 4 (short circuit).effectfull
 	jmp :3
-3:	test bpl, bpl
+3:	test bl, bl
 	jz :4
 	mov rdi, 0x04
 	call :if statements 4 (short circuit).effectfull
 	jmp :4
-4:	test bl, bl
+4:	test bpl, bpl
 	jz :4
 	jmp :5
 4:	mov rdi, 0x05

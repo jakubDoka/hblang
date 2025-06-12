@@ -4,21 +4,21 @@ structs 2.swap:
 	push r12
 	push r13
 	sub rsp, 0x20
-	mov rbx, rdi
-	mov rbp, rsi
-	mov r12, 0x18
-	lea r13, [rsp]
-	mov rdi, r13
-	mov rsi, rbx
-	mov rdx, r12
-	call :memcpy
+	mov r13, rdi
+	mov r12, rsi
+	mov rbp, 0x18
+	lea rbx, [rsp]
 	mov rdi, rbx
-	mov rsi, rbp
-	mov rdx, r12
-	call :memcpy
-	mov rdi, rbp
 	mov rsi, r13
-	mov rdx, r12
+	mov rdx, rbp
+	call :memcpy
+	mov rdi, r13
+	mov rsi, r12
+	mov rdx, rbp
+	call :memcpy
+	mov rdi, r12
+	mov rsi, rbx
+	mov rdx, rbp
 	call :memcpy
 	add rsp, 0x20
 	pop r13
@@ -42,10 +42,10 @@ main:
 	mov rdi, rbx
 	call :structs 2.swap
 	mov rax, [rbx]
-	mov rcx, [rbx+0x08]
-	mov rdx, [rbx+0x10]
-	add rax, rcx
+	mov rdx, [rbx+0x08]
+	mov rcx, [rbx+0x10]
 	add rax, rdx
+	add rax, rcx
 	add rsp, 0x38
 	pop rbx
 	ret

@@ -20,34 +20,34 @@ main:
 	jz :2
 	mov rax, 0x02
 1:	jmp :3
-2:	mov rax, rcx
-b:	cmp rax, 0x03
-	setz cl
-	movzx rcx, cl
-	mov rdx, rax
-	add rdx, 0x01
-	test cl, cl
+2:	mov rdx, rcx
+b:	cmp rdx, 0x03
+	setz al
+	movzx rax, al
+	mov rcx, rdx
+	add rcx, 0x01
+	test al, al
 	jz :4
-	mov rax, rdx
+	mov rax, rcx
 	jmp :5
-4:	cmp rax, 0x04
+4:	cmp rdx, 0x04
 	setz al
 	movzx rax, al
 	test al, al
 	jz :6
-	cmp rdx, 0x05
+	cmp rcx, 0x05
 	setnz al
 	movzx rax, al
 	test al, al
 	jz :7
 	mov rax, 0x03
 3:	jmp :8
-7:	mov rbx, 0x00
-	lea rbp, [rsp]
-	mov [rbp], rbx
-	mov rdi, rbp
+7:	mov rbp, 0x00
+	lea rbx, [rsp]
+	mov [rbx], rbp
+	mov rdi, rbx
 	call :defer 1.main.ret_defer
-	mov rax, [rbp]
+	mov rax, [rbx]
 	cmp rax, 0x01
 	setnz al
 	movzx rax, al
@@ -55,10 +55,11 @@ b:	cmp rax, 0x03
 	jz :9
 	mov rax, 0x04
 8:	jmp :10
-9:	mov rax, rbx
+9:	mov rax, rbp
 a:	add rsp, 0x08
 	pop rbp
 	pop rbx
 	ret
-6:	mov rax, rdx
-5:	jmp :11
+6:	mov rax, rcx
+5:	mov rdx, rax
+	jmp :11

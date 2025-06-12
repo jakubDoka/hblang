@@ -10,8 +10,8 @@ global variables 1.main:
          ld $31, $254, -16, 16
          tx
 global variables 1.dec:
-        lra $1, $0, :global variables 1.counter
-         ld $2, $1, 0, 8
-     addi64 $2, $2, -1
-         st $2, $1, 0, 8
+        lra $2, $0, :global variables 1.counter
+         ld $1, $2, 0, 8
+     addi64 $1, $1, -1
+         st $1, $2, 0, 8
        jala $0, $31, 0

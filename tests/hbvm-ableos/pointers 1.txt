@@ -14,6 +14,7 @@ pointers 1.main:
          ld $31, $254, -16, 16
          tx
 pointers 1.modify:
-       li64 $2, 2
-         st $2, $1, 0, 8
+         cp $2, $1
+       li64 $1, 2
+         st $1, $2, 0, 8
        jala $0, $31, 0

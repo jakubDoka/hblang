@@ -1,12 +1,12 @@
 nullable types 1.mkval(T = uint):
 	sub rsp, 0x10
-	lea rax, [rsp]
-	mov rcx, 0x01
-	mov [rax], cl
-	mov [rax+0x08], rsi
-	mov rcx, 0x10
-	mov rsi, rax
-	mov rdx, rcx
+	lea rcx, [rsp]
+	mov rax, 0x01
+	mov [rcx], al
+	mov [rcx+0x08], rsi
+	mov rax, 0x10
+	mov rsi, rcx
+	mov rdx, rax
 	call :memcpy
 	add rsp, 0x10
 	ret
@@ -18,29 +18,28 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x28
-	lea rbx, [rsp]
+	lea rbp, [rsp]
 	mov rsi, 0x0A
-	mov rdi, rbx
+	mov rdi, rbp
 	call :nullable types 1.mkval(T = uint)
-	mov rax, 0x00
-	mov cl, [rbx]
-	cmp cl, al
-	setz cl
-	movzx rcx, cl
-	test cl, cl
+	mov rcx, 0x00
+	mov al, [rbp]
+	cmp al, cl
+	setz al
+	movzx rax, al
+	test al, al
 	jz :0
 	mov rax, 0x01
 	jmp :1
-0:	lea rbp, [rsp+0x10]
-	mov rdi, rbp
+0:	lea rbx, [rsp+0x10]
+	mov rdi, rbx
 	call :nullable types 1.mknull(T = uint)
-	mov al, [rbp]
-	mov rcx, [rbx+0x08]
-	test al, al
-	jz :2
+	mov cl, [rbx]
+	mov rax, [rbp+0x08]
+	test cl, cl
+	jz :3
 	mov rax, 0x02
 1:	jmp :3
-2:	mov rax, rcx
 3:	add rsp, 0x28
 	pop rbp
 	pop rbx

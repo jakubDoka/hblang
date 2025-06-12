@@ -65,7 +65,7 @@ pub const CompileOptions = struct {
     // #OPTIONS (--target ableos)
     target: []const u8 = "hbvm-ableos", // target triple to compile to (not used yet since we have only one target)
     extra_threads: usize = 0, // extra threads used for the compilation (not used yet)
-    path_projections: std.StringHashMapUnmanaged([]const u8) = .{}, // can be specified multiple times
+    path_projection: std.StringHashMapUnmanaged([]const u8) = .{}, // can be specified multiple times
     // as `--path-projection name path`, when the `@use("name")` is encountered, its projected to `@use("path")`
     // #CLI end
 
@@ -74,7 +74,7 @@ pub const CompileOptions = struct {
         _ = args.next();
 
         var i: usize = 0;
-        while (args.next()) |a| {
+        parse: while (args.next()) |a| {
             var arg: []const u8 = a[0..];
             if (!std.mem.startsWith(u8, arg, "--")) {
                 switch (i) {
@@ -120,7 +120,12 @@ pub const CompileOptions = struct {
                     },
                     else => @compileError(@typeName(f.type)),
                 }
+
+                continue :parse;
             }
+
+            try self.diagnostics.print("unknown flag: --{s}", .{arg});
+            std.process.exit(1);
         }
     }
 };
@@ -174,7 +179,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
 
     const asts, const base = try Loader.loadAll(
         &type_system_memory,
-        opts.path_projections,
+        opts.path_projection,
         opts.root_file,
         opts.diagnostics,
         opts.parser_mode,

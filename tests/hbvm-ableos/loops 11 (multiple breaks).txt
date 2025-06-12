@@ -1,12 +1,11 @@
 loops 11 (multiple breaks).main:
-       li64 $1, 0
+       li64 $3, 0
        li64 $2, 1
-         cp $3, $1
-3:      jne $3, $1, :0
          cp $1, $3
+3:      jne $1, $3, :0
         jmp :1
-0:      jne $3, $2, :2
+0:      jne $1, $2, :2
          cp $1, $2
 1:       tx
-2:       cp $3, $2
+2:       cp $1, $2
         jmp :3

@@ -10,11 +10,10 @@ main:
 	call :forced shl 1.two
 	mov rbx, rax
 	call :forced shl 1.one
-	mov rcx, rbx
-	xchg rcx, rax
+	mov rdx, rax
+	mov rax, rbx
+	mov rcx, rdx
 	shl rax, cl
-	xchg rcx, rax
-	mov rax, rcx
 	add rsp, 0x08
 	pop rbx
 	ret

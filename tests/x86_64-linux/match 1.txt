@@ -1,15 +1,15 @@
 main:
-	mov rax, 0x01
-	mov rcx, 0x00
-	test al, al
-	jz :0
+	mov rcx, 0x01
+	mov rax, 0x00
 	test cl, cl
+	jz :0
+	test al, al
 	jz :1
 	mov rax, 0x03
 	jmp :4
 1:	mov rax, 0x00
 	jmp :4
-0:	test cl, cl
+0:	test al, al
 	jz :3
 	mov rax, 0x01
 	jmp :4

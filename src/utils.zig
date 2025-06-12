@@ -20,7 +20,16 @@ pub fn setColor(cfg: std.io.tty.Config, writer: std.io.AnyWriter, color: std.io.
 pub const Depth = u8;
 
 pub fn Move(comptime R: type) type {
-    return struct { R, R, Depth };
+    return struct {
+        dst: R,
+        src: R,
+        depth: Depth = 0,
+        swap: bool = false,
+
+        pub fn init(dst: R, src: R) @This() {
+            return .{ .dst = dst, .src = src };
+        }
+    };
 }
 
 pub fn orderMoves(self: anytype, comptime R: type, moves: []Move(R)) void {
@@ -30,43 +39,41 @@ pub fn orderMoves(self: anytype, comptime R: type, moves: []Move(R)) void {
     // in case of cycles, swaps are used instead in which case the conflicting
     // move is removed and remining moves are replaced with swaps
 
-    const cycle_sentinel = std.math.maxInt(Depth);
-
     var reg_graph = std.EnumArray(R, ?R).initFill(null);
     for (moves) |m| {
-        reg_graph.set(m[0], m[1]);
+        reg_graph.set(m.dst, m.src);
     }
 
     o: for (moves) |*m| {
         var seen = std.EnumSet(R).initEmpty();
-        var c: ?R = m[1];
-        while (c != m[0]) {
+        var c: ?R = m.src;
+        while (c != m.dst) {
             c = reg_graph.get(c.?);
-            m[2] += 1;
+            m.depth += 1;
             if (c == null or seen.contains(c.?)) continue :o;
             seen.insert(c.?);
         }
 
         reg_graph.set(c.?, null);
-        m[2] = cycle_sentinel;
+        m.swap = true;
     }
 
     std.sort.pdq(Move(R), moves, {}, struct {
         fn lt(_: void, lhs: Move(R), rhs: Move(R)) bool {
-            return rhs[2] < lhs[2];
+            return rhs.depth < lhs.depth;
         }
     }.lt);
 
     for (moves) |*m| {
-        if (m[2] == cycle_sentinel) {
-            while (reg_graph.get(m[1]) != null) {
-                self.emitSwap(m[0], m[1]);
-                m[0] = m[1];
-                std.mem.swap(R, &reg_graph.getPtr(m[1]).*.?, &m[1]);
+        if (m.swap) {
+            while (reg_graph.get(m.src) != null) {
+                self.emitSwap(m.dst, m.src);
+                m.dst = m.src;
+                std.mem.swap(R, &reg_graph.getPtr(m.src).*.?, &m.src);
             }
-            reg_graph.set(m[1], m[1]);
-        } else if (reg_graph.get(m[1]) != m[1]) {
-            self.emitCp(m[0], m[1]);
+            reg_graph.set(m.dst, null);
+        } else if (reg_graph.get(m.dst) != null) {
+            self.emitCp(m.dst, m.src);
         }
     }
 }

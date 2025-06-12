@@ -14,8 +14,10 @@ main:
 	mov rax, 0x03
 	mov [rbx+0x03], al
 	call :adding difference to a pointer 1.one
-	mov rcx, 0x01
-	sub rcx, rax
+	mov rdx, rax
+	mov rax, 0x01
+	mov rcx, rax
+	sub rcx, rdx
 	mov rax, rbx
 	add rax, rcx
 	mov al, [rax]

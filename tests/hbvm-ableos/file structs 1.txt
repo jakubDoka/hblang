@@ -3,7 +3,8 @@ file structs 1.main:
      addi64 $254, $254, -8
        li64 $1, 2
         jal $31, $0, :Foo.hb.init
-      sub64 $1, $1, $2
+        swa $2, $1
+      sub64 $1, $2, $1
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx

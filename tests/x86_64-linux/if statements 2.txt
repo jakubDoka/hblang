@@ -2,24 +2,24 @@ if statements 2.fib:
 	push rbx
 	push rbp
 	sub rsp, 0x08
-	mov rbx, rdi
-	cmp rbx, 0x02
+	mov rbp, rdi
+	cmp rbp, 0x02
 	setbe dil
 	movzx rdi, dil
 	test dil, dil
 	jz :0
 	mov rax, 0x01
 	jmp :1
-0:	mov rdi, rbx
+0:	mov rdi, rbp
 	sub rdi, 0x01
 	call :if statements 2.fib
-	mov rbp, rax
-	mov rdi, rbx
+	mov rbx, rax
+	mov rdi, rbp
 	sub rdi, 0x02
 	call :if statements 2.fib
-	mov rcx, rbp
-	add rcx, rax
-	mov rax, rcx
+	mov rcx, rax
+	mov rax, rbx
+	add rax, rcx
 1:	add rsp, 0x08
 	pop rbp
 	pop rbx
