@@ -25,10 +25,7 @@ main:
 	mov rcx, 0x00
 	mov al, [rbp]
 	cmp al, cl
-	setz al
-	movzx rax, al
-	test al, al
-	jz :0
+	jnz :0
 	mov rax, 0x01
 	jmp :1
 0:	lea rbx, [rsp+0x10]

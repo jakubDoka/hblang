@@ -24,10 +24,7 @@ slices 3.reverse:
 	mov rcx, rax
 	mov rsi, rdx
 3:	cmp rcx, rsi
-	setb al
-	movzx rax, al
-	test al, al
-	jz :2
+	jnb :2
 	mov rbp, rsi
 	sub rbp, 0x01
 	mov rbx, rcx

@@ -41,11 +41,7 @@ main:
 	mov rbx, rax
 	mov rdi, rbp
 	call :structs 3 (call stress test).take_triple
-	mov rcx, rax
-	cmp rbx, rcx
-	setnz al
-	movzx rax, al
-	test al, al
+	cmp rbx, rax
 	jz :0
 	mov rax, 0x01
 	jmp :1

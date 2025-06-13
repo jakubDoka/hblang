@@ -6,25 +6,27 @@ nullable types 2.take:
 main:
 	push rbx
 	sub rsp, 0x18
-	mov rcx, 0x00
+	mov rax, 0x00
+	mov rdx, 0x01
 	lea rbx, [rsp]
-	mov rax, 0x01
-	mov [rbx], al
-	mov [rbx+0x08], rcx
-	mov [rbx+0x10], rcx
-	mov rax, 0x01
-	test cl, cl
+	mov [rbx], dl
+	mov [rbx+0x08], rax
+	mov [rbx+0x10], rax
+	mov rcx, 0x01
+	test al, al
 	jz :0
+	mov rax, rcx
 	jmp :1
-0:	test cl, cl
-	jz :2
+0:	mov rax, 0x00
+	cmp dl, al
+	jnz :2
 	mov rax, 0x02
 1:	jmp :3
-2:	test cl, cl
-	jz :4
+2:	cmp dl, al
+	jnz :4
 	mov rax, 0x03
 3:	jmp :5
-4:	mov [rbx+0x10], rax
+4:	mov [rbx+0x10], rcx
 	mov rdi, rbx
 	add rdi, 0x08
 	call :nullable types 2.take

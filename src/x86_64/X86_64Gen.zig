@@ -156,16 +156,14 @@ pub const Node = union(enum) {
         base: graph.BinOp,
         imm: i64,
     },
-    InPlaceImmOp: extern struct {
-        base: graph.MemCpy = .{},
-        op: graph.BinOp,
-        dis: i32,
-        imm: i64,
+    CondJump: extern struct {
+        base: graph.If = .{},
+        op: zydis.ZydisMnemonic,
     },
 
     pub const is_basic_block_start: []const Func.Kind = &.{};
-    pub const is_mem_op: []const Func.Kind = &.{ .OffsetLoad, .OffsetStore, .InPlaceImmOp };
-    pub const is_basic_block_end: []const Func.Kind = &.{};
+    pub const is_mem_op: []const Func.Kind = &.{ .OffsetLoad, .OffsetStore };
+    pub const is_basic_block_end: []const Func.Kind = &.{.CondJump};
     pub const is_pinned: []const Func.Kind = &.{};
     pub const reg_count = 32;
 
@@ -174,8 +172,7 @@ pub const Node = union(enum) {
     }
 
     pub fn isInterned(kind: Func.Kind) bool {
-        _ = kind;
-        return false;
+        return kind == .OffsetLoad;
     }
 
     pub fn isSwapped(node: *Func.Node) bool {
@@ -262,6 +259,36 @@ pub const Node = union(enum) {
             );
             worklist.add(res);
             return res;
+        }
+
+        if (node.kind == .If) {
+            const cond = node.inputs()[1].?;
+            if (cond.kind == .BinOp) select_cond_jump: {
+                const op: zydis.ZydisMnemonic = switch (cond.extra(.BinOp).*) {
+                    .ne => zydis.ZYDIS_MNEMONIC_JZ,
+                    .eq => zydis.ZYDIS_MNEMONIC_JNZ,
+
+                    // Unsigned comparisons
+                    .uge => zydis.ZYDIS_MNEMONIC_JB, // jump if below (opposite of >=)
+                    .ule => zydis.ZYDIS_MNEMONIC_JNBE, // jump if above (opposite of <=)
+                    .ugt => zydis.ZYDIS_MNEMONIC_JBE, // jump if below or equal (opposite of >)
+                    .ult => zydis.ZYDIS_MNEMONIC_JNB, // jump if above or equal (opposite of <)
+
+                    // Signed comparisons
+                    .sge => zydis.ZYDIS_MNEMONIC_JL, // jump if less (opposite of >=)
+                    .sle => zydis.ZYDIS_MNEMONIC_JNLE, // jump if greater (opposite of <=)
+                    .sgt => zydis.ZYDIS_MNEMONIC_JLE, // jump if less or equal (opposite of >)
+                    .slt => zydis.ZYDIS_MNEMONIC_JNL, // jump if greater or equal (opposite of <)
+
+                    else => break :select_cond_jump,
+                };
+                return func.addNode(
+                    .CondJump,
+                    cond.data_type,
+                    &.{ node.inputs()[0], cond.inputs()[1], cond.inputs()[2] },
+                    .{ .op = op },
+                );
+            }
         }
 
         if (node.kind == .Store) {
@@ -828,25 +855,6 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
 
                 continue;
             },
-            .InPlaceImmOp => |extra| {
-                const op = extra.op;
-                const size = instr.data_type.size();
-                const dis = extra.dis;
-                const lhs = self.getReg(instr.inputs()[2]);
-                const rhs = extra.imm;
-
-                const mnemonic = binopToMnemonic(op);
-
-                switch (op) {
-                    .imul => unreachable,
-                    .ushr, .ishl, .sshr, .iadd, .isub, .bor, .band, .bxor => {
-                        self.emitInstr(mnemonic, .{ BRegOff{ lhs, dis, @intCast(size) }, rhs });
-                    },
-                    .udiv, .sdiv, .smod, .umod => unreachable,
-                    .fadd, .fsub, .fmul, .fdiv, .fgt, .flt, .fge, .fle => unreachable,
-                    .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => unreachable,
-                }
-            },
             .ImmOp => |extra| {
                 const op = extra.base;
                 const size = instr.data_type.size();
@@ -993,8 +1001,19 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     .class = .rel32,
                     .off = 2,
                 });
-                // je 0
-                try self.out.code.appendSlice(self.gpa, &.{ 0x0F, 0x84, 0, 0, 0, 0 });
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_JZ, .{ std.math.maxInt(i32), SizeHint{ .bytes = 0 } });
+            },
+            .CondJump => |extra| {
+                const lhs = self.getReg(instr.inputs()[1]);
+                const rhs = self.getReg(instr.inputs()[2]);
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_CMP, .{ SReg{ lhs, instr.inputs()[1].?.data_type.size() }, rhs });
+                self.local_relocs.appendAssumeCapacity(.{
+                    .dest = instr.outputs()[1].schedule,
+                    .offset = @intCast(self.out.code.items.len),
+                    .class = .rel32,
+                    .off = 2,
+                });
+                self.emitInstr(extra.op, .{ std.math.maxInt(i32), SizeHint{ .bytes = 0 } });
             },
             .Jmp => if (instr.outputs()[0].kind == .Region or instr.outputs()[0].kind == .Loop) {
                 const idx = std.mem.indexOfScalar(?*Func.Node, instr.outputs()[0].inputs(), instr).? + 1;
@@ -1098,6 +1117,20 @@ pub fn finalize(self: *X86_64, opts: Mach.FinalizeOptions) void {
     self.out.reset();
 }
 
+pub fn isJump(mnemonic: zydis.ZydisMnemonic) bool {
+    return mnemonic == zydis.ZYDIS_MNEMONIC_JMP or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JZ or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JNZ or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JB or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JNBE or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JBE or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JNB or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JL or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JNLE or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JLE or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JNL;
+}
+
 pub fn disasm(self: *X86_64, opts: Mach.DisasmOpts) void {
     // TODO: maybe we can do this in more platform independend way?
     // Compiling a library in?
@@ -1161,9 +1194,7 @@ pub fn disasm(self: *X86_64, opts: Mach.DisasmOpts) void {
                         );
                         std.debug.assert(zydis.ZYAN_SUCCESS(status));
 
-                        if (inst.mnemonic == zydis.ZYDIS_MNEMONIC_JMP or
-                            inst.mnemonic == zydis.ZYDIS_MNEMONIC_JZ)
-                        {
+                        if (isJump(inst.mnemonic)) {
                             try map.put(
                                 tmp.arena.allocator(),
                                 @intCast(addr + ops[0].unnamed_0.imm.value.s + inst.length),
@@ -1210,9 +1241,7 @@ pub fn disasm(self: *X86_64, opts: Mach.DisasmOpts) void {
                         }
                     }
 
-                    if (inst.mnemonic == zydis.ZYDIS_MNEMONIC_JMP or
-                        inst.mnemonic == zydis.ZYDIS_MNEMONIC_JZ)
-                    {
+                    if (isJump(inst.mnemonic)) {
                         const label = label_map.get(@intCast(addr +
                             ops[0].unnamed_0.imm.value.s + inst.length)).?;
                         const fmt, const args = .{

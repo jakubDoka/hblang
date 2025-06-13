@@ -1,32 +1,25 @@
 main:
 	push rbx
-	push rbp
-	mov rbp, 0x00
 	mov rbx, 0x00
-	mov rdx, rbp
-4:	cmp rdx, 0x01
+	mov rdx, 0x00
+	mov rcx, rbx
+4:	cmp rcx, 0x01
 	setnb al
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, rbp
-	pop rbp
+	mov rax, rbx
 	pop rbx
 	ret
-0:	test bl, bl
+0:	test dl, dl
 	jz :3
-	mov rcx, rbp
-3:	cmp rcx, 0x00
-	setz al
-	movzx rax, al
-	test al, al
-	jz :2
+	mov rax, rbx
+3:	cmp rax, rbx
+	jnz :2
 	jmp :3
-2:	mov rax, rcx
-	imul rax, rbp
-	mov rcx, rax
+2:	imul rax, rbx
 	jmp :3
-3:	mov rax, rdx
+3:	mov rax, rcx
 	add rax, 0x01
-	mov rdx, rax
+	mov rcx, rax
 	jmp :4
