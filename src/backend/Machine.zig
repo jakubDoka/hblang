@@ -863,10 +863,17 @@ pub const OptOptions = struct {
     pub fn execute(self: @This(), comptime MachNode: type, ctx: anytype, func: *graph.Func(MachNode)) void {
         const freestanding = @import("builtin").target.os.tag == .freestanding;
 
+        const Func = graph.Func(MachNode);
+        const Node = Func.Node;
+
         std.debug.assert(func.root.id != std.math.maxInt(u16));
 
         if (self.do_dead_code_elimination) {
-            func.iterPeeps({}, @TypeOf(func.*).idealizeDead);
+            func.iterPeeps(ctx, struct {
+                fn wrap(cx: @TypeOf(ctx), fnc: *Func, nd: *Node, wl: *Func.WorkList) ?*Node {
+                    return @TypeOf(func.*).idealizeDead(cx, fnc, nd, wl);
+                }
+            }.wrap);
             std.debug.assert(func.root.id != std.math.maxInt(u16));
         }
 
@@ -875,7 +882,11 @@ pub const OptOptions = struct {
         }
 
         if (self.do_generic_peeps) {
-            func.iterPeeps({}, @TypeOf(func.*).idealize);
+            func.iterPeeps(ctx, struct {
+                fn wrap(cx: @TypeOf(ctx), fnc: *Func, nd: *Node, wl: *Func.WorkList) ?*Node {
+                    return @TypeOf(func.*).idealize(cx, fnc, nd, wl);
+                }
+            }.wrap);
         }
 
         if (self.do_machine_peeps and @hasDecl(MachNode, "idealizeMach")) {

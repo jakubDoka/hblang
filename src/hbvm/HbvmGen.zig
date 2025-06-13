@@ -953,29 +953,10 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
         return ld;
     }
 
-    if (node.kind == .Ld) {
-        if (node.base().kind == .GlobalAddr) fold_const_read: {
-            const value = self.out.readFromSym(
-                node.base().extra(.GlobalAddr).id,
-                node.extra(.Ld).offset,
-                node.data_type.size(),
-            ) orelse break :fold_const_read;
-
-            return func.addIntImm(node.data_type, value);
-        }
-    }
-
-    if (node.kind == .Call and node.data_type != .bot) {
-        if (self.out.getInlineFunc(node.extra(.Call).id)) |inline_func| {
-            inline_func.inlineInto(Node, func, node, work);
-            return null;
-        }
-    }
-
-    return Func.idealize({}, func, node, work);
+    return Func.idealize(self, func, node, work);
 }
 
-pub fn idealize(_: void, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
+pub fn idealize(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
     const inps = node.inputs();
 
     if (node.kind == .BinOp) {

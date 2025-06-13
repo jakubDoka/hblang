@@ -207,7 +207,7 @@ pub const Node = union(enum) {
         };
     }
 
-    pub fn idealize(_: void, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
+    pub fn idealize(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
         _ = func;
         _ = node;
         _ = worklist;
@@ -251,14 +251,7 @@ pub const Node = union(enum) {
         };
     }
 
-    pub fn idealizeMach(self: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
-        if (node.kind == .Call and node.data_type != .bot) {
-            if (self.out.getInlineFunc(node.extra(.Call).id)) |inline_func| {
-                inline_func.inlineInto(Node, func, node, worklist);
-                return null;
-            }
-        }
-
+    pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
         if (node.kind == .Load) {
             const base, const offset = node.base().knownOffset();
             const res = func.addNode(
@@ -281,18 +274,6 @@ pub const Node = union(enum) {
             );
             worklist.add(res);
             return res;
-        }
-
-        if (node.kind == .OffsetLoad) {
-            if (node.base().kind == .GlobalAddr) fold_const_read: {
-                const value = self.out.readFromSym(
-                    node.base().extra(.GlobalAddr).id,
-                    node.extra(.OffsetLoad).dis,
-                    node.data_type.size(),
-                ) orelse break :fold_const_read;
-
-                return func.addNode(.CInt, node.data_type, &.{null}, value);
-            }
         }
 
         if (node.kind == .BinOp and node.inputs()[1].?.kind == .CInt and node.inputs()[2].?.kind == .CInt) {

@@ -1361,7 +1361,7 @@ pub fn Func(comptime MachNode: type) type {
             for (node.outputs()) |o| if (o.isCfg()) collectPostorder3(self, o, arena, pos, visited, only_basic);
         }
 
-        pub fn idealizeDead(_: void, self: *Self, node: *Node, worklist: *WorkList) ?*Node {
+        pub fn idealizeDead(_: anytype, self: *Self, node: *Node, worklist: *WorkList) ?*Node {
             const inps = node.inputs();
 
             var is_dead = node.kind == .Region and isDead(inps[0]) and isDead(inps[1]);
@@ -1434,12 +1434,12 @@ pub fn Func(comptime MachNode: type) type {
             return null;
         }
 
-        pub fn idealize(_: void, self: *Self, node: *Node, worklist: *WorkList) ?*Node {
+        pub fn idealize(ctx: anytype, self: *Self, node: *Node, work: *WorkList) ?*Node {
             if (node.data_type == .bot) return null;
 
-            if (idealizeDead({}, self, node, worklist)) |w| return w;
+            if (idealizeDead(ctx, self, node, work)) |w| return w;
 
-            var tmp = utils.Arena.scrath(null);
+            var tmp = utils.Arena.scrathFromAlloc(work.list.allocator);
             defer tmp.deinit();
 
             const inps = node.inputs();
@@ -1455,7 +1455,7 @@ pub fn Func(comptime MachNode: type) type {
                     }
 
                     for (base.outputs()) |o| if (o.knownStore(base).? != node) {
-                        worklist.add(o.knownStore(base).?);
+                        work.add(o.knownStore(base).?);
                     };
 
                     return node.mem();
@@ -1465,7 +1465,7 @@ pub fn Func(comptime MachNode: type) type {
                     const dinps = tmp.arena.dupe(?*Node, node.inputs());
                     dinps[0] = null;
                     const st = self.addNode(.Store, node.data_type, dinps, .{});
-                    worklist.add(st);
+                    work.add(st);
                     return st;
                 }
             }
@@ -1478,7 +1478,7 @@ pub fn Func(comptime MachNode: type) type {
                     const dinps = tmp.arena.dupe(?*Node, node.inputs());
                     dinps[0] = null;
                     const st = self.addNode(.Load, node.data_type, dinps, .{});
-                    worklist.add(st);
+                    work.add(st);
                     return st;
                 }
 
@@ -1528,7 +1528,34 @@ pub fn Func(comptime MachNode: type) type {
                 }
             }
 
-            return if (comptime optApi("idealize", @TypeOf(idealize))) MachNode.idealize({}, self, node, worklist) else null;
+            if (node.isLoad()) {
+                const base, const offset = node.base().knownOffset();
+                if (base.kind == .GlobalAddr) fold_const_read: {
+                    const value = ctx.out.readFromSym(
+                        base.extra(.GlobalAddr).id,
+                        offset + node.getStaticOffset(),
+                        node.data_type.size(),
+                    ) orelse break :fold_const_read;
+
+                    return self.addIntImm(node.data_type, value);
+                }
+            }
+
+            if (node.kind == .Call and node.data_type != .bot) {
+                if (ctx.out.getInlineFunc(node.extra(.Call).id)) |inline_func| {
+                    inline_func.inlineInto(MachNode, self, node, work);
+                    return null;
+                }
+            }
+
+            return if (comptime optApi("idealize", IdealSig(@TypeOf(ctx))))
+                MachNode.idealize(ctx, self, node, work)
+            else
+                null;
+        }
+
+        fn IdealSig(C: type) type {
+            return fn (C, *Self, *Node, *WorkList) ?*Node;
         }
 
         pub fn logNid(wr: anytype, nid: usize, cc: std.io.tty.Config) void {
