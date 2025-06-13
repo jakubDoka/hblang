@@ -30,9 +30,6 @@ main:
 	add rax, rdx
 	add rax, rcx
 	cmp al, bl
-	setnz al
-	movzx rax, al
-	test al, al
 	jz :0
 	mov rax, 0x3E9
 	jmp :1

@@ -5,34 +5,26 @@ loops 2.square:
 	mov rbp, rsi
 	mov rcx, rsi
 2:	cmp rbp, rdi
-	setz al
-	movzx rax, al
-	test al, al
-	jz :0
+	jnz :0
 	mov rax, rcx
 	pop rbp
 	pop rbx
 	ret
-0:	mov rbx, rcx
-	mov rcx, rsi
-3:	cmp rcx, rdi
-	setz al
-	movzx rax, al
-	test al, al
-	jz :1
+0:	mov rax, rsi
+	mov rbx, rcx
+3:	cmp rax, rdi
+	jnz :1
 	mov rcx, rbp
 	add rcx, 0x01
 	mov rbp, rcx
 	mov rcx, rbx
 	jmp :2
-1:	mov rdx, rcx
+1:	mov rdx, rax
 	imul rdx, rbp
-	mov rax, rcx
 	add rax, 0x01
 	mov rcx, rbx
 	add rcx, rdx
 	mov rbx, rcx
-	mov rcx, rax
 	jmp :3
 main:
 	sub rsp, 0x08

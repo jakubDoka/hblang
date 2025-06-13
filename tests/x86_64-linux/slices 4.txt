@@ -4,41 +4,29 @@ slices 4.equals:
 	mov r9, rdi
 	mov r10, rsi
 	mov r8, rdx
-	cmp r10, rcx
-	setnz al
-	movzx rax, al
 	mov rsi, 0x00
-	test al, al
+	cmp r10, rcx
 	jz :0
 	mov rax, rsi
 	jmp :1
-0:	cmp r9, r8
-	setz dil
-	movzx rdi, dil
-	mov rbp, 0x01
-	test dil, dil
-	jz :2
+0:	mov rbp, 0x01
+	cmp r9, r8
+	jnz :2
 	mov rax, rbp
 1:	jmp :5
 2:	mov rax, 0x00
 	mov rbx, rax
 6:	cmp rbx, r10
-	setz al
-	movzx rax, al
-	test al, al
-	jz :4
+	jnz :4
 	mov rax, rbp
 	jmp :5
 4:	mov rdi, r9
 	add rdi, rbx
 	mov rdx, r8
 	add rdx, rbx
-	mov al, [rdi]
-	mov cl, [rdx]
-	cmp al, cl
-	setnz al
-	movzx rax, al
-	test al, al
+	mov cl, [rdi]
+	mov al, [rdx]
+	cmp cl, al
 	jz :5
 	mov rax, rsi
 5:	pop rbp

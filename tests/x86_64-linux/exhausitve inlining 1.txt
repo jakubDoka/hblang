@@ -17,12 +17,15 @@ exhausitve inlining 1.loop_fn:
 	mov rcx, rax
 	jmp :1
 main:
+	push rbx
 	sub rsp, 0x08
 	mov rax, 0x01
+	mov rbx, 0x00
 	test al, al
 	jz :0
-	mov rax, 0x00
+	mov rax, rbx
 	add rsp, 0x08
+	pop rbx
 	ret
 0:	mov rax, 0x00
 	test al, al
@@ -31,14 +34,8 @@ main:
 	ud2
 	jmp :2
 2:	mov rax, 0x0A
-	mov rcx, rax
-3:	cmp rcx, 0x00
-	setz al
-	movzx rax, al
-	test al, al
-	jz :2
+3:	cmp rax, rbx
+	jnz :2
 	ud2
-2:	mov rax, rcx
-	sub rax, 0x01
-	mov rcx, rax
+2:	sub rax, 0x01
 	jmp :3

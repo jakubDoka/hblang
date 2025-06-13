@@ -10,11 +10,7 @@ main:
 	call :literals 2.hex
 	mov rbx, rax
 	call :literals 2.dec
-	mov rcx, rax
-	cmp rbx, rcx
-	setnz al
-	movzx rax, al
-	test al, al
+	cmp rbx, rax
 	jz :0
 	mov rax, 0x01
 	jmp :1

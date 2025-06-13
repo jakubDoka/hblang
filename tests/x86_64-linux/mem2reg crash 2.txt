@@ -1,25 +1,21 @@
 mem2reg crash 2.insert:
 	push rbx
 	push rbp
-	mov rbp, 0x00
-	mov rbx, rbp
-1:	mov rdx, rbp
-3:	cmp rdx, 0x08
-	setnb al
-	movzx rax, al
-	test al, al
-	jz :0
+	mov r8, rsi
+	mov rsi, 0x00
+	mov rbp, 0x08
+	mov rbx, rsi
+1:	mov rdx, rsi
+3:	cmp rdx, rbp
+	jb :0
 	mov rax, rbx
 	add rax, 0x01
 	mov rbx, rax
 	jmp :1
 0:	mov rcx, [rdi]
 	mov rax, [rcx]
-	cmp rax, rsi
-	setz al
-	movzx rax, al
-	test al, al
-	jz :2
+	cmp rax, r8
+	jnz :2
 	mov rax, rcx
 	add rax, 0x08
 	pop rbp

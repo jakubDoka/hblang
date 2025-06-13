@@ -6,43 +6,37 @@ defer 1.main.ret_defer:
 main:
 	push rbx
 	push rbp
+	push r12
 	sub rsp, 0x08
-	mov rax, 0x00
-	mov rcx, 0x01
-	test al, al
+	mov rcx, 0x00
+	mov rax, 0x01
+	test cl, cl
 	jz :0
-	mov rax, rcx
 	jmp :1
-0:	cmp rcx, 0x01
-	setnz al
-	movzx rax, al
-	test al, al
+0:	cmp rax, rax
 	jz :2
 	mov rax, 0x02
 1:	jmp :3
-2:	mov rdx, rcx
-b:	cmp rdx, 0x03
-	setz al
-	movzx rax, al
-	mov rcx, rdx
-	add rcx, 0x01
-	test al, al
+2:	mov r12, 0x04
+	mov rdx, rax
+a:	cmp rdx, 0x03
+	setz cl
+	movzx rcx, cl
+	mov rax, rdx
+	add rax, 0x01
+	test cl, cl
 	jz :4
-	mov rax, rcx
-	jmp :5
-4:	cmp rdx, 0x04
-	setz al
-	movzx rax, al
-	test al, al
-	jz :6
-	cmp rcx, 0x05
+	jmp :6
+4:	cmp rdx, r12
+	jnz :6
+	cmp rax, 0x05
 	setnz al
 	movzx rax, al
 	test al, al
-	jz :7
+	jz :6
 	mov rax, 0x03
-3:	jmp :8
-7:	lea rbp, [rsp]
+3:	jmp :7
+6:	lea rbp, [rsp]
 	mov rbx, 0x00
 	mov [rbp], rbx
 	mov rdi, rbp
@@ -52,14 +46,14 @@ b:	cmp rdx, 0x03
 	setnz al
 	movzx rax, al
 	test al, al
-	jz :9
-	mov rax, 0x04
-8:	jmp :10
-9:	mov rax, rbx
-a:	add rsp, 0x08
+	jz :8
+	mov rax, r12
+7:	jmp :9
+8:	mov rax, rbx
+9:	add rsp, 0x08
+	pop r12
 	pop rbp
 	pop rbx
 	ret
-6:	mov rax, rcx
-5:	mov rdx, rax
-	jmp :11
+6:	mov rdx, rax
+	jmp :10

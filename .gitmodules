@@ -3,4 +3,4 @@
 	url = https://github.com/jakubDoka/zydis.git
 [submodule "vendored-tests/lily/"]
 	path = vendored-tests/lily
-	url = https://github.com/koniifer/lily
+	url = https://git.ablecorp.eu/lily-org/lily
