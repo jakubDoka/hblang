@@ -32,10 +32,6 @@ pub const Ident = enum(u32) {
     pub inline fn pos(self: Ident) u32 {
         return @intFromEnum(self);
     }
-
-    pub fn isComptime(self: Ident, source: []const u8) bool {
-        return @intFromEnum(self) != 0 and source[@intFromEnum(self) - 1] == '$';
-    }
 };
 
 pub fn cmpLow(pos: u32, source: [:0]const u8, repr: []const u8) bool {

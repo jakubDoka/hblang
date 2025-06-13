@@ -42,12 +42,12 @@ b:	cmp rdx, 0x03
 	jz :7
 	mov rax, 0x03
 3:	jmp :8
-7:	mov rbp, 0x00
-	lea rbx, [rsp]
-	mov [rbx], rbp
-	mov rdi, rbx
+7:	lea rbp, [rsp]
+	mov rbx, 0x00
+	mov [rbp], rbx
+	mov rdi, rbp
 	call :defer 1.main.ret_defer
-	mov rax, [rbx]
+	mov rax, [rbp]
 	cmp rax, 0x01
 	setnz al
 	movzx rax, al
@@ -55,7 +55,7 @@ b:	cmp rdx, 0x03
 	jz :9
 	mov rax, 0x04
 8:	jmp :10
-9:	mov rax, rbp
+9:	mov rax, rbx
 a:	add rsp, 0x08
 	pop rbp
 	pop rbx

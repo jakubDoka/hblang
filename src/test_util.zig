@@ -184,12 +184,28 @@ pub fn testBuilder(
 
     const expectations: Expectations = .init(&ast, func_arena.arena.allocator());
 
-    try std.testing.expectEqual(expectations.should_error, errored);
-    if (expectations.should_error) return;
+    if (errored) {
+        try std.testing.expect(expectations.should_error);
+        return;
+    }
+
+    var anal_errors = std.ArrayListUnmanaged(root.backend.static_anal.Error){};
+    const optimizations: Mach.OptOptions = .{
+        .arena = func_arena.arena,
+        .error_buf = &anal_errors,
+    };
 
     if (verbose) try header("CODEGEN", output, colors);
-    var out = gen.finalizeBytes(.{ .gpa = gpa });
+    var out = gen.finalizeBytes(.{
+        .gpa = gpa,
+        .optimizations = optimizations,
+    });
     defer out.deinit(gpa);
+
+    if (types.dumpAnalErrors(&anal_errors)) {
+        try std.testing.expect(expectations.should_error);
+        return;
+    }
 
     gen.disasm(.{
         .name = name,

@@ -1982,12 +1982,13 @@ pub fn lookupScopeItem(
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    const decl, const path, const ident =
+    const decl, const path, _ =
         bsty.index(self.types).?.search(name) orelse {
             return self.report(pos, "{} does not declare this", .{bsty});
         };
 
-    return self.resolveGlobal(name, bsty, ast, decl, path, ident.isComptime(ast.source));
+    const is_read_only = ast.source[ast.posOf(decl).index] == '$';
+    return self.resolveGlobal(name, bsty, ast, decl, path, is_read_only);
 }
 
 pub fn resolveGlobal(
@@ -2055,7 +2056,7 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
         var cursor = self.parent_scope;
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
-        const decl, const path, const ident = while (!cursor.empty()) {
+        const decl, const path, _ = while (!cursor.empty()) {
             if (cursor.index(self.types)) |idx| if (idx.search(id)) |v| break v;
             if (cursor.findCapture(pos, id, self.types)) |c| {
                 return .{ .ty = c.ty, .id = switch (self.abiCata(c.ty)) {
@@ -2093,7 +2094,7 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
             ast,
             decl,
             path,
-            ident.isComptime(ast.source),
+            ast.source[ast.posOf(decl).index] == '$',
         );
     }
 }

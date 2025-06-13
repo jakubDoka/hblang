@@ -70,8 +70,8 @@ pub fn orderMoves(self: anytype, comptime R: type, moves: []Move(R)) void {
                 self.emitSwap(m.dst, m.src);
                 m.dst = m.src;
                 std.mem.swap(R, &reg_graph.getPtr(m.src).*.?, &m.src);
+                reg_graph.set(m.dst, null);
             }
-            reg_graph.set(m.dst, null);
         } else if (reg_graph.get(m.dst) != null) {
             self.emitCp(m.dst, m.src);
         }

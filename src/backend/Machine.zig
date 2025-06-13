@@ -114,19 +114,25 @@ pub const InlineFunc = struct {
             .next_id = @intCast(self.node_count),
         };
 
-        internBatch(Node, self_end, 0, &func, &.{});
+        internBatch(
+            Node,
+            self_end,
+            0,
+            &func,
+            .{ .count = self.node_count },
+        );
 
         const entry = self_start.outputs()[0];
         std.debug.assert(entry.kind == .Entry);
 
         var params = std.ArrayListUnmanaged(graph.DataType){};
-        for (entry.outputs()) |o| {
+        for (self_start.outputs()) |o| {
             // NOTE: we dont initialize the killed args because all code only
             // acesses the initialized ones
             //
             if (o.kind == .Arg) {
                 if (params.items.len <= o.extra(.Arg).*) {
-                    try params.resize(func.arena.allocator(), o.extra(.Arg).*);
+                    try params.resize(func.arena.allocator(), o.extra(.Arg).* + 1);
                 }
                 params.items[o.extra(.Arg).*] = o.data_type;
             }
@@ -229,7 +235,7 @@ pub const InlineFunc = struct {
         end: *graph.FuncNode(Node),
         already_present: usize,
         into: *graph.Func(Node),
-        new_nodes: []*graph.FuncNode(Node),
+        new_nodes: union(enum) { new: []*graph.FuncNode(Node), count: usize },
     ) void {
         errdefer unreachable;
 
@@ -238,14 +244,23 @@ pub const InlineFunc = struct {
         var tmp = root.Arena.scrath(null);
         defer tmp.deinit();
 
+        const node_count = switch (new_nodes) {
+            .new => |n| n.len,
+            .count => |c| c,
+        };
+
         var interned = try Set.initEmpty(
             tmp.arena.allocator(),
-            already_present + new_nodes.len,
+            already_present + node_count,
         );
-        var work = try Func.WorkList.init(tmp.arena.allocator(), new_nodes.len);
+        var work = try Func.WorkList.init(tmp.arena.allocator(), node_count);
         work.add(end);
 
+        var deffered_phi_stack = std.ArrayListUnmanaged(*Func.Node){};
+
+        var limit: usize = 100000;
         while (work.pop()) |node| {
+            limit -= 1;
             if (node.id < already_present) {
                 // NOTE: this can happen, dont ask me how
                 continue;
@@ -263,7 +278,34 @@ pub const InlineFunc = struct {
                         ready = false;
                     }
                 }
-                if (!ready) continue;
+                if (!ready) b: {
+                    if (node.kind == .Phi and node.inputs()[0].?.kind == .Loop) {
+                        if (std.mem.indexOfScalar(
+                            *Func.Node,
+                            deffered_phi_stack.items,
+                            node,
+                        )) |idx| {
+                            // we have a cycle so just intern
+                            _ = deffered_phi_stack.swapRemove(idx);
+                            break :b;
+                        } else {
+                            try deffered_phi_stack.append(tmp.arena.allocator(), node);
+                        }
+                    }
+
+                    continue;
+                } else {
+                    if (node.kind == .Phi and node.inputs()[0].?.kind == .Loop) {
+                        if (std.mem.indexOfScalar(
+                            *Func.Node,
+                            deffered_phi_stack.items,
+                            node,
+                        )) |idx| {
+                            // we have a cycle so just intern
+                            _ = deffered_phi_stack.swapRemove(idx);
+                        }
+                    }
+                }
 
                 interned.set(node.id);
                 const slot = into.internNode(
@@ -287,26 +329,32 @@ pub const InlineFunc = struct {
                 for (node.inputs()) |on| if (on) |n| {
                     work.add(n);
                 };
+
+                if (node.kind == .Loop or node.kind == .Region) {
+                    for (node.outputs()) |o| work.add(o);
+                }
             }
         }
 
-        var malformed = false;
-        for (new_nodes) |n| {
-            // TODO: there is a better way
-            if (n.id == std.math.maxInt(u16) or
-                !Func.Node.isInterned(n.kind, n.inputs())) continue;
-            if (!interned.isSet(n.id)) {
-                std.debug.print("{}\n", .{n});
-                malformed = true;
+        if (new_nodes == .new) {
+            var malformed = false;
+            for (new_nodes.new) |n| {
+                // TODO: there is a better way
+                if (n.id == std.math.maxInt(u16)) continue;
+                if (!interned.isSet(n.id)) {
+                    std.debug.print("{}\n", .{n});
+                    malformed = true;
+                }
             }
-        }
-        if (malformed) {
-            std.debug.print("\n", .{});
-            into.fmtUnscheduled(
-                std.io.getStdErr().writer().any(),
-                .escape_codes,
-            );
-            unreachable;
+            if (malformed) {
+                std.debug.print("\n", .{});
+                std.debug.print("{}\n", .{end});
+                into.fmtUnscheduled(
+                    std.io.getStdErr().writer().any(),
+                    .escape_codes,
+                );
+                unreachable;
+            }
         }
     }
 
@@ -329,7 +377,7 @@ pub const InlineFunc = struct {
 
         const prev_next_id = func.next_id;
 
-        var tmp = root.Arena.scrath(null);
+        var tmp = root.Arena.scrathFromAlloc(func_work.list.allocator);
         defer tmp.deinit();
 
         const cloned = cloneNodes(
@@ -346,14 +394,53 @@ pub const InlineFunc = struct {
 
         const end = cloned.new_node_table[self_end.id];
 
-        internBatch(Node, end, prev_next_id, func, cloned.new_nodes);
+        internBatch(Node, end, prev_next_id, func, .{ .new = cloned.new_nodes });
 
         const start = cloned.new_node_table[self_start.id];
         const entry = start.outputs()[0];
         std.debug.assert(entry.kind == .Entry);
 
-        const entry_mem = start.outputs()[1];
-        std.debug.assert(entry_mem.kind == .Mem);
+        const entry_mem: ?*Func.Node = for (start.outputs()) |o| {
+            if (o.kind == .Mem) break o;
+        } else null;
+        var exit_mem = end.inputs()[1];
+
+        const into_entry_mem = func.root.outputs()[1];
+        std.debug.assert(into_entry_mem.kind == .Mem);
+
+        const call_end = dest.outputs()[0];
+        if (call_end.kind != .CallEnd)
+            func.fmtUnscheduled(
+                std.io.getStdErr().writer().any(),
+                .escape_codes,
+            );
+        std.debug.assert(call_end.kind == .CallEnd);
+
+        var after_entry: *Func.Node = for (entry.outputs()) |o| {
+            if (o.isCfg()) break o;
+        } else unreachable;
+        std.debug.assert(after_entry.isBasicBlockEnd() or
+            after_entry.kind == .Region or after_entry.kind == .Loop);
+        std.debug.assert(after_entry.kind != .Entry);
+        std.debug.assert(after_entry.kind != .Start);
+
+        const before_return = end.inputs()[0];
+        std.debug.assert(before_return == null or before_return.?.isBasicBlockStart());
+
+        const before_dest = dest.inputs()[0].?;
+        std.debug.assert(before_dest.isBasicBlockStart());
+
+        const call_end_entry_mem = for (call_end.outputs()) |o| {
+            if (o.kind == .Mem) break o;
+        } else null;
+
+        if (entry_mem != null) {
+            for (tmp.arena.dupe(*Func.Node, entry_mem.?.outputs())) |use| {
+                if (use.kind == .Local) {
+                    func.setInputNoIntern(use, 1, into_entry_mem);
+                }
+            }
+        }
 
         // NOTE: not scheduled yet so args are on the Start
         for (dest.dataDeps(), 0..) |dep, j| {
@@ -363,15 +450,6 @@ pub const InlineFunc = struct {
             func.subsume(dep.?, arg);
         }
 
-        const exit_mem = end.inputs()[1].?;
-        const call_end = dest.outputs()[0];
-
-        if (call_end.kind != .CallEnd)
-            func.fmtUnscheduled(
-                std.io.getStdErr().writer().any(),
-                .escape_codes,
-            );
-        std.debug.assert(call_end.kind == .CallEnd);
         for (end.dataDeps(), 0..) |dep, j| {
             const ret = for (call_end.outputs()) |o| {
                 if (o.kind == .Ret and o.extra(.Ret).* == j) break o;
@@ -379,45 +457,53 @@ pub const InlineFunc = struct {
             func.subsume(dep.?, ret);
         }
 
-        var after_entry: *Func.Node = for (entry.outputs()) |o| {
-            if (o.isCfg()) break o;
-        } else unreachable;
-        std.debug.assert(after_entry.isBasicBlockEnd());
-        std.debug.assert(after_entry.kind != .Entry);
-        std.debug.assert(after_entry.kind != .Start);
-
-        const call_end_entry_mem = for (call_end.outputs()) |o| {
-            if (o.kind == .Mem) break o;
-        } else unreachable;
-
         if (entry_mem == exit_mem) {
-            // NOTE: this is still needed since there can be loads
-            func.subsume(dest.inputs()[1].?, entry_mem);
-            func.subsume(dest.inputs()[1].?, call_end_entry_mem);
+            if (entry_mem != null) {
+                // NOTE: this is still needed since there can be loads
+                func.subsume(dest.inputs()[1].?, entry_mem.?);
+            }
+            if (call_end_entry_mem != null) {
+                func.subsume(dest.inputs()[1].?, call_end_entry_mem.?);
+            }
+            exit_mem = dest.inputs()[1].?;
         } else {
-            func.subsume(dest.inputs()[1].?, entry_mem);
-            func.subsume(exit_mem, call_end_entry_mem);
+            func.subsume(dest.inputs()[1].?, entry_mem.?);
+            if (call_end_entry_mem != null) {
+                func.subsume(exit_mem.?, call_end_entry_mem.?);
+            }
         }
 
-        const before_return = end.inputs()[0].?;
-        std.debug.assert(before_return.isBasicBlockStart());
-        const before_dest = dest.inputs()[0].?;
-        std.debug.assert(before_dest.isBasicBlockStart());
+        if (exit_mem) |em| {
+            for (em.outputs()) |o| {
+                func_work.add(o);
+            }
+        }
 
-        if (after_entry.kind == .Return) {
-            std.debug.assert(before_return.kind == .Entry);
+        func.subsume(before_dest, entry);
+
+        if (before_return == null) {
+            const trap_region = end.inputs()[2].?;
+            if (func.end.inputs()[2] == null) {
+                func.setInputNoIntern(func.end, 2, func.addNode(.TrapRegion, .top, &.{}, .{}));
+            }
+            const dest_trap_region = func.end.inputs()[2].?;
+
+            for (trap_region.inputs()) |inp| {
+                func.connect(inp.?, dest_trap_region);
+            }
+        } else if (after_entry.kind == .Return) {
             func.subsume(before_dest, call_end);
-            func_work.add(dest);
         } else {
-            func.subsume(after_entry, dest);
-            func.subsume(before_return, call_end);
+            func.subsume(before_return.?, call_end);
         }
-
-        for (tmp.arena.dupe(*Func.Node, entry.outputs())) |o| {
-            func.setInputNoIntern(o, 0, before_dest);
-        }
+        dest.data_type = .bot;
+        func_work.add(dest);
 
         end.kill();
+
+        for (cloned.new_nodes) |nn| if (nn.id != std.math.maxInt(u16)) {
+            func_work.add(nn);
+        };
     }
 
     pub fn init(
@@ -620,6 +706,7 @@ pub const Data = struct {
         linkage: Linkage,
         is_inline: bool,
     ) !void {
+        std.debug.assert(id != std.math.maxInt(u32));
         return self.startDefineSym(
             gpa,
             try root.ensureSlot(&self.funcs, gpa, id),
@@ -685,6 +772,7 @@ pub const Data = struct {
     }
 
     pub fn endDefineFunc(self: *Data, id: u32) void {
+        std.debug.assert(id != std.math.maxInt(u32));
         self.endDefineSym(self.funcs.items[id]);
     }
 
@@ -717,7 +805,7 @@ pub const DataOptions = struct {
 
 pub const OptOptions = struct {
     verbose: bool = false,
-    do_dead_code_elimination: bool = false,
+    do_dead_code_elimination: bool = true,
     do_inlining: bool = true,
     do_generic_peeps: bool = true,
     do_machine_peeps: bool = true,
@@ -756,11 +844,30 @@ pub const OptOptions = struct {
         return s;
     }
 
+    pub fn shouldDefer(
+        self: @This(),
+        id: u32,
+        is_inline: bool,
+        comptime B: type,
+        func: *graph.Func(B.Node),
+        backend: *B,
+    ) bool {
+        if (self.do_inlining or is_inline) {
+            self.asPreInline().execute(B.Node, backend, func);
+            backend.out.setInlineFunc(backend.gpa, B.Node, func, id);
+        }
+
+        return self.do_inlining;
+    }
+
     pub fn execute(self: @This(), comptime MachNode: type, ctx: anytype, func: *graph.Func(MachNode)) void {
         const freestanding = @import("builtin").target.os.tag == .freestanding;
 
+        std.debug.assert(func.root.id != std.math.maxInt(u16));
+
         if (self.do_dead_code_elimination) {
             func.iterPeeps({}, @TypeOf(func.*).idealizeDead);
+            std.debug.assert(func.root.id != std.math.maxInt(u16));
         }
 
         if (self.mem2reg) {
@@ -787,6 +894,96 @@ pub const OptOptions = struct {
 
         if (self.error_buf) |eb| {
             func.static_anal.analize(self.arena.?, eb);
+        }
+    }
+
+    pub fn finalize(optimizations: @This(), comptime B: type, backend: *B) void {
+        errdefer unreachable;
+
+        if (optimizations.do_inlining) {
+            var tmp = root.Arena.scrath(optimizations.arena);
+            defer tmp.deinit();
+
+            const bout: *Data = &backend.out;
+            const gpa: std.mem.Allocator = backend.gpa;
+            const Func = graph.Func(B.Node);
+            const Node = B.Node;
+
+            var out: Data = .{};
+            defer out.deinit(gpa);
+
+            // do the exhausitve optimization pass with inlining, this should
+            // hanlde stacked inlines as well
+            //
+            const pi_opts = optimizations.asPostInlining();
+            var arena = bout.inline_func_nodes.promote(gpa);
+            const funcs = tmp.arena.alloc(Func, bout.inline_funcs.items.len);
+            for (bout.funcs.items, 0..) |sym_id, i| {
+                if (sym_id == .invalid) continue;
+                const sym = &bout.syms.items[@intFromEnum(sym_id)];
+                if (sym.linkage == .imported) {
+                    try out.startDefineFunc(
+                        gpa,
+                        @intCast(i),
+                        bout.lookupName(sym.name),
+                        sym.kind,
+                        sym.linkage,
+                        false,
+                    );
+                    out.endDefineFunc(@intCast(i));
+                    continue;
+                }
+                const inline_func = &bout.inline_funcs.items[sym.nodes];
+                funcs[sym.nodes] = inline_func.toFunc(&arena, Node);
+                pi_opts.execute(Node, backend, &funcs[sym.nodes]);
+                inline_func.node_count = funcs[sym.nodes].next_id;
+
+                arena = funcs[sym.nodes].arena;
+            }
+
+            // we take out the current `out` that just encodes the code spec and
+            // and emit all functions to the new out without opts
+            //
+            std.mem.swap(Data, &out, bout);
+
+            for (out.funcs.items, 0..) |sym_id, i| {
+                if (sym_id == .invalid) continue;
+                const sym = &out.syms.items[@intFromEnum(sym_id)];
+                if (sym.linkage == .imported) continue;
+                var func = &funcs[sym.nodes];
+                func.arena = arena;
+
+                backend.emitFunc(func, .{
+                    .name = out.lookupName(sym.name),
+                    .id = @intCast(i),
+                    .entry = i == backend.entry,
+                    .linkage = sym.linkage,
+                    .is_inline = false,
+                    .optimizations = b: {
+                        var op = OptOptions.none;
+                        op.do_gcm = true;
+                        op.error_buf = optimizations.error_buf;
+                        op.arena = optimizations.arena;
+                        break :b op;
+                    },
+                });
+                arena = func.arena;
+            }
+
+            // blit the globals as well
+            //
+            for (out.globals.items, 0..) |sym_id, i| {
+                if (sym_id == .invalid) continue;
+                const sym = &out.syms.items[@intFromEnum(sym_id)];
+                backend.emitData(.{
+                    .name = out.lookupName(sym.name),
+                    .id = @intCast(i),
+                    .value = .{ .init = out.code.items[sym.offset..][0..sym.size] },
+                    .readonly = sym.readonly,
+                });
+            }
+
+            out.inline_func_nodes = arena.state;
         }
     }
 };

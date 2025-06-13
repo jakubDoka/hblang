@@ -2,6 +2,56 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### exhausitve inlining 1
+```hb
+expectations := .{
+    unreaches: true,
+}
+
+$no_op := fn(): void {
+}
+
+$unreachable := fn(): void die
+
+$double_inline := fn(): void no_op()
+
+$some_mem_ops := fn(vl: ^uint): void {
+    vl += 1
+}
+
+$loop_fn := fn(iters: uint): void {
+    loop if iters == 0 break else {
+        iters -= 1
+    }
+}
+
+$recurcive := fn(n: uint): uint {
+    if n == 0 return 0
+
+    return recurcive(n - 1)
+}
+
+main := fn(): uint {
+    no_op()
+
+    a := 0
+    some_mem_ops(&a)
+    if a != 1 return 0
+
+    if false {
+        unreachable()
+    }
+
+    loop_fn(10)
+
+    ////_ = recurcive(10)
+
+    unreachable()
+
+    return 0
+}
+```
+
 #### false positive in cycle detection
 ```hb
 main := fn(): uint {

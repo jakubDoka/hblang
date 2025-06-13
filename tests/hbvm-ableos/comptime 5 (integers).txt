@@ -3,8 +3,8 @@ comptime 5 (integers).main:
      addi64 $254, $254, -8
         jal $31, $0, :comptime 5 (integers).main.func(value: uint)
          cp $3, $1
-        lra $1, $0, :comptime 5 (integers).main(value: uint).global_value
         lra $2, $0, :comptime 5 (integers).main.param(i: uint).global_value
+        lra $1, $0, :comptime 5 (integers).main(value: uint).global_value
          ld $1, $1, 0, 8
          ld $2, $2, 0, 8
       sub64 $1, $1, $3

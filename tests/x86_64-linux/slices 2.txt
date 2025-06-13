@@ -58,9 +58,9 @@ main:
 	jmp :2
 1:	mov rdx, rbp
 	add rdx, 0x01
-	mov rax, [rsi]
 	mov rcx, rbp
 	imul rcx, r8
+	mov rax, [rsi]
 	add rax, rcx
 	mov rax, [rax]
 	mov rcx, rbx

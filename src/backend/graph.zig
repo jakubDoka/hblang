@@ -890,7 +890,8 @@ pub fn Func(comptime MachNode: type) type {
             pub fn isDataPhi(self: *const Node) bool {
                 // TODO: get rid of this recursion
                 return self.kind == .Phi and //and self.data_type != .top;
-                    (!self.input_base[1].?.isMemOp() or self.input_base[1].?.isLoad()) and
+                    ((!self.input_base[1].?.isMemOp() or self.input_base[1].?.kind == .Local) or
+                        self.input_base[1].?.isLoad()) and
                     (self.input_base[1].?.kind != .Phi or self.input_base[1].?.isDataPhi());
             }
 
@@ -1210,16 +1211,6 @@ pub fn Func(comptime MachNode: type) type {
                     _ = self.setInput(use, index, this);
                 }
             }
-
-            //if (@import("builtin").mode == .Debug) {
-            //    var iter = self.interner.iterator();
-            //    while (iter.next()) |e| std.debug.assert(e.key_ptr.node.id != std.math.maxInt(u16));
-            //}
-
-            //if (target.outputs().len != 0)
-            //    utils.panic("-- {any}\n", .{target.outputs()})
-            //else
-            //    std.debug.print("--\n", .{});
         }
 
         pub fn subsume(self: *Self, this: *Node, target: *Node) void {

@@ -129,6 +129,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
             else_.asCfg().?.ext.loop = 0;
 
             func.setInputNoIntern(&loop.base, 1, else_);
+
             func.addTrap(then, graph.infinite_loop_trap);
 
             return end.asCfg().?;
@@ -147,7 +148,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
             var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), self.next_id * 2) catch unreachable;
             var stack = std.ArrayList(Func.Frame).init(tmp.arena.allocator());
 
-            const cfg_rpo = cfg_rpo: {
+            const cfg_rpo: []*CfgNode = cfg_rpo: {
                 var rpo = std.ArrayList(*CfgNode).init(tmp.arena.allocator());
 
                 Func.traversePostorder(struct {
@@ -187,8 +188,9 @@ pub fn GcmMixin(comptime MachNode: type) type {
 
             sched_early: {
                 for (cfg_rpo) |cfg| {
-                    if (cfg.base.kind != .Return or cfg.base.inputs()[0] != null)
+                    if (cfg.base.kind != .Return or cfg.base.inputs()[0] != null) {
                         _ = cfg.idom();
+                    }
 
                     for (cfg.base.inputs()) |oinp| if (oinp) |inp| {
                         gcm.shedEarly(inp, cfg_rpo[1], &visited);
@@ -509,13 +511,13 @@ pub fn GcmMixin(comptime MachNode: type) type {
             };
 
             if (!node.isPinned()) {
-                //if (node.isCfg()) {
-                //    // self.fmtUnscheduled(
-                //    //     std.io.getStdErr().writer().any(),
-                //    //     .escape_codes,
-                //    // );
-                //    root.panic("{}\n", .{node});
-                //}
+                if (node.kind == .Start) {
+                    self.fmtUnscheduled(
+                        std.io.getStdErr().writer().any(),
+                        .escape_codes,
+                    );
+                    root.panic("{}\n", .{node});
+                }
 
                 var best = early;
                 if (node.inputs()[0]) |n| if (n.asCfg()) |cn| {

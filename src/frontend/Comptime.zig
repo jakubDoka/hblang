@@ -197,9 +197,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
                 }
 
                 var cursor = curr.mem();
-                //std.debug.print("--- {}\n", .{curr.base()});
                 while (true) {
-                    //std.debug.print("{}\n", .{cursor});
                     if (cursor.isStore()) {
                         if (cursor.base() != curr.base()) {
                             cursor = cursor.mem();

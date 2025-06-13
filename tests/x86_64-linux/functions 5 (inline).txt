@@ -1,0 +1,6 @@
+functions 5 (inline).foo:
+	mov rax, 0x00
+	ret
+main:
+	mov rax, 0x00
+	ret

@@ -10,11 +10,8 @@ comptime 2.main.some_fn3(some_int = uint)(fnc = comptime 2.main.some_fn3(some_in
 	add rax, 0x0A
 	add rsp, 0x08
 	ret
-comptime 2.main.some_fn3(some_int = uint)(fnc = comptime 2.main.some_fn2(some_int = uint, some_fn = comptime 2.main.some_fn(some_int = uint))):
-	sub rsp, 0x08
-	call :comptime 2.main.some_fn2(some_int = uint, some_fn = comptime 2.main.some_fn(some_int = uint))
-	add rax, 0x0A
-	add rsp, 0x08
+comptime 2.main.some_fn(some_int = uint):
+	mov rax, 0x01
 	ret
 comptime 2.main.some_fn2(some_int = uint, some_fn = comptime 2.main.some_fn(some_int = uint)):
 	sub rsp, 0x08
@@ -22,8 +19,11 @@ comptime 2.main.some_fn2(some_int = uint, some_fn = comptime 2.main.some_fn(some
 	add rax, 0x01
 	add rsp, 0x08
 	ret
-comptime 2.main.some_fn(some_int = uint):
-	mov rax, 0x01
+comptime 2.main.some_fn3(some_int = uint)(fnc = comptime 2.main.some_fn2(some_int = uint, some_fn = comptime 2.main.some_fn(some_int = uint))):
+	sub rsp, 0x08
+	call :comptime 2.main.some_fn2(some_int = uint, some_fn = comptime 2.main.some_fn(some_int = uint))
+	add rax, 0x0A
+	add rsp, 0x08
 	ret
 main:
 	push rbx

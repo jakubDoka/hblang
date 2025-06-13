@@ -56,6 +56,15 @@ pub const SafeContext = struct {
     }
 
     fn progRead(self: *Self, comptime T: type, src: usize) !*align(1) const T {
+        if (self.code_start != self.code_end) {
+            if (self.code_start > src or self.code_end < src + @sizeOf(T)) {
+                return error.MemOob;
+            }
+        } else {
+            if (self.memory.len < src + @sizeOf(T)) {
+                return error.MemOob;
+            }
+        }
         const mem = self.memory[src..][0..@sizeOf(T)];
         return @ptrCast(mem.ptr);
     }

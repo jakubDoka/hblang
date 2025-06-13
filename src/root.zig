@@ -238,8 +238,22 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
 
     const name = try std.mem.replaceOwned(u8, types.pool.arena.allocator(), opts.root_file, "/", "_");
 
+    var anal_errors = std.ArrayListUnmanaged(backend.static_anal.Error){};
+    const optimizations: backend.Machine.OptOptions = .{
+        .arena = root_tmp.arena,
+        .error_buf = &anal_errors,
+    };
+
     if (opts.dump_asm) {
-        const out = bckend.finalizeBytes(.{ .gpa = types.pool.arena.allocator() });
+        const out = bckend.finalizeBytes(.{
+            .gpa = types.pool.arena.allocator(),
+            .optimizations = optimizations,
+        });
+
+        if (types.dumpAnalErrors(&anal_errors)) {
+            try opts.diagnostics.print("failed due to previous errors\n", .{});
+            return error.Failed;
+        }
 
         bckend.disasm(.{
             .name = name,
@@ -253,7 +267,15 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     if (opts.vendored_test) {
         const expectations: test_utils.Expectations = .init(&asts[0], types.pool.arena.allocator());
 
-        const out = bckend.finalizeBytes(.{ .gpa = types.pool.arena.allocator() });
+        const out = bckend.finalizeBytes(.{
+            .gpa = types.pool.arena.allocator(),
+            .optimizations = optimizations,
+        });
+
+        if (types.dumpAnalErrors(&anal_errors)) {
+            try opts.diagnostics.print("failed due to previous errors\n", .{});
+            return error.Failed;
+        }
 
         errdefer {
             bckend.disasm(.{
@@ -268,7 +290,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
                 .code = out.items,
                 .output = std.io.getStdErr().writer().any(),
                 .colors = std.io.tty.detectConfig(std.io.getStdErr()),
-            })) catch {};
+            })) catch unreachable;
         }
 
         try expectations.assert(bckend.run(.{

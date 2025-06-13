@@ -1,0 +1,6 @@
+functions 5 (inline).main:
+    li64 $1, 0
+      tx
+functions 5 (inline).foo:
+    li64 $1, 0
+    jala $0, $31, 0

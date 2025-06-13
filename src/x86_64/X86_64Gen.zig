@@ -16,6 +16,7 @@ const Move = utils.Move(Reg);
 gpa: std.mem.Allocator,
 object_format: enum { elf, coff },
 memcpy: Mach.Data.SymIdx = .invalid,
+entry: u32 = undefined,
 out: Mach.Data = .{},
 allocs: []u16 = undefined,
 ret_count: usize = undefined,
@@ -251,32 +252,7 @@ pub const Node = union(enum) {
     }
 
     pub fn idealizeMach(self: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
-        //if (node.kind == .OffsetStore and node.value().isSub(graph.BinOp) and
-        //    node.value().inputs()[1].?.isSub(graph.Load) and
-        //    node.value().inputs()[1].?.getStaticOffset() == 0 and
-        //    node.value().outputs().len == 1 and
-        //    node.value().inputs()[1].?.base() == node.base())
-        //{
-        //    if (node.value().kind == .ImmOp and switch (node.value().extra(.ImmOp).base) {
-        //        .ushr, .ishl, .sshr, .iadd, .isub, .bor, .band, .bxor => true,
-        //        else => false,
-        //    }) {
-        //        worklist.add(node.value());
-
-        //        return func.addNode(
-        //            .InPlaceImmOp,
-        //            node.data_type,
-        //            &.{ node.inputs()[0], node.mem(), node.base() },
-        //            .{
-        //                .op = node.value().extra(.ImmOp).base,
-        //                .dis = node.extra(.OffsetStore).dis,
-        //                .imm = node.value().extra(.ImmOp).imm,
-        //            },
-        //        );
-        //    }
-        //}
-
-        if (node.kind == .Call) {
+        if (node.kind == .Call and node.data_type != .bot) {
             if (self.out.getInlineFunc(node.extra(.Call).id)) |inline_func| {
                 inline_func.inlineInto(Node, func, node, worklist);
                 return null;
@@ -393,17 +369,15 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     const name = if (entry) "main" else opts.name;
     const linkage: Mach.Data.Linkage = if (entry) .exported else opts.linkage;
 
+    if (entry) self.entry = id;
+
     try self.out.startDefineFunc(self.gpa, id, name, .func, linkage, opts.is_inline);
     defer self.out.endDefineFunc(id);
 
-    if (opts.optimizations.do_inlining or opts.is_inline) {
-        opts.optimizations.asPreInline().execute(Node, self, func);
-        self.out.setInlineFunc(self.gpa, Node, func, id);
-    }
-
-    if (opts.optimizations.do_inlining) return;
-
     if (opts.linkage == .imported) return;
+
+    if (opts.optimizations.shouldDefer(id, opts.is_inline, X86_64, func, self))
+        return;
 
     opts.optimizations.execute(Node, self, func);
 
@@ -710,8 +684,7 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
 
     const status = zydis.ZydisEncoderEncodeInstruction(&req, &buf, &len);
     if (zydis.ZYAN_FAILED(status) != 0) {
-        std.debug.print("{x} {s} {} {any}\n", .{ status, zydis.ZydisMnemonicGetString(mnemonic), args, req.operands[0..fields.len] });
-        unreachable;
+        utils.panic("{x} {s} {} {any}\n", .{ status, zydis.ZydisMnemonicGetString(mnemonic), args, req.operands[0..fields.len] });
     }
 
     try self.out.code.appendSlice(self.gpa, buf[0..len]);
@@ -742,9 +715,8 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
 
                 const opcode = 0xE8;
                 try self.out.code.append(self.gpa, opcode);
-                const slot = &self.memcpy;
-                try self.out.importSym(self.gpa, slot, "memcpy", .func);
-                try self.out.addReloc(self.gpa, slot, 4, -4);
+                try self.out.importSym(self.gpa, &self.memcpy, "memcpy", .func);
+                try self.out.addReloc(self.gpa, &self.memcpy, 4, -4);
                 try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
             },
             .MachMove => {},
@@ -777,8 +749,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 };
                 const status = zydis.ZydisEncoderEncodeInstruction(&req, &buf, &len);
                 if (zydis.ZYAN_FAILED(status) != 0) {
-                    std.debug.print("{x}\n", .{status});
-                    unreachable;
+                    utils.panic("{x}\n", .{status});
                 }
                 try self.out.code.appendSlice(self.gpa, buf[0 .. len - 4]);
 
@@ -1135,11 +1106,7 @@ pub fn emitData(self: *X86_64, opts: Mach.DataOptions) void {
 pub fn finalize(self: *X86_64, opts: Mach.FinalizeOptions) void {
     errdefer unreachable;
 
-    if (opts.optimizations.do_inlining) {
-        //for (self.out.syms) |sym| {
-        //    const func = Func{};
-        //}
-    }
+    opts.optimizations.finalize(X86_64, self);
 
     try switch (self.object_format) {
         .elf => root.object.elf.flush(self.out, .x86_64, opts.output),

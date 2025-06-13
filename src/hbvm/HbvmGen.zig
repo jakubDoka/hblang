@@ -184,14 +184,18 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     try self.out.startDefineFunc(self.gpa, id, name, .func, .local, opts.is_inline);
     defer self.out.endDefineFunc(id);
 
-    if (opts.optimizations.do_inlining or opts.is_inline) {
-        opts.optimizations.asPreInline().execute(Node, self, func);
-        self.out.setInlineFunc(self.gpa, Node, func, id);
-    }
-
-    if (opts.optimizations.do_inlining) return;
+    if (opts.optimizations.shouldDefer(id, opts.is_inline, HbvmGen, func, self))
+        return;
 
     opts.optimizations.execute(Node, self, func);
+
+    if (false and std.mem.eql(u8, "mem.hb.copy", opts.name)) {
+        std.debug.print("{s}\n", .{opts.name});
+        func.fmtScheduled(
+            std.io.getStdErr().writer().any(),
+            .escape_codes,
+        );
+    }
 
     const allocs = Regalloc.ralloc(Node, func);
 
@@ -203,9 +207,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     self.allocs = allocs;
     self.ret_count = func.returns.len;
 
-    var visited = try std.DynamicBitSet.initEmpty(tmp.arena.allocator(), func.next_id);
-    const postorder = func.collectPostorder(tmp.arena.allocator(), &visited);
-    const is_tail = for (postorder) |bb| {
+    const is_tail = for (func.gcm.postorder) |bb| {
         if (bb.base.kind == .CallEnd) break false;
     } else true;
 
@@ -242,7 +244,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
         var moves = std.ArrayList(Move).init(tmp.arena.allocator());
         for (0..func.params.len) |i| {
-            const argn = for (postorder[0].base.outputs()) |o| {
+            const argn = for (func.gcm.postorder[0].base.outputs()) |o| {
                 if (o.kind == .Arg and o.extra(.Arg).* == i) break o;
             } else continue; // is dead
             const dst, const src = .{ self.outReg(argn), isa.Reg.arg(i) };
@@ -252,10 +254,14 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         break :prelude;
     }
 
-    for (postorder, 0..) |bb, i| {
+    for (func.gcm.postorder) |bb| {
+        std.debug.assert(bb.base.schedule != std.math.maxInt(u16));
+    }
+
+    for (func.gcm.postorder, 0..) |bb, i| {
         self.block_offsets[bb.base.schedule] = @intCast(self.out.code.items.len);
         std.debug.assert(bb.base.schedule == i);
-        self.emitBlockBody(tmp.arena.allocator(), &bb.base);
+        self.emitBlockBody(tmp.arena.allocator(), &bb.base, func);
         const last = bb.base.outputs()[bb.base.output_len - 1];
         if (last.outputs().len == 0) {
             std.debug.assert(last.kind == .Return);
@@ -277,7 +283,17 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         } else if (last.kind == .Trap) {
             // noop
         } else {
-            std.debug.assert(last.outputs()[0].isBasicBlockStart());
+            std.debug.assert(last.outputs()[@intFromBool(last.isSwapped())]
+                .isBasicBlockStart());
+            if (last.outputs()[@intFromBool(last.isSwapped())]
+                .schedule == std.math.maxInt(u16))
+            {
+                func.fmtScheduled(
+                    std.io.getStdErr().writer().any(),
+                    std.io.tty.detectConfig(std.io.getStdErr()),
+                );
+                utils.panic("{} {}\n", .{ last.outputs()[@intFromBool(last.isSwapped())], last });
+            }
             self.local_relocs.appendAssumeCapacity(.{
                 .dest_block = last.outputs()[@intFromBool(last.isSwapped())].schedule,
                 .rel = self.reloc(1, .rel32),
@@ -311,76 +327,7 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
 pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {
     errdefer unreachable;
 
-    if (opts.optimizations.do_inlining) {
-        var tmp = utils.Arena.scrath(opts.optimizations.arena);
-        defer tmp.deinit();
-
-        // do the exhausitve optimization pass with inlining, this should
-        // hanlde stacked inlines as well
-        //
-        const pi_opts = opts.optimizations.asPostInlining();
-        var arena = self.out.inline_func_nodes.promote(self.gpa);
-        const funcs = tmp.arena.alloc(Func, self.out.inline_funcs.items.len);
-        for (self.out.funcs.items) |sym_id| {
-            if (sym_id == .invalid) continue;
-            const sym = &self.out.syms.items[@intFromEnum(sym_id)];
-            const inline_func = &self.out.inline_funcs.items[sym.nodes];
-            funcs[sym.nodes] = inline_func.toFunc(&arena, Node);
-            pi_opts.execute(Node, self, &funcs[sym.nodes]);
-            inline_func.node_count = funcs[sym.nodes].next_id;
-
-            arena = funcs[sym.nodes].arena;
-
-            std.debug.print("{s}\n", .{self.out.lookupName(sym.name)});
-        }
-
-        // we take out the current `out` that just encodes the code spec and
-        // and emit all functions to the new out without and opts
-        //
-        var out: Mach.Data = .{};
-        defer out.deinit(self.gpa);
-        std.mem.swap(Mach.Data, &out, &self.out);
-        std.mem.swap(
-            std.heap.ArenaAllocator.State,
-            &out.inline_func_nodes,
-            &self.out.inline_func_nodes,
-        );
-
-        for (out.funcs.items, 0..) |sym_id, i| {
-            if (sym_id == .invalid) continue;
-            const sym = &out.syms.items[@intFromEnum(sym_id)];
-            var func = &funcs[sym.nodes];
-            func.arena = arena;
-            self.emitFunc(func, .{
-                .name = out.lookupName(sym.name),
-                .id = @intCast(i),
-                .entry = i == self.entry,
-                .linkage = sym.linkage,
-                .is_inline = false,
-                .optimizations = b: {
-                    var op = Mach.OptOptions.none;
-                    op.do_gcm = true;
-                    op.error_buf = opts.optimizations.error_buf;
-                    op.arena = opts.optimizations.arena;
-                    break :b op;
-                },
-            });
-            arena = func.arena;
-        }
-
-        // blit the globals as well
-        //
-        for (out.globals.items, 0..) |sym_id, i| {
-            if (sym_id == .invalid) continue;
-            const sym = &out.syms.items[@intFromEnum(sym_id)];
-            self.emitData(.{
-                .name = out.lookupName(sym.name),
-                .id = @intCast(i),
-                .value = .{ .init = out.code.items[sym.offset..][0..sym.size] },
-                .readonly = sym.readonly,
-            });
-        }
-    }
+    opts.optimizations.finalize(HbvmGen, self);
 
     try root.hbvm.object.flush(self.out, opts.output);
 
@@ -455,6 +402,15 @@ pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
                     5 => {
                         const Msg = extern struct { pad: u8, len: u64 align(1), count: u64 align(1), src: u64 align(1), dest: u64 align(1) };
                         const msg: Msg = @bitCast(ctx.memory[@intCast(vm.regs.get(.arg(2)))..][0..@sizeOf(Msg)].*);
+
+                        if (msg.dest > ctx.memory.len or
+                            msg.src > ctx.memory.len or
+                            msg.dest + msg.len > ctx.memory.len or
+                            msg.src + msg.count > ctx.memory.len)
+                        {
+                            return error.MemOob;
+                        }
+
                         const dst, const src = .{
                             ctx.memory[@intCast(msg.dest)..][0..@intCast(msg.len)],
                             ctx.memory[@intCast(msg.src)..][0..@intCast(msg.count)],
@@ -467,6 +423,15 @@ pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
                     4, 6 => |v| {
                         const Msg = extern struct { pad: u8, len: u64 align(1), src: u64 align(1), dest: u64 align(1) };
                         const msg: Msg = @bitCast(ctx.memory[@intCast(vm.regs.get(.arg(2)))..][0..@sizeOf(Msg)].*);
+
+                        if (msg.dest > ctx.memory.len or
+                            msg.src > ctx.memory.len or
+                            msg.dest + msg.len > ctx.memory.len or
+                            msg.src + msg.len > ctx.memory.len)
+                        {
+                            return error.MemOob;
+                        }
+
                         const dst, const src = .{
                             ctx.memory[@intCast(msg.dest)..][0..@intCast(msg.len)],
                             ctx.memory[@intCast(msg.src)..][0..@intCast(msg.len)],
@@ -531,7 +496,7 @@ pub fn doReloc(self: *HbvmGen, rel: Reloc, dest: i64) void {
     @memcpy(self.out.code.items[location..][0..size], @as(*const [8]u8, @ptrCast(&jump))[0..size]);
 }
 
-pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) void {
+pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node, func: *Func) void {
     errdefer unreachable;
     for (node.outputs()) |no| {
         const inps = no.dataDeps();
@@ -560,6 +525,13 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 self.emit(.lra, .{ self.outReg(no), .null, 0 });
             },
             .Local => |extra| {
+                if (no.inputs()[1].?.kind != .Mem) {
+                    func.fmtScheduled(
+                        std.io.getStdErr().writer().any(),
+                        std.io.tty.detectConfig(std.io.getStdErr()),
+                    );
+                    unreachable;
+                }
                 self.emit(.addi64, .{ self.outReg(no), .stack_addr, extra.* });
             },
             .Ld => |extra| {
@@ -717,6 +689,10 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 self.flushOutReg(no);
             },
             .IfOp => |extra| {
+                std.debug.assert(
+                    no.outputs()[@intFromBool(!extra.swapped)].schedule !=
+                        std.math.maxInt(u16),
+                );
                 self.local_relocs.appendAssumeCapacity(.{
                     .dest_block = no.outputs()[@intFromBool(!extra.swapped)].schedule,
                     .rel = self.reloc(3, .rel16),
@@ -724,6 +700,13 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 self.emitLow("RRP", extra.op, .{ self.inReg(0, inps[0]), self.inReg(1, inps[1]), 0 });
             },
             .If => {
+                if (no.outputs().len == 1) {
+                    func.fmtScheduled(
+                        std.io.getStdErr().writer().any(),
+                        .escape_codes,
+                    );
+                }
+                std.debug.assert(no.outputs()[1].schedule != std.math.maxInt(u16));
                 self.local_relocs.appendAssumeCapacity(.{
                     .dest_block = no.outputs()[1].schedule,
                     .rel = self.reloc(3, .rel16),
@@ -861,6 +844,8 @@ pub fn reloc(self: *HbvmGen, sub_offset: u8, arg: isa.Arg) Reloc {
 pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
     const inps = node.inputs();
 
+    if (Func.idealizeDead({}, func, node, work)) |n| return n;
+
     if (node.kind == .BinOp) {
         const op: graph.BinOp = node.extra(.BinOp).*;
 
@@ -980,7 +965,7 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
         }
     }
 
-    if (node.kind == .Call) {
+    if (node.kind == .Call and node.data_type != .bot) {
         if (self.out.getInlineFunc(node.extra(.Call).id)) |inline_func| {
             inline_func.inlineInto(Node, func, node, work);
             return null;

@@ -45,8 +45,8 @@ main:
 	mov rax, 0x3EB
 3:	jmp :5
 4:	lea r13, [rsp+0x40]
-	mov rax, 0x01
 	lea rdx, [rsp+0x60]
+	mov rax, 0x01
 	mov [rdx], rax
 	mov rcx, 0x02
 	mov [rdx+0x08], rcx
