@@ -2,6 +2,26 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### epoll 1
+```hb
+EPOLL_CTL_ADD: u16 = 1
+main := fn(): uint {
+    $if !@target("x86_64-linux") return 0
+
+    efd: i32 = @syscall(291, 0, 0)
+    if efd < 0 {
+        return 1
+    }
+    ev: struct align(4) {
+        .events: u32;
+        .data: u64;
+    } = .(1, 0)
+    res: i32 = @syscall(233, efd, EPOLL_CTL_ADD, 0, &ev)
+    if res < 0 return 2
+    return 0
+}
+```
+
 #### syscall then infinite loop 1
 ```hb
 main := fn(): uint {

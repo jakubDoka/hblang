@@ -5,7 +5,7 @@ main:
 	mov [rcx], al
 	mov [rcx+0x01], al
 	mov ax, [rcx]
-	mov ax, ax
+	movzx rax, ax
 	sub rax, 0x100
 	add rsp, 0x10
 	ret

@@ -68,7 +68,7 @@ pub const CompileOptions = struct {
     path_projection: std.StringHashMapUnmanaged([]const u8) = .{}, // can be
     // specified multiple times as `--path-projection name path`, when the
     // `@use("name")` is encountered, its projected to `@use("path")` #CLI end
-    optimizations: backend.Machine.OptOptions = .none,
+    optimizations: backend.Machine.OptOptions = .all,
 
     pub fn loadCli(self: *CompileOptions, arena: std.mem.Allocator) !void {
         var args = try std.process.ArgIterator.initWithAllocator(arena);

@@ -1073,10 +1073,10 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                         ),
                         else => unreachable,
                     },
-                    .uext => if (instr.inputs()[1].?.data_type.size() == 1) {
+                    .uext => if (instr.inputs()[1].?.data_type.size() <= 2) {
                         self.emitInstr(
                             zydis.ZYDIS_MNEMONIC_MOVZX,
-                            .{ SReg{ dst, size }, SReg{ dst, 1 } },
+                            .{ SReg{ dst, size }, SReg{ dst, src_size } },
                         );
                     } else {
                         self.emitInstr(
