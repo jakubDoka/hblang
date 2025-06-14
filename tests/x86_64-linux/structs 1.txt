@@ -19,10 +19,10 @@ structs 1.Ty.sum:
 structs 1.pass:
 	mov rax, [rdi]
 	sub rax, 0x01
+	mov rcx, [rdi+0x08]
 	mov [rdi], rax
 	add rax, 0x01
 	mov [rdi], rax
-	mov rcx, [rdi+0x08]
 	sub rax, rcx
 	ret
 main:

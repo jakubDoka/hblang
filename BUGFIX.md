@@ -2,6 +2,22 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### inline return stack 1
+```hb
+expectations := .{
+    should_error: true,
+}
+
+$inlined := fn(): []u8 {
+    buf: [4]u8 = idk
+    return buf[..]
+}
+
+main := fn(): uint {
+    return inlined().len
+}
+```
+
 #### eopll 2
 ```hb
 $epoll_wait := fn(epfd: int, events: ^void, maxevents: uint, timeout: int): void {

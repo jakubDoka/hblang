@@ -548,8 +548,10 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             pub fn knownStore(self: *Node, root: *Node) ?*Node {
-                if (self.isStore() and !self.isSub(MemCpy) and self.base() == root) return self;
-                if (self.kind == .BinOp and self.outputs().len == 1 and self.outputs()[0].isStore() and !self.isSub(MemCpy) and self.outputs()[0].base() == self) {
+                if (self.isStore() and !self.isSub(MemCpy) and self.base() == root) {
+                    return self;
+                }
+                if (self.kind == .BinOp and self.outputs().len == 1 and self.outputs()[0].isStore() and !self.outputs()[0].isSub(MemCpy) and self.outputs()[0].base() == self) {
                     return self.outputs()[0];
                 }
                 return null;
@@ -592,13 +594,16 @@ pub fn Func(comptime MachNode: type) type {
             pub fn noAlias(self: *Node, other: *Node) bool {
                 const lsize: i64 = @bitCast(self.data_type.size());
                 const rsize: i64 = @bitCast(other.data_type.size());
-                const lbase, const loff = knownOffset(self.base());
-                const rbase, const roff = knownOffset(other.base());
+                const lbase, var loff = knownOffset(self.base());
+                const rbase, var roff = knownOffset(other.base());
+                loff += self.getStaticOffset();
+                roff += other.getStaticOffset();
 
                 if (lbase.kind == .Local and rbase.kind == .Local)
                     return (lbase != rbase) or (loff + lsize <= roff) or (roff + rsize <= loff);
                 if (lbase.kind == .Local and rbase.kind == .Arg) return true;
                 if (lbase.kind == .Arg and rbase.kind == .Local) return true;
+                if (lbase == rbase) return (loff + lsize <= roff) or (roff + rsize <= loff);
                 return false;
             }
 
