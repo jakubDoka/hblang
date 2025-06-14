@@ -356,6 +356,11 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             .output = opts.output,
             .optimizations = optimizations,
         });
+
+        if (types.dumpAnalErrors(&anal_errors)) {
+            try opts.diagnostics.print("failed due to previous errors\n", .{});
+            return error.Failed;
+        }
         return .{ .ast = asts, .arena = types.pool.arena };
     } else {
         try opts.diagnostics.writeAll("can't dump the executable to the stdout since it" ++
