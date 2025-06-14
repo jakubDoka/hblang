@@ -47,6 +47,24 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
             code,
             .init(target, &hbvm),
             .ableos,
+            .all,
+            gpa,
+            stderr.writer().any(),
+            colors,
+        );
+    }
+
+    if (true) {
+        const target = "hbvm-ableos-no-opts";
+        var hbvm = root.hbvm.HbvmGen{ .gpa = gpa };
+        defer hbvm.deinit();
+        try runMachineTest(
+            name,
+            target,
+            code,
+            .init(target, &hbvm),
+            .ableos,
+            .none,
             gpa,
             stderr.writer().any(),
             colors,
@@ -65,6 +83,7 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
             code,
             .init(target, &x86_64),
             .systemv,
+            .all,
             gpa,
             stderr.writer().any(),
             colors,
@@ -80,6 +99,7 @@ pub fn runMachineTest(
     code: [:0]const u8,
     machine: root.backend.Machine,
     abi: root.frontend.Types.Abi,
+    opts: root.backend.Machine.OptOptions,
     gpa: std.mem.Allocator,
     out: std.io.AnyWriter,
     color: std.io.tty.Config,
@@ -96,6 +116,7 @@ pub fn runMachineTest(
             gpa,
             out,
             machine,
+            opts,
             abi,
             color,
             true,
@@ -109,6 +130,7 @@ pub fn runMachineTest(
         gpa,
         output.writer().any(),
         machine,
+        opts,
         abi,
         .no_color,
         false,
@@ -151,6 +173,7 @@ pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
         gpa,
         std.io.null_writer.any(),
         .init("hbvm-ableos", &hbvm),
+        .all,
         .ableos,
         .no_color,
         false,
@@ -165,6 +188,7 @@ pub fn runVendoredTest(path: []const u8) !void {
 
     utils.Arena.initScratch(1024 * 1024 * 32);
     defer utils.Arena.deinitScratch();
-    try test_util.runVendoredTest(path, "hbvm-ableos");
-    try test_util.runVendoredTest(path, "x86_64-linux");
+    try test_util.runVendoredTest(path, "hbvm-ableos", .all);
+    try test_util.runVendoredTest(path, "hbvm-ableos-no-opts", .none);
+    try test_util.runVendoredTest(path, "x86_64-linux", .all);
 }

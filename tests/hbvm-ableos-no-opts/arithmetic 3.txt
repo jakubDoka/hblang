@@ -1,0 +1,241 @@
+arithmetic 3.main:
+         st $31, $254, -24, 24
+     addi64 $254, $254, -32
+        jal $31, $0, :arithmetic 3.one
+     addi64 $33, $254, 0
+         st $1, $254, 0, 1
+        jal $31, $0, :arithmetic 3.zero
+     addi64 $32, $254, 1
+         st $1, $254, 1, 1
+         ld $2, $254, 0, 1
+         ld $1, $254, 1, 1
+       andi $2, $2, 255
+       andi $1, $1, 255
+       cmpu $1, $2, $1
+      cmpui $1, $1, -1
+        not $1, $1
+        jal $31, $0, :arithmetic 3.cond
+       andi $2, $1, 255
+         ld $1, $254, 0, 1
+        jeq $2, $0, :3
+       li64 $1, 1
+        jmp :4
+3:     andi $1, $1, 255
+       cmpu $1, $1, $1
+      cmpui $1, $1, -1
+        not $1, $1
+        jal $31, $0, :arithmetic 3.cond
+       andi $2, $1, 255
+         ld $3, $254, 1, 1
+         ld $1, $254, 0, 1
+        jeq $2, $0, :5
+       li64 $1, 2
+4:      jmp :6
+5:     andi $2, $1, 255
+       andi $1, $3, 255
+       cmpu $1, $2, $1
+      cmpui $1, $1, 1
+       andi $1, $1, 1
+        jal $31, $0, :arithmetic 3.cond
+       andi $2, $1, 255
+         ld $3, $254, 0, 1
+         ld $1, $254, 1, 1
+        jeq $2, $0, :7
+       li64 $1, 3
+6:      jmp :8
+7:     andi $2, $1, 255
+       andi $1, $3, 255
+       cmpu $1, $2, $1
+      cmpui $1, $1, 1
+        not $1, $1
+        jal $31, $0, :arithmetic 3.cond
+       andi $2, $1, 255
+         ld $1, $254, 0, 1
+        jeq $2, $0, :9
+       li64 $1, 4
+8:      jmp :a
+9:     andi $1, $1, 255
+       cmpu $1, $1, $1
+      cmpui $1, $1, 1
+        not $1, $1
+        jal $31, $0, :arithmetic 3.cond
+       andi $2, $1, 255
+         ld $3, $254, 0, 1
+         ld $1, $254, 1, 1
+        jeq $2, $0, :b
+       li64 $1, 5
+a:      jmp :c
+b:     andi $2, $1, 255
+       andi $1, $3, 255
+       cmpu $1, $2, $1
+      cmpui $1, $1, -1
+       andi $1, $1, 1
+        jal $31, $0, :arithmetic 3.cond
+       andi $1, $1, 255
+        jeq $1, $0, :d
+       li64 $1, 6
+c:      jmp :e
+d:      jal $31, $0, :arithmetic 3.mne
+     addi64 $33, $254, 2
+         st $1, $254, 2, 1
+        jal $31, $0, :arithmetic 3.mero
+     addi64 $32, $254, 3
+         st $1, $254, 3, 1
+         ld $2, $254, 2, 1
+         ld $1, $254, 3, 1
+       sxt8 $2, $2
+       sxt8 $1, $1
+       cmps $1, $2, $1
+      cmpui $1, $1, 1
+        not $1, $1
+        jal $31, $0, :arithmetic 3.cond
+       andi $2, $1, 255
+         ld $1, $254, 2, 1
+        jeq $2, $0, :11
+       li64 $1, 7
+e:      jmp :12
+11:     sxt8 $1, $1
+       cmps $1, $1, $1
+      cmpui $1, $1, 1
+        not $1, $1
+        jal $31, $0, :arithmetic 3.cond
+       andi $2, $1, 255
+         ld $3, $254, 3, 1
+         ld $1, $254, 2, 1
+        jeq $2, $0, :13
+       li64 $1, 8
+12:      jmp :14
+13:     sxt8 $2, $1
+       sxt8 $1, $3
+       cmps $1, $2, $1
+      cmpui $1, $1, -1
+       andi $1, $1, 1
+        jal $31, $0, :arithmetic 3.cond
+       andi $2, $1, 255
+         ld $3, $254, 2, 1
+         ld $1, $254, 3, 1
+        jeq $2, $0, :15
+       li64 $1, 9
+14:      jmp :16
+15:     sxt8 $2, $1
+       sxt8 $1, $3
+       cmps $1, $2, $1
+      cmpui $1, $1, -1
+        not $1, $1
+        jal $31, $0, :arithmetic 3.cond
+       andi $2, $1, 255
+         ld $1, $254, 2, 1
+        jeq $2, $0, :17
+       li64 $1, 10
+16:      jmp :18
+17:     sxt8 $1, $1
+       cmps $1, $1, $1
+      cmpui $1, $1, -1
+        not $1, $1
+        jal $31, $0, :arithmetic 3.cond
+       andi $2, $1, 255
+         ld $3, $254, 2, 1
+         ld $1, $254, 3, 1
+        jeq $2, $0, :19
+       li64 $1, 11
+18:      jmp :1a
+19:     sxt8 $2, $1
+       sxt8 $1, $3
+       cmps $1, $2, $1
+      cmpui $1, $1, 1
+       andi $1, $1, 1
+        jal $31, $0, :arithmetic 3.cond
+       andi $1, $1, 255
+        jeq $1, $0, :1b
+       li64 $1, 12
+1a:      jmp :1c
+1b:      jal $31, $0, :arithmetic 3.one
+     addi64 $32, $254, 4
+         st $1, $254, 4, 1
+        jal $31, $0, :arithmetic 3.zero
+         cp $2, $1
+     addi64 $1, $254, 5
+         st $2, $254, 5, 1
+         ld $2, $254, 4, 1
+         ld $1, $254, 5, 1
+       andi $2, $2, 255
+       andi $1, $1, 255
+       jltu $2, $1, :1d
+       jltu $2, $2, :1e
+       jgtu $2, $1, :1f
+       li64 $1, 15
+        jmp :1c
+1f:     jgtu $1, $2, :20
+       jgtu $2, $2, :21
+       jltu $1, $2, :22
+       li64 $1, 18
+        jmp :1c
+22:      jal $31, $0, :arithmetic 3.mne
+     addi64 $32, $254, 6
+         st $1, $254, 6, 1
+        jal $31, $0, :arithmetic 3.mero
+         cp $2, $1
+     addi64 $1, $254, 7
+         st $2, $254, 7, 1
+         ld $4, $254, 6, 1
+         ld $3, $254, 7, 1
+       sxt8 $2, $4
+       sxt8 $1, $3
+       jgts $2, $1, :23
+       jgts $2, $2, :24
+       jlts $2, $1, :25
+       li64 $1, 21
+        jmp :1c
+25:     jlts $1, $2, :26
+       jlts $2, $2, :27
+       jgts $1, $2, :28
+       li64 $1, 24
+        jmp :1c
+28:     andi $2, $4, 255
+        jeq $2, $2, :29
+       li64 $1, 25
+        jmp :1c
+29:     andi $1, $3, 255
+        jne $2, $1, :2a
+       li64 $1, 26
+        jmp :1c
+2a:     li64 $1, 0
+        jmp :1c
+27:     li64 $1, 23
+        jmp :1c
+26:     li64 $1, 22
+        jmp :1c
+24:     li64 $1, 20
+        jmp :1c
+23:     li64 $1, 19
+        jmp :1c
+21:     li64 $1, 17
+        jmp :1c
+20:     li64 $1, 16
+        jmp :1c
+1e:     li64 $1, 14
+        jmp :1c
+1d:     li64 $1, 13
+1c:   addi64 $254, $254, 32
+         ld $31, $254, -24, 24
+         tx
+arithmetic 3.one:
+        li8 $1, 1
+       jala $0, $31, 0
+arithmetic 3.zero:
+        li8 $1, 0
+       jala $0, $31, 0
+arithmetic 3.cond:
+     addi64 $254, $254, -1
+         cp $2, $1
+     addi64 $1, $254, 0
+         st $2, $254, 0, 1
+         ld $1, $254, 0, 1
+     addi64 $254, $254, 1
+       jala $0, $31, 0
+arithmetic 3.mne:
+        li8 $1, -1
+       jala $0, $31, 0
+arithmetic 3.mero:
+        li8 $1, 0
+       jala $0, $31, 0

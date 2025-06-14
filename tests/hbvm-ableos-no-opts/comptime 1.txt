@@ -1,0 +1,35 @@
+comptime 1.main:
+         st $31, $254, -24, 24
+     addi64 $254, $254, -32
+     addi64 $2, $254, 0
+       li32 $1, 7
+         st $1, $254, 0, 4
+       li32 $2, -2147483648
+     addi64 $1, $254, 4
+         st $2, $254, 4, 4
+       li64 $1, 9
+        jal $31, $0, :comptime 1.main.some_fn(some_int = uint)(ui = uint)
+         cp $33, $1
+       li64 $1, 5
+        jal $31, $0, :comptime 1.main.some_fn(some_int = uint)(ui = uint)
+         cp $32, $1
+       li64 $1, 7
+        jal $31, $0, :comptime 1.main.some_fn(some_int = uint)(ui = uint)
+      add64 $1, $32, $1
+      sub64 $1, $33, $1
+     addi64 $254, $254, 32
+         ld $31, $254, -24, 24
+         tx
+comptime 1.main.some_fn(some_int = uint)(ui = uint):
+     addi64 $254, $254, -16
+         cp $2, $1
+     addi64 $1, $254, 0
+         st $2, $254, 0, 8
+         ld $1, $254, 0, 8
+     addi64 $2, $254, 8
+     addi64 $1, $1, 1
+         st $1, $254, 8, 8
+         ld $1, $254, 8, 8
+      mul64 $1, $1, $1
+     addi64 $254, $254, 16
+       jala $0, $31, 0

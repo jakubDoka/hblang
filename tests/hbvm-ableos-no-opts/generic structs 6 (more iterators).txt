@@ -1,0 +1,17 @@
+generic structs 6 (more iterators).main:
+         st $31, $254, -16, 16
+     addi64 $254, $254, -16
+       li64 $32, 0
+         cp $1, $32
+        jal $31, $0, :foo.hb.foo(oo = u8)
+         cp $1, $32
+     addi64 $254, $254, 16
+         ld $31, $254, -16, 16
+         tx
+foo.hb.foo(oo = u8):
+     addi64 $254, $254, -8
+         cp $2, $1
+     addi64 $1, $254, 0
+         st $2, $254, 0, 8
+     addi64 $254, $254, 8
+       jala $0, $31, 0

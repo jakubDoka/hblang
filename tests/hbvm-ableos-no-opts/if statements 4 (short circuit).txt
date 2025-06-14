@@ -1,0 +1,81 @@
+if statements 4 (short circuit).main:
+         st $31, $254, -56, 56
+     addi64 $254, $254, -63
+       li64 $2, 0
+     addi64 $1, $254, 1
+        li8 $37, 1
+     addi64 $36, $254, 2
+     addi64 $35, $254, 3
+        jeq $2, $0, :0
+         st $37, $254, 1, 1
+        jmp :1
+0:       st $37, $254, 1, 1
+1:       ld $1, $254, 1, 1
+       andi $1, $1, 255
+     addi64 $33, $254, 0
+       li64 $32, 1
+        jeq $1, $0, :2
+         st $37, $254, 0, 1
+        jmp :3
+2:       cp $1, $32
+        jal $31, $0, :if statements 4 (short circuit).effectfull
+         st $1, $254, 0, 1
+3:      li8 $34, 0
+        jeq $32, $0, :5
+         st $34, $254, 3, 1
+        jmp :6
+5:       st $34, $254, 3, 1
+6:       ld $1, $254, 3, 1
+       andi $1, $1, 255
+        jeq $1, $0, :7
+       li64 $1, 2
+        jal $31, $0, :if statements 4 (short circuit).effectfull
+         st $1, $254, 2, 1
+        jmp :8
+7:       st $34, $254, 2, 1
+8:       ld $1, $254, 2, 1
+       andi $1, $1, 255
+        jeq $1, $0, :9
+        jmp :9
+9:   addi64 $33, $254, 4
+         st $34, $254, 4, 1
+         ld $1, $254, 4, 1
+       andi $1, $1, 255
+     addi64 $32, $254, 5
+        jeq $1, $0, :a
+       li64 $1, 4
+        jal $31, $0, :if statements 4 (short circuit).effectfull
+         st $1, $254, 5, 1
+        jmp :b
+a:       st $34, $254, 5, 1
+b:       ld $1, $254, 5, 1
+         st $1, $254, 4, 1
+         st $37, $254, 4, 1
+         ld $1, $254, 4, 1
+       andi $1, $1, 255
+     addi64 $32, $254, 6
+        jeq $1, $0, :c
+         st $37, $254, 6, 1
+        jmp :d
+c:     li64 $1, 5
+        jal $31, $0, :if statements 4 (short circuit).effectfull
+         st $1, $254, 6, 1
+d:      lra $2, $0, :if statements 4 (short circuit).global
+         ld $1, $254, 6, 1
+         st $1, $254, 4, 1
+         ld $1, $2, 0, 8
+     addi64 $254, $254, 63
+         ld $31, $254, -56, 56
+         tx
+if statements 4 (short circuit).effectfull:
+     addi64 $254, $254, -8
+         cp $2, $1
+     addi64 $1, $254, 0
+         st $2, $254, 0, 8
+        li8 $3, 1
+        lra $2, $0, :if statements 4 (short circuit).global
+         ld $1, $254, 0, 8
+         st $1, $2, 0, 8
+         cp $1, $3
+     addi64 $254, $254, 8
+       jala $0, $31, 0

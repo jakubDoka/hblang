@@ -1,0 +1,10 @@
+functions 5 (inline).main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        jal $31, $0, :functions 5 (inline).foo
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+functions 5 (inline).foo:
+       li64 $1, 0
+       jala $0, $31, 0

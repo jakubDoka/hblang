@@ -1,0 +1,3 @@
+main fn 1.main:
+    li64 $1, 42
+      tx

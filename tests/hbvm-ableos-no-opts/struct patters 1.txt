@@ -1,0 +1,23 @@
+struct patters 1.main:
+         st $31, $254, -24, 24
+     addi64 $254, $254, -24
+        jal $31, $0, :foo.hb.foo
+         cp $33, $1
+        jal $31, $0, :foo.hb.bar
+         cp $32, $1
+        jal $31, $0, :bas.hb.baz
+         cp $2, $1
+      add64 $1, $33, $32
+      add64 $1, $1, $2
+     addi64 $254, $254, 24
+         ld $31, $254, -24, 24
+         tx
+foo.hb.foo:
+       li64 $1, 0
+       jala $0, $31, 0
+foo.hb.bar:
+       li64 $1, 1
+       jala $0, $31, 0
+bas.hb.baz:
+       li64 $1, 2
+       jala $0, $31, 0

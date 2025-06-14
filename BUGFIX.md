@@ -16,7 +16,7 @@ main := fn(): uint {
         .events: u32;
         .data: u64;
     } = .(1, 0)
-    res: i32 = @syscall(233, efd, EPOLL_CTL_ADD, 0, &ev)
+    res: i32 = @syscall(233, efd, @as(int, EPOLL_CTL_ADD), 0, &ev)
     if res < 0 return 2
     return 0
 }

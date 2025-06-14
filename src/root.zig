@@ -68,7 +68,7 @@ pub const CompileOptions = struct {
     path_projection: std.StringHashMapUnmanaged([]const u8) = .{}, // can be
     // specified multiple times as `--path-projection name path`, when the
     // `@use("name")` is encountered, its projected to `@use("path")` #CLI end
-    optimizations: backend.Machine.OptOptions = .all,
+    optimizations: backend.Machine.OptOptions = .none,
 
     pub fn loadCli(self: *CompileOptions, arena: std.mem.Allocator) !void {
         var args = try std.process.ArgIterator.initWithAllocator(arena);
@@ -250,15 +250,15 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     types.target = opts.target;
     defer if (std.debug.runtime_safety) types.deinit();
 
-    var bckend, const abi: hb.frontend.Types.Abi = if (std.mem.eql(u8, opts.target, "hbvm-ableos")) backend: {
+    var bckend, const abi: hb.frontend.Types.Abi = if (std.mem.startsWith(u8, opts.target, "hbvm-ableos")) backend: {
         const slot = types.pool.arena.create(hb.hbvm.HbvmGen);
         slot.* = hb.hbvm.HbvmGen{ .gpa = types.pool.allocator() };
         break :backend .{ hb.backend.Machine.init(opts.target, slot), .ableos };
-    } else if (std.mem.eql(u8, opts.target, "x86_64-windows")) backend: {
+    } else if (std.mem.startsWith(u8, opts.target, "x86_64-windows")) backend: {
         const slot = types.pool.arena.create(hb.x86_64.X86_64Gen);
         slot.* = hb.x86_64.X86_64Gen{ .gpa = types.pool.allocator(), .object_format = .coff };
         break :backend .{ hb.backend.Machine.init(opts.target, slot), .fastcall };
-    } else if (std.mem.eql(u8, opts.target, "x86_64-linux")) backend: {
+    } else if (std.mem.startsWith(u8, opts.target, "x86_64-linux")) backend: {
         const slot = types.pool.arena.create(hb.x86_64.X86_64Gen);
         slot.* = hb.x86_64.X86_64Gen{ .gpa = types.pool.allocator(), .object_format = .elf };
         break :backend .{ hb.backend.Machine.init(opts.target, slot), .systemv };
@@ -331,15 +331,15 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             bckend.disasm(.{
                 .name = name,
                 .bin = out.items,
-                .out = std.io.getStdErr().writer().any(),
-                .colors = std.io.tty.detectConfig(std.io.getStdErr()),
+                .out = opts.diagnostics,
+                .colors = opts.colors,
             });
 
             expectations.assert(bckend.run(.{
                 .name = name,
                 .code = out.items,
-                .output = std.io.getStdErr().writer().any(),
-                .colors = std.io.tty.detectConfig(std.io.getStdErr()),
+                .output = opts.diagnostics,
+                .colors = opts.colors,
             })) catch unreachable;
         }
 
@@ -352,7 +352,10 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     }
 
     if (opts.colors == .no_color or opts.mangle_terminal) {
-        bckend.finalize(.{ .output = opts.output });
+        bckend.finalize(.{
+            .output = opts.output,
+            .optimizations = optimizations,
+        });
         return .{ .ast = asts, .arena = types.pool.arena };
     } else {
         try opts.diagnostics.writeAll("can't dump the executable to the stdout since it" ++

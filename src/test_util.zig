@@ -67,7 +67,7 @@ pub const Expectations = struct {
     }
 };
 
-pub fn runVendoredTest(path: []const u8, target: []const u8) !void {
+pub fn runVendoredTest(path: []const u8, target: []const u8, optimizations: Mach.OptOptions) !void {
     var ast = try root.compile(.{
         .diagnostics = std.io.getStdErr().writer().any(),
         .colors = std.io.tty.detectConfig(std.io.getStdErr()),
@@ -76,7 +76,7 @@ pub fn runVendoredTest(path: []const u8, target: []const u8) !void {
         .vendored_test = true,
         .root_file = path,
         .target = target,
-        .optimizations = .all,
+        .optimizations = optimizations,
     });
     defer ast.arena.deinit();
 }
@@ -161,6 +161,7 @@ pub fn testBuilder(
     gpa: std.mem.Allocator,
     output: std.io.AnyWriter,
     gen: root.backend.Machine,
+    opts: root.backend.Machine.OptOptions,
     abi: root.frontend.Types.Abi,
     colors: std.io.tty.Config,
     verbose: bool,
@@ -182,11 +183,15 @@ pub fn testBuilder(
         types,
         abi,
         gen,
-        .all,
+        opts,
         .{ .verbose = verbose, .colors = colors, .output = output },
     );
 
     const expectations: Expectations = .init(&ast, func_arena.arena.allocator());
+
+    if (std.mem.endsWith(u8, target, "no-opts") and expectations.should_error) {
+        return;
+    }
 
     if (errored) {
         try std.testing.expect(expectations.should_error);
@@ -194,7 +199,7 @@ pub fn testBuilder(
     }
 
     var anal_errors = std.ArrayListUnmanaged(root.backend.static_anal.Error){};
-    var optimizations: Mach.OptOptions = .all;
+    var optimizations = opts;
     optimizations.arena = func_arena.arena;
     optimizations.error_buf = &anal_errors;
 

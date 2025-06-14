@@ -1,0 +1,3 @@
+arithmetic 4.main:
+     li8 $1, 1
+      tx

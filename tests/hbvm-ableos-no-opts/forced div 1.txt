@@ -1,0 +1,16 @@
+forced div 1.main:
+         st $31, $254, -16, 16
+     addi64 $254, $254, -16
+        jal $31, $0, :forced div 1.two
+         cp $32, $1
+        jal $31, $0, :forced div 1.one
+     diru64 $1, $0, $32, $1
+     addi64 $254, $254, 16
+         ld $31, $254, -16, 16
+         tx
+forced div 1.two:
+       li64 $1, 2
+       jala $0, $31, 0
+forced div 1.one:
+       li64 $1, 1
+       jala $0, $31, 0

@@ -1,0 +1,4 @@
+global variables 3.main:
+        lra $1, $0, :global variables 3.d
+         ld $1, $1, 0, 8
+         tx
