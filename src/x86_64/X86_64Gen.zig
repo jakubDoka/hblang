@@ -72,8 +72,8 @@ pub const Reg = enum(u8) {
 
     // stack slots are separate so that register allocator knows they dont interfere
     //
-    pub const set_cap = 128;
-    pub const stack_per_mask = (set_cap - (@intFromEnum(Reg.xmm15) + 3)) / 2;
+    pub const set_cap = 256;
+    pub const stack_per_mask = (@as(u16, set_cap) - (@intFromEnum(Reg.xmm15) + 3)) / 2;
 
     pub fn floatMask(tmp: *utils.Arena) std.DynamicBitSetUnmanaged {
         var set = std.DynamicBitSetUnmanaged.initFull(tmp.allocator(), set_cap) catch unreachable;
