@@ -16,32 +16,24 @@ mixing @Any and comptime args 1.main:
 	mov [rcx], al
 	add esi, 0x05
 	mov [rcx+0x04], esi
-	mov rax, 0x08
-	mov rsi, rcx
-	mov rdx, rax
-	call :memcpy
+	mov rax, [rcx]
+	mov [rdi], rax
 	add rsp, 0x10
 	ret
 main:
-	push rbx
 	sub rsp, 0x18
-	lea rcx, [rsp+0x08]
+	lea rdx, [rsp+0x08]
 	mov rax, 0x01
-	mov [rcx], al
+	mov [rdx], al
 	mov rax, 0x00
-	mov [rcx+0x04], eax
-	lea rbx, [rsp]
-	mov rax, 0x08
-	mov rdi, rbx
-	mov rsi, rcx
-	mov rdx, rax
-	call :memcpy
+	mov [rdx+0x04], eax
+	lea rcx, [rsp]
+	mov rax, [rdx]
+	mov [rcx], rax
 	lea rdi, [rsp+0x10]
-	mov sil, [rbx]
-	mov edx, [rbx+0x04]
+	mov sil, [rcx]
+	mov edx, [rcx+0x04]
 	call :mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime args 1.main)
 	mov rax, 0x00
 	add rsp, 0x18
-	pop rbx
 	ret
-memcpy:

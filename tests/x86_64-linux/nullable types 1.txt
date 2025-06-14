@@ -3,11 +3,10 @@ nullable types 1.mkval(T = uint):
 	lea rcx, [rsp]
 	mov rax, 0x01
 	mov [rcx], al
+	mov rax, [rcx]
 	mov [rcx+0x08], rsi
-	mov rax, 0x10
-	mov rsi, rcx
-	mov rdx, rax
-	call :memcpy
+	mov [rdi], rax
+	mov [rdi+0x08], rsi
 	add rsp, 0x10
 	ret
 nullable types 1.mknull(T = uint):
@@ -41,4 +40,3 @@ main:
 	pop rbp
 	pop rbx
 	ret
-memcpy:

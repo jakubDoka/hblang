@@ -205,9 +205,36 @@ pub const Node = union(enum) {
     }
 
     pub fn idealize(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
-        _ = func;
-        _ = node;
-        _ = worklist;
+        if (node.kind == .MemCpy) {
+            const ctrl = node.inputs()[0].?;
+            var mem = node.inputs()[1].?;
+            const dst = node.inputs()[2].?;
+            const src = node.inputs()[3].?;
+            const len = node.inputs()[4].?;
+            if (len.kind == .CInt and len.extra(.CInt).* <= 16) {
+                const size = len.extra(.CInt).*;
+                var cursor: u64 = 0;
+                var copy_elem = graph.DataType.i64;
+
+                while (cursor != size) {
+                    while (cursor + copy_elem.size() > size) : (copy_elem =
+                        @enumFromInt(@intFromEnum(copy_elem) - 1))
+                    {}
+
+                    const dst_off = func.addFieldOffset(dst, @intCast(cursor));
+                    const src_off = func.addFieldOffset(src, @intCast(cursor));
+                    const ld = func.addNode(.Load, copy_elem, &.{ ctrl, mem, src_off }, .{});
+                    worklist.add(ld);
+                    mem = func.addNode(.Store, copy_elem, &.{ ctrl, mem, dst_off, ld }, .{});
+                    worklist.add(mem);
+
+                    cursor += copy_elem.size();
+                }
+
+                return mem;
+            }
+        }
+
         return null;
     }
 

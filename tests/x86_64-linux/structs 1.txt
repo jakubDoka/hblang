@@ -27,25 +27,16 @@ structs 1.pass:
 	ret
 main:
 	push rbx
-	push rbp
-	push r12
 	sub rsp, 0x38
-	lea r12, [rsp]
+	lea rsi, [rsp]
 	mov rax, 0x04
-	mov [r12], rax
-	mov rbp, 0x03
+	mov [rsi], rax
+	mov rax, 0x01
+	mov [rsi+0x08], rax
+	mov rax, 0x03
+	mov [rsi+0x10], rax
 	lea rbx, [rsp+0x18]
-	mov rcx, 0x08
-	mov rsi, r12
-	add rsi, 0x08
-	lea rax, [0x0000000000000007]
-	mov rdi, rsi
-	mov rsi, rax
-	mov rdx, rcx
-	call :memcpy
-	mov [r12+0x10], rbp
 	mov rdi, rbx
-	mov rsi, r12
 	call :structs 1.odher_pass
 	mov rax, [rbx+0x10]
 	cmp rax, 0x03
@@ -68,8 +59,6 @@ main:
 2:	mov rdi, rbx
 	call :structs 1.pass
 3:	add rsp, 0x38
-	pop r12
-	pop rbp
 	pop rbx
 	ret
 memcpy:
