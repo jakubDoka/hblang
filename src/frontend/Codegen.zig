@@ -284,8 +284,7 @@ pub fn collectExports(self: *Codegen, scrath: *utils.Arena) ![]utils.EntId(root.
 
     var has_main = false;
     var funcs = std.ArrayListUnmanaged(utils.EntId(root.frontend.types.Func)){};
-    for (self.types.files, self.types.file_scopes) |fl, scope| {
-        self.parent_scope = .{ .Perm = scope };
+    for (self.types.files, 0..) |fl, i| {
         self.ast = &fl;
         for (fl.exprs.view(fl.items)) |it| {
             const item: Ast.Id = it;
@@ -309,6 +308,8 @@ pub fn collectExports(self: *Codegen, scrath: *utils.Arena) ![]utils.EntId(root.
 
             has_main = has_main or std.mem.eql(u8, name_str, "main");
 
+            const scope = self.types.getScope(@enumFromInt(i));
+            self.parent_scope = .{ .Perm = scope };
             const ty = try self.types.ct.evalTy(name_str, .{ .Perm = scope }, func);
 
             if (ty.data() != .Func) {
