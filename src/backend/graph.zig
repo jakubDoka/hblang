@@ -916,9 +916,9 @@ pub fn Func(comptime MachNode: type) type {
 
             pub fn hash(kind: Kind, dt: DataType, inpts: []const ?*Node, extr: *const anyopaque) u64 {
                 var hasher = std.hash.Fnv1a_64.init();
-                hasher.update(@as(*const [2]u8, @ptrCast(&kind)));
-                hasher.update(@as(*const [1]u8, @ptrCast(&dt)));
-                hasher.update(@as([*]const u8, @ptrCast(inpts.ptr))[0 .. inpts.len * @sizeOf(?*Node)]);
+                hasher.update(std.mem.asBytes(&kind));
+                hasher.update(std.mem.asBytes(&dt));
+                hasher.update(@ptrCast(inpts));
                 hasher.update(@as([*]const u8, @ptrCast(extr))[0..size_map[@intFromEnum(kind)]]);
                 return hasher.final();
             }
@@ -934,8 +934,8 @@ pub fn Func(comptime MachNode: type) type {
                 bextra: *const anyopaque,
             ) bool {
                 return akind == bkind and
-                    std.mem.eql(?*Node, ainputs, binputs) and
                     adt == bdt and
+                    std.mem.eql(?*Node, ainputs, binputs) and
                     std.mem.eql(
                         u8,
                         @as([*]const u8, @ptrCast(aextra))[0..size_map[@intFromEnum(akind)]],
@@ -1012,7 +1012,20 @@ pub fn Func(comptime MachNode: type) type {
 
         pub fn uninternNode(self: *Self, node: *Node) void {
             if (Node.isInterned(node.kind, node.inputs())) {
-                std.debug.assert(self.interner.remove(.{ .node = node, .hash = Node.hash(node.kind, node.data_type, node.inputs(), node.anyextra()) }));
+                if (!self.interner.remove(.{
+                    .node = node,
+                    .hash = Node.hash(node.kind, node.data_type, node.inputs(), node.anyextra()),
+                })) {
+                    var iter = self.interner.iterator();
+                    while (iter.next()) |entry| {
+                        std.debug.print("flop {}\n", .{entry.key_ptr.node});
+                    }
+                    self.fmtUnscheduled(
+                        std.io.getStdErr().writer().any(),
+                        .escape_codes,
+                    );
+                    utils.panic("{}\n", .{node});
+                }
             }
         }
 
@@ -1115,9 +1128,7 @@ pub fn Func(comptime MachNode: type) type {
             } else if (oper.kind == .CFlt32 and ty == .f32) {
                 return self.addFlt32Imm(@floatCast(@as(f64, @bitCast(op.eval(oper.data_type, @bitCast(@as(f64, @floatCast(oper.extra(.CFlt32).*))))))));
             }
-            const opa = self.addNode(.UnOp, ty, &.{ null, oper }, op);
-            opa.data_type = opa.data_type.meet(ty);
-            return opa;
+            return self.addNode(.UnOp, ty, &.{ null, oper }, op);
         }
 
         pub fn addTrap(self: *Self, ctrl: *Node, code: u64) void {
@@ -1146,11 +1157,11 @@ pub fn Func(comptime MachNode: type) type {
                 const entry = self.internNode(kind, dt, inputs, &extra);
                 if (!entry.found_existing) {
                     entry.key_ptr.node = self.addNodeNoIntern(kind, dt, inputs, extra);
-                } else {
-                    entry.key_ptr.node.data_type = entry.key_ptr.node.data_type.meet(dt);
                 }
 
-                return entry.key_ptr.node;
+                const node = entry.key_ptr.node;
+
+                return node;
             } else {
                 return self.addNodeNoIntern(kind, dt, inputs, extra);
             }

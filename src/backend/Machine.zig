@@ -116,6 +116,7 @@ pub const InlineFunc = struct {
 
         internBatch(
             Node,
+            self_start,
             self_end,
             0,
             &func,
@@ -192,6 +193,7 @@ pub const InlineFunc = struct {
                     new_node.input_ordered_len,
                     null,
                 ) orelse new_node.input_len);
+
                 std.debug.assert(new_node.input_len >= new_node.input_ordered_len);
             }
 
@@ -232,6 +234,7 @@ pub const InlineFunc = struct {
 
     pub fn internBatch(
         comptime Node: type,
+        start: *graph.FuncNode(Node),
         end: *graph.FuncNode(Node),
         already_present: usize,
         into: *graph.Func(Node),
@@ -254,6 +257,7 @@ pub const InlineFunc = struct {
             already_present + node_count,
         );
         var work = try Func.WorkList.init(tmp.arena.allocator(), node_count);
+        work.add(start);
         work.add(end);
 
         var deffered_phi_stack = std.ArrayListUnmanaged(*Func.Node){};
@@ -330,9 +334,7 @@ pub const InlineFunc = struct {
                     work.add(n);
                 };
 
-                if (node.kind == .Loop or node.kind == .Region) {
-                    for (node.outputs()) |o| work.add(o);
-                }
+                for (node.outputs()) |o| work.add(o);
             }
         }
 
@@ -393,10 +395,10 @@ pub const InlineFunc = struct {
         func.next_id += @intCast(cloned.new_nodes.len);
 
         const end = cloned.new_node_table[self_end.id];
-
-        internBatch(Node, end, prev_next_id, func, .{ .new = cloned.new_nodes });
-
         const start = cloned.new_node_table[self_start.id];
+
+        internBatch(Node, start, end, prev_next_id, func, .{ .new = cloned.new_nodes });
+
         const entry = start.outputs()[0];
         std.debug.assert(entry.kind == .Entry);
 

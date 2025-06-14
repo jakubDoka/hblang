@@ -2,6 +2,17 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### syscall then infinite loop 1
+```hb
+main := fn(): uint {
+    $if !@target("x86_64-linux") return 0
+    @syscall(291, 0)
+    loop {
+    }
+    return 0
+}
+```
+
 #### exhausitve inlining 1
 ```hb
 expectations := .{
