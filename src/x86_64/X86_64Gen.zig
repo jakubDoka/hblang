@@ -678,6 +678,7 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
     const should_flush_to_mem =
         (mnemonic == zydis.ZYDIS_MNEMONIC_MOVZX or
             mnemonic == zydis.ZYDIS_MNEMONIC_MOVSX or
+            mnemonic == zydis.ZYDIS_MNEMONIC_MOVSXD or
             mnemonic == zydis.ZYDIS_MNEMONIC_IMUL or
             (req.operands[1].type == zydis.ZYDIS_OPERAND_TYPE_IMMEDIATE and
                 (mnemonic == zydis.ZYDIS_MNEMONIC_MOV and

@@ -2,6 +2,30 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### eopll 2
+```hb
+$epoll_wait := fn(epfd: int, events: ^void, maxevents: uint, timeout: int): void {
+    _x: uint = @syscall(232, epfd, events, maxevents, timeout)
+}
+main := fn(): uint {
+    $if !@target("x86_64-linux") return 0
+    efd: i32 = @syscall(291, 0)
+    if false {
+        return 1
+    }
+    events: [16]u8 = idk
+    i := 0
+    loop {
+        if i == 0 {
+            return 0
+        }
+        epoll_wait(efd, @bit_cast(events.ptr), events.len, -1)
+        i += 1
+    }
+    return 1
+}
+```
+
 #### epoll 1
 ```hb
 EPOLL_CTL_ADD: u16 = 1
