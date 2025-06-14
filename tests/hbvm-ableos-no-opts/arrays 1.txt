@@ -1,4 +1,4 @@
-arrays 1.main:
+main:
      addi64 $254, $254, -80
      addi64 $7, $254, 72
        li64 $6, 0

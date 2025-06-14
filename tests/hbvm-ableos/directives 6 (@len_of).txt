@@ -1,3 +1,3 @@
-directives 6 (@len_of).main:
+main:
     li64 $1, 4
       tx

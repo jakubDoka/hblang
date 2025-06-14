@@ -1,4 +1,4 @@
-generic structs 4.main:
+main:
          st $31, $254, -40, 40
      addi64 $254, $254, -64
      addi64 $35, $254, 0

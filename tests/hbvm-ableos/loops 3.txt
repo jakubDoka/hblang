@@ -1,4 +1,4 @@
-loops 3.main:
+main:
        li64 $1, 0
        li64 $2, 4
 1:      jne $1, $2, :0

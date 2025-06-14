@@ -1,3 +1,3 @@
-arithmetic 6 (missing operators).main:
+main:
     li64 $1, 0
       tx

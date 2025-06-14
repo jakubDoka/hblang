@@ -1,4 +1,4 @@
-file structs 1.main:
+main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
        li64 $1, 2

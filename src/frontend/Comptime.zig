@@ -465,8 +465,7 @@ pub fn jitExprLow(
                 @ptrCast(&gen.bl.func),
                 .{
                     .id = @intFromEnum(id),
-                    .entry = true,
-                    .linkage = .local,
+                    .linkage = .exported,
                     .is_inline = false,
                     .optimizations = opts,
                 },

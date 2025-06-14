@@ -1,4 +1,4 @@
-generic structs 5 (iterators).main:
+main:
          st $31, $254, -64, 64
      addi64 $254, $254, -188
      addi64 $38, $254, 48

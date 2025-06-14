@@ -1,4 +1,4 @@
-struct operators 1.main:
+main:
      addi64 $254, $254, -200
      addi64 $4, $254, 0
         li8 $1, 0

@@ -1,4 +1,4 @@
-arithmetic 7 (unary operators).main:
+main:
        li64 $1, 0
         jeq $1, $0, :0
        li64 $1, 1

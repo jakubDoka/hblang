@@ -1,3 +1,3 @@
-tuples 1.main:
+main:
     li64 $1, 6
       tx

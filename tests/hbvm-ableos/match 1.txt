@@ -1,4 +1,4 @@
-match 1.main:
+main:
        li64 $2, 1
        li64 $1, 0
         jeq $2, $0, :0

@@ -1,4 +1,4 @@
-directives 9 (@embed).main:
+main:
      addi64 $254, $254, -8
      addi64 $2, $254, 0
         lra $1, $0, :mbed.txt

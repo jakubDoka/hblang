@@ -1,4 +1,4 @@
-loops 4 (comptime).main:
+main:
   addi64 $254, $254, -32
   addi64 $6, $254, 0
     li64 $1, 1

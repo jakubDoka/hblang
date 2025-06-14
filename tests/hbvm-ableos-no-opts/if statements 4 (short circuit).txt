@@ -1,4 +1,4 @@
-if statements 4 (short circuit).main:
+main:
          st $31, $254, -56, 56
      addi64 $254, $254, -63
        li64 $2, 0

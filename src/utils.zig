@@ -421,6 +421,7 @@ pub fn EnumStore(comptime T: type) type {
 
         pub fn view(self: *const Self, slice: anytype) []@TypeOf(slice).Elem {
             const slc = self.store.items[slice.start..slice.end];
+            if (slc.len == 0) return &.{};
             const len = slc.len / @sizeOf(@TypeOf(slice).Elem);
             const ptr: [*]@TypeOf(slice).Elem = @ptrCast(@alignCast(slc.ptr));
             return ptr[0..len];

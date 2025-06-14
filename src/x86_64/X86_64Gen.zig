@@ -387,11 +387,8 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     errdefer unreachable;
 
     const id = opts.id;
-    const entry = opts.entry;
-    const name = if (entry) "main" else opts.name;
-    const linkage: Mach.Data.Linkage = if (entry) .exported else opts.linkage;
-
-    if (entry) self.entry = id;
+    const linkage = opts.linkage;
+    const name = opts.name;
 
     try self.out.startDefineFunc(self.gpa, id, name, .func, linkage, opts.is_inline);
     defer self.out.endDefineFunc(id);

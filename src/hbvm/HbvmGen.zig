@@ -177,11 +177,9 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     const id = opts.id;
     const name = opts.name;
-    const entry = opts.entry;
+    const entry = opts.linkage == .exported;
 
-    if (entry) self.entry = id;
-
-    try self.out.startDefineFunc(self.gpa, id, name, .func, .local, opts.is_inline);
+    try self.out.startDefineFunc(self.gpa, id, name, .func, opts.linkage, opts.is_inline);
     defer self.out.endDefineFunc(id);
 
     if (opts.optimizations.shouldDefer(id, opts.is_inline, HbvmGen, func, self))

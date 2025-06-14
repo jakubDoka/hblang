@@ -1,4 +1,4 @@
-structs 5 (comptime).main:
+main:
   addi64 $254, $254, -44
   addi64 $2, $254, 8
     li64 $1, 1879048193

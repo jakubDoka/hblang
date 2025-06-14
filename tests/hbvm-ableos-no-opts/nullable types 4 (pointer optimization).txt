@@ -1,4 +1,4 @@
-nullable types 4 (pointer optimization).main:
+main:
          st $31, $254, -24, 24
      addi64 $254, $254, -40
        li64 $33, 0

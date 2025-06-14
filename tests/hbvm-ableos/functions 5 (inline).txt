@@ -1,4 +1,4 @@
-functions 5 (inline).main:
+main:
     li64 $1, 0
       tx
 functions 5 (inline).foo:

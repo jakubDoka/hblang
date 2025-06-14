@@ -1,4 +1,4 @@
-comptime 4 (@TypeOf).main:
+main:
   addi64 $254, $254, -20
   addi64 $3, $254, 0
     li64 $1, 0

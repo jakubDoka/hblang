@@ -1,4 +1,4 @@
-comptime 2.main:
+main:
          st $31, $254, -16, 16
      addi64 $254, $254, -16
         jal $31, $0, :comptime 2.main.some_fn3(some_int = uint)(fnc = comptime 2.main.some_fn(some_int = uint))

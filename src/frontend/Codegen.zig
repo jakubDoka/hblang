@@ -218,18 +218,11 @@ pub fn emitReachable(
     const codegen = Codegen.init(root_tmp.arena, types, .runtime, abi);
     defer codegen.deinit();
 
-    const entry = codegen.getEntry(.root, "main") catch {
-        try types.diagnostics.writeAll(
-            \\...you can define the `main` in the mentioned file:
-            \\main := fn(): uint {
-            \\    return 0
-            \\}
-        );
-
+    const exports = codegen.collectExports(root_tmp.arena) catch {
         return true;
     };
 
-    types.queue(.runtime, .init(.{ .Func = entry }));
+    for (exports) |exp| types.queue(.runtime, .init(.{ .Func = exp }));
 
     var errored = false;
     while (types.nextTask(.runtime, 0)) |func| {
@@ -266,7 +259,6 @@ pub fn emitReachable(
                 try root.frontend.Types.Id.init(.{ .Func = func })
                     .fmt(types).toString(scrath.allocator()),
             .is_inline = func_data.is_inline,
-            .entry = func == entry,
             .linkage = func_data.visibility,
             .optimizations = opts,
         });
@@ -286,22 +278,108 @@ pub inline fn abiCata(self: *Codegen, ty: Types.Id) Types.Abi.Spec {
     return @as(Types.Abi.TmpSpec, self.abi.categorize(ty, self.types) orelse .Imaginary).toPerm(ty, self.types);
 }
 
-pub fn getEntry(self: *Codegen, file: Types.File, name: []const u8) !utils.EntId(root.frontend.types.Func) {
-    var tmp = utils.Arena.scrath(null);
+pub fn collectExports(self: *Codegen, scrath: *utils.Arena) ![]utils.EntId(root.frontend.types.Func) {
+    var tmp = utils.Arena.scrath(scrath);
     defer tmp.deinit();
 
-    self.ast = self.types.getFile(file);
-    _ = self.beginBuilder(tmp.arena, .never, .{});
-    defer self.bl.func.reset();
-    self.parent_scope = .{ .Perm = self.types.getScope(file) };
-    self.struct_ret_ptr = null;
-    self.name = "";
+    var has_main = false;
+    var funcs = std.ArrayListUnmanaged(utils.EntId(root.frontend.types.Func)){};
+    for (self.types.files, self.types.file_scopes) |fl, scope| {
+        self.parent_scope = .{ .Perm = scope };
+        self.ast = &fl;
+        for (fl.exprs.view(fl.items)) |it| {
+            const item: Ast.Id = it;
 
-    var entry_vl = try self.lookupScopeItem(.init(0), self.types.getScope(file), name);
-    const entry_ty = try self.unwrapTyConst(Ast.Pos.init(0), &entry_vl);
+            if (item.tag() != .Directive) continue;
 
-    if (entry_ty.data() != .Func) return error.Never;
-    return entry_ty.data().Func;
+            const dir = fl.exprs.get(item).Directive;
+            if (dir.kind != .@"export") continue;
+
+            const args: []const Ast.Id = fl.exprs.view(dir.args);
+            try self.assertDirectiveArgs(item, args, "<name>, <func>");
+
+            const name, const func = args[0..2].*;
+
+            if (name.tag() != .String) {
+                self.report(name, "non hardcoded strings are not supported (yet)", .{}) catch continue;
+            }
+
+            const name_string = fl.exprs.get(name).String;
+            const name_str = fl.source[name_string.pos.index + 1 .. name_string.end - 1];
+
+            has_main = has_main or std.mem.eql(u8, name_str, "main");
+
+            const ty = try self.types.ct.evalTy(name_str, .{ .Perm = scope }, func);
+
+            if (ty.data() != .Func) {
+                self.report(func, "only function types can be exported", .{}) catch continue;
+            }
+
+            self.types.store.get(ty.data().Func).visibility = .exported;
+
+            try funcs.append(tmp.arena.allocator(), ty.data().Func);
+        }
+    }
+
+    if (!has_main) {
+        var base_scope = self.types.getScope(.root);
+        var pos_stack = std.ArrayListUnmanaged([]const u8){};
+
+        try pos_stack.append(tmp.arena.allocator(), "main");
+
+        var vari: *const Ast.Store.TagPayload(.Decl) = undefined;
+        var file: Types.File = undefined;
+        var i: usize = 0;
+        while (i < pos_stack.items.len) : (i += 1) {
+            file = base_scope.file(self.types).?;
+            self.parent_scope = .{ .Perm = base_scope };
+            self.ast = self.types.getFile(file);
+
+            var name = pos_stack.items[i];
+            const is_readonly = name[0] == '$';
+            if (is_readonly) name = name[1..];
+
+            const decl, const path, _ = base_scope.index(self.types).?.search(name) orelse {
+                return self.report(Ast.Pos.init(0),
+                    \\you need to define a `main` function, like this:
+                    \\main := fn(): uint {{
+                    \\    return 0
+                    \\}}
+                , .{});
+            };
+
+            vari = self.ast.exprs.get(decl).Decl;
+
+            for (path) |pos| try pos_stack.append(tmp.arena.allocator(), self.ast.tokenSrc(pos.index));
+            const global_id = try self.resolveGlobalLow(name, base_scope, self.ast, decl, is_readonly);
+            const global = self.types.store.get(global_id).*;
+
+            if (global.ty != .type) {
+                return self.report(vari.value, "expected a global holding" ++
+                    " a type, {} is not", .{global.ty});
+            }
+
+            base_scope = Types.Id.fromRaw(
+                @bitCast(global.data[0..@sizeOf(Types.Id)].*),
+                self.types,
+            ) orelse return self.report(vari.value, "the type here is corrupted", .{});
+        }
+
+        if (base_scope.data() != .Func) {
+            return self.report(vari.value,
+                \\you need to define a `main` as a function:
+                \\main := fn(): uint {{
+                \\    return 0
+                \\}}
+            , .{});
+        }
+
+        self.types.store.get(base_scope.data().Func).visibility = .exported;
+
+        try funcs.append(tmp.arena.allocator(), base_scope.data().Func);
+    }
+
+    return scrath.dupe(utils.EntId(root.frontend.types.Func), funcs.items);
 }
 
 pub fn beginBuilder(
@@ -1982,9 +2060,6 @@ pub fn lookupScopeItem(
         }
     }
 
-    var tmp = utils.Arena.scrath(null);
-    defer tmp.deinit();
-
     const decl, const path, _ =
         bsty.index(self.types).?.search(name) orelse {
             return self.report(pos, "{} does not declare this", .{bsty});
@@ -1994,15 +2069,14 @@ pub fn lookupScopeItem(
     return self.resolveGlobal(name, bsty, ast, decl, path, is_read_only);
 }
 
-pub fn resolveGlobal(
+pub fn resolveGlobalLow(
     self: *Codegen,
     name: []const u8,
     bsty: Types.Id,
     ast: *const Ast,
     decl: Ast.Id,
-    path: []Ast.Pos,
     readonly: bool,
-) EmitError!Value {
+) EmitError!utils.EntId(tys.Global) {
     const vari = ast.exprs.getTyped(.Decl, decl).?;
 
     // NOTE: we do this here particularly because the explicit type can contain
@@ -2027,6 +2101,21 @@ pub fn resolveGlobal(
         try self.types.ct.evalGlobal(name, global_id, ty, vari.value);
     }
     self.types.queue(self.target, .init(.{ .Global = global_id }));
+
+    return global_id;
+}
+
+pub fn resolveGlobal(
+    self: *Codegen,
+    name: []const u8,
+    bsty: Types.Id,
+    ast: *const Ast,
+    decl: Ast.Id,
+    path: []Ast.Pos,
+    readonly: bool,
+) EmitError!Value {
+    const vari = ast.exprs.getTyped(.Decl, decl).?;
+    const global_id = try self.resolveGlobalLow(name, bsty, ast, decl, readonly);
 
     const global = self.types.store.get(global_id).*;
     if (path.len != 0) {
@@ -2987,5 +3076,6 @@ fn emitDirective(
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(has_decl)));
         },
         .import => unreachable,
+        .@"export" => unreachable,
     }
 }

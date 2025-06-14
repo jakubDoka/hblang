@@ -1,4 +1,4 @@
-match 1.main:
+main:
      addi64 $254, $254, -4
        li64 $2, 1
        li64 $1, 0

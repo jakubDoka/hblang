@@ -1,4 +1,4 @@
-directives 3 (@ecall).main:
+main:
       st $31, $254, -8, 8
   addi64 $254, $254, -48
   addi64 $2, $254, 24

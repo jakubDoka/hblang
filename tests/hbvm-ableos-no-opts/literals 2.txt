@@ -1,4 +1,4 @@
-literals 2.main:
+main:
          st $31, $254, -16, 16
      addi64 $254, $254, -16
         jal $31, $0, :literals 2.hex

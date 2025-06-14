@@ -1,4 +1,4 @@
-comptime 1.main:
+main:
          st $31, $254, -24, 24
      addi64 $254, $254, -24
        li64 $1, 9

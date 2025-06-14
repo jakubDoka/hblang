@@ -1,4 +1,4 @@
-slices 1.main:
+main:
      addi64 $254, $254, -132
        li64 $9, 0
      addi64 $5, $254, 0

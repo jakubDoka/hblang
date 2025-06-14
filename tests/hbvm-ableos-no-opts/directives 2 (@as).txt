@@ -1,4 +1,4 @@
-directives 2 (@as).main:
+main:
   addi64 $254, $254, -8
   addi64 $2, $254, 0
     li64 $1, 3

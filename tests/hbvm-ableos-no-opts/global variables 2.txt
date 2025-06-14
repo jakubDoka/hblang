@@ -1,4 +1,4 @@
-global variables 2.main:
+main:
         lra $2, $0, :global variables 2.some_fib
         lra $1, $0, :global variables 2.bigon_era
          ld $2, $2, 0, 8

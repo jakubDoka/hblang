@@ -1855,6 +1855,15 @@ some_num := fn(): uint {
 }
 ```
 
+#### directives 18 (@export())
+```hb
+@export("main", foo)
+
+foo := fn(): uint {
+    return 0
+}
+```
+
 
 ## progress
 

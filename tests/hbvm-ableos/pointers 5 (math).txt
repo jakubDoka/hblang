@@ -1,3 +1,3 @@
-pointers 5 (math).main:
+main:
     li64 $1, 0
       tx

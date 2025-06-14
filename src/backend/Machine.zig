@@ -992,7 +992,6 @@ pub const OptOptions = struct {
                 backend.emitFunc(func, .{
                     .name = out.lookupName(sym.name),
                     .id = @intCast(i),
-                    .entry = i == backend.entry,
                     .linkage = sym.linkage,
                     .is_inline = false,
                     .optimizations = b: {
@@ -1014,7 +1013,6 @@ pub const OptOptions = struct {
 pub const EmitOptions = struct {
     id: u32,
     name: []const u8 = &.{},
-    entry: bool = false,
     is_inline: bool,
     linkage: Data.Linkage,
     optimizations: OptOptions = .all,
