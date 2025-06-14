@@ -2100,6 +2100,8 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
 }
 
 pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(.Call)) !Value {
+    //std.debug.print("\n{}\n\n", .{ctx});
+
     const ast = self.ast;
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
@@ -2315,6 +2317,7 @@ pub fn instantiateTemplate(
         };
         alc.key.captures =
             self.types.pool.arena.dupe(Types.Scope.Capture, alc.key.captures);
+        alc.is_inline = tmpl.is_inline;
     }
 
     return .{ arg_exprs, slot.key_ptr.* };

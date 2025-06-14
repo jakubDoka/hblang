@@ -481,8 +481,7 @@ pub const InlineFunc = struct {
 
         func.subsume(before_dest, entry);
 
-        if (before_return == null) {
-            const trap_region = end.inputs()[2].?;
+        if (end.inputs()[2]) |trap_region| {
             if (func.end.inputs()[2] == null) {
                 func.setInputNoIntern(func.end, 2, func.addNode(.TrapRegion, .top, &.{}, .{}));
             }
@@ -491,9 +490,11 @@ pub const InlineFunc = struct {
             for (trap_region.inputs()) |inp| {
                 func.connect(inp.?, dest_trap_region);
             }
-        } else if (after_entry.kind == .Return) {
+        }
+
+        if (after_entry.kind == .Return) {
             func.subsume(before_dest, call_end);
-        } else {
+        } else if (before_return != null) {
             func.subsume(before_return.?, call_end);
         }
         dest.data_type = .bot;

@@ -705,6 +705,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node, f
                         std.io.getStdErr().writer().any(),
                         .escape_codes,
                     );
+                    std.debug.print("{}\n\n", .{no});
                 }
                 std.debug.assert(no.outputs()[1].schedule != std.math.maxInt(u16));
                 self.local_relocs.appendAssumeCapacity(.{

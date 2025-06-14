@@ -556,6 +556,10 @@ pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(root.fr
             self.getTypes().store.get(typ.data().Func).is_inline =
                 self.getTypes().store.get(global).readonly;
         }
+        if (typ.data() == .Template) {
+            self.getTypes().store.get(typ.data().Template).is_inline =
+                self.getTypes().store.get(global).readonly;
+        }
     }
 
     self.getTypes().store.get(global).data = data;

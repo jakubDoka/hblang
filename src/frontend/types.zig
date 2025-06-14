@@ -391,6 +391,7 @@ pub const Struct = struct {
 pub const Template = struct {
     key: Scope,
     temporary: bool = false,
+    is_inline: bool = false,
 };
 
 pub const Func = struct {

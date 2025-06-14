@@ -389,6 +389,12 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
 
     opts.optimizations.execute(Node, self, func);
 
+    //if (entry)
+    //    func.fmtScheduled(
+    //        std.io.getStdErr().writer().any(),
+    //        std.io.tty.detectConfig(std.io.getStdErr()),
+    //    );
+
     var tmp = utils.Arena.scrath(opts.optimizations.arena);
     defer tmp.deinit();
 
