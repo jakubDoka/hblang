@@ -440,7 +440,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
 
         std.sort.pdq(*FuncNode, locals.items, {}, struct {
             fn isBigger(_: void, lhs: *FuncNode, rhs: *FuncNode) bool {
-                return lhs.extra(.Local).* > rhs.extra(.Local).*;
+                return @ctz(lhs.extra(.Local).*) > @ctz(rhs.extra(.Local).*);
             }
         }.isBigger);
 

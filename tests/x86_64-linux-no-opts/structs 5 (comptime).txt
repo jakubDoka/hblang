@@ -6,13 +6,13 @@ main:
 	mov rax, 0x70000001
 	mov [rcx], eax
 	mov r8, 0x01
-	lea rdi, [rsp]
+	lea rdi, [rsp+0x08]
 	mov [rdi], r8
 	mov rsi, 0x02
 	mov [rdi+0x08], rsi
 	mov rbp, 0x03
 	mov [rdi+0x10], rbp
-	lea rbx, [rsp+0x18]
+	lea rbx, [rsp]
 	mov rax, 0x00
 	lea rdx, [rsp+0x20]
 	mov [rdx], rax

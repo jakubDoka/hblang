@@ -29,10 +29,10 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x28
-	lea rbx, [rsp+0x18]
+	lea rbx, [rsp]
 	mov rdi, rbx
 	call :structs 3 (call stress test).return_pair
-	lea rbp, [rsp]
+	lea rbp, [rsp+0x10]
 	mov rdi, rbp
 	call :structs 3 (call stress test).return_triple
 	mov dil, [rbx]

@@ -4,11 +4,11 @@ structs 2.swap:
 	push r12
 	push r13
 	sub rsp, 0x30
-	lea r13, [rsp+0x18]
+	lea r13, [rsp]
 	mov [r13], rdi
-	lea r12, [rsp+0x20]
+	lea r12, [rsp+0x08]
 	mov [r12], rsi
-	lea rbp, [rsp]
+	lea rbp, [rsp+0x10]
 	mov rbx, 0x18
 	mov rax, [r13]
 	mov rdi, rbp

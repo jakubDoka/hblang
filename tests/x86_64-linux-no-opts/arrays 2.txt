@@ -6,7 +6,7 @@ main:
 	mov r10, 0x00
 	mov [r11], r10
 	lea r9, [rsp+0x60]
-	lea r8, [rsp]
+	lea r8, [rsp+0x08]
 	mov rsi, 0x18
 	mov rdi, 0x08
 4:	mov rax, [r11]
@@ -17,7 +17,7 @@ main:
 	jz :0
 	lea rsi, [rsp+0x68]
 	mov [rsi], r8
-	lea rbp, [rsp+0x48]
+	lea rbp, [rsp]
 	mov [rbp], r10
 	lea rbx, [rsp+0x50]
 	mov [rbx], r10

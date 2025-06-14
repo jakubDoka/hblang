@@ -12,12 +12,12 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x48
-	lea rbp, [rsp+0x38]
+	lea rbp, [rsp+0x20]
 	lea rax, [0x0000000000000007]
 	mov [rbp], rax
 	mov rax, 0x04
 	mov [rbp+0x08], rax
-	lea rsi, [rsp+0x20]
+	lea rsi, [rsp+0x30]
 	mov rax, 0x00
 	mov [rsi], al
 	lea rbx, [rsp]

@@ -7,7 +7,7 @@ main:
 	mov rdi, rbx
 	mov rsi, rbx
 	syscall
-	lea rcx, [rsp+0x0C]
+	lea rcx, [rsp]
 	mov [rcx], eax
 	mov eax, [rcx]
 	cmp eax, 0x00
@@ -17,7 +17,7 @@ main:
 	jz :0
 	mov rax, 0x01
 	jmp :1
-0:	lea r8, [rsp]
+0:	lea r8, [rsp+0x04]
 	mov rax, 0x01
 	mov [r8], eax
 	mov [r8+0x04], rbx

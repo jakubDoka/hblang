@@ -122,7 +122,7 @@ main:
 	push r14
 	push r15
 	sub rsp, 0x138
-	lea r15, [rsp+0xD0]
+	lea r15, [rsp+0xA8]
 	mov [rsp+0xA0], r15
 	lea rax, [0x0000000000000007]
 	mov r15, [rsp+0xA0]
@@ -132,13 +132,13 @@ main:
 	mov r14, [rsp+0x98]
 	mov [r15+0x08], r14
 	lea rax, [0x0000000000000007]
-	lea rbx, [rsp+0xE0]
+	lea rbx, [rsp+0xB8]
 	mov [rbx], rax
 	mov qword ptr [rsp+0x90], 0x02
 	mov r15, [rsp+0x90]
 	mov [rbx+0x08], r15
 	lea rax, [0x0000000000000007]
-	lea rdx, [rsp+0xF0]
+	lea rdx, [rsp+0xC8]
 	mov [rdx], rax
 	mov r15, [rsp+0x90]
 	mov [rdx+0x08], r15
@@ -151,15 +151,15 @@ main:
 	mov rcx, 0x90000003
 	lea rax, [rsp+0x128]
 	mov [rax], ecx
-	lea r15, [rsp+0xA8]
+	lea r15, [rsp+0xF8]
 	mov [rsp+0x08], r15
 	mov rcx, 0x00
-	lea r13, [rsp+0x100]
+	lea r13, [rsp+0xD8]
 	mov rax, [rbx]
 	mov [r13], rax
 	mov rax, [rbx+0x08]
 	mov [r13+0x08], rax
-	lea r15, [rsp+0x110]
+	lea r15, [rsp+0xE8]
 	mov [rsp], r15
 	mov r15, [rsp+0xA0]
 	mov rax, [r15]
