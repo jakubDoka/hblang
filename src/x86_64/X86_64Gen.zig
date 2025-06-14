@@ -956,7 +956,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                             zydis.ZYDIS_MNEMONIC_MOV,
                             .{ SReg{ Reg.rcx, size }, SReg{ rhs, size } },
                         );
-                        self.emitInstr(mnemonic, .{ oper, SReg{ .rcx, 1 } });
+                        self.emitInstr(mnemonic, .{ SReg{ oper, size }, SReg{ .rcx, 1 } });
                         if (dst == .rcx and rhs != .rcx) {
                             self.emitInstr(zydis.ZYDIS_MNEMONIC_XCHG, .{ SReg{ dst, size }, rhs });
                         }

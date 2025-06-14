@@ -1,0 +1,35 @@
+if statements 1.fib:
+	push rbx
+	push rbp
+	sub rsp, 0x08
+	lea rbp, [rsp]
+	mov [rbp], rdi
+	mov rcx, [rbp]
+	cmp rcx, 0x02
+	setbe al
+	movzx rax, al
+	test al, al
+	jz :0
+	mov rax, 0x01
+	jmp :1
+0:	mov rdi, rcx
+	sub rdi, 0x01
+	call :if statements 1.fib
+	mov rbx, rax
+	mov rax, [rbp]
+	mov rdi, rax
+	sub rdi, 0x02
+	call :if statements 1.fib
+	mov rcx, rax
+	mov rax, rbx
+	add rax, rcx
+1:	add rsp, 0x08
+	pop rbp
+	pop rbx
+	ret
+main:
+	sub rsp, 0x08
+	mov rdi, 0x03
+	call :if statements 1.fib
+	add rsp, 0x08
+	ret

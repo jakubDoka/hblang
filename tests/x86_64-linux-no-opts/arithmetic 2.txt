@@ -1,0 +1,38 @@
+main:
+	push rbx
+	push rbp
+	sub rsp, 0x10
+	lea rdx, [rsp+0x0C]
+	mov rax, 0x00
+	mov [rdx], al
+	lea rcx, [rsp+0x0D]
+	mov [rcx], al
+	mov al, [rdx]
+	movsx ax, al
+	lea rbp, [rsp+0x08]
+	sub ax, 0x01
+	mov [rbp], ax
+	mov al, [rcx]
+	movzx ax, al
+	lea rbx, [rsp]
+	lea rdx, [rsp+0x04]
+	lea rcx, [rsp+0x0A]
+	add ax, 0x01
+	mov [rcx], ax
+	mov ax, [rbp]
+	movsx eax, ax
+	sub eax, 0x01
+	mov [rbx], eax
+	mov ax, [rcx]
+	movzx eax, ax
+	add eax, 0x01
+	mov [rdx], eax
+	mov eax, [rdx]
+	mov ecx, [rbx]
+	mov eax, eax
+	movsxd rcx, ecx
+	add rax, rcx
+	add rsp, 0x10
+	pop rbp
+	pop rbx
+	ret

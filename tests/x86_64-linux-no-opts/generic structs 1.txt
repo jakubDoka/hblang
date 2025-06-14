@@ -1,0 +1,33 @@
+generic structs 1.nvec(E = uint):
+	sub rsp, 0x10
+	lea rcx, [rsp]
+	mov [rcx], rsi
+	mov rax, [rcx]
+	mov [rdi], rax
+	mov rax, [rcx]
+	mov [rdi+0x08], rax
+	add rsp, 0x10
+	ret
+generic structs 1.Vec(E = uint).sub:
+	sub rsp, 0x10
+	lea rax, [rsp]
+	mov [rax], rdi
+	mov [rax+0x08], rsi
+	mov rcx, [rax+0x08]
+	mov rax, [rax]
+	sub rax, rcx
+	add rsp, 0x10
+	ret
+main:
+	push rbx
+	sub rsp, 0x18
+	lea rbx, [rsp]
+	mov rsi, 0x01
+	mov rdi, rbx
+	call :generic structs 1.nvec(E = uint)
+	mov rsi, [rbx+0x08]
+	mov rdi, [rbx]
+	call :generic structs 1.Vec(E = uint).sub
+	add rsp, 0x18
+	pop rbx
+	ret

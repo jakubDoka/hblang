@@ -1,0 +1,29 @@
+generic structs 3.Foo(F = generic structs 3.Foo(F = uint)).sub:
+	sub rsp, 0x10
+	lea rax, [rsp]
+	mov [rax], rdi
+	mov rax, [rax]
+	add rsp, 0x10
+	ret
+generic structs 3.Foo(F = uint).sub:
+	sub rsp, 0x10
+	lea rax, [rsp]
+	mov [rax], rdi
+	mov rax, [rax]
+	add rsp, 0x10
+	ret
+main:
+	sub rsp, 0x08
+	lea rcx, [rsp]
+	mov rax, 0x0A
+	mov [rcx], rax
+	mov rax, [rcx]
+	mov [rcx], rax
+	mov rax, [rcx]
+	mov [rcx], rax
+	mov rdi, [rcx]
+	call :generic structs 3.Foo(F = generic structs 3.Foo(F = uint)).sub
+	mov rdi, rax
+	call :generic structs 3.Foo(F = uint).sub
+	add rsp, 0x08
+	ret

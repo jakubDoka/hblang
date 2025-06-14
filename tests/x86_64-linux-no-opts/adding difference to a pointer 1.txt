@@ -1,0 +1,30 @@
+adding difference to a pointer 1.one:
+	mov rax, 0x01
+	ret
+main:
+	push rbx
+	sub rsp, 0x18
+	lea rcx, [rsp+0x08]
+	mov rax, 0x00
+	mov [rcx], al
+	mov rax, 0x01
+	mov [rcx+0x01], al
+	mov rax, 0x02
+	mov [rcx+0x02], al
+	mov rax, 0x03
+	mov [rcx+0x03], al
+	lea rbx, [rsp]
+	mov [rbx], rcx
+	call :adding difference to a pointer 1.one
+	mov rdx, rax
+	mov rcx, 0x01
+	mov rax, [rbx]
+	sub rcx, rdx
+	add rax, rcx
+	mov [rbx], rax
+	mov rax, [rbx]
+	mov al, [rax]
+	movzx rax, al
+	add rsp, 0x18
+	pop rbx
+	ret

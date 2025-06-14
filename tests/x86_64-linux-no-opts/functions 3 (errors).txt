@@ -1,0 +1,24 @@
+functions 3 (errors):8:2: expected type, void is not
+    imaginary()
+    ^
+functions 3 (errors):9:2: expected 3 arguments, got 0
+    some_fn()
+    ^
+functions 3 (errors):10:17: expected void got uint
+    _ = some_fn(0, 0, 0)
+                   ^
+functions 3 (errors):11:6: expected 3 arguments, got 2
+    _ = some_fn(0, 0)
+        ^
+functions 3 (errors):12:8: expected 3 arguments, got 4
+    vl := some_fn(0, {
+          ^
+functions 3 (errors):5:20: function is missing a return value since uint has more then 1 possible value
+main := fn(): uint {
+                   ^
+functions 3 (errors):19:2: expected uint got void
+    return
+    ^
+functions 3 (errors):18:46: function is missing a return value since uint has more then 1 possible value
+some_fn := fn(a: uint, b: void, c: u8): uint {
+                                             ^

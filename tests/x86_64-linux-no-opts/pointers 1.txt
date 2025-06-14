@@ -1,0 +1,29 @@
+pointers 1.modify:
+	sub rsp, 0x10
+	lea rax, [rsp]
+	mov [rax], rdi
+	mov rcx, 0x02
+	mov rax, [rax]
+	mov [rax], rcx
+	add rsp, 0x10
+	ret
+main:
+	push rbx
+	sub rsp, 0x18
+	lea rcx, [rsp]
+	mov rax, 0x01
+	mov [rcx], rax
+	lea rbx, [rsp+0x08]
+	mov [rbx], rcx
+	mov rdi, [rbx]
+	call :pointers 1.modify
+	mov rcx, [rbx]
+	mov rax, [rcx]
+	add rax, 0x02
+	mov [rcx], rax
+	mov rax, [rbx]
+	mov rax, [rax]
+	sub rax, 0x04
+	add rsp, 0x18
+	pop rbx
+	ret

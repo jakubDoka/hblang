@@ -1,0 +1,14 @@
+zero sized structs 1.main.new:
+	ret
+zero sized structs 1.main.test:
+	mov rax, 0x00
+	ret
+main:
+	sub rsp, 0x08
+	lea rcx, [rsp]
+	mov rax, 0x70000001
+	mov [rcx], eax
+	call :zero sized structs 1.main.new
+	call :zero sized structs 1.main.test
+	add rsp, 0x08
+	ret

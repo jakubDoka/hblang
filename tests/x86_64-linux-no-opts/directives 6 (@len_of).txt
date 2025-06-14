@@ -1,0 +1,3 @@
+main:
+	mov rax, 0x04
+	ret

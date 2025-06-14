@@ -1,0 +1,49 @@
+enums 4.NameMap(Enum = enums 4.Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get:
+	push rbx
+	push rbp
+	sub rsp, 0x10
+	lea rcx, [rsp]
+	mov [rcx], rsi
+	lea rax, [rsp+0x08]
+	mov [rax], dl
+	mov rsi, [rcx]
+	mov al, [rax]
+	movzx rax, al
+	mov rbp, 0x08
+	mov rcx, rax
+	add rcx, 0x01
+	mov rbx, rsi
+	add rbx, 0x08
+	imul rax, rbp
+	mov rdx, rcx
+	imul rdx, rbp
+	mov rcx, rbx
+	add rcx, rax
+	mov rax, rbx
+	add rax, rdx
+	mov rdx, [rcx]
+	mov rcx, [rax]
+	mov rax, rsi
+	add rax, rdx
+	mov [rdi], rax
+	mov rax, rcx
+	sub rax, rdx
+	mov [rdi+0x08], rax
+	add rsp, 0x10
+	pop rbp
+	pop rbx
+	ret
+main:
+	push rbx
+	sub rsp, 0x18
+	lea rbx, [rsp]
+	lea rsi, [0x0000000000000007]
+	mov rdx, 0x00
+	mov rdi, rbx
+	call :enums 4.NameMap(Enum = enums 4.Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get
+	mov rax, [rbx]
+	mov al, [rax]
+	movzx rax, al
+	add rsp, 0x18
+	pop rbx
+	ret

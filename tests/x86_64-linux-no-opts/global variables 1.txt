@@ -1,0 +1,17 @@
+global variables 1.dec:
+	lea rcx, [0x0000000000000007]
+	mov rax, [rcx]
+	sub rax, 0x01
+	mov [rcx], rax
+	ret
+main:
+	push rbx
+	sub rsp, 0x08
+	lea rbx, [0x0000000000000007]
+	mov rax, 0x01
+	mov [rbx], rax
+	call :global variables 1.dec
+	mov rax, [rbx]
+	add rsp, 0x08
+	pop rbx
+	ret

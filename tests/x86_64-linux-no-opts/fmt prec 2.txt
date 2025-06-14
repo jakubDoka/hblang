@@ -1,0 +1,12 @@
+fmt prec 2.f:
+	mov rax, 0x01
+	test al, al
+	jz :1
+	jmp :1
+1:	ret
+main:
+	sub rsp, 0x08
+	call :fmt prec 2.f
+	mov rax, 0x00
+	add rsp, 0x08
+	ret

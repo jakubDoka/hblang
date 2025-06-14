@@ -1,0 +1,45 @@
+pointers 2.swap:
+	push rbx
+	sub rsp, 0x20
+	lea rbx, [rsp]
+	mov [rbx], rdi
+	lea rcx, [rsp+0x08]
+	mov [rcx], rsi
+	mov rax, [rcx]
+	lea rdx, [rsp+0x10]
+	mov rax, [rax]
+	mov [rdx], rax
+	mov rax, [rbx]
+	mov rcx, [rcx]
+	mov rax, [rax]
+	mov [rcx], rax
+	mov rcx, [rbx]
+	mov rax, [rdx]
+	mov [rcx], rax
+	add rsp, 0x20
+	pop rbx
+	ret
+main:
+	push rbx
+	push rbp
+	sub rsp, 0x28
+	lea rbp, [rsp]
+	mov rax, 0x01
+	mov [rbp], rax
+	mov rax, 0x02
+	lea rbx, [rsp+0x08]
+	mov [rbx], rax
+	lea rcx, [rsp+0x10]
+	mov [rcx], rbp
+	lea rax, [rsp+0x18]
+	mov [rax], rbx
+	mov rdi, [rcx]
+	mov rsi, [rax]
+	call :pointers 2.swap
+	mov rax, [rbp]
+	mov rcx, [rbx]
+	sub rax, rcx
+	add rsp, 0x28
+	pop rbp
+	pop rbx
+	ret

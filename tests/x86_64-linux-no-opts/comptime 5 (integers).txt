@@ -1,0 +1,27 @@
+comptime 5 (integers).main.func(value: uint):
+	mov rax, 0x01
+	ret
+main:
+	sub rsp, 0x18
+	lea rcx, [rsp]
+	mov rax, 0x01
+	mov [rcx], rax
+	mov rcx, 0x70000001
+	lea rax, [rsp+0x08]
+	mov [rax], ecx
+	lea rcx, [rsp+0x0C]
+	mov rax, 0x90000002
+	mov [rcx], eax
+	mov rcx, 0x80000000
+	lea rax, [rsp+0x10]
+	mov [rax], ecx
+	call :comptime 5 (integers).main.func(value: uint)
+	mov rdx, rax
+	lea rax, [0x0000000000000007]
+	lea rcx, [0x0000000000000007]
+	mov rax, [rax]
+	mov rcx, [rcx]
+	sub rax, rdx
+	add rax, rcx
+	add rsp, 0x18
+	ret

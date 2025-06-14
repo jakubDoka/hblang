@@ -1,0 +1,58 @@
+structs 2.swap:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	sub rsp, 0x30
+	lea r13, [rsp+0x18]
+	mov [r13], rdi
+	lea r12, [rsp+0x20]
+	mov [r12], rsi
+	lea rbp, [rsp]
+	mov rbx, 0x18
+	mov rax, [r13]
+	mov rdi, rbp
+	mov rsi, rax
+	mov rdx, rbx
+	call :memcpy
+	mov rcx, [r13]
+	mov rax, [r12]
+	mov rdi, rcx
+	mov rsi, rax
+	mov rdx, rbx
+	call :memcpy
+	mov rax, [r12]
+	mov rdi, rax
+	mov rsi, rbp
+	mov rdx, rbx
+	call :memcpy
+	add rsp, 0x30
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
+	ret
+main:
+	push rbx
+	sub rsp, 0x38
+	lea rbx, [rsp]
+	mov rax, 0x00
+	mov [rbx], rax
+	mov [rbx+0x08], rax
+	mov [rbx+0x10], rax
+	mov rax, 0x01
+	lea rsi, [rsp+0x18]
+	mov [rsi], rax
+	mov [rsi+0x08], rax
+	mov [rsi+0x10], rax
+	mov rdi, rbx
+	call :structs 2.swap
+	mov rdx, [rbx+0x08]
+	mov rax, [rbx]
+	mov rcx, [rbx+0x10]
+	add rax, rdx
+	add rax, rcx
+	add rsp, 0x38
+	pop rbx
+	ret
+memcpy:

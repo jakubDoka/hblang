@@ -1,0 +1,29 @@
+generic structs 2.Foo(F = uint).Bar(B = u8).init:
+	mov rax, 0x01
+	mov [rdi], rax
+	mov rax, 0x01
+	mov [rdi+0x08], al
+	ret
+generic structs 2.Foo(F = uint).Bar(B = u8).sub:
+	sub rsp, 0x10
+	lea rax, [rsp]
+	mov [rax], rdi
+	mov [rax+0x08], sil
+	mov cl, [rax+0x08]
+	mov rax, [rax]
+	movzx rcx, cl
+	sub rax, rcx
+	add rsp, 0x10
+	ret
+main:
+	push rbx
+	sub rsp, 0x18
+	lea rbx, [rsp]
+	mov rdi, rbx
+	call :generic structs 2.Foo(F = uint).Bar(B = u8).init
+	mov sil, [rbx+0x08]
+	mov rdi, [rbx]
+	call :generic structs 2.Foo(F = uint).Bar(B = u8).sub
+	add rsp, 0x18
+	pop rbx
+	ret

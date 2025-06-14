@@ -1,0 +1,50 @@
+main:
+	push rbx
+	sub rsp, 0x18
+	mov rdi, 0x123
+	mov rbx, 0x00
+	mov rax, rdi
+	mov rdi, rbx
+	mov rsi, rbx
+	syscall
+	lea rcx, [rsp+0x0C]
+	mov [rcx], eax
+	mov eax, [rcx]
+	cmp eax, 0x00
+	setl al
+	movzx rax, al
+	test al, al
+	jz :0
+	mov rax, 0x01
+	jmp :1
+0:	lea r8, [rsp]
+	mov rax, 0x01
+	mov [r8], eax
+	mov [r8+0x04], rbx
+	lea rax, [0x0000000000000007]
+	mov ax, [rax]
+	mov esi, [rcx]
+	mov rdi, 0xE9
+	mov rdx, rax
+	movzx rdx, dx
+	mov rax, rdi
+	mov rdi, rsi
+	mov rsi, rdx
+	mov rdx, rbx
+	mov r10, r8
+	syscall
+	mov rcx, rax
+	lea rax, [rsp+0x10]
+	mov [rax], ecx
+	mov eax, [rax]
+	cmp eax, 0x00
+	setl al
+	movzx rax, al
+	test al, al
+	jz :2
+	mov rax, 0x02
+1:	jmp :3
+2:	mov rax, rbx
+3:	add rsp, 0x18
+	pop rbx
+	ret

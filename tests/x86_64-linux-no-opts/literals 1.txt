@@ -1,0 +1,16 @@
+main:
+	mov rax, 0x00
+	test al, al
+	jz :0
+	mov rax, 0x10
+	jmp :1
+0:	test al, al
+	jz :2
+	mov rax, 0x08
+1:	jmp :3
+2:	test al, al
+	jz :4
+	mov rax, 0x02
+3:	jmp :5
+4:	mov rax, 0x00
+5:	ret

@@ -90,6 +90,25 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
         );
     }
 
+    if (true) {
+        if (std.mem.indexOf(u8, name, "float") != null) return;
+
+        const target = "x86_64-linux-no-opts";
+        var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
+        defer x86_64.deinit();
+        try runMachineTest(
+            name,
+            target,
+            code,
+            .init(target, &x86_64),
+            .systemv,
+            .none,
+            gpa,
+            stderr.writer().any(),
+            colors,
+        );
+    }
+
     try failed_fmt;
 }
 
@@ -191,4 +210,5 @@ pub fn runVendoredTest(path: []const u8) !void {
     try test_util.runVendoredTest(path, "hbvm-ableos", .all);
     try test_util.runVendoredTest(path, "hbvm-ableos-no-opts", .none);
     try test_util.runVendoredTest(path, "x86_64-linux", .all);
+    try test_util.runVendoredTest(path, "x86_64-linux-no-opts", .none);
 }

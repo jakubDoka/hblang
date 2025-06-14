@@ -1,0 +1,22 @@
+main:
+	sub rsp, 0x10
+	lea rcx, [rsp]
+	mov rax, 0x50000000
+	mov [rcx], eax
+	mov rax, 0x00
+	lea rdx, [rsp+0x05]
+	mov [rdx], al
+	lea rcx, [rsp+0x04]
+	mov rax, 0x01
+	mov [rcx], al
+	mov al, [rdx]
+	mov cl, [rcx]
+	cmp al, cl
+	jnz :0
+	mov rax, 0x0A
+	jmp :1
+0:	movzx rax, al
+	movzx rcx, cl
+	add rax, rcx
+1:	add rsp, 0x10
+	ret

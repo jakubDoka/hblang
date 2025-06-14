@@ -1,0 +1,100 @@
+if statements 4 (short circuit).effectfull:
+	sub rsp, 0x10
+	lea rax, [rsp]
+	mov [rax], rdi
+	mov rdx, 0x01
+	lea rcx, [0x0000000000000007]
+	mov rax, [rax]
+	mov [rcx], rax
+	mov rax, rdx
+	add rsp, 0x10
+	ret
+main:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	push r14
+	push r15
+	sub rsp, 0x18
+	mov qword ptr [rsp], 0x00
+	lea rax, [rsp+0x09]
+	mov r13, 0x01
+	lea r12, [rsp+0x0A]
+	lea rbp, [rsp+0x08]
+	lea rbx, [rsp+0x0B]
+	mov r15b, [rsp]
+	test [rsp], r15b
+	jz :0
+	mov [rax], r13b
+	jmp :1
+0:	mov [rax], r13b
+1:	mov al, [rax]
+	test al, al
+	jz :2
+	mov [rbp], r13b
+	jmp :3
+2:	mov rdi, 0x01
+	call :if statements 4 (short circuit).effectfull
+	mov [rbp], al
+3:	mov al, [rbp]
+	test al, al
+	jz :5
+	jmp :5
+5:	test r13b, r13b
+	jz :5
+	mov r15b, [rsp]
+	mov [rbx], r15b
+	jmp :6
+5:	mov r15b, [rsp]
+	mov [rbx], r15b
+6:	mov al, [rbx]
+	test al, al
+	jz :7
+	mov rdi, 0x02
+	call :if statements 4 (short circuit).effectfull
+	mov [r12], al
+	jmp :8
+7:	mov r15b, [rsp]
+	mov [r12], r15b
+8:	mov al, [r12]
+	test al, al
+	jz :10
+	jmp :10
+a:	lea rbp, [rsp+0x0C]
+	mov r15b, [rsp]
+	mov [rbp], r15b
+	mov al, [rbp]
+	lea rbx, [rsp+0x0D]
+	test al, al
+	jz :10
+	mov rdi, 0x04
+	call :if statements 4 (short circuit).effectfull
+	mov [rbx], al
+	jmp :11
+a:	mov r15b, [rsp]
+	mov [rbx], r15b
+b:	mov al, [rbx]
+	mov [rbp], al
+	mov [rbp], r13b
+	mov al, [rbp]
+	lea rbx, [rsp+0x0E]
+	test al, al
+	jz :12
+	mov [rbx], r13b
+	jmp :13
+c:	mov rdi, 0x05
+	call :if statements 4 (short circuit).effectfull
+	mov [rbx], al
+d:	lea rcx, [0x0000000000000007]
+	mov al, [rbx]
+	mov [rbp], al
+	mov rax, [rcx]
+	add rsp, 0x18
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
+	ret

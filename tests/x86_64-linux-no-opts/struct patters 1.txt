@@ -1,0 +1,26 @@
+foo.hb.foo:
+	mov rax, 0x00
+	ret
+foo.hb.bar:
+	mov rax, 0x01
+	ret
+bas.hb.baz:
+	mov rax, 0x02
+	ret
+main:
+	push rbx
+	push rbp
+	sub rsp, 0x08
+	call :foo.hb.foo
+	mov rbp, rax
+	call :foo.hb.bar
+	mov rbx, rax
+	call :bas.hb.baz
+	mov rcx, rax
+	mov rax, rbp
+	add rax, rbx
+	add rax, rcx
+	add rsp, 0x08
+	pop rbp
+	pop rbx
+	ret

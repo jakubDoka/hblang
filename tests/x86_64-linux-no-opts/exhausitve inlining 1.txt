@@ -1,0 +1,60 @@
+exhausitve inlining 1.no_op:
+	ret
+exhausitve inlining 1.some_mem_ops:
+	sub rsp, 0x10
+	lea rcx, [rsp]
+	mov [rcx], rdi
+	mov rax, [rcx]
+	add rax, 0x08
+	mov [rcx], rax
+	add rsp, 0x10
+	ret
+exhausitve inlining 1.unreachable:
+	ud2
+exhausitve inlining 1.loop_fn:
+	sub rsp, 0x10
+	lea rdx, [rsp]
+	mov [rdx], rdi
+1:	mov rcx, [rdx]
+	cmp rcx, 0x00
+	setz al
+	movzx rax, al
+	test al, al
+	jz :0
+	add rsp, 0x10
+	ret
+0:	mov rax, rcx
+	sub rax, 0x01
+	mov [rdx], rax
+	jmp :1
+main:
+	push rbx
+	push rbp
+	sub rsp, 0x08
+	call :exhausitve inlining 1.no_op
+	lea rbp, [rsp]
+	mov rbx, 0x00
+	mov [rbp], rbx
+	mov rdi, rbp
+	call :exhausitve inlining 1.some_mem_ops
+	mov rax, [rbp]
+	cmp rax, 0x01
+	setnz al
+	movzx rax, al
+	test al, al
+	jz :0
+	mov rax, rbx
+	jmp :1
+0:	mov rax, 0x00
+	test al, al
+	jz :3
+	call :exhausitve inlining 1.unreachable
+	jmp :3
+3:	mov rdi, 0x0A
+	call :exhausitve inlining 1.loop_fn
+	call :exhausitve inlining 1.unreachable
+	mov rax, rbx
+1:	add rsp, 0x08
+	pop rbp
+	pop rbx
+	ret

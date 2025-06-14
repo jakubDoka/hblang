@@ -1,0 +1,104 @@
+slices 3.reverse:
+	push rbx
+	push rbp
+	sub rsp, 0x30
+	mov r9, rdi
+	lea r8, [rsp]
+	mov [r8], rsi
+	mov [r8+0x08], rdx
+	mov rax, [r8+0x08]
+	cmp rax, 0x00
+	setz al
+	movzx rax, al
+	test al, al
+	jz :0
+	mov rax, [r8]
+	mov [r9], rax
+	mov rax, [r8+0x08]
+	mov [r9+0x08], rax
+	jmp :1
+0:	mov rax, [r8+0x08]
+	lea rdi, [rsp+0x10]
+	sub rax, 0x01
+	mov [rdi], rax
+	lea rsi, [rsp+0x18]
+	mov rax, 0x00
+	mov [rsi], rax
+	lea rbp, [rsp+0x20]
+	mov rax, 0x00
+	mov [rbp], al
+3:	mov rax, [rdi]
+	mov rcx, [rsi]
+	cmp rcx, rax
+	jnb :2
+	mov rax, [r8]
+	add rax, rcx
+	mov al, [rax]
+	mov [rbp], al
+	mov rbx, [r8]
+	mov rdx, [rsi]
+	mov rcx, [rdi]
+	mov rax, rbx
+	add rax, rcx
+	mov rcx, rbx
+	add rcx, rdx
+	mov al, [rax]
+	mov [rcx], al
+	mov rax, [r8]
+	mov rdx, [rdi]
+	mov cl, [rbp]
+	add rax, rdx
+	mov [rax], cl
+	mov rax, [rsi]
+	add rax, 0x01
+	mov [rsi], rax
+	mov rax, [rdi]
+	sub rax, 0x01
+	mov [rdi], rax
+	jmp :3
+2:	mov rax, [r8]
+	mov [r9], rax
+	mov rax, [r8+0x08]
+	mov [r9+0x08], rax
+1:	add rsp, 0x30
+	pop rbp
+	pop rbx
+	ret
+main:
+	push rbx
+	sub rsp, 0x48
+	lea rbx, [rsp+0x40]
+	mov rax, 0x01
+	mov [rbx], al
+	mov rax, 0x02
+	mov [rbx+0x01], al
+	mov rax, 0x03
+	mov [rbx+0x02], al
+	mov rax, 0x01
+	lea rcx, [rsp+0x10]
+	mov [rcx], rax
+	mov rax, 0x00
+	mov [rcx+0x08], rax
+	lea rdi, [rsp]
+	mov rdx, [rcx+0x08]
+	mov rsi, [rcx]
+	call :slices 3.reverse
+	lea rcx, [rsp+0x30]
+	mov [rcx], rbx
+	mov rax, 0x03
+	mov [rcx+0x08], rax
+	lea rdi, [rsp+0x20]
+	mov rdx, [rcx+0x08]
+	mov rsi, [rcx]
+	call :slices 3.reverse
+	mov dl, [rbx+0x01]
+	mov cl, [rbx+0x02]
+	mov al, [rbx]
+	movzx rdx, dl
+	movzx rax, al
+	movzx rcx, cl
+	sub rax, rdx
+	sub rax, rcx
+	add rsp, 0x48
+	pop rbx
+	ret

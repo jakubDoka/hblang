@@ -1,0 +1,240 @@
+arithmetic 3.one:
+	mov rax, 0x01
+	ret
+arithmetic 3.zero:
+	mov rax, 0x00
+	ret
+arithmetic 3.cond:
+	sub rsp, 0x10
+	lea rax, [rsp]
+	mov [rax], dil
+	mov al, [rax]
+	add rsp, 0x10
+	ret
+arithmetic 3.mne:
+	mov rax, 0xFF
+	ret
+arithmetic 3.mero:
+	mov rax, 0x00
+	ret
+main:
+	push rbx
+	push rbp
+	sub rsp, 0x08
+	call :arithmetic 3.one
+	lea rbp, [rsp]
+	mov [rbp], al
+	call :arithmetic 3.zero
+	lea rbx, [rsp+0x01]
+	mov [rbx], al
+	mov cl, [rbp]
+	mov al, [rbx]
+	cmp cl, al
+	setb dil
+	movzx rdi, dil
+	call :arithmetic 3.cond
+	mov rcx, rax
+	mov al, [rbp]
+	test cl, cl
+	jz :0
+	mov rax, 0x01
+	jmp :1
+0:	cmp al, al
+	setb dil
+	movzx rdi, dil
+	call :arithmetic 3.cond
+	mov rdx, rax
+	mov cl, [rbp]
+	mov al, [rbx]
+	test dl, dl
+	jz :2
+	mov rax, 0x02
+1:	jmp :3
+2:	cmp cl, al
+	setbe dil
+	movzx rdi, dil
+	call :arithmetic 3.cond
+	mov rdx, rax
+	mov cl, [rbx]
+	mov al, [rbp]
+	test dl, dl
+	jz :4
+	mov rax, 0x03
+3:	jmp :5
+4:	cmp cl, al
+	setnbe dil
+	movzx rdi, dil
+	call :arithmetic 3.cond
+	mov rcx, rax
+	mov al, [rbp]
+	test cl, cl
+	jz :6
+	mov rax, 0x04
+5:	jmp :7
+6:	cmp al, al
+	setnbe dil
+	movzx rdi, dil
+	call :arithmetic 3.cond
+	mov rdx, rax
+	mov cl, [rbx]
+	mov al, [rbp]
+	test dl, dl
+	jz :8
+	mov rax, 0x05
+7:	jmp :9
+8:	cmp cl, al
+	setnb dil
+	movzx rdi, dil
+	call :arithmetic 3.cond
+	test al, al
+	jz :10
+	mov rax, 0x06
+9:	jmp :11
+a:	call :arithmetic 3.mne
+	lea rbp, [rsp+0x02]
+	mov [rbp], al
+	call :arithmetic 3.mero
+	lea rbx, [rsp+0x03]
+	mov [rbx], al
+	mov cl, [rbp]
+	mov al, [rbx]
+	cmp cl, al
+	setnle dil
+	movzx rdi, dil
+	call :arithmetic 3.cond
+	mov rcx, rax
+	mov al, [rbp]
+	test cl, cl
+	jz :12
+	mov rax, 0x07
+b:	jmp :13
+c:	cmp al, al
+	setnle dil
+	movzx rdi, dil
+	call :arithmetic 3.cond
+	mov rdx, rax
+	mov cl, [rbp]
+	mov al, [rbx]
+	test dl, dl
+	jz :14
+	mov rax, 0x08
+d:	jmp :15
+e:	cmp cl, al
+	setnl dil
+	movzx rdi, dil
+	call :arithmetic 3.cond
+	mov rdx, rax
+	mov cl, [rbx]
+	mov al, [rbp]
+	test dl, dl
+	jz :16
+	mov rax, 0x09
+f:	jmp :17
+10:	cmp cl, al
+	setl dil
+	movzx rdi, dil
+	call :arithmetic 3.cond
+	mov rcx, rax
+	mov al, [rbp]
+	test cl, cl
+	jz :18
+	mov rax, 0x0A
+11:	jmp :19
+12:	cmp al, al
+	setl dil
+	movzx rdi, dil
+	call :arithmetic 3.cond
+	mov rdx, rax
+	mov cl, [rbx]
+	mov al, [rbp]
+	test dl, dl
+	jz :20
+	mov rax, 0x0B
+13:	jmp :21
+14:	cmp cl, al
+	setle dil
+	movzx rdi, dil
+	call :arithmetic 3.cond
+	test al, al
+	jz :22
+	mov rax, 0x0C
+15:	jmp :23
+16:	call :arithmetic 3.one
+	lea rbx, [rsp+0x04]
+	mov [rbx], al
+	call :arithmetic 3.zero
+	mov rcx, rax
+	lea rax, [rsp+0x05]
+	mov [rax], cl
+	mov cl, [rbx]
+	mov al, [rax]
+	cmp cl, al
+	jnb :24
+	mov rax, 0x0D
+17:	jmp :25
+18:	cmp cl, cl
+	jnb :26
+	mov rax, 0x0E
+19:	jmp :27
+1a:	cmp cl, al
+	jnbe :28
+	mov rax, 0x0F
+1b:	jmp :29
+1c:	cmp al, cl
+	jbe :30
+	mov rax, 0x10
+1d:	jmp :31
+1e:	cmp cl, cl
+	jbe :32
+	mov rax, 0x11
+1f:	jmp :33
+20:	cmp al, cl
+	jb :34
+	mov rax, 0x12
+21:	jmp :35
+22:	call :arithmetic 3.mne
+	lea rbx, [rsp+0x06]
+	mov [rbx], al
+	call :arithmetic 3.mero
+	mov rcx, rax
+	lea rax, [rsp+0x07]
+	mov [rax], cl
+	mov cl, [rbx]
+	mov al, [rax]
+	cmp cl, al
+	jle :36
+	mov rax, 0x13
+23:	jmp :37
+24:	cmp cl, cl
+	jle :38
+	mov rax, 0x14
+25:	jmp :39
+26:	cmp cl, al
+	jl :40
+	mov rax, 0x15
+27:	jmp :41
+28:	cmp al, cl
+	jnl :42
+	mov rax, 0x16
+29:	jmp :43
+2a:	cmp cl, cl
+	jnl :44
+	mov rax, 0x17
+2b:	jmp :45
+2c:	cmp al, cl
+	jnle :46
+	mov rax, 0x18
+2d:	jmp :47
+2e:	cmp cl, cl
+	jz :48
+	mov rax, 0x19
+2f:	jmp :49
+30:	cmp cl, al
+	jnz :50
+	mov rax, 0x1A
+31:	jmp :51
+32:	mov rax, 0x00
+33:	add rsp, 0x08
+	pop rbp
+	pop rbx
+	ret

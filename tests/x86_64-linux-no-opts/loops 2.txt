@@ -1,0 +1,45 @@
+loops 2.square:
+	push rbx
+	push rbp
+	sub rsp, 0x20
+	lea r8, [rsp]
+	mov [r8], rdi
+	lea rdi, [rsp+0x08]
+	mov rsi, 0x00
+	mov [rdi], rsi
+	lea rbp, [rsp+0x10]
+	mov [rbp], rsi
+	lea rbx, [rsp+0x18]
+2:	mov rcx, [rbp]
+	mov rax, [r8]
+	cmp rcx, rax
+	jnz :0
+	mov rax, [rdi]
+	add rsp, 0x20
+	pop rbp
+	pop rbx
+	ret
+0:	mov [rbx], rsi
+3:	mov rdx, [rbx]
+	mov rcx, [r8]
+	mov rax, [rbp]
+	cmp rdx, rcx
+	jnz :1
+	add rax, 0x01
+	mov [rbp], rax
+	jmp :2
+1:	mov rcx, rdx
+	imul rcx, rax
+	mov rax, [rdi]
+	add rax, rcx
+	mov [rdi], rax
+	mov rax, [rbx]
+	add rax, 0x01
+	mov [rbx], rax
+	jmp :3
+main:
+	sub rsp, 0x08
+	mov rdi, 0x03
+	call :loops 2.square
+	add rsp, 0x08
+	ret

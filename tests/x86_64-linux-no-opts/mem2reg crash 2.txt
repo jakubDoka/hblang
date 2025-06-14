@@ -1,0 +1,64 @@
+mem2reg crash 2.insert:
+	push rbx
+	push rbp
+	sub rsp, 0x30
+	mov rcx, rdi
+	mov rbx, rsi
+	mov rax, 0x01
+	lea r9, [rsp+0x20]
+	lea r8, [rsp+0x18]
+	test al, al
+	jz :1
+	jmp :1
+1:	lea rdi, [rsp]
+	mov [rdi], rcx
+	lea rsi, [rsp+0x08]
+	mov [rsi], rbx
+	lea rax, [rsp+0x10]
+	mov [rax], rdx
+	mov rbp, 0x00
+	mov [r8], rbp
+	lea rbx, [rsp+0x28]
+2:	mov [r9], rbp
+4:	mov rax, [r9]
+	cmp rax, 0x08
+	setnb cl
+	movzx rcx, cl
+	mov rax, [r8]
+	test cl, cl
+	jz :1
+	add rax, 0x01
+	mov [r8], rax
+	jmp :2
+1:	mov rax, [rdi]
+	mov rax, [rax]
+	mov [rbx], rax
+	mov rdx, [rbx]
+	mov rcx, [rsi]
+	mov rax, [rdx]
+	cmp rax, rcx
+	jnz :3
+	mov rax, rdx
+	add rax, 0x08
+	add rsp, 0x30
+	pop rbp
+	pop rbx
+	ret
+3:	mov rax, [r9]
+	add rax, 0x01
+	mov [r9], rax
+	jmp :4
+main:
+	sub rsp, 0x28
+	lea rax, [rsp+0x10]
+	mov rsi, 0x01
+	mov [rax], rsi
+	mov rdx, 0x00
+	mov [rax+0x08], rdx
+	lea rdi, [rsp]
+	mov [rdi], rax
+	mov [rdi+0x08], rsi
+	call :mem2reg crash 2.insert
+	mov rax, [rax]
+	add rsp, 0x28
+	ret

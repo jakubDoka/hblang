@@ -1,0 +1,49 @@
+main:
+	push rbx
+	push rbp
+	sub rsp, 0x30
+	lea r9, [rsp]
+	mov r8, 0x00
+	mov [r9], r8
+	lea rdi, [rsp+0x08]
+	mov [rdi], r8
+	lea rsi, [rsp+0x18]
+	mov rbp, 0x01
+	lea rbx, [rsp+0x20]
+	lea rdx, [rsp+0x10]
+2:	mov rax, [r9]
+	cmp rax, 0x0A
+	setz al
+	movzx rax, al
+	test al, al
+	jz :0
+	mov rax, [rdi]
+	add rsp, 0x30
+	pop rbp
+	pop rbx
+	ret
+0:	mov [rdx], r8
+	mov [rsi], rbp
+	mov [rbx], r8
+3:	mov rax, [rbx]
+	cmp rax, 0x09
+	setz al
+	movzx rax, al
+	test al, al
+	jz :1
+	mov rax, [r9]
+	add rax, 0x01
+	mov [r9], rax
+	jmp :2
+1:	mov rcx, [rsi]
+	mov rax, [rdx]
+	add rax, rcx
+	mov [rdi], rax
+	mov rax, [rsi]
+	mov [rdx], rax
+	mov rax, [rdi]
+	mov [rsi], rax
+	mov rax, [rbx]
+	add rax, 0x01
+	mov [rbx], rax
+	jmp :3

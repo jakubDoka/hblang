@@ -1,0 +1,15 @@
+die 2.fallible:
+	mov rax, 0x00
+	ret
+main:
+	sub rsp, 0x08
+	call :die 2.fallible
+	mov rcx, rax
+	lea rax, [rsp]
+	mov [rax], rcx
+	mov rcx, 0x00
+	mov rax, [rax]
+	cmp rax, rcx
+	jnz :0
+	ud2
+0:	ud2

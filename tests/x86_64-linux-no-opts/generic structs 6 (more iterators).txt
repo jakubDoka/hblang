@@ -1,0 +1,16 @@
+foo.hb.foo(oo = u8):
+	sub rsp, 0x10
+	lea rax, [rsp]
+	mov [rax], rdi
+	add rsp, 0x10
+	ret
+main:
+	push rbx
+	sub rsp, 0x08
+	mov rbx, 0x00
+	mov rdi, rbx
+	call :foo.hb.foo(oo = u8)
+	mov rax, rbx
+	add rsp, 0x08
+	pop rbx
+	ret

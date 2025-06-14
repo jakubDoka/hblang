@@ -1,0 +1,39 @@
+wired string comparison 1.broken:
+	mov rax, [rsi+0x08]
+	mov [rdi], rax
+	mov rax, [rsi+0x10]
+	mov [rdi+0x08], rax
+	mov rax, [rsi+0x08]
+	mov [rdi+0x10], rax
+	mov rax, [rsi+0x10]
+	mov [rdi+0x18], rax
+	ret
+main:
+	push rbx
+	push rbp
+	sub rsp, 0x48
+	lea rbp, [rsp+0x38]
+	lea rax, [0x0000000000000007]
+	mov [rbp], rax
+	mov rax, 0x04
+	mov [rbp+0x08], rax
+	lea rsi, [rsp+0x20]
+	mov rax, 0x00
+	mov [rsi], al
+	lea rbx, [rsp]
+	mov rax, [rbp]
+	mov [rsi+0x08], rax
+	mov rax, [rbp+0x08]
+	mov [rsi+0x10], rax
+	mov rdi, rbx
+	call :wired string comparison 1.broken
+	mov rax, [rbx+0x10]
+	mov rcx, [rbp]
+	cmp rax, rcx
+	setnz al
+	movzx rax, al
+	movzx rax, al
+	add rsp, 0x48
+	pop rbp
+	pop rbx
+	ret

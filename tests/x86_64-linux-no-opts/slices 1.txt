@@ -1,0 +1,94 @@
+main:
+	push rbx
+	push rbp
+	sub rsp, 0xB0
+	lea rcx, [rsp+0xA8]
+	mov rax, 0x01
+	mov [rcx], al
+	mov rax, 0x02
+	mov [rcx+0x01], al
+	mov rax, 0x03
+	mov [rcx+0x02], al
+	mov rax, 0x04
+	mov [rcx+0x03], al
+	lea rbx, [rsp+0x80]
+	mov [rbx], rcx
+	mov rax, 0x04
+	mov [rbx+0x08], rax
+	lea r10, [rsp]
+	mov [r10], rcx
+	mov [r10+0x08], rax
+	mov [r10+0x10], rcx
+	mov rdx, 0x02
+	mov [r10+0x18], rdx
+	mov rax, rcx
+	add rax, 0x02
+	mov [r10+0x20], rax
+	mov [r10+0x28], rdx
+	mov rax, rcx
+	add rax, 0x01
+	mov [r10+0x30], rax
+	mov [r10+0x38], rdx
+	mov rcx, [rbx+0x08]
+	mov rax, [rbx]
+	mov [r10+0x40], rax
+	mov rax, rcx
+	sub rax, 0x00
+	mov [r10+0x48], rax
+	mov rax, [rbx]
+	mov [r10+0x50], rax
+	mov [r10+0x58], rdx
+	mov rax, [rbx]
+	mov rcx, [rbx+0x08]
+	add rax, 0x02
+	mov [r10+0x60], rax
+	mov rax, rcx
+	sub rax, 0x02
+	mov [r10+0x68], rax
+	mov rax, [rbx]
+	add rax, 0x01
+	mov [r10+0x70], rax
+	mov [r10+0x78], rdx
+	mov r9, 0x00
+	lea r8, [rsp+0x90]
+	mov [r8], r9
+	lea rdi, [rsp+0x98]
+	mov [rdi], r9
+	lea rsi, [rsp+0xA0]
+	mov rbp, 0x10
+2:	mov rax, [rdi]
+	cmp rax, 0x08
+	setz al
+	movzx rax, al
+	test al, al
+	jz :0
+	mov rax, [r8]
+	add rsp, 0xB0
+	pop rbp
+	pop rbx
+	ret
+0:	mov [rsi], r9
+3:	mov rbx, [rdi]
+	mov rax, rbx
+	imul rax, rbp
+	mov rdx, r10
+	add rdx, rax
+	mov rcx, [rsi]
+	mov rax, [rdx+0x08]
+	cmp rcx, rax
+	jnz :1
+	mov rax, rbx
+	add rax, 0x01
+	mov [rdi], rax
+	jmp :2
+1:	mov rax, [rdx]
+	add rax, rcx
+	mov cl, [rax]
+	mov rax, [r8]
+	movzx rcx, cl
+	add rax, rcx
+	mov [r8], rax
+	mov rax, [rsi]
+	add rax, 0x01
+	mov [rsi], rax
+	jmp :3

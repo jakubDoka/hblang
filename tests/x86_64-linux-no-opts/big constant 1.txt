@@ -1,0 +1,19 @@
+big constant 1.uninit:
+	sub rsp, 0x10
+	lea rax, [rsp]
+	mov [rax], rdi
+	mov rdx, 0x00
+	mov rcx, 0xAAAAAAAAAAAAAAAA
+	mov rax, [rax]
+	mov [rax], rcx
+	mov rax, rdx
+	add rsp, 0x10
+	ret
+main:
+	sub rsp, 0x08
+	lea rdi, [rsp]
+	mov rax, 0x00
+	mov [rdi], rax
+	call :big constant 1.uninit
+	add rsp, 0x08
+	ret

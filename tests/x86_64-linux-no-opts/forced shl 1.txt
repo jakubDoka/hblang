@@ -1,0 +1,19 @@
+forced shl 1.two:
+	mov rax, 0x02
+	ret
+forced shl 1.one:
+	mov rax, 0x01
+	ret
+main:
+	push rbx
+	sub rsp, 0x08
+	call :forced shl 1.two
+	mov rbx, rax
+	call :forced shl 1.one
+	mov rdx, rax
+	mov rax, rbx
+	mov rcx, rdx
+	shl rax, cl
+	add rsp, 0x08
+	pop rbx
+	ret

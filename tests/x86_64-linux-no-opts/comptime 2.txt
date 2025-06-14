@@ -1,0 +1,51 @@
+comptime 2.main.some_fn3(some_int = uint)(fnc = comptime 2.main.some_fn(some_int = uint)):
+	sub rsp, 0x08
+	call :comptime 2.main.some_fn(some_int = uint)
+	add rax, 0x0A
+	add rsp, 0x08
+	ret
+comptime 2.main.some_fn3(some_int = uint)(fnc = comptime 2.main.some_fn3(some_int = uint)(fnc = comptime 2.main.some_fn2(some_int = uint, some_fn = comptime 2.main.some_fn(some_int = uint)))):
+	sub rsp, 0x08
+	call :comptime 2.main.some_fn3(some_int = uint)(fnc = comptime 2.main.some_fn2(some_int = uint, some_fn = comptime 2.main.some_fn(some_int = uint)))
+	add rax, 0x0A
+	add rsp, 0x08
+	ret
+comptime 2.main.some_fn3(some_int = uint)(fnc = comptime 2.main.some_fn2(some_int = uint, some_fn = comptime 2.main.some_fn(some_int = uint))):
+	sub rsp, 0x08
+	call :comptime 2.main.some_fn2(some_int = uint, some_fn = comptime 2.main.some_fn(some_int = uint))
+	add rax, 0x0A
+	add rsp, 0x08
+	ret
+comptime 2.main.some_fn2(some_int = uint, some_fn = comptime 2.main.some_fn(some_int = uint)):
+	sub rsp, 0x08
+	call :comptime 2.main.some_fn(some_int = uint)
+	add rax, 0x01
+	add rsp, 0x08
+	ret
+comptime 2.main.some_fn(some_int = uint):
+	mov rax, 0x01
+	ret
+main:
+	push rbx
+	sub rsp, 0x18
+	lea rcx, [rsp]
+	mov rax, 0x07
+	mov [rcx], eax
+	mov rcx, 0x90000002
+	lea rax, [rsp+0x04]
+	mov [rax], ecx
+	lea rcx, [rsp+0x08]
+	mov rax, 0x90000003
+	mov [rcx], eax
+	mov rcx, 0x80000000
+	lea rax, [rsp+0x0C]
+	mov [rax], ecx
+	call :comptime 2.main.some_fn3(some_int = uint)(fnc = comptime 2.main.some_fn(some_int = uint))
+	mov rbx, rax
+	call :comptime 2.main.some_fn3(some_int = uint)(fnc = comptime 2.main.some_fn3(some_int = uint)(fnc = comptime 2.main.some_fn2(some_int = uint, some_fn = comptime 2.main.some_fn(some_int = uint))))
+	mov rcx, rax
+	mov rax, rbx
+	add rax, rcx
+	add rsp, 0x18
+	pop rbx
+	ret

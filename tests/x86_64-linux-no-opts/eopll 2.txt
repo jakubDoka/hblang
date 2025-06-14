@@ -1,0 +1,88 @@
+eopll 2.epoll_wait:
+	push rbx
+	push rbp
+	sub rsp, 0x28
+	mov rax, rdx
+	mov rbp, rcx
+	lea rbx, [rsp]
+	mov [rbx], rdi
+	lea rdx, [rsp+0x08]
+	mov [rdx], rsi
+	lea rcx, [rsp+0x10]
+	mov [rcx], rax
+	lea rax, [rsp+0x18]
+	mov [rax], rbp
+	mov rdi, 0xE8
+	mov rsi, [rbx]
+	mov rdx, [rdx]
+	mov rcx, [rcx]
+	mov r8, [rax]
+	mov rax, rdi
+	mov rdi, rsi
+	mov rsi, rdx
+	mov rdx, rcx
+	mov r10, r8
+	syscall
+	mov rcx, rax
+	lea rax, [rsp+0x20]
+	mov [rax], rcx
+	add rsp, 0x28
+	pop rbp
+	pop rbx
+	ret
+main:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	push r14
+	push r15
+	sub rsp, 0x38
+	mov rdi, 0x123
+	mov qword ptr [rsp+0x08], 0x00
+	mov rax, rdi
+	mov rdi, [rsp+0x08]
+	syscall
+	mov rcx, rax
+	mov rax, 0x00
+	lea r15, [rsp+0x28]
+	mov [rsp], r15
+	mov r15, [rsp]
+	mov [r15], ecx
+	test al, al
+	jz :0
+	mov rax, 0x01
+	jmp :1
+0:	lea r13, [rsp+0x20]
+	mov r15, [rsp+0x08]
+	mov [r13], r15
+	mov r12, 0x10
+	mov rbp, 0xFFFFFFFFFFFFFFFF
+	lea rbx, [rsp+0x10]
+3:	mov rax, [r13]
+	cmp rax, 0x00
+	setz cl
+	movzx rcx, cl
+	mov r15, [rsp]
+	mov eax, [r15]
+	test cl, cl
+	jz :2
+	mov rax, [rsp+0x08]
+1:	add rsp, 0x38
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
+	ret
+2:	mov rdi, rax
+	movsxd rdi, edi
+	mov rsi, rbx
+	mov rdx, r12
+	mov rcx, rbp
+	call :eopll 2.epoll_wait
+	mov rax, [r13]
+	add rax, 0x01
+	mov [r13], rax
+	jmp :3

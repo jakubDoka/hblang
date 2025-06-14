@@ -1,0 +1,7 @@
+main:
+	lea rax, [0x0000000000000007]
+	lea rcx, [0x0000000000000007]
+	mov rax, [rax]
+	mov rcx, [rcx]
+	sub rax, rcx
+	ret

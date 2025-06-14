@@ -1,0 +1,3 @@
+functions 4 (returning stack):20:2: stack location escapes the function
+    v := 0
+    ^

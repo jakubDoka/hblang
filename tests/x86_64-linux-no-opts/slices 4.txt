@@ -1,0 +1,97 @@
+slices 4.equals:
+	push rbx
+	push rbp
+	sub rsp, 0x30
+	lea r9, [rsp]
+	mov [r9], rdi
+	mov [r9+0x08], rsi
+	lea r8, [rsp+0x10]
+	mov [r8], rdx
+	mov [r8+0x08], rcx
+	mov rbx, [r9+0x08]
+	mov rdx, [r8+0x08]
+	mov rdi, 0x00
+	mov rcx, [r9]
+	mov rax, [r8]
+	lea rsi, [rsp+0x20]
+	cmp rbx, rdx
+	jz :0
+	mov rax, rdi
+	jmp :1
+0:	mov rbp, 0x01
+	cmp rcx, rax
+	jnz :2
+	mov rax, rbp
+1:	jmp :5
+2:	mov rax, 0x00
+	mov [rsi], rax
+6:	mov rbx, [r9+0x08]
+	mov rdx, [rsi]
+	mov rcx, [r9]
+	mov rax, [r8]
+	add rcx, rdx
+	add rax, rdx
+	cmp rdx, rbx
+	jnz :4
+	mov rax, rbp
+	jmp :5
+4:	mov cl, [rcx]
+	mov al, [rax]
+	cmp cl, al
+	jz :5
+	mov rax, rdi
+5:	add rsp, 0x30
+	pop rbp
+	pop rbx
+	ret
+5:	mov rax, rdx
+	add rax, 0x01
+	mov [rsi], rax
+	jmp :6
+main:
+	push rbx
+	push rbp
+	push r12
+	sub rsp, 0x28
+	lea r12, [rsp]
+	lea rax, [0x0000000000000007]
+	mov [r12], rax
+	mov rdx, 0x03
+	mov [r12+0x08], rdx
+	lea rbp, [rsp+0x10]
+	lea rcx, [rsp+0x20]
+	mov rax, 0x61
+	mov [rcx], al
+	mov rax, 0x62
+	mov [rcx+0x01], al
+	mov rax, 0x63
+	mov [rcx+0x02], al
+	mov [rbp], rcx
+	mov [rbp+0x08], rdx
+	mov rsi, [r12+0x08]
+	mov rdi, [r12]
+	mov rdx, rdi
+	mov rcx, rsi
+	call :slices 4.equals
+	xor al, 0x01
+	mov rdi, [rbp]
+	mov rdx, [r12]
+	mov rbx, 0x01
+	test al, al
+	jz :0
+	mov rax, rbx
+	jmp :1
+0:	mov rsi, [rbp+0x08]
+	mov rcx, [r12+0x08]
+	call :slices 4.equals
+	xor al, 0x01
+	test al, al
+	jz :2
+	mov rax, rbx
+1:	jmp :3
+2:	mov rax, 0x00
+3:	add rsp, 0x28
+	pop r12
+	pop rbp
+	pop rbx
+	ret

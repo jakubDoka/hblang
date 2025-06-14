@@ -1,0 +1,8 @@
+functions 5 (inline).foo:
+	mov rax, 0x00
+	ret
+main:
+	sub rsp, 0x08
+	call :functions 5 (inline).foo
+	add rsp, 0x08
+	ret

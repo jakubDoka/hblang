@@ -1,0 +1,10 @@
+main:
+	sub rsp, 0x10
+	lea rcx, [rsp]
+	lea rax, [0x0000000000000007]
+	mov [rcx], rax
+	mov rax, [rcx]
+	mov al, [rax]
+	movzx rax, al
+	add rsp, 0x10
+	ret

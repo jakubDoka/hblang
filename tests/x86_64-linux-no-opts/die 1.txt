@@ -1,0 +1,7 @@
+main:
+	mov rax, 0x00
+	test al, al
+	jz :0
+	mov rax, 0x01
+	ret
+0:	ud2
