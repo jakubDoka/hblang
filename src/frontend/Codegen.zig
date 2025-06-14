@@ -895,7 +895,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     return self.report(e.lhs, "can't assign to this", .{});
                 }
 
-                var val = try self.emitTyped(ctx, loc.ty, e.rhs);
+                var val = try self.emitTyped(ctx.addLoc(loc.id.Pointer), loc.ty, e.rhs);
                 self.emitGenericStore(loc.id.Pointer, &val);
                 return .{};
             },
@@ -964,7 +964,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     },
                 };
 
-                var rhs = try self.emit(ctx.addTy(lhs.ty), e.rhs);
+                var rhs = try self.emit(.{ .ty = lhs.ty }, e.rhs);
 
                 switch (lhs.ty.data()) {
                     .Struct => |struct_ty| {
