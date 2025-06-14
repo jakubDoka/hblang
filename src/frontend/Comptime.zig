@@ -21,6 +21,15 @@ vm: Vm = .{},
 gen: HbvmGen,
 in_progress: std.ArrayListUnmanaged(Loc) = .{},
 
+pub const opts = root.backend.Machine.OptOptions{
+    .do_dead_code_elimination = true,
+    .do_inlining = false,
+    .do_generic_peeps = true,
+    .do_machine_peeps = true,
+    .mem2reg = true,
+    .do_gcm = true,
+};
+
 pub const stack_size = 1024 * 100;
 
 pub const Loc = packed struct(u64) {
@@ -459,10 +468,7 @@ pub fn jitExprLow(
                     .entry = true,
                     .linkage = .local,
                     .is_inline = false,
-                    .optimizations = .{
-                        .verbose = false,
-                        .do_inlining = false,
-                    },
+                    .optimizations = opts,
                 },
             );
         }
@@ -495,9 +501,7 @@ pub fn compileDependencies(self: *Codegen, reloc_after: usize, pop_until: usize)
                 .id = @intFromEnum(func),
                 .linkage = .local,
                 .is_inline = false,
-                .optimizations = .{
-                    .do_inlining = false,
-                },
+                .optimizations = opts,
             },
         );
     }

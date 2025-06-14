@@ -607,6 +607,7 @@ pub const Data = struct {
     }
 
     pub fn readFromSym(self: Data, id: u32, offset: i64, size: u64) ?i64 {
+        if (self.globals.items.len <= id) return null;
         const sym = &self.syms.items[@intFromEnum(self.globals.items[id])];
 
         if (!sym.readonly) return null;
@@ -807,23 +808,32 @@ pub const DataOptions = struct {
 };
 
 pub const OptOptions = struct {
+    do_dead_code_elimination: bool,
+    do_inlining: bool,
+    do_generic_peeps: bool,
+    do_machine_peeps: bool,
+    mem2reg: bool,
+    do_gcm: bool,
     verbose: bool = false,
-    do_dead_code_elimination: bool = true,
-    do_inlining: bool = true,
-    do_generic_peeps: bool = true,
-    do_machine_peeps: bool = true,
-    mem2reg: bool = true,
-    do_gcm: bool = true,
     arena: ?*root.Arena = null,
     error_buf: ?*std.ArrayListUnmanaged(static_anal.Error) = null,
+
+    pub const all = @This(){
+        .do_dead_code_elimination = true,
+        .do_inlining = true,
+        .do_generic_peeps = true,
+        .do_machine_peeps = true,
+        .mem2reg = true,
+        .do_gcm = true,
+    };
 
     pub const none = @This(){
         .do_dead_code_elimination = false,
         .do_inlining = false,
         .mem2reg = false,
         .do_generic_peeps = false,
-        .do_machine_peeps = false,
-        .do_gcm = false,
+        .do_machine_peeps = true,
+        .do_gcm = true,
     };
 
     pub fn asPostInlining(self: @This()) @This() {
@@ -837,7 +847,6 @@ pub const OptOptions = struct {
     }
 
     pub fn asPreInline(self: @This()) @This() {
-        std.debug.assert(self.do_inlining);
         var s = self;
         s.verbose = false;
         s.do_machine_peeps = false;
@@ -890,6 +899,8 @@ pub const OptOptions = struct {
                     return @TypeOf(func.*).idealize(cx, fnc, nd, wl);
                 }
             }.wrap);
+        } else if (@hasDecl(MachNode, "idealize")) {
+            func.iterPeeps(ctx, MachNode.idealize);
         }
 
         if (self.do_machine_peeps and @hasDecl(MachNode, "idealizeMach")) {
@@ -960,6 +971,17 @@ pub const OptOptions = struct {
             //
             std.mem.swap(Data, &out, bout);
 
+            for (out.globals.items, 0..) |sym_id, i| {
+                if (sym_id == .invalid) continue;
+                const sym = &out.syms.items[@intFromEnum(sym_id)];
+                backend.emitData(.{
+                    .name = out.lookupName(sym.name),
+                    .id = @intCast(i),
+                    .value = .{ .init = out.code.items[sym.offset..][0..sym.size] },
+                    .readonly = sym.readonly,
+                });
+            }
+
             for (out.funcs.items, 0..) |sym_id, i| {
                 if (sym_id == .invalid) continue;
                 const sym = &out.syms.items[@intFromEnum(sym_id)];
@@ -984,19 +1006,6 @@ pub const OptOptions = struct {
                 arena = func.arena;
             }
 
-            // blit the globals as well
-            //
-            for (out.globals.items, 0..) |sym_id, i| {
-                if (sym_id == .invalid) continue;
-                const sym = &out.syms.items[@intFromEnum(sym_id)];
-                backend.emitData(.{
-                    .name = out.lookupName(sym.name),
-                    .id = @intCast(i),
-                    .value = .{ .init = out.code.items[sym.offset..][0..sym.size] },
-                    .readonly = sym.readonly,
-                });
-            }
-
             out.inline_func_nodes = arena.state;
         }
     }
@@ -1008,7 +1017,7 @@ pub const EmitOptions = struct {
     entry: bool = false,
     is_inline: bool,
     linkage: Data.Linkage,
-    optimizations: OptOptions = .{},
+    optimizations: OptOptions = .all,
 };
 
 const Vidsibility = enum { local, exported, imported };
@@ -1022,12 +1031,12 @@ pub const DisasmOpts = struct {
 
 pub const FinalizeOptions = struct {
     output: std.io.AnyWriter,
-    optimizations: OptOptions = .{},
+    optimizations: OptOptions = .all,
 };
 
 pub const FinalizeBytesOptions = struct {
     gpa: std.mem.Allocator,
-    optimizations: OptOptions = .{},
+    optimizations: OptOptions = .all,
 };
 
 pub fn init(name: []const u8, data: anytype) Machine {

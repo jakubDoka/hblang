@@ -1527,6 +1527,21 @@ pub fn Func(comptime MachNode: type) type {
                 }
             }
 
+            if (node.kind == .BinOp) {
+                const lhs = node.inputs()[1].?;
+                const rhs = node.inputs()[2].?;
+                if (lhs.kind == .CInt and rhs.kind == .CInt) {
+                    return self.addIntImm(
+                        lhs.data_type.meet(rhs.data_type),
+                        node.extra(.BinOp).eval(
+                            lhs.data_type,
+                            lhs.extra(.CInt).*,
+                            rhs.extra(.CInt).*,
+                        ),
+                    );
+                }
+            }
+
             if (node.kind == .Phi) {
                 _, const l, const r = .{ inps[0].?, inps[1].?, inps[2].? };
 

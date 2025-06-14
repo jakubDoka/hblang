@@ -851,14 +851,6 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
         const op: graph.BinOp = node.extra(.BinOp).*;
 
         if (inps[2].?.kind == .CInt) b: {
-            if (inps[1].?.kind == .CInt) {
-                return func.addIntImm(node.data_type, op.eval(
-                    node.data_type,
-                    inps[1].?.extra(.CInt).*,
-                    inps[2].?.extra(.CInt).*,
-                ));
-            }
-
             var imm = inps[2].?.extra(.CInt).*;
 
             const instr: isa.Op = switch (op) {

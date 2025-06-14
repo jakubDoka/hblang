@@ -76,6 +76,7 @@ pub fn runVendoredTest(path: []const u8, target: []const u8) !void {
         .vendored_test = true,
         .root_file = path,
         .target = target,
+        .optimizations = .all,
     });
     defer ast.arena.deinit();
 }
@@ -176,11 +177,14 @@ pub fn testBuilder(
     types.target = target;
     defer types.deinit();
 
-    const errored = Codegen.emitReachable(func_arena.arena, types, abi, gen, .{
-        .verbose = verbose,
-        .colors = colors,
-        .output = output,
-    });
+    const errored = Codegen.emitReachable(
+        func_arena.arena,
+        types,
+        abi,
+        gen,
+        .all,
+        .{ .verbose = verbose, .colors = colors, .output = output },
+    );
 
     const expectations: Expectations = .init(&ast, func_arena.arena.allocator());
 
@@ -190,10 +194,9 @@ pub fn testBuilder(
     }
 
     var anal_errors = std.ArrayListUnmanaged(root.backend.static_anal.Error){};
-    const optimizations: Mach.OptOptions = .{
-        .arena = func_arena.arena,
-        .error_buf = &anal_errors,
-    };
+    var optimizations: Mach.OptOptions = .all;
+    optimizations.arena = func_arena.arena;
+    optimizations.error_buf = &anal_errors;
 
     if (verbose) try header("CODEGEN", output, colors);
     var out = gen.finalizeBytes(.{

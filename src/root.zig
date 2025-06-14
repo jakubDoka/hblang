@@ -62,12 +62,13 @@ pub const CompileOptions = struct {
     vendored_test: bool = false, // run the file in a vendored test setting
     type_system_memory: usize = 1024 * 1024 * 256, // how much memory can type system use
     scratch_memory: usize = 1024 * 1024 * 128, // how much memory can each scratch arena use (there are 2)
-    // #OPTIONS (--target ableos)
-    target: []const u8 = "hbvm-ableos", // target triple to compile to (not used yet since we have only one target)
+    target: []const u8 = "hbvm-ableos", // target triple to compile to (not
+    // used yet since we have only one target)
     extra_threads: usize = 0, // extra threads used for the compilation (not used yet)
-    path_projection: std.StringHashMapUnmanaged([]const u8) = .{}, // can be specified multiple times
-    // as `--path-projection name path`, when the `@use("name")` is encountered, its projected to `@use("path")`
-    // #CLI end
+    path_projection: std.StringHashMapUnmanaged([]const u8) = .{}, // can be
+    // specified multiple times as `--path-projection name path`, when the
+    // `@use("name")` is encountered, its projected to `@use("path")` #CLI end
+    optimizations: backend.Machine.OptOptions = .none,
 
     pub fn loadCli(self: *CompileOptions, arena: std.mem.Allocator) !void {
         var args = try std.process.ArgIterator.initWithAllocator(arena);
@@ -118,6 +119,49 @@ pub const CompileOptions = struct {
                         const value = args.next() orelse return error.@"key> <value";
                         try val.put(arena, key, value);
                     },
+                    backend.Machine.OptOptions => {
+                        const Preset = enum { none, all, custom };
+                        const preset = std.meta.stringToEnum(
+                            Preset,
+                            args.next() orelse return error.mode,
+                        ) orelse return error.@"none/all/custom";
+                        val.* = switch (preset) {
+                            .custom => b: {
+                                const options = args.next() orelse return error.@"mode=custom> <key[=value],...>";
+                                var iter = std.mem.splitScalar(u8, options, ',');
+                                var opts = backend.Machine.OptOptions.none;
+                                out: while (iter.next()) |opt| {
+                                    var key = opt;
+                                    var value: ?[]const u8 = null;
+                                    if (std.mem.indexOfScalar(u8, opt, '=')) |idx| {
+                                        key = key[0..idx];
+                                        value = key[idx + 1 ..];
+                                    }
+
+                                    inline for (std.meta.fields(backend.Machine.OptOptions)) |field| {
+                                        switch (field.type) {
+                                            bool => {
+                                                if (std.mem.eql(u8, key, field.name)) {
+                                                    @field(opts, field.name) = true;
+                                                    continue :out;
+                                                }
+                                            },
+                                            else => {},
+                                        }
+                                    }
+
+                                    try self.diagnostics.print("invalid optimization option: {s}\n", .{opt});
+                                    try self.diagnostics.print("valid options:\n", .{});
+                                    inline for (std.meta.fields(backend.Machine.OptOptions)) |field| {
+                                        if (field.type != bool) continue;
+                                        try self.diagnostics.print("\t{s}={s}\n", .{ field.name, @typeName(field.type) });
+                                    }
+                                }
+                                break :b opts;
+                            },
+                            inline else => |t| @field(backend.Machine.OptOptions, @tagName(t)),
+                        };
+                    },
                     else => @compileError(@typeName(f.type)),
                 }
 
@@ -136,7 +180,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
 } {
     if (opts.help) {
         const help_str = comptime b: {
-            @setEvalBranchQuota(2000);
+            @setEvalBranchQuota(4000);
             const source = @embedFile("root.zig");
             const start_pat = "// #CLI start";
             const end_pat = "// #CLI end";
@@ -230,7 +274,14 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     var root_tmp = utils.Arena.scrath(null);
     defer root_tmp.deinit();
 
-    const errored = hb.frontend.Codegen.emitReachable(root_tmp.arena, types, abi, bckend, .{});
+    const errored = hb.frontend.Codegen.emitReachable(
+        root_tmp.arena,
+        types,
+        abi,
+        bckend,
+        opts.optimizations,
+        .{},
+    );
     if (errored) {
         try opts.diagnostics.print("failed due to previous errors\n", .{});
         return error.Failed;
@@ -239,10 +290,9 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     const name = try std.mem.replaceOwned(u8, types.pool.arena.allocator(), opts.root_file, "/", "_");
 
     var anal_errors = std.ArrayListUnmanaged(backend.static_anal.Error){};
-    const optimizations: backend.Machine.OptOptions = .{
-        .arena = root_tmp.arena,
-        .error_buf = &anal_errors,
-    };
+    var optimizations: backend.Machine.OptOptions = opts.optimizations;
+    optimizations.error_buf = &anal_errors;
+    optimizations.arena = root_tmp.arena;
 
     if (opts.dump_asm) {
         const out = bckend.finalizeBytes(.{

@@ -330,19 +330,6 @@ pub const Node = union(enum) {
             return res;
         }
 
-        if (node.kind == .BinOp and node.inputs()[1].?.kind == .CInt and node.inputs()[2].?.kind == .CInt) {
-            return func.addNode(
-                .CInt,
-                node.data_type,
-                &.{null},
-                node.extra(.BinOp).*.eval(
-                    node.data_type,
-                    node.inputs()[1].?.extra(.CInt).*,
-                    node.inputs()[2].?.extra(.CInt).*,
-                ),
-            );
-        }
-
         if (node.kind == .BinOp and node.inputs()[2].?.kind == .CInt and
             switch (node.extra(.BinOp).*) {
                 .udiv, .sdiv, .umod, .smod, .imul => false,

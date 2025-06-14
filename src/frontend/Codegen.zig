@@ -203,6 +203,7 @@ pub fn emitReachable(
     types: *Types,
     abi: Types.Abi,
     backend: root.backend.Machine,
+    optimizations: root.backend.Machine.OptOptions,
     log_opts: struct {
         colors: std.io.tty.Config = .no_color,
         output: std.io.AnyWriter = std.io.null_writer.any(),
@@ -251,6 +252,12 @@ pub fn emitReachable(
         defer tmp.deinit();
 
         const func_data: *root.frontend.types.Func = types.store.get(func);
+
+        var opts = optimizations;
+        opts.error_buf = &errors;
+        opts.arena = tmp.arena;
+        opts.verbose = log_opts.verbose;
+
         backend.emitFunc(&codegen.bl.func, .{
             .id = @intFromEnum(func),
             .name = if (func_data.visibility != .local)
@@ -261,11 +268,7 @@ pub fn emitReachable(
             .is_inline = func_data.is_inline,
             .entry = func == entry,
             .linkage = func_data.visibility,
-            .optimizations = .{
-                .arena = tmp.arena,
-                .error_buf = &errors,
-                .verbose = log_opts.verbose,
-            },
+            .optimizations = opts,
         });
 
         errored = types.dumpAnalErrors(&errors) or errored;

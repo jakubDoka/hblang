@@ -1,24 +1,24 @@
 main:
 	push rbx
+	push rbp
 	sub rsp, 0x20
-	lea rbx, [rsp]
+	lea rsi, [rsp]
 	mov rax, 0x01
-	mov [rbx], rax
+	mov [rsi], rax
+	mov rbp, 0x03
+	mov rbx, 0x04
+	mov rdx, 0x00
+	mov rcx, [rsi]
 	mov rax, 0x02
-	mov [rbx+0x08], rax
-	mov rax, 0x03
-	mov [rbx+0x10], rax
-	mov rax, 0x04
-	mov [rbx+0x18], rax
-	mov rax, 0x00
-	mov rdx, [rbx]
-	mov rcx, [rbx+0x08]
-	add rax, rdx
-	mov rdx, [rbx+0x10]
+	mov [rsi+0x08], rax
+	mov [rsi+0x10], rbp
+	mov [rsi+0x18], rbx
+	mov rax, rdx
 	add rax, rcx
-	mov rcx, [rbx+0x18]
-	add rax, rdx
-	add rax, rcx
+	add rax, 0x02
+	add rax, 0x03
+	add rax, 0x04
 	add rsp, 0x20
+	pop rbp
 	pop rbx
 	ret

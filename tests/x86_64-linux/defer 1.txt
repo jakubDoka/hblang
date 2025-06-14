@@ -8,16 +8,16 @@ main:
 	push rbp
 	push r12
 	sub rsp, 0x08
-	mov rcx, 0x00
+	mov r12, 0x00
 	mov rax, 0x01
-	test cl, cl
+	test r12b, r12b
 	jz :0
 	jmp :1
-0:	cmp rax, rax
+0:	test r12b, r12b
 	jz :2
 	mov rax, 0x02
 1:	jmp :3
-2:	mov r12, 0x04
+2:	mov rbp, 0x04
 	mov rdx, rax
 a:	cmp rdx, 0x03
 	setz cl
@@ -27,7 +27,7 @@ a:	cmp rdx, 0x03
 	test cl, cl
 	jz :4
 	jmp :6
-4:	cmp rdx, r12
+4:	cmp rdx, rbp
 	jnz :6
 	cmp rax, 0x05
 	setnz al
@@ -36,20 +36,19 @@ a:	cmp rdx, 0x03
 	jz :6
 	mov rax, 0x03
 3:	jmp :7
-6:	lea rbp, [rsp]
-	mov rbx, 0x00
-	mov [rbp], rbx
-	mov rdi, rbp
+6:	lea rbx, [rsp]
+	mov [rbx], r12
+	mov rdi, rbx
 	call :defer 1.main.ret_defer
-	mov rax, [rbp]
+	mov rax, [rbx]
 	cmp rax, 0x01
 	setnz al
 	movzx rax, al
 	test al, al
 	jz :8
-	mov rax, r12
+	mov rax, rbp
 7:	jmp :9
-8:	mov rax, rbx
+8:	mov rax, r12
 9:	add rsp, 0x08
 	pop r12
 	pop rbp
