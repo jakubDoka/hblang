@@ -1,4 +1,4 @@
-loops 9.main:
+main:
        li64 $4, 0
        li64 $3, 1
          cp $2, $4

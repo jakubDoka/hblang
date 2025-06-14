@@ -1,4 +1,4 @@
-loops 11 (multiple breaks).main:
+main:
      addi64 $254, $254, -8
      addi64 $4, $254, 0
        li64 $3, 0

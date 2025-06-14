@@ -1,4 +1,4 @@
-loops 8 (nested).main:
+main:
        li64 $9, 0
        li64 $8, 10
        li64 $7, 1

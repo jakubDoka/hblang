@@ -1,4 +1,4 @@
-adding difference to a pointer 1.main:
+main:
          st $31, $254, -16, 16
      addi64 $254, $254, -20
      addi64 $32, $254, 0

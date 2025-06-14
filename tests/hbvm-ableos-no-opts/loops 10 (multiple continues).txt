@@ -1,4 +1,4 @@
-loops 10 (multiple continues).main:
+main:
      addi64 $254, $254, -9
      addi64 $7, $254, 0
        li64 $6, 0

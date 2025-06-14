@@ -1,4 +1,4 @@
-exhausitve inlining 1.main:
+main:
        li64 $1, 1
        li64 $2, 0
         jeq $1, $0, :0

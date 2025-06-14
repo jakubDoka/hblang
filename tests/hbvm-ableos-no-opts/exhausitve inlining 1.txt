@@ -1,4 +1,4 @@
-exhausitve inlining 1.main:
+main:
          st $31, $254, -24, 24
      addi64 $254, $254, -32
         jal $31, $0, :exhausitve inlining 1.no_op

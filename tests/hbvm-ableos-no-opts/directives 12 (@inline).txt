@@ -1,4 +1,4 @@
-directives 12 (@inline).main:
+main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
        li64 $1, 10

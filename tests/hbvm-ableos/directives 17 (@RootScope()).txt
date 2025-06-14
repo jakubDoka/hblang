@@ -1,4 +1,4 @@
-directives 17 (@RootScope()).main:
+main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
         jal $31, $0, :lib.hb.some_num

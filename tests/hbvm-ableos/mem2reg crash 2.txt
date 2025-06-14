@@ -1,4 +1,4 @@
-mem2reg crash 2.main:
+main:
          st $31, $254, -8, 8
      addi64 $254, $254, -40
      addi64 $4, $254, 16

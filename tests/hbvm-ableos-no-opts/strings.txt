@@ -1,4 +1,4 @@
-strings.main:
+main:
      addi64 $254, $254, -16
      addi64 $2, $254, 0
         lra $1, $0, :strings.main.	Edvard

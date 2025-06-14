@@ -1,4 +1,4 @@
-arithmetic 3.main:
+main:
          st $31, $254, -24, 24
      addi64 $254, $254, -24
         jal $31, $0, :arithmetic 3.one

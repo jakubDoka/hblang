@@ -1,4 +1,4 @@
-loops 9.main:
+main:
      addi64 $254, $254, -32
      addi64 $8, $254, 0
         lra $1, $0, :loops 9.main.abc

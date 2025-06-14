@@ -1,4 +1,4 @@
-directives 14 (@name_of).main:
+main:
      addi64 $254, $254, -32
      addi64 $2, $254, 0
         lra $1, $0, :directives 14 (@name_of).main.uint

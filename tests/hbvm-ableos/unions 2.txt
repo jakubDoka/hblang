@@ -1,3 +1,3 @@
-unions 2.main:
+main:
     li64 $1, 42
       tx

@@ -1,4 +1,4 @@
-unions 3.main:
+main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
         jal $31, $0, :unions 3.TypeInfo(T = uint)

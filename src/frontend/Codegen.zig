@@ -317,70 +317,48 @@ pub fn collectExports(self: *Codegen, scrath: *utils.Arena) ![]utils.EntId(root.
             }
 
             self.types.store.get(ty.data().Func).visibility = .exported;
+            self.types.store.get(ty.data().Func).key.name = name_str;
 
             try funcs.append(tmp.arena.allocator(), ty.data().Func);
         }
     }
 
     if (!has_main) {
-        var base_scope = self.types.getScope(.root);
-        var pos_stack = std.ArrayListUnmanaged([]const u8){};
-
-        try pos_stack.append(tmp.arena.allocator(), "main");
-
-        var vari: *const Ast.Store.TagPayload(.Decl) = undefined;
-        var file: Types.File = undefined;
-        var i: usize = 0;
-        while (i < pos_stack.items.len) : (i += 1) {
-            file = base_scope.file(self.types).?;
-            self.parent_scope = .{ .Perm = base_scope };
-            self.ast = self.types.getFile(file);
-
-            var name = pos_stack.items[i];
-            const is_readonly = name[0] == '$';
-            if (is_readonly) name = name[1..];
-
-            const decl, const path, _ = base_scope.index(self.types).?.search(name) orelse {
-                return self.report(Ast.Pos.init(0),
-                    \\you need to define a `main` function, like this:
-                    \\main := fn(): uint {{
-                    \\    return 0
-                    \\}}
-                , .{});
-            };
-
-            vari = self.ast.exprs.get(decl).Decl;
-
-            for (path) |pos| try pos_stack.append(tmp.arena.allocator(), self.ast.tokenSrc(pos.index));
-            const global_id = try self.resolveGlobalLow(name, base_scope, self.ast, decl, is_readonly);
-            const global = self.types.store.get(global_id).*;
-
-            if (global.ty != .type) {
-                return self.report(vari.value, "expected a global holding" ++
-                    " a type, {} is not", .{global.ty});
-            }
-
-            base_scope = Types.Id.fromRaw(
-                @bitCast(global.data[0..@sizeOf(Types.Id)].*),
-                self.types,
-            ) orelse return self.report(vari.value, "the type here is corrupted", .{});
-        }
-
-        if (base_scope.data() != .Func) {
-            return self.report(vari.value,
-                \\you need to define a `main` as a function:
-                \\main := fn(): uint {{
+        const entry = self.getEntry(.root, "main") catch {
+            try self.types.diagnostics.writeAll(
+                \\...you can define the `main` in the mentioned file:
+                \\main := fn(): uint {
                 \\    return 0
-                \\}}
-            , .{});
-        }
+                \\}
+            );
+            return error.Never;
+        };
 
-        self.types.store.get(base_scope.data().Func).visibility = .exported;
+        self.types.store.get(entry).visibility = .exported;
+        self.types.store.get(entry).key.name = "main";
 
-        try funcs.append(tmp.arena.allocator(), base_scope.data().Func);
+        try funcs.append(tmp.arena.allocator(), entry);
     }
 
     return scrath.dupe(utils.EntId(root.frontend.types.Func), funcs.items);
+}
+
+pub fn getEntry(self: *Codegen, file: Types.File, name: []const u8) !utils.EntId(root.frontend.types.Func) {
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    self.ast = self.types.getFile(file);
+    _ = self.beginBuilder(tmp.arena, .never, .{});
+    defer self.bl.func.reset();
+    self.parent_scope = .{ .Perm = self.types.getScope(file) };
+    self.struct_ret_ptr = null;
+    self.name = "";
+
+    var entry_vl = try self.lookupScopeItem(.init(0), self.types.getScope(file), name);
+    const entry_ty = try self.unwrapTyConst(Ast.Pos.init(0), &entry_vl);
+
+    if (entry_ty.data() != .Func) return error.Never;
+    return entry_ty.data().Func;
 }
 
 pub fn beginBuilder(

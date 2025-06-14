@@ -1,4 +1,4 @@
-loops 8 (nested).main:
+main:
      addi64 $254, $254, -40
      addi64 $11, $254, 0
        li64 $10, 0

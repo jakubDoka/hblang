@@ -1,4 +1,4 @@
-directives 15 (@has_decl).main:
+main:
         lra $1, $0, :directives 15 (@has_decl).scp.foo
          ld $1, $1, 0, 8
          tx

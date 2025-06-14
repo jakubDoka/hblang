@@ -1,4 +1,4 @@
-loops 10 (multiple continues).main:
+main:
        li64 $5, 0
         li8 $4, 0
         li8 $3, 1
