@@ -409,7 +409,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     const postorder = func.collectPostorder(tmp.arena.allocator(), &visited);
 
     self.allocs = Regalloc.ralloc(X86_64, func);
-    self.ret_count = func.returns.len;
+    self.ret_count = func.signature.returns().len;
     self.local_relocs = .initBuffer(tmp.arena.alloc(Reloc, 1024 * 10));
     self.block_offsets = tmp.arena.alloc(u32, postorder.len);
 
@@ -480,9 +480,9 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
         }
 
         var moves = std.ArrayList(Move).init(tmp.arena.allocator());
-        for (0..func.params.len) |i| {
+        for (0..func.signature.params().len) |i| {
             const argn = for (postorder[0].base.outputs()) |o| {
-                if (o.kind == .Arg and o.extra(.Arg).index == i) break o;
+                if (o.isSub(graph.Arg) and o.subclass(graph.Arg).?.ext.index == i) break o;
             } else continue; // is dead
             if (self.getReg(argn) != Reg.system_v.args[i]) {
                 moves.append(.init(self.getReg(argn), Reg.system_v.args[i])) catch unreachable;
@@ -847,10 +847,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 }
                 self.orderMoves(moves.items);
             },
-            .Arg => {},
-            .Ret => {},
-            .Mem => {},
-            .Never => {},
+            .Arg, .Ret, .Mem, .Never, .StructArg => {},
             .Trap => {
                 switch (instr.extra(.Trap).code) {
                     graph.infinite_loop_trap => return,

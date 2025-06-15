@@ -80,6 +80,7 @@ pub fn knownOffset(node: *Func.Node) struct { *Func.Node, i64 } {
 pub fn regBias(node: *Func.Node) ?u16 {
     return switch (node.kind) {
         .Arg => @intCast(node.extraConst(.Arg).index),
+        .StructArg => @intCast(node.extraConst(.StructArg).base.index),
         else => {
             for (node.outputs()) |o| {
                 if (o.kind == .Call) {
@@ -196,7 +197,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     self.block_offsets = tmp.arena.alloc(i32, func.gcm.block_count);
     self.local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.gcm.block_count * 2));
     self.allocs = allocs;
-    self.ret_count = func.returns.len;
+    self.ret_count = func.signature.returns().len;
 
     const is_tail = for (func.gcm.postorder) |bb| {
         if (bb.base.kind == .CallEnd) break false;
@@ -234,7 +235,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         }
 
         var moves = std.ArrayList(Move).init(tmp.arena.allocator());
-        for (0..func.params.len) |i| {
+        for (0..func.signature.params().len) |i| {
             const argn = for (func.gcm.postorder[0].base.outputs()) |o| {
                 if (o.kind == .Arg and o.extra(.Arg).index == i) break o;
             } else continue; // is dead

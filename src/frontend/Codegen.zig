@@ -349,7 +349,7 @@ pub fn getEntry(self: *Codegen, file: Types.File, name: []const u8) !utils.EntId
     defer tmp.deinit();
 
     self.ast = self.types.getFile(file);
-    _ = self.beginBuilder(tmp.arena, .never, .{});
+    _ = self.beginBuilder(tmp.arena, .never, &.{}, &.{}, .{});
     defer self.bl.func.reset();
     self.parent_scope = .{ .Perm = self.types.getScope(file) };
     self.struct_ret_ptr = null;
@@ -366,16 +366,16 @@ pub fn beginBuilder(
     self: *Codegen,
     scratch: *utils.Arena,
     ret: Types.Id,
+    params: []const graph.AbiParam,
+    returns: []const graph.AbiParam,
     caps: struct {
         scope_cap: usize = 0,
         loop_cap: usize = 0,
-        param_count: usize = 0,
-        return_count: usize = 0,
     },
-) struct { Builder.BuildToken, []DataType, []DataType } {
+) Builder.BuildToken {
     self.errored = false;
     self.ret = ret;
-    const res = self.bl.begin(caps.param_count, caps.return_count);
+    const res = self.bl.begin(params, returns);
 
     self.scope = .initBuffer(scratch.alloc(ScopeEntry, caps.scope_cap));
     self.loops = .initBuffer(scratch.alloc(Loop, caps.loop_cap));
@@ -412,13 +412,14 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
         return;
     }
 
-    const param_count, const return_count, const ret_abi = func.computeAbiSize(self.abi, self.types);
-    const token, const params, const returns = self.beginBuilder(tmp.arena, func.ret, .{
-        .param_count = param_count,
-        .return_count = return_count,
-        .scope_cap = fn_ast.peak_vars,
-        .loop_cap = fn_ast.peak_loops,
-    });
+    const params, const returns, const ret_abi = func.computeAbi(self.abi, self.types, tmp.arena);
+    const token = self.beginBuilder(
+        tmp.arena,
+        func.ret,
+        params,
+        returns,
+        .{ .scope_cap = fn_ast.peak_vars, .loop_cap = fn_ast.peak_loops },
+    );
     self.parent_scope = .init(.{ .Func = func_id });
     self.name = "";
 
@@ -437,11 +438,9 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
     var i: usize = 0;
 
     if (ret_abi.isByRefRet(self.abi)) {
-        ret_abi.types(params[0..1], true, self.abi);
         self.struct_ret_ptr = self.bl.addParam(i);
         i += 1;
     } else {
-        ret_abi.types(returns, true, self.abi);
         self.struct_ret_ptr = null;
     }
 
@@ -452,7 +451,6 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
         func = self.types.store.get(func_id);
         const ty = func.args[ty_idx];
         const abi = self.abiCata(ty);
-        abi.types(params[i..], false, self.abi);
 
         const arg = switch (abi) {
             .ByRef => self.bl.addParam(i),
@@ -1641,11 +1639,13 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         // TODO: unify under single ast
         inline .Struct, .Union, .Enum => |e, t| {
             const prefix = 3;
-            const args = self.bl.allocCallArgs(tmp.arena, prefix + e.captures.len() * 2, 1);
-            @memset(args.params, self.abiCata(.type).ByValue);
-            args.params[0] = .i64;
-            args.params[2] = .i64;
-            args.returns[0] = self.abiCata(.type).ByValue;
+            const params = tmp.arena.alloc(graph.AbiParam, prefix + e.captures.len() * 2);
+            @memset(params, .{ .Reg = self.abiCata(.type).ByValue });
+            params[0] = .{ .Reg = .i64 };
+            params[2] = .{ .Reg = .i64 };
+            const returns = [_]graph.AbiParam{.{ .Reg = self.abiCata(.type).ByValue }};
+
+            const args = self.bl.allocCallArgs(tmp.arena, params, &returns);
 
             args.arg_slots[0] = self.bl.addIntImm(.i64, @intFromEnum(@field(Comptime.InteruptCode, @tagName(t))));
             args.arg_slots[1] = self.emitTyConst(self.parent_scope.perm(self.types)).id.Value;
@@ -1877,18 +1877,17 @@ fn emitInternalEca(
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    const c_args = self.bl.allocCallArgs(
-        tmp.arena,
-        1 + args.len,
-        self.abiCata(ret_ty).len(true, .ableos),
-    );
+    const params = tmp.arena.alloc(graph.AbiParam, 1 + args.len);
+    const returns = tmp.arena.alloc(graph.AbiParam, self.abiCata(ret_ty).len(true, .ableos));
 
-    c_args.params[0] = .i64;
-    for (args, c_args.params[1..]) |a, *ca| ca.* = a.data_type;
+    params[0] = .{ .Reg = .i64 };
+    for (args, params[1..]) |a, *ca| ca.* = .{ .Reg = a.data_type };
+    self.abiCata(ret_ty).types(returns, true, self.abi);
+
+    const c_args = self.bl.allocCallArgs(tmp.arena, params, returns);
+
     c_args.arg_slots[0] = self.bl.addIntImm(.i64, @intCast(@intFromEnum(ic)));
     @memcpy(c_args.arg_slots[1..], args);
-
-    self.abiCata(ret_ty).types(c_args.returns, true, self.abi);
 
     return self.assembleReturn(
         Ast.Id.zeroSized(.Void),
@@ -2231,9 +2230,9 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
             " got {}", .{ func.args.len, passed_args });
     }
 
-    const param_count, const return_count, const ret_abi =
-        func.computeAbiSize(self.abi, self.types);
-    const args = self.bl.allocCallArgs(tmp.arena, param_count, return_count);
+    const params, const returns, const ret_abi =
+        func.computeAbi(self.abi, self.types, tmp.arena);
+    const args = self.bl.allocCallArgs(tmp.arena, params, returns);
 
     var i: usize = self.pushReturn(expr, args, ret_abi, func.ret, ctx);
 
@@ -2257,12 +2256,13 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
     const args_ast = ast.exprs.view(e.args);
     for (func.args[@intFromBool(caller != null)..], 0..) |ty, k| {
         const abi = self.abiCata(ty);
-        abi.types(args.params[i..], false, self.abi);
         var value = if (computed_args) |a| a[k] else try self.emitTyped(.{}, ty, args_ast[k]);
         i += self.pushParam(args, abi, i, &value);
     }
 
-    std.debug.assert(i == param_count);
+    if (i != params.len) {
+        utils.panic("{}", .{.{ i, params.len }});
+    }
 
     return self.assembleReturn(
         expr,
@@ -2404,12 +2404,10 @@ fn pushReturn(
     ctx: Ctx,
 ) usize {
     if (ret_abi.isByRefRet(self.abi)) {
-        ret_abi.types(call_args.params[0..1], true, self.abi);
         call_args.arg_slots[0] = ctx.loc orelse
             self.bl.addLocal(self.sloc(pos), ret.size(self.types));
         return 1;
     } else {
-        ret_abi.types(call_args.returns, true, self.abi);
         return 0;
     }
 }
@@ -2421,7 +2419,6 @@ fn pushParam(
     idx: usize,
     value: *Value,
 ) usize {
-    abi.types(call_args.params[idx..], false, self.abi);
     switch (abi) {
         .Imaginary => {},
         .ByValue => {
@@ -2970,7 +2967,7 @@ fn emitDirective(
                 return self.report(expr, "cant do na ecall/syscall during comptime", .{});
             }
 
-            if (e.kind == .ecall and self.abi != .ableos) {
+            if (e.kind == .ecall and self.abi.cc != .ablecall) {
                 return self.report(expr, "@ecall is specific to vm" ++
                     " targets use @syscall instead", .{});
             }
@@ -2984,16 +2981,19 @@ fn emitDirective(
             };
 
             const arg_nodes = tmp.arena.alloc(Value, args.len);
-            for (args, arg_nodes) |arg, *slot| {
+            const argums = tmp.arena.alloc(Types.Id, args.len);
+            for (args, arg_nodes, argums) |arg, *slot, *argum| {
                 slot.* = try self.emit(.{}, arg);
+                argum.* = slot.ty;
             }
 
-            const ret_abi = self.abiCata(ret);
-            var param_count: usize = @intFromBool(ret_abi.isByRefRet(self.abi));
-            for (arg_nodes) |nod| param_count += self.abiCata(nod.ty).len(false, self.abi);
-            const return_count: usize = ret_abi.len(true, self.abi);
+            var dummy_func: tys.Func = undefined;
+            dummy_func.args = argums;
+            dummy_func.ret = ret;
 
-            const call_args = self.bl.allocCallArgs(tmp.arena, param_count, return_count);
+            const params, const returns, const ret_abi =
+                dummy_func.computeAbi(self.abi, self.types, tmp.arena);
+            const call_args = self.bl.allocCallArgs(tmp.arena, params, returns);
 
             var i: usize = self.pushReturn(expr, call_args, ret_abi, ret, ctx);
 

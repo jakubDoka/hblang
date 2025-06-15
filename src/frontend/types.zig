@@ -406,14 +406,37 @@ pub const Func = struct {
 
     pub const CompileState = enum { queued, compiled };
 
-    pub fn computeAbiSize(self: Func, abi: Types.Abi, types: *Types) struct { usize, usize, Types.Abi.Spec } {
+    pub fn computeAbi(
+        self: Func,
+        abi: Types.Abi,
+        types: *Types,
+        scratch: *utils.Arena,
+    ) struct {
+        []const graph.AbiParam,
+        []const graph.AbiParam,
+        Types.Abi.Spec,
+    } {
+        errdefer unreachable;
         const ret_abi = @as(Types.Abi.TmpSpec, abi.categorize(self.ret, types) orelse .Imaginary)
             .toPerm(self.ret, types);
-        var param_count: usize = @intFromBool(ret_abi.isByRefRet(abi));
-        for (self.args) |ty| param_count += (abi.categorize(ty, types) orelse continue)
-            .toPerm(self.ret, types).len(false, abi);
-        const return_count: usize = ret_abi.len(true, abi);
-        return .{ param_count, return_count, ret_abi };
+
+        const returns = scratch.alloc(graph.AbiParam, ret_abi.len(true, abi));
+        var params = std.ArrayListUnmanaged(graph.AbiParam){};
+
+        if (ret_abi.isByRefRet(abi)) {
+            const slots = try params.addManyAsSlice(scratch.allocator(), 1);
+            ret_abi.types(slots, true, abi);
+        } else {
+            ret_abi.types(returns, true, abi);
+        }
+
+        for (self.args) |ty| {
+            const arg_abi = (abi.categorize(ty, types) orelse continue).toPerm(ty, types);
+            const slots = try params.addManyAsSlice(scratch.allocator(), arg_abi.len(false, abi));
+            arg_abi.types(slots, false, abi);
+        }
+
+        return .{ params.items, returns, ret_abi };
     }
 };
 

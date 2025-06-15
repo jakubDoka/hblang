@@ -455,9 +455,11 @@ pub fn AsRef(comptime E: type) type {
 }
 
 pub fn dbg(value: anytype) @TypeOf(value) {
-    if (@TypeOf(value) == []const u8)
+    if (@TypeOf(value) == []const u8) {
         std.debug.print("{s}\n", .{value});
-    std.debug.print("{any}\n", .{value});
+    } else {
+        std.debug.print("{any}\n", .{value});
+    }
     return value;
 }
 

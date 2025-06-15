@@ -90,6 +90,7 @@ const root = @import("../utils.zig");
 const Set = std.DynamicBitSetUnmanaged;
 
 pub const InlineFunc = struct {
+    signature: graph.Signature,
     start: *anyopaque,
     end: *anyopaque,
     node_count: usize,
@@ -125,28 +126,7 @@ pub const InlineFunc = struct {
             .{ .count = self.node_count },
         );
 
-        const entry = self_start.outputs()[0];
-        std.debug.assert(entry.kind == .Entry);
-
-        var params = std.ArrayListUnmanaged(graph.DataType){};
-        for (self_start.outputs()) |o| {
-            // NOTE: we dont initialize the killed args because all code only
-            // acesses the initialized ones
-            //
-            if (o.kind == .Arg) {
-                if (params.items.len <= o.extra(.Arg).index) {
-                    try params.resize(func.arena.allocator(), o.extra(.Arg).index + 1);
-                }
-                params.items[o.extra(.Arg).index] = o.data_type;
-            }
-        }
-
-        const rets = try func.arena.allocator()
-            .alloc(graph.DataType, self_end.dataDeps().len);
-        for (self_end.dataDeps(), rets) |dep, *ret| ret.* = dep.?.data_type;
-
-        func.params = params.items;
-        func.returns = rets;
+        func.signature = self.signature;
 
         return func;
     }
@@ -201,6 +181,8 @@ pub const InlineFunc = struct {
 
             if (new_node.asCfg()) |cfg| cfg.ext.idepth = 0;
             if (new_node.subclass(graph.Region)) |cfg| cfg.ext.cached_lca = null;
+            if (new_node.subclass(graph.builtin.Call)) |call|
+                call.ext.signature = call.ext.signature.dupe(arena.allocator());
 
             new_node.input_base = (try arena.allocator()
                 .dupe(?*Func.Node, new_node.inputs())).ptr;
@@ -438,6 +420,8 @@ pub const InlineFunc = struct {
             if (o.kind == .Mem) break o;
         } else null;
 
+        var dest_mem = dest.inputs()[1].?;
+
         if (entry_mem != null) {
             for (tmp.arena.dupe(*Func.Node, entry_mem.?.outputs())) |use| {
                 if (use.kind == .Local) {
@@ -447,11 +431,26 @@ pub const InlineFunc = struct {
         }
 
         // NOTE: not scheduled yet so args are on the Start
+        //
         for (dest.dataDeps(), 0..) |dep, j| {
-            const arg = for (start.outputs()) |o| {
-                if (o.kind == .Arg and o.extra(.Arg).index == j) break o;
-            } else continue;
-            func.subsume(dep.?, arg);
+            for (start.outputs()) |o| {
+                if (o.kind == .Arg and o.extra(.Arg).index == j) {
+                    func.subsume(dep.?, o);
+                    break;
+                }
+                if (o.kind == .StructArg and o.extra(.StructArg).base.index == j) {
+                    // we need to copy to preserve the semantics of a call
+                    // TODO: decide if we need this based on the call
+                    // convention of the inlined function since the default
+                    // call convention should be a bit customized
+                    //
+                    const copy = func.addNode(.Local, .i64, &.{ null, into_entry_mem }, .{ .size = o.extra(.StructArg).size });
+                    const size = func.addIntImm(.i64, @bitCast(o.extra(.StructArg).size));
+                    dest_mem = func.addNode(.MemCpy, .top, &.{ before_dest, dest_mem, copy, size }, .{});
+                    func.subsume(dep.?, o);
+                    break;
+                }
+            }
         }
 
         for (end.dataDeps(), 0..) |dep, j| {
@@ -464,14 +463,14 @@ pub const InlineFunc = struct {
         if (entry_mem == exit_mem) {
             if (entry_mem != null) {
                 // NOTE: this is still needed since there can be loads
-                func.subsume(dest.inputs()[1].?, entry_mem.?);
+                func.subsume(dest_mem, entry_mem.?);
             }
             if (call_end_entry_mem != null) {
-                func.subsume(dest.inputs()[1].?, call_end_entry_mem.?);
+                func.subsume(dest_mem, call_end_entry_mem.?);
             }
-            exit_mem = dest.inputs()[1].?;
+            exit_mem = dest_mem;
         } else {
-            func.subsume(dest.inputs()[1].?, entry_mem.?);
+            func.subsume(dest_mem, entry_mem.?);
             if (call_end_entry_mem != null) {
                 func.subsume(exit_mem.?, call_end_entry_mem.?);
             }
@@ -534,6 +533,7 @@ pub const InlineFunc = struct {
         );
 
         return InlineFunc{
+            .signature = func.signature.dupe(arena.allocator()),
             .start = cloned.new_node_table[func.root.id],
             .end = cloned.new_node_table[func.end.id],
             .node_count = cloned.new_nodes.len,

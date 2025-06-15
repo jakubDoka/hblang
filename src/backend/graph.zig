@@ -156,14 +156,14 @@ pub const UnOp = enum(u8) {
 };
 
 pub const DataType = enum(u16) {
-    top,
+    bot,
     i8,
     i16,
     i32,
     i64,
     f32,
     f64,
-    bot,
+    top,
 
     pub fn size(self: DataType) u64 {
         return switch (self) {
@@ -205,6 +205,76 @@ pub const DataType = enum(u16) {
     }
 };
 
+pub const AbiParam = union(enum) {
+    Reg: DataType,
+    Stack: u64,
+
+    pub fn getReg(self: AbiParam) DataType {
+        return switch (self) {
+            .Reg => |r| r,
+            .Stack => .i64,
+        };
+    }
+};
+
+pub const CallConv = enum(u8) {
+    refcall,
+    systemv,
+    ablecall,
+    fastcall,
+};
+
+pub const Signature = extern struct {
+    par_base: [*]const AbiParam = undefined,
+    ret_base: [*]const AbiParam = undefined,
+    call_conv: CallConv = .refcall,
+    par_count: u8 = 0,
+    ret_count: u8 = 0,
+
+    pub fn initBuf(
+        call_conv: CallConv,
+        pars: []AbiParam,
+        rets: []AbiParam,
+    ) Signature {
+        errdefer unreachable;
+        return .{
+            .call_conv = call_conv,
+            .par_base = pars.ptr,
+            .ret_base = rets.ptr,
+            .par_count = @intCast(pars.len),
+            .ret_count = @intCast(rets.len),
+        };
+    }
+
+    pub fn init(
+        call_conv: CallConv,
+        pars: []const AbiParam,
+        rets: []const AbiParam,
+        arena: std.mem.Allocator,
+    ) Signature {
+        errdefer unreachable;
+        return .initBuf(call_conv, try arena.dupe(AbiParam, pars), try arena.dupe(AbiParam, rets));
+    }
+
+    pub fn dupe(self: @This(), arena: std.mem.Allocator) @This() {
+        return .init(self.call_conv, self.params(), self.returns(), arena);
+    }
+
+    pub fn params(self: @This()) []const AbiParam {
+        return self.par_base[0..self.par_count];
+    }
+
+    pub fn returns(self: @This()) []const AbiParam {
+        return self.ret_base[0..self.ret_count];
+    }
+
+    pub fn stackSize(self: @This()) usize {
+        switch (self.call_conv) {
+            else => unreachable,
+        }
+    }
+};
+
 pub const builtin = enum {
     // ===== CFG =====
     pub const Start = extern struct {
@@ -229,8 +299,8 @@ pub const builtin = enum {
     };
     pub const Call = extern struct {
         base: Cfg = .{},
+        signature: Signature,
         id: u32,
-        ret_count: u32,
 
         pub const data_dep_offset = 1;
     };
@@ -264,12 +334,14 @@ pub const builtin = enum {
 
         pub const is_basic_block_start = true;
     };
-    // ===== VALUES =====
+    // ===== VALUES ====
     pub const Phi = extern struct {
         pub const is_pinned = true;
     };
-    pub const Arg = extern struct {
-        index: usize,
+    pub const Arg = mod.Arg;
+    pub const StructArg = extern struct {
+        base: mod.Arg,
+        size: u64,
     };
     pub const CInt = extern struct {
         value: i64,
@@ -311,6 +383,9 @@ pub const builtin = enum {
     pub const Join = extern struct {};
 };
 
+pub const Arg = extern struct {
+    index: usize,
+};
 pub const MemOp = extern struct {
     pub const data_dep_offset = 1;
 };
@@ -410,8 +485,7 @@ pub fn Func(comptime Backend: type) type {
     return struct {
         arena: std.heap.ArenaAllocator,
         interner: InternMap(Uninserter) = .{},
-        params: []const mod.DataType = &.{},
-        returns: []const mod.DataType = &.{},
+        signature: Signature = .{},
         next_id: u16 = 0,
         root: *Node = undefined,
         end: *Node = undefined,
@@ -756,6 +830,8 @@ pub fn Func(comptime Backend: type) type {
                         inline while (fields.next()) |f| {
                             if (comptime std.mem.eql(u8, f.name, "antidep") or
                                 std.mem.eql(u8, f.name, "loop") or
+                                std.mem.eql(u8, f.name, "par_base") or
+                                std.mem.eql(u8, f.name, "ret_base") or
                                 !isVisibel(f.type))
                             {
                                 continue;

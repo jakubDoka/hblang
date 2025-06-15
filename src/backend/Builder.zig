@@ -38,23 +38,32 @@ pub fn deinit(self: *Builder) void {
 
 pub const BuildToken = enum { @"please call Builder.begin() first, then Builder.end()" };
 
-pub fn begin(self: *Builder, param_count: usize, return_coutn: usize) struct { BuildToken, []DataType, []DataType } {
+/// Begins a build of a function, returns a token to end the build body building.
+/// the `params` and `returns` are copied
+pub fn begin(
+    self: *Builder,
+    params: []const graph.AbiParam,
+    returns: []const graph.AbiParam,
+) BuildToken {
     const ctrl = self.func.addNode(.Entry, .top, &.{self.func.root}, .{});
     self.root_mem = self.func.addNode(.Mem, .top, &.{self.func.root}, .{});
     self.scope = self.func.addNode(.Scope, .top, &.{ ctrl, self.root_mem }, .{});
     self.func.end = self.func.addNode(.Return, .top, &.{ null, null, null }, .{});
     self.pins = self.func.addNode(.Scope, .top, &.{}, .{});
 
-    const alloc = self.func.arena.allocator().alloc(DataType, param_count + return_coutn) catch unreachable;
+    self.func.signature = .init(.refcall, params, returns, self.func.arena.allocator());
 
-    self.func.params = alloc[0..param_count];
-    self.func.returns = alloc[param_count..];
-
-    return .{ @enumFromInt(0), alloc[0..param_count], alloc[param_count..] };
+    return @enumFromInt(0);
 }
 
 pub fn addParam(self: *Builder, idx: usize) SpecificNode(.Arg) {
-    return self.func.addNode(.Arg, self.func.params[idx], &.{self.func.root}, .{ .index = idx });
+    return switch (self.func.signature.params()[idx]) {
+        .Reg => |ty| self.func.addNode(.Arg, ty, &.{self.func.root}, .{ .index = idx }),
+        .Stack => |size| self.func.addNode(.StructArg, .i64, &.{self.func.root}, .{
+            .base = .{ .index = idx },
+            .size = size,
+        }),
+    };
 }
 
 pub fn end(self: *Builder, _: BuildToken) void {
@@ -438,23 +447,22 @@ pub fn addLoopAndBeginBody(self: *Builder) Loop {
 }
 
 pub const CallArgs = struct {
-    params: []DataType,
+    params: []const graph.AbiParam,
     arg_slots: []*BuildNode,
-    returns: []DataType,
+    returns: []const graph.AbiParam,
     return_slots: []*BuildNode,
     hint: enum { @"construst this with Builder.allocCallArgs()" },
 };
 
 const arg_prefix_len = 2;
 
-pub fn allocCallArgs(_: *Builder, scratch: *root.Arena, param_count: usize, return_count: usize) CallArgs {
-    const params = scratch.alloc(DataType, param_count + return_count);
-    const args = scratch.alloc(*BuildNode, arg_prefix_len + param_count + return_count);
+pub fn allocCallArgs(_: *Builder, scratch: *root.Arena, params: []const graph.AbiParam, returns: []const graph.AbiParam) CallArgs {
+    const args = scratch.alloc(*BuildNode, arg_prefix_len + params.len + returns.len);
     return .{
-        .params = params[0..param_count],
-        .returns = params[param_count..],
-        .arg_slots = args[arg_prefix_len..][0..param_count],
-        .return_slots = args[arg_prefix_len + param_count ..],
+        .params = params,
+        .returns = returns,
+        .arg_slots = args[arg_prefix_len..][0..params.len],
+        .return_slots = args[arg_prefix_len + params.len ..],
         .hint = @enumFromInt(0),
     };
 }
@@ -464,9 +472,11 @@ pub fn addCall(
     arbitrary_call_id: u32,
     args_with_initialized_arg_slots: CallArgs,
 ) []const *BuildNode {
+    errdefer unreachable;
+
     const args = args_with_initialized_arg_slots;
-    for (args.arg_slots, args.params) |ar, pr| if (ar.data_type != ar.data_type.meet(pr)) {
-        std.debug.panic("{} != {}", .{ ar.data_type, ar.data_type.meet(pr) });
+    for (args.arg_slots, args.params) |ar, pr| if (ar.data_type != ar.data_type.meet(pr.getReg())) {
+        std.debug.panic("{} != {}", .{ ar.data_type, ar.data_type.meet(pr.getReg()) });
     };
     const full_args = (args.arg_slots.ptr - arg_prefix_len)[0 .. arg_prefix_len + args.params.len];
     full_args[0] = self.control();
@@ -474,7 +484,7 @@ pub fn addCall(
 
     const call = self.func.addNode(.Call, .top, full_args, .{
         .id = arbitrary_call_id,
-        .ret_count = @intCast(args.returns.len),
+        .signature = .init(.refcall, args.params, args.returns, self.func.arena.allocator()),
     });
     const call_end = self.func.addNode(.CallEnd, .top, &.{call}, .{});
     self.func.setInputNoIntern(self.scope.?, 0, call_end);
@@ -482,14 +492,16 @@ pub fn addCall(
     self.func.setInputNoIntern(self.scope.?, 1, call_mem);
 
     for (args.return_slots, args.returns, 0..) |*slt, rty, i| {
-        slt.* = self.func.addNode(.Ret, rty, &.{call_end}, .{ .index = i });
+        slt.* = self.func.addNode(.Ret, rty.getReg(), &.{call_end}, .{ .index = i });
     }
 
     return args.return_slots;
 }
 
 pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
-    for (values, self.func.returns) |val, rtt| if (val.data_type != val.data_type.meet(rtt)) root.panic("{s} != {s}", .{ @tagName(val.data_type), @tagName(rtt) });
+    for (values, self.func.signature.returns()) |val, rtt|
+        if (val.data_type != val.data_type.meet(rtt.getReg()))
+            root.panic("{s} != {s}", .{ @tagName(val.data_type), @tagName(rtt.getReg()) });
 
     const ret = self.func.end;
     const inps = ret.inputs();

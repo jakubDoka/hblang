@@ -134,7 +134,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
                 const call: *Node = curr.inputs()[0].?;
                 std.debug.assert(call.kind == .Call);
 
-                if (call.extra(.Call).ret_count != 1) {
+                if (call.extra(.Call).signature.returns().len != 1) {
                     types.report(file, pos, "the function returns something we cant handle", .{});
                     return .{ .Unsupported = curr };
                 }
@@ -435,13 +435,12 @@ pub fn jitExprLow(
         defer scratch.deinit();
         defer gen.bl.func.reset();
 
-        const token, const params, _ = gen.beginBuilder(tmp.arena, .never, .{ .param_count = 1 });
+        const token = gen.beginBuilder(tmp.arena, .never, &.{.{ .Reg = .i64 }}, &.{}, .{});
         gen.ast = types.getFile(scope.file(types));
         gen.parent_scope = scope;
         gen.name = name;
         gen.struct_ret_ptr = null;
 
-        params[0] = .i64;
         const ptr = gen.bl.addParam(0);
 
         ret = try gen.emit(ctx.addLoc(ptr), value);

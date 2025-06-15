@@ -24,6 +24,7 @@ pub const object = @import("object.zig");
 pub const frontend = enum {
     pub const Lexer = @import("frontend/Lexer.zig");
     pub const Ast = @import("frontend/Ast.zig");
+    pub const Abi = @import("frontend/Abi.zig");
     pub const Parser = @import("frontend/Parser.zig");
     pub const Fmt = @import("frontend/Fmt.zig");
     pub const Types = @import("frontend/TypeStore.zig");
@@ -251,10 +252,10 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     types.target = opts.target;
     defer if (std.debug.runtime_safety) types.deinit();
 
-    var bckend, const abi: hb.frontend.Types.Abi = if (std.mem.startsWith(u8, opts.target, "hbvm-ableos")) backend: {
+    var bckend, const abi: hb.backend.graph.CallConv = if (std.mem.startsWith(u8, opts.target, "hbvm-ableos")) backend: {
         const slot = types.pool.arena.create(hb.hbvm.HbvmGen);
         slot.* = hb.hbvm.HbvmGen{ .gpa = types.pool.allocator() };
-        break :backend .{ hb.backend.Machine.init(opts.target, slot), .ableos };
+        break :backend .{ hb.backend.Machine.init(opts.target, slot), .ablecall };
     } else if (std.mem.startsWith(u8, opts.target, "x86_64-windows")) backend: {
         const slot = types.pool.arena.create(hb.x86_64.X86_64Gen);
         slot.* = hb.x86_64.X86_64Gen{ .gpa = types.pool.allocator(), .object_format = .coff };
@@ -278,7 +279,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     const errored = hb.frontend.Codegen.emitReachable(
         root_tmp.arena,
         types,
-        abi,
+        .{ .cc = abi },
         bckend,
         opts.optimizations,
         !opts.no_entry,

@@ -123,6 +123,7 @@ pub fn runMachineTest(
     out: std.io.AnyWriter,
     color: std.io.tty.Config,
 ) !void {
+    if (false) std.debug.print("{s}\n", .{category});
     var output = std.ArrayList(u8).init(gpa);
     defer output.deinit();
 
