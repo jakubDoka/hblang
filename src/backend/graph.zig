@@ -220,6 +220,8 @@ pub const builtin = enum {
     };
     pub const Return = extern struct {
         base: Cfg = .{},
+
+        pub const data_dep_offset = 2;
     };
     pub const Trap = extern struct {
         base: Cfg = .{},
@@ -229,6 +231,8 @@ pub const builtin = enum {
         base: Cfg = .{},
         id: u32,
         ret_count: u32,
+
+        pub const data_dep_offset = 1;
     };
     pub const CallEnd = extern struct {
         base: Cfg = .{},
@@ -251,7 +255,7 @@ pub const builtin = enum {
     };
     pub const Region = mod.Region;
     pub const Loop = extern struct {
-        base: mod.Region = .{},
+        base: mod.Cfg = .{},
 
         pub const is_basic_block_start = true;
     };
@@ -294,6 +298,8 @@ pub const builtin = enum {
     };
     pub const Local = extern struct {
         size: u64,
+
+        pub const data_dep_offset = 1;
     };
     pub const MemCpy = mod.MemCpy;
     pub const Load = mod.Load;
@@ -305,7 +311,9 @@ pub const builtin = enum {
     pub const Join = extern struct {};
 };
 
-pub const MemOp = extern struct {};
+pub const MemOp = extern struct {
+    pub const data_dep_offset = 1;
+};
 pub const MemCpy = extern struct {
     base: Store = .{},
 };
@@ -594,11 +602,43 @@ pub fn Func(comptime Backend: type) type {
                 return scheds[use.id].?;
             }
 
+            const DepOffsetElem = u8;
+            const sub_elem_width = 2;
+            const per_dep_elem = @bitSizeOf(DepOffsetElem) / sub_elem_width;
+            pub const dep_offset = b: {
+                const property = "data_dep_offset";
+                var offs: [
+                    std.mem.alignForward(
+                        usize,
+                        all_classes.len,
+                        @bitSizeOf(DepOffsetElem) / sub_elem_width,
+                    )
+                ]DepOffsetElem = undefined;
+                @memset(&offs, 0);
+
+                for (all_classes, 0..) |cls, i| {
+                    var Cursor = cls.type;
+                    const off = (while (true) {
+                        if (@hasDecl(Cursor, property)) break @field(Cursor, property);
+                        if (@typeInfo(Cursor) != .@"struct" or !@hasField(Cursor, "base")) break 0;
+                        Cursor = @TypeOf(@as(Cursor, undefined).base);
+                    } else unreachable) + 1;
+                    std.debug.assert(off <= std.math.powi(usize, 2, sub_elem_width) catch unreachable);
+                    const slot_idx = i / (per_dep_elem);
+                    const shift = (i % (per_dep_elem)) * sub_elem_width;
+
+                    offs[slot_idx] |= off << shift;
+                }
+
+                break :b offs;
+            };
+
             pub fn dataDeps(self: *Node) []?*Node {
-                if ((self.kind == .Phi and !self.isDataPhi()) or self.kind == .Mem) return &.{};
-                const start: usize = @intFromBool(self.isMemOp() or
-                    self.kind == .Return or self.kind == .Local or self.kind == .Call or self.kind == .Mem);
-                return self.input_base[1 + start + @intFromBool(self.kind == .Return) .. self.input_ordered_len];
+                if (self.kind == .Phi and !self.isDataPhi()) return &.{};
+                const kind_idx = @intFromEnum(self.kind);
+                const start: usize = dep_offset[kind_idx / per_dep_elem] >>
+                    @intCast((kind_idx % per_dep_elem) * sub_elem_width) & ((@as(u16, 1) << sub_elem_width) - 1);
+                return self.input_base[start..self.input_ordered_len];
             }
 
             pub fn knownStore(self: *Node, root: *Node) ?*Node {
@@ -714,7 +754,10 @@ pub fn Func(comptime Backend: type) type {
                         comptime var fields = std.mem.reverseIterator(s.fields);
                         comptime var first = fir;
                         inline while (fields.next()) |f| {
-                            if (comptime std.mem.eql(u8, f.name, "antidep") or !isVisibel(f.type)) {
+                            if (comptime std.mem.eql(u8, f.name, "antidep") or
+                                std.mem.eql(u8, f.name, "loop") or
+                                !isVisibel(f.type))
+                            {
                                 continue;
                             }
 
@@ -969,13 +1012,18 @@ pub fn Func(comptime Backend: type) type {
                 return self.isSub(MemOp);
             }
 
-            pub fn isDataPhi(self: *const Node) bool {
+            pub fn isDataPhi(self: *Node) bool {
                 // TODO: get rid of this recursion
-                return self.kind == .Phi and //and self.data_type != .top;
+                const test_val = self.kind == .Phi and self.data_type != .top;
+                const true_val = self.kind == .Phi and
                     ((!(self.input_base[1].?.isMemOp() or self.input_base[1].?.kind == .Mem) or
                         self.input_base[1].?.kind == .Local) or
                         self.input_base[1].?.isLoad()) and
                     (self.input_base[1].?.kind != .Phi or self.input_base[1].?.isDataPhi());
+                if (test_val != true_val) {
+                    utils.panic("{} {}\n", .{ self, self.inputs()[1].? });
+                }
+                return test_val;
             }
 
             pub inline fn isBasicBlockStart(self: *const Node) bool {
@@ -1243,7 +1291,14 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn addNode(self: *Self, comptime kind: Kind, ty: DataType, inputs: []const ?*Node, extra: ClassFor(kind)) *Node {
-            const node = self.addNodeUntyped(kind, ty, inputs, extra);
+            var typ = ty;
+            if (kind == .Phi) {
+                if (inputs[1].?.isStore() or inputs[1].?.kind == .Mem) typ = .top;
+                if (inputs[2]) |inp| if (inp.isStore() or inp.kind == .Mem) {
+                    typ = .top;
+                };
+            }
+            const node = self.addNodeUntyped(kind, typ, inputs, extra);
             return node;
         }
 

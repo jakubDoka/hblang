@@ -4,8 +4,10 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const use_llvm = b.option(bool, "use-llvm", "use llvm, last resort option") orelse (b.graph.host.result.os.tag == .windows);
-    const use_lld = b.option(bool, "use-lld", "use lld, last resort option") orelse (b.graph.host.result.os.tag == .windows);
+    const use_llvm = b.option(bool, "use-llvm", "use llvm, last resort option") orelse
+        (b.graph.host.result.os.tag == .windows) or optimize != .Debug;
+    const use_lld = b.option(bool, "use-lld", "use lld, last resort option") orelse
+        (b.graph.host.result.os.tag == .windows) or optimize != .Debug;
     const stack_size = b.option(usize, "stack-size", "the amount of stack for the build") orelse 1024 * 1024 * 4;
 
     const options = b.addOptions();
