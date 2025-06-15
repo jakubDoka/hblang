@@ -922,7 +922,7 @@ pub const OptOptions = struct {
         }
     }
 
-    pub fn finalize(optimizations: @This(), comptime B: type, backend: *B) void {
+    pub fn finalize(optimizations: @This(), comptime B: type, backend: *B) bool {
         errdefer unreachable;
 
         if (optimizations.do_inlining) {
@@ -1007,6 +1007,10 @@ pub const OptOptions = struct {
 
             out.inline_func_nodes = arena.state;
         }
+
+        if (optimizations.error_buf) |eb| if (eb.items.len != 0) return true;
+
+        return false;
     }
 };
 

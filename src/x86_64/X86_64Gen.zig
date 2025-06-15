@@ -1124,7 +1124,7 @@ pub fn emitData(self: *X86_64, opts: Mach.DataOptions) void {
 pub fn finalize(self: *X86_64, opts: Mach.FinalizeOptions) void {
     errdefer unreachable;
 
-    opts.optimizations.finalize(X86_64, self);
+    if (opts.optimizations.finalize(X86_64, self)) return;
 
     try switch (self.object_format) {
         .elf => root.object.elf.flush(self.out, .x86_64, opts.output),
