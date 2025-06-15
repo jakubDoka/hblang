@@ -205,94 +205,124 @@ pub const DataType = enum(u16) {
     }
 };
 
-pub const Builtin = union(enum) {
-    Start: Cfg,
-    // [Start]
-    Arg: usize,
-    // [Start]
-    Entry: Cfg,
-    // [Start]
-    Mem,
-    Never: Cfg,
-    // [Cfg, ret]
-    Return: Cfg,
-    // [Cfg]
-    Trap: extern struct {
+pub const builtin = enum {
+    // ===== CFG =====
+    pub const Start = extern struct {
+        base: Cfg = .{},
+
+        pub const is_basic_block_start = true;
+    };
+    pub const Entry = extern struct {
+        base: Cfg = .{},
+
+        pub const is_basic_block_start = true;
+    };
+    pub const Never = extern struct {
+        base: Cfg = .{},
+    };
+    pub const Return = extern struct {
+        base: Cfg = .{},
+    };
+    pub const Trap = extern struct {
         base: Cfg = .{},
         code: u64,
-    },
-    // [?Cfg]
-    CInt: i64,
-    // [?Cfg]
-    CFlt32: f32,
-    CFlt64: f64,
-    // [?Cfg, lhs, rhs]
-    BinOp: mod.BinOp,
-    // [?Cfg, lhs, rhs]
-    UnOp: mod.UnOp,
-    // [?Cfg, Mem]
-    Local: u64,
-    // [?Cfg, thread, ptr]
-    Load: Load,
-    // [?Cfg, thread, ptr, value, ...antideps]
-    Store: Store,
-    // [?Cfg, thread, dst, src, size, ...antideps]
-    MemCpy: MemCpy,
-    // [?Cfg]
-    GlobalAddr: extern struct {
-        id: u32,
-    },
-    // [?Cfg, ...lane]
-    Split,
-    // [?Cfg, ...lane]
-    Join,
-    // [Cfg, ..args]
-    Call: extern struct {
+    };
+    pub const Call = extern struct {
         base: Cfg = .{},
         id: u32,
         ret_count: u32,
-    },
-    // [Call]
-    CallEnd: Cfg,
-    // [CallEnd]
-    Ret: usize,
-    // [Cfg, cond],
-    If: If,
-    // [If]
-    Then: Cfg,
-    // [If]
-    Else: Cfg,
-    // [lCfg, rCfg]
-    Region: Region,
-    // [traps...]
-    TrapRegion: Cfg,
-    // [entryCfg, backCfg]
-    Loop: Cfg,
-    // [Cfg]
-    Jmp: Cfg,
-    // [Region, lhs, rhs]
-    Phi,
-    // [Cfg, inp]
-    MachMove,
+    };
+    pub const CallEnd = extern struct {
+        base: Cfg = .{},
 
-    pub const is_basic_block_start = .{ .Entry, .CallEnd, .Then, .Else, .Region, .Loop, .TrapRegion };
-    pub const is_basic_block_end = .{ .Return, .Call, .If, .Jmp, .Never, .Trap };
-    pub const is_mem_op = .{ .Load, .MemCpy, .Local, .Store, .Return, .Call, .Mem };
-    pub const is_pinned = .{ .Ret, .Phi, .Mem };
+        pub const is_basic_block_start = true;
+    };
+    pub const Jmp = extern struct {
+        base: Cfg = .{},
+    };
+    pub const If = extern struct {
+        base: Cfg = .{},
+    };
+    pub const Then = extern struct {
+        base: Cfg = .{},
+
+        pub const is_basic_block_start = true;
+    };
+    pub const Else = extern struct {
+        base: Cfg = .{},
+
+        pub const is_basic_block_start = true;
+    };
+    pub const Region = extern struct {
+        base: Cfg = .{},
+        preserve_identity_phys: bool = false,
+        cached_lca: ?*align(8) anyopaque = null,
+
+        pub const is_basic_block_start = true;
+    };
+    pub const Loop = extern struct {
+        base: Region = .{},
+
+        pub const is_basic_block_start = true;
+    };
+    pub const TrapRegion = extern struct {
+        base: Cfg = .{},
+    };
+    // ===== VALUES =====
+    pub const Phi = extern struct {
+        pub const pinned = true;
+    };
+    pub const Arg = extern struct {
+        base: Phi = .{},
+    };
+    pub const CInt = extern struct {
+        value: i64,
+    };
+    pub const CFlt32 = extern struct {
+        value: f32,
+    };
+    pub const CFlt64 = extern struct {
+        value: f64,
+    };
+    pub const BinOp = extern struct {
+        op: mod.BinOp,
+    };
+    pub const UnOp = extern struct {
+        op: mod.UnOp,
+    };
+    pub const Ret = extern struct {
+        index: usize,
+
+        pub const pinned = true;
+    };
+    pub const MachMove = extern struct {};
+    // ===== MEMORY =====
+    pub const Mem = extern struct {
+        pub const pinned = true;
+    };
+    pub const Local = extern struct {
+        size: u64,
+    };
+    pub const Load = extern struct {
+        base: MemOp = .{},
+    };
+    pub const Store = extern struct {
+        base: MemOp = .{},
+    };
+    pub const MemCpy = extern struct {
+        base: Store = .{},
+    };
+    pub const GlobalAddr = extern struct {
+        id: u32,
+    };
+    pub const Split = extern struct {};
+    pub const Join = extern struct {};
 };
 
-pub const If = extern struct {
-    base: Cfg = .{},
-};
-
-pub const Region = extern struct {
-    base: Cfg = .{},
-    preserve_identity_phys: bool = false,
-    cached_lca: ?*align(8) anyopaque = null,
-};
+pub const MemOp = extern struct {};
 
 pub fn UnionOf(comptime MachNode: type) type {
-    var builtin = @typeInfo(Builtin);
+    var builtin = @typeInfo(builtin);
     builtin.@"union".decls = &.{};
     builtin.@"union".tag_type = KindOf(MachNode);
     const field_ref = std.meta.fields(MachNode);
@@ -301,7 +331,7 @@ pub fn UnionOf(comptime MachNode: type) type {
 }
 
 pub fn KindOf(comptime MachNode: type) type {
-    var builtin = @typeInfo(std.meta.Tag(Builtin));
+    var builtin = @typeInfo(std.meta.Tag(builtin));
     builtin.@"enum".tag_type = u16;
     const field_ref = std.meta.fields(std.meta.Tag(MachNode));
     var fields = field_ref[0..field_ref.len].*;
@@ -316,11 +346,6 @@ pub const Cfg = extern struct {
     idepth: u16 = 0,
     antidep: u16 = 0,
     loop: u16 = undefined,
-};
-pub const Load = extern struct {};
-pub const Store = extern struct {};
-pub const MemCpy = extern struct {
-    base: Store = .{},
 };
 
 const mod = @This();
@@ -368,7 +393,7 @@ pub fn Func(comptime MachNode: type) type {
             return std.hash_map.HashMapUnmanaged(InternedNode, void, Context, 70);
         }
 
-        pub const all_classes = std.meta.fields(Builtin) ++ std.meta.fields(MachNode);
+        pub const all_classes = std.meta.fields(builtin) ++ std.meta.fields(MachNode);
 
         const Self = @This();
 
@@ -422,7 +447,7 @@ pub fn Func(comptime MachNode: type) type {
 
         pub fn bakeBitset(comptime name: []const u8) std.EnumSet(Kind) {
             var set = std.EnumSet(Kind).initEmpty();
-            for (@field(Builtin, name)) |k| set.insert(k);
+            for (@field(builtin, name)) |k| set.insert(k);
             if (optApi(name, []const Kind)) for (@field(MachNode, name)) |k| set.insert(k);
             return set;
         }
