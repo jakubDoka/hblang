@@ -2,9 +2,9 @@ const graph = @import("graph.zig");
 const root = graph.utils;
 const std = @import("std");
 
-pub fn Mem2RegMixin(comptime MachNode: type) type {
+pub fn Mem2RegMixin(comptime Backend: type) type {
     return struct {
-        const Func = graph.Func(MachNode);
+        const Func = graph.Func(Backend);
         const Self = @This();
         const Node = Func.Node;
 
@@ -53,7 +53,7 @@ pub fn Mem2RegMixin(comptime MachNode: type) type {
                                     .Phi,
                                     initVal.data_type,
                                     &.{ loop.ctrl, initVal, null },
-                                    {},
+                                    .{},
                                 ) });
                             }
                         }

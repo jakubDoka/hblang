@@ -8,20 +8,19 @@ const root = graph.utils;
 const graph = @import("graph.zig");
 const Builder = @This();
 
-pub const Func = graph.Func(Node);
+pub const Func = graph.Func(Builder);
+pub const i_know_the_api = {};
 pub const BuildNode = Func.Node;
 pub const Kind = Func.Kind;
 
 pub const DataType = graph.DataType;
 pub const BinOp = graph.BinOp;
 pub const UnOp = graph.UnOp;
-pub const Node = union(enum) {
+pub const classes = enum {
     // [Cfg, mem, ...values]
-    Scope,
-
-    pub const is_temporary = .{.Scope};
-
-    pub const i_know_the_api = {};
+    pub const Scope = extern struct {
+        pub const is_temporary = true;
+    };
 };
 
 pub fn SpecificNode(comptime _: Kind) type {
@@ -41,10 +40,10 @@ pub const BuildToken = enum { @"please call Builder.begin() first, then Builder.
 
 pub fn begin(self: *Builder, param_count: usize, return_coutn: usize) struct { BuildToken, []DataType, []DataType } {
     const ctrl = self.func.addNode(.Entry, .top, &.{self.func.root}, .{});
-    self.root_mem = self.func.addNode(.Mem, .top, &.{self.func.root}, {});
-    self.scope = self.func.addNode(.Scope, .top, &.{ ctrl, self.root_mem }, {});
+    self.root_mem = self.func.addNode(.Mem, .top, &.{self.func.root}, .{});
+    self.scope = self.func.addNode(.Scope, .top, &.{ ctrl, self.root_mem }, .{});
     self.func.end = self.func.addNode(.Return, .top, &.{ null, null, null }, .{});
-    self.pins = self.func.addNode(.Scope, .top, &.{}, {});
+    self.pins = self.func.addNode(.Scope, .top, &.{}, .{});
 
     const alloc = self.func.arena.allocator().alloc(DataType, param_count + return_coutn) catch unreachable;
 
@@ -55,7 +54,7 @@ pub fn begin(self: *Builder, param_count: usize, return_coutn: usize) struct { B
 }
 
 pub fn addParam(self: *Builder, idx: usize) SpecificNode(.Arg) {
-    return self.func.addNode(.Arg, self.func.params[idx], &.{self.func.root}, idx);
+    return self.func.addNode(.Arg, self.func.params[idx], &.{self.func.root}, .{ .index = idx });
 }
 
 pub fn end(self: *Builder, _: BuildToken) void {
@@ -91,14 +90,14 @@ pub fn end(self: *Builder, _: BuildToken) void {
 // #MEM ========================================================================
 
 pub fn addLocal(self: *Builder, sloc: graph.Sloc, size: u64) SpecificNode(.Local) {
-    const local = self.func.addNode(.Local, .i64, &.{ null, self.root_mem }, size);
+    const local = self.func.addNode(.Local, .i64, &.{ null, self.root_mem }, .{ .size = size });
     local.sloc = sloc;
     return local;
 }
 
 pub fn resizeLocal(_: *Builder, here: SpecificNode(.Local), to_size: u64) void {
-    std.debug.assert(here.extra(.Local).* == 0);
-    here.extra(.Local).* = to_size;
+    std.debug.assert(here.extra(.Local).size == 0);
+    here.extra(.Local).size = to_size;
 }
 
 pub fn addLoad(self: *Builder, addr: *BuildNode, ty: DataType) SpecificNode(.Store) {
@@ -243,7 +242,7 @@ pub fn getScopeValueMulty(func: *Func, scope: *BuildNode, index: usize) *Func.No
             const initVal = getScopeValueMulty(func, loop, index);
             const items = getScopeValues(loop);
             if (!items[index].isLazyPhi(items[0])) {
-                const phi = func.addNode(.Phi, initVal.data_type, &.{ items[0], initVal, null }, {});
+                const phi = func.addNode(.Phi, initVal.data_type, &.{ items[0], initVal, null }, .{});
                 std.debug.assert(phi.isLazyPhi(items[0]));
                 func.setInputNoIntern(loop, index, phi);
             }
@@ -272,7 +271,7 @@ pub fn mergeScopes(
         if (lh == rh) continue;
         const thn = getScopeValueMulty(func, lhs, i);
         const els = getScopeValueMulty(func, rhs, i);
-        const phi = func.addNode(.Phi, thn.data_type.meet(els.data_type), &.{ new_ctrl, thn, els }, {});
+        const phi = func.addNode(.Phi, thn.data_type.meet(els.data_type), &.{ new_ctrl, thn, els }, .{});
         func.setInputNoIntern(rhs, i, phi);
     }
 
@@ -284,7 +283,7 @@ pub fn mergeScopes(
 
 pub fn cloneScope(self: *Builder) SpecificNode(.Scope) {
     const values = getScopeValues(self.scope.?);
-    return self.func.addNode(.Scope, .top, values, {});
+    return self.func.addNode(.Scope, .top, values, .{});
 }
 
 pub inline fn truncateScope(self: *Builder, back_to: usize) void {
@@ -479,11 +478,11 @@ pub fn addCall(
     });
     const call_end = self.func.addNode(.CallEnd, .top, &.{call}, .{});
     self.func.setInputNoIntern(self.scope.?, 0, call_end);
-    const call_mem = self.func.addNode(.Mem, .top, &.{call_end}, {});
+    const call_mem = self.func.addNode(.Mem, .top, &.{call_end}, .{});
     self.func.setInputNoIntern(self.scope.?, 1, call_mem);
 
     for (args.return_slots, args.returns, 0..) |*slt, rty, i| {
-        slt.* = self.func.addNode(.Ret, rty, &.{call_end}, i);
+        slt.* = self.func.addNode(.Ret, rty, &.{call_end}, .{ .index = i });
     }
 
     return args.return_slots;
@@ -497,10 +496,10 @@ pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
     if (inps[0] != null) {
         const new_ctrl = self.func.addNode(.Region, .top, &.{ inps[0].?, self.control() }, .{});
         self.func.setInputNoIntern(ret, 0, new_ctrl);
-        const new_mem = self.func.addNode(.Phi, .top, &.{ new_ctrl, inps[1], self.memory() }, {});
+        const new_mem = self.func.addNode(.Phi, .top, &.{ new_ctrl, inps[1], self.memory() }, .{});
         self.func.setInputNoIntern(ret, 1, new_mem);
         for (inps[3..ret.input_ordered_len], values, 3..) |curr, next, vidx| {
-            const new_value = self.func.addNode(.Phi, curr.?.data_type.meet(next.data_type), &.{ new_ctrl, curr, next }, {});
+            const new_value = self.func.addNode(.Phi, curr.?.data_type.meet(next.data_type), &.{ new_ctrl, curr, next }, .{});
             self.func.setInputNoIntern(ret, vidx, new_value);
         }
     } else {

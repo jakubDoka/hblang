@@ -2,7 +2,7 @@ const graph = @import("graph.zig");
 const root = graph.utils;
 const std = @import("std");
 
-pub fn GcmMixin(comptime MachNode: type) type {
+pub fn GcmMixin(comptime Backend: type) type {
     return struct {
         loop_tree_built: std.debug.SafetyLock = .{},
         cfg_built: std.debug.SafetyLock = .{},
@@ -11,7 +11,7 @@ pub fn GcmMixin(comptime MachNode: type) type {
         block_count: u16 = undefined,
         instr_count: u16 = undefined,
 
-        const Func = graph.Func(MachNode);
+        const Func = graph.Func(Backend);
         const Self = @This();
         const CfgNode = Func.CfgNode;
         const Node = Func.Node;
@@ -177,9 +177,9 @@ pub fn GcmMixin(comptime MachNode: type) type {
                     defer intmp.deinit();
                     for (intmp.arena.dupe(*Node, n.base.outputs())) |o| if (o.isDataPhi()) {
                         std.debug.assert(o.inputs().len == 3);
-                        const lhs = self.addNode(.MachMove, .top, &.{ null, o.inputs()[1].? }, {});
-                        const rhs = self.addNode(.MachMove, .top, &.{ null, o.inputs()[2].? }, {});
-                        const new_phy = self.addNode(.Phi, o.data_type, &.{ &n.base, lhs, rhs }, {});
+                        const lhs = self.addNode(.MachMove, .top, &.{ null, o.inputs()[1].? }, .{});
+                        const rhs = self.addNode(.MachMove, .top, &.{ null, o.inputs()[2].? }, .{});
+                        const new_phy = self.addNode(.Phi, o.data_type, &.{ &n.base, lhs, rhs }, .{});
                         self.subsume(new_phy, o);
                     };
                 };

@@ -9,7 +9,7 @@ const object = root.object;
 const zydis = @import("zydis").exports;
 
 const X86_64 = @This();
-const Func = graph.Func(Node);
+const Func = graph.Func(X86_64);
 const FuncNode = Func.Node;
 const Move = utils.Move(Reg);
 
@@ -143,241 +143,237 @@ pub const Reloc = struct {
     off: u8,
 };
 
-pub const Node = union(enum) {
-    OffsetLoad: extern struct {
+pub const classes = enum {
+    pub const OffsetLoad = extern struct {
         base: graph.Load = .{},
         dis: i32,
-    },
-    OffsetStore: extern struct {
+    };
+    pub const OffsetStore = extern struct {
         base: graph.Store = .{},
         dis: i32,
-    },
-    ImmOp: extern struct {
-        base: graph.BinOp,
+    };
+    pub const ImmOp = extern struct {
+        base: graph.builtin.BinOp,
         imm: i64,
-    },
-    CondJump: extern struct {
+    };
+    pub const CondJump = extern struct {
         base: graph.If = .{},
         op: zydis.ZydisMnemonic,
-    },
-
-    pub const is_basic_block_start: []const Func.Kind = &.{};
-    pub const is_mem_op: []const Func.Kind = &.{ .OffsetLoad, .OffsetStore };
-    pub const is_basic_block_end: []const Func.Kind = &.{.CondJump};
-    pub const is_pinned: []const Func.Kind = &.{};
-    pub const reg_count = 32;
-
-    pub fn carried(node: *Func.Node) ?usize {
-        return if (node.kind == .BinOp) 0 else null;
-    }
-
-    pub fn isInterned(kind: Func.Kind) bool {
-        return kind == .OffsetLoad;
-    }
-
-    pub fn isSwapped(node: *Func.Node) bool {
-        _ = node;
-        return false;
-    }
-
-    pub fn clobbers(node: *Func.Node) u64 {
-        return switch (node.kind) {
-            .Call, .MemCpy => comptime b: {
-                var vl: u64 = 0;
-                for (Reg.system_v.caller_saved) |r| {
-                    vl |= @as(u64, 1) << @intFromEnum(r);
-                }
-                break :b vl;
-            },
-            .BinOp => switch (node.extra(.BinOp).*) {
-                .udiv, .sdiv, .umod, .smod => {
-                    var base = @as(u64, 1) << @intFromEnum(Reg.rax);
-                    if (node.data_type.size() != 1) {
-                        base |= @as(u64, 1) << @intFromEnum(Reg.rdx);
-                    }
-                    return base;
-                },
-                .ishl, .ushr, .sshr => @as(u64, 1) << @intFromEnum(Reg.rcx),
-                else => 0,
-            },
-            else => 0,
-        };
-    }
-
-    pub fn idealize(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
-        if (node.kind == .MemCpy) {
-            const ctrl = node.inputs()[0].?;
-            var mem = node.inputs()[1].?;
-            const dst = node.inputs()[2].?;
-            const src = node.inputs()[3].?;
-            const len = node.inputs()[4].?;
-            if (len.kind == .CInt and len.extra(.CInt).* <= 16) {
-                const size = len.extra(.CInt).*;
-                var cursor: u64 = 0;
-                var copy_elem = graph.DataType.i64;
-
-                while (cursor != size) {
-                    while (cursor + copy_elem.size() > size) : (copy_elem =
-                        @enumFromInt(@intFromEnum(copy_elem) - 1))
-                    {}
-
-                    const dst_off = func.addFieldOffset(dst, @intCast(cursor));
-                    const src_off = func.addFieldOffset(src, @intCast(cursor));
-                    const ld = func.addNode(.Load, copy_elem, &.{ ctrl, mem, src_off }, .{});
-                    worklist.add(ld);
-                    mem = func.addNode(.Store, copy_elem, &.{ ctrl, mem, dst_off, ld }, .{});
-                    worklist.add(mem);
-
-                    cursor += copy_elem.size();
-                }
-
-                return mem;
-            }
-        }
-
-        return null;
-    }
-
-    pub fn regBias(node: *Func.Node) ?u16 {
-        return @intFromEnum(switch (node.kind) {
-            .Arg => Reg.system_v.args[node.extraConst(.Arg).*],
-            else => b: {
-                for (node.outputs()) |o| {
-                    if (o.kind == .Call) {
-                        const idx = std.mem.indexOfScalar(?*Func.Node, o.dataDeps(), node) orelse continue;
-                        break :b Reg.system_v.args[idx];
-                    }
-
-                    if (o.kind == .Phi and o.inputs()[0].?.kind != .Loop) {
-                        return o.regBias();
-                    }
-                }
-
-                if (node.isSub(graph.BinOp)) {
-                    return node.inputs()[1].?.regBias();
-                }
-
-                return null;
-            },
-        });
-    }
-
-    pub fn knownOffset(node: *Func.Node) struct { *Func.Node, i64 } {
-        return switch (node.extra2()) {
-            .ImmOp => |extra| {
-                std.debug.assert(extra.base == .iadd or extra.base == .isub);
-                return .{ node.inputs()[1].?, if (extra.base == .iadd)
-                    extra.imm
-                else
-                    -extra.imm };
-            },
-            else => .{ node, 0 },
-        };
-    }
-
-    pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
-        if (node.kind == .Load) {
-            const base, const offset = node.base().knownOffset();
-            const res = func.addNode(
-                .OffsetLoad,
-                node.data_type,
-                &.{ node.inputs()[0], node.mem(), base },
-                .{ .dis = @intCast(offset) },
-            );
-            worklist.add(res);
-            return res;
-        }
-
-        if (node.kind == .If) {
-            const cond = node.inputs()[1].?;
-            if (cond.kind == .BinOp) select_cond_jump: {
-                const op: zydis.ZydisMnemonic = switch (cond.extra(.BinOp).*) {
-                    .ne => zydis.ZYDIS_MNEMONIC_JZ,
-                    .eq => zydis.ZYDIS_MNEMONIC_JNZ,
-
-                    // Unsigned comparisons
-                    .uge => zydis.ZYDIS_MNEMONIC_JB, // jump if below (opposite of >=)
-                    .ule => zydis.ZYDIS_MNEMONIC_JNBE, // jump if above (opposite of <=)
-                    .ugt => zydis.ZYDIS_MNEMONIC_JBE, // jump if below or equal (opposite of >)
-                    .ult => zydis.ZYDIS_MNEMONIC_JNB, // jump if above or equal (opposite of <)
-
-                    // Signed comparisons
-                    .sge => zydis.ZYDIS_MNEMONIC_JL, // jump if less (opposite of >=)
-                    .sle => zydis.ZYDIS_MNEMONIC_JNLE, // jump if greater (opposite of <=)
-                    .sgt => zydis.ZYDIS_MNEMONIC_JLE, // jump if less or equal (opposite of >)
-                    .slt => zydis.ZYDIS_MNEMONIC_JNL, // jump if greater or equal (opposite of <)
-
-                    else => break :select_cond_jump,
-                };
-                return func.addNode(
-                    .CondJump,
-                    cond.data_type,
-                    &.{ node.inputs()[0], cond.inputs()[1], cond.inputs()[2] },
-                    .{ .op = op },
-                );
-            }
-        }
-
-        if (node.kind == .Store) {
-            const base, const offset = node.base().knownOffset();
-            const res = func.addNode(
-                .OffsetStore,
-                node.data_type,
-                &.{ node.inputs()[0], node.mem(), base, node.value() },
-                .{ .dis = @intCast(offset) },
-            );
-            worklist.add(res);
-            return res;
-        }
-
-        if (node.kind == .BinOp and node.inputs()[2].?.kind == .CInt and
-            switch (node.extra(.BinOp).*) {
-                .udiv, .sdiv, .umod, .smod, .imul => false,
-                .band, .bor, .bxor => node.inputs()[2].?.data_type.size() > 1,
-                .eq,
-                .ne,
-                .uge,
-                .ule,
-                .ugt,
-                .ult,
-                .sge,
-                .sle,
-                .sgt,
-                .slt,
-                => node.inputs()[2].?.data_type.size() > 2,
-                else => true,
-            })
-        {
-            if (std.math.cast(i32, node.inputs()[2].?.extra(.CInt).*) != null) {
-                return func.addNode(.ImmOp, node.data_type, node.inputs()[0..2], .{
-                    .base = node.extra(.BinOp).*,
-                    .imm = node.inputs()[2].?.extra(.CInt).*,
-                });
-            }
-        }
-
-        return null;
-    }
-
-    pub fn allowedRegsFor(
-        node: *Func.Node,
-        ids: usize,
-        tmp: *utils.Arena,
-    ) ?std.DynamicBitSetUnmanaged {
-        _ = node;
-        _ = ids;
-
-        return Reg.intMask(tmp);
-    }
-
-    pub fn getStaticOffset(node: *Func.Node) i64 {
-        return switch (node.kind) {
-            .OffsetLoad => node.extra(.OffsetLoad).dis,
-            .OffsetStore => node.extra(.OffsetStore).dis,
-            else => 0,
-        };
-    }
+    };
 };
+
+pub const reg_count = 32;
+
+pub fn carried(node: *Func.Node) ?usize {
+    return if (node.kind == .BinOp) 0 else null;
+}
+
+pub fn isInterned(kind: Func.Kind) bool {
+    return kind == .OffsetLoad;
+}
+
+pub fn isSwapped(node: *Func.Node) bool {
+    _ = node;
+    return false;
+}
+
+pub fn clobbers(node: *Func.Node) u64 {
+    return switch (node.kind) {
+        .Call, .MemCpy => comptime b: {
+            var vl: u64 = 0;
+            for (Reg.system_v.caller_saved) |r| {
+                vl |= @as(u64, 1) << @intFromEnum(r);
+            }
+            break :b vl;
+        },
+        .BinOp => switch (node.extra(.BinOp).op) {
+            .udiv, .sdiv, .umod, .smod => {
+                var base = @as(u64, 1) << @intFromEnum(Reg.rax);
+                if (node.data_type.size() != 1) {
+                    base |= @as(u64, 1) << @intFromEnum(Reg.rdx);
+                }
+                return base;
+            },
+            .ishl, .ushr, .sshr => @as(u64, 1) << @intFromEnum(Reg.rcx),
+            else => 0,
+        },
+        else => 0,
+    };
+}
+
+pub fn idealize(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
+    if (node.kind == .MemCpy) {
+        const ctrl = node.inputs()[0].?;
+        var mem = node.inputs()[1].?;
+        const dst = node.inputs()[2].?;
+        const src = node.inputs()[3].?;
+        const len = node.inputs()[4].?;
+        if (len.kind == .CInt and len.extra(.CInt).value <= 16) {
+            const size = len.extra(.CInt).value;
+            var cursor: u64 = 0;
+            var copy_elem = graph.DataType.i64;
+
+            while (cursor != size) {
+                while (cursor + copy_elem.size() > size) : (copy_elem =
+                    @enumFromInt(@intFromEnum(copy_elem) - 1))
+                {}
+
+                const dst_off = func.addFieldOffset(dst, @intCast(cursor));
+                const src_off = func.addFieldOffset(src, @intCast(cursor));
+                const ld = func.addNode(.Load, copy_elem, &.{ ctrl, mem, src_off }, .{});
+                worklist.add(ld);
+                mem = func.addNode(.Store, copy_elem, &.{ ctrl, mem, dst_off, ld }, .{});
+                worklist.add(mem);
+
+                cursor += copy_elem.size();
+            }
+
+            return mem;
+        }
+    }
+
+    return null;
+}
+
+pub fn regBias(node: *Func.Node) ?u16 {
+    return @intFromEnum(switch (node.kind) {
+        .Arg => Reg.system_v.args[node.extraConst(.Arg).index],
+        else => b: {
+            for (node.outputs()) |o| {
+                if (o.kind == .Call) {
+                    const idx = std.mem.indexOfScalar(?*Func.Node, o.dataDeps(), node) orelse continue;
+                    break :b Reg.system_v.args[idx];
+                }
+
+                if (o.kind == .Phi and o.inputs()[0].?.kind != .Loop) {
+                    return o.regBias();
+                }
+            }
+
+            if (node.isSub(graph.builtin.BinOp)) {
+                return node.inputs()[1].?.regBias();
+            }
+
+            return null;
+        },
+    });
+}
+
+pub fn knownOffset(node: *Func.Node) struct { *Func.Node, i64 } {
+    return switch (node.extra2()) {
+        .ImmOp => |extra| {
+            std.debug.assert(extra.base.op == .iadd or extra.base.op == .isub);
+            return .{ node.inputs()[1].?, if (extra.base.op == .iadd)
+                extra.imm
+            else
+                -extra.imm };
+        },
+        else => .{ node, 0 },
+    };
+}
+
+pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
+    if (node.kind == .Load) {
+        const base, const offset = node.base().knownOffset();
+        const res = func.addNode(
+            .OffsetLoad,
+            node.data_type,
+            &.{ node.inputs()[0], node.mem(), base },
+            .{ .dis = @intCast(offset) },
+        );
+        worklist.add(res);
+        return res;
+    }
+
+    if (node.kind == .If) {
+        const cond = node.inputs()[1].?;
+        if (cond.kind == .BinOp) select_cond_jump: {
+            const op: zydis.ZydisMnemonic = switch (cond.extra(.BinOp).op) {
+                .ne => zydis.ZYDIS_MNEMONIC_JZ,
+                .eq => zydis.ZYDIS_MNEMONIC_JNZ,
+
+                // Unsigned comparisons
+                .uge => zydis.ZYDIS_MNEMONIC_JB, // jump if below (opposite of >=)
+                .ule => zydis.ZYDIS_MNEMONIC_JNBE, // jump if above (opposite of <=)
+                .ugt => zydis.ZYDIS_MNEMONIC_JBE, // jump if below or equal (opposite of >)
+                .ult => zydis.ZYDIS_MNEMONIC_JNB, // jump if above or equal (opposite of <)
+
+                // Signed comparisons
+                .sge => zydis.ZYDIS_MNEMONIC_JL, // jump if less (opposite of >=)
+                .sle => zydis.ZYDIS_MNEMONIC_JNLE, // jump if greater (opposite of <=)
+                .sgt => zydis.ZYDIS_MNEMONIC_JLE, // jump if less or equal (opposite of >)
+                .slt => zydis.ZYDIS_MNEMONIC_JNL, // jump if greater or equal (opposite of <)
+
+                else => break :select_cond_jump,
+            };
+            return func.addNode(
+                .CondJump,
+                cond.data_type,
+                &.{ node.inputs()[0], cond.inputs()[1], cond.inputs()[2] },
+                .{ .op = op },
+            );
+        }
+    }
+
+    if (node.kind == .Store) {
+        const base, const offset = node.base().knownOffset();
+        const res = func.addNode(
+            .OffsetStore,
+            node.data_type,
+            &.{ node.inputs()[0], node.mem(), base, node.value() },
+            .{ .dis = @intCast(offset) },
+        );
+        worklist.add(res);
+        return res;
+    }
+
+    if (node.kind == .BinOp and node.inputs()[2].?.kind == .CInt and
+        switch (node.extra(.BinOp).op) {
+            .udiv, .sdiv, .umod, .smod, .imul => false,
+            .band, .bor, .bxor => node.inputs()[2].?.data_type.size() > 1,
+            .eq,
+            .ne,
+            .uge,
+            .ule,
+            .ugt,
+            .ult,
+            .sge,
+            .sle,
+            .sgt,
+            .slt,
+            => node.inputs()[2].?.data_type.size() > 2,
+            else => true,
+        })
+    {
+        if (std.math.cast(i32, node.inputs()[2].?.extra(.CInt).value) != null) {
+            return func.addNode(.ImmOp, node.data_type, node.inputs()[0..2], .{
+                .base = node.extra(.BinOp).*,
+                .imm = node.inputs()[2].?.extra(.CInt).value,
+            });
+        }
+    }
+
+    return null;
+}
+
+pub fn allowedRegsFor(
+    node: *Func.Node,
+    ids: usize,
+    tmp: *utils.Arena,
+) ?std.DynamicBitSetUnmanaged {
+    _ = node;
+    _ = ids;
+
+    return Reg.intMask(tmp);
+}
+
+pub fn getStaticOffset(node: *Func.Node) i64 {
+    return switch (node.kind) {
+        .OffsetLoad => node.extra(.OffsetLoad).dis,
+        .OffsetStore => node.extra(.OffsetStore).dis,
+        else => 0,
+    };
+}
 
 pub fn getReg(self: X86_64, node: ?*FuncNode) Reg {
     return @enumFromInt(self.allocs[node.?.schedule]);
@@ -398,7 +394,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     if (opts.optimizations.shouldDefer(id, opts.is_inline, X86_64, func, self))
         return;
 
-    opts.optimizations.execute(Node, self, func);
+    opts.optimizations.execute(X86_64, self, func);
 
     //if (entry)
     //    func.fmtScheduled(
@@ -412,7 +408,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), func.next_id) catch unreachable;
     const postorder = func.collectPostorder(tmp.arena.allocator(), &visited);
 
-    self.allocs = Regalloc.ralloc(Node, func);
+    self.allocs = Regalloc.ralloc(X86_64, func);
     self.ret_count = func.returns.len;
     self.local_relocs = .initBuffer(tmp.arena.alloc(Reloc, 1024 * 10));
     self.block_offsets = tmp.arena.alloc(u32, postorder.len);
@@ -437,15 +433,15 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
 
         std.sort.pdq(*FuncNode, locals.items, {}, struct {
             fn isBigger(_: void, lhs: *FuncNode, rhs: *FuncNode) bool {
-                return @ctz(lhs.extra(.Local).*) > @ctz(rhs.extra(.Local).*);
+                return @ctz(lhs.extra(.Local).size) > @ctz(rhs.extra(.Local).size);
             }
         }.isBigger);
 
         std.debug.assert(func.root.outputs()[1].kind == .Mem);
         for (locals.items) |o| {
             const extra = o.extra(.Local);
-            const size = extra.*;
-            extra.* = @bitCast(local_size);
+            const size = extra.size;
+            extra.size = @bitCast(local_size);
             local_size += @intCast(size);
         }
     }
@@ -486,7 +482,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
         var moves = std.ArrayList(Move).init(tmp.arena.allocator());
         for (0..func.params.len) |i| {
             const argn = for (postorder[0].base.outputs()) |o| {
-                if (o.kind == .Arg and o.extra(.Arg).* == i) break o;
+                if (o.kind == .Arg and o.extra(.Arg).index == i) break o;
             } else continue; // is dead
             if (self.getReg(argn) != Reg.system_v.args[i]) {
                 moves.append(.init(self.getReg(argn), Reg.system_v.args[i])) catch unreachable;
@@ -729,7 +725,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
     for (block.outputs()) |instr| {
         switch (instr.extra2()) {
             .CInt => |extra| {
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), extra.* });
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), extra.value });
             },
             .MemCpy => {
                 var moves = std.ArrayList(Move).init(tmp.arena.allocator());
@@ -790,7 +786,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
             .Local => {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_LEA, .{
                     self.getReg(instr),
-                    BRegOff{ .rsp, @intCast(instr.extra(.Local).* + self.local_base), 8 },
+                    BRegOff{ .rsp, @intCast(instr.extra(.Local).size + self.local_base), 8 },
                 });
             },
             .OffsetLoad => |extra| {
@@ -874,7 +870,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 continue;
             },
             .ImmOp => |extra| {
-                const op = extra.base;
+                const op = extra.base.op;
                 const size = instr.data_type.size();
                 const opsize = instr.inputs()[1].?.data_type.size();
                 const dst = self.getReg(instr);
@@ -925,7 +921,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 }
             },
             .BinOp => |extra| {
-                const op = extra.*;
+                const op = extra.op;
                 const size = instr.data_type.size();
                 const opsize = instr.inputs()[1].?.data_type.size();
                 const dst = self.getReg(instr);
@@ -1047,8 +1043,8 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
 
                 self.orderMoves(moves.items);
             },
-            .UnOp => {
-                const op = instr.extra(.UnOp).*;
+            .UnOp => |extra| {
+                const op = extra.op;
                 const size = instr.data_type.size();
                 const dst = self.getReg(instr);
                 const src_size = instr.inputs()[1].?.data_type.size();

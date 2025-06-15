@@ -1,9 +1,11 @@
 test init {
     const ExampleMachine = struct {
-        const Func = graph.Func(Node);
+        const Func = graph.Func(classes);
 
-        pub const Node = union(enum) {
-            CustomNode: bool,
+        pub const classes = enum {
+            pub const CustomNode = extern struct {
+                value: bool,
+            };
 
             pub const is_basic_block_start: []const Func.Kind = &.{};
             pub const is_mem_op: []const Func.Kind = &.{};
@@ -31,7 +33,7 @@ test init {
         };
 
         pub fn emitFunc(self: *@This(), func: *Func, opts: EmitOptions) void {
-            opts.optimizations.execute(Node, func);
+            opts.optimizations.execute(classes, func);
             _ = self;
             unreachable;
         }
@@ -95,9 +97,9 @@ pub const InlineFunc = struct {
     pub fn toFunc(
         self: *const InlineFunc,
         arena: *std.heap.ArenaAllocator,
-        comptime Node: type,
-    ) graph.Func(Node) {
-        const Func = graph.Func(Node);
+        comptime Backend: type,
+    ) graph.Func(Backend) {
+        const Func = graph.Func(Backend);
 
         errdefer unreachable;
 
@@ -115,7 +117,7 @@ pub const InlineFunc = struct {
         };
 
         internBatch(
-            Node,
+            Backend,
             self_start,
             self_end,
             0,
@@ -132,10 +134,10 @@ pub const InlineFunc = struct {
             // acesses the initialized ones
             //
             if (o.kind == .Arg) {
-                if (params.items.len <= o.extra(.Arg).*) {
-                    try params.resize(func.arena.allocator(), o.extra(.Arg).* + 1);
+                if (params.items.len <= o.extra(.Arg).index) {
+                    try params.resize(func.arena.allocator(), o.extra(.Arg).index + 1);
                 }
-                params.items[o.extra(.Arg).*] = o.data_type;
+                params.items[o.extra(.Arg).index] = o.data_type;
             }
         }
 
@@ -150,20 +152,20 @@ pub const InlineFunc = struct {
     }
 
     pub fn cloneNodes(
-        comptime Node: type,
-        start: *graph.FuncNode(Node),
-        end: *graph.FuncNode(Node),
+        comptime Backend: type,
+        start: *graph.FuncNode(Backend),
+        end: *graph.FuncNode(Backend),
         node_count: usize,
         arena: *std.heap.ArenaAllocator,
         already_present: usize,
         scrath: *root.Arena,
     ) struct {
-        new_node_table: []*graph.FuncNode(Node),
-        new_nodes: []*graph.FuncNode(Node),
+        new_node_table: []*graph.FuncNode(Backend),
+        new_nodes: []*graph.FuncNode(Backend),
     } {
         errdefer unreachable;
 
-        const Func = graph.Func(Node);
+        const Func = graph.Func(Backend);
 
         var tmp = root.Arena.scrath(scrath);
         defer tmp.deinit();
@@ -233,16 +235,16 @@ pub const InlineFunc = struct {
     }
 
     pub fn internBatch(
-        comptime Node: type,
-        start: *graph.FuncNode(Node),
-        end: *graph.FuncNode(Node),
+        comptime Backend: type,
+        start: *graph.FuncNode(Backend),
+        end: *graph.FuncNode(Backend),
         already_present: usize,
-        into: *graph.Func(Node),
-        new_nodes: union(enum) { new: []*graph.FuncNode(Node), count: usize },
+        into: *graph.Func(Backend),
+        new_nodes: union(enum) { new: []*graph.FuncNode(Backend), count: usize },
     ) void {
         errdefer unreachable;
 
-        const Func = graph.Func(Node);
+        const Func = graph.Func(Backend);
 
         var tmp = root.Arena.scrath(null);
         defer tmp.deinit();
@@ -362,16 +364,16 @@ pub const InlineFunc = struct {
 
     pub fn inlineInto(
         self: *const InlineFunc,
-        comptime Node: type,
-        func: *graph.Func(Node),
-        dest: *graph.Func(Node).Node,
-        func_work: *graph.Func(Node).WorkList,
+        comptime Backend: type,
+        func: *graph.Func(Backend),
+        dest: *graph.Func(Backend).Node,
+        func_work: *graph.Func(Backend).WorkList,
     ) void {
         errdefer unreachable;
 
         func.gcm.loop_tree_built.assertUnlocked();
 
-        const Func = graph.Func(Node);
+        const Func = graph.Func(Backend);
 
         const arena = &func.arena;
         const self_start: *Func.Node = @alignCast(@ptrCast(self.start));
@@ -383,7 +385,7 @@ pub const InlineFunc = struct {
         defer tmp.deinit();
 
         const cloned = cloneNodes(
-            Node,
+            Backend,
             self_start,
             self_end,
             self.node_count,
@@ -397,7 +399,7 @@ pub const InlineFunc = struct {
         const end = cloned.new_node_table[self_end.id];
         const start = cloned.new_node_table[self_start.id];
 
-        internBatch(Node, start, end, prev_next_id, func, .{ .new = cloned.new_nodes });
+        internBatch(Backend, start, end, prev_next_id, func, .{ .new = cloned.new_nodes });
 
         const entry = start.outputs()[0];
         std.debug.assert(entry.kind == .Entry);
@@ -447,14 +449,14 @@ pub const InlineFunc = struct {
         // NOTE: not scheduled yet so args are on the Start
         for (dest.dataDeps(), 0..) |dep, j| {
             const arg = for (start.outputs()) |o| {
-                if (o.kind == .Arg and o.extra(.Arg).* == j) break o;
+                if (o.kind == .Arg and o.extra(.Arg).index == j) break o;
             } else continue;
             func.subsume(dep.?, arg);
         }
 
         for (end.dataDeps(), 0..) |dep, j| {
             const ret = for (call_end.outputs()) |o| {
-                if (o.kind == .Ret and o.extra(.Ret).* == j) break o;
+                if (o.kind == .Ret and o.extra(.Ret).index == j) break o;
             } else continue;
             func.subsume(dep.?, ret);
         }
@@ -511,8 +513,8 @@ pub const InlineFunc = struct {
 
     pub fn init(
         arena: *std.heap.ArenaAllocator,
-        comptime Node: type,
-        func: *graph.Func(Node),
+        comptime Backend: type,
+        func: *graph.Func(Backend),
     ) InlineFunc {
         errdefer unreachable;
 
@@ -522,7 +524,7 @@ pub const InlineFunc = struct {
         defer tmp.deinit();
 
         const cloned = cloneNodes(
-            Node,
+            Backend,
             func.root,
             func.end,
             func.next_id,
@@ -861,21 +863,21 @@ pub const OptOptions = struct {
         id: u32,
         is_inline: bool,
         comptime B: type,
-        func: *graph.Func(B.Node),
+        func: *graph.Func(B),
         backend: *B,
     ) bool {
         if (self.do_inlining or is_inline) {
-            self.asPreInline().execute(B.Node, backend, func);
-            backend.out.setInlineFunc(backend.gpa, B.Node, func, id);
+            self.asPreInline().execute(B, backend, func);
+            backend.out.setInlineFunc(backend.gpa, B, func, id);
         }
 
         return self.do_inlining;
     }
 
-    pub fn execute(self: @This(), comptime MachNode: type, ctx: anytype, func: *graph.Func(MachNode)) void {
+    pub fn execute(self: @This(), comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) void {
         const freestanding = @import("builtin").target.os.tag == .freestanding;
 
-        const Func = graph.Func(MachNode);
+        const Func = graph.Func(Backend);
         const Node = Func.Node;
 
         std.debug.assert(func.root.id != std.math.maxInt(u16));
@@ -899,12 +901,12 @@ pub const OptOptions = struct {
                     return @TypeOf(func.*).idealize(cx, fnc, nd, wl);
                 }
             }.wrap);
-        } else if (@hasDecl(MachNode, "idealize")) {
-            func.iterPeeps(ctx, MachNode.idealize);
+        } else if (@hasDecl(Backend, "idealize")) {
+            func.iterPeeps(ctx, Backend.idealize);
         }
 
-        if (self.do_machine_peeps and @hasDecl(MachNode, "idealizeMach")) {
-            func.iterPeeps(ctx, MachNode.idealizeMach);
+        if (self.do_machine_peeps and @hasDecl(Backend, "idealizeMach")) {
+            func.iterPeeps(ctx, Backend.idealizeMach);
         }
 
         if (self.do_gcm) {
@@ -922,7 +924,7 @@ pub const OptOptions = struct {
         }
     }
 
-    pub fn finalize(optimizations: @This(), comptime B: type, backend: *B) bool {
+    pub fn finalize(optimizations: @This(), comptime Backend: type, backend: *Backend) bool {
         errdefer unreachable;
 
         if (optimizations.do_inlining) {
@@ -931,8 +933,7 @@ pub const OptOptions = struct {
 
             const bout: *Data = &backend.out;
             const gpa: std.mem.Allocator = backend.gpa;
-            const Func = graph.Func(B.Node);
-            const Node = B.Node;
+            const Func = graph.Func(Backend);
 
             var out: Data = .{};
             defer out.deinit(gpa);
@@ -959,8 +960,8 @@ pub const OptOptions = struct {
                     continue;
                 }
                 const inline_func = &bout.inline_funcs.items[sym.nodes];
-                funcs[sym.nodes] = inline_func.toFunc(&arena, Node);
-                pi_opts.execute(Node, backend, &funcs[sym.nodes]);
+                funcs[sym.nodes] = inline_func.toFunc(&arena, Backend);
+                pi_opts.execute(Backend, backend, &funcs[sym.nodes]);
                 inline_func.node_count = funcs[sym.nodes].next_id;
 
                 arena = funcs[sym.nodes].arena;
@@ -1043,12 +1044,12 @@ pub const FinalizeBytesOptions = struct {
 
 pub fn init(name: []const u8, data: anytype) Machine {
     const Type = @TypeOf(data.*);
-    if (!@hasDecl(Type, "Node")) @compileError("expected `pub const Node = enum(union) { ... }` to be present");
+    if (!@hasDecl(Type, "classes")) @compileError("expected `pub const classes = enum { ... }` to be present");
 
     const fns = struct {
         fn emitFunc(self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void {
             const slf: *Type = @alignCast(@ptrCast(self));
-            const fnc: *graph.Func(Type.Node) = @alignCast(@ptrCast(func));
+            const fnc: *graph.Func(Type) = @alignCast(@ptrCast(func));
             slf.emitFunc(fnc, opts);
         }
         fn emitData(self: *anyopaque, opts: DataOptions) void {

@@ -116,12 +116,12 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
 
                 switch (t) {
                     .BinOp => {
-                        const lhs, const rhs = .{ curr.inputs()[1].?.extra(.CInt).*, curr.inputs()[2].?.extra(.CInt).* };
-                        break :b bl.addIntImm(curr.data_type, curr.extra(.BinOp).eval(curr.data_type, lhs, rhs));
+                        const lhs, const rhs = .{ curr.inputs()[1].?.extra(.CInt).value, curr.inputs()[2].?.extra(.CInt).value };
+                        break :b bl.addIntImm(curr.data_type, curr.extra(.BinOp).op.eval(curr.data_type, lhs, rhs));
                     },
                     .UnOp => {
-                        const oper = curr.inputs()[1].?.extra(.CInt).*;
-                        break :b bl.addIntImm(curr.data_type, curr.extra(.UnOp).eval(curr.data_type, oper));
+                        const oper = curr.inputs()[1].?.extra(.CInt).value;
+                        break :b bl.addIntImm(curr.data_type, curr.extra(.UnOp).op.eval(curr.data_type, oper));
                     },
                     else => unreachable,
                 }
@@ -451,7 +451,7 @@ pub fn jitExprLow(
 
         if (ret.id == .Value and ret.id.Value.kind == .CInt) {
             types.func_work_list.getPtr(.@"comptime").items.len = pop_until;
-            return .{ .{ .constant = ret.id.Value.extra(.CInt).* }, ret.ty };
+            return .{ .{ .constant = ret.id.Value.extra(.CInt).value }, ret.ty };
         }
 
         gen.emitGenericStore(ptr, &ret);

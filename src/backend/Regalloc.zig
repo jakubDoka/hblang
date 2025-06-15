@@ -12,12 +12,12 @@ pub inline fn swap(a: anytype, b: @TypeOf(a)) void {
     std.mem.swap(@TypeOf(a.*), a, b);
 }
 
-pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
+pub fn ralloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
     func.gcm.cfg_built.assertLocked();
 
     errdefer unreachable;
 
-    const Func = graph.Func(Mach);
+    const Func = graph.Func(Backend);
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
@@ -165,7 +165,7 @@ pub fn ralloc(comptime Mach: type, func: *graph.Func(Mach)) []u16 {
             ls.* = func.loopDepth(instr);
             for (instr.outputs()) |o| ls.* = @max(func.loopDepth(o), ls.*);
 
-            tmp_mask.setRangeValue(.{ .start = 0, .end = Mach.reg_count + 1 }, true);
+            tmp_mask.setRangeValue(.{ .start = 0, .end = Backend.reg_count + 1 }, true);
             tmp_mask.setIntersection(mask);
             arc.* = @intCast(tmp_mask.count());
             if (arc.* > edges.len) {

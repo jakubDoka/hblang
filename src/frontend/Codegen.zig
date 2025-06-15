@@ -283,6 +283,7 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
     var tmp = utils.Arena.scrath(scrath);
     defer tmp.deinit();
 
+    var exports_main = false;
     var funcs = std.ArrayListUnmanaged(utils.EntId(root.frontend.types.Func)){};
     for (self.types.files, 0..) |fl, i| {
         self.ast = &fl;
@@ -306,6 +307,8 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
             const name_string = fl.exprs.get(name).String;
             const name_str = fl.source[name_string.pos.index + 1 .. name_string.end - 1];
 
+            exports_main = exports_main or std.mem.eql(u8, name_str, "main");
+
             const scope = self.types.getScope(@enumFromInt(i));
             self.parent_scope = .{ .Perm = scope };
             const ty = try self.types.ct.evalTy(name_str, .{ .Perm = scope }, func);
@@ -321,7 +324,7 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
         }
     }
 
-    if (has_main) {
+    if (has_main and !exports_main) {
         const entry = self.getEntry(.root, "main") catch {
             try self.types.diagnostics.writeAll(
                 \\...you can define the `main` in the mentioned file:

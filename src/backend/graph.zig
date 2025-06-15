@@ -209,8 +209,6 @@ pub const builtin = enum {
     // ===== CFG =====
     pub const Start = extern struct {
         base: Cfg = .{},
-
-        pub const is_basic_block_start = true;
     };
     pub const Entry = extern struct {
         base: Cfg = .{},
@@ -240,9 +238,7 @@ pub const builtin = enum {
     pub const Jmp = extern struct {
         base: Cfg = .{},
     };
-    pub const If = extern struct {
-        base: Cfg = .{},
-    };
+    pub const If = mod.If;
     pub const Then = extern struct {
         base: Cfg = .{},
 
@@ -253,27 +249,23 @@ pub const builtin = enum {
 
         pub const is_basic_block_start = true;
     };
-    pub const Region = extern struct {
-        base: Cfg = .{},
-        preserve_identity_phys: bool = false,
-        cached_lca: ?*align(8) anyopaque = null,
-
-        pub const is_basic_block_start = true;
-    };
+    pub const Region = mod.Region;
     pub const Loop = extern struct {
-        base: Region = .{},
+        base: mod.Region = .{},
 
         pub const is_basic_block_start = true;
     };
     pub const TrapRegion = extern struct {
         base: Cfg = .{},
+
+        pub const is_basic_block_start = true;
     };
     // ===== VALUES =====
     pub const Phi = extern struct {
-        pub const pinned = true;
+        pub const is_pinned = true;
     };
     pub const Arg = extern struct {
-        base: Phi = .{},
+        index: usize,
     };
     pub const CInt = extern struct {
         value: i64,
@@ -293,25 +285,19 @@ pub const builtin = enum {
     pub const Ret = extern struct {
         index: usize,
 
-        pub const pinned = true;
+        pub const is_pinned = true;
     };
     pub const MachMove = extern struct {};
     // ===== MEMORY =====
     pub const Mem = extern struct {
-        pub const pinned = true;
+        pub const is_pinned = true;
     };
     pub const Local = extern struct {
         size: u64,
     };
-    pub const Load = extern struct {
-        base: MemOp = .{},
-    };
-    pub const Store = extern struct {
-        base: MemOp = .{},
-    };
-    pub const MemCpy = extern struct {
-        base: Store = .{},
-    };
+    pub const MemCpy = mod.MemCpy;
+    pub const Load = mod.Load;
+    pub const Store = mod.Store;
     pub const GlobalAddr = extern struct {
         id: u32,
     };
@@ -320,26 +306,81 @@ pub const builtin = enum {
 };
 
 pub const MemOp = extern struct {};
+pub const MemCpy = extern struct {
+    base: Store = .{},
+};
+pub const Load = extern struct {
+    base: MemOp = .{},
+};
+pub const Store = extern struct {
+    base: MemOp = .{},
+};
+pub const If = extern struct {
+    base: Cfg = .{},
+};
+pub const Region = extern struct {
+    base: Cfg = .{},
+    preserve_identity_phys: bool = false,
+    cached_lca: ?*align(8) anyopaque = null,
 
-pub fn UnionOf(comptime MachNode: type) type {
-    var builtin = @typeInfo(builtin);
-    builtin.@"union".decls = &.{};
-    builtin.@"union".tag_type = KindOf(MachNode);
-    const field_ref = std.meta.fields(MachNode);
-    builtin.@"union".fields = builtin.@"union".fields ++ field_ref;
-    return @Type(builtin);
+    pub const is_basic_block_start = true;
+};
+
+pub fn UnionOf(comptime mach_classes: type) type {
+    const bdecls = @typeInfo(builtin).@"enum".decls;
+    const cdecls = @typeInfo(mach_classes).@"enum".decls;
+    var fields: [bdecls.len + cdecls.len]std.builtin.Type.UnionField = undefined;
+    var i: usize = 0;
+    for (bdecls) |decl| {
+        fields[i] = .{
+            .name = decl.name,
+            .type = @field(builtin, decl.name),
+            .alignment = @alignOf(@field(builtin, decl.name)),
+        };
+        i += 1;
+    }
+    for (cdecls) |decl| {
+        const value = @field(mach_classes, decl.name);
+        fields[i] = .{
+            .name = decl.name,
+            .type = value,
+            .alignment = @alignOf(value),
+        };
+        i += 1;
+    }
+    return @Type(.{ .@"union" = .{
+        .layout = .auto,
+        .tag_type = KindOf(mach_classes),
+        .fields = fields[0..i],
+        .decls = &.{},
+    } });
 }
 
-pub fn KindOf(comptime MachNode: type) type {
-    var builtin = @typeInfo(std.meta.Tag(builtin));
-    builtin.@"enum".tag_type = u16;
-    const field_ref = std.meta.fields(std.meta.Tag(MachNode));
-    var fields = field_ref[0..field_ref.len].*;
-    for (&fields, builtin.@"enum".fields.len..) |*f, i| {
-        f.value = i;
+pub fn KindOf(comptime mach_classes: type) type {
+    const bdecls = @typeInfo(builtin).@"enum".decls;
+    const cdecls = @typeInfo(mach_classes).@"enum".decls;
+    var fields: [bdecls.len + cdecls.len]std.builtin.Type.EnumField = undefined;
+    var i: usize = 0;
+    for (bdecls) |decl| {
+        fields[i] = .{
+            .name = decl.name,
+            .value = i,
+        };
+        i += 1;
     }
-    builtin.@"enum".fields = builtin.@"enum".fields ++ fields;
-    return @Type(builtin);
+    for (cdecls) |decl| {
+        fields[i] = .{
+            .name = decl.name,
+            .value = i,
+        };
+        i += 1;
+    }
+    return @Type(.{ .@"enum" = .{
+        .tag_type = u16,
+        .fields = fields[0..i],
+        .decls = &.{},
+        .is_exhaustive = true,
+    } });
 }
 
 pub const Cfg = extern struct {
@@ -353,11 +394,11 @@ const gcm = @import("gcm.zig");
 const mem2reg = @import("mem2reg.zig");
 const static_anal = @import("static_anal.zig");
 
-pub fn FuncNode(comptime MachNode: type) type {
-    return Func(MachNode).Node;
+pub fn FuncNode(comptime Backend: type) type {
+    return Func(Backend).Node;
 }
 
-pub fn Func(comptime MachNode: type) type {
+pub fn Func(comptime Backend: type) type {
     return struct {
         arena: std.heap.ArenaAllocator,
         interner: InternMap(Uninserter) = .{},
@@ -366,34 +407,34 @@ pub fn Func(comptime MachNode: type) type {
         next_id: u16 = 0,
         root: *Node = undefined,
         end: *Node = undefined,
-        gcm: gcm.GcmMixin(MachNode) = .{},
-        mem2reg: mem2reg.Mem2RegMixin(MachNode) = .{},
-        static_anal: static_anal.StaticAnalMixin(MachNode) = .{},
+        gcm: gcm.GcmMixin(Backend) = .{},
+        mem2reg: mem2reg.Mem2RegMixin(Backend) = .{},
+        static_anal: static_anal.StaticAnalMixin(Backend) = .{},
 
         pub fn optApi(comptime decl_name: []const u8, comptime Ty: type) bool {
-            const prelude = @typeName(MachNode) ++ " requires this unless `pub const i_know_the_api = {}` is declared:";
+            const prelude = @typeName(Backend) ++ " requires this unless `pub const i_know_the_api = {}` is declared:";
 
             const decl = if (@typeInfo(Ty) == .@"fn")
                 "pub fn " ++ decl_name ++ @typeName(Ty)[3..]
             else
                 "pub const " ++ decl_name ++ ": " ++ @typeName(Ty);
 
-            const known_api = @hasDecl(MachNode, "i_know_the_api");
-            if (!known_api and !@hasDecl(MachNode, decl_name))
+            const known_api = @hasDecl(Backend, "i_know_the_api");
+            if (!known_api and !@hasDecl(Backend, decl_name))
                 @compileError(prelude ++ " `" ++ decl ++ "`");
 
-            if (@hasDecl(MachNode, decl_name) and @TypeOf(@field(MachNode, decl_name)) != Ty)
+            if (@hasDecl(Backend, decl_name) and @TypeOf(@field(Backend, decl_name)) != Ty)
                 @compileError("expected `" ++ decl ++
-                    "` but the type is: " ++ @typeName(@TypeOf(@field(MachNode, decl_name))));
+                    "` but the type is: " ++ @typeName(@TypeOf(@field(Backend, decl_name))));
 
-            return @hasDecl(MachNode, decl_name);
+            return @hasDecl(Backend, decl_name);
         }
 
         pub fn InternMap(comptime Context: type) type {
             return std.hash_map.HashMapUnmanaged(InternedNode, void, Context, 70);
         }
 
-        pub const all_classes = std.meta.fields(builtin) ++ std.meta.fields(MachNode);
+        pub const all_classes = std.meta.fields(Union);
 
         const Self = @This();
 
@@ -442,15 +483,8 @@ pub fn Func(comptime MachNode: type) type {
 
         pub const CfgNode = LayoutOf(Cfg);
 
-        pub const Kind = KindOf(MachNode);
-        pub const Union = UnionOf(MachNode);
-
-        pub fn bakeBitset(comptime name: []const u8) std.EnumSet(Kind) {
-            var set = std.EnumSet(Kind).initEmpty();
-            for (@field(builtin, name)) |k| set.insert(k);
-            if (optApi(name, []const Kind)) for (@field(MachNode, name)) |k| set.insert(k);
-            return set;
-        }
+        pub const Kind = KindOf(Backend.classes);
+        pub const Union = UnionOf(Backend.classes);
 
         pub fn ClassFor(comptime kind: Kind) type {
             return all_classes[@intFromEnum(kind)].type;
@@ -520,14 +554,8 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         fn callCheck(comptime name: []const u8, value: anytype) bool {
-            return (comptime optApi(name, fn (@TypeOf(value)) bool)) and @field(MachNode, name)(value);
+            return (comptime optApi(name, fn (@TypeOf(value)) bool)) and @field(Backend, name)(value);
         }
-
-        const is_basic_block_start = bakeBitset("is_basic_block_start");
-        const is_basic_block_end = bakeBitset("is_basic_block_end");
-        const is_mem_op = bakeBitset("is_mem_op");
-        const is_pinned = bakeBitset("is_pinned");
-        const is_temporary = bakeBitset("is_temporary");
 
         pub const Node = extern struct {
             kind: Kind,
@@ -568,7 +596,8 @@ pub fn Func(comptime MachNode: type) type {
 
             pub fn dataDeps(self: *Node) []?*Node {
                 if ((self.kind == .Phi and !self.isDataPhi()) or self.kind == .Mem) return &.{};
-                const start: usize = @intFromBool(self.isMemOp());
+                const start: usize = @intFromBool(self.isMemOp() or
+                    self.kind == .Return or self.kind == .Local or self.kind == .Call or self.kind == .Mem);
                 return self.input_base[1 + start + @intFromBool(self.kind == .Return) .. self.input_ordered_len];
             }
 
@@ -576,7 +605,10 @@ pub fn Func(comptime MachNode: type) type {
                 if (self.isStore() and !self.isSub(MemCpy) and self.base() == root) {
                     return self;
                 }
-                if (self.kind == .BinOp and self.outputs().len == 1 and self.outputs()[0].isStore() and !self.outputs()[0].isSub(MemCpy) and self.outputs()[0].base() == self) {
+                if (self.kind == .BinOp and self.outputs().len == 1 and
+                    self.outputs()[0].isStore() and !self.outputs()[0].isSub(MemCpy) and
+                    self.outputs()[0].base() == self)
+                {
                     return self.outputs()[0];
                 }
                 return null;
@@ -585,35 +617,36 @@ pub fn Func(comptime MachNode: type) type {
             pub fn knownMemOp(self: *Node) ?struct { *Node, i64 } {
                 if (self.isMemOp()) return .{ self, self.getStaticOffset() };
                 if (self.kind == .BinOp and self.inputs()[2].?.kind == .CInt and
-                    (self.outputs().len) == 1 and (self.outputs()[0].isStore() or self.outputs()[0].isLoad()) and (self.outputs()[0].base()) == (self))
+                    (self.outputs().len) == 1 and
+                    (self.outputs()[0].isStore() or self.outputs()[0].isLoad()) and
+                    (self.outputs()[0].base()) == (self))
                 {
-                    return .{ self.outputs()[0], self.inputs()[2].?.extra(.CInt).* };
+                    return .{ self.outputs()[0], self.inputs()[2].?.extra(.CInt).value };
                 }
                 return null;
             }
 
             pub fn knownOffset(self: *Node) struct { *Node, i64 } {
                 if (self.kind == .BinOp and self.inputs()[2].?.kind == .CInt) {
-                    std.debug.assert(self.extra(.BinOp).* == .iadd or self.extra(.BinOp).* == .isub);
-                    return .{ self.inputs()[1].?, if (self.extra(.BinOp).* == .iadd)
-                        self.inputs()[2].?.extra(.CInt).*
-                    else
-                        -self.inputs()[2].?.extra(.CInt).* };
+                    const op = self.extra(.BinOp).op;
+                    const magnitude = self.inputs()[2].?.extra(.CInt).value;
+                    std.debug.assert(op == .iadd or op == .isub);
+                    return .{ self.inputs()[1].?, if (op == .iadd) magnitude else -magnitude };
                 }
-                if (@hasDecl(MachNode, "knownOffset")) return MachNode.knownOffset(self);
+                if (@hasDecl(Backend, "knownOffset")) return Backend.knownOffset(self);
                 return .{ self, 0 };
             }
 
             pub fn allowedRegsFor(self: *Node, idx: usize, tmp: *utils.Arena) ?std.DynamicBitSetUnmanaged {
-                return if (comptime optApi("allowedRegsFor", @TypeOf(allowedRegsFor))) MachNode.allowedRegsFor(self, idx, tmp) else null;
+                return if (comptime optApi("allowedRegsFor", @TypeOf(allowedRegsFor))) Backend.allowedRegsFor(self, idx, tmp) else null;
             }
 
             pub fn regKills(self: *Node, tmp: *utils.Arena) ?std.DynamicBitSetUnmanaged {
-                return if (comptime optApi("regKills", @TypeOf(regKills))) MachNode.regKills(self, tmp) else null;
+                return if (comptime optApi("regKills", @TypeOf(regKills))) Backend.regKills(self, tmp) else null;
             }
 
             pub fn inPlaceSlot(self: *Node) ?usize {
-                return if (comptime optApi("inPlaceSlot", @TypeOf(inPlaceSlot))) MachNode.inPlaceSlot(self) else null;
+                return if (comptime optApi("inPlaceSlot", @TypeOf(inPlaceSlot))) Backend.inPlaceSlot(self) else null;
             }
 
             pub fn noAlias(self: *Node, other: *Node) bool {
@@ -633,15 +666,15 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             pub fn regBias(self: *Node) ?u16 {
-                return if (@hasDecl(MachNode, "regBias")) MachNode.regBias(self) else null;
+                return if (@hasDecl(Backend, "regBias")) Backend.regBias(self) else null;
             }
 
             pub fn carried(self: *Node) ?usize {
-                return if (@hasDecl(MachNode, "carried")) MachNode.carried(self) else null;
+                return if (@hasDecl(Backend, "carried")) Backend.carried(self) else null;
             }
 
             pub fn clobbers(self: *Node) u64 {
-                return if (@hasDecl(MachNode, "clobbers")) MachNode.clobbers(self) else 0;
+                return if (@hasDecl(Backend, "clobbers")) Backend.clobbers(self) else 0;
             }
 
             pub fn anyextra(self: *const Node) *const anyopaque {
@@ -737,9 +770,11 @@ pub fn Func(comptime MachNode: type) type {
                     },
                 }
 
-                for (self.input_base[0..self.input_len][@min(@intFromBool(scheduled != null and
-                    (!self.isCfg() or !self.isBasicBlockStart())), self.input_base[0..self.input_len].len)..]) |oo| if (oo) |o|
-                {
+                for (self.input_base[0..self.input_len][@min(
+                    @intFromBool(scheduled != null and
+                        (!self.isCfg() or !self.isBasicBlockStart())),
+                    self.input_base[0..self.input_len].len,
+                )..]) |oo| if (oo) |o| {
                     if (!add_colon_space) {
                         writer.writeAll(": ") catch unreachable;
                         add_colon_space = true;
@@ -851,7 +886,7 @@ pub fn Func(comptime MachNode: type) type {
 
             pub fn getStaticOffset(self: *Node) i64 {
                 std.debug.assert(self.isMemOp());
-                return if (@hasDecl(MachNode, "getStaticOffset")) MachNode.getStaticOffset(self) else 0;
+                return if (@hasDecl(Backend, "getStaticOffset")) Backend.getStaticOffset(self) else 0;
             }
 
             pub fn isSubbclass(Full: type, Sub: type) bool {
@@ -867,6 +902,23 @@ pub fn Func(comptime MachNode: type) type {
                 var bitset = std.EnumSet(Kind).initEmpty();
                 for (all_classes, 0..) |c, i| {
                     if (isSubbclass(c.type, Sub)) bitset.insert(@enumFromInt(i));
+                }
+                return bitset;
+            }
+
+            pub fn hasFlag(comptime Full: type, comptime flag: []const u8) bool {
+                var Cursor = Full;
+                while (true) {
+                    if (@hasDecl(Cursor, flag)) return @field(Cursor, flag);
+                    if (@typeInfo(Cursor) != .@"struct" or !@hasField(Cursor, "base")) return false;
+                    Cursor = @TypeOf(@as(Cursor, undefined).base);
+                }
+            }
+
+            pub fn bakeFlagBitset(comptime flag: []const u8) std.EnumSet(Kind) {
+                var bitset = std.EnumSet(Kind).initEmpty();
+                for (all_classes, 0..) |c, i| {
+                    if (hasFlag(c.type, flag)) bitset.insert(@enumFromInt(i));
                 }
                 return bitset;
             }
@@ -910,27 +962,29 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             pub inline fn isPinned(self: *const Node) bool {
-                return is_pinned.contains(self.kind);
+                return (comptime bakeFlagBitset("is_pinned")).contains(self.kind);
             }
 
             pub inline fn isMemOp(self: *const Node) bool {
-                return is_mem_op.contains(self.kind);
+                return self.isSub(MemOp);
             }
 
             pub fn isDataPhi(self: *const Node) bool {
                 // TODO: get rid of this recursion
                 return self.kind == .Phi and //and self.data_type != .top;
-                    ((!self.input_base[1].?.isMemOp() or self.input_base[1].?.kind == .Local) or
+                    ((!(self.input_base[1].?.isMemOp() or self.input_base[1].?.kind == .Mem) or
+                        self.input_base[1].?.kind == .Local) or
                         self.input_base[1].?.isLoad()) and
                     (self.input_base[1].?.kind != .Phi or self.input_base[1].?.isDataPhi());
             }
 
             pub inline fn isBasicBlockStart(self: *const Node) bool {
-                return is_basic_block_start.contains(self.kind);
+                return (comptime bakeFlagBitset("is_basic_block_start")).contains(self.kind);
             }
 
             pub inline fn isBasicBlockEnd(self: *const Node) bool {
-                return is_basic_block_end.contains(self.kind);
+                std.debug.assert(self.isCfg());
+                return !self.isBasicBlockStart();
             }
 
             pub const size_map = b: {
@@ -941,7 +995,11 @@ pub fn Func(comptime MachNode: type) type {
             };
 
             pub fn size(node: *Node) usize {
-                return @sizeOf(Node) + std.mem.alignForward(usize, size_map[@intFromEnum(node.kind)], @alignOf(Node));
+                return @sizeOf(Node) + std.mem.alignForward(
+                    usize,
+                    size_map[@intFromEnum(node.kind)],
+                    @alignOf(Node),
+                );
             }
 
             pub fn hash(kind: Kind, dt: DataType, inpts: []const ?*Node, extr: *const anyopaque) u64 {
@@ -1095,7 +1153,7 @@ pub fn Func(comptime MachNode: type) type {
             return if (offset != 0) if (base.kind == .BinOp and base.inputs()[2].?.kind == .CInt) b: {
                 break :b self.addBinOp(.iadd, .i64, base.inputs()[1].?, self.addIntImm(
                     .i64,
-                    base.inputs()[2].?.extra(.CInt).* + offset,
+                    base.inputs()[2].?.extra(.CInt).value + offset,
                 ));
             } else self.addBinOp(.iadd, .i64, base, self.addIntImm(.i64, offset)) else base;
         }
@@ -1105,7 +1163,7 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         pub fn addCast(self: *Self, to: DataType, value: *Node) *Node {
-            return self.addNode(.UnOp, to, &.{ null, value }, .cast);
+            return self.addNode(.UnOp, to, &.{ null, value }, .{ .op = .cast });
         }
 
         pub const OffsetDirection = enum(u8) {
@@ -1117,7 +1175,7 @@ pub fn Func(comptime MachNode: type) type {
             const offset = if (elem_size == 1)
                 subscript
             else if (subscript.kind == .CInt)
-                self.addIntImm(.i64, subscript.extra(.CInt).* * @as(i64, @bitCast(elem_size)))
+                self.addIntImm(.i64, subscript.extra(.CInt).value * @as(i64, @bitCast(elem_size)))
             else
                 self.addBinOp(.imul, .i64, subscript, self.addIntImm(.i64, @bitCast(elem_size)));
             return self.addBinOp(@enumFromInt(@intFromEnum(op)), .i64, base, offset);
@@ -1125,40 +1183,47 @@ pub fn Func(comptime MachNode: type) type {
 
         pub fn addIntImm(self: *Self, ty: DataType, value: i64) *Node {
             std.debug.assert(ty != .bot);
-            const val = self.addNode(.CInt, ty, &.{null}, value);
+            const val = self.addNode(.CInt, ty, &.{null}, .{ .value = value });
             std.debug.assert(val.data_type.isInt());
             return val;
         }
 
         pub fn addFlt64Imm(self: *Self, value: f64) *Node {
-            return self.addNode(.CFlt64, .f64, &.{null}, value);
+            return self.addNode(.CFlt64, .f64, &.{null}, .{ .value = value });
         }
 
         pub fn addFlt32Imm(self: *Self, value: f32) *Node {
-            return self.addNode(.CFlt32, .f32, &.{null}, value);
+            return self.addNode(.CFlt32, .f32, &.{null}, .{ .value = value });
         }
 
         pub fn addBinOp(self: *Self, op: BinOp, ty: DataType, lhs: *Node, rhs: *Node) *Node {
             if (lhs.kind == .CInt and rhs.kind == .CInt) {
-                return self.addIntImm(ty, op.eval(ty, lhs.extra(.CInt).*, rhs.extra(.CInt).*));
+                return self.addIntImm(ty, op.eval(ty, lhs.extra(.CInt).value, rhs.extra(.CInt).value));
             } else if (lhs.kind == .CFlt64 and rhs.kind == .CFlt64) {
-                return self.addFlt64Imm(@bitCast(op.eval(ty, @bitCast(lhs.extra(.CFlt64).*), @bitCast(rhs.extra(.CFlt64).*))));
+                return self.addFlt64Imm(@bitCast(op.eval(
+                    ty,
+                    @bitCast(lhs.extra(.CFlt64).*),
+                    @bitCast(rhs.extra(.CFlt64).*),
+                )));
             }
-            if ((op == .iadd or op == .iadd) and rhs.kind == .CInt and rhs.extra(.CInt).* == 0) {
+            if ((op == .iadd or op == .iadd) and rhs.kind == .CInt and rhs.extra(.CInt).value == 0) {
                 return lhs;
             }
-            return self.addNode(.BinOp, ty, &.{ null, lhs, rhs }, op);
+            return self.addNode(.BinOp, ty, &.{ null, lhs, rhs }, .{ .op = op });
         }
 
         pub fn addUnOp(self: *Self, op: UnOp, ty: DataType, oper: *Node) *Node {
             if (oper.kind == .CInt and ty.isInt()) {
-                return self.addIntImm(ty, op.eval(oper.data_type, oper.extra(.CInt).*));
+                return self.addIntImm(ty, op.eval(oper.data_type, oper.extra(.CInt).value));
             } else if (oper.kind == .CFlt64 and ty == .f64) {
                 return self.addFlt64Imm(@bitCast(op.eval(oper.data_type, @bitCast(oper.extra(.CFlt64).*))));
             } else if (oper.kind == .CFlt32 and ty == .f32) {
-                return self.addFlt32Imm(@floatCast(@as(f64, @bitCast(op.eval(oper.data_type, @bitCast(@as(f64, @floatCast(oper.extra(.CFlt32).*))))))));
+                return self.addFlt32Imm(@floatCast(@as(f64, @bitCast(op.eval(
+                    oper.data_type,
+                    @bitCast(@as(f64, @floatCast(oper.extra(.CFlt32).value))),
+                )))));
             }
-            return self.addNode(.UnOp, ty, &.{ null, oper }, op);
+            return self.addNode(.UnOp, ty, &.{ null, oper }, .{ .op = op });
         }
 
         pub fn addTrap(self: *Self, ctrl: *Node, code: u64) void {
@@ -1174,7 +1239,7 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         pub fn addSplit(self: *Self, ctrl: *Node, def: *Node) *Node {
-            return if (comptime optApi("addSplit", @TypeOf(addSplit))) MachNode.addSplit(self, ctrl, def) else unreachable;
+            return if (comptime optApi("addSplit", @TypeOf(addSplit))) Backend.addSplit(self, ctrl, def) else unreachable;
         }
 
         pub fn addNode(self: *Self, comptime kind: Kind, ty: DataType, inputs: []const ?*Node, extra: ClassFor(kind)) *Node {
@@ -1237,7 +1302,6 @@ pub fn Func(comptime MachNode: type) type {
                 utils.panic("{} {}\n", .{ this, target });
             }
             errdefer unreachable;
-            //std.debug.print("{} {} {any}\n", .{ target, this, target.outputs() });
 
             for (try self.arena.allocator().dupe(*Node, target.outputs())) |use| {
                 if (use.id == std.math.maxInt(u16)) continue;
@@ -1285,7 +1349,13 @@ pub fn Func(comptime MachNode: type) type {
         }
 
         pub fn addDep(self: *Self, use: *Node, def: *Node) void {
-            if (use.input_ordered_len == use.input_len or std.mem.indexOfScalar(?*Node, use.input_base[use.input_ordered_len..use.input_len], null) == null) {
+            if (use.input_ordered_len == use.input_len or
+                std.mem.indexOfScalar(
+                    ?*Node,
+                    use.input_base[use.input_ordered_len..use.input_len],
+                    null,
+                ) == null)
+            {
                 const new_cap = @max(use.input_len, 1) * 2;
                 const new_inputs = self.arena.allocator().realloc(use.inputs(), new_cap) catch unreachable;
                 @memset(new_inputs[use.input_len..], null);
@@ -1543,11 +1613,11 @@ pub fn Func(comptime MachNode: type) type {
             }
 
             if (node.kind == .UnOp) {
-                const op: UnOp = node.extra(.UnOp).*;
+                const op: UnOp = node.extra(.UnOp).op;
                 const oper = inps[1].?;
 
                 if (oper.kind == .CInt and node.data_type.isInt()) {
-                    return self.addIntImm(node.data_type, op.eval(oper.data_type, oper.extra(.CInt).*));
+                    return self.addIntImm(node.data_type, op.eval(oper.data_type, oper.extra(.CInt).value));
                 }
 
                 if (node.data_type.meet(inps[1].?.data_type) == inps[1].?.data_type) {
@@ -1563,10 +1633,10 @@ pub fn Func(comptime MachNode: type) type {
                 if (lhs.kind == .CInt and rhs.kind == .CInt) {
                     return self.addIntImm(
                         lhs.data_type.meet(rhs.data_type),
-                        node.extra(.BinOp).eval(
+                        node.extra(.BinOp).op.eval(
                             lhs.data_type,
-                            lhs.extra(.CInt).*,
-                            rhs.extra(.CInt).*,
+                            lhs.extra(.CInt).value,
+                            rhs.extra(.CInt).value,
                         ),
                     );
                 }
@@ -1599,13 +1669,13 @@ pub fn Func(comptime MachNode: type) type {
 
             if (node.kind == .Call and node.data_type != .bot) {
                 if (ctx.out.getInlineFunc(node.extra(.Call).id)) |inline_func| {
-                    inline_func.inlineInto(MachNode, self, node, work);
+                    inline_func.inlineInto(Backend, self, node, work);
                     return null;
                 }
             }
 
             return if (comptime optApi("idealize", IdealSig(@TypeOf(ctx))))
-                MachNode.idealize(ctx, self, node, work)
+                Backend.idealize(ctx, self, node, work)
             else
                 null;
         }
