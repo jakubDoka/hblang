@@ -204,6 +204,7 @@ pub fn emitReachable(
     abi: Types.Abi,
     backend: root.backend.Machine,
     optimizations: root.backend.Machine.OptOptions,
+    has_main: bool,
     log_opts: struct {
         colors: std.io.tty.Config = .no_color,
         output: std.io.AnyWriter = std.io.null_writer.any(),
@@ -218,7 +219,7 @@ pub fn emitReachable(
     const codegen = Codegen.init(root_tmp.arena, types, .runtime, abi);
     defer codegen.deinit();
 
-    const exports = codegen.collectExports(root_tmp.arena) catch {
+    const exports = codegen.collectExports(has_main, root_tmp.arena) catch {
         return true;
     };
 
@@ -278,11 +279,10 @@ pub inline fn abiCata(self: *Codegen, ty: Types.Id) Types.Abi.Spec {
     return @as(Types.Abi.TmpSpec, self.abi.categorize(ty, self.types) orelse .Imaginary).toPerm(ty, self.types);
 }
 
-pub fn collectExports(self: *Codegen, scrath: *utils.Arena) ![]utils.EntId(root.frontend.types.Func) {
+pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]utils.EntId(root.frontend.types.Func) {
     var tmp = utils.Arena.scrath(scrath);
     defer tmp.deinit();
 
-    var has_main = false;
     var funcs = std.ArrayListUnmanaged(utils.EntId(root.frontend.types.Func)){};
     for (self.types.files, 0..) |fl, i| {
         self.ast = &fl;
@@ -306,8 +306,6 @@ pub fn collectExports(self: *Codegen, scrath: *utils.Arena) ![]utils.EntId(root.
             const name_string = fl.exprs.get(name).String;
             const name_str = fl.source[name_string.pos.index + 1 .. name_string.end - 1];
 
-            has_main = has_main or std.mem.eql(u8, name_str, "main");
-
             const scope = self.types.getScope(@enumFromInt(i));
             self.parent_scope = .{ .Perm = scope };
             const ty = try self.types.ct.evalTy(name_str, .{ .Perm = scope }, func);
@@ -323,7 +321,7 @@ pub fn collectExports(self: *Codegen, scrath: *utils.Arena) ![]utils.EntId(root.
         }
     }
 
-    if (!has_main) {
+    if (has_main) {
         const entry = self.getEntry(.root, "main") catch {
             try self.types.diagnostics.writeAll(
                 \\...you can define the `main` in the mentioned file:

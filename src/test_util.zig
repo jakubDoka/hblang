@@ -184,6 +184,7 @@ pub fn testBuilder(
         abi,
         gen,
         opts,
+        true,
         .{ .verbose = verbose, .colors = colors, .output = output },
     );
 

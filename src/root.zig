@@ -64,6 +64,7 @@ pub const CompileOptions = struct {
     scratch_memory: usize = 1024 * 1024 * 128, // how much memory can each scratch arena use (there are 2)
     target: []const u8 = "hbvm-ableos", // target triple to compile to (not
     // used yet since we have only one target)
+    no_entry: bool = false, // wether compiler should look for main function
     extra_threads: usize = 0, // extra threads used for the compilation (not used yet)
     path_projection: std.StringHashMapUnmanaged([]const u8) = .{}, // can be
     // specified multiple times as `--path-projection name path`, when the
@@ -280,6 +281,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         abi,
         bckend,
         opts.optimizations,
+        !opts.no_entry,
         .{},
     );
     if (errored) {
