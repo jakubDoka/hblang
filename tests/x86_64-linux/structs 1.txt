@@ -1,5 +1,5 @@
 structs 1.odher_pass:
-	mov rcx, rsi
+	lea rcx, [rsp+0x08]
 	mov rax, 0x18
 	mov rsi, rcx
 	mov rdx, rax
@@ -29,15 +29,22 @@ structs 1.pass:
 	ret
 main:
 	push rbx
+	push rbp
 	sub rsp, 0x38
-	lea rsi, [rsp]
+	lea rcx, [rsp+0x18]
 	mov rax, 0x04
-	mov [rsi], rax
+	mov [rcx], rax
 	mov rax, 0x01
-	mov [rsi+0x08], rax
+	mov [rcx+0x08], rax
 	mov rax, 0x03
-	mov [rsi+0x10], rax
-	lea rbx, [rsp+0x18]
+	mov [rcx+0x10], rax
+	mov rax, 0x18
+	lea rbp, [rsp]
+	mov rdi, rbp
+	mov rsi, rcx
+	mov rdx, rax
+	call :memcpy
+	lea rbx, [rsp+0x30]
 	mov rdi, rbx
 	call :structs 1.odher_pass
 	mov rax, [rbx+0x10]
@@ -61,6 +68,7 @@ main:
 2:	mov rdi, rbx
 	call :structs 1.pass
 3:	add rsp, 0x38
+	pop rbp
 	pop rbx
 	ret
 memcpy:

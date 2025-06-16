@@ -15,27 +15,95 @@ proper systemv abi 1 (spilled arg).load_of_args:
 	mov rax, rdi
 	pop rbx
 	ret
-main:
+proper systemv abi 1 (spilled arg).stack_args:
 	push rbx
 	push rbp
-	sub rsp, 0x08
-	lea rcx, [rsp+0x10]
-	mov rax, 0x07
-	mov [rcx], rax
-	mov rax, 0x06
-	lea rbp, [rsp]
-	mov [rbp], rax
-	lea rbx, [rsp+0x08]
+	mov rbp, rsi
+	mov rsi, rdi
+	lea rcx, [rsp+0x18]
+	lea rdi, [rsp+0x30]
+	mov rdx, [rcx+0x10]
 	mov rax, [rcx]
-	mov [rbx], rax
-	mov r8, 0x04
-	mov r9, 0x05
-	mov rsi, 0x01
-	mov rdi, 0x00
-	mov rdx, 0x02
-	mov rcx, 0x03
-	call :proper systemv abi 1 (spilled arg).load_of_args
-	add rsp, 0x08
+	mov rcx, [rcx+0x08]
+	add rax, rcx
+	mov rbx, [rdi]
+	add rax, rdx
+	mov rdx, [rdi+0x10]
+	mov rcx, [rdi+0x08]
+	add rax, rbx
+	add rax, rcx
+	add rax, rdx
+	add rax, rsi
+	add rax, rbp
 	pop rbp
 	pop rbx
 	ret
+main:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	push r14
+	push r15
+	sub rsp, 0xE8
+	lea rax, [rsp+0xF0]
+	mov qword ptr [rsp+0x220], 0x07
+	mov r15, [rsp+0x220]
+	mov [rax], r15
+	mov qword ptr [rsp+0x218], 0x06
+	lea rdx, [rsp]
+	mov r15, [rsp+0x218]
+	mov [rdx], r15
+	lea rcx, [rsp+0x08]
+	mov rax, [rax]
+	mov [rcx], rax
+	mov qword ptr [rsp+0x210], 0x04
+	mov qword ptr [rsp+0x188], 0x05
+	mov r13, 0x01
+	mov r12, 0x00
+	mov rbp, 0x02
+	mov rbx, 0x03
+	mov rdi, r12
+	mov rsi, r13
+	mov rdx, rbp
+	mov rcx, rbx
+	mov r8, [rsp+0x210]
+	mov r9, [rsp+0x188]
+	call :proper systemv abi 1 (spilled arg).load_of_args
+	mov [rsp+0x180], rax
+	lea rax, [rsp+0xF8]
+	mov [rax], r12
+	mov [rax+0x08], r13
+	mov [rax+0x10], rbp
+	lea r13, [rsp+0xD8]
+	mov [r13], rbx
+	mov r15, [rsp+0x210]
+	mov [r13+0x08], r15
+	mov r15, [rsp+0x188]
+	mov [r13+0x10], r15
+	mov r12, 0x18
+	lea rbp, [rsp]
+	mov rdi, rbp
+	mov rsi, rax
+	mov rdx, r12
+	call :memcpy
+	lea rbx, [rsp+0x18]
+	mov rdi, rbx
+	mov rsi, r13
+	mov rdx, r12
+	call :memcpy
+	mov rdi, [rsp+0x218]
+	mov rsi, [rsp+0x220]
+	call :proper systemv abi 1 (spilled arg).stack_args
+	mov rcx, rax
+	mov rax, [rsp+0x180]
+	sub rax, rcx
+	add rsp, 0xE8
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
+	ret
+memcpy:

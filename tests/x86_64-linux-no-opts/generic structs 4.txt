@@ -1,6 +1,7 @@
 generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get:
 	sub rsp, 0x08
-	mov rdx, rdi
+	mov rsi, rdi
+	lea rdx, [rsp+0x10]
 	lea rax, [rsp]
 	mov [rax], rsi
 	mov rcx, [rax]
@@ -69,34 +70,60 @@ main:
 	push rbp
 	push r12
 	push r13
-	sub rsp, 0x18
-	lea r13, [rsp]
-	mov rbx, 0x01
-	mov [r13], rbx
-	mov r12, 0x02
-	mov [r13+0x08], r12
+	push r14
+	push r15
+	sub rsp, 0x28
+	lea r15, [rsp+0x28]
+	mov [rsp+0xC8], r15
+	mov rbp, 0x01
+	mov r15, [rsp+0xC8]
+	mov [r15], rbp
+	mov qword ptr [rsp+0xC0], 0x02
+	mov r15, [rsp+0xC8]
+	mov r14, [rsp+0xC0]
+	mov [r15+0x08], r14
 	mov rax, 0x03
-	mov [r13+0x10], rax
+	mov r15, [rsp+0xC8]
+	mov [r15+0x10], rax
+	mov r15, [rsp+0xC8]
+	mov rax, [r15+0x10]
+	mov r15, [rsp+0xC8]
+	mov [r15+0x10], rax
+	mov r13, 0x18
+	lea rbx, [rsp]
+	mov rdi, rbx
+	mov rsi, [rsp+0xC8]
+	mov rdx, r13
+	call :memcpy
 	mov rsi, 0x00
-	mov rax, [r13+0x10]
-	mov [r13+0x10], rax
-	mov rdi, r13
+	mov rdi, rsi
+	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get
+	mov r12, rax
+	lea rbx, [rsp]
+	mov rdi, rbx
+	mov rsi, [rsp+0xC8]
+	mov rdx, r13
+	call :memcpy
+	mov rdi, rbp
 	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get
 	mov rbp, rax
-	mov rdi, r13
-	mov rsi, rbx
-	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get
-	mov rbx, rax
-	mov rdi, r13
-	mov rsi, r12
+	lea rbx, [rsp]
+	mov rdi, rbx
+	mov rsi, [rsp+0xC8]
+	mov rdx, r13
+	call :memcpy
+	mov rdi, [rsp+0xC0]
 	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get
 	mov rcx, rax
-	mov rax, rbp
-	add rax, rbx
+	mov rax, r12
+	add rax, rbp
 	add rax, rcx
-	add rsp, 0x18
+	add rsp, 0x28
+	pop r15
+	pop r14
 	pop r13
 	pop r12
 	pop rbp
 	pop rbx
 	ret
+memcpy:

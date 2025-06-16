@@ -1,10 +1,11 @@
 loops 1.fib:
 	push rbx
 	push rbp
-	mov rdx, 0x01
-	mov rcx, 0x00
+	mov rdx, 0x00
+	mov rcx, 0x01
+	mov rbx, rcx
 	mov rbp, rdi
-	mov rbx, rdx
+	mov rcx, rdx
 1:	cmp rbp, 0x00
 	setz al
 	movzx rax, al

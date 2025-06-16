@@ -4,10 +4,6 @@ This file contains minimal repro tests that are not a good example for learning.
 
 #### proper systemv abi 1 (spilled arg)
 ```hb
-expectations := .{
-    return_value: 28,
-}
-
 load_of_args := fn(
     a: uint,
     b: uint,
@@ -21,8 +17,17 @@ load_of_args := fn(
     return a + b + c + d + e + f + g + h
 }
 
+stack_args := fn(
+    a: struct{.a: uint; .b: uint; .c: uint},
+    b: struct{.a: uint; .b: uint; .c: uint},
+    v: struct{.a: uint; .b: uint},
+): uint {
+    return a.a + a.b + a.c + b.a + b.b + b.c + v.a + v.b
+}
+
 main := fn(): uint {
-    return load_of_args(0, 1, 2, 3, 4, 5, 6, 7)
+    return load_of_args(0, 1, 2, 3, 4, 5, 6, 7) -
+        stack_args(.(0, 1, 2), .(3, 4, 5), .(6, 7))
 }
 ```
 

@@ -3022,7 +3022,7 @@ fn emitDirective(
             dummy_func.ret = ret;
 
             const params, const returns, const ret_abi =
-                dummy_func.computeAbi(self.abi, self.types, tmp.arena);
+                dummy_func.computeAbi(.ableos, self.types, tmp.arena);
             const call_args = self.bl.allocCallArgs(tmp.arena, params, returns);
 
             var i: usize = self.pushReturn(expr, call_args, ret_abi, ret, ctx);

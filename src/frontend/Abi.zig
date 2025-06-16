@@ -46,6 +46,7 @@ pub const Builder = union(graph.CallConv) {
                 .ByValuePair => |pair| {
                     if (is_ret) {
                         buf[0] = .{ .Reg = .i64 };
+                        s.remining_scalar_regs -= 1;
                     } else if (s.remining_scalar_regs < 2) {
                         buf[0] = .{ .Stack = pair.stackSpec() };
                     } else {
@@ -54,6 +55,7 @@ pub const Builder = union(graph.CallConv) {
                     }
                 },
                 .ByRef => |size| if (is_ret) {
+                    s.remining_scalar_regs -= 1;
                     buf[0] = .{ .Reg = .i64 };
                 } else {
                     buf[0] = .{ .Stack = size };

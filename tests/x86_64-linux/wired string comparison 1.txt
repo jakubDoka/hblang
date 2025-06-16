@@ -1,5 +1,5 @@
 wired string comparison 1.broken:
-	mov rcx, rsi
+	lea rcx, [rsp+0x08]
 	mov rax, [rcx+0x08]
 	mov [rdi], rax
 	mov rax, [rcx+0x10]
@@ -12,27 +12,36 @@ wired string comparison 1.broken:
 main:
 	push rbx
 	push rbp
+	push r12
 	sub rsp, 0x48
-	lea rbp, [rsp+0x20]
-	lea rdx, [0x0000000000000007]
-	mov [rbp], rdx
-	mov rcx, 0x04
-	mov [rbp+0x08], rcx
-	lea rsi, [rsp+0x30]
+	lea r12, [rsp+0x38]
+	lea rbx, [0x0000000000000007]
+	mov [r12], rbx
+	mov rdx, 0x04
+	mov [r12+0x08], rdx
+	lea rcx, [rsp+0x48]
 	mov rax, 0x00
-	mov [rsi], al
-	mov [rsi+0x08], rdx
-	mov [rsi+0x10], rcx
-	lea rbx, [rsp]
+	mov [rcx], al
+	mov [rcx+0x08], rbx
+	mov [rcx+0x10], rdx
+	lea rbp, [rsp]
+	mov rax, 0x18
+	mov rdi, rbp
+	mov rsi, rcx
+	mov rdx, rax
+	call :memcpy
+	lea rbx, [rsp+0x18]
 	mov rdi, rbx
 	call :wired string comparison 1.broken
 	mov rax, [rbx+0x10]
-	mov rcx, [rbp]
+	mov rcx, [r12]
 	cmp rax, rcx
 	setnz al
 	movzx rax, al
 	movzx rax, al
 	add rsp, 0x48
+	pop r12
 	pop rbp
 	pop rbx
 	ret
+memcpy:

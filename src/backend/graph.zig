@@ -796,10 +796,11 @@ pub fn Func(comptime Backend: type) type {
                 loff += self.getStaticOffset();
                 roff += other.getStaticOffset();
 
-                if (lbase.kind == .Local and rbase.kind == .Local)
+                if ((lbase.kind == .Local or lbase.kind == .StructArg) and
+                    (rbase.kind == .Local or rbase.kind == .StructArg))
                     return (lbase != rbase) or (loff + lsize <= roff) or (roff + rsize <= loff);
                 if (lbase.kind == .Local and rbase.kind == .Arg) return true;
-                if (lbase.kind == .Arg and rbase.kind == .Local) return true;
+                if (rbase.kind == .Arg and rbase.kind == .Local) return true;
                 if (lbase == rbase) return (loff + lsize <= roff) or (roff + rsize <= loff);
                 return false;
             }

@@ -13,22 +13,23 @@ slices 3.reverse:
 	test dl, dl
 	jz :0
 	mov [r8], rsi
-	mov [r8+0x08], rcx
+	mov rax, [rdi+0x08]
+	mov [r8+0x08], rax
 	jmp :1
 0:	mov rax, 0x00
 	mov rdx, rcx
 	sub rdx, 0x01
+	mov rcx, rax
 	mov rsi, rdx
-	mov rdx, rax
-3:	mov rcx, [rdi]
-	cmp rdx, rsi
+3:	mov rax, [rdi]
+	cmp rcx, rsi
 	jnb :2
-	mov rbp, rcx
-	add rbp, rdx
-	mov rax, rcx
+	mov rbp, rax
+	add rbp, rcx
 	add rax, rsi
 	mov rbx, rsi
 	sub rbx, 0x01
+	mov rdx, rcx
 	add rdx, 0x01
 	mov cl, [rbp]
 	mov al, [rax]
@@ -36,10 +37,11 @@ slices 3.reverse:
 	mov rax, [rdi]
 	add rax, rsi
 	mov [rax], cl
+	mov rcx, rdx
 	mov rsi, rbx
 	jmp :3
-2:	mov rax, [rdi+0x08]
-	mov [r8], rcx
+2:	mov [r8], rax
+	mov rax, [rdi+0x08]
 	mov [r8+0x08], rax
 1:	add rsp, 0x10
 	pop rbp

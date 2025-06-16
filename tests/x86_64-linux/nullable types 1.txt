@@ -6,7 +6,8 @@ nullable types 1.mkval(T = uint):
 	mov rax, [rcx]
 	mov [rcx+0x08], rsi
 	mov [rdi], rax
-	mov [rdi+0x08], rsi
+	mov rax, [rcx+0x08]
+	mov [rdi+0x08], rax
 	add rsp, 0x10
 	ret
 nullable types 1.mknull(T = uint):

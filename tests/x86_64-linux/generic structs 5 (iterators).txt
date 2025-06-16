@@ -13,8 +13,8 @@ generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Nex
 0:	mov rax, [rbx]
 	mov sil, [rax]
 	call :generic structs 5 (iterators).main.Next(T = u8).some
-	mov rcx, [rbx+0x08]
 	mov rax, [rbx]
+	mov rcx, [rbx+0x08]
 	add rax, 0x01
 	mov [rbx], rax
 	mov rax, rcx
