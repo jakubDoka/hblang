@@ -400,6 +400,10 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
     const fn_ast = ast.exprs.getTyped(.Fn, func.key.ast).?;
 
     if (fn_ast.body.tag() == .Directive and ast.exprs.get(fn_ast.body).Directive.kind == .import) {
+        if (self.abi.cc == .ablecall) {
+            return self.report(fn_ast.body, "cant use @import() on this target", .{});
+        }
+
         const args = ast.exprs.view(ast.exprs.get(fn_ast.body).Directive.args);
 
         if (args.len != 0) {

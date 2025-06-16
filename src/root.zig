@@ -449,6 +449,8 @@ const Loader = struct {
                 .{ path, @errorName(err) },
                 opts.diagnostics,
             );
+
+            slot.source = "";
             return null;
         };
 
