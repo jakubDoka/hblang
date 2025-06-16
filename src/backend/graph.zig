@@ -207,7 +207,19 @@ pub const DataType = enum(u16) {
 
 pub const AbiParam = union(enum) {
     Reg: DataType,
-    Stack: u64,
+    Stack: StackSpec,
+
+    pub const StackSpec = packed struct(u64) {
+        alignment: u3,
+        size: u61,
+
+        pub fn reg(dt: DataType) StackSpec {
+            return .{
+                .size = @intCast(dt.size()),
+                .alignment = @intCast(std.math.log2_int(u64, dt.size())),
+            };
+        }
+    };
 
     pub fn getReg(self: AbiParam) DataType {
         return switch (self) {
@@ -225,8 +237,8 @@ pub const CallConv = enum(u8) {
 };
 
 pub const Signature = extern struct {
-    par_base: [*]const AbiParam = undefined,
-    ret_base: [*]const AbiParam = undefined,
+    par_base: [*]AbiParam = undefined,
+    ret_base: [*]AbiParam = undefined,
     call_conv: CallConv = .refcall,
     par_count: u8 = 0,
     ret_count: u8 = 0,
@@ -268,8 +280,18 @@ pub const Signature = extern struct {
         return self.ret_base[0..self.ret_count];
     }
 
-    pub fn stackSize(self: @This()) usize {
+    pub fn stackSize(self: @This()) u64 {
         switch (self.call_conv) {
+            .systemv => {
+                var size: u64 = 0;
+                for (self.params()) |par| {
+                    if (par == .Stack) {
+                        size = std.mem.alignForward(u64, size, @as(u64, 1) << par.Stack.alignment);
+                        size += par.Stack.size;
+                    }
+                }
+                return size;
+            },
             else => unreachable,
         }
     }
@@ -341,7 +363,10 @@ pub const builtin = enum {
     pub const Arg = mod.Arg;
     pub const StructArg = extern struct {
         base: mod.Arg,
-        size: u64,
+        spec: AbiParam.StackSpec,
+    };
+    pub const StackArgOffset = extern struct {
+        offset: u64, // from eg. rsp
     };
     pub const CInt = extern struct {
         value: i64,

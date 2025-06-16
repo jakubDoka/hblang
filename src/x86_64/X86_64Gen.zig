@@ -22,7 +22,9 @@ allocs: []u16 = undefined,
 ret_count: usize = undefined,
 local_relocs: std.ArrayListUnmanaged(Reloc) = undefined,
 block_offsets: []u32 = undefined,
+arg_base: u32 = undefined,
 local_base: u32 = undefined,
+slot_base: c_int = undefined,
 
 const tmp_count = 2;
 
@@ -115,7 +117,7 @@ pub const Reg = enum(u8) {
         };
     }
 
-    pub fn asZydisOp(self: Reg, size: usize) zydis.ZydisEncoderOperand {
+    pub fn asZydisOp(self: Reg, size: usize, slot_offset: c_int) zydis.ZydisEncoderOperand {
         if (@intFromEnum(self) < @intFromEnum(Reg.r14)) {
             return self.asZydisOpReg(size);
         } else {
@@ -126,7 +128,7 @@ pub const Reg = enum(u8) {
                     .size = @intCast(size),
                     .displacement = @as(
                         c_int,
-                        @intFromEnum(self) - @intFromEnum(Reg.r14),
+                        @intFromEnum(self) - @intFromEnum(Reg.r14) + slot_offset,
                     ) * 8,
                 },
             };
@@ -236,13 +238,13 @@ pub fn idealize(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkL
 }
 
 pub fn regBias(node: *Func.Node) ?u16 {
-    return @intFromEnum(switch (node.kind) {
-        .Arg => Reg.system_v.args[node.extraConst(.Arg).index],
+    return @intFromEnum(switch (node.extra2()) {
+        .Arg => |ext| if (ext.index < Reg.system_v.args.len) Reg.system_v.args[ext.index] else return null,
         else => b: {
             for (node.outputs()) |o| {
                 if (o.kind == .Call) {
                     const idx = std.mem.indexOfScalar(?*Func.Node, o.dataDeps(), node) orelse continue;
-                    break :b Reg.system_v.args[idx];
+                    break :b if (idx < Reg.system_v.args.len) Reg.system_v.args[idx] else return null;
                 }
 
                 if (o.kind == .Phi and o.inputs()[0].?.kind != .Loop) {
@@ -396,12 +398,6 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
 
     opts.optimizations.execute(X86_64, self, func);
 
-    //if (entry)
-    //    func.fmtScheduled(
-    //        std.io.getStdErr().writer().any(),
-    //        std.io.tty.detectConfig(std.io.getStdErr()),
-    //    );
-
     var tmp = utils.Arena.scrath(opts.optimizations.arena);
     defer tmp.deinit();
 
@@ -451,9 +447,18 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
 
     const padding = std.mem.alignForward(i64, stack_size, 16) - stack_size;
 
-    const has_call = for (postorder) |bb| {
-        if (bb.base.kind == .CallEnd) break true;
-    } else false;
+    var has_call = false;
+    self.slot_base = 0;
+    for (postorder) |bb| {
+        if (bb.base.kind == .CallEnd) {
+            const call = bb.base.inputs()[0].?;
+            const signature = &call.extra(.Call).signature;
+            self.slot_base = @max(@as(c_int, @intCast(signature.stackSize())), self.slot_base);
+            has_call = true;
+        }
+    }
+
+    self.slot_base = std.mem.alignForward(c_int, self.slot_base, 8);
 
     if (has_call and padding >= 8) {
         stack_size += padding - 8;
@@ -463,15 +468,19 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
         stack_size += padding;
     }
 
-    self.local_base = spill_slot_count * 8;
+    self.local_base = spill_slot_count * 8 + @as(u32, @intCast(self.slot_base));
+    self.arg_base = @intCast(stack_size);
+    self.arg_base += 8; // call adress
 
     prelude: {
         for (Reg.system_v.callee_saved) |r| {
             if (@intFromEnum(r) > @intFromEnum(Reg.r15) - tmp_count and spill_slot_count > 0) {
                 const tp = Tmp{@intFromEnum(r) - (@intFromEnum(Reg.r15) - tmp_count + 1)};
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_PUSH, .{tp});
+                self.arg_base += 8;
             } else if (used_regs.contains(r)) {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_PUSH, .{r});
+                self.arg_base += 8;
             }
         }
 
@@ -480,11 +489,22 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
         }
 
         var moves = std.ArrayList(Move).init(tmp.arena.allocator());
-        for (0..func.signature.params().len) |i| {
+        var i: usize = 0;
+        var stack_arg_offset: u64 = 0;
+        for (func.signature.params(), 0..) |par, j| {
+            defer if (par != .Stack) {
+                i += 1;
+            };
+
             const argn = for (postorder[0].base.outputs()) |o| {
-                if (o.isSub(graph.Arg) and o.subclass(graph.Arg).?.ext.index == i) break o;
+                if (o.subclass(graph.Arg)) |sub| if (sub.ext.index == j) break o;
             } else continue; // is dead
-            if (self.getReg(argn) != Reg.system_v.args[i]) {
+
+            if (par == .Stack) {
+                stack_arg_offset = std.mem.alignForward(u64, stack_arg_offset, @as(u64, 1) << par.Stack.alignment);
+                argn.extra(.StructArg).spec.size = @intCast(stack_arg_offset);
+                stack_arg_offset += par.Stack.size;
+            } else if (self.getReg(argn) != Reg.system_v.args[i]) {
                 moves.append(.init(self.getReg(argn), Reg.system_v.args[i])) catch unreachable;
             }
         }
@@ -621,11 +641,11 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
         const val = @field(args, f.name);
 
         req.operands[i] = switch (f.type) {
-            Reg => val.asZydisOp(fsize),
+            Reg => val.asZydisOp(fsize, self.slot_base),
             Tmp => @as(Reg, @enumFromInt(@intFromEnum(Reg.r14) + val[0])).asZydisOpReg(fsize),
-            SReg => val[0].asZydisOp(val[1]),
+            SReg => val[0].asZydisOp(val[1], self.slot_base),
             BRegOff => b: {
-                var base = val[0].asZydisOp(8);
+                var base = val[0].asZydisOp(8, self.slot_base);
                 if (base.type != zydis.ZYDIS_OPERAND_TYPE_REGISTER) {
                     tmp_allocs -= 1;
                     self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{tmp_allocs}, val[0] });
@@ -754,7 +774,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     .operand_count = 2,
                 };
                 len = @sizeOf(@TypeOf(buf));
-                req.operands[0] = self.getReg(instr).asZydisOp(8);
+                req.operands[0] = self.getReg(instr).asZydisOp(8, self.slot_base);
                 const spilled = req.operands[0].type != zydis.ZYDIS_OPERAND_TYPE_REGISTER;
                 if (spilled) {
                     req.operands[0] = .{
@@ -789,6 +809,18 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     BRegOff{ .rsp, @intCast(instr.extra(.Local).size + self.local_base), 8 },
                 });
             },
+            .StructArg => {
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_LEA, .{
+                    self.getReg(instr),
+                    BRegOff{ .rsp, @intCast(instr.extra(.StructArg).spec.size + self.arg_base), 8 },
+                });
+            },
+            .StackArgOffset => {
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_LEA, .{
+                    self.getReg(instr),
+                    BRegOff{ .rsp, @intCast(instr.extra(.StackArgOffset).offset), 8 },
+                });
+            },
             .OffsetLoad => |extra| {
                 const dst = self.getReg(instr);
                 const bse = self.getReg(instr.inputs()[2]);
@@ -820,9 +852,12 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     Reg.system_v.args;
 
                 var moves = std.ArrayList(Move).init(tmp.arena.allocator());
-                for (instr.dataDeps(), 0..) |arg, i| {
+                var i: usize = 0;
+                for (instr.dataDeps()) |arg| {
+                    if (arg.?.kind == .StackArgOffset) continue;
                     const dst, const src: Reg = .{ call_conv[i], self.getReg(arg) };
                     if (dst != src) moves.append(.init(dst, src)) catch unreachable;
+                    i += 1;
                 }
                 self.orderMoves(moves.items);
 
@@ -847,7 +882,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 }
                 self.orderMoves(moves.items);
             },
-            .Arg, .Ret, .Mem, .Never, .StructArg => {},
+            .Arg, .Ret, .Mem, .Never => {},
             .Trap => {
                 switch (instr.extra(.Trap).code) {
                     graph.infinite_loop_trap => return,

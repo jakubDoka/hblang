@@ -417,23 +417,25 @@ pub const Func = struct {
         Types.Abi.Spec,
     } {
         errdefer unreachable;
+        var builder = abi.builder();
+
         const ret_abi = @as(Types.Abi.TmpSpec, abi.categorize(self.ret, types) orelse .Imaginary)
             .toPerm(self.ret, types);
 
-        const returns = scratch.alloc(graph.AbiParam, ret_abi.len(true, abi));
+        const returns = scratch.alloc(graph.AbiParam, builder.len(true, ret_abi));
         var params = std.ArrayListUnmanaged(graph.AbiParam){};
 
-        if (ret_abi.isByRefRet(abi)) {
+        if (abi.isByRefRet(ret_abi)) {
             const slots = try params.addManyAsSlice(scratch.allocator(), 1);
-            ret_abi.types(slots, true, abi);
+            builder.types(slots, true, ret_abi);
         } else {
-            ret_abi.types(returns, true, abi);
+            builder.types(returns, true, ret_abi);
         }
 
         for (self.args) |ty| {
             const arg_abi = (abi.categorize(ty, types) orelse continue).toPerm(ty, types);
-            const slots = try params.addManyAsSlice(scratch.allocator(), arg_abi.len(false, abi));
-            arg_abi.types(slots, false, abi);
+            const slots = try params.addManyAsSlice(scratch.allocator(), builder.len(false, arg_abi));
+            builder.types(slots, false, arg_abi);
         }
 
         return .{ params.items, returns, ret_abi };

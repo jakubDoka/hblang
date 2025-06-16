@@ -235,11 +235,9 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         }
 
         var moves = std.ArrayList(Move).init(tmp.arena.allocator());
-        for (0..func.signature.params().len) |i| {
-            const argn = for (func.gcm.postorder[0].base.outputs()) |o| {
-                if (o.kind == .Arg and o.extra(.Arg).index == i) break o;
-            } else continue; // is dead
-            const dst, const src = .{ self.outReg(argn), isa.Reg.arg(i) };
+        for (func.gcm.postorder[0].base.outputs()) |argn| {
+            const arg = argn.subclass(graph.Arg) orelse break;
+            const dst, const src = .{ self.outReg(argn), isa.Reg.arg(arg.ext.index) };
             if (dst != src) moves.append(.init(dst, src)) catch unreachable;
         }
         self.orderMoves(moves.items);

@@ -375,7 +375,7 @@ pub fn beginBuilder(
 ) Builder.BuildToken {
     self.errored = false;
     self.ret = ret;
-    const res = self.bl.begin(params, returns);
+    const res = self.bl.begin(self.abi.cc, params, returns);
 
     self.scope = .initBuffer(scratch.alloc(ScopeEntry, caps.scope_cap));
     self.loops = .initBuffer(scratch.alloc(Loop, caps.loop_cap));
@@ -416,7 +416,8 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
         return;
     }
 
-    const params, const returns, const ret_abi = func.computeAbi(self.abi, self.types, tmp.arena);
+    const params, const returns, const ret_abi =
+        func.computeAbi(self.abi, self.types, tmp.arena);
     const token = self.beginBuilder(
         tmp.arena,
         func.ret,
@@ -441,7 +442,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
 
     var i: usize = 0;
 
-    if (ret_abi.isByRefRet(self.abi)) {
+    if (self.abi.isByRefRet(ret_abi)) {
         self.struct_ret_ptr = self.bl.addParam(i);
         i += 1;
     } else {
@@ -456,22 +457,33 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
         const ty = func.args[ty_idx];
         const abi = self.abiCata(ty);
 
+        var len: usize = 1;
         const arg = switch (abi) {
             .ByRef => self.bl.addParam(i),
-            .ByValue => self.bl.addSpill(self.sloc(aarg), self.bl.addParam(i)),
-            .ByValuePair => |p| b: {
+            .ByValue => if (params[i] == .Stack)
+                self.bl.addParam(i)
+            else
+                self.bl.addSpill(self.sloc(aarg), self.bl.addParam(i)),
+            .ByValuePair => |p| if (params[i] == .Stack) b: {
+                break :b self.bl.addParam(i);
+            } else b: {
                 const slot = self.bl.addLocal(self.sloc(aarg), ty.size(self.types));
                 for (p.offsets(), 0..) |off, j| {
                     const arg = self.bl.addParam(i + j);
                     self.bl.addFieldStore(slot, @intCast(off), arg.data_type, arg);
                 }
+
+                len = 2;
                 break :b slot;
             },
-            .Imaginary => self.bl.addLocal(self.sloc(aarg), 0),
+            .Imaginary => b: {
+                len = 0;
+                break :b self.bl.addLocal(self.sloc(aarg), 0);
+            },
         };
         self.scope.appendAssumeCapacity(.{ .ty = ty, .name = ident.id });
         self.bl.pushPin(arg);
-        i += abi.len(false, self.abi);
+        i += len;
         ty_idx += 1;
     }
 
@@ -1617,7 +1629,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             const rets = switch (self.abiCata(value.ty)) {
                 .Imaginary => &.{},
                 .ByValue => &.{value.getValue(self)},
-                .ByValuePair => |pair| if (self.abiCata(value.ty).isByRefRet(self.abi)) b: {
+                .ByValuePair => |pair| if (self.abi.isByRefRet(self.abiCata(value.ty))) b: {
                     self.emitGenericStore(self.struct_ret_ptr.?, &value);
                     break :b &.{};
                 } else b: {
@@ -1663,7 +1675,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 };
             }
 
-            const rets = self.bl.addCall(Comptime.eca, args);
+            const rets = self.bl.addCall(.ablecall, Comptime.eca, args);
             return .mkv(.type, rets[0]);
         },
         .Fn => |e| {
@@ -1881,12 +1893,14 @@ fn emitInternalEca(
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
+    var builder = Types.Abi.ableos.builder();
+
     const params = tmp.arena.alloc(graph.AbiParam, 1 + args.len);
-    const returns = tmp.arena.alloc(graph.AbiParam, self.abiCata(ret_ty).len(true, .ableos));
+    const returns = tmp.arena.alloc(graph.AbiParam, builder.len(true, self.abiCata(ret_ty)));
 
     params[0] = .{ .Reg = .i64 };
     for (args, params[1..]) |a, *ca| ca.* = .{ .Reg = a.data_type };
-    self.abiCata(ret_ty).types(returns, true, self.abi);
+    builder.types(returns, true, self.abiCata(ret_ty));
 
     const c_args = self.bl.allocCallArgs(tmp.arena, params, returns);
 
@@ -2407,7 +2421,7 @@ fn pushReturn(
     ret: Types.Id,
     ctx: Ctx,
 ) usize {
-    if (ret_abi.isByRefRet(self.abi)) {
+    if (self.abi.isByRefRet(ret_abi)) {
         call_args.arg_slots[0] = ctx.loc orelse
             self.bl.addLocal(self.sloc(pos), ret.size(self.types));
         return 1;
@@ -2423,20 +2437,32 @@ fn pushParam(
     idx: usize,
     value: *Value,
 ) usize {
+    var len: usize = 1;
     switch (abi) {
-        .Imaginary => {},
+        .Imaginary => {
+            len = 0;
+        },
         .ByValue => {
-            call_args.arg_slots[idx] = value.getValue(self);
+            if (call_args.params[idx] == .Stack) {
+                call_args.arg_slots[idx] = self.bl.addSpill(.none, value.getValue(self));
+            } else {
+                call_args.arg_slots[idx] = value.getValue(self);
+            }
         },
         .ByValuePair => |pair| {
-            for (pair.types, pair.offsets(), 0..) |t, off, j| {
-                call_args.arg_slots[idx + j] =
-                    self.bl.addFieldLoad(value.id.Pointer, @intCast(off), t);
+            if (call_args.params[idx] == .Stack) {
+                call_args.arg_slots[idx] = value.id.Pointer;
+            } else {
+                for (pair.types, pair.offsets(), 0..) |t, off, j| {
+                    call_args.arg_slots[idx + j] =
+                        self.bl.addFieldLoad(value.id.Pointer, @intCast(off), t);
+                }
+                len = 2;
             }
         },
         .ByRef => call_args.arg_slots[idx] = value.id.Pointer,
     }
-    return abi.len(false, self.abi);
+    return len;
 }
 
 fn assembleReturn(
@@ -2448,11 +2474,11 @@ fn assembleReturn(
     ret: Types.Id,
     ret_abi: Types.Abi.Spec,
 ) Value {
-    const rets = self.bl.addCall(id, call_args);
+    const rets = self.bl.addCall(self.abi.cc, id, call_args);
     return switch (ret_abi) {
         .Imaginary => .mkv(ret, null),
         .ByValue => .mkv(ret, rets[0]),
-        .ByValuePair => |pair| if (ret_abi.isByRefRet(self.abi)) b: {
+        .ByValuePair => |pair| if (self.abi.isByRefRet(ret_abi)) b: {
             break :b .mkp(ret, call_args.arg_slots[0]);
         } else b: {
             const slot = ctx.loc orelse self.bl.addLocal(self.sloc(expr), ret.size(self.types));

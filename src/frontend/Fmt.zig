@@ -104,6 +104,19 @@ fn preserveSpace(self: *Fmt, id: anytype) Error!void {
     if (nline_count > 1) try self.buf.appendSlice("\n");
 }
 
+fn preserveWrapping(self: *Fmt, id: anytype) Error!void {
+    const pos = self.ast.posOf(id);
+    const preceding = self.ast.source[0..pos.index];
+    const preceding_whitespace = preceding[std.mem.trimRight(u8, preceding, " \t\r\n").len..];
+    const nline_count = std.mem.count(u8, preceding_whitespace, "\n");
+    if (nline_count > 0) {
+        try self.buf.appendSlice("\n");
+        try self.buf.appendNTimes('\t', self.indent + 1);
+    } else {
+        try self.buf.appendSlice(" ");
+    }
+}
+
 fn autoInsertSep(self: *Fmt, id: anytype, sep: Lexer.Lexeme) Error!void {
     errdefer unreachable;
 
@@ -303,7 +316,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             // TODO: linebreaks
             try self.buf.appendSlice(" ");
             try self.buf.appendSlice(o.op.repr());
-            try self.buf.appendSlice(" ");
+            try self.preserveWrapping(o.rhs);
             if (o.rhs.tag() == .BinOp and self.ast.exprs.getTyped(.BinOp, o.rhs).?.op.precedence() == o.op.precedence()) {
                 try self.buf.appendSlice("(");
                 try self.fmtExprPrec(o.rhs, 255);
@@ -363,7 +376,7 @@ fn fmtSliceLow(
     }
 
     for (view, 1..) |id, i| {
-        if (indent) for (0..self.indent) |_| try self.buf.appendSlice("\t");
+        if (indent) try self.buf.appendNTimes('\t', self.indent);
         if (@TypeOf(id) == Ast.Arg) {
             try self.fmtExpr(id.bindings);
             try self.buf.appendSlice(": ");
@@ -394,7 +407,7 @@ fn fmtSliceLow(
 
     if (indent) {
         self.indent -= 1;
-        for (0..self.indent) |_| try self.buf.appendSlice("\t");
+        try self.buf.appendNTimes('\t', self.indent);
     }
 
     try self.buf.appendSlice(end.repr());

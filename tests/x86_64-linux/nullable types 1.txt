@@ -1,7 +1,7 @@
 nullable types 1.mkval(T = uint):
 	sub rsp, 0x10
-	lea rcx, [rsp]
 	mov rax, 0x01
+	lea rcx, [rsp]
 	mov [rcx], al
 	mov rax, [rcx]
 	mov [rcx+0x08], rsi

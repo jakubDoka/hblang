@@ -1,26 +1,26 @@
 slices 4.equals:
 	push rbx
 	push rbp
-	mov r9, rdi
-	mov r10, rsi
+	mov r10, rdi
+	mov r9, rsi
 	mov r8, rdx
 	mov rsi, 0x00
-	cmp r10, rcx
+	cmp r9, rcx
 	jz :0
 	mov rax, rsi
 	jmp :1
 0:	mov rbp, 0x01
-	cmp r9, r8
+	cmp r10, r8
 	jnz :2
 	mov rax, rbp
 1:	jmp :5
 2:	mov rax, 0x00
 	mov rbx, rax
-6:	cmp rbx, r10
+6:	cmp rbx, r9
 	jnz :4
 	mov rax, rbp
 	jmp :5
-4:	mov rdi, r9
+4:	mov rdi, r10
 	add rdi, rbx
 	mov rdx, r8
 	add rdx, rbx

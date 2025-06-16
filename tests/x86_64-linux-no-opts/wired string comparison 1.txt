@@ -1,11 +1,12 @@
 wired string comparison 1.broken:
-	mov rax, [rsi+0x08]
+	mov rcx, rsi
+	mov rax, [rcx+0x08]
 	mov [rdi], rax
-	mov rax, [rsi+0x10]
+	mov rax, [rcx+0x10]
 	mov [rdi+0x08], rax
-	mov rax, [rsi+0x08]
+	mov rax, [rcx+0x08]
 	mov [rdi+0x10], rax
-	mov rax, [rsi+0x10]
+	mov rax, [rcx+0x10]
 	mov [rdi+0x18], rax
 	ret
 main:

@@ -421,8 +421,8 @@ pub fn GcmMixin(comptime Backend: type) type {
                     0
                 else if (o.kind == .MachMove)
                     10
-                else if (o.isSub(graph.Arg))
-                    99
+                else if (o.subclass(graph.Arg)) |arg|
+                    @intCast(99 - arg.ext.index)
                 else if (o.kind == .Phi or o.kind == .Mem or o.kind == .Ret)
                     100
                 else if (o.isStore())

@@ -1,7 +1,8 @@
 mem2reg crash 2.insert:
 	push rbx
 	push rbp
-	mov r8, rsi
+	mov r8, rdi
+	mov rdi, rsi
 	mov rsi, 0x00
 	mov rbp, 0x08
 	mov rbx, rsi
@@ -12,9 +13,9 @@ mem2reg crash 2.insert:
 	add rax, 0x01
 	mov rbx, rax
 	jmp :1
-0:	mov rcx, [rdi]
+0:	mov rcx, [r8]
 	mov rax, [rcx]
-	cmp rax, r8
+	cmp rax, rdi
 	jnz :2
 	mov rax, rcx
 	add rax, 0x08

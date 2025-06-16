@@ -444,8 +444,8 @@ pub const InlineFunc = struct {
                     // convention of the inlined function since the default
                     // call convention should be a bit customized
                     //
-                    const copy = func.addNode(.Local, .i64, &.{ null, into_entry_mem }, .{ .size = o.extra(.StructArg).size });
-                    const size = func.addIntImm(.i64, @bitCast(o.extra(.StructArg).size));
+                    const copy = func.addNode(.Local, .i64, &.{ null, into_entry_mem }, .{ .size = o.extra(.StructArg).spec.size });
+                    const size = func.addIntImm(.i64, @bitCast(@as(u64, o.extra(.StructArg).spec.size)));
                     dest_mem = func.addNode(.MemCpy, .top, &.{ before_dest, dest_mem, copy, size }, .{});
                     func.subsume(dep.?, o);
                     break;
@@ -841,8 +841,10 @@ pub const OptOptions = struct {
     pub fn asPostInlining(self: @This()) @This() {
         std.debug.assert(self.do_inlining);
         var s = self;
+        s.verbose = false;
         s.do_inlining = false;
         s.do_gcm = false;
+        s.mem2reg = false;
         s.arena = null;
         s.error_buf = null;
         return s;
@@ -1000,6 +1002,7 @@ pub const OptOptions = struct {
                         op.do_gcm = true;
                         op.error_buf = optimizations.error_buf;
                         op.arena = optimizations.arena;
+                        op.verbose = optimizations.verbose;
                         break :b op;
                     },
                 });

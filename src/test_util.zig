@@ -201,6 +201,7 @@ pub fn testBuilder(
 
     var anal_errors = std.ArrayListUnmanaged(root.backend.static_anal.Error){};
     var optimizations = opts;
+    optimizations.verbose = verbose;
     optimizations.arena = func_arena.arena;
     optimizations.error_buf = &anal_errors;
 

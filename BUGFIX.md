@@ -2,6 +2,30 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### proper systemv abi 1 (spilled arg)
+```hb
+expectations := .{
+    return_value: 28,
+}
+
+load_of_args := fn(
+    a: uint,
+    b: uint,
+    c: uint,
+    d: uint,
+    e: uint,
+    f: uint,
+    g: uint,
+    h: uint,
+): uint {
+    return a + b + c + d + e + f + g + h
+}
+
+main := fn(): uint {
+    return load_of_args(0, 1, 2, 3, 4, 5, 6, 7)
+}
+```
+
 #### index-ptr precedence 1
 ```hb
 main := fn(): uint {

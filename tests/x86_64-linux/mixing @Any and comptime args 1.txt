@@ -11,12 +11,12 @@ mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime arg
 	ret
 mixing @Any and comptime args 1.main:
 	sub rsp, 0x10
-	lea rcx, [rsp]
-	mov rax, 0x01
-	mov [rcx], al
+	mov rcx, 0x01
+	lea rax, [rsp]
+	mov [rax], cl
 	add esi, 0x05
-	mov [rcx+0x04], esi
-	mov rax, [rcx]
+	mov [rax+0x04], esi
+	mov rax, [rax]
 	mov [rdi], rax
 	add rsp, 0x10
 	ret

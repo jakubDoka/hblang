@@ -1,5 +1,7 @@
 structs 1.odher_pass:
+	mov rcx, rsi
 	mov rax, 0x18
+	mov rsi, rcx
 	mov rdx, rax
 	call :memcpy
 	ret

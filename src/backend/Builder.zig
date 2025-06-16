@@ -42,6 +42,7 @@ pub const BuildToken = enum { @"please call Builder.begin() first, then Builder.
 /// the `params` and `returns` are copied
 pub fn begin(
     self: *Builder,
+    call_conv: graph.CallConv,
     params: []const graph.AbiParam,
     returns: []const graph.AbiParam,
 ) BuildToken {
@@ -51,7 +52,7 @@ pub fn begin(
     self.func.end = self.func.addNode(.Return, .top, &.{ null, null, null }, .{});
     self.pins = self.func.addNode(.Scope, .top, &.{}, .{});
 
-    self.func.signature = .init(.refcall, params, returns, self.func.arena.allocator());
+    self.func.signature = .init(call_conv, params, returns, self.func.arena.allocator());
 
     return @enumFromInt(0);
 }
@@ -59,9 +60,9 @@ pub fn begin(
 pub fn addParam(self: *Builder, idx: usize) SpecificNode(.Arg) {
     return switch (self.func.signature.params()[idx]) {
         .Reg => |ty| self.func.addNode(.Arg, ty, &.{self.func.root}, .{ .index = idx }),
-        .Stack => |size| self.func.addNode(.StructArg, .i64, &.{self.func.root}, .{
+        .Stack => |spec| self.func.addNode(.StructArg, .i64, &.{self.func.root}, .{
             .base = .{ .index = idx },
-            .size = size,
+            .spec = spec,
         }),
     };
 }
@@ -469,6 +470,7 @@ pub fn allocCallArgs(_: *Builder, scratch: *root.Arena, params: []const graph.Ab
 
 pub fn addCall(
     self: *Builder,
+    call_conv: graph.CallConv,
     arbitrary_call_id: u32,
     args_with_initialized_arg_slots: CallArgs,
 ) []const *BuildNode {
@@ -479,12 +481,32 @@ pub fn addCall(
         std.debug.panic("{} != {}", .{ ar.data_type, ar.data_type.meet(pr.getReg()) });
     };
     const full_args = (args.arg_slots.ptr - arg_prefix_len)[0 .. arg_prefix_len + args.params.len];
+    var stack_offset: u64 = 0;
+    for (args.params, args.arg_slots) |par, *arg| {
+        if (par == .Stack) {
+            stack_offset = std.mem.alignForward(
+                u64,
+                stack_offset,
+                @as(u64, 1) << par.Stack.alignment,
+            );
+            const location = self.func.addNode(
+                .StackArgOffset,
+                .i64,
+                &.{null},
+                .{ .offset = stack_offset },
+            );
+            self.addFixedMemCpy(location, arg.*, par.Stack.size);
+            stack_offset += par.Stack.size;
+            arg.* = location;
+        }
+    }
+
     full_args[0] = self.control();
     full_args[1] = self.memory();
 
     const call = self.func.addNode(.Call, .top, full_args, .{
         .id = arbitrary_call_id,
-        .signature = .init(.refcall, args.params, args.returns, self.func.arena.allocator()),
+        .signature = .init(call_conv, args.params, args.returns, self.func.arena.allocator()),
     });
     const call_end = self.func.addNode(.CallEnd, .top, &.{call}, .{});
     self.func.setInputNoIntern(self.scope.?, 0, call_end);

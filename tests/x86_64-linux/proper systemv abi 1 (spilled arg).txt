@@ -1,0 +1,41 @@
+proper systemv abi 1 (spilled arg).load_of_args:
+	push rbx
+	mov rbx, rdx
+	lea rdx, [rsp+0x10]
+	lea rax, [rsp+0x18]
+	add rdi, rsi
+	add rdi, rbx
+	add rdi, rcx
+	add rdi, r8
+	mov rcx, [rax]
+	mov rax, [rdx]
+	add rdi, r9
+	add rdi, rax
+	add rdi, rcx
+	mov rax, rdi
+	pop rbx
+	ret
+main:
+	push rbx
+	push rbp
+	sub rsp, 0x08
+	lea rcx, [rsp+0x10]
+	mov rax, 0x07
+	mov [rcx], rax
+	mov rax, 0x06
+	lea rbp, [rsp]
+	mov [rbp], rax
+	lea rbx, [rsp+0x08]
+	mov rax, [rcx]
+	mov [rbx], rax
+	mov r8, 0x04
+	mov r9, 0x05
+	mov rsi, 0x01
+	mov rdi, 0x00
+	mov rdx, 0x02
+	mov rcx, 0x03
+	call :proper systemv abi 1 (spilled arg).load_of_args
+	add rsp, 0x08
+	pop rbp
+	pop rbx
+	ret

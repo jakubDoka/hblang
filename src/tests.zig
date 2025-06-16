@@ -127,8 +127,9 @@ pub fn runMachineTest(
     var output = std.ArrayList(u8).init(gpa);
     defer output.deinit();
 
-    errdefer {
-        test_util.checkOrUpdatePrintTest(name, category, output.items, out, color) catch {};
+    errdefer |err| {
+        if (err != error.TestFailed)
+            test_util.checkOrUpdatePrintTest(name, category, output.items, out, color) catch {};
         test_util.testBuilder(
             name,
             code,

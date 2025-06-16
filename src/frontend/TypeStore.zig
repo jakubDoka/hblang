@@ -353,6 +353,13 @@ pub const Id = enum(IdRepr) {
         };
     }
 
+    pub fn stackSpec(self: Id, types: *Types) graph.AbiParam.StackSpec {
+        return .{
+            .size = @intCast(self.size(types)),
+            .alignment = @intCast(@min(4, std.math.log2_int(u64, self.alignment(types)))),
+        };
+    }
+
     pub fn max(lhs: Id, rhs: Id) Id {
         return @enumFromInt(@max(@intFromEnum(lhs), @intFromEnum(rhs)));
     }
