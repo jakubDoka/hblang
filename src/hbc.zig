@@ -19,6 +19,9 @@ pub fn main() !void {
 
     try opts.loadCli(cli_scratch.allocator());
 
-    var arena = (try hb.compile(opts)).arena;
+    var arena = (hb.compile(opts) catch |err| switch (err) {
+        error.Failed => std.process.exit(1),
+        else => return err,
+    }).arena;
     if (std.debug.runtime_safety) arena.deinit();
 }

@@ -220,7 +220,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         try ast.fmt(&buf);
 
         try opts.output.writeAll(buf.items);
-        return error.Failed;
+        return .{ .ast = &.{}, .arena = type_system_memory };
     }
 
     const asts, const base = try Loader.loadAll(

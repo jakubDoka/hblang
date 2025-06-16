@@ -227,7 +227,7 @@ pub fn GcmMixin(comptime Backend: type) type {
 
                     if (t.asCfg()) |c| {
                         late_scheds[c.base.id] = if (c.base.isBasicBlockStart()) c else c.base.tryCfg0();
-                    } else if (t.isPinned() or t.kind == .Arg) {
+                    } else if (t.isPinned() or t.isSub(graph.Arg)) {
                         late_scheds[t.id] = t.cfg0();
                     } else {
                         for (t.outputs()) |o| {
@@ -421,7 +421,7 @@ pub fn GcmMixin(comptime Backend: type) type {
                     0
                 else if (o.kind == .MachMove)
                     10
-                else if (o.kind == .Arg)
+                else if (o.isSub(graph.Arg))
                     99
                 else if (o.kind == .Phi or o.kind == .Mem or o.kind == .Ret)
                     100
