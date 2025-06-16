@@ -187,7 +187,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.fmtExpr(r.end);
         },
         .Index => |i| {
-            try self.fmtExpr(i.base);
+            try self.fmtExprPrec(i.base, 0);
             try self.buf.appendSlice("[");
             try self.fmtExpr(i.subscript);
             try self.buf.appendSlice("]");

@@ -2,6 +2,14 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### index-ptr precedence 1
+```hb
+main := fn(): uint {
+    val := 0
+    return (&val)[..1][0]
+}
+```
+
 #### inline return stack 1
 ```hb
 expectations := .{
