@@ -307,8 +307,10 @@ pub const elf = struct {
         }.lessThen);
 
         var local_sim_count: Word = 0;
-        while (self.syms.items[projection[local_sim_count]].linkage == .local)
-            local_sim_count += 1;
+        if (projection.len > 0) {
+            while (self.syms.items[projection[local_sim_count]].linkage == .local)
+                local_sim_count += 1;
+        }
 
         var sym_count: Word = 1;
         for (self.syms.items) |s| sym_count += @intFromBool(s.kind != .invalid);
