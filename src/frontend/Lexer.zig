@@ -205,6 +205,11 @@ pub const Lexeme = enum(u16) {
         break :b @Type(.{ .@"union" = .{ .layout = .@"extern", .tag_type = tag, .fields = &variants, .decls = &.{} } });
     };
 
+    pub fn isKeyword(self: Lexeme) bool {
+        return @intFromEnum(Lexeme.@"fn") <= @intFromEnum(self) and
+            @intFromEnum(self) <= @intFromEnum(Lexeme.false);
+    }
+
     pub fn expand(self: Lexeme) Expanded {
         var vl = @intFromEnum(self);
         if (vl >= 256) vl = @byteSwap(vl);

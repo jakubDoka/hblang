@@ -11,6 +11,7 @@ var cli_buff: [1024 * 8]u8 = undefined;
 pub fn main() !void {
     var opts = hb.CompileOptions{
         .diagnostics = std.io.getStdErr().writer().any(),
+        .error_colors = std.io.tty.detectConfig(std.io.getStdErr()),
         .colors = std.io.tty.detectConfig(std.io.getStdOut()),
         .output = std.io.getStdOut().writer().any(),
     };

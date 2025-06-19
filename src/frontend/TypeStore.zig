@@ -22,6 +22,7 @@ interner: Map = .{},
 file_scopes: []Id,
 ct: Comptime,
 diagnostics: std.io.AnyWriter,
+colors: std.io.tty.Config = .no_color,
 files: []const Ast,
 stack_base: usize,
 target: []const u8 = "hbvm-ableos",
@@ -574,7 +575,7 @@ pub fn report(self: *Types, file_id: File, expr: anytype, comptime fmt: []const 
     }
 
     const file = self.getFile(file_id);
-    Ast.report(file.path, file.source, file.posOf(expr).index, fmt, rargs, self.diagnostics);
+    Ast.report(file.path, file.source, file.posOf(expr).index, fmt, rargs, self.colors, self.diagnostics);
 }
 
 pub fn getFile(self: *Types, file: File) *const Ast {

@@ -224,6 +224,7 @@ pub const InitOptions = struct {
     diagnostics: std.io.AnyWriter = std.io.null_writer.any(),
     ignore_errors: bool = false,
     mode: Mode = .latest,
+    colors: std.io.tty.Config = .no_color,
 
     pub const Mode = enum { legacy, latest };
 };
@@ -244,6 +245,7 @@ pub fn init(
         .cur = lexer.next(),
         .lexer = lexer,
         .diagnostics = opts.diagnostics,
+        .colors = opts.colors,
     };
 
     const source_to_ast_ratio = 5;
@@ -478,25 +480,43 @@ pub fn fmt(self: *const Ast, buf: *std.ArrayList(u8)) !void {
     try ft.fmt();
 }
 
-pub fn report(path: []const u8, file: []const u8, pos: u32, comptime fmt_str: []const u8, args: anytype, out: anytype) void {
+pub fn report(
+    path: []const u8,
+    file: []const u8,
+    pos: u32,
+    comptime fmt_str: []const u8,
+    args: anytype,
+    colors: std.io.tty.Config,
+    out: anytype,
+) void {
+    errdefer unreachable;
     const line, const col = Ast.lineCol(file, pos);
-    out.print(
-        "{s}:{}:{}: " ++ fmt_str ++ "\n{}\n",
-        .{ path, line, col } ++ args ++ .{CodePointer{ .source = file, .index = pos }},
-    ) catch unreachable;
+
+    try colors.setColor(out, .bright_white);
+    try colors.setColor(out, .bold);
+    try out.print("{s}:{}:{}: ", .{ path, line, col });
+    try colors.setColor(out, .reset);
+
+    try out.print(fmt_str, args);
+    try out.print("\n{}\n", .{CodePointer{
+        .source = file,
+        .index = pos,
+        .colors = colors,
+    }});
 }
 
 pub const CodePointer = struct {
     source: []const u8,
     index: usize,
+    colors: std.io.tty.Config,
 
     pub fn format(slf: *const @This(), comptime _: anytype, _: anytype, writer: anytype) !void {
-        try pointToCode(slf.source, slf.index, writer);
+        try pointToCode(slf.source, slf.index, slf.colors, writer);
     }
 };
 
 pub fn codePointer(self: *const Ast, index: usize) CodePointer {
-    return .{ .source = self.source, .index = index };
+    return .{ .source = self.source, .index = index, .colors = .no_color };
 }
 
 pub fn lineCol(source: []const u8, index: usize) struct { usize, usize } {
@@ -509,7 +529,35 @@ pub fn lineCol(source: []const u8, index: usize) struct { usize, usize } {
     return .{ line + 1, @intCast(@as(isize, @bitCast(index)) - last_nline) };
 }
 
-pub fn pointToCode(source: []const u8, index_m: usize, writer: anytype) !void {
+pub fn highlightCode(
+    source: []const u8,
+    colors: std.io.tty.Config,
+    writer: std.io.AnyWriter,
+) !void {
+    errdefer unreachable;
+
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    var lexer = Lexer.init(try tmp.arena.allocator().dupeZ(u8, source), 0);
+    var last: usize = 0;
+    var token = lexer.next();
+    while (token.kind != .Eof) : (token = lexer.next()) {
+        if (token.kind.isKeyword()) {
+            try colors.setColor(writer, .bright_white);
+            try colors.setColor(writer, .bold);
+        }
+
+        try writer.writeAll(source[last..token.end]);
+        last = token.end;
+
+        if (token.kind.isKeyword()) {
+            try colors.setColor(writer, .reset);
+        }
+    }
+}
+
+pub fn pointToCode(source: []const u8, index_m: usize, colors: std.io.tty.Config, writer: std.io.AnyWriter) !void {
     const index = @min(index_m, source.len -| 1); // might be an empty file
     const line_start = if (std.mem.lastIndexOfScalar(u8, source[0..index], '\n')) |l| l + 1 else 0;
     const line_end = if (std.mem.indexOfScalar(u8, source[index..], '\n')) |l| l + index else source.len;
@@ -529,12 +577,15 @@ pub fn pointToCode(source: []const u8, index_m: usize, writer: anytype) !void {
         } else break j;
     } else the_line.len;
 
-    try writer.writeAll(the_line[code_start..][0 .. the_line.len - code_start]);
+    try colors.setColor(writer, .white);
+    try highlightCode(the_line[code_start..][0 .. the_line.len - code_start], colors, writer);
     try writer.writeAll("\n");
 
     const col = index - line_start + extra_bytes;
     for (0..col) |_| {
         try writer.writeAll(" ");
     }
+    try colors.setColor(writer, .green);
     try writer.writeAll("^");
+    try colors.setColor(writer, .reset);
 }

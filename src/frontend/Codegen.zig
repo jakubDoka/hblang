@@ -327,10 +327,11 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
     if (has_main and !exports_main) {
         const entry = self.getEntry(.root, "main") catch {
             try self.types.diagnostics.writeAll(
-                \\...you can define the `main` in the mentioned file:
+                \\...you can define the `main` in the mentioned file (or pass --no-entry):
                 \\main := fn(): uint {
                 \\    return 0
                 \\}
+                \\
             );
             return error.Never;
         };

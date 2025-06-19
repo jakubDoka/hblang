@@ -46,6 +46,7 @@ const max_file_len = std.math.maxInt(u31);
 
 pub const CompileOptions = struct {
     diagnostics: std.io.AnyWriter = std.io.null_writer.any(),
+    error_colors: std.io.tty.Config = .no_color,
     colors: std.io.tty.Config = .no_color,
     output: std.io.AnyWriter,
     raw_binary: bool = false,
@@ -214,6 +215,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             .code = source,
             .diagnostics = opts.diagnostics,
             .mode = opts.parser_mode,
+            .colors = opts.error_colors,
         });
 
         var buf = std.ArrayList(u8).init(type_system_memory.allocator());
@@ -228,6 +230,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         opts.path_projection,
         opts.root_file,
         opts.diagnostics,
+        opts.error_colors,
         opts.parser_mode,
     ) orelse {
         try opts.diagnostics.print("failed due to previous errors (codegen skipped)\n", .{});
@@ -250,6 +253,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
 
     const types = hb.frontend.Types.init(type_system_memory, asts, opts.diagnostics);
     types.target = opts.target;
+    types.colors = opts.error_colors;
     defer if (std.debug.runtime_safety) types.deinit();
 
     var bckend, const abi: hb.backend.graph.CallConv = if (std.mem.startsWith(u8, opts.target, "hbvm-ableos")) backend: {
@@ -447,6 +451,7 @@ const Loader = struct {
                 opts.pos,
                 "can't open used file: {s}: {s}",
                 .{ path, @errorName(err) },
+                opts.colors,
                 opts.diagnostics,
             );
 
@@ -462,6 +467,7 @@ const Loader = struct {
         path_projections: std.StringHashMapUnmanaged([]const u8),
         root: []const u8,
         diagnostics: std.io.AnyWriter,
+        colors: std.io.tty.Config,
         parser_mode: hb.frontend.Ast.InitOptions.Mode,
     ) !?struct { []const hb.frontend.Ast, []const u8 } {
         const real_root = std.fs.cwd().realpathAlloc(arena.allocator(), root) catch root;
@@ -495,6 +501,7 @@ const Loader = struct {
                 .loader = .init(&self),
                 .diagnostics = diagnostics,
                 .mode = parser_mode,
+                .colors = colors,
             });
 
             if (ast_res) |ast| {

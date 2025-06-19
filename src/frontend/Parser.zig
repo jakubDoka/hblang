@@ -18,6 +18,7 @@ current: Types.File,
 path: []const u8,
 loader: Loader,
 diagnostics: std.io.AnyWriter,
+colors: std.io.tty.Config,
 stack_base: usize,
 store: Ast.Store = .{},
 active_sym_table: std.HashMapUnmanaged(u32, void, Hasher, 70) = .{},
@@ -83,6 +84,7 @@ pub const Loader = struct {
         path: []const u8,
         from: Types.File,
         pos: u32,
+        colors: std.io.tty.Config,
         diagnostics: std.io.AnyWriter,
         type: Kind,
 
@@ -292,7 +294,7 @@ fn parseUnit(self: *Parser) Error!Id {
 
 fn report(self: *Parser, pos: u32, comptime msg: []const u8, args: anytype) void {
     self.errored = true;
-    Ast.report(self.path, self.lexer.source, pos, msg, args, self.diagnostics);
+    Ast.report(self.path, self.lexer.source, pos, msg, args, self.colors, self.diagnostics);
 }
 
 fn codePointer(self: *const Parser, pos: usize) Ast.CodePointer {
@@ -413,6 +415,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                         .path = path[1 .. path.len - 1],
                         .type = ty,
                         .pos = token.pos,
+                        .colors = self.colors,
                         .diagnostics = self.diagnostics,
                     }) orelse c: {
                         self.errored = true;
