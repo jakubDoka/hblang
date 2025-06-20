@@ -270,13 +270,27 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
         },
         .Loop => |l| {
             if (l.pos.flag.@"comptime") try self.buf.appendSlice("$");
-            try self.buf.appendSlice("loop");
-            if (l.label.tag() != .Void) {
-                try self.buf.appendSlice(":");
-                try self.fmtExpr(l.label);
+
+            if (l.body.tag() == .If and self.ast.exprs.get(l.body).If.pos == l.pos) {
+                try self.buf.appendSlice("while");
+                if (l.label.tag() != .Void) {
+                    try self.buf.appendSlice(":");
+                    try self.fmtExpr(l.label);
+                }
+                try self.buf.appendSlice(" ");
+                const if_body = self.ast.exprs.get(l.body).If;
+                try self.fmtExpr(if_body.cond);
+                try self.buf.appendSlice(" ");
+                try self.fmtExpr(if_body.then);
+            } else {
+                try self.buf.appendSlice("loop");
+                if (l.label.tag() != .Void) {
+                    try self.buf.appendSlice(":");
+                    try self.fmtExpr(l.label);
+                }
+                try self.buf.appendSlice(" ");
+                try self.fmtExpr(l.body);
             }
-            try self.buf.appendSlice(" ");
-            try self.fmtExpr(l.body);
         },
         .Break => |b| {
             try self.buf.appendSlice("break");

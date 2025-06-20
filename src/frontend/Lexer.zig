@@ -26,6 +26,8 @@ pub const Lexeme = enum(u16) {
     @"$match",
     @"$loop",
     loop,
+    @"$while",
+    @"while",
     @"break",
     @"continue",
     @"enum",

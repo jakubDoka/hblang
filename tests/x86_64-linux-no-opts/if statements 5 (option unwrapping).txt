@@ -1,25 +1,37 @@
 main:
 	push rbx
 	sub rsp, 0x30
-	lea rcx, [rsp+0x10]
+	lea rdx, [rsp+0x10]
 	mov rax, 0x01
-	mov [rcx], al
+	mov [rdx], al
 	mov rax, 0x00
+	mov [rdx+0x08], rax
+	lea rcx, [rsp]
+	mov rax, [rdx]
+	mov [rcx], rax
+	mov rax, [rdx+0x08]
 	mov [rcx+0x08], rax
-	lea rbx, [rsp]
+	mov bl, [rcx]
 	lea rdx, [rsp+0x20]
-	mov rax, [rcx]
-	mov [rbx], rax
 	mov rax, [rcx+0x08]
-	mov [rbx+0x08], rax
-	mov cl, [rbx]
-	mov rax, [rbx+0x08]
 	mov [rdx], rax
+	lea rcx, [rsp+0x28]
+	test bl, bl
+	jz :0
+	mov rax, [rdx]
+	cmp rax, 0x00
+	setz al
+	movzx rax, al
+	mov [rcx], al
+	jmp :1
+0:	mov rax, 0x00
+	mov [rcx], al
+1:	mov cl, [rcx]
 	mov rax, [rdx]
 	test cl, cl
-	jz :0
-	jmp :1
-0:	mov rax, 0x01
-1:	add rsp, 0x30
+	jz :2
+	jmp :3
+2:	mov rax, 0x01
+3:	add rsp, 0x30
 	pop rbx
 	ret

@@ -57,7 +57,7 @@ pub const SafeContext = struct {
 
     fn progRead(self: *Self, comptime T: type, src: usize) !*align(1) const T {
         if (self.code_start != self.code_end) {
-            if (self.code_start > src or self.code_end < src + @sizeOf(T)) {
+            if (self.code_start > src or src + @sizeOf(T) > self.code_end) {
                 return error.MemOob;
             }
         } else {
@@ -69,47 +69,6 @@ pub const SafeContext = struct {
         return @ptrCast(mem.ptr);
     }
 };
-
-pub fn UnsafeCtx(comptime Writer: type) type {
-    return struct {
-        color_cfg: if (debug) std.io.tty.Config else void = undefined,
-        writer: if (debug) Writer else void = undefined,
-
-        const check_ops = debug;
-        const assume_no_div_by_zero = true;
-        const Self = @This();
-
-        fn read(_: *Self, src: usize, dst: []u8) !void {
-            const ptr: [*]u8 = @ptrFromInt(src);
-            @memcpy(dst, ptr);
-        }
-
-        fn write(_: *Self, src: []u8, dst: usize) !void {
-            const ptr: [*]u8 = @ptrFromInt(dst);
-            @memcpy(ptr, src);
-        }
-
-        fn setColor(self: *Self, color: std.io.tty.Color) !void {
-            if (debug) try root.setColor(self.color_cfg, self.writer, color);
-        }
-
-        fn memmove(_: *Self, dst: usize, src: usize, len: usize) !void {
-            const srcp: [*]u8 = @ptrFromInt(src);
-            const dstp: [*]u8 = @ptrFromInt(dst);
-            if (dst + len <= src or src + len <= dst) {
-                @memcpy(dstp[0..len], srcp[0..len]);
-            } else if (dst <= src) {
-                std.mem.copyForwards(u8, dstp[0..len], srcp[0..len]);
-            } else {
-                std.mem.copyBackwards(u8, dstp[0..len], srcp[0..len]);
-            }
-        }
-
-        fn progRead(_: *Self, comptime T: type, src: usize) !*align(1) T {
-            return @ptrFromInt(src);
-        }
-    };
-}
 
 pub fn run(self: *Vm, ctx: anytype) !isa.Op {
     @setEvalBranchQuota(3000);
@@ -447,7 +406,7 @@ fn progRead(self: *Vm, comptime T: type, ctx: anytype) !T {
 pub fn testRun(vm: *Vm, res: anyerror!isa.Op, regRes: anytype, comptime code: anytype) !void {
     const fode = isa.packMany(code);
     vm.ip = @intFromPtr(fode.ptr);
-    var ctx = UnsafeCtx(void){};
+    var ctx = SafeContext{};
     try std.testing.expectEqual(res, vm.run(&ctx));
     try std.testing.expectEqual(regRes, vm.regs.get(.ret(0)));
 }

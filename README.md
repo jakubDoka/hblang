@@ -1947,7 +1947,6 @@ foo := fn(): uint {
     - [x] comptime
   - [x] `defer`
   - [x] `die`
-  - [ ] `orelse`
 - [x] import pattern matching
 - [x] global variables
   - [x] strings
@@ -1968,6 +1967,9 @@ foo := fn(): uint {
       - [x] `- + * / % == != <= >= < > << >> | ^ &`
     - [x] unary operators
       - [x] `- ! ~`
+    - [x] short circuit (`&&`, `||`)
+      - [x] `&&` applied to option patterns
+      - [ ] `||` to provide default value
   - [x] floats
     - [x] binary operators
       - [x] `- + * / == != <= >= < >`

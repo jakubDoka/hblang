@@ -1,0 +1,43 @@
+main:
+	push rbx
+	push rbp
+	mov rsi, 0x00
+	mov rbp, rsi
+	mov rcx, rsi
+3:	cmp rbp, 0x0A
+	setz al
+	movzx rax, al
+	test al, al
+	jz :0
+	mov rax, rcx
+	jmp :1
+0:	mov rbx, rsi
+	mov rdx, rcx
+5:	cmp rbx, 0x0A
+	setz al
+	movzx rax, al
+	test al, al
+	jz :2
+	mov rcx, rbp
+	add rcx, 0x01
+	mov rbp, rcx
+	mov rcx, rdx
+	jmp :3
+2:	mov rcx, rbp
+	imul rcx, rbx
+	cmp rcx, 0x00
+	setz al
+	movzx rax, al
+	test al, al
+	jz :4
+	mov rax, rdx
+1:	pop rbp
+	pop rbx
+	ret
+4:	mov rax, rdx
+	add rax, rcx
+	mov rcx, rbx
+	add rcx, 0x01
+	mov rbx, rcx
+	mov rdx, rax
+	jmp :5
