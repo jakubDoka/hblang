@@ -823,7 +823,8 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn format(self: *const Node, comptime _: anytype, _: anytype, writer: anytype) !void {
-                const colors: std.io.tty.Config = if (writer.writeFn == std.io.getStdErr().writer().any().writeFn)
+                const colors: std.io.tty.Config = if (!utils.freestanding and
+                    writer.writeFn == utils.getStdErr().writeFn)
                     std.io.tty.detectConfig(std.io.getStdErr())
                 else
                     .no_color;
@@ -1254,14 +1255,6 @@ pub fn Func(comptime Backend: type) type {
                     .node = node,
                     .hash = Node.hash(node.kind, node.data_type, node.inputs(), node.anyextra()),
                 })) {
-                    var iter = self.interner.iterator();
-                    while (iter.next()) |entry| {
-                        std.debug.print("flop {}\n", .{entry.key_ptr.node});
-                    }
-                    self.fmtUnscheduled(
-                        std.io.getStdErr().writer().any(),
-                        .escape_codes,
-                    );
                     utils.panic("{}\n", .{node});
                 }
             }

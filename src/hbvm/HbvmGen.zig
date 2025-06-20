@@ -181,14 +181,6 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     opts.optimizations.execute(HbvmGen, self, func);
 
-    if (false and std.mem.eql(u8, "mem.hb.copy", opts.name)) {
-        std.debug.print("{s}\n", .{opts.name});
-        func.fmtScheduled(
-            std.io.getStdErr().writer().any(),
-            .escape_codes,
-        );
-    }
-
     const allocs = Regalloc.ralloc(HbvmGen, func);
 
     var tmp = utils.Arena.scrath(opts.optimizations.arena);
@@ -253,7 +245,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     for (func.gcm.postorder, 0..) |bb, i| {
         self.block_offsets[bb.base.schedule] = @intCast(self.out.code.items.len);
         std.debug.assert(bb.base.schedule == i);
-        self.emitBlockBody(tmp.arena.allocator(), &bb.base, func);
+        self.emitBlockBody(tmp.arena.allocator(), &bb.base);
         const last = bb.base.outputs()[bb.base.output_len - 1];
         if (last.outputs().len == 0) {
             std.debug.assert(last.kind == .Return);
@@ -280,10 +272,6 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
             if (last.outputs()[@intFromBool(last.isSwapped())]
                 .schedule == std.math.maxInt(u16))
             {
-                func.fmtScheduled(
-                    std.io.getStdErr().writer().any(),
-                    std.io.tty.detectConfig(std.io.getStdErr()),
-                );
                 utils.panic("{} {}\n", .{ last.outputs()[@intFromBool(last.isSwapped())], last });
             }
             self.local_relocs.appendAssumeCapacity(.{
@@ -488,7 +476,7 @@ pub fn doReloc(self: *HbvmGen, rel: Reloc, dest: i64) void {
     @memcpy(self.out.code.items[location..][0..size], @as(*const [8]u8, @ptrCast(&jump))[0..size]);
 }
 
-pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node, func: *Func) void {
+pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) void {
     errdefer unreachable;
     for (node.outputs()) |no| {
         const inps = no.dataDeps();
@@ -517,13 +505,6 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node, f
                 self.emit(.lra, .{ self.outReg(no), .null, 0 });
             },
             .Local => |extra| {
-                if (no.inputs()[1].?.kind != .Mem) {
-                    func.fmtScheduled(
-                        std.io.getStdErr().writer().any(),
-                        std.io.tty.detectConfig(std.io.getStdErr()),
-                    );
-                    unreachable;
-                }
                 self.emit(.addi64, .{ self.outReg(no), .stack_addr, extra.size });
             },
             .Ld => |extra| {
@@ -692,13 +673,6 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node, f
                 self.emitLow("RRP", extra.op, .{ self.inReg(0, inps[0]), self.inReg(1, inps[1]), 0 });
             },
             .If => {
-                if (no.outputs().len == 1) {
-                    func.fmtScheduled(
-                        std.io.getStdErr().writer().any(),
-                        .escape_codes,
-                    );
-                    std.debug.print("{}\n\n", .{no});
-                }
                 std.debug.assert(no.outputs()[1].schedule != std.math.maxInt(u16));
                 self.local_relocs.appendAssumeCapacity(.{
                     .dest_block = no.outputs()[1].schedule,

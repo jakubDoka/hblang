@@ -321,27 +321,6 @@ pub const InlineFunc = struct {
                 for (node.outputs()) |o| work.add(o);
             }
         }
-
-        if (new_nodes == .new) {
-            var malformed = false;
-            for (new_nodes.new) |n| {
-                // TODO: there is a better way
-                if (n.id == std.math.maxInt(u16)) continue;
-                if (!interned.isSet(n.id)) {
-                    std.debug.print("{}\n", .{n});
-                    malformed = true;
-                }
-            }
-            if (malformed) {
-                std.debug.print("\n", .{});
-                std.debug.print("{}\n", .{end});
-                into.fmtUnscheduled(
-                    std.io.getStdErr().writer().any(),
-                    .escape_codes,
-                );
-                unreachable;
-            }
-        }
     }
 
     pub fn inlineInto(
@@ -395,11 +374,6 @@ pub const InlineFunc = struct {
         std.debug.assert(into_entry_mem.kind == .Mem);
 
         const call_end = dest.outputs()[0];
-        if (call_end.kind != .CallEnd)
-            func.fmtUnscheduled(
-                std.io.getStdErr().writer().any(),
-                .escape_codes,
-            );
         std.debug.assert(call_end.kind == .CallEnd);
 
         var after_entry: *Func.Node = for (entry.outputs()) |o| {
@@ -877,8 +851,6 @@ pub const OptOptions = struct {
     }
 
     pub fn execute(self: @This(), comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) void {
-        const freestanding = @import("builtin").target.os.tag == .freestanding;
-
         const Func = graph.Func(Backend);
         const Node = Func.Node;
 
@@ -915,7 +887,7 @@ pub const OptOptions = struct {
             func.gcm.buildCfg();
         }
 
-        if (!freestanding and self.verbose)
+        if (!root.freestanding and self.verbose)
             func.fmtScheduled(
                 std.io.getStdErr().writer().any(),
                 std.io.tty.detectConfig(std.io.getStdErr()),

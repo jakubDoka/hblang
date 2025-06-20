@@ -77,12 +77,6 @@ pub fn GcmMixin(comptime Backend: type) type {
                 var ltree: u16 = undefined;
                 if (builder.post_walked.isSet(oc.base.id)) {
                     ltree = oc.ext.loop;
-                    if (ltree > builder.tree.items.len) {
-                        self.fmtUnscheduled(
-                            std.io.getStdErr().writer().any(),
-                            .escape_codes,
-                        );
-                    }
                     const tree = &builder.tree.items[ltree];
                     if (tree.head == oc) {
                         ltree = tree.par orelse b: {
@@ -512,10 +506,6 @@ pub fn GcmMixin(comptime Backend: type) type {
 
             if (!node.isPinned()) {
                 if (node.kind == .Start) {
-                    self.fmtUnscheduled(
-                        std.io.getStdErr().writer().any(),
-                        .escape_codes,
-                    );
                     root.panic("{}\n", .{node});
                 }
 

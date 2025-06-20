@@ -1,5 +1,7 @@
 const std = @import("std");
 
+pub const freestanding = @import("builtin").target.os.tag == .freestanding;
+
 pub fn ensureSlot(self: anytype, gpa: std.mem.Allocator, id: usize) !*std.meta.Child(@TypeOf(self.items)) {
     if (self.items.len <= id) {
         const prev_len = self.items.len;
@@ -9,8 +11,12 @@ pub fn ensureSlot(self: anytype, gpa: std.mem.Allocator, id: usize) !*std.meta.C
     return &self.items[id];
 }
 
+pub fn getStdErr() std.io.AnyWriter {
+    return if (freestanding) std.io.null_writer.any() else std.io.getStdErr().writer().any();
+}
+
 pub fn panic(comptime format: []const u8, args: anytype) noreturn {
-    if (debug) std.debug.panic(format, args) else unreachable;
+    if (debug and !freestanding) std.debug.panic(format, args) else unreachable;
 }
 
 pub fn setColor(cfg: std.io.tty.Config, writer: std.io.AnyWriter, color: std.io.tty.Color) !void {
@@ -84,11 +90,9 @@ pub const Pool = struct {
     free: [sclass_count]?*Header = @splat(null),
 
     const max_alloc_size = 1024 * 1024 * 256;
-    const sclass_offset = std.math.log2_int(usize, std.heap.pageSize());
+    const page_size = 1024 * 4;
+    const sclass_offset = std.math.log2_int(usize, page_size);
     const sclass_count = std.math.log2_int(usize, max_alloc_size) - sclass_offset;
-    comptime {
-        std.debug.assert(sclass_count == 16);
-    }
 
     const Header = struct {
         next: ?*Header,
@@ -104,7 +108,7 @@ pub const Pool = struct {
             fn alloc(ptr: *anyopaque, size: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
                 const slf: *Pool = @alignCast(@ptrCast(ptr));
                 const alignm = @max(alignment.toByteUnits(), @alignOf(Header));
-                std.debug.assert(alignm <= comptime std.heap.pageSize());
+                std.debug.assert(alignm <= page_size);
                 const size_class = sclassOf(size);
 
                 if (slf.free[size_class]) |fr| {
