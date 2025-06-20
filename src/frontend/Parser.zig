@@ -156,13 +156,7 @@ fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8, unordered: bool) Error!Id 
         if (prec >= prevPrec) break;
 
         self.cur = self.lexer.next();
-        if (op == .@":=") {
-            _ = self.declareExpr(acum, unordered);
-            return try self.store.alloc(self.arena.allocator(), .Decl, .{
-                .bindings = acum,
-                .value = try self.parseExpr(),
-            });
-        } else if (op == .@":") {
+        if (op == .@":") {
             const lover_prec = comptime Lexer.Lexeme.@"=".precedence() - 1;
             const ty = try self.parseBinExpr(try self.parseUnit(), lover_prec, false);
             _ = self.declareExpr(acum, unordered);
@@ -187,6 +181,12 @@ fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8, unordered: bool) Error!Id 
                     .BinOp,
                     .{ .lhs = acum, .op = iop, .rhs = rhs },
                 ),
+            });
+        } else if (op == .@":=") {
+            _ = self.declareExpr(acum, unordered);
+            acum = try self.store.alloc(self.arena.allocator(), .Decl, .{
+                .bindings = acum,
+                .value = rhs,
             });
         } else {
             acum = try self.store.alloc(
@@ -561,8 +561,11 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         },
         .@"if", .@"$if" => .{ .If = .{
             .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind == .@"$if" } },
-            .cond = try self.parseScopedExpr(),
-            .then = try self.parseScopedExpr(),
+            .cond = try self.parseExpr(),
+            .then = b: {
+                defer self.finalizeVariables(scope_frame);
+                break :b try self.parseScopedExpr();
+            },
             .else_ = if (self.tryAdvance(.@"else"))
                 try self.parseScopedExpr()
             else

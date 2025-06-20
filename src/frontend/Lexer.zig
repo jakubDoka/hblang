@@ -100,8 +100,6 @@ pub const Lexeme = enum(u16) {
     @"<=" = '<' + 128,
     @"==" = '=' + 128,
     @">=" = '>' + 128,
-    @"||=" = '|' + 32 + 128,
-    @"&&=" = '&' + 32 + 128,
 
     @"||" = '|' + 32,
     @"&&" = '&' + 32,
@@ -122,6 +120,9 @@ pub const Lexeme = enum(u16) {
     ty_f32,
     ty_f64,
     ty_type,
+
+    @"||=" = '|' + 32 + 128,
+    @"&&=" = '&' + 32 + 128,
 
     @"@CurrentScope" = 0x200,
     @"@RootScope",
@@ -220,7 +221,6 @@ pub const Lexeme = enum(u16) {
     pub fn precedence(self: Lexeme) u8 {
         return switch (self) {
             .@":",
-            .@":=",
             .@"=",
             .@"+=",
             .@"-=",
@@ -235,7 +235,9 @@ pub const Lexeme = enum(u16) {
             .@"&&=",
             .@"||=",
             => 15,
-            .@"|", .@"&", .@"||", .@"&&" => 8,
+            .@"||", .@"&&" => 14,
+            .@":=" => 13,
+            .@"|", .@"&" => 8,
             .@"<", .@">", .@"<=", .@">=", .@"==", .@"!=" => 7,
             .@"^" => 6,
             .@"<<", .@">>" => 5,
@@ -252,10 +254,6 @@ pub const Lexeme = enum(u16) {
 
     pub fn repr(self: Lexeme) []const u8 {
         return @tagName(self);
-    }
-
-    pub fn isAssignment(self: Lexeme) bool {
-        return self.precedence() == 15;
     }
 
     pub fn cantStartExpression(self: Lexeme) bool {

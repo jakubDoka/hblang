@@ -1,0 +1,3 @@
+if statements 5 (option unwrapping):4:10: expected bool got ?uint
+    if v := val && v == 0 {
+            ^

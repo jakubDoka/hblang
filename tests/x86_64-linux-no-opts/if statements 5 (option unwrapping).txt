@@ -1,0 +1,25 @@
+main:
+	push rbx
+	sub rsp, 0x30
+	lea rcx, [rsp+0x10]
+	mov rax, 0x01
+	mov [rcx], al
+	mov rax, 0x00
+	mov [rcx+0x08], rax
+	lea rbx, [rsp]
+	lea rdx, [rsp+0x20]
+	mov rax, [rcx]
+	mov [rbx], rax
+	mov rax, [rcx+0x08]
+	mov [rbx+0x08], rax
+	mov cl, [rbx]
+	mov rax, [rbx+0x08]
+	mov [rdx], rax
+	mov rax, [rdx]
+	test cl, cl
+	jz :0
+	jmp :1
+0:	mov rax, 0x01
+1:	add rsp, 0x30
+	pop rbx
+	ret

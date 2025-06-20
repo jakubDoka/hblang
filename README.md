@@ -369,6 +369,19 @@ effectfull := fn(vl: uint): bool {
 }
 ```
 
+#### if statements 5 (option unwrapping)
+```hb
+main := fn(): uint {
+    val: ?uint = 0
+
+    if v := val && v == 0 {
+        return v
+    }
+
+    return 1
+}
+```
+
 #### variables 1
 ```hb
 main := fn(): uint {
@@ -528,6 +541,21 @@ main := fn(): uint {
         x += 1
     }
     return sum
+}
+```
+
+#### loops 13 (while)
+```hb
+expectations := .{
+    return_value: 10,
+}
+
+main := fn(): uint {
+    i := 0
+    while i < 10 {
+        i += 1
+    }
+    return i
 }
 ```
 
@@ -1889,8 +1917,9 @@ foo := fn(): uint {
 - [x] x86_64-linux target
   - [ ] folatin point math
 - [ ] x86_64-windows target
-- [ ] ? diagnostics
-  - [ ] ? don't crash on cycles
+- [x] diagnostics
+  - [x] don't crash on cycles
+  - [x] colors
 - [ ] control flow
   - [x] functions
     - [x] inlining
@@ -1899,7 +1928,13 @@ foo := fn(): uint {
     - [x] comptime parameters
   - [x] ifs
     - [x] comptime
+    - [x] option unwrap
   - [x] loops
+    - [x] infinite
+    - [ ] while
+    - [ ] ? for
+      - [ ] index
+      - [ ] multiple slices
     - [x] comptime
     - [x] break
     - [x] continue
@@ -1910,8 +1945,9 @@ foo := fn(): uint {
     - [ ] ? labels
   - [x] match
     - [x] comptime
-  - [x] defer
+  - [x] `defer`
   - [x] `die`
+  - [ ] `orelse`
 - [x] import pattern matching
 - [x] global variables
   - [x] strings
@@ -1967,7 +2003,7 @@ foo := fn(): uint {
     - [x] indexing
     - [x] slicing
     - [x] empty
-    - [ ] ? array slicing
+    - [x] array slicing
   - [x] tuples
   - [x] nullable types
 - [ ] ? directives
@@ -2001,8 +2037,8 @@ foo := fn(): uint {
   - [x] `@float_cast(<float>): <float>`
   - [x] `@name_of(<ty>): []u8`
     - [x] comptime interrupt
-  - [ ] `@import("<name>")`
-  - [ ] `@export("<name>", &fn)`
+  - [x] `@import("<name>")`
+  - [x] `@export("<name>", &fn)`
   - [ ] ? `@recall(..<args>): never`
 - [ ] optimizations
   - [ ] assumptions

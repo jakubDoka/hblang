@@ -166,8 +166,9 @@ pub const Scope = union(enum) {
 };
 
 pub const Ctx = struct {
-    ty: ?Types.Id = null,
     loc: ?*Node = null,
+    ty: ?Types.Id = null,
+    in_if_cond: bool = false,
 
     pub fn addLoc(self: Ctx, loc: ?*Node) Ctx {
         var v = self;
@@ -932,35 +933,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             },
             else => return self.report(expr, "cant handle this operation yet", .{}),
         },
-        .Decl => |e| {
-            const loc = self.bl.addLocal(self.sloc(expr), 0);
-
-            const prev_name = self.name;
-            const ident = ast.exprs.getTyped(.Ident, e.bindings) orelse
-                return self.report(expr, "TODO: pattern matching", .{});
-
-            errdefer |err| if (err != error.Unreachable) {
-                self.scope.appendAssumeCapacity(.{ .ty = .never, .name = ident.id });
-                self.bl.pushPin(loc);
-            };
-
-            self.name = ast.tokenSrc(ident.id.pos());
-            defer self.name = prev_name;
-
-            var value = try if (e.ty.tag() == .Void)
-                self.emit(.{ .loc = loc }, e.value)
-            else b: {
-                const ty = try self.resolveAnonTy(e.ty);
-                break :b self.emitTyped(ctx.addLoc(loc), ty, e.value);
-            };
-
-            self.bl.resizeLocal(loc, value.ty.size(self.types));
-            self.emitGenericStore(loc, &value);
-
-            self.scope.appendAssumeCapacity(.{ .ty = value.ty, .name = ident.id });
-            self.bl.pushPin(loc);
-            return .{};
-        },
+        .Decl => |e| return self.emitDecl(expr, e, ctx.in_if_cond),
         .BinOp => |e| switch (e.op) {
             .@"=" => if (e.lhs.tag() == .Wildcard) {
                 _ = try self.emit(.{}, e.rhs);
@@ -979,10 +952,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             .@"&&" => {
                 const variable = self.bl.addLocal(.none, 1);
 
-                var lhs = try self.emitTyped(.{}, .bool, e.lhs);
+                var lhs = try self.emitTyped(.{ .in_if_cond = ctx.in_if_cond }, .bool, e.lhs);
                 var builder = self.bl.addIfAndBeginThen(self.sloc(expr), lhs.getValue(self));
                 {
-                    var rhs = try self.emitTyped(.{ .loc = variable }, .i8, e.rhs);
+                    var rhs = try self.emitTyped(.{ .loc = variable, .in_if_cond = ctx.in_if_cond }, .i8, e.rhs);
                     self.emitGenericStore(variable, &rhs);
                 }
                 const token = builder.beginElse(&self.bl);
@@ -1018,24 +991,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 var lhs = try self.emit(if (e.op.isComparison()) .{} else ctx, e.lhs);
 
                 if (e.rhs.tag() == .Null) switch (e.op) {
-                    .@"==", .@"!=" => {
-                        if (lhs.ty.data() != .Nullable) {
-                            return self.report(e.lhs, "only nullable types can be compared with null," ++
-                                " {} is not", .{lhs.ty});
-                        }
-
-                        var value = switch (self.abiCata(lhs.ty)) {
-                            .Imaginary => unreachable,
-                            .ByValue => lhs.getValue(self),
-                            .ByValuePair, .ByRef => self.bl.addLoad(lhs.id.Pointer, .i8),
-                        };
-
-                        if (e.op == .@"==") {
-                            value = self.bl.addBinOp(.eq, .i64, value, self.bl.addIntImm(.i8, 0));
-                        }
-
-                        return .mkv(.bool, value);
-                    },
+                    .@"==", .@"!=" => return self.chechNull(e.lhs, &lhs, e.op),
                     else => {
                         return self.report(e.lhs, "only comparing against null is supported", .{});
                     },
@@ -1137,25 +1093,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 null };
             var base = try self.emit(pctx, e.*);
 
-            self.emitAutoDeref(&base);
-
-            const nullable = self.types.store.unwrap(base.ty.data(), .Nullable) orelse {
-                return self.report(e, "only nullable types can be unwrapped, {} is not", .{base.ty});
-            };
-
-            if (!base.ty.needsTag(self.types)) {
-                base.ty = nullable.inner;
-                return base;
-            }
-
-            switch (self.abiCata(base.ty)) {
-                .Imaginary => unreachable,
-                .ByValue => return .{ .ty = nullable.inner },
-                .ByRef, .ByValuePair => return .mkp(nullable.inner, self.bl.addFieldOffset(
-                    base.id.Pointer,
-                    @bitCast(nullable.inner.alignment(self.types)),
-                )),
-            }
+            try self.unwrapNullable(expr, &base);
+            return base;
         },
         .Deref => |e| {
             const pctx = Ctx{ .ty = if (ctx.ty != null and ctx.ty.?.data() == .Pointer)
@@ -1413,10 +1352,18 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             return .{};
         } else {
-            var cond = try self.emitTyped(ctx, .bool, e.cond);
+            const prev_scope_height = self.scope.items.len;
+
+            var cond = try self.emitTyped(.{ .in_if_cond = true }, .bool, e.cond);
+
             var unreachable_count: usize = 0;
             var if_builder = self.bl.addIfAndBeginThen(self.sloc(expr), cond.getValue(self));
             unreachable_count += self.emitBranch(e.then);
+            // we remove any unwraps int the condition so that else does not
+            // have acces to them
+            self.scope.items.len = prev_scope_height;
+            self.bl.truncatePins(prev_scope_height);
+
             const end_else = if_builder.beginElse(&self.bl);
             unreachable_count += self.emitBranch(e.else_);
             if_builder.end(&self.bl, end_else);
@@ -1778,6 +1725,90 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .Wildcard => return self.report(expr, "wildcard does not make sense here", .{}),
         else => return self.report(expr, "cant handle this operation yet", .{}),
     }
+}
+
+pub fn unwrapNullable(self: *Codegen, expr: Ast.Id, base: *Value) !void {
+    self.emitAutoDeref(base);
+
+    const nullable = self.types.store.unwrap(base.ty.data(), .Nullable) orelse {
+        return self.report(expr, "only nullable types can be unwrapped, {} is not", .{base.ty});
+    };
+
+    if (!base.ty.needsTag(self.types)) {
+        base.ty = nullable.inner;
+        return;
+    }
+
+    base.* = switch (self.abiCata(base.ty)) {
+        .Imaginary => unreachable,
+        .ByValue => .{ .ty = nullable.inner },
+        .ByRef, .ByValuePair => .mkp(nullable.inner, self.bl.addFieldOffset(
+            base.id.Pointer,
+            @bitCast(nullable.inner.alignment(self.types)),
+        )),
+    };
+}
+
+pub fn emitDecl(
+    self: *Codegen,
+    expr: Ast.Id,
+    e: *const Ast.Store.TagPayload(.Decl),
+    unwrap: bool,
+) !Value {
+    const ast = self.ast;
+    const loc = self.bl.addLocal(self.sloc(expr), 0);
+
+    const prev_name = self.name;
+    const ident = ast.exprs.getTyped(.Ident, e.bindings) orelse
+        return self.report(expr, "TODO: pattern matching", .{});
+
+    errdefer |err| if (err != error.Unreachable) {
+        self.scope.appendAssumeCapacity(.{ .ty = .never, .name = ident.id });
+        self.bl.pushPin(loc);
+    };
+
+    self.name = ast.tokenSrc(ident.id.pos());
+    defer self.name = prev_name;
+
+    var value = try if (e.ty.tag() == .Void)
+        self.emit(.{ .loc = loc }, e.value)
+    else b: {
+        const ty = try self.resolveAnonTy(e.ty);
+        break :b self.emitTyped(.{ .loc = loc }, ty, e.value);
+    };
+
+    var out = Value{};
+    if (unwrap) {
+        out = try self.chechNull(e.value, &value, .@"!=");
+        try self.unwrapNullable(e.value, &value);
+    }
+
+    self.bl.resizeLocal(loc, value.ty.size(self.types));
+    self.emitGenericStore(loc, &value);
+
+    self.scope.appendAssumeCapacity(.{ .ty = value.ty, .name = ident.id });
+    self.bl.pushPin(loc);
+
+    return out;
+}
+
+pub fn chechNull(self: *Codegen, expr: Ast.Id, lhs: *Value, op: Lexer.Lexeme) !Value {
+    if (lhs.ty.data() != .Nullable) {
+        return self.report(expr, "only nullable types can be compared with null," ++
+            " {} is not", .{lhs.ty});
+    }
+
+    var value = switch (self.abiCata(lhs.ty)) {
+        .Imaginary => unreachable,
+        .ByValue => lhs.getValue(self),
+        .ByValuePair, .ByRef => self.bl.addLoad(lhs.id.Pointer, .i8),
+    };
+
+    if (op == .@"==") {
+        value = self.bl.addBinOp(.eq, .i64, value, self.bl.addIntImm(.i8, 0));
+    }
+
+    return .mkv(.bool, value);
 }
 
 pub fn typeCheck(self: *Codegen, expr: anytype, got: *Value, expected: Types.Id) !void {
