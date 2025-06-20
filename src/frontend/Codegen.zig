@@ -967,21 +967,57 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 return .mkp(.bool, variable);
             },
             .@"||" => {
-                const variable = self.bl.addLocal(.none, 1);
+                var lhs = try self.emit(.{ .ty = .bool }, e.lhs);
 
-                var lhs = try self.emitTyped(.{}, .bool, e.lhs);
-                var builder = self.bl.addIfAndBeginThen(self.sloc(expr), lhs.getValue(self));
-                {
-                    self.bl.addStore(variable, .i8, self.bl.addIntImm(.i8, 1));
-                }
-                const token = builder.beginElse(&self.bl);
-                {
-                    var rhs = try self.emitTyped(.{ .loc = variable }, .i8, e.rhs);
-                    self.emitGenericStore(variable, &rhs);
-                }
-                builder.end(&self.bl, token);
+                if (self.types.store.unwrap(lhs.ty.data(), .Nullable)) |nullable| {
+                    const inner = nullable.inner;
+                    const is_compact = lhs.ty.data().Nullable.isCompact(self.types);
 
-                return .mkp(.bool, variable);
+                    // TODO: this wastes stack, we should fix up the stack
+                    // allocation once we know this results into unwrapped
+                    // value
+                    var variable = self.bl.addLocal(.none, lhs.ty.size(self.types));
+                    var cond = try self.chechNull(e.lhs, &lhs, .@"!=");
+
+                    var builder = self.bl.addIfAndBeginThen(self.sloc(expr), cond.getValue(self));
+                    {
+                        self.emitGenericStore(variable, &lhs);
+                    }
+                    const token = builder.beginElse(&self.bl);
+                    var res_ty = lhs.ty;
+                    {
+                        var rhs = try self.emit(.{ .loc = variable, .ty = inner }, e.rhs);
+                        if (rhs.ty != lhs.ty) {
+                            try self.typeCheck(e.rhs, &rhs, inner);
+                            res_ty = inner;
+                            if (!is_compact) {
+                                variable = self.bl.addFieldOffset(
+                                    variable,
+                                    @intCast(inner.alignment(self.types)),
+                                );
+                            }
+                        }
+                        self.emitGenericStore(variable, &rhs);
+                    }
+                    builder.end(&self.bl, token);
+
+                    return .mkp(res_ty, variable);
+                } else {
+                    const variable = self.bl.addLocal(.none, 1);
+
+                    var builder = self.bl.addIfAndBeginThen(self.sloc(expr), lhs.getValue(self));
+                    {
+                        self.bl.addStore(variable, .i8, self.bl.addIntImm(.i8, 1));
+                    }
+                    const token = builder.beginElse(&self.bl);
+                    {
+                        var rhs = try self.emitTyped(.{ .loc = variable }, .i8, e.rhs);
+                        self.emitGenericStore(variable, &rhs);
+                    }
+                    builder.end(&self.bl, token);
+
+                    return .mkp(.bool, variable);
+                }
             },
             else => {
                 if (e.lhs.tag() == .Null) {

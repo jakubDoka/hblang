@@ -1649,6 +1649,15 @@ main := fn(): uint {
 opaque := fn(v: @Any()): ?@TypeOf(v) return v
 ```
 
+#### nullable types 5 (|| operator)
+```hb
+main := fn(): uint {
+    if (@as(?usize, null) || 1) != 1 return 1
+
+    return @as(?uint, 0) || 1
+}
+```
+
 #### struct patters 1
 ```hb
 expectations := .{
@@ -1969,7 +1978,7 @@ foo := fn(): uint {
       - [x] `- ! ~`
     - [x] short circuit (`&&`, `||`)
       - [x] `&&` applied to option patterns
-      - [ ] `||` to provide default value
+      - [x] `||` to provide default value
   - [x] floats
     - [x] binary operators
       - [x] `- + * / == != <= >= < >`
