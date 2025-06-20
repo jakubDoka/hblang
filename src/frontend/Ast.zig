@@ -23,6 +23,7 @@ pub const Captures = utils.EnumSlice(Capture);
 pub const Capture = struct { id: Ident, pos: Pos };
 
 pub const Ident = enum(u32) {
+    invalid = std.math.maxInt(u32),
     _,
 
     pub fn init(token: Lexer.Token) Ident {
@@ -138,10 +139,17 @@ pub const Expr = union(enum) {
     },
     Loop: struct {
         pos: Pos,
+        label: Id,
         body: Id,
     },
-    Break: Pos,
-    Continue: Pos,
+    Break: struct {
+        pos: Pos,
+        label: Id,
+    },
+    Continue: struct {
+        pos: Pos,
+        label: Id,
+    },
     Return: struct {
         pos: Pos,
         value: Id,

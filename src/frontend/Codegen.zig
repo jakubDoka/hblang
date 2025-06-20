@@ -44,6 +44,7 @@ pub const Sloc = struct {
 };
 
 const Loop = struct {
+    id: Ast.Ident,
     defer_base: usize,
     kind: union(enum) {
         Runtime: Builder.Loop,
@@ -1575,6 +1576,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         },
         .Loop => |e| if (e.pos.flag.@"comptime") {
             self.loops.appendAssumeCapacity(.{
+                .id = if (e.label.tag() != .Void) ast.exprs.get(e.label).Ident.id else .invalid,
                 .defer_base = self.defers.items.len,
                 .kind = .{ .Comptime = .Clean },
             });
@@ -1600,6 +1602,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             return .{};
         } else {
             self.loops.appendAssumeCapacity(.{
+                .id = if (e.label.tag() != .Void) ast.exprs.get(e.label).Ident.id else .invalid,
                 .defer_base = self.defers.items.len,
                 .kind = .{ .Runtime = self.bl.addLoopAndBeginBody() },
             });
@@ -2505,9 +2508,27 @@ fn loopControl(self: *Codegen, kind: Builder.Loop.Control, ctrl: Ast.Id) !void {
         return;
     }
 
-    const loops = &self.loops.items[self.loops.items.len - 1];
-    try self.emitDefers(loops.defer_base);
-    switch (loops.kind) {
+    const label = switch (self.ast.exprs.get(ctrl)) {
+        .Break => |b| b.label,
+        .Continue => |b| b.label,
+        .Loop => |b| b.label,
+        else => unreachable,
+    };
+
+    const id = if (label.tag() != .Void) self.ast.exprs.get(label).Ident.id else .invalid;
+
+    var cursor = std.mem.reverseIterator(self.loops.items);
+    const loop = while (cursor.nextPtr()) |p| {
+        if (p.id == id) break p;
+    } else {
+        if (label.tag() == .Void) {
+            return self.report(ctrl, "break is missing a explicit label", .{});
+        } else {
+            return self.report(ctrl, "the label did not refer to a loop", .{});
+        }
+    };
+    try self.emitDefers(loop.defer_base);
+    switch (loop.kind) {
         .Runtime => |*l| l.addControl(&self.bl, kind),
         .Comptime => |*l| {
             switch (l.*) {

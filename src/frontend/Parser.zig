@@ -575,21 +575,39 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         } },
         .loop, .@"$loop" => .{ .Loop = .{
             .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind != .loop } },
+            .label = if (self.tryAdvance(.@":")) b: {
+                const label = try self.resolveIdent(try self.expectAdvance(.Ident));
+                self.declareExpr(label, false);
+                break :b label;
+            } else .zeroSized(.Void),
             .body = b: {
                 self.func_stats.loop_depth += 1;
                 self.func_stats.max_loop_depth =
                     @max(self.func_stats.max_loop_depth, self.func_stats.loop_depth);
                 defer self.func_stats.loop_depth -= 1;
+                defer self.finalizeVariables(scope_frame);
                 break :b try self.parseScopedExpr();
             },
         } },
         .@"break" => b: {
             if (self.deferring) self.report(token.pos, "can not break from a defer", .{});
-            break :b .{ .Break = .init(token.pos) };
+            break :b .{ .Break = .{
+                .pos = .init(token.pos),
+                .label = if (self.tryAdvance(.@":"))
+                    try self.resolveIdent(try self.expectAdvance(.Ident))
+                else
+                    .zeroSized(.Void),
+            } };
         },
         .@"continue" => b: {
             if (self.deferring) self.report(token.pos, "can not continue from a defer", .{});
-            break :b .{ .Continue = .init(token.pos) };
+            break :b .{ .Continue = .{
+                .pos = .init(token.pos),
+                .label = if (self.tryAdvance(.@":"))
+                    try self.resolveIdent(try self.expectAdvance(.Ident))
+                else
+                    .zeroSized(.Void),
+            } };
         },
         .@"return" => .{ .Return = .{
             .pos = .init(token.pos),

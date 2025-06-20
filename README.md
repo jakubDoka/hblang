@@ -513,6 +513,24 @@ main := fn(): uint {
 }
 ```
 
+#### loops 12 (labels)
+```hb
+main := fn(): uint {
+    sum := 0
+    x := 0
+    loop:outher if x == 10 break:outher else {
+        y := 0
+        loop if y == 10 break else {
+            if x * y == 0 break:outher
+            sum += x * y
+            y += 1
+        }
+        x += 1
+    }
+    return sum
+}
+```
+
 #### pointers 1
 ```hb
 main := fn(): uint {
@@ -1868,13 +1886,14 @@ foo := fn(): uint {
 ## progress
 
 - [x] hbvm-ableos target
-- [ ] x86_64-linux target
+- [x] x86_64-linux target
+  - [ ] folatin point math
 - [ ] x86_64-windows target
 - [ ] ? diagnostics
   - [ ] ? don't crash on cycles
 - [ ] control flow
   - [x] functions
-    - [ ] ? inlining
+    - [x] inlining
       - [x] noop compatibility
     - [x] scope inference
     - [x] comptime parameters
@@ -1886,7 +1905,7 @@ foo := fn(): uint {
     - [x] continue
     - [x] infinite
       - [x] clean up the hacky graph hierarchy
-    - [ ] ? labels
+    - [x] labels
   - [x] blocks
     - [ ] ? labels
   - [x] match
@@ -1989,7 +2008,7 @@ foo := fn(): uint {
   - [ ] assumptions
   - [ ] memory
     - [ ] uninitialized global memory
-    - [ ] constant global loads
+    - [x] constant global loads
     - [x] stack elimination
     - [x] load alias reordering
       - [x] around stores
