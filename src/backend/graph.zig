@@ -302,6 +302,7 @@ pub const builtin = enum {
     pub const Start = extern struct {
         base: Cfg = .{},
     };
+    pub const FramePointer = extern struct {};
     pub const Entry = extern struct {
         base: Cfg = .{},
 
@@ -1092,7 +1093,7 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn isInterned(kind: Kind, inpts: []const ?*Node) bool {
                 return switch (kind) {
-                    .CInt, .BinOp, .Load, .UnOp, .GlobalAddr => true,
+                    .CInt, .BinOp, .Load, .UnOp, .GlobalAddr, .FramePointer => true,
                     .Phi => inpts[2] != null,
                     else => callCheck("isInterned", kind),
                 };

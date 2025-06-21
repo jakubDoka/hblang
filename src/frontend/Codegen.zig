@@ -3176,5 +3176,6 @@ fn emitDirective(
         },
         .import => unreachable,
         .@"export" => unreachable,
+        .frame_pointer => return .mkv(.uint, self.bl.addFramePointer(.i64)),
     }
 }

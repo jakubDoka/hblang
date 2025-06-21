@@ -119,11 +119,18 @@ pub fn getStaticOffset(node: *Func.Node) i64 {
 const Set = std.DynamicBitSetUnmanaged;
 
 pub fn allowedRegsFor(node: *Func.Node, idx: usize, arena: *utils.Arena) ?Set {
-    _ = node;
-    _ = idx;
     errdefer unreachable;
+
+    if (node.kind == .FramePointer) {
+        std.debug.assert(idx == 0);
+        var set = try Set.initEmpty(arena.allocator(), reg_mask_cap);
+        set.set(@intFromEnum(isa.Reg.stack_addr));
+        return set;
+    }
+
     var set = try Set.initFull(arena.allocator(), reg_mask_cap);
     set.unset(0);
+    set.setRangeValue(.{ .start = max_alloc_regs, .end = 256 }, false);
     return set;
     //return switch (node.extra2()) {
     //    inline .Ret, .Arg => |id| arg: {
@@ -197,12 +204,19 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     const reg_shift: u8 = 1;
     for (self.allocs) |*r| r.* += reg_shift;
-    const max_reg = if (self.allocs.len == 0) 0 else std.mem.max(u16, self.allocs);
+    const max_reg = if (self.allocs.len == 0) 0 else b: {
+        var max: u16 = 0;
+        for (self.allocs) |r| {
+            if (r == 254) continue;
+            max = @max(r, max);
+        }
+        break :b max;
+    };
     const used_registers = if (self.allocs.len == 0) 0 else @min(max_reg, max_alloc_regs) -|
         (@intFromEnum(isa.Reg.ret_addr) - @intFromBool(is_tail));
 
     const used_reg_size = @as(u16, (used_registers + @intFromBool(!is_tail))) * 8;
-    const spill_count = (max_reg -| max_alloc_regs) * 8;
+    const spill_count = (max_reg -| max_regs) * 8;
 
     var local_size: i64 = 0;
     if (func.root.outputs().len > 1) {
@@ -481,6 +495,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
     for (node.outputs()) |no| {
         const inps = no.dataDeps();
         switch (no.extra2()) {
+            .FramePointer => {},
             .CInt => |extra| {
                 switch (no.data_type) {
                     inline .i8, .i16, .i32, .i64 => |t| self.emit(
@@ -757,12 +772,14 @@ pub fn emitCp(self: *HbvmGen, dst: isa.Reg, src: isa.Reg) void {
     self.emit(.cp, .{ dst, src });
 }
 
+const max_regs = @intFromEnum(isa.Reg.max);
+
 fn inReg(self: *HbvmGen, i: usize, n: ?*Func.Node) isa.Reg {
     std.debug.assert(i < tmp_registers);
-    if (self.allocs[n.?.schedule] < max_alloc_regs) {
+    if (self.allocs[n.?.schedule] < max_regs) {
         return @enumFromInt(self.allocs[n.?.schedule]);
     } else {
-        const idx = (self.allocs[n.?.schedule] - max_alloc_regs) * 8;
+        const idx = (self.allocs[n.?.schedule] - max_regs) * 8;
         const reg: isa.Reg = @enumFromInt(max_alloc_regs + i);
         self.emit(.ld, .{ reg, .stack_addr, @intCast(idx + self.spill_base), 8 });
         return reg;
@@ -771,7 +788,7 @@ fn inReg(self: *HbvmGen, i: usize, n: ?*Func.Node) isa.Reg {
 
 fn inRegNoLoad(self: *HbvmGen, i: usize, n: ?*Func.Node) isa.Reg {
     std.debug.assert(i < tmp_registers);
-    if (self.allocs[n.?.schedule] < max_alloc_regs) {
+    if (self.allocs[n.?.schedule] < max_regs) {
         return @enumFromInt(self.allocs[n.?.schedule]);
     } else {
         unreachable;
@@ -779,7 +796,7 @@ fn inRegNoLoad(self: *HbvmGen, i: usize, n: ?*Func.Node) isa.Reg {
 }
 
 fn outReg(self: HbvmGen, n: ?*Func.Node) isa.Reg {
-    if (self.allocs[n.?.schedule] < max_alloc_regs) {
+    if (self.allocs[n.?.schedule] < max_regs) {
         return @enumFromInt(self.allocs[n.?.schedule]);
     } else {
         return @enumFromInt(max_alloc_regs);
@@ -787,8 +804,8 @@ fn outReg(self: HbvmGen, n: ?*Func.Node) isa.Reg {
 }
 
 fn flushOutReg(self: *HbvmGen, n: ?*Func.Node) void {
-    if (self.allocs[n.?.schedule] < max_alloc_regs) {} else {
-        const idx = (self.allocs[n.?.schedule] - max_alloc_regs) * 8;
+    if (self.allocs[n.?.schedule] < max_regs) {} else {
+        const idx = (self.allocs[n.?.schedule] - max_regs) * 8;
         const reg: isa.Reg = @enumFromInt(max_alloc_regs);
         self.emit(.st, .{ reg, .stack_addr, @intCast(idx + self.spill_base), 8 });
     }

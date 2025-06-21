@@ -1919,6 +1919,29 @@ foo := fn(): uint {
 }
 ```
 
+#### directives 19 (@frame_pointer())
+```hb
+expectations := .{
+    return_value: 8,
+}
+
+bar := fn(): uint {
+    return foo()
+}
+
+foo := fn(): uint {
+    return @frame_pointer()
+}
+
+main := fn(): uint {
+    $if @target("x86_64-linux") {
+        return @frame_pointer() - bar() - 16
+    } else {
+        return @frame_pointer() - bar()
+    }
+}
+```
+
 
 ## progress
 
@@ -2050,6 +2073,7 @@ foo := fn(): uint {
     - [x] comptime interrupt
   - [x] `@import("<name>")`
   - [x] `@export("<name>", &fn)`
+  - [x] `@frame_pointer(): uint`
   - [ ] ? `@recall(..<args>): never`
 - [ ] optimizations
   - [ ] assumptions

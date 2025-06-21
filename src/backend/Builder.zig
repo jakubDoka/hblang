@@ -160,6 +160,10 @@ pub fn addCast(self: *Builder, to: DataType, value: *BuildNode) SpecificNode(.Un
     return self.func.addCast(to, value);
 }
 
+pub fn addFramePointer(self: *Builder, as: DataType) SpecificNode(.FramePointer) {
+    return self.func.addNode(.FramePointer, as, &.{null}, .{});
+}
+
 pub fn addIndexOffset(
     self: *Builder,
     base: *BuildNode,

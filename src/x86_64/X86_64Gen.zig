@@ -408,8 +408,14 @@ pub fn allowedRegsFor(
     ids: usize,
     tmp: *utils.Arena,
 ) ?std.DynamicBitSetUnmanaged {
-    _ = node;
+    errdefer unreachable;
     _ = ids;
+
+    if (node.kind == .FramePointer) {
+        var set = try std.DynamicBitSetUnmanaged.initEmpty(tmp.allocator(), Reg.set_cap);
+        set.set(@intFromEnum(Reg.rsp) + 1);
+        return set;
+    }
 
     return Reg.intMask(tmp);
 }
@@ -800,6 +806,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
 
     for (block.outputs()) |instr| {
         switch (instr.extra2()) {
+            .FramePointer => {},
             .CInt => |extra| {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), extra.value });
             },

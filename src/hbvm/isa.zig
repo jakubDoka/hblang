@@ -6,8 +6,10 @@ pub const Reg = enum(u8) {
     null,
     ret_addr = 31,
     stack_addr = 254,
-    max = 255,
+    thread_addr = 255,
     _,
+
+    pub const max = Reg.thread_addr;
 
     pub fn arg(index: usize) Reg {
         return @enumFromInt(1 + index);

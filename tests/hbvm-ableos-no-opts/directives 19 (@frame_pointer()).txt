@@ -1,0 +1,18 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        jal $31, $0, :directives 19 (@frame_pointer()).bar
+      sub64 $1, $254, $1
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+directives 19 (@frame_pointer()).bar:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        jal $31, $0, :directives 19 (@frame_pointer()).foo
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+       jala $0, $31, 0
+directives 19 (@frame_pointer()).foo:
+         cp $1, $254
+       jala $0, $31, 0
