@@ -1,0 +1,37 @@
+directives 20 (@handler, @SourceLoc).slice_ioob:
+         un
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+       li64 $1, 1
+       li64 $2, 0
+        jal $31, $0, :directives 20 (@handler, @SourceLoc).use_slice
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+directives 20 (@handler, @SourceLoc).use_slice:
+         st $31, $254, -16, 16
+     addi64 $254, $254, -48
+         cp $32, $1
+         cp $4, $2
+       li64 $3, 0
+       jltu $3, $4, :1
+     addi64 $2, $254, 0
+        lra $1, $0, :directives 20 (@handler, @SourceLoc).use_slice.directives 20 (@handler, @SourceLoc)
+         st $1, $254, 0, 8
+       li64 $1, 36
+         st $1, $254, 8, 8
+       li64 $1, 18
+         st $1, $254, 16, 8
+       li64 $1, 15
+         st $1, $254, 24, 8
+         cp $1, $2
+         cp $2, $4
+         cp $4, $3
+        jal $31, $0, :directives 20 (@handler, @SourceLoc).slice_ioob
+        jmp :1
+1:       ld $1, $32, 0, 1
+       andi $1, $1, 255
+     addi64 $254, $254, 48
+         ld $31, $254, -16, 16
+       jala $0, $31, 0

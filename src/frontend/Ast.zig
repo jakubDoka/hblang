@@ -286,6 +286,8 @@ pub const Index = struct {
     linear: std.MultiArrayList(Entry),
     map: HashMap,
 
+    pub const empty = Index{ .linear = .empty, .map = .empty };
+
     const HashMap = std.HashMapUnmanaged(u32, void, Hasher, 70);
 
     const Hasher = struct {

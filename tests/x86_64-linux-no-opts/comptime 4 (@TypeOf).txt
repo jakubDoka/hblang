@@ -2,7 +2,7 @@ main:
 	sub rsp, 0x20
 	mov rax, 0x00
 	mov [rsp], rax
-	mov rax, 0x70000001
+	mov rax, 0x70000002
 	mov [rsp+0x10], eax
 	mov rax, [rsp]
 	mov [rsp+0x08], rax

@@ -28,9 +28,20 @@ stack_base: usize,
 target: []const u8 = "hbvm-ableos",
 func_work_list: std.EnumArray(Target, std.ArrayListUnmanaged(utils.EntId(tys.Func))),
 global_work_list: std.EnumArray(Target, std.ArrayListUnmanaged(utils.EntId(tys.Global))),
+string: Id = undefined,
+source_loc: Id = undefined,
+handlers: Handlers = .{},
+handler_signatures: std.EnumArray(std.meta.FieldEnum(Handlers), Handlers.Signature) = undefined,
 
 const Types = @This();
 const Map = std.hash_map.HashMapUnmanaged(Id, void, TypeCtx, 70);
+
+pub const Handlers = struct {
+    slice_ioob: ?utils.EntId(tys.Func) = null,
+    null_unwrap: ?utils.EntId(tys.Func) = null,
+
+    pub const Signature = struct { args: []const Id, ret: Id };
+};
 
 pub const Scope = struct {
     file: Types.File,
@@ -528,6 +539,41 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: std.io.AnyWriter) *
         .ct = .init(slot.pool.allocator()),
         .diagnostics = diagnostics,
     };
+
+    slot.string = slot.makeSlice(null, .u8);
+    slot.source_loc = .init(.{ .Struct = slot.store.add(slot.pool.allocator(), tys.Struct{
+        .key = .{
+            .name = "SrcLoc",
+            .file = .root,
+            .scope = slot.getScope(.root),
+            .ast = .zeroSized(.Void),
+            .captures = &.{},
+        },
+        .index = .empty,
+        .alignment = 8,
+        .size = 32,
+        .fields = slot.pool.arena.dupe(tys.Struct.Field, &.{
+            .{ .name = "src", .ty = slot.string },
+            .{ .name = "line", .ty = .uint },
+            .{ .name = "col", .ty = .uint },
+        }),
+    }) });
+
+    slot.handler_signatures = .{
+        .values = .{
+            .{
+                // sloc, len, range start, range end
+                .args = slot.pool.arena.dupe(Id, &.{ slot.source_loc, .uint, .uint, .uint }),
+                .ret = .never,
+            },
+            .{
+                // sloc
+                .args = slot.pool.arena.dupe(Id, &.{slot.source_loc}),
+                .ret = .never,
+            },
+        },
+    };
+
     return slot;
 }
 

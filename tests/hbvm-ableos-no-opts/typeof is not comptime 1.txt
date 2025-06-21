@@ -8,7 +8,7 @@ main:
 typeof is not comptime 1.broken1:
          st $31, $254, -8, 8
      addi64 $254, $254, -22
-       li64 $1, 1879048193
+       li64 $1, 1879048194
          st $1, $254, 10, 4
         li8 $2, 0
      addi64 $3, $254, 0

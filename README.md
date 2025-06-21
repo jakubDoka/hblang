@@ -1942,6 +1942,32 @@ main := fn(): uint {
 }
 ```
 
+#### directives 20 (@handler, @SourceLoc)
+```hb
+expectations := .{
+    unreaches: true,
+}
+
+@handler("slice_ioob", fn(
+    loc: @SrcLoc(),
+    slice_len: uint,
+    start: uint,
+    end: uint,
+): never {
+    die
+})
+
+// ignored in this case
+@handler("slice_ioob", void)
+
+use_slice := fn(slice: []u8): uint {
+    return slice[0]
+}
+
+main := fn(): uint {
+    return use_slice(&.[])
+}
+```
 
 ## progress
 
@@ -2072,8 +2098,9 @@ main := fn(): uint {
   - [x] `@name_of(<ty>): []u8`
     - [x] comptime interrupt
   - [x] `@import("<name>")`
-  - [x] `@export("<name>", &fn)`
+  - [x] `@export("<name>", <fn>)`
   - [x] `@frame_pointer(): uint`
+  - [ ] `@handler("<name>", <handle_fn>)`
   - [ ] ? `@recall(..<args>): never`
 - [ ] optimizations
   - [ ] assumptions
