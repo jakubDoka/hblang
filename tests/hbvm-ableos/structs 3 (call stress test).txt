@@ -3,7 +3,6 @@ main:
      addi64 $254, $254, -64
         jal $31, $0, :structs 3 (call stress test).return_pair
         swa $2, $1
-     addi64 $32, $254, 0
          st $2, $254, 0, 1
          st $1, $254, 8, 8
      addi64 $33, $254, 16

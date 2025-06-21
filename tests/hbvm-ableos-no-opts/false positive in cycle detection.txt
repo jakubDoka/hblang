@@ -1,19 +1,14 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -28
-     addi64 $2, $254, 0
        li32 $1, -2147483648
          st $1, $254, 0, 4
-       li32 $2, -2147483647
-     addi64 $1, $254, 4
-         st $2, $254, 4, 4
-     addi64 $2, $254, 8
+       li32 $1, -2147483647
+         st $1, $254, 4, 4
        li64 $1, 1879048193
          st $1, $254, 8, 4
-     addi64 $2, $254, 12
        li32 $1, 1879048194
          st $1, $254, 12, 4
-     addi64 $2, $254, 16
        li32 $1, 1879048195
          st $1, $254, 16, 4
         jal $31, $0, :false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main)).test

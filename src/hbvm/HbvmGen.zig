@@ -48,6 +48,16 @@ pub const classes = enum {
         swapped: bool,
     };
     // [?Cfg, mem, ptr]
+    pub const StackLd = extern struct {
+        base: Ld,
+        pub const data_dep_offset = 2;
+    };
+    // [?Cfg, mem, ptr, value, ...antideps]
+    pub const StackSt = extern struct {
+        base: St,
+        pub const data_dep_offset = 2;
+    };
+    // [?Cfg, mem, ptr]
     pub const Ld = extern struct {
         base: graph.Load = .{},
         offset: i64,
@@ -112,8 +122,14 @@ pub fn getStaticOffset(node: *Func.Node) i64 {
     return switch (node.kind) {
         .Ld => node.extra(.Ld).offset,
         .St => node.extra(.St).offset,
+        .StackLd => node.extra(.StackLd).base.offset,
+        .StackSt => node.extra(.StackSt).base.offset,
         else => 0,
     };
+}
+
+pub fn isInterned(kind: Func.Kind) bool {
+    return kind == .Ld or kind == .StackLd;
 }
 
 const Set = std.DynamicBitSetUnmanaged;
@@ -519,27 +535,30 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 try self.out.addGlobalReloc(self.gpa, extra.id, 4, 3);
                 self.emit(.lra, .{ self.outReg(no), .null, 0 });
             },
-            .Local => |extra| {
+            .Local => |extra| if (!extra.no_address) {
                 self.emit(.addi64, .{ self.outReg(no), .stack_addr, extra.size });
             },
             .Ld => |extra| {
                 const size: u16 = @intCast(no.data_type.size());
                 const off = extra.offset;
-                if (inps[0].?.kind == .Local) {
-                    self.emit(.ld, .{ self.outReg(no), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).size)) + off, size });
-                } else {
-                    self.emit(.ld, .{ self.outReg(no), self.inReg(0, inps[0]), off, size });
-                }
+                self.emit(.ld, .{ self.outReg(no), self.inReg(0, inps[0]), off, size });
                 self.flushOutReg(no);
             },
             .St => |extra| {
                 const size: u16 = @intCast(no.data_type.size());
                 const off = extra.offset;
-                if (inps[0].?.kind == .Local) {
-                    self.emit(.st, .{ self.outReg(inps[1]), .stack_addr, @as(i64, @intCast(inps[0].?.extra(.Local).size)) + off, size });
-                } else {
-                    self.emit(.st, .{ self.outReg(inps[1]), self.inReg(0, inps[0]), off, size });
-                }
+                self.emit(.st, .{ self.outReg(inps[1]), self.inReg(0, inps[0]), off, size });
+            },
+            .StackLd => |extra| {
+                const size: u16 = @intCast(no.data_type.size());
+                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.Local).size)) + extra.base.offset;
+                self.emit(.ld, .{ self.outReg(no), .stack_addr, off, size });
+                self.flushOutReg(no);
+            },
+            .StackSt => |extra| {
+                const size: u16 = @intCast(no.data_type.size());
+                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.Local).size)) + extra.base.offset;
+                self.emit(.st, .{ self.outReg(inps[0]), .stack_addr, off, size });
             },
             .BlockCpy => {
                 // not a mistake, the bmc is retarded
@@ -913,20 +932,51 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
             &.{ inps[0], inps[1], base, inps[3] },
             .{ .offset = offset },
         );
+
+        if (base.isStack()) {
+            st.kind = .StackSt;
+        }
+
         work.add(st);
         return st;
     }
 
+    if (node.kind == .St and node.base().isStack()) {
+        node.kind = .StackSt;
+    }
+
     if (node.kind == .Load) {
         const base, const offset = node.base().knownOffset();
-        const ld = func.addNode(
-            .Ld,
-            node.data_type,
-            &.{ inps[0], inps[1], base },
-            .{ .offset = offset },
-        );
+        const ld = if (base.isStack())
+            func.addNode(
+                .StackLd,
+                node.data_type,
+                &.{ inps[0], inps[1], base },
+                .{ .base = .{ .offset = offset } },
+            )
+        else
+            func.addNode(
+                .Ld,
+                node.data_type,
+                &.{ inps[0], inps[1], base },
+                .{ .offset = offset },
+            );
         work.add(ld);
         return ld;
+    }
+
+    if (node.isStack()) elim_local: {
+        for (node.outputs()) |use| {
+            if (((!use.isStore() or use.value() == node) and !use.isLoad()) or use.isSub(graph.MemCpy)) {
+                break :elim_local;
+            }
+        }
+
+        switch (node.extra2()) {
+            .Local => |n| n.no_address = true,
+            .StructArg => |n| n.no_address = true,
+            else => unreachable,
+        }
     }
 
     return Func.idealize(self, func, node, work);

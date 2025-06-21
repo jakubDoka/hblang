@@ -19,7 +19,7 @@ main:
          cp $8, $33
         jal $31, $0, :proper systemv abi 1 (spilled arg).load_of_args
          cp $32, $1
-     addi64 $5, $254, 0
+     addi64 $1, $254, 0
          st $40, $254, 0, 8
          st $39, $254, 8, 8
          st $38, $254, 16, 8
@@ -27,12 +27,10 @@ main:
          st $37, $254, 24, 8
          st $36, $254, 32, 8
          st $35, $254, 40, 8
-     addi64 $1, $254, 48
          st $34, $254, 48, 8
          st $33, $254, 56, 8
          ld $4, $254, 56, 8
          ld $3, $254, 48, 8
-         cp $1, $5
         jal $31, $0, :proper systemv abi 1 (spilled arg).stack_args
       sub64 $1, $32, $1
      addi64 $254, $254, 144
@@ -40,27 +38,14 @@ main:
          tx
 proper systemv abi 1 (spilled arg).load_of_args:
      addi64 $254, $254, -64
-         cp $9, $8
-         cp $8, $3
-         cp $3, $7
-         cp $7, $2
-        swa $6, $4
-     addi64 $2, $254, 0
          st $1, $254, 0, 8
-     addi64 $1, $254, 8
-         st $7, $254, 8, 8
-     addi64 $7, $254, 16
-         st $8, $254, 16, 8
-     addi64 $8, $254, 24
-         st $6, $254, 24, 8
-     addi64 $6, $254, 32
+         st $2, $254, 8, 8
+         st $3, $254, 16, 8
+         st $4, $254, 24, 8
          st $5, $254, 32, 8
-     addi64 $5, $254, 40
-         st $4, $254, 40, 8
-     addi64 $4, $254, 48
-         st $3, $254, 48, 8
-     addi64 $3, $254, 56
-         st $9, $254, 56, 8
+         st $6, $254, 40, 8
+         st $7, $254, 48, 8
+         st $8, $254, 56, 8
          ld $2, $254, 0, 8
          ld $1, $254, 8, 8
          ld $7, $254, 16, 8
@@ -80,7 +65,6 @@ proper systemv abi 1 (spilled arg).load_of_args:
        jala $0, $31, 0
 proper systemv abi 1 (spilled arg).stack_args:
      addi64 $254, $254, -16
-     addi64 $8, $254, 0
          st $3, $254, 0, 8
          st $4, $254, 8, 8
          ld $7, $2, 8, 8

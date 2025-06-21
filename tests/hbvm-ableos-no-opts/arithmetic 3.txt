@@ -1,11 +1,9 @@
 main:
-         st $31, $254, -24, 24
-     addi64 $254, $254, -32
+         st $31, $254, -8, 8
+     addi64 $254, $254, -16
         jal $31, $0, :arithmetic 3.one
-     addi64 $33, $254, 0
          st $1, $254, 0, 1
         jal $31, $0, :arithmetic 3.zero
-     addi64 $32, $254, 1
          st $1, $254, 1, 1
          ld $2, $254, 0, 1
          ld $1, $254, 1, 1
@@ -76,10 +74,8 @@ b:     andi $2, $1, 255
        li64 $1, 6
 c:      jmp :e
 d:      jal $31, $0, :arithmetic 3.mne
-     addi64 $33, $254, 2
          st $1, $254, 2, 1
         jal $31, $0, :arithmetic 3.mero
-     addi64 $32, $254, 3
          st $1, $254, 3, 1
          ld $2, $254, 2, 1
          ld $1, $254, 3, 1
@@ -150,12 +146,9 @@ e:      jmp :12
        li64 $1, 12
 1a:      jmp :1c
 1b:      jal $31, $0, :arithmetic 3.one
-     addi64 $32, $254, 4
          st $1, $254, 4, 1
         jal $31, $0, :arithmetic 3.zero
-         cp $2, $1
-     addi64 $1, $254, 5
-         st $2, $254, 5, 1
+         st $1, $254, 5, 1
          ld $2, $254, 4, 1
          ld $1, $254, 5, 1
        andi $2, $2, 255
@@ -171,12 +164,9 @@ e:      jmp :12
        li64 $1, 18
         jmp :1c
 22:      jal $31, $0, :arithmetic 3.mne
-     addi64 $32, $254, 6
          st $1, $254, 6, 1
         jal $31, $0, :arithmetic 3.mero
-         cp $2, $1
-     addi64 $1, $254, 7
-         st $2, $254, 7, 1
+         st $1, $254, 7, 1
          ld $4, $254, 6, 1
          ld $3, $254, 7, 1
        sxt8 $2, $4
@@ -216,8 +206,8 @@ e:      jmp :12
 1e:     li64 $1, 14
         jmp :1c
 1d:     li64 $1, 13
-1c:   addi64 $254, $254, 32
-         ld $31, $254, -24, 24
+1c:   addi64 $254, $254, 16
+         ld $31, $254, -8, 8
          tx
 arithmetic 3.one:
         li8 $1, 1
@@ -227,9 +217,7 @@ arithmetic 3.zero:
        jala $0, $31, 0
 arithmetic 3.cond:
      addi64 $254, $254, -1
-         cp $2, $1
-     addi64 $1, $254, 0
-         st $2, $254, 0, 1
+         st $1, $254, 0, 1
          ld $1, $254, 0, 1
      addi64 $254, $254, 1
        jala $0, $31, 0

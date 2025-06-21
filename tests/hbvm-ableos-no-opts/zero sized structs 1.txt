@@ -1,7 +1,6 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -12
-     addi64 $2, $254, 0
        li64 $1, 1879048193
          st $1, $254, 0, 4
         jal $31, $0, :zero sized structs 1.main.new

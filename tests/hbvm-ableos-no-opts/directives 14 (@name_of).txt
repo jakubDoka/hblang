@@ -1,11 +1,9 @@
 main:
      addi64 $254, $254, -32
-     addi64 $2, $254, 0
         lra $1, $0, :directives 14 (@name_of).main.uint
          st $1, $254, 0, 8
        li64 $1, 4
          st $1, $254, 8, 8
-     addi64 $3, $254, 16
         lra $1, $0, :directives 14 (@name_of).main.foo
          st $1, $254, 16, 8
        li64 $1, 3
