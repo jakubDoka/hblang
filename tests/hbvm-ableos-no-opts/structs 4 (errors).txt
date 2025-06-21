@@ -1,6 +1,6 @@
-structs 4 (errors):8:8: cant infer the type of this constructor, you can specify a type: '<ty>.{'
+structs 4 (errors):8:6: cant infer the type of this constructor, you can specify a type: '<ty>.{'
     _ = .{}
-          ^
+        ^
 structs 4 (errors):10:6: uint can not be constructed with '.{..}'
     _ = uint.{}
         ^

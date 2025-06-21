@@ -295,6 +295,31 @@ main := fn(): uint {
 }
 ```
 
+#### fmt tuple 1
+```hb
+expectations := .{
+    should_error: true,
+}
+
+main := fn(): uint {
+    tpl := .(1, 2, 3)
+    tr := &tpl
+
+    stru := struct {
+        foo := 0
+    }
+
+    _ = stru
+        .foo
+
+    tr.* = .(
+        1,
+        2,
+        3,
+    )
+}
+```
+
 #### fmt prec 1
 ```hb
 main := fn(): uint {

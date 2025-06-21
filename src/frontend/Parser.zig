@@ -474,17 +474,17 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         .@".{" => .{ .Ctor = .{
             .ty = .zeroSized(.Void),
             .fields = try self.parseListTyped(null, .@",", .@"}", Ast.CtorField, parseCtorField),
-            .pos = self.list_pos,
+            .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
         } },
         .@".(" => .{ .Tupl = .{
             .ty = .zeroSized(.Void),
             .fields = try self.parseList(null, .@",", .@")", parseExpr),
-            .pos = self.list_pos,
+            .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
         } },
         .@".[" => .{ .Arry = .{
             .ty = .zeroSized(.Void),
             .fields = try self.parseList(null, .@",", .@"]", parseExpr),
-            .pos = self.list_pos,
+            .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
         } },
         .@"{" => .{ .Block = .{
             .pos = .{ .index = @intCast(token.pos), .flag = .{ .indented = true } },

@@ -104,7 +104,7 @@ fn preserveSpace(self: *Fmt, id: anytype) Error!void {
     if (nline_count > 1) try self.buf.appendSlice("\n");
 }
 
-fn preserveWrapping(self: *Fmt, id: anytype) Error!void {
+fn preserveWrapping(self: *Fmt, id: anytype) Error!bool {
     const pos = self.ast.posOf(id);
     const preceding = self.ast.source[0..pos.index];
     const preceding_whitespace = preceding[std.mem.trimRight(u8, preceding, " \t\r\n").len..];
@@ -112,9 +112,9 @@ fn preserveWrapping(self: *Fmt, id: anytype) Error!void {
     if (nline_count > 0) {
         try self.buf.appendSlice("\n");
         try self.buf.appendNTimes('\t', self.indent + 1);
-    } else {
-        try self.buf.appendSlice(" ");
+        return true;
     }
+    return false;
 }
 
 fn autoInsertSep(self: *Fmt, id: anytype, sep: Lexer.Lexeme) Error!void {
@@ -227,6 +227,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
         },
         .Field => |f| {
             try self.fmtExprPrec(f.base, 0);
+            _ = try self.preserveWrapping(Ast.Pos{ .index = f.field.index - 1 });
             try self.buf.appendSlice(".");
             try self.buf.appendSlice(Lexer.peekStr(self.ast.source, f.field.index));
         },
@@ -347,7 +348,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             // TODO: linebreaks
             try self.buf.appendSlice(" ");
             try self.buf.appendSlice(o.op.repr());
-            try self.preserveWrapping(o.rhs);
+            if (!try self.preserveWrapping(o.rhs)) try self.buf.appendSlice(" ");
             if (o.rhs.tag() == .BinOp and self.ast.exprs.getTyped(.BinOp, o.rhs).?.op.precedence() == o.op.precedence()) {
                 try self.buf.appendSlice("(");
                 try self.fmtExprPrec(o.rhs, 255);

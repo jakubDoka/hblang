@@ -1,0 +1,6 @@
+fmt tuple 1:16:9: (uint, uint, uint) can not be constructed with '.(..)'
+    tr.* = .(
+           ^
+fmt tuple 1:5:20: function is missing a return value since uint has more then 1 possible value
+main := fn(): uint {
+                   ^
