@@ -1,10 +1,9 @@
 main:
 	sub rsp, 0x10
-	lea rcx, [rsp]
 	mov rax, 0x03
-	mov [rcx], rax
-	mov rax, [rcx]
-	mov [rcx], rax
-	mov rax, [rcx]
+	mov [rsp], rax
+	mov rax, [rsp]
+	mov [rsp], rax
+	mov rax, [rsp]
 	add rsp, 0x10
 	ret

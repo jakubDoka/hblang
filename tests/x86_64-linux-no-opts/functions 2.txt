@@ -1,16 +1,14 @@
 one.hb.add:
 	sub rsp, 0x10
-	lea rax, [rsp]
-	mov [rax], rdi
-	mov rax, [rax]
+	mov [rsp], rdi
+	mov rax, [rsp]
 	add rax, 0x01
 	add rsp, 0x10
 	ret
 two.hb.add:
 	sub rsp, 0x10
-	lea rax, [rsp]
-	mov [rax], rdi
-	mov rax, [rax]
+	mov [rsp], rdi
+	mov rax, [rsp]
 	add rax, 0x02
 	add rsp, 0x10
 	ret

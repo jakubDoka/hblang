@@ -3,12 +3,11 @@ main:
 	sub rsp, 0x08
 	mov rdi, 0x08
 	call :malloc
-	lea rdx, [rsp]
-	mov [rdx], rax
+	mov [rsp], rax
 	mov rcx, 0x0A
-	mov rax, [rdx]
+	mov rax, [rsp]
 	mov [rax], rcx
-	mov rdi, [rdx]
+	mov rdi, [rsp]
 	mov rbx, [rdi]
 	call :free
 	mov rax, rbx

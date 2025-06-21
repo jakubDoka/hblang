@@ -445,8 +445,8 @@ pub fn AsRef(comptime E: type) type {
 
     for (&field_arr) |*f| {
         if (f.type != void) {
-            f.type = *const f.type;
-            f.alignment = @alignOf(*const f.type);
+            f.type = *f.type;
+            f.alignment = @alignOf(*f.type);
         }
     }
 

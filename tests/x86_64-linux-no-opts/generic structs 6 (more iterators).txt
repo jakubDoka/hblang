@@ -1,7 +1,6 @@
 foo.hb.foo(oo = u8):
 	sub rsp, 0x10
-	lea rax, [rsp]
-	mov [rax], rdi
+	mov [rsp], rdi
 	add rsp, 0x10
 	ret
 main:

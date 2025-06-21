@@ -6,13 +6,13 @@ main:
 	sub rsp, 0x08
 	lea rbx, [rsp]
 	mov rax, 0x00
-	mov [rbx], al
+	mov [rsp], al
 	mov rax, 0x01
-	mov [rbx+0x01], al
+	mov [rsp+0x01], al
 	mov rax, 0x02
-	mov [rbx+0x02], al
+	mov [rsp+0x02], al
 	mov rax, 0x03
-	mov [rbx+0x03], al
+	mov [rsp+0x03], al
 	call :adding difference to a pointer 1.one
 	mov rdx, rax
 	mov rax, 0x01

@@ -37,32 +37,28 @@ slices 4.equals:
 	mov rbx, rax
 	jmp :6
 main:
-	push rbx
-	push rbp
 	sub rsp, 0x28
-	lea rbp, [rsp]
 	lea rdi, [0x0000000000000007]
-	mov [rbp], rdi
+	mov [rsp], rdi
 	mov rsi, 0x03
-	mov [rbp+0x08], rsi
-	lea rbx, [rsp+0x10]
+	mov [rsp+0x08], rsi
 	lea rcx, [rsp+0x20]
 	mov rax, 0x61
-	mov [rcx], al
+	mov [rsp+0x20], al
 	mov rax, 0x62
-	mov [rcx+0x01], al
+	mov [rsp+0x21], al
 	mov rax, 0x63
-	mov [rcx+0x02], al
-	mov [rbx], rcx
-	mov [rbx+0x08], rsi
+	mov [rsp+0x22], al
+	mov [rsp+0x10], rcx
+	mov [rsp+0x18], rsi
 	mov rdx, rdi
 	mov rcx, rsi
 	call :slices 4.equals
 	xor al, 0x01
-	mov rsi, [rbx+0x08]
-	mov rdx, [rbp]
-	mov rcx, [rbp+0x08]
-	mov rdi, [rbx]
+	mov rsi, [rsp+0x18]
+	mov rdx, [rsp]
+	mov rcx, [rsp+0x08]
+	mov rdi, [rsp+0x10]
 	test al, al
 	jz :0
 	jmp :1
@@ -74,6 +70,4 @@ main:
 	jmp :3
 2:	mov rax, 0x00
 3:	add rsp, 0x28
-	pop rbp
-	pop rbx
 	ret

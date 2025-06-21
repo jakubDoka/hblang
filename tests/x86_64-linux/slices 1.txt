@@ -5,36 +5,36 @@ main:
 	mov r9, 0x00
 	lea rbp, [rsp+0x80]
 	mov rax, 0x01
-	mov [rbp], al
+	mov [rsp+0x80], al
 	mov rax, 0x02
-	mov [rbp+0x01], al
+	mov [rsp+0x81], al
 	mov rax, 0x03
-	mov [rbp+0x02], al
+	mov [rsp+0x82], al
 	mov rax, 0x04
-	mov [rbp+0x03], al
+	mov [rsp+0x83], al
 	lea r8, [rsp]
-	mov [r8], rbp
+	mov [rsp], rbp
 	mov rbx, 0x04
-	mov [r8+0x08], rbx
-	mov [r8+0x10], rbp
+	mov [rsp+0x08], rbx
+	mov [rsp+0x10], rbp
 	mov rdx, 0x02
-	mov [r8+0x18], rdx
+	mov [rsp+0x18], rdx
 	mov rcx, rbp
 	add rcx, 0x02
-	mov [r8+0x20], rcx
-	mov [r8+0x28], rdx
+	mov [rsp+0x20], rcx
+	mov [rsp+0x28], rdx
 	mov rax, rbp
 	add rax, 0x01
-	mov [r8+0x30], rax
-	mov [r8+0x38], rdx
-	mov [r8+0x40], rbp
-	mov [r8+0x48], rbx
-	mov [r8+0x50], rbp
-	mov [r8+0x58], rdx
-	mov [r8+0x60], rcx
-	mov [r8+0x68], rdx
-	mov [r8+0x70], rax
-	mov [r8+0x78], rdx
+	mov [rsp+0x30], rax
+	mov [rsp+0x38], rdx
+	mov [rsp+0x40], rbp
+	mov [rsp+0x48], rbx
+	mov [rsp+0x50], rbp
+	mov [rsp+0x58], rdx
+	mov [rsp+0x60], rcx
+	mov [rsp+0x68], rdx
+	mov [rsp+0x70], rax
+	mov [rsp+0x78], rdx
 	mov rdi, 0x10
 	mov rsi, r9
 	mov rcx, r9

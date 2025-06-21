@@ -1,11 +1,10 @@
 main:
 	sub rsp, 0x10
-	mov rdx, 0x01
-	lea rcx, [rsp]
+	mov rcx, 0x01
 	mov rax, 0x50000000
-	mov [rcx], eax
+	mov [rsp], eax
 	mov rax, 0x00
-	test dl, dl
+	test cl, cl
 	jz :0
 	test al, al
 	jz :1

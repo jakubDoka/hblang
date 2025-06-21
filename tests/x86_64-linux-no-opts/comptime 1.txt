@@ -1,12 +1,10 @@
 comptime 1.main.some_fn(some_int = uint)(ui = uint):
 	sub rsp, 0x10
-	lea rax, [rsp]
-	mov [rax], rdi
-	mov rax, [rax]
-	lea rcx, [rsp+0x08]
+	mov [rsp], rdi
+	mov rax, [rsp]
 	add rax, 0x01
-	mov [rcx], rax
-	mov rcx, [rcx]
+	mov [rsp+0x08], rax
+	mov rcx, [rsp+0x08]
 	mov rax, rcx
 	imul rax, rcx
 	add rsp, 0x10
@@ -15,12 +13,10 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x08
-	lea rcx, [rsp]
 	mov rax, 0x07
-	mov [rcx], eax
-	mov rcx, 0x80000000
-	lea rax, [rsp+0x04]
-	mov [rax], ecx
+	mov [rsp], eax
+	mov rax, 0x80000000
+	mov [rsp+0x04], eax
 	mov rdi, 0x09
 	call :comptime 1.main.some_fn(some_int = uint)(ui = uint)
 	mov rbp, rax

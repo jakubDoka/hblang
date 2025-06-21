@@ -4,91 +4,87 @@ main:
 	sub rsp, 0xB0
 	lea rcx, [rsp+0xA8]
 	mov rax, 0x01
-	mov [rcx], al
+	mov [rsp+0xA8], al
 	mov rax, 0x02
-	mov [rcx+0x01], al
+	mov [rsp+0xA9], al
 	mov rax, 0x03
-	mov [rcx+0x02], al
+	mov [rsp+0xAA], al
 	mov rax, 0x04
-	mov [rcx+0x03], al
-	lea rbx, [rsp+0x80]
-	mov [rbx], rcx
+	mov [rsp+0xAB], al
+	mov [rsp+0x80], rcx
 	mov rax, 0x04
-	mov [rbx+0x08], rax
-	lea r10, [rsp]
-	mov [r10], rcx
-	mov [r10+0x08], rax
-	mov [r10+0x10], rcx
+	mov [rsp+0x88], rax
+	lea rdi, [rsp]
+	mov [rsp], rcx
+	mov [rsp+0x08], rax
+	mov [rsp+0x10], rcx
 	mov rdx, 0x02
-	mov [r10+0x18], rdx
+	mov [rsp+0x18], rdx
 	mov rax, rcx
 	add rax, 0x02
-	mov [r10+0x20], rax
-	mov [r10+0x28], rdx
+	mov [rsp+0x20], rax
+	mov [rsp+0x28], rdx
 	mov rax, rcx
 	add rax, 0x01
-	mov [r10+0x30], rax
-	mov [r10+0x38], rdx
-	mov rcx, [rbx+0x08]
-	mov rax, [rbx]
-	mov [r10+0x40], rax
+	mov [rsp+0x30], rax
+	mov [rsp+0x38], rdx
+	mov rcx, [rsp+0x88]
+	mov rax, [rsp+0x80]
+	mov [rsp+0x40], rax
 	mov rax, rcx
 	sub rax, 0x00
-	mov [r10+0x48], rax
-	mov rax, [rbx]
-	mov [r10+0x50], rax
-	mov [r10+0x58], rdx
-	mov rax, [rbx]
-	mov rcx, [rbx+0x08]
+	mov [rsp+0x48], rax
+	mov rax, [rsp+0x80]
+	mov [rsp+0x50], rax
+	mov [rsp+0x58], rdx
+	mov rax, [rsp+0x80]
+	mov rcx, [rsp+0x88]
 	add rax, 0x02
-	mov [r10+0x60], rax
+	mov [rsp+0x60], rax
 	mov rax, rcx
 	sub rax, 0x02
-	mov [r10+0x68], rax
-	mov rax, [rbx]
+	mov [rsp+0x68], rax
+	mov rax, [rsp+0x80]
 	add rax, 0x01
-	mov [r10+0x70], rax
-	mov [r10+0x78], rdx
-	mov r9, 0x00
-	lea r8, [rsp+0x90]
-	mov [r8], r9
-	lea rdi, [rsp+0x98]
-	mov [rdi], r9
-	lea rsi, [rsp+0xA0]
+	mov [rsp+0x70], rax
+	mov [rsp+0x78], rdx
+	mov rsi, 0x00
+	mov [rsp+0x90], rsi
+	mov [rsp+0x98], rsi
 	mov rbp, 0x10
-2:	mov rax, [rdi]
+2:	mov rax, [rsp+0x98]
 	cmp rax, 0x08
 	setz al
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, [r8]
+	mov rax, [rsp+0x90]
 	add rsp, 0xB0
 	pop rbp
 	pop rbx
 	ret
-0:	mov [rsi], r9
-3:	mov rbx, [rdi]
+0:	mov [rsp+0xA0], rsi
+3:	mov rbx, [rsp+0x98]
 	mov rax, rbx
 	imul rax, rbp
-	mov rdx, r10
+	mov rdx, rdi
 	add rdx, rax
-	mov rcx, [rsi]
+	mov rcx, [rsp+0xA0]
 	mov rax, [rdx+0x08]
 	cmp rcx, rax
 	jnz :1
 	mov rax, rbx
 	add rax, 0x01
-	mov [rdi], rax
+	mov [rsp+0x98], rax
 	jmp :2
 1:	mov rax, [rdx]
 	add rax, rcx
 	mov cl, [rax]
-	mov rax, [r8]
+	mov rax, [rsp+0x90]
 	movzx rcx, cl
 	add rax, rcx
-	mov [r8], rax
-	mov rax, [rsi]
+	mov [rsp+0x90], rax
+	mov rax, [rsp+0xA0]
 	add rax, 0x01
-	mov [rsi], rax
+	mov [rsp+0xA0], rax
 	jmp :3

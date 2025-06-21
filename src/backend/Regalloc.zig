@@ -103,7 +103,9 @@ pub fn ralloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
                 if (node.kind == .Phi) continue;
             }
 
+            //std.debug.print("{}\n", .{node});
             for (node.dataDeps()) |dd| {
+                //std.debug.print("- {}\n", .{dd.?});
                 slider.set(dd.?.schedule);
             }
         }

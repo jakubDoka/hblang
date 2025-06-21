@@ -2,21 +2,18 @@ slices 4.equals:
 	push rbx
 	push rbp
 	sub rsp, 0x30
-	lea r9, [rsp]
-	mov [r9], rdi
-	mov [r9+0x08], rsi
-	lea r8, [rsp+0x10]
-	mov [r8], rdx
-	mov [r8+0x08], rcx
-	mov rbx, [r9+0x08]
-	mov rdx, [r8+0x08]
-	mov rdi, 0x00
-	mov rcx, [r9]
-	mov rax, [r8]
-	lea rsi, [rsp+0x20]
+	mov [rsp], rdi
+	mov [rsp+0x08], rsi
+	mov [rsp+0x10], rdx
+	mov [rsp+0x18], rcx
+	mov rbx, [rsp+0x08]
+	mov rdx, [rsp+0x18]
+	mov rsi, 0x00
+	mov rcx, [rsp]
+	mov rax, [rsp+0x10]
 	cmp rbx, rdx
 	jz :0
-	mov rax, rdi
+	mov rax, rsi
 	jmp :1
 0:	mov rbp, 0x01
 	cmp rcx, rax
@@ -24,11 +21,11 @@ slices 4.equals:
 	mov rax, rbp
 1:	jmp :5
 2:	mov rax, 0x00
-	mov [rsi], rax
-6:	mov rbx, [r9+0x08]
-	mov rdx, [rsi]
-	mov rcx, [r9]
-	mov rax, [r8]
+	mov [rsp+0x20], rax
+6:	mov rbx, [rsp+0x08]
+	mov rdx, [rsp+0x20]
+	mov rcx, [rsp]
+	mov rax, [rsp+0x10]
 	add rcx, rdx
 	add rax, rdx
 	cmp rdx, rbx
@@ -39,50 +36,46 @@ slices 4.equals:
 	mov al, [rax]
 	cmp cl, al
 	jz :5
-	mov rax, rdi
+	mov rax, rsi
 5:	add rsp, 0x30
 	pop rbp
 	pop rbx
 	ret
 5:	mov rax, rdx
 	add rax, 0x01
-	mov [rsi], rax
+	mov [rsp+0x20], rax
 	jmp :6
 main:
 	push rbx
-	push rbp
-	push r12
 	sub rsp, 0x28
-	lea r12, [rsp]
 	lea rax, [0x0000000000000007]
-	mov [r12], rax
+	mov [rsp], rax
 	mov rdx, 0x03
-	mov [r12+0x08], rdx
-	lea rbp, [rsp+0x10]
+	mov [rsp+0x08], rdx
 	lea rcx, [rsp+0x20]
 	mov rax, 0x61
-	mov [rcx], al
+	mov [rsp+0x20], al
 	mov rax, 0x62
-	mov [rcx+0x01], al
+	mov [rsp+0x21], al
 	mov rax, 0x63
-	mov [rcx+0x02], al
-	mov [rbp], rcx
-	mov [rbp+0x08], rdx
-	mov rsi, [r12+0x08]
-	mov rdi, [r12]
+	mov [rsp+0x22], al
+	mov [rsp+0x10], rcx
+	mov [rsp+0x18], rdx
+	mov rsi, [rsp+0x08]
+	mov rdi, [rsp]
 	mov rdx, rdi
 	mov rcx, rsi
 	call :slices 4.equals
 	xor al, 0x01
-	mov rdi, [rbp]
-	mov rdx, [r12]
+	mov rdi, [rsp+0x10]
+	mov rdx, [rsp]
 	mov rbx, 0x01
 	test al, al
 	jz :0
 	mov rax, rbx
 	jmp :1
-0:	mov rsi, [rbp+0x08]
-	mov rcx, [r12+0x08]
+0:	mov rsi, [rsp+0x18]
+	mov rcx, [rsp+0x08]
 	call :slices 4.equals
 	xor al, 0x01
 	test al, al
@@ -91,7 +84,5 @@ main:
 1:	jmp :3
 2:	mov rax, 0x00
 3:	add rsp, 0x28
-	pop r12
-	pop rbp
 	pop rbx
 	ret

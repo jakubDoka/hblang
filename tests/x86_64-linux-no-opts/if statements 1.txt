@@ -1,10 +1,8 @@
 if statements 1.fib:
 	push rbx
-	push rbp
 	sub rsp, 0x08
-	lea rbp, [rsp]
-	mov [rbp], rdi
-	mov rcx, [rbp]
+	mov [rsp], rdi
+	mov rcx, [rsp]
 	cmp rcx, 0x02
 	setbe al
 	movzx rax, al
@@ -16,7 +14,7 @@ if statements 1.fib:
 	sub rdi, 0x01
 	call :if statements 1.fib
 	mov rbx, rax
-	mov rax, [rbp]
+	mov rax, [rsp]
 	mov rdi, rax
 	sub rdi, 0x02
 	call :if statements 1.fib
@@ -24,7 +22,6 @@ if statements 1.fib:
 	mov rax, rbx
 	add rax, rcx
 1:	add rsp, 0x08
-	pop rbp
 	pop rbx
 	ret
 main:

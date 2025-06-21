@@ -1,12 +1,11 @@
 mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime args 1.main):
 	sub rsp, 0x08
-	lea rcx, [rsp]
-	mov [rcx], sil
-	mov [rcx+0x04], edx
-	mov al, [rcx]
+	mov [rsp], sil
+	mov [rsp+0x04], edx
+	mov al, [rsp]
 	test al, al
 	jz :0
-	mov esi, [rcx+0x04]
+	mov esi, [rsp+0x04]
 	call :mixing @Any and comptime args 1.main
 	jmp :1
 0:	mov rax, 0x00
@@ -15,32 +14,28 @@ mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime arg
 	ret
 mixing @Any and comptime args 1.main:
 	sub rsp, 0x10
-	lea rax, [rsp+0x08]
-	mov [rax], esi
-	mov edx, [rax]
+	mov [rsp+0x08], esi
+	mov ecx, [rsp+0x08]
 	mov rax, 0x01
-	lea rcx, [rsp]
-	mov [rcx], al
-	mov eax, edx
+	mov [rsp], al
+	mov eax, ecx
 	add eax, 0x05
-	mov [rcx+0x04], eax
-	mov rax, [rcx]
+	mov [rsp+0x04], eax
+	mov rax, [rsp]
 	mov [rdi], rax
 	add rsp, 0x10
 	ret
 main:
 	sub rsp, 0x18
-	lea rdx, [rsp+0x08]
 	mov rax, 0x01
-	mov [rdx], al
+	mov [rsp+0x08], al
 	mov rax, 0x00
-	mov [rdx+0x04], eax
-	lea rcx, [rsp]
-	mov rax, [rdx]
-	mov [rcx], rax
+	mov [rsp+0x0C], eax
+	mov rax, [rsp+0x08]
+	mov [rsp], rax
 	lea rdi, [rsp+0x10]
-	mov edx, [rcx+0x04]
-	mov sil, [rcx]
+	mov edx, [rsp+0x04]
+	mov sil, [rsp]
 	call :mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime args 1.main)
 	mov rax, 0x00
 	add rsp, 0x18

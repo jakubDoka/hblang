@@ -1,9 +1,7 @@
 generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next).next:
-	push rbx
 	sub rsp, 0x08
-	lea rbx, [rsp]
-	mov [rbx], rsi
-	mov rcx, [rbx]
+	mov [rsp], rsi
+	mov rcx, [rsp]
 	mov rax, [rcx+0x08]
 	cmp rax, 0x00
 	setz al
@@ -15,7 +13,7 @@ generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Nex
 0:	mov rax, [rcx]
 	mov sil, [rax]
 	call :generic structs 5 (iterators).main.Next(T = u8).some
-	mov rdx, [rbx]
+	mov rdx, [rsp]
 	mov rax, [rdx]
 	mov rcx, [rdx+0x08]
 	add rax, 0x01
@@ -24,7 +22,6 @@ generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Nex
 	sub rax, 0x01
 	mov [rdx+0x08], rax
 1:	add rsp, 0x08
-	pop rbx
 	ret
 generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next), B = generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next)).next:
 	push rbx
@@ -33,18 +30,14 @@ generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main(
 	push r13
 	push r14
 	push r15
-	sub rsp, 0x28
-	mov [rsp+0x08], rdi
-	lea r15, [rsp+0x10]
-	mov [rsp], r15
-	mov r15, [rsp]
-	mov [r15], rsi
-	lea r13, [rsp+0x1A]
-	lea r12, [rsp+0x18]
+	sub rsp, 0x18
+	mov [rsp], rdi
+	mov [rsp+0x08], rsi
+	lea r13, [rsp+0x12]
+	lea r12, [rsp+0x10]
 	mov rbp, 0x01
 	mov rbx, 0x02
-7:	mov r15, [rsp]
-	mov rdx, [r15]
+7:	mov rdx, [rsp+0x08]
 	mov al, [rdx]
 	mov rcx, rax
 	movsx rcx, cl
@@ -57,13 +50,12 @@ generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main(
 	add rsi, 0x08
 	mov rdi, r12
 	call :generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next).next
-	mov cl, [r12]
-	mov r15, [rsp]
-	mov rax, [r15]
+	mov cl, [rsp+0x10]
+	mov rax, [rsp+0x08]
 	test cl, cl
 	jz :1
-	mov ax, [r12]
-	mov r15, [rsp+0x08]
+	mov ax, [rsp+0x10]
+	mov r15, [rsp]
 	mov [r15], ax
 	jmp :2
 1:	mov [rax], bpl
@@ -77,20 +69,19 @@ generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main(
 	add rsi, 0x18
 	mov rdi, r13
 	call :generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next).next
-	mov cl, [r13]
-	mov r15, [rsp]
-	mov rax, [r15]
+	mov cl, [rsp+0x12]
+	mov rax, [rsp+0x08]
 	test cl, cl
 	jz :5
-	mov ax, [r13]
-	mov r15, [rsp+0x08]
+	mov ax, [rsp+0x12]
+	mov r15, [rsp]
 	mov [r15], ax
 2:	jmp :6
 5:	mov [rax], bl
 3:	jmp :7
-4:	mov rdi, [rsp+0x08]
+4:	mov rdi, [rsp]
 	call :generic structs 5 (iterators).main.Next(T = u8).none
-6:	add rsp, 0x28
+6:	add rsp, 0x18
 	pop r15
 	pop r14
 	pop r13
@@ -106,11 +97,10 @@ generic structs 5 (iterators).main.Next(T = u8).none:
 	ret
 generic structs 5 (iterators).main.Next(T = u8).some:
 	sub rsp, 0x10
-	lea rcx, [rsp]
-	mov [rcx], sil
+	mov [rsp], sil
 	mov rax, 0x01
 	mov [rdi], al
-	mov al, [rcx]
+	mov al, [rsp]
 	mov [rdi+0x01], al
 	add rsp, 0x10
 	ret
@@ -122,90 +112,68 @@ main:
 	push r14
 	push r15
 	sub rsp, 0x138
-	lea r15, [rsp+0xA8]
-	mov [rsp+0xA0], r15
 	lea rax, [0x0000000000000007]
-	mov r15, [rsp+0xA0]
-	mov [r15], rax
+	mov [rsp+0xA0], rax
 	mov qword ptr [rsp+0x98], 0x04
-	mov r15, [rsp+0xA0]
-	mov r14, [rsp+0x98]
-	mov [r15+0x08], r14
+	mov r15, [rsp+0x98]
+	mov [rsp+0xA8], r15
 	lea rax, [0x0000000000000007]
-	lea rbx, [rsp+0xB8]
-	mov [rbx], rax
+	mov [rsp+0xB0], rax
 	mov qword ptr [rsp+0x90], 0x02
 	mov r15, [rsp+0x90]
-	mov [rbx+0x08], r15
+	mov [rsp+0xB8], r15
 	lea rax, [0x0000000000000007]
-	lea rdx, [rsp+0xC8]
-	mov [rdx], rax
+	mov [rsp+0xC0], rax
 	mov r15, [rsp+0x90]
-	mov [rdx+0x08], r15
-	mov rcx, 0x90000002
-	lea rax, [rsp+0x120]
-	mov [rax], ecx
-	lea rcx, [rsp+0x124]
+	mov [rsp+0xC8], r15
+	mov rax, 0x90000002
+	mov [rsp+0x118], eax
 	mov rax, 0x70000001
-	mov [rcx], eax
-	mov rcx, 0x90000003
-	lea rax, [rsp+0x128]
-	mov [rax], ecx
-	lea r15, [rsp+0xF8]
+	mov [rsp+0x11C], eax
+	mov rax, 0x90000003
+	mov [rsp+0x120], eax
+	lea r15, [rsp+0xF0]
 	mov [rsp+0x08], r15
 	mov rcx, 0x00
-	lea r13, [rsp+0xD8]
-	mov rax, [rbx]
-	mov [r13], rax
-	mov rax, [rbx+0x08]
-	mov [r13+0x08], rax
-	lea r15, [rsp+0xE8]
+	lea r13, [rsp+0xD0]
+	mov rax, [rsp+0xB0]
+	mov [rsp+0xD0], rax
+	mov rax, [rsp+0xB8]
+	mov [rsp+0xD8], rax
+	lea r15, [rsp+0xE0]
 	mov [rsp], r15
-	mov r15, [rsp+0xA0]
-	mov rax, [r15]
-	mov r15, [rsp]
-	mov [r15], rax
-	mov r15, [rsp+0xA0]
-	mov rax, [r15+0x08]
-	mov r15, [rsp]
-	mov [r15+0x08], rax
-	mov r15, [rsp+0x08]
-	mov [r15], cl
-	mov rax, [rbx]
-	mov r15, [rsp+0x08]
-	mov [r15+0x08], rax
-	mov rax, [rbx+0x08]
-	mov r15, [rsp+0x08]
-	mov [r15+0x10], rax
-	mov rax, [rdx]
-	mov r15, [rsp+0x08]
-	mov [r15+0x18], rax
-	mov rax, [rdx+0x08]
-	mov r15, [rsp+0x08]
-	mov [r15+0x20], rax
-	lea r12, [rsp+0x12C]
-	lea rbp, [rsp+0x12E]
+	mov rax, [rsp+0xA0]
+	mov [rsp+0xE0], rax
+	mov rax, [rsp+0xA8]
+	mov [rsp+0xE8], rax
+	mov [rsp+0xF0], cl
+	mov rax, [rsp+0xB0]
+	mov [rsp+0xF8], rax
+	mov rax, [rsp+0xB8]
+	mov [rsp+0x100], rax
+	mov rax, [rsp+0xC0]
+	mov [rsp+0x108], rax
+	mov rax, [rsp+0xC8]
+	mov [rsp+0x110], rax
+	lea r12, [rsp+0x124]
+	lea rbp, [rsp+0x126]
 8:	mov rdi, r12
 	mov rsi, r13
 	call :generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next).next
-	mov al, [r12]
+	mov al, [rsp+0x124]
 	xor al, 0x01
 	test al, al
 	jz :0
-	mov r15, [rsp+0xA0]
-	mov rax, [r15]
-	mov r15, [rsp]
-	mov [r15], rax
-	mov r15, [rsp+0xA0]
-	mov rax, [r15+0x08]
-	mov r15, [rsp]
-	mov [r15+0x08], rax
-	lea r13, [rsp+0x130]
-	lea r12, [rsp+0x132]
+	mov rax, [rsp+0xA0]
+	mov [rsp+0xE0], rax
+	mov rax, [rsp+0xA8]
+	mov [rsp+0xE8], rax
+	lea r13, [rsp+0x128]
+	lea r12, [rsp+0x12A]
 5:	mov rdi, r13
 	mov rsi, [rsp]
 	call :generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next).next
-	mov al, [r13]
+	mov al, [rsp+0x128]
 	xor al, 0x01
 	test al, al
 	jz :1
@@ -214,16 +182,16 @@ main:
 1:	mov rdi, r12
 	mov rsi, [rsp+0x08]
 	call :generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next), B = generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next)).next
-	mov bpl, [r12]
+	mov bpl, [rsp+0x12A]
 	mov al, bpl
 	xor al, 0x01
-	mov bl, [r13]
+	mov bl, [rsp+0x128]
 	test al, al
 	jz :3
 	mov rax, 0x03
 	jmp :7
-3:	mov cl, [r12+0x01]
-	mov dl, [r13+0x01]
+3:	mov cl, [rsp+0x12B]
+	mov dl, [rsp+0x129]
 	cmp bpl, bl
 	setnz al
 	movzx rax, al
@@ -239,16 +207,16 @@ main:
 0:	mov rdi, rbp
 	mov rsi, [rsp]
 	call :generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next).next
-	mov bl, [rbp]
+	mov bl, [rsp+0x126]
 	mov cl, bl
 	xor cl, 0x01
-	mov al, [r12]
+	mov al, [rsp+0x124]
 	test cl, cl
 	jz :6
 	mov rax, 0x01
 	jmp :7
-6:	mov cl, [r12+0x01]
-	mov dl, [rbp+0x01]
+6:	mov cl, [rsp+0x125]
+	mov dl, [rsp+0x127]
 	cmp al, bl
 	setnz al
 	movzx rax, al

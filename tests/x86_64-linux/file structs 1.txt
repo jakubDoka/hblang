@@ -3,15 +3,12 @@ Foo.hb.init:
 	mov [rdi+0x08], rsi
 	ret
 main:
-	push rbx
 	sub rsp, 0x18
-	lea rbx, [rsp]
+	lea rdi, [rsp]
 	mov rsi, 0x02
-	mov rdi, rbx
 	call :Foo.hb.init
-	mov rax, [rbx]
-	mov rcx, [rbx+0x08]
+	mov rax, [rsp]
+	mov rcx, [rsp+0x08]
 	sub rax, rcx
 	add rsp, 0x18
-	pop rbx
 	ret

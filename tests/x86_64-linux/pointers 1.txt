@@ -3,17 +3,14 @@ pointers 1.modify:
 	mov [rdi], rax
 	ret
 main:
-	push rbx
 	sub rsp, 0x08
-	lea rbx, [rsp]
+	lea rdi, [rsp]
 	mov rax, 0x01
-	mov [rbx], rax
-	mov rdi, rbx
+	mov [rsp], rax
 	call :pointers 1.modify
-	mov rax, [rbx]
+	mov rax, [rsp]
 	add rax, 0x02
-	mov [rbx], rax
+	mov [rsp], rax
 	sub rax, 0x04
 	add rsp, 0x08
-	pop rbx
 	ret

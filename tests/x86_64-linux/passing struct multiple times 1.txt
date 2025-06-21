@@ -1,9 +1,7 @@
 passing struct multiple times 1.foo:
 	push rbx
-	push rbp
 	sub rsp, 0x28
-	lea rbp, [rsp+0x40]
-	lea rcx, [rsp+0x48]
+	lea rcx, [rsp+0x40]
 	mov rax, 0x18
 	lea rbx, [rsp]
 	mov rdi, rbx
@@ -11,26 +9,23 @@ passing struct multiple times 1.foo:
 	mov rdx, rax
 	call :memcpy
 	lea rsi, [rsp+0x18]
-	mov ax, [rbp]
+	mov ax, [rsp+0x38]
 	mov [rsi], ax
-	mov al, [rbp+0x02]
+	mov al, [rsp+0x3A]
 	mov [rsi+0x02], al
 	call :passing struct multiple times 1.bar
 	add rsp, 0x28
-	pop rbp
 	pop rbx
 	ret
 passing struct multiple times 1.bar:
 	push rbx
 	push rbp
-	lea rcx, [rsp+0x18]
-	lea rax, [rsp+0x30]
-	mov sil, [rax+0x02]
-	mov bl, [rax]
-	mov bpl, [rax+0x01]
-	mov rdx, [rcx+0x10]
-	mov rax, [rcx]
-	mov rcx, [rcx+0x08]
+	mov sil, [rsp+0x32]
+	mov bl, [rsp+0x30]
+	mov bpl, [rsp+0x31]
+	mov rdx, [rsp+0x28]
+	mov rax, [rsp+0x18]
+	mov rcx, [rsp+0x20]
 	add rax, rcx
 	movzx rbx, bl
 	sub rax, rdx
@@ -48,27 +43,27 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x48
-	lea rsi, [rsp+0x20]
+	lea rdx, [rsp+0x20]
 	mov rax, 0x01
-	mov [rsi], rax
+	mov [rsp+0x20], rax
 	mov rax, 0x02
-	mov [rsi+0x08], rax
+	mov [rsp+0x28], rax
 	mov rax, 0x03
-	mov [rsi+0x10], rax
+	mov [rsp+0x30], rax
 	mov rax, 0x01
-	lea rdx, [rsp+0x38]
-	mov [rdx], al
+	mov [rsp+0x38], al
 	mov rax, 0x02
-	mov [rdx+0x01], al
+	mov [rsp+0x39], al
 	mov rcx, 0x03
-	mov ax, [rdx]
-	mov [rdx+0x02], cl
+	mov ax, [rsp+0x38]
+	mov [rsp+0x3A], cl
 	lea rbp, [rsp]
 	mov [rbp], ax
 	lea rbx, [rsp+0x08]
 	mov rcx, 0x18
-	mov al, [rdx+0x02]
+	mov al, [rsp+0x3A]
 	mov [rbp+0x02], al
+	mov rsi, rdx
 	mov rdi, rbx
 	mov rdx, rcx
 	call :memcpy

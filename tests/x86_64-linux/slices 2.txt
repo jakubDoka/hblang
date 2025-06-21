@@ -5,26 +5,26 @@ main:
 	mov r10, 0x00
 	lea rdx, [rsp+0x40]
 	mov rax, 0x01
-	mov [rdx], rax
+	mov [rsp+0x40], rax
 	mov rcx, 0x02
-	mov [rdx+0x08], rcx
+	mov [rsp+0x48], rcx
 	mov rax, 0x03
-	mov [rdx+0x10], rax
+	mov [rsp+0x50], rax
 	mov rax, 0x04
-	mov [rdx+0x18], rax
+	mov [rsp+0x58], rax
 	lea r9, [rsp]
-	mov [r9], rdx
-	mov [r9+0x08], rax
-	mov [r9+0x10], rdx
-	mov [r9+0x18], rcx
+	mov [rsp], rdx
+	mov [rsp+0x08], rax
+	mov [rsp+0x10], rdx
+	mov [rsp+0x18], rcx
 	mov rax, rdx
 	add rax, 0x10
-	mov [r9+0x20], rax
-	mov [r9+0x28], rcx
+	mov [rsp+0x20], rax
+	mov [rsp+0x28], rcx
 	mov rax, rdx
 	add rax, 0x08
-	mov [r9+0x30], rax
-	mov [r9+0x38], rcx
+	mov [rsp+0x30], rax
+	mov [rsp+0x38], rcx
 	mov r8, 0x10
 	mov rdi, 0x08
 	mov rsi, r10

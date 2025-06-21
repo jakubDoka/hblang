@@ -1,43 +1,37 @@
 main:
 	push rbx
-	push rbp
 	sub rsp, 0x40
-	mov rbx, 0x00
-	lea rax, [rsp]
-	mov rdx, [rax+0x08]
-	mov [rax], bl
-	lea rcx, [rsp+0x10]
-	mov rbp, 0x01
-	mov rax, [rax]
-	test bl, bl
+	mov rdx, 0x00
+	mov rcx, [rsp+0x08]
+	mov [rsp], dl
+	mov rbx, 0x01
+	mov rax, [rsp]
+	test dl, dl
 	jz :0
-	mov [rcx], rax
-	mov [rcx+0x08], rdx
+	mov [rsp+0x10], rax
+	mov [rsp+0x18], rcx
 	jmp :1
-0:	mov [rcx+0x08], rbp
-1:	mov rax, [rcx+0x08]
+0:	mov [rsp+0x18], rbx
+1:	mov rax, [rsp+0x18]
 	cmp rax, 0x01
 	setnz al
 	movzx rax, al
 	test al, al
 	jz :2
-	mov rax, rbp
+	mov rax, rbx
 	jmp :3
-2:	mov rbx, 0x01
-	lea rax, [rsp+0x20]
-	mov [rax], bl
-	mov rdx, 0x00
-	mov [rax+0x08], rdx
-	lea rcx, [rsp+0x30]
-	mov rax, [rax]
-	test bl, bl
+2:	mov rdx, 0x01
+	mov [rsp+0x20], dl
+	mov rcx, 0x00
+	mov [rsp+0x28], rcx
+	mov rax, [rsp+0x20]
+	test dl, dl
 	jz :4
-	mov [rcx], rax
-	mov [rcx+0x08], rdx
+	mov [rsp+0x30], rax
+	mov [rsp+0x38], rcx
 	jmp :5
-4:	mov [rcx+0x08], rbp
-5:	mov rax, [rcx+0x08]
+4:	mov [rsp+0x38], rbx
+5:	mov rax, [rsp+0x38]
 3:	add rsp, 0x40
-	pop rbp
 	pop rbx
 	ret

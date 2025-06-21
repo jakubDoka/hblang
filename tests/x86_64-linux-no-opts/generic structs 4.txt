@@ -1,59 +1,50 @@
 generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get:
 	sub rsp, 0x08
 	mov rsi, rdi
-	lea rdx, [rsp+0x10]
-	lea rax, [rsp]
-	mov [rax], rsi
-	mov rcx, [rax]
+	mov [rsp], rsi
+	mov rcx, [rsp]
 	cmp rcx, 0x00
 	setz al
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, [rdx]
+	mov rax, [rsp+0x10]
 	jmp :1
-0:	mov rdi, [rdx+0x08]
-	mov rsi, [rdx+0x10]
+0:	mov rdi, [rsp+0x18]
+	mov rsi, [rsp+0x20]
 	mov rdx, rcx
 	sub rdx, 0x01
 	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint))).get
 1:	add rsp, 0x08
 	ret
 generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint))).get:
-	push rbx
 	sub rsp, 0x18
-	lea rbx, [rsp]
-	mov [rbx], rdi
-	mov [rbx+0x08], rsi
-	lea rax, [rsp+0x10]
-	mov [rax], rdx
-	mov rdx, [rax]
+	mov [rsp], rdi
+	mov [rsp+0x08], rsi
+	mov [rsp+0x10], rdx
+	mov rdx, [rsp+0x10]
 	cmp rdx, 0x00
 	setz cl
 	movzx rcx, cl
-	mov rax, [rbx]
+	mov rax, [rsp]
 	test cl, cl
 	jz :0
 	jmp :1
-0:	mov rdi, [rbx+0x08]
+0:	mov rdi, [rsp+0x08]
 	mov rsi, rdx
 	sub rsi, 0x01
 	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)).get
 1:	add rsp, 0x18
-	pop rbx
 	ret
 generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)).get:
-	push rbx
 	sub rsp, 0x18
-	lea rbx, [rsp]
-	mov [rbx], rdi
-	lea rax, [rsp+0x08]
-	mov [rax], rsi
-	mov rdx, [rax]
+	mov [rsp], rdi
+	mov [rsp+0x08], rsi
+	mov rdx, [rsp+0x08]
 	cmp rdx, 0x00
 	setz cl
 	movzx rcx, cl
-	mov rax, [rbx]
+	mov rax, [rsp]
 	test cl, cl
 	jz :0
 	jmp :1
@@ -61,7 +52,6 @@ generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)).get:
 	sub rdi, 0x01
 	call :generic structs 4.Array(E = uint).get
 1:	add rsp, 0x18
-	pop rbx
 	ret
 generic structs 4.Array(E = uint).get:
 	ud2
@@ -76,19 +66,14 @@ main:
 	lea r15, [rsp+0x28]
 	mov [rsp+0x20], r15
 	mov rbp, 0x01
-	mov r15, [rsp+0x20]
-	mov [r15], rbp
+	mov [rsp+0x28], rbp
 	mov qword ptr [rsp+0x18], 0x02
-	mov r15, [rsp+0x20]
-	mov r14, [rsp+0x18]
-	mov [r15+0x08], r14
+	mov r15, [rsp+0x18]
+	mov [rsp+0x30], r15
 	mov rax, 0x03
-	mov r15, [rsp+0x20]
-	mov [r15+0x10], rax
-	mov r15, [rsp+0x20]
-	mov rax, [r15+0x10]
-	mov r15, [rsp+0x20]
-	mov [r15+0x10], rax
+	mov [rsp+0x38], rax
+	mov rax, [rsp+0x38]
+	mov [rsp+0x38], rax
 	mov r13, 0x18
 	lea rbx, [rsp]
 	mov rdi, rbx

@@ -364,6 +364,7 @@ pub const builtin = enum {
     pub const StructArg = extern struct {
         base: mod.Arg,
         spec: AbiParam.StackSpec,
+        no_address: bool = false,
     };
     pub const StackArgOffset = extern struct {
         offset: u64, // from eg. rsp
@@ -395,6 +396,7 @@ pub const builtin = enum {
     };
     pub const Local = extern struct {
         size: u64,
+        no_address: bool = false,
 
         pub const data_dep_offset = 1;
     };
@@ -805,6 +807,10 @@ pub fn Func(comptime Backend: type) type {
                 return false;
             }
 
+            pub fn isStack(self: *Node) bool {
+                return self.kind == .Local or self.kind == .StructArg;
+            }
+
             pub fn regBias(self: *Node) ?u16 {
                 return if (@hasDecl(Backend, "regBias")) Backend.regBias(self) else null;
             }
@@ -1023,6 +1029,7 @@ pub fn Func(comptime Backend: type) type {
                 return !self.isStore() and
                     !self.isCfg() and
                     (self.kind != .Phi or self.isDataPhi()) and
+                    (self.kind != .Local or !self.extra(.Local).no_address) and
                     self.kind != .Mem;
             }
 

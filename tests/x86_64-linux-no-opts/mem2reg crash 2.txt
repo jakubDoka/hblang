@@ -1,63 +1,53 @@
 mem2reg crash 2.insert:
 	push rbx
-	push rbp
 	sub rsp, 0x30
-	mov rbx, rdi
-	mov rcx, rsi
 	mov rax, 0x01
-	lea r9, [rsp+0x18]
-	lea r8, [rsp+0x20]
 	test al, al
 	jz :1
 	jmp :1
-1:	lea rdi, [rsp]
-	mov [rdi], rbx
-	lea rsi, [rsp+0x08]
-	mov [rsi], rcx
-	lea rax, [rsp+0x10]
-	mov [rax], rdx
-	mov rbp, 0x00
-	mov [r9], rbp
-	lea rbx, [rsp+0x28]
-2:	mov [r8], rbp
-4:	mov rax, [r8]
+1:	mov [rsp], rdi
+	mov [rsp+0x08], rsi
+	mov [rsp+0x10], rdx
+	mov rbx, 0x00
+	mov [rsp+0x18], rbx
+2:	mov [rsp+0x20], rbx
+4:	mov rax, [rsp+0x20]
 	cmp rax, 0x08
 	setnb cl
 	movzx rcx, cl
-	mov rax, [r9]
+	mov rax, [rsp+0x18]
 	test cl, cl
 	jz :1
 	add rax, 0x01
-	mov [r9], rax
+	mov [rsp+0x18], rax
 	jmp :2
-1:	mov rax, [rdi]
+1:	mov rax, [rsp]
 	mov rax, [rax]
-	mov [rbx], rax
-	mov rdx, [rbx]
-	mov rcx, [rsi]
+	mov [rsp+0x28], rax
+	mov rdx, [rsp+0x28]
+	mov rcx, [rsp+0x08]
 	mov rax, [rdx]
 	cmp rax, rcx
 	jnz :3
 	mov rax, rdx
 	add rax, 0x08
 	add rsp, 0x30
-	pop rbp
 	pop rbx
 	ret
-3:	mov rax, [r8]
+3:	mov rax, [rsp+0x20]
 	add rax, 0x01
-	mov [r8], rax
+	mov [rsp+0x20], rax
 	jmp :4
 main:
 	sub rsp, 0x28
 	lea rax, [rsp+0x10]
 	mov rsi, 0x01
-	mov [rax], rsi
+	mov [rsp+0x10], rsi
 	mov rdx, 0x00
-	mov [rax+0x08], rdx
+	mov [rsp+0x18], rdx
 	lea rdi, [rsp]
-	mov [rdi], rax
-	mov [rdi+0x08], rsi
+	mov [rsp], rax
+	mov [rsp+0x08], rsi
 	call :mem2reg crash 2.insert
 	mov rax, [rax]
 	add rsp, 0x28

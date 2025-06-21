@@ -1,8 +1,7 @@
 arithmetic 9 (force imm ops).box(v: uint):
 	sub rsp, 0x10
-	lea rax, [rsp]
-	mov [rax], rdi
-	mov rax, [rax]
+	mov [rsp], rdi
+	mov rax, [rsp]
 	add rsp, 0x10
 	ret
 main:

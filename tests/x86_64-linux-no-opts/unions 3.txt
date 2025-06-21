@@ -1,9 +1,8 @@
 unions 3.TypeInfo(T = uint):
 	sub rsp, 0x10
-	lea rcx, [rsp]
 	mov rax, 0x08
-	mov [rcx], rax
-	mov rax, [rcx]
+	mov [rsp], rax
+	mov rax, [rsp]
 	add rsp, 0x10
 	ret
 main:

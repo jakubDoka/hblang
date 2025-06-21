@@ -1,67 +1,60 @@
 slices 3.reverse:
 	push rbx
-	push rbp
 	sub rsp, 0x30
-	mov r9, rdi
-	lea r8, [rsp]
-	mov [r8], rsi
-	mov [r8+0x08], rdx
-	mov rax, [r8+0x08]
+	mov [rsp], rsi
+	mov [rsp+0x08], rdx
+	mov rax, [rsp+0x08]
 	cmp rax, 0x00
 	setz al
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, [r8]
-	mov [r9], rax
-	mov rax, [r8+0x08]
-	mov [r9+0x08], rax
-	jmp :1
-0:	mov rax, [r8+0x08]
-	lea rdi, [rsp+0x10]
-	sub rax, 0x01
+	mov rax, [rsp]
 	mov [rdi], rax
-	lea rsi, [rsp+0x18]
+	mov rax, [rsp+0x08]
+	mov [rdi+0x08], rax
+	jmp :1
+0:	mov rax, [rsp+0x08]
+	sub rax, 0x01
+	mov [rsp+0x10], rax
 	mov rax, 0x00
-	mov [rsi], rax
-	lea rbp, [rsp+0x20]
+	mov [rsp+0x18], rax
 	mov rax, 0x00
-	mov [rbp], al
-3:	mov rax, [rdi]
-	mov rcx, [rsi]
+	mov [rsp+0x20], al
+3:	mov rax, [rsp+0x10]
+	mov rcx, [rsp+0x18]
 	cmp rcx, rax
 	jnb :2
-	mov rax, [r8]
+	mov rax, [rsp]
 	add rax, rcx
 	mov al, [rax]
-	mov [rbp], al
-	mov rbx, [r8]
-	mov rdx, [rsi]
-	mov rcx, [rdi]
+	mov [rsp+0x20], al
+	mov rbx, [rsp]
+	mov rdx, [rsp+0x18]
+	mov rcx, [rsp+0x10]
 	mov rax, rbx
 	add rax, rcx
 	mov rcx, rbx
 	add rcx, rdx
 	mov al, [rax]
 	mov [rcx], al
-	mov rax, [r8]
-	mov rdx, [rdi]
-	mov cl, [rbp]
+	mov rax, [rsp]
+	mov rdx, [rsp+0x10]
+	mov cl, [rsp+0x20]
 	add rax, rdx
 	mov [rax], cl
-	mov rax, [rsi]
+	mov rax, [rsp+0x18]
 	add rax, 0x01
-	mov [rsi], rax
-	mov rax, [rdi]
+	mov [rsp+0x18], rax
+	mov rax, [rsp+0x10]
 	sub rax, 0x01
-	mov [rdi], rax
+	mov [rsp+0x10], rax
 	jmp :3
-2:	mov rax, [r8]
-	mov [r9], rax
-	mov rax, [r8+0x08]
-	mov [r9+0x08], rax
+2:	mov rax, [rsp]
+	mov [rdi], rax
+	mov rax, [rsp+0x08]
+	mov [rdi+0x08], rax
 1:	add rsp, 0x30
-	pop rbp
 	pop rbx
 	ret
 main:
@@ -69,31 +62,29 @@ main:
 	sub rsp, 0x48
 	lea rbx, [rsp+0x40]
 	mov rax, 0x01
-	mov [rbx], al
+	mov [rsp+0x40], al
 	mov rax, 0x02
-	mov [rbx+0x01], al
+	mov [rsp+0x41], al
 	mov rax, 0x03
-	mov [rbx+0x02], al
+	mov [rsp+0x42], al
 	mov rax, 0x01
-	lea rcx, [rsp+0x10]
-	mov [rcx], rax
+	mov [rsp+0x10], rax
 	mov rax, 0x00
-	mov [rcx+0x08], rax
+	mov [rsp+0x18], rax
 	lea rdi, [rsp]
-	mov rdx, [rcx+0x08]
-	mov rsi, [rcx]
+	mov rdx, [rsp+0x18]
+	mov rsi, [rsp+0x10]
 	call :slices 3.reverse
-	lea rcx, [rsp+0x30]
-	mov [rcx], rbx
+	mov [rsp+0x30], rbx
 	mov rax, 0x03
-	mov [rcx+0x08], rax
+	mov [rsp+0x38], rax
 	lea rdi, [rsp+0x20]
-	mov rdx, [rcx+0x08]
-	mov rsi, [rcx]
+	mov rdx, [rsp+0x38]
+	mov rsi, [rsp+0x30]
 	call :slices 3.reverse
-	mov dl, [rbx+0x01]
-	mov cl, [rbx+0x02]
-	mov al, [rbx]
+	mov dl, [rsp+0x41]
+	mov cl, [rsp+0x42]
+	mov al, [rsp+0x40]
 	movzx rdx, dl
 	movzx rax, al
 	movzx rcx, cl

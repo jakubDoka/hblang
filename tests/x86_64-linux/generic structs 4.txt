@@ -1,16 +1,15 @@
 generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get:
 	sub rsp, 0x08
 	mov rax, rdi
-	lea rcx, [rsp+0x10]
 	cmp rax, 0x00
 	setz sil
 	movzx rsi, sil
 	test sil, sil
 	jz :0
-	mov rax, [rcx]
+	mov rax, [rsp+0x10]
 	jmp :1
-0:	mov rdi, [rcx+0x08]
-	mov rsi, [rcx+0x10]
+0:	mov rdi, [rsp+0x18]
+	mov rsi, [rsp+0x20]
 	mov rdx, rax
 	sub rdx, 0x01
 	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint))).get
@@ -61,17 +60,13 @@ main:
 	lea r15, [rsp+0x28]
 	mov [rsp+0x20], r15
 	mov rbp, 0x01
-	mov r15, [rsp+0x20]
-	mov [r15], rbp
+	mov [rsp+0x28], rbp
 	mov qword ptr [rsp+0x18], 0x02
-	mov r15, [rsp+0x20]
-	mov r14, [rsp+0x18]
-	mov [r15+0x08], r14
+	mov r15, [rsp+0x18]
+	mov [rsp+0x30], r15
 	mov rax, 0x03
-	mov r15, [rsp+0x20]
-	mov [r15+0x10], rax
-	mov r15, [rsp+0x20]
-	mov [r15+0x10], rax
+	mov [rsp+0x38], rax
+	mov [rsp+0x38], rax
 	lea rbx, [rsp]
 	mov r13, 0x18
 	mov rdi, rbx

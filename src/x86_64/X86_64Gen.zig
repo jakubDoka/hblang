@@ -146,6 +146,17 @@ pub const Reloc = struct {
 };
 
 pub const classes = enum {
+    pub const StackLoad = extern struct {
+        base: OffsetLoad,
+
+        pub const data_dep_offset = 2;
+    };
+    pub const StackStore = extern struct {
+        base: OffsetStore,
+
+        pub const data_dep_offset = 2;
+    };
+
     pub const OffsetLoad = extern struct {
         base: graph.Load = .{},
         dis: i32,
@@ -171,7 +182,7 @@ pub fn carried(node: *Func.Node) ?usize {
 }
 
 pub fn isInterned(kind: Func.Kind) bool {
-    return kind == .OffsetLoad;
+    return kind == .OffsetLoad or kind == .StackLoad;
 }
 
 pub fn isSwapped(node: *Func.Node) bool {
@@ -277,14 +288,60 @@ pub fn knownOffset(node: *Func.Node) struct { *Func.Node, i64 } {
 pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
     if (node.kind == .Load) {
         const base, const offset = node.base().knownOffset();
-        const res = func.addNode(
-            .OffsetLoad,
-            node.data_type,
-            &.{ node.inputs()[0], node.mem(), base },
-            .{ .dis = @intCast(offset) },
-        );
+
+        // needs to be done since Loads are interned
+        const res = if (base.isStack())
+            func.addNode(
+                .StackLoad,
+                node.data_type,
+                &.{ node.inputs()[0], node.mem(), base },
+                .{ .base = .{ .dis = @intCast(offset) } },
+            )
+        else
+            func.addNode(
+                .OffsetLoad,
+                node.data_type,
+                &.{ node.inputs()[0], node.mem(), base },
+                .{ .dis = @intCast(offset) },
+            );
+
         worklist.add(res);
         return res;
+    }
+
+    if (node.kind == .Store) {
+        const base, const offset = node.base().knownOffset();
+        const res = func.addNode(
+            .OffsetStore,
+            node.data_type,
+            &.{ node.inputs()[0], node.mem(), base, node.value() },
+            .{ .dis = @intCast(offset) },
+        );
+
+        if (base.isStack()) {
+            res.kind = .StackStore;
+        }
+
+        worklist.add(res);
+        return res;
+    }
+
+    if (node.kind == .OffsetStore and node.base().isStack()) {
+        node.kind = .StackStore;
+    }
+
+    if (node.isStack()) elim_local: {
+        for (node.outputs()) |use| {
+            if (((!use.isStore() or use.value() == node) and !use.isLoad()) or use.isSub(graph.MemCpy)) {
+                break :elim_local;
+            }
+        }
+
+        switch (node.extra2()) {
+            .Local => |n| n.no_address = true,
+            .StructArg => |n| n.no_address = true,
+            else => unreachable,
+        }
     }
 
     if (node.kind == .If) {
@@ -315,18 +372,6 @@ pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.W
                 .{ .op = op },
             );
         }
-    }
-
-    if (node.kind == .Store) {
-        const base, const offset = node.base().knownOffset();
-        const res = func.addNode(
-            .OffsetStore,
-            node.data_type,
-            &.{ node.inputs()[0], node.mem(), base, node.value() },
-            .{ .dis = @intCast(offset) },
-        );
-        worklist.add(res);
-        return res;
     }
 
     if (node.kind == .BinOp and node.inputs()[2].?.kind == .CInt and
@@ -373,6 +418,8 @@ pub fn getStaticOffset(node: *Func.Node) i64 {
     return switch (node.kind) {
         .OffsetLoad => node.extra(.OffsetLoad).dis,
         .OffsetStore => node.extra(.OffsetStore).dis,
+        .StackLoad => node.extra(.StackLoad).base.dis,
+        .StackStore => node.extra(.StackStore).base.dis,
         else => 0,
     };
 }
@@ -812,13 +859,13 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), Tmp{1} });
                 }
             },
-            .Local => {
+            .Local => |extra| if (!extra.no_address) {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_LEA, .{
                     self.getReg(instr),
                     BRegOff{ .rsp, @intCast(instr.extra(.Local).size + self.local_base), 8 },
                 });
             },
-            .StructArg => {
+            .StructArg => |extra| if (!extra.no_address) {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_LEA, .{
                     self.getReg(instr),
                     BRegOff{ .rsp, @intCast(instr.extra(.StructArg).spec.size + self.arg_base), 8 },
@@ -849,6 +896,33 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
 
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
                     BRegOff{ dst, offset, @intCast(instr.data_type.size()) },
+                    SReg{ vl, instr.data_type.size() },
+                });
+            },
+            .StackLoad => |extra| {
+                const dst = self.getReg(instr);
+                const offset: i32 = extra.base.dis +
+                    @as(i32, @intCast(switch (instr.inputs()[2].?.extra2()) {
+                        .Local => |n| n.size + self.local_base,
+                        .StructArg => |n| n.spec.size + self.arg_base,
+                        else => unreachable,
+                    }));
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
+                    SReg{ dst, instr.data_type.size() },
+                    BRegOff{ .rsp, offset, @intCast(instr.data_type.size()) },
+                });
+            },
+            .StackStore => |extra| {
+                const vl = self.getReg(instr.inputs()[3]);
+                const offset: i32 = extra.base.dis +
+                    @as(i32, @intCast(switch (instr.inputs()[2].?.extra2()) {
+                        .Local => |n| n.size + self.local_base,
+                        .StructArg => |n| n.spec.size + self.arg_base,
+                        else => unreachable,
+                    }));
+
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
+                    BRegOff{ .rsp, offset, @intCast(instr.data_type.size()) },
                     SReg{ vl, instr.data_type.size() },
                 });
             },

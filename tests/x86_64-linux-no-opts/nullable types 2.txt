@@ -1,8 +1,7 @@
 nullable types 2.take:
 	sub rsp, 0x10
-	lea rax, [rsp]
-	mov [rax], rdi
-	mov rcx, [rax]
+	mov [rsp], rdi
+	mov rcx, [rsp]
 	mov rax, [rcx]
 	add rax, 0x01
 	mov [rcx], rax
@@ -11,26 +10,23 @@ nullable types 2.take:
 main:
 	push rbx
 	push rbp
-	push r12
 	sub rsp, 0x48
-	lea r12, [rsp]
-	mov rbx, 0x01
-	mov [r12], bl
-	mov rdx, 0x00
-	mov [r12+0x08], rdx
-	mov [r12+0x10], rdx
-	lea rcx, [rsp+0x18]
-	mov [rcx], bl
-	mov [rcx+0x08], rdx
-	mov [rcx+0x10], rdx
-	lea rax, [rsp+0x30]
-	mov [rax], bl
-	mov [rax+0x08], rdx
-	mov [rax+0x10], rdx
+	lea rsi, [rsp]
+	mov rcx, 0x01
+	mov [rsp], cl
+	mov rax, 0x00
+	mov [rsp+0x08], rax
+	mov [rsp+0x10], rax
+	mov [rsp+0x18], cl
+	mov [rsp+0x20], rax
+	mov [rsp+0x28], rax
+	mov [rsp+0x30], cl
+	mov [rsp+0x38], rax
+	mov [rsp+0x40], rax
 	mov rbp, 0x00
-	mov bl, [r12]
-	mov dl, [rcx]
-	mov cl, [rax]
+	mov bl, [rsp]
+	mov dl, [rsp+0x18]
+	mov cl, [rsp+0x30]
 	mov rax, 0x01
 	cmp bl, bpl
 	jnz :0
@@ -43,15 +39,14 @@ main:
 	jnz :4
 	mov rax, 0x03
 3:	jmp :5
-4:	mov [r12+0x10], rax
-	mov rdi, r12
+4:	mov [rsp+0x10], rax
+	mov rdi, rsi
 	add rdi, 0x08
 	call :nullable types 2.take
-	mov rax, [r12+0x08]
-	mov rcx, [r12+0x10]
+	mov rax, [rsp+0x08]
+	mov rcx, [rsp+0x10]
 	sub rax, rcx
 5:	add rsp, 0x48
-	pop r12
 	pop rbp
 	pop rbx
 	ret

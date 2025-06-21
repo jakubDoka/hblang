@@ -7,9 +7,8 @@ main:
 	mov rdi, rbx
 	mov rsi, rbx
 	syscall
-	lea rcx, [rsp]
-	mov [rcx], eax
-	mov eax, [rcx]
+	mov [rsp], eax
+	mov eax, [rsp]
 	cmp eax, 0x00
 	setl al
 	movzx rax, al
@@ -19,11 +18,11 @@ main:
 	jmp :1
 0:	lea r8, [rsp+0x04]
 	mov rax, 0x01
-	mov [r8], eax
-	mov [r8+0x04], rbx
+	mov [rsp+0x04], eax
+	mov [rsp+0x08], rbx
 	lea rax, [0x0000000000000007]
 	mov ax, [rax]
-	mov esi, [rcx]
+	mov esi, [rsp]
 	mov rdi, 0xE9
 	mov rdx, rax
 	movzx rdx, dx
@@ -33,10 +32,8 @@ main:
 	mov rdx, rbx
 	mov r10, r8
 	syscall
-	mov rcx, rax
-	lea rax, [rsp+0x10]
-	mov [rax], ecx
-	mov eax, [rax]
+	mov [rsp+0x10], eax
+	mov eax, [rsp+0x10]
 	cmp eax, 0x00
 	setl al
 	movzx rax, al

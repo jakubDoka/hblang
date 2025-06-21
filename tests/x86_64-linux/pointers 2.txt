@@ -5,22 +5,16 @@ pointers 2.swap:
 	mov [rdi], rcx
 	ret
 main:
-	push rbx
-	push rbp
 	sub rsp, 0x18
-	lea rbp, [rsp]
+	lea rdi, [rsp]
 	mov rax, 0x01
-	mov [rbp], rax
+	mov [rsp], rax
 	mov rax, 0x02
-	lea rbx, [rsp+0x08]
-	mov [rbx], rax
-	mov rdi, rbp
-	mov rsi, rbx
+	lea rsi, [rsp+0x08]
+	mov [rsp+0x08], rax
 	call :pointers 2.swap
-	mov rax, [rbp]
-	mov rcx, [rbx]
+	mov rax, [rsp]
+	mov rcx, [rsp+0x08]
 	sub rax, rcx
 	add rsp, 0x18
-	pop rbp
-	pop rbx
 	ret

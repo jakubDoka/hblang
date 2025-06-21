@@ -27,16 +27,13 @@ enums 4.NameMap(Enum = enums 4.Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get:
 	pop rbx
 	ret
 main:
-	push rbx
 	sub rsp, 0x18
-	lea rbx, [rsp]
+	lea rdi, [rsp]
 	lea rsi, [0x0000000000000007]
 	mov rdx, 0x00
-	mov rdi, rbx
 	call :enums 4.NameMap(Enum = enums 4.Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get
-	mov rax, [rbx]
+	mov rax, [rsp]
 	mov al, [rax]
 	movzx rax, al
 	add rsp, 0x18
-	pop rbx
 	ret

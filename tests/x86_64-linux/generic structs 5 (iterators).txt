@@ -55,12 +55,10 @@ generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main(
 	mov rdi, [rsp]
 	mov rsi, rbx
 	call :generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next).next
-	mov r15, [rsp]
-	mov al, [r15]
+	mov al, [rsp+0xA2]
 	test al, al
 	jz :1
-	mov r15, [rsp]
-	mov ax, [r15]
+	mov ax, [rsp+0xA2]
 	mov r15, [rsp+0x98]
 	mov [r15], ax
 	jmp :2
@@ -75,12 +73,10 @@ generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main(
 	mov rdi, [rsp+0x08]
 	mov rsi, rbp
 	call :generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next).next
-	mov r15, [rsp+0x08]
-	mov al, [r15]
+	mov al, [rsp+0xA0]
 	test al, al
 	jz :5
-	mov r15, [rsp+0x08]
-	mov ax, [r15]
+	mov ax, [rsp+0xA0]
 	mov r15, [rsp+0x98]
 	mov [r15], ax
 2:	jmp :6
@@ -115,71 +111,54 @@ main:
 	push r13
 	push r14
 	push r15
-	sub rsp, 0x118
-	lea r15, [rsp+0xB0]
-	mov [rsp+0xA8], r15
+	sub rsp, 0x108
 	lea rax, [0x0000000000000007]
-	mov r15, [rsp+0xA8]
-	mov [r15], rax
+	mov [rsp+0xA8], rax
 	mov qword ptr [rsp+0xA0], 0x04
-	mov r15, [rsp+0xA8]
-	mov r14, [rsp+0xA0]
-	mov [r15+0x08], r14
+	mov r15, [rsp+0xA0]
+	mov [rsp+0xB0], r15
 	lea rcx, [0x0000000000000007]
-	lea r15, [rsp+0xC0]
+	lea r15, [rsp+0xB8]
 	mov [rsp+0x98], r15
-	mov r15, [rsp+0x98]
-	mov [r15], rcx
+	mov [rsp+0xB8], rcx
 	mov qword ptr [rsp+0x90], 0x02
-	mov r15, [rsp+0x98]
-	mov r14, [rsp+0x90]
-	mov [r15+0x08], r14
-	lea r15, [rsp+0xD0]
+	mov r15, [rsp+0x90]
+	mov [rsp+0xC0], r15
+	lea r15, [rsp+0xC8]
 	mov [rsp+0x08], r15
-	mov r15, [rsp+0x08]
-	mov [r15], rax
-	mov r15, [rsp+0x08]
-	mov r14, [rsp+0xA0]
-	mov [r15+0x08], r14
-	lea r15, [rsp+0xE0]
+	mov [rsp+0xC8], rax
+	mov r15, [rsp+0xA0]
+	mov [rsp+0xD0], r15
+	lea r15, [rsp+0xD8]
 	mov [rsp], r15
 	mov rax, 0x00
-	mov r15, [rsp]
-	mov [r15], al
-	mov r15, [rsp]
-	mov [r15+0x08], rcx
-	mov r15, [rsp]
-	mov r14, [rsp+0x90]
-	mov [r15+0x10], r14
+	mov [rsp+0xD8], al
+	mov [rsp+0xE0], rcx
+	mov r15, [rsp+0x90]
+	mov [rsp+0xE8], r15
 	lea rax, [0x0000000000000007]
-	mov r15, [rsp]
-	mov [r15+0x18], rax
-	mov r15, [rsp]
-	mov r14, [rsp+0x90]
-	mov [r15+0x20], r14
-	lea r13, [rsp+0x108]
-	lea r12, [rsp+0x10A]
+	mov [rsp+0xF0], rax
+	mov r15, [rsp+0x90]
+	mov [rsp+0xF8], r15
+	lea r13, [rsp+0x100]
+	lea r12, [rsp+0x102]
 8:	mov rdi, r13
 	mov rsi, [rsp+0x98]
 	call :generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next).next
-	mov al, [r13]
+	mov al, [rsp+0x100]
 	xor al, 0x01
 	test al, al
 	jz :0
-	mov r15, [rsp+0xA8]
-	mov rax, [r15]
-	mov r15, [rsp+0x08]
-	mov [r15], rax
-	mov r15, [rsp+0xA8]
-	mov rax, [r15+0x08]
-	mov r15, [rsp+0x08]
-	mov [r15+0x08], rax
-	lea r13, [rsp+0x10C]
-	lea r12, [rsp+0x10E]
+	mov rax, [rsp+0xA8]
+	mov [rsp+0xC8], rax
+	mov rax, [rsp+0xB0]
+	mov [rsp+0xD0], rax
+	lea r13, [rsp+0x104]
+	lea r12, [rsp+0x106]
 5:	mov rdi, r13
 	mov rsi, [rsp+0x08]
 	call :generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next).next
-	mov al, [r13]
+	mov al, [rsp+0x104]
 	xor al, 0x01
 	test al, al
 	jz :1
@@ -188,12 +167,12 @@ main:
 1:	mov rdi, r12
 	mov rsi, [rsp]
 	call :generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next), B = generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next)).next
-	mov bpl, [r12]
+	mov bpl, [rsp+0x106]
 	mov al, bpl
 	xor al, 0x01
-	mov bl, [r13+0x01]
-	mov dl, [r12+0x01]
-	mov cl, [r13]
+	mov bl, [rsp+0x105]
+	mov dl, [rsp+0x107]
+	mov cl, [rsp+0x104]
 	test al, al
 	jz :3
 	mov rax, 0x03
@@ -213,12 +192,12 @@ main:
 0:	mov rdi, r12
 	mov rsi, [rsp+0x08]
 	call :generic structs 5 (iterators).main(Next = generic structs 5 (iterators).main.Next).next
-	mov bpl, [r12]
+	mov bpl, [rsp+0x102]
 	mov bl, bpl
 	xor bl, 0x01
-	mov dl, [r12+0x01]
-	mov cl, [r13+0x01]
-	mov al, [r13]
+	mov dl, [rsp+0x103]
+	mov cl, [rsp+0x101]
+	mov al, [rsp+0x100]
 	test bl, bl
 	jz :6
 	mov rax, 0x01
@@ -233,7 +212,7 @@ main:
 	test al, al
 	jz :7
 	mov rax, [rsp+0x90]
-7:	add rsp, 0x118
+7:	add rsp, 0x108
 	pop r15
 	pop r14
 	pop r13

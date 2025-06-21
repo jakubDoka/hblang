@@ -1,8 +1,7 @@
 main:
 	sub rsp, 0x10
-	lea rcx, [rsp]
 	mov rax, 0x00
-	mov [rcx], eax
-	mov eax, [rcx]
+	mov [rsp], eax
+	mov eax, [rsp]
 	add rsp, 0x10
 	ret

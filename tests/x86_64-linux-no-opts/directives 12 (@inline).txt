@@ -1,8 +1,7 @@
 directives 12 (@inline).foo:
 	sub rsp, 0x10
-	lea rax, [rsp]
-	mov [rax], rdi
-	mov rax, [rax]
+	mov [rsp], rdi
+	mov rax, [rsp]
 	add rsp, 0x10
 	ret
 main:

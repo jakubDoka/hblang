@@ -2,58 +2,56 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x30
-	lea r10, [rsp]
-	mov r9, 0x01
-	mov [r10], r9
-	mov r8, 0x02
-	mov [r10+0x08], r8
-	mov rdi, 0x03
-	mov [r10+0x10], rdi
-	mov rsi, 0x04
-	mov [r10+0x18], rsi
-	lea rbp, [rsp+0x20]
+	lea r8, [rsp]
+	mov rdi, 0x01
+	mov [rsp], rdi
+	mov rsi, 0x02
+	mov [rsp+0x08], rsi
+	mov rbp, 0x03
+	mov [rsp+0x10], rbp
+	mov rbx, 0x04
+	mov [rsp+0x18], rbx
 	mov rax, 0x00
-	mov [rbp], rax
-	lea rbx, [rsp+0x28]
-	mov [rbx], rax
+	mov [rsp+0x20], rax
+	mov [rsp+0x28], rax
 	mov rdx, 0x08
-	mov rax, [rbp]
+	mov rax, [rsp+0x20]
 	imul rax, rdx
-	mov rcx, r10
+	mov rcx, r8
 	add rcx, rax
-	mov rax, [rbx]
+	mov rax, [rsp+0x28]
 	mov rcx, [rcx]
 	add rax, rcx
-	mov [rbx], rax
-	mov [rbp], r9
-	mov rax, [rbp]
+	mov [rsp+0x28], rax
+	mov [rsp+0x20], rdi
+	mov rax, [rsp+0x20]
 	imul rax, rdx
-	mov rcx, r10
+	mov rcx, r8
 	add rcx, rax
-	mov rax, [rbx]
+	mov rax, [rsp+0x28]
 	mov rcx, [rcx]
 	add rax, rcx
-	mov [rbx], rax
-	mov [rbp], r8
-	mov rax, [rbp]
+	mov [rsp+0x28], rax
+	mov [rsp+0x20], rsi
+	mov rax, [rsp+0x20]
 	imul rax, rdx
-	mov rcx, r10
+	mov rcx, r8
 	add rcx, rax
-	mov rax, [rbx]
+	mov rax, [rsp+0x28]
 	mov rcx, [rcx]
 	add rax, rcx
-	mov [rbx], rax
-	mov [rbp], rdi
-	mov rax, [rbp]
+	mov [rsp+0x28], rax
+	mov [rsp+0x20], rbp
+	mov rax, [rsp+0x20]
 	imul rax, rdx
-	mov rcx, r10
+	mov rcx, r8
 	add rcx, rax
-	mov rax, [rbx]
+	mov rax, [rsp+0x28]
 	mov rcx, [rcx]
 	add rax, rcx
-	mov [rbx], rax
-	mov [rbp], rsi
-	mov rax, [rbx]
+	mov [rsp+0x28], rax
+	mov [rsp+0x20], rbx
+	mov rax, [rsp+0x28]
 	add rsp, 0x30
 	pop rbp
 	pop rbx

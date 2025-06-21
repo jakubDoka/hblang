@@ -2,35 +2,21 @@ proper systemv abi 1 (spilled arg).load_of_args:
 	push rbx
 	push rbp
 	sub rsp, 0x30
-	mov rbx, rcx
-	mov rcx, rdi
-	mov rbp, rsi
-	mov rdi, rdx
-	mov rdx, r8
-	mov rsi, r9
-	lea r10, [rsp+0x48]
-	lea r9, [rsp+0x50]
-	lea rax, [rsp]
-	mov [rax], rcx
-	lea rcx, [rsp+0x08]
-	mov [rcx], rbp
-	lea rbp, [rsp+0x10]
-	mov [rbp], rdi
-	lea r8, [rsp+0x18]
-	mov [r8], rbx
-	lea rbx, [rsp+0x20]
-	mov [rbx], rdx
-	lea rdx, [rsp+0x28]
-	mov [rdx], rsi
-	mov rax, [rax]
-	mov rcx, [rcx]
-	mov rdi, [rbp]
+	mov [rsp], rdi
+	mov [rsp+0x08], rsi
+	mov [rsp+0x10], rdx
+	mov [rsp+0x18], rcx
+	mov [rsp+0x20], r8
+	mov [rsp+0x28], r9
+	mov rax, [rsp]
+	mov rcx, [rsp+0x08]
+	mov rdi, [rsp+0x10]
 	add rax, rcx
-	mov rsi, [rbx]
-	mov rbp, [rdx]
-	mov rbx, [r10]
-	mov rdx, [r9]
-	mov rcx, [r8]
+	mov rsi, [rsp+0x20]
+	mov rbp, [rsp+0x28]
+	mov rbx, [rsp+0x48]
+	mov rdx, [rsp+0x50]
+	mov rcx, [rsp+0x18]
 	add rax, rdi
 	add rax, rcx
 	add rax, rsi
@@ -47,23 +33,20 @@ proper systemv abi 1 (spilled arg).stack_args:
 	sub rsp, 0x10
 	mov rdx, rdi
 	mov rcx, rsi
-	lea r9, [rsp+0x28]
-	lea rax, [rsp+0x40]
-	lea r8, [rsp]
-	mov [r8], rdx
-	mov [r8+0x08], rcx
-	mov rdi, [rax+0x08]
-	mov rsi, [rax+0x10]
-	mov rbp, [r8+0x08]
-	mov rbx, [r9+0x10]
-	mov rdx, [rax]
-	mov rax, [r9]
-	mov rcx, [r9+0x08]
+	mov [rsp], rdx
+	mov [rsp+0x08], rcx
+	mov rdi, [rsp+0x48]
+	mov rsi, [rsp+0x50]
+	mov rbp, [rsp+0x08]
+	mov rbx, [rsp+0x38]
+	mov rdx, [rsp+0x40]
+	mov rax, [rsp+0x28]
+	mov rcx, [rsp+0x30]
 	add rax, rcx
 	add rax, rbx
 	add rax, rdx
 	add rax, rdi
-	mov rcx, [r8]
+	mov rcx, [rsp]
 	add rax, rsi
 	add rax, rcx
 	add rax, rbp
@@ -79,19 +62,17 @@ main:
 	push r14
 	push r15
 	sub rsp, 0x128
-	lea rax, [rsp+0xE8]
 	mov qword ptr [rsp+0xD0], 0x06
 	mov r15, [rsp+0xD0]
-	mov [rax], r15
+	mov [rsp+0xE8], r15
 	mov qword ptr [rsp+0xC8], 0x07
-	lea rbx, [rsp+0xF0]
 	mov r15, [rsp+0xC8]
-	mov [rbx], r15
+	mov [rsp+0xF0], r15
 	lea rdx, [rsp]
-	mov rax, [rax]
+	mov rax, [rsp+0xE8]
 	mov [rdx], rax
 	lea rcx, [rsp+0x08]
-	mov rax, [rbx]
+	mov rax, [rsp+0xF0]
 	mov [rcx], rax
 	mov qword ptr [rsp+0x38], 0x00
 	mov qword ptr [rsp+0x30], 0x03
@@ -107,33 +88,29 @@ main:
 	mov r9, rbx
 	call :proper systemv abi 1 (spilled arg).load_of_args
 	mov [rsp+0xC0], rax
-	lea rcx, [rsp+0xF8]
+	lea rax, [rsp+0xF8]
 	mov r15, [rsp+0x38]
-	mov [rcx], r15
-	mov [rcx+0x08], r13
-	mov [rcx+0x10], r12
+	mov [rsp+0xF8], r15
+	mov [rsp+0x100], r13
+	mov [rsp+0x108], r12
 	lea r15, [rsp+0x110]
 	mov [rsp+0x38], r15
-	mov r15, [rsp+0x38]
-	mov r14, [rsp+0x30]
-	mov [r15], r14
-	mov r15, [rsp+0x38]
-	mov [r15+0x08], rbp
-	mov r15, [rsp+0x38]
-	mov [r15+0x10], rbx
-	lea rax, [rsp+0xD8]
+	mov r15, [rsp+0x30]
+	mov [rsp+0x110], r15
+	mov [rsp+0x118], rbp
+	mov [rsp+0x120], rbx
 	mov r15, [rsp+0xD0]
-	mov [rax], r15
+	mov [rsp+0xD8], r15
 	mov r15, [rsp+0xC8]
-	mov [rax+0x08], r15
+	mov [rsp+0xE0], r15
 	lea r15, [rsp+0x18]
 	mov [rsp+0x30], r15
 	mov r13, 0x18
 	lea r12, [rsp]
-	mov rbp, [rax]
-	mov rbx, [rax+0x08]
+	mov rbp, [rsp+0xD8]
+	mov rbx, [rsp+0xE0]
 	mov rdi, r12
-	mov rsi, rcx
+	mov rsi, rax
 	mov rdx, r13
 	call :memcpy
 	mov rdi, [rsp+0x30]

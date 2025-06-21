@@ -7,13 +7,12 @@ structs 1.odher_pass:
 	ret
 structs 1.Ty.sum:
 	sub rsp, 0x10
-	lea rax, [rsp]
-	mov [rax], rdi
-	mov [rax+0x08], rsi
+	mov [rsp], rdi
+	mov [rsp+0x08], rsi
 	sub rdi, 0x02
-	mov [rax], rdi
+	mov [rsp], rdi
 	add rsi, 0x01
-	mov [rax+0x08], rsi
+	mov [rsp+0x08], rsi
 	sub rdi, rsi
 	mov rax, rdi
 	add rsp, 0x10
@@ -33,11 +32,11 @@ main:
 	sub rsp, 0x48
 	lea rcx, [rsp+0x18]
 	mov rax, 0x04
-	mov [rcx], rax
+	mov [rsp+0x18], rax
 	mov rax, 0x01
-	mov [rcx+0x08], rax
+	mov [rsp+0x20], rax
 	mov rax, 0x03
-	mov [rcx+0x10], rax
+	mov [rsp+0x28], rax
 	mov rax, 0x18
 	lea rbp, [rsp]
 	mov rdi, rbp
@@ -47,12 +46,12 @@ main:
 	lea rbx, [rsp+0x30]
 	mov rdi, rbx
 	call :structs 1.odher_pass
-	mov rax, [rbx+0x10]
+	mov rax, [rsp+0x40]
 	cmp rax, 0x03
 	setnz al
 	movzx rax, al
-	mov rsi, [rbx+0x08]
-	mov rdi, [rbx]
+	mov rsi, [rsp+0x38]
+	mov rdi, [rsp+0x30]
 	test al, al
 	jz :0
 	mov rax, 0x00
