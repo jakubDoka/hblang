@@ -18,10 +18,10 @@ main:
 	push r15
 	sub rsp, 0x18
 	mov qword ptr [rsp], 0x00
-	lea rax, [rsp+0x09]
+	lea rax, [rsp+0x08]
 	mov r13, 0x01
 	lea r12, [rsp+0x0A]
-	lea rbp, [rsp+0x08]
+	lea rbp, [rsp+0x09]
 	lea rbx, [rsp+0x0B]
 	mov r15b, [rsp]
 	test [rsp], r15b

@@ -292,7 +292,7 @@ pub const Signature = extern struct {
                 }
                 return size;
             },
-            else => unreachable,
+            else => return 0,
         }
     }
 };
@@ -1759,6 +1759,35 @@ pub fn Func(comptime Backend: type) type {
 
                 if (earlier != node.mem()) {
                     return self.addNode(.Load, node.data_type, &.{ inps[0], earlier, inps[2] }, .{});
+                }
+            }
+
+            if (false and node.kind == .MemCpy) memcpy: {
+                const ctrl = inps[0].?;
+                _ = ctrl; // autofix
+                const mem = inps[1].?;
+                const dst = inps[2].?;
+                const src = inps[3].?;
+                const len = inps[4].?;
+                _ = len; // autofix
+
+                if (dst == src) {
+                    return mem;
+                }
+
+                if (src.kind == .Local and dst.kind == .Local) {
+                    for (src.outputs()) |use| {
+                        if (use.knownMemOp()) |op| {
+                            if (op[0] == node) continue;
+                            if (op[0].kind != .Store) {
+                                std.debug.print("{}\n", .{op});
+                                break :memcpy;
+                            }
+                        } else break :memcpy;
+                    }
+
+                    self.subsume(dst, src);
+                    return mem;
                 }
             }
 

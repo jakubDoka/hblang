@@ -42,7 +42,7 @@ structs 1.pass:
 main:
 	push rbx
 	push rbp
-	sub rsp, 0x38
+	sub rsp, 0x48
 	lea rdx, [rsp+0x18]
 	mov rax, 0x04
 	mov [rdx], rax
@@ -80,7 +80,7 @@ main:
 1:	jmp :3
 2:	mov rdi, rbx
 	call :structs 1.pass
-3:	add rsp, 0x38
+3:	add rsp, 0x48
 	pop rbp
 	pop rbx
 	ret

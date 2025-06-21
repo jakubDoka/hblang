@@ -36,7 +36,7 @@ main:
 	push rbx
 	push rbp
 	push r12
-	sub rsp, 0x28
+	sub rsp, 0x48
 	lea rbx, [rsp+0x18]
 	mov rdi, rbx
 	call :structs 3 (call stress test).return_pair
@@ -59,7 +59,7 @@ main:
 	mov rax, 0x01
 	jmp :1
 0:	mov rax, 0x00
-1:	add rsp, 0x28
+1:	add rsp, 0x48
 	pop r12
 	pop rbp
 	pop rbx

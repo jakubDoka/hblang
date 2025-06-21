@@ -1652,7 +1652,7 @@ opaque := fn(v: @Any()): ?@TypeOf(v) return v
 #### nullable types 5 (|| operator)
 ```hb
 main := fn(): uint {
-    if (@as(?usize, null) || 1) != 1 return 1
+    if (@as(?uint, null) || 1) != 1 return 1
 
     return @as(?uint, 0) || 1
 }
@@ -2060,6 +2060,7 @@ foo := fn(): uint {
     - [x] load alias reordering
       - [x] around stores
       - [ ] around calls
+      - [ ] around memcpy
     - [x] store->load forwarding
     - [ ] splitting
     - [ ] mem2reg

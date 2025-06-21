@@ -13,7 +13,7 @@ main:
 	push rbx
 	push rbp
 	push r12
-	sub rsp, 0x48
+	sub rsp, 0x68
 	lea r12, [rsp+0x38]
 	lea rax, [0x0000000000000007]
 	mov [r12], rax
@@ -41,7 +41,7 @@ main:
 	setnz al
 	movzx rax, al
 	movzx rax, al
-	add rsp, 0x48
+	add rsp, 0x68
 	pop r12
 	pop rbp
 	pop rbx

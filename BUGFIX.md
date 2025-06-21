@@ -2,6 +2,26 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### passing struct multiple times 1
+```hb
+S := struct{.a: uint; .b: uint; .c: uint}
+B := struct{.a: u8; .b: u8; .c: u8}
+
+main := fn(): uint {
+    vl := S.(1, 2, 3)
+    bl := B.(1, 2, 3)
+    return foo(bl, vl)
+}
+
+foo := fn(b: B, s: S): uint {
+    return bar(s, b)
+}
+
+bar := fn(s: S, v: B): uint {
+    return s.a + s.b - s.c + v.a + v.b - v.c
+}
+```
+
 #### proper systemv abi 1 (spilled arg)
 ```hb
 load_of_args := fn(

@@ -394,7 +394,7 @@ pub const InlineFunc = struct {
             if (o.kind == .Mem) break o;
         } else null;
 
-        var dest_mem = dest.inputs()[1].?;
+        const dest_mem = dest.inputs()[1].?;
 
         if (entry_mem != null) {
             for (tmp.arena.dupe(*Func.Node, entry_mem.?.outputs())) |use| {
@@ -419,9 +419,8 @@ pub const InlineFunc = struct {
                     // call convention should be a bit customized
                     //
                     const copy = func.addNode(.Local, .i64, &.{ null, into_entry_mem }, .{ .size = o.extra(.StructArg).spec.size });
-                    const size = func.addIntImm(.i64, @bitCast(@as(u64, o.extra(.StructArg).spec.size)));
-                    dest_mem = func.addNode(.MemCpy, .top, &.{ before_dest, dest_mem, copy, size }, .{});
-                    func.subsume(dep.?, o);
+                    func.subsume(copy, dep.?);
+                    func.subsume(copy, o);
                     break;
                 }
             }

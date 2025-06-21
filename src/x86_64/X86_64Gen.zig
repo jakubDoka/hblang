@@ -128,8 +128,8 @@ pub const Reg = enum(u8) {
                     .size = @intCast(size),
                     .displacement = @as(
                         c_int,
-                        @intFromEnum(self) - @intFromEnum(Reg.r14) + slot_offset,
-                    ) * 8,
+                        @intFromEnum(self) - @intFromEnum(Reg.r14),
+                    ) * 8 + slot_offset,
                 },
             };
         }
@@ -398,6 +398,13 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
 
     opts.optimizations.execute(X86_64, self, func);
 
+    //    if (std.mem.endsWith(u8, opts.name, "unwrap")) {
+    //        func.fmtScheduled(
+    //            std.io.getStdErr().writer().any(),
+    //            std.io.tty.detectConfig(std.io.getStdErr()),
+    //        );
+    //    }
+    //
     var tmp = utils.Arena.scrath(opts.optimizations.arena);
     defer tmp.deinit();
 
@@ -445,20 +452,21 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     const spill_slot_count = if (self.allocs.len == 0) 0 else std.mem.max(u16, self.allocs) -| (@intFromEnum(Reg.r15) - tmp_count);
     var stack_size: i64 = std.mem.alignForward(i64, local_size, 8) + spill_slot_count * 8;
 
-    const padding = std.mem.alignForward(i64, stack_size, 16) - stack_size;
-
     var has_call = false;
-    self.slot_base = 0;
+    var call_slot_size: u64 = 0;
     for (postorder) |bb| {
+        if (bb.base.kind == .MemCpy) has_call = true;
         if (bb.base.kind == .CallEnd) {
             const call = bb.base.inputs()[0].?;
             const signature = &call.extra(.Call).signature;
-            self.slot_base = @max(@as(c_int, @intCast(signature.stackSize())), self.slot_base);
+            call_slot_size = @max(signature.stackSize(), call_slot_size);
             has_call = true;
         }
     }
 
-    self.slot_base = std.mem.alignForward(c_int, self.slot_base, 8);
+    stack_size += @intCast(call_slot_size);
+
+    const padding = std.mem.alignForward(i64, stack_size, 16) - stack_size;
 
     if (has_call and padding >= 8) {
         stack_size += padding - 8;
@@ -468,6 +476,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
         stack_size += padding;
     }
 
+    self.slot_base = @intCast(call_slot_size);
     self.local_base = spill_slot_count * 8 + @as(u32, @intCast(self.slot_base));
     self.arg_base = @intCast(stack_size);
     self.arg_base += 8; // call adress
@@ -854,7 +863,10 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 var moves = std.ArrayList(Move).init(tmp.arena.allocator());
                 var i: usize = 0;
                 for (instr.dataDeps()) |arg| {
-                    if (arg.?.kind == .StackArgOffset) continue;
+                    if (arg.?.kind == .StackArgOffset) {
+                        std.debug.assert(self.slot_base != 0);
+                        continue;
+                    }
                     const dst, const src: Reg = .{ call_conv[i], self.getReg(arg) };
                     if (dst != src) moves.append(.init(dst, src)) catch unreachable;
                     i += 1;
