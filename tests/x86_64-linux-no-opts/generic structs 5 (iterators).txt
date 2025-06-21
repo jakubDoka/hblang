@@ -128,7 +128,7 @@ main:
 	mov [rsp+0xC8], r15
 	mov rax, 0x90000002
 	mov [rsp+0x118], eax
-	mov rax, 0x70000001
+	mov rax, 0x70000002
 	mov [rsp+0x11C], eax
 	mov rax, 0x90000003
 	mov [rsp+0x120], eax

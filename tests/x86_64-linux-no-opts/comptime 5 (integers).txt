@@ -5,7 +5,7 @@ main:
 	sub rsp, 0x18
 	mov rax, 0x01
 	mov [rsp], rax
-	mov rax, 0x70000001
+	mov rax, 0x70000002
 	mov [rsp+0x08], eax
 	mov rax, 0x90000002
 	mov [rsp+0x0C], eax

@@ -295,7 +295,7 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
             if (item.tag() != .Directive) continue;
 
             const dir = fl.exprs.get(item).Directive;
-            if (dir.kind != .@"export") continue;
+            if (dir.kind != .@"export" and dir.kind != .handler) continue;
 
             const args: []const Ast.Id = fl.exprs.view(dir.args);
             try self.assertDirectiveArgs(item, args, "<name>, <func>");
@@ -309,18 +309,85 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
             const name_string = fl.exprs.get(name).String;
             const name_str = fl.source[name_string.pos.index + 1 .. name_string.end - 1];
 
-            exports_main = exports_main or std.mem.eql(u8, name_str, "main");
-
             const scope = self.types.getScope(@enumFromInt(i));
             self.parent_scope = .{ .Perm = scope };
             const ty = try self.types.ct.evalTy(name_str, .{ .Perm = scope }, func);
 
             if (ty.data() != .Func) {
-                self.report(func, "only function types can be exported", .{}) catch continue;
+                if (dir.kind == .handler and ty == .void) continue;
+
+                if (dir.kind == .@"export") {
+                    self.report(func, "only function types can be used here", .{}) catch continue;
+                } else {
+                    self.report(func, "only functions and `void` (usefull for" ++
+                        " conditional compilation) can be a handler", .{}) catch continue;
+                }
             }
 
-            self.types.store.get(ty.data().Func).visibility = .exported;
-            self.types.store.get(ty.data().Func).key.name = name_str;
+            switch (dir.kind) {
+                .handler => {
+                    const field = std.meta.stringToEnum(
+                        std.meta.FieldEnum(Types.Handlers),
+                        name_str,
+                    ) orelse {
+                        const handlers = comptime b: {
+                            var acc: []const u8 = "";
+                            for (std.meta.fields(Types.Handlers)) |f| acc = acc ++ ", " ++ f.name;
+                            break :b acc[", ".len..];
+                        };
+
+                        self.report(name, "invalid handler, only " ++ handlers, .{}) catch
+                            continue;
+                    };
+
+                    switch (field) {
+                        inline else => |t| {
+                            const field_ptr = &@field(self.types.handlers, @tagName(t));
+                            if (field_ptr.* != null) {
+                                self.report(name, "redeclaration of a handler," ++
+                                    " TODO: where is the original?", .{}) catch continue;
+                            }
+
+                            const sig = self.types.handler_signatures.get(t);
+                            const func_data: *tys.Func = self.types.store.get(ty.data().Func);
+                            const ast = self.types.getFile(func_data.key.file);
+                            const func_ast = ast.exprs.get(func_data.key.ast).Fn;
+
+                            if (sig.args.len != func_data.args.len) {
+                                self.report(
+                                    func,
+                                    "this handler takes function" ++
+                                        " with {} arguments, but got {}",
+                                    .{ sig.args.len, func_data.args.len },
+                                ) catch continue;
+                            }
+
+                            for (sig.args, func_data.args, ast.exprs.view(func_ast.args)) |expected, got, past| {
+                                if (expected != got) {
+                                    self.report(func, "argument does not match the handler signature," ++
+                                        " expected {}, got {}", .{ expected, got }) catch {};
+                                    self.report(past, "...the argument", .{}) catch continue;
+                                }
+                            }
+
+                            if (sig.ret != func_data.ret) {
+                                self.report(func, "return type does not match the handler signature," ++
+                                    " expected {}, got {}", .{ sig.ret, func_data.ret }) catch {};
+                                self.report(func_ast.ret, "...return type", .{}) catch continue;
+                            }
+
+                            field_ptr.* = ty.data().Func;
+                        },
+                    }
+                },
+                .@"export" => {
+                    exports_main = exports_main or std.mem.eql(u8, name_str, "main");
+
+                    self.types.store.get(ty.data().Func).visibility = .exported;
+                    self.types.store.get(ty.data().Func).key.name = name_str;
+                },
+                else => unreachable,
+            }
 
             try funcs.append(tmp.arena.allocator(), ty.data().Func);
         }
@@ -1287,6 +1354,15 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 },
             };
 
+            if (self.types.handlers.slice_ioob) |handler| {
+                var len = Value.mkv(.uint, self.bl.addFieldLoad(base.id.Pointer, TySlice.len_offset, .i64));
+                const range_check = self.bl.addBinOp(.uge, .i8, end.getValue(self), len.getValue(self));
+                const order_check = self.bl.addBinOp(.ugt, .i8, start.getValue(self), end.getValue(self));
+                const check = self.bl.addBinOp(.bor, .i8, range_check, order_check);
+                var arg_values = [_]Value{ undefined, len, start, end };
+                self.emitHandlerCall(handler, e.subscript, check, &arg_values);
+            }
+
             ptr.id = .{ .Value = self.bl.addIndexOffset(
                 ptr.getValue(self),
                 .iadd,
@@ -1334,6 +1410,13 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         self.bl.addLoad(base.id.Pointer, .i64)
                     else
                         base.id.Pointer;
+
+                    if (self.types.handlers.slice_ioob) |handler| {
+                        var len = Value.mkv(.uint, self.bl.addFieldLoad(base.id.Pointer, TySlice.len_offset, .i64));
+                        const check = self.bl.addBinOp(.uge, .i8, idx_value.getValue(self), len.getValue(self));
+                        var arg_values = [_]Value{ undefined, len, idx_value, idx_value };
+                        self.emitHandlerCall(handler, e.subscript, check, &arg_values);
+                    }
 
                     return .mkp(slice.elem, self.bl.addIndexOffset(
                         index_base,
@@ -1763,6 +1846,52 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
     }
 }
 
+pub fn emitHandlerCall(self: *Codegen, handler: utils.EntId(tys.Func), expr: Ast.Id, check: *Node, arg_values: []Value) void {
+    const func: *tys.Func = self.types.store.get(handler);
+
+    var builder = self.bl.addIfAndBeginThen(self.sloc(expr), check);
+
+    arg_values[0] = self.emitSrcLoc(expr);
+
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    const params, const returns, const ret_abi =
+        func.computeAbi(self.abi, self.types, tmp.arena);
+    const args = self.bl.allocCallArgs(tmp.arena, params, returns);
+
+    var i: usize = self.pushReturn(expr, args, ret_abi, func.ret, .{});
+
+    for (func.args, arg_values) |ty, *value| {
+        const abi = self.abiCata(ty);
+        i += self.pushParam(args, abi, i, value);
+    }
+
+    if (i != params.len) {
+        utils.panic("{}", .{.{ i, params.len }});
+    }
+
+    _ = self.assembleReturn(
+        expr,
+        @intFromEnum(handler),
+        args,
+        .{},
+        func.ret,
+        ret_abi,
+    );
+
+    builder.end(&self.bl, builder.beginElse(&self.bl));
+}
+
+pub fn emitSrcLoc(self: *Codegen, expr: Ast.Id) Value {
+    const src_loc = self.bl.addLocal(.none, self.types.source_loc.size(self.types));
+    _ = self.emitStirng(.{ .loc = src_loc }, self.ast.path, expr);
+    const line, const col = Ast.lineCol(self.ast.source, self.ast.posOf(expr).index);
+    _ = self.bl.addFieldStore(src_loc, 16, .i64, self.bl.addIntImm(.i64, @intCast(line)));
+    _ = self.bl.addFieldStore(src_loc, 24, .i64, self.bl.addIntImm(.i64, @intCast(col)));
+    return .mkp(self.types.source_loc, src_loc);
+}
+
 pub fn unwrapNullable(self: *Codegen, expr: Ast.Id, base: *Value) !void {
     self.emitAutoDeref(base);
 
@@ -1773,6 +1902,12 @@ pub fn unwrapNullable(self: *Codegen, expr: Ast.Id, base: *Value) !void {
     if (!base.ty.needsTag(self.types)) {
         base.ty = nullable.inner;
         return;
+    }
+
+    if (self.types.handlers.null_unwrap) |handler| {
+        var check = try self.chechNull(expr, base, .@"==");
+        var arg_values = [_]Value{undefined};
+        self.emitHandlerCall(handler, expr, check.getValue(self), &arg_values);
     }
 
     base.* = switch (self.abiCata(base.ty)) {
@@ -2729,7 +2864,7 @@ fn emitStirng(self: *Codegen, ctx: Ctx, data: []const u8, expr: Ast.Id) Value {
     self.types.store.get(global).ty = self.types.makeSlice(data.len, .u8);
     self.types.queue(self.target, .init(.{ .Global = global }));
 
-    const slice_ty = self.types.makeSlice(null, .u8);
+    const slice_ty = self.types.string;
     const slice_loc = ctx.loc orelse
         self.bl.addLocal(self.sloc(expr), slice_ty.size(self.types));
     self.bl.addFieldStore(
@@ -3174,8 +3309,9 @@ fn emitDirective(
 
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(has_decl)));
         },
-        .import => unreachable,
-        .@"export" => unreachable,
+        .handler, .@"export" => return self.report(expr, "can only be used in the file scope", .{}),
+        .import => return self.report(expr, "can be only used as a body of the function", .{}),
         .frame_pointer => return .mkv(.uint, self.bl.addFramePointer(.i64)),
+        .SrcLoc => return self.emitTyConst(self.types.source_loc),
     }
 }

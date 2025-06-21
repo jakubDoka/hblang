@@ -1,0 +1,39 @@
+null unwrap 1.null_unwrap:
+         un
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -24
+        li8 $1, 1
+       li64 $2, 1
+        jal $31, $0, :null unwrap 1.use_opt
+        li8 $1, 0
+         ld $2, $254, 8, 8
+         st $1, $254, 0, 1
+        jal $31, $0, :null unwrap 1.use_opt
+     addi64 $254, $254, 24
+         ld $31, $254, -8, 8
+         tx
+null unwrap 1.use_opt:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -56
+         st $1, $254, 0, 1
+         st $2, $254, 8, 8
+       li64 $2, 0
+       andi $1, $1, 255
+        jne $1, $2, :1
+     addi64 $2, $254, 16
+        lra $1, $0, :null unwrap 1.use_opt.null unwrap 1
+         st $1, $254, 16, 8
+       li64 $1, 13
+         st $1, $254, 24, 8
+       li64 $1, 7
+         st $1, $254, 32, 8
+       li64 $1, 40
+         st $1, $254, 40, 8
+         cp $1, $2
+        jal $31, $0, :null unwrap 1.null_unwrap
+        jmp :1
+1:       ld $1, $254, 8, 8
+     addi64 $254, $254, 56
+         ld $31, $254, -8, 8
+       jala $0, $31, 0

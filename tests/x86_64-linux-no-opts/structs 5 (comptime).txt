@@ -2,7 +2,7 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x30
-	mov rax, 0x70000001
+	mov rax, 0x70000002
 	mov [rsp+0x28], eax
 	mov rbp, 0x01
 	mov [rsp+0x08], rbp

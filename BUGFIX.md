@@ -2,6 +2,22 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### null unwrap 1
+```hb
+expectations := .{
+    unreaches: true,
+}
+
+@handler("null_unwrap", fn(sloc: @SrcLoc()): never die)
+
+use_opt := fn(opt: ?uint): uint return opt.?
+
+main := fn(): uint {
+    _ = use_opt(1)
+    return use_opt(null)
+}
+```
+
 #### passing struct multiple times 1
 ```hb
 S := struct{.a: uint; .b: uint; .c: uint}
