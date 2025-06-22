@@ -3,16 +3,7 @@ nullable types 4 (pointer optimization).opaque(v: ^uint):
 	ret
 main:
 	sub rsp, 0x08
-	mov rax, 0x00
-	test al, al
-	jz :0
-	mov rax, 0x01
-	jmp :1
-0:	test al, al
-	jz :2
-	mov rax, 0x02
-1:	jmp :3
-2:	lea rdi, [rsp]
+	lea rdi, [rsp]
 	mov rax, 0x03
 	mov [rsp], rax
 	call :nullable types 4 (pointer optimization).opaque(v: ^uint)
@@ -20,5 +11,5 @@ main:
 	mov rax, 0x00
 	mov [rcx], rax
 	mov rax, [rsp]
-3:	add rsp, 0x08
+	add rsp, 0x08
 	ret

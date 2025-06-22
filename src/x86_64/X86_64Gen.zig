@@ -286,6 +286,8 @@ pub fn knownOffset(node: *Func.Node) struct { *Func.Node, i64 } {
 }
 
 pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
+    if (Func.idealizeDead({}, func, node, worklist)) |n| return n;
+
     if (node.kind == .Load) {
         const base, const offset = node.base().knownOffset();
 

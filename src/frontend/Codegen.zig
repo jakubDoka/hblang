@@ -1670,7 +1670,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             self.loops.appendAssumeCapacity(.{
                 .id = if (e.label.tag() != .Void) ast.exprs.get(e.label).Ident.id else .invalid,
                 .defer_base = self.defers.items.len,
-                .kind = .{ .Runtime = self.bl.addLoopAndBeginBody() },
+                .kind = .{ .Runtime = self.bl.addLoopAndBeginBody(self.sloc(expr)) },
             });
 
             _ = self.emitBranch(e.body);
@@ -1713,6 +1713,14 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     break :b &.{};
                 },
             };
+
+            var iter = std.mem.reverseIterator(self.loops.items);
+            while (iter.nextPtr()) |l| {
+                if (l.kind == .Runtime) {
+                    l.kind.Runtime.markBreaking();
+                    break;
+                }
+            }
             try self.emitDefers(0);
             self.bl.addReturn(rets);
             return error.Unreachable;

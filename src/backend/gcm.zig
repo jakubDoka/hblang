@@ -116,6 +116,10 @@ pub fn GcmMixin(comptime Backend: type) type {
         }
 
         pub fn fixLoop(func: *Func, loop: *CfgNode, end: *Node) *CfgNode {
+            if (loop.base.extra(.Loop).anal_stage == .has_break) {
+                loop.base.extra(.Loop).anal_stage = .has_dead_break;
+            }
+
             const dead = func.addNode(.Never, .top, &.{loop.base.inputs()[1].?}, .{});
             const then = func.addNode(.Then, .top, &.{dead}, .{});
             const else_ = func.addNode(.Else, .top, &.{dead}, .{});

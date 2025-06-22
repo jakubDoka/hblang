@@ -10,10 +10,7 @@ main:
          ld $1, $254, 0, 8
         jeq $1, $2, :2
         jmp :3
-2:      jeq $32, $0, :4
-        jal $31, $0, :exhausitve inlining 1.unreachable
-        jmp :4
-4:     li64 $1, 10
+2:     li64 $1, 10
         jal $31, $0, :exhausitve inlining 1.loop_fn
         jal $31, $0, :exhausitve inlining 1.unreachable
 3:       cp $1, $32
@@ -30,16 +27,16 @@ exhausitve inlining 1.some_mem_ops:
          st $1, $254, 0, 8
      addi64 $254, $254, 8
        jala $0, $31, 0
-exhausitve inlining 1.unreachable:
-         un
 exhausitve inlining 1.loop_fn:
      addi64 $254, $254, -8
          st $1, $254, 0, 8
        li64 $2, 0
-8:       ld $1, $254, 0, 8
-        jne $1, $2, :7
+7:       ld $1, $254, 0, 8
+        jne $1, $2, :6
      addi64 $254, $254, 8
        jala $0, $31, 0
-7:   addi64 $1, $1, -1
+6:   addi64 $1, $1, -1
          st $1, $254, 0, 8
-        jmp :8
+        jmp :7
+exhausitve inlining 1.unreachable:
+         un

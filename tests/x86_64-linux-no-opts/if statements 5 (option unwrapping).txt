@@ -21,10 +21,10 @@ main:
 	jmp :1
 0:	mov rax, 0x00
 	mov [rsp+0x28], al
-1:	mov cl, [rsp+0x28]
-	mov rax, [rsp+0x20]
-	test cl, cl
+1:	mov al, [rsp+0x28]
+	test al, al
 	jz :2
+	mov rax, [rsp+0x20]
 	jmp :3
 2:	mov rax, 0x01
 3:	add rsp, 0x30

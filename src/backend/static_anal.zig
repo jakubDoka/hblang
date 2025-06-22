@@ -13,6 +13,9 @@ pub const Error = union(enum) {
     LoopInvariantBreak: struct {
         if_node: graph.Sloc,
     },
+    InfiniteLoopWithBreak: struct {
+        loop: graph.Sloc,
+    },
 };
 
 pub fn StaticAnalMixin(comptime Backend: type) type {
@@ -30,6 +33,20 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
             self.tryHardToFindMemoryEscapes(arena, errors);
             self.findConstantOobMemOps(arena, errors);
             self.findLoopInvariantConditions(arena, errors);
+            self.findInfiniteLoopsWithBreaks(arena, errors);
+        }
+
+        pub fn findInfiniteLoopsWithBreaks(
+            self: *Self,
+            arena: *root.Arena,
+            errors: *std.ArrayListUnmanaged(Error),
+        ) void {
+            const func = self.getGraph();
+            for (func.gcm.postorder) |bb| {
+                if (bb.base.kind == .Loop and bb.base.extra(.Loop).anal_stage == .has_dead_break) {
+                    errors.append(arena.allocator(), .{ .InfiniteLoopWithBreak = .{ .loop = bb.base.sloc } }) catch unreachable;
+                }
+            }
         }
 
         pub fn findLoopInvariantConditions(

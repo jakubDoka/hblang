@@ -12,65 +12,53 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x08
-	mov rbp, 0x00
-	mov rbx, 0x01
-	test bpl, bpl
+	mov rbp, 0x01
+	mov [rsp+0x01], bpl
+	mov al, [rsp+0x01]
+	test al, al
 	jz :0
-	mov [rsp], bl
+	mov [rsp+0x02], bpl
 	jmp :1
-0:	mov [rsp], bl
-1:	mov al, [rsp]
-	test al, al
-	jz :2
-	mov [rsp+0x01], bl
-	jmp :3
-2:	mov rdi, 0x01
-	call :if statements 4 (short circuit).effectfull
-	mov [rsp+0x01], al
-3:	mov al, [rsp+0x01]
-	test al, al
-	jz :5
-	jmp :5
-5:	test bl, bl
-	jz :5
-	mov [rsp+0x03], bpl
-	jmp :6
-5:	mov [rsp+0x03], bpl
-6:	mov al, [rsp+0x03]
-	test al, al
-	jz :7
-	mov rdi, 0x02
+0:	mov rdi, 0x01
 	call :if statements 4 (short circuit).effectfull
 	mov [rsp+0x02], al
-	jmp :8
-7:	mov [rsp+0x02], bpl
-8:	mov al, [rsp+0x02]
-	test al, al
-	jz :10
-	jmp :10
-a:	mov [rsp+0x04], bpl
-	mov al, [rsp+0x04]
-	test al, al
-	jz :10
-	mov rdi, 0x04
-	call :if statements 4 (short circuit).effectfull
-	mov [rsp+0x05], al
-	jmp :11
-a:	mov [rsp+0x05], bpl
-b:	mov al, [rsp+0x05]
-	mov [rsp+0x04], al
+1:	mov rbx, 0x00
 	mov [rsp+0x04], bl
 	mov al, [rsp+0x04]
 	test al, al
-	jz :12
-	mov [rsp+0x06], bl
-	jmp :13
-c:	mov rdi, 0x05
+	jz :2
+	mov rdi, 0x02
+	call :if statements 4 (short circuit).effectfull
+	mov [rsp+0x03], al
+	jmp :3
+2:	mov [rsp+0x03], bl
+3:	mov al, [rsp+0x03]
+	test al, al
+	jz :5
+	jmp :5
+5:	mov [rsp+0x05], bl
+	mov al, [rsp+0x05]
+	test al, al
+	jz :5
+	mov rdi, 0x04
 	call :if statements 4 (short circuit).effectfull
 	mov [rsp+0x06], al
-d:	lea rcx, [0x0000000000000007]
-	mov al, [rsp+0x06]
-	mov [rsp+0x04], al
+	jmp :6
+5:	mov [rsp+0x06], bl
+6:	mov al, [rsp+0x06]
+	mov [rsp+0x05], al
+	mov [rsp+0x05], bpl
+	mov al, [rsp+0x05]
+	test al, al
+	jz :7
+	mov [rsp], bpl
+	jmp :8
+7:	mov rdi, 0x05
+	call :if statements 4 (short circuit).effectfull
+	mov [rsp], al
+8:	lea rcx, [0x0000000000000007]
+	mov al, [rsp]
+	mov [rsp+0x05], al
 	mov rax, [rcx]
 	add rsp, 0x08
 	pop rbp

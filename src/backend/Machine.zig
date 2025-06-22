@@ -803,7 +803,7 @@ pub const OptOptions = struct {
     };
 
     pub const none = @This(){
-        .do_dead_code_elimination = false,
+        .do_dead_code_elimination = true,
         .do_inlining = false,
         .mem2reg = false,
         .do_generic_peeps = false,

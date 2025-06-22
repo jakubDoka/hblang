@@ -349,6 +349,7 @@ pub const builtin = enum {
     pub const Region = mod.Region;
     pub const Loop = extern struct {
         base: mod.Cfg = .{},
+        anal_stage: enum(u8) { is_infinite, has_break, has_dead_break } = .is_infinite,
 
         pub const is_basic_block_start = true;
     };
@@ -1634,10 +1635,34 @@ pub fn Func(comptime Backend: type) type {
             const inps = node.inputs();
 
             var is_dead = node.kind == .Region and isDead(inps[0]) and isDead(inps[1]);
-            is_dead = is_dead or (node.kind != .Start and node.kind != .Region and node.kind != .Return and
-                node.isCfg() and isDead(inps[0]));
+            is_dead = is_dead or (node.kind != .Start and node.kind != .Region and
+                node.kind != .TrapRegion and node.isCfg() and isDead(inps[0]));
 
-            if (is_dead) {
+            if (is_dead and node.kind == .Return and inps[0] != null) {
+                worklist.add(inps[0].?);
+                self.setInputNoIntern(node, 0, null);
+                return null;
+            }
+
+            if (node.kind == .TrapRegion) {
+                is_dead = true;
+                for (node.inputs(), 0..) |inp, i| {
+                    if (inp != null and isDead(inp)) {
+                        self.setInputNoIntern(node, i, null);
+                        worklist.add(inp.?);
+                    }
+                    is_dead = is_dead and isDead(inp);
+                }
+
+                if (is_dead) {
+                    self.setInputNoIntern(self.end, 2, null);
+                    worklist.add(node);
+                }
+
+                return null;
+            }
+
+            if (is_dead and node.data_type != .bot) {
                 node.data_type = .bot;
                 for (node.outputs()) |o| worklist.add(o);
                 return null;
@@ -1678,6 +1703,28 @@ pub fn Func(comptime Backend: type) type {
                 };
 
                 return node.inputs()[0].?;
+            }
+
+            if (node.kind == .Then and node.inputs()[0].?.kind == .If) {
+                const if_node = node.inputs()[0].?;
+                const cond = if_node.inputs()[1].?;
+                if (cond.kind == .CInt and cond.extra(.CInt).value != 0) {
+                    if_node.data_type = .bot;
+                    if_node.outputs()[1].data_type = .bot;
+                    worklist.add(if_node.outputs()[1]);
+                    return if_node.inputs()[0].?;
+                }
+            }
+
+            if (node.kind == .Else and node.inputs()[0].?.kind == .If) {
+                const if_node = node.inputs()[0].?;
+                const cond = if_node.inputs()[1].?;
+                if (cond.kind == .CInt and cond.extra(.CInt).value == 0) {
+                    if_node.data_type = .bot;
+                    if_node.outputs()[0].data_type = .bot;
+                    worklist.add(if_node.outputs()[0]);
+                    return if_node.inputs()[0].?;
+                }
             }
 
             if (node.kind == .Store) {

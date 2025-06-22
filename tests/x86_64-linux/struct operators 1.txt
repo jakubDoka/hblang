@@ -1,29 +1,15 @@
 main:
 	sub rsp, 0x30
-	mov rcx, 0x00
-	mov [rsp+0x20], cl
-	mov [rsp+0x21], cl
-	mov [rsp+0x22], cl
-	mov [rsp+0x23], cl
+	mov rax, 0x00
+	mov [rsp+0x20], al
+	mov [rsp+0x21], al
+	mov [rsp+0x22], al
+	mov [rsp+0x23], al
 	mov rax, 0x01
 	mov [rsp+0x20], al
 	mov [rsp+0x21], al
 	mov [rsp+0x22], al
 	mov [rsp+0x23], al
-	test cl, cl
-	jz :0
-	mov rax, 0x3E9
-	jmp :1
-0:	mov rax, 0x00
-	test al, al
-	jz :2
-	mov rax, 0x3EA
-1:	jmp :3
-2:	test al, al
-	jz :4
-	mov rax, 0x3EB
-3:	jmp :5
-4:	mov rdx, 0x0A
 	mov rax, 0xFFFFFFFFFFFFFFFD
 	mov [rsp], rax
 	mov rax, 0xFFFFFFFFFFFFFFFC
@@ -38,6 +24,6 @@ main:
 	mov [rsp+0x10], rax
 	mov rax, 0x04
 	mov [rsp+0x18], rax
-	mov rax, rdx
-5:	add rsp, 0x30
+	mov rax, 0x0A
+	add rsp, 0x30
 	ret

@@ -1,8 +1,3 @@
 main:
-	mov rax, 0x00
-	test al, al
-	jz :0
-	mov rax, 0x0A
-	jmp :1
-0:	mov rax, 0x01
-1:	ret
+	mov rax, 0x01
+	ret

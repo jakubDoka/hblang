@@ -376,6 +376,11 @@ pub const Loop = struct {
 
     pub const Control = enum { @"break", @"continue" };
 
+    pub fn markBreaking(self: *Loop) void {
+        const loop = getScopeValues(self.scope)[0].extra(.Loop);
+        loop.anal_stage = .has_break;
+    }
+
     pub fn addControl(self: *Loop, builder: *Builder, kind: Loop.Control) void {
         if (self.control.getPtr(kind).*) |ctrl| {
             const rhs = mergeScopes(&builder.func, builder.scope.?, ctrl);
@@ -384,6 +389,7 @@ pub const Loop = struct {
             builder._truncateScope(builder.scope.?, self.scope.inputs().len);
             self.control.set(kind, builder.scope.?);
         }
+        if (kind == .@"break") self.markBreaking();
         builder.scope = null;
     }
 
@@ -438,11 +444,12 @@ pub const Loop = struct {
     }
 };
 
-pub fn addLoopAndBeginBody(self: *Builder) Loop {
+pub fn addLoopAndBeginBody(self: *Builder, sloc: graph.Sloc) Loop {
     const loop = self.func.addNode(.Loop, .top, &.{
         self.control(),
         null,
     }, .{});
+    loop.sloc = sloc;
     self.func.setInputNoIntern(self.scope.?, 0, loop);
     const pscope = self.cloneScope();
     for (1..self.scope.?.input_ordered_len) |i| {

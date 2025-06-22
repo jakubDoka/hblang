@@ -607,8 +607,10 @@ expectations := .{
     should_error: true,
 }
 
+obf := 1
+
 main := fn(): uint {
-    a := 1
+    a := obf
     b := &a
 
     loop {

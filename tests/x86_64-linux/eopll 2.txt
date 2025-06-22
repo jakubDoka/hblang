@@ -20,29 +20,21 @@ main:
 	mov rax, rdi
 	mov rdi, [rsp+0x90]
 	syscall
-	mov rcx, rax
-	mov rax, 0x00
-	test al, al
-	jz :0
-	mov rax, 0x01
-	jmp :1
-0:	lea r15, [rsp+0x98]
+	lea r15, [rsp+0x98]
 	mov [rsp+0x08], r15
-	mov [rsp], rcx
-	mov r15, [rsp]
-	movsxd r15, dword ptr [rsp]
-	mov [rsp], r15
-	mov r13, 0x10
-	mov r12, 0xFFFFFFFFFFFFFFFF
-	mov rbp, 0xE8
+	mov qword ptr [rsp], 0x10
+	mov r13, 0xFFFFFFFFFFFFFFFF
+	mov r12, 0xE8
+	mov rbp, rax
+	movsxd rbp, ebp
 	mov rbx, [rsp+0x90]
-3:	cmp rbx, 0x00
+1:	cmp rbx, 0x00
 	setz al
 	movzx rax, al
 	test al, al
-	jz :2
+	jz :0
 	mov rax, [rsp+0x90]
-1:	add rsp, 0xA8
+	add rsp, 0xA8
 	pop r15
 	pop r14
 	pop r13
@@ -50,13 +42,13 @@ main:
 	pop rbp
 	pop rbx
 	ret
-2:	mov rax, rbp
-	mov rdi, [rsp]
+0:	mov rax, r12
+	mov rdi, rbp
 	mov rsi, [rsp+0x08]
-	mov rdx, r13
-	mov r10, r12
+	mov rdx, [rsp]
+	mov r10, r13
 	syscall
 	mov rax, rbx
 	add rax, 0x01
 	mov rbx, rax
-	jmp :3
+	jmp :1
