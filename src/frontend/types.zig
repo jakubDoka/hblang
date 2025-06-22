@@ -411,30 +411,34 @@ pub const Func = struct {
         abi: Types.Abi,
         types: *Types,
         scratch: *utils.Arena,
-    ) struct {
+    ) ?struct {
         []const graph.AbiParam,
-        []const graph.AbiParam,
+        ?[]const graph.AbiParam,
         Types.Abi.Spec,
     } {
         errdefer unreachable;
         var builder = abi.builder();
 
-        const ret_abi = @as(Types.Abi.TmpSpec, abi.categorize(self.ret, types) orelse .Imaginary)
+        const ret_abi = @as(Types.Abi.TmpSpec, abi.categorize(self.ret, types))
             .toPerm(self.ret, types);
 
-        const returns = scratch.alloc(graph.AbiParam, builder.len(true, ret_abi));
+        const returns = if (builder.len(true, ret_abi)) |len|
+            scratch.alloc(graph.AbiParam, len)
+        else
+            null;
         var params = std.ArrayListUnmanaged(graph.AbiParam){};
 
         if (abi.isByRefRet(ret_abi)) {
             const slots = try params.addManyAsSlice(scratch.allocator(), 1);
             builder.types(slots, true, ret_abi);
-        } else {
-            builder.types(returns, true, ret_abi);
+        } else if (returns) |rets| {
+            builder.types(rets, true, ret_abi);
         }
 
         for (self.args) |ty| {
-            const arg_abi = (abi.categorize(ty, types) orelse continue).toPerm(ty, types);
-            const slots = try params.addManyAsSlice(scratch.allocator(), builder.len(false, arg_abi));
+            const arg_abi = abi.categorize(ty, types).toPerm(ty, types);
+            const len = builder.len(false, arg_abi) orelse return null;
+            const slots = try params.addManyAsSlice(scratch.allocator(), len);
             builder.types(slots, false, arg_abi);
         }
 

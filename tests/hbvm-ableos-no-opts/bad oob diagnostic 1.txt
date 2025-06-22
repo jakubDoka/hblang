@@ -1,0 +1,3 @@
+bad oob diagnostic 1:13:18: can't make an uninitialized bad oob diagnostic 1.Union, its uninhabited
+    return Union.vl(idk)
+                    ^

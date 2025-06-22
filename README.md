@@ -865,23 +865,12 @@ main := fn(): uint {
     start := "ab"
     end := "cd"
 
-    Next := fn(T: type): type return struct {
-        .next: bool;
-        .val: T
-        none := fn(): @CurrentScope() {
-            return .(false, idk)
-        }
-        some := fn(val: T): @CurrentScope() {
-            return .(true, val)
-        }
-    }
-
     Chars := struct {
         .slc: []u8
-        next := fn(self: ^@CurrentScope()): Next(u8) {
-            if self.slc.len == 0 return .none()
+        next := fn(self: ^@CurrentScope()): ?u8 {
+            if self.slc.len == 0 return null
             defer self.slc = self.slc[1..]
-            return .some(self.slc[0])
+            return self.slc[0]
         }
     }
 
@@ -896,15 +885,15 @@ main := fn(): uint {
             loop match self.state {
                 .a => {
                     nxt := self.a.next()
-                    if nxt.next return nxt
+                    if nxt != null return nxt
                     self.state = .b
                 },
                 .b => {
                     nxt := self.b.next()
-                    if nxt.next return nxt
+                    if nxt != null return nxt
                     self.state = .done
                 },
-                .done => return .none(),
+                .done => return null,
             }
         }
     }
@@ -915,21 +904,21 @@ main := fn(): uint {
 
     loop {
         sc := siter.next()
-        if !sc.next break
+        if sc == null break
         rc := riter.next()
-        if !rc.next return 1
+        if rc == null return 1
 
-        if sc != rc return 2
+        if sc.? != rc.? return 2
     }
 
     riter = .(ref)
     loop {
         rc := riter.next()
-        if !rc.next break
+        if rc == null break
         sc := citer.next()
-        if !sc.next return 3
+        if sc == null return 3
 
-        if sc != rc return 4
+        if sc.? != rc.? return 4
     }
 
     return 0

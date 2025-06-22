@@ -134,7 +134,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
                 const call: *Node = curr.inputs()[0].?;
                 std.debug.assert(call.kind == .Call);
 
-                if (call.extra(.Call).signature.returns().len != 1) {
+                if (call.extra(.Call).signature.returns().?.len != 1) {
                     types.report(file, pos, "the function returns something we cant handle", .{});
                     return .{ .Unsupported = curr };
                 }
@@ -149,7 +149,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
                         return .{ .Unsupported = curr };
                     }
 
-                    ret_ty = (abi.categorize(func.ret, types) orelse return .{ .Unsupported = curr }).ByValue;
+                    ret_ty = abi.categorize(func.ret, types).ByValue;
                     if (func.completion.get(.@"comptime") == .queued) {
                         self.jitFunc(func_id) catch return .{ .Unsupported = curr };
                     }

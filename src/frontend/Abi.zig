@@ -22,58 +22,62 @@ pub const Builder = union(graph.CallConv) {
     ablecall,
     fastcall,
 
-    pub fn types(self: *Builder, buf: []graph.AbiParam, is_ret: bool, spec: Spec) void {
+    pub fn types(self: *Builder, buf: ?[]graph.AbiParam, is_ret: bool, spec: Spec) void {
         switch (self.*) {
             .ablecall => switch (spec) {
+                .Impossible => unreachable,
                 .Imaginary => {},
-                .ByValue => |d| buf[0] = .{ .Reg = d },
-                .ByValuePair => |pair| buf[0..2].* =
+                .ByValue => |d| buf.?[0] = .{ .Reg = d },
+                .ByValuePair => |pair| buf.?[0..2].* =
                     .{ .{ .Reg = pair.types[0] }, .{ .Reg = pair.types[1] } },
-                .ByRef => buf[0] = .{ .Reg = .i64 },
+                .ByRef => buf.?[0] = .{ .Reg = .i64 },
             },
             .systemv => |*s| switch (spec) {
+                .Impossible => unreachable,
                 .Imaginary => {},
                 .ByValue => |d| {
                     if (is_ret) {
-                        buf[0] = .{ .Reg = d };
+                        buf.?[0] = .{ .Reg = d };
                     } else if (s.remining_scalar_regs == 0) {
-                        buf[0] = .{ .Stack = .reg(d) };
+                        buf.?[0] = .{ .Stack = .reg(d) };
                     } else {
-                        buf[0] = .{ .Reg = d };
+                        buf.?[0] = .{ .Reg = d };
                         s.remining_scalar_regs -= 1;
                     }
                 },
                 .ByValuePair => |pair| {
                     if (is_ret) {
-                        buf[0] = .{ .Reg = .i64 };
+                        buf.?[0] = .{ .Reg = .i64 };
                         s.remining_scalar_regs -= 1;
                     } else if (s.remining_scalar_regs < 2) {
-                        buf[0] = .{ .Stack = pair.stackSpec() };
+                        buf.?[0] = .{ .Stack = pair.stackSpec() };
                     } else {
-                        buf[0..2].* = .{ .{ .Reg = pair.types[0] }, .{ .Reg = pair.types[1] } };
+                        buf.?[0..2].* = .{ .{ .Reg = pair.types[0] }, .{ .Reg = pair.types[1] } };
                         s.remining_scalar_regs -= 2;
                     }
                 },
                 .ByRef => |size| if (is_ret) {
                     s.remining_scalar_regs -= 1;
-                    buf[0] = .{ .Reg = .i64 };
+                    buf.?[0] = .{ .Reg = .i64 };
                 } else {
-                    buf[0] = .{ .Stack = size };
+                    buf.?[0] = .{ .Stack = size };
                 },
             },
             else => unreachable,
         }
     }
 
-    pub fn len(self: Builder, is_ret: bool, spec: Spec) usize {
+    pub fn len(self: Builder, is_ret: bool, spec: Spec) ?usize {
         return switch (self) {
             .ablecall => switch (spec) {
+                .Impossible => null,
                 .Imaginary => 0,
                 .ByValue => 1,
                 .ByValuePair => 2,
                 .ByRef => if (is_ret) 0 else 1,
             },
             .systemv => |s| switch (spec) {
+                .Impossible => null,
                 .Imaginary => 0,
                 .ByValue => 1,
                 .ByValuePair => if (is_ret)
@@ -115,6 +119,7 @@ pub const TmpSpec = union(enum) {
     ByValuePair: Pair,
     ByRef,
     Imaginary,
+    Impossible,
 
     pub fn toPerm(self: TmpSpec, ty: Id, types: *Types) Spec {
         return switch (self) {
@@ -129,6 +134,7 @@ pub const Spec = union(enum) {
     ByValuePair: Pair,
     ByRef: graph.AbiParam.StackSpec,
     Imaginary,
+    Impossible,
 
     const max_subtypes = 2;
 
@@ -141,10 +147,11 @@ pub const Spec = union(enum) {
     const Offs = std.BoundedArray(u64, max_subtypes);
 };
 
-pub fn categorize(self: Abi, ty: Id, types: *Types) ?TmpSpec {
+pub fn categorize(self: Abi, ty: Id, types: *Types) TmpSpec {
     return switch (ty.data()) {
         .Builtin => |b| .{ .ByValue = switch (b) {
-            .never, .any => return null,
+            .any => unreachable,
+            .never => return .Impossible,
             .void => return .Imaginary,
             .u8, .i8, .bool => .i8,
             .u16, .i16 => .i16,
@@ -182,10 +189,11 @@ pub fn categorize(self: Abi, ty: Id, types: *Types) ?TmpSpec {
     };
 }
 
-pub fn categorizeAbleosNullable(id: utils.EntId(tys.Nullable), types: *Types) ?TmpSpec {
+pub fn categorizeAbleosNullable(id: utils.EntId(tys.Nullable), types: *Types) TmpSpec {
     const nullable = types.store.get(id);
-    const base_abi = Abi.ableos.categorize(nullable.inner, types) orelse return null;
+    const base_abi = Abi.ableos.categorize(nullable.inner, types);
     if (id.isCompact(types)) return base_abi;
+    if (base_abi == .Impossible) return .Imaginary;
     if (base_abi == .Imaginary) return .{ .ByValue = .i8 };
     if (base_abi == .ByValue) return .{ .ByValuePair = .{
         .types = .{ .i8, base_abi.ByValue },
@@ -195,7 +203,7 @@ pub fn categorizeAbleosNullable(id: utils.EntId(tys.Nullable), types: *Types) ?T
     return .ByRef;
 }
 
-pub fn categorizeAbleosSlice(id: utils.EntId(tys.Slice), types: *Types) ?TmpSpec {
+pub fn categorizeAbleosSlice(id: utils.EntId(tys.Slice), types: *Types) TmpSpec {
     const slice = types.store.get(id);
     if (slice.len == null) return .{ .ByValuePair = .{
         .types = .{ .i64, .i64 },
@@ -203,7 +211,8 @@ pub fn categorizeAbleosSlice(id: utils.EntId(tys.Slice), types: *Types) ?TmpSpec
         .alignment = 3,
     } };
     if (slice.len == 0) return .Imaginary;
-    const elem_abi = Abi.ableos.categorize(slice.elem, types) orelse return null;
+    const elem_abi = Abi.ableos.categorize(slice.elem, types);
+    if (elem_abi == .Impossible) return .Impossible;
     if (elem_abi == .Imaginary) return .Imaginary;
     if (slice.len == 1) return elem_abi;
     if (slice.len == 2 and elem_abi == .ByValue) return .{ .ByValuePair = .{
@@ -214,12 +223,13 @@ pub fn categorizeAbleosSlice(id: utils.EntId(tys.Slice), types: *Types) ?TmpSpec
     return .ByRef;
 }
 
-pub fn categorizeAbleosUnion(id: utils.EntId(tys.Union), types: *Types) ?TmpSpec {
+pub fn categorizeAbleosUnion(id: utils.EntId(tys.Union), types: *Types) TmpSpec {
     const fields = id.getFields(types);
-    if (fields.len == 0) return .Imaginary; // TODO: add .Impossible
-    const res = Abi.ableos.categorize(fields[0].ty, types) orelse return null;
+    if (fields.len == 0) return .Impossible; // TODO: add .Impossible
+    const res = Abi.ableos.categorize(fields[0].ty, types);
     for (fields[1..]) |f| {
-        const fspec = Abi.ableos.categorize(f.ty, types) orelse continue;
+        const fspec = Abi.ableos.categorize(f.ty, types);
+        if (fspec == .Impossible) continue;
         if (!std.meta.eql(res, fspec)) return .ByRef;
     }
     return res;
@@ -246,7 +256,8 @@ pub fn categorizeAbleosRecord(stru: anytype, types: *Types) TmpSpec {
     var res: TmpSpec = .Imaginary;
     var offset: u64 = 0;
     for (stru.getFields(types)) |f| {
-        const fspec = Abi.ableos.categorize(f.ty, types) orelse continue;
+        const fspec = Abi.ableos.categorize(f.ty, types);
+        if (fspec == .Impossible) return .Impossible;
         if (fspec == .Imaginary) continue;
         if (fspec == .ByRef) return fspec;
         if (res == .Imaginary) {
@@ -288,8 +299,8 @@ pub fn isByRefRet(self: Abi, spec: Spec) bool {
             else => false,
         },
         .systemv => switch (spec) {
-            .Imaginary, .ByValue => false,
-            else => true,
+            .ByRef, .ByValuePair => true,
+            else => false,
         },
         else => unreachable,
     };

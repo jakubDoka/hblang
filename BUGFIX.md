@@ -10,7 +10,7 @@ expectations := .{
 
 @handler("null_unwrap", fn(sloc: @SrcLoc()): never die)
 
-use_opt := fn(opt: ?uint): uint return opt.?
+use_opt := fn(opt: ?uint): uint return opt.? + opt.?
 
 main := fn(): uint {
     _ = use_opt(1)

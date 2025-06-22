@@ -36,8 +36,8 @@ null unwrap 1.use_opt:
          st $1, $254, 40, 8
          cp $1, $2
         jal $31, $0, :null unwrap 1.null_unwrap
-        jmp :1
 1:       ld $1, $254, 8, 8
+      add64 $1, $1, $1
      addi64 $254, $254, 56
          ld $31, $254, -8, 8
        jala $0, $31, 0

@@ -235,9 +235,12 @@ pub fn emitReachable(
 
         types.retainGlobals(.runtime, backend, scrath.allocator());
 
-        err catch {
-            errored = true;
-            continue;
+        err catch |e| switch (e) {
+            error.HasErrors => {
+                errored = true;
+                continue;
+            },
+            error.Uninhabited => continue,
         };
 
         var errors = std.ArrayListUnmanaged(static_anal.Error){};
@@ -278,7 +281,7 @@ pub fn deinit(self: *Codegen) void {
 }
 
 pub inline fn abiCata(self: *Codegen, ty: Types.Id) Types.Abi.Spec {
-    return @as(Types.Abi.TmpSpec, self.abi.categorize(ty, self.types) orelse .Imaginary).toPerm(ty, self.types);
+    return @as(Types.Abi.TmpSpec, self.abi.categorize(ty, self.types)).toPerm(ty, self.types);
 }
 
 pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]utils.EntId(root.frontend.types.Func) {
@@ -437,7 +440,7 @@ pub fn beginBuilder(
     scratch: *utils.Arena,
     ret: Types.Id,
     params: []const graph.AbiParam,
-    returns: []const graph.AbiParam,
+    returns: ?[]const graph.AbiParam,
     caps: struct {
         scope_cap: usize = 0,
         loop_cap: usize = 0,
@@ -454,7 +457,9 @@ pub fn beginBuilder(
     return res;
 }
 
-pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !void {
+const BuildError = error{ Uninhabited, HasErrors };
+
+pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) BuildError!void {
     errdefer {
         self.types.store.get(func_id).errored = true;
     }
@@ -471,7 +476,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
 
     if (fn_ast.body.tag() == .Directive and ast.exprs.get(fn_ast.body).Directive.kind == .import) {
         if (self.abi.cc == .ablecall) {
-            return self.report(fn_ast.body, "cant use @import() on this target", .{});
+            return self.report(fn_ast.body, "cant use @import() on this target", .{}) catch error.HasErrors;
         }
 
         const args = ast.exprs.view(ast.exprs.get(fn_ast.body).Directive.args);
@@ -487,7 +492,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
     }
 
     const params, const returns, const ret_abi =
-        func.computeAbi(self.abi, self.types, tmp.arena);
+        func.computeAbi(self.abi, self.types, tmp.arena) orelse return error.Uninhabited;
     const token = self.beginBuilder(
         tmp.arena,
         func.ret,
@@ -501,7 +506,8 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
     self.types.checkStack(func.key.file, func.key.ast) catch return error.HasErrors;
 
     if (func.recursion_lock) {
-        self.report(func.key.ast, "the functions types most likely depend on it being evaluated", .{}) catch {};
+        self.report(func.key.ast, "the functions types most likely" ++
+            " depend on it being evaluated", .{}) catch {};
         return error.HasErrors;
     }
     func.recursion_lock = true;
@@ -529,6 +535,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) !vo
 
         var len: usize = 1;
         const arg = switch (abi) {
+            .Impossible => unreachable,
             .ByRef => self.bl.addParam(i),
             .ByValue => if (params[i] == .Stack)
                 self.bl.addParam(i)
@@ -674,7 +681,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             if (nullable.nieche.offset(self.types)) |spec| {
                 switch (self.abiCata(nullable.inner)) {
-                    .Imaginary => unreachable,
+                    .Impossible => unreachable,
+                    .Imaginary => return .{ .ty = ty },
                     .ByValue => return .mkv(ty, self.bl.addIntImm(spec.kind.abi(), 0)),
                     .ByValuePair, .ByRef => {
                         const loc = ctx.loc orelse
@@ -686,7 +694,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 }
             } else {
                 switch (self.abiCata(ty)) {
-                    .Imaginary => unreachable,
+                    .Impossible => unreachable,
+                    .Imaginary => return .{ .ty = ty },
                     .ByValue => return .mkv(ty, self.bl.addIntImm(.i8, 0)),
                     .ByValuePair, .ByRef => {
                         const loc = ctx.loc orelse self.bl.addLocal(self.sloc(expr), ty.size(self.types));
@@ -704,16 +713,21 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             };
 
             const abi = self.abiCata(ty);
-            if (abi == .ByValue) if (abi.ByValue == .f32) {
-                return .mkv(ty, self.bl.addFlt32Imm(@bitCast(@as(u32, 0xaaaaaaaa))));
-            } else if (abi.ByValue == .f64) {
-                return .mkv(ty, self.bl.addFlt64Imm(@bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa))));
-            } else {
-                return .mkv(ty, self.bl.addIntImm(abi.ByValue, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa))));
-            } else {
-                const loc = ctx.loc orelse self.bl.addLocal(self.sloc(expr), ty.size(self.types));
-                return .mkp(ty, loc);
-            }
+            return switch (abi) {
+                .Impossible => return self.report(expr, "can't make an uninitialized" ++
+                    " {}, its uninhabited", .{ty}) catch error.Unreachable,
+                .Imaginary => .{ .ty = ty },
+                .ByValue => |t| if (t == .f32)
+                    .mkv(ty, self.bl.addFlt32Imm(@bitCast(@as(u32, 0xaaaaaaaa))))
+                else if (t == .f64)
+                    .mkv(ty, self.bl.addFlt64Imm(@bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa))))
+                else
+                    .mkv(ty, self.bl.addIntImm(abi.ByValue, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)))),
+                .ByValuePair, .ByRef => {
+                    const loc = ctx.loc orelse self.bl.addLocal(self.sloc(expr), ty.size(self.types));
+                    return .mkp(ty, loc);
+                },
+            };
         },
         .Ctor => |e| {
             if (e.ty.tag() == .Void and ctx.ty == null) {
@@ -1697,6 +1711,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             try self.typeCheck(expr, &value, self.ret);
             var slots: [2]*Node = undefined;
             const rets = switch (self.abiCata(value.ty)) {
+                .Impossible => return self.report(expr, "can't return uninhabited type", .{}),
                 .Imaginary => &.{},
                 .ByValue => &.{value.getValue(self)},
                 .ByValuePair => |pair| if (self.abi.isByRefRet(self.abiCata(value.ty))) b: {
@@ -1748,13 +1763,14 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             for (ast.exprs.view(e.captures), 0..) |cp, slot_idx| {
                 var val = try self.loadIdent(cp.pos, cp.id);
                 args.arg_slots[prefix + slot_idx * 2 ..][0..2].* = switch (self.abiCata(val.ty)) {
+                    .Impossible => unreachable, // TODO: wah
                     .Imaginary, .ByRef, .ByValuePair => .{ self.emitTyConst(val.ty).id.Value, self.bl.addIntImm(.i64, 0) },
                     .ByValue => .{ self.emitTyConst(val.ty).id.Value, val.getValue(self) },
                 };
             }
 
             const rets = self.bl.addCall(.ablecall, Comptime.eca, args);
-            return .mkv(.type, rets[0]);
+            return .mkv(.type, rets.?[0]);
         },
         .Fn => |e| {
             const captures = tmp.arena.alloc(Types.Scope.Capture, e.captures.len());
@@ -1763,7 +1779,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 var val = try self.loadIdent(cp.pos, cp.id);
 
                 slot.* = switch (self.abiCata(val.ty)) {
-                    .Imaginary, .ByRef, .ByValuePair => .{ .id = cp.id, .ty = val.ty },
+                    .Impossible, .Imaginary, .ByRef, .ByValuePair => .{ .id = cp.id, .ty = val.ty },
                     .ByValue => .{ .id = cp.id, .ty = val.ty, .value = try self.partialEval(cp.id, val.getValue(self)) },
                 };
             }
@@ -1865,7 +1881,7 @@ pub fn emitHandlerCall(self: *Codegen, handler: utils.EntId(tys.Func), expr: Ast
     defer tmp.deinit();
 
     const params, const returns, const ret_abi =
-        func.computeAbi(self.abi, self.types, tmp.arena);
+        func.computeAbi(self.abi, self.types, tmp.arena).?;
     const args = self.bl.allocCallArgs(tmp.arena, params, returns);
 
     var i: usize = self.pushReturn(expr, args, ret_abi, func.ret, .{});
@@ -1886,7 +1902,7 @@ pub fn emitHandlerCall(self: *Codegen, handler: utils.EntId(tys.Func), expr: Ast
         .{},
         func.ret,
         ret_abi,
-    );
+    ) catch {};
 
     builder.end(&self.bl, builder.beginElse(&self.bl));
 }
@@ -1919,7 +1935,8 @@ pub fn unwrapNullable(self: *Codegen, expr: Ast.Id, base: *Value) !void {
     }
 
     base.* = switch (self.abiCata(base.ty)) {
-        .Imaginary => unreachable,
+        .Impossible => unreachable,
+        .Imaginary => return self.report(expr, "option of uninhabited type cna not be unwrapped", .{}),
         .ByValue => .{ .ty = nullable.inner },
         .ByRef, .ByValuePair => .mkp(nullable.inner, self.bl.addFieldOffset(
             base.id.Pointer,
@@ -1978,7 +1995,7 @@ pub fn chechNull(self: *Codegen, expr: Ast.Id, lhs: *Value, op: Lexer.Lexeme) !V
     }
 
     var value = switch (self.abiCata(lhs.ty)) {
-        .Imaginary => unreachable,
+        .Impossible, .Imaginary => unreachable,
         .ByValue => lhs.getValue(self),
         .ByValuePair, .ByRef => self.bl.addLoad(lhs.id.Pointer, .i8),
     };
@@ -2110,7 +2127,7 @@ fn emitInternalEca(
     var builder = Types.Abi.ableos.builder();
 
     const params = tmp.arena.alloc(graph.AbiParam, 1 + args.len);
-    const returns = tmp.arena.alloc(graph.AbiParam, builder.len(true, self.abiCata(ret_ty)));
+    const returns = tmp.arena.alloc(graph.AbiParam, builder.len(true, self.abiCata(ret_ty)).?);
 
     params[0] = .{ .Reg = .i64 };
     for (args, params[1..]) |a, *ca| ca.* = .{ .Reg = a.data_type };
@@ -2128,7 +2145,7 @@ fn emitInternalEca(
         ctx,
         ret_ty,
         self.abiCata(ret_ty),
-    );
+    ) catch unreachable;
 }
 
 fn emitStructFoldOp(
@@ -2363,6 +2380,7 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
             if (cursor.index(self.types)) |idx| if (idx.search(id)) |v| break v;
             if (cursor.findCapture(pos, id, self.types)) |c| {
                 return .{ .ty = c.ty, .id = switch (self.abiCata(c.ty)) {
+                    .Impossible => return error.Unreachable,
                     .Imaginary => .Imaginary,
                     .ByValue => |v| .{ .Value = if (v.isInt())
                         self.bl.addIntImm(.i64, @bitCast(c.value))
@@ -2463,7 +2481,17 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
     }
 
     const params, const returns, const ret_abi =
-        func.computeAbi(self.abi, self.types, tmp.arena);
+        func.computeAbi(self.abi, self.types, tmp.arena) orelse {
+            std.debug.assert(computed_args == null);
+            const args_ast = ast.exprs.view(e.args);
+            for (func.args[@intFromBool(caller != null)..], 0..) |ty, k| {
+                _ = self.emitTyped(.{}, ty, args_ast[k]) catch |err| switch (err) {
+                    error.Unreachable => return error.Unreachable,
+                    error.Never => {},
+                };
+            }
+            unreachable;
+        };
     const args = self.bl.allocCallArgs(tmp.arena, params, returns);
 
     var i: usize = self.pushReturn(expr, args, ret_abi, func.ret, ctx);
@@ -2653,6 +2681,7 @@ fn pushParam(
 ) usize {
     var len: usize = 1;
     switch (abi) {
+        .Impossible => unreachable,
         .Imaginary => {
             len = 0;
         },
@@ -2687,16 +2716,17 @@ fn assembleReturn(
     ctx: Ctx,
     ret: Types.Id,
     ret_abi: Types.Abi.Spec,
-) Value {
+) !Value {
     const rets = self.bl.addCall(self.abi.cc, id, call_args);
     return switch (ret_abi) {
+        .Impossible => return error.Unreachable,
         .Imaginary => .mkv(ret, null),
-        .ByValue => .mkv(ret, rets[0]),
+        .ByValue => .mkv(ret, rets.?[0]),
         .ByValuePair => |pair| if (self.abi.isByRefRet(ret_abi)) b: {
             break :b .mkp(ret, call_args.arg_slots[0]);
         } else b: {
             const slot = ctx.loc orelse self.bl.addLocal(self.sloc(expr), ret.size(self.types));
-            for (pair.types, pair.offsets(), rets) |ty, off, vl| {
+            for (pair.types, pair.offsets(), rets.?) |ty, off, vl| {
                 self.bl.addFieldStore(slot, @intCast(off), ty, vl);
             }
             break :b .mkp(ret, slot);
@@ -3254,7 +3284,7 @@ fn emitDirective(
             dummy_func.ret = ret;
 
             const params, const returns, const ret_abi =
-                dummy_func.computeAbi(.ableos, self.types, tmp.arena);
+                dummy_func.computeAbi(.ableos, self.types, tmp.arena) orelse unreachable;
             const call_args = self.bl.allocCallArgs(tmp.arena, params, returns);
 
             var i: usize = self.pushReturn(expr, call_args, ret_abi, ret, ctx);

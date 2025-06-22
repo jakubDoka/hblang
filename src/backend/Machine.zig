@@ -180,9 +180,9 @@ pub const InlineFunc = struct {
             }
 
             if (new_node.asCfg()) |cfg| cfg.ext.idepth = 0;
-            if (new_node.subclass(graph.Region)) |cfg| cfg.ext.cached_lca = null;
             if (new_node.subclass(graph.builtin.Call)) |call|
                 call.ext.signature = call.ext.signature.dupe(arena.allocator());
+            if (new_node.isSub(graph.If) and already_present != 0) new_node.sloc = .none;
 
             new_node.input_base = (try arena.allocator()
                 .dupe(?*Func.Node, new_node.inputs())).ptr;
@@ -202,6 +202,13 @@ pub const InlineFunc = struct {
 
             for (node.outputs()) |*out| {
                 out.* = new_node_table[out.*.id];
+            }
+
+            if (node.subclass(graph.Region)) |cfg| {
+                if (cfg.ext.cached_lca != null) {
+                    cfg.ext.cached_lca =
+                        new_node_table[cfg.base.asCfg().?.idom().base.id];
+                }
             }
         }
 

@@ -212,7 +212,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     self.block_offsets = tmp.arena.alloc(i32, func.gcm.block_count);
     self.local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.gcm.block_count * 2));
     self.allocs = allocs;
-    self.ret_count = func.signature.returns().len;
+    self.ret_count = if (func.signature.returns()) |r| r.len else std.math.maxInt(usize);
 
     const is_tail = for (func.gcm.postorder) |bb| {
         if (bb.base.kind == .CallEnd) break false;
@@ -767,7 +767,9 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .Trap => |extra| {
                 switch (extra.code) {
-                    graph.infinite_loop_trap => return,
+                    graph.unreachable_func_trap,
+                    graph.infinite_loop_trap,
+                    => return,
                     0 => self.emit(.un, .{}),
                     1 => self.emit(.tx, .{}),
                     else => unreachable,

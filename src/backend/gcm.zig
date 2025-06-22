@@ -186,7 +186,9 @@ pub fn GcmMixin(comptime Backend: type) type {
 
             sched_early: {
                 for (cfg_rpo) |cfg| {
-                    if (cfg.base.kind != .Return or cfg.base.inputs()[0] != null) {
+                    if ((cfg.base.kind != .Return or cfg.base.inputs()[0] != null) and
+                        cfg.base.kind != .TrapRegion)
+                    {
                         _ = cfg.idom();
                     }
 
@@ -310,7 +312,6 @@ pub fn GcmMixin(comptime Backend: type) type {
                             var best = lca;
                             var cursor = best.base.cfg0();
                             while (cursor != early.idom()) : (cursor = cursor.idom()) {
-                                std.debug.assert(cursor.base.kind != .Start);
                                 if (cursor.better(best, t, self)) best = cursor;
                             }
 

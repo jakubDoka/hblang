@@ -467,7 +467,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     const postorder = func.collectPostorder(tmp.arena.allocator(), &visited);
 
     self.allocs = Regalloc.ralloc(X86_64, func);
-    self.ret_count = func.signature.returns().len;
+    self.ret_count = if (func.signature.returns()) |r| r.len else std.math.maxInt(usize);
     self.local_relocs = .initBuffer(tmp.arena.alloc(Reloc, 1024 * 10));
     self.block_offsets = tmp.arena.alloc(u32, postorder.len);
 
@@ -980,7 +980,9 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
             .Arg, .Ret, .Mem, .Never => {},
             .Trap => {
                 switch (instr.extra(.Trap).code) {
-                    graph.infinite_loop_trap => return,
+                    graph.unreachable_func_trap,
+                    graph.infinite_loop_trap,
+                    => return,
                     0 => self.emitInstr(zydis.ZYDIS_MNEMONIC_UD2, .{}),
                     else => unreachable,
                 }

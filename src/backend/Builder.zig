@@ -44,7 +44,7 @@ pub fn begin(
     self: *Builder,
     call_conv: graph.CallConv,
     params: []const graph.AbiParam,
-    returns: []const graph.AbiParam,
+    returns: ?[]const graph.AbiParam,
 ) BuildToken {
     const ctrl = self.func.addNode(.Entry, .top, &.{self.func.root}, .{});
     self.root_mem = self.func.addNode(.Mem, .top, &.{self.func.root}, .{});
@@ -461,20 +461,26 @@ pub fn addLoopAndBeginBody(self: *Builder, sloc: graph.Sloc) Loop {
 pub const CallArgs = struct {
     params: []const graph.AbiParam,
     arg_slots: []*BuildNode,
-    returns: []const graph.AbiParam,
-    return_slots: []*BuildNode,
+    returns: ?[]const graph.AbiParam,
+    return_slots: ?[]*BuildNode,
     hint: enum { @"construst this with Builder.allocCallArgs()" },
 };
 
 const arg_prefix_len = 2;
 
-pub fn allocCallArgs(_: *Builder, scratch: *root.Arena, params: []const graph.AbiParam, returns: []const graph.AbiParam) CallArgs {
-    const args = scratch.alloc(*BuildNode, arg_prefix_len + params.len + returns.len);
+pub fn allocCallArgs(
+    _: *Builder,
+    scratch: *root.Arena,
+    params: []const graph.AbiParam,
+    returns: ?[]const graph.AbiParam,
+) CallArgs {
+    const args = scratch.alloc(*BuildNode, arg_prefix_len + params.len +
+        if (returns) |r| r.len else 0);
     return .{
         .params = params,
         .returns = returns,
         .arg_slots = args[arg_prefix_len..][0..params.len],
-        .return_slots = args[arg_prefix_len + params.len ..],
+        .return_slots = if (returns != null) args[arg_prefix_len + params.len ..] else null,
         .hint = @enumFromInt(0),
     };
 }
@@ -484,7 +490,7 @@ pub fn addCall(
     call_conv: graph.CallConv,
     arbitrary_call_id: u32,
     args_with_initialized_arg_slots: CallArgs,
-) []const *BuildNode {
+) ?[]const *BuildNode {
     errdefer unreachable;
 
     const args = args_with_initialized_arg_slots;
@@ -524,15 +530,19 @@ pub fn addCall(
     const call_mem = self.func.addNode(.Mem, .top, &.{call_end}, .{});
     self.func.setInputNoIntern(self.scope.?, 1, call_mem);
 
-    for (args.return_slots, args.returns, 0..) |*slt, rty, i| {
-        slt.* = self.func.addNode(.Ret, rty.getReg(), &.{call_end}, .{ .index = i });
+    if (args.return_slots) |rslots| {
+        for (rslots, args.returns.?, 0..) |*slt, rty, i| {
+            slt.* = self.func.addNode(.Ret, rty.getReg(), &.{call_end}, .{ .index = i });
+        }
+    } else {
+        self.addTrap(graph.unreachable_func_trap);
     }
 
     return args.return_slots;
 }
 
 pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
-    for (values, self.func.signature.returns()) |val, rtt|
+    for (values, self.func.signature.returns().?) |val, rtt|
         if (val.data_type != val.data_type.meet(rtt.getReg()))
             root.panic("{s} != {s}", .{ @tagName(val.data_type), @tagName(rtt.getReg()) });
 

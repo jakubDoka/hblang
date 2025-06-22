@@ -10,6 +10,7 @@ fn tf(int: i64) f64 {
 }
 
 pub const infinite_loop_trap = std.math.maxInt(u64);
+pub const unreachable_func_trap = infinite_loop_trap - 1;
 
 pub const Sloc = packed struct(u64) {
     namespace: u32,
@@ -238,7 +239,7 @@ pub const CallConv = enum(u8) {
 
 pub const Signature = extern struct {
     par_base: [*]AbiParam = undefined,
-    ret_base: [*]AbiParam = undefined,
+    ret_base: ?[*]AbiParam = undefined,
     call_conv: CallConv = .refcall,
     par_count: u8 = 0,
     ret_count: u8 = 0,
@@ -246,26 +247,30 @@ pub const Signature = extern struct {
     pub fn initBuf(
         call_conv: CallConv,
         pars: []AbiParam,
-        rets: []AbiParam,
+        rets: ?[]AbiParam,
     ) Signature {
         errdefer unreachable;
         return .{
             .call_conv = call_conv,
             .par_base = pars.ptr,
-            .ret_base = rets.ptr,
+            .ret_base = if (rets) |r| r.ptr else null,
             .par_count = @intCast(pars.len),
-            .ret_count = @intCast(rets.len),
+            .ret_count = if (rets) |r| @intCast(r.len) else 0,
         };
     }
 
     pub fn init(
         call_conv: CallConv,
         pars: []const AbiParam,
-        rets: []const AbiParam,
+        rets: ?[]const AbiParam,
         arena: std.mem.Allocator,
     ) Signature {
         errdefer unreachable;
-        return .initBuf(call_conv, try arena.dupe(AbiParam, pars), try arena.dupe(AbiParam, rets));
+        return .initBuf(
+            call_conv,
+            try arena.dupe(AbiParam, pars),
+            if (rets) |r| try arena.dupe(AbiParam, r) else null,
+        );
     }
 
     pub fn dupe(self: @This(), arena: std.mem.Allocator) @This() {
@@ -276,8 +281,8 @@ pub const Signature = extern struct {
         return self.par_base[0..self.par_count];
     }
 
-    pub fn returns(self: @This()) []const AbiParam {
-        return self.ret_base[0..self.ret_count];
+    pub fn returns(self: @This()) ?[]const AbiParam {
+        return (self.ret_base orelse return null)[0..self.ret_count];
     }
 
     pub fn stackSize(self: @This()) u64 {
@@ -640,13 +645,19 @@ pub fn Func(comptime Backend: type) type {
                 }
 
                 pub fn idom(cfg: *CfgNode) *CfgNode {
-                    return switch (cfg.base.kind) {
-                        .Region => if (cfg.base.extra(.Region).cached_lca) |cached|
-                            @ptrCast(cached)
-                        else {
-                            const lca = findLca(cfg.base.inputs()[0].?.asCfg().?, cfg.base.inputs()[1].?.asCfg().?);
-                            cfg.base.extra(.Region).cached_lca = lca;
-                            return lca;
+                    return switch (cfg.base.extra2()) {
+                        .Region => |extra| {
+                            if (extra.cached_lca != null and
+                                @as(*Node, @ptrCast(extra.cached_lca)).id == std.math.maxInt(u16))
+                                extra.cached_lca = null;
+
+                            if (extra.cached_lca) |lca| {
+                                return @ptrCast(lca);
+                            } else {
+                                const lca = findLca(cfg.base.inputs()[0].?.asCfg().?, cfg.base.inputs()[1].?.asCfg().?);
+                                cfg.base.extra(.Region).cached_lca = lca;
+                                return lca;
+                            }
                         },
                         else => cfg.base.cfg0(),
                     };
@@ -983,6 +994,7 @@ pub fn Func(comptime Backend: type) type {
                 for (self.inputs()) |oi| if (oi) |i| {
                     i.removeUse(self);
                 };
+
                 self.* = undefined;
                 self.id = std.math.maxInt(u16);
             }
@@ -1492,6 +1504,7 @@ pub fn Func(comptime Backend: type) type {
             if (use.inputs()[idx] == def) return null;
             if (use.inputs()[idx]) |n| {
                 n.removeUse(use);
+                //self.fmtUnscheduled(std.io.getStdErr().writer().any(), .escape_codes);
             }
 
             self.uninternNode(use);
@@ -1586,6 +1599,9 @@ pub fn Func(comptime Backend: type) type {
                 };
 
                 for (worklist.list.items[i].outputs()) |o| {
+                    if (o.id == std.math.maxInt(u16)) {
+                        std.debug.print("{} {} {any}\n", .{ worklist.list.items[i], worklist.list.items[i].data_type, self.end.inputs() });
+                    }
                     worklist.add(o);
                 }
             }
@@ -1646,20 +1662,59 @@ pub fn Func(comptime Backend: type) type {
 
             if (node.kind == .TrapRegion) {
                 is_dead = true;
-                for (node.inputs(), 0..) |inp, i| {
-                    if (inp != null and isDead(inp)) {
-                        self.setInputNoIntern(node, i, null);
-                        worklist.add(inp.?);
+                for (node.inputs()) |*inp| {
+                    if (inp.* != null and isDead(inp.*)) {
+                        inp.*.?.removeUse(node);
+                        worklist.add(inp.*.?);
+                        inp.* = null;
                     }
-                    is_dead = is_dead and isDead(inp);
+                    is_dead = is_dead and isDead(inp.*);
                 }
 
+                var retain: usize = 0;
+                for (node.inputs()) |a| {
+                    if (a != null) {
+                        node.inputs()[retain] = a;
+                        retain += 1;
+                    }
+                }
+                node.input_len = @intCast(retain);
+                node.input_ordered_len = @intCast(retain);
+
                 if (is_dead) {
+                    std.debug.assert(for (node.inputs()) |i| {
+                        if (i != null) break false;
+                    } else true);
+
                     self.setInputNoIntern(self.end, 2, null);
+
                     worklist.add(node);
                 }
 
                 return null;
+            }
+
+            if (node.kind == .If and node.data_type != .bot and
+                node.inputs()[1].?.kind != .CInt)
+            {
+                var cursor = node.cfg0();
+                while (cursor.base.kind != .Entry and
+                    cursor.base.id != std.math.maxInt(u16)) : (cursor = cursor.idom())
+                {
+                    if (cursor.base.kind != .Then and cursor.base.kind != .Else) continue;
+
+                    const if_node = cursor.base.inputs()[0].?;
+                    if (if_node.kind != .If) continue;
+
+                    if (if_node.inputs()[1].? == node.inputs()[1].?) {
+                        self.setInputNoIntern(node, 1, self.addIntImm(
+                            .i8,
+                            @intFromBool(cursor.base.kind == .Then),
+                        ));
+                        for (node.outputs()) |o| worklist.add(o);
+                        return null;
+                    }
+                }
             }
 
             if (is_dead and node.data_type != .bot) {
@@ -1710,7 +1765,6 @@ pub fn Func(comptime Backend: type) type {
                 const cond = if_node.inputs()[1].?;
                 if (cond.kind == .CInt and cond.extra(.CInt).value != 0) {
                     if_node.data_type = .bot;
-                    if_node.outputs()[1].data_type = .bot;
                     worklist.add(if_node.outputs()[1]);
                     return if_node.inputs()[0].?;
                 }
@@ -1721,7 +1775,6 @@ pub fn Func(comptime Backend: type) type {
                 const cond = if_node.inputs()[1].?;
                 if (cond.kind == .CInt and cond.extra(.CInt).value == 0) {
                     if_node.data_type = .bot;
-                    if_node.outputs()[0].data_type = .bot;
                     worklist.add(if_node.outputs()[0]);
                     return if_node.inputs()[0].?;
                 }
@@ -1835,7 +1888,6 @@ pub fn Func(comptime Backend: type) type {
                         if (use.knownMemOp()) |op| {
                             if (op[0] == node) continue;
                             if (op[0].kind != .Store) {
-                                std.debug.print("{}\n", .{op});
                                 break :memcpy;
                             }
                         } else break :memcpy;

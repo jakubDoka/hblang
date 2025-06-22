@@ -4,13 +4,11 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	push rbx
 	push rbp
 	push r12
-	push r13
 	sub rsp, 0x48
-	mov r13, rdi
 	mov r12, rsi
 	mov rbp, 0x00
 	cmp rbp, r12
-	jb :1
+	jb :0
 	lea rcx, [rsp+0x20]
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x20], rax
@@ -30,11 +28,9 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	mov rsi, rbp
 	mov rdx, rbp
 	call :directives 20 (@handler, @SourceLoc).slice_ioob
-	jmp :1
-1:	mov al, [r13]
+0:	mov al, [rdi]
 	movzx rax, al
 	add rsp, 0x48
-	pop r13
 	pop r12
 	pop rbp
 	pop rbx

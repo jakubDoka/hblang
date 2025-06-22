@@ -68,7 +68,7 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
             var i: usize = 0;
             while (i < work.list.items.len) : (i += 1) {
                 const node = work.list.items[i];
-                if (node.isSub(graph.If)) b: {
+                if (node.isSub(graph.If) and node.sloc != graph.Sloc.none) b: {
                     const ld = func.loopDepth(node);
                     for (node.outputs()) |o| {
                         if (func.loopDepth(o) < ld) break;
