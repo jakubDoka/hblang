@@ -161,13 +161,13 @@ pub fn categorize(self: Abi, ty: Id, types: *Types) TmpSpec {
             .f64 => .f64,
         } },
         .Pointer => .{ .ByValue = .i64 },
-        .Enum => .{ .ByValue = switch (ty.size(types)) {
-            0 => return .Imaginary,
-            1 => .i8,
-            2 => .i16,
-            4 => .i32,
-            8 => .i64,
-            else => unreachable,
+        .Enum => |enm| .{ .ByValue = switch (enm.getFields(types).len) {
+            0 => return .Impossible,
+            1 => return .Imaginary,
+            2...255 => .i8,
+            256...std.math.maxInt(u16) => .i16,
+            std.math.maxInt(u16) + 1...std.math.maxInt(u32) => .i32,
+            std.math.maxInt(u32) + 1...std.math.maxInt(u64) => .i64,
         } },
         .Union => |s| switch (self.cc) {
             .ablecall, .systemv => categorizeAbleosUnion(s, types),
@@ -193,14 +193,16 @@ pub fn categorizeAbleosNullable(id: utils.EntId(tys.Nullable), types: *Types) Tm
     const nullable = types.store.get(id);
     const base_abi = Abi.ableos.categorize(nullable.inner, types);
     if (id.isCompact(types)) return base_abi;
-    if (base_abi == .Impossible) return .Imaginary;
-    if (base_abi == .Imaginary) return .{ .ByValue = .i8 };
-    if (base_abi == .ByValue) return .{ .ByValuePair = .{
-        .types = .{ .i8, base_abi.ByValue },
-        .padding = @intCast(base_abi.ByValue.size() - 1),
-        .alignment = @intCast(std.math.log2_int(u64, base_abi.ByValue.size())),
-    } };
-    return .ByRef;
+    return switch (base_abi) {
+        .Impossible => .Imaginary,
+        .Imaginary => .{ .ByValue = .i8 },
+        .ByValue => |v| .{ .ByValuePair = .{
+            .types = .{ .i8, v },
+            .padding = @intCast(v.size() - 1),
+            .alignment = @intCast(std.math.log2_int(u64, v.size())),
+        } },
+        .ByValuePair, .ByRef => .ByRef,
+    };
 }
 
 pub fn categorizeAbleosSlice(id: utils.EntId(tys.Slice), types: *Types) TmpSpec {

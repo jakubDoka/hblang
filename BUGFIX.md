@@ -2,6 +2,26 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### wired pointer edge cases
+```hb
+expectations := .{
+    should_error: true,
+}
+
+main := fn(): uint {
+    ptr: ^enum{} = idk
+    optr: ^void = idk
+
+    vl := ptr.*
+    ovl := optr.*
+    ptr.* = idk
+    optr.* = {
+    }
+
+    return 0
+}
+```
+
 #### cstring indexing
 ```hb
 @handler("slice_ioob", fn(sloc: @SrcLoc(), slice_len: uint, start: uint, end: uint): never {

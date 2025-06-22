@@ -1224,6 +1224,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 return self.report(e, "only pointer types can be dereferenced, {} is not", .{base.ty});
             };
 
+            if (self.abiCata(ptr.*) == .Impossible) {
+                return self.report(e, "dereferencing uninhabited type ({}) is not allowed", .{base.ty});
+            }
+
             return .mkp(ptr.*, base.getValue(self));
         },
         .Tag => |e| {
@@ -1265,12 +1269,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                             " (the type is 'never')", .{});
                     }
 
-                    if (base.id == .Imaginary) return .mkv(ftype, null);
-
-                    // this can happen in the @TypeOf
-                    if (base.id == .Value) return .mkv(ftype, base.id.Value);
-
-                    return .mkp(ftype, self.bl.addFieldOffset(base.id.Pointer, @intCast(offset)));
+                    return switch (base.id) {
+                        .Imaginary => .mkv(ftype, null),
+                        .Value => |v| .mkv(ftype, v),
+                        .Pointer => |p| .mkp(ftype, self.bl.addFieldOffset(p, @intCast(offset))),
+                    };
                 },
                 .Union => |union_ty| {
                     const ftype = for (union_ty.getFields(self.types)) |tf| {
@@ -1287,12 +1290,8 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         return self.report(e.field, "accessing malformed field (the type is 'never')", .{});
                     }
 
-                    if (base.id == .Imaginary) return .mkv(ftype, null);
-
-                    // this can happen when immediately accessing union field
-                    if (base.id == .Value) return .mkv(ftype, base.id.Value);
-
-                    return .mkp(ftype, self.bl.addFieldOffset(base.id.Pointer, 0));
+                    base.ty = ftype;
+                    return base;
                 },
                 .Slice => |slice_ty| {
                     const slice = self.types.store.get(slice_ty);
@@ -1412,14 +1411,14 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     var elem: @TypeOf(iter.next().?) = undefined;
                     for (0..@as(usize, @intCast(idx)) + 1) |_| elem = iter.next().?;
 
-                    if (base.id == .Imaginary) return .mkv(elem.field.ty, null);
-
-                    if (base.id == .Value) return .mkv(elem.field.ty, base.id.Value);
-
-                    return .mkp(
-                        elem.field.ty,
-                        self.bl.addFieldOffset(base.id.Pointer, @intCast(elem.offset)),
-                    );
+                    return switch (base.id) {
+                        .Imaginary => .mkv(elem.field.ty, null),
+                        .Value => |v| .mkv(elem.field.ty, v),
+                        .Pointer => |p| .mkp(
+                            elem.field.ty,
+                            self.bl.addFieldOffset(p, @intCast(elem.offset)),
+                        ),
+                    };
                 },
                 .Slice => |slice_ty| {
                     const slice = self.types.store.get(slice_ty);
@@ -2227,6 +2226,7 @@ pub fn emitGenericStore(self: *Codegen, loc: *Node, value: *Value) void {
     if (self.abiCata(value.ty) == .ByValue) {
         _ = self.bl.addStore(loc, self.abiCata(value.ty).ByValue, value.getValue(self));
     } else if (value.id.Pointer != loc) {
+        //if (self.abiCata(value.ty) == .Impossible) unreachable;
         _ = self.bl.addFixedMemCpy(loc, value.id.Pointer, value.ty.size(self.types));
     }
 }
