@@ -1368,14 +1368,17 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 },
             };
 
-            if (self.types.handlers.slice_ioob) |handler| {
-                var len = Value.mkv(.uint, self.bl.addFieldLoad(base.id.Pointer, TySlice.len_offset, .i64));
+            if (base.ty.data() == .Slice) if (self.types.handlers.slice_ioob) |handler| {
+                var len = Value.mkv(.uint, if (self.types.store.get(base.ty.data().Slice).len) |l|
+                    self.bl.addIntImm(.i64, @intCast(l))
+                else
+                    self.bl.addFieldLoad(base.id.Pointer, TySlice.len_offset, .i64));
                 const range_check = self.bl.addBinOp(.uge, .i8, end.getValue(self), len.getValue(self));
                 const order_check = self.bl.addBinOp(.ugt, .i8, start.getValue(self), end.getValue(self));
                 const check = self.bl.addBinOp(.bor, .i8, range_check, order_check);
                 var arg_values = [_]Value{ undefined, len, start, end };
                 self.emitHandlerCall(handler, e.subscript, check, &arg_values);
-            }
+            };
 
             ptr.id = .{ .Value = self.bl.addIndexOffset(
                 ptr.getValue(self),
@@ -1426,7 +1429,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         base.id.Pointer;
 
                     if (self.types.handlers.slice_ioob) |handler| {
-                        var len = Value.mkv(.uint, self.bl.addFieldLoad(base.id.Pointer, TySlice.len_offset, .i64));
+                        var len = Value.mkv(.uint, if (slice.len) |len|
+                            self.bl.addIntImm(.i64, @intCast(len))
+                        else
+                            self.bl.addFieldLoad(base.id.Pointer, TySlice.len_offset, .i64));
+
                         const check = self.bl.addBinOp(.uge, .i8, idx_value.getValue(self), len.getValue(self));
                         var arg_values = [_]Value{ undefined, len, idx_value, idx_value };
                         self.emitHandlerCall(handler, e.subscript, check, &arg_values);

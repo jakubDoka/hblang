@@ -1,0 +1,93 @@
+cstring indexing.slice_ioob:
+	ud2
+cstring indexing.cstr:
+	push rbx
+	mov rbx, rsi
+	mov rax, 0x00
+	mov rdx, 0x00
+	mov rcx, rax
+1:	mov rsi, rbx
+	add rsi, rcx
+	mov al, [rsi]
+	cmp al, dl
+	jz :0
+	mov rax, rcx
+	add rax, 0x01
+	mov rcx, rax
+	jmp :1
+0:	mov [rdi], rbx
+	mov rax, rcx
+	sub rax, 0x00
+	mov [rdi+0x08], rax
+	pop rbx
+	ret
+main:
+	push rbx
+	push rbp
+	push r12
+	sub rsp, 0x68
+	mov r8, 0x00
+	lea rdi, [rsp+0x40]
+	lea rax, [0x0000000000000007]
+	mov [rsp+0x40], rax
+	lea rax, [0x0000000000000007]
+	mov [rsp+0x48], rax
+	mov r12, 0x02
+	mov rsi, 0x00
+	mov rbx, 0x08
+	mov rbp, r8
+4:	mov rcx, rbp
+	imul rcx, rbx
+	cmp rbp, 0x02
+	setb dl
+	movzx rdx, dl
+	mov rax, rdi
+	add rax, rcx
+	test dl, dl
+	jz :0
+	cmp rbp, r12
+	jb :1
+	lea rcx, [rsp+0x20]
+	lea rax, [0x0000000000000007]
+	mov [rsp+0x20], rax
+	mov rax, 0x10
+	mov [rsp+0x28], rax
+	mov [rsp+0x30], rax
+	mov rax, 0x11
+	mov [rsp+0x38], rax
+	lea rbx, [rsp]
+	mov rax, 0x20
+	mov rdi, rbx
+	mov rsi, rcx
+	mov rdx, rax
+	call :memcpy
+	mov rdi, r12
+	mov rsi, rbp
+	mov rdx, rbp
+	call :cstring indexing.slice_ioob
+1:	mov rdx, [rax]
+	mov rcx, r8
+3:	mov rax, rdx
+	add rax, rcx
+	mov al, [rax]
+	cmp al, sil
+	jz :2
+	mov rax, rcx
+	add rax, 0x01
+	mov rcx, rax
+	jmp :3
+2:	mov [rsp+0x50], rdx
+	mov rdx, rbp
+	add rdx, 0x01
+	mov rax, rcx
+	sub rax, 0x00
+	mov [rsp+0x58], rax
+	mov rbp, rdx
+	jmp :4
+0:	mov rax, r8
+	add rsp, 0x68
+	pop r12
+	pop rbp
+	pop rbx
+	ret
+memcpy:

@@ -1,10 +1,6 @@
 main:
        li64 $1, 0
          tx
-exhausitve inlining 1.no_op:
-       jala $0, $31, 0
-exhausitve inlining 1.some_mem_ops:
-       jala $0, $31, 0
 exhausitve inlining 1.unreachable:
          un
 exhausitve inlining 1.loop_fn:
@@ -13,3 +9,7 @@ exhausitve inlining 1.loop_fn:
        jala $0, $31, 0
 0:   addi64 $1, $1, -1
         jmp :1
+exhausitve inlining 1.some_mem_ops:
+       jala $0, $31, 0
+exhausitve inlining 1.no_op:
+       jala $0, $31, 0

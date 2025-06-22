@@ -924,9 +924,21 @@ pub const OptOptions = struct {
             const pi_opts = optimizations.asPostInlining();
             var arena = bout.inline_func_nodes.promote(gpa);
             const funcs = tmp.arena.alloc(Func, bout.inline_funcs.items.len);
-            for (bout.funcs.items, 0..) |sym_id, i| {
-                if (sym_id == .invalid) continue;
-                const sym = &bout.syms.items[@intFromEnum(sym_id)];
+
+            const sym_to_idx = tmp.arena.alloc(u32, bout.syms.items.len);
+
+            for (bout.funcs.items, 0..) |sym, i| {
+                if (sym == .invalid) continue;
+                sym_to_idx[@intFromEnum(sym)] = @intCast(i);
+            }
+
+            for (bout.globals.items, 0..) |sym, i| {
+                if (sym == .invalid) continue;
+                sym_to_idx[@intFromEnum(sym)] = @intCast(i);
+            }
+
+            for (bout.syms.items, sym_to_idx) |sym, i| {
+                if (sym.kind != .func) continue;
                 if (sym.linkage == .imported) {
                     try out.startDefineFunc(
                         gpa,
@@ -952,39 +964,39 @@ pub const OptOptions = struct {
             //
             std.mem.swap(Data, &out, bout);
 
-            for (out.globals.items, 0..) |sym_id, i| {
-                if (sym_id == .invalid) continue;
-                const sym = &out.syms.items[@intFromEnum(sym_id)];
-                backend.emitData(.{
-                    .name = out.lookupName(sym.name),
-                    .id = @intCast(i),
-                    .value = .{ .init = out.code.items[sym.offset..][0..sym.size] },
-                    .readonly = sym.readonly,
-                });
-            }
+            for (out.syms.items, sym_to_idx) |sym, i| {
+                switch (sym.kind) {
+                    .func => {
+                        if (sym.linkage == .imported) continue;
+                        var func = &funcs[sym.nodes];
+                        func.arena = arena;
 
-            for (out.funcs.items, 0..) |sym_id, i| {
-                if (sym_id == .invalid) continue;
-                const sym = &out.syms.items[@intFromEnum(sym_id)];
-                if (sym.linkage == .imported) continue;
-                var func = &funcs[sym.nodes];
-                func.arena = arena;
-
-                backend.emitFunc(func, .{
-                    .name = out.lookupName(sym.name),
-                    .id = @intCast(i),
-                    .linkage = sym.linkage,
-                    .is_inline = false,
-                    .optimizations = b: {
-                        var op = OptOptions.none;
-                        op.do_gcm = true;
-                        op.error_buf = optimizations.error_buf;
-                        op.arena = optimizations.arena;
-                        op.verbose = optimizations.verbose;
-                        break :b op;
+                        backend.emitFunc(func, .{
+                            .name = out.lookupName(sym.name),
+                            .id = @intCast(i),
+                            .linkage = sym.linkage,
+                            .is_inline = false,
+                            .optimizations = b: {
+                                var op = OptOptions.none;
+                                op.do_gcm = true;
+                                op.error_buf = optimizations.error_buf;
+                                op.arena = optimizations.arena;
+                                op.verbose = optimizations.verbose;
+                                break :b op;
+                            },
+                        });
+                        arena = func.arena;
                     },
-                });
-                arena = func.arena;
+                    .data => {
+                        backend.emitData(.{
+                            .name = out.lookupName(sym.name),
+                            .id = @intCast(i),
+                            .value = .{ .init = out.code.items[sym.offset..][0..sym.size] },
+                            .readonly = sym.readonly,
+                        });
+                    },
+                    .prealloc, .invalid => unreachable,
+                }
             }
 
             out.inline_func_nodes = arena.state;

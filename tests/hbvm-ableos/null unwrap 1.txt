@@ -1,5 +1,3 @@
-null unwrap 1.null_unwrap:
-         un
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -24
@@ -35,3 +33,5 @@ null unwrap 1.use_opt:
      addi64 $254, $254, 40
          ld $31, $254, -8, 8
        jala $0, $31, 0
+null unwrap 1.null_unwrap:
+         un

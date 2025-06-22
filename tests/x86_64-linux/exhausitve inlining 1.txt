@@ -1,7 +1,3 @@
-exhausitve inlining 1.no_op:
-	ret
-exhausitve inlining 1.some_mem_ops:
-	ret
 exhausitve inlining 1.unreachable:
 	ud2
 exhausitve inlining 1.loop_fn:
@@ -16,6 +12,10 @@ exhausitve inlining 1.loop_fn:
 	sub rax, 0x01
 	mov rcx, rax
 	jmp :1
+exhausitve inlining 1.some_mem_ops:
+	ret
+exhausitve inlining 1.no_op:
+	ret
 main:
 	mov rax, 0x00
 	ret

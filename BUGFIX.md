@@ -2,6 +2,30 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### cstring indexing
+```hb
+@handler("slice_ioob", fn(sloc: @SrcLoc(), slice_len: uint, start: uint, end: uint): never {
+    die
+})
+
+$cstr := fn(c_str: ^u8): []u8 {
+    len := 0
+    while (c_str + len).* != 0 len += 1
+    return c_str[..len]
+}
+
+main := fn(): uint {
+    args := (^u8).["aa\0".ptr, "bb\0".ptr]
+
+    len := 0
+    while len < args.len {
+        _ = cstr(args[len])
+        len += 1
+    }
+    return 0
+}
+```
+
 #### null unwrap 1
 ```hb
 expectations := .{

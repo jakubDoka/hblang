@@ -1954,7 +1954,10 @@ use_slice := fn(slice: []u8): uint {
 }
 
 main := fn(): uint {
-    return use_slice(&.[])
+    vl: u8 = 0
+    slc := (&vl)[..1]
+
+    return use_slice(slc[..0])
 }
 ```
 

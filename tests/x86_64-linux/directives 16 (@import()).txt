@@ -11,5 +11,5 @@ main:
 	add rsp, 0x08
 	pop rbx
 	ret
-malloc:
 free:
+malloc:
