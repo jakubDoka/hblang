@@ -12,12 +12,10 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	mov [rsp+0x20], rax
 	mov rax, 0x24
 	mov [rsp+0x28], rax
-	mov rax, 0x12
+	mov rax, 0xF00000012
 	mov [rsp+0x30], rax
-	mov rax, 0x0F
-	mov [rsp+0x38], rax
-	lea rbx, [rsp]
 	mov rax, 0x20
+	lea rbx, [rsp]
 	mov rdi, rbx
 	mov rsi, rcx
 	mov rdx, rax

@@ -1917,8 +1917,9 @@ pub fn emitSrcLoc(self: *Codegen, expr: Ast.Id) Value {
     const src_loc = self.bl.addLocal(.none, self.types.source_loc.size(self.types));
     _ = self.emitStirng(.{ .loc = src_loc }, self.ast.path, expr);
     const line, const col = Ast.lineCol(self.ast.source, self.ast.posOf(expr).index);
-    _ = self.bl.addFieldStore(src_loc, 16, .i64, self.bl.addIntImm(.i64, @intCast(line)));
-    _ = self.bl.addFieldStore(src_loc, 24, .i64, self.bl.addIntImm(.i64, @intCast(col)));
+    comptime std.debug.assert(@import("builtin").cpu.arch.endian() == .little);
+    const pcked = col << 32 | line;
+    _ = self.bl.addFieldStore(src_loc, 16, .i64, self.bl.addIntImm(.i64, @intCast(pcked)));
     return .mkp(self.types.source_loc, src_loc);
 }
 

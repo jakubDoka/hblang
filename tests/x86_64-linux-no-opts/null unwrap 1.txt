@@ -12,12 +12,10 @@ null unwrap 1.use_opt:
 	mov [rsp+0x20], rax
 	mov rax, 0x0D
 	mov [rsp+0x28], rax
-	mov rax, 0x07
+	mov rax, 0x2800000007
 	mov [rsp+0x30], rax
-	mov rax, 0x28
-	mov [rsp+0x38], rax
-	mov rax, 0x20
 	lea rbx, [rsp]
+	mov rax, 0x20
 	mov rdi, rbx
 	mov rsi, rcx
 	mov rdx, rax

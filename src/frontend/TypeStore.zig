@@ -554,8 +554,8 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: std.io.AnyWriter) *
         .size = 32,
         .fields = slot.pool.arena.dupe(tys.Struct.Field, &.{
             .{ .name = "src", .ty = slot.string },
-            .{ .name = "line", .ty = .uint },
-            .{ .name = "col", .ty = .uint },
+            .{ .name = "line", .ty = .u32 },
+            .{ .name = "col", .ty = .u32 },
         }),
     }) });
 

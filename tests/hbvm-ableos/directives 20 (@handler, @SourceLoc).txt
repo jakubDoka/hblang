@@ -21,10 +21,8 @@ directives 20 (@handler, @SourceLoc).use_slice:
          st $1, $254, 0, 8
        li64 $1, 36
          st $1, $254, 8, 8
-       li64 $1, 18
+       li64 $1, 64424509458
          st $1, $254, 16, 8
-       li64 $1, 15
-         st $1, $254, 24, 8
          cp $1, $2
          cp $2, $4
          cp $4, $3

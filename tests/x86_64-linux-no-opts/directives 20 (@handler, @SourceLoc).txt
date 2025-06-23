@@ -16,12 +16,10 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	mov [rsp+0x20], rax
 	mov rax, 0x24
 	mov [rsp+0x28], rax
-	mov rax, 0x12
+	mov rax, 0xF00000012
 	mov [rsp+0x30], rax
-	mov rax, 0x0F
-	mov [rsp+0x38], rax
-	mov rax, 0x20
 	lea rbx, [rsp]
+	mov rax, 0x20
 	mov rdi, rbx
 	mov rsi, rcx
 	mov rdx, rax
@@ -44,17 +42,17 @@ main:
 	push r12
 	sub rsp, 0x68
 	mov r12, 0x00
-	lea rcx, [rsp+0x60]
-	mov rax, 0x00
-	mov [rsp+0x60], al
-	mov [rsp+0x40], rcx
-	mov rbx, 0x01
-	mov [rsp+0x48], rbx
+	lea rax, [rsp+0x60]
+	mov rcx, 0x00
+	mov [rsp+0x60], cl
+	mov [rsp+0x40], rax
+	mov rax, 0x01
+	mov [rsp+0x48], rax
 	mov rbp, [rsp+0x48]
 	cmp r12, rbp
 	setnb dl
 	movzx rdx, dl
-	or rdx, rax
+	or rdx, rcx
 	test dl, dl
 	jz :0
 	lea rcx, [rsp+0x20]
@@ -62,8 +60,8 @@ main:
 	mov [rsp+0x20], rax
 	mov rax, 0x24
 	mov [rsp+0x28], rax
-	mov [rsp+0x30], rbx
-	mov [rsp+0x38], rbx
+	mov rax, 0x100000001
+	mov [rsp+0x30], rax
 	lea rbx, [rsp]
 	mov rax, 0x20
 	mov rdi, rbx
