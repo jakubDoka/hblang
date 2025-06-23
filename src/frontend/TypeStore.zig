@@ -284,6 +284,18 @@ pub const Id = enum(IdRepr) {
 
     pub fn findNieche(self: Id, types: *Types) ?root.frontend.types.Nullable.NiecheSpec {
         return switch (self.data()) {
+            .Builtin => |b| switch (b) {
+                .never => .{ .offset = 0, .kind = .impossible },
+                else => null,
+            },
+            .Enum => |u| if (u.getFields(types).len == 0)
+                .{ .offset = 0, .kind = .impossible }
+            else
+                null,
+            .Union => |u| if (u.getFields(types).len == 0)
+                .{ .offset = 0, .kind = .impossible }
+            else
+                null,
             .Pointer => return .{ .offset = 0, .kind = .ptr },
             .Struct => |s| {
                 var offs: tys.Struct.Id.OffIter = s.offsetIter(types);

@@ -1599,9 +1599,6 @@ pub fn Func(comptime Backend: type) type {
                 };
 
                 for (worklist.list.items[i].outputs()) |o| {
-                    if (o.id == std.math.maxInt(u16)) {
-                        std.debug.print("{} {} {any}\n", .{ worklist.list.items[i], worklist.list.items[i].data_type, self.end.inputs() });
-                    }
                     worklist.add(o);
                 }
             }

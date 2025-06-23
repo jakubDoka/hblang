@@ -8,8 +8,6 @@ var gpa_impl = std.heap.DebugAllocator(.{}){};
 const gpa = if (std.debug.runtime_safety) gpa_impl.allocator() else std.heap.smp_allocator;
 var cli_buff: [1024 * 8]u8 = undefined;
 
-pub const foobar = {};
-
 pub fn main() !void {
     var opts = hb.CompileOptions{
         .diagnostics = std.io.getStdErr().writer().any(),

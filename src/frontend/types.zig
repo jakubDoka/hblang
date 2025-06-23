@@ -80,17 +80,19 @@ pub const Nullable = struct {
     };
 
     pub const NiecheSpec = packed struct(u64) {
-        kind: enum(u1) {
+        kind: enum(u2) {
             bool,
             ptr,
+            impossible,
             pub fn abi(self: @This()) graph.DataType {
                 return switch (self) {
                     .bool => .i8,
                     .ptr => .i64,
+                    .impossible => .bot,
                 };
             }
         },
-        offset: std.meta.Int(.unsigned, @bitSizeOf(u64) - 1),
+        offset: std.meta.Int(.unsigned, @bitSizeOf(u64) - 2),
     };
 };
 

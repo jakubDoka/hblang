@@ -293,6 +293,7 @@ fn parseUnit(self: *Parser) Error!Id {
 }
 
 fn report(self: *Parser, pos: u32, msg: []const u8, args: anytype) void {
+    self.errored = true;
     const file = Ast{
         .path = self.path,
         .source = self.lexer.source,

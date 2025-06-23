@@ -497,7 +497,7 @@ pub fn report(self: *const Ast, types: anytype, pos: u32, msg: []const u8, args:
     defer tmp.deinit();
 
     const fields = std.meta.fields(@TypeOf(args));
-    var argss: [fields.len][]const u8 = undefined;
+    var argss: [fields.len + 1][]const u8 = undefined;
     inline for (0..fields.len) |i| {
         if (fields[i].type == Types.Id) {
             argss[i] = try std.fmt.allocPrint(tmp.arena.allocator(), "{}", .{args[i].fmt(types)});
@@ -507,6 +507,7 @@ pub fn report(self: *const Ast, types: anytype, pos: u32, msg: []const u8, args:
             argss[i] = try std.fmt.allocPrint(tmp.arena.allocator(), "{}", .{args[i]});
         }
     }
+    argss[fields.len] = "";
 
     Ast.reportLow(self.path, self.source, pos, msg, &argss, types.colors, types.diagnostics);
 }

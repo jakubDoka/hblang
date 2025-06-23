@@ -1920,7 +1920,7 @@ pub fn emitSrcLoc(self: *Codegen, expr: Ast.Id) Value {
     _ = self.emitStirng(.{ .loc = src_loc }, self.ast.path, expr);
     const line, const col = Ast.lineCol(self.ast.source, self.ast.posOf(expr).index);
     comptime std.debug.assert(@import("builtin").cpu.arch.endian() == .little);
-    const pcked = col << 32 | line;
+    const pcked = @as(u64, col) << 32 | @as(u64, line);
     _ = self.bl.addFieldStore(src_loc, 16, .i64, self.bl.addIntImm(.i64, @intCast(pcked)));
     return .mkp(self.types.source_loc, src_loc);
 }

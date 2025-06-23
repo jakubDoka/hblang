@@ -161,7 +161,7 @@ pub fn categorize(self: Abi, ty: Id, types: *Types) TmpSpec {
             .f64 => .f64,
         } },
         .Pointer => .{ .ByValue = .i64 },
-        .Enum => |enm| .{ .ByValue = switch (enm.getFields(types).len) {
+        .Enum => |enm| .{ .ByValue = switch (@as(u64, enm.getFields(types).len)) {
             0 => return .Impossible,
             1 => return .Imaginary,
             2...255 => .i8,
