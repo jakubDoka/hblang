@@ -292,9 +292,16 @@ fn parseUnit(self: *Parser) Error!Id {
     return base;
 }
 
-fn report(self: *Parser, pos: u32, comptime msg: []const u8, args: anytype) void {
-    self.errored = true;
-    Ast.report(self.path, self.lexer.source, pos, msg, args, self.colors, self.diagnostics);
+fn report(self: *Parser, pos: u32, msg: []const u8, args: anytype) void {
+    const file = Ast{
+        .path = self.path,
+        .source = self.lexer.source,
+        .exprs = undefined,
+        .items = undefined,
+        .root_struct = undefined,
+    };
+
+    file.report(self, pos, msg, args);
 }
 
 fn codePointer(self: *const Parser, pos: usize) Ast.CodePointer {

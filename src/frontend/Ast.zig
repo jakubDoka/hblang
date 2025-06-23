@@ -86,9 +86,9 @@ pub const Expr = union(enum) {
         peak_vars: u16,
         peak_loops: u16,
     },
-    Enum: Type,
-    Union: Type,
     Struct: Type,
+    Union: Type,
+    Enum: Type,
     Directive: struct {
         pos: Pos,
         kind: Lexer.Lexeme.Directive,
@@ -490,14 +490,35 @@ pub fn fmt(self: *const Ast, buf: *std.ArrayList(u8)) !void {
     try ft.fmt();
 }
 
-pub fn report(
+pub fn report(self: *const Ast, types: anytype, pos: u32, msg: []const u8, args: anytype) void {
+    errdefer unreachable;
+
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    const fields = std.meta.fields(@TypeOf(args));
+    var argss: [fields.len][]const u8 = undefined;
+    inline for (0..fields.len) |i| {
+        if (fields[i].type == Types.Id) {
+            argss[i] = try std.fmt.allocPrint(tmp.arena.allocator(), "{}", .{args[i].fmt(types)});
+        } else if (@typeInfo(fields[i].type) == .pointer) {
+            argss[i] = try std.fmt.allocPrint(tmp.arena.allocator(), "{s}", .{args[i]});
+        } else {
+            argss[i] = try std.fmt.allocPrint(tmp.arena.allocator(), "{}", .{args[i]});
+        }
+    }
+
+    Ast.reportLow(self.path, self.source, pos, msg, &argss, types.colors, types.diagnostics);
+}
+
+pub fn reportLow(
     path: []const u8,
     file: []const u8,
     pos: u32,
-    comptime fmt_str: []const u8,
-    args: anytype,
+    fmt_str: []const u8,
+    args: []const []const u8,
     colors: std.io.tty.Config,
-    out: anytype,
+    out: std.io.AnyWriter,
 ) void {
     errdefer unreachable;
     const line, const col = Ast.lineCol(file, pos);
@@ -507,7 +528,14 @@ pub fn report(
     try out.print("{s}:{}:{}: ", .{ path, line, col });
     try colors.setColor(out, .reset);
 
-    try out.print(fmt_str, args);
+    var iter = std.mem.splitSequence(u8, fmt_str, "{}");
+    var idx: usize = 0;
+    while (iter.next()) |chunk| {
+        try out.writeAll(chunk);
+        try out.writeAll(args[idx]);
+        idx += 1;
+    }
+
     try out.print("\n{}\n", .{CodePointer{
         .source = file,
         .index = pos,

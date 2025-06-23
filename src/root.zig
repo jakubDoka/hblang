@@ -445,14 +445,11 @@ const Loader = struct {
         const slot = self.files.addOne(arena) catch return null;
         slot.path = self.arena.dupe(u8, canon);
         slot.source = std.fs.cwd().readFileAllocOptions(arena, path, max_file_len, null, @alignOf(u8), 0) catch |err| {
-            hb.frontend.Ast.report(
-                file.path,
-                file.source,
+            file.report(
+                opts,
                 opts.pos,
                 "can't open used file: {s}: {s}",
                 .{ path, @errorName(err) },
-                opts.colors,
-                opts.diagnostics,
             );
 
             slot.source = "";

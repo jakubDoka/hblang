@@ -419,30 +419,33 @@ pub const Id = enum(IdRepr) {
                     return;
                 },
                 .Builtin => |b| writer.writeAll(@tagName(b)),
-                inline .Func, .Global, .Template, .Struct, .Union, .Enum => |v| {
-                    const b = self.tys.store.get(v);
-                    if (b.key.scope != .void) {
-                        try writer.print("{" ++ opts ++ "}", .{b.key.scope.fmt(self.tys)});
+                .Func, .Global, .Template, .Struct, .Union, .Enum => {
+                    const key = switch (self.self.data()) {
+                        inline .Func, .Global, .Template, .Struct, .Union, .Enum => |v| self.tys.store.get(v).key,
+                        else => unreachable,
+                    };
+                    if (key.scope != .void) {
+                        try writer.print("{" ++ opts ++ "}", .{key.scope.fmt(self.tys)});
                     }
-                    if (b.key.name.len != 0) {
+                    if (key.name.len != 0) {
                         const testing = comptime !std.mem.eql(u8, opts, "test") or true;
-                        if (b.key.scope != .void and
-                            (b.key.scope.data() != .Struct or
-                                self.tys.store.get(b.key.scope.data().Struct).key.scope != .void or
+                        if (key.scope != .void and
+                            (key.scope.data() != .Struct or
+                                self.tys.store.get(key.scope.data().Struct).key.scope != .void or
                                 testing)) try writer.writeAll(".");
-                        if (b.key.scope != .void) {
-                            try writer.print("{s}", .{b.key.name});
+                        if (key.scope != .void) {
+                            try writer.print("{s}", .{key.name});
                         } else {
                             if (testing) {
-                                var path = std.mem.splitBackwardsAny(u8, b.key.name, "/");
+                                var path = std.mem.splitBackwardsAny(u8, key.name, "/");
                                 try writer.print("{s}", .{path.first()});
                             }
                         }
                     }
-                    if (b.key.captures.len != 0) {
+                    if (key.captures.len != 0) {
                         var written_paren = false;
-                        o: for (b.key.captures) |capture| {
-                            var cursor = b.key.scope;
+                        o: for (key.captures) |capture| {
+                            var cursor = key.scope;
                             while (cursor != .void and cursor.data() != .Pointer and cursor.data() != .Builtin) {
                                 if (cursor.findCapture(capture.id, self.tys) != null) continue :o;
                                 cursor = cursor.parent(self.tys);
@@ -457,7 +460,7 @@ pub const Id = enum(IdRepr) {
                             const op = if (capture.ty == .type) " =" else ":";
                             try writer.print(
                                 "{s}{s} {" ++ opts ++ "}",
-                                .{ self.tys.getFile(b.key.file).tokenSrc(capture.id.pos()), op, finty.fmt(self.tys) },
+                                .{ self.tys.getFile(key.file).tokenSrc(capture.id.pos()), op, finty.fmt(self.tys) },
                             );
                         }
                         if (written_paren) try writer.writeAll(")");
@@ -581,7 +584,6 @@ pub fn checkStack(self: *Types, file: File, pos: anytype) !void {
     const distance = @abs(@as(isize, @bitCast(@frameAddress() -% self.stack_base)));
     if (distance > root.frontend.Parser.stack_limit) {
         self.report(file, pos, "the comptime evaluation recurses too deep", .{});
-        std.debug.dumpCurrentStackTrace(@returnAddress());
         return error.StackOverflow;
     }
 }
@@ -594,34 +596,13 @@ pub fn deinit(self: *Types) void {
     arena.deinit();
 }
 
-pub fn reportSloc(self: *Types, sloc: graph.Sloc, comptime fmt: []const u8, args: anytype) void {
+pub fn reportSloc(self: *Types, sloc: graph.Sloc, fmt: []const u8, args: anytype) void {
     std.debug.assert(sloc != graph.Sloc.none);
     self.report(@enumFromInt(sloc.namespace), sloc.index, fmt, args);
 }
 
-pub fn report(self: *Types, file_id: File, expr: anytype, comptime fmt: []const u8, args: anytype) void {
-    const RemapedArgs = comptime b: {
-        var tupl = @typeInfo(@TypeOf(args)).@"struct";
-        var fields = tupl.fields[0..tupl.fields.len].*;
-        for (&fields) |*f| if (f.type == Types.Id) {
-            f.type = Types.Id.Fmt;
-            f.alignment = @alignOf(f.type);
-        };
-        tupl.fields = &fields;
-        break :b @Type(.{ .@"struct" = tupl });
-    };
-
-    var rargs: RemapedArgs = undefined;
-    inline for (args, 0..) |v, i| {
-        if (@TypeOf(v) == Types.Id) {
-            rargs[i] = v.fmt(self);
-        } else {
-            rargs[i] = v;
-        }
-    }
-
-    const file = self.getFile(file_id);
-    Ast.report(file.path, file.source, file.posOf(expr).index, fmt, rargs, self.colors, self.diagnostics);
+pub fn report(self: *Types, file_id: File, expr: anytype, msg: []const u8, args: anytype) void {
+    self.getFile(file_id).report(self, self.getFile(file_id).posOf(expr).index, msg, args);
 }
 
 pub fn getFile(self: *Types, file: File) *const Ast {

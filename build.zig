@@ -76,6 +76,8 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
             .use_llvm = use_llvm,
             .use_lld = use_lld,
+            .single_threaded = true,
+            //.strip = false,
         });
         exe.stack_size = stack_size;
         b.installArtifact(exe);

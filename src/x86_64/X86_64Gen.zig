@@ -1222,11 +1222,11 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     .fcst,
                     .cast,
                     .fneg,
-                    => std.debug.panic("floating point ops are postponed: {any}", .{instr}),
+                    => utils.panic("floating point ops are postponed: {any}", .{instr}),
                 }
             },
             else => {
-                std.debug.panic("{any}", .{instr});
+                utils.panic("{any}", .{instr});
             },
         }
     }
@@ -1460,7 +1460,7 @@ pub fn run(_: *X86_64, env: Mach.RunEnv) !usize {
             return error.Unreachable;
         } else if (res.Signal == 11 or res.Signal == 8) {
             return error.Fucked;
-        } else std.debug.panic("{}\n", .{res});
+        } else utils.panic("{}\n", .{res});
     }
     return res.Exited;
 }
@@ -1507,6 +1507,6 @@ pub fn binopToMnemonic(op: graph.BinOp) zydis.ZydisMnemonic {
         .flt,
         .fge,
         .fle,
-        => std.debug.panic("floating point ops are postponed: {}", .{op}),
+        => utils.panic("floating point ops are postponed: {}", .{op}),
     };
 }

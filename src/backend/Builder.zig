@@ -495,7 +495,7 @@ pub fn addCall(
 
     const args = args_with_initialized_arg_slots;
     for (args.arg_slots, args.params) |ar, pr| if (ar.data_type != ar.data_type.meet(pr.getReg())) {
-        std.debug.panic("{} != {}", .{ ar.data_type, ar.data_type.meet(pr.getReg()) });
+        root.panic("{} != {}", .{ ar.data_type, ar.data_type.meet(pr.getReg()) });
     };
     const full_args = (args.arg_slots.ptr - arg_prefix_len)[0 .. arg_prefix_len + args.params.len];
     var stack_offset: u64 = 0;

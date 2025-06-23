@@ -343,45 +343,44 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
                             continue;
                     };
 
-                    switch (field) {
-                        inline else => |t| {
-                            const field_ptr = &@field(self.types.handlers, @tagName(t));
-                            if (field_ptr.* != null) {
-                                self.report(name, "redeclaration of a handler," ++
-                                    " TODO: where is the original?", .{}) catch continue;
-                            }
+                    const field_ptr = switch (field) {
+                        inline else => |t| &@field(self.types.handlers, @tagName(t)),
+                    };
 
-                            const sig = self.types.handler_signatures.get(t);
-                            const func_data: *tys.Func = self.types.store.get(ty.data().Func);
-                            const ast = self.types.getFile(func_data.key.file);
-                            const func_ast = ast.exprs.get(func_data.key.ast).Fn;
-
-                            if (sig.args.len != func_data.args.len) {
-                                self.report(
-                                    func,
-                                    "this handler takes function" ++
-                                        " with {} arguments, but got {}",
-                                    .{ sig.args.len, func_data.args.len },
-                                ) catch continue;
-                            }
-
-                            for (sig.args, func_data.args, ast.exprs.view(func_ast.args)) |expected, got, past| {
-                                if (expected != got) {
-                                    self.report(func, "argument does not match the handler signature," ++
-                                        " expected {}, got {}", .{ expected, got }) catch {};
-                                    self.report(past, "...the argument", .{}) catch continue;
-                                }
-                            }
-
-                            if (sig.ret != func_data.ret) {
-                                self.report(func, "return type does not match the handler signature," ++
-                                    " expected {}, got {}", .{ sig.ret, func_data.ret }) catch {};
-                                self.report(func_ast.ret, "...return type", .{}) catch continue;
-                            }
-
-                            field_ptr.* = ty.data().Func;
-                        },
+                    if (field_ptr.* != null) {
+                        self.report(name, "redeclaration of a handler," ++
+                            " TODO: where is the original?", .{}) catch continue;
                     }
+
+                    const sig = self.types.handler_signatures.get(field);
+                    const func_data: *tys.Func = self.types.store.get(ty.data().Func);
+                    const ast = self.types.getFile(func_data.key.file);
+                    const func_ast = ast.exprs.get(func_data.key.ast).Fn;
+
+                    if (sig.args.len != func_data.args.len) {
+                        self.report(
+                            func,
+                            "this handler takes function" ++
+                                " with {} arguments, but got {}",
+                            .{ sig.args.len, func_data.args.len },
+                        ) catch continue;
+                    }
+
+                    for (sig.args, func_data.args, ast.exprs.view(func_ast.args)) |expected, got, past| {
+                        if (expected != got) {
+                            self.report(func, "argument does not match the handler signature," ++
+                                " expected {}, got {}", .{ expected, got }) catch {};
+                            self.report(past, "...the argument", .{}) catch continue;
+                        }
+                    }
+
+                    if (sig.ret != func_data.ret) {
+                        self.report(func, "return type does not match the handler signature," ++
+                            " expected {}, got {}", .{ sig.ret, func_data.ret }) catch {};
+                        self.report(func_ast.ret, "...return type", .{}) catch continue;
+                    }
+
+                    field_ptr.* = ty.data().Func;
                 },
                 .@"export" => {
                     exports_main = exports_main or std.mem.eql(u8, name_str, "main");
@@ -925,7 +924,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 if (slice.len != e.fields.len()) if (slice.len) |len| {
                     return self.report(expr, "expected array with {} element, got {}", .{ len, e.fields.len() });
                 } else {
-                    return self.report(expr, "expected {}, got array with {} elements", .{ slice, e.fields.len() });
+                    return self.report(expr, "expected {}, got array with {} elements", .{ ty, e.fields.len() });
                 };
 
                 break :b .{ slice.elem, ret_ty };
@@ -1752,7 +1751,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         },
         .Buty => |e| return self.emitTyConst(.fromLexeme(e.bt)),
         // TODO: unify under single ast
-        inline .Struct, .Union, .Enum => |e, t| {
+        .Struct, .Union, .Enum => |e| {
             const prefix = 3;
             const params = tmp.arena.alloc(graph.AbiParam, prefix + e.captures.len() * 2);
             @memset(params, .{ .Reg = self.abiCata(.type).ByValue });
@@ -1762,7 +1761,10 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             const args = self.bl.allocCallArgs(tmp.arena, params, &returns);
 
-            args.arg_slots[0] = self.bl.addIntImm(.i64, @intFromEnum(@field(Comptime.InteruptCode, @tagName(t))));
+            const code: Comptime.InteruptCode = @enumFromInt(@intFromEnum(expr.tag()) -
+                @intFromEnum(std.meta.Tag(Ast.Expr).Struct));
+
+            args.arg_slots[0] = self.bl.addIntImm(.i64, @intCast(@intFromEnum(code)));
             args.arg_slots[1] = self.emitTyConst(self.parent_scope.perm(self.types)).id.Value;
             args.arg_slots[2] = self.bl.addIntImm(.i64, @intFromEnum(expr));
 
@@ -2084,7 +2086,7 @@ pub fn typeCheck(self: *Codegen, expr: anytype, got: *Value, expected: Types.Id)
     return;
 }
 
-pub fn report(self: *Codegen, expr: anytype, comptime fmt: []const u8, args: anytype) EmitError {
+pub fn report(self: *Codegen, expr: anytype, fmt: []const u8, args: anytype) EmitError {
     self.errored = true;
     self.types.report(self.parent_scope.file(self.types), expr, fmt, args);
     return error.Never;
@@ -3010,7 +3012,7 @@ inline fn assertDirectiveArgs(
 
 fn assertDirectiveArgsLow(
     cg: *Codegen,
-    exr: anytype,
+    exr: Ast.Id,
     got: []const Ast.Id,
     expected: []const u8,
     min_expected_args: usize,
