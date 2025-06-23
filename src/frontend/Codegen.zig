@@ -2002,13 +2002,14 @@ pub fn chechNull(self: *Codegen, expr: Ast.Id, lhs: *Value, op: Lexer.Lexeme) !V
     }
 
     var value = switch (self.abiCata(lhs.ty)) {
-        .Impossible, .Imaginary => unreachable,
+        .Impossible => unreachable,
+        .Imaginary => self.bl.addIntImm(.i8, 0),
         .ByValue => lhs.getValue(self),
         .ByValuePair, .ByRef => self.bl.addLoad(lhs.id.Pointer, .i8),
     };
 
     if (op == .@"==") {
-        value = self.bl.addBinOp(.eq, .i64, value, self.bl.addIntImm(.i8, 0));
+        value = self.bl.addBinOp(.eq, .i8, value, self.bl.addIntImm(.i8, 0));
     }
 
     return .mkv(.bool, value);
