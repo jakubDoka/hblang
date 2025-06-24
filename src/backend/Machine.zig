@@ -273,34 +273,21 @@ pub const InlineFunc = struct {
                         ready = false;
                     }
                 }
-                if (!ready) b: {
-                    if (node.kind == .Phi and node.inputs()[0].?.kind == .Loop) {
-                        if (std.mem.indexOfScalar(
-                            *Func.Node,
-                            deffered_phi_stack.items,
-                            node,
-                        )) |idx| {
-                            // we have a cycle so just intern
-                            _ = deffered_phi_stack.swapRemove(idx);
-                            break :b;
-                        } else {
-                            try deffered_phi_stack.append(tmp.arena.allocator(), node);
-                        }
-                    }
-
-                    continue;
-                } else {
-                    if (node.kind == .Phi and node.inputs()[0].?.kind == .Loop) {
-                        if (std.mem.indexOfScalar(
-                            *Func.Node,
-                            deffered_phi_stack.items,
-                            node,
-                        )) |idx| {
-                            // we have a cycle so just intern
-                            _ = deffered_phi_stack.swapRemove(idx);
-                        }
+                if (node.kind == .Phi and node.inputs()[0].?.kind == .Loop) {
+                    if (std.mem.indexOfScalar(
+                        *Func.Node,
+                        deffered_phi_stack.items,
+                        node,
+                    )) |idx| {
+                        // we have a cycle so just intern
+                        _ = deffered_phi_stack.swapRemove(idx);
+                        ready = true;
+                    } else {
+                        try deffered_phi_stack.append(tmp.arena.allocator(), node);
                     }
                 }
+
+                if (!ready) continue;
 
                 interned.set(node.id);
                 const slot = into.internNode(
@@ -327,6 +314,12 @@ pub const InlineFunc = struct {
 
                 for (node.outputs()) |o| work.add(o);
             }
+        }
+
+        if (new_nodes == .new) {
+            for (new_nodes.new) |nn| if (nn.id != std.math.maxInt(u16)) {
+                std.debug.assert(interned.isSet(nn.id));
+            };
         }
     }
 

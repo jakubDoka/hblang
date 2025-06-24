@@ -203,7 +203,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                 } else continue;
                 var child_preds: usize = 0;
                 for (child.inputs()) |b| child_preds += @intFromBool(b != null and b.?.isCfg());
-                std.debug.assert(child_preds >= 1 and child_preds <= 2);
+                std.debug.assert((child_preds >= 1 and child_preds <= 2) or child.kind == .TrapRegion);
                 // handle joins
                 if (child_preds == 2 and child.kind != .TrapRegion and child.kind != .Return) {
                     if (!(child.kind == .Region or child.kind == .Loop)) {

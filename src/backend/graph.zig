@@ -1276,7 +1276,7 @@ pub fn Func(comptime Backend: type) type {
                     .node = node,
                     .hash = Node.hash(node.kind, node.data_type, node.inputs(), node.anyextra()),
                 })) {
-                    utils.panic("{}\n", .{node});
+                    //    utils.panic("{}\n", .{node});
                 }
             }
         }
@@ -1504,7 +1504,6 @@ pub fn Func(comptime Backend: type) type {
             if (use.inputs()[idx] == def) return null;
             if (use.inputs()[idx]) |n| {
                 n.removeUse(use);
-                //self.fmtUnscheduled(std.io.getStdErr().writer().any(), .escape_codes);
             }
 
             self.uninternNode(use);

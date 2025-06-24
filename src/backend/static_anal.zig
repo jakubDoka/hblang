@@ -107,6 +107,7 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
                     }
                     const end_offset = offset + @as(i64, @intCast(mem_op.data_type.size()));
                     if (offset < 0 or end_offset > local.extra(.Local).size) {
+                        std.debug.print("{} {} {}\n", .{ local, mem_op, offset });
                         errors.append(arena.allocator(), .{ .StackOob = .{ .slot = local.sloc, .op = mem_op.id } }) catch unreachable;
                     }
                 }

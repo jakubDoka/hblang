@@ -2,6 +2,42 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### out of bounds matching 1
+```hb
+main := fn(): uint {
+    byte_iter("hello, world").for_each(fn(x: u8): void {
+    })
+    return 0
+}
+
+$byte_iter := fn(slice: []u8): Iterator(struct {
+    .slice: []u8
+
+    $next := fn(self: ^@CurrentScope()): ?u8 {
+        if self.slice.len == 0 return null
+        tmp := self.slice[0]
+        self.slice = self.slice[1..]
+        return tmp
+    }
+}) {
+    return .(.(slice))
+}
+
+Iterator := fn($Iter: type): type return struct {
+    .inner: Iter
+    Next := @TypeOf(Iter.next(idk))
+    Value := @ChildOf(Next)
+    Self := @CurrentScope()
+
+    $next := fn(self: ^Self): Next return self.inner.next()
+    $for_each := fn(self: ^Self, $func: type): void {
+        while x := self.next() {
+            _ = func(x)
+        }
+    }
+}
+```
+
 #### wired pointer edge cases
 ```hb
 expectations := .{

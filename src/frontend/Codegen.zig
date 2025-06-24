@@ -264,7 +264,7 @@ pub fn emitReachable(
             else
                 try root.frontend.Types.Id.init(.{ .Func = func })
                     .fmt(types).toString(scrath.allocator()),
-            .is_inline = func_data.is_inline,
+            .is_inline = func_data.is_inline or func_data.key.name.len == 0,
             .linkage = func_data.visibility,
             .optimizations = opts,
         });
@@ -986,12 +986,9 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     }
                 }
 
-                const addrd = try self.emit(.{}, e.oper);
-                return .mkv(self.types.makePtr(addrd.ty), switch (addrd.id) {
-                    .Imaginary => self.bl.addIntImm(.i64, @intCast(addrd.ty.alignment(self.types))),
-                    .Value => |v| self.bl.addSpill(self.sloc(expr), v),
-                    .Pointer => |p| p,
-                });
+                var addrd = try self.emit(.{}, e.oper);
+                self.emitSpill(expr, &addrd);
+                return addrd;
             },
             inline .@"-", .@"!", .@"~" => |t| {
                 var lhs = try self.emit(ctx, e.oper);
@@ -1209,7 +1206,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 null };
             var base = try self.emit(pctx, e.*);
 
-            try self.unwrapNullable(expr, &base);
+            try self.unwrapNullable(expr, &base, true);
             return base;
         },
         .Deref => |e| {
@@ -1371,7 +1368,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     self.bl.addIntImm(.i64, @intCast(l))
                 else
                     self.bl.addFieldLoad(base.id.Pointer, TySlice.len_offset, .i64));
-                const range_check = self.bl.addBinOp(.uge, .i8, end.getValue(self), len.getValue(self));
+                const range_check = self.bl.addBinOp(.ugt, .i8, end.getValue(self), len.getValue(self));
                 const order_check = self.bl.addBinOp(.ugt, .i8, start.getValue(self), end.getValue(self));
                 const check = self.bl.addBinOp(.bor, .i8, range_check, order_check);
                 var arg_values = [_]Value{ undefined, len, start, end };
@@ -1878,6 +1875,14 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
     }
 }
 
+pub fn emitSpill(self: *Codegen, expr: Ast.Id, value: *Value) void {
+    value.* = .mkv(self.types.makePtr(value.ty), switch (value.id) {
+        .Imaginary => self.bl.addIntImm(.i64, @intCast(value.ty.alignment(self.types))),
+        .Value => |v| self.bl.addSpill(self.sloc(expr), v),
+        .Pointer => |p| p,
+    });
+}
+
 pub fn emitHandlerCall(self: *Codegen, handler: utils.EntId(tys.Func), expr: Ast.Id, check: *Node, arg_values: []Value) void {
     const func: *tys.Func = self.types.store.get(handler);
 
@@ -1925,7 +1930,7 @@ pub fn emitSrcLoc(self: *Codegen, expr: Ast.Id) Value {
     return .mkp(self.types.source_loc, src_loc);
 }
 
-pub fn unwrapNullable(self: *Codegen, expr: Ast.Id, base: *Value) !void {
+pub fn unwrapNullable(self: *Codegen, expr: Ast.Id, base: *Value, do_check: bool) !void {
     self.emitAutoDeref(base);
 
     const nullable = self.types.store.unwrap(base.ty.data(), .Nullable) orelse {
@@ -1937,11 +1942,11 @@ pub fn unwrapNullable(self: *Codegen, expr: Ast.Id, base: *Value) !void {
         return;
     }
 
-    if (self.types.handlers.null_unwrap) |handler| {
+    if (do_check) if (self.types.handlers.null_unwrap) |handler| {
         var check = try self.chechNull(expr, base, .@"==");
         var arg_values = [_]Value{undefined};
         self.emitHandlerCall(handler, expr, check.getValue(self), &arg_values);
-    }
+    };
 
     base.* = switch (self.abiCata(base.ty)) {
         .Impossible => unreachable,
@@ -1982,13 +1987,14 @@ pub fn emitDecl(
         break :b self.emitTyped(.{ .loc = loc }, ty, e.value);
     };
 
+    self.bl.resizeLocal(loc, value.ty.size(self.types));
+
     var out = Value{};
     if (unwrap) {
         out = try self.chechNull(e.value, &value, .@"!=");
-        try self.unwrapNullable(e.value, &value);
+        try self.unwrapNullable(e.value, &value, false);
     }
 
-    self.bl.resizeLocal(loc, value.ty.size(self.types));
     self.emitGenericStore(loc, &value);
 
     self.scope.appendAssumeCapacity(.{ .ty = value.ty, .name = ident.id });
@@ -2514,8 +2520,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
         }
 
         if (value.ty.data() != .Pointer and func.args[0].data() == .Pointer) {
-            value.ty = self.types.makePtr(value.ty);
-            value.id = .{ .Value = value.id.Pointer };
+            self.emitSpill(expr, value);
         }
 
         try self.typeCheck(e.called, value, func.args[0]);
