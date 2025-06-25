@@ -446,11 +446,10 @@ pub const Id = enum(IdRepr) {
                                 self.tys.store.get(key.scope.data().Struct).key.scope != .void or
                                 testing)) try writer.writeAll(".");
                         if (key.scope != .void) {
-                            try writer.print("{s}", .{key.name});
+                            try writer.writeAll(key.name);
                         } else {
                             if (testing) {
-                                var path = std.mem.splitBackwardsAny(u8, key.name, "/");
-                                try writer.print("{s}", .{path.first()});
+                                try writer.writeAll(std.fs.path.basename(key.name));
                             }
                         }
                     }

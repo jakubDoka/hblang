@@ -389,7 +389,7 @@ pub const elf = struct {
                 .invalid => unreachable,
             };
             try writer.writeStruct(elf.Symbol{
-                .name = @enumFromInt(sym.name + 1 + @intFromBool(sym.kind == .data)),
+                .name = @enumFromInt(sym.name + 1),
                 .size = sym.size,
                 .value = poff.*,
                 .info = .{
