@@ -1,0 +1,93 @@
+out of bounds matching 1.byte_iter:
+	sub rsp, 0x10
+	mov [rsp], rsi
+	mov [rsp+0x08], rdx
+	mov rax, [rsp]
+	mov [rdi], rax
+	mov rax, [rsp+0x08]
+	mov [rdi+0x08], rax
+	add rsp, 0x10
+	ret
+out of bounds matching 1.Iterator(Iter = out of bounds matching 1).for_each(func = out of bounds matching 1.main):
+	push rbx
+	sub rsp, 0x18
+	mov [rsp], rdi
+	lea rbx, [rsp+0x08]
+1:	mov rsi, [rsp]
+	mov rdi, rbx
+	call :out of bounds matching 1.Iterator(Iter = out of bounds matching 1).next
+	mov cl, [rsp+0x08]
+	mov al, [rsp+0x09]
+	mov [rsp+0x08], al
+	test cl, cl
+	jz :0
+	mov dil, [rsp+0x08]
+	call :out of bounds matching 1.main
+	jmp :1
+0:	add rsp, 0x18
+	pop rbx
+	ret
+out of bounds matching 1.Iterator(Iter = out of bounds matching 1).next:
+	sub rsp, 0x08
+	mov [rsp], rsi
+	mov rsi, [rsp]
+	call :out of bounds matching 1.next
+	add rsp, 0x08
+	ret
+out of bounds matching 1.main:
+	sub rsp, 0x10
+	mov [rsp], dil
+	add rsp, 0x10
+	ret
+out of bounds matching 1.next:
+	push rbx
+	sub rsp, 0x10
+	mov [rsp], rsi
+	mov rcx, [rsp]
+	mov rax, [rcx+0x08]
+	cmp rax, 0x00
+	setz al
+	movzx rax, al
+	test al, al
+	jz :0
+	mov rax, 0x00
+	mov [rdi], al
+	jmp :1
+0:	mov rax, [rcx]
+	mov rbx, 0x01
+	mov al, [rax]
+	mov [rsp+0x0A], al
+	mov rdx, [rsp]
+	mov rax, [rdx]
+	mov rcx, [rdx+0x08]
+	add rax, 0x01
+	mov [rdx], rax
+	mov rax, rcx
+	sub rax, 0x01
+	mov [rdx+0x08], rax
+	mov [rsp+0x08], bl
+	mov al, [rsp+0x0A]
+	mov [rsp+0x09], al
+	mov ax, [rsp+0x08]
+	mov [rdi], ax
+1:	add rsp, 0x10
+	pop rbx
+	ret
+main:
+	push rbx
+	sub rsp, 0x28
+	lea rax, [0x0000000000000007]
+	mov [rsp+0x10], rax
+	mov rax, 0x0C
+	mov [rsp+0x18], rax
+	lea rbx, [rsp]
+	mov rdx, [rsp+0x18]
+	mov rsi, [rsp+0x10]
+	mov rdi, rbx
+	call :out of bounds matching 1.byte_iter
+	mov rdi, rbx
+	call :out of bounds matching 1.Iterator(Iter = out of bounds matching 1).for_each(func = out of bounds matching 1.main)
+	mov rax, 0x00
+	add rsp, 0x28
+	pop rbx
+	ret

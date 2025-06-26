@@ -185,6 +185,7 @@ pub fn GcmMixin(comptime Backend: type) type {
             }
 
             sched_early: {
+                for (cfg_rpo) |cfg| cfg.ext.idepth = 0;
                 for (cfg_rpo) |cfg| {
                     if ((cfg.base.kind != .Return or cfg.base.inputs()[0] != null) and
                         cfg.base.kind != .TrapRegion)
@@ -267,6 +268,7 @@ pub fn GcmMixin(comptime Backend: type) type {
                                         const sdef = o.cfg0();
                                         var lcar = late_scheds[o.id].?;
                                         while (lcar != sdef.idom()) : (lcar = lcar.idom()) {
+                                            std.debug.assert(lcar.base.kind != .Start);
                                             if (lcar.ext.antidep == t.id) {
                                                 lca = lcar.findLca(lca);
                                                 if (lca == sdef) {
@@ -278,10 +280,11 @@ pub fn GcmMixin(comptime Backend: type) type {
                                         }
                                     },
                                     .Phi => {
+                                        const sdef = t.mem().cfg0();
                                         for (o.inputs()[1..], o.cfg0().base.inputs()) |inp, oblk| if (inp.? == t.mem()) {
-                                            const sdef = t.mem().cfg0();
                                             var lcar = oblk.?.asCfg().?;
                                             while (lcar != sdef.idom()) : (lcar = lcar.idom()) {
+                                                std.debug.assert(lcar.base.kind != .Start);
                                                 if (lcar.ext.antidep == t.id) {
                                                     lca = lcar.findLca(lca);
                                                 }
@@ -294,6 +297,7 @@ pub fn GcmMixin(comptime Backend: type) type {
                                         const sdef = o.cfg0();
                                         var lcar = late_scheds[o.id].?;
                                         while (lcar != sdef.idom()) : (lcar = lcar.idom()) {
+                                            std.debug.assert(lcar.base.kind != .Start);
                                             if (lcar.ext.antidep == t.id) {
                                                 lca = lcar.findLca(lca);
                                                 if (lca == sdef) {

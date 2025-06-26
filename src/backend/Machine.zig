@@ -253,7 +253,7 @@ pub const InlineFunc = struct {
 
         var deffered_phi_stack = std.ArrayListUnmanaged(*Func.Node){};
 
-        var limit: usize = 100000;
+        var limit: usize = 1000000;
         while (work.pop()) |node| {
             limit -= 1;
             if (node.id < already_present) {
@@ -573,10 +573,10 @@ pub const Data = struct {
             @intCast(self.inline_funcs.items.len - 1);
     }
 
-    pub fn getInlineFunc(self: *Data, at: u32) ?*const InlineFunc {
+    pub fn getInlineFunc(self: *Data, at: u32, force_inline: bool) ?*const InlineFunc {
         if (self.funcs.items.len <= at or self.funcs.items[at] == .invalid) return null;
         const sym = &self.syms.items[@intFromEnum(self.funcs.items[at])];
-        if (!sym.is_inline) return null;
+        if (!sym.is_inline and !force_inline) return null;
         const nodes = sym.nodes;
         return if (nodes == std.math.maxInt(u32)) null else &self.inline_funcs.items[nodes];
     }

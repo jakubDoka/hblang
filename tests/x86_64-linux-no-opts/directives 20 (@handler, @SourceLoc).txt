@@ -50,7 +50,7 @@ main:
 	mov [rsp+0x48], rax
 	mov rbp, [rsp+0x48]
 	cmp r12, rbp
-	setnb dl
+	setnbe dl
 	movzx rdx, dl
 	or rdx, rcx
 	test dl, dl

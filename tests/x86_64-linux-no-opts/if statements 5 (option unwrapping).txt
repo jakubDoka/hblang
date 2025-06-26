@@ -1,5 +1,5 @@
 main:
-	sub rsp, 0x30
+	sub rsp, 0x40
 	mov rax, 0x01
 	mov [rsp+0x10], al
 	mov rax, 0x00
@@ -17,15 +17,15 @@ main:
 	cmp rax, 0x00
 	setz al
 	movzx rax, al
-	mov [rsp+0x28], al
+	mov [rsp+0x30], al
 	jmp :1
 0:	mov rax, 0x00
-	mov [rsp+0x28], al
-1:	mov al, [rsp+0x28]
+	mov [rsp+0x30], al
+1:	mov al, [rsp+0x30]
 	test al, al
 	jz :2
 	mov rax, [rsp+0x20]
 	jmp :3
 2:	mov rax, 0x01
-3:	add rsp, 0x30
+3:	add rsp, 0x40
 	ret

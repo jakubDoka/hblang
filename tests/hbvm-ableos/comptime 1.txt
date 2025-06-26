@@ -1,20 +1,7 @@
 main:
-         st $31, $254, -24, 24
-     addi64 $254, $254, -24
-       li64 $1, 9
-        jal $31, $0, :comptime 1.main.some_fn(some_int = uint)(ui = uint)
-         cp $33, $1
-       li64 $1, 5
-        jal $31, $0, :comptime 1.main.some_fn(some_int = uint)(ui = uint)
-         cp $32, $1
-       li64 $1, 7
-        jal $31, $0, :comptime 1.main.some_fn(some_int = uint)(ui = uint)
-      add64 $1, $32, $1
-      sub64 $1, $33, $1
-     addi64 $254, $254, 24
-         ld $31, $254, -24, 24
-         tx
+    li64 $1, 0
+      tx
 comptime 1.main.some_fn(some_int = uint)(ui = uint):
-     addi64 $1, $1, 1
-      mul64 $1, $1, $1
-       jala $0, $31, 0
+  addi64 $1, $1, 1
+   mul64 $1, $1, $1
+    jala $0, $31, 0

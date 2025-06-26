@@ -1,15 +1,5 @@
 main:
-	sub rsp, 0x30
-	mov rax, 0x00
-	mov [rsp+0x20], al
-	mov [rsp+0x21], al
-	mov [rsp+0x22], al
-	mov [rsp+0x23], al
-	mov rax, 0x01
-	mov [rsp+0x20], al
-	mov [rsp+0x21], al
-	mov [rsp+0x22], al
-	mov [rsp+0x23], al
+	sub rsp, 0x20
 	mov rax, 0xFFFFFFFFFFFFFFFD
 	mov [rsp], rax
 	mov rax, 0xFFFFFFFFFFFFFFFC
@@ -25,5 +15,5 @@ main:
 	mov rax, 0x04
 	mov [rsp+0x18], rax
 	mov rax, 0x0A
-	add rsp, 0x30
+	add rsp, 0x20
 	ret

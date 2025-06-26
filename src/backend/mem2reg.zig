@@ -42,7 +42,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
             const L = @This();
 
             fn resolve(func: *Func, scope: []L, index: usize) *Node {
-                return switch (scope[index].expand().?) {
+                return switch (scope[index].expand() orelse return func.addIntImm(.i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)))) {
                     .Node => |n| n,
                     .Loop => |loop| {
                         if (!loop.done) {
@@ -56,6 +56,9 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                                     .{},
                                 ) });
                             }
+                        }
+                        if (loop.items[index].expand() == null) {
+                            return func.addIntImm(.i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)));
                         }
                         scope[index] = loop.items[index];
                         if (scope[index].expand().? == .Loop) {
@@ -92,9 +95,22 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
             };
         };
 
+        const StackSlot = struct {
+            offset: i64,
+        };
+
+        pub fn isGoodMemOp(self: *Node, local: *Node) bool {
+            return (self.isStore() and !self.isSub(graph.MemCpy) and
+                self.value() != local) or self.isLoad();
+        }
+
         pub fn run(m2r: *Self) void {
+            errdefer unreachable;
+
             const self = m2r.getGraph();
             self.gcm.cfg_built.assertUnlocked();
+
+            if (self.root.outputs().len == 1) return;
 
             // TODO: refactor to use tmpa directily
             var tmpa = root.Arena.scrath(null);
@@ -102,31 +118,86 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
 
             const tmp = tmpa.arena.allocator();
 
-            var visited = std.DynamicBitSet.initEmpty(tmp, self.next_id) catch unreachable;
+            var visited = try std.DynamicBitSet.initEmpty(tmp, self.next_id);
             const postorder = self.collectDfs(tmp, &visited)[1..];
 
-            var local_count: u16 = 0;
+            var slots = std.ArrayListUnmanaged(StackSlot){};
+            var offset: i64 = 0;
+            var offsets = std.ArrayListUnmanaged(packed struct(u64) { offset: u62, size: u2 }){};
+            var store_load_nodes = std.ArrayListUnmanaged(*Node){};
+            var alloc_offsets = std.ArrayListUnmanaged(i64){};
 
-            if (self.root.outputs().len == 1) return;
-
+            //self.fmtUnscheduled(std.io.getStdErr().writer().any(), .escape_codes);
             std.debug.assert(self.root.outputs()[1].kind == .Mem);
-            for (self.root.outputs()[1].outputs()) |o| {
-                if (o.kind == .Local) b: {
-                    for (o.outputs()) |oo| {
-                        if ((!oo.isStore() and !oo.isLoad()) or oo.base() != o or oo.isSub(graph.MemCpy)) {
-                            o.schedule = std.math.maxInt(u16);
-                            break :b;
+            outer: for (self.root.outputs()[1].outputs()) |o| {
+                if (o.kind != .Local) continue :outer;
+                std.debug.assert(o.schedule == std.math.maxInt(u16));
+
+                // collect all loads and stores, bail on something else
+                //
+                store_load_nodes.items.len = 0;
+                for (o.outputs()) |use| {
+                    if (use.kind == .BinOp and use.inputs()[2].?.kind == .CInt) {
+                        for (use.outputs()) |use_use| {
+                            if (isGoodMemOp(use_use, o)) {
+                                try store_load_nodes.append(tmp, use_use);
+                            } else {
+                                continue :outer;
+                            }
                         }
+                    } else if (isGoodMemOp(use, o)) {
+                        try store_load_nodes.append(tmp, use);
+                    } else {
+                        continue :outer;
                     }
-                    o.schedule = local_count;
-                    local_count += 1;
                 }
+
+                // validate that there are no viredly overlapping stores or loads
+                // if so, bail
+                //
+                offsets.items.len = 0;
+                for (store_load_nodes.items) |use| {
+                    _, const offs = use.base().knownOffset();
+                    // don't touch this and leave the static analysis report the soob
+                    //
+                    if (offs < 0 or @as(u64, @intCast(offs)) + use.data_type.size() >
+                        o.extra(.Local).size)
+                    {
+                        continue :outer;
+                    }
+
+                    for (offsets.items) |off| {
+                        if (off.offset <= offs and offs < off.offset + (@as(u64, 1) << off.size)) {
+                            if (off.offset != offs or (@as(u64, 1) << off.size) != use.data_type.size()) {
+                                continue :outer;
+                            }
+                            break;
+                        }
+                    } else {
+                        try offsets.append(tmp, .{
+                            .offset = @intCast(offs),
+                            .size = @intCast(std.math.log2_int(u64, use.data_type.size())),
+                        });
+                    }
+                }
+
+                for (offsets.items) |off| {
+                    try alloc_offsets.append(tmp, offset + off.offset);
+                }
+                const new = alloc_offsets.items[alloc_offsets.items.len - offsets.items.len ..];
+                std.sort.pdq(i64, new, {}, std.sort.asc(i64));
+
+                o.schedule = @intCast(slots.items.len);
+                try slots.append(tmp, .{ .offset = offset });
+                offset += @intCast(o.extra(.Local).size);
             }
 
-            var locals = tmp.alloc(Local, local_count) catch unreachable;
+            std.debug.assert(std.sort.isSorted(i64, alloc_offsets.items, {}, std.sort.asc(i64)));
+
+            var locals = tmpa.arena.alloc(Local, alloc_offsets.items.len);
             @memset(locals, .{});
 
-            var states = tmp.alloc(BBState, postorder.len) catch unreachable;
+            var states = tmpa.arena.alloc(BBState, postorder.len);
             @memset(states, .{});
 
             for (postorder, 0..) |bb, i| bb.base.schedule = @intCast(i);
@@ -183,16 +254,38 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
 
                 for (tmp.dupe(*Node, bb.outputs()) catch unreachable) |o| {
                     if (o.id == std.math.maxInt(u16)) continue;
-                    if (o.kind == .Phi or o.kind == .Mem or o.isStore()) {
-                        if (o.isStore() and o.base().kind == .Local and o.base().schedule != std.math.maxInt(u16)) {
-                            to_remove.append(o) catch unreachable;
-                            locals[o.base().schedule] = .compact(.{ .Node = o.value() });
-                        }
+                    std.debug.assert(bb.kind != .Local);
 
+                    if (o.isStore()) {
+                        const base, const off = o.base().knownOffset();
+                        if (base.kind == .Local and base.schedule != std.math.maxInt(u16)) {
+                            to_remove.append(o) catch unreachable;
+                            const offs = slots.items[base.schedule].offset + off;
+                            const idx = std.sort.binarySearch(i64, alloc_offsets.items, offs, struct {
+                                pub fn inner(a: i64, b: i64) std.math.Order {
+                                    return std.math.order(a, b);
+                                }
+                            }.inner) orelse {
+                                root.panic("{} {any} {}", .{ o, alloc_offsets.items, offs });
+                            };
+                            locals[idx] = .compact(.{ .Node = o.value() });
+                        }
+                    }
+
+                    if (o.kind == .Phi or o.kind == .Mem or o.isStore()) {
                         for (tmp.dupe(*Node, o.outputs()) catch unreachable) |lo| {
-                            if (lo.isLoad() and lo.base().kind == .Local and lo.base().schedule != std.math.maxInt(u16)) {
-                                const su = Local.resolve(self, locals, lo.base().schedule);
-                                self.subsume(su, lo);
+                            if (lo.isLoad()) {
+                                const base, const off = lo.base().knownOffset();
+                                if (base.kind == .Local and base.schedule != std.math.maxInt(u16)) {
+                                    const offs = slots.items[base.schedule].offset + off;
+                                    const idx = std.sort.binarySearch(i64, alloc_offsets.items, offs, struct {
+                                        pub fn inner(a: i64, b: i64) std.math.Order {
+                                            return std.math.order(a, b);
+                                        }
+                                    }.inner).?;
+                                    const su = Local.resolve(self, locals, idx);
+                                    self.subsume(su, lo);
+                                }
                             }
                         }
                     }

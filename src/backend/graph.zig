@@ -235,6 +235,7 @@ pub const CallConv = enum(u8) {
     systemv,
     ablecall,
     fastcall,
+    @"inline",
 };
 
 pub const Signature = extern struct {
@@ -1950,7 +1951,8 @@ pub fn Func(comptime Backend: type) type {
             }
 
             if (node.kind == .Call and node.data_type != .bot) {
-                if (ctx.out.getInlineFunc(node.extra(.Call).id)) |inline_func| {
+                const force_inline = node.extra(.Call).signature.call_conv == .@"inline";
+                if (ctx.out.getInlineFunc(node.extra(.Call).id, force_inline)) |inline_func| {
                     inline_func.inlineInto(Backend, self, node, work);
                     return null;
                 }

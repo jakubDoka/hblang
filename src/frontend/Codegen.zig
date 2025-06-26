@@ -612,7 +612,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 .err => |err| {
                     var pos = e.pos;
                     pos.index += @intCast(err.pos);
-                    return self.report(pos, "{s}", .{err.reason});
+                    return self.report(pos, "{}", .{err.reason});
                 },
             };
 
@@ -630,7 +630,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 .err => |err| {
                     var pos = e.pos;
                     pos.index += @intCast(err.pos);
-                    return self.report(pos, "{s}", .{err.reason});
+                    return self.report(pos, "{}", .{err.reason});
                 },
             };
 
@@ -731,7 +731,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .Ctor => |e| {
             if (e.ty.tag() == .Void and ctx.ty == null) {
                 return self.report(expr, "cant infer the type of this constructor," ++
-                    " you can specify a type: '<ty>.{{'", .{});
+                    " you can specify a type: '<ty>.{'", .{});
             }
 
             const oty = ctx.ty orelse try self.resolveAnonTy(e.ty);
@@ -771,7 +771,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         } else {
                             self.report(
                                 field.pos,
-                                "{} does not have a field called {s}, it has: {s}",
+                                "{} does not have a field called {}, it has: {}",
                                 .{ ty, fname, listFileds(tmp.arena, fields) },
                             ) catch continue;
                         };
@@ -803,7 +803,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                                 const glob = self.bl.addGlobalAddr(@intFromEnum(value));
                                 self.bl.addFixedMemCpy(off, glob, f.ty.size(self.types));
                             } else {
-                                return self.report(expr, "field {s} on struct {} is not initialized", .{ f.name, ty });
+                                return self.report(expr, "field {} on struct {} is not initialized", .{ f.name, ty });
                             }
                         }
                     }
@@ -823,7 +823,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     } else {
                         return self.report(
                             field_ast.value,
-                            "{} does not have a field called {s}, is has: {s}",
+                            "{} does not have a field called {}, is has: {}",
                             .{ ty, fname, listFileds(tmp.arena, fields) },
                         );
                     };
@@ -834,7 +834,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     self.emitGenericStore(off, &value);
                 },
                 else => {
-                    return self.report(expr, "{} can not be constructed with '.{{..}}'", .{ty});
+                    return self.report(expr, "{} can not be constructed with '.{..}'", .{ty});
                 },
             }
 
@@ -1136,7 +1136,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                         else
                             ctx.ty) orelse lhs.ty;
                         const upcast_ty = self.binOpUpcast(lhs_ty, rhs.ty) catch |err|
-                            return self.report(expr, "{s} ({} and {})", .{ @errorName(err), lhs_ty, rhs.ty });
+                            return self.report(expr, "{} ({} and {})", .{ @errorName(err), lhs_ty, rhs.ty });
 
                         if (lhs.ty.isFloat()) {
                             try self.typeCheck(expr, &rhs, lhs.ty);
@@ -1229,7 +1229,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .Tag => |e| {
             const ty = ctx.ty orelse {
                 return self.report(expr, "cant infer the type of the implicit access, " ++
-                    " you can specify the type: <ty>.{s}", .{ast.tokenSrc(e.index + 1)});
+                    " you can specify the type: <ty>.{}", .{ast.tokenSrc(e.index + 1)});
             };
 
             return try self.lookupScopeItem(e.*, ty, ast.tokenSrc(e.index + 1));
@@ -1255,7 +1255,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     } else {
                         return self.report(
                             e.field,
-                            "no such field on {}, but it has: {s}",
+                            "no such field on {}, but it has: {}",
                             .{ base.ty, listFileds(tmp.arena, struct_ty.getFields(self.types)) },
                         );
                     };
@@ -1277,7 +1277,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     } else {
                         return self.report(
                             e.field,
-                            "no such field on {}, but it has: {s}",
+                            "no such field on {}, but it has: {}",
                             .{ base.ty, listFileds(tmp.arena, union_ty.getFields(self.types)) },
                         );
                     };
@@ -1614,7 +1614,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 const final_branch = matched_branch orelse matcher.else_arm orelse {
                     return self.report(
                         e.pos,
-                        "not all branches are covered: {s}",
+                        "not all branches are covered: {}",
                         .{matcher.missingBranches(tmp.arena, fields)},
                     );
                 };
@@ -1643,7 +1643,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 const final_else = matcher.else_arm orelse {
                     return self.report(
                         e.pos,
-                        "not all branches are covered: {s}",
+                        "not all branches are covered: {}",
                         .{matcher.missingBranches(tmp.arena, fields)},
                     );
                 };
@@ -1706,7 +1706,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             try self.loopControl(.@"continue", expr);
             return .{};
         },
-        .Call => |e| return self.emitCall(ctx, expr, e.*),
+        .Call => |e| return self.emitCall(ctx, expr, self.abi.cc, e.*),
         .Return => |e| {
             // we dont use .emitTyped because the ecpression is different
             var value = try self.emit(.{ .loc = self.struct_ret_ptr, .ty = self.ret }, e.value);
@@ -1915,6 +1915,7 @@ pub fn emitHandlerCall(self: *Codegen, handler: utils.EntId(tys.Func), expr: Ast
         .{},
         func.ret,
         ret_abi,
+        self.abi.cc,
     ) catch {};
 
     builder.end(&self.bl, builder.beginElse(&self.bl));
@@ -2161,6 +2162,7 @@ fn emitInternalEca(
         ctx,
         ret_ty,
         self.abiCata(ret_ty),
+        self.abi.cc,
     ) catch unreachable;
 }
 
@@ -2437,7 +2439,7 @@ pub fn loadIdent(self: *Codegen, pos: Ast.Pos, id: Ast.Ident) !Value {
     }
 }
 
-pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(.Call)) !Value {
+pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: Ast.Store.TagPayload(.Call)) !Value {
     //std.debug.print("\n{}\n\n", .{ctx});
 
     const ast = self.ast;
@@ -2449,7 +2451,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
         const name = ast.tokenSrc(pos.index + 1);
         const ty = ctx.ty orelse {
             return self.report(e.called, "can infer the implicit access," ++
-                " you can specify the type: <ty>.{s}", .{name});
+                " you can specify the type: <ty>.{}", .{name});
         };
 
         break :b .{ try self.lookupScopeItem(pos.*, ty, name), null };
@@ -2547,6 +2549,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: Ast.Store.TagPayload(
         ctx,
         func.ret,
         ret_abi,
+        cc,
     );
 }
 
@@ -2652,7 +2655,7 @@ pub fn instantiateTemplate(
         .scope = typ,
         .file = tmpl.key.file,
         .ast = tmpl.key.ast,
-        .name = "",
+        .name = "-",
         .captures = captures[0..capture_idx],
     });
 
@@ -2732,8 +2735,9 @@ fn assembleReturn(
     ctx: Ctx,
     ret: Types.Id,
     ret_abi: Types.Abi.Spec,
+    cc: graph.CallConv,
 ) !Value {
-    const rets = self.bl.addCall(self.abi.cc, id, call_args);
+    const rets = self.bl.addCall(cc, id, call_args);
     return switch (ret_abi) {
         .Impossible => return error.Unreachable,
         .Imaginary => .mkv(ret, null),
@@ -2760,7 +2764,7 @@ fn emitDefers(self: *Codegen, base: usize) !void {
 
 fn loopControl(self: *Codegen, kind: Builder.Loop.Control, ctrl: Ast.Id) !void {
     if (self.loops.items.len == 0) {
-        self.report(ctrl, "{s} outside of the loop", .{@tagName(kind)}) catch {};
+        self.report(ctrl, "{} outside of the loop", .{@tagName(kind)}) catch {};
         return;
     }
 
@@ -3000,7 +3004,7 @@ fn reportInferrence(
     dir_name: []const u8,
 ) EmitError {
     return cg.report(exr, "type can not be inferred from the context," ++
-        " use `@as(<{s}>, {s}(...))`", .{ ty, dir_name });
+        " use `@as(<{}>, {}(...))`", .{ ty, dir_name });
 }
 
 inline fn assertDirectiveArgs(
@@ -3027,7 +3031,7 @@ fn assertDirectiveArgsLow(
         const range = if (varargs) "at least " else "";
         return cg.report(
             exr,
-            "directive takes {s}{} arguments, got {} ({s})",
+            "directive takes {}{} arguments, got {} ({})",
             .{ range, min_expected_args, got.len, expected },
         );
     }
@@ -3061,7 +3065,7 @@ fn emitDirective(
         },
         .@"inline" => {
             try assertDirectiveArgs(self, expr, args, "<called>, <args>..");
-            return self.emitCall(ctx, expr, .{
+            return self.emitCall(ctx, expr, .@"inline", .{
                 .called = args[0],
                 .arg_pos = ast.posOf(args[0]),
                 .args = e.args.slice(1, e.args.len()),
@@ -3262,7 +3266,7 @@ fn emitDirective(
             const str_content = ast.source[content.pos.index + 1 .. content.end - 1];
             const triple = self.types.target;
             const matched = matchTriple(str_content, triple) catch |err| {
-                return self.report(args[0], "{s}", .{@errorName(err)});
+                return self.report(args[0], "{}", .{@errorName(err)});
             };
             return .mkv(.bool, self.bl.addIntImm(.i8, @intFromBool(matched)));
         },
@@ -3309,7 +3313,7 @@ fn emitDirective(
                 i += self.pushParam(call_args, self.abiCata(arg.ty), i, arg);
             }
 
-            return self.assembleReturn(expr, Comptime.eca, call_args, ctx, ret, ret_abi);
+            return self.assembleReturn(expr, Comptime.eca, call_args, ctx, ret, ret_abi, .ablecall);
         },
         .as => {
             try assertDirectiveArgs(self, expr, args, "<ty>, <expr>");
@@ -3340,7 +3344,7 @@ fn emitDirective(
                 },
             };
 
-            return self.report(expr, "{s}", .{msg.items});
+            return self.report(expr, "{}", .{msg.items});
         },
         .Any => return self.emitTyConst(.any),
         .has_decl => {

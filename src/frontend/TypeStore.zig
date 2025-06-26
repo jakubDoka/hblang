@@ -412,20 +412,19 @@ pub const Id = enum(IdRepr) {
 
         pub fn format(self: *const Fmt, comptime opts: []const u8, _: anytype, writer: anytype) !void {
             try switch (self.self.data()) {
-                .Pointer => |b| writer.print("^{" ++ opts ++ "}", .{self.tys.store.get(b).fmt(self.tys)}),
-                .Nullable => |b| writer.print("?{" ++ opts ++ "}", .{self.tys.store.get(b).inner.fmt(self.tys)}),
+                .Pointer => |b| writer.print("^{}", .{self.tys.store.get(b).fmt(self.tys)}),
+                .Nullable => |b| writer.print("?{}", .{self.tys.store.get(b).inner.fmt(self.tys)}),
                 .Slice => |b| {
                     try writer.writeAll("[");
                     if (self.tys.store.get(b).len) |l| try writer.print("{d}", .{l});
-                    try writer.writeAll("]");
-                    try writer.print("{" ++ opts ++ "}", .{self.tys.store.get(b).elem.fmt(self.tys)});
+                    try writer.print("]{}", .{self.tys.store.get(b).elem.fmt(self.tys)});
                     return;
                 },
                 .Tuple => |b| {
                     try writer.writeAll("(");
                     for (self.tys.store.get(b).fields, 0..) |f, i| {
                         if (i != 0) try writer.writeAll(", ");
-                        try writer.print("{" ++ opts ++ "}", .{f.ty.fmt(self.tys)});
+                        try writer.print("{}", .{f.ty.fmt(self.tys)});
                     }
                     try writer.writeAll(")");
                     return;
@@ -437,9 +436,9 @@ pub const Id = enum(IdRepr) {
                         else => unreachable,
                     };
                     if (key.scope != .void) {
-                        try writer.print("{" ++ opts ++ "}", .{key.scope.fmt(self.tys)});
+                        try writer.print("{}", .{key.scope.fmt(self.tys)});
                     }
-                    if (key.name.len != 0) {
+                    if (key.name.len != 0 and (key.name.len != 1 or key.name[0] != '-')) {
                         const testing = comptime !std.mem.eql(u8, opts, "test") or true;
                         if (key.scope != .void and
                             (key.scope.data() != .Struct or
@@ -470,7 +469,7 @@ pub const Id = enum(IdRepr) {
                             const finty: Types.Id = if (capture.ty == .type) @enumFromInt(capture.value) else capture.ty;
                             const op = if (capture.ty == .type) " =" else ":";
                             try writer.print(
-                                "{s}{s} {" ++ opts ++ "}",
+                                "{s}{s} {}",
                                 .{ self.tys.getFile(key.file).tokenSrc(capture.id.pos()), op, finty.fmt(self.tys) },
                             );
                         }

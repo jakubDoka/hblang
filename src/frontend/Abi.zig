@@ -21,6 +21,7 @@ pub const Builder = union(graph.CallConv) {
     },
     ablecall,
     fastcall,
+    @"inline",
 
     pub fn types(self: *Builder, buf: ?[]graph.AbiParam, is_ret: bool, spec: Spec) void {
         switch (self.*) {

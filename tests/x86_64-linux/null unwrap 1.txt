@@ -28,14 +28,13 @@ null unwrap 1.use_opt:
 null unwrap 1.null_unwrap:
 	ud2
 main:
-	sub rsp, 0x18
+	sub rsp, 0x08
 	mov rdi, 0x01
 	mov rsi, 0x01
 	call :null unwrap 1.use_opt
 	mov rdi, 0x00
-	mov rsi, [rsp+0x08]
-	mov [rsp], dil
+	mov rsi, 0xAAAAAAAAAAAAAAAA
 	call :null unwrap 1.use_opt
-	add rsp, 0x18
+	add rsp, 0x08
 	ret
 memcpy:

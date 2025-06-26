@@ -1808,7 +1808,6 @@ expectations := .{
 }
 
 main := fn(): uint {
-    // NOTE: does nothing right now
     return @inline(foo, 10)
 }
 

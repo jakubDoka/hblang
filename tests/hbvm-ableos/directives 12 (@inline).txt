@@ -1,10 +1,5 @@
 main:
-         st $31, $254, -8, 8
-     addi64 $254, $254, -8
-       li64 $1, 10
-        jal $31, $0, :directives 12 (@inline).foo
-     addi64 $254, $254, 8
-         ld $31, $254, -8, 8
-         tx
+    li64 $1, 10
+      tx
 directives 12 (@inline).foo:
-       jala $0, $31, 0
+    jala $0, $31, 0
