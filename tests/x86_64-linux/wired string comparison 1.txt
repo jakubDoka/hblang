@@ -11,17 +11,16 @@ wired string comparison 1.broken:
 main:
 	push rbx
 	sub rsp, 0x68
-	lea rbx, [0x0000000000000007]
-	mov [rsp+0x38], rbx
-	mov rdx, 0x04
-	mov [rsp+0x40], rdx
+	lea rdx, [0x0000000000000007]
+	mov [rsp+0x38], rdx
+	mov rax, 0x04
+	mov [rsp+0x40], rax
 	lea rcx, [rsp+0x48]
-	mov rax, 0x00
-	mov [rsp+0x48], al
-	mov [rsp+0x50], rbx
-	mov [rsp+0x58], rdx
-	lea rbx, [rsp]
+	mov byte ptr [rsp+0x48], 0x00
+	mov [rsp+0x50], rdx
+	mov [rsp+0x58], rax
 	mov rax, 0x18
+	lea rbx, [rsp]
 	mov rdi, rbx
 	mov rsi, rcx
 	mov rdx, rax

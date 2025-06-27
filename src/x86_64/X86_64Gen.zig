@@ -156,7 +156,15 @@ pub const classes = enum {
 
         pub const data_dep_offset = 2;
     };
+    pub const ConstStackStore = extern struct {
+        base: ConstStore,
 
+        pub const data_dep_offset = 2;
+    };
+    pub const ConstStore = extern struct {
+        base: OffsetStore,
+        imm: i64,
+    };
     pub const OffsetLoad = extern struct {
         base: graph.Load = .{},
         dis: i32,
@@ -317,6 +325,27 @@ pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.W
 
     if (node.kind == .Store) {
         const base, const offset = node.base().knownOffset();
+
+        const mask = node.data_type.mask() >> 1;
+        if (node.value().?.kind == .CInt and (node.value().?.extra(.CInt).value <= mask)) {
+            const res = func.addNode(
+                .ConstStore,
+                node.data_type,
+                &.{ node.inputs()[0], node.mem(), base },
+                .{
+                    .base = .{ .dis = @intCast(offset) },
+                    .imm = node.value().?.extra(.CInt).value,
+                },
+            );
+
+            if (base.isStack()) {
+                res.kind = .ConstStackStore;
+            }
+
+            worklist.add(res);
+            return res;
+        }
+
         const res = func.addNode(
             .OffsetStore,
             node.data_type,
@@ -430,8 +459,10 @@ pub fn getStaticOffset(node: *Func.Node) i64 {
     return switch (node.kind) {
         .OffsetLoad => node.extra(.OffsetLoad).dis,
         .OffsetStore => node.extra(.OffsetStore).dis,
+        .ConstStore => node.extra(.ConstStore).base.dis,
         .StackLoad => node.extra(.StackLoad).base.dis,
         .StackStore => node.extra(.StackStore).base.dis,
+        .ConstStackStore => node.extra(.ConstStackStore).base.base.dis,
         else => 0,
     };
 }
@@ -910,6 +941,30 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
                     BRegOff{ dst, offset, @intCast(instr.data_type.size()) },
                     SReg{ vl, instr.data_type.size() },
+                });
+            },
+            .ConstStore => |extra| {
+                const dst = self.getReg(instr.inputs()[2]);
+                const vl = extra.imm;
+
+                const offset: i32 = extra.base.dis;
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
+                    BRegOff{ dst, offset, @intCast(instr.data_type.size()) },
+                    vl,
+                });
+            },
+            .ConstStackStore => |extra| {
+                const vl = extra.base.imm;
+
+                const offset: i32 = extra.base.base.dis +
+                    @as(i32, @intCast(switch (instr.inputs()[2].?.extra2()) {
+                        .Local => |n| n.size + self.local_base,
+                        .StructArg => |n| n.spec.size + self.arg_base,
+                        else => unreachable,
+                    }));
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
+                    BRegOff{ .rsp, offset, @intCast(instr.data_type.size()) },
+                    vl,
                 });
             },
             .StackLoad => |extra| {

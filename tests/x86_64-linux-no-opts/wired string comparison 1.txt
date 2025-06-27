@@ -16,14 +16,13 @@ main:
 	mov rax, 0x04
 	mov [rsp+0x40], rax
 	lea rcx, [rsp+0x48]
-	mov rax, 0x00
-	mov [rsp+0x48], al
+	mov byte ptr [rsp+0x48], 0x00
 	mov rax, [rsp+0x38]
 	mov [rsp+0x50], rax
 	mov rax, [rsp+0x40]
 	mov [rsp+0x58], rax
-	mov rax, 0x18
 	lea rbx, [rsp]
+	mov rax, 0x18
 	mov rdi, rbx
 	mov rsi, rcx
 	mov rdx, rax

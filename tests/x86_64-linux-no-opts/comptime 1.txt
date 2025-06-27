@@ -13,8 +13,7 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x08
-	mov rax, 0x07
-	mov [rsp], eax
+	mov dword ptr [rsp], 0x07
 	mov rax, 0x80000000
 	mov [rsp+0x04], eax
 	mov rdi, 0x09

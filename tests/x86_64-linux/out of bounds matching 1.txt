@@ -1,16 +1,12 @@
 out of bounds matching 1.Iterator(Iter = out of bounds matching 1).for_each(func = out of bounds matching 1.main):
-	push rbx
-	push rbp
 	sub rsp, 0x10
-	mov rbp, 0x00
-	mov rbx, 0x01
 3:	mov rax, [rdi+0x08]
 	cmp rax, 0x00
 	setz al
 	movzx rax, al
 	test al, al
 	jz :0
-	mov [rsp], bpl
+	mov byte ptr [rsp], 0x00
 	jmp :1
 0:	mov rdx, [rdi]
 	mov rcx, [rdi+0x08]
@@ -20,7 +16,7 @@ out of bounds matching 1.Iterator(Iter = out of bounds matching 1).for_each(func
 	mov rax, rcx
 	sub rax, 0x01
 	mov [rdi+0x08], rax
-	mov [rsp+0x02], bl
+	mov byte ptr [rsp+0x02], 0x01
 	mov al, [rdx]
 	mov [rsp+0x03], al
 	mov ax, [rsp+0x02]
@@ -32,8 +28,6 @@ out of bounds matching 1.Iterator(Iter = out of bounds matching 1).for_each(func
 	jz :2
 	jmp :3
 2:	add rsp, 0x10
-	pop rbp
-	pop rbx
 	ret
 out of bounds matching 1.main:
 	ret
@@ -45,8 +39,7 @@ out of bounds matching 1.Iterator(Iter = out of bounds matching 1).next:
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, 0x00
-	mov [rdi], al
+	mov byte ptr [rdi], 0x00
 	jmp :1
 0:	mov rdx, [rsi]
 	mov rcx, [rsi+0x08]
@@ -56,8 +49,7 @@ out of bounds matching 1.Iterator(Iter = out of bounds matching 1).next:
 	mov rax, rcx
 	sub rax, 0x01
 	mov [rsi+0x08], rax
-	mov rax, 0x01
-	mov [rsp], al
+	mov byte ptr [rsp], 0x01
 	mov al, [rdx]
 	mov [rsp+0x01], al
 	mov ax, [rsp]
@@ -72,8 +64,7 @@ out of bounds matching 1.next:
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, 0x00
-	mov [rdi], al
+	mov byte ptr [rdi], 0x00
 	jmp :1
 0:	mov rdx, [rsi]
 	mov rcx, [rsi+0x08]
@@ -83,8 +74,7 @@ out of bounds matching 1.next:
 	mov rax, rcx
 	sub rax, 0x01
 	mov [rsi+0x08], rax
-	mov rax, 0x01
-	mov [rsp], al
+	mov byte ptr [rsp], 0x01
 	mov al, [rdx]
 	mov [rsp+0x01], al
 	mov ax, [rsp]
@@ -102,20 +92,17 @@ out of bounds matching 1.byte_iter:
 	ret
 main:
 	push rbx
-	push rbp
 	sub rsp, 0x20
 	lea rax, [0x0000000000000007]
 	mov [rsp], rax
 	mov rax, 0x0C
 	mov [rsp+0x08], rax
-	mov rsi, 0x00
-	mov rbp, 0x00
-	mov rbx, 0x01
+	mov rbx, 0x00
 3:	mov rdx, [rsp+0x08]
 	mov rcx, [rsp]
-	cmp rdx, rsi
+	cmp rdx, rbx
 	jnz :0
-	mov [rsp+0x10], bpl
+	mov byte ptr [rsp+0x10], 0x00
 	jmp :1
 0:	mov rax, rcx
 	add rax, 0x01
@@ -123,7 +110,7 @@ main:
 	mov rax, rdx
 	sub rax, 0x01
 	mov [rsp+0x08], rax
-	mov [rsp+0x12], bl
+	mov byte ptr [rsp+0x12], 0x01
 	mov al, [rcx]
 	mov [rsp+0x13], al
 	mov ax, [rsp+0x12]
@@ -134,8 +121,7 @@ main:
 	test cl, cl
 	jz :2
 	jmp :3
-2:	mov rax, rsi
+2:	mov rax, rbx
 	add rsp, 0x20
-	pop rbp
 	pop rbx
 	ret

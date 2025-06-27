@@ -268,7 +268,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                             }.inner) orelse {
                                 root.panic("{} {any} {}", .{ o, alloc_offsets.items, offs });
                             };
-                            locals[idx] = .compact(.{ .Node = o.value() });
+                            locals[idx] = .compact(.{ .Node = o.value().? });
                         }
                     }
 

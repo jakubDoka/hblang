@@ -41,18 +41,18 @@ main:
 	push rbp
 	push r12
 	sub rsp, 0x68
-	mov r12, 0x00
 	lea rax, [rsp+0x60]
-	mov rcx, 0x00
-	mov [rsp+0x60], cl
+	mov byte ptr [rsp+0x60], 0x00
 	mov [rsp+0x40], rax
 	mov rax, 0x01
 	mov [rsp+0x48], rax
+	mov rax, 0x00
+	mov r12, 0x00
 	mov rbp, [rsp+0x48]
 	cmp r12, rbp
 	setnbe dl
 	movzx rdx, dl
-	or rdx, rcx
+	or rdx, rax
 	test dl, dl
 	jz :0
 	lea rcx, [rsp+0x20]

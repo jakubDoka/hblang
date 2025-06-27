@@ -40,7 +40,6 @@ out of bounds matching 1.main:
 	add rsp, 0x10
 	ret
 out of bounds matching 1.next:
-	push rbx
 	sub rsp, 0x10
 	mov [rsp], rsi
 	mov rcx, [rsp]
@@ -50,28 +49,25 @@ out of bounds matching 1.next:
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, 0x00
-	mov [rdi], al
+	mov byte ptr [rdi], 0x00
 	jmp :1
 0:	mov rax, [rcx]
-	mov rbx, 0x01
 	mov al, [rax]
 	mov [rsp+0x0A], al
 	mov rdx, [rsp]
-	mov rax, [rdx]
 	mov rcx, [rdx+0x08]
+	mov rax, [rdx]
 	add rax, 0x01
 	mov [rdx], rax
 	mov rax, rcx
 	sub rax, 0x01
 	mov [rdx+0x08], rax
-	mov [rsp+0x08], bl
+	mov byte ptr [rsp+0x08], 0x01
 	mov al, [rsp+0x0A]
 	mov [rsp+0x09], al
 	mov ax, [rsp+0x08]
 	mov [rdi], ax
 1:	add rsp, 0x10
-	pop rbx
 	ret
 main:
 	push rbx

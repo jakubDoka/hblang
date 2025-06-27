@@ -1,8 +1,7 @@
 generic structs 2.Foo(F = uint).Bar(B = u8).init:
 	mov rax, 0x01
 	mov [rdi], rax
-	mov rax, 0x01
-	mov [rdi+0x08], al
+	mov byte ptr [rdi+0x08], 0x01
 	ret
 generic structs 2.Foo(F = uint).Bar(B = u8).sub:
 	mov rax, rsi

@@ -132,7 +132,7 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
                     // but memcpy elimination might help and effort here would be redundant
                     const store = ao.knownStore(arg) orelse continue;
 
-                    if (store.value().kind == .Local) {
+                    if (store.value() != null and store.value().?.kind == .Local) {
                         local_stores.append(tmp.arena.allocator(), store) catch unreachable;
                     }
                 }
@@ -143,7 +143,7 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
                 for (arg.outputs()) |unmarked| {
                     const store = unmarked.knownStore(arg) orelse continue;
 
-                    if (store.value().kind == .Local) continue;
+                    if (store.value() != null and store.value().?.kind == .Local) continue;
 
                     var kept: usize = 0;
                     o: for (local_stores.items) |marked| {
@@ -181,7 +181,7 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
 
                 for (local_stores.items) |marked| {
                     errors.append(arena.allocator(), .{
-                        .ReturningStack = .{ .slot = marked.value().sloc },
+                        .ReturningStack = .{ .slot = marked.value().?.sloc },
                     }) catch unreachable;
                 }
             };

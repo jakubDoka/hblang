@@ -2,27 +2,25 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0xD0
-	mov rax, 0x00
-	mov [rsp+0xC0], al
-	mov [rsp+0xC1], al
-	mov [rsp+0xC2], al
-	mov [rsp+0xC3], al
-	mov rax, 0x01
-	mov [rsp+0xC4], al
-	mov [rsp+0xC5], al
-	mov [rsp+0xC6], al
-	mov [rsp+0xC7], al
-	mov rbx, 0x04
+	mov byte ptr [rsp+0xC0], 0x00
+	mov byte ptr [rsp+0xC1], 0x00
+	mov byte ptr [rsp+0xC2], 0x00
+	mov byte ptr [rsp+0xC3], 0x00
+	mov byte ptr [rsp+0xC4], 0x01
+	mov byte ptr [rsp+0xC5], 0x01
+	mov byte ptr [rsp+0xC6], 0x01
+	mov byte ptr [rsp+0xC7], 0x01
+	mov rbp, 0x04
 	mov al, [rsp+0xC0]
 	mov cl, [rsp+0xC4]
 	add rax, rcx
 	mov [rsp+0xC0], al
-	mov al, [rsp+0xC1]
 	mov cl, [rsp+0xC5]
+	mov al, [rsp+0xC1]
 	add rax, rcx
 	mov [rsp+0xC1], al
-	mov al, [rsp+0xC2]
 	mov cl, [rsp+0xC6]
+	mov al, [rsp+0xC2]
 	add rax, rcx
 	mov [rsp+0xC2], al
 	mov cl, [rsp+0xC7]
@@ -30,13 +28,13 @@ main:
 	add rax, rcx
 	mov [rsp+0xC3], al
 	mov al, [rsp+0xC2]
-	mov cl, [rsp+0xC1]
-	mov dl, [rsp+0xC0]
+	mov bl, [rsp+0xC1]
+	mov dl, [rsp+0xC3]
+	mov cl, [rsp+0xC0]
+	add rax, rbx
 	add rax, rcx
-	mov cl, [rsp+0xC3]
 	add rax, rdx
-	add rax, rcx
-	cmp al, bl
+	cmp al, bpl
 	jz :0
 	mov rax, 0x3E9
 	jmp :1

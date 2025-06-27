@@ -16,8 +16,7 @@ main:
 	mov rax, 0x01
 	jmp :1
 0:	lea r10, [rsp+0x04]
-	mov rax, 0x01
-	mov [rsp+0x04], eax
+	mov dword ptr [rsp+0x04], 0x01
 	mov [rsp+0x08], rbx
 	lea rax, [0x0000000000000007]
 	mov cx, [rax]

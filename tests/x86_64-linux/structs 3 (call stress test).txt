@@ -1,6 +1,5 @@
 structs 3 (call stress test).return_pair:
-	mov rax, 0x01
-	mov [rdi], al
+	mov byte ptr [rdi], 0x01
 	mov rax, 0x05
 	mov [rdi+0x08], rax
 	ret
@@ -9,8 +8,7 @@ structs 3 (call stress test).return_triple:
 	mov [rdi], rax
 	mov rax, 0x02
 	mov [rdi+0x08], rax
-	mov rax, 0x03
-	mov [rdi+0x10], al
+	mov byte ptr [rdi+0x10], 0x03
 	ret
 structs 3 (call stress test).take_pair:
 	mov rax, rdi

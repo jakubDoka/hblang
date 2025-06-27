@@ -16,12 +16,9 @@ main:
 	mov [rsp], eax
 	mov rax, 0x80000001
 	mov [rsp+0x04], eax
-	mov rax, 0x70000002
-	mov [rsp+0x08], eax
-	mov rax, 0x70000003
-	mov [rsp+0x0C], eax
-	mov rax, 0x70000004
-	mov [rsp+0x10], eax
+	mov dword ptr [rsp+0x08], 0x70000002
+	mov dword ptr [rsp+0x0C], 0x70000003
+	mov dword ptr [rsp+0x10], 0x70000004
 	call :false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main)).test
 	mov rax, 0x00
 	add rsp, 0x18

@@ -1002,8 +1002,9 @@ pub fn Func(comptime Backend: type) type {
                 return self.inputs()[2].?;
             }
 
-            pub fn value(self: *Node) *Node {
+            pub fn value(self: *Node) ?*Node {
                 std.debug.assert(self.isStore());
+                if (self.inputs().len < 4) return null;
                 return self.inputs()[3].?;
             }
 
@@ -1821,7 +1822,7 @@ pub fn Func(comptime Backend: type) type {
             }
 
             if (node.kind == .Store) {
-                if (node.value().data_type.size() == 0) {
+                if (node.value().?.data_type.size() == 0) {
                     return node.mem();
                 }
             }
@@ -1879,6 +1880,9 @@ pub fn Func(comptime Backend: type) type {
                 }
             }
 
+            // pull loads up the memory chain with hope that they find a store
+            // with the same addr and type to just use the value
+            //
             if (node.kind == .Load) {
                 var earlier = node.mem();
                 const base, _ = node.base().knownOffset();
@@ -1891,9 +1895,9 @@ pub fn Func(comptime Backend: type) type {
                     return st;
                 }
 
-                while (earlier.kind == .Store and
+                while ((earlier.kind == .Store and
                     (earlier.tryCfg0() == node.tryCfg0() or node.tryCfg0() == null) and
-                    earlier.noAlias(node))
+                    earlier.noAlias(node)))
                 {
                     earlier = earlier.mem();
                 }

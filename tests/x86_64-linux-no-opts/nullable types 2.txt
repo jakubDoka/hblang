@@ -12,15 +12,14 @@ main:
 	push rbp
 	sub rsp, 0x48
 	lea rsi, [rsp]
-	mov rcx, 0x01
-	mov [rsp], cl
+	mov byte ptr [rsp], 0x01
 	mov rax, 0x00
 	mov [rsp+0x08], rax
 	mov [rsp+0x10], rax
-	mov [rsp+0x18], cl
+	mov byte ptr [rsp+0x18], 0x01
 	mov [rsp+0x20], rax
 	mov [rsp+0x28], rax
-	mov [rsp+0x30], cl
+	mov byte ptr [rsp+0x30], 0x01
 	mov [rsp+0x38], rax
 	mov [rsp+0x40], rax
 	mov rbp, 0x00

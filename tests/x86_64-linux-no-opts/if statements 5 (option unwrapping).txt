@@ -1,7 +1,6 @@
 main:
 	sub rsp, 0x40
-	mov rax, 0x01
-	mov [rsp+0x10], al
+	mov byte ptr [rsp+0x10], 0x01
 	mov rax, 0x00
 	mov [rsp+0x18], rax
 	mov rax, [rsp+0x10]
@@ -19,8 +18,7 @@ main:
 	movzx rax, al
 	mov [rsp+0x30], al
 	jmp :1
-0:	mov rax, 0x00
-	mov [rsp+0x30], al
+0:	mov byte ptr [rsp+0x30], 0x00
 1:	mov al, [rsp+0x30]
 	test al, al
 	jz :2

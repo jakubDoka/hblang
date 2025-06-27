@@ -1,6 +1,6 @@
 big constant 1.uninit:
-	mov rax, 0xAAAAAAAAAAAAAAAA
-	mov [rdi], rax
+	mov r15, 0xAAAAAAAAAAAAAAAA
+	mov [rdi], r15
 	mov rax, 0x00
 	ret
 main:

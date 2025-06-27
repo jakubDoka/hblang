@@ -1,9 +1,9 @@
 main:
 	sub rsp, 0x20
-	mov rax, 0xFFFFFFFFFFFFFFFD
-	mov [rsp], rax
-	mov rax, 0xFFFFFFFFFFFFFFFC
-	mov [rsp+0x08], rax
+	mov r15, 0xFFFFFFFFFFFFFFFD
+	mov [rsp], r15
+	mov r15, 0xFFFFFFFFFFFFFFFC
+	mov [rsp+0x08], r15
 	mov rcx, 0x01
 	mov [rsp+0x10], rcx
 	mov rax, 0x02

@@ -4,14 +4,10 @@ main:
 	sub rsp, 0x90
 	mov r9, 0x00
 	lea rbp, [rsp+0x80]
-	mov rax, 0x01
-	mov [rsp+0x80], al
-	mov rax, 0x02
-	mov [rsp+0x81], al
-	mov rax, 0x03
-	mov [rsp+0x82], al
-	mov rax, 0x04
-	mov [rsp+0x83], al
+	mov byte ptr [rsp+0x80], 0x01
+	mov byte ptr [rsp+0x81], 0x02
+	mov byte ptr [rsp+0x82], 0x03
+	mov byte ptr [rsp+0x83], 0x04
 	lea r8, [rsp]
 	mov [rsp], rbp
 	mov rbx, 0x04

@@ -1,7 +1,6 @@
 nullable types 1.mkval(T = uint):
 	sub rsp, 0x10
-	mov rax, 0x01
-	mov [rsp], al
+	mov byte ptr [rsp], 0x01
 	mov rax, [rsp]
 	mov [rsp+0x08], rsi
 	mov [rdi], rax
@@ -10,8 +9,7 @@ nullable types 1.mkval(T = uint):
 	add rsp, 0x10
 	ret
 nullable types 1.mknull(T = uint):
-	mov rax, 0x00
-	mov [rdi], al
+	mov byte ptr [rdi], 0x00
 	ret
 main:
 	sub rsp, 0x28

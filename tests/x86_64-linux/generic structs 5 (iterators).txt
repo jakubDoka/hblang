@@ -6,13 +6,11 @@ generic structs 5 (iterators).main.next:
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, 0x00
-	mov [rdi], al
+	mov byte ptr [rdi], 0x00
 	jmp :1
-0:	mov rcx, [rsi]
-	mov rax, 0x01
-	mov [rsp], al
-	mov al, [rcx]
+0:	mov byte ptr [rsp], 0x01
+	mov rax, [rsi]
+	mov al, [rax]
 	mov [rsp+0x01], al
 	mov ax, [rsp]
 	mov [rdi], ax
@@ -32,20 +30,16 @@ generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main,
 	push r13
 	push r14
 	push r15
-	sub rsp, 0xA8
-	mov [rsp+0x98], rdi
-	mov [rsp+0x90], rsi
-	lea r15, [rsp+0xA0]
-	mov [rsp+0x08], r15
-	lea r15, [rsp+0xA2]
-	mov [rsp], r15
-	mov r13, 0x01
-	mov r12, 0x02
-	mov rbp, [rsp+0x90]
+	sub rsp, 0x18
+	mov [rsp+0x08], rdi
+	mov [rsp], rsi
+	lea r13, [rsp+0x10]
+	lea r12, [rsp+0x12]
+	mov rbp, [rsp]
 	add rbp, 0x08
-	mov rbx, [rsp+0x90]
+	mov rbx, [rsp]
 	add rbx, 0x18
-7:	mov r15, [rsp+0x90]
+7:	mov r15, [rsp]
 	mov al, [r15]
 	mov rcx, rax
 	movsx rcx, cl
@@ -54,41 +48,40 @@ generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main,
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rdi, [rsp]
+	mov rdi, r12
 	mov rsi, rbp
 	call :generic structs 5 (iterators).main.next
-	mov al, [rsp+0xA2]
+	mov al, [rsp+0x12]
 	test al, al
 	jz :1
-	mov ax, [rsp+0xA2]
-	mov r15, [rsp+0x98]
+	mov ax, [rsp+0x12]
+	mov r15, [rsp+0x08]
 	mov [r15], ax
 	jmp :2
-1:	mov r15, [rsp+0x90]
-	mov [r15], r13b
+1:	mov r15, [rsp]
+	mov byte ptr [r15], 0x01
 	jmp :3
 0:	cmp rcx, 0x01
 	setz al
 	movzx rax, al
 	test al, al
 	jz :4
-	mov rdi, [rsp+0x08]
+	mov rdi, r13
 	mov rsi, rbx
 	call :generic structs 5 (iterators).main.next
-	mov al, [rsp+0xA0]
+	mov al, [rsp+0x10]
 	test al, al
 	jz :5
-	mov ax, [rsp+0xA0]
-	mov r15, [rsp+0x98]
+	mov ax, [rsp+0x10]
+	mov r15, [rsp+0x08]
 	mov [r15], ax
 2:	jmp :6
-5:	mov r15, [rsp+0x90]
-	mov [r15], r12b
+5:	mov r15, [rsp]
+	mov byte ptr [r15], 0x02
 3:	jmp :7
-4:	mov rax, 0x00
-	mov r15, [rsp+0x98]
-	mov [r15], al
-6:	add rsp, 0xA8
+4:	mov r15, [rsp+0x08]
+	mov byte ptr [r15], 0x00
+6:	add rsp, 0x18
 	pop r15
 	pop r14
 	pop r13
@@ -122,8 +115,7 @@ main:
 	mov r15, [rsp+0x98]
 	mov [rsp+0xC8], r15
 	lea r13, [rsp+0xD0]
-	mov r12, 0x00
-	mov [rsp+0xD0], r12b
+	mov byte ptr [rsp+0xD0], 0x00
 	mov [rsp+0xD8], rax
 	mov r15, [rsp+0x08]
 	mov [rsp+0xE0], r15
@@ -132,6 +124,7 @@ main:
 	mov r15, [rsp+0x08]
 	mov [rsp+0xF0], r15
 	lea rbp, [rsp+0xF8]
+	mov r12, 0x00
 	lea rbx, [rsp+0xFA]
 8:	mov rdi, rbp
 	mov rsi, [rsp+0x90]

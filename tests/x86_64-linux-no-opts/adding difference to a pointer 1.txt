@@ -3,16 +3,12 @@ adding difference to a pointer 1.one:
 	ret
 main:
 	sub rsp, 0x18
-	lea rcx, [rsp+0x08]
-	mov rax, 0x00
-	mov [rsp+0x08], al
-	mov rax, 0x01
-	mov [rsp+0x09], al
-	mov rax, 0x02
-	mov [rsp+0x0A], al
-	mov rax, 0x03
-	mov [rsp+0x0B], al
-	mov [rsp], rcx
+	lea rax, [rsp+0x08]
+	mov byte ptr [rsp+0x08], 0x00
+	mov byte ptr [rsp+0x09], 0x01
+	mov byte ptr [rsp+0x0A], 0x02
+	mov byte ptr [rsp+0x0B], 0x03
+	mov [rsp], rax
 	call :adding difference to a pointer 1.one
 	mov rdx, rax
 	mov rcx, 0x01

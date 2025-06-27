@@ -210,7 +210,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
                     if (cursor.isStore()) {
                         if (cursor.base() != curr.base()) {
                             cursor = cursor.mem();
-                        } else break :b cursor.value();
+                        } else break :b cursor.value().?;
                     } else if (cursor.kind == .Mem) {
                         if (cursor.inputs()[0].?.kind == .Start) {
                             return .{ .Unsupported = cursor };

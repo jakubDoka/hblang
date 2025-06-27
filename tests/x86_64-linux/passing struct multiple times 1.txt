@@ -50,13 +50,10 @@ main:
 	mov [rsp+0x28], rax
 	mov rax, 0x03
 	mov [rsp+0x30], rax
-	mov rax, 0x01
-	mov [rsp+0x38], al
-	mov rax, 0x02
-	mov [rsp+0x39], al
-	mov rcx, 0x03
+	mov byte ptr [rsp+0x38], 0x01
+	mov byte ptr [rsp+0x39], 0x02
 	mov ax, [rsp+0x38]
-	mov [rsp+0x3A], cl
+	mov byte ptr [rsp+0x3A], 0x03
 	lea rbp, [rsp]
 	mov [rbp], ax
 	lea rbx, [rsp+0x08]

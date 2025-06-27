@@ -49,14 +49,11 @@ main:
 	push rbx
 	sub rsp, 0x28
 	lea rbx, [rsp+0x20]
-	mov rax, 0x01
-	mov [rsp+0x20], al
-	mov rax, 0x02
-	mov [rsp+0x21], al
-	mov rax, 0x03
-	mov [rsp+0x22], al
-	mov rsi, 0x01
+	mov byte ptr [rsp+0x20], 0x01
+	mov byte ptr [rsp+0x21], 0x02
+	mov byte ptr [rsp+0x22], 0x03
 	lea rdi, [rsp]
+	mov rsi, 0x01
 	mov rdx, 0x00
 	call :slices 3.reverse
 	lea rdi, [rsp+0x10]

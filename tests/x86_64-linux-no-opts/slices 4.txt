@@ -49,17 +49,14 @@ main:
 	sub rsp, 0x28
 	lea rax, [0x0000000000000007]
 	mov [rsp], rax
-	mov rdx, 0x03
-	mov [rsp+0x08], rdx
-	lea rcx, [rsp+0x20]
-	mov rax, 0x61
-	mov [rsp+0x20], al
-	mov rax, 0x62
-	mov [rsp+0x21], al
-	mov rax, 0x63
-	mov [rsp+0x22], al
-	mov [rsp+0x10], rcx
-	mov [rsp+0x18], rdx
+	mov rcx, 0x03
+	mov [rsp+0x08], rcx
+	lea rax, [rsp+0x20]
+	mov byte ptr [rsp+0x20], 0x61
+	mov byte ptr [rsp+0x21], 0x62
+	mov byte ptr [rsp+0x22], 0x63
+	mov [rsp+0x10], rax
+	mov [rsp+0x18], rcx
 	mov rsi, [rsp+0x08]
 	mov rdi, [rsp]
 	mov rdx, rdi

@@ -1,11 +1,11 @@
 big constant 1.uninit:
 	sub rsp, 0x10
 	mov [rsp], rdi
-	mov rdx, 0x00
-	mov rcx, 0xAAAAAAAAAAAAAAAA
+	mov rcx, 0x00
 	mov rax, [rsp]
-	mov [rax], rcx
-	mov rax, rdx
+	mov r15, 0xAAAAAAAAAAAAAAAA
+	mov [rax], r15
+	mov rax, rcx
 	add rsp, 0x10
 	ret
 main:

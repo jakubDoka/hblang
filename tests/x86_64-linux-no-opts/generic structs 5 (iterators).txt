@@ -8,19 +8,17 @@ generic structs 5 (iterators).main.next:
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, 0x00
-	mov [rdi], al
+	mov byte ptr [rdi], 0x00
 	jmp :1
-0:	mov rcx, [rcx]
-	mov rax, 0x01
-	mov [rsp+0x08], al
-	mov al, [rcx]
+0:	mov rax, [rcx]
+	mov byte ptr [rsp+0x08], 0x01
+	mov al, [rax]
 	mov [rsp+0x09], al
 	mov ax, [rsp+0x08]
 	mov [rdi], ax
 	mov rdx, [rsp]
-	mov rax, [rdx]
 	mov rcx, [rdx+0x08]
+	mov rax, [rdx]
 	add rax, 0x01
 	mov [rdx], rax
 	mov rax, rcx
@@ -32,17 +30,12 @@ generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main,
 	push rbx
 	push rbp
 	push r12
-	push r13
-	push r14
-	push r15
 	sub rsp, 0x18
-	mov [rsp], rdi
-	mov [rsp+0x08], rsi
-	lea r13, [rsp+0x10]
-	mov r12, 0x01
-	mov rbp, 0x02
-	lea rbx, [rsp+0x12]
-7:	mov rdx, [rsp+0x08]
+	mov r12, rdi
+	mov [rsp], rsi
+	lea rbp, [rsp+0x08]
+	lea rbx, [rsp+0x0A]
+7:	mov rdx, [rsp]
 	mov al, [rdx]
 	mov rcx, rax
 	movsx rcx, cl
@@ -53,17 +46,16 @@ generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main,
 	jz :0
 	mov rsi, rdx
 	add rsi, 0x08
-	mov rdi, r13
+	mov rdi, rbp
 	call :generic structs 5 (iterators).main.next
-	mov cl, [rsp+0x10]
-	mov rax, [rsp+0x08]
+	mov cl, [rsp+0x08]
+	mov rax, [rsp]
 	test cl, cl
 	jz :1
-	mov ax, [rsp+0x10]
-	mov r15, [rsp]
-	mov [r15], ax
+	mov ax, [rsp+0x08]
+	mov [r12], ax
 	jmp :2
-1:	mov [rax], r12b
+1:	mov byte ptr [rax], 0x01
 	jmp :3
 0:	cmp rcx, 0x01
 	setz al
@@ -74,23 +66,17 @@ generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main,
 	add rsi, 0x18
 	mov rdi, rbx
 	call :generic structs 5 (iterators).main.next
-	mov cl, [rsp+0x12]
-	mov rax, [rsp+0x08]
+	mov cl, [rsp+0x0A]
+	mov rax, [rsp]
 	test cl, cl
 	jz :5
-	mov ax, [rsp+0x12]
-	mov r15, [rsp]
-	mov [r15], ax
+	mov ax, [rsp+0x0A]
+	mov [r12], ax
 2:	jmp :6
-5:	mov [rax], bpl
+5:	mov byte ptr [rax], 0x02
 3:	jmp :7
-4:	mov rax, 0x00
-	mov r15, [rsp]
-	mov [r15], al
+4:	mov byte ptr [r12], 0x00
 6:	add rsp, 0x18
-	pop r15
-	pop r14
-	pop r13
 	pop r12
 	pop rbp
 	pop rbx
@@ -113,29 +99,27 @@ main:
 	mov qword ptr [rsp+0x90], 0x02
 	mov r15, [rsp+0x90]
 	mov [rsp+0xB8], r15
+	lea r15, [rsp+0xF0]
+	mov [rsp+0x08], r15
 	lea rax, [0x0000000000000007]
 	mov [rsp+0xC0], rax
 	mov r15, [rsp+0x90]
 	mov [rsp+0xC8], r15
-	mov rax, 0x70000002
-	mov [rsp+0x118], eax
+	mov dword ptr [rsp+0x118], 0x70000002
 	mov rax, 0x90000002
 	mov [rsp+0x11C], eax
-	lea r15, [rsp+0xF0]
-	mov [rsp+0x08], r15
-	mov qword ptr [rsp], 0x00
-	lea r13, [rsp+0xD0]
+	lea r15, [rsp+0xD0]
+	mov [rsp], r15
 	mov rax, [rsp+0xB0]
 	mov [rsp+0xD0], rax
 	mov rax, [rsp+0xB8]
 	mov [rsp+0xD8], rax
-	lea r12, [rsp+0xE0]
+	lea r13, [rsp+0xE0]
 	mov rax, [rsp+0xA0]
 	mov [rsp+0xE0], rax
 	mov rax, [rsp+0xA8]
 	mov [rsp+0xE8], rax
-	mov r15b, [rsp]
-	mov [rsp+0xF0], r15b
+	mov byte ptr [rsp+0xF0], 0x00
 	mov rax, [rsp+0xB0]
 	mov [rsp+0xF8], rax
 	mov rax, [rsp+0xB8]
@@ -144,13 +128,14 @@ main:
 	mov [rsp+0x108], rax
 	mov rax, [rsp+0xC8]
 	mov [rsp+0x110], rax
-	lea rbp, [rsp+0x120]
-	lea rbx, [rsp+0x122]
-8:	mov rdi, rbp
-	mov rsi, r13
+	lea rbp, [rsp+0x122]
+	mov r12, 0x00
+	lea rbx, [rsp+0x120]
+8:	mov rdi, rbx
+	mov rsi, [rsp]
 	call :generic structs 5 (iterators).main.next
 	mov al, [rsp+0x120]
-	cmp al, [rsp]
+	cmp al, r12b
 	jnz :0
 	mov rax, [rsp+0xA0]
 	mov [rsp+0xE0], rax
@@ -159,10 +144,10 @@ main:
 	lea rbp, [rsp+0x124]
 	lea rbx, [rsp+0x126]
 5:	mov rdi, rbp
-	mov rsi, r12
+	mov rsi, r13
 	call :generic structs 5 (iterators).main.next
 	mov al, [rsp+0x124]
-	cmp al, [rsp]
+	cmp al, r12b
 	jnz :1
 	mov rax, 0x00
 	jmp :7
@@ -170,7 +155,7 @@ main:
 	mov rsi, [rsp+0x08]
 	call :generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main, B = generic structs 5 (iterators).main).next
 	mov al, [rsp+0x126]
-	cmp al, [rsp]
+	cmp al, r12b
 	jnz :3
 	mov rax, 0x03
 	jmp :7
@@ -181,11 +166,11 @@ main:
 	mov rax, [rsp+0x98]
 	jmp :7
 4:	jmp :5
-0:	mov rdi, rbx
-	mov rsi, r12
+0:	mov rdi, rbp
+	mov rsi, r13
 	call :generic structs 5 (iterators).main.next
 	mov al, [rsp+0x122]
-	cmp al, [rsp]
+	cmp al, r12b
 	jnz :6
 	mov rax, 0x01
 	jmp :7

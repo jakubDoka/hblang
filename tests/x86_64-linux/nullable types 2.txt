@@ -6,8 +6,7 @@ nullable types 2.take:
 main:
 	sub rsp, 0x18
 	lea rcx, [rsp]
-	mov rax, 0x01
-	mov [rsp], al
+	mov byte ptr [rsp], 0x01
 	mov rax, 0x00
 	mov [rsp+0x08], rax
 	mov [rsp+0x10], rax

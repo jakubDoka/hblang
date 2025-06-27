@@ -1,10 +1,8 @@
 main:
 	sub rsp, 0x10
-	mov rax, 0x60000000
-	mov [rsp], eax
-	mov rax, 0x01
-	mov [rsp+0x04], al
-	mov [rsp+0x05], al
+	mov dword ptr [rsp], 0x60000000
+	mov byte ptr [rsp+0x04], 0x01
+	mov byte ptr [rsp+0x05], 0x01
 	mov ax, [rsp+0x04]
 	movzx rax, ax
 	sub rax, 0x100

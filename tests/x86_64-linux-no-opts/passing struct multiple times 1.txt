@@ -50,21 +50,18 @@ main:
 	mov [rsp+0x28], rax
 	mov rax, 0x03
 	mov [rsp+0x30], rax
-	mov rax, 0x01
-	mov [rsp+0x38], al
-	mov rax, 0x02
-	mov [rsp+0x39], al
-	mov rax, 0x03
-	mov [rsp+0x3A], al
-	lea rbp, [rsp+0x08]
-	lea rbx, [rsp]
+	mov byte ptr [rsp+0x38], 0x01
+	mov byte ptr [rsp+0x39], 0x02
+	mov byte ptr [rsp+0x3A], 0x03
+	lea rbp, [rsp]
+	lea rbx, [rsp+0x08]
 	mov rcx, 0x18
 	mov ax, [rsp+0x38]
-	mov [rbx], ax
+	mov [rbp], ax
 	mov al, [rsp+0x3A]
-	mov [rbx+0x02], al
+	mov [rbp+0x02], al
 	mov rsi, rdx
-	mov rdi, rbp
+	mov rdi, rbx
 	mov rdx, rcx
 	call :memcpy
 	call :passing struct multiple times 1.foo

@@ -42,27 +42,24 @@ main:
 	push r12
 	sub rsp, 0x08
 	lea r12, [rsp]
-	mov rax, 0x61
-	mov [rsp], al
-	mov rax, 0x62
-	mov [rsp+0x01], al
-	mov rax, 0x63
-	mov [rsp+0x02], al
-	lea rbp, [0x0000000000000007]
-	mov rbx, 0x03
-	mov rdi, rbp
-	mov rsi, rbx
-	mov rdx, rbp
-	mov rcx, rbx
+	mov byte ptr [rsp], 0x61
+	mov byte ptr [rsp+0x01], 0x62
+	mov byte ptr [rsp+0x02], 0x63
+	mov rbp, 0x03
+	lea rbx, [0x0000000000000007]
+	mov rdi, rbx
+	mov rsi, rbp
+	mov rdx, rbx
+	mov rcx, rbp
 	call :slices 4.equals
 	xor al, 0x01
 	test al, al
 	jz :0
 	jmp :1
 0:	mov rdi, r12
-	mov rsi, rbx
-	mov rdx, rbp
-	mov rcx, rbx
+	mov rsi, rbp
+	mov rdx, rbx
+	mov rcx, rbp
 	call :slices 4.equals
 	xor al, 0x01
 	test al, al

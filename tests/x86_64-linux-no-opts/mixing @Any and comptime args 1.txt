@@ -8,17 +8,14 @@ mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime arg
 	mov esi, [rsp+0x04]
 	call :mixing @Any and comptime args 1.main
 	jmp :1
-0:	mov rax, 0x00
-	mov [rdi], al
+0:	mov byte ptr [rdi], 0x00
 1:	add rsp, 0x08
 	ret
 mixing @Any and comptime args 1.main:
 	sub rsp, 0x10
 	mov [rsp+0x08], esi
-	mov ecx, [rsp+0x08]
-	mov rax, 0x01
-	mov [rsp], al
-	mov eax, ecx
+	mov eax, [rsp+0x08]
+	mov byte ptr [rsp], 0x01
 	add eax, 0x05
 	mov [rsp+0x04], eax
 	mov rax, [rsp]
@@ -27,10 +24,8 @@ mixing @Any and comptime args 1.main:
 	ret
 main:
 	sub rsp, 0x18
-	mov rax, 0x01
-	mov [rsp+0x08], al
-	mov rax, 0x00
-	mov [rsp+0x0C], eax
+	mov byte ptr [rsp+0x08], 0x01
+	mov dword ptr [rsp+0x0C], 0x00
 	mov rax, [rsp+0x08]
 	mov [rsp], rax
 	lea rdi, [rsp+0x10]
