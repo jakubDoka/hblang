@@ -4,16 +4,11 @@ eopll 2.epoll_wait:
 	mov [rsp+0x08], rsi
 	mov [rsp+0x10], rdx
 	mov [rsp+0x18], rcx
-	mov rdi, 0xE8
-	mov rsi, [rsp]
-	mov rdx, [rsp+0x08]
-	mov rcx, [rsp+0x10]
-	mov r8, [rsp+0x18]
-	mov rax, rdi
-	mov rdi, rsi
-	mov rsi, rdx
-	mov rdx, rcx
-	mov r10, r8
+	mov rax, 0xE8
+	mov rdi, [rsp]
+	mov rsi, [rsp+0x08]
+	mov rdx, [rsp+0x10]
+	mov r10, [rsp+0x18]
 	syscall
 	mov [rsp+0x20], rax
 	add rsp, 0x28
@@ -24,9 +19,8 @@ main:
 	push r12
 	push r13
 	sub rsp, 0x28
-	mov rdi, 0x123
+	mov rax, 0x123
 	mov r13, 0x00
-	mov rax, rdi
 	mov rdi, r13
 	syscall
 	mov [rsp+0x18], eax

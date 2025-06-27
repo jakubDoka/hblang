@@ -1,7 +1,3 @@
-nullable types 1.mknull(T = uint):
-	mov rax, 0x00
-	mov [rdi], al
-	ret
 nullable types 1.mkval(T = uint):
 	sub rsp, 0x10
 	mov rax, 0x01
@@ -13,21 +9,28 @@ nullable types 1.mkval(T = uint):
 	mov [rdi+0x08], rax
 	add rsp, 0x10
 	ret
+nullable types 1.mknull(T = uint):
+	mov rax, 0x00
+	mov [rdi], al
+	ret
 main:
-	sub rsp, 0x20
-	mov rax, 0x01
-	mov [rsp+0x10], al
-	mov rdx, 0x00
-	mov rcx, 0x0A
-	mov rax, [rsp+0x10]
-	mov [rsp+0x18], rcx
-	mov [rsp], rax
+	sub rsp, 0x28
+	lea rdi, [rsp]
+	mov rsi, 0x0A
+	call :nullable types 1.mkval(T = uint)
+	mov rcx, 0x00
 	mov al, [rsp]
-	cmp al, dl
+	cmp al, cl
 	jnz :0
 	mov rax, 0x01
 	jmp :1
-0:	mov rax, rcx
-1:	mov [rsp+0x08], rcx
-	add rsp, 0x20
+0:	lea rdi, [rsp+0x10]
+	call :nullable types 1.mknull(T = uint)
+	mov cl, [rsp+0x10]
+	mov rax, [rsp+0x08]
+	test cl, cl
+	jz :3
+	mov rax, 0x02
+1:	jmp :3
+3:	add rsp, 0x28
 	ret

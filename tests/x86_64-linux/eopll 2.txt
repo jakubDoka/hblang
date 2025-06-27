@@ -1,8 +1,6 @@
 eopll 2.epoll_wait:
 	sub rsp, 0x08
-	mov rax, rdi
-	mov rdi, 0xE8
-	xchg rax, rdi
+	mov rax, 0xE8
 	mov r10, rcx
 	syscall
 	add rsp, 0x08
@@ -15,9 +13,8 @@ main:
 	push r14
 	push r15
 	sub rsp, 0xA8
-	mov rdi, 0x123
+	mov rax, 0x123
 	mov qword ptr [rsp+0x90], 0x00
-	mov rax, rdi
 	mov rdi, [rsp+0x90]
 	syscall
 	lea r15, [rsp+0x98]

@@ -1,13 +1,10 @@
 typeof is not comptime 1.broken1:
 	push rbx
 	sub rsp, 0x08
-	mov rdi, 0x01
-	mov rsi, 0x02
-	lea rdx, [0x0000000000000007]
+	mov rax, 0x01
+	mov rdi, 0x02
+	lea rsi, [0x0000000000000007]
 	mov rbx, 0x00
-	mov rax, rdi
-	mov rdi, rsi
-	mov rsi, rdx
 	mov rdx, rbx
 	syscall
 	mov rax, rbx

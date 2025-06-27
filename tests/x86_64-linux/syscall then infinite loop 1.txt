@@ -1,8 +1,6 @@
 main:
 	sub rsp, 0x08
-	mov rdi, 0x123
-	mov rsi, 0x00
-	mov rax, rdi
-	mov rdi, rsi
+	mov rax, 0x123
+	mov rdi, 0x00
 	syscall
 0:	jmp :0

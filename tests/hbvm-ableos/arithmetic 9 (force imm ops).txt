@@ -1,11 +1,16 @@
 main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
        li64 $1, -1
+        jal $31, $0, :arithmetic 9 (force imm ops).box(v: uint)
        li64 $2, 0
        xori $1, $1, -1
-        jeq $1, $2, :0
+        jeq $1, $2, :1
        li64 $1, 1
-        jmp :1
-0:       cp $1, $2
-1:       tx
+        jmp :2
+1:       cp $1, $2
+2:   addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
 arithmetic 9 (force imm ops).box(v: uint):
        jala $0, $31, 0

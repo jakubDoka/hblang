@@ -1,12 +1,29 @@
 main:
-    li64 $1, 10
-      tx
-nullable types 1.mknull(T = uint):
-     li8 $2, 0
-    li64 $1, -6148914691236517206
-     swa $1, $2
-    jala $0, $31, 0
+         st $31, $254, -16, 16
+     addi64 $254, $254, -16
+       li64 $1, 10
+        jal $31, $0, :nullable types 1.mkval(T = uint)
+         cp $32, $2
+       li64 $2, 0
+       andi $1, $1, 255
+        jne $1, $2, :1
+       li64 $1, 1
+        jmp :2
+1:      jal $31, $0, :nullable types 1.mknull(T = uint)
+       andi $1, $1, 255
+        jeq $1, $0, :4
+       li64 $1, 2
+2:      jmp :5
+4:       cp $1, $32
+5:   addi64 $254, $254, 16
+         ld $31, $254, -16, 16
+         tx
 nullable types 1.mkval(T = uint):
-      cp $2, $1
-     li8 $1, 1
-    jala $0, $31, 0
+         cp $2, $1
+        li8 $1, 1
+       jala $0, $31, 0
+nullable types 1.mknull(T = uint):
+        li8 $2, 0
+       li64 $1, -6148914691236517206
+        swa $1, $2
+       jala $0, $31, 0

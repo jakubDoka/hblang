@@ -24,25 +24,17 @@ mixing @Any and comptime args 1.main:
 	add rsp, 0x10
 	ret
 main:
-	sub rsp, 0x20
-	mov rdx, 0x01
-	mov [rsp+0x08], dl
+	sub rsp, 0x18
+	mov rax, 0x01
+	mov [rsp+0x08], al
 	mov rax, 0x00
 	mov [rsp+0x0C], eax
 	mov rax, [rsp+0x08]
 	mov [rsp], rax
-	mov cl, [rsp]
-	mov eax, [rsp+0x04]
-	test cl, cl
-	jz :0
-	mov [rsp+0x18], dl
-	add eax, 0x05
-	mov [rsp+0x1C], eax
-	mov rax, [rsp+0x18]
-	mov [rsp+0x10], rax
-	jmp :1
-0:	mov rax, 0x00
-	mov [rsp+0x10], al
-1:	mov rax, 0x00
-	add rsp, 0x20
+	lea rdi, [rsp+0x10]
+	mov sil, [rsp]
+	mov edx, [rsp+0x04]
+	call :mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime args 1.main)
+	mov rax, 0x00
+	add rsp, 0x18
 	ret

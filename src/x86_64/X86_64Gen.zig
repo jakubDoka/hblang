@@ -255,7 +255,11 @@ pub fn regBias(node: *Func.Node) ?u16 {
             for (node.outputs()) |o| {
                 if (o.kind == .Call) {
                     const idx = std.mem.indexOfScalar(?*Func.Node, o.dataDeps(), node) orelse continue;
-                    break :b if (idx < Reg.system_v.args.len) Reg.system_v.args[idx] else return null;
+                    if (o.extra(.Call).id == syscall) {
+                        break :b Reg.system_v.syscall_args[idx];
+                    } else {
+                        break :b if (idx < Reg.system_v.args.len) Reg.system_v.args[idx] else return null;
+                    }
                 }
 
                 if (o.kind == .Phi and o.inputs()[0].?.kind != .Loop) {

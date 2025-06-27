@@ -1,6 +1,10 @@
 main:
-    li64 $1, 8
-      tx
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        jal $31, $0, :unions 3.TypeInfo(T = uint)
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
 unions 3.TypeInfo(T = uint):
-    li64 $1, 8
-    jala $0, $31, 0
+       li64 $1, 8
+       jala $0, $31, 0

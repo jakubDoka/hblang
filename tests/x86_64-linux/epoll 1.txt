@@ -1,34 +1,30 @@
 main:
 	push rbx
 	sub rsp, 0x18
-	mov rdi, 0x123
+	mov rax, 0x123
 	mov rbx, 0x00
-	mov rax, rdi
 	mov rdi, rbx
 	mov rsi, rbx
 	syscall
-	mov rcx, rax
-	cmp ecx, 0x00
-	setl sil
-	movzx rsi, sil
-	test sil, sil
+	mov rdx, rax
+	cmp edx, 0x00
+	setl dil
+	movzx rdi, dil
+	test dil, dil
 	jz :0
 	mov rax, 0x01
 	jmp :1
-0:	lea r8, [rsp]
+0:	lea r10, [rsp]
 	mov rax, 0x01
 	mov [rsp], eax
 	mov [rsp+0x04], rbx
 	lea rax, [0x0000000000000007]
-	mov ax, [rax]
-	mov rdi, 0xE9
-	mov rdx, rax
-	movzx rdx, dx
-	mov rax, rdi
-	mov rsi, rdx
-	mov rdi, rcx
+	mov cx, [rax]
+	mov rax, 0xE9
+	mov rsi, rcx
+	movzx rsi, si
+	mov rdi, rdx
 	mov rdx, rbx
-	mov r10, r8
 	syscall
 	cmp eax, 0x00
 	setl al
