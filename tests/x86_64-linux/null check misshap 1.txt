@@ -1,0 +1,14 @@
+null check misshap 1.alloc:
+	lea rax, [0x0000000000000007]
+	ret
+main:
+	sub rsp, 0x08
+	call :null check misshap 1.alloc
+	test rax, rax
+	jz :0
+	mov byte ptr [rax], 0x01
+	mov rax, 0x00
+	jmp :1
+0:	mov rax, 0x01
+1:	add rsp, 0x08
+	ret

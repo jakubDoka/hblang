@@ -1196,7 +1196,8 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
             },
             .If => {
                 const cond = self.getReg(instr.inputs()[1]);
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_TEST, .{ SReg{ cond, 1 }, SReg{ cond, 1 } });
+                const cond_size = instr.inputs()[1].?.data_type.size();
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_TEST, .{ SReg{ cond, cond_size }, SReg{ cond, cond_size } });
                 self.local_relocs.appendAssumeCapacity(.{
                     .dest = instr.outputs()[1].schedule,
                     .offset = @intCast(self.out.code.items.len),

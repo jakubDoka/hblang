@@ -2,6 +2,25 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### null check misshap 1
+```hb
+glb: u8 = 0
+
+alloc := fn(): ?^u8 {
+    return &glb
+}
+
+main := fn(): uint {
+    mmapped := alloc()
+    if mmapped != null {
+        mmapped.?.* = 1
+        return 0
+    } else {
+        return 1
+    }
+}
+```
+
 #### subsume copy 1
 ```hb
 main := fn(): uint {
