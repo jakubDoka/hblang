@@ -979,6 +979,11 @@ pub fn Func(comptime Backend: type) type {
                 return self.inputs()[3].?;
             }
 
+            pub fn cpySize(self: *Node) *Node {
+                std.debug.assert(self.isSub(MemCpy));
+                return self.inputs()[4].?;
+            }
+
             pub fn isLazyPhi(self: *Node, on_loop: *Node) bool {
                 std.debug.assert(on_loop.kind == .Loop or on_loop.kind == .Region);
                 return self.kind == .Phi and self.inputs()[0] == on_loop and
@@ -1867,32 +1872,40 @@ pub fn Func(comptime Backend: type) type {
                 }
             }
 
-            if (false and node.kind == .MemCpy) memcpy: {
-                const ctrl = inps[0].?;
-                _ = ctrl; // autofix
+            // Is this a memcpy to a local that is only loaded from?
+            //
+            if (node.kind == .MemCpy) memcpy: {
                 const mem = inps[1].?;
                 const dst = inps[2].?;
                 const src = inps[3].?;
-                const len = inps[4].?;
-                _ = len; // autofix
 
                 if (dst == src) {
                     return mem;
                 }
 
-                if (src.kind == .Local and dst.kind == .Local) {
-                    for (src.outputs()) |use| {
-                        if (use.knownMemOp()) |op| {
-                            if (op[0] == node) continue;
-                            if (op[0].kind != .Store) {
-                                break :memcpy;
-                            }
-                        } else break :memcpy;
-                    }
-
-                    self.subsume(dst, src);
-                    return mem;
+                // If store happens after us, it could be a swap so by pesimiztic
+                //
+                for (node.outputs()) |use| {
+                    if (if (use.knownMemOp()) |op| !op[0].isLoad() else false) break :memcpy;
                 }
+
+                // We cause side effects if our dest is not .Local
+                //
+                if (dst.kind != .Local and (dst.kind != .BinOp or
+                    dst.inputs()[1].?.kind != .Local)) break :memcpy;
+
+                // NOTE: if the size of the memcpy does not match, we do not care
+                // since reading uninitialized memory is undefined behavior
+
+                const scanned = if (dst.kind == .BinOp) dst.inputs()[1].? else dst;
+                for (scanned.outputs()) |use| {
+                    if (if (use.knownMemOp()) |op| !op[0].isLoad() and use != node else true) {
+                        break :memcpy;
+                    }
+                }
+
+                self.subsume(src, dst);
+                return mem;
             }
 
             if (node.kind == .UnOp) {

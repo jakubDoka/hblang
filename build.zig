@@ -148,25 +148,29 @@ pub fn build(b: *std.Build) !void {
             .use_lld = use_lld,
         });
 
-        const run_gen = b.addRunArtifact(gen);
-        run_gen.addFileArg(b.path("README.md"));
-        run_gen.addFileArg(b.path("BUGFIX.md"));
-        const out = run_gen.addOutputFileArg("tests.zig");
+        inline for (
+            .{ "example_tests", "bugfix_tests" },
+            .{ "README.md", "BUGFIX.md" },
+        ) |name, source| {
+            const run_gen = b.addRunArtifact(gen);
+            run_gen.addFileArg(b.path(source));
+            const out = run_gen.addOutputFileArg("tests.zig");
 
-        const test_run = b.addTest(.{
-            .name = "example_tests",
-            .root_source_file = out,
-            .target = b.graph.host,
-            .optimize = optimize,
-            .filter = test_filter,
-            .use_llvm = use_llvm,
-            .use_lld = use_lld,
-        });
+            const test_run = b.addTest(.{
+                .name = name,
+                .root_source_file = out,
+                .target = b.graph.host,
+                .optimize = optimize,
+                .filter = test_filter,
+                .use_llvm = use_llvm,
+                .use_lld = use_lld,
+            });
 
-        test_run.root_module.addImport("utils", test_module);
-        const run = b.addRunArtifact(test_run);
-        run.has_side_effects = true;
-        test_step.dependOn(&run.step);
+            test_run.root_module.addImport("utils", test_module);
+            const run = b.addRunArtifact(test_run);
+            run.has_side_effects = true;
+            test_step.dependOn(&run.step);
+        }
 
         break :example_tests;
     }

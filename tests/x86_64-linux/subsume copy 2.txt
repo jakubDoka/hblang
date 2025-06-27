@@ -1,0 +1,13 @@
+main:
+	sub rsp, 0x10
+	mov rax, 0x01
+	mov [rsp], al
+	mov rax, 0x02
+	mov [rsp+0x01], al
+	mov rax, 0x03
+	mov [rsp+0x02], al
+	mov rax, 0x00
+	mov [rsp+0x02], al
+	mov rax, 0x00
+	add rsp, 0x10
+	ret

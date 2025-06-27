@@ -552,17 +552,16 @@ pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(root.fr
         },
     }
 
+    const glbal = self.getTypes().store.get(global);
+    glbal.data = data;
+    glbal.ty = fty;
     if (fty == .type) {
         const typ: Types.Id = @enumFromInt(@as(u32, @bitCast(data[0..4].*)));
-        const readonly = self.getTypes().store.get(global).readonly;
         inline for (.{ .Func, .Template }) |tag| {
             if (typ.data() == tag) {
                 const item = self.getTypes().store.get(@field(typ.data(), @tagName(tag)));
-                if (std.mem.eql(u8, name, item.key.name)) item.is_inline = readonly;
+                if (std.mem.eql(u8, name, item.key.name)) item.is_inline = glbal.readonly;
             }
         }
     }
-
-    self.getTypes().store.get(global).data = data;
-    self.getTypes().store.get(global).ty = fty;
 }

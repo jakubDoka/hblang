@@ -2,6 +2,32 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### subsume copy 1
+```hb
+main := fn(): uint {
+    value := u8.[1, 2, 3]
+
+    value2 := value
+    value3 := value2
+
+    return value3[0] + value3[1] - value3[2]
+}
+```
+
+#### subsume copy 2
+```hb
+main := fn(): uint {
+    value := u8.[1, 2, 3]
+    value2 := u8.[1, 2, 0]
+
+    tmp := value
+    value[2] = value2[2]
+    value2[2] = tmp[2]
+
+    return value2[0] + value2[1] - value2[2]
+}
+```
+
 #### out of bounds matching 1
 ```hb
 main := fn(): uint {
