@@ -117,6 +117,34 @@ pub const BinOp = enum(u8) {
             .sle => @intFromBool(lhs <= rhs),
         }) & dt.mask();
     }
+
+    pub fn isComutative(self: BinOp) bool {
+        return switch (self) {
+            .iadd, .imul, .band, .bor, .bxor, .fadd, .fmul, .ne, .eq => true,
+            else => false,
+        };
+    }
+
+    pub fn isAsociative(self: BinOp) bool {
+        return self.isComutative();
+    }
+
+    pub fn neutralElememnt(self: BinOp) ?i64 {
+        return switch (self) {
+            .iadd, .isub, .fsub, .fadd, .bxor, .bor, .ishl, .sshr, .ushr => 0,
+            .band => -1,
+            .imul, .sdiv => 1,
+            .fmul, .fdiv => @bitCast(@as(f64, 1.0)),
+            else => null,
+        };
+    }
+
+    pub fn symetricConstant(self: BinOp) ?i64 {
+        return switch (self) {
+            .isub, .bxor, .fsub => 0,
+            else => null,
+        };
+    }
 };
 
 pub const UnOp = enum(u8) {
@@ -365,9 +393,16 @@ pub const builtin = enum {
         pub const is_basic_block_start = true;
     };
     // ===== VALUES ====
+    pub const Local = extern struct {
+        size: u64,
+        no_address: bool = false,
+
+        pub const data_dep_offset = 1;
+    };
     pub const Phi = extern struct {
         pub const is_pinned = true;
     };
+    pub const MachMove = extern struct {};
     pub const Arg = mod.Arg;
     pub const StructArg = extern struct {
         base: mod.Arg,
@@ -376,15 +411,6 @@ pub const builtin = enum {
     };
     pub const StackArgOffset = extern struct {
         offset: u64, // from eg. rsp
-    };
-    pub const CInt = extern struct {
-        value: i64,
-    };
-    pub const CFlt32 = extern struct {
-        value: f32,
-    };
-    pub const CFlt64 = extern struct {
-        value: f64,
     };
     pub const BinOp = extern struct {
         op: mod.BinOp,
@@ -397,16 +423,18 @@ pub const builtin = enum {
 
         pub const is_pinned = true;
     };
-    pub const MachMove = extern struct {};
+    pub const CInt = extern struct {
+        value: i64,
+    };
+    pub const CFlt32 = extern struct {
+        value: f32,
+    };
+    pub const CFlt64 = extern struct {
+        value: f64,
+    };
     // ===== MEMORY =====
     pub const Mem = extern struct {
         pub const is_pinned = true;
-    };
-    pub const Local = extern struct {
-        size: u64,
-        no_address: bool = false,
-
-        pub const data_dep_offset = 1;
     };
     pub const MemCpy = mod.MemCpy;
     pub const Load = mod.Load;
@@ -977,6 +1005,16 @@ pub fn Func(comptime Backend: type) type {
             pub fn value(self: *Node) *Node {
                 std.debug.assert(self.isStore());
                 return self.inputs()[3].?;
+            }
+
+            pub fn lhs(self: *Node) *Node {
+                std.debug.assert(self.isSub(builtin.BinOp));
+                return self.inputs()[1].?;
+            }
+
+            pub fn rhs(self: *Node) *Node {
+                std.debug.assert(self.kind == .BinOp);
+                return self.inputs()[2].?;
             }
 
             pub fn cpySize(self: *Node) *Node {
@@ -1872,7 +1910,8 @@ pub fn Func(comptime Backend: type) type {
                 }
             }
 
-            // Is this a memcpy to a local that is only loaded from?
+            // Is this a single memcpy to a local that is only loaded from
+            // that is also the last in the memory thread?
             //
             if (node.kind == .MemCpy) memcpy: {
                 const mem = inps[1].?;
@@ -1883,7 +1922,7 @@ pub fn Func(comptime Backend: type) type {
                     return mem;
                 }
 
-                // If store happens after us, it could be a swap so by pesimiztic
+                // If store happens after us, it could be a swap so be pesimiztic
                 //
                 for (node.outputs()) |use| {
                     if (if (use.knownMemOp()) |op| !op[0].isLoad() else false) break :memcpy;
@@ -1924,8 +1963,9 @@ pub fn Func(comptime Backend: type) type {
             }
 
             if (node.kind == .BinOp) {
-                const lhs = node.inputs()[1].?;
-                const rhs = node.inputs()[2].?;
+                const op: BinOp = node.extra(.BinOp).op;
+                var lhs = node.inputs()[1].?;
+                var rhs = node.inputs()[2].?;
                 if (lhs.kind == .CInt and rhs.kind == .CInt) {
                     return self.addIntImm(
                         lhs.data_type.meet(rhs.data_type),
@@ -1935,6 +1975,29 @@ pub fn Func(comptime Backend: type) type {
                             rhs.extra(.CInt).value,
                         ),
                     );
+                }
+
+                if (op.isComutative() and @intFromEnum(lhs.kind) > @intFromEnum(rhs.kind)) {
+                    std.mem.swap(*Node, &lhs, &rhs);
+                }
+
+                if (lhs == rhs) if (op.symetricConstant()) |c| {
+                    return self.addIntImm(lhs.data_type, c);
+                };
+
+                if (rhs.kind == .CInt and rhs.extra(.CInt).value == op.neutralElememnt()) {
+                    return lhs;
+                }
+
+                if (op.isAsociative() and lhs.kind == .BinOp and lhs.extra(.BinOp).op == op and
+                    rhs.kind == .CInt)
+                {
+                    if (lhs.rhs().kind == .CInt)
+                        return self.addBinOp(op, node.data_type, lhs.lhs(), self.addIntImm(node.data_type, op.eval(
+                            node.data_type,
+                            lhs.rhs().extra(.CInt).value,
+                            rhs.extra(.CInt).value,
+                        )));
                 }
             }
 

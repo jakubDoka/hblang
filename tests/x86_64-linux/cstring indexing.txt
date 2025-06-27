@@ -16,9 +16,7 @@ cstring indexing.cstr:
 	mov rcx, rax
 	jmp :1
 0:	mov [rdi], rbx
-	mov rax, rcx
-	sub rax, 0x00
-	mov [rdi+0x08], rax
+	mov [rdi+0x08], rcx
 	pop rbx
 	ret
 main:
@@ -76,11 +74,9 @@ main:
 	mov rcx, rax
 	jmp :3
 2:	mov [rsp+0x50], rdx
+	mov [rsp+0x58], rcx
 	mov rdx, rbp
 	add rdx, 0x01
-	mov rax, rcx
-	sub rax, 0x00
-	mov [rsp+0x58], rax
 	mov rbp, rdx
 	jmp :4
 0:	mov rax, r8
