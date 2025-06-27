@@ -11,15 +11,6 @@ mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime arg
 0:	mov byte ptr [rdi], 0x00
 1:	add rsp, 0x10
 	ret
-mixing @Any and comptime args 1.main:
-	sub rsp, 0x10
-	mov byte ptr [rsp], 0x01
-	add esi, 0x05
-	mov [rsp+0x04], esi
-	mov rax, [rsp]
-	mov [rdi], rax
-	add rsp, 0x10
-	ret
 main:
 	sub rsp, 0x08
 	lea rdi, [rsp]

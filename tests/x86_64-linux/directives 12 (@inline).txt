@@ -1,6 +1,3 @@
-directives 12 (@inline).foo:
-	mov rax, rdi
-	ret
 main:
 	mov rax, 0x0A
 	ret

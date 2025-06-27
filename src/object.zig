@@ -378,7 +378,7 @@ pub const elf = struct {
         var text_offset_cursor: u32 = 0;
         var data_offset_cursor: u32 = 0;
         var prealloc_offset_cursor: u32 = 0;
-        for (projection, projected_offsets, 0..) |symid, *poff, i| {
+        for (projection[0 .. sym_count - 1], projected_offsets[0 .. sym_count - 1], 0..) |symid, *poff, i| {
             reloc_proj[symid] = @intCast(i);
 
             const sym = &self.syms.items[symid];

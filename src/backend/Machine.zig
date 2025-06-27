@@ -763,6 +763,65 @@ pub const Data = struct {
         slot.size = @intCast(self.code.items.len - slot.offset);
         slot.reloc_count = @intCast(self.relocs.items.len - slot.reloc_offset);
     }
+
+    pub fn elimitaneDeadCode(self: *Data) void {
+        errdefer unreachable;
+        var tmp = root.Arena.scrath(null);
+        defer tmp.deinit();
+
+        const sym_to_idx = tmp.arena.alloc(u32, self.syms.items.len);
+
+        for (self.funcs.items, 0..) |sym, i| {
+            if (sym == .invalid) continue;
+            sym_to_idx[@intFromEnum(sym)] = @intCast(i);
+        }
+
+        for (self.globals.items, 0..) |sym, i| {
+            if (sym == .invalid) continue;
+            sym_to_idx[@intFromEnum(sym)] = @intCast(i);
+        }
+
+        var visited_syms = try Set.initEmpty(tmp.arena.allocator(), self.syms.items.len);
+        var frontier = std.ArrayList(SymIdx).init(tmp.arena.allocator());
+
+        for (self.funcs.items) |fid| {
+            if (fid == .invalid) continue;
+            const f = &self.syms.items[@intFromEnum(fid)];
+            if (f.kind == .func and f.linkage == .exported) {
+                visited_syms.set(@intFromEnum(fid));
+                try frontier.append(fid);
+            }
+        }
+
+        for (self.globals.items) |gid| {
+            if (gid == .invalid) continue;
+            const g = &self.syms.items[@intFromEnum(gid)];
+            if (g.kind == .data and g.linkage == .exported) {
+                visited_syms.set(@intFromEnum(gid));
+                try frontier.append(gid);
+            }
+        }
+
+        while (frontier.pop()) |fid| {
+            const f = &self.syms.items[@intFromEnum(fid)];
+            for (self.relocs.items[f.reloc_offset..][0..f.reloc_count]) |rel| {
+                if (visited_syms.isSet(@intFromEnum(rel.target))) continue;
+                visited_syms.set(@intFromEnum(rel.target));
+                try frontier.append(rel.target);
+            }
+        }
+
+        for (sym_to_idx, self.syms.items, 0..) |idx, *sym, i| {
+            if (!visited_syms.isSet(i)) {
+                switch (sym.kind) {
+                    .func => self.funcs.items[idx] = .invalid,
+                    .data => self.globals.items[idx] = .invalid,
+                    else => unreachable,
+                }
+                sym.kind = .invalid;
+            }
+        }
+    }
 };
 
 pub const RunEnv = struct {
@@ -993,6 +1052,8 @@ pub const OptOptions = struct {
             }
 
             out.inline_func_nodes = arena.state;
+
+            bout.elimitaneDeadCode();
         }
 
         if (optimizations.error_buf) |eb| if (eb.items.len != 0) return true;

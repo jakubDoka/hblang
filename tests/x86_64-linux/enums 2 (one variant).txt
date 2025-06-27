@@ -1,9 +1,6 @@
 ableos.hb.page_size:
 	mov rax, 0x00
 	ret
-enums 2 (one variant).Target.current:
-	mov rax, 0x01
-	ret
 main:
 	sub rsp, 0x08
 	call :ableos.hb.page_size

@@ -1,24 +1,5 @@
 cstring indexing.slice_ioob:
 	ud2
-cstring indexing.cstr:
-	push rbx
-	mov rbx, rsi
-	mov rax, 0x00
-	mov rdx, 0x00
-	mov rcx, rax
-1:	mov rsi, rbx
-	add rsi, rcx
-	mov al, [rsi]
-	cmp al, dl
-	jz :0
-	mov rax, rcx
-	add rax, 0x01
-	mov rcx, rax
-	jmp :1
-0:	mov [rdi], rbx
-	mov [rdi+0x08], rcx
-	pop rbx
-	ret
 main:
 	push rbx
 	push rbp

@@ -1,10 +1,3 @@
-eopll 2.epoll_wait:
-	sub rsp, 0x08
-	mov rax, 0xE8
-	mov r10, rcx
-	syscall
-	add rsp, 0x08
-	ret
 main:
 	push rbx
 	push rbp

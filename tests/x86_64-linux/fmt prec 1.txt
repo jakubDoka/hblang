@@ -1,6 +1,3 @@
-fmt prec 1.main:
-	mov rax, 0x00
-	ret
 main:
 	mov rax, 0x00
 	ret

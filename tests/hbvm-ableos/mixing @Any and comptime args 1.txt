@@ -20,8 +20,3 @@ mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime arg
         swa $2, $1
 2:      swa $1, $2
        jala $0, $31, 0
-mixing @Any and comptime args 1.main:
-        li8 $2, 1
-     addi32 $1, $1, 5
-        swa $1, $2
-       jala $0, $31, 0
