@@ -37,8 +37,7 @@ generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main,
 	lea rbx, [rsp+0x0A]
 7:	mov rdx, [rsp]
 	mov al, [rdx]
-	mov rcx, rax
-	movsx rcx, cl
+	movsx rcx, al
 	cmp rcx, 0x00
 	setz al
 	movzx rax, al

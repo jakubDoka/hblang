@@ -38,29 +38,50 @@ pub const Builder = union(graph.CallConv) {
                 .Imaginary => {},
                 .ByValue => |d| {
                     if (is_ret) {
+                        std.debug.assert(buf.?.len == 1);
                         buf.?[0] = .{ .Reg = d };
-                    } else if (s.remining_scalar_regs == 0) {
+                    } else if ((d.isInt() and s.remining_scalar_regs == 0) or
+                        s.remining_xmm_regs == 0)
+                    {
+                        std.debug.assert(buf.?.len == 1);
                         buf.?[0] = .{ .Stack = .reg(d) };
                     } else {
+                        std.debug.assert(buf.?.len == 1);
                         buf.?[0] = .{ .Reg = d };
-                        s.remining_scalar_regs -= 1;
+                        if (d.isInt()) {
+                            s.remining_scalar_regs -= 1;
+                        } else {
+                            s.remining_xmm_regs -= 1;
+                        }
                     }
                 },
                 .ByValuePair => |pair| {
                     if (is_ret) {
+                        std.debug.assert(buf.?.len == 1);
                         buf.?[0] = .{ .Reg = .i64 };
                         s.remining_scalar_regs -= 1;
-                    } else if (s.remining_scalar_regs < 2) {
+                    } else if (pair.types[0].isInt() != pair.types[1].isInt() or
+                        (pair.types[0].isInt() and s.remining_scalar_regs < 2) or
+                        s.remining_xmm_regs < 2)
+                    {
+                        std.debug.assert(buf.?.len == 1);
                         buf.?[0] = .{ .Stack = pair.stackSpec() };
                     } else {
+                        std.debug.assert(buf.?.len == 2);
                         buf.?[0..2].* = .{ .{ .Reg = pair.types[0] }, .{ .Reg = pair.types[1] } };
-                        s.remining_scalar_regs -= 2;
+                        if (pair.types[0].isInt()) {
+                            s.remining_scalar_regs -= 2;
+                        } else {
+                            s.remining_xmm_regs -= 2;
+                        }
                     }
                 },
                 .ByRef => |size| if (is_ret) {
+                    std.debug.assert(buf.?.len == 1);
                     s.remining_scalar_regs -= 1;
                     buf.?[0] = .{ .Reg = .i64 };
                 } else {
+                    std.debug.assert(buf.?.len == 1);
                     buf.?[0] = .{ .Stack = size };
                 },
             },
@@ -81,12 +102,14 @@ pub const Builder = union(graph.CallConv) {
                 .Impossible => null,
                 .Imaginary => 0,
                 .ByValue => 1,
-                .ByValuePair => if (is_ret)
+                .ByValuePair => |pair| if (is_ret)
                     0
-                else if (s.remining_scalar_regs >= 2)
-                    2
+                else if (pair.types[0].isInt() != pair.types[1].isInt() or
+                    (pair.types[0].isInt() and s.remining_scalar_regs < 2) or
+                    s.remining_xmm_regs < 2)
+                    1
                 else
-                    1,
+                    2,
                 .ByRef => if (is_ret) 0 else 1,
             },
             else => unreachable,
@@ -238,34 +261,18 @@ pub fn categorizeAbleosUnion(id: utils.EntId(tys.Union), types: *Types) TmpSpec 
     return res;
 }
 
-pub fn checkCycles(stru: anytype, types: *Types) bool {
-    if (@TypeOf(stru) == tys.Struct.Id or @TypeOf(stru) == tys.Union.Id) {
-        const self = types.store.get(stru);
-        if (self.recursion_lock) {
-            types.report(self.key.file, self.key.ast, "the struct has undecidable alignment (cycle)", .{});
-            return true;
-        }
-        self.recursion_lock = true;
-    }
-    return false;
-}
-
 pub fn categorizeAbleosRecord(stru: anytype, types: *Types) TmpSpec {
-    if (checkCycles(stru, types)) return .Imaginary;
-    defer if (@TypeOf(stru) == tys.Struct.Id) {
-        types.store.get(stru).recursion_lock = false;
-    };
-
     var res: TmpSpec = .Imaginary;
-    var offset: u64 = 0;
-    for (stru.getFields(types)) |f| {
-        const fspec = Abi.ableos.categorize(f.ty, types);
+    var prev_offset: u64 = 0;
+    var field_offsets = stru.offsetIter(types);
+    while (field_offsets.next()) |elem| {
+        defer prev_offset = elem.offset + elem.field.ty.size(types);
+        const fspec = Abi.ableos.categorize(elem.field.ty, types);
         if (fspec == .Impossible) return .Impossible;
         if (fspec == .Imaginary) continue;
         if (fspec == .ByRef) return fspec;
         if (res == .Imaginary) {
             res = fspec;
-            offset += f.ty.size(types);
             continue;
         }
 
@@ -273,17 +280,14 @@ pub fn categorizeAbleosRecord(stru: anytype, types: *Types) TmpSpec {
         if (res == .ByValuePair) return .ByRef;
         std.debug.assert(res != .ByRef);
 
-        const off = std.mem.alignForward(u64, offset, f.ty.alignment(types));
         res = .{ .ByValuePair = .{
             .types = .{ res.ByValue, fspec.ByValue },
-            .padding = @intCast(off - offset),
+            .padding = @intCast(elem.offset - prev_offset),
             .alignment = @intCast(@min(4, std.math.log2_int(
                 u64,
                 @max(res.ByValue.size(), fspec.ByValue.size()),
             ))),
         } };
-
-        offset = off + f.ty.size(types);
     }
     return res;
 }

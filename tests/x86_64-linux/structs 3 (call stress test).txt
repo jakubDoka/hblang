@@ -11,8 +11,7 @@ structs 3 (call stress test).return_triple:
 	mov byte ptr [rdi+0x10], 0x03
 	ret
 structs 3 (call stress test).take_pair:
-	mov rax, rdi
-	movzx rax, al
+	movzx rax, dil
 	add rax, rsi
 	ret
 structs 3 (call stress test).take_triple:

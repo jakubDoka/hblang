@@ -1,6 +1,6 @@
 arrays 3 (errors):6:2: this slot has a out of bounds read/write
     arr := uint.[0, 1, 2]
     ^
-arrays 3 (errors):7:2: the access is here
+arrays 3 (errors):7:2: ...the access is here, stack slot has 24 bytes, whild access is at 24..32
     return arr[3]
     ^

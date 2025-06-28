@@ -258,7 +258,8 @@ pub fn ralloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
         var j = instr_table.len;
         while (j > 0) {
             j -= 1;
-            const row, const out, const selection_set = .{ interference_table[j], &outs[j], &instr_masks[j] };
+            const row, const out, const selection_set =
+                .{ interference_table[j], &outs[j], &instr_masks[j] };
             selection_set.toggleAll();
             std.debug.assert(selection_set.isSet(sentinel));
 

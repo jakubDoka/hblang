@@ -13,27 +13,27 @@ main:
 	mov rbp, 0x04
 	mov al, [rsp+0xC0]
 	mov cl, [rsp+0xC4]
-	add rax, rcx
+	add eax, ecx
 	mov [rsp+0xC0], al
 	mov cl, [rsp+0xC5]
 	mov al, [rsp+0xC1]
-	add rax, rcx
+	add eax, ecx
 	mov [rsp+0xC1], al
 	mov cl, [rsp+0xC6]
 	mov al, [rsp+0xC2]
-	add rax, rcx
+	add eax, ecx
 	mov [rsp+0xC2], al
 	mov cl, [rsp+0xC7]
 	mov al, [rsp+0xC3]
-	add rax, rcx
+	add eax, ecx
 	mov [rsp+0xC3], al
 	mov al, [rsp+0xC2]
 	mov bl, [rsp+0xC1]
 	mov dl, [rsp+0xC3]
 	mov cl, [rsp+0xC0]
-	add rax, rbx
-	add rax, rcx
-	add rax, rdx
+	add eax, ebx
+	add eax, ecx
+	add eax, edx
 	cmp al, bpl
 	jz :0
 	mov rax, 0x3E9
@@ -53,7 +53,7 @@ main:
 	cmp rcx, rdx
 	setnz cl
 	movzx rcx, cl
-	or rax, rcx
+	or eax, ecx
 	test al, al
 	jz :2
 	mov rax, 0x3EA
@@ -73,7 +73,7 @@ main:
 	cmp rcx, rdx
 	setz cl
 	movzx rcx, cl
-	and rax, rcx
+	and eax, ecx
 	test al, al
 	jz :4
 	mov rax, 0x3EB

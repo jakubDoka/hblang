@@ -29,10 +29,8 @@ passing struct multiple times 1.bar:
 	add rax, rcx
 	movzx rbx, bl
 	sub rax, rdx
-	mov rdx, rsi
-	movzx rdx, dl
-	mov rcx, rbp
-	movzx rcx, cl
+	movzx rdx, sil
+	movzx rcx, bpl
 	add rax, rbx
 	add rax, rcx
 	sub rax, rdx

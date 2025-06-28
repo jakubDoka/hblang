@@ -24,7 +24,7 @@ main:
 	setnz cl
 	movzx rcx, cl
 	mov rax, rdx
-	and rax, rcx
+	and eax, ecx
 	test al, al
 	jz :3
 	mov [rsp+0x18], rbx

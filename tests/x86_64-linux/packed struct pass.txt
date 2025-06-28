@@ -1,0 +1,10 @@
+packed struct pass.broken:
+	ret
+main:
+	sub rsp, 0x08
+	mov rdi, 0x00
+	mov rsi, 0x00
+	call :packed struct pass.broken
+	mov rax, 0x00
+	add rsp, 0x08
+	ret

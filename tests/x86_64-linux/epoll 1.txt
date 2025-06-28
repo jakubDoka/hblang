@@ -20,8 +20,7 @@ main:
 	lea rax, [0x0000000000000007]
 	mov cx, [rax]
 	mov rax, 0xE9
-	mov rsi, rcx
-	movzx rsi, si
+	movzx rsi, cx
 	mov rdi, rdx
 	mov rdx, rbx
 	syscall

@@ -1053,7 +1053,8 @@ pub const OptOptions = struct {
                             .readonly = sym.readonly,
                         });
                     },
-                    .prealloc, .invalid => unreachable,
+                    .prealloc => unreachable,
+                    .invalid => {},
                 }
             }
 

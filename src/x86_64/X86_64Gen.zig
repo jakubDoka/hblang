@@ -25,6 +25,7 @@ block_offsets: []u32 = undefined,
 arg_base: u32 = undefined,
 local_base: u32 = undefined,
 slot_base: c_int = undefined,
+xmm_slot_base: c_int = undefined,
 
 const tmp_count = 2;
 
@@ -67,15 +68,31 @@ pub const Reg = enum(u8) {
 
     const system_v = struct {
         const syscall_args: []const Reg = &.{ .rax, .rdi, .rsi, .rdx, .r10, .r8, .r9 };
+        const float_args: []const Reg = &.{ .xmm0, .xmm1, .xmm2, .xmm3, .xmm4, .xmm5, .xmm6, .xmm7 };
         const args: []const Reg = &.{ .rdi, .rsi, .rdx, .rcx, .r8, .r9 };
         const caller_saved: []const Reg = &.{ .rax, .rcx, .rdx, .rsi, .rdi, .r8, .r9, .r10, .r11 };
         const callee_saved: []const Reg = &.{ .rbx, .rbp, .r12, .r13, .r14, .r15 };
+        const caller_saved_float: []const Reg = &.{
+            .xmm0,  .xmm1,  .xmm2,  .xmm3,
+            .xmm4,  .xmm5,  .xmm6,  .xmm7,
+            .xmm8,  .xmm9,  .xmm10, .xmm11,
+            .xmm12, .xmm13, .xmm14, .xmm15,
+        };
+        const callee_saved_float: []const Reg = &.{};
     };
 
     // stack slots are separate so that register allocator knows they dont interfere
     //
     pub const set_cap = 256;
     pub const stack_per_mask = (@as(u16, set_cap) - (@intFromEnum(Reg.xmm15) + 3)) / 2;
+
+    pub fn isXmm(self: Reg) bool {
+        return @intFromEnum(Reg.xmm0) <= @intFromEnum(self) and @intFromEnum(self) <= @intFromEnum(Reg.xmm15);
+    }
+
+    pub fn retForDt(dt: graph.DataType) Reg {
+        return if (dt.isInt()) .rax else .xmm0;
+    }
 
     pub fn floatMask(tmp: *utils.Arena) std.DynamicBitSetUnmanaged {
         var set = std.DynamicBitSetUnmanaged.initFull(tmp.allocator(), set_cap) catch unreachable;
@@ -117,7 +134,18 @@ pub const Reg = enum(u8) {
         };
     }
 
-    pub fn asZydisOp(self: Reg, size: usize, slot_offset: c_int) zydis.ZydisEncoderOperand {
+    pub fn asZydisOpXmmReg(self: Reg, size: usize) zydis.ZydisEncoderOperand {
+        return .{
+            .type = zydis.ZYDIS_OPERAND_TYPE_REGISTER,
+            .reg = .{ .value = @intCast(switch (size) {
+                4 => zydis.ZYDIS_REGISTER_XMM0,
+                8 => zydis.ZYDIS_REGISTER_XMM0,
+                else => unreachable,
+            } + @intFromEnum(self) - @intFromEnum(Reg.xmm0)) },
+        };
+    }
+
+    pub fn asZydisOp(self: Reg, size: usize, slot_offset: c_int, xmm_slot_offset: c_int) zydis.ZydisEncoderOperand {
         if (@intFromEnum(self) <= @intFromEnum(Reg.r13)) {
             return self.asZydisOpReg(size);
         } else if (@intFromEnum(self) <= @intFromEnum(Reg.r15)) {
@@ -132,9 +160,21 @@ pub const Reg = enum(u8) {
                     ) * 8 + slot_offset,
                 },
             };
+        } else if (@intFromEnum(self) <= @intFromEnum(Reg.xmm13)) {
+            return self.asZydisOpXmmReg(size);
         } else if (@intFromEnum(self) <= @intFromEnum(Reg.xmm15)) {
-            unreachable; // TODO: floats
-        } else if (@intFromEnum(self) <= @intFromEnum(Reg.xmm15) + 1 + Reg.stack_per_mask) {
+            return .{
+                .type = zydis.ZYDIS_OPERAND_TYPE_MEMORY,
+                .mem = .{
+                    .base = zydis.ZYDIS_REGISTER_RSP,
+                    .size = @intCast(size),
+                    .displacement = @as(
+                        c_int,
+                        @intFromEnum(self) - @intFromEnum(Reg.xmm13) - 1,
+                    ) * 16 + xmm_slot_offset,
+                },
+            };
+        } else if (@intFromEnum(self) <= @intFromEnum(Reg.xmm15) + stack_per_mask) {
             return .{
                 .type = zydis.ZYDIS_OPERAND_TYPE_MEMORY,
                 .mem = .{
@@ -147,7 +187,18 @@ pub const Reg = enum(u8) {
                 },
             };
         } else {
-            unreachable; // TODO: floats
+            return .{
+                .type = zydis.ZYDIS_OPERAND_TYPE_MEMORY,
+                .mem = .{
+                    .base = zydis.ZYDIS_REGISTER_RSP,
+                    .size = @intCast(size),
+                    .displacement = @as(
+                        c_int,
+                        @intFromEnum(self) - @intFromEnum(Reg.xmm15) - 1 -
+                            stack_per_mask + tmp_count,
+                    ) * 16 + xmm_slot_offset,
+                },
+            };
         }
     }
 };
@@ -221,6 +272,9 @@ pub fn clobbers(node: *Func.Node) u64 {
             for (Reg.system_v.caller_saved) |r| {
                 vl |= @as(u64, 1) << @intFromEnum(r);
             }
+            for (Reg.system_v.caller_saved_float) |r| {
+                vl |= @as(u64, 1) << @intFromEnum(r);
+            }
             break :b vl;
         },
         .BinOp => switch (node.extra(.BinOp).op) {
@@ -267,6 +321,16 @@ pub fn idealize(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkL
 
             return mem;
         }
+    }
+
+    if (node.kind == .CFlt32) {
+        const int_const = func.addIntImm(node.sloc, .i32, @as(u32, @bitCast(node.extra(.CFlt32).value)));
+        return func.addCast(node.sloc, .f32, int_const);
+    }
+
+    if (node.kind == .CFlt64) {
+        const int_const = func.addIntImm(node.sloc, .i64, @bitCast(node.extra(.CFlt64).value));
+        return func.addCast(node.sloc, .f64, int_const);
     }
 
     return null;
@@ -473,6 +537,16 @@ pub fn allowedRegsFor(
         return set;
     }
 
+    if (node.kind == .Call) {
+        var set = try std.DynamicBitSetUnmanaged.initFull(tmp.allocator(), Reg.set_cap);
+        set.unset(0);
+        return set;
+    }
+
+    if (node.data_type == .f32 or node.data_type == .f64) {
+        return Reg.floatMask(tmp);
+    }
+
     return Reg.intMask(tmp);
 }
 
@@ -575,20 +649,20 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     }
 
     var spill_slot_count: u16 = 0;
+    var xmm_spill_slot_count: u16 = 0;
     for (self.allocs) |v| {
-        if (v <= @intFromEnum(Reg.r15) - tmp_count) continue;
-        if (v <= @intFromEnum(Reg.r15)) {
+        if (v <= @intFromEnum(Reg.r15) - tmp_count) {} else if (v <= @intFromEnum(Reg.r15)) {
             spill_slot_count = @max(spill_slot_count, v - (@intFromEnum(Reg.r15) - tmp_count));
-            continue;
-        }
-        if (v <= @intFromEnum(Reg.xmm15)) unreachable; // TODO: floats
-        if (v <= @intFromEnum(Reg.xmm15) + Reg.stack_per_mask) {
+        } else if (v <= @intFromEnum(Reg.xmm15) - tmp_count) {} else if (v <= @intFromEnum(Reg.xmm15)) {
+            xmm_spill_slot_count = @max(xmm_spill_slot_count, v - (@intFromEnum(Reg.xmm15) - tmp_count));
+        } else if (v <= @intFromEnum(Reg.xmm15) + Reg.stack_per_mask) {
             spill_slot_count = @max(spill_slot_count, v - @intFromEnum(Reg.xmm15) + tmp_count);
-            continue;
+        } else {
+            xmm_spill_slot_count = @max(xmm_spill_slot_count, v - @intFromEnum(Reg.xmm15) - Reg.stack_per_mask + tmp_count);
         }
-        unreachable; // TODO: floats
     }
-    var stack_size: i64 = std.mem.alignForward(i64, local_size, 8) + spill_slot_count * 8;
+    var stack_size: i64 = std.mem.alignForward(i64, local_size, 8) +
+        spill_slot_count * 8 + xmm_spill_slot_count * 16;
 
     var has_call = false;
     var call_slot_size: u64 = 0;
@@ -615,7 +689,8 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     }
 
     self.slot_base = @intCast(call_slot_size);
-    self.local_base = spill_slot_count * 8 + @as(u32, @intCast(self.slot_base));
+    self.xmm_slot_base = self.slot_base + spill_slot_count * 8;
+    self.local_base = @as(u32, @intCast(self.xmm_slot_base)) + xmm_spill_slot_count * 16;
     self.arg_base = @intCast(stack_size);
     self.arg_base += 8; // call adress
 
@@ -637,11 +712,18 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
 
         var moves = std.ArrayList(Move).init(tmp.arena.allocator());
         var i: usize = 0;
+        var f: usize = 0;
         var stack_arg_offset: u64 = 0;
         for (func.signature.params(), 0..) |par, j| {
-            defer if (par != .Stack) {
-                i += 1;
-            };
+            defer {
+                if (par != .Stack) {
+                    if (par.Reg.isInt()) {
+                        i += 1;
+                    } else {
+                        f += 1;
+                    }
+                }
+            }
 
             const argn = for (postorder[0].base.outputs()) |o| {
                 if (o.subclass(graph.Arg)) |sub| if (sub.ext.index == j) break o;
@@ -651,8 +733,10 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
                 stack_arg_offset = std.mem.alignForward(u64, stack_arg_offset, @as(u64, 1) << par.Stack.alignment);
                 argn.extra(.StructArg).spec.size = @intCast(stack_arg_offset);
                 stack_arg_offset += par.Stack.size;
-            } else if (self.getReg(argn) != Reg.system_v.args[i]) {
+            } else if (par.Reg.isInt() and self.getReg(argn) != Reg.system_v.args[i]) {
                 moves.append(.init(self.getReg(argn), Reg.system_v.args[i])) catch unreachable;
+            } else if (!par.Reg.isInt() and self.getReg(argn) != Reg.system_v.float_args[f]) {
+                moves.append(.init(self.getReg(argn), Reg.system_v.float_args[f])) catch unreachable;
             }
         }
         self.orderMoves(moves.items);
@@ -788,11 +872,11 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
         const val = @field(args, f.name);
 
         req.operands[i] = switch (f.type) {
-            Reg => val.asZydisOp(fsize, self.slot_base),
+            Reg => val.asZydisOp(fsize, self.slot_base, self.xmm_slot_base),
             Tmp => @as(Reg, @enumFromInt(@intFromEnum(Reg.r14) + val[0])).asZydisOpReg(fsize),
-            SReg => val[0].asZydisOp(val[1], self.slot_base),
+            SReg => val[0].asZydisOp(val[1], self.slot_base, self.xmm_slot_base),
             BRegOff => b: {
-                var base = val[0].asZydisOp(8, self.slot_base);
+                var base = val[0].asZydisOp(8, self.slot_base, self.xmm_slot_base);
                 if (base.type != zydis.ZYDIS_OPERAND_TYPE_REGISTER) {
                     tmp_allocs -= 1;
                     self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{tmp_allocs}, val[0] });
@@ -829,6 +913,24 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
         };
     }
 
+    if (mnemonic == zydis.ZYDIS_MNEMONIC_MOV and
+        req.operands[0].reg.value >= zydis.ZYDIS_REGISTER_XMM0 and
+        req.operands[0].reg.value <= zydis.ZYDIS_REGISTER_XMM15)
+    {
+        if (size == 8) {
+            req.mnemonic = zydis.ZYDIS_MNEMONIC_MOVSD;
+        } else {
+            req.mnemonic = zydis.ZYDIS_MNEMONIC_MOVSS;
+        }
+    }
+
+    if ((mnemonic == zydis.ZYDIS_MNEMONIC_MOVD or
+        mnemonic == zydis.ZYDIS_MNEMONIC_MOVQ) and
+        req.operands[0].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY)
+    {
+        req.mnemonic = zydis.ZYDIS_MNEMONIC_MOV;
+    }
+
     if (mnemonic == zydis.ZYDIS_MNEMONIC_XCHG and
         req.operands[1].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY)
     {
@@ -845,6 +947,7 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
                     req.operands[1].imm.u > 0x7fffffff)) or
             mnemonic == zydis.ZYDIS_MNEMONIC_LEA) and
         req.operands[0].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY;
+
     var prev_oper: zydis.ZydisEncoderOperand = undefined;
     if (should_flush_to_mem) {
         prev_oper = req.operands[0];
@@ -873,7 +976,7 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
 
     const status = zydis.ZydisEncoderEncodeInstruction(&req, &buf, &len);
     if (zydis.ZYAN_FAILED(status) != 0) {
-        utils.panic("{x} {s} {} {any}\n", .{ status, zydis.ZydisMnemonicGetString(mnemonic), args, req.operands[0..fields.len] });
+        utils.panic("{x} {s} {} {any}\n", .{ status, zydis.ZydisMnemonicGetString(req.mnemonic), args, req.operands[0..fields.len] });
     }
 
     try self.out.code.appendSlice(self.gpa, buf[0..len]);
@@ -924,7 +1027,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     .operand_count = 2,
                 };
                 len = @sizeOf(@TypeOf(buf));
-                req.operands[0] = self.getReg(instr).asZydisOp(8, self.slot_base);
+                req.operands[0] = self.getReg(instr).asZydisOp(8, self.slot_base, self.xmm_slot_base);
                 const spilled = req.operands[0].type != zydis.ZYDIS_OPERAND_TYPE_REGISTER;
                 if (spilled) {
                     req.operands[0] = .{
@@ -1052,16 +1155,26 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 else
                     Reg.system_v.args;
 
+                const float_conv = Reg.system_v.float_args;
+
                 var moves = std.ArrayList(Move).init(tmp.arena.allocator());
                 var i: usize = 0;
+                var f: usize = 0;
                 for (instr.dataDeps()) |arg| {
                     if (arg.?.kind == .StackArgOffset) {
                         std.debug.assert(self.slot_base != 0);
                         continue;
                     }
-                    const dst, const src: Reg = .{ call_conv[i], self.getReg(arg) };
+
+                    var dst: Reg, const src = .{ undefined, self.getReg(arg) };
+                    if (arg.?.data_type.isInt()) {
+                        dst = call_conv[i];
+                        i += 1;
+                    } else {
+                        dst = float_conv[f];
+                        f += 1;
+                    }
                     if (dst != src) moves.append(.init(dst, src)) catch unreachable;
-                    i += 1;
                 }
                 self.orderMoves(moves.items);
 
@@ -1080,7 +1193,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 moves.items.len = 0;
                 for (cend.outputs()) |r| {
                     if (r.kind == .Ret) {
-                        const dst: Reg, const src = .{ self.getReg(r), Reg.rax };
+                        const dst: Reg, const src = .{ self.getReg(r), Reg.retForDt(r.data_type) };
                         if (dst != src) moves.append(.init(dst, src)) catch unreachable;
                     }
                 }
@@ -1099,9 +1212,9 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
             .Return => {
                 for (instr.dataDeps()[0..self.ret_count]) |inp| {
                     const src = self.getReg(inp);
-                    if (src != .rax) self.emitInstr(
+                    if (src != Reg.retForDt(inp.?.data_type)) self.emitInstr(
                         zydis.ZYDIS_MNEMONIC_MOV,
-                        .{ Reg.rax, src },
+                        .{ Reg.retForDt(inp.?.data_type), src },
                     );
                 }
 
@@ -1110,12 +1223,13 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
             .ImmOp => |extra| {
                 const op = extra.base.op;
                 const size = instr.data_type.size();
-                const opsize = instr.inputs()[1].?.data_type.size();
+                const op_dt = instr.inputs()[1].?.data_type;
+                const opsize = op_dt.size();
                 const dst = self.getReg(instr);
                 const lhs = self.getReg(instr.inputs()[1]);
                 const rhs = extra.imm;
 
-                const mnemonic = binopToMnemonic(op);
+                const mnemonic = binopToMnemonic(op, instr.data_type);
 
                 switch (op) {
                     .imul => unreachable,
@@ -1161,7 +1275,8 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
             .BinOp => |extra| {
                 const op = extra.op;
                 const size = instr.data_type.size();
-                const opsize = instr.inputs()[1].?.data_type.size();
+                const op_dt = instr.inputs()[1].?.data_type;
+                const opsize = op_dt.size();
                 const dst = self.getReg(instr);
                 const lhs = self.getReg(instr.inputs()[1]);
                 const rhs = self.getReg(instr.inputs()[2]);
@@ -1175,7 +1290,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     else => {},
                 }
 
-                const mnemonic = binopToMnemonic(op);
+                const mnemonic = binopToMnemonic(op, instr.data_type);
 
                 switch (op) {
                     .ushr, .ishl, .sshr => {
@@ -1192,8 +1307,8 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                             self.emitInstr(zydis.ZYDIS_MNEMONIC_XCHG, .{ SReg{ dst, size }, rhs });
                         }
                     },
-                    .iadd, .isub, .imul, .bor, .band, .bxor => {
-                        self.emitInstr(mnemonic, .{ dst, rhs });
+                    .fadd, .fsub, .fmul, .fdiv, .iadd, .isub, .imul, .bor, .band, .bxor => {
+                        self.emitInstr(mnemonic, .{ SReg{ dst, @max(size, 4) }, rhs });
                     },
                     .udiv, .sdiv, .smod, .umod => switch (size) {
                         1, 2, 4, 8 => {
@@ -1236,9 +1351,15 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                         },
                         else => unreachable,
                     },
-                    .fadd, .fsub, .fmul, .fdiv, .fgt, .flt, .fge, .fle => unreachable,
-                    .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => {
-                        self.emitInstr(zydis.ZYDIS_MNEMONIC_CMP, .{ SReg{ lhs, opsize }, SReg{ rhs, opsize } });
+                    .fgt, .flt, .fge, .fle, .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => {
+                        const cmp_mnemonic: zydis.ZydisMnemonic = if (op_dt.isInt())
+                            zydis.ZYDIS_MNEMONIC_CMP
+                        else if (op_dt == .f64)
+                            zydis.ZYDIS_MNEMONIC_COMISD
+                        else
+                            zydis.ZYDIS_MNEMONIC_COMISS;
+
+                        self.emitInstr(cmp_mnemonic, .{ SReg{ lhs, opsize }, SReg{ rhs, opsize } });
                         self.emitInstr(mnemonic, .{SReg{ dst, 1 }});
                         self.emitInstr(zydis.ZYDIS_MNEMONIC_MOVZX, .{ dst, SReg{ dst, 1 } });
                     },
@@ -1286,10 +1407,14 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 const op = extra.op;
                 const size = instr.data_type.size();
                 const dst = self.getReg(instr);
-                const src_size = instr.inputs()[1].?.data_type.size();
+                const src_dt = instr.inputs()[1].?.data_type;
+                const src_size = src_dt.size();
                 const src = self.getReg(instr.inputs()[1]);
 
-                if (dst != src) {
+                if (dst != src and switch (op) {
+                    .not, .bnot, .ineg, .ired => true,
+                    else => false,
+                }) {
                     self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ SReg{ dst, size }, src });
                 }
 
@@ -1298,23 +1423,23 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     .sext => switch (src_size) {
                         1, 2 => self.emitInstr(
                             zydis.ZYDIS_MNEMONIC_MOVSX,
-                            .{ SReg{ dst, size }, SReg{ dst, src_size } },
+                            .{ SReg{ dst, size }, SReg{ src, src_size } },
                         ),
                         4 => self.emitInstr(
                             zydis.ZYDIS_MNEMONIC_MOVSXD,
-                            .{ SReg{ dst, size }, SReg{ dst, src_size } },
+                            .{ SReg{ dst, size }, SReg{ src, src_size } },
                         ),
                         else => unreachable,
                     },
                     .uext => if (instr.inputs()[1].?.data_type.size() <= 2) {
                         self.emitInstr(
                             zydis.ZYDIS_MNEMONIC_MOVZX,
-                            .{ SReg{ dst, size }, SReg{ dst, src_size } },
+                            .{ SReg{ dst, size }, SReg{ src, src_size } },
                         );
                     } else {
                         self.emitInstr(
                             zydis.ZYDIS_MNEMONIC_MOV,
-                            .{ SReg{ dst, instr.inputs()[1].?.data_type.size() }, dst },
+                            .{ SReg{ dst, instr.inputs()[1].?.data_type.size() }, src },
                         );
                     },
                     .not => {
@@ -1326,13 +1451,36 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     .ineg => {
                         self.emitInstr(zydis.ZYDIS_MNEMONIC_NEG, .{SReg{ dst, size }});
                     },
-                    .itf32,
-                    .itf64,
-                    .fti,
-                    .fcst,
-                    .cast,
-                    .fneg,
-                    => utils.panic("floating point ops are postponed: {any}", .{instr}),
+                    .cast => self.emitInstr(switch (src_size) {
+                        4 => zydis.ZYDIS_MNEMONIC_MOVD,
+                        8 => zydis.ZYDIS_MNEMONIC_MOVQ,
+                        else => unreachable,
+                    }, .{ SReg{ dst, size }, src }),
+                    .fti => self.emitInstr(switch (src_dt) {
+                        .f32 => switch (instr.data_type) {
+                            .i32 => zydis.ZYDIS_MNEMONIC_CVTTSS2SI,
+                            .i64 => zydis.ZYDIS_MNEMONIC_CVTTSS2SI,
+                            else => unreachable,
+                        },
+                        .f64 => switch (instr.data_type) {
+                            .i32 => zydis.ZYDIS_MNEMONIC_CVTTSD2SI,
+                            .i64 => zydis.ZYDIS_MNEMONIC_CVTTSD2SI,
+                            else => unreachable,
+                        },
+                        else => unreachable,
+                    }, .{ SReg{ dst, size }, SReg{ src, size } }),
+                    .itf32 => self.emitInstr(zydis.ZYDIS_MNEMONIC_CVTSI2SS, .{ SReg{ dst, size }, SReg{ src, size } }),
+                    .itf64 => self.emitInstr(zydis.ZYDIS_MNEMONIC_CVTSI2SD, .{ SReg{ dst, size }, SReg{ src, size } }),
+                    .fcst => self.emitInstr(switch (src_dt) {
+                        .f32 => zydis.ZYDIS_MNEMONIC_CVTSS2SD,
+                        .f64 => zydis.ZYDIS_MNEMONIC_CVTSD2SS,
+                        else => unreachable,
+                    }, .{ SReg{ dst, size }, SReg{ src, size } }),
+                    .fneg => self.emitInstr(switch (src_dt) {
+                        .f32 => zydis.ZYDIS_MNEMONIC_XORPS,
+                        .f64 => zydis.ZYDIS_MNEMONIC_XORPD,
+                        else => unreachable,
+                    }, .{ SReg{ dst, size }, SReg{ src, size } }),
                 }
             },
             else => {
@@ -1587,7 +1735,7 @@ pub fn deinit(self: *X86_64) void {
     self.out.deinit(self.gpa);
 }
 
-pub fn binopToMnemonic(op: graph.BinOp) zydis.ZydisMnemonic {
+pub fn binopToMnemonic(op: graph.BinOp, ty: graph.DataType) zydis.ZydisMnemonic {
     return switch (op) {
         .iadd => zydis.ZYDIS_MNEMONIC_ADD,
         .isub => zydis.ZYDIS_MNEMONIC_SUB,
@@ -1617,14 +1765,14 @@ pub fn binopToMnemonic(op: graph.BinOp) zydis.ZydisMnemonic {
         .ishl => zydis.ZYDIS_MNEMONIC_SHL,
         .sshr => zydis.ZYDIS_MNEMONIC_SAR,
 
-        .fadd,
-        .fsub,
-        .fmul,
-        .fdiv,
-        .fgt,
-        .flt,
-        .fge,
-        .fle,
-        => utils.panic("floating point ops are postponed: {}", .{op}),
+        .fadd => if (ty == .f64) zydis.ZYDIS_MNEMONIC_ADDSD else zydis.ZYDIS_MNEMONIC_ADDSS,
+        .fsub => if (ty == .f64) zydis.ZYDIS_MNEMONIC_SUBSD else zydis.ZYDIS_MNEMONIC_SUBSS,
+        .fmul => if (ty == .f64) zydis.ZYDIS_MNEMONIC_MULSD else zydis.ZYDIS_MNEMONIC_MULSS,
+        .fdiv => if (ty == .f64) zydis.ZYDIS_MNEMONIC_DIVSD else zydis.ZYDIS_MNEMONIC_DIVSS,
+
+        .flt => zydis.ZYDIS_MNEMONIC_SETB,
+        .fle => zydis.ZYDIS_MNEMONIC_SETBE,
+        .fgt => zydis.ZYDIS_MNEMONIC_SETNBE,
+        .fge => zydis.ZYDIS_MNEMONIC_SETNB,
     };
 }

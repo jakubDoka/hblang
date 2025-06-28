@@ -22,8 +22,7 @@ main:
 	mov cx, [rax]
 	mov edi, [rsp]
 	mov rax, 0xE9
-	mov rsi, rcx
-	movzx rsi, si
+	movzx rsi, cx
 	mov rdx, rbx
 	syscall
 	mov [rsp+0x10], eax

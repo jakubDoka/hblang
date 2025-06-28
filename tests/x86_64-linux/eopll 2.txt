@@ -15,8 +15,7 @@ main:
 	mov qword ptr [rsp], 0x10
 	mov r13, 0xFFFFFFFFFFFFFFFF
 	mov r12, 0xE8
-	mov rbp, rax
-	movsxd rbp, ebp
+	movsxd rbp, eax
 	mov rbx, [rsp+0x10]
 1:	cmp rbx, 0x00
 	setz al

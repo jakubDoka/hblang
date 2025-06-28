@@ -42,8 +42,7 @@ main:
 	pop rbx
 	ret
 0:	mov eax, [rsp+0x18]
-	mov rdi, rax
-	movsxd rdi, edi
+	movsxd rdi, eax
 	mov rsi, r12
 	mov rdx, rbx
 	mov rcx, rbp

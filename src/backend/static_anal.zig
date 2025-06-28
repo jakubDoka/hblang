@@ -10,6 +10,8 @@ pub const Error = union(enum) {
         slot: graph.Sloc,
         access: graph.Sloc,
         op: u32,
+        size: u64,
+        range: struct { start: i64, end: i64 },
     },
     LoopInvariantBreak: struct {
         if_node: graph.Sloc,
@@ -112,6 +114,8 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
                             .slot = local.sloc,
                             .op = mem_op.id,
                             .access = op.sloc,
+                            .size = local.extra(.Local).size,
+                            .range = .{ .end = end_offset, .start = offset },
                         } }) catch unreachable;
                     }
                 }

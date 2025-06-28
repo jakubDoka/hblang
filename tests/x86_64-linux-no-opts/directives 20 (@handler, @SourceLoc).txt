@@ -22,7 +22,7 @@ directives 20 (@handler, @SourceLoc).main:
 	cmp r12, rbp
 	setnbe dl
 	movzx rdx, dl
-	or rdx, rax
+	or edx, eax
 	test dl, dl
 	jz :0
 	lea rcx, [rsp+0x20]

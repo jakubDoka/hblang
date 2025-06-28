@@ -2,6 +2,20 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### packed struct pass
+```hb
+Broken := struct align(1) {
+    .a: u8;
+    .b: u16;
+}
+broken := fn(event: Broken): void {
+}
+main := fn(): uint {
+    broken(.(0, 0))
+    return 0
+}
+```
+
 #### null check misshap 1
 ```hb
 glb: u8 = 0
