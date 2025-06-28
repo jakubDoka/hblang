@@ -118,9 +118,9 @@ pub const Reg = enum(u8) {
     }
 
     pub fn asZydisOp(self: Reg, size: usize, slot_offset: c_int) zydis.ZydisEncoderOperand {
-        if (@intFromEnum(self) < @intFromEnum(Reg.r14)) {
+        if (@intFromEnum(self) <= @intFromEnum(Reg.r13)) {
             return self.asZydisOpReg(size);
-        } else {
+        } else if (@intFromEnum(self) <= @intFromEnum(Reg.r15)) {
             return .{
                 .type = zydis.ZYDIS_OPERAND_TYPE_MEMORY,
                 .mem = .{
@@ -128,10 +128,26 @@ pub const Reg = enum(u8) {
                     .size = @intCast(size),
                     .displacement = @as(
                         c_int,
-                        @intFromEnum(self) - @intFromEnum(Reg.r14),
+                        @intFromEnum(self) - @intFromEnum(Reg.r13) - 1,
                     ) * 8 + slot_offset,
                 },
             };
+        } else if (@intFromEnum(self) <= @intFromEnum(Reg.xmm15)) {
+            unreachable; // TODO: floats
+        } else if (@intFromEnum(self) <= @intFromEnum(Reg.xmm15) + 1 + Reg.stack_per_mask) {
+            return .{
+                .type = zydis.ZYDIS_OPERAND_TYPE_MEMORY,
+                .mem = .{
+                    .base = zydis.ZYDIS_REGISTER_RSP,
+                    .size = @intCast(size),
+                    .displacement = @as(
+                        c_int,
+                        @intFromEnum(self) - @intFromEnum(Reg.xmm15) - 1 + tmp_count,
+                    ) * 8 + slot_offset,
+                },
+            };
+        } else {
+            unreachable; // TODO: floats
         }
     }
 };
@@ -558,7 +574,20 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
         }
     }
 
-    const spill_slot_count = if (self.allocs.len == 0) 0 else std.mem.max(u16, self.allocs) -| (@intFromEnum(Reg.r15) - tmp_count);
+    var spill_slot_count: u16 = 0;
+    for (self.allocs) |v| {
+        if (v <= @intFromEnum(Reg.r15) - tmp_count) continue;
+        if (v <= @intFromEnum(Reg.r15)) {
+            spill_slot_count = @max(spill_slot_count, v - (@intFromEnum(Reg.r15) - tmp_count));
+            continue;
+        }
+        if (v <= @intFromEnum(Reg.xmm15)) unreachable; // TODO: floats
+        if (v <= @intFromEnum(Reg.xmm15) + Reg.stack_per_mask) {
+            spill_slot_count = @max(spill_slot_count, v - @intFromEnum(Reg.xmm15) + tmp_count);
+            continue;
+        }
+        unreachable; // TODO: floats
+    }
     var stack_size: i64 = std.mem.alignForward(i64, local_size, 8) + spill_slot_count * 8;
 
     var has_call = false;

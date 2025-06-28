@@ -38,18 +38,18 @@ main:
 	push r13
 	push r14
 	push r15
-	sub rsp, 0x118
-	mov qword ptr [rsp+0xD0], 0x07
-	mov r15, [rsp+0xD0]
-	mov [rsp+0xF0], r15
-	mov qword ptr [rsp+0xC8], 0x06
+	sub rsp, 0x98
+	mov qword ptr [rsp+0x50], 0x07
+	mov r15, [rsp+0x50]
+	mov [rsp+0x70], r15
+	mov qword ptr [rsp+0x48], 0x06
 	lea rdx, [rsp]
-	mov r15, [rsp+0xC8]
+	mov r15, [rsp+0x48]
 	mov [rdx], r15
 	lea rcx, [rsp+0x08]
-	mov rax, [rsp+0xF0]
+	mov rax, [rsp+0x70]
 	mov [rcx], rax
-	mov qword ptr [rsp+0xC0], 0x04
+	mov qword ptr [rsp+0x40], 0x04
 	mov qword ptr [rsp+0x38], 0x05
 	mov r13, 0x01
 	mov r12, 0x00
@@ -59,20 +59,20 @@ main:
 	mov rsi, r13
 	mov rdx, rbp
 	mov rcx, rbx
-	mov r8, [rsp+0xC0]
+	mov r8, [rsp+0x40]
 	mov r9, [rsp+0x38]
 	call :proper systemv abi 1 (spilled arg).load_of_args
 	mov [rsp+0x30], rax
-	lea rax, [rsp+0xF8]
-	mov [rsp+0xF8], r12
-	mov [rsp+0x100], r13
-	mov [rsp+0x108], rbp
-	lea r13, [rsp+0xD8]
-	mov [rsp+0xD8], rbx
-	mov r15, [rsp+0xC0]
-	mov [rsp+0xE0], r15
+	lea rax, [rsp+0x78]
+	mov [rsp+0x78], r12
+	mov [rsp+0x80], r13
+	mov [rsp+0x88], rbp
+	lea r13, [rsp+0x58]
+	mov [rsp+0x58], rbx
+	mov r15, [rsp+0x40]
+	mov [rsp+0x60], r15
 	mov r15, [rsp+0x38]
-	mov [rsp+0xE8], r15
+	mov [rsp+0x68], r15
 	mov r12, 0x18
 	lea rbp, [rsp]
 	mov rdi, rbp
@@ -84,13 +84,13 @@ main:
 	mov rsi, r13
 	mov rdx, r12
 	call :memcpy
-	mov rdi, [rsp+0xC8]
-	mov rsi, [rsp+0xD0]
+	mov rdi, [rsp+0x48]
+	mov rsi, [rsp+0x50]
 	call :proper systemv abi 1 (spilled arg).stack_args
 	mov rcx, rax
 	mov rax, [rsp+0x30]
 	sub rax, rcx
-	add rsp, 0x118
+	add rsp, 0x98
 	pop r15
 	pop r14
 	pop r13

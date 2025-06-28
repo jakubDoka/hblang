@@ -5,26 +5,26 @@ main:
 	push r13
 	push r14
 	push r15
-	sub rsp, 0xA8
+	sub rsp, 0x28
 	mov rax, 0x123
-	mov qword ptr [rsp+0x90], 0x00
-	mov rdi, [rsp+0x90]
+	mov qword ptr [rsp+0x10], 0x00
+	mov rdi, [rsp+0x10]
 	syscall
-	lea r15, [rsp+0x98]
+	lea r15, [rsp+0x18]
 	mov [rsp+0x08], r15
 	mov qword ptr [rsp], 0x10
 	mov r13, 0xFFFFFFFFFFFFFFFF
 	mov r12, 0xE8
 	mov rbp, rax
 	movsxd rbp, ebp
-	mov rbx, [rsp+0x90]
+	mov rbx, [rsp+0x10]
 1:	cmp rbx, 0x00
 	setz al
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, [rsp+0x90]
-	add rsp, 0xA8
+	mov rax, [rsp+0x10]
+	add rsp, 0x28
 	pop r15
 	pop r14
 	pop r13
