@@ -1952,12 +1952,33 @@ use_slice := fn(slice: []u8): uint {
     return slice[0]
 }
 
+produce_memcpy := fn(vl: [4]u8): void {
+}
+
 main := fn(): uint {
     vl: u8 = 0
     slc := (&vl)[..1]
 
+    arr := u8.[1, 2, 3, 4]
+    produce_memcpy(arr)
+
     return use_slice(slc[..0])
 }
+
+// in: lib.hb
+
+@handler("entry", fn(): uint {
+    return @inline(@RootScope().main)
+})
+
+@handler("builtin_memcpy", fn(dst: ^u8, src: ^u8, len: uint): void {
+    while len != 0 {
+        dst.* = src.*
+        dst += 1
+        src += 1
+        len -= 1
+    }
+})
 ```
 
 ## progress

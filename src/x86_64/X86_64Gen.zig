@@ -476,9 +476,23 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
 
     const id = opts.id;
     const linkage = opts.linkage;
-    const name = opts.name;
+    const name = if (opts.special == .memcpy)
+        "memcpy"
+    else if (opts.special == .entry)
+        switch (self.object_format) {
+            .elf => "_start",
+            .coff => "WinMain",
+        }
+    else
+        opts.name;
 
-    try self.out.startDefineFunc(self.gpa, id, name, .func, linkage, opts.is_inline);
+    if (opts.special == .memcpy) {
+        try self.out.startDefineSym(self.gpa, &self.memcpy, name, .func, linkage, true, false);
+        self.out.funcs.items[id] = self.memcpy;
+    } else {
+        try self.out.startDefineFunc(self.gpa, id, name, .func, linkage, opts.is_inline);
+    }
+
     defer self.out.endDefineFunc(id);
 
     if (opts.linkage == .imported) return;
@@ -857,7 +871,9 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
 
                 const opcode = 0xE8;
                 try self.out.code.append(self.gpa, opcode);
-                try self.out.importSym(self.gpa, &self.memcpy, "memcpy", .func);
+                if (self.memcpy == .invalid) {
+                    try self.out.importSym(self.gpa, &self.memcpy, "memcpy", .func);
+                }
                 try self.out.addReloc(self.gpa, &self.memcpy, 4, -4);
                 try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
             },
@@ -1505,7 +1521,15 @@ pub fn run(_: *X86_64, env: Mach.RunEnv) !usize {
             &.{ "zig", "cc", name, "-o", exe_name },
             tmp.arena.allocator(),
         );
-        _ = try compile.spawnAndWait();
+        compile.stderr_behavior = .Ignore;
+        const result = try compile.spawnAndWait();
+        if (result != .Exited or result.Exited != 0) {
+            compile = std.process.Child.init(
+                &.{ "zig", "cc", "-nostdlib", "-static", name, "-o", exe_name },
+                tmp.arena.allocator(),
+            );
+            _ = try compile.spawnAndWait();
+        }
         defer if (cleanup) std.fs.cwd().deleteFile(exe_name) catch unreachable;
 
         var run_exe = std.process.Child.init(

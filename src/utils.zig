@@ -326,7 +326,7 @@ pub fn EnumSlice(comptime T: type) type {
         }
 
         pub fn slice(self: @This(), start: usize, end: usize) @This() {
-            std.debug.assert(start < end);
+            std.debug.assert(start <= end);
             std.debug.assert(end * @sizeOf(Elem) <= self.end);
             return .{ .start = @intCast(self.start + start * @sizeOf(Elem)), .end = @intCast(self.start + end * @sizeOf(Elem)) };
         }

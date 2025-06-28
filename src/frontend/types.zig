@@ -404,6 +404,7 @@ pub const Func = struct {
     recursion_lock: bool = false,
     is_inline: bool = false,
     visibility: root.backend.Machine.Data.Linkage = .local,
+    special: ?root.backend.Machine.EmitOptions.Special = null,
     completion: std.EnumArray(Types.Target, CompileState) = .{ .values = .{ .queued, .queued } },
 
     pub const CompileState = enum { queued, compiled };

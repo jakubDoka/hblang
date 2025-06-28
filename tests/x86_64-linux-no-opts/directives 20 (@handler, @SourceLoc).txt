@@ -1,3 +1,87 @@
+directives 20 (@handler, @SourceLoc).main:
+	push rbx
+	push rbp
+	push r12
+	sub rsp, 0x68
+	lea rax, [rsp+0x64]
+	mov byte ptr [rsp+0x64], 0x00
+	mov [rsp+0x40], rax
+	mov rax, 0x01
+	mov [rsp+0x48], rax
+	mov byte ptr [rsp+0x60], 0x01
+	mov byte ptr [rsp+0x61], 0x02
+	mov byte ptr [rsp+0x62], 0x03
+	mov byte ptr [rsp+0x63], 0x04
+	lea rdi, [rsp]
+	mov eax, [rsp+0x60]
+	mov [rdi], eax
+	call :directives 20 (@handler, @SourceLoc).produce_memcpy
+	mov r12, 0x00
+	mov rbp, [rsp+0x48]
+	mov rax, 0x00
+	cmp r12, rbp
+	setnbe dl
+	movzx rdx, dl
+	or rdx, rax
+	test dl, dl
+	jz :0
+	lea rcx, [rsp+0x20]
+	lea rax, [0x0000000000000007]
+	mov [rsp+0x20], rax
+	mov rax, 0x24
+	mov [rsp+0x28], rax
+	mov rax, 0x100000001
+	mov [rsp+0x30], rax
+	lea rbx, [rsp]
+	mov rax, 0x20
+	mov rdi, rbx
+	mov rsi, rcx
+	mov rdx, rax
+	call :memcpy
+	mov rdi, rbp
+	mov rsi, r12
+	mov rdx, r12
+	call :directives 20 (@handler, @SourceLoc).slice_ioob
+0:	mov rax, [rsp+0x40]
+	mov [rsp+0x50], rax
+	mov [rsp+0x58], r12
+	mov rdi, [rsp+0x50]
+	mov rsi, [rsp+0x58]
+	call :directives 20 (@handler, @SourceLoc).use_slice
+	add rsp, 0x68
+	pop r12
+	pop rbp
+	pop rbx
+	ret
+directives 20 (@handler, @SourceLoc).produce_memcpy:
+	ret
+memcpy:
+	sub rsp, 0x20
+	mov [rsp], rdi
+	mov [rsp+0x08], rsi
+	mov [rsp+0x10], rdx
+1:	mov rax, [rsp+0x10]
+	cmp rax, 0x00
+	setnz al
+	movzx rax, al
+	test al, al
+	jz :0
+	mov rax, [rsp+0x08]
+	mov rcx, [rsp]
+	mov al, [rax]
+	mov [rcx], al
+	mov rax, [rsp]
+	add rax, 0x01
+	mov [rsp], rax
+	mov rax, [rsp+0x08]
+	add rax, 0x01
+	mov [rsp+0x08], rax
+	mov rax, [rsp+0x10]
+	sub rax, 0x01
+	mov [rsp+0x10], rax
+	jmp :1
+0:	add rsp, 0x20
+	ret
 directives 20 (@handler, @SourceLoc).slice_ioob:
 	ud2
 directives 20 (@handler, @SourceLoc).use_slice:
@@ -36,51 +120,8 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	pop rbp
 	pop rbx
 	ret
-main:
-	push rbx
-	push rbp
-	push r12
-	sub rsp, 0x68
-	lea rax, [rsp+0x60]
-	mov byte ptr [rsp+0x60], 0x00
-	mov [rsp+0x40], rax
-	mov rax, 0x01
-	mov [rsp+0x48], rax
-	mov rax, 0x00
-	mov r12, 0x00
-	mov rbp, [rsp+0x48]
-	cmp r12, rbp
-	setnbe dl
-	movzx rdx, dl
-	or rdx, rax
-	test dl, dl
-	jz :0
-	lea rcx, [rsp+0x20]
-	lea rax, [0x0000000000000007]
-	mov [rsp+0x20], rax
-	mov rax, 0x24
-	mov [rsp+0x28], rax
-	mov rax, 0x100000001
-	mov [rsp+0x30], rax
-	lea rbx, [rsp]
-	mov rax, 0x20
-	mov rdi, rbx
-	mov rsi, rcx
-	mov rdx, rax
-	call :memcpy
-	mov rdi, rbp
-	mov rsi, r12
-	mov rdx, r12
-	call :directives 20 (@handler, @SourceLoc).slice_ioob
-0:	mov rax, [rsp+0x40]
-	mov [rsp+0x50], rax
-	mov [rsp+0x58], r12
-	mov rdi, [rsp+0x50]
-	mov rsi, [rsp+0x58]
-	call :directives 20 (@handler, @SourceLoc).use_slice
-	add rsp, 0x68
-	pop r12
-	pop rbp
-	pop rbx
+_start:
+	sub rsp, 0x08
+	call :directives 20 (@handler, @SourceLoc).main
+	add rsp, 0x08
 	ret
-memcpy:

@@ -266,6 +266,7 @@ pub fn emitReachable(
                     .fmt(types).toString(scrath.allocator()),
             .is_inline = func_data.is_inline or func_data.key.name.len == 0,
             .linkage = func_data.visibility,
+            .special = func_data.special,
             .optimizations = opts,
         });
 
@@ -352,35 +353,46 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
                             " TODO: where is the original?", .{}) catch continue;
                     }
 
-                    const sig = self.types.handler_signatures.get(field);
                     const func_data: *tys.Func = self.types.store.get(ty.data().Func);
                     const ast = self.types.getFile(func_data.key.file);
                     const func_ast = ast.exprs.get(func_data.key.ast).Fn;
 
-                    if (sig.args.len != func_data.args.len) {
-                        self.report(
-                            func,
-                            "this handler takes function" ++
-                                " with {} arguments, but got {}",
-                            .{ sig.args.len, func_data.args.len },
-                        ) catch continue;
-                    }
+                    if (self.types.handler_signatures.get(field)) |sig| {
+                        if (sig.args.len != func_data.args.len) {
+                            self.report(
+                                func,
+                                "this handler takes function" ++
+                                    " with {} arguments, but got {}",
+                                .{ sig.args.len, func_data.args.len },
+                            ) catch continue;
+                        }
 
-                    for (sig.args, func_data.args, ast.exprs.view(func_ast.args)) |expected, got, past| {
-                        if (expected != got) {
-                            self.report(func, "argument does not match the handler signature," ++
-                                " expected {}, got {}", .{ expected, got }) catch {};
-                            self.report(past, "...the argument", .{}) catch continue;
+                        for (sig.args, func_data.args, ast.exprs.view(func_ast.args)) |expected, got, past| {
+                            if (expected != got) {
+                                self.report(func, "argument does not match the handler signature," ++
+                                    " expected {}, got {}", .{ expected, got }) catch {};
+                                self.report(past, "...the argument", .{}) catch continue;
+                            }
+                        }
+
+                        if (sig.ret != func_data.ret) {
+                            self.report(func, "return type does not match the handler signature," ++
+                                " expected {}, got {}", .{ sig.ret, func_data.ret }) catch {};
+                            self.report(func_ast.ret, "...return type", .{}) catch continue;
                         }
                     }
 
-                    if (sig.ret != func_data.ret) {
-                        self.report(func, "return type does not match the handler signature," ++
-                            " expected {}, got {}", .{ sig.ret, func_data.ret }) catch {};
-                        self.report(func_ast.ret, "...return type", .{}) catch continue;
+                    field_ptr.* = ty.data().Func;
+
+                    if (field == .entry and has_main) {
+                        self.types.store.get(ty.data().Func).visibility = .exported;
+                        self.types.store.get(ty.data().Func).special = .entry;
+                        continue;
                     }
 
-                    field_ptr.* = ty.data().Func;
+                    if (field == .builtin_memcpy) {
+                        self.types.store.get(ty.data().Func).special = .memcpy;
+                    }
                 },
                 .@"export" => {
                     exports_main = exports_main or std.mem.eql(u8, name_str, "main");
@@ -395,7 +407,7 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
         }
     }
 
-    if (has_main and !exports_main) {
+    if (has_main and !exports_main and self.types.handlers.entry == null) {
         const entry = self.getEntry(.root, "main") catch {
             try self.types.diagnostics.writeAll(
                 \\...you can define the `main` in the mentioned file (or pass --no-entry):
@@ -410,6 +422,10 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
         self.types.store.get(entry).visibility = .exported;
         self.types.store.get(entry).key.name = "main";
 
+        try funcs.append(tmp.arena.allocator(), entry);
+    }
+
+    if (self.types.handlers.entry) |entry| {
         try funcs.append(tmp.arena.allocator(), entry);
     }
 
@@ -3013,9 +3029,9 @@ inline fn assertDirectiveArgs(
     got: []const Ast.Id,
     comptime expected: []const u8,
 ) !void {
-    const min_expected_args = comptime std.mem.count(u8, expected, ",") +
-        @intFromBool(expected.len != 0);
     const varargs = comptime std.mem.endsWith(u8, expected, "..");
+    const min_expected_args = comptime std.mem.count(u8, expected, ",") +
+        @intFromBool(expected.len != 0) - @intFromBool(varargs);
     try assertDirectiveArgsLow(cg, exr, got, expected, min_expected_args, varargs);
 }
 

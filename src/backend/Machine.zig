@@ -1068,6 +1068,9 @@ pub const EmitOptions = struct {
     is_inline: bool,
     linkage: Data.Linkage,
     optimizations: OptOptions = .all,
+    special: ?Special = null,
+
+    pub const Special = enum { entry, memcpy };
 };
 
 const Vidsibility = enum { local, exported, imported };

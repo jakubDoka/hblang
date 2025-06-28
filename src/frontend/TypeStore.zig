@@ -31,7 +31,10 @@ global_work_list: std.EnumArray(Target, std.ArrayListUnmanaged(utils.EntId(tys.G
 string: Id = undefined,
 source_loc: Id = undefined,
 handlers: Handlers = .{},
-handler_signatures: std.EnumArray(std.meta.FieldEnum(Handlers), Handlers.Signature) = undefined,
+handler_signatures: std.EnumArray(
+    std.meta.FieldEnum(Handlers),
+    ?Handlers.Signature,
+) = undefined,
 
 const Types = @This();
 const Map = std.hash_map.HashMapUnmanaged(Id, void, TypeCtx, 70);
@@ -39,6 +42,8 @@ const Map = std.hash_map.HashMapUnmanaged(Id, void, TypeCtx, 70);
 pub const Handlers = struct {
     slice_ioob: ?utils.EntId(tys.Func) = null,
     null_unwrap: ?utils.EntId(tys.Func) = null,
+    builtin_memcpy: ?utils.EntId(tys.Func) = null,
+    entry: ?utils.EntId(tys.Func) = null,
 
     pub const Signature = struct { args: []const Id, ret: Id };
 };
@@ -572,6 +577,7 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: std.io.AnyWriter) *
         }),
     }) });
 
+    const u8_ptr = slot.makePtr(.u8);
     slot.handler_signatures = .{
         .values = .{
             .{
@@ -584,6 +590,12 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: std.io.AnyWriter) *
                 .args = slot.pool.arena.dupe(Id, &.{slot.source_loc}),
                 .ret = .never,
             },
+            .{
+                // dst, src, len
+                .args = slot.pool.arena.dupe(Id, &.{ u8_ptr, u8_ptr, .uint }),
+                .ret = .void,
+            },
+            null,
         },
     };
 
