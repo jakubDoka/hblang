@@ -42,7 +42,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
             const L = @This();
 
             fn resolve(func: *Func, scope: []L, index: usize) *Node {
-                return switch (scope[index].expand() orelse return func.addIntImm(.i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)))) {
+                return switch (scope[index].expand() orelse return func.addIntImm(.none, .i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)))) {
                     .Node => |n| n,
                     .Loop => |loop| {
                         if (!loop.done) {
@@ -51,6 +51,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                             if (!loop.items[index].expand().?.Node.isLazyPhi(loop.ctrl)) {
                                 loop.items[index] = .compact(.{ .Node = func.addNode(
                                     .Phi,
+                                    initVal.sloc,
                                     initVal.data_type,
                                     &.{ loop.ctrl, initVal, null },
                                     .{},
@@ -58,7 +59,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                             }
                         }
                         if (loop.items[index].expand() == null) {
-                            return func.addIntImm(.i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)));
+                            return func.addIntImm(.none, .i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)));
                         }
                         scope[index] = loop.items[index];
                         if (scope[index].expand().? == .Loop) {

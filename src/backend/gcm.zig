@@ -120,15 +120,15 @@ pub fn GcmMixin(comptime Backend: type) type {
                 loop.base.extra(.Loop).anal_stage = .has_dead_break;
             }
 
-            const dead = func.addNode(.Never, .top, &.{loop.base.inputs()[1].?}, .{});
-            const then = func.addNode(.Then, .top, &.{dead}, .{});
-            const else_ = func.addNode(.Else, .top, &.{dead}, .{});
+            const dead = func.addNode(.Never, .none, .top, &.{loop.base.inputs()[1].?}, .{});
+            const then = func.addNode(.Then, .none, .top, &.{dead}, .{});
+            const else_ = func.addNode(.Else, .none, .top, &.{dead}, .{});
 
             else_.asCfg().?.ext.loop = 0;
 
             func.setInputNoIntern(&loop.base, 1, else_);
 
-            func.addTrap(then, graph.infinite_loop_trap);
+            func.addTrap(loop.base.sloc, then, graph.infinite_loop_trap);
 
             return end.asCfg().?;
         }
@@ -168,16 +168,16 @@ pub fn GcmMixin(comptime Backend: type) type {
             add_mach_moves: {
                 for (cfg_rpo) |n| if (n.base.kind == .Loop or n.base.kind == .Region) {
                     for (0..2) |i| {
-                        self.setInputNoIntern(&n.base, i, self.addNode(.Jmp, .top, &.{n.base.inputs()[i].?}, .{}));
+                        self.setInputNoIntern(&n.base, i, self.addNode(.Jmp, n.base.sloc, .top, &.{n.base.inputs()[i].?}, .{}));
                     }
 
                     var intmp = root.Arena.scrath(null);
                     defer intmp.deinit();
                     for (intmp.arena.dupe(*Node, n.base.outputs())) |o| if (o.isDataPhi()) {
                         std.debug.assert(o.inputs().len == 3);
-                        const lhs = self.addNode(.MachMove, .top, &.{ null, o.inputs()[1].? }, .{});
-                        const rhs = self.addNode(.MachMove, .top, &.{ null, o.inputs()[2].? }, .{});
-                        const new_phy = self.addNode(.Phi, o.data_type, &.{ &n.base, lhs, rhs }, .{});
+                        const lhs = self.addNode(.MachMove, n.base.sloc, .top, &.{ null, o.inputs()[1].? }, .{});
+                        const rhs = self.addNode(.MachMove, n.base.sloc, .top, &.{ null, o.inputs()[2].? }, .{});
+                        const new_phy = self.addNode(.Phi, n.base.sloc, o.data_type, &.{ &n.base, lhs, rhs }, .{});
                         self.subsume(new_phy, o);
                     };
                 };

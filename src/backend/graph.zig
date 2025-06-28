@@ -1251,7 +1251,7 @@ pub fn Func(comptime Backend: type) type {
 
         pub fn init(gpa: std.mem.Allocator) Self {
             var self = Self{ .arena = .init(gpa) };
-            self.root = self.addNode(.Start, .top, &.{}, .{});
+            self.root = self.addNode(.Start, .none, .top, &.{}, .{});
             return self;
         }
 
@@ -1263,7 +1263,7 @@ pub fn Func(comptime Backend: type) type {
         pub fn reset(self: *Self) void {
             std.debug.assert(self.arena.reset(.retain_capacity));
             self.next_id = 0;
-            self.root = self.addNode(.Start, .top, &.{}, .{});
+            self.root = self.addNode(.Start, .none, .top, &.{}, .{});
             self.interner = .{};
             self.gcm.cfg_built = .{};
             self.gcm.loop_tree_built = .{};
@@ -1358,21 +1358,22 @@ pub fn Func(comptime Backend: type) type {
             return tree.depth;
         }
 
-        pub fn addFieldOffset(self: *Self, base: *Node, offset: i64) *Node {
+        pub fn addFieldOffset(self: *Self, sloc: Sloc, base: *Node, offset: i64) *Node {
             return if (offset != 0) if (base.kind == .BinOp and base.inputs()[2].?.kind == .CInt) b: {
-                break :b self.addBinOp(.iadd, .i64, base.inputs()[1].?, self.addIntImm(
+                break :b self.addBinOp(sloc, .iadd, .i64, base.inputs()[1].?, self.addIntImm(
+                    sloc,
                     .i64,
                     base.inputs()[2].?.extra(.CInt).value + offset,
                 ));
-            } else self.addBinOp(.iadd, .i64, base, self.addIntImm(.i64, offset)) else base;
+            } else self.addBinOp(sloc, .iadd, .i64, base, self.addIntImm(sloc, .i64, offset)) else base;
         }
 
-        pub fn addGlobalAddr(self: *Self, arbitrary_global_id: u32) *Node {
-            return self.addNode(.GlobalAddr, .i64, &.{null}, .{ .id = arbitrary_global_id });
+        pub fn addGlobalAddr(self: *Self, sloc: Sloc, arbitrary_global_id: u32) *Node {
+            return self.addNode(.GlobalAddr, sloc, .i64, &.{null}, .{ .id = arbitrary_global_id });
         }
 
-        pub fn addCast(self: *Self, to: DataType, value: *Node) *Node {
-            return self.addNode(.UnOp, to, &.{ null, value }, .{ .op = .cast });
+        pub fn addCast(self: *Self, sloc: Sloc, to: DataType, value: *Node) *Node {
+            return self.addNode(.UnOp, sloc, to, &.{ null, value }, .{ .op = .cast });
         }
 
         pub const OffsetDirection = enum(u8) {
@@ -1380,36 +1381,36 @@ pub fn Func(comptime Backend: type) type {
             isub = @intFromEnum(BinOp.isub),
         };
 
-        pub fn addIndexOffset(self: *Self, base: *Node, op: OffsetDirection, elem_size: u64, subscript: *Node) *Node {
+        pub fn addIndexOffset(self: *Self, sloc: Sloc, base: *Node, op: OffsetDirection, elem_size: u64, subscript: *Node) *Node {
             const offset = if (elem_size == 1)
                 subscript
             else if (subscript.kind == .CInt)
-                self.addIntImm(.i64, subscript.extra(.CInt).value * @as(i64, @bitCast(elem_size)))
+                self.addIntImm(sloc, .i64, subscript.extra(.CInt).value * @as(i64, @bitCast(elem_size)))
             else
-                self.addBinOp(.imul, .i64, subscript, self.addIntImm(.i64, @bitCast(elem_size)));
-            return self.addBinOp(@enumFromInt(@intFromEnum(op)), .i64, base, offset);
+                self.addBinOp(sloc, .imul, .i64, subscript, self.addIntImm(sloc, .i64, @bitCast(elem_size)));
+            return self.addBinOp(sloc, @enumFromInt(@intFromEnum(op)), .i64, base, offset);
         }
 
-        pub fn addIntImm(self: *Self, ty: DataType, value: i64) *Node {
+        pub fn addIntImm(self: *Self, sloc: Sloc, ty: DataType, value: i64) *Node {
             std.debug.assert(ty != .bot);
-            const val = self.addNode(.CInt, ty, &.{null}, .{ .value = value });
+            const val = self.addNode(.CInt, sloc, ty, &.{null}, .{ .value = value });
             std.debug.assert(val.data_type.isInt());
             return val;
         }
 
-        pub fn addFlt64Imm(self: *Self, value: f64) *Node {
-            return self.addNode(.CFlt64, .f64, &.{null}, .{ .value = value });
+        pub fn addFlt64Imm(self: *Self, sloc: Sloc, value: f64) *Node {
+            return self.addNode(.CFlt64, sloc, .f64, &.{null}, .{ .value = value });
         }
 
-        pub fn addFlt32Imm(self: *Self, value: f32) *Node {
-            return self.addNode(.CFlt32, .f32, &.{null}, .{ .value = value });
+        pub fn addFlt32Imm(self: *Self, sloc: Sloc, value: f32) *Node {
+            return self.addNode(.CFlt32, sloc, .f32, &.{null}, .{ .value = value });
         }
 
-        pub fn addBinOp(self: *Self, op: BinOp, ty: DataType, lhs: *Node, rhs: *Node) *Node {
+        pub fn addBinOp(self: *Self, sloc: Sloc, op: BinOp, ty: DataType, lhs: *Node, rhs: *Node) *Node {
             if (lhs.kind == .CInt and rhs.kind == .CInt) {
-                return self.addIntImm(ty, op.eval(ty, lhs.extra(.CInt).value, rhs.extra(.CInt).value));
+                return self.addIntImm(sloc, ty, op.eval(ty, lhs.extra(.CInt).value, rhs.extra(.CInt).value));
             } else if (lhs.kind == .CFlt64 and rhs.kind == .CFlt64) {
-                return self.addFlt64Imm(@bitCast(op.eval(
+                return self.addFlt64Imm(sloc, @bitCast(op.eval(
                     ty,
                     @bitCast(lhs.extra(.CFlt64).*),
                     @bitCast(rhs.extra(.CFlt64).*),
@@ -1418,40 +1419,36 @@ pub fn Func(comptime Backend: type) type {
             if ((op == .iadd or op == .iadd) and rhs.kind == .CInt and rhs.extra(.CInt).value == 0) {
                 return lhs;
             }
-            return self.addNode(.BinOp, ty, &.{ null, lhs, rhs }, .{ .op = op });
+            return self.addNode(.BinOp, sloc, ty, &.{ null, lhs, rhs }, .{ .op = op });
         }
 
-        pub fn addUnOp(self: *Self, op: UnOp, ty: DataType, oper: *Node) *Node {
+        pub fn addUnOp(self: *Self, sloc: Sloc, op: UnOp, ty: DataType, oper: *Node) *Node {
             if (oper.kind == .CInt and ty.isInt()) {
-                return self.addIntImm(ty, op.eval(oper.data_type, oper.extra(.CInt).value));
+                return self.addIntImm(sloc, ty, op.eval(oper.data_type, oper.extra(.CInt).value));
             } else if (oper.kind == .CFlt64 and ty == .f64) {
-                return self.addFlt64Imm(@bitCast(op.eval(oper.data_type, @bitCast(oper.extra(.CFlt64).*))));
+                return self.addFlt64Imm(sloc, @bitCast(op.eval(oper.data_type, @bitCast(oper.extra(.CFlt64).*))));
             } else if (oper.kind == .CFlt32 and ty == .f32) {
-                return self.addFlt32Imm(@floatCast(@as(f64, @bitCast(op.eval(
+                return self.addFlt32Imm(sloc, @floatCast(@as(f64, @bitCast(op.eval(
                     oper.data_type,
                     @bitCast(@as(f64, @floatCast(oper.extra(.CFlt32).value))),
                 )))));
             }
-            return self.addNode(.UnOp, ty, &.{ null, oper }, .{ .op = op });
+            return self.addNode(.UnOp, sloc, ty, &.{ null, oper }, .{ .op = op });
         }
 
-        pub fn addTrap(self: *Self, ctrl: *Node, code: u64) void {
+        pub fn addTrap(self: *Self, sloc: Sloc, ctrl: *Node, code: u64) void {
             if (self.end.inputs()[2] == null) {
-                self.setInputNoIntern(self.end, 2, self.addNode(.TrapRegion, .top, &.{}, .{}));
+                self.setInputNoIntern(self.end, 2, self.addNode(.TrapRegion, sloc, .top, &.{}, .{}));
             }
 
             const region = self.end.inputs()[2].?;
-            const trap = self.addNode(.Trap, .top, &.{ctrl}, .{ .code = code });
+            const trap = self.addNode(.Trap, sloc, .top, &.{ctrl}, .{ .code = code });
 
             self.addDep(region, trap);
             self.addUse(trap, region);
         }
 
-        pub fn addSplit(self: *Self, ctrl: *Node, def: *Node) *Node {
-            return if (comptime optApi("addSplit", @TypeOf(addSplit))) Backend.addSplit(self, ctrl, def) else unreachable;
-        }
-
-        pub fn addNode(self: *Self, comptime kind: Kind, ty: DataType, inputs: []const ?*Node, extra: ClassFor(kind)) *Node {
+        pub fn addNode(self: *Self, comptime kind: Kind, sloc: Sloc, ty: DataType, inputs: []const ?*Node, extra: ClassFor(kind)) *Node {
             var typ = ty;
             if (kind == .Phi) {
                 if (inputs[1].?.isStore() or inputs[1].?.kind == .Mem) typ = .top;
@@ -1460,6 +1457,7 @@ pub fn Func(comptime Backend: type) type {
                 };
             }
             const node = self.addNodeUntyped(kind, typ, inputs, extra);
+            node.sloc = sloc;
             return node;
         }
 
@@ -1749,6 +1747,7 @@ pub fn Func(comptime Backend: type) type {
 
                     if (if_node.inputs()[1].? == node.inputs()[1].?) {
                         self.setInputNoIntern(node, 1, self.addIntImm(
+                            node.sloc,
                             .i8,
                             @intFromBool(cursor.base.kind == .Then),
                         ));
@@ -1874,7 +1873,7 @@ pub fn Func(comptime Backend: type) type {
                 if (base.kind == .Local and node.tryCfg0() != null) {
                     const dinps = tmp.arena.dupe(?*Node, node.inputs());
                     dinps[0] = null;
-                    const st = self.addNode(.Store, node.data_type, dinps, .{});
+                    const st = self.addNode(.Store, node.sloc, node.data_type, dinps, .{});
                     work.add(st);
                     return st;
                 }
@@ -1890,7 +1889,7 @@ pub fn Func(comptime Backend: type) type {
                 if (base.kind == .Local and node.tryCfg0() != null) {
                     const dinps = tmp.arena.dupe(?*Node, node.inputs());
                     dinps[0] = null;
-                    const st = self.addNode(.Load, node.data_type, dinps, .{});
+                    const st = self.addNode(.Load, node.sloc, node.data_type, dinps, .{});
                     work.add(st);
                     return st;
                 }
@@ -1910,7 +1909,7 @@ pub fn Func(comptime Backend: type) type {
                 }
 
                 if (earlier != node.mem()) {
-                    return self.addNode(.Load, node.data_type, &.{ inps[0], earlier, inps[2] }, .{});
+                    return self.addNode(.Load, node.sloc, node.data_type, &.{ inps[0], earlier, inps[2] }, .{});
                 }
             }
 
@@ -1956,7 +1955,7 @@ pub fn Func(comptime Backend: type) type {
                 const oper = inps[1].?;
 
                 if (oper.kind == .CInt and node.data_type.isInt()) {
-                    return self.addIntImm(node.data_type, op.eval(oper.data_type, oper.extra(.CInt).value));
+                    return self.addIntImm(node.sloc, node.data_type, op.eval(oper.data_type, oper.extra(.CInt).value));
                 }
 
                 if (node.data_type.meet(inps[1].?.data_type) == inps[1].?.data_type) {
@@ -1972,6 +1971,7 @@ pub fn Func(comptime Backend: type) type {
                 var rhs = node.inputs()[2].?;
                 if (lhs.kind == .CInt and rhs.kind == .CInt) {
                     return self.addIntImm(
+                        node.sloc,
                         lhs.data_type.meet(rhs.data_type),
                         node.extra(.BinOp).op.eval(
                             lhs.data_type,
@@ -1986,7 +1986,7 @@ pub fn Func(comptime Backend: type) type {
                 }
 
                 if (lhs == rhs) if (op.symetricConstant()) |c| {
-                    return self.addIntImm(lhs.data_type, c);
+                    return self.addIntImm(node.sloc, lhs.data_type, c);
                 };
 
                 if (rhs.kind == .CInt and rhs.extra(.CInt).value == op.neutralElememnt()) {
@@ -1997,11 +1997,15 @@ pub fn Func(comptime Backend: type) type {
                     rhs.kind == .CInt)
                 {
                     if (lhs.rhs().kind == .CInt)
-                        return self.addBinOp(op, node.data_type, lhs.lhs(), self.addIntImm(node.data_type, op.eval(
+                        return self.addBinOp(node.sloc, op, node.data_type, lhs.lhs(), self.addIntImm(
+                            node.sloc,
                             node.data_type,
-                            lhs.rhs().extra(.CInt).value,
-                            rhs.extra(.CInt).value,
-                        )));
+                            op.eval(
+                                node.data_type,
+                                lhs.rhs().extra(.CInt).value,
+                                rhs.extra(.CInt).value,
+                            ),
+                        ));
                 }
             }
 
@@ -2026,7 +2030,7 @@ pub fn Func(comptime Backend: type) type {
                         node.data_type.size(),
                     ) orelse break :fold_const_read;
 
-                    return self.addIntImm(node.data_type, value);
+                    return self.addIntImm(node.sloc, node.data_type, value);
                 }
             }
 

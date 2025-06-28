@@ -725,8 +725,8 @@ pub fn dumpAnalErrors(self: *Types, anal_errors: *std.ArrayListUnmanaged(static_
             self.reportSloc(loc.slot, "stack location escapes the function", .{});
         },
         .StackOob => |loc| {
-            self.reportSloc(loc.slot, "this slot has a out of bounds read/write" ++
-                " (TODO: show the index location as well)", .{});
+            self.reportSloc(loc.slot, "this slot has a out of bounds read/write", .{});
+            self.reportSloc(loc.access, "the access is here", .{});
         },
         .LoopInvariantBreak => |loc| {
             self.reportSloc(loc.if_node, "the if condition is loop invariant but it" ++

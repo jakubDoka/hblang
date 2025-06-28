@@ -8,6 +8,7 @@ pub const Error = union(enum) {
     },
     StackOob: struct {
         slot: graph.Sloc,
+        access: graph.Sloc,
         op: u32,
     },
     LoopInvariantBreak: struct {
@@ -107,7 +108,11 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
                     }
                     const end_offset = offset + @as(i64, @intCast(mem_op.data_type.size()));
                     if (offset < 0 or end_offset > local.extra(.Local).size) {
-                        errors.append(arena.allocator(), .{ .StackOob = .{ .slot = local.sloc, .op = mem_op.id } }) catch unreachable;
+                        errors.append(arena.allocator(), .{ .StackOob = .{
+                            .slot = local.sloc,
+                            .op = mem_op.id,
+                            .access = op.sloc,
+                        } }) catch unreachable;
                     }
                 }
             };

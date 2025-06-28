@@ -117,11 +117,11 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
                 switch (t) {
                     .BinOp => {
                         const lhs, const rhs = .{ curr.inputs()[1].?.extra(.CInt).value, curr.inputs()[2].?.extra(.CInt).value };
-                        break :b bl.addIntImm(curr.data_type, curr.extra(.BinOp).op.eval(curr.data_type, lhs, rhs));
+                        break :b bl.addIntImm(.none, curr.data_type, curr.extra(.BinOp).op.eval(curr.data_type, lhs, rhs));
                     },
                     .UnOp => {
                         const oper = curr.inputs()[1].?.extra(.CInt).value;
-                        break :b bl.addIntImm(curr.data_type, curr.extra(.UnOp).op.eval(curr.data_type, oper));
+                        break :b bl.addIntImm(.none, curr.data_type, curr.extra(.UnOp).op.eval(curr.data_type, oper));
                     },
                     else => unreachable,
                 }
@@ -176,7 +176,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
                 };
 
                 const ret = types.ct.vm.regs.get(.ret(0));
-                const ret_vl = bl.addIntImm(ret_ty, @bitCast(ret));
+                const ret_vl = bl.addIntImm(.none, ret_ty, @bitCast(ret));
                 for (tmp.arena.dupe(*Node, curr.outputs())) |o| {
                     if (o.kind == .Ret) {
                         bl.func.subsume(ret_vl, o);
@@ -202,7 +202,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
                         glob.data[0..@intCast(curr.data_type.size())],
                     );
 
-                    break :b bl.addIntImm(curr.data_type, @bitCast(mem));
+                    break :b bl.addIntImm(.none, curr.data_type, @bitCast(mem));
                 }
 
                 var cursor = curr.mem();
@@ -441,7 +441,7 @@ pub fn jitExprLow(
         gen.name = name;
         gen.struct_ret_ptr = null;
 
-        const ptr = gen.bl.addParam(0);
+        const ptr = gen.bl.addParam(.none, 0);
 
         ret = try gen.emit(ctx.addLoc(ptr), value);
         if (ctx.ty) |ty| {
@@ -453,7 +453,7 @@ pub fn jitExprLow(
             return .{ .{ .constant = ret.id.Value.extra(.CInt).value }, ret.ty };
         }
 
-        gen.emitGenericStore(ptr, &ret);
+        gen.emitGenericStore(.none, ptr, &ret);
 
         gen.bl.end(token);
 

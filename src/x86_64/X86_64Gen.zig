@@ -239,11 +239,11 @@ pub fn idealize(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkL
                     @enumFromInt(@intFromEnum(copy_elem) - 1))
                 {}
 
-                const dst_off = func.addFieldOffset(dst, @intCast(cursor));
-                const src_off = func.addFieldOffset(src, @intCast(cursor));
-                const ld = func.addNode(.Load, copy_elem, &.{ ctrl, mem, src_off }, .{});
+                const dst_off = func.addFieldOffset(node.sloc, dst, @intCast(cursor));
+                const src_off = func.addFieldOffset(node.sloc, src, @intCast(cursor));
+                const ld = func.addNode(.Load, node.sloc, copy_elem, &.{ ctrl, mem, src_off }, .{});
                 worklist.add(ld);
-                mem = func.addNode(.Store, copy_elem, &.{ ctrl, mem, dst_off, ld }, .{});
+                mem = func.addNode(.Store, node.sloc, copy_elem, &.{ ctrl, mem, dst_off, ld }, .{});
                 worklist.add(mem);
 
                 cursor += copy_elem.size();
@@ -307,6 +307,7 @@ pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.W
         const res = if (base.isStack())
             func.addNode(
                 .StackLoad,
+                node.sloc,
                 node.data_type,
                 &.{ node.inputs()[0], node.mem(), base },
                 .{ .base = .{ .dis = @intCast(offset) } },
@@ -314,6 +315,7 @@ pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.W
         else
             func.addNode(
                 .OffsetLoad,
+                node.sloc,
                 node.data_type,
                 &.{ node.inputs()[0], node.mem(), base },
                 .{ .dis = @intCast(offset) },
@@ -330,6 +332,7 @@ pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.W
         if (node.value().?.kind == .CInt and (node.value().?.extra(.CInt).value <= mask)) {
             const res = func.addNode(
                 .ConstStore,
+                node.sloc,
                 node.data_type,
                 &.{ node.inputs()[0], node.mem(), base },
                 .{
@@ -348,6 +351,7 @@ pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.W
 
         const res = func.addNode(
             .OffsetStore,
+            node.sloc,
             node.data_type,
             &.{ node.inputs()[0], node.mem(), base, node.value() },
             .{ .dis = @intCast(offset) },
@@ -402,6 +406,7 @@ pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.W
             };
             return func.addNode(
                 .CondJump,
+                node.sloc,
                 cond.data_type,
                 &.{ node.inputs()[0], cond.inputs()[1], cond.inputs()[2] },
                 .{ .op = op },
@@ -428,7 +433,7 @@ pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.W
         })
     {
         if (std.math.cast(i32, node.inputs()[2].?.extra(.CInt).value) != null) {
-            return func.addNode(.ImmOp, node.data_type, node.inputs()[0..2], .{
+            return func.addNode(.ImmOp, node.sloc, node.data_type, node.inputs()[0..2], .{
                 .base = node.extra(.BinOp).*,
                 .imm = node.inputs()[2].?.extra(.CInt).value,
             });

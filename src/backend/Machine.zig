@@ -418,7 +418,13 @@ pub const InlineFunc = struct {
                     // convention of the inlined function since the default
                     // call convention should be a bit customized
                     //
-                    const copy = func.addNode(.Local, .i64, &.{ null, into_entry_mem }, .{ .size = o.extra(.StructArg).spec.size });
+                    const copy = func.addNode(
+                        .Local,
+                        o.sloc,
+                        .i64,
+                        &.{ null, into_entry_mem },
+                        .{ .size = o.extra(.StructArg).spec.size },
+                    );
                     func.subsume(copy, dep.?);
                     func.subsume(copy, o);
                     break;
@@ -459,7 +465,7 @@ pub const InlineFunc = struct {
 
         if (end.inputs()[2]) |trap_region| {
             if (func.end.inputs()[2] == null) {
-                func.setInputNoIntern(func.end, 2, func.addNode(.TrapRegion, .top, &.{}, .{}));
+                func.setInputNoIntern(func.end, 2, func.addNode(.TrapRegion, .none, .top, &.{}, .{}));
             }
             const dest_trap_region = func.end.inputs()[2].?;
 

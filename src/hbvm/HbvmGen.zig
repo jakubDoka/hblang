@@ -183,10 +183,6 @@ pub fn regKills(node: *Func.Node, arena: *utils.Arena) ?Set {
     };
 }
 
-pub fn addSplit(self: *Func, ctrl: *Func.Node, def: *Func.Node) *Func.Node {
-    return self.addNode(.Split, def.data_type, &.{ ctrl, def }, .{});
-}
-
 pub const i_know_the_api = {};
 
 pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
@@ -872,6 +868,7 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
 
             return func.addNode(
                 .ImmBinOp,
+                node.sloc,
                 node.data_type,
                 &.{ null, node.inputs()[1] },
                 .{ .op = instr, .imm = imm },
@@ -902,14 +899,14 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
             };
             const op_inps = inps[1].?.inputs();
 
-            return func.addNode(.IfOp, .top, &.{ inps[0], op_inps[1], op_inps[2] }, .{
+            return func.addNode(.IfOp, node.sloc, .top, &.{ inps[0], op_inps[1], op_inps[2] }, .{
                 .op = instr,
                 .swapped = swap,
             });
         }
 
         if (inps[1].?.data_type != .i64) {
-            const new = func.addUnOp(.uext, .i64, inps[1].?);
+            const new = func.addUnOp(node.sloc, .uext, .i64, inps[1].?);
             work.add(new);
             _ = func.setInput(node, 1, new);
         }
@@ -919,6 +916,7 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
         if (inps[4].?.kind == .CInt) {
             return func.addNode(
                 .BlockCpy,
+                node.sloc,
                 .top,
                 &.{ inps[0], inps[1], inps[2], inps[3] },
                 .{ .size = @intCast(inps[4].?.extra(.CInt).value) },
@@ -930,6 +928,7 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
         const base, const offset = node.base().knownOffset();
         const st = func.addNode(
             .St,
+            node.sloc,
             node.data_type,
             &.{ inps[0], inps[1], base, inps[3] },
             .{ .offset = offset },
@@ -952,6 +951,7 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
         const ld = if (base.isStack())
             func.addNode(
                 .StackLd,
+                node.sloc,
                 node.data_type,
                 &.{ inps[0], inps[1], base },
                 .{ .base = .{ .offset = offset } },
@@ -959,6 +959,7 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
         else
             func.addNode(
                 .Ld,
+                node.sloc,
                 node.data_type,
                 &.{ inps[0], inps[1], base },
                 .{ .offset = offset },
@@ -994,7 +995,7 @@ pub fn idealize(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList
             const ext_op: graph.UnOp = if (op.isSigned()) .sext else .uext;
             inline for (inps[1..3], 1..) |inp, i| {
                 if (inp.?.data_type.size() != 8) {
-                    const new = func.addUnOp(ext_op, .i64, inp.?);
+                    const new = func.addUnOp(node.sloc, ext_op, .i64, inp.?);
                     work.add(new);
                     _ = func.setInput(node, i, new);
                 }
@@ -1005,7 +1006,7 @@ pub fn idealize(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList
     if (node.kind == .UnOp) {
         const op: graph.UnOp = node.extra(.UnOp).op;
         if (op == .not and inps[1].?.data_type != .i64) {
-            const new = func.addUnOp(.uext, .i64, inps[1].?);
+            const new = func.addUnOp(node.sloc, .uext, .i64, inps[1].?);
             work.add(new);
             _ = func.setInput(node, 1, new);
         }

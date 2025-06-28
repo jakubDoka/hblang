@@ -2126,16 +2126,16 @@ main := fn(): uint {
       - [ ] around memcpy
     - [x] store->load forwarding
     - [ ] splitting
-    - [ ] mem2reg
+    - [x] mem2reg
       - [x] scalar locals
-      - [ ] arbitrary locals
-  - [ ] compute
-    - [ ] folding
-    - [ ] algebra
+      - [x] arbitrary locals
+  - [x] compute
+    - [x] folding
+    - [x] algebra
   - [ ] control flow
     - [ ] inlining (heuristic)
     - [ ] loop unrolling
-    - [ ] folding
+    - [x] folding
   - [ ] clonable insructions
   - [x] allocate abi registers
 - [ ] static analisys
