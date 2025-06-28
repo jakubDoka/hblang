@@ -1985,7 +1985,7 @@ main := fn(): uint {
 
 - [x] hbvm-ableos target
 - [x] x86_64-linux target
-  - [ ] folatin point math
+  - [ ] folating point math
 - [ ] x86_64-windows target
 - [x] diagnostics
   - [x] don't crash on cycles
@@ -2001,7 +2001,7 @@ main := fn(): uint {
     - [x] option unwrap
   - [x] loops
     - [x] infinite
-    - [ ] while
+    - [x] while
     - [ ] ? for
       - [ ] index
       - [ ] multiple slices
@@ -2021,8 +2021,8 @@ main := fn(): uint {
 - [x] global variables
   - [x] strings
   - [x] comptime evaluation
-  - [ ] ? references
-  - [ ] ? immutable
+  - [ ] references
+  - [x] immutable
     - [x] noop compatibility
 - [ ] types
   - [x] `idk`
@@ -2084,24 +2084,23 @@ main := fn(): uint {
   - [x] `@as(<ty>, <expr>): <ty>`
   - [x] `@int_cast(<int>): <infered-int>`
   - [x] `@size_of(<ty>): uint`
-    - [ ] comptime interrupt
+    - [x] comptime interrupt
   - [x] `@align_of(<ty>): uint`
-    - [ ] comptime interrupt
+    - [x] comptime interrupt
   - [x] `@bit_cast(<expr>): <infered-ty>`
   - [x] `@ecall(...<expr>): <infered-ty>`
   - [x] `@embed(<string>): [len]u8`
-  - [ ] ? `@inline(<func>, ...<args>): <func>.ret`
-    - [x] noop compatibility
+  - [x] ? `@inline(<func>, ...<args>): <func>.ret`
   - [x] `@len_of(<ty>): uint`
-    - [ ] comptime interrupt
+    - [x] comptime interrupt
   - [x] `@kind_of(<ty>): u8`
-    - [ ] comptime interrupt
+    - [x] comptime interrupt
   - [x] `@Any(<fn(type): void/type>..): type`
     - [ ] ? type filters
   - [x] `@error(...<expr>): never`
   - [x] `@compiles(<expr>): bool`
   - [x] `@ChildOf(<ty>): type`
-    - [ ] comptime interrupt
+    - [x] comptime interrupt
   - [x] `@target("<pat>"): bool`
   - [x] `@is_comptime(): bool`
   - [x] `@int_to_float(<int>): <float>`
@@ -2112,7 +2111,7 @@ main := fn(): uint {
   - [x] `@import("<name>")`
   - [x] `@export("<name>", <fn>)`
   - [x] `@frame_pointer(): uint`
-  - [ ] `@handler("<name>", <handle_fn>)`
+  - [x] `@handler("<name>", <handle_fn>)`
   - [ ] ? `@recall(..<args>): never`
 - [ ] optimizations
   - [ ] assumptions

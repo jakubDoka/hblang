@@ -43,6 +43,11 @@ pub const InteruptCode = enum(u64) {
     Enum,
     name_of,
     make_array,
+    ChildOf,
+    kind_of,
+    len_of,
+    size_of,
+    align_of,
 };
 
 pub fn init(gpa: std.mem.Allocator) Comptime {
@@ -64,6 +69,14 @@ inline fn getGpa(self: *Comptime) std.mem.Allocator {
 
 pub inline fn ecaArg(self: *Comptime, idx: usize) u64 {
     return self.vm.regs.get(.arg(idx));
+}
+
+pub inline fn ecaArgAst(self: *Comptime, idx: usize) Ast.Id {
+    return @enumFromInt(@as(u32, @truncate(self.ecaArg(idx))));
+}
+
+pub inline fn ecaArgSloc(self: *Comptime, idx: usize) graph.Sloc {
+    return @bitCast(self.ecaArg(idx));
 }
 
 pub const PartialEvalResult = union(enum) {
@@ -96,10 +109,8 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
             },
             .Phi => b: {
                 if (curr.inputs()[0].?.kind == .Loop and curr.inputs()[2] == null) {
-                    if (true) unreachable;
                     break :b curr.inputs()[1].?;
                 } else {
-                    if (true) unreachable;
                     return .{ .Unsupported = curr };
                 }
             },
@@ -294,13 +305,14 @@ pub fn runVm(
                 inline .Struct, .Union, .Enum => |t| {
                     const scope: Types.Id = @enumFromInt(self.ecaArg(1));
                     const ast = types.getFile(scope.file(types).?);
-                    const struct_ast_id: Ast.Id = @enumFromInt(@as(u32, @truncate(self.ecaArg(2))));
+                    const struct_ast_id = self.ecaArgAst(2);
                     const struct_ast = ast.exprs.getTyped(@field(std.meta.Tag(Ast.Expr), @tagName(t)), struct_ast_id).?;
 
                     const captures = types.pool.arena.alloc(Types.Scope.Capture, struct_ast.captures.len());
 
                     for (captures, ast.exprs.view(struct_ast.captures), 0..) |*slot, cp, i| {
                         slot.* = .{ .id = cp.id, .ty = @enumFromInt(self.ecaArg(3 + i * 2)), .value = self.ecaArg(3 + i * 2 + 1) };
+                        if (slot.ty.size(types) < 8) slot.value &= (@as(u64, 1) << @intCast(slot.ty.size(types) * 8)) - 1;
                     }
 
                     const res = types.resolveFielded(
@@ -317,8 +329,6 @@ pub fn runVm(
                 .name_of => {
                     const ty: Types.Id = @enumFromInt(self.ecaArg(1));
                     const value = self.ecaArg(2);
-                    //const lfile: Types.File = @enumFromInt(@as(u32, @truncate(self.ecaArg(2))));
-                    //const expr: Ast.Id = @enumFromInt(@as(u32, @truncate(self.ecaArg(3))));
 
                     const enm: root.frontend.types.Enum.Id = ty.data().Enum;
                     const fields = enm.getFields(types);
@@ -341,6 +351,35 @@ pub fn runVm(
                     const ty: Types.Id = @enumFromInt(self.ecaArg(2));
                     const slice = types.makeSlice(@intCast(len), ty);
                     self.vm.regs.set(.ret(0), @intFromEnum(slice));
+                },
+                .ChildOf => {
+                    const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+
+                    self.vm.regs.set(.ret(0), @intFromEnum(ty.child(types) orelse b: {
+                        types.reportSloc(self.ecaArgSloc(1), "directive only work on pointer" ++
+                            " types and slices, {} is not", .{ty});
+                        break :b .never;
+                    }));
+                },
+                .kind_of => {
+                    const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+                    self.vm.regs.set(.ret(0), @intFromEnum(ty.data()));
+                },
+                .len_of => {
+                    const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+                    self.vm.regs.set(.ret(0), ty.len(types) orelse b: {
+                        types.reportSloc(self.ecaArgSloc(1), "directive only works on structs" ++
+                            " and arrays, {} is not", .{ty});
+                        break :b 0;
+                    });
+                },
+                .size_of => {
+                    const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+                    self.vm.regs.set(.ret(0), ty.size(types));
+                },
+                .align_of => {
+                    const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+                    self.vm.regs.set(.ret(0), ty.alignment(types));
                 },
             }
         },

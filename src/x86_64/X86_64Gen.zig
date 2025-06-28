@@ -445,11 +445,11 @@ pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.W
 
 pub fn allowedRegsFor(
     node: *Func.Node,
-    ids: usize,
+    idx: usize,
     tmp: *utils.Arena,
 ) ?std.DynamicBitSetUnmanaged {
     errdefer unreachable;
-    _ = ids;
+    _ = idx;
 
     if (node.kind == .FramePointer) {
         var set = try std.DynamicBitSetUnmanaged.initEmpty(tmp.allocator(), Reg.set_cap);

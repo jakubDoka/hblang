@@ -12,7 +12,7 @@ fn tf(int: i64) f64 {
 pub const infinite_loop_trap = std.math.maxInt(u64);
 pub const unreachable_func_trap = infinite_loop_trap - 1;
 
-pub const Sloc = packed struct(u64) {
+pub const Sloc = packed struct(i64) {
     namespace: u32,
     index: u32,
 

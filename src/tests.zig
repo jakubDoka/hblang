@@ -203,7 +203,6 @@ pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
 
 pub fn runVendoredTest(path: []const u8) !void {
     // TODO: fix
-    if (std.mem.indexOf(u8, path, "struct-niches.hb") != null) return;
     if (std.mem.indexOf(u8, path, "float") != null) return;
     if (std.mem.indexOf(u8, path, "inf") != null) return;
 

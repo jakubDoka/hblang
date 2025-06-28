@@ -154,11 +154,22 @@ pub const Scope = union(enum) {
             .Perm => |p| p.findCapture(id, types),
             .Tmp => |t| for (t.scope.items, 0..) |se, i| {
                 if (se.name == id) {
-                    if (se.ty != .type) {
-                        return .{ .id = id, .ty = se.ty };
-                    }
-                    var value = Codegen.Value{ .ty = .type, .id = .{ .Pointer = t.bl.getPinValue(i) } };
-                    break .{ .id = id, .ty = .type, .value = @intFromEnum(t.unwrapTyConst(ast, &value) catch .never) };
+                    return switch (t.abiCata(se.ty)) {
+                        .Impossible, .Imaginary, .ByValuePair, .ByRef => .{ .id = id, .ty = se.ty },
+                        .ByValue => |v| b: {
+                            const res = t.types.ct.partialEval(
+                                t.parent_scope.file(t.types),
+                                ast,
+                                &t.bl,
+                                t.bl.addLoad(.none, t.bl.getPinValue(i), v),
+                            );
+                            const lit_value = switch (res) {
+                                .Resolved => |r| r,
+                                .Unsupported => 0,
+                            };
+                            break :b .{ .id = id, .ty = se.ty, .value = lit_value };
+                        },
+                    };
                 }
             } else null,
         };
@@ -3102,6 +3113,15 @@ fn assertDirectiveArgsLow(
     }
 }
 
+fn emitComptimeDirectiveEca(self: *Codegen, ctx: Ctx, expr: Ast.Id, code: Comptime.InteruptCode, ret_ty: Types.Id) !Value {
+    var vl = try self.emitTyped(.{}, .type, expr);
+
+    return self.emitInternalEca(ctx, code, &.{
+        self.bl.addIntImm(.none, .i64, @bitCast(self.src(expr))),
+        vl.getValue(self.src(expr), self),
+    }, ret_ty);
+}
+
 fn emitDirective(
     self: *Codegen,
     ctx: Ctx,
@@ -3247,6 +3267,10 @@ fn emitDirective(
         },
         .ChildOf => {
             try assertDirectiveArgs(self, expr, args, "<ty>");
+            if (self.target == .@"comptime") {
+                return self.emitComptimeDirectiveEca(ctx, args[0], .ChildOf, .type);
+            }
+
             const ty = try self.resolveAnonTy(args[0]);
             const child = ty.child(self.types) orelse {
                 return self.report(args[0], "directive only work on pointer" ++
@@ -3256,11 +3280,20 @@ fn emitDirective(
         },
         .kind_of => {
             try assertDirectiveArgs(self, expr, args, "<ty>");
+            if (self.target == .@"comptime") {
+                return self.emitComptimeDirectiveEca(ctx, args[0], .kind_of, .i8);
+            }
+
             const len = try self.resolveAnonTy(args[0]);
             return .mkv(.u8, self.bl.addIntImm(sloc, .i8, @intFromEnum(len.data())));
         },
         .len_of => {
             try assertDirectiveArgs(self, expr, args, "<ty>");
+
+            if (self.target == .@"comptime") {
+                return self.emitComptimeDirectiveEca(ctx, args[0], .len_of, .uint);
+            }
+
             const ty = try self.resolveAnonTy(args[0]);
             const len = ty.len(self.types) orelse {
                 return self.report(args[0], "directive only works on structs" ++
@@ -3320,11 +3353,17 @@ fn emitDirective(
         },
         .align_of => {
             try assertDirectiveArgs(self, expr, args, "<ty>");
+            if (self.target == .@"comptime") {
+                return self.emitComptimeDirectiveEca(ctx, args[0], .align_of, .uint);
+            }
             const ty = try self.resolveAnonTy(args[0]);
             return .mkv(.uint, self.bl.addIntImm(sloc, .i64, @bitCast(ty.alignment(self.types))));
         },
         .size_of => {
             try assertDirectiveArgs(self, expr, args, "<ty>");
+            if (self.target == .@"comptime") {
+                return self.emitComptimeDirectiveEca(ctx, args[0], .size_of, .uint);
+            }
             const ty = try self.resolveAnonTy(args[0]);
             return .mkv(.uint, self.bl.addIntImm(sloc, .i64, @bitCast(ty.size(self.types))));
         },
