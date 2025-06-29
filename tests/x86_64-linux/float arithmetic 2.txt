@@ -2,47 +2,51 @@ float arithmetic 2.sin:
 	push rbx
 	push rbp
 	movsd xmm6, xmm0
-	mov rbx, 0x3FE0000000000000
-	mov rsi, 0x100
-	mov rdx, 0x40490FDB
-	mov rcx, 0x3F000000
-	mov rax, 0x40000000
-	movd xmm5, edx
-	mov rbp, 0x04
+	mov rcx, 0x4060000000000000
+	mov rax, 0x400921FB60000000
+	mov r9, 0x3F000000
+	mov r8, 0x40C90FDB
+	mov rdi, 0x43800000
+	mov rsi, 0x04
+	lea rbp, [0x0000000000000007]
 	cvtss2sd xmm0, xmm6
-	movq xmm1, rbx
-	cvtsi2sd xmm3, rsi
-	mulsd xmm0, xmm1
-	lea rbx, [0x0000000000000007]
-	movd xmm4, ecx
-	movd xmm2, eax
-	cvtss2sd xmm1, xmm5
-	mulsd xmm0, xmm3
+	movq xmm2, rcx
+	movq xmm1, rax
+	mulsd xmm0, xmm2
 	divsd xmm0, xmm1
-	cvttsd2si rax, xmm0
-	mov rcx, rax
+	cvttsd2si rbx, xmm0
+	mov rcx, rbx
 	add rcx, 0x40
-	cvtsi2ss xmm0, eax
+	mov rax, rbx
 	and rax, 0xFF
 	and rcx, 0xFF
-	mulss xmm0, xmm2
-	imul rax, rbp
+	imul rax, rsi
 	mov rdx, rcx
-	imul rdx, rbp
-	mov rcx, rbx
+	imul rdx, rsi
+	mov rcx, rbp
 	add rcx, rax
-	mov rax, rbx
+	mov rax, rbp
 	add rax, rdx
-	movss xmm3, dword ptr [rcx]
-	mulss xmm0, xmm5
-	cvtsi2ss xmm1, esi
-	divss xmm0, xmm1
-	mulss xmm1, xmm3
-	subss xmm2, xmm0
-	movss xmm0, dword ptr [rax]
+	movd xmm5, r9d
+	movss xmm4, dword ptr [rcx]
+	movd xmm1, r8d
+	cvtsi2ss xmm0, ebx
+	movd xmm2, edi
+	mulss xmm0, xmm1
+	movsd xmm1, xmm0
+	divss xmm1, xmm2
+	movss xmm3, dword ptr [rax]
+	movsd xmm0, xmm5
+	mulss xmm0, xmm4
+	movsd xmm2, xmm6
+	subss xmm2, xmm1
+	movsd xmm1, xmm0
 	mulss xmm1, xmm2
+	movsd xmm0, xmm3
 	subss xmm0, xmm1
+	movsd xmm1, xmm0
 	mulss xmm1, xmm2
+	movsd xmm0, xmm4
 	addss xmm0, xmm1
 	pop rbp
 	pop rbx

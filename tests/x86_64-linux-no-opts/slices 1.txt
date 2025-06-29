@@ -27,9 +27,7 @@ main:
 	mov rcx, [rsp+0x88]
 	mov rax, [rsp+0x80]
 	mov [rsp+0x40], rax
-	mov rax, rcx
-	sub rax, 0x00
-	mov [rsp+0x48], rax
+	mov [rsp+0x48], rcx
 	mov rax, [rsp+0x80]
 	mov [rsp+0x50], rax
 	mov [rsp+0x58], rdx

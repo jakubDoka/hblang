@@ -1,0 +1,4 @@
+main:
+	mov rax, 0x00
+	movq xmm0, rax
+	ret

@@ -328,11 +328,12 @@ fn readOp(self: *Vm, ctx: anytype) !isa.Op {
 
     if (@TypeOf(ctx.writer) != void) {
         const prev_ip = self.ip;
-        const instr_name = @tagName(@as(isa.Op, @enumFromInt(byte)));
+        const instr = @as(isa.Op, @enumFromInt(byte));
+        const instr_name = @tagName(instr);
         for (instr_name.len..isa.max_instr_len) |_| try ctx.writer.writeAll(" ");
         try ctx.writer.writeAll(instr_name);
         const argTys = isa.spec[byte][1];
-        try self.readOpArgs(argTys, ctx);
+        try self.readOpArgs(instr, argTys, ctx);
         try ctx.writer.writeAll("\n");
         self.ip = prev_ip;
     }
@@ -340,13 +341,17 @@ fn readOp(self: *Vm, ctx: anytype) !isa.Op {
     return @enumFromInt(byte);
 }
 
-fn readOpArgs(self: *Vm, argTys: []const u8, ctx: anytype) !void {
+fn readOpArgs(self: *Vm, op: isa.Op, argTys: []const u8, ctx: anytype) !void {
     const prev_ip = self.ip - 1;
     var seen_regs = std.EnumSet(isa.Reg){};
     for (argTys, 0..) |argTy, i| {
         const argt = isa.Arg.fromChar(argTy);
         if (i > 0) try ctx.writer.writeAll(", ") else try ctx.writer.writeAll(" ");
-        try self.displayArg(prev_ip, argt, ctx, &seen_regs);
+        try self.displayArg(prev_ip, argt, ctx, &seen_regs, switch (op) {
+            .fadd64, .fsub64, .fmul64, .fdiv64, .fti64 => .f64,
+            .fadd32, .fsub32, .fmul32, .fdiv32, .fti32 => .f32,
+            else => .int,
+        });
     }
 }
 
@@ -356,6 +361,7 @@ fn displayArg(
     arg: isa.Arg,
     ctx: anytype,
     seen_regs: *std.EnumSet(isa.Reg),
+    ty: enum { int, f32, f64 },
 ) !void {
     switch (arg) {
         inline .reg => |t| {
@@ -373,7 +379,11 @@ fn displayArg(
                 try ctx.setColor(.dim);
                 try ctx.writer.writeAll("=");
 
-                try ctx.writer.print("{d}", .{@as(i64, @bitCast(self.regs.get(value)))});
+                switch (ty) {
+                    .int => try ctx.writer.print("{d}", .{@as(i64, @bitCast(self.regs.get(value)))}),
+                    .f32 => try ctx.writer.print("{d}", .{@as(f32, @bitCast(@as(u32, @truncate(self.regs.get(value)))))}),
+                    .f64 => try ctx.writer.print("{d}", .{@as(f64, @bitCast(self.regs.get(value)))}),
+                }
                 try ctx.setColor(.reset);
             }
         },

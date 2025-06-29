@@ -512,18 +512,21 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 switch (no.data_type) {
                     inline .i8, .i16, .i32, .i64 => |t| self.emit(
                         @field(isa.Op, "l" ++ @tagName(t)),
-                        .{ self.outReg(no), @truncate(@as(u64, @bitCast(extra.*))) },
+                        .{ self.outReg(no), @truncate(@as(u64, @bitCast(extra.value))) },
                     ),
+                    .f32 => {
+                        self.emit(.li32, .{
+                            self.outReg(no),
+                            @truncate(@as(u64, @bitCast(extra.*))),
+                        });
+                        self.flushOutReg(no);
+                    },
+                    .f64 => {
+                        self.emit(.li64, .{ self.outReg(no), @bitCast(extra.value) });
+                        self.flushOutReg(no);
+                    },
                     else => utils.panic("{}\n", .{no.data_type}),
                 }
-                self.flushOutReg(no);
-            },
-            .CFlt32 => {
-                self.emit(.li32, .{ self.outReg(no), @bitCast(no.extra(.CFlt32).*) });
-                self.flushOutReg(no);
-            },
-            .CFlt64 => {
-                self.emit(.li64, .{ self.outReg(no), @bitCast(no.extra(.CFlt64).*) });
                 self.flushOutReg(no);
             },
             .Arg => {},

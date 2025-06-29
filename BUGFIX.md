@@ -2,6 +2,28 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### carry over call float op 1
+```hb
+expectations := .{
+    return_value: 3,
+}
+
+opaque := fn(v: @Any()): @TypeOf(v) return v
+
+main := fn(): int {
+    a := opaque(1.0)
+    b := opaque(2.0)
+
+    _ = opaque(0)
+
+    c := a + b
+
+    _ = opaque(c)
+
+    return @float_to_int(c)
+}
+```
+
 #### loop if folding 1 (infinite)
 ```hb
 expectations := .{

@@ -72,8 +72,6 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
     }
 
     if (true) {
-        if (std.mem.indexOf(u8, name, "float") != null) return;
-
         const target = "x86_64-linux";
         var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
         defer x86_64.deinit();
@@ -91,8 +89,6 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
     }
 
     if (true) {
-        if (std.mem.indexOf(u8, name, "float") != null) return;
-
         const target = "x86_64-linux-no-opts";
         var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
         defer x86_64.deinit();
@@ -202,8 +198,6 @@ pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
 }
 
 pub fn runVendoredTest(path: []const u8) !void {
-    // TODO: fix
-    if (std.mem.indexOf(u8, path, "float") != null) return;
     if (std.mem.indexOf(u8, path, "inf") != null) return;
 
     utils.Arena.initScratch(1024 * 1024 * 32);

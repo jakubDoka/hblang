@@ -9,6 +9,10 @@ fn tf(int: i64) f64 {
     return @bitCast(int);
 }
 
+fn tf32(int: i64) f32 {
+    return @bitCast(@as(u32, @truncate(@as(u64, @bitCast(int)))));
+}
+
 pub const infinite_loop_trap = std.math.maxInt(u64);
 pub const unreachable_func_trap = infinite_loop_trap - 1;
 
@@ -80,14 +84,26 @@ pub const BinOp = enum(u8) {
     pub fn eval(self: BinOp, dt: DataType, lhs: i64, rhs: i64) i64 {
         return @as(i64, switch (self) {
             .iadd => lhs +% rhs,
-            .fadd => @bitCast(tf(lhs) + tf(rhs)),
+            .fadd => if (dt == .f64)
+                @bitCast(tf(lhs) + tf(rhs))
+            else
+                @as(u32, @bitCast(tf32(lhs) + tf32(rhs))),
             .isub => lhs -% rhs,
-            .fsub => @bitCast(tf(lhs) - tf(rhs)),
+            .fsub => if (dt == .f64)
+                @bitCast(tf(lhs) - tf(rhs))
+            else
+                @as(u32, @bitCast(tf32(lhs) - tf32(rhs))),
             .imul => lhs *% rhs,
-            .fmul => @bitCast(tf(lhs) * tf(rhs)),
+            .fmul => if (dt == .f64)
+                @bitCast(tf(lhs) * tf(rhs))
+            else
+                @as(u32, @bitCast(tf32(lhs) * tf32(rhs))),
             .udiv => if (rhs == 0) 0 else @bitCast(tu(lhs) / tu(rhs)),
             .sdiv => if (rhs == 0) 0 else @divFloor(lhs, rhs),
-            .fdiv => @bitCast(tf(lhs) / tf(rhs)),
+            .fdiv => if (dt == .f64)
+                @bitCast(tf(lhs) / tf(rhs))
+            else
+                @as(u32, @bitCast(tf32(lhs) / tf32(rhs))),
             .umod => if (rhs == 0) 0 else @bitCast(tu(lhs) % tu(rhs)),
             .smod => if (rhs == 0) 0 else @rem(lhs, rhs),
 
@@ -106,10 +122,22 @@ pub const BinOp = enum(u8) {
             .uge => @intFromBool(tu(lhs) >= tu(rhs)),
             .ule => @intFromBool(tu(lhs) <= tu(rhs)),
 
-            .fgt => @intFromBool(tf(lhs) > tf(rhs)),
-            .flt => @intFromBool(tf(lhs) < tf(rhs)),
-            .fge => @intFromBool(tf(lhs) >= tf(rhs)),
-            .fle => @intFromBool(tf(lhs) <= tf(rhs)),
+            .fgt => if (dt == .f64)
+                @intFromBool(tf(lhs) > tf(rhs))
+            else
+                @intFromBool(tf32(lhs) > tf32(rhs)),
+            .flt => if (dt == .f64)
+                @intFromBool(tf(lhs) < tf(rhs))
+            else
+                @intFromBool(tf32(lhs) < tf32(rhs)),
+            .fge => if (dt == .f64)
+                @intFromBool(tf(lhs) >= tf(rhs))
+            else
+                @intFromBool(tf32(lhs) >= tf32(rhs)),
+            .fle => if (dt == .f64)
+                @intFromBool(tf(lhs) <= tf(rhs))
+            else
+                @intFromBool(tf32(lhs) <= tf32(rhs)),
 
             .sgt => @intFromBool(lhs > rhs),
             .slt => @intFromBool(lhs < rhs),
@@ -174,12 +202,19 @@ pub const UnOp = enum(u8) {
             .uext => oper,
             .ired => oper,
             .ineg => -oper,
-            .fneg => return @bitCast(-tf(oper)),
+            .fneg => return if (src == .f64)
+                @bitCast(-tf(oper))
+            else
+                @as(u32, @bitCast(-tf32(oper))),
             .not => @intFromBool(oper == 0),
             .bnot => ~oper,
-            .fti => @intFromFloat(tf(oper)),
-            .itf64, .itf32 => return @bitCast(@as(f64, @floatFromInt(oper))),
-            .fcst => return oper,
+            .fti => if (src == .f64) @intFromFloat(tf(oper)) else @intFromFloat(tf32(oper)),
+            .itf64 => return @bitCast(@as(f64, @floatFromInt(oper))),
+            .itf32 => return @as(u32, @bitCast(@as(f32, @floatFromInt(oper)))),
+            .fcst => return if (src == .f64)
+                @as(u32, @bitCast(@as(f32, @floatCast(tf(oper)))))
+            else
+                @bitCast(@as(f64, @floatCast(tf32(oper)))),
         }) & src.mask();
     }
 };
@@ -425,12 +460,6 @@ pub const builtin = enum {
     };
     pub const CInt = extern struct {
         value: i64,
-    };
-    pub const CFlt32 = extern struct {
-        value: f32,
-    };
-    pub const CFlt64 = extern struct {
-        value: f64,
     };
     // ===== MEMORY =====
     pub const Mem = extern struct {
@@ -1393,30 +1422,15 @@ pub fn Func(comptime Backend: type) type {
 
         pub fn addIntImm(self: *Self, sloc: Sloc, ty: DataType, value: i64) *Node {
             std.debug.assert(ty != .bot);
-            const val = self.addNode(.CInt, sloc, ty, &.{null}, .{ .value = value });
-            std.debug.assert(val.data_type.isInt());
-            return val;
-        }
-
-        pub fn addFlt64Imm(self: *Self, sloc: Sloc, value: f64) *Node {
-            return self.addNode(.CFlt64, sloc, .f64, &.{null}, .{ .value = value });
-        }
-
-        pub fn addFlt32Imm(self: *Self, sloc: Sloc, value: f32) *Node {
-            return self.addNode(.CFlt32, sloc, .f32, &.{null}, .{ .value = value });
+            return self.addNode(.CInt, sloc, ty, &.{null}, .{ .value = value });
         }
 
         pub fn addBinOp(self: *Self, sloc: Sloc, op: BinOp, ty: DataType, lhs: *Node, rhs: *Node) *Node {
             if (lhs.kind == .CInt and rhs.kind == .CInt) {
                 return self.addIntImm(sloc, ty, op.eval(ty, lhs.extra(.CInt).value, rhs.extra(.CInt).value));
-            } else if (lhs.kind == .CFlt64 and rhs.kind == .CFlt64) {
-                return self.addFlt64Imm(sloc, @bitCast(op.eval(
-                    ty,
-                    @bitCast(lhs.extra(.CFlt64).*),
-                    @bitCast(rhs.extra(.CFlt64).*),
-                )));
             }
-            if ((op == .iadd or op == .iadd) and rhs.kind == .CInt and rhs.extra(.CInt).value == 0) {
+
+            if ((op == .iadd or op == .isub) and rhs.kind == .CInt and rhs.extra(.CInt).value == 0) {
                 return lhs;
             }
             return self.addNode(.BinOp, sloc, ty, &.{ null, lhs, rhs }, .{ .op = op });
@@ -1425,13 +1439,6 @@ pub fn Func(comptime Backend: type) type {
         pub fn addUnOp(self: *Self, sloc: Sloc, op: UnOp, ty: DataType, oper: *Node) *Node {
             if (oper.kind == .CInt and ty.isInt()) {
                 return self.addIntImm(sloc, ty, op.eval(oper.data_type, oper.extra(.CInt).value));
-            } else if (oper.kind == .CFlt64 and ty == .f64) {
-                return self.addFlt64Imm(sloc, @bitCast(op.eval(oper.data_type, @bitCast(oper.extra(.CFlt64).*))));
-            } else if (oper.kind == .CFlt32 and ty == .f32) {
-                return self.addFlt32Imm(sloc, @floatCast(@as(f64, @bitCast(op.eval(
-                    oper.data_type,
-                    @bitCast(@as(f64, @floatCast(oper.extra(.CFlt32).value))),
-                )))));
             }
             return self.addNode(.UnOp, sloc, ty, &.{ null, oper }, .{ .op = op });
         }
@@ -1954,8 +1961,12 @@ pub fn Func(comptime Backend: type) type {
                 const op: UnOp = node.extra(.UnOp).op;
                 const oper = inps[1].?;
 
-                if (oper.kind == .CInt and node.data_type.isInt()) {
-                    return self.addIntImm(node.sloc, node.data_type, op.eval(oper.data_type, oper.extra(.CInt).value));
+                if (oper.kind == .CInt) {
+                    return self.addIntImm(
+                        node.sloc,
+                        node.data_type,
+                        op.eval(oper.data_type, oper.extra(.CInt).value),
+                    );
                 }
 
                 if (node.data_type.meet(inps[1].?.data_type) == inps[1].?.data_type) {

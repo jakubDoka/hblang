@@ -323,16 +323,6 @@ pub fn idealize(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkL
         }
     }
 
-    if (node.kind == .CFlt32) {
-        const int_const = func.addIntImm(node.sloc, .i32, @as(u32, @bitCast(node.extra(.CFlt32).value)));
-        return func.addCast(node.sloc, .f32, int_const);
-    }
-
-    if (node.kind == .CFlt64) {
-        const int_const = func.addIntImm(node.sloc, .i64, @bitCast(node.extra(.CFlt64).value));
-        return func.addCast(node.sloc, .f64, int_const);
-    }
-
     return null;
 }
 
@@ -379,6 +369,16 @@ pub fn knownOffset(node: *Func.Node) struct { *Func.Node, i64 } {
 
 pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
     if (Func.idealizeDead({}, func, node, worklist)) |n| return n;
+
+    if (node.kind == .CInt and node.data_type == .f32) {
+        const int_const = func.addIntImm(node.sloc, .i32, node.extra(.CInt).value);
+        return func.addCast(node.sloc, .f32, int_const);
+    }
+
+    if (node.kind == .CInt and node.data_type == .f64) {
+        const int_const = func.addIntImm(node.sloc, .i64, node.extra(.CInt).value);
+        return func.addCast(node.sloc, .f64, int_const);
+    }
 
     if (node.kind == .Load) {
         const base, const offset = node.base().knownOffset();
@@ -496,7 +496,7 @@ pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.W
 
     if (node.kind == .BinOp and node.inputs()[2].?.kind == .CInt and
         switch (node.extra(.BinOp).op) {
-            .udiv, .sdiv, .umod, .smod, .imul => false,
+            .udiv, .sdiv, .umod, .smod, .imul, .fadd, .fmul, .fsub, .fdiv, .fgt, .flt, .fge, .fle => false,
             .band, .bor, .bxor => node.inputs()[2].?.data_type.size() > 1,
             .eq,
             .ne,
@@ -508,7 +508,8 @@ pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.W
             .sle,
             .sgt,
             .slt,
-            => node.inputs()[2].?.data_type.size() > 2,
+            => node.inputs()[2].?.data_type.size() > 2 and node.inputs()[2].?.data_type.isInt(),
+
             else => true,
         })
     {
@@ -824,6 +825,7 @@ pub fn emitCp(self: *X86_64, dst: Reg, src: Reg) void {
 pub const SReg = struct { Reg, usize };
 pub const BRegOff = struct { Reg, i32, u16 };
 pub const Tmp = struct { u8 };
+pub const FTmp = struct { u16 };
 pub const SizeHint = struct { bytes: u64 };
 
 pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
@@ -874,6 +876,7 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
         req.operands[i] = switch (f.type) {
             Reg => val.asZydisOp(fsize, self.slot_base, self.xmm_slot_base),
             Tmp => @as(Reg, @enumFromInt(@intFromEnum(Reg.r14) + val[0])).asZydisOpReg(fsize),
+            FTmp => @as(Reg, @enumFromInt(@intFromEnum(Reg.xmm14) + val[0])).asZydisOpXmmReg(fsize),
             SReg => val[0].asZydisOp(val[1], self.slot_base, self.xmm_slot_base),
             BRegOff => b: {
                 var base = val[0].asZydisOp(8, self.slot_base, self.xmm_slot_base);
@@ -914,8 +917,10 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
     }
 
     if (mnemonic == zydis.ZYDIS_MNEMONIC_MOV and
-        req.operands[0].reg.value >= zydis.ZYDIS_REGISTER_XMM0 and
-        req.operands[0].reg.value <= zydis.ZYDIS_REGISTER_XMM15)
+        ((req.operands[0].reg.value >= zydis.ZYDIS_REGISTER_XMM0 and
+            req.operands[0].reg.value <= zydis.ZYDIS_REGISTER_XMM15) or
+            (req.operands[1].reg.value >= zydis.ZYDIS_REGISTER_XMM0 and
+                req.operands[1].reg.value <= zydis.ZYDIS_REGISTER_XMM15)))
     {
         if (size == 8) {
             req.mnemonic = zydis.ZYDIS_MNEMONIC_MOVSD;
@@ -926,7 +931,9 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
 
     if ((mnemonic == zydis.ZYDIS_MNEMONIC_MOVD or
         mnemonic == zydis.ZYDIS_MNEMONIC_MOVQ) and
-        req.operands[0].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY)
+        req.operands[0].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY and
+        !(req.operands[1].reg.value >= zydis.ZYDIS_REGISTER_XMM0 and
+            req.operands[1].reg.value <= zydis.ZYDIS_REGISTER_XMM15))
     {
         req.mnemonic = zydis.ZYDIS_MNEMONIC_MOV;
     }
@@ -937,11 +944,31 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
         std.mem.swap(@TypeOf(req.operands[1]), &req.operands[0], &req.operands[1]);
     }
 
+    const is_float_op = req.mnemonic == zydis.ZYDIS_MNEMONIC_MOVSS or
+        req.mnemonic == zydis.ZYDIS_MNEMONIC_ADDSD or
+        req.mnemonic == zydis.ZYDIS_MNEMONIC_ADDSS or
+        req.mnemonic == zydis.ZYDIS_MNEMONIC_SUBSD or
+        req.mnemonic == zydis.ZYDIS_MNEMONIC_SUBSS or
+        req.mnemonic == zydis.ZYDIS_MNEMONIC_MULSD or
+        req.mnemonic == zydis.ZYDIS_MNEMONIC_MULSS or
+        req.mnemonic == zydis.ZYDIS_MNEMONIC_DIVSD or
+        req.mnemonic == zydis.ZYDIS_MNEMONIC_DIVSS or
+        req.mnemonic == zydis.ZYDIS_MNEMONIC_COMISD or
+        req.mnemonic == zydis.ZYDIS_MNEMONIC_COMISS;
+
     const should_flush_to_mem =
         (mnemonic == zydis.ZYDIS_MNEMONIC_MOVZX or
             mnemonic == zydis.ZYDIS_MNEMONIC_MOVSX or
             mnemonic == zydis.ZYDIS_MNEMONIC_MOVSXD or
             mnemonic == zydis.ZYDIS_MNEMONIC_IMUL or
+            req.mnemonic == zydis.ZYDIS_MNEMONIC_ADDSD or
+            req.mnemonic == zydis.ZYDIS_MNEMONIC_ADDSS or
+            req.mnemonic == zydis.ZYDIS_MNEMONIC_SUBSD or
+            req.mnemonic == zydis.ZYDIS_MNEMONIC_SUBSS or
+            req.mnemonic == zydis.ZYDIS_MNEMONIC_MULSD or
+            req.mnemonic == zydis.ZYDIS_MNEMONIC_MULSS or
+            req.mnemonic == zydis.ZYDIS_MNEMONIC_DIVSD or
+            req.mnemonic == zydis.ZYDIS_MNEMONIC_DIVSS or
             (req.operands[1].type == zydis.ZYDIS_OPERAND_TYPE_IMMEDIATE and
                 (mnemonic == zydis.ZYDIS_MNEMONIC_MOV and
                     req.operands[1].imm.u > 0x7fffffff)) or
@@ -951,27 +978,53 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
     var prev_oper: zydis.ZydisEncoderOperand = undefined;
     if (should_flush_to_mem) {
         prev_oper = req.operands[0];
-        if (mnemonic != zydis.ZYDIS_MNEMONIC_MOVZX and
-            mnemonic != zydis.ZYDIS_MNEMONIC_LEA and
-            mnemonic != zydis.ZYDIS_MNEMONIC_MOV)
-        {
-            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{1}, prev_oper });
+        if (is_float_op) {
+            const mov_mnem: zydis.ZydisMnemonic = if (req.operands[0].mem.size == 4)
+                zydis.ZYDIS_MNEMONIC_MOVSS
+            else
+                zydis.ZYDIS_MNEMONIC_MOVSD;
+            self.emitInstr(mov_mnem, .{ FTmp{1}, prev_oper });
+            req.operands[0] = Reg.xmm15.asZydisOpXmmReg(req.operands[0].mem.size);
+        } else {
+            if (mnemonic != zydis.ZYDIS_MNEMONIC_MOVZX and
+                mnemonic != zydis.ZYDIS_MNEMONIC_LEA and
+                mnemonic != zydis.ZYDIS_MNEMONIC_MOV)
+            {
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{1}, prev_oper });
+            }
+            req.operands[0] = Reg.r15.asZydisOpReg(req.operands[0].mem.size);
         }
-        req.operands[0] = Reg.r15.asZydisOpReg(req.operands[0].mem.size);
     } else if (fields.len == 2 and
         req.operands[0].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY and
         req.operands[1].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY)
     {
-        if (mnemonic == zydis.ZYDIS_MNEMONIC_XCHG) {
-            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{0}, req.operands[1] });
-            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{1}, req.operands[0] });
-            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ req.operands[0], Tmp{0} });
-            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ req.operands[1], Tmp{1} });
-            return;
-        }
+        if (is_float_op) {
+            const mov_mnem: zydis.ZydisMnemonic = if (req.operands[0].mem.size == 4)
+                zydis.ZYDIS_MNEMONIC_MOVSS
+            else
+                zydis.ZYDIS_MNEMONIC_MOVSD;
+            if (mnemonic == zydis.ZYDIS_MNEMONIC_XCHG) {
+                self.emitInstr(mov_mnem, .{ FTmp{0}, req.operands[1] });
+                self.emitInstr(mov_mnem, .{ FTmp{1}, req.operands[0] });
+                self.emitInstr(mov_mnem, .{ req.operands[0], FTmp{0} });
+                self.emitInstr(mov_mnem, .{ req.operands[1], FTmp{1} });
+                return;
+            }
 
-        self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{tmp_allocs -| 1}, req.operands[1] });
-        req.operands[1] = @as(Reg, @enumFromInt(@intFromEnum(Reg.r14) + (tmp_allocs -| 1))).asZydisOpReg(req.operands[1].mem.size);
+            self.emitInstr(mov_mnem, .{ FTmp{tmp_allocs -| 1}, req.operands[1] });
+            req.operands[1] = @as(Reg, @enumFromInt(@intFromEnum(Reg.xmm14) + (tmp_allocs -| 1))).asZydisOpXmmReg(req.operands[1].mem.size);
+        } else {
+            if (mnemonic == zydis.ZYDIS_MNEMONIC_XCHG) {
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{0}, req.operands[1] });
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{1}, req.operands[0] });
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ req.operands[0], Tmp{0} });
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ req.operands[1], Tmp{1} });
+                return;
+            }
+
+            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{tmp_allocs -| 1}, req.operands[1] });
+            req.operands[1] = @as(Reg, @enumFromInt(@intFromEnum(Reg.r14) + (tmp_allocs -| 1))).asZydisOpReg(req.operands[1].mem.size);
+        }
     }
 
     const status = zydis.ZydisEncoderEncodeInstruction(&req, &buf, &len);
@@ -982,7 +1035,15 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
     try self.out.code.appendSlice(self.gpa, buf[0..len]);
 
     if (should_flush_to_mem) {
-        self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ prev_oper, Tmp{1} });
+        if (is_float_op) {
+            const mov_mnem: zydis.ZydisMnemonic = if (req.operands[0].mem.size == 4)
+                zydis.ZYDIS_MNEMONIC_MOVD
+            else
+                zydis.ZYDIS_MNEMONIC_MOVQ;
+            self.emitInstr(mov_mnem, .{ prev_oper, FTmp{1} });
+        } else {
+            self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ prev_oper, Tmp{1} });
+        }
     }
 }
 
@@ -1282,7 +1343,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 const rhs = self.getReg(instr.inputs()[2]);
 
                 switch (op) {
-                    .iadd, .isub, .imul, .bor, .band, .bxor, .ushr, .ishl, .sshr => {
+                    .iadd, .isub, .imul, .bor, .band, .bxor, .ushr, .ishl, .sshr, .fadd, .fsub, .fmul, .fdiv => {
                         if (dst != lhs) {
                             self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ dst, lhs });
                         }
@@ -1380,7 +1441,16 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
             .CondJump => |extra| {
                 const lhs = self.getReg(instr.inputs()[1]);
                 const rhs = self.getReg(instr.inputs()[2]);
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_CMP, .{ SReg{ lhs, instr.inputs()[1].?.data_type.size() }, rhs });
+                const oper_dt = instr.inputs()[1].?.data_type;
+
+                const cmp_mnemonic: zydis.ZydisMnemonic = if (oper_dt.isInt())
+                    zydis.ZYDIS_MNEMONIC_CMP
+                else if (oper_dt == .f64)
+                    zydis.ZYDIS_MNEMONIC_COMISD
+                else
+                    zydis.ZYDIS_MNEMONIC_COMISS;
+
+                self.emitInstr(cmp_mnemonic, .{ SReg{ lhs, instr.inputs()[1].?.data_type.size() }, rhs });
                 self.local_relocs.appendAssumeCapacity(.{
                     .dest = instr.outputs()[1].schedule,
                     .offset = @intCast(self.out.code.items.len),
@@ -1455,18 +1525,10 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                         4 => zydis.ZYDIS_MNEMONIC_MOVD,
                         8 => zydis.ZYDIS_MNEMONIC_MOVQ,
                         else => unreachable,
-                    }, .{ SReg{ dst, size }, src }),
+                    }, .{ SReg{ dst, size }, SReg{ src, src_size } }),
                     .fti => self.emitInstr(switch (src_dt) {
-                        .f32 => switch (instr.data_type) {
-                            .i32 => zydis.ZYDIS_MNEMONIC_CVTTSS2SI,
-                            .i64 => zydis.ZYDIS_MNEMONIC_CVTTSS2SI,
-                            else => unreachable,
-                        },
-                        .f64 => switch (instr.data_type) {
-                            .i32 => zydis.ZYDIS_MNEMONIC_CVTTSD2SI,
-                            .i64 => zydis.ZYDIS_MNEMONIC_CVTTSD2SI,
-                            else => unreachable,
-                        },
+                        .f32 => zydis.ZYDIS_MNEMONIC_CVTTSS2SI,
+                        .f64 => zydis.ZYDIS_MNEMONIC_CVTTSD2SI,
                         else => unreachable,
                     }, .{ SReg{ dst, size }, SReg{ src, size } }),
                     .itf32 => self.emitInstr(zydis.ZYDIS_MNEMONIC_CVTSI2SS, .{ SReg{ dst, size }, SReg{ src, size } }),

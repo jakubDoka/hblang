@@ -184,14 +184,6 @@ pub fn addIntImm(self: *Builder, sloc: graph.Sloc, ty: DataType, value: i64) Spe
     return self.func.addIntImm(sloc, ty, value);
 }
 
-pub fn addFlt64Imm(self: *Builder, sloc: graph.Sloc, value: f64) SpecificNode(.CFlt64) {
-    return self.func.addFlt64Imm(sloc, value);
-}
-
-pub fn addFlt32Imm(self: *Builder, sloc: graph.Sloc, value: f32) SpecificNode(.CFlt32) {
-    return self.func.addFlt32Imm(sloc, value);
-}
-
 pub fn addBinOp(self: *Builder, sloc: graph.Sloc, op: BinOp, ty: DataType, lhs: *BuildNode, rhs: *BuildNode) SpecificNode(.BinOp) {
     return self.func.addBinOp(sloc, op, ty, lhs, rhs);
 }

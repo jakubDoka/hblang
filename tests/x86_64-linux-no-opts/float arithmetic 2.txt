@@ -1,0 +1,95 @@
+float arithmetic 2.sin:
+	push rbx
+	push rbp
+	sub rsp, 0x20
+	movss [rsp+0x10], xmm0
+	mov rax, 0x40490FDB
+	mov rbx, 0x3FE0000000000000
+	mov rdx, 0x40000000
+	mov rcx, 0x3F000000
+	mov rsi, 0x04
+	lea rbp, [0x0000000000000007]
+	movd xmm0, eax
+	movss [rsp+0x14], xmm0
+	mov dword ptr [rsp+0x18], 0x100
+	mov eax, [rsp+0x18]
+	movss xmm1, dword ptr [rsp+0x14]
+	movss xmm0, dword ptr [rsp+0x10]
+	movsxd rax, eax
+	movq xmm5, rbx
+	cvtss2sd xmm0, xmm0
+	movd xmm4, ecx
+	cvtss2sd xmm3, xmm1
+	movd xmm2, edx
+	cvtsi2sd xmm1, rax
+	mulsd xmm0, xmm5
+	mulsd xmm0, xmm1
+	divsd xmm0, xmm3
+	cvttsd2si rax, xmm0
+	mov [rsp], rax
+	mov rcx, [rsp]
+	mov eax, [rsp+0x18]
+	cvtsi2ss xmm0, ecx
+	movsxd rax, eax
+	movss xmm1, dword ptr [rsp+0x14]
+	mulss xmm0, xmm2
+	movss xmm3, dword ptr [rsp+0x10]
+	cvtsi2ss xmm2, eax
+	mulss xmm0, xmm1
+	movsd xmm1, xmm0
+	divss xmm1, xmm2
+	movsd xmm0, xmm3
+	subss xmm0, xmm1
+	movss [rsp+0x1C], xmm0
+	mov eax, [rsp+0x18]
+	movsxd rbx, eax
+	mov rcx, [rsp]
+	mov rax, rbx
+	xor rdx, rdx
+	idiv rsi
+	sub rbx, 0x01
+	add rcx, rax
+	mov rax, rcx
+	and rax, rbx
+	mov [rsp+0x08], rax
+	mov eax, [rsp+0x18]
+	movsxd rcx, eax
+	mov rax, [rsp]
+	sub rcx, 0x01
+	and rax, rcx
+	mov [rsp], rax
+	mov rax, [rsp]
+	mov rcx, [rsp+0x08]
+	imul rax, rsi
+	mov rdx, rcx
+	imul rdx, rsi
+	mov rcx, rbp
+	add rcx, rax
+	mov rax, rbp
+	add rax, rdx
+	movss xmm3, dword ptr [rcx]
+	movss xmm2, dword ptr [rsp+0x1C]
+	movsd xmm1, xmm4
+	mulss xmm1, xmm3
+	movss xmm0, dword ptr [rax]
+	mulss xmm1, xmm2
+	subss xmm0, xmm1
+	movsd xmm1, xmm0
+	mulss xmm1, xmm2
+	movsd xmm0, xmm3
+	addss xmm0, xmm1
+	add rsp, 0x20
+	pop rbp
+	pop rbx
+	ret
+main:
+	sub rsp, 0x38
+	mov rax, 0x447A0000
+	mov [rsp+0x20], eax
+	movsd xmm0, qword ptr [rsp+0x20]
+	call :float arithmetic 2.sin
+	mulss xmm0, [rsp+0x20]
+	cvttss2si rax, xmm0
+	sub rax, 0x33A
+	add rsp, 0x38
+	ret

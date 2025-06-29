@@ -685,12 +685,12 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 const parsed = std.fmt.parseFloat(f32, ast.tokenSrc(e.index)) catch |err| switch (err) {
                     error.InvalidCharacter => utils.panic("{s}", .{ast.tokenSrc(e.index)}),
                 };
-                return .mkv(ty, self.bl.addFlt32Imm(sloc, parsed));
+                return .mkv(ty, self.bl.addIntImm(sloc, .f32, @as(u32, @bitCast(parsed))));
             } else {
                 const parsed = std.fmt.parseFloat(f64, ast.tokenSrc(e.index)) catch |err| switch (err) {
                     error.InvalidCharacter => utils.panic("{s}", .{ast.tokenSrc(e.index)}),
                 };
-                return .mkv(ty, self.bl.addFlt64Imm(sloc, parsed));
+                return .mkv(ty, self.bl.addIntImm(sloc, .f64, @bitCast(parsed)));
             }
         },
         .Bool => |e| {
@@ -744,12 +744,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 .Impossible => return self.report(expr, "can't make an uninitialized" ++
                     " {}, its uninhabited", .{ty}) catch error.Unreachable,
                 .Imaginary => .{ .ty = ty },
-                .ByValue => |t| if (t == .f32)
-                    .mkv(ty, self.bl.addFlt32Imm(sloc, @bitCast(@as(u32, 0xaaaaaaaa))))
-                else if (t == .f64)
-                    .mkv(ty, self.bl.addFlt64Imm(sloc, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa))))
-                else
-                    .mkv(ty, self.bl.addIntImm(sloc, abi.ByValue, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)))),
+                .ByValue => |t| .mkv(ty, self.bl.addIntImm(
+                    sloc,
+                    t,
+                    @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)),
+                )),
                 .ByValuePair, .ByRef => {
                     const loc = ctx.loc orelse self.bl.addLocal(sloc, ty.size(self.types));
                     return .mkp(ty, loc);
@@ -2471,12 +2470,9 @@ pub fn loadIdent(self: *Codegen, expr: Ast.Pos, id: Ast.Ident) !Value {
                 return .{ .ty = c.ty, .id = switch (self.abiCata(c.ty)) {
                     .Impossible => return error.Unreachable,
                     .Imaginary => .Imaginary,
-                    .ByValue => |v| .{ .Value = if (v.isInt())
-                        self.bl.addIntImm(sloc, .i64, @bitCast(c.value))
-                    else if (v == .f32)
-                        self.bl.addFlt32Imm(sloc, @bitCast(@as(u32, @truncate(c.value))))
-                    else
-                        self.bl.addFlt64Imm(sloc, @bitCast(c.value)) },
+                    .ByValue => |v| .{
+                        .Value = self.bl.addIntImm(sloc, v, @bitCast(c.value)),
+                    },
                     .ByValuePair, .ByRef => b: {
                         if (self.target != .@"comptime") {
                             return self.report(expr, "can't access this value, (yet)", .{});
