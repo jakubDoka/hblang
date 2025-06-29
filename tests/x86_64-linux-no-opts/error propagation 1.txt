@@ -1,4 +1,4 @@
-error propagation 1:5:30: function is missing a return value since type has more then 1 possible value
+error propagation 1:5:30: function returns a type with more then 1 value, but end of the function body is reachabletype
 Broken := fn($T: type): type struct{}
                              ^
 error propagation 1:6:26: can't evaluate this at compile time (yet), (DEBUG: got stuck on %12 = CallEnd: idepth: 0, %11 [, %3, %13, %14])

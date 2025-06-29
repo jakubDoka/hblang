@@ -2213,12 +2213,11 @@ fn emitInternalEca(
     var builder = Types.Abi.ableos.builder();
 
     const params = tmp.arena.alloc(graph.AbiParam, 1 + args.len);
-    const returns = tmp.arena.alloc(graph.AbiParam, builder.len(true, self.abiCata(ret_ty)).?);
 
     params[0] = .{ .Reg = .i64 };
     for (args, params[1..]) |a, *ca| ca.* = .{ .Reg = a.data_type };
-    builder.types(returns, true, self.abiCata(ret_ty));
-
+    const ret_buf = tmp.arena.alloc(graph.AbiParam, Types.Abi.Builder.max_elems);
+    const returns = builder.types(ret_buf, true, self.abiCata(ret_ty));
     const c_args = self.bl.allocCallArgs(tmp.arena, params, returns);
 
     c_args.arg_slots[0] = self.bl.addIntImm(.none, .i64, @intCast(@intFromEnum(ic)));

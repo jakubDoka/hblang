@@ -13,12 +13,12 @@ functions 3 (errors):11:6: expected 3 arguments, got 2
 functions 3 (errors):12:8: expected 3 arguments, got 4
     vl := some_fn(0, {
           ^
-functions 3 (errors):5:20: function is missing a return value since uint has more then 1 possible value
+functions 3 (errors):5:20: function returns a type with more then 1 value, but end of the function body is reachableuint
 main := fn(): uint {
                    ^
 functions 3 (errors):19:2: expected uint got void
     return
     ^
-functions 3 (errors):18:46: function is missing a return value since uint has more then 1 possible value
+functions 3 (errors):18:46: function returns a type with more then 1 value, but end of the function body is reachableuint
 some_fn := fn(a: uint, b: void, c: u8): uint {
                                              ^

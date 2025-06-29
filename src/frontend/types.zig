@@ -422,30 +422,29 @@ pub const Func = struct {
         errdefer unreachable;
         var builder = abi.builder();
 
+        const max_elems = Types.Abi.Builder.max_elems;
+
         const ret_abi = @as(Types.Abi.TmpSpec, abi.categorize(self.ret, types))
             .toPerm(self.ret, types);
 
-        const returns = if (builder.len(true, ret_abi)) |len|
-            scratch.alloc(graph.AbiParam, len)
+        var params = scratch.alloc(graph.AbiParam, self.args.len * max_elems + 1);
+        var cursor: usize = 0;
+
+        const returns = if (ret_abi != .Impossible)
+            if (abi.isByRefRet(ret_abi)) b: {
+                cursor += builder.types(params, true, ret_abi).len;
+                break :b &.{};
+            } else builder.types(scratch.alloc(graph.AbiParam, max_elems), true, ret_abi)
         else
             null;
-        var params = std.ArrayListUnmanaged(graph.AbiParam){};
-
-        if (abi.isByRefRet(ret_abi)) {
-            const slots = try params.addManyAsSlice(scratch.allocator(), 1);
-            builder.types(slots, true, ret_abi);
-        } else if (returns) |rets| {
-            builder.types(rets, true, ret_abi);
-        }
 
         for (self.args) |ty| {
             const arg_abi = abi.categorize(ty, types).toPerm(ty, types);
-            const len = builder.len(false, arg_abi) orelse return null;
-            const slots = try params.addManyAsSlice(scratch.allocator(), len);
-            builder.types(slots, false, arg_abi);
+            if (arg_abi == .Impossible) return null;
+            cursor += builder.types(params[cursor..], false, arg_abi).len;
         }
 
-        return .{ params.items, returns, ret_abi };
+        return .{ params[0..cursor], returns, ret_abi };
     }
 };
 

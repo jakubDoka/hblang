@@ -23,31 +23,40 @@ pub const Builder = union(graph.CallConv) {
     fastcall,
     @"inline",
 
-    pub fn types(self: *Builder, buf: ?[]graph.AbiParam, is_ret: bool, spec: Spec) void {
+    pub const max_elems = 2;
+
+    pub inline fn slice(buf: *[]graph.AbiParam, comptime size: usize) if (size == 1)
+        *graph.AbiParam
+    else
+        *[size]graph.AbiParam {
+        defer buf.len = size;
+        return if (size == 1) &buf.*[0] else buf.*[0..size];
+    }
+
+    pub fn types(self: *Builder, bufr: []graph.AbiParam, is_ret: bool, spec: Spec) []graph.AbiParam {
+        var buf_tmp = bufr;
+        const buf = &buf_tmp;
         switch (self.*) {
             .ablecall => switch (spec) {
                 .Impossible => unreachable,
-                .Imaginary => {},
-                .ByValue => |d| buf.?[0] = .{ .Reg = d },
-                .ByValuePair => |pair| buf.?[0..2].* =
+                .Imaginary => _ = slice(buf, 0),
+                .ByValue => |d| slice(buf, 1).* = .{ .Reg = d },
+                .ByValuePair => |pair| slice(buf, 2).* =
                     .{ .{ .Reg = pair.types[0] }, .{ .Reg = pair.types[1] } },
-                .ByRef => buf.?[0] = .{ .Reg = .i64 },
+                .ByRef => slice(buf, 1).* = .{ .Reg = .i64 },
             },
             .systemv => |*s| switch (spec) {
                 .Impossible => unreachable,
-                .Imaginary => {},
+                .Imaginary => _ = slice(buf, 0),
                 .ByValue => |d| {
                     if (is_ret) {
-                        std.debug.assert(buf.?.len == 1);
-                        buf.?[0] = .{ .Reg = d };
+                        slice(buf, 1).* = .{ .Reg = d };
                     } else if ((d.isInt() and s.remining_scalar_regs == 0) or
                         s.remining_xmm_regs == 0)
                     {
-                        std.debug.assert(buf.?.len == 1);
-                        buf.?[0] = .{ .Stack = .reg(d) };
+                        slice(buf, 1).* = .{ .Stack = .reg(d) };
                     } else {
-                        std.debug.assert(buf.?.len == 1);
-                        buf.?[0] = .{ .Reg = d };
+                        slice(buf, 1).* = .{ .Reg = d };
                         if (d.isInt()) {
                             s.remining_scalar_regs -= 1;
                         } else {
@@ -57,18 +66,15 @@ pub const Builder = union(graph.CallConv) {
                 },
                 .ByValuePair => |pair| {
                     if (is_ret) {
-                        std.debug.assert(buf.?.len == 1);
-                        buf.?[0] = .{ .Reg = .i64 };
+                        slice(buf, 1).* = .{ .Reg = .i64 };
                         s.remining_scalar_regs -= 1;
                     } else if (pair.types[0].isInt() != pair.types[1].isInt() or
                         (pair.types[0].isInt() and s.remining_scalar_regs < 2) or
                         s.remining_xmm_regs < 2)
                     {
-                        std.debug.assert(buf.?.len == 1);
-                        buf.?[0] = .{ .Stack = pair.stackSpec() };
+                        slice(buf, 1).* = .{ .Stack = pair.stackSpec() };
                     } else {
-                        std.debug.assert(buf.?.len == 2);
-                        buf.?[0..2].* = .{ .{ .Reg = pair.types[0] }, .{ .Reg = pair.types[1] } };
+                        slice(buf, 2).* = .{ .{ .Reg = pair.types[0] }, .{ .Reg = pair.types[1] } };
                         if (pair.types[0].isInt()) {
                             s.remining_scalar_regs -= 2;
                         } else {
@@ -77,43 +83,16 @@ pub const Builder = union(graph.CallConv) {
                     }
                 },
                 .ByRef => |size| if (is_ret) {
-                    std.debug.assert(buf.?.len == 1);
                     s.remining_scalar_regs -= 1;
-                    buf.?[0] = .{ .Reg = .i64 };
+                    slice(buf, 1).* = .{ .Reg = .i64 };
                 } else {
-                    std.debug.assert(buf.?.len == 1);
-                    buf.?[0] = .{ .Stack = size };
+                    slice(buf, 1).* = .{ .Stack = size };
                 },
             },
             else => unreachable,
         }
-    }
 
-    pub fn len(self: Builder, is_ret: bool, spec: Spec) ?usize {
-        return switch (self) {
-            .ablecall => switch (spec) {
-                .Impossible => null,
-                .Imaginary => 0,
-                .ByValue => 1,
-                .ByValuePair => 2,
-                .ByRef => if (is_ret) 0 else 1,
-            },
-            .systemv => |s| switch (spec) {
-                .Impossible => null,
-                .Imaginary => 0,
-                .ByValue => 1,
-                .ByValuePair => |pair| if (is_ret)
-                    0
-                else if (pair.types[0].isInt() != pair.types[1].isInt() or
-                    (pair.types[0].isInt() and s.remining_scalar_regs < 2) or
-                    s.remining_xmm_regs < 2)
-                    1
-                else
-                    2,
-                .ByRef => if (is_ret) 0 else 1,
-            },
-            else => unreachable,
-        };
+        return buf_tmp;
     }
 };
 

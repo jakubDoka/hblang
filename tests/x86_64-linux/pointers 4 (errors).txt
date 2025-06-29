@@ -1,6 +1,6 @@
 pointers 4 (errors):6:10: only pointer types can be dereferenced, uint is not
     return (~0).*
             ^
-pointers 4 (errors):5:20: function is missing a return value since uint has more then 1 possible value
+pointers 4 (errors):5:20: function returns a type with more then 1 value, but end of the function body is reachableuint
 main := fn(): uint {
                    ^
