@@ -4,6 +4,7 @@
 [submodule "vendored-tests/lily/"]
 	path = vendored-tests/lily
 	url = https://git.ablecorp.eu/lily-org/lily
+	branch = 0.2.0
 [submodule "examples/raylib/raylib"]
 	path = examples/raylib/raylib
 	url = https://github.com/raysan5/raylib

@@ -482,7 +482,10 @@ pub fn jitExprLow(
 
         const ptr = gen.bl.addParam(.none, 0);
 
-        ret = try gen.emit(ctx.addLoc(ptr), value);
+        ret = gen.emit(ctx.addLoc(ptr), value) catch |err| switch (err) {
+            error.Never => return err,
+            error.Unreachable => .{ .ty = .never },
+        };
         if (ctx.ty) |ty| {
             try gen.typeCheck(value, &ret, ty);
         }

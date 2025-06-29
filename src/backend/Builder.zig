@@ -44,7 +44,7 @@ pub fn begin(
     self: *Builder,
     call_conv: graph.CallConv,
     params: []const graph.AbiParam,
-    returns: ?[]const graph.AbiParam,
+    return_values: ?[]const graph.AbiParam,
 ) BuildToken {
     const ctrl = self.func.addNode(.Entry, .none, .top, &.{self.func.root}, .{});
     self.root_mem = self.func.addNode(.Mem, .none, .top, &.{self.func.root}, .{});
@@ -52,7 +52,7 @@ pub fn begin(
     self.func.end = self.func.addNode(.Return, .none, .top, &.{ null, null, null }, .{});
     self.pins = self.func.addNode(.Scope, .none, .top, &.{}, .{});
 
-    self.func.signature = .init(call_conv, params, returns, self.func.arena.allocator());
+    self.func.signature = .init(call_conv, params, return_values, self.func.arena.allocator());
 
     return @enumFromInt(0);
 }
@@ -320,6 +320,10 @@ pub fn killScope(scope: SpecificNode(.Scope)) void {
 
 // #CONTROL ====================================================================
 
+pub fn returns(self: *Builder) bool {
+    return self.func.end.inputs()[0] != null;
+}
+
 pub fn isUnreachable(self: *Builder) bool {
     return self.scope == null;
 }
@@ -425,8 +429,8 @@ pub const Loop = struct {
         }
 
         if (builder.scope) |scope| killScope(scope);
-
         builder.scope = self.control.get(.@"break");
+
         defer killScope(self.scope);
         const exit = builder.scope orelse {
             return;
@@ -468,15 +472,15 @@ pub fn allocCallArgs(
     _: *Builder,
     scratch: *root.Arena,
     params: []const graph.AbiParam,
-    returns: ?[]const graph.AbiParam,
+    return_values: ?[]const graph.AbiParam,
 ) CallArgs {
     const args = scratch.alloc(*BuildNode, arg_prefix_len + params.len +
-        if (returns) |r| r.len else 0);
+        if (return_values) |r| r.len else 0);
     return .{
         .params = params,
-        .returns = returns,
+        .returns = return_values,
         .arg_slots = args[arg_prefix_len..][0..params.len],
-        .return_slots = if (returns != null) args[arg_prefix_len + params.len ..] else null,
+        .return_slots = if (return_values != null) args[arg_prefix_len + params.len ..] else null,
         .hint = @enumFromInt(0),
     };
 }

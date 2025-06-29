@@ -597,10 +597,17 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
         error.Unreachable => termintes = true,
     };
 
-    if (!termintes and ret_abi != .Imaginary) {
+    if (ret_abi == .Impossible) {
+        const msg = "function returns a type with 0 values, ";
+        if (!termintes) {
+            self.report(fn_ast.body, msg ++ "but end of the body is reachable", .{}) catch {};
+        } else if (self.bl.returns()) {
+            self.report(fn_ast.body, msg ++ "but it returns at least once", .{}) catch {};
+        }
+    } else if (!termintes and ret_abi != .Imaginary) {
         func = self.types.store.get(func_id);
-        self.report(fn_ast.body, "function is missing a return value since" ++
-            " {} has more then 1 possible value", .{func.ret}) catch {};
+        self.report(fn_ast.body, "function returns a type with more then" ++
+            " 1 value, but end of the function body is reachable", .{func.ret}) catch {};
     }
 
     if (self.errored) return error.HasErrors;
@@ -1740,7 +1747,9 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             var loop = self.loops.pop().?.kind.Runtime;
             loop.end(&self.bl);
 
-            if (self.bl.isUnreachable()) return error.Unreachable;
+            if (self.bl.isUnreachable()) {
+                return error.Unreachable;
+            }
 
             return .{};
         },
@@ -2506,8 +2515,6 @@ pub fn loadIdent(self: *Codegen, expr: Ast.Pos, id: Ast.Ident) !Value {
 }
 
 pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: Ast.Store.TagPayload(.Call)) !Value {
-    //std.debug.print("\n{}\n\n", .{ctx});
-
     const sloc = self.src(expr);
     const ast = self.ast;
     var tmp = utils.Arena.scrath(null);

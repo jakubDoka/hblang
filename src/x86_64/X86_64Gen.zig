@@ -584,7 +584,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
 
     if (opts.special == .memcpy) {
         try self.out.startDefineSym(self.gpa, &self.memcpy, name, .func, linkage, true, false);
-        self.out.funcs.items[id] = self.memcpy;
+        (try utils.ensureSlot(&self.out.funcs, self.gpa, id)).* = self.memcpy;
     } else {
         try self.out.startDefineFunc(self.gpa, id, name, .func, linkage, opts.is_inline);
     }
