@@ -45,6 +45,9 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                 return switch (scope[index].expand() orelse return func.addIntImm(.none, .i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)))) {
                     .Node => |n| n,
                     .Loop => |loop| {
+                        if (loop.items[index].expand() == null) {
+                            return func.addIntImm(.none, .i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)));
+                        }
                         if (!loop.done) {
                             const initVal = resolve(func, loop.items, index);
 
@@ -57,9 +60,6 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                                     .{},
                                 ) });
                             }
-                        }
-                        if (loop.items[index].expand() == null) {
-                            return func.addIntImm(.none, .i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)));
                         }
                         scope[index] = loop.items[index];
                         if (scope[index].expand().? == .Loop) {
@@ -162,7 +162,9 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                     // don't touch this and leave the static analysis report the soob
                     //
                     if (offs < 0 or @as(u64, @intCast(offs)) + use.data_type.size() >
-                        o.extra(.Local).size)
+                        // TODO: we ignore elems > 8 for now but we will want mem2reg to work on
+                        // vectors eventually
+                        o.extra(.Local).size or use.data_type.size() > 8)
                     {
                         continue :outer;
                     }
@@ -238,8 +240,13 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                     var buf: [2]*Func.Node = undefined;
                     var scheds: [2]u16 = undefined;
                     var len: usize = 0;
+                    //std.debug.print("bb {}\n", .{bb});
                     for (bb.outputs()) |use| {
                         if (use.isCfg()) {
+                            //std.debug.print("use {}\n", .{use});
+                            //if (use.kind == .If) {
+                            //    std.debug.print("use if {?}\n", .{use.inputs()[1]});
+                            //}
                             buf[len] = use;
                             scheds[len] = use.schedule;
                             len += 1;
@@ -248,6 +255,11 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
 
                     if (bb.isBasicBlockStart()) {
                         @TypeOf(self.gcm).scheduleBlock(bb);
+                    }
+
+                    if (!(bb.kind == .If or len == 1)) {
+                        //self.fmtUnscheduled(std.io.getStdErr().writer().any(), .escape_codes);
+                        unreachable;
                     }
 
                     for (buf[0..len], scheds[0..len]) |n, s| n.schedule = s;

@@ -136,6 +136,32 @@ pub const Id = enum(IdRepr) {
     any,
     _,
 
+    pub const Builtin = enum(Types.IdRepr) {
+        never,
+        void,
+        bool,
+        u8,
+        u16,
+        u32,
+        u64,
+        uint,
+        i8,
+        i16,
+        i32,
+        i64,
+        int,
+        f32,
+        f64,
+        type,
+        any,
+
+        pub const identity = {};
+    };
+
+    comptime {
+        std.debug.assert(std.meta.fields(Id).len == std.meta.fields(Builtin).len);
+    }
+
     const Repr = packed struct(IdRepr) {
         data: std.meta.Int(.unsigned, @bitSizeOf(IdRepr) - @bitSizeOf(std.meta.Tag(Data))),
         flag: std.meta.Tag(std.meta.Tag(Data)),

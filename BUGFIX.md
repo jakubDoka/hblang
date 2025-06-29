@@ -2,6 +2,36 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### float sse call conv 1
+```hb
+expectations := .{
+    should_error: true,
+}
+
+V2 := struct{.a: f32; .b: f32}
+
+fun := fn(v: V2): f32 return v.a + v.b
+
+main := fn(): int {
+    return @float_to_int(fun(.(1.0, 2.0)) - 3.0)
+}
+```
+
+#### float sse call conv 2
+```hb
+expectations := .{
+    should_error: true,
+}
+
+V2 := struct{.a: f64; .b: f64}
+
+fun := fn(v: V2): f64 return v.a + v.b
+
+main := fn(): int {
+    return @float_to_int(fun(.(1.0, 2.0)) - 3.0)
+}
+```
+
 #### float load and store 1
 ```hb
 Stru := struct{.a: f32; .b: f32; .c: f32}
@@ -785,6 +815,37 @@ insert := fn(self: ^Self, key: uint, value: uint): ?^uint {
         }
         idx += 1
     }
+}
+```
+
+#### mem2reg crash 3 (infinite)
+```hb
+expectations := .{
+    times_out: true,
+}
+
+main := fn(): uint {
+    x: []u8 = idk
+    loop {
+        loop if true break else {
+            x = x[..]
+        }
+        if true x = x[..]
+    }
+    return 0
+}
+```
+
+#### mem2reg crash 4 (infinite) (control flow)
+```hb
+main := fn(): uint {
+    x: []u8 = idk
+    loop {
+        loop if true break else {
+            x = x[..]
+        }
+    }
+    return 0
 }
 ```
 

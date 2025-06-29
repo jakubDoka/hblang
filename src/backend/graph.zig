@@ -143,7 +143,7 @@ pub const BinOp = enum(u8) {
             .slt => @intFromBool(lhs < rhs),
             .sge => @intFromBool(lhs >= rhs),
             .sle => @intFromBool(lhs <= rhs),
-        }) & dt.mask();
+        }) & dt.mask().?;
     }
 
     pub fn isComutative(self: BinOp) bool {
@@ -215,7 +215,7 @@ pub const UnOp = enum(u8) {
                 @as(u32, @bitCast(@as(f32, @floatCast(tf(oper)))))
             else
                 @bitCast(@as(f64, @floatCast(tf32(oper)))),
-        }) & src.mask();
+        }) & src.mask().?;
     }
 };
 
@@ -228,24 +228,108 @@ pub const DataType = enum(u16) {
     f32,
     f64,
     top,
+    _,
 
-    pub fn size(self: DataType) u64 {
-        return switch (self) {
-            .top, .bot => unreachable,
-            .i8 => 1,
-            .i16 => 2,
-            .i32, .f32 => 4,
-            .i64, .f64 => 8,
-        };
+    // TODO: derive this from DataType
+    pub const Kind = enum(u3) {
+        top,
+        i8,
+        i16,
+        i32,
+        i64,
+        f32,
+        f64,
+        bot,
+
+        pub fn isFloat(self: Kind) bool {
+            return switch (self) {
+                .f32, .f64 => true,
+                else => false,
+            };
+        }
+
+        pub fn size(self: Kind) u64 {
+            return switch (self) {
+                .top, .bot => unreachable,
+                .i8 => 1,
+                .i16 => 2,
+                .i32, .f32 => 4,
+                .i64, .f64 => 8,
+            };
+        }
+
+        pub fn mask(self: Kind) i64 {
+            return switch (self) {
+                .top, .bot => unreachable,
+                .i8 => 0xFF,
+                .i16 => 0xFFFF,
+                .i32, .f32 => 0xFFFFFFFF,
+                .i64, .f64 => -1,
+            };
+        }
+    };
+
+    comptime {
+        std.debug.assert(std.meta.fields(Kind).len == std.meta.fields(DataType).len);
     }
 
-    pub fn mask(self: DataType) i64 {
+    pub const Raw = packed struct(u16) {
+        kind: Kind,
+        one_less_then_lanes: u5 = 0,
+        unused: u8 = 0,
+
+        pub fn lanes(self: Raw) u64 {
+            return @as(u64, self.one_less_then_lanes) + 1;
+        }
+    };
+
+    pub fn toRaw(self: DataType) Raw {
+        return @bitCast(@intFromEnum(self));
+    }
+
+    pub fn fromRaw(raw: Raw) DataType {
+        return @enumFromInt(@as(u16, @bitCast(raw)));
+    }
+
+    pub fn vec(ty: DataType, lans: u64) DataType {
+        const raw = ty.toRaw();
+        return .fromRaw(.{
+            .kind = raw.kind,
+            .one_less_then_lanes = @intCast(raw.lanes() * lans - 1),
+        });
+    }
+
+    pub fn lanes(self: DataType) u64 {
+        return self.toRaw().lanes();
+    }
+
+    pub fn size(self: DataType) u64 {
+        const raw = self.toRaw();
+        return raw.kind.size() * raw.lanes();
+    }
+
+    pub fn mask(self: DataType) ?i64 {
         return switch (self) {
             .top, .bot => unreachable,
             .i8 => 0xFF,
             .i16 => 0xFFFF,
             .i32, .f32 => 0xFFFFFFFF,
             .i64, .f64 => -1,
+            else => {
+                if (self.size() == 8) return -1;
+                return null;
+            },
+        };
+    }
+
+    pub fn isSse(self: DataType) bool {
+        return self.lanes() != 1;
+    }
+
+    pub fn isFloat(self: DataType) bool {
+        return switch (self) {
+            .f32, .f64 => true,
+            else => false,
         };
     }
 
@@ -1779,6 +1863,7 @@ pub fn Func(comptime Backend: type) type {
                 var iter = std.mem.reverseIterator(node.outputs());
                 while (iter.next()) |o| if (o.kind == .Phi) {
                     for (o.outputs()) |oo| worklist.add(oo);
+                    worklist.add(o.inputs()[idx + 1].?);
                     self.subsume(o.inputs()[(1 - idx) + 1].?, o);
                 };
 
@@ -1801,6 +1886,7 @@ pub fn Func(comptime Backend: type) type {
                 var iter = std.mem.reverseIterator(node.outputs());
                 while (iter.next()) |o| if (o.kind == .Phi) {
                     for (o.outputs()) |oo| worklist.add(oo);
+                    worklist.add(o.inputs()[2].?);
                     self.subsume(o.inputs()[1].?, o);
                 };
 

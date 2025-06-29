@@ -7,28 +7,7 @@ const TyId = Types.Id;
 const std = @import("std");
 const Scope = Types.Scope;
 
-pub const Builtin = enum(Types.IdRepr) {
-    never,
-    void,
-    bool,
-    u8,
-    u16,
-    u32,
-    u64,
-    uint,
-    i8,
-    i16,
-    i32,
-    i64,
-    int,
-    f32,
-    f64,
-    type,
-    any,
-
-    pub const identity = {};
-};
-
+pub const Builtin = Types.Id.Builtin;
 pub const Pointer = TyId;
 
 pub const Slice = struct {

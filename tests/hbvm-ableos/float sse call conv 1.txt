@@ -1,0 +1,16 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+       li32 $1, 1065353216
+       li32 $2, 1073741824
+        jal $31, $0, :float sse call conv 1.fun
+         cp $2, $1
+       li32 $1, 1077936128
+     fsub32 $1, $2, $1
+      fti32 $1, $1, 0
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+float sse call conv 1.fun:
+     fadd32 $1, $1, $2
+       jala $0, $31, 0

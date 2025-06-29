@@ -13,15 +13,17 @@ main := fn(): uint {
 	init_window(800, 600, "hblang\0".ptr)
 	defer close_window()
 
-	pos := V2.(0.0, 0.0)
-	vel := V2.(1.0, 1.0)
+	//pos := V2.(0.0, 0.0)
+	//vel := V2.(1.0, 1.0)
 	while !window_should_close() {
 		begin_drawing()
 		defer end_drawing()
 
 		clear_background(.[255, 0, 0, 255])
 
-		draw_rectandle_v(pos, .(100.0, 100.0), .[255, 0, 0, 255])
+		//draw_rectandle_v(pos, .(100.0, 100.0), .[255, 0, 0, 255])
+
+		//pos += vel
 	}
 
 	return 0

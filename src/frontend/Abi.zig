@@ -40,6 +40,7 @@ pub const Builder = union(graph.CallConv) {
             .ablecall => switch (spec) {
                 .Impossible => unreachable,
                 .Imaginary => _ = slice(buf, 0),
+                .BySse => |d| slice(buf, 1).* = .{ .Reg = d },
                 .ByValue => |d| slice(buf, 1).* = .{ .Reg = d },
                 .ByValuePair => |pair| slice(buf, 2).* =
                     .{ .{ .Reg = pair.types[0] }, .{ .Reg = pair.types[1] } },
@@ -48,6 +49,14 @@ pub const Builder = union(graph.CallConv) {
             .systemv => |*s| switch (spec) {
                 .Impossible => unreachable,
                 .Imaginary => _ = slice(buf, 0),
+                .BySse => |d| {
+                    if (s.remining_xmm_regs == 0) {
+                        slice(buf, 1).* = .{ .Stack = .reg(d) };
+                    } else {
+                        slice(buf, 1).* = .{ .Reg = d };
+                        s.remining_xmm_regs -= 1;
+                    }
+                },
                 .ByValue => |d| {
                     if (is_ret) {
                         slice(buf, 1).* = .{ .Reg = d };
@@ -68,7 +77,13 @@ pub const Builder = union(graph.CallConv) {
                     if (is_ret) {
                         slice(buf, 1).* = .{ .Reg = .i64 };
                         s.remining_scalar_regs -= 1;
-                    } else if (pair.types[0].isInt() != pair.types[1].isInt() or
+                    } else if (pair.types[0].isFloat() and pair.types[1].isFloat())
+                        if (pair.types[0] == pair.types[1]) {
+                            unreachable;
+                        } else {
+                            slice(buf, 1).* = .{ .Stack = pair.stackSpec() };
+                        }
+                    else if (pair.types[0].isInt() != pair.types[1].isInt() or
                         (pair.types[0].isInt() and s.remining_scalar_regs < 2) or
                         s.remining_xmm_regs < 2)
                     {
@@ -119,6 +134,7 @@ pub const Pair = struct {
 
 pub const TmpSpec = union(enum) {
     ByValue: graph.DataType,
+    BySse: graph.DataType,
     ByValuePair: Pair,
     ByRef,
     Imaginary,
@@ -134,6 +150,7 @@ pub const TmpSpec = union(enum) {
 
 pub const Spec = union(enum) {
     ByValue: graph.DataType,
+    BySse: graph.DataType,
     ByValuePair: Pair,
     ByRef: graph.AbiParam.StackSpec,
     Imaginary,
@@ -164,20 +181,23 @@ pub fn categorize(self: Abi, ty: Id, types: *Types) TmpSpec {
             .f64 => .f64,
         } },
         .Pointer => .{ .ByValue = .i64 },
-        .Enum => |enm| .{ .ByValue = switch (@as(u64, enm.getFields(types).len)) {
-            0 => return .Impossible,
-            1 => return .Imaginary,
-            2...255 => .i8,
-            256...std.math.maxInt(u16) => .i16,
-            std.math.maxInt(u16) + 1...std.math.maxInt(u32) => .i32,
-            std.math.maxInt(u32) + 1...std.math.maxInt(u64) => .i64,
-        } },
+        .Enum => |enm| .{
+            .ByValue = switch (@as(u64, enm.getFields(types).len)) {
+                0 => return .Impossible,
+                1 => return .Imaginary,
+                2...255 => .i8,
+                256...std.math.maxInt(u16) => .i16,
+                // an I braindead?
+                std.math.maxInt(u16) + 1...std.math.maxInt(u32) => .i32,
+                std.math.maxInt(u32) + 1...std.math.maxInt(u64) => .i64,
+            },
+        },
         .Union => |s| switch (self.cc) {
             .ablecall, .systemv => categorizeAbleosUnion(s, types),
             else => unreachable,
         },
         inline .Struct, .Tuple => |s| switch (self.cc) {
-            .ablecall, .systemv => categorizeAbleosRecord(s, types),
+            .ablecall, .systemv => self.categorizeRecord(s, types),
             else => unreachable,
         },
         .Slice => |s| switch (self.cc) {
@@ -204,7 +224,7 @@ pub fn categorizeAbleosNullable(id: utils.EntId(tys.Nullable), types: *Types) Tm
             .padding = @intCast(v.size() - 1),
             .alignment = @intCast(std.math.log2_int(u64, v.size())),
         } },
-        .ByValuePair, .ByRef => .ByRef,
+        .ByValuePair, .ByRef, .BySse => .ByRef,
     };
 }
 
@@ -240,7 +260,7 @@ pub fn categorizeAbleosUnion(id: utils.EntId(tys.Union), types: *Types) TmpSpec 
     return res;
 }
 
-pub fn categorizeAbleosRecord(stru: anytype, types: *Types) TmpSpec {
+pub fn categorizeRecord(self: Abi, stru: anytype, types: *Types) TmpSpec {
     var res: TmpSpec = .Imaginary;
     var prev_offset: u64 = 0;
     var field_offsets = stru.offsetIter(types);
@@ -255,18 +275,25 @@ pub fn categorizeAbleosRecord(stru: anytype, types: *Types) TmpSpec {
             continue;
         }
 
+        if (fspec == .BySse) return .ByRef;
+        if (res == .BySse) return .ByRef;
         if (fspec == .ByValuePair) return .ByRef;
         if (res == .ByValuePair) return .ByRef;
         std.debug.assert(res != .ByRef);
 
-        res = .{ .ByValuePair = .{
-            .types = .{ res.ByValue, fspec.ByValue },
-            .padding = @intCast(elem.offset - prev_offset),
-            .alignment = @intCast(@min(4, std.math.log2_int(
-                u64,
-                @max(res.ByValue.size(), fspec.ByValue.size()),
-            ))),
-        } };
+        if (self.cc == .systemv and res.ByValue.isFloat() and fspec.ByValue.isFloat()) {
+            if (res.ByValue != fspec.ByValue) return .ByRef;
+            res = .{ .BySse = .vec(res.ByValue, 2) };
+        } else {
+            res = .{ .ByValuePair = .{
+                .types = .{ res.ByValue, fspec.ByValue },
+                .padding = @intCast(elem.offset - prev_offset),
+                .alignment = @intCast(@min(4, std.math.log2_int(
+                    u64,
+                    @max(res.ByValue.size(), fspec.ByValue.size()),
+                ))),
+            } };
+        }
     }
     return res;
 }

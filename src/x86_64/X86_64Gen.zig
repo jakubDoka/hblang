@@ -140,6 +140,7 @@ pub const Reg = enum(u8) {
             .reg = .{ .value = @intCast(switch (size) {
                 4 => zydis.ZYDIS_REGISTER_XMM0,
                 8 => zydis.ZYDIS_REGISTER_XMM0,
+                16 => zydis.ZYDIS_REGISTER_XMM0,
                 else => utils.panic("{}", .{size}),
             } + @intFromEnum(self) - @intFromEnum(Reg.xmm0)) },
         };
@@ -408,25 +409,27 @@ pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.W
     if (node.kind == .Store) {
         const base, const offset = node.base().knownOffset();
 
-        const mask = node.data_type.mask() >> 1;
-        if (node.value().?.kind == .CInt and (node.value().?.extra(.CInt).value <= mask)) {
-            const res = func.addNode(
-                .ConstStore,
-                node.sloc,
-                node.data_type,
-                &.{ node.inputs()[0], node.mem(), base },
-                .{
-                    .base = .{ .dis = @intCast(offset) },
-                    .imm = node.value().?.extra(.CInt).value,
-                },
-            );
+        store: {
+            const mask = if (node.data_type.mask()) |m| m >> 1 else break :store;
+            if (node.value().?.kind == .CInt and (node.value().?.extra(.CInt).value <= mask)) {
+                const res = func.addNode(
+                    .ConstStore,
+                    node.sloc,
+                    node.data_type,
+                    &.{ node.inputs()[0], node.mem(), base },
+                    .{
+                        .base = .{ .dis = @intCast(offset) },
+                        .imm = node.value().?.extra(.CInt).value,
+                    },
+                );
 
-            if (base.isStack()) {
-                res.kind = .ConstStackStore;
+                if (base.isStack()) {
+                    res.kind = .ConstStackStore;
+                }
+
+                worklist.add(res);
+                return res;
             }
-
-            worklist.add(res);
-            return res;
         }
 
         const res = func.addNode(
@@ -544,7 +547,7 @@ pub fn allowedRegsFor(
         return set;
     }
 
-    if (node.data_type == .f32 or node.data_type == .f64) {
+    if (node.data_type.toRaw().kind.isFloat()) {
         return Reg.floatMask(tmp);
     }
 
@@ -925,7 +928,11 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
             (req.operands[1].reg.value >= zydis.ZYDIS_REGISTER_XMM0 and
                 req.operands[1].reg.value <= zydis.ZYDIS_REGISTER_XMM15)))
     {
-        if (size == 8) {
+        if (size == 16) {
+            // FIXME: we need to know if this is 2 doubles of 1 float, who
+            // knows what breaks due to this
+            req.mnemonic = zydis.ZYDIS_MNEMONIC_MOVUPS;
+        } else if (size == 8) {
             req.mnemonic = zydis.ZYDIS_MNEMONIC_MOVSD;
         } else {
             req.mnemonic = zydis.ZYDIS_MNEMONIC_MOVSS;
