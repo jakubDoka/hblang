@@ -140,7 +140,7 @@ pub const Reg = enum(u8) {
             .reg = .{ .value = @intCast(switch (size) {
                 4 => zydis.ZYDIS_REGISTER_XMM0,
                 8 => zydis.ZYDIS_REGISTER_XMM0,
-                else => unreachable,
+                else => utils.panic("{}", .{size}),
             } + @intFromEnum(self) - @intFromEnum(Reg.xmm0)) },
         };
     }
@@ -855,7 +855,10 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
             BRegOff => val[2],
             SizeHint => val.bytes,
             zydis.ZydisEncoderOperand => b: {
-                const t = val.mem.size;
+                const t = if (val.type == zydis.ZYDIS_OPERAND_TYPE_MEMORY)
+                    val.mem.size
+                else
+                    8;
                 break :b t;
             },
             else => null,
@@ -1025,6 +1028,22 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
             self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Tmp{tmp_allocs -| 1}, req.operands[1] });
             req.operands[1] = @as(Reg, @enumFromInt(@intFromEnum(Reg.r14) + (tmp_allocs -| 1))).asZydisOpReg(req.operands[1].mem.size);
         }
+    }
+
+    if (req.mnemonic == zydis.ZYDIS_MNEMONIC_XCHG and
+        ((req.operands[0].reg.value >= zydis.ZYDIS_REGISTER_XMM0 and
+            req.operands[0].reg.value <= zydis.ZYDIS_REGISTER_XMM15) or
+            (req.operands[1].reg.value >= zydis.ZYDIS_REGISTER_XMM0 and
+                req.operands[1].reg.value <= zydis.ZYDIS_REGISTER_XMM15)))
+    {
+        const mov_mnem: zydis.ZydisMnemonic = if (req.operands[0].mem.size == 4)
+            zydis.ZYDIS_MNEMONIC_MOVSS
+        else
+            zydis.ZYDIS_MNEMONIC_MOVSD;
+        self.emitInstr(mov_mnem, .{ FTmp{1}, req.operands[0] });
+        self.emitInstr(mov_mnem, .{ req.operands[0], req.operands[1] });
+        self.emitInstr(mov_mnem, .{ req.operands[1], FTmp{1} });
+        return;
     }
 
     const status = zydis.ZydisEncoderEncodeInstruction(&req, &buf, &len);
