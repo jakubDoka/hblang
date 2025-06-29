@@ -45,8 +45,8 @@ directives 20 (@handler, @SourceLoc).main:
 0:	mov rax, [rsp+0x40]
 	mov [rsp+0x50], rax
 	mov [rsp+0x58], r12
-	mov rdi, [rsp+0x50]
 	mov rsi, [rsp+0x58]
+	mov rdi, [rsp+0x50]
 	call :directives 20 (@handler, @SourceLoc).use_slice
 	add rsp, 0x68
 	pop r12

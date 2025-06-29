@@ -2453,15 +2453,26 @@ pub fn resolveGlobal(
         if (global.ty != .type)
             return self.report(vari.value, "expected a global holding" ++
                 " a type, {} is not", .{global.ty});
+
+        const prev_scope = self.parent_scope;
+        defer self.parent_scope = prev_scope;
+
+        var report_scope = bsty;
         var cur: Types.Id = @enumFromInt(@as(
             Types.IdRepr,
             @bitCast(global.data[0..@sizeOf(Types.Id)].*),
         ));
-        for (path) |ps| {
+
+        for (path, 0..) |ps, i| {
             var vl = try self.lookupScopeItem(ps, cur, ast.tokenSrc(ps.index));
-            cur = try self.unwrapTyConst(ps, &vl);
+            self.parent_scope = .{ .Perm = report_scope };
+            report_scope = cur;
+            if (i == path.len - 1) {
+                return vl;
+            } else {
+                cur = try self.unwrapTyConst(ps, &vl);
+            }
         }
-        return self.emitTyConst(cur);
     }
 
     // TODO: fix the location

@@ -2,6 +2,21 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### importing global 1
+```hb
+foo.{global} := @use("global2.hb")
+
+main := fn(): uint {
+    return global
+}
+
+// in: global2.hb
+.{global} := @use("global.hb")
+
+// in: global.hb
+$global := 0
+```
+
 #### gcm crash 1 (infinite)
 ```hb
 expectations := .{

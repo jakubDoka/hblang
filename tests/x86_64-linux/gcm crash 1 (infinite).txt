@@ -1,0 +1,36 @@
+gcm crash 1 (infinite).func:
+	ret
+main:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	push r14
+	push r15
+	sub rsp, 0x418
+	mov rax, 0x00
+	lea r15, [rsp+0x10]
+	mov [rsp+0x08], r15
+	lea r15, [0x0000000000000007]
+	mov [rsp], r15
+	mov r13, 0x400
+	mov r12, 0x00
+	mov rcx, [rsp+0x08]
+1:	mov rbp, rax
+	mov rbx, rcx
+2:	cmp rbp, 0x00
+	setnb al
+	movzx rax, al
+	test al, al
+	jz :0
+	mov r15, [rsp]
+	mov sil, [r15]
+	mov rdi, r12
+	mov rdx, rsi
+	call :gcm crash 1 (infinite).func
+	mov rax, rbp
+	mov rcx, rbx
+	jmp :1
+0:	mov rbp, r13
+	mov rbx, [rsp+0x08]
+	jmp :2

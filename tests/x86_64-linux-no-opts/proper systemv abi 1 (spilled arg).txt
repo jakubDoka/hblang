@@ -35,9 +35,8 @@ proper systemv abi 1 (spilled arg).stack_args:
 	mov rcx, rsi
 	mov [rsp], rdx
 	mov [rsp+0x08], rcx
-	mov rdi, [rsp+0x48]
-	mov rsi, [rsp+0x50]
-	mov rbp, [rsp+0x08]
+	mov rsi, [rsp+0x48]
+	mov rbp, [rsp+0x50]
 	mov rbx, [rsp+0x38]
 	mov rdx, [rsp+0x40]
 	mov rax, [rsp+0x28]
@@ -45,11 +44,12 @@ proper systemv abi 1 (spilled arg).stack_args:
 	add rax, rcx
 	add rax, rbx
 	add rax, rdx
-	add rax, rdi
-	mov rcx, [rsp]
 	add rax, rsi
-	add rax, rcx
+	mov rdx, [rsp]
 	add rax, rbp
+	mov rcx, [rsp+0x08]
+	add rax, rdx
+	add rax, rcx
 	add rsp, 0x10
 	pop rbp
 	pop rbx

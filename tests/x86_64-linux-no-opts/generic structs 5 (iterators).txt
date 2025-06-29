@@ -153,14 +153,14 @@ main:
 1:	mov rdi, rbx
 	mov rsi, [rsp+0x08]
 	call :generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main, B = generic structs 5 (iterators).main).next
-	mov al, [rsp+0xA6]
-	cmp al, r12b
+	mov dl, [rsp+0xA6]
+	mov cl, [rsp+0xA7]
+	mov al, [rsp+0xA5]
+	cmp dl, r12b
 	jnz :3
 	mov rax, 0x03
 	jmp :7
-3:	mov cl, [rsp+0xA7]
-	mov al, [rsp+0xA5]
-	cmp cl, al
+3:	cmp cl, al
 	jz :4
 	mov rax, [rsp+0x18]
 	jmp :7
@@ -168,14 +168,14 @@ main:
 0:	mov rdi, rbp
 	mov rsi, r13
 	call :generic structs 5 (iterators).main.next
-	mov al, [rsp+0xA2]
-	cmp al, r12b
+	mov dl, [rsp+0xA2]
+	mov cl, [rsp+0xA1]
+	mov al, [rsp+0xA3]
+	cmp dl, r12b
 	jnz :6
 	mov rax, 0x01
 	jmp :7
-6:	mov cl, [rsp+0xA1]
-	mov al, [rsp+0xA3]
-	cmp cl, al
+6:	cmp cl, al
 	jz :7
 	mov rax, [rsp+0x10]
 7:	add rsp, 0xA8

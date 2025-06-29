@@ -27,11 +27,11 @@ generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next 
 	setz cl
 	movzx rcx, cl
 	mov rax, [rsp]
+	mov rdi, [rsp+0x08]
 	test cl, cl
 	jz :0
 	jmp :1
-0:	mov rdi, [rsp+0x08]
-	mov rsi, rdx
+0:	mov rsi, rdx
 	sub rsi, 0x01
 	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)).get
 1:	add rsp, 0x18

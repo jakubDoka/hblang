@@ -17,13 +17,13 @@ main:
 	add rax, rcx
 	mov [rsp], rax
 	mov [rsp+0x20], rbp
-	mov rcx, [rsp+0x10]
 	mov rax, [rsp]
+	mov rcx, [rsp+0x10]
 	add rax, rcx
 	mov [rsp], rax
 	mov [rsp+0x20], rbx
-	mov rcx, [rsp+0x18]
 	mov rax, [rsp]
+	mov rcx, [rsp+0x18]
 	add rax, rcx
 	mov [rsp], rax
 	mov [rsp+0x20], rdx

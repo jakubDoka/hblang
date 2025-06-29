@@ -10,31 +10,31 @@ main:
 	mov byte ptr [rsp+0xC5], 0x01
 	mov byte ptr [rsp+0xC6], 0x01
 	mov byte ptr [rsp+0xC7], 0x01
-	mov rbp, 0x04
+	mov rbx, 0x04
 	mov al, [rsp+0xC0]
 	mov cl, [rsp+0xC4]
 	add eax, ecx
 	mov [rsp+0xC0], al
-	mov cl, [rsp+0xC5]
 	mov al, [rsp+0xC1]
+	mov cl, [rsp+0xC5]
 	add eax, ecx
 	mov [rsp+0xC1], al
-	mov cl, [rsp+0xC6]
 	mov al, [rsp+0xC2]
+	mov cl, [rsp+0xC6]
 	add eax, ecx
 	mov [rsp+0xC2], al
-	mov cl, [rsp+0xC7]
 	mov al, [rsp+0xC3]
+	mov cl, [rsp+0xC7]
 	add eax, ecx
 	mov [rsp+0xC3], al
 	mov al, [rsp+0xC2]
-	mov bl, [rsp+0xC1]
-	mov dl, [rsp+0xC3]
-	mov cl, [rsp+0xC0]
-	add eax, ebx
+	mov cl, [rsp+0xC1]
+	mov dl, [rsp+0xC0]
 	add eax, ecx
+	mov cl, [rsp+0xC3]
 	add eax, edx
-	cmp al, bpl
+	add eax, ecx
+	cmp al, bl
 	jz :0
 	mov rax, 0x3E9
 	jmp :1
@@ -43,16 +43,16 @@ main:
 	mov [rsp+0x48], rsi
 	mov [rsp+0x50], rsi
 	mov [rsp+0x58], rsi
-	mov rax, [rsp+0x40]
-	mov rbx, [rsp+0x50]
 	mov rcx, [rsp+0x48]
-	mov rdx, [rsp+0x58]
-	cmp rax, rbx
-	setnz al
-	movzx rax, al
-	cmp rcx, rdx
+	mov rbx, [rsp+0x58]
+	mov rax, [rsp+0x40]
+	mov rdx, [rsp+0x50]
+	cmp rcx, rbx
 	setnz cl
 	movzx rcx, cl
+	cmp rax, rdx
+	setnz al
+	movzx rax, al
 	or eax, ecx
 	test al, al
 	jz :2
@@ -63,16 +63,16 @@ main:
 	mov [rsp+0x68], rbp
 	mov [rsp+0x70], rsi
 	mov [rsp+0x78], rsi
-	mov rax, [rsp+0x60]
-	mov rbx, [rsp+0x70]
 	mov rcx, [rsp+0x68]
-	mov rdx, [rsp+0x78]
-	cmp rax, rbx
-	setz al
-	movzx rax, al
-	cmp rcx, rdx
+	mov rbx, [rsp+0x78]
+	mov rax, [rsp+0x60]
+	mov rdx, [rsp+0x70]
+	cmp rcx, rbx
 	setz cl
 	movzx rcx, cl
+	cmp rax, rdx
+	setz al
+	movzx rax, al
 	and eax, ecx
 	test al, al
 	jz :4
@@ -119,16 +119,16 @@ main:
 	mov rcx, [rsp]
 	add rax, rcx
 	mov [rsp+0x20], rax
-	mov rcx, [rsp+0x08]
 	mov rax, [rsp+0x28]
+	mov rcx, [rsp+0x08]
 	add rax, rcx
 	mov [rsp+0x28], rax
-	mov rax, [rsp+0x30]
 	mov rcx, [rsp+0x10]
+	mov rax, [rsp+0x30]
 	add rax, rcx
 	mov [rsp+0x30], rax
-	mov rax, [rsp+0x38]
 	mov rcx, [rsp+0x18]
+	mov rax, [rsp+0x38]
 	add rax, rcx
 	mov [rsp+0x38], rax
 	mov rcx, [rsp+0x30]

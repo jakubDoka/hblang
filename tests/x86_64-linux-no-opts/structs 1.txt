@@ -15,8 +15,8 @@ structs 1.Ty.sum:
 	mov rax, [rsp+0x08]
 	add rax, 0x01
 	mov [rsp+0x08], rax
-	mov rcx, [rsp+0x08]
 	mov rax, [rsp]
+	mov rcx, [rsp+0x08]
 	sub rax, rcx
 	add rsp, 0x10
 	ret
@@ -62,13 +62,13 @@ main:
 	cmp rax, 0x03
 	setnz al
 	movzx rax, al
+	mov rsi, [rsp+0x38]
 	mov rdi, [rsp+0x30]
 	test al, al
 	jz :0
 	mov rax, 0x00
 	jmp :1
-0:	mov rsi, [rsp+0x38]
-	call :structs 1.Ty.sum
+0:	call :structs 1.Ty.sum
 	cmp rax, 0x00
 	setnz al
 	movzx rax, al

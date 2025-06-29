@@ -29,8 +29,8 @@ main:
 	mov rax, [rsp+0x08]
 	mov [rsp], rax
 	lea rdi, [rsp+0x10]
-	mov edx, [rsp+0x04]
 	mov sil, [rsp]
+	mov edx, [rsp+0x04]
 	call :mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime args 1.main)
 	mov rax, 0x00
 	add rsp, 0x18

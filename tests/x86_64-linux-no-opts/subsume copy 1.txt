@@ -11,11 +11,11 @@ main:
 	mov [rsp+0x06], ax
 	mov al, [rsp+0x05]
 	mov [rsp+0x08], al
+	mov al, [rsp+0x06]
 	mov dl, [rsp+0x07]
 	mov cl, [rsp+0x08]
-	mov al, [rsp+0x06]
-	movzx rdx, dl
 	movzx rax, al
+	movzx rdx, dl
 	movzx rcx, cl
 	add rax, rdx
 	sub rax, rcx

@@ -77,8 +77,8 @@ main:
 	mov rax, 0x0C
 	mov [rsp+0x18], rax
 	lea rbx, [rsp]
-	mov rdx, [rsp+0x18]
 	mov rsi, [rsp+0x10]
+	mov rdx, [rsp+0x18]
 	mov rdi, rbx
 	call :out of bounds matching 1.byte_iter
 	mov rdi, rbx

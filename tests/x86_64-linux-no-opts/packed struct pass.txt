@@ -8,8 +8,8 @@ main:
 	sub rsp, 0x08
 	mov byte ptr [rsp], 0x00
 	mov word ptr [rsp+0x01], 0x00
-	mov si, [rsp+0x01]
 	mov dil, [rsp]
+	mov si, [rsp+0x01]
 	call :packed struct pass.broken
 	mov rax, 0x00
 	add rsp, 0x08

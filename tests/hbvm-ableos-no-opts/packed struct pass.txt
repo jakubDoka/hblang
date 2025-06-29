@@ -5,8 +5,8 @@ main:
          st $1, $254, 0, 1
        li16 $1, 0
          st $1, $254, 1, 2
-         ld $2, $254, 1, 2
          ld $1, $254, 0, 1
+         ld $2, $254, 1, 2
         jal $31, $0, :packed struct pass.broken
        li64 $1, 0
      addi64 $254, $254, 11

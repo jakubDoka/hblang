@@ -8,8 +8,8 @@ main:
          st $1, $254, 12, 4
      addi64 $1, $254, 0
         bmc $2, $1, 8
-         ld $2, $254, 4, 4
          ld $1, $254, 0, 1
+         ld $2, $254, 4, 4
         jal $31, $0, :mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime args 1.main)
         swa $2, $1
          st $2, $254, 16, 1
@@ -31,15 +31,13 @@ mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime arg
         swa $2, $1
          st $2, $254, 8, 1
          st $1, $254, 12, 4
-         ld $1, $254, 8, 1
-         ld $2, $254, 12, 4
-        swa $2, $1
+         ld $1, $254, 12, 4
+         ld $2, $254, 8, 1
         jmp :3
 1:      li8 $1, 0
          st $1, $254, 16, 1
-         ld $1, $254, 16, 1
-         ld $2, $254, 20, 4
-        swa $2, $1
+         ld $1, $254, 20, 4
+         ld $2, $254, 16, 1
 3:      swa $1, $2
      addi64 $254, $254, 32
          ld $31, $254, -8, 8
@@ -52,7 +50,8 @@ mixing @Any and comptime args 1.main:
          st $1, $254, 4, 1
      addi32 $1, $2, 5
          st $1, $254, 8, 4
-         ld $2, $254, 8, 4
-         ld $1, $254, 4, 1
+         ld $2, $254, 4, 1
+         ld $1, $254, 8, 4
+        swa $1, $2
      addi64 $254, $254, 12
        jala $0, $31, 0
