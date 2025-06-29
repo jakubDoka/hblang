@@ -2,6 +2,17 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### float load and store 1
+```hb
+Stru := struct{.a: f32; .b: f32; .c: f32}
+
+fun := fn(s: Stru): f32 return s.a + s.b - s.c
+
+main := fn(): int {
+    return @float_to_int(fun(.(1.0, 2.0, 3.0)))
+}
+```
+
 #### carry over call float op 1
 ```hb
 expectations := .{

@@ -1,0 +1,27 @@
+float load and store 1.fun:
+	movss xmm2, dword ptr [rsp+0x0C]
+	movss xmm0, dword ptr [rsp+0x08]
+	movss xmm1, dword ptr [rsp+0x10]
+	addss xmm0, xmm2
+	subss xmm0, xmm1
+	ret
+main:
+	sub rsp, 0x28
+	mov rdx, 0x3F800000
+	mov rcx, 0x40000000
+	mov rax, 0x40400000
+	movd xmm0, edx
+	movss [rsp+0x0C], xmm0
+	movd xmm0, ecx
+	movss [rsp+0x10], xmm0
+	lea rdi, [rsp]
+	movd xmm0, eax
+	mov rax, [rsp+0x0C]
+	movss [rsp+0x14], xmm0
+	mov [rdi], rax
+	mov eax, [rsp+0x14]
+	mov [rdi+0x08], eax
+	call :float load and store 1.fun
+	cvttss2si rax, xmm0
+	add rsp, 0x28
+	ret
