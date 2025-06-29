@@ -109,7 +109,8 @@ pub fn resizeLocal(_: *Builder, here: SpecificNode(.Local), to_size: u64) void {
 }
 
 pub fn addLoad(self: *Builder, sloc: graph.Sloc, addr: *BuildNode, ty: DataType) SpecificNode(.Store) {
-    const ctrl = if (addr.kind == .Local) null else self.control();
+    const true_base, _ = addr.knownOffset();
+    const ctrl = if (true_base.kind == .Local or true_base.kind == .GlobalAddr) null else self.control();
     return self.func.addNode(.Load, sloc, ty, &.{ ctrl, self.memory(), addr }, .{});
 }
 

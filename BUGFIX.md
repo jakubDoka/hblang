@@ -2,6 +2,36 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### gcm crash 1 (infinite)
+```hb
+expectations := .{
+    times_out: true,
+}
+
+WrapperU8 := struct {
+    .x: u8;
+}
+
+func := fn(op: u8, fd: u8, event: WrapperU8): void {
+}
+
+ZERO: u8 = 0
+
+main := fn(): uint {
+    buf: [1024]u8 = idk
+    remaining: []u8 = buf[0..0]
+    loop {
+        loop if remaining.len >= 0 break else {
+            remaining = buf[..]
+        }
+        ev: WrapperU8 = .(ZERO)
+        if remaining.len == 0 remaining = remaining[..]
+        func(0, ZERO, ev)
+    }
+    return 0
+}
+```
+
 #### float sse call conv 1
 ```hb
 expectations := .{
