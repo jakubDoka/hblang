@@ -417,24 +417,27 @@ pub fn GcmMixin(comptime Backend: type) type {
 
             // init meta
             const extra = tmp.arena.alloc(NodeMeta, node.outputs().len);
-            for (node.outputs(), extra, 0..) |o, *e, i| {
-                if (o.schedule != std.math.maxInt(u16) and !o.isCfg()) root.panic("{} {}\n", .{ o, o.schedule });
-                o.schedule = @intCast(i);
-                e.* = .{ .priority = if (o.isCfg())
+            for (node.outputs(), extra, 0..) |instr, *e, i| {
+                if (instr.schedule != std.math.maxInt(u16) and !instr.isCfg())
+                    root.panic("{} {}\n", .{ instr, instr.schedule });
+                instr.schedule = @intCast(i);
+                e.* = .{ .priority = if (instr.isCfg())
                     0
-                else if (o.kind == .MachMove)
+                else if (instr.kind == .MachMove)
                     10
-                else if (o.subclass(graph.Arg)) |arg|
+                else if (instr.subclass(graph.Arg)) |arg|
                     @intCast(99 - arg.ext.index)
-                else if (o.kind == .Phi or o.kind == .Mem or o.kind == .Ret)
+                else if (instr.kind == .Phi or instr.kind == .Mem or instr.kind == .Ret)
                     100
-                else if (o.isStore())
+                else if (instr.isStore())
                     75
                 else
                     50 };
-                if (o.kind != .Phi) {
-                    for (o.inputs()[1..]) |j| if (j != null and !j.?.isCfg() and j.?.inputs()[0] == node) {
-                        e.unscheduled_deps += 1;
+                if (instr.kind != .Phi) {
+                    for (instr.inputs()[1..]) |def| if (def) |df| {
+                        if ((!df.isCfg() and df.inputs()[0] == node) or instr == df) {
+                            e.unscheduled_deps += 1;
+                        }
                     };
                 }
             }

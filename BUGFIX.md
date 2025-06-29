@@ -2,6 +2,21 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### loop if folding 1 (infinite)
+```hb
+expectations := .{
+    times_out: true,
+}
+
+main := fn(): uint {
+    loop {
+        n := 0
+        if false n = 1
+    }
+    return 0
+}
+```
+
 #### packed struct pass
 ```hb
 Broken := struct align(1) {
