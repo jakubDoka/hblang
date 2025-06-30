@@ -156,7 +156,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
                     const func = types.store.get(func_id);
 
                     if (func.recursion_lock) {
-                        types.report(func.key.file, func.key.ast, "the functions types most likely depend on it being evaluated", .{});
+                        types.report(func.key.loc.file, func.key.loc.ast, "the functions types most likely depend on it being evaluated", .{});
                         return .{ .Unsupported = curr };
                     }
 
@@ -583,11 +583,11 @@ pub fn evalIntConst(self: *Comptime, scope: Codegen.Scope, int_conts: Ast.Id) !i
 }
 
 pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(root.frontend.types.Global), ty: ?Types.Id, value: Ast.Id) !void {
-    const res, const fty = try self.jitExpr(name, .{ .Perm = self.getTypes().store.get(global).key.scope }, .{ .ty = ty }, value);
+    const res, const fty = try self.jitExpr(name, .{ .Perm = self.getTypes().store.get(global).key.loc.scope }, .{ .ty = ty }, value);
     const data = self.getTypes().pool.arena.allocator().alloc(u8, @intCast(fty.size(self.getTypes()))) catch unreachable;
     switch (res) {
         .func => |id| {
-            try self.runVm(self.getTypes().store.get(global).key.file, value, name, @intFromEnum(id), data);
+            try self.runVm(self.getTypes().store.get(global).key.loc.file, value, name, @intFromEnum(id), data);
         },
         .constant => |c| {
             @memcpy(data, @as(*const [@sizeOf(@TypeOf(c))]u8, @ptrCast(&c))[0..data.len]);

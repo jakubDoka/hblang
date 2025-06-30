@@ -72,6 +72,7 @@ pub const CompileOptions = struct {
     // specified multiple times as `--path-projection name path`, when the
     // `@use("name")` is encountered, its projected to `@use("path")` #CLI end
     optimizations: backend.Machine.OptOptions = .none,
+    // #CLI end
 
     pub fn loadCli(self: *CompileOptions, arena: std.mem.Allocator) !void {
         var args = try std.process.ArgIterator.initWithAllocator(arena);
@@ -183,7 +184,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
 } {
     if (opts.help) {
         const help_str = comptime b: {
-            @setEvalBranchQuota(4000);
+            @setEvalBranchQuota(2000);
             const source = @embedFile("root.zig");
             const start_pat = "// #CLI start";
             const end_pat = "// #CLI end";

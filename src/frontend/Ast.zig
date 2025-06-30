@@ -398,7 +398,7 @@ pub const Index = struct {
     pub fn search(self: Index, id: anytype) ?struct { Id, []Pos, Ident } {
         switch (@TypeOf(id)) {
             Ident => {
-                if (self.linear.len > 4096) {
+                if (self.linear.len > 1024) {
                     if (std.sort.binarySearch(u32, @ptrCast(self.linear.items(.id)), @intFromEnum(id), struct {
                         fn ord(a: u32, b: u32) std.math.Order {
                             return std.math.order(a, b);

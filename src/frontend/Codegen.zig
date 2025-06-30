@@ -139,7 +139,7 @@ pub const Scope = union(enum) {
         };
     }
 
-    pub fn index(self: Scope, types: *Types) ?Ast.Index {
+    pub fn index(self: Scope, types: *Types) ?*Ast.Index {
         return switch (self) {
             .Perm => |p| p.index(types),
             .Tmp => |t| t.parent_scope.index(types),
@@ -153,12 +153,12 @@ pub const Scope = union(enum) {
         };
     }
 
-    pub fn findCapture(self: Scope, ast: Ast.Pos, id: Ast.Ident, types: *Types) ?Types.Scope.Capture {
+    pub fn findCapture(self: Scope, ast: Ast.Pos, id: Ast.Ident, types: *Types, slot: *Types.Scope.Capture) ?*const Types.Scope.Capture {
         return switch (self) {
             .Perm => |p| p.findCapture(id, types),
             .Tmp => |t| for (t.scope.items, 0..) |se, i| {
                 if (se.name == id) {
-                    return switch (t.abiCata(se.ty)) {
+                    slot.* = switch (t.abiCata(se.ty)) {
                         .Impossible,
                         .Imaginary,
                         .ByValuePair,
@@ -179,6 +179,7 @@ pub const Scope = union(enum) {
                             break :b .{ .id = id, .ty = se.ty, .value = lit_value };
                         },
                     };
+                    return slot;
                 }
             } else null,
         };
@@ -374,8 +375,8 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
                     }
 
                     const func_data: *tys.Func = self.types.store.get(ty.data().Func);
-                    const ast = self.types.getFile(func_data.key.file);
-                    const func_ast = ast.exprs.get(func_data.key.ast).Fn;
+                    const ast = self.types.getFile(func_data.key.loc.file);
+                    const func_ast = ast.exprs.get(func_data.key.loc.ast).Fn;
 
                     if (self.types.handler_signatures.get(field)) |sig| {
                         if (sig.args.len != func_data.args.len) {
@@ -504,10 +505,10 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
 
     var func: *root.frontend.types.Func = self.types.store.get(func_id);
 
-    self.ast = self.types.getFile(func.key.file);
+    self.ast = self.types.getFile(func.key.loc.file);
     const ast = self.ast;
 
-    const fn_ast = ast.exprs.getTyped(.Fn, func.key.ast).?;
+    const fn_ast = ast.exprs.getTyped(.Fn, func.key.loc.ast).?;
 
     if (fn_ast.body.tag() == .Directive and ast.exprs.get(fn_ast.body).Directive.kind == .import) {
         if (self.abi.cc == .ablecall) {
@@ -538,10 +539,10 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
     self.parent_scope = .init(.{ .Func = func_id });
     self.name = "";
 
-    self.types.checkStack(func.key.file, func.key.ast) catch return error.HasErrors;
+    self.types.checkStack(func.key.loc.file, func.key.loc.ast) catch return error.HasErrors;
 
     if (func.recursion_lock) {
-        self.report(func.key.ast, "the functions types most likely" ++
+        self.report(func.key.loc.ast, "the functions types most likely" ++
             " depend on it being evaluated", .{}) catch {};
         return error.HasErrors;
     }
@@ -601,7 +602,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
 
     var termintes = false;
     func = self.types.store.get(func_id);
-    _ = self.emit(.{}, ast.exprs.getTyped(.Fn, func.key.ast).?.body) catch |err| switch (err) {
+    _ = self.emit(.{}, ast.exprs.getTyped(.Fn, func.key.loc.ast).?.body) catch |err| switch (err) {
         error.Never => {},
         error.Unreachable => termintes = true,
     };
@@ -1867,9 +1868,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
             if (e.comptime_args.len() != 0 or has_anytypes) {
                 const slot, const alloc = self.types.intern(.Template, .{
-                    .scope = self.parent_scope.perm(self.types),
-                    .file = self.parent_scope.file(self.types),
-                    .ast = expr,
+                    .loc = .{
+                        .scope = self.parent_scope.perm(self.types),
+                        .file = self.parent_scope.file(self.types),
+                        .ast = expr,
+                    },
                     .name = self.name,
                     .captures = captures,
                 });
@@ -1880,9 +1883,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 return self.emitTyConst(slot.key_ptr.*);
             } else {
                 const slot, const alloc = self.types.intern(.Func, .{
-                    .scope = self.parent_scope.perm(self.types),
-                    .file = self.parent_scope.file(self.types),
-                    .ast = expr,
+                    .loc = .{
+                        .scope = self.parent_scope.perm(self.types),
+                        .file = self.parent_scope.file(self.types),
+                        .ast = expr,
+                    },
                     .name = self.name,
                     .captures = captures,
                 });
@@ -1913,9 +1918,11 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             .embed => {
                 const file = self.types.getFile(e.file);
                 const slot, const alloc = self.types.intern(.Global, .{
-                    .scope = .void,
-                    .file = e.file,
-                    .ast = .zeroSized(.Void),
+                    .loc = .{
+                        .scope = .void,
+                        .file = e.file,
+                        .ast = .zeroSized(.Void),
+                    },
                     .name = file.path,
                     .captures = &.{},
                 });
@@ -2492,9 +2499,10 @@ pub fn loadIdent(self: *Codegen, expr: Ast.Pos, id: Ast.Ident) !Value {
         var cursor = self.parent_scope;
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
+        var slot: Types.Scope.Capture = undefined;
         const decl, const path, _ = while (!cursor.empty()) {
             if (cursor.index(self.types)) |idx| if (idx.search(id)) |v| break v;
-            if (cursor.findCapture(expr, id, self.types)) |c| {
+            if (cursor.findCapture(expr, id, self.types, &slot)) |c| {
                 return .{ .ty = c.ty, .id = switch (self.abiCata(c.ty)) {
                     .Impossible => return error.Unreachable,
                     .Imaginary => .Imaginary,
@@ -2661,11 +2669,11 @@ pub fn instantiateTemplate(
 
     const scope = self.types.store.add(self.types.pool.allocator(), tmpl);
     self.types.store.get(scope).temporary = true;
-    self.types.store.get(scope).key.scope = typ;
+    self.types.store.get(scope).key.loc.scope = typ;
     self.types.store.get(scope).key.captures = &.{};
 
-    const tmpl_file = self.types.getFile(tmpl.key.file);
-    const tmpl_ast = tmpl_file.exprs.getTyped(.Fn, tmpl.key.ast).?;
+    const tmpl_file = self.types.getFile(tmpl.key.loc.file);
+    const tmpl_ast = tmpl_file.exprs.getTyped(.Fn, tmpl.key.loc.ast).?;
     const comptime_args = tmpl_file.exprs.view(tmpl_ast.comptime_args);
 
     const passed_args = e.args.len() + @intFromBool(caller.* != null);
@@ -2745,9 +2753,11 @@ pub fn instantiateTemplate(
     const ret = try self.types.ct.evalTy("", template_scope, tmpl_ast.ret);
 
     const slot, const alloc = self.types.intern(.Func, .{
-        .scope = typ,
-        .file = tmpl.key.file,
-        .ast = tmpl.key.ast,
+        .loc = .{
+            .scope = typ,
+            .file = tmpl.key.loc.file,
+            .ast = tmpl.key.loc.ast,
+        },
         .name = "-",
         .captures = captures[0..capture_idx],
     });

@@ -2,6 +2,21 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### duplicate identifier 1
+```hb
+expectations := .{
+    should_error: true,
+}
+
+main := fn(): uint return erm
+
+X := struct {
+    erm := 0
+}
+
+erm := 0
+```
+
 #### importing global 1
 ```hb
 foo.{global} := @use("global2.hb")

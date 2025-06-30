@@ -136,8 +136,8 @@ pub const Enum = struct {
             const self = types.store.get(id);
 
             if (self.fields) |f| return f;
-            const ast = types.getFile(self.key.file);
-            const enum_ast = ast.exprs.getTyped(.Enum, self.key.ast).?;
+            const ast = types.getFile(self.key.loc.file);
+            const enum_ast = ast.exprs.getTyped(.Enum, self.key.loc.ast).?;
 
             var count: usize = 0;
             for (ast.exprs.view(enum_ast.fields)) |f| count += @intFromBool(f.tag() == .Tag);
@@ -148,7 +148,7 @@ pub const Enum = struct {
                 if (fast.tag() == .Comment) continue;
                 if (fast.tag() != .Tag) {
                     if (fast.tag() != .Decl) {
-                        types.report(self.key.file, fast, "unexpected item," ++
+                        types.report(self.key.loc.file, fast, "unexpected item," ++
                             " only field declarations (.variant_name)," ++
                             " and declarations (decl_name := expr)", .{});
                     }
@@ -183,8 +183,8 @@ pub const Union = struct {
             const self: *Union = types.store.get(id);
 
             if (self.fields) |f| return f;
-            const ast = types.getFile(self.key.file);
-            const union_ast = ast.exprs.getTyped(.Union, self.key.ast).?;
+            const ast = types.getFile(self.key.loc.file);
+            const union_ast = ast.exprs.getTyped(.Union, self.key.loc.ast).?;
 
             var count: usize = 0;
             for (ast.exprs.view(union_ast.fields)) |f| count +=
@@ -195,7 +195,7 @@ pub const Union = struct {
             for (ast.exprs.view(union_ast.fields)) |fast| {
                 if (fast.tag() == .Comment) continue;
                 const field = ast.exprs.getTyped(.Decl, fast) orelse {
-                    types.report(self.key.file, fast, "unexpected item," ++
+                    types.report(self.key.loc.file, fast, "unexpected item," ++
                         " only field declarations (.field_name: field_type)," ++
                         " and declarations (decl_name := expr)", .{});
                     continue;
@@ -242,7 +242,7 @@ pub const Struct = struct {
             const max_alignment = getAlignment(id, types);
 
             if (self.recursion_lock) {
-                types.report(self.key.file, self.key.ast, "the struct has infinite size", .{});
+                types.report(self.key.loc.file, self.key.loc.ast, "the struct has infinite size", .{});
                 return 0;
             }
             self.recursion_lock = true;
@@ -268,21 +268,21 @@ pub const Struct = struct {
             if (self.alignment) |a| return a;
 
             if (self.recursion_lock) {
-                types.report(self.key.file, self.key.ast, "the struct has undecidable alignment (cycle)", .{});
+                types.report(self.key.loc.file, self.key.loc.ast, "the struct has undecidable alignment (cycle)", .{});
                 return 1;
             }
             self.recursion_lock = true;
             defer self.recursion_lock = false;
 
-            const ast = types.getFile(self.key.file);
-            const struct_ast = ast.exprs.getTyped(.Struct, self.key.ast).?;
+            const ast = types.getFile(self.key.loc.file);
+            const struct_ast = ast.exprs.getTyped(.Struct, self.key.loc.ast).?;
 
             if (struct_ast.alignment.tag() != .Void) {
                 if (@hasField(Field, "alignment")) @compileError("assert fields <= alignment then base alignment");
                 self.alignment = @bitCast(types.ct.evalIntConst(.{ .Perm = .init(.{ .Struct = id }) }, struct_ast.alignment) catch 1);
                 if (self.alignment == 0 or !std.math.isPowerOfTwo(self.alignment.?)) {
                     self = types.store.get(id);
-                    types.report(self.key.file, struct_ast.alignment, "the alignment needs to be power of 2, got {}", .{self.alignment.?});
+                    types.report(self.key.loc.file, struct_ast.alignment, "the alignment needs to be power of 2, got {}", .{self.alignment.?});
                     self.alignment = 1;
                     return 1;
                 }
@@ -325,8 +325,8 @@ pub const Struct = struct {
             const self = types.store.get(id);
 
             if (self.fields) |f| return f;
-            const ast = types.getFile(self.key.file);
-            const struct_ast = ast.exprs.getTyped(.Struct, self.key.ast).?;
+            const ast = types.getFile(self.key.loc.file);
+            const struct_ast = ast.exprs.getTyped(.Struct, self.key.loc.ast).?;
 
             var count: usize = 0;
             for (ast.exprs.view(struct_ast.fields)) |f| count += @intFromBool(if (ast.exprs.getTyped(.Decl, f)) |b| b.bindings.tag() == .Tag else false);
@@ -336,7 +336,7 @@ pub const Struct = struct {
             for (ast.exprs.view(struct_ast.fields)) |fast| {
                 if (fast.tag() == .Comment) continue;
                 const field = ast.exprs.getTyped(.Decl, fast) orelse {
-                    types.report(self.key.file, fast, "unexpected item," ++
+                    types.report(self.key.loc.file, fast, "unexpected item," ++
                         " only field declarations (.field_name: field_type [= default_value])," ++
                         " and declarations (decl_name := expr)", .{});
                     continue;
@@ -348,10 +348,12 @@ pub const Struct = struct {
                 if (field.value.tag() != .Void) {
                     const value = types.store.add(types.pool.allocator(), Global{
                         .key = .{
-                            .file = self.key.file,
+                            .loc = .{
+                                .file = self.key.loc.file,
+                                .scope = .init(.{ .Struct = id }),
+                                .ast = field.value,
+                            },
                             .name = name,
-                            .scope = .init(.{ .Struct = id }),
-                            .ast = field.value,
                             .captures = &.{},
                         },
                         .readonly = true,

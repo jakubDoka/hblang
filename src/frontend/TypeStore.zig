@@ -49,9 +49,12 @@ pub const Handlers = struct {
 };
 
 pub const Scope = struct {
-    file: Types.File,
-    scope: Id,
-    ast: Ast.Id,
+    loc: struct {
+        file: Types.File,
+        scope: Id,
+        ast: Ast.Id,
+        unused: u32 = 0,
+    },
     name: []const u8,
     captures: []const Capture,
 
@@ -59,22 +62,27 @@ pub const Scope = struct {
         id: Ast.Ident,
         ty: Id,
         value: u64 = 0,
+
+        comptime {
+            std.debug.assert(@sizeOf(@This()) == 16);
+        }
     };
 
     pub const dummy = Scope{
-        .file = .root,
-        .scope = .void,
-        .ast = .zeroSized(.Void),
+        .loc = .{
+            .file = .root,
+            .scope = .void,
+            .ast = .zeroSized(.Void),
+        },
         .name = "",
         .captures = &.{},
     };
 
     pub fn eql(self: Scope, other: Scope) bool {
-        return self.file == other.file and self.scope == other.scope and self.ast == other.ast and
-            self.captures.len == other.captures.len and
-            for (self.captures, other.captures) |a, b| {
-                if (!std.meta.eql(a, b)) return false;
-            } else true;
+        return self.loc.file == other.loc.file and
+            self.loc.scope == other.loc.scope and
+            self.loc.ast == other.loc.ast and
+            std.mem.eql(u64, @ptrCast(self.captures), @ptrCast(other.captures));
     }
 };
 
@@ -100,11 +108,25 @@ pub const TypeCtx = struct {
         const adk = adapted_key.data();
         std.hash.autoHash(&hasher, std.meta.activeTag(adk));
         switch (adk) {
-            .Builtin => |bl| std.hash.autoHash(&hasher, bl),
+            .Builtin => unreachable,
             inline .Pointer, .Slice => |s| std.hash.autoHash(&hasher, self.types.store.get(s).*),
             .Nullable => |n| std.hash.autoHash(&hasher, self.types.store.get(n).inner),
-            .Tuple => |n| std.hash.autoHashStrat(&hasher, self.types.store.get(n).fields, .Deep),
-            inline .Enum, .Union, .Struct, .Func, .Template, .Global => |v| std.hash.autoHashStrat(&hasher, self.types.store.get(v).key, .Deep),
+            // its an array of integers, splat
+            .Tuple => |n| hasher.update(@ptrCast(self.types.store.get(n).fields)),
+            .Enum, .Union, .Struct, .Func, .Template, .Global => {
+                const scope = switch (adk) {
+                    inline .Enum, .Union, .Struct, .Func, .Template, .Global => |v| &self.types.store.get(v).key,
+                    else => unreachable,
+                };
+
+                // we can safely hash the prefix as it contains
+                // only integers
+                hasher.update(std.mem.asBytes(&scope.loc));
+
+                // we skip the name and also splat the captures since they
+                // have no padding bites
+                hasher.update(@ptrCast(scope.captures));
+            },
         }
         return hasher.final();
     }
@@ -207,7 +229,7 @@ pub const Id = enum(IdRepr) {
 
     pub fn perm(self: Id, types: *Types) Id {
         switch (self.data()) {
-            .Template => |t| if (types.store.get(t).temporary) return types.store.get(t).key.scope,
+            .Template => |t| if (types.store.get(t).temporary) return types.store.get(t).key.loc.scope,
             else => {},
         }
 
@@ -221,7 +243,7 @@ pub const Id = enum(IdRepr) {
     pub fn firstType(self: Id, types: *Types) Id {
         return switch (self.data()) {
             .Struct, .Union, .Enum => self,
-            inline .Func, .Template, .Global => |t| types.store.get(t).key.scope.firstType(types),
+            inline .Func, .Template, .Global => |t| types.store.get(t).key.loc.scope.firstType(types),
             .Builtin, .Tuple, .Pointer, .Nullable, .Slice => unreachable,
         };
     }
@@ -229,13 +251,13 @@ pub const Id = enum(IdRepr) {
     pub fn file(self: Id, types: *Types) ?File {
         return switch (self.data()) {
             .Builtin, .Pointer, .Slice, .Nullable, .Tuple => null,
-            inline else => |v| types.store.get(v).key.file,
+            inline else => |v| types.store.get(v).key.loc.file,
         };
     }
 
-    pub fn index(self: Id, types: *Types) ?Ast.Index {
+    pub fn index(self: Id, types: *Types) ?*Ast.Index {
         return switch (self.data()) {
-            inline .Struct, .Union, .Enum => |v| types.store.get(v).index,
+            inline .Struct, .Union, .Enum => |v| &types.store.get(v).index,
             else => null,
         };
     }
@@ -244,7 +266,7 @@ pub const Id = enum(IdRepr) {
         return switch (self.data()) {
             .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
             .Template, .Func => .{},
-            inline else => |v, t| ast.exprs.getTyped(@field(std.meta.Tag(Ast.Expr), @tagName(t)), types.store.get(v).key.ast).?.fields,
+            inline else => |v, t| ast.exprs.getTyped(@field(std.meta.Tag(Ast.Expr), @tagName(t)), types.store.get(v).key.loc.ast).?.fields,
         };
     }
 
@@ -255,10 +277,10 @@ pub const Id = enum(IdRepr) {
         };
     }
 
-    pub fn findCapture(self: Id, id: Ast.Ident, types: *Types) ?Scope.Capture {
+    pub fn findCapture(self: Id, id: Ast.Ident, types: *Types) ?*const Scope.Capture {
         return switch (self.data()) {
             .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
-            inline else => |v| for (types.store.get(v).key.captures) |cp| {
+            inline else => |v| for (types.store.get(v).key.captures) |*cp| {
                 if (cp.id == id) break cp;
             } else null,
         };
@@ -267,7 +289,7 @@ pub const Id = enum(IdRepr) {
     pub fn parent(self: Id, types: *Types) Id {
         return switch (self.data()) {
             .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
-            inline else => |v| types.store.get(v).key.scope,
+            inline else => |v| types.store.get(v).key.loc.scope,
         };
     }
 
@@ -466,16 +488,16 @@ pub const Id = enum(IdRepr) {
                         inline .Func, .Global, .Template, .Struct, .Union, .Enum => |v| self.tys.store.get(v).key,
                         else => unreachable,
                     };
-                    if (key.scope != .void) {
-                        try writer.print("{}", .{key.scope.fmt(self.tys)});
+                    if (key.loc.scope != .void) {
+                        try writer.print("{}", .{key.loc.scope.fmt(self.tys)});
                     }
                     if (key.name.len != 0 and (key.name.len != 1 or key.name[0] != '-')) {
                         const testing = comptime !std.mem.eql(u8, opts, "test") or true;
-                        if (key.scope != .void and
-                            (key.scope.data() != .Struct or
-                                self.tys.store.get(key.scope.data().Struct).key.scope != .void or
+                        if (key.loc.scope != .void and
+                            (key.loc.scope.data() != .Struct or
+                                self.tys.store.get(key.loc.scope.data().Struct).key.loc.scope != .void or
                                 testing)) try writer.writeAll(".");
-                        if (key.scope != .void) {
+                        if (key.loc.scope != .void) {
                             try writer.writeAll(key.name);
                         } else {
                             if (testing) {
@@ -486,7 +508,7 @@ pub const Id = enum(IdRepr) {
                     if (key.captures.len != 0) {
                         var written_paren = false;
                         o: for (key.captures) |capture| {
-                            var cursor = key.scope;
+                            var cursor = key.loc.scope;
                             while (cursor != .void and cursor.data() != .Pointer and cursor.data() != .Builtin) {
                                 if (cursor.findCapture(capture.id, self.tys) != null) continue :o;
                                 cursor = cursor.parent(self.tys);
@@ -501,7 +523,7 @@ pub const Id = enum(IdRepr) {
                             const op = if (capture.ty == .type) " =" else ":";
                             try writer.print(
                                 "{s}{s} {}",
-                                .{ self.tys.getFile(key.file).tokenSrc(capture.id.pos()), op, finty.fmt(self.tys) },
+                                .{ self.tys.getFile(key.loc.file).tokenSrc(capture.id.pos()), op, finty.fmt(self.tys) },
                             );
                         }
                         if (written_paren) try writer.writeAll(")");
@@ -587,10 +609,12 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: std.io.AnyWriter) *
     slot.string = slot.makeSlice(null, .u8);
     slot.source_loc = .init(.{ .Struct = slot.store.add(slot.pool.allocator(), tys.Struct{
         .key = .{
+            .loc = .{
+                .file = .root,
+                .scope = slot.getScope(.root),
+                .ast = .zeroSized(.Void),
+            },
             .name = "SrcLoc",
-            .file = .root,
-            .scope = slot.getScope(.root),
-            .ast = .zeroSized(.Void),
             .captures = &.{},
         },
         .index = .empty,
@@ -726,9 +750,11 @@ pub fn resolveFielded(
     captures: []const Scope.Capture,
 ) Id {
     const slot, const alloc = self.intern(tag, .{
-        .scope = scope,
-        .file = file,
-        .ast = ast,
+        .loc = .{
+            .scope = scope,
+            .file = file,
+            .ast = ast,
+        },
         .name = name,
         .captures = captures,
     });
@@ -776,9 +802,11 @@ pub fn resolveGlobal(
     readonly: bool,
 ) struct { Id, bool } {
     const slot, const alloc = self.intern(.Global, .{
-        .scope = scope,
-        .file = scope.file(self).?,
-        .ast = ast,
+        .loc = .{
+            .scope = scope,
+            .file = scope.file(self).?,
+            .ast = ast,
+        },
         .name = name,
         .captures = &.{},
     });

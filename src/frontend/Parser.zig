@@ -31,6 +31,7 @@ list_pos: Ast.Pos = undefined,
 deferring: bool = false,
 errored: bool = false,
 func_stats: FuncStats = .{},
+scope_depth: u8 = 0,
 
 const Hasher = struct {
     syms: []const Sym,
@@ -57,16 +58,13 @@ const FuncStats = struct {
     variable_count: u16 = 0,
 };
 
-const SymEntry = struct {
-    sym: Sym,
-};
-
 const Sym = struct {
     name: []const u8,
     id: Ident,
     declared: bool = false,
     unordered: bool = true,
     used: bool = false,
+    shadows: ?u31 = null,
 };
 
 pub const Loader = struct {
@@ -210,12 +208,35 @@ fn declareExpr(self: *Parser, id: Id, unordered: bool) void {
         },
         else => return,
     };
-    var iter = std.mem.reverseIterator(self.active_syms.items);
-    const sym = while (iter.nextPtr()) |s| {
+
+    // stuff beyond capture boundary can not be declared here
+    const search_scpace = self.active_syms.items[self.capture_boundary..];
+    var iter = std.mem.reverseIterator(search_scpace);
+    const sym: *Sym = while (iter.nextPtr()) |s| {
         if (s.id == ident.id) break s;
-    } else unreachable;
+    } else if (unordered) {
+        // shadow
+
+        const repr = Lexer.peekStr(self.lexer.source, ident.pos.index);
+        const slot = self.active_sym_table.getEntryAdapted(
+            repr,
+            InsertCtx{ .syms = self.active_syms.items },
+        ).?;
+
+        var sym = self.active_syms.items[slot.key_ptr.*];
+        sym.shadows = @intCast(slot.key_ptr.*);
+        sym.declared = true;
+        self.active_syms.append(self.arena.allocator(), sym) catch unreachable;
+
+        return;
+    } else {
+        self.report(ident.pos.index, "out of order declaration in ordered scope", .{});
+        return;
+    };
+
     if (sym.declared and !self.loader.isNoop()) {
         self.report(ident.pos.index, "redeclaration of identifier", .{});
+        self.report(sym.id.pos(), "...first declaration here", .{});
     } else if (!unordered and ident.pos.index > ident.id.pos()) {
         self.report(ident.pos.index, "out of order declaration in ordered scope", .{});
     } else if (!unordered and sym.used) {
@@ -683,13 +704,10 @@ fn finalizeVariablesLow(self: *Parser, start: usize) usize {
     for (self.active_syms.items[start..], start..) |s, j| {
         if (!s.declared) {
             if (new_len != j) {
-                std.debug.assert(self.active_sym_table.removeContext(@intCast(j), .{
+                self.active_sym_table.getEntryContext(@intCast(j), .{
                     .syms = self.active_syms.items,
-                }));
+                }).?.key_ptr.* = @intCast(new_len);
                 self.active_syms.items[new_len] = s;
-                self.active_sym_table.putAssumeCapacityNoClobberContext(@intCast(new_len), {}, .{
-                    .syms = self.active_syms.items,
-                });
             }
             new_len += 1;
         } else {
@@ -698,9 +716,15 @@ fn finalizeVariablesLow(self: *Parser, start: usize) usize {
             } else null) |idx| {
                 _ = self.captures.swapRemove(idx);
             }
-            std.debug.assert(self.active_sym_table.removeContext(@intCast(j), .{
-                .syms = self.active_syms.items,
-            }));
+            if (s.shadows) |shadows| {
+                self.active_sym_table.getEntryContext(@intCast(j), .{
+                    .syms = self.active_syms.items,
+                }).?.key_ptr.* = shadows;
+            } else {
+                std.debug.assert(self.active_sym_table.removeContext(@intCast(j), .{
+                    .syms = self.active_syms.items,
+                }));
+            }
         }
     }
     if (new_len != 0) self.func_stats.variable_count -|=
@@ -712,32 +736,37 @@ fn finalizeVariables(self: *Parser, start: usize) void {
     self.active_syms.items.len = self.finalizeVariablesLow(start);
 }
 
+const InsertCtx = struct {
+    syms: []const Sym,
+
+    pub fn hash(_: @This(), vl: []const u8) u64 {
+        return std.hash.Fnv1a_64.hash(vl);
+    }
+
+    pub fn eql(h: @This(), a: []const u8, b: u32) bool {
+        return std.mem.eql(u8, a, h.syms[b].name);
+    }
+};
+
 fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
     var repr = token.view(self.lexer.source);
     if (token.kind == .@"$") repr = repr[1..];
 
-    const slot = self.active_sym_table.getOrPutContextAdapted(self.arena.allocator(), repr, struct {
-        syms: []const Sym,
-
-        pub fn hash(_: @This(), vl: []const u8) u64 {
-            return std.hash.Fnv1a_64.hash(vl);
-        }
-
-        pub fn eql(h: @This(), a: []const u8, b: u32) bool {
-            return std.mem.eql(u8, a, h.syms[b].name);
-        }
-    }{
-        .syms = self.active_syms.items,
-    }, .{
-        .syms = self.active_syms.items,
-    }) catch unreachable;
+    const slot = self.active_sym_table.getOrPutContextAdapted(
+        self.arena.allocator(),
+        repr,
+        InsertCtx{ .syms = self.active_syms.items },
+        .{ .syms = self.active_syms.items },
+    ) catch unreachable;
     if (slot.found_existing) {
         const i = slot.key_ptr.*;
         const s = &self.active_syms.items[i];
         s.used = true;
+
         if (i < self.capture_boundary and !s.unordered) {
             try self.captures.append(self.arena.allocator(), .{ .id = s.id, .pos = .init(token.pos) });
         }
+
         return try self.store.alloc(self.arena.allocator(), .Ident, .{
             .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind == .@"$" } },
             .id = s.id,
