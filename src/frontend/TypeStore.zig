@@ -542,6 +542,15 @@ pub const Id = enum(IdRepr) {
 
 pub const Target = enum { @"comptime", runtime };
 
+pub fn getBuiltins(self: *Types) Machine.EmitOptions.Builtins {
+    return .{
+        .memcpy = if (self.handlers.builtin_memcpy) |m|
+            @intFromEnum(m)
+        else
+            std.math.maxInt(u32),
+    };
+}
+
 pub fn retainGlobals(self: *Types, target: Target, backend: anytype, scratch: ?std.mem.Allocator) bool {
     errdefer unreachable;
 

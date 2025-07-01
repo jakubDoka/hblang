@@ -306,6 +306,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         const out = bckend.finalizeBytes(.{
             .gpa = types.pool.arena.allocator(),
             .optimizations = optimizations,
+            .builtins = types.getBuiltins(),
         });
 
         if (types.dumpAnalErrors(&anal_errors)) {
@@ -328,6 +329,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         const out = bckend.finalizeBytes(.{
             .gpa = types.pool.arena.allocator(),
             .optimizations = optimizations,
+            .builtins = types.getBuiltins(),
         });
 
         if (types.dumpAnalErrors(&anal_errors)) {
@@ -363,6 +365,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         bckend.finalize(.{
             .output = opts.output,
             .optimizations = optimizations,
+            .builtins = types.getBuiltins(),
         });
 
         if (types.dumpAnalErrors(&anal_errors)) {
@@ -375,6 +378,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         bckend.finalize(.{
             .output = std.io.null_writer.any(),
             .optimizations = optimizations,
+            .builtins = types.getBuiltins(),
         });
 
         if (types.dumpAnalErrors(&anal_errors)) {

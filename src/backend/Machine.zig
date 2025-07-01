@@ -997,7 +997,7 @@ pub const OptOptions = struct {
         }
     }
 
-    pub fn finalize(optimizations: @This(), comptime Backend: type, backend: *Backend) bool {
+    pub fn finalize(optimizations: @This(), builtins: EmitOptions.Builtins, comptime Backend: type, backend: *Backend) bool {
         errdefer unreachable;
 
         if (optimizations.do_inlining) {
@@ -1077,6 +1077,7 @@ pub const OptOptions = struct {
                                 op.verbose = optimizations.verbose;
                                 break :b op;
                             },
+                            .builtins = builtins,
                         });
                         arena = func.arena;
                     },
@@ -1126,7 +1127,7 @@ pub const EmitOptions = struct {
     linkage: Data.Linkage,
     optimizations: OptOptions = .all,
     special: ?Special = null,
-    builtins: Builtins = .{},
+    builtins: Builtins,
 
     pub const Builtins = struct {
         memcpy: u32 = std.math.maxInt(u32),
@@ -1147,11 +1148,13 @@ pub const DisasmOpts = struct {
 pub const FinalizeOptions = struct {
     output: std.io.AnyWriter,
     optimizations: OptOptions = .all,
+    builtins: EmitOptions.Builtins,
 };
 
 pub const FinalizeBytesOptions = struct {
     gpa: std.mem.Allocator,
     optimizations: OptOptions = .all,
+    builtins: EmitOptions.Builtins,
 };
 
 pub fn init(name: []const u8, data: anytype) Machine {
@@ -1220,6 +1223,7 @@ pub fn finalizeBytes(self: Machine, opts: FinalizeBytesOptions) std.ArrayListUnm
     self.finalize(.{
         .output = out.writer(opts.gpa).any(),
         .optimizations = opts.optimizations,
+        .builtins = opts.builtins,
     });
     return out;
 }

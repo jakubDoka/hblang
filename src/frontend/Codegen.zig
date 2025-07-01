@@ -290,12 +290,7 @@ pub fn emitReachable(
             .linkage = func_data.visibility,
             .special = func_data.special,
             .optimizations = opts,
-            .builtins = .{
-                .memcpy = if (types.handlers.builtin_memcpy) |m|
-                    @intFromEnum(m)
-                else
-                    std.math.maxInt(u32),
-            },
+            .builtins = types.getBuiltins(),
         });
 
         errored = types.dumpAnalErrors(&errors) or errored;

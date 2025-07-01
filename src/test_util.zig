@@ -209,6 +209,7 @@ pub fn testBuilder(
     var out = gen.finalizeBytes(.{
         .gpa = gpa,
         .optimizations = optimizations,
+        .builtins = types.getBuiltins(),
     });
     defer out.deinit(gpa);
 

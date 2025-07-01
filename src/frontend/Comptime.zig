@@ -514,6 +514,7 @@ pub fn jitExprLow(
                     .linkage = .exported,
                     .is_inline = false,
                     .optimizations = opts,
+                    .builtins = .{},
                 },
             );
         }
@@ -548,6 +549,7 @@ pub fn compileDependencies(self: *Codegen, reloc_after: usize, pop_until: usize)
                 .linkage = .local,
                 .is_inline = false,
                 .optimizations = opts,
+                .builtins = .{},
             },
         );
     }

@@ -335,7 +335,7 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
 pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {
     errdefer unreachable;
 
-    if (opts.optimizations.finalize(HbvmGen, self)) return;
+    if (opts.optimizations.finalize(opts.builtins, HbvmGen, self)) return;
 
     try root.hbvm.object.flush(self.out, opts.output);
 
