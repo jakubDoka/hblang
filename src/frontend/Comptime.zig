@@ -504,7 +504,8 @@ pub fn jitExprLow(
         gen.bl.end(token);
 
         if (!only_inference) {
-            self.getTypes().retainGlobals(.@"comptime", &self.gen, null);
+            gen.errored = self.getTypes().retainGlobals(.@"comptime", &self.gen, null) or
+                gen.errored;
 
             self.gen.emitFunc(
                 @ptrCast(&gen.bl.func),
@@ -537,7 +538,8 @@ pub fn compileDependencies(self: *Codegen, reloc_after: usize, pop_until: usize)
 
         try self.build(func);
 
-        self.types.retainGlobals(self.target, &self.types.ct.gen, null);
+        self.errored = self.types.retainGlobals(self.target, &self.types.ct.gen, null) or
+            self.errored;
 
         self.types.ct.gen.emitFunc(
             @ptrCast(&self.bl.func),

@@ -542,8 +542,10 @@ pub const Id = enum(IdRepr) {
 
 pub const Target = enum { @"comptime", runtime };
 
-pub fn retainGlobals(self: *Types, target: Target, backend: anytype, scratch: ?std.mem.Allocator) void {
+pub fn retainGlobals(self: *Types, target: Target, backend: anytype, scratch: ?std.mem.Allocator) bool {
     errdefer unreachable;
+
+    var errored = false;
 
     const work_list = self.global_work_list.getPtr(target);
     while (work_list.pop()) |global| {
@@ -555,8 +557,17 @@ pub fn retainGlobals(self: *Types, target: Target, backend: anytype, scratch: ?s
         glob.completion.getPtr(target).* = .compiled;
 
         var relocs = std.ArrayListUnmanaged(Machine.DataOptions.Reloc){};
-        if (target == .runtime)
-            self.findNestedGlobals(&relocs, glob, scrath.arena, glob.ty, 0);
+        if (target == .runtime) {
+            self.findNestedGlobals(&relocs, glob, scrath.arena, glob.ty, 0) catch |err| {
+                errored = true;
+                self.report(
+                    glob.key.loc.file,
+                    glob.key.loc.ast,
+                    "global is corrupted: contains a pointer {}",
+                    .{@errorName(err)},
+                );
+            };
+        }
 
         backend.emitData(.{
             .id = @intFromEnum(global),
@@ -567,6 +578,8 @@ pub fn retainGlobals(self: *Types, target: Target, backend: anytype, scratch: ?s
             .readonly = glob.readonly,
         });
     }
+
+    return errored;
 }
 
 pub fn findNestedGlobals(
@@ -576,9 +589,7 @@ pub fn findNestedGlobals(
     scratch: *utils.Arena,
     ty: Id,
     offset: usize,
-) void {
-    errdefer unreachable;
-
+) !void {
     switch (ty.data()) {
         .Union, .Enum, .Builtin => {},
         .Pointer => |p| {
@@ -590,10 +601,10 @@ pub fn findNestedGlobals(
             const cap = base.size(self);
             if (cap == 0) return;
 
-            try relocs.append(scratch.allocator(), .{
+            relocs.append(scratch.allocator(), .{
                 .offset = @intCast(offset),
-                .target = self.findSymForPtr(ptr, cap).?, // TODO: error
-            });
+                .target = try self.findSymForPtr(ptr, cap), // TODO: error
+            }) catch unreachable;
         },
         .Slice => |s| {
             const slc: *tys.Slice = self.store.get(s);
@@ -601,7 +612,13 @@ pub fn findNestedGlobals(
             if (slc.len) |len| {
                 const elem_size = slc.elem.size(self);
                 for (0..len) |idx| {
-                    self.findNestedGlobals(relocs, global, scratch, slc.elem, offset + idx * elem_size);
+                    try self.findNestedGlobals(
+                        relocs,
+                        global,
+                        scratch,
+                        slc.elem,
+                        offset + idx * elem_size,
+                    );
                 }
             } else {
                 const ptr_big: u64 = @bitCast(global.data[offset + tys.Slice.ptr_offset ..][0..8].*);
@@ -612,16 +629,16 @@ pub fn findNestedGlobals(
                 const cap = len * slc.elem.size(self);
                 if (cap == 0) return;
 
-                try relocs.append(scratch.allocator(), .{
+                relocs.append(scratch.allocator(), .{
                     .offset = @intCast(offset + tys.Slice.ptr_offset),
-                    .target = self.findSymForPtr(ptr, cap).?, // TODO: error
-                });
+                    .target = try self.findSymForPtr(ptr, cap), // TODO: error
+                }) catch unreachable;
             }
         },
         inline .Struct, .Tuple => |t| {
             var fields_iter = t.offsetIter(self);
             while (fields_iter.next()) |elem| {
-                self.findNestedGlobals(relocs, global, scratch, elem.field.ty, elem.offset);
+                try self.findNestedGlobals(relocs, global, scratch, elem.field.ty, elem.offset);
             }
         },
         .Nullable => |n| {
@@ -645,7 +662,7 @@ pub fn findNestedGlobals(
             if (!is_present) return;
 
             const next_offset = if (nieche != null) data.inner.alignment(self) else 0;
-            self.findNestedGlobals(relocs, global, scratch, data.inner, offset + next_offset);
+            try self.findNestedGlobals(relocs, global, scratch, data.inner, offset + next_offset);
         },
         .Global, .Func, .Template => unreachable,
     }
@@ -655,18 +672,27 @@ pub fn findSymForPtr(
     self: *Types,
     ptr: usize,
     cap: usize,
-) ?u32 {
-    errdefer unreachable;
-
+) !u32 {
     const data = &self.ct.gen.out;
 
-    // TODO: do error reporting when this is corrupted
+    if (ptr < Comptime.stack_size)
+        return error.@"to comptime stack";
+
+    if (ptr > data.code.items.len)
+        return error.@"exceeding code section";
+
     const id: utils.EntId(tys.Global) =
         @enumFromInt(@as(u32, @bitCast(data.code.items[ptr - 4 ..][0..4].*)));
+
+    if (!self.store.isValid(.Global, @intFromEnum(id)))
+        return error.@"to something thats not a global";
+
     self.queue(.runtime, .init(.{ .Global = id }));
     const sym = &data.syms.items[@intFromEnum(data.globals.items[@intFromEnum(id)])];
-    std.debug.assert(sym.size == self.store.get(id).data.len);
-    std.debug.assert(sym.size == cap);
+
+    if (sym.size != cap)
+        return error.@"to a global with different size";
+
     return @intFromEnum(id);
 }
 

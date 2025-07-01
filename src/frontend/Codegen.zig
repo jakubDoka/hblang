@@ -254,7 +254,8 @@ pub fn emitReachable(
 
         const err = codegen.build(func);
 
-        types.retainGlobals(.runtime, backend, scrath.allocator());
+        errored = types.retainGlobals(.runtime, backend, scrath.allocator()) or
+            errored;
 
         err catch |e| switch (e) {
             error.HasErrors => {
@@ -568,22 +569,23 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
         func = self.types.store.get(func_id);
         const ty = func.args[ty_idx];
         const abi = self.abiCata(ty);
+        const arg_sloc = self.src(aarg);
 
         var len: usize = 1;
         const arg = switch (abi) {
             .Impossible => unreachable,
-            .ByRef => self.bl.addParam(self.src(aarg), i),
+            .ByRef => self.bl.addParam(arg_sloc, i),
             .BySse, .ByValue => if (params[i] == .Stack)
-                self.bl.addParam(self.src(aarg), i)
+                self.bl.addParam(arg_sloc, i)
             else
-                self.bl.addSpill(self.src(aarg), self.bl.addParam(self.src(aarg), i)),
+                self.bl.addSpill(arg_sloc, self.bl.addParam(arg_sloc, i)),
             .ByValuePair => |p| if (params[i] == .Stack) b: {
-                break :b self.bl.addParam(self.src(aarg), i);
+                break :b self.bl.addParam(arg_sloc, i);
             } else b: {
-                const slot = self.bl.addLocal(self.src(aarg), ty.size(self.types));
+                const slot = self.bl.addLocal(arg_sloc, ty.size(self.types));
                 for (p.offsets(), 0..) |off, j| {
-                    const arg = self.bl.addParam(self.src(aarg), i + j);
-                    self.bl.addFieldStore(self.src(aarg), slot, @intCast(off), arg.data_type, arg);
+                    const arg = self.bl.addParam(arg_sloc, i + j);
+                    self.bl.addFieldStore(arg_sloc, slot, @intCast(off), arg.data_type, arg);
                 }
 
                 len = 2;

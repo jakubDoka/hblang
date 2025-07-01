@@ -2,6 +2,16 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### dangling pointer in global 1
+```hb
+expectations := .{
+    should_error: true,
+}
+
+$ptr: ^u8 = @bit_cast(0)
+main := fn(): uint return @as(^u8, @bit_cast(0)) != ptr
+```
+
 #### duplicate identifier 1
 ```hb
 expectations := .{
