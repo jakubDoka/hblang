@@ -13,8 +13,10 @@ const Arena = utils.Arena;
 const Codegen = root.frontend.Codegen;
 const Comptime = root.frontend.Comptime;
 const Lexer = root.frontend.Lexer;
+const Machine = root.backend.Machine;
 const HbvmGen = root.hbvm.HbvmGen;
 const Vm = root.hbvm.Vm;
+const tys = root.frontend.types;
 pub const eca = HbvmGen.eca;
 
 vm: Vm = .{},
@@ -152,7 +154,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
 
                 var ret_ty: graph.DataType = .i64;
                 if (call.extra(.Call).id != eca) {
-                    const func_id: utils.EntId(root.frontend.types.Func) = @enumFromInt(call.extra(.Call).id);
+                    const func_id: utils.EntId(tys.Func) = @enumFromInt(call.extra(.Call).id);
                     const func = types.store.get(func_id);
 
                     if (func.recursion_lock) {
@@ -201,16 +203,18 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
                 continue;
             },
             .Load => b: {
-                if (curr.base().kind == .GlobalAddr) {
-                    const glob_id: utils.EntId(root.frontend.types.Global) = @enumFromInt(curr.base().extra(.GlobalAddr).id);
-                    const glob = types.store.get(glob_id);
+                const base, const offset = curr.base().knownOffset();
+
+                if (base.kind == .GlobalAddr) {
+                    const glob_id: utils.EntId(tys.Global) = @enumFromInt(base.extra(.GlobalAddr).id);
+                    const glob: *tys.Global = types.store.get(glob_id);
 
                     std.debug.assert(curr.data_type.isInt());
 
                     var mem: u64 = 0;
                     @memcpy(
                         @as([*]u8, @ptrCast(&mem))[0..@intCast(curr.data_type.size())],
-                        glob.data[0..@intCast(curr.data_type.size())],
+                        glob.data[@intCast(offset)..][0..@intCast(curr.data_type.size())],
                     );
 
                     break :b bl.addIntImm(.none, curr.data_type, @bitCast(mem));
@@ -330,7 +334,7 @@ pub fn runVm(
                     const ty: Types.Id = @enumFromInt(self.ecaArg(1));
                     const value = self.ecaArg(2);
 
-                    const enm: root.frontend.types.Enum.Id = ty.data().Enum;
+                    const enm: tys.Enum.Id = ty.data().Enum;
                     const fields = enm.getFields(types);
 
                     if (value > fields.len) {
@@ -390,7 +394,7 @@ pub fn runVm(
     self.vm.regs.set(.stack_addr, stack_end);
 }
 
-pub fn jitFunc(self: *Comptime, fnc: utils.EntId(root.frontend.types.Func)) !void {
+pub fn jitFunc(self: *Comptime, fnc: utils.EntId(tys.Func)) !void {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
@@ -442,7 +446,7 @@ pub fn addInProgress(self: *Comptime, expr: Ast.Id, scope: Types.Id) !void {
 }
 
 pub const JitResult = union(enum) {
-    func: utils.EntId(root.frontend.types.Func),
+    func: utils.EntId(tys.Func),
     constant: i64,
 };
 
@@ -455,7 +459,7 @@ pub fn jitExprLow(
     value: Ast.Id,
 ) !struct { JitResult, Types.Id } {
     const types = self.getTypes();
-    const id = types.store.add(types.pool.allocator(), @as(root.frontend.types.Func, undefined));
+    const id = types.store.add(types.pool.allocator(), @as(tys.Func, undefined));
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
@@ -582,7 +586,7 @@ pub fn evalIntConst(self: *Comptime, scope: Codegen.Scope, int_conts: Ast.Id) !i
     }
 }
 
-pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(root.frontend.types.Global), ty: ?Types.Id, value: Ast.Id) !void {
+pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(tys.Global), ty: ?Types.Id, value: Ast.Id) !void {
     const res, const fty = try self.jitExpr(name, .{ .Perm = self.getTypes().store.get(global).key.loc.scope }, .{ .ty = ty }, value);
     const data = self.getTypes().pool.arena.allocator().alloc(u8, @intCast(fty.size(self.getTypes()))) catch unreachable;
     switch (res) {

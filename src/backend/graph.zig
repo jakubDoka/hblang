@@ -2121,13 +2121,16 @@ pub fn Func(comptime Backend: type) type {
             if (node.isLoad()) {
                 const base, const offset = node.base().knownOffset();
                 if (base.kind == .GlobalAddr) fold_const_read: {
-                    const value = ctx.out.readFromSym(
+                    const res = ctx.out.readFromSym(
                         base.extra(.GlobalAddr).id,
                         offset + node.getStaticOffset(),
                         node.data_type.size(),
                     ) orelse break :fold_const_read;
 
-                    return self.addIntImm(node.sloc, node.data_type, value);
+                    switch (res) {
+                        .value => |v| return self.addIntImm(node.sloc, node.data_type, v),
+                        .global => |g| return self.addGlobalAddr(node.sloc, g),
+                    }
                 }
             }
 

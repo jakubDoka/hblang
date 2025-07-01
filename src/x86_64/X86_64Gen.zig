@@ -1588,6 +1588,7 @@ pub fn emitData(self: *X86_64, opts: Mach.DataOptions) void {
         .data,
         .local,
         opts.value.init,
+        opts.relocs,
         opts.readonly,
     );
 }

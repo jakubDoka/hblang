@@ -11,12 +11,13 @@ const Comptime = root.frontend.Comptime;
 const Lexer = root.frontend.Lexer;
 const HbvmGen = root.hbvm.HbvmGen;
 const Vm = root.hbvm.Vm;
+const Machine = root.backend.Machine;
 const tys = root.frontend.types;
 
 pub const Abi = root.frontend.Abi;
 
 next_struct: u32 = 0,
-store: utils.EntStore(root.frontend.types) = .{},
+store: utils.EntStore(tys) = .{},
 pool: utils.Pool,
 interner: Map = .{},
 file_scopes: []Id,
@@ -505,7 +506,7 @@ pub const Id = enum(IdRepr) {
                             }
                         }
                     }
-                    if (key.captures.len != 0) {
+                    if (key.captures.len != 0 and self.self.data() != .Global) {
                         var written_paren = false;
                         o: for (key.captures) |capture| {
                             var cursor = key.loc.scope;
@@ -545,16 +546,128 @@ pub fn retainGlobals(self: *Types, target: Target, backend: anytype, scratch: ?s
     errdefer unreachable;
 
     const work_list = self.global_work_list.getPtr(target);
-    for (work_list.items) |global| {
+    while (work_list.pop()) |global| {
+        var scrath = utils.Arena.scrathFromAlloc(scratch);
+        defer scrath.deinit();
+
+        const glob: *tys.Global = self.store.get(global);
+        if (glob.completion.get(target) == .compiled) continue;
+        glob.completion.getPtr(target).* = .compiled;
+
+        var relocs = std.ArrayListUnmanaged(Machine.DataOptions.Reloc){};
+        if (target == .runtime)
+            self.findNestedGlobals(&relocs, glob, scrath.arena, glob.ty, 0);
+
         backend.emitData(.{
             .id = @intFromEnum(global),
             .name = if (scratch) |s| try root.frontend.Types.Id.init(.{ .Global = global })
                 .fmt(self).toString(s) else "",
-            .value = .{ .init = self.store.get(global).data },
-            .readonly = self.store.get(global).readonly,
+            .value = .{ .init = glob.data },
+            .relocs = relocs.items,
+            .readonly = glob.readonly,
         });
     }
-    work_list.items.len = 0;
+}
+
+pub fn findNestedGlobals(
+    self: *Types,
+    relocs: *std.ArrayListUnmanaged(Machine.DataOptions.Reloc),
+    global: *tys.Global,
+    scratch: *utils.Arena,
+    ty: Id,
+    offset: usize,
+) void {
+    errdefer unreachable;
+
+    switch (ty.data()) {
+        .Union, .Enum, .Builtin => {},
+        .Pointer => |p| {
+            const base: Id = self.store.get(p).*;
+
+            const ptr_big: u64 = @bitCast(global.data[offset..][0..8].*);
+            const ptr: usize = @bitCast(ptr_big);
+
+            const cap = base.size(self);
+            if (cap == 0) return;
+
+            try relocs.append(scratch.allocator(), .{
+                .offset = @intCast(offset),
+                .target = self.findSymForPtr(ptr, cap).?, // TODO: error
+            });
+        },
+        .Slice => |s| {
+            const slc: *tys.Slice = self.store.get(s);
+
+            if (slc.len) |len| {
+                const elem_size = slc.elem.size(self);
+                for (0..len) |idx| {
+                    self.findNestedGlobals(relocs, global, scratch, slc.elem, offset + idx * elem_size);
+                }
+            } else {
+                const ptr_big: u64 = @bitCast(global.data[offset + tys.Slice.ptr_offset ..][0..8].*);
+                const ptr: usize = @bitCast(ptr_big);
+                const len_big: u64 = @bitCast(global.data[offset + tys.Slice.len_offset ..][0..8].*);
+                const len: usize = @bitCast(len_big);
+
+                const cap = len * slc.elem.size(self);
+                if (cap == 0) return;
+
+                try relocs.append(scratch.allocator(), .{
+                    .offset = @intCast(offset + tys.Slice.ptr_offset),
+                    .target = self.findSymForPtr(ptr, cap).?, // TODO: error
+                });
+            }
+        },
+        inline .Struct, .Tuple => |t| {
+            var fields_iter = t.offsetIter(self);
+            while (fields_iter.next()) |elem| {
+                self.findNestedGlobals(relocs, global, scratch, elem.field.ty, elem.offset);
+            }
+        },
+        .Nullable => |n| {
+            const data: *tys.Nullable = self.store.get(n);
+            const nieche: ?tys.Nullable.NiecheSpec = data.nieche.offset(self);
+
+            const is_present = if (nieche) |niche| b: {
+                const abi = niche.kind.abi();
+                if (abi == .bot) return;
+                const size = abi.size();
+
+                var value: u64 = 0;
+                @memcpy(
+                    @as(*[8]u8, @ptrCast(&value))[0..size],
+                    global.data[offset + niche.offset ..][0..size],
+                );
+
+                break :b value != 0;
+            } else global.data[offset] != 0;
+
+            if (!is_present) return;
+
+            const next_offset = if (nieche != null) data.inner.alignment(self) else 0;
+            self.findNestedGlobals(relocs, global, scratch, data.inner, offset + next_offset);
+        },
+        .Global, .Func, .Template => unreachable,
+    }
+}
+
+pub fn findSymForPtr(
+    self: *Types,
+    ptr: usize,
+    cap: usize,
+) ?u32 {
+    errdefer unreachable;
+
+    const data = &self.ct.gen.out;
+
+    // TODO: do error reporting when this is corrupted
+    const id: utils.EntId(tys.Global) =
+        @enumFromInt(@as(u32, @bitCast(data.code.items[ptr - 4 ..][0..4].*)));
+    self.queue(.runtime, .init(.{ .Global = id }));
+    const sym = &data.syms.items[@intFromEnum(data.globals.items[@intFromEnum(id)])];
+    std.debug.assert(sym.size == self.store.get(id).data.len);
+    std.debug.assert(sym.size == cap);
+    return @intFromEnum(id);
 }
 
 pub fn queue(self: *Types, target: Target, task: Id) void {
@@ -605,6 +718,8 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: std.io.AnyWriter) *
         .ct = .init(slot.pool.allocator()),
         .diagnostics = diagnostics,
     };
+
+    slot.ct.gen.add_global_metadata = true;
 
     slot.string = slot.makeSlice(null, .u8);
     slot.source_loc = .init(.{ .Struct = slot.store.add(slot.pool.allocator(), tys.Struct{
@@ -800,6 +915,7 @@ pub fn resolveGlobal(
     name: []const u8,
     ast: Ast.Id,
     readonly: bool,
+    is_string: bool,
 ) struct { Id, bool } {
     const slot, const alloc = self.intern(.Global, .{
         .loc = .{
@@ -808,7 +924,12 @@ pub fn resolveGlobal(
             .ast = ast,
         },
         .name = name,
-        .captures = &.{},
+        // There is an edge case when the source loc is the same
+        // when you do `global := "str"`
+        .captures = if (is_string)
+            &.{.{ .id = @enumFromInt(0), .ty = .void }}
+        else
+            &.{},
     });
     if (!slot.found_existing) {
         self.store.get(alloc).* = .{

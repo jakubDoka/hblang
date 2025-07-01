@@ -19,6 +19,30 @@ pub const Symbol = extern struct {
     offset: u64,
 };
 
+const Reloc = struct {
+    slot_rel: i32,
+    target_rel: i32,
+};
+
+const code_init = root.hbvm.isa.packMany(.{
+    .{ .lra, 2, 0, 0 }, // load reloc address
+    .{ .li64, 1, 0 },
+    .{ .li64, 5, 0 },
+});
+
+const code_body = root.hbvm.isa.packMany(.{
+    .{ .ld, 3, 2, 0, 4 }, // load offset
+    .{ .sxt32, 3, 3 }, // mask of
+    .{ .ld, 4, 2, 4, 4 }, // load disp
+    .{ .sxt32, 4, 4 }, // mask of
+    .{ .add64, 3, 3, 2 }, // compute global offset
+    .{ .add64, 4, 4, 3 }, // compute the resuting address
+    .{ .st, 4, 3, 0, 8 }, // do the reloc
+    .{ .addi64, 1, 1, 1 },
+    .{ .addi64, 2, 2, @sizeOf(Reloc) },
+    .{ .jltu, 1, 5, 0 },
+});
+
 pub fn loadSymMap(arena: std.mem.Allocator, code: []const u8) !std.AutoHashMapUnmanaged(u32, []const u8) {
     const header: ExecHeader = @bitCast(code[0..@sizeOf(ExecHeader)].*);
     const sym_start: usize = @intCast(@sizeOf(ExecHeader) + header.code_length + header.data_length);
@@ -64,29 +88,92 @@ pub fn flush(self: root.backend.Machine.Data, writer: std.io.AnyWriter) anyerror
     var lengths: struct { func: u32, data: u32, prealloc: u32 } = undefined;
     const sets = .{ .func, .data, .prealloc };
     var prev_len: u32 = code_cursor;
+    var global_reloc_count: u32 = 0;
+    var global_reloc_offset: u32 = undefined;
+
+    const include_relocs = for (self.syms.items) |sym| {
+        if (sym.kind == .data and sym.reloc_count != 0) break true;
+    } else false;
+
     inline for (sets) |v| {
+        if (v == .func and include_relocs) {
+            code_cursor += code_init.len + code_body.len;
+        }
+
         for (offset_lookup, self.syms.items) |*slot, sym| if (sym.kind == v) {
             slot.* = code_cursor;
             code_cursor += sym.size;
+
+            if (v == .data) {
+                global_reloc_count += sym.reloc_count;
+            }
         };
+
+        if (v == .data and include_relocs) {
+            global_reloc_offset = code_cursor;
+            code_cursor += global_reloc_count * @sizeOf(Reloc);
+        }
+
         @field(lengths, @tagName(v)) = code_cursor - prev_len;
         prev_len = code_cursor;
     }
 
-    for (self.syms.items, offset_lookup) |sym, olp| if (sym.kind == .func) {
-        for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |*rel| {
-            const dest = offset_lookup[@intFromEnum(rel.target)];
-            const jump = @as(i64, dest) - (rel.offset - sym.offset + olp);
-            const location: usize = @intCast(rel.offset + @as(u32, @intCast(rel.addend)));
+    var code_init_buf: []u8 = undefined;
+    var code_body_buf: []u8 = undefined;
+    if (include_relocs) {
+        code_init_buf = tmp.arena.dupe(u8, code_init);
+        @memcpy(
+            code_init_buf[3..][0..4],
+            @as(*const [8]u8, @ptrCast(&(global_reloc_offset - @sizeOf(ExecHeader))))[0..4],
+        );
+        @memcpy(
+            code_init_buf[code_init_buf.len - 8 ..],
+            @as(*const [8]u8, @ptrCast(&@as(u64, global_reloc_count))),
+        );
 
-            @memcpy(
-                self.code.items[location..][0..rel.slot_size],
-                @as(*const [8]u8, @ptrCast(&jump))[0..rel.slot_size],
-            );
-        }
+        code_body_buf = tmp.arena.dupe(u8, code_body);
+        @memcpy(
+            code_body_buf[code_body_buf.len - 2 ..],
+            @as(*const [8]u8, @ptrCast(&@as(u64, -%code_body_buf.len +
+                root.hbvm.isa.instrSize(.jltu))))[0..2],
+        );
+    }
+
+    var buf = tmp.arena.makeArrayList(Reloc, global_reloc_count);
+
+    for (self.syms.items, offset_lookup) |sym, olp| switch (sym.kind) {
+        .func => {
+            for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |*rel| {
+                const dest = offset_lookup[@intFromEnum(rel.target)];
+                const jump = @as(i64, dest) - (rel.offset - sym.offset + olp);
+                const location: usize = @intCast(rel.offset + @as(u32, @intCast(rel.addend)));
+
+                @memcpy(
+                    self.code.items[location..][0..rel.slot_size],
+                    @as(*const [8]u8, @ptrCast(&jump))[0..rel.slot_size],
+                );
+            }
+        },
+        .data => {
+            for (
+                self.relocs.items[sym.reloc_offset..][0..sym.reloc_count],
+                buf.items.len..,
+                buf.addManyAsSliceAssumeCapacity(sym.reloc_count),
+            ) |rel, i, *slot| {
+                const reloc_offset: i64 = @intCast(global_reloc_offset + i * @sizeOf(Reloc));
+                const dest: i64 = offset_lookup[@intFromEnum(rel.target)];
+
+                slot.* = .{
+                    .slot_rel = @intCast((rel.offset - sym.offset + olp) - reloc_offset),
+                    .target_rel = @intCast(dest - (rel.offset - sym.offset + olp)),
+                };
+            }
+        },
+        .invalid => {},
+        else => unreachable,
     };
 
-    var sym_count: usize = 0;
+    var sym_count: usize = @intFromBool(include_relocs);
     for (self.syms.items) |sym| {
         sym_count += @intFromBool(sym.kind != .invalid);
     }
@@ -99,9 +186,18 @@ pub fn flush(self: root.backend.Machine.Data, writer: std.io.AnyWriter) anyerror
     });
 
     inline for (sets) |v| {
+        if (v == .func and include_relocs) {
+            try writer.writeAll(code_init_buf);
+            try writer.writeAll(code_body_buf);
+        }
+
         for (self.syms.items) |sym| if (sym.kind == v) {
             try writer.writeAll(self.code.items[sym.offset..][0..sym.size]);
         };
+
+        if (v == .data and include_relocs) {
+            try writer.writeAll(@ptrCast(buf.items));
+        }
     }
 
     for (offset_lookup, self.syms.items) |off, sym| {
@@ -113,6 +209,14 @@ pub fn flush(self: root.backend.Machine.Data, writer: std.io.AnyWriter) anyerror
                 .data, .prealloc => .data,
                 .invalid => continue,
             },
+        });
+    }
+
+    if (include_relocs) {
+        try writer.writeStruct(Symbol{
+            .name = 0,
+            .offset = global_reloc_offset,
+            .kind = .data,
         });
     }
 

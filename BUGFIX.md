@@ -1117,6 +1117,31 @@ main := fn(): uint {
 }
 ```
 
+#### global variables 4 (nested)
+```hb
+expectations := .{
+    return_value: 69,
+}
+
+str := "Edward"
+
+main := fn(): uint {
+    return str[0]
+}
+```
+
+#### global variables 5 (nested constant)
+```hb
+expectations := .{
+    return_value: 69,
+}
+
+$str := "Edward"
+
+main := fn(): uint {
+    return str[0]
+}
+```
 
 #### enums 2 (one variant)
 ```hb

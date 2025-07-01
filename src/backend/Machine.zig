@@ -587,7 +587,7 @@ pub const Data = struct {
         return if (nodes == std.math.maxInt(u32)) null else &self.inline_funcs.items[nodes];
     }
 
-    pub fn readFromSym(self: Data, id: u32, offset: i64, size: u64) ?i64 {
+    pub fn readFromSym(self: Data, id: u32, offset: i64, size: u64) ?union(enum) { value: i64, global: u32 } {
         if (self.globals.items.len <= id) return null;
         const sym = &self.syms.items[@intFromEnum(self.globals.items[id])];
 
@@ -600,7 +600,16 @@ pub const Data = struct {
             self.code.items[@intCast(sym.offset + offset)..][0..@intCast(size)],
         );
 
-        return value;
+        // TODO: use binary search
+        for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |rel| {
+            if (rel.offset - sym.offset == offset) {
+                const sm = &self.syms.items[@intFromEnum(rel.target)];
+                const gid: u32 = @bitCast(self.code.items[sm.offset - 4 ..][0..4].*);
+                return .{ .global = gid };
+            }
+        }
+
+        return .{ .value = value };
     }
 
     pub fn reset(self: *Data) void {
@@ -711,8 +720,13 @@ pub const Data = struct {
         kind: Kind,
         linkage: Linkage,
         data: []const u8,
+        relocs: []const DataOptions.Reloc,
         readonly: bool,
     ) !void {
+        // this is there to support N(1) reverse lookup form a memory offset
+        // to global id
+        try self.code.appendSlice(gpa, std.mem.asBytes(&id));
+
         try self.startDefineSym(
             gpa,
             try root.ensureSlot(&self.globals, gpa, id),
@@ -722,7 +736,17 @@ pub const Data = struct {
             readonly,
             false,
         );
-        try self.code.appendSlice(gpa, data);
+        try self.code.ensureUnusedCapacity(gpa, data.len);
+
+        var prev_off: usize = 0;
+        for (relocs) |rel| {
+            std.debug.assert(rel.target != id);
+            self.code.appendSliceAssumeCapacity(data[prev_off..rel.offset]);
+            try self.addGlobalReloc(gpa, rel.target, 8, 0);
+            prev_off = rel.offset;
+        }
+        self.code.appendSliceAssumeCapacity(data[prev_off..]);
+
         self.endDefineSym(self.globals.items[id]);
     }
 
@@ -810,6 +834,7 @@ pub const Data = struct {
 
         while (frontier.pop()) |fid| {
             const f = &self.syms.items[@intFromEnum(fid)];
+
             for (self.relocs.items[f.reloc_offset..][0..f.reloc_count]) |rel| {
                 if (visited_syms.isSet(@intFromEnum(rel.target))) continue;
                 visited_syms.set(@intFromEnum(rel.target));
@@ -841,8 +866,14 @@ pub const RunEnv = struct {
 pub const DataOptions = struct {
     id: u32,
     name: []const u8 = &.{},
+    relocs: []const Reloc = &.{},
     value: ValueSpec,
     readonly: bool,
+
+    pub const Reloc = struct {
+        target: u32,
+        offset: u32,
+    };
 
     pub const ValueSpec = union(enum) { init: []const u8, uninit: usize };
 };
@@ -1046,10 +1077,25 @@ pub const OptOptions = struct {
                         arena = func.arena;
                     },
                     .data => {
+                        var tmpa = tmp.arena.checkpoint();
+                        defer tmpa.deinit();
+
+                        const relocs = tmpa.arena.alloc(DataOptions.Reloc, sym.reloc_count);
+                        for (
+                            out.relocs.items[sym.reloc_offset..][0..sym.reloc_count],
+                            relocs,
+                        ) |rel, *dst| {
+                            dst.* = .{
+                                .target = sym_to_idx[@intFromEnum(rel.target)],
+                                .offset = rel.offset - sym.offset,
+                            };
+                        }
+
                         backend.emitData(.{
                             .name = out.lookupName(sym.name),
                             .id = @intCast(i),
                             .value = .{ .init = out.code.items[sym.offset..][0..sym.size] },
+                            .relocs = relocs,
                             .readonly = sym.readonly,
                         });
                     },

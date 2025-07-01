@@ -192,8 +192,8 @@ pub const Arena = struct {
         return @intFromPtr(self.end) - @intFromPtr(self.pos);
     }
 
-    pub fn scrathFromAlloc(except: std.mem.Allocator) Scratch {
-        for (&scratch) |*slt| if (@as(*anyopaque, slt) != except.ptr) return slt.checkpoint();
+    pub fn scrathFromAlloc(except: ?std.mem.Allocator) Scratch {
+        for (&scratch) |*slt| if (@as(*anyopaque, slt) != if (except) |e| e.ptr else null) return slt.checkpoint();
         unreachable;
     }
 
@@ -472,10 +472,6 @@ const debug = @import("builtin").mode == .Debug;
 pub fn isErr(value: anytype) bool {
     value catch return true;
     return false;
-}
-
-pub inline fn alignTo(offset: anytype, alignment: @TypeOf(offset)) @TypeOf(offset) {
-    return (offset + alignment - 1) & ~(alignment - 1);
 }
 
 pub fn findReadmeSnippet(comptime name: []const u8) ![]const u8 {

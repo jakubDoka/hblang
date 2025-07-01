@@ -1,4 +1,5 @@
 gpa: std.mem.Allocator,
+add_global_metadata: bool = false,
 out: Mach.Data = .{},
 local_relocs: std.ArrayListUnmanaged(BlockReloc) = undefined,
 ret_count: usize = undefined,
@@ -324,6 +325,7 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
             if (opts.value == .init) .data else .prealloc,
             .local,
             v,
+            opts.relocs,
             opts.readonly,
         ),
         .uninit => unreachable,
@@ -366,6 +368,7 @@ pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
     vm.fuel = 1024 * 128;
     @memset(&vm.regs.values, 0);
     vm.regs.set(.stack_addr, stack_end);
+
     var ctx = root.hbvm.Vm.SafeContext{
         .writer = env.output,
         .symbols = try root.hbvm.object.loadSymMap(tmp.arena.allocator(), code),

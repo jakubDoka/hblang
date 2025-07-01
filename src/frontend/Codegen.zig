@@ -661,7 +661,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                 },
             };
 
-            return self.emitStirng(ctx, data, expr);
+            return self.emitString(ctx, data, expr);
         },
         .Quotes => |e| {
             const lit = ast.source[e.pos.index + 1 .. e.end - 1];
@@ -1996,7 +1996,7 @@ pub fn emitHandlerCall(self: *Codegen, handler: utils.EntId(tys.Func), expr: Ast
 pub fn emitSrcLoc(self: *Codegen, expr: Ast.Id) Value {
     const sloc = self.src(expr);
     const src_loc = self.bl.addLocal(sloc, self.types.source_loc.size(self.types));
-    _ = self.emitStirng(.{ .loc = src_loc }, self.ast.path, expr);
+    _ = self.emitString(.{ .loc = src_loc }, self.ast.path, expr);
     const line, const col = Ast.lineCol(self.ast.source, self.ast.posOf(expr).index);
     comptime std.debug.assert(@import("builtin").cpu.arch.endian() == .little);
     const pcked = @as(u64, col) << 32 | @as(u64, line);
@@ -2432,7 +2432,7 @@ pub fn resolveGlobalLow(
 
     const ty = if (vari.ty.tag() == .Void) null else try self.resolveAnonTy(vari.ty);
 
-    const global_ty, const new = self.types.resolveGlobal(bsty, name, vari.value, readonly);
+    const global_ty, const new = self.types.resolveGlobal(bsty, name, vari.value, readonly, false);
     const global_id = global_ty.data().Global;
     if (new) {
         errdefer self.errored = true;
@@ -3017,12 +3017,13 @@ pub fn emitBranch(self: *Codegen, block: Ast.Id) usize {
     return 0;
 }
 
-fn emitStirng(self: *Codegen, ctx: Ctx, data: []const u8, expr: Ast.Id) Value {
+fn emitString(self: *Codegen, ctx: Ctx, data: []const u8, expr: Ast.Id) Value {
     const sloc = self.src(expr);
     const global = self.types.resolveGlobal(
         self.parent_scope.perm(self.types),
         data,
         expr,
+        true,
         true,
     )[0].data().Global;
     self.types.store.get(global).data = data;
@@ -3382,7 +3383,7 @@ fn emitDirective(
                 ),
             };
 
-            return self.emitStirng(ctx, data, expr);
+            return self.emitString(ctx, data, expr);
         },
         .align_of => {
             try assertDirectiveArgs(self, expr, args, "<ty>");

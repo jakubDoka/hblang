@@ -9,7 +9,7 @@ pub const Arch = enum {
 
 pub const Flush = fn (root.backend.Machine.Data, Arch, std.io.AnyWriter) anyerror!void;
 
-pub const elf = struct {
+pub const elf = enum {
     const Addr = u64;
     const Half = u16;
     const Off = u64;
@@ -51,6 +51,7 @@ pub const elf = struct {
         ".text",
         ".rela.text",
         ".data",
+        ".rela.data",
     };
 
     pub const FileHeader = extern struct {
@@ -80,6 +81,7 @@ pub const elf = struct {
         offset: Addr,
         info: packed struct {
             type: enum(u32) {
+                R_X86_64_64 = 1,
                 R_X86_64_PC32 = 2,
                 R_X86_64_PLT32 = 4,
             } = .R_X86_64_PC32,
@@ -239,6 +241,7 @@ pub const elf = struct {
                             .addend = @intCast(r.addend),
                             .slot_size = switch (r.info.type) {
                                 .R_X86_64_PC32, .R_X86_64_PLT32 => 4,
+                                .R_X86_64_64 => 8,
                             },
                         });
                     }
@@ -330,11 +333,13 @@ pub const elf = struct {
         var text_size: usize = 0;
         var data_size: usize = 0;
         var text_rel_count: usize = 0;
+        var data_rel_count: usize = 0;
         for (self.syms.items) |sm| if (sm.kind == .func) {
             text_size += sm.size;
             text_rel_count += sm.reloc_count;
         } else if (sm.kind == .data) {
             data_size += sm.size;
+            data_rel_count += sm.reloc_count;
         };
 
         try writer.writeStruct(SectionHeader{
@@ -366,6 +371,18 @@ pub const elf = struct {
             .sh_link = 3,
         });
         section_alloc_cursor += text_rel_count * @sizeOf(Rela);
+
+        try writer.writeStruct(SectionHeader{
+            .sh_name = positions[7],
+            .sh_type = .rela,
+            .sh_flags = .empty,
+            .sh_offset = @intCast(section_alloc_cursor),
+            .sh_size = @intCast(data_rel_count * @sizeOf(Rela)),
+            .sh_entsize = @sizeOf(Rela),
+            .sh_info = 5,
+            .sh_link = 3,
+        });
+        section_alloc_cursor += data_rel_count * @sizeOf(Rela);
 
         try writer.writeAll(section_name_table);
         try writer.writeByte(0);
@@ -430,24 +447,30 @@ pub const elf = struct {
             }
         }
 
-        for (projection, projected_offsets) |symid, poff| {
-            const sym = &self.syms.items[symid];
-            if (sym.kind != .func) continue;
-            for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |rl| {
-                try writer.writeStruct(Rela{
-                    .offset = (rl.offset - sym.offset) + poff,
-                    .info = .{
-                        .type = switch (rl.slot_size) {
-                            4 => if (self.syms.items[@intFromEnum(rl.target)].linkage == .imported)
-                                .R_X86_64_PLT32
-                            else
-                                .R_X86_64_PC32,
-                            else => unreachable,
+        inline for (.{ .func, .data }) |k| {
+            for (projection, projected_offsets) |symid, poff| {
+                const sym = &self.syms.items[symid];
+                if (sym.kind != k) continue;
+                for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |rl| {
+                    try writer.writeStruct(Rela{
+                        .offset = (rl.offset - sym.offset) + poff,
+                        .info = .{
+                            .type = switch (rl.slot_size) {
+                                4 => if (self.syms.items[@intFromEnum(rl.target)].linkage == .imported)
+                                    .R_X86_64_PLT32
+                                else
+                                    .R_X86_64_PC32,
+                                else => unreachable,
+                                8 => b: {
+                                    std.debug.assert(k == .data);
+                                    break :b .R_X86_64_64;
+                                },
+                            },
+                            .sym = (reloc_proj[@intFromEnum(rl.target)]) + 1,
                         },
-                        .sym = (reloc_proj[@intFromEnum(rl.target)]) + 1,
-                    },
-                    .addend = rl.addend,
-                });
+                        .addend = rl.addend,
+                    });
+                }
             }
         }
     }
