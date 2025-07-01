@@ -16,7 +16,6 @@ const Move = utils.Move(Reg);
 gpa: std.mem.Allocator,
 object_format: enum { elf, coff },
 memcpy: Mach.Data.SymIdx = .invalid,
-entry: u32 = undefined,
 out: Mach.Data = .{},
 allocs: []u16 = undefined,
 ret_count: usize = undefined,
@@ -26,6 +25,7 @@ arg_base: u32 = undefined,
 local_base: u32 = undefined,
 slot_base: c_int = undefined,
 xmm_slot_base: c_int = undefined,
+builtins: Mach.EmitOptions.Builtins = undefined,
 
 const tmp_count = 2;
 
@@ -584,13 +584,9 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
         }
     else
         opts.name;
+    self.builtins = opts.builtins;
 
-    if (opts.special == .memcpy) {
-        try self.out.startDefineSym(self.gpa, &self.memcpy, name, .func, linkage, true, false);
-        (try utils.ensureSlot(&self.out.funcs, self.gpa, id)).* = self.memcpy;
-    } else {
-        try self.out.startDefineFunc(self.gpa, id, name, .func, linkage, opts.is_inline);
-    }
+    try self.out.startDefineFunc(self.gpa, id, name, .func, linkage, opts.is_inline);
 
     defer self.out.endDefineFunc(id);
 
@@ -1095,10 +1091,13 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
 
                 const opcode = 0xE8;
                 try self.out.code.append(self.gpa, opcode);
-                if (self.memcpy == .invalid) {
-                    try self.out.importSym(self.gpa, &self.memcpy, "memcpy", .func);
+                if (self.builtins.memcpy == std.math.maxInt(u32)) {
+                    if (self.memcpy == .invalid)
+                        try self.out.importSym(self.gpa, &self.memcpy, "memcpy", .func);
+                    try self.out.addReloc(self.gpa, &self.memcpy, 4, -4);
+                } else {
+                    try self.out.addFuncReloc(self.gpa, self.builtins.memcpy, 4, -4);
                 }
-                try self.out.addReloc(self.gpa, &self.memcpy, 4, -4);
                 try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
             },
             .MachMove => {},

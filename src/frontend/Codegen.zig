@@ -279,7 +279,7 @@ pub fn emitReachable(
         opts.arena = tmp.arena;
         opts.verbose = log_opts.verbose;
 
-        backend.emitFunc(&codegen.bl.func, .{
+        backend.emitFunc(&codegen.bl.func, root.backend.Machine.EmitOptions{
             .id = @intFromEnum(func),
             .name = if (func_data.visibility != .local)
                 func_data.key.name
@@ -290,6 +290,12 @@ pub fn emitReachable(
             .linkage = func_data.visibility,
             .special = func_data.special,
             .optimizations = opts,
+            .builtins = .{
+                .memcpy = if (types.handlers.builtin_memcpy) |m|
+                    @intFromEnum(m)
+                else
+                    std.math.maxInt(u32),
+            },
         });
 
         errored = types.dumpAnalErrors(&errors) or errored;

@@ -21,7 +21,7 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	mov rdi, rbx
 	mov rsi, rcx
 	mov rdx, rax
-	call :directives 20 (@handler, @SourceLoc).slice_ioob
+	call :memcpy
 	mov rdi, r12
 	mov rsi, rbp
 	mov rdx, rbp
@@ -54,3 +54,4 @@ _start:
 	add rsp, 0x18
 	pop rbx
 	ret
+memcpy:

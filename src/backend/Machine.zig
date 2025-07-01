@@ -668,6 +668,10 @@ pub const Data = struct {
         return slot.*;
     }
 
+    pub fn importFunc(self: *Data, gpa: std.mem.Allocator, id: u32, name: []const u8) !void {
+        try self.importSym(gpa, try root.ensureSlot(&self.funcs, gpa, id), name, .func);
+    }
+
     pub fn importSym(
         self: *Data,
         gpa: std.mem.Allocator,
@@ -1122,6 +1126,11 @@ pub const EmitOptions = struct {
     linkage: Data.Linkage,
     optimizations: OptOptions = .all,
     special: ?Special = null,
+    builtins: Builtins = .{},
+
+    pub const Builtins = struct {
+        memcpy: u32 = std.math.maxInt(u32),
+    };
 
     pub const Special = enum { entry, memcpy };
 };

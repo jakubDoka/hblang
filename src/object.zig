@@ -452,6 +452,9 @@ pub const elf = enum {
                 const sym = &self.syms.items[symid];
                 if (sym.kind != k) continue;
                 for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |rl| {
+                    if (reloc_proj[@intFromEnum(rl.target)] > sym_count) {
+                        root.utils.panic("{} {} {s}\n", .{ rl.target, sym, self.lookupName(sym.name) });
+                    }
                     try writer.writeStruct(Rela{
                         .offset = (rl.offset - sym.offset) + poff,
                         .info = .{
@@ -466,7 +469,7 @@ pub const elf = enum {
                                     break :b .R_X86_64_64;
                                 },
                             },
-                            .sym = (reloc_proj[@intFromEnum(rl.target)]) + 1,
+                            .sym = reloc_proj[@intFromEnum(rl.target)] + 1,
                         },
                         .addend = rl.addend,
                     });
