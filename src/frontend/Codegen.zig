@@ -413,7 +413,7 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
                         continue;
                     }
 
-                    if (field == .builtin_memcpy) {
+                    if (field == .memcpy) {
                         self.types.store.get(ty.data().Func).special = .memcpy;
                     }
                 },

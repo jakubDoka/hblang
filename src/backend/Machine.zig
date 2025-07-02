@@ -527,6 +527,7 @@ pub const Data = struct {
         size: u32,
         reloc_offset: u32,
         reloc_count: u32,
+        // TODO: pack these into a struct for faster hashing
         kind: Kind,
         linkage: Linkage,
         readonly: bool,
@@ -798,6 +799,118 @@ pub const Data = struct {
         slot.reloc_count = @intCast(self.relocs.items.len - slot.reloc_offset);
     }
 
+    pub fn deduplicate(self: *Data) void {
+        errdefer unreachable;
+        var tmp = root.Arena.scrath(null);
+        defer tmp.deinit();
+
+        const InverseSym = struct {
+            dependants_offset: u32 = undefined,
+            dependants_count: u32 = 0,
+            dependants_cap: u32 = 0,
+            done_relocs: u32 = 0,
+        };
+
+        const isims = tmp.arena.alloc(InverseSym, self.syms.items.len);
+        @memset(isims, .{});
+
+        for (self.relocs.items) |rel| {
+            isims[@intFromEnum(rel.target)].dependants_cap += 1;
+        }
+
+        var cursor: u32 = 0;
+        for (isims) |*isim| {
+            isim.dependants_offset = cursor;
+            cursor += isim.dependants_cap;
+        }
+        std.debug.assert(cursor == self.relocs.items.len);
+
+        const RevReloc = struct {
+            dep: SymIdx,
+            reloc_idx: u32,
+        };
+
+        // TODO: maybe also keep the index into the rev_relocs for extra speedy
+        const rev_relocs = tmp.arena.alloc(RevReloc, self.relocs.items.len);
+        for (self.syms.items, 0..) |sym, i| {
+            if (sym.kind == .invalid) continue;
+            for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count], 0..) |rel, j| {
+                const dst = &isims[@intFromEnum(rel.target)];
+                std.debug.assert(dst.dependants_count < dst.dependants_cap);
+                rev_relocs[dst.dependants_offset + dst.dependants_count] = .{
+                    .dep = @enumFromInt(i),
+                    .reloc_idx = @intCast(j),
+                };
+                dst.dependants_count += 1;
+            }
+        }
+
+        var dedup_map = std.HashMapUnmanaged(
+            SymIdx,
+            void,
+            *Data,
+            std.hash_map.default_max_load_percentage,
+        ){};
+        try dedup_map.ensureTotalCapacityContext(tmp.arena.allocator(), @intCast(isims.len), self);
+
+        var worklist = tmp.arena.makeArrayList(SymIdx, isims.len);
+        for (0..isims.len, self.syms.items) |i, s| {
+            if (s.kind != .invalid and s.readonly and s.linkage != .imported and s.reloc_count == 0) {
+                worklist.appendAssumeCapacity(@enumFromInt(i));
+            }
+        }
+
+        // TODO: this does not handle cycles, maybe we can gain some by handling this
+        while (worklist.pop()) |n| {
+            const entry = dedup_map.getOrPutAssumeCapacityContext(n, self);
+
+            if (entry.found_existing) {
+                const isim = &isims[@intFromEnum(n)];
+                for (rev_relocs[isim.dependants_offset..][0..isim.dependants_count]) |rel| {
+                    const sym = &self.syms.items[@intFromEnum(rel.dep)];
+                    self.relocs.items[sym.reloc_offset + rel.reloc_idx].target = entry.key_ptr.*;
+                    const oisim = &isims[@intFromEnum(rel.dep)];
+                    oisim.done_relocs += 1;
+                    if (oisim.done_relocs == sym.reloc_count and sym.readonly) {
+                        std.debug.assert(sym.kind != .invalid);
+                        worklist.appendAssumeCapacity(rel.dep);
+                    }
+                }
+            }
+        }
+
+        // NOTE: dead code elimination will handle the rest
+    }
+
+    pub fn hash(self: *Data, v: SymIdx) u64 {
+        var hasher = std.hash.Fnv1a_64.init();
+
+        const vs = &self.syms.items[@intFromEnum(v)];
+        std.debug.assert(vs.readonly and vs.linkage != .imported);
+
+        hasher.update(std.mem.asBytes(&vs.kind));
+        hasher.update(self.code.items[vs.offset..][0..vs.size]);
+        hasher.update(@ptrCast(self.relocs.items[vs.reloc_offset..][0..vs.reloc_count]));
+
+        return hasher.final();
+    }
+
+    pub fn eql(self: *Data, a: SymIdx, b: SymIdx) bool {
+        const as = &self.syms.items[@intFromEnum(a)];
+        const bs = &self.syms.items[@intFromEnum(b)];
+        std.debug.assert(as.readonly and as.linkage != .imported);
+        std.debug.assert(bs.readonly and as.linkage != .imported);
+        return as.kind == bs.kind and std.mem.eql(
+            u8,
+            self.code.items[as.offset..][0..as.size],
+            self.code.items[bs.offset..][0..bs.size],
+        ) and std.mem.eql(
+            u8,
+            @ptrCast(self.relocs.items[as.reloc_offset..][0..as.reloc_count]),
+            @ptrCast(self.relocs.items[bs.reloc_offset..][0..bs.reloc_count]),
+        );
+    }
+
     pub fn elimitaneDeadCode(self: *Data) void {
         errdefer unreachable;
         var tmp = root.Arena.scrath(null);
@@ -997,7 +1110,7 @@ pub const OptOptions = struct {
         }
     }
 
-    pub fn finalize(optimizations: @This(), builtins: EmitOptions.Builtins, comptime Backend: type, backend: *Backend) bool {
+    pub fn finalize(optimizations: @This(), builtins: Builtins, comptime Backend: type, backend: *Backend) bool {
         errdefer unreachable;
 
         if (optimizations.do_inlining) {
@@ -1111,6 +1224,7 @@ pub const OptOptions = struct {
 
             out.inline_func_nodes = arena.state;
 
+            bout.deduplicate();
             bout.elimitaneDeadCode();
         }
 
@@ -1118,6 +1232,10 @@ pub const OptOptions = struct {
 
         return false;
     }
+};
+
+pub const Builtins = struct {
+    memcpy: u32 = std.math.maxInt(u32),
 };
 
 pub const EmitOptions = struct {
@@ -1128,10 +1246,6 @@ pub const EmitOptions = struct {
     optimizations: OptOptions = .all,
     special: ?Special = null,
     builtins: Builtins,
-
-    pub const Builtins = struct {
-        memcpy: u32 = std.math.maxInt(u32),
-    };
 
     pub const Special = enum { entry, memcpy };
 };
@@ -1148,13 +1262,13 @@ pub const DisasmOpts = struct {
 pub const FinalizeOptions = struct {
     output: std.io.AnyWriter,
     optimizations: OptOptions = .all,
-    builtins: EmitOptions.Builtins,
+    builtins: Builtins,
 };
 
 pub const FinalizeBytesOptions = struct {
     gpa: std.mem.Allocator,
     optimizations: OptOptions = .all,
-    builtins: EmitOptions.Builtins,
+    builtins: Builtins,
 };
 
 pub fn init(name: []const u8, data: anytype) Machine {

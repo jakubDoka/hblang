@@ -1,13 +1,10 @@
-literals 2.hex:
-	mov rax, 0x2D
-	ret
 literals 2.dec:
 	mov rax, 0x2D
 	ret
 main:
 	push rbx
 	sub rsp, 0x08
-	call :literals 2.hex
+	call :literals 2.dec
 	mov rbx, rax
 	call :literals 2.dec
 	cmp rbx, rax

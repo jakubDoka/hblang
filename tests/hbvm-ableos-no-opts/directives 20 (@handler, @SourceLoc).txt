@@ -82,7 +82,7 @@ directives 20 (@handler, @SourceLoc).use_slice:
      addi64 $254, $254, 56
          ld $31, $254, -8, 8
        jala $0, $31, 0
-lib.hb.builtin_memcpy:
+lib.hb.memcpy:
      addi64 $254, $254, -24
          st $1, $254, 0, 8
          st $2, $254, 8, 8

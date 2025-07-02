@@ -1967,7 +1967,7 @@ main := fn(): uint {
     return @inline(@RootScope().main)
 })
 
-@handler("builtin_memcpy", fn(dst: ^u8, src: ^u8, len: uint): void {
+@handler("memcpy", fn(dst: ^u8, src: ^u8, len: uint): void {
     while len != 0 {
         dst.* = src.*
         dst += 1

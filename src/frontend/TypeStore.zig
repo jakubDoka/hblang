@@ -43,7 +43,7 @@ const Map = std.hash_map.HashMapUnmanaged(Id, void, TypeCtx, 70);
 pub const Handlers = struct {
     slice_ioob: ?utils.EntId(tys.Func) = null,
     null_unwrap: ?utils.EntId(tys.Func) = null,
-    builtin_memcpy: ?utils.EntId(tys.Func) = null,
+    memcpy: ?utils.EntId(tys.Func) = null,
     entry: ?utils.EntId(tys.Func) = null,
 
     pub const Signature = struct { args: []const Id, ret: Id };
@@ -542,9 +542,9 @@ pub const Id = enum(IdRepr) {
 
 pub const Target = enum { @"comptime", runtime };
 
-pub fn getBuiltins(self: *Types) Machine.EmitOptions.Builtins {
+pub fn getBuiltins(self: *Types) Machine.Builtins {
     return .{
-        .memcpy = if (self.handlers.builtin_memcpy) |m|
+        .memcpy = if (self.handlers.memcpy) |m|
             @intFromEnum(m)
         else
             std.math.maxInt(u32),

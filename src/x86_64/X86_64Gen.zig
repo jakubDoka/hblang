@@ -25,7 +25,7 @@ arg_base: u32 = undefined,
 local_base: u32 = undefined,
 slot_base: c_int = undefined,
 xmm_slot_base: c_int = undefined,
-builtins: Mach.EmitOptions.Builtins = undefined,
+builtins: Mach.Builtins = undefined,
 
 const tmp_count = 2;
 

@@ -5,7 +5,7 @@ main:
        li64 $2, 2
         jal $31, $0, :directives 13 (@Any).func(a: uint)
        li64 $1, 5
-        jal $31, $0, :directives 13 (@Any).foo(vl: uint)
+        jal $31, $0, :directives 13 (@Any).foo(vl: u8)
          cp $32, $1
         li8 $1, 5
         jal $31, $0, :directives 13 (@Any).foo(vl: u8)
@@ -16,8 +16,6 @@ main:
          tx
 directives 13 (@Any).func(a: uint):
        li64 $1, 0
-       jala $0, $31, 0
-directives 13 (@Any).foo(vl: uint):
        jala $0, $31, 0
 directives 13 (@Any).foo(vl: u8):
        jala $0, $31, 0

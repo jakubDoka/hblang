@@ -33,6 +33,32 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	pop rbp
 	pop rbx
 	ret
+memcpy:
+	push rbx
+	push rbp
+	mov rbp, rsi
+	mov rcx, rdx
+	mov rsi, rdi
+1:	cmp rcx, 0x00
+	setnz al
+	movzx rax, al
+	test al, al
+	jz :0
+	mov rbx, rcx
+	sub rbx, 0x01
+	mov rdx, rbp
+	add rdx, 0x01
+	mov rcx, rsi
+	add rcx, 0x01
+	mov al, [rbp]
+	mov [rsi], al
+	mov rsi, rcx
+	mov rcx, rbx
+	mov rbp, rdx
+	jmp :1
+0:	pop rbp
+	pop rbx
+	ret
 directives 20 (@handler, @SourceLoc).slice_ioob:
 	ud2
 _start:
@@ -54,4 +80,3 @@ _start:
 	add rsp, 0x18
 	pop rbx
 	ret
-memcpy:
