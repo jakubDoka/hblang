@@ -36,6 +36,60 @@ size := fn($t: type): uint {
 }
 ```
 
+#### deep dedup 3 (recursive functions)
+```hb
+main := fn(): uint {
+    return fib(3) - fib2(3)
+}
+
+fib := fn(x: uint): uint {
+    if x <= 2 {
+        return 1
+    } else {
+        return fib(x - 1) + fib(x - 2)
+    }
+}
+
+fib2 := fn(x: uint): uint {
+    if x <= 2 {
+        return 1
+    } else {
+        return fib2(x - 1) + fib2(x - 2)
+    }
+}
+```
+
+#### deep dedup 4 (mutuali recursive)
+```hb
+main := fn(): uint {
+    return fib(3) - fib2(3)
+}
+
+fib := fn(x: uint): uint {
+    if x <= 2 {
+        return 1
+    } else {
+        return fib_body(x)
+    }
+}
+
+fib_body := fn(x: uint): uint {
+    return fib(x - 1) + fib(x - 2)
+}
+
+fib2 := fn(x: uint): uint {
+    if x <= 2 {
+        return 1
+    } else {
+        return fib_body2(x)
+    }
+}
+
+fib_body2 := fn(x: uint): uint {
+    return fib2(x - 1) + fib2(x - 2)
+}
+```
+
 #### dangling pointer in global 1
 ```hb
 expectations := .{

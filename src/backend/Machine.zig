@@ -800,22 +800,178 @@ pub const Data = struct {
         slot.reloc_count = @intCast(self.relocs.items.len - slot.reloc_offset);
     }
 
+    const trivial_group = std.math.maxInt(u32);
+
+    const strong_group_ref_flag: u32 = 1 << 31;
+
     pub fn deduplicate(self: *Data) void {
         errdefer unreachable;
         var tmp = root.Arena.scrath(null);
         defer tmp.deinit();
+
+        // Trajan algorithm
+        //
+        const strong_groups = tmp.arena.alloc(u32, self.syms.items.len);
+
+        var strong_group_meta = std.ArrayListUnmanaged([]const u32){};
+
+        const indexes = tmp.arena.alloc(packed struct(u32) {
+            in_stack: bool,
+            self_recursive: bool,
+            index: u30,
+        }, self.syms.items.len);
+
+        const unvisited = @TypeOf(indexes[0]){
+            .in_stack = false,
+            .self_recursive = false,
+            .index = 0,
+        };
+
+        @memset(indexes, unvisited);
+
+        const low_links = tmp.arena.alloc(u32, self.syms.items.len);
+
+        const depth_estimate = std.math.log2_int_ceil(usize, self.syms.items.len) + 4;
+
+        var stack = tmp.arena.makeArrayList(u32, depth_estimate);
+
+        const Frame = struct {
+            node: u32,
+            dep_idx: u32 = 0,
+        };
+        var recursion_stack = tmp.arena.makeArrayList(Frame, depth_estimate);
+
+        var next_index: u30 = 1;
+        for (0..self.syms.items.len) |idx| {
+            if (indexes[idx] != unvisited) continue;
+
+            recursion_stack.appendAssumeCapacity(.{ .node = @intCast(idx) });
+
+            while (recursion_stack.items.len > 0) {
+                const frame = &recursion_stack.items[recursion_stack.items.len - 1];
+                const sym = &self.syms.items[frame.node];
+
+                if (frame.dep_idx == 0) {
+                    indexes[frame.node].index = next_index;
+                    low_links[frame.node] = next_index;
+                    next_index += 1;
+                    try stack.append(tmp.arena.allocator(), @intCast(frame.node));
+                    indexes[frame.node].in_stack = true;
+                } else {
+                    const prev_node = @intFromEnum(self.relocs.items[sym.reloc_offset + frame.dep_idx - 1].target);
+                    std.debug.assert(indexes[prev_node] != unvisited);
+                    low_links[frame.node] = @min(low_links[frame.node], low_links[prev_node]);
+                }
+
+                if (frame.dep_idx == sym.reloc_count) {
+                    // got a strong group, idk why
+                    if (indexes[frame.node].index == low_links[frame.node]) {
+                        if (stack.getLast() == frame.node and
+                            !indexes[frame.node].self_recursive)
+                        {
+                            strong_groups[frame.node] = trivial_group;
+                            _ = stack.pop().?;
+                        } else {
+                            var i = stack.items.len;
+                            while (true) {
+                                i -= 1;
+                                const node = stack.items[i];
+                                std.debug.assert(indexes[node].in_stack);
+                                indexes[node].in_stack = false;
+                                strong_groups[node] = @intCast(strong_group_meta.items.len);
+                                if (node == frame.node) break;
+                            }
+
+                            const SortCtx = struct {
+                                self: *Data,
+                                group: u32,
+                            };
+
+                            // Reindex the in group refs
+
+                            std.sort.pdq(u32, stack.items[i..], SortCtx{
+                                .self = self,
+                                .group = @intCast(strong_group_meta.items.len),
+                            }, enum {
+                                fn lessThenFn(slf: SortCtx, lhs: u32, rhs: u32) bool {
+                                    const data = slf.self;
+
+                                    const lhss = &data.syms.items[lhs];
+                                    const rhss = &data.syms.items[rhs];
+
+                                    const code_order = std.mem.order(
+                                        u8,
+                                        data.code.items[lhss.offset..][0..lhss.size],
+                                        data.code.items[rhss.offset..][0..rhss.size],
+                                    );
+
+                                    // if we encounter equals we are basically
+                                    // damned but that has low likelyhoot of
+                                    // happening
+                                    return code_order == .lt;
+                                }
+                            }.lessThenFn);
+
+                            // NOTE: we reuse the low-link memory to store
+                            // index lookup, this is fine since trojan will not
+                            // need them after this strong group is discovered
+                            const idx_lookup = low_links;
+                            for (stack.items[i..], 0..) |si, j| {
+                                idx_lookup[si] = @intCast(j);
+                            }
+
+                            // NOTE: we basically convert this to a DAG this way
+                            for (stack.items[i..]) |si| {
+                                const sm = &self.syms.items[si];
+                                for (self.relocs.items[sm.reloc_offset..][0..sm.reloc_count]) |*rel| {
+                                    const sidx = @intFromEnum(rel.target);
+                                    if (strong_groups[sidx] == strong_group_meta.items.len) {
+                                        rel.target = @enumFromInt(strong_group_ref_flag | idx_lookup[sidx]);
+                                    }
+                                }
+                            }
+
+                            try strong_group_meta.append(
+                                tmp.arena.allocator(),
+                                tmp.arena.dupe(u32, stack.items[i..]),
+                            );
+                            stack.items.len = i;
+                        }
+                    }
+                    _ = recursion_stack.pop();
+                    continue;
+                }
+
+                const next_node = @intFromEnum(self.relocs.items[sym.reloc_offset + frame.dep_idx].target);
+                frame.dep_idx += 1;
+
+                indexes[frame.node].self_recursive = indexes[frame.node].self_recursive or
+                    next_node == frame.node;
+
+                if (indexes[next_node] == unvisited) {
+                    recursion_stack.appendAssumeCapacity(.{ .node = next_node });
+                    continue; // we do not sync low_link here, instead when we pop the frame
+                }
+
+                if (indexes[next_node].in_stack) {
+                    low_links[frame.node] = @min(low_links[frame.node], low_links[next_node]);
+                }
+            }
+        }
 
         const InverseSym = struct {
             dependants_offset: u32 = undefined,
             dependants_count: u32 = 0,
             dependants_cap: u32 = 0,
             done_relocs: u32 = 0,
+            dag_edge_cound: u32 = 0,
         };
 
         const isims = tmp.arena.alloc(InverseSym, self.syms.items.len);
         @memset(isims, .{});
 
         for (self.relocs.items) |rel| {
+            if (@intFromEnum(rel.target) & strong_group_ref_flag != 0) continue;
             isims[@intFromEnum(rel.target)].dependants_cap += 1;
         }
 
@@ -824,7 +980,6 @@ pub const Data = struct {
             isim.dependants_offset = cursor;
             cursor += isim.dependants_cap;
         }
-        std.debug.assert(cursor == self.relocs.items.len);
 
         const RevReloc = struct {
             dep: SymIdx,
@@ -836,6 +991,11 @@ pub const Data = struct {
         for (self.syms.items, 0..) |sym, i| {
             if (sym.kind == .invalid) continue;
             for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count], 0..) |*rel, j| {
+                if (@intFromEnum(rel.target) & strong_group_ref_flag != 0) {
+                    isims[i].dag_edge_cound += 1;
+                    continue;
+                }
+
                 const dst = &isims[@intFromEnum(rel.target)];
                 std.debug.assert(dst.dependants_count < dst.dependants_cap);
                 rev_relocs[dst.dependants_offset + dst.dependants_count] = .{
@@ -855,13 +1015,12 @@ pub const Data = struct {
         try dedup_map.ensureTotalCapacityContext(tmp.arena.allocator(), @intCast(isims.len), self);
 
         var worklist = tmp.arena.makeArrayList(SymIdx, isims.len);
-        for (0..isims.len, self.syms.items) |i, s| {
-            if (s.kind != .invalid and s.readonly and s.linkage != .imported and s.reloc_count == 0) {
+        for (0..isims.len, self.syms.items, isims) |i, s, is| {
+            if (s.kind != .invalid and s.readonly and s.linkage != .imported and s.reloc_count == is.dag_edge_cound) {
                 worklist.appendAssumeCapacity(@enumFromInt(i));
             }
         }
 
-        // TODO: this does not handle cycles, maybe we can gain some by handling this
         while (worklist.pop()) |n| {
             const entry = dedup_map.getOrPutAssumeCapacityContext(n, self);
 
@@ -871,9 +1030,20 @@ pub const Data = struct {
                 self.relocs.items[sym.reloc_offset + rel.reloc_idx].target = entry.key_ptr.*;
                 const oisim = &isims[@intFromEnum(rel.dep)];
                 oisim.done_relocs += 1;
-                if (oisim.done_relocs == sym.reloc_count and sym.readonly) {
+                if (oisim.done_relocs == oisim.dependants_count and sym.readonly) {
                     std.debug.assert(sym.kind != .invalid);
                     worklist.appendAssumeCapacity(rel.dep);
+                }
+            }
+        }
+
+        // NOTE: this restores the strong group edges from the normalized form
+        for (strong_group_meta.items) |members| {
+            for (members) |member| {
+                const sym = &self.syms.items[member];
+                for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |*rel| {
+                    if (@intFromEnum(rel.target) & strong_group_ref_flag == 0) continue;
+                    rel.target = @enumFromInt(members[@intFromEnum(rel.target) & ~strong_group_ref_flag]);
                 }
             }
         }
@@ -884,7 +1054,9 @@ pub const Data = struct {
     pub fn hash(self: *Data, v: SymIdx) u64 {
         var hasher = std.hash.Fnv1a_64.init();
 
-        const vs = &self.syms.items[@intFromEnum(v)];
+        const vi = @intFromEnum(v);
+
+        const vs = &self.syms.items[vi];
         std.debug.assert(vs.readonly and vs.linkage != .imported);
 
         hasher.update(std.mem.asBytes(&vs.kind));

@@ -47,7 +47,6 @@ main := fn(): int {
 }
 ```
 
-
 #### arithmetic 4
 ```hb
 expectations := .{
