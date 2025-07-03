@@ -1,0 +1,16 @@
+main:
+         st $31, $254, -16, 16
+     addi64 $254, $254, -16
+        jal $31, $0, :deep dedup 2 (generics).size(t = uint)
+         cp $32, $1
+        jal $31, $0, :deep dedup 2 (generics).size(t = int)
+      sub64 $1, $32, $1
+     addi64 $254, $254, 16
+         ld $31, $254, -16, 16
+         tx
+deep dedup 2 (generics).size(t = uint):
+       li64 $1, 8
+       jala $0, $31, 0
+deep dedup 2 (generics).size(t = int):
+       li64 $1, 8
+       jala $0, $31, 0

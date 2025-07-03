@@ -23,7 +23,17 @@ c := fn(): uint {
 d := fn(): uint {
     return 1
 }
+```
 
+#### deep dedup 2 (generics)
+```hb
+main := fn(): uint {
+    return size(uint) - size(int)
+}
+
+size := fn($t: type): uint {
+    return @size_of(t)
+}
 ```
 
 #### dangling pointer in global 1

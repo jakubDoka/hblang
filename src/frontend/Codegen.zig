@@ -1113,8 +1113,21 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
                     }
                     const token = builder.beginElse(&self.bl);
                     var res_ty = lhs.ty;
-                    {
-                        var rhs = try self.emit(.{ .loc = variable, .ty = inner }, e.rhs);
+                    default_value: {
+                        var rhs = self.emit(.{ .loc = variable, .ty = inner }, e.rhs) catch |err| switch (err) {
+                            error.Unreachable => {
+                                res_ty = inner;
+                                if (!is_compact) {
+                                    variable = self.bl.addFieldOffset(
+                                        sloc,
+                                        variable,
+                                        @intCast(inner.alignment(self.types)),
+                                    );
+                                }
+                                break :default_value;
+                            },
+                            else => return err,
+                        };
                         if (rhs.ty != lhs.ty) {
                             try self.typeCheck(e.rhs, &rhs, inner);
                             res_ty = inner;

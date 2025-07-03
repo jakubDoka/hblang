@@ -1634,12 +1634,12 @@ main := fn(): uint {
 opaque := fn(v: @Any()): ?@TypeOf(v) return v
 ```
 
-#### nullable types 5 (|| operator)
+#### nullable types 5 (or operator)
 ```hb
 main := fn(): uint {
     if (@as(?uint, null) || 1) != 1 return 1
 
-    return @as(?uint, 0) || 1
+    return @as(?uint, 0) || return 1
 }
 ```
 
