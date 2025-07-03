@@ -834,8 +834,9 @@ pub const Data = struct {
         const rev_relocs = tmp.arena.alloc(RevReloc, self.relocs.items.len);
         for (self.syms.items, 0..) |sym, i| {
             if (sym.kind == .invalid) continue;
-            for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count], 0..) |rel, j| {
+            for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count], 0..) |*rel, j| {
                 const dst = &isims[@intFromEnum(rel.target)];
+                rel.offset -= sym.offset;
                 std.debug.assert(dst.dependants_count < dst.dependants_cap);
                 rev_relocs[dst.dependants_offset + dst.dependants_count] = .{
                     .dep = @enumFromInt(i),
@@ -864,18 +865,23 @@ pub const Data = struct {
         while (worklist.pop()) |n| {
             const entry = dedup_map.getOrPutAssumeCapacityContext(n, self);
 
-            if (entry.found_existing) {
-                const isim = &isims[@intFromEnum(n)];
-                for (rev_relocs[isim.dependants_offset..][0..isim.dependants_count]) |rel| {
-                    const sym = &self.syms.items[@intFromEnum(rel.dep)];
-                    self.relocs.items[sym.reloc_offset + rel.reloc_idx].target = entry.key_ptr.*;
-                    const oisim = &isims[@intFromEnum(rel.dep)];
-                    oisim.done_relocs += 1;
-                    if (oisim.done_relocs == sym.reloc_count and sym.readonly) {
-                        std.debug.assert(sym.kind != .invalid);
-                        worklist.appendAssumeCapacity(rel.dep);
-                    }
+            const isim = &isims[@intFromEnum(n)];
+            for (rev_relocs[isim.dependants_offset..][0..isim.dependants_count]) |rel| {
+                const sym = &self.syms.items[@intFromEnum(rel.dep)];
+                self.relocs.items[sym.reloc_offset + rel.reloc_idx].target = entry.key_ptr.*;
+                const oisim = &isims[@intFromEnum(rel.dep)];
+                oisim.done_relocs += 1;
+                if (oisim.done_relocs == sym.reloc_count and sym.readonly) {
+                    std.debug.assert(sym.kind != .invalid);
+                    worklist.appendAssumeCapacity(rel.dep);
                 }
+            }
+        }
+
+        for (self.syms.items) |sym| {
+            if (sym.kind == .invalid) continue;
+            for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |*rel| {
+                rel.offset += sym.offset;
             }
         }
 

@@ -1,0 +1,20 @@
+main:
+         st $31, $254, -16, 16
+     addi64 $254, $254, -16
+        jal $31, $0, :deep dedup 1.a
+         cp $32, $1
+        jal $31, $0, :deep dedup 1.a
+      sub64 $1, $32, $1
+     addi64 $254, $254, 16
+         ld $31, $254, -16, 16
+         tx
+deep dedup 1.a:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        jal $31, $0, :deep dedup 1.c
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+       jala $0, $31, 0
+deep dedup 1.c:
+       li64 $1, 1
+       jala $0, $31, 0

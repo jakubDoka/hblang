@@ -1,0 +1,28 @@
+deep dedup 1.a:
+	sub rsp, 0x08
+	call :deep dedup 1.c
+	add rsp, 0x08
+	ret
+deep dedup 1.b:
+	sub rsp, 0x08
+	call :deep dedup 1.d
+	add rsp, 0x08
+	ret
+deep dedup 1.d:
+	mov rax, 0x01
+	ret
+deep dedup 1.c:
+	mov rax, 0x01
+	ret
+main:
+	push rbx
+	sub rsp, 0x08
+	call :deep dedup 1.a
+	mov rbx, rax
+	call :deep dedup 1.b
+	mov rcx, rax
+	mov rax, rbx
+	sub rax, rcx
+	add rsp, 0x08
+	pop rbx
+	ret

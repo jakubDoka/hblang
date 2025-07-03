@@ -2,6 +2,30 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### deep dedup 1
+```hb
+main := fn(): uint {
+    return a() - b()
+}
+
+a := fn(): uint {
+    return c()
+}
+
+b := fn(): uint {
+    return d()
+}
+
+c := fn(): uint {
+    return 1
+}
+
+d := fn(): uint {
+    return 1
+}
+
+```
+
 #### dangling pointer in global 1
 ```hb
 expectations := .{
