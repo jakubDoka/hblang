@@ -1,6 +1,6 @@
 gpa: std.mem.Allocator,
-add_global_metadata: bool = false,
 out: Mach.Data = .{},
+new_syms: ?std.ArrayListUnmanaged(Mach.Data.SymIdx) = null,
 local_relocs: std.ArrayListUnmanaged(BlockReloc) = undefined,
 ret_count: usize = undefined,
 block_offsets: []i32 = undefined,
@@ -199,6 +199,8 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     if (opts.optimizations.shouldDefer(id, opts.is_inline, HbvmGen, func, self))
         return;
 
+    if (self.new_syms) |*syms| try syms.append(self.gpa, self.out.funcs.items[id]);
+
     opts.optimizations.execute(HbvmGen, self, func);
 
     const allocs = Regalloc.ralloc(HbvmGen, func);
@@ -316,20 +318,18 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
 pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
     errdefer unreachable;
+    try self.out.defineGlobal(
+        self.gpa,
+        opts.id,
+        opts.name,
+        if (opts.value == .init) .data else .prealloc,
+        .local,
+        opts.value.init,
+        opts.relocs,
+        opts.readonly,
+    );
 
-    switch (opts.value) {
-        .init => |v| try self.out.defineGlobal(
-            self.gpa,
-            opts.id,
-            opts.name,
-            if (opts.value == .init) .data else .prealloc,
-            .local,
-            v,
-            opts.relocs,
-            opts.readonly,
-        ),
-        .uninit => unreachable,
-    }
+    if (self.new_syms) |*syms| try syms.append(self.gpa, self.out.globals.items[opts.id]);
 }
 
 pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {

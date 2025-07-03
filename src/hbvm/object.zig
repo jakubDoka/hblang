@@ -65,16 +65,19 @@ pub fn loadSymMap(arena: std.mem.Allocator, code: []const u8) !std.AutoHashMapUn
     return symbols;
 }
 
-pub fn jitLink(self: root.backend.Machine.Data, after: usize) void {
-    for (self.relocs.items[after..]) |rel| {
-        const dest = self.syms.items[@intFromEnum(rel.target)].offset;
-        const jump = @as(i64, dest) - rel.offset;
-        const location: usize = @intCast(rel.offset + @as(u32, @intCast(rel.addend)));
+pub fn jitLink(self: root.backend.Machine.Data, new_syms: []const root.backend.Machine.Data.SymIdx) void {
+    for (new_syms) |sym_id| {
+        const sym = &self.syms.items[@intFromEnum(sym_id)];
+        for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |rel| {
+            const dest = self.syms.items[@intFromEnum(rel.target)].offset;
+            const jump = @as(i64, dest) - (rel.offset + sym.offset);
+            const location: usize = @intCast((rel.offset + sym.offset) + @as(u32, @intCast(rel.addend)));
 
-        @memcpy(
-            self.code.items[location..][0..rel.slot_size],
-            @as(*const [8]u8, @ptrCast(&jump))[0..rel.slot_size],
-        );
+            @memcpy(
+                self.code.items[location..][0..rel.slot_size],
+                @as(*const [8]u8, @ptrCast(&jump))[0..rel.slot_size],
+            );
+        }
     }
 }
 
@@ -145,8 +148,8 @@ pub fn flush(self: root.backend.Machine.Data, writer: std.io.AnyWriter) anyerror
         .func => {
             for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |*rel| {
                 const dest = offset_lookup[@intFromEnum(rel.target)];
-                const jump = @as(i64, dest) - (rel.offset - sym.offset + olp);
-                const location: usize = @intCast(rel.offset + @as(u32, @intCast(rel.addend)));
+                const jump = @as(i64, dest) - (rel.offset + olp);
+                const location: usize = @intCast(rel.offset + sym.offset + @as(u32, @intCast(rel.addend)));
 
                 @memcpy(
                     self.code.items[location..][0..rel.slot_size],
@@ -164,8 +167,8 @@ pub fn flush(self: root.backend.Machine.Data, writer: std.io.AnyWriter) anyerror
                 const dest: i64 = offset_lookup[@intFromEnum(rel.target)];
 
                 slot.* = .{
-                    .slot_rel = @intCast((rel.offset - sym.offset + olp) - reloc_offset),
-                    .target_rel = @intCast(dest - (rel.offset - sym.offset + olp)),
+                    .slot_rel = @intCast((rel.offset + olp) - reloc_offset),
+                    .target_rel = @intCast(dest - (rel.offset + olp)),
                 };
             }
         },

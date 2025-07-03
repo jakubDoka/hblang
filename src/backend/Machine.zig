@@ -603,7 +603,7 @@ pub const Data = struct {
 
         // TODO: use binary search
         for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |rel| {
-            if (rel.offset - sym.offset == offset) {
+            if (rel.offset == offset) {
                 const sm = &self.syms.items[@intFromEnum(rel.target)];
                 const gid: u32 = @bitCast(self.code.items[sm.offset - 4 ..][0..4].*);
                 return .{ .global = gid };
@@ -635,7 +635,8 @@ pub const Data = struct {
     pub fn addReloc(self: *Data, gpa: std.mem.Allocator, target: *SymIdx, slot_size: u8, addend: i16) !void {
         try self.relocs.append(gpa, .{
             .target = try self.declSym(gpa, target),
-            .offset = @intCast(self.code.items.len),
+            .offset = @intCast(self.code.items.len -
+                self.syms.items[@intFromEnum(self.declaring_sym.?)].offset),
             .addend = addend,
             .slot_size = slot_size,
         });
@@ -836,7 +837,6 @@ pub const Data = struct {
             if (sym.kind == .invalid) continue;
             for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count], 0..) |*rel, j| {
                 const dst = &isims[@intFromEnum(rel.target)];
-                rel.offset -= sym.offset;
                 std.debug.assert(dst.dependants_count < dst.dependants_cap);
                 rev_relocs[dst.dependants_offset + dst.dependants_count] = .{
                     .dep = @enumFromInt(i),
@@ -875,13 +875,6 @@ pub const Data = struct {
                     std.debug.assert(sym.kind != .invalid);
                     worklist.appendAssumeCapacity(rel.dep);
                 }
-            }
-        }
-
-        for (self.syms.items) |sym| {
-            if (sym.kind == .invalid) continue;
-            for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |*rel| {
-                rel.offset += sym.offset;
             }
         }
 
@@ -1211,7 +1204,7 @@ pub const OptOptions = struct {
                         ) |rel, *dst| {
                             dst.* = .{
                                 .target = sym_to_idx[@intFromEnum(rel.target)],
-                                .offset = rel.offset - sym.offset,
+                                .offset = rel.offset,
                             };
                         }
 

@@ -456,7 +456,7 @@ pub const elf = enum {
                         root.utils.panic("{} {} {s}\n", .{ rl.target, sym, self.lookupName(sym.name) });
                     }
                     try writer.writeStruct(Rela{
-                        .offset = (rl.offset - sym.offset) + poff,
+                        .offset = rl.offset + poff,
                         .info = .{
                             .type = switch (rl.slot_size) {
                                 4 => if (self.syms.items[@intFromEnum(rl.target)].linkage == .imported)

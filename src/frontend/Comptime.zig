@@ -404,7 +404,6 @@ pub fn jitFunc(self: *Comptime, fnc: utils.EntId(tys.Func)) !void {
     self.getTypes().queue(gen.target, .init(.{ .Func = fnc }));
     try compileDependencies(
         gen,
-        self.gen.out.relocs.items.len,
         self.getTypes().func_work_list.get(gen.target).items.len - 1,
     );
 }
@@ -469,7 +468,6 @@ pub fn jitExprLow(
 
     gen.only_inference = only_inference;
 
-    const reloc_frame = self.gen.out.relocs.items.len;
     const pop_until = types.func_work_list.get(.@"comptime").items.len;
 
     var ret: Codegen.Value = undefined;
@@ -525,7 +523,7 @@ pub fn jitExprLow(
     }
 
     if (!only_inference) {
-        compileDependencies(gen, reloc_frame, pop_until) catch return error.Never;
+        compileDependencies(gen, pop_until) catch return error.Never;
     } else {
         types.func_work_list.getPtr(.@"comptime").items.len = pop_until;
     }
@@ -533,7 +531,7 @@ pub fn jitExprLow(
     return .{ .{ .func = id }, ret.ty };
 }
 
-pub fn compileDependencies(self: *Codegen, reloc_after: usize, pop_until: usize) !void {
+pub fn compileDependencies(self: *Codegen, pop_until: usize) !void {
     while (self.types.nextTask(self.target, pop_until)) |func| {
         defer self.bl.func.reset();
 
@@ -554,7 +552,8 @@ pub fn compileDependencies(self: *Codegen, reloc_after: usize, pop_until: usize)
         );
     }
 
-    root.hbvm.object.jitLink(self.types.ct.gen.out, reloc_after);
+    root.hbvm.object.jitLink(self.types.ct.gen.out, self.types.ct.gen.new_syms.?.items);
+    self.types.ct.gen.new_syms.?.items.len = 0;
 }
 
 pub fn evalTy(self: *Comptime, name: []const u8, scope: Codegen.Scope, ty_expr: Ast.Id) !Types.Id {
