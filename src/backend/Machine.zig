@@ -800,6 +800,13 @@ pub const Data = struct {
         slot.reloc_count = @intCast(self.relocs.items.len - slot.reloc_offset);
     }
 
+    pub fn makeRelocOffsetsGlobal(self: *Data, idx: SymIdx) void {
+        const sym = &self.syms.items[@intFromEnum(idx)];
+        for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |*rel| {
+            rel.offset += sym.offset;
+        }
+    }
+
     const trivial_group = std.math.maxInt(u32);
 
     const strong_group_ref_flag: u32 = 1 << 31;

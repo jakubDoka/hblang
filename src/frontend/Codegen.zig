@@ -363,7 +363,7 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
                             break :b acc[", ".len..];
                         };
 
-                        self.report(name, "invalid handler, only " ++ handlers, .{}) catch
+                        self.report(name, "invalid handler, only " ++ handlers ++ " are supported", .{}) catch
                             continue;
                     };
 

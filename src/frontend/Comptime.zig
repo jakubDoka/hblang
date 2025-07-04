@@ -270,7 +270,7 @@ pub fn runVm(
     self.vm.regs.set(.stack_addr, stack_end - return_loc.len);
 
     var vm_ctx = Vm.SafeContext{
-        .writer = if (false) utils.getStdErr() else std.io.null_writer.any(),
+        .writer = if (false) types.diagnostics else std.io.null_writer.any(),
         .color_cfg = .escape_codes,
         .memory = self.gen.out.code.items,
         .code_start = 0,
@@ -278,7 +278,7 @@ pub fn runVm(
     };
 
     while (true) switch (self.vm.run(&vm_ctx) catch |err| {
-        types.report(file, pos, "comptime execution failed: {s}", .{@errorName(err)});
+        types.report(file, pos, "comptime execution failed: {}", .{@errorName(err)});
         return error.Never;
     }) {
         .tx => break,
@@ -405,6 +405,7 @@ pub fn jitFunc(self: *Comptime, fnc: utils.EntId(tys.Func)) !void {
     try compileDependencies(
         gen,
         self.getTypes().func_work_list.get(gen.target).items.len - 1,
+        self.getTypes().ct.gen.out.relocs.items.len,
     );
 }
 
@@ -469,6 +470,7 @@ pub fn jitExprLow(
     gen.only_inference = only_inference;
 
     const pop_until = types.func_work_list.get(.@"comptime").items.len;
+    const new_syms_pop_until = self.getTypes().ct.gen.out.relocs.items.len;
 
     var ret: Codegen.Value = undefined;
     {
@@ -523,7 +525,7 @@ pub fn jitExprLow(
     }
 
     if (!only_inference) {
-        compileDependencies(gen, pop_until) catch return error.Never;
+        compileDependencies(gen, pop_until, new_syms_pop_until) catch return error.Never;
     } else {
         types.func_work_list.getPtr(.@"comptime").items.len = pop_until;
     }
@@ -531,7 +533,7 @@ pub fn jitExprLow(
     return .{ .{ .func = id }, ret.ty };
 }
 
-pub fn compileDependencies(self: *Codegen, pop_until: usize) !void {
+pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until: usize) !void {
     while (self.types.nextTask(self.target, pop_until)) |func| {
         defer self.bl.func.reset();
 
@@ -552,8 +554,7 @@ pub fn compileDependencies(self: *Codegen, pop_until: usize) !void {
         );
     }
 
-    root.hbvm.object.jitLink(self.types.ct.gen.out, self.types.ct.gen.new_syms.?.items);
-    self.types.ct.gen.new_syms.?.items.len = 0;
+    root.hbvm.object.jitLink(self.types.ct.gen.out, new_syms_pop_until);
 }
 
 pub fn evalTy(self: *Comptime, name: []const u8, scope: Codegen.Scope, ty_expr: Ast.Id) !Types.Id {

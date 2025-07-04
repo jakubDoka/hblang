@@ -1,6 +1,6 @@
 gpa: std.mem.Allocator,
 out: Mach.Data = .{},
-new_syms: ?std.ArrayListUnmanaged(Mach.Data.SymIdx) = null,
+emit_global_reloc_offsets: bool = false,
 local_relocs: std.ArrayListUnmanaged(BlockReloc) = undefined,
 ret_count: usize = undefined,
 block_offsets: []i32 = undefined,
@@ -194,12 +194,16 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     const entry = opts.linkage == .exported;
 
     try self.out.startDefineFunc(self.gpa, id, name, .func, opts.linkage, opts.is_inline);
-    defer self.out.endDefineFunc(id);
+    defer {
+        self.out.endDefineFunc(id);
+
+        if (self.emit_global_reloc_offsets) {
+            self.out.makeRelocOffsetsGlobal(self.out.funcs.items[id]);
+        }
+    }
 
     if (opts.optimizations.shouldDefer(id, opts.is_inline, HbvmGen, func, self))
         return;
-
-    if (self.new_syms) |*syms| try syms.append(self.gpa, self.out.funcs.items[id]);
 
     opts.optimizations.execute(HbvmGen, self, func);
 
@@ -329,7 +333,9 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
         opts.readonly,
     );
 
-    if (self.new_syms) |*syms| try syms.append(self.gpa, self.out.globals.items[opts.id]);
+    if (self.emit_global_reloc_offsets) {
+        self.out.makeRelocOffsetsGlobal(self.out.globals.items[opts.id]);
+    }
 }
 
 pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {

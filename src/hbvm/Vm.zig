@@ -12,7 +12,7 @@ const one: u64 = 1;
 
 pub const SafeContext = struct {
     color_cfg: std.io.tty.Config = .no_color,
-    writer: std.io.AnyWriter = std.io.null_writer.any(),
+    writer: ?std.io.AnyWriter = null,
     symbols: std.AutoHashMapUnmanaged(u32, []const u8) = .{},
     memory: []u8,
     code_start: usize,
@@ -33,7 +33,7 @@ pub const SafeContext = struct {
     }
 
     fn setColor(self: *Self, color: std.io.tty.Color) !void {
-        try root.setColor(self.color_cfg, self.writer, color);
+        try root.setColor(self.color_cfg, self.writer.?, color);
     }
 
     fn memmove(self: *Self, dst: usize, src: usize, len: usize) !void {
@@ -326,32 +326,32 @@ fn readOp(self: *Vm, ctx: anytype) !isa.Op {
         return error.InvalidOp;
     }
 
-    if (@TypeOf(ctx.writer) != void) {
+    if (ctx.writer) |wrt| {
         const prev_ip = self.ip;
         const instr = @as(isa.Op, @enumFromInt(byte));
         const instr_name = @tagName(instr);
-        for (instr_name.len..isa.max_instr_len) |_| try ctx.writer.writeAll(" ");
-        try ctx.writer.writeAll(instr_name);
+        for (instr_name.len..isa.max_instr_len) |_| try wrt.writeAll(" ");
+        try wrt.writeAll(instr_name);
         const argTys = isa.spec[byte][1];
-        try self.readOpArgs(instr, argTys, ctx);
-        try ctx.writer.writeAll("\n");
+        try self.readOpArgs(instr, argTys, ctx, wrt);
+        try wrt.writeAll("\n");
         self.ip = prev_ip;
     }
 
     return @enumFromInt(byte);
 }
 
-fn readOpArgs(self: *Vm, op: isa.Op, argTys: []const u8, ctx: anytype) !void {
+fn readOpArgs(self: *Vm, op: isa.Op, argTys: []const u8, ctx: anytype, wrt: std.io.AnyWriter) !void {
     const prev_ip = self.ip - 1;
     var seen_regs = std.EnumSet(isa.Reg){};
     for (argTys, 0..) |argTy, i| {
         const argt = isa.Arg.fromChar(argTy);
-        if (i > 0) try ctx.writer.writeAll(", ") else try ctx.writer.writeAll(" ");
+        if (i > 0) try wrt.writeAll(", ") else try wrt.writeAll(" ");
         try self.displayArg(prev_ip, argt, ctx, &seen_regs, switch (op) {
             .fadd64, .fsub64, .fmul64, .fdiv64, .fti64 => .f64,
             .fadd32, .fsub32, .fmul32, .fdiv32, .fti32 => .f32,
             else => .int,
-        });
+        }, wrt);
     }
 }
 
@@ -362,6 +362,7 @@ fn displayArg(
     ctx: anytype,
     seen_regs: *std.EnumSet(isa.Reg),
     ty: enum { int, f32, f64 },
+    wrt: std.io.AnyWriter,
 ) !void {
     switch (arg) {
         inline .reg => |t| {
@@ -370,19 +371,19 @@ fn displayArg(
 
             const col: std.io.tty.Color = @enumFromInt(3 + @intFromEnum(value) % 12);
             try ctx.setColor(col);
-            try ctx.writer.print("${d}", .{@intFromEnum(value)});
+            try wrt.print("${d}", .{@intFromEnum(value)});
             try ctx.setColor(.reset);
 
             if (!seen_regs.contains(value)) {
                 seen_regs.insert(value);
 
                 try ctx.setColor(.dim);
-                try ctx.writer.writeAll("=");
+                try wrt.writeAll("=");
 
                 switch (ty) {
-                    .int => try ctx.writer.print("{d}", .{@as(i64, @bitCast(self.regs.get(value)))}),
-                    .f32 => try ctx.writer.print("{d}", .{@as(f32, @bitCast(@as(u32, @truncate(self.regs.get(value)))))}),
-                    .f64 => try ctx.writer.print("{d}", .{@as(f64, @bitCast(self.regs.get(value)))}),
+                    .int => try wrt.print("{d}", .{@as(i64, @bitCast(self.regs.get(value)))}),
+                    .f32 => try wrt.print("{d}", .{@as(f32, @bitCast(@as(u32, @truncate(self.regs.get(value)))))}),
+                    .f64 => try wrt.print("{d}", .{@as(f64, @bitCast(self.regs.get(value)))}),
                 }
                 try ctx.setColor(.reset);
             }
@@ -393,11 +394,11 @@ fn displayArg(
             try ctx.setColor(arg.color());
             const pos = if (t == .rel32) @as(i32, @intCast(prev_ip)) + value - @as(i32, @intCast(ctx.code_start)) else 0;
             if (t == .rel32 and pos > 0 and ctx.symbols.get(@intCast(pos)) != null) {
-                try ctx.writer.print("{s}", .{ctx.symbols.get(@intCast(pos)).?});
+                try wrt.print("{s}", .{ctx.symbols.get(@intCast(pos)).?});
             } else if (@typeInfo(@TypeOf(value)).int.signedness == .unsigned) {
-                try ctx.writer.print("{any}", .{@as(std.meta.Int(.signed, @bitSizeOf(@TypeOf(value))), @bitCast(value))});
+                try wrt.print("{any}", .{@as(std.meta.Int(.signed, @bitSizeOf(@TypeOf(value))), @bitCast(value))});
             } else {
-                try ctx.writer.print("{any}", .{value});
+                try wrt.print("{any}", .{value});
             }
             try ctx.setColor(.reset);
         },

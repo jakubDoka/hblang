@@ -1,5 +1,6 @@
 const std = @import("std");
 const root = @import("hb");
+const utils = root.utils;
 
 pub const ExecHeader = extern struct {
     magic_number: [3]u8 = .{ 0x15, 0x91, 0xD2 },
@@ -65,19 +66,18 @@ pub fn loadSymMap(arena: std.mem.Allocator, code: []const u8) !std.AutoHashMapUn
     return symbols;
 }
 
-pub fn jitLink(self: root.backend.Machine.Data, new_syms: []const root.backend.Machine.Data.SymIdx) void {
-    for (new_syms) |sym_id| {
-        const sym = &self.syms.items[@intFromEnum(sym_id)];
-        for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |rel| {
-            const dest = self.syms.items[@intFromEnum(rel.target)].offset;
-            const jump = @as(i64, dest) - (rel.offset + sym.offset);
-            const location: usize = @intCast((rel.offset + sym.offset) + @as(u32, @intCast(rel.addend)));
+pub fn jitLink(self: root.backend.Machine.Data, after: usize) void {
+    for (self.relocs.items[after..]) |rel| {
+        const target = &self.syms.items[@intFromEnum(rel.target)];
+        std.debug.assert(target.kind != .invalid);
+        const dest = target.offset;
+        const jump = @as(i64, dest) - rel.offset;
+        const location: usize = @intCast(rel.offset + @as(u32, @intCast(rel.addend)));
 
-            @memcpy(
-                self.code.items[location..][0..rel.slot_size],
-                @as(*const [8]u8, @ptrCast(&jump))[0..rel.slot_size],
-            );
-        }
+        @memcpy(
+            self.code.items[location..][0..rel.slot_size],
+            @as(*const [8]u8, @ptrCast(&jump))[0..rel.slot_size],
+        );
     }
 }
 

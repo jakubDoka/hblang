@@ -754,7 +754,7 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: std.io.AnyWriter) *
         .diagnostics = diagnostics,
     };
 
-    slot.ct.gen.new_syms = .empty;
+    slot.ct.gen.emit_global_reloc_offsets = true;
 
     slot.string = slot.makeSlice(null, .u8);
     slot.source_loc = .init(.{ .Struct = slot.store.add(slot.pool.allocator(), tys.Struct{
