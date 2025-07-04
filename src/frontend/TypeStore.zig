@@ -100,7 +100,27 @@ pub const TypeCtx = struct {
             .Slice => |s| std.meta.eql(self.types.store.get(s).*, self.types.store.get(bd.Slice).*),
             .Nullable => |n| std.meta.eql(self.types.store.get(n).inner, self.types.store.get(bd.Nullable).inner),
             .Tuple => |n| std.mem.eql(Id, @ptrCast(self.types.store.get(n).fields), @ptrCast(self.types.store.get(bd.Tuple).fields)),
-            inline .Enum, .Union, .Struct, .Func, .Template, .Global => |v, t| self.types.store.get(v).key.eql(self.types.store.get(@field(bd, @tagName(t))).key),
+            .Enum, .Union, .Struct, .Func, .Template, .Global => {
+                const as, const bs = switch (ad) {
+                    inline .Enum, .Union, .Struct, .Func, .Template, .Global => |v, t| .{
+                        &self.types.store.get(v).key,
+                        &self.types.store.get(@field(bd, @tagName(t))).key,
+                    },
+                    else => unreachable,
+                };
+
+                if (!as.eql(bs.*)) return false;
+
+                if (self.types.store.unwrap(ad, .Global)) |ag| {
+                    const bg = self.types.store.get(bd.Global);
+                    if (ag.readonly) {
+                        std.debug.assert(bg.readonly);
+                        return std.mem.eql(u8, ag.data, bg.data);
+                    }
+                }
+
+                return true;
+            },
         };
     }
 
@@ -114,7 +134,7 @@ pub const TypeCtx = struct {
             .Nullable => |n| std.hash.autoHash(&hasher, self.types.store.get(n).inner),
             // its an array of integers, splat
             .Tuple => |n| hasher.update(@ptrCast(self.types.store.get(n).fields)),
-            .Enum, .Union, .Struct, .Func, .Template, .Global => {
+            .Enum, .Union, .Struct, .Func, .Template, .Global => hash: {
                 const scope = switch (adk) {
                     inline .Enum, .Union, .Struct, .Func, .Template, .Global => |v| &self.types.store.get(v).key,
                     else => unreachable,
@@ -123,6 +143,13 @@ pub const TypeCtx = struct {
                 // we can safely hash the prefix as it contains
                 // only integers
                 hasher.update(std.mem.asBytes(&scope.loc));
+
+                if (self.types.store.unwrap(adk, .Global)) |gl| {
+                    if (gl.readonly) {
+                        hasher.update(gl.data);
+                        break :hash;
+                    }
+                }
 
                 // we skip the name and also splat the captures since they
                 // have no padding bites
