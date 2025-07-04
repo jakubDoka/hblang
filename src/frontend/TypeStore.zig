@@ -16,7 +16,7 @@ const tys = root.frontend.types;
 
 pub const Abi = root.frontend.Abi;
 
-next_struct: u32 = 0,
+string_index: u32 = 0,
 store: utils.EntStore(tys) = .{},
 pool: utils.Pool,
 interner: Map = .{},
@@ -109,17 +109,7 @@ pub const TypeCtx = struct {
                     else => unreachable,
                 };
 
-                if (!as.eql(bs.*)) return false;
-
-                if (self.types.store.unwrap(ad, .Global)) |ag| {
-                    const bg = self.types.store.get(bd.Global);
-                    if (ag.readonly) {
-                        std.debug.assert(bg.readonly);
-                        return std.mem.eql(u8, ag.data, bg.data);
-                    }
-                }
-
-                return true;
+                return as.eql(bs.*);
             },
         };
     }
@@ -134,7 +124,7 @@ pub const TypeCtx = struct {
             .Nullable => |n| std.hash.autoHash(&hasher, self.types.store.get(n).inner),
             // its an array of integers, splat
             .Tuple => |n| hasher.update(@ptrCast(self.types.store.get(n).fields)),
-            .Enum, .Union, .Struct, .Func, .Template, .Global => hash: {
+            .Enum, .Union, .Struct, .Func, .Template, .Global => {
                 const scope = switch (adk) {
                     inline .Enum, .Union, .Struct, .Func, .Template, .Global => |v| &self.types.store.get(v).key,
                     else => unreachable,
@@ -143,13 +133,6 @@ pub const TypeCtx = struct {
                 // we can safely hash the prefix as it contains
                 // only integers
                 hasher.update(std.mem.asBytes(&scope.loc));
-
-                if (self.types.store.unwrap(adk, .Global)) |gl| {
-                    if (gl.readonly) {
-                        hasher.update(gl.data);
-                        break :hash;
-                    }
-                }
 
                 // we skip the name and also splat the captures since they
                 // have no padding bites
@@ -225,6 +208,11 @@ pub const Id = enum(IdRepr) {
         id: u32,
         tag: u32,
     };
+
+    pub fn smallestIntFor(value: u64) Id {
+        if (value == 0) return .void;
+        return @enumFromInt(@intFromEnum(Id.u8) + std.math.log2_int_ceil(u64, value) / 8);
+    }
 
     pub fn fromRaw(raw: u32, types: *Types) ?Id {
         const repr: Repr = @bitCast(raw);
@@ -453,7 +441,10 @@ pub const Id = enum(IdRepr) {
                 }
                 return alignm;
             },
-            .Slice => |s| if (types.store.get(s).len == null) 8 else types.store.get(s).elem.alignment(types),
+            .Slice => |s| if (types.store.get(s).len == null)
+                8
+            else
+                types.store.get(s).elem.alignment(types),
             .Global, .Func, .Template => 1,
         };
     }
@@ -977,7 +968,6 @@ pub fn resolveGlobal(
     name: []const u8,
     ast: Ast.Id,
     readonly: bool,
-    is_string: bool,
 ) struct { Id, bool } {
     const slot, const alloc = self.intern(.Global, .{
         .loc = .{
@@ -986,12 +976,7 @@ pub fn resolveGlobal(
             .ast = ast,
         },
         .name = name,
-        // There is an edge case when the source loc is the same
-        // when you do `global := "str"`
-        .captures = if (is_string)
-            &.{.{ .id = @enumFromInt(0), .ty = .void }}
-        else
-            &.{},
+        .captures = &.{},
     });
     if (!slot.found_existing) {
         self.store.get(alloc).* = .{

@@ -120,11 +120,13 @@ pub const Tuple = struct {
 pub const Enum = struct {
     key: Scope,
 
+    backing_int: ?TyId = null,
     fields: ?[]const Field = null,
     index: Ast.Index,
 
     pub const Field = struct {
         name: []const u8,
+        value: i64,
     };
 
     pub const Id = enum(u32) {
@@ -132,35 +134,60 @@ pub const Enum = struct {
 
         pub const Data = Enum;
 
-        pub fn getFields(id: Id, types: *Types) []const Field {
-            const self = types.store.get(id);
+        pub const getFields = Enum.getFields;
+    };
 
-            if (self.fields) |f| return f;
-            const ast = types.getFile(self.key.loc.file);
-            const enum_ast = ast.exprs.getTyped(.Enum, self.key.loc.ast).?;
+    pub fn getFields(id: Id, types: *Types) []const Field {
+        const self: *Enum = types.store.get(id);
 
-            var count: usize = 0;
-            for (ast.exprs.view(enum_ast.fields)) |f| count += @intFromBool(f.tag() == .Tag);
+        if (self.fields) |f| return f;
 
-            const fields = types.pool.arena.alloc(Field, count);
-            var i: usize = 0;
-            for (ast.exprs.view(enum_ast.fields)) |fast| {
-                if (fast.tag() == .Comment) continue;
-                if (fast.tag() != .Tag) {
-                    if (fast.tag() != .Decl) {
-                        types.report(self.key.loc.file, fast, "unexpected item," ++
-                            " only field declarations (.variant_name)," ++
-                            " and declarations (decl_name := expr)", .{});
+        const ast = types.getFile(self.key.loc.file);
+        const enum_ast = ast.exprs.getTyped(.Enum, self.key.loc.ast).?;
+
+        var tmp = utils.Arena.scrath(null);
+        defer tmp.deinit();
+
+        var fields = std.ArrayListUnmanaged(Field){};
+
+        var value: i64 = 0;
+        var max_value: i64 = 0;
+        for (ast.exprs.view(enum_ast.fields)) |fast| {
+            if (fast.tag() == .Comment) continue;
+            const name = b: switch (ast.exprs.get(fast)) {
+                .Tag => |t| {
+                    break :b ast.tokenSrc(t.index + 1);
+                },
+                .Decl => |d| {
+                    if (d.bindings.tag() == .Tag) {
+                        const t = ast.exprs.get(d.bindings).Tag;
+                        value = types.ct.evalIntConst(
+                            .{ .Perm = .init(.{ .Enum = id }) },
+                            d.value,
+                        ) catch continue;
+                        break :b ast.tokenSrc(t.index + 1);
                     }
                     continue;
-                }
-                fields[i] = .{ .name = ast.tokenSrc(ast.exprs.getTyped(.Tag, fast).?.index + 1) };
-                i += 1;
-            }
-            self.fields = fields;
-            return fields;
+                },
+                else => {
+                    types.report(self.key.loc.file, fast, "unexpected item," ++
+                        " only field declarations (.variant_name)," ++
+                        " and declarations (decl_name := expr)", .{});
+                    continue;
+                },
+            };
+
+            fields.append(
+                tmp.arena.allocator(),
+                .{ .name = name, .value = value },
+            ) catch unreachable;
+            max_value = @max(max_value, value);
+            value += 1;
         }
-    };
+        self.fields = types.pool.arena.dupe(Field, fields.items);
+        if (self.backing_int == null) self.backing_int = .smallestIntFor(@bitCast(max_value));
+        return self.fields.?;
+    }
 };
 
 pub const Union = struct {

@@ -2448,7 +2448,7 @@ pub fn resolveGlobalLow(
 
     const ty = if (vari.ty.tag() == .Void) null else try self.resolveAnonTy(vari.ty);
 
-    const global_ty, const new = self.types.resolveGlobal(bsty, name, vari.value, readonly, false);
+    const global_ty, const new = self.types.resolveGlobal(bsty, name, vari.value, readonly);
     const global_id = global_ty.data().Global;
     if (new) {
         errdefer self.errored = true;
@@ -3038,10 +3038,10 @@ fn emitString(self: *Codegen, ctx: Ctx, data: []const u8, expr: Ast.Id) Value {
     const global = self.types.resolveGlobal(
         self.parent_scope.perm(self.types),
         data,
-        expr,
-        true,
+        Ast.Id.compact(.Void, self.types.string_index),
         true,
     )[0].data().Global;
+    self.types.string_index += 1;
     self.types.store.get(global).data = data;
     self.types.store.get(global).ty = self.types.makeSlice(data.len, .u8);
     self.types.queue(self.target, .init(.{ .Global = global }));
