@@ -166,7 +166,7 @@ pub fn testBuilder(
     colors: std.io.tty.Config,
     verbose: bool,
 ) !void {
-    var type_system_arena = utils.Arena.init(1024 * 1024);
+    var type_system_arena = utils.Arena.init(1024 * 1024 * 16);
 
     const asts = parseExample(&type_system_arena, name, code, output) catch return;
     const ast = asts[0];

@@ -2,6 +2,42 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### deep instantiation 1
+```hb
+S := fn($A: type): type return struct {
+    get := fn(): u32 return A.get() + 1
+}
+
+Z := struct {
+    get := fn(): u32 return 0
+}
+
+main := fn(): u32 {
+    $i := 0
+    $T := Z
+    $while i < 100 {
+        i += 1
+        T = S(T)
+    }
+    return T.get() != i
+}
+```
+
+#### deep instantiation 2
+```hb
+S := fn($A: type): type return struct {
+    get := fn(): u32 return A.get() + 1
+}
+
+Z := struct {
+    get := fn(): u32 return 0
+}
+
+main := fn(): u32 {
+    return S(S(S(S(S(S(S(S(Z)))))))).get() != 8
+}
+```
+
 #### deep dedup 1
 ```hb
 main := fn(): uint {

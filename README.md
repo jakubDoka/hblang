@@ -2124,6 +2124,8 @@ main := fn(): uint {
   - [x] `@frame_pointer(): uint`
   - [x] `@handler("<name>", <handle_fn>)`
   - [ ] ? `@recall(..<args>): never`
+  - [x] `@has_decl(<ty>, "<name>")`
+    - [ ] comptime interrupt
 - [ ] optimizations
   - [ ] assumptions
   - [ ] memory

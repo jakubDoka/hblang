@@ -956,7 +956,7 @@ pub const Data = struct {
                     next_node == frame.node;
 
                 if (indexes[next_node] == unvisited) {
-                    recursion_stack.appendAssumeCapacity(.{ .node = next_node });
+                    try recursion_stack.append(tmp.arena.allocator(), .{ .node = next_node });
                     continue; // we do not sync low_link here, instead when we pop the frame
                 }
 

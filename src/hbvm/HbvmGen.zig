@@ -359,9 +359,9 @@ pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    const stack_size = 1024 * 128;
+    const stack_size = 1024 * 128 + env.code.len;
 
-    var stack: [stack_size]u8 = undefined;
+    const stack = tmp.arena.alloc(u8, stack_size);
 
     const code = env.code;
 
@@ -379,7 +379,7 @@ pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
         .writer = env.output,
         .symbols = try root.hbvm.object.loadSymMap(tmp.arena.allocator(), code),
         .color_cfg = env.colors,
-        .memory = &stack,
+        .memory = stack,
         .code_start = stack_end,
         .code_end = stack_end + @as(usize, @intCast(head.code_length)),
     };

@@ -278,6 +278,13 @@ pub const Id = enum(IdRepr) {
         };
     }
 
+    pub fn getAst(self: Id, types: *Types) Ast.Id {
+        return switch (self.data()) {
+            .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
+            inline else => |v| types.store.get(v).key.loc.ast,
+        };
+    }
+
     pub fn items(self: Id, ast: *const Ast, types: *Types) Ast.Slice {
         return switch (self.data()) {
             .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
@@ -824,6 +831,7 @@ pub fn checkStack(self: *Types, file: File, pos: anytype) !void {
     const distance = @abs(@as(isize, @bitCast(@frameAddress() -% self.stack_base)));
     if (distance > root.frontend.Parser.stack_limit) {
         self.report(file, pos, "the comptime evaluation recurses too deep", .{});
+        //std.debug.dumpCurrentStackTrace(@returnAddress());
         return error.StackOverflow;
     }
 }

@@ -2477,9 +2477,6 @@ pub fn resolveGlobal(
             return self.report(vari.value, "expected a global holding" ++
                 " a type, {} is not", .{global.ty});
 
-        const prev_scope = self.parent_scope;
-        defer self.parent_scope = prev_scope;
-
         var report_scope = bsty;
         var cur: Types.Id = @enumFromInt(@as(
             Types.IdRepr,
@@ -2488,8 +2485,12 @@ pub fn resolveGlobal(
 
         for (path, 0..) |ps, i| {
             var vl = try self.lookupScopeItem(ps, cur, ast.tokenSrc(ps.index));
+
+            const prev_scope = self.parent_scope;
+            defer self.parent_scope = prev_scope;
             self.parent_scope = .{ .Perm = report_scope };
             report_scope = cur;
+
             if (i == path.len - 1) {
                 return vl;
             } else {

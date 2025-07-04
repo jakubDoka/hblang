@@ -26,7 +26,7 @@ var ran = false;
 
 pub fn runTest(name: []const u8, code: [:0]const u8) !void {
     if (!ran) {
-        utils.Arena.initScratch(1024 * 1024 * 10);
+        utils.Arena.initScratch(1024 * 1024 * 16);
         ran = true;
     }
 
