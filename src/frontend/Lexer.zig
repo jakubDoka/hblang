@@ -141,6 +141,7 @@ pub const Lexeme = enum(u16) {
     @"@inline",
     @"@len_of",
     @"@kind_of",
+    @"@field_name",
     @"@name_of",
     @"@is_comptime",
     @"@Any",

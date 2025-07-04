@@ -3351,6 +3351,25 @@ fn emitDirective(
             };
             return .mkv(.uint, self.bl.addIntImm(sloc, .i64, @intCast(len)));
         },
+        .field_name => {
+            try assertDirectiveArgs(self, expr, args, "<ty>, <index>");
+
+            const ty = try self.resolveAnonTy(args[0]);
+            if (ty.data() != .Struct) {
+                return self.report(args[0], "expected struct type, {} is not", .{ty});
+            }
+            var idx_value = try self.emitTyped(.{}, .uint, args[1]);
+            const idx = try self.partialEval(args[1], idx_value.getValue(.none, self));
+            const fields: []const tys.Struct.Field = ty.data().Struct.getFields(self.types);
+            if (idx >= fields.len) {
+                return self.report(
+                    args[1],
+                    "index is {}, but struct has only {} fields",
+                    .{ idx, fields.len },
+                );
+            }
+            return self.emitString(ctx, fields[@intCast(idx)].name, expr);
+        },
         .name_of => {
             try assertDirectiveArgs(self, expr, args, "<ty/enum-variant>");
 

@@ -1976,6 +1976,17 @@ main := fn(): uint {
 })
 ```
 
+#### directives 21 (@field_name)
+```hb
+expectations := .{
+    return_value: 69,
+}
+
+main := fn(): uint {
+    return @field_name(struct{.Edward: void}, 0)[0]
+}
+```
+
 ## progress
 
 - [x] hbvm-ableos target
@@ -1994,14 +2005,17 @@ main := fn(): uint {
   - [x] ifs
     - [x] comptime
     - [x] option unwrap
+    - [ ] return a value
   - [x] loops
     - [x] infinite
     - [x] while
-    - [ ] ? for
+      - [ ] else clause
+    - [ ] for
       - [ ] index
       - [ ] multiple slices
     - [x] comptime
     - [x] break
+      - [ ] break value
     - [x] continue
     - [x] infinite
       - [x] clean up the hacky graph hierarchy
@@ -2090,6 +2104,8 @@ main := fn(): uint {
     - [x] comptime interrupt
   - [x] `@kind_of(<ty>): u8`
     - [x] comptime interrupt
+  - [x] `@filed_name(<ty>, i)`
+    - [ ] comptime interrupt
   - [x] `@Any(<fn(type): void/type>..): type`
     - [ ] ? type filters
   - [x] `@error(...<expr>): never`

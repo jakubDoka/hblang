@@ -1,0 +1,11 @@
+main:
+     addi64 $254, $254, -16
+        lra $1, $0, :directives 21 (@field_name).main.Edward
+         st $1, $254, 0, 8
+       li64 $1, 6
+         st $1, $254, 8, 8
+         ld $1, $254, 0, 8
+         ld $1, $1, 0, 1
+       andi $1, $1, 255
+     addi64 $254, $254, 16
+         tx
