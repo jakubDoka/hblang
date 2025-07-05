@@ -1,4 +1,7 @@
 # hblang
+<p align="center">
+    <img src="./holey-byte.png" alt="holey byte">
+</p>
 
 ## Build The Compiler
 
@@ -9,7 +12,7 @@ zig build install
 
 ## Tour
 
-Try out the examples on [depell](depell.mlokis.tech).
+Try out the examples on [depell](https://depell.mlokis.tech).
 
 Note: the examples are used to generate unit tests, `n = 1` from each group is
 most interesting, others are more for testing purposes.

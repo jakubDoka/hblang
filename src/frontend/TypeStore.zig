@@ -619,15 +619,16 @@ pub fn findNestedGlobals(
     global: *tys.Global,
     scratch: *utils.Arena,
     ty: Id,
-    offset: usize,
+    offset_f: u64,
 ) !void {
+    const offset: usize = @intCast(offset_f);
     switch (ty.data()) {
         .Union, .Enum, .Builtin => {},
         .Pointer => |p| {
             const base: Id = self.store.get(p).*;
 
             const ptr_big: u64 = @bitCast(global.data[offset..][0..8].*);
-            const ptr: usize = @bitCast(ptr_big);
+            const ptr: usize = @intCast(ptr_big);
 
             const cap = base.size(self);
             if (cap == 0) return;
@@ -653,9 +654,9 @@ pub fn findNestedGlobals(
                 }
             } else {
                 const ptr_big: u64 = @bitCast(global.data[offset + tys.Slice.ptr_offset ..][0..8].*);
-                const ptr: usize = @bitCast(ptr_big);
+                const ptr: usize = @intCast(ptr_big);
                 const len_big: u64 = @bitCast(global.data[offset + tys.Slice.len_offset ..][0..8].*);
-                const len: usize = @bitCast(len_big);
+                const len: usize = @intCast(len_big);
 
                 const cap = len * slc.elem.size(self);
                 if (cap == 0) return;
@@ -683,8 +684,8 @@ pub fn findNestedGlobals(
 
                 var value: u64 = 0;
                 @memcpy(
-                    @as(*[8]u8, @ptrCast(&value))[0..size],
-                    global.data[offset + niche.offset ..][0..size],
+                    @as(*[8]u8, @ptrCast(&value))[0..@intCast(size)],
+                    global.data[@intCast(offset + niche.offset)..][0..@intCast(size)],
                 );
 
                 break :b value != 0;
@@ -702,7 +703,7 @@ pub fn findNestedGlobals(
 pub fn findSymForPtr(
     self: *Types,
     ptr: usize,
-    cap: usize,
+    cap: u64,
 ) !u32 {
     const data = &self.ct.gen.out;
 
