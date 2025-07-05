@@ -1846,7 +1846,7 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
     const ForIter = union(enum) {
         ClosedRange: struct { idx: Value, end: *Node },
         OpenedRange: struct { idx: Value },
-        Slice: struct { base: Value, len: *Node },
+        Slice: struct { base: Value, len: *Node, bound: *Node },
     };
 
     const iter_data = tmp.arena.alloc(ForIter, e.iters.len());
@@ -1884,7 +1884,10 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
                 const base = self.bl.addFieldLoad(sloc, slice.id.Pointer, tys.Slice.ptr_offset, .i64);
                 const base_id = self.bl.addSpill(sloc, base);
                 const len = self.bl.addFieldLoad(sloc, slice.id.Pointer, tys.Slice.len_offset, .i64);
-                id.* = .{ .Slice = .{ .base = .mkp(slc.elem, base_id), .len = len } };
+                const unit = self.bl.addIntImm(sloc, .i64, @intCast(slc.elem.size(self.types)));
+                const byte_len = self.bl.addBinOp(sloc, .imul, .i64, len, unit);
+                const bound = self.bl.addBinOp(sloc, .iadd, .i64, base, byte_len);
+                id.* = .{ .Slice = .{ .base = .mkp(slc.elem, base_id), .len = len, .bound = bound } };
             }
         }
     }
@@ -1914,7 +1917,8 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
         }
 
         if (check) |c| {
-            self.emitHandlerCall(handler, expr, c, &.{});
+            var arg: Value = undefined;
+            self.emitHandlerCall(handler, expr, c, (&arg)[0..1]);
         }
     }
 
@@ -1932,8 +1936,13 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
             inline .Slice => |s| s.base.id.Pointer,
         };
 
+        const ty = switch (data) {
+            inline .OpenedRange, .ClosedRange => .uint,
+            inline .Slice => |s| self.types.makePtr(s.base.ty),
+        };
+
         self.scope.appendAssumeCapacity(.{
-            .ty = .uint,
+            .ty = ty,
             .name = self.ast.exprs.get(iter.bindings).Ident.id,
         });
         self.bl.pushPin(slot);
@@ -1953,10 +1962,7 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
             },
             .Slice => |s| {
                 var base = s.base;
-                const unit = self.bl.addIntImm(sloc, .i64, @intCast(base.ty.size(self.types)));
-                const len = self.bl.addBinOp(sloc, .imul, .i64, s.len, unit);
-                const bound = self.bl.addBinOp(sloc, .iadd, .i64, base.getValue(sloc, self), len);
-                break self.bl.addBinOp(sloc, .ult, .i8, base.getValue(sloc, self), bound);
+                break self.bl.addBinOp(sloc, .ult, .i8, base.getValue(sloc, self), s.bound);
             },
             .OpenedRange => {},
         }

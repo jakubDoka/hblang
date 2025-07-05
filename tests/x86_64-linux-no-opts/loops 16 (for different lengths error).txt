@@ -1,0 +1,64 @@
+loops 16 (for different lengths error).for_loop_length_mismatch:
+	ud2
+main:
+	push rbx
+	sub rsp, 0x78
+	mov rax, 0x00
+	mov [rsp+0x50], rax
+	mov [rsp+0x58], rax
+	lea rax, [rsp+0x68]
+	mov byte ptr [rsp+0x68], 0x01
+	mov byte ptr [rsp+0x69], 0x02
+	mov byte ptr [rsp+0x6A], 0x03
+	mov [rsp+0x40], rax
+	mov rax, 0x03
+	mov [rsp+0x48], rax
+	mov rbx, 0x02
+	mov rax, [rsp+0x40]
+	mov [rsp+0x60], rax
+	mov rdx, [rsp+0x58]
+	mov rcx, [rsp+0x48]
+	mov rax, rbx
+	sub rax, rdx
+	cmp rcx, rax
+	jz :2
+	lea rcx, [rsp+0x20]
+	lea rax, [0x0000000000000007]
+	mov [rsp+0x20], rax
+	mov rax, 0x26
+	mov [rsp+0x28], rax
+	mov rax, 0x200000007
+	mov [rsp+0x30], rax
+	lea rbx, [rsp]
+	mov rax, 0x20
+	mov rdi, rbx
+	mov rsi, rcx
+	mov rdx, rax
+	call :memcpy
+	call :loops 16 (for different lengths error).for_loop_length_mismatch
+2:	mov rcx, [rsp+0x58]
+	cmp rcx, 0x02
+	setb al
+	movzx rax, al
+	mov rdx, [rsp+0x50]
+	test al, al
+	jz :1
+	mov rax, [rsp+0x60]
+	mov al, [rax]
+	movzx rax, al
+	add rcx, rax
+	mov rax, rdx
+	add rax, rcx
+	mov [rsp+0x50], rax
+	mov rax, [rsp+0x58]
+	add rax, 0x01
+	mov [rsp+0x58], rax
+	mov al, [rsp+0x60]
+	add rax, 0x01
+	mov [rsp+0x60], rax
+	jmp :2
+1:	mov rax, rdx
+	add rsp, 0x78
+	pop rbx
+	ret
+memcpy:

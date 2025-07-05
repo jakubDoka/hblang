@@ -318,7 +318,8 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
                 try self.fmtExpr(f.label);
             }
             try self.buf.appendSlice(" ");
-            for (self.ast.exprs.view(f.iters)) |*iter| {
+            for (self.ast.exprs.view(f.iters), 0..) |*iter, i| {
+                if (i != 0) try self.buf.appendSlice(", ");
                 try self.fmtDecl(iter);
             }
             try self.buf.appendSlice(" ");

@@ -571,6 +571,49 @@ main := fn(): uint {
 }
 ```
 
+#### loops 15 (for advanced)
+```hb
+expectations := .{
+    return_value: 10,
+}
+
+main := fn(): uint {
+    arr: [4]uint = idk
+
+    for i := 1.., elem := arr[..] {
+        elem.* = i
+    }
+
+    sum := 0
+
+    for elem := arr[..] {
+        sum += elem.*
+    }
+
+    return sum
+}
+```
+
+#### loops 16 (for different lengths error)
+```hb
+expectations := .{
+    unreaches: true,
+}
+
+main := fn(): uint {
+    sum := 0
+    for i := 0..2, j := u8.[1, 2, 3][..] {
+        sum += i + j.*
+    }
+    return sum
+}
+
+@handler("for_loop_length_mismatch", fn(loc: @SrcLoc()): never {
+    die
+})
+
+```
+
 #### pointers 1
 ```hb
 main := fn(): uint {
@@ -2027,9 +2070,10 @@ main := fn(): uint {
     - [x] infinite
     - [x] while
       - [ ] else clause
-    - [ ] for
-      - [ ] index
-      - [ ] multiple slices
+    - [x] for
+      - [x] index
+      - [x] multiple slices
+      - [ ] else clause
     - [x] comptime
     - [x] break
       - [ ] break value

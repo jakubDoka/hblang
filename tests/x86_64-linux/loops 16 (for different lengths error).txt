@@ -1,0 +1,21 @@
+loops 16 (for different lengths error).for_loop_length_mismatch:
+	ud2
+main:
+	push rbx
+	sub rsp, 0x48
+	lea rcx, [rsp+0x20]
+	lea rax, [0x0000000000000007]
+	mov [rsp+0x20], rax
+	mov rax, 0x26
+	mov [rsp+0x28], rax
+	mov rax, 0x200000007
+	mov [rsp+0x30], rax
+	mov rax, 0x20
+	lea rbx, [rsp]
+	mov rdi, rbx
+	mov rsi, rcx
+	mov rdx, rax
+	call :memcpy
+	mov rax, 0x00
+	call :loops 16 (for different lengths error).for_loop_length_mismatch
+memcpy:

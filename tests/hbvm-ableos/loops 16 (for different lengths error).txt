@@ -1,0 +1,15 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -40
+     addi64 $2, $254, 0
+        lra $1, $0, :loops 16 (for different lengths error).main.loops 16 (for different lengths error)
+         st $1, $254, 0, 8
+       li64 $1, 38
+         st $1, $254, 8, 8
+       li64 $1, 8589934599
+         st $1, $254, 16, 8
+       li64 $1, 0
+         cp $1, $2
+        jal $31, $0, :loops 16 (for different lengths error).for_loop_length_mismatch
+loops 16 (for different lengths error).for_loop_length_mismatch:
+         un
