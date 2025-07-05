@@ -45,6 +45,7 @@ pub const Handlers = struct {
     null_unwrap: ?utils.EntId(tys.Func) = null,
     memcpy: ?utils.EntId(tys.Func) = null,
     entry: ?utils.EntId(tys.Func) = null,
+    for_loop_length_mismatch: ?utils.EntId(tys.Func) = null,
 
     pub const Signature = struct { args: []const Id, ret: Id };
 };
@@ -815,6 +816,11 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: std.io.AnyWriter) *
                 // dst, src, len
                 .args = slot.pool.arena.dupe(Id, &.{ u8_ptr, u8_ptr, .uint }),
                 .ret = .void,
+            },
+            .{
+                // sloc
+                .args = slot.pool.arena.dupe(Id, &.{slot.source_loc}),
+                .ret = .never,
             },
             null,
         },

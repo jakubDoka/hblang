@@ -1834,40 +1834,110 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
         return self.report(expr, "TODO: comptime for loops", .{});
     }
 
-    if (e.iters.len() != 1) {
-        return self.report(expr, "TODO: multi-iter for loops", .{});
+    //if (e.iters.len() != 1) {
+    //    return self.report(expr, "TODO: multi-iter for loops", .{});
+    //}
+
+    const sloc = self.src(expr);
+
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    const ForIter = union(enum) {
+        ClosedRange: struct { idx: Value, end: *Node },
+        OpenedRange: struct { idx: Value },
+        Slice: struct { base: Value, len: *Node },
+    };
+
+    const iter_data = tmp.arena.alloc(ForIter, e.iters.len());
+
+    for (self.ast.exprs.view(e.iters), iter_data) |iter, *id| {
+        if (iter.value.tag() == .Range) {
+            const range = self.ast.exprs.get(iter.value).Range;
+
+            var start = try self.emitTyped(.{}, .uint, range.start);
+            if (start.id == .Value) start.id = .{
+                .Pointer = self.bl.addSpill(self.src(range.start), start.id.Value),
+            };
+
+            if (range.end.tag() == .Void) {
+                id.* = .{ .OpenedRange = .{ .idx = start } };
+            } else {
+                var end = try self.emitTyped(.{}, .uint, range.end);
+                id.* = .{ .ClosedRange = .{
+                    .idx = start,
+                    .end = end.getValue(sloc, self),
+                } };
+            }
+        } else {
+            const slice = try self.emit(.{}, iter.value);
+
+            if (slice.ty.data() != .Slice) {
+                return self.report(iter, "expected a slice", .{});
+            }
+
+            const slc: tys.Slice = self.types.store.get(slice.ty.data().Slice).*;
+
+            if (slc.len != null) {
+                return self.report(iter, "TODO: arrays", .{});
+            } else {
+                const base = self.bl.addFieldLoad(sloc, slice.id.Pointer, tys.Slice.ptr_offset, .i64);
+                const base_id = self.bl.addSpill(sloc, base);
+                const len = self.bl.addFieldLoad(sloc, slice.id.Pointer, tys.Slice.len_offset, .i64);
+                id.* = .{ .Slice = .{ .base = .mkp(slc.elem, base_id), .len = len } };
+            }
+        }
     }
 
-    const iter = self.ast.exprs.view(e.iters)[0];
-    const sloc = self.src(expr);
+    if (self.types.handlers.for_loop_length_mismatch) |handler| {
+        var bounds = tmp.arena.makeArrayList(*Node, iter_data.len);
+        for (iter_data) |data| {
+            bounds.appendAssumeCapacity(switch (data) {
+                .ClosedRange => |r| b: {
+                    var start = r.idx;
+                    break :b self.bl.addBinOp(sloc, .isub, .i64, r.end, start.getValue(sloc, self));
+                },
+                .Slice => |s| s.len,
+                .OpenedRange => continue,
+            });
+        }
+
+        if (bounds.items.len == 0) {
+            return self.report(expr, "cant determine upper bound of the loop", .{});
+        }
+
+        const ref = bounds.items[0];
+        var check: ?*Node = null;
+        for (bounds.items[1..]) |b| {
+            const cmp = self.bl.addBinOp(sloc, .ne, .i8, b, ref);
+            check = if (check) |c| self.bl.addBinOp(sloc, .band, .i8, c, cmp) else cmp;
+        }
+
+        if (check) |c| {
+            self.emitHandlerCall(handler, expr, c, &.{});
+        }
+    }
 
     const prev_scope_height = self.scope.items.len;
     defer self.scope.items.len = prev_scope_height;
     defer self.bl.truncatePins(prev_scope_height);
 
-    if (iter.value.tag() != .Range) {
-        return self.report(iter.value, "TODO: slices", .{});
+    for (self.ast.exprs.view(e.iters), iter_data) |iter, data| {
+        if (iter.bindings.tag() != .Ident) {
+            return self.report(iter.bindings, "TODO: pattern matching", .{});
+        }
+
+        const slot = switch (data) {
+            inline .OpenedRange, .ClosedRange => |r| r.idx.id.Pointer,
+            inline .Slice => |s| s.base.id.Pointer,
+        };
+
+        self.scope.appendAssumeCapacity(.{
+            .ty = .uint,
+            .name = self.ast.exprs.get(iter.bindings).Ident.id,
+        });
+        self.bl.pushPin(slot);
     }
-
-    if (iter.bindings.tag() != .Ident) {
-        return self.report(iter.bindings, "TODO: pattern matching", .{});
-    }
-
-    const range = self.ast.exprs.get(iter.value).Range;
-    var start = try self.emitTyped(.{}, .uint, range.start);
-    var end = try self.emitTyped(.{}, .uint, range.end);
-
-    if (start.id == .Value) start.id = .{
-        .Pointer = self.bl.addSpill(self.src(range.start), start.id.Value),
-    };
-
-    const idx_slot = start.id.Pointer;
-
-    self.scope.appendAssumeCapacity(.{
-        .ty = .uint,
-        .name = self.ast.exprs.get(iter.bindings).Ident.id,
-    });
-    self.bl.pushPin(idx_slot);
 
     self.loops.appendAssumeCapacity(.{
         .id = if (e.label.tag() != .Void) self.ast.exprs.get(e.label).Ident.id else .invalid,
@@ -1875,14 +1945,43 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
         .kind = .{ .Runtime = self.bl.addLoopAndBeginBody(sloc) },
     });
 
-    const cond = self.bl.addBinOp(sloc, .ult, .i8, start.getValue(sloc, self), end.getValue(sloc, self));
+    const cond = for (iter_data) |data| {
+        switch (data) {
+            .ClosedRange => |r| {
+                var idx = r.idx;
+                break self.bl.addBinOp(sloc, .ult, .i8, idx.getValue(sloc, self), r.end);
+            },
+            .Slice => |s| {
+                var base = s.base;
+                const unit = self.bl.addIntImm(sloc, .i64, @intCast(base.ty.size(self.types)));
+                const len = self.bl.addBinOp(sloc, .imul, .i64, s.len, unit);
+                const bound = self.bl.addBinOp(sloc, .iadd, .i64, base.getValue(sloc, self), len);
+                break self.bl.addBinOp(sloc, .ult, .i8, base.getValue(sloc, self), bound);
+            },
+            .OpenedRange => {},
+        }
+    } else return self.report(e.pos, "cant determine the termination condition", .{});
+
     var if_builder = self.bl.addIfAndBeginThen(sloc, cond);
     {
         _ = self.emitBranch(e.body);
 
-        const off = self.bl.addIntImm(sloc, .i64, 1);
-        const next = self.bl.addBinOp(sloc, .iadd, .i64, start.getValue(sloc, self), off);
-        self.bl.addStore(sloc, idx_slot, .i64, next);
+        for (iter_data) |data| {
+            switch (data) {
+                inline .OpenedRange, .ClosedRange => |r| {
+                    var idx = r.idx;
+                    const off = self.bl.addIntImm(sloc, .i64, 1);
+                    const next = self.bl.addBinOp(sloc, .iadd, .i64, idx.getValue(sloc, self), off);
+                    self.bl.addStore(sloc, r.idx.id.Pointer, .i64, next);
+                },
+                .Slice => |s| {
+                    var base = s.base;
+                    const off = self.bl.addIntImm(sloc, .i64, @intCast(base.ty.size(self.types)));
+                    const next = self.bl.addBinOp(sloc, .iadd, .i64, base.getValue(sloc, self), off);
+                    self.bl.addStore(sloc, s.base.id.Pointer, .i64, next);
+                },
+            }
+        }
     }
     const end_else = if_builder.beginElse(&self.bl);
     {

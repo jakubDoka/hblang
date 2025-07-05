@@ -13,7 +13,7 @@ main:
 	jz :0
 	add rax, rdx
 	mov [rsp], rax
-	mov rax, rdx
+	mov rax, [rsp+0x08]
 	add rax, 0x01
 	mov [rsp+0x08], rax
 	jmp :1
