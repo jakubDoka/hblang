@@ -589,18 +589,18 @@ pub fn highlightCode(
     var last: usize = 0;
     var token = lexer.next();
     while (token.kind != .Eof) : (token = lexer.next()) {
-        if (token.kind.isKeyword()) {
-            try colors.setColor(writer, .bright_white);
-            try colors.setColor(writer, .bold);
+        const mods = Fmt.Class.fromLexeme(token.kind).?;
+        for (mods.toTtyColor()) |color| {
+            try colors.setColor(writer, color);
         }
 
         try writer.writeAll(source[last..token.end]);
         last = token.end;
 
-        if (token.kind.isKeyword()) {
-            try colors.setColor(writer, .reset);
-        }
+        try colors.setColor(writer, .reset);
     }
+
+    try writer.writeAll(source[last..]);
 }
 
 pub fn pointToCode(source: []const u8, index_m: usize, colors: std.io.tty.Config, writer: std.io.AnyWriter) !void {

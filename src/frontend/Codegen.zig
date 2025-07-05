@@ -435,11 +435,16 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
         const entry = self.getEntry(.root, "main") catch {
             try self.types.diagnostics.writeAll(
                 \\...you can define the `main` in the mentioned file (or pass --no-entry):
+                \\
+            );
+
+            try Ast.highlightCode(
                 \\main := fn(): uint {
                 \\    return 0
                 \\}
                 \\
-            );
+            , self.types.colors, self.types.diagnostics);
+
             return error.Never;
         };
 

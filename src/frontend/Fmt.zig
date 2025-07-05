@@ -18,6 +18,87 @@ pub fn needsSpace(c: u8) bool {
         (c >= 127);
 }
 
+pub const Class = enum(u8) {
+    blank,
+    comment,
+    keyword,
+    identifier,
+    directive,
+    number,
+    string,
+    op,
+    assign,
+    paren,
+    bracket,
+    colon,
+    comma,
+    dot,
+    ctor,
+
+    pub fn toTtyColor(self: Class) []const std.io.tty.Color {
+        return switch (self) {
+            .blank => unreachable,
+            .comment => &.{.dim},
+            .keyword => &.{ .bright_white, .bold },
+            .identifier => &.{},
+            .directive => &.{ .bright_white, .bold },
+            .number => &.{.cyan},
+            .string => &.{.green},
+            .op => &.{.dim},
+            .assign => &.{.dim},
+            .paren => &.{.dim},
+            .bracket => &.{.dim},
+            .colon => &.{.dim},
+            .comma => &.{.dim},
+            .dot => &.{.dim},
+            .ctor => &.{.dim},
+        };
+    }
+
+    pub fn fromLexeme(leme: Lexer.Lexeme) ?Class {
+        return switch (leme) {
+            inline else => |t| {
+                if (comptime @tagName(t)[0] == '@')
+                    return .directive;
+                if (comptime std.mem.startsWith(u8, @tagName(t), "ty_"))
+                    return .identifier;
+                if (comptime std.mem.endsWith(u8, @tagName(t), "="))
+                    return .assign;
+                if (comptime std.ascii.isLower(@tagName(t)[0]) or
+                    @tagName(t)[0] == '$')
+                    return .keyword;
+                if (comptime std.mem.indexOfAny(
+                    u8,
+                    @tagName(t),
+                    "!^*/%+-<>&|.,~?",
+                ) != null)
+                    return .op;
+
+                comptime unreachable;
+            },
+            .true,
+            .false,
+            .BinInteger,
+            .OctInteger,
+            .DecInteger,
+            .HexInteger,
+            .Float,
+            => .number,
+            .@"<=", .@"==", .@">=" => .op,
+            .Ident, .@"$", ._ => .identifier,
+            .Comment => .comment,
+            .@".(", .@".[", .@".{" => .ctor,
+            .@"[", .@"]" => .bracket,
+            .@"(", .@")", .@"{", .@"}" => .paren,
+            .@"\"", .@"`", .@"'" => .string,
+            .@":", .@";", .@"#", .@"\\", .@"," => .comma,
+            .@"." => .dot,
+            .@"unterminated string" => .comment,
+            .Eof => null,
+        };
+    }
+};
+
 pub fn minify(source: [:0]u8) usize {
     var writer = source.ptr;
     var reader = source;
