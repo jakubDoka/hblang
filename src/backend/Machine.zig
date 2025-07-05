@@ -968,10 +968,10 @@ pub const Data = struct {
 
         const InverseSym = struct {
             dependants_offset: u32 = undefined,
-            dependants_count: u32 = 0,
-            dependants_cap: u32 = 0,
-            done_relocs: u32 = 0,
-            dag_edge_cound: u32 = 0,
+            dependants_count: u16 = 0,
+            dependants_cap: u16 = 0,
+            done_relocs: u16 = 0,
+            dag_edge_cound: u16 = 0,
         };
 
         const isims = tmp.arena.alloc(InverseSym, self.syms.items.len);

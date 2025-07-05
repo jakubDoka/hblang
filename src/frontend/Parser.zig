@@ -132,7 +132,11 @@ pub fn parse(self: *Parser) !Ast.Slice {
 }
 
 fn parseExpr(self: *Parser) Error!Id {
-    return self.parseBinExpr(try self.parseUnit(), 254, false);
+    return self.parseExprPrec(254);
+}
+
+fn parseExprPrec(self: *Parser, prec: u8) Error!Id {
+    return self.parseBinExpr(try self.parseUnit(), prec, false);
 }
 
 fn parseScopedExpr(self: *Parser) !Id {
@@ -169,6 +173,15 @@ fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8, unordered: bool) Error!Id 
             });
         }
 
+        if (op == .@".." and (self.cur.kind == .@"," or
+            self.cur.kind == .@")" or self.cur.kind == .@"]"))
+        {
+            return try self.store.alloc(self.arena.allocator(), .Range, .{
+                .start = acum,
+                .end = .zeroSized(.Void),
+            });
+        }
+
         const rhs = try self.parseBinExpr(try self.parseUnit(), prec, false);
         if (op.innerOp()) |iop| {
             acum = try self.store.alloc(self.arena.allocator(), .BinOp, .{
@@ -185,6 +198,11 @@ fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8, unordered: bool) Error!Id 
             acum = try self.store.alloc(self.arena.allocator(), .Decl, .{
                 .bindings = acum,
                 .value = rhs,
+            });
+        } else if (op == .@"..") {
+            acum = try self.store.alloc(self.arena.allocator(), .Range, .{
+                .start = acum,
+                .end = rhs,
             });
         } else {
             acum = try self.store.alloc(
@@ -270,12 +288,21 @@ fn parseUnit(self: *Parser) Error!Id {
             .base = base,
             .subscript = b: {
                 _ = self.advance();
-                const start: Id = if (self.cur.kind == .@"..") .zeroSized(.Void) else try self.parseExpr();
+                const start: Id = if (self.cur.kind == .@"..")
+                    .zeroSized(.Void)
+                else
+                    try self.parseExpr();
                 const is_range = self.tryAdvance(.@"..");
-                const end: Id = if (self.cur.kind == .@"]") .zeroSized(.Void) else try self.parseExpr();
+                const end: Id = if (self.cur.kind == .@"]")
+                    .zeroSized(.Void)
+                else
+                    try self.parseExpr();
                 _ = try self.expectAdvance(.@"]");
                 break :b if (is_range)
-                    try self.store.allocDyn(self.arena.allocator(), .{ .Range = .{ .start = start, .end = end } })
+                    try self.store.allocDyn(
+                        self.arena.allocator(),
+                        .{ .Range = .{ .start = start, .end = end } },
+                    )
                 else
                     start;
             },
@@ -462,13 +489,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
             } },
         },
-        inline .@"enum", .@"union", .@"struct" => |_, t| b: {
-            const name = comptime nm: {
-                var nm = @tagName(t)[0..].*;
-                nm[0] = std.ascii.toUpper(nm[0]);
-                break :nm nm[0..] ++ "";
-            };
-
+        .@"enum", .@"union", .@"struct" => b: {
             const prev_func_stats = self.func_stats;
             defer self.func_stats = prev_func_stats;
 
@@ -487,12 +508,13 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             const fields = try self.parseList(.@"{", .@";", .@"}", parseUnorderedExpr);
             self.finalizeVariables(scope_frame);
             const captures = self.popCaptures(capture_scope, prev_capture_boundary != 0);
-            break :b @unionInit(Ast.Expr, name, .{
+            break :b .{ .Type = .{
                 .fields = fields,
                 .alignment = alignment,
                 .captures = try self.store.allocSlice(Capture, self.arena.allocator(), captures),
                 .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
-            });
+                .kind = token.kind,
+            } };
         },
         .@"." => .{ .Tag = .init((try self.expectAdvance(.Ident)).pos - 1) },
         .@"defer" => .{ .Defer = b: {
@@ -605,17 +627,50 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             .value = try self.parseExpr(),
             .arms = try self.parseListTyped(.@"{", .@",", .@"}", Ast.MatchArm, parseMatchArm),
         } },
+        .@"for", .@"$for" => for_loop: {
+            const pos = Ast.Pos{
+                .index = @intCast(token.pos),
+                .flag = .{ .@"comptime" = token.kind != .@"for" },
+            };
+
+            const label: Ast.Id = try self.parseLabel();
+
+            defer self.finalizeVariables(scope_frame);
+            break :for_loop .{ .For = .{
+                .pos = pos,
+                .label = label,
+                .iters = b: {
+                    var tmp = Arena.scrath(self.arena);
+                    defer tmp.deinit();
+
+                    var buf = std.ArrayListUnmanaged(Ast.Decl){};
+                    while (true) {
+                        const ps = self.cur.pos;
+                        const vl = self.store.get(try self.parseExpr());
+                        if (vl != .Decl) {
+                            self.report(ps, "expected a declaration", .{});
+                        }
+                        try buf.append(tmp.arena.allocator(), vl.Decl.*);
+                        if (!self.tryAdvance(.@",")) break;
+                    }
+                    break :b try self.store.allocSlice(Ast.Decl, self.arena.allocator(), buf.items);
+                },
+                .body = body: {
+                    self.func_stats.loop_depth += 1;
+                    self.func_stats.max_loop_depth =
+                        @max(self.func_stats.max_loop_depth, self.func_stats.loop_depth);
+                    defer self.func_stats.loop_depth -= 1;
+                    break :body try self.parseExpr();
+                },
+            } };
+        },
         .@"while", .@"$while" => while_loop: {
             const pos = Ast.Pos{
                 .index = @intCast(token.pos),
                 .flag = .{ .@"comptime" = token.kind != .@"while" },
             };
 
-            const label: Ast.Id = if (self.tryAdvance(.@":")) b: {
-                const label = try self.resolveIdent(try self.expectAdvance(.Ident));
-                self.declareExpr(label, false);
-                break :b label;
-            } else .zeroSized(.Void);
+            const label: Ast.Id = try self.parseLabel();
 
             const body = try self.store.alloc(self.arena.allocator(), .If, .{
                 .pos = pos,
@@ -638,11 +693,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         },
         .loop, .@"$loop" => .{ .Loop = .{
             .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind != .loop } },
-            .label = if (self.tryAdvance(.@":")) b: {
-                const label = try self.resolveIdent(try self.expectAdvance(.Ident));
-                self.declareExpr(label, false);
-                break :b label;
-            } else .zeroSized(.Void),
+            .label = try self.parseLabel(),
             .body = b: {
                 self.func_stats.loop_depth += 1;
                 self.func_stats.max_loop_depth =
@@ -693,10 +744,18 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         .@"'" => .{ .Quotes = .{ .pos = .init(token.pos), .end = token.end } },
         .false => .{ .Bool = .{ .value = false, .pos = .init(token.pos) } },
         else => |k| {
-            self.report(token.pos, "no idea how to handle this: {s}", .{@tagName(k)});
+            self.report(token.pos, "no idea how to handle this: {}", .{@tagName(k)});
             return error.UnexpectedToken;
         },
     });
+}
+
+fn parseLabel(self: *Parser) Error!Ast.Id {
+    return if (self.tryAdvance(.@":")) b: {
+        const label = try self.resolveIdent(try self.expectAdvance(.Ident));
+        self.declareExpr(label, false);
+        break :b label;
+    } else .zeroSized(.Void);
 }
 
 fn finalizeVariablesLow(self: *Parser, start: usize) usize {

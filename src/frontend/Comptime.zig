@@ -306,11 +306,11 @@ pub fn runVm(
             }
 
             switch (@as(InteruptCode, @enumFromInt(self.vm.regs.get(.arg(0))))) {
-                inline .Struct, .Union, .Enum => |t| {
+                .Struct, .Union, .Enum => |t| {
                     const scope: Types.Id = @enumFromInt(self.ecaArg(1));
                     const ast = types.getFile(scope.file(types).?);
                     const struct_ast_id = self.ecaArgAst(2);
-                    const struct_ast = ast.exprs.getTyped(@field(std.meta.Tag(Ast.Expr), @tagName(t)), struct_ast_id).?;
+                    const struct_ast = ast.exprs.get(struct_ast_id).Type;
 
                     const captures = types.pool.arena.alloc(Types.Scope.Capture, struct_ast.captures.len());
 
@@ -319,14 +319,17 @@ pub fn runVm(
                         if (slot.ty.size(types) < 8) slot.value &= (@as(u64, 1) << @intCast(slot.ty.size(types) * 8)) - 1;
                     }
 
-                    const res = types.resolveFielded(
-                        @field(std.meta.Tag(Types.Data), @tagName(t)),
-                        scope,
-                        scope.file(types).?,
-                        name,
-                        struct_ast_id,
-                        captures,
-                    );
+                    const res = switch (t) {
+                        inline .Struct, .Union, .Enum => |tg| types.resolveFielded(
+                            @field(std.meta.Tag(Types.Data), @tagName(tg)),
+                            scope,
+                            scope.file(types).?,
+                            name,
+                            struct_ast_id,
+                            captures,
+                        ),
+                        else => unreachable,
+                    };
 
                     self.vm.regs.set(.ret(0), @intFromEnum(res));
                 },

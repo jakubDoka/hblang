@@ -1818,7 +1818,7 @@ fn emitLoop(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Loop)) EmitError!Val
         });
 
         _ = self.emitBranch(e.body);
-        var loop = self.loops.pop().?.kind.Runtime;
+        var loop: Builder.Loop = self.loops.pop().?.kind.Runtime;
         loop.end(&self.bl);
 
         if (self.bl.isUnreachable()) {
@@ -1827,6 +1827,75 @@ fn emitLoop(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Loop)) EmitError!Val
 
         return .{};
     }
+}
+
+pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
+    if (e.pos.flag.@"comptime") {
+        return self.report(expr, "TODO: comptime for loops", .{});
+    }
+
+    if (e.iters.len() != 1) {
+        return self.report(expr, "TODO: multi-iter for loops", .{});
+    }
+
+    const iter = self.ast.exprs.view(e.iters)[0];
+    const sloc = self.src(expr);
+
+    const prev_scope_height = self.scope.items.len;
+    defer self.scope.items.len = prev_scope_height;
+    defer self.bl.truncatePins(prev_scope_height);
+
+    if (iter.value.tag() != .Range) {
+        return self.report(iter.value, "TODO: slices", .{});
+    }
+
+    if (iter.bindings.tag() != .Ident) {
+        return self.report(iter.bindings, "TODO: pattern matching", .{});
+    }
+
+    const range = self.ast.exprs.get(iter.value).Range;
+    var start = try self.emitTyped(.{}, .uint, range.start);
+    var end = try self.emitTyped(.{}, .uint, range.end);
+
+    if (start.id == .Value) start.id = .{
+        .Pointer = self.bl.addSpill(self.src(range.start), start.id.Value),
+    };
+
+    const idx_slot = start.id.Pointer;
+
+    self.scope.appendAssumeCapacity(.{
+        .ty = .uint,
+        .name = self.ast.exprs.get(iter.bindings).Ident.id,
+    });
+    self.bl.pushPin(idx_slot);
+
+    self.loops.appendAssumeCapacity(.{
+        .id = if (e.label.tag() != .Void) self.ast.exprs.get(e.label).Ident.id else .invalid,
+        .defer_base = self.defers.items.len,
+        .kind = .{ .Runtime = self.bl.addLoopAndBeginBody(sloc) },
+    });
+
+    const cond = self.bl.addBinOp(sloc, .ult, .i8, start.getValue(sloc, self), end.getValue(sloc, self));
+    var if_builder = self.bl.addIfAndBeginThen(sloc, cond);
+    {
+        _ = self.emitBranch(e.body);
+
+        const off = self.bl.addIntImm(sloc, .i64, 1);
+        const next = self.bl.addBinOp(sloc, .iadd, .i64, start.getValue(sloc, self), off);
+        self.bl.addStore(sloc, idx_slot, .i64, next);
+    }
+    const end_else = if_builder.beginElse(&self.bl);
+    {
+        _ = self.loopControl(.@"break", expr) catch {};
+    }
+    if_builder.end(&self.bl, end_else);
+
+    var loop: Builder.Loop = self.loops.pop().?.kind.Runtime;
+    loop.end(&self.bl);
+
+    std.debug.assert(!self.bl.isUnreachable());
+
+    return .{};
 }
 
 fn emitReturn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Return)) EmitError!Value {
@@ -1866,7 +1935,7 @@ fn emitReturn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Return)) EmitError
     return error.Unreachable;
 }
 
-fn emitUserType(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Ast.Expr.Type) !Value {
+fn emitUserType(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Type)) !Value {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
@@ -1881,8 +1950,8 @@ fn emitUserType(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Ast.Expr.Type) !Value 
 
     const args = self.bl.allocCallArgs(tmp.arena, params, &returns);
 
-    const code: Comptime.InteruptCode = @enumFromInt(@intFromEnum(expr.tag()) -
-        @intFromEnum(std.meta.Tag(Ast.Expr).Struct));
+    const code: Comptime.InteruptCode = @enumFromInt(@intFromEnum(e.kind) -
+        @intFromEnum(Lexer.Lexeme.@"struct"));
 
     args.arg_slots[0] = self.bl.addIntImm(sloc, .i64, @intCast(@intFromEnum(code)));
     args.arg_slots[1] = self.emitTyConst(self.parent_scope.perm(self.types)).id.Value;
@@ -2017,7 +2086,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .Comment => .{},
         .Void => .{},
 
-        // #VALUES =====================================================================
         .String => |e| self.emitParseString(ctx, expr, e),
         .Quotes => |e| self.emitParseQuotes(ctx, expr, e),
         .Integer => |e| self.emitInteger(ctx, expr, e),
@@ -2030,7 +2098,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .Tupl => |e| self.emitTuple(ctx, expr, e),
         .Arry => |e| self.emitArray(ctx, expr, e),
 
-        // #OPS ========================================================================
         .SliceTy => |e| self.emitSliceTy(ctx, expr, e),
         .UnOp => |e| self.emitUnOp(ctx, expr, e),
         .Decl => |e| self.emitDecl(expr, e, ctx.in_if_cond),
@@ -2041,7 +2108,6 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .Field => |e| self.emitField(ctx, expr, e),
         .Index => |e| self.emitIndex(ctx, expr, e),
 
-        // #CONTROL ====================================================================
         .Block => |e| self.emitBlock(ctx, expr, e),
         .Defer => |e| {
             self.defers.appendAssumeCapacity(e.*);
@@ -2050,7 +2116,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .If => |e| self.emitIf(ctx, expr, e),
         .Match => |e| self.emitMatch(ctx, expr, e),
         .Loop => |e| self.emitLoop(ctx, expr, e),
-        // TODO: detect conflicting control flow
+        .For => |e| self.emitFor(ctx, expr, e),
         .Break => try self.loopControl(.@"break", expr),
         .Continue => self.loopControl(.@"continue", expr),
         .Call => |e| return self.emitCall(ctx, expr, self.abi.cc, e.*),
@@ -2060,12 +2126,12 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             return error.Unreachable;
         },
         .Buty => |e| return self.emitTyConst(.fromLexeme(e.bt)),
-        .Struct, .Union, .Enum => |e| self.emitUserType(ctx, expr, e),
+        .Type => |e| self.emitUserType(ctx, expr, e),
         .Fn => |e| self.emitFn(ctx, expr, e),
         .Use => |e| self.emitUse(ctx, expr, e),
         .Directive => |e| return self.emitDirective(ctx, expr, e),
         .Wildcard => return self.report(expr, "wildcard does not make sense here", .{}),
-        else => return self.report(expr, "cant handle this operation yet", .{}),
+        .Range => return self.report(expr, "range does not make sense here", .{}),
     };
 }
 
@@ -3000,6 +3066,7 @@ fn loopControl(self: *Codegen, kind: Builder.Loop.Control, ctrl: Ast.Id) !Value 
         .Break => |b| b.label,
         .Continue => |b| b.label,
         .Loop => |b| b.label,
+        .For => |b| b.label,
         else => unreachable,
     };
 

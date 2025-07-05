@@ -289,7 +289,7 @@ pub const Id = enum(IdRepr) {
         return switch (self.data()) {
             .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
             .Template, .Func => .{},
-            inline else => |v, t| ast.exprs.getTyped(@field(std.meta.Tag(Ast.Expr), @tagName(t)), types.store.get(v).key.loc.ast).?.fields,
+            inline else => |v| ast.exprs.get(types.store.get(v).key.loc.ast).Type.fields,
         };
     }
 
@@ -402,11 +402,7 @@ pub const Id = enum(IdRepr) {
                 .uint, .i64, .f64, .u64, .int => 8,
             },
             .Pointer => 8,
-            .Enum => |e| {
-                const var_count = e.getFields(types).len;
-                if (var_count <= 1) return 0;
-                return std.math.ceilPowerOfTwo(u64, std.mem.alignForward(u64, std.math.log2_int(u64, var_count), 8) / 8) catch unreachable;
-            },
+            .Enum => |e| e.getBackingInt(types).size(types),
             .Tuple => |t| {
                 var total_size: u64 = 0;
                 var alignm: u64 = 1;
@@ -939,7 +935,7 @@ pub fn resolveFielded(
             .key = self.store.get(alloc).key,
             .index = Ast.Index.build(
                 self.getFile(file),
-                @field(self.getFile(file).exprs.get(ast), @tagName(tag)).fields,
+                self.getFile(file).exprs.get(ast).Type.fields,
                 self.pool.arena.allocator(),
             ),
         };

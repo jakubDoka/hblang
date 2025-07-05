@@ -554,6 +554,23 @@ main := fn(): uint {
 }
 ```
 
+#### loops 14 (for)
+```hb
+expectations := .{
+    return_value: 10,
+}
+
+main := fn(): uint {
+    sum := 0
+
+    for i := 1..5 {
+        sum += i
+    }
+
+    return sum
+}
+```
+
 #### pointers 1
 ```hb
 main := fn(): uint {

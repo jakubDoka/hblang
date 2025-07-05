@@ -144,6 +144,23 @@ fn autoInsertSep(self: *Fmt, id: anytype, sep: Lexer.Lexeme) Error!void {
         try self.buf.appendSlice(@tagName(sep));
 }
 
+fn fmtDecl(self: *Fmt, d: *Ast.Decl) Error!void {
+    try self.fmtExpr(d.bindings);
+    if (d.ty.tag() != .Void) {
+        try self.buf.appendSlice(": ");
+        try self.fmtExpr(d.ty);
+        if (d.value.tag() != .Void) {
+            try self.buf.appendSlice(" ");
+        }
+    } else {
+        try self.buf.appendSlice(" :");
+    }
+    if (d.value.tag() != .Void) {
+        try self.buf.appendSlice("= ");
+        try self.fmtExpr(d.value);
+    }
+}
+
 fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
     switch (self.ast.exprs.get(id)) {
         .Void => {},
@@ -167,11 +184,10 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.fmtExpr(f.body);
             if (prec < fn_prec) try self.buf.appendSlice(")");
         },
-        inline .Union, .Struct, .Enum => |s, t| {
-            const name = comptime b: {
-                var nm = @tagName(t)[0..].*;
-                nm[0] = std.ascii.toLower(nm[0]);
-                break :b nm[0..] ++ "";
+        .Type => |s| {
+            const name = switch (s.kind) {
+                inline .@"struct", .@"union", .@"enum" => |t| @tagName(t),
+                else => unreachable,
             };
 
             try self.buf.appendSlice(name);
@@ -183,8 +199,10 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             }
 
             const forced = for (self.ast.exprs.view(s.fields)) |e| {
-                if (t == .Enum and e.tag() != .Tag) break true;
-                if (t != .Enum and (self.ast.exprs.getTyped(.Decl, e) orelse continue).bindings.tag() != .Tag) break true;
+                if (s.kind == .@"enum" and e.tag() != .Tag and (e.tag() == .Decl and
+                    self.ast.exprs.get(e).Decl.bindings.tag() != .Tag)) break true;
+                if (s.kind != .@"enum" and (e.tag() == .Decl and
+                    self.ast.exprs.get(e).Decl.bindings.tag() != .Tag)) break true;
             } else false;
             if (s.pos.flag.indented or forced) try self.buf.appendSlice(" ");
             try self.fmtSliceLow(s.pos.flag.indented or forced, forced, s.fields, .@"{", .@";", .@"}");
@@ -293,6 +311,19 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
                 try self.fmtExpr(l.body);
             }
         },
+        .For => |f| {
+            try self.buf.appendSlice("for");
+            if (f.label.tag() != .Void) {
+                try self.buf.appendSlice(":");
+                try self.fmtExpr(f.label);
+            }
+            try self.buf.appendSlice(" ");
+            for (self.ast.exprs.view(f.iters)) |*iter| {
+                try self.fmtDecl(iter);
+            }
+            try self.buf.appendSlice(" ");
+            try self.fmtExpr(f.body);
+        },
         .Break => |b| {
             try self.buf.appendSlice("break");
             if (b.label.tag() != .Void) {
@@ -321,22 +352,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.fmtExprPrec(o.oper, unprec);
             if (prec < unprec) try self.buf.appendSlice(")");
         },
-        .Decl => |d| {
-            try self.fmtExpr(d.bindings);
-            if (d.ty.tag() != .Void) {
-                try self.buf.appendSlice(": ");
-                try self.fmtExpr(d.ty);
-                if (d.value.tag() != .Void) {
-                    try self.buf.appendSlice(" ");
-                }
-            } else {
-                try self.buf.appendSlice(" :");
-            }
-            if (d.value.tag() != .Void) {
-                try self.buf.appendSlice("= ");
-                try self.fmtExpr(d.value);
-            }
-        },
+        .Decl => |d| try self.fmtDecl(d),
         .BinOp => |co| {
             var o = co.*;
             if (o.op == .@"=" and o.rhs.tag() == .BinOp and self.ast.exprs.getTyped(.BinOp, o.rhs).?.lhs == o.lhs) {
@@ -345,7 +361,6 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             }
             if (prec < o.op.precedence()) try self.buf.appendSlice("(");
             try self.fmtExprPrec(o.lhs, o.op.precedence());
-            // TODO: linebreaks
             try self.buf.appendSlice(" ");
             try self.buf.appendSlice(o.op.repr());
             if (!try self.preserveWrapping(o.rhs)) try self.buf.appendSlice(" ");

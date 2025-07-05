@@ -86,9 +86,14 @@ pub const Expr = union(enum) {
         peak_vars: u16,
         peak_loops: u16,
     },
-    Struct: Type,
-    Union: Type,
-    Enum: Type,
+    Type: struct {
+        pos: Pos,
+        alignment: Id,
+        captures: Captures,
+        fields: Slice,
+        // TODO: move into Pos
+        kind: Lexer.Lexeme,
+    },
     Directive: struct {
         pos: Pos,
         kind: Lexer.Lexeme.Directive,
@@ -137,6 +142,12 @@ pub const Expr = union(enum) {
         value: Id,
         arms: utils.EnumSlice(MatchArm),
     },
+    For: struct {
+        pos: Pos,
+        label: Id,
+        iters: utils.EnumSlice(Decl),
+        body: Id,
+    },
     Loop: struct {
         pos: Pos,
         label: Id,
@@ -168,11 +179,7 @@ pub const Expr = union(enum) {
         op: Lexer.Lexeme,
         oper: Id,
     },
-    Decl: struct {
-        bindings: Id,
-        ty: Id = .zeroSized(.Void),
-        value: Id,
-    },
+    Decl: Decl,
     BinOp: struct {
         lhs: Id,
         op: Lexer.Lexeme,
@@ -200,13 +207,12 @@ pub const Expr = union(enum) {
         pos: Pos,
         end: u32,
     },
+};
 
-    pub const Type = struct {
-        pos: Pos,
-        alignment: Id,
-        captures: Captures,
-        fields: Slice,
-    };
+pub const Decl = struct {
+    bindings: Id,
+    ty: Id = .zeroSized(.Void),
+    value: Id,
 };
 
 pub const Pos = packed struct(Pos.Repr) {
@@ -272,7 +278,8 @@ pub fn init(
         .items = items,
         .path = opts.path,
         .source = opts.code,
-        .root_struct = try parser.store.alloc(arena.allocator(), .Struct, .{
+        .root_struct = try parser.store.alloc(arena.allocator(), .Type, .{
+            .kind = .@"struct",
             .pos = .init(0),
             .alignment = .zeroSized(.Void),
             .fields = items,

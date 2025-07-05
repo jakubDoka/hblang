@@ -135,7 +135,14 @@ pub const Enum = struct {
         pub const Data = Enum;
 
         pub const getFields = Enum.getFields;
+        pub const getBackingInt = Enum.getBackingInt;
     };
+
+    pub fn getBackingInt(id: Id, types: *Types) TyId {
+        if (types.store.get(id).backing_int) |b| return b;
+        _ = id.getFields(types);
+        return types.store.get(id).backing_int.?;
+    }
 
     pub fn getFields(id: Id, types: *Types) []const Field {
         const self: *Enum = types.store.get(id);
@@ -143,7 +150,7 @@ pub const Enum = struct {
         if (self.fields) |f| return f;
 
         const ast = types.getFile(self.key.loc.file);
-        const enum_ast = ast.exprs.getTyped(.Enum, self.key.loc.ast).?;
+        const enum_ast = ast.exprs.get(self.key.loc.ast).Type;
 
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
@@ -151,7 +158,6 @@ pub const Enum = struct {
         var fields = std.ArrayListUnmanaged(Field){};
 
         var value: i64 = 0;
-        var max_value: i64 = 0;
         for (ast.exprs.view(enum_ast.fields)) |fast| {
             if (fast.tag() == .Comment) continue;
             const name = b: switch (ast.exprs.get(fast)) {
@@ -181,11 +187,24 @@ pub const Enum = struct {
                 tmp.arena.allocator(),
                 .{ .name = name, .value = value },
             ) catch unreachable;
-            max_value = @max(max_value, value);
             value += 1;
         }
+
+        std.sort.pdq(Field, fields.items, {}, enum {
+            fn lessThenFn(_: void, lhs: Field, rhs: Field) bool {
+                return lhs.value < rhs.value;
+            }
+        }.lessThenFn);
+
+        if (self.backing_int == null) {
+            if (fields.items.len == 0)
+                self.backing_int = .never
+            else
+                self.backing_int = .smallestIntFor(@bitCast(fields.getLast().value));
+        }
+
         self.fields = types.pool.arena.dupe(Field, fields.items);
-        if (self.backing_int == null) self.backing_int = .smallestIntFor(@bitCast(max_value));
+
         return self.fields.?;
     }
 };
@@ -211,7 +230,7 @@ pub const Union = struct {
 
             if (self.fields) |f| return f;
             const ast = types.getFile(self.key.loc.file);
-            const union_ast = ast.exprs.getTyped(.Union, self.key.loc.ast).?;
+            const union_ast = ast.exprs.get(self.key.loc.ast).Type;
 
             var count: usize = 0;
             for (ast.exprs.view(union_ast.fields)) |f| count +=
@@ -302,7 +321,7 @@ pub const Struct = struct {
             defer self.recursion_lock = false;
 
             const ast = types.getFile(self.key.loc.file);
-            const struct_ast = ast.exprs.getTyped(.Struct, self.key.loc.ast).?;
+            const struct_ast = ast.exprs.get(self.key.loc.ast).Type;
 
             if (struct_ast.alignment.tag() != .Void) {
                 if (@hasField(Field, "alignment")) @compileError("assert fields <= alignment then base alignment");
@@ -353,7 +372,7 @@ pub const Struct = struct {
 
             if (self.fields) |f| return f;
             const ast = types.getFile(self.key.loc.file);
-            const struct_ast = ast.exprs.getTyped(.Struct, self.key.loc.ast).?;
+            const struct_ast = ast.exprs.get(self.key.loc.ast).Type;
 
             var count: usize = 0;
             for (ast.exprs.view(struct_ast.fields)) |f| count += @intFromBool(if (ast.exprs.getTyped(.Decl, f)) |b| b.bindings.tag() == .Tag else false);

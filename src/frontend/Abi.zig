@@ -181,17 +181,7 @@ pub fn categorize(self: Abi, ty: Id, types: *Types) TmpSpec {
             .f64 => .f64,
         } },
         .Pointer => .{ .ByValue = .i64 },
-        .Enum => |enm| .{
-            .ByValue = switch (@as(u64, enm.getFields(types).len)) {
-                0 => return .Impossible,
-                1 => return .Imaginary,
-                2...255 => .i8,
-                256...std.math.maxInt(u16) => .i16,
-                // an I braindead?
-                std.math.maxInt(u16) + 1...std.math.maxInt(u32) => .i32,
-                std.math.maxInt(u32) + 1...std.math.maxInt(u64) => .i64,
-            },
-        },
+        .Enum => |enm| self.categorize(enm.getBackingInt(types), types),
         .Union => |s| switch (self.cc) {
             .ablecall, .systemv => categorizeAbleosUnion(s, types),
             else => unreachable,

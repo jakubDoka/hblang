@@ -175,7 +175,7 @@ pub fn build(b: *std.Build) !void {
         break :example_tests;
     }
 
-    if (false) fuzz_fidning_tests: {
+    fuzz_fidning_tests: {
         const test_run = b.addTest(.{
             .name = "fuzz_finding_tests",
             .root_source_file = b.path("src/fuzz_finding_tests.zig"),
