@@ -135,7 +135,7 @@ pub fn isInterned(kind: Func.Kind) bool {
 
 const Set = std.DynamicBitSetUnmanaged;
 
-pub fn allowedRegsFor(node: *Func.Node, idx: usize, arena: *utils.Arena) ?Set {
+pub fn allowedRegsFor(node: *Func.Node, idx: usize, arena: *utils.Arena) Set {
     errdefer unreachable;
 
     if (node.kind == .FramePointer) {
@@ -600,7 +600,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 switch (extra.op) {
                     .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt, .bor, .band, .bxor => {},
                     .fadd, .fsub, .fmul, .fdiv, .fge, .fle, .fgt, .flt => op = @enumFromInt(@intFromEnum(op) +
-                        (@intFromEnum(inps[0].?.data_type) - @intFromEnum(graph.DataType.f32))),
+                        (@intFromEnum(inps[0].data_type) - @intFromEnum(graph.DataType.f32))),
                     else => op = @enumFromInt(@intFromEnum(op) +
                         (@intFromEnum(no.data_type) - @intFromEnum(graph.DataType.i8))),
                 }
@@ -642,11 +642,11 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 switch (extra.op) {
                     .sext => {
                         const op: isa.Op = @enumFromInt(@intFromEnum(isa.Op.sxt8) +
-                            (@intFromEnum(inps[0].?.data_type) - @intFromEnum(graph.DataType.i8)));
+                            (@intFromEnum(inps[0].data_type) - @intFromEnum(graph.DataType.i8)));
                         self.emitLow("RR", op, .{ self.outReg(no), self.inReg(0, inps[0]) });
                     },
                     .uext => {
-                        const mask = (@as(u64, 1) << @intCast(inps[0].?.data_type.size() * 8)) - 1;
+                        const mask = (@as(u64, 1) << @intCast(inps[0].data_type.size() * 8)) - 1;
                         self.emit(.andi, .{ self.outReg(no), self.inReg(0, inps[0]), mask });
                     },
                     // TODO: idealize to nothing
@@ -659,10 +659,10 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     },
                     .not => self.emit(.not, .{ self.outReg(no), self.inReg(0, inps[0]) }),
                     .bnot => self.emit(.xori, .{ self.outReg(no), self.inReg(0, inps[0]), std.math.maxInt(u64) }),
-                    .fti => if (inps[0].?.data_type == .f32) {
+                    .fti => if (inps[0].data_type == .f32) {
                         self.emit(.fti32, .{ self.outReg(no), self.inReg(0, inps[0]), 0 });
                     } else {
-                        std.debug.assert(inps[0].?.data_type == .f64);
+                        std.debug.assert(inps[0].data_type == .f64);
                         self.emit(.fti64, .{ self.outReg(no), self.inReg(0, inps[0]), 0 });
                     },
                     .itf32 => self.emit(.itf32, .{ self.outReg(no), self.inReg(0, inps[0]) }),

@@ -1,0 +1,27 @@
+main:
+	push rbx
+	sub rsp, 0x20
+	mov rax, 0x01
+	lea rdx, [rsp]
+	mov rbx, rdx
+	add rbx, 0x20
+	mov rcx, rax
+	mov rax, rdx
+1:	cmp rax, rbx
+	jnb :0
+	mov [rax], rcx
+	add rax, 0x08
+	add rcx, 0x01
+	jmp :1
+0:	mov rcx, 0x00
+	mov rax, rdx
+3:	cmp rax, rbx
+	jnb :2
+	mov rdx, [rax]
+	add rax, 0x08
+	add rcx, rdx
+	jmp :3
+2:	mov rax, rcx
+	add rsp, 0x20
+	pop rbx
+	ret

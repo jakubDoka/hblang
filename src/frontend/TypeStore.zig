@@ -818,12 +818,12 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: std.io.AnyWriter) *
                 .args = slot.pool.arena.dupe(Id, &.{ u8_ptr, u8_ptr, .uint }),
                 .ret = .void,
             },
+            null,
             .{
                 // sloc
                 .args = slot.pool.arena.dupe(Id, &.{slot.source_loc}),
                 .ret = .never,
             },
-            null,
         },
     };
 

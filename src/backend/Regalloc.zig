@@ -4,12 +4,125 @@ const graph = @import("graph.zig");
 
 const Set = std.DynamicBitSetUnmanaged;
 const Arry = std.ArrayListUnmanaged;
+const Error = error{RegallocFailed};
+
 pub fn setMasks(s: Set) []Set.MaskInt {
     return s.masks[0 .. (s.bit_length + @bitSizeOf(Set.MaskInt) - 1) / @bitSizeOf(Set.MaskInt)];
 }
 
 pub inline fn swap(a: anytype, b: @TypeOf(a)) void {
     std.mem.swap(@TypeOf(a.*), a, b);
+}
+
+pub fn _ralloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
+    func.gcm.cfg_built.assertLocked();
+
+    errdefer unreachable;
+
+    for (0..8) |i| {
+        return rallocRound(Backend, func, i) catch continue;
+    } else unreachable;
+}
+
+pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend), round: usize) Error![]u16 {
+    _ = round; // autofix
+    const Func = graph.Func(Backend);
+    _ = Func; // autofix
+
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    const no_def_sentinel = std.math.maxInt(u16);
+
+    func.gcm.instr_count = 0;
+    for (func.gcm.postorder) |bb| {
+        for (bb.base.outputs()) |instr| {
+            if (instr.isDef() or instr.kills()) {
+                instr.schedule = func.gcm.instr_count;
+                func.gcm.instr_count += 1;
+            } else {
+                instr.schedule = no_def_sentinel;
+            }
+        }
+    }
+
+    if (func.gcm.instr_count == 0) return &.{};
+
+    const LiveRange = struct {
+        parent: ?*LiveRange = null,
+        mask: Set,
+
+        const LiveRange = @This();
+
+        pub fn index(self: *LiveRange, live_ranges: []const LiveRange) u16 {
+            return @intCast((@intFromPtr(live_ranges.ptr) - @intFromPtr(self)) / @sizeOf(LiveRange));
+        }
+
+        pub fn unify(self: *LiveRange, other: *LiveRange, live_ranges: []const LiveRange) bool {
+            var s, var o = .{ self, other };
+            if (self.index(live_ranges) < other.index(live_ranges)) {
+                std.mem.swap(*LiveRange, &s, &o);
+            }
+
+            o.parent = s;
+
+            s.mask.setIntersection(o.mask);
+            o.mask = .{};
+
+            return s.mask.count() == 0;
+        }
+
+        pub fn unionFind(self: *LiveRange) *LiveRange {
+            const parent = self.parent orelse return self;
+            const parent_parent = parent.parent orelse return parent;
+
+            var root = parent_parent;
+            while (root.parent) |p| : (root = p) {}
+
+            var cursor = self;
+            while (cursor.parent) |p| : (cursor = p) {
+                cursor.parent = root;
+            }
+
+            return root;
+        }
+
+        pub fn init(buf: *std.ArrayListUnmanaged(LiveRange), mask: Set) *LiveRange {
+            const lrg = buf.addOneAssumeCapacity();
+            lrg.* = .{ .mask = mask };
+            return lrg;
+        }
+    };
+
+    var lrgs = tmp.arena.makeArrayList(LiveRange, func.gcm.instr_count);
+    _ = &lrgs; // autofix
+    const lrg_table = tmp.arena.alloc(?*LiveRange, func.gcm.instr_count);
+    @memset(lrg_table, null);
+    var failed = tmp.arena.makeArrayList(u16, func.gcm.instr_count);
+
+    for (func.gcm.postorder) |bb| {
+        for (bb.base.outputs()) |instr| {
+            if (instr.schedule == no_def_sentinel) continue;
+
+            if (instr.kind == .Phi) {
+                const lrg = for (instr.dataDeps()) |d| {
+                    if (lrg_table[d.schedule]) |l| break l;
+                } else LiveRange.init(&lrgs, instr.allowedRegsFor(0, tmp.arena));
+
+                for (instr.dataDeps()) |d| {
+                    if (lrg_table[d.schedule]) |l| {
+                        if (lrg.unify(l, lrgs.items)) {
+                            failed.appendAssumeCapacity(lrg.index(lrgs.items));
+                        }
+                    } else {
+                        lrg_table[d.schedule] = lrg;
+                    }
+                }
+            } else {}
+        }
+    }
+
+    unreachable;
 }
 
 pub fn ralloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
@@ -35,7 +148,7 @@ pub fn ralloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
             if (instr.isDef() or instr.kills()) {
                 instr.schedule = func.gcm.instr_count;
                 instr_table[func.gcm.instr_count] = instr;
-                instr_masks[func.gcm.instr_count] = instr.allowedRegsFor(0, tmp.arena).?;
+                instr_masks[func.gcm.instr_count] = instr.allowedRegsFor(0, tmp.arena);
                 func.gcm.instr_count += 1;
             } else {
                 instr.schedule = std.math.maxInt(u16);
@@ -74,8 +187,8 @@ pub fn ralloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
             if (node.carried()) |c| {
                 for (node.dataDeps(), 0..) |d, k| {
                     if (k != c) {
-                        interference_table[node.schedule].set(d.?.schedule);
-                        interference_table[d.?.schedule].set(node.schedule);
+                        interference_table[node.schedule].set(d.schedule);
+                        interference_table[d.schedule].set(node.schedule);
                     }
                 }
             }
@@ -106,7 +219,7 @@ pub fn ralloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
             //std.debug.print("{}\n", .{node});
             for (node.dataDeps()) |dd| {
                 //std.debug.print("- {}\n", .{dd.?});
-                slider.set(dd.?.schedule);
+                slider.set(dd.schedule);
             }
         }
 

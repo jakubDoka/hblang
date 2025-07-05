@@ -531,7 +531,7 @@ pub fn allowedRegsFor(
     node: *Func.Node,
     idx: usize,
     tmp: *utils.Arena,
-) ?std.DynamicBitSetUnmanaged {
+) std.DynamicBitSetUnmanaged {
     errdefer unreachable;
     _ = idx;
 
@@ -1247,13 +1247,13 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 var i: usize = 0;
                 var f: usize = 0;
                 for (instr.dataDeps()) |arg| {
-                    if (arg.?.kind == .StackArgOffset) {
+                    if (arg.kind == .StackArgOffset) {
                         std.debug.assert(self.slot_base != 0);
                         continue;
                     }
 
                     var dst: Reg, const src = .{ undefined, self.getReg(arg) };
-                    if (arg.?.data_type.isInt()) {
+                    if (arg.data_type.isInt()) {
                         dst = call_conv[i];
                         i += 1;
                     } else {
@@ -1298,9 +1298,9 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
             .Return => {
                 for (instr.dataDeps()[0..self.ret_count]) |inp| {
                     const src = self.getReg(inp);
-                    if (src != Reg.retForDt(inp.?.data_type)) self.emitInstr(
+                    if (src != Reg.retForDt(inp.data_type)) self.emitInstr(
                         zydis.ZYDIS_MNEMONIC_MOV,
-                        .{ Reg.retForDt(inp.?.data_type), src },
+                        .{ Reg.retForDt(inp.data_type), src },
                     );
                 }
 

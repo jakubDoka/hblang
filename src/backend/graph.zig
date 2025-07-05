@@ -889,12 +889,14 @@ pub fn Func(comptime Backend: type) type {
                 break :b offs;
             };
 
-            pub fn dataDeps(self: *Node) []?*Node {
+            pub fn dataDeps(self: *Node) []*Node {
                 if (self.kind == .Phi and !self.isDataPhi()) return &.{};
                 const kind_idx = @intFromEnum(self.kind);
                 const start: usize = dep_offset[kind_idx / per_dep_elem] >>
                     @intCast((kind_idx % per_dep_elem) * sub_elem_width) & ((@as(u16, 1) << sub_elem_width) - 1);
-                return self.input_base[start..self.input_ordered_len];
+                const deps = self.input_base[start..self.input_ordered_len];
+                std.debug.assert(std.mem.indexOfScalar(?*Node, deps, null) == null);
+                return @ptrCast(deps);
             }
 
             pub fn knownStore(self: *Node, root: *Node) ?*Node {
@@ -933,8 +935,8 @@ pub fn Func(comptime Backend: type) type {
                 return .{ self, 0 };
             }
 
-            pub fn allowedRegsFor(self: *Node, idx: usize, tmp: *utils.Arena) ?std.DynamicBitSetUnmanaged {
-                return if (comptime optApi("allowedRegsFor", @TypeOf(allowedRegsFor))) Backend.allowedRegsFor(self, idx, tmp) else null;
+            pub fn allowedRegsFor(self: *Node, idx: usize, tmp: *utils.Arena) std.DynamicBitSetUnmanaged {
+                return if (comptime optApi("allowedRegsFor", @TypeOf(allowedRegsFor))) Backend.allowedRegsFor(self, idx, tmp) else unreachable;
             }
 
             pub fn regKills(self: *Node, tmp: *utils.Arena) ?std.DynamicBitSetUnmanaged {
