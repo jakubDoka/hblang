@@ -88,6 +88,13 @@ pub fn knownOffset(node: *Func.Node) struct { *Func.Node, i64 } {
     };
 }
 
+pub fn clobbers(node: *Func.Node) u64 {
+    return switch (node.kind) {
+        .Call => (1 << 31) - 1,
+        else => 0,
+    };
+}
+
 pub fn regBias(node: *Func.Node) ?u16 {
     return switch (node.kind) {
         .Arg => @intCast(node.extraConst(.Arg).index),
@@ -105,13 +112,6 @@ pub fn regBias(node: *Func.Node) ?u16 {
             }
             return null;
         },
-    };
-}
-
-pub fn clobbers(node: *Func.Node) u64 {
-    return switch (node.kind) {
-        .Call => (1 << 31) - 1,
-        else => 0,
     };
 }
 
@@ -135,8 +135,52 @@ pub fn isInterned(kind: Func.Kind) bool {
 
 const Set = std.DynamicBitSetUnmanaged;
 
-pub fn allowedRegsFor(node: *Func.Node, idx: usize, arena: *utils.Arena) Set {
+pub fn inPlaceSlot(_: *Func.Node) ?usize {
+    return null;
+}
+
+pub fn readMask(arena: *utils.Arena) Set {
+    var set = Set.initEmpty(arena.allocator(), reg_mask_cap) catch unreachable;
+    set.setRangeValue(.{ .start = 0, .end = 256 }, true);
+    return set;
+}
+
+pub fn writeMask(arena: *utils.Arena) Set {
+    var mask = Set.initEmpty(arena.allocator(), reg_mask_cap) catch unreachable;
+    mask.setRangeValue(.{ .start = 1, .end = max_alloc_regs }, true);
+    return mask;
+}
+
+pub fn spillMask(arena: *utils.Arena) Set {
+    var mask = Set.initFull(arena.allocator(), reg_mask_cap) catch unreachable;
+    mask.unset(0);
+    mask.setRangeValue(.{ .start = max_alloc_regs, .end = 256 }, false);
+    return mask;
+}
+
+pub fn singleRegMask(arena: *utils.Arena, reg: isa.Reg) Set {
+    var mask = Set.initEmpty(arena.allocator(), reg_mask_cap) catch unreachable;
+    mask.set(@intFromEnum(reg));
+    return mask;
+}
+
+pub fn regMask(node: *Func.Node, idx: usize, arena: *utils.Arena) Set {
     errdefer unreachable;
+
+    if (node.kind == .Arg) {
+        std.debug.assert(idx == 0);
+        return singleRegMask(arena, isa.Reg.arg(node.extra(.Arg).index));
+    }
+
+    if (node.kind == .Ret) {
+        std.debug.assert(idx == 0);
+        return singleRegMask(arena, isa.Reg.ret(node.extra(.Ret).index));
+    }
+
+    if (node.kind == .Call) {
+        std.debug.assert(idx >= 2);
+        return singleRegMask(arena, isa.Reg.arg(idx - 2));
+    }
 
     if (node.kind == .FramePointer) {
         std.debug.assert(idx == 0);
@@ -145,46 +189,29 @@ pub fn allowedRegsFor(node: *Func.Node, idx: usize, arena: *utils.Arena) Set {
         return set;
     }
 
-    var set = try Set.initFull(arena.allocator(), reg_mask_cap);
+    if (node.kind == .MachSplit) {
+        return spillMask(arena);
+    }
+
+    if (idx == 0) return writeMask(arena);
+    return readMask(arena);
+}
+
+pub fn allowedRegsFor(node: *Func.Node, idx: usize, tmp: *utils.Arena) std.DynamicBitSetUnmanaged {
+    errdefer unreachable;
+
+    if (node.kind == .FramePointer) {
+        std.debug.assert(idx == 0);
+        var set = try Set.initEmpty(tmp.allocator(), reg_mask_cap);
+        set.set(@intFromEnum(isa.Reg.stack_addr));
+        return set;
+    }
+
+    var set = try Set.initFull(tmp.allocator(), reg_mask_cap);
     set.unset(0);
     set.setRangeValue(.{ .start = max_alloc_regs, .end = 256 }, false);
     return set;
-    //return switch (node.extra2()) {
-    //    inline .Ret, .Arg => |id| arg: {
-    //        std.debug.assert(idx == 0);
-    //        var set = try Set.initEmpty(arena.allocator(), reg_mask_cap);
-    //        set.set(id.*);
-    //        break :arg set;
-    //    },
-    //    .Call => switch (idx) {
-    //        0, 1 => null,
-    //        else => arg: {
-    //            var set = try Set.initEmpty(arena.allocator(), reg_mask_cap);
-    //            set.set(idx - 1);
-    //            break :arg set;
-    //        },
-    //    },
-    //    else => {
-    //        var set = try Set.initEmpty(arena.allocator(), reg_mask_cap);
-    //        set.setRangeValue(.{ .start = 0, .end = @intFromEnum(isa.Reg.stack_addr) - 1 }, true);
-    //        return set;
-    //    },
-    //};
 }
-
-pub fn regKills(node: *Func.Node, arena: *utils.Arena) ?Set {
-    errdefer unreachable;
-    return switch (node.kind) {
-        .Call => clobbers: {
-            var set = try Set.initEmpty(arena.allocator(), reg_mask_cap);
-            set.setRangeValue(.{ .start = 0, .end = @intFromEnum(isa.Reg.ret_addr) - 1 }, true);
-            break :clobbers set;
-        },
-        else => null,
-    };
-}
-
-pub const i_know_the_api = {};
 
 pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     errdefer unreachable;
@@ -756,7 +783,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 var moves = std.ArrayList(Move).init(tmp);
                 for (no.outputs()[0].outputs()) |o| {
                     if (o.isDataPhi()) {
-                        std.debug.assert(o.inputs()[idx].?.kind == .MachMove);
+                        std.debug.assert(o.inputs()[idx].?.kind == .MachSplit);
                         const dst, const src = .{ self.outReg(o), self.inRegNoLoad(0, o.inputs()[idx].?.inputs()[1]) };
                         if (dst != src) moves.append(.init(dst, src)) catch unreachable;
                     }
@@ -783,7 +810,10 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     else => unreachable,
                 }
             },
-            .Never, .MachMove, .Mem, .Ret, .Phi => {},
+            .MachSplit => if (no.outputs().len != 1 or no.outputs()[0].kind != .Phi) {
+                self.emit(.cp, .{ self.outReg(no), self.inReg(0, inps[0]) });
+            },
+            .Never, .Mem, .Ret, .Phi => {},
             else => |e| utils.panic("{any}", .{e}),
         }
     }

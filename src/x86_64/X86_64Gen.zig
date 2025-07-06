@@ -253,10 +253,6 @@ pub const classes = enum {
 
 pub const reg_count = 32;
 
-pub fn carried(node: *Func.Node) ?usize {
-    return if (node.kind == .BinOp) 0 else null;
-}
-
 pub fn isInterned(kind: Func.Kind) bool {
     return kind == .OffsetLoad or kind == .StackLoad;
 }
@@ -264,6 +260,34 @@ pub fn isInterned(kind: Func.Kind) bool {
 pub fn isSwapped(node: *Func.Node) bool {
     _ = node;
     return false;
+}
+
+pub fn regBias(node: *Func.Node) ?u16 {
+    return @intFromEnum(switch (node.extra2()) {
+        .Arg => |ext| if (ext.index < Reg.system_v.args.len) Reg.system_v.args[ext.index] else return null,
+        else => b: {
+            for (node.outputs()) |o| {
+                if (o.kind == .Call) {
+                    const idx = std.mem.indexOfScalar(?*Func.Node, o.dataDeps(), node) orelse continue;
+                    if (o.extra(.Call).id == syscall) {
+                        break :b Reg.system_v.syscall_args[idx];
+                    } else {
+                        break :b if (idx < Reg.system_v.args.len) Reg.system_v.args[idx] else return null;
+                    }
+                }
+
+                if (o.kind == .Phi and o.inputs()[0].?.kind != .Loop) {
+                    return o.regBias();
+                }
+            }
+
+            if (node.isSub(graph.builtin.BinOp)) {
+                return node.inputs()[1].?.regBias();
+            }
+
+            return null;
+        },
+    });
 }
 
 pub fn clobbers(node: *Func.Node) u64 {
@@ -325,34 +349,6 @@ pub fn idealize(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkL
     }
 
     return null;
-}
-
-pub fn regBias(node: *Func.Node) ?u16 {
-    return @intFromEnum(switch (node.extra2()) {
-        .Arg => |ext| if (ext.index < Reg.system_v.args.len) Reg.system_v.args[ext.index] else return null,
-        else => b: {
-            for (node.outputs()) |o| {
-                if (o.kind == .Call) {
-                    const idx = std.mem.indexOfScalar(?*Func.Node, o.dataDeps(), node) orelse continue;
-                    if (o.extra(.Call).id == syscall) {
-                        break :b Reg.system_v.syscall_args[idx];
-                    } else {
-                        break :b if (idx < Reg.system_v.args.len) Reg.system_v.args[idx] else return null;
-                    }
-                }
-
-                if (o.kind == .Phi and o.inputs()[0].?.kind != .Loop) {
-                    return o.regBias();
-                }
-            }
-
-            if (node.isSub(graph.builtin.BinOp)) {
-                return node.inputs()[1].?.regBias();
-            }
-
-            return null;
-        },
-    });
 }
 
 pub fn knownOffset(node: *Func.Node) struct { *Func.Node, i64 } {
@@ -552,6 +548,93 @@ pub fn allowedRegsFor(
     }
 
     return Reg.intMask(tmp);
+}
+
+pub fn regMask(
+    node: *Func.Node,
+    idx: usize,
+    tmp: *utils.Arena,
+) std.DynamicBitSetUnmanaged {
+    errdefer unreachable;
+    _ = idx;
+
+    if (node.kind == .FramePointer) {
+        var set = try std.DynamicBitSetUnmanaged.initEmpty(tmp.allocator(), Reg.set_cap);
+        set.set(@intFromEnum(Reg.rsp) + 1);
+        return set;
+    }
+
+    if (node.kind == .Call) {
+        var set = try std.DynamicBitSetUnmanaged.initFull(tmp.allocator(), Reg.set_cap);
+        set.unset(0);
+        return set;
+    }
+
+    if (node.data_type.toRaw().kind.isFloat()) {
+        return Reg.floatMask(tmp);
+    }
+
+    return Reg.intMask(tmp);
+}
+
+pub fn inPlaceSlot(node: *Func.Node) ?usize {
+    return if (node.kind == .BinOp) 0 else null;
+}
+pub fn _inPlaceSlot(node: *Func.Node) ?usize {
+    return switch (node.extra2()) {
+        .BinOp => |extra| switch (@as(graph.BinOp, extra.op)) {
+            .iadd,
+            .isub,
+            .imul,
+            .bor,
+            .band,
+            .bxor,
+            .ushr,
+            .ishl,
+            .sshr,
+            .fadd,
+            .fsub,
+            .fmul,
+            .fdiv,
+            => 0,
+            .eq,
+            .ne,
+            .uge,
+            .ule,
+            .ugt,
+            .ult,
+            .sge,
+            .sle,
+            .sgt,
+            .slt,
+            .udiv,
+            .sdiv,
+            .umod,
+            .smod,
+            .fgt,
+            .flt,
+            .fge,
+            .fle,
+            => return null,
+        },
+        .UnOp => |extra| switch (@as(graph.UnOp, extra.op)) {
+            .ineg,
+            .bnot,
+            .ired,
+            .not,
+            .fcst,
+            .fneg,
+            => 0,
+            .sext,
+            .uext,
+            .cast,
+            .itf32,
+            .itf64,
+            .fti,
+            => return null,
+        },
+        else => null,
+    };
 }
 
 pub fn getStaticOffset(node: *Func.Node) i64 {
@@ -1100,7 +1183,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 }
                 try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
             },
-            .MachMove => {},
+            .MachSplit => {},
             .Phi => {},
             .GlobalAddr => {
                 var buf: [zydis.ZYDIS_MAX_INSTRUCTION_LENGTH]u8 = undefined;
@@ -1490,7 +1573,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 var moves = std.ArrayList(Move).init(tmp.arena.allocator());
                 for (instr.outputs()[0].outputs()) |o| {
                     if (o.isDataPhi()) {
-                        std.debug.assert(o.inputs()[idx].?.kind == .MachMove);
+                        std.debug.assert(o.inputs()[idx].?.kind == .MachSplit);
                         const dst, const src = .{ self.getReg(o), self.getReg(o.inputs()[idx].?.inputs()[1]) };
                         if (dst != src) try moves.append(.init(dst, src));
                     }

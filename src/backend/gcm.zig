@@ -175,8 +175,8 @@ pub fn GcmMixin(comptime Backend: type) type {
                     defer intmp.deinit();
                     for (intmp.arena.dupe(*Node, n.base.outputs())) |o| if (o.isDataPhi()) {
                         std.debug.assert(o.inputs().len == 3);
-                        const lhs = self.addNode(.MachMove, n.base.sloc, .top, &.{ null, o.inputs()[1].? }, .{});
-                        const rhs = self.addNode(.MachMove, n.base.sloc, .top, &.{ null, o.inputs()[2].? }, .{});
+                        const lhs = self.addNode(.MachSplit, n.base.sloc, .top, &.{ null, o.inputs()[1].? }, .{});
+                        const rhs = self.addNode(.MachSplit, n.base.sloc, .top, &.{ null, o.inputs()[2].? }, .{});
                         const new_phy = self.addNode(.Phi, n.base.sloc, o.data_type, &.{ &n.base, lhs, rhs }, .{});
                         self.subsume(new_phy, o);
                     };
@@ -423,7 +423,7 @@ pub fn GcmMixin(comptime Backend: type) type {
                 instr.schedule = @intCast(i);
                 e.* = .{ .priority = if (instr.isCfg())
                     0
-                else if (instr.kind == .MachMove)
+                else if (instr.kind == .MachSplit)
                     10
                 else if (instr.subclass(graph.Arg)) |arg|
                     @intCast(99 - arg.ext.index)

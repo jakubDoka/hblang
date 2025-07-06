@@ -13,6 +13,12 @@ fn tf32(int: i64) f32 {
     return @bitCast(@as(u32, @truncate(@as(u64, @bitCast(int)))));
 }
 
+pub const Set = std.DynamicBitSetUnmanaged;
+
+pub fn setMasks(s: Set) []Set.MaskInt {
+    return s.masks[0 .. (s.bit_length + @bitSizeOf(Set.MaskInt) - 1) / @bitSizeOf(Set.MaskInt)];
+}
+
 pub const infinite_loop_trap = std.math.maxInt(u64);
 pub const unreachable_func_trap = infinite_loop_trap - 1;
 
@@ -521,7 +527,7 @@ pub const builtin = enum {
     pub const Phi = extern struct {
         pub const is_pinned = true;
     };
-    pub const MachMove = extern struct {};
+    pub const MachSplit = extern struct {};
     pub const Arg = mod.Arg;
     pub const StructArg = extern struct {
         base: mod.Arg,
@@ -808,7 +814,7 @@ pub fn Func(comptime Backend: type) type {
                 pub fn better(cfg: *CfgNode, best: *CfgNode, to_sched: *Node, func: *Self) bool {
                     return !cfg.base.isBasicBlockEnd() and (idepth(cfg) > idepth(best) or
                         best.base.isBasicBlockEnd() or
-                        (to_sched.kind != .MachMove and func.gcm.loopDepthOf(cfg) < func.gcm.loopDepthOf(best)));
+                        (to_sched.kind != .MachSplit and func.gcm.loopDepthOf(cfg) < func.gcm.loopDepthOf(best)));
                 }
 
                 pub fn format(self: *const CfgNode, comptime a: anytype, b: anytype, writer: anytype) !void {
@@ -939,12 +945,20 @@ pub fn Func(comptime Backend: type) type {
                 return if (comptime optApi("allowedRegsFor", @TypeOf(allowedRegsFor))) Backend.allowedRegsFor(self, idx, tmp) else unreachable;
             }
 
-            pub fn regKills(self: *Node, tmp: *utils.Arena) ?std.DynamicBitSetUnmanaged {
-                return if (comptime optApi("regKills", @TypeOf(regKills))) Backend.regKills(self, tmp) else null;
+            pub fn regMask(self: *Node, idx: usize, tmp: *utils.Arena) std.DynamicBitSetUnmanaged {
+                return if (comptime optApi("regMask", @TypeOf(regMask))) Backend.regMask(self, idx, tmp) else unreachable;
+            }
+
+            pub fn clobbers(self: *Node) u64 {
+                return if (@hasDecl(Backend, "clobbers")) Backend.clobbers(self) else 0;
             }
 
             pub fn inPlaceSlot(self: *Node) ?usize {
                 return if (comptime optApi("inPlaceSlot", @TypeOf(inPlaceSlot))) Backend.inPlaceSlot(self) else null;
+            }
+
+            pub fn regBias(self: *Node) ?u16 {
+                return if (@hasDecl(Backend, "regBias")) Backend.regBias(self) else null;
             }
 
             pub fn noAlias(self: *Node, other: *Node) bool {
@@ -966,18 +980,6 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn isStack(self: *Node) bool {
                 return self.kind == .Local or self.kind == .StructArg;
-            }
-
-            pub fn regBias(self: *Node) ?u16 {
-                return if (@hasDecl(Backend, "regBias")) Backend.regBias(self) else null;
-            }
-
-            pub fn carried(self: *Node) ?usize {
-                return if (@hasDecl(Backend, "carried")) Backend.carried(self) else null;
-            }
-
-            pub fn clobbers(self: *Node) u64 {
-                return if (@hasDecl(Backend, "clobbers")) Backend.clobbers(self) else 0;
             }
 
             pub fn anyextra(self: *const Node) *const anyopaque {
@@ -1169,6 +1171,10 @@ pub fn Func(comptime Backend: type) type {
                 return forceSubclass((self.inputs()[0].?), Cfg);
             }
 
+            pub fn hasNoUseFor(self: *Node, def: *Node) bool {
+                return std.mem.indexOfScalar(*Node, self.dataDeps(), def) == null;
+            }
+
             pub fn removeUse(self: *Node, use: *Node) void {
                 const outs = self.outputs();
                 const index = std.mem.indexOfScalar(*Node, outs, use).?;
@@ -1178,6 +1184,14 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn outputs(self: *Node) []*Node {
                 return self.output_base[0..self.output_len];
+            }
+
+            pub fn posOfInput(self: *Node, input: *Node) usize {
+                return std.mem.indexOfScalarPos(?*Node, self.inputs(), 1, input).?;
+            }
+
+            pub fn posOfOutput(self: *Node, output: *Node) usize {
+                return std.mem.indexOfScalar(*Node, self.outputs(), output).?;
             }
 
             pub fn extraConst(self: *const Node, comptime kind: Kind) *const ClassFor(kind) {
@@ -1297,17 +1311,7 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn isDataPhi(self: *Node) bool {
-                // TODO: get rid of this recursion
-                const test_val = self.kind == .Phi and self.data_type != .top;
-                const true_val = self.kind == .Phi and
-                    ((!(self.input_base[1].?.isMemOp() or self.input_base[1].?.kind == .Mem) or
-                        self.input_base[1].?.kind == .Local) or
-                        self.input_base[1].?.isLoad()) and
-                    (self.input_base[1].?.kind != .Phi or self.input_base[1].?.isDataPhi());
-                if (test_val != true_val) {
-                    utils.panic("{} {}\n", .{ self, self.inputs()[1].? });
-                }
-                return test_val;
+                return self.kind == .Phi and self.data_type != .top;
             }
 
             pub inline fn isBasicBlockStart(self: *const Node) bool {
@@ -1410,6 +1414,91 @@ pub fn Func(comptime Backend: type) type {
         };
 
         const InsertMap = InternMap(Inserter);
+
+        pub fn addSplit(self: *Self, block: *CfgNode, def: *Node) *Node {
+            return self.addNode(.MachSplit, def.sloc, def.data_type, &.{ &block.base, def }, .{});
+        }
+
+        pub fn splitBeforeKill(self: *Self, kill: *Node, def: *Node) void {
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            const block = kill.cfg0();
+
+            const ins = self.addSplit(block, def);
+            const oidx = block.base.posOfOutput(kill);
+            var subsumed = false;
+            for (tmp.arena.dupe(*Node, def.outputs())) |use| {
+                if (use == kill) continue;
+                if (use == ins) continue;
+                if (use.hasNoUseFor(def)) continue;
+                if (use.cfg0().idepth() < kill.cfg0().idepth()) continue;
+                if (use.cfg0() == kill.cfg0() and oidx > use.cfg0().base.posOfOutput(use)) continue;
+
+                const idx = use.posOfInput(def);
+
+                const mask = use.regMask(idx, tmp.arena);
+                const kills = kill.clobbers();
+                @as(
+                    *align(@alignOf(usize)) @TypeOf(kills),
+                    @ptrCast(&setMasks(mask)[0]),
+                ).* &= ~kills;
+
+                if (mask.count() == 0) {
+                    self.splitBefore(use, idx, ins);
+                } else {
+                    self.setInputNoIntern(use, idx, ins);
+                }
+
+                subsumed = true;
+            }
+
+            if (!subsumed and !kill.hasNoUseFor(def)) {
+                const idx = kill.posOfInput(def);
+                self.setInputNoIntern(kill, idx, ins);
+                subsumed = true;
+            }
+
+            std.debug.assert(subsumed);
+
+            const to_rotate = block.base.outputs()[oidx..];
+            std.mem.rotate(*Node, to_rotate, to_rotate.len - 1);
+        }
+
+        pub fn splitAfterSubsume(self: *Self, def: *Node) void {
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            const block = def.cfg0();
+            const ins = self.addSplit(block, def);
+            for (tmp.arena.dupe(*Node, def.outputs())) |use| {
+                if (use == def) continue;
+                if (use == ins) continue;
+                self.setInputNoIntern(use, use.posOfInput(def), ins);
+            }
+
+            const oidx = block.base.posOfOutput(def);
+            const to_rotate = block.base.outputs()[oidx + 1 ..];
+            std.mem.rotate(*Node, to_rotate, to_rotate.len - 1);
+        }
+
+        pub fn splitBefore(self: *Self, use: *Node, idx: usize, def: *Node) void {
+            const block = use.cfg0();
+            const ins = self.addSplit(block, def);
+            self.setInputNoIntern(use, idx, ins);
+            const oidx = block.base.posOfOutput(use);
+            const to_rotate = block.base.outputs()[oidx..];
+            std.mem.rotate(*Node, to_rotate, to_rotate.len - 1);
+        }
+
+        pub fn splitAfter(self: *Self, def: *Node, idx: usize, use: *Node) void {
+            const block = def.cfg0();
+            const ins = self.addSplit(block, def);
+            self.setInputNoIntern(use, idx, ins);
+            const oidx = block.base.posOfOutput(def);
+            const to_rotate = block.base.outputs()[oidx + 1 ..];
+            std.mem.rotate(*Node, to_rotate, to_rotate.len - 1);
+        }
 
         pub fn internNode(self: *Self, kind: Kind, dt: DataType, inputs: []const ?*Node, extra: *const anyopaque) InsertMap.GetOrPutResult {
             const map: *InsertMap = @ptrCast(&self.interner);
