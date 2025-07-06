@@ -2,6 +2,8 @@ const std = @import("std");
 const utils = graph.utils;
 const graph = @import("graph.zig");
 
+pub const use_new_ralloc = @import("options").use_new_ralloc;
+
 const Set = std.DynamicBitSetUnmanaged;
 const Map = std.AutoArrayHashMapUnmanaged;
 const Arry = std.ArrayListUnmanaged;
@@ -17,7 +19,9 @@ pub inline fn swap(a: anytype, b: @TypeOf(a)) void {
     std.mem.swap(@TypeOf(a.*), a, b);
 }
 
-pub fn _ralloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
+pub const ralloc = if (use_new_ralloc) newRalloc else oldRalloc;
+
+pub fn newRalloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
     func.gcm.cfg_built.assertLocked();
 
     errdefer unreachable;
@@ -492,7 +496,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend), round: us
     return func.arena.allocator().dupe(u16, alloc) catch unreachable;
 }
 
-pub fn ralloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
+pub fn oldRalloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
     func.gcm.cfg_built.assertLocked();
 
     errdefer unreachable;
@@ -515,7 +519,7 @@ pub fn ralloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
             if (instr.isDef() or instr.kills()) {
                 instr.schedule = func.gcm.instr_count;
                 instr_table[func.gcm.instr_count] = instr;
-                instr_masks[func.gcm.instr_count] = instr.allowedRegsFor(0, tmp.arena);
+                instr_masks[func.gcm.instr_count] = instr.regMask(0, tmp.arena);
                 func.gcm.instr_count += 1;
             } else {
                 instr.schedule = std.math.maxInt(u16);

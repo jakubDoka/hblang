@@ -4,6 +4,7 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const use_new_ralloc = b.option(bool, "use-new-ralloc", "use the new ralloc implementation") orelse false;
     const use_llvm = b.option(bool, "use-llvm", "use llvm, last resort option") orelse
         (b.graph.host.result.os.tag == .windows) or optimize != .Debug;
     const use_lld = b.option(bool, "use-lld", "use lld, last resort option") orelse
@@ -12,6 +13,7 @@ pub fn build(b: *std.Build) !void {
 
     const options = b.addOptions();
     options.addOption(usize, "stack_size", stack_size);
+    options.addOption(bool, "use_new_ralloc", use_new_ralloc);
 
     const zydis = zydis: {
         const m = b.addModule("zidis", .{

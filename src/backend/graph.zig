@@ -941,10 +941,6 @@ pub fn Func(comptime Backend: type) type {
                 return .{ self, 0 };
             }
 
-            pub fn allowedRegsFor(self: *Node, idx: usize, tmp: *utils.Arena) std.DynamicBitSetUnmanaged {
-                return if (comptime optApi("allowedRegsFor", @TypeOf(allowedRegsFor))) Backend.allowedRegsFor(self, idx, tmp) else unreachable;
-            }
-
             pub fn regMask(self: *Node, idx: usize, tmp: *utils.Arena) std.DynamicBitSetUnmanaged {
                 return if (comptime optApi("regMask", @TypeOf(regMask))) Backend.regMask(self, idx, tmp) else unreachable;
             }

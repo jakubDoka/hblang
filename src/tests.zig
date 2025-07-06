@@ -3,9 +3,10 @@ pub const utils = root.utils;
 pub const root = @import("hb");
 pub const test_util = root.test_utils;
 pub const fuzz = @import("fuzz.zig");
+pub const Regalloc = root.backend.Regalloc;
 
 comptime {
-    @setEvalBranchQuota(2000);
+    @setEvalBranchQuota(3000);
     refAllDeclsRecursive(@This(), 10);
 }
 
@@ -71,7 +72,7 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
         );
     }
 
-    if (true) {
+    if (true and !Regalloc.use_new_ralloc) {
         const target = "x86_64-linux";
         var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
         defer x86_64.deinit();
@@ -88,7 +89,7 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
         );
     }
 
-    if (true) {
+    if (true and !Regalloc.use_new_ralloc) {
         const target = "x86_64-linux-no-opts";
         var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
         defer x86_64.deinit();
@@ -199,6 +200,7 @@ pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
 
 pub fn runVendoredTest(path: []const u8) !void {
     if (std.mem.indexOf(u8, path, "inf") != null) return;
+    if (Regalloc.use_new_ralloc) return;
 
     utils.Arena.initScratch(1024 * 1024 * 32);
     defer utils.Arena.deinitScratch();

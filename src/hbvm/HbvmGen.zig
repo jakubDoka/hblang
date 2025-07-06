@@ -78,6 +78,7 @@ pub const classes = enum {
 pub const reg_mask_cap = 254 + 32;
 pub const reg_count = 254;
 
+// ================== BINDINGS ==================
 pub fn knownOffset(node: *Func.Node) struct { *Func.Node, i64 } {
     return switch (node.extra2()) {
         .ImmBinOp => |i| {
@@ -88,11 +89,22 @@ pub fn knownOffset(node: *Func.Node) struct { *Func.Node, i64 } {
     };
 }
 
-pub fn clobbers(node: *Func.Node) u64 {
+pub fn isSwapped(node: *Func.Node) bool {
+    return node.kind == .IfOp and node.extra(.IfOp).swapped;
+}
+
+pub fn getStaticOffset(node: *Func.Node) i64 {
     return switch (node.kind) {
-        .Call => (1 << 31) - 1,
+        .Ld => node.extra(.Ld).offset,
+        .St => node.extra(.St).offset,
+        .StackLd => node.extra(.StackLd).base.offset,
+        .StackSt => node.extra(.StackSt).base.offset,
         else => 0,
     };
+}
+
+pub fn isInterned(kind: Func.Kind) bool {
+    return kind == .Ld or kind == .StackLd;
 }
 
 pub fn regBias(node: *Func.Node) ?u16 {
@@ -115,29 +127,182 @@ pub fn regBias(node: *Func.Node) ?u16 {
     };
 }
 
-pub fn isSwapped(node: *Func.Node) bool {
-    return node.kind == .IfOp and node.extra(.IfOp).swapped;
+// ================== PEEPHOLES ==================
+pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
+    const inps = node.inputs();
+
+    if (Func.idealizeDead({}, func, node, work)) |n| return n;
+
+    if (node.kind == .BinOp) {
+        const op: graph.BinOp = node.extra(.BinOp).op;
+
+        if (inps[2].?.kind == .CInt) b: {
+            var imm = inps[2].?.extra(.CInt).value;
+
+            const instr: isa.Op = switch (op) {
+                .iadd => .addi8,
+                .imul => .muli8,
+                .isub => m: {
+                    imm *= -1;
+                    break :m .addi8;
+                },
+                .bor => .ori,
+                .bxor => .xori,
+                .band => .andi,
+                else => break :b,
+            };
+
+            return func.addNode(
+                .ImmBinOp,
+                node.sloc,
+                node.data_type,
+                &.{ null, node.inputs()[1] },
+                .{ .op = instr, .imm = imm },
+            );
+        }
+    }
+
+    if (node.kind == .UnOp and node.extra(.UnOp).op == .cast) return inps[1];
+
+    if (node.kind == .If) {
+        if (inps[1].?.kind == .BinOp) b: {
+            work.add(inps[1].?);
+            const op = inps[1].?.extra(.BinOp).op;
+            const instr: isa.Op, const swap = switch (op) {
+                .ule => .{ .jgtu, false },
+                .uge => .{ .jltu, false },
+                .ult => .{ .jltu, true },
+                .ugt => .{ .jgtu, true },
+
+                .sle => .{ .jgts, false },
+                .sge => .{ .jlts, false },
+                .slt => .{ .jlts, true },
+                .sgt => .{ .jgts, true },
+
+                .eq => .{ .jne, false },
+                .ne => .{ .jeq, false },
+                else => break :b,
+            };
+            const op_inps = inps[1].?.inputs();
+
+            return func.addNode(.IfOp, node.sloc, .top, &.{ inps[0], op_inps[1], op_inps[2] }, .{
+                .op = instr,
+                .swapped = swap,
+            });
+        }
+
+        if (inps[1].?.data_type != .i64) {
+            const new = func.addUnOp(node.sloc, .uext, .i64, inps[1].?);
+            work.add(new);
+            _ = func.setInput(node, 1, new);
+        }
+    }
+
+    if (node.kind == .MemCpy) {
+        if (inps[4].?.kind == .CInt) {
+            return func.addNode(
+                .BlockCpy,
+                node.sloc,
+                .top,
+                &.{ inps[0], inps[1], inps[2], inps[3] },
+                .{ .size = @intCast(inps[4].?.extra(.CInt).value) },
+            );
+        }
+    }
+
+    if (node.kind == .Store) {
+        const base, const offset = node.base().knownOffset();
+        const st = func.addNode(
+            .St,
+            node.sloc,
+            node.data_type,
+            &.{ inps[0], inps[1], base, inps[3] },
+            .{ .offset = offset },
+        );
+
+        if (base.isStack()) {
+            st.kind = .StackSt;
+        }
+
+        work.add(st);
+        return st;
+    }
+
+    if (node.kind == .St and node.base().isStack()) {
+        node.kind = .StackSt;
+    }
+
+    if (node.kind == .Load) {
+        const base, const offset = node.base().knownOffset();
+        const ld = if (base.isStack())
+            func.addNode(
+                .StackLd,
+                node.sloc,
+                node.data_type,
+                &.{ inps[0], inps[1], base },
+                .{ .base = .{ .offset = offset } },
+            )
+        else
+            func.addNode(
+                .Ld,
+                node.sloc,
+                node.data_type,
+                &.{ inps[0], inps[1], base },
+                .{ .offset = offset },
+            );
+        work.add(ld);
+        return ld;
+    }
+
+    if (node.isStack()) elim_local: {
+        for (node.outputs()) |use| {
+            if (((!use.isStore() or use.value() == node) and !use.isLoad()) or use.isSub(graph.MemCpy)) {
+                break :elim_local;
+            }
+        }
+
+        switch (node.extra2()) {
+            .Local => |n| n.no_address = true,
+            .StructArg => |n| n.no_address = true,
+            else => unreachable,
+        }
+    }
+
+    return Func.idealize(self, func, node, work);
 }
 
-pub fn getStaticOffset(node: *Func.Node) i64 {
-    return switch (node.kind) {
-        .Ld => node.extra(.Ld).offset,
-        .St => node.extra(.St).offset,
-        .StackLd => node.extra(.StackLd).base.offset,
-        .StackSt => node.extra(.StackSt).base.offset,
-        else => 0,
-    };
-}
+pub fn idealize(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
+    const inps = node.inputs();
 
-pub fn isInterned(kind: Func.Kind) bool {
-    return kind == .Ld or kind == .StackLd;
-}
+    if (node.kind == .BinOp) {
+        const op: graph.BinOp = node.extra(.BinOp).op;
 
-const Set = std.DynamicBitSetUnmanaged;
+        if (op.isCmp() and !op.isFloat()) {
+            const ext_op: graph.UnOp = if (op.isSigned()) .sext else .uext;
+            inline for (inps[1..3], 1..) |inp, i| {
+                if (inp.?.data_type.size() != 8) {
+                    const new = func.addUnOp(node.sloc, ext_op, .i64, inp.?);
+                    work.add(new);
+                    _ = func.setInput(node, i, new);
+                }
+            }
+        }
+    }
 
-pub fn inPlaceSlot(_: *Func.Node) ?usize {
+    if (node.kind == .UnOp) {
+        const op: graph.UnOp = node.extra(.UnOp).op;
+        if (op == .not and inps[1].?.data_type != .i64) {
+            const new = func.addUnOp(node.sloc, .uext, .i64, inps[1].?);
+            work.add(new);
+            _ = func.setInput(node, 1, new);
+        }
+    }
+
     return null;
 }
+
+// ================== REGALLOC ==================
+const Set = std.DynamicBitSetUnmanaged;
 
 pub fn readMask(arena: *utils.Arena) Set {
     var set = Set.initEmpty(arena.allocator(), reg_mask_cap) catch unreachable;
@@ -158,28 +323,41 @@ pub fn spillMask(arena: *utils.Arena) Set {
     return mask;
 }
 
-pub fn singleRegMask(arena: *utils.Arena, reg: isa.Reg) Set {
+pub fn singleMask(arena: *utils.Arena, reg: isa.Reg) Set {
     var mask = Set.initEmpty(arena.allocator(), reg_mask_cap) catch unreachable;
     mask.set(@intFromEnum(reg));
     return mask;
 }
 
-pub fn regMask(node: *Func.Node, idx: usize, arena: *utils.Arena) Set {
+pub fn inPlaceSlot(_: *Func.Node) ?usize {
+    return null;
+}
+
+pub fn clobbers(node: *Func.Node) u64 {
+    return switch (node.kind) {
+        .Call => ((1 << 31) - 1) << @intFromBool(Regalloc.use_new_ralloc),
+        else => 0,
+    };
+}
+
+pub const regMask = if (Regalloc.use_new_ralloc) newRegMask else oldRegMask;
+
+pub fn newRegMask(node: *Func.Node, idx: usize, arena: *utils.Arena) Set {
     errdefer unreachable;
 
     if (node.kind == .Arg) {
         std.debug.assert(idx == 0);
-        return singleRegMask(arena, isa.Reg.arg(node.extra(.Arg).index));
+        return singleMask(arena, isa.Reg.arg(node.extra(.Arg).index));
     }
 
     if (node.kind == .Ret) {
         std.debug.assert(idx == 0);
-        return singleRegMask(arena, isa.Reg.ret(node.extra(.Ret).index));
+        return singleMask(arena, isa.Reg.ret(node.extra(.Ret).index));
     }
 
     if (node.kind == .Call) {
         std.debug.assert(idx >= 2);
-        return singleRegMask(arena, isa.Reg.arg(idx - 2));
+        return singleMask(arena, isa.Reg.arg(idx - 2));
     }
 
     if (node.kind == .FramePointer) {
@@ -197,7 +375,7 @@ pub fn regMask(node: *Func.Node, idx: usize, arena: *utils.Arena) Set {
     return readMask(arena);
 }
 
-pub fn allowedRegsFor(node: *Func.Node, idx: usize, tmp: *utils.Arena) std.DynamicBitSetUnmanaged {
+pub fn oldRegMask(node: *Func.Node, idx: usize, tmp: *utils.Arena) std.DynamicBitSetUnmanaged {
     errdefer unreachable;
 
     if (node.kind == .FramePointer) {
@@ -213,6 +391,7 @@ pub fn allowedRegsFor(node: *Func.Node, idx: usize, tmp: *utils.Arena) std.Dynam
     return set;
 }
 
+// ================== EMIT ==================
 pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     errdefer unreachable;
 
@@ -248,7 +427,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         if (bb.base.kind == .CallEnd) break false;
     } else true;
 
-    const reg_shift: u8 = 1;
+    const reg_shift: u8 = if (Regalloc.use_new_ralloc) 0 else 1;
     for (self.allocs) |*r| r.* += reg_shift;
     const max_reg = if (self.allocs.len == 0) 0 else b: {
         var max: u16 = 0;
@@ -345,197 +524,6 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     for (self.local_relocs.items) |lr| {
         self.doReloc(lr.rel, self.block_offsets[lr.dest_block]);
     }
-}
-
-pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
-    errdefer unreachable;
-    try self.out.defineGlobal(
-        self.gpa,
-        opts.id,
-        opts.name,
-        if (opts.value == .init) .data else .prealloc,
-        .local,
-        opts.value.init,
-        opts.relocs,
-        opts.readonly,
-    );
-
-    if (self.emit_global_reloc_offsets) {
-        self.out.makeRelocOffsetsGlobal(self.out.globals.items[opts.id]);
-    }
-}
-
-pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {
-    errdefer unreachable;
-
-    if (opts.optimizations.finalize(opts.builtins, HbvmGen, self)) return;
-
-    try root.hbvm.object.flush(self.out, opts.output);
-
-    self.out.reset();
-}
-
-pub fn disasm(_: *HbvmGen, opts: Mach.DisasmOpts) void {
-    var tmp = utils.Arena.scrath(null);
-    defer tmp.deinit();
-
-    isa.disasm(opts.bin, tmp.arena.allocator(), opts.out, opts.colors) catch unreachable;
-}
-
-pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
-    var tmp = utils.Arena.scrath(null);
-    defer tmp.deinit();
-
-    const stack_size = 1024 * 128 + env.code.len;
-
-    const stack = tmp.arena.alloc(u8, stack_size);
-
-    const code = env.code;
-
-    const head: ExecHeader = @bitCast(code[0..@sizeOf(ExecHeader)].*);
-    const stack_end = stack_size - code.len + @sizeOf(ExecHeader);
-    @memcpy(stack[stack_end..], code[@sizeOf(ExecHeader)..]);
-
-    var vm = root.hbvm.Vm{};
-    vm.ip = stack_end;
-    vm.fuel = 1024 * 128;
-    @memset(&vm.regs.values, 0);
-    vm.regs.set(.stack_addr, stack_end);
-
-    var ctx = root.hbvm.Vm.SafeContext{
-        .writer = env.output,
-        .symbols = try root.hbvm.object.loadSymMap(tmp.arena.allocator(), code),
-        .color_cfg = env.colors,
-        .memory = stack,
-        .code_start = stack_end,
-        .code_end = stack_end + @as(usize, @intCast(head.code_length)),
-    };
-
-    var prng = std.Random.Pcg.init(0);
-    var page_cursor: usize = 1;
-    const page_size = 1024 * 4;
-    while (true) switch (try vm.run(&ctx)) {
-        .tx => break,
-        .eca => switch (vm.regs.get(.arg(0))) {
-            100 => {
-                std.debug.assert(vm.regs.get(.arg(1)) == 1);
-                std.debug.assert(vm.regs.get(.arg(2)) == 2);
-                vm.regs.set(.ret(0), 3);
-            },
-            3 => switch (vm.regs.get(.arg(1))) {
-                2 => switch (ctx.memory[@intCast(vm.regs.get(.arg(2)))]) {
-                    0 => {
-                        const Msg = extern struct { pad: u8, pages_new: u64 align(1), zeroed: bool };
-
-                        const msg: Msg =
-                            @bitCast(ctx.memory[@intCast(vm.regs.get(.arg(2)))..][0..@sizeOf(Msg)].*);
-
-                        const base = page_size * page_cursor;
-                        page_cursor += @intCast(msg.pages_new);
-
-                        if (msg.zeroed) @memset(
-                            ctx.memory[@intCast(base)..][0..@intCast(msg.pages_new * page_size)],
-                            0,
-                        );
-
-                        vm.regs.set(.ret(0), base);
-                    },
-                    7, 1 => {},
-                    5 => {
-                        const Msg = extern struct { pad: u8, len: u64 align(1), count: u64 align(1), src: u64 align(1), dest: u64 align(1) };
-                        const msg: Msg = @bitCast(ctx.memory[@intCast(vm.regs.get(.arg(2)))..][0..@sizeOf(Msg)].*);
-
-                        if (msg.dest > ctx.memory.len or
-                            msg.src > ctx.memory.len or
-                            msg.dest + msg.len > ctx.memory.len or
-                            msg.src + msg.count > ctx.memory.len)
-                        {
-                            return error.MemOob;
-                        }
-
-                        const dst, const src = .{
-                            ctx.memory[@intCast(msg.dest)..][0..@intCast(msg.len)],
-                            ctx.memory[@intCast(msg.src)..][0..@intCast(msg.count)],
-                        };
-
-                        for (0..@intCast(msg.len / msg.count)) |i| {
-                            @memcpy(dst[@intCast(i * msg.count)..][0..@intCast(msg.count)], src);
-                        }
-                    },
-                    4, 6 => |v| {
-                        const Msg = extern struct { pad: u8, len: u64 align(1), src: u64 align(1), dest: u64 align(1) };
-                        const msg: Msg = @bitCast(ctx.memory[@intCast(vm.regs.get(.arg(2)))..][0..@sizeOf(Msg)].*);
-
-                        if (msg.dest > ctx.memory.len or
-                            msg.src > ctx.memory.len or
-                            msg.dest + msg.len > ctx.memory.len or
-                            msg.src + msg.len > ctx.memory.len)
-                        {
-                            return error.MemOob;
-                        }
-
-                        const dst, const src = .{
-                            ctx.memory[@intCast(msg.dest)..][0..@intCast(msg.len)],
-                            ctx.memory[@intCast(msg.src)..][0..@intCast(msg.len)],
-                        };
-
-                        if (v == 4) {
-                            @memcpy(dst, src);
-                        } else {
-                            if (msg.src < msg.dest) {
-                                std.mem.copyBackwards(u8, dst, src);
-                            } else {
-                                std.mem.copyForwards(u8, dst, src);
-                            }
-                        }
-                    },
-                    else => |v| utils.panic("{}", .{v}),
-                },
-                7 => utils.panic("I don't think I will", .{}),
-                1 => {
-                    const LogLevel = enum(u8) {
-                        Error,
-                        Warn,
-                        Info,
-                        Debug,
-                        Trace,
-                    };
-                    const Msg = extern struct { level: LogLevel, str_ptr: u64 align(1), str_len: u64 align(1) };
-                    const msg: Msg = @bitCast(ctx.memory[@intCast(vm.regs.get(.arg(2)))..][0..@sizeOf(Msg)].*);
-                    const str = ctx.memory[@intCast(msg.str_ptr)..][0..@intCast(msg.str_len)];
-
-                    env.logs.print("{s}\n", .{str}) catch {};
-                },
-                4 => {
-                    const dest = ctx.memory[@intCast(vm.regs.get(.arg(3)))..][0..@intCast(vm.regs.get(.arg(4)))];
-                    prng.fill(dest);
-                },
-                else => |v| utils.panic("{}", .{v}),
-            },
-            else => unreachable,
-        },
-        else => unreachable,
-    };
-
-    return @intCast(vm.regs.get(.ret(0)));
-}
-
-pub fn deinit(self: *HbvmGen) void {
-    self.out.deinit(self.gpa);
-    self.* = undefined;
-}
-
-pub fn doReloc(self: *HbvmGen, rel: Reloc, dest: i64) void {
-    const jump = dest - rel.offset;
-    const location: usize = @intCast(rel.offset + rel.sub_offset);
-
-    const size: usize = switch (rel.operand) {
-        .rel32 => 4,
-        .rel16 => 2,
-        else => unreachable,
-    };
-
-    @memcpy(self.out.code.items[location..][0..size], @as(*const [8]u8, @ptrCast(&jump))[0..size]);
 }
 
 pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) void {
@@ -819,6 +807,19 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
     }
 }
 
+pub fn doReloc(self: *HbvmGen, rel: Reloc, dest: i64) void {
+    const jump = dest - rel.offset;
+    const location: usize = @intCast(rel.offset + rel.sub_offset);
+
+    const size: usize = switch (rel.operand) {
+        .rel32 => 4,
+        .rel16 => 2,
+        else => unreachable,
+    };
+
+    @memcpy(self.out.code.items[location..][0..size], @as(*const [8]u8, @ptrCast(&jump))[0..size]);
+}
+
 fn orderMoves(self: *HbvmGen, moves: []Move) void {
     utils.orderMoves(self, isa.Reg, moves);
 }
@@ -884,175 +885,191 @@ pub fn reloc(self: *HbvmGen, sub_offset: u8, arg: isa.Arg) Reloc {
     return .{ .offset = @intCast(self.out.code.items.len), .sub_offset = sub_offset, .operand = arg };
 }
 
-pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
-    const inps = node.inputs();
+pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
+    errdefer unreachable;
+    try self.out.defineGlobal(
+        self.gpa,
+        opts.id,
+        opts.name,
+        if (opts.value == .init) .data else .prealloc,
+        .local,
+        opts.value.init,
+        opts.relocs,
+        opts.readonly,
+    );
 
-    if (Func.idealizeDead({}, func, node, work)) |n| return n;
-
-    if (node.kind == .BinOp) {
-        const op: graph.BinOp = node.extra(.BinOp).op;
-
-        if (inps[2].?.kind == .CInt) b: {
-            var imm = inps[2].?.extra(.CInt).value;
-
-            const instr: isa.Op = switch (op) {
-                .iadd => .addi8,
-                .imul => .muli8,
-                .isub => m: {
-                    imm *= -1;
-                    break :m .addi8;
-                },
-                .bor => .ori,
-                .bxor => .xori,
-                .band => .andi,
-                else => break :b,
-            };
-
-            return func.addNode(
-                .ImmBinOp,
-                node.sloc,
-                node.data_type,
-                &.{ null, node.inputs()[1] },
-                .{ .op = instr, .imm = imm },
-            );
-        }
+    if (self.emit_global_reloc_offsets) {
+        self.out.makeRelocOffsetsGlobal(self.out.globals.items[opts.id]);
     }
-
-    if (node.kind == .UnOp and node.extra(.UnOp).op == .cast) return inps[1];
-
-    if (node.kind == .If) {
-        if (inps[1].?.kind == .BinOp) b: {
-            work.add(inps[1].?);
-            const op = inps[1].?.extra(.BinOp).op;
-            const instr: isa.Op, const swap = switch (op) {
-                .ule => .{ .jgtu, false },
-                .uge => .{ .jltu, false },
-                .ult => .{ .jltu, true },
-                .ugt => .{ .jgtu, true },
-
-                .sle => .{ .jgts, false },
-                .sge => .{ .jlts, false },
-                .slt => .{ .jlts, true },
-                .sgt => .{ .jgts, true },
-
-                .eq => .{ .jne, false },
-                .ne => .{ .jeq, false },
-                else => break :b,
-            };
-            const op_inps = inps[1].?.inputs();
-
-            return func.addNode(.IfOp, node.sloc, .top, &.{ inps[0], op_inps[1], op_inps[2] }, .{
-                .op = instr,
-                .swapped = swap,
-            });
-        }
-
-        if (inps[1].?.data_type != .i64) {
-            const new = func.addUnOp(node.sloc, .uext, .i64, inps[1].?);
-            work.add(new);
-            _ = func.setInput(node, 1, new);
-        }
-    }
-
-    if (node.kind == .MemCpy) {
-        if (inps[4].?.kind == .CInt) {
-            return func.addNode(
-                .BlockCpy,
-                node.sloc,
-                .top,
-                &.{ inps[0], inps[1], inps[2], inps[3] },
-                .{ .size = @intCast(inps[4].?.extra(.CInt).value) },
-            );
-        }
-    }
-
-    if (node.kind == .Store) {
-        const base, const offset = node.base().knownOffset();
-        const st = func.addNode(
-            .St,
-            node.sloc,
-            node.data_type,
-            &.{ inps[0], inps[1], base, inps[3] },
-            .{ .offset = offset },
-        );
-
-        if (base.isStack()) {
-            st.kind = .StackSt;
-        }
-
-        work.add(st);
-        return st;
-    }
-
-    if (node.kind == .St and node.base().isStack()) {
-        node.kind = .StackSt;
-    }
-
-    if (node.kind == .Load) {
-        const base, const offset = node.base().knownOffset();
-        const ld = if (base.isStack())
-            func.addNode(
-                .StackLd,
-                node.sloc,
-                node.data_type,
-                &.{ inps[0], inps[1], base },
-                .{ .base = .{ .offset = offset } },
-            )
-        else
-            func.addNode(
-                .Ld,
-                node.sloc,
-                node.data_type,
-                &.{ inps[0], inps[1], base },
-                .{ .offset = offset },
-            );
-        work.add(ld);
-        return ld;
-    }
-
-    if (node.isStack()) elim_local: {
-        for (node.outputs()) |use| {
-            if (((!use.isStore() or use.value() == node) and !use.isLoad()) or use.isSub(graph.MemCpy)) {
-                break :elim_local;
-            }
-        }
-
-        switch (node.extra2()) {
-            .Local => |n| n.no_address = true,
-            .StructArg => |n| n.no_address = true,
-            else => unreachable,
-        }
-    }
-
-    return Func.idealize(self, func, node, work);
 }
 
-pub fn idealize(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
-    const inps = node.inputs();
+pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {
+    errdefer unreachable;
 
-    if (node.kind == .BinOp) {
-        const op: graph.BinOp = node.extra(.BinOp).op;
+    if (opts.optimizations.finalize(opts.builtins, HbvmGen, self)) return;
 
-        if (op.isCmp() and !op.isFloat()) {
-            const ext_op: graph.UnOp = if (op.isSigned()) .sext else .uext;
-            inline for (inps[1..3], 1..) |inp, i| {
-                if (inp.?.data_type.size() != 8) {
-                    const new = func.addUnOp(node.sloc, ext_op, .i64, inp.?);
-                    work.add(new);
-                    _ = func.setInput(node, i, new);
-                }
-            }
-        }
+    try root.hbvm.object.flush(self.out, opts.output);
+
+    self.out.reset();
+}
+
+pub fn deinit(self: *HbvmGen) void {
+    self.out.deinit(self.gpa);
+    self.* = undefined;
+}
+
+pub fn disasm(_: *HbvmGen, opts: Mach.DisasmOpts) void {
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    isa.disasm(opts.bin, tmp.arena.allocator(), opts.out, opts.colors) catch unreachable;
+}
+
+const page_size = 1024 * 4;
+
+pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    const stack_size = 1024 * 128 + env.code.len;
+
+    const stack = tmp.arena.alloc(u8, stack_size);
+
+    const code = env.code;
+
+    const head: ExecHeader = @bitCast(code[0..@sizeOf(ExecHeader)].*);
+    const stack_end = stack_size - code.len + @sizeOf(ExecHeader);
+    @memcpy(stack[stack_end..], code[@sizeOf(ExecHeader)..]);
+
+    var vm = root.hbvm.Vm{};
+    vm.ip = stack_end;
+    vm.fuel = 1024 * 128;
+    @memset(&vm.regs.values, 0);
+    vm.regs.set(.stack_addr, stack_end);
+
+    var ctx = root.hbvm.Vm.SafeContext{
+        .writer = env.output,
+        .symbols = try root.hbvm.object.loadSymMap(tmp.arena.allocator(), code),
+        .color_cfg = env.colors,
+        .memory = stack,
+        .code_start = stack_end,
+        .code_end = stack_end + @as(usize, @intCast(head.code_length)),
+    };
+
+    var prng = std.Random.Pcg.init(0);
+    var page_cursor: usize = 1;
+    while (true) switch (try vm.run(&ctx)) {
+        .tx => break,
+        .eca => try doInterrupt(&vm, &ctx, &prng, &page_cursor, env),
+        else => unreachable,
+    };
+
+    return @intCast(vm.regs.get(.ret(0)));
+}
+
+pub fn doInterrupt(
+    vm: *root.hbvm.Vm,
+    ctx: *root.hbvm.Vm.SafeContext,
+    prng: *std.Random.Pcg,
+    page_cursor: *usize,
+    env: Mach.RunEnv,
+) !void {
+    switch (vm.regs.get(.arg(0))) {
+        100 => {
+            std.debug.assert(vm.regs.get(.arg(1)) == 1);
+            std.debug.assert(vm.regs.get(.arg(2)) == 2);
+            vm.regs.set(.ret(0), 3);
+        },
+        3 => switch (vm.regs.get(.arg(1))) {
+            2 => switch (ctx.memory[@intCast(vm.regs.get(.arg(2)))]) {
+                0 => {
+                    const Msg = extern struct { pad: u8, pages_new: u64 align(1), zeroed: bool };
+
+                    const msg: Msg =
+                        @bitCast(ctx.memory[@intCast(vm.regs.get(.arg(2)))..][0..@sizeOf(Msg)].*);
+
+                    const base = page_size * page_cursor.*;
+                    page_cursor.* += @intCast(msg.pages_new);
+
+                    if (msg.zeroed) @memset(
+                        ctx.memory[@intCast(base)..][0..@intCast(msg.pages_new * page_size)],
+                        0,
+                    );
+
+                    vm.regs.set(.ret(0), base);
+                },
+                7, 1 => {},
+                5 => {
+                    const Msg = extern struct { pad: u8, len: u64 align(1), count: u64 align(1), src: u64 align(1), dest: u64 align(1) };
+                    const msg: Msg = @bitCast(ctx.memory[@intCast(vm.regs.get(.arg(2)))..][0..@sizeOf(Msg)].*);
+
+                    if (msg.dest > ctx.memory.len or
+                        msg.src > ctx.memory.len or
+                        msg.dest + msg.len > ctx.memory.len or
+                        msg.src + msg.count > ctx.memory.len)
+                    {
+                        return error.MemOob;
+                    }
+
+                    const dst, const src = .{
+                        ctx.memory[@intCast(msg.dest)..][0..@intCast(msg.len)],
+                        ctx.memory[@intCast(msg.src)..][0..@intCast(msg.count)],
+                    };
+
+                    for (0..@intCast(msg.len / msg.count)) |i| {
+                        @memcpy(dst[@intCast(i * msg.count)..][0..@intCast(msg.count)], src);
+                    }
+                },
+                4, 6 => |v| {
+                    const Msg = extern struct { pad: u8, len: u64 align(1), src: u64 align(1), dest: u64 align(1) };
+                    const msg: Msg = @bitCast(ctx.memory[@intCast(vm.regs.get(.arg(2)))..][0..@sizeOf(Msg)].*);
+
+                    if (msg.dest > ctx.memory.len or
+                        msg.src > ctx.memory.len or
+                        msg.dest + msg.len > ctx.memory.len or
+                        msg.src + msg.len > ctx.memory.len)
+                    {
+                        return error.MemOob;
+                    }
+
+                    const dst, const src = .{
+                        ctx.memory[@intCast(msg.dest)..][0..@intCast(msg.len)],
+                        ctx.memory[@intCast(msg.src)..][0..@intCast(msg.len)],
+                    };
+
+                    if (v == 4) {
+                        @memcpy(dst, src);
+                    } else {
+                        if (msg.src < msg.dest) {
+                            std.mem.copyBackwards(u8, dst, src);
+                        } else {
+                            std.mem.copyForwards(u8, dst, src);
+                        }
+                    }
+                },
+                else => |v| utils.panic("{}", .{v}),
+            },
+            7 => utils.panic("I don't think I will", .{}),
+            1 => {
+                const LogLevel = enum(u8) {
+                    Error,
+                    Warn,
+                    Info,
+                    Debug,
+                    Trace,
+                };
+                const Msg = extern struct { level: LogLevel, str_ptr: u64 align(1), str_len: u64 align(1) };
+                const msg: Msg = @bitCast(ctx.memory[@intCast(vm.regs.get(.arg(2)))..][0..@sizeOf(Msg)].*);
+                const str = ctx.memory[@intCast(msg.str_ptr)..][0..@intCast(msg.str_len)];
+
+                env.logs.print("{s}\n", .{str}) catch {};
+            },
+            4 => {
+                const dest = ctx.memory[@intCast(vm.regs.get(.arg(3)))..][0..@intCast(vm.regs.get(.arg(4)))];
+                prng.fill(dest);
+            },
+            else => |v| utils.panic("{}", .{v}),
+        },
+        else => unreachable,
     }
-
-    if (node.kind == .UnOp) {
-        const op: graph.UnOp = node.extra(.UnOp).op;
-        if (op == .not and inps[1].?.data_type != .i64) {
-            const new = func.addUnOp(node.sloc, .uext, .i64, inps[1].?);
-            work.add(new);
-            _ = func.setInput(node, 1, new);
-        }
-    }
-
-    return null;
 }
