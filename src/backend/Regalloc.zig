@@ -19,7 +19,7 @@ pub inline fn swap(a: anytype, b: @TypeOf(a)) void {
     std.mem.swap(@TypeOf(a.*), a, b);
 }
 
-pub const ralloc = if (use_new_ralloc) newRalloc else oldRalloc;
+pub const ralloc = newRalloc;
 
 pub fn newRalloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
     func.gcm.cfg_built.assertLocked();
@@ -35,8 +35,10 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend), round: us
     _ = round; // autofix
     const Func = graph.Func(Backend);
     const Node = Func.Node;
+    const CfgNode = Func.CfgNode;
 
     const unresolved_reg = std.math.maxInt(u16);
+    const no_def_sentinel = std.math.maxInt(u16);
 
     const LiveRange = struct {
         parent: ?*LiveRange = null,
@@ -67,6 +69,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend), round: us
         }
 
         pub fn fail(self: *LiveRange, live_ranges: []const LiveRange, failed: *Arry(u16)) void {
+            std.debug.assert(self.parent == null);
             if (self.failed) return;
             self.failed = true;
             failed.appendAssumeCapacity(self.index(live_ranges));
@@ -133,6 +136,63 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend), round: us
             _ = arena; // autofix
             unreachable;
         }
+
+        pub fn isSame(self: *LiveRange, other: *Node, lrg_table: []const *LiveRange) bool {
+            var cursor = other;
+            while (cursor.kind == .MachSplit) {
+                cursor = cursor.inputs()[1].?;
+            }
+            return lrg_table[cursor.schedule] == self;
+        }
+
+        pub fn hasDef(self: *LiveRange, def: *Node, lrg_table: []const *LiveRange) bool {
+            if (def.schedule == no_def_sentinel) return false;
+            return lrg_table[def.schedule] == self;
+        }
+
+        pub fn collectLoopDepth(fnc: *Func, member: *Node, cfg: *CfgNode, min: u32, max: u32) struct { u32, u32 } {
+            if (member.kind == .MachSplit) return .{ min, max };
+
+            var depth = fnc.loopDepth(&cfg.base);
+
+            if (depth < min) slid_to_loop: {
+                const outs = cfg.base.outputs();
+                if (outs[outs.len - 1].kind == .Return) break :slid_to_loop;
+                const loop = outs[outs.len - 1].outputs()[0];
+                if (loop.kind != .Loop or loop.inputs()[0] != outs[outs.len - 1]) {
+                    break :slid_to_loop;
+                }
+
+                var iter = std.mem.reverseIterator(outs[0 .. outs.len - 1]);
+                while (iter.next()) |instr| {
+                    if (instr == member) {
+                        depth = fnc.loopDepth(loop);
+                        break;
+                    }
+
+                    if (instr.kind != .MachSplit) break; // TODO: clonable
+                }
+            }
+
+            return .{ @min(min, depth), @max(max, depth) };
+        }
+
+        pub fn isSameBlockNoClobber(node: *Node, lrg_table: []const *LiveRange) bool {
+            std.debug.assert(node.kind == .MachSplit);
+            const def = node.dataDeps()[0];
+            const cfg = node.cfg0();
+            if (def.cfg0() != cfg) return false;
+            var reg = lrg_table[def.schedule].reg;
+            if (reg == unresolved_reg) reg = @intCast(lrg_table[def.schedule].mask.findFirstSet() orelse
+                return false);
+            var iter = std.mem.reverseIterator(cfg.base.outputs()[0..cfg.base.posOfOutput(node)]);
+            while (iter.next()) |instr| {
+                if (instr == node) return true;
+                if (instr.schedule == no_def_sentinel) continue;
+                if (lrg_table[def.schedule] == lrg_table[instr.schedule]) return false;
+                if (lrg_table[instr.schedule].reg == reg) return false;
+            } else unreachable;
+        }
     };
 
     const LiveMap = Map(*LiveRange, *Node);
@@ -140,15 +200,13 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend), round: us
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    const no_def_sentinel = std.math.maxInt(u16);
-
     func.gcm.instr_count = 0;
-    const print = true;
-    if (print) std.debug.print("\n", .{});
+    const shoud_log = false;
+    if (shoud_log) std.debug.print("\n", .{});
     for (func.gcm.postorder) |bb| {
-        if (print) std.debug.print("{}\n", .{bb});
+        if (shoud_log) std.debug.print("{}\n", .{bb});
         for (bb.base.outputs()) |instr| {
-            if (print) std.debug.print("  {}\n", .{instr});
+            if (shoud_log) std.debug.print("  {}\n", .{instr});
             if (instr.isDef()) {
                 instr.schedule = func.gcm.instr_count;
                 func.gcm.instr_count += 1;
@@ -157,7 +215,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend), round: us
             }
         }
     }
-    if (print) std.debug.print("\n", .{});
+    if (shoud_log) std.debug.print("\n", .{});
 
     if (func.gcm.instr_count == 0) return &.{};
 
@@ -223,28 +281,92 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend), round: us
 
     errdefer {
         for (failed.items) |lrg_idx| {
-            const lrg = lrg_table[lrg_idx];
+            const lrg = &lrgs.items[lrg_idx];
             std.debug.assert(lrg.failed);
 
-            if (print) std.debug.print("{}\n", .{lrg});
+            if (shoud_log) std.debug.print("{}\n", .{lrg});
 
-            if (lrg.killed_by) |k| {
-                func.splitBeforeKill(k, lrg.def);
-                continue;
-            }
+            const alc = tmp.arena.allocator();
+            var members: Map(*Node, void) = .empty;
+            members.put(alc, lrg.def, {}) catch unreachable;
 
-            // try to split on bad uses
-            // TODO: reuse splits for same regs
-            //
-            for (tmp.arena.dupe(*Node, lrg.def.outputs())) |use| {
-                const idx = use.posOfInput(lrg.def);
-                if (use.regMask(idx, tmp.arena).count() == 1) {
-                    func.splitBefore(use, idx, lrg.def);
+            var i: usize = 0;
+            while (i < members.entries.len) : (i += 1) {
+                const def: *Node = members.entries.items(.key)[i];
+                if (def.schedule == no_def_sentinel) continue;
+                if (lrg_table[def.schedule] != lrg) continue;
+                for (def.outputs()) |o| {
+                    if (o.hasNoUseFor(def)) continue;
+                    members.put(alc, o, {}) catch unreachable;
+                }
+                for (def.dataDeps()) |d| {
+                    if (lrg.hasDef(d, lrg_table)) {
+                        members.put(alc, d, {}) catch unreachable;
+                    }
                 }
             }
 
-            for (lrg.def.outputs()) |o| {
-                if (print) std.debug.print("    {}\n", .{o});
+            if (shoud_log) for (members.entries.items(.key)) |o| {
+                const depth = func.loopDepth(o);
+                std.debug.print("|- [{}] {}\n", .{ depth, o });
+            };
+
+            var min: u32, var max: u32 = .{ 1000, 0 };
+            for (@as([]*Node, members.entries.items(.key))) |member| {
+                if (lrg.hasDef(member, lrg_table)) {
+                    min, max = LiveRange
+                        .collectLoopDepth(func, member, member.cfg0(), min, max);
+                }
+
+                if (member.kind == .Phi) {
+                    for (member.dataDeps(), member.cfg0().base.inputs()) |dep, cfg| {
+                        min, max = LiveRange
+                            .collectLoopDepth(func, dep, cfg.?.cfg0(), min, max);
+                    }
+                } else {
+                    for (member.dataDeps()) |dep| {
+                        if (lrg.isSame(dep, lrg_table)) {
+                            min, max = LiveRange
+                                .collectLoopDepth(func, dep, dep.cfg0(), min, max);
+                        }
+                    }
+                }
+            }
+
+            if (shoud_log) std.debug.print("min {} max {}\n", .{ min, max });
+
+            for (@as([]*Node, members.entries.items(.key))) |member| {
+                if (min == max and member.kind == .MachSplit) continue;
+
+                if (lrg.hasDef(member, lrg_table) and
+                    (min == max or func.loopDepth(member) <= min) and
+                    // TODO: (is clone) and
+                    !(member.outputs().len == 1 and member.outputs()[0].kind == .MachSplit and
+                        LiveRange.isSameBlockNoClobber(member.outputs()[0], lrg_table)))
+                {
+                    func.splitAfterSubsume(member, .@"def/loop");
+                }
+
+                if (member.kind == .Phi) {
+                    for (member.dataDeps(), member.cfg0().base.inputs(), 0..) |dep, cfg, j| {
+                        if (dep.kind == .MachSplit) continue;
+
+                        if (min != max and func.loopDepth(cfg.?) > max) continue;
+
+                        if (member.cfg0().base.kind == .Loop and j == 1 and
+                            dep.kind == .Phi and dep.cfg0() == member.cfg0()) continue;
+
+                        func.splitBefore(member, j, dep, .@"use/loop/phi");
+                    }
+                } else {
+                    for (member.dataDeps(), member.dataDepOffset()..) |dep, j| {
+                        if (!lrg.isSame(dep, lrg_table)) continue;
+
+                        if (min != max and func.loopDepth(member) > max) continue;
+
+                        func.splitBefore(member, j, dep, .@"use/loop/use");
+                    }
+                }
             }
         }
     }
@@ -307,7 +429,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend), round: us
                     if (concu_single_reg) {
                         instr_lrg.mask.unset(first_concu.?);
                         if (instr_lrg.mask.count() == 0) {
-                            if (print) {
+                            if (shoud_log) {
                                 std.debug.print("killed by concu {}\n", .{concu_lrg});
                                 std.debug.print("                {}\n", .{instr_lrg});
                             }
@@ -319,7 +441,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend), round: us
                     if (instr_single_reg) {
                         concu_lrg.mask.unset(first_instr.?);
                         if (concu_lrg.mask.count() == 0) {
-                            if (print) {
+                            if (shoud_log) {
                                 std.debug.print("killed by instr {}\n", .{instr_lrg});
                                 std.debug.print("                {}\n", .{concu_lrg});
                             }
@@ -337,7 +459,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend), round: us
                 }
             }
 
-            const kills = instr.clobbers() << 1;
+            const kills = instr.clobbers();
             if (kills != 0) for (tmp_liveins.entries.items(.key)) |al| {
                 const active_lrg: *LiveRange = al;
                 // we don't skip if killed_by is not null since we are going in reverse

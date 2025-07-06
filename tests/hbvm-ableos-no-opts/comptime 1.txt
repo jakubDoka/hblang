@@ -13,8 +13,12 @@ main:
          cp $32, $1
        li64 $1, 7
         jal $31, $0, :comptime 1.main.some_fn(some_int = uint)(ui = uint)
-      add64 $1, $32, $1
-      sub64 $1, $33, $1
+         cp $1, $1
+         cp $2, $1
+         cp $1, $32
+      add64 $2, $1, $2
+         cp $1, $33
+      sub64 $1, $1, $2
      addi64 $254, $254, 32
          ld $31, $254, -24, 24
          tx

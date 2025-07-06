@@ -527,7 +527,16 @@ pub const builtin = enum {
     pub const Phi = extern struct {
         pub const is_pinned = true;
     };
-    pub const MachSplit = extern struct {};
+    pub const MachSplit = extern struct {
+        dbg: Dbg = .defualt,
+
+        pub const Dbg = enum(u8) {
+            defualt,
+            @"def/loop",
+            @"use/loop/phi",
+            @"use/loop/use",
+        };
+    };
     pub const Arg = mod.Arg;
     pub const StructArg = extern struct {
         base: mod.Arg,
@@ -895,11 +904,15 @@ pub fn Func(comptime Backend: type) type {
                 break :b offs;
             };
 
+            pub fn dataDepOffset(self: *Node) usize {
+                const kind_idx = @intFromEnum(self.kind);
+                return dep_offset[kind_idx / per_dep_elem] >>
+                    @intCast((kind_idx % per_dep_elem) * sub_elem_width) & ((@as(u16, 1) << sub_elem_width) - 1);
+            }
+
             pub fn dataDeps(self: *Node) []*Node {
                 if (self.kind == .Phi and !self.isDataPhi()) return &.{};
-                const kind_idx = @intFromEnum(self.kind);
-                const start: usize = dep_offset[kind_idx / per_dep_elem] >>
-                    @intCast((kind_idx % per_dep_elem) * sub_elem_width) & ((@as(u16, 1) << sub_elem_width) - 1);
+                const start = self.dataDepOffset();
                 const deps = self.input_base[start..self.input_ordered_len];
                 std.debug.assert(std.mem.indexOfScalar(?*Node, deps, null) == null);
                 return @ptrCast(deps);
@@ -1411,17 +1424,17 @@ pub fn Func(comptime Backend: type) type {
 
         const InsertMap = InternMap(Inserter);
 
-        pub fn addSplit(self: *Self, block: *CfgNode, def: *Node) *Node {
-            return self.addNode(.MachSplit, def.sloc, def.data_type, &.{ &block.base, def }, .{});
+        pub fn addSplit(self: *Self, block: *CfgNode, def: *Node, dgb: builtin.MachSplit.Dbg) *Node {
+            return self.addNode(.MachSplit, def.sloc, def.data_type, &.{ &block.base, def }, .{ .dbg = dgb });
         }
 
-        pub fn splitBeforeKill(self: *Self, kill: *Node, def: *Node) void {
+        pub fn splitBeforeKill(self: *Self, kill: *Node, def: *Node, dbg: builtin.MachSplit.Dbg) void {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             const block = kill.cfg0();
 
-            const ins = self.addSplit(block, def);
+            const ins = self.addSplit(block, def, dbg);
             const oidx = block.base.posOfOutput(kill);
             var subsumed = false;
             for (tmp.arena.dupe(*Node, def.outputs())) |use| {
@@ -1441,7 +1454,7 @@ pub fn Func(comptime Backend: type) type {
                 ).* &= ~kills;
 
                 if (mask.count() == 0) {
-                    self.splitBefore(use, idx, ins);
+                    self.splitBefore(use, idx, ins, dbg);
                 } else {
                     self.setInputNoIntern(use, idx, ins);
                 }
@@ -1455,21 +1468,24 @@ pub fn Func(comptime Backend: type) type {
                 subsumed = true;
             }
 
-            std.debug.assert(subsumed);
+            if (!subsumed) {
+                utils.panic("{} {any}\n", .{ kill, def });
+            }
 
             const to_rotate = block.base.outputs()[oidx..];
             std.mem.rotate(*Node, to_rotate, to_rotate.len - 1);
         }
 
-        pub fn splitAfterSubsume(self: *Self, def: *Node) void {
+        pub fn splitAfterSubsume(self: *Self, def: *Node, dbg: builtin.MachSplit.Dbg) void {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             const block = def.cfg0();
-            const ins = self.addSplit(block, def);
+            const ins = self.addSplit(block, def, dbg);
             for (tmp.arena.dupe(*Node, def.outputs())) |use| {
                 if (use == def) continue;
                 if (use == ins) continue;
+                if (use.hasNoUseFor(def)) continue;
                 self.setInputNoIntern(use, use.posOfInput(def), ins);
             }
 
@@ -1478,18 +1494,18 @@ pub fn Func(comptime Backend: type) type {
             std.mem.rotate(*Node, to_rotate, to_rotate.len - 1);
         }
 
-        pub fn splitBefore(self: *Self, use: *Node, idx: usize, def: *Node) void {
+        pub fn splitBefore(self: *Self, use: *Node, idx: usize, def: *Node, dbg: builtin.MachSplit.Dbg) void {
             const block = use.cfg0();
-            const ins = self.addSplit(block, def);
+            const ins = self.addSplit(block, def, dbg);
             self.setInputNoIntern(use, idx, ins);
             const oidx = block.base.posOfOutput(use);
             const to_rotate = block.base.outputs()[oidx..];
             std.mem.rotate(*Node, to_rotate, to_rotate.len - 1);
         }
 
-        pub fn splitAfter(self: *Self, def: *Node, idx: usize, use: *Node) void {
+        pub fn splitAfter(self: *Self, def: *Node, idx: usize, use: *Node, dbg: builtin.MachSplit.Dbg) void {
             const block = def.cfg0();
-            const ins = self.addSplit(block, def);
+            const ins = self.addSplit(block, def, dbg);
             self.setInputNoIntern(use, idx, ins);
             const oidx = block.base.posOfOutput(def);
             const to_rotate = block.base.outputs()[oidx + 1 ..];

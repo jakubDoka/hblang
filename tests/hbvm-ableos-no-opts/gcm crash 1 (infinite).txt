@@ -6,7 +6,8 @@ main:
        li64 $35, 0
          st $35, $254, 1033, 8
         lra $34, $0, :gcm crash 1 (infinite).ZERO
-        li8 $33, 0
+        li8 $1, 0
+         cp $33, $1
        li64 $32, 1024
 4:       ld $1, $254, 1033, 8
        jltu $1, $35, :1

@@ -19,8 +19,8 @@ main:
          ld $31, $254, -16, 16
          tx
 nullable types 1.mkval(T = uint):
-         cp $2, $1
-        li8 $1, 1
+        li8 $2, 1
+        swa $1, $2
        jala $0, $31, 0
 nullable types 1.mknull(T = uint):
         li8 $2, 0

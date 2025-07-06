@@ -200,12 +200,12 @@ pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
 
 pub fn runVendoredTest(path: []const u8) !void {
     if (std.mem.indexOf(u8, path, "inf") != null) return;
-    if (Regalloc.use_new_ralloc) return;
 
     utils.Arena.initScratch(1024 * 1024 * 32);
     defer utils.Arena.deinitScratch();
     try test_util.runVendoredTest(path, "hbvm-ableos", .all);
     try test_util.runVendoredTest(path, "hbvm-ableos-no-opts", .none);
+    if (Regalloc.use_new_ralloc) return;
     try test_util.runVendoredTest(path, "x86_64-linux", .all);
     try test_util.runVendoredTest(path, "x86_64-linux-no-opts", .none);
 }

@@ -1,11 +1,16 @@
 main:
          st $31, $254, -40, 40
      addi64 $254, $254, -64
-     addi64 $35, $254, 0
-       li64 $32, 1
-         st $32, $254, 0, 8
-       li64 $34, 2
-         st $34, $254, 8, 8
+     addi64 $1, $254, 0
+         cp $35, $1
+       li64 $1, 1
+         cp $32, $1
+         cp $1, $32
+         st $1, $254, 0, 8
+       li64 $1, 2
+         cp $34, $1
+         cp $1, $34
+         st $1, $254, 8, 8
        li64 $1, 3
          st $1, $254, 16, 8
          st $1, $254, 16, 8
@@ -17,27 +22,32 @@ main:
          cp $2, $32
         jal $31, $0, :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get
          cp $32, $1
-         cp $1, $35
          cp $2, $34
+         cp $1, $35
         jal $31, $0, :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get
-         cp $2, $1
-      add64 $1, $33, $32
-      add64 $1, $1, $2
+         cp $3, $1
+         cp $2, $32
+         cp $1, $33
+      add64 $2, $1, $2
+         cp $1, $3
+      add64 $1, $2, $1
      addi64 $254, $254, 64
          ld $31, $254, -40, 40
          tx
 generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-         cp $3, $2
-         cp $2, $1
-       li64 $1, 0
-        jne $3, $1, :1
-         ld $1, $2, 0, 8
+       li64 $3, 0
+        jne $2, $3, :1
+         ld $1, $1, 0, 8
         jmp :2
-1:       ld $1, $2, 8, 8
-         ld $2, $2, 16, 8
-     addi64 $3, $3, -1
+1:       ld $5, $1, 8, 8
+         cp $5, $5
+         ld $4, $1, 16, 8
+         cp $1, $4
+     addi64 $3, $2, -1
+         cp $2, $1
+         cp $1, $5
         jal $31, $0, :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint))).get
 2:   addi64 $254, $254, 8
          ld $31, $254, -8, 8
@@ -46,10 +56,8 @@ generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next 
          st $31, $254, -8, 8
      addi64 $254, $254, -8
          cp $4, $2
-         cp $2, $1
-       li64 $1, 0
-        jne $3, $1, :4
-         cp $1, $2
+       li64 $2, 0
+        jne $3, $2, :4
         jmp :5
 4:   addi64 $2, $3, -1
          cp $1, $4
@@ -60,10 +68,8 @@ generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next 
 generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)).get:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-         cp $3, $1
-       li64 $1, 0
-        jne $2, $1, :7
-         cp $1, $3
+       li64 $3, 0
+        jne $2, $3, :7
         jmp :8
 7:   addi64 $1, $2, -1
         jal $31, $0, :generic structs 4.Array(E = uint).get

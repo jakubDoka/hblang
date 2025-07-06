@@ -18,8 +18,7 @@ main:
          ld $31, $254, -8, 8
          tx
 nullable types 2.take:
-         cp $2, $1
-         ld $1, $2, 0, 8
-     addi64 $1, $1, 1
-         st $1, $2, 0, 8
+         ld $2, $1, 0, 8
+     addi64 $2, $2, 1
+         st $2, $1, 0, 8
        jala $0, $31, 0

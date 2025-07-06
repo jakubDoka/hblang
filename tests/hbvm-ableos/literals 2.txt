@@ -4,7 +4,10 @@ main:
         jal $31, $0, :literals 2.dec
          cp $32, $1
         jal $31, $0, :literals 2.dec
-        jeq $32, $1, :1
+         cp $1, $1
+         cp $2, $1
+         cp $1, $32
+        jeq $1, $2, :1
        li64 $1, 1
         jmp :2
 1:     li64 $1, 0

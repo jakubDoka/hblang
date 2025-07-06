@@ -10,16 +10,22 @@ if statements 2.fib:
          st $31, $254, -24, 24
      addi64 $254, $254, -24
          cp $33, $1
-       li64 $1, 2
-       jgtu $33, $1, :1
+       li64 $2, 2
+         cp $1, $33
+       jgtu $1, $2, :1
        li64 $1, 1
         jmp :2
-1:   addi64 $1, $33, -1
+1:       cp $1, $33
+     addi64 $1, $1, -1
         jal $31, $0, :if statements 2.fib
          cp $32, $1
-     addi64 $1, $33, -2
+         cp $1, $33
+     addi64 $1, $1, -2
         jal $31, $0, :if statements 2.fib
-      add64 $1, $32, $1
+         cp $1, $1
+         cp $2, $1
+         cp $1, $32
+      add64 $1, $1, $2
 2:   addi64 $254, $254, 24
          ld $31, $254, -24, 24
        jala $0, $31, 0

@@ -1,30 +1,37 @@
 main:
          st $31, $254, -72, 72
      addi64 $254, $254, -192
-     addi64 $39, $254, 64
+     addi64 $1, $254, 64
+         cp $39, $1
      addi64 $38, $254, 0
         lra $1, $0, :generic structs 5 (iterators).main.abcd
          st $1, $254, 0, 8
        li64 $37, 4
          st $37, $254, 8, 8
-     addi64 $36, $254, 48
+     addi64 $1, $254, 48
+         cp $36, $1
         li8 $5, 0
      addi64 $4, $254, 16
         lra $1, $0, :generic structs 5 (iterators).main.ab
          st $1, $254, 16, 8
        li64 $35, 2
          st $35, $254, 24, 8
-     addi64 $3, $39, 8
+         cp $1, $39
+     addi64 $3, $1, 8
         lra $1, $0, :generic structs 5 (iterators).main.cd
      addi64 $2, $254, 32
          st $1, $254, 32, 8
          st $35, $254, 40, 8
-     addi64 $34, $254, 104
-        bmc $4, $34, 16
-        bmc $38, $36, 16
+     addi64 $1, $254, 104
+         cp $34, $1
+         cp $1, $34
+        bmc $4, $1, 16
+         cp $1, $36
+        bmc $38, $1, 16
          st $5, $254, 64, 1
         bmc $4, $3, 16
-     addi64 $1, $39, 24
+         cp $1, $39
+     addi64 $1, $1, 24
         bmc $2, $1, 16
        li64 $33, 0
 d:       cp $1, $34
@@ -32,36 +39,47 @@ d:       cp $1, $34
          cp $32, $2
        andi $1, $1, 255
         jne $1, $33, :4
-        bmc $38, $36, 16
+         cp $1, $36
+        bmc $38, $1, 16
 a:       cp $1, $36
         jal $31, $0, :generic structs 5 (iterators).main.next
+         cp $1, $1
          cp $32, $2
+         cp $1, $1
        andi $1, $1, 255
         jne $1, $33, :5
          cp $1, $33
         jmp :6
 5:       cp $1, $39
         jal $31, $0, :generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main, B = generic structs 5 (iterators).main).next
+         cp $1, $1
          cp $3, $2
+         cp $1, $1
        andi $1, $1, 255
         jne $1, $33, :8
        li64 $1, 3
         jmp :6
-8:     andi $2, $32, 255
-       andi $1, $3, 255
+8:       cp $1, $32
+       andi $2, $1, 255
+         cp $1, $3
+       andi $1, $1, 255
         jeq $1, $2, :9
          cp $1, $37
         jmp :6
 9:      jmp :a
 4:       cp $1, $36
         jal $31, $0, :generic structs 5 (iterators).main.next
+         cp $1, $1
          cp $3, $2
+         cp $1, $1
        andi $1, $1, 255
         jne $1, $33, :b
        li64 $1, 1
         jmp :6
-b:     andi $2, $32, 255
-       andi $1, $3, 255
+b:       cp $1, $32
+       andi $2, $1, 255
+         cp $1, $3
+       andi $1, $1, 255
         jeq $2, $1, :c
          cp $1, $35
 6:   addi64 $254, $254, 192
@@ -69,26 +87,23 @@ b:     andi $2, $32, 255
          tx
 c:      jmp :d
 generic structs 5 (iterators).main.next:
-         cp $5, $1
-       li64 $2, 0
-         ld $1, $5, 8, 8
-        jne $1, $2, :e
+       li64 $3, 0
+         ld $2, $1, 8, 8
+        jne $2, $3, :e
         li8 $1, 0
        li64 $2, -6148914691236517206
-        swa $2, $1
         jmp :f
-e:       ld $1, $5, 0, 8
-         ld $4, $5, 8, 8
-        li8 $3, 1
-         ld $2, $1, 0, 1
-     addi64 $1, $1, 1
-         st $1, $5, 0, 8
-     addi64 $1, $4, -1
-         st $1, $5, 8, 8
-         cp $1, $2
+e:       ld $2, $1, 0, 8
+         ld $5, $1, 8, 8
+        li8 $4, 1
+         ld $3, $2, 0, 1
+     addi64 $2, $2, 1
+         st $2, $1, 0, 8
+     addi64 $2, $5, -1
+         st $2, $1, 8, 8
+         cp $1, $4
          cp $2, $3
-f:      swa $1, $2
-       jala $0, $31, 0
+f:     jala $0, $31, 0
 generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main, B = generic structs 5 (iterators).main).next:
          st $31, $254, -64, 64
      addi64 $254, $254, -64
@@ -97,34 +112,41 @@ generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main,
        li64 $36, 1
         li8 $35, 1
         li8 $34, 2
-     addi64 $33, $38, 24
-     addi64 $32, $38, 8
-17:       ld $1, $38, 0, 1
+         cp $1, $38
+     addi64 $1, $1, 24
+         cp $33, $1
+         cp $1, $38
+     addi64 $1, $1, 8
+         cp $32, $1
+17:       cp $1, $38
+         ld $1, $1, 0, 1
        sxt8 $1, $1
         jne $1, $37, :10
          cp $1, $32
         jal $31, $0, :generic structs 5 (iterators).main.next
+       andi $3, $1, 255
+        jeq $3, $0, :11
          cp $3, $1
-       andi $1, $3, 255
-        jeq $1, $0, :11
-         cp $1, $3
+         cp $1, $2
         jmp :12
-11:       st $35, $38, 0, 1
+11:       cp $1, $38
+         st $35, $1, 0, 1
         jmp :13
 10:      jne $1, $36, :14
          cp $1, $33
         jal $31, $0, :generic structs 5 (iterators).main.next
          cp $3, $1
-       andi $1, $3, 255
-        jeq $1, $0, :15
          cp $1, $3
-12:      swa $2, $1
+       andi $1, $1, 255
+        jeq $1, $0, :15
+         cp $1, $2
+12:       cp $2, $3
         jmp :16
-15:       st $34, $38, 0, 1
+15:       cp $1, $38
+         st $34, $1, 0, 1
 13:      jmp :17
-14:      li8 $1, 0
-       li64 $2, -6148914691236517206
-        swa $2, $1
+14:      li8 $2, 0
+       li64 $1, -6148914691236517206
 16:      swa $1, $2
      addi64 $254, $254, 64
          ld $31, $254, -64, 64
