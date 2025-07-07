@@ -1,14 +1,10 @@
 main:
 	mov rax, 0x00
-	mov rcx, rax
-1:	cmp rcx, 0x0A
-	setb al
-	movzx rax, al
-	test al, al
+1:	cmp rax, 0x0A
+	setb cl
+	movzx rcx, cl
+	test cl, cl
 	jz :0
-	mov rax, rcx
 	add rax, 0x01
-	mov rcx, rax
 	jmp :1
-0:	mov rax, rcx
-	ret
+0:	ret

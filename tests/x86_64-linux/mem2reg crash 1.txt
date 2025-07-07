@@ -6,22 +6,22 @@ mem2reg crash 1.insert:
 	mov r12, rdi
 	mov rbp, rsi
 	mov rbx, 0x00
-	cmp r12, rbx
+	mov rax, r12
+	cmp rax, rbx
 	jnz :1
 	call :mem2reg crash 1.bar
 	jmp :1
 1:	mov rdx, rbx
-2:	mov rcx, rbx
-4:	cmp rcx, 0x08
-	setnb al
-	movzx rax, al
-	test al, al
+2:	mov rax, rbx
+4:	cmp rax, 0x08
+	setnb cl
+	movzx rcx, cl
+	test cl, cl
 	jz :1
-	mov rax, rdx
-	add rax, 0x01
-	mov rdx, rax
+	add rdx, 0x01
 	jmp :2
-1:	cmp rcx, rbp
+1:	mov rcx, rbp
+	cmp rax, rcx
 	jnz :3
 	mov rax, r12
 	add rsp, 0x08
@@ -29,9 +29,7 @@ mem2reg crash 1.insert:
 	pop rbp
 	pop rbx
 	ret
-3:	mov rax, rcx
-	add rax, 0x01
-	mov rcx, rax
+3:	add rax, 0x01
 	jmp :4
 mem2reg crash 1.bar:
 	ret

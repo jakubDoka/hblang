@@ -8,46 +8,39 @@ passing struct multiple times 1.foo:
 	mov rsi, rcx
 	mov rdx, rax
 	call :memcpy
-	lea rsi, [rsp+0x18]
+	lea rcx, [rsp+0x18]
 	mov ax, [rsp+0x38]
-	mov [rsi], ax
+	mov [rcx], ax
 	mov al, [rsp+0x3A]
-	mov [rsi+0x02], al
+	mov [rcx+0x02], al
 	call :passing struct multiple times 1.bar
 	add rsp, 0x28
 	pop rbx
 	ret
 passing struct multiple times 1.bar:
-	push rbx
-	push rbp
-	mov sil, [rsp+0x32]
-	mov bl, [rsp+0x30]
-	mov bpl, [rsp+0x31]
-	mov rdx, [rsp+0x28]
-	mov rax, [rsp+0x18]
-	mov rcx, [rsp+0x20]
+	mov r8b, [rsp+0x22]
+	mov sil, [rsp+0x20]
+	mov dil, [rsp+0x21]
+	mov rdx, [rsp+0x18]
+	mov rax, [rsp+0x08]
+	mov rcx, [rsp+0x10]
 	add rax, rcx
-	movzx rbx, bl
+	movzx rsi, sil
 	sub rax, rdx
-	movzx rdx, sil
-	movzx rcx, bpl
-	add rax, rbx
+	movzx rdx, r8b
+	movzx rcx, dil
+	add rax, rsi
 	add rax, rcx
 	sub rax, rdx
-	pop rbp
-	pop rbx
 	ret
 main:
 	push rbx
 	push rbp
 	sub rsp, 0x48
 	lea rdx, [rsp+0x20]
-	mov rax, 0x01
-	mov [rsp+0x20], rax
-	mov rax, 0x02
-	mov [rsp+0x28], rax
-	mov rax, 0x03
-	mov [rsp+0x30], rax
+	mov qword ptr [rsp+0x20], 0x01
+	mov qword ptr [rsp+0x28], 0x02
+	mov qword ptr [rsp+0x30], 0x03
 	mov byte ptr [rsp+0x38], 0x01
 	mov byte ptr [rsp+0x39], 0x02
 	mov ax, [rsp+0x38]

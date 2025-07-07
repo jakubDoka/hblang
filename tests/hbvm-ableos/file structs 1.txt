@@ -9,4 +9,5 @@ main:
          tx
 Foo.hb.init:
          cp $2, $1
+         cp $1, $2
        jala $0, $31, 0

@@ -7,7 +7,9 @@ main:
 	call :literals 2.dec
 	mov rbx, rax
 	call :literals 2.dec
-	cmp rbx, rax
+	mov rcx, rax
+	mov rax, rbx
+	cmp rax, rcx
 	jz :0
 	mov rax, 0x01
 	jmp :1

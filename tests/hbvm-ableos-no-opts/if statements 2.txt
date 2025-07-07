@@ -19,10 +19,9 @@ if statements 2.fib:
 1:   addi64 $1, $1, -1
         jal $31, $0, :if statements 2.fib
          cp $32, $1
-         ld $2, $254, 0, 8
-     addi64 $1, $2, -2
+         ld $1, $254, 0, 8
+     addi64 $1, $1, -2
         jal $31, $0, :if statements 2.fib
-         cp $1, $1
          cp $2, $1
          cp $1, $32
       add64 $1, $1, $2

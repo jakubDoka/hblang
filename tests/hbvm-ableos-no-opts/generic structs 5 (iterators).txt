@@ -49,8 +49,6 @@ d:       cp $1, $33
         bmc $37, $1, 16
 a:       cp $1, $35
         jal $31, $0, :generic structs 5 (iterators).main.next
-         cp $1, $1
-         cp $1, $1
          st $1, $254, 132, 1
          st $2, $254, 133, 1
          ld $1, $254, 132, 1
@@ -60,8 +58,6 @@ a:       cp $1, $35
         jmp :6
 5:       cp $1, $38
         jal $31, $0, :generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main, B = generic structs 5 (iterators).main).next
-         cp $1, $1
-         cp $1, $1
          st $1, $254, 134, 1
          st $2, $254, 135, 1
          ld $1, $254, 134, 1
@@ -79,8 +75,6 @@ a:       cp $1, $35
 9:      jmp :a
 4:       cp $1, $35
         jal $31, $0, :generic structs 5 (iterators).main.next
-         cp $1, $1
-         cp $1, $1
          st $1, $254, 130, 1
          st $2, $254, 131, 1
          ld $1, $254, 130, 1

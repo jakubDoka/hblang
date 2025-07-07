@@ -53,6 +53,7 @@ pub fn begin(
     self.pins = self.func.addNode(.Scope, .none, .top, &.{}, .{});
 
     self.func.signature = .init(call_conv, params, return_values, self.func.arena.allocator());
+    self.func.root.extra(.Start).signature = self.func.signature;
 
     return @enumFromInt(0);
 }

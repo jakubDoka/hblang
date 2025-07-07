@@ -3,8 +3,9 @@ typeof is not comptime 1.broken1:
 	sub rsp, 0x18
 	lea rax, [0x0000000000000007]
 	mov [rsp], rax
-	mov rbx, 0x00
-	mov [rsp+0x08], rbx
+	mov qword ptr [rsp+0x08], 0x00
+	mov rax, 0x00
+	mov rbx, rax
 	mov rax, 0x01
 	mov rdi, 0x02
 	mov rsi, [rsp]

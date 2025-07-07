@@ -4,12 +4,9 @@ nullable types 4 (pointer optimization).opaque(v: ^uint):
 main:
 	sub rsp, 0x08
 	lea rdi, [rsp]
-	mov rax, 0x03
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x03
 	call :nullable types 4 (pointer optimization).opaque(v: ^uint)
-	mov rcx, rax
-	mov rax, 0x00
-	mov [rcx], rax
+	mov qword ptr [rax], 0x00
 	mov rax, [rsp]
 	add rsp, 0x08
 	ret

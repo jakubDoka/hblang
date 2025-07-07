@@ -1,3 +1,2 @@
 main:
-	mov rax, 0x00
 0:	jmp :0

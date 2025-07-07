@@ -1,11 +1,8 @@
 main:
 	sub rsp, 0x20
-	mov rax, 0x01
-	mov [rsp], rax
-	mov rax, 0x02
-	mov [rsp+0x08], rax
-	mov rax, 0x03
-	mov [rsp+0x10], rax
+	mov qword ptr [rsp], 0x01
+	mov qword ptr [rsp+0x08], 0x02
+	mov qword ptr [rsp+0x10], 0x03
 	mov rax, [rsp]
 	mov rdx, [rsp+0x08]
 	mov rcx, [rsp+0x10]

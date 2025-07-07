@@ -17,9 +17,8 @@ enums 4.NameMap(Enum = enums 4.Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get:
      muli64 $2, $2, 8
       add64 $3, $4, $3
       add64 $2, $4, $2
-         ld $4, $3, 0, 8
-         ld $3, $2, 0, 8
-      add64 $2, $1, $4
-      sub64 $1, $3, $4
-        swa $1, $2
+         ld $3, $3, 0, 8
+         ld $2, $2, 0, 8
+      add64 $1, $1, $3
+      sub64 $2, $2, $3
        jala $0, $31, 0

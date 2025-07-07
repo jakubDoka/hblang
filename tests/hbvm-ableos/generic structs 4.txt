@@ -41,13 +41,12 @@ generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next 
         jne $2, $3, :1
          ld $1, $1, 0, 8
         jmp :2
-1:       ld $5, $1, 8, 8
-         cp $5, $5
-         ld $4, $1, 16, 8
-         cp $1, $4
+1:       ld $3, $1, 8, 8
+         cp $4, $3
+         ld $1, $1, 16, 8
      addi64 $3, $2, -1
          cp $2, $1
-         cp $1, $5
+         cp $1, $4
         jal $31, $0, :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint))).get
 2:   addi64 $254, $254, 8
          ld $31, $254, -8, 8

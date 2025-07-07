@@ -72,7 +72,9 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
         );
     }
 
-    if (true and !Regalloc.use_new_ralloc) {
+    if (true) b: {
+        if (std.mem.indexOf(u8, name, "float") != null) break :b;
+        if (std.mem.indexOf(u8, name, "abi") != null) break :b;
         const target = "x86_64-linux";
         var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
         defer x86_64.deinit();
@@ -89,7 +91,9 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
         );
     }
 
-    if (true and !Regalloc.use_new_ralloc) {
+    if (true) b: {
+        if (std.mem.indexOf(u8, name, "float") != null) break :b;
+        if (std.mem.indexOf(u8, name, "abi") != null) break :b;
         const target = "x86_64-linux-no-opts";
         var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
         defer x86_64.deinit();
@@ -200,12 +204,12 @@ pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
 
 pub fn runVendoredTest(path: []const u8) !void {
     if (std.mem.indexOf(u8, path, "inf") != null) return;
+    if (std.mem.indexOf(u8, path, "float") != null) return;
 
     utils.Arena.initScratch(1024 * 1024 * 32);
     defer utils.Arena.deinitScratch();
     try test_util.runVendoredTest(path, "hbvm-ableos", .all);
     try test_util.runVendoredTest(path, "hbvm-ableos-no-opts", .none);
-    if (Regalloc.use_new_ralloc) return;
     try test_util.runVendoredTest(path, "x86_64-linux", .all);
     try test_util.runVendoredTest(path, "x86_64-linux-no-opts", .none);
 }

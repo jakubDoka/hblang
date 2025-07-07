@@ -1,15 +1,13 @@
 deep dedup 4 (mutuali recursive).fib2:
 	sub rsp, 0x08
-	mov rax, rdi
-	cmp rax, 0x02
-	setbe dil
-	movzx rdi, dil
-	test dil, dil
+	cmp rdi, 0x02
+	setbe al
+	movzx rax, al
+	test al, al
 	jz :0
 	mov rax, 0x01
 	jmp :1
-0:	mov rdi, rax
-	call :deep dedup 4 (mutuali recursive).fib_body2
+0:	call :deep dedup 4 (mutuali recursive).fib_body2
 1:	add rsp, 0x08
 	ret
 deep dedup 4 (mutuali recursive).fib_body2:
@@ -17,12 +15,14 @@ deep dedup 4 (mutuali recursive).fib_body2:
 	push rbp
 	sub rsp, 0x08
 	mov rbp, rdi
-	mov rdi, rbp
-	sub rdi, 0x01
+	mov rax, rbp
+	sub rax, 0x01
+	mov rdi, rax
 	call :deep dedup 4 (mutuali recursive).fib2
 	mov rbx, rax
-	mov rdi, rbp
-	sub rdi, 0x02
+	mov rax, rbp
+	sub rax, 0x02
+	mov rdi, rax
 	call :deep dedup 4 (mutuali recursive).fib2
 	mov rcx, rax
 	mov rax, rbx
@@ -35,7 +35,8 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x08
-	mov rbp, 0x03
+	mov rax, 0x03
+	mov rbp, rax
 	mov rdi, rbp
 	call :deep dedup 4 (mutuali recursive).fib2
 	mov rbx, rax

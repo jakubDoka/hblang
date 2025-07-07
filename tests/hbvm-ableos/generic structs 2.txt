@@ -7,9 +7,8 @@ main:
          ld $31, $254, -8, 8
          tx
 generic structs 2.Foo(F = uint).Bar(B = u8).init:
-       li64 $2, 1
-        li8 $1, 1
-        swa $1, $2
+       li64 $1, 1
+        li8 $2, 1
        jala $0, $31, 0
 generic structs 2.Foo(F = uint).Bar(B = u8).sub:
        andi $2, $2, 255

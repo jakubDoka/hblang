@@ -11,11 +11,9 @@ main:
 mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime args 1.main):
        andi $1, $1, 255
         jeq $1, $0, :1
-        li8 $3, 1
-     addi32 $1, $2, 5
-         cp $2, $3
+        li8 $1, 1
+     addi32 $2, $2, 5
         jmp :2
-1:      li8 $2, 0
-       li64 $1, -6148914691236517206
-2:      swa $1, $2
-       jala $0, $31, 0
+1:      li8 $1, 0
+       li64 $2, -6148914691236517206
+2:     jala $0, $31, 0

@@ -12,7 +12,6 @@ main:
         jal $31, $0, :comptime 2.main.some_fn3(some_int = uint)(fnc = comptime 2.main.some_fn(some_int = uint))
          cp $32, $1
         jal $31, $0, :comptime 2.main.some_fn3(some_int = uint)(fnc = comptime 2.main.some_fn3(some_int = uint)(fnc = comptime 2.main.some_fn2(some_int = uint, some_fn = comptime 2.main.some_fn(some_int = uint))))
-         cp $1, $1
          cp $2, $1
          cp $1, $32
       add64 $1, $1, $2

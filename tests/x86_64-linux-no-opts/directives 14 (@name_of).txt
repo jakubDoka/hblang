@@ -2,12 +2,10 @@ main:
 	sub rsp, 0x20
 	lea rax, [0x0000000000000007]
 	mov [rsp], rax
-	mov rax, 0x04
-	mov [rsp+0x08], rax
+	mov qword ptr [rsp+0x08], 0x04
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x10], rax
-	mov rax, 0x03
-	mov [rsp+0x18], rax
+	mov qword ptr [rsp+0x18], 0x03
 	mov rax, [rsp+0x08]
 	mov rcx, [rsp+0x18]
 	add rax, rcx

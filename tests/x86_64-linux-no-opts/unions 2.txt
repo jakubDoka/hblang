@@ -1,8 +1,7 @@
 main:
 	sub rsp, 0x10
 	mov dword ptr [rsp+0x08], 0x60000000
-	mov rax, 0x2A
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x2A
 	mov rax, [rsp]
 	mov [rsp], rax
 	mov rax, [rsp]

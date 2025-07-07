@@ -18,9 +18,8 @@ generic structs 1.nvec(E = uint):
          st $1, $254, 8, 8
          ld $1, $254, 0, 8
          st $1, $254, 16, 8
-         ld $2, $254, 8, 8
-         ld $1, $254, 16, 8
-        swa $1, $2
+         ld $1, $254, 8, 8
+         ld $2, $254, 16, 8
      addi64 $254, $254, 24
        jala $0, $31, 0
 generic structs 1.Vec(E = uint).sub:

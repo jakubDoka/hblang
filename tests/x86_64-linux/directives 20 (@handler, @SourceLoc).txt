@@ -6,14 +6,16 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	push r12
 	sub rsp, 0x48
 	mov r12, rsi
-	mov rbp, 0x00
-	cmp rbp, r12
+	mov rax, 0x00
+	mov rbp, rax
+	mov rcx, r12
+	mov rax, rbp
+	cmp rax, rcx
 	jb :0
 	lea rcx, [rsp+0x20]
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x20], rax
-	mov rax, 0x24
-	mov [rsp+0x28], rax
+	mov qword ptr [rsp+0x28], 0x24
 	mov rax, 0xF00000012
 	mov [rsp+0x30], rax
 	mov rax, 0x20
@@ -34,45 +36,40 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	pop rbx
 	ret
 memcpy:
-	push rbx
-	push rbp
-	mov rbp, rsi
-	mov rcx, rdx
-	mov rsi, rdi
-1:	cmp rcx, 0x00
+	mov r8, rdi
+	mov rdi, rsi
+	mov rsi, rdx
+1:	cmp rsi, 0x00
 	setnz al
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rbx, rcx
-	sub rbx, 0x01
-	mov rdx, rbp
+	sub rsi, 0x01
+	mov rdx, rdi
 	add rdx, 0x01
-	mov rcx, rsi
+	mov rcx, r8
 	add rcx, 0x01
-	mov al, [rbp]
-	mov [rsi], al
-	mov rsi, rcx
-	mov rcx, rbx
-	mov rbp, rdx
+	mov al, [rdi]
+	mov [r8], al
+	mov r8, rcx
+	mov rdi, rdx
 	jmp :1
-0:	pop rbp
-	pop rbx
-	ret
+0:	ret
 directives 20 (@handler, @SourceLoc).slice_ioob:
 	ud2
 _start:
 	push rbx
 	sub rsp, 0x18
-	lea rbx, [rsp+0x08]
+	lea rax, [rsp+0x08]
+	mov rbx, rax
 	mov byte ptr [rsp+0x08], 0x00
 	mov byte ptr [rsp+0x04], 0x01
 	mov byte ptr [rsp+0x05], 0x02
 	mov byte ptr [rsp+0x06], 0x03
 	mov byte ptr [rsp+0x07], 0x04
-	lea rdi, [rsp]
+	lea rcx, [rsp]
 	mov eax, [rsp+0x04]
-	mov [rdi], eax
+	mov [rcx], eax
 	call :directives 20 (@handler, @SourceLoc).produce_memcpy
 	mov rsi, 0x00
 	mov rdi, rbx

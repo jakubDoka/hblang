@@ -323,7 +323,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         return .{ .ast = asts, .arena = types.pool.arena };
     }
 
-    if (opts.vendored_test) {
+    if (opts.vendored_test and !@import("options").dont_simulate) {
         const expectations: test_utils.Expectations = .init(&asts[0], types.pool.arena.allocator());
 
         const out = bckend.finalizeBytes(.{

@@ -16,13 +16,11 @@ pointers 2.swap:
 	ret
 main:
 	sub rsp, 0x28
-	lea rdx, [rsp]
-	mov rax, 0x01
-	mov [rsp], rax
-	mov rcx, 0x02
+	lea rcx, [rsp]
+	mov qword ptr [rsp], 0x01
 	lea rax, [rsp+0x08]
-	mov [rsp+0x08], rcx
-	mov [rsp+0x10], rdx
+	mov qword ptr [rsp+0x08], 0x02
+	mov [rsp+0x10], rcx
 	mov [rsp+0x18], rax
 	mov rdi, [rsp+0x10]
 	mov rsi, [rsp+0x18]

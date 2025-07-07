@@ -1,34 +1,26 @@
 main:
-	push rbx
-	push rbp
 	sub rsp, 0x30
 	mov dword ptr [rsp+0x28], 0x70000002
-	mov rbp, 0x01
-	mov [rsp+0x08], rbp
-	mov rbx, 0x02
-	mov [rsp+0x10], rbx
-	mov rdx, 0x03
-	mov [rsp+0x18], rdx
-	mov rax, 0x00
-	mov [rsp+0x20], rax
-	mov [rsp], rax
+	mov qword ptr [rsp+0x08], 0x01
+	mov qword ptr [rsp+0x10], 0x02
+	mov qword ptr [rsp+0x18], 0x03
+	mov qword ptr [rsp+0x20], 0x00
+	mov qword ptr [rsp], 0x00
 	mov rax, [rsp]
 	mov rcx, [rsp+0x08]
 	add rax, rcx
 	mov [rsp], rax
-	mov [rsp+0x20], rbp
+	mov qword ptr [rsp+0x20], 0x01
 	mov rax, [rsp]
 	mov rcx, [rsp+0x10]
 	add rax, rcx
 	mov [rsp], rax
-	mov [rsp+0x20], rbx
+	mov qword ptr [rsp+0x20], 0x02
 	mov rax, [rsp]
 	mov rcx, [rsp+0x18]
 	add rax, rcx
 	mov [rsp], rax
-	mov [rsp+0x20], rdx
+	mov qword ptr [rsp+0x20], 0x03
 	mov rax, [rsp]
 	add rsp, 0x30
-	pop rbp
-	pop rbx
 	ret

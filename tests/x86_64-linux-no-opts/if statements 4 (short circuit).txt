@@ -1,11 +1,10 @@
 if statements 4 (short circuit).effectfull:
 	sub rsp, 0x10
 	mov [rsp], rdi
-	mov rdx, 0x01
-	lea rcx, [0x0000000000000007]
-	mov rax, [rsp]
-	mov [rcx], rax
-	mov rax, rdx
+	mov rax, 0x01
+	lea rdx, [0x0000000000000007]
+	mov rcx, [rsp]
+	mov [rdx], rcx
 	add rsp, 0x10
 	ret
 main:

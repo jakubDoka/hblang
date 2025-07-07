@@ -41,21 +41,20 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x48
-	lea rdx, [rsp+0x18]
-	mov rax, 0x04
-	mov [rsp+0x18], rax
+	lea rcx, [rsp+0x18]
+	mov qword ptr [rsp+0x18], 0x04
 	lea rax, [0x0000000000000007]
-	mov rcx, 0x03
 	mov rax, [rax]
 	mov [rsp+0x20], rax
-	mov [rsp+0x28], rcx
+	mov qword ptr [rsp+0x28], 0x03
 	mov rax, 0x18
 	lea rbp, [rsp]
-	mov rsi, rdx
 	mov rdi, rbp
+	mov rsi, rcx
 	mov rdx, rax
 	call :memcpy
-	lea rbx, [rsp+0x30]
+	lea rax, [rsp+0x30]
+	mov rbx, rax
 	mov rdi, rbx
 	call :structs 1.odher_pass
 	mov rax, [rsp+0x40]

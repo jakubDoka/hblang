@@ -1,3 +1,2 @@
 main:
-       li64 $1, 0
-0:      jmp :0
+        jmp :main

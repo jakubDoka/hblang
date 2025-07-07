@@ -1,10 +1,7 @@
 main:
-	push rbx
 	sub rsp, 0x30
-	mov rbx, 0x00
-	mov [rsp], rbx
-	mov [rsp+0x08], rbx
-	mov rdx, 0x01
+	mov qword ptr [rsp], 0x00
+	mov qword ptr [rsp+0x08], 0x00
 2:	mov rax, [rsp]
 	cmp rax, 0x0A
 	setz al
@@ -13,11 +10,10 @@ main:
 	jz :0
 	mov rax, [rsp+0x08]
 	add rsp, 0x30
-	pop rbx
 	ret
-0:	mov [rsp+0x10], rbx
-	mov [rsp+0x18], rdx
-	mov [rsp+0x20], rbx
+0:	mov qword ptr [rsp+0x10], 0x00
+	mov qword ptr [rsp+0x18], 0x01
+	mov qword ptr [rsp+0x20], 0x00
 3:	mov rax, [rsp+0x20]
 	cmp rax, 0x09
 	setz al

@@ -1,10 +1,10 @@
 one.hb.add:
-	add rdi, 0x01
 	mov rax, rdi
+	add rax, 0x01
 	ret
 two.hb.add:
-	add rdi, 0x02
 	mov rax, rdi
+	add rax, 0x02
 	ret
 main:
 	push rbx

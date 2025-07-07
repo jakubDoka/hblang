@@ -8,7 +8,6 @@ main:
          cp $32, $1
          cp $1, $33
         jal $31, $0, :deep dedup 4 (mutuali recursive).fib2
-         cp $1, $1
          cp $2, $1
          cp $1, $32
       sub64 $1, $1, $2
@@ -37,7 +36,6 @@ deep dedup 4 (mutuali recursive).fib_body2:
          cp $1, $33
      addi64 $1, $1, -2
         jal $31, $0, :deep dedup 4 (mutuali recursive).fib2
-         cp $1, $1
          cp $2, $1
          cp $1, $32
       add64 $1, $1, $2

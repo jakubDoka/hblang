@@ -6,30 +6,32 @@ directives 20 (@handler, @SourceLoc).main:
 	lea rax, [rsp+0x64]
 	mov byte ptr [rsp+0x64], 0x00
 	mov [rsp+0x40], rax
-	mov rax, 0x01
-	mov [rsp+0x48], rax
+	mov qword ptr [rsp+0x48], 0x01
 	mov byte ptr [rsp+0x60], 0x01
 	mov byte ptr [rsp+0x61], 0x02
 	mov byte ptr [rsp+0x62], 0x03
 	mov byte ptr [rsp+0x63], 0x04
-	lea rdi, [rsp]
+	lea rcx, [rsp]
 	mov eax, [rsp+0x60]
-	mov [rdi], eax
+	mov [rcx], eax
 	call :directives 20 (@handler, @SourceLoc).produce_memcpy
-	mov r12, 0x00
-	mov rbp, [rsp+0x48]
 	mov rax, 0x00
-	cmp r12, rbp
-	setnbe dl
-	movzx rdx, dl
-	or edx, eax
-	test dl, dl
+	mov r12, rax
+	mov rax, [rsp+0x48]
+	mov rbp, rax
+	mov rdx, 0x00
+	mov rcx, r12
+	mov rax, rbp
+	cmp rcx, rax
+	setnbe al
+	movzx rax, al
+	or eax, edx
+	test al, al
 	jz :0
 	lea rcx, [rsp+0x20]
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x20], rax
-	mov rax, 0x24
-	mov [rsp+0x28], rax
+	mov qword ptr [rsp+0x28], 0x24
 	mov rax, 0x100000001
 	mov [rsp+0x30], rax
 	lea rbx, [rsp]
@@ -38,13 +40,13 @@ directives 20 (@handler, @SourceLoc).main:
 	mov rsi, rcx
 	mov rdx, rax
 	call :memcpy
-	mov rdi, rbp
 	mov rsi, r12
 	mov rdx, r12
+	mov rdi, rbp
 	call :directives 20 (@handler, @SourceLoc).slice_ioob
 0:	mov rax, [rsp+0x40]
 	mov [rsp+0x50], rax
-	mov [rsp+0x58], r12
+	mov qword ptr [rsp+0x58], 0x00
 	mov rsi, [rsp+0x58]
 	mov rdi, [rsp+0x50]
 	call :directives 20 (@handler, @SourceLoc).use_slice
@@ -91,15 +93,18 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	sub rsp, 0x58
 	mov [rsp+0x40], rdi
 	mov [rsp+0x48], rsi
-	mov r12, 0x00
-	mov rbp, [rsp+0x48]
-	cmp r12, rbp
+	mov rax, 0x00
+	mov r12, rax
+	mov rax, [rsp+0x48]
+	mov rbp, rax
+	mov rcx, r12
+	mov rax, rbp
+	cmp rcx, rax
 	jb :0
 	lea rcx, [rsp+0x20]
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x20], rax
-	mov rax, 0x24
-	mov [rsp+0x28], rax
+	mov qword ptr [rsp+0x28], 0x24
 	mov rax, 0xF00000012
 	mov [rsp+0x30], rax
 	lea rbx, [rsp]
@@ -108,9 +113,9 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	mov rsi, rcx
 	mov rdx, rax
 	call :memcpy
-	mov rdi, rbp
 	mov rsi, r12
 	mov rdx, r12
+	mov rdi, rbp
 	call :directives 20 (@handler, @SourceLoc).slice_ioob
 0:	mov rax, [rsp+0x40]
 	mov al, [rax]

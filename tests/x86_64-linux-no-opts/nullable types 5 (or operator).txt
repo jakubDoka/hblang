@@ -2,7 +2,6 @@ main:
 	sub rsp, 0x40
 	mov byte ptr [rsp], 0x00
 	mov al, [rsp]
-	mov rcx, 0x01
 	test al, al
 	jz :0
 	mov rax, [rsp]
@@ -10,14 +9,14 @@ main:
 	mov rax, [rsp+0x08]
 	mov [rsp+0x18], rax
 	jmp :1
-0:	mov [rsp+0x18], rcx
-1:	mov rax, [rsp+0x18]
+0:	mov qword ptr [rsp+0x18], 0x01
+1:	mov rcx, 0x01
+	mov rax, [rsp+0x18]
 	cmp rax, rcx
 	jz :2
 	jmp :4
 2:	mov byte ptr [rsp+0x20], 0x01
-	mov rax, 0x00
-	mov [rsp+0x28], rax
+	mov qword ptr [rsp+0x28], 0x00
 	mov al, [rsp+0x20]
 	test al, al
 	jz :4

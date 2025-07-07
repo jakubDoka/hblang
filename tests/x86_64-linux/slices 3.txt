@@ -1,54 +1,47 @@
 slices 3.reverse:
-	push rbx
-	push rbp
 	sub rsp, 0x10
-	mov rcx, rdx
 	mov [rsp], rsi
-	mov [rsp+0x08], rcx
-	cmp rcx, 0x00
-	setz dl
-	movzx rdx, dl
-	test dl, dl
+	mov [rsp+0x08], rdx
+	cmp rdx, 0x00
+	setz al
+	movzx rax, al
+	test al, al
 	jz :0
 	mov [rdi], rsi
 	mov rax, [rsp+0x08]
 	mov [rdi+0x08], rax
 	jmp :1
 0:	mov rax, 0x00
-	mov rdx, rcx
 	sub rdx, 0x01
-	mov rcx, rax
-	mov rsi, rdx
+	mov rsi, rax
+	mov r9, rdx
 3:	mov rax, [rsp]
-	cmp rcx, rsi
+	cmp rsi, r9
 	jnb :2
-	mov rbp, rax
-	add rbp, rcx
-	add rax, rsi
-	mov rbx, rsi
-	sub rbx, 0x01
-	mov rdx, rcx
-	add rdx, 0x01
-	mov cl, [rbp]
+	mov r8, rax
+	add r8, rsi
+	add rax, r9
+	mov rdx, r9
+	sub rdx, 0x01
+	add rsi, 0x01
+	mov cl, [r8]
 	mov al, [rax]
-	mov [rbp], al
+	mov [r8], al
 	mov rax, [rsp]
-	add rax, rsi
+	add rax, r9
 	mov [rax], cl
-	mov rcx, rdx
-	mov rsi, rbx
+	mov r9, rdx
 	jmp :3
 2:	mov [rdi], rax
 	mov rax, [rsp+0x08]
 	mov [rdi+0x08], rax
 1:	add rsp, 0x10
-	pop rbp
-	pop rbx
 	ret
 main:
 	push rbx
 	sub rsp, 0x28
-	lea rbx, [rsp+0x20]
+	lea rax, [rsp+0x20]
+	mov rbx, rax
 	mov byte ptr [rsp+0x20], 0x01
 	mov byte ptr [rsp+0x21], 0x02
 	mov byte ptr [rsp+0x22], 0x03

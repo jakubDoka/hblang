@@ -16,7 +16,11 @@ main:
 	mov rcx, rax
 	mov rax, rbx
 	add rax, 0x0A
-	add rcx, 0x14
+	mov rdx, rax
+	mov rax, rcx
+	add rax, 0x14
+	mov rcx, rax
+	mov rax, rdx
 	add rax, rcx
 	add rsp, 0x08
 	pop rbx

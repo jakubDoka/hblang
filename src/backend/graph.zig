@@ -460,6 +460,7 @@ pub const builtin = enum {
     // ===== CFG =====
     pub const Start = extern struct {
         base: Cfg = .{},
+        signature: Signature = .{},
     };
     pub const FramePointer = extern struct {};
     pub const Entry = extern struct {
@@ -532,6 +533,7 @@ pub const builtin = enum {
 
         pub const Dbg = enum(u8) {
             defualt,
+            conflict,
             @"def/loop",
             @"use/loop/phi",
             @"use/loop/use",
@@ -707,6 +709,7 @@ pub fn Func(comptime Backend: type) type {
             return std.hash_map.HashMapUnmanaged(InternedNode, void, Context, 70);
         }
 
+        pub const biased_regs = if (optApi("biased_regs", u64)) Backend.biased_regs else 0;
         pub const all_classes = std.meta.fields(Union);
 
         const Self = @This();
@@ -1181,6 +1184,7 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn hasNoUseFor(self: *Node, def: *Node) bool {
+                if (self.kind == .Call and def.kind == .StackArgOffset) return true;
                 return std.mem.indexOfScalar(*Node, self.dataDeps(), def) == null;
             }
 
@@ -1195,8 +1199,8 @@ pub fn Func(comptime Backend: type) type {
                 return self.output_base[0..self.output_len];
             }
 
-            pub fn posOfInput(self: *Node, input: *Node) usize {
-                return std.mem.indexOfScalarPos(?*Node, self.inputs(), 1, input).?;
+            pub fn posOfInput(self: *Node, from: usize, input: *Node) usize {
+                return std.mem.indexOfScalarPos(?*Node, self.inputs(), from, input).?;
             }
 
             pub fn posOfOutput(self: *Node, output: *Node) usize {
@@ -1444,7 +1448,7 @@ pub fn Func(comptime Backend: type) type {
                 if (use.cfg0().idepth() < kill.cfg0().idepth()) continue;
                 if (use.cfg0() == kill.cfg0() and oidx > use.cfg0().base.posOfOutput(use)) continue;
 
-                const idx = use.posOfInput(def);
+                const idx = use.posOfInput(1, def);
 
                 const mask = use.regMask(idx, tmp.arena);
                 const kills = kill.clobbers();
@@ -1463,7 +1467,7 @@ pub fn Func(comptime Backend: type) type {
             }
 
             if (!subsumed and !kill.hasNoUseFor(def)) {
-                const idx = kill.posOfInput(def);
+                const idx = kill.posOfInput(1, def);
                 self.setInputNoIntern(kill, idx, ins);
                 subsumed = true;
             }
@@ -1486,7 +1490,7 @@ pub fn Func(comptime Backend: type) type {
                 if (use == def) continue;
                 if (use == ins) continue;
                 if (use.hasNoUseFor(def)) continue;
-                self.setInputNoIntern(use, use.posOfInput(def), ins);
+                self.setInputNoIntern(use, use.posOfInput(1, def), ins);
             }
 
             const oidx = block.base.posOfOutput(def);
@@ -1890,6 +1894,9 @@ pub fn Func(comptime Backend: type) type {
             if (is_dead and node.kind == .Return and inps[0] != null) {
                 worklist.add(inps[0].?);
                 self.setInputNoIntern(node, 0, null);
+                for (3..node.inputs().len) |i| {
+                    self.setInputNoIntern(node, i, null);
+                }
                 return null;
             }
 

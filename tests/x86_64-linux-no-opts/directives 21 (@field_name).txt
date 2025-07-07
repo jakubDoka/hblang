@@ -2,8 +2,7 @@ main:
 	sub rsp, 0x10
 	lea rax, [0x0000000000000007]
 	mov [rsp], rax
-	mov rax, 0x06
-	mov [rsp+0x08], rax
+	mov qword ptr [rsp+0x08], 0x06
 	mov rax, [rsp]
 	mov al, [rax]
 	movzx rax, al

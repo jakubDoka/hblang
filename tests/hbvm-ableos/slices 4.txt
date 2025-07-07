@@ -18,17 +18,15 @@ main:
          cp $2, $32
          cp $4, $32
         jal $31, $0, :slices 4.equals
-         cp $1, $1
-         cp $1, $1
        andi $1, $1, 255
         not $1, $1
        andi $1, $1, 255
         jeq $1, $0, :2
         jmp :3
 2:       cp $3, $33
-         cp $1, $34
          cp $2, $32
          cp $4, $32
+         cp $1, $34
         jal $31, $0, :slices 4.equals
        andi $1, $1, 255
         not $1, $1

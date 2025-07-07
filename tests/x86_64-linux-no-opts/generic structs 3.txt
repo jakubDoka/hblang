@@ -12,8 +12,7 @@ generic structs 3.Foo(F = uint).sub:
 	ret
 main:
 	sub rsp, 0x08
-	mov rax, 0x0A
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x0A
 	mov rax, [rsp]
 	mov [rsp], rax
 	mov rax, [rsp]

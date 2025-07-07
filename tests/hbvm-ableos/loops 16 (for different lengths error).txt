@@ -8,7 +8,6 @@ main:
          st $2, $254, 8, 8
        li64 $2, 8589934599
          st $2, $254, 16, 8
-       li64 $2, 0
         jal $31, $0, :loops 16 (for different lengths error).for_loop_length_mismatch
 loops 16 (for different lengths error).for_loop_length_mismatch:
          un

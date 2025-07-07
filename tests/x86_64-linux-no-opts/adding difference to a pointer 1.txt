@@ -10,12 +10,11 @@ main:
 	mov byte ptr [rsp+0x0B], 0x03
 	mov [rsp], rax
 	call :adding difference to a pointer 1.one
-	mov rdx, rax
-	mov rcx, 0x01
-	mov rax, [rsp]
-	sub rcx, rdx
-	add rax, rcx
-	mov [rsp], rax
+	mov rdx, 0x01
+	mov rcx, [rsp]
+	sub rdx, rax
+	add rcx, rdx
+	mov [rsp], rcx
 	mov rax, [rsp]
 	mov al, [rax]
 	movzx rax, al

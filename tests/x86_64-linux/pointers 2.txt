@@ -7,11 +7,9 @@ pointers 2.swap:
 main:
 	sub rsp, 0x18
 	lea rdi, [rsp]
-	mov rax, 0x01
-	mov [rsp], rax
-	mov rax, 0x02
+	mov qword ptr [rsp], 0x01
 	lea rsi, [rsp+0x08]
-	mov [rsp+0x08], rax
+	mov qword ptr [rsp+0x08], 0x02
 	call :pointers 2.swap
 	mov rax, [rsp]
 	mov rcx, [rsp+0x08]

@@ -4,9 +4,8 @@ comptime 1.main.some_fn(some_int = uint)(ui = uint):
 	mov rax, [rsp]
 	add rax, 0x01
 	mov [rsp+0x08], rax
-	mov rcx, [rsp+0x08]
-	mov rax, rcx
-	imul rax, rcx
+	mov rax, [rsp+0x08]
+	imul rax, rax
 	add rsp, 0x10
 	ret
 main:
@@ -24,8 +23,10 @@ main:
 	mov rbx, rax
 	mov rdi, 0x07
 	call :comptime 1.main.some_fn(some_int = uint)(ui = uint)
-	mov rcx, rbx
-	add rcx, rax
+	mov rcx, rax
+	mov rax, rbx
+	add rax, rcx
+	mov rcx, rax
 	mov rax, rbp
 	sub rax, rcx
 	add rsp, 0x08

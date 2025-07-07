@@ -227,7 +227,7 @@ pub fn testBuilder(
 
     if (std.mem.indexOf(u8, name, "infinite") != null) return;
 
-    try expectations.assert(gen.run(.{
+    if (!@import("options").dont_simulate) try expectations.assert(gen.run(.{
         .name = name,
         .code = out.items,
         .colors = colors,

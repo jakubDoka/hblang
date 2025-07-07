@@ -8,15 +8,19 @@ structs 2.swap:
 	mov r12, rsi
 	mov rbp, 0x18
 	lea rbx, [rsp]
+	mov rax, r13
 	mov rdi, rbx
-	mov rsi, r13
+	mov rsi, rax
 	mov rdx, rbp
 	call :memcpy
-	mov rdi, r13
-	mov rsi, r12
+	mov rcx, r12
+	mov rax, r13
+	mov rdi, rax
+	mov rsi, rcx
 	mov rdx, rbp
 	call :memcpy
-	mov rdi, r12
+	mov rax, r12
+	mov rdi, rax
 	mov rsi, rbx
 	mov rdx, rbp
 	call :memcpy
@@ -29,15 +33,13 @@ structs 2.swap:
 main:
 	sub rsp, 0x38
 	lea rdi, [rsp]
-	mov rax, 0x00
-	mov [rsp], rax
-	mov [rsp+0x08], rax
-	mov [rsp+0x10], rax
-	mov rax, 0x01
+	mov qword ptr [rsp], 0x00
+	mov qword ptr [rsp+0x08], 0x00
+	mov qword ptr [rsp+0x10], 0x00
 	lea rsi, [rsp+0x18]
-	mov [rsp+0x18], rax
-	mov [rsp+0x20], rax
-	mov [rsp+0x28], rax
+	mov qword ptr [rsp+0x18], 0x01
+	mov qword ptr [rsp+0x20], 0x01
+	mov qword ptr [rsp+0x28], 0x01
 	call :structs 2.swap
 	mov rax, [rsp]
 	mov rdx, [rsp+0x08]

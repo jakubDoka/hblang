@@ -27,15 +27,17 @@ directives 20 (@handler, @SourceLoc).use_slice:
          st $31, $254, -8, 8
      addi64 $254, $254, -40
        li64 $3, 0
+         cp $4, $3
+         cp $3, $4
        jltu $3, $2, :2
      addi64 $1, $254, 0
-        lra $4, $0, :directives 20 (@handler, @SourceLoc).use_slice.directives 20 (@handler, @SourceLoc)
-         st $4, $254, 0, 8
-       li64 $4, 36
-         st $4, $254, 8, 8
-       li64 $4, 64424509458
-         st $4, $254, 16, 8
-         cp $4, $3
+        lra $3, $0, :directives 20 (@handler, @SourceLoc).use_slice.directives 20 (@handler, @SourceLoc)
+         st $3, $254, 0, 8
+       li64 $3, 36
+         st $3, $254, 8, 8
+       li64 $3, 64424509458
+         st $3, $254, 16, 8
+         cp $3, $4
         jal $31, $0, :directives 20 (@handler, @SourceLoc).slice_ioob
 2:       ld $1, $1, 0, 1
        andi $1, $1, 255

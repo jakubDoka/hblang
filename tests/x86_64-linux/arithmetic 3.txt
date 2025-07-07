@@ -18,7 +18,9 @@ main:
 	mov rbp, rax
 	call :arithmetic 3.mero
 	mov rbx, rax
-	cmp bpl, bl
+	mov rcx, rbx
+	mov rax, rbp
+	cmp al, cl
 	setb dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
@@ -26,7 +28,9 @@ main:
 	jz :0
 	mov rax, 0x01
 	jmp :1
-0:	cmp bpl, bpl
+0:	mov rcx, rbp
+	mov rax, rbp
+	cmp cl, al
 	setb dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
@@ -34,7 +38,9 @@ main:
 	jz :2
 	mov rax, 0x02
 1:	jmp :3
-2:	cmp bpl, bl
+2:	mov rcx, rbx
+	mov rax, rbp
+	cmp al, cl
 	setbe dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
@@ -42,7 +48,9 @@ main:
 	jz :4
 	mov rax, 0x03
 3:	jmp :5
-4:	cmp bl, bpl
+4:	mov rcx, rbx
+	mov rax, rbp
+	cmp cl, al
 	setnbe dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
@@ -50,7 +58,9 @@ main:
 	jz :6
 	mov rax, 0x04
 5:	jmp :7
-6:	cmp bpl, bpl
+6:	mov rcx, rbp
+	mov rax, rbp
+	cmp cl, al
 	setnbe dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
@@ -58,7 +68,9 @@ main:
 	jz :8
 	mov rax, 0x05
 7:	jmp :9
-8:	cmp bl, bpl
+8:	mov rcx, rbx
+	mov rax, rbp
+	cmp cl, al
 	setnb dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
@@ -70,7 +82,9 @@ a:	call :arithmetic 3.mne
 	mov rbp, rax
 	call :arithmetic 3.mero
 	mov rbx, rax
-	cmp bpl, bl
+	mov rcx, rbx
+	mov rax, rbp
+	cmp al, cl
 	setnle dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
@@ -78,7 +92,9 @@ a:	call :arithmetic 3.mne
 	jz :12
 	mov rax, 0x07
 b:	jmp :13
-c:	cmp bpl, bpl
+c:	mov rcx, rbp
+	mov rax, rbp
+	cmp cl, al
 	setnle dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
@@ -86,7 +102,9 @@ c:	cmp bpl, bpl
 	jz :14
 	mov rax, 0x08
 d:	jmp :15
-e:	cmp bpl, bl
+e:	mov rcx, rbx
+	mov rax, rbp
+	cmp al, cl
 	setnl dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
@@ -94,7 +112,9 @@ e:	cmp bpl, bl
 	jz :16
 	mov rax, 0x09
 f:	jmp :17
-10:	cmp bl, bpl
+10:	mov rcx, rbx
+	mov rax, rbp
+	cmp cl, al
 	setl dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
@@ -102,7 +122,9 @@ f:	jmp :17
 	jz :18
 	mov rax, 0x0A
 11:	jmp :19
-12:	cmp bpl, bpl
+12:	mov rcx, rbp
+	mov rax, rbp
+	cmp cl, al
 	setl dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
@@ -110,7 +132,9 @@ f:	jmp :17
 	jz :20
 	mov rax, 0x0B
 13:	jmp :21
-14:	cmp bl, bpl
+14:	mov rcx, rbx
+	mov rax, rbp
+	cmp cl, al
 	setle dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
@@ -121,62 +145,92 @@ f:	jmp :17
 16:	call :arithmetic 3.one
 	mov rbx, rax
 	call :arithmetic 3.mero
-	cmp bl, al
+	mov rdx, rax
+	mov rcx, rdx
+	mov rax, rbx
+	cmp al, cl
 	jnb :24
 	mov rax, 0x0D
 17:	jmp :25
-18:	cmp bl, bl
+18:	mov rcx, rbx
+	mov rax, rbx
+	cmp cl, al
 	jnb :26
 	mov rax, 0x0E
 19:	jmp :27
-1a:	cmp bl, al
+1a:	mov rcx, rdx
+	mov rax, rbx
+	cmp al, cl
 	jnbe :28
 	mov rax, 0x0F
 1b:	jmp :29
-1c:	cmp al, bl
+1c:	mov rcx, rdx
+	mov rax, rbx
+	cmp cl, al
 	jbe :30
 	mov rax, 0x10
 1d:	jmp :31
-1e:	cmp bl, bl
+1e:	mov rcx, rbx
+	mov rax, rbx
+	cmp cl, al
 	jbe :32
 	mov rax, 0x11
 1f:	jmp :33
-20:	cmp al, bl
+20:	mov rcx, rdx
+	mov rax, rbx
+	cmp cl, al
 	jb :34
 	mov rax, 0x12
 21:	jmp :35
 22:	call :arithmetic 3.mne
 	mov rbx, rax
 	call :arithmetic 3.mero
-	cmp bl, al
+	mov rdx, rax
+	mov rcx, rdx
+	mov rax, rbx
+	cmp al, cl
 	jle :36
 	mov rax, 0x13
 23:	jmp :37
-24:	cmp bl, bl
+24:	mov rcx, rbx
+	mov rax, rbx
+	cmp cl, al
 	jle :38
 	mov rax, 0x14
 25:	jmp :39
-26:	cmp bl, al
+26:	mov rcx, rdx
+	mov rax, rbx
+	cmp al, cl
 	jl :40
 	mov rax, 0x15
 27:	jmp :41
-28:	cmp al, bl
+28:	mov rcx, rdx
+	mov rax, rbx
+	cmp cl, al
 	jnl :42
 	mov rax, 0x16
 29:	jmp :43
-2a:	cmp bl, bl
+2a:	mov rcx, rbx
+	mov rax, rbx
+	cmp cl, al
 	jnl :44
 	mov rax, 0x17
 2b:	jmp :45
-2c:	cmp al, bl
+2c:	mov rcx, rdx
+	mov rax, rbx
+	cmp cl, al
 	jnle :46
 	mov rax, 0x18
 2d:	jmp :47
-2e:	cmp bl, bl
+2e:	mov rcx, rbx
+	mov rax, rbx
+	cmp cl, al
 	jz :48
 	mov rax, 0x19
 2f:	jmp :49
-30:	cmp bl, al
+30:	mov rcx, rdx
+	mov rax, rbx
+	cmp al, cl
 	jnz :50
 	mov rax, 0x1A
 31:	jmp :51

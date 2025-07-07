@@ -50,7 +50,6 @@ main:
          ld $4, $254, 56, 8
          cp $1, $5
         jal $31, $0, :proper systemv abi 1 (spilled arg).stack_args
-         cp $1, $1
          cp $2, $1
          cp $1, $32
       sub64 $1, $1, $2

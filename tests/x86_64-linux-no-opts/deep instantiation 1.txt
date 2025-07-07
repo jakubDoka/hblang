@@ -603,308 +603,207 @@ deep instantiation 1.Z.get:
 	ret
 main:
 	sub rsp, 0x18
-	mov rax, 0x00
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x00
 	mov dword ptr [rsp+0x08], 0x70000002
-	mov rax, 0x01
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x01
 	mov dword ptr [rsp+0x08], 0x70000003
-	mov rax, 0x02
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x02
 	mov dword ptr [rsp+0x08], 0x70000004
-	mov rax, 0x03
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x03
 	mov dword ptr [rsp+0x08], 0x70000005
-	mov rax, 0x04
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x04
 	mov dword ptr [rsp+0x08], 0x70000006
-	mov rax, 0x05
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x05
 	mov dword ptr [rsp+0x08], 0x70000007
-	mov rax, 0x06
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x06
 	mov dword ptr [rsp+0x08], 0x70000008
-	mov rax, 0x07
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x07
 	mov dword ptr [rsp+0x08], 0x70000009
-	mov rax, 0x08
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x08
 	mov dword ptr [rsp+0x08], 0x7000000A
-	mov rax, 0x09
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x09
 	mov dword ptr [rsp+0x08], 0x7000000B
-	mov rax, 0x0A
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x0A
 	mov dword ptr [rsp+0x08], 0x7000000C
-	mov rax, 0x0B
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x0B
 	mov dword ptr [rsp+0x08], 0x7000000D
-	mov rax, 0x0C
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x0C
 	mov dword ptr [rsp+0x08], 0x7000000E
-	mov rax, 0x0D
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x0D
 	mov dword ptr [rsp+0x08], 0x7000000F
-	mov rax, 0x0E
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x0E
 	mov dword ptr [rsp+0x08], 0x70000010
-	mov rax, 0x0F
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x0F
 	mov dword ptr [rsp+0x08], 0x70000011
-	mov rax, 0x10
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x10
 	mov dword ptr [rsp+0x08], 0x70000012
-	mov rax, 0x11
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x11
 	mov dword ptr [rsp+0x08], 0x70000013
-	mov rax, 0x12
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x12
 	mov dword ptr [rsp+0x08], 0x70000014
-	mov rax, 0x13
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x13
 	mov dword ptr [rsp+0x08], 0x70000015
-	mov rax, 0x14
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x14
 	mov dword ptr [rsp+0x08], 0x70000016
-	mov rax, 0x15
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x15
 	mov dword ptr [rsp+0x08], 0x70000017
-	mov rax, 0x16
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x16
 	mov dword ptr [rsp+0x08], 0x70000018
-	mov rax, 0x17
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x17
 	mov dword ptr [rsp+0x08], 0x70000019
-	mov rax, 0x18
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x18
 	mov dword ptr [rsp+0x08], 0x7000001A
-	mov rax, 0x19
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x19
 	mov dword ptr [rsp+0x08], 0x7000001B
-	mov rax, 0x1A
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x1A
 	mov dword ptr [rsp+0x08], 0x7000001C
-	mov rax, 0x1B
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x1B
 	mov dword ptr [rsp+0x08], 0x7000001D
-	mov rax, 0x1C
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x1C
 	mov dword ptr [rsp+0x08], 0x7000001E
-	mov rax, 0x1D
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x1D
 	mov dword ptr [rsp+0x08], 0x7000001F
-	mov rax, 0x1E
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x1E
 	mov dword ptr [rsp+0x08], 0x70000020
-	mov rax, 0x1F
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x1F
 	mov dword ptr [rsp+0x08], 0x70000021
-	mov rax, 0x20
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x20
 	mov dword ptr [rsp+0x08], 0x70000022
-	mov rax, 0x21
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x21
 	mov dword ptr [rsp+0x08], 0x70000023
-	mov rax, 0x22
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x22
 	mov dword ptr [rsp+0x08], 0x70000024
-	mov rax, 0x23
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x23
 	mov dword ptr [rsp+0x08], 0x70000025
-	mov rax, 0x24
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x24
 	mov dword ptr [rsp+0x08], 0x70000026
-	mov rax, 0x25
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x25
 	mov dword ptr [rsp+0x08], 0x70000027
-	mov rax, 0x26
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x26
 	mov dword ptr [rsp+0x08], 0x70000028
-	mov rax, 0x27
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x27
 	mov dword ptr [rsp+0x08], 0x70000029
-	mov rax, 0x28
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x28
 	mov dword ptr [rsp+0x08], 0x7000002A
-	mov rax, 0x29
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x29
 	mov dword ptr [rsp+0x08], 0x7000002B
-	mov rax, 0x2A
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x2A
 	mov dword ptr [rsp+0x08], 0x7000002C
-	mov rax, 0x2B
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x2B
 	mov dword ptr [rsp+0x08], 0x7000002D
-	mov rax, 0x2C
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x2C
 	mov dword ptr [rsp+0x08], 0x7000002E
-	mov rax, 0x2D
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x2D
 	mov dword ptr [rsp+0x08], 0x7000002F
-	mov rax, 0x2E
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x2E
 	mov dword ptr [rsp+0x08], 0x70000030
-	mov rax, 0x2F
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x2F
 	mov dword ptr [rsp+0x08], 0x70000031
-	mov rax, 0x30
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x30
 	mov dword ptr [rsp+0x08], 0x70000032
-	mov rax, 0x31
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x31
 	mov dword ptr [rsp+0x08], 0x70000033
-	mov rax, 0x32
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x32
 	mov dword ptr [rsp+0x08], 0x70000034
-	mov rax, 0x33
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x33
 	mov dword ptr [rsp+0x08], 0x70000035
-	mov rax, 0x34
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x34
 	mov dword ptr [rsp+0x08], 0x70000036
-	mov rax, 0x35
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x35
 	mov dword ptr [rsp+0x08], 0x70000037
-	mov rax, 0x36
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x36
 	mov dword ptr [rsp+0x08], 0x70000038
-	mov rax, 0x37
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x37
 	mov dword ptr [rsp+0x08], 0x70000039
-	mov rax, 0x38
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x38
 	mov dword ptr [rsp+0x08], 0x7000003A
-	mov rax, 0x39
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x39
 	mov dword ptr [rsp+0x08], 0x7000003B
-	mov rax, 0x3A
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x3A
 	mov dword ptr [rsp+0x08], 0x7000003C
-	mov rax, 0x3B
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x3B
 	mov dword ptr [rsp+0x08], 0x7000003D
-	mov rax, 0x3C
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x3C
 	mov dword ptr [rsp+0x08], 0x7000003E
-	mov rax, 0x3D
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x3D
 	mov dword ptr [rsp+0x08], 0x7000003F
-	mov rax, 0x3E
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x3E
 	mov dword ptr [rsp+0x08], 0x70000040
-	mov rax, 0x3F
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x3F
 	mov dword ptr [rsp+0x08], 0x70000041
-	mov rax, 0x40
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x40
 	mov dword ptr [rsp+0x08], 0x70000042
-	mov rax, 0x41
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x41
 	mov dword ptr [rsp+0x08], 0x70000043
-	mov rax, 0x42
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x42
 	mov dword ptr [rsp+0x08], 0x70000044
-	mov rax, 0x43
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x43
 	mov dword ptr [rsp+0x08], 0x70000045
-	mov rax, 0x44
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x44
 	mov dword ptr [rsp+0x08], 0x70000046
-	mov rax, 0x45
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x45
 	mov dword ptr [rsp+0x08], 0x70000047
-	mov rax, 0x46
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x46
 	mov dword ptr [rsp+0x08], 0x70000048
-	mov rax, 0x47
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x47
 	mov dword ptr [rsp+0x08], 0x70000049
-	mov rax, 0x48
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x48
 	mov dword ptr [rsp+0x08], 0x7000004A
-	mov rax, 0x49
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x49
 	mov dword ptr [rsp+0x08], 0x7000004B
-	mov rax, 0x4A
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x4A
 	mov dword ptr [rsp+0x08], 0x7000004C
-	mov rax, 0x4B
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x4B
 	mov dword ptr [rsp+0x08], 0x7000004D
-	mov rax, 0x4C
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x4C
 	mov dword ptr [rsp+0x08], 0x7000004E
-	mov rax, 0x4D
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x4D
 	mov dword ptr [rsp+0x08], 0x7000004F
-	mov rax, 0x4E
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x4E
 	mov dword ptr [rsp+0x08], 0x70000050
-	mov rax, 0x4F
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x4F
 	mov dword ptr [rsp+0x08], 0x70000051
-	mov rax, 0x50
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x50
 	mov dword ptr [rsp+0x08], 0x70000052
-	mov rax, 0x51
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x51
 	mov dword ptr [rsp+0x08], 0x70000053
-	mov rax, 0x52
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x52
 	mov dword ptr [rsp+0x08], 0x70000054
-	mov rax, 0x53
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x53
 	mov dword ptr [rsp+0x08], 0x70000055
-	mov rax, 0x54
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x54
 	mov dword ptr [rsp+0x08], 0x70000056
-	mov rax, 0x55
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x55
 	mov dword ptr [rsp+0x08], 0x70000057
-	mov rax, 0x56
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x56
 	mov dword ptr [rsp+0x08], 0x70000058
-	mov rax, 0x57
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x57
 	mov dword ptr [rsp+0x08], 0x70000059
-	mov rax, 0x58
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x58
 	mov dword ptr [rsp+0x08], 0x7000005A
-	mov rax, 0x59
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x59
 	mov dword ptr [rsp+0x08], 0x7000005B
-	mov rax, 0x5A
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x5A
 	mov dword ptr [rsp+0x08], 0x7000005C
-	mov rax, 0x5B
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x5B
 	mov dword ptr [rsp+0x08], 0x7000005D
-	mov rax, 0x5C
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x5C
 	mov dword ptr [rsp+0x08], 0x7000005E
-	mov rax, 0x5D
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x5D
 	mov dword ptr [rsp+0x08], 0x7000005F
-	mov rax, 0x5E
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x5E
 	mov dword ptr [rsp+0x08], 0x70000060
-	mov rax, 0x5F
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x5F
 	mov dword ptr [rsp+0x08], 0x70000061
-	mov rax, 0x60
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x60
 	mov dword ptr [rsp+0x08], 0x70000062
-	mov rax, 0x61
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x61
 	mov dword ptr [rsp+0x08], 0x70000063
-	mov rax, 0x62
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x62
 	mov dword ptr [rsp+0x08], 0x70000064
-	mov rax, 0x63
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x63
 	mov dword ptr [rsp+0x08], 0x70000065
-	mov rax, 0x64
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x64
 	mov dword ptr [rsp+0x08], 0x70000066
 	call :deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.S(A = deep instantiation 1.Z)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))).get
 	mov rcx, [rsp]

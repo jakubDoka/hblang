@@ -12,7 +12,8 @@ out of bounds matching 1.Iterator(Iter = out of bounds matching 1).for_each(func
 	push rbx
 	sub rsp, 0x18
 	mov [rsp], rdi
-	lea rbx, [rsp+0x08]
+	lea rax, [rsp+0x08]
+	mov rbx, rax
 1:	mov rsi, [rsp]
 	mov rdi, rbx
 	call :out of bounds matching 1.Iterator(Iter = out of bounds matching 1).next
@@ -55,11 +56,10 @@ out of bounds matching 1.next:
 	mov al, [rax]
 	mov [rsp+0x0A], al
 	mov rdx, [rsp]
-	mov rcx, [rdx+0x08]
-	mov rax, [rdx]
-	add rax, 0x01
-	mov [rdx], rax
-	mov rax, rcx
+	mov rax, [rdx+0x08]
+	mov rcx, [rdx]
+	add rcx, 0x01
+	mov [rdx], rcx
 	sub rax, 0x01
 	mov [rdx+0x08], rax
 	mov byte ptr [rsp+0x08], 0x01
@@ -74,9 +74,9 @@ main:
 	sub rsp, 0x28
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x10], rax
-	mov rax, 0x0C
-	mov [rsp+0x18], rax
-	lea rbx, [rsp]
+	mov qword ptr [rsp+0x18], 0x0C
+	lea rax, [rsp]
+	mov rbx, rax
 	mov rsi, [rsp+0x10]
 	mov rdx, [rsp+0x18]
 	mov rdi, rbx

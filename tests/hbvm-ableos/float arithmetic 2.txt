@@ -5,7 +5,6 @@ main:
          cp $32, $1
          cp $1, $32
         jal $31, $0, :float arithmetic 2.sin
-         cp $1, $1
          cp $2, $1
          cp $1, $32
      fmul32 $1, $2, $1

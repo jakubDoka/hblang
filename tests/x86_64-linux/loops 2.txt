@@ -1,30 +1,19 @@
 loops 2.square:
-	push rbx
-	push rbp
-	mov rsi, 0x00
-	mov rbp, rsi
-	mov rcx, rsi
-2:	cmp rbp, rdi
+	mov r8, 0x00
+	mov rsi, r8
+	mov rax, r8
+2:	cmp rsi, rdi
 	jnz :0
-	mov rax, rcx
-	pop rbp
-	pop rbx
 	ret
-0:	mov rax, rsi
-	mov rbx, rcx
-3:	cmp rax, rdi
+0:	mov rcx, r8
+3:	cmp rcx, rdi
 	jnz :1
-	mov rcx, rbp
-	add rcx, 0x01
-	mov rbp, rcx
-	mov rcx, rbx
+	add rsi, 0x01
 	jmp :2
-1:	mov rdx, rax
-	imul rdx, rbp
-	add rax, 0x01
-	mov rcx, rbx
-	add rcx, rdx
-	mov rbx, rcx
+1:	mov rdx, rcx
+	imul rdx, rsi
+	add rcx, 0x01
+	add rax, rdx
 	jmp :3
 main:
 	sub rsp, 0x08

@@ -25,7 +25,6 @@ passing struct multiple times 1.foo:
          cp $3, $1
          cp $1, $2
          cp $2, $3
-         cp $1, $1
         jal $31, $0, :passing struct multiple times 1.bar
      addi64 $254, $254, 8
          ld $31, $254, -8, 8

@@ -9,10 +9,8 @@ defer 1.main.ret_defer:
 	ret
 main:
 	push rbx
-	push rbp
 	sub rsp, 0x18
-	mov rbp, 0x00
-	mov [rsp], rbp
+	mov qword ptr [rsp], 0x00
 	mov rax, [rsp]
 	cmp rax, 0x01
 	setz cl
@@ -53,7 +51,7 @@ b:	mov rcx, [rsp]
 7:	mov rax, 0x90000002
 	mov [rsp+0x10], eax
 	lea rdi, [rsp+0x08]
-	mov [rsp+0x08], rbp
+	mov qword ptr [rsp+0x08], 0x00
 	call :defer 1.main.ret_defer
 	mov rax, [rsp+0x08]
 	cmp rax, 0x01
@@ -63,9 +61,8 @@ b:	mov rcx, [rsp]
 	jz :9
 	mov rax, rbx
 8:	jmp :10
-9:	mov rax, rbp
+9:	mov rax, 0x00
 a:	add rsp, 0x18
-	pop rbp
 	pop rbx
 	ret
 6:	mov [rsp], rax

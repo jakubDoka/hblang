@@ -44,8 +44,8 @@ generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next 
         jne $3, $2, :1
          ld $1, $1, 0, 8
         jmp :2
-1:       ld $5, $1, 8, 8
-         cp $4, $5
+1:       ld $2, $1, 8, 8
+         cp $4, $2
          ld $2, $1, 16, 8
      addi64 $3, $3, -1
          cp $1, $4

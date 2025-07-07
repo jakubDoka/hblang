@@ -28,56 +28,51 @@ main:
 	setb dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
-	mov rcx, rax
-	mov al, [rsp]
-	test cl, cl
+	mov cl, [rsp]
+	test al, al
 	jz :0
 	mov rax, 0x01
 	jmp :1
-0:	cmp al, al
+0:	cmp cl, cl
 	setb dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
-	mov rdx, rax
-	mov cl, [rsp]
-	mov al, [rsp+0x01]
-	test dl, dl
+	mov dl, [rsp]
+	mov cl, [rsp+0x01]
+	test al, al
 	jz :2
 	mov rax, 0x02
 1:	jmp :3
-2:	cmp cl, al
+2:	cmp dl, cl
 	setbe dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
-	mov rdx, rax
-	mov cl, [rsp+0x01]
-	mov al, [rsp]
-	test dl, dl
+	mov dl, [rsp+0x01]
+	mov cl, [rsp]
+	test al, al
 	jz :4
 	mov rax, 0x03
 3:	jmp :5
-4:	cmp cl, al
+4:	cmp dl, cl
 	setnbe dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
-	mov rcx, rax
-	mov al, [rsp]
-	test cl, cl
+	mov cl, [rsp]
+	test al, al
 	jz :6
 	mov rax, 0x04
 5:	jmp :7
-6:	cmp al, al
+6:	cmp cl, cl
 	setnbe dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
-	mov rdx, rax
-	mov cl, [rsp+0x01]
-	mov al, [rsp]
-	test dl, dl
+	mov dl, [rsp+0x01]
+	mov cl, [rsp]
+	test al, al
 	jz :8
 	mov rax, 0x05
 7:	jmp :9
-8:	cmp cl, al
+8:	cmp dl, cl
 	setnb dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
@@ -95,56 +90,51 @@ a:	call :arithmetic 3.mne
 	setnle dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
-	mov rcx, rax
-	mov al, [rsp+0x02]
-	test cl, cl
+	mov cl, [rsp+0x02]
+	test al, al
 	jz :12
 	mov rax, 0x07
 b:	jmp :13
-c:	cmp al, al
+c:	cmp cl, cl
 	setnle dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
-	mov rdx, rax
-	mov cl, [rsp+0x02]
-	mov al, [rsp+0x03]
-	test dl, dl
+	mov dl, [rsp+0x02]
+	mov cl, [rsp+0x03]
+	test al, al
 	jz :14
 	mov rax, 0x08
 d:	jmp :15
-e:	cmp cl, al
+e:	cmp dl, cl
 	setnl dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
-	mov rdx, rax
-	mov cl, [rsp+0x03]
-	mov al, [rsp+0x02]
-	test dl, dl
+	mov dl, [rsp+0x03]
+	mov cl, [rsp+0x02]
+	test al, al
 	jz :16
 	mov rax, 0x09
 f:	jmp :17
-10:	cmp cl, al
+10:	cmp dl, cl
 	setl dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
-	mov rcx, rax
-	mov al, [rsp+0x02]
-	test cl, cl
+	mov cl, [rsp+0x02]
+	test al, al
 	jz :18
 	mov rax, 0x0A
 11:	jmp :19
-12:	cmp al, al
+12:	cmp cl, cl
 	setl dil
 	movzx rdi, dil
 	call :arithmetic 3.cond
-	mov rdx, rax
-	mov cl, [rsp+0x03]
-	mov al, [rsp+0x02]
-	test dl, dl
+	mov dl, [rsp+0x03]
+	mov cl, [rsp+0x02]
+	test al, al
 	jz :20
 	mov rax, 0x0B
 13:	jmp :21
-14:	cmp cl, al
+14:	cmp dl, cl
 	setle dil
 	movzx rdi, dil
 	call :arithmetic 3.cond

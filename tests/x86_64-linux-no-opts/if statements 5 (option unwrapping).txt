@@ -1,8 +1,7 @@
 main:
 	sub rsp, 0x40
 	mov byte ptr [rsp+0x10], 0x01
-	mov rax, 0x00
-	mov [rsp+0x18], rax
+	mov qword ptr [rsp+0x18], 0x00
 	mov rax, [rsp+0x10]
 	mov [rsp], rax
 	mov rax, [rsp+0x18]

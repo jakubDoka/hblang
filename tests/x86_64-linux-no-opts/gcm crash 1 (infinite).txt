@@ -10,38 +10,33 @@ main:
 	push rbp
 	push r12
 	push r13
-	push r14
-	push r15
-	sub rsp, 0x428
-	lea r15, [rsp+0x08]
-	mov [rsp], r15
-	mov r15, [rsp]
-	mov [rsp+0x408], r15
-	mov r13, 0x00
-	mov [rsp+0x410], r13
-	lea r12, [0x0000000000000007]
-	mov rbp, 0x00
-	mov rbx, 0x400
-3:	mov rax, [rsp+0x410]
-	cmp rax, r13
+	sub rsp, 0x418
+	lea r12, [rsp]
+	mov [rsp+0x400], r12
+	mov qword ptr [rsp+0x408], 0x00
+	lea rbp, [0x0000000000000007]
+	mov rax, 0x00
+	mov r13, rax
+	mov rbx, 0x00
+3:	mov rax, [rsp+0x408]
+	cmp rax, rbx
 	jb :0
-	mov al, [r12]
-	mov [rsp+0x418], al
-	mov al, [rsp+0x418]
-	mov [rsp+0x418], al
-	mov rcx, [rsp+0x410]
-	mov rax, [rsp+0x408]
-	cmp rcx, r13
+	mov al, [rbp]
+	mov [rsp+0x410], al
+	mov al, [rsp+0x410]
+	mov [rsp+0x410], al
+	mov rcx, [rsp+0x408]
+	mov rax, [rsp+0x400]
+	cmp rcx, rbx
 	jnz :2
-	mov [rsp+0x408], rax
-	mov [rsp+0x410], rcx
+	mov [rsp+0x400], rax
+	mov [rsp+0x408], rcx
 	jmp :2
-2:	mov sil, [r12]
-	mov dl, [rsp+0x418]
-	mov rdi, rbp
+2:	mov sil, [rbp]
+	mov dl, [rsp+0x410]
+	mov rdi, r13
 	call :gcm crash 1 (infinite).func
 	jmp :3
-0:	mov r15, [rsp]
-	mov [rsp+0x408], r15
-	mov [rsp+0x410], rbx
+0:	mov [rsp+0x400], r12
+	mov qword ptr [rsp+0x408], 0x400
 	jmp :3

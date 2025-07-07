@@ -16,9 +16,11 @@ main:
 	call :foo.hb.bar
 	mov rbx, rax
 	call :bas.hb.baz
-	mov rcx, rax
+	mov rdx, rax
 	mov rax, rbp
-	add rax, rbx
+	mov rcx, rbx
+	add rax, rcx
+	mov rcx, rdx
 	add rax, rcx
 	add rsp, 0x08
 	pop rbp

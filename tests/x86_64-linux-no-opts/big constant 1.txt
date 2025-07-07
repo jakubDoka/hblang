@@ -1,18 +1,16 @@
 big constant 1.uninit:
 	sub rsp, 0x10
 	mov [rsp], rdi
-	mov rcx, 0x00
-	mov rax, [rsp]
-	mov r15, 0xAAAAAAAAAAAAAAAA
-	mov [rax], r15
-	mov rax, rcx
+	mov rax, 0x00
+	mov rdx, 0xAAAAAAAAAAAAAAAA
+	mov rcx, [rsp]
+	mov [rcx], rdx
 	add rsp, 0x10
 	ret
 main:
 	sub rsp, 0x08
 	lea rdi, [rsp]
-	mov rax, 0x00
-	mov [rsp], rax
+	mov qword ptr [rsp], 0x00
 	call :big constant 1.uninit
 	add rsp, 0x08
 	ret

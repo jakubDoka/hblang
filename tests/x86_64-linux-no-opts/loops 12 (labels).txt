@@ -1,10 +1,7 @@
 main:
-	push rbx
-	push rbp
 	sub rsp, 0x20
-	mov rbp, 0x00
-	mov [rsp], rbp
-	mov [rsp+0x08], rbp
+	mov qword ptr [rsp], 0x00
+	mov qword ptr [rsp+0x08], 0x00
 3:	mov rax, [rsp+0x08]
 	cmp rax, 0x0A
 	setz al
@@ -12,32 +9,28 @@ main:
 	test al, al
 	jz :0
 	jmp :1
-0:	mov [rsp+0x10], rbp
-5:	mov rbx, [rsp+0x10]
-	cmp rbx, 0x0A
+0:	mov qword ptr [rsp+0x10], 0x00
+5:	mov rsi, [rsp+0x10]
+	cmp rsi, 0x0A
 	setz cl
 	movzx rcx, cl
-	mov rax, [rsp+0x08]
-	mov rdx, [rsp]
+	mov rdx, [rsp+0x08]
+	mov rax, [rsp]
 	test cl, cl
 	jz :2
-	add rax, 0x01
-	mov [rsp+0x08], rax
+	add rdx, 0x01
+	mov [rsp+0x08], rdx
 	jmp :3
-2:	mov rcx, rax
-	imul rcx, rbx
-	cmp rcx, 0x00
-	setz al
-	movzx rax, al
-	test al, al
+2:	imul rdx, rsi
+	cmp rdx, 0x00
+	setz cl
+	movzx rcx, cl
+	test cl, cl
 	jz :4
 1:	mov rax, [rsp]
 	add rsp, 0x20
-	pop rbp
-	pop rbx
 	ret
-4:	mov rax, rdx
-	add rax, rcx
+4:	add rax, rdx
 	mov [rsp], rax
 	mov rax, [rsp+0x10]
 	add rax, 0x01

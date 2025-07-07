@@ -1,9 +1,7 @@
 main:
 	sub rsp, 0x10
-	mov rax, 0x00
-	mov [rsp], rax
-	mov rax, 0x01
-	mov [rsp+0x08], rax
+	mov qword ptr [rsp], 0x00
+	mov qword ptr [rsp+0x08], 0x01
 1:	mov rdx, [rsp+0x08]
 	cmp rdx, 0x05
 	setb cl

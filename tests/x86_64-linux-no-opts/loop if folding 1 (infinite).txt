@@ -1,5 +1,4 @@
 main:
 	sub rsp, 0x10
-0:	mov rax, 0x00
-	mov [rsp], rax
+0:	mov qword ptr [rsp], 0x00
 	jmp :0

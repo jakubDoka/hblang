@@ -8,44 +8,38 @@ nullable types 2.take:
 	add rsp, 0x10
 	ret
 main:
-	push rbx
-	push rbp
 	sub rsp, 0x48
-	lea rsi, [rsp]
+	lea rdi, [rsp]
 	mov byte ptr [rsp], 0x01
-	mov rax, 0x00
-	mov [rsp+0x08], rax
-	mov [rsp+0x10], rax
+	mov qword ptr [rsp+0x08], 0x00
+	mov qword ptr [rsp+0x10], 0x00
 	mov byte ptr [rsp+0x18], 0x01
-	mov [rsp+0x20], rax
-	mov [rsp+0x28], rax
+	mov qword ptr [rsp+0x20], 0x00
+	mov qword ptr [rsp+0x28], 0x00
 	mov byte ptr [rsp+0x30], 0x01
-	mov [rsp+0x38], rax
-	mov [rsp+0x40], rax
-	mov rbp, 0x00
-	mov bl, [rsp]
-	mov dl, [rsp+0x18]
-	mov cl, [rsp+0x30]
-	mov rax, 0x01
-	cmp bl, bpl
+	mov qword ptr [rsp+0x38], 0x00
+	mov qword ptr [rsp+0x40], 0x00
+	mov rsi, 0x00
+	mov dl, [rsp]
+	mov cl, [rsp+0x18]
+	mov al, [rsp+0x30]
+	cmp dl, sil
 	jnz :0
+	mov rax, 0x01
 	jmp :1
-0:	cmp dl, bpl
+0:	cmp cl, sil
 	jnz :2
 	mov rax, 0x02
 1:	jmp :3
-2:	cmp cl, bpl
+2:	cmp al, sil
 	jnz :4
 	mov rax, 0x03
 3:	jmp :5
-4:	mov [rsp+0x10], rax
-	mov rdi, rsi
+4:	mov qword ptr [rsp+0x10], 0x01
 	add rdi, 0x08
 	call :nullable types 2.take
 	mov rax, [rsp+0x08]
 	mov rcx, [rsp+0x10]
 	sub rax, rcx
 5:	add rsp, 0x48
-	pop rbp
-	pop rbx
 	ret

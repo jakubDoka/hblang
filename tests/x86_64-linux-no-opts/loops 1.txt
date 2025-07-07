@@ -1,10 +1,8 @@
 loops 1.fib:
 	sub rsp, 0x20
 	mov [rsp], rdi
-	mov rax, 0x01
-	mov [rsp+0x08], rax
-	mov rax, 0x00
-	mov [rsp+0x10], rax
+	mov qword ptr [rsp+0x08], 0x01
+	mov qword ptr [rsp+0x10], 0x00
 1:	mov rax, [rsp]
 	cmp rax, 0x00
 	setz cl

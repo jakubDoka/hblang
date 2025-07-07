@@ -8,8 +8,7 @@ null unwrap 1.use_opt:
 	lea rcx, [rsp+0x20]
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x20], rax
-	mov rax, 0x0D
-	mov [rsp+0x28], rax
+	mov qword ptr [rsp+0x28], 0x0D
 	mov rax, 0x2800000007
 	mov [rsp+0x30], rax
 	mov rax, 0x20
@@ -19,9 +18,8 @@ null unwrap 1.use_opt:
 	mov rdx, rax
 	call :memcpy
 	call :null unwrap 1.null_unwrap
-0:	mov rsi, rcx
-	add rsi, rcx
-	mov rax, rsi
+0:	mov rax, rcx
+	add rax, rcx
 	add rsp, 0x48
 	pop rbx
 	ret

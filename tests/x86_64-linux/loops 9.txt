@@ -1,14 +1,11 @@
 main:
-	mov rdx, 0x00
-	mov rcx, rdx
-1:	cmp rcx, 0x01
-	setnb al
-	movzx rax, al
-	test al, al
-	jz :0
-	mov rax, rdx
-	ret
-0:	mov rax, rcx
-	add rax, 0x01
+	mov rax, 0x00
 	mov rcx, rax
+1:	cmp rcx, 0x01
+	setnb dl
+	movzx rdx, dl
+	test dl, dl
+	jz :0
+	ret
+0:	add rcx, 0x01
 	jmp :1

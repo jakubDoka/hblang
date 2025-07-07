@@ -20,14 +20,18 @@ main:
 	push r13
 	sub rsp, 0x28
 	mov rax, 0x123
-	mov r13, 0x00
+	mov rcx, 0x00
+	mov r13, rcx
 	mov rdi, r13
 	syscall
 	mov [rsp+0x18], eax
-	mov [rsp+0x10], r13
-	lea r12, [rsp]
-	mov rbp, 0xFFFFFFFFFFFFFFFF
-	mov rbx, 0x10
+	mov qword ptr [rsp+0x10], 0x00
+	lea rax, [rsp]
+	mov r12, rax
+	mov rax, 0xFFFFFFFFFFFFFFFF
+	mov rbp, rax
+	mov rax, 0x10
+	mov rbx, rax
 1:	mov rax, [rsp+0x10]
 	cmp rax, 0x00
 	setz al
@@ -43,9 +47,9 @@ main:
 	ret
 0:	mov eax, [rsp+0x18]
 	movsxd rdi, eax
+	mov rcx, rbp
 	mov rsi, r12
 	mov rdx, rbx
-	mov rcx, rbp
 	call :eopll 2.epoll_wait
 	mov rax, [rsp+0x10]
 	add rax, 0x01

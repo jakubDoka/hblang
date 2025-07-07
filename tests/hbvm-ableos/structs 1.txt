@@ -21,8 +21,6 @@ main:
          cp $1, $32
         jmp :3
 2:      jal $31, $0, :structs 1.Ty.sum
-         cp $1, $1
-         cp $1, $1
         jeq $1, $32, :5
        li64 $1, 100
 3:      jmp :6
