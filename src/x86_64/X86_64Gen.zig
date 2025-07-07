@@ -426,16 +426,13 @@ const Set = std.DynamicBitSetUnmanaged;
 
 pub fn floatMask(arena: *utils.Arena) Set {
     var set = Set.initEmpty(arena.allocator(), set_cap) catch unreachable;
-    set.setRangeValue(.{
-        .start = @intFromEnum(Reg.xmm0),
-        .end = @intFromEnum(Reg.xmm15) + 1,
-    }, true);
+    set.setRangeValue(.{ .start = 16, .end = 32 }, true);
     return set;
 }
 
 pub fn readIntMask(arena: *utils.Arena) Set {
     var set = Set.initEmpty(arena.allocator(), set_cap) catch unreachable;
-    set.setRangeValue(.{ .start = 0, .end = @intFromEnum(Reg.r15) + 1 }, true);
+    set.setRangeValue(.{ .start = 0, .end = 16 }, true);
     return set;
 }
 
@@ -446,7 +443,7 @@ pub fn writeIntMask(arena: *utils.Arena) Set {
 }
 
 pub fn splitFloatMask(arena: *utils.Arena) Set {
-    var set = Set.initEmpty(arena.allocator(), set_cap) catch unreachable;
+    var set = Set.initFull(arena.allocator(), set_cap) catch unreachable;
     set.setRangeValue(.{ .start = 0, .end = 16 }, false);
     return set;
 }
@@ -525,10 +522,44 @@ pub fn clobbers(node: *Func.Node) u64 {
 
 pub fn regMask(
     node: *Func.Node,
+    func: *Func,
     idx: usize,
     arena: *utils.Arena,
 ) std.DynamicBitSetUnmanaged {
     errdefer unreachable;
+
+    if (node.kind == .MachSplit) {
+        if (node.data_type.isFloat()) return splitFloatMask(arena);
+        if (idx == 0) return splitIntMask(arena);
+        return readSplitIntMask(arena);
+    }
+
+    if (node.kind == .Arg) {
+        std.debug.assert(idx == 0);
+        const index: usize = node.extra(.Arg).index;
+
+        const params = func.signature.params();
+        if (params[index] == .Stack) return readIntMask(arena);
+        var reg_idx: usize = 0;
+        var xmm_idx: usize = 0;
+        for (params[0..index]) |p| {
+            if (p == .Reg) {
+                if (p.Reg.isFloat()) {
+                    xmm_idx += 1;
+                } else {
+                    reg_idx += 1;
+                }
+            }
+        }
+
+        if (params[index].Reg.isFloat()) {
+            std.debug.assert(node.data_type.isFloat());
+            return singleReg(Reg.system_v.float_args[xmm_idx], arena);
+        } else {
+            std.debug.assert(node.data_type.isInt());
+            return singleReg(Reg.system_v.args[reg_idx], arena);
+        }
+    }
 
     if (node.kind == .FramePointer) {
         std.debug.assert(idx == 0);
@@ -543,7 +574,6 @@ pub fn regMask(
         } else {
             const params = @as(graph.Signature, extra.signature).params();
             if (params[idx - 2] == .Stack) return readIntMask(arena);
-            std.debug.assert(params[idx - 2] == .Reg); // TODO
             var reg_idx: usize = 0;
             var xmm_idx: usize = 0;
             for (params[0 .. idx - 2]) |p| {
@@ -556,8 +586,10 @@ pub fn regMask(
                 }
             }
             if (params[idx - 2].Reg.isFloat()) {
-                return singleReg(Reg.system_v.float_args[reg_idx], arena);
+                std.debug.assert(node.inputs()[idx].?.data_type.isFloat());
+                return singleReg(Reg.system_v.float_args[xmm_idx], arena);
             } else {
+                std.debug.assert(node.inputs()[idx].?.data_type.isInt());
                 return singleReg(Reg.system_v.args[reg_idx], arena);
             }
         }
@@ -565,45 +597,17 @@ pub fn regMask(
 
     if (node.kind == .Return) {
         std.debug.assert(idx == 3);
+        if (node.inputs()[idx].?.data_type.isFloat()) return singleReg(.xmm0, arena);
         return singleReg(.rax, arena);
+    }
+
+    if (node.data_type.isFloat() and idx == 0) {
+        return floatMask(arena);
     }
 
     if (node.kind == .Ret) {
         std.debug.assert(idx == 0);
         return singleReg(.rax, arena);
-    }
-
-    if (node.kind == .Arg) {
-        std.debug.assert(idx == 0);
-        const signature: graph.Signature = node.inputs()[0].?.inputs()[0].?.extra(.Start).signature;
-        const index: usize = node.extra(.Arg).index;
-
-        const params = signature.params();
-        if (params[index] == .Stack) return readIntMask(arena);
-        if (params[index] != .Reg) utils.panic("{}", .{params[index]}); // TODO
-        var reg_idx: usize = 0;
-        var xmm_idx: usize = 0;
-        for (params[0..index]) |p| {
-            if (p == .Reg) {
-                if (p.Reg.isFloat()) {
-                    xmm_idx += 1;
-                } else {
-                    reg_idx += 1;
-                }
-            }
-        }
-
-        if (params[index].Reg.isFloat()) {
-            return singleReg(Reg.system_v.float_args[reg_idx], arena);
-        } else {
-            return singleReg(Reg.system_v.args[reg_idx], arena);
-        }
-    }
-
-    if (node.kind == .MachSplit) {
-        if (node.data_type.isFloat()) return splitFloatMask(arena);
-        if (idx == 0) return splitIntMask(arena);
-        return readSplitIntMask(arena);
     }
 
     if (node.subclass(graph.builtin.BinOp)) |b| {
@@ -638,27 +642,10 @@ pub fn regMask(
         }
     }
 
-    if (node.kind == .UnOp) {
-        switch (@as(graph.UnOp, node.extra(.UnOp).op)) {
-            .itf32, .itf64 => switch (idx) {
-                0 => return floatMask(arena),
-                1 => return readIntMask(arena),
-                else => unreachable,
-            },
-            .fti => switch (idx) {
-                0 => return writeIntMask(arena),
-                1 => return floatMask(arena),
-                else => unreachable,
-            },
-            else => {},
-        }
-    }
-
-    if (node.data_type.isFloat()) {
+    if (idx == 0) return writeIntMask(arena);
+    if (node.inputs()[idx].?.data_type.isFloat()) {
         return floatMask(arena);
     }
-
-    if (idx == 0) return writeIntMask(arena);
     return readIntMask(arena);
 }
 

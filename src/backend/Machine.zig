@@ -183,8 +183,6 @@ pub const InlineFunc = struct {
             if (new_node.subclass(graph.builtin.Call)) |call|
                 call.ext.signature = call.ext.signature.dupe(arena.allocator());
             if (new_node.isSub(graph.If) and already_present != 0) new_node.sloc = .none;
-            if (new_node.subclass(graph.builtin.Start)) |strt|
-                strt.ext.signature = strt.ext.signature.dupe(arena.allocator());
 
             new_node.input_base = (try arena.allocator()
                 .dupe(?*Func.Node, new_node.inputs())).ptr;

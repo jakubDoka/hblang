@@ -14,13 +14,13 @@ main:
 	movss [rsp+0x0C], xmm0
 	movd xmm0, ecx
 	movss [rsp+0x10], xmm0
-	lea rdi, [rsp]
+	lea rcx, [rsp]
 	movd xmm0, eax
 	mov rax, [rsp+0x0C]
 	movss [rsp+0x14], xmm0
-	mov [rdi], rax
+	mov [rcx], rax
 	mov eax, [rsp+0x14]
-	mov [rdi+0x08], eax
+	mov [rcx+0x08], eax
 	call :float load and store 1.fun
 	cvttss2si rax, xmm0
 	add rsp, 0x28

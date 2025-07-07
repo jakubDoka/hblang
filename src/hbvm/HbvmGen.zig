@@ -345,7 +345,7 @@ pub fn clobbers(node: *Func.Node) u64 {
     };
 }
 
-pub fn regMask(node: *Func.Node, idx: usize, arena: *utils.Arena) Set {
+pub fn regMask(node: *Func.Node, _: *Func, idx: usize, arena: *utils.Arena) Set {
     errdefer unreachable;
 
     if (node.kind == .Arg) {

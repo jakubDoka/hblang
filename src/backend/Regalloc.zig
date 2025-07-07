@@ -233,7 +233,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 const lrg = lrg_table_build[instr.schedule] orelse
                     for (instr.dataDeps()) |d| {
                         if (lrg_table_build[d.schedule]) |l| break l;
-                    } else LiveRange.init(&build_lrgs, instr.regMask(0, tmp.arena), instr);
+                    } else LiveRange.init(&build_lrgs, instr.regMask(func, 0, tmp.arena), instr);
 
                 lrg_table_build[instr.schedule] = lrg;
 
@@ -250,7 +250,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 break :lrg lrg;
             } else lrg: {
                 const lrg = lrg_table_build[instr.schedule] orelse
-                    LiveRange.init(&build_lrgs, instr.regMask(0, tmp.arena), instr);
+                    LiveRange.init(&build_lrgs, instr.regMask(func, 0, tmp.arena), instr);
 
                 lrg_table_build[instr.schedule] = lrg;
 
@@ -277,7 +277,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 const idx = use.posOfInput(seen.get(use) orelse 1, instr);
                 if (idx >= use.input_ordered_len) continue;
                 seen.putAssumeCapacity(use, idx + 1);
-                lrg.mask.setIntersection(use.regMask(idx, tmp.arena));
+                lrg.mask.setIntersection(use.regMask(func, idx, tmp.arena));
 
                 if (lrg.mask.count() == 0) {
                     lrg.fail(build_lrgs.items, &failed);
@@ -299,7 +299,11 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             std.debug.print("{}\n", .{bb});
             for (bb.base.outputs()) |instr| {
                 if (instr.isDef()) {
-                    std.debug.print("  [{}] {}\n", .{ lrg_table[instr.schedule].index(lrgs), instr });
+                    std.debug.print("  [{}] {x} {}\n", .{
+                        lrg_table[instr.schedule].index(lrgs),
+                        lrg_table[instr.schedule].mask.masks[0],
+                        instr,
+                    });
                 } else {
                     std.debug.print("       {}\n", .{instr});
                 }

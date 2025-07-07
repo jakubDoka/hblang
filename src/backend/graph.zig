@@ -460,7 +460,6 @@ pub const builtin = enum {
     // ===== CFG =====
     pub const Start = extern struct {
         base: Cfg = .{},
-        signature: Signature = .{},
     };
     pub const FramePointer = extern struct {};
     pub const Entry = extern struct {
@@ -957,8 +956,8 @@ pub fn Func(comptime Backend: type) type {
                 return .{ self, 0 };
             }
 
-            pub fn regMask(self: *Node, idx: usize, tmp: *utils.Arena) std.DynamicBitSetUnmanaged {
-                return if (comptime optApi("regMask", @TypeOf(regMask))) Backend.regMask(self, idx, tmp) else unreachable;
+            pub fn regMask(self: *Node, func: *Self, idx: usize, tmp: *utils.Arena) std.DynamicBitSetUnmanaged {
+                return if (comptime optApi("regMask", @TypeOf(regMask))) Backend.regMask(self, func, idx, tmp) else unreachable;
             }
 
             pub fn clobbers(self: *Node) u64 {
@@ -1076,7 +1075,7 @@ pub fn Func(comptime Backend: type) type {
                 logNid(writer, self.id, colors);
                 const name = @tagName(self.kind);
 
-                writer.print(" = {s}", .{name}) catch unreachable;
+                writer.print(" = {s}:{s}", .{ name, @tagName(self.data_type) }) catch unreachable;
 
                 var add_colon_space = false;
 
@@ -1430,54 +1429,6 @@ pub fn Func(comptime Backend: type) type {
 
         pub fn addSplit(self: *Self, block: *CfgNode, def: *Node, dgb: builtin.MachSplit.Dbg) *Node {
             return self.addNode(.MachSplit, def.sloc, def.data_type, &.{ &block.base, def }, .{ .dbg = dgb });
-        }
-
-        pub fn splitBeforeKill(self: *Self, kill: *Node, def: *Node, dbg: builtin.MachSplit.Dbg) void {
-            var tmp = utils.Arena.scrath(null);
-            defer tmp.deinit();
-
-            const block = kill.cfg0();
-
-            const ins = self.addSplit(block, def, dbg);
-            const oidx = block.base.posOfOutput(kill);
-            var subsumed = false;
-            for (tmp.arena.dupe(*Node, def.outputs())) |use| {
-                if (use == kill) continue;
-                if (use == ins) continue;
-                if (use.hasNoUseFor(def)) continue;
-                if (use.cfg0().idepth() < kill.cfg0().idepth()) continue;
-                if (use.cfg0() == kill.cfg0() and oidx > use.cfg0().base.posOfOutput(use)) continue;
-
-                const idx = use.posOfInput(1, def);
-
-                const mask = use.regMask(idx, tmp.arena);
-                const kills = kill.clobbers();
-                @as(
-                    *align(@alignOf(usize)) @TypeOf(kills),
-                    @ptrCast(&setMasks(mask)[0]),
-                ).* &= ~kills;
-
-                if (mask.count() == 0) {
-                    self.splitBefore(use, idx, ins, dbg);
-                } else {
-                    self.setInputNoIntern(use, idx, ins);
-                }
-
-                subsumed = true;
-            }
-
-            if (!subsumed and !kill.hasNoUseFor(def)) {
-                const idx = kill.posOfInput(1, def);
-                self.setInputNoIntern(kill, idx, ins);
-                subsumed = true;
-            }
-
-            if (!subsumed) {
-                utils.panic("{} {any}\n", .{ kill, def });
-            }
-
-            const to_rotate = block.base.outputs()[oidx..];
-            std.mem.rotate(*Node, to_rotate, to_rotate.len - 1);
         }
 
         pub fn splitAfterSubsume(self: *Self, def: *Node, dbg: builtin.MachSplit.Dbg) void {
