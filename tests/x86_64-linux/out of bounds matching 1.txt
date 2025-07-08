@@ -4,20 +4,19 @@ main:
 	mov [rsp], rax
 	mov qword ptr [rsp+0x08], 0x0C
 	mov rax, 0x00
-3:	mov rcx, [rsp+0x08]
-	mov rsi, [rsp]
-	cmp rcx, rax
+3:	mov rsi, [rsp+0x08]
+	cmp rsi, rax
 	jnz :0
 	mov byte ptr [rsp+0x10], 0x00
 	jmp :1
-0:	mov rdx, rsi
-	add rdx, 0x01
-	mov [rsp], rdx
-	sub rcx, 0x01
-	mov [rsp+0x08], rcx
+0:	mov rcx, [rsp]
+	sub rsi, 0x01
+	mov dl, [rcx]
+	add rcx, 0x01
+	mov [rsp], rcx
+	mov [rsp+0x08], rsi
 	mov byte ptr [rsp+0x12], 0x01
-	mov cl, [rsi]
-	mov [rsp+0x13], cl
+	mov [rsp+0x13], dl
 	mov cx, [rsp+0x12]
 	mov [rsp+0x10], cx
 1:	mov dl, [rsp+0x10]

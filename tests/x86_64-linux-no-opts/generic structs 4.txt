@@ -22,14 +22,14 @@ generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next 
 	mov [rsp+0x10], rdx
 	mov rsi, [rsp+0x10]
 	cmp rsi, 0x00
-	setz cl
-	movzx rcx, cl
-	mov rax, [rsp]
-	mov rdi, [rsp+0x08]
-	test cl, cl
+	setz al
+	movzx rax, al
+	test al, al
 	jz :0
+	mov rax, [rsp]
 	jmp :1
 0:	sub rsi, 0x01
+	mov rdi, [rsp+0x08]
 	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)).get
 1:	add rsp, 0x18
 	ret
@@ -39,11 +39,11 @@ generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)).get:
 	mov [rsp+0x08], rsi
 	mov rdi, [rsp+0x08]
 	cmp rdi, 0x00
-	setz cl
-	movzx rcx, cl
-	mov rax, [rsp]
-	test cl, cl
+	setz al
+	movzx rax, al
+	test al, al
 	jz :0
+	mov rax, [rsp]
 	jmp :1
 0:	sub rdi, 0x01
 	call :generic structs 4.Array(E = uint).get

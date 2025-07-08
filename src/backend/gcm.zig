@@ -240,6 +240,10 @@ pub fn GcmMixin(comptime Backend: type) type {
                         }
 
                         if (t.isLoad()) {
+                            //if (t.id == 142 and t.isLoad()) {
+                            //    std.debug.print("{} \n", .{t});
+                            //    unreachable;
+                            //}
                             for (t.mem().outputs()) |p| {
                                 if ((p.isStore() or p.kind == .Call) and late_scheds[p.id] == null) {
                                     continue :task;
@@ -267,46 +271,32 @@ pub fn GcmMixin(comptime Backend: type) type {
                                 // TODO: might be dangerosa
                                 for (t.mem().outputs()) |o| switch (o.kind) {
                                     .Call => {
-                                        const sdef = o.cfg0();
-                                        var lcar = late_scheds[o.id].?;
-                                        while (lcar != sdef.idom()) : (lcar = lcar.idom()) {
-                                            std.debug.assert(lcar.base.kind != .Start);
-                                            if (lcar.ext.antidep == t.id) {
-                                                lca = lcar.findLca(lca);
-                                                if (lca == sdef) {
-                                                    self.addDep(o, t);
-                                                    self.addUse(t, o);
-                                                }
-                                                break;
+                                        const stblck = late_scheds[o.id].?;
+                                        if (stblck.ext.antidep == t.id) {
+                                            lca = stblck.findLca(lca);
+                                            if (lca == stblck) {
+                                                self.addDep(o, t);
+                                                self.addUse(t, o);
                                             }
                                         }
                                     },
                                     .Phi => {
-                                        const sdef = t.mem().cfg0();
                                         for (o.inputs()[1..], o.cfg0().base.inputs()) |inp, oblk| if (inp.? == t.mem()) {
-                                            var lcar = oblk.?.asCfg().?;
-                                            while (lcar != sdef.idom()) : (lcar = lcar.idom()) {
-                                                std.debug.assert(lcar.base.kind != .Start);
-                                                if (lcar.ext.antidep == t.id) {
-                                                    lca = lcar.findLca(lca);
-                                                }
+                                            var stblck = oblk.?.cfg0();
+                                            if (stblck.ext.antidep == t.id) {
+                                                lca = stblck.findLca(lca);
                                             }
                                         };
                                     },
                                     .Local => {},
                                     .Return => {},
                                     else => if (o.isLoad()) {} else if (o.isStore()) {
-                                        const sdef = o.cfg0();
-                                        var lcar = late_scheds[o.id].?;
-                                        while (lcar != sdef.idom()) : (lcar = lcar.idom()) {
-                                            std.debug.assert(lcar.base.kind != .Start);
-                                            if (lcar.ext.antidep == t.id) {
-                                                lca = lcar.findLca(lca);
-                                                if (lca == sdef) {
-                                                    self.addDep(o, t);
-                                                    self.addUse(t, o);
-                                                }
-                                                break;
+                                        const stblck = late_scheds[o.id].?;
+                                        if (stblck.ext.antidep == t.id) {
+                                            lca = stblck.findLca(lca);
+                                            if (lca == stblck) {
+                                                self.addDep(o, t);
+                                                self.addUse(t, o);
                                             }
                                         }
                                     } else utils.panic("{any}", .{o.kind}),
@@ -347,14 +337,14 @@ pub fn GcmMixin(comptime Backend: type) type {
                                 visited.set(def.id);
                                 work_list.append(def) catch unreachable;
                             }
-
+                        }
+                        if (t.isStore() or t.kind == .Call)
                             for (def.outputs()) |out| {
                                 if (out.isLoad() and late_scheds[out.id] == null and !visited.isSet(out.id)) {
                                     visited.set(out.id);
                                     work_list.append(out) catch unreachable;
                                 }
-                            }
-                        }
+                            };
                     };
                 }
 

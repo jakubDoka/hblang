@@ -11,9 +11,9 @@ main:
 	imul rax, rsi
 	add rdx, rax
 1:	mov rcx, [rsp+0x50]
-	mov rax, [rsp+0x48]
 	cmp rcx, rdx
 	jnb :0
+	mov rax, [rsp+0x48]
 	mov [rcx], rax
 	mov rax, [rsp+0x48]
 	add rax, 0x01

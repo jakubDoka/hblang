@@ -4,36 +4,36 @@ slices 4.equals:
 	mov [rsp+0x08], rsi
 	mov [rsp+0x10], rdx
 	mov [rsp+0x18], rcx
-	mov rsi, [rsp+0x18]
-	mov rdx, [rsp+0x08]
-	mov r8, 0x00
-	mov rcx, [rsp]
-	mov rax, [rsp+0x10]
-	cmp rdx, rsi
-	jz :0
-	mov rax, r8
-	jmp :1
-0:	mov rdi, 0x01
+	mov rcx, [rsp+0x08]
+	mov rax, [rsp+0x18]
+	mov rdi, 0x00
 	cmp rcx, rax
-	jnz :2
+	jz :0
 	mov rax, rdi
+	jmp :1
+0:	mov rcx, [rsp+0x10]
+	mov rax, [rsp]
+	mov rsi, 0x01
+	cmp rax, rcx
+	jnz :2
+	mov rax, rsi
 1:	jmp :5
 2:	mov qword ptr [rsp+0x20], 0x00
 6:	mov rax, [rsp+0x20]
-	mov rsi, [rsp+0x08]
-	mov rdx, [rsp]
-	mov rcx, [rsp+0x10]
+	mov rcx, [rsp+0x08]
+	cmp rax, rcx
+	jnz :4
+	mov rax, rsi
+	jmp :5
+4:	mov rdx, [rsp+0x10]
+	mov rcx, [rsp]
 	add rdx, rax
 	add rcx, rax
-	cmp rax, rsi
-	jnz :4
-	mov rax, rdi
-	jmp :5
-4:	mov dl, [rdx]
+	mov dl, [rdx]
 	mov cl, [rcx]
-	cmp dl, cl
+	cmp cl, dl
 	jz :5
-	mov rax, r8
+	mov rax, rdi
 5:	add rsp, 0x30
 	ret
 5:	add rax, 0x01
@@ -59,14 +59,14 @@ main:
 	mov rcx, rax
 	call :slices 4.equals
 	xor al, 0x01
-	mov rsi, [rsp+0x18]
-	mov rdx, [rsp]
-	mov rcx, [rsp+0x08]
-	mov rdi, [rsp+0x10]
 	test al, al
 	jz :0
 	jmp :1
-0:	call :slices 4.equals
+0:	mov rcx, [rsp+0x08]
+	mov rsi, [rsp+0x18]
+	mov rdi, [rsp+0x10]
+	mov rdx, [rsp]
+	call :slices 4.equals
 	xor al, 0x01
 	test al, al
 	jz :2

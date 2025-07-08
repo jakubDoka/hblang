@@ -7,11 +7,11 @@ mem2reg crash 2.insert:
 1:	mov qword ptr [rsp+0x20], 0x00
 3:	mov rax, [rsp+0x20]
 	cmp rax, 0x08
-	setnb cl
-	movzx rcx, cl
-	mov rax, [rsp+0x18]
-	test cl, cl
+	setnb al
+	movzx rax, al
+	test al, al
 	jz :0
+	mov rax, [rsp+0x18]
 	add rax, 0x01
 	mov [rsp+0x18], rax
 	jmp :1

@@ -176,17 +176,37 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             return .{ @min(min, depth), @max(max, depth) };
         }
 
-        pub fn isSameBlockNoClobber(node: *Node, lrg_table: []const *LiveRange) bool {
-            std.debug.assert(node.kind == .MachSplit);
-            const def = node.dataDeps()[0];
-            const cfg = node.cfg0();
+        pub fn splitAfterSubsume(self: *Func, def: *Node, must: bool, lrg_table: []const *LiveRange, dbg: graph.builtin.MachSplit.Dbg) void {
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            const block = def.cfg0();
+            const ins = self.addSplit(block, def, dbg);
+            for (tmp.arena.dupe(*Node, def.outputs())) |use| {
+                if (use == def) continue;
+                if (use == ins) continue;
+                if (use.hasNoUseFor(def)) continue;
+                if (!must and use.kind == .MachSplit and
+                    isSameBlockNoClobber(use, lrg_table)) continue;
+                self.setInputNoIntern(use, use.posOfInput(1, def), ins);
+            }
+
+            const oidx = block.base.posOfOutput(def);
+            const to_rotate = block.base.outputs()[oidx + 1 ..];
+            std.mem.rotate(*Node, to_rotate, to_rotate.len - 1);
+        }
+
+        pub fn isSameBlockNoClobber(split: *Node, lrg_table: []const *LiveRange) bool {
+            std.debug.assert(split.kind == .MachSplit);
+            const def = split.dataDeps()[0];
+            const cfg = split.cfg0();
             if (def.cfg0() != cfg) return false;
             var reg = lrg_table[def.schedule].reg;
             if (reg == unresolved_reg) reg = @intCast(lrg_table[def.schedule].mask.findFirstSet() orelse
                 return false);
-            var iter = std.mem.reverseIterator(cfg.base.outputs()[0..cfg.base.posOfOutput(node)]);
+            var iter = std.mem.reverseIterator(cfg.base.outputs()[0..cfg.base.posOfOutput(split)]);
             while (iter.next()) |instr| {
-                if (instr == node) return true;
+                if (instr == split) return true;
                 if (instr.schedule == no_def_sentinel) continue;
                 if (lrg_table[def.schedule] == lrg_table[instr.schedule]) return false;
                 if (lrg_table[instr.schedule].reg == reg) return false;
@@ -382,7 +402,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                     !(member.outputs().len == 1 and member.outputs()[0].kind == .MachSplit and
                         LiveRange.isSameBlockNoClobber(member.outputs()[0], lrg_table)))
                 {
-                    func.splitAfterSubsume(member, .@"def/loop");
+                    LiveRange.splitAfterSubsume(func, member, true, lrg_table, .@"def/loop");
                 }
 
                 if (member.kind == .Phi) {
@@ -396,7 +416,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                         if (member.cfg0().base.kind == .Loop and j == 2 and
                             dep.kind == .Phi and dep.cfg0() == member.cfg0()) continue;
 
-                        func.splitBefore(member, j, dep, .@"use/loop/phi");
+                        func.splitBefore(member, j, dep, true, .@"use/loop/phi");
                     }
                 } else {
                     for (member.dataDeps(), member.dataDepOffset()..) |dep, j| {
@@ -404,7 +424,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
                         if (min != max and func.loopDepth(member) > max) continue;
 
-                        func.splitBefore(member, j, dep, .@"use/loop/use");
+                        func.splitBefore(member, j, dep, false, .@"use/loop/use");
                     }
                 }
             }
@@ -563,27 +583,31 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 std.debug.print("cdef {}\n", .{conflict.instr});
             }
 
-            if (false) {
-                for (tmp.arena.dupe(*Node, conflict.instr.outputs())) |use| {
-                    const idx = use.posOfInput(1, conflict.instr);
-                    if (use.inPlaceSlot() == idx - 1) {
-                        func.splitBefore(use, idx, conflict.instr, .@"conflict/in-place-slot/use");
-                    }
+            const instr = conflict.instr;
 
-                    if (use.kind == .Phi) {
-                        func.splitBefore(use, idx, conflict.instr, .@"conflict/phi/use");
+            if (false) {
+                for (tmp.arena.dupe(*Node, instr.outputs())) |use| {
+                    if (use.inPlaceSlot()) |idx| if (use.dataDeps()[idx] == instr) {
+                        func.splitBefore(use, idx + 1, instr, true, .@"conflict/in-place-slot/use");
+                    };
+
+                    if (use.kind == .Phi and !(use.cfg0().base.kind == .Loop and
+                        use.inputs()[2] == instr and instr.cfg0().idepth() > use.cfg0().idepth()))
+                    {
+                        std.debug.assert(use.inputs()[1] == instr);
+                        func.splitBefore(use, 1, instr, true, .@"conflict/phi/use");
                     }
                 }
 
-                if (conflict.instr.kind == .Phi) {
-                    for (conflict.instr.dataDeps(), conflict.instr.dataDepOffset()..) |d, i| {
-                        func.splitBefore(conflict.instr, i, d, .@"conflict/phi/def");
-                    }
+                if (instr.kind == .Phi) {
+                    LiveRange.splitAfterSubsume(func, instr, false, lrg_table, .@"conflict/phi/def");
+
+                    func.splitBefore(instr, 1, instr.inputs()[1].?, true, .@"conflict/phi/def");
                 }
             }
 
-            if (conflict.instr.inPlaceSlot()) |slt| {
-                func.splitBefore(conflict.instr, slt + 1, conflict.instr.dataDeps()[slt], .@"conflict/in-place-slot/def");
+            if (instr.inPlaceSlot()) |slt| {
+                func.splitBefore(instr, slt + 1, instr.dataDeps()[slt], true, .@"conflict/in-place-slot/def");
             }
         }
     }

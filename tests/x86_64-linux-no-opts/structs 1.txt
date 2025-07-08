@@ -58,13 +58,13 @@ main:
 	cmp rax, 0x03
 	setnz al
 	movzx rax, al
-	mov rsi, [rsp+0x38]
-	mov rdi, [rsp+0x30]
 	test al, al
 	jz :0
 	mov rax, 0x00
 	jmp :1
-0:	call :structs 1.Ty.sum
+0:	mov rsi, [rsp+0x38]
+	mov rdi, [rsp+0x30]
+	call :structs 1.Ty.sum
 	cmp rax, 0x00
 	setnz al
 	movzx rax, al

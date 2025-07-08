@@ -1,13 +1,13 @@
 main:
 	sub rsp, 0x10
-	mov rdx, 0x00
+	mov rcx, 0x00
 1:	mov byte ptr [rsp], 0x00
-3:	mov cl, [rsp]
-	mov al, [rsp+0x01]
-	cmp cl, dl
+3:	mov al, [rsp]
+	cmp al, cl
 	jnz :0
 	jmp :1
-0:	cmp al, dl
+0:	mov al, [rsp+0x01]
+	cmp al, cl
 	jnz :3
 	jmp :3
 3:	mov byte ptr [rsp], 0x00

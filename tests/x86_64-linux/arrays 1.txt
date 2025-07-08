@@ -1,36 +1,36 @@
 main:
 	sub rsp, 0x40
-	mov rdi, 0x00
-	lea r9, [rsp]
-	mov r8, 0x08
-	mov rsi, rdi
+	mov r9, 0x00
+	lea r8, [rsp]
+	mov rdi, 0x08
+	mov rsi, r9
 3:	cmp rsi, 0x08
 	setz al
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, rdi
-	mov rcx, rdi
-2:	mov rdi, rcx
-	imul rdi, r8
-	cmp rcx, 0x08
-	setz sil
-	movzx rsi, sil
+	mov rax, r9
 	mov rdx, r9
-	add rdx, rdi
-	test sil, sil
+2:	cmp rdx, 0x08
+	setz cl
+	movzx rcx, cl
+	test cl, cl
 	jz :1
 	add rsp, 0x40
 	ret
-1:	mov rdx, [rdx]
-	add rcx, 0x01
-	add rax, rdx
+1:	mov rsi, rdx
+	imul rsi, rdi
+	add rdx, 0x01
+	mov rcx, r8
+	add rcx, rsi
+	mov rcx, [rcx]
+	add rax, rcx
 	jmp :2
 0:	mov rdx, rsi
-	imul rdx, r8
+	imul rdx, rdi
 	mov rcx, rsi
 	add rcx, 0x01
-	mov rax, r9
+	mov rax, r8
 	add rax, rdx
 	mov [rax], rsi
 	mov rsi, rcx

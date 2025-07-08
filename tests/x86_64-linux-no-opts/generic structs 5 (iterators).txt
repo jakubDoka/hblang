@@ -47,15 +47,15 @@ generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main,
 	add rsi, 0x08
 	mov rdi, rbp
 	call :generic structs 5 (iterators).main.next
-	mov cl, [rsp+0x08]
-	mov rax, [rsp]
-	test cl, cl
+	mov al, [rsp+0x08]
+	test al, al
 	jz :1
 	mov cx, [rsp+0x08]
 	mov rax, r12
 	mov [rax], cx
 	jmp :2
-1:	mov byte ptr [rax], 0x01
+1:	mov rax, [rsp]
+	mov byte ptr [rax], 0x01
 	jmp :3
 0:	cmp rcx, 0x01
 	setz al
@@ -65,15 +65,15 @@ generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main,
 	add rsi, 0x18
 	mov rdi, rbx
 	call :generic structs 5 (iterators).main.next
-	mov cl, [rsp+0x0A]
-	mov rax, [rsp]
-	test cl, cl
+	mov al, [rsp+0x0A]
+	test al, al
 	jz :5
 	mov cx, [rsp+0x0A]
 	mov rax, r12
 	mov [rax], cx
 2:	jmp :6
-5:	mov byte ptr [rax], 0x02
+5:	mov rax, [rsp]
+	mov byte ptr [rax], 0x02
 3:	jmp :7
 4:	mov rax, r12
 	mov byte ptr [rax], 0x00
@@ -130,8 +130,8 @@ main:
 	mov rbx, 0x00
 	lea rax, [rsp+0x80]
 	mov rbp, rax
-8:	mov rsi, r14
-	mov rdi, rbp
+8:	mov rdi, rbp
+	mov rsi, r14
 	call :generic structs 5 (iterators).main.next
 	mov al, [rsp+0x80]
 	cmp al, bl
@@ -144,8 +144,8 @@ main:
 	mov r12, rax
 	lea rax, [rsp+0x86]
 	mov rbp, rax
-5:	mov rsi, r13
-	mov rdi, r12
+5:	mov rdi, r12
+	mov rsi, r13
 	call :generic structs 5 (iterators).main.next
 	mov al, [rsp+0x84]
 	cmp al, bl
@@ -155,14 +155,14 @@ main:
 1:	mov rdi, rbp
 	mov rsi, r15
 	call :generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main, B = generic structs 5 (iterators).main).next
-	mov dl, [rsp+0x86]
-	mov cl, [rsp+0x87]
-	mov al, [rsp+0x85]
-	cmp dl, bl
+	mov al, [rsp+0x86]
+	cmp al, bl
 	jnz :3
 	mov rax, 0x03
 	jmp :7
-3:	cmp cl, al
+3:	mov cl, [rsp+0x85]
+	mov al, [rsp+0x87]
+	cmp al, cl
 	jz :4
 	mov rax, 0x04
 	jmp :7
@@ -170,14 +170,14 @@ main:
 0:	mov rsi, r13
 	mov rdi, r12
 	call :generic structs 5 (iterators).main.next
-	mov dl, [rsp+0x82]
-	mov cl, [rsp+0x81]
-	mov al, [rsp+0x83]
-	cmp dl, bl
+	mov al, [rsp+0x82]
+	cmp al, bl
 	jnz :6
 	mov rax, 0x01
 	jmp :7
-6:	cmp cl, al
+6:	mov cl, [rsp+0x83]
+	mov al, [rsp+0x81]
+	cmp al, cl
 	jz :7
 	mov rax, 0x02
 7:	add rsp, 0x88

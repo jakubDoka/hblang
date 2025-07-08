@@ -1434,30 +1434,23 @@ pub fn Func(comptime Backend: type) type {
             return self.addNode(.MachSplit, def.sloc, def.data_type, &.{ &block.base, def }, .{ .dbg = dgb });
         }
 
-        pub fn splitAfterSubsume(self: *Self, def: *Node, dbg: builtin.MachSplit.Dbg) void {
-            var tmp = utils.Arena.scrath(null);
-            defer tmp.deinit();
-
-            const block = def.cfg0();
-            const ins = self.addSplit(block, def, dbg);
-            for (tmp.arena.dupe(*Node, def.outputs())) |use| {
-                if (use == def) continue;
-                if (use == ins) continue;
-                if (use.hasNoUseFor(def)) continue;
-                self.setInputNoIntern(use, use.posOfInput(1, def), ins);
-            }
-
-            const oidx = block.base.posOfOutput(def);
-            const to_rotate = block.base.outputs()[oidx + 1 ..];
-            std.mem.rotate(*Node, to_rotate, to_rotate.len - 1);
-        }
-
-        pub fn splitBefore(self: *Self, use: *Node, idx: usize, def: *Node, dbg: builtin.MachSplit.Dbg) void {
+        pub fn splitBefore(self: *Self, use: *Node, idx: usize, def: *Node, skip: bool, dbg: builtin.MachSplit.Dbg) void {
+            std.debug.assert(idx > 0);
             const block = if (use.kind == .Phi)
                 use.cfg0().base.inputs()[idx - 1].?.inputs()[0].?.asCfg().?
             else
                 use.cfg0();
-            const ins = self.addSplit(block, def, dbg);
+            if (skip and def.kind == .MachSplit) {
+                var tmp = utils.Arena.scrath(null);
+                defer tmp.deinit();
+                if (block == def.cfg0() and def.outputs().len == 1 and
+                    use.regMask(self, idx, tmp.arena).count() != 1)
+                {
+                    return;
+                }
+            }
+            const ins = self.addSplit(block, if (skip and
+                def.kind == .MachSplit and def.cfg0() == block) def.inputs()[1].? else def, dbg);
             self.setInputNoIntern(use, idx, ins);
             const oidx = if (use.kind == .Phi) block.base.outputs().len - 2 else block.base.posOfOutput(use);
             const to_rotate = block.base.outputs()[oidx..];

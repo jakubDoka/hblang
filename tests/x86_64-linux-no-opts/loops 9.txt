@@ -8,14 +8,14 @@ main:
 	mov rsi, 0x00
 4:	mov rcx, [rsp+0x10]
 	cmp rcx, 0x01
-	setnb dl
-	movzx rdx, dl
-	mov rcx, [rsp]
-	test dl, dl
+	setnb cl
+	movzx rcx, cl
+	test cl, cl
 	jz :0
 	add rsp, 0x20
 	ret
-0:	mov cl, [rcx]
+0:	mov rcx, [rsp]
+	mov cl, [rcx]
 	cmp cl, sil
 	setnz dl
 	movzx rdx, dl

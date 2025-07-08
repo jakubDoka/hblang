@@ -26,9 +26,9 @@ main:
 	mov al, [rsp+0x410]
 	mov [rsp+0x410], al
 	mov rcx, [rsp+0x408]
-	mov rax, [rsp+0x400]
 	cmp rcx, rbx
 	jnz :2
+	mov rax, [rsp+0x400]
 	mov [rsp+0x400], rax
 	mov [rsp+0x408], rcx
 	jmp :2

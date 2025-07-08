@@ -13,21 +13,15 @@ main:
 	mov [rsp+0x48], rcx
 	mov rcx, 0x02
 	mov r12, rcx
-	mov rcx, 0x00
-	mov rdx, 0x08
+	mov rdx, 0x00
+	mov rcx, 0x08
 	mov rdi, rax
 4:	mov rbp, rdi
 	mov rdi, rbp
-	imul rdi, rdx
-	mov r9, rdi
-	mov rdi, rbp
 	cmp rdi, 0x02
-	setb r8b
-	movzx r8, r8b
-	mov rdi, r9
-	mov r9, rsi
-	add r9, rdi
-	test r8b, r8b
+	setb dil
+	movzx rdi, dil
+	test dil, dil
 	jz :0
 	mov r8, rbp
 	mov rdi, r12
@@ -48,12 +42,17 @@ main:
 	mov rdx, rbp
 	mov rdi, r12
 	call :cstring indexing.slice_ioob
-1:	mov r9, [r9]
+1:	mov rdi, rbp
+	imul rdi, rcx
+	mov r8, rdi
+	mov rdi, rsi
+	add rdi, r8
+	mov r9, [rdi]
 	mov rdi, rax
 3:	mov r8, r9
 	add r8, rdi
 	mov r8b, [r8]
-	cmp r8b, cl
+	cmp r8b, dl
 	jz :2
 	add rdi, 0x01
 	jmp :3

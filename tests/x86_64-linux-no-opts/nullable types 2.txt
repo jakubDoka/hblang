@@ -19,19 +19,19 @@ main:
 	mov byte ptr [rsp+0x30], 0x01
 	mov qword ptr [rsp+0x38], 0x00
 	mov qword ptr [rsp+0x40], 0x00
-	mov rsi, 0x00
-	mov dl, [rsp]
-	mov cl, [rsp+0x18]
-	mov al, [rsp+0x30]
-	cmp dl, sil
+	mov rcx, 0x00
+	mov al, [rsp]
+	cmp al, cl
 	jnz :0
 	mov rax, 0x01
 	jmp :1
-0:	cmp cl, sil
+0:	mov al, [rsp+0x18]
+	cmp al, cl
 	jnz :2
 	mov rax, 0x02
 1:	jmp :3
-2:	cmp al, sil
+2:	mov al, [rsp+0x30]
+	cmp al, cl
 	jnz :4
 	mov rax, 0x03
 3:	jmp :5
