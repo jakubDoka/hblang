@@ -9,8 +9,8 @@ main:
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rcx, rdi
 	mov rax, rdi
+	mov rcx, rdi
 2:	mov rdi, rcx
 	imul rdi, r8
 	cmp rcx, 0x08

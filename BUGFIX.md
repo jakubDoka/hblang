@@ -1043,6 +1043,24 @@ main := fn(): uint {
 }
 ```
 
+#### mem2reg crash 5 (infinite)
+```hb
+expectations := .{
+    unreaches: true,
+}
+
+main := fn(): u32 {
+    loop {
+        val1: ?u8 = null
+        loop if val1 == null break else {
+            if val1.? == 0 {
+            }
+            val1 = null
+        }
+    }
+}
+```
+
 #### static analisys 1
 ```hb
 expectations := .{

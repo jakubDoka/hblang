@@ -1,7 +1,7 @@
 main:
 	mov r8, 0x00
-	mov rdi, r8
 	mov rcx, r8
+	mov rdi, r8
 3:	cmp rdi, 0x0A
 	setz al
 	movzx rax, al

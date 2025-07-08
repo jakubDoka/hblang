@@ -18,8 +18,8 @@ loops 2.square:
          cp $4, $2
 4:      jne $3, $1, :2
      addi64 $2, $5, 1
-         cp $5, $2
          cp $3, $4
+         cp $5, $2
         jmp :3
 2:    mul64 $2, $3, $5
      addi64 $3, $3, 1

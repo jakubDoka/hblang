@@ -73,7 +73,6 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
     }
 
     if (true) b: {
-        if (std.mem.indexOf(u8, name, "abi") != null) break :b;
         if (std.mem.indexOf(u8, name, "sse") != null) break :b;
         const target = "x86_64-linux";
         var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
@@ -93,7 +92,6 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
 
     if (true) b: {
         if (std.mem.indexOf(u8, name, "sse") != null) break :b;
-        if (std.mem.indexOf(u8, name, "abi") != null) break :b;
         const target = "x86_64-linux-no-opts";
         var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
         defer x86_64.deinit();

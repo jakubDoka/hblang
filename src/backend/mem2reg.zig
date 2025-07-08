@@ -1,5 +1,5 @@
 const graph = @import("graph.zig");
-const root = graph.utils;
+const utils = graph.utils;
 const std = @import("std");
 
 pub fn Mem2RegMixin(comptime Backend: type) type {
@@ -42,11 +42,15 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
             const L = @This();
 
             fn resolve(func: *Func, scope: []L, index: usize) *Node {
-                return switch (scope[index].expand() orelse return func.addIntImm(.none, .i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)))) {
+                return switch (scope[index].expand() orelse {
+                    return func.addIntImm(.none, .i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)));
+                }) {
                     .Node => |n| n,
                     .Loop => |loop| {
                         if (loop.items[index].expand() == null) {
-                            return func.addIntImm(.none, .i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)));
+                            const vl = func.addIntImm(.none, .i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)));
+                            scope[index] = .compact(.{ .Node = vl });
+                            return vl;
                         }
                         if (!loop.done) {
                             const initVal = resolve(func, loop.items, index);
@@ -114,7 +118,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
             if (self.root.outputs().len == 1) return;
 
             // TODO: refactor to use tmpa directily
-            var tmpa = root.Arena.scrath(null);
+            var tmpa = utils.Arena.scrath(null);
             defer tmpa.deinit();
 
             const tmp = tmpa.arena.allocator();
@@ -218,7 +222,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                 };
                 std.debug.assert(parent.isCfg());
                 for (parent.outputs()) |o| parent_succs += @intFromBool(o.isCfg());
-                if (!(parent_succs >= 1 and parent_succs <= 2)) root.panic("{}\n", .{bb});
+                if (!(parent_succs >= 1 and parent_succs <= 2)) utils.panic("{}\n", .{bb});
                 // handle fork
                 if (parent_succs == 2) {
                     // this is the second branch, restore the value
@@ -279,7 +283,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                                     return std.math.order(a, b);
                                 }
                             }.inner) orelse {
-                                root.panic("{} {any} {}", .{ o, alloc_offsets.items, offs });
+                                utils.panic("{} {any} {}", .{ o, alloc_offsets.items, offs });
                             };
                             locals[idx] = .compact(.{ .Node = o.value().? });
                         }
@@ -313,11 +317,11 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                 // handle joins
                 if (child_preds == 2 and child.kind != .TrapRegion and child.kind != .Return) {
                     if (!(child.kind == .Region or child.kind == .Loop)) {
-                        root.panic("{}\n", .{child});
+                        utils.panic("{}\n", .{child});
                     }
                     // eider we arrived from the back branch or the other side of the split
                     if (states[child.schedule].expand(locals.len).Join) |s| {
-                        if (s.ctrl != child) root.panic("{} {} {} {}\n", .{ s.ctrl, s.ctrl.schedule, child, child.schedule });
+                        if (s.ctrl != child) utils.panic("{} {} {} {}\n", .{ s.ctrl, s.ctrl.schedule, child, child.schedule });
                         for (s.items, locals, 0..) |clhs, crhsm, i| {
                             var lhs = clhs.expand() orelse continue;
                             if (lhs == .Node and lhs.Node.isLazyPhi(s.ctrl)) {

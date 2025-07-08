@@ -20,8 +20,8 @@ main:
          cp $2, $33
          cp $1, $32
         jmp :3
-1:       cp $33, $35
-         cp $32, $37
+1:       cp $32, $37
+         cp $33, $35
         jmp :4
 gcm crash 1 (infinite).func:
        jala $0, $31, 0

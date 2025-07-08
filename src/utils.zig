@@ -23,68 +23,6 @@ pub fn setColor(cfg: std.io.tty.Config, writer: std.io.AnyWriter, color: std.io.
     if (@import("builtin").target.os.tag != .freestanding) try cfg.setColor(writer, color);
 }
 
-pub const Depth = u8;
-
-pub fn Move(comptime R: type) type {
-    return struct {
-        dst: R,
-        src: R,
-        depth: Depth = 0,
-        swap: bool = false,
-
-        pub fn init(dst: R, src: R) @This() {
-            return .{ .dst = dst, .src = src };
-        }
-    };
-}
-
-pub fn orderMoves(self: anytype, comptime R: type, moves: []Move(R)) void {
-    // code makes sure all moves are ordered so that register is only moved
-    // into after all its uses
-    //
-    // in case of cycles, swaps are used instead in which case the conflicting
-    // move is removed and remining moves are replaced with swaps
-
-    var reg_graph = std.EnumArray(R, ?R).initFill(null);
-    for (moves) |m| {
-        reg_graph.set(m.dst, m.src);
-    }
-
-    o: for (moves) |*m| {
-        var seen = std.EnumSet(R).initEmpty();
-        var c: ?R = m.src;
-        while (c != m.dst) {
-            c = reg_graph.get(c.?);
-            m.depth += 1;
-            if (c == null or seen.contains(c.?)) continue :o;
-            seen.insert(c.?);
-        }
-
-        reg_graph.set(c.?, null);
-        m.swap = true;
-    }
-
-    std.sort.pdq(Move(R), moves, {}, struct {
-        fn lt(_: void, lhs: Move(R), rhs: Move(R)) bool {
-            return rhs.depth < lhs.depth;
-        }
-    }.lt);
-
-    for (moves) |*m| {
-        if (m.swap) {
-            while (reg_graph.get(m.src) != null) {
-                self.emitSwap(m.dst, m.src);
-                m.dst = m.src;
-                std.mem.swap(R, &reg_graph.getPtr(m.src).*.?, &m.src);
-                reg_graph.set(m.dst, null);
-            }
-        } else if (reg_graph.get(m.dst) != null) {
-            self.emitCp(m.dst, m.src);
-        }
-    }
-}
-
-// designed to be used with arena
 pub const Pool = struct {
     arena: Arena,
     free: [sclass_count]?*Header = @splat(null),

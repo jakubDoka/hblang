@@ -4,7 +4,7 @@ root_mem: *Func.Node = undefined,
 pins: *Func.Node = undefined,
 
 const std = @import("std");
-const root = graph.utils;
+const utils = graph.utils;
 const graph = @import("graph.zig");
 const Builder = @This();
 
@@ -74,7 +74,7 @@ pub fn end(self: *Builder, _: BuildToken) void {
     if (!self.isUnreachable()) self.addReturn(&.{});
 
     if (std.debug.runtime_safety) {
-        var tmp = root.Arena.scrath(null);
+        var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
 
         var worklist = Func.WorkList.init(tmp.arena.allocator(), self.func.next_id) catch unreachable;
@@ -120,7 +120,7 @@ pub fn addFieldLoad(self: *Builder, sloc: graph.Sloc, base: *BuildNode, offset: 
 
 pub fn addStore(self: *Builder, sloc: graph.Sloc, addr: *BuildNode, ty: DataType, value: *BuildNode) void {
     if (value.data_type == .bot) return;
-    if (value.data_type.size() == 0) root.panic("{}", .{value.data_type});
+    if (value.data_type.size() == 0) utils.panic("{}", .{value.data_type});
     const mem = self.memory();
     const ctrl = self.control();
     const store = self.func.addNode(.Store, sloc, ty, &.{ ctrl, mem, addr, value }, .{});
@@ -471,7 +471,7 @@ const arg_prefix_len = 2;
 
 pub fn allocCallArgs(
     _: *Builder,
-    scratch: *root.Arena,
+    scratch: *utils.Arena,
     params: []const graph.AbiParam,
     return_values: ?[]const graph.AbiParam,
 ) CallArgs {
@@ -497,7 +497,7 @@ pub fn addCall(
 
     const args = args_with_initialized_arg_slots;
     for (args.arg_slots, args.params) |ar, pr| if (ar.data_type != ar.data_type.meet(pr.getReg())) {
-        root.panic("{} != {}", .{ ar.data_type, ar.data_type.meet(pr.getReg()) });
+        utils.panic("{} != {}", .{ ar.data_type, ar.data_type.meet(pr.getReg()) });
     };
     const full_args = (args.arg_slots.ptr - arg_prefix_len)[0 .. arg_prefix_len + args.params.len];
     var stack_offset: u64 = 0;
@@ -547,7 +547,7 @@ pub fn addCall(
 pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
     for (values, self.func.signature.returns().?) |val, rtt|
         if (val.data_type != val.data_type.meet(rtt.getReg()))
-            root.panic("{s} != {s}", .{ @tagName(val.data_type), @tagName(rtt.getReg()) });
+            utils.panic("{s} != {s}", .{ @tagName(val.data_type), @tagName(rtt.getReg()) });
 
     const ret = self.func.end;
     const inps = ret.inputs();

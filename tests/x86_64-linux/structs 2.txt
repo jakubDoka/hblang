@@ -6,21 +6,19 @@ structs 2.swap:
 	sub rsp, 0x20
 	mov r13, rdi
 	mov r12, rsi
-	mov rbp, 0x18
-	lea rbx, [rsp]
-	mov rax, r13
+	mov rax, 0x18
+	mov rbp, rax
+	lea rax, [rsp]
+	mov rbx, rax
+	mov rsi, r13
 	mov rdi, rbx
-	mov rsi, rax
 	mov rdx, rbp
 	call :memcpy
-	mov rcx, r12
-	mov rax, r13
-	mov rdi, rax
-	mov rsi, rcx
+	mov rdi, r13
+	mov rsi, r12
 	mov rdx, rbp
 	call :memcpy
-	mov rax, r12
-	mov rdi, rax
+	mov rdi, r12
 	mov rsi, rbx
 	mov rdx, rbp
 	call :memcpy

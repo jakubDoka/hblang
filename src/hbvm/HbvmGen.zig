@@ -529,6 +529,8 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 }
 
 pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) void {
+    _ = tmp;
+
     errdefer unreachable;
     for (node.outputs()) |no| {
         const inps = no.dataDeps();
@@ -731,46 +733,12 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 self.emit(.jeq, .{ self.getReg(inps[0]), .null, 0 });
             },
             .Call => |extra| {
-                var moves = std.ArrayList(Move).init(tmp);
-                for (inps, 0..) |arg, i| {
-                    const dst, const src = .{ isa.Reg.arg(i), self.getReg(arg) };
-                    if (dst != src) moves.append(.init(dst, src)) catch unreachable;
-                }
-                self.orderMoves(moves.items);
-
                 if (extra.id == eca) {
                     self.emit(.eca, .{});
                 } else {
                     try self.out.addFuncReloc(self.gpa, extra.id, 4, 3);
                     self.emit(.jal, .{ .ret_addr, .null, 0 });
                 }
-
-                const cend = for (no.outputs()) |o| {
-                    if (o.kind == .CallEnd) break o;
-                } else unreachable;
-
-                moves.items.len = 0;
-                for (cend.outputs()) |r| {
-                    if (r.kind == .Ret) {
-                        const dst, const src = .{ self.getReg(r), isa.Reg.ret(r.extra(.Ret).index) };
-                        if (dst != src) moves.append(.init(dst, src)) catch unreachable;
-                    }
-                }
-                self.orderMoves(moves.items);
-            },
-            .Jmp => if (no.outputs()[0].kind == .Region or no.outputs()[0].kind == .Loop) {
-                const idx = std.mem.indexOfScalar(?*Func.Node, no.outputs()[0].inputs(), no).? + 1;
-
-                var moves = std.ArrayList(Move).init(tmp);
-                for (no.outputs()[0].outputs()) |o| {
-                    if (o.isDataPhi()) {
-                        std.debug.assert(o.inputs()[idx].?.kind == .MachSplit);
-                        const dst, const src = .{ self.getReg(o), self.getReg(o.inputs()[idx].?.inputs()[1]) };
-                        if (dst != src) moves.append(.init(dst, src)) catch unreachable;
-                    }
-                }
-
-                self.orderMoves(moves.items);
             },
             .Return => {},
             .Trap => |extra| {
@@ -783,12 +751,12 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     else => unreachable,
                 }
             },
-            .MachSplit => if (no.outputs().len != 1 or no.outputs()[0].kind != .Phi) {
+            .MachSplit => {
                 const dst, const src = .{ self.getReg(no), self.getReg(inps[0]) };
                 if (dst == src) continue;
                 self.emit(.cp, .{ dst, src });
             },
-            .Never, .Mem, .Ret, .Phi => {},
+            .Never, .Mem, .Ret, .Phi, .Jmp => {},
             else => |e| utils.panic("{any}", .{e}),
         }
     }
@@ -805,18 +773,6 @@ pub fn doReloc(self: *HbvmGen, rel: Reloc, dest: i64) void {
     };
 
     @memcpy(self.out.code.items[location..][0..size], @as(*const [8]u8, @ptrCast(&jump))[0..size]);
-}
-
-fn orderMoves(self: *HbvmGen, moves: []Move) void {
-    utils.orderMoves(self, isa.Reg, moves);
-}
-
-pub fn emitSwap(self: *HbvmGen, lhs: isa.Reg, rhs: isa.Reg) void {
-    self.emit(.swa, .{ lhs, rhs });
-}
-
-pub fn emitCp(self: *HbvmGen, dst: isa.Reg, src: isa.Reg) void {
-    self.emit(.cp, .{ dst, src });
 }
 
 const max_regs = @intFromEnum(isa.Reg.max);

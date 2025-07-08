@@ -8,8 +8,8 @@ const utils = root.utils;
 const object = root.object;
 const zydis = @import("zydis").exports;
 
-const X86_64 = @This();
-const Func = graph.Func(X86_64);
+const X86_64Gen = @This();
+const Func = graph.Func(X86_64Gen);
 const FuncNode = Func.Node;
 const Move = utils.Move(Reg);
 
@@ -86,6 +86,10 @@ pub const Reg = enum(u8) {
 
     pub fn isXmm(self: Reg) bool {
         return @intFromEnum(Reg.xmm0) <= @intFromEnum(self) and @intFromEnum(self) <= @intFromEnum(Reg.xmm15);
+    }
+
+    pub fn isStack(self: Reg) bool {
+        return @intFromEnum(self) > @intFromEnum(Reg.xmm15);
     }
 
     pub fn retForDt(dt: graph.DataType) Reg {
@@ -227,7 +231,7 @@ pub fn isSwapped(node: *Func.Node) bool {
 }
 
 // ================== PEEPHOLES ==================
-pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
+pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
     if (Func.idealizeDead({}, func, node, worklist)) |n| return n;
 
     if (node.kind == .CInt and node.data_type == .f32) {
@@ -386,7 +390,7 @@ pub fn idealizeMach(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.W
     return null;
 }
 
-pub fn idealize(_: *X86_64, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
+pub fn idealize(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
     if (node.kind == .MemCpy) {
         const ctrl = node.inputs()[0].?;
         var mem = node.inputs()[1].?;
@@ -566,6 +570,11 @@ pub fn regMask(
         return singleReg(.rsp, arena);
     }
 
+    if (node.kind == .MemCpy) {
+        std.debug.assert(idx >= 2);
+        return singleReg(Reg.system_v.args[idx - 2], arena);
+    }
+
     if (node.kind == .Call) {
         std.debug.assert(idx >= 2);
         const extra = node.extra(.Call);
@@ -597,17 +606,16 @@ pub fn regMask(
 
     if (node.kind == .Return) {
         std.debug.assert(idx == 3);
-        if (node.inputs()[idx].?.data_type.isFloat()) return singleReg(.xmm0, arena);
-        return singleReg(.rax, arena);
-    }
-
-    if (node.data_type.isFloat() and idx == 0) {
-        return floatMask(arena);
+        return singleReg(Reg.retForDt(node.inputs()[idx].?.data_type), arena);
     }
 
     if (node.kind == .Ret) {
         std.debug.assert(idx == 0);
-        return singleReg(.rax, arena);
+        return singleReg(Reg.retForDt(node.data_type), arena);
+    }
+
+    if (node.data_type.isFloat() and idx == 0) {
+        return floatMask(arena);
     }
 
     if (node.subclass(graph.builtin.BinOp)) |b| {
@@ -672,7 +680,7 @@ pub fn inPlaceSlot(node: *Func.Node) ?usize {
 
 // ================== EMIT ==================
 
-pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
+pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     errdefer unreachable;
 
     const id = opts.id;
@@ -694,10 +702,10 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
 
     if (opts.linkage == .imported) return;
 
-    if (opts.optimizations.shouldDefer(id, opts.is_inline, X86_64, func, self))
+    if (opts.optimizations.shouldDefer(id, opts.is_inline, X86_64Gen, func, self))
         return;
 
-    opts.optimizations.execute(X86_64, self, func);
+    opts.optimizations.execute(X86_64Gen, self, func);
 
     //    if (std.mem.endsWith(u8, opts.name, "unwrap")) {
     //        func.fmtScheduled(
@@ -712,7 +720,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), func.next_id) catch unreachable;
     const postorder = func.collectPostorder(tmp.arena.allocator(), &visited);
 
-    self.allocs = Regalloc.ralloc(X86_64, func);
+    self.allocs = Regalloc.ralloc(X86_64Gen, func);
     self.ret_count = if (func.signature.returns()) |r| r.len else std.math.maxInt(usize);
     self.local_relocs = .initBuffer(tmp.arena.alloc(Reloc, 1024 * 10));
     self.block_offsets = tmp.arena.alloc(u32, postorder.len);
@@ -786,7 +794,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     prelude: {
         for (Reg.system_v.callee_saved) |r| {
             if (used_regs.contains(r)) {
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_PUSH, .{r});
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_PUSH, .{SReg{ r, 8 }});
                 self.arg_base += 8;
             }
         }
@@ -842,7 +850,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
             var iter = std.mem.reverseIterator(Reg.system_v.callee_saved);
             while (iter.next()) |r| {
                 if (used_regs.contains(r)) {
-                    self.emitInstr(zydis.ZYDIS_MNEMONIC_POP, .{r});
+                    self.emitInstr(zydis.ZYDIS_MNEMONIC_POP, .{SReg{ r, 8 }});
                 }
             }
 
@@ -883,7 +891,7 @@ pub fn emitFunc(self: *X86_64, func: *Func, opts: Mach.EmitOptions) void {
     }
 }
 
-pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
+pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
     errdefer unreachable;
 
     var tmp = utils.Arena.scrath(null);
@@ -896,13 +904,6 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), extra.value });
             },
             .MemCpy => {
-                var moves = std.ArrayList(Move).init(tmp.arena.allocator());
-                for (instr.dataDeps(), 0..) |arg, i| {
-                    const dst, const src: Reg = .{ Reg.system_v.args[i], self.getReg(arg) };
-                    if (!std.meta.eql(dst, src)) moves.append(.init(dst, src)) catch unreachable;
-                }
-                self.orderMoves(moves.items);
-
                 const opcode = 0xE8;
                 try self.out.code.append(self.gpa, opcode);
                 if (self.builtins.memcpy == std.math.maxInt(u32)) {
@@ -914,9 +915,10 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 }
                 try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
             },
-            .MachSplit => if (instr.outputs().len != 1 or instr.outputs()[0].kind != .Phi) {
+            .MachSplit => {
                 const dst, const src = .{ self.getReg(instr), self.getReg(instr.inputs()[1]) };
                 if (dst == src) continue;
+
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ dst, src });
             },
             .Phi => {},
@@ -1043,34 +1045,6 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
             .Call => |extra| {
                 const call = instr.extra(.Call);
 
-                const call_conv = if (extra.id == syscall)
-                    Reg.system_v.syscall_args
-                else
-                    Reg.system_v.args;
-
-                const float_conv = Reg.system_v.float_args;
-
-                var moves = std.ArrayList(Move).init(tmp.arena.allocator());
-                var i: usize = 0;
-                var f: usize = 0;
-                for (instr.dataDeps()) |arg| {
-                    if (arg.kind == .StackArgOffset) {
-                        std.debug.assert(self.slot_base != 0);
-                        continue;
-                    }
-
-                    var dst: Reg, const src = .{ undefined, self.getReg(arg) };
-                    if (arg.data_type.isInt()) {
-                        dst = call_conv[i];
-                        i += 1;
-                    } else {
-                        dst = float_conv[f];
-                        f += 1;
-                    }
-                    if (dst != src) moves.append(.init(dst, src)) catch unreachable;
-                }
-                self.orderMoves(moves.items);
-
                 if (extra.id == syscall) {
                     self.emitInstr(zydis.ZYDIS_MNEMONIC_SYSCALL, .{});
                 } else {
@@ -1079,18 +1053,6 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                     try self.out.addFuncReloc(self.gpa, call.id, 4, -4);
                     try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
                 }
-
-                const cend = for (instr.outputs()) |o| {
-                    if (o.kind == .CallEnd) break o;
-                } else unreachable;
-                moves.items.len = 0;
-                for (cend.outputs()) |r| {
-                    if (r.kind == .Ret) {
-                        const dst: Reg, const src = .{ self.getReg(r), Reg.retForDt(r.data_type) };
-                        if (dst != src) moves.append(.init(dst, src)) catch unreachable;
-                    }
-                }
-                self.orderMoves(moves.items);
             },
             .Arg, .Ret, .Mem, .Never => {},
             .Trap => {
@@ -1236,20 +1198,7 @@ pub fn emitBlockBody(self: *X86_64, block: *FuncNode) void {
                 });
                 self.emitInstr(extra.op, .{ std.math.maxInt(i32), SizeHint{ .bytes = 0 } });
             },
-            .Jmp => if (instr.outputs()[0].kind == .Region or instr.outputs()[0].kind == .Loop) {
-                const idx = std.mem.indexOfScalar(?*Func.Node, instr.outputs()[0].inputs(), instr).? + 1;
-
-                var moves = std.ArrayList(Move).init(tmp.arena.allocator());
-                for (instr.outputs()[0].outputs()) |o| {
-                    if (o.isDataPhi()) {
-                        std.debug.assert(o.inputs()[idx].?.kind == .MachSplit);
-                        const dst, const src = .{ self.getReg(o), self.getReg(o.inputs()[idx].?.inputs()[1]) };
-                        if (dst != src) try moves.append(.init(dst, src));
-                    }
-                }
-
-                self.orderMoves(moves.items);
-            },
+            .Jmp => {},
             .UnOp => |extra| {
                 const op = extra.op;
                 const size = instr.data_type.size();
@@ -1331,7 +1280,7 @@ pub const SReg = struct { Reg, usize };
 pub const BRegOff = struct { Reg, i32, u16 };
 pub const SizeHint = struct { bytes: u64 };
 
-pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
+pub fn emitInstr(self: *X86_64Gen, mnemonic: c_uint, args: anytype) void {
     errdefer unreachable;
 
     const fields = std.meta.fields(@TypeOf(args));
@@ -1369,8 +1318,6 @@ pub fn emitInstr(self: *X86_64, mnemonic: c_uint, args: anytype) void {
     }
 
     if (fields.len == 0) size = 0;
-    if (mnemonic == zydis.ZYDIS_MNEMONIC_PUSH or
-        mnemonic == zydis.ZYDIS_MNEMONIC_POP) size = 8;
 
     const fsize = size.?;
 
@@ -1492,37 +1439,20 @@ pub fn binopToMnemonic(op: graph.BinOp, ty: graph.DataType) zydis.ZydisMnemonic 
     };
 }
 
-pub fn isJump(mnemonic: zydis.ZydisMnemonic) bool {
-    return mnemonic == zydis.ZYDIS_MNEMONIC_JMP or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JZ or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JNZ or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JB or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JNBE or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JBE or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JNB or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JL or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JNLE or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JLE or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JNL;
+pub fn movMnem(dt: graph.DataType, is_stack: bool) zydis.ZydisMnemonic {
+    return switch (dt) {
+        .f32 => if (is_stack) zydis.ZYDIS_MNEMONIC_MOVD else zydis.ZYDIS_MNEMONIC_MOVSS,
+        .f64 => if (is_stack) zydis.ZYDIS_MNEMONIC_MOVQ else zydis.ZYDIS_MNEMONIC_MOVSD,
+        .i8, .i16, .i32, .i64 => zydis.ZYDIS_MNEMONIC_MOV,
+        else => unreachable,
+    };
 }
 
-pub fn getReg(self: X86_64, node: ?*FuncNode) Reg {
+pub fn getReg(self: X86_64Gen, node: ?*FuncNode) Reg {
     return @enumFromInt(self.allocs[node.?.schedule]);
 }
 
-fn orderMoves(self: *X86_64, moves: []Move) void {
-    utils.orderMoves(self, Reg, moves);
-}
-
-pub fn emitSwap(self: *X86_64, lhs: Reg, rhs: Reg) void {
-    self.emitInstr(zydis.ZYDIS_MNEMONIC_XCHG, .{ lhs, rhs });
-}
-
-pub fn emitCp(self: *X86_64, dst: Reg, src: Reg) void {
-    self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ dst, src });
-}
-
-pub fn emitData(self: *X86_64, opts: Mach.DataOptions) void {
+pub fn emitData(self: *X86_64Gen, opts: Mach.DataOptions) void {
     errdefer unreachable;
 
     try self.out.defineGlobal(
@@ -1537,10 +1467,10 @@ pub fn emitData(self: *X86_64, opts: Mach.DataOptions) void {
     );
 }
 
-pub fn finalize(self: *X86_64, opts: Mach.FinalizeOptions) void {
+pub fn finalize(self: *X86_64Gen, opts: Mach.FinalizeOptions) void {
     errdefer unreachable;
 
-    if (opts.optimizations.finalize(opts.builtins, X86_64, self)) return;
+    if (opts.optimizations.finalize(opts.builtins, X86_64Gen, self)) return;
 
     try switch (self.object_format) {
         .elf => root.object.elf.flush(self.out, .x86_64, opts.output),
@@ -1551,11 +1481,11 @@ pub fn finalize(self: *X86_64, opts: Mach.FinalizeOptions) void {
     self.out.reset();
 }
 
-pub fn deinit(self: *X86_64) void {
+pub fn deinit(self: *X86_64Gen) void {
     self.out.deinit(self.gpa);
 }
 
-pub fn disasm(self: *X86_64, opts: Mach.DisasmOpts) void {
+pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
     // TODO: maybe we can do this in more platform independend way?
     // Compiling a library in?
 
@@ -1700,7 +1630,21 @@ pub fn disasm(self: *X86_64, opts: Mach.DisasmOpts) void {
     }
 }
 
-pub fn run(_: *X86_64, env: Mach.RunEnv) !usize {
+pub fn isJump(mnemonic: zydis.ZydisMnemonic) bool {
+    return mnemonic == zydis.ZYDIS_MNEMONIC_JMP or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JZ or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JNZ or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JB or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JNBE or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JBE or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JNB or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JL or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JNLE or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JLE or
+        mnemonic == zydis.ZYDIS_MNEMONIC_JNL;
+}
+
+pub fn run(_: *X86_64Gen, env: Mach.RunEnv) !usize {
     const cleanup = true;
     const res = b: {
         errdefer unreachable;

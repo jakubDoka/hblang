@@ -1,8 +1,6 @@
 structs 1.odher_pass:
-	lea rcx, [rsp+0x08]
-	mov rax, 0x18
-	mov rsi, rcx
-	mov rdx, rax
+	lea rsi, [rsp+0x08]
+	mov rdx, 0x18
 	call :memcpy
 	ret
 structs 1.Ty.sum:
@@ -24,15 +22,14 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x48
-	lea rcx, [rsp+0x18]
+	lea rsi, [rsp+0x18]
 	mov qword ptr [rsp+0x18], 0x04
 	mov qword ptr [rsp+0x20], 0x01
 	mov qword ptr [rsp+0x28], 0x03
 	lea rbp, [rsp]
-	mov rax, 0x18
-	mov rdi, rbp
-	mov rsi, rcx
-	mov rdx, rax
+	mov rax, rbp
+	mov rdx, 0x18
+	mov rdi, rax
 	call :memcpy
 	lea rax, [rsp+0x30]
 	mov rbx, rax

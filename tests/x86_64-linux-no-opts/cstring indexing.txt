@@ -55,17 +55,16 @@ main:
 	mov rax, r14
 	cmp rcx, rax
 	jb :1
-	lea rcx, [rsp+0x20]
+	lea rsi, [rsp+0x20]
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x20], rax
 	mov qword ptr [rsp+0x28], 0x10
 	mov rax, 0x1100000010
 	mov [rsp+0x30], rax
 	lea rbx, [rsp]
-	mov rax, 0x20
-	mov rdi, rbx
-	mov rsi, rcx
-	mov rdx, rax
+	mov rax, rbx
+	mov rdx, 0x20
+	mov rdi, rax
 	call :memcpy
 	mov rsi, r12
 	mov rdx, r12

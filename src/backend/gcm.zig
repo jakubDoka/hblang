@@ -1,5 +1,5 @@
 const graph = @import("graph.zig");
-const root = graph.utils;
+const utils = graph.utils;
 const std = @import("std");
 
 pub fn GcmMixin(comptime Backend: type) type {
@@ -42,7 +42,7 @@ pub fn GcmMixin(comptime Backend: type) type {
             gcm.loop_tree_built.lock();
             const self = gcm.getGraph();
 
-            var tmp = root.Arena.scrath(null);
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             var builder = LoopTreeBuilder{
@@ -140,7 +140,7 @@ pub fn GcmMixin(comptime Backend: type) type {
             gcm.cfg_built.lock();
             const self = gcm.getGraph();
 
-            var tmp = root.Arena.scrath(null);
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), self.next_id * 2) catch unreachable;
@@ -171,7 +171,7 @@ pub fn GcmMixin(comptime Backend: type) type {
                         self.setInputNoIntern(&n.base, i, self.addNode(.Jmp, n.base.sloc, .top, &.{n.base.inputs()[i].?}, .{}));
                     }
 
-                    var intmp = root.Arena.scrath(null);
+                    var intmp = utils.Arena.scrath(null);
                     defer intmp.deinit();
                     for (intmp.arena.dupe(*Node, n.base.outputs())) |o| if (o.isDataPhi()) {
                         std.debug.assert(o.inputs().len == 3);
@@ -198,7 +198,7 @@ pub fn GcmMixin(comptime Backend: type) type {
                     };
 
                     if (cfg.base.kind == .Region or cfg.base.kind == .Loop) {
-                        var intmp = root.Arena.scrath(null);
+                        var intmp = utils.Arena.scrath(null);
                         defer intmp.deinit();
                         for (intmp.arena.dupe(*Node, cfg.base.outputs())) |o| {
                             if (o.kind == .Phi) {
@@ -307,7 +307,7 @@ pub fn GcmMixin(comptime Backend: type) type {
                                                 break;
                                             }
                                         }
-                                    } else root.panic("{any}", .{o.kind}),
+                                    } else utils.panic("{any}", .{o.kind}),
                                 };
 
                                 break :add_antideps;
@@ -412,14 +412,14 @@ pub fn GcmMixin(comptime Backend: type) type {
                 priority: u16,
             };
 
-            var tmp = root.Arena.scrath(null);
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             // init meta
             const extra = tmp.arena.alloc(NodeMeta, node.outputs().len);
             for (node.outputs(), extra, 0..) |instr, *e, i| {
                 if (instr.schedule != std.math.maxInt(u16) and !instr.isCfg())
-                    root.panic("{} {}\n", .{ instr, instr.schedule });
+                    utils.panic("{} {}\n", .{ instr, instr.schedule });
                 instr.schedule = @intCast(i);
                 e.* = .{ .priority = if (instr.isCfg())
                     0
@@ -453,7 +453,7 @@ pub fn GcmMixin(comptime Backend: type) type {
 
             var scheduled: usize = 0;
             if (ready != scheduled) while (scheduled < outs.len - 1) {
-                if (ready == scheduled) root.panic("{} {} {} {any}", .{ scheduled, outs.len, node, outs[scheduled..] });
+                if (ready == scheduled) utils.panic("{} {} {} {any}", .{ scheduled, outs.len, node, outs[scheduled..] });
 
                 var pick = scheduled;
                 for (outs[scheduled + 1 .. ready], scheduled + 1..) |o, i| {
@@ -518,7 +518,7 @@ pub fn GcmMixin(comptime Backend: type) type {
 
             if (!node.isPinned()) {
                 if (node.kind == .Start) {
-                    root.panic("{}\n", .{node});
+                    utils.panic("{}\n", .{node});
                 }
 
                 var best = early;

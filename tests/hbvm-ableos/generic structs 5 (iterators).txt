@@ -95,8 +95,8 @@ e:       ld $2, $1, 0, 8
          st $2, $1, 0, 8
      addi64 $2, $5, -1
          st $2, $1, 8, 8
-         cp $1, $4
          cp $2, $3
+         cp $1, $4
 f:     jala $0, $31, 0
 generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main, B = generic structs 5 (iterators).main).next:
          st $31, $254, -64, 64

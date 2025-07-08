@@ -30,6 +30,6 @@ main:
 	mov rcx, rbx
 	mov rax, rbp
 	jmp :1
-0:	mov rbx, r12
-	mov rbp, r14
+0:	mov rbp, r14
+	mov rbx, r12
 	jmp :2

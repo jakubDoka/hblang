@@ -14,19 +14,19 @@ main:
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x38], rax
 	mov qword ptr [rsp+0x40], 0x04
-	lea rcx, [rsp+0x48]
+	lea rsi, [rsp+0x48]
 	mov byte ptr [rsp+0x48], 0x00
 	mov rax, [rsp+0x38]
 	mov [rsp+0x50], rax
 	mov rax, [rsp+0x40]
 	mov [rsp+0x58], rax
 	lea rbx, [rsp]
-	mov rax, 0x18
-	mov rdi, rbx
-	mov rsi, rcx
-	mov rdx, rax
+	mov rax, rbx
+	mov rdx, 0x18
+	mov rdi, rax
 	call :memcpy
-	lea rdi, [rsp+0x18]
+	lea rax, [rsp+0x18]
+	mov rdi, rax
 	call :wired string comparison 1.broken
 	mov rcx, [rsp+0x28]
 	mov rax, [rsp+0x38]

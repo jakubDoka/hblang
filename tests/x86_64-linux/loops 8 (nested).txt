@@ -10,8 +10,8 @@ main:
 	jz :0
 	ret
 0:	mov r8, rax
-	mov rax, r10
 	mov rdi, r9
+	mov rax, r10
 	mov rsi, r10
 3:	cmp rax, 0x09
 	setz cl
