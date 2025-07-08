@@ -24,7 +24,7 @@ pub fn newRalloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
 
     errdefer unreachable;
 
-    for (0..8) |_| {
+    for (0..10) |_| {
         return rallocRound(Backend, func) catch continue;
     } else unreachable;
 }
@@ -92,14 +92,14 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             const parent = self.parent orelse return self;
             const parent_parent = parent.parent orelse return parent;
 
-            var fuel: usize = 1000;
             var root = parent_parent;
-            while (root.parent) |p| : (root = p) fuel -= 1;
+            while (root.parent) |p| : (root = p) {}
 
             var cursor = self;
-            while (cursor.parent) |p| : (cursor = p) {
+            while (cursor.parent != root) {
+                const next = cursor.parent.?;
                 cursor.parent = root;
-                fuel -= 1;
+                cursor = next;
             }
 
             return root;
@@ -230,18 +230,22 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             if (instr.schedule == no_def_sentinel) continue;
 
             var lrg = if (instr.kind == .Phi) lrg: {
-                const lrg = lrg_table_build[instr.schedule] orelse
+                std.debug.assert(instr.isDataPhi());
+                var lrg = lrg_table_build[instr.schedule] orelse
                     for (instr.dataDeps()) |d| {
                         if (lrg_table_build[d.schedule]) |l| break l;
                     } else LiveRange.init(&build_lrgs, instr.regMask(func, 0, tmp.arena), instr);
+
+                lrg = lrg.unionFind();
 
                 lrg_table_build[instr.schedule] = lrg;
 
                 for (instr.dataDeps()) |d| {
                     if (lrg_table_build[d.schedule]) |l| {
-                        if (lrg.unify(l, build_lrgs.items)) {
-                            lrg.fail(build_lrgs.items, &failed);
+                        if (lrg.unify(l.unionFind(), build_lrgs.items)) {
+                            lrg.unionFind().fail(build_lrgs.items, &failed);
                         }
+                        lrg = lrg.unionFind();
                     } else {
                         lrg_table_build[d.schedule] = lrg;
                     }
@@ -249,16 +253,17 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
                 break :lrg lrg;
             } else lrg: {
-                const lrg = lrg_table_build[instr.schedule] orelse
+                var lrg = lrg_table_build[instr.schedule] orelse
                     LiveRange.init(&build_lrgs, instr.regMask(func, 0, tmp.arena), instr);
 
+                lrg = lrg.unionFind();
                 lrg_table_build[instr.schedule] = lrg;
 
                 if (instr.inPlaceSlot()) |idx| {
                     const up_lrg = lrg_table_build[instr.dataDeps()[idx].schedule].?.unionFind();
                     std.debug.assert(up_lrg.parent == null);
                     if (lrg.unify(up_lrg, build_lrgs.items)) {
-                        lrg.fail(build_lrgs.items, &failed);
+                        lrg.unionFind().fail(build_lrgs.items, &failed);
                         continue;
                     }
                 }
@@ -381,12 +386,14 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 }
 
                 if (member.kind == .Phi) {
-                    for (member.dataDeps(), member.cfg0().base.inputs(), 0..) |dep, cfg, j| {
+                    for (member.dataDeps(), member.cfg0().base.inputs(), member.dataDepOffset()..) |dep, c, j| {
                         if (dep.kind == .MachSplit) continue;
 
-                        if (min != max and func.loopDepth(cfg.?) > max) continue;
+                        const cfg = c.?.inputs()[0].?;
 
-                        if (member.cfg0().base.kind == .Loop and j == 1 and
+                        if (min != max and func.loopDepth(cfg) > max) continue;
+
+                        if (member.cfg0().base.kind == .Loop and j == 2 and
                             dep.kind == .Phi and dep.cfg0() == member.cfg0()) continue;
 
                         func.splitBefore(member, j, dep, .@"use/loop/phi");
@@ -467,7 +474,6 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                                 std.debug.print("                {}\n", .{instr_lrg});
                             }
                             instr_lrg.fail(lrgs, &failed);
-                            break;
                         }
                     }
 
@@ -557,8 +563,27 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 std.debug.print("cdef {}\n", .{conflict.instr});
             }
 
-            if (conflict.instr.inPlaceSlot()) |ips| {
-                func.splitBefore(conflict.instr, 1 + ips, conflict.instr.dataDeps()[ips], .conflict);
+            if (false) {
+                for (tmp.arena.dupe(*Node, conflict.instr.outputs())) |use| {
+                    const idx = use.posOfInput(1, conflict.instr);
+                    if (use.inPlaceSlot() == idx - 1) {
+                        func.splitBefore(use, idx, conflict.instr, .@"conflict/in-place-slot/use");
+                    }
+
+                    if (use.kind == .Phi) {
+                        func.splitBefore(use, idx, conflict.instr, .@"conflict/phi/use");
+                    }
+                }
+
+                if (conflict.instr.kind == .Phi) {
+                    for (conflict.instr.dataDeps(), conflict.instr.dataDepOffset()..) |d, i| {
+                        func.splitBefore(conflict.instr, i, d, .@"conflict/phi/def");
+                    }
+                }
+            }
+
+            if (conflict.instr.inPlaceSlot()) |slt| {
+                func.splitBefore(conflict.instr, slt + 1, conflict.instr.dataDeps()[slt], .@"conflict/in-place-slot/def");
             }
         }
     }

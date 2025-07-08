@@ -171,15 +171,17 @@ pub fn GcmMixin(comptime Backend: type) type {
                         self.setInputNoIntern(&n.base, i, self.addNode(.Jmp, n.base.sloc, .top, &.{n.base.inputs()[i].?}, .{}));
                     }
 
-                    var intmp = utils.Arena.scrath(null);
-                    defer intmp.deinit();
-                    for (intmp.arena.dupe(*Node, n.base.outputs())) |o| if (o.isDataPhi()) {
-                        std.debug.assert(o.inputs().len == 3);
-                        const lhs = self.addNode(.MachSplit, n.base.sloc, o.data_type, &.{ null, o.inputs()[1].? }, .{});
-                        const rhs = self.addNode(.MachSplit, n.base.sloc, o.data_type, &.{ null, o.inputs()[2].? }, .{});
-                        const new_phy = self.addNode(.Phi, n.base.sloc, o.data_type, &.{ &n.base, lhs, rhs }, .{});
-                        self.subsume(new_phy, o);
-                    };
+                    if (true) {
+                        var intmp = utils.Arena.scrath(null);
+                        defer intmp.deinit();
+                        for (intmp.arena.dupe(*Node, n.base.outputs())) |o| if (o.isDataPhi()) {
+                            std.debug.assert(o.inputs().len == 3);
+                            const lhs = self.addNode(.MachSplit, n.base.sloc, o.data_type, &.{ null, o.inputs()[1].? }, .{});
+                            const rhs = self.addNode(.MachSplit, n.base.sloc, o.data_type, &.{ null, o.inputs()[2].? }, .{});
+                            const new_phy = self.addNode(.Phi, n.base.sloc, o.data_type, &.{ &n.base, lhs, rhs }, .{});
+                            self.subsume(new_phy, o);
+                        };
+                    }
                 };
                 break :add_mach_moves;
             }

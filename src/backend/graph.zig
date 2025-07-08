@@ -532,7 +532,10 @@ pub const builtin = enum {
 
         pub const Dbg = enum(u8) {
             defualt,
-            conflict,
+            @"conflict/phi/def",
+            @"conflict/phi/use",
+            @"conflict/in-place-slot/def",
+            @"conflict/in-place-slot/use",
             @"def/loop",
             @"use/loop/phi",
             @"use/loop/use",
@@ -1450,10 +1453,13 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn splitBefore(self: *Self, use: *Node, idx: usize, def: *Node, dbg: builtin.MachSplit.Dbg) void {
-            const block = use.cfg0();
+            const block = if (use.kind == .Phi)
+                use.cfg0().base.inputs()[idx - 1].?.inputs()[0].?.asCfg().?
+            else
+                use.cfg0();
             const ins = self.addSplit(block, def, dbg);
             self.setInputNoIntern(use, idx, ins);
-            const oidx = block.base.posOfOutput(use);
+            const oidx = if (use.kind == .Phi) block.base.outputs().len - 2 else block.base.posOfOutput(use);
             const to_rotate = block.base.outputs()[oidx..];
             std.mem.rotate(*Node, to_rotate, to_rotate.len - 1);
         }

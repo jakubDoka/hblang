@@ -2,6 +2,19 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### regalloc crash 1
+```hb
+X := struct{.a: u8; .b: u64; .c: u8}
+broken := fn(self: X, n: u8): X {
+    if n == 0 return self
+    return self
+}
+main := fn(): u32 {
+    _ = broken(.(0, 0, 0), ' ')
+    return 0
+}
+```
+
 #### field access on non scope type 1
 ```hb
 expectations := .{

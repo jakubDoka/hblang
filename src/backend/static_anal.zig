@@ -207,19 +207,21 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
             var tmp = root.Arena.scrath(arena);
             defer tmp.deinit();
 
-            var frontier = std.ArrayListUnmanaged(*Node){};
+            var frontier = std.AutoArrayHashMapUnmanaged(*Node, void){};
             for (func.end.inputs()[3..]) |n| {
-                frontier.append(tmp.arena.allocator(), n orelse continue) catch unreachable;
+                frontier.put(tmp.arena.allocator(), n orelse continue, {}) catch unreachable;
             }
 
             // walk trough phis
             // note: assuming store->load peepholes are all applied, walking loads should be redundant
-            while (frontier.pop()) |nd| {
+            var i: usize = 0;
+            while (i < frontier.entries.len) : (i += 1) {
+                const nd = frontier.entries.items(.key)[i];
                 if (nd.kind == .Local) {
                     errors.append(arena.allocator(), .{ .ReturningStack = .{ .slot = nd.sloc } }) catch unreachable;
                 } else if (nd.kind == .Phi) {
                     for (nd.inputs()[1..]) |n| {
-                        frontier.append(tmp.arena.allocator(), n.?) catch unreachable;
+                        frontier.put(tmp.arena.allocator(), n.?, {}) catch unreachable;
                     }
                 }
             }

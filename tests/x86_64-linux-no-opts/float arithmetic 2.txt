@@ -39,13 +39,16 @@ float arithmetic 2.sin:
 	movss [rsp+0x1C], xmm0
 	mov eax, [rsp+0x18]
 	movsxd rax, eax
-	mov r8, rax
+	mov r9, rax
 	mov rdi, [rsp]
-	mov rax, r8
+	mov rax, r9
 	xor rdx, rdx
 	idiv rsi
-	mov rdx, r8
-	sub rdx, 0x01
+	mov r8, rax
+	mov rax, r9
+	sub rax, 0x01
+	mov rdx, rax
+	mov rax, r8
 	add rdi, rax
 	mov rax, rdx
 	and rdi, rax

@@ -17,9 +17,9 @@ main:
 	mov rbx, rax
 	mov rdi, 0x07
 	call :comptime 1.main.some_fn(some_int = uint)(ui = uint)
-	mov rcx, rax
-	mov rax, rbx
-	add rax, rcx
+	mov rcx, rbx
+	add rcx, rax
+	mov rax, rcx
 	mov rcx, rax
 	mov rax, rbp
 	sub rax, rcx
