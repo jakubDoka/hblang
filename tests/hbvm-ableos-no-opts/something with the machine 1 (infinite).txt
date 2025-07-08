@@ -1,0 +1,14 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        jal $31, $0, :something with the machine 1 (infinite).foo
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+something with the machine 1 (infinite).foo:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+2:      jal $31, $0, :something with the machine 1 (infinite).broken
+        jmp :2
+something with the machine 1 (infinite).broken:
+       jala $0, $31, 0

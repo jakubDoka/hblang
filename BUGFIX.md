@@ -2,6 +2,25 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### something with the machine 1 (infinite)
+```hb
+expectations := .{
+    times_out: true,
+}
+
+broken := fn(): struct{} return .()
+
+foo := fn(): uint {
+    loop {
+        _ = broken()
+    }
+}
+
+main := fn(): uint {
+    return @inline(foo)
+}
+```
+
 #### regalloc crash 1
 ```hb
 X := struct{.a: u8; .b: u64; .c: u8}

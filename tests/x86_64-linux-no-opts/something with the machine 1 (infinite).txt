@@ -1,0 +1,11 @@
+something with the machine 1 (infinite).foo:
+	sub rsp, 0x08
+0:	call :something with the machine 1 (infinite).broken
+	jmp :0
+something with the machine 1 (infinite).broken:
+	ret
+main:
+	sub rsp, 0x08
+	call :something with the machine 1 (infinite).foo
+	add rsp, 0x08
+	ret

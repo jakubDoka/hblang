@@ -451,7 +451,7 @@ pub const InlineFunc = struct {
         } else {
             func.subsume(dest_mem, entry_mem.?);
             if (call_end_entry_mem != null) {
-                func.subsume(exit_mem.?, call_end_entry_mem.?);
+                func.subsume(exit_mem orelse dest_mem, call_end_entry_mem.?);
             }
         }
 

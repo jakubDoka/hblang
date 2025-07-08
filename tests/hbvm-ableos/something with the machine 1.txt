@@ -1,0 +1,6 @@
+something with the machine 1:14:2: expected void got uint
+    @inline(foo)
+    ^
+something with the machine 1:13:20: function returns a type with more then 1 value, but end of the function body is reachableuint
+main := fn(): uint {
+                   ^
