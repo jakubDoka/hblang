@@ -2,6 +2,17 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### field access on non scope type 1
+```hb
+expectations := .{
+    should_error: true,
+}
+
+main := fn(): u32 {
+    return (fn(): type return struct{}).test
+}
+```
+
 #### deep instantiation 1
 ```hb
 S := fn($A: type): type return struct {

@@ -2697,7 +2697,10 @@ pub fn lookupScopeItem(
     }
 
     const decl, const path, _ =
-        bsty.index(self.types).?.search(name) orelse {
+        (bsty.index(self.types) orelse {
+            return self.report(pos, "the {} does not have a scope," ++
+                " so field access does not make sense", .{bsty});
+        }).search(name) orelse {
             return self.report(pos, "{} does not declare this", .{bsty});
         };
 
