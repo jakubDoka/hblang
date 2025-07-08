@@ -1,0 +1,84 @@
+regalloc crash 2 (infinite).broken:
+	ret
+main:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	push r14
+	push r15
+	sub rsp, 0x108
+	lea rax, [rsp+0x60]
+	mov [rsp+0x58], rax
+	lea rax, [rsp]
+	mov [rsp+0x50], rax
+	mov rax, 0x18
+	mov [rsp+0x48], rax
+	lea rax, [rsp+0x78]
+	mov [rsp+0x40], rax
+	lea rax, [rsp]
+	mov [rsp+0x38], rax
+	lea rax, [rsp+0x90]
+	mov [rsp+0x30], rax
+	lea rax, [rsp]
+	mov [rsp+0x28], rax
+	lea rax, [rsp+0xA8]
+	mov [rsp+0x20], rax
+	lea rax, [rsp]
+	mov [rsp+0x18], rax
+	lea rax, [rsp+0xC0]
+	mov r15, rax
+	lea rax, [rsp]
+	mov r14, rax
+	lea rax, [rsp+0xD8]
+	mov r13, rax
+	lea rax, [rsp]
+	mov r12, rax
+	lea rax, [rsp+0xF0]
+	mov rbp, rax
+	lea rax, [rsp]
+	mov rbx, rax
+0:	mov byte ptr [rsp+0x60], 0x00
+	mov rdx, [rsp+0x48]
+	mov rdi, [rsp+0x50]
+	mov rsi, [rsp+0x58]
+	call :memcpy
+	call :regalloc crash 2 (infinite).broken
+	mov byte ptr [rsp+0x78], 0x00
+	mov rdx, [rsp+0x48]
+	mov rdi, [rsp+0x38]
+	mov rsi, [rsp+0x40]
+	call :memcpy
+	call :regalloc crash 2 (infinite).broken
+	mov byte ptr [rsp+0x90], 0x00
+	mov rdx, [rsp+0x48]
+	mov rdi, [rsp+0x28]
+	mov rsi, [rsp+0x30]
+	call :memcpy
+	call :regalloc crash 2 (infinite).broken
+	mov byte ptr [rsp+0xA8], 0x00
+	mov rdx, [rsp+0x48]
+	mov rdi, [rsp+0x18]
+	mov rsi, [rsp+0x20]
+	call :memcpy
+	call :regalloc crash 2 (infinite).broken
+	mov byte ptr [rsp+0xC0], 0x00
+	mov rdx, [rsp+0x48]
+	mov rdi, r14
+	mov rsi, r15
+	call :memcpy
+	call :regalloc crash 2 (infinite).broken
+	mov byte ptr [rsp+0xD8], 0x00
+	mov rdx, [rsp+0x48]
+	mov rdi, r12
+	mov rsi, r13
+	call :memcpy
+	call :regalloc crash 2 (infinite).broken
+	mov byte ptr [rsp+0xF0], 0x00
+	mov rdi, rbx
+	mov rsi, rbp
+	mov rdx, [rsp+0x48]
+	call :memcpy
+	call :regalloc crash 2 (infinite).broken
+	jmp :0
+memcpy:

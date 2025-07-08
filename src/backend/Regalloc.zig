@@ -535,6 +535,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             };
 
             for (instr.dataDeps()) |def| {
+                if (instr.hasNoUseFor(def)) continue;
                 const other = if (tmp_liveins.fetchPut(
                     tmp.arena.allocator(),
                     lrg_table[def.schedule],

@@ -22,34 +22,30 @@ structs 3 (call stress test).take_triple:
 main:
 	push rbx
 	push rbp
-	push r12
 	sub rsp, 0x48
 	lea rdi, [rsp+0x18]
 	call :structs 3 (call stress test).return_pair
 	lea rax, [rsp+0x28]
-	mov r12, rax
-	mov rdi, r12
+	mov rbp, rax
+	mov rdi, rbp
 	call :structs 3 (call stress test).return_triple
 	mov dil, [rsp+0x18]
 	mov rsi, [rsp+0x20]
 	call :structs 3 (call stress test).take_pair
-	mov rbp, rax
-	lea rbx, [rsp]
-	mov rax, rbx
+	mov rbx, rax
+	lea rdi, [rsp]
 	mov rdx, 0x18
-	mov rsi, r12
-	mov rdi, rax
+	mov rsi, rbp
 	call :memcpy
 	call :structs 3 (call stress test).take_triple
 	mov rcx, rax
-	mov rax, rbp
+	mov rax, rbx
 	cmp rax, rcx
 	jz :0
 	mov rax, 0x01
 	jmp :1
 0:	mov rax, 0x00
 1:	add rsp, 0x48
-	pop r12
 	pop rbp
 	pop rbx
 	ret

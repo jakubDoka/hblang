@@ -59,53 +59,42 @@ main:
 	push rbp
 	push r12
 	push r13
-	push r14
 	sub rsp, 0x38
 	lea rax, [rsp+0x18]
-	mov r14, rax
+	mov r13, rax
 	mov qword ptr [rsp+0x18], 0x01
 	mov qword ptr [rsp+0x20], 0x02
 	mov qword ptr [rsp+0x28], 0x03
 	mov qword ptr [rsp+0x28], 0x03
 	mov rax, 0x18
-	mov r13, rax
-	lea rbx, [rsp]
-	mov rax, rbx
-	mov rsi, r14
-	mov rdx, r13
-	mov rdi, rax
-	call :memcpy
-	mov rax, 0x00
-	mov rdi, rax
-	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get
 	mov r12, rax
-	lea rbx, [rsp]
-	mov rax, rbx
-	mov rsi, r14
-	mov rdx, r13
-	mov rdi, rax
+	lea rdi, [rsp]
+	mov rsi, r13
+	mov rdx, r12
 	call :memcpy
-	mov rax, 0x01
-	mov rdi, rax
+	mov rdi, 0x00
 	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get
 	mov rbp, rax
-	lea rbx, [rsp]
-	mov rax, rbx
-	mov rdi, rax
-	mov rsi, r14
-	mov rdx, r13
+	lea rdi, [rsp]
+	mov rsi, r13
+	mov rdx, r12
 	call :memcpy
-	mov rax, 0x02
-	mov rdi, rax
+	mov rdi, 0x01
+	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get
+	mov rbx, rax
+	lea rdi, [rsp]
+	mov rsi, r13
+	mov rdx, r12
+	call :memcpy
+	mov rdi, 0x02
 	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get
 	mov rdx, rax
-	mov rax, r12
-	mov rcx, rbp
+	mov rax, rbp
+	mov rcx, rbx
 	add rax, rcx
 	mov rcx, rdx
 	add rax, rcx
 	add rsp, 0x38
-	pop r14
 	pop r13
 	pop r12
 	pop rbp

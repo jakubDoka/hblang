@@ -2,6 +2,26 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### regalloc crash 2 (infinite)
+```hb
+expectations := .{
+    times_out: true,
+}
+
+broken := fn(self: ?[]u8): void {
+}
+
+main := fn(): u32 loop {
+    broken(null)
+    broken(null)
+    broken(null)
+    broken(null)
+    broken(null)
+    broken(null)
+    broken(null)
+}
+```
+
 #### something with the machine 1 (infinite)
 ```hb
 expectations := .{

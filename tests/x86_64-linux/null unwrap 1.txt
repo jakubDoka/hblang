@@ -1,5 +1,4 @@
 null unwrap 1.use_opt:
-	push rbx
 	sub rsp, 0x48
 	mov rcx, rsi
 	mov rax, 0x00
@@ -12,15 +11,12 @@ null unwrap 1.use_opt:
 	mov rax, 0x2800000007
 	mov [rsp+0x30], rax
 	mov rdx, 0x20
-	lea rbx, [rsp]
-	mov rax, rbx
-	mov rdi, rax
+	lea rdi, [rsp]
 	call :memcpy
 	call :null unwrap 1.null_unwrap
 0:	mov rax, rcx
 	add rax, rcx
 	add rsp, 0x48
-	pop rbx
 	ret
 null unwrap 1.null_unwrap:
 	ud2

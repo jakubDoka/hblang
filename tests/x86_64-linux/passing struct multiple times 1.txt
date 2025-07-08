@@ -1,20 +1,16 @@
 passing struct multiple times 1.foo:
-	push rbx
 	sub rsp, 0x28
-	lea rsi, [rsp+0x40]
+	lea rsi, [rsp+0x38]
 	mov rdx, 0x18
-	lea rbx, [rsp]
-	mov rax, rbx
-	mov rdi, rax
+	lea rdi, [rsp]
 	call :memcpy
 	lea rcx, [rsp+0x18]
-	mov ax, [rsp+0x38]
+	mov ax, [rsp+0x30]
 	mov [rcx], ax
-	mov al, [rsp+0x3A]
+	mov al, [rsp+0x32]
 	mov [rcx+0x02], al
 	call :passing struct multiple times 1.bar
 	add rsp, 0x28
-	pop rbx
 	ret
 passing struct multiple times 1.bar:
 	mov r8b, [rsp+0x22]
@@ -33,8 +29,6 @@ passing struct multiple times 1.bar:
 	sub rax, rdx
 	ret
 main:
-	push rbx
-	push rbp
 	sub rsp, 0x48
 	lea rsi, [rsp+0x20]
 	mov qword ptr [rsp+0x20], 0x01
@@ -44,18 +38,14 @@ main:
 	mov byte ptr [rsp+0x39], 0x02
 	mov ax, [rsp+0x38]
 	mov byte ptr [rsp+0x3A], 0x03
-	lea rbp, [rsp]
-	mov [rbp], ax
-	lea rbx, [rsp+0x08]
-	mov rcx, rbx
+	lea rcx, [rsp]
+	mov [rcx], ax
+	lea rdi, [rsp+0x08]
 	mov rdx, 0x18
 	mov al, [rsp+0x3A]
-	mov [rbp+0x02], al
-	mov rdi, rcx
+	mov [rcx+0x02], al
 	call :memcpy
 	call :passing struct multiple times 1.foo
 	add rsp, 0x48
-	pop rbp
-	pop rbx
 	ret
 memcpy:

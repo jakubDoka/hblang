@@ -1,7 +1,6 @@
 directives 20 (@handler, @SourceLoc).main:
 	push rbx
 	push rbp
-	push r12
 	sub rsp, 0x68
 	lea rax, [rsp+0x64]
 	mov byte ptr [rsp+0x64], 0x00
@@ -16,12 +15,12 @@ directives 20 (@handler, @SourceLoc).main:
 	mov [rcx], eax
 	call :directives 20 (@handler, @SourceLoc).produce_memcpy
 	mov rax, 0x00
-	mov r12, rax
-	mov rax, [rsp+0x48]
 	mov rbp, rax
+	mov rax, [rsp+0x48]
+	mov rbx, rax
 	mov rdx, 0x00
-	mov rcx, r12
-	mov rax, rbp
+	mov rcx, rbp
+	mov rax, rbx
 	cmp rcx, rax
 	setnbe al
 	movzx rax, al
@@ -34,14 +33,12 @@ directives 20 (@handler, @SourceLoc).main:
 	mov qword ptr [rsp+0x28], 0x24
 	mov rax, 0x100000001
 	mov [rsp+0x30], rax
-	lea rbx, [rsp]
-	mov rax, rbx
+	lea rdi, [rsp]
 	mov rdx, 0x20
-	mov rdi, rax
 	call :memcpy
-	mov rsi, r12
-	mov rdx, r12
-	mov rdi, rbp
+	mov rsi, rbp
+	mov rdx, rbp
+	mov rdi, rbx
 	call :directives 20 (@handler, @SourceLoc).slice_ioob
 0:	mov rax, [rsp+0x40]
 	mov [rsp+0x50], rax
@@ -50,7 +47,6 @@ directives 20 (@handler, @SourceLoc).main:
 	mov rdi, [rsp+0x50]
 	call :directives 20 (@handler, @SourceLoc).use_slice
 	add rsp, 0x68
-	pop r12
 	pop rbp
 	pop rbx
 	ret
@@ -88,16 +84,15 @@ directives 20 (@handler, @SourceLoc).slice_ioob:
 directives 20 (@handler, @SourceLoc).use_slice:
 	push rbx
 	push rbp
-	push r12
 	sub rsp, 0x58
 	mov [rsp+0x40], rdi
 	mov [rsp+0x48], rsi
 	mov rax, 0x00
-	mov r12, rax
-	mov rax, [rsp+0x48]
 	mov rbp, rax
-	mov rcx, r12
-	mov rax, rbp
+	mov rax, [rsp+0x48]
+	mov rbx, rax
+	mov rcx, rbp
+	mov rax, rbx
 	cmp rcx, rax
 	jb :0
 	lea rsi, [rsp+0x20]
@@ -106,20 +101,17 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	mov qword ptr [rsp+0x28], 0x24
 	mov rax, 0xF00000012
 	mov [rsp+0x30], rax
-	lea rbx, [rsp]
-	mov rax, rbx
+	lea rdi, [rsp]
 	mov rdx, 0x20
-	mov rdi, rax
 	call :memcpy
-	mov rsi, r12
-	mov rdx, r12
-	mov rdi, rbp
+	mov rsi, rbp
+	mov rdx, rbp
+	mov rdi, rbx
 	call :directives 20 (@handler, @SourceLoc).slice_ioob
 0:	mov rax, [rsp+0x40]
 	mov al, [rax]
 	movzx rax, al
 	add rsp, 0x58
-	pop r12
 	pop rbp
 	pop rbx
 	ret

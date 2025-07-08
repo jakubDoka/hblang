@@ -37,7 +37,6 @@ structs 1.pass:
 	ret
 main:
 	push rbx
-	push rbp
 	sub rsp, 0x48
 	lea rsi, [rsp+0x18]
 	mov qword ptr [rsp+0x18], 0x04
@@ -46,9 +45,7 @@ main:
 	mov [rsp+0x20], rax
 	mov qword ptr [rsp+0x28], 0x03
 	mov rdx, 0x18
-	lea rbp, [rsp]
-	mov rax, rbp
-	mov rdi, rax
+	lea rdi, [rsp]
 	call :memcpy
 	lea rax, [rsp+0x30]
 	mov rbx, rax
@@ -75,7 +72,6 @@ main:
 2:	mov rdi, rbx
 	call :structs 1.pass
 3:	add rsp, 0x48
-	pop rbp
 	pop rbx
 	ret
 memcpy:
