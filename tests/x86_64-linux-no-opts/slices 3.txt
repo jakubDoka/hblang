@@ -25,13 +25,12 @@ slices 3.reverse:
 	add rax, rcx
 	mov al, [rax]
 	mov [rsp+0x20], al
-	mov rsi, [rsp]
-	mov rdx, [rsp+0x18]
-	mov rcx, [rsp+0x10]
-	mov rax, rsi
-	add rax, rcx
-	mov rcx, rsi
-	add rcx, rdx
+	mov rcx, [rsp]
+	mov rsi, [rsp+0x18]
+	mov rdx, [rsp+0x10]
+	mov rax, rcx
+	add rax, rdx
+	add rcx, rsi
 	mov al, [rax]
 	mov [rcx], al
 	mov rax, [rsp]

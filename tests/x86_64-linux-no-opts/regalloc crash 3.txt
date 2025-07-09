@@ -8,8 +8,7 @@ main:
 	push rbp
 	sub rsp, 0x288
 	lea rbp, [0x0000000000000007]
-	mov rax, 0x18
-	mov rbx, rax
+	mov rbx, 0x18
 1:	mov rax, [rbp]
 	cmp rax, rax
 	jnz :0

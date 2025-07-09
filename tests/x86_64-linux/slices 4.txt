@@ -1,45 +1,41 @@
 slices 4.equals:
-	mov r10, 0x00
+	mov r8, 0x00
 	cmp rsi, rcx
 	jz :0
-	mov al, r10b
 	jmp :1
-0:	mov r9, 0x01
+0:	mov r10, 0x01
 	cmp rdi, rdx
 	jnz :2
-	mov al, r9b
-1:	jmp :5
+	mov r8b, r10b
+1:	jmp :3
 2:	mov rax, 0x00
-6:	cmp rax, rsi
+7:	cmp rax, rsi
 	jnz :4
-	mov al, r9b
+	mov al, r10b
 	jmp :5
-4:	mov r8, rdi
-	add r8, rax
+4:	mov r9, rdi
+	add r9, rax
 	mov rcx, rdx
 	add rcx, rax
-	mov r8b, [r8]
+	mov r9b, [r9]
 	mov cl, [rcx]
-	cmp r8b, cl
-	jz :5
-	mov al, r10b
+	cmp r9b, cl
+	jz :6
+3:	mov al, r8b
 5:	ret
-5:	add rax, 0x01
-	jmp :6
+6:	add rax, 0x01
+	jmp :7
 main:
 	push rbx
 	push rbp
 	push r12
 	sub rsp, 0x08
-	lea rax, [rsp]
-	mov r12, rax
+	lea r12, [rsp]
 	mov byte ptr [rsp], 0x61
 	mov byte ptr [rsp+0x01], 0x62
 	mov byte ptr [rsp+0x02], 0x63
-	mov rax, 0x03
-	mov rbp, rax
-	lea rax, [0x0000000000000007]
-	mov rbx, rax
+	mov rbp, 0x03
+	lea rbx, [0x0000000000000007]
 	mov rsi, rbp
 	mov rcx, rbp
 	mov rdi, rbx

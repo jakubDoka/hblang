@@ -39,9 +39,8 @@ main:
 	mov rdx, rbx
 	mov rdi, rbp
 	call :cstring indexing.slice_ioob
-1:	mov rdi, rbx
-	imul rdi, rcx
-	mov r8, rdi
+1:	mov r8, rbx
+	imul r8, rcx
 	mov rdi, rsi
 	add rdi, r8
 	mov r9, [rdi]

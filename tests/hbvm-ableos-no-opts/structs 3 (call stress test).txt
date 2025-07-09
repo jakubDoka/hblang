@@ -4,8 +4,7 @@ main:
         jal $31, $0, :structs 3 (call stress test).return_pair
          st $1, $254, 0, 1
          st $2, $254, 8, 8
-     addi64 $1, $254, 16
-         cp $33, $1
+     addi64 $33, $254, 16
          cp $1, $33
         jal $31, $0, :structs 3 (call stress test).return_triple
          ld $1, $254, 0, 1
@@ -14,9 +13,7 @@ main:
          cp $32, $1
          cp $1, $33
         jal $31, $0, :structs 3 (call stress test).take_triple
-         cp $2, $1
-         cp $1, $32
-        jeq $1, $2, :4
+        jeq $32, $1, :4
        li64 $1, 1
         jmp :5
 4:     li64 $1, 0

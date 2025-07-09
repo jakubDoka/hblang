@@ -7,9 +7,8 @@ main:
 	call :deep dedup 2 (generics).size(t = int)
 	mov rbx, rax
 	call :deep dedup 2 (generics).size(t = int)
-	mov rcx, rax
+	sub rbx, rax
 	mov rax, rbx
-	sub rax, rcx
 	add rsp, 0x08
 	pop rbx
 	ret

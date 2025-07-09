@@ -18,9 +18,9 @@ main:
 	mov rbx, rax
 	mov rdi, 0x05
 	call :directives 13 (@Any).foo(vl: u8)
-	movzx rcx, al
+	movzx rax, al
+	add rbx, rax
 	mov rax, rbx
-	add rax, rcx
 	add rsp, 0x08
 	pop rbx
 	ret

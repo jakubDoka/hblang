@@ -4,9 +4,7 @@ main:
         jal $31, $0, :forced shl 1.two
          cp $32, $1
         jal $31, $0, :forced shl 1.one
-         cp $2, $1
-         cp $1, $32
-      slu64 $1, $1, $2
+      slu64 $1, $32, $1
      addi64 $254, $254, 16
          ld $31, $254, -16, 16
          tx

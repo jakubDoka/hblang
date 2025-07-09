@@ -4,8 +4,7 @@ typeof is not comptime 1.broken1:
 	mov rax, 0x01
 	mov rdi, 0x02
 	lea rsi, [0x0000000000000007]
-	mov rcx, 0x00
-	mov rbx, rcx
+	mov rbx, 0x00
 	mov rdx, rbx
 	syscall
 	mov rax, rbx

@@ -89,8 +89,7 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	mov [rsp+0x48], rsi
 	mov rax, 0x00
 	mov rbp, rax
-	mov rax, [rsp+0x48]
-	mov rbx, rax
+	mov rbx, [rsp+0x48]
 	mov rcx, rbp
 	mov rax, rbx
 	cmp rcx, rax

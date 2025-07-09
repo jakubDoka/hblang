@@ -48,7 +48,8 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             try self.def.format(a, b, writer);
             try writer.writeAll(", ");
             try writer.writeAll("mask: ");
-            for (setMasks(self.mask)) |m| {
+            var mask = self.mask;
+            for (setMasks(&mask)) |m| {
                 try writer.print("{x:016} ", .{m});
             }
             if (self.killed_by) |k| {
@@ -321,7 +322,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 if (instr.isDef()) {
                     std.debug.print("  [{}] {x} {}\n", .{
                         lrg_table[instr.schedule].index(lrgs),
-                        lrg_table[instr.schedule].mask.masks[0],
+                        setMasks(&lrg_table[instr.schedule].mask)[0],
                         instr,
                     });
                 } else {
@@ -519,12 +520,14 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 const active_lrg: *LiveRange = &lrgs[al];
                 // we don't skip if killed_by is not null since we are going in reverse
                 std.debug.assert(active_lrg.mask.bit_length >= @bitSizeOf(@TypeOf(kills)));
+
                 @as(
                     *align(@alignOf(usize)) @TypeOf(kills),
                     @ptrCast(&setMasks(&active_lrg.mask)[0]),
                 ).* &= ~kills;
 
                 if (active_lrg.mask.count() == 0) {
+                    if (should_log) std.debug.print("{} killed {}\n", .{ instr, active_lrg });
                     active_lrg.killed_by = instr;
                     active_lrg.fail(lrgs, &failed);
                 }
@@ -624,6 +627,104 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
         }
     }
 
+    // coalsce
+    //
+    var coalesced = false;
+    for (func.gcm.postorder) |bb| {
+        var removed: usize = 0;
+        coalesce: for (tmp.arena.dupe(*Node, bb.base.outputs()), 0..) |instr, i| {
+            if (instr.kind != .MachSplit) continue;
+
+            const splitLrg = lrg_table[instr.schedule].unionFind();
+            const defLrg = lrg_table[instr.dataDeps()[0].schedule].unionFind();
+            if (splitLrg != defLrg) {
+                const lhs, const rhs = if (ifg[splitLrg.index(lrgs)].len >
+                    ifg[defLrg.index(lrgs)].len)
+                    .{ defLrg, splitLrg }
+                else
+                    .{ splitLrg, defLrg };
+
+                if (!setIntersects(lhs.mask, rhs.mask)) continue :coalesce;
+
+                // we suffle the edges around to then be joined in bulk
+                var to_move: usize = 0;
+                for (ifg[lhs.index(lrgs)]) |*other| {
+                    if (other.* == rhs.index(lrgs)) {
+                        continue :coalesce;
+                    }
+
+                    if (std.mem.indexOfScalar(u16, ifg[rhs.index(lrgs)], other.*) ==
+                        null)
+                    {
+                        swap(other, &ifg[lhs.index(lrgs)][to_move]);
+                        to_move += 1;
+                    }
+                }
+
+                var set: Set = lhs.mask.clone(tmp.arena.allocator()) catch unreachable;
+                set.setIntersection(rhs.mask);
+
+                if (ifg[rhs.index(lrgs)].len + to_move >= set.count()) {
+                    continue :coalesce;
+                }
+
+                const final_adj = std.mem.concat(tmp.arena.allocator(), u16, &.{
+                    ifg[rhs.index(lrgs)],
+                    ifg[lhs.index(lrgs)][0..to_move],
+                }) catch unreachable;
+
+                std.debug.assert(!rhs.unify(lhs, lrgs));
+                const winner = rhs.unionFind();
+                const looser = if (rhs == winner) lhs else rhs;
+                ifg[winner.index(lrgs)] = final_adj;
+
+                if (winner.def == instr) winner.def = looser.def;
+
+                for (ifg[looser.index(lrgs)]) |adj| {
+                    const other_adj = ifg[adj];
+                    const idx = std.mem.indexOfScalar(
+                        u16,
+                        other_adj,
+                        looser.index(lrgs),
+                    ).?;
+                    if (std.mem.indexOfScalar(
+                        u16,
+                        other_adj,
+                        winner.index(lrgs),
+                    ) != null) {
+                        swap(&other_adj[idx], &other_adj[other_adj.len - 1]);
+                        ifg[adj].len -= 1;
+                    } else {
+                        other_adj[idx] = winner.index(lrgs);
+                    }
+                }
+            }
+
+            coalesced = true;
+
+            if (should_log) {
+                std.debug.print("coalesce: {} + {}\n", .{ instr, instr.dataDeps()[0] });
+                std.debug.print("lrg:     {}\n", .{splitLrg});
+                std.debug.print("drg:     {}\n", .{defLrg});
+            }
+
+            // TODO: could we actuially retain here?
+            // maybe not
+            std.mem.rotate(*Node, bb.base.outputs()[i - removed ..], 1);
+            bb.base.output_len -= 1;
+            instr.inputs()[0] = null;
+            removed += 1;
+
+            func.subsume(instr.dataDeps()[0], instr);
+        }
+    }
+
+    if (coalesced) for (lrg_table) |*lrg| {
+        lrg.* = lrg.*.unionFind();
+    };
+
+    // coloring
+    //
     var color_stack = tmp.arena.alloc(u16, lrgs.len);
     var fill: usize = 0;
     for (lrgs, 0..) |lrg, i| {
@@ -706,15 +807,16 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
     }
 
     // first allocate into tmp since its near in memory
-    const alloc = tmp.arena.alloc(u16, func.gcm.instr_count);
+    var alloc = tmp.arena.makeArrayList(u16, func.gcm.instr_count);
 
     for (func.gcm.postorder) |bb| {
         for (bb.base.outputs()) |instr| {
             if (instr.schedule == no_def_sentinel) continue;
             const instr_lrg = lrg_table[instr.schedule];
-            alloc[instr.schedule] = instr_lrg.reg;
+            instr.schedule = @intCast(alloc.items.len);
+            alloc.appendAssumeCapacity(instr_lrg.reg);
         }
     }
 
-    return func.arena.allocator().dupe(u16, alloc) catch unreachable;
+    return func.arena.allocator().dupe(u16, alloc.items) catch unreachable;
 }

@@ -4,9 +4,7 @@ main:
         jal $31, $0, :deep dedup 2 (generics).size(t = uint)
          cp $32, $1
         jal $31, $0, :deep dedup 2 (generics).size(t = int)
-         cp $2, $1
-         cp $1, $32
-      sub64 $1, $1, $2
+      sub64 $1, $32, $1
      addi64 $254, $254, 16
          ld $31, $254, -16, 16
          tx

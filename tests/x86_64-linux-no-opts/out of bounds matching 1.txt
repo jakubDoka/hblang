@@ -71,8 +71,7 @@ main:
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x10], rax
 	mov qword ptr [rsp+0x18], 0x0C
-	lea rax, [rsp]
-	mov rbx, rax
+	lea rbx, [rsp]
 	mov rsi, [rsp+0x10]
 	mov rdx, [rsp+0x18]
 	mov rdi, rbx

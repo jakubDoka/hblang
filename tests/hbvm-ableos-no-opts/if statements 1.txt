@@ -21,9 +21,7 @@ if statements 1.fib:
          ld $1, $254, 0, 8
      addi64 $1, $1, -2
         jal $31, $0, :if statements 1.fib
-         cp $2, $1
-         cp $1, $32
-      add64 $1, $1, $2
+      add64 $1, $32, $1
 2:   addi64 $254, $254, 24
          ld $31, $254, -16, 16
        jala $0, $31, 0

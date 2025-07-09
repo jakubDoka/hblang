@@ -4,9 +4,7 @@ main:
         jal $31, $0, :forced div 1.two
          cp $32, $1
         jal $31, $0, :forced div 1.one
-         cp $2, $1
-         cp $1, $32
-     diru64 $1, $0, $1, $2
+     diru64 $1, $0, $32, $1
      addi64 $254, $254, 16
          ld $31, $254, -16, 16
          tx

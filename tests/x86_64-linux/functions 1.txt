@@ -1,10 +1,10 @@
 functions 1.add_one:
+	add rdi, 0x01
 	mov rax, rdi
-	add rax, 0x01
 	ret
 functions 1.add_two:
+	add rdi, 0x02
 	mov rax, rdi
-	add rax, 0x02
 	ret
 main:
 	push rbx
@@ -14,9 +14,8 @@ main:
 	mov rbx, rax
 	mov rdi, 0x14
 	call :functions 1.add_two
-	mov rcx, rax
+	add rbx, rax
 	mov rax, rbx
-	add rax, rcx
 	add rsp, 0x08
 	pop rbx
 	ret

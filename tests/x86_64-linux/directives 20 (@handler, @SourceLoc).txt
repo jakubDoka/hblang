@@ -5,8 +5,7 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	push rbp
 	sub rsp, 0x48
 	mov rbp, rsi
-	mov rax, 0x00
-	mov rbx, rax
+	mov rbx, 0x00
 	mov rcx, rbp
 	mov rax, rbx
 	cmp rax, rcx
@@ -55,8 +54,7 @@ directives 20 (@handler, @SourceLoc).slice_ioob:
 _start:
 	push rbx
 	sub rsp, 0x18
-	lea rax, [rsp+0x08]
-	mov rbx, rax
+	lea rbx, [rsp+0x08]
 	mov byte ptr [rsp+0x08], 0x00
 	mov byte ptr [rsp+0x04], 0x01
 	mov byte ptr [rsp+0x05], 0x02

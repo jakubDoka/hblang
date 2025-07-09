@@ -30,23 +30,22 @@ main:
 	jz :2
 	mov rax, 0x02
 1:	jmp :3
-2:	mov rdx, 0x03
+2:	mov rax, 0x03
 	mov rbx, 0x04
-b:	mov rcx, [rsp]
-	mov rax, rcx
-	add rax, 0x01
-	cmp rcx, rdx
+b:	mov rdx, [rsp]
+	mov rcx, rdx
+	add rcx, 0x01
+	cmp rdx, rax
 	jnz :4
-	mov [rsp], rax
+	mov [rsp], rcx
 	jmp :5
-4:	cmp rcx, rbx
+4:	cmp rdx, rbx
 	jnz :6
-	mov [rsp], rax
-	mov rcx, 0x05
-	mov rax, [rsp]
-	cmp rax, rcx
+	mov [rsp], rcx
+	mov rdx, 0x05
+	mov rcx, [rsp]
+	cmp rcx, rdx
 	jz :7
-	mov rax, rdx
 3:	jmp :8
 7:	mov rax, 0x90000002
 	mov [rsp+0x10], eax
@@ -65,5 +64,5 @@ b:	mov rcx, [rsp]
 a:	add rsp, 0x18
 	pop rbx
 	ret
-6:	mov [rsp], rax
+6:	mov [rsp], rcx
 5:	jmp :11

@@ -3,8 +3,7 @@ regalloc crash 2 (infinite).broken:
 main:
 	push rbx
 	sub rsp, 0xC8
-	mov rax, 0x18
-	mov rbx, rax
+	mov rbx, 0x18
 0:	lea rsi, [rsp+0x18]
 	mov byte ptr [rsp+0x18], 0x00
 	lea rdi, [rsp]

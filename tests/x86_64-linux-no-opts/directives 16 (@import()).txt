@@ -7,8 +7,7 @@ main:
 	mov rax, [rsp]
 	mov qword ptr [rax], 0x0A
 	mov rdi, [rsp]
-	mov rax, [rdi]
-	mov rbx, rax
+	mov rbx, [rdi]
 	call :free
 	mov rax, rbx
 	add rsp, 0x08

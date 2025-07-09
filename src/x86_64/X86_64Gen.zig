@@ -448,6 +448,10 @@ pub const Set = struct {
     pub fn unset(s: *Set, idx: usize) void {
         s.bits &= ~(@as(u64, 1) << @intCast(idx));
     }
+
+    pub fn clone(s: Set, _: anytype) !Set {
+        return s;
+    }
 };
 
 pub fn setIntersects(a: Set, b: Set) bool {

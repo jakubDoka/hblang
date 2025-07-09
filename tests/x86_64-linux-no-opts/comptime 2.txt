@@ -38,9 +38,8 @@ main:
 	call :comptime 2.main.some_fn3(some_int = uint)(fnc = comptime 2.main.some_fn(some_int = uint))
 	mov rbx, rax
 	call :comptime 2.main.some_fn3(some_int = uint)(fnc = comptime 2.main.some_fn3(some_int = uint)(fnc = comptime 2.main.some_fn2(some_int = uint, some_fn = comptime 2.main.some_fn(some_int = uint))))
-	mov rcx, rax
+	add rbx, rax
 	mov rax, rbx
-	add rax, rcx
 	add rsp, 0x18
 	pop rbx
 	ret

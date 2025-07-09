@@ -12,16 +12,13 @@ main:
 	push rbp
 	sub rsp, 0x08
 	call :foo.hb.foo
-	mov rbp, rax
-	call :foo.hb.bar
 	mov rbx, rax
+	call :foo.hb.bar
+	mov rbp, rax
 	call :bas.hb.baz
-	mov rdx, rax
-	mov rax, rbp
-	mov rcx, rbx
-	add rax, rcx
-	mov rcx, rdx
-	add rax, rcx
+	add rbx, rbp
+	add rbx, rax
+	mov rax, rbx
 	add rsp, 0x08
 	pop rbp
 	pop rbx

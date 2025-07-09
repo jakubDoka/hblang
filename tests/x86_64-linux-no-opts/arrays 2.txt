@@ -33,24 +33,23 @@ main:
 	mov [rsp+0x50], rax
 	jmp :2
 0:	mov qword ptr [rsp+0x60], 0x00
-5:	mov r8, [rsp+0x60]
-	cmp r8, 0x03
+5:	mov rdx, [rsp+0x60]
+	cmp rdx, 0x03
 	setz al
 	movzx rax, al
-	mov rdi, [rsp+0x58]
+	mov r8, [rsp+0x58]
 	test al, al
 	jz :3
-	add rdi, 0x01
-	mov [rsp+0x58], rdi
+	add r8, 0x01
+	mov [rsp+0x58], r8
 	jmp :4
-3:	mov rdx, rdi
-	imul rdx, r10
-	mov rsi, r8
+3:	mov rdi, r8
+	imul rdi, r10
+	mov rsi, rdx
 	imul rsi, rcx
 	mov rax, r9
-	add rax, rdx
-	mov rdx, r8
-	imul rdx, rdi
+	add rax, rdi
+	imul rdx, r8
 	add rax, rsi
 	mov [rax], rdx
 	mov rax, [rsp+0x60]

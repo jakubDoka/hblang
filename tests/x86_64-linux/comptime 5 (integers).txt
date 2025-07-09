@@ -4,12 +4,11 @@ comptime 5 (integers).main.func(value: uint):
 main:
 	sub rsp, 0x08
 	call :comptime 5 (integers).main.func(value: uint)
-	mov rsi, rax
-	lea rcx, [0x0000000000000007]
+	mov rcx, rax
+	lea rdx, [0x0000000000000007]
 	lea rax, [0x0000000000000007]
 	mov rax, [rax]
-	mov rdx, [rcx]
-	mov rcx, rsi
+	mov rdx, [rdx]
 	sub rax, rcx
 	add rax, rdx
 	add rsp, 0x08

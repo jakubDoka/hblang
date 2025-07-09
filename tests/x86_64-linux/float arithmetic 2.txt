@@ -1,51 +1,44 @@
 float arithmetic 2.sin:
-	movss xmm5, xmm0
-	mov rcx, 0x4060000000000000
-	mov rax, 0x400921FB60000000
-	mov r11, 0x3F000000
-	mov r10, 0x40C90FDB
-	mov r9, 0x43800000
-	mov r8, 0x04
-	lea rdi, [0x0000000000000007]
-	movss xmm0, xmm5
+	movss xmm2, xmm0
+	mov rsi, 0x4060000000000000
+	mov rdx, 0x400921FB60000000
+	mov r10, 0x3F000000
+	mov r9, 0x40C90FDB
+	mov r8, 0x43800000
+	mov rcx, 0x04
+	lea rax, [0x0000000000000007]
+	movss xmm0, xmm2
 	cvtss2sd xmm0, xmm0
-	movq xmm2, rcx
-	movq xmm1, rax
-	mulsd xmm0, xmm2
+	movq xmm3, rsi
+	movq xmm1, rdx
+	mulsd xmm0, xmm3
 	divsd xmm0, xmm1
-	cvttsd2si rsi, xmm0
-	mov rcx, rsi
-	add rcx, 0x40
-	mov rax, rsi
-	and rax, 0xFF
-	and rcx, 0xFF
-	imul rax, r8
-	mov rdx, rcx
-	imul rdx, r8
-	mov rcx, rdi
-	add rcx, rax
-	mov rax, rdi
+	cvttsd2si rdi, xmm0
+	mov rdx, rdi
+	add rdx, 0x40
+	mov rsi, rdi
+	and rsi, 0xFF
+	and rdx, 0xFF
+	imul rsi, rcx
+	imul rdx, rcx
+	mov rcx, rax
+	add rcx, rsi
 	add rax, rdx
-	movd xmm0, r11d
-	movss xmm1, dword ptr [rcx]
-	movss xmm4, xmm1
-	movd xmm2, r10d
-	cvtsi2ss xmm3, esi
-	movd xmm1, r9d
-	mulss xmm3, xmm2
-	divss xmm3, xmm1
+	movd xmm3, r10d
+	movss xmm0, dword ptr [rcx]
+	movd xmm4, r9d
+	cvtsi2ss xmm5, edi
+	movd xmm1, r8d
+	mulss xmm5, xmm4
+	divss xmm5, xmm1
 	movss xmm1, dword ptr [rax]
-	movss xmm2, xmm4
-	mulss xmm0, xmm2
-	movss xmm2, xmm5
-	subss xmm2, xmm3
-	movss xmm3, xmm2
-	movss xmm2, xmm3
-	mulss xmm0, xmm2
-	subss xmm1, xmm0
-	movss xmm0, xmm3
-	mulss xmm1, xmm0
-	movss xmm0, xmm4
+	movss xmm4, xmm0
+	mulss xmm3, xmm4
+	subss xmm2, xmm5
+	movss xmm4, xmm2
+	mulss xmm3, xmm4
+	subss xmm1, xmm3
+	mulss xmm1, xmm2
 	addss xmm0, xmm1
 	ret
 main:

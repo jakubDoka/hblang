@@ -4,10 +4,7 @@ main:
         jal $31, $0, :comptime 2.main.some_fn(some_int = uint)
          cp $32, $1
         jal $31, $0, :comptime 2.main.some_fn2(some_int = uint, some_fn = comptime 2.main.some_fn(some_int = uint))
-         cp $3, $1
-         cp $1, $32
-     addi64 $2, $1, 10
-         cp $1, $3
+     addi64 $2, $32, 10
      addi64 $1, $1, 20
       add64 $1, $2, $1
      addi64 $254, $254, 16

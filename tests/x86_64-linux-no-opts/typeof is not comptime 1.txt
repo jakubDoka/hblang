@@ -4,8 +4,7 @@ typeof is not comptime 1.broken1:
 	lea rax, [0x0000000000000007]
 	mov [rsp], rax
 	mov qword ptr [rsp+0x08], 0x00
-	mov rax, 0x00
-	mov rbx, rax
+	mov rbx, 0x00
 	mov rax, 0x01
 	mov rdi, 0x02
 	mov rsi, [rsp]

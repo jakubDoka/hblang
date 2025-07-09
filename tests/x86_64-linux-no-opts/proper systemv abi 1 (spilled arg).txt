@@ -86,8 +86,7 @@ main:
 	lea rdi, [rsp]
 	mov rax, [rsp+0x30]
 	mov rbp, rax
-	mov rax, [rsp+0x38]
-	mov rbx, rax
+	mov rbx, [rsp+0x38]
 	mov rdx, r12
 	call :memcpy
 	mov rdi, r13

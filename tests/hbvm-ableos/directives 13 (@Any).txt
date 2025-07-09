@@ -9,9 +9,8 @@ main:
          cp $32, $1
         li8 $1, 5
         jal $31, $0, :directives 13 (@Any).foo(vl: u8)
-       andi $2, $1, 255
-         cp $1, $32
-      add64 $1, $1, $2
+       andi $1, $1, 255
+      add64 $1, $32, $1
      addi64 $254, $254, 16
          ld $31, $254, -16, 16
          tx

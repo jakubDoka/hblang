@@ -11,8 +11,8 @@ main:
 	mov rbx, rax
 	call :forced shl 1.one
 	mov rcx, rax
+	shl rbx, cl
 	mov rax, rbx
-	shl rax, cl
 	add rsp, 0x08
 	pop rbx
 	ret

@@ -4,41 +4,40 @@ slices 4.equals:
 	mov [rsp+0x08], rsi
 	mov [rsp+0x10], rdx
 	mov [rsp+0x18], rcx
-	mov rcx, [rsp+0x08]
+	mov rdx, [rsp+0x08]
 	mov rax, [rsp+0x18]
-	mov rdi, 0x00
-	cmp rcx, rax
+	mov rcx, 0x00
+	cmp rdx, rax
 	jz :0
-	mov al, dil
 	jmp :1
-0:	mov rcx, [rsp+0x10]
+0:	mov rdx, [rsp+0x10]
 	mov rax, [rsp]
-	mov rsi, 0x01
-	cmp rax, rcx
+	mov rdi, 0x01
+	cmp rax, rdx
 	jnz :2
-	mov al, sil
-1:	jmp :5
+	mov cl, dil
+1:	jmp :3
 2:	mov qword ptr [rsp+0x20], 0x00
-6:	mov rax, [rsp+0x20]
-	mov rcx, [rsp+0x08]
-	cmp rax, rcx
+7:	mov rax, [rsp+0x20]
+	mov rdx, [rsp+0x08]
+	cmp rax, rdx
 	jnz :4
-	mov al, sil
-	jmp :5
-4:	mov rdx, [rsp+0x10]
-	mov rcx, [rsp]
-	add rdx, rax
-	add rcx, rax
-	mov dl, [rdx]
-	mov cl, [rcx]
-	cmp cl, dl
-	jz :5
 	mov al, dil
+	jmp :5
+4:	mov rsi, [rsp+0x10]
+	mov rdx, [rsp]
+	add rsi, rax
+	add rdx, rax
+	mov sil, [rsi]
+	mov dl, [rdx]
+	cmp dl, sil
+	jz :6
+3:	mov al, cl
 5:	add rsp, 0x30
 	ret
-5:	add rax, 0x01
+6:	add rax, 0x01
 	mov [rsp+0x20], rax
-	jmp :6
+	jmp :7
 main:
 	sub rsp, 0x28
 	lea rax, [0x0000000000000007]
@@ -50,8 +49,7 @@ main:
 	mov byte ptr [rsp+0x22], 0x63
 	mov [rsp+0x10], rax
 	mov qword ptr [rsp+0x18], 0x03
-	mov rax, [rsp]
-	mov rcx, rax
+	mov rcx, [rsp]
 	mov rax, [rsp+0x08]
 	mov rdi, rcx
 	mov rdx, rcx

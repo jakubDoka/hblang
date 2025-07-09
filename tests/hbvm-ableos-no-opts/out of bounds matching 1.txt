@@ -8,10 +8,7 @@ main:
          ld $1, $254, 0, 8
          ld $2, $254, 8, 8
         jal $31, $0, :out of bounds matching 1.byte_iter
-         cp $4, $1
-     addi64 $1, $254, 16
-         cp $3, $1
-         cp $1, $4
+     addi64 $3, $254, 16
          st $1, $254, 16, 8
          st $2, $254, 24, 8
          cp $1, $3

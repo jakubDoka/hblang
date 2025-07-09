@@ -1,16 +1,15 @@
 main:
 	sub rsp, 0x40
-	mov rdi, 0x00
+	mov rsi, 0x00
 	mov r8, 0x08
-	mov rsi, rdi
-3:	cmp rsi, 0x08
+	mov rdi, rsi
+3:	cmp rdi, 0x08
 	setz al
 	movzx rax, al
 	lea rcx, [rsp]
 	test al, al
 	jz :0
-	mov rax, rdi
-	mov rsi, rdi
+	mov rax, rsi
 2:	cmp rsi, 0x08
 	setz dl
 	movzx rdx, dl
@@ -26,11 +25,11 @@ main:
 	mov rdx, [rdx]
 	add rax, rdx
 	jmp :2
-0:	mov rdx, rsi
+0:	mov rdx, rdi
 	imul rdx, r8
-	mov rax, rsi
+	mov rax, rdi
 	add rax, 0x01
 	add rcx, rdx
-	mov [rcx], rsi
-	mov rsi, rax
+	mov [rcx], rdi
+	mov rdi, rax
 	jmp :3

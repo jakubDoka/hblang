@@ -47,8 +47,7 @@ main:
 	mov rdx, 0x18
 	lea rdi, [rsp]
 	call :memcpy
-	lea rax, [rsp+0x30]
-	mov rbx, rax
+	lea rbx, [rsp+0x30]
 	mov rdi, rbx
 	call :structs 1.odher_pass
 	mov rax, [rsp+0x40]

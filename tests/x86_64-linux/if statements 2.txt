@@ -16,13 +16,11 @@ if statements 2.fib:
 	mov rdi, rax
 	call :if statements 2.fib
 	mov rbx, rax
-	mov rax, rbp
-	sub rax, 0x02
-	mov rdi, rax
+	sub rbp, 0x02
+	mov rdi, rbp
 	call :if statements 2.fib
-	mov rcx, rax
+	add rbx, rax
 	mov rax, rbx
-	add rax, rcx
 1:	add rsp, 0x08
 	pop rbp
 	pop rbx

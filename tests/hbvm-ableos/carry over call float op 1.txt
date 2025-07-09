@@ -9,14 +9,10 @@ main:
          cp $32, $1
        li64 $1, 0
         jal $31, $0, :carry over call float op 1.opaque(v: uint)
-         cp $2, $33
-         cp $1, $32
-     fadd32 $1, $2, $1
-         cp $32, $1
+     fadd32 $32, $33, $32
          cp $1, $32
         jal $31, $0, :carry over call float op 1.opaque(v: uint)
-         cp $1, $32
-      fti32 $1, $1, 0
+      fti32 $1, $32, 0
      addi64 $254, $254, 24
          ld $31, $254, -24, 24
          tx

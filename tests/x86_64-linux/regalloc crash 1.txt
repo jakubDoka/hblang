@@ -1,6 +1,5 @@
 regalloc crash 1.broken:
-	lea rax, [rsp+0x08]
-	mov r8, rax
+	lea r8, [rsp+0x08]
 	mov al, sil
 	mov rcx, 0x00
 	mov rdx, 0x18

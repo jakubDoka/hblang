@@ -11,9 +11,8 @@ slices 3.reverse:
 	mov rax, [rsp+0x08]
 	mov [rdi+0x08], rax
 	jmp :1
-0:	mov rax, 0x00
+0:	mov rsi, 0x00
 	sub rdx, 0x01
-	mov rsi, rax
 	mov r9, rdx
 3:	mov rax, [rsp]
 	cmp rsi, r9
@@ -40,8 +39,7 @@ slices 3.reverse:
 main:
 	push rbx
 	sub rsp, 0x28
-	lea rax, [rsp+0x20]
-	mov rbx, rax
+	lea rbx, [rsp+0x20]
 	mov byte ptr [rsp+0x20], 0x01
 	mov byte ptr [rsp+0x21], 0x02
 	mov byte ptr [rsp+0x22], 0x03

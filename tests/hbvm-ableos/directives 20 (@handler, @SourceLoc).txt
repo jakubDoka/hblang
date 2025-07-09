@@ -1,8 +1,7 @@
 entry:
          st $31, $254, -16, 16
      addi64 $254, $254, -21
-     addi64 $1, $254, 0
-         cp $32, $1
+     addi64 $32, $254, 0
         li8 $1, 0
          st $1, $254, 0, 1
         li8 $2, 1
@@ -26,8 +25,7 @@ directives 20 (@handler, @SourceLoc).produce_memcpy:
 directives 20 (@handler, @SourceLoc).use_slice:
          st $31, $254, -8, 8
      addi64 $254, $254, -40
-       li64 $3, 0
-         cp $4, $3
+       li64 $4, 0
          cp $3, $4
        jltu $3, $2, :2
      addi64 $1, $254, 0

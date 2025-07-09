@@ -1,16 +1,13 @@
 main:
          st $31, $254, -24, 24
      addi64 $254, $254, -24
-       li64 $1, 3
-         cp $33, $1
+       li64 $33, 3
          cp $1, $33
         jal $31, $0, :deep dedup 4 (mutuali recursive).fib2
          cp $32, $1
          cp $1, $33
         jal $31, $0, :deep dedup 4 (mutuali recursive).fib2
-         cp $2, $1
-         cp $1, $32
-      sub64 $1, $1, $2
+      sub64 $1, $32, $1
      addi64 $254, $254, 24
          ld $31, $254, -24, 24
          tx
@@ -33,12 +30,9 @@ deep dedup 4 (mutuali recursive).fib_body2:
      addi64 $1, $1, -1
         jal $31, $0, :deep dedup 4 (mutuali recursive).fib2
          cp $32, $1
-         cp $1, $33
-     addi64 $1, $1, -2
+     addi64 $1, $33, -2
         jal $31, $0, :deep dedup 4 (mutuali recursive).fib2
-         cp $2, $1
-         cp $1, $32
-      add64 $1, $1, $2
+      add64 $1, $32, $1
      addi64 $254, $254, 24
          ld $31, $254, -24, 24
        jala $0, $31, 0

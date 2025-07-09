@@ -3,8 +3,7 @@ foo.hb.foo(oo = u8):
 main:
 	push rbx
 	sub rsp, 0x08
-	mov rax, 0x00
-	mov rbx, rax
+	mov rbx, 0x00
 	mov rdi, rbx
 	call :foo.hb.foo(oo = u8)
 	mov rax, rbx

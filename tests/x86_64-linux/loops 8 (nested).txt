@@ -9,22 +9,21 @@ main:
 	test cl, cl
 	jz :0
 	ret
-0:	mov r8, rax
-	mov rdi, r9
+0:	mov rcx, rax
+	mov r8, r9
 	mov rax, r10
-	mov rsi, r10
+	mov rdi, r10
 3:	cmp rax, 0x09
-	setz cl
-	movzx rcx, cl
-	test cl, cl
+	setz sil
+	movzx rsi, sil
+	test sil, sil
 	jz :1
 	add rdx, 0x01
-	mov rax, r8
+	mov rax, rcx
 	jmp :2
-1:	mov rcx, rsi
-	add rcx, rdi
+1:	mov rcx, rdi
+	add rcx, r8
 	add rax, 0x01
-	mov rsi, rdi
-	mov rdi, rcx
+	mov rdi, r8
 	mov r8, rcx
 	jmp :3

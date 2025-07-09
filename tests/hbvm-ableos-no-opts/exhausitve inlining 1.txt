@@ -3,8 +3,7 @@ main:
      addi64 $254, $254, -24
         jal $31, $0, :exhausitve inlining 1.no_op
      addi64 $1, $254, 0
-       li64 $2, 0
-         cp $32, $2
+       li64 $32, 0
          cp $2, $32
          st $2, $254, 0, 8
         jal $31, $0, :exhausitve inlining 1.some_mem_ops

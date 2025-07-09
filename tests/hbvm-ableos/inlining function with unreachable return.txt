@@ -1,0 +1,6 @@
+inlining function with unreachable return:1:21: the loop was declared with breaks or returns but they are all unreachable
+$main2 := fn(): u32 loop if false return 0
+                    ^
+inlining function with unreachable return:1:21: the loop was declared with breaks or returns but they are all unreachable
+$main2 := fn(): u32 loop if false return 0
+                    ^

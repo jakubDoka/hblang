@@ -4,10 +4,8 @@ structs 2.swap:
 	sub rsp, 0x30
 	mov [rsp], rdi
 	mov [rsp+0x08], rsi
-	lea rax, [rsp+0x10]
-	mov rbp, rax
-	mov rax, 0x18
-	mov rbx, rax
+	lea rbp, [rsp+0x10]
+	mov rbx, 0x18
 	mov rsi, [rsp]
 	mov rdi, rbp
 	mov rdx, rbx
