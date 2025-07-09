@@ -432,12 +432,13 @@ pub const InlineFunc = struct {
             }
         }
 
-        for (end.dataDeps(), 0..) |dep, j| {
-            const ret = for (call_end.outputs()) |o| {
-                if (o.kind == .Ret and o.extra(.Ret).index == j) break o;
-            } else continue;
-            func.subsume(dep, ret);
-        }
+        if (end.inputs()[0] != null)
+            for (end.dataDeps(), 0..) |dep, j| {
+                const ret = for (call_end.outputs()) |o| {
+                    if (o.kind == .Ret and o.extra(.Ret).index == j) break o;
+                } else continue;
+                func.subsume(dep, ret);
+            };
 
         if (entry_mem == exit_mem) {
             if (entry_mem != null) {
