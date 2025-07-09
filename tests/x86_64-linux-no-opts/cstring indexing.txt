@@ -24,7 +24,6 @@ main:
 	push rbp
 	push r12
 	push r13
-	push r14
 	sub rsp, 0x88
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x50], rax
@@ -39,8 +38,6 @@ main:
 	mov [rsp+0x48], rax
 	mov qword ptr [rsp+0x80], 0x00
 	mov rax, 0x02
-	mov r14, rax
-	lea rax, [rsp+0x70]
 	mov r13, rax
 	mov rbx, 0x08
 2:	mov rax, [rsp+0x80]
@@ -52,7 +49,7 @@ main:
 	test al, al
 	jz :0
 	mov rcx, r12
-	mov rax, r14
+	mov rax, r13
 	cmp rcx, rax
 	jb :1
 	lea rsi, [rsp+0x20]
@@ -66,15 +63,15 @@ main:
 	call :memcpy
 	mov rsi, r12
 	mov rdx, r12
-	mov rdi, r14
+	mov rdi, r13
 	call :cstring indexing.slice_ioob
 1:	mov rax, r12
 	imul rax, rbx
 	mov rcx, rax
 	mov rax, rbp
 	add rax, rcx
+	lea rdi, [rsp+0x70]
 	mov rsi, [rax]
-	mov rdi, r13
 	call :cstring indexing.cstr
 	mov rax, [rsp+0x80]
 	add rax, 0x01
@@ -82,7 +79,6 @@ main:
 	jmp :2
 0:	mov rax, 0x00
 	add rsp, 0x88
-	pop r14
 	pop r13
 	pop r12
 	pop rbp

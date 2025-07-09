@@ -1,16 +1,16 @@
 main:
 	sub rsp, 0x70
 	mov qword ptr [rsp+0x58], 0x00
-	lea r10, [rsp+0x08]
-	mov r9, 0x18
 	mov rcx, 0x08
+	mov r10, 0x18
 4:	mov rax, [rsp+0x58]
 	cmp rax, 0x03
 	setz al
 	movzx rax, al
+	lea r9, [rsp+0x08]
 	test al, al
 	jz :0
-	mov [rsp+0x68], r10
+	mov [rsp+0x68], r9
 	mov qword ptr [rsp], 0x00
 	mov qword ptr [rsp+0x50], 0x00
 2:	mov rsi, [rsp+0x50]
@@ -44,10 +44,10 @@ main:
 	mov [rsp+0x58], rdi
 	jmp :4
 3:	mov rdx, rdi
-	imul rdx, r9
+	imul rdx, r10
 	mov rsi, r8
 	imul rsi, rcx
-	mov rax, r10
+	mov rax, r9
 	add rax, rdx
 	mov rdx, r8
 	imul rdx, rdi

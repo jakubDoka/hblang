@@ -828,7 +828,7 @@ pub fn Func(comptime Backend: type) type {
                 pub fn better(cfg: *CfgNode, best: *CfgNode, to_sched: *Node, func: *Self) bool {
                     return !cfg.base.isBasicBlockEnd() and (idepth(cfg) > idepth(best) or
                         best.base.isBasicBlockEnd() or
-                        (to_sched.kind != .MachSplit and func.gcm.loopDepthOf(cfg) < func.gcm.loopDepthOf(best)));
+                        (to_sched.kind != .MachSplit and !to_sched.isCheap() and func.gcm.loopDepthOf(cfg) < func.gcm.loopDepthOf(best)));
                 }
 
                 pub fn format(self: *const CfgNode, comptime a: anytype, b: anytype, writer: anytype) !void {
@@ -913,6 +913,10 @@ pub fn Func(comptime Backend: type) type {
                 const kind_idx = @intFromEnum(self.kind);
                 return dep_offset[kind_idx / per_dep_elem] >>
                     @intCast((kind_idx % per_dep_elem) * sub_elem_width) & ((@as(u16, 1) << sub_elem_width) - 1);
+            }
+
+            pub fn isCheap(self: *Node) bool {
+                return self.kind == .Local or self.kind == .StackArgOffset;
             }
 
             pub fn dataDeps(self: *Node) []*Node {

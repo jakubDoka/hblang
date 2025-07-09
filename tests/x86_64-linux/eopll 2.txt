@@ -8,11 +8,9 @@ main:
 	sub rsp, 0x18
 	mov rax, 0x123
 	mov rcx, 0x00
-	mov [rsp], rcx
-	mov rdi, [rsp]
-	syscall
-	lea rcx, [rsp+0x08]
 	mov r15, rcx
+	mov rdi, r15
+	syscall
 	mov rcx, 0x10
 	mov r14, rcx
 	mov rcx, 0xFFFFFFFFFFFFFFFF
@@ -21,13 +19,13 @@ main:
 	mov r12, rcx
 	movsxd rax, eax
 	mov rbp, rax
-	mov rbx, [rsp]
+	mov rbx, r15
 1:	cmp rbx, 0x00
 	setz al
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, [rsp]
+	mov rax, r15
 	add rsp, 0x18
 	pop r15
 	pop r14
@@ -36,11 +34,11 @@ main:
 	pop rbp
 	pop rbx
 	ret
-0:	mov rax, r12
+0:	lea rsi, [rsp]
+	mov rax, r12
 	mov rdi, rbp
-	mov rsi, r15
-	mov rdx, r14
 	mov r10, r13
+	mov rdx, r14
 	syscall
 	add rbx, 0x01
 	jmp :1

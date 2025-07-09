@@ -2,6 +2,33 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+
+Broken := struct { .inner: ?[]u8 }
+broken := fn(self: Broken): ?[]u8 return self.inner
+
+#### regalloc crash 3
+```hb
+Broken := struct{.inner: ?[]u8}
+broken := fn(self: Broken): ?[]u8 return self.inner
+
+A := 5
+main := fn(): u32 loop if A == A return 0 else {
+    _ = broken(.(null))
+    _ = broken(.(null))
+    _ = broken(.(null))
+    _ = broken(.(null))
+    _ = broken(.(null))
+    _ = broken(.(null))
+    _ = broken(.(null))
+    _ = broken(.(null))
+    _ = broken(.(null))
+    _ = broken(.(null))
+    _ = broken(.(null))
+    _ = broken(.(null))
+    _ = broken(.(null))
+}
+```
+
 #### regalloc crash 2 (infinite)
 ```hb
 expectations := .{

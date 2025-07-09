@@ -1,0 +1,67 @@
+main:
+         st $31, $254, -24, 24
+     addi64 $254, $254, -648
+        lra $33, $0, :regalloc crash 3.A
+        li8 $32, 0
+3:       ld $1, $33, 0, 8
+        jne $1, $1, :1
+       li32 $1, 0
+     addi64 $254, $254, 648
+         ld $31, $254, -24, 24
+         tx
+1:   addi64 $2, $254, 24
+         st $32, $254, 24, 1
+     addi64 $1, $254, 0
+        jal $31, $0, :regalloc crash 3.broken
+     addi64 $2, $254, 72
+         st $32, $254, 72, 1
+     addi64 $1, $254, 48
+        jal $31, $0, :regalloc crash 3.broken
+     addi64 $2, $254, 120
+         st $32, $254, 120, 1
+     addi64 $1, $254, 96
+        jal $31, $0, :regalloc crash 3.broken
+     addi64 $2, $254, 168
+         st $32, $254, 168, 1
+     addi64 $1, $254, 144
+        jal $31, $0, :regalloc crash 3.broken
+     addi64 $2, $254, 216
+         st $32, $254, 216, 1
+     addi64 $1, $254, 192
+        jal $31, $0, :regalloc crash 3.broken
+     addi64 $2, $254, 264
+         st $32, $254, 264, 1
+     addi64 $1, $254, 240
+        jal $31, $0, :regalloc crash 3.broken
+     addi64 $2, $254, 312
+         st $32, $254, 312, 1
+     addi64 $1, $254, 288
+        jal $31, $0, :regalloc crash 3.broken
+     addi64 $2, $254, 360
+         st $32, $254, 360, 1
+     addi64 $1, $254, 336
+        jal $31, $0, :regalloc crash 3.broken
+     addi64 $2, $254, 408
+         st $32, $254, 408, 1
+     addi64 $1, $254, 384
+        jal $31, $0, :regalloc crash 3.broken
+     addi64 $2, $254, 456
+         st $32, $254, 456, 1
+     addi64 $1, $254, 432
+        jal $31, $0, :regalloc crash 3.broken
+     addi64 $2, $254, 504
+         st $32, $254, 504, 1
+     addi64 $1, $254, 480
+        jal $31, $0, :regalloc crash 3.broken
+     addi64 $2, $254, 552
+         st $32, $254, 552, 1
+     addi64 $1, $254, 528
+        jal $31, $0, :regalloc crash 3.broken
+     addi64 $2, $254, 600
+         st $32, $254, 600, 1
+     addi64 $1, $254, 576
+        jal $31, $0, :regalloc crash 3.broken
+        jmp :3
+regalloc crash 3.broken:
+        bmc $2, $1, 24
+       jala $0, $31, 0

@@ -17,17 +17,14 @@ main:
 	push rbx
 	push rbp
 	push r12
-	push r13
 	sub rsp, 0x28
 	mov rax, 0x123
 	mov rcx, 0x00
-	mov r13, rcx
-	mov rdi, r13
+	mov r12, rcx
+	mov rdi, r12
 	syscall
 	mov [rsp+0x18], eax
 	mov qword ptr [rsp+0x10], 0x00
-	lea rax, [rsp]
-	mov r12, rax
 	mov rax, 0xFFFFFFFFFFFFFFFF
 	mov rbp, rax
 	mov rax, 0x10
@@ -38,17 +35,16 @@ main:
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, r13
+	mov rax, r12
 	add rsp, 0x28
-	pop r13
 	pop r12
 	pop rbp
 	pop rbx
 	ret
 0:	mov eax, [rsp+0x18]
+	lea rsi, [rsp]
 	movsxd rdi, eax
 	mov rcx, rbp
-	mov rsi, r12
 	mov rdx, rbx
 	call :eopll 2.epoll_wait
 	mov rax, [rsp+0x10]

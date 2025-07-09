@@ -14,25 +14,25 @@ main:
 	lea r12, [rsp]
 	mov [rsp+0x400], r12
 	mov qword ptr [rsp+0x408], 0x00
-	lea rbp, [0x0000000000000007]
 	mov rax, 0x00
 	mov r13, rax
-	mov rbx, 0x00
+	lea rbx, [0x0000000000000007]
+	mov rbp, 0x00
 3:	mov rax, [rsp+0x408]
-	cmp rax, rbx
+	cmp rax, rbp
 	jb :0
-	mov al, [rbp]
+	mov al, [rbx]
 	mov [rsp+0x410], al
 	mov al, [rsp+0x410]
 	mov [rsp+0x410], al
 	mov rcx, [rsp+0x408]
-	cmp rcx, rbx
+	cmp rcx, rbp
 	jnz :2
 	mov rax, [rsp+0x400]
 	mov [rsp+0x400], rax
 	mov [rsp+0x408], rcx
 	jmp :2
-2:	mov sil, [rbp]
+2:	mov sil, [rbx]
 	mov dl, [rsp+0x410]
 	mov rdi, r13
 	call :gcm crash 1 (infinite).func
