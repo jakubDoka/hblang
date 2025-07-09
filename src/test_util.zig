@@ -68,7 +68,7 @@ pub const Expectations = struct {
 };
 
 pub fn runVendoredTest(path: []const u8, target: []const u8, optimizations: Mach.OptOptions) !void {
-    var ast = try root.compile(.{
+    const opts = root.CompileOptions{
         .diagnostics = std.io.getStdErr().writer().any(),
         .colors = std.io.tty.detectConfig(std.io.getStdErr()),
         .output = std.io.null_writer.any(),
@@ -77,7 +77,9 @@ pub fn runVendoredTest(path: []const u8, target: []const u8, optimizations: Mach
         .root_file = path,
         .target = target,
         .optimizations = optimizations,
-    });
+    };
+    utils.Arena.initScratch(opts.scratch_memory);
+    var ast = try root.compile(opts);
     defer ast.arena.deinit();
 }
 

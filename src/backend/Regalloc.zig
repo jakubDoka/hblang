@@ -2,16 +2,9 @@ const std = @import("std");
 const utils = graph.utils;
 const graph = @import("graph.zig");
 
-const Set = std.DynamicBitSetUnmanaged;
 const Map = std.AutoArrayHashMapUnmanaged;
 const Arry = std.ArrayListUnmanaged;
 const Error = error{RegallocFailed};
-
-pub fn setIntersects(a: Set, b: Set) bool {
-    return for (graph.setMasks(a), graph.setMasks(b)) |aa, bb| {
-        if (aa & bb != 0) return true;
-    } else false;
-}
 
 pub inline fn swap(a: anytype, b: @TypeOf(a)) void {
     std.mem.swap(@TypeOf(a.*), a, b);
@@ -33,6 +26,9 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
     const Func = graph.Func(Backend);
     const Node = Func.Node;
     const CfgNode = Func.CfgNode;
+    const Set = Backend.Set;
+    const setIntersects = Backend.setIntersects;
+    const setMasks = Backend.setMasks;
 
     const unresolved_reg = std.math.maxInt(u16);
     const no_def_sentinel = std.math.maxInt(u16);
@@ -52,7 +48,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             try self.def.format(a, b, writer);
             try writer.writeAll(", ");
             try writer.writeAll("mask: ");
-            for (graph.setMasks(self.mask)) |m| {
+            for (setMasks(self.mask)) |m| {
                 try writer.print("{x:016} ", .{m});
             }
             if (self.killed_by) |k| {
@@ -83,7 +79,6 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             o.parent = s;
 
             s.mask.setIntersection(o.mask);
-            o.mask = .{};
 
             return s.mask.count() == 0;
         }
@@ -185,7 +180,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             for (tmp.arena.dupe(*Node, def.outputs())) |use| {
                 if (use == def) continue;
                 if (use == ins) continue;
-                if (use.hasNoUseFor(def)) continue;
+                if (!use.hasUseFor(def)) continue;
                 if (!must and use.kind == .MachSplit and
                     isSameBlockNoClobber(use, lrg_table)) continue;
                 self.setInputNoIntern(use, use.posOfInput(1, def), ins);
@@ -214,7 +209,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
         }
     };
 
-    const LiveMap = Map(*LiveRange, *Node);
+    const LiveMap = Map(u16, *Node);
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
@@ -296,7 +291,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             var seen = Map(*Node, usize).empty;
             seen.ensureTotalCapacity(tmp.arena.allocator(), instr.outputs().len) catch unreachable;
             for (instr.outputs()) |use| {
-                if (use.hasNoUseFor(instr)) {
+                if (instr.kind == .Call and use.kind == .StackArgOffset) {
                     continue;
                 }
                 const idx = use.posOfInput(seen.get(use) orelse 1, instr);
@@ -354,7 +349,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 if (def.schedule == no_def_sentinel) continue;
                 if (lrg_table[def.schedule] != lrg) continue;
                 for (def.outputs()) |o| {
-                    if (o.hasNoUseFor(def)) continue;
+                    if (!o.hasUseFor(def)) continue;
                     members.put(alc, o, {}) catch unreachable;
                 }
                 for (def.dataDeps()) |d| {
@@ -435,10 +430,11 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
         return error.RegallocFailed;
     }
 
+    const BitSet = std.DynamicBitSetUnmanaged;
     const block_liveouts = tmp.arena.alloc(LiveMap, func.gcm.postorder.len);
     @memset(block_liveouts, LiveMap.empty);
-    const interference = tmp.arena.alloc(Set, lrgs.len);
-    for (interference) |*r| r.* = Set.initEmpty(
+    const interference = tmp.arena.alloc(BitSet, lrgs.len);
+    for (interference) |*r| r.* = BitSet.initEmpty(
         tmp.arena.allocator(),
         lrgs.len,
     ) catch unreachable;
@@ -446,7 +442,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
     var conflicts = Map(LiveRange.Conflict, void).empty;
 
     var work_list = tmp.arena.makeArrayList(u16, func.gcm.postorder.len);
-    var in_work_list = Set.initFull(
+    var in_work_list = BitSet.initFull(
         tmp.arena.allocator(),
         func.gcm.postorder.len,
     ) catch unreachable;
@@ -474,7 +470,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             const instr: *Node = in;
             if (instr.schedule != no_def_sentinel) {
                 const instr_lrg = lrg_table[instr.schedule];
-                const value = if (tmp_liveins.fetchSwapRemove(instr_lrg)) |v| v.value else null;
+                const value = if (tmp_liveins.fetchSwapRemove(instr_lrg.index(lrgs))) |v| v.value else null;
                 _ = instr_lrg.selfConflict(instr, value, &conflicts, tmp.arena);
 
                 if (instr.kind == .Phi) continue;
@@ -520,12 +516,12 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
             const kills = instr.clobbers();
             if (kills != 0) for (tmp_liveins.entries.items(.key)) |al| {
-                const active_lrg: *LiveRange = al;
+                const active_lrg: *LiveRange = &lrgs[al];
                 // we don't skip if killed_by is not null since we are going in reverse
                 std.debug.assert(active_lrg.mask.bit_length >= @bitSizeOf(@TypeOf(kills)));
                 @as(
                     *align(@alignOf(usize)) @TypeOf(kills),
-                    @ptrCast(&graph.setMasks(active_lrg.mask)[0]),
+                    @ptrCast(&setMasks(&active_lrg.mask)[0]),
                 ).* &= ~kills;
 
                 if (active_lrg.mask.count() == 0) {
@@ -535,10 +531,10 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             };
 
             for (instr.dataDeps()) |def| {
-                if (instr.hasNoUseFor(def)) continue;
+                if (!instr.hasUseFor(def)) continue;
                 const other = if (tmp_liveins.fetchPut(
                     tmp.arena.allocator(),
-                    lrg_table[def.schedule],
+                    lrg_table[def.schedule].index(lrgs),
                     def,
                 ) catch unreachable) |o| o.value else null;
 
@@ -559,13 +555,13 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 tmp_liveins.entries.items(.value),
             ) |k, v| {
                 const other = pred_block.fetchPut(tmp.arena.allocator(), k, v) catch unreachable;
-                dirty = k.selfConflict(v, if (other) |o| o.value else null, &conflicts, tmp.arena) or dirty;
+                dirty = lrgs[k].selfConflict(v, if (other) |o| o.value else null, &conflicts, tmp.arena) or dirty;
                 dirty = other == null or dirty;
             }
 
             for (bb.base.outputs()) |out| {
                 if (out.kind != .Phi or out.schedule == no_def_sentinel) continue;
-                const k, const v = .{ lrg_table[out.schedule], out.dataDeps()[i] };
+                const k, const v = .{ lrg_table[out.schedule].index(lrgs), out.dataDeps()[i] };
                 const other = pred_block.fetchPut(tmp.arena.allocator(), k, v) catch unreachable;
                 dirty = other == null or dirty;
             }
@@ -689,11 +685,11 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
         if (Func.biased_regs != 0) {
             if (Func.biased_regs & @as(
                 *align(@alignOf(usize)) const u64,
-                @ptrCast(&graph.setMasks(lrg.mask)[0]),
+                @ptrCast(&setMasks(&lrg.mask)[0]),
             ).* != 0) {
                 @as(
                     *align(@alignOf(usize)) u64,
-                    @ptrCast(&graph.setMasks(lrg.mask)[0]),
+                    @ptrCast(&setMasks(&lrg.mask)[0]),
                 ).* &= Func.biased_regs;
             }
         }

@@ -349,7 +349,7 @@ pub fn GcmMixin(comptime Backend: type) type {
                 }
 
                 for (nodes, late_scheds) |on, l| if (on) |n| {
-                    std.debug.assert(self.setInput(n, 0, &l.?.base) == null);
+                    _ = self.setInput(n, 0, &l.?.base);
                 };
 
                 break :sched_late;

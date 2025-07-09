@@ -72,6 +72,9 @@ pub const CompileOptions = struct {
     // specified multiple times as `--path-projection name path`, when the
     // `@use("name")` is encountered, its projected to `@use("path")` #CLI end
     optimizations: backend.Machine.OptOptions = .none,
+    // run the compiler in succesion in order to collect more samples for
+    // profiling
+    benchmark_rounds: usize = 1,
     // #CLI end
 
     pub fn loadCli(self: *CompileOptions, arena: std.mem.Allocator) !void {
@@ -196,8 +199,6 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         try opts.diagnostics.writeAll(help_str);
         return error.Failed;
     }
-
-    utils.Arena.initScratch(opts.scratch_memory);
 
     var type_system_memory = Arena.init(opts.type_system_memory);
     errdefer type_system_memory.deinit();

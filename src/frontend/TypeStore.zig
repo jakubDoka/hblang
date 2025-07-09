@@ -965,8 +965,8 @@ pub fn dumpAnalErrors(self: *Types, anal_errors: *std.ArrayListUnmanaged(static_
                 " decides wheter to break out ouf the loop", .{});
         },
         .InfiniteLoopWithBreak => |loc| {
-            self.reportSloc(loc.loop, "the loop was declared with breaks but" ++
-                " they are all unreachable", .{});
+            self.reportSloc(loc.loop, "the loop was declared with breaks or" ++
+                " returns but they are all unreachable", .{});
         },
     };
     defer anal_errors.items.len = 0;

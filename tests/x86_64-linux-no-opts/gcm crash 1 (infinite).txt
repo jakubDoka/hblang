@@ -15,7 +15,7 @@ main:
 	mov [rsp+0x400], r12
 	mov qword ptr [rsp+0x408], 0x00
 	mov rax, 0x00
-	mov r13, rax
+	mov r13b, al
 	lea rbx, [0x0000000000000007]
 	mov rbp, 0x00
 3:	mov rax, [rsp+0x408]
@@ -34,7 +34,7 @@ main:
 	jmp :2
 2:	mov sil, [rbx]
 	mov dl, [rsp+0x410]
-	mov rdi, r13
+	mov dil, r13b
 	call :gcm crash 1 (infinite).func
 	jmp :3
 0:	mov [rsp+0x400], r12

@@ -262,7 +262,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                     }
 
                     if (!(bb.kind == .If or len == 1)) {
-                        //self.fmtUnscheduled(std.io.getStdErr().writer().any(), .escape_codes);
+                        self.fmtUnscheduled(std.io.getStdErr().writer().any(), .escape_codes);
                         unreachable;
                     }
 

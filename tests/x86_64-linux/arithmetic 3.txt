@@ -2,7 +2,7 @@ arithmetic 3.one:
 	mov rax, 0x01
 	ret
 arithmetic 3.cond:
-	mov rax, rdi
+	mov al, dil
 	ret
 arithmetic 3.mne:
 	mov rax, 0xFF
@@ -15,11 +15,11 @@ main:
 	push rbp
 	sub rsp, 0x08
 	call :arithmetic 3.one
-	mov rbp, rax
+	mov bpl, al
 	call :arithmetic 3.mero
-	mov rbx, rax
-	mov rcx, rbx
-	mov rax, rbp
+	mov bl, al
+	mov cl, bl
+	mov al, bpl
 	cmp al, cl
 	setb dil
 	movzx rdi, dil
@@ -28,8 +28,8 @@ main:
 	jz :0
 	mov rax, 0x01
 	jmp :1
-0:	mov rcx, rbp
-	mov rax, rbp
+0:	mov cl, bpl
+	mov al, bpl
 	cmp cl, al
 	setb dil
 	movzx rdi, dil
@@ -38,8 +38,8 @@ main:
 	jz :2
 	mov rax, 0x02
 1:	jmp :3
-2:	mov rcx, rbx
-	mov rax, rbp
+2:	mov cl, bl
+	mov al, bpl
 	cmp al, cl
 	setbe dil
 	movzx rdi, dil
@@ -48,8 +48,8 @@ main:
 	jz :4
 	mov rax, 0x03
 3:	jmp :5
-4:	mov rcx, rbx
-	mov rax, rbp
+4:	mov cl, bl
+	mov al, bpl
 	cmp cl, al
 	setnbe dil
 	movzx rdi, dil
@@ -58,8 +58,8 @@ main:
 	jz :6
 	mov rax, 0x04
 5:	jmp :7
-6:	mov rcx, rbp
-	mov rax, rbp
+6:	mov cl, bpl
+	mov al, bpl
 	cmp cl, al
 	setnbe dil
 	movzx rdi, dil
@@ -68,8 +68,8 @@ main:
 	jz :8
 	mov rax, 0x05
 7:	jmp :9
-8:	mov rcx, rbx
-	mov rax, rbp
+8:	mov cl, bl
+	mov al, bpl
 	cmp cl, al
 	setnb dil
 	movzx rdi, dil
@@ -79,11 +79,11 @@ main:
 	mov rax, 0x06
 9:	jmp :11
 a:	call :arithmetic 3.mne
-	mov rbp, rax
+	mov bpl, al
 	call :arithmetic 3.mero
-	mov rbx, rax
-	mov rcx, rbx
-	mov rax, rbp
+	mov bl, al
+	mov cl, bl
+	mov al, bpl
 	cmp al, cl
 	setnle dil
 	movzx rdi, dil
@@ -92,8 +92,8 @@ a:	call :arithmetic 3.mne
 	jz :12
 	mov rax, 0x07
 b:	jmp :13
-c:	mov rcx, rbp
-	mov rax, rbp
+c:	mov cl, bpl
+	mov al, bpl
 	cmp cl, al
 	setnle dil
 	movzx rdi, dil
@@ -102,8 +102,8 @@ c:	mov rcx, rbp
 	jz :14
 	mov rax, 0x08
 d:	jmp :15
-e:	mov rcx, rbx
-	mov rax, rbp
+e:	mov cl, bl
+	mov al, bpl
 	cmp al, cl
 	setnl dil
 	movzx rdi, dil
@@ -112,8 +112,8 @@ e:	mov rcx, rbx
 	jz :16
 	mov rax, 0x09
 f:	jmp :17
-10:	mov rcx, rbx
-	mov rax, rbp
+10:	mov cl, bl
+	mov al, bpl
 	cmp cl, al
 	setl dil
 	movzx rdi, dil
@@ -122,8 +122,8 @@ f:	jmp :17
 	jz :18
 	mov rax, 0x0A
 11:	jmp :19
-12:	mov rcx, rbp
-	mov rax, rbp
+12:	mov cl, bpl
+	mov al, bpl
 	cmp cl, al
 	setl dil
 	movzx rdi, dil
@@ -132,8 +132,8 @@ f:	jmp :17
 	jz :20
 	mov rax, 0x0B
 13:	jmp :21
-14:	mov rcx, rbx
-	mov rax, rbp
+14:	mov cl, bl
+	mov al, bpl
 	cmp cl, al
 	setle dil
 	movzx rdi, dil
@@ -143,93 +143,93 @@ f:	jmp :17
 	mov rax, 0x0C
 15:	jmp :23
 16:	call :arithmetic 3.one
-	mov rbx, rax
+	mov bl, al
 	call :arithmetic 3.mero
-	mov rdx, rax
-	mov rcx, rdx
-	mov rax, rbx
+	mov dl, al
+	mov cl, dl
+	mov al, bl
 	cmp al, cl
 	jnb :24
 	mov rax, 0x0D
 17:	jmp :25
-18:	mov rcx, rbx
-	mov rax, rbx
+18:	mov cl, bl
+	mov al, bl
 	cmp cl, al
 	jnb :26
 	mov rax, 0x0E
 19:	jmp :27
-1a:	mov rcx, rdx
-	mov rax, rbx
+1a:	mov cl, dl
+	mov al, bl
 	cmp al, cl
 	jnbe :28
 	mov rax, 0x0F
 1b:	jmp :29
-1c:	mov rcx, rdx
-	mov rax, rbx
+1c:	mov cl, dl
+	mov al, bl
 	cmp cl, al
 	jbe :30
 	mov rax, 0x10
 1d:	jmp :31
-1e:	mov rcx, rbx
-	mov rax, rbx
+1e:	mov cl, bl
+	mov al, bl
 	cmp cl, al
 	jbe :32
 	mov rax, 0x11
 1f:	jmp :33
-20:	mov rcx, rdx
-	mov rax, rbx
+20:	mov cl, dl
+	mov al, bl
 	cmp cl, al
 	jb :34
 	mov rax, 0x12
 21:	jmp :35
 22:	call :arithmetic 3.mne
-	mov rbx, rax
+	mov bl, al
 	call :arithmetic 3.mero
-	mov rdx, rax
-	mov rcx, rdx
-	mov rax, rbx
+	mov dl, al
+	mov cl, dl
+	mov al, bl
 	cmp al, cl
 	jle :36
 	mov rax, 0x13
 23:	jmp :37
-24:	mov rcx, rbx
-	mov rax, rbx
+24:	mov cl, bl
+	mov al, bl
 	cmp cl, al
 	jle :38
 	mov rax, 0x14
 25:	jmp :39
-26:	mov rcx, rdx
-	mov rax, rbx
+26:	mov cl, dl
+	mov al, bl
 	cmp al, cl
 	jl :40
 	mov rax, 0x15
 27:	jmp :41
-28:	mov rcx, rdx
-	mov rax, rbx
+28:	mov cl, dl
+	mov al, bl
 	cmp cl, al
 	jnl :42
 	mov rax, 0x16
 29:	jmp :43
-2a:	mov rcx, rbx
-	mov rax, rbx
+2a:	mov cl, bl
+	mov al, bl
 	cmp cl, al
 	jnl :44
 	mov rax, 0x17
 2b:	jmp :45
-2c:	mov rcx, rdx
-	mov rax, rbx
+2c:	mov cl, dl
+	mov al, bl
 	cmp cl, al
 	jnle :46
 	mov rax, 0x18
 2d:	jmp :47
-2e:	mov rcx, rbx
-	mov rax, rbx
+2e:	mov cl, bl
+	mov al, bl
 	cmp cl, al
 	jz :48
 	mov rax, 0x19
 2f:	jmp :49
-30:	mov rcx, rdx
-	mov rax, rbx
+30:	mov cl, dl
+	mov al, bl
 	cmp al, cl
 	jnz :50
 	mov rax, 0x1A

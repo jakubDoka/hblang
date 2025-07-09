@@ -2,17 +2,17 @@ slices 4.equals:
 	mov r10, 0x00
 	cmp rsi, rcx
 	jz :0
-	mov rax, r10
+	mov al, r10b
 	jmp :1
 0:	mov r9, 0x01
 	cmp rdi, rdx
 	jnz :2
-	mov rax, r9
+	mov al, r9b
 1:	jmp :5
 2:	mov rax, 0x00
 6:	cmp rax, rsi
 	jnz :4
-	mov rax, r9
+	mov al, r9b
 	jmp :5
 4:	mov r8, rdi
 	add r8, rax
@@ -22,7 +22,7 @@ slices 4.equals:
 	mov cl, [rcx]
 	cmp r8b, cl
 	jz :5
-	mov rax, r10
+	mov al, r10b
 5:	ret
 5:	add rax, 0x01
 	jmp :6

@@ -7,8 +7,8 @@ main:
 	mov rdi, rbx
 	mov rsi, rbx
 	syscall
-	mov rdi, rax
-	mov rax, rdi
+	mov edi, eax
+	mov eax, edi
 	cmp eax, 0x00
 	setl al
 	movzx rax, al

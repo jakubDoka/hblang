@@ -963,7 +963,10 @@ pub fn Func(comptime Backend: type) type {
                 return .{ self, 0 };
             }
 
-            pub fn regMask(self: *Node, func: *Self, idx: usize, tmp: *utils.Arena) std.DynamicBitSetUnmanaged {
+            pub fn regMask(self: *Node, func: *Self, idx: usize, tmp: *utils.Arena) if (@hasDecl(Backend, "Set"))
+                Backend.Set
+            else
+                std.DynamicBitSetUnmanaged {
                 return if (comptime optApi("regMask", @TypeOf(regMask))) Backend.regMask(self, func, idx, tmp) else unreachable;
             }
 
@@ -1189,9 +1192,9 @@ pub fn Func(comptime Backend: type) type {
                 return forceSubclass((self.inputs()[0].?), Cfg);
             }
 
-            pub fn hasNoUseFor(self: *Node, def: *Node) bool {
-                if (self.kind == .Call and def.kind == .StackArgOffset) return true;
-                return std.mem.indexOfScalar(*Node, self.dataDeps(), def) == null;
+            pub fn hasUseFor(self: *Node, def: *Node) bool {
+                if (self.kind == .Call and def.kind == .StackArgOffset) return false;
+                return std.mem.indexOfScalar(*Node, self.dataDeps(), def) != null;
             }
 
             pub fn removeUse(self: *Node, use: *Node) void {
@@ -1692,7 +1695,10 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn setInputNoIntern(self: *Self, use: *Node, idx: usize, def: ?*Node) void {
-            std.debug.assert(self.setInput(use, idx, def) == null);
+            if (self.setInput(use, idx, def)) |new| {
+                if (new.isLoad()) std.debug.print("{any}\n", .{new.inputs()});
+                utils.panic("setInputNoIntern: {}", .{new});
+            }
         }
 
         pub fn setInput(self: *Self, use: *Node, idx: usize, def: ?*Node) ?*Node {
@@ -1847,8 +1853,12 @@ pub fn Func(comptime Backend: type) type {
 
             if (is_dead and node.kind == .Return and inps[0] != null) {
                 worklist.add(inps[0].?);
+                worklist.add(inps[1].?);
                 self.setInputNoIntern(node, 0, null);
+                self.setInputNoIntern(node, 1, null);
                 for (3..node.inputs().len) |i| {
+                    if (inps[i] == null) continue;
+                    worklist.add(inps[i].?);
                     self.setInputNoIntern(node, i, null);
                 }
                 return null;

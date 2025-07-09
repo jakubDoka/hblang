@@ -303,7 +303,17 @@ pub fn idealize(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList
 }
 
 // ================== REGALLOC ==================
-const Set = std.DynamicBitSetUnmanaged;
+pub const Set = std.DynamicBitSetUnmanaged;
+
+pub fn setMasks(set: *Set) []Set.MaskInt {
+    return graph.setMasks(set.*);
+}
+
+pub fn setIntersects(a: Set, b: Set) bool {
+    return for (graph.setMasks(a), graph.setMasks(b)) |aa, bb| {
+        if (aa & bb != 0) return true;
+    } else false;
+}
 
 pub fn readMask(arena: *utils.Arena) Set {
     var set = Set.initEmpty(arena.allocator(), reg_mask_cap) catch unreachable;

@@ -13,7 +13,7 @@ main:
 	lea r13, [0x0000000000000007]
 	mov r12, 0x400
 	mov rax, 0x00
-	mov r15, rax
+	mov r15b, al
 	mov rax, r14
 1:	mov rbx, rcx
 	mov rbp, rax
@@ -23,9 +23,9 @@ main:
 	test al, al
 	jz :0
 	mov al, [r13]
-	mov rsi, rax
-	mov rdx, rax
-	mov rdi, r15
+	mov sil, al
+	mov dl, al
+	mov dil, r15b
 	call :gcm crash 1 (infinite).func
 	mov rcx, rbx
 	mov rax, rbp

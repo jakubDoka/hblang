@@ -8,7 +8,7 @@ const utils = graph.utils;
 const graph = @import("graph.zig");
 const Builder = @This();
 
-pub const Func = graph.Func(Builder);
+const Func = graph.Func(Builder);
 pub const i_know_the_api = {};
 pub const BuildNode = Func.Node;
 pub const Kind = Func.Kind;

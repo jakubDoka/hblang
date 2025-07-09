@@ -9,21 +9,21 @@ slices 4.equals:
 	mov rdi, 0x00
 	cmp rcx, rax
 	jz :0
-	mov rax, rdi
+	mov al, dil
 	jmp :1
 0:	mov rcx, [rsp+0x10]
 	mov rax, [rsp]
 	mov rsi, 0x01
 	cmp rax, rcx
 	jnz :2
-	mov rax, rsi
+	mov al, sil
 1:	jmp :5
 2:	mov qword ptr [rsp+0x20], 0x00
 6:	mov rax, [rsp+0x20]
 	mov rcx, [rsp+0x08]
 	cmp rax, rcx
 	jnz :4
-	mov rax, rsi
+	mov al, sil
 	jmp :5
 4:	mov rdx, [rsp+0x10]
 	mov rcx, [rsp]
@@ -33,7 +33,7 @@ slices 4.equals:
 	mov cl, [rcx]
 	cmp cl, dl
 	jz :5
-	mov rax, rdi
+	mov al, dil
 5:	add rsp, 0x30
 	ret
 5:	add rax, 0x01

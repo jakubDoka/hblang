@@ -424,48 +424,66 @@ pub fn idealize(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Func.Wo
 
 // ================== REGALLOC ==================
 const set_cap = 64;
-const Set = std.DynamicBitSetUnmanaged;
+pub const Set = struct {
+    bits: u64,
+    comptime bit_length: usize = 64,
 
-pub fn floatMask(arena: *utils.Arena) Set {
-    var set = Set.initEmpty(arena.allocator(), set_cap) catch unreachable;
-    set.setRangeValue(.{ .start = 16, .end = 32 }, true);
-    return set;
+    pub fn init(bits: u64) Set {
+        return .{ .bits = bits };
+    }
+
+    pub fn setIntersection(a: *Set, b: Set) void {
+        a.bits &= b.bits;
+    }
+
+    pub fn count(s: Set) u16 {
+        return @popCount(s.bits);
+    }
+
+    pub fn findFirstSet(s: Set) ?u16 {
+        if (s.bits == 0) return null;
+        return @ctz(s.bits);
+    }
+
+    pub fn unset(s: *Set, idx: usize) void {
+        s.bits &= ~(@as(u64, 1) << @intCast(idx));
+    }
+};
+
+pub fn setIntersects(a: Set, b: Set) bool {
+    return a.bits & b.bits != 0;
 }
 
-pub fn readIntMask(arena: *utils.Arena) Set {
-    var set = Set.initEmpty(arena.allocator(), set_cap) catch unreachable;
-    set.setRangeValue(.{ .start = 0, .end = 16 }, true);
-    return set;
+pub fn setMasks(s: *Set) []u64 {
+    return (&s.bits)[0..1];
 }
 
-pub fn writeIntMask(arena: *utils.Arena) Set {
-    var set = readIntMask(arena);
-    set.unset(@intFromEnum(Reg.rsp));
-    return set;
+pub fn floatMask(_: *utils.Arena) Set {
+    return .init(0xFFFF_0000);
 }
 
-pub fn splitFloatMask(arena: *utils.Arena) Set {
-    var set = Set.initFull(arena.allocator(), set_cap) catch unreachable;
-    set.setRangeValue(.{ .start = 0, .end = 16 }, false);
-    return set;
+pub fn readIntMask(_: *utils.Arena) Set {
+    return .init(0xFFFF);
+}
+
+pub fn writeIntMask(_: *utils.Arena) Set {
+    return .init(0xFFFF & ~(@as(u64, 1) << @intFromEnum(Reg.rsp)));
+}
+
+pub fn splitFloatMask(_: *utils.Arena) Set {
+    return .init(0xFFFF_FFFF_FFFF_0000);
 }
 
 pub fn splitIntMask(arena: *utils.Arena) Set {
-    var set = readSplitIntMask(arena);
-    set.unset(@intFromEnum(Reg.rsp));
-    return set;
+    return .init(0xFFFF_FFFF_0000_0000 | writeIntMask(arena).bits);
 }
 
 pub fn readSplitIntMask(arena: *utils.Arena) Set {
-    var set = Set.initFull(arena.allocator(), set_cap) catch unreachable;
-    set.setRangeValue(.{ .start = 16, .end = 32 }, false);
-    return set;
+    return .init(0xFFFF_FFFF_0000_0000 | readIntMask(arena).bits);
 }
 
-pub fn singleReg(reg: Reg, arena: *utils.Arena) Set {
-    var set = Set.initEmpty(arena.allocator(), set_cap) catch unreachable;
-    set.set(@intFromEnum(reg));
-    return set;
+pub fn singleReg(reg: Reg, _: *utils.Arena) Set {
+    return .init(@as(u64, 1) << @intCast(@intFromEnum(reg)));
 }
 
 pub fn regBias(node: *Func.Node) ?u16 {
@@ -527,7 +545,7 @@ pub fn regMask(
     func: *Func,
     idx: usize,
     arena: *utils.Arena,
-) std.DynamicBitSetUnmanaged {
+) Set {
     errdefer unreachable;
 
     if (node.kind == .MachSplit) {
@@ -705,13 +723,6 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
 
     opts.optimizations.execute(X86_64Gen, self, func);
 
-    //    if (std.mem.endsWith(u8, opts.name, "unwrap")) {
-    //        func.fmtScheduled(
-    //            std.io.getStdErr().writer().any(),
-    //            std.io.tty.detectConfig(std.io.getStdErr()),
-    //        );
-    //    }
-    //
     var tmp = utils.Arena.scrath(opts.optimizations.arena);
     defer tmp.deinit();
 
@@ -917,7 +928,10 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const dst, const src = .{ self.getReg(instr), self.getReg(instr.inputs()[1]) };
                 if (dst == src) continue;
 
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ dst, src });
+                self.emitInstr(
+                    movMnem(instr.data_type),
+                    .{ SReg{ dst, instr.data_type.size() }, src },
+                );
             },
             .Phi => {},
             .GlobalAddr => {
@@ -973,7 +987,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
 
                 const offset: i32 = extra.dis;
 
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
+                self.emitInstr(movMnem(instr.data_type), .{
                     SReg{ dst, instr.data_type.size() },
                     BRegOff{ bse, offset, @intCast(instr.data_type.size()) },
                 });
@@ -984,7 +998,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
 
                 const offset: i32 = extra.dis;
 
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
+                self.emitInstr(movMnem(instr.data_type), .{
                     BRegOff{ dst, offset, @intCast(instr.data_type.size()) },
                     SReg{ vl, instr.data_type.size() },
                 });
@@ -1021,7 +1035,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         .StructArg => |n| n.spec.size + self.arg_base,
                         else => unreachable,
                     }));
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
+                self.emitInstr(movMnem(instr.data_type), .{
                     SReg{ dst, instr.data_type.size() },
                     BRegOff{ .rsp, offset, @intCast(instr.data_type.size()) },
                 });
@@ -1035,7 +1049,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         else => unreachable,
                     }));
 
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{
+                self.emitInstr(movMnem(instr.data_type), .{
                     BRegOff{ .rsp, offset, @intCast(instr.data_type.size()) },
                     SReg{ vl, instr.data_type.size() },
                 });
@@ -1355,38 +1369,6 @@ pub fn emitInstr(self: *X86_64Gen, mnemonic: c_uint, args: anytype) void {
         };
     }
 
-    if (mnemonic == zydis.ZYDIS_MNEMONIC_MOV and
-        ((req.operands[0].reg.value >= zydis.ZYDIS_REGISTER_XMM0 and
-            req.operands[0].reg.value <= zydis.ZYDIS_REGISTER_XMM15) or
-            (req.operands[1].reg.value >= zydis.ZYDIS_REGISTER_XMM0 and
-                req.operands[1].reg.value <= zydis.ZYDIS_REGISTER_XMM15)))
-    {
-        if (size == 16) {
-            // FIXME: we need to know if this is 2 doubles of 1 float, who
-            // knows what breaks due to this
-            req.mnemonic = zydis.ZYDIS_MNEMONIC_MOVUPS;
-        } else if (size == 8) {
-            req.mnemonic = zydis.ZYDIS_MNEMONIC_MOVSD;
-        } else {
-            req.mnemonic = zydis.ZYDIS_MNEMONIC_MOVSS;
-        }
-    }
-
-    if ((mnemonic == zydis.ZYDIS_MNEMONIC_MOVD or
-        mnemonic == zydis.ZYDIS_MNEMONIC_MOVQ) and
-        req.operands[0].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY and
-        !(req.operands[1].reg.value >= zydis.ZYDIS_REGISTER_XMM0 and
-            req.operands[1].reg.value <= zydis.ZYDIS_REGISTER_XMM15))
-    {
-        req.mnemonic = zydis.ZYDIS_MNEMONIC_MOV;
-    }
-
-    if (mnemonic == zydis.ZYDIS_MNEMONIC_XCHG and
-        req.operands[1].type == zydis.ZYDIS_OPERAND_TYPE_MEMORY)
-    {
-        std.mem.swap(@TypeOf(req.operands[1]), &req.operands[0], &req.operands[1]);
-    }
-
     const status = zydis.ZydisEncoderEncodeInstruction(&req, &buf, &len);
     if (zydis.ZYAN_FAILED(status) != 0) {
         utils.panic("{x} {s} {} {any}\n", .{ status, zydis.ZydisMnemonicGetString(req.mnemonic), args, req.operands[0..fields.len] });
@@ -1437,10 +1419,10 @@ pub fn binopToMnemonic(op: graph.BinOp, ty: graph.DataType) zydis.ZydisMnemonic 
     };
 }
 
-pub fn movMnem(dt: graph.DataType, is_stack: bool) zydis.ZydisMnemonic {
+pub fn movMnem(dt: graph.DataType) zydis.ZydisMnemonic {
     return switch (dt) {
-        .f32 => if (is_stack) zydis.ZYDIS_MNEMONIC_MOVD else zydis.ZYDIS_MNEMONIC_MOVSS,
-        .f64 => if (is_stack) zydis.ZYDIS_MNEMONIC_MOVQ else zydis.ZYDIS_MNEMONIC_MOVSD,
+        .f32 => zydis.ZYDIS_MNEMONIC_MOVSS,
+        .f64 => zydis.ZYDIS_MNEMONIC_MOVSD,
         .i8, .i16, .i32, .i64 => zydis.ZYDIS_MNEMONIC_MOV,
         else => unreachable,
     };

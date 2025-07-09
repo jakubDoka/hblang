@@ -8,20 +8,20 @@ main:
 	mov rax, 0x3F800000
 	movd xmm0, eax
 	call :carry over call float op 1.opaque(v: f32)
-	movsd [rsp+0x08], xmm0
+	movss [rsp+0x08], xmm0
 	mov rax, 0x40000000
 	movd xmm0, eax
 	call :carry over call float op 1.opaque(v: f32)
-	movsd [rsp], xmm0
+	movss [rsp], xmm0
 	mov rdi, 0x00
 	call :carry over call float op 1.opaque(v: uint)
-	movsd xmm0, qword ptr [rsp+0x08]
-	movsd xmm1, qword ptr [rsp]
+	movss xmm0, dword ptr [rsp+0x08]
+	movss xmm1, dword ptr [rsp]
 	addss xmm0, xmm1
-	movsd [rsp], xmm0
-	movsd xmm0, qword ptr [rsp]
+	movss [rsp], xmm0
+	movss xmm0, dword ptr [rsp]
 	call :carry over call float op 1.opaque(v: f32)
-	movsd xmm0, qword ptr [rsp]
+	movss xmm0, dword ptr [rsp]
 	cvttss2si rax, xmm0
 	add rsp, 0x18
 	ret

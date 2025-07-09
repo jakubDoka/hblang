@@ -2,9 +2,15 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### mem2reg crash 6
+```hb
+expectations := .{
+    should_error: true,
+}
 
-Broken := struct { .inner: ?[]u8 }
-broken := fn(self: Broken): ?[]u8 return self.inner
+$blackbox := fn(): u32 return 0
+main := fn(): u32 loop if false return blackbox()
+```
 
 #### regalloc crash 3
 ```hb

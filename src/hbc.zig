@@ -16,9 +16,13 @@ pub fn main() !void {
 
     try opts.loadCli(cli_scratch.allocator());
 
-    var arena = (hb.compile(opts) catch |err| switch (err) {
-        error.Failed => std.process.exit(1),
-        else => return err,
-    }).arena;
-    if (std.debug.runtime_safety) arena.deinit();
+    hb.utils.Arena.initScratch(opts.scratch_memory);
+
+    for (0..opts.benchmark_rounds) |_| {
+        var arena = (hb.compile(opts) catch |err| switch (err) {
+            error.Failed => std.process.exit(1),
+            else => return err,
+        }).arena;
+        if (std.debug.runtime_safety or opts.benchmark_rounds > 1) arena.deinit();
+    }
 }
