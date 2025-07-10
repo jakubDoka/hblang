@@ -27,8 +27,8 @@ main:
 	mov [rsp+0x70], rax
 	mov qword ptr [rsp+0x78], 0x02
 	mov r10, 0x10
-	mov rdi, rcx
 	mov rax, rcx
+	mov rdi, rcx
 2:	cmp rdi, 0x08
 	setz dl
 	movzx rdx, dl
@@ -36,9 +36,9 @@ main:
 	jz :0
 	add rsp, 0x90
 	ret
-0:	lea r9, [rsp]
-	mov rdx, rdi
+0:	mov rdx, rdi
 	imul rdx, r10
+	lea r9, [rsp]
 	add r9, rdx
 	mov r8, rcx
 3:	mov rdx, [r9+0x08]

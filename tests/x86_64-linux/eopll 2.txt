@@ -17,11 +17,11 @@ main:
 	pop rbp
 	pop rbx
 	ret
-0:	lea rsi, [rsp]
-	mov rdx, 0x10
+0:	mov r10, 0xFFFFFFFFFFFFFFFF
 	mov rax, 0xE8
 	mov rdi, rbp
-	mov r10, 0xFFFFFFFFFFFFFFFF
+	lea rsi, [rsp]
+	mov rdx, 0x10
 	syscall
 	add rbx, 0x01
 	jmp :1

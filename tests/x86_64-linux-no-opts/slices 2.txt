@@ -12,9 +12,9 @@ main:
 	mov rax, [rsp+0x48]
 	mov [rsp+0x10], rdx
 	mov [rsp+0x18], rax
-	mov rax, 0x08
-	mov r8, [rsp+0x48]
 	mov rcx, 0x04
+	mov r8, [rsp+0x48]
+	mov rax, 0x08
 	mov rdi, r8
 	imul rdi, rax
 	lea rsi, [rsp+0x40]
@@ -44,9 +44,9 @@ main:
 	ret
 0:	mov qword ptr [rsp+0x80], 0x00
 3:	mov rdx, [rsp+0x78]
-	lea rdi, [rsp]
 	mov rcx, rdx
 	imul rcx, r8
+	lea rdi, [rsp]
 	add rdi, rcx
 	mov rcx, [rsp+0x80]
 	mov rsi, [rdi+0x08]

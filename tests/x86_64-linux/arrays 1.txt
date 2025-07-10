@@ -4,10 +4,9 @@ main:
 	mov r8, 0x08
 	mov rdi, rsi
 3:	cmp rdi, 0x08
-	setz cl
-	movzx rcx, cl
-	lea rax, [rsp]
-	test cl, cl
+	setz al
+	movzx rax, al
+	test al, al
 	jz :0
 	mov rax, rsi
 2:	cmp rsi, 0x08
@@ -29,6 +28,7 @@ main:
 	imul rdx, r8
 	mov rcx, rdi
 	add rcx, 0x01
+	lea rax, [rsp]
 	add rax, rdx
 	mov [rax], rdi
 	mov rdi, rcx

@@ -1,8 +1,8 @@
 main:
 	sub rsp, 0x50
 	mov r11, 0x00
-	mov rcx, 0x08
 	mov r10, 0x18
+	mov rcx, 0x08
 	mov r8, r11
 4:	cmp r8, 0x03
 	setz al

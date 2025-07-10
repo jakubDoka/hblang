@@ -4,10 +4,9 @@ main:
 	mov rsi, 0x08
 3:	mov rdx, [rsp+0x48]
 	cmp rdx, 0x08
-	setz cl
-	movzx rcx, cl
-	lea rax, [rsp]
-	test cl, cl
+	setz al
+	movzx rax, al
+	test al, al
 	jz :0
 	mov qword ptr [rsp+0x48], 0x00
 	mov qword ptr [rsp+0x40], 0x00
@@ -32,6 +31,7 @@ main:
 	jmp :2
 0:	mov rcx, rdx
 	imul rcx, rsi
+	lea rax, [rsp]
 	add rax, rcx
 	mov [rax], rdx
 	mov rax, [rsp+0x48]

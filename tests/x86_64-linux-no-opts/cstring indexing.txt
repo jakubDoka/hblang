@@ -60,12 +60,12 @@ main:
 	mov rdx, rbp
 	mov rdi, 0x02
 	call :cstring indexing.slice_ioob
-1:	lea rax, [rsp+0x40]
-	mov rcx, rbp
+1:	mov rcx, rbp
 	imul rcx, rbx
+	lea rax, [rsp+0x40]
 	add rax, rcx
-	lea rdi, [rsp+0x70]
 	mov rsi, [rax]
+	lea rdi, [rsp+0x70]
 	call :cstring indexing.cstr
 	mov rax, [rsp+0x80]
 	add rax, 0x01

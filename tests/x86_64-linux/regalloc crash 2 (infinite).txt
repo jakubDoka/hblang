@@ -4,44 +4,44 @@ main:
 	sub rsp, 0xC8
 0:	mov byte ptr [rsp+0x18], 0x00
 	lea rdi, [rsp]
-	lea rsi, [rsp+0x18]
 	mov rdx, 0x18
+	lea rsi, [rsp+0x18]
 	call :memcpy
 	call :regalloc crash 2 (infinite).broken
 	mov byte ptr [rsp+0x30], 0x00
 	lea rdi, [rsp]
-	lea rsi, [rsp+0x30]
 	mov rdx, 0x18
+	lea rsi, [rsp+0x30]
 	call :memcpy
 	call :regalloc crash 2 (infinite).broken
 	mov byte ptr [rsp+0x48], 0x00
 	lea rdi, [rsp]
-	lea rsi, [rsp+0x48]
 	mov rdx, 0x18
+	lea rsi, [rsp+0x48]
 	call :memcpy
 	call :regalloc crash 2 (infinite).broken
 	mov byte ptr [rsp+0x60], 0x00
 	lea rdi, [rsp]
-	lea rsi, [rsp+0x60]
 	mov rdx, 0x18
+	lea rsi, [rsp+0x60]
 	call :memcpy
 	call :regalloc crash 2 (infinite).broken
 	mov byte ptr [rsp+0x78], 0x00
 	lea rdi, [rsp]
-	lea rsi, [rsp+0x78]
 	mov rdx, 0x18
+	lea rsi, [rsp+0x78]
 	call :memcpy
 	call :regalloc crash 2 (infinite).broken
 	mov byte ptr [rsp+0x90], 0x00
 	lea rdi, [rsp]
-	lea rsi, [rsp+0x90]
 	mov rdx, 0x18
+	lea rsi, [rsp+0x90]
 	call :memcpy
 	call :regalloc crash 2 (infinite).broken
 	mov byte ptr [rsp+0xA8], 0x00
 	lea rdi, [rsp]
-	lea rsi, [rsp+0xA8]
 	mov rdx, 0x18
+	lea rsi, [rsp+0xA8]
 	call :memcpy
 	call :regalloc crash 2 (infinite).broken
 	jmp :0

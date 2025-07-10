@@ -10,68 +10,68 @@ main:
          tx
 1:       cp $1, $0
          st $1, $254, 24, 1
-     addi64 $2, $254, 24
      addi64 $1, $254, 0
+     addi64 $2, $254, 24
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
          st $1, $254, 72, 1
-     addi64 $2, $254, 72
      addi64 $1, $254, 48
+     addi64 $2, $254, 72
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
          st $1, $254, 120, 1
-     addi64 $2, $254, 120
      addi64 $1, $254, 96
+     addi64 $2, $254, 120
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
          st $1, $254, 168, 1
-     addi64 $2, $254, 168
      addi64 $1, $254, 144
+     addi64 $2, $254, 168
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
          st $1, $254, 216, 1
-     addi64 $2, $254, 216
      addi64 $1, $254, 192
+     addi64 $2, $254, 216
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
          st $1, $254, 264, 1
-     addi64 $2, $254, 264
      addi64 $1, $254, 240
+     addi64 $2, $254, 264
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
          st $1, $254, 312, 1
-     addi64 $2, $254, 312
      addi64 $1, $254, 288
+     addi64 $2, $254, 312
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
          st $1, $254, 360, 1
-     addi64 $2, $254, 360
      addi64 $1, $254, 336
+     addi64 $2, $254, 360
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
          st $1, $254, 408, 1
-     addi64 $2, $254, 408
      addi64 $1, $254, 384
+     addi64 $2, $254, 408
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
          st $1, $254, 456, 1
-     addi64 $2, $254, 456
      addi64 $1, $254, 432
+     addi64 $2, $254, 456
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
          st $1, $254, 504, 1
-     addi64 $2, $254, 504
      addi64 $1, $254, 480
+     addi64 $2, $254, 504
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
          st $1, $254, 552, 1
-     addi64 $2, $254, 552
      addi64 $1, $254, 528
+     addi64 $2, $254, 552
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
          st $1, $254, 600, 1
-     addi64 $2, $254, 600
      addi64 $1, $254, 576
+     addi64 $2, $254, 600
         jal $31, $0, :regalloc crash 3.broken
         jmp :3
 regalloc crash 3.broken:

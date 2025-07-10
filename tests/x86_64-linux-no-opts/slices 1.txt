@@ -49,9 +49,9 @@ main:
 	ret
 0:	mov qword ptr [rsp+0xA0], 0x00
 3:	mov rax, [rsp+0x98]
-	lea rsi, [rsp]
 	mov rcx, rax
 	imul rcx, rdi
+	lea rsi, [rsp]
 	add rsi, rcx
 	mov rdx, [rsp+0xA0]
 	mov rcx, [rsi+0x08]

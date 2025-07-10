@@ -925,7 +925,7 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn isCheap(self: *Node) bool {
-                return self.kind == .Local or self.kind == .StackArgOffset;
+                return self.kind == .StackArgOffset;
             }
 
             pub fn dataDeps(self: *Node) []*Node {
