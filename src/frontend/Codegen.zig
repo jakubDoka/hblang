@@ -858,7 +858,6 @@ pub fn emitCtor(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Ctor)) EmitErr
             for (slots, fields) |s, f| {
                 if (s == .RequiredOffset) {
                     if (f.defalut_value) |value| {
-                        // TODO: we will need to optimize constants in the backend
                         self.types.queue(self.target, .init(.{ .Global = value }));
                         const off = self.bl.addFieldOffset(sloc, local, @intCast(s.RequiredOffset));
                         const glob = self.bl.addGlobalAddr(sloc, @intFromEnum(value));
@@ -1838,10 +1837,6 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
     if (e.pos.flag.@"comptime") {
         return self.report(expr, "TODO: comptime for loops", .{});
     }
-
-    //if (e.iters.len() != 1) {
-    //    return self.report(expr, "TODO: multi-iter for loops", .{});
-    //}
 
     const sloc = self.src(expr);
 

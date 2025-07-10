@@ -165,7 +165,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                         break;
                     }
 
-                    if (instr.kind != .MachSplit and !instr.isClone()) break; // TODO: clonable
+                    if (instr.kind != .MachSplit and !instr.isClone()) break;
                 }
             }
 

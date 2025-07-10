@@ -62,8 +62,6 @@ pub fn GcmMixin(comptime Backend: type) type {
         }
 
         pub fn postwaklBuildLoopTree(self: *Func, par_preorder: u16, from: *CfgNode, builder: *LoopTreeBuilder) u16 {
-            // TODO: make the preorder globaly increase, but after we know why thats actually important
-
             if (builder.pre_levels[from.base.id] != 0) return par_preorder;
             builder.pre_levels[from.base.id] = par_preorder;
             var postorder = par_preorder + 1;
@@ -264,7 +262,6 @@ pub fn GcmMixin(comptime Backend: type) type {
                                     cursor.ext.antidep = t.id;
                                 }
 
-                                // TODO: might be dangerosa
                                 for (t.mem().outputs()) |o| switch (o.kind) {
                                     .Call => {
                                         const stblck = late_scheds[o.id].?;

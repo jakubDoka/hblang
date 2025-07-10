@@ -240,7 +240,7 @@ pub fn categorizeAbleosSlice(id: utils.EntId(tys.Slice), types: *Types) TmpSpec 
 
 pub fn categorizeAbleosUnion(id: utils.EntId(tys.Union), types: *Types) TmpSpec {
     const fields = id.getFields(types);
-    if (fields.len == 0) return .Impossible; // TODO: add .Impossible
+    if (fields.len == 0) return .Impossible;
     const res = Abi.ableos.categorize(fields[0].ty, types);
     for (fields[1..]) |f| {
         const fspec = Abi.ableos.categorize(f.ty, types);

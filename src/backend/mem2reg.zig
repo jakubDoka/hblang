@@ -12,7 +12,6 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
             return @alignCast(@fieldParentPtr("mem2reg", self));
         }
 
-        // TODO: make this compact
         const Local = packed struct(usize) {
             flag: enum(u2) { null, node, loop } = .null,
             data: std.meta.Int(.unsigned, @bitSizeOf(usize) - 2) = 0,
@@ -109,6 +108,9 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                 self.value() != local) or self.isLoad();
         }
 
+        const Set = std.DynamicBitSetUnmanaged;
+        const Arry = std.ArrayListUnmanaged;
+
         pub fn run(m2r: *Self) void {
             errdefer unreachable;
 
@@ -117,20 +119,17 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
 
             if (self.root.outputs().len == 1) return;
 
-            // TODO: refactor to use tmpa directily
-            var tmpa = utils.Arena.scrath(null);
-            defer tmpa.deinit();
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
 
-            const tmp = tmpa.arena.allocator();
+            var visited = try Set.initEmpty(tmp.arena.allocator(), self.next_id);
+            const postorder = self.collectDfs(tmp.arena.allocator(), &visited)[1..];
 
-            var visited = try std.DynamicBitSet.initEmpty(tmp, self.next_id);
-            const postorder = self.collectDfs(tmp, &visited)[1..];
-
-            var slots = std.ArrayListUnmanaged(StackSlot){};
+            var slots = Arry(StackSlot){};
             var offset: i64 = 0;
-            var offsets = std.ArrayListUnmanaged(packed struct(u64) { offset: u62, size: u2 }){};
-            var store_load_nodes = std.ArrayListUnmanaged(*Node){};
-            var alloc_offsets = std.ArrayListUnmanaged(i64){};
+            var offsets = Arry(packed struct(u64) { offset: u62, size: u2 }){};
+            var store_load_nodes = Arry(*Node){};
+            var alloc_offsets = Arry(i64){};
 
             //self.fmtUnscheduled(std.io.getStdErr().writer().any(), .escape_codes);
             std.debug.assert(self.root.outputs()[1].kind == .Mem);
@@ -146,13 +145,13 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                     if (use.kind == .BinOp and use.inputs()[2].?.kind == .CInt) {
                         for (use.outputs()) |use_use| {
                             if (isGoodMemOp(use_use, o)) {
-                                try store_load_nodes.append(tmp, use_use);
+                                try store_load_nodes.append(tmp.arena.allocator(), use_use);
                             } else {
                                 continue :outer;
                             }
                         }
                     } else if (isGoodMemOp(use, o)) {
-                        try store_load_nodes.append(tmp, use);
+                        try store_load_nodes.append(tmp.arena.allocator(), use);
                     } else {
                         continue :outer;
                     }
@@ -182,7 +181,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                             break;
                         }
                     } else {
-                        try offsets.append(tmp, .{
+                        try offsets.append(tmp.arena.allocator(), .{
                             .offset = @intCast(offs),
                             .size = @intCast(std.math.log2_int(u64, use.data_type.size())),
                         });
@@ -190,27 +189,27 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                 }
 
                 for (offsets.items) |off| {
-                    try alloc_offsets.append(tmp, offset + off.offset);
+                    try alloc_offsets.append(tmp.arena.allocator(), offset + off.offset);
                 }
                 const new = alloc_offsets.items[alloc_offsets.items.len - offsets.items.len ..];
                 std.sort.pdq(i64, new, {}, std.sort.asc(i64));
 
                 o.schedule = @intCast(slots.items.len);
-                try slots.append(tmp, .{ .offset = offset });
+                try slots.append(tmp.arena.allocator(), .{ .offset = offset });
                 offset += @intCast(o.inputs()[1].?.extra(.LocalAlloc).size);
             }
 
             std.debug.assert(std.sort.isSorted(i64, alloc_offsets.items, {}, std.sort.asc(i64)));
 
-            var locals = tmpa.arena.alloc(Local, alloc_offsets.items.len);
+            var locals = tmp.arena.alloc(Local, alloc_offsets.items.len);
             @memset(locals, .{});
 
-            var states = tmpa.arena.alloc(BBState, postorder.len);
+            var states = tmp.arena.alloc(BBState, postorder.len);
             @memset(states, .{});
 
             for (postorder, 0..) |bb, i| bb.base.schedule = @intCast(i);
 
-            var to_remove = std.ArrayList(*Node).init(tmp);
+            var to_remove = Arry(*Node){};
             for (postorder) |bbc| {
                 const bb = &bbc.base;
 
@@ -231,7 +230,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                         locals = s.saved;
                     } else {
                         // we will visit this eventually
-                        states[parent.schedule] = .compact(.{ .Fork = .{ .saved = tmp.dupe(Local, locals) catch unreachable } });
+                        states[parent.schedule] = .compact(.{ .Fork = .{ .saved = tmp.arena.dupe(Local, locals) } });
                     }
                 }
 
@@ -270,14 +269,14 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                     for (buf[0..len], scheds[0..len]) |n, s| n.schedule = s;
                 }
 
-                for (tmp.dupe(*Node, bb.outputs()) catch unreachable) |o| {
+                for (tmp.arena.dupe(*Node, bb.outputs())) |o| {
                     if (o.id == std.math.maxInt(u16)) continue;
                     std.debug.assert(bb.kind != .Local);
 
                     if (o.isStore()) {
                         const base, const off = o.base().knownOffset();
                         if (base.kind == .Local and base.schedule != std.math.maxInt(u16)) {
-                            to_remove.append(o) catch unreachable;
+                            try to_remove.append(tmp.arena.allocator(), o);
                             const offs = slots.items[base.schedule].offset + off;
                             const idx = std.sort.binarySearch(i64, alloc_offsets.items, offs, struct {
                                 pub fn inner(a: i64, b: i64) std.math.Order {
@@ -291,7 +290,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                     }
 
                     if (o.kind == .Phi or o.kind == .Mem or o.isStore()) {
-                        for (tmp.dupe(*Node, o.outputs()) catch unreachable) |lo| {
+                        for (tmp.arena.dupe(*Node, o.outputs())) |lo| {
                             if (lo.isLoad()) {
                                 const base, const off = lo.base().knownOffset();
                                 if (base.kind == .Local and base.schedule != std.math.maxInt(u16)) {
@@ -342,12 +341,9 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                                 }
 
                                 if (child.inputs()[0] == bb) {
-                                    // TODO: maybe make all previous code more
-                                    // complicated so that his is not needed as
-                                    // it's kind of slow
-                                    const lhss, const rhss = lhs.Node.inputs()[1..3].*;
-                                    if (self.setInput(lhs.Node, 1, rhss)) |v| lhs = .{ .Node = v };
-                                    if (self.setInput(lhs.Node, 2, lhss)) |v| lhs = .{ .Node = v };
+                                    self.uninternNode(lhs.Node);
+                                    std.mem.reverse(?*Node, lhs.Node.inputs()[1..3]);
+                                    if (self.reinternNode(lhs.Node)) |v| lhs = .{ .Node = v };
                                 }
 
                                 s.items[i] = .compact(lhs);
@@ -356,11 +352,11 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                         s.done = true;
                     } else {
                         // first time seeing, this ca also be a region, needs renaming I guess
-                        const loop = tmp.create(Local.Join) catch unreachable;
+                        const loop = tmp.arena.create(Local.Join);
                         loop.* = .{
                             .done = false,
                             .ctrl = child,
-                            .items = tmp.dupe(Local, locals) catch unreachable,
+                            .items = tmp.arena.dupe(Local, locals),
                         };
                         @memset(locals, .compact(.{ .Loop = loop }));
                         states[child.schedule] = .compact(.{ .Join = loop });

@@ -108,6 +108,9 @@ pub const Lexeme = enum(u16) {
     @"||" = '|' + 32,
     @"&&" = '&' + 32,
 
+    @"||=" = '|' + 32 + 128,
+    @"&&=" = '&' + 32 + 128,
+
     ty_never = 0x100,
     ty_void,
     ty_bool,
@@ -124,9 +127,6 @@ pub const Lexeme = enum(u16) {
     ty_f32,
     ty_f64,
     ty_type,
-
-    @"||=" = '|' + 32 + 128,
-    @"&&=" = '&' + 32 + 128,
 
     @"@CurrentScope" = 0x200,
     @"@RootScope",
@@ -225,7 +225,23 @@ pub const Lexeme = enum(u16) {
         return @bitCast(vl);
     }
 
-    // TODO: reverse the order because this does not look like precedence
+    pub const precedence_groups = [_][]const Lexeme{
+        &.{ .@".", .@".{", .@".(", .@".[", .@".?", .@".*" },
+        &.{ .@"*", .@"/", .@"%" },
+        &.{ .@"+", .@"-" },
+        &.{ .@"<<", .@">>" },
+        &.{.@"^"},
+        &.{ .@"<", .@">", .@"<=", .@">=", .@"==", .@"!=" },
+        &.{ .@"|", .@"&" },
+        &.{.@".."},
+        &.{.@":="},
+        &.{ .@"||", .@"&&" },
+        &.{
+            .@":",  .@"=",  .@"+=", .@"-=",  .@"*=",  .@"/=",  .@"%=",
+            .@"|=", .@"^=", .@"&=", .@"<<=", .@">>=", .@"||=", .@"&&=",
+        },
+    };
+
     pub fn precedence(self: Lexeme) u8 {
         return switch (self) {
             .@":",
@@ -258,7 +274,7 @@ pub const Lexeme = enum(u16) {
     }
 
     pub fn isComparison(self: Lexeme) bool {
-        return self.precedence() == 7;
+        return self.precedence() == 5;
     }
 
     pub fn repr(self: Lexeme) []const u8 {

@@ -143,7 +143,7 @@ pub const Reg = enum(u8) {
 pub const Reloc = struct {
     offset: u32,
     dest: u32,
-    class: enum { rel32 },
+    class: enum(u8) { rel32 = 4 },
     off: u8,
 };
 
@@ -915,12 +915,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     }
 
     for (self.local_relocs.items) |rl| {
-        // TODO: copypasted nono
-
-        // TODO: make the class hold the values directly
-        const size = switch (rl.class) {
-            .rel32 => 4,
-        };
+        const size = @intFromEnum(rl.class);
 
         const dst_offset: i64 = self.block_offsets[rl.dest];
         const jump = dst_offset - rl.offset - size - rl.off; // welp we learned

@@ -149,7 +149,10 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
     if (node.kind == .CInt and node.extra(.CInt).value == 0)
         return func.addNode(.Zero, node.sloc, .i64, &.{null}, .{});
 
-    if (node.kind == .UnOp and node.extra(.UnOp).op == .cast) return inps[1];
+    if (node.kind == .UnOp and switch (node.extra(.UnOp).op) {
+        .cast, .ired => true,
+        else => false,
+    }) return inps[1];
 
     if (node.kind == .If) {
         if (inps[1].?.kind == .BinOp) b: {
@@ -660,8 +663,6 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                         const mask = (@as(u64, 1) << @intCast(inps[0].data_type.size() * 8)) - 1;
                         self.emit(.andi, .{ self.getReg(no), self.getReg(inps[0]), mask });
                     },
-                    // TODO: idealize to nothing
-                    .ired => self.emit(.cp, .{ self.getReg(no), self.getReg(inps[0]) }),
                     .ineg => self.emit(.neg, .{ self.getReg(no), self.getReg(inps[0]) }),
                     .fneg => if (no.data_type == .f32) {
                         self.emit(.fsub32, .{ self.getReg(no), .null, self.getReg(inps[0]) });
@@ -684,7 +685,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                         std.debug.assert(no.data_type == .f64);
                         self.emit(.fc32t64, .{ self.getReg(no), self.getReg(inps[0]) });
                     },
-                    .cast => unreachable,
+                    .ired, .cast => unreachable,
                 }
             },
             .ImmBinOp => |extra| {

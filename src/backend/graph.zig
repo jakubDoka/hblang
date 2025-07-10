@@ -1885,7 +1885,11 @@ pub fn Func(comptime Backend: type) type {
             }
         }
 
-        pub fn collectDfs(self: *Self, arena: std.mem.Allocator, visited: *std.DynamicBitSet) []*CfgNode {
+        pub fn collectDfs(
+            self: *Self,
+            arena: std.mem.Allocator,
+            visited: *std.DynamicBitSetUnmanaged,
+        ) []*CfgNode {
             var postorder = std.ArrayList(*CfgNode).init(arena);
             collectPostorder3(self, self.root, arena, &postorder, visited, true);
             return postorder.items;
@@ -1896,7 +1900,7 @@ pub fn Func(comptime Backend: type) type {
             node: *Node,
             arena: std.mem.Allocator,
             pos: *std.ArrayList(*CfgNode),
-            visited: *std.DynamicBitSet,
+            visited: *std.DynamicBitSetUnmanaged,
             comptime only_basic: bool,
         ) void {
             if (visited.isSet(node.id)) {

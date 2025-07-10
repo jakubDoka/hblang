@@ -301,7 +301,6 @@ pub const elf = enum {
 
         const projection = tmp.arena.alloc(u32, self.syms.items.len);
         for (0..self.syms.items.len) |i| projection[i] = @intCast(i);
-        // TODO: we are sorting by a bool, so faster algorithm is available
         std.sort.pdq(u32, projection, self.syms.items, struct {
             fn lessThen(syms: []root.backend.Machine.Data.Sym, lhs: u32, rhs: u32) bool {
                 return syms[lhs].kind != .invalid and (syms[rhs].kind == .invalid or

@@ -529,7 +529,6 @@ pub const Data = struct {
         size: u32,
         reloc_offset: u32,
         reloc_count: u32,
-        // TODO: pack these into a struct for faster hashing
         kind: Kind,
         linkage: Linkage,
         readonly: bool,
@@ -616,7 +615,6 @@ pub const Data = struct {
     }
 
     pub fn reset(self: *Data) void {
-        // TODO: clear the inline_func_nodes
         inline for (std.meta.fields(Data)[2..]) |f| {
             @field(self, f.name).items.len = 0;
         }
@@ -992,7 +990,6 @@ pub const Data = struct {
             reloc_idx: u32,
         };
 
-        // TODO: maybe also keep the index into the rev_relocs for extra speedy
         const rev_relocs = tmp.arena.alloc(RevReloc, self.relocs.items.len);
         for (self.syms.items, 0..) |sym, i| {
             if (sym.kind == .invalid) continue;

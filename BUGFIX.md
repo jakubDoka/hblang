@@ -2,6 +2,28 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### comptime around the loop 1
+```hb
+main := fn(): uint {
+    Stru := struct{}
+
+    sum := 0
+    i := 0
+    while i < 10 {
+        j := 0
+        while j < 10 {
+            sum += i + j
+            j += 1
+        }
+        i += 1
+    }
+
+    val: Stru = .()
+
+    return sum - 900
+}
+```
+
 #### mem2reg crash 6
 ```hb
 expectations := .{

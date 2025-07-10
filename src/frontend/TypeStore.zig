@@ -391,7 +391,6 @@ pub const Id = enum(IdRepr) {
     }
 
     pub fn size(self: Id, types: *Types) u64 {
-        // TODO: what about uninhabited types?
         return switch (self.data()) {
             .Builtin => |b| switch (b) {
                 .never, .any => 0,
@@ -634,7 +633,7 @@ pub fn findNestedGlobals(
 
             relocs.append(scratch.allocator(), .{
                 .offset = @intCast(offset),
-                .target = try self.findSymForPtr(ptr, cap), // TODO: error
+                .target = try self.findSymForPtr(ptr, cap),
             }) catch unreachable;
         },
         .Slice => |s| {
@@ -662,7 +661,7 @@ pub fn findNestedGlobals(
 
                 relocs.append(scratch.allocator(), .{
                     .offset = @intCast(offset + tys.Slice.ptr_offset),
-                    .target = try self.findSymForPtr(ptr, cap), // TODO: error
+                    .target = try self.findSymForPtr(ptr, cap),
                 }) catch unreachable;
             }
         },
