@@ -9,8 +9,8 @@ main:
          ld $2, $254, 8, 8
         jal $31, $0, :null unwrap 1.use_opt
          st $0, $254, 16, 1
-         ld $2, $254, 24, 8
          ld $1, $254, 16, 1
+         ld $2, $254, 24, 8
         jal $31, $0, :null unwrap 1.use_opt
      addi64 $254, $254, 40
          ld $31, $254, -8, 8
@@ -23,13 +23,13 @@ null unwrap 1.use_opt:
          ld $1, $254, 0, 1
        andi $1, $1, 255
         jne $1, $0, :1
+        lra $1, $0, :null unwrap 1.use_opt.null unwrap 1
+         st $1, $254, 16, 8
+       li64 $1, 13
+         st $1, $254, 24, 8
+       li64 $1, 171798691847
+         st $1, $254, 32, 8
      addi64 $1, $254, 16
-        lra $2, $0, :null unwrap 1.use_opt.null unwrap 1
-         st $2, $254, 16, 8
-       li64 $2, 13
-         st $2, $254, 24, 8
-       li64 $2, 171798691847
-         st $2, $254, 32, 8
         jal $31, $0, :null unwrap 1.null_unwrap
 1:       ld $1, $254, 8, 8
       add64 $1, $1, $1

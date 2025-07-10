@@ -14,38 +14,26 @@ eopll 2.epoll_wait:
 	add rsp, 0x28
 	ret
 main:
-	push rbx
-	push rbp
-	push r12
 	sub rsp, 0x28
 	mov rax, 0x123
-	mov rcx, 0x00
-	mov r12, rcx
-	mov rdi, r12
+	mov rdi, 0x00
 	syscall
 	mov [rsp+0x18], eax
 	mov qword ptr [rsp+0x10], 0x00
-	mov rax, 0xFFFFFFFFFFFFFFFF
-	mov rbp, rax
-	mov rax, 0x10
-	mov rbx, rax
 1:	mov rax, [rsp+0x10]
 	cmp rax, 0x00
 	setz al
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, r12
+	mov rax, 0x00
 	add rsp, 0x28
-	pop r12
-	pop rbp
-	pop rbx
 	ret
 0:	mov eax, [rsp+0x18]
 	lea rsi, [rsp]
 	movsxd rdi, eax
-	mov rcx, rbp
-	mov rdx, rbx
+	mov rcx, 0xFFFFFFFFFFFFFFFF
+	mov rdx, 0x10
 	call :eopll 2.epoll_wait
 	mov rax, [rsp+0x10]
 	add rax, 0x01

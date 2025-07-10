@@ -2,10 +2,9 @@ main:
 	push rbx
 	sub rsp, 0x18
 	mov rax, 0x123
-	mov rcx, 0x00
-	mov rbx, rcx
-	mov rdi, rbx
-	mov rsi, rbx
+	mov rbx, 0x00
+	mov rdi, 0x00
+	mov rsi, 0x00
 	syscall
 	mov [rsp], eax
 	mov eax, [rsp]
@@ -16,15 +15,15 @@ main:
 	jz :0
 	mov rax, 0x01
 	jmp :1
-0:	lea r10, [rsp+0x04]
-	mov dword ptr [rsp+0x04], 0x01
+0:	mov dword ptr [rsp+0x04], 0x01
 	mov qword ptr [rsp+0x08], 0x00
 	lea rax, [0x0000000000000007]
 	mov cx, [rax]
+	lea r10, [rsp+0x04]
 	mov edi, [rsp]
 	mov rax, 0xE9
 	movzx rsi, cx
-	mov rdx, rbx
+	mov rdx, 0x00
 	syscall
 	mov [rsp+0x10], eax
 	mov eax, [rsp+0x10]

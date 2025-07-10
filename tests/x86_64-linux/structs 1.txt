@@ -19,17 +19,15 @@ structs 1.pass:
 	sub rax, rcx
 	ret
 main:
-	push rbx
 	sub rsp, 0x48
-	lea rsi, [rsp+0x18]
 	mov qword ptr [rsp+0x18], 0x04
 	mov qword ptr [rsp+0x20], 0x01
 	mov qword ptr [rsp+0x28], 0x03
-	lea rdi, [rsp]
 	mov rdx, 0x18
+	lea rdi, [rsp]
+	lea rsi, [rsp+0x18]
 	call :memcpy
-	lea rbx, [rsp+0x30]
-	mov rdi, rbx
+	lea rdi, [rsp+0x30]
 	call :structs 1.odher_pass
 	mov rax, [rsp+0x40]
 	cmp rax, 0x03
@@ -49,9 +47,8 @@ main:
 	jz :2
 	mov rax, 0x64
 1:	jmp :3
-2:	mov rdi, rbx
+2:	lea rdi, [rsp+0x30]
 	call :structs 1.pass
 3:	add rsp, 0x48
-	pop rbx
 	ret
 memcpy:

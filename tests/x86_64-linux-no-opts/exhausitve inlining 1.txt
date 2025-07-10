@@ -27,8 +27,8 @@ exhausitve inlining 1.unreachable:
 main:
 	sub rsp, 0x08
 	call :exhausitve inlining 1.no_op
-	lea rdi, [rsp]
 	mov qword ptr [rsp], 0x00
+	lea rdi, [rsp]
 	call :exhausitve inlining 1.some_mem_ops
 	mov rax, [rsp]
 	cmp rax, 0x01

@@ -43,10 +43,10 @@ main:
 	lea rax, [0x0000000000000007]
 	mov [rsp], rax
 	mov qword ptr [rsp+0x08], 0x03
-	lea rax, [rsp+0x20]
 	mov byte ptr [rsp+0x20], 0x61
 	mov byte ptr [rsp+0x21], 0x62
 	mov byte ptr [rsp+0x22], 0x63
+	lea rax, [rsp+0x20]
 	mov [rsp+0x10], rax
 	mov qword ptr [rsp+0x18], 0x03
 	mov rcx, [rsp]
@@ -61,9 +61,9 @@ main:
 	jz :0
 	jmp :1
 0:	mov rcx, [rsp+0x08]
+	mov rdx, [rsp]
 	mov rsi, [rsp+0x18]
 	mov rdi, [rsp+0x10]
-	mov rdx, [rsp]
 	call :slices 4.equals
 	xor al, 0x01
 	test al, al

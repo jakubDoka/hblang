@@ -1,12 +1,10 @@
 float arithmetic 2.sin:
 	sub rsp, 0x20
 	movss [rsp+0x10], xmm0
+	mov rsi, 0x3FE0000000000000
+	mov rdx, 0x40000000
+	mov rcx, 0x3F000000
 	mov rax, 0x40490FDB
-	mov r8, 0x3FE0000000000000
-	mov rdi, 0x40000000
-	mov rdx, 0x3F000000
-	mov rsi, 0x04
-	lea rcx, [0x0000000000000007]
 	movd xmm0, eax
 	movss [rsp+0x14], xmm0
 	mov dword ptr [rsp+0x18], 0x100
@@ -14,11 +12,13 @@ float arithmetic 2.sin:
 	movss xmm1, dword ptr [rsp+0x14]
 	movss xmm0, dword ptr [rsp+0x10]
 	movsxd rax, eax
-	movq xmm5, r8
+	movq xmm5, rsi
 	cvtss2sd xmm0, xmm0
-	movd xmm2, edx
+	movd xmm2, ecx
+	mov rsi, 0x04
+	lea rcx, [0x0000000000000007]
 	cvtss2sd xmm4, xmm1
-	movd xmm3, edi
+	movd xmm3, edx
 	cvtsi2sd xmm1, rax
 	mulsd xmm0, xmm5
 	mulsd xmm0, xmm1

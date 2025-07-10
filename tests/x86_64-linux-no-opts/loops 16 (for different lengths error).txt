@@ -4,10 +4,10 @@ main:
 	sub rsp, 0x78
 	mov qword ptr [rsp+0x50], 0x00
 	mov qword ptr [rsp+0x58], 0x00
-	lea rax, [rsp+0x68]
 	mov byte ptr [rsp+0x68], 0x01
 	mov byte ptr [rsp+0x69], 0x02
 	mov byte ptr [rsp+0x6A], 0x03
+	lea rax, [rsp+0x68]
 	mov [rsp+0x40], rax
 	mov qword ptr [rsp+0x48], 0x03
 	mov rax, 0x02
@@ -18,13 +18,13 @@ main:
 	sub rax, rdx
 	cmp rcx, rax
 	jz :2
-	lea rsi, [rsp+0x20]
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x20], rax
 	mov qword ptr [rsp+0x28], 0x26
 	mov rax, 0x200000007
 	mov [rsp+0x30], rax
 	lea rdi, [rsp]
+	lea rsi, [rsp+0x20]
 	mov rdx, 0x20
 	call :memcpy
 	call :loops 16 (for different lengths error).for_loop_length_mismatch

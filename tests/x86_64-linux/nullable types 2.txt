@@ -5,11 +5,11 @@ nullable types 2.take:
 	ret
 main:
 	sub rsp, 0x18
-	lea rdi, [rsp]
 	mov byte ptr [rsp], 0x01
 	mov qword ptr [rsp+0x08], 0x00
 	mov qword ptr [rsp+0x10], 0x00
 	mov qword ptr [rsp+0x10], 0x01
+	lea rdi, [rsp]
 	add rdi, 0x08
 	call :nullable types 2.take
 	mov rax, [rsp+0x08]

@@ -259,7 +259,7 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
                 .StackLoad,
                 node.sloc,
                 node.data_type,
-                &.{ node.inputs()[0], node.mem(), base },
+                &.{ node.inputs()[0], node.mem(), if (base.kind == .Local) base.inputs()[1] else base },
                 .{ .base = .{ .dis = @intCast(offset) } },
             )
         else if (base.kind == .GlobalAddr and false)
@@ -302,6 +302,7 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
 
                 if (base.isStack()) {
                     res.kind = .ConstStackStore;
+                    if (base.kind == .Local) func.setInputNoIntern(res, 2, base.inputs()[1]);
                 }
 
                 worklist.add(res);
@@ -319,6 +320,7 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
 
         if (base.isStack()) {
             res.kind = .StackStore;
+            if (base.kind == .Local) func.setInputNoIntern(res, 2, base.inputs()[1]);
         }
 
         if (base.kind == .GlobalAddr and false) {
@@ -333,7 +335,7 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
         node.kind = .StackStore;
     }
 
-    if (node.isStack()) elim_local: {
+    if (node.kind == .StructArg) elim_local: {
         for (node.outputs()) |use| {
             if (((!use.isStore() or use.value() == node) and !use.isLoad()) or use.isSub(graph.MemCpy)) {
                 break :elim_local;
@@ -341,7 +343,6 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
         }
 
         switch (node.extra2()) {
-            .Local => |n| n.no_address = true,
             .StructArg => |n| n.no_address = true,
             else => unreachable,
         }
@@ -744,19 +745,19 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         var locals = std.ArrayListUnmanaged(*FuncNode).empty;
 
         std.debug.assert(func.root.outputs()[1].kind == .Mem);
-        for (func.root.outputs()[1].outputs()) |o| if (o.kind == .Local) {
+        for (func.root.outputs()[1].outputs()) |o| if (o.kind == .LocalAlloc) {
             try locals.append(tmp.arena.allocator(), o);
         };
 
         std.sort.pdq(*FuncNode, locals.items, {}, struct {
             fn isBigger(_: void, lhs: *FuncNode, rhs: *FuncNode) bool {
-                return @ctz(lhs.extra(.Local).size) > @ctz(rhs.extra(.Local).size);
+                return @ctz(lhs.extra(.LocalAlloc).size) > @ctz(rhs.extra(.LocalAlloc).size);
             }
         }.isBigger);
 
         std.debug.assert(func.root.outputs()[1].kind == .Mem);
         for (locals.items) |o| {
-            const extra = o.extra(.Local);
+            const extra = o.extra(.LocalAlloc);
             const size = extra.size;
             extra.size = @bitCast(local_size);
             local_size += @intCast(size);
@@ -959,10 +960,11 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
 
                 try self.out.code.appendSlice(self.gpa, buf[len - 4 .. len]);
             },
-            .Local => |extra| if (!extra.no_address) {
+            .LocalAlloc => {},
+            .Local => {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_LEA, .{
                     self.getReg(instr),
-                    BRegOff{ .rsp, @intCast(instr.extra(.Local).size + self.local_base), 8 },
+                    BRegOff{ .rsp, @intCast(instr.inputs()[1].?.extra(.LocalAlloc).size + self.local_base), 8 },
                 });
             },
             .StructArg => |extra| if (!extra.no_address) {
@@ -1014,7 +1016,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
 
                 const offset: i32 = extra.base.base.dis +
                     @as(i32, @intCast(switch (instr.inputs()[2].?.extra2()) {
-                        .Local => |n| n.size + self.local_base,
+                        .LocalAlloc => |n| n.size + self.local_base,
                         .StructArg => |n| n.spec.size + self.arg_base,
                         else => unreachable,
                     }));
@@ -1027,7 +1029,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const dst = self.getReg(instr);
                 const offset: i32 = extra.base.dis +
                     @as(i32, @intCast(switch (instr.inputs()[2].?.extra2()) {
-                        .Local => |n| n.size + self.local_base,
+                        .LocalAlloc => |n| n.size + self.local_base,
                         .StructArg => |n| n.spec.size + self.arg_base,
                         else => unreachable,
                     }));
@@ -1040,7 +1042,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const vl = self.getReg(instr.inputs()[3]);
                 const offset: i32 = extra.base.dis +
                     @as(i32, @intCast(switch (instr.inputs()[2].?.extra2()) {
-                        .Local => |n| n.size + self.local_base,
+                        .LocalAlloc => |n| n.size + self.local_base,
                         .StructArg => |n| n.spec.size + self.arg_base,
                         else => unreachable,
                     }));

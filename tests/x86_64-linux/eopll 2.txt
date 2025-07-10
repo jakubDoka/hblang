@@ -1,44 +1,27 @@
 main:
 	push rbx
 	push rbp
-	push r12
-	push r13
-	push r14
-	push r15
 	sub rsp, 0x18
 	mov rax, 0x123
-	mov rcx, 0x00
-	mov r15, rcx
-	mov rdi, r15
+	mov rbx, 0x00
+	mov rdi, 0x00
 	syscall
-	mov rcx, 0x10
-	mov r14, rcx
-	mov rcx, 0xFFFFFFFFFFFFFFFF
-	mov r13, rcx
-	mov rcx, 0xE8
-	mov r12, rcx
-	movsxd rax, eax
-	mov rbp, rax
-	mov rbx, r15
+	movsxd rbp, eax
 1:	cmp rbx, 0x00
 	setz al
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, r15
+	mov rax, 0x00
 	add rsp, 0x18
-	pop r15
-	pop r14
-	pop r13
-	pop r12
 	pop rbp
 	pop rbx
 	ret
 0:	lea rsi, [rsp]
-	mov rax, r12
+	mov rdx, 0x10
+	mov rax, 0xE8
 	mov rdi, rbp
-	mov r10, r13
-	mov rdx, r14
+	mov r10, 0xFFFFFFFFFFFFFFFF
 	syscall
 	add rbx, 0x01
 	jmp :1

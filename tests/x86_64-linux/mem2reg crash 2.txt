@@ -17,14 +17,14 @@ mem2reg crash 2.insert:
 	jmp :3
 main:
 	sub rsp, 0x28
-	lea rax, [rsp+0x10]
 	mov qword ptr [rsp+0x10], 0x01
 	mov qword ptr [rsp+0x18], 0x00
-	lea rdi, [rsp]
+	lea rax, [rsp+0x10]
 	mov [rsp], rax
 	mov qword ptr [rsp+0x08], 0x01
-	mov rdx, 0x00
+	lea rdi, [rsp]
 	mov rsi, 0x01
+	mov rdx, 0x00
 	call :mem2reg crash 2.insert
 	mov rax, [rax]
 	add rsp, 0x28

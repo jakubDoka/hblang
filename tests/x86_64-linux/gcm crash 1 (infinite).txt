@@ -6,18 +6,15 @@ main:
 	push r12
 	push r13
 	push r14
-	push r15
 	sub rsp, 0x408
 	mov rcx, 0x00
 	lea r14, [rsp]
 	lea r13, [0x0000000000000007]
 	mov r12, 0x400
-	mov rax, 0x00
-	mov r15b, al
 	mov rax, r14
-1:	mov rbx, rcx
-	mov rbp, rax
-2:	cmp rbx, 0x00
+1:	mov rbp, rcx
+	mov rbx, rax
+2:	cmp rbp, 0x00
 	setnb al
 	movzx rax, al
 	test al, al
@@ -25,11 +22,11 @@ main:
 	mov al, [r13]
 	mov sil, al
 	mov dl, al
-	mov dil, r15b
+	mov rdi, 0x00
 	call :gcm crash 1 (infinite).func
-	mov rcx, rbx
-	mov rax, rbp
+	mov rcx, rbp
+	mov rax, rbx
 	jmp :1
-0:	mov rbp, r14
-	mov rbx, r12
+0:	mov rbx, r14
+	mov rbp, r12
 	jmp :2

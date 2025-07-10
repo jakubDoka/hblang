@@ -40,14 +40,14 @@ main:
 	mov qword ptr [rsp+0x48], 0x01
 	mov qword ptr [rsp+0x50], 0x01
 	mov qword ptr [rsp+0x58], 0x01
-	mov rsi, [rsp+0x50]
-	mov rax, [rsp+0x40]
-	mov rdx, [rsp+0x58]
-	mov rcx, [rsp+0x48]
-	cmp rax, rsi
+	mov rsi, [rsp+0x40]
+	mov rax, [rsp+0x50]
+	mov rdx, [rsp+0x48]
+	mov rcx, [rsp+0x58]
+	cmp rsi, rax
 	setnz al
 	movzx rax, al
-	cmp rcx, rdx
+	cmp rdx, rcx
 	setnz cl
 	movzx rcx, cl
 	or eax, ecx
@@ -59,14 +59,14 @@ main:
 	mov qword ptr [rsp+0x68], 0x02
 	mov qword ptr [rsp+0x70], 0x01
 	mov qword ptr [rsp+0x78], 0x01
-	mov rsi, [rsp+0x70]
-	mov rax, [rsp+0x60]
-	mov rdx, [rsp+0x78]
-	mov rcx, [rsp+0x68]
-	cmp rax, rsi
+	mov rsi, [rsp+0x60]
+	mov rax, [rsp+0x70]
+	mov rdx, [rsp+0x68]
+	mov rcx, [rsp+0x78]
+	cmp rsi, rax
 	setz al
 	movzx rax, al
-	cmp rcx, rdx
+	cmp rdx, rcx
 	setz cl
 	movzx rcx, cl
 	and eax, ecx
@@ -112,24 +112,24 @@ main:
 	mov rcx, [rsp]
 	add rax, rcx
 	mov [rsp+0x20], rax
-	mov rcx, [rsp+0x08]
 	mov rax, [rsp+0x28]
+	mov rcx, [rsp+0x08]
 	add rax, rcx
 	mov [rsp+0x28], rax
-	mov rcx, [rsp+0x10]
 	mov rax, [rsp+0x30]
+	mov rcx, [rsp+0x10]
 	add rax, rcx
 	mov [rsp+0x30], rax
-	mov rcx, [rsp+0x18]
 	mov rax, [rsp+0x38]
+	mov rcx, [rsp+0x18]
 	add rax, rcx
 	mov [rsp+0x38], rax
 	mov rax, [rsp+0x20]
 	mov rcx, [rsp+0x30]
 	add rax, rcx
 	mov [rsp+0xB0], rax
-	mov rcx, [rsp+0x38]
 	mov rax, [rsp+0x28]
+	mov rcx, [rsp+0x38]
 	add rax, rcx
 	mov [rsp+0xB8], rax
 	mov rax, [rsp+0xB0]

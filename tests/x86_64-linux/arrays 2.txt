@@ -7,7 +7,6 @@ main:
 4:	cmp r8, 0x03
 	setz al
 	movzx rax, al
-	lea r9, [rsp]
 	test al, al
 	jz :0
 	mov rsi, r11
@@ -22,13 +21,14 @@ main:
 1:	mov rdi, rsi
 	imul rdi, rcx
 	add rsi, 0x01
-	mov rdx, r9
+	lea rdx, [rsp]
 	add rdx, rdi
 	mov rdx, [rdx]
 	add rax, rdx
 	jmp :2
 0:	mov rax, r8
 	imul rax, r10
+	lea r9, [rsp]
 	add r9, rax
 	mov rdx, r11
 5:	cmp rdx, 0x03

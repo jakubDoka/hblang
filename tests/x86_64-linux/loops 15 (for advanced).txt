@@ -2,7 +2,7 @@ main:
 	sub rsp, 0x20
 	mov rax, 0x01
 	lea rcx, [rsp]
-	mov rsi, rcx
+	lea rsi, [rsp]
 	add rsi, 0x20
 	mov rdx, rcx
 1:	cmp rdx, rsi

@@ -1,69 +1,68 @@
 main:
 	sub rsp, 0x90
-	lea rsi, [rsp+0x40]
 	mov qword ptr [rsp+0x40], 0x01
 	mov qword ptr [rsp+0x48], 0x02
 	mov qword ptr [rsp+0x50], 0x03
 	mov qword ptr [rsp+0x58], 0x04
-	mov [rsp+0x60], rsi
+	lea rdx, [rsp+0x40]
+	mov [rsp+0x60], rdx
 	mov qword ptr [rsp+0x68], 0x04
-	lea rcx, [rsp]
-	mov [rsp], rsi
+	mov [rsp], rdx
 	mov qword ptr [rsp+0x08], 0x04
 	mov rax, [rsp+0x48]
-	mov [rsp+0x10], rsi
+	mov [rsp+0x10], rdx
 	mov [rsp+0x18], rax
-	mov rdx, 0x04
-	mov r9, [rsp+0x48]
 	mov rax, 0x08
-	mov r8, r9
-	imul r8, rax
-	mov rdi, rsi
-	add rdi, r8
-	mov [rsp+0x20], rdi
-	sub rdx, r9
-	mov [rsp+0x28], rdx
-	mov r8, [rsp+0x40]
-	mov rdx, [rsp+0x50]
+	mov r8, [rsp+0x48]
+	mov rcx, 0x04
 	mov rdi, r8
 	imul rdi, rax
+	lea rsi, [rsp+0x40]
 	add rsi, rdi
-	mov [rsp+0x30], rsi
-	sub rdx, r8
-	mov [rsp+0x38], rdx
+	mov [rsp+0x20], rsi
+	sub rcx, r8
+	mov [rsp+0x28], rcx
+	mov rdi, [rsp+0x40]
+	mov rcx, [rsp+0x50]
+	mov rsi, rdi
+	imul rsi, rax
+	add rdx, rsi
+	mov [rsp+0x30], rdx
+	sub rcx, rdi
+	mov [rsp+0x38], rcx
 	mov qword ptr [rsp+0x70], 0x00
 	mov qword ptr [rsp+0x78], 0x00
-	mov r9, 0x10
-2:	mov rdx, [rsp+0x78]
-	cmp rdx, 0x04
-	setz dl
-	movzx rdx, dl
-	test dl, dl
+	mov r8, 0x10
+2:	mov rcx, [rsp+0x78]
+	cmp rcx, 0x04
+	setz cl
+	movzx rcx, cl
+	test cl, cl
 	jz :0
 	mov rax, [rsp+0x70]
 	add rsp, 0x90
 	ret
 0:	mov qword ptr [rsp+0x80], 0x00
-3:	mov rsi, [rsp+0x78]
-	mov rdx, rsi
-	imul rdx, r9
-	mov r8, rcx
-	add r8, rdx
-	mov rdx, [rsp+0x80]
-	mov rdi, [r8+0x08]
-	cmp rdx, rdi
+3:	mov rdx, [rsp+0x78]
+	lea rdi, [rsp]
+	mov rcx, rdx
+	imul rcx, r8
+	add rdi, rcx
+	mov rcx, [rsp+0x80]
+	mov rsi, [rdi+0x08]
+	cmp rcx, rsi
 	jnz :1
-	add rsi, 0x01
-	mov [rsp+0x78], rsi
-	jmp :2
-1:	mov rsi, [r8]
-	imul rdx, rax
-	add rsi, rdx
-	mov rdx, [rsp+0x70]
-	mov rsi, [rsi]
-	add rdx, rsi
-	mov [rsp+0x70], rdx
-	mov rdx, [rsp+0x80]
 	add rdx, 0x01
-	mov [rsp+0x80], rdx
+	mov [rsp+0x78], rdx
+	jmp :2
+1:	mov rdx, [rdi]
+	imul rcx, rax
+	add rdx, rcx
+	mov rcx, [rsp+0x70]
+	mov rdx, [rdx]
+	add rcx, rdx
+	mov [rsp+0x70], rcx
+	mov rcx, [rsp+0x80]
+	add rcx, 0x01
+	mov [rsp+0x80], rcx
 	jmp :3

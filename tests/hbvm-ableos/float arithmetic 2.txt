@@ -1,14 +1,15 @@
 main:
-         st $31, $254, -16, 16
-     addi64 $254, $254, -16
-       li32 $32, 1148846080
-         cp $1, $32
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+       li32 $1, 1148846080
         jal $31, $0, :float arithmetic 2.sin
-     fmul32 $1, $1, $32
+         cp $2, $1
+       li32 $1, 1148846080
+     fmul32 $1, $2, $1
       fti32 $1, $1, 0
      addi64 $1, $1, -826
-     addi64 $254, $254, 16
-         ld $31, $254, -16, 16
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
          tx
 float arithmetic 2.sin:
         lra $8, $0, :float arithmetic 2.sin_table

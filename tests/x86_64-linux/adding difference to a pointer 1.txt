@@ -2,19 +2,17 @@ adding difference to a pointer 1.one:
 	mov rax, 0x01
 	ret
 main:
-	push rbx
 	sub rsp, 0x08
-	lea rbx, [rsp]
 	mov byte ptr [rsp], 0x00
 	mov byte ptr [rsp+0x01], 0x01
 	mov byte ptr [rsp+0x02], 0x02
 	mov byte ptr [rsp+0x03], 0x03
 	call :adding difference to a pointer 1.one
-	mov rcx, 0x01
-	sub rcx, rax
-	add rbx, rcx
-	mov al, [rbx]
+	mov rdx, 0x01
+	lea rcx, [rsp]
+	sub rdx, rax
+	add rcx, rdx
+	mov al, [rcx]
 	movzx rax, al
 	add rsp, 0x08
-	pop rbx
 	ret

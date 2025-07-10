@@ -101,25 +101,33 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
 
             if (func.root.outputs().len < 2 or func.root.outputs()[1].kind != .Mem) return;
 
-            for (func.root.outputs()[1].outputs()) |local| if (local.kind == .Local) {
+            for (func.root.outputs()[1].outputs()) |local| if (local.kind == .LocalAlloc) {
                 for (local.outputs()) |op| {
-                    const mem_op, const offset = op.knownMemOp() orelse continue;
-                    if ((!mem_op.isLoad() and !mem_op.isStore()) or mem_op.isSub(graph.MemCpy)) continue;
-                    if (mem_op.isStore() and mem_op.value() == local) {
-                        continue;
-                    }
-                    const end_offset = offset + @as(i64, @intCast(mem_op.data_type.size()));
-                    if (offset < 0 or end_offset > local.extra(.Local).size) {
-                        errors.append(arena.allocator(), .{ .StackOob = .{
-                            .slot = local.sloc,
-                            .op = mem_op.id,
-                            .access = op.sloc,
-                            .size = local.extra(.Local).size,
-                            .range = .{ .end = end_offset, .start = offset },
-                        } }) catch unreachable;
+                    if (op.kind == .Local) {
+                        for (op.outputs()) |use| {
+                            checkLocalForOob(use, local, op, arena, errors);
+                        }
+                    } else {
+                        checkLocalForOob(op, local, null, arena, errors);
                     }
                 }
             };
+        }
+
+        pub fn checkLocalForOob(op: *Func.Node, local: *Func.Node, addr: ?*Func.Node, arena: *root.Arena, errors: *std.ArrayListUnmanaged(Error)) void {
+            const mem_op, const offset = op.knownMemOp() orelse return;
+            if ((!mem_op.isLoad() and !mem_op.isStore()) or mem_op.isSub(graph.MemCpy)) return;
+            if (mem_op.isStore() and mem_op.value() == addr) return;
+            const end_offset = offset + @as(i64, @intCast(mem_op.data_type.size()));
+            if (offset < 0 or end_offset > local.extra(.LocalAlloc).size) {
+                errors.append(arena.allocator(), .{ .StackOob = .{
+                    .slot = local.sloc,
+                    .op = mem_op.id,
+                    .access = op.sloc,
+                    .size = local.extra(.LocalAlloc).size,
+                    .range = .{ .end = end_offset, .start = offset },
+                } }) catch unreachable;
+            }
         }
 
         // NOTE: this is a heuristic, it can miss things

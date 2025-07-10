@@ -398,8 +398,8 @@ pub const InlineFunc = struct {
 
         if (entry_mem != null) {
             for (tmp.arena.dupe(*Func.Node, entry_mem.?.outputs())) |use| {
-                if (use.kind == .Local) {
-                    func.setInputNoIntern(use, 1, into_entry_mem);
+                if (use.kind == .LocalAlloc) {
+                    func.setInputNoIntern(use, 0, into_entry_mem);
                 }
             }
         }
@@ -418,13 +418,14 @@ pub const InlineFunc = struct {
                     // convention of the inlined function since the default
                     // call convention should be a bit customized
                     //
-                    const copy = func.addNode(
-                        .Local,
+                    const alloc = func.addNode(
+                        .LocalAlloc,
                         o.sloc,
                         .i64,
                         &.{ null, into_entry_mem },
                         .{ .size = o.extra(.StructArg).spec.size },
                     );
+                    const copy = func.addNode(.Local, o.sloc, .i64, &.{ null, alloc }, .{});
                     func.subsume(copy, dep);
                     func.subsume(copy, o);
                     break;

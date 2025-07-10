@@ -27,28 +27,24 @@ slices 4.equals:
 	jmp :7
 main:
 	push rbx
-	push rbp
-	push r12
 	sub rsp, 0x08
-	lea r12, [rsp]
 	mov byte ptr [rsp], 0x61
 	mov byte ptr [rsp+0x01], 0x62
 	mov byte ptr [rsp+0x02], 0x63
-	mov rbp, 0x03
 	lea rbx, [0x0000000000000007]
-	mov rsi, rbp
-	mov rcx, rbp
 	mov rdi, rbx
 	mov rdx, rbx
+	mov rsi, 0x03
+	mov rcx, 0x03
 	call :slices 4.equals
 	xor al, 0x01
 	test al, al
 	jz :0
 	jmp :1
-0:	mov rsi, rbp
-	mov rcx, rbp
+0:	lea rdi, [rsp]
 	mov rdx, rbx
-	mov rdi, r12
+	mov rsi, 0x03
+	mov rcx, 0x03
 	call :slices 4.equals
 	xor al, 0x01
 	test al, al
@@ -57,7 +53,5 @@ main:
 	jmp :3
 2:	mov rax, 0x00
 3:	add rsp, 0x08
-	pop r12
-	pop rbp
 	pop rbx
 	ret

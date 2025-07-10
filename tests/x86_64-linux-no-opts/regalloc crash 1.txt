@@ -17,15 +17,15 @@ regalloc crash 1.broken:
 	ret
 main:
 	sub rsp, 0x48
-	lea rsi, [rsp+0x30]
 	mov byte ptr [rsp+0x30], 0x00
 	mov qword ptr [rsp+0x38], 0x00
 	mov byte ptr [rsp+0x40], 0x00
-	lea rdi, [rsp]
 	mov rdx, 0x18
+	lea rdi, [rsp]
+	lea rsi, [rsp+0x30]
 	call :memcpy
-	lea rdi, [rsp+0x18]
 	mov rsi, 0x20
+	lea rdi, [rsp+0x18]
 	call :regalloc crash 1.broken
 	mov rax, 0x00
 	add rsp, 0x48

@@ -134,8 +134,9 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
 
             //self.fmtUnscheduled(std.io.getStdErr().writer().any(), .escape_codes);
             std.debug.assert(self.root.outputs()[1].kind == .Mem);
-            outer: for (self.root.outputs()[1].outputs()) |o| {
-                if (o.kind != .Local) continue :outer;
+            outer: for (self.root.outputs()[1].outputs()) |ov| {
+                if (ov.kind != .LocalAlloc or ov.outputs().len != 1) continue :outer;
+                const o = ov.outputs()[0];
                 std.debug.assert(o.schedule == std.math.maxInt(u16));
 
                 // collect all loads and stores, bail on something else
@@ -168,7 +169,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                     if (offs < 0 or @as(u64, @intCast(offs)) + use.data_type.size() >
                         // TODO: we ignore elems > 8 for now but we will want mem2reg to work on
                         // vectors eventually
-                        o.extra(.Local).size or use.data_type.size() > 8)
+                        o.inputs()[1].?.extra(.LocalAlloc).size or use.data_type.size() > 8)
                     {
                         continue :outer;
                     }
@@ -196,7 +197,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
 
                 o.schedule = @intCast(slots.items.len);
                 try slots.append(tmp, .{ .offset = offset });
-                offset += @intCast(o.extra(.Local).size);
+                offset += @intCast(o.inputs()[1].?.extra(.LocalAlloc).size);
             }
 
             std.debug.assert(std.sort.isSorted(i64, alloc_offsets.items, {}, std.sort.asc(i64)));

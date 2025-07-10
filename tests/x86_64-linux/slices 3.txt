@@ -37,19 +37,17 @@ slices 3.reverse:
 1:	add rsp, 0x10
 	ret
 main:
-	push rbx
 	sub rsp, 0x28
-	lea rbx, [rsp+0x20]
 	mov byte ptr [rsp+0x20], 0x01
 	mov byte ptr [rsp+0x21], 0x02
 	mov byte ptr [rsp+0x22], 0x03
+	mov rdx, 0x00
 	lea rdi, [rsp]
 	mov rsi, 0x01
-	mov rdx, 0x00
 	call :slices 3.reverse
+	lea rsi, [rsp+0x20]
 	lea rdi, [rsp+0x10]
 	mov rdx, 0x03
-	mov rsi, rbx
 	call :slices 3.reverse
 	mov al, [rsp+0x20]
 	mov dl, [rsp+0x21]
@@ -60,5 +58,4 @@ main:
 	sub rax, rdx
 	sub rax, rcx
 	add rsp, 0x28
-	pop rbx
 	ret

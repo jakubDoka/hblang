@@ -165,7 +165,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                         break;
                     }
 
-                    if (instr.kind != .MachSplit) break; // TODO: clonable
+                    if (instr.kind != .MachSplit and !instr.isClone()) break; // TODO: clonable
                 }
             }
 
@@ -394,7 +394,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
                 if (lrg.hasDef(member, lrg_table) and
                     (min == max or func.loopDepth(member) <= min) and
-                    // TODO: (is clone) and
+                    !member.isClone() and
                     !(member.outputs().len == 1 and member.outputs()[0].kind == .MachSplit and
                         LiveRange.isSameBlockNoClobber(member.outputs()[0], lrg_table)))
                 {

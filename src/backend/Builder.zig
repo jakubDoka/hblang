@@ -100,12 +100,13 @@ pub fn end(self: *Builder, _: BuildToken) void {
 // #MEM ========================================================================
 
 pub fn addLocal(self: *Builder, sloc: graph.Sloc, size: u64) SpecificNode(.Local) {
-    return self.func.addNode(.Local, sloc, .i64, &.{ null, self.root_mem }, .{ .size = size });
+    const alloc = self.func.addNode(.LocalAlloc, sloc, .i64, &.{self.root_mem}, .{ .size = size });
+    return self.func.addNode(.Local, sloc, .i64, &.{ null, alloc }, .{});
 }
 
 pub fn resizeLocal(_: *Builder, here: SpecificNode(.Local), to_size: u64) void {
-    std.debug.assert(here.extra(.Local).size == 0);
-    here.extra(.Local).size = to_size;
+    std.debug.assert(here.inputs()[1].?.extra(.LocalAlloc).size == 0);
+    here.inputs()[1].?.extra(.LocalAlloc).size = to_size;
 }
 
 pub fn addLoad(self: *Builder, sloc: graph.Sloc, addr: *BuildNode, ty: DataType) SpecificNode(.Store) {

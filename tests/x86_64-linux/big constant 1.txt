@@ -5,8 +5,8 @@ big constant 1.uninit:
 	ret
 main:
 	sub rsp, 0x08
-	lea rdi, [rsp]
 	mov qword ptr [rsp], 0x00
+	lea rdi, [rsp]
 	call :big constant 1.uninit
 	add rsp, 0x08
 	ret

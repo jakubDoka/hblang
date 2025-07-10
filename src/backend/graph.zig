@@ -518,10 +518,14 @@ pub const builtin = enum {
         pub const is_basic_block_start = true;
     };
     // ===== VALUES ====
-    pub const Local = extern struct {
+    pub const LocalAlloc = extern struct {
         size: u64,
-        no_address: bool = false,
 
+        pub const is_floating = true;
+        pub const is_pinned = true;
+    };
+    pub const Local = extern struct {
+        pub const is_clone = true;
         pub const data_dep_offset = 1;
     };
     pub const Phi = extern struct {
@@ -1241,7 +1245,7 @@ pub fn Func(comptime Backend: type) type {
                 return !self.isStore() and
                     !self.isCfg() and
                     (self.kind != .Phi or self.isDataPhi()) and
-                    (self.kind != .Local or !self.extra(.Local).no_address) and
+                    (self.kind != .LocalAlloc) and
                     self.kind != .Mem;
             }
 
@@ -1326,7 +1330,11 @@ pub fn Func(comptime Backend: type) type {
                 return self.isSub(Load);
             }
 
-            pub inline fn isPinned(self: *const Node) bool {
+            pub fn isFloating(self: *const Node) bool {
+                return (comptime bakeFlagBitset("is_floating")).contains(self.kind);
+            }
+
+            pub fn isPinned(self: *const Node) bool {
                 return (comptime bakeFlagBitset("is_pinned")).contains(self.kind);
             }
 
@@ -1462,7 +1470,20 @@ pub fn Func(comptime Backend: type) type {
                 }
             }
 
-            const ins = if (def.isClone()) self.clone(def, block) else self.addSplit(block, if (skip and
+            const ins = if (def.isClone()) b: {
+                if (def.outputs().len == 1) {
+                    const cur_block = def.cfg0();
+                    const i = cur_block.base.posOfOutput(def);
+
+                    std.mem.rotate(*Node, cur_block.base.outputs()[i..], 1);
+                    cur_block.base.output_len -= 1;
+                    def.inputs()[0] = &block.base;
+                    self.addUse(&block.base, def);
+                    break :b def;
+                } else {
+                    break :b self.clone(def, block);
+                }
+            } else self.addSplit(block, if (skip and
                 def.kind == .MachSplit and def.cfg0() == block) def.inputs()[1].? else def, dbg);
 
             self.setInputNoIntern(use, idx, ins);
@@ -2322,6 +2343,12 @@ pub fn Func(comptime Backend: type) type {
             var visited = try std.DynamicBitSet.initEmpty(tmp.arena.allocator(), self.next_id);
 
             self.root.fmt(self.gcm.block_count, writer, colors);
+            if (self.root.outputs().len > 1 and self.root.outputs()[1].kind == .Mem) {
+                for (self.root.outputs()[1].outputs()) |oo| if (oo.kind == .LocalAlloc) {
+                    try writer.writeAll("\n  ");
+                    oo.fmt(self.gcm.instr_count, writer, colors);
+                };
+            }
             try writer.writeAll("\n");
             for (collectPostorder(self, tmp.arena.allocator(), &visited)) |p| {
                 p.base.fmt(self.gcm.block_count, writer, colors);

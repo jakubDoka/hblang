@@ -42,15 +42,17 @@ b:	mov rdx, [rsp]
 4:	cmp rdx, rbx
 	jnz :6
 	mov [rsp], rcx
-	mov rdx, 0x05
 	mov rcx, [rsp]
-	cmp rcx, rdx
+	cmp rcx, 0x05
+	setnz cl
+	movzx rcx, cl
+	test cl, cl
 	jz :7
 3:	jmp :8
 7:	mov rax, 0x90000002
 	mov [rsp+0x10], eax
-	lea rdi, [rsp+0x08]
 	mov qword ptr [rsp+0x08], 0x00
+	lea rdi, [rsp+0x08]
 	call :defer 1.main.ret_defer
 	mov rax, [rsp+0x08]
 	cmp rax, 0x01

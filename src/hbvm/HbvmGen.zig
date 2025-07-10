@@ -207,6 +207,7 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
 
         if (base.isStack()) {
             st.kind = .StackSt;
+            func.setInputNoIntern(st, 2, base.inputs()[1]);
         }
 
         work.add(st);
@@ -224,7 +225,7 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
                 .StackLd,
                 node.sloc,
                 node.data_type,
-                &.{ inps[0], inps[1], base },
+                &.{ inps[0], inps[1], base.inputs()[1] },
                 .{ .base = .{ .offset = offset } },
             )
         else
@@ -239,7 +240,7 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
         return ld;
     }
 
-    if (node.isStack()) elim_local: {
+    if (node.kind == .StructArg) elim_local: {
         for (node.outputs()) |use| {
             if (((!use.isStore() or use.value() == node) and !use.isLoad()) or use.isSub(graph.MemCpy)) {
                 break :elim_local;
@@ -247,7 +248,6 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
         }
 
         switch (node.extra2()) {
-            .Local => |n| n.no_address = true,
             .StructArg => |n| n.no_address = true,
             else => unreachable,
         }
@@ -451,8 +451,8 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     var local_size: i64 = 0;
     if (func.root.outputs().len > 1) {
         std.debug.assert(func.root.outputs()[1].kind == .Mem);
-        for (func.root.outputs()[1].outputs()) |o| if (o.kind == .Local) {
-            const extra = o.extra(.Local);
+        for (func.root.outputs()[1].outputs()) |o| if (o.kind == .LocalAlloc) {
+            const extra = o.extra(.LocalAlloc);
             const size = extra.size;
             extra.size = @bitCast(local_size);
             local_size += @intCast(size);
@@ -555,8 +555,9 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 try self.out.addGlobalReloc(self.gpa, extra.id, 4, 3);
                 self.emit(.lra, .{ self.getReg(no), .null, 0 });
             },
-            .Local => |extra| if (!extra.no_address) {
-                self.emit(.addi64, .{ self.getReg(no), .stack_addr, extra.size });
+            .LocalAlloc => {},
+            .Local => {
+                self.emit(.addi64, .{ self.getReg(no), .stack_addr, no.inputs()[1].?.extra(.LocalAlloc).size });
             },
             .Ld => |extra| {
                 const size: u16 = @intCast(no.data_type.size());
@@ -570,12 +571,12 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .StackLd => |extra| {
                 const size: u16 = @intCast(no.data_type.size());
-                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.Local).size)) + extra.base.offset;
+                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc).size)) + extra.base.offset;
                 self.emit(.ld, .{ self.getReg(no), .stack_addr, off, size });
             },
             .StackSt => |extra| {
                 const size: u16 = @intCast(no.data_type.size());
-                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.Local).size)) + extra.base.offset;
+                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc).size)) + extra.base.offset;
                 self.emit(.st, .{ self.getReg(inps[0]), .stack_addr, off, size });
             },
             .BlockCpy => {

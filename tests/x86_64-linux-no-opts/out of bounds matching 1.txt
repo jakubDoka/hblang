@@ -52,8 +52,8 @@ out of bounds matching 1.next:
 	mov al, [rax]
 	mov [rsp+0x0A], al
 	mov rdx, [rsp]
-	mov rax, [rdx+0x08]
 	mov rcx, [rdx]
+	mov rax, [rdx+0x08]
 	add rcx, 0x01
 	mov [rdx], rcx
 	sub rax, 0x01
@@ -66,19 +66,16 @@ out of bounds matching 1.next:
 1:	add rsp, 0x10
 	ret
 main:
-	push rbx
 	sub rsp, 0x28
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x10], rax
 	mov qword ptr [rsp+0x18], 0x0C
-	lea rbx, [rsp]
 	mov rsi, [rsp+0x10]
 	mov rdx, [rsp+0x18]
-	mov rdi, rbx
+	lea rdi, [rsp]
 	call :out of bounds matching 1.byte_iter
-	mov rdi, rbx
+	lea rdi, [rsp]
 	call :out of bounds matching 1.Iterator(Iter = out of bounds matching 1).for_each(func = out of bounds matching 1.main)
 	mov rax, 0x00
 	add rsp, 0x28
-	pop rbx
 	ret

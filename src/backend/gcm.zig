@@ -230,7 +230,7 @@ pub fn GcmMixin(comptime Backend: type) type {
 
                     if (t.asCfg()) |c| {
                         late_scheds[c.base.id] = if (c.base.isBasicBlockStart()) c else c.base.tryCfg0();
-                    } else if (t.isPinned() or t.isSub(graph.Arg)) {
+                    } else if (t.isFloating()) {} else if (t.isPinned() or t.isSub(graph.Arg)) {
                         late_scheds[t.id] = t.cfg0();
                     } else {
                         for (t.outputs()) |o| {
@@ -240,10 +240,6 @@ pub fn GcmMixin(comptime Backend: type) type {
                         }
 
                         if (t.isLoad()) {
-                            //if (t.id == 142 and t.isLoad()) {
-                            //    std.debug.print("{} \n", .{t});
-                            //    unreachable;
-                            //}
                             for (t.mem().outputs()) |p| {
                                 if ((p.isStore() or p.kind == .Call) and late_scheds[p.id] == null) {
                                     continue :task;
@@ -290,7 +286,7 @@ pub fn GcmMixin(comptime Backend: type) type {
                                     },
                                     .Local => {},
                                     .Return => {},
-                                    else => if (o.isLoad()) {} else if (o.isStore()) {
+                                    else => if (o.isLoad() or o.kind == .LocalAlloc) {} else if (o.isStore()) {
                                         const stblck = late_scheds[o.id].?;
                                         if (stblck.ext.antidep == t.id) {
                                             lca = stblck.findLca(lca);
@@ -349,6 +345,7 @@ pub fn GcmMixin(comptime Backend: type) type {
                 }
 
                 for (nodes, late_scheds) |on, l| if (on) |n| {
+                    std.debug.assert(!n.isFloating());
                     _ = self.setInput(n, 0, &l.?.base);
                 };
 
@@ -385,6 +382,7 @@ pub fn GcmMixin(comptime Backend: type) type {
                         }
                         if (o.kind == .Phi) continue;
                         for (o.inputs()[1..]) |i| if (i != null) {
+                            if (i.?.isFloating()) continue;
                             var cursor = o.cfg0();
                             while (cursor.idepth() > i.?.cfg0().idepth()) {
                                 cursor = cursor.idom();
@@ -519,6 +517,8 @@ pub fn GcmMixin(comptime Backend: type) type {
                 };
 
                 for (node.inputs()[1..]) |oin| if (oin) |in| {
+                    if (in.isFloating()) continue;
+
                     if (in.cfg0().idepth() > best.idepth()) {
                         best = in.cfg0();
                     }
