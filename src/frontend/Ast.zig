@@ -540,7 +540,9 @@ pub fn reportLow(
     var idx: usize = 0;
     while (iter.next()) |chunk| {
         try out.writeAll(chunk);
+        try colors.setColor(out, .bold);
         try out.writeAll(args[idx]);
+        try colors.setColor(out, .reset);
         idx += 1;
     }
 

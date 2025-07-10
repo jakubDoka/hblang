@@ -274,7 +274,7 @@ pub const Lexeme = enum(u16) {
     }
 
     pub fn isComparison(self: Lexeme) bool {
-        return self.precedence() == 5;
+        return self.precedence() == 7;
     }
 
     pub fn repr(self: Lexeme) []const u8 {
