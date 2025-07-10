@@ -3,7 +3,7 @@ main:
      addi64 $254, $254, -8
      addi64 $1, $254, 0
         jal $31, $0, :generic structs 7 (template method call).A.apply(func = generic structs 7 (template method call).main)
-       li64 $1, 0
+         cp $1, $0
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx

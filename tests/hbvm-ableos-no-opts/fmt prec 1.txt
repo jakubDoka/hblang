@@ -6,5 +6,5 @@ main:
          ld $31, $254, -8, 8
          tx
 fmt prec 1.main:
-       li64 $1, 0
+         cp $1, $0
        jala $0, $31, 0

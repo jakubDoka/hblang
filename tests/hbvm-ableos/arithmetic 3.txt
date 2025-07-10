@@ -147,7 +147,7 @@ e:      jmp :11
         jne $2, $1, :29
        li64 $1, 26
         jmp :1b
-29:     li64 $1, 0
+29:       cp $1, $0
         jmp :1b
 26:     li64 $1, 23
         jmp :1b
@@ -176,5 +176,5 @@ arithmetic 3.mne:
         li8 $1, -1
        jala $0, $31, 0
 arithmetic 3.mero:
-        li8 $1, 0
+         cp $1, $0
        jala $0, $31, 0

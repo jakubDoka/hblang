@@ -2,10 +2,9 @@ main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
         jal $31, $0, :die 2.fallible
-       li64 $2, 0
-        jne $1, $2, :1
+        jne $1, $0, :1
          un
 1:       un
 die 2.fallible:
-       li64 $1, 0
+         cp $1, $0
        jala $0, $31, 0

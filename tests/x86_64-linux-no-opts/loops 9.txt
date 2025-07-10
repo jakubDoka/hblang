@@ -19,7 +19,7 @@ main:
 	cmp cl, sil
 	setnz dl
 	movzx rdx, dl
-	mov cl, sil
+	mov rcx, 0x00
 	and ecx, edx
 	test cl, cl
 	jz :3

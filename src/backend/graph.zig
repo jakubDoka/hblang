@@ -563,6 +563,8 @@ pub const builtin = enum {
     };
     pub const CInt = extern struct {
         value: i64,
+
+        pub const is_clone = true;
     };
     // ===== MEMORY =====
     pub const Mem = extern struct {
@@ -978,8 +980,8 @@ pub fn Func(comptime Backend: type) type {
                 return if (comptime optApi("inPlaceSlot", @TypeOf(inPlaceSlot))) Backend.inPlaceSlot(self) else null;
             }
 
-            pub fn regBias(self: *Node) ?u16 {
-                return if (@hasDecl(Backend, "regBias")) Backend.regBias(self) else null;
+            pub fn isClone(self: *Node) bool {
+                return (comptime bakeFlagBitset("is_clone")).contains(self.kind);
             }
 
             pub fn noAlias(self: *Node, other: *Node) bool {
@@ -1447,21 +1449,49 @@ pub fn Func(comptime Backend: type) type {
                 use.cfg0().base.inputs()[idx - 1].?.inputs()[0].?.asCfg().?
             else
                 use.cfg0();
+
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+            const mask = use.regMask(self, idx, tmp.arena);
+
             if (skip and def.kind == .MachSplit) {
-                var tmp = utils.Arena.scrath(null);
-                defer tmp.deinit();
                 if (block == def.cfg0() and def.outputs().len == 1 and
-                    use.regMask(self, idx, tmp.arena).count() != 1)
+                    mask.count() != 1)
                 {
                     return;
                 }
             }
-            const ins = self.addSplit(block, if (skip and
+
+            const ins = if (def.isClone()) self.clone(def, block) else self.addSplit(block, if (skip and
                 def.kind == .MachSplit and def.cfg0() == block) def.inputs()[1].? else def, dbg);
+
             self.setInputNoIntern(use, idx, ins);
             const oidx = if (use.kind == .Phi) block.base.outputs().len - 2 else block.base.posOfOutput(use);
             const to_rotate = block.base.outputs()[oidx..];
             std.mem.rotate(*Node, to_rotate, to_rotate.len - 1);
+        }
+
+        pub fn clone(self: *Self, def: *Node, block: *CfgNode) *Node {
+            errdefer unreachable;
+
+            const node_size = def.size();
+            const new_slot = try self.arena.allocator()
+                .alignedAlloc(u8, @alignOf(Node), node_size);
+            @memcpy(new_slot, @as([*]const u8, @ptrCast(def)));
+            const new_node: *Node = @ptrCast(new_slot);
+
+            new_node.input_base = (try self.arena.allocator()
+                .dupe(?*Node, new_node.inputs())).ptr;
+            new_node.output_base = @ptrFromInt(@alignOf(*Node));
+            new_node.output_cap = 0;
+            new_node.output_len = 0;
+            new_node.id = self.next_id;
+            self.next_id += 1;
+
+            new_node.inputs()[0] = &block.base;
+            self.addUse(&block.base, new_node);
+
+            return new_node;
         }
 
         pub fn splitAfter(self: *Self, def: *Node, idx: usize, use: *Node, dbg: builtin.MachSplit.Dbg) void {

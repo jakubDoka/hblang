@@ -12,7 +12,7 @@ main:
          ld $31, $254, -24, 24
          tx
 foo.hb.foo:
-       li64 $1, 0
+         cp $1, $0
        jala $0, $31, 0
 foo.hb.bar:
        li64 $1, 1

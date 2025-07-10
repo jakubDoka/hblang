@@ -678,7 +678,11 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 const looser = if (rhs == winner) lhs else rhs;
                 ifg[winner.index(lrgs)] = final_adj;
 
-                if (winner.def == instr) winner.def = looser.def;
+                if (winner.def == instr) {
+                    winner.def = looser.def;
+                } else {
+                    looser.def = winner.def;
+                }
 
                 for (ifg[looser.index(lrgs)]) |adj| {
                     const other_adj = ifg[adj];
@@ -704,8 +708,8 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
             if (should_log) {
                 std.debug.print("coalesce: {} + {}\n", .{ instr, instr.dataDeps()[0] });
-                std.debug.print("lrg:     {}\n", .{splitLrg});
-                std.debug.print("drg:     {}\n", .{defLrg});
+                std.debug.print("lrg:      {}\n", .{splitLrg});
+                std.debug.print("drg:      {}\n", .{defLrg});
             }
 
             // TODO: could we actuially retain here?

@@ -15,7 +15,7 @@ main:
          ld $31, $254, -16, 16
          tx
 directives 13 (@Any).func(a: uint):
-       li64 $1, 0
+         cp $1, $0
        jala $0, $31, 0
 directives 13 (@Any).foo(vl: u8):
        jala $0, $31, 0

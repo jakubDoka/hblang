@@ -1,8 +1,7 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -20
-       li64 $1, 0
-         st $1, $254, 0, 8
+         st $0, $254, 0, 8
        li32 $1, 1879048194
          st $1, $254, 8, 4
        li64 $1, 1
@@ -1216,5 +1215,5 @@ deep instantiation 1.S(A = deep instantiation 1.Z).get:
          ld $31, $254, -8, 8
        jala $0, $31, 0
 deep instantiation 1.Z.get:
-       li32 $1, 0
+         cp $1, $0
        jala $0, $31, 0

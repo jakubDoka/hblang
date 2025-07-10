@@ -4,9 +4,8 @@ main:
        li64 $1, 10
         jal $31, $0, :nullable types 1.mkval(T = uint)
          cp $32, $2
-       li64 $2, 0
        andi $1, $1, 255
-        jne $1, $2, :1
+        jne $1, $0, :1
        li64 $1, 1
         jmp :2
 1:      jal $31, $0, :nullable types 1.mknull(T = uint)
@@ -23,6 +22,6 @@ nullable types 1.mkval(T = uint):
         li8 $1, 1
        jala $0, $31, 0
 nullable types 1.mknull(T = uint):
-        li8 $1, 0
+         cp $1, $0
        li64 $2, -6148914691236517206
        jala $0, $31, 0

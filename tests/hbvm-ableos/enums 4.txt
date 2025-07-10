@@ -2,7 +2,7 @@ main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
         lra $1, $0, :enums 4.map
-        li8 $2, 0
+         cp $2, $0
         jal $31, $0, :enums 4.NameMap(Enum = enums 4.Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get
          ld $1, $1, 0, 1
        andi $1, $1, 255

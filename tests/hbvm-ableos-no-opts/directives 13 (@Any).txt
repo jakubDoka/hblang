@@ -18,7 +18,7 @@ directives 13 (@Any).func(a: uint):
      addi64 $254, $254, -16
          st $1, $254, 0, 8
          st $2, $254, 8, 8
-       li64 $1, 0
+         cp $1, $0
      addi64 $254, $254, 16
        jala $0, $31, 0
 directives 13 (@Any).foo(vl: uint):

@@ -7,7 +7,7 @@ main:
        li32 $1, 1073741824
         jal $31, $0, :carry over call float op 1.opaque(v: f32)
          st $1, $254, 4, 4
-       li64 $1, 0
+         cp $1, $0
         jal $31, $0, :carry over call float op 1.opaque(v: uint)
          ld $2, $254, 0, 4
          ld $1, $254, 4, 4

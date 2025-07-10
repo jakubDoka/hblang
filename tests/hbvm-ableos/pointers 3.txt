@@ -10,10 +10,9 @@ main:
          ld $31, $254, -8, 8
          tx
 pointers 3.do_stuff:
-       li64 $2, 0
          ld $1, $1, 0, 8
-        jne $1, $2, :1
-         cp $1, $2
+        jne $1, $0, :1
+         cp $1, $0
         jmp :2
 1:     li64 $1, 1
 2:     jala $0, $31, 0

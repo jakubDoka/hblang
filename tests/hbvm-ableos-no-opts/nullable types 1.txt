@@ -6,9 +6,8 @@ main:
          st $1, $254, 0, 1
          st $2, $254, 8, 8
          ld $1, $254, 0, 1
-       li64 $2, 0
        andi $1, $1, 255
-        jne $1, $2, :1
+        jne $1, $0, :1
        li64 $1, 1
         jmp :2
 1:      jal $31, $0, :nullable types 1.mknull(T = uint)
@@ -36,8 +35,7 @@ nullable types 1.mkval(T = uint):
        jala $0, $31, 0
 nullable types 1.mknull(T = uint):
      addi64 $254, $254, -16
-        li8 $1, 0
-         st $1, $254, 0, 1
+         st $0, $254, 0, 1
          ld $1, $254, 0, 1
          ld $2, $254, 8, 8
      addi64 $254, $254, 16

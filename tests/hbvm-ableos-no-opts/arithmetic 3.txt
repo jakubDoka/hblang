@@ -189,7 +189,7 @@ e:      jmp :12
         jne $2, $1, :2a
        li64 $1, 26
         jmp :1c
-2a:     li64 $1, 0
+2a:       cp $1, $0
         jmp :1c
 27:     li64 $1, 23
         jmp :1c
@@ -213,7 +213,7 @@ arithmetic 3.one:
         li8 $1, 1
        jala $0, $31, 0
 arithmetic 3.zero:
-        li8 $1, 0
+         cp $1, $0
        jala $0, $31, 0
 arithmetic 3.cond:
      addi64 $254, $254, -1
@@ -225,5 +225,5 @@ arithmetic 3.mne:
         li8 $1, -1
        jala $0, $31, 0
 arithmetic 3.mero:
-        li8 $1, 0
+         cp $1, $0
        jala $0, $31, 0

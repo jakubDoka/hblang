@@ -11,5 +11,5 @@ main:
 zero sized structs 1.main.new:
        jala $0, $31, 0
 zero sized structs 1.main.test:
-       li64 $1, 0
+         cp $1, $0
        jala $0, $31, 0

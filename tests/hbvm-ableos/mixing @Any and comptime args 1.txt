@@ -1,12 +1,13 @@
 main:
-         st $31, $254, -8, 8
-     addi64 $254, $254, -8
+         st $31, $254, -16, 16
+     addi64 $254, $254, -16
         li8 $1, 1
-       li32 $2, 0
+         cp $32, $0
+         cp $2, $32
         jal $31, $0, :mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime args 1.main)
-       li64 $1, 0
-     addi64 $254, $254, 8
-         ld $31, $254, -8, 8
+         cp $1, $32
+     addi64 $254, $254, 16
+         ld $31, $254, -16, 16
          tx
 mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime args 1.main):
        andi $1, $1, 255
@@ -14,6 +15,6 @@ mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime arg
         li8 $1, 1
      addi32 $2, $2, 5
         jmp :2
-1:      li8 $1, 0
-       li64 $2, -6148914691236517206
+1:     li64 $2, -6148914691236517206
+         cp $1, $0
 2:     jala $0, $31, 0

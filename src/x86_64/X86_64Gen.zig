@@ -148,6 +148,14 @@ pub const Reloc = struct {
 };
 
 pub const classes = enum {
+    pub const GlobalLoad = extern struct {
+        base: OffsetLoad,
+        pub const data_dep_offset = 2;
+    };
+    pub const GlobalStore = extern struct {
+        base: OffsetStore,
+        pub const data_dep_offset = 2;
+    };
     pub const StackLoad = extern struct {
         base: OffsetLoad,
 
@@ -254,6 +262,14 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
                 &.{ node.inputs()[0], node.mem(), base },
                 .{ .base = .{ .dis = @intCast(offset) } },
             )
+        else if (base.kind == .GlobalAddr and false)
+            func.addNode(
+                .GlobalLoad,
+                node.sloc,
+                node.data_type,
+                &.{ node.inputs()[0], node.mem(), base },
+                .{ .base = .{ .dis = @intCast(offset) } },
+            )
         else
             func.addNode(
                 .OffsetLoad,
@@ -303,6 +319,10 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
 
         if (base.isStack()) {
             res.kind = .StackStore;
+        }
+
+        if (base.kind == .GlobalAddr and false) {
+            res.kind = .GlobalStore;
         }
 
         worklist.add(res);
@@ -488,34 +508,6 @@ pub fn readSplitIntMask(arena: *utils.Arena) Set {
 
 pub fn singleReg(reg: Reg, _: *utils.Arena) Set {
     return .init(@as(u64, 1) << @intCast(@intFromEnum(reg)));
-}
-
-pub fn regBias(node: *Func.Node) ?u16 {
-    return @intFromEnum(switch (node.extra2()) {
-        .Arg => |ext| if (ext.index < Reg.system_v.args.len) Reg.system_v.args[ext.index] else return null,
-        else => b: {
-            for (node.outputs()) |o| {
-                if (o.kind == .Call) {
-                    const idx = std.mem.indexOfScalar(?*Func.Node, o.dataDeps(), node) orelse continue;
-                    if (o.extra(.Call).id == syscall) {
-                        break :b Reg.system_v.syscall_args[idx];
-                    } else {
-                        break :b if (idx < Reg.system_v.args.len) Reg.system_v.args[idx] else return null;
-                    }
-                }
-
-                if (o.kind == .Phi and o.inputs()[0].?.kind != .Loop) {
-                    return o.regBias();
-                }
-            }
-
-            if (node.isSub(graph.builtin.BinOp)) {
-                return node.inputs()[1].?.regBias();
-            }
-
-            return null;
-        },
-    });
 }
 
 pub fn clobbers(node: *Func.Node) u64 {

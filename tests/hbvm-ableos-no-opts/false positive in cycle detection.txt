@@ -12,7 +12,7 @@ main:
        li32 $1, 1879048196
          st $1, $254, 16, 4
         jal $31, $0, :false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main)).test
-       li64 $1, 0
+         cp $1, $0
      addi64 $254, $254, 28
          ld $31, $254, -8, 8
          tx

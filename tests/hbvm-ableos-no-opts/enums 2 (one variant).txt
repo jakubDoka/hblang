@@ -6,8 +6,8 @@ main:
          ld $31, $254, -8, 8
          tx
 ableos.hb.page_size:
-       li64 $1, 0
+         cp $1, $0
        jala $0, $31, 0
 enums 2 (one variant).Target.current:
-        li8 $1, 0
+         cp $1, $0
        jala $0, $31, 0

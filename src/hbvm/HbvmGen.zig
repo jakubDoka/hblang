@@ -74,6 +74,7 @@ pub const classes = enum {
         base: graph.MemCpy = .{},
         size: u16,
     };
+    pub const Zero = extern struct {};
 };
 
 pub const reg_mask_cap = 254 + 32;
@@ -105,27 +106,7 @@ pub fn getStaticOffset(node: *Func.Node) i64 {
 }
 
 pub fn isInterned(kind: Func.Kind) bool {
-    return kind == .Ld or kind == .StackLd;
-}
-
-pub fn regBias(node: *Func.Node) ?u16 {
-    return switch (node.kind) {
-        .Arg => @intCast(node.extraConst(.Arg).index),
-        .StructArg => @intCast(node.extraConst(.StructArg).base.index),
-        else => {
-            for (node.outputs()) |o| {
-                if (o.kind == .Call) {
-                    const idx = std.mem.indexOfScalar(?*Func.Node, o.dataDeps(), node) orelse continue;
-                    return @intCast(idx);
-                }
-
-                if (o.kind == .Phi and o.inputs()[0].?.kind != .Loop) {
-                    return o.regBias();
-                }
-            }
-            return null;
-        },
-    };
+    return kind == .Ld or kind == .StackLd or kind == .Zero;
 }
 
 // ================== PEEPHOLES ==================
@@ -162,6 +143,9 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
             );
         }
     }
+
+    if (node.kind == .CInt and node.extra(.CInt).value == 0)
+        return func.addNode(.Zero, node.sloc, .i64, &.{null}, .{});
 
     if (node.kind == .UnOp and node.extra(.UnOp).op == .cast) return inps[1];
 
@@ -358,6 +342,8 @@ pub fn clobbers(node: *Func.Node) u64 {
 pub fn regMask(node: *Func.Node, _: *Func, idx: usize, arena: *utils.Arena) Set {
     errdefer unreachable;
 
+    if (node.kind == .Zero) return singleMask(arena, isa.Reg.null);
+
     if (node.kind == .Arg) {
         std.debug.assert(idx == 0);
         return singleMask(arena, isa.Reg.arg(node.extra(.Arg).index));
@@ -545,7 +531,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
     for (node.outputs()) |no| {
         const inps = no.dataDeps();
         switch (no.extra2()) {
-            .FramePointer => {},
+            .FramePointer, .Zero => {},
             .CInt => |extra| {
                 switch (no.data_type) {
                     inline .i8, .i16, .i32, .i64 => |t| self.emit(

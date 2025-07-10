@@ -6,9 +6,8 @@ main:
          st $2, $254, 8, 8
         jal $31, $0, :nullable types 4 (pointer optimization).opaque(v: ^uint)
          st $1, $254, 0, 8
-       li64 $2, 0
          ld $1, $254, 0, 8
-         st $2, $1, 0, 8
+         st $0, $1, 0, 8
          ld $1, $254, 8, 8
      addi64 $254, $254, 24
          ld $31, $254, -8, 8

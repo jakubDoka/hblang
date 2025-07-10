@@ -6,5 +6,5 @@ main:
          ld $31, $254, -8, 8
          tx
 functions 5 (inline).foo:
-       li64 $1, 0
+         cp $1, $0
        jala $0, $31, 0
