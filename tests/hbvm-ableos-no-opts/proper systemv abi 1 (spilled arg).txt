@@ -1,8 +1,7 @@
 main:
-         st $31, $254, -24, 24
-     addi64 $254, $254, -88
-         cp $33, $0
-         cp $1, $33
+         st $31, $254, -16, 16
+     addi64 $254, $254, -80
+         cp $1, $0
        li64 $8, 7
        li64 $7, 6
        li64 $6, 5
@@ -12,7 +11,8 @@ main:
        li64 $2, 1
         jal $31, $0, :proper systemv abi 1 (spilled arg).load_of_args
          cp $32, $1
-         st $33, $254, 0, 8
+         cp $1, $0
+         st $1, $254, 0, 8
        li64 $1, 1
          st $1, $254, 8, 8
        li64 $1, 2
@@ -33,8 +33,8 @@ main:
          ld $3, $254, 48, 8
         jal $31, $0, :proper systemv abi 1 (spilled arg).stack_args
       sub64 $1, $32, $1
-     addi64 $254, $254, 88
-         ld $31, $254, -24, 24
+     addi64 $254, $254, 80
+         ld $31, $254, -16, 16
          tx
 proper systemv abi 1 (spilled arg).load_of_args:
      addi64 $254, $254, -64

@@ -461,7 +461,9 @@ pub const builtin = enum {
     pub const Start = extern struct {
         base: Cfg = .{},
     };
-    pub const FramePointer = extern struct {};
+    pub const FramePointer = extern struct {
+        pub const is_readonly = true;
+    };
     pub const Entry = extern struct {
         base: Cfg = .{},
 
@@ -987,6 +989,10 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn isClone(self: *Node) bool {
                 return (comptime bakeFlagBitset("is_clone")).contains(self.kind);
+            }
+
+            pub fn isReadonly(self: *Node) bool {
+                return (comptime bakeFlagBitset("is_readonly")).contains(self.kind);
             }
 
             pub fn noAlias(self: *Node, other: *Node) bool {

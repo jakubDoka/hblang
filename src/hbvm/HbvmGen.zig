@@ -74,7 +74,9 @@ pub const classes = enum {
         base: graph.MemCpy = .{},
         size: u16,
     };
-    pub const Zero = extern struct {};
+    pub const Zero = extern struct {
+        pub const is_readonly = true;
+    };
 };
 
 pub const reg_mask_cap = 254 + 32;

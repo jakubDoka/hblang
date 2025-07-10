@@ -22,6 +22,6 @@ nullable types 1.mkval(T = uint):
         li8 $1, 1
        jala $0, $31, 0
 nullable types 1.mknull(T = uint):
-         cp $1, $0
        li64 $2, -6148914691236517206
+         cp $1, $0
        jala $0, $31, 0

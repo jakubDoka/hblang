@@ -1,9 +1,8 @@
 main:
-         st $31, $254, -16, 16
-     addi64 $254, $254, -24
+         st $31, $254, -8, 8
+     addi64 $254, $254, -16
         jal $31, $0, :exhausitve inlining 1.no_op
-         cp $32, $0
-         cp $1, $32
+         cp $1, $0
          st $1, $254, 0, 8
      addi64 $1, $254, 0
         jal $31, $0, :exhausitve inlining 1.some_mem_ops
@@ -14,9 +13,9 @@ main:
 2:     li64 $1, 10
         jal $31, $0, :exhausitve inlining 1.loop_fn
         jal $31, $0, :exhausitve inlining 1.unreachable
-3:       cp $1, $32
-     addi64 $254, $254, 24
-         ld $31, $254, -16, 16
+3:       cp $1, $0
+     addi64 $254, $254, 16
+         ld $31, $254, -8, 8
          tx
 exhausitve inlining 1.no_op:
        jala $0, $31, 0
