@@ -1,4 +1,4 @@
-generic structs 1.nvec(E = uint):
+generic structs 1.nvec(uint):
 	sub rsp, 0x10
 	mov [rsp], rsi
 	mov rax, [rsp]
@@ -7,7 +7,7 @@ generic structs 1.nvec(E = uint):
 	mov [rdi+0x08], rax
 	add rsp, 0x10
 	ret
-generic structs 1.Vec(E = uint).sub:
+generic structs 1.Vec(uint).sub:
 	sub rsp, 0x10
 	mov [rsp], rdi
 	mov [rsp+0x08], rsi
@@ -20,9 +20,9 @@ main:
 	sub rsp, 0x18
 	lea rdi, [rsp]
 	mov rsi, 0x01
-	call :generic structs 1.nvec(E = uint)
+	call :generic structs 1.nvec(uint)
 	mov rdi, [rsp]
 	mov rsi, [rsp+0x08]
-	call :generic structs 1.Vec(E = uint).sub
+	call :generic structs 1.Vec(uint).sub
 	add rsp, 0x18
 	ret

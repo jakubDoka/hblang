@@ -67,8 +67,7 @@ float arithmetic 2.sin:
 	movss xmm1, dword ptr [rax]
 	mulss xmm2, xmm3
 	subss xmm1, xmm2
-	mulss xmm1, xmm3
-	addss xmm0, xmm1
+	vfmadd231ss xmm0, xmm1, xmm3
 	add rsp, 0x20
 	ret
 main:

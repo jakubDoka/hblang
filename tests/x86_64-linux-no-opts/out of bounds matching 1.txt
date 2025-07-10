@@ -8,12 +8,12 @@ out of bounds matching 1.byte_iter:
 	mov [rdi+0x08], rax
 	add rsp, 0x10
 	ret
-out of bounds matching 1.Iterator(Iter = out of bounds matching 1).for_each(func = out of bounds matching 1.main):
+out of bounds matching 1.Iterator(out of bounds matching 1).for_each(out of bounds matching 1.main):
 	sub rsp, 0x18
 	mov [rsp], rdi
 1:	mov rsi, [rsp]
 	lea rdi, [rsp+0x08]
-	call :out of bounds matching 1.Iterator(Iter = out of bounds matching 1).next
+	call :out of bounds matching 1.Iterator(out of bounds matching 1).next
 	mov cl, [rsp+0x08]
 	mov al, [rsp+0x09]
 	mov [rsp+0x08], al
@@ -24,7 +24,7 @@ out of bounds matching 1.Iterator(Iter = out of bounds matching 1).for_each(func
 	jmp :1
 0:	add rsp, 0x18
 	ret
-out of bounds matching 1.Iterator(Iter = out of bounds matching 1).next:
+out of bounds matching 1.Iterator(out of bounds matching 1).next:
 	sub rsp, 0x08
 	mov [rsp], rsi
 	mov rsi, [rsp]
@@ -75,7 +75,7 @@ main:
 	lea rdi, [rsp]
 	call :out of bounds matching 1.byte_iter
 	lea rdi, [rsp]
-	call :out of bounds matching 1.Iterator(Iter = out of bounds matching 1).for_each(func = out of bounds matching 1.main)
+	call :out of bounds matching 1.Iterator(out of bounds matching 1).for_each(out of bounds matching 1.main)
 	xor rax, rax
 	add rsp, 0x28
 	ret

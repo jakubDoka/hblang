@@ -2,19 +2,19 @@ main:
          st $31, $254, -24, 24
      addi64 $254, $254, -24
        li32 $1, 1065353216
-        jal $31, $0, :carry over call float op 1.opaque(v: uint)
+        jal $31, $0, :carry over call float op 1.opaque(uint)
          cp $33, $1
        li32 $1, 1073741824
-        jal $31, $0, :carry over call float op 1.opaque(v: uint)
+        jal $31, $0, :carry over call float op 1.opaque(uint)
          cp $32, $1
          cp $1, $0
-        jal $31, $0, :carry over call float op 1.opaque(v: uint)
+        jal $31, $0, :carry over call float op 1.opaque(uint)
      fadd32 $32, $33, $32
          cp $1, $32
-        jal $31, $0, :carry over call float op 1.opaque(v: uint)
+        jal $31, $0, :carry over call float op 1.opaque(uint)
       fti32 $1, $32, 0
      addi64 $254, $254, 24
          ld $31, $254, -24, 24
          tx
-carry over call float op 1.opaque(v: uint):
+carry over call float op 1.opaque(uint):
        jala $0, $31, 0

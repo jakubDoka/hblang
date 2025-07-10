@@ -6,19 +6,19 @@ main:
        li32 $1, -2147483648
          st $1, $254, 4, 4
        li64 $1, 9
-        jal $31, $0, :comptime 1.main.some_fn(some_int = uint)(ui = uint)
+        jal $31, $0, :comptime 1.main.some_fn(uint)(uint)
          cp $32, $1
        li64 $1, 5
-        jal $31, $0, :comptime 1.main.some_fn(some_int = uint)(ui = uint)
+        jal $31, $0, :comptime 1.main.some_fn(uint)(uint)
          cp $33, $1
        li64 $1, 7
-        jal $31, $0, :comptime 1.main.some_fn(some_int = uint)(ui = uint)
+        jal $31, $0, :comptime 1.main.some_fn(uint)(uint)
       add64 $1, $33, $1
       sub64 $1, $32, $1
      addi64 $254, $254, 32
          ld $31, $254, -24, 24
          tx
-comptime 1.main.some_fn(some_int = uint)(ui = uint):
+comptime 1.main.some_fn(uint)(uint):
      addi64 $254, $254, -16
          st $1, $254, 0, 8
          ld $1, $254, 0, 8

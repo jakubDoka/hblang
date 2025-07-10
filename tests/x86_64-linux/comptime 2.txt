@@ -1,18 +1,18 @@
-comptime 2.main.some_fn(some_int = uint):
+comptime 2.main.some_fn(uint):
 	mov rax, 0x01
 	ret
-comptime 2.main.some_fn2(some_int = uint, some_fn = comptime 2.main.some_fn(some_int = uint)):
+comptime 2.main.some_fn2(uint, comptime 2.main.some_fn(uint)):
 	sub rsp, 0x08
-	call :comptime 2.main.some_fn(some_int = uint)
+	call :comptime 2.main.some_fn(uint)
 	inc rax
 	add rsp, 0x08
 	ret
 main:
 	push rbx
 	sub rsp, 0x08
-	call :comptime 2.main.some_fn(some_int = uint)
+	call :comptime 2.main.some_fn(uint)
 	mov rbx, rax
-	call :comptime 2.main.some_fn2(some_int = uint, some_fn = comptime 2.main.some_fn(some_int = uint))
+	call :comptime 2.main.some_fn2(uint, comptime 2.main.some_fn(uint))
 	add rbx, 0x0A
 	add rax, 0x14
 	add rbx, rax

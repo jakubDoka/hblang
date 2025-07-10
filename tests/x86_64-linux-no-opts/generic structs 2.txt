@@ -1,8 +1,8 @@
-generic structs 2.Foo(F = uint).Bar(B = u8).init:
+generic structs 2.Foo(uint).Bar(u8).init:
 	mov qword ptr [rdi], 0x01
 	mov byte ptr [rdi+0x08], 0x01
 	ret
-generic structs 2.Foo(F = uint).Bar(B = u8).sub:
+generic structs 2.Foo(uint).Bar(u8).sub:
 	sub rsp, 0x10
 	mov [rsp], rdi
 	mov [rsp+0x08], sil
@@ -15,9 +15,9 @@ generic structs 2.Foo(F = uint).Bar(B = u8).sub:
 main:
 	sub rsp, 0x18
 	lea rdi, [rsp]
-	call :generic structs 2.Foo(F = uint).Bar(B = u8).init
+	call :generic structs 2.Foo(uint).Bar(u8).init
 	mov rdi, [rsp]
 	mov sil, [rsp+0x08]
-	call :generic structs 2.Foo(F = uint).Bar(B = u8).sub
+	call :generic structs 2.Foo(uint).Bar(u8).sub
 	add rsp, 0x18
 	ret

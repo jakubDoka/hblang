@@ -17,7 +17,7 @@ pub fn newRalloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
 
     errdefer unreachable;
 
-    for (0..10) |_| {
+    for (0..15) |_| {
         return rallocRound(Backend, func) catch continue;
     } else unreachable;
 }
@@ -604,6 +604,12 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
                     func.splitBefore(instr, 1, instr.inputs()[1].?, true, .@"conflict/phi/def");
                 }
+            }
+
+            for (tmp.arena.dupe(*Node, instr.outputs())) |use| {
+                if (use.inPlaceSlot()) |idx| if (use.dataDeps()[idx] == instr) {
+                    func.splitBefore(use, idx + 1, instr, true, .@"conflict/in-place-slot/use");
+                };
             }
 
             if (instr.inPlaceSlot()) |slt| {

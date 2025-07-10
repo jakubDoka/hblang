@@ -521,7 +521,10 @@ pub const Id = enum(IdRepr) {
                                 self.tys.store.get(key.loc.scope.data().Struct).key.loc.scope != .void or
                                 testing)) try writer.writeAll(".");
                         if (key.loc.scope != .void) {
-                            try writer.writeAll(key.name);
+                            try writer.writeAll(
+                                key.name[0 .. std.mem.lastIndexOfScalar(u8, key.name, '.') orelse
+                                    key.name.len],
+                            );
                         } else {
                             if (testing) {
                                 try writer.writeAll(std.fs.path.basename(key.name));
@@ -543,11 +546,7 @@ pub const Id = enum(IdRepr) {
                                 written_paren = true;
                             }
                             const finty: Types.Id = if (capture.ty == .type) @enumFromInt(capture.value) else capture.ty;
-                            const op = if (capture.ty == .type) " =" else ":";
-                            try writer.print(
-                                "{s}{s} {}",
-                                .{ self.tys.getFile(key.loc.file).tokenSrc(capture.id.pos()), op, finty.fmt(self.tys) },
-                            );
+                            try writer.print("{}", .{finty.fmt(self.tys)});
                         }
                         if (written_paren) try writer.writeAll(")");
                     }

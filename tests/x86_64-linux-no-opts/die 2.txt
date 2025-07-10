@@ -5,9 +5,11 @@ main:
 	sub rsp, 0x08
 	call :die 2.fallible
 	mov [rsp], rax
-	xor cl, cl
 	mov rax, [rsp]
-	cmp rax, rcx
-	jnz :0
+	cmp rax, 0x00
+	setz al
+	movzx rax, al
+	test al, al
+	jz :0
 	ud2
 0:	ud2

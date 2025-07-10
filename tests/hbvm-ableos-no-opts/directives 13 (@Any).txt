@@ -3,31 +3,31 @@ main:
      addi64 $254, $254, -16
        li64 $1, 1
        li64 $2, 2
-        jal $31, $0, :directives 13 (@Any).func(a: uint)
+        jal $31, $0, :directives 13 (@Any).func(uint)
        li64 $1, 5
-        jal $31, $0, :directives 13 (@Any).foo(vl: uint)
+        jal $31, $0, :directives 13 (@Any).foo(uint)
          cp $32, $1
         li8 $1, 5
-        jal $31, $0, :directives 13 (@Any).foo(vl: u8)
+        jal $31, $0, :directives 13 (@Any).foo(u8)
        andi $1, $1, 255
       add64 $1, $32, $1
      addi64 $254, $254, 16
          ld $31, $254, -16, 16
          tx
-directives 13 (@Any).func(a: uint):
+directives 13 (@Any).func(uint):
      addi64 $254, $254, -16
          st $1, $254, 0, 8
          st $2, $254, 8, 8
          cp $1, $0
      addi64 $254, $254, 16
        jala $0, $31, 0
-directives 13 (@Any).foo(vl: uint):
+directives 13 (@Any).foo(uint):
      addi64 $254, $254, -8
          st $1, $254, 0, 8
          ld $1, $254, 0, 8
      addi64 $254, $254, 8
        jala $0, $31, 0
-directives 13 (@Any).foo(vl: u8):
+directives 13 (@Any).foo(u8):
      addi64 $254, $254, -1
          st $1, $254, 0, 1
          ld $1, $254, 0, 1

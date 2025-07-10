@@ -4,10 +4,10 @@ main:
        li64 $1, 1
          st $1, $254, 0, 8
      addi64 $1, $254, 0
-        jal $31, $0, :directives 8 (@ChildOf).deref(T = ^uint)
+        jal $31, $0, :directives 8 (@ChildOf).deref(^uint)
      addi64 $254, $254, 16
          ld $31, $254, -8, 8
          tx
-directives 8 (@ChildOf).deref(T = ^uint):
+directives 8 (@ChildOf).deref(^uint):
          ld $1, $1, 0, 8
        jala $0, $31, 0

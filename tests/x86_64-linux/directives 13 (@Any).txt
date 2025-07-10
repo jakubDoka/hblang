@@ -1,10 +1,10 @@
-directives 13 (@Any).func(a: uint):
+directives 13 (@Any).func(uint):
 	xor rax, rax
 	ret
-directives 13 (@Any).foo(vl: uint):
+directives 13 (@Any).foo(uint):
 	mov rax, rdi
 	ret
-directives 13 (@Any).foo(vl: u8):
+directives 13 (@Any).foo(u8):
 	mov al, dil
 	ret
 main:
@@ -12,12 +12,12 @@ main:
 	sub rsp, 0x08
 	mov rdi, 0x01
 	mov rsi, 0x02
-	call :directives 13 (@Any).func(a: uint)
+	call :directives 13 (@Any).func(uint)
 	mov rdi, 0x05
-	call :directives 13 (@Any).foo(vl: uint)
+	call :directives 13 (@Any).foo(uint)
 	mov rbx, rax
 	mov rdi, 0x05
-	call :directives 13 (@Any).foo(vl: u8)
+	call :directives 13 (@Any).foo(u8)
 	movzx rax, al
 	add rbx, rax
 	mov rax, rbx

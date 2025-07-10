@@ -1,10 +1,10 @@
-directives 8 (@ChildOf).deref(T = ^uint):
+directives 8 (@ChildOf).deref(^uint):
 	mov rax, [rdi]
 	ret
 main:
 	sub rsp, 0x08
 	mov qword ptr [rsp], 0x01
 	lea rdi, [rsp]
-	call :directives 8 (@ChildOf).deref(T = ^uint)
+	call :directives 8 (@ChildOf).deref(^uint)
 	add rsp, 0x08
 	ret

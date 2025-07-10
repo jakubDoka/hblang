@@ -25,7 +25,7 @@ generic structs 5 (iterators).main.next:
 	mov [rdx+0x08], rax
 1:	add rsp, 0x10
 	ret
-generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main, B = generic structs 5 (iterators).main).next:
+generic structs 5 (iterators).main.Chain(generic structs 5 (iterators).main, generic structs 5 (iterators).main).next:
 	push rbx
 	sub rsp, 0x18
 	mov rbx, rdi
@@ -127,7 +127,7 @@ main:
 	jmp :7
 1:	lea rdi, [rsp+0x86]
 	lea rsi, [rsp+0x50]
-	call :generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main, B = generic structs 5 (iterators).main).next
+	call :generic structs 5 (iterators).main.Chain(generic structs 5 (iterators).main, generic structs 5 (iterators).main).next
 	mov al, [rsp+0x86]
 	cmp al, bl
 	jnz :3

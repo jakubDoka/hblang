@@ -1,9 +1,9 @@
-comptime 5 (integers).main.func(value: uint):
+comptime 5 (integers).main.func(uint):
 	mov rax, 0x01
 	ret
 main:
 	sub rsp, 0x08
-	call :comptime 5 (integers).main.func(value: uint)
+	call :comptime 5 (integers).main.func(uint)
 	mov rcx, rax
 	mov rax, [0x0000000000000007]
 	mov rdx, [0x0000000000000007]

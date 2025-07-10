@@ -1,7 +1,7 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        jal $31, $0, :deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.Z)))))))).get
+        jal $31, $0, :deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.Z)))))))).get
        li64 $2, 8
        andi $1, $1, 4294967295
        cmpu $1, $1, $2
@@ -11,63 +11,63 @@ main:
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
-deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.Z)))))))).get:
+deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.Z)))))))).get:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        jal $31, $0, :deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.Z))))))).get
+        jal $31, $0, :deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.Z))))))).get
      addi32 $1, $1, 1
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.Z))))))).get:
+deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.Z))))))).get:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        jal $31, $0, :deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.Z)))))).get
+        jal $31, $0, :deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.Z)))))).get
      addi32 $1, $1, 1
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.Z)))))).get:
+deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.Z)))))).get:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        jal $31, $0, :deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.Z))))).get
+        jal $31, $0, :deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.Z))))).get
      addi32 $1, $1, 1
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.Z))))).get:
+deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.Z))))).get:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        jal $31, $0, :deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.Z)))).get
+        jal $31, $0, :deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.Z)))).get
      addi32 $1, $1, 1
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.Z)))).get:
+deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.Z)))).get:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        jal $31, $0, :deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.Z))).get
+        jal $31, $0, :deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.Z))).get
      addi32 $1, $1, 1
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.Z))).get:
+deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.Z))).get:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        jal $31, $0, :deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.Z)).get
+        jal $31, $0, :deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.Z)).get
      addi32 $1, $1, 1
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-deep instantiation 2.S(A = deep instantiation 2.S(A = deep instantiation 2.Z)).get:
+deep instantiation 2.S(deep instantiation 2.S(deep instantiation 2.Z)).get:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        jal $31, $0, :deep instantiation 2.S(A = deep instantiation 2.Z).get
+        jal $31, $0, :deep instantiation 2.S(deep instantiation 2.Z).get
      addi32 $1, $1, 1
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-deep instantiation 2.S(A = deep instantiation 2.Z).get:
+deep instantiation 2.S(deep instantiation 2.Z).get:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
         jal $31, $0, :deep instantiation 2.Z.get

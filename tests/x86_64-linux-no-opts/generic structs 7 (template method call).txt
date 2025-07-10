@@ -1,4 +1,4 @@
-generic structs 7 (template method call).A.apply(func = generic structs 7 (template method call).main):
+generic structs 7 (template method call).A.apply(generic structs 7 (template method call).main):
 	sub rsp, 0x10
 	mov [rsp], rdi
 	add rsp, 0x10
@@ -6,7 +6,7 @@ generic structs 7 (template method call).A.apply(func = generic structs 7 (templ
 main:
 	sub rsp, 0x08
 	lea rdi, [rsp]
-	call :generic structs 7 (template method call).A.apply(func = generic structs 7 (template method call).main)
+	call :generic structs 7 (template method call).A.apply(generic structs 7 (template method call).main)
 	xor rax, rax
 	add rsp, 0x08
 	ret

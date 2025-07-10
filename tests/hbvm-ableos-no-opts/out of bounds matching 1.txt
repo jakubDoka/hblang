@@ -11,7 +11,7 @@ main:
          st $1, $254, 16, 8
          st $2, $254, 24, 8
      addi64 $1, $254, 16
-        jal $31, $0, :out of bounds matching 1.Iterator(Iter = out of bounds matching 1).for_each(func = out of bounds matching 1.main)
+        jal $31, $0, :out of bounds matching 1.Iterator(out of bounds matching 1).for_each(out of bounds matching 1.main)
          cp $1, $0
      addi64 $254, $254, 40
          ld $31, $254, -8, 8
@@ -27,12 +27,12 @@ out of bounds matching 1.byte_iter:
          ld $2, $254, 24, 8
      addi64 $254, $254, 32
        jala $0, $31, 0
-out of bounds matching 1.Iterator(Iter = out of bounds matching 1).for_each(func = out of bounds matching 1.main):
+out of bounds matching 1.Iterator(out of bounds matching 1).for_each(out of bounds matching 1.main):
          st $31, $254, -8, 8
      addi64 $254, $254, -18
          st $1, $254, 0, 8
 6:       ld $1, $254, 0, 8
-        jal $31, $0, :out of bounds matching 1.Iterator(Iter = out of bounds matching 1).next
+        jal $31, $0, :out of bounds matching 1.Iterator(out of bounds matching 1).next
          st $1, $254, 8, 1
          st $2, $254, 9, 1
          ld $1, $254, 8, 1
@@ -46,7 +46,7 @@ out of bounds matching 1.Iterator(Iter = out of bounds matching 1).for_each(func
 4:   addi64 $254, $254, 18
          ld $31, $254, -8, 8
        jala $0, $31, 0
-out of bounds matching 1.Iterator(Iter = out of bounds matching 1).next:
+out of bounds matching 1.Iterator(out of bounds matching 1).next:
          st $31, $254, -8, 8
      addi64 $254, $254, -18
          st $1, $254, 0, 8

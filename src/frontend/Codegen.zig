@@ -2395,7 +2395,7 @@ pub fn chechNull(self: *Codegen, expr: Ast.Id, lhs: *Value, op: Lexer.Lexeme) !V
     };
 
     if (op == .@"==") {
-        value = self.bl.addBinOp(sloc, .eq, .i8, value, self.bl.addIntImm(sloc, .i8, 0));
+        value = self.bl.addBinOp(sloc, .eq, .i8, value, self.bl.addIntImm(sloc, value.data_type, 0));
     }
 
     return .mkv(.bool, value);

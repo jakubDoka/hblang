@@ -148,8 +148,7 @@ pub const Reloc = struct {
 };
 
 pub const classes = enum {
-    pub const Inc = extern struct {};
-    pub const Dec = extern struct {};
+    pub const FusedMulAdd = extern struct {};
     pub const GlobalLoad = extern struct {
         base: OffsetLoad,
         id: u32,
@@ -234,7 +233,7 @@ pub fn knownOffset(node: *Func.Node) struct { *Func.Node, i64 } {
 }
 
 pub fn isInterned(kind: Func.Kind) bool {
-    return kind == .OffsetLoad or kind == .StackLoad;
+    return kind == .OffsetLoad or kind == .StackLoad or kind == .ImmOp or kind == .FusedMulAdd;
 }
 
 pub fn isSwapped(node: *Func.Node) bool {
@@ -421,6 +420,24 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
                 .imm = node.inputs()[2].?.extra(.CInt).value,
             });
         }
+    }
+
+    if (node.kind == .BinOp and node.extra(.BinOp).op == .fadd and
+        (node.inputs()[2].?.kind == .BinOp and node.inputs()[2].?.extra(.BinOp).op == .fmul))
+    {
+        const a = node.inputs()[1].?;
+        const b = node.inputs()[2].?.inputs()[1].?;
+        const c = node.inputs()[2].?.inputs()[2].?;
+        return func.addNode(.FusedMulAdd, node.sloc, node.data_type, &.{ null, a, b, c }, .{});
+    }
+
+    if (node.kind == .BinOp and node.extra(.BinOp).op == .fadd and
+        (node.inputs()[1].?.kind == .BinOp and node.inputs()[1].?.extra(.BinOp).op == .fmul))
+    {
+        const a = node.inputs()[2].?;
+        const b = node.inputs()[1].?.inputs()[1].?;
+        const c = node.inputs()[1].?.inputs()[2].?;
+        return func.addNode(.FusedMulAdd, node.sloc, node.data_type, &.{ null, a, b, c }, .{});
     }
 
     return null;
@@ -700,6 +717,7 @@ pub fn inPlaceSlot(node: *Func.Node) ?usize {
     return switch (node.extra2()) {
         .ImmOp => |extra| binOpInPlaceSlot(extra.base.op),
         .BinOp => |extra| binOpInPlaceSlot(extra.op),
+        .FusedMulAdd => 0,
         .UnOp => |extra| switch (@as(graph.UnOp, extra.op)) {
             .ineg, .bnot, .ired, .not => 0,
             .fneg, .fcst, .sext, .uext, .cast, .itf32, .itf64, .fti => return null,
@@ -1125,6 +1143,22 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         self.emitInstr(zydis.ZYDIS_MNEMONIC_MOVZX, .{ dst, SReg{ dst, 1 } });
                     },
                 }
+            },
+            .FusedMulAdd => {
+                const dst = self.getReg(instr);
+                const a = self.getReg(instr.inputs()[1]);
+                const b = self.getReg(instr.inputs()[2]);
+                const c = self.getReg(instr.inputs()[3]);
+
+                std.debug.assert(instr.data_type == .f32 or instr.data_type == .f64);
+                std.debug.assert(dst == a);
+
+                const mnemonic: zydis.ZydisMnemonic = if (instr.data_type == .f32)
+                    zydis.ZYDIS_MNEMONIC_VFMADD231SS
+                else
+                    zydis.ZYDIS_MNEMONIC_VFMADD231SD;
+
+                self.emitInstr(mnemonic, .{ a, b, c });
             },
             .BinOp => |extra| {
                 const op = extra.op;

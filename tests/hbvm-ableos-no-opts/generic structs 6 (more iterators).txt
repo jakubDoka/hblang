@@ -2,12 +2,12 @@ main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
          cp $1, $0
-        jal $31, $0, :foo.hb.foo(oo = u8)
+        jal $31, $0, :foo.hb.foo(u8)
          cp $1, $0
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
-foo.hb.foo(oo = u8):
+foo.hb.foo(u8):
      addi64 $254, $254, -8
          st $1, $254, 0, 8
      addi64 $254, $254, 8

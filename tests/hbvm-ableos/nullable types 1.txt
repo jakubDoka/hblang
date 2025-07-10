@@ -2,13 +2,13 @@ main:
          st $31, $254, -16, 16
      addi64 $254, $254, -16
        li64 $1, 10
-        jal $31, $0, :nullable types 1.mkval(T = uint)
+        jal $31, $0, :nullable types 1.mkval(uint)
          cp $32, $2
        andi $1, $1, 255
         jne $1, $0, :1
        li64 $1, 1
         jmp :2
-1:      jal $31, $0, :nullable types 1.mknull(T = uint)
+1:      jal $31, $0, :nullable types 1.mknull(uint)
        andi $1, $1, 255
         jeq $1, $0, :4
        li64 $1, 2
@@ -17,11 +17,11 @@ main:
 5:   addi64 $254, $254, 16
          ld $31, $254, -16, 16
          tx
-nullable types 1.mkval(T = uint):
+nullable types 1.mkval(uint):
          cp $2, $1
         li8 $1, 1
        jala $0, $31, 0
-nullable types 1.mknull(T = uint):
+nullable types 1.mknull(uint):
        li64 $2, -6148914691236517206
          cp $1, $0
        jala $0, $31, 0

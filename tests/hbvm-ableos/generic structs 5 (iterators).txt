@@ -41,7 +41,7 @@ c:   addi64 $1, $254, 48
          cp $1, $0
         jmp :6
 5:   addi64 $1, $254, 64
-        jal $31, $0, :generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main, B = generic structs 5 (iterators).main).next
+        jal $31, $0, :generic structs 5 (iterators).main.Chain(generic structs 5 (iterators).main, generic structs 5 (iterators).main).next
          cp $3, $1
          cp $1, $2
        andi $2, $3, 255
@@ -87,7 +87,7 @@ generic structs 5 (iterators).main.next:
          cp $2, $3
          cp $1, $4
 11:     jala $0, $31, 0
-generic structs 5 (iterators).main.Chain(A = generic structs 5 (iterators).main, B = generic structs 5 (iterators).main).next:
+generic structs 5 (iterators).main.Chain(generic structs 5 (iterators).main, generic structs 5 (iterators).main).next:
          st $31, $254, -56, 56
      addi64 $254, $254, -56
          cp $37, $1
