@@ -1,5 +1,5 @@
 main:
-	mov r10, 0x00
+	xor r10, r10
 	mov r9, 0x01
 	mov rdx, r10
 	mov rax, r10

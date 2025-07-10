@@ -2,8 +2,8 @@ foo.hb.foo(oo = u8):
 	ret
 main:
 	sub rsp, 0x08
-	mov rdi, 0x00
+	xor rdi, rdi
 	call :foo.hb.foo(oo = u8)
-	mov rax, 0x00
+	xor rax, rax
 	add rsp, 0x08
 	ret

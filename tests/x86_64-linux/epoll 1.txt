@@ -2,9 +2,9 @@ main:
 	push rbx
 	sub rsp, 0x18
 	mov rax, 0x123
-	mov rbx, 0x00
-	mov rdi, 0x00
-	mov rsi, 0x00
+	xor rbx, rbx
+	xor rdi, rdi
+	xor rsi, rsi
 	syscall
 	mov edi, eax
 	mov eax, edi
@@ -21,7 +21,7 @@ main:
 	mov rax, 0xE9
 	lea r10, [rsp]
 	movzx rsi, cx
-	mov rdx, 0x00
+	xor rdx, rdx
 	syscall
 	cmp eax, 0x00
 	setl al

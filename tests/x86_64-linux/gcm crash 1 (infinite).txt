@@ -6,7 +6,7 @@ main:
 	push r12
 	push r13
 	sub rsp, 0x408
-	mov rcx, 0x00
+	xor rcx, rcx
 	lea r12, [rsp]
 	mov rbp, 0x400
 	mov rax, r12
@@ -20,7 +20,7 @@ main:
 	mov rax, [0x0000000000000007]
 	mov sil, al
 	mov dl, al
-	mov rdi, 0x00
+	xor dil, dil
 	call :gcm crash 1 (infinite).func
 	mov rcx, rbx
 	mov rax, r13

@@ -2,7 +2,7 @@ null unwrap 1.use_opt:
 	sub rsp, 0x58
 	mov [rsp+0x40], dil
 	mov [rsp+0x48], rsi
-	mov rcx, 0x00
+	xor cl, cl
 	mov al, [rsp+0x40]
 	cmp al, cl
 	jnz :0

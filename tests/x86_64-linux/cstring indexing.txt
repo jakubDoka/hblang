@@ -7,9 +7,9 @@ main:
 	mov [rsp+0x40], rax
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x48], rax
-	mov rax, 0x00
+	xor rax, rax
 	mov r8, 0x08
-	mov rdi, 0x00
+	xor dil, dil
 	mov rcx, rax
 4:	mov rbx, rcx
 	mov rcx, rbx

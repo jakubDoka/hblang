@@ -13,6 +13,6 @@ false positive in cycle detection.main.test:
 main:
 	sub rsp, 0x08
 	call :false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main)).test
-	mov rax, 0x00
+	xor rax, rax
 	add rsp, 0x08
 	ret

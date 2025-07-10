@@ -16,7 +16,7 @@ eopll 2.epoll_wait:
 main:
 	sub rsp, 0x28
 	mov rax, 0x123
-	mov rdi, 0x00
+	xor rdi, rdi
 	syscall
 	mov [rsp+0x18], eax
 	mov qword ptr [rsp+0x10], 0x00
@@ -26,7 +26,7 @@ main:
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, 0x00
+	xor rax, rax
 	add rsp, 0x28
 	ret
 0:	mov eax, [rsp+0x18]

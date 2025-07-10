@@ -1,5 +1,5 @@
 directives 13 (@Any).func(a: uint):
-	mov rax, 0x00
+	xor rax, rax
 	ret
 directives 13 (@Any).foo(vl: uint):
 	mov rax, rdi

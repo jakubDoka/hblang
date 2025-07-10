@@ -16,7 +16,7 @@ main:
 	add rax, 0x08
 	mov [rsp+0x30], rax
 	mov qword ptr [rsp+0x38], 0x02
-	mov r11, 0x00
+	xor r11, r11
 	mov r10, 0x10
 	mov r9, 0x08
 	mov rdi, r11

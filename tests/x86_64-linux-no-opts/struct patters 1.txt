@@ -1,5 +1,5 @@
 foo.hb.foo:
-	mov rax, 0x00
+	xor rax, rax
 	ret
 foo.hb.bar:
 	mov rax, 0x01

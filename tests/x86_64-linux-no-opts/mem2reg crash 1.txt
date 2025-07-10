@@ -35,7 +35,7 @@ mem2reg crash 1.bar:
 	ret
 main:
 	sub rsp, 0x08
-	mov rdi, 0x00
+	xor rdi, rdi
 	mov rsi, 0x01
 	call :mem2reg crash 1.insert
 	add rsp, 0x08

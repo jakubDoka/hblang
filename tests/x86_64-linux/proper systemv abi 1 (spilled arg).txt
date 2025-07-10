@@ -37,7 +37,7 @@ main:
 	mov rcx, 0x03
 	mov r8, 0x04
 	mov r9, 0x05
-	mov rdi, 0x00
+	xor rdi, rdi
 	mov rsi, 0x01
 	mov rdx, 0x02
 	call :proper systemv abi 1 (spilled arg).load_of_args

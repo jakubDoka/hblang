@@ -922,7 +922,17 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
         switch (instr.extra2()) {
             .FramePointer => {},
             .CInt => |extra| {
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), extra.value });
+                if (extra.value == 0) {
+                    self.emitInstr(
+                        zydis.ZYDIS_MNEMONIC_XOR,
+                        .{ SReg{ self.getReg(instr), instr.data_type.size() }, self.getReg(instr) },
+                    );
+                } else {
+                    self.emitInstr(
+                        zydis.ZYDIS_MNEMONIC_MOV,
+                        .{ self.getReg(instr), extra.value },
+                    );
+                }
             },
             .MemCpy => {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_CALL, .{0});

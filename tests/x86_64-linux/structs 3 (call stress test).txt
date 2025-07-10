@@ -39,7 +39,7 @@ main:
 	jz :0
 	mov rax, 0x01
 	jmp :1
-0:	mov rax, 0x00
+0:	xor rax, rax
 1:	add rsp, 0x48
 	pop rbx
 	ret

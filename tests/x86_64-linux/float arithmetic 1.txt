@@ -1,4 +1,4 @@
 main:
-	mov rax, 0x00
+	xor rax, rax
 	movq xmm0, rax
 	ret

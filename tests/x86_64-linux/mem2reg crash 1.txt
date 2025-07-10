@@ -5,7 +5,7 @@ mem2reg crash 1.insert:
 	sub rsp, 0x08
 	mov r12, rdi
 	mov rbp, rsi
-	mov rbx, 0x00
+	xor rbx, rbx
 	mov rax, r12
 	cmp rax, rbx
 	jnz :1
@@ -35,7 +35,7 @@ mem2reg crash 1.bar:
 	ret
 main:
 	sub rsp, 0x08
-	mov rdi, 0x00
+	xor rdi, rdi
 	mov rsi, 0x01
 	call :mem2reg crash 1.insert
 	add rsp, 0x08

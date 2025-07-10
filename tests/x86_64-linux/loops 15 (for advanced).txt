@@ -11,7 +11,7 @@ main:
 	add rdx, 0x08
 	add rax, 0x01
 	jmp :1
-0:	mov rax, 0x00
+0:	xor rax, rax
 3:	cmp rcx, rsi
 	jnb :2
 	mov rdx, [rcx]

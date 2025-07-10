@@ -20,7 +20,7 @@ main:
 	movd xmm0, eax
 	call :carry over call float op 1.opaque(v: f32)
 	movss [rsp+0x04], xmm0
-	mov rdi, 0x00
+	xor rdi, rdi
 	call :carry over call float op 1.opaque(v: uint)
 	movss xmm0, dword ptr [rsp]
 	movss xmm1, dword ptr [rsp+0x04]

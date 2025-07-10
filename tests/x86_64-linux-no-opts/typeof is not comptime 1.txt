@@ -6,9 +6,9 @@ typeof is not comptime 1.broken1:
 	mov rax, 0x01
 	mov rdi, 0x02
 	mov rsi, [rsp]
-	mov rdx, 0x00
+	xor rdx, rdx
 	syscall
-	mov rax, 0x00
+	xor rax, rax
 	add rsp, 0x18
 	ret
 main:

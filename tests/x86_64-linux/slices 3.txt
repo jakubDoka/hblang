@@ -11,7 +11,7 @@ slices 3.reverse:
 	mov rax, [rsp+0x08]
 	mov [rdi+0x08], rax
 	jmp :1
-0:	mov rsi, 0x00
+0:	xor rsi, rsi
 	sub rdx, 0x01
 	mov r9, rdx
 3:	mov rax, [rsp]
@@ -41,7 +41,7 @@ main:
 	mov byte ptr [rsp+0x20], 0x01
 	mov byte ptr [rsp+0x21], 0x02
 	mov byte ptr [rsp+0x22], 0x03
-	mov rdx, 0x00
+	xor rdx, rdx
 	lea rdi, [rsp]
 	mov rsi, 0x01
 	call :slices 3.reverse

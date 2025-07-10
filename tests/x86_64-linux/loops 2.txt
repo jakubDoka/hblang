@@ -1,5 +1,5 @@
 loops 2.square:
-	mov r8, 0x00
+	xor r8, r8
 	mov rsi, r8
 	mov rax, r8
 2:	cmp rsi, rdi

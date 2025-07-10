@@ -1,5 +1,5 @@
 loops 1.fib:
-	mov rax, 0x00
+	xor rax, rax
 	mov rsi, 0x01
 	mov rcx, rdi
 1:	cmp rcx, 0x00

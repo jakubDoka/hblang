@@ -32,6 +32,6 @@ main:
 	mov sil, [rsp]
 	mov edx, [rsp+0x04]
 	call :mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime args 1.main)
-	mov rax, 0x00
+	xor rax, rax
 	add rsp, 0x18
 	ret

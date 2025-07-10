@@ -8,7 +8,7 @@ arithmetic 3.mne:
 	mov rax, 0xFF
 	ret
 arithmetic 3.mero:
-	mov rax, 0x00
+	xor al, al
 	ret
 main:
 	push rbx
@@ -233,7 +233,7 @@ f:	jmp :17
 	jnz :50
 	mov rax, 0x1A
 31:	jmp :51
-32:	mov rax, 0x00
+32:	xor rax, rax
 33:	add rsp, 0x08
 	pop rbp
 	pop rbx

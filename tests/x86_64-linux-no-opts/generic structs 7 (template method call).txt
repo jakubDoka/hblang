@@ -7,6 +7,6 @@ main:
 	sub rsp, 0x08
 	lea rdi, [rsp]
 	call :generic structs 7 (template method call).A.apply(func = generic structs 7 (template method call).main)
-	mov rax, 0x00
+	xor rax, rax
 	add rsp, 0x08
 	ret

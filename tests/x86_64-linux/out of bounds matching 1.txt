@@ -3,7 +3,7 @@ main:
 	lea rax, [0x0000000000000007]
 	mov [rsp], rax
 	mov qword ptr [rsp+0x08], 0x0C
-	mov rax, 0x00
+	xor rax, rax
 3:	mov rsi, [rsp+0x08]
 	cmp rsi, rax
 	jnz :0

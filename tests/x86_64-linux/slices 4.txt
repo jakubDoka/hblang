@@ -1,5 +1,5 @@
 slices 4.equals:
-	mov r8, 0x00
+	xor r8b, r8b
 	cmp rsi, rcx
 	jz :0
 	jmp :1
@@ -8,7 +8,7 @@ slices 4.equals:
 	jnz :2
 	mov r8b, r10b
 1:	jmp :3
-2:	mov rax, 0x00
+2:	xor rax, rax
 7:	cmp rax, rsi
 	jnz :4
 	mov al, r10b
@@ -51,7 +51,7 @@ main:
 	jz :2
 1:	mov rax, 0x01
 	jmp :3
-2:	mov rax, 0x00
+2:	xor rax, rax
 3:	add rsp, 0x08
 	pop rbx
 	ret

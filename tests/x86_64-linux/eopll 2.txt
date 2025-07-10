@@ -3,8 +3,8 @@ main:
 	push rbp
 	sub rsp, 0x18
 	mov rax, 0x123
-	mov rbx, 0x00
-	mov rdi, 0x00
+	xor rbx, rbx
+	xor rdi, rdi
 	syscall
 	movsxd rbp, eax
 1:	cmp rbx, 0x00
@@ -12,7 +12,7 @@ main:
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, 0x00
+	xor rax, rax
 	add rsp, 0x18
 	pop rbp
 	pop rbx

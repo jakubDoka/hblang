@@ -64,7 +64,7 @@ main:
 	lea rsi, [rsp+0x18]
 	mov rdx, 0x18
 	call :memcpy
-	mov rdi, 0x00
+	xor rdi, rdi
 	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)))).get
 	mov rbx, rax
 	lea rdi, [rsp]

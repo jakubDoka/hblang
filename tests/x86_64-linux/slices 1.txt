@@ -13,7 +13,7 @@ main:
 	add rdx, 0x02
 	mov [rsp+0x20], rdx
 	mov qword ptr [rsp+0x28], 0x02
-	mov rcx, 0x00
+	xor rcx, rcx
 	lea rax, [rsp+0x80]
 	add rax, 0x01
 	mov [rsp+0x30], rax

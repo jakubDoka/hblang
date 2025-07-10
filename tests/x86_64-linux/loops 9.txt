@@ -1,5 +1,5 @@
 main:
-	mov rax, 0x00
+	xor rax, rax
 	mov rcx, rax
 1:	cmp rcx, 0x01
 	setnb dl

@@ -1,10 +1,10 @@
 die 2.fallible:
-	mov rax, 0x00
+	xor rax, rax
 	ret
 main:
 	sub rsp, 0x08
 	call :die 2.fallible
-	mov rcx, 0x00
+	xor cl, cl
 	cmp rax, rcx
 	jnz :0
 	ud2

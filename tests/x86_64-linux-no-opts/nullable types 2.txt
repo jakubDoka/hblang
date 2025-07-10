@@ -18,7 +18,7 @@ main:
 	mov byte ptr [rsp+0x30], 0x01
 	mov qword ptr [rsp+0x38], 0x00
 	mov qword ptr [rsp+0x40], 0x00
-	mov rcx, 0x00
+	xor cl, cl
 	mov al, [rsp]
 	cmp al, cl
 	jnz :0

@@ -12,7 +12,7 @@ main:
 	lea rbp, [rsp]
 	mov [rsp+0x400], rbp
 	mov qword ptr [rsp+0x408], 0x00
-	mov rbx, 0x00
+	xor rbx, rbx
 3:	mov rax, [rsp+0x408]
 	cmp rax, rbx
 	jb :0
@@ -29,7 +29,7 @@ main:
 	jmp :2
 2:	mov rsi, [0x0000000000000007]
 	mov dl, [rsp+0x410]
-	mov rdi, 0x00
+	xor dil, dil
 	call :gcm crash 1 (infinite).func
 	jmp :3
 0:	mov [rsp+0x400], rbp

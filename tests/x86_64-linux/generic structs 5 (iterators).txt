@@ -100,7 +100,7 @@ main:
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x48], rax
 	mov qword ptr [rsp+0x50], 0x02
-	mov rbx, 0x00
+	xor bl, bl
 8:	lea rdi, [rsp+0x58]
 	lea rsi, [rsp+0x10]
 	call :generic structs 5 (iterators).main.next
@@ -117,7 +117,7 @@ main:
 	mov al, [rsp+0x5C]
 	cmp al, bl
 	jnz :1
-	mov rax, 0x00
+	xor rax, rax
 	jmp :7
 1:	lea rdi, [rsp+0x5E]
 	lea rsi, [rsp+0x30]

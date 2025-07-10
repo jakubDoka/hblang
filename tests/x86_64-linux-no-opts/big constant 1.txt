@@ -1,7 +1,7 @@
 big constant 1.uninit:
 	sub rsp, 0x10
 	mov [rsp], rdi
-	mov rax, 0x00
+	xor rax, rax
 	mov rdx, 0xAAAAAAAAAAAAAAAA
 	mov rcx, [rsp]
 	mov [rcx], rdx

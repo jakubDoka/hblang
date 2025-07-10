@@ -15,8 +15,8 @@ directives 20 (@handler, @SourceLoc).main:
 	call :directives 20 (@handler, @SourceLoc).produce_memcpy
 	mov rax, [rsp+0x48]
 	mov rbx, rax
-	mov rdx, 0x00
-	mov rcx, 0x00
+	xor dl, dl
+	xor rcx, rcx
 	mov rax, rbx
 	cmp rcx, rax
 	setnbe al
@@ -33,8 +33,8 @@ directives 20 (@handler, @SourceLoc).main:
 	lea rsi, [rsp+0x20]
 	mov rdx, 0x20
 	call :memcpy
-	mov rsi, 0x00
-	mov rdx, 0x00
+	xor rsi, rsi
+	xor rdx, rdx
 	mov rdi, rbx
 	call :directives 20 (@handler, @SourceLoc).slice_ioob
 0:	mov rax, [rsp+0x40]
@@ -83,7 +83,7 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	mov [rsp+0x40], rdi
 	mov [rsp+0x48], rsi
 	mov rbx, [rsp+0x48]
-	mov rcx, 0x00
+	xor rcx, rcx
 	mov rax, rbx
 	cmp rcx, rax
 	jb :0
@@ -96,8 +96,8 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	lea rsi, [rsp+0x20]
 	mov rdx, 0x20
 	call :memcpy
-	mov rsi, 0x00
-	mov rdx, 0x00
+	xor rsi, rsi
+	xor rdx, rdx
 	mov rdi, rbx
 	call :directives 20 (@handler, @SourceLoc).slice_ioob
 0:	mov rax, [rsp+0x40]

@@ -60,7 +60,7 @@ main:
 	mov [rcx], rax
 	mov r9, 0x05
 	mov rdx, 0x02
-	mov rdi, 0x00
+	xor rdi, rdi
 	mov rsi, 0x01
 	mov rcx, 0x03
 	mov r8, 0x04

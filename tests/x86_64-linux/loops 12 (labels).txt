@@ -1,5 +1,5 @@
 main:
-	mov r8, 0x00
+	xor r8, r8
 	mov rcx, r8
 	mov rdi, r8
 3:	cmp rdi, 0x0A

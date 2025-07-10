@@ -53,7 +53,7 @@ main:
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, 0x00
+	xor rax, rax
 	jmp :1
 0:	mov rsi, [rsp+0x38]
 	mov rdi, [rsp+0x30]

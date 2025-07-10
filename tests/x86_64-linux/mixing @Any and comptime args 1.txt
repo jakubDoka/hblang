@@ -15,8 +15,8 @@ main:
 	sub rsp, 0x08
 	lea rdi, [rsp]
 	mov rsi, 0x01
-	mov rdx, 0x00
+	xor edx, edx
 	call :mixing @Any and comptime args 1.bind(val: ?i32, f = mixing @Any and comptime args 1.main)
-	mov rax, 0x00
+	xor rax, rax
 	add rsp, 0x08
 	ret

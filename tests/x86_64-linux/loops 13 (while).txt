@@ -1,5 +1,5 @@
 main:
-	mov rax, 0x00
+	xor rax, rax
 1:	cmp rax, 0x0A
 	setb cl
 	movzx rcx, cl

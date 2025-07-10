@@ -76,6 +76,6 @@ main:
 	call :out of bounds matching 1.byte_iter
 	lea rdi, [rsp]
 	call :out of bounds matching 1.Iterator(Iter = out of bounds matching 1).for_each(func = out of bounds matching 1.main)
-	mov rax, 0x00
+	xor rax, rax
 	add rsp, 0x28
 	ret

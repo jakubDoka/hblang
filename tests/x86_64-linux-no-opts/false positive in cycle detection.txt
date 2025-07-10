@@ -20,6 +20,6 @@ main:
 	mov dword ptr [rsp+0x0C], 0x70000003
 	mov dword ptr [rsp+0x10], 0x70000004
 	call :false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main.Wrap(Wrapper = false positive in cycle detection.main.Wrapper)(T = false positive in cycle detection.main)).test
-	mov rax, 0x00
+	xor rax, rax
 	add rsp, 0x18
 	ret

@@ -62,7 +62,7 @@ b:	mov rdx, [rsp]
 	jz :9
 	mov rax, rbx
 8:	jmp :10
-9:	mov rax, 0x00
+9:	xor rax, rax
 a:	add rsp, 0x18
 	pop rbx
 	ret
