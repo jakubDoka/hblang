@@ -29,7 +29,7 @@ main:
 	add rax, rdx
 	mov [rsp], rax
 	mov rax, [rsp+0x50]
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x50], rax
 	jmp :2
 0:	mov qword ptr [rsp+0x60], 0x00
@@ -40,7 +40,7 @@ main:
 	mov r8, [rsp+0x58]
 	test al, al
 	jz :3
-	add r8, 0x01
+	inc r8
 	mov [rsp+0x58], r8
 	jmp :4
 3:	mov rdi, r8
@@ -53,6 +53,6 @@ main:
 	add rax, rsi
 	mov [rax], rdx
 	mov rax, [rsp+0x60]
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x60], rax
 	jmp :5

@@ -1,5 +1,5 @@
 one.hb.add:
-	add rdi, 0x01
+	inc rdi
 	mov rax, rdi
 	ret
 two.hb.add:

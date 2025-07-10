@@ -17,7 +17,7 @@ main:
 	mov rcx, [rsp+0x08]
 	test al, al
 	jz :2
-	add rcx, 0x01
+	inc rcx
 	mov [rsp+0x08], rcx
 	jmp :3
 2:	imul rcx, rdx
@@ -33,6 +33,6 @@ main:
 	add rax, rcx
 	mov [rsp], rax
 	mov rax, [rsp+0x10]
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x10], rax
 	jmp :5

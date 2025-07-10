@@ -1,5 +1,5 @@
 functions 1.add_one:
-	add rdi, 0x01
+	inc rdi
 	mov rax, rdi
 	ret
 functions 1.add_two:

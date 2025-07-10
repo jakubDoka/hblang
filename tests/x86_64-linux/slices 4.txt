@@ -23,7 +23,7 @@ slices 4.equals:
 	jz :6
 3:	mov al, r8b
 5:	ret
-6:	add rax, 0x01
+6:	inc rax
 	jmp :7
 main:
 	push rbx

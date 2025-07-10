@@ -19,7 +19,7 @@ exhausitve inlining 1.loop_fn:
 	jz :0
 	add rsp, 0x10
 	ret
-0:	sub rax, 0x01
+0:	dec rax
 	mov [rsp], rax
 	jmp :1
 exhausitve inlining 1.unreachable:

@@ -15,7 +15,7 @@ main:
 	mov qword ptr [rsp+0x28], 0x02
 	xor rcx, rcx
 	lea rax, [rsp+0x80]
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x30], rax
 	mov qword ptr [rsp+0x38], 0x02
 	mov [rsp+0x40], rsi
@@ -44,11 +44,11 @@ main:
 3:	mov rdx, [r9+0x08]
 	cmp r8, rdx
 	jnz :1
-	add rdi, 0x01
+	inc rdi
 	jmp :2
 1:	mov rdx, [r9]
 	mov rsi, r8
-	add rsi, 0x01
+	inc rsi
 	add rdx, r8
 	mov dl, [rdx]
 	movzx rdx, dl

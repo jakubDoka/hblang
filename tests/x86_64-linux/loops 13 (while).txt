@@ -5,6 +5,6 @@ main:
 	movzx rcx, cl
 	test cl, cl
 	jz :0
-	add rax, 0x01
+	inc rax
 	jmp :1
 0:	ret

@@ -10,7 +10,7 @@ deep dedup 3 (recursive functions).fib:
 	jz :0
 	mov rax, 0x01
 	jmp :1
-0:	sub rdi, 0x01
+0:	dec rdi
 	call :deep dedup 3 (recursive functions).fib
 	mov rbx, rax
 	mov rdi, [rsp]
@@ -33,7 +33,7 @@ deep dedup 3 (recursive functions).fib2:
 	jz :0
 	mov rax, 0x01
 	jmp :1
-0:	sub rdi, 0x01
+0:	dec rdi
 	call :deep dedup 3 (recursive functions).fib2
 	mov rbx, rax
 	mov rdi, [rsp]

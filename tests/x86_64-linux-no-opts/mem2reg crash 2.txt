@@ -12,7 +12,7 @@ mem2reg crash 2.insert:
 	test al, al
 	jz :0
 	mov rax, [rsp+0x18]
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x18], rax
 	jmp :1
 0:	mov rax, [rsp]
@@ -27,7 +27,7 @@ mem2reg crash 2.insert:
 	add rsp, 0x30
 	ret
 2:	mov rax, [rsp+0x20]
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x20], rax
 	jmp :3
 main:

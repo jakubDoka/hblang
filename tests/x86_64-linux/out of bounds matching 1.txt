@@ -10,9 +10,9 @@ main:
 	mov byte ptr [rsp+0x10], 0x00
 	jmp :1
 0:	mov rcx, [rsp]
-	sub rsi, 0x01
+	dec rsi
 	mov dl, [rcx]
-	add rcx, 0x01
+	inc rcx
 	mov [rsp], rcx
 	mov [rsp+0x08], rsi
 	mov byte ptr [rsp+0x12], 0x01

@@ -4,19 +4,19 @@ main:
 	mov byte ptr [rsp+0x0D], 0x00
 	mov al, [rsp+0x0C]
 	movsx ax, al
-	sub ax, 0x01
+	dec ax
 	mov [rsp+0x08], ax
 	mov al, [rsp+0x0D]
 	movzx ax, al
-	add ax, 0x01
+	inc ax
 	mov [rsp+0x0A], ax
 	mov ax, [rsp+0x08]
 	movsx eax, ax
-	sub eax, 0x01
+	dec eax
 	mov [rsp], eax
 	mov ax, [rsp+0x0A]
 	movzx eax, ax
-	add eax, 0x01
+	inc eax
 	mov [rsp+0x04], eax
 	mov eax, [rsp+0x04]
 	mov ecx, [rsp]

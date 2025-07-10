@@ -1,6 +1,6 @@
 defer 1.main.ret_defer:
 	mov rax, [rdi]
-	add rax, 0x01
+	inc rax
 	mov [rdi], rax
 	ret
 main:
@@ -12,7 +12,7 @@ main:
 	setz cl
 	movzx rcx, cl
 	mov rax, rdx
-	add rax, 0x01
+	inc rax
 	test cl, cl
 	jz :0
 	jmp :2

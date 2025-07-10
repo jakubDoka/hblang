@@ -1,6 +1,6 @@
 global variables 1.dec:
 	mov rax, [0x0000000000000007]
-	sub rax, 0x01
+	dec rax
 	mov [0x0000000000000007], rax
 	ret
 main:

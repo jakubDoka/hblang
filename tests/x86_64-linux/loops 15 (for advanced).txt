@@ -9,7 +9,7 @@ main:
 	jnb :0
 	mov [rdx], rax
 	add rdx, 0x08
-	add rax, 0x01
+	inc rax
 	jmp :1
 0:	xor rax, rax
 3:	cmp rcx, rsi

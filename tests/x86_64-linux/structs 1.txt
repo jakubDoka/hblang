@@ -5,16 +5,16 @@ structs 1.odher_pass:
 	ret
 structs 1.Ty.sum:
 	sub rdi, 0x02
-	add rsi, 0x01
+	inc rsi
 	sub rdi, rsi
 	mov rax, rdi
 	ret
 structs 1.pass:
 	mov rax, [rdi]
-	sub rax, 0x01
+	dec rax
 	mov rcx, [rdi+0x08]
 	mov [rdi], rax
-	add rax, 0x01
+	inc rax
 	mov [rdi], rax
 	sub rax, rcx
 	ret

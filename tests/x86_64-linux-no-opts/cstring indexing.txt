@@ -12,7 +12,7 @@ cstring indexing.cstr:
 	mov cl, [rcx]
 	cmp cl, sil
 	jz :0
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x08], rax
 	jmp :1
 0:	mov [rdi], rdx
@@ -68,7 +68,7 @@ main:
 	lea rdi, [rsp+0x70]
 	call :cstring indexing.cstr
 	mov rax, [rsp+0x80]
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x80], rax
 	jmp :2
 0:	xor rax, rax

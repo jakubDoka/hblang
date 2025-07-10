@@ -15,7 +15,7 @@ main:
 	movzx rdx, dl
 	test dl, dl
 	jz :2
-	add rdi, 0x01
+	inc rdi
 	jmp :3
 2:	mov rsi, rdi
 	imul rsi, rax
@@ -27,5 +27,5 @@ main:
 	mov rax, rcx
 1:	ret
 4:	add rcx, rsi
-	add rax, 0x01
+	inc rax
 	jmp :5

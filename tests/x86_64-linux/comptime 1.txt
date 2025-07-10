@@ -1,5 +1,5 @@
 comptime 1.main.some_fn(some_int = uint)(ui = uint):
-	add rdi, 0x01
+	inc rdi
 	mov rcx, rdi
 	mov rax, rcx
 	imul rax, rcx

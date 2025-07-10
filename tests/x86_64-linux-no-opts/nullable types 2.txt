@@ -3,7 +3,7 @@ nullable types 2.take:
 	mov [rsp], rdi
 	mov rcx, [rsp]
 	mov rax, [rcx]
-	add rax, 0x01
+	inc rax
 	mov [rcx], rax
 	add rsp, 0x10
 	ret

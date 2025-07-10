@@ -36,10 +36,10 @@ main:
 3:	mov rcx, [r8+0x08]
 	cmp rdx, rcx
 	jnz :1
-	add rdi, 0x01
+	inc rdi
 	jmp :2
 1:	mov rsi, rdx
-	add rsi, 0x01
+	inc rsi
 	mov rcx, [r8]
 	imul rdx, r9
 	add rcx, rdx

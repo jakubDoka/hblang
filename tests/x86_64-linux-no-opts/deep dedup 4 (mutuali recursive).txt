@@ -31,7 +31,7 @@ deep dedup 4 (mutuali recursive).fib_body2:
 	sub rsp, 0x08
 	mov [rsp], rdi
 	mov rdi, [rsp]
-	sub rdi, 0x01
+	dec rdi
 	call :deep dedup 4 (mutuali recursive).fib2
 	mov rbx, rax
 	mov rdi, [rsp]
@@ -47,7 +47,7 @@ deep dedup 4 (mutuali recursive).fib_body:
 	sub rsp, 0x08
 	mov [rsp], rdi
 	mov rdi, [rsp]
-	sub rdi, 0x01
+	dec rdi
 	call :deep dedup 4 (mutuali recursive).fib
 	mov rbx, rax
 	mov rdi, [rsp]

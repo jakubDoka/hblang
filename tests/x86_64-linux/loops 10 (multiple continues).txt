@@ -7,5 +7,5 @@ main:
 	test dl, dl
 	jz :0
 	ret
-0:	add rcx, 0x01
+0:	inc rcx
 	jmp :1

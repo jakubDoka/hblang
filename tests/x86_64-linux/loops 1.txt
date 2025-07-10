@@ -10,7 +10,7 @@ loops 1.fib:
 	ret
 0:	mov rdx, rax
 	add rdx, rsi
-	sub rcx, 0x01
+	dec rcx
 	mov rax, rsi
 	mov rsi, rdx
 	jmp :1

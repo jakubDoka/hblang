@@ -18,7 +18,7 @@ mem2reg crash 1.insert:
 	movzx rcx, cl
 	test cl, cl
 	jz :1
-	add rdx, 0x01
+	inc rdx
 	jmp :2
 1:	mov rcx, rbp
 	cmp rax, rcx
@@ -29,7 +29,7 @@ mem2reg crash 1.insert:
 	pop rbp
 	pop rbx
 	ret
-3:	add rax, 0x01
+3:	inc rax
 	jmp :4
 mem2reg crash 1.bar:
 	ret

@@ -15,7 +15,7 @@ main:
 	test al, al
 	jz :2
 	mov rax, [rsp]
-	add rax, 0x01
+	inc rax
 	mov [rsp], rax
 	jmp :2
 2:	jmp :2

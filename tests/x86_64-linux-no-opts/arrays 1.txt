@@ -26,7 +26,7 @@ main:
 	add rax, rcx
 	mov [rsp+0x40], rax
 	mov rax, [rsp+0x48]
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x48], rax
 	jmp :2
 0:	mov rcx, rdx
@@ -35,6 +35,6 @@ main:
 	add rax, rcx
 	mov [rax], rdx
 	mov rax, [rsp+0x48]
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x48], rax
 	jmp :3

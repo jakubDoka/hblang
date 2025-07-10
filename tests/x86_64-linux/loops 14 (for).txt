@@ -7,6 +7,6 @@ main:
 	test dl, dl
 	jz :0
 	add rax, rcx
-	add rcx, 0x01
+	inc rcx
 	jmp :1
 0:	ret

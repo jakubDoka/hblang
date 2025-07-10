@@ -9,6 +9,6 @@ main:
 	jz :0
 	add rsp, 0x10
 	ret
-0:	add rax, 0x01
+0:	inc rax
 	mov [rsp], rax
 	jmp :1

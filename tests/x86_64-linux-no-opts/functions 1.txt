@@ -2,7 +2,7 @@ functions 1.add_one:
 	sub rsp, 0x10
 	mov [rsp], rdi
 	mov rax, [rsp]
-	add rax, 0x01
+	inc rax
 	add rsp, 0x10
 	ret
 functions 1.add_two:

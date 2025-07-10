@@ -54,9 +54,9 @@ out of bounds matching 1.next:
 	mov rdx, [rsp]
 	mov rcx, [rdx]
 	mov rax, [rdx+0x08]
-	add rcx, 0x01
+	inc rcx
 	mov [rdx], rcx
-	sub rax, 0x01
+	dec rax
 	mov [rdx+0x08], rax
 	mov byte ptr [rsp+0x08], 0x01
 	mov al, [rsp+0x0A]

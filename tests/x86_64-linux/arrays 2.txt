@@ -20,7 +20,7 @@ main:
 	ret
 1:	mov rdi, rsi
 	imul rdi, rcx
-	add rsi, 0x01
+	inc rsi
 	lea rdx, [rsp]
 	add rdx, rdi
 	mov rdx, [rdx]
@@ -36,12 +36,12 @@ main:
 	movzx rax, al
 	test al, al
 	jz :3
-	add r8, 0x01
+	inc r8
 	jmp :4
 3:	mov rdi, rdx
 	imul rdi, rcx
 	mov rsi, rdx
-	add rsi, 0x01
+	inc rsi
 	imul rdx, r8
 	mov rax, r9
 	add rax, rdi

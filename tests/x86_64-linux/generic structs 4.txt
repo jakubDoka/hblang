@@ -11,7 +11,7 @@ generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next 
 	jmp :1
 0:	mov rdi, [rsp+0x18]
 	mov rsi, [rsp+0x20]
-	sub rax, 0x01
+	dec rax
 	mov rdx, rax
 	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint))).get
 1:	add rsp, 0x08
@@ -27,7 +27,7 @@ generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint, Next 
 	jz :0
 	mov rax, rdi
 	jmp :1
-0:	sub rax, 0x01
+0:	dec rax
 	mov rdi, rsi
 	mov rsi, rax
 	call :generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)).get
@@ -44,7 +44,7 @@ generic structs 4.Array(E = uint, Next = generic structs 4.Array(E = uint)).get:
 	jz :0
 	mov rax, rdi
 	jmp :1
-0:	sub rax, 0x01
+0:	dec rax
 	mov rdi, rax
 	call :generic structs 4.Array(E = uint).get
 1:	add rsp, 0x08

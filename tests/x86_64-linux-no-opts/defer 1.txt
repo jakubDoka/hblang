@@ -3,7 +3,7 @@ defer 1.main.ret_defer:
 	mov [rsp], rdi
 	mov rcx, [rsp]
 	mov rax, [rcx]
-	add rax, 0x01
+	inc rax
 	mov [rcx], rax
 	add rsp, 0x10
 	ret
@@ -15,7 +15,7 @@ main:
 	cmp rax, 0x01
 	setz cl
 	movzx rcx, cl
-	add rax, 0x01
+	inc rax
 	test cl, cl
 	jz :0
 	mov [rsp], rax
@@ -34,7 +34,7 @@ main:
 	mov rbx, 0x04
 b:	mov rdx, [rsp]
 	mov rcx, rdx
-	add rcx, 0x01
+	inc rcx
 	cmp rdx, rax
 	jnz :4
 	mov [rsp], rcx

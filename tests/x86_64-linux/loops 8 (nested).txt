@@ -18,12 +18,12 @@ main:
 	movzx rsi, sil
 	test sil, sil
 	jz :1
-	add rdx, 0x01
+	inc rdx
 	mov rax, rcx
 	jmp :2
 1:	mov rcx, rdi
 	add rcx, r8
-	add rax, 0x01
+	inc rax
 	mov rdi, r8
 	mov r8, rcx
 	jmp :3

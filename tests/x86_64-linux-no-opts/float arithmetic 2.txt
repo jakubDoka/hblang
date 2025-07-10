@@ -43,14 +43,14 @@ float arithmetic 2.sin:
 	mov rax, r8
 	xor rdx, rdx
 	idiv rsi
-	sub r8, 0x01
+	dec r8
 	add rdi, rax
 	and rdi, r8
 	mov [rsp+0x08], rdi
 	mov eax, [rsp+0x18]
 	movsxd rdx, eax
 	mov rax, [rsp]
-	sub rdx, 0x01
+	dec rdx
 	and rax, rdx
 	mov [rsp], rax
 	mov rax, [rsp]

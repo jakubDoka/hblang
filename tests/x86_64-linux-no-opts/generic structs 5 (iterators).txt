@@ -19,9 +19,9 @@ generic structs 5 (iterators).main.next:
 	mov rdx, [rsp]
 	mov rax, [rdx+0x08]
 	mov rcx, [rdx]
-	add rcx, 0x01
+	inc rcx
 	mov [rdx], rcx
-	sub rax, 0x01
+	dec rax
 	mov [rdx+0x08], rax
 1:	add rsp, 0x10
 	ret

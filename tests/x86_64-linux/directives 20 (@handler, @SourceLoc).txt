@@ -35,11 +35,11 @@ memcpy:
 	movzx rax, al
 	test al, al
 	jz :0
-	sub rsi, 0x01
+	dec rsi
 	mov rdx, rdi
-	add rdx, 0x01
+	inc rdx
 	mov rcx, r8
-	add rcx, 0x01
+	inc rcx
 	mov al, [rdi]
 	mov [r8], al
 	mov rdi, rdx

@@ -64,13 +64,13 @@ memcpy:
 	mov al, [rax]
 	mov [rcx], al
 	mov rax, [rsp]
-	add rax, 0x01
+	inc rax
 	mov [rsp], rax
 	mov rax, [rsp+0x08]
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x08], rax
 	mov rax, [rsp+0x10]
-	sub rax, 0x01
+	dec rax
 	mov [rsp+0x10], rax
 	jmp :1
 0:	add rsp, 0x20

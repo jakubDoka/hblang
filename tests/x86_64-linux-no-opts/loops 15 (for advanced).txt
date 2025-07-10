@@ -16,7 +16,7 @@ main:
 	mov rax, [rsp+0x48]
 	mov [rcx], rax
 	mov rax, [rsp+0x48]
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x48], rax
 	mov rax, [rsp+0x50]
 	add rax, 0x08

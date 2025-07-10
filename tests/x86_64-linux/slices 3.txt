@@ -12,7 +12,7 @@ slices 3.reverse:
 	mov [rdi+0x08], rax
 	jmp :1
 0:	xor rsi, rsi
-	sub rdx, 0x01
+	dec rdx
 	mov r9, rdx
 3:	mov rax, [rsp]
 	cmp rsi, r9
@@ -21,8 +21,8 @@ slices 3.reverse:
 	add r8, rsi
 	add rax, r9
 	mov rdx, r9
-	sub rdx, 0x01
-	add rsi, 0x01
+	dec rdx
+	inc rsi
 	mov cl, [r8]
 	mov al, [rax]
 	mov [r8], al

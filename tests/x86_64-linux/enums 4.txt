@@ -2,7 +2,7 @@ enums 4.NameMap(Enum = enums 4.Nm)(StrBuf = [6]u8, IndexBuf = [4]uint).get:
 	movzx r8, dl
 	mov rcx, 0x08
 	mov rdx, r8
-	add rdx, 0x01
+	inc rdx
 	mov rax, rsi
 	add rax, 0x08
 	imul r8, rcx

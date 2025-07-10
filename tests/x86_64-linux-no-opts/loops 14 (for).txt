@@ -12,7 +12,7 @@ main:
 	add rax, rdx
 	mov [rsp], rax
 	mov rax, [rsp+0x08]
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x08], rax
 	jmp :1
 0:	add rsp, 0x10

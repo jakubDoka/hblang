@@ -8,11 +8,11 @@ loops 2.square:
 0:	mov rcx, r8
 3:	cmp rcx, rdi
 	jnz :1
-	add rsi, 0x01
+	inc rsi
 	jmp :2
 1:	mov rdx, rcx
 	imul rdx, rsi
-	add rcx, 0x01
+	inc rcx
 	add rax, rdx
 	jmp :3
 main:

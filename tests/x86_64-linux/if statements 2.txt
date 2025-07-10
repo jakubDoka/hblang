@@ -12,7 +12,7 @@ if statements 2.fib:
 	mov rax, 0x01
 	jmp :1
 0:	mov rax, rbp
-	sub rax, 0x01
+	dec rax
 	mov rdi, rax
 	call :if statements 2.fib
 	mov rbx, rax

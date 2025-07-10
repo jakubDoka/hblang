@@ -23,5 +23,5 @@ main:
 	lea rsi, [rsp]
 	mov rdx, 0x10
 	syscall
-	add rbx, 0x01
+	inc rbx
 	jmp :1

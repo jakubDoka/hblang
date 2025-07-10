@@ -35,7 +35,7 @@ slices 4.equals:
 3:	mov al, cl
 5:	add rsp, 0x30
 	ret
-6:	add rax, 0x01
+6:	inc rax
 	mov [rsp+0x20], rax
 	jmp :7
 main:

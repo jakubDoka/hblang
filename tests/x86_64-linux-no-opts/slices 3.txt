@@ -13,7 +13,7 @@ slices 3.reverse:
 	mov rax, [rsp+0x08]
 	mov [rdi+0x08], rax
 	jmp :1
-0:	sub rax, 0x01
+0:	dec rax
 	mov [rsp+0x10], rax
 	mov qword ptr [rsp+0x18], 0x00
 	mov byte ptr [rsp+0x20], 0x00
@@ -39,10 +39,10 @@ slices 3.reverse:
 	add rax, rdx
 	mov [rax], cl
 	mov rax, [rsp+0x18]
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x18], rax
 	mov rax, [rsp+0x10]
-	sub rax, 0x01
+	dec rax
 	mov [rsp+0x10], rax
 	jmp :3
 2:	mov rax, [rsp]

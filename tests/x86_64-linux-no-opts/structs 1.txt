@@ -11,7 +11,7 @@ structs 1.Ty.sum:
 	sub rax, 0x02
 	mov [rsp], rax
 	mov rax, [rsp+0x08]
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x08], rax
 	mov rax, [rsp]
 	mov rcx, [rsp+0x08]
@@ -23,11 +23,11 @@ structs 1.pass:
 	mov [rsp], rdi
 	mov rcx, [rsp]
 	mov rax, [rcx]
-	sub rax, 0x01
+	dec rax
 	mov [rcx], rax
 	mov rcx, [rsp]
 	mov rax, [rcx]
-	add rax, 0x01
+	inc rax
 	mov [rcx], rax
 	mov rcx, [rsp]
 	mov rax, [rcx]

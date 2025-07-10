@@ -15,7 +15,7 @@ main:
 	add rcx, 0x02
 	mov [rsp+0x20], rcx
 	mov qword ptr [rsp+0x28], 0x02
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x30], rax
 	mov qword ptr [rsp+0x38], 0x02
 	mov rcx, [rsp+0x88]
@@ -32,7 +32,7 @@ main:
 	sub rax, 0x02
 	mov [rsp+0x68], rax
 	mov rax, [rsp+0x80]
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x70], rax
 	mov qword ptr [rsp+0x78], 0x02
 	mov qword ptr [rsp+0x90], 0x00
@@ -57,7 +57,7 @@ main:
 	mov rcx, [rsi+0x08]
 	cmp rdx, rcx
 	jnz :1
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x98], rax
 	jmp :2
 1:	mov rax, [rsi]
@@ -68,6 +68,6 @@ main:
 	add rax, rcx
 	mov [rsp+0x90], rax
 	mov rax, [rsp+0xA0]
-	add rax, 0x01
+	inc rax
 	mov [rsp+0xA0], rax
 	jmp :3

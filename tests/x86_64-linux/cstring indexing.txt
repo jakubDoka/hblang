@@ -46,12 +46,12 @@ main:
 	mov dl, [rdx]
 	cmp dl, dil
 	jz :2
-	add rcx, 0x01
+	inc rcx
 	jmp :3
 2:	mov [rsp+0x50], rsi
 	mov [rsp+0x58], rcx
 	mov rcx, rbx
-	add rcx, 0x01
+	inc rcx
 	jmp :4
 0:	add rsp, 0x68
 	pop rbx

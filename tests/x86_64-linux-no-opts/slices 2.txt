@@ -52,7 +52,7 @@ main:
 	mov rsi, [rdi+0x08]
 	cmp rcx, rsi
 	jnz :1
-	add rdx, 0x01
+	inc rdx
 	mov [rsp+0x78], rdx
 	jmp :2
 1:	mov rdx, [rdi]
@@ -63,6 +63,6 @@ main:
 	add rcx, rdx
 	mov [rsp+0x70], rcx
 	mov rcx, [rsp+0x80]
-	add rcx, 0x01
+	inc rcx
 	mov [rsp+0x80], rcx
 	jmp :3

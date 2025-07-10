@@ -10,7 +10,7 @@ if statements 1.fib:
 	jz :0
 	mov rax, 0x01
 	jmp :1
-0:	sub rdi, 0x01
+0:	dec rdi
 	call :if statements 1.fib
 	mov rbx, rax
 	mov rdi, [rsp]

@@ -12,7 +12,7 @@ deep dedup 3 (recursive functions).fib2:
 	mov rax, 0x01
 	jmp :1
 0:	mov rax, rbp
-	sub rax, 0x01
+	dec rax
 	mov rdi, rax
 	call :deep dedup 3 (recursive functions).fib2
 	mov rbx, rax

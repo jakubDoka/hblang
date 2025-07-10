@@ -18,7 +18,7 @@ main:
 	ret
 1:	mov rdx, rsi
 	imul rdx, r8
-	add rsi, 0x01
+	inc rsi
 	lea rcx, [rsp]
 	add rcx, rdx
 	mov rcx, [rcx]
@@ -27,7 +27,7 @@ main:
 0:	mov rdx, rdi
 	imul rdx, r8
 	mov rcx, rdi
-	add rcx, 0x01
+	inc rcx
 	lea rax, [rsp]
 	add rax, rdx
 	mov [rax], rdi

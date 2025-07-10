@@ -2,7 +2,7 @@ comptime 1.main.some_fn(some_int = uint)(ui = uint):
 	sub rsp, 0x10
 	mov [rsp], rdi
 	mov rax, [rsp]
-	add rax, 0x01
+	inc rax
 	mov [rsp+0x08], rax
 	mov rax, [rsp+0x08]
 	imul rax, rax

@@ -148,6 +148,8 @@ pub const Reloc = struct {
 };
 
 pub const classes = enum {
+    pub const Inc = extern struct {};
+    pub const Dec = extern struct {};
     pub const GlobalLoad = extern struct {
         base: OffsetLoad,
         id: u32,
@@ -1093,7 +1095,13 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 switch (op) {
                     .imul => unreachable,
                     .ushr, .ishl, .sshr, .iadd, .isub, .bor, .band, .bxor => {
-                        self.emitInstr(mnemonic, .{ SReg{ dst, size }, rhs });
+                        if (op == .iadd and rhs == 1) {
+                            self.emitInstr(zydis.ZYDIS_MNEMONIC_INC, .{SReg{ dst, size }});
+                        } else if (op == .isub and rhs == 1) {
+                            self.emitInstr(zydis.ZYDIS_MNEMONIC_DEC, .{SReg{ dst, size }});
+                        } else {
+                            self.emitInstr(mnemonic, .{ SReg{ dst, size }, rhs });
+                        }
                     },
                     .udiv, .sdiv, .smod, .umod => switch (size) {
                         1, 2, 4, 8 => {

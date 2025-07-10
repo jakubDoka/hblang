@@ -32,6 +32,6 @@ main:
 	mov [rsp+0x18], rcx
 	jmp :3
 3:	mov rcx, [rsp+0x10]
-	add rcx, 0x01
+	inc rcx
 	mov [rsp+0x10], rcx
 	jmp :4

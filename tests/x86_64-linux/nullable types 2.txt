@@ -1,6 +1,6 @@
 nullable types 2.take:
 	mov rax, [rdi]
-	add rax, 0x01
+	inc rax
 	mov [rdi], rax
 	ret
 main:
