@@ -552,7 +552,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .Arg => {},
             .GlobalAddr => |extra| {
-                try self.out.addGlobalReloc(self.gpa, extra.id, 4, 3);
+                try self.out.addGlobalReloc(self.gpa, extra.id, 4, 3, 0);
                 self.emit(.lra, .{ self.getReg(no), .null, 0 });
             },
             .LocalAlloc => {},
@@ -733,7 +733,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 if (extra.id == eca) {
                     self.emit(.eca, .{});
                 } else {
-                    try self.out.addFuncReloc(self.gpa, extra.id, 4, 3);
+                    try self.out.addFuncReloc(self.gpa, extra.id, 4, 3, 0);
                     self.emit(.jal, .{ .ret_addr, .null, 0 });
                 }
             },

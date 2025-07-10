@@ -11,10 +11,8 @@ main:
 	mov [rsp+0x10], eax
 	call :comptime 5 (integers).main.func(value: uint)
 	mov rcx, rax
-	lea rax, [0x0000000000000007]
-	lea rdx, [0x0000000000000007]
-	mov rax, [rax]
-	mov rdx, [rdx]
+	mov rax, [0x0000000000000007]
+	mov rdx, [0x0000000000000007]
 	sub rax, rcx
 	add rax, rdx
 	add rsp, 0x18

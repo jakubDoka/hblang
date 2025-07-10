@@ -579,6 +579,7 @@ pub const builtin = enum {
     pub const Store = mod.Store;
     pub const GlobalAddr = extern struct {
         id: u32,
+        //pub const is_clone = true;
     };
     pub const Split = extern struct {};
     pub const Join = extern struct {};
@@ -934,7 +935,7 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn knownStore(self: *Node, root: *Node) ?*Node {
-                if (self.isStore() and !self.isSub(MemCpy) and self.base() == root) {
+                if (self.isStore() and !self.isSub(MemCpy) and self.tryBase() == root) {
                     return self;
                 }
                 if (self.kind == .BinOp and self.outputs().len == 1 and
@@ -1139,6 +1140,11 @@ pub fn Func(comptime Backend: type) type {
             pub fn mem(self: *Node) *Node {
                 std.debug.assert(self.isLoad() or self.isStore());
                 return self.inputs()[1].?;
+            }
+
+            pub fn tryBase(self: *Node) ?*Node {
+                std.debug.assert(self.isLoad() or self.isStore());
+                return self.inputs()[2];
             }
 
             pub fn base(self: *Node) *Node {

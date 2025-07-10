@@ -626,19 +626,20 @@ pub const Data = struct {
         return self.names.items[name..][0..std.mem.indexOfScalar(u8, self.names.items[name..], 0).? :0];
     }
 
-    pub fn addFuncReloc(self: *Data, gpa: std.mem.Allocator, target: u32, slot_size: u8, addend: i16) !void {
-        return self.addReloc(gpa, try root.ensureSlot(&self.funcs, gpa, target), slot_size, addend);
+    pub fn addFuncReloc(self: *Data, gpa: std.mem.Allocator, target: u32, slot_size: u8, addend: i16, back_shift: u32) !void {
+        return self.addReloc(gpa, try root.ensureSlot(&self.funcs, gpa, target), slot_size, addend, back_shift);
     }
 
-    pub fn addGlobalReloc(self: *Data, gpa: std.mem.Allocator, target: u32, slot_size: u8, addend: i16) !void {
-        return self.addReloc(gpa, try root.ensureSlot(&self.globals, gpa, target), slot_size, addend);
+    pub fn addGlobalReloc(self: *Data, gpa: std.mem.Allocator, target: u32, slot_size: u8, addend: i16, back_shift: u32) !void {
+        return self.addReloc(gpa, try root.ensureSlot(&self.globals, gpa, target), slot_size, addend, back_shift);
     }
 
-    pub fn addReloc(self: *Data, gpa: std.mem.Allocator, target: *SymIdx, slot_size: u8, addend: i16) !void {
+    pub fn addReloc(self: *Data, gpa: std.mem.Allocator, target: *SymIdx, slot_size: u8, addend: i16, back_shift: u32) !void {
         try self.relocs.append(gpa, .{
             .target = try self.declSym(gpa, target),
             .offset = @intCast(self.code.items.len -
-                self.syms.items[@intFromEnum(self.declaring_sym.?)].offset),
+                self.syms.items[@intFromEnum(self.declaring_sym.?)].offset -
+                back_shift),
             .addend = addend,
             .slot_size = slot_size,
         });
@@ -744,16 +745,12 @@ pub const Data = struct {
             readonly,
             false,
         );
-        try self.code.ensureUnusedCapacity(gpa, data.len);
 
-        var prev_off: usize = 0;
+        try self.code.appendSlice(gpa, data);
         for (relocs) |rel| {
+            try self.addGlobalReloc(gpa, rel.target, 8, 0, @intCast(data.len - rel.offset));
             std.debug.assert(rel.target != id);
-            self.code.appendSliceAssumeCapacity(data[prev_off..rel.offset]);
-            try self.addGlobalReloc(gpa, rel.target, 8, 0);
-            prev_off = rel.offset;
         }
-        self.code.appendSliceAssumeCapacity(data[prev_off..]);
 
         self.endDefineSym(self.globals.items[id]);
     }

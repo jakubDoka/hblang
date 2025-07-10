@@ -2,9 +2,8 @@ if statements 4 (short circuit).effectfull:
 	sub rsp, 0x10
 	mov [rsp], rdi
 	mov rax, 0x01
-	lea rdx, [0x0000000000000007]
 	mov rcx, [rsp]
-	mov [rdx], rcx
+	mov [0x0000000000000007], rcx
 	add rsp, 0x10
 	ret
 main:
@@ -51,9 +50,8 @@ main:
 7:	mov rdi, 0x05
 	call :if statements 4 (short circuit).effectfull
 	mov [rsp], al
-8:	lea rcx, [0x0000000000000007]
-	mov al, [rsp]
+8:	mov al, [rsp]
 	mov [rsp+0x05], al
-	mov rax, [rcx]
+	mov rax, [0x0000000000000007]
 	add rsp, 0x08
 	ret

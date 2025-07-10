@@ -1,5 +1,4 @@
 main:
-	lea rax, [0x0000000000000007]
-	mov al, [rax]
+	mov rax, [0x0000000000000007]
 	movzx rax, al
 	ret

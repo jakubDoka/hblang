@@ -150,10 +150,14 @@ pub const Reloc = struct {
 pub const classes = enum {
     pub const GlobalLoad = extern struct {
         base: OffsetLoad,
+        id: u32,
+
         pub const data_dep_offset = 2;
     };
     pub const GlobalStore = extern struct {
         base: OffsetStore,
+        id: u32,
+
         pub const data_dep_offset = 2;
     };
     pub const StackLoad = extern struct {
@@ -262,13 +266,16 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
                 &.{ node.inputs()[0], node.mem(), if (base.kind == .Local) base.inputs()[1] else base },
                 .{ .base = .{ .dis = @intCast(offset) } },
             )
-        else if (base.kind == .GlobalAddr and false)
+        else if (base.kind == .GlobalAddr)
             func.addNode(
                 .GlobalLoad,
                 node.sloc,
                 node.data_type,
-                &.{ node.inputs()[0], node.mem(), base },
-                .{ .base = .{ .dis = @intCast(offset) } },
+                &.{ node.inputs()[0], node.mem(), null },
+                .{
+                    .base = .{ .dis = @intCast(offset) },
+                    .id = base.extra(.GlobalAddr).id,
+                },
             )
         else
             func.addNode(
@@ -310,21 +317,29 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
             }
         }
 
-        const res = func.addNode(
-            .OffsetStore,
-            node.sloc,
-            node.data_type,
-            &.{ node.inputs()[0], node.mem(), base, node.value() },
-            .{ .dis = @intCast(offset) },
-        );
+        const res = if (base.kind == .GlobalAddr)
+            func.addNode(
+                .GlobalStore,
+                node.sloc,
+                node.data_type,
+                &.{ node.inputs()[0], node.mem(), null, node.value() },
+                .{
+                    .base = .{ .dis = @intCast(offset) },
+                    .id = base.extra(.GlobalAddr).id,
+                },
+            )
+        else
+            func.addNode(
+                .OffsetStore,
+                node.sloc,
+                node.data_type,
+                &.{ node.inputs()[0], node.mem(), base, node.value() },
+                .{ .dis = @intCast(offset) },
+            );
 
         if (base.isStack()) {
             res.kind = .StackStore;
             if (base.kind == .Local) func.setInputNoIntern(res, 2, base.inputs()[1]);
-        }
-
-        if (base.kind == .GlobalAddr and false) {
-            res.kind = .GlobalStore;
         }
 
         worklist.add(res);
@@ -910,16 +925,14 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), extra.value });
             },
             .MemCpy => {
-                const opcode = 0xE8;
-                try self.out.code.append(self.gpa, opcode);
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_CALL, .{0});
                 if (self.builtins.memcpy == std.math.maxInt(u32)) {
                     if (self.memcpy == .invalid)
                         try self.out.importSym(self.gpa, &self.memcpy, "memcpy", .func);
-                    try self.out.addReloc(self.gpa, &self.memcpy, 4, -4);
+                    try self.out.addReloc(self.gpa, &self.memcpy, 4, -4, 4);
                 } else {
-                    try self.out.addFuncReloc(self.gpa, self.builtins.memcpy, 4, -4);
+                    try self.out.addFuncReloc(self.gpa, self.builtins.memcpy, 4, -4, 4);
                 }
-                try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
             },
             .MachSplit => {
                 const dst, const src = .{ self.getReg(instr), self.getReg(instr.inputs()[1]) };
@@ -932,33 +945,16 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             },
             .Phi => {},
             .GlobalAddr => {
-                var buf: [zydis.ZYDIS_MAX_INSTRUCTION_LENGTH]u8 = undefined;
-                var len: usize = undefined;
-                var req: zydis.ZydisEncoderRequest = undefined;
-
-                req = .{
-                    .mnemonic = zydis.ZYDIS_MNEMONIC_LEA,
-                    .machine_mode = zydis.ZYDIS_MACHINE_MODE_LONG_64,
-                    .operand_count = 2,
-                };
-                len = @sizeOf(@TypeOf(buf));
-                req.operands[0] = self.getReg(instr).asZydisOp(8, self.slot_base);
-                req.operands[1] = .{
-                    .type = zydis.ZYDIS_OPERAND_TYPE_MEMORY,
-                    .mem = .{
-                        .base = zydis.ZYDIS_REGISTER_RIP,
-                        .size = 8,
-                    },
-                };
-                const status = zydis.ZydisEncoderEncodeInstruction(&req, &buf, &len);
-                if (zydis.ZYAN_FAILED(status) != 0) {
-                    utils.panic("{x}\n", .{status});
-                }
-                try self.out.code.appendSlice(self.gpa, buf[0 .. len - 4]);
-
-                try self.out.addGlobalReloc(self.gpa, instr.extra(.GlobalAddr).id, 4, -4);
-
-                try self.out.code.appendSlice(self.gpa, buf[len - 4 .. len]);
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_LEA, .{ self.getReg(instr), Rip{} });
+                try self.out.addGlobalReloc(self.gpa, instr.extra(.GlobalAddr).id, 4, -4, 4);
+            },
+            .GlobalStore => {
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Rip{}, self.getReg(instr.value()) });
+                try self.out.addGlobalReloc(self.gpa, instr.extra(.GlobalStore).id, 4, -4, 4);
+            },
+            .GlobalLoad => {
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), Rip{} });
+                try self.out.addGlobalReloc(self.gpa, instr.extra(.GlobalLoad).id, 4, -4, 4);
             },
             .LocalAlloc => {},
             .Local => {
@@ -1058,10 +1054,8 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 if (extra.id == syscall) {
                     self.emitInstr(zydis.ZYDIS_MNEMONIC_SYSCALL, .{});
                 } else {
-                    const opcode = 0xE8;
-                    try self.out.code.append(self.gpa, opcode);
-                    try self.out.addFuncReloc(self.gpa, call.id, 4, -4);
-                    try self.out.code.appendSlice(self.gpa, &.{ 0, 0, 0, 0 });
+                    self.emitInstr(zydis.ZYDIS_MNEMONIC_CALL, .{0});
+                    try self.out.addFuncReloc(self.gpa, call.id, 4, -4, 4);
                 }
             },
             .Arg, .Ret, .Mem, .Never => {},
@@ -1288,6 +1282,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
 
 pub const SReg = struct { Reg, usize };
 pub const BRegOff = struct { Reg, i32, u16 };
+pub const Rip = struct {};
 pub const SizeHint = struct { bytes: u64 };
 
 pub fn emitInstr(self: *X86_64Gen, mnemonic: c_uint, args: anytype) void {
@@ -1314,6 +1309,7 @@ pub fn emitInstr(self: *X86_64Gen, mnemonic: c_uint, args: anytype) void {
             SReg => val[1],
             BRegOff => val[2],
             SizeHint => val.bytes,
+            Rip => 8,
             zydis.ZydisEncoderOperand => b: {
                 const t = if (val.type == zydis.ZYDIS_OPERAND_TYPE_MEMORY)
                     val.mem.size
@@ -1327,6 +1323,7 @@ pub fn emitInstr(self: *X86_64Gen, mnemonic: c_uint, args: anytype) void {
         size = size orelse op_size;
     }
 
+    if (mnemonic == zydis.ZYDIS_MNEMONIC_CALL) size = 0;
     if (fields.len == 0) size = 0;
 
     const fsize = size.?;
@@ -1362,6 +1359,13 @@ pub fn emitInstr(self: *X86_64Gen, mnemonic: c_uint, args: anytype) void {
                 req.operand_count -= 1;
                 req.operand_size_hint = @intCast(zydis.ZYDIS_OPERAND_SIZE_HINT_8 + val.bytes);
                 continue;
+            },
+            Rip => .{
+                .type = zydis.ZYDIS_OPERAND_TYPE_MEMORY,
+                .mem = .{
+                    .base = zydis.ZYDIS_REGISTER_RIP,
+                    .size = 8,
+                },
             },
             else => comptime unreachable,
         };

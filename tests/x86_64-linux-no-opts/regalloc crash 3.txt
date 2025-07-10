@@ -4,15 +4,12 @@ regalloc crash 3.broken:
 	call :memcpy
 	ret
 main:
-	push rbx
 	sub rsp, 0x288
-	lea rbx, [0x0000000000000007]
-1:	mov rax, [rbx]
+1:	mov rax, [0x0000000000000007]
 	cmp rax, rax
 	jnz :0
 	mov rax, 0x00
 	add rsp, 0x288
-	pop rbx
 	ret
 0:	mov byte ptr [rsp+0x30], 0x00
 	lea rsi, [rsp+0x30]

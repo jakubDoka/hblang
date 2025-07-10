@@ -1,8 +1,6 @@
 main:
-	lea rdx, [0x0000000000000007]
-	lea rax, [0x0000000000000007]
-	mov cl, [rax]
-	mov rax, [rdx]
+	mov rcx, [0x0000000000000007]
+	mov rax, [0x0000000000000007]
 	movzx rcx, cl
 	add rax, rcx
 	ret

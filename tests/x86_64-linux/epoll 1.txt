@@ -17,8 +17,7 @@ main:
 	jmp :1
 0:	mov dword ptr [rsp], 0x01
 	mov qword ptr [rsp+0x04], 0x00
-	lea rax, [0x0000000000000007]
-	mov cx, [rax]
+	mov rcx, [0x0000000000000007]
 	mov rax, 0xE9
 	lea r10, [rsp]
 	movzx rsi, cx

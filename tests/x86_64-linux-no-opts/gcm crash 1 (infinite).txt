@@ -8,17 +8,15 @@ gcm crash 1 (infinite).func:
 main:
 	push rbx
 	push rbp
-	push r12
 	sub rsp, 0x418
-	lea r12, [rsp]
-	mov [rsp+0x400], r12
+	lea rbp, [rsp]
+	mov [rsp+0x400], rbp
 	mov qword ptr [rsp+0x408], 0x00
-	lea rbp, [0x0000000000000007]
 	mov rbx, 0x00
 3:	mov rax, [rsp+0x408]
 	cmp rax, rbx
 	jb :0
-	mov al, [rbp]
+	mov rax, [0x0000000000000007]
 	mov [rsp+0x410], al
 	mov al, [rsp+0x410]
 	mov [rsp+0x410], al
@@ -29,11 +27,11 @@ main:
 	mov [rsp+0x400], rax
 	mov [rsp+0x408], rcx
 	jmp :2
-2:	mov sil, [rbp]
+2:	mov rsi, [0x0000000000000007]
 	mov dl, [rsp+0x410]
 	mov rdi, 0x00
 	call :gcm crash 1 (infinite).func
 	jmp :3
-0:	mov [rsp+0x400], r12
+0:	mov [rsp+0x400], rbp
 	mov qword ptr [rsp+0x408], 0x400
 	jmp :3
