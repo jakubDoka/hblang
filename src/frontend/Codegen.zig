@@ -160,7 +160,11 @@ pub const Scope = union(enum) {
             .Tmp => |t| for (t.scope.items, 0..) |se, i| {
                 if (se.name == id) {
                     var value = Value.mkp(se.ty, t.bl.getPinValue(i));
-                    slot.* = .{ .ty = se.ty, .id = id, .value = t.partialEvalLow(ast, &value, true) catch 0 };
+                    slot.* = .{
+                        .ty = se.ty,
+                        .id = id,
+                        .value = t.partialEvalLow(t.posOf(ast).index, &value, true) catch 0,
+                    };
                     return slot;
                 }
             } else null,
@@ -3247,9 +3251,10 @@ pub fn encodeString(
     return .{ .ok = str.items };
 }
 
-pub fn partialEvalLow(self: *Codegen, pos: anytype, value: *Value, can_recover: bool) !u64 {
+pub fn partialEvalLow(self: *Codegen, pos: u32, value: *Value, can_recover: bool) !u64 {
+    const file = self.parent_scope.file(self.types);
     return switch (self.types.ct.partialEval(
-        self.parent_scope.file(self.types),
+        file,
         self.parent_scope.perm(self.types),
         pos,
         &self.bl,
@@ -3272,8 +3277,12 @@ pub fn partialEvalLow(self: *Codegen, pos: anytype, value: *Value, can_recover: 
     };
 }
 
+pub fn posOf(self: *Codegen, pos: anytype) Ast.Pos {
+    return self.types.posOf(self.parent_scope.file(self.types), pos);
+}
+
 pub fn partialEval(self: *Codegen, pos: anytype, value: *Value) !u64 {
-    return self.partialEvalLow(pos, value, false);
+    return self.partialEvalLow(self.posOf(pos).index, value, false);
 }
 
 pub fn binOpUpcast(self: *Codegen, lhs: Types.Id, rhs: Types.Id) !Types.Id {

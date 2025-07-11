@@ -857,6 +857,10 @@ pub fn getFile(self: *Types, file: File) *const Ast {
     return &self.files[@intFromEnum(file)];
 }
 
+pub fn posOf(self: *Types, file: File, expr: anytype) Ast.Pos {
+    return self.getFile(file).posOf(expr);
+}
+
 pub fn getScope(self: *Types, file: File) Id {
     if (self.file_scopes[@intFromEnum(file)] == .void) {
         self.file_scopes[@intFromEnum(file)] = self.resolveFielded(

@@ -87,7 +87,7 @@ pub const PartialEvalResult = union(enum) {
     Unsupported: *Node,
 };
 
-pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: anytype, bl: *Builder, expr: *Node, ty: Types.Id) PartialEvalResult {
+pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32, bl: *Builder, expr: *Node, ty: Types.Id) PartialEvalResult {
     const abi: Types.Abi = .ableos;
     const types = self.getTypes();
 
@@ -327,7 +327,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: anyt
 pub fn runVm(
     self: *Comptime,
     file: Types.File,
-    pos: anytype,
+    pos: u32,
     name: []const u8,
     entry_id: u32,
     return_loc: []u8,
@@ -639,20 +639,22 @@ pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until:
 }
 
 pub fn evalTy(self: *Comptime, name: []const u8, scope: Codegen.Scope, ty_expr: Ast.Id) !Types.Id {
+    const types = self.getTypes();
     const res, _ = try self.jitExpr(name, scope, .{ .ty = .type }, ty_expr);
+    const file = scope.file(types);
 
     switch (res) {
         .func => |id| {
             var data: [8]u8 = undefined;
-            try self.runVm(scope.file(self.getTypes()), ty_expr, name, @intFromEnum(id), &data);
-            return Types.Id.fromRaw(@bitCast(data[0..4].*), self.getTypes()) orelse {
-                self.getTypes().report(scope.file(self.getTypes()), ty_expr, "resulting type has a corrupted value", .{});
+            try self.runVm(scope.file(types), types.getFile(file).posOf(ty_expr).index, name, @intFromEnum(id), &data);
+            return Types.Id.fromRaw(@bitCast(data[0..4].*), types) orelse {
+                types.report(scope.file(types), ty_expr, "resulting type has a corrupted value", .{});
                 return error.Never;
             };
         },
         .constant => |vl| {
-            return Types.Id.fromRaw(@truncate(@as(u64, @bitCast(vl))), self.getTypes()) orelse {
-                self.getTypes().report(scope.file(self.getTypes()), ty_expr, "resulting type has a corrupted value", .{});
+            return Types.Id.fromRaw(@truncate(@as(u64, @bitCast(vl))), types) orelse {
+                types.report(scope.file(types), ty_expr, "resulting type has a corrupted value", .{});
                 return error.Never;
             };
         },
@@ -661,10 +663,12 @@ pub fn evalTy(self: *Comptime, name: []const u8, scope: Codegen.Scope, ty_expr: 
 
 pub fn evalIntConst(self: *Comptime, scope: Codegen.Scope, int_conts: Ast.Id) !i64 {
     const res, _ = try self.jitExpr("", scope, .{ .ty = .uint }, int_conts);
+    const types = self.getTypes();
+    const file = scope.file(types);
     switch (res) {
         .func => |id| {
             var data: [8]u8 = undefined;
-            try self.runVm(scope.file(self.getTypes()), int_conts, "", @intFromEnum(id), &data);
+            try self.runVm(file, types.posOf(file, int_conts).index, "", @intFromEnum(id), &data);
             return @bitCast(data);
         },
         .constant => |c| return c,
@@ -672,25 +676,27 @@ pub fn evalIntConst(self: *Comptime, scope: Codegen.Scope, int_conts: Ast.Id) !i
 }
 
 pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(tys.Global), ty: ?Types.Id, value: Ast.Id) !void {
+    const types = self.getTypes();
     const res, const fty = try self.jitExpr(name, .{ .Perm = self.getTypes().store.get(global).key.loc.scope }, .{ .ty = ty }, value);
-    const data = self.getTypes().pool.arena.allocator().alloc(u8, @intCast(fty.size(self.getTypes()))) catch unreachable;
+    const file = types.store.get(global).key.loc.file;
+    const data = types.pool.arena.allocator().alloc(u8, @intCast(fty.size(types))) catch unreachable;
     switch (res) {
         .func => |id| {
-            try self.runVm(self.getTypes().store.get(global).key.loc.file, value, name, @intFromEnum(id), data);
+            try self.runVm(file, types.posOf(file, value).index, name, @intFromEnum(id), data);
         },
         .constant => |c| {
             @memcpy(data, @as(*const [@sizeOf(@TypeOf(c))]u8, @ptrCast(&c))[0..data.len]);
         },
     }
 
-    const glbal = self.getTypes().store.get(global);
+    const glbal = types.store.get(global);
     glbal.data = data;
     glbal.ty = fty;
     if (fty == .type) {
         const typ: Types.Id = @enumFromInt(@as(u32, @bitCast(data[0..4].*)));
         inline for (.{ .Func, .Template }) |tag| {
             if (typ.data() == tag) {
-                const item = self.getTypes().store.get(@field(typ.data(), @tagName(tag)));
+                const item = types.store.get(@field(typ.data(), @tagName(tag)));
                 if (std.mem.eql(u8, name, item.key.name)) item.is_inline = glbal.readonly;
             }
         }
