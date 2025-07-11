@@ -479,12 +479,13 @@ pub const Id = enum(IdRepr) {
     pub const Fmt = struct {
         self: Id,
         tys: *Types,
+        root: ?Id = null,
 
         pub fn toString(self: *const Fmt, arena: std.mem.Allocator) ![]u8 {
             return std.fmt.allocPrint(arena, "{}", .{self});
         }
 
-        pub fn format(self: *const Fmt, comptime opts: []const u8, _: anytype, writer: anytype) !void {
+        pub fn format(self: *const Fmt, comptime _: []const u8, _: anytype, writer: anytype) !void {
             try switch (self.self.data()) {
                 .Pointer => |b| writer.print("^{}", .{self.tys.store.get(b).fmt(self.tys)}),
                 .Nullable => |b| writer.print("?{}", .{self.tys.store.get(b).inner.fmt(self.tys)}),
@@ -505,28 +506,22 @@ pub const Id = enum(IdRepr) {
                 },
                 .Builtin => |b| writer.writeAll(@tagName(b)),
                 .Func, .Global, .Template, .Struct, .Union, .Enum => {
-                    const key = switch (self.self.data()) {
-                        inline .Func, .Global, .Template, .Struct, .Union, .Enum => |v| self.tys.store.get(v).key,
+                    const key: *Scope = switch (self.self.data()) {
+                        inline .Func, .Global, .Template, .Struct, .Union, .Enum => |v| &self.tys.store.get(v).key,
                         else => unreachable,
                     };
                     if (key.loc.scope != .void) {
                         try writer.print("{}", .{key.loc.scope.fmt(self.tys)});
                     }
                     if (key.name.len != 0 and (key.name.len != 1 or key.name[0] != '-')) {
-                        const testing = comptime !std.mem.eql(u8, opts, "test") or true;
-                        if (key.loc.scope != .void and
-                            (key.loc.scope.data() != .Struct or
-                                self.tys.store.get(key.loc.scope.data().Struct).key.loc.scope != .void or
-                                testing)) try writer.writeAll(".");
                         if (key.loc.scope != .void) {
+                            try writer.writeAll(".");
                             try writer.writeAll(
                                 key.name[0 .. std.mem.lastIndexOfScalar(u8, key.name, '.') orelse
                                     key.name.len],
                             );
                         } else {
-                            if (testing) {
-                                try writer.writeAll(std.fs.path.basename(key.name));
-                            }
+                            try writer.writeAll(std.fs.path.basename(key.name));
                         }
                     }
                     if (key.captures.len != 0 and self.self.data() != .Global) {
@@ -543,8 +538,7 @@ pub const Id = enum(IdRepr) {
                                 try writer.writeAll("(");
                                 written_paren = true;
                             }
-                            const finty: Types.Id = if (capture.ty == .type) @enumFromInt(capture.value) else capture.ty;
-                            try writer.print("{}", .{finty.fmt(self.tys)});
+                            try writer.print("{}", .{capture.ty.fmtValue(self.tys, capture.value)});
                         }
                         if (written_paren) try writer.writeAll(")");
                     }
@@ -557,9 +551,141 @@ pub const Id = enum(IdRepr) {
     pub fn fmt(self: Id, types: *Types) Fmt {
         return .{ .self = self, .tys = types };
     }
+
+    pub const FmtValue = struct {
+        self: Id,
+        tys: *Types,
+        offset: u64 = 0,
+        value: u64,
+
+        pub fn format(self: *const FmtValue, comptime _: []const u8, _: anytype, writer: anytype) !void {
+            switch (self.self.data()) {
+                .Builtin => |b| switch (@as(Builtin, b)) {
+                    .never, .any => try writer.writeAll("<invalid>"),
+                    .void => try writer.writeAll(".()"),
+                    .bool => try writer.writeAll(if (self.value != 0) "true" else "false"),
+                    .u8, .u16, .u32, .u64, .uint => try writer.print("{}", .{self.value}),
+                    .i8, .i16, .i32, .i64, .int => try writer.print("{}", .{@as(i64, @bitCast(self.value))}),
+                    .f32 => try writer.print("{}", .{@as(f32, @bitCast(@as(u32, @truncate(self.value))))}),
+                    .f64 => try writer.print("{}", .{@as(f64, @bitCast(@as(u64, @truncate(self.value))))}),
+                    .type => try writer.print("{}", .{@as(Id, @enumFromInt(self.value)).fmt(self.tys)}),
+                },
+                .Slice => |s| {
+                    const slc: tys.Slice = self.tys.store.get(s).*;
+                    const ln, const global, const base = if (slc.len) |l| b: {
+                        break :b .{ l, self.value, self.offset };
+                    } else b: {
+                        const ptr = readFromGlobal(self.tys, @enumFromInt(self.value), .uint, self.offset + tys.Slice.ptr_offset);
+                        const ln = readFromGlobal(self.tys, @enumFromInt(self.value), .uint, self.offset + tys.Slice.len_offset);
+                        std.debug.print("{} {}\n", .{ ptr, ln });
+
+                        const global = self.tys.findSymForPtr(ptr, ln * slc.elem.size(self.tys));
+                        break :b .{ ln, global catch |err| {
+                            try writer.print("<corrupted>({s})", .{@errorName(err)});
+                            return;
+                        }, 0 };
+                    };
+
+                    if (slc.elem == .u8 and slc.len == null) {
+                        const glb: utils.EntId(tys.Global) = @enumFromInt(global);
+                        try writer.print("\"{s}\"", .{self.tys.store.get(glb).data[base..][0..ln]});
+                        return;
+                    }
+
+                    const fvl = FmtValue{ .self = slc.elem, .tys = self.tys, .offset = base, .value = global };
+                    if (slc.len == null) try writer.writeAll("&");
+                    try writer.writeAll(".[");
+                    for (0..ln) |i| {
+                        if (i != 0) try writer.writeAll(", ");
+                        const off = i * slc.elem.size(self.tys);
+                        try writer.print("{}", .{fvl.fmtAny(slc.elem, off)});
+                    }
+                    try writer.writeAll("]");
+                },
+                .Struct => |s| {
+                    var offsets = @as(tys.Struct.Id, s).offsetIter(self.tys);
+                    try writer.writeAll(".{");
+                    var first = true;
+                    while (offsets.next()) |elem| {
+                        if (!first) try writer.writeAll(", ");
+                        if (first) first = false;
+                        try writer.print("{s}: ", .{elem.field.name});
+                        try writer.print("{}", .{self.fmtAny(elem.field.ty, elem.offset)});
+                    }
+                    try writer.writeAll("}");
+                },
+                .Pointer => |p| {
+                    const ty: Id = self.tys.store.get(p).*;
+                    const global = self.tys.findSymForPtr(self.value, ty.size(self.tys)) catch |err| {
+                        try writer.print("<corrupted>({s})", .{@errorName(err)});
+                        return;
+                    };
+
+                    const fvl = FmtValue{ .self = ty, .tys = self.tys, .offset = 0, .value = global };
+                    try writer.print("&{}", .{fvl.fmtAny(ty, 0)});
+                },
+                .Tuple => |t| {
+                    try writer.writeAll(".(");
+                    var iter = @as(tys.Tuple.Id, t).offsetIter(self.tys);
+                    var first = true;
+                    while (iter.next()) |elem| {
+                        if (!first) try writer.writeAll(", ");
+                        if (first) first = false;
+                        try writer.print("{}", .{self.fmtAny(elem.field.ty, elem.offset)});
+                    }
+                    try writer.writeAll(")");
+                },
+                .Enum => |e| {
+                    try writer.print(".{s}", .{e.getFields(self.tys)[self.value].name});
+                },
+                .Nullable => |n| {
+                    const global = self.tys.store.get(@as(utils.EntId(tys.Global), @enumFromInt(self.value)));
+                    if (self.tys.isNullablePresent(n, global, self.offset)) {
+                        try writer.writeAll("null");
+                        return;
+                    }
+
+                    const dta: *tys.Nullable = self.tys.store.get(n);
+                    const nieche: ?tys.Nullable.NiecheSpec = dta.nieche.offset(self.tys);
+                    const next_offset = if (nieche != null) dta.inner.alignment(self.tys) else 0;
+                    try writer.print("{}", .{self.fmtAny(dta.inner, next_offset)});
+                },
+                .Union => try writer.writeAll("<union: cant display>"),
+                .Func, .Template, .Global => unreachable,
+            }
+        }
+
+        pub fn fmtAny(self: FmtValue, ty: Id, offset: u64) FmtValue {
+            return switch (Abi.ableos.categorize(ty, self.tys)) {
+                .Impossible, .Imaginary, .ByValue => ty.fmtValue(
+                    self.tys,
+                    readFromGlobal(self.tys, @enumFromInt(self.value), ty, self.offset + offset),
+                ),
+                .ByRef, .BySse, .ByValuePair => ty.fmtValueOffset(self.tys, self.value, self.offset + offset),
+            };
+        }
+    };
+
+    pub fn fmtValueOffset(self: Id, types: *Types, value: u64, offset: u64) FmtValue {
+        return .{ .self = self, .tys = types, .value = value, .offset = offset };
+    }
+
+    pub fn fmtValue(self: Id, types: *Types, value: u64) FmtValue {
+        return .{ .self = self, .tys = types, .value = value };
+    }
 };
 
 pub const Target = enum { @"comptime", runtime };
+
+pub fn readFromGlobal(self: *Types, global: utils.EntId(tys.Global), ty: Id, offset: u64) u64 {
+    const glob = self.store.get(global);
+    var value: u64 = 0;
+    @memcpy(
+        @as([*]u8, @ptrCast(&value))[0..@intCast(ty.size(self))],
+        glob.data[offset..][0..@intCast(ty.size(self))],
+    );
+    return value;
+}
 
 pub fn getBuiltins(self: *Types) Machine.Builtins {
     return .{
@@ -671,30 +797,34 @@ pub fn findNestedGlobals(
             }
         },
         .Nullable => |n| {
+            if (self.isNullablePresent(n, global, offset)) return;
+
             const data: *tys.Nullable = self.store.get(n);
             const nieche: ?tys.Nullable.NiecheSpec = data.nieche.offset(self);
-
-            const is_present = if (nieche) |niche| b: {
-                const abi = niche.kind.abi();
-                if (abi == .bot) return;
-                const size = abi.size();
-
-                var value: u64 = 0;
-                @memcpy(
-                    @as(*[8]u8, @ptrCast(&value))[0..@intCast(size)],
-                    global.data[@intCast(offset + niche.offset)..][0..@intCast(size)],
-                );
-
-                break :b value != 0;
-            } else global.data[offset] != 0;
-
-            if (!is_present) return;
-
             const next_offset = if (nieche != null) data.inner.alignment(self) else 0;
             try self.findNestedGlobals(relocs, global, scratch, data.inner, offset + next_offset);
         },
         .Global, .Func, .Template => unreachable,
     }
+}
+
+pub fn isNullablePresent(self: *Types, n: utils.EntId(tys.Nullable), global: *tys.Global, offset: u64) bool {
+    const data: *tys.Nullable = self.store.get(n);
+    const nieche: ?tys.Nullable.NiecheSpec = data.nieche.offset(self);
+
+    return if (nieche) |niche| b: {
+        const abi = niche.kind.abi();
+        if (abi == .bot) return false;
+        const size = abi.size();
+
+        var value: u64 = 0;
+        @memcpy(
+            @as(*[8]u8, @ptrCast(&value))[0..@intCast(size)],
+            global.data[@intCast(offset + niche.offset)..][0..@intCast(size)],
+        );
+
+        break :b value != 0;
+    } else global.data[offset] != 0;
 }
 
 pub fn findSymForPtr(

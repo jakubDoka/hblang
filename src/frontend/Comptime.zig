@@ -262,7 +262,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
 
                 if (requeued) continue;
 
-                types.ct.runVm(file, pos, "", call.extra(.Call).id, &.{}) catch {
+                types.ct.runVm(file, pos, call.extra(.Call).id, &.{}) catch {
                     return .{ .Unsupported = curr };
                 };
 
@@ -328,7 +328,6 @@ pub fn runVm(
     self: *Comptime,
     file: Types.File,
     pos: u32,
-    name: []const u8,
     entry_id: u32,
     return_loc: []u8,
 ) !void {
@@ -392,9 +391,15 @@ pub fn runVm(
 
                     const captures = types.pool.arena.alloc(Types.Scope.Capture, struct_ast.captures.len());
 
+                    const prefix = 5;
                     for (captures, ast.exprs.view(struct_ast.captures), 0..) |*slot, cp, i| {
-                        slot.* = .{ .id = cp.id, .ty = @enumFromInt(self.ecaArg(3 + i * 2)), .value = self.ecaArg(3 + i * 2 + 1) };
-                        if (slot.ty.size(types) < 8) slot.value &= (@as(u64, 1) << @intCast(slot.ty.size(types) * 8)) - 1;
+                        slot.* = .{
+                            .id = cp.id,
+                            .ty = @enumFromInt(self.ecaArg(prefix + i * 2)),
+                            .value = self.ecaArg(prefix + i * 2 + 1),
+                        };
+                        if (slot.ty.size(types) < 8) slot.value &=
+                            (@as(u64, 1) << @intCast(slot.ty.size(types) * 8)) - 1;
                     }
 
                     const res = switch (t) {
@@ -402,7 +407,10 @@ pub fn runVm(
                             @field(std.meta.Tag(Types.Data), @tagName(tg)),
                             scope,
                             scope.file(types).?,
-                            name,
+                            @as(
+                                [*]const u8,
+                                @ptrFromInt(@as(usize, self.vm.regs.get(.arg(3)))),
+                            )[0..@intCast(self.vm.regs.get(.arg(4)))],
                             struct_ast_id,
                             captures,
                         ),
@@ -646,7 +654,7 @@ pub fn evalTy(self: *Comptime, name: []const u8, scope: Codegen.Scope, ty_expr: 
     switch (res) {
         .func => |id| {
             var data: [8]u8 = undefined;
-            try self.runVm(scope.file(types), types.getFile(file).posOf(ty_expr).index, name, @intFromEnum(id), &data);
+            try self.runVm(scope.file(types), types.getFile(file).posOf(ty_expr).index, @intFromEnum(id), &data);
             return Types.Id.fromRaw(@bitCast(data[0..4].*), types) orelse {
                 types.report(scope.file(types), ty_expr, "resulting type has a corrupted value", .{});
                 return error.Never;
@@ -668,7 +676,7 @@ pub fn evalIntConst(self: *Comptime, scope: Codegen.Scope, int_conts: Ast.Id) !i
     switch (res) {
         .func => |id| {
             var data: [8]u8 = undefined;
-            try self.runVm(file, types.posOf(file, int_conts).index, "", @intFromEnum(id), &data);
+            try self.runVm(file, types.posOf(file, int_conts).index, @intFromEnum(id), &data);
             return @bitCast(data);
         },
         .constant => |c| return c,
@@ -682,7 +690,7 @@ pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(tys.Glo
     const data = types.pool.arena.allocator().alloc(u8, @intCast(fty.size(types))) catch unreachable;
     switch (res) {
         .func => |id| {
-            try self.runVm(file, types.posOf(file, value).index, name, @intFromEnum(id), data);
+            try self.runVm(file, types.posOf(file, value).index, @intFromEnum(id), data);
         },
         .constant => |c| {
             @memcpy(data, @as(*const [@sizeOf(@TypeOf(c))]u8, @ptrCast(&c))[0..data.len]);

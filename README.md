@@ -1118,6 +1118,22 @@ main := fn(): uint {
 }
 ```
 
+#### comptime 7 (struct)
+```hb
+expectations := .{
+    return_value: 2,
+}
+
+main := fn(): uint {
+    Dims := struct{.x: uint; .y: uint}
+    arr := fn($dims: Dims): [dims.x][dims.y]uint {
+        return idk
+    }
+
+    return arr(.(2, 1)).len
+}
+```
+
 #### tuples 1
 ```hb
 expectations := .{

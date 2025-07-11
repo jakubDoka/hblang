@@ -2031,7 +2031,7 @@ fn emitUserType(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Type)) !Value {
 
     const sloc = self.src(expr);
 
-    const prefix = 3;
+    const prefix = 5;
     const params = tmp.arena.alloc(graph.AbiParam, prefix + e.captures.len() * 2);
     @memset(params, .{ .Reg = self.abiCata(.type).ByValue });
     params[0] = .{ .Reg = .i64 };
@@ -2046,6 +2046,8 @@ fn emitUserType(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Type)) !Value {
     args.arg_slots[0] = self.bl.addIntImm(sloc, .i64, @intCast(@intFromEnum(code)));
     args.arg_slots[1] = self.emitTyConst(self.parent_scope.perm(self.types)).id.Value;
     args.arg_slots[2] = self.bl.addIntImm(sloc, .i64, @intFromEnum(expr));
+    args.arg_slots[3] = self.bl.addIntImm(sloc, .i64, @bitCast(@as(u64, @intFromPtr(self.name.ptr))));
+    args.arg_slots[4] = self.bl.addIntImm(sloc, .i64, @bitCast(@as(u64, self.name.len)));
 
     for (self.ast.exprs.view(e.captures), 0..) |cp, slot_idx| {
         var val = try self.loadIdent(cp.pos, cp.id);
