@@ -5,14 +5,14 @@ main:
          st $1, $254, 16, 4
        li32 $1, -2147483648
          st $1, $254, 20, 4
-        jal $31, $0, :comptime 7 (struct).main.arr(comptime 7 (struct).main.Dims)(.{x: 2, y: 1})
+        jal $31, $0, :comptime 7 (struct).main.arr(.Dims)(.{x: 2, y: 1})
          st $1, $254, 0, 8
          st $2, $254, 8, 8
        li64 $1, 2
      addi64 $254, $254, 32
          ld $31, $254, -8, 8
          tx
-comptime 7 (struct).main.arr(comptime 7 (struct).main.Dims)(.{x: 2, y: 1}):
+comptime 7 (struct).main.arr(.Dims)(.{x: 2, y: 1}):
      addi64 $254, $254, -16
          ld $1, $254, 0, 8
          ld $2, $254, 8, 8

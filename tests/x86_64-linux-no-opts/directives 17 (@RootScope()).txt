@@ -1,8 +1,8 @@
-lib.hb.some_num:
+lib.some_num:
 	mov rax, [0x0000000000000007]
 	ret
 main:
 	sub rsp, 0x08
-	call :lib.hb.some_num
+	call :lib.some_num
 	add rsp, 0x08
 	ret

@@ -490,7 +490,7 @@ pub const Id = enum(IdRepr) {
     pub const Fmt = struct {
         self: Id,
         tys: *Types,
-        root: ?Id = null,
+        root: Id = .void,
 
         pub fn toString(self: *const Fmt, arena: std.mem.Allocator) ![]u8 {
             return std.fmt.allocPrint(arena, "{}", .{self});
@@ -521,18 +521,24 @@ pub const Id = enum(IdRepr) {
                         inline .Func, .Global, .Template, .Struct, .Union, .Enum => |v| &self.tys.store.get(v).key,
                         else => unreachable,
                     };
-                    if (key.loc.scope != .void) {
-                        try writer.print("{}", .{key.loc.scope.fmt(self.tys)});
+                    var cursora = self.root;
+                    const overlap = while (cursora != .void) {
+                        if (cursora == key.loc.scope) {
+                            break false;
+                        }
+                        cursora = cursora.parent(self.tys);
+                    } else true;
+                    if (overlap and key.loc.scope != .void) {
+                        try writer.print("{}", .{key.loc.scope.fmtLocal(self.tys, self.root)});
                     }
                     if (key.name.len != 0 and (key.name.len != 1 or key.name[0] != '-')) {
                         if (key.loc.scope != .void) {
                             try writer.writeAll(".");
-                            try writer.writeAll(
-                                key.name[0 .. std.mem.lastIndexOfScalar(u8, key.name, '.') orelse
-                                    key.name.len],
-                            );
+                            try writer.writeAll(key.name);
                         } else {
-                            try writer.writeAll(std.fs.path.basename(key.name));
+                            var name = std.fs.path.basename(key.name);
+                            name = name[0 .. std.mem.lastIndexOfScalar(u8, name, '.') orelse name.len];
+                            try writer.writeAll(name);
                         }
                     }
                     if (key.captures.len != 0 and self.self.data() != .Global) {
@@ -550,9 +556,9 @@ pub const Id = enum(IdRepr) {
                                 written_paren = true;
                             }
                             if (capture.id.from_any) {
-                                try writer.print("{}", .{capture.ty.fmt(self.tys)});
+                                try writer.print("{}", .{capture.ty.fmtLocal(self.tys, key.loc.scope)});
                             } else {
-                                try writer.print("{}", .{capture.ty.fmtValue(self.tys, capture.value)});
+                                try writer.print("{}", .{capture.ty.fmtValue(self.tys, capture.value, key.loc.scope)});
                             }
                         }
                         if (written_paren) try writer.writeAll(")");
@@ -563,6 +569,10 @@ pub const Id = enum(IdRepr) {
         }
     };
 
+    pub fn fmtLocal(self: Id, types: *Types, bound: Id) Fmt {
+        return .{ .self = self, .tys = types, .root = bound };
+    }
+
     pub fn fmt(self: Id, types: *Types) Fmt {
         return .{ .self = self, .tys = types };
     }
@@ -572,6 +582,7 @@ pub const Id = enum(IdRepr) {
         tys: *Types,
         offset: u64 = 0,
         value: u64,
+        root: Id,
 
         pub fn format(self: *const FmtValue, comptime _: []const u8, _: anytype, writer: anytype) !void {
             switch (self.self.data()) {
@@ -583,7 +594,7 @@ pub const Id = enum(IdRepr) {
                     .i8, .i16, .i32, .i64, .int => try writer.print("{}", .{@as(i64, @bitCast(self.value))}),
                     .f32 => try writer.print("{}", .{@as(f32, @bitCast(@as(u32, @truncate(self.value))))}),
                     .f64 => try writer.print("{}", .{@as(f64, @bitCast(@as(u64, @truncate(self.value))))}),
-                    .type => try writer.print("{}", .{@as(Id, @enumFromInt(self.value)).fmt(self.tys)}),
+                    .type => try writer.print("{}", .{@as(Id, @enumFromInt(self.value)).fmtLocal(self.tys, self.root)}),
                 },
                 .Slice => |s| {
                     const slc: tys.Slice = self.tys.store.get(s).*;
@@ -606,7 +617,13 @@ pub const Id = enum(IdRepr) {
                         return;
                     }
 
-                    const fvl = FmtValue{ .self = slc.elem, .tys = self.tys, .offset = base, .value = global };
+                    const fvl = FmtValue{
+                        .self = slc.elem,
+                        .tys = self.tys,
+                        .offset = base,
+                        .value = global,
+                        .root = self.root,
+                    };
                     if (slc.len == null) try writer.writeAll("&");
                     try writer.writeAll(".[");
                     for (0..ln) |i| {
@@ -635,7 +652,13 @@ pub const Id = enum(IdRepr) {
                         return;
                     };
 
-                    const fvl = FmtValue{ .self = ty, .tys = self.tys, .offset = 0, .value = global };
+                    const fvl = FmtValue{
+                        .self = ty,
+                        .tys = self.tys,
+                        .offset = 0,
+                        .value = global,
+                        .root = self.root,
+                    };
                     try writer.print("&{}", .{fvl.fmtAny(ty, 0)});
                 },
                 .Tuple => |t| {
@@ -674,18 +697,21 @@ pub const Id = enum(IdRepr) {
                 .Impossible, .Imaginary, .ByValue => ty.fmtValue(
                     self.tys,
                     readFromGlobal(self.tys, @enumFromInt(self.value), ty, self.offset + offset),
+                    self.root,
                 ),
-                .ByRef, .BySse, .ByValuePair => ty.fmtValueOffset(self.tys, self.value, self.offset + offset),
+                .ByRef, .BySse, .ByValuePair => {
+                    return ty.fmtValueOffset(self.tys, self.value, self.offset + offset, self.root);
+                },
             };
         }
     };
 
-    pub fn fmtValueOffset(self: Id, types: *Types, value: u64, offset: u64) FmtValue {
-        return .{ .self = self, .tys = types, .value = value, .offset = offset };
+    pub fn fmtValueOffset(self: Id, types: *Types, value: u64, offset: u64, bound: Id) FmtValue {
+        return .{ .self = self, .tys = types, .value = value, .offset = offset, .root = bound };
     }
 
-    pub fn fmtValue(self: Id, types: *Types, value: u64) FmtValue {
-        return .{ .self = self, .tys = types, .value = value };
+    pub fn fmtValue(self: Id, types: *Types, value: u64, bound: Id) FmtValue {
+        return .{ .self = self, .tys = types, .value = value, .root = bound };
     }
 };
 

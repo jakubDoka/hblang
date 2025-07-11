@@ -3,12 +3,12 @@ main:
      addi64 $254, $254, -8
         li8 $1, 1
          cp $2, $0
-        jal $31, $0, :mixing @Any and comptime args 1.bind(?i32, mixing @Any and comptime args 1.main)
+        jal $31, $0, :mixing @Any and comptime args 1.bind(?i32, .main)
          cp $1, $0
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
-mixing @Any and comptime args 1.bind(?i32, mixing @Any and comptime args 1.main):
+mixing @Any and comptime args 1.bind(?i32, .main):
        andi $1, $1, 255
         jeq $1, $0, :1
         li8 $1, 1

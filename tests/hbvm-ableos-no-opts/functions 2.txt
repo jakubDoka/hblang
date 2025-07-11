@@ -2,22 +2,22 @@ main:
          st $31, $254, -16, 16
      addi64 $254, $254, -16
        li64 $1, 10
-        jal $31, $0, :one.hb.add
+        jal $31, $0, :one.add
          cp $32, $1
        li64 $1, 20
-        jal $31, $0, :two.hb.add
+        jal $31, $0, :two.add
       add64 $1, $32, $1
      addi64 $254, $254, 16
          ld $31, $254, -16, 16
          tx
-one.hb.add:
+one.add:
      addi64 $254, $254, -8
          st $1, $254, 0, 8
          ld $1, $254, 0, 8
      addi64 $1, $1, 1
      addi64 $254, $254, 8
        jala $0, $31, 0
-two.hb.add:
+two.add:
      addi64 $254, $254, -8
          st $1, $254, 0, 8
          ld $1, $254, 0, 8

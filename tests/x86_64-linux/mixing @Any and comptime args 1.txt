@@ -1,4 +1,4 @@
-mixing @Any and comptime args 1.bind(?i32, mixing @Any and comptime args 1.main):
+mixing @Any and comptime args 1.bind(?i32, .main):
 	sub rsp, 0x10
 	test sil, sil
 	jz :0
@@ -16,7 +16,7 @@ main:
 	lea rdi, [rsp]
 	mov rsi, 0x01
 	xor edx, edx
-	call :mixing @Any and comptime args 1.bind(?i32, mixing @Any and comptime args 1.main)
+	call :mixing @Any and comptime args 1.bind(?i32, .main)
 	xor rax, rax
 	add rsp, 0x08
 	ret

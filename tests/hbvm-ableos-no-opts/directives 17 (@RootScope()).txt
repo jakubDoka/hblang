@@ -1,11 +1,11 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        jal $31, $0, :lib.hb.some_num
+        jal $31, $0, :lib.some_num
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
-lib.hb.some_num:
+lib.some_num:
         lra $1, $0, :directives 17 (@RootScope()).custom_num
          ld $1, $1, 0, 8
        jala $0, $31, 0

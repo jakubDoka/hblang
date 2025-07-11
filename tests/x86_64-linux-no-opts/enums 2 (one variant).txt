@@ -1,4 +1,4 @@
-ableos.hb.page_size:
+ableos.page_size:
 	xor rax, rax
 	ret
 enums 2 (one variant).Target.current:
@@ -6,6 +6,6 @@ enums 2 (one variant).Target.current:
 	ret
 main:
 	sub rsp, 0x08
-	call :ableos.hb.page_size
+	call :ableos.page_size
 	add rsp, 0x08
 	ret

@@ -1,21 +1,21 @@
-foo.hb.foo:
+foo.foo:
 	xor rax, rax
 	ret
-foo.hb.bar:
+foo.bar:
 	mov rax, 0x01
 	ret
-bas.hb.baz:
+bas.baz:
 	mov rax, 0x02
 	ret
 main:
 	push rbx
 	push rbp
 	sub rsp, 0x08
-	call :foo.hb.foo
+	call :foo.foo
 	mov rbx, rax
-	call :foo.hb.bar
+	call :foo.bar
 	mov rbp, rax
-	call :bas.hb.baz
+	call :bas.baz
 	add rbx, rbp
 	add rbx, rax
 	mov rax, rbx

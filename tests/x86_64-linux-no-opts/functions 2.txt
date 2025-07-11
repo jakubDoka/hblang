@@ -1,11 +1,11 @@
-one.hb.add:
+one.add:
 	sub rsp, 0x10
 	mov [rsp], rdi
 	mov rax, [rsp]
 	inc rax
 	add rsp, 0x10
 	ret
-two.hb.add:
+two.add:
 	sub rsp, 0x10
 	mov [rsp], rdi
 	mov rax, [rsp]
@@ -16,10 +16,10 @@ main:
 	push rbx
 	sub rsp, 0x08
 	mov rdi, 0x0A
-	call :one.hb.add
+	call :one.add
 	mov rbx, rax
 	mov rdi, 0x14
-	call :two.hb.add
+	call :two.add
 	add rbx, rax
 	mov rax, rbx
 	add rsp, 0x08

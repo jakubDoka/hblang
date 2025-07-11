@@ -1,22 +1,22 @@
 main:
          st $31, $254, -24, 24
      addi64 $254, $254, -24
-        jal $31, $0, :foo.hb.foo
+        jal $31, $0, :foo.foo
          cp $32, $1
-        jal $31, $0, :foo.hb.bar
+        jal $31, $0, :foo.bar
          cp $33, $1
-        jal $31, $0, :bas.hb.baz
+        jal $31, $0, :bas.baz
       add64 $2, $32, $33
       add64 $1, $2, $1
      addi64 $254, $254, 24
          ld $31, $254, -24, 24
          tx
-foo.hb.foo:
+foo.foo:
          cp $1, $0
        jala $0, $31, 0
-foo.hb.bar:
+foo.bar:
        li64 $1, 1
        jala $0, $31, 0
-bas.hb.baz:
+bas.baz:
        li64 $1, 2
        jala $0, $31, 0

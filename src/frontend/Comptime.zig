@@ -167,9 +167,8 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                 continue;
             },
             .GlobalAddr => {
-                const below = work_list.getLast();
-
                 const global = curr.extra(.GlobalAddr).id;
+                const below = work_list.getLastOrNull() orelse return .{ .Arbitrary = @enumFromInt(global) };
                 const gid: utils.EntId(tys.Global) = @enumFromInt(global);
                 if (types.store.get(gid).completion.get(.@"comptime") != .compiled) {
                     types.queue(.@"comptime", .init(.{ .Global = gid }));

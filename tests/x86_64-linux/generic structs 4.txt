@@ -1,4 +1,4 @@
-generic structs 4.Array(uint, generic structs 4.Array(uint, generic structs 4.Array(uint, generic structs 4.Array(uint)))).get:
+generic structs 4.Array(uint, (uint, (uint, (uint)))).get:
 	sub rsp, 0x08
 	mov rax, rdi
 	mov rcx, rax
@@ -13,10 +13,10 @@ generic structs 4.Array(uint, generic structs 4.Array(uint, generic structs 4.Ar
 	mov rsi, [rsp+0x20]
 	dec rax
 	mov rdx, rax
-	call :generic structs 4.Array(uint, generic structs 4.Array(uint, generic structs 4.Array(uint))).get
+	call :generic structs 4.Array(uint, (uint, (uint))).get
 1:	add rsp, 0x08
 	ret
-generic structs 4.Array(uint, generic structs 4.Array(uint, generic structs 4.Array(uint))).get:
+generic structs 4.Array(uint, (uint, (uint))).get:
 	sub rsp, 0x08
 	mov rax, rdx
 	mov rcx, rax
@@ -30,10 +30,10 @@ generic structs 4.Array(uint, generic structs 4.Array(uint, generic structs 4.Ar
 0:	dec rax
 	mov rdi, rsi
 	mov rsi, rax
-	call :generic structs 4.Array(uint, generic structs 4.Array(uint)).get
+	call :generic structs 4.Array(uint, (uint)).get
 1:	add rsp, 0x08
 	ret
-generic structs 4.Array(uint, generic structs 4.Array(uint)).get:
+generic structs 4.Array(uint, (uint)).get:
 	sub rsp, 0x08
 	mov rax, rsi
 	mov rcx, rax
@@ -64,21 +64,21 @@ main:
 	mov rdx, 0x18
 	call :memcpy
 	xor rdi, rdi
-	call :generic structs 4.Array(uint, generic structs 4.Array(uint, generic structs 4.Array(uint, generic structs 4.Array(uint)))).get
+	call :generic structs 4.Array(uint, (uint, (uint, (uint)))).get
 	mov rbx, rax
 	lea rdi, [rsp]
 	lea rsi, [rsp+0x18]
 	mov rdx, 0x18
 	call :memcpy
 	mov rdi, 0x01
-	call :generic structs 4.Array(uint, generic structs 4.Array(uint, generic structs 4.Array(uint, generic structs 4.Array(uint)))).get
+	call :generic structs 4.Array(uint, (uint, (uint, (uint)))).get
 	mov rbp, rax
 	lea rdi, [rsp]
 	lea rsi, [rsp+0x18]
 	mov rdx, 0x18
 	call :memcpy
 	mov rdi, 0x02
-	call :generic structs 4.Array(uint, generic structs 4.Array(uint, generic structs 4.Array(uint, generic structs 4.Array(uint)))).get
+	call :generic structs 4.Array(uint, (uint, (uint, (uint)))).get
 	add rbx, rbp
 	add rbx, rax
 	mov rax, rbx
