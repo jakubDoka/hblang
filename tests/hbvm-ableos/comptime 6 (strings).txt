@@ -2,13 +2,13 @@ main:
          st $31, $254, -8, 8
      addi64 $254, $254, -14
      addi64 $1, $254, 0
-        jal $31, $0, :comptime 6 (strings).main.string_to_array([]u8)
+        jal $31, $0, :comptime 6 (strings).main.string_to_array("Edward")
          ld $1, $254, 0, 1
        andi $1, $1, 255
      addi64 $254, $254, 14
          ld $31, $254, -8, 8
          tx
-comptime 6 (strings).main.string_to_array([]u8):
+comptime 6 (strings).main.string_to_array("Edward"):
      addi64 $254, $254, -6
         lra $7, $0, :comptime 6 (strings).main.Edward
      addi64 $6, $254, 0

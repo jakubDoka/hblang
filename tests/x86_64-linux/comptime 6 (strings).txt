@@ -1,4 +1,4 @@
-comptime 6 (strings).main.string_to_array([]u8):
+comptime 6 (strings).main.string_to_array("Edward"):
 	sub rsp, 0x10
 	xor rsi, rsi
 	lea r8, [0x0000000000000007]
@@ -26,7 +26,7 @@ comptime 6 (strings).main.string_to_array([]u8):
 main:
 	sub rsp, 0x08
 	lea rdi, [rsp]
-	call :comptime 6 (strings).main.string_to_array([]u8)
+	call :comptime 6 (strings).main.string_to_array("Edward")
 	mov al, [rsp]
 	movzx rax, al
 	add rsp, 0x08

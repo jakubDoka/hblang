@@ -1,14 +1,14 @@
-false positive in cycle detection.main.Wrap(false positive in cycle detection.main.Wrapper)(false positive in cycle detection.main.Wrap(false positive in cycle detection.main.Wrapper)(false positive in cycle detection.main)).test:
+false positive in cycle detection.main.Wrap(false positive in cycle detection.main.Wrapper)(false positive in cycle detection.main.Wrap(false positive in cycle detection.main.Wrapper)(false positive in cycle detection.main.A)).test:
 	sub rsp, 0x08
-	call :false positive in cycle detection.main.Wrap(false positive in cycle detection.main.Wrapper)(false positive in cycle detection.main).test
+	call :false positive in cycle detection.main.Wrap(false positive in cycle detection.main.Wrapper)(false positive in cycle detection.main.A).test
 	add rsp, 0x08
 	ret
-false positive in cycle detection.main.Wrap(false positive in cycle detection.main.Wrapper)(false positive in cycle detection.main).test:
+false positive in cycle detection.main.Wrap(false positive in cycle detection.main.Wrapper)(false positive in cycle detection.main.A).test:
 	sub rsp, 0x08
-	call :false positive in cycle detection.main.test
+	call :false positive in cycle detection.main.A.test
 	add rsp, 0x08
 	ret
-false positive in cycle detection.main.test:
+false positive in cycle detection.main.A.test:
 	ret
 main:
 	sub rsp, 0x18
@@ -19,7 +19,7 @@ main:
 	mov dword ptr [rsp+0x08], 0x70000002
 	mov dword ptr [rsp+0x0C], 0x70000003
 	mov dword ptr [rsp+0x10], 0x70000004
-	call :false positive in cycle detection.main.Wrap(false positive in cycle detection.main.Wrapper)(false positive in cycle detection.main.Wrap(false positive in cycle detection.main.Wrapper)(false positive in cycle detection.main)).test
+	call :false positive in cycle detection.main.Wrap(false positive in cycle detection.main.Wrapper)(false positive in cycle detection.main.Wrap(false positive in cycle detection.main.Wrapper)(false positive in cycle detection.main.A)).test
 	xor rax, rax
 	add rsp, 0x18
 	ret

@@ -1,0 +1,12 @@
+comptime 7 (struct).main.arr(comptime 7 (struct).main.Dims)(.{x: 2, y: 1}):
+	ret
+main:
+	sub rsp, 0x18
+	mov dword ptr [rsp+0x10], 0x70000002
+	mov rax, 0x80000000
+	mov [rsp+0x14], eax
+	lea rdi, [rsp]
+	call :comptime 7 (struct).main.arr(comptime 7 (struct).main.Dims)(.{x: 2, y: 1})
+	mov rax, 0x02
+	add rsp, 0x18
+	ret

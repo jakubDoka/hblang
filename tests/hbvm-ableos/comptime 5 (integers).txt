@@ -1,9 +1,9 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        jal $31, $0, :comptime 5 (integers).main.func(uint)
-        lra $4, $0, :comptime 5 (integers).main.param(uint).global_value
-        lra $2, $0, :comptime 5 (integers).main(uint).global_value
+        jal $31, $0, :comptime 5 (integers).main.func(1)
+        lra $4, $0, :comptime 5 (integers).main.param(1).global_value
+        lra $2, $0, :comptime 5 (integers).main.Ty(1).global_value
          ld $3, $2, 0, 8
          ld $2, $4, 0, 8
       sub64 $1, $3, $1
@@ -11,6 +11,6 @@ main:
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
-comptime 5 (integers).main.func(uint):
+comptime 5 (integers).main.func(1):
        li64 $1, 1
        jala $0, $31, 0

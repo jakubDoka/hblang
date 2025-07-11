@@ -162,7 +162,7 @@ pub const Scope = union(enum) {
                     var value = Value.mkp(se.ty, t.bl.getPinValue(i));
                     slot.* = .{
                         .ty = se.ty,
-                        .id = id,
+                        .id = .fromIdent(id),
                         .value = t.partialEvalLow(t.posOf(ast).index, &value, true) catch 0,
                     };
                     return slot;
@@ -2072,7 +2072,7 @@ fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
         var val = try self.loadIdent(cp.pos, cp.id);
 
         slot.* = .{
-            .id = cp.id,
+            .id = .fromIdent(cp.id),
             .ty = val.ty,
             .value = try self.partialEval(cp.id, &val),
         };
@@ -2981,7 +2981,7 @@ pub fn instantiateTemplate(
         if (binding.pos.flag.@"comptime") {
             const ty = try self.types.ct.evalTy("", template_scope, param.ty);
             captures[capture_idx] = .{
-                .id = comptime_args[comptime_idx],
+                .id = .fromIdent(comptime_args[comptime_idx]),
                 .ty = ty,
                 .value = if (ty == .type)
                     @intFromEnum(switch (arg) {
@@ -3009,7 +3009,8 @@ pub fn instantiateTemplate(
                         break :b arg_exprs[arg_expr_idx].ty;
                     },
                 };
-                captures[capture_idx] = .{ .id = binding.id, .ty = arg_tys[arg_idx] };
+                captures[capture_idx] = .{ .id = .fromIdent(binding.id), .ty = arg_tys[arg_idx] };
+                captures[capture_idx].id.from_any = true;
                 capture_idx += 1;
                 self.types.store.get(scope).key.captures = captures[0..capture_idx];
             } else if (arg == .Expr) {

@@ -60,12 +60,23 @@ pub const Scope = struct {
     captures: []const Capture,
 
     pub const Capture = struct {
-        id: Ast.Ident,
+        id: packed struct {
+            from_any: bool = false,
+            index: u31,
+
+            pub fn fromIdent(id: Ast.Ident) @This() {
+                return .{ .index = @intCast(@intFromEnum(id)) };
+            }
+        },
         ty: Id,
         value: u64 = 0,
 
         comptime {
             std.debug.assert(@sizeOf(@This()) == 16);
+        }
+
+        pub fn ident(self: Capture) Ast.Ident {
+            return @enumFromInt(self.id.index);
         }
     };
 
@@ -304,7 +315,7 @@ pub const Id = enum(IdRepr) {
         return switch (self.data()) {
             .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| for (types.store.get(v).key.captures) |*cp| {
-                if (cp.id == id) break cp;
+                if (cp.id.index == @intFromEnum(id)) break cp;
             } else null,
         };
     }
@@ -529,7 +540,7 @@ pub const Id = enum(IdRepr) {
                         o: for (key.captures) |capture| {
                             var cursor = key.loc.scope;
                             while (cursor != .void and cursor.data() != .Pointer and cursor.data() != .Builtin) {
-                                if (cursor.findCapture(capture.id, self.tys) != null) continue :o;
+                                if (cursor.findCapture(capture.ident(), self.tys) != null) continue :o;
                                 cursor = cursor.parent(self.tys);
                             }
 
@@ -538,7 +549,11 @@ pub const Id = enum(IdRepr) {
                                 try writer.writeAll("(");
                                 written_paren = true;
                             }
-                            try writer.print("{}", .{capture.ty.fmtValue(self.tys, capture.value)});
+                            if (capture.id.from_any) {
+                                try writer.print("{}", .{capture.ty.fmt(self.tys)});
+                            } else {
+                                try writer.print("{}", .{capture.ty.fmtValue(self.tys, capture.value)});
+                            }
                         }
                         if (written_paren) try writer.writeAll(")");
                     }
@@ -577,7 +592,6 @@ pub const Id = enum(IdRepr) {
                     } else b: {
                         const ptr = readFromGlobal(self.tys, @enumFromInt(self.value), .uint, self.offset + tys.Slice.ptr_offset);
                         const ln = readFromGlobal(self.tys, @enumFromInt(self.value), .uint, self.offset + tys.Slice.len_offset);
-                        std.debug.print("{} {}\n", .{ ptr, ln });
 
                         const global = self.tys.findSymForPtr(ptr, ln * slc.elem.size(self.tys));
                         break :b .{ ln, global catch |err| {

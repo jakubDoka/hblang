@@ -109,7 +109,9 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
 
                     if (global != std.math.maxInt(u32)) {
                         bl.func.subsume(bl.addGlobalAddr(.none, global), curr);
-                        return .{ .Arbitrary = @enumFromInt(global) };
+                        if (work_list.items.len == 0) {
+                            return .{ .Arbitrary = @enumFromInt(global) };
+                        }
                     }
                 }
 
@@ -394,7 +396,7 @@ pub fn runVm(
                     const prefix = 5;
                     for (captures, ast.exprs.view(struct_ast.captures), 0..) |*slot, cp, i| {
                         slot.* = .{
-                            .id = cp.id,
+                            .id = .fromIdent(cp.id),
                             .ty = @enumFromInt(self.ecaArg(prefix + i * 2)),
                             .value = self.ecaArg(prefix + i * 2 + 1),
                         };
