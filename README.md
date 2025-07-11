@@ -1099,6 +1099,25 @@ main := fn(): uint {
 }
 ```
 
+#### comptime 6 (strings)
+```hb
+expectations := .{
+    return_value: 69,
+}
+
+main := fn(): uint {
+    string_to_array := fn($str: []u8): [str.len]u8 {
+        vl: [str.len]u8 = idk
+        for i := 0..str.len {
+            vl[i] = str[i]
+        }
+        return vl
+    }
+
+    return string_to_array("Edward")[0]
+}
+```
+
 #### tuples 1
 ```hb
 expectations := .{

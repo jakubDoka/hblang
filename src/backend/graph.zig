@@ -522,6 +522,8 @@ pub const builtin = enum {
     // ===== VALUES ====
     pub const LocalAlloc = extern struct {
         size: u64,
+        meta: u32 = std.math.maxInt(u32),
+        ty: u32 = std.math.maxInt(u32),
 
         pub const is_floating = true;
         pub const is_pinned = true;

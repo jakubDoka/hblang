@@ -16,7 +16,6 @@ const tys = root.frontend.types;
 
 pub const Abi = root.frontend.Abi;
 
-string_index: u32 = 0,
 store: utils.EntStore(tys) = .{},
 pool: utils.Pool,
 interner: Map = .{},
@@ -969,6 +968,23 @@ pub fn dumpAnalErrors(self: *Types, anal_errors: *std.ArrayListUnmanaged(static_
     };
     defer anal_errors.items.len = 0;
     return anal_errors.items.len != 0;
+}
+
+pub fn addUniqueGlobal(self: *Types, scope: Id) utils.EntId(tys.Global) {
+    return self.store.add(self.pool.allocator(), tys.Global{
+        .key = .{
+            .loc = .{
+                .file = scope.file(self).?,
+                .scope = scope,
+                .ast = .zeroSized(.Void),
+            },
+            .name = "",
+            .captures = &.{},
+        },
+        .data = "",
+        .ty = .never,
+        .readonly = true,
+    });
 }
 
 pub fn resolveGlobal(

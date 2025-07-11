@@ -83,10 +83,11 @@ pub inline fn ecaArgSloc(self: *Comptime, idx: usize) graph.Sloc {
 
 pub const PartialEvalResult = union(enum) {
     Resolved: u64,
+    Arbitrary: utils.EntId(tys.Global),
     Unsupported: *Node,
 };
 
-pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder, expr: *Node) PartialEvalResult {
+pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: anytype, bl: *Builder, expr: *Node, ty: Types.Id) PartialEvalResult {
     const abi: Types.Abi = .ableos;
     const types = self.getTypes();
 
@@ -99,9 +100,86 @@ pub fn partialEval(self: *Comptime, file: Types.File, pos: anytype, bl: *Builder
     work_list.appendAssumeCapacity(expr);
 
     while (true) {
-        const curr = work_list.pop().?;
+        const curr: *Node = work_list.pop().?;
         if (curr.id == std.math.maxInt(u16)) continue;
         const res = switch (curr.kind) {
+            .Local => {
+                {
+                    const global = curr.inputs()[1].?.extra(.LocalAlloc).meta;
+
+                    if (global != std.math.maxInt(u32)) {
+                        bl.func.subsume(bl.addGlobalAddr(.none, global), curr);
+                        return .{ .Arbitrary = @enumFromInt(global) };
+                    }
+                }
+
+                work_list.appendAssumeCapacity(curr);
+
+                const global = types.addUniqueGlobal(scope);
+                types.store.get(global).data = types.pool.arena.alloc(
+                    u8,
+                    curr.inputs()[1].?.extra(.LocalAlloc).size,
+                );
+                types.store.get(global).ty = ty;
+                curr.inputs()[1].?.extra(.LocalAlloc).meta = @intFromEnum(global);
+
+                var tmpa = tmp.arena.checkpoint();
+                defer tmpa.deinit();
+
+                var iter = std.mem.reverseIterator(curr.outputs());
+                while (iter.next()) |o| {
+                    const use: *Node = o;
+                    if (use.knownMemOp()) |op| {
+                        if (op[0].isStore()) {
+                            work_list.appendAssumeCapacity(op[0]);
+                            continue;
+                        }
+                    }
+                    return .{ .Unsupported = curr };
+                }
+
+                continue;
+            },
+            .Store => {
+                const base, const offset = curr.base().knownOffset();
+                if (base.kind != .Local) {
+                    return .{ .Unsupported = curr };
+                }
+                const global: utils.EntId(tys.Global) = @enumFromInt(base.inputs()[1].?.extra(.LocalAlloc).meta);
+                const data = types.store.get(global).data;
+
+                if (curr.value().?.kind != .CInt) {
+                    work_list.appendAssumeCapacity(curr);
+                    work_list.appendAssumeCapacity(curr.value().?);
+                    continue;
+                }
+
+                const value = curr.value().?.extra(.CInt).value;
+                @memcpy(
+                    data[@intCast(offset)..][0..curr.data_type.size()],
+                    @as([*]const u8, @ptrCast(&value))[0..curr.data_type.size()],
+                );
+
+                bl.func.subsume(curr.mem(), curr);
+
+                continue;
+            },
+            .GlobalAddr => {
+                const below = work_list.getLast();
+
+                const global = curr.extra(.GlobalAddr).id;
+                const gid: utils.EntId(tys.Global) = @enumFromInt(global);
+                if (types.store.get(gid).completion.get(.@"comptime") != .compiled) {
+                    types.queue(.@"comptime", .init(.{ .Global = gid }));
+                    if (types.retainGlobals(.@"comptime", &self.gen, null)) {
+                        return .{ .Unsupported = curr };
+                    }
+                }
+
+                const addr = self.gen.out.syms.items[@intFromEnum(self.gen.out.globals.items[global])].offset;
+                bl.func.setInputNoIntern(below, 3, bl.addIntImm(curr.sloc, .i64, addr));
+                continue;
+            },
             .CInt => {
                 if (work_list.items.len == 0) {
                     return .{ .Resolved = @as(u64, @bitCast(curr.extra(.CInt).*)) };

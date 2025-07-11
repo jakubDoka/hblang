@@ -1,0 +1,33 @@
+comptime 6 (strings).main.string_to_array([]u8):
+	sub rsp, 0x10
+	xor rsi, rsi
+	lea r8, [0x0000000000000007]
+1:	cmp rsi, 0x06
+	setb al
+	movzx rax, al
+	test al, al
+	jz :0
+	mov rax, r8
+	add rax, rsi
+	mov rdx, rsi
+	inc rdx
+	lea rcx, [rsp]
+	add rcx, rsi
+	mov al, [rax]
+	mov [rcx], al
+	mov rsi, rdx
+	jmp :1
+0:	mov eax, [rsp]
+	mov [rdi], eax
+	mov ax, [rsp+0x04]
+	mov [rdi+0x04], ax
+	add rsp, 0x10
+	ret
+main:
+	sub rsp, 0x08
+	lea rdi, [rsp]
+	call :comptime 6 (strings).main.string_to_array([]u8)
+	mov al, [rsp]
+	movzx rax, al
+	add rsp, 0x08
+	ret

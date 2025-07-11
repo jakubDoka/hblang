@@ -973,13 +973,15 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_LEA, .{ self.getReg(instr), Rip{} });
                 try self.out.addGlobalReloc(self.gpa, instr.extra(.GlobalAddr).id, 4, -4, 4);
             },
-            .GlobalStore => {
+            .GlobalStore => |extra| {
+                const dis: i16 = @intCast(extra.base.dis);
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Rip{}, self.getReg(instr.value()) });
-                try self.out.addGlobalReloc(self.gpa, instr.extra(.GlobalStore).id, 4, -4, 4);
+                try self.out.addGlobalReloc(self.gpa, extra.id, 4, dis - 4, 4);
             },
-            .GlobalLoad => {
+            .GlobalLoad => |extra| {
+                const dis: i16 = @intCast(extra.base.dis);
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), Rip{} });
-                try self.out.addGlobalReloc(self.gpa, instr.extra(.GlobalLoad).id, 4, -4, 4);
+                try self.out.addGlobalReloc(self.gpa, extra.id, 4, dis - 4, 4);
             },
             .LocalAlloc => {},
             .Local => {

@@ -478,7 +478,7 @@ pub const Func = struct {
 pub const Global = struct {
     key: Scope,
     ty: TyId = .void,
-    data: []const u8 = &.{},
+    data: []u8 = &.{},
     readonly: bool,
     completion: std.EnumArray(Types.Target, CompileState) = .{ .values = .{ .queued, .queued } },
 
