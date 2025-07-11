@@ -708,9 +708,10 @@ pub const Data = struct {
         is_inline: bool,
     ) !void {
         std.debug.assert(id != std.math.maxInt(u32));
-        return self.startDefineSym(
+        const slot = try root.ensureSlot(&self.funcs, gpa, id);
+        try self.startDefineSym(
             gpa,
-            try root.ensureSlot(&self.funcs, gpa, id),
+            slot,
             name,
             kind,
             linkage,

@@ -602,15 +602,15 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
     };
 
     if (ret_abi == .Impossible) {
-        const msg = "function returns a type with 0 values, ";
+        const msg = "function returns a {} which has 0 values, ";
         if (!termintes) {
-            self.report(fn_ast.body, msg ++ "but end of the body is reachable", .{}) catch {};
+            self.report(fn_ast.body, msg ++ "but end of the body is reachable", .{func.ret}) catch {};
         } else if (self.bl.returns()) {
-            self.report(fn_ast.body, msg ++ "but it returns at least once", .{}) catch {};
+            self.report(fn_ast.body, msg ++ "but it returns at least once", .{func.ret}) catch {};
         }
     } else if (!termintes and ret_abi != .Imaginary) {
         func = self.types.store.get(func_id);
-        self.report(fn_ast.body, "function returns a type with more then" ++
+        self.report(fn_ast.body, "function returns a {}, which has more then" ++
             " 1 value, but end of the function body is reachable", .{func.ret}) catch {};
     }
 

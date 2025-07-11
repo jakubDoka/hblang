@@ -1,6 +1,6 @@
 fmt tuple 1:16:9: (uint, uint, uint) can not be constructed with '.(..)'
     tr.* = .(
            ^
-fmt tuple 1:5:20: function returns a type with more then 1 value, but end of the function body is reachableuint
+fmt tuple 1:5:20: function returns a uint, which has more then 1 value, but end of the function body is reachable
 main := fn(): uint {
                    ^

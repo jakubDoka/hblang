@@ -1,6 +1,6 @@
 field access on non scope type 1:6:38: the field access on non scope type 1.main does not have a scope, so field access does not make sense
     return (fn(): type return struct{}).test
                                         ^
-field access on non scope type 1:5:19: function returns a type with more then 1 value, but end of the function body is reachableu32
+field access on non scope type 1:5:19: function returns a u32, which has more then 1 value, but end of the function body is reachable
 main := fn(): u32 {
                   ^

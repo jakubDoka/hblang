@@ -54,15 +54,16 @@ pub const Scope = struct {
         file: Types.File,
         scope: Id,
         ast: Ast.Id,
+        unused2: u16 = 0,
         unused: u32 = 0,
     },
     name: []const u8,
     captures: []const Capture,
 
     pub const Capture = struct {
-        id: packed struct {
-            from_any: bool = false,
+        id: packed struct(u32) {
             index: u31,
+            from_any: bool = false,
 
             pub fn fromIdent(id: Ast.Ident) @This() {
                 return .{ .index = @intCast(@intFromEnum(id)) };
@@ -286,6 +287,13 @@ pub const Id = enum(IdRepr) {
         return switch (self.data()) {
             inline .Struct, .Union, .Enum => |v| &types.store.get(v).index,
             else => null,
+        };
+    }
+
+    pub fn getKey(self: Id, types: *Types) *Scope {
+        return switch (self.data()) {
+            .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
+            inline else => |v| &types.store.get(v).key,
         };
     }
 
@@ -757,8 +765,8 @@ pub fn retainGlobals(self: *Types, target: Target, backend: anytype, scratch: ?s
                 self.report(
                     glob.key.loc.file,
                     glob.key.loc.ast,
-                    "global is corrupted: contains a pointer {}",
-                    .{@errorName(err)},
+                    "global is corrupted (of type {}) (global_id: {}): contains a pointer {}",
+                    .{ glob.ty, @intFromEnum(global), @errorName(err) },
                 );
             };
         }
@@ -877,8 +885,9 @@ pub fn findSymForPtr(
     if (ptr < Comptime.stack_size)
         return error.@"to comptime stack";
 
-    if (ptr > data.code.items.len)
+    if (ptr > data.code.items.len) {
         return error.@"exceeding code section";
+    }
 
     const id: utils.EntId(tys.Global) =
         @enumFromInt(@as(u32, @bitCast(data.code.items[ptr - 4 ..][0..4].*)));
@@ -1145,7 +1154,7 @@ pub fn dumpAnalErrors(self: *Types, anal_errors: *std.ArrayListUnmanaged(static_
 }
 
 pub fn addUniqueGlobal(self: *Types, scope: Id) utils.EntId(tys.Global) {
-    return self.store.add(self.pool.allocator(), tys.Global{
+    const glob = self.store.add(self.pool.allocator(), tys.Global{
         .key = .{
             .loc = .{
                 .file = scope.file(self).?,
@@ -1159,6 +1168,8 @@ pub fn addUniqueGlobal(self: *Types, scope: Id) utils.EntId(tys.Global) {
         .ty = .never,
         .readonly = true,
     });
+
+    return glob;
 }
 
 pub fn resolveGlobal(
@@ -1177,6 +1188,7 @@ pub fn resolveGlobal(
         .name = name,
         .captures = &.{},
     });
+
     if (!slot.found_existing) {
         self.store.get(alloc).* = .{
             .key = self.store.get(alloc).key,

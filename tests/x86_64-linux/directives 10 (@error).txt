@@ -1,6 +1,6 @@
 directives 10 (@error):7:2: no main in sight, here is a type: ^u8
     @error("no main in sight, here is a type: ", ^u8)
     ^
-directives 10 (@error):5:20: function returns a type with more then 1 value, but end of the function body is reachableuint
+directives 10 (@error):5:20: function returns a uint, which has more then 1 value, but end of the function body is reachable
 main := fn(): uint {
                    ^

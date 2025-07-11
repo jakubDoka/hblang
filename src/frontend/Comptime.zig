@@ -108,7 +108,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                     const global = curr.inputs()[1].?.extra(.LocalAlloc).meta;
 
                     if (global != std.math.maxInt(u32)) {
-                        bl.func.subsume(bl.addGlobalAddr(.none, global), curr);
+                        //bl.func.subsume(bl.addGlobalAddr(.none, global), curr);
                         if (work_list.items.len == 0) {
                             return .{ .Arbitrary = @enumFromInt(global) };
                         }
@@ -168,7 +168,9 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
             },
             .GlobalAddr => {
                 const global = curr.extra(.GlobalAddr).id;
-                const below = work_list.getLastOrNull() orelse return .{ .Arbitrary = @enumFromInt(global) };
+                const below = work_list.getLastOrNull() orelse {
+                    return .{ .Arbitrary = @enumFromInt(global) };
+                };
                 const gid: utils.EntId(tys.Global) = @enumFromInt(global);
                 if (types.store.get(gid).completion.get(.@"comptime") != .compiled) {
                     types.queue(.@"comptime", .init(.{ .Global = gid }));

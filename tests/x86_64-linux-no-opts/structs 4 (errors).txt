@@ -40,6 +40,6 @@ structs 4 (errors):19:9: structs 4 (errors).Ty has 2 fields, but tuple construct
 structs 4 (errors):20:11: uint can not be constructed with '.(..)'
     return Ty.(v, 0)
              ^
-structs 4 (errors):7:20: function returns a type with more then 1 value, but end of the function body is reachableuint
+structs 4 (errors):7:20: function returns a uint, which has more then 1 value, but end of the function body is reachable
 main := fn(): uint {
                    ^

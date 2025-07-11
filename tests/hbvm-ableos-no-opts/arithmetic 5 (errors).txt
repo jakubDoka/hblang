@@ -1,6 +1,6 @@
 arithmetic 5 (errors):8:13: the operator not supported for void
     return 1 + v * 10
                ^
-arithmetic 5 (errors):5:20: function returns a type with more then 1 value, but end of the function body is reachableuint
+arithmetic 5 (errors):5:20: function returns a uint, which has more then 1 value, but end of the function body is reachable
 main := fn(): uint {
                    ^
