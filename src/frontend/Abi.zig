@@ -168,38 +168,197 @@ pub const Spec = union(enum) {
 };
 
 pub fn categorize(self: Abi, ty: Id, types: *Types) TmpSpec {
-    return switch (ty.data()) {
-        .Builtin => |b| .{ .ByValue = switch (b) {
-            .any => unreachable,
-            .never => return .Impossible,
-            .void => return .Imaginary,
-            .u8, .i8, .bool => .i8,
-            .u16, .i16 => .i16,
-            .u32, .type, .i32 => .i32,
-            .uint, .i64, .int, .u64 => .i64,
-            .f32 => .f32,
-            .f64 => .f64,
-        } },
-        .Pointer => .{ .ByValue = .i64 },
-        .Enum => |enm| self.categorize(enm.getBackingInt(types), types),
-        .Union => |s| switch (self.cc) {
-            .ablecall, .systemv => categorizeAbleosUnion(s, types),
-            else => unreachable,
+    return switch (self.cc) {
+        .ablecall => switch (ty.data()) {
+            .Builtin => |b| categorizeBuiltin(b),
+            .Pointer => .{ .ByValue = .i64 },
+            .Enum => |enm| self.categorize(enm.getBackingInt(types), types),
+            .Union => |s| categorizeAbleosUnion(s, types),
+            .Slice => |s| categorizeAbleosSlice(s, types),
+            .Nullable => |n| categorizeAbleosNullable(n, types),
+            inline .Struct, .Tuple => |s| categorizeAbleosRecord(s, types),
+            .Global, .Func, .Template => unreachable,
         },
-        inline .Struct, .Tuple => |s| switch (self.cc) {
-            .ablecall, .systemv => self.categorizeRecord(s, types),
-            else => unreachable,
-        },
-        .Slice => |s| switch (self.cc) {
-            .ablecall, .systemv => categorizeAbleosSlice(s, types),
-            else => unreachable,
-        },
-        .Nullable => |n| switch (self.cc) {
-            .ablecall, .systemv => categorizeAbleosNullable(n, types),
-            else => unreachable,
-        },
-        .Global, .Func, .Template => unreachable,
+        .systemv => categorizeSystemv(ty, types),
+        else => unreachable,
     };
+}
+
+pub fn categorizeSystemv(ty: Id, types: *Types) TmpSpec {
+    const max_vector_size = 512;
+    const max_eight_bytes = max_vector_size / 64;
+
+    const Category = enum {
+        int,
+        sse,
+        sseup,
+
+        const Category = @This();
+
+        pub fn max(lhs: Category, rhs: Category) Category {
+            return @enumFromInt(@max(@intFromEnum(lhs), @intFromEnum(rhs)));
+        }
+
+        const Error = error{ ByRef, Impossible };
+
+        pub fn classify(t: Id, ts: *Types, offset: u64, catas: []?Category) Error!void {
+            if (offset & (t.alignment(ts) - 1) != 0) return error.ByRef;
+
+            var class: Category = switch (t.data()) {
+                .Builtin => |b| switch (b) {
+                    .any => unreachable,
+                    .never => return error.Impossible,
+                    .void => return,
+                    .bool, .i8, .u8, .i16, .u16, .i32 => .int,
+                    .u32, .i64, .u64, .int, .uint, .type => .int,
+                    .f32, .f64 => .sse,
+                },
+                .Pointer, .Enum => .int,
+                .Union => |s| {
+                    for (s.getFields(ts)) |f| {
+                        try classify(f.ty, ts, offset, catas);
+                    }
+                    return;
+                },
+                .Slice => |s| {
+                    const slc = ts.store.get(s);
+                    if (slc.len) |len| {
+                        for (0..len) |i| {
+                            try classify(slc.elem, ts, offset + i * slc.elem.size(ts), catas);
+                        }
+                    } else {
+                        try classify(.uint, ts, offset + tys.Slice.len_offset, catas);
+                        try classify(.uint, ts, offset + tys.Slice.ptr_offset, catas);
+                    }
+                    return;
+                },
+                .Nullable => |n| {
+                    const nl = ts.store.get(n);
+                    if (n.isCompact(ts)) {
+                        try classify(nl.inner, ts, offset, catas);
+                    } else {
+                        try classify(.u8, ts, offset, catas);
+                        try classify(nl.inner, ts, offset + nl.inner.alignment(ts), catas);
+                    }
+                    return;
+                },
+                inline .Struct, .Tuple => |s| {
+                    var iter = s.offsetIter(ts);
+                    while (iter.next()) |elem| {
+                        try classify(elem.field.ty, ts, offset + elem.offset, catas);
+                    }
+                    return;
+                },
+                .Global, .Func, .Template => unreachable,
+            };
+
+            const first = offset / 8;
+            const last = (offset + t.size(ts) + 7) / 8;
+
+            for (catas[first..last]) |*cat| {
+                if (cat.*) |old| cat.* = old.max(class) else cat.* = class;
+
+                if (class == .sse) {
+                    class = .sseup;
+                }
+            }
+        }
+        pub fn regComponent(cls: []const ?Category, i: *usize, size: u64) ?graph.DataType {
+            if (i.* >= cls.len) return null;
+
+            switch (cls[i.*] orelse return null) {
+                .int => {
+                    i.* += 1;
+                    return switch (size) {
+                        1 => .i8,
+                        2 => .i16,
+                        4 => .i32,
+                        else => .i64,
+                    };
+                },
+                .sse => {
+                    var vec_len: usize = 1;
+                    while (i.* + vec_len < cls.len and cls[i.* + vec_len] == .sseup) : (vec_len += 1) {}
+                    i.* += vec_len;
+                    return switch (vec_len) {
+                        1 => switch (size) {
+                            4 => .f32,
+                            else => .f64,
+                        },
+                        else => graph.DataType.fromRaw(.{
+                            .kind = .f64,
+                            .one_less_then_lanes = @intCast(((size + 7) / 8) - 1),
+                        }),
+                    };
+                },
+                else => unreachable,
+            }
+        }
+    };
+
+    if (ty.size(types) * 8 > max_vector_size) {
+        return .ByRef;
+    }
+
+    const eight_bytes = (ty.size(types) + 7) / 8;
+
+    var categories_mem: [max_eight_bytes]?Category = @splat(null);
+    const categories = categories_mem[0..eight_bytes];
+
+    Category.classify(ty, types, 0, categories) catch |err| switch (err) {
+        error.ByRef => return .ByRef,
+        error.Impossible => return .Impossible,
+    };
+
+    if (eight_bytes == 0) {
+        std.debug.print("{}\n", .{ty.fmt(types)});
+        return .Imaginary;
+    }
+
+    if (eight_bytes > 2) {
+        if (categories[0] != .sse) return .ByRef;
+        for (categories[1..]) |cat| if (cat != .sseup) return .ByRef;
+    } else {
+        var i: usize = 0;
+        while (i < categories.len) {
+            if (categories[i] == .sseup) {
+                categories[i] = .sse;
+            } else if (categories[i] == .sse) {
+                i += 1;
+                while (i < categories.len and categories[i] == .sseup) {
+                    i += 1;
+                }
+            } else {
+                i += 1;
+            }
+        }
+    }
+
+    var i: usize = 0;
+    const lo = Category.regComponent(categories, &i, ty.size(types)).?;
+    if (i * 8 < ty.size(types)) {
+        return .{ .ByValuePair = .{
+            .types = .{ lo, Category.regComponent(categories, &i, ty.size(types) - i * 8).? },
+            .padding = 0,
+            .alignment = @intCast(std.math.log2_int(u64, ty.alignment(types))),
+        } };
+    }
+
+    return .{ .ByValue = lo };
+}
+
+pub fn categorizeBuiltin(b: tys.Builtin) TmpSpec {
+    return .{ .ByValue = switch (b) {
+        .any => unreachable,
+        .never => return .Impossible,
+        .void => return .Imaginary,
+        .u8, .i8, .bool => .i8,
+        .u16, .i16 => .i16,
+        .u32, .type, .i32 => .i32,
+        .uint, .i64, .int, .u64 => .i64,
+        .f32 => .f32,
+        .f64 => .f64,
+    } };
 }
 
 pub fn categorizeAbleosNullable(id: utils.EntId(tys.Nullable), types: *Types) TmpSpec {
@@ -250,7 +409,7 @@ pub fn categorizeAbleosUnion(id: utils.EntId(tys.Union), types: *Types) TmpSpec 
     return res;
 }
 
-pub fn categorizeRecord(self: Abi, stru: anytype, types: *Types) TmpSpec {
+pub fn categorizeAbleosRecord(stru: anytype, types: *Types) TmpSpec {
     var res: TmpSpec = .Imaginary;
     var prev_offset: u64 = 0;
     var field_offsets = stru.offsetIter(types);
@@ -271,19 +430,14 @@ pub fn categorizeRecord(self: Abi, stru: anytype, types: *Types) TmpSpec {
         if (res == .ByValuePair) return .ByRef;
         std.debug.assert(res != .ByRef);
 
-        if (self.cc == .systemv and res.ByValue.isFloat() and fspec.ByValue.isFloat()) {
-            if (res.ByValue != fspec.ByValue) return .ByRef;
-            res = .{ .BySse = .vec(res.ByValue, 2) };
-        } else {
-            res = .{ .ByValuePair = .{
-                .types = .{ res.ByValue, fspec.ByValue },
-                .padding = @intCast(elem.offset - prev_offset),
-                .alignment = @intCast(@min(4, std.math.log2_int(
-                    u64,
-                    @max(res.ByValue.size(), fspec.ByValue.size()),
-                ))),
-            } };
-        }
+        res = .{ .ByValuePair = .{
+            .types = .{ res.ByValue, fspec.ByValue },
+            .padding = @intCast(elem.offset - prev_offset),
+            .alignment = @intCast(@min(4, std.math.log2_int(
+                u64,
+                @max(res.ByValue.size(), fspec.ByValue.size()),
+            ))),
+        } };
     }
     return res;
 }
