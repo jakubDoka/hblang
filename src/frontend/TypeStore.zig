@@ -707,7 +707,7 @@ pub const Id = enum(IdRepr) {
                     readFromGlobal(self.tys, @enumFromInt(self.value), ty, self.offset + offset),
                     self.root,
                 ),
-                .ByRef, .BySse, .ByValuePair => {
+                .ByRef, .ByValuePair => {
                     return ty.fmtValueOffset(self.tys, self.value, self.offset + offset, self.root);
                 },
             };

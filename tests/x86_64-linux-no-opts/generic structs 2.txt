@@ -5,7 +5,7 @@ generic structs 2.Foo(uint).Bar(u8).init:
 generic structs 2.Foo(uint).Bar(u8).sub:
 	sub rsp, 0x10
 	mov [rsp], rdi
-	mov [rsp+0x08], sil
+	mov [rsp+0x08], rsi
 	mov cl, [rsp+0x08]
 	mov rax, [rsp]
 	movzx rcx, cl
@@ -17,7 +17,7 @@ main:
 	lea rdi, [rsp]
 	call :generic structs 2.Foo(uint).Bar(u8).init
 	mov rdi, [rsp]
-	mov sil, [rsp+0x08]
+	mov rsi, [rsp+0x08]
 	call :generic structs 2.Foo(uint).Bar(u8).sub
 	add rsp, 0x18
 	ret

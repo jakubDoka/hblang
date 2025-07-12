@@ -87,11 +87,31 @@ pub const Value = struct {
     pub fn getValue(value: *Value, sloc: graph.Sloc, self: *Codegen) *Node {
         if (value.id == .Pointer) {
             const cata = self.abiCata(value.ty);
-            value.id = .{ .Value = self.bl.addLoad(
-                sloc,
-                value.id.Pointer,
-                if (cata == .BySse) cata.BySse else cata.ByValue,
-            ) };
+
+            if (cata.ByValue.size() > value.ty.size(self.types)) {
+                var val: ?*Node = null;
+                var loader = graph.DataType.i64;
+                var offset: u64 = 0;
+                while (offset < value.ty.size(self.types)) {
+                    while (loader.size() + offset > value.ty.size(self.types)) {
+                        loader = @enumFromInt(@intFromEnum(loader) - 1);
+                    }
+
+                    const loaded = self.bl.addFieldLoad(sloc, value.id.Pointer, @intCast(offset), loader);
+                    const extended = self.bl.addUnOp(sloc, .uext, cata.ByValue, loaded);
+                    const shifted = self.bl.addBinOp(sloc, .ishl, cata.ByValue, extended, self.bl.addIntImm(sloc, .i64, @intCast(offset * 8)));
+                    val = if (val) |v| self.bl.addBinOp(sloc, .bor, cata.ByValue, v, shifted) else shifted;
+                    offset += loader.size();
+                }
+
+                value.id = .{ .Value = val.? };
+            } else {
+                value.id = .{ .Value = self.bl.addLoad(
+                    sloc,
+                    value.id.Pointer,
+                    cata.ByValue,
+                ) };
+            }
         }
         return value.id.Value;
     }
@@ -567,7 +587,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
         const arg = switch (abi) {
             .Impossible => unreachable,
             .ByRef => self.bl.addParam(arg_sloc, i),
-            .BySse, .ByValue => if (params[i] == .Stack)
+            .ByValue => if (params[i] == .Stack)
                 self.bl.addParam(arg_sloc, i)
             else
                 self.bl.addSpill(arg_sloc, self.bl.addParam(arg_sloc, i)),
@@ -718,7 +738,7 @@ pub fn emitNull(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
     if (nullable.nieche.offset(self.types)) |spec| {
         switch (self.abiCata(nullable.inner)) {
-            .Impossible, .BySse => unreachable,
+            .Impossible => unreachable,
             .Imaginary => return .{ .ty = ty },
             .ByValue => return .mkv(ty, self.bl.addIntImm(sloc, spec.kind.abi(), 0)),
             .ByValuePair, .ByRef => {
@@ -731,10 +751,9 @@ pub fn emitNull(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         }
     } else {
         switch (self.abiCata(ty)) {
-            .Impossible, .BySse => unreachable,
+            .Impossible => unreachable,
             .Imaginary => return .{ .ty = ty },
-            .ByValue => return .mkv(ty, self.bl.addIntImm(sloc, .i8, 0)),
-            .ByValuePair, .ByRef => {
+            .ByValue, .ByValuePair, .ByRef => {
                 const loc = ctx.loc orelse self.bl.addLocal(sloc, ty.size(self.types));
                 _ = self.bl.addStore(sloc, loc, .i8, self.bl.addIntImm(sloc, .i8, 0));
                 return .mkp(ty, loc);
@@ -761,7 +780,7 @@ pub fn emitIdk(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             t,
             @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)),
         )),
-        .ByValuePair, .ByRef, .BySse => {
+        .ByValuePair, .ByRef => {
             const loc = ctx.loc orelse self.bl.addLocal(sloc, ty.size(self.types));
             return .mkp(ty, loc);
         },
@@ -1120,7 +1139,7 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
                 // allocation once we know this results into unwrapped
                 // value
                 var variable = self.bl.addLocal(sloc, lhs.ty.size(self.types));
-                var cond = try self.chechNull(e.lhs, &lhs, .@"!=");
+                var cond = try self.checkNull(e.lhs, &lhs, .@"!=");
 
                 var builder = self.bl.addIfAndBeginThen(sloc, cond.getValue(sloc, self));
                 {
@@ -1184,7 +1203,7 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
             var lhs = try self.emit(if (e.op.isComparison()) .{} else ctx, e.lhs);
 
             if (e.rhs.tag() == .Null) switch (e.op) {
-                .@"==", .@"!=" => return self.chechNull(e.lhs, &lhs, e.op),
+                .@"==", .@"!=" => return self.checkNull(e.lhs, &lhs, e.op),
                 else => {
                     return self.report(e.lhs, "only comparing against null is supported", .{});
                 },
@@ -1522,8 +1541,11 @@ pub fn emitIndex(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Index)) EmitE
                 const slice = self.types.store.get(slice_ty);
                 const index_base = if (slice.len == null)
                     self.bl.addLoad(sloc, base.id.Pointer, .i64)
-                else
-                    base.id.Pointer;
+                else switch (base.id) {
+                    .Imaginary => return self.report(expr, "indexing into an empty array is not allowed", .{}),
+                    .Value => self.bl.addSpill(sloc, base.id.Value),
+                    .Pointer => base.id.Pointer,
+                };
 
                 if (self.types.handlers.slice_ioob) |handler| {
                     var len = Value.mkv(.uint, if (slice.len) |len|
@@ -1997,7 +2019,7 @@ fn emitReturn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Return)) EmitError
     const rets = switch (self.abiCata(value.ty)) {
         .Impossible => return self.report(expr, "can't return uninhabited type", .{}),
         .Imaginary => &.{},
-        .ByValue, .BySse => &.{value.getValue(sloc, self)},
+        .ByValue => &.{value.getValue(sloc, self)},
         .ByValuePair => |pair| if (self.abi.isByRefRet(self.abiCata(value.ty))) b: {
             self.emitGenericStore(sloc, self.struct_ret_ptr.?, &value);
             break :b &.{};
@@ -2053,7 +2075,7 @@ fn emitUserType(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Type)) !Value {
         var val = try self.loadIdent(cp.pos, cp.id);
         args.arg_slots[prefix + slot_idx * 2 ..][0..2].* = switch (self.abiCata(val.ty)) {
             .Impossible => unreachable, // TODO: wah
-            .Imaginary, .ByRef, .BySse, .ByValuePair => .{ self.emitTyConst(val.ty).id.Value, self.bl.addIntImm(sloc, .i64, 0) },
+            .Imaginary, .ByRef, .ByValuePair => .{ self.emitTyConst(val.ty).id.Value, self.bl.addIntImm(sloc, .i64, 0) },
             .ByValue => .{ self.emitTyConst(val.ty).id.Value, val.getValue(sloc, self) },
         };
     }
@@ -2300,20 +2322,29 @@ pub fn unwrapNullable(self: *Codegen, expr: Ast.Id, base: *Value, do_check: bool
     }
 
     if (do_check) if (self.types.handlers.null_unwrap) |handler| {
-        var check = try self.chechNull(expr, base, .@"==");
+        var check = try self.checkNull(expr, base, .@"==");
         var arg_values = [_]Value{undefined};
         self.emitHandlerCall(handler, expr, check.getValue(sloc, self), &arg_values);
     };
 
-    base.* = switch (self.abiCata(base.ty)) {
-        .Impossible, .BySse => unreachable,
-        .Imaginary => return self.report(expr, "option of uninhabited type cna not be unwrapped", .{}),
-        .ByValue => .{ .ty = nullable.inner },
-        .ByRef, .ByValuePair => .mkp(nullable.inner, self.bl.addFieldOffset(
-            sloc,
-            base.id.Pointer,
-            @bitCast(nullable.inner.alignment(self.types)),
-        )),
+    base.* = switch (self.abiCata(nullable.inner)) {
+        .Impossible => return self.report(expr, "option of uninhabited type cna not be unwrapped", .{}),
+        .Imaginary => .{ .ty = nullable.inner },
+        .ByValue, .ByRef, .ByValuePair => switch (base.id) {
+            .Imaginary => unreachable,
+            .Value => .mkv(nullable.inner, self.bl.addBinOp(
+                sloc,
+                .ushr,
+                self.abiCata(nullable.inner).ByValue,
+                base.id.Value,
+                self.bl.addIntImm(sloc, .i8, @intCast(nullable.inner.alignment(self.types) * 8)),
+            )),
+            .Pointer => .mkp(nullable.inner, self.bl.addFieldOffset(
+                sloc,
+                base.id.Pointer, // TODO: handle value
+                @bitCast(nullable.inner.alignment(self.types)),
+            )),
+        },
     };
 }
 
@@ -2350,7 +2381,7 @@ pub fn emitDecl(
 
     var out = Value{};
     if (unwrap) {
-        out = try self.chechNull(e.value, &value, .@"!=");
+        out = try self.checkNull(e.value, &value, .@"!=");
         try self.unwrapNullable(e.value, &value, false);
     }
 
@@ -2362,7 +2393,7 @@ pub fn emitDecl(
     return out;
 }
 
-pub fn chechNull(self: *Codegen, expr: Ast.Id, lhs: *Value, op: Lexer.Lexeme) !Value {
+pub fn checkNull(self: *Codegen, expr: Ast.Id, lhs: *Value, op: Lexer.Lexeme) !Value {
     if (lhs.ty.data() != .Nullable) {
         return self.report(expr, "only nullable types can be compared with null," ++
             " {} is not", .{lhs.ty});
@@ -2370,11 +2401,15 @@ pub fn chechNull(self: *Codegen, expr: Ast.Id, lhs: *Value, op: Lexer.Lexeme) !V
 
     const sloc = self.src(expr);
 
-    var value = switch (self.abiCata(lhs.ty)) {
-        .Impossible, .BySse => unreachable,
-        .Imaginary => self.bl.addIntImm(sloc, .i8, 0),
-        .ByValue => lhs.getValue(sloc, self),
-        .ByValuePair, .ByRef => self.bl.addLoad(sloc, lhs.id.Pointer, .i8),
+    const nul: *tys.Nullable = self.types.store.get(lhs.ty.data().Nullable);
+
+    var value = if (nul.nieche.offset(self.types)) |spec|
+        self.bl.addFieldLoad(sloc, lhs.id.Pointer, spec.offset, spec.kind.abi())
+    else switch (lhs.id) {
+        .Imaginary => unreachable,
+        .Value => self.bl.addBinOp(sloc, .band, .i8, lhs.id.Value, self.bl
+            .addIntImm(sloc, .i8, 255)),
+        .Pointer => self.bl.addLoad(sloc, lhs.id.Pointer, .i8),
     };
 
     if (op == .@"==") {
@@ -2602,10 +2637,30 @@ fn emitStructOp(
 pub fn emitGenericStore(self: *Codegen, sloc: graph.Sloc, loc: *Node, value: *Value) void {
     if (value.id == .Imaginary) return;
 
-    if (self.abiCata(value.ty) == .ByValue) {
-        _ = self.bl.addStore(sloc, loc, self.abiCata(value.ty).ByValue, value.getValue(sloc, self));
+    const cata = self.abiCata(value.ty);
+    if (cata == .ByValue) {
+        if (cata.ByValue.size() > value.ty.size(self.types)) {
+            var storer = graph.DataType.i64;
+            var offset: u64 = 0;
+            while (offset < value.ty.size(self.types)) {
+                while (storer.size() + offset > value.ty.size(self.types)) {
+                    storer = @enumFromInt(@intFromEnum(storer) - 1);
+                }
+
+                const shifted = self.bl.addBinOp(
+                    sloc,
+                    .ushr,
+                    cata.ByValue,
+                    value.getValue(sloc, self),
+                    self.bl.addIntImm(sloc, .i64, @intCast(offset * 8)),
+                );
+                self.bl.addFieldStore(sloc, loc, @intCast(offset), storer, shifted);
+                offset += storer.size();
+            }
+        } else {
+            _ = self.bl.addStore(sloc, loc, cata.ByValue, value.getValue(sloc, self));
+        }
     } else if (value.id.Pointer != loc) {
-        //if (self.abiCata(value.ty) == .Impossible) unreachable;
         _ = self.bl.addFixedMemCpy(sloc, loc, value.id.Pointer, value.ty.size(self.types));
     }
 }
@@ -2793,7 +2848,7 @@ pub fn loadIdent(self: *Codegen, expr: Ast.Pos, id: Ast.Ident) !Value {
                     .ByValue => |v| .{
                         .Value = self.bl.addIntImm(sloc, v, @bitCast(c.value)),
                     },
-                    .ByValuePair, .ByRef, .BySse => b: {
+                    .ByValuePair, .ByRef => b: {
                         self.types.queue(self.target, .init(.{ .Global = @enumFromInt(c.value) }));
                         break :b .{ .Pointer = self.bl.addGlobalAddr(sloc, @intCast(c.value)) };
                     },
@@ -3084,7 +3139,7 @@ fn pushParam(
         .Imaginary => {
             len = 0;
         },
-        .ByValue, .BySse => {
+        .ByValue => {
             if (call_args.params[idx] == .Stack) {
                 call_args.arg_slots[idx] = self.bl.addSpill(.none, value.getValue(sloc, self));
             } else {
@@ -3123,7 +3178,6 @@ fn assembleReturn(
         .Impossible => return error.Unreachable,
         .Imaginary => .mkv(ret, null),
         .ByValue => .mkv(ret, rets.?[0]),
-        .BySse => .mkp(ret, self.bl.addSpill(sloc, rets.?[0])),
         .ByValuePair => |pair| if (self.abi.isByRefRet(ret_abi)) b: {
             break :b .mkp(ret, call_args.arg_slots[0]);
         } else b: {
@@ -3264,7 +3318,7 @@ pub fn partialEvalLow(self: *Codegen, pos: u32, value: *Value, can_recover: bool
         switch (self.abiCata(value.ty)) {
             .Impossible, .Imaginary => return 0,
             .ByValue => value.getValue(.none, self),
-            .ByValuePair, .ByRef, .BySse => value.id.Pointer,
+            .ByValuePair, .ByRef => value.id.Pointer,
         },
         value.ty,
     )) {

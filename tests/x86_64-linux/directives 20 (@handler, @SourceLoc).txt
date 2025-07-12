@@ -49,18 +49,17 @@ memcpy:
 directives 20 (@handler, @SourceLoc).slice_ioob:
 	ud2
 _start:
-	sub rsp, 0x18
-	mov byte ptr [rsp+0x08], 0x00
-	mov byte ptr [rsp+0x04], 0x01
-	mov byte ptr [rsp+0x05], 0x02
-	mov byte ptr [rsp+0x06], 0x03
-	mov byte ptr [rsp+0x07], 0x04
-	lea rcx, [rsp]
-	mov eax, [rsp+0x04]
-	mov [rcx], eax
+	sub rsp, 0x08
+	mov byte ptr [rsp+0x04], 0x00
+	mov byte ptr [rsp], 0x01
+	mov byte ptr [rsp+0x01], 0x02
+	mov byte ptr [rsp+0x02], 0x03
+	mov byte ptr [rsp+0x03], 0x04
+	mov edi, [rsp]
+	mov [rsp], edi
 	call :directives 20 (@handler, @SourceLoc).produce_memcpy
-	lea rdi, [rsp+0x08]
+	lea rdi, [rsp+0x04]
 	xor rsi, rsi
 	call :directives 20 (@handler, @SourceLoc).use_slice
-	add rsp, 0x18
+	add rsp, 0x08
 	ret

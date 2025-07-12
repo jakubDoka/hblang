@@ -4,12 +4,14 @@ main:
 	mov byte ptr [rsp+0xA9], 0x02
 	mov byte ptr [rsp+0xAA], 0x03
 	mov byte ptr [rsp+0xAB], 0x04
-	lea rax, [rsp+0xA8]
-	mov [rsp+0x80], rax
+	lea rcx, [rsp+0xA8]
+	mov eax, [rsp+0xA8]
+	mov [rsp+0xA8], eax
+	mov [rsp+0x80], rcx
 	mov qword ptr [rsp+0x88], 0x04
-	mov [rsp], rax
+	mov [rsp], rcx
 	mov qword ptr [rsp+0x08], 0x04
-	mov [rsp+0x10], rax
+	mov [rsp+0x10], rcx
 	mov qword ptr [rsp+0x18], 0x02
 	lea rax, [rsp+0xA8]
 	add rax, 0x02

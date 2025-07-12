@@ -487,6 +487,22 @@ Iterator := fn($Iter: type): type return struct {
 }
 ```
 
+#### unaligned stack 1
+```hb
+$check_stack := fn(): void {
+    $if @target("x86_64-linux") {
+        if @frame_pointer() % 16 == 8 {
+            die
+        }
+    }
+}
+
+main := fn(): uint {
+    check_stack()
+    return 0
+}
+```
+
 #### wired pointer edge cases
 ```hb
 expectations := .{

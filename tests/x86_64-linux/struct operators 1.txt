@@ -1,6 +1,38 @@
 main:
-	sub rsp, 0x20
-	mov qword ptr [rsp], 0xFFFFFFFFFFFFFFFD
+	sub rsp, 0x30
+	mov byte ptr [rsp+0x20], 0x00
+	mov byte ptr [rsp+0x21], 0x00
+	mov byte ptr [rsp+0x22], 0x00
+	mov byte ptr [rsp+0x23], 0x00
+	mov rdi, 0x04
+	mov eax, [rsp+0x20]
+	mov [rsp+0x20], eax
+	mov sil, [rsp+0x20]
+	mov dl, [rsp+0x21]
+	mov cl, [rsp+0x22]
+	mov al, [rsp+0x23]
+	inc sil
+	mov [rsp+0x20], sil
+	inc dl
+	mov [rsp+0x21], dl
+	inc cl
+	mov [rsp+0x22], cl
+	inc al
+	mov [rsp+0x23], al
+	mov eax, [rsp+0x20]
+	mov [rsp+0x20], eax
+	mov al, [rsp+0x22]
+	mov cl, [rsp+0x21]
+	mov dl, [rsp+0x20]
+	add eax, ecx
+	mov cl, [rsp+0x23]
+	add eax, edx
+	add eax, ecx
+	cmp al, dil
+	jz :0
+	mov rax, 0x3E9
+	jmp :1
+0:	mov qword ptr [rsp], 0xFFFFFFFFFFFFFFFD
 	mov qword ptr [rsp+0x08], 0xFFFFFFFFFFFFFFFC
 	mov qword ptr [rsp+0x10], 0x01
 	mov qword ptr [rsp+0x18], 0x02
@@ -9,5 +41,5 @@ main:
 	mov qword ptr [rsp+0x10], 0x03
 	mov qword ptr [rsp+0x18], 0x04
 	mov rax, 0x0A
-	add rsp, 0x20
+1:	add rsp, 0x30
 	ret

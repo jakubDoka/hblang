@@ -1,0 +1,10 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        jal $31, $0, :unaligned stack 1.check_stack
+         cp $1, $0
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+unaligned stack 1.check_stack:
+       jala $0, $31, 0

@@ -1,8 +1,12 @@
 null unwrap 1.use_opt:
-	sub rsp, 0x48
+	sub rsp, 0x58
 	mov rcx, rsi
+	mov [rsp+0x40], rdi
+	mov dl, [rsp+0x40]
+	mov rax, rcx
+	mov [rsp+0x48], rax
 	xor al, al
-	cmp dil, al
+	cmp dl, al
 	jnz :0
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x20], rax
@@ -16,18 +20,21 @@ null unwrap 1.use_opt:
 	call :null unwrap 1.null_unwrap
 0:	mov rax, rcx
 	add rax, rcx
-	add rsp, 0x48
+	add rsp, 0x58
 	ret
 null unwrap 1.null_unwrap:
 	ud2
 main:
-	sub rsp, 0x08
-	mov rdi, 0x01
+	sub rsp, 0x28
+	mov byte ptr [rsp], 0x01
+	mov rdi, [rsp]
+	mov qword ptr [rsp+0x08], 0x01
 	mov rsi, 0x01
 	call :null unwrap 1.use_opt
-	xor dil, dil
-	mov rsi, 0xAAAAAAAAAAAAAAAA
+	mov rsi, [rsp+0x18]
+	mov byte ptr [rsp+0x10], 0x00
+	mov rdi, [rsp+0x10]
 	call :null unwrap 1.use_opt
-	add rsp, 0x08
+	add rsp, 0x28
 	ret
 memcpy:

@@ -1,16 +1,15 @@
 packed struct pass.broken:
-	sub rsp, 0x10
-	mov [rsp], dil
-	mov [rsp+0x01], si
-	add rsp, 0x10
 	ret
 main:
-	sub rsp, 0x08
-	mov byte ptr [rsp], 0x00
-	mov word ptr [rsp+0x01], 0x00
-	mov dil, [rsp]
-	mov si, [rsp+0x01]
+	sub rsp, 0x18
+	mov byte ptr [rsp+0x03], 0x00
+	mov word ptr [rsp+0x04], 0x00
+	lea rcx, [rsp]
+	mov ax, [rsp+0x03]
+	mov [rcx], ax
+	mov al, [rsp+0x05]
+	mov [rcx+0x02], al
 	call :packed struct pass.broken
 	xor rax, rax
-	add rsp, 0x08
+	add rsp, 0x18
 	ret

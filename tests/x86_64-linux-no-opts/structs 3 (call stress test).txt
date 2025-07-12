@@ -9,7 +9,7 @@ structs 3 (call stress test).return_triple:
 	ret
 structs 3 (call stress test).take_pair:
 	sub rsp, 0x10
-	mov [rsp], dil
+	mov [rsp], rdi
 	mov [rsp+0x08], rsi
 	mov al, [rsp]
 	mov rcx, [rsp+0x08]
@@ -32,7 +32,7 @@ main:
 	call :structs 3 (call stress test).return_pair
 	lea rdi, [rsp+0x28]
 	call :structs 3 (call stress test).return_triple
-	mov dil, [rsp+0x18]
+	mov rdi, [rsp+0x18]
 	mov rsi, [rsp+0x20]
 	call :structs 3 (call stress test).take_pair
 	mov rbx, rax

@@ -1,0 +1,13 @@
+main:
+	mov rcx, 0x10
+	mov rax, rsp
+	xor rdx, rdx
+	div rcx
+	cmp rdx, 0x08
+	setz al
+	movzx rax, al
+	test al, al
+	jz :0
+	ud2
+0:	xor rax, rax
+	ret

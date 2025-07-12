@@ -9,9 +9,9 @@ directives 20 (@handler, @SourceLoc).main:
 	mov byte ptr [rsp+0x61], 0x02
 	mov byte ptr [rsp+0x62], 0x03
 	mov byte ptr [rsp+0x63], 0x04
-	lea rcx, [rsp]
 	mov eax, [rsp+0x60]
-	mov [rcx], eax
+	mov [rsp+0x60], eax
+	mov edi, [rsp+0x60]
 	call :directives 20 (@handler, @SourceLoc).produce_memcpy
 	mov rax, [rsp+0x48]
 	mov rbx, rax
@@ -47,6 +47,9 @@ directives 20 (@handler, @SourceLoc).main:
 	pop rbx
 	ret
 directives 20 (@handler, @SourceLoc).produce_memcpy:
+	sub rsp, 0x10
+	mov [rsp], edi
+	add rsp, 0x10
 	ret
 memcpy:
 	sub rsp, 0x20

@@ -56,6 +56,18 @@ main:
 	mov byte ptr [rsp+0x40], 0x01
 	mov byte ptr [rsp+0x41], 0x02
 	mov byte ptr [rsp+0x42], 0x03
+	mov ax, [rsp+0x40]
+	mov cl, [rsp+0x42]
+	movzx eax, ax
+	movzx ecx, cl
+	shl eax, 0x00
+	shl ecx, 0x10
+	or eax, ecx
+	mov ecx, eax
+	shr ecx, 0x00
+	mov [rsp+0x40], cx
+	shr eax, 0x10
+	mov [rsp+0x42], al
 	mov qword ptr [rsp+0x10], 0x01
 	mov qword ptr [rsp+0x18], 0x00
 	lea rdi, [rsp]

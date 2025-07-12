@@ -3,6 +3,8 @@ main:
 	mov byte ptr [rsp], 0x01
 	mov byte ptr [rsp+0x01], 0x01
 	mov ax, [rsp]
+	mov [rsp], ax
+	mov [rsp], ax
 	movzx rax, ax
 	sub rax, 0x100
 	add rsp, 0x10

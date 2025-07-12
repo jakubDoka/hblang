@@ -2,6 +2,8 @@ main:
 	sub rsp, 0x10
 	xor cl, cl
 1:	mov byte ptr [rsp], 0x00
+	mov ax, [rsp]
+	mov [rsp], ax
 3:	mov al, [rsp]
 	cmp al, cl
 	jnz :0
@@ -11,4 +13,6 @@ main:
 	jnz :3
 	jmp :3
 3:	mov byte ptr [rsp], 0x00
+	mov ax, [rsp]
+	mov [rsp], ax
 	jmp :3

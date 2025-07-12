@@ -40,7 +40,6 @@ pub const Builder = union(graph.CallConv) {
             .ablecall => switch (spec) {
                 .Impossible => unreachable,
                 .Imaginary => _ = slice(buf, 0),
-                .BySse => |d| slice(buf, 1).* = .{ .Reg = d },
                 .ByValue => |d| slice(buf, 1).* = .{ .Reg = d },
                 .ByValuePair => |pair| slice(buf, 2).* =
                     .{ .{ .Reg = pair.types[0] }, .{ .Reg = pair.types[1] } },
@@ -49,14 +48,6 @@ pub const Builder = union(graph.CallConv) {
             .systemv => |*s| switch (spec) {
                 .Impossible => unreachable,
                 .Imaginary => _ = slice(buf, 0),
-                .BySse => |d| {
-                    if (s.remining_xmm_regs == 0) {
-                        slice(buf, 1).* = .{ .Stack = .reg(d) };
-                    } else {
-                        slice(buf, 1).* = .{ .Reg = d };
-                        s.remining_xmm_regs -= 1;
-                    }
-                },
                 .ByValue => |d| {
                     if (is_ret) {
                         slice(buf, 1).* = .{ .Reg = d };
@@ -134,7 +125,6 @@ pub const Pair = struct {
 
 pub const TmpSpec = union(enum) {
     ByValue: graph.DataType,
-    BySse: graph.DataType,
     ByValuePair: Pair,
     ByRef,
     Imaginary,
@@ -150,7 +140,6 @@ pub const TmpSpec = union(enum) {
 
 pub const Spec = union(enum) {
     ByValue: graph.DataType,
-    BySse: graph.DataType,
     ByValuePair: Pair,
     ByRef: graph.AbiParam.StackSpec,
     Imaginary,
@@ -263,6 +252,7 @@ pub fn categorizeSystemv(ty: Id, types: *Types) TmpSpec {
                 }
             }
         }
+
         pub fn regComponent(cls: []const ?Category, i: *usize, size: u64) ?graph.DataType {
             if (i.* >= cls.len) return null;
 
@@ -272,7 +262,7 @@ pub fn categorizeSystemv(ty: Id, types: *Types) TmpSpec {
                     return switch (size) {
                         1 => .i8,
                         2 => .i16,
-                        4 => .i32,
+                        3, 4 => .i32,
                         else => .i64,
                     };
                 },
@@ -311,7 +301,6 @@ pub fn categorizeSystemv(ty: Id, types: *Types) TmpSpec {
     };
 
     if (eight_bytes == 0) {
-        std.debug.print("{}\n", .{ty.fmt(types)});
         return .Imaginary;
     }
 
@@ -373,7 +362,7 @@ pub fn categorizeAbleosNullable(id: utils.EntId(tys.Nullable), types: *Types) Tm
             .padding = @intCast(v.size() - 1),
             .alignment = @intCast(std.math.log2_int(u64, v.size())),
         } },
-        .ByValuePair, .ByRef, .BySse => .ByRef,
+        .ByValuePair, .ByRef => .ByRef,
     };
 }
 
@@ -424,8 +413,6 @@ pub fn categorizeAbleosRecord(stru: anytype, types: *Types) TmpSpec {
             continue;
         }
 
-        if (fspec == .BySse) return .ByRef;
-        if (res == .BySse) return .ByRef;
         if (fspec == .ByValuePair) return .ByRef;
         if (res == .ByValuePair) return .ByRef;
         std.debug.assert(res != .ByRef);

@@ -5,6 +5,9 @@ main:
 	mov byte ptr [rsp+0x82], 0x03
 	mov byte ptr [rsp+0x83], 0x04
 	lea rsi, [rsp+0x80]
+	xor rcx, rcx
+	mov eax, [rsp+0x80]
+	mov [rsp+0x80], eax
 	mov [rsp], rsi
 	mov qword ptr [rsp+0x08], 0x04
 	mov [rsp+0x10], rsi
@@ -13,7 +16,6 @@ main:
 	add rdx, 0x02
 	mov [rsp+0x20], rdx
 	mov qword ptr [rsp+0x28], 0x02
-	xor rcx, rcx
 	lea rax, [rsp+0x80]
 	inc rax
 	mov [rsp+0x30], rax
@@ -27,8 +29,8 @@ main:
 	mov [rsp+0x70], rax
 	mov qword ptr [rsp+0x78], 0x02
 	mov r10, 0x10
-	mov rax, rcx
 	mov rdi, rcx
+	mov rax, rcx
 2:	cmp rdi, 0x08
 	setz dl
 	movzx rdx, dl

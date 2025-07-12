@@ -3,16 +3,22 @@ generic structs 2.Foo(uint).Bar(u8).init:
 	mov byte ptr [rdi+0x08], 0x01
 	ret
 generic structs 2.Foo(uint).Bar(u8).sub:
+	sub rsp, 0x10
 	mov rax, rdi
-	movzx rcx, sil
+	mov rcx, rax
+	mov [rsp], rcx
+	mov [rsp+0x08], rsi
+	mov cl, [rsp+0x08]
+	movzx rcx, cl
 	sub rax, rcx
+	add rsp, 0x10
 	ret
 main:
 	sub rsp, 0x18
 	lea rdi, [rsp]
 	call :generic structs 2.Foo(uint).Bar(u8).init
 	mov rdi, [rsp]
-	mov sil, [rsp+0x08]
+	mov rsi, [rsp+0x08]
 	call :generic structs 2.Foo(uint).Bar(u8).sub
 	add rsp, 0x18
 	ret

@@ -3,11 +3,13 @@ main:
 	lea rax, [0x0000000000000007]
 	mov [rsp], rax
 	mov qword ptr [rsp+0x08], 0x0C
+	mov rdi, 0xFF
 	xor rax, rax
 3:	mov rsi, [rsp+0x08]
 	cmp rsi, rax
 	jnz :0
 	mov byte ptr [rsp+0x10], 0x00
+	mov cx, [rsp+0x10]
 	jmp :1
 0:	mov rcx, [rsp]
 	dec rsi
@@ -18,11 +20,8 @@ main:
 	mov byte ptr [rsp+0x12], 0x01
 	mov [rsp+0x13], dl
 	mov cx, [rsp+0x12]
-	mov [rsp+0x10], cx
-1:	mov dl, [rsp+0x10]
-	mov cl, [rsp+0x11]
-	mov [rsp+0x10], cl
-	test dl, dl
+1:	and ecx, edi
+	test cl, cl
 	jz :2
 	jmp :3
 2:	add rsp, 0x20

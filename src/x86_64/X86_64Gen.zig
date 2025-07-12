@@ -255,6 +255,13 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
         return func.addCast(node.sloc, .f64, int_const);
     }
 
+    if (node.kind == .UnOp and node.extra(.UnOp).op == .fneg) {
+        const src = node.inputs()[1].?;
+        const imm = func.addIntImm(node.sloc, .i64, 0);
+        const dst = func.addUnOp(node.sloc, .cast, node.data_type, imm);
+        return func.addBinOp(node.sloc, .fsub, node.data_type, dst, src);
+    }
+
     if (node.kind == .Load) {
         const base, const offset = node.base().knownOffset();
 
@@ -817,7 +824,14 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
 
     stack_size += @intCast(call_slot_size);
 
-    const padding = std.mem.alignForward(i64, stack_size, 16) - stack_size;
+    var pushed_regs: i64 = 0;
+    for (Reg.system_v.callee_saved) |r| {
+        if (used_regs.contains(r)) {
+            pushed_regs += 1;
+        }
+    }
+
+    const padding = std.mem.alignForward(i64, stack_size + pushed_regs * 8, 16) - stack_size - pushed_regs * 8;
 
     if (has_call and padding >= 8) {
         stack_size += padding - 8;
@@ -1315,11 +1329,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         .f64 => zydis.ZYDIS_MNEMONIC_CVTSD2SS,
                         else => unreachable,
                     }, .{ SReg{ dst, size }, SReg{ src, size } }),
-                    .fneg => self.emitInstr(switch (src_dt) {
-                        .f32 => zydis.ZYDIS_MNEMONIC_XORPS,
-                        .f64 => zydis.ZYDIS_MNEMONIC_XORPD,
-                        else => unreachable,
-                    }, .{ SReg{ dst, size }, SReg{ src, size } }),
+                    .fneg => unreachable,
                 }
             },
             else => {

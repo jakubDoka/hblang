@@ -1,5 +1,9 @@
 comptime 6 (strings).main.string_to_array("Edward"):
 	sub rsp, 0x10
+	mov rax, 0xAAAAAAAAAAAAAAAA
+	mov [rsp+0x08], eax
+	mov rax, 0xAAAAAAAA
+	mov [rsp+0x0C], ax
 	mov qword ptr [rsp], 0x00
 	mov rsi, [0x0000000000000007]
 1:	mov rdx, [rsp]
@@ -15,19 +19,22 @@ comptime 6 (strings).main.string_to_array("Edward"):
 	inc rax
 	mov [rsp], rax
 	jmp :1
-0:	mov eax, [rsp+0x08]
-	mov [rdi], eax
-	mov ax, [rsp+0x0C]
-	mov [rdi+0x04], ax
+0:	mov cx, [rsp+0x0C]
+	mov eax, [rsp+0x08]
+	movzx rcx, cx
+	mov eax, eax
+	shl rcx, 0x20
+	shl rax, 0x00
+	or rax, rcx
 	add rsp, 0x10
 	ret
 main:
 	sub rsp, 0x18
 	mov rax, 0x80000000
-	mov [rsp], eax
-	lea rdi, [rsp+0x04]
+	mov [rsp+0x08], eax
 	call :comptime 6 (strings).main.string_to_array("Edward")
-	mov al, [rsp+0x04]
+	mov [rsp], rax
+	mov al, [rsp]
 	movzx rax, al
 	add rsp, 0x18
 	ret
