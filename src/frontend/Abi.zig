@@ -202,11 +202,25 @@ pub fn categorizeSystemv(ty: Id, types: *Types) TmpSpec {
                     .u32, .i64, .u64, .int, .uint, .type => .int,
                     .f32, .f64 => .sse,
                 },
-                .Pointer, .Enum => .int,
+                .Enum => |e| b: {
+                    if (e.getFields(ts).len == 0) return error.Impossible;
+                    if (e.getFields(ts).len == 1) return;
+                    break :b .int;
+                },
+                .Pointer => .int,
                 .Union => |s| {
+                    if (s.getFields(ts).len == 0) return error.Impossible;
+
+                    var impossible = true;
+
                     for (s.getFields(ts)) |f| {
-                        try classify(f.ty, ts, offset, catas);
+                        classify(f.ty, ts, offset, catas) catch |err| switch (err) {
+                            error.ByRef => return err,
+                            error.Impossible => continue,
+                        };
+                        impossible = false;
                     }
+                    if (impossible) return error.Impossible;
                     return;
                 },
                 .Slice => |s| {

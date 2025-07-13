@@ -1,3 +1,6 @@
-main:
-	xor rax, rax
-	ret
+wired pointer edge cases:9:8: dereferencing uninhabited type (^wired pointer edge cases.main) is not allowed
+    vl := ptr.*
+          ^
+wired pointer edge cases:11:2: dereferencing uninhabited type (^wired pointer edge cases.main) is not allowed
+    ptr.* = idk
+    ^

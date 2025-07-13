@@ -1,19 +1,44 @@
+defer 1.main.ret_defer:
+	mov rax, [rdi]
+	inc rax
+	mov [rdi], rax
+	ret
 main:
-	xor rax, rax
-	mov rsi, rax
-2:	cmp rsi, 0x03
-	setz dl
-	movzx rdx, dl
-	mov rcx, rsi
-	inc rcx
-	test dl, dl
+	push rbx
+	sub rsp, 0x10
+	mov rdx, 0x01
+	mov rbx, 0x04
+6:	cmp rdx, 0x03
+	setz cl
+	movzx rcx, cl
+	mov rax, rdx
+	inc rax
+	test cl, cl
 	jz :0
 	jmp :2
-0:	cmp rsi, 0x04
-	setz dl
-	movzx rdx, dl
-	test dl, dl
+0:	cmp rdx, rbx
+	jnz :2
+	cmp rax, 0x05
+	setnz al
+	movzx rax, al
+	test al, al
 	jz :2
+	mov rax, 0x03
+	jmp :3
+2:	mov qword ptr [rsp], 0x00
+	lea rdi, [rsp]
+	call :defer 1.main.ret_defer
+	mov rax, [rsp]
+	cmp rax, 0x01
+	setnz al
+	movzx rax, al
+	test al, al
+	jz :4
+	mov rax, rbx
+3:	jmp :5
+4:	xor rax, rax
+5:	add rsp, 0x10
+	pop rbx
 	ret
-2:	mov rsi, rcx
-	jmp :2
+2:	mov rdx, rax
+	jmp :6
