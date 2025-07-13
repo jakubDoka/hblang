@@ -11,19 +11,19 @@ main:
          st $4, $254, 8, 4
          st $3, $254, 12, 4
          st $2, $254, 16, 4
-        jal $31, $0, :false positive in cycle detection.main.Wrap(.Wrapper)((.A)).test
+        jal $31, $0, :false positive in cycle detection.main.Wrap.test(.Wrapper, (.A))
          cp $1, $0
      addi64 $254, $254, 28
          ld $31, $254, -8, 8
          tx
-false positive in cycle detection.main.Wrap(.Wrapper)((.A)).test:
+false positive in cycle detection.main.Wrap.test(.Wrapper, (.A)):
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        jal $31, $0, :false positive in cycle detection.main.Wrap(.Wrapper)(.A).test
+        jal $31, $0, :false positive in cycle detection.main.Wrap.test(.Wrapper, .A)
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-false positive in cycle detection.main.Wrap(.Wrapper)(.A).test:
+false positive in cycle detection.main.Wrap.test(.Wrapper, .A):
          st $31, $254, -8, 8
      addi64 $254, $254, -8
         jal $31, $0, :false positive in cycle detection.main.A.test

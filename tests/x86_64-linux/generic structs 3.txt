@@ -1,11 +1,11 @@
-generic structs 3.Foo(uint).sub:
+generic structs 3.Foo.sub(uint):
 	mov rax, rdi
 	ret
 main:
 	sub rsp, 0x08
 	mov rdi, 0x0A
-	call :generic structs 3.Foo(uint).sub
+	call :generic structs 3.Foo.sub(uint)
 	mov rdi, rax
-	call :generic structs 3.Foo(uint).sub
+	call :generic structs 3.Foo.sub(uint)
 	add rsp, 0x08
 	ret

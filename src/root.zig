@@ -325,7 +325,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     }
 
     if (opts.vendored_test and !@import("options").dont_simulate) {
-        const expectations: test_utils.Expectations = .init(&asts[0], types.pool.arena.allocator());
+        const expectations: test_utils.Expectations = .init(&asts[0], &types.pool.arena);
 
         const out = bckend.finalizeBytes(.{
             .gpa = types.pool.arena.allocator(),

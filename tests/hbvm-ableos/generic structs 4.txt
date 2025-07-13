@@ -10,21 +10,21 @@ main:
          st $2, $254, 16, 8
          cp $2, $0
      addi64 $1, $254, 0
-        jal $31, $0, :generic structs 4.Array(uint, (uint, (uint, (uint)))).get
+        jal $31, $0, :generic structs 4.Array((())).get(uint)
          cp $32, $1
      addi64 $1, $254, 0
        li64 $2, 1
-        jal $31, $0, :generic structs 4.Array(uint, (uint, (uint, (uint)))).get
+        jal $31, $0, :generic structs 4.Array((())).get(uint)
          cp $33, $1
        li64 $2, 2
      addi64 $1, $254, 0
-        jal $31, $0, :generic structs 4.Array(uint, (uint, (uint, (uint)))).get
+        jal $31, $0, :generic structs 4.Array((())).get(uint)
       add64 $2, $32, $33
       add64 $1, $2, $1
      addi64 $254, $254, 48
          ld $31, $254, -24, 24
          tx
-generic structs 4.Array(uint, (uint, (uint, (uint)))).get:
+generic structs 4.Array((())).get(uint):
          st $31, $254, -8, 8
      addi64 $254, $254, -8
          cp $3, $1
@@ -38,11 +38,11 @@ generic structs 4.Array(uint, (uint, (uint, (uint)))).get:
          ld $2, $3, 16, 8
      addi64 $3, $1, -1
          cp $1, $4
-        jal $31, $0, :generic structs 4.Array(uint, (uint, (uint))).get
+        jal $31, $0, :generic structs 4.Array(()).get(uint)
 2:   addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-generic structs 4.Array(uint, (uint, (uint))).get:
+generic structs 4.Array(()).get(uint):
          st $31, $254, -8, 8
      addi64 $254, $254, -8
          cp $4, $2
@@ -50,19 +50,19 @@ generic structs 4.Array(uint, (uint, (uint))).get:
         jmp :5
 4:   addi64 $2, $3, -1
          cp $1, $4
-        jal $31, $0, :generic structs 4.Array(uint, (uint)).get
+        jal $31, $0, :generic structs 4.Array().get(uint)
 5:   addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-generic structs 4.Array(uint, (uint)).get:
+generic structs 4.Array().get(uint):
          st $31, $254, -8, 8
      addi64 $254, $254, -8
         jne $2, $0, :7
         jmp :8
 7:   addi64 $1, $2, -1
-        jal $31, $0, :generic structs 4.Array(uint).get
+        jal $31, $0, :generic structs 4.Array.get(uint)
 8:   addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
-generic structs 4.Array(uint).get:
+generic structs 4.Array.get(uint):
          un

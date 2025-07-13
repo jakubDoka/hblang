@@ -1,22 +1,22 @@
-comptime 2.main.some_fn3(uint)(.some_fn(uint)):
+comptime 2.main.some_fn3(uint, .some_fn):
 	sub rsp, 0x08
 	call :comptime 2.main.some_fn(uint)
 	add rax, 0x0A
 	add rsp, 0x08
 	ret
-comptime 2.main.some_fn3(uint)((.some_fn2(uint, .some_fn(uint)))):
+comptime 2.main.some_fn3(uint, (.some_fn2(.some_fn))):
 	sub rsp, 0x08
-	call :comptime 2.main.some_fn3(uint)(.some_fn2(uint, .some_fn(uint)))
+	call :comptime 2.main.some_fn3(uint, .some_fn2(.some_fn))
 	add rax, 0x0A
 	add rsp, 0x08
 	ret
-comptime 2.main.some_fn3(uint)(.some_fn2(uint, .some_fn(uint))):
+comptime 2.main.some_fn3(uint, .some_fn2(.some_fn)):
 	sub rsp, 0x08
-	call :comptime 2.main.some_fn2(uint, .some_fn(uint))
+	call :comptime 2.main.some_fn2(uint, .some_fn)
 	add rax, 0x0A
 	add rsp, 0x08
 	ret
-comptime 2.main.some_fn2(uint, .some_fn(uint)):
+comptime 2.main.some_fn2(uint, .some_fn):
 	sub rsp, 0x08
 	call :comptime 2.main.some_fn(uint)
 	inc rax
@@ -35,9 +35,9 @@ main:
 	mov rax, 0x90000003
 	mov [rsp+0x08], eax
 	mov [rsp+0x0C], ecx
-	call :comptime 2.main.some_fn3(uint)(.some_fn(uint))
+	call :comptime 2.main.some_fn3(uint, .some_fn)
 	mov rbx, rax
-	call :comptime 2.main.some_fn3(uint)((.some_fn2(uint, .some_fn(uint))))
+	call :comptime 2.main.some_fn3(uint, (.some_fn2(.some_fn)))
 	add rbx, rax
 	mov rax, rbx
 	add rsp, 0x10

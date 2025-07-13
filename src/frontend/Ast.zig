@@ -326,7 +326,7 @@ pub const Index = struct {
         value: Ast.Id,
         pos_stack: *std.ArrayListUnmanaged(Pos),
         into: *std.ArrayListUnmanaged(Entry),
-        arena: std.mem.Allocator,
+        arena: *utils.Arena,
         scratch: *utils.Arena,
     ) void {
         errdefer unreachable;
@@ -337,7 +337,7 @@ pub const Index = struct {
                     .id = ast.exprs.get(bindings).Ident.id,
                     .meta = .{
                         .name = name,
-                        .path = try arena.dupe(Pos, pos_stack.items),
+                        .path = arena.dupe(Pos, pos_stack.items),
                         .decl = value,
                     },
                 });
@@ -356,10 +356,10 @@ pub const Index = struct {
         }
     }
 
-    pub fn build(ast: *const Ast, slice: Slice, arena: std.mem.Allocator) Index {
+    pub fn build(ast: *const Ast, slice: Slice, arena: *utils.Arena) Index {
         errdefer unreachable;
 
-        var tmp = utils.Arena.scrathFromAlloc(arena);
+        var tmp = utils.Arena.scrath(arena);
         defer tmp.deinit();
 
         var fseq = std.ArrayListUnmanaged(Pos).initBuffer(tmp.arena.alloc(Pos, 128));
@@ -376,9 +376,9 @@ pub const Index = struct {
         }.lt);
 
         var linear = std.MultiArrayList(Entry){};
-        try linear.setCapacity(arena, entries.items.len);
+        try linear.setCapacity(arena.allocator(), entries.items.len);
         var map = HashMap{};
-        try map.ensureTotalCapacityContext(arena, @intCast(entries.items.len), undefined);
+        try map.ensureTotalCapacityContext(arena.allocator(), @intCast(entries.items.len), undefined);
         for (entries.items, 0..) |it, i| {
             linear.appendAssumeCapacity(it);
 
@@ -480,11 +480,6 @@ fn posOfPayload(self: *const Ast, v: anytype) Pos {
         else
             self.posOf(@field(v, std.meta.fields(Vt)[0].name)),
     };
-}
-
-pub fn deinit(self: *Ast, gpa: std.mem.Allocator) void {
-    self.exprs.deinit(gpa);
-    self.* = undefined;
 }
 
 pub fn fmtExpr(self: *const Ast, buf: *std.ArrayList(u8), expr: Ast.Id) !void {

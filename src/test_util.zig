@@ -17,7 +17,7 @@ pub const Expectations = struct {
     times_out: bool = false,
     unreaches: bool = false,
 
-    pub fn init(ast: *const Ast, gpa: std.mem.Allocator) Expectations {
+    pub fn init(ast: *const Ast, gpa: *utils.Arena) Expectations {
         errdefer unreachable;
 
         var slf: Expectations = .{};
@@ -190,7 +190,7 @@ pub fn testBuilder(
         .{ .verbose = verbose, .colors = colors, .output = output },
     );
 
-    const expectations: Expectations = .init(&ast, func_arena.arena.allocator());
+    const expectations: Expectations = .init(&ast, func_arena.arena);
 
     if (std.mem.endsWith(u8, target, "no-opts") and expectations.should_error) {
         return;

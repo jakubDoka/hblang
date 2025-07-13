@@ -3,13 +3,13 @@ main:
      addi64 $254, $254, -8
         lra $1, $0, :enums 4.map
          cp $2, $0
-        jal $31, $0, :enums 4.NameMap(.Nm)([6]u8, [4]uint).get
+        jal $31, $0, :enums 4.NameMap([6]u8, [4]uint).get(.Nm)
          ld $1, $1, 0, 1
        andi $1, $1, 255
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
-enums 4.NameMap(.Nm)([6]u8, [4]uint).get:
+enums 4.NameMap([6]u8, [4]uint).get(.Nm):
      addi64 $4, $1, 8
        andi $2, $2, 255
      muli64 $3, $2, 8

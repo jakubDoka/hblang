@@ -260,7 +260,7 @@ pub fn emitReachable(
 
         const err = codegen.build(func);
 
-        errored = types.retainGlobals(.runtime, backend, scrath.allocator()) or
+        errored = types.retainGlobals(.runtime, backend, scrath) or
             errored;
 
         err catch |e| switch (e) {
@@ -290,8 +290,8 @@ pub fn emitReachable(
             .name = if (func_data.visibility != .local)
                 func_data.key.name
             else
-                try root.frontend.Types.Id.init(.{ .Func = func })
-                    .fmt(types).toString(scrath.allocator()),
+                root.frontend.Types.Id.init(.{ .Func = func })
+                    .fmt(types).toString(scrath),
             .is_inline = func_data.is_inline or func_data.key.name.len == 0,
             .linkage = func_data.visibility,
             .special = func_data.special,
