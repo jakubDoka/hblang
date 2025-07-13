@@ -2657,7 +2657,7 @@ pub fn emitGenericStore(self: *Codegen, sloc: graph.Sloc, loc: *Node, value: *Va
                 self.bl.addFieldStore(sloc, loc, @intCast(offset), storer, shifted);
                 offset += storer.size();
             }
-        } else {
+        } else if (value.id == .Value or value.id.Pointer != loc) {
             _ = self.bl.addStore(sloc, loc, cata.ByValue, value.getValue(sloc, self));
         }
     } else if (value.id.Pointer != loc) {

@@ -4,10 +4,6 @@ main:
 	mov byte ptr [rsp+0x04], 0x01
 	mov byte ptr [rsp+0x05], 0x01
 	mov ax, [rsp+0x04]
-	mov [rsp+0x04], ax
-	mov ax, [rsp+0x04]
-	mov [rsp+0x04], ax
-	mov ax, [rsp+0x04]
 	movzx rax, ax
 	sub rax, 0x100
 	add rsp, 0x10

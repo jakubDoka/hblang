@@ -4,13 +4,11 @@ main:
 	mov byte ptr [rsp+0xC1], 0x00
 	mov byte ptr [rsp+0xC2], 0x00
 	mov byte ptr [rsp+0xC3], 0x00
-	mov rdi, 0x04
-	mov eax, [rsp+0xC0]
-	mov [rsp+0xC0], eax
 	mov byte ptr [rsp+0xC4], 0x01
 	mov byte ptr [rsp+0xC5], 0x01
 	mov byte ptr [rsp+0xC6], 0x01
 	mov byte ptr [rsp+0xC7], 0x01
+	mov rdi, 0x04
 	mov al, [rsp+0xC0]
 	mov cl, [rsp+0xC4]
 	add eax, ecx
@@ -27,8 +25,6 @@ main:
 	mov cl, [rsp+0xC7]
 	add eax, ecx
 	mov [rsp+0xC3], al
-	mov eax, [rsp+0xC0]
-	mov [rsp+0xC0], eax
 	mov al, [rsp+0xC2]
 	mov sil, [rsp+0xC1]
 	mov dl, [rsp+0xC0]

@@ -9,8 +9,6 @@ directives 20 (@handler, @SourceLoc).main:
 	mov byte ptr [rsp+0x61], 0x02
 	mov byte ptr [rsp+0x62], 0x03
 	mov byte ptr [rsp+0x63], 0x04
-	mov eax, [rsp+0x60]
-	mov [rsp+0x60], eax
 	mov edi, [rsp+0x60]
 	call :directives 20 (@handler, @SourceLoc).produce_memcpy
 	xor dl, dl

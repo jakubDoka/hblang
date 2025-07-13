@@ -18,8 +18,6 @@ main:
 	jb :0
 	mov rax, [0x0000000000000007]
 	mov [rsp+0x410], al
-	mov al, [rsp+0x410]
-	mov [rsp+0x410], al
 	mov rcx, [rsp+0x408]
 	cmp rcx, rbx
 	jnz :2

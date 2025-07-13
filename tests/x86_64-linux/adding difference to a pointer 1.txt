@@ -7,8 +7,6 @@ main:
 	mov byte ptr [rsp+0x01], 0x01
 	mov byte ptr [rsp+0x02], 0x02
 	mov byte ptr [rsp+0x03], 0x03
-	mov eax, [rsp]
-	mov [rsp], eax
 	call :adding difference to a pointer 1.one
 	lea rcx, [rsp]
 	mov rdx, 0x01

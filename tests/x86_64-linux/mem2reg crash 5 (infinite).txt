@@ -1,14 +1,2 @@
 main:
-	sub rsp, 0x10
-	xor cl, cl
-1:	mov byte ptr [rsp], 0x00
-	mov ax, [rsp]
-	mov [rsp], ax
-2:	mov al, [rsp]
-	cmp al, cl
-	jnz :0
-	jmp :1
-0:	mov byte ptr [rsp], 0x00
-	mov ax, [rsp]
-	mov [rsp], ax
-	jmp :2
+0:	jmp :0

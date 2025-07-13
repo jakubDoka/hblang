@@ -51,7 +51,6 @@ _start:
 	mov byte ptr [rsp+0x02], 0x03
 	mov byte ptr [rsp+0x03], 0x04
 	mov edi, [rsp]
-	mov [rsp], edi
 	call :directives 20 (@handler, @SourceLoc).produce_memcpy
 	lea rdi, [rsp+0x04]
 	xor rsi, rsi

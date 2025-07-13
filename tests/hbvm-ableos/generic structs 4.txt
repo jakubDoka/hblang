@@ -7,7 +7,6 @@ main:
        li64 $1, 2
          st $1, $254, 8, 8
          st $2, $254, 16, 8
-         st $2, $254, 16, 8
          cp $2, $0
      addi64 $1, $254, 0
         jal $31, $0, :generic structs 4.Array((())).get(uint)

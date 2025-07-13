@@ -59,8 +59,6 @@ main:
 	mov qword ptr [rsp+0x20], 0x02
 	mov qword ptr [rsp+0x28], 0x03
 	lea rdi, [rsp]
-	mov rax, [rsp+0x28]
-	mov [rsp+0x28], rax
 	mov rdx, 0x18
 	lea rsi, [rsp+0x18]
 	call :memcpy
