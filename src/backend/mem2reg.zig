@@ -132,20 +132,22 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
             var alloc_offsets = Arry(i64){};
 
             //self.fmtUnscheduled(std.io.getStdErr().writer().any(), .escape_codes);
-            std.debug.assert(self.root.outputs()[1].kind == .Mem);
-            outer: for (self.root.outputs()[1].outputs()) |ov| {
+            std.debug.assert(self.root.outputs()[1].get().kind == .Mem);
+            outer: for (self.root.outputs()[1].get().outputs()) |n| {
+                const ov = n.get();
                 if (ov.kind != .LocalAlloc or ov.outputs().len != 1) continue :outer;
-                const o = ov.outputs()[0];
+                const o = ov.outputs()[0].get();
                 std.debug.assert(o.schedule == std.math.maxInt(u16));
 
                 // collect all loads and stores, bail on something else
                 //
                 store_load_nodes.items.len = 0;
-                for (o.outputs()) |use| {
+                for (o.outputs()) |us| {
+                    const use = us.get();
                     if (use.kind == .BinOp and use.inputs()[2].?.kind == .CInt) {
                         for (use.outputs()) |use_use| {
-                            if (isGoodMemOp(use_use, o)) {
-                                try store_load_nodes.append(tmp.arena.allocator(), use_use);
+                            if (isGoodMemOp(use_use.get(), o)) {
+                                try store_load_nodes.append(tmp.arena.allocator(), use_use.get());
                             } else {
                                 continue :outer;
                             }
@@ -221,7 +223,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                     continue;
                 };
                 std.debug.assert(parent.isCfg());
-                for (parent.outputs()) |o| parent_succs += @intFromBool(o.isCfg());
+                for (parent.outputs()) |o| parent_succs += @intFromBool(o.get().isCfg());
                 if (!(parent_succs >= 1 and parent_succs <= 2)) utils.panic("{}\n", .{bb});
                 // handle fork
                 if (parent_succs == 2) {
@@ -246,13 +248,13 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                     var len: usize = 0;
                     //std.debug.print("bb {}\n", .{bb});
                     for (bb.outputs()) |use| {
-                        if (use.isCfg()) {
+                        if (use.get().isCfg()) {
                             //std.debug.print("use {}\n", .{use});
                             //if (use.kind == .If) {
                             //    std.debug.print("use if {?}\n", .{use.inputs()[1]});
                             //}
-                            buf[len] = use;
-                            scheds[len] = use.schedule;
+                            buf[len] = use.get();
+                            scheds[len] = use.get().schedule;
                             len += 1;
                         }
                     }
@@ -269,7 +271,8 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                     for (buf[0..len], scheds[0..len]) |n, s| n.schedule = s;
                 }
 
-                for (tmp.arena.dupe(*Node, bb.outputs())) |o| {
+                for (tmp.arena.dupe(Node.Out, bb.outputs())) |n| {
+                    const o = n.get();
                     if (o.id == std.math.maxInt(u16)) continue;
                     std.debug.assert(bb.kind != .Local);
 
@@ -290,7 +293,8 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                     }
 
                     if (o.kind == .Phi or o.kind == .Mem or o.isStore()) {
-                        for (tmp.arena.dupe(*Node, o.outputs())) |lo| {
+                        for (tmp.arena.dupe(Node.Out, o.outputs())) |no| {
+                            const lo = no.get();
                             if (lo.isLoad()) {
                                 const base, const off = lo.base().knownOffset();
                                 if (base.kind == .Local and base.schedule != std.math.maxInt(u16)) {
@@ -309,7 +313,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                 }
 
                 const child: *Node = for (bb.outputs()) |o| {
-                    if (o.isCfg()) break o;
+                    if (o.get().isCfg()) break o.get();
                 } else continue;
                 var child_preds: usize = 0;
                 for (child.inputs()) |b| child_preds += @intFromBool(b != null and b.?.isCfg());
@@ -342,6 +346,10 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
 
                                 if (child.inputs()[0] == bb) {
                                     self.uninternNode(lhs.Node);
+                                    for (lhs.Node.inputs()[1..3], 1..) |inp, j| {
+                                        const idx = inp.?.posOfOutput(j, lhs.Node);
+                                        inp.?.outputs()[idx] = .init(lhs.Node, 3 - j, null);
+                                    }
                                     std.mem.reverse(?*Node, lhs.Node.inputs()[1..3]);
                                     if (self.reinternNode(lhs.Node)) |v| lhs = .{ .Node = v };
                                 }
@@ -368,9 +376,9 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                 self.subsume(tr.mem(), tr);
             }
 
-            for (self.root.outputs()[1].outputs()) |o| {
-                if (o.kind == .Local) {
-                    o.schedule = std.math.maxInt(u16);
+            for (self.root.outputs()[1].get().outputs()) |o| {
+                if (o.get().kind == .Local) {
+                    o.get().schedule = std.math.maxInt(u16);
                 }
             }
 

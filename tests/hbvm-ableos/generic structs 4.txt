@@ -3,11 +3,11 @@ main:
      addi64 $254, $254, -48
        li64 $1, 1
          st $1, $254, 0, 8
+       li64 $2, 3
        li64 $1, 2
          st $1, $254, 8, 8
-       li64 $1, 3
-         st $1, $254, 16, 8
-         st $1, $254, 16, 8
+         st $2, $254, 16, 8
+         st $2, $254, 16, 8
          cp $2, $0
      addi64 $1, $254, 0
         jal $31, $0, :generic structs 4.Array(uint, (uint, (uint, (uint)))).get

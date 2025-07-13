@@ -1,8 +1,8 @@
 pointers 2.swap:
-	mov rcx, [rsi]
-	mov rax, [rdi]
-	mov [rsi], rax
-	mov [rdi], rcx
+	mov rcx, [rdi]
+	mov rax, [rsi]
+	mov [rsi], rcx
+	mov [rdi], rax
 	ret
 main:
 	sub rsp, 0x18

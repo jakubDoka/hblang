@@ -10,11 +10,11 @@ main:
 	test al, al
 	jz :0
 	mov qword ptr [rsp+0x10], 0x00
-2:	mov rdx, [rsp+0x10]
+2:	mov rax, [rsp+0x08]
+	mov rdx, [rsp+0x10]
 	cmp rdx, 0x0A
 	setb cl
 	movzx rcx, cl
-	mov rax, [rsp+0x08]
 	test cl, cl
 	jz :1
 	add rax, rdx

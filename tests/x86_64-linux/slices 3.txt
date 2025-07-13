@@ -40,6 +40,9 @@ main:
 	sub rsp, 0x28
 	mov byte ptr [rsp+0x20], 0x01
 	mov byte ptr [rsp+0x21], 0x02
+	mov rsi, 0x01
+	xor rdx, rdx
+	lea rdi, [rsp]
 	mov ax, [rsp+0x20]
 	mov byte ptr [rsp+0x22], 0x03
 	movzx eax, ax
@@ -47,9 +50,6 @@ main:
 	mov [rsp+0x20], ax
 	shr eax, 0x10
 	mov [rsp+0x22], al
-	xor rdx, rdx
-	lea rdi, [rsp]
-	mov rsi, 0x01
 	call :slices 3.reverse
 	lea rsi, [rsp+0x20]
 	lea rdi, [rsp+0x10]

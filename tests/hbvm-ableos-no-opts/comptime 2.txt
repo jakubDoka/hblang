@@ -3,12 +3,12 @@ main:
      addi64 $254, $254, -32
        li32 $1, 7
          st $1, $254, 0, 4
+       li32 $3, -1879048189
+       li32 $2, -2147483648
        li32 $1, -1879048190
          st $1, $254, 4, 4
-       li32 $1, -1879048189
-         st $1, $254, 8, 4
-       li32 $1, -2147483648
-         st $1, $254, 12, 4
+         st $3, $254, 8, 4
+         st $2, $254, 12, 4
         jal $31, $0, :comptime 2.main.some_fn3(uint)(.some_fn(uint))
          cp $32, $1
         jal $31, $0, :comptime 2.main.some_fn3(uint)((.some_fn2(uint, .some_fn(uint))))

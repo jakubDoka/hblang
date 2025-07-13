@@ -864,8 +864,37 @@ pub fn Func(comptime Backend: type) type {
             output_cap: u16 = 0,
 
             input_base: [*]?*Node,
-            output_base: [*]*Node,
+            output_base: [*]Out,
             sloc: Sloc = .none,
+
+            pub const OutInner = if (@sizeOf(*Node) == 8) packed struct(u64) {
+                node: u48,
+                pos: u16,
+            } else packed struct(u64) {
+                node: u32,
+                pos: u32,
+            };
+
+            pub const Out = packed struct(u64) {
+                inner: OutInner,
+
+                pub fn init(node: *Node, ps: usize, from: ?*Node) Out {
+                    if (from) |f| std.debug.assert(node.inputs()[ps] == f);
+                    return .{ .inner = .{ .node = @intCast(@intFromPtr(node)), .pos = @intCast(ps) } };
+                }
+
+                pub fn get(self: Out) *Node {
+                    return @as(*Node, @ptrFromInt(self.inner.node));
+                }
+
+                pub fn pos(self: Out) usize {
+                    return @intCast(self.inner.pos);
+                }
+
+                pub fn format(self: *const Out, comptime _: anytype, _: anytype, writer: anytype) !void {
+                    try writer.print("{}:{any}", .{ self.pos(), self.get() });
+                }
+            };
 
             pub fn preservesIdentityPhys(self: *Node) bool {
                 std.debug.assert(self.kind == .Region or self.kind == .Loop);
@@ -943,10 +972,10 @@ pub fn Func(comptime Backend: type) type {
                     return self;
                 }
                 if (self.kind == .BinOp and self.outputs().len == 1 and
-                    self.outputs()[0].isStore() and !self.outputs()[0].isSub(MemCpy) and
-                    self.outputs()[0].base() == self)
+                    self.outputs()[0].get().isStore() and !self.outputs()[0].get().isSub(MemCpy) and
+                    self.outputs()[0].get().base() == self)
                 {
-                    return self.outputs()[0];
+                    return self.outputs()[0].get();
                 }
                 return null;
             }
@@ -955,10 +984,10 @@ pub fn Func(comptime Backend: type) type {
                 if (self.isMemOp()) return .{ self, self.getStaticOffset() };
                 if (self.kind == .BinOp and self.inputs()[2].?.kind == .CInt and
                     (self.outputs().len) == 1 and
-                    (self.outputs()[0].isStore() or self.outputs()[0].isLoad()) and
-                    (self.outputs()[0].base()) == (self))
+                    (self.outputs()[0].get().isStore() or self.outputs()[0].get().isLoad()) and
+                    (self.outputs()[0].get().base()) == (self))
                 {
-                    return .{ self.outputs()[0], self.inputs()[2].?.extra(.CInt).value };
+                    return .{ self.outputs()[0].get(), self.inputs()[2].?.extra(.CInt).value };
                 }
                 return null;
             }
@@ -1135,7 +1164,7 @@ pub fn Func(comptime Backend: type) type {
                     writer.writeAll(" [") catch unreachable;
                     for (self.output_base[0..self.output_len]) |o| {
                         writer.writeAll(", ") catch unreachable;
-                        logNid(writer, o.id, colors);
+                        logNid(writer, o.get().id, colors);
                     }
                     writer.writeAll("]") catch unreachable;
                 }
@@ -1194,8 +1223,8 @@ pub fn Func(comptime Backend: type) type {
             pub fn kill(self: *Node) void {
                 if (self.output_len != 0) utils.panic("{any} {}\n", .{ self.outputs(), self });
                 std.debug.assert(self.output_len == 0);
-                for (self.inputs()) |oi| if (oi) |i| {
-                    i.removeUse(self);
+                for (self.inputs(), 0..) |oi, j| if (oi) |i| {
+                    i.removeUse(j, self);
                 };
 
                 self.* = undefined;
@@ -1212,28 +1241,24 @@ pub fn Func(comptime Backend: type) type {
                 return forceSubclass((self.inputs()[0].?), Cfg);
             }
 
-            pub fn hasUseFor(self: *Node, def: *Node) bool {
+            pub fn hasUseFor(self: *Node, idx: usize, def: *Node) bool {
                 if (self.kind == .Call and def.kind == .StackArgOffset) return false;
-                return std.mem.indexOfScalar(*Node, self.dataDeps(), def) != null;
+                return self.dataDepOffset() <= idx and idx < self.input_ordered_len;
             }
 
-            pub fn removeUse(self: *Node, use: *Node) void {
+            pub fn removeUse(self: *Node, idx: usize, use: *Node) void {
                 const outs = self.outputs();
-                const index = std.mem.indexOfScalar(*Node, outs, use).?;
-                std.mem.swap(*Node, &outs[index], &outs[outs.len - 1]);
+                const index = std.mem.indexOfScalar(Out, outs, .init(use, idx, self)).?;
+                std.mem.swap(Out, &outs[index], &outs[outs.len - 1]);
                 self.output_len -= 1;
             }
 
-            pub fn outputs(self: *Node) []*Node {
+            pub fn outputs(self: *Node) []Out {
                 return self.output_base[0..self.output_len];
             }
 
-            pub fn posOfInput(self: *Node, from: usize, input: *Node) usize {
-                return std.mem.indexOfScalarPos(?*Node, self.inputs(), from, input).?;
-            }
-
-            pub fn posOfOutput(self: *Node, output: *Node) usize {
-                return std.mem.indexOfScalar(*Node, self.outputs(), output).?;
+            pub fn posOfOutput(self: *Node, index: usize, output: *Node) usize {
+                return std.mem.indexOfScalar(Out, self.outputs(), .init(output, index, self)).?;
             }
 
             pub fn extraConst(self: *const Node, comptime kind: Kind) *const ClassFor(kind) {
@@ -1487,12 +1512,12 @@ pub fn Func(comptime Backend: type) type {
             const ins = if (def.isClone()) b: {
                 if (def.outputs().len == 1) {
                     const cur_block = def.cfg0();
-                    const i = cur_block.base.posOfOutput(def);
+                    const i = cur_block.base.posOfOutput(0, def);
 
-                    std.mem.rotate(*Node, cur_block.base.outputs()[i..], 1);
+                    std.mem.rotate(Node.Out, cur_block.base.outputs()[i..], 1);
                     cur_block.base.output_len -= 1;
                     def.inputs()[0] = &block.base;
-                    self.addUse(&block.base, def);
+                    self.addUse(&block.base, 0, def);
                     break :b def;
                 } else {
                     break :b self.clone(def, block);
@@ -1504,9 +1529,9 @@ pub fn Func(comptime Backend: type) type {
             } else def, dbg);
 
             self.setInputNoIntern(use, idx, ins);
-            const oidx = if (use.kind == .Phi) block.base.outputs().len - 2 else block.base.posOfOutput(use);
+            const oidx = if (use.kind == .Phi) block.base.outputs().len - 2 else block.base.posOfOutput(0, use);
             const to_rotate = block.base.outputs()[oidx..];
-            std.mem.rotate(*Node, to_rotate, to_rotate.len - 1);
+            std.mem.rotate(Node.Out, to_rotate, to_rotate.len - 1);
         }
 
         pub fn clone(self: *Self, def: *Node, block: *CfgNode) *Node {
@@ -1527,7 +1552,7 @@ pub fn Func(comptime Backend: type) type {
             self.next_id += 1;
 
             new_node.inputs()[0] = &block.base;
-            self.addUse(&block.base, new_node);
+            self.addUse(&block.base, 0, new_node);
 
             return new_node;
         }
@@ -1587,8 +1612,8 @@ pub fn Func(comptime Backend: type) type {
 
         pub fn connect(self: *Self, def: *Node, to: *Node) void {
             std.debug.assert(!Node.isInterned(to.kind, to.inputs()));
-            self.addUse(def, to);
-            self.addDep(to, def);
+            const idx = self.addDep(to, def);
+            self.addUse(def, idx, to);
         }
 
         pub fn loopDepth(self: *Self, node: *Node) u16 {
@@ -1667,8 +1692,8 @@ pub fn Func(comptime Backend: type) type {
             const region = self.end.inputs()[2].?;
             const trap = self.addNode(.Trap, sloc, .top, &.{ctrl}, .{ .code = code });
 
-            self.addDep(region, trap);
-            self.addUse(trap, region);
+            const idx = self.addDep(region, trap);
+            self.addUse(trap, idx, region);
         }
 
         pub fn addNode(self: *Self, comptime kind: Kind, sloc: Sloc, ty: DataType, inputs: []const ?*Node, extra: ClassFor(kind)) *Node {
@@ -1721,8 +1746,8 @@ pub fn Func(comptime Backend: type) type {
                 .extra = extra,
             };
 
-            for (owned_inputs) |on| if (on) |def| {
-                self.addUse(def, &node.base);
+            for (owned_inputs, 0..) |on, i| if (on) |def| {
+                self.addUse(def, i, &node.base);
             };
 
             self.next_id += 1;
@@ -1740,17 +1765,14 @@ pub fn Func(comptime Backend: type) type {
             }
             errdefer unreachable;
 
-            for (try self.arena.allocator().dupe(*Node, target.outputs())) |use| {
-                if (use.id == std.math.maxInt(u16)) continue;
-                const index = std.mem.indexOfScalar(?*Node, use.inputs(), target) orelse {
-                    utils.panic("{} {any} {}", .{ this, target.outputs(), use });
-                };
+            for (try self.arena.allocator().dupe(Node.Out, target.outputs())) |use| {
+                if (use.get().id == std.math.maxInt(u16)) continue;
 
-                if (use == target) {
-                    target.inputs()[index] = null;
-                    target.removeUse(target);
+                if (use.get() == target) {
+                    target.removeUse(use.pos(), target);
+                    target.inputs()[use.pos()] = null;
                 } else {
-                    _ = self.setInput(use, index, this);
+                    _ = self.setInput(use.get(), use.pos(), this);
                 }
             }
         }
@@ -1764,7 +1786,6 @@ pub fn Func(comptime Backend: type) type {
 
         pub fn setInputNoIntern(self: *Self, use: *Node, idx: usize, def: ?*Node) void {
             if (self.setInput(use, idx, def)) |new| {
-                if (new.isLoad()) std.debug.print("{any}\n", .{new.inputs()});
                 utils.panic("setInputNoIntern: {}", .{new});
             }
         }
@@ -1772,13 +1793,13 @@ pub fn Func(comptime Backend: type) type {
         pub fn setInput(self: *Self, use: *Node, idx: usize, def: ?*Node) ?*Node {
             if (use.inputs()[idx] == def) return null;
             if (use.inputs()[idx]) |n| {
-                n.removeUse(use);
+                n.removeUse(idx, use);
             }
 
             self.uninternNode(use);
             use.inputs()[idx] = def;
             if (def) |d| {
-                self.addUse(d, use);
+                _ = self.addUse(d, idx, use);
             }
             if (self.reinternNode(use)) |nuse| {
                 self.subsumeNoKill(nuse, use);
@@ -1788,7 +1809,7 @@ pub fn Func(comptime Backend: type) type {
             return null;
         }
 
-        pub fn addDep(self: *Self, use: *Node, def: *Node) void {
+        pub fn addDep(self: *Self, use: *Node, def: *Node) usize {
             if (use.input_ordered_len == use.input_len or
                 std.mem.indexOfScalar(
                     ?*Node,
@@ -1803,15 +1824,15 @@ pub fn Func(comptime Backend: type) type {
                 use.input_len = new_cap;
             }
 
-            for (use.input_base[use.input_ordered_len..use.input_len]) |*slot| {
+            for (use.input_base[use.input_ordered_len..use.input_len], use.input_ordered_len..) |*slot, i| {
                 if (slot.* == null) {
                     slot.* = def;
-                    break;
+                    return i;
                 }
             } else unreachable;
         }
 
-        pub fn addUse(self: *Self, def: *Node, use: *Node) void {
+        pub fn addUse(self: *Self, def: *Node, index: usize, use: *Node) void {
             if (def.output_len == def.output_cap) {
                 const new_cap = @max(def.output_cap, 1) * 2;
                 const new_outputs = self.arena.allocator().realloc(def.outputs(), new_cap) catch unreachable;
@@ -1819,17 +1840,16 @@ pub fn Func(comptime Backend: type) type {
                 def.output_cap = new_cap;
             }
 
-            def.output_base[def.output_len] = use;
+            def.output_base[def.output_len] = .init(use, index, def);
             def.output_len += 1;
         }
 
-        pub const Frame = struct { *Node, []const ?*Node };
+        pub const Frame = struct { *Node, []const Node.Out };
 
         pub fn traversePostorder(ctx: anytype, inp: *Node, stack: *std.ArrayList(Frame), visited: *std.DynamicBitSet) void {
             const Ctx = if (@typeInfo(@TypeOf(ctx)) == .pointer) @TypeOf(ctx.*) else @TypeOf(ctx);
-            const dir = Ctx.dir;
 
-            stack.append(.{ inp, @field(Node, dir)(inp) }) catch unreachable;
+            stack.append(.{ inp, inp.outputs() }) catch unreachable;
             visited.set(inp.id);
             while (stack.items.len > 0) {
                 const frame = &stack.items[stack.items.len - 1];
@@ -1840,10 +1860,11 @@ pub fn Func(comptime Backend: type) type {
                 }
                 const node = frame[1][0];
                 frame[1] = frame[1][1..];
-                if (node) |n| if ((!@hasDecl(Ctx, "filter") or ctx.filter(n)) and !visited.isSet(n.id)) {
+                const n = node.get();
+                if ((!@hasDecl(Ctx, "filter") or ctx.filter(n)) and !visited.isSet(n.id)) {
                     visited.set(n.id);
-                    stack.append(.{ n, @field(Node, dir)(n) }) catch unreachable;
-                };
+                    stack.append(.{ n, n.outputs() }) catch unreachable;
+                }
             }
         }
 
@@ -1867,7 +1888,7 @@ pub fn Func(comptime Backend: type) type {
                 };
 
                 for (worklist.list.items[i].outputs()) |o| {
-                    worklist.add(o);
+                    worklist.add(o.get());
                 }
             }
 
@@ -1883,7 +1904,7 @@ pub fn Func(comptime Backend: type) type {
 
                 if (strategy(ctx, self, t, &worklist)) |nt| {
                     for (t.inputs()) |ii| if (ii) |ia| worklist.add(ia);
-                    for (t.outputs()) |o| worklist.add(o);
+                    for (t.outputs()) |o| worklist.add(o.get());
                     self.subsume(nt, t);
                     continue;
                 }
@@ -1913,7 +1934,7 @@ pub fn Func(comptime Backend: type) type {
             }
             visited.set(node.id);
             pos.append(node.asCfg().?) catch unreachable;
-            for (node.outputs()) |o| if (o.isCfg()) collectPostorder3(self, o, arena, pos, visited, only_basic);
+            for (node.outputs()) |o| if (o.get().isCfg()) collectPostorder3(self, o.get(), arena, pos, visited, only_basic);
         }
 
         pub fn idealizeDead(_: anytype, self: *Self, node: *Node, worklist: *WorkList) ?*Node {
@@ -1938,9 +1959,9 @@ pub fn Func(comptime Backend: type) type {
 
             if (node.kind == .TrapRegion) {
                 is_dead = true;
-                for (node.inputs()) |*inp| {
+                for (node.inputs(), 0..) |*inp, i| {
                     if (inp.* != null and isDead(inp.*)) {
-                        inp.*.?.removeUse(node);
+                        inp.*.?.removeUse(i, node);
                         worklist.add(inp.*.?);
                         inp.* = null;
                     }
@@ -1988,7 +2009,7 @@ pub fn Func(comptime Backend: type) type {
                             .i8,
                             @intFromBool(cursor.base.kind == .Then),
                         ));
-                        for (node.outputs()) |o| worklist.add(o);
+                        for (node.outputs()) |o| worklist.add(o.get());
                         return null;
                     }
                 }
@@ -1996,7 +2017,7 @@ pub fn Func(comptime Backend: type) type {
 
             if (is_dead and node.data_type != .bot) {
                 node.data_type = .bot;
-                for (node.outputs()) |o| worklist.add(o);
+                for (node.outputs()) |o| worklist.add(o.get());
                 return null;
             }
 
@@ -2007,8 +2028,9 @@ pub fn Func(comptime Backend: type) type {
                 } else break :eliminate_branch;
 
                 var iter = std.mem.reverseIterator(node.outputs());
-                while (iter.next()) |o| if (o.kind == .Phi) {
-                    for (o.outputs()) |oo| worklist.add(oo);
+                while (iter.next()) |ot| if (ot.get().kind == .Phi) {
+                    const o = ot.get();
+                    for (o.outputs()) |oo| worklist.add(oo.get());
                     worklist.add(o.inputs()[idx + 1].?);
                     self.subsume(o.inputs()[(1 - idx) + 1].?, o);
                 };
@@ -2018,7 +2040,7 @@ pub fn Func(comptime Backend: type) type {
 
             if (node.kind == .Region) eliminate_if: {
                 for (node.outputs()) |o| {
-                    if (!o.isCfg()) break :eliminate_if;
+                    if (!o.get().isCfg()) break :eliminate_if;
                 }
 
                 if (node.inputs()[0].?.inputs()[0] == node.inputs()[1].?.inputs()[0]) {
@@ -2030,8 +2052,9 @@ pub fn Func(comptime Backend: type) type {
                 if (!isDead(node.inputs()[1])) break :remove;
 
                 var iter = std.mem.reverseIterator(node.outputs());
-                while (iter.next()) |o| if (o.kind == .Phi) {
-                    for (o.outputs()) |oo| worklist.add(oo);
+                while (iter.next()) |ot| if (ot.get().kind == .Phi) {
+                    const o = ot.get();
+                    for (o.outputs()) |oo| worklist.add(oo.get());
                     worklist.add(o.inputs()[2].?);
                     self.subsume(o.inputs()[1].?, o);
                 };
@@ -2044,7 +2067,7 @@ pub fn Func(comptime Backend: type) type {
                 const cond = if_node.inputs()[1].?;
                 if (cond.kind == .CInt and cond.extra(.CInt).value != 0) {
                     if_node.data_type = .bot;
-                    worklist.add(if_node.outputs()[1]);
+                    worklist.add(if_node.outputs()[1].get());
                     return if_node.inputs()[0].?;
                 }
             }
@@ -2054,7 +2077,7 @@ pub fn Func(comptime Backend: type) type {
                 const cond = if_node.inputs()[1].?;
                 if (cond.kind == .CInt and cond.extra(.CInt).value == 0) {
                     if_node.data_type = .bot;
-                    worklist.add(if_node.outputs()[0]);
+                    worklist.add(if_node.outputs()[0].get());
                     return if_node.inputs()[0].?;
                 }
             }
@@ -2097,13 +2120,13 @@ pub fn Func(comptime Backend: type) type {
 
                 if (base.kind == .Local) eliminate_stack: {
                     for (base.outputs()) |o| {
-                        _ = o.knownStore(base) orelse {
+                        _ = o.get().knownStore(base) orelse {
                             break :eliminate_stack;
                         };
                     }
 
-                    for (base.outputs()) |o| if (o.knownStore(base).? != node) {
-                        work.add(o.knownStore(base).?);
+                    for (base.outputs()) |o| if (o.get().knownStore(base).? != node) {
+                        work.add(o.get().knownStore(base).?);
                     };
 
                     return node.mem();
@@ -2167,7 +2190,7 @@ pub fn Func(comptime Backend: type) type {
                 // If store happens after us, it could be a swap so be pesimiztic
                 //
                 for (node.outputs()) |use| {
-                    if (if (use.knownMemOp()) |op| !op[0].isLoad() else false) break :memcpy;
+                    if (if (use.get().knownMemOp()) |op| !op[0].isLoad() else false) break :memcpy;
                 }
 
                 // We cause side effects if our dest is not .Local
@@ -2180,7 +2203,7 @@ pub fn Func(comptime Backend: type) type {
 
                 const scanned = if (dst.kind == .BinOp) dst.inputs()[1].? else dst;
                 for (scanned.outputs()) |use| {
-                    if (if (use.knownMemOp()) |op| !op[0].isLoad() and use != node else true) {
+                    if (if (use.get().knownMemOp()) |op| !op[0].isLoad() and use.get() != node else true) {
                         break :memcpy;
                     }
                 }
@@ -2349,9 +2372,9 @@ pub fn Func(comptime Backend: type) type {
             if (!only_basic or node.isBasicBlockStart()) pos.append(node.asCfg().?) catch unreachable;
             if (node.isSwapped()) {
                 var iter = std.mem.reverseIterator(node.outputs());
-                while (iter.next()) |o| if (o.isCfg()) collectPostorder2(self, o, arena, pos, visited, only_basic);
+                while (iter.next()) |o| if (o.get().isCfg()) collectPostorder2(self, o.get(), arena, pos, visited, only_basic);
             } else {
-                for (node.outputs()) |o| if (o.isCfg()) collectPostorder2(self, o, arena, pos, visited, only_basic);
+                for (node.outputs()) |o| if (o.get().isCfg()) collectPostorder2(self, o.get(), arena, pos, visited, only_basic);
             }
         }
 
@@ -2364,10 +2387,10 @@ pub fn Func(comptime Backend: type) type {
             var visited = try std.DynamicBitSet.initEmpty(tmp.arena.allocator(), self.next_id);
 
             self.root.fmt(self.gcm.block_count, writer, colors);
-            if (self.root.outputs().len > 1 and self.root.outputs()[1].kind == .Mem) {
-                for (self.root.outputs()[1].outputs()) |oo| if (oo.kind == .LocalAlloc) {
+            if (self.root.outputs().len > 1 and self.root.outputs()[1].get().kind == .Mem) {
+                for (self.root.outputs()[1].get().outputs()) |oo| if (oo.get().kind == .LocalAlloc) {
                     try writer.writeAll("\n  ");
-                    oo.fmt(self.gcm.instr_count, writer, colors);
+                    oo.get().fmt(self.gcm.instr_count, writer, colors);
                 };
             }
             try writer.writeAll("\n");
@@ -2377,7 +2400,7 @@ pub fn Func(comptime Backend: type) type {
                 try writer.writeAll("\n");
                 for (p.base.outputs()) |o| {
                     try writer.writeAll("  ");
-                    o.fmt(self.gcm.instr_count, writer, colors);
+                    o.get().fmt(self.gcm.instr_count, writer, colors);
                     try writer.writeAll("\n");
                 }
             }
@@ -2398,7 +2421,7 @@ pub fn Func(comptime Backend: type) type {
                 };
 
                 for (worklist.list.items[i].outputs()) |o| {
-                    worklist.add(o);
+                    worklist.add(o.get());
                 }
             }
 

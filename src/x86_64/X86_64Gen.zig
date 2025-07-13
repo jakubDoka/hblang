@@ -359,7 +359,8 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
     }
 
     if (node.kind == .StructArg) elim_local: {
-        for (node.outputs()) |use| {
+        for (node.outputs()) |us| {
+            const use = us.get();
             if (((!use.isStore() or use.value() == node) and !use.isLoad()) or use.isSub(graph.MemCpy)) {
                 break :elim_local;
             }
@@ -787,9 +788,9 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     if (func.root.outputs().len > 1) {
         var locals = std.ArrayListUnmanaged(*FuncNode).empty;
 
-        std.debug.assert(func.root.outputs()[1].kind == .Mem);
-        for (func.root.outputs()[1].outputs()) |o| if (o.kind == .LocalAlloc) {
-            try locals.append(tmp.arena.allocator(), o);
+        std.debug.assert(func.root.outputs()[1].get().kind == .Mem);
+        for (func.root.outputs()[1].get().outputs()) |o| if (o.get().kind == .LocalAlloc) {
+            try locals.append(tmp.arena.allocator(), o.get());
         };
 
         std.sort.pdq(*FuncNode, locals.items, {}, struct {
@@ -798,7 +799,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
             }
         }.isBigger);
 
-        std.debug.assert(func.root.outputs()[1].kind == .Mem);
+        std.debug.assert(func.root.outputs()[1].get().kind == .Mem);
         for (locals.items) |o| {
             const extra = o.extra(.LocalAlloc);
             const size = extra.size;
@@ -874,7 +875,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
             }
 
             const argn = for (postorder[0].base.outputs()) |o| {
-                if (o.subclass(graph.Arg)) |sub| if (sub.ext.index == j) break o;
+                if (o.get().subclass(graph.Arg)) |sub| if (sub.ext.index == j) break o.get();
             } else continue; // is dead
 
             if (par == .Stack) {
@@ -892,7 +893,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         std.debug.assert(bb.base.schedule == i);
 
         self.emitBlockBody(&bb.base);
-        const last = bb.base.outputs()[bb.base.output_len - 1];
+        const last = bb.base.outputs()[bb.base.output_len - 1].get();
         if (last.outputs().len == 0) {
             std.debug.assert(last.kind == .Return);
 
@@ -911,16 +912,16 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
             }
 
             self.emitInstr(zydis.ZYDIS_MNEMONIC_RET, .{});
-        } else if (i + 1 == last.outputs()[@intFromBool(last.isSwapped())].schedule) {
+        } else if (i + 1 == last.outputs()[@intFromBool(last.isSwapped())].get().schedule) {
             // noop
         } else if (last.kind == .Never) {
             // noop
         } else if (last.kind == .Trap) {
             // noop
         } else {
-            std.debug.assert(last.outputs()[0].isBasicBlockStart());
+            std.debug.assert(last.outputs()[0].get().isBasicBlockStart());
             self.local_relocs.appendAssumeCapacity(.{
-                .dest = last.outputs()[@intFromBool(last.isSwapped())].schedule,
+                .dest = last.outputs()[@intFromBool(last.isSwapped())].get().schedule,
                 .offset = @intCast(self.out.code.items.len),
                 .off = 1,
                 .class = .rel32,
@@ -948,7 +949,8 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    for (block.outputs()) |instr| {
+    for (block.outputs()) |in| {
+        const instr = in.get();
         switch (instr.extra2()) {
             .FramePointer => {},
             .CInt => |extra| {
@@ -1238,7 +1240,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const cond_size = instr.inputs()[1].?.data_type.size();
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_TEST, .{ SReg{ cond, cond_size }, SReg{ cond, cond_size } });
                 self.local_relocs.appendAssumeCapacity(.{
-                    .dest = instr.outputs()[1].schedule,
+                    .dest = instr.outputs()[1].get().schedule,
                     .offset = @intCast(self.out.code.items.len),
                     .class = .rel32,
                     .off = 2,
@@ -1259,7 +1261,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
 
                 self.emitInstr(cmp_mnemonic, .{ SReg{ lhs, instr.inputs()[1].?.data_type.size() }, rhs });
                 self.local_relocs.appendAssumeCapacity(.{
-                    .dest = instr.outputs()[1].schedule,
+                    .dest = instr.outputs()[1].get().schedule,
                     .offset = @intCast(self.out.code.items.len),
                     .class = .rel32,
                     .off = 2,

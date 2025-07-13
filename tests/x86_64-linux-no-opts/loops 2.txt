@@ -11,9 +11,9 @@ loops 2.square:
 	add rsp, 0x20
 	ret
 0:	mov qword ptr [rsp+0x18], 0x00
-3:	mov rcx, [rsp+0x18]
+3:	mov rax, [rsp+0x10]
+	mov rcx, [rsp+0x18]
 	mov rdx, [rsp]
-	mov rax, [rsp+0x10]
 	cmp rcx, rdx
 	jnz :1
 	inc rax

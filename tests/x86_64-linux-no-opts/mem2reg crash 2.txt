@@ -18,8 +18,8 @@ mem2reg crash 2.insert:
 0:	mov rax, [rsp]
 	mov rax, [rax]
 	mov [rsp+0x28], rax
-	mov rax, [rsp+0x28]
 	mov rdx, [rsp+0x08]
+	mov rax, [rsp+0x28]
 	mov rcx, [rax]
 	cmp rcx, rdx
 	jnz :2
@@ -34,12 +34,12 @@ main:
 	sub rsp, 0x28
 	mov qword ptr [rsp+0x10], 0x01
 	mov qword ptr [rsp+0x18], 0x00
-	lea rax, [rsp+0x10]
-	mov [rsp], rax
-	mov qword ptr [rsp+0x08], 0x01
 	lea rdi, [rsp]
 	mov rsi, 0x01
 	xor rdx, rdx
+	lea rax, [rsp+0x10]
+	mov [rsp], rax
+	mov qword ptr [rsp+0x08], 0x01
 	call :mem2reg crash 2.insert
 	mov rax, [rax]
 	add rsp, 0x28

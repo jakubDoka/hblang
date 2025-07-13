@@ -31,10 +31,10 @@ main:
 	mov dword ptr [rsp], 0x07
 	mov rax, 0x90000002
 	mov [rsp+0x04], eax
+	mov rcx, 0x80000000
 	mov rax, 0x90000003
 	mov [rsp+0x08], eax
-	mov rax, 0x80000000
-	mov [rsp+0x0C], eax
+	mov [rsp+0x0C], ecx
 	call :comptime 2.main.some_fn3(uint)(.some_fn(uint))
 	mov rbx, rax
 	call :comptime 2.main.some_fn3(uint)((.some_fn2(uint, .some_fn(uint))))

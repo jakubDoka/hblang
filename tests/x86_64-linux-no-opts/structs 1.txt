@@ -38,12 +38,12 @@ structs 1.pass:
 main:
 	sub rsp, 0x48
 	mov qword ptr [rsp+0x18], 0x04
-	mov rax, [0x0000000000000007]
-	mov [rsp+0x20], rax
-	mov qword ptr [rsp+0x28], 0x03
 	lea rdi, [rsp]
 	lea rsi, [rsp+0x18]
 	mov rdx, 0x18
+	mov rax, [0x0000000000000007]
+	mov [rsp+0x20], rax
+	mov qword ptr [rsp+0x28], 0x03
 	call :memcpy
 	lea rdi, [rsp+0x30]
 	call :structs 1.odher_pass

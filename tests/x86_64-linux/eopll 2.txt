@@ -3,10 +3,10 @@ main:
 	push rbp
 	sub rsp, 0x18
 	mov rax, 0x123
-	xor rbx, rbx
 	xor rdi, rdi
 	syscall
 	movsxd rbp, eax
+	xor rbx, rbx
 1:	cmp rbx, 0x00
 	setz al
 	movzx rax, al

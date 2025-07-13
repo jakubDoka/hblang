@@ -26,18 +26,18 @@ structs 3 (call stress test).return_pair:
 structs 3 (call stress test).return_triple:
        li64 $2, 1
          st $2, $1, 0, 8
+        li8 $3, 3
        li64 $2, 2
          st $2, $1, 8, 8
-        li8 $2, 3
-         st $2, $1, 16, 1
+         st $3, $1, 16, 1
        jala $0, $31, 0
 structs 3 (call stress test).take_pair:
        andi $1, $1, 255
       add64 $1, $1, $2
        jala $0, $31, 0
 structs 3 (call stress test).take_triple:
-         ld $2, $1, 16, 1
          ld $3, $1, 8, 8
+         ld $2, $1, 16, 1
          ld $1, $1, 0, 8
        andi $2, $2, 255
       add64 $1, $1, $3

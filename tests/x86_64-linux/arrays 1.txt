@@ -1,7 +1,7 @@
 main:
 	sub rsp, 0x40
-	xor rsi, rsi
 	mov r8, 0x08
+	xor rsi, rsi
 	mov rdi, rsi
 3:	cmp rdi, 0x08
 	setz al

@@ -20,8 +20,8 @@ main:
 	lea rdi, [rsp]
 	lea rsi, [rsp+0x30]
 	call :memcpy
-	mov rsi, 0x20
 	lea rdi, [rsp+0x18]
+	mov rsi, 0x20
 	call :regalloc crash 1.broken
 	xor eax, eax
 	add rsp, 0x48

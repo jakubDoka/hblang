@@ -1,8 +1,6 @@
 main:
-	push rbx
-	sub rsp, 0x10
+	sub rsp, 0x18
 	mov rax, 0x123
-	xor rbx, rbx
 	xor rdi, rdi
 	xor rsi, rsi
 	syscall
@@ -17,9 +15,9 @@ main:
 	jmp :1
 0:	mov dword ptr [rsp], 0x01
 	mov qword ptr [rsp+0x04], 0x00
-	mov rcx, [0x0000000000000007]
-	mov rax, 0xE9
 	lea r10, [rsp]
+	mov rax, 0xE9
+	mov rcx, [0x0000000000000007]
 	movzx rsi, cx
 	xor rdx, rdx
 	syscall
@@ -30,7 +28,6 @@ main:
 	jz :2
 	mov rax, 0x02
 1:	jmp :3
-2:	mov rax, rbx
-3:	add rsp, 0x10
-	pop rbx
+2:	xor rax, rax
+3:	add rsp, 0x18
 	ret

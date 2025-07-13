@@ -13,9 +13,9 @@ directives 20 (@handler, @SourceLoc).main:
 	mov [rsp+0x60], eax
 	mov edi, [rsp+0x60]
 	call :directives 20 (@handler, @SourceLoc).produce_memcpy
+	xor dl, dl
 	mov rax, [rsp+0x48]
 	mov rbx, rax
-	xor dl, dl
 	xor rcx, rcx
 	mov rax, rbx
 	cmp rcx, rax
@@ -24,14 +24,14 @@ directives 20 (@handler, @SourceLoc).main:
 	or eax, edx
 	test al, al
 	jz :0
+	lea rsi, [rsp+0x20]
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x20], rax
 	mov qword ptr [rsp+0x28], 0x24
+	mov rdx, 0x20
 	mov rax, 0x100000001
 	mov [rsp+0x30], rax
 	lea rdi, [rsp]
-	lea rsi, [rsp+0x20]
-	mov rdx, 0x20
 	call :memcpy
 	xor rsi, rsi
 	xor rdx, rdx
@@ -90,14 +90,14 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	mov rax, rbx
 	cmp rcx, rax
 	jb :0
+	lea rsi, [rsp+0x20]
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x20], rax
 	mov qword ptr [rsp+0x28], 0x24
+	mov rdx, 0x20
 	mov rax, 0xF00000012
 	mov [rsp+0x30], rax
 	lea rdi, [rsp]
-	lea rsi, [rsp+0x20]
-	mov rdx, 0x20
 	call :memcpy
 	xor rsi, rsi
 	xor rdx, rdx

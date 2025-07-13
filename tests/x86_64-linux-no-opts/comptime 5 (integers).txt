@@ -5,10 +5,10 @@ main:
 	sub rsp, 0x18
 	mov qword ptr [rsp], 0x01
 	mov dword ptr [rsp+0x08], 0x70000002
+	mov rcx, 0x80000000
 	mov rax, 0x90000002
 	mov [rsp+0x0C], eax
-	mov rax, 0x80000000
-	mov [rsp+0x10], eax
+	mov [rsp+0x10], ecx
 	call :comptime 5 (integers).main.func(1)
 	mov rcx, rax
 	mov rax, [0x0000000000000007]

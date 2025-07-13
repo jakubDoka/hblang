@@ -15,17 +15,17 @@ main:
 	shl edx, 0x10
 	mov ax, [rsp+0x03]
 	mov byte ptr [rsp+0x05], 0x00
-	movzx eax, ax
-	mov [rsp+0x03], ax
+	movzx esi, ax
+	mov [rsp+0x03], si
+	shr esi, 0x10
 	or ecx, edx
-	mov sil, [rsp+0x03]
+	mov al, [rsp+0x03]
 	mov dl, [rsp+0x04]
-	shr eax, 0x10
-	mov [rsp+0x05], al
-	mov [rsp+0x02], al
+	mov [rsp+0x05], sil
+	mov [rsp+0x02], sil
 	shr ecx, 0x10
 	mov [rsp+0x05], cl
-	movzx rax, sil
+	movzx rax, al
 	movzx rdx, dl
 	mov ecx, ecx
 	add rax, rdx

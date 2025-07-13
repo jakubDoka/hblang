@@ -10,8 +10,8 @@ main:
 	mov eax, [rsp]
 	mov [rsp], eax
 	call :adding difference to a pointer 1.one
-	mov rdx, 0x01
 	lea rcx, [rsp]
+	mov rdx, 0x01
 	sub rdx, rax
 	add rcx, rdx
 	mov al, [rcx]

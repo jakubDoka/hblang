@@ -29,13 +29,13 @@ comptime 6 (strings).main.string_to_array("Edward"):
         lra $6, $0, :comptime 6 (strings).main.Edward
        li64 $5, 6
      addi64 $4, $254, 8
-5:       ld $3, $254, 0, 8
-       jltu $3, $5, :4
+5:       ld $2, $254, 0, 8
+       jltu $2, $5, :4
         bmc $4, $1, 6
      addi64 $254, $254, 14
        jala $0, $31, 0
-4:    add64 $2, $6, $3
-      add64 $3, $4, $3
+4:    add64 $3, $4, $2
+      add64 $2, $6, $2
          ld $2, $2, 0, 1
          st $2, $3, 0, 1
          ld $2, $254, 0, 8

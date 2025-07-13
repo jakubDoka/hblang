@@ -159,7 +159,7 @@ pub const InlineFunc = struct {
         var i: usize = 0;
         while (i < work.list.items.len) : (i += 1) {
             const node = work.list.items[i];
-            for (node.outputs()) |o| work.add(o);
+            for (node.outputs()) |o| work.add(o.get());
             for (node.inputs()) |inp| if (inp != null) work.add(inp.?);
 
             const node_size = node.size();
@@ -187,7 +187,7 @@ pub const InlineFunc = struct {
             new_node.input_base = (try arena.allocator()
                 .dupe(?*Func.Node, new_node.inputs())).ptr;
             new_node.output_base = (try arena.allocator()
-                .dupe(*Func.Node, new_node.outputs())).ptr;
+                .dupe(Func.Node.Out, new_node.outputs())).ptr;
             new_node_table[new_node.id] = new_node;
             new_node.id = @intCast(already_present + i);
             new_node.output_cap = new_node.output_len;
@@ -201,7 +201,7 @@ pub const InlineFunc = struct {
             };
 
             for (node.outputs()) |*out| {
-                out.* = new_node_table[out.*.id];
+                out.* = .init(new_node_table[out.get().id], out.pos(), null);
             }
 
             if (node.subclass(graph.Region)) |cfg| {
@@ -264,7 +264,8 @@ pub const InlineFunc = struct {
 
             if (Func.Node.isInterned(node.kind, node.inputs())) {
                 var ready = true;
-                for (node.outputs()) |use| {
+                for (node.outputs()) |us| {
+                    const use = us.get();
                     if (use != node and
                         Func.Node.isInterned(use.kind, use.inputs()) and
                         !interned.isSet(use.id))
@@ -312,7 +313,7 @@ pub const InlineFunc = struct {
                     work.add(n);
                 };
 
-                for (node.outputs()) |o| work.add(o);
+                for (node.outputs()) |o| work.add(o.get());
             }
         }
 
@@ -362,22 +363,22 @@ pub const InlineFunc = struct {
 
         internBatch(Backend, start, end, prev_next_id, func, .{ .new = cloned.new_nodes });
 
-        const entry = start.outputs()[0];
+        const entry = start.outputs()[0].get();
         std.debug.assert(entry.kind == .Entry);
 
         const entry_mem: ?*Func.Node = for (start.outputs()) |o| {
-            if (o.kind == .Mem) break o;
+            if (o.get().kind == .Mem) break o.get();
         } else null;
         var exit_mem = end.inputs()[1];
 
-        const into_entry_mem = func.root.outputs()[1];
+        const into_entry_mem = func.root.outputs()[1].get();
         std.debug.assert(into_entry_mem.kind == .Mem);
 
-        const call_end = dest.outputs()[0];
+        const call_end = dest.outputs()[0].get();
         std.debug.assert(call_end.kind == .CallEnd);
 
         var after_entry: *Func.Node = for (entry.outputs()) |o| {
-            if (o.isCfg()) break o;
+            if (o.get().isCfg()) break o.get();
         } else unreachable;
         std.debug.assert(after_entry.isBasicBlockEnd() or
             after_entry.kind == .Region or after_entry.kind == .Loop);
@@ -391,15 +392,15 @@ pub const InlineFunc = struct {
         std.debug.assert(before_dest.isBasicBlockStart());
 
         const call_end_entry_mem = for (call_end.outputs()) |o| {
-            if (o.kind == .Mem) break o;
+            if (o.get().kind == .Mem) break o.get();
         } else null;
 
         const dest_mem = dest.inputs()[1].?;
 
         if (entry_mem != null) {
-            for (tmp.arena.dupe(*Func.Node, entry_mem.?.outputs())) |use| {
-                if (use.kind == .LocalAlloc) {
-                    func.setInputNoIntern(use, 0, into_entry_mem);
+            for (tmp.arena.dupe(Func.Node.Out, entry_mem.?.outputs())) |use| {
+                if (use.get().kind == .LocalAlloc) {
+                    func.setInputNoIntern(use.get(), 0, into_entry_mem);
                 }
             }
         }
@@ -407,7 +408,8 @@ pub const InlineFunc = struct {
         // NOTE: not scheduled yet so args are on the Start
         //
         for (dest.dataDeps(), 0..) |dep, j| {
-            for (start.outputs()) |o| {
+            for (start.outputs()) |n| {
+                const o = n.get();
                 if (o.kind == .Arg and o.extra(.Arg).index == j) {
                     func.subsume(dep, o);
                     break;
@@ -436,7 +438,7 @@ pub const InlineFunc = struct {
         if (end.inputs()[0] != null)
             for (end.dataDeps(), 0..) |dep, j| {
                 const ret = for (call_end.outputs()) |o| {
-                    if (o.kind == .Ret and o.extra(.Ret).index == j) break o;
+                    if (o.get().kind == .Ret and o.get().extra(.Ret).index == j) break o.get();
                 } else continue;
                 func.subsume(dep, ret);
             };
@@ -459,7 +461,7 @@ pub const InlineFunc = struct {
 
         if (exit_mem) |em| {
             for (em.outputs()) |o| {
-                func_work.add(o);
+                func_work.add(o.get());
             }
         }
 

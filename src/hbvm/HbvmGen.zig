@@ -245,7 +245,8 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
     }
 
     if (node.kind == .StructArg) elim_local: {
-        for (node.outputs()) |use| {
+        for (node.outputs()) |us| {
+            const use = us.get();
             if (((!use.isStore() or use.value() == node) and !use.isLoad()) or use.isSub(graph.MemCpy)) {
                 break :elim_local;
             }
@@ -455,9 +456,9 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     var local_size: i64 = 0;
     if (func.root.outputs().len > 1) {
-        std.debug.assert(func.root.outputs()[1].kind == .Mem);
-        for (func.root.outputs()[1].outputs()) |o| if (o.kind == .LocalAlloc) {
-            const extra = o.extra(.LocalAlloc);
+        std.debug.assert(func.root.outputs()[1].get().kind == .Mem);
+        for (func.root.outputs()[1].get().outputs()) |o| if (o.get().kind == .LocalAlloc) {
+            const extra = o.get().extra(.LocalAlloc);
             const size = extra.size;
             extra.size = @bitCast(local_size);
             local_size += @intCast(size);
@@ -488,7 +489,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         self.block_offsets[bb.base.schedule] = @intCast(self.out.code.items.len);
         std.debug.assert(bb.base.schedule == i);
         self.emitBlockBody(tmp.arena.allocator(), &bb.base);
-        const last = bb.base.outputs()[bb.base.output_len - 1];
+        const last = bb.base.outputs()[bb.base.output_len - 1].get();
         if (last.outputs().len == 0) {
             std.debug.assert(last.kind == .Return);
             if (stack_size != 0) {
@@ -502,22 +503,22 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
             } else {
                 self.emit(.jala, .{ .null, .ret_addr, 0 });
             }
-        } else if (i + 1 == last.outputs()[@intFromBool(last.isSwapped())].schedule) {
+        } else if (i + 1 == last.outputs()[@intFromBool(last.isSwapped())].get().schedule) {
             // noop
         } else if (last.kind == .Never) {
             // noop
         } else if (last.kind == .Trap) {
             // noop
         } else {
-            std.debug.assert(last.outputs()[@intFromBool(last.isSwapped())]
+            std.debug.assert(last.outputs()[@intFromBool(last.isSwapped())].get()
                 .isBasicBlockStart());
-            if (last.outputs()[@intFromBool(last.isSwapped())]
+            if (last.outputs()[@intFromBool(last.isSwapped())].get()
                 .schedule == std.math.maxInt(u16))
             {
                 utils.panic("{} {}\n", .{ last.outputs()[@intFromBool(last.isSwapped())], last });
             }
             self.local_relocs.appendAssumeCapacity(.{
-                .dest_block = last.outputs()[@intFromBool(last.isSwapped())].schedule,
+                .dest_block = last.outputs()[@intFromBool(last.isSwapped())].get().schedule,
                 .rel = self.reloc(1, .rel32),
             });
             self.emit(.jmp, .{0});
@@ -533,7 +534,8 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
     _ = tmp;
 
     errdefer unreachable;
-    for (node.outputs()) |no| {
+    for (node.outputs()) |n| {
+        const no = n.get();
         const inps = no.dataDeps();
         switch (no.extra2()) {
             .FramePointer, .Zero => {},
@@ -715,19 +717,19 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .IfOp => |extra| {
                 std.debug.assert(
-                    no.outputs()[@intFromBool(!extra.swapped)].schedule !=
+                    no.outputs()[@intFromBool(!extra.swapped)].get().schedule !=
                         std.math.maxInt(u16),
                 );
                 self.local_relocs.appendAssumeCapacity(.{
-                    .dest_block = no.outputs()[@intFromBool(!extra.swapped)].schedule,
+                    .dest_block = no.outputs()[@intFromBool(!extra.swapped)].get().schedule,
                     .rel = self.reloc(3, .rel16),
                 });
                 self.emitLow("RRP", extra.op, .{ self.getReg(inps[0]), self.getReg(inps[1]), 0 });
             },
             .If => {
-                std.debug.assert(no.outputs()[1].schedule != std.math.maxInt(u16));
+                std.debug.assert(no.outputs()[1].get().schedule != std.math.maxInt(u16));
                 self.local_relocs.appendAssumeCapacity(.{
-                    .dest_block = no.outputs()[1].schedule,
+                    .dest_block = no.outputs()[1].get().schedule,
                     .rel = self.reloc(3, .rel16),
                 });
                 self.emit(.jeq, .{ self.getReg(inps[0]), .null, 0 });

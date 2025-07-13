@@ -39,12 +39,11 @@ main:
 	inc r8
 	jmp :4
 3:	mov rdi, rdx
-	imul rdi, rcx
+	imul rdi, r8
 	mov rsi, rdx
-	inc rsi
-	imul rdx, r8
+	imul rsi, rcx
+	inc rdx
 	mov rax, r9
-	add rax, rdi
-	mov [rax], rdx
-	mov rdx, rsi
+	add rax, rsi
+	mov [rax], rdi
 	jmp :5

@@ -3,12 +3,12 @@ main:
      addi64 $254, $254, -28
        li64 $1, 1
          st $1, $254, 0, 8
+       li32 $3, -1879048190
+       li32 $2, -2147483648
        li64 $1, 1879048194
          st $1, $254, 8, 4
-       li32 $1, -1879048190
-         st $1, $254, 12, 4
-       li32 $1, -2147483648
-         st $1, $254, 16, 4
+         st $3, $254, 12, 4
+         st $2, $254, 16, 4
         jal $31, $0, :comptime 5 (integers).main.func(1)
         lra $3, $0, :comptime 5 (integers).main.Ty(1).global_value
         lra $2, $0, :comptime 5 (integers).main.param(1).global_value

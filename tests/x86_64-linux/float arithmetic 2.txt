@@ -1,40 +1,39 @@
 float arithmetic 2.sin:
 	movss xmm1, xmm0
-	mov rsi, 0x4060000000000000
-	mov rdx, 0x400921FB60000000
-	mov r10, 0x3F000000
-	mov r9, 0x40C90FDB
-	mov r8, 0x43800000
-	mov rcx, 0x04
 	lea rax, [0x0000000000000007]
+	mov r9, 0x4060000000000000
+	mov r8, 0x400921FB60000000
+	mov rdi, 0x04
+	mov rsi, 0x3F000000
+	mov rdx, 0x40C90FDB
+	mov rcx, 0x43800000
 	movss xmm0, xmm1
 	cvtss2sd xmm0, xmm0
-	movq xmm3, rsi
-	movq xmm2, rdx
-	mulsd xmm0, xmm3
-	divsd xmm0, xmm2
-	cvttsd2si rdi, xmm0
-	mov rdx, rdi
+	movq xmm6, r9
+	movq xmm5, r8
+	movd xmm3, esi
+	movd xmm4, edx
+	movd xmm2, ecx
+	mulsd xmm0, xmm6
+	divsd xmm0, xmm5
+	cvttsd2si rsi, xmm0
+	mov rdx, rsi
 	add rdx, 0x40
-	mov rsi, rdi
+	cvtsi2ss xmm0, esi
 	and rsi, 0xFF
 	and rdx, 0xFF
-	imul rsi, rcx
-	imul rdx, rcx
+	mulss xmm0, xmm4
+	imul rsi, rdi
+	imul rdx, rdi
+	divss xmm0, xmm2
 	mov rcx, rax
 	add rcx, rsi
 	add rax, rdx
-	movd xmm3, r10d
+	subss xmm1, xmm0
 	movss xmm0, dword ptr [rcx]
-	movd xmm4, r9d
-	cvtsi2ss xmm5, edi
-	movd xmm2, r8d
-	mulss xmm5, xmm4
-	divss xmm5, xmm2
 	movss xmm2, dword ptr [rax]
 	movss xmm4, xmm0
 	mulss xmm3, xmm4
-	subss xmm1, xmm5
 	movss xmm4, xmm1
 	mulss xmm3, xmm4
 	subss xmm2, xmm3

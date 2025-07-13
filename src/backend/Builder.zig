@@ -87,7 +87,7 @@ pub fn end(self: *Builder, _: BuildToken) void {
             };
 
             for (worklist.list.items[i].outputs()) |o| {
-                worklist.add(o);
+                worklist.add(o.get());
             }
         }
 
@@ -223,13 +223,14 @@ fn pushToScope(self: *Builder, scope: *BuildNode, value: *BuildNode) void {
             scope.input_base[0..scope.input_len],
             new_cap,
         ) catch unreachable;
+        @memset(new_alloc[scope.input_len..], null);
         scope.input_base = new_alloc.ptr;
         scope.input_len = @intCast(new_alloc.len);
     }
 
     scope.input_base[scope.input_ordered_len] = value;
+    self.func.addUse(value, scope.input_ordered_len, scope);
     scope.input_ordered_len += 1;
-    self.func.addUse(value, scope);
 }
 
 pub fn getPinValue(self: *Builder, index: usize) *Func.Node {
@@ -568,8 +569,8 @@ pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
         self.func.setInputNoIntern(ret, 1, self.memory());
 
         for (values) |v| {
-            self.func.addDep(ret, v);
-            self.func.addUse(v, ret);
+            const idx = self.func.addDep(ret, v);
+            self.func.addUse(v, idx, ret);
             ret.input_ordered_len += 1;
         }
     }

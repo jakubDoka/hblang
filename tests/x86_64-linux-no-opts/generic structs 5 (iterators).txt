@@ -17,12 +17,12 @@ generic structs 5 (iterators).main.Chars.next:
 	mov [rsp+0x0B], al
 	mov rsi, [rsp]
 	mov dx, [rsp+0x0A]
-	mov rax, [rsi+0x08]
-	mov rcx, [rsi]
-	inc rcx
-	mov [rsi], rcx
-	dec rax
-	mov [rsi+0x08], rax
+	mov rcx, [rsi+0x08]
+	mov rax, [rsi]
+	dec rcx
+	inc rax
+	mov [rsi], rax
+	mov [rsi+0x08], rcx
 	mov ax, dx
 1:	add rsp, 0x10
 	ret
@@ -74,15 +74,16 @@ main:
 	lea rax, [0x0000000000000007]
 	mov [rsp], rax
 	mov qword ptr [rsp+0x08], 0x04
+	lea rdx, [0x0000000000000007]
+	mov rcx, 0x90000002
+	xor bl, bl
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x10], rax
 	mov qword ptr [rsp+0x18], 0x02
-	lea rax, [0x0000000000000007]
-	mov [rsp+0x20], rax
+	mov [rsp+0x20], rdx
 	mov qword ptr [rsp+0x28], 0x02
 	mov dword ptr [rsp+0x78], 0x70000002
-	mov rax, 0x90000002
-	mov [rsp+0x7C], eax
+	mov [rsp+0x7C], ecx
 	mov rax, [rsp+0x10]
 	mov [rsp+0x30], rax
 	mov rax, [rsp+0x18]
@@ -100,7 +101,6 @@ main:
 	mov [rsp+0x68], rax
 	mov rax, [rsp+0x28]
 	mov [rsp+0x70], rax
-	xor bl, bl
 8:	lea rdi, [rsp+0x30]
 	call :generic structs 5 (iterators).main.Chars.next
 	mov [rsp+0x80], ax

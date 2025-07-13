@@ -9,10 +9,10 @@ comptime 6 (strings).main.string_to_array("Edward"):
 1:	mov rdx, [rsp]
 	cmp rdx, rsi
 	jnb :0
-	mov rax, [0x0000000000000007]
-	add rax, rdx
 	lea rcx, [rsp+0x08]
 	add rcx, rdx
+	mov rax, [0x0000000000000007]
+	add rax, rdx
 	mov al, [rax]
 	mov [rcx], al
 	mov rax, [rsp]

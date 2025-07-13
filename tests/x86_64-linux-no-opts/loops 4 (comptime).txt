@@ -7,8 +7,8 @@ main:
 	mov qword ptr [rsp+0x20], 0x00
 	mov qword ptr [rsp+0x28], 0x00
 	mov rsi, 0x08
-	mov rdx, [rsp+0x20]
 	mov rax, [rsp+0x28]
+	mov rdx, [rsp+0x20]
 	imul rdx, rsi
 	lea rcx, [rsp]
 	add rcx, rdx
@@ -16,29 +16,29 @@ main:
 	add rax, rcx
 	mov [rsp+0x28], rax
 	mov qword ptr [rsp+0x20], 0x01
-	mov rax, [rsp+0x20]
-	imul rax, rsi
-	lea rcx, [rsp]
-	add rcx, rax
 	mov rax, [rsp+0x28]
+	mov rdx, [rsp+0x20]
+	imul rdx, rsi
+	lea rcx, [rsp]
+	add rcx, rdx
 	mov rcx, [rcx]
 	add rax, rcx
 	mov [rsp+0x28], rax
 	mov qword ptr [rsp+0x20], 0x02
-	mov rax, [rsp+0x20]
-	imul rax, rsi
-	lea rcx, [rsp]
-	add rcx, rax
 	mov rax, [rsp+0x28]
+	mov rdx, [rsp+0x20]
+	imul rdx, rsi
+	lea rcx, [rsp]
+	add rcx, rdx
 	mov rcx, [rcx]
 	add rax, rcx
 	mov [rsp+0x28], rax
 	mov qword ptr [rsp+0x20], 0x03
-	mov rax, [rsp+0x20]
-	imul rax, rsi
-	lea rcx, [rsp]
-	add rcx, rax
 	mov rax, [rsp+0x28]
+	mov rdx, [rsp+0x20]
+	imul rdx, rsi
+	lea rcx, [rsp]
+	add rcx, rdx
 	mov rcx, [rcx]
 	add rax, rcx
 	mov [rsp+0x28], rax

@@ -4,56 +4,56 @@ main:
 	mov byte ptr [rsp+0x81], 0x02
 	mov byte ptr [rsp+0x82], 0x03
 	mov byte ptr [rsp+0x83], 0x04
-	lea rsi, [rsp+0x80]
-	xor rcx, rcx
+	lea rdi, [rsp+0x80]
+	xor rdx, rdx
+	mov rcx, 0x10
 	mov eax, [rsp+0x80]
 	mov [rsp+0x80], eax
-	mov [rsp], rsi
+	mov [rsp], rdi
 	mov qword ptr [rsp+0x08], 0x04
-	mov [rsp+0x10], rsi
+	mov [rsp+0x10], rdi
 	mov qword ptr [rsp+0x18], 0x02
-	lea rdx, [rsp+0x80]
-	add rdx, 0x02
-	mov [rsp+0x20], rdx
+	lea rsi, [rsp+0x80]
+	add rsi, 0x02
+	mov [rsp+0x20], rsi
 	mov qword ptr [rsp+0x28], 0x02
 	lea rax, [rsp+0x80]
 	inc rax
 	mov [rsp+0x30], rax
 	mov qword ptr [rsp+0x38], 0x02
-	mov [rsp+0x40], rsi
+	mov [rsp+0x40], rdi
 	mov qword ptr [rsp+0x48], 0x04
-	mov [rsp+0x50], rsi
+	mov [rsp+0x50], rdi
 	mov qword ptr [rsp+0x58], 0x02
-	mov [rsp+0x60], rdx
+	mov [rsp+0x60], rsi
 	mov qword ptr [rsp+0x68], 0x02
 	mov [rsp+0x70], rax
 	mov qword ptr [rsp+0x78], 0x02
-	mov r10, 0x10
-	mov rdi, rcx
-	mov rax, rcx
-2:	cmp rdi, 0x08
-	setz dl
-	movzx rdx, dl
-	test dl, dl
+	mov rax, rdx
+	mov r8, rdx
+2:	cmp r8, 0x08
+	setz sil
+	movzx rsi, sil
+	test sil, sil
 	jz :0
 	add rsp, 0x90
 	ret
-0:	mov rdx, rdi
-	imul rdx, r10
-	lea r9, [rsp]
-	add r9, rdx
-	mov r8, rcx
-3:	mov rdx, [r9+0x08]
-	cmp r8, rdx
+0:	mov rsi, r8
+	imul rsi, rcx
+	lea r10, [rsp]
+	add r10, rsi
+	mov r9, rdx
+3:	mov rsi, [r10+0x08]
+	cmp r9, rsi
 	jnz :1
-	inc rdi
+	inc r8
 	jmp :2
-1:	mov rdx, [r9]
-	mov rsi, r8
-	inc rsi
-	add rdx, r8
-	mov dl, [rdx]
-	movzx rdx, dl
-	add rax, rdx
-	mov r8, rsi
+1:	mov rsi, [r10]
+	mov rdi, r9
+	inc rdi
+	add rsi, r9
+	mov sil, [rsi]
+	movzx rsi, sil
+	add rax, rsi
+	mov r9, rdi
 	jmp :3

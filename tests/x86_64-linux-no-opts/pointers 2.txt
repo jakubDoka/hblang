@@ -5,8 +5,8 @@ pointers 2.swap:
 	mov rax, [rsp+0x08]
 	mov rax, [rax]
 	mov [rsp+0x10], rax
-	mov rax, [rsp]
 	mov rcx, [rsp+0x08]
+	mov rax, [rsp]
 	mov rax, [rax]
 	mov [rcx], rax
 	mov rcx, [rsp]
@@ -18,10 +18,10 @@ main:
 	sub rsp, 0x28
 	mov qword ptr [rsp], 0x01
 	mov qword ptr [rsp+0x08], 0x02
+	lea rcx, [rsp+0x08]
 	lea rax, [rsp]
 	mov [rsp+0x10], rax
-	lea rax, [rsp+0x08]
-	mov [rsp+0x18], rax
+	mov [rsp+0x18], rcx
 	mov rdi, [rsp+0x10]
 	mov rsi, [rsp+0x18]
 	call :pointers 2.swap

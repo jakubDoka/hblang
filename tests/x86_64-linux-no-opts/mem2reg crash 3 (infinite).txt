@@ -1,7 +1,7 @@
 main:
 	sub rsp, 0x10
-0:	mov rcx, [rsp+0x08]
-	mov rax, [rsp]
-	mov [rsp], rax
-	mov [rsp+0x08], rcx
+0:	mov rcx, [rsp]
+	mov rax, [rsp+0x08]
+	mov [rsp], rcx
+	mov [rsp+0x08], rax
 	jmp :0

@@ -152,14 +152,15 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
             if (depth < min) slid_to_loop: {
                 const outs = cfg.base.outputs();
-                if (outs[outs.len - 1].kind == .Return) break :slid_to_loop;
-                const loop = outs[outs.len - 1].outputs()[0];
-                if (loop.kind != .Loop or loop.inputs()[0] != outs[outs.len - 1]) {
+                if (outs[outs.len - 1].get().kind == .Return) break :slid_to_loop;
+                const loop = outs[outs.len - 1].get().outputs()[0].get();
+                if (loop.kind != .Loop or loop.inputs()[0] != outs[outs.len - 1].get()) {
                     break :slid_to_loop;
                 }
 
                 var iter = std.mem.reverseIterator(outs[0 .. outs.len - 1]);
-                while (iter.next()) |instr| {
+                while (iter.next()) |in| {
+                    const instr = in.get();
                     if (instr == member) {
                         depth = fnc.loopDepth(loop);
                         break;
@@ -178,18 +179,19 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
             const block = def.cfg0();
             const ins = self.addSplit(block, def, dbg);
-            for (tmp.arena.dupe(*Node, def.outputs())) |use| {
+            for (tmp.arena.dupe(Node.Out, def.outputs())) |us| {
+                const use = us.get();
                 if (use == def) continue;
                 if (use == ins) continue;
-                if (!use.hasUseFor(def)) continue;
+                if (!use.hasUseFor(us.pos(), def)) continue;
                 if (!must and use.kind == .MachSplit and
                     isSameBlockNoClobber(use, lrg_table)) continue;
-                self.setInputNoIntern(use, use.posOfInput(1, def), ins);
+                self.setInputNoIntern(use, us.pos(), ins);
             }
 
-            const oidx = block.base.posOfOutput(def);
+            const oidx = block.base.posOfOutput(0, def);
             const to_rotate = block.base.outputs()[oidx + 1 ..];
-            std.mem.rotate(*Node, to_rotate, to_rotate.len - 1);
+            std.mem.rotate(Node.Out, to_rotate, to_rotate.len - 1);
         }
 
         pub fn isSameBlockNoClobber(split: *Node, lrg_table: []const *LiveRange) bool {
@@ -200,8 +202,9 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             var reg = lrg_table[def.schedule].reg;
             if (reg == unresolved_reg) reg = @intCast(lrg_table[def.schedule].mask.findFirstSet() orelse
                 return false);
-            var iter = std.mem.reverseIterator(cfg.base.outputs()[0..cfg.base.posOfOutput(split)]);
-            while (iter.next()) |instr| {
+            var iter = std.mem.reverseIterator(cfg.base.outputs()[0..cfg.base.posOfOutput(0, split)]);
+            while (iter.next()) |in| {
+                const instr = in.get();
                 if (instr == split) return true;
                 if (instr.schedule == no_def_sentinel) continue;
                 if (lrg_table[def.schedule] == lrg_table[instr.schedule]) return false;
@@ -222,11 +225,11 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
         if (should_log) std.debug.print("{}\n", .{bb});
         for (bb.base.outputs()) |instr| {
             if (should_log) std.debug.print("  {}\n", .{instr});
-            if (instr.isDef()) {
-                instr.schedule = func.gcm.instr_count;
+            if (instr.get().isDef()) {
+                instr.get().schedule = func.gcm.instr_count;
                 func.gcm.instr_count += 1;
             } else {
-                instr.schedule = no_def_sentinel;
+                instr.get().schedule = no_def_sentinel;
             }
         }
     }
@@ -242,7 +245,8 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
     // # Build live ranges
     //
     for (func.gcm.postorder) |bb| {
-        for (bb.base.outputs()) |instr| {
+        for (bb.base.outputs()) |in| {
+            const instr = in.get();
             if (instr.schedule == no_def_sentinel) continue;
 
             var lrg = if (instr.kind == .Phi) lrg: {
@@ -289,15 +293,13 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
             lrg = lrg.unionFind();
 
-            var seen = Map(*Node, usize).empty;
-            seen.ensureTotalCapacity(tmp.arena.allocator(), instr.outputs().len) catch unreachable;
-            for (instr.outputs()) |use| {
+            for (instr.outputs()) |us| {
+                const use = us.get();
                 if (instr.kind == .Call and use.kind == .StackArgOffset) {
                     continue;
                 }
-                const idx = use.posOfInput(seen.get(use) orelse 1, instr);
+                const idx = us.pos();
                 if (idx >= use.input_ordered_len) continue;
-                seen.putAssumeCapacity(use, idx + 1);
                 lrg.mask.setIntersection(use.regMask(func, idx, tmp.arena));
 
                 if (lrg.mask.count() == 0) {
@@ -350,8 +352,8 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 if (def.schedule == no_def_sentinel) continue;
                 if (lrg_table[def.schedule] != lrg) continue;
                 for (def.outputs()) |o| {
-                    if (!o.hasUseFor(def)) continue;
-                    members.put(alc, o, {}) catch unreachable;
+                    if (!o.get().hasUseFor(o.pos(), def)) continue;
+                    members.put(alc, o.get(), {}) catch unreachable;
                 }
                 for (def.dataDeps()) |d| {
                     if (lrg.hasDef(d, lrg_table)) {
@@ -390,13 +392,13 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             if (should_log) std.debug.print("min {} max {}\n", .{ min, max });
 
             for (@as([]*Node, members.entries.items(.key))) |member| {
-                if (min == max and member.kind == .MachSplit) continue;
+                if (min == max and member.kind == .MachSplit and member.extra(.MachSplit).dbg != .defualt) continue;
 
                 if (lrg.hasDef(member, lrg_table) and
                     (min == max or func.loopDepth(member) <= min) and
                     !member.isClone() and !member.isReadonly() and
-                    !(member.outputs().len == 1 and member.outputs()[0].kind == .MachSplit and
-                        LiveRange.isSameBlockNoClobber(member.outputs()[0], lrg_table)))
+                    !(member.outputs().len == 1 and member.outputs()[0].get().kind == .MachSplit and
+                        LiveRange.isSameBlockNoClobber(member.outputs()[0].get(), lrg_table)))
                 {
                     LiveRange.splitAfterSubsume(func, member, true, lrg_table, .@"def/loop");
                 }
@@ -468,7 +470,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
         var iter = std.mem.reverseIterator(bb.base.outputs());
         while (iter.next()) |in| {
-            const instr: *Node = in;
+            const instr: *Node = in.get();
             if (instr.schedule != no_def_sentinel) {
                 const instr_lrg = lrg_table[instr.schedule];
                 const value = if (tmp_liveins.fetchSwapRemove(instr_lrg.index(lrgs))) |v| v.value else null;
@@ -533,8 +535,8 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 }
             };
 
-            for (instr.dataDeps()) |def| {
-                if (!instr.hasUseFor(def)) continue;
+            for (instr.dataDeps(), instr.dataDepOffset()..) |def, i| {
+                if (!instr.hasUseFor(i, def)) continue;
                 const other = if (tmp_liveins.fetchPut(
                     tmp.arena.allocator(),
                     lrg_table[def.schedule].index(lrgs),
@@ -562,7 +564,8 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 dirty = other == null or dirty;
             }
 
-            for (bb.base.outputs()) |out| {
+            for (bb.base.outputs()) |ot| {
+                const out = ot.get();
                 if (out.kind != .Phi or out.schedule == no_def_sentinel) continue;
                 const k, const v = .{ lrg_table[out.schedule].index(lrgs), out.dataDeps()[i] };
                 const other = pred_block.fetchPut(tmp.arena.allocator(), k, v) catch unreachable;
@@ -606,7 +609,8 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 }
             }
 
-            for (tmp.arena.dupe(*Node, instr.outputs())) |use| {
+            for (tmp.arena.dupe(Node.Out, instr.outputs())) |us| {
+                const use = us.get();
                 if (use.inPlaceSlot()) |idx| if (use.dataDeps()[idx] == instr) {
                     func.splitBefore(use, idx + 1, instr, true, .@"conflict/in-place-slot/use");
                 };
@@ -638,7 +642,8 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
     var coalesced = false;
     for (func.gcm.postorder) |bb| {
         var removed: usize = 0;
-        coalesce: for (tmp.arena.dupe(*Node, bb.base.outputs()), 0..) |instr, i| {
+        coalesce: for (tmp.arena.dupe(Node.Out, bb.base.outputs()), 0..) |in, i| {
+            const instr = in.get();
             if (instr.kind != .MachSplit) continue;
 
             const splitLrg = lrg_table[instr.schedule].unionFind();
@@ -720,7 +725,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
             // TODO: could we actuially retain here?
             // maybe not
-            std.mem.rotate(*Node, bb.base.outputs()[i - removed ..], 1);
+            std.mem.rotate(Node.Out, bb.base.outputs()[i - removed ..], 1);
             bb.base.output_len -= 1;
             instr.inputs()[0] = null;
             removed += 1;
@@ -820,7 +825,8 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
     var alloc = tmp.arena.makeArrayList(u16, func.gcm.instr_count);
 
     for (func.gcm.postorder) |bb| {
-        for (bb.base.outputs()) |instr| {
+        for (bb.base.outputs()) |in| {
+            const instr = in.get();
             if (instr.schedule == no_def_sentinel) continue;
             const instr_lrg = lrg_table[instr.schedule];
             instr.schedule = @intCast(alloc.items.len);

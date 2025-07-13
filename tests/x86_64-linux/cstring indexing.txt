@@ -7,8 +7,8 @@ main:
 	mov [rsp+0x40], rax
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x48], rax
-	xor rax, rax
 	mov r8, 0x08
+	xor rax, rax
 	xor dil, dil
 	mov rcx, rax
 4:	mov rbx, rcx
@@ -22,14 +22,14 @@ main:
 	mov rcx, 0x02
 	cmp rdx, rcx
 	jb :1
+	lea rsi, [rsp+0x20]
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x20], rax
 	mov qword ptr [rsp+0x28], 0x10
 	mov rax, 0x1100000010
 	mov [rsp+0x30], rax
-	lea rdi, [rsp]
-	lea rsi, [rsp+0x20]
 	mov rdx, 0x20
+	lea rdi, [rsp]
 	call :memcpy
 	mov rsi, rbx
 	mov rdx, rbx

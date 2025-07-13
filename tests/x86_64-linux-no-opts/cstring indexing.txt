@@ -26,6 +26,7 @@ main:
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x50], rax
 	mov qword ptr [rsp+0x58], 0x03
+	mov rbx, 0x08
 	lea rcx, [0x0000000000000007]
 	mov rax, [rsp+0x50]
 	mov [rsp+0x40], rax
@@ -34,7 +35,6 @@ main:
 	mov rax, [rsp+0x60]
 	mov [rsp+0x48], rax
 	mov qword ptr [rsp+0x80], 0x00
-	mov rbx, 0x08
 2:	mov rax, [rsp+0x80]
 	mov rbp, rax
 	mov rax, rbp
@@ -47,14 +47,14 @@ main:
 	mov rax, 0x02
 	cmp rcx, rax
 	jb :1
+	lea rsi, [rsp+0x20]
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x20], rax
 	mov qword ptr [rsp+0x28], 0x10
+	mov rdx, 0x20
 	mov rax, 0x1100000010
 	mov [rsp+0x30], rax
 	lea rdi, [rsp]
-	lea rsi, [rsp+0x20]
-	mov rdx, 0x20
 	call :memcpy
 	mov rsi, rbp
 	mov rdx, rbp

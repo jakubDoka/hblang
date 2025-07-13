@@ -30,8 +30,8 @@ main:
 	mov rax, [rsp+0x38]
 	imul rax, rsi
 	add rdx, rax
-3:	mov rcx, [rsp+0x40]
-	mov rax, [rsp+0x58]
+3:	mov rax, [rsp+0x58]
+	mov rcx, [rsp+0x40]
 	cmp rcx, rdx
 	jnb :2
 	mov rcx, [rcx]

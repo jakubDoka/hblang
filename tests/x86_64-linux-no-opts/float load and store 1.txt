@@ -7,16 +7,16 @@ float load and store 1.fun:
 	ret
 main:
 	sub rsp, 0x28
-	mov rdx, 0x3F800000
-	mov rcx, 0x40000000
+	mov rsi, 0x3F800000
+	mov rdx, 0x40000000
 	mov rax, 0x40400000
-	movd xmm0, edx
-	movss [rsp+0x0C], xmm0
-	movd xmm0, ecx
-	movss [rsp+0x10], xmm0
-	movd xmm0, eax
-	movss [rsp+0x14], xmm0
 	lea rcx, [rsp]
+	movd xmm0, esi
+	movss [rsp+0x0C], xmm0
+	movd xmm1, eax
+	movd xmm0, edx
+	movss [rsp+0x10], xmm0
+	movss [rsp+0x14], xmm1
 	mov rax, [rsp+0x0C]
 	mov [rcx], rax
 	mov eax, [rsp+0x14]

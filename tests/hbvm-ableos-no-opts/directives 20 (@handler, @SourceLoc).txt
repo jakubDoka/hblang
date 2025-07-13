@@ -10,19 +10,19 @@ directives 20 (@handler, @SourceLoc).main:
      addi64 $254, $254, -77
          cp $1, $0
          st $1, $254, 0, 1
-     addi64 $1, $254, 0
-         st $1, $254, 1, 8
-       li64 $1, 1
-         st $1, $254, 9, 8
-        li8 $1, 1
-         st $1, $254, 17, 1
-        li8 $1, 2
-         st $1, $254, 18, 1
-        li8 $1, 3
-         st $1, $254, 19, 1
-        li8 $1, 4
-         st $1, $254, 20, 1
+       li64 $7, 1
+        li8 $6, 1
+        li8 $5, 2
+        li8 $4, 3
+        li8 $3, 4
      addi64 $1, $254, 17
+     addi64 $2, $254, 0
+         st $2, $254, 1, 8
+         st $7, $254, 9, 8
+         st $6, $254, 17, 1
+         st $5, $254, 18, 1
+         st $4, $254, 19, 1
+         st $3, $254, 20, 1
         jal $31, $0, :directives 20 (@handler, @SourceLoc).produce_memcpy
          ld $2, $254, 9, 8
          cp $1, $0
@@ -32,13 +32,13 @@ directives 20 (@handler, @SourceLoc).main:
         ori $1, $1, 0
        andi $1, $1, 255
         jeq $1, $0, :2
-        lra $1, $0, :directives 20 (@handler, @SourceLoc).main.directives 20 (@handler, @SourceLoc)
-         st $1, $254, 21, 8
-       li64 $1, 36
-         st $1, $254, 29, 8
-       li64 $1, 4294967297
-         st $1, $254, 37, 8
      addi64 $1, $254, 21
+        lra $3, $0, :directives 20 (@handler, @SourceLoc).main.directives 20 (@handler, @SourceLoc)
+         st $3, $254, 21, 8
+       li64 $4, 4294967297
+       li64 $3, 36
+         st $3, $254, 29, 8
+         st $4, $254, 37, 8
          cp $3, $0
          cp $4, $0
         jal $31, $0, :directives 20 (@handler, @SourceLoc).slice_ioob
@@ -64,13 +64,13 @@ directives 20 (@handler, @SourceLoc).use_slice:
          ld $2, $254, 8, 8
          cp $1, $0
        jltu $1, $2, :6
-        lra $1, $0, :directives 20 (@handler, @SourceLoc).use_slice.directives 20 (@handler, @SourceLoc)
-         st $1, $254, 16, 8
-       li64 $1, 36
-         st $1, $254, 24, 8
-       li64 $1, 64424509458
-         st $1, $254, 32, 8
      addi64 $1, $254, 16
+        lra $3, $0, :directives 20 (@handler, @SourceLoc).use_slice.directives 20 (@handler, @SourceLoc)
+         st $3, $254, 16, 8
+       li64 $4, 64424509458
+       li64 $3, 36
+         st $3, $254, 24, 8
+         st $4, $254, 32, 8
          cp $3, $0
          cp $4, $0
         jal $31, $0, :directives 20 (@handler, @SourceLoc).slice_ioob

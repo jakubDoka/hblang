@@ -8,14 +8,14 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	xor rax, rax
 	cmp rax, rcx
 	jb :0
+	lea rsi, [rsp+0x20]
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x20], rax
 	mov qword ptr [rsp+0x28], 0x24
 	mov rax, 0xF00000012
 	mov [rsp+0x30], rax
-	lea rdi, [rsp]
-	lea rsi, [rsp+0x20]
 	mov rdx, 0x20
+	lea rdi, [rsp]
 	call :memcpy
 	mov rdi, rbx
 	xor rsi, rsi
@@ -27,23 +27,18 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	pop rbx
 	ret
 memcpy:
-	mov r8, rdi
-	mov rdi, rsi
-	mov rsi, rdx
-1:	cmp rsi, 0x00
-	setnz al
-	movzx rax, al
-	test al, al
+	mov rax, rdi
+	mov rcx, rsi
+1:	cmp rdx, 0x00
+	setnz sil
+	movzx rsi, sil
+	test sil, sil
 	jz :0
-	dec rsi
-	mov rdx, rdi
-	inc rdx
-	mov rcx, r8
+	mov sil, [rcx]
+	mov [rax], sil
+	dec rdx
 	inc rcx
-	mov al, [rdi]
-	mov [r8], al
-	mov rdi, rdx
-	mov r8, rcx
+	inc rax
 	jmp :1
 0:	ret
 directives 20 (@handler, @SourceLoc).slice_ioob:

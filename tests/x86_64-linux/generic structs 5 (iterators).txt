@@ -78,21 +78,21 @@ generic structs 5 (iterators).main.Chain(.Chars, .Chars).next:
 main:
 	push rbx
 	sub rsp, 0x60
-	lea rcx, [0x0000000000000007]
-	mov [rsp], rcx
+	lea rdx, [0x0000000000000007]
+	mov [rsp], rdx
 	mov qword ptr [rsp+0x08], 0x04
+	lea rcx, [0x0000000000000007]
+	xor bl, bl
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x10], rax
 	mov qword ptr [rsp+0x18], 0x02
-	mov [rsp+0x20], rcx
+	mov [rsp+0x20], rdx
 	mov qword ptr [rsp+0x28], 0x04
 	mov byte ptr [rsp+0x30], 0x00
 	mov [rsp+0x38], rax
 	mov qword ptr [rsp+0x40], 0x02
-	lea rax, [0x0000000000000007]
-	mov [rsp+0x48], rax
+	mov [rsp+0x48], rcx
 	mov qword ptr [rsp+0x50], 0x02
-	xor bl, bl
 8:	lea rdi, [rsp+0x10]
 	call :generic structs 5 (iterators).main.Chars.next
 	mov rdx, [rsp]

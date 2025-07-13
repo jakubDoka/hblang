@@ -130,7 +130,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
 
                 var iter = std.mem.reverseIterator(curr.outputs());
                 while (iter.next()) |o| {
-                    const use: *Node = o;
+                    const use: *Node = o.get();
                     if (use.knownMemOp()) |op| {
                         if (op[0].isStore()) {
                             work_list.appendAssumeCapacity(op[0]);
@@ -271,7 +271,8 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
 
                 const ret = types.ct.vm.regs.get(.ret(0));
                 const ret_vl = bl.addIntImm(.none, ret_ty, @bitCast(ret));
-                for (tmp.arena.dupe(*Node, curr.outputs())) |o| {
+                for (tmp.arena.dupe(Node.Out, curr.outputs())) |n| {
+                    const o = n.get();
                     if (o.kind == .Ret) {
                         bl.func.subsume(ret_vl, o);
                     }

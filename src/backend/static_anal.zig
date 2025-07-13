@@ -74,7 +74,7 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
                 if (node.isSub(graph.If) and node.sloc != graph.Sloc.none) b: {
                     const ld = func.loopDepth(node);
                     for (node.outputs()) |o| {
-                        if (func.loopDepth(o) < ld) break;
+                        if (func.loopDepth(o.get()) < ld) break;
                     } else break :b;
 
                     for (node.inputs()[1..]) |inp| {
@@ -86,8 +86,8 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
                     }) catch unreachable;
                 }
 
-                for (node.outputs()) |o| if (o.isCfg()) {
-                    work.add(o);
+                for (node.outputs()) |o| if (o.get().isCfg()) {
+                    work.add(o.get());
                 };
             }
         }
@@ -99,19 +99,23 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
         ) void {
             const func = self.getGraph();
 
-            if (func.root.outputs().len < 2 or func.root.outputs()[1].kind != .Mem) return;
+            if (func.root.outputs().len < 2 or func.root.outputs()[1].get().kind != .Mem) return;
 
-            for (func.root.outputs()[1].outputs()) |local| if (local.kind == .LocalAlloc) {
-                for (local.outputs()) |op| {
-                    if (op.kind == .Local) {
-                        for (op.outputs()) |use| {
-                            checkLocalForOob(use, local, op, arena, errors);
+            for (func.root.outputs()[1].get().outputs()) |lcl| {
+                const local = lcl.get();
+                if (local.kind == .LocalAlloc) {
+                    for (local.outputs()) |n| {
+                        const op = n.get();
+                        if (op.kind == .Local) {
+                            for (op.outputs()) |use| {
+                                checkLocalForOob(use.get(), local, op, arena, errors);
+                            }
+                        } else {
+                            checkLocalForOob(op, local, null, arena, errors);
                         }
-                    } else {
-                        checkLocalForOob(op, local, null, arena, errors);
                     }
                 }
-            };
+            }
         }
 
         pub fn checkLocalForOob(op: *Func.Node, local: *Func.Node, addr: ?*Func.Node, arena: *root.Arena, errors: *std.ArrayListUnmanaged(Error)) void {
@@ -137,7 +141,10 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
             errors: *std.ArrayListUnmanaged(Error),
         ) void {
             const func = self.getGraph();
-            for (func.root.outputs()[0].outputs()) |arg| if (arg.kind == .Arg) {
+            for (func.root.outputs()[0].get().outputs()) |ar| {
+                const arg = ar.get();
+                if (arg.kind != .Arg) continue;
+
                 var tmp = root.Arena.scrath(arena);
                 defer tmp.deinit();
 
@@ -147,7 +154,7 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
                 for (arg.outputs()) |ao| {
                     // TODO: we skip MemCpy, this will miss a class of problems,
                     // but memcpy elimination might help and effort here would be redundant
-                    const store = ao.knownStore(arg) orelse continue;
+                    const store = ao.get().knownStore(arg) orelse continue;
 
                     if (store.value() != null and store.value().?.kind == .Local) {
                         local_stores.append(tmp.arena.allocator(), store) catch unreachable;
@@ -158,7 +165,7 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
 
                 // filter out the stores that are overriden
                 for (arg.outputs()) |unmarked| {
-                    const store = unmarked.knownStore(arg) orelse continue;
+                    const store = unmarked.get().knownStore(arg) orelse continue;
 
                     if (store.value() != null and store.value().?.kind == .Local) continue;
 
@@ -184,8 +191,8 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
                         }
 
                         const unmarked_is_first = for (curcor.base.outputs()) |bo| {
-                            if (bo == store) break false;
-                            if (bo == marked) break true;
+                            if (bo.get() == store) break false;
+                            if (bo.get() == marked) break true;
                         } else unreachable;
 
                         if (!unmarked_is_first) {
@@ -201,7 +208,7 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
                         .ReturningStack = .{ .slot = marked.value().?.sloc },
                     }) catch unreachable;
                 }
-            };
+            }
         }
 
         pub fn findTrivialStackEscapes(

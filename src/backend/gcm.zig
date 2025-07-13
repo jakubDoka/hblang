@@ -66,12 +66,12 @@ pub fn GcmMixin(comptime Backend: type) type {
             builder.pre_levels[from.base.id] = par_preorder;
             var postorder = par_preorder + 1;
 
-            for (from.base.outputs()) |o| if (o.asCfg()) |oc| {
+            for (from.base.outputs()) |o| if (o.get().asCfg()) |oc| {
                 postorder = postwaklBuildLoopTree(self, postorder, oc, builder);
             };
 
             var inner: ?u16 = null;
-            for (from.base.outputs()) |o| if (o.asCfg()) |oc| {
+            for (from.base.outputs()) |o| if (o.get().asCfg()) |oc| {
                 var ltree: u16 = undefined;
                 if (builder.post_walked.isSet(oc.base.id)) {
                     ltree = oc.ext.loop;
@@ -149,7 +149,6 @@ pub fn GcmMixin(comptime Backend: type) type {
 
                 Func.traversePostorder(struct {
                     rpo: *std.ArrayList(*CfgNode),
-                    pub const dir = "outputs";
                     pub fn each(ctx: @This(), node: *Node) void {
                         ctx.rpo.append(node.asCfg().?) catch unreachable;
                     }
@@ -172,7 +171,8 @@ pub fn GcmMixin(comptime Backend: type) type {
                     if (true) {
                         var intmp = utils.Arena.scrath(null);
                         defer intmp.deinit();
-                        for (intmp.arena.dupe(*Node, n.base.outputs())) |o| if (o.isDataPhi()) {
+                        for (intmp.arena.dupe(Node.Out, n.base.outputs())) |ot| if (ot.get().isDataPhi()) {
+                            const o = ot.get();
                             std.debug.assert(o.inputs().len == 3);
                             const lhs = self.addNode(.MachSplit, n.base.sloc, o.data_type, &.{ null, o.inputs()[1].? }, .{});
                             const rhs = self.addNode(.MachSplit, n.base.sloc, o.data_type, &.{ null, o.inputs()[2].? }, .{});
@@ -200,9 +200,9 @@ pub fn GcmMixin(comptime Backend: type) type {
                     if (cfg.base.kind == .Region or cfg.base.kind == .Loop) {
                         var intmp = utils.Arena.scrath(null);
                         defer intmp.deinit();
-                        for (intmp.arena.dupe(*Node, cfg.base.outputs())) |o| {
-                            if (o.kind == .Phi) {
-                                gcm.shedEarly(o, cfg_rpo[1], &visited);
+                        for (intmp.arena.dupe(Node.Out, cfg.base.outputs())) |o| {
+                            if (o.get().kind == .Phi) {
+                                gcm.shedEarly(o.get(), cfg_rpo[1], &visited);
                             }
                         }
                     }
@@ -232,13 +232,14 @@ pub fn GcmMixin(comptime Backend: type) type {
                         late_scheds[t.id] = t.cfg0();
                     } else {
                         for (t.outputs()) |o| {
-                            if (late_scheds[o.id] == null) {
+                            if (late_scheds[o.get().id] == null) {
                                 continue :task;
                             }
                         }
 
                         if (t.isLoad()) {
-                            for (t.mem().outputs()) |p| {
+                            for (t.mem().outputs()) |n| {
+                                const p = n.get();
                                 if ((p.isStore() or p.kind == .Call) and late_scheds[p.id] == null) {
                                     continue :task;
                                 }
@@ -249,7 +250,8 @@ pub fn GcmMixin(comptime Backend: type) type {
                             const early = t.cfg0();
 
                             var olca: ?*CfgNode = null;
-                            for (t.outputs()) |o| {
+                            for (t.outputs()) |n| {
+                                const o = n.get();
                                 const other = t.useBlock(o, 1, late_scheds);
                                 olca = if (olca) |l| l.findLca(other) else other;
                             }
@@ -262,38 +264,41 @@ pub fn GcmMixin(comptime Backend: type) type {
                                     cursor.ext.antidep = t.id;
                                 }
 
-                                for (t.mem().outputs()) |o| switch (o.kind) {
-                                    .Call => {
-                                        const stblck = late_scheds[o.id].?;
-                                        if (stblck.ext.antidep == t.id) {
-                                            lca = stblck.findLca(lca);
-                                            if (lca == stblck) {
-                                                self.addDep(o, t);
-                                                self.addUse(t, o);
-                                            }
-                                        }
-                                    },
-                                    .Phi => {
-                                        for (o.inputs()[1..], o.cfg0().base.inputs()) |inp, oblk| if (inp.? == t.mem()) {
-                                            var stblck = oblk.?.cfg0();
+                                for (t.mem().outputs()) |n| {
+                                    const o = n.get();
+                                    switch (o.kind) {
+                                        .Call => {
+                                            const stblck = late_scheds[o.id].?;
                                             if (stblck.ext.antidep == t.id) {
                                                 lca = stblck.findLca(lca);
+                                                if (lca == stblck) {
+                                                    const idx = self.addDep(o, t);
+                                                    self.addUse(t, idx, o);
+                                                }
                                             }
-                                        };
-                                    },
-                                    .Local => {},
-                                    .Return => {},
-                                    else => if (o.isLoad() or o.kind == .LocalAlloc) {} else if (o.isStore()) {
-                                        const stblck = late_scheds[o.id].?;
-                                        if (stblck.ext.antidep == t.id) {
-                                            lca = stblck.findLca(lca);
-                                            if (lca == stblck) {
-                                                self.addDep(o, t);
-                                                self.addUse(t, o);
+                                        },
+                                        .Phi => {
+                                            for (o.inputs()[1..], o.cfg0().base.inputs()) |inp, oblk| if (inp.? == t.mem()) {
+                                                var stblck = oblk.?.cfg0();
+                                                if (stblck.ext.antidep == t.id) {
+                                                    lca = stblck.findLca(lca);
+                                                }
+                                            };
+                                        },
+                                        .Local => {},
+                                        .Return => {},
+                                        else => if (o.isLoad() or o.kind == .LocalAlloc) {} else if (o.isStore()) {
+                                            const stblck = late_scheds[o.id].?;
+                                            if (stblck.ext.antidep == t.id) {
+                                                lca = stblck.findLca(lca);
+                                                if (lca == stblck) {
+                                                    const idx = self.addDep(o, t);
+                                                    self.addUse(t, idx, o);
+                                                }
                                             }
-                                        }
-                                    } else utils.panic("{any}", .{o.kind}),
-                                };
+                                        } else utils.panic("{any}", .{o.kind}),
+                                    }
+                                }
 
                                 break :add_antideps;
                             }
@@ -316,12 +321,15 @@ pub fn GcmMixin(comptime Backend: type) type {
                     }
 
                     if (t.kind == .Loop or t.kind == .Region) {
-                        for (t.outputs()) |o| if (late_scheds[o.id] == null) {
-                            if (!visited.isSet(o.id)) {
-                                visited.set(o.id);
-                                work_list.append(o) catch unreachable;
+                        for (t.outputs()) |n| {
+                            const o = n.get();
+                            if (late_scheds[o.id] == null) {
+                                if (!visited.isSet(o.id)) {
+                                    visited.set(o.id);
+                                    work_list.append(o) catch unreachable;
+                                }
                             }
-                        };
+                        }
                     }
 
                     for (t.inputs()) |odef| if (odef) |def| {
@@ -332,7 +340,8 @@ pub fn GcmMixin(comptime Backend: type) type {
                             }
                         }
                         if (t.isStore() or t.kind == .Call)
-                            for (def.outputs()) |out| {
+                            for (def.outputs()) |ot| {
+                                const out = ot.get();
                                 if (out.isLoad() and late_scheds[out.id] == null and !visited.isSet(out.id)) {
                                     visited.set(out.id);
                                     work_list.append(out) catch unreachable;
@@ -372,7 +381,8 @@ pub fn GcmMixin(comptime Backend: type) type {
 
             if (std.debug.runtime_safety) validate_ssa: {
                 for (cfg_rpo[1..]) |bb| if (bb.base.isBasicBlockStart()) {
-                    for (bb.base.outputs()[0 .. bb.base.outputs().len - 1]) |o| {
+                    for (bb.base.outputs()[0 .. bb.base.outputs().len - 1]) |n| {
+                        const o = n.get();
                         if (o.tryCfg0() == null) {
                             std.debug.assert(o.kind == .Return);
                             continue;
@@ -404,7 +414,8 @@ pub fn GcmMixin(comptime Backend: type) type {
 
             // init meta
             const extra = tmp.arena.alloc(NodeMeta, node.outputs().len);
-            for (node.outputs(), extra, 0..) |instr, *e, i| {
+            for (node.outputs(), extra, 0..) |in, *e, i| {
+                const instr = in.get();
                 if (instr.schedule != std.math.maxInt(u16) and !instr.isCfg())
                     utils.panic("{} {}\n", .{ instr, instr.schedule });
                 instr.schedule = @intCast(i);
@@ -432,8 +443,8 @@ pub fn GcmMixin(comptime Backend: type) type {
             const outs = node.outputs();
             var ready: usize = 0;
             for (outs) |*o| {
-                if (extra[o.*.schedule].unscheduled_deps == 0) {
-                    std.mem.swap(*Node, &outs[ready], o);
+                if (extra[o.get().schedule].unscheduled_deps == 0) {
+                    std.mem.swap(Node.Out, &outs[ready], o);
                     ready += 1;
                 }
             }
@@ -443,47 +454,32 @@ pub fn GcmMixin(comptime Backend: type) type {
                 if (ready == scheduled) utils.panic("{} {} {} {any}", .{ scheduled, outs.len, node, outs[scheduled..] });
 
                 var pick = scheduled;
-                for (outs[scheduled + 1 .. ready], scheduled + 1..) |o, i| {
-                    if (extra[o.schedule].priority > extra[outs[pick].schedule].priority) {
-                        pick = i;
-                    } else if (extra[o.schedule].priority == extra[outs[pick].schedule].priority and
-                        b: {
-                            var sum: usize = 1000;
-                            for (o.outputs()) |oo| if (oo.inputs()[0] == node) {
-                                sum = @min(sum, extra[oo.schedule].unscheduled_deps);
-                            };
-                            break :b sum;
-                        } < b: {
-                            var sum: usize = 1000;
-                            for (outs[pick].outputs()) |oo| if (oo.inputs()[0] == node) {
-                                sum = @min(sum, extra[oo.schedule].unscheduled_deps);
-                            };
-                            break :b sum;
-                        })
-                    {
+                for (outs[scheduled + 1 .. ready], scheduled + 1..) |n, i| {
+                    const o = n.get();
+                    if (extra[o.schedule].priority > extra[outs[pick].get().schedule].priority) {
                         pick = i;
                     }
                 }
 
-                const n = outs[pick];
-                for (n.outputs()) |def| if (node == def.inputs()[0] and def.kind != .Phi) {
-                    extra[def.schedule].unscheduled_deps -= 1;
+                const n = outs[pick].get();
+                for (n.outputs()) |def| if (node == def.get().inputs()[0] and def.get().kind != .Phi) {
+                    extra[def.get().schedule].unscheduled_deps -= 1;
                 };
 
-                std.mem.swap(*Node, &outs[scheduled], &outs[pick]);
+                std.mem.swap(Node.Out, &outs[scheduled], &outs[pick]);
                 scheduled += 1;
 
                 for (outs[ready..]) |*o| {
-                    if (extra[o.*.schedule].unscheduled_deps == 0) {
-                        std.debug.assert(o.*.kind != .Phi);
-                        std.mem.swap(*Node, &outs[ready], o);
+                    if (extra[o.get().schedule].unscheduled_deps == 0) {
+                        std.debug.assert(o.get().kind != .Phi);
+                        std.mem.swap(Node.Out, &outs[ready], o);
                         ready += 1;
                     }
                 }
             };
 
             for (node.outputs()) |o| {
-                o.schedule = std.math.maxInt(u16);
+                o.get().schedule = std.math.maxInt(u16);
             }
         }
 

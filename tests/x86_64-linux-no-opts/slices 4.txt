@@ -4,15 +4,15 @@ slices 4.equals:
 	mov [rsp+0x08], rsi
 	mov [rsp+0x10], rdx
 	mov [rsp+0x18], rcx
+	xor cl, cl
 	mov rdx, [rsp+0x08]
 	mov rax, [rsp+0x18]
-	xor cl, cl
 	cmp rdx, rax
 	jz :0
 	jmp :1
-0:	mov rdx, [rsp+0x10]
+0:	mov rdi, 0x01
+	mov rdx, [rsp+0x10]
 	mov rax, [rsp]
-	mov rdi, 0x01
 	cmp rax, rdx
 	jnz :2
 	mov cl, dil
