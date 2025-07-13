@@ -1248,7 +1248,9 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn removeUse(self: *Node, idx: usize, use: *Node) void {
                 const outs = self.outputs();
-                const index = std.mem.indexOfScalar(Out, outs, .init(use, idx, self)).?;
+                const index = std.mem.indexOfScalar(Out, outs, .init(use, idx, self)) orelse {
+                    utils.panic("removeUse: not found {} {any} {}", .{ use, self.outputs(), self });
+                };
                 std.mem.swap(Out, &outs[index], &outs[outs.len - 1]);
                 self.output_len -= 1;
             }
@@ -1969,9 +1971,11 @@ pub fn Func(comptime Backend: type) type {
                 }
 
                 var retain: usize = 0;
-                for (node.inputs()) |a| {
+                for (node.inputs(), 0..) |a, i| {
                     if (a != null) {
+                        const idx = a.?.posOfOutput(i, node);
                         node.inputs()[retain] = a;
+                        a.?.outputs()[idx] = .init(node, retain, a);
                         retain += 1;
                     }
                 }
