@@ -330,7 +330,7 @@ pub const Id = enum(IdRepr) {
 
     pub fn parent(self: Id, types: *Types) Id {
         return switch (self.data()) {
-            .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
+            .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| types.store.get(v).key.loc.scope,
         };
     }
@@ -500,155 +500,301 @@ pub const Id = enum(IdRepr) {
         tys: *Types,
         root: Id = .void,
 
-        pub fn toString(self: *const Fmt, arena: std.mem.Allocator) ![]u8 {
-            return std.fmt.allocPrint(arena, "{}", .{self});
+        pub fn toString(self: *const Fmt, arena: *utils.Arena) []u8 {
+            var tmp = utils.Arena.scrath(arena);
+            defer tmp.deinit();
+            var arr = std.ArrayListUnmanaged(u8).empty;
+            self.fmt(&arr, tmp.arena);
+            return arena.dupe(u8, arr.items);
         }
 
-        pub fn fmt(self: *const Fmt, writer: std.io.AnyWriter) !void {
-            var buff_writer = std.io.bufferedWriter(writer);
+        pub fn fmt(self: *const Fmt, writer: *std.ArrayListUnmanaged(u8), to: *utils.Arena) void {
+            errdefer unreachable;
 
-            var tmp = utils.Arena.scrath(null);
+            var tmp = utils.Arena.scrath(to);
             defer tmp.deinit();
 
             const Task = union(enum) {
-                WritePunck: enum {
-                    @")",
-                    @", ",
-                },
+                Name: []const u8,
                 Type: Id,
+                Value: Val,
+                PushScope: Id,
+                PopScope: usize,
+
+                const Val = struct {
+                    ty: Id,
+                    offset: u32 = 0,
+                    value: u64,
+
+                    pub fn normalize(slf: Val, ts: *Types) Val {
+                        return .{ .value = switch (Abi.ableos.categorize(slf.ty, ts)) {
+                            .Impossible, .Imaginary, .ByValue => readFromGlobal(ts, @enumFromInt(slf.value), slf.ty, slf.offset),
+                            .ByRef, .ByValuePair => slf.value,
+                        }, .ty = slf.ty, .offset = slf.offset };
+                    }
+                };
+
+                pub fn format(s: *const @This(), comptime _: []const u8, _: anytype, wrter: anytype) !void {
+                    switch (s.*) {
+                        .Name => |n| try wrter.print("name: {s}", .{n}),
+                        .Type => |t| try wrter.print("ty: {}", .{t.data()}),
+                        .Value => |v| try wrter.print("v: {}", .{v}),
+                        .PopScope => try wrter.writeAll("pop scope"),
+                    }
+                }
+
+                pub fn writeSignedInt(val: i64, wrter: *std.ArrayListUnmanaged(u8), t: *utils.Arena) !void {
+                    if (val < 0) {
+                        _ = try wrter.write("-");
+                        try writeInt(@intCast(-val), wrter, t);
+                    } else {
+                        try writeInt(@intCast(val), wrter, t);
+                    }
+                }
+
+                pub fn writeInt(val: u64, wrter: *std.ArrayListUnmanaged(u8), t: *utils.Arena) !void {
+                    var chars: [20]u8 = undefined;
+                    var value = val;
+                    const base = 10;
+                    var i: usize = 0;
+                    while (value != 0) : (i += 1) {
+                        chars[i] = '0' + @as(u8, @truncate(value % base));
+                        value /= base;
+                    }
+                    std.mem.reverse(u8, chars[0..i]);
+
+                    _ = try wrter.appendSlice(t.allocator(), chars[0..i]);
+                }
             };
 
-            var stack = tmp.arena.makeArrayList(Task, 16);
+            var work_list = tmp.arena.makeArrayList(Task, 16);
+            var seen_captures = std.AutoArrayHashMapUnmanaged(Scope.Capture, void).empty;
+            var captures_to_display = std.ArrayListUnmanaged(Scope.Capture).empty;
+            var scope_stack = std.ArrayListUnmanaged(Id).empty;
+            try seen_captures.ensureTotalCapacity(tmp.arena.allocator(), 32);
 
-            while (stack.pop()) |task| switch (task) {
+            work_list.appendAssumeCapacity(.{ .Type = self.self });
+
+            while (work_list.pop()) |task| switch (task) {
+                .PopScope => |v| scope_stack.items.len = v,
+                .PushScope => |v| try scope_stack.append(tmp.arena.allocator(), v),
                 .Type => |t| switch (t.data()) {
-                    .Builtin => |b| _ = try buff_writer.write(@tagName(b)),
+                    .Builtin => |b| try writer.appendSlice(to.allocator(), @tagName(b)),
                     .Pointer => |p| {
-                        _ = try buff_writer.write("^");
-                        stack.appendAssumeCapacity(.{ .Type = self.tys.store.get(p).* });
+                        try writer.appendSlice(to.allocator(), "^");
+                        work_list.appendAssumeCapacity(.{ .Type = self.tys.store.get(p).* });
                     },
                     .Slice => |s| {
-                        _ = try buff_writer.write("[");
+                        try writer.appendSlice(to.allocator(), "[");
                         if (self.tys.store.get(s).len) |l| {
-                            var chars: [20]u8 = undefined;
-                            var value = l;
-                            const base = 10;
-                            var i: usize = 0;
-                            while (value != 0) : (i += 1) {
-                                chars[i] = '0' + @as(u8, @truncate(value % base));
-                                value /= base;
-                            }
-                            std.mem.reverse(u8, chars[0..i]);
-
-                            _ = try buff_writer.write(chars[0..i]);
+                            try Task.writeInt(l, writer, to);
                         }
-                        _ = try buff_writer.write("]");
-                        stack.appendAssumeCapacity(.{ .Type = self.tys.store.get(s).elem });
+                        try writer.appendSlice(to.allocator(), "]");
+                        work_list.appendAssumeCapacity(.{ .Type = self.tys.store.get(s).elem });
                     },
                     .Nullable => |n| {
-                        _ = try buff_writer.write("?");
-                        stack.appendAssumeCapacity(.{ .Type = self.tys.store.get(n).inner });
+                        try writer.appendSlice(to.allocator(), "?");
+                        work_list.appendAssumeCapacity(.{ .Type = self.tys.store.get(n).inner });
                     },
                     .Tuple => |tupl| {
-                        _ = try buff_writer.write("(");
+                        try writer.appendSlice(to.allocator(), "(");
                         var iter = std.mem.reverseIterator(self.tys.store.get(tupl).fields);
-                        stack.ensureUnusedCapacity(
+                        work_list.ensureUnusedCapacity(
                             tmp.arena.allocator(),
                             iter.index * 2,
                         ) catch unreachable;
+                        work_list.appendAssumeCapacity(.{ .Name = ") " });
                         while (iter.next()) |elem| {
-                            stack.appendAssumeCapacity(.{ .Type = elem.ty });
-                            stack.appendAssumeCapacity(.{ .WritePunck = .@", " });
+                            work_list.appendAssumeCapacity(.{ .Type = elem.ty });
+                            work_list.appendAssumeCapacity(.{ .Name = ", " });
                         }
-                        stack.items[stack.items.len - 1] = .{ .WritePunck = .@")" };
+                        _ = work_list.pop();
                     },
-                    .Func, .Global, .Template, .Struct, .Union, .Enum => {},
+                    .Func, .Global, .Template, .Struct, .Union, .Enum => {
+                        var cursor = t;
+                        var depth: usize = 0;
+                        const frame = scope_stack.items.len;
+                        work_list.appendAssumeCapacity(.{ .PopScope = frame });
+                        while (cursor != .void) : (depth += 1) {
+                            if (std.mem.indexOfScalar(Id, scope_stack.items, cursor) != null) {
+                                work_list.appendAssumeCapacity(.{ .Name = "." });
+                                break;
+                            }
+                            const key = cursor.getKey(self.tys);
+                            cursor = key.loc.scope;
+
+                            captures_to_display.clearRetainingCapacity();
+                            try captures_to_display.ensureTotalCapacity(tmp.arena.allocator(), key.captures.len);
+                            for (key.captures) |cap| {
+                                if (try seen_captures.fetchPut(tmp.arena.allocator(), cap, {}) == null) {
+                                    captures_to_display.appendAssumeCapacity(cap);
+                                }
+                            }
+
+                            try work_list.ensureUnusedCapacity(tmp.arena.allocator(), captures_to_display.items.len * 2 + 4);
+                            if (captures_to_display.items.len != 0) {
+                                work_list.appendAssumeCapacity(.{ .Name = ")" });
+                                var iter = std.mem.reverseIterator(captures_to_display.items);
+                                while (iter.next()) |cap| {
+                                    if (cap.id.from_any) {
+                                        work_list.appendAssumeCapacity(.{ .Type = cap.ty });
+                                    } else {
+                                        work_list.appendAssumeCapacity(.{ .Value = .{ .ty = cap.ty, .value = cap.value } });
+                                    }
+                                    work_list.appendAssumeCapacity(.{ .Name = ", " });
+                                }
+                                work_list.items[work_list.items.len - 1] = .{ .Name = "(" };
+                            }
+
+                            work_list.appendAssumeCapacity(.{ .PushScope = cursor });
+                            if (key.name.len != 0 and (key.name.len != 1 or key.name[0] != '-')) {
+                                if (key.loc.scope == .void) {
+                                    const end = std.mem.lastIndexOfScalar(u8, key.name, '.') orelse key.name.len;
+                                    work_list.appendAssumeCapacity(.{ .Name = key.name[0..end] });
+                                } else {
+                                    work_list.appendAssumeCapacity(.{ .Name = key.name });
+                                }
+                                work_list.appendAssumeCapacity(.{ .Name = "." });
+                            }
+                        }
+                        _ = work_list.pop();
+                    },
                 },
-                .WritePunck => |p| _ = try buff_writer.write(@tagName(p)),
+                .Name => |n| try writer.appendSlice(to.allocator(), n),
+                .Value => |v| switch (v.ty.data()) {
+                    .Builtin => |b| switch (@as(Builtin, b)) {
+                        .never, .any => try writer.appendSlice(to.allocator(), "<invalid>"),
+                        .void => try writer.appendSlice(to.allocator(), ".()"),
+                        .bool => try writer.appendSlice(to.allocator(), if (v.value != 0) "true" else "false"),
+                        .u8, .u16, .u32, .u64, .uint => try Task.writeInt(v.value, writer, to),
+                        .i8, .i16, .i32, .i64, .int => try Task.writeInt(@bitCast(v.value), writer, to),
+                        .f32 => try writer.writer(to.allocator()).print("{}", .{@as(f32, @bitCast(@as(u32, @truncate(v.value))))}),
+                        .f64 => try writer.writer(to.allocator()).print("{}", .{@as(f64, @bitCast(@as(u64, @truncate(v.value))))}),
+                        .type => work_list.appendAssumeCapacity(.{ .Type = @enumFromInt(v.value) }),
+                    },
+                    .Slice => |s| {
+                        const slc: tys.Slice = self.tys.store.get(s).*;
+                        const ln, const global, const base = if (slc.len) |l| b: {
+                            break :b .{ l, v.value, v.offset };
+                        } else b: {
+                            const ptr = readFromGlobal(self.tys, @enumFromInt(v.value), .uint, v.offset + tys.Slice.ptr_offset);
+                            const ln = readFromGlobal(self.tys, @enumFromInt(v.value), .uint, v.offset + tys.Slice.len_offset);
+
+                            const global = self.tys.findSymForPtr(ptr, ln * slc.elem.size(self.tys));
+                            break :b .{ ln, global catch |err| {
+                                try writer.appendSlice(to.allocator(), "<corrupted-slice>(");
+                                try writer.appendSlice(to.allocator(), @errorName(err));
+                                try writer.appendSlice(to.allocator(), ")");
+                                continue;
+                            }, 0 };
+                        };
+
+                        if (slc.elem == .u8 and slc.len == null) {
+                            const glb: utils.EntId(tys.Global) = @enumFromInt(global);
+                            try writer.appendSlice(to.allocator(), "\"");
+                            try writer.appendSlice(to.allocator(), self.tys.store.get(glb).data[base..][0..ln]);
+                            try writer.appendSlice(to.allocator(), "\"");
+                            continue;
+                        }
+
+                        if (slc.len == null) {
+                            try writer.appendSlice(to.allocator(), "&.[");
+                        } else {
+                            try writer.appendSlice(to.allocator(), ".[");
+                        }
+
+                        work_list.ensureUnusedCapacity(tmp.arena.allocator(), ln * 2) catch unreachable;
+                        try work_list.append(tmp.arena.allocator(), .{ .Name = "]" });
+                        for (0..ln) |i| {
+                            const off = i * slc.elem.size(self.tys);
+                            work_list.appendAssumeCapacity(.{ .Value = .normalize(.{
+                                .ty = slc.elem,
+                                .value = global,
+                                .offset = @intCast(off),
+                            }, self.tys) });
+                            work_list.appendAssumeCapacity(.{ .Name = ", " });
+                        }
+                        _ = work_list.pop();
+                    },
+                    .Struct => |s| {
+                        var offsets = @as(tys.Struct.Id, s).offsetIter(self.tys);
+                        try writer.appendSlice(to.allocator(), ".{");
+                        work_list.ensureUnusedCapacity(tmp.arena.allocator(), offsets.fields.len * 2) catch unreachable;
+                        work_list.appendAssumeCapacity(.{ .Name = "}" });
+                        const base = work_list.items.len;
+                        while (offsets.next()) |elem| {
+                            work_list.appendAssumeCapacity(.{ .Name = ", " });
+                            work_list.appendAssumeCapacity(.{ .Name = elem.field.name });
+                            work_list.appendAssumeCapacity(.{ .Name = ": " });
+                            work_list.appendAssumeCapacity(.{ .Value = .normalize(.{
+                                .ty = elem.field.ty,
+                                .value = v.value,
+                                .offset = @intCast(v.offset + elem.offset),
+                            }, self.tys) });
+                        }
+                        std.mem.reverse(Task, work_list.items[base..]);
+                        _ = work_list.pop();
+                    },
+                    .Pointer => |p| {
+                        const ty: Id = self.tys.store.get(p).*;
+                        const global = self.tys.findSymForPtr(v.value, ty.size(self.tys)) catch |err| {
+                            try writer.appendSlice(to.allocator(), "<corrupted-pointer>(");
+                            try writer.appendSlice(to.allocator(), @errorName(err));
+                            try writer.appendSlice(to.allocator(), ")");
+                            return;
+                        };
+
+                        try writer.appendSlice(to.allocator(), "&");
+                        work_list.appendAssumeCapacity(.{
+                            .Value = .normalize(.{ .ty = ty, .value = global }, self.tys),
+                        });
+                    },
+                    .Tuple => |t| {
+                        try writer.appendSlice(to.allocator(), ".(");
+                        var iter = @as(tys.Tuple.Id, t).offsetIter(self.tys);
+                        while (iter.next()) |elem| {
+                            work_list.appendAssumeCapacity(.{ .Name = ", " });
+                            work_list.appendAssumeCapacity(.{ .Value = .normalize(.{
+                                .ty = elem.field.ty,
+                                .value = v.value,
+                                .offset = @intCast(v.offset + elem.offset),
+                            }, self.tys) });
+                        }
+                        std.mem.reverse(Task, work_list.items[work_list.items.len - 1 ..]);
+                        _ = work_list.pop();
+                    },
+                    .Enum => |e| {
+                        try writer.appendSlice(to.allocator(), ".");
+                        try writer.appendSlice(to.allocator(), e.getFields(self.tys)[v.value].name);
+                    },
+                    .Nullable => |n| {
+                        const global = self.tys.store.get(@as(utils.EntId(tys.Global), @enumFromInt(v.value)));
+                        if (self.tys.isNullablePresent(n, global, v.offset)) {
+                            try writer.appendSlice(to.allocator(), "null");
+                            continue;
+                        }
+
+                        const dta: *tys.Nullable = self.tys.store.get(n);
+                        const nieche: ?tys.Nullable.NiecheSpec = dta.nieche.offset(self.tys);
+                        const next_offset = if (nieche != null) dta.inner.alignment(self.tys) else 0;
+                        work_list.appendAssumeCapacity(.{ .Value = .normalize(.{
+                            .ty = dta.inner,
+                            .value = v.value,
+                            .offset = @intCast(v.offset + next_offset),
+                        }, self.tys) });
+                    },
+                    .Union => try writer.appendSlice(to.allocator(), "<union: cant display>"),
+                    .Template, .Global, .Func => unreachable,
+                },
             };
-
-            try buff_writer.flush();
-
-            //var buff = tmp.arena.makeArrayList(Id, 8);
-            //while (cursor != .void) : (cursor = cursor.parent(self.tys)) {
-            //    try buff.append(tmp.arena.allocator(), cursor);
-            //}
-
-            //var seen_syms = tmp.arena.makeArrayList(Ast.Ident, 8);
-            //var iter = std.mem.reverseIterator(buff.items);
-            //while (iter.next()) |id| {}
         }
 
         pub fn format(self: *const Fmt, comptime _: []const u8, _: anytype, writer: anytype) !void {
-            try switch (self.self.data()) {
-                .Pointer => |b| writer.print("^{}", .{self.tys.store.get(b).fmt(self.tys)}),
-                .Nullable => |b| writer.print("?{}", .{self.tys.store.get(b).inner.fmt(self.tys)}),
-                .Slice => |b| {
-                    try writer.writeAll("[");
-                    if (self.tys.store.get(b).len) |l| try writer.print("{d}", .{l});
-                    try writer.print("]{}", .{self.tys.store.get(b).elem.fmt(self.tys)});
-                    return;
-                },
-                .Tuple => |b| {
-                    try writer.writeAll("(");
-                    for (self.tys.store.get(b).fields, 0..) |f, i| {
-                        if (i != 0) try writer.writeAll(", ");
-                        try writer.print("{}", .{f.ty.fmt(self.tys)});
-                    }
-                    try writer.writeAll(")");
-                    return;
-                },
-                .Builtin => |b| writer.writeAll(@tagName(b)),
-                .Func, .Global, .Template, .Struct, .Union, .Enum => {
-                    const key: *Scope = switch (self.self.data()) {
-                        inline .Func, .Global, .Template, .Struct, .Union, .Enum => |v| &self.tys.store.get(v).key,
-                        else => unreachable,
-                    };
-                    var cursora = self.root;
-                    const overlap = while (cursora != .void) {
-                        if (cursora == key.loc.scope) {
-                            break false;
-                        }
-                        cursora = cursora.parent(self.tys);
-                    } else true;
-                    if (overlap and key.loc.scope != .void) {
-                        try writer.print("{}", .{key.loc.scope.fmtLocal(self.tys, self.root)});
-                    }
-                    if (key.name.len != 0 and (key.name.len != 1 or key.name[0] != '-')) {
-                        if (key.loc.scope != .void) {
-                            try writer.writeAll(".");
-                            try writer.writeAll(key.name);
-                        } else {
-                            var name = std.fs.path.basename(key.name);
-                            name = name[0 .. std.mem.lastIndexOfScalar(u8, name, '.') orelse name.len];
-                            try writer.writeAll(name);
-                        }
-                    }
-                    if (key.captures.len != 0 and self.self.data() != .Global) {
-                        var written_paren = false;
-                        o: for (key.captures) |capture| {
-                            var cursor = key.loc.scope;
-                            while (cursor != .void and cursor.data() != .Pointer and cursor.data() != .Builtin) {
-                                if (cursor.findCapture(capture.ident(), self.tys) != null) continue :o;
-                                cursor = cursor.parent(self.tys);
-                            }
-
-                            if (written_paren) try writer.writeAll(", ");
-                            if (!written_paren) {
-                                try writer.writeAll("(");
-                                written_paren = true;
-                            }
-                            if (capture.id.from_any) {
-                                try writer.print("{}", .{capture.ty.fmtLocal(self.tys, key.loc.scope)});
-                            } else {
-                                try writer.print("{}", .{capture.ty.fmtValue(self.tys, capture.value, key.loc.scope)});
-                            }
-                        }
-                        if (written_paren) try writer.writeAll(")");
-                    }
-                    return;
-                },
-            };
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+            var arr = std.ArrayListUnmanaged(u8).empty;
+            self.fmt(&arr, tmp.arena);
+            try writer.writeAll(arr.items);
         }
     };
 
@@ -658,143 +804,6 @@ pub const Id = enum(IdRepr) {
 
     pub fn fmt(self: Id, types: *Types) Fmt {
         return .{ .self = self, .tys = types };
-    }
-
-    pub const FmtValue = struct {
-        self: Id,
-        tys: *Types,
-        offset: u64 = 0,
-        value: u64,
-        root: Id,
-
-        pub fn format(self: *const FmtValue, comptime _: []const u8, _: anytype, writer: anytype) !void {
-            switch (self.self.data()) {
-                .Builtin => |b| switch (@as(Builtin, b)) {
-                    .never, .any => try writer.writeAll("<invalid>"),
-                    .void => try writer.writeAll(".()"),
-                    .bool => try writer.writeAll(if (self.value != 0) "true" else "false"),
-                    .u8, .u16, .u32, .u64, .uint => try writer.print("{}", .{self.value}),
-                    .i8, .i16, .i32, .i64, .int => try writer.print("{}", .{@as(i64, @bitCast(self.value))}),
-                    .f32 => try writer.print("{}", .{@as(f32, @bitCast(@as(u32, @truncate(self.value))))}),
-                    .f64 => try writer.print("{}", .{@as(f64, @bitCast(@as(u64, @truncate(self.value))))}),
-                    .type => try writer.print("{}", .{@as(Id, @enumFromInt(self.value)).fmtLocal(self.tys, self.root)}),
-                },
-                .Slice => |s| {
-                    const slc: tys.Slice = self.tys.store.get(s).*;
-                    const ln, const global, const base = if (slc.len) |l| b: {
-                        break :b .{ l, self.value, self.offset };
-                    } else b: {
-                        const ptr = readFromGlobal(self.tys, @enumFromInt(self.value), .uint, self.offset + tys.Slice.ptr_offset);
-                        const ln = readFromGlobal(self.tys, @enumFromInt(self.value), .uint, self.offset + tys.Slice.len_offset);
-
-                        const global = self.tys.findSymForPtr(ptr, ln * slc.elem.size(self.tys));
-                        break :b .{ ln, global catch |err| {
-                            try writer.print("<corrupted>({s})", .{@errorName(err)});
-                            return;
-                        }, 0 };
-                    };
-
-                    if (slc.elem == .u8 and slc.len == null) {
-                        const glb: utils.EntId(tys.Global) = @enumFromInt(global);
-                        try writer.print("\"{s}\"", .{self.tys.store.get(glb).data[base..][0..ln]});
-                        return;
-                    }
-
-                    const fvl = FmtValue{
-                        .self = slc.elem,
-                        .tys = self.tys,
-                        .offset = base,
-                        .value = global,
-                        .root = self.root,
-                    };
-                    if (slc.len == null) try writer.writeAll("&");
-                    try writer.writeAll(".[");
-                    for (0..ln) |i| {
-                        if (i != 0) try writer.writeAll(", ");
-                        const off = i * slc.elem.size(self.tys);
-                        try writer.print("{}", .{fvl.fmtAny(slc.elem, off)});
-                    }
-                    try writer.writeAll("]");
-                },
-                .Struct => |s| {
-                    var offsets = @as(tys.Struct.Id, s).offsetIter(self.tys);
-                    try writer.writeAll(".{");
-                    var first = true;
-                    while (offsets.next()) |elem| {
-                        if (!first) try writer.writeAll(", ");
-                        if (first) first = false;
-                        try writer.print("{s}: ", .{elem.field.name});
-                        try writer.print("{}", .{self.fmtAny(elem.field.ty, elem.offset)});
-                    }
-                    try writer.writeAll("}");
-                },
-                .Pointer => |p| {
-                    const ty: Id = self.tys.store.get(p).*;
-                    const global = self.tys.findSymForPtr(self.value, ty.size(self.tys)) catch |err| {
-                        try writer.print("<corrupted>({s})", .{@errorName(err)});
-                        return;
-                    };
-
-                    const fvl = FmtValue{
-                        .self = ty,
-                        .tys = self.tys,
-                        .offset = 0,
-                        .value = global,
-                        .root = self.root,
-                    };
-                    try writer.print("&{}", .{fvl.fmtAny(ty, 0)});
-                },
-                .Tuple => |t| {
-                    try writer.writeAll(".(");
-                    var iter = @as(tys.Tuple.Id, t).offsetIter(self.tys);
-                    var first = true;
-                    while (iter.next()) |elem| {
-                        if (!first) try writer.writeAll(", ");
-                        if (first) first = false;
-                        try writer.print("{}", .{self.fmtAny(elem.field.ty, elem.offset)});
-                    }
-                    try writer.writeAll(")");
-                },
-                .Enum => |e| {
-                    try writer.print(".{s}", .{e.getFields(self.tys)[self.value].name});
-                },
-                .Nullable => |n| {
-                    const global = self.tys.store.get(@as(utils.EntId(tys.Global), @enumFromInt(self.value)));
-                    if (self.tys.isNullablePresent(n, global, self.offset)) {
-                        try writer.writeAll("null");
-                        return;
-                    }
-
-                    const dta: *tys.Nullable = self.tys.store.get(n);
-                    const nieche: ?tys.Nullable.NiecheSpec = dta.nieche.offset(self.tys);
-                    const next_offset = if (nieche != null) dta.inner.alignment(self.tys) else 0;
-                    try writer.print("{}", .{self.fmtAny(dta.inner, next_offset)});
-                },
-                .Union => try writer.writeAll("<union: cant display>"),
-                .Func, .Template, .Global => unreachable,
-            }
-        }
-
-        pub fn fmtAny(self: FmtValue, ty: Id, offset: u64) FmtValue {
-            return switch (Abi.ableos.categorize(ty, self.tys)) {
-                .Impossible, .Imaginary, .ByValue => ty.fmtValue(
-                    self.tys,
-                    readFromGlobal(self.tys, @enumFromInt(self.value), ty, self.offset + offset),
-                    self.root,
-                ),
-                .ByRef, .ByValuePair => {
-                    return ty.fmtValueOffset(self.tys, self.value, self.offset + offset, self.root);
-                },
-            };
-        }
-    };
-
-    pub fn fmtValueOffset(self: Id, types: *Types, value: u64, offset: u64, bound: Id) FmtValue {
-        return .{ .self = self, .tys = types, .value = value, .offset = offset, .root = bound };
-    }
-
-    pub fn fmtValue(self: Id, types: *Types, value: u64, bound: Id) FmtValue {
-        return .{ .self = self, .tys = types, .value = value, .root = bound };
     }
 };
 
@@ -819,14 +828,14 @@ pub fn getBuiltins(self: *Types) Machine.Builtins {
     };
 }
 
-pub fn retainGlobals(self: *Types, target: Target, backend: anytype, scratch: ?std.mem.Allocator) bool {
+pub fn retainGlobals(self: *Types, target: Target, backend: anytype, scratch: ?*utils.Arena) bool {
     errdefer unreachable;
 
     var errored = false;
 
     const work_list = self.global_work_list.getPtr(target);
     while (work_list.pop()) |global| {
-        var scrath = utils.Arena.scrathFromAlloc(scratch);
+        var scrath = utils.Arena.scrath(scratch);
         defer scrath.deinit();
 
         const glob: *tys.Global = self.store.get(global);
@@ -848,7 +857,7 @@ pub fn retainGlobals(self: *Types, target: Target, backend: anytype, scratch: ?s
 
         backend.emitData(.{
             .id = @intFromEnum(global),
-            .name = if (scratch) |s| try root.frontend.Types.Id.init(.{ .Global = global })
+            .name = if (scratch) |s| root.frontend.Types.Id.init(.{ .Global = global })
                 .fmt(self).toString(s) else "",
             .value = .{ .init = glob.data },
             .relocs = relocs.items,
@@ -1024,7 +1033,7 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: std.io.AnyWriter) *
         .pool = .{
             .arena = arena,
         },
-        .ct = .init(slot.pool.allocator()),
+        .ct = .init(&slot.pool),
         .diagnostics = diagnostics,
     };
 
@@ -1092,7 +1101,7 @@ pub fn checkStack(self: *Types, file: File, pos: anytype) !void {
 
 pub fn deinit(self: *Types) void {
     var arena = self.pool.arena;
-    self.ct.in_progress.deinit(self.ct.gen.gpa);
+    self.ct.in_progress.deinit(self.ct.gen.gpa.allocator());
     self.ct.gen.deinit();
     self.* = undefined;
     arena.deinit();
@@ -1198,7 +1207,7 @@ pub fn resolveFielded(
             .index = Ast.Index.build(
                 self.getFile(file),
                 self.getFile(file).exprs.get(ast).Type.fields,
-                self.pool.arena.allocator(),
+                &self.pool.arena,
             ),
         };
     }
