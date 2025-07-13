@@ -27,7 +27,7 @@ comptime 2.main.some_fn(uint):
 	ret
 main:
 	push rbx
-	sub rsp, 0x18
+	sub rsp, 0x10
 	mov dword ptr [rsp], 0x07
 	mov rax, 0x90000002
 	mov [rsp+0x04], eax
@@ -40,6 +40,6 @@ main:
 	call :comptime 2.main.some_fn3(uint)((.some_fn2(uint, .some_fn(uint))))
 	add rbx, rax
 	mov rax, rbx
-	add rsp, 0x18
+	add rsp, 0x10
 	pop rbx
 	ret

@@ -504,6 +504,81 @@ pub const Id = enum(IdRepr) {
             return std.fmt.allocPrint(arena, "{}", .{self});
         }
 
+        pub fn fmt(self: *const Fmt, writer: std.io.AnyWriter) !void {
+            var buff_writer = std.io.bufferedWriter(writer);
+
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            const Task = union(enum) {
+                WritePunck: enum {
+                    @")",
+                    @", ",
+                },
+                Type: Id,
+            };
+
+            var stack = tmp.arena.makeArrayList(Task, 16);
+
+            while (stack.pop()) |task| switch (task) {
+                .Type => |t| switch (t.data()) {
+                    .Builtin => |b| _ = try buff_writer.write(@tagName(b)),
+                    .Pointer => |p| {
+                        _ = try buff_writer.write("^");
+                        stack.appendAssumeCapacity(.{ .Type = self.tys.store.get(p).* });
+                    },
+                    .Slice => |s| {
+                        _ = try buff_writer.write("[");
+                        if (self.tys.store.get(s).len) |l| {
+                            var chars: [20]u8 = undefined;
+                            var value = l;
+                            const base = 10;
+                            var i: usize = 0;
+                            while (value != 0) : (i += 1) {
+                                chars[i] = '0' + @as(u8, @truncate(value % base));
+                                value /= base;
+                            }
+                            std.mem.reverse(u8, chars[0..i]);
+
+                            _ = try buff_writer.write(chars[0..i]);
+                        }
+                        _ = try buff_writer.write("]");
+                        stack.appendAssumeCapacity(.{ .Type = self.tys.store.get(s).elem });
+                    },
+                    .Nullable => |n| {
+                        _ = try buff_writer.write("?");
+                        stack.appendAssumeCapacity(.{ .Type = self.tys.store.get(n).inner });
+                    },
+                    .Tuple => |tupl| {
+                        _ = try buff_writer.write("(");
+                        var iter = std.mem.reverseIterator(self.tys.store.get(tupl).fields);
+                        stack.ensureUnusedCapacity(
+                            tmp.arena.allocator(),
+                            iter.index * 2,
+                        ) catch unreachable;
+                        while (iter.next()) |elem| {
+                            stack.appendAssumeCapacity(.{ .Type = elem.ty });
+                            stack.appendAssumeCapacity(.{ .WritePunck = .@", " });
+                        }
+                        stack.items[stack.items.len - 1] = .{ .WritePunck = .@")" };
+                    },
+                    .Func, .Global, .Template, .Struct, .Union, .Enum => {},
+                },
+                .WritePunck => |p| _ = try buff_writer.write(@tagName(p)),
+            };
+
+            try buff_writer.flush();
+
+            //var buff = tmp.arena.makeArrayList(Id, 8);
+            //while (cursor != .void) : (cursor = cursor.parent(self.tys)) {
+            //    try buff.append(tmp.arena.allocator(), cursor);
+            //}
+
+            //var seen_syms = tmp.arena.makeArrayList(Ast.Ident, 8);
+            //var iter = std.mem.reverseIterator(buff.items);
+            //while (iter.next()) |id| {}
+        }
+
         pub fn format(self: *const Fmt, comptime _: []const u8, _: anytype, writer: anytype) !void {
             try switch (self.self.data()) {
                 .Pointer => |b| writer.print("^{}", .{self.tys.store.get(b).fmt(self.tys)}),

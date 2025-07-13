@@ -10,7 +10,7 @@ out of bounds matching 1.byte_iter:
 	ret
 out of bounds matching 1.Iterator().for_each(.main):
 	push rbx
-	sub rsp, 0x18
+	sub rsp, 0x10
 	mov [rsp], rdi
 	mov rbx, 0xFF
 1:	mov rdi, [rsp]
@@ -24,7 +24,7 @@ out of bounds matching 1.Iterator().for_each(.main):
 	mov dil, [rsp+0x08]
 	call :out of bounds matching 1.main
 	jmp :1
-0:	add rsp, 0x18
+0:	add rsp, 0x10
 	pop rbx
 	ret
 out of bounds matching 1.Iterator().next:

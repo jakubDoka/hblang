@@ -14,7 +14,6 @@ two.add:
 	ret
 main:
 	push rbx
-	sub rsp, 0x08
 	mov rdi, 0x0A
 	call :one.add
 	mov rbx, rax
@@ -22,6 +21,5 @@ main:
 	call :two.add
 	add rbx, rax
 	mov rax, rbx
-	add rsp, 0x08
 	pop rbx
 	ret

@@ -2,7 +2,7 @@ cstring indexing.slice_ioob:
 	ud2
 main:
 	push rbx
-	sub rsp, 0x68
+	sub rsp, 0x60
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x40], rax
 	lea rax, [0x0000000000000007]
@@ -53,7 +53,7 @@ main:
 	mov rcx, rbx
 	inc rcx
 	jmp :4
-0:	add rsp, 0x68
+0:	add rsp, 0x60
 	pop rbx
 	ret
 memcpy:

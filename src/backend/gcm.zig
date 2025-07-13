@@ -250,7 +250,7 @@ pub fn GcmMixin(comptime Backend: type) type {
 
                             var olca: ?*CfgNode = null;
                             for (t.outputs()) |o| {
-                                const other = t.useBlock(o, late_scheds);
+                                const other = t.useBlock(o, 1, late_scheds);
                                 olca = if (olca) |l| l.findLca(other) else other;
                             }
                             var lca = olca.?;

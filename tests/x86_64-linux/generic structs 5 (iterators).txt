@@ -27,7 +27,7 @@ generic structs 5 (iterators).main.Chain(.Chars, .Chars).next:
 	push rbx
 	push rbp
 	push r12
-	sub rsp, 0x08
+	sub rsp, 0x10
 	mov r12, rdi
 	mov rax, r12
 	add rax, 0x18
@@ -70,14 +70,14 @@ generic structs 5 (iterators).main.Chain(.Chars, .Chars).next:
 3:	jmp :7
 4:	mov byte ptr [rsp], 0x00
 	mov ax, [rsp]
-6:	add rsp, 0x08
+6:	add rsp, 0x10
 	pop r12
 	pop rbp
 	pop rbx
 	ret
 main:
 	push rbx
-	sub rsp, 0x68
+	sub rsp, 0x60
 	lea rcx, [0x0000000000000007]
 	mov [rsp], rcx
 	mov qword ptr [rsp+0x08], 0x04
@@ -139,7 +139,7 @@ main:
 	cmp cl, al
 	jz :7
 	mov rax, 0x02
-7:	add rsp, 0x68
+7:	add rsp, 0x60
 	pop rbx
 	ret
 7:	jmp :8

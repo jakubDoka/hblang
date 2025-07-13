@@ -1,6 +1,6 @@
 main:
 	push rbx
-	sub rsp, 0x18
+	sub rsp, 0x20
 	mov rax, 0x123
 	xor rbx, rbx
 	xor rdi, rdi
@@ -34,6 +34,6 @@ main:
 	mov rax, 0x02
 1:	jmp :3
 2:	mov rax, rbx
-3:	add rsp, 0x18
+3:	add rsp, 0x20
 	pop rbx
 	ret

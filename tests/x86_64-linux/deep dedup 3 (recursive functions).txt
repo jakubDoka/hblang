@@ -27,7 +27,6 @@ deep dedup 3 (recursive functions).fib2:
 	ret
 main:
 	push rbx
-	sub rsp, 0x08
 	mov rdi, 0x03
 	call :deep dedup 3 (recursive functions).fib2
 	mov rbx, rax
@@ -35,6 +34,5 @@ main:
 	call :deep dedup 3 (recursive functions).fib2
 	sub rbx, rax
 	mov rax, rbx
-	add rsp, 0x08
 	pop rbx
 	ret

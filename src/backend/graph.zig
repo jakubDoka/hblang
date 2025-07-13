@@ -872,10 +872,10 @@ pub fn Func(comptime Backend: type) type {
                 return self.kind == .Region and self.extra(.Region).preserve_identity_phys;
             }
 
-            pub fn useBlock(self: *Node, use: *Node, scheds: []const ?*CfgNode) *CfgNode {
+            pub fn useBlock(self: *Node, use: *Node, from: usize, scheds: []const ?*CfgNode) *CfgNode {
                 if (use.kind == .Phi) {
                     std.debug.assert(use.inputs()[0].?.kind == .Region or use.inputs()[0].?.kind == .Loop);
-                    for (use.inputs()[0].?.inputs(), use.inputs()[1..]) |b, u| {
+                    for (use.inputs()[0].?.inputs()[from - 1 ..], use.inputs()[from..]) |b, u| {
                         if (u.? == self) {
                             return subclass(b.?, Cfg).?;
                         }
@@ -1498,7 +1498,10 @@ pub fn Func(comptime Backend: type) type {
                     break :b self.clone(def, block);
                 }
             } else self.addSplit(block, if (skip and
-                def.kind == .MachSplit and def.cfg0() == block) def.inputs()[1].? else def, dbg);
+                def.kind == .MachSplit and def.cfg0() == block)
+            b: {
+                break :b def.inputs()[1].?;
+            } else def, dbg);
 
             self.setInputNoIntern(use, idx, ins);
             const oidx = if (use.kind == .Phi) block.base.outputs().len - 2 else block.base.posOfOutput(use);

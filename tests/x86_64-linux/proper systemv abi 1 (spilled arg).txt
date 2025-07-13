@@ -27,7 +27,7 @@ proper systemv abi 1 (spilled arg).stack_args:
 	ret
 main:
 	push rbx
-	sub rsp, 0x68
+	sub rsp, 0x70
 	mov qword ptr [rsp+0x48], 0x07
 	lea rax, [rsp]
 	mov qword ptr [rax], 0x06
@@ -61,7 +61,7 @@ main:
 	call :proper systemv abi 1 (spilled arg).stack_args
 	sub rbx, rax
 	mov rax, rbx
-	add rsp, 0x68
+	add rsp, 0x70
 	pop rbx
 	ret
 memcpy:

@@ -6,7 +6,6 @@ forced div 1.one:
 	ret
 main:
 	push rbx
-	sub rsp, 0x08
 	call :forced div 1.two
 	mov rbx, rax
 	call :forced div 1.one
@@ -14,6 +13,5 @@ main:
 	mov rax, rbx
 	xor rdx, rdx
 	div rcx
-	add rsp, 0x08
 	pop rbx
 	ret

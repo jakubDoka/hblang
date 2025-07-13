@@ -1,0 +1,18 @@
+unaligned stack 1.check_stack:
+	mov rcx, 0x10
+	mov rax, rsp
+	xor rdx, rdx
+	div rcx
+	cmp rdx, 0x00
+	setz al
+	movzx rax, al
+	test al, al
+	jz :0
+	ud2
+0:	ret
+main:
+	sub rsp, 0x08
+	call :unaligned stack 1.check_stack
+	xor rax, rax
+	add rsp, 0x08
+	ret

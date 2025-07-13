@@ -2,7 +2,7 @@ directives 20 (@handler, @SourceLoc).produce_memcpy:
 	ret
 directives 20 (@handler, @SourceLoc).use_slice:
 	push rbx
-	sub rsp, 0x48
+	sub rsp, 0x40
 	mov rbx, rsi
 	mov rcx, rbx
 	xor rax, rax
@@ -23,7 +23,7 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	call :directives 20 (@handler, @SourceLoc).slice_ioob
 0:	mov al, [rdi]
 	movzx rax, al
-	add rsp, 0x48
+	add rsp, 0x40
 	pop rbx
 	ret
 memcpy:

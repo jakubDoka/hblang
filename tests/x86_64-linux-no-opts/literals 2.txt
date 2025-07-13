@@ -6,7 +6,6 @@ literals 2.dec:
 	ret
 main:
 	push rbx
-	sub rsp, 0x08
 	call :literals 2.hex
 	mov rbx, rax
 	call :literals 2.dec
@@ -15,6 +14,5 @@ main:
 	mov rax, 0x01
 	jmp :1
 0:	xor rax, rax
-1:	add rsp, 0x08
-	pop rbx
+1:	pop rbx
 	ret

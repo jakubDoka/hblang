@@ -491,7 +491,7 @@ Iterator := fn($Iter: type): type return struct {
 ```hb
 $check_stack := fn(): void {
     $if @target("x86_64-linux") {
-        if @frame_pointer() % 16 == 8 {
+        if @frame_pointer() % 16 == 0 {
             die
         }
     }

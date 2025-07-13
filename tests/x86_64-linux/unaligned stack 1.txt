@@ -3,7 +3,7 @@ main:
 	mov rax, rsp
 	xor rdx, rdx
 	div rcx
-	cmp rdx, 0x08
+	cmp rdx, 0x00
 	setz al
 	movzx rax, al
 	test al, al

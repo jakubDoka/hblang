@@ -27,7 +27,7 @@ slices 4.equals:
 	jmp :7
 main:
 	push rbx
-	sub rsp, 0x08
+	sub rsp, 0x10
 	mov byte ptr [rsp], 0x61
 	mov byte ptr [rsp+0x01], 0x62
 	mov byte ptr [rsp+0x02], 0x63
@@ -52,6 +52,6 @@ main:
 1:	mov rax, 0x01
 	jmp :3
 2:	xor rax, rax
-3:	add rsp, 0x08
+3:	add rsp, 0x10
 	pop rbx
 	ret

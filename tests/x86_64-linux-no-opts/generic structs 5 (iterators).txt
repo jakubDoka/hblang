@@ -70,7 +70,7 @@ generic structs 5 (iterators).main.Chain(.Chars, .Chars).next:
 	ret
 main:
 	push rbx
-	sub rsp, 0x88
+	sub rsp, 0x90
 	lea rax, [0x0000000000000007]
 	mov [rsp], rax
 	mov qword ptr [rsp+0x08], 0x04
@@ -147,7 +147,7 @@ main:
 	cmp al, cl
 	jz :7
 	mov rax, 0x02
-7:	add rsp, 0x88
+7:	add rsp, 0x90
 	pop rbx
 	ret
 7:	jmp :8

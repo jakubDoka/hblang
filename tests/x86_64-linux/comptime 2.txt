@@ -9,7 +9,6 @@ comptime 2.main.some_fn2(uint, .some_fn(uint)):
 	ret
 main:
 	push rbx
-	sub rsp, 0x08
 	call :comptime 2.main.some_fn(uint)
 	mov rbx, rax
 	call :comptime 2.main.some_fn2(uint, .some_fn(uint))
@@ -17,6 +16,5 @@ main:
 	add rax, 0x14
 	add rbx, rax
 	mov rax, rbx
-	add rsp, 0x08
 	pop rbx
 	ret

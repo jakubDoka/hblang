@@ -8,7 +8,6 @@ functions 1.add_two:
 	ret
 main:
 	push rbx
-	sub rsp, 0x08
 	mov rdi, 0x0A
 	call :functions 1.add_one
 	mov rbx, rax
@@ -16,6 +15,5 @@ main:
 	call :functions 1.add_two
 	add rbx, rax
 	mov rax, rbx
-	add rsp, 0x08
 	pop rbx
 	ret

@@ -79,7 +79,6 @@ pub const classes = enum {
     };
 };
 
-pub const reg_mask_cap = 254 + 32;
 pub const reg_count = 254;
 
 // ================== BINDINGS ==================
@@ -292,6 +291,7 @@ pub fn idealize(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList
 }
 
 // ================== REGALLOC ==================
+pub const set_cap = 254 + 32;
 pub const Set = std.DynamicBitSetUnmanaged;
 
 pub fn setMasks(set: *Set) []Set.MaskInt {
@@ -305,30 +305,30 @@ pub fn setIntersects(a: Set, b: Set) bool {
 }
 
 pub fn readMask(arena: *utils.Arena) Set {
-    var set = Set.initEmpty(arena.allocator(), reg_mask_cap) catch unreachable;
+    var set = Set.initEmpty(arena.allocator(), set_cap) catch unreachable;
     set.setRangeValue(.{ .start = 0, .end = 256 }, true);
     return set;
 }
 
 pub fn writeMask(arena: *utils.Arena) Set {
-    var mask = Set.initEmpty(arena.allocator(), reg_mask_cap) catch unreachable;
+    var mask = Set.initEmpty(arena.allocator(), set_cap) catch unreachable;
     mask.setRangeValue(.{ .start = 1, .end = max_alloc_regs }, true);
     return mask;
 }
 
 pub fn splitMask(arena: *utils.Arena) Set {
-    var mask = Set.initFull(arena.allocator(), reg_mask_cap) catch unreachable;
+    var mask = Set.initFull(arena.allocator(), set_cap) catch unreachable;
     mask.unset(0);
     mask.setRangeValue(.{ .start = max_alloc_regs, .end = 256 }, false);
     return mask;
 }
 
 pub fn readSplitMask(arena: *utils.Arena) Set {
-    return Set.initFull(arena.allocator(), reg_mask_cap) catch unreachable;
+    return Set.initFull(arena.allocator(), set_cap) catch unreachable;
 }
 
 pub fn singleMask(arena: *utils.Arena, reg: isa.Reg) Set {
-    var mask = Set.initEmpty(arena.allocator(), reg_mask_cap) catch unreachable;
+    var mask = Set.initEmpty(arena.allocator(), set_cap) catch unreachable;
     mask.set(@intFromEnum(reg));
     return mask;
 }
@@ -371,7 +371,7 @@ pub fn regMask(node: *Func.Node, _: *Func, idx: usize, arena: *utils.Arena) Set 
 
     if (node.kind == .FramePointer) {
         std.debug.assert(idx == 0);
-        var set = try Set.initEmpty(arena.allocator(), reg_mask_cap);
+        var set = try Set.initEmpty(arena.allocator(), set_cap);
         set.set(@intFromEnum(isa.Reg.stack_addr));
         return set;
     }
@@ -390,12 +390,12 @@ pub fn oldRegMask(node: *Func.Node, idx: usize, tmp: *utils.Arena) std.DynamicBi
 
     if (node.kind == .FramePointer) {
         std.debug.assert(idx == 0);
-        var set = try Set.initEmpty(tmp.allocator(), reg_mask_cap);
+        var set = try Set.initEmpty(tmp.allocator(), set_cap);
         set.set(@intFromEnum(isa.Reg.stack_addr));
         return set;
     }
 
-    var set = try Set.initFull(tmp.allocator(), reg_mask_cap);
+    var set = try Set.initFull(tmp.allocator(), set_cap);
     set.unset(0);
     set.setRangeValue(.{ .start = max_alloc_regs, .end = 256 }, false);
     return set;

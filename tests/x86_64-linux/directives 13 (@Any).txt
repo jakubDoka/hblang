@@ -9,7 +9,6 @@ directives 13 (@Any).foo(u8):
 	ret
 main:
 	push rbx
-	sub rsp, 0x08
 	mov rdi, 0x01
 	mov rsi, 0x02
 	call :directives 13 (@Any).func(uint)
@@ -21,6 +20,5 @@ main:
 	movzx rax, al
 	add rbx, rax
 	mov rax, rbx
-	add rsp, 0x08
 	pop rbx
 	ret

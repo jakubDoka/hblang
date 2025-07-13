@@ -1,6 +1,6 @@
 main:
 	push rbx
-	sub rsp, 0x08
+	sub rsp, 0x10
 	mov rdi, 0x08
 	call :malloc
 	mov [rsp], rax
@@ -10,7 +10,7 @@ main:
 	mov rbx, [rdi]
 	call :free
 	mov rax, rbx
-	add rsp, 0x08
+	add rsp, 0x10
 	pop rbx
 	ret
 malloc:

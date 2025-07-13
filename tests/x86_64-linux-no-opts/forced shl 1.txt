@@ -6,13 +6,11 @@ forced shl 1.one:
 	ret
 main:
 	push rbx
-	sub rsp, 0x08
 	call :forced shl 1.two
 	mov rbx, rax
 	call :forced shl 1.one
 	mov rcx, rax
 	shl rbx, cl
 	mov rax, rbx
-	add rsp, 0x08
 	pop rbx
 	ret

@@ -485,12 +485,13 @@ pub fn idealize(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Func.Wo
 }
 
 // ================== REGALLOC ==================
-const set_cap = 64;
 pub const Set = struct {
-    bits: u64,
-    comptime bit_length: usize = 64,
+    bits: Mask,
+    comptime bit_length: usize = @bitSizeOf(Mask),
 
-    pub fn init(bits: u64) Set {
+    const Mask = u64;
+
+    pub fn init(bits: Mask) Set {
         return .{ .bits = bits };
     }
 
@@ -508,7 +509,7 @@ pub const Set = struct {
     }
 
     pub fn unset(s: *Set, idx: usize) void {
-        s.bits &= ~(@as(u64, 1) << @intCast(idx));
+        s.bits &= ~(@as(Mask, 1) << @intCast(idx));
     }
 
     pub fn clone(s: Set, _: anytype) !Set {
@@ -521,7 +522,7 @@ pub fn setIntersects(a: Set, b: Set) bool {
 }
 
 pub fn setMasks(s: *Set) []u64 {
-    return (&s.bits)[0..1];
+    return @ptrCast((&s.bits)[0..1]);
 }
 
 pub fn floatMask(_: *utils.Arena) Set {
@@ -533,7 +534,7 @@ pub fn readIntMask(_: *utils.Arena) Set {
 }
 
 pub fn writeIntMask(_: *utils.Arena) Set {
-    return .init(0xFFFF & ~(@as(u64, 1) << @intFromEnum(Reg.rsp)));
+    return .init(0xFFFF & ~(@as(Set.Mask, 1) << @intFromEnum(Reg.rsp)));
 }
 
 pub fn splitFloatMask(_: *utils.Arena) Set {
@@ -549,7 +550,7 @@ pub fn readSplitIntMask(arena: *utils.Arena) Set {
 }
 
 pub fn singleReg(reg: Reg, _: *utils.Arena) Set {
-    return .init(@as(u64, 1) << @intCast(@intFromEnum(reg)));
+    return .init(@as(Set.Mask, 1) << @intCast(@intFromEnum(reg)));
 }
 
 pub fn clobbers(node: *Func.Node) u64 {

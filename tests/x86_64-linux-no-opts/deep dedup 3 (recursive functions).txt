@@ -1,6 +1,6 @@
 deep dedup 3 (recursive functions).fib:
 	push rbx
-	sub rsp, 0x08
+	sub rsp, 0x10
 	mov [rsp], rdi
 	mov rdi, [rsp]
 	cmp rdi, 0x02
@@ -18,12 +18,12 @@ deep dedup 3 (recursive functions).fib:
 	call :deep dedup 3 (recursive functions).fib
 	add rbx, rax
 	mov rax, rbx
-1:	add rsp, 0x08
+1:	add rsp, 0x10
 	pop rbx
 	ret
 deep dedup 3 (recursive functions).fib2:
 	push rbx
-	sub rsp, 0x08
+	sub rsp, 0x10
 	mov [rsp], rdi
 	mov rdi, [rsp]
 	cmp rdi, 0x02
@@ -41,12 +41,11 @@ deep dedup 3 (recursive functions).fib2:
 	call :deep dedup 3 (recursive functions).fib2
 	add rbx, rax
 	mov rax, rbx
-1:	add rsp, 0x08
+1:	add rsp, 0x10
 	pop rbx
 	ret
 main:
 	push rbx
-	sub rsp, 0x08
 	mov rdi, 0x03
 	call :deep dedup 3 (recursive functions).fib
 	mov rbx, rax
@@ -54,6 +53,5 @@ main:
 	call :deep dedup 3 (recursive functions).fib2
 	sub rbx, rax
 	mov rax, rbx
-	add rsp, 0x08
 	pop rbx
 	ret
