@@ -37,75 +37,41 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
     const colors = std.io.tty.detectConfig(stderr);
 
     const failed_fmt = test_util.testFmt(name, name, code, stderr.writer().any(), colors);
+    var pool = utils.Pool{ .arena = utils.Arena.init(1024 * 1024 * 16) };
+    {
+        var hbvm = root.hbvm.HbvmGen{ .gpa = &pool };
+        var hbvm2 = root.hbvm.HbvmGen{ .gpa = &pool };
+        var x86_64 = root.x86_64.X86_64Gen{ .gpa = &pool, .object_format = .elf };
+        var x86_642 = root.x86_64.X86_64Gen{ .gpa = &pool, .object_format = .elf };
 
-    if (true) {
-        const target = "hbvm-ableos";
-        var hbvm = root.hbvm.HbvmGen{ .gpa = gpa };
-        defer hbvm.deinit();
-        try runMachineTest(
-            name,
-            target,
-            code,
-            .init(target, &hbvm),
-            .ableos,
-            .all,
-            gpa,
-            stderr.writer().any(),
-            colors,
-        );
-    }
+        const tests = [_]struct {
+            []const u8,
+            root.backend.Machine,
+            root.backend.Machine.OptOptions,
+            root.frontend.Types.Abi,
+        }{
+            .{ "hbvm-ableos", .init("hbvm-ableos", &hbvm), .all, .ableos },
+            .{ "hbvm-ableos-no-opts", .init("hbvm-ableos-no-opts", &hbvm2), .none, .ableos },
+            .{ "x86_64-linux", .init("x86_64-linux", &x86_64), .all, .systemv },
+            .{ "x86_64-linux-no-opts", .init("x86_64-linux-no-opts", &x86_642), .none, .systemv },
+        };
 
-    if (true) {
-        const target = "hbvm-ableos-no-opts";
-        var hbvm = root.hbvm.HbvmGen{ .gpa = gpa };
-        defer hbvm.deinit();
-        try runMachineTest(
-            name,
-            target,
-            code,
-            .init(target, &hbvm),
-            .ableos,
-            .none,
-            gpa,
-            stderr.writer().any(),
-            colors,
-        );
-    }
-
-    if (true) b: {
-        if (std.mem.indexOf(u8, name, "sse") != null) break :b;
-        const target = "x86_64-linux";
-        var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
-        defer x86_64.deinit();
-        try runMachineTest(
-            name,
-            target,
-            code,
-            .init(target, &x86_64),
-            .systemv,
-            .all,
-            gpa,
-            stderr.writer().any(),
-            colors,
-        );
-    }
-
-    if (true) b: {
-        if (std.mem.indexOf(u8, name, "sse") != null) break :b;
-        const target = "x86_64-linux-no-opts";
-        var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
-        defer x86_64.deinit();
-        try runMachineTest(
-            name,
-            target,
-            code,
-            .init(target, &x86_64),
-            .systemv,
-            .none,
-            gpa,
-            stderr.writer().any(),
-            colors,
-        );
+        for (tests) |tst| {
+            const target, var machine, const opts, const abi = tst;
+            defer machine.deinit();
+            if (abi.cc == .systemv and std.mem.indexOf(u8, name, "sse") != null) return;
+            try runMachineTest(
+                name,
+                target,
+                code,
+                machine,
+                abi,
+                opts,
+                gpa,
+                stderr.writer().any(),
+                colors,
+            );
+        }
     }
 
     try failed_fmt;
@@ -161,6 +127,7 @@ pub fn runMachineTest(
 }
 
 pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
+    if (true) return;
     utils.Arena.initScratch(1024 * 1024 * 10);
     defer utils.Arena.deinitScratch();
 

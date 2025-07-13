@@ -260,15 +260,15 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
 
     var bckend, const abi: hb.backend.graph.CallConv = if (std.mem.startsWith(u8, opts.target, "hbvm-ableos")) backend: {
         const slot = types.pool.arena.create(hb.hbvm.HbvmGen);
-        slot.* = hb.hbvm.HbvmGen{ .gpa = types.pool.allocator() };
+        slot.* = hb.hbvm.HbvmGen{ .gpa = &types.pool };
         break :backend .{ hb.backend.Machine.init(opts.target, slot), .ablecall };
     } else if (std.mem.startsWith(u8, opts.target, "x86_64-windows")) backend: {
         const slot = types.pool.arena.create(hb.x86_64.X86_64Gen);
-        slot.* = hb.x86_64.X86_64Gen{ .gpa = types.pool.allocator(), .object_format = .coff };
+        slot.* = hb.x86_64.X86_64Gen{ .gpa = &types.pool, .object_format = .coff };
         break :backend .{ hb.backend.Machine.init(opts.target, slot), .fastcall };
     } else if (std.mem.startsWith(u8, opts.target, "x86_64-linux")) backend: {
         const slot = types.pool.arena.create(hb.x86_64.X86_64Gen);
-        slot.* = hb.x86_64.X86_64Gen{ .gpa = types.pool.allocator(), .object_format = .elf };
+        slot.* = hb.x86_64.X86_64Gen{ .gpa = &types.pool, .object_format = .elf };
         break :backend .{ hb.backend.Machine.init(opts.target, slot), .systemv };
     } else {
         try opts.diagnostics.print(

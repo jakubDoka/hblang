@@ -13,7 +13,7 @@ const Func = graph.Func(X86_64Gen);
 const FuncNode = Func.Node;
 const Move = utils.Move(Reg);
 
-gpa: std.mem.Allocator,
+gpa: *utils.Pool,
 object_format: enum { elf, coff },
 memcpy: Mach.Data.SymIdx = .invalid,
 out: Mach.Data = .{},
@@ -753,7 +753,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         opts.name;
     self.builtins = opts.builtins;
 
-    try self.out.startDefineFunc(self.gpa, id, name, .func, linkage, opts.is_inline);
+    try self.out.startDefineFunc(self.gpa.allocator(), id, name, .func, linkage, opts.is_inline);
 
     defer self.out.endDefineFunc(id);
 
@@ -926,7 +926,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
                 .off = 1,
                 .class = .rel32,
             });
-            try self.out.code.appendSlice(self.gpa, &.{ 0xE9, 0, 0, 0, 0 });
+            try self.out.code.appendSlice(self.gpa.allocator(), &.{ 0xE9, 0, 0, 0, 0 });
         }
     }
 
@@ -970,10 +970,10 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_CALL, .{0});
                 if (self.builtins.memcpy == std.math.maxInt(u32)) {
                     if (self.memcpy == .invalid)
-                        try self.out.importSym(self.gpa, &self.memcpy, "memcpy", .func);
-                    try self.out.addReloc(self.gpa, &self.memcpy, 4, -4, 4);
+                        try self.out.importSym(self.gpa.allocator(), &self.memcpy, "memcpy", .func);
+                    try self.out.addReloc(self.gpa.allocator(), &self.memcpy, 4, -4, 4);
                 } else {
-                    try self.out.addFuncReloc(self.gpa, self.builtins.memcpy, 4, -4, 4);
+                    try self.out.addFuncReloc(self.gpa.allocator(), self.builtins.memcpy, 4, -4, 4);
                 }
             },
             .MachSplit => {
@@ -988,17 +988,17 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             .Phi => {},
             .GlobalAddr => {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_LEA, .{ self.getReg(instr), Rip{} });
-                try self.out.addGlobalReloc(self.gpa, instr.extra(.GlobalAddr).id, 4, -4, 4);
+                try self.out.addGlobalReloc(self.gpa.allocator(), instr.extra(.GlobalAddr).id, 4, -4, 4);
             },
             .GlobalStore => |extra| {
                 const dis: i16 = @intCast(extra.base.dis);
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Rip{}, self.getReg(instr.value()) });
-                try self.out.addGlobalReloc(self.gpa, extra.id, 4, dis - 4, 4);
+                try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, 4, dis - 4, 4);
             },
             .GlobalLoad => |extra| {
                 const dis: i16 = @intCast(extra.base.dis);
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ self.getReg(instr), Rip{} });
-                try self.out.addGlobalReloc(self.gpa, extra.id, 4, dis - 4, 4);
+                try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, 4, dis - 4, 4);
             },
             .LocalAlloc => {},
             .Local => {
@@ -1099,7 +1099,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     self.emitInstr(zydis.ZYDIS_MNEMONIC_SYSCALL, .{});
                 } else {
                     self.emitInstr(zydis.ZYDIS_MNEMONIC_CALL, .{0});
-                    try self.out.addFuncReloc(self.gpa, call.id, 4, -4, 4);
+                    try self.out.addFuncReloc(self.gpa.allocator(), call.id, 4, -4, 4);
                 }
             },
             .Arg, .Ret, .Mem, .Never => {},
@@ -1438,7 +1438,7 @@ pub fn emitInstr(self: *X86_64Gen, mnemonic: c_uint, args: anytype) void {
         utils.panic("{x} {s} {} {any}\n", .{ status, zydis.ZydisMnemonicGetString(req.mnemonic), args, req.operands[0..fields.len] });
     }
 
-    try self.out.code.appendSlice(self.gpa, buf[0..len]);
+    try self.out.code.appendSlice(self.gpa.allocator(), buf[0..len]);
 }
 
 pub fn binopToMnemonic(op: graph.BinOp, ty: graph.DataType) zydis.ZydisMnemonic {
@@ -1500,7 +1500,7 @@ pub fn emitData(self: *X86_64Gen, opts: Mach.DataOptions) void {
     errdefer unreachable;
 
     try self.out.defineGlobal(
-        self.gpa,
+        self.gpa.allocator(),
         opts.id,
         opts.name,
         .data,
@@ -1526,7 +1526,7 @@ pub fn finalize(self: *X86_64Gen, opts: Mach.FinalizeOptions) void {
 }
 
 pub fn deinit(self: *X86_64Gen) void {
-    self.out.deinit(self.gpa);
+    self.out.deinit(self.gpa.allocator());
 }
 
 pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {

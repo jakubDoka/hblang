@@ -52,9 +52,9 @@ pub const InteruptCode = enum(u64) {
     align_of,
 };
 
-pub fn init(gpa: std.mem.Allocator) Comptime {
+pub fn init(gpa: *utils.Pool) Comptime {
     var self = Comptime{ .gen = .{ .gpa = gpa } };
-    self.gen.out.code.resize(gpa, stack_size) catch unreachable;
+    self.gen.out.code.resize(gpa.allocator(), stack_size) catch unreachable;
     self.gen.out.code.items[self.gen.out.code.items.len - 1] = @intFromEnum(isa.Op.tx);
     self.gen.out.code.items[self.gen.out.code.items.len - 2] = @intFromEnum(isa.Op.eca);
     self.vm.regs.set(.stack_addr, stack_size - 2);
@@ -66,7 +66,7 @@ inline fn getTypes(self: *Comptime) *Types {
 }
 
 inline fn getGpa(self: *Comptime) std.mem.Allocator {
-    return self.gen.gpa;
+    return self.gen.gpa.allocator();
 }
 
 pub inline fn ecaArg(self: *Comptime, idx: usize) u64 {

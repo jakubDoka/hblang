@@ -1233,7 +1233,7 @@ pub const OptOptions = struct {
     ) bool {
         if (self.do_inlining or is_inline) {
             self.asPreInline().execute(B, backend, func);
-            backend.out.setInlineFunc(backend.gpa, B, func, id);
+            backend.out.setInlineFunc(backend.gpa.allocator(), B, func, id);
         }
 
         return self.do_inlining;
@@ -1295,7 +1295,7 @@ pub const OptOptions = struct {
             defer tmp.deinit();
 
             const bout: *Data = &backend.out;
-            const gpa: std.mem.Allocator = backend.gpa;
+            const gpa: std.mem.Allocator = backend.gpa.allocator();
             const Func = graph.Func(Backend);
 
             var out: Data = .{};

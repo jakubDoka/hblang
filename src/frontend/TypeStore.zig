@@ -1033,7 +1033,7 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: std.io.AnyWriter) *
         .pool = .{
             .arena = arena,
         },
-        .ct = .init(slot.pool.allocator()),
+        .ct = .init(&slot.pool),
         .diagnostics = diagnostics,
     };
 
@@ -1101,7 +1101,7 @@ pub fn checkStack(self: *Types, file: File, pos: anytype) !void {
 
 pub fn deinit(self: *Types) void {
     var arena = self.pool.arena;
-    self.ct.in_progress.deinit(self.ct.gen.gpa);
+    self.ct.in_progress.deinit(self.ct.gen.gpa.allocator());
     self.ct.gen.deinit();
     self.* = undefined;
     arena.deinit();

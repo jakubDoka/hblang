@@ -1,4 +1,4 @@
-gpa: std.mem.Allocator,
+gpa: *utils.Pool,
 out: Mach.Data = .{},
 emit_global_reloc_offsets: bool = false,
 local_relocs: std.ArrayListUnmanaged(BlockReloc) = undefined,
@@ -410,7 +410,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     const name = opts.name;
     const entry = opts.linkage == .exported;
 
-    try self.out.startDefineFunc(self.gpa, id, name, .func, opts.linkage, opts.is_inline);
+    try self.out.startDefineFunc(self.gpa.allocator(), id, name, .func, opts.linkage, opts.is_inline);
     defer {
         self.out.endDefineFunc(id);
 
@@ -559,7 +559,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .Arg => {},
             .GlobalAddr => |extra| {
-                try self.out.addGlobalReloc(self.gpa, extra.id, 4, 3, 0);
+                try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, 4, 3, 0);
                 self.emit(.lra, .{ self.getReg(no), .null, 0 });
             },
             .LocalAlloc => {},
@@ -738,7 +738,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 if (extra.id == eca) {
                     self.emit(.eca, .{});
                 } else {
-                    try self.out.addFuncReloc(self.gpa, extra.id, 4, 3, 0);
+                    try self.out.addFuncReloc(self.gpa.allocator(), extra.id, 4, 3, 0);
                     self.emit(.jal, .{ .ret_addr, .null, 0 });
                 }
             },
@@ -789,8 +789,8 @@ fn emit(self: *HbvmGen, comptime op: isa.Op, args: isa.TupleOf(isa.ArgsOf(op))) 
 
 fn emitLow(self: *HbvmGen, comptime arg_str: []const u8, op: isa.Op, args: isa.TupleOf(isa.ArgsOfStr(arg_str))) void {
     if (!std.mem.eql(u8, isa.spec[@intFromEnum(op)][1], arg_str)) utils.panic("{} {s} {s}", .{ op, arg_str, isa.spec[@intFromEnum(op)][1] });
-    self.out.code.append(self.gpa, @intFromEnum(op)) catch unreachable;
-    self.out.code.appendSlice(self.gpa, std.mem.asBytes(&isa.packTo(isa.ArgsOfStr(arg_str), args))) catch unreachable;
+    self.out.code.append(self.gpa.allocator(), @intFromEnum(op)) catch unreachable;
+    self.out.code.appendSlice(self.gpa.allocator(), std.mem.asBytes(&isa.packTo(isa.ArgsOfStr(arg_str), args))) catch unreachable;
 }
 
 pub fn reloc(self: *HbvmGen, sub_offset: u8, arg: isa.Arg) Reloc {
@@ -800,7 +800,7 @@ pub fn reloc(self: *HbvmGen, sub_offset: u8, arg: isa.Arg) Reloc {
 pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
     errdefer unreachable;
     try self.out.defineGlobal(
-        self.gpa,
+        self.gpa.allocator(),
         opts.id,
         opts.name,
         if (opts.value == .init) .data else .prealloc,
@@ -826,7 +826,7 @@ pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {
 }
 
 pub fn deinit(self: *HbvmGen) void {
-    self.out.deinit(self.gpa);
+    self.out.deinit(self.gpa.allocator());
     self.* = undefined;
 }
 
