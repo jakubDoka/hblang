@@ -1,0 +1,44 @@
+main:
+         st $31, $254, -40, 40
+     addi64 $254, $254, -40
+        lra $34, $0, :loop check 1.main.aaaaaaaaaaaaaaaaaaaaa
+       li64 $33, 21
+         cp $32, $0
+8:    add64 $35, $34, $32
+      sub64 $2, $33, $32
+         cp $1, $35
+        jal $31, $0, :loop check 1.nextPos
+       andi $1, $1, 255
+        jeq $1, $0, :2
+      sub64 $2, $2, $32
+         cp $1, $35
+        jal $31, $0, :loop check 1.blackbox
+       andi $1, $1, 255
+        jeq $1, $0, :4
+        jal $31, $0, :loop check 1.blackbox
+       andi $1, $1, 255
+        not $1, $1
+       andi $1, $1, 255
+        jeq $1, $0, :5
+         cp $32, $0
+        jmp :6
+5:       cp $1, $0
+        jmp :7
+4:       cp $32, $0
+6:      jmp :8
+2:     li32 $1, 1
+7:   addi64 $254, $254, 40
+         ld $31, $254, -40, 40
+         tx
+loop check 1.nextPos:
+       li64 $1, 1
+       jltu $2, $1, :9
+        li8 $1, 1
+       li64 $2, 17
+        jmp :a
+9:     li64 $2, -6148914691236517206
+         cp $1, $0
+a:     jala $0, $31, 0
+loop check 1.blackbox:
+        li8 $1, 1
+       jala $0, $31, 0

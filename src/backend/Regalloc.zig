@@ -189,7 +189,16 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 self.setInputNoIntern(use, us.pos(), ins);
             }
 
-            const oidx = block.base.posOfOutput(0, def);
+            var oidx = block.base.posOfOutput(0, def);
+            if (def.kind == .Phi) {
+                for (block.base.outputs()[oidx + 1 ..]) |o| {
+                    if (o.get().kind == .Phi) {
+                        oidx += 1;
+                    } else {
+                        break;
+                    }
+                }
+            }
             const to_rotate = block.base.outputs()[oidx + 1 ..];
             std.mem.rotate(Node.Out, to_rotate, to_rotate.len - 1);
         }
@@ -612,11 +621,13 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             for (tmp.arena.dupe(Node.Out, instr.outputs())) |us| {
                 const use = us.get();
                 if (use.inPlaceSlot()) |idx| if (use.dataDeps()[idx] == instr) {
+                    std.debug.assert(use.dataDepOffset() == 1);
                     func.splitBefore(use, idx + 1, instr, true, .@"conflict/in-place-slot/use");
                 };
             }
 
             if (instr.inPlaceSlot()) |slt| {
+                std.debug.assert(instr.dataDepOffset() == 1);
                 func.splitBefore(instr, slt + 1, instr.dataDeps()[slt], true, .@"conflict/in-place-slot/def");
             }
         }
@@ -831,6 +842,111 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             const instr_lrg = lrg_table[instr.schedule];
             instr.schedule = @intCast(alloc.items.len);
             alloc.appendAssumeCapacity(instr_lrg.reg);
+        }
+    }
+
+    if (std.debug.runtime_safety) {
+        const util = struct {
+            pub fn logCollision(fnc: *Func, block: *CfgNode, def: *Node, clobber: *Node, use: *Node, allc: []u16) void {
+                for (fnc.gcm.postorder) |bb| {
+                    std.debug.print("{}\n", .{bb});
+                    for (bb.base.outputs()) |in| {
+                        const instr = in.get();
+                        if (instr.schedule != no_def_sentinel) {
+                            std.debug.print("  {} {}\n", .{ allc[instr.schedule], instr });
+                        } else {
+                            std.debug.print("    {}\n", .{instr});
+                        }
+                    }
+                }
+                utils.panic(
+                    \\
+                    \\block:   {any}
+                    \\def:     {} {any}
+                    \\clobber: {} {any}
+                    \\use:        {any}
+                , .{
+                    block,
+                    allc[def.schedule],
+                    def,
+                    allc[clobber.schedule],
+                    clobber,
+                    use,
+                });
+            }
+        };
+
+        const loop_switches = tmp.arena.alloc(bool, func.gcm.loop_tree.len);
+        for (func.gcm.postorder) |bb| {
+            for (bb.base.outputs()) |in| {
+                const instr = in.get();
+                if (instr.schedule == no_def_sentinel) continue;
+                const alc = alloc.items[instr.schedule];
+                const root_block = instr.cfg0();
+                std.debug.assert(root_block.base.kind != .Start);
+                const root_idx = root_block.base.posOfOutput(0, instr);
+
+                for (instr.outputs()) |us| {
+                    @memset(loop_switches, false);
+
+                    const use = us.get();
+                    if (!use.hasUseFor(us.pos(), instr)) continue;
+                    var block = use.cfg0();
+                    var idx: usize = undefined;
+                    if (use.kind == .Phi) {
+                        block = block.base.inputs()[us.pos() - 1].?.cfg0();
+                        std.debug.assert(block.base.isBasicBlockStart());
+                        idx = block.base.outputs().len;
+                    } else {
+                        idx = block.base.posOfOutput(0, use);
+                    }
+
+                    if (block == root_block) {
+                        for (block.base.outputs()[root_idx + 1 .. idx]) |o| {
+                            const other = o.get();
+                            if (other.schedule == no_def_sentinel) continue;
+                            if (alc == alloc.items[other.schedule]) {
+                                util.logCollision(func, block, instr, other, use, alloc.items);
+                            }
+                        }
+                        continue;
+                    } else {
+                        for (block.base.outputs()[0..idx]) |o| {
+                            const other = o.get();
+                            if (other.schedule == no_def_sentinel) continue;
+                            if (alc == alloc.items[other.schedule]) {
+                                util.logCollision(func, block, instr, other, use, alloc.items);
+                            }
+                        }
+                        block = block.idom().idom();
+                    }
+
+                    while (block != root_block) {
+                        std.debug.assert(block.base.isBasicBlockStart());
+                        std.debug.assert(block.base.kind != .Start);
+                        for (block.base.outputs()) |o| {
+                            const other = o.get();
+                            if (other == use) continue;
+                            if (other.schedule == no_def_sentinel) continue;
+                            if (alc == alloc.items[other.schedule]) {
+                                util.logCollision(func, block, instr, other, use, alloc.items);
+                            }
+                        }
+
+                        if (block.base.kind == .Loop and
+                            func.loopDepth(&block.base) > func.loopDepth(&root_block.base))
+                        {
+                            // take the backedge first
+                            if (!loop_switches[block.ext.loop]) {
+                                loop_switches[block.ext.loop] = true;
+                                block = block.base.inputs()[1].?.cfg0();
+                                continue;
+                            }
+                        }
+                        block = block.idom().idom();
+                    }
+                }
+            }
         }
     }
 

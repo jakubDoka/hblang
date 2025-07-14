@@ -2,6 +2,31 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### loop check 1
+```hb
+nextPos := fn(buf: []u8): ?uint {
+    if buf.len >= 1 return 17
+    return null
+}
+check := fn(buf: []u8): bool return true
+blackbox := fn(): bool return true
+main := fn(): u32 {
+    data := "aaaaaaaaaaaaaaaaaaaaa"
+    i := 0
+    while j := nextPos(data[i..]) {
+        if check(data[i..j]) {
+            if !blackbox() {
+                i = 0
+                continue
+            }
+            return 0
+        }
+        i = 0
+    }
+    return 1
+}
+```
+
 #### comptime around the loop 1
 ```hb
 main := fn(): uint {

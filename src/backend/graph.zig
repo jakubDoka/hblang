@@ -1057,7 +1057,7 @@ pub fn Func(comptime Backend: type) type {
                     writer.writeFn == utils.getStdErr().writeFn)
                     std.io.tty.detectConfig(std.io.getStdErr())
                 else
-                    .no_color;
+                    .escape_codes;
                 self.fmt(null, writer, colors);
             }
 
@@ -1557,15 +1557,6 @@ pub fn Func(comptime Backend: type) type {
             self.addUse(&block.base, 0, new_node);
 
             return new_node;
-        }
-
-        pub fn splitAfter(self: *Self, def: *Node, idx: usize, use: *Node, dbg: builtin.MachSplit.Dbg) void {
-            const block = def.cfg0();
-            const ins = self.addSplit(block, def, dbg);
-            self.setInputNoIntern(use, idx, ins);
-            const oidx = block.base.posOfOutput(def);
-            const to_rotate = block.base.outputs()[oidx + 1 ..];
-            std.mem.rotate(*Node, to_rotate, to_rotate.len - 1);
         }
 
         pub fn internNode(self: *Self, kind: Kind, dt: DataType, inputs: []const ?*Node, extra: *const anyopaque) InsertMap.GetOrPutResult {

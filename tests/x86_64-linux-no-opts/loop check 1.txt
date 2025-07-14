@@ -1,0 +1,77 @@
+loop check 1.nextPos:
+	sub rsp, 0x20
+	mov [rsp], rsi
+	mov [rsp+0x08], rdx
+	mov rax, [rsp+0x08]
+	cmp rax, 0x01
+	setnb al
+	movzx rax, al
+	test al, al
+	jz :0
+	mov byte ptr [rsp+0x10], 0x01
+	mov qword ptr [rsp+0x18], 0x11
+	mov rax, [rsp+0x10]
+	mov [rdi], rax
+	mov rax, [rsp+0x18]
+	mov [rdi+0x08], rax
+	jmp :1
+0:	mov byte ptr [rdi], 0x00
+1:	add rsp, 0x20
+	ret
+loop check 1.check:
+	sub rsp, 0x10
+	mov [rsp], rdi
+	mov [rsp+0x08], rsi
+	mov rax, 0x01
+	add rsp, 0x10
+	ret
+loop check 1.blackbox:
+	mov rax, 0x01
+	ret
+main:
+	sub rsp, 0x48
+	lea rax, [0x0000000000000007]
+	mov [rsp], rax
+	mov qword ptr [rsp+0x08], 0x15
+	mov qword ptr [rsp+0x40], 0x00
+5:	mov rcx, [rsp]
+	mov rdx, [rsp+0x40]
+	mov rax, [rsp+0x08]
+	add rcx, rdx
+	mov [rsp+0x20], rcx
+	sub rax, rdx
+	mov [rsp+0x28], rax
+	mov rsi, [rsp+0x20]
+	mov rdx, [rsp+0x28]
+	lea rdi, [rsp+0x10]
+	call :loop check 1.nextPos
+	mov cl, [rsp+0x10]
+	mov rax, [rsp+0x18]
+	mov [rsp+0x10], rax
+	test cl, cl
+	jz :0
+	mov rcx, [rsp+0x10]
+	mov rdx, [rsp+0x40]
+	mov rax, [rsp]
+	sub rcx, rdx
+	add rax, rdx
+	mov [rsp+0x30], rax
+	mov [rsp+0x38], rcx
+	mov rsi, [rsp+0x38]
+	mov rdi, [rsp+0x30]
+	call :loop check 1.check
+	test al, al
+	jz :1
+	call :loop check 1.blackbox
+	xor al, 0x01
+	test al, al
+	jz :2
+	mov qword ptr [rsp+0x40], 0x00
+	jmp :3
+2:	xor eax, eax
+	jmp :4
+1:	mov qword ptr [rsp+0x40], 0x00
+3:	jmp :5
+0:	mov rax, 0x01
+4:	add rsp, 0x48
+	ret
