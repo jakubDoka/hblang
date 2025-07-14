@@ -19,7 +19,8 @@ mem2reg crash 2.insert:
        li64 $7, 8
          cp $6, $0
 2:       cp $3, $0
-4:     jltu $3, $7, :1
+4:       cp $4, $3
+       jltu $4, $7, :1
      addi64 $6, $6, 1
         jmp :2
 1:       ld $5, $1, 0, 8

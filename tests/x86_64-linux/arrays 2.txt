@@ -1,16 +1,15 @@
 main:
 	sub rsp, 0x50
-	xor r11, r11
 	mov r10, 0x18
 	mov rcx, 0x08
-	mov r8, r11
+	xor r8, r8
 4:	cmp r8, 0x03
 	setz al
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rsi, r11
-	mov rax, r11
+	xor rax, rax
+	xor rsi, rsi
 2:	cmp rsi, 0x09
 	setz dl
 	movzx rdx, dl
@@ -30,7 +29,7 @@ main:
 	imul rax, r10
 	lea r9, [rsp]
 	add r9, rax
-	mov rdx, r11
+	xor rdx, rdx
 5:	cmp rdx, 0x03
 	setz al
 	movzx rax, al

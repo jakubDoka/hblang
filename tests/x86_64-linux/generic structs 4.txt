@@ -18,34 +18,34 @@ generic structs 4.Array((())).get(uint):
 	ret
 generic structs 4.Array(()).get(uint):
 	sub rsp, 0x08
-	mov rax, rdx
-	mov rcx, rax
-	cmp rcx, 0x00
-	setz cl
-	movzx rcx, cl
-	test cl, cl
-	jz :0
 	mov rax, rdi
+	mov rcx, rdx
+	mov rdx, rcx
+	cmp rdx, 0x00
+	setz dl
+	movzx rdx, dl
+	test dl, dl
+	jz :0
 	jmp :1
-0:	dec rax
+0:	dec rcx
 	mov rdi, rsi
-	mov rsi, rax
+	mov rsi, rcx
 	call :generic structs 4.Array().get(uint)
 1:	add rsp, 0x08
 	ret
 generic structs 4.Array().get(uint):
 	sub rsp, 0x08
-	mov rax, rsi
-	mov rcx, rax
-	cmp rcx, 0x00
-	setz cl
-	movzx rcx, cl
-	test cl, cl
-	jz :0
 	mov rax, rdi
+	mov rcx, rsi
+	mov rdx, rcx
+	cmp rdx, 0x00
+	setz dl
+	movzx rdx, dl
+	test dl, dl
+	jz :0
 	jmp :1
-0:	dec rax
-	mov rdi, rax
+0:	dec rcx
+	mov rdi, rcx
 	call :generic structs 4.Array.get(uint)
 1:	add rsp, 0x08
 	ret

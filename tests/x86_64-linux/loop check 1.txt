@@ -23,20 +23,19 @@ main:
 	push rbp
 	push r12
 	push r13
-	push r14
-	sub rsp, 0x10
-	lea rcx, [0x0000000000000007]
-	mov rax, 0x15
-	xor rbx, rbx
-	mov rbp, rbx
-5:	mov r12, rax
-	mov r13, rcx
-	mov rax, r13
+	sub rsp, 0x18
+	lea rax, [0x0000000000000007]
+	xor rdx, rdx
+	mov rcx, 0x15
+5:	mov r13, rcx
+	mov rbp, rdx
+	mov rbx, rax
+	mov rax, rbx
 	add rax, rbp
-	mov r14, rax
-	mov rax, r12
+	mov r12, rax
+	mov rax, r13
 	sub rax, rbp
-	mov rsi, r14
+	mov rsi, r12
 	mov rdx, rax
 	lea rdi, [rsp]
 	call :loop check 1.nextPos
@@ -46,7 +45,7 @@ main:
 	test al, al
 	jz :0
 	sub rsi, rbp
-	mov rdi, r14
+	mov rdi, r12
 	call :loop check 1.blackbox
 	test al, al
 	jz :1
@@ -54,20 +53,17 @@ main:
 	xor al, 0x01
 	test al, al
 	jz :2
+	xor rdx, rdx
 	mov rcx, r13
-	mov rax, r12
-	mov rdx, rbx
 	jmp :3
 2:	xor eax, eax
 	jmp :4
-1:	mov rcx, r13
-	mov rax, r12
-	mov rdx, rbx
-3:	mov rbp, rdx
+1:	xor rdx, rdx
+	mov rcx, r13
+3:	mov rax, rbx
 	jmp :5
 0:	mov rax, 0x01
-4:	add rsp, 0x10
-	pop r14
+4:	add rsp, 0x18
 	pop r13
 	pop r12
 	pop rbp

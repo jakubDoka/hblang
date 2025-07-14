@@ -4,40 +4,39 @@ slices 4.equals:
 	mov [rsp+0x08], rsi
 	mov [rsp+0x10], rdx
 	mov [rsp+0x18], rcx
-	xor cl, cl
-	mov rdx, [rsp+0x08]
+	mov rcx, [rsp+0x08]
 	mov rax, [rsp+0x18]
-	cmp rdx, rax
+	cmp rcx, rax
 	jz :0
+	xor al, al
 	jmp :1
-0:	mov rdi, 0x01
-	mov rdx, [rsp+0x10]
+0:	mov rcx, [rsp+0x10]
 	mov rax, [rsp]
-	cmp rax, rdx
+	cmp rax, rcx
 	jnz :2
-	mov cl, dil
-1:	jmp :3
+	mov rax, 0x01
+1:	jmp :5
 2:	mov qword ptr [rsp+0x20], 0x00
-7:	mov rax, [rsp+0x20]
-	mov rdx, [rsp+0x08]
-	cmp rax, rdx
+6:	mov rax, [rsp+0x20]
+	mov rcx, [rsp+0x08]
+	cmp rax, rcx
 	jnz :4
-	mov al, dil
+	mov rax, 0x01
 	jmp :5
-4:	mov rsi, [rsp+0x10]
-	mov rdx, [rsp]
-	add rsi, rax
+4:	mov rdx, [rsp+0x10]
+	mov rcx, [rsp]
 	add rdx, rax
-	mov sil, [rsi]
+	add rcx, rax
 	mov dl, [rdx]
-	cmp dl, sil
-	jz :6
-3:	mov al, cl
+	mov cl, [rcx]
+	cmp cl, dl
+	jz :5
+	xor al, al
 5:	add rsp, 0x30
 	ret
-6:	inc rax
+5:	inc rax
 	mov [rsp+0x20], rax
-	jmp :7
+	jmp :6
 main:
 	sub rsp, 0x28
 	lea rax, [0x0000000000000007]

@@ -1,7 +1,6 @@
 main:
-	xor r8, r8
-	mov rcx, r8
-	mov rdi, r8
+	xor rdi, rdi
+	xor rcx, rcx
 3:	cmp rdi, 0x0A
 	setz al
 	movzx rax, al
@@ -9,7 +8,7 @@ main:
 	jz :0
 	mov rax, rcx
 	jmp :1
-0:	mov rax, r8
+0:	xor rax, rax
 5:	cmp rax, 0x0A
 	setz dl
 	movzx rdx, dl

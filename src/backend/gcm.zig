@@ -168,7 +168,7 @@ pub fn GcmMixin(comptime Backend: type) type {
                         self.setInputNoIntern(&n.base, i, self.addNode(.Jmp, n.base.sloc, .top, &.{n.base.inputs()[i].?}, .{}));
                     }
 
-                    if (true) {
+                    if (false) {
                         var intmp = utils.Arena.scrath(null);
                         defer intmp.deinit();
                         for (intmp.arena.dupe(Node.Out, n.base.outputs())) |ot| if (ot.get().isDataPhi()) {
@@ -252,7 +252,7 @@ pub fn GcmMixin(comptime Backend: type) type {
                             var olca: ?*CfgNode = null;
                             for (t.outputs()) |n| {
                                 const o = n.get();
-                                const other = t.useBlock(o, 1, late_scheds);
+                                const other = t.useBlock(o, n.pos(), late_scheds);
                                 olca = if (olca) |l| l.findLca(other) else other;
                             }
                             var lca = olca.?;

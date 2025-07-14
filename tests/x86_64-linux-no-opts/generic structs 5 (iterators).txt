@@ -16,14 +16,13 @@ generic structs 5 (iterators).main.Chars.next:
 	mov al, [rax]
 	mov [rsp+0x0B], al
 	mov rsi, [rsp]
-	mov dx, [rsp+0x0A]
-	mov rcx, [rsi+0x08]
-	mov rax, [rsi]
-	dec rcx
-	inc rax
-	mov [rsi], rax
-	mov [rsi+0x08], rcx
-	mov ax, dx
+	mov ax, [rsp+0x0A]
+	mov rdx, [rsi+0x08]
+	mov rcx, [rsi]
+	dec rdx
+	inc rcx
+	mov [rsi], rcx
+	mov [rsi+0x08], rdx
 1:	add rsp, 0x10
 	ret
 generic structs 5 (iterators).main.Chain(.Chars, .Chars).next:

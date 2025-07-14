@@ -1,30 +1,29 @@
 slices 4.equals:
-	xor r8b, r8b
 	cmp rsi, rcx
 	jz :0
+	xor al, al
 	jmp :1
-0:	mov r10, 0x01
-	cmp rdi, rdx
+0:	cmp rdi, rdx
 	jnz :2
-	mov r8b, r10b
-1:	jmp :3
-2:	xor rax, rax
-7:	cmp rax, rsi
+	mov rax, 0x01
+1:	jmp :5
+2:	xor r8, r8
+6:	cmp r8, rsi
 	jnz :4
-	mov al, r10b
+	mov rax, 0x01
 	jmp :5
-4:	mov r9, rdi
-	add r9, rax
-	mov rcx, rdx
-	add rcx, rax
-	mov r9b, [r9]
+4:	mov rcx, rdi
+	add rcx, r8
+	mov rax, rdx
+	add rax, r8
 	mov cl, [rcx]
-	cmp r9b, cl
-	jz :6
-3:	mov al, r8b
+	mov al, [rax]
+	cmp cl, al
+	jz :5
+	xor al, al
 5:	ret
-6:	inc rax
-	jmp :7
+5:	inc r8
+	jmp :6
 main:
 	push rbx
 	sub rsp, 0x10

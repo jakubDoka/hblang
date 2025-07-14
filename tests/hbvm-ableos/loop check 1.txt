@@ -1,17 +1,19 @@
 main:
          st $31, $254, -40, 40
      addi64 $254, $254, -40
-        lra $34, $0, :loop check 1.main.aaaaaaaaaaaaaaaaaaaaa
-       li64 $33, 21
+        lra $35, $0, :loop check 1.main.aaaaaaaaaaaaaaaaaaaaa
+       li64 $34, 21
          cp $32, $0
-8:    add64 $35, $34, $32
-      sub64 $2, $33, $32
-         cp $1, $35
+8:       cp $1, $32
+      add64 $33, $35, $1
+         cp $1, $32
+      sub64 $2, $34, $1
+         cp $1, $33
         jal $31, $0, :loop check 1.nextPos
        andi $1, $1, 255
         jeq $1, $0, :2
       sub64 $2, $2, $32
-         cp $1, $35
+         cp $1, $33
         jal $31, $0, :loop check 1.blackbox
        andi $1, $1, 255
         jeq $1, $0, :4
@@ -33,8 +35,8 @@ main:
 loop check 1.nextPos:
        li64 $1, 1
        jltu $2, $1, :9
-        li8 $1, 1
        li64 $2, 17
+        li8 $1, 1
         jmp :a
 9:     li64 $2, -6148914691236517206
          cp $1, $0

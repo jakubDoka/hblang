@@ -1,24 +1,24 @@
 main:
-	xor rdi, rdi
-	mov rax, rdi
-	mov rcx, rdi
-3:	cmp rcx, 0x0A
+	xor rax, rax
+	xor rcx, rcx
+3:	cmp rax, 0x0A
 	setb dl
 	movzx rdx, dl
 	test dl, dl
 	jz :0
-	mov rdx, rdi
+	xor rdx, rdx
 2:	cmp rdx, 0x0A
 	setb sil
 	movzx rsi, sil
 	test sil, sil
 	jz :1
-	mov rsi, rcx
+	mov rsi, rax
 	add rsi, rdx
 	inc rdx
-	add rax, rsi
+	add rcx, rsi
 	jmp :2
-1:	inc rcx
+1:	inc rax
 	jmp :3
-0:	sub rax, 0x384
+0:	mov rax, rcx
+	sub rax, 0x384
 	ret

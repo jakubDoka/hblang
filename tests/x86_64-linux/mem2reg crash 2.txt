@@ -1,8 +1,7 @@
 mem2reg crash 2.insert:
-	xor r10, r10
 	mov r9, 0x08
-	mov r8, r10
-1:	mov rcx, r10
+	xor r8, r8
+1:	xor rcx, rcx
 3:	cmp rcx, r9
 	jb :0
 	inc r8

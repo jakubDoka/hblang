@@ -3,16 +3,10 @@ gcm crash 1 (infinite).func:
 main:
 	push rbx
 	push rbp
-	push r12
-	push r13
 	sub rsp, 0x408
-	xor rcx, rcx
-	lea r12, [rsp]
-	mov rbp, 0x400
-	mov rax, r12
-1:	mov rbx, rcx
-	mov r13, rax
-2:	cmp rbx, 0x00
+	lea rbx, [rsp]
+	xor rbp, rbp
+2:	cmp rbp, 0x00
 	setnb al
 	movzx rax, al
 	test al, al
@@ -22,9 +16,7 @@ main:
 	mov dl, al
 	xor dil, dil
 	call :gcm crash 1 (infinite).func
-	mov rcx, rbx
-	mov rax, r13
-	jmp :1
-0:	mov r13, r12
-	mov rbx, rbp
+	jmp :2
+0:	mov rbp, 0x400
+	lea rbx, [rsp]
 	jmp :2

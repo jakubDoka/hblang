@@ -1,6 +1,5 @@
 main:
 	xor rcx, rcx
-	mov rdx, 0x01
 3:	cmp rcx, 0x00
 	setz al
 	movzx rax, al
@@ -13,7 +12,7 @@ main:
 	movzx rax, al
 	test al, al
 	jz :2
-	mov rax, rdx
+	mov rax, 0x01
 1:	ret
-2:	mov rcx, rdx
+2:	mov rcx, 0x01
 	jmp :3

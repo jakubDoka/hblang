@@ -8,19 +8,18 @@ main:
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x48], rax
 	mov r8, 0x08
-	xor rax, rax
 	xor dil, dil
-	mov rcx, rax
-4:	mov rbx, rcx
-	mov rcx, rbx
-	cmp rcx, 0x02
-	setb cl
-	movzx rcx, cl
-	test cl, cl
+	xor rax, rax
+4:	mov rbx, rax
+	mov rax, rbx
+	cmp rax, 0x02
+	setb al
+	movzx rax, al
+	test al, al
 	jz :0
-	mov rdx, rbx
-	mov rcx, 0x02
-	cmp rdx, rcx
+	mov rcx, rbx
+	mov rax, 0x02
+	cmp rcx, rax
 	jb :1
 	lea rsi, [rsp+0x20]
 	lea rax, [0x0000000000000007]
@@ -35,25 +34,27 @@ main:
 	mov rdx, rbx
 	mov rdi, 0x02
 	call :cstring indexing.slice_ioob
-1:	mov rdx, rbx
-	imul rdx, r8
-	lea rcx, [rsp+0x40]
+1:	mov rcx, rbx
+	imul rcx, r8
+	lea rax, [rsp+0x40]
+	add rax, rcx
+	mov rsi, [rax]
+	xor rax, rax
+3:	mov rdx, rax
+	mov rcx, rsi
 	add rcx, rdx
-	mov rsi, [rcx]
-	mov rcx, rax
-3:	mov rdx, rsi
-	add rdx, rcx
-	mov dl, [rdx]
-	cmp dl, dil
+	mov cl, [rcx]
+	cmp cl, dil
 	jz :2
-	inc rcx
+	inc rax
 	jmp :3
 2:	mov [rsp+0x50], rsi
-	mov [rsp+0x58], rcx
-	mov rcx, rbx
-	inc rcx
+	mov [rsp+0x58], rax
+	mov rax, rbx
+	inc rax
 	jmp :4
-0:	add rsp, 0x60
+0:	xor rax, rax
+	add rsp, 0x60
 	pop rbx
 	ret
 memcpy:

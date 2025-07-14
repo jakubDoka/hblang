@@ -1,6 +1,6 @@
 main:
 	xor rax, rax
-	mov rcx, rax
+	xor rcx, rcx
 1:	cmp rcx, 0x01
 	setnb dl
 	movzx rdx, dl

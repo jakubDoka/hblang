@@ -1,29 +1,25 @@
 main:
-	xor r10, r10
-	mov r9, 0x01
-	mov rdx, r10
-	mov rax, r10
+	xor rdx, rdx
+	xor rax, rax
 2:	cmp rdx, 0x0A
 	setz cl
 	movzx rcx, cl
 	test cl, cl
 	jz :0
 	ret
-0:	mov rcx, rax
-	mov r8, r9
-	mov rax, r10
-	mov rdi, r10
-3:	cmp rax, 0x09
+0:	xor rcx, rcx
+	xor r8, r8
+	mov rdi, 0x01
+3:	cmp rcx, 0x09
 	setz sil
 	movzx rsi, sil
 	test sil, sil
 	jz :1
 	inc rdx
-	mov rax, rcx
 	jmp :2
-1:	mov rcx, rdi
-	add rcx, r8
-	inc rax
-	mov rdi, r8
-	mov r8, rcx
+1:	mov rax, r8
+	add rax, rdi
+	inc rcx
+	mov r8, rdi
+	mov rdi, rax
 	jmp :3

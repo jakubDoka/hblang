@@ -8,8 +8,7 @@ defer 1.main.ret_defer:
 	add rsp, 0x10
 	ret
 main:
-	push rbx
-	sub rsp, 0x20
+	sub rsp, 0x18
 	mov qword ptr [rsp], 0x00
 	mov rax, [rsp]
 	cmp rax, 0x01
@@ -30,24 +29,25 @@ main:
 	jz :2
 	mov rax, 0x02
 1:	jmp :3
-2:	mov rax, 0x03
-	mov rbx, 0x04
-b:	mov rdx, [rsp]
-	mov rcx, rdx
-	inc rcx
-	cmp rdx, rax
+2:	mov rsi, 0x03
+	mov rdx, 0x04
+b:	mov rcx, [rsp]
+	mov rax, rcx
+	inc rax
+	cmp rcx, rsi
 	jnz :4
-	mov [rsp], rcx
+	mov [rsp], rax
 	jmp :5
-4:	cmp rdx, rbx
+4:	cmp rcx, rdx
 	jnz :6
-	mov [rsp], rcx
-	mov rcx, [rsp]
-	cmp rcx, 0x05
-	setnz cl
-	movzx rcx, cl
-	test cl, cl
+	mov [rsp], rax
+	mov rax, [rsp]
+	cmp rax, 0x05
+	setnz al
+	movzx rax, al
+	test al, al
 	jz :7
+	mov rax, 0x03
 3:	jmp :8
 7:	mov rax, 0x90000002
 	mov [rsp+0x10], eax
@@ -60,11 +60,10 @@ b:	mov rdx, [rsp]
 	movzx rax, al
 	test al, al
 	jz :9
-	mov rax, rbx
+	mov rax, 0x04
 8:	jmp :10
 9:	xor rax, rax
-a:	add rsp, 0x20
-	pop rbx
+a:	add rsp, 0x18
 	ret
-6:	mov [rsp], rcx
+6:	mov [rsp], rax
 5:	jmp :11

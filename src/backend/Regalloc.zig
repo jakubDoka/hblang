@@ -17,7 +17,7 @@ pub fn newRalloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
 
     errdefer unreachable;
 
-    for (0..15) |_| {
+    for (0..7) |_| {
         return rallocRound(Backend, func) catch continue;
     } else unreachable;
 }
@@ -120,7 +120,6 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             arena: *utils.Arena,
         ) bool {
             errdefer unreachable;
-            if (self.failed) return false;
             if (other) |o| {
                 if (o != instr) {
                     try conflicts.put(arena.allocator(), .{ .lrg = self, .instr = instr }, {});
@@ -228,7 +227,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
     defer tmp.deinit();
 
     func.gcm.instr_count = 0;
-    const should_log = false;
+    const should_log = 0 == 1;
     if (should_log) std.debug.print("\n", .{});
     for (func.gcm.postorder) |bb| {
         if (should_log) std.debug.print("{}\n", .{bb});
@@ -262,7 +261,14 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 std.debug.assert(instr.isDataPhi());
                 var lrg = lrg_table_build[instr.schedule] orelse
                     for (instr.dataDeps()) |d| {
-                        if (lrg_table_build[d.schedule]) |l| break l;
+                        if (lrg_table_build[d.schedule]) |*l| {
+                            l.* = l.*.unionFind();
+                            l.*.mask.setIntersection(instr.regMask(func, 0, tmp.arena));
+                            if (l.*.mask.count() == 0) {
+                                l.*.fail(build_lrgs.items, &failed);
+                            }
+                            break l.*;
+                        }
                     } else LiveRange.init(&build_lrgs, instr.regMask(func, 0, tmp.arena), instr);
 
                 lrg = lrg.unionFind();
@@ -329,9 +335,10 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
         std.debug.print("\n", .{});
         for (func.gcm.postorder) |bb| {
             std.debug.print("{}\n", .{bb});
-            for (bb.base.outputs()) |instr| {
+            for (bb.base.outputs()) |in| {
+                const instr = in.get();
                 if (instr.isDef()) {
-                    std.debug.print("  [{}] {x} {}\n", .{
+                    std.debug.print("  [{}] {x:08} {}\n", .{
                         lrg_table[instr.schedule].index(lrgs),
                         setMasks(&lrg_table[instr.schedule].mask)[0],
                         instr,
@@ -597,33 +604,30 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
             const instr = conflict.instr;
 
-            if (false) {
-                for (tmp.arena.dupe(*Node, instr.outputs())) |use| {
-                    if (use.inPlaceSlot()) |idx| if (use.dataDeps()[idx] == instr) {
-                        func.splitBefore(use, idx + 1, instr, true, .@"conflict/in-place-slot/use");
-                    };
-
-                    if (use.kind == .Phi and !(use.cfg0().base.kind == .Loop and
-                        use.inputs()[2] == instr and instr.cfg0().idepth() > use.cfg0().idepth()))
-                    {
-                        std.debug.assert(use.inputs()[1] == instr);
-                        func.splitBefore(use, 1, instr, true, .@"conflict/phi/use");
-                    }
-                }
-
-                if (instr.kind == .Phi) {
-                    LiveRange.splitAfterSubsume(func, instr, false, lrg_table, .@"conflict/phi/def");
-
-                    func.splitBefore(instr, 1, instr.inputs()[1].?, true, .@"conflict/phi/def");
-                }
-            }
-
             for (tmp.arena.dupe(Node.Out, instr.outputs())) |us| {
                 const use = us.get();
                 if (use.inPlaceSlot()) |idx| if (use.dataDeps()[idx] == instr) {
                     std.debug.assert(use.dataDepOffset() == 1);
                     func.splitBefore(use, idx + 1, instr, true, .@"conflict/in-place-slot/use");
                 };
+
+                if (use.kind == .Phi and !(use.cfg0().base.kind == .Loop and
+                    use.inputs()[2] == instr and instr.cfg0().idepth() > use.cfg0().idepth()))
+                {
+                    func.splitBefore(use, us.pos(), instr, true, .@"conflict/phi/use");
+                }
+            }
+
+            if (instr.kind == .Phi) {
+                LiveRange.splitAfterSubsume(func, instr, false, lrg_table, .@"conflict/phi/def");
+                func.splitBefore(instr, 1, instr.inputs()[1].?, true, .@"conflict/phi/def");
+                for (instr.inputs()[2].?.outputs()) |o| {
+                    // another phi has same liverange, split or we get stuck
+                    if (o.get() != instr and o.get().kind == .Phi) {
+                        func.splitBefore(instr, 2, instr.inputs()[2].?, true, .@"conflict/phi/def");
+                        break;
+                    }
+                }
             }
 
             if (instr.inPlaceSlot()) |slt| {
@@ -922,8 +926,10 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                     }
 
                     while (block != root_block) {
-                        std.debug.assert(block.base.isBasicBlockStart());
                         std.debug.assert(block.base.kind != .Start);
+                        if (!block.base.isBasicBlockStart()) {
+                            utils.panic("{}", .{block});
+                        }
                         for (block.base.outputs()) |o| {
                             const other = o.get();
                             if (other == use) continue;

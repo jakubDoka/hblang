@@ -5,19 +5,19 @@ comptime 6 (strings).main.string_to_array("Edward"):
 	mov rax, 0xAAAAAAAA
 	mov [rsp+0x04], ax
 	lea rsi, [0x0000000000000007]
-	xor rcx, rcx
-1:	cmp rcx, 0x06
+	xor rdx, rdx
+1:	cmp rdx, 0x06
 	setb al
 	movzx rax, al
 	test al, al
 	jz :0
 	mov rax, rsi
-	add rax, rcx
-	lea rdx, [rsp]
-	add rdx, rcx
-	inc rcx
+	add rax, rdx
+	lea rcx, [rsp]
+	add rcx, rdx
+	inc rdx
 	mov al, [rax]
-	mov [rdx], al
+	mov [rcx], al
 	jmp :1
 0:	mov eax, [rsp]
 	mov cx, [rsp+0x04]

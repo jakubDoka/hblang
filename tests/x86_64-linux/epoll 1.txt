@@ -4,8 +4,8 @@ main:
 	xor rdi, rdi
 	xor rsi, rsi
 	syscall
-	mov edi, eax
-	mov eax, edi
+	mov edx, eax
+	mov eax, edx
 	cmp eax, 0x00
 	setl al
 	movzx rax, al
@@ -19,6 +19,7 @@ main:
 	mov rax, 0xE9
 	mov rcx, [0x0000000000000007]
 	movzx rsi, cx
+	mov edi, edx
 	xor rdx, rdx
 	syscall
 	cmp eax, 0x00

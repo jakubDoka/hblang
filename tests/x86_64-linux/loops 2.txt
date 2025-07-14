@@ -1,11 +1,10 @@
 loops 2.square:
-	xor r8, r8
-	mov rsi, r8
-	mov rax, r8
+	xor rsi, rsi
+	xor rax, rax
 2:	cmp rsi, rdi
 	jnz :0
 	ret
-0:	mov rcx, r8
+0:	xor rcx, rcx
 3:	cmp rcx, rdi
 	jnz :1
 	inc rsi

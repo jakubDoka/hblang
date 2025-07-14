@@ -1,20 +1,19 @@
 main:
-         st $31, $254, -48, 48
-     addi64 $254, $254, -1072
-     addi64 $36, $254, 0
-        lra $35, $0, :gcm crash 1 (infinite).ZERO
-       li64 $34, 1024
+         st $31, $254, -32, 32
+     addi64 $254, $254, -1056
+        lra $34, $0, :gcm crash 1 (infinite).ZERO
          cp $33, $0
-         cp $32, $36
-3:       cp $1, $0
-       jltu $33, $1, :1
-         ld $3, $35, 0, 1
+     addi64 $32, $254, 0
+3:       cp $2, $33
+         cp $1, $0
+       jltu $2, $1, :1
+         ld $3, $34, 0, 1
          cp $1, $0
          cp $2, $3
         jal $31, $0, :gcm crash 1 (infinite).func
         jmp :3
-1:       cp $32, $36
-         cp $33, $34
+1:     li64 $33, 1024
+     addi64 $32, $254, 0
         jmp :3
 gcm crash 1 (infinite).func:
        jala $0, $31, 0

@@ -207,7 +207,7 @@ pub const UnOp = enum(u8) {
             },
             .uext => oper,
             .ired => oper,
-            .ineg => -oper,
+            .ineg => -%oper,
             .fneg => return if (src == .f64)
                 @bitCast(-tf(oper))
             else
@@ -901,14 +901,11 @@ pub fn Func(comptime Backend: type) type {
                 return self.kind == .Region and self.extra(.Region).preserve_identity_phys;
             }
 
-            pub fn useBlock(self: *Node, use: *Node, from: usize, scheds: []const ?*CfgNode) *CfgNode {
+            pub fn useBlock(self: *Node, use: *Node, pos: usize, scheds: []const ?*CfgNode) *CfgNode {
+                _ = self;
                 if (use.kind == .Phi) {
                     std.debug.assert(use.inputs()[0].?.kind == .Region or use.inputs()[0].?.kind == .Loop);
-                    for (use.inputs()[0].?.inputs()[from - 1 ..], use.inputs()[from..]) |b, u| {
-                        if (u.? == self) {
-                            return subclass(b.?, Cfg).?;
-                        }
-                    }
+                    return use.inputs()[0].?.inputs()[pos - 1].?.asCfg().?;
                 }
 
                 if (scheds.len == 0) {

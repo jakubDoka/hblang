@@ -3,8 +3,9 @@ main:
      addi64 $254, $254, -8
        li64 $1, -1
         jal $31, $0, :arithmetic 9 (force imm ops).box(uint)
-       xori $1, $1, -1
-        jeq $1, $0, :1
+       xori $2, $1, -1
+         cp $1, $0
+        jeq $2, $1, :1
        li64 $1, 1
         jmp :2
 1:       cp $1, $0
