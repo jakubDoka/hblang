@@ -804,6 +804,8 @@ pub fn emitCtor(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Ctor)) EmitErr
         ty = self.types.store.get(ty.data().Nullable).inner;
         _ = self.bl.addStore(sloc, local, .i8, self.bl.addIntImm(sloc, .i8, 1));
         offset_cursor += ty.alignment(self.types);
+    } else if (self.types.store.unwrap(ty.data(), .Nullable)) |n| {
+        ty = n.inner;
     }
 
     switch (ty.data()) {
@@ -942,6 +944,8 @@ pub fn emitTuple(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Tupl)) EmitEr
             ty = self.types.store.get(ty.data().Nullable).inner;
             _ = self.bl.addStore(sloc, local, .i8, self.bl.addIntImm(sloc, .i8, 1));
             init_offset += ty.alignment(self.types);
+        } else if (self.types.store.unwrap(ty.data(), .Nullable)) |n| {
+            ty = n.inner;
         }
 
         if (ty.data() != .Struct) {

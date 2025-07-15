@@ -8,12 +8,20 @@ main:
 	mov byte ptr [rsp], 0x01
 	mov qword ptr [rsp+0x08], 0x00
 	mov qword ptr [rsp+0x10], 0x00
-	mov qword ptr [rsp+0x10], 0x01
+	lea rax, [0x0000000000000007]
+	cmp rax, 0x00
+	setz al
+	movzx rax, al
+	test al, al
+	jz :0
+	mov rax, 0x04
+	jmp :1
+0:	mov qword ptr [rsp+0x10], 0x01
 	lea rdi, [rsp]
 	add rdi, 0x08
 	call :nullable types 2.take
 	mov rax, [rsp+0x08]
 	mov rcx, [rsp+0x10]
 	sub rax, rcx
-	add rsp, 0x18
+1:	add rsp, 0x18
 	ret

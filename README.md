@@ -1668,14 +1668,20 @@ Stru := struct {
     .b: uint;
 }
 
+StruF := struct {
+    .a: []u8;
+}
+
 main := fn(): uint {
     nlbl: ?Stru = .(0, 0)
     other: ?Stru = .{a: 0, b: 0}
     othera: ?[2]uint = .[0, 0]
+    otherb: ?StruF = .("")
 
     if nlbl == null return 1
     if other == null return 2
     if othera == null return 3
+    if otherb == null return 4
 
     nlbl.?.b = 1
     take(&nlbl.?)

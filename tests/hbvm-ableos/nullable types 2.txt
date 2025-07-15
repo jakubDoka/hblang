@@ -1,19 +1,23 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -32
+        lra $2, $0, :nullable types 2.main
         li8 $1, 1
          st $1, $254, 0, 1
-       li64 $2, 1
-     addi64 $1, $254, 0
          st $0, $254, 8, 8
          st $0, $254, 16, 8
-         st $2, $254, 16, 8
-     addi64 $1, $1, 8
+        jne $2, $0, :1
+       li64 $1, 4
+        jmp :2
+1:   addi64 $2, $254, 0
+       li64 $1, 1
+         st $1, $254, 16, 8
+     addi64 $1, $2, 8
         jal $31, $0, :nullable types 2.take
          ld $2, $254, 8, 8
          ld $1, $254, 16, 8
       sub64 $1, $2, $1
-     addi64 $254, $254, 32
+2:   addi64 $254, $254, 32
          ld $31, $254, -8, 8
          tx
 nullable types 2.take:
