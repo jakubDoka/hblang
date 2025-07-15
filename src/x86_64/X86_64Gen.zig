@@ -1337,7 +1337,7 @@ pub fn prepareDivRegs(self: *X86_64Gen, mnemonic: zydis.ZydisMnemonic, size: u64
         if (size == 1) {
             self.emitInstr(
                 zydis.ZYDIS_MNEMONIC_MOVZX,
-                .{ Reg.rdx, SReg{ .rdx, 1 } },
+                .{ Reg.rax, SReg{ .rax, 1 } },
             );
         } else {
             self.emitInstr(zydis.ZYDIS_MNEMONIC_XOR, .{ Reg.rdx, Reg.rdx });

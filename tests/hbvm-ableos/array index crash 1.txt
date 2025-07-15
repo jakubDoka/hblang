@@ -1,0 +1,26 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        li8 $1, -1
+        jal $31, $0, :array index crash 1.awa
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+array index crash 1.awa:
+     addi64 $254, $254, -3
+     addi64 $6, $254, 0
+       li64 $5, 2
+        li8 $4, 10
+         cp $2, $1
+2:       cp $3, $2
+       andi $2, $3, 255
+         cp $1, $0
+       jgtu $2, $1, :1
+         cp $1, $0
+     addi64 $254, $254, 3
+       jala $0, $31, 0
+1:    diru8 $2, $0, $3, $4
+      add64 $1, $6, $5
+         st $3, $1, 0, 1
+     addi64 $5, $5, -1
+        jmp :2

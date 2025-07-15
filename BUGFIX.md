@@ -2,6 +2,21 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### array index crash 1
+```hb
+awa := fn(x: u8): u32 {
+    buf: [3]u8 = .[0, 0, 0]
+    i := 2
+    while x > 0 {
+        buf[i] = x
+        x /= 10
+        i -= 1
+    }
+    return 0
+}
+main := fn(): u32 return awa(255)
+```
+
 #### bad signed div 1
 ```hb
 x: i32 = -1200
