@@ -293,7 +293,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 if (lrg_table_build[instr.schedule] != null) {
                     lrg.mask.setIntersection(instr.regMask(func, 0, tmp.arena));
                     if (lrg.mask.count() == 0) {
-                        lrg.fail(build_lrgs.items, &failed);
+                        lrg.unionFind().fail(build_lrgs.items, &failed);
                     }
                 }
 
