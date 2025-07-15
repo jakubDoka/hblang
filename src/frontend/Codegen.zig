@@ -993,10 +993,12 @@ pub fn emitArray(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Arry)) EmitEr
             ty = self.types.store.get(ty.data().Nullable).inner;
             _ = self.bl.addStore(sloc, local, .i8, self.bl.addIntImm(sloc, .i8, 1));
             start += 1;
+        } else if (self.types.store.unwrap(ty.data(), .Nullable)) |n| {
+            ty = n.inner;
         }
 
         const slice = self.types.store.unwrap(ty.data(), .Slice) orelse {
-            return self.report(expr, "{} can not bi initialized with array syntax", .{ty});
+            return self.report(expr, "{} can not be initialized with array syntax", .{ty});
         };
 
         if (slice.len != e.fields.len()) if (slice.len) |len| {

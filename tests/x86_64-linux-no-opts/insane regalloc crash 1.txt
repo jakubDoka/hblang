@@ -1,294 +1,166 @@
 main:
-	sub rsp, 0x310
-	mov qword ptr [rsp], 0x00
-	mov rax, [rsp+0x10]
-	mov cl, [rsp+0x08]
-	mov [rsp+0x08], rax
-	mov rax, [rsp+0x18]
-	mov [rsp+0x10], rax
-	test cl, cl
+	sub rsp, 0x210
+	mov qword ptr [rsp+0x200], 0x00
+	mov rax, [rsp+0x100]
+	test rax, rax
 	jz :0
 	jmp :1
-0:	mov qword ptr [rsp], 0x01
-	mov rax, [rsp+0x28]
-	mov cl, [rsp+0x20]
-	mov [rsp+0x20], rax
-	mov rax, [rsp+0x30]
-	mov [rsp+0x28], rax
-	test cl, cl
+0:	mov qword ptr [rsp+0x200], 0x01
+	mov rax, [rsp+0x20]
+	test rax, rax
 	jz :2
 1:	jmp :3
-2:	mov qword ptr [rsp], 0x02
-	mov rax, [rsp+0x40]
-	mov cl, [rsp+0x38]
-	mov [rsp+0x38], rax
-	mov rax, [rsp+0x48]
-	mov [rsp+0x40], rax
-	test cl, cl
+2:	mov qword ptr [rsp+0x200], 0x02
+	mov rax, [rsp+0x30]
+	test rax, rax
 	jz :4
 3:	jmp :5
-4:	mov qword ptr [rsp], 0x03
-	mov rax, [rsp+0x58]
-	mov cl, [rsp+0x50]
-	mov [rsp+0x50], rax
-	mov rax, [rsp+0x60]
-	mov [rsp+0x58], rax
-	test cl, cl
+4:	mov qword ptr [rsp+0x200], 0x03
+	mov rax, [rsp+0x40]
+	test rax, rax
 	jz :6
 5:	jmp :7
-6:	mov qword ptr [rsp], 0x04
-	mov rax, [rsp+0x70]
-	mov cl, [rsp+0x68]
-	mov [rsp+0x68], rax
-	mov rax, [rsp+0x78]
-	mov [rsp+0x70], rax
-	test cl, cl
+6:	mov qword ptr [rsp+0x200], 0x04
+	mov rax, [rsp+0x50]
+	test rax, rax
 	jz :8
 7:	jmp :9
-8:	mov qword ptr [rsp], 0x05
-	mov rax, [rsp+0x88]
-	mov cl, [rsp+0x80]
-	mov [rsp+0x80], rax
-	mov rax, [rsp+0x90]
-	mov [rsp+0x88], rax
-	test cl, cl
+8:	mov qword ptr [rsp+0x200], 0x05
+	mov rax, [rsp+0x60]
+	test rax, rax
 	jz :10
 9:	jmp :11
-a:	mov qword ptr [rsp], 0x06
-	mov rax, [rsp+0xA0]
-	mov cl, [rsp+0x98]
-	mov [rsp+0x98], rax
-	mov rax, [rsp+0xA8]
-	mov [rsp+0xA0], rax
-	test cl, cl
+a:	mov qword ptr [rsp+0x200], 0x06
+	mov rax, [rsp+0x70]
+	test rax, rax
 	jz :12
 b:	jmp :13
-c:	mov qword ptr [rsp], 0x07
-	mov rax, [rsp+0xB8]
-	mov cl, [rsp+0xB0]
-	mov [rsp+0xB0], rax
-	mov rax, [rsp+0xC0]
-	mov [rsp+0xB8], rax
-	test cl, cl
+c:	mov qword ptr [rsp+0x200], 0x07
+	mov rax, [rsp+0x80]
+	test rax, rax
 	jz :14
 d:	jmp :15
-e:	mov qword ptr [rsp], 0x08
-	mov rax, [rsp+0xD0]
-	mov cl, [rsp+0xC8]
-	mov [rsp+0xC8], rax
-	mov rax, [rsp+0xD8]
-	mov [rsp+0xD0], rax
-	test cl, cl
+e:	mov qword ptr [rsp+0x200], 0x08
+	mov rax, [rsp+0x90]
+	test rax, rax
 	jz :16
 f:	jmp :17
-10:	mov qword ptr [rsp], 0x09
-	mov rax, [rsp+0xE8]
-	mov cl, [rsp+0xE0]
-	mov [rsp+0xE0], rax
-	mov rax, [rsp+0xF0]
-	mov [rsp+0xE8], rax
-	test cl, cl
+10:	mov qword ptr [rsp+0x200], 0x09
+	mov rax, [rsp+0xA0]
+	test rax, rax
 	jz :18
 11:	jmp :19
-12:	mov qword ptr [rsp], 0x0A
-	mov rax, [rsp+0x100]
-	mov cl, [rsp+0xF8]
-	mov [rsp+0xF8], rax
-	mov rax, [rsp+0x108]
-	mov [rsp+0x100], rax
-	test cl, cl
+12:	mov qword ptr [rsp+0x200], 0x0A
+	mov rax, [rsp+0xB0]
+	test rax, rax
 	jz :20
 13:	jmp :21
-14:	mov qword ptr [rsp], 0x0B
-	mov rax, [rsp+0x118]
-	mov cl, [rsp+0x110]
-	mov [rsp+0x110], rax
-	mov rax, [rsp+0x120]
-	mov [rsp+0x118], rax
-	test cl, cl
+14:	mov qword ptr [rsp+0x200], 0x0B
+	mov rax, [rsp+0xC0]
+	test rax, rax
 	jz :22
 15:	jmp :23
-16:	mov qword ptr [rsp], 0x0C
-	mov rax, [rsp+0x130]
-	mov cl, [rsp+0x128]
-	mov [rsp+0x128], rax
-	mov rax, [rsp+0x138]
-	mov [rsp+0x130], rax
-	test cl, cl
+16:	mov qword ptr [rsp+0x200], 0x0C
+	mov rax, [rsp+0xD0]
+	test rax, rax
 	jz :24
 17:	jmp :25
-18:	mov qword ptr [rsp], 0x0D
-	mov rax, [rsp+0x148]
-	mov cl, [rsp+0x140]
-	mov [rsp+0x140], rax
-	mov rax, [rsp+0x150]
-	mov [rsp+0x148], rax
-	test cl, cl
+18:	mov qword ptr [rsp+0x200], 0x0D
+	mov rax, [rsp+0xE0]
+	test rax, rax
 	jz :26
 19:	jmp :27
-1a:	mov qword ptr [rsp], 0x0E
-	mov rax, [rsp+0x160]
-	mov cl, [rsp+0x158]
-	mov [rsp+0x158], rax
-	mov rax, [rsp+0x168]
-	mov [rsp+0x160], rax
-	test cl, cl
+1a:	mov qword ptr [rsp+0x200], 0x0E
+	mov rax, [rsp+0xF0]
+	test rax, rax
 	jz :28
 1b:	jmp :29
-1c:	mov qword ptr [rsp], 0x0F
-	mov rax, [rsp+0x178]
-	mov cl, [rsp+0x170]
-	mov [rsp+0x170], rax
-	mov rax, [rsp+0x180]
-	mov [rsp+0x178], rax
-	test cl, cl
+1c:	mov qword ptr [rsp+0x200], 0x0F
+	mov rax, [rsp]
+	test rax, rax
 	jz :30
 1d:	jmp :31
-1e:	mov qword ptr [rsp], 0x10
-	mov rax, [rsp+0x190]
-	mov cl, [rsp+0x188]
-	mov [rsp+0x188], rax
-	mov rax, [rsp+0x198]
-	mov [rsp+0x190], rax
-	test cl, cl
+1e:	mov qword ptr [rsp+0x200], 0x10
+	mov rax, [rsp+0x10]
+	test rax, rax
 	jz :32
 1f:	jmp :33
-20:	mov qword ptr [rsp], 0x11
-	mov rax, [rsp+0x1A8]
-	mov cl, [rsp+0x1A0]
-	mov [rsp+0x1A0], rax
-	mov rax, [rsp+0x1B0]
-	mov [rsp+0x1A8], rax
-	test cl, cl
+20:	mov qword ptr [rsp+0x200], 0x11
+	mov rax, [rsp+0x110]
+	test rax, rax
 	jz :34
 21:	jmp :35
-22:	mov qword ptr [rsp], 0x12
-	mov rax, [rsp+0x1C0]
-	mov cl, [rsp+0x1B8]
-	mov [rsp+0x1B8], rax
-	mov rax, [rsp+0x1C8]
-	mov [rsp+0x1C0], rax
-	test cl, cl
+22:	mov qword ptr [rsp+0x200], 0x12
+	mov rax, [rsp+0x130]
+	test rax, rax
 	jz :36
 23:	jmp :37
-24:	mov qword ptr [rsp], 0x13
-	mov rax, [rsp+0x1D8]
-	mov cl, [rsp+0x1D0]
-	mov [rsp+0x1D0], rax
-	mov rax, [rsp+0x1E0]
-	mov [rsp+0x1D8], rax
-	test cl, cl
+24:	mov qword ptr [rsp+0x200], 0x13
+	mov rax, [rsp+0x140]
+	test rax, rax
 	jz :38
 25:	jmp :39
-26:	mov qword ptr [rsp], 0x14
-	mov rax, [rsp+0x1F0]
-	mov cl, [rsp+0x1E8]
-	mov [rsp+0x1E8], rax
-	mov rax, [rsp+0x1F8]
-	mov [rsp+0x1F0], rax
-	test cl, cl
+26:	mov qword ptr [rsp+0x200], 0x14
+	mov rax, [rsp+0x150]
+	test rax, rax
 	jz :40
 27:	jmp :41
-28:	mov qword ptr [rsp], 0x15
-	mov rax, [rsp+0x208]
-	mov cl, [rsp+0x200]
-	mov [rsp+0x200], rax
-	mov rax, [rsp+0x210]
-	mov [rsp+0x208], rax
-	test cl, cl
+28:	mov qword ptr [rsp+0x200], 0x15
+	mov rax, [rsp+0x160]
+	test rax, rax
 	jz :42
 29:	jmp :43
-2a:	mov qword ptr [rsp], 0x16
-	mov rax, [rsp+0x220]
-	mov cl, [rsp+0x218]
-	mov [rsp+0x218], rax
-	mov rax, [rsp+0x228]
-	mov [rsp+0x220], rax
-	test cl, cl
+2a:	mov qword ptr [rsp+0x200], 0x16
+	mov rax, [rsp+0x170]
+	test rax, rax
 	jz :44
 2b:	jmp :45
-2c:	mov qword ptr [rsp], 0x17
-	mov rax, [rsp+0x238]
-	mov cl, [rsp+0x230]
-	mov [rsp+0x230], rax
-	mov rax, [rsp+0x240]
-	mov [rsp+0x238], rax
-	test cl, cl
+2c:	mov qword ptr [rsp+0x200], 0x17
+	mov rax, [rsp+0x180]
+	test rax, rax
 	jz :46
 2d:	jmp :47
-2e:	mov qword ptr [rsp], 0x18
-	mov rax, [rsp+0x250]
-	mov cl, [rsp+0x248]
-	mov [rsp+0x248], rax
-	mov rax, [rsp+0x258]
-	mov [rsp+0x250], rax
-	test cl, cl
+2e:	mov qword ptr [rsp+0x200], 0x18
+	mov rax, [rsp+0x190]
+	test rax, rax
 	jz :48
 2f:	jmp :49
-30:	mov qword ptr [rsp], 0x19
-	mov rax, [rsp+0x268]
-	mov cl, [rsp+0x260]
-	mov [rsp+0x260], rax
-	mov rax, [rsp+0x270]
-	mov [rsp+0x268], rax
-	test cl, cl
+30:	mov qword ptr [rsp+0x200], 0x19
+	mov rax, [rsp+0x1A0]
+	test rax, rax
 	jz :50
 31:	jmp :51
-32:	mov qword ptr [rsp], 0x1A
-	mov rax, [rsp+0x280]
-	mov cl, [rsp+0x278]
-	mov [rsp+0x278], rax
-	mov rax, [rsp+0x288]
-	mov [rsp+0x280], rax
-	test cl, cl
+32:	mov qword ptr [rsp+0x200], 0x1A
+	mov rax, [rsp+0x1B0]
+	test rax, rax
 	jz :52
 33:	jmp :53
-34:	mov qword ptr [rsp], 0x1B
-	mov rax, [rsp+0x298]
-	mov cl, [rsp+0x290]
-	mov [rsp+0x290], rax
-	mov rax, [rsp+0x2A0]
-	mov [rsp+0x298], rax
-	test cl, cl
+34:	mov qword ptr [rsp+0x200], 0x1B
+	mov rax, [rsp+0x1C0]
+	test rax, rax
 	jz :54
 35:	jmp :55
-36:	mov qword ptr [rsp], 0x1C
-	mov rax, [rsp+0x2B0]
-	mov cl, [rsp+0x2A8]
-	mov [rsp+0x2A8], rax
-	mov rax, [rsp+0x2B8]
-	mov [rsp+0x2B0], rax
-	test cl, cl
+36:	mov qword ptr [rsp+0x200], 0x1C
+	mov rax, [rsp+0x1D0]
+	test rax, rax
 	jz :56
 37:	jmp :57
-38:	mov qword ptr [rsp], 0x1D
-	mov rax, [rsp+0x2C8]
-	mov cl, [rsp+0x2C0]
-	mov [rsp+0x2C0], rax
-	mov rax, [rsp+0x2D0]
-	mov [rsp+0x2C8], rax
-	test cl, cl
+38:	mov qword ptr [rsp+0x200], 0x1D
+	mov rax, [rsp+0x1E0]
+	test rax, rax
 	jz :58
 39:	jmp :59
-3a:	mov qword ptr [rsp], 0x1E
-	mov rax, [rsp+0x2E0]
-	mov cl, [rsp+0x2D8]
-	mov [rsp+0x2D8], rax
-	mov rax, [rsp+0x2E8]
-	mov [rsp+0x2E0], rax
-	test cl, cl
+3a:	mov qword ptr [rsp+0x200], 0x1E
+	mov rax, [rsp+0x1F0]
+	test rax, rax
 	jz :60
 3b:	jmp :61
-3c:	mov qword ptr [rsp], 0x1F
-	mov rax, [rsp+0x2F8]
-	mov cl, [rsp+0x2F0]
-	mov [rsp+0x2F0], rax
-	mov rax, [rsp+0x300]
-	mov [rsp+0x2F8], rax
-	test cl, cl
+3c:	mov qword ptr [rsp+0x200], 0x1F
+	mov rax, [rsp+0x120]
+	test rax, rax
 	jz :62
 3d:	jmp :63
-3e:	mov qword ptr [rsp], 0x20
+3e:	mov qword ptr [rsp+0x200], 0x20
 3f:	xor eax, eax
-	add rsp, 0x310
+	add rsp, 0x210
 	ret

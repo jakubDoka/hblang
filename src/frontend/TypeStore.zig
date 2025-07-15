@@ -392,6 +392,10 @@ pub const Id = enum(IdRepr) {
             else
                 null,
             .Pointer => return .{ .offset = 0, .kind = .ptr },
+            .Slice => |s| if (types.store.get(s).len == null)
+                return .{ .offset = tys.Slice.ptr_offset, .kind = .ptr }
+            else
+                null,
             .Struct => |s| {
                 var offs: tys.Struct.Id.OffIter = s.offsetIter(types);
 

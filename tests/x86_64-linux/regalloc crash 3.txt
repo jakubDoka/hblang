@@ -1,106 +1,70 @@
 regalloc crash 3.broken:
-	lea rsi, [rsp+0x08]
-	mov rdx, 0x18
-	call :memcpy
+	sub rsp, 0x10
+	mov [rsp], rsi
+	mov [rsp+0x08], rdx
+	mov [rdi], rsi
+	mov rax, [rsp+0x08]
+	mov [rdi+0x08], rax
+	add rsp, 0x10
 	ret
 main:
-	sub rsp, 0x288
+	sub rsp, 0xD8
 1:	mov rax, [0x0000000000000007]
 	cmp rax, rax
 	jnz :0
 	xor eax, eax
-	add rsp, 0x288
+	add rsp, 0xD8
 	ret
-0:	mov byte ptr [rsp+0x30], 0x00
+0:	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
 	lea rdi, [rsp]
-	mov rdx, 0x18
-	lea rsi, [rsp+0x30]
-	call :memcpy
-	lea rdi, [rsp+0x18]
 	call :regalloc crash 3.broken
-	mov byte ptr [rsp+0x60], 0x00
-	lea rdi, [rsp]
-	mov rdx, 0x18
-	lea rsi, [rsp+0x60]
-	call :memcpy
-	lea rdi, [rsp+0x48]
+	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
+	lea rdi, [rsp+0x20]
 	call :regalloc crash 3.broken
-	mov byte ptr [rsp+0x90], 0x00
-	lea rdi, [rsp]
-	mov rdx, 0x18
-	lea rsi, [rsp+0x90]
-	call :memcpy
-	lea rdi, [rsp+0x78]
+	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
+	lea rdi, [rsp+0x40]
 	call :regalloc crash 3.broken
-	mov byte ptr [rsp+0xC0], 0x00
-	lea rdi, [rsp]
-	mov rdx, 0x18
-	lea rsi, [rsp+0xC0]
-	call :memcpy
-	lea rdi, [rsp+0xA8]
+	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
+	lea rdi, [rsp+0x60]
 	call :regalloc crash 3.broken
-	mov byte ptr [rsp+0xF0], 0x00
-	lea rdi, [rsp]
-	mov rdx, 0x18
-	lea rsi, [rsp+0xF0]
-	call :memcpy
-	lea rdi, [rsp+0xD8]
+	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
+	lea rdi, [rsp+0x80]
 	call :regalloc crash 3.broken
-	mov byte ptr [rsp+0x120], 0x00
-	lea rdi, [rsp]
-	mov rdx, 0x18
-	lea rsi, [rsp+0x120]
-	call :memcpy
-	lea rdi, [rsp+0x108]
+	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
+	lea rdi, [rsp+0xA0]
 	call :regalloc crash 3.broken
-	mov byte ptr [rsp+0x150], 0x00
-	lea rdi, [rsp]
-	mov rdx, 0x18
-	lea rsi, [rsp+0x150]
-	call :memcpy
-	lea rdi, [rsp+0x138]
+	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
+	lea rdi, [rsp+0xC0]
 	call :regalloc crash 3.broken
-	mov byte ptr [rsp+0x180], 0x00
-	lea rdi, [rsp]
-	mov rdx, 0x18
-	lea rsi, [rsp+0x180]
-	call :memcpy
-	lea rdi, [rsp+0x168]
+	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
+	lea rdi, [rsp+0x30]
 	call :regalloc crash 3.broken
-	mov byte ptr [rsp+0x1B0], 0x00
-	lea rdi, [rsp]
-	mov rdx, 0x18
-	lea rsi, [rsp+0x1B0]
-	call :memcpy
-	lea rdi, [rsp+0x198]
+	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
+	lea rdi, [rsp+0x70]
 	call :regalloc crash 3.broken
-	mov byte ptr [rsp+0x1E0], 0x00
-	lea rdi, [rsp]
-	mov rdx, 0x18
-	lea rsi, [rsp+0x1E0]
-	call :memcpy
-	lea rdi, [rsp+0x1C8]
+	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
+	lea rdi, [rsp+0xB0]
 	call :regalloc crash 3.broken
-	mov byte ptr [rsp+0x210], 0x00
-	lea rdi, [rsp]
-	mov rdx, 0x18
-	lea rsi, [rsp+0x210]
-	call :memcpy
-	lea rdi, [rsp+0x1F8]
+	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
+	lea rdi, [rsp+0x50]
 	call :regalloc crash 3.broken
-	mov byte ptr [rsp+0x240], 0x00
-	lea rdi, [rsp]
-	mov rdx, 0x18
-	lea rsi, [rsp+0x240]
-	call :memcpy
-	lea rdi, [rsp+0x228]
+	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
+	lea rdi, [rsp+0x10]
 	call :regalloc crash 3.broken
-	mov byte ptr [rsp+0x270], 0x00
-	lea rdi, [rsp]
-	mov rdx, 0x18
-	lea rsi, [rsp+0x270]
-	call :memcpy
-	lea rdi, [rsp+0x258]
+	lea rdi, [rsp+0x90]
+	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
 	call :regalloc crash 3.broken
 	jmp :1
-memcpy:
