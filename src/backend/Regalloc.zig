@@ -591,9 +591,15 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 dirty = other == null or dirty;
             }
 
-            for (bb.base.outputs()) |ot| {
+            for (bb.base.outputs(), 0..) |ot, j| {
                 const out = ot.get();
-                if (out.kind != .Phi or out.schedule == no_def_sentinel) continue;
+                if (out.schedule == no_def_sentinel) continue;
+                if (out.kind != .Phi) {
+                    std.debug.assert(for (bb.base.outputs()[j + 1 ..]) |o| {
+                        if (o.get().kind == .Phi) break false;
+                    } else true);
+                    break;
+                }
                 const k, const v = .{ lrg_table[out.schedule].index(lrgs), out.dataDeps()[i] };
                 const other = pred_block.fetchPut(tmp.arena.allocator(), k, v) catch unreachable;
                 dirty = other == null or dirty;
