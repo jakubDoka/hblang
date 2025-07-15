@@ -1039,6 +1039,19 @@ pub fn Func(comptime Backend: type) type {
                 return (comptime bakeFlagBitset("is_readonly")).contains(self.kind);
             }
 
+            pub fn alreadyBefore(self: *Node, use: *Node, block: *CfgNode) bool {
+                std.debug.assert(self.isClone());
+                if (self.cfg0() != block) return false;
+                const search_from = if (use.kind == .Phi) block.base.outputs().len - 1 else block.base.posOfOutput(0, use);
+                var iter = std.mem.reverseIterator(block.base.outputs()[0..search_from]);
+                while (iter.next()) |o| {
+                    const out: *Node = o.get();
+                    if (out == self) return true;
+                    if (!out.isClone() and !out.isReadonly()) break;
+                }
+                return false;
+            }
+
             pub fn noAlias(self: *Node, other: *Node) bool {
                 const lsize: i64 = @bitCast(self.data_type.size());
                 const rsize: i64 = @bitCast(other.data_type.size());
@@ -1525,7 +1538,11 @@ pub fn Func(comptime Backend: type) type {
                 }
             }
 
-            const ins = if (def.isClone()) b: {
+            const ins = if (def.isClone() and
+                // if we are already cloned, force a split as that can extend
+                // the register options
+                !def.alreadyBefore(use, block))
+            b: {
                 if (def.outputs().len == 1) {
                     const cur_block = def.cfg0();
                     const i = cur_block.base.posOfOutput(0, def);

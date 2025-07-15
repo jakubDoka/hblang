@@ -2,6 +2,19 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### insane regalloc crash 1 (infinite)
+```!hb
+broken := fn(): void loop {
+    $i := 0
+    $while i < 64 {
+        x: ?[]u8 = idk
+        if y := x {return}
+        i += 1
+    }
+}
+main := fn(): u32 loop broken()
+```
+
 #### insane regalloc crash 1
 ```hb
 main := fn(): u32 {

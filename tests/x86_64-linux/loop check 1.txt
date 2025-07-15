@@ -24,12 +24,12 @@ main:
 	push r12
 	push r13
 	sub rsp, 0x18
-	lea rax, [0x0000000000000007]
-	xor rdx, rdx
-	mov rcx, 0x15
-5:	mov r13, rcx
-	mov r12, rdx
-	mov rbx, rax
+	lea rdx, [0x0000000000000007]
+	xor rcx, rcx
+	mov rax, 0x15
+5:	mov r13, rax
+	mov r12, rcx
+	mov rbx, rdx
 	mov rbp, rbx
 	add rbp, r12
 	mov rdx, r13
@@ -51,14 +51,14 @@ main:
 	xor al, 0x01
 	test al, al
 	jz :2
-	xor rdx, rdx
-	mov rcx, r13
+	xor rcx, rcx
+	mov rax, r13
 	jmp :3
 2:	xor eax, eax
 	jmp :4
-1:	xor rdx, rdx
-	mov rcx, r13
-3:	mov rax, rbx
+1:	xor rcx, rcx
+	mov rax, r13
+3:	mov rdx, rbx
 	jmp :5
 0:	mov rax, 0x01
 4:	add rsp, 0x18

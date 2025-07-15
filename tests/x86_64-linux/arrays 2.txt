@@ -1,8 +1,8 @@
 main:
 	sub rsp, 0x50
+	xor r8, r8
 	mov r10, 0x18
 	mov rcx, 0x08
-	xor r8, r8
 4:	cmp r8, 0x03
 	setz al
 	movzx rax, al

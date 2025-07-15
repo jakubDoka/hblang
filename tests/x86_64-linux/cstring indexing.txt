@@ -8,8 +8,8 @@ main:
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x48], rax
 	mov rdi, 0x08
-	xor sil, sil
 	xor rax, rax
+	xor sil, sil
 4:	mov rbx, rax
 	cmp rbx, 0x02
 	setb al

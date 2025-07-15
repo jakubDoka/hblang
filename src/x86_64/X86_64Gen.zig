@@ -588,7 +588,7 @@ pub fn regMask(
 ) Set {
     errdefer unreachable;
 
-    if (node.kind == .MachSplit) {
+    if (node.kind == .MachSplit or node.kind == .Phi) {
         if (node.data_type.isFloat()) return splitFloatMask(arena);
         if (idx == 0) return splitIntMask(arena);
         return readSplitIntMask(arena);
