@@ -6,8 +6,8 @@ loop check 1.nextPos:
 	test al, al
 	jz :0
 	mov byte ptr [rsp], 0x01
-	mov rax, [rsp]
 	mov qword ptr [rsp+0x08], 0x11
+	mov rax, [rsp]
 	mov [rdi], rax
 	mov rax, [rsp+0x08]
 	mov [rdi+0x08], rax

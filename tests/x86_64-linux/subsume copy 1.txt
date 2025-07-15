@@ -2,27 +2,27 @@ main:
 	sub rsp, 0x10
 	mov byte ptr [rsp], 0x01
 	mov byte ptr [rsp+0x01], 0x02
-	mov ax, [rsp]
 	mov byte ptr [rsp+0x02], 0x03
-	movzx edx, ax
-	or edx, 0x30000
-	mov [rsp], dx
-	mov eax, edx
+	mov ax, [rsp]
+	movzx eax, ax
+	or eax, 0x30000
+	mov [rsp], ax
+	mov ecx, eax
+	shr ecx, 0x10
+	mov [rsp+0x02], cl
+	shl ecx, 0x10
+	or eax, ecx
+	mov ecx, eax
+	shr ecx, 0x10
+	shl ecx, 0x10
+	or eax, ecx
+	mov [rsp+0x03], ax
 	shr eax, 0x10
-	mov [rsp+0x02], al
-	shl eax, 0x10
-	or edx, eax
-	mov eax, edx
-	shr eax, 0x10
-	shl eax, 0x10
-	or edx, eax
-	mov [rsp+0x03], dx
-	shr edx, 0x10
+	mov [rsp+0x05], al
+	mov edx, eax
 	mov al, [rsp+0x03]
 	mov cl, [rsp+0x04]
-	mov [rsp+0x05], dl
 	movzx rax, al
-	mov edx, edx
 	movzx rcx, cl
 	add rax, rcx
 	sub rax, rdx

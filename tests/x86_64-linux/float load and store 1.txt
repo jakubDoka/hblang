@@ -16,8 +16,8 @@ main:
 	movd xmm1, eax
 	movd xmm0, edx
 	movss [rsp+0x10], xmm0
-	mov rax, [rsp+0x0C]
 	movss [rsp+0x14], xmm1
+	mov rax, [rsp+0x0C]
 	mov [rcx], rax
 	mov eax, [rsp+0x14]
 	mov [rcx+0x08], eax

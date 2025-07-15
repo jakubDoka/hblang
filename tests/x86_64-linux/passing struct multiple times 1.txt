@@ -20,18 +20,18 @@ passing struct multiple times 1.foo:
 	ret
 passing struct multiple times 1.bar:
 	sub rsp, 0x10
-	mov rcx, [rsp+0x20]
-	mov r8, [rsp+0x28]
-	mov rax, [rsp+0x18]
 	mov [rsp], edi
-	add rax, rcx
+	mov r8, [rsp+0x28]
+	mov rdi, [rsp+0x20]
+	mov rax, [rsp+0x18]
 	mov sil, [rsp]
 	mov dl, [rsp+0x01]
 	mov cl, [rsp+0x02]
-	sub rax, r8
+	add rax, rdi
 	movzx rsi, sil
 	movzx rdx, dl
 	movzx rcx, cl
+	sub rax, r8
 	add rax, rsi
 	add rax, rdx
 	sub rax, rcx
@@ -46,11 +46,11 @@ main:
 	mov qword ptr [rsp+0x28], 0x03
 	mov byte ptr [rsp+0x30], 0x01
 	mov byte ptr [rsp+0x31], 0x02
-	lea rsi, [rsp+0x18]
+	mov byte ptr [rsp+0x32], 0x03
 	mov rdx, 0x18
 	lea rdi, [rsp]
+	lea rsi, [rsp+0x18]
 	mov ax, [rsp+0x30]
-	mov byte ptr [rsp+0x32], 0x03
 	movzx ebp, ax
 	or ebp, 0x30000
 	mov [rsp+0x30], bp

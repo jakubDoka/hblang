@@ -9,17 +9,17 @@ generic structs 5 (iterators).main.Chars.next:
 	mov byte ptr [rsp], 0x00
 	mov ax, [rsp]
 	jmp :1
-0:	mov rdx, [rdi+0x08]
-	mov rax, [rdi]
+0:	mov rax, [rdi]
 	mov byte ptr [rsp+0x02], 0x01
-	dec rdx
 	mov al, [rax]
 	mov [rsp+0x03], al
-	mov rcx, [rdi]
+	mov rdx, [rdi]
 	mov ax, [rsp+0x02]
-	inc rcx
-	mov [rdi], rcx
-	mov [rdi+0x08], rdx
+	mov rcx, [rdi+0x08]
+	inc rdx
+	mov [rdi], rdx
+	dec rcx
+	mov [rdi+0x08], rcx
 1:	add rsp, 0x10
 	ret
 generic structs 5 (iterators).main.Chain(.Chars, .Chars).next:
@@ -91,14 +91,14 @@ main:
 	mov qword ptr [rsp+0x50], 0x02
 8:	lea rdi, [rsp+0x10]
 	call :generic structs 5 (iterators).main.Chars.next
-	mov rdx, [rsp]
-	mov rcx, [rsp+0x08]
 	mov [rsp+0x58], ax
 	mov al, [rsp+0x58]
 	cmp al, bl
 	jnz :0
-	mov [rsp+0x20], rdx
-	mov [rsp+0x28], rcx
+	mov rax, [rsp]
+	mov [rsp+0x20], rax
+	mov rax, [rsp+0x08]
+	mov [rsp+0x28], rax
 5:	lea rdi, [rsp+0x20]
 	call :generic structs 5 (iterators).main.Chars.next
 	mov [rsp+0x5C], ax
@@ -109,14 +109,14 @@ main:
 	jmp :7
 1:	lea rdi, [rsp+0x30]
 	call :generic structs 5 (iterators).main.Chain(.Chars, .Chars).next
-	mov cl, [rsp+0x5D]
 	mov [rsp+0x5E], ax
 	mov al, [rsp+0x5E]
 	cmp al, bl
 	jnz :3
 	mov rax, 0x03
 	jmp :7
-3:	mov al, [rsp+0x5F]
+3:	mov cl, [rsp+0x5D]
+	mov al, [rsp+0x5F]
 	cmp al, cl
 	jz :4
 	mov rax, 0x04
@@ -124,15 +124,15 @@ main:
 4:	jmp :5
 0:	lea rdi, [rsp+0x20]
 	call :generic structs 5 (iterators).main.Chars.next
-	mov cl, [rsp+0x59]
 	mov [rsp+0x5A], ax
 	mov al, [rsp+0x5A]
 	cmp al, bl
 	jnz :6
 	mov rax, 0x01
 	jmp :7
-6:	mov al, [rsp+0x5B]
-	cmp cl, al
+6:	mov cl, [rsp+0x5B]
+	mov al, [rsp+0x59]
+	cmp al, cl
 	jz :7
 	mov rax, 0x02
 7:	add rsp, 0x60

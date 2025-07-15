@@ -2218,7 +2218,7 @@ pub fn Func(comptime Backend: type) type {
                     return earlier.value();
                 }
 
-                if (earlier != node.mem()) {
+                if (false and earlier != node.mem()) {
                     return self.addNode(.Load, node.sloc, node.data_type, &.{ inps[0], earlier, inps[2] }, .{});
                 }
             }

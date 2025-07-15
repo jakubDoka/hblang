@@ -39,11 +39,11 @@ main:
 	sub rsp, 0x28
 	mov byte ptr [rsp+0x20], 0x01
 	mov byte ptr [rsp+0x21], 0x02
-	mov rsi, 0x01
+	mov byte ptr [rsp+0x22], 0x03
 	xor rdx, rdx
 	lea rdi, [rsp]
+	mov rsi, 0x01
 	mov ax, [rsp+0x20]
-	mov byte ptr [rsp+0x22], 0x03
 	movzx eax, ax
 	or eax, 0x30000
 	mov [rsp+0x20], ax

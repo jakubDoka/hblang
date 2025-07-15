@@ -2,11 +2,11 @@ null unwrap 1.use_opt:
 	sub rsp, 0x58
 	mov rcx, rsi
 	mov [rsp+0x40], rdi
-	xor sil, sil
-	mov dl, [rsp+0x40]
 	mov rax, rcx
 	mov [rsp+0x48], rax
-	cmp dl, sil
+	xor dl, dl
+	mov al, [rsp+0x40]
+	cmp al, dl
 	jnz :0
 	lea rsi, [rsp+0x20]
 	lea rax, [0x0000000000000007]
@@ -27,13 +27,13 @@ null unwrap 1.null_unwrap:
 main:
 	sub rsp, 0x28
 	mov byte ptr [rsp], 0x01
+	mov qword ptr [rsp+0x08], 0x01
 	mov rsi, 0x01
 	mov rdi, [rsp]
-	mov qword ptr [rsp+0x08], 0x01
 	call :null unwrap 1.use_opt
-	mov rsi, [rsp+0x18]
 	mov byte ptr [rsp+0x10], 0x00
 	mov rdi, [rsp+0x10]
+	mov rsi, [rsp+0x18]
 	call :null unwrap 1.use_opt
 	add rsp, 0x28
 	ret
