@@ -2,6 +2,21 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### bad signed div 1
+```hb
+x: i32 = -1200
+main := fn(): u32 return -(x / 10) != 120
+```
+
+#### bad signed div 2
+```hb
+main := fn(): u32 {
+    $x: i32 = -1200
+    $y := -(x / 10)
+    return y != 120
+}
+```
+
 #### insane regalloc crash 1 (infinite)
 ```!hb
 broken := fn(): void loop {

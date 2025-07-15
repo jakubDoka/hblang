@@ -1137,15 +1137,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     },
                     .udiv, .sdiv, .smod, .umod => switch (size) {
                         1, 2, 4, 8 => {
-                            if (size == 1) {
-                                self.emitInstr(
-                                    zydis.ZYDIS_MNEMONIC_MOVZX,
-                                    .{ Reg.rdx, SReg{ .rdx, 1 } },
-                                );
-                            } else {
-                                self.emitInstr(zydis.ZYDIS_MNEMONIC_XOR, .{ Reg.rdx, Reg.rdx });
-                            }
-
+                            self.prepareDivRegs(mnemonic, size);
                             self.emitInstr(mnemonic, .{ rhs, SizeHint{ .bytes = size } });
                         },
                         else => unreachable,
@@ -1207,11 +1199,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                                 utils.panic("{} {} {} {}", .{ dst, dest_reg, op, instr });
                             }
 
-                            if (size == 1) {
-                                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOVZX, .{ Reg.rax, SReg{ .rax, 1 } });
-                            } else {
-                                self.emitInstr(zydis.ZYDIS_MNEMONIC_XOR, .{ SReg{ Reg.rdx, size }, Reg.rdx });
-                            }
+                            self.prepareDivRegs(mnemonic, size);
                             self.emitInstr(mnemonic, .{SReg{ oper, size }});
 
                             if (size == 1 and dest_reg == .rdx) {
@@ -1340,6 +1328,34 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             else => {
                 utils.panic("{any}", .{instr});
             },
+        }
+    }
+}
+
+pub fn prepareDivRegs(self: *X86_64Gen, mnemonic: zydis.ZydisMnemonic, size: u64) void {
+    if (mnemonic == zydis.ZYDIS_MNEMONIC_DIV) {
+        if (size == 1) {
+            self.emitInstr(
+                zydis.ZYDIS_MNEMONIC_MOVZX,
+                .{ Reg.rdx, SReg{ .rdx, 1 } },
+            );
+        } else {
+            self.emitInstr(zydis.ZYDIS_MNEMONIC_XOR, .{ Reg.rdx, Reg.rdx });
+        }
+    } else {
+        if (size == 1) {
+            self.emitInstr(
+                zydis.ZYDIS_MNEMONIC_MOVSX,
+                .{ Reg.rax, SReg{ .rax, 1 } },
+            );
+        } else if (size == 2) {
+            self.emitInstr(zydis.ZYDIS_MNEMONIC_CWD, .{});
+        } else if (size == 4) {
+            self.emitInstr(zydis.ZYDIS_MNEMONIC_CDQ, .{});
+        } else if (size == 8) {
+            self.emitInstr(zydis.ZYDIS_MNEMONIC_CQO, .{});
+        } else {
+            unreachable;
         }
     }
 }

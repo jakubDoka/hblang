@@ -1,0 +1,17 @@
+main:
+	sub rsp, 0x10
+	mov rax, 0xFFFFFB50
+	mov [rsp], eax
+	mov rcx, 0x0A
+	mov eax, [rsp]
+	cdq
+	idiv ecx
+	neg eax
+	mov [rsp+0x04], eax
+	mov eax, [rsp+0x04]
+	cmp eax, 0x78
+	setnz al
+	movzx rax, al
+	movzx eax, al
+	add rsp, 0x10
+	ret

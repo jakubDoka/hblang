@@ -40,7 +40,7 @@ float arithmetic 2.sin:
 	mov eax, [rsp+0x18]
 	movsxd rdi, eax
 	mov rax, rdi
-	xor rdx, rdx
+	cqo
 	idiv rcx
 	dec rdi
 	add rsi, rax

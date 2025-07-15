@@ -105,7 +105,13 @@ pub const BinOp = enum(u8) {
             else
                 @as(u32, @bitCast(tf32(lhs) * tf32(rhs))),
             .udiv => if (rhs == 0) 0 else @bitCast(tu(lhs) / tu(rhs)),
-            .sdiv => if (rhs == 0) 0 else @divFloor(lhs, rhs),
+            .sdiv => if (rhs == 0) 0 else switch (dt) {
+                .i8 => @divFloor(@as(i8, @truncate(lhs)), @as(i8, @truncate(rhs))),
+                .i16 => @divFloor(@as(i16, @truncate(lhs)), @as(i16, @truncate(rhs))),
+                .i32 => @divFloor(@as(i32, @truncate(lhs)), @as(i32, @truncate(rhs))),
+                .i64 => @divFloor(lhs, rhs),
+                else => unreachable,
+            },
             .fdiv => if (dt == .f64)
                 @bitCast(tf(lhs) / tf(rhs))
             else
@@ -167,7 +173,7 @@ pub const BinOp = enum(u8) {
         return switch (self) {
             .iadd, .isub, .fsub, .fadd, .bxor, .bor, .ishl, .sshr, .ushr => 0,
             .band => -1,
-            .imul, .sdiv => 1,
+            .imul, .sdiv, .udiv => 1,
             .fmul, .fdiv => @bitCast(@as(f64, 1.0)),
             else => null,
         };

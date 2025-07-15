@@ -1,0 +1,11 @@
+main:
+	mov rax, [0x0000000000000007]
+	mov rcx, 0x0A
+	cdq
+	idiv ecx
+	neg eax
+	cmp eax, 0x78
+	setnz al
+	movzx rax, al
+	movzx eax, al
+	ret
