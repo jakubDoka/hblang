@@ -78,20 +78,9 @@ pub fn end(self: *Builder, _: BuildToken) void {
         defer tmp.deinit();
 
         var worklist = Func.WorkList.init(tmp.arena.allocator(), self.func.next_id) catch unreachable;
-        worklist.add(self.func.end);
-        worklist.add(self.func.root);
-        var i: usize = 0;
-        while (i < worklist.list.items.len) : (i += 1) {
-            for (worklist.list.items[i].inputs()) |oi| if (oi) |o| {
-                worklist.add(o);
-            };
+        worklist.collectAll(&self.func);
 
-            for (worklist.list.items[i].outputs()) |o| {
-                worklist.add(o.get());
-            }
-        }
-
-        for (worklist.list.items) |node| {
+        for (worklist.items()) |node| {
             std.debug.assert(node.kind != .Scope);
         }
     }

@@ -17,7 +17,7 @@ pub fn newRalloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
 
     errdefer unreachable;
 
-    for (0..10) |_| {
+    for (0..7) |_| {
         return rallocRound(Backend, func) catch continue;
     } else unreachable;
 }
@@ -35,7 +35,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
     const LiveRange = struct {
         parent: ?*LiveRange = null,
-        killed_by: ?*Node = null,
+        //killed_by: ?*Node = null,
         mask: Set,
         def: *Node,
         failed: bool = false,
@@ -53,10 +53,10 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             for (setMasks(&mask)) |m| {
                 try writer.print("{x:016} ", .{m});
             }
-            if (self.killed_by) |k| {
-                try writer.writeAll("\n\tkilled by: ");
-                try k.format(a, b, writer);
-            }
+            // if (self.killed_by) |k| {
+            //     try writer.writeAll("\n\tkilled by: ");
+            //     try k.format(a, b, writer);
+            // }
         }
 
         pub fn index(self: *LiveRange, live_ranges: []const LiveRange) u16 {
@@ -74,7 +74,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             if (self == other) return false;
 
             var s, var o = .{ self, other };
-            if (self.index(live_ranges) < other.index(live_ranges)) {
+            if (s.index(live_ranges) < o.index(live_ranges)) {
                 std.mem.swap(*LiveRange, &s, &o);
             }
 
@@ -179,16 +179,18 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
             const block = def.cfg0();
             const ins = self.addSplit(block, def, dbg);
+            self.ensureOutputCapacity(ins, def.outputs().len);
+
             for (tmp.arena.dupe(Node.Out, def.outputs())) |us| {
                 const use = us.get();
                 if (use == def) continue;
-                if (use == ins) continue;
                 if (!use.hasUseFor(us.pos(), def)) continue;
                 if (!must and use.kind == .MachSplit and
                     isSameBlockNoClobber(use, lrg_table)) continue;
-                self.setInputNoIntern(use, us.pos(), ins);
+                self.setInputIgnoreIntern(use, us.pos(), ins);
             }
 
+            self.setInputIgnoreIntern(ins, 1, def);
             var oidx = block.base.posOfOutput(0, def);
             if (def.kind == .Phi) {
                 for (block.base.outputs()[oidx + 1 ..]) |o| {
@@ -464,11 +466,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
     const BitSet = std.DynamicBitSetUnmanaged;
     const block_liveouts = tmp.arena.alloc(LiveMap, func.gcm.postorder.len);
     @memset(block_liveouts, LiveMap.empty);
-    const interference = tmp.arena.alloc(BitSet, lrgs.len);
-    for (interference) |*r| r.* = BitSet.initEmpty(
-        tmp.arena.allocator(),
-        lrgs.len,
-    ) catch unreachable;
+    var interference = BitSet.initEmpty(tmp.arena.allocator(), lrgs.len * lrgs.len) catch unreachable;
 
     var conflicts = Map(LiveRange.Conflict, void).empty;
 
@@ -539,8 +537,8 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                         setIntersects(concu_lrg.mask, instr_lrg.mask))
                     {
                         std.debug.assert(instr_lrg.index(lrgs) != concu_lrg.index(lrgs));
-                        interference[instr_lrg.index(lrgs)].set(concu_lrg.index(lrgs));
-                        interference[concu_lrg.index(lrgs)].set(instr_lrg.index(lrgs));
+                        interference.set(concu_lrg.index(lrgs) + instr_lrg.index(lrgs) * lrgs.len);
+                        interference.set(instr_lrg.index(lrgs) + concu_lrg.index(lrgs) * lrgs.len);
                     }
                 }
             }
@@ -557,7 +555,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 ).* &= ~kills;
 
                 if (active_lrg.mask.count() == 0 and !active_lrg.failed) {
-                    active_lrg.killed_by = instr;
+                    //active_lrg.killed_by = instr;
                     active_lrg.fail(lrgs, &failed);
                 }
             };
@@ -659,13 +657,37 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
     }
 
     const ifg = tmp.arena.alloc([]u16, lrgs.len);
-    for (ifg, interference) |*r, in| {
-        const count = in.count();
-        r.* = tmp.arena.alloc(u16, count);
+    {
+        const buff = tmp.arena.alloc(u16, interference.count());
+        var idx: usize = 0;
+        var cursor: usize = 0;
+        var last_idx: usize = 0;
         var i: usize = 0;
-        var iter = in.iterator(.{});
-        while (iter.next()) |k| : (i += 1) {
-            r.*[i] = @intCast(k);
+        var iter = interference.iterator(.{});
+        while (iter.next()) |k| : (idx += 1) {
+            while (k >= cursor + lrgs.len) {
+                cursor += lrgs.len;
+                ifg[i] = buff[last_idx..idx];
+                last_idx = idx;
+                i += 1;
+            }
+
+            buff[idx] = @intCast(k - cursor);
+        }
+
+        std.debug.assert(idx == buff.len);
+        while (cursor < lrgs.len * lrgs.len) {
+            cursor += lrgs.len;
+            ifg[i] = buff[last_idx..idx];
+            last_idx = idx;
+            i += 1;
+        }
+
+        std.debug.assert(cursor == lrgs.len * lrgs.len);
+        std.debug.assert(i == lrgs.len);
+
+        for (buff) |v| {
+            std.debug.assert(v < lrgs.len);
         }
     }
 
@@ -762,7 +784,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             instr.inputs()[0] = null;
             removed += 1;
 
-            func.subsume(instr.dataDeps()[0], instr);
+            func.subsumeIgnoreIntern(instr.dataDeps()[0], instr);
         }
     }
 
@@ -854,7 +876,10 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
     }
 
     // first allocate into tmp since its near in memory
-    var alloc = tmp.arena.makeArrayList(u16, func.gcm.instr_count);
+    var alloc = std.ArrayListUnmanaged(u16).initCapacity(
+        func.arena.allocator(),
+        func.gcm.instr_count,
+    ) catch unreachable;
 
     for (func.gcm.postorder) |bb| {
         for (bb.base.outputs()) |in| {
@@ -973,5 +998,5 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
         }
     }
 
-    return func.arena.allocator().dupe(u16, alloc.items) catch unreachable;
+    return alloc.items;
 }

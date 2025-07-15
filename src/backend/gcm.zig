@@ -124,24 +124,25 @@ pub fn GcmMixin(comptime Backend: type) type {
 
             else_.asCfg().?.ext.loop = 0;
 
-            func.setInputNoIntern(&loop.base, 1, else_);
+            func.setInputIgnoreIntern(&loop.base, 1, else_);
 
-            func.addTrap(loop.base.sloc, then, graph.infinite_loop_trap);
+            func.addTrapIgnoreIntern(loop.base.sloc, then, graph.infinite_loop_trap);
 
             return end.asCfg().?;
         }
 
         pub fn buildCfg(gcm: *Self) void {
-            _ = gcm.buildLoopTree();
+            const self = gcm.getGraph();
 
+            self.stopped_interning.lock();
+            _ = gcm.buildLoopTree();
             gcm.loop_tree_built.assertLocked();
             gcm.cfg_built.lock();
-            const self = gcm.getGraph();
 
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), self.next_id * 2) catch unreachable;
+            var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), self.next_id) catch unreachable;
             var stack = std.ArrayList(Func.Frame).init(tmp.arena.allocator());
 
             const cfg_rpo: []*CfgNode = cfg_rpo: {
@@ -165,21 +166,10 @@ pub fn GcmMixin(comptime Backend: type) type {
             add_mach_moves: {
                 for (cfg_rpo) |n| if (n.base.kind == .Loop or n.base.kind == .Region) {
                     for (0..2) |i| {
-                        self.setInputNoIntern(&n.base, i, self.addNode(.Jmp, n.base.sloc, .top, &.{n.base.inputs()[i].?}, .{}));
+                        self.setInputIgnoreIntern(&n.base, i, self.addNode(.Jmp, n.base.sloc, .top, &.{n.base.inputs()[i].?}, .{}));
                     }
 
-                    if (false) {
-                        var intmp = utils.Arena.scrath(null);
-                        defer intmp.deinit();
-                        for (intmp.arena.dupe(Node.Out, n.base.outputs())) |ot| if (ot.get().isDataPhi()) {
-                            const o = ot.get();
-                            std.debug.assert(o.inputs().len == 3);
-                            const lhs = self.addNode(.MachSplit, n.base.sloc, o.data_type, &.{ null, o.inputs()[1].? }, .{});
-                            const rhs = self.addNode(.MachSplit, n.base.sloc, o.data_type, &.{ null, o.inputs()[2].? }, .{});
-                            const new_phy = self.addNode(.Phi, n.base.sloc, o.data_type, &.{ &n.base, lhs, rhs }, .{});
-                            self.subsume(new_phy, o);
-                        };
-                    }
+                    visited.resize(self.next_id, true) catch unreachable;
                 };
                 break :add_mach_moves;
             }
@@ -352,7 +342,7 @@ pub fn GcmMixin(comptime Backend: type) type {
 
                 for (nodes, late_scheds) |on, l| if (on) |n| {
                     std.debug.assert(!n.isFloating());
-                    _ = self.setInput(n, 0, &l.?.base);
+                    self.setInputIgnoreIntern(n, 0, &l.?.base);
                 };
 
                 break :sched_late;
@@ -519,7 +509,7 @@ pub fn GcmMixin(comptime Backend: type) type {
 
                 std.debug.assert(best.base.kind != .Start);
 
-                _ = self.setInput(node, 0, &best.base);
+                self.setInputIgnoreIntern(node, 0, &best.base);
             }
         }
     };

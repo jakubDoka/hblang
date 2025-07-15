@@ -157,8 +157,8 @@ pub const InlineFunc = struct {
         work.add(start);
         work.add(end);
         var i: usize = 0;
-        while (i < work.list.items.len) : (i += 1) {
-            const node = work.list.items[i];
+        while (i < work.items().len) : (i += 1) {
+            const node = work.items()[i];
             for (node.outputs()) |o| work.add(o.get());
             for (node.inputs()) |inp| if (inp != null) work.add(inp.?);
 

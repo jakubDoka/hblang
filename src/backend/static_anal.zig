@@ -65,12 +65,11 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
             const func = self.getGraph();
 
             var work = Func.WorkList.init(tmp.arena.allocator(), func.next_id) catch unreachable;
-
             work.add(func.root);
 
             var i: usize = 0;
-            while (i < work.list.items.len) : (i += 1) {
-                const node = work.list.items[i];
+            while (i < work.items().len) : (i += 1) {
+                const node = work.items()[i];
                 if (node.isSub(graph.If) and node.sloc != graph.Sloc.none) b: {
                     const ld = func.loopDepth(node);
                     for (node.outputs()) |o| {

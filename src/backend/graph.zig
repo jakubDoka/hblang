@@ -698,6 +698,7 @@ pub fn Func(comptime Backend: type) type {
         gcm: gcm.GcmMixin(Backend) = .{},
         mem2reg: mem2reg.Mem2RegMixin(Backend) = .{},
         static_anal: static_anal.StaticAnalMixin(Backend) = .{},
+        stopped_interning: std.debug.SafetyLock = .{},
 
         pub fn optApi(comptime decl_name: []const u8, comptime Ty: type) bool {
             const prelude = @typeName(Backend) ++ " requires this unless `pub const i_know_the_api = {}` is declared:";
@@ -733,8 +734,8 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn init(gpa: std.mem.Allocator, cap: usize) !WorkList {
                 return .{
-                    .list = try .initCapacity(gpa, cap * 2),
-                    .in_list = try .initEmpty(gpa, cap * 2),
+                    .list = try .initCapacity(gpa, cap),
+                    .in_list = try .initEmpty(gpa, cap),
                 };
             }
 
@@ -762,6 +763,21 @@ pub fn Func(comptime Backend: type) type {
                 }
                 self.in_list.unset(node.id);
                 return node;
+            }
+
+            pub fn collectAll(self: *WorkList, func: *Self) void {
+                self.add(func.end);
+                self.add(func.root);
+                var i: usize = 0;
+                while (i < self.items().len) : (i += 1) {
+                    const n = self.items()[i];
+                    for (n.inputs()) |oi| if (oi) |o| self.add(o);
+                    for (n.outputs()) |o| self.add(o.get());
+                }
+            }
+
+            pub fn items(self: *WorkList) []*Node {
+                return self.list.items;
             }
         };
 
@@ -1456,6 +1472,7 @@ pub fn Func(comptime Backend: type) type {
             self.interner = .{};
             self.gcm.cfg_built = .{};
             self.gcm.loop_tree_built = .{};
+            self.stopped_interning = .{};
         }
 
         const Inserter = struct {
@@ -1486,7 +1503,7 @@ pub fn Func(comptime Backend: type) type {
         const InsertMap = InternMap(Inserter);
 
         pub fn addSplit(self: *Self, block: *CfgNode, def: *Node, dgb: builtin.MachSplit.Dbg) *Node {
-            return self.addNode(.MachSplit, def.sloc, def.data_type, &.{ &block.base, def }, .{ .dbg = dgb });
+            return self.addNode(.MachSplit, def.sloc, def.data_type, &.{ &block.base, null }, .{ .dbg = dgb });
         }
 
         pub fn splitBefore(self: *Self, use: *Node, idx: usize, def: *Node, skip: bool, dbg: builtin.MachSplit.Dbg) void {
@@ -1527,7 +1544,8 @@ pub fn Func(comptime Backend: type) type {
                 break :b def.inputs()[1].?;
             } else def, dbg);
 
-            self.setInputNoIntern(use, idx, ins);
+            self.setInputIgnoreIntern(use, idx, ins);
+            if (ins.kind == .MachSplit) self.setInputIgnoreIntern(ins, 1, def);
             const oidx = if (use.kind == .Phi) block.base.outputs().len - 2 else block.base.posOfOutput(0, use);
             const to_rotate = block.base.outputs()[oidx..];
             std.mem.rotate(Node.Out, to_rotate, to_rotate.len - 1);
@@ -1675,8 +1693,16 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn addTrap(self: *Self, sloc: Sloc, ctrl: *Node, code: u64) void {
+            self.addTrapLow(sloc, ctrl, code, setInputNoIntern);
+        }
+
+        pub fn addTrapIgnoreIntern(self: *Self, sloc: Sloc, ctrl: *Node, code: u64) void {
+            self.addTrapLow(sloc, ctrl, code, setInputIgnoreIntern);
+        }
+
+        pub fn addTrapLow(self: *Self, sloc: Sloc, ctrl: *Node, code: u64, comptime setter: anytype) void {
             if (self.end.inputs()[2] == null) {
-                self.setInputNoIntern(self.end, 2, self.addNode(.TrapRegion, sloc, .top, &.{}, .{}));
+                setter(self, self.end, 2, self.addNode(.TrapRegion, sloc, .top, &.{}, .{}));
             }
 
             const region = self.end.inputs()[2].?;
@@ -1749,13 +1775,35 @@ pub fn Func(comptime Backend: type) type {
             return node == null or node.?.data_type == .bot;
         }
 
+        pub fn subsumeNoKillIgnoreIntern(self: *Self, this: *Node, target: *Node) void {
+            self.ensureOutputCapacity(this, target.outputs().len);
+
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            for (tmp.arena.dupe(Node.Out, target.outputs())) |use| {
+                if (use.get().id == std.math.maxInt(u16)) continue;
+                if (use.get() == target) {
+                    target.removeUse(use.pos(), target);
+                    target.inputs()[use.pos()] = null;
+                } else {
+                    _ = self.setInputIgnoreIntern(use.get(), use.pos(), this);
+                }
+            }
+        }
+
         pub fn subsumeNoKill(self: *Self, this: *Node, target: *Node) void {
             if (this == target) {
                 utils.panic("{} {}\n", .{ this, target });
             }
             errdefer unreachable;
 
-            for (try self.arena.allocator().dupe(Node.Out, target.outputs())) |use| {
+            self.ensureOutputCapacity(this, target.outputs().len);
+
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            for (tmp.arena.dupe(Node.Out, target.outputs())) |use| {
                 if (use.get().id == std.math.maxInt(u16)) continue;
 
                 if (use.get() == target) {
@@ -1765,6 +1813,12 @@ pub fn Func(comptime Backend: type) type {
                     _ = self.setInput(use.get(), use.pos(), this);
                 }
             }
+        }
+
+        pub fn subsumeIgnoreIntern(self: *Self, this: *Node, target: *Node) void {
+            if (this.sloc == Sloc.none) this.sloc = target.sloc;
+            self.subsumeNoKillIgnoreIntern(this, target);
+            target.kill();
         }
 
         pub fn subsume(self: *Self, this: *Node, target: *Node) void {
@@ -1780,7 +1834,17 @@ pub fn Func(comptime Backend: type) type {
             }
         }
 
+        pub fn setInputIgnoreIntern(self: *Self, use: *Node, idx: usize, def: *Node) void {
+            self.stopped_interning.assertLocked();
+            if (use.inputs()[idx] == def) return;
+            if (use.inputs()[idx]) |n| n.removeUse(idx, use);
+            use.inputs()[idx] = def;
+            self.addUse(def, idx, use);
+        }
+
         pub fn setInput(self: *Self, use: *Node, idx: usize, def: ?*Node) ?*Node {
+            self.stopped_interning.assertUnlocked();
+
             if (use.inputs()[idx] == def) return null;
             if (use.inputs()[idx]) |n| {
                 n.removeUse(idx, use);
@@ -1822,14 +1886,17 @@ pub fn Func(comptime Backend: type) type {
             } else unreachable;
         }
 
-        pub fn addUse(self: *Self, def: *Node, index: usize, use: *Node) void {
-            if (def.output_len == def.output_cap) {
-                const new_cap = @max(def.output_cap, 1) * 2;
+        pub fn ensureOutputCapacity(self: *Self, def: *Node, at_least: usize) void {
+            if (def.output_cap < at_least) {
+                const new_cap = @max(@max(def.output_cap, 1) * 2, at_least);
                 const new_outputs = self.arena.allocator().realloc(def.outputs(), new_cap) catch unreachable;
                 def.output_base = new_outputs.ptr;
-                def.output_cap = new_cap;
+                def.output_cap = @intCast(new_cap);
             }
+        }
 
+        pub fn addUse(self: *Self, def: *Node, index: usize, use: *Node) void {
+            self.ensureOutputCapacity(def, def.output_len + 1);
             def.output_base[def.output_len] = .init(use, index, def);
             def.output_len += 1;
         }
@@ -1869,18 +1936,7 @@ pub fn Func(comptime Backend: type) type {
             defer tmp.deinit();
 
             var worklist = WorkList.init(tmp.arena.allocator(), self.next_id * 2) catch unreachable;
-            worklist.add(self.end);
-            worklist.add(self.root);
-            var i: usize = 0;
-            while (i < worklist.list.items.len) : (i += 1) {
-                for (worklist.list.items[i].inputs()) |oi| if (oi) |o| {
-                    worklist.add(o);
-                };
-
-                for (worklist.list.items[i].outputs()) |o| {
-                    worklist.add(o.get());
-                }
-            }
+            worklist.collectAll(self);
 
             while (worklist.pop()) |t| {
                 if (t.id == std.math.maxInt(u16)) continue;
@@ -2403,23 +2459,9 @@ pub fn Func(comptime Backend: type) type {
             defer tmp.deinit();
 
             var worklist = Self.WorkList.init(tmp.arena.allocator(), self.next_id) catch unreachable;
+            worklist.collectAll(self);
 
-            worklist.add(self.root);
-            worklist.add(self.end);
-            var i: usize = 0;
-            while (i < worklist.list.items.len) : (i += 1) {
-                for (worklist.list.items[i].inputs()) |oi| if (oi) |o| {
-                    worklist.add(o);
-                };
-
-                for (worklist.list.items[i].outputs()) |o| {
-                    worklist.add(o.get());
-                }
-            }
-
-            std.mem.reverse(*Node, worklist.list.items);
-
-            for (worklist.list.items) |p| {
+            for (worklist.items()) |p| {
                 p.fmt(null, writer, colors);
                 writer.writeAll("\n") catch unreachable;
             }

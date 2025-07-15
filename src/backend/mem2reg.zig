@@ -271,7 +271,10 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                     for (buf[0..len], scheds[0..len]) |n, s| n.schedule = s;
                 }
 
-                for (tmp.arena.dupe(Node.Out, bb.outputs())) |n| {
+                var stmp = utils.Arena.scrath(tmp.arena);
+                defer stmp.deinit();
+
+                for (stmp.arena.dupe(Node.Out, bb.outputs())) |n| {
                     const o = n.get();
                     if (o.id == std.math.maxInt(u16)) continue;
                     std.debug.assert(bb.kind != .Local);
@@ -293,7 +296,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                     }
 
                     if (o.kind == .Phi or o.kind == .Mem or o.isStore()) {
-                        for (tmp.arena.dupe(Node.Out, o.outputs())) |no| {
+                        for (stmp.arena.dupe(Node.Out, o.outputs())) |no| {
                             const lo = no.get();
                             if (lo.isLoad()) {
                                 const base, const off = lo.base().knownOffset();
