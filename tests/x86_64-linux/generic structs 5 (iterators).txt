@@ -27,45 +27,42 @@ generic structs 5 (iterators).main.Chain(.Chars, .Chars).next:
 	push rbp
 	push r12
 	sub rsp, 0x10
-	mov r12, rdi
-	mov rax, r12
+	mov rbx, rdi
+	mov rax, rbx
 	add rax, 0x18
-	mov rbp, rax
-	mov rax, r12
+	mov r12, rax
+	mov rax, rbx
 	add rax, 0x08
-	mov rbx, rax
-7:	mov rax, r12
-	mov al, [rax]
+	mov rbp, rax
+7:	mov al, [rbx]
 	movsx rcx, al
 	cmp rcx, 0x00
 	setz al
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rdi, rbx
+	mov rdi, rbp
 	call :generic structs 5 (iterators).main.Chars.next
 	mov [rsp+0x02], ax
 	mov cl, [rsp+0x02]
 	test cl, cl
 	jz :1
 	jmp :2
-1:	mov rax, r12
-	mov byte ptr [rax], 0x01
+1:	mov byte ptr [rbx], 0x01
 	jmp :3
 0:	cmp rcx, 0x01
 	setz al
 	movzx rax, al
 	test al, al
 	jz :4
-	mov rdi, rbp
+	mov rdi, r12
 	call :generic structs 5 (iterators).main.Chars.next
 	mov [rsp+0x04], ax
 	mov cl, [rsp+0x04]
 	test cl, cl
 	jz :5
 2:	jmp :6
-5:	mov rax, r12
-	mov byte ptr [rax], 0x02
+5:	mov byte ptr [rbx], 0x02
 3:	jmp :7
 4:	mov byte ptr [rsp], 0x00
 	mov ax, [rsp]

@@ -1801,8 +1801,9 @@ fn emitLoop(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Loop)) EmitError!Val
             .defer_base = self.defers.items.len,
             .kind = .{ .Comptime = .Clean },
         });
+        defer _ = self.loops.pop().?;
         const loop = &self.loops.items[self.loops.items.len - 1];
-        const default_iters = 200;
+        const default_iters = 300;
         var fuel: usize = default_iters;
         while ((loop.kind.Comptime != .Controlled or
             loop.kind.Comptime.Controlled.tag() != .Break) and !self.errored)
@@ -1819,7 +1820,6 @@ fn emitLoop(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Loop)) EmitError!Val
             }
             _ = self.loopControl(.@"continue", expr) catch {};
         }
-        _ = self.loops.pop().?;
         return .{};
     } else {
         self.loops.appendAssumeCapacity(.{

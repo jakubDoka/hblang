@@ -993,11 +993,11 @@ pub fn queue(self: *Types, target: Target, task: Id) void {
     switch (task.data()) {
         .Func => |func| {
             if (self.store.get(func).completion.get(target) == .compiled) return;
-            self.func_work_list.getPtr(target).appendAssumeCapacity(func);
+            try self.func_work_list.getPtr(target).append(self.pool.allocator(), func);
         },
         .Global => |global| {
             if (self.store.get(global).completion.get(target) == .compiled) return;
-            self.global_work_list.getPtr(target).appendAssumeCapacity(global);
+            try self.global_work_list.getPtr(target).append(self.pool.allocator(), global);
         },
         else => unreachable,
     }
@@ -1019,14 +1019,8 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: std.io.AnyWriter) *
     @memset(scopes, .void);
     const slot = arena.create(Types);
     slot.* = .{
-        .func_work_list = .{ .values = .{
-            arena.makeArrayList(utils.EntId(tys.Func), 1024),
-            arena.makeArrayList(utils.EntId(tys.Func), 1024),
-        } },
-        .global_work_list = .{ .values = .{
-            arena.makeArrayList(utils.EntId(tys.Global), 1024),
-            arena.makeArrayList(utils.EntId(tys.Global), 1024),
-        } },
+        .func_work_list = .{ .values = .{ .empty, .empty } },
+        .global_work_list = .{ .values = .{ .empty, .empty } },
         .stack_base = @frameAddress(),
         .files = source,
         .file_scopes = scopes,

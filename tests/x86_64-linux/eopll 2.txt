@@ -7,8 +7,7 @@ main:
 	syscall
 	movsxd rbp, eax
 	xor rbx, rbx
-1:	mov rax, rbx
-	cmp rax, 0x00
+1:	cmp rbx, 0x00
 	setz al
 	movzx rax, al
 	test al, al

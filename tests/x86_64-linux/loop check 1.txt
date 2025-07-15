@@ -28,15 +28,13 @@ main:
 	xor rdx, rdx
 	mov rcx, 0x15
 5:	mov r13, rcx
-	mov rbp, rdx
+	mov r12, rdx
 	mov rbx, rax
-	mov rax, rbx
-	add rax, rbp
-	mov r12, rax
-	mov rax, r13
-	sub rax, rbp
-	mov rsi, r12
-	mov rdx, rax
+	mov rbp, rbx
+	add rbp, r12
+	mov rdx, r13
+	sub rdx, r12
+	mov rsi, rbp
 	lea rdi, [rsp]
 	call :loop check 1.nextPos
 	mov al, [rsp]
@@ -44,8 +42,8 @@ main:
 	mov [rsp], rsi
 	test al, al
 	jz :0
-	sub rsi, rbp
-	mov rdi, r12
+	sub rsi, r12
+	mov rdi, rbp
 	call :loop check 1.blackbox
 	test al, al
 	jz :1

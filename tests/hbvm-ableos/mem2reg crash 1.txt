@@ -17,21 +17,18 @@ mem2reg crash 1.insert:
         jne $1, $2, :1
         jal $31, $0, :mem2reg crash 1.bar
         jmp :1
-1:     li64 $5, 8
-         cp $4, $0
-4:       cp $1, $0
-6:       cp $2, $1
-       jltu $2, $5, :3
-     addi64 $4, $4, 1
+1:     li64 $3, 8
+         cp $1, $0
+4:       cp $2, $0
+6:     jltu $2, $3, :3
+     addi64 $1, $1, 1
         jmp :4
-3:       cp $3, $1
-         cp $2, $32
-        jne $3, $2, :5
+3:      jne $2, $32, :5
          cp $1, $33
      addi64 $254, $254, 24
          ld $31, $254, -24, 24
        jala $0, $31, 0
-5:   addi64 $1, $1, 1
+5:   addi64 $2, $2, 1
         jmp :6
 mem2reg crash 1.bar:
        jala $0, $31, 0

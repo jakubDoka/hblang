@@ -583,7 +583,7 @@ pub const builtin = enum {
     pub const Store = mod.Store;
     pub const GlobalAddr = extern struct {
         id: u32,
-        //pub const is_clone = true;
+        pub const is_clone = true;
     };
     pub const Split = extern struct {};
     pub const Join = extern struct {};

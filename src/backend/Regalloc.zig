@@ -17,7 +17,7 @@ pub fn newRalloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
 
     errdefer unreachable;
 
-    for (0..7) |_| {
+    for (0..10) |_| {
         return rallocRound(Backend, func) catch continue;
     } else unreachable;
 }
@@ -39,6 +39,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
         mask: Set,
         def: *Node,
         failed: bool = false,
+        self_conflict: bool = false,
         reg: u16 = unresolved_reg,
 
         const LiveRange = @This();
@@ -124,7 +125,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 if (o != instr) {
                     try conflicts.put(arena.allocator(), .{ .lrg = self, .instr = instr }, {});
                     try conflicts.put(arena.allocator(), .{ .lrg = self, .instr = o }, {});
-                    self.failed = true;
+                    self.self_conflict = true;
                     return true;
                 }
             }
@@ -133,7 +134,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
         pub fn isSame(self: *LiveRange, other: *Node, lrg_table: []const *LiveRange) bool {
             var cursor = other;
-            while (cursor.kind == .MachSplit) {
+            while (cursor.schedule == no_def_sentinel and cursor.kind == .MachSplit) {
                 cursor = cursor.inputs()[1].?;
             }
             return lrg_table[cursor.schedule] == self;
@@ -165,7 +166,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                         break;
                     }
 
-                    if (instr.kind != .MachSplit and !instr.isClone()) break;
+                    if (instr.kind != .MachSplit and !instr.isClone() and !instr.isReadonly()) break;
                 }
             }
 
@@ -228,11 +229,8 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
     func.gcm.instr_count = 0;
     const should_log = 0 == 1;
-    if (should_log) std.debug.print("\n", .{});
     for (func.gcm.postorder) |bb| {
-        if (should_log) std.debug.print("{}\n", .{bb});
         for (bb.base.outputs()) |instr| {
-            if (should_log) std.debug.print("  {}\n", .{instr});
             if (instr.get().isDef()) {
                 instr.get().schedule = func.gcm.instr_count;
                 func.gcm.instr_count += 1;
@@ -241,7 +239,6 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             }
         }
     }
-    if (should_log) std.debug.print("\n", .{});
 
     if (func.gcm.instr_count == 0) return &.{};
 
@@ -327,6 +324,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
     for (lrg_table_build) |*lrg| {
         lrg.* = lrg.*.?.unionFind();
+        std.debug.assert(lrg_table_build[lrg.*.?.def.schedule] == lrg.*);
     }
     const lrg_table: []*LiveRange = @ptrCast(lrg_table_build);
     const lrgs: []LiveRange = build_lrgs.items;
@@ -354,6 +352,8 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
     errdefer {
         for (failed.items) |lrg_idx| {
             const lrg = &lrgs[lrg_idx];
+            if (lrg.self_conflict) continue;
+            if (lrg.parent != null) continue;
             std.debug.assert(lrg.failed);
 
             if (should_log) std.debug.print("{}\n", .{lrg});
@@ -399,16 +399,27 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                     for (member.dataDeps()) |dep| {
                         if (lrg.isSame(dep, lrg_table)) {
                             min, max = LiveRange
-                                .collectLoopDepth(func, dep, dep.cfg0(), min, max);
+                                .collectLoopDepth(func, member, member.cfg0(), min, max);
+                            break;
                         }
                     }
                 }
             }
 
             if (should_log) std.debug.print("min {} max {}\n", .{ min, max });
+            if (min == 1000) {
+                if (should_log) for (members.entries.items(.key)) |member| {
+                    if (member.schedule == no_def_sentinel) {
+                        std.debug.print("<- {}\n", .{member});
+                    } else {
+                        std.debug.print("* {} {} {} {any}\n", .{ lrg.hasDef(member, lrg_table), member, lrg_table[member.schedule], member.outputs() });
+                    }
+                };
+                unreachable;
+            }
 
             for (@as([]*Node, members.entries.items(.key))) |member| {
-                if (min == max and member.kind == .MachSplit and member.extra(.MachSplit).dbg != .defualt) continue;
+                if (min == max and member.kind == .MachSplit) continue;
 
                 if (lrg.hasDef(member, lrg_table) and
                     (min == max or func.loopDepth(member) <= min) and
@@ -425,7 +436,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
                         const cfg = c.?.inputs()[0].?;
 
-                        if (min != max and func.loopDepth(cfg) > max) continue;
+                        if (min != max and func.loopDepth(cfg) > min and !dep.isReadonly()) continue;
 
                         if (member.cfg0().base.kind == .Loop and j == 2 and
                             dep.kind == .Phi and dep.cfg0() == member.cfg0()) continue;
@@ -436,7 +447,8 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                     for (member.dataDeps(), member.dataDepOffset()..) |dep, j| {
                         if (!lrg.isSame(dep, lrg_table)) continue;
 
-                        if (min != max and func.loopDepth(member) > max) continue;
+                        if (min != max and func.loopDepth(member) > min and
+                            !dep.isClone() and !dep.isReadonly()) continue;
 
                         func.splitBefore(member, j, dep, false, .@"use/loop/use");
                     }
@@ -501,7 +513,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                     const first_concu = if (concu_single_reg) concu_lrg.mask.findFirstSet() else null;
                     const first_instr = if (instr_single_reg) instr_lrg.mask.findFirstSet() else null;
 
-                    if (concu_single_reg) {
+                    if (concu_single_reg and !instr_lrg.failed) {
                         instr_lrg.mask.unset(first_concu.?);
                         if (instr_lrg.mask.count() == 0) {
                             if (should_log) {
@@ -512,7 +524,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                         }
                     }
 
-                    if (instr_single_reg) {
+                    if (instr_single_reg and !concu_lrg.failed) {
                         concu_lrg.mask.unset(first_instr.?);
                         if (concu_lrg.mask.count() == 0) {
                             if (should_log) {
@@ -544,8 +556,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                     @ptrCast(&setMasks(&active_lrg.mask)[0]),
                 ).* &= ~kills;
 
-                if (active_lrg.mask.count() == 0) {
-                    if (should_log) std.debug.print("{} killed {}\n", .{ instr, active_lrg });
+                if (active_lrg.mask.count() == 0 and !active_lrg.failed) {
                     active_lrg.killed_by = instr;
                     active_lrg.fail(lrgs, &failed);
                 }
@@ -732,7 +743,7 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
             coalesced = true;
 
-            if (should_log) {
+            if (false and should_log) {
                 std.debug.print("coalesce: {} + {}\n", .{ instr, instr.dataDeps()[0] });
                 std.debug.print("lrg:      {}\n", .{splitLrg});
                 std.debug.print("drg:      {}\n", .{defLrg});

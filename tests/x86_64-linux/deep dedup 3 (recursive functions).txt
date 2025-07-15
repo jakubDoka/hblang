@@ -15,8 +15,8 @@ deep dedup 3 (recursive functions).fib2:
 	dec rdi
 	call :deep dedup 3 (recursive functions).fib2
 	mov rbx, rax
-	sub rbp, 0x02
 	mov rdi, rbp
+	sub rdi, 0x02
 	call :deep dedup 3 (recursive functions).fib2
 	add rbx, rax
 1:	mov rax, rbx

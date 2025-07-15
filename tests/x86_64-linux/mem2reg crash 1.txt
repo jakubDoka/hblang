@@ -10,17 +10,16 @@ mem2reg crash 1.insert:
 	jnz :1
 	call :mem2reg crash 1.bar
 	jmp :1
-1:	xor rdx, rdx
+1:	xor rcx, rcx
 2:	xor rax, rax
 4:	cmp rax, 0x08
-	setnb cl
-	movzx rcx, cl
-	test cl, cl
+	setnb dl
+	movzx rdx, dl
+	test dl, dl
 	jz :1
-	inc rdx
+	inc rcx
 	jmp :2
-1:	mov rcx, rbx
-	cmp rax, rcx
+1:	cmp rax, rbx
 	jnz :3
 	mov rax, rbp
 	add rsp, 0x08

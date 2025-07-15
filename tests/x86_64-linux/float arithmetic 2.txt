@@ -1,33 +1,33 @@
 float arithmetic 2.sin:
 	movss xmm1, xmm0
-	lea rax, [0x0000000000000007]
-	mov r9, 0x4060000000000000
-	mov r8, 0x400921FB60000000
-	mov rdi, 0x04
-	mov rsi, 0x3F000000
-	mov rdx, 0x40C90FDB
-	mov rcx, 0x43800000
+	mov r8, 0x4060000000000000
+	mov rdi, 0x400921FB60000000
+	mov rsi, 0x04
+	mov rdx, 0x3F000000
+	mov rcx, 0x40C90FDB
+	mov rax, 0x43800000
 	movss xmm0, xmm1
 	cvtss2sd xmm0, xmm0
-	movq xmm6, r9
-	movq xmm5, r8
-	movd xmm3, esi
-	movd xmm4, edx
-	movd xmm2, ecx
+	movq xmm6, r8
+	movq xmm5, rdi
+	movd xmm3, edx
+	movd xmm4, ecx
+	movd xmm2, eax
 	mulsd xmm0, xmm6
 	divsd xmm0, xmm5
-	cvttsd2si rsi, xmm0
-	mov rdx, rsi
+	cvttsd2si rax, xmm0
+	mov rdx, rax
 	add rdx, 0x40
-	cvtsi2ss xmm0, esi
-	and rsi, 0xFF
+	cvtsi2ss xmm0, eax
+	and rax, 0xFF
 	and rdx, 0xFF
 	mulss xmm0, xmm4
-	imul rsi, rdi
-	imul rdx, rdi
+	imul rax, rsi
+	imul rdx, rsi
 	divss xmm0, xmm2
-	mov rcx, rax
-	add rcx, rsi
+	lea rcx, [0x0000000000000007]
+	add rcx, rax
+	lea rax, [0x0000000000000007]
 	add rax, rdx
 	subss xmm1, xmm0
 	movss xmm0, dword ptr [rcx]

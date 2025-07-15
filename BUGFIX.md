@@ -2,6 +2,20 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### insane regalloc crash 1
+```!hb
+blackbox := fn(x: []u8, y: []u8): bool return true
+main := fn(): u32 {
+    loop {
+        $i := 0
+        $while i < 40 {
+            if blackbox("", "") if blackbox("", "") if blackbox("", "") if blackbox("", "") if blackbox("", "") return 0
+            i += 1
+        }
+    }
+}
+```
+
 #### loop check 1
 ```hb
 nextPos := fn(buf: []u8): ?uint {

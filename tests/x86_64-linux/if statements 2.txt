@@ -15,8 +15,8 @@ if statements 2.fib:
 	dec rdi
 	call :if statements 2.fib
 	mov rbx, rax
-	sub rbp, 0x02
 	mov rdi, rbp
+	sub rdi, 0x02
 	call :if statements 2.fib
 	add rbx, rax
 1:	mov rax, rbx
