@@ -454,7 +454,7 @@ const Loader = struct {
             file.report(
                 opts,
                 opts.pos,
-                "can't open used file: {s}: {s}",
+                "can't open used file: {}: {}",
                 .{ path, @errorName(err) },
             );
 

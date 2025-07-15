@@ -19,35 +19,46 @@ pub fn main() !void {
 
     const cwd = try std.fs.cwd().realpathAlloc(arena, "vendored-tests");
 
-    var stack = std.ArrayList([]const u8).init(arena);
+    const path_projections = std.StaticStringMap([]const [2][]const u8).initComptime(.{
+        .{ "hblsp", &.{.{ "lily", "vendored-tests/hblsp/lily/src/lib.hb" }} },
+    });
+
     var vendored = try std.fs.cwd().openDir(vendored_tests, .{ .iterate = true });
     var walker = vendored.iterate();
     while (try walker.next()) |node| {
         if (node.kind != .directory) std.debug.panic("vendored dir can only contain directories {s}", .{node.name});
 
-        try stack.append(try std.fs.path.join(arena, &.{ node.name, example_dir }));
-        while (stack.pop()) |path| {
-            var edir = try vendored.openDir(path, .{ .iterate = true });
-            var ewalker = edir.iterate();
-            while (try ewalker.next()) |example| {
-                if (example.kind == .directory) {
-                    try stack.append(try std.fs.path.join(arena, &.{ path, example.name }));
-                }
-                if (example.kind != .file) continue;
-                if (!std.mem.endsWith(u8, example.name, ".hb")) continue;
-
-                const name = try std.mem.replaceOwned(u8, arena, try std.fs.path.join(arena, &.{ vendored_tests, path, example.name }), "\\", "\\\\");
-                try writer.print(
-                    \\test "{s}" {{
-                    \\    try utils.runVendoredTest("{s}");
-                    \\}}
-                    \\
-                    \\
-                , .{
-                    try std.mem.replaceOwned(u8, arena, name[cwd.len..], example_dir, ""),
-                    name,
-                });
+        var test_args = std.ArrayList(u8).init(arena);
+        const pwriter = test_args.writer();
+        {
+            const projs = path_projections.get(node.name) orelse &.{};
+            try pwriter.writeAll("&.{");
+            for (projs) |proj| {
+                try pwriter.print(".{{\"{s}\", \"{s}\"}},", .{ proj[0], proj[1] });
             }
+            try pwriter.writeAll("}");
+        }
+
+        const example_dir_name = try std.fs.path.join(arena, &.{ node.name, example_dir });
+        var dir = vendored.openDir(example_dir_name, .{ .iterate = true }) catch continue;
+        var example_walker = try dir.walk(arena);
+        while (try example_walker.next()) |example| {
+            if (example.kind != .file) continue;
+            if (!std.mem.endsWith(u8, example.basename, ".hb")) continue;
+
+            const path = try std.fs.path.join(arena, &.{ vendored_tests, node.name, example_dir, example.path });
+            const name = try std.mem.replaceOwned(u8, arena, path, "\\", "\\\\");
+            try writer.print(
+                \\test "{s}" {{
+                \\    try utils.runVendoredTest("{s}", {s});
+                \\}}
+                \\
+                \\
+            , .{
+                try std.mem.replaceOwned(u8, arena, name[cwd.len..], example_dir_name, ""),
+                name,
+                test_args.items,
+            });
         }
     }
 }

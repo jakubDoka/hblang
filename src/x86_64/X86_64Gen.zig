@@ -1203,7 +1203,9 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                             std.debug.assert(lhs == .rax);
                             std.debug.assert(rhs != .rdx);
                             const dest_reg: Reg = if (op == .udiv or op == .sdiv) .rax else .rdx;
-                            std.debug.assert(dst == dest_reg);
+                            if (dst != dest_reg) {
+                                utils.panic("{} {} {} {}", .{ dst, dest_reg, op, instr });
+                            }
 
                             if (size == 1) {
                                 self.emitInstr(zydis.ZYDIS_MNEMONIC_MOVZX, .{ Reg.rax, SReg{ .rax, 1 } });

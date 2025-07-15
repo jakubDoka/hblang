@@ -290,6 +290,13 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 var lrg = lrg_table_build[instr.schedule] orelse
                     LiveRange.init(&build_lrgs, instr.regMask(func, 0, tmp.arena), instr);
 
+                if (lrg_table_build[instr.schedule] != null) {
+                    lrg.mask.setIntersection(instr.regMask(func, 0, tmp.arena));
+                    if (lrg.mask.count() == 0) {
+                        lrg.fail(build_lrgs.items, &failed);
+                    }
+                }
+
                 lrg = lrg.unionFind();
                 lrg_table_build[instr.schedule] = lrg;
 

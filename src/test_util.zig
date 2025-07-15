@@ -67,8 +67,13 @@ pub const Expectations = struct {
     }
 };
 
-pub fn runVendoredTest(path: []const u8, target: []const u8, optimizations: Mach.OptOptions) !void {
-    const opts = root.CompileOptions{
+pub fn runVendoredTest(
+    path: []const u8,
+    projs: []const [2][]const u8,
+    target: []const u8,
+    optimizations: Mach.OptOptions,
+) !void {
+    var opts = root.CompileOptions{
         .diagnostics = std.io.getStdErr().writer().any(),
         .colors = std.io.tty.detectConfig(std.io.getStdErr()),
         .output = std.io.null_writer.any(),
@@ -79,6 +84,17 @@ pub fn runVendoredTest(path: []const u8, target: []const u8, optimizations: Mach
         .optimizations = optimizations,
     };
     utils.Arena.initScratch(opts.scratch_memory);
+
+    const scratch = utils.Arena.scrath(null);
+    opts.path_projection.ensureTotalCapacity(
+        scratch.arena.allocator(),
+        @intCast(projs.len),
+    ) catch unreachable;
+    for (projs) |proj| {
+        opts.path_projection
+            .putAssumeCapacity(proj[0], proj[1]);
+    }
+
     var ast = try root.compile(opts);
     defer ast.arena.deinit();
 }

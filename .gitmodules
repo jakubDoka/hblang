@@ -8,3 +8,6 @@
 [submodule "examples/raylib/raylib"]
 	path = examples/raylib/raylib
 	url = https://github.com/raysan5/raylib
+[submodule "vendored-tests/hblsp"]
+	path = vendored-tests/hblsp
+	url = https://git.ablecorp.eu/chayleaf/hblsp.git
