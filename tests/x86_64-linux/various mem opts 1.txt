@@ -1,10 +1,57 @@
-various mem opts 1.use(^uint):
-	ret
-main:
+various mem opts 1.store_pullout:
 	sub rsp, 0x08
 	mov qword ptr [rsp], 0x01
 	lea rdi, [rsp]
 	call :various mem opts 1.use(^uint)
 	xor rax, rax
 	add rsp, 0x08
+	ret
+various mem opts 1.duplicate_store:
+	sub rsp, 0x08
+	mov qword ptr [rsp], 0x01
+	lea rdi, [rsp]
+	call :various mem opts 1.use(^uint)
+	mov qword ptr [rsp], 0x00
+	lea rdi, [rsp]
+	call :various mem opts 1.use(^uint)
+	mov rax, [rsp]
+	add rsp, 0x08
+	ret
+various mem opts 1.combine_pull_out_duplicate:
+	sub rsp, 0x08
+	mov qword ptr [rsp], 0x01
+	lea rdi, [rsp]
+	call :various mem opts 1.use(^uint)
+	mov qword ptr [rsp], 0x00
+	lea rdi, [rsp]
+	call :various mem opts 1.use(^uint)
+	mov rax, [rsp]
+	add rsp, 0x08
+	ret
+various mem opts 1.use(^uint):
+	ret
+main:
+	sub rsp, 0x08
+	call :various mem opts 1.store_pullout
+	xor rcx, rcx
+	cmp rax, rcx
+	jz :0
+	mov rax, 0x01
+	jmp :1
+0:	call :various mem opts 1.duplicate_store
+	xor rcx, rcx
+	cmp rax, rcx
+	jz :2
+	mov rax, 0x02
+1:	jmp :3
+2:	call :various mem opts 1.combine_pull_out_duplicate
+	cmp rax, 0x00
+	setnz al
+	movzx rax, al
+	test al, al
+	jz :4
+	mov rax, 0x03
+3:	jmp :5
+4:	xor rax, rax
+5:	add rsp, 0x08
 	ret

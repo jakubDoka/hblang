@@ -2194,6 +2194,16 @@ pub fn Func(comptime Backend: type) type {
             const inps = node.inputs();
 
             if (node.kind == .Store) {
+                if (node.outputs().len == 1) {
+                    const succ = node.outputs()[0].get();
+                    if (succ.kind == .Store and
+                        succ.data_type == node.data_type and
+                        succ.base() == node.base())
+                    {
+                        return node.mem();
+                    }
+                }
+
                 const base, _ = node.base().knownOffset();
 
                 if (base.kind == .Local) eliminate_stack: {

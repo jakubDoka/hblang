@@ -9,7 +9,7 @@ opaque := true
 use := fn(v: @Any()): void {
 }
 
-main := fn(): uint {
+store_pullout := fn(): uint {
     x := 1
     use(&x)
     if opaque {
@@ -17,8 +17,37 @@ main := fn(): uint {
     } else {
         x = 0
     }
-
     return x
+}
+
+duplicate_store := fn(): uint {
+    x := 1
+    use(&x)
+    x = 0
+    x = 0
+    use(&x)
+    return x
+}
+
+combine_pull_out_duplicate := fn(): uint {
+    x := 1
+    use(&x)
+    if opaque {
+        x = 0
+    } else {
+        x = 0
+    }
+    x = 0
+    use(&x)
+    return x
+}
+
+main := fn(): uint {
+    if store_pullout() != 0 return 1
+    if duplicate_store() != 0 return 2
+    if combine_pull_out_duplicate() != 0 return 3
+
+    return 0
 }
 ```
 
