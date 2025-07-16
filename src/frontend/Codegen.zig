@@ -694,6 +694,7 @@ pub fn emitParseQuotes(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Quotes)) 
 
 pub fn emitInteger(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Integer)) EmitError!Value {
     var ty = ctx.ty orelse .uint;
+    if (self.types.store.unwrap(ty.data(), .Nullable)) |n| ty = n.inner;
     if (!ty.isInteger()) ty = .uint;
     const shift: u8 = if (e.base == 10) 0 else 2;
     const num_str = self.ast.tokenSrc(e.pos.index)[shift..];

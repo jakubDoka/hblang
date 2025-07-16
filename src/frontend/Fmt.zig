@@ -1,5 +1,6 @@
 buf: *std.ArrayList(u8),
 indent: u32 = 0,
+is_if_or_while: bool = false,
 ast: *const Ast,
 
 const std = @import("std");
@@ -126,11 +127,11 @@ pub fn minify(source: [:0]u8) usize {
 
         const inbetweenNewlines =
             std.mem.count(u8, reader[0..token.pos], "\n") +
-            if (Lexer.Lexeme.precedence(token.kind) != 255) @as(usize, 1) else 0;
+            if (token.kind.precedence(false) != 255) @as(usize, 1) else 0;
 
         const extraPrefixNewlines =
             if (inbetweenNewlines > 1)
-                @as(usize, 1) + @intFromBool(Lexer.Lexeme.precedence(token.kind) == 255)
+                @as(usize, 1) + @intFromBool(token.kind.precedence(false) == 255)
             else
                 @intFromBool(prevNeedsNewline);
 
@@ -221,7 +222,7 @@ fn autoInsertSep(self: *Fmt, id: anytype, sep: Lexer.Lexeme) Error!void {
         }
     }
 
-    if ((starting_token.kind.precedence() < 255 or last_token == .@"return") and last_token != .Comment)
+    if ((starting_token.kind.precedence(false) < 255 or last_token == .@"return") and last_token != .Comment)
         try self.buf.appendSlice(@tagName(sep));
 }
 
@@ -359,7 +360,12 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
         .If => |i| {
             if (i.pos.flag.@"comptime") try self.buf.appendSlice("$");
             try self.buf.appendSlice("if ");
-            try self.fmtExpr(i.cond);
+            {
+                const prev_is_if_or_while = self.is_if_or_while;
+                defer self.is_if_or_while = prev_is_if_or_while;
+                self.is_if_or_while = true;
+                try self.fmtExpr(i.cond);
+            }
             try self.buf.appendSlice(" ");
             try self.fmtExpr(i.then);
             if (i.else_.tag() != .Void) {
@@ -385,7 +391,12 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
                 }
                 try self.buf.appendSlice(" ");
                 const if_body = self.ast.exprs.get(l.body).If;
-                try self.fmtExpr(if_body.cond);
+                {
+                    const prev_is_if_or_while = self.is_if_or_while;
+                    defer self.is_if_or_while = prev_is_if_or_while;
+                    self.is_if_or_while = true;
+                    try self.fmtExpr(if_body.cond);
+                }
                 try self.buf.appendSlice(" ");
                 try self.fmtExpr(if_body.then);
             } else {
@@ -447,19 +458,21 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
                 o.op = self.ast.exprs.getTyped(.BinOp, o.rhs).?.op.toAssignment();
                 o.rhs = self.ast.exprs.getTyped(.BinOp, o.rhs).?.rhs;
             }
-            if (prec < o.op.precedence()) try self.buf.appendSlice("(");
-            try self.fmtExprPrec(o.lhs, o.op.precedence());
+            if (prec < o.op.precedence(self.is_if_or_while)) try self.buf.appendSlice("(");
+            try self.fmtExprPrec(o.lhs, o.op.precedence(self.is_if_or_while));
             try self.buf.appendSlice(" ");
             try self.buf.appendSlice(o.op.repr());
             if (!try self.preserveWrapping(o.rhs)) try self.buf.appendSlice(" ");
-            if (o.rhs.tag() == .BinOp and self.ast.exprs.getTyped(.BinOp, o.rhs).?.op.precedence() == o.op.precedence()) {
+            if (o.rhs.tag() == .BinOp and self.ast.exprs.getTyped(.BinOp, o.rhs).?
+                .op.precedence(self.is_if_or_while) == o.op.precedence(self.is_if_or_while))
+            {
                 try self.buf.appendSlice("(");
                 try self.fmtExprPrec(o.rhs, 255);
                 try self.buf.appendSlice(")");
             } else {
-                try self.fmtExprPrec(o.rhs, o.op.precedence());
+                try self.fmtExprPrec(o.rhs, o.op.precedence(self.is_if_or_while));
             }
-            if (prec < o.op.precedence()) try self.buf.appendSlice(")");
+            if (prec < o.op.precedence(self.is_if_or_while)) try self.buf.appendSlice(")");
         },
         .Use => |use| {
             try self.buf.writer().print(
@@ -496,6 +509,10 @@ fn fmtSliceLow(
     sep: Lexer.Lexeme,
     end: Lexer.Lexeme,
 ) Error!void {
+    const prev_is_if_or_while = self.is_if_or_while;
+    defer self.is_if_or_while = prev_is_if_or_while;
+    self.is_if_or_while = false;
+
     try self.buf.appendSlice(start.repr());
 
     const view = self.ast.exprs.view(slice);

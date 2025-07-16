@@ -326,13 +326,15 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                     if (!(child.kind == .Region or child.kind == .Loop)) {
                         utils.panic("{}\n", .{child});
                     }
-                    // eider we arrived from the back branch or the other side of the split
+                    // either we arrived from the back branch or the other side of the split
                     if (states[child.schedule].expand(locals.len).Join) |s| {
                         if (s.ctrl != child) utils.panic("{} {} {} {}\n", .{ s.ctrl, s.ctrl.schedule, child, child.schedule });
                         for (s.items, locals, 0..) |clhs, crhsm, i| {
                             var lhs = clhs.expand() orelse continue;
                             if (lhs == .Node and lhs.Node.isLazyPhi(s.ctrl)) {
-                                var rhs = crhsm.expand().?;
+                                var rhs = crhsm.expand() orelse Local.Expanded{
+                                    .Node = self.addIntImm(lhs.Node.sloc, .i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa))),
+                                };
                                 if (rhs == .Loop and (rhs.Loop != s or s.ctrl.preservesIdentityPhys())) {
                                     rhs = .{ .Node = Local.resolve(self, locals, i) };
                                 }

@@ -242,7 +242,7 @@ pub const Lexeme = enum(u16) {
         },
     };
 
-    pub fn precedence(self: Lexeme) u8 {
+    pub fn precedence(self: Lexeme, in_if_or_while: bool) u8 {
         return switch (self) {
             .@":",
             .@"=",
@@ -259,7 +259,7 @@ pub const Lexeme = enum(u16) {
             .@"&&=",
             .@"||=",
             => 15,
-            .@"&&" => 14,
+            .@"&&" => if (in_if_or_while) 14 else 12,
             .@":=" => 13,
             .@"||" => 12,
             .@".." => 11,
@@ -275,7 +275,7 @@ pub const Lexeme = enum(u16) {
     }
 
     pub fn isComparison(self: Lexeme) bool {
-        return self.precedence() == 7;
+        return self.precedence(false) == 7;
     }
 
     pub fn repr(self: Lexeme) []const u8 {

@@ -35,6 +35,7 @@ mode: Ast.InitOptions.Mode,
 list_pos: Ast.Pos = undefined,
 deferring: bool = false,
 errored: bool = false,
+in_if_or_while: bool = false,
 func_stats: FuncStats = .{},
 scope_depth: u8 = 0,
 
@@ -159,12 +160,12 @@ fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8, unordered: bool) Error!Id 
     var acum = lhs;
     while (true) {
         const op = self.cur.kind;
-        const prec = op.precedence();
+        const prec = op.precedence(self.in_if_or_while);
         if (prec >= prevPrec) break;
 
         self.cur = self.lexer.next();
         if (op == .@":") {
-            const lover_prec = comptime Lexer.Lexeme.@"=".precedence() - 1;
+            const lover_prec = comptime Lexer.Lexeme.@"=".precedence(false) - 1;
             const ty = try self.parseBinExpr(try self.parseUnit(), lover_prec, false);
             _ = self.declareExpr(acum, unordered);
 
@@ -552,6 +553,10 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         .@"{" => .{ .Block = .{
             .pos = .{ .index = @intCast(token.pos), .flag = .{ .indented = true } },
             .stmts = b: {
+                const prev_in_if_or_while = self.in_if_or_while;
+                defer self.in_if_or_while = prev_in_if_or_while;
+                self.in_if_or_while = false;
+
                 var tmp = Arena.scrath(self.arena);
                 defer tmp.deinit();
                 var buf = std.ArrayListUnmanaged(Id){};
@@ -624,7 +629,12 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
         },
         .@"if", .@"$if" => .{ .If = .{
             .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind == .@"$if" } },
-            .cond = try self.parseExpr(),
+            .cond = b: {
+                const prev_in_if_or_while = self.in_if_or_while;
+                defer self.in_if_or_while = prev_in_if_or_while;
+                self.in_if_or_while = true;
+                break :b try self.parseExpr();
+            },
             .then = b: {
                 defer self.finalizeVariables(scope_frame);
                 break :b try self.parseScopedExpr();
@@ -686,7 +696,12 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
 
             const body = try self.store.alloc(self.arena.allocator(), .If, .{
                 .pos = pos,
-                .cond = try self.parseExpr(),
+                .cond = b: {
+                    const prev_in_if_or_while = self.in_if_or_while;
+                    defer self.in_if_or_while = prev_in_if_or_while;
+                    self.in_if_or_while = true;
+                    break :b try self.parseExpr();
+                },
                 .then = b: {
                     self.func_stats.loop_depth += 1;
                     self.func_stats.max_loop_depth =

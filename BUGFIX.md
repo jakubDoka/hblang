@@ -2,6 +2,25 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### short and op precedence 1
+```hb
+
+foo := fn(x: ?u8): bool {
+    if v := x && v2 := x {
+        return v == v2
+    }
+
+    return false
+}
+
+main := fn(): u32 {
+    if foo(null) return 1
+    if !foo(1) return 2
+    val := true && false
+    return 0
+}
+```
+
 #### various mem opts 1
 ```hb
 opaque := true
