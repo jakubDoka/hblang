@@ -1187,6 +1187,8 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
             } else {
                 const variable = self.bl.addLocal(.none, 1);
 
+                try self.typeCheck(e.lhs, &lhs, .bool);
+
                 var builder = self.bl.addIfAndBeginThen(sloc, lhs.getValue(sloc, self));
                 {
                     self.bl.addStore(sloc, variable, .i8, self.bl.addIntImm(sloc, .i8, 1));
