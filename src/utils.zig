@@ -102,7 +102,7 @@ pub const Arena = struct {
         arena: *Arena,
 
         pub fn deinit(self: *Scratch) void {
-            @memset(self.arena.pos[0 .. @intFromPtr(self.prev_pos) - @intFromPtr(self.arena.pos)], undefined);
+            @memset(self.arena.pos[0 .. @intFromPtr(self.arena.pos) - @intFromPtr(self.prev_pos)], undefined);
             self.arena.pos = self.prev_pos;
             self.* = undefined;
         }
@@ -146,7 +146,7 @@ pub const Arena = struct {
         return .{
             .end = @alignCast(ptr + pages),
             .start = @alignCast(ptr),
-            .pos = @alignCast(ptr + pages),
+            .pos = @alignCast(ptr),
         };
     }
 
@@ -155,17 +155,24 @@ pub const Arena = struct {
             fn alloc(ptr: *anyopaque, size: usize, alignment: std.mem.Alignment, _: usize) ?[*]u8 {
                 const slf: *Arena = @alignCast(@ptrCast(ptr));
                 const alignm = alignment.toByteUnits();
-                slf.pos = @ptrFromInt(std.mem.alignBackward(usize, @intFromPtr(slf.pos - size), alignm));
-                std.debug.assert(@intFromPtr(slf.start) < @intFromPtr(slf.pos));
-                return slf.pos;
+                slf.pos = @ptrFromInt(std.mem.alignForward(usize, @intFromPtr(slf.pos), alignm));
+                slf.pos += size;
+                std.debug.assert(@intFromPtr(slf.end) > @intFromPtr(slf.pos));
+                return slf.pos - size;
             }
             fn free(_: *anyopaque, mem: []u8, _: std.mem.Alignment, _: usize) void {
                 @memset(mem, undefined);
             }
-            fn remap(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize, _: usize) ?[*]u8 {
+            fn remap(ptr: *anyopaque, mem: []u8, alignment: std.mem.Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
+                if (@This().resize(ptr, mem, alignment, new_len, ret_addr)) return mem.ptr;
                 return null;
             }
-            fn resize(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize, _: usize) bool {
+            fn resize(ptr: *anyopaque, mem: []u8, _: std.mem.Alignment, new_len: usize, _: usize) bool {
+                const slf: *Arena = @alignCast(@ptrCast(ptr));
+                if (mem.ptr + mem.len == slf.pos) {
+                    slf.pos += new_len - mem.len;
+                    return true;
+                }
                 return false;
             }
         };
@@ -198,9 +205,10 @@ pub const Arena = struct {
 
     pub fn alloc(self: *Arena, comptime T: type, count: usize) []T {
         const size = @sizeOf(T) * count;
-        self.pos = @ptrFromInt(std.mem.alignBackward(usize, @intFromPtr(self.pos - size), @alignOf(T)));
-        std.debug.assert(@intFromPtr(self.start) < @intFromPtr(self.pos));
-        const ptr: [*]T = @alignCast(@ptrCast(self.pos));
+        self.pos = @ptrFromInt(std.mem.alignForward(usize, @intFromPtr(self.pos), @alignOf(T)));
+        self.pos += size;
+        std.debug.assert(@intFromPtr(self.end) > @intFromPtr(self.pos));
+        const ptr: [*]T = @alignCast(@ptrCast(self.pos - size));
         const mem = ptr[0..count];
         @memset(mem, undefined);
         return mem;
