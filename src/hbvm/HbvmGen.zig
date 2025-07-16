@@ -422,7 +422,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     if (opts.optimizations.shouldDefer(id, opts.is_inline, HbvmGen, func, self))
         return;
 
-    opts.optimizations.execute(HbvmGen, self, func);
+    opts.optimizations.execute(HbvmGen, self, func) catch return;
 
     const allocs = Regalloc.ralloc(HbvmGen, func);
 
@@ -455,9 +455,9 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     const spill_count = (max_reg -| max_regs) * 8;
 
     var local_size: i64 = 0;
-    if (func.root.outputs().len > 1) {
-        std.debug.assert(func.root.outputs()[1].get().kind == .Mem);
-        for (func.root.outputs()[1].get().outputs()) |o| if (o.get().kind == .LocalAlloc) {
+    if (func.start.outputs().len > 1) {
+        std.debug.assert(func.start.outputs()[1].get().kind == .Mem);
+        for (func.start.outputs()[1].get().outputs()) |o| if (o.get().kind == .LocalAlloc) {
             const extra = o.get().extra(.LocalAlloc);
             const size = extra.size;
             extra.size = @bitCast(local_size);
@@ -534,9 +534,14 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
     _ = tmp;
 
     errdefer unreachable;
-    for (node.outputs()) |n| {
+    outer: for (node.outputs()) |n| {
         const no = n.get();
         const inps = no.dataDeps();
+
+        if (no.kind != .Call) {
+            for (inps) |inp| if (inp.kind == .Uninit) continue :outer;
+        }
+
         switch (no.extra2()) {
             .FramePointer, .Zero => {},
             .CInt => |extra| {

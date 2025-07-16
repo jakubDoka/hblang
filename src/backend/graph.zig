@@ -594,8 +594,9 @@ pub const builtin = enum {
         id: u32,
         pub const is_clone = true;
     };
-    pub const Split = extern struct {};
-    pub const Join = extern struct {};
+    pub const Uninit = extern struct {
+        pub const is_pinned = true;
+    };
 };
 
 pub const Arg = extern struct {
@@ -702,11 +703,11 @@ pub fn Func(comptime Backend: type) type {
         interner: InternMap(Uninserter) = .{},
         signature: Signature = .{},
         next_id: u16 = 0,
-        root: *Node = undefined,
+        start: *Node = undefined,
         end: *Node = undefined,
-        gcm: gcm.GcmMixin(Backend) = .{},
-        mem2reg: mem2reg.Mem2RegMixin(Backend) = .{},
-        static_anal: static_anal.StaticAnalMixin(Backend) = .{},
+        gcm: gcm.Mixin(Backend) = .{},
+        mem2reg: mem2reg.Mixin(Backend) = .{},
+        static_anal: static_anal.Mixin(Backend) = .{},
         stopped_interning: std.debug.SafetyLock = .{},
 
         pub fn optApi(comptime decl_name: []const u8, comptime Ty: type) bool {
@@ -776,7 +777,7 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn collectAll(self: *WorkList, func: *Self) void {
                 self.add(func.end);
-                self.add(func.root);
+                self.add(func.start);
                 var i: usize = 0;
                 while (i < self.items().len) : (i += 1) {
                     const n = self.items()[i];
@@ -1279,6 +1280,7 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn hasUseFor(self: *Node, idx: usize, def: *Node) bool {
                 if (self.kind == .Call and def.kind == .StackArgOffset) return false;
+                if (def.kind == .Uninit) return false;
                 return self.dataDepOffset() <= idx and idx < self.input_ordered_len;
             }
 
@@ -1322,7 +1324,8 @@ pub fn Func(comptime Backend: type) type {
                 return !self.isStore() and
                     !self.isCfg() and
                     (self.kind != .Phi or self.isDataPhi()) and
-                    (self.kind != .LocalAlloc) and
+                    self.kind != .LocalAlloc and
+                    self.kind != .Uninit and
                     self.kind != .Mem;
             }
 
@@ -1385,7 +1388,7 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn isInterned(kind: Kind, inpts: []const ?*Node) bool {
                 return switch (kind) {
-                    .CInt, .BinOp, .Load, .UnOp, .GlobalAddr, .FramePointer => true,
+                    .CInt, .BinOp, .Load, .UnOp, .GlobalAddr, .FramePointer, .Uninit => true,
                     .Phi => inpts[2] != null,
                     else => callCheck("isInterned", kind),
                 };
@@ -1479,7 +1482,7 @@ pub fn Func(comptime Backend: type) type {
 
         pub fn init(gpa: std.mem.Allocator) Self {
             var self = Self{ .arena = .init(gpa) };
-            self.root = self.addNode(.Start, .none, .top, &.{}, .{});
+            self.start = self.addNode(.Start, .none, .top, &.{}, .{});
             return self;
         }
 
@@ -1491,7 +1494,7 @@ pub fn Func(comptime Backend: type) type {
         pub fn reset(self: *Self) void {
             std.debug.assert(self.arena.reset(.retain_capacity));
             self.next_id = 0;
-            self.root = self.addNode(.Start, .none, .top, &.{}, .{});
+            self.start = self.addNode(.Start, .none, .top, &.{}, .{});
             self.interner = .{};
             self.gcm.cfg_built = .{};
             self.gcm.loop_tree_built = .{};
@@ -1596,7 +1599,7 @@ pub fn Func(comptime Backend: type) type {
 
             new_node.input_base = (try self.arena.allocator()
                 .dupe(?*Node, new_node.inputs())).ptr;
-            new_node.output_base = @ptrFromInt(@alignOf(*Node));
+            new_node.output_base = @ptrFromInt(@alignOf(Node.Out));
             new_node.output_cap = 0;
             new_node.output_len = 0;
             new_node.id = self.next_id;
@@ -1703,6 +1706,10 @@ pub fn Func(comptime Backend: type) type {
             return self.addBinOp(sloc, @enumFromInt(@intFromEnum(op)), .i64, base, offset);
         }
 
+        pub fn addUninit(self: *Self, sloc: Sloc, ty: DataType) *Node {
+            return self.addNode(.Uninit, sloc, ty, &.{self.start}, .{});
+        }
+
         pub fn addIntImm(self: *Self, sloc: Sloc, ty: DataType, value: i64) *Node {
             std.debug.assert(ty != .bot);
             return self.addNode(.CInt, sloc, ty, &.{null}, .{ .value = value });
@@ -1788,7 +1795,7 @@ pub fn Func(comptime Backend: type) type {
                     .input_base = owned_inputs.ptr,
                     .input_len = @intCast(owned_inputs.len),
                     .input_ordered_len = @intCast(owned_inputs.len),
-                    .output_base = @ptrFromInt(@alignOf(*Node)),
+                    .output_base = @ptrFromInt(@alignOf(Node.Out)),
                     .kind = kind,
                     .id = self.next_id,
                     .data_type = ty,
@@ -1997,7 +2004,7 @@ pub fn Func(comptime Backend: type) type {
             visited: *std.DynamicBitSetUnmanaged,
         ) []*CfgNode {
             var postorder = std.ArrayList(*CfgNode).init(arena);
-            collectPostorder3(self, self.root, arena, &postorder, visited, true);
+            collectPostorder3(self, self.start, arena, &postorder, visited, true);
             return postorder.items;
         }
 
@@ -2200,6 +2207,9 @@ pub fn Func(comptime Backend: type) type {
             const inps = node.inputs();
 
             if (node.kind == .Store) {
+                if (node.value() != null and node.value().?.kind == .Uninit)
+                    return node.mem();
+
                 if (node.outputs().len == 1) {
                     const succ = node.outputs()[0].get();
                     if (succ.kind == .Store and
@@ -2350,6 +2360,8 @@ pub fn Func(comptime Backend: type) type {
             }
 
             if (node.kind == .UnOp) {
+                if (node.inputs()[1].?.kind == .Uninit) return node.inputs()[1].?;
+
                 const op: UnOp = node.extra(.UnOp).op;
                 const oper = inps[1].?;
 
@@ -2369,6 +2381,10 @@ pub fn Func(comptime Backend: type) type {
             }
 
             if (node.kind == .BinOp) {
+                for (node.inputs()[1..]) |inp| {
+                    if (inp.?.kind == .Uninit) return inp.?;
+                }
+
                 const op: BinOp = node.extra(.BinOp).op;
                 var lhs = node.inputs()[1].?;
                 var rhs = node.inputs()[2].?;
@@ -2467,7 +2483,6 @@ pub fn Func(comptime Backend: type) type {
                         if (store.?.kind != .Store) break :bail;
                         if (store.?.base().kind != .Local) break :bail;
                     }
-                    std.debug.print("{}\n", .{node});
                     return node.inputs()[1].?.mem();
                 }
             }
@@ -2517,14 +2532,14 @@ pub fn Func(comptime Backend: type) type {
         pub fn collectPostorder(self: *Self, arena: std.mem.Allocator, visited: *std.DynamicBitSetUnmanaged) []*CfgNode {
             var postorder = std.ArrayList(*CfgNode).init(arena);
 
-            collectPostorder2(self, self.root, arena, &postorder, visited, true);
+            collectPostorder2(self, self.start, arena, &postorder, visited, true);
 
             return postorder.items;
         }
 
         pub fn collectPostorderAll(self: *Self, arena: std.mem.Allocator, visited: *std.DynamicBitSetUnmanaged) []*CfgNode {
             var postorder = std.ArrayList(*CfgNode).init(arena);
-            self.collectPostorder2(self.root, arena, &postorder, visited, false);
+            self.collectPostorder2(self.start, arena, &postorder, visited, false);
             return postorder.items;
         }
 
@@ -2571,9 +2586,9 @@ pub fn Func(comptime Backend: type) type {
 
             var visited = try std.DynamicBitSetUnmanaged.initEmpty(tmp.arena.allocator(), self.next_id);
 
-            self.root.fmt(self.gcm.block_count, writer, colors);
-            if (self.root.outputs().len > 1 and self.root.outputs()[1].get().kind == .Mem) {
-                for (self.root.outputs()[1].get().outputs()) |oo| if (oo.get().kind == .LocalAlloc) {
+            self.start.fmt(self.gcm.block_count, writer, colors);
+            if (self.start.outputs().len > 1 and self.start.outputs()[1].get().kind == .Mem) {
+                for (self.start.outputs()[1].get().outputs()) |oo| if (oo.get().kind == .LocalAlloc) {
                     try writer.writeAll("\n  ");
                     oo.get().fmt(self.gcm.instr_count, writer, colors);
                 };

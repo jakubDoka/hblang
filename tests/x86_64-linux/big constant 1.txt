@@ -1,6 +1,4 @@
 big constant 1.uninit:
-	mov rax, 0xAAAAAAAAAAAAAAAA
-	mov [rdi], rax
 	xor rax, rax
 	ret
 main:

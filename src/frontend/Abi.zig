@@ -258,7 +258,7 @@ pub fn categorizeSystemv(ty: Id, types: *Types) TmpSpec {
             const first = offset / 8;
             const last = (offset + t.size(ts) + 7) / 8;
 
-            for (catas[first..last]) |*cat| {
+            for (catas[@intCast(first)..@intCast(last)]) |*cat| {
                 if (cat.*) |old| cat.* = old.max(class) else cat.* = class;
 
                 if (class == .sse) {
@@ -307,7 +307,7 @@ pub fn categorizeSystemv(ty: Id, types: *Types) TmpSpec {
     const eight_bytes = (ty.size(types) + 7) / 8;
 
     var categories_mem: [max_eight_bytes]?Category = @splat(null);
-    const categories = categories_mem[0..eight_bytes];
+    const categories = categories_mem[0..@intCast(eight_bytes)];
 
     Category.classify(ty, types, 0, categories) catch |err| switch (err) {
         error.ByRef => return .ByRef,

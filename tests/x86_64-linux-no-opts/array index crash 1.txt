@@ -4,21 +4,9 @@ array index crash 1.awa:
 	mov byte ptr [rsp+0x09], 0x00
 	mov byte ptr [rsp+0x0A], 0x00
 	mov byte ptr [rsp+0x0B], 0x00
+	mov qword ptr [rsp], 0x02
 	mov rdi, 0x0A
 	xor sil, sil
-	mov ax, [rsp+0x09]
-	mov cl, [rsp+0x0B]
-	movzx eax, ax
-	movzx ecx, cl
-	shl eax, 0x00
-	shl ecx, 0x10
-	or eax, ecx
-	mov ecx, eax
-	shr ecx, 0x00
-	mov [rsp+0x09], cx
-	shr eax, 0x10
-	mov [rsp+0x0B], al
-	mov qword ptr [rsp], 0x02
 1:	mov dl, [rsp+0x08]
 	cmp dl, sil
 	jbe :0

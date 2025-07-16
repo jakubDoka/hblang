@@ -2,25 +2,18 @@ main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
 1:       cp $1, $0
-       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 2 (infinite).broken
          cp $1, $0
-       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 2 (infinite).broken
          cp $1, $0
-       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 2 (infinite).broken
          cp $1, $0
-       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 2 (infinite).broken
          cp $1, $0
-       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 2 (infinite).broken
          cp $1, $0
-       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 2 (infinite).broken
          cp $1, $0
-       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 2 (infinite).broken
         jmp :1
 regalloc crash 2 (infinite).broken:

@@ -7,8 +7,7 @@ short and op precedence 1.foo:
 	jz :0
 	mov al, dl
 	jmp :1
-0:	mov rax, 0xAAAAAAAAAAAAAAAA
-	xor cl, cl
+0:	xor cl, cl
 1:	test cl, cl
 	jz :2
 	cmp dl, al

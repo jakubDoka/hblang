@@ -46,8 +46,8 @@ pub fn begin(
     params: []const graph.AbiParam,
     return_values: ?[]const graph.AbiParam,
 ) BuildToken {
-    const ctrl = self.func.addNode(.Entry, .none, .top, &.{self.func.root}, .{});
-    self.root_mem = self.func.addNode(.Mem, .none, .top, &.{self.func.root}, .{});
+    const ctrl = self.func.addNode(.Entry, .none, .top, &.{self.func.start}, .{});
+    self.root_mem = self.func.addNode(.Mem, .none, .top, &.{self.func.start}, .{});
     self.scope = self.func.addNode(.Scope, .none, .top, &.{ ctrl, self.root_mem }, .{});
     self.func.end = self.func.addNode(.Return, .none, .top, &.{ null, null, null }, .{});
     self.pins = self.func.addNode(.Scope, .none, .top, &.{}, .{});
@@ -59,8 +59,8 @@ pub fn begin(
 
 pub fn addParam(self: *Builder, sloc: graph.Sloc, idx: usize) SpecificNode(.Arg) {
     return switch (self.func.signature.params()[idx]) {
-        .Reg => |ty| self.func.addNode(.Arg, sloc, ty, &.{self.func.root}, .{ .index = idx }),
-        .Stack => |spec| self.func.addNode(.StructArg, sloc, .i64, &.{self.func.root}, .{
+        .Reg => |ty| self.func.addNode(.Arg, sloc, ty, &.{self.func.start}, .{ .index = idx }),
+        .Stack => |spec| self.func.addNode(.StructArg, sloc, .i64, &.{self.func.start}, .{
             .base = .{ .index = idx },
             .spec = spec,
         }),
@@ -171,6 +171,10 @@ pub fn addIndexOffset(
     subscript: *BuildNode,
 ) SpecificNode(.BinOp) {
     return self.func.addIndexOffset(sloc, base, op, elem_size, subscript);
+}
+
+pub fn addUninit(self: *Builder, sloc: graph.Sloc, ty: DataType) SpecificNode(.Uninit) {
+    return self.func.addUninit(sloc, ty);
 }
 
 pub fn addIntImm(self: *Builder, sloc: graph.Sloc, ty: DataType, value: i64) SpecificNode(.CInt) {

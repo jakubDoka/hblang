@@ -2,7 +2,7 @@ const graph = @import("graph.zig");
 const utils = graph.utils;
 const std = @import("std");
 
-pub fn GcmMixin(comptime Backend: type) type {
+pub fn Mixin(comptime Backend: type) type {
     return struct {
         loop_tree_built: std.debug.SafetyLock = .{},
         cfg_built: std.debug.SafetyLock = .{},
@@ -52,11 +52,11 @@ pub fn GcmMixin(comptime Backend: type) type {
             };
             @memset(builder.pre_levels, 0);
 
-            builder.tree.append(.{ .head = self.root.asCfg().?, .par = 0, .depth = 1 }) catch unreachable;
+            builder.tree.append(.{ .head = self.start.asCfg().?, .par = 0, .depth = 1 }) catch unreachable;
             self.end.asCfg().?.ext.loop = 0;
-            self.root.asCfg().?.ext.loop = 0;
+            self.start.asCfg().?.ext.loop = 0;
 
-            _ = postwaklBuildLoopTree(self, 2, self.root.asCfg().?, &builder);
+            _ = postwaklBuildLoopTree(self, 2, self.start.asCfg().?, &builder);
 
             gcm.loop_tree = self.arena.allocator().dupe(LoopTree, builder.tree.items) catch unreachable;
         }
@@ -156,7 +156,7 @@ pub fn GcmMixin(comptime Backend: type) type {
                     pub fn filter(_: @This(), node: *Node) bool {
                         return node.isCfg();
                     }
-                }{ .rpo = &rpo }, self.root, &stack, &visited);
+                }{ .rpo = &rpo }, self.start, &stack, &visited);
 
                 std.mem.reverse(*CfgNode, rpo.items);
 
@@ -352,7 +352,7 @@ pub fn GcmMixin(comptime Backend: type) type {
                 visited.setRangeValue(.{ .start = 0, .end = visited.capacity() }, false);
                 self.gcm.block_count = 0;
                 self.gcm.instr_count = 0;
-                self.root.schedule = 0;
+                self.start.schedule = 0;
 
                 const postorder = self.collectPostorder(tmp.arena.allocator(), &visited);
                 for (postorder) |bb| {
@@ -485,6 +485,8 @@ pub fn GcmMixin(comptime Backend: type) type {
             if (visited.isSet(node.id)) return;
             visited.set(node.id);
 
+            if (node.kind == .Uninit) return;
+
             for (node.inputs()) |i| if (i) |ii| if (ii.kind != .Phi) {
                 gcm.shedEarly(ii, early, visited);
             };
@@ -501,7 +503,6 @@ pub fn GcmMixin(comptime Backend: type) type {
 
                 for (node.inputs()[1..]) |oin| if (oin) |in| {
                     if (in.isFloating()) continue;
-
                     if (in.cfg0().idepth() > best.idepth()) {
                         best = in.cfg0();
                     }

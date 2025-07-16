@@ -8,7 +8,5 @@ main:
          ld $31, $254, -8, 8
          tx
 big constant 1.uninit:
-       li64 $2, -6148914691236517206
-         st $2, $1, 0, 8
          cp $1, $0
        jala $0, $31, 0

@@ -43,12 +43,6 @@ main:
 	xor rdx, rdx
 	lea rdi, [rsp]
 	mov rsi, 0x01
-	mov ax, [rsp+0x20]
-	movzx eax, ax
-	or eax, 0x30000
-	mov [rsp+0x20], ax
-	shr eax, 0x10
-	mov [rsp+0x22], al
 	call :slices 3.reverse
 	lea rsi, [rsp+0x20]
 	lea rdi, [rsp+0x10]

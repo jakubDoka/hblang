@@ -30,6 +30,7 @@ pub const opts = root.backend.Machine.OptOptions{
     .do_machine_peeps = true,
     .mem2reg = true,
     .do_gcm = true,
+    .do_uninit_analisys = true,
 };
 
 pub const stack_size = 1024 * 100;
@@ -120,7 +121,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                 const global = types.addUniqueGlobal(scope);
                 types.store.get(global).data = types.pool.arena.alloc(
                     u8,
-                    curr.inputs()[1].?.extra(.LocalAlloc).size,
+                    @intCast(curr.inputs()[1].?.extra(.LocalAlloc).size),
                 );
                 types.store.get(global).ty = ty;
                 curr.inputs()[1].?.extra(.LocalAlloc).meta = @intFromEnum(global);
@@ -158,8 +159,8 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
 
                 const value = curr.value().?.extra(.CInt).value;
                 @memcpy(
-                    data[@intCast(offset)..][0..curr.data_type.size()],
-                    @as([*]const u8, @ptrCast(&value))[0..curr.data_type.size()],
+                    data[@intCast(offset)..][0..@intCast(curr.data_type.size())],
+                    @as([*]const u8, @ptrCast(&value))[0..@intCast(curr.data_type.size())],
                 );
 
                 bl.func.subsume(curr.mem(), curr);
@@ -413,7 +414,7 @@ pub fn runVm(
                             scope.file(types).?,
                             @as(
                                 [*]const u8,
-                                @ptrFromInt(@as(usize, self.vm.regs.get(.arg(3)))),
+                                @ptrFromInt(@as(usize, @intCast(self.vm.regs.get(.arg(3))))),
                             )[0..@intCast(self.vm.regs.get(.arg(4)))],
                             struct_ast_id,
                             captures,

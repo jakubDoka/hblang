@@ -1,7 +1,6 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-       li64 $2, -6148914691236517206
          cp $1, $0
         jal $31, $0, :short and op precedence 1.foo
        andi $1, $1, 255
@@ -27,8 +26,7 @@ short and op precedence 1.foo:
         jeq $3, $0, :5
          cp $3, $2
         jmp :6
-5:     li64 $3, -6148914691236517206
-         cp $1, $0
+5:       cp $1, $0
 6:     andi $1, $1, 255
         jeq $1, $0, :7
        andi $2, $2, 255

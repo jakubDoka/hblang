@@ -74,7 +74,6 @@ c:      jmp :d
 generic structs 5 (iterators).main.Chars.next:
          ld $2, $1, 8, 8
         jne $2, $0, :e
-       li64 $2, -6148914691236517206
          cp $1, $0
         jmp :f
 e:       ld $2, $1, 0, 8
@@ -117,8 +116,7 @@ generic structs 5 (iterators).main.Chain(.Chars, .Chars).next:
 15:      li8 $1, 2
 13:       st $1, $35, 0, 1
         jmp :17
-14:     li64 $2, -6148914691236517206
-         cp $1, $0
+14:       cp $1, $0
 16:   addi64 $254, $254, 40
          ld $31, $254, -40, 40
        jala $0, $31, 0

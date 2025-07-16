@@ -42,6 +42,7 @@ pub const InlineFunc = struct {
     start: *anyopaque,
     end: *anyopaque,
     node_count: usize,
+    corrupted: bool = false,
 
     pub fn toFunc(
         self: *const InlineFunc,
@@ -60,7 +61,7 @@ pub const InlineFunc = struct {
 
         var func = Func{
             .arena = arena.*,
-            .root = self_start,
+            .start = self_start,
             .end = self_end,
             .next_id = @intCast(self.node_count),
         };
@@ -319,7 +320,7 @@ pub const InlineFunc = struct {
         } else null;
         var exit_mem = end.inputs()[1];
 
-        const into_entry_mem = func.root.outputs()[1].get();
+        const into_entry_mem = func.start.outputs()[1].get();
         std.debug.assert(into_entry_mem.kind == .Mem);
 
         const call_end = dest.outputs()[0].get();
@@ -455,7 +456,7 @@ pub const InlineFunc = struct {
 
         const cloned = cloneNodes(
             Backend,
-            func.root,
+            func.start,
             func.end,
             func.next_id,
             arena,
@@ -465,7 +466,7 @@ pub const InlineFunc = struct {
 
         return InlineFunc{
             .signature = func.signature.dupe(arena.allocator()),
-            .start = cloned.new_node_table[func.root.id],
+            .start = cloned.new_node_table[func.start.id],
             .end = cloned.new_node_table[func.end.id],
             .node_count = cloned.new_nodes.len,
         };
@@ -1128,6 +1129,7 @@ pub const OptOptions = struct {
     mem2reg: bool,
     do_gcm: bool,
     verbose: bool = false,
+    do_uninit_analisys: bool,
     arena: ?*root.Arena = null,
     error_buf: ?*std.ArrayListUnmanaged(static_anal.Error) = null,
 
@@ -1138,6 +1140,7 @@ pub const OptOptions = struct {
         .do_machine_peeps = true,
         .mem2reg = true,
         .do_gcm = true,
+        .do_uninit_analisys = true,
     };
 
     pub const none = @This(){
@@ -1147,6 +1150,7 @@ pub const OptOptions = struct {
         .do_generic_peeps = false,
         .do_machine_peeps = true,
         .do_gcm = true,
+        .do_uninit_analisys = false,
     };
 
     pub fn asPostInlining(self: @This()) @This() {
@@ -1180,18 +1184,18 @@ pub const OptOptions = struct {
         backend: *B,
     ) bool {
         if (self.do_inlining or is_inline) {
-            self.asPreInline().execute(B, backend, func);
+            self.asPreInline().execute(B, backend, func) catch unreachable;
             backend.out.setInlineFunc(backend.gpa.allocator(), B, func, id);
         }
 
         return self.do_inlining;
     }
 
-    pub fn execute(self: @This(), comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) void {
+    pub fn execute(self: @This(), comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) !void {
         const Func = graph.Func(Backend);
         const Node = Func.Node;
 
-        std.debug.assert(func.root.id != std.math.maxInt(u16));
+        std.debug.assert(func.start.id != std.math.maxInt(u16));
 
         if (self.do_dead_code_elimination) {
             func.iterPeeps(ctx, struct {
@@ -1199,7 +1203,7 @@ pub const OptOptions = struct {
                     return @TypeOf(func.*).idealizeDead(cx, fnc, nd, wl);
                 }
             }.wrap);
-            std.debug.assert(func.root.id != std.math.maxInt(u16));
+            std.debug.assert(func.start.id != std.math.maxInt(u16));
         }
 
         if (self.mem2reg) {
@@ -1231,7 +1235,8 @@ pub const OptOptions = struct {
             );
 
         if (self.error_buf) |eb| {
-            func.static_anal.analize(self.arena.?, eb);
+            func.static_anal.analize(self.arena.?, eb, self.do_uninit_analisys);
+            if (self.error_buf.?.items.len != 0) return error.HasErrors;
         }
     }
 
@@ -1284,7 +1289,9 @@ pub const OptOptions = struct {
                 }
                 const inline_func = &bout.inline_funcs.items[sym.nodes];
                 funcs[sym.nodes] = inline_func.toFunc(&arena, Backend);
-                pi_opts.execute(Backend, backend, &funcs[sym.nodes]);
+                pi_opts.execute(Backend, backend, &funcs[sym.nodes]) catch {
+                    inline_func.corrupted = true;
+                };
                 inline_func.node_count = funcs[sym.nodes].next_id;
 
                 arena = funcs[sym.nodes].arena;
@@ -1348,6 +1355,8 @@ pub const OptOptions = struct {
             }
 
             out.inline_func_nodes = arena.state;
+
+            if (optimizations.error_buf) |eb| if (eb.items.len != 0) return true;
 
             bout.deduplicate();
             bout.elimitaneDeadCode();

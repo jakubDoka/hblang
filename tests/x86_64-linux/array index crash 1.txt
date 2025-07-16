@@ -1,28 +1,20 @@
 array index crash 1.awa:
 	sub rsp, 0x10
 	mov cl, dil
-	mov byte ptr [rsp], 0x00
-	mov byte ptr [rsp+0x01], 0x00
-	mov byte ptr [rsp+0x02], 0x00
-	mov r8, 0x0A
-	xor dil, dil
-	mov rsi, 0x02
-	mov ax, [rsp]
-	movzx eax, ax
-	mov [rsp], ax
-	shr eax, 0x10
-	mov [rsp+0x02], al
+	mov r8, 0x02
+	mov rdi, 0x0A
+	xor sil, sil
 1:	mov al, cl
-	cmp al, dil
+	cmp al, sil
 	jbe :0
 	mov al, cl
 	movzx rax, al
-	div r8b
+	div dil
 	mov dl, al
 	lea rax, [rsp]
-	add rax, rsi
+	add rax, r8
 	mov [rax], cl
-	dec rsi
+	dec r8
 	mov cl, dl
 	jmp :1
 0:	xor eax, eax

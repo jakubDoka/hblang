@@ -769,20 +769,17 @@ pub fn emitIdk(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
             " you can specify a type: @as(<ty>, idk)", .{});
     };
 
+    if (ctx.loc) |loc| return .mkp(ty, loc);
+
     const sloc = self.src(expr);
 
-    const abi = self.abiCata(ty);
-    return switch (abi) {
+    return switch (self.abiCata(ty)) {
         .Impossible => return self.report(expr, "can't make an uninitialized" ++
             " {}, its uninhabited", .{ty}) catch error.Unreachable,
         .Imaginary => .{ .ty = ty },
-        .ByValue => |t| .mkv(ty, self.bl.addIntImm(
-            sloc,
-            t,
-            @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)),
-        )),
+        .ByValue => |t| .mkv(ty, self.bl.addUninit(sloc, t)),
         .ByValuePair, .ByRef => {
-            const loc = ctx.loc orelse self.bl.addLocal(sloc, ty.size(self.types));
+            const loc = self.bl.addLocal(sloc, ty.size(self.types));
             return .mkp(ty, loc);
         },
     };
@@ -1694,7 +1691,7 @@ fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError
             cg: *Codegen,
             i: usize,
             arm: Ast.MatchArm,
-        ) !?struct { u64, Ast.Id } {
+        ) !?struct { usize, Ast.Id } {
             if (arm.pat.tag() == .Wildcard or i == slf.iter_until) {
                 if (slf.else_arm) |erm| if (i == slf.iter_until) {
                     cg.report(erm, "useless esle match arm," ++
@@ -1735,7 +1732,7 @@ fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError
                 },
             }
 
-            return .{ idx, arm.body };
+            return .{ @intCast(idx), arm.body };
         }
     };
 
@@ -2658,8 +2655,10 @@ fn emitStructOp(
 
 pub fn emitGenericStore(self: *Codegen, sloc: graph.Sloc, loc: *Node, value: *Value) void {
     if (value.id == .Imaginary) return;
+    if (value.id == .Pointer and value.id.Pointer == loc) return;
 
     const cata = self.abiCata(value.ty);
+
     if (cata == .ByValue) {
         if (cata.ByValue.size() > value.ty.size(self.types)) {
             var storer = graph.DataType.i64;
@@ -2679,10 +2678,10 @@ pub fn emitGenericStore(self: *Codegen, sloc: graph.Sloc, loc: *Node, value: *Va
                 self.bl.addFieldStore(sloc, loc, @intCast(offset), storer, shifted);
                 offset += storer.size();
             }
-        } else if (value.id == .Value or value.id.Pointer != loc) {
+        } else {
             _ = self.bl.addStore(sloc, loc, cata.ByValue, value.getValue(sloc, self));
         }
-    } else if (value.id.Pointer != loc) {
+    } else {
         _ = self.bl.addFixedMemCpy(sloc, loc, value.id.Pointer, value.ty.size(self.types));
     }
 }

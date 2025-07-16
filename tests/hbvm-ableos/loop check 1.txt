@@ -36,8 +36,7 @@ loop check 1.nextPos:
         li8 $1, 1
        li64 $2, 17
         jmp :a
-9:     li64 $2, -6148914691236517206
-         cp $1, $0
+9:       cp $1, $0
 a:     jala $0, $31, 0
 loop check 1.blackbox:
         li8 $1, 1

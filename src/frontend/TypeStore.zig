@@ -689,7 +689,7 @@ pub const Id = enum(IdRepr) {
                             const ptr = readFromGlobal(self.tys, @enumFromInt(v.value), .uint, v.offset + tys.Slice.ptr_offset);
                             const ln = readFromGlobal(self.tys, @enumFromInt(v.value), .uint, v.offset + tys.Slice.len_offset);
 
-                            const global = self.tys.findSymForPtr(ptr, ln * slc.elem.size(self.tys));
+                            const global = self.tys.findSymForPtr(@intCast(ptr), ln * slc.elem.size(self.tys));
                             break :b .{ ln, global catch |err| {
                                 try writer.appendSlice(to.allocator(), "<corrupted-slice>(");
                                 try writer.appendSlice(to.allocator(), @errorName(err));
@@ -701,7 +701,7 @@ pub const Id = enum(IdRepr) {
                         if (slc.elem == .u8 and slc.len == null) {
                             const glb: utils.EntId(tys.Global) = @enumFromInt(global);
                             try writer.appendSlice(to.allocator(), "\"");
-                            try writer.appendSlice(to.allocator(), self.tys.store.get(glb).data[base..][0..ln]);
+                            try writer.appendSlice(to.allocator(), self.tys.store.get(glb).data[@intCast(base)..][0..@intCast(ln)]);
                             try writer.appendSlice(to.allocator(), "\"");
                             continue;
                         }
@@ -712,9 +712,9 @@ pub const Id = enum(IdRepr) {
                             try writer.appendSlice(to.allocator(), ".[");
                         }
 
-                        work_list.ensureUnusedCapacity(tmp.arena.allocator(), ln * 2) catch unreachable;
+                        work_list.ensureUnusedCapacity(tmp.arena.allocator(), @intCast(ln * 2)) catch unreachable;
                         try work_list.append(tmp.arena.allocator(), .{ .Name = "]" });
-                        for (0..ln) |i| {
+                        for (0..@intCast(ln)) |i| {
                             const off = i * slc.elem.size(self.tys);
                             work_list.appendAssumeCapacity(.{ .Value = .normalize(.{
                                 .ty = slc.elem,
@@ -746,7 +746,7 @@ pub const Id = enum(IdRepr) {
                     },
                     .Pointer => |p| {
                         const ty: Id = self.tys.store.get(p).*;
-                        const global = self.tys.findSymForPtr(v.value, ty.size(self.tys)) catch |err| {
+                        const global = self.tys.findSymForPtr(@intCast(v.value), ty.size(self.tys)) catch |err| {
                             try writer.appendSlice(to.allocator(), "<corrupted-pointer>(");
                             try writer.appendSlice(to.allocator(), @errorName(err));
                             try writer.appendSlice(to.allocator(), ")");
@@ -774,7 +774,7 @@ pub const Id = enum(IdRepr) {
                     },
                     .Enum => |e| {
                         try writer.appendSlice(to.allocator(), ".");
-                        try writer.appendSlice(to.allocator(), e.getFields(self.tys)[v.value].name);
+                        try writer.appendSlice(to.allocator(), e.getFields(self.tys)[@intCast(v.value)].name);
                     },
                     .Nullable => |n| {
                         const global = self.tys.store.get(@as(utils.EntId(tys.Global), @enumFromInt(v.value)));
@@ -823,7 +823,7 @@ pub fn readFromGlobal(self: *Types, global: utils.EntId(tys.Global), ty: Id, off
     var value: u64 = 0;
     @memcpy(
         @as([*]u8, @ptrCast(&value))[0..@intCast(ty.size(self))],
-        glob.data[offset..][0..@intCast(ty.size(self))],
+        glob.data[@intCast(offset)..][0..@intCast(ty.size(self))],
     );
     return value;
 }
@@ -965,7 +965,7 @@ pub fn isNullablePresent(self: *Types, n: utils.EntId(tys.Nullable), global: *ty
         );
 
         break :b value != 0;
-    } else global.data[offset] != 0;
+    } else global.data[@intCast(offset)] != 0;
 }
 
 pub fn findSymForPtr(
@@ -1234,6 +1234,9 @@ pub fn dumpAnalErrors(self: *Types, anal_errors: *std.ArrayListUnmanaged(static_
         .InfiniteLoopWithBreak => |loc| {
             self.reportSloc(loc.loop, "the loop was declared with breaks or" ++
                 " returns but they are all unreachable", .{});
+        },
+        .ReadUninit => |loc| {
+            self.reportSloc(loc.loc, "reading from an uninitialized memory location", .{});
         },
     };
     defer anal_errors.items.len = 0;

@@ -51,18 +51,6 @@ main:
 	mov rdx, 0x18
 	lea rdi, [rsp]
 	lea rsi, [rsp+0x18]
-	mov ax, [rsp+0x30]
-	mov cl, [rsp+0x32]
-	movzx eax, ax
-	movzx ecx, cl
-	shl eax, 0x00
-	shl ecx, 0x10
-	or eax, ecx
-	mov ecx, eax
-	shr ecx, 0x00
-	mov [rsp+0x30], cx
-	shr eax, 0x10
-	mov [rsp+0x32], al
 	mov bp, [rsp+0x30]
 	mov bl, [rsp+0x32]
 	call :memcpy

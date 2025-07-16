@@ -39,8 +39,7 @@ passing struct multiple times 1.bar:
 	ret
 main:
 	push rbx
-	push rbp
-	sub rsp, 0x38
+	sub rsp, 0x40
 	mov qword ptr [rsp+0x18], 0x01
 	mov qword ptr [rsp+0x20], 0x02
 	mov qword ptr [rsp+0x28], 0x03
@@ -50,20 +49,12 @@ main:
 	mov rdx, 0x18
 	lea rdi, [rsp]
 	lea rsi, [rsp+0x18]
-	mov ax, [rsp+0x30]
-	movzx ebp, ax
-	or ebp, 0x30000
-	mov [rsp+0x30], bp
-	mov ebx, ebp
-	shr ebx, 0x10
-	mov [rsp+0x32], bl
+	mov bx, [rsp+0x30]
 	call :memcpy
-	shl ebx, 0x10
-	mov edi, ebp
-	or edi, ebx
+	movzx edi, bx
+	or edi, 0x30000
 	call :passing struct multiple times 1.foo
-	add rsp, 0x38
-	pop rbp
+	add rsp, 0x40
 	pop rbx
 	ret
 memcpy:

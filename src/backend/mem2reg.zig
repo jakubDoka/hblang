@@ -2,7 +2,7 @@ const graph = @import("graph.zig");
 const utils = graph.utils;
 const std = @import("std");
 
-pub fn Mem2RegMixin(comptime Backend: type) type {
+pub fn Mixin(comptime Backend: type) type {
     return struct {
         const Func = graph.Func(Backend);
         const Self = @This();
@@ -42,12 +42,12 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
 
             fn resolve(func: *Func, scope: []L, index: usize) *Node {
                 return switch (scope[index].expand() orelse {
-                    return func.addIntImm(.none, .i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)));
+                    return func.addUninit(.none, .i64);
                 }) {
                     .Node => |n| n,
                     .Loop => |loop| {
                         if (loop.items[index].expand() == null) {
-                            const vl = func.addIntImm(.none, .i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa)));
+                            const vl = func.addUninit(.none, .i64);
                             scope[index] = .compact(.{ .Node = vl });
                             return vl;
                         }
@@ -117,7 +117,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
             const self = m2r.getGraph();
             self.gcm.cfg_built.assertUnlocked();
 
-            if (self.root.outputs().len == 1) return;
+            if (self.start.outputs().len == 1) return;
 
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
@@ -131,9 +131,8 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
             var store_load_nodes = Arry(*Node){};
             var alloc_offsets = Arry(i64){};
 
-            //self.fmtUnscheduled(std.io.getStdErr().writer().any(), .escape_codes);
-            std.debug.assert(self.root.outputs()[1].get().kind == .Mem);
-            outer: for (self.root.outputs()[1].get().outputs()) |n| {
+            std.debug.assert(self.start.outputs()[1].get().kind == .Mem);
+            outer: for (self.start.outputs()[1].get().outputs()) |n| {
                 const ov = n.get();
                 if (ov.kind != .LocalAlloc or ov.outputs().len != 1) continue :outer;
                 const o = ov.outputs()[0].get();
@@ -264,7 +263,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                     }
 
                     if (!(bb.kind == .If or len == 1)) {
-                        self.fmtUnscheduled(std.io.getStdErr().writer().any(), .escape_codes);
+                        //self.fmtUnscheduled(std.io.getStdErr().writer().any(), .escape_codes);
                         unreachable;
                     }
 
@@ -333,7 +332,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                             var lhs = clhs.expand() orelse continue;
                             if (lhs == .Node and lhs.Node.isLazyPhi(s.ctrl)) {
                                 var rhs = crhsm.expand() orelse Local.Expanded{
-                                    .Node = self.addIntImm(lhs.Node.sloc, .i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa))),
+                                    .Node = self.addUninit(lhs.Node.sloc, .i64),
                                 };
                                 if (rhs == .Loop and (rhs.Loop != s or s.ctrl.preservesIdentityPhys())) {
                                     rhs = .{ .Node = Local.resolve(self, locals, i) };
@@ -381,7 +380,7 @@ pub fn Mem2RegMixin(comptime Backend: type) type {
                 self.subsume(tr.mem(), tr);
             }
 
-            for (self.root.outputs()[1].get().outputs()) |o| {
+            for (self.start.outputs()[1].get().outputs()) |o| {
                 if (o.get().kind == .Local) {
                     o.get().schedule = std.math.maxInt(u16);
                 }

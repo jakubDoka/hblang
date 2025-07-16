@@ -1,9 +1,5 @@
 comptime 6 (strings).main.string_to_array("Edward"):
 	sub rsp, 0x10
-	mov rax, 0xAAAAAAAAAAAAAAAA
-	mov [rsp], eax
-	mov rax, 0xAAAAAAAA
-	mov [rsp+0x04], ax
 	xor rdx, rdx
 1:	cmp rdx, 0x06
 	setb al

@@ -12,18 +12,6 @@ main:
 	or eax, ecx
 	mov ecx, eax
 	shr ecx, 0x00
-	mov [rsp], cx
-	shr eax, 0x10
-	mov [rsp+0x02], al
-	mov ax, [rsp]
-	mov cl, [rsp+0x02]
-	movzx eax, ax
-	movzx ecx, cl
-	shl eax, 0x00
-	shl ecx, 0x10
-	or eax, ecx
-	mov ecx, eax
-	shr ecx, 0x00
 	mov [rsp+0x03], cx
 	shr eax, 0x10
 	mov [rsp+0x05], al

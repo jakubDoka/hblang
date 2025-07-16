@@ -762,7 +762,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     if (opts.optimizations.shouldDefer(id, opts.is_inline, X86_64Gen, func, self))
         return;
 
-    opts.optimizations.execute(X86_64Gen, self, func);
+    opts.optimizations.execute(X86_64Gen, self, func) catch return;
 
     var tmp = utils.Arena.scrath(opts.optimizations.arena);
     defer tmp.deinit();
@@ -785,11 +785,11 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     }
 
     var local_size: i64 = 0;
-    if (func.root.outputs().len > 1) {
+    if (func.start.outputs().len > 1) {
         var locals = std.ArrayListUnmanaged(*FuncNode).empty;
 
-        std.debug.assert(func.root.outputs()[1].get().kind == .Mem);
-        for (func.root.outputs()[1].get().outputs()) |o| if (o.get().kind == .LocalAlloc) {
+        std.debug.assert(func.start.outputs()[1].get().kind == .Mem);
+        for (func.start.outputs()[1].get().outputs()) |o| if (o.get().kind == .LocalAlloc) {
             try locals.append(tmp.arena.allocator(), o.get());
         };
 
@@ -799,7 +799,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
             }
         }.isBigger);
 
-        std.debug.assert(func.root.outputs()[1].get().kind == .Mem);
+        std.debug.assert(func.start.outputs()[1].get().kind == .Mem);
         for (locals.items) |o| {
             const extra = o.extra(.LocalAlloc);
             const size = extra.size;
@@ -949,8 +949,14 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    for (block.outputs()) |in| {
+    outer: for (block.outputs()) |in| {
         const instr = in.get();
+        const inps = instr.dataDeps();
+
+        if (instr.kind != .Call) {
+            for (inps) |inp| if (inp.kind == .Uninit) continue :outer;
+        }
+
         switch (instr.extra2()) {
             .FramePointer => {},
             .CInt => |extra| {
@@ -977,7 +983,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 }
             },
             .MachSplit => {
-                const dst, const src = .{ self.getReg(instr), self.getReg(instr.inputs()[1]) };
+                const dst, const src = .{ self.getReg(instr), self.getReg(inps[0]) };
                 if (dst == src) continue;
 
                 self.emitInstr(
@@ -992,7 +998,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             },
             .GlobalStore => |extra| {
                 const dis: i16 = @intCast(extra.base.dis);
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Rip{}, self.getReg(instr.value()) });
+                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ Rip{}, self.getReg(inps[0]) });
                 try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, 4, dis - 4, 4);
             },
             .GlobalLoad => |extra| {
@@ -1021,7 +1027,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             },
             .OffsetLoad => |extra| {
                 const dst = self.getReg(instr);
-                const bse = self.getReg(instr.inputs()[2]);
+                const bse = self.getReg(inps[0]);
 
                 const offset: i32 = extra.dis;
 
@@ -1031,8 +1037,8 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 });
             },
             .OffsetStore => |extra| {
-                const dst = self.getReg(instr.inputs()[2]);
-                const vl = self.getReg(instr.inputs()[3]);
+                const dst = self.getReg(inps[0]);
+                const vl = self.getReg(inps[1]);
 
                 const offset: i32 = extra.dis;
 
@@ -1042,7 +1048,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 });
             },
             .ConstStore => |extra| {
-                const dst = self.getReg(instr.inputs()[2]);
+                const dst = self.getReg(inps[0]);
                 const vl = extra.imm;
 
                 const offset: i32 = extra.base.dis;
@@ -1079,7 +1085,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 });
             },
             .StackStore => |extra| {
-                const vl = self.getReg(instr.inputs()[3]);
+                const vl = self.getReg(inps[0]);
                 const offset: i32 = extra.base.dis +
                     @as(i32, @intCast(switch (instr.inputs()[2].?.extra2()) {
                         .LocalAlloc => |n| n.size + self.local_base,
@@ -1119,7 +1125,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const op_dt = instr.inputs()[1].?.data_type;
                 const opsize = op_dt.size();
                 const dst = self.getReg(instr);
-                const lhs = self.getReg(instr.inputs()[1]);
+                const lhs = self.getReg(inps[0]);
                 const rhs = extra.imm;
 
                 const mnemonic = binopToMnemonic(op, instr.data_type);
@@ -1152,9 +1158,9 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             },
             .FusedMulAdd => {
                 const dst = self.getReg(instr);
-                const a = self.getReg(instr.inputs()[1]);
-                const b = self.getReg(instr.inputs()[2]);
-                const c = self.getReg(instr.inputs()[3]);
+                const a = self.getReg(inps[0]);
+                const b = self.getReg(inps[1]);
+                const c = self.getReg(inps[2]);
 
                 std.debug.assert(instr.data_type == .f32 or instr.data_type == .f64);
                 std.debug.assert(dst == a);
@@ -1172,8 +1178,8 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const op_dt = instr.inputs()[1].?.data_type;
                 const opsize = op_dt.size();
                 const dst = self.getReg(instr);
-                const lhs = self.getReg(instr.inputs()[1]);
-                const rhs = self.getReg(instr.inputs()[2]);
+                const lhs = self.getReg(inps[0]);
+                const rhs = self.getReg(inps[1]);
 
                 const mnemonic = binopToMnemonic(op, instr.data_type);
 
@@ -1226,8 +1232,8 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 }
             },
             .If => {
-                const cond = self.getReg(instr.inputs()[1]);
-                const cond_size = instr.inputs()[1].?.data_type.size();
+                const cond = self.getReg(inps[0]);
+                const cond_size = inps[0].data_type.size();
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_TEST, .{ SReg{ cond, cond_size }, SReg{ cond, cond_size } });
                 self.local_relocs.appendAssumeCapacity(.{
                     .dest = instr.outputs()[1].get().schedule,
@@ -1238,9 +1244,9 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 self.emitInstr(zydis.ZYDIS_MNEMONIC_JZ, .{ std.math.maxInt(i32), SizeHint{ .bytes = 0 } });
             },
             .CondJump => |extra| {
-                const lhs = self.getReg(instr.inputs()[1]);
-                const rhs = self.getReg(instr.inputs()[2]);
-                const oper_dt = instr.inputs()[1].?.data_type;
+                const lhs = self.getReg(inps[0]);
+                const rhs = self.getReg(inps[1]);
+                const oper_dt = inps[0].data_type;
 
                 const cmp_mnemonic: zydis.ZydisMnemonic = if (oper_dt.isInt())
                     zydis.ZYDIS_MNEMONIC_CMP
@@ -1249,7 +1255,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 else
                     zydis.ZYDIS_MNEMONIC_COMISS;
 
-                self.emitInstr(cmp_mnemonic, .{ SReg{ lhs, instr.inputs()[1].?.data_type.size() }, rhs });
+                self.emitInstr(cmp_mnemonic, .{ SReg{ lhs, oper_dt.size() }, rhs });
                 self.local_relocs.appendAssumeCapacity(.{
                     .dest = instr.outputs()[1].get().schedule,
                     .offset = @intCast(self.out.code.items.len),
@@ -1263,9 +1269,9 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const op = extra.op;
                 const size = instr.data_type.size();
                 const dst = self.getReg(instr);
-                const src_dt = instr.inputs()[1].?.data_type;
+                const src_dt = inps[0].data_type;
                 const src_size = src_dt.size();
-                const src = self.getReg(instr.inputs()[1]);
+                const src = self.getReg(inps[0]);
 
                 std.debug.assert(dst == src or switch (op) {
                     .not, .bnot, .ineg, .ired => false,
@@ -1510,8 +1516,8 @@ pub fn movMnem(dt: graph.DataType) zydis.ZydisMnemonic {
     };
 }
 
-pub fn getReg(self: X86_64Gen, node: ?*FuncNode) Reg {
-    return @enumFromInt(self.allocs[node.?.schedule]);
+pub fn getReg(self: X86_64Gen, node: *FuncNode) Reg {
+    return @enumFromInt(self.allocs[node.schedule]);
 }
 
 pub fn emitData(self: *X86_64Gen, opts: Mach.DataOptions) void {

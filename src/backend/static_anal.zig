@@ -19,9 +19,12 @@ pub const Error = union(enum) {
     InfiniteLoopWithBreak: struct {
         loop: graph.Sloc,
     },
+    ReadUninit: struct {
+        loc: graph.Sloc,
+    },
 };
 
-pub fn StaticAnalMixin(comptime Backend: type) type {
+pub fn Mixin(comptime Backend: type) type {
     return struct {
         const Self = @This();
         const Func = graph.Func(Backend);
@@ -31,12 +34,38 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
             return @alignCast(@fieldParentPtr("static_anal", self));
         }
 
-        pub fn analize(self: *Self, arena: *root.Arena, errors: *std.ArrayListUnmanaged(Error)) void {
+        pub fn analize(self: *Self, arena: *root.Arena, errors: *std.ArrayListUnmanaged(Error), do_uninit_analisys: bool) void {
             self.findTrivialStackEscapes(arena, errors);
             self.tryHardToFindMemoryEscapes(arena, errors);
             self.findConstantOobMemOps(arena, errors);
             self.findLoopInvariantConditions(arena, errors);
             self.findInfiniteLoopsWithBreaks(arena, errors);
+            if (do_uninit_analisys) self.findInvalidUninitReads(arena, errors);
+        }
+
+        pub fn findInvalidUninitReads(
+            self: *Self,
+            arena: *root.Arena,
+            errors: *std.ArrayListUnmanaged(Error),
+        ) void {
+            errdefer unreachable;
+
+            const func = self.getGraph();
+
+            const uninit: *Node = for (func.start.outputs()) |out| {
+                if (out.get().kind == .Uninit) break out.get();
+            } else return;
+
+            for (uninit.outputs()) |out| {
+                if (out.get().kind == .Call) continue;
+                if (out.get().kind == .Return) continue;
+                if (out.get().kind == .Phi) continue;
+
+                std.debug.print("uninit: {any} {any}\n", .{ out.get(), uninit });
+                try errors.append(arena.allocator(), .{
+                    .ReadUninit = .{ .loc = out.get().sloc },
+                });
+            }
         }
 
         pub fn findInfiniteLoopsWithBreaks(
@@ -44,10 +73,11 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
             arena: *root.Arena,
             errors: *std.ArrayListUnmanaged(Error),
         ) void {
+            errdefer unreachable;
             const func = self.getGraph();
             for (func.gcm.postorder) |bb| {
                 if (bb.base.kind == .Loop and bb.base.extra(.Loop).anal_stage == .has_dead_break) {
-                    errors.append(arena.allocator(), .{ .InfiniteLoopWithBreak = .{ .loop = bb.base.sloc } }) catch unreachable;
+                    try errors.append(arena.allocator(), .{ .InfiniteLoopWithBreak = .{ .loop = bb.base.sloc } });
                 }
             }
         }
@@ -57,6 +87,7 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
             arena: *root.Arena,
             errors: *std.ArrayListUnmanaged(Error),
         ) void {
+            errdefer unreachable;
             var tmp = root.Arena.scrath(arena);
             defer tmp.deinit();
 
@@ -64,12 +95,9 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
 
             const func = self.getGraph();
 
-            var work = Func.WorkList.init(tmp.arena.allocator(), func.next_id) catch unreachable;
-            work.add(func.root);
+            for (func.gcm.postorder) |bb| {
+                const node = bb.base.outputs()[bb.base.outputs().len - 1].get();
 
-            var i: usize = 0;
-            while (i < work.items().len) : (i += 1) {
-                const node = work.items()[i];
                 if (node.isSub(graph.If) and node.sloc != graph.Sloc.none) b: {
                     const ld = func.loopDepth(node);
                     for (node.outputs()) |o| {
@@ -80,14 +108,10 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
                         if (func.loopDepth(inp.?) == ld) break :b;
                     }
 
-                    errors.append(arena.allocator(), .{
+                    try errors.append(arena.allocator(), .{
                         .LoopInvariantBreak = .{ .if_node = node.sloc },
-                    }) catch unreachable;
+                    });
                 }
-
-                for (node.outputs()) |o| if (o.get().isCfg()) {
-                    work.add(o.get());
-                };
             }
         }
 
@@ -98,9 +122,9 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
         ) void {
             const func = self.getGraph();
 
-            if (func.root.outputs().len < 2 or func.root.outputs()[1].get().kind != .Mem) return;
+            if (func.start.outputs().len < 2 or func.start.outputs()[1].get().kind != .Mem) return;
 
-            for (func.root.outputs()[1].get().outputs()) |lcl| {
+            for (func.start.outputs()[1].get().outputs()) |lcl| {
                 const local = lcl.get();
                 if (local.kind == .LocalAlloc) {
                     for (local.outputs()) |n| {
@@ -118,18 +142,19 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
         }
 
         pub fn checkLocalForOob(op: *Func.Node, local: *Func.Node, addr: ?*Func.Node, arena: *root.Arena, errors: *std.ArrayListUnmanaged(Error)) void {
+            errdefer unreachable;
             const mem_op, const offset = op.knownMemOp() orelse return;
             if ((!mem_op.isLoad() and !mem_op.isStore()) or mem_op.isSub(graph.MemCpy)) return;
             if (mem_op.isStore() and mem_op.value() == addr) return;
             const end_offset = offset + @as(i64, @intCast(mem_op.data_type.size()));
             if (offset < 0 or end_offset > local.extra(.LocalAlloc).size) {
-                errors.append(arena.allocator(), .{ .StackOob = .{
+                try errors.append(arena.allocator(), .{ .StackOob = .{
                     .slot = local.sloc,
                     .op = mem_op.id,
                     .access = op.sloc,
                     .size = local.extra(.LocalAlloc).size,
                     .range = .{ .end = end_offset, .start = offset },
-                } }) catch unreachable;
+                } });
             }
         }
 
@@ -139,8 +164,9 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
             arena: *root.Arena,
             errors: *std.ArrayListUnmanaged(Error),
         ) void {
+            errdefer unreachable;
             const func = self.getGraph();
-            for (func.root.outputs()[0].get().outputs()) |ar| {
+            for (func.start.outputs()[0].get().outputs()) |ar| {
                 const arg = ar.get();
                 if (arg.kind != .Arg) continue;
 
@@ -156,7 +182,7 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
                     const store = ao.get().knownStore(arg) orelse continue;
 
                     if (store.value() != null and store.value().?.kind == .Local) {
-                        local_stores.append(tmp.arena.allocator(), store) catch unreachable;
+                        try local_stores.append(tmp.arena.allocator(), store);
                     }
                 }
 
@@ -203,9 +229,9 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
                 }
 
                 for (local_stores.items) |marked| {
-                    errors.append(arena.allocator(), .{
+                    try errors.append(arena.allocator(), .{
                         .ReturningStack = .{ .slot = marked.value().?.sloc },
-                    }) catch unreachable;
+                    });
                 }
             }
         }
@@ -215,6 +241,7 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
             arena: *root.Arena,
             errors: *std.ArrayListUnmanaged(Error),
         ) void {
+            errdefer unreachable;
             const func = self.getGraph();
             if (func.end.inputs()[0] == null) return;
 
@@ -223,7 +250,7 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
 
             var frontier = std.AutoArrayHashMapUnmanaged(*Node, void){};
             for (func.end.inputs()[3..]) |n| {
-                frontier.put(tmp.arena.allocator(), n orelse continue, {}) catch unreachable;
+                try frontier.put(tmp.arena.allocator(), n orelse continue, {});
             }
 
             // walk trough phis
@@ -232,10 +259,10 @@ pub fn StaticAnalMixin(comptime Backend: type) type {
             while (i < frontier.entries.len) : (i += 1) {
                 const nd = frontier.entries.items(.key)[i];
                 if (nd.kind == .Local) {
-                    errors.append(arena.allocator(), .{ .ReturningStack = .{ .slot = nd.sloc } }) catch unreachable;
+                    try errors.append(arena.allocator(), .{ .ReturningStack = .{ .slot = nd.sloc } });
                 } else if (nd.kind == .Phi) {
                     for (nd.inputs()[1..]) |n| {
-                        frontier.put(tmp.arena.allocator(), n.?, {}) catch unreachable;
+                        try frontier.put(tmp.arena.allocator(), n.?, {});
                     }
                 }
             }
