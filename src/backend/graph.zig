@@ -726,7 +726,7 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn InternMap(comptime Context: type) type {
-            return std.hash_map.HashMapUnmanaged(InternedNode, void, Context, 70);
+            return std.hash_map.HashMapUnmanaged(InternedNode, void, Context, std.hash_map.default_max_load_percentage);
         }
 
         pub const biased_regs = if (optApi("biased_regs", u64)) Backend.biased_regs else 0;
@@ -1444,7 +1444,7 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn hash(kind: Kind, dt: DataType, inpts: []const ?*Node, extr: *const anyopaque) u64 {
-                var hasher = std.hash.Fnv1a_64.init();
+                var hasher = std.hash.Wyhash.init(0);
                 hasher.update(std.mem.asBytes(&kind));
                 hasher.update(std.mem.asBytes(&dt));
                 hasher.update(@ptrCast(inpts));
@@ -1926,7 +1926,7 @@ pub fn Func(comptime Backend: type) type {
 
         pub const Frame = struct { *Node, []const Node.Out };
 
-        pub fn traversePostorder(ctx: anytype, inp: *Node, stack: *std.ArrayList(Frame), visited: *std.DynamicBitSet) void {
+        pub fn traversePostorder(ctx: anytype, inp: *Node, stack: *std.ArrayList(Frame), visited: *std.DynamicBitSetUnmanaged) void {
             const Ctx = if (@typeInfo(@TypeOf(ctx)) == .pointer) @TypeOf(ctx.*) else @TypeOf(ctx);
 
             stack.append(.{ inp, inp.outputs() }) catch unreachable;
@@ -2400,7 +2400,7 @@ pub fn Func(comptime Backend: type) type {
             try utils.setColor(cc, wr, .reset);
         }
 
-        pub fn collectPostorder(self: *Self, arena: std.mem.Allocator, visited: *std.DynamicBitSet) []*CfgNode {
+        pub fn collectPostorder(self: *Self, arena: std.mem.Allocator, visited: *std.DynamicBitSetUnmanaged) []*CfgNode {
             var postorder = std.ArrayList(*CfgNode).init(arena);
 
             collectPostorder2(self, self.root, arena, &postorder, visited, true);
@@ -2408,7 +2408,7 @@ pub fn Func(comptime Backend: type) type {
             return postorder.items;
         }
 
-        pub fn collectPostorderAll(self: *Self, arena: std.mem.Allocator, visited: *std.DynamicBitSet) []*CfgNode {
+        pub fn collectPostorderAll(self: *Self, arena: std.mem.Allocator, visited: *std.DynamicBitSetUnmanaged) []*CfgNode {
             var postorder = std.ArrayList(*CfgNode).init(arena);
             self.collectPostorder2(self.root, arena, &postorder, visited, false);
             return postorder.items;
@@ -2419,7 +2419,7 @@ pub fn Func(comptime Backend: type) type {
             node: *Node,
             arena: std.mem.Allocator,
             pos: *std.ArrayList(*CfgNode),
-            visited: *std.DynamicBitSet,
+            visited: *std.DynamicBitSetUnmanaged,
             comptime only_basic: bool,
         ) void {
             switch (node.kind) {
@@ -2455,7 +2455,7 @@ pub fn Func(comptime Backend: type) type {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            var visited = try std.DynamicBitSet.initEmpty(tmp.arena.allocator(), self.next_id);
+            var visited = try std.DynamicBitSetUnmanaged.initEmpty(tmp.arena.allocator(), self.next_id);
 
             self.root.fmt(self.gcm.block_count, writer, colors);
             if (self.root.outputs().len > 1 and self.root.outputs()[1].get().kind == .Mem) {

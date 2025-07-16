@@ -50,10 +50,10 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
             root.backend.Machine.OptOptions,
             root.frontend.Types.Abi,
         }{
-            .{ "hbvm-ableos", .init("hbvm-ableos", &hbvm), .all, .ableos },
-            .{ "hbvm-ableos-no-opts", .init("hbvm-ableos-no-opts", &hbvm2), .none, .ableos },
-            .{ "x86_64-linux", .init("x86_64-linux", &x86_64), .all, .systemv },
-            .{ "x86_64-linux-no-opts", .init("x86_64-linux-no-opts", &x86_642), .none, .systemv },
+            .{ "hbvm-ableos", .init(&hbvm), .all, .ableos },
+            .{ "hbvm-ableos-no-opts", .init(&hbvm2), .none, .ableos },
+            .{ "x86_64-linux", .init(&x86_64), .all, .systemv },
+            .{ "x86_64-linux-no-opts", .init(&x86_642), .none, .systemv },
         };
 
         for (tests) |tst| {

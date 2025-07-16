@@ -767,7 +767,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     var tmp = utils.Arena.scrath(opts.optimizations.arena);
     defer tmp.deinit();
 
-    var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), func.next_id) catch unreachable;
+    var visited = std.DynamicBitSetUnmanaged.initEmpty(tmp.arena.allocator(), func.next_id) catch unreachable;
     const postorder = func.collectPostorder(tmp.arena.allocator(), &visited);
 
     self.allocs = Regalloc.ralloc(X86_64Gen, func);

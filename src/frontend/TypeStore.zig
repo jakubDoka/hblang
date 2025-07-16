@@ -37,7 +37,12 @@ handler_signatures: std.EnumArray(
 ) = undefined,
 
 const Types = @This();
-const Map = std.hash_map.HashMapUnmanaged(Id, void, TypeCtx, 70);
+const Map = std.hash_map.HashMapUnmanaged(
+    Id,
+    void,
+    TypeCtx,
+    std.hash_map.default_max_load_percentage,
+);
 
 pub const Handlers = struct {
     slice_ioob: ?utils.EntId(tys.Func) = null,

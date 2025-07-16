@@ -142,7 +142,7 @@ pub fn GcmMixin(comptime Backend: type) type {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            var visited = std.DynamicBitSet.initEmpty(tmp.arena.allocator(), self.next_id) catch unreachable;
+            var visited = std.DynamicBitSetUnmanaged.initEmpty(tmp.arena.allocator(), self.next_id) catch unreachable;
             var stack = std.ArrayList(Func.Frame).init(tmp.arena.allocator());
 
             const cfg_rpo: []*CfgNode = cfg_rpo: {
@@ -169,7 +169,7 @@ pub fn GcmMixin(comptime Backend: type) type {
                         self.setInputIgnoreIntern(&n.base, i, self.addNode(.Jmp, n.base.sloc, .top, &.{n.base.inputs()[i].?}, .{}));
                     }
 
-                    visited.resize(self.next_id, true) catch unreachable;
+                    visited.resize(tmp.arena.allocator(), self.next_id, true) catch unreachable;
                 };
                 break :add_mach_moves;
             }
@@ -477,7 +477,7 @@ pub fn GcmMixin(comptime Backend: type) type {
             gcm: *Self,
             node: *Func.Node,
             early: *Func.CfgNode,
-            visited: *std.DynamicBitSet,
+            visited: *std.DynamicBitSetUnmanaged,
         ) void {
             const self = gcm.getGraph();
 

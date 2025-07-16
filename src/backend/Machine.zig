@@ -1,78 +1,4 @@
-test init {
-    const ExampleMachine = struct {
-        const Func = graph.Func(classes);
-
-        pub const classes = enum {
-            pub const CustomNode = extern struct {
-                value: bool,
-            };
-
-            pub const is_basic_block_start: []const Func.Kind = &.{};
-            pub const is_mem_op: []const Func.Kind = &.{};
-            pub const is_basic_block_end: []const Func.Kind = &.{.CustomNode};
-            pub const is_pinned: []const Func.Kind = &.{.CustomNode};
-
-            pub fn isInterned(kind: Func.Kind) bool {
-                // this is not a good idea since its supposed to be a control flow
-                return kind == .CustomNode;
-            }
-
-            pub fn isSwapped(node: *Func.Node) bool {
-                // means the output basic blocks should be reversed for reducing jumps
-                return node.kind == .CustomNode and node.extra(.CustomNode).*;
-            }
-
-            pub fn idealize(func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
-                _ = worklist;
-                // relpace node whih the return value
-                if (node.kind == .Start)
-                    return func.addNode(.CustomNode, .top, &.{}, false);
-
-                return null;
-            }
-        };
-
-        pub fn emitFunc(self: *@This(), func: *Func, opts: EmitOptions) void {
-            opts.optimizations.execute(classes, func);
-            _ = self;
-            unreachable;
-        }
-
-        pub fn emitData(self: *@This(), opts: DataOptions) void {
-            _ = self;
-            _ = opts;
-            unreachable;
-        }
-
-        pub fn finalize(self: *@This(), out: std.io.AnyWriter) void {
-            _ = out;
-            _ = self;
-            unreachable;
-        }
-
-        pub fn disasm(self: *@This(), opts: DisasmOpts) void {
-            _ = self;
-            _ = opts;
-            unreachable;
-        }
-
-        pub fn run(self: *@This(), env: RunEnv) !usize {
-            _ = self;
-            _ = env;
-            return 0;
-        }
-
-        pub fn deinit(self: *@This()) void {
-            _ = self;
-        }
-    };
-
-    var em = ExampleMachine{};
-    _ = init(&em);
-}
-
 data: *anyopaque,
-name: []const u8,
 _emitFunc: *const fn (self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void,
 _emitData: *const fn (self: *anyopaque, opts: DataOptions) void,
 _finalize: *const fn (self: *anyopaque, opts: FinalizeOptions) void,
@@ -88,6 +14,28 @@ const BuilderFunc = graph.Func(Builder);
 const Machine = @This();
 const root = @import("../utils.zig");
 const Set = std.DynamicBitSetUnmanaged;
+
+pub const Null = struct {
+    const Func = graph.Func(Null);
+
+    pub const classes = enum {};
+
+    pub const i_know_the_api = {};
+
+    comptime {
+        var s = Null{};
+        _ = init(&s);
+    }
+
+    pub fn emitFunc(_: *@This(), _: *Func, _: EmitOptions) void {}
+    pub fn emitData(_: *@This(), _: DataOptions) void {}
+    pub fn finalize(_: *@This(), _: FinalizeOptions) void {}
+    pub fn disasm(_: *@This(), _: DisasmOpts) void {}
+    pub fn run(_: *@This(), _: RunEnv) !usize {
+        return 0;
+    }
+    pub fn deinit(_: *@This()) void {}
+};
 
 pub const InlineFunc = struct {
     signature: graph.Signature,
@@ -1058,7 +1006,7 @@ pub const Data = struct {
     }
 
     pub fn hash(self: *Data, v: SymIdx) u64 {
-        var hasher = std.hash.Fnv1a_64.init();
+        var hasher = std.hash.Wyhash.init(0);
 
         const vi = @intFromEnum(v);
 
@@ -1448,7 +1396,7 @@ pub const FinalizeBytesOptions = struct {
     builtins: Builtins,
 };
 
-pub fn init(name: []const u8, data: anytype) Machine {
+pub fn init(data: anytype) Machine {
     const Type = @TypeOf(data.*);
     if (!@hasDecl(Type, "classes")) @compileError("expected `pub const classes = enum { ... }` to be present");
 
@@ -1482,7 +1430,6 @@ pub fn init(name: []const u8, data: anytype) Machine {
 
     return .{
         .data = data,
-        .name = name,
         ._emitFunc = fns.emitFunc,
         ._emitData = fns.emitData,
         ._finalize = fns.finalize,
