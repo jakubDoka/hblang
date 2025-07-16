@@ -154,15 +154,9 @@ pub const Arena = struct {
         const alc_impl = enum {
             fn alloc(ptr: *anyopaque, size: usize, alignment: std.mem.Alignment, _: usize) ?[*]u8 {
                 const slf: *Arena = @alignCast(@ptrCast(ptr));
-                const alignm = alignment.toByteUnits();
-                slf.pos = @ptrFromInt(std.mem.alignForward(usize, @intFromPtr(slf.pos), alignm));
-                slf.pos += size;
-                std.debug.assert(@intFromPtr(slf.end) > @intFromPtr(slf.pos));
-                return slf.pos - size;
+                return slf.allocRaw(alignment.toByteUnits(), size);
             }
-            fn free(_: *anyopaque, mem: []u8, _: std.mem.Alignment, _: usize) void {
-                @memset(mem, undefined);
-            }
+            fn free(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize) void {}
             fn remap(ptr: *anyopaque, mem: []u8, alignment: std.mem.Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
                 if (@This().resize(ptr, mem, alignment, new_len, ret_addr)) return mem.ptr;
                 return null;
@@ -170,7 +164,8 @@ pub const Arena = struct {
             fn resize(ptr: *anyopaque, mem: []u8, _: std.mem.Alignment, new_len: usize, _: usize) bool {
                 const slf: *Arena = @alignCast(@ptrCast(ptr));
                 if (mem.ptr + mem.len == slf.pos) {
-                    slf.pos += new_len - mem.len;
+                    slf.pos += new_len;
+                    slf.pos -= mem.len;
                     return true;
                 }
                 return false;
@@ -204,14 +199,17 @@ pub const Arena = struct {
     }
 
     pub fn alloc(self: *Arena, comptime T: type, count: usize) []T {
-        const size = @sizeOf(T) * count;
-        self.pos = @ptrFromInt(std.mem.alignForward(usize, @intFromPtr(self.pos), @alignOf(T)));
-        self.pos += size;
-        std.debug.assert(@intFromPtr(self.end) > @intFromPtr(self.pos));
-        const ptr: [*]T = @alignCast(@ptrCast(self.pos - size));
+        const ptr: [*]T = @alignCast(@ptrCast(self.allocRaw(@alignOf(T), @sizeOf(T) * count)));
         const mem = ptr[0..count];
         @memset(mem, undefined);
         return mem;
+    }
+
+    pub fn allocRaw(self: *Arena, alignment: usize, size: usize) [*]u8 {
+        self.pos = @ptrFromInt(std.mem.alignForward(usize, @intFromPtr(self.pos), alignment));
+        self.pos += size;
+        std.debug.assert(@intFromPtr(self.end) > @intFromPtr(self.pos));
+        return self.pos - size;
     }
 
     pub fn makeArrayList(self: *Arena, comptime T: type, cap: usize) std.ArrayListUnmanaged(T) {

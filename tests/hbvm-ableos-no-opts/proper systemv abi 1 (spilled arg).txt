@@ -11,8 +11,7 @@ main:
        li64 $2, 1
         jal $31, $0, :proper systemv abi 1 (spilled arg).load_of_args
          cp $32, $1
-         cp $1, $0
-         st $1, $254, 0, 8
+         st $0, $254, 0, 8
        li64 $1, 1
          st $1, $254, 8, 8
        li64 $1, 2

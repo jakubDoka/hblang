@@ -1,0 +1,23 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -16
+       li64 $1, 1
+         st $1, $254, 0, 8
+     addi64 $1, $254, 0
+        jal $31, $0, :various mem opts 1.use(^uint)
+        lra $1, $0, :various mem opts 1.opaque
+         ld $1, $1, 0, 1
+       andi $1, $1, 255
+        jeq $1, $0, :2
+         st $0, $254, 0, 8
+        jmp :3
+2:       st $0, $254, 0, 8
+3:       ld $1, $254, 0, 8
+     addi64 $254, $254, 16
+         ld $31, $254, -8, 8
+         tx
+various mem opts 1.use(^uint):
+     addi64 $254, $254, -8
+         st $1, $254, 0, 8
+     addi64 $254, $254, 8
+       jala $0, $31, 0

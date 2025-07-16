@@ -4,14 +4,10 @@ main:
        li64 $1, 1
          st $1, $254, 0, 8
      addi64 $1, $254, 0
-        jal $31, $0, :pointers 1.modify
-         ld $1, $254, 0, 8
-     addi64 $1, $1, 2
-     addi64 $1, $1, -4
+        jal $31, $0, :various mem opts 1.use(^uint)
+         cp $1, $0
      addi64 $254, $254, 16
          ld $31, $254, -8, 8
          tx
-pointers 1.modify:
-       li64 $2, 2
-         st $2, $1, 0, 8
+various mem opts 1.use(^uint):
        jala $0, $31, 0

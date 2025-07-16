@@ -6,14 +6,14 @@ main:
          st $1, $254, 0, 8
         lra $1, $0, :cstring indexing.main.bb
          st $1, $254, 8, 8
-     addi64 $7, $254, 0
-         cp $6, $0
-8:     jltu $6, $2, :2
+     addi64 $6, $254, 0
+         cp $5, $0
+8:     jltu $5, $2, :2
          cp $1, $0
      addi64 $254, $254, 56
          ld $31, $254, -8, 8
          tx
-2:     jltu $6, $2, :3
+2:     jltu $5, $2, :3
      addi64 $1, $254, 16
         lra $3, $0, :cstring indexing.main.cstring indexing
          st $3, $254, 16, 8
@@ -21,21 +21,20 @@ main:
        li64 $3, 16
          st $3, $254, 24, 8
          st $4, $254, 32, 8
-         cp $3, $6
-         cp $4, $6
+         cp $3, $5
+         cp $4, $5
         jal $31, $0, :cstring indexing.slice_ioob
-3:   muli64 $1, $6, 8
-      add64 $1, $7, $1
-         ld $5, $1, 0, 8
-         cp $4, $0
-7:    add64 $1, $5, $4
+3:   muli64 $1, $5, 8
+      add64 $1, $6, $1
+         ld $4, $1, 0, 8
+         cp $3, $0
+7:    add64 $1, $4, $3
          ld $1, $1, 0, 1
-       andi $3, $1, 255
-         cp $1, $0
-        jeq $3, $1, :6
-     addi64 $4, $4, 1
+       andi $1, $1, 255
+        jeq $1, $0, :6
+     addi64 $3, $3, 1
         jmp :7
-6:   addi64 $6, $6, 1
+6:   addi64 $5, $5, 1
         jmp :8
 cstring indexing.slice_ioob:
          un

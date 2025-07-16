@@ -25,8 +25,7 @@ main:
          ld $31, $254, -8, 8
          tx
 slices 3.reverse:
-         cp $3, $0
-        jne $2, $3, :1
+        jne $2, $0, :1
         jmp :2
 1:   addi64 $8, $2, -1
          cp $7, $0

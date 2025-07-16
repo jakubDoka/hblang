@@ -8,8 +8,7 @@ entry:
 directives 20 (@handler, @SourceLoc).main:
          st $31, $254, -8, 8
      addi64 $254, $254, -77
-         cp $1, $0
-         st $1, $254, 0, 1
+         st $0, $254, 0, 1
        li64 $7, 1
         li8 $6, 1
         li8 $5, 2
@@ -25,8 +24,7 @@ directives 20 (@handler, @SourceLoc).main:
          st $3, $254, 20, 1
         jal $31, $0, :directives 20 (@handler, @SourceLoc).produce_memcpy
          ld $2, $254, 9, 8
-         cp $1, $0
-       cmpu $1, $1, $2
+       cmpu $1, $0, $2
       cmpui $1, $1, 1
         not $1, $1
         ori $1, $1, 0
@@ -44,8 +42,7 @@ directives 20 (@handler, @SourceLoc).main:
         jal $31, $0, :directives 20 (@handler, @SourceLoc).slice_ioob
 2:       ld $1, $254, 1, 8
          st $1, $254, 53, 8
-         cp $1, $0
-         st $1, $254, 61, 8
+         st $0, $254, 61, 8
          ld $1, $254, 53, 8
          ld $2, $254, 61, 8
         jal $31, $0, :directives 20 (@handler, @SourceLoc).use_slice
@@ -62,8 +59,7 @@ directives 20 (@handler, @SourceLoc).use_slice:
          st $1, $254, 0, 8
          st $2, $254, 8, 8
          ld $2, $254, 8, 8
-         cp $1, $0
-       jltu $1, $2, :6
+       jltu $0, $2, :6
      addi64 $1, $254, 16
         lra $3, $0, :directives 20 (@handler, @SourceLoc).use_slice.directives 20 (@handler, @SourceLoc)
          st $3, $254, 16, 8

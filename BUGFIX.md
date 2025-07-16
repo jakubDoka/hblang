@@ -2,6 +2,26 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### various mem opts 1
+```hb
+opaque := true
+
+use := fn(v: @Any()): void {
+}
+
+main := fn(): uint {
+    x := 1
+    use(&x)
+    if opaque {
+        x = 0
+    } else {
+        x = 0
+    }
+
+    return x
+}
+```
+
 #### array index crash 1
 ```hb
 awa := fn(x: u8): u32 {

@@ -222,6 +222,10 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 if (lrg_table[instr.schedule].reg == reg) return false;
             } else unreachable;
         }
+
+        pub fn easierToColorThen(self: LiveRange, other: LiveRange) bool {
+            return self.mask.count() > other.mask.count();
+        }
     };
 
     const LiveMap = Map(u16, *Node);
@@ -828,7 +832,21 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
         }
 
         // TODO: add heuristic
-        const best = color_stack[done_cursor];
+        var best = color_stack[done_cursor];
+        if (false) {
+            var bidx: usize = done_cursor;
+
+            for (done_cursor + 1..known_cursor) |idx| {
+                if (lrgs[color_stack[idx]].easierToColorThen(lrgs[best])) {
+                    best = color_stack[idx];
+                    bidx = idx;
+                }
+            }
+
+            if (bidx != done_cursor) {
+                swap(&color_stack[done_cursor], &color_stack[bidx]);
+            }
+        }
 
         for (ifg[best]) |adj| {
             std.debug.assert(best != adj);

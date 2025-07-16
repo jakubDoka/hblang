@@ -1536,6 +1536,13 @@ pub fn Func(comptime Backend: type) type {
             defer tmp.deinit();
             const mask = use.regMask(self, idx, tmp.arena);
 
+            if (def.isReadonly() and use.kind != .Phi and
+                (if (use.inPlaceSlot()) |s| s + use.dataDepOffset() != idx else true) and
+                Backend.setIntersects(mask, def.regMask(self, 0, tmp.arena)))
+            {
+                return;
+            }
+
             if (skip and def.kind == .MachSplit) {
                 if (block == def.cfg0() and def.outputs().len == 1 and
                     mask.count() != 1)
@@ -2203,6 +2210,10 @@ pub fn Func(comptime Backend: type) type {
                     return node.mem();
                 }
 
+                if (base.kind == .Local and node.outputs().len == 1 and node.outputs()[0].get().kind == .Return) {
+                    return node.mem();
+                }
+
                 if (base.kind == .Local and node.tryCfg0() != null) {
                     const dinps = tmp.arena.dupe(?*Node, node.inputs());
                     dinps[0] = null;
@@ -2347,7 +2358,7 @@ pub fn Func(comptime Backend: type) type {
             }
 
             if (node.kind == .Phi) {
-                _, const l, const r = .{ inps[0].?, inps[1].?, inps[2].? };
+                const reg, const l, const r = .{ inps[0].?, inps[1].?, inps[2].? };
 
                 if (l == r and !node.cfg0().base.preservesIdentityPhys()) {
                     return l;
@@ -2355,6 +2366,19 @@ pub fn Func(comptime Backend: type) type {
 
                 if (r == node) {
                     return l;
+                }
+
+                // pull common stored down
+                if (l.kind == .Store and r.kind == .Store and
+                    l.data_type == r.data_type and
+                    l.base() == r.base() and
+                    l.value() != null and r.value() != null)
+                {
+                    work.add(l);
+                    work.add(r);
+                    const mem = self.addNode(.Phi, node.sloc, .top, &.{ reg, l.mem(), r.mem() }, .{});
+                    const val = self.addNode(.Phi, node.sloc, l.data_type, &.{ reg, l.value().?, r.value().? }, .{});
+                    return self.addNode(.Store, node.sloc, l.data_type, &.{ reg, mem, l.base(), val }, .{});
                 }
             }
 

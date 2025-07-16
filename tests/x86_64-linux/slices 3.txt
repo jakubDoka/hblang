@@ -9,31 +9,31 @@ slices 3.reverse:
 	jz :0
 	mov [rdi], rsi
 	mov rax, [rsp+0x08]
-	mov [rdi+0x08], rax
 	jmp :1
-0:	xor r9, r9
+0:	xor r10, r10
 	dec rdx
-3:	mov r8, rdx
-	mov rax, [rsp]
-	cmp r9, r8
+3:	mov r9, rdx
+	mov rsi, [rsp]
+	cmp r10, r9
 	jnb :2
-	mov rsi, rax
+	mov r8, rsi
+	add r8, r10
 	add rsi, r9
-	add rax, r8
-	mov rdx, r8
+	mov rdx, r9
 	dec rdx
-	inc r9
-	mov cl, [rsi]
-	mov al, [rax]
-	mov [rsi], al
+	inc r10
+	mov cl, [r8]
+	mov al, [rsi]
+	mov [r8], al
 	mov rax, [rsp]
-	add rax, r8
+	add rax, r9
 	mov [rax], cl
 	jmp :3
-2:	mov [rdi], rax
+2:	mov [rdi], rsi
 	mov rax, [rsp+0x08]
+1:	mov [rdi], rsi
 	mov [rdi+0x08], rax
-1:	add rsp, 0x10
+	add rsp, 0x10
 	ret
 main:
 	sub rsp, 0x28
