@@ -152,6 +152,11 @@ pub const Enum = struct {
         const ast = types.getFile(self.key.loc.file);
         const enum_ast = ast.exprs.get(self.key.loc.ast).Type;
 
+        self.backing_int = if (enum_ast.tag.tag() != .Void)
+            types.ct.evalTy("", .{ .Perm = .init(.{ .Enum = id }) }, enum_ast.tag) catch null
+        else
+            null;
+
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
 

@@ -88,10 +88,10 @@ pub const Expr = union(enum) {
     },
     Type: struct {
         pos: Pos,
+        tag: Id,
         alignment: Id,
         captures: Captures,
         fields: Slice,
-        // TODO: move into Pos
         kind: Lexer.Lexeme,
     },
     Directive: struct {
@@ -281,6 +281,7 @@ pub fn init(
         .root_struct = try parser.store.alloc(arena.allocator(), .Type, .{
             .kind = .@"struct",
             .pos = .init(0),
+            .tag = .zeroSized(.Void),
             .alignment = .zeroSized(.Void),
             .fields = items,
             .captures = .{},

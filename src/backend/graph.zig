@@ -541,6 +541,9 @@ pub const builtin = enum {
     pub const Phi = extern struct {
         pub const is_pinned = true;
     };
+    pub const MemJoin = extern struct {
+        base: mod.Store = .{},
+    };
     pub const MachSplit = extern struct {
         dbg: Dbg = .defualt,
 
@@ -980,6 +983,7 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn dataDeps(self: *Node) []*Node {
                 if (self.kind == .Phi and !self.isDataPhi()) return &.{};
+                if (self.kind == .MemJoin) return &.{};
                 const start = self.dataDepOffset();
                 const deps = self.input_base[start..self.input_ordered_len];
                 std.debug.assert(std.mem.indexOfScalar(?*Node, deps, null) == null);
@@ -2184,6 +2188,8 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn idealize(ctx: anytype, self: *Self, node: *Node, work: *WorkList) ?*Node {
+            errdefer unreachable;
+
             if (node.data_type == .bot) return null;
 
             if (idealizeDead(ctx, self, node, work)) |w| return w;
@@ -2202,6 +2208,28 @@ pub fn Func(comptime Backend: type) type {
                     {
                         return node.mem();
                     }
+                }
+
+                if (false) parallelize: {
+                    var to_join = std.ArrayListUnmanaged(?*Node){};
+                    try to_join.appendSlice(tmp.arena.allocator(), &.{ null, node });
+                    var cursor = node.mem();
+                    while (cursor.kind == .Store and for (to_join.items[1..]) |item| {
+                        if (!item.?.noAlias(cursor)) break false;
+                    } else true) {
+                        try to_join.append(tmp.arena.allocator(), cursor);
+                        cursor = cursor.mem();
+                    }
+
+                    if (to_join.items.len <= 2) break :parallelize;
+
+                    for (to_join.items[1..], 1..) |item, i| {
+                        const deps = tmp.arena.dupe(?*Node, item.?.inputs());
+                        deps[1] = cursor;
+                        to_join.items[i] = self.addNode(.Store, item.?.sloc, item.?.data_type, deps, .{});
+                    }
+
+                    return self.addNode(.MemJoin, node.sloc, .top, to_join.items, .{});
                 }
 
                 const base, _ = node.base().knownOffset();
@@ -2248,11 +2276,28 @@ pub fn Func(comptime Backend: type) type {
                     return st;
                 }
 
-                while ((earlier.kind == .Store and
-                    (earlier.tryCfg0() == node.tryCfg0() or node.tryCfg0() == null) and
-                    earlier.noAlias(node)))
-                {
-                    earlier = earlier.mem();
+                var changed = true;
+                while (changed) {
+                    changed = false;
+
+                    while ((earlier.kind == .Store and
+                        (earlier.tryCfg0() == node.tryCfg0() or node.tryCfg0() == null) and
+                        earlier.noAlias(node)))
+                    {
+                        earlier = earlier.mem();
+                    }
+
+                    if (earlier.kind == .MemJoin) {
+                        for (earlier.inputs()[1..]) |store| {
+                            if (store.?.kind == .Store and
+                                store.?.base() == node.base() and
+                                store.?.data_type == node.data_type)
+                            {
+                                work.add(earlier);
+                                return store.?.value();
+                            }
+                        }
+                    }
                 }
 
                 if (earlier.kind == .Store and
@@ -2389,6 +2434,41 @@ pub fn Func(comptime Backend: type) type {
                     const mem = self.addNode(.Phi, node.sloc, .top, &.{ reg, l.mem(), r.mem() }, .{});
                     const val = self.addNode(.Phi, node.sloc, l.data_type, &.{ reg, l.value().?, r.value().? }, .{});
                     return self.addNode(.Store, node.sloc, l.data_type, &.{ reg, mem, l.base(), val }, .{});
+                }
+
+                if (l.kind == .MemJoin and r.kind == .MemJoin) {
+                    var phis = tmp.arena.makeArrayList(?*Node, l.inputs().len * r.inputs().len + 1);
+                    phis.appendAssumeCapacity(null);
+
+                    // make a phi for each aliasing store pair
+                    for (l.inputs()[1..]) |ln| {
+                        if (ln.?.kind != .Store) continue;
+                        for (r.inputs()[1..]) |rn| {
+                            if (rn.?.kind != .Store) continue;
+                            if (ln == rn) {
+                                phis.appendAssumeCapacity(ln.?);
+                            } else if (!ln.?.noAlias(rn.?)) {
+                                phis.appendAssumeCapacity(self.addNode(.Phi, node.sloc, l.data_type, &.{ reg, ln, rn }, .{}));
+                            }
+                        }
+                    }
+
+                    for (phis.items[1..]) |phi| work.add(phi.?);
+
+                    std.debug.assert(phis.items.len > 1);
+
+                    return self.addNode(.MemJoin, node.sloc, .top, phis.items, .{});
+                }
+            }
+
+            if (node.kind == .MemJoin) {
+                if (node.outputs().len == 1 and node.outputs()[0].get().kind == .Return) bail: {
+                    for (node.inputs()[1..]) |store| {
+                        if (store.?.kind != .Store) break :bail;
+                        if (store.?.base().kind != .Local) break :bail;
+                    }
+                    std.debug.print("{}\n", .{node});
+                    return node.inputs()[1].?.mem();
                 }
             }
 

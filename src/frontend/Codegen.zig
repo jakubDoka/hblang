@@ -1671,6 +1671,7 @@ fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError
         iter_until: usize,
         else_arm: ?Ast.Id = null,
         slots: []ArmSlot,
+        fields: []const root.frontend.types.Enum.Field,
         ty: Types.Id,
 
         pub fn missingBranches(
@@ -1706,10 +1707,21 @@ fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError
             }
 
             var match_pat = try cg.emitTyped(.{}, slf.ty, arm.pat);
-            const idx = if (cg.abiCata(match_pat.ty) == .Imaginary)
+            const arm_value = if (cg.abiCata(match_pat.ty) == .Imaginary)
                 0
             else
                 try cg.partialEval(arm.pat, &match_pat);
+
+            // do a binary search instead
+            //const idx = for (slf.fields, 0..) |field, j| {
+            //    if (field.value == arm_value) break j;
+            //} else unreachable;
+
+            const idx = std.sort.binarySearch(tys.Enum.Field, slf.fields, arm_value, struct {
+                fn lessThenFn(ar: u64, lhs: tys.Enum.Field) std.math.Order {
+                    return std.math.order(ar, lhs.value);
+                }
+            }.lessThenFn).?;
 
             switch (slf.slots[@intCast(idx)]) {
                 .Unmatched => slf.slots[@intCast(idx)] = .{ .Matched = arm.body },
@@ -1727,6 +1739,7 @@ fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError
     var matcher = Matcher{
         .iter_until = fields.len - 1,
         .slots = tmp.arena.alloc(ArmSlot, fields.len),
+        .fields = fields,
         .ty = value.ty,
     };
     @memset(matcher.slots, .Unmatched);
@@ -1773,7 +1786,7 @@ fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError
                 .eq,
                 .i8,
                 vl,
-                self.bl.addIntImm(arm_sloc, .i64, @bitCast(idx)),
+                self.bl.addIntImm(arm_sloc, .i64, @bitCast(matcher.fields[idx].value)),
             );
             var if_builder = self.bl.addIfAndBeginThen(self.src(body), cond);
 
@@ -2727,13 +2740,13 @@ pub fn lookupScopeItem(
     if (bsty.data() == .Enum) {
         const fields = bsty.data().Enum.getFields(self.types);
 
-        for (fields, 0..) |f, i| {
+        for (fields) |f| {
             if (std.mem.eql(u8, f.name, name))
                 if (fields.len <= 1) return .mkv(bsty, null) else {
                     return .mkv(bsty, self.bl.addIntImm(
                         sloc,
                         self.abiCata(bsty).ByValue,
-                        @intCast(i),
+                        @intCast(f.value),
                     ));
                 };
         }

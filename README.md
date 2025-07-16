@@ -1222,13 +1222,9 @@ main := fn(): uint {
 ```
 
 #### enums 3 (customization)
-```!hb
+```hb
 main := fn(): uint {
-    Enm := enum(u32) {
-        .a = 1;
-        .b;
-        .c = 0
-    }
+    Enm := enum(u32){.a := 1; .b; .c := 0}
 
     if @as(Enm, @bit_cast(@as(u32, 1))) != .a return 1
     if @as(Enm, @bit_cast(@as(u32, 2))) != .b return 2

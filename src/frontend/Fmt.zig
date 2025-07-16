@@ -273,6 +273,12 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
 
             try self.buf.appendSlice(name);
 
+            if (s.tag.tag() != .Void) {
+                try self.buf.appendSlice("(");
+                try self.fmtExpr(s.tag);
+                try self.buf.appendSlice(")");
+            }
+
             if (s.alignment.tag() != .Void) {
                 try self.buf.appendSlice(" align(");
                 try self.fmtExpr(s.alignment);

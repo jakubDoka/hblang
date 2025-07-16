@@ -42,10 +42,29 @@ combine_pull_out_duplicate := fn(): uint {
     return x
 }
 
+parallel_stores := fn(): uint {
+    a := 0
+    b := 0
+
+    use(&a)
+    use(&b)
+
+    if opaque {
+        a = 1
+        b = 1
+    } else {
+        b = 1
+        a = 1
+    }
+
+    return a - b
+}
+
 main := fn(): uint {
     if store_pullout() != 0 return 1
     if duplicate_store() != 0 return 2
     if combine_pull_out_duplicate() != 0 return 3
+    if parallel_stores() != 0 return 4
 
     return 0
 }
@@ -1590,6 +1609,19 @@ page_size := fn(): uint return 0
 
 // in: linux.hb
 page_size := fn(): uint return 0
+```
+
+#### enums 6 (custom value match)
+```hb
+main := fn(): uint {
+    Enm := enum(u32){.a := 100; .b; .c := 0}
+
+    match Enm.b {
+        .a => return 1,
+        .b => return 0,
+        .c => return 2,
+    }
+}
 ```
 
 #### unions 2

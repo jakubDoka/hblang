@@ -502,6 +502,12 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             self.capture_boundary = self.active_syms.items.len;
             defer self.capture_boundary = prev_capture_boundary;
 
+            var tag: Id = .zeroSized(.Void);
+            if (self.tryAdvance(.@"(")) {
+                tag = try self.parseExpr();
+                _ = try self.expectAdvance(.@")");
+            }
+
             var alignment: Id = .zeroSized(.Void);
             if (self.tryAdvance(.@"align")) {
                 _ = try self.expectAdvance(.@"(");
@@ -515,6 +521,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             const captures = self.popCaptures(capture_scope, prev_capture_boundary != 0);
             break :b .{ .Type = .{
                 .fields = fields,
+                .tag = tag,
                 .alignment = alignment,
                 .captures = try self.store.allocSlice(Capture, self.arena.allocator(), captures),
                 .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },

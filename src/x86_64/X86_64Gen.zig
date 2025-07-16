@@ -1102,7 +1102,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     try self.out.addFuncReloc(self.gpa.allocator(), call.id, 4, -4, 4);
                 }
             },
-            .Arg, .Ret, .Mem, .Never => {},
+            .Arg, .Ret, .Mem, .Never, .MemJoin => {},
             .Trap => {
                 switch (instr.extra(.Trap).code) {
                     graph.unreachable_func_trap,

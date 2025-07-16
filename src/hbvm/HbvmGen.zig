@@ -758,7 +758,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 if (dst == src) continue;
                 self.emit(.cp, .{ dst, src });
             },
-            .Never, .Mem, .Ret, .Phi, .Jmp => {},
+            .Never, .Mem, .MemJoin, .Ret, .Phi, .Jmp => {},
             else => |e| utils.panic("{any}", .{e}),
         }
     }

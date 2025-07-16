@@ -28,6 +28,27 @@ various mem opts 1.combine_pull_out_duplicate:
 	mov rax, [rsp]
 	add rsp, 0x08
 	ret
+various mem opts 1.parallel_stores:
+	sub rsp, 0x18
+	mov qword ptr [rsp], 0x00
+	mov qword ptr [rsp+0x08], 0x00
+	lea rdi, [rsp]
+	call :various mem opts 1.use(^uint)
+	lea rdi, [rsp+0x08]
+	call :various mem opts 1.use(^uint)
+	mov rax, [0x0000000000000007]
+	test al, al
+	jz :0
+	mov qword ptr [rsp], 0x01
+	mov qword ptr [rsp+0x08], 0x01
+	jmp :1
+0:	mov qword ptr [rsp+0x08], 0x01
+	mov qword ptr [rsp], 0x01
+1:	mov rax, [rsp]
+	mov rcx, [rsp+0x08]
+	sub rax, rcx
+	add rsp, 0x18
+	ret
 various mem opts 1.use(^uint):
 	ret
 main:
@@ -45,13 +66,19 @@ main:
 	mov rax, 0x02
 1:	jmp :3
 2:	call :various mem opts 1.combine_pull_out_duplicate
+	xor rcx, rcx
+	cmp rax, rcx
+	jz :4
+	mov rax, 0x03
+3:	jmp :5
+4:	call :various mem opts 1.parallel_stores
 	cmp rax, 0x00
 	setnz al
 	movzx rax, al
 	test al, al
-	jz :4
-	mov rax, 0x03
-3:	jmp :5
-4:	xor rax, rax
-5:	add rsp, 0x08
+	jz :6
+	mov rax, 0x04
+5:	jmp :7
+6:	xor rax, rax
+7:	add rsp, 0x08
 	ret
