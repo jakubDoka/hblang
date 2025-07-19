@@ -21,7 +21,7 @@ short and op precedence 1.foo:
 	setz al
 	movzx rax, al
 	jmp :3
-2:	xor al, al
+2:	xor rax, rax
 3:	add rsp, 0x10
 	ret
 main:
@@ -43,7 +43,7 @@ main:
 	mov rax, 0x02
 1:	jmp :3
 2:	mov byte ptr [rsp+0x05], 0x00
-	xor eax, eax
+	xor rax, rax
 	mov cl, [rsp+0x05]
 	mov [rsp+0x04], cl
 3:	add rsp, 0x08

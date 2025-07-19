@@ -11,10 +11,10 @@ main:
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, [0x0000000000000007]
-	mov sil, al
-	mov dl, al
-	xor dil, dil
+	mov al, [0x0000000000000006]
+	mov rsi, rax
+	mov rdx, rax
+	xor rdi, rdi
 	call :gcm crash 1 (infinite).func
 	jmp :2
 0:	mov rbp, 0x400

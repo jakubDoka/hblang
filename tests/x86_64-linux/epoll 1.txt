@@ -4,8 +4,8 @@ main:
 	xor rdi, rdi
 	xor rsi, rsi
 	syscall
-	mov edx, eax
-	mov eax, edx
+	mov rdx, rax
+	mov rax, rdx
 	cmp eax, 0x00
 	setl al
 	movzx rax, al
@@ -17,9 +17,9 @@ main:
 	mov qword ptr [rsp+0x04], 0x00
 	lea r10, [rsp]
 	mov rax, 0xE9
-	mov rcx, [0x0000000000000007]
+	mov cx, [0x0000000000000007]
 	movzx rsi, cx
-	mov edi, edx
+	mov rdi, rdx
 	xor rdx, rdx
 	syscall
 	cmp eax, 0x00

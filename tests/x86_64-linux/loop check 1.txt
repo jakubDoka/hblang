@@ -54,7 +54,7 @@ main:
 	xor rcx, rcx
 	mov rax, r13
 	jmp :3
-2:	xor eax, eax
+2:	xor rax, rax
 	jmp :4
 1:	xor rcx, rcx
 	mov rax, r13

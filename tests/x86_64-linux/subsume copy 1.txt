@@ -6,7 +6,7 @@ main:
 	mov ax, [rsp]
 	movzx eax, ax
 	or eax, 0x30000
-	mov ecx, eax
+	mov rcx, rax
 	shr ecx, 0x10
 	shl ecx, 0x10
 	or eax, ecx

@@ -1,6 +1,6 @@
 main:
 	mov rax, [0x0000000000000007]
-	mov rcx, [0x0000000000000007]
+	mov cl, [0x0000000000000006]
 	movzx rcx, cl
 	add rax, rcx
 	ret

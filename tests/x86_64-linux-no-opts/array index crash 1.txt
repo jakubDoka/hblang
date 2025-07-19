@@ -6,7 +6,7 @@ array index crash 1.awa:
 	mov byte ptr [rsp+0x0B], 0x00
 	mov qword ptr [rsp], 0x02
 	mov rdi, 0x0A
-	xor sil, sil
+	xor rsi, rsi
 1:	mov dl, [rsp+0x08]
 	cmp dl, sil
 	jbe :0
@@ -22,7 +22,7 @@ array index crash 1.awa:
 	dec rax
 	mov [rsp], rax
 	jmp :1
-0:	xor eax, eax
+0:	xor rax, rax
 	add rsp, 0x10
 	ret
 main:

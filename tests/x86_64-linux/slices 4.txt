@@ -1,7 +1,7 @@
 slices 4.equals:
 	cmp rsi, rcx
 	jz :0
-	xor al, al
+	xor rax, rax
 	jmp :1
 0:	cmp rdi, rdx
 	jnz :2
@@ -20,7 +20,7 @@ slices 4.equals:
 	mov al, [rax]
 	cmp cl, al
 	jz :5
-	xor al, al
+	xor rax, rax
 5:	ret
 5:	inc r8
 	jmp :6

@@ -5,7 +5,7 @@ deep instantiation 1.S.get((((((((((((((((((((((((((((((((((((((((((((((((((.Z))
 	add rsp, 0x08
 	ret
 deep instantiation 1.Z.get:
-	xor eax, eax
+	xor rax, rax
 	ret
 deep instantiation 1.S.get(.Z):
 	sub rsp, 0x08

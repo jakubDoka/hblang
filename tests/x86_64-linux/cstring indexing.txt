@@ -9,7 +9,7 @@ main:
 	mov [rsp+0x48], rax
 	mov rdi, 0x08
 	xor rax, rax
-	xor sil, sil
+	xor rsi, rsi
 4:	mov rbx, rax
 	cmp rbx, 0x02
 	setb al

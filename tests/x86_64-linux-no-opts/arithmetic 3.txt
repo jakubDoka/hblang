@@ -2,7 +2,7 @@ arithmetic 3.one:
 	mov rax, 0x01
 	ret
 arithmetic 3.zero:
-	xor al, al
+	xor rax, rax
 	ret
 arithmetic 3.cond:
 	sub rsp, 0x10
@@ -14,7 +14,7 @@ arithmetic 3.mne:
 	mov rax, 0xFF
 	ret
 arithmetic 3.mero:
-	xor al, al
+	xor rax, rax
 	ret
 main:
 	sub rsp, 0x08

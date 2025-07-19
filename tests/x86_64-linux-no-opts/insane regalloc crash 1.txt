@@ -161,6 +161,6 @@ f:	jmp :17
 	jz :62
 3d:	jmp :63
 3e:	mov qword ptr [rsp+0x200], 0x20
-3f:	xor eax, eax
+3f:	xor rax, rax
 	add rsp, 0x210
 	ret

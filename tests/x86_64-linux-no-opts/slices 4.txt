@@ -8,7 +8,7 @@ slices 4.equals:
 	mov rax, [rsp+0x18]
 	cmp rcx, rax
 	jz :0
-	xor al, al
+	xor rax, rax
 	jmp :1
 0:	mov rcx, [rsp+0x10]
 	mov rax, [rsp]
@@ -31,7 +31,7 @@ slices 4.equals:
 	mov cl, [rcx]
 	cmp cl, dl
 	jz :5
-	xor al, al
+	xor rax, rax
 5:	add rsp, 0x30
 	ret
 5:	inc rax

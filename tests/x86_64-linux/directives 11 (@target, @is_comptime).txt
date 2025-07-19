@@ -1,4 +1,4 @@
 main:
-	mov rax, [0x0000000000000007]
+	mov al, [0x0000000000000006]
 	movzx rax, al
 	ret

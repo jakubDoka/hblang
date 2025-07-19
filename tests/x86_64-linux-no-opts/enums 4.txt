@@ -27,7 +27,7 @@ main:
 	sub rsp, 0x18
 	lea rdi, [rsp]
 	lea rsi, [0x0000000000000007]
-	xor dl, dl
+	xor rdx, rdx
 	call :enums 4.NameMap([6]u8, [4]uint).get(.Nm)
 	mov rax, [rsp]
 	mov al, [rax]

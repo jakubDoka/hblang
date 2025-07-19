@@ -36,7 +36,7 @@ various mem opts 1.parallel_stores:
 	call :various mem opts 1.use(^uint)
 	lea rdi, [rsp+0x08]
 	call :various mem opts 1.use(^uint)
-	mov rax, [0x0000000000000007]
+	mov al, [0x0000000000000006]
 	test al, al
 	jz :0
 	mov qword ptr [rsp], 0x01

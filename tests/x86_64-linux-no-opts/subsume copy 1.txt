@@ -10,7 +10,7 @@ main:
 	shl eax, 0x00
 	shl ecx, 0x10
 	or eax, ecx
-	mov ecx, eax
+	mov rcx, rax
 	shr ecx, 0x00
 	mov [rsp+0x03], cx
 	shr eax, 0x10
@@ -22,7 +22,7 @@ main:
 	shl eax, 0x00
 	shl ecx, 0x10
 	or eax, ecx
-	mov ecx, eax
+	mov rcx, rax
 	shr ecx, 0x00
 	mov [rsp+0x06], cx
 	shr eax, 0x10

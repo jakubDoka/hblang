@@ -17,7 +17,7 @@ main:
 	mov qword ptr [rsp+0x08], 0x00
 	mov rax, 0xE9
 	lea r10, [rsp+0x04]
-	mov rcx, [0x0000000000000007]
+	mov cx, [0x0000000000000007]
 	mov edi, [rsp]
 	movzx rsi, cx
 	xor rdx, rdx

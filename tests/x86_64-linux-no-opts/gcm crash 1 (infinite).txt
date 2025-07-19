@@ -16,7 +16,7 @@ main:
 3:	mov rax, [rsp+0x408]
 	cmp rax, rbx
 	jb :0
-	mov rax, [0x0000000000000007]
+	mov al, [0x0000000000000006]
 	mov [rsp+0x410], al
 	mov rcx, [rsp+0x408]
 	cmp rcx, rbx
@@ -25,9 +25,9 @@ main:
 	mov [rsp+0x400], rax
 	mov [rsp+0x408], rcx
 	jmp :2
-2:	mov rsi, [0x0000000000000007]
+2:	mov sil, [0x0000000000000007]
 	mov dl, [rsp+0x410]
-	xor dil, dil
+	xor rdi, rdi
 	call :gcm crash 1 (infinite).func
 	jmp :3
 0:	mov [rsp+0x400], rbp

@@ -4,7 +4,7 @@ main:
 	mov [rsp], rax
 	mov qword ptr [rsp+0x08], 0x03
 	mov qword ptr [rsp+0x10], 0x00
-	xor sil, sil
+	xor rsi, rsi
 	xor rax, rax
 4:	mov rcx, [rsp+0x10]
 	cmp rcx, 0x01
@@ -19,7 +19,7 @@ main:
 	cmp cl, sil
 	setnz dl
 	movzx rdx, dl
-	xor cl, cl
+	xor rcx, rcx
 	and ecx, edx
 	test cl, cl
 	jz :3

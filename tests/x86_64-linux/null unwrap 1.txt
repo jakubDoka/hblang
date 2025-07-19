@@ -4,7 +4,7 @@ null unwrap 1.use_opt:
 	mov [rsp+0x40], rdi
 	mov rax, rcx
 	mov [rsp+0x48], rax
-	xor dl, dl
+	xor rdx, rdx
 	mov al, [rsp+0x40]
 	cmp al, dl
 	jnz :0

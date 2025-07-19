@@ -5,16 +5,16 @@ short and op precedence 1.foo:
 	mov dl, [rsp+0x01]
 	test cl, cl
 	jz :0
-	mov al, dl
+	mov rax, rdx
 	jmp :1
-0:	xor cl, cl
+0:	xor rcx, rcx
 1:	test cl, cl
 	jz :2
 	cmp dl, al
 	setz al
 	movzx rax, al
 	jmp :3
-2:	xor al, al
+2:	xor rax, rax
 3:	add rsp, 0x10
 	ret
 main:
@@ -35,6 +35,6 @@ main:
 	jz :2
 	mov rax, 0x02
 1:	jmp :3
-2:	xor eax, eax
+2:	xor rax, rax
 3:	add rsp, 0x08
 	ret

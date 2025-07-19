@@ -11,7 +11,7 @@ directives 20 (@handler, @SourceLoc).main:
 	mov byte ptr [rsp+0x63], 0x04
 	mov edi, [rsp+0x60]
 	call :directives 20 (@handler, @SourceLoc).produce_memcpy
-	xor dl, dl
+	xor rdx, rdx
 	mov rax, [rsp+0x48]
 	mov rbx, rax
 	xor rcx, rcx

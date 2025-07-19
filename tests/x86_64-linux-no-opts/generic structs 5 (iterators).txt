@@ -75,7 +75,7 @@ main:
 	mov qword ptr [rsp+0x08], 0x04
 	lea rdx, [0x0000000000000007]
 	mov rcx, 0x90000002
-	xor bl, bl
+	xor rbx, rbx
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x10], rax
 	mov qword ptr [rsp+0x18], 0x02

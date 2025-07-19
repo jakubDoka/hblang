@@ -1,6 +1,6 @@
 main:
 	sub rsp, 0x10
-	xor cl, cl
+	xor rcx, rcx
 1:	mov byte ptr [rsp], 0x00
 3:	mov al, [rsp]
 	cmp al, cl
