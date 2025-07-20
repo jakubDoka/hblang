@@ -1,3 +1,11 @@
+const std = @import("std");
+const Set = std.DynamicBitSetUnmanaged;
+
+const utils = @import("../utils.zig");
+const Builder = @import("Builder.zig");
+const graph = @import("graph.zig");
+const static_anal = @import("static_anal.zig");
+
 data: *anyopaque,
 _emitFunc: *const fn (self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void,
 _emitData: *const fn (self: *anyopaque, opts: DataOptions) void,
@@ -6,15 +14,8 @@ _disasm: *const fn (self: *anyopaque, opts: DisasmOpts) void,
 _run: *const fn (self: *anyopaque, env: RunEnv) anyerror!usize,
 _deinit: *const fn (self: *anyopaque) void,
 
-const std = @import("std");
-const graph = @import("graph.zig");
-const static_anal = @import("static_anal.zig");
-const Builder = @import("Builder.zig");
 const BuilderFunc = graph.Func(Builder);
 const Machine = @This();
-const utils = @import("../utils.zig");
-const Set = std.DynamicBitSetUnmanaged;
-
 pub const Null = struct {
     const Func = graph.Func(Null);
 
@@ -804,7 +805,13 @@ pub const OptOptions = struct {
         }
     }
 
-    pub fn finalize(optimizations: @This(), builtins: Builtins, comptime Backend: type, backend: *Backend) bool {
+    pub fn finalize(
+        optimizations: @This(),
+        builtins: Builtins,
+        comptime Backend: type,
+        backend: *Backend,
+        logs: ?std.io.AnyWriter,
+    ) bool {
         errdefer unreachable;
 
         if (optimizations.do_inlining) {
@@ -910,8 +917,30 @@ pub const OptOptions = struct {
 
             if (optimizations.error_buf) |eb| if (eb.items.len != 0) return true;
 
+            if (logs) |d| {
+                try d.writeAll("backend:\n");
+
+                inline for (std.meta.fields(Data)[1..]) |f| {
+                    try d.print("  {s:<12}: {}\n", .{ f.name, @field(bout, f.name).items.len });
+                }
+            }
+
             bout.deduplicate();
             bout.elimitaneDeadCode();
+
+            if (logs) |d| {
+                var alive_syms: usize = 0;
+                var alive_code: usize = 0;
+                for (bout.syms.items) |s| {
+                    if (s.kind != .invalid) {
+                        alive_syms += 1;
+                        alive_code += s.size;
+                    }
+                }
+
+                try d.print("  dead syms   : {}\n", .{bout.syms.items.len - alive_syms});
+                try d.print("  dead code   : {}\n", .{bout.code.items.len - alive_code});
+            }
         }
 
         if (optimizations.error_buf) |eb| if (eb.items.len != 0) return true;
@@ -949,12 +978,14 @@ pub const FinalizeOptions = struct {
     output: std.io.AnyWriter,
     optimizations: OptOptions = .all,
     builtins: Builtins,
+    logs: ?std.io.AnyWriter = null,
 };
 
 pub const FinalizeBytesOptions = struct {
     gpa: std.mem.Allocator,
     optimizations: OptOptions = .all,
     builtins: Builtins,
+    logs: ?std.io.AnyWriter = null,
 };
 
 pub fn init(data: anytype) Machine {
@@ -1023,6 +1054,7 @@ pub fn finalizeBytes(self: Machine, opts: FinalizeBytesOptions) std.ArrayListUnm
         .output = out.writer(opts.gpa).any(),
         .optimizations = opts.optimizations,
         .builtins = opts.builtins,
+        .logs = opts.logs,
     });
     return out;
 }

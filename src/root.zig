@@ -62,6 +62,7 @@ pub const CompileOptions = struct {
     dump_asm: bool = false, // dump assembly of the program
     mangle_terminal: bool = false, // dump the executable even if colors are supported
     vendored_test: bool = false, // run the file in a vendored test setting
+    log_stats: bool = false, // log stats about the compilation (memory)
     type_system_memory: usize = 1024 * 1024 * 256, // how much memory can type system use
     scratch_memory: usize = 1024 * 1024 * 128, // how much memory can each scratch arena use (there are 2)
     target: []const u8 = "hbvm-ableos", // target triple to compile to (not
@@ -366,11 +367,25 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         return .{ .arena = types.pool.arena, .ast = asts };
     }
 
+    if (opts.log_stats) {
+        try opts.diagnostics.writeAll("type system:\n");
+        inline for (std.meta.fields(@TypeOf(types.store.rpr))) |field| {
+            try opts.diagnostics.print(
+                "  {s:<8}: {}\n",
+                .{ field.name, @field(types.store.rpr, field.name).items.len },
+            );
+        }
+        try opts.diagnostics.print("  arena   : {}\n", .{types.pool.arena.consumed()});
+    }
+
+    const logs = if (opts.log_stats) opts.diagnostics else null;
+
     if (opts.colors == .no_color or opts.mangle_terminal) {
         bckend.finalize(.{
             .output = opts.output,
             .optimizations = optimizations,
             .builtins = types.getBuiltins(),
+            .logs = logs,
         });
 
         if (types.dumpAnalErrors(&anal_errors)) {
@@ -384,6 +399,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             .output = std.io.null_writer.any(),
             .optimizations = optimizations,
             .builtins = types.getBuiltins(),
+            .logs = logs,
         });
 
         if (types.dumpAnalErrors(&anal_errors)) {

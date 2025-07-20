@@ -88,8 +88,6 @@ pub const Pool = struct {
     }
 };
 
-pub const PooledArena = struct {};
-
 pub const Arena = struct {
     start: [*]align(page_size) u8,
     end: [*]align(page_size) u8,
@@ -122,8 +120,12 @@ pub const Arena = struct {
         for (&scratch) |*slt| slt.reset();
     }
 
+    pub fn consumed(arena: *Arena) u64 {
+        return @intCast(arena.pos - arena.start);
+    }
+
     pub fn reset(arena: *Arena) void {
-        arena.pos = arena.end;
+        arena.pos = arena.start;
     }
 
     pub fn allocated(self: *Arena) usize {
