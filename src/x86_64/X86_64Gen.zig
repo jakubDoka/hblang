@@ -6,7 +6,6 @@ const Mach = root.backend.Machine;
 const Regalloc = root.backend.Regalloc;
 const utils = root.utils;
 const object = root.object;
-const zydis = @import("zydis").exports;
 
 const X86_64Gen = @This();
 const Func = graph.Func(X86_64Gen);
@@ -209,53 +208,8 @@ pub const Reg = enum(u8) {
         return vex_bytes;
     }
 
-    pub fn asZydisOpScalar(self: Reg, size: usize) zydis.ZydisEncoderOperand {
-        return .{
-            .type = zydis.ZYDIS_OPERAND_TYPE_REGISTER,
-            .reg = .{ .value = @intCast(switch (size) {
-                1 => zydis.ZYDIS_REGISTER_AL + if (@intFromEnum(self) > 4) @as(u8, 4) else 0,
-                2 => zydis.ZYDIS_REGISTER_AX,
-                4 => zydis.ZYDIS_REGISTER_EAX,
-                8 => zydis.ZYDIS_REGISTER_RAX,
-                else => unreachable,
-            } + @intFromEnum(self)) },
-        };
-    }
-
-    pub fn asZydisOpXmm(self: Reg, size: usize) zydis.ZydisEncoderOperand {
-        return .{
-            .type = zydis.ZYDIS_OPERAND_TYPE_REGISTER,
-            .reg = .{ .value = @intCast(switch (size) {
-                4 => zydis.ZYDIS_REGISTER_XMM0,
-                8 => zydis.ZYDIS_REGISTER_XMM0,
-                16 => zydis.ZYDIS_REGISTER_XMM0,
-                else => utils.panic("{}", .{size}),
-            } + @intFromEnum(self) - @intFromEnum(Reg.xmm0)) },
-        };
-    }
-
     pub fn stackOffset(self: Reg, slot_offset: u64) u64 {
         return (@intFromEnum(self) - @intFromEnum(Reg.xmm15) - 1) * 8 + slot_offset;
-    }
-
-    pub fn asZydisOp(self: Reg, size: usize, slot_offset: c_int) zydis.ZydisEncoderOperand {
-        if (self.isScalar()) {
-            return self.asZydisOpScalar(size);
-        } else if (self.isXmm()) {
-            return self.asZydisOpXmm(size);
-        } else {
-            return .{
-                .type = zydis.ZYDIS_OPERAND_TYPE_MEMORY,
-                .mem = .{
-                    .base = zydis.ZYDIS_REGISTER_RSP,
-                    .size = @intCast(size),
-                    .displacement = @as(
-                        c_int,
-                        @intFromEnum(self) - @intFromEnum(Reg.xmm15) - 1,
-                    ) * 8 + slot_offset,
-                },
-            };
-        }
     }
 };
 
@@ -1906,100 +1860,6 @@ pub fn emitImm(self: *X86_64Gen, comptime T: type, int: T) void {
     );
 }
 
-pub fn emitInstr(self: *X86_64Gen, mnemonic: c_uint, args: anytype) void {
-    errdefer unreachable;
-
-    const fields = std.meta.fields(@TypeOf(args));
-
-    var buf: [zydis.ZYDIS_MAX_INSTRUCTION_LENGTH]u8 = undefined;
-    var len: usize = undefined;
-    var req: zydis.ZydisEncoderRequest = undefined;
-
-    req = .{
-        .mnemonic = mnemonic,
-        .machine_mode = zydis.ZYDIS_MACHINE_MODE_LONG_64,
-        .operand_count = fields.len,
-    };
-    len = @sizeOf(@TypeOf(buf));
-
-    var size: ?usize = null;
-    inline for (fields) |f| {
-        const val = @field(args, f.name);
-        const op_size: ?usize = switch (f.type) {
-            Reg => 8,
-            SReg => val[1],
-            BRegOff => val[2],
-            SizeHint => val.bytes,
-            Rip => 8,
-            zydis.ZydisEncoderOperand => b: {
-                const t = if (val.type == zydis.ZYDIS_OPERAND_TYPE_MEMORY)
-                    val.mem.size
-                else
-                    8;
-                break :b t;
-            },
-            else => null,
-        };
-
-        size = size orelse op_size;
-    }
-
-    if (mnemonic == zydis.ZYDIS_MNEMONIC_CALL) size = 0;
-    if (fields.len == 0) size = 0;
-
-    const fsize = size.?;
-
-    inline for (fields, 0..) |f, i| {
-        const val = @field(args, f.name);
-
-        req.operands[i] = switch (f.type) {
-            Reg => val.asZydisOp(fsize, self.slot_base),
-            SReg => val[0].asZydisOp(val[1], self.slot_base),
-            BRegOff => b: {
-                const base = val[0].asZydisOp(8, self.slot_base);
-                std.debug.assert(base.reg.value != 0);
-                break :b .{
-                    .type = zydis.ZYDIS_OPERAND_TYPE_MEMORY,
-                    .mem = .{
-                        .base = base.reg.value,
-                        .displacement = val[1],
-                        .size = val[2],
-                    },
-                };
-            },
-            comptime_int, i64, i32 => .{
-                .type = zydis.ZYDIS_OPERAND_TYPE_IMMEDIATE,
-                .imm = .{ .s = val },
-            },
-            u64, u32 => .{
-                .type = zydis.ZYDIS_OPERAND_TYPE_IMMEDIATE,
-                .imm = .{ .u = val },
-            },
-            zydis.ZydisEncoderOperand => val,
-            SizeHint => {
-                req.operand_count -= 1;
-                req.operand_size_hint = @intCast(zydis.ZYDIS_OPERAND_SIZE_HINT_8 + val.bytes);
-                continue;
-            },
-            Rip => .{
-                .type = zydis.ZYDIS_OPERAND_TYPE_MEMORY,
-                .mem = .{
-                    .base = zydis.ZYDIS_REGISTER_RIP,
-                    .size = 8,
-                },
-            },
-            else => comptime unreachable,
-        };
-    }
-
-    const status = zydis.ZydisEncoderEncodeInstruction(&req, &buf, &len);
-    if (zydis.ZYAN_FAILED(status) != 0) {
-        utils.panic("{x} {s} {} {any}\n", .{ status, zydis.ZydisMnemonicGetString(req.mnemonic), args, req.operands[0..fields.len] });
-    }
-
-    try self.out.code.appendSlice(self.gpa.allocator(), buf[0..len]);
-}
-
 pub fn jmpCompOp(op: graph.BinOp) u8 {
     // we flip the orientation here with the xor
     return (0x80 + setOff(op)) ^ 0x1;
@@ -2022,57 +1882,6 @@ pub fn setOff(op: graph.BinOp) u8 {
         .sle => 0xe, // SETLE,
         .sgt => 0xf, // SETNLE,
 
-        else => unreachable,
-    };
-}
-
-pub fn binopToMnemonic(op: graph.BinOp, ty: graph.DataType) zydis.ZydisMnemonic {
-    return switch (op) {
-        .iadd => zydis.ZYDIS_MNEMONIC_ADD,
-        .isub => zydis.ZYDIS_MNEMONIC_SUB,
-        .imul => zydis.ZYDIS_MNEMONIC_IMUL,
-
-        .udiv, .umod => zydis.ZYDIS_MNEMONIC_DIV,
-        .sdiv, .smod => zydis.ZYDIS_MNEMONIC_IDIV,
-
-        .eq => zydis.ZYDIS_MNEMONIC_SETZ,
-        .ne => zydis.ZYDIS_MNEMONIC_SETNZ,
-
-        .ult => zydis.ZYDIS_MNEMONIC_SETB,
-        .ule => zydis.ZYDIS_MNEMONIC_SETBE,
-        .ugt => zydis.ZYDIS_MNEMONIC_SETNBE,
-        .uge => zydis.ZYDIS_MNEMONIC_SETNB,
-
-        .slt => zydis.ZYDIS_MNEMONIC_SETL,
-        .sle => zydis.ZYDIS_MNEMONIC_SETLE,
-        .sgt => zydis.ZYDIS_MNEMONIC_SETNLE,
-        .sge => zydis.ZYDIS_MNEMONIC_SETNL,
-
-        .bor => zydis.ZYDIS_MNEMONIC_OR,
-        .band => zydis.ZYDIS_MNEMONIC_AND,
-        .bxor => zydis.ZYDIS_MNEMONIC_XOR,
-
-        .ushr => zydis.ZYDIS_MNEMONIC_SHR,
-        .ishl => zydis.ZYDIS_MNEMONIC_SHL,
-        .sshr => zydis.ZYDIS_MNEMONIC_SAR,
-
-        .fadd => if (ty == .f64) zydis.ZYDIS_MNEMONIC_ADDSD else zydis.ZYDIS_MNEMONIC_ADDSS,
-        .fsub => if (ty == .f64) zydis.ZYDIS_MNEMONIC_SUBSD else zydis.ZYDIS_MNEMONIC_SUBSS,
-        .fmul => if (ty == .f64) zydis.ZYDIS_MNEMONIC_MULSD else zydis.ZYDIS_MNEMONIC_MULSS,
-        .fdiv => if (ty == .f64) zydis.ZYDIS_MNEMONIC_DIVSD else zydis.ZYDIS_MNEMONIC_DIVSS,
-
-        .flt => zydis.ZYDIS_MNEMONIC_SETB,
-        .fle => zydis.ZYDIS_MNEMONIC_SETBE,
-        .fgt => zydis.ZYDIS_MNEMONIC_SETNBE,
-        .fge => zydis.ZYDIS_MNEMONIC_SETNB,
-    };
-}
-
-pub fn movMnem(dt: graph.DataType) zydis.ZydisMnemonic {
-    return switch (dt) {
-        .f32 => zydis.ZYDIS_MNEMONIC_MOVSS,
-        .f64 => zydis.ZYDIS_MNEMONIC_MOVSD,
-        .i8, .i16, .i32, .i64 => zydis.ZYDIS_MNEMONIC_MOV,
         else => unreachable,
     };
 }
@@ -2119,6 +1928,24 @@ pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
     // Compiling a library in?
 
     errdefer unreachable;
+
+    const zydis = @import("zydis").exports;
+
+    const util = enum {
+        pub fn isJump(mnemonic: zydis.ZydisMnemonic) bool {
+            return mnemonic == zydis.ZYDIS_MNEMONIC_JMP or
+                mnemonic == zydis.ZYDIS_MNEMONIC_JZ or
+                mnemonic == zydis.ZYDIS_MNEMONIC_JNZ or
+                mnemonic == zydis.ZYDIS_MNEMONIC_JB or
+                mnemonic == zydis.ZYDIS_MNEMONIC_JNBE or
+                mnemonic == zydis.ZYDIS_MNEMONIC_JBE or
+                mnemonic == zydis.ZYDIS_MNEMONIC_JNB or
+                mnemonic == zydis.ZYDIS_MNEMONIC_JL or
+                mnemonic == zydis.ZYDIS_MNEMONIC_JNLE or
+                mnemonic == zydis.ZYDIS_MNEMONIC_JLE or
+                mnemonic == zydis.ZYDIS_MNEMONIC_JNL;
+        }
+    };
 
     var tmp = root.utils.Arena.scrath(null);
     defer tmp.deinit();
@@ -2179,7 +2006,7 @@ pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
                             continue;
                         }
 
-                        if (isJump(inst.mnemonic)) {
+                        if (util.isJump(inst.mnemonic)) {
                             try map.put(
                                 tmp.arena.allocator(),
                                 @intCast(addr + ops[0].unnamed_0.imm.value.s + inst.length),
@@ -2228,7 +2055,7 @@ pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
                         }
                     }
 
-                    if (isJump(inst.mnemonic)) {
+                    if (util.isJump(inst.mnemonic)) {
                         const label = label_map.get(@intCast(addr +
                             ops[0].unnamed_0.imm.value.s + inst.length)).?;
                         const fmt, const args = .{
@@ -2261,20 +2088,6 @@ pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
             else => {},
         }
     }
-}
-
-pub fn isJump(mnemonic: zydis.ZydisMnemonic) bool {
-    return mnemonic == zydis.ZYDIS_MNEMONIC_JMP or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JZ or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JNZ or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JB or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JNBE or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JBE or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JNB or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JL or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JNLE or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JLE or
-        mnemonic == zydis.ZYDIS_MNEMONIC_JNL;
 }
 
 pub fn run(_: *X86_64Gen, env: Mach.RunEnv) !usize {
