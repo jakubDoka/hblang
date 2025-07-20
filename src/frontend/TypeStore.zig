@@ -113,6 +113,10 @@ pub const TypeCtx = struct {
 
         return switch (ad) {
             .Builtin => |bl| bl == bd.Builtin,
+            .FnPtr => |s| {
+                return self.types.store.get(s).ret == self.types.store.get(bd.FnPtr).ret and
+                    std.mem.eql(Id, self.types.store.get(s).args, self.types.store.get(bd.FnPtr).args);
+            },
             .Pointer => |s| std.meta.eql(self.types.store.get(s).*, self.types.store.get(bd.Pointer).*),
             .Slice => |s| std.meta.eql(self.types.store.get(s).*, self.types.store.get(bd.Slice).*),
             .Nullable => |n| std.meta.eql(self.types.store.get(n).inner, self.types.store.get(bd.Nullable).inner),
@@ -141,6 +145,10 @@ pub const TypeCtx = struct {
             .Nullable => |n| std.hash.autoHash(&hasher, self.types.store.get(n).inner),
             // its an array of integers, splat
             .Tuple => |n| hasher.update(@ptrCast(self.types.store.get(n).fields)),
+            .FnPtr => |s| {
+                hasher.update(std.mem.asBytes(&self.types.store.get(s).ret));
+                hasher.update(@ptrCast(self.types.store.get(s).args));
+            },
             .Enum, .Union, .Struct, .Func, .Template, .Global => {
                 const scope = switch (adk) {
                     inline .Enum, .Union, .Struct, .Func, .Template, .Global => |v| &self.types.store.get(v).key,
@@ -277,13 +285,13 @@ pub const Id = enum(IdRepr) {
         return switch (self.data()) {
             .Struct, .Union, .Enum => self,
             inline .Func, .Template, .Global => |t| types.store.get(t).key.loc.scope.firstType(types),
-            .Builtin, .Tuple, .Pointer, .Nullable, .Slice => unreachable,
+            .Builtin, .Tuple, .Pointer, .Nullable, .Slice, .FnPtr => unreachable,
         };
     }
 
     pub fn file(self: Id, types: *Types) ?File {
         return switch (self.data()) {
-            .Builtin, .Pointer, .Slice, .Nullable, .Tuple => null,
+            .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnPtr => null,
             inline else => |v| types.store.get(v).key.loc.file,
         };
     }
@@ -297,47 +305,35 @@ pub const Id = enum(IdRepr) {
 
     pub fn getKey(self: Id, types: *Types) *Scope {
         return switch (self.data()) {
-            .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
+            .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnPtr => utils.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| &types.store.get(v).key,
         };
     }
 
     pub fn getAst(self: Id, types: *Types) Ast.Id {
-        return switch (self.data()) {
-            .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
-            inline else => |v| types.store.get(v).key.loc.ast,
-        };
+        return self.getKey(types).loc.ast;
     }
 
     pub fn items(self: Id, ast: *const Ast, types: *Types) Ast.Slice {
         return switch (self.data()) {
-            .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnPtr => utils.panic("{s}", .{@tagName(self.data())}),
             .Template, .Func => .{},
             inline else => |v| ast.exprs.get(types.store.get(v).key.loc.ast).Type.fields,
         };
     }
 
     pub fn captures(self: Id, types: *Types) []const Scope.Capture {
-        return switch (self.data()) {
-            .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
-            inline else => |v| types.store.get(v).key.captures,
-        };
+        return self.getKey(types).captures;
     }
 
     pub fn findCapture(self: Id, id: Ast.Ident, types: *Types) ?*const Scope.Capture {
-        return switch (self.data()) {
-            .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
-            inline else => |v| for (types.store.get(v).key.captures) |*cp| {
-                if (cp.id.index == @intFromEnum(id)) break cp;
-            } else null,
-        };
+        return for (self.getKey(types).captures) |*cp| {
+            if (cp.id.index == @intFromEnum(id)) break cp;
+        } else null;
     }
 
     pub fn parent(self: Id, types: *Types) Id {
-        return switch (self.data()) {
-            .Builtin, .Pointer, .Slice, .Nullable, .Tuple => utils.panic("{s}", .{@tagName(self.data())}),
-            inline else => |v| types.store.get(v).key.loc.scope,
-        };
+        return self.getKey(types).loc.scope;
     }
 
     pub fn isInteger(self: Id) bool {
@@ -428,7 +424,7 @@ pub const Id = enum(IdRepr) {
                 .u32, .i32, .f32 => 4,
                 .uint, .i64, .f64, .u64, .int => 8,
             },
-            .Pointer => 8,
+            .Pointer, .FnPtr => 8,
             .Enum => |e| e.getBackingInt(types).size(types),
             .Tuple => |t| {
                 var total_size: u64 = 0;
@@ -461,7 +457,7 @@ pub const Id = enum(IdRepr) {
     pub fn alignment(self: Id, types: *Types) u64 {
         return switch (self.data()) {
             .Builtin, .Enum => @max(1, self.size(types)),
-            .Pointer => 8,
+            .Pointer, .FnPtr => 8,
             .Nullable => |n| types.store.get(n).inner.alignment(types),
             .Struct => |s| s.getAlignment(types),
             inline .Union, .Tuple => |s| {
@@ -592,6 +588,22 @@ pub const Id = enum(IdRepr) {
                     .Pointer => |p| {
                         try writer.appendSlice(to.allocator(), "^");
                         work_list.appendAssumeCapacity(.{ .Type = self.tys.store.get(p).* });
+                    },
+                    .FnPtr => |p| {
+                        try writer.appendSlice(to.allocator(), "^fn(");
+                        const fp = self.tys.store.get(p);
+                        work_list.ensureUnusedCapacity(
+                            tmp.arena.allocator(),
+                            fp.args.len + 3,
+                        ) catch unreachable;
+                        work_list.appendAssumeCapacity(.{ .Type = fp.ret });
+                        work_list.appendAssumeCapacity(.{ .Name = "): " });
+                        var iter = std.mem.reverseIterator(fp.args);
+                        while (iter.next()) |arg| {
+                            work_list.appendAssumeCapacity(.{ .Type = arg });
+                            work_list.appendAssumeCapacity(.{ .Name = ", " });
+                        }
+                        _ = work_list.pop();
                     },
                     .Slice => |s| {
                         try writer.appendSlice(to.allocator(), "[");
@@ -758,6 +770,9 @@ pub const Id = enum(IdRepr) {
                             .Value = .normalize(.{ .ty = ty, .value = global }, self.tys),
                         });
                     },
+                    .FnPtr => {
+                        unreachable;
+                    },
                     .Tuple => |t| {
                         try writer.appendSlice(to.allocator(), ".(");
                         var iter = @as(tys.Tuple.Id, t).offsetIter(self.tys);
@@ -888,6 +903,7 @@ pub fn findNestedGlobals(
     const offset: usize = @intCast(offset_f);
     switch (ty.data()) {
         .Union, .Enum, .Builtin => {},
+        .FnPtr => unreachable,
         .Pointer => |p| {
             const base: Id = self.store.get(p).*;
 
@@ -1152,6 +1168,8 @@ pub fn internPtr(self: *Types, comptime tag: std.meta.Tag(Data), payload: std.me
     }
     if (@TypeOf(payload) == tys.Tuple) {
         self.store.get(vl).fields = self.pool.arena.dupe(tys.Tuple.Field, payload.fields);
+    } else if (@TypeOf(payload) == tys.FnPtr) {
+        self.store.get(vl).args = self.pool.arena.dupe(Id, payload.args);
     } else self.store.get(vl).* = payload;
     return slot.key_ptr.*;
 }

@@ -22,6 +22,7 @@ pub fn setMasks(s: Set) []Set.MaskInt {
 
 pub const infinite_loop_trap = std.math.maxInt(u64);
 pub const unreachable_func_trap = infinite_loop_trap - 1;
+pub const indirect_call = std.math.maxInt(u32) - 1000;
 
 pub const Sloc = packed struct(i64) {
     namespace: u32,
@@ -584,6 +585,9 @@ pub const builtin = enum {
         value: i64,
 
         pub const is_clone = true;
+    };
+    pub const FuncAddr = extern struct {
+        id: u32,
     };
     // ===== MEMORY =====
     pub const Mem = extern struct {
@@ -1690,6 +1694,10 @@ pub fn Func(comptime Backend: type) type {
 
         pub fn addGlobalAddr(self: *Self, sloc: Sloc, arbitrary_global_id: u32) *Node {
             return self.addNode(.GlobalAddr, sloc, .i64, &.{null}, .{ .id = arbitrary_global_id });
+        }
+
+        pub fn addFuncAddr(self: *Self, sloc: Sloc, func_id: u32) *Node {
+            return self.addNode(.FuncAddr, sloc, .i64, &.{null}, .{ .id = func_id });
         }
 
         pub fn addCast(self: *Self, sloc: Sloc, to: DataType, value: *Node) *Node {

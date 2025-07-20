@@ -266,6 +266,12 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.fmtExpr(f.body);
             if (prec < fn_prec) try self.buf.appendSlice(")");
         },
+        .FnPtr => |f| {
+            try self.buf.appendSlice("^fn");
+            try self.fmtSlice(f.pos.flag.indented, f.args, .@"(", .@",", .@")");
+            try self.buf.appendSlice(": ");
+            try self.fmtExpr(f.ret);
+        },
         .Type => |s| {
             const name = switch (s.kind) {
                 inline .@"struct", .@"union", .@"enum" => |t| @tagName(t),

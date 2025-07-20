@@ -1742,6 +1742,15 @@ main := fn(): uint {
 }
 ```
 
+#### function pointers 1
+```hb
+call := fn(f: ^fn(u8): u8, v: u8): u8 return f(v)
+
+main := fn(): uint {
+    return call(&fn(x: u8): u8 return x - 10, 10)
+}
+```
+
 #### struct patters 1
 ```hb
 expectations := .{

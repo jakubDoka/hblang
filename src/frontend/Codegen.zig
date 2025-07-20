@@ -32,7 +32,7 @@ defers: std.ArrayListUnmanaged(Ast.Id) = undefined,
 ret: Types.Id = undefined,
 errored: bool = undefined,
 
-const Func = Builder.Func;
+const Func = graph.Func(Builder);
 const Node = Builder.BuildNode;
 const DataType = Builder.DataType;
 const Codegen = @This();
@@ -541,7 +541,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
     }
 
     const params, const returns, const ret_abi =
-        func.computeAbi(self.abi, self.types, tmp.arena) orelse return error.Uninhabited;
+        func.sig().computeAbi(self.abi, self.types, tmp.arena) orelse return error.Uninhabited;
     const token = self.beginBuilder(
         tmp.arena,
         func.ret,
@@ -1073,6 +1073,36 @@ pub fn emitUnOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.UnOp)) EmitErr
             }
 
             var addrd = try self.emit(.{}, e.oper);
+
+            if (ctx.ty) |fty| function_pointer: {
+                const sig: *tys.FnPtr = self.types.store.unwrap(fty.data(), .FnPtr) orelse
+                    break :function_pointer;
+
+                const ty = try self.unwrapTyConst(expr, &addrd);
+                const func: *tys.Func = self.types.store.unwrap(ty.data(), .Func) orelse
+                    break :function_pointer;
+
+                errdefer self.report(
+                    e.oper,
+                    "...while triing to coerse {} to {}",
+                    .{ ty, fty },
+                ) catch {};
+
+                for (func.args, sig.args, 0..) |harg, earg, i| {
+                    if (harg == earg) continue;
+                    return self.report(e.oper, "the argument no. {} does not match, " ++
+                        "expected {}, got {}", .{ i, earg, harg });
+                }
+
+                if (func.ret != sig.ret) {
+                    return self.report(e.oper, "the return type does not match, " ++
+                        "expected {}, got {}", .{ sig.ret, func.ret });
+                }
+
+                self.types.queue(self.target, ty);
+                return .mkv(fty, self.bl.addFuncAddr(sloc, @intFromEnum(ty.data().Func)));
+            }
+
             self.emitSpill(expr, &addrd);
             return addrd;
         },
@@ -2079,7 +2109,7 @@ fn emitUserType(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Type)) !Value {
     params[2] = .{ .Reg = .i64 };
     const returns = [_]graph.AbiParam{.{ .Reg = self.abiCata(.type).ByValue }};
 
-    const args = self.bl.allocCallArgs(tmp.arena, params, &returns);
+    const args = self.bl.allocCallArgs(tmp.arena, params, &returns, null);
 
     const code: Comptime.InteruptCode = @enumFromInt(@intFromEnum(e.kind) -
         @intFromEnum(Lexer.Lexeme.@"struct"));
@@ -2101,6 +2131,21 @@ fn emitUserType(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Type)) !Value {
 
     const rets = self.bl.addCall(sloc, .ablecall, Comptime.eca, args);
     return .mkv(.type, rets.?[0]);
+}
+
+fn emitFnPtr(self: *Codegen, _: Ctx, _: Ast.Id, e: *Expr(.FnPtr)) !Value {
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    const args = tmp.arena.alloc(Types.Id, e.args.len());
+    for (args, self.ast.exprs.view(e.args)) |*ty, arg| {
+        ty.* = try self.resolveAnonTy(arg);
+    }
+
+    return self.emitTyConst(self.types.internPtr(.FnPtr, .{
+        .args = args,
+        .ret = try self.resolveAnonTy(e.ret),
+    }));
 }
 
 fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
@@ -2262,6 +2307,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .Buty => |e| return self.emitTyConst(.fromLexeme(e.bt)),
         .Type => |e| self.emitUserType(ctx, expr, e),
         .Fn => |e| self.emitFn(ctx, expr, e),
+        .FnPtr => |e| self.emitFnPtr(ctx, expr, e),
         .Use => |e| self.emitUse(ctx, expr, e),
         .Directive => |e| return self.emitDirective(ctx, expr, e),
         .Wildcard => return self.report(expr, "wildcard does not make sense here", .{}),
@@ -2288,8 +2334,8 @@ pub fn emitHandlerCall(self: *Codegen, handler: utils.EntId(tys.Func), expr: Ast
     defer tmp.deinit();
 
     const params, const returns, const ret_abi =
-        func.computeAbi(self.abi, self.types, tmp.arena).?;
-    const args = self.bl.allocCallArgs(tmp.arena, params, returns);
+        func.sig().computeAbi(self.abi, self.types, tmp.arena).?;
+    const args = self.bl.allocCallArgs(tmp.arena, params, returns, null);
 
     var i: usize = self.pushReturn(expr, args, ret_abi, func.ret, .{});
 
@@ -2569,7 +2615,7 @@ fn emitInternalEca(
     for (args, params[1..]) |a, *ca| ca.* = .{ .Reg = a.data_type };
     const ret_buf = tmp.arena.alloc(graph.AbiParam, Types.Abi.Builder.max_elems);
     const returns = builder.types(ret_buf, true, self.abiCata(ret_ty));
-    const c_args = self.bl.allocCallArgs(tmp.arena, params, returns);
+    const c_args = self.bl.allocCallArgs(tmp.arena, params, returns, null);
 
     c_args.arg_slots[0] = self.bl.addIntImm(.none, .i64, @intCast(@intFromEnum(ic)));
     @memcpy(c_args.arg_slots[1..], args);
@@ -2929,33 +2975,46 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
         break :b .{ try self.emit(.{}, e.called), null };
     };
 
-    var typ: Types.Id = try self.unwrapTyConst(expr, &typ_res);
-
     var computed_args: ?[]Value = null;
-    const was_template = typ.data() == .Template;
-    if (was_template) {
-        computed_args, typ = try self.instantiateTemplate(&caller, tmp.arena, expr, e, typ);
-    }
+    var was_template = false;
+    const sig, const ptr, const literal_func = if (typ_res.ty == .type) b: {
+        var typ = try self.unwrapTyConst(expr, &typ_res);
 
-    if (typ.data() != .Func) {
-        return self.report(e.called, "{} is not callable", .{typ});
-    }
+        was_template = typ.data() == .Template;
+        if (was_template) {
+            computed_args, typ = try self.instantiateTemplate(&caller, tmp.arena, expr, e, typ);
+        }
 
-    const func: root.frontend.types.Func = self.types.store.get(typ.data().Func).*;
-    if (self.target != .runtime or func.ret != .type)
-        self.types.queue(self.target, .init(.{ .Func = typ.data().Func }));
+        const func: *tys.Func = self.types.store.unwrap(typ.data(), .Func) orelse {
+            return self.report(e.called, "{} is not callable", .{typ});
+        };
+
+        break :b .{ func.sig(), null, typ };
+    } else b: {
+        const func: *tys.FnPtr = self.types.store.unwrap(typ_res.ty.data(), .FnPtr) orelse {
+            return self.report(e.called, "{} is not callable", .{typ_res.ty});
+        };
+
+        break :b .{ func.*, typ_res.getValue(sloc, self), null };
+    };
+
+    if (literal_func) |typ| {
+        const func: root.frontend.types.Func = self.types.store.get(typ.data().Func).*;
+        if (self.target != .runtime or func.ret != .type)
+            self.types.queue(self.target, .init(.{ .Func = typ.data().Func }));
+    }
 
     const passed_args = e.args.len() + @intFromBool(caller != null);
-    if (!was_template and passed_args != func.args.len) {
+    if (!was_template and passed_args != sig.args.len) {
         return self.report(expr, "expected {} arguments," ++
-            " got {}", .{ func.args.len, passed_args });
+            " got {}", .{ sig.args.len, passed_args });
     }
 
     const params, const returns, const ret_abi =
-        func.computeAbi(self.abi, self.types, tmp.arena) orelse {
+        sig.computeAbi(self.abi, self.types, tmp.arena) orelse {
             std.debug.assert(computed_args == null);
             const args_ast = ast.exprs.view(e.args);
-            for (func.args[@intFromBool(caller != null)..], 0..) |ty, k| {
+            for (sig.args[@intFromBool(caller != null)..], 0..) |ty, k| {
                 _ = self.emitTyped(.{}, ty, args_ast[k]) catch |err| switch (err) {
                     error.Unreachable => return error.Unreachable,
                     error.Never => {},
@@ -2963,28 +3022,28 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
             }
             unreachable;
         };
-    const args = self.bl.allocCallArgs(tmp.arena, params, returns);
+    const args = self.bl.allocCallArgs(tmp.arena, params, returns, ptr);
 
-    var i: usize = self.pushReturn(expr, args, ret_abi, func.ret, ctx);
+    var i: usize = self.pushReturn(expr, args, ret_abi, sig.ret, ctx);
 
     if (caller) |*value| {
-        if (value.ty.data() == .Pointer and func.args[0].data() != .Pointer) {
+        if (value.ty.data() == .Pointer and sig.args[0].data() != .Pointer) {
             value.id = .{ .Pointer = value.getValue(sloc, self) };
             value.ty = self.types.store.get(value.ty.data().Pointer).*;
         }
 
-        if (value.ty.data() != .Pointer and func.args[0].data() == .Pointer) {
+        if (value.ty.data() != .Pointer and sig.args[0].data() == .Pointer) {
             self.emitSpill(expr, value);
         }
 
-        try self.typeCheck(e.called, value, func.args[0]);
+        try self.typeCheck(e.called, value, sig.args[0]);
 
         const abi = self.abiCata(value.ty);
         i += self.pushParam(sloc, args, abi, i, value);
     }
 
     const args_ast = ast.exprs.view(e.args);
-    for (func.args[@intFromBool(caller != null)..], 0..) |ty, k| {
+    for (sig.args[@intFromBool(caller != null)..], 0..) |ty, k| {
         const abi = self.abiCata(ty);
         var value = if (computed_args) |a| a[k] else try self.emitTyped(.{}, ty, args_ast[k]);
         i += self.pushParam(self.src(args_ast[k]), args, abi, i, &value);
@@ -2996,10 +3055,10 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
 
     return self.assembleReturn(
         expr,
-        @intFromEnum(typ.data().Func),
+        if (literal_func) |ty| @intFromEnum(ty.data().Func) else null,
         args,
         ctx,
-        func.ret,
+        sig.ret,
         ret_abi,
         cc,
     );
@@ -3186,7 +3245,7 @@ fn pushParam(
 fn assembleReturn(
     self: *Codegen,
     expr: anytype,
-    id: u32,
+    id: ?u32,
     call_args: Builder.CallArgs,
     ctx: Ctx,
     ret: Types.Id,
@@ -3194,7 +3253,7 @@ fn assembleReturn(
     cc: graph.CallConv,
 ) !Value {
     const sloc = self.src(expr);
-    const rets = self.bl.addCall(sloc, cc, id, call_args);
+    const rets = self.bl.addCall(sloc, cc, id orelse graph.indirect_call, call_args);
     return switch (ret_abi) {
         .Impossible => return error.Unreachable,
         .Imaginary => .mkv(ret, null),
@@ -3826,13 +3885,13 @@ fn emitDirective(
                 argum.* = slot.ty;
             }
 
-            var dummy_func: tys.Func = undefined;
+            var dummy_func: tys.FnPtr = undefined;
             dummy_func.args = argums;
             dummy_func.ret = ret;
 
             const params, const returns, const ret_abi =
                 dummy_func.computeAbi(.ableos, self.types, tmp.arena) orelse unreachable;
-            const call_args = self.bl.allocCallArgs(tmp.arena, params, returns);
+            const call_args = self.bl.allocCallArgs(tmp.arena, params, returns, null);
 
             var i: usize = self.pushReturn(expr, call_args, ret_abi, ret, ctx);
 

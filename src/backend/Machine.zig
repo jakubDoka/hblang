@@ -132,7 +132,7 @@ pub const Data = struct {
     }
 
     pub fn reset(self: *Data) void {
-        inline for (std.meta.fields(Data)[2..]) |f| {
+        inline for (std.meta.fields(Data)[1..]) |f| {
             @field(self, f.name).items.len = 0;
         }
     }
@@ -161,18 +161,10 @@ pub const Data = struct {
     }
 
     pub fn deinit(self: *Data, gpa: std.mem.Allocator) void {
-        inline for (std.meta.fields(Data)[2..]) |f| {
+        inline for (std.meta.fields(Data)[1..]) |f| {
             @field(self, f.name).deinit(gpa);
         }
         self.* = undefined;
-    }
-
-    pub fn declGlobal(self: *Data, gpa: std.mem.Allocator, id: u32) !SymIdx {
-        return self.declSym(gpa, try utils.ensureSlot(&self.globals, gpa, id));
-    }
-
-    pub fn declFunc(self: *Data, gpa: std.mem.Allocator, id: u32) !SymIdx {
-        return self.declSym(gpa, try utils.ensureSlot(&self.funcs, gpa, id));
     }
 
     pub fn declSym(
@@ -181,8 +173,8 @@ pub const Data = struct {
         slot: *SymIdx,
     ) !SymIdx {
         if (slot.* == .invalid) {
+            slot.* = @enumFromInt(self.syms.items.len);
             (try self.syms.addOne(gpa)).kind = .invalid;
-            slot.* = @enumFromInt(self.syms.items.len - 1);
         }
         return slot.*;
     }
@@ -223,7 +215,7 @@ pub const Data = struct {
         linkage: Linkage,
         is_inline: bool,
     ) !void {
-        std.debug.assert(id != std.math.maxInt(u32));
+        std.debug.assert(id != std.math.maxInt(u32) and id != graph.indirect_call);
         const slot = try utils.ensureSlot(&self.funcs, gpa, id);
         try self.startDefineSym(
             gpa,
@@ -463,6 +455,7 @@ pub const Data = struct {
                     continue;
                 }
 
+                std.debug.assert(sym.kind != .invalid);
                 const next_node = @intFromEnum(self.relocs.items[sym.reloc_offset + frame.dep_idx].target);
                 frame.dep_idx += 1;
 

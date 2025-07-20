@@ -86,6 +86,11 @@ pub const Expr = union(enum) {
         peak_vars: u16,
         peak_loops: u16,
     },
+    FnPtr: struct {
+        pos: Pos,
+        args: Slice,
+        ret: Id,
+    },
     Type: struct {
         pos: Pos,
         tag: Id,

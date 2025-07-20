@@ -152,6 +152,10 @@ pub fn addGlobalAddr(self: *Builder, sloc: graph.Sloc, arbitrary_global_id: u32)
     return self.func.addGlobalAddr(sloc, arbitrary_global_id);
 }
 
+pub fn addFuncAddr(self: *Builder, sloc: graph.Sloc, func_id: u32) SpecificNode(.FuncAddr) {
+    return self.func.addFuncAddr(sloc, func_id);
+}
+
 // #MATH =======================================================================
 
 pub fn addCast(self: *Builder, sloc: graph.Sloc, to: DataType, value: *BuildNode) SpecificNode(.UnOp) {
@@ -461,25 +465,28 @@ pub const CallArgs = struct {
     arg_slots: []*BuildNode,
     returns: ?[]const graph.AbiParam,
     return_slots: ?[]*BuildNode,
+    fptr: ?*BuildNode,
     hint: enum { @"construst this with Builder.allocCallArgs()" },
 };
 
-const arg_prefix_len = 2;
+const arg_prefix_len: usize = 2;
 
 pub fn allocCallArgs(
     _: *Builder,
     scratch: *utils.Arena,
     params: []const graph.AbiParam,
     return_values: ?[]const graph.AbiParam,
+    fptr: ?*BuildNode,
 ) CallArgs {
     const args = scratch.alloc(*BuildNode, arg_prefix_len + params.len +
-        if (return_values) |r| r.len else 0);
+        if (return_values) |r| r.len else 0 + @intFromBool(fptr != null));
     return .{
         .params = params,
         .returns = return_values,
-        .arg_slots = args[arg_prefix_len..][0..params.len],
+        .arg_slots = args[arg_prefix_len + @intFromBool(fptr != null) ..][0..params.len],
         .return_slots = if (return_values != null) args[arg_prefix_len + params.len ..] else null,
         .hint = @enumFromInt(0),
+        .fptr = fptr,
     };
 }
 
@@ -496,7 +503,8 @@ pub fn addCall(
     for (args.arg_slots, args.params) |ar, pr| if (ar.data_type != ar.data_type.meet(pr.getReg())) {
         utils.panic("{} != {}", .{ ar.data_type, ar.data_type.meet(pr.getReg()) });
     };
-    const full_args = (args.arg_slots.ptr - arg_prefix_len)[0 .. arg_prefix_len + args.params.len];
+    const prefix_len = arg_prefix_len + @intFromBool(args.fptr != null);
+    const full_args = (args.arg_slots.ptr - prefix_len)[0 .. prefix_len + args.params.len];
     var stack_offset: u64 = 0;
     for (args.params, args.arg_slots) |par, *arg| {
         if (par == .Stack) {
@@ -520,6 +528,9 @@ pub fn addCall(
 
     full_args[0] = self.control();
     full_args[1] = self.memory();
+    if (args.fptr) |fptr| {
+        full_args[2] = fptr;
+    }
 
     const call = self.func.addNode(.Call, sloc, .top, full_args, .{
         .id = arbitrary_call_id,

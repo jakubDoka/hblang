@@ -696,11 +696,16 @@ pub fn regMask(
         if (extra.id == syscall) {
             return singleReg(Reg.system_v.syscall_args[idx - 2], arena);
         } else {
+            if (extra.id == graph.indirect_call and idx == 2) {
+                return readIntMask(arena);
+            }
+
+            const ix = idx - 2 - @intFromBool(extra.id == graph.indirect_call);
             const params = @as(graph.Signature, extra.signature).params();
-            if (params[idx - 2] == .Stack) return readIntMask(arena);
+            if (params[ix] == .Stack) return readIntMask(arena);
             var reg_idx: usize = 0;
             var xmm_idx: usize = 0;
-            for (params[0 .. idx - 2]) |p| {
+            for (params[0..ix]) |p| {
                 if (p == .Reg) {
                     if (p.Reg.isFloat()) {
                         xmm_idx += 1;
@@ -709,7 +714,7 @@ pub fn regMask(
                     }
                 }
             }
-            if (params[idx - 2].Reg.isFloat()) {
+            if (params[ix].Reg.isFloat()) {
                 std.debug.assert(node.inputs()[idx].?.data_type.isFloat());
                 return singleReg(Reg.system_v.float_args[xmm_idx], arena);
             } else {
@@ -1083,7 +1088,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 }
             },
             .Phi => {},
-            .GlobalAddr => {
+            .GlobalAddr => |extra| {
                 // lea dst, [rip+reloc]
                 const dst = self.getReg(instr);
                 self.emitRex(dst, .rax, .rax, 8);
@@ -1091,7 +1096,17 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 self.emitIndirectAddr(dst, .rip, .no_index, 1, null);
 
                 try self.out.addGlobalReloc(self.gpa
-                    .allocator(), instr.extra(.GlobalAddr).id, 4, -4, 4);
+                    .allocator(), extra.id, 4, -4, 4);
+            },
+            .FuncAddr => |extra| {
+                // lea dst, [rip+reloc]
+                const dst = self.getReg(instr);
+                self.emitRex(dst, .rax, .rax, 8);
+                self.emitByte(0x8d);
+                self.emitIndirectAddr(dst, .rip, .no_index, 1, null);
+
+                try self.out.addFuncReloc(self.gpa
+                    .allocator(), extra.id, 4, -4, 4);
             },
             .GlobalStore => |extra| {
                 // mov [rip+dis+offset], src
@@ -1173,6 +1188,11 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
 
                 if (extra.id == syscall) {
                     self.emitBytes(&.{ 0x0f, 0x05 });
+                } else if (extra.id == graph.indirect_call) {
+                    const ptr = self.getReg(inps[0]);
+                    // call ptr
+                    self.emitRexNoReg(ptr, .rax, 0);
+                    self.emitBytes(&.{ 0xff, Reg.Mod.direct.rmSub(0b010, ptr) });
                 } else {
                     // call id
                     self.emitBytes(&.{ 0xe8, 0, 0, 0, 0 });

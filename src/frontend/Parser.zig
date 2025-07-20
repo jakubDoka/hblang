@@ -582,7 +582,19 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 return error.UnexpectedToken;
             },
         },
-        .@"&", .@"^", .@"-", .@"~", .@"!", .@"?" => .{ .UnOp = .{
+        .@"^" => if (self.tryAdvance(.@"fn")) .{ .FnPtr = .{
+            .args = try self.parseList(.@"(", .@",", .@")", parseExpr),
+            .ret = b: {
+                _ = try self.expectAdvance(.@":");
+                break :b try self.parseExpr();
+            },
+            .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
+        } } else .{ .UnOp = .{
+            .pos = .init(token.pos),
+            .op = token.kind,
+            .oper = try self.parseUnit(),
+        } },
+        .@"&", .@"-", .@"~", .@"!", .@"?" => .{ .UnOp = .{
             .pos = .init(token.pos),
             .op = token.kind,
             .oper = try self.parseUnit(),

@@ -110,7 +110,7 @@ pub const CompileOptions = struct {
                 const val = &@field(self, f.name);
 
                 errdefer |err| {
-                    self.diagnostics.print("--parser-mode <{s}>", .{@errorName(err)}) catch unreachable;
+                    self.diagnostics.print("--{s} <{s}>", .{ f.name, @errorName(err) }) catch unreachable;
                     std.process.exit(1);
                 }
 

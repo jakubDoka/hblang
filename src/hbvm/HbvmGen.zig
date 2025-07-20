@@ -361,8 +361,14 @@ pub fn regMask(node: *Func.Node, _: *Func, idx: usize, arena: *utils.Arena) Set 
     }
 
     if (node.kind == .Call) {
-        std.debug.assert(idx >= 2);
-        return singleMask(arena, isa.Reg.arg(idx - 2));
+        const is_indirect = node.extra(.Call).id == graph.indirect_call;
+        if (is_indirect and idx == 2) {
+            return readMask(arena);
+        }
+
+        std.debug.assert(idx - @intFromBool(is_indirect) >= 2);
+
+        return singleMask(arena, isa.Reg.arg(idx - 2 - @intFromBool(is_indirect)));
     }
 
     if (node.kind == .Return) {
@@ -567,6 +573,10 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, 4, 3, 0);
                 self.emit(.lra, .{ self.getReg(no), .null, 0 });
             },
+            .FuncAddr => |extra| {
+                try self.out.addFuncReloc(self.gpa.allocator(), extra.id, 4, 3, 0);
+                self.emit(.lra, .{ self.getReg(no), .null, 0 });
+            },
             .LocalAlloc => {},
             .Local => {
                 self.emit(.addi64, .{ self.getReg(no), .stack_addr, no.inputs()[1].?.extra(.LocalAlloc).size });
@@ -744,6 +754,8 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             .Call => |extra| {
                 if (extra.id == eca) {
                     self.emit(.eca, .{});
+                } else if (extra.id == graph.indirect_call) {
+                    self.emit(.jala, .{ .ret_addr, self.getReg(inps[0]), 0 });
                 } else {
                     try self.out.addFuncReloc(self.gpa.allocator(), extra.id, 4, 3, 0);
                     self.emit(.jal, .{ .ret_addr, .null, 0 });

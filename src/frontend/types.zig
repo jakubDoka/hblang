@@ -18,6 +18,49 @@ pub const Slice = struct {
     pub const len_offset = 8;
 };
 
+pub const FnPtr = struct {
+    args: []TyId,
+    ret: TyId,
+
+    pub fn computeAbi(
+        self: FnPtr,
+        abi: Types.Abi,
+        types: *Types,
+        scratch: *utils.Arena,
+    ) ?struct {
+        []const graph.AbiParam,
+        ?[]const graph.AbiParam,
+        Types.Abi.Spec,
+    } {
+        errdefer unreachable;
+        var builder = abi.builder();
+
+        const max_elems = Types.Abi.Builder.max_elems;
+
+        const ret_abi = @as(Types.Abi.TmpSpec, abi.categorize(self.ret, types))
+            .toPerm(self.ret, types);
+
+        var params = scratch.alloc(graph.AbiParam, self.args.len * max_elems + 1);
+        var cursor: usize = 0;
+
+        const returns = if (ret_abi != .Impossible)
+            if (abi.isByRefRet(ret_abi)) b: {
+                cursor += builder.types(params, true, ret_abi).len;
+                break :b &.{};
+            } else builder.types(scratch.alloc(graph.AbiParam, max_elems), true, ret_abi)
+        else
+            null;
+
+        for (self.args) |ty| {
+            const arg_abi = abi.categorize(ty, types).toPerm(ty, types);
+            if (arg_abi == .Impossible) return null;
+            cursor += builder.types(params[cursor..], false, arg_abi).len;
+        }
+
+        return .{ params[0..cursor], returns, ret_abi };
+    }
+};
+
 pub const Nullable = struct {
     inner: TyId,
     nieche: enum(u64) {
@@ -441,42 +484,8 @@ pub const Func = struct {
 
     pub const CompileState = enum { queued, compiled };
 
-    pub fn computeAbi(
-        self: Func,
-        abi: Types.Abi,
-        types: *Types,
-        scratch: *utils.Arena,
-    ) ?struct {
-        []const graph.AbiParam,
-        ?[]const graph.AbiParam,
-        Types.Abi.Spec,
-    } {
-        errdefer unreachable;
-        var builder = abi.builder();
-
-        const max_elems = Types.Abi.Builder.max_elems;
-
-        const ret_abi = @as(Types.Abi.TmpSpec, abi.categorize(self.ret, types))
-            .toPerm(self.ret, types);
-
-        var params = scratch.alloc(graph.AbiParam, self.args.len * max_elems + 1);
-        var cursor: usize = 0;
-
-        const returns = if (ret_abi != .Impossible)
-            if (abi.isByRefRet(ret_abi)) b: {
-                cursor += builder.types(params, true, ret_abi).len;
-                break :b &.{};
-            } else builder.types(scratch.alloc(graph.AbiParam, max_elems), true, ret_abi)
-        else
-            null;
-
-        for (self.args) |ty| {
-            const arg_abi = abi.categorize(ty, types).toPerm(ty, types);
-            if (arg_abi == .Impossible) return null;
-            cursor += builder.types(params[cursor..], false, arg_abi).len;
-        }
-
-        return .{ params[0..cursor], returns, ret_abi };
+    pub fn sig(self: Func) FnPtr {
+        return .{ .ret = self.ret, .args = self.args };
     }
 };
 
