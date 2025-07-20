@@ -788,7 +788,7 @@ pub fn inPlaceSlot(node: *Func.Node) ?usize {
         .FusedMulAdd => 0,
         .UnOp => |extra| switch (@as(graph.UnOp, extra.op)) {
             .ineg, .bnot, .ired, .not => 0,
-            .fneg, .fcst, .sext, .uext, .cast, .itf32, .itf64, .fti => return null,
+            .fneg, .fcst, .sext, .uext, .cast, .itf, .fti => return null,
         },
         else => null,
     };
@@ -1608,7 +1608,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         self.emitRex(dst, src, .rax, size);
                         self.emitBytes(&.{ 0x0F, 0x2C, Reg.Mod.direct.rm(dst, src) });
                     },
-                    .itf32, .itf64 => {
+                    .itf => {
                         switch (instr.data_type) {
                             .f32 => self.emitByte(0xF3),
                             .f64 => self.emitByte(0xF2),

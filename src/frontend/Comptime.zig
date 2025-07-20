@@ -216,7 +216,8 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                     },
                     .UnOp => {
                         const oper = curr.inputs()[1].?.extra(.CInt).value;
-                        break :b bl.addIntImm(.none, curr.data_type, curr.extra(.UnOp).op.eval(curr.data_type, oper));
+                        break :b bl.addIntImm(.none, curr.data_type, curr.extra(.UnOp).op
+                            .eval(curr.inputs()[1].?.data_type, curr.data_type, oper));
                     },
                     else => unreachable,
                 }

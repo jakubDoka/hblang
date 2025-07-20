@@ -684,8 +684,10 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                         std.debug.assert(inps[0].data_type == .f64);
                         self.emit(.fti64, .{ self.getReg(no), self.getReg(inps[0]), 0 });
                     },
-                    .itf32 => self.emit(.itf32, .{ self.getReg(no), self.getReg(inps[0]) }),
-                    .itf64 => self.emit(.itf64, .{ self.getReg(no), self.getReg(inps[0]) }),
+                    .itf => if (no.data_type == .f32)
+                        self.emit(.itf32, .{ self.getReg(no), self.getReg(inps[0]) })
+                    else
+                        self.emit(.itf64, .{ self.getReg(no), self.getReg(inps[0]) }),
                     .fcst => if (no.data_type == .f32) {
                         self.emit(.fc64t32, .{ self.getReg(no), self.getReg(inps[0]), 0 });
                     } else {

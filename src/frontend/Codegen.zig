@@ -3615,7 +3615,7 @@ fn emitDirective(
 
             return .mkv(ret, self.bl.addUnOp(
                 sloc,
-                if (ret == .f32) .itf32 else .itf64,
+                .itf,
                 self.abiCata(ret).ByValue,
                 oper.getValue(sloc, self),
             ));

@@ -196,12 +196,11 @@ pub const UnOp = enum(u8) {
     fneg,
     not,
     bnot,
-    itf32,
-    itf64,
+    itf,
     fti,
     fcst,
 
-    pub fn eval(self: UnOp, src: DataType, oper: i64) i64 {
+    pub fn eval(self: UnOp, src: DataType, dst: DataType, oper: i64) i64 {
         return @as(i64, switch (self) {
             .cast => oper,
             .sext => return switch (src) {
@@ -221,8 +220,10 @@ pub const UnOp = enum(u8) {
             .not => @intFromBool(oper == 0),
             .bnot => ~oper,
             .fti => if (src == .f64) @intFromFloat(tf(oper)) else @intFromFloat(tf32(oper)),
-            .itf64 => return @bitCast(@as(f64, @floatFromInt(oper))),
-            .itf32 => return @as(u32, @bitCast(@as(f32, @floatFromInt(oper)))),
+            .itf => return if (dst == .f64)
+                @bitCast(@as(f64, @floatFromInt(oper)))
+            else
+                @as(u32, @bitCast(@as(f32, @floatFromInt(oper)))),
             .fcst => return if (src == .f64)
                 @as(u32, @bitCast(@as(f32, @floatCast(tf(oper)))))
             else
@@ -1728,7 +1729,7 @@ pub fn Func(comptime Backend: type) type {
 
         pub fn addUnOp(self: *Self, sloc: Sloc, op: UnOp, ty: DataType, oper: *Node) *Node {
             if (oper.kind == .CInt and ty.isInt()) {
-                return self.addIntImm(sloc, ty, op.eval(oper.data_type, oper.extra(.CInt).value));
+                return self.addIntImm(sloc, ty, op.eval(oper.data_type, ty, oper.extra(.CInt).value));
             }
             return self.addNode(.UnOp, sloc, ty, &.{ null, oper }, .{ .op = op });
         }
@@ -2369,7 +2370,7 @@ pub fn Func(comptime Backend: type) type {
                     return self.addIntImm(
                         node.sloc,
                         node.data_type,
-                        op.eval(oper.data_type, oper.extra(.CInt).value),
+                        op.eval(oper.data_type, node.data_type, oper.extra(.CInt).value),
                     );
                 }
 
