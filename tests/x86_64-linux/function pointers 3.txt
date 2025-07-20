@@ -1,0 +1,12 @@
+function pointers 3.Obj.do_thing:
+	mov al, [rdi]
+	inc al
+	ret
+main:
+	sub rsp, 0x08
+	mov rax, 0xFF
+	mov [rsp], al
+	lea rdi, [rsp]
+	lea rax, [0x0000000000000007]
+	add rsp, 0x08
+	ret

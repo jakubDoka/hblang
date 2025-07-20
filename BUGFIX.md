@@ -2,6 +2,44 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### function pointers 2
+```hb
+X := struct {
+    .func: ^fn(): void;
+}
+
+main := fn(): uint {
+    X.(&fn(): void {
+    }).func()
+
+    return 0
+}
+```
+
+#### function pointers 3
+```hb
+DynObj := struct {
+    .do_thing: ^fn(^void): u8;
+    .obj: ^void
+
+    $new := fn($T: type, inst: ^T): DynObj {
+        return .(@bit_cast(@as(^fn(foo: ^T): u8, &T.do_thing)), @bit_cast(inst))
+    }
+}
+
+Obj := struct {
+    .x: u8
+    do_thing := fn(self: ^Obj): u8 return self.x + 1
+}
+
+main := fn(): u8 {
+    obj := Obj.(255)
+    dyn_obj := DynObj.new(Obj, &obj)
+    fptr := dyn_obj.do_thing
+    return fptr(dyn_obj.obj)
+}
+```
+
 #### short and op precedence 1
 ```hb
 

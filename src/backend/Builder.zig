@@ -478,13 +478,14 @@ pub fn allocCallArgs(
     return_values: ?[]const graph.AbiParam,
     fptr: ?*BuildNode,
 ) CallArgs {
-    const args = scratch.alloc(*BuildNode, arg_prefix_len + params.len +
-        if (return_values) |r| r.len else 0 + @intFromBool(fptr != null));
+    const prefix_len = arg_prefix_len + @intFromBool(fptr != null);
+    const args = scratch.alloc(*BuildNode, prefix_len + params.len +
+        (if (return_values) |r| r.len else 0));
     return .{
         .params = params,
         .returns = return_values,
-        .arg_slots = args[arg_prefix_len + @intFromBool(fptr != null) ..][0..params.len],
-        .return_slots = if (return_values != null) args[arg_prefix_len + params.len ..] else null,
+        .arg_slots = args[prefix_len..][0..params.len],
+        .return_slots = if (return_values != null) args[prefix_len + params.len ..] else null,
         .hint = @enumFromInt(0),
         .fptr = fptr,
     };

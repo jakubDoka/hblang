@@ -1,0 +1,30 @@
+function pointers 3.DynObj.new(.Obj):
+	sub rsp, 0x10
+	mov [rsp], rsi
+	lea rax, [0x0000000000000007]
+	mov [rdi], rax
+	mov rax, [rsp]
+	mov [rdi+0x08], rax
+	add rsp, 0x10
+	ret
+function pointers 3.Obj.do_thing:
+	sub rsp, 0x10
+	mov [rsp], rdi
+	mov rax, [rsp]
+	mov al, [rax]
+	inc al
+	add rsp, 0x10
+	ret
+main:
+	sub rsp, 0x28
+	mov rax, 0xFF
+	mov [rsp+0x18], al
+	lea rsi, [rsp+0x18]
+	lea rdi, [rsp]
+	call :function pointers 3.DynObj.new(.Obj)
+	mov rax, [rsp]
+	mov [rsp+0x10], rax
+	mov rax, [rsp+0x10]
+	mov rdi, [rsp+0x08]
+	add rsp, 0x28
+	ret

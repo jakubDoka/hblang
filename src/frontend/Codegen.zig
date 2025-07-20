@@ -2138,7 +2138,11 @@ fn emitFnPtr(self: *Codegen, _: Ctx, _: Ast.Id, e: *Expr(.FnPtr)) !Value {
     defer tmp.deinit();
 
     const args = tmp.arena.alloc(Types.Id, e.args.len());
-    for (args, self.ast.exprs.view(e.args)) |*ty, arg| {
+    for (args, self.ast.exprs.view(e.args)) |*ty, a| {
+        var arg: Ast.Id = a;
+        if (arg.tag() == .Decl) {
+            arg = self.ast.exprs.get(arg).Decl.ty;
+        }
         ty.* = try self.resolveAnonTy(arg);
     }
 
@@ -2427,13 +2431,16 @@ pub fn emitDecl(
     const ident = ast.exprs.getTyped(.Ident, e.bindings) orelse
         return self.report(expr, "TODO: pattern matching", .{});
 
+    self.name = ast.tokenSrc(ident.id.pos());
+    defer self.name = prev_name;
+
+    if (e.value.tag() == .Void)
+        return self.report(expr, "declaration needs a value", .{});
+
     errdefer |err| if (err != error.Unreachable) {
         self.scope.appendAssumeCapacity(.{ .ty = .never, .name = ident.id });
         self.bl.pushPin(loc);
     };
-
-    self.name = ast.tokenSrc(ident.id.pos());
-    defer self.name = prev_name;
 
     var value = try if (e.ty.tag() == .Void)
         self.emit(.{ .loc = loc }, e.value)
@@ -2970,6 +2977,34 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
             p.*
         else
             value.ty;
+
+        if (ty.data() == .Struct or ty.data() == .Union) coerse_to_field: {
+            switch (ty.data()) {
+                .Struct => |struct_ty| {
+                    var iter = struct_ty.offsetIter(self.types);
+                    const ftype, const offset = while (iter.next()) |elem| {
+                        if (std.mem.eql(u8, name, elem.field.name))
+                            break .{ elem.field.ty, elem.offset };
+                    } else break :coerse_to_field;
+
+                    break :b .{ .mkp(ftype, self.bl.addFieldOffset(
+                        sloc,
+                        value.id.Pointer,
+                        @intCast(offset),
+                    )), null };
+                },
+                .Union => |union_ty| {
+                    const ftype = for (union_ty.getFields(self.types)) |f| {
+                        if (std.mem.eql(u8, name, f.name))
+                            break f.ty;
+                    } else break :coerse_to_field;
+                    value.ty = ftype;
+                    break :b .{ value, null };
+                },
+                else => unreachable,
+            }
+        }
+
         break :b .{ try self.lookupScopeItem(field.field, ty, name), value };
     } else b: {
         break :b .{ try self.emit(.{}, e.called), null };
