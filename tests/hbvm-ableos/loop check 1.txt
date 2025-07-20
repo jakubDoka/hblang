@@ -33,8 +33,8 @@ main:
 loop check 1.nextPos:
        li64 $1, 1
        jltu $2, $1, :9
-        li8 $1, 1
        li64 $2, 17
+        li8 $1, 1
         jmp :a
 9:       cp $1, $0
 a:     jala $0, $31, 0

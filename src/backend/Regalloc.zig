@@ -10,9 +10,7 @@ pub inline fn swap(a: anytype, b: @TypeOf(a)) void {
     std.mem.swap(@TypeOf(a.*), a, b);
 }
 
-pub const ralloc = newRalloc;
-
-pub fn newRalloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
+pub fn ralloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
     func.gcm.cfg_built.assertLocked();
 
     errdefer unreachable;

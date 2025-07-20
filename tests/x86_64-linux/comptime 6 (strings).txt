@@ -6,10 +6,10 @@ comptime 6 (strings).main.string_to_array("Edward"):
 	movzx rax, al
 	test al, al
 	jz :0
-	lea rax, [0x0000000000000007]
-	add rax, rdx
 	lea rcx, [rsp]
 	add rcx, rdx
+	lea rax, [0x0000000000000007]
+	add rax, rdx
 	inc rdx
 	mov al, [rax]
 	mov [rcx], al

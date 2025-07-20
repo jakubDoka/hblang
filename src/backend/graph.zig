@@ -1,5 +1,6 @@
 const std = @import("std");
 pub const utils = @import("../utils.zig");
+const Machine = @import("Machine.zig");
 
 fn tu(int: i64) u64 {
     return @bitCast(int);
@@ -693,6 +694,7 @@ const mod = @This();
 const gcm = @import("gcm.zig");
 const mem2reg = @import("mem2reg.zig");
 const static_anal = @import("static_anal.zig");
+const inliner = @import("inliner.zig");
 
 pub fn FuncNode(comptime Backend: type) type {
     return Func(Backend).Node;
@@ -704,11 +706,13 @@ pub fn Func(comptime Backend: type) type {
         interner: InternMap(Uninserter) = .{},
         signature: Signature = .{},
         next_id: u16 = 0,
+        corrupted: bool = false,
         start: *Node = undefined,
         end: *Node = undefined,
         gcm: gcm.Mixin(Backend) = .{},
         mem2reg: mem2reg.Mixin(Backend) = .{},
         static_anal: static_anal.Mixin(Backend) = .{},
+        inliner: inliner.Mixin(Backend) = .{},
         stopped_interning: std.debug.SafetyLock = .{},
 
         pub fn optApi(comptime decl_name: []const u8, comptime Ty: type) bool {
@@ -2506,8 +2510,8 @@ pub fn Func(comptime Backend: type) type {
 
             if (node.kind == .Call and node.data_type != .bot) {
                 const force_inline = node.extra(.Call).signature.call_conv == .@"inline";
-                if (ctx.out.getInlineFunc(node.extra(.Call).id, force_inline)) |inline_func| {
-                    inline_func.inlineInto(Backend, self, node, work);
+                if (ctx.out.getInlineFunc(Backend, node.extra(.Call).id, force_inline)) |inline_func| {
+                    inline_func.inliner.inlineInto(self, node, work);
                     return null;
                 }
             }

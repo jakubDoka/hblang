@@ -4,7 +4,7 @@ fuel: usize = 0,
 
 const std = @import("std");
 const isa = @import("isa.zig");
-const root = @import("../utils.zig");
+const utils = @import("../utils.zig");
 const Vm = @This();
 const debug = @import("builtin").mode == .Debug;
 
@@ -33,7 +33,7 @@ pub const SafeContext = struct {
     }
 
     fn setColor(self: *Self, color: std.io.tty.Color) !void {
-        try root.setColor(self.color_cfg, self.writer.?, color);
+        try utils.setColor(self.color_cfg, self.writer.?, color);
     }
 
     fn memmove(self: *Self, dst: usize, src: usize, len: usize) !void {

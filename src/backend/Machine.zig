@@ -12,7 +12,7 @@ const static_anal = @import("static_anal.zig");
 const Builder = @import("Builder.zig");
 const BuilderFunc = graph.Func(Builder);
 const Machine = @This();
-const root = @import("../utils.zig");
+const utils = @import("../utils.zig");
 const Set = std.DynamicBitSetUnmanaged;
 
 pub const Null = struct {
@@ -37,443 +37,18 @@ pub const Null = struct {
     pub fn deinit(_: *@This()) void {}
 };
 
-pub const InlineFunc = struct {
-    signature: graph.Signature,
-    start: *anyopaque,
-    end: *anyopaque,
-    node_count: usize,
-    corrupted: bool = false,
-
-    pub fn toFunc(
-        self: *const InlineFunc,
-        arena: *std.heap.ArenaAllocator,
-        comptime Backend: type,
-    ) graph.Func(Backend) {
-        const Func = graph.Func(Backend);
-
-        errdefer unreachable;
-
-        var tmp = root.Arena.scrath(null);
-        defer tmp.deinit();
-
-        const self_start: *Func.Node = @alignCast(@ptrCast(self.start));
-        const self_end: *Func.Node = @alignCast(@ptrCast(self.end));
-
-        var func = Func{
-            .arena = arena.*,
-            .start = self_start,
-            .end = self_end,
-            .next_id = @intCast(self.node_count),
-        };
-
-        internBatch(
-            Backend,
-            self_start,
-            self_end,
-            0,
-            &func,
-            .{ .count = self.node_count },
-        );
-
-        func.signature = self.signature;
-
-        return func;
-    }
-
-    pub fn cloneNodes(
-        comptime Backend: type,
-        start: *graph.FuncNode(Backend),
-        end: *graph.FuncNode(Backend),
-        node_count: usize,
-        arena: *std.heap.ArenaAllocator,
-        already_present: usize,
-        scrath: *root.Arena,
-    ) struct {
-        new_node_table: []*graph.FuncNode(Backend),
-        new_nodes: []*graph.FuncNode(Backend),
-    } {
-        errdefer unreachable;
-
-        const Func = graph.Func(Backend);
-
-        var tmp = root.Arena.scrath(scrath);
-        defer tmp.deinit();
-
-        const new_node_table = scrath.alloc(*Func.Node, node_count);
-        var new_nodes = scrath.makeArrayList(*Func.Node, node_count);
-
-        var work = try Func.WorkList.init(tmp.arena.allocator(), node_count);
-        work.add(start);
-        work.add(end);
-        var i: usize = 0;
-        while (i < work.items().len) : (i += 1) {
-            const node = work.items()[i];
-            for (node.outputs()) |o| work.add(o.get());
-            for (node.inputs()) |inp| if (inp != null) work.add(inp.?);
-
-            const node_size = node.size();
-            const new_slot = try arena.allocator()
-                .alignedAlloc(u8, @alignOf(Func.Node), node_size);
-            @memcpy(new_slot, @as([*]const u8, @ptrCast(node)));
-            const new_node: *Func.Node = @ptrCast(new_slot);
-
-            if (new_node.input_len != new_node.input_ordered_len) {
-                new_node.input_len = @intCast(std.mem.indexOfScalarPos(
-                    ?*Func.Node,
-                    node.inputs(),
-                    new_node.input_ordered_len,
-                    null,
-                ) orelse new_node.input_len);
-
-                std.debug.assert(new_node.input_len >= new_node.input_ordered_len);
-            }
-
-            if (new_node.asCfg()) |cfg| cfg.ext.idepth = 0;
-            if (new_node.subclass(graph.builtin.Call)) |call|
-                call.ext.signature = call.ext.signature.dupe(arena.allocator());
-            if (new_node.isSub(graph.If) and already_present != 0) new_node.sloc = .none;
-
-            new_node.input_base = (try arena.allocator()
-                .dupe(?*Func.Node, new_node.inputs())).ptr;
-            new_node.output_base = (try arena.allocator()
-                .dupe(Func.Node.Out, new_node.outputs())).ptr;
-            new_node_table[new_node.id] = new_node;
-            new_node.id = @intCast(already_present + i);
-            new_node.output_cap = new_node.output_len;
-            new_nodes.appendAssumeCapacity(new_node);
-        }
-
-        // remap inputs and outputs
-        for (new_nodes.items) |node| {
-            for (node.inputs()) |*inp| if (inp.* != null) {
-                inp.* = new_node_table[inp.*.?.id];
-            };
-
-            for (node.outputs()) |*out| {
-                out.* = .init(new_node_table[out.get().id], out.pos(), null);
-            }
-
-            if (node.subclass(graph.Region)) |cfg| {
-                if (cfg.ext.cached_lca != null) {
-                    cfg.ext.cached_lca =
-                        new_node_table[cfg.base.asCfg().?.idom().base.id];
-                }
-            }
-        }
-
-        for (new_nodes.items) |n| {
-            std.debug.assert(n.id < already_present + i);
-            std.debug.assert(n.id >= already_present);
-        }
-
-        return .{
-            .new_node_table = new_node_table,
-            .new_nodes = new_nodes.items,
-        };
-    }
-
-    pub fn internBatch(
-        comptime Backend: type,
-        start: *graph.FuncNode(Backend),
-        end: *graph.FuncNode(Backend),
-        already_present: usize,
-        into: *graph.Func(Backend),
-        new_nodes: union(enum) { new: []*graph.FuncNode(Backend), count: usize },
-    ) void {
-        errdefer unreachable;
-
-        const Func = graph.Func(Backend);
-
-        var tmp = root.Arena.scrath(null);
-        defer tmp.deinit();
-
-        const node_count = switch (new_nodes) {
-            .new => |n| n.len,
-            .count => |c| c,
-        };
-
-        var interned = try Set.initEmpty(
-            tmp.arena.allocator(),
-            already_present + node_count,
-        );
-        var work = try Func.WorkList.init(tmp.arena.allocator(), node_count);
-        work.add(start);
-        work.add(end);
-
-        var deffered_phi_stack = std.ArrayListUnmanaged(*Func.Node){};
-
-        var limit: usize = 1000000;
-        while (work.pop()) |node| {
-            limit -= 1;
-            if (node.id < already_present) {
-                // NOTE: this can happen, dont ask me how
-                continue;
-            }
-            if (interned.isSet(node.id)) continue;
-
-            if (Func.Node.isInterned(node.kind, node.inputs())) {
-                var ready = true;
-                for (node.outputs()) |us| {
-                    const use = us.get();
-                    if (use != node and
-                        Func.Node.isInterned(use.kind, use.inputs()) and
-                        !interned.isSet(use.id))
-                    {
-                        work.add(use);
-                        ready = false;
-                    }
-                }
-                if (node.kind == .Phi and node.inputs()[0].?.kind == .Loop) {
-                    if (std.mem.indexOfScalar(
-                        *Func.Node,
-                        deffered_phi_stack.items,
-                        node,
-                    )) |idx| {
-                        // we have a cycle so just intern
-                        _ = deffered_phi_stack.swapRemove(idx);
-                        ready = true;
-                    } else {
-                        try deffered_phi_stack.append(tmp.arena.allocator(), node);
-                    }
-                }
-
-                if (!ready) continue;
-
-                interned.set(node.id);
-                const slot = into.internNode(
-                    node.kind,
-                    node.data_type,
-                    node.inputs(),
-                    node.anyextra(),
-                );
-                if (slot.found_existing) {
-                    into.subsumeNoKill(slot.key_ptr.node, node);
-                    node.kill();
-                } else {
-                    slot.key_ptr.node = node;
-                    for (node.inputs()) |on| if (on) |n| {
-                        work.add(n);
-                    };
-                }
-            } else {
-                interned.set(node.id);
-
-                for (node.inputs()) |on| if (on) |n| {
-                    work.add(n);
-                };
-
-                for (node.outputs()) |o| work.add(o.get());
-            }
-        }
-
-        if (new_nodes == .new) {
-            for (new_nodes.new) |nn| if (nn.id != std.math.maxInt(u16)) {
-                std.debug.assert(interned.isSet(nn.id));
-            };
-        }
-    }
-
-    pub fn inlineInto(
-        self: *const InlineFunc,
-        comptime Backend: type,
-        func: *graph.Func(Backend),
-        dest: *graph.Func(Backend).Node,
-        func_work: *graph.Func(Backend).WorkList,
-    ) void {
-        errdefer unreachable;
-
-        func.gcm.loop_tree_built.assertUnlocked();
-
-        const Func = graph.Func(Backend);
-
-        const arena = &func.arena;
-        const self_start: *Func.Node = @alignCast(@ptrCast(self.start));
-        const self_end: *Func.Node = @alignCast(@ptrCast(self.end));
-
-        const prev_next_id = func.next_id;
-
-        var tmp = root.Arena.scrathFromAlloc(func_work.list.allocator);
-        defer tmp.deinit();
-
-        const cloned = cloneNodes(
-            Backend,
-            self_start,
-            self_end,
-            self.node_count,
-            arena,
-            func.next_id,
-            tmp.arena,
-        );
-
-        func.next_id += @intCast(cloned.new_nodes.len);
-
-        const end = cloned.new_node_table[self_end.id];
-        const start = cloned.new_node_table[self_start.id];
-
-        internBatch(Backend, start, end, prev_next_id, func, .{ .new = cloned.new_nodes });
-
-        const entry = start.outputs()[0].get();
-        std.debug.assert(entry.kind == .Entry);
-
-        const entry_mem: ?*Func.Node = for (start.outputs()) |o| {
-            if (o.get().kind == .Mem) break o.get();
-        } else null;
-        var exit_mem = end.inputs()[1];
-
-        const into_entry_mem = func.start.outputs()[1].get();
-        std.debug.assert(into_entry_mem.kind == .Mem);
-
-        const call_end = dest.outputs()[0].get();
-        std.debug.assert(call_end.kind == .CallEnd);
-
-        var after_entry: *Func.Node = for (entry.outputs()) |o| {
-            if (o.get().isCfg()) break o.get();
-        } else unreachable;
-        std.debug.assert(after_entry.isBasicBlockEnd() or
-            after_entry.kind == .Region or after_entry.kind == .Loop);
-        std.debug.assert(after_entry.kind != .Entry);
-        std.debug.assert(after_entry.kind != .Start);
-
-        const before_return = end.inputs()[0];
-        std.debug.assert(before_return == null or before_return.?.isBasicBlockStart());
-
-        const before_dest = dest.inputs()[0].?;
-        std.debug.assert(before_dest.isBasicBlockStart());
-
-        const call_end_entry_mem = for (call_end.outputs()) |o| {
-            if (o.get().kind == .Mem) break o.get();
-        } else null;
-
-        const dest_mem = dest.inputs()[1].?;
-
-        if (entry_mem != null) {
-            for (tmp.arena.dupe(Func.Node.Out, entry_mem.?.outputs())) |use| {
-                if (use.get().kind == .LocalAlloc) {
-                    func.setInputNoIntern(use.get(), 0, into_entry_mem);
-                }
-            }
-        }
-
-        // NOTE: not scheduled yet so args are on the Start
-        //
-        for (dest.dataDeps(), 0..) |dep, j| {
-            for (start.outputs()) |n| {
-                const o = n.get();
-                if (o.kind == .Arg and o.extra(.Arg).index == j) {
-                    func.subsume(dep, o);
-                    break;
-                }
-                if (o.kind == .StructArg and o.extra(.StructArg).base.index == j) {
-                    // we need to copy to preserve the semantics of a call
-                    // TODO: decide if we need this based on the call
-                    // convention of the inlined function since the default
-                    // call convention should be a bit customized
-                    //
-                    const alloc = func.addNode(
-                        .LocalAlloc,
-                        o.sloc,
-                        .i64,
-                        &.{ null, into_entry_mem },
-                        .{ .size = o.extra(.StructArg).spec.size },
-                    );
-                    const copy = func.addNode(.Local, o.sloc, .i64, &.{ null, alloc }, .{});
-                    func.subsume(copy, dep);
-                    func.subsume(copy, o);
-                    break;
-                }
-            }
-        }
-
-        if (end.inputs()[0] != null)
-            for (end.dataDeps(), 0..) |dep, j| {
-                const ret = for (call_end.outputs()) |o| {
-                    if (o.get().kind == .Ret and o.get().extra(.Ret).index == j) break o.get();
-                } else continue;
-                func.subsume(dep, ret);
-            };
-
-        if (entry_mem == exit_mem) {
-            if (entry_mem != null) {
-                // NOTE: this is still needed since there can be loads
-                func.subsume(dest_mem, entry_mem.?);
-            }
-            if (call_end_entry_mem != null) {
-                func.subsume(dest_mem, call_end_entry_mem.?);
-            }
-            exit_mem = dest_mem;
-        } else {
-            func.subsume(dest_mem, entry_mem.?);
-            if (call_end_entry_mem != null) {
-                func.subsume(exit_mem orelse dest_mem, call_end_entry_mem.?);
-            }
-        }
-
-        if (exit_mem) |em| {
-            for (em.outputs()) |o| {
-                func_work.add(o.get());
-            }
-        }
-
-        func.subsume(before_dest, entry);
-
-        if (end.inputs()[2]) |trap_region| {
-            if (func.end.inputs()[2] == null) {
-                func.setInputNoIntern(func.end, 2, func.addNode(.TrapRegion, .none, .top, &.{}, .{}));
-            }
-            const dest_trap_region = func.end.inputs()[2].?;
-
-            for (trap_region.inputs()) |inp| {
-                func.connect(inp.?, dest_trap_region);
-            }
-        }
-
-        if (after_entry.kind == .Return) {
-            func.subsume(before_dest, call_end);
-        } else if (before_return != null) {
-            func.subsume(before_return.?, call_end);
-        }
-        dest.data_type = .bot;
-        func_work.add(dest);
-
-        end.kill();
-
-        for (cloned.new_nodes) |nn| if (nn.id != std.math.maxInt(u16)) {
-            func_work.add(nn);
-        };
-    }
-
-    pub fn init(
-        arena: *std.heap.ArenaAllocator,
-        comptime Backend: type,
-        func: *graph.Func(Backend),
-    ) InlineFunc {
-        errdefer unreachable;
-
-        func.gcm.loop_tree_built.assertUnlocked();
-
-        var tmp = root.Arena.scrath(null);
-        defer tmp.deinit();
-
-        const cloned = cloneNodes(
-            Backend,
-            func.start,
-            func.end,
-            func.next_id,
-            arena,
-            0,
-            tmp.arena,
-        );
-
-        return InlineFunc{
-            .signature = func.signature.dupe(arena.allocator()),
-            .start = cloned.new_node_table[func.start.id],
-            .end = cloned.new_node_table[func.end.id],
-            .node_count = cloned.new_nodes.len,
-        };
-    }
-};
+const InlinFunc = graph.Func(Builder);
 
 pub const Data = struct {
+    declaring_sym: ?SymIdx = null,
+    funcs: std.ArrayListUnmanaged(SymIdx) = .empty,
+    globals: std.ArrayListUnmanaged(SymIdx) = .empty,
+    syms: std.ArrayListUnmanaged(Sym) = .empty,
+    names: std.ArrayListUnmanaged(u8) = .empty,
+    code: std.ArrayListUnmanaged(u8) = .empty,
+    relocs: std.ArrayListUnmanaged(Reloc) = .empty,
+    inline_funcs: std.ArrayListUnmanaged(InlinFunc) = .empty,
+
     pub const Sym = struct {
         name: u32,
         offset: u32,
@@ -484,7 +59,9 @@ pub const Data = struct {
         linkage: Linkage,
         readonly: bool,
         is_inline: bool,
-        nodes: u32 = std.math.maxInt(u32),
+        inline_func: u32 = no_inline_func,
+
+        pub const no_inline_func = std.math.maxInt(u32);
     };
 
     pub const Kind = enum {
@@ -510,34 +87,22 @@ pub const Data = struct {
 
     pub const SymIdx = enum(u32) { invalid = std.math.maxInt(u32), _ };
 
-    declaring_sym: ?SymIdx = null,
-    inline_func_nodes: std.heap.ArenaAllocator.State = .{},
-    funcs: std.ArrayListUnmanaged(SymIdx) = .empty,
-    globals: std.ArrayListUnmanaged(SymIdx) = .empty,
-    syms: std.ArrayListUnmanaged(Sym) = .empty,
-    names: std.ArrayListUnmanaged(u8) = .empty,
-    code: std.ArrayListUnmanaged(u8) = .empty,
-    relocs: std.ArrayListUnmanaged(Reloc) = .empty,
-    inline_funcs: std.ArrayListUnmanaged(InlineFunc) = .empty,
-
     pub fn setInlineFunc(self: *Data, gpa: std.mem.Allocator, comptime Node: type, func: *graph.Func(Node), to: u32) void {
         errdefer unreachable;
 
-        var arena = self.inline_func_nodes.promote(gpa);
-        const ifunc = InlineFunc.init(&arena, Node, func);
-        self.inline_func_nodes = arena.state;
-        try self.inline_funcs.append(gpa, ifunc);
-
-        self.syms.items[@intFromEnum(self.funcs.items[to])].nodes =
-            @intCast(self.inline_funcs.items.len - 1);
+        self.syms.items[@intFromEnum(self.funcs.items[to])].inline_func = @intCast(self.inline_funcs.items.len);
+        try self.inline_funcs.append(gpa, @as(*InlinFunc, @ptrCast(func)).*);
+        func.arena = .init(gpa);
     }
 
-    pub fn getInlineFunc(self: *Data, at: u32, force_inline: bool) ?*const InlineFunc {
+    pub fn getInlineFunc(self: *Data, comptime Backend: type, at: u32, force_inline: bool) ?*const graph.Func(Backend) {
         if (self.funcs.items.len <= at or self.funcs.items[at] == .invalid) return null;
         const sym = &self.syms.items[@intFromEnum(self.funcs.items[at])];
         if (!sym.is_inline and !force_inline) return null;
-        const nodes = sym.nodes;
-        return if (nodes == std.math.maxInt(u32)) null else &self.inline_funcs.items[nodes];
+        return if (sym.inline_func != Sym.no_inline_func)
+            @ptrCast(&self.inline_funcs.items[sym.inline_func])
+        else
+            null;
     }
 
     pub fn readFromSym(self: Data, id: u32, offset: i64, size: u64) ?union(enum) { value: i64, global: u32 } {
@@ -576,11 +141,11 @@ pub const Data = struct {
     }
 
     pub fn addFuncReloc(self: *Data, gpa: std.mem.Allocator, target: u32, slot_size: u8, addend: i16, back_shift: u32) !void {
-        return self.addReloc(gpa, try root.ensureSlot(&self.funcs, gpa, target), slot_size, addend, back_shift);
+        return self.addReloc(gpa, try utils.ensureSlot(&self.funcs, gpa, target), slot_size, addend, back_shift);
     }
 
     pub fn addGlobalReloc(self: *Data, gpa: std.mem.Allocator, target: u32, slot_size: u8, addend: i16, back_shift: u32) !void {
-        return self.addReloc(gpa, try root.ensureSlot(&self.globals, gpa, target), slot_size, addend, back_shift);
+        return self.addReloc(gpa, try utils.ensureSlot(&self.globals, gpa, target), slot_size, addend, back_shift);
     }
 
     pub fn addReloc(self: *Data, gpa: std.mem.Allocator, target: *SymIdx, slot_size: u8, addend: i16, back_shift: u32) !void {
@@ -595,7 +160,6 @@ pub const Data = struct {
     }
 
     pub fn deinit(self: *Data, gpa: std.mem.Allocator) void {
-        self.inline_func_nodes.promote(gpa).deinit();
         inline for (std.meta.fields(Data)[2..]) |f| {
             @field(self, f.name).deinit(gpa);
         }
@@ -603,11 +167,11 @@ pub const Data = struct {
     }
 
     pub fn declGlobal(self: *Data, gpa: std.mem.Allocator, id: u32) !SymIdx {
-        return self.declSym(gpa, try root.ensureSlot(&self.globals, gpa, id));
+        return self.declSym(gpa, try utils.ensureSlot(&self.globals, gpa, id));
     }
 
     pub fn declFunc(self: *Data, gpa: std.mem.Allocator, id: u32) !SymIdx {
-        return self.declSym(gpa, try root.ensureSlot(&self.funcs, gpa, id));
+        return self.declSym(gpa, try utils.ensureSlot(&self.funcs, gpa, id));
     }
 
     pub fn declSym(
@@ -623,7 +187,7 @@ pub const Data = struct {
     }
 
     pub fn importFunc(self: *Data, gpa: std.mem.Allocator, id: u32, name: []const u8) !void {
-        try self.importSym(gpa, try root.ensureSlot(&self.funcs, gpa, id), name, .func);
+        try self.importSym(gpa, try utils.ensureSlot(&self.funcs, gpa, id), name, .func);
     }
 
     pub fn importSym(
@@ -659,7 +223,7 @@ pub const Data = struct {
         is_inline: bool,
     ) !void {
         std.debug.assert(id != std.math.maxInt(u32));
-        const slot = try root.ensureSlot(&self.funcs, gpa, id);
+        const slot = try utils.ensureSlot(&self.funcs, gpa, id);
         try self.startDefineSym(
             gpa,
             slot,
@@ -688,7 +252,7 @@ pub const Data = struct {
 
         try self.startDefineSym(
             gpa,
-            try root.ensureSlot(&self.globals, gpa, id),
+            try utils.ensureSlot(&self.globals, gpa, id),
             name,
             kind,
             linkage,
@@ -762,7 +326,7 @@ pub const Data = struct {
 
     pub fn deduplicate(self: *Data) void {
         errdefer unreachable;
-        var tmp = root.Arena.scrath(null);
+        var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
 
         // Trajan algorithm
@@ -1039,7 +603,7 @@ pub const Data = struct {
 
     pub fn elimitaneDeadCode(self: *Data) void {
         errdefer unreachable;
-        var tmp = root.Arena.scrath(null);
+        var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
 
         const sym_to_idx = tmp.arena.alloc(u32, self.syms.items.len);
@@ -1130,7 +694,7 @@ pub const OptOptions = struct {
     do_gcm: bool,
     verbose: bool = false,
     do_uninit_analisys: bool,
-    arena: ?*root.Arena = null,
+    arena: ?*utils.Arena = null,
     error_buf: ?*std.ArrayListUnmanaged(static_anal.Error) = null,
 
     pub const all = @This(){
@@ -1228,7 +792,7 @@ pub const OptOptions = struct {
             func.gcm.buildCfg();
         }
 
-        if (!root.freestanding and self.verbose)
+        if (!utils.freestanding and self.verbose)
             func.fmtScheduled(
                 std.io.getStdErr().writer().any(),
                 std.io.tty.detectConfig(std.io.getStdErr()),
@@ -1244,12 +808,11 @@ pub const OptOptions = struct {
         errdefer unreachable;
 
         if (optimizations.do_inlining) {
-            var tmp = root.Arena.scrath(optimizations.arena);
+            var tmp = utils.Arena.scrath(optimizations.arena);
             defer tmp.deinit();
 
             const bout: *Data = &backend.out;
             const gpa: std.mem.Allocator = backend.gpa.allocator();
-            const Func = graph.Func(Backend);
 
             var out: Data = .{};
             defer out.deinit(gpa);
@@ -1258,8 +821,6 @@ pub const OptOptions = struct {
             // hanlde stacked inlines as well
             //
             const pi_opts = optimizations.asPostInlining();
-            var arena = bout.inline_func_nodes.promote(gpa);
-            const funcs = tmp.arena.alloc(Func, bout.inline_funcs.items.len);
 
             const sym_to_idx = tmp.arena.alloc(u32, bout.syms.items.len);
 
@@ -1287,14 +848,10 @@ pub const OptOptions = struct {
                     out.endDefineFunc(@intCast(i));
                     continue;
                 }
-                const inline_func = &bout.inline_funcs.items[sym.nodes];
-                funcs[sym.nodes] = inline_func.toFunc(&arena, Backend);
-                pi_opts.execute(Backend, backend, &funcs[sym.nodes]) catch {
+                const inline_func = &bout.inline_funcs.items[sym.inline_func];
+                pi_opts.execute(Backend, backend, @ptrCast(inline_func)) catch {
                     inline_func.corrupted = true;
                 };
-                inline_func.node_count = funcs[sym.nodes].next_id;
-
-                arena = funcs[sym.nodes].arena;
             }
 
             // we take out the current `out` that just encodes the code spec and
@@ -1306,10 +863,8 @@ pub const OptOptions = struct {
                 switch (sym.kind) {
                     .func => {
                         if (sym.linkage == .imported) continue;
-                        var func = &funcs[sym.nodes];
-                        func.arena = arena;
-
-                        backend.emitFunc(func, .{
+                        const func = &out.inline_funcs.items[sym.inline_func];
+                        backend.emitFunc(@ptrCast(func), .{
                             .name = out.lookupName(sym.name),
                             .id = @intCast(i),
                             .linkage = sym.linkage,
@@ -1324,7 +879,6 @@ pub const OptOptions = struct {
                             },
                             .builtins = builtins,
                         });
-                        arena = func.arena;
                     },
                     .data => {
                         var tmpa = tmp.arena.checkpoint();
@@ -1353,8 +907,6 @@ pub const OptOptions = struct {
                     .invalid => {},
                 }
             }
-
-            out.inline_func_nodes = arena.state;
 
             if (optimizations.error_buf) |eb| if (eb.items.len != 0) return true;
 

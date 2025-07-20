@@ -1,21 +1,19 @@
 array index crash 1.awa:
 	sub rsp, 0x10
-	mov rcx, rdi
+	mov rax, rdi
 	mov r8, 0x02
 	mov rdi, 0x0A
 	xor rsi, rsi
-1:	mov rax, rcx
-	cmp al, sil
+1:	mov rcx, rax
+	cmp cl, sil
 	jbe :0
-	mov rax, rcx
+	lea rdx, [rsp]
+	add rdx, r8
+	mov rcx, rax
+	mov [rdx], cl
 	movzx rax, al
 	div dil
-	mov rdx, rax
-	lea rax, [rsp]
-	add rax, r8
-	mov [rax], cl
 	dec r8
-	mov rcx, rdx
 	jmp :1
 0:	xor rax, rax
 	add rsp, 0x10

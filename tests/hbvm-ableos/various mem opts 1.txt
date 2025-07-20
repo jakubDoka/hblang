@@ -69,8 +69,8 @@ various mem opts 1.parallel_stores:
         jal $31, $0, :various mem opts 1.use(^uint)
      addi64 $1, $254, 8
         jal $31, $0, :various mem opts 1.use(^uint)
-       li64 $2, 1
         lra $1, $0, :various mem opts 1.opaque
+       li64 $2, 1
          ld $1, $1, 0, 1
        andi $1, $1, 255
         jeq $1, $0, :e
