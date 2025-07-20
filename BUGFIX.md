@@ -40,6 +40,32 @@ main := fn(): u8 {
 }
 ```
 
+#### function pointers 4
+```hb
+DynObj := struct {
+    .v_func: ^fn(^Obj): u8;
+    .obj: ^Obj
+
+    $func := fn(self: ^DynObj): u8 {
+        return self.v_func(self.obj)
+    }
+    $new := fn(obj: @Any()): DynObj {
+        return .(&@TypeOf(obj.*).func, obj)
+    }
+}
+
+Obj := struct {
+    .state: u8
+    func := fn(self: ^Obj): u8 return self.state + 1
+}
+
+main := fn(): u8 {
+    obj := Obj.(255)
+    dyn_obj := DynObj.new(&obj)
+    return dyn_obj.func()
+}
+```
+
 #### short and op precedence 1
 ```hb
 

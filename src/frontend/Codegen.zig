@@ -2987,11 +2987,15 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
                             break .{ elem.field.ty, elem.offset };
                     } else break :coerse_to_field;
 
-                    break :b .{ .mkp(ftype, self.bl.addFieldOffset(
-                        sloc,
-                        value.id.Pointer,
-                        @intCast(offset),
-                    )), null };
+                    if (value.ty.data() == .Pointer) {
+                        break :b .{ .mkp(ftype, value.getValue(sloc, self)), null };
+                    } else {
+                        break :b .{ .mkp(ftype, self.bl.addFieldOffset(
+                            sloc,
+                            value.id.Pointer,
+                            @intCast(offset),
+                        )), null };
+                    }
                 },
                 .Union => |union_ty| {
                     const ftype = for (union_ty.getFields(self.types)) |f| {
@@ -2999,6 +3003,9 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
                             break f.ty;
                     } else break :coerse_to_field;
                     value.ty = ftype;
+                    if (value.ty.data() == .Pointer) {
+                        break :b .{ .mkp(ftype, value.getValue(sloc, self)), null };
+                    }
                     break :b .{ value, null };
                 },
                 else => unreachable,

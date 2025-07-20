@@ -1,0 +1,44 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -25
+        li8 $1, -1
+         st $1, $254, 0, 1
+     addi64 $1, $254, 0
+        jal $31, $0, :function pointers 4.DynObj.new(^.Obj)
+         st $1, $254, 1, 8
+         st $2, $254, 9, 8
+     addi64 $1, $254, 1
+        jal $31, $0, :function pointers 4.DynObj.func
+     addi64 $254, $254, 25
+         ld $31, $254, -8, 8
+         tx
+function pointers 4.DynObj.new(^.Obj):
+     addi64 $254, $254, -24
+         st $1, $254, 0, 8
+        lra $1, $0, :function pointers 4.Obj.func
+         st $1, $254, 8, 8
+         ld $1, $254, 0, 8
+         st $1, $254, 16, 8
+         ld $1, $254, 8, 8
+         ld $2, $254, 16, 8
+     addi64 $254, $254, 24
+       jala $0, $31, 0
+function pointers 4.DynObj.func:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -16
+         st $1, $254, 0, 8
+         ld $2, $254, 0, 8
+         ld $1, $2, 8, 8
+         ld $2, $2, 0, 8
+       jala $31, $2, 0
+     addi64 $254, $254, 16
+         ld $31, $254, -8, 8
+       jala $0, $31, 0
+function pointers 4.Obj.func:
+     addi64 $254, $254, -8
+         st $1, $254, 0, 8
+         ld $1, $254, 0, 8
+         ld $1, $1, 0, 1
+      addi8 $1, $1, 1
+     addi64 $254, $254, 8
+       jala $0, $31, 0
