@@ -18,7 +18,7 @@ float arithmetic 2.sin:
 	cvttsd2si rax, xmm0
 	mov rdx, rax
 	add rdx, 0x40
-	cvtsi2ss xmm0, eax
+	cvtsi2ss xmm0, rax
 	and rax, 0xFF
 	and rdx, 0xFF
 	mulss xmm0, xmm4

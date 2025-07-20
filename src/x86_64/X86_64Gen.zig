@@ -27,6 +27,7 @@ slot_base: c_int = undefined,
 builtins: Mach.Builtins = undefined,
 
 const syscall = std.math.maxInt(u32);
+const max_instruction_size = 15;
 
 pub const Reg = enum(u8) {
     rax,
@@ -136,6 +137,10 @@ pub const Reg = enum(u8) {
                 (@intFromEnum(m_r) & 7);
         }
 
+        pub fn rmSub(self: Mod, sub: u3, m_r: Reg) u8 {
+            return self.rm(@enumFromInt(sub), m_r);
+        }
+
         pub fn fromDis(dis: i64) Mod {
             return switch (dis) {
                 0 => .indirect,
@@ -161,6 +166,47 @@ pub const Reg = enum(u8) {
         if (@intFromEnum(idx) & 0xf >= 8) res |= 0b0010;
 
         return res;
+    }
+
+    pub const VexOpcodeMap = enum(u8) {
+        _0F = 1,
+        _0F38 = 2,
+        _0F3A = 3,
+    };
+
+    pub const VexPrefix = enum(u8) {
+        none = 0,
+        _66 = 1,
+        _F3 = 2,
+        _F2 = 3,
+    };
+
+    pub fn vex3(
+        self: Reg,
+        vvvv: Reg,
+        rm: Reg,
+        map: VexOpcodeMap,
+        prefix: VexPrefix,
+        wide: bool,
+        vector_length: bool,
+    ) [3]u8 {
+        var vex_bytes: [3]u8 = undefined;
+
+        vex_bytes[0] = 0xC4;
+
+        vex_bytes[1] = 0;
+        vex_bytes[1] |= ((~@intFromEnum(self) & 0x08) << 4);
+        vex_bytes[1] |= (1 << 6);
+        vex_bytes[1] |= ((~@intFromEnum(rm) & 0x08) << 2);
+        vex_bytes[1] |= (@intFromEnum(map) & 0x1F);
+
+        vex_bytes[2] = 0;
+        vex_bytes[2] |= (if (wide) (1 << 7) else 0);
+        vex_bytes[2] |= ((~@intFromEnum(vvvv) & 0x0F) << 3);
+        vex_bytes[2] |= (if (vector_length) (1 << 2) else 0);
+        vex_bytes[2] |= (@intFromEnum(prefix) & 0x03);
+
+        return vex_bytes;
     }
 
     pub fn asZydisOpScalar(self: Reg, size: usize) zydis.ZydisEncoderOperand {
@@ -267,7 +313,7 @@ pub const classes = enum {
     };
     pub const CondJump = extern struct {
         base: graph.If = .{},
-        op: zydis.ZydisMnemonic,
+        op: graph.BinOp,
     };
 };
 
@@ -330,7 +376,7 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
 
     if (node.kind == .UnOp and node.extra(.UnOp).op == .fneg) {
         const src = node.inputs()[1].?;
-        const imm = func.addIntImm(node.sloc, .i64, 0);
+        const imm = func.addIntImm(node.sloc, if (node.data_type == .f32) .i32 else .i64, 0);
         const dst = func.addUnOp(node.sloc, .cast, node.data_type, imm);
         return func.addBinOp(node.sloc, .fsub, node.data_type, dst, src);
     }
@@ -448,30 +494,16 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
     if (node.kind == .If) {
         const cond = node.inputs()[1].?;
         if (cond.kind == .BinOp) select_cond_jump: {
-            const op: zydis.ZydisMnemonic = switch (cond.extra(.BinOp).op) {
-                .ne => zydis.ZYDIS_MNEMONIC_JZ,
-                .eq => zydis.ZYDIS_MNEMONIC_JNZ,
-
-                // Unsigned comparisons
-                .uge => zydis.ZYDIS_MNEMONIC_JB, // jump if below (opposite of >=)
-                .ule => zydis.ZYDIS_MNEMONIC_JNBE, // jump if above (opposite of <=)
-                .ugt => zydis.ZYDIS_MNEMONIC_JBE, // jump if below or equal (opposite of >)
-                .ult => zydis.ZYDIS_MNEMONIC_JNB, // jump if above or equal (opposite of <)
-
-                // Signed comparisons
-                .sge => zydis.ZYDIS_MNEMONIC_JL, // jump if less (opposite of >=)
-                .sle => zydis.ZYDIS_MNEMONIC_JNLE, // jump if greater (opposite of <=)
-                .sgt => zydis.ZYDIS_MNEMONIC_JLE, // jump if less or equal (opposite of >)
-                .slt => zydis.ZYDIS_MNEMONIC_JNL, // jump if greater or equal (opposite of <)
-
+            switch (cond.extra(.BinOp).op) {
+                .ne, .eq, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => {},
                 else => break :select_cond_jump,
-            };
+            }
             return func.addNode(
                 .CondJump,
                 node.sloc,
                 cond.data_type,
                 &.{ node.inputs()[0], cond.inputs()[1], cond.inputs()[2] },
-                .{ .op = op },
+                .{ .op = cond.extra(.BinOp).op },
             );
         }
     }
@@ -924,6 +956,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     prelude: {
         for (Reg.system_v.callee_saved) |r| {
             if (used_regs.contains(r)) {
+                self.ensureInstrSpace();
                 // push r
                 self.emitSingleOp(0x50, r);
                 self.arg_base += 8;
@@ -932,6 +965,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
 
         if (stack_size != 0) {
             // sub rsp, stack_size
+            self.ensureInstrSpace();
             self.emitImmOp(0x81, 0b101, .rsp, stack_size);
         }
 
@@ -974,6 +1008,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
 
             if (stack_size != 0) {
                 // add rsp, stack_size
+                self.ensureInstrSpace();
                 self.emitImmOp(0x81, 0b000, .rsp, stack_size);
             }
 
@@ -981,12 +1016,13 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
             while (@as(?Reg, iter.next())) |r| {
                 if (used_regs.contains(r)) {
                     // pop r
+                    self.ensureInstrSpace();
                     self.emitSingleOp(0x58, r);
                 }
             }
 
             // ret
-            self.emitBytes(&.{0xc3});
+            self.emitByte(0xc3);
         } else if (i + 1 == last.outputs()[@intFromBool(last.isSwapped())].get().schedule) {
             // noop
         } else if (last.kind == .Never) {
@@ -1002,6 +1038,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
                 .class = .rel32,
             });
             // jmp dest
+            self.ensureInstrSpace();
             try self.out.code.appendSlice(self.gpa.allocator(), &.{ 0xE9, 0, 0, 0, 0 });
         }
     }
@@ -1033,13 +1070,16 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             for (inps) |inp| if (inp.kind == .Uninit) continue :outer;
         }
 
+        self.ensureInstrSpace();
+
         switch (instr.extra2()) {
             .FramePointer => {},
             .CInt => |extra| {
                 if (extra.value == 0) {
-                    // TODO: avoid rex prefix
+                    // xor dst, dst
                     self.emitRegOp(0x31, self.getReg(instr), self.getReg(instr));
                 } else {
+                    // mov dst, $imm
                     self.emitSingleOp(0xb8, self.getReg(instr));
                     self.emitImm(i64, extra.value);
                 }
@@ -1064,7 +1104,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     self.emitRegOp(0x89, rhs, lhs);
                 } else if (lhs.isXmm() and rhs.isXmm()) {
                     // movs[s/d] dst, src
-                    self.emitBytes(&.{if (instr.data_type == .f32) 0xf3 else 0xf2});
+                    self.emitByte(if (instr.data_type == .f32) 0xf3 else 0xf2);
                     self.emitRex(rhs, lhs, .rax, instr.data_type.size());
                     self.emitBytes(&.{ 0x0f, 0x11, Reg.Mod.direct.rm(rhs, lhs) });
                 } else {
@@ -1076,12 +1116,12 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     }
 
                     if (lhs.isXmm()) {
-                        self.emitBytes(&.{if (instr.data_type == .f32) 0xf3 else 0xf2});
+                        self.emitByte(if (instr.data_type == .f32) 0xf3 else 0xf2);
                         self.emitRex(lhs, .rsp, .rax, instr.data_type.size());
                         self.emitBytes(&.{ 0x0f, if (lhs_stack) 0x11 else 0x10 });
                     } else {
                         self.emitRex(lhs, .rsp, .rax, instr.data_type.size());
-                        self.emitBytes(&.{if (lhs_stack) 0x89 else 0x8b});
+                        self.emitByte(if (lhs_stack) 0x89 else 0x8b);
                     }
 
                     const offset = rhs.stackOffset(@intCast(self.slot_base));
@@ -1093,7 +1133,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 // lea dst, [rip+reloc]
                 const dst = self.getReg(instr);
                 self.emitRex(dst, .rax, .rax, 8);
-                self.emitBytes(&.{0x8d});
+                self.emitByte(0x8d);
                 self.emitIndirectAddr(dst, .rip, .no_index, 1, null);
 
                 try self.out.addGlobalReloc(self.gpa
@@ -1102,29 +1142,14 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             .GlobalStore => |extra| {
                 // mov [rip+dis+offset], src
                 const src = self.getReg(inps[0]);
-                if (instr.data_type == .i16) self.emitBytes(&.{0x66});
-                self.emitRex(src, .rip, .no_index, instr.data_type.size());
-                self.emitBytes(&.{switch (instr.data_type) {
-                    .i16, .i64, .i32 => 0x89,
-                    .i8 => 0x88,
-                    else => unreachable,
-                }});
-                self.emitIndirectAddr(src, .rip, .no_index, 1, null);
+                self.emitMemStoreOrLoad(instr.data_type, src, .rip, null, true);
                 const dis: i16 = @intCast(extra.base.dis);
                 try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, 4, dis - 4, 4);
             },
             .GlobalLoad => |extra| {
                 // mov dst, [rip+dis+offset]
                 const dst = self.getReg(instr);
-
-                if (instr.data_type == .i16) self.emitBytes(&.{0x66});
-                self.emitRex(dst, .rip, .no_index, instr.data_type.size());
-                self.emitBytes(&.{switch (instr.data_type) {
-                    .i16, .i64, .i32 => 0x8b,
-                    .i8 => 0x8a,
-                    else => unreachable,
-                }});
-                self.emitIndirectAddr(dst, .rip, .no_index, 1, null);
+                self.emitMemStoreOrLoad(instr.data_type, dst, .rip, null, false);
                 const dis: i16 = @intCast(extra.base.dis);
                 try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, 4, dis - 4, 4);
             },
@@ -1153,20 +1178,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const bse = self.getReg(inps[0]);
                 const dis: i32 = extra.dis;
 
-                switch (instr.data_type) {
-                    .i16 => self.emitBytes(&.{0x66}),
-                    .f32 => self.emitBytes(&.{0xf3}),
-                    .f64 => self.emitBytes(&.{0xf2}),
-                    else => {},
-                }
-                self.emitRex(dst, bse, .no_index, instr.data_type.size());
-                switch (instr.data_type) {
-                    .i16, .i64, .i32 => self.emitBytes(&.{0x8b}),
-                    .i8 => self.emitBytes(&.{0x8a}),
-                    .f32, .f64 => self.emitBytes(&.{ 0x0f, 0x10 }),
-                    else => unreachable,
-                }
-                self.emitIndirectAddr(dst, bse, .no_index, 1, dis);
+                self.emitMemStoreOrLoad(instr.data_type, dst, bse, dis, false);
             },
             .OffsetStore => |extra| {
                 // mov [dst+dis], vl
@@ -1174,20 +1186,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const vl = self.getReg(inps[1]);
                 const dis: i32 = extra.dis;
 
-                switch (instr.data_type) {
-                    .i16 => self.emitBytes(&.{0x66}),
-                    .f32 => self.emitBytes(&.{0xf3}),
-                    .f64 => self.emitBytes(&.{0xf2}),
-                    else => {},
-                }
-                self.emitRex(vl, dst, .no_index, instr.data_type.size());
-                switch (instr.data_type) {
-                    .i16, .i64, .i32 => self.emitBytes(&.{0x89}),
-                    .i8 => self.emitBytes(&.{0x88}),
-                    .f32, .f64 => self.emitBytes(&.{ 0x0f, 0x11 }),
-                    else => unreachable,
-                }
-                self.emitIndirectAddr(vl, dst, .no_index, 1, dis);
+                self.emitMemStoreOrLoad(instr.data_type, vl, dst, dis, true);
             },
             .ConstStore => |extra| {
                 // mov [dst+dis], $vl
@@ -1195,107 +1194,25 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const vl = extra.imm;
                 const dis: i32 = extra.base.dis;
 
-                switch (instr.data_type) {
-                    .i16 => self.emitBytes(&.{0x66}),
-                    else => {},
-                }
-
-                self.emitRex(.rax, dst, .rax, instr.data_type.size());
-
-                switch (instr.data_type) {
-                    .i16, .i32, .i64 => self.emitBytes(&.{0xc7}),
-                    .i8 => self.emitBytes(&.{0xc6}),
-                    else => unreachable,
-                }
-                self.emitIndirectAddr(.rax, dst, .no_index, 1, dis);
-
-                switch (instr.data_type) {
-                    .i8 => self.emitImm(i8, @intCast(vl)),
-                    .i16 => self.emitImm(i16, @intCast(vl)),
-                    .i32, .i64 => self.emitImm(i32, @intCast(vl)),
-                    else => unreachable,
-                }
+                self.emitMemConstStore(instr.data_type, vl, dst, dis);
             },
             .ConstStackStore => |extra| {
                 // mov [rsp+dis], $vl
                 const vl = extra.base.imm;
-                const dis: i32 = extra.base.base.dis +
-                    @as(i32, @intCast(switch (instr.inputs()[2].?.extra2()) {
-                        .LocalAlloc => |n| n.size + self.local_base,
-                        .StructArg => |n| n.spec.size + self.arg_base,
-                        else => unreachable,
-                    }));
-
-                switch (instr.data_type) {
-                    .i16 => self.emitBytes(&.{0x66}),
-                    else => {},
-                }
-
-                self.emitRex(.rax, .rsp, .rax, instr.data_type.size());
-
-                switch (instr.data_type) {
-                    .i16, .i32, .i64 => self.emitBytes(&.{0xc7}),
-                    .i8 => self.emitBytes(&.{0xc6}),
-                    else => unreachable,
-                }
-                self.emitIndirectAddr(.rax, .rsp, .no_index, 1, dis);
-
-                switch (instr.data_type) {
-                    .i8 => self.emitImm(i8, @intCast(vl)),
-                    .i16 => self.emitImm(i16, @intCast(vl)),
-                    .i32, .i64 => self.emitImm(i32, @intCast(vl)),
-                    else => unreachable,
-                }
+                const dis: i32 = extra.base.base.dis + self.stackBaseOf(instr);
+                self.emitMemConstStore(instr.data_type, vl, .rsp, dis);
             },
             .StackLoad => |extra| {
                 // mov dst, [rsp+dis]
                 const dst = self.getReg(instr);
-                const dis: i32 = extra.base.dis +
-                    @as(i32, @intCast(switch (instr.inputs()[2].?.extra2()) {
-                        .LocalAlloc => |n| n.size + self.local_base,
-                        .StructArg => |n| n.spec.size + self.arg_base,
-                        else => unreachable,
-                    }));
-
-                switch (instr.data_type) {
-                    .i16 => self.emitBytes(&.{0x66}),
-                    .f32 => self.emitBytes(&.{0xf3}),
-                    .f64 => self.emitBytes(&.{0xf2}),
-                    else => {},
-                }
-                self.emitRex(dst, .rsp, .no_index, instr.data_type.size());
-                switch (instr.data_type) {
-                    .i16, .i64, .i32 => self.emitBytes(&.{0x8b}),
-                    .i8 => self.emitBytes(&.{0x8a}),
-                    .f32, .f64 => self.emitBytes(&.{ 0x0f, 0x10 }),
-                    else => unreachable,
-                }
-                self.emitIndirectAddr(dst, .rsp, .no_index, 1, dis);
+                const dis: i32 = extra.base.dis + self.stackBaseOf(instr);
+                self.emitMemStoreOrLoad(instr.data_type, dst, .rsp, dis, false);
             },
             .StackStore => |extra| {
                 // mov [rsp+dis], vl
                 const vl = self.getReg(inps[0]);
-                const dis: i32 = extra.base.dis +
-                    @as(i32, @intCast(switch (instr.inputs()[2].?.extra2()) {
-                        .LocalAlloc => |n| n.size + self.local_base,
-                        .StructArg => |n| n.spec.size + self.arg_base,
-                        else => unreachable,
-                    }));
-
-                switch (instr.data_type) {
-                    .i16 => self.emitBytes(&.{0x66}),
-                    .f32 => self.emitBytes(&.{0xf3}),
-                    .f64 => self.emitBytes(&.{0xf2}),
-                    else => {},
-                }
-                self.emitRex(vl, .rsp, .no_index, instr.data_type.size());
-                switch (instr.data_type) {
-                    .i16, .i64, .i32 => self.emitBytes(&.{0x89}),
-                    .i8 => self.emitBytes(&.{0x88}),
-                    .f32, .f64 => self.emitBytes(&.{ 0x0f, 0x11 }),
-                    else => unreachable,
-                }
-                self.emitIndirectAddr(vl, .rsp, .no_index, 1, dis);
+                const dis: i32 = extra.base.dis + self.stackBaseOf(instr);
+                self.emitMemStoreOrLoad(instr.data_type, vl, .rsp, dis, true);
             },
             .Call => |extra| {
                 const call = instr.extra(.Call);
@@ -1303,6 +1220,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 if (extra.id == syscall) {
                     self.emitBytes(&.{ 0x0f, 0x05 });
                 } else {
+                    // call id
                     self.emitBytes(&.{ 0xe8, 0, 0, 0, 0 });
                     try self.out.addFuncReloc(self.gpa.allocator(), call.id, 4, -4, 4);
                 }
@@ -1313,45 +1231,171 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     graph.unreachable_func_trap,
                     graph.infinite_loop_trap,
                     => return,
+                    // ud2
                     0 => self.emitBytes(&.{ 0x0f, 0x0b }),
                     else => unreachable,
                 }
             },
+            .If => {
+                const cond = self.getReg(inps[0]);
+                const cond_size = inps[0].data_type.size();
+
+                const opcode: u8 = switch (inps[0].data_type) {
+                    .i8 => 0x84,
+                    .i16, .i32, .i64 => 0x85,
+                    else => unreachable,
+                };
+
+                // test cond, cond
+                self.emitRex(cond, cond, .rax, cond_size);
+                self.emitBytes(&.{ opcode, Reg.Mod.direct.rm(cond, cond) });
+
+                self.local_relocs.appendAssumeCapacity(.{
+                    .dest = instr.outputs()[1].get().schedule,
+                    .offset = @intCast(self.out.code.items.len),
+                    .class = .rel32,
+                    .off = 2,
+                });
+                // jz dest
+                self.emitBytes(&.{ 0x0f, 0x84, 0, 0, 0, 0 });
+            },
+            .CondJump => |extra| {
+                const lhs = self.getReg(inps[0]);
+                const rhs = self.getReg(inps[1]);
+                const oper_dt = inps[0].data_type;
+
+                self.emitBinopCmp(lhs, rhs, oper_dt);
+
+                self.local_relocs.appendAssumeCapacity(.{
+                    .dest = instr.outputs()[1].get().schedule,
+                    .offset = @intCast(self.out.code.items.len),
+                    .class = .rel32,
+                    .off = 2,
+                });
+
+                // j[op] dst
+                self.emitBytes(&.{ 0x0f, jmpCompOp(extra.op), 0, 0, 0, 0 });
+            },
+            .Jmp => {},
             .Return => {},
             .ImmOp => |extra| {
                 const op = extra.base.op;
-                const size = instr.data_type.size();
                 const op_dt = instr.inputs()[1].?.data_type;
-                const opsize = op_dt.size();
                 const dst = self.getReg(instr);
                 const lhs = self.getReg(inps[0]);
                 const rhs = extra.imm;
-
-                const mnemonic = binopToMnemonic(op, instr.data_type);
+                const crhs = std.math.cast(i8, rhs);
 
                 switch (op) {
                     .imul => unreachable,
-                    .ushr, .ishl, .sshr, .iadd, .isub, .bor, .band, .bxor => {
+                    .ushr, .ishl, .sshr => {
+                        std.debug.assert(dst == lhs);
+
+                        const opcode: u8 = switch (instr.data_type) {
+                            .i8 => 0xC0,
+                            .i16, .i32, .i64 => 0xC1,
+                            else => unreachable,
+                        };
+
+                        const sub_opcode: u3 = switch (op) {
+                            .ishl => 0b100,
+                            .ushr => 0b101,
+                            .sshr => 0b111,
+                            else => unreachable,
+                        };
+
+                        if (instr.data_type == .i16) self.emitByte(0x66);
+                        self.emitRexNoReg(dst, .rax, instr.data_type.size());
+                        self.emitBytes(&.{ opcode, Reg.Mod.direct.rmSub(sub_opcode, dst) });
+                        self.emitImm(i8, @intCast(rhs));
+                    },
+                    .iadd, .isub, .bor, .band, .bxor => {
+                        std.debug.assert(dst == lhs);
+
+                        if (instr.data_type == .i16) self.emitByte(0x66);
+                        self.emitRexNoReg(dst, .rax, instr.data_type.size());
+
+                        const inc_dec_op: u8 = switch (instr.data_type) {
+                            .i8 => 0xFE,
+                            .i16, .i32, .i64 => 0xFF,
+                            else => unreachable,
+                        };
                         if (op == .iadd and rhs == 1) {
-                            self.emitInstr(zydis.ZYDIS_MNEMONIC_INC, .{SReg{ dst, size }});
+                            // inc dst
+                            self.emitBytes(&.{ inc_dec_op, Reg.Mod.direct.rmSub(0, dst) });
                         } else if (op == .isub and rhs == 1) {
-                            self.emitInstr(zydis.ZYDIS_MNEMONIC_DEC, .{SReg{ dst, size }});
+                            // dec dst
+                            self.emitBytes(&.{ inc_dec_op, Reg.Mod.direct.rmSub(1, dst) });
                         } else {
-                            self.emitInstr(mnemonic, .{ SReg{ dst, size }, rhs });
+
+                            // op dst, $rhs
+                            const opcode: u8 = switch (instr.data_type) {
+                                .i8 => 0x80,
+                                .i16, .i32, .i64 => if (crhs == null) 0x81 else 0x83,
+                                else => unreachable,
+                            };
+
+                            const sub_opcode: u3 = switch (op) {
+                                .iadd => 0b000,
+                                .bor => 0b001,
+                                .band => 0b100,
+                                .isub => 0b101,
+                                .bxor => 0b110,
+                                else => unreachable,
+                            };
+
+                            if (instr.data_type == .i16) self.emitByte(0x66);
+                            self.emitRexNoReg(dst, .rax, instr.data_type.size());
+                            self.emitBytes(&.{ opcode, Reg.Mod.direct.rmSub(sub_opcode, dst) });
+
+                            if (crhs) |c| {
+                                self.emitImm(i8, c);
+                            } else {
+                                switch (instr.data_type) {
+                                    .i8 => self.emitImm(i8, @intCast(rhs)),
+                                    .i16 => self.emitImm(i16, @intCast(rhs)),
+                                    .i32, .i64 => self.emitImm(i32, @intCast(rhs)),
+                                    else => unreachable,
+                                }
+                            }
                         }
                     },
-                    .udiv, .sdiv, .smod, .umod => switch (size) {
-                        1, 2, 4, 8 => {
-                            self.prepareDivRegs(mnemonic, size);
-                            self.emitInstr(mnemonic, .{ rhs, SizeHint{ .bytes = size } });
-                        },
-                        else => unreachable,
-                    },
-                    .fadd, .fsub, .fmul, .fdiv, .fgt, .flt, .fge, .fle => unreachable,
+                    .udiv, .sdiv, .smod, .umod, .fadd, .fsub => unreachable,
+                    .fmul, .fdiv, .fgt, .flt, .fge, .fle => unreachable,
                     .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => {
-                        self.emitInstr(zydis.ZYDIS_MNEMONIC_CMP, .{ SReg{ lhs, opsize }, rhs });
-                        self.emitInstr(mnemonic, .{SReg{ dst, 1 }});
-                        self.emitInstr(zydis.ZYDIS_MNEMONIC_MOVZX, .{ dst, SReg{ dst, 1 } });
+                        // cmp lhs, $rhs
+                        const opcode: u8 = switch (op_dt) {
+                            .i8 => 0x80,
+                            .i16, .i32, .i64 => if (crhs == null) 0x81 else 0x83,
+                            else => unreachable,
+                        };
+
+                        if (op_dt == .i16) self.emitByte(0x66);
+                        self.emitRexNoReg(lhs, .rax, op_dt.size());
+                        self.emitBytes(&.{ opcode, Reg.Mod.direct.rmSub(0b111, lhs) });
+
+                        if (crhs) |c| {
+                            self.emitImm(i8, c);
+                        } else {
+                            switch (op_dt) {
+                                .i8 => self.emitImm(i8, @intCast(rhs)),
+                                .i16 => self.emitImm(i16, @intCast(rhs)),
+                                .i32, .i64 => self.emitImm(i32, @intCast(rhs)),
+                                else => unreachable,
+                            }
+                        }
+
+                        // setx dst
+                        self.emitRexNoReg(dst, .rax, 1);
+                        self.emitBytes(&.{
+                            0x0F,
+                            setCompOp(op),
+                            Reg.Mod.direct.rmSub(0b000, dst),
+                        });
+
+                        // movzx dst, al
+                        self.emitRex(dst, dst, .rax, 8);
+                        self.emitBytes(&.{ 0x0F, 0xB6, Reg.Mod.direct.rm(dst, dst) });
                     },
                 }
             },
@@ -1364,113 +1408,142 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 std.debug.assert(instr.data_type == .f32 or instr.data_type == .f64);
                 std.debug.assert(dst == a);
 
-                const mnemonic: zydis.ZydisMnemonic = if (instr.data_type == .f32)
-                    zydis.ZYDIS_MNEMONIC_VFMADD231SS
-                else
-                    zydis.ZYDIS_MNEMONIC_VFMADD231SD;
-
-                self.emitInstr(mnemonic, .{ a, b, c });
+                // vfmadd231s[s/d] a, b, c
+                const wide = instr.data_type == .f64;
+                self.emitBytes(&Reg.vex3(a, b, c, ._0F38, ._66, wide, false));
+                self.emitBytes(&.{ 0xB9, Reg.Mod.direct.rm(a, c) });
             },
             .BinOp => |extra| {
                 const op = extra.op;
                 const size = instr.data_type.size();
                 const op_dt = instr.inputs()[1].?.data_type;
-                const opsize = op_dt.size();
                 const dst = self.getReg(instr);
                 const lhs = self.getReg(inps[0]);
                 const rhs = self.getReg(inps[1]);
-
-                const mnemonic = binopToMnemonic(op, instr.data_type);
 
                 switch (op) {
                     .ushr, .ishl, .sshr => {
                         std.debug.assert(lhs == dst);
                         std.debug.assert(rhs == .rcx);
-                        self.emitInstr(mnemonic, .{ SReg{ dst, size }, SReg{ rhs, 1 } });
+
+                        if (instr.data_type == .i16) self.emitByte(0x66);
+                        self.emitRexBinop(dst, lhs, .rax, instr.data_type.size());
+
+                        const opcode: u8 = switch (instr.data_type) {
+                            .i8 => 0xD2,
+                            .i16, .i32, .i64 => 0xD3,
+                            else => unreachable,
+                        };
+
+                        const sub_opcode: u3 = switch (op) {
+                            .ishl => 0b100,
+                            .ushr => 0b101,
+                            .sshr => 0b111,
+                            else => unreachable,
+                        };
+
+                        self.emitBytes(&.{ opcode, Reg.Mod.direct.rmSub(sub_opcode, lhs) });
                     },
-                    .fadd, .fsub, .fmul, .fdiv, .iadd, .isub, .imul, .bor, .band, .bxor => {
+                    .fadd, .fsub, .fmul, .fdiv => {
                         std.debug.assert(lhs == dst);
-                        self.emitInstr(mnemonic, .{ SReg{ dst, @max(size, 4) }, rhs });
+
+                        switch (instr.data_type) {
+                            .f32 => self.emitByte(0xF3),
+                            .f64 => self.emitByte(0xF2),
+                            else => unreachable,
+                        }
+                        self.emitRexBinop(dst, rhs, .rax, size);
+
+                        const opcode: u8 = switch (op) {
+                            .fadd => 0x58,
+                            .fsub => 0x5c,
+                            .fmul => 0x59,
+                            .fdiv => 0x5e,
+                            else => unreachable,
+                        };
+
+                        self.emitBytes(&.{ 0x0F, opcode, Reg.Mod.direct.rm(dst, rhs) });
                     },
-                    .udiv, .sdiv, .smod, .umod => switch (size) {
-                        1, 2, 4, 8 => {
-                            // this is kind of fucked but eh,
-                            // we need a better support from the regalloc
-                            const oper = rhs;
-                            std.debug.assert(lhs == .rax);
-                            std.debug.assert(rhs != .rdx);
-                            const dest_reg: Reg = if (op == .udiv or op == .sdiv) .rax else .rdx;
-                            if (dst != dest_reg) {
-                                utils.panic("{} {} {} {}", .{ dst, dest_reg, op, instr });
-                            }
+                    .imul => {
+                        std.debug.assert(lhs == dst);
 
-                            self.prepareDivRegs(mnemonic, size);
-                            self.emitInstr(mnemonic, .{SReg{ oper, size }});
+                        self.emitRexBinop(dst, rhs, .rax, @max(size, 4));
+                        self.emitBytes(&.{ 0x0F, 0xAF, Reg.Mod.direct.rm(dst, rhs) });
+                    },
+                    .iadd, .isub, .bor, .band, .bxor => {
+                        std.debug.assert(lhs == dst);
 
-                            if (size == 1 and dest_reg == .rdx) {
-                                self.emitInstr(zydis.ZYDIS_MNEMONIC_MOV, .{ SReg{ dst, 1 }, zydis.ZydisEncoderOperand{
-                                    .type = zydis.ZYDIS_OPERAND_TYPE_REGISTER,
-                                    .reg = .{ .value = zydis.ZYDIS_REGISTER_AH },
-                                } });
-                            }
-                        },
-                        else => unreachable,
+                        self.emitRexBinop(rhs, dst, .rax, @max(size, 4));
+                        var opcode: u8 = switch (op) {
+                            .iadd => 0x00,
+                            .isub => 0x28,
+                            .bor => 0x08,
+                            .band => 0x20,
+                            .bxor => 0x30,
+                            else => unreachable,
+                        };
+                        opcode += 1;
+
+                        self.emitBytes(&.{ opcode, Reg.Mod.direct.rm(rhs, dst) });
+                    },
+                    .udiv, .sdiv, .smod, .umod => {
+                        // this is kind of fucked but eh,
+                        // we need a better support from the regalloc
+                        std.debug.assert(lhs == .rax);
+                        std.debug.assert(rhs != .rdx);
+                        const dest_reg: Reg = if (op == .udiv or op == .sdiv) .rax else .rdx;
+                        if (dst != dest_reg) {
+                            utils.panic("{} {} {} {}", .{ dst, dest_reg, op, instr });
+                        }
+
+                        // div rhs
+                        self.prepareDivRegs(op, size);
+                        if (instr.data_type == .i16) self.emitByte(0x66);
+                        self.emitRexNoReg(rhs, .rax, size);
+
+                        const opcode: u8 = switch (instr.data_type) {
+                            .i8 => 0xF6,
+                            .i16, .i32, .i64 => 0xF7,
+                            else => unreachable,
+                        };
+
+                        const sub_opcode: u3 = switch (op) {
+                            .udiv, .umod => 0b110,
+                            .sdiv, .smod => 0b111,
+                            else => unreachable,
+                        };
+
+                        self.emitBytes(&.{ opcode, Reg.Mod.direct.rmSub(sub_opcode, rhs) });
+
+                        if (size == 1 and dest_reg == .rdx) {
+                            // mov al, ah
+                            self.emitBytes(&.{ 0x88, 0xe2 });
+                        }
                     },
                     .fgt, .flt, .fge, .fle, .eq, .ne, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => {
-                        const cmp_mnemonic: zydis.ZydisMnemonic = if (op_dt.isInt())
-                            zydis.ZYDIS_MNEMONIC_CMP
-                        else if (op_dt == .f64)
-                            zydis.ZYDIS_MNEMONIC_COMISD
-                        else
-                            zydis.ZYDIS_MNEMONIC_COMISS;
+                        self.emitBinopCmp(lhs, rhs, op_dt);
 
-                        self.emitInstr(cmp_mnemonic, .{ SReg{ lhs, opsize }, SReg{ rhs, opsize } });
-                        self.emitInstr(mnemonic, .{SReg{ dst, 1 }});
-                        self.emitInstr(zydis.ZYDIS_MNEMONIC_MOVZX, .{ dst, SReg{ dst, 1 } });
+                        // set[op] dst
+                        self.emitRexNoReg(dst, .rax, 1);
+                        self.emitBytes(&.{
+                            0x0F,
+                            setCompOp(op),
+                            Reg.Mod.direct.rmSub(0b000, dst),
+                        });
+
+                        // movzx dst, al
+                        self.emitRex(dst, dst, .rax, 8);
+                        self.emitBytes(&.{ 0x0F, 0xB6, Reg.Mod.direct.rm(dst, dst) });
                     },
                 }
             },
-            .If => {
-                const cond = self.getReg(inps[0]);
-                const cond_size = inps[0].data_type.size();
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_TEST, .{ SReg{ cond, cond_size }, SReg{ cond, cond_size } });
-                self.local_relocs.appendAssumeCapacity(.{
-                    .dest = instr.outputs()[1].get().schedule,
-                    .offset = @intCast(self.out.code.items.len),
-                    .class = .rel32,
-                    .off = 2,
-                });
-                self.emitInstr(zydis.ZYDIS_MNEMONIC_JZ, .{ std.math.maxInt(i32), SizeHint{ .bytes = 0 } });
-            },
-            .CondJump => |extra| {
-                const lhs = self.getReg(inps[0]);
-                const rhs = self.getReg(inps[1]);
-                const oper_dt = inps[0].data_type;
-
-                const cmp_mnemonic: zydis.ZydisMnemonic = if (oper_dt.isInt())
-                    zydis.ZYDIS_MNEMONIC_CMP
-                else if (oper_dt == .f64)
-                    zydis.ZYDIS_MNEMONIC_COMISD
-                else
-                    zydis.ZYDIS_MNEMONIC_COMISS;
-
-                self.emitInstr(cmp_mnemonic, .{ SReg{ lhs, oper_dt.size() }, rhs });
-                self.local_relocs.appendAssumeCapacity(.{
-                    .dest = instr.outputs()[1].get().schedule,
-                    .offset = @intCast(self.out.code.items.len),
-                    .class = .rel32,
-                    .off = 2,
-                });
-                self.emitInstr(extra.op, .{ std.math.maxInt(i32), SizeHint{ .bytes = 0 } });
-            },
-            .Jmp => {},
             .UnOp => |extra| {
                 const op = extra.op;
                 const size = instr.data_type.size();
-                const dst = self.getReg(instr);
+                var dst = self.getReg(instr);
                 const src_dt = inps[0].data_type;
                 const src_size = src_dt.size();
-                const src = self.getReg(inps[0]);
+                var src = self.getReg(inps[0]);
 
                 std.debug.assert(dst == src or switch (op) {
                     .not, .bnot, .ineg, .ired => false,
@@ -1479,54 +1552,126 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
 
                 switch (op) {
                     .ired => {},
-                    .sext => switch (src_size) {
-                        1, 2 => self.emitInstr(
-                            zydis.ZYDIS_MNEMONIC_MOVSX,
-                            .{ SReg{ dst, size }, SReg{ src, src_size } },
-                        ),
-                        4 => self.emitInstr(
-                            zydis.ZYDIS_MNEMONIC_MOVSXD,
-                            .{ SReg{ dst, size }, SReg{ src, src_size } },
-                        ),
-                        else => unreachable,
+                    .sext => {
+                        std.debug.assert(src_size < size);
+
+                        if (instr.data_type == .i16) self.emitByte(0x66);
+                        const opcode: []const u8 = switch (size << 4 | src_size) {
+                            0x21, 0x41, 0x81 => &.{ 0x0F, 0xBE },
+                            0x42, 0x82 => &.{ 0x0F, 0xBf },
+                            0x84 => &.{0x63},
+                            else => unreachable,
+                        };
+
+                        const rex = Reg.rex(dst, src, .rax, size == 8);
+                        if (rex != Reg.no_op_rex or
+                            (src_size == 1 and src.needRexIfSingleByte()))
+                        {
+                            self.emitByte(rex);
+                        }
+
+                        self.emitBytes(opcode);
+                        self.emitBytes(&.{Reg.Mod.direct.rm(dst, src)});
                     },
-                    .uext => if (instr.inputs()[1].?.data_type.size() <= 2) {
-                        self.emitInstr(
-                            zydis.ZYDIS_MNEMONIC_MOVZX,
-                            .{ SReg{ dst, size }, SReg{ src, src_size } },
-                        );
-                    } else {
-                        self.emitInstr(
-                            zydis.ZYDIS_MNEMONIC_MOV,
-                            .{ SReg{ dst, instr.inputs()[1].?.data_type.size() }, src },
-                        );
+                    .uext => {
+                        std.debug.assert(src_size < size);
+
+                        if (instr.data_type == .i16) self.emitByte(0x66);
+                        const opcode: []const u8 = switch (size << 4 | src_size) {
+                            0x21, 0x41, 0x81 => &.{ 0x0F, 0xB6 },
+                            0x42, 0x82 => &.{ 0x0F, 0xB7 },
+                            0x84 => &.{0x89},
+                            else => unreachable,
+                        };
+
+                        if (src_size == 4) std.mem.swap(Reg, &src, &dst);
+
+                        const rex = Reg.rex(dst, src, .rax, size == 8 and src_size != 4);
+                        if (rex != Reg.no_op_rex or
+                            (src_size == 1 and src.needRexIfSingleByte()))
+                        {
+                            self.emitByte(rex);
+                        }
+
+                        self.emitBytes(opcode);
+                        self.emitBytes(&.{Reg.Mod.direct.rm(dst, src)});
                     },
                     .not => {
-                        self.emitInstr(zydis.ZYDIS_MNEMONIC_XOR, .{ SReg{ dst, size }, 1 });
+                        if (instr.data_type == .i16) self.emitByte(0x66);
+                        self.emitRexNoReg(dst, .rax, instr.data_type.size());
+
+                        // op dst, $rhs
+                        const opcode: u8 = switch (instr.data_type) {
+                            .i8 => 0x80,
+                            .i16, .i32, .i64 => 0x83,
+                            else => unreachable,
+                        };
+
+                        if (instr.data_type == .i16) self.emitByte(0x66);
+                        self.emitRexNoReg(dst, .rax, instr.data_type.size());
+                        self.emitBytes(&.{ opcode, Reg.Mod.direct.rmSub(0b110, dst) });
+                        self.emitImm(i8, 1);
                     },
-                    .bnot => {
-                        self.emitInstr(zydis.ZYDIS_MNEMONIC_NOT, .{SReg{ dst, size }});
+                    .bnot, .ineg => {
+                        // op dst
+                        if (instr.data_type == .i16) self.emitByte(0x66);
+                        self.emitRexNoReg(dst, .rax, instr.data_type.size());
+
+                        const opcode: u8 = switch (instr.data_type) {
+                            .i8 => 0xF6,
+                            .i16, .i32, .i64 => 0xF7,
+                            else => unreachable,
+                        };
+
+                        const sub_opcode: u3 = switch (op) {
+                            .bnot => 0b010,
+                            .ineg => 0b011,
+                            else => unreachable,
+                        };
+
+                        self.emitBytes(&.{ opcode, Reg.Mod.direct.rmSub(sub_opcode, dst) });
                     },
-                    .ineg => {
-                        self.emitInstr(zydis.ZYDIS_MNEMONIC_NEG, .{SReg{ dst, size }});
+                    .cast => {
+                        std.debug.assert(src_size == size);
+                        std.debug.assert(src_size == 8 or src_size == 4);
+
+                        const opcode: u8 = switch (src_dt) {
+                            .f32, .f64 => 0x7e,
+                            .i32, .i64 => 0x6e,
+                            else => unreachable,
+                        };
+
+                        self.emitByte(0x66);
+                        self.emitRex(dst, src, .rax, src_size);
+                        self.emitBytes(&.{ 0x0f, opcode, Reg.Mod.direct.rm(dst, src) });
                     },
-                    .cast => self.emitInstr(switch (src_size) {
-                        4 => zydis.ZYDIS_MNEMONIC_MOVD,
-                        8 => zydis.ZYDIS_MNEMONIC_MOVQ,
-                        else => unreachable,
-                    }, .{ SReg{ dst, size }, SReg{ src, src_size } }),
-                    .fti => self.emitInstr(switch (src_dt) {
-                        .f32 => zydis.ZYDIS_MNEMONIC_CVTTSS2SI,
-                        .f64 => zydis.ZYDIS_MNEMONIC_CVTTSD2SI,
-                        else => unreachable,
-                    }, .{ SReg{ dst, size }, SReg{ src, size } }),
-                    .itf32 => self.emitInstr(zydis.ZYDIS_MNEMONIC_CVTSI2SS, .{ SReg{ dst, size }, SReg{ src, size } }),
-                    .itf64 => self.emitInstr(zydis.ZYDIS_MNEMONIC_CVTSI2SD, .{ SReg{ dst, size }, SReg{ src, size } }),
-                    .fcst => self.emitInstr(switch (src_dt) {
-                        .f32 => zydis.ZYDIS_MNEMONIC_CVTSS2SD,
-                        .f64 => zydis.ZYDIS_MNEMONIC_CVTSD2SS,
-                        else => unreachable,
-                    }, .{ SReg{ dst, size }, SReg{ src, size } }),
+                    .fti => {
+                        switch (src_dt) {
+                            .f32 => self.emitByte(0xF3),
+                            .f64 => self.emitByte(0xF2),
+                            else => unreachable,
+                        }
+                        self.emitRex(dst, src, .rax, size);
+                        self.emitBytes(&.{ 0x0F, 0x2C, Reg.Mod.direct.rm(dst, src) });
+                    },
+                    .itf32, .itf64 => {
+                        switch (instr.data_type) {
+                            .f32 => self.emitByte(0xF3),
+                            .f64 => self.emitByte(0xF2),
+                            else => unreachable,
+                        }
+                        self.emitRex(dst, src, .rax, src_size);
+                        self.emitBytes(&.{ 0x0F, 0x2A, Reg.Mod.direct.rm(dst, src) });
+                    },
+                    .fcst => {
+                        switch (src_dt) {
+                            .f32 => self.emitByte(0xF3),
+                            .f64 => self.emitByte(0xF2),
+                            else => unreachable,
+                        }
+                        self.emitRex(dst, src, .rax, 0);
+                        self.emitBytes(&.{ 0x0F, 0x5a, Reg.Mod.direct.rm(dst, src) });
+                    },
                     .fneg => unreachable,
                 }
             },
@@ -1537,30 +1682,32 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
     }
 }
 
-pub fn prepareDivRegs(self: *X86_64Gen, mnemonic: zydis.ZydisMnemonic, size: u64) void {
-    if (mnemonic == zydis.ZYDIS_MNEMONIC_DIV) {
+pub fn prepareDivRegs(self: *X86_64Gen, mnemonic: graph.BinOp, size: u64) void {
+    if (mnemonic == .udiv or mnemonic == .umod) {
         if (size == 1) {
-            self.emitInstr(
-                zydis.ZYDIS_MNEMONIC_MOVZX,
-                .{ Reg.rax, SReg{ .rax, 1 } },
-            );
+            // movzx rax, al
+            self.emitRex(.rax, .rax, .rax, 8);
+            self.emitBytes(&.{ 0x0F, 0xB6, Reg.Mod.direct.rm(.rax, .rax) });
         } else {
-            self.emitInstr(zydis.ZYDIS_MNEMONIC_XOR, .{ Reg.rdx, Reg.rdx });
+            // xor rdx, rdx
+            if (size == 2) self.emitByte(0x66);
+            self.emitRex(.rdx, .rdx, .rax, size);
+            self.emitBytes(&.{ 0x31, Reg.Mod.direct.rm(.rdx, .rdx) });
         }
     } else {
-        if (size == 1) {
-            self.emitInstr(
-                zydis.ZYDIS_MNEMONIC_MOVSX,
-                .{ Reg.rax, SReg{ .rax, 1 } },
-            );
-        } else if (size == 2) {
-            self.emitInstr(zydis.ZYDIS_MNEMONIC_CWD, .{});
-        } else if (size == 4) {
-            self.emitInstr(zydis.ZYDIS_MNEMONIC_CDQ, .{});
-        } else if (size == 8) {
-            self.emitInstr(zydis.ZYDIS_MNEMONIC_CQO, .{});
-        } else {
-            unreachable;
+        switch (size) {
+            // movsx rax, al
+            1 => {
+                self.emitRex(.rax, .rax, .rax, 8);
+                self.emitBytes(&.{ 0x0F, 0xBE, Reg.Mod.direct.rm(.rax, .rax) });
+            },
+            // cwd
+            2 => self.emitBytes(&.{ 0x66, 0x99 }),
+            // cdq
+            4 => self.emitBytes(&.{0x99}),
+            // cqo
+            8 => self.emitBytes(&.{ 0x48, 0x99 }),
+            else => unreachable,
         }
     }
 }
@@ -1569,6 +1716,90 @@ pub const SReg = struct { Reg, usize };
 pub const BRegOff = struct { Reg, i32, u16 };
 pub const Rip = struct {};
 pub const SizeHint = struct { bytes: u64 };
+
+pub fn ensureInstrSpace(self: *X86_64Gen) void {
+    self.out.code.ensureUnusedCapacity(
+        self.gpa.allocator(),
+        max_instruction_size,
+    ) catch unreachable;
+}
+
+pub fn stackBaseOf(self: *X86_64Gen, instr: *Func.Node) i32 {
+    return @intCast(switch (instr.inputs()[2].?.extra2()) {
+        .LocalAlloc => |n| n.size + self.local_base,
+        .StructArg => |n| n.spec.size + self.arg_base,
+        else => unreachable,
+    });
+}
+
+pub fn emitBinopCmp(self: *X86_64Gen, lhs: Reg, rhs: Reg, oper_dt: graph.DataType) void {
+    // cmp lhs, rhs
+    if (oper_dt == .i16 or oper_dt == .f64) self.emitByte(0x66);
+    self.emitRexBinop(lhs, rhs, .rax, oper_dt.size());
+
+    const opcode: []const u8 = switch (oper_dt) {
+        .i8 => &.{0x3a},
+        .i16, .i32, .i64 => &.{0x3b},
+        .f32, .f64 => &.{ 0x0f, 0x2f },
+        else => unreachable,
+    };
+
+    self.emitBytes(opcode);
+    self.emitBytes(&.{Reg.Mod.direct.rm(lhs, rhs)});
+}
+
+pub fn emitMemConstStore(
+    self: *X86_64Gen,
+    dt: graph.DataType,
+    vl: i64,
+    bse: Reg,
+    dis: i64,
+) void {
+    switch (dt) {
+        .i16 => self.emitByte(0x66),
+        else => {},
+    }
+
+    self.emitRexNoReg(bse, .rax, dt.size());
+
+    switch (dt) {
+        .i16, .i32, .i64 => self.emitByte(0xc7),
+        .i8 => self.emitByte(0xc6),
+        else => unreachable,
+    }
+    self.emitIndirectAddr(.rax, bse, .no_index, 1, dis);
+
+    switch (dt) {
+        .i8 => self.emitImm(i8, @intCast(vl)),
+        .i16 => self.emitImm(i16, @intCast(vl)),
+        .i32, .i64 => self.emitImm(i32, @intCast(vl)),
+        else => unreachable,
+    }
+}
+
+pub fn emitMemStoreOrLoad(
+    self: *X86_64Gen,
+    dt: graph.DataType,
+    reg: Reg,
+    bse: Reg,
+    dis: ?i64,
+    is_store: bool,
+) void {
+    switch (dt) {
+        .i16 => self.emitByte(0x66),
+        .f32 => self.emitByte(0xf3),
+        .f64 => self.emitByte(0xf2),
+        else => {},
+    }
+    self.emitRex(reg, bse, .no_index, dt.size());
+    self.emitBytes(switch (dt) {
+        .i16, .i64, .i32 => &.{if (is_store) 0x89 else 0x8b},
+        .i8 => &.{if (is_store) 0x88 else 0x8a},
+        .f32, .f64 => &.{ 0x0f, if (is_store) 0x11 else 0x10 },
+        else => unreachable,
+    });
+    self.emitIndirectAddr(reg, bse, .no_index, 1, dis);
+}
 
 pub fn emitIndirectAddr(
     self: *X86_64Gen,
@@ -1579,7 +1810,6 @@ pub fn emitIndirectAddr(
     // null if this is relocated
     dis: ?i64,
 ) void {
-    // TODO: preallocate and push assuming capacity
     var mod = if (dis) |d| Reg.Mod.fromDis(d) else Reg.Mod.indirect;
     std.debug.assert(mod != .direct);
 
@@ -1590,10 +1820,10 @@ pub fn emitIndirectAddr(
     }
 
     if (index != Reg.no_index or ill_base or scale != 1) {
-        self.emitBytes(&.{mod.rm(reg, .rsp)});
-        self.emitBytes(&.{Reg.sib(base, index, scale)});
+        self.emitByte(mod.rm(reg, .rsp));
+        self.emitByte(Reg.sib(base, index, scale));
     } else {
-        self.emitBytes(&.{mod.rm(reg, base)});
+        self.emitByte(mod.rm(reg, base));
     }
 
     if (dis) |d| switch (mod) {
@@ -1606,16 +1836,32 @@ pub fn emitIndirectAddr(
     }
 }
 
+pub fn emitRexNoReg(self: *X86_64Gen, ptr: Reg, idx: Reg, reg_size: u64) void {
+    const rex = Reg.rex(.rax, ptr, idx, reg_size == 8);
+    if (rex != Reg.no_op_rex or (reg_size == 1 and ptr.needRexIfSingleByte())) {
+        self.emitByte(rex);
+    }
+}
+
+pub fn emitRexBinop(self: *X86_64Gen, reg: Reg, ptr: Reg, idx: Reg, reg_size: u64) void {
+    const rex = Reg.rex(reg, ptr, idx, reg_size == 8);
+    if (rex != Reg.no_op_rex or (reg_size == 1 and
+        (reg.needRexIfSingleByte() or ptr.needRexIfSingleByte())))
+    {
+        self.emitByte(rex);
+    }
+}
+
 pub fn emitRex(self: *X86_64Gen, reg: Reg, ptr: Reg, idx: Reg, reg_size: u64) void {
     const rex = Reg.rex(reg, ptr, idx, reg_size == 8);
     if (rex != Reg.no_op_rex or (reg_size == 1 and reg.needRexIfSingleByte())) {
-        self.emitBytes(&.{rex});
+        self.emitByte(rex);
     }
 }
 
 pub fn emitStackLea(self: *X86_64Gen, dst: Reg, dis: u64) void {
     self.emitRex(dst, .rax, .rax, 8);
-    self.emitBytes(&.{0x8d});
+    self.emitByte(0x8d);
     self.emitIndirectAddr(dst, .rsp, .no_index, 1, @intCast(dis));
 }
 
@@ -1629,7 +1875,7 @@ pub fn emitImmOp(self: *X86_64Gen, op: u8, mod: u3, dst: Reg, imm: i64) void {
     self.emitBytes(&.{
         Reg.rex(dst, .rax, .rax, true),
         op + @as(u8, if (cimm != null) 2 else 0),
-        Reg.Mod.direct.rm(@enumFromInt(mod), .rsp),
+        Reg.Mod.direct.rm(@enumFromInt(mod), dst),
     });
     if (cimm) |c| {
         self.emitImm(i8, c);
@@ -1643,15 +1889,21 @@ pub fn emitSingleOp(self: *X86_64Gen, op_base: u8, dst: Reg) void {
     self.emitBytes(&.{ Reg.rex(.rax, dst, .rax, true), opcode });
 }
 
+pub fn emitByte(self: *X86_64Gen, byte: u8) void {
+    self.out.code.appendAssumeCapacity(byte);
+}
+
 pub fn emitBytes(self: *X86_64Gen, bytes: []const u8) void {
-    self.out.code.appendSlice(self.gpa.allocator(), bytes) catch unreachable;
+    self.out.code.appendSliceAssumeCapacity(bytes);
 }
 
 pub fn emitImm(self: *X86_64Gen, comptime T: type, int: T) void {
-    std.mem.writeInt(T, self.out.code.addManyAsArray(
-        self.gpa.allocator(),
-        @sizeOf(T),
-    ) catch unreachable, int, .little);
+    std.mem.writeInt(
+        T,
+        self.out.code.addManyAsArrayAssumeCapacity(@sizeOf(T)),
+        int,
+        .little,
+    );
 }
 
 pub fn emitInstr(self: *X86_64Gen, mnemonic: c_uint, args: anytype) void {
@@ -1746,6 +1998,32 @@ pub fn emitInstr(self: *X86_64Gen, mnemonic: c_uint, args: anytype) void {
     }
 
     try self.out.code.appendSlice(self.gpa.allocator(), buf[0..len]);
+}
+
+pub fn jmpCompOp(op: graph.BinOp) u8 {
+    // we flip the orientation here with the xor
+    return (0x80 + setOff(op)) ^ 0x1;
+}
+
+pub fn setCompOp(op: graph.BinOp) u8 {
+    return 0x90 + setOff(op);
+}
+
+pub fn setOff(op: graph.BinOp) u8 {
+    return switch (op) {
+        .ult, .flt => 0x2, // SETB,
+        .uge, .fge => 0x3, // SETNB,
+        .eq => 0x4, // SETZ,
+        .ne => 0x5, // SETNZ,
+        .ule, .fle => 0x6, // SETBE,
+        .ugt, .fgt => 0x7, // SETNBE,
+        .slt => 0xc, // SETL,
+        .sge => 0xd, // SETNL,
+        .sle => 0xe, // SETLE,
+        .sgt => 0xf, // SETNLE,
+
+        else => unreachable,
+    };
 }
 
 pub fn binopToMnemonic(op: graph.BinOp, ty: graph.DataType) zydis.ZydisMnemonic {

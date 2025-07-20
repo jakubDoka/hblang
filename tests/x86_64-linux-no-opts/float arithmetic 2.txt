@@ -28,10 +28,10 @@ float arithmetic 2.sin:
 	mov rdx, [rsp]
 	movss xmm4, dword ptr [rsp+0x14]
 	mov eax, [rsp+0x18]
-	cvtsi2ss xmm1, edx
+	cvtsi2ss xmm1, rdx
 	movsxd rax, eax
 	mulss xmm1, xmm5
-	cvtsi2ss xmm3, eax
+	cvtsi2ss xmm3, rax
 	mulss xmm1, xmm4
 	divss xmm1, xmm3
 	subss xmm0, xmm1
