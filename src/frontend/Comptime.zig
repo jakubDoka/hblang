@@ -105,18 +105,35 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
         const curr: *Node = work_list.pop().?;
         if (curr.id == std.math.maxInt(u16)) continue;
         const res = switch (curr.kind) {
-            .Local => {
+            .Local => b: {
                 {
                     const global = curr.inputs()[1].?.extra(.LocalAlloc).meta;
 
                     if (global != std.math.maxInt(u32)) {
                         if (work_list.items.len == 0) {
                             return .{ .Arbitrary = @enumFromInt(global) };
+                        } else {
+                            break :b bl.addGlobalAddr(curr.sloc, global);
                         }
                     }
                 }
 
                 work_list.appendAssumeCapacity(curr);
+
+                var iter = std.mem.reverseIterator(curr.outputs());
+                while (iter.next()) |o| {
+                    const use: *Node = o.get();
+                    if (use.knownMemOp()) |op| {
+                        const base, _ = op[0].base().knownOffset();
+                        if (op[0].isStore() and base == curr) {
+                            work_list.appendAssumeCapacity(op[0]);
+                            continue;
+                        } else if (op[0].isStore()) {
+                            continue;
+                        }
+                    }
+                    return .{ .Unsupported = curr };
+                }
 
                 const global = types.addUniqueGlobal(scope);
                 types.store.get(global).data = types.pool.arena.alloc(
@@ -128,18 +145,6 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
 
                 var tmpa = tmp.arena.checkpoint();
                 defer tmpa.deinit();
-
-                var iter = std.mem.reverseIterator(curr.outputs());
-                while (iter.next()) |o| {
-                    const use: *Node = o.get();
-                    if (use.knownMemOp()) |op| {
-                        if (op[0].isStore()) {
-                            work_list.appendAssumeCapacity(op[0]);
-                            continue;
-                        }
-                    }
-                    return .{ .Unsupported = curr };
-                }
 
                 continue;
             },

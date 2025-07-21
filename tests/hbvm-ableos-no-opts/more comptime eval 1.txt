@@ -1,0 +1,5 @@
+main:
+        lra $1, $0, :more comptime eval 1.bbb
+         ld $1, $1, 0, 8
+     addi64 $1, $1, -1
+         tx

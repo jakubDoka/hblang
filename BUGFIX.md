@@ -2,6 +2,22 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### more comptime eval 1
+```hb
+X := struct {
+    .st: uint
+    $x := fn($st: uint): X return .(st)
+}
+$aaa := fn($a: []X): uint {
+    return a[0].st
+}
+bbb := aaa(X.[.x(1)][..])
+
+main := fn(): uint {
+    return bbb - 1
+}
+```
+
 #### resolve mem phi during partial eval 1
 ```hb
 expectations := .{
