@@ -987,8 +987,10 @@ pub fn Func(comptime Backend: type) type {
                     @intCast((kind_idx % per_dep_elem) * sub_elem_width) & ((@as(u16, 1) << sub_elem_width) - 1);
             }
 
+            // TODO: this is a hack, its here because otherwise everithing gets pulled out of
+            // the loop and cloggs the register allocator
             pub fn isCheap(self: *Node) bool {
-                return self.kind == .StackArgOffset;
+                return self.kind == .StackArgOffset or (self.kind == .UnOp and self.extra(.UnOp).op == .cast);
             }
 
             pub fn dataDeps(self: *Node) []*Node {

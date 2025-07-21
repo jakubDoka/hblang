@@ -28,6 +28,8 @@ pub fn build(b: *std.Build) void {
     run_hbc.addFileArg(b.path("main.hb"));
     run_hbc.addArg("--target");
     run_hbc.addArg("x86_64-linux");
+    run_hbc.addArg("--optimizations");
+    run_hbc.addArg("all");
     run_hbc.addArg("--mangle-terminal");
     const main_obj = captureStdOut(run_hbc, "main.o");
 

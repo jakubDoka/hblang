@@ -88,7 +88,7 @@ pub const Value = struct {
         if (value.id == .Pointer) {
             const cata = self.abiCata(value.ty);
 
-            if (cata.ByValue.size() > value.ty.size(self.types)) {
+            if (cata.size() > value.ty.size(self.types)) {
                 var val: ?*Node = null;
                 var loader = graph.DataType.i64;
                 var offset: u64 = 0;
@@ -1943,7 +1943,7 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
                 const unit = self.bl.addIntImm(sloc, .i64, @intCast(slc.elem.size(self.types)));
                 const byte_len = self.bl.addBinOp(sloc, .imul, .i64, len, unit);
                 const bound = self.bl.addBinOp(sloc, .iadd, .i64, base, byte_len);
-                id.* = .{ .Slice = .{ .base = .mkp(slc.elem, base_id), .len = len, .bound = bound } };
+                id.* = .{ .Slice = .{ .base = .mkp(self.types.makePtr(slc.elem), base_id), .len = len, .bound = bound } };
             }
         }
     }
@@ -1994,7 +1994,7 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
 
         const ty = switch (data) {
             inline .OpenedRange, .ClosedRange => .uint,
-            inline .Slice => |s| self.types.makePtr(s.base.ty),
+            inline .Slice => |s| s.base.ty,
         };
 
         self.scope.appendAssumeCapacity(.{
@@ -2038,7 +2038,8 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
                 },
                 .Slice => |s| {
                     var base = s.base;
-                    const off = self.bl.addIntImm(sloc, .i64, @intCast(base.ty.size(self.types)));
+                    const elem = base.ty.child(self.types).?;
+                    const off = self.bl.addIntImm(sloc, .i64, @intCast(elem.size(self.types)));
                     const next = self.bl.addBinOp(sloc, .iadd, .i64, base.getValue(sloc, self), off);
                     self.bl.addStore(sloc, s.base.id.Pointer, .i64, next);
                 },
@@ -3299,7 +3300,7 @@ fn assembleReturn(
     return switch (ret_abi) {
         .Impossible => return error.Unreachable,
         .Imaginary => .mkv(ret, null),
-        .ByValue => .mkv(ret, rets.?[0]),
+        .ByValue => .mkp(ret, self.bl.addSpill(sloc, rets.?[0])),
         .ByValuePair => |pair| if (self.abi.isByRefRet(ret_abi)) b: {
             break :b .mkp(ret, call_args.arg_slots[0]);
         } else b: {

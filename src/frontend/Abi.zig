@@ -154,6 +154,16 @@ pub const Spec = union(enum) {
 
     const Dts = std.BoundedArray(graph.DataType, max_subtypes);
     const Offs = std.BoundedArray(u64, max_subtypes);
+
+    pub fn size(self: Spec) usize {
+        return switch (self) {
+            .ByValue => |v| v.size(),
+            .ByValuePair => |p| p.size(),
+            .ByRef => |r| r.size,
+            .Imaginary => 0,
+            .Impossible => unreachable,
+        };
+    }
 };
 
 pub fn categorize(self: Abi, ty: Id, types: *Types) TmpSpec {

@@ -13,9 +13,7 @@ pub inline fn swap(a: anytype, b: @TypeOf(a)) void {
 pub fn ralloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
     func.gcm.cfg_built.assertLocked();
 
-    errdefer unreachable;
-
-    for (0..7) |_| {
+    for (0..10) |_| {
         return rallocRound(Backend, func) catch continue;
     } else unreachable;
 }

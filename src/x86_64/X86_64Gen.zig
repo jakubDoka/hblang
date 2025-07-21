@@ -377,10 +377,15 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
         store: {
             const mask = if (node.data_type.mask()) |m| (m & 0xffffffff) >> 1 else break :store;
             if (node.value().?.kind == .CInt and (@abs(node.value().?.extra(.CInt).value) <= mask)) {
+                const proj_dt = switch (node.data_type) {
+                    .f32 => .i32,
+                    .f64 => .i64,
+                    else => node.data_type,
+                };
                 const res = func.addNode(
                     .ConstStore,
                     node.sloc,
-                    node.data_type,
+                    proj_dt,
                     &.{ node.inputs()[0], node.mem(), base },
                     .{
                         .base = .{ .dis = @intCast(offset) },
@@ -1739,7 +1744,7 @@ pub fn emitMemConstStore(
     switch (dt) {
         .i16, .i32, .i64 => self.emitByte(0xc7),
         .i8 => self.emitByte(0xc6),
-        else => unreachable,
+        else => utils.panic("{}", .{dt}),
     }
     self.emitIndirectAddr(.rax, bse, .no_index, 1, dis);
 
