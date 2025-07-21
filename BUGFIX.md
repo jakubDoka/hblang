@@ -18,6 +18,39 @@ main := fn(): uint {
 }
 ```
 
+#### more comptime eval 2
+```hb
+X := struct {
+    .st: uint;
+    .st1: uint
+    $x := fn($st: uint): X return .(st, 0)
+}
+
+$aaa := fn($a: []X): uint return a[0].st
+bbb := aaa(X.[.x(1)][..])
+
+main := fn(): uint {
+    return bbb - 1
+}
+```
+
+#### more comptime eval 3
+```hb
+X := struct {
+    .st: uint;
+    .st1: uint;
+    .st2: uint
+    $x := fn($st: uint): X return .(st, 0, 0)
+}
+
+$aaa := fn($a: []X): uint return a[0].st
+bbb := aaa(X.[.x(1)][..])
+
+main := fn(): uint {
+    return bbb - 1
+}
+```
+
 #### resolve mem phi during partial eval 1
 ```hb
 expectations := .{

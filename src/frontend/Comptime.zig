@@ -90,7 +90,6 @@ pub const PartialEvalResult = union(enum) {
 };
 
 pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32, bl: *Builder, expr: *Node, ty: Types.Id) PartialEvalResult {
-    const abi: Types.Abi = .ableos;
     const types = self.getTypes();
 
     var tmp = utils.Arena.scrath(null);
@@ -132,6 +131,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                             continue;
                         }
                     }
+                    if (use.kind == .Call) continue;
                     return .{ .Unsupported = curr };
                 }
 
@@ -236,12 +236,6 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                 const call: *Node = curr.inputs()[0].?;
                 std.debug.assert(call.kind == .Call);
 
-                if (call.extra(.Call).signature.returns().?.len != 1) {
-                    types.report(file, pos, "the function returns something we cant handle", .{});
-                    return .{ .Unsupported = curr };
-                }
-
-                var ret_ty: graph.DataType = .i64;
                 if (call.extra(.Call).id != eca) {
                     const func_id: utils.EntId(tys.Func) = @enumFromInt(call.extra(.Call).id);
                     const func = types.store.get(func_id);
@@ -251,7 +245,6 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                         return .{ .Unsupported = curr };
                     }
 
-                    ret_ty = abi.categorize(func.ret, types).ByValue;
                     if (func.completion.get(.@"comptime") == .queued) {
                         self.jitFunc(func_id) catch return .{ .Unsupported = curr };
                     }
@@ -277,11 +270,12 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                     return .{ .Unsupported = curr };
                 };
 
-                const ret = types.ct.vm.regs.get(.ret(0));
-                const ret_vl = bl.addIntImm(.none, ret_ty, @bitCast(ret));
                 for (tmp.arena.dupe(Node.Out, curr.outputs())) |n| {
                     const o = n.get();
                     if (o.kind == .Ret) {
+                        const idx = o.extra(.Ret).index;
+                        const ret = types.ct.vm.regs.get(.ret(idx));
+                        const ret_vl = bl.addIntImm(.none, o.data_type, @bitCast(ret));
                         bl.func.subsume(ret_vl, o);
                     }
                     if (o.kind == .Mem) {
@@ -289,7 +283,6 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                     }
                 }
                 bl.func.subsume(call.inputs()[0].?, curr);
-                work_list.appendAssumeCapacity(ret_vl);
                 continue;
             },
             .Load => b: {

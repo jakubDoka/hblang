@@ -1,0 +1,4 @@
+main:
+	mov rax, [0x0000000000000007]
+	dec rax
+	ret
