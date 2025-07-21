@@ -277,6 +277,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                         const ret = types.ct.vm.regs.get(.ret(idx));
                         const ret_vl = bl.addIntImm(.none, o.data_type, @bitCast(ret));
                         bl.func.subsume(ret_vl, o);
+                        work_list.appendAssumeCapacity(ret_vl);
                     }
                     if (o.kind == .Mem) {
                         bl.func.subsume(call.inputs()[1].?, o);
