@@ -2,6 +2,28 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### resolve mem phi during partial eval 1
+```hb
+expectations := .{
+    should_error: true,
+}
+
+cond := false
+main := fn(): uint {
+    $if cond || cond {
+        return 1
+    }
+
+    return 0
+}
+```
+
+#### comptime array access 1
+```hb
+$i := 0
+main := fn(): type.[uint][i] return 0
+```
+
 #### function pointers 2
 ```hb
 X := struct {
@@ -19,7 +41,7 @@ main := fn(): uint {
 #### function pointers 3
 ```hb
 DynObj := struct {
-    .do_thing: ^fn(^void): u8;
+    .do_thing: ^fn(inst: ^void): u8;
     .obj: ^void
 
     $new := fn($T: type, inst: ^T): DynObj {

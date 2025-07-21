@@ -1787,9 +1787,9 @@ pub fn emitIndirectAddr(
     var mod = if (dis) |d| Reg.Mod.fromDis(d) else Reg.Mod.indirect;
     std.debug.assert(mod != .direct);
 
-    const ill_base = base == .rsp or base == .r13;
+    const ill_base = base == .rsp or base == .r12;
 
-    if (mod == .indirect and (ill_base or (base == Reg.rip and dis != null))) {
+    if (mod == .indirect and ((base == Reg.rip or base == .r13) and dis != null)) {
         mod = .indirect_disp8;
     }
 

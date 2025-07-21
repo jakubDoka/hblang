@@ -3446,10 +3446,20 @@ pub fn partialEvalLow(self: *Codegen, pos: u32, value: *Value, can_recover: bool
     )) {
         .Resolved => |r| r,
         .Arbitrary => |a| @intFromEnum(a),
+        .DependsOnRuntimeControlFlow => |n| {
+            if (can_recover) {
+                return 0;
+            }
+
+            return self.report(pos, "can't evaluate this at compile time since" ++
+                " the value depends on runtime control flow" ++
+                " (DEBUG: got stuck on {})", .{n});
+        },
         .Unsupported => |n| {
             if (can_recover) {
                 return 0;
             }
+
             return self.report(pos, "can't evaluate this at compile time (yet)," ++
                 " (DEBUG: got stuck on {})", .{n});
         },

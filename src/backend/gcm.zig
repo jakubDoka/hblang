@@ -248,48 +248,7 @@ pub fn Mixin(comptime Backend: type) type {
                             var lca = olca.?;
 
                             if (t.isLoad()) add_antideps: {
-                                var cursor = lca;
-                                while (cursor != early.idom()) : (cursor = cursor.idom()) {
-                                    std.debug.assert(cursor.base.kind != .Start);
-                                    cursor.ext.antidep = t.id;
-                                }
-
-                                for (t.mem().outputs()) |n| {
-                                    const o = n.get();
-                                    switch (o.kind) {
-                                        .Call => {
-                                            const stblck = late_scheds[o.id].?;
-                                            if (stblck.ext.antidep == t.id) {
-                                                lca = stblck.findLca(lca);
-                                                if (lca == stblck) {
-                                                    const idx = self.addDep(o, t);
-                                                    self.addUse(t, idx, o);
-                                                }
-                                            }
-                                        },
-                                        .Phi => {
-                                            for (o.inputs()[1..], o.cfg0().base.inputs()) |inp, oblk| if (inp.? == t.mem()) {
-                                                var stblck = oblk.?.cfg0();
-                                                if (stblck.ext.antidep == t.id) {
-                                                    lca = stblck.findLca(lca);
-                                                }
-                                            };
-                                        },
-                                        .Local => {},
-                                        .Return => {},
-                                        else => if (o.isLoad() or o.kind == .LocalAlloc) {} else if (o.isStore()) {
-                                            const stblck = late_scheds[o.id].?;
-                                            if (stblck.ext.antidep == t.id) {
-                                                lca = stblck.findLca(lca);
-                                                if (lca == stblck) {
-                                                    const idx = self.addDep(o, t);
-                                                    self.addUse(t, idx, o);
-                                                }
-                                            }
-                                        } else utils.panic("{any}", .{o.kind}),
-                                    }
-                                }
-
+                                lca = findAntideps(self, lca, t, late_scheds);
                                 break :add_antideps;
                             }
 
@@ -392,6 +351,60 @@ pub fn Mixin(comptime Backend: type) type {
             }
         }
 
+        pub fn findAntideps(
+            self: *Func,
+            lca_: *Func.CfgNode,
+            load: *Func.Node,
+            late_scheds: []const ?*Func.CfgNode,
+        ) *Func.CfgNode {
+            var lca = lca_;
+            const early = load.cfg0();
+            std.debug.assert(load.isLoad());
+            var cursor = lca;
+            while (cursor != early.idom()) : (cursor = cursor.idom()) {
+                std.debug.assert(cursor.base.kind != .Start);
+                cursor.ext.antidep = load.id;
+            }
+
+            for (load.mem().outputs()) |n| {
+                const o = n.get();
+                switch (o.kind) {
+                    .Call => {
+                        const stblck = late_scheds[o.id].?;
+                        if (stblck.ext.antidep == load.id) {
+                            lca = stblck.findLca(lca);
+                            if (lca == stblck) {
+                                const idx = self.addDep(o, load);
+                                self.addUse(load, idx, o);
+                            }
+                        }
+                    },
+                    .Phi => {
+                        for (o.inputs()[1..], o.cfg0().base.inputs()) |inp, oblk| if (inp.? == load.mem()) {
+                            var stblck = oblk.?.cfg0();
+                            if (stblck.ext.antidep == load.id) {
+                                lca = stblck.findLca(lca);
+                            }
+                        };
+                    },
+                    .Local => {},
+                    .Return => {},
+                    else => if (o.isLoad() or o.kind == .LocalAlloc) {} else if (o.isStore()) {
+                        const stblck = late_scheds[o.id].?;
+                        if (stblck.ext.antidep == load.id) {
+                            lca = stblck.findLca(lca);
+                            if (lca == stblck) {
+                                const idx = self.addDep(o, load);
+                                self.addUse(load, idx, o);
+                            }
+                        }
+                    } else utils.panic("{any}", .{o.kind}),
+                }
+            }
+
+            return lca;
+        }
+
         pub fn scheduleBlock(node: *Func.Node) void {
             const NodeMeta = struct {
                 unscheduled_deps: u16 = 0,
@@ -406,8 +419,6 @@ pub fn Mixin(comptime Backend: type) type {
             const extra = tmp.arena.alloc(NodeMeta, node.outputs().len);
             for (node.outputs(), extra, 0..) |in, *e, i| {
                 const instr = in.get();
-                if (instr.schedule != std.math.maxInt(u16) and !instr.isCfg())
-                    utils.panic("{} {}\n", .{ instr, instr.schedule });
                 instr.schedule = @intCast(i);
                 e.* = .{ .priority = if (instr.isCfg())
                     0
@@ -467,10 +478,6 @@ pub fn Mixin(comptime Backend: type) type {
                     }
                 }
             };
-
-            for (node.outputs()) |o| {
-                o.get().schedule = std.math.maxInt(u16);
-            }
         }
 
         fn shedEarly(

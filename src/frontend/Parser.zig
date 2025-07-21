@@ -583,7 +583,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             },
         },
         .@"^" => if (self.tryAdvance(.@"fn")) .{ .FnPtr = .{
-            .args = try self.parseList(.@"(", .@",", .@")", parseExpr),
+            .args = try self.parseList(.@"(", .@",", .@")", parseScopedExpr),
             .ret = b: {
                 _ = try self.expectAdvance(.@":");
                 break :b try self.parseExpr();

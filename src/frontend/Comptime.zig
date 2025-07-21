@@ -85,6 +85,7 @@ pub inline fn ecaArgSloc(self: *Comptime, idx: usize) graph.Sloc {
 pub const PartialEvalResult = union(enum) {
     Resolved: u64,
     Arbitrary: utils.EntId(tys.Global),
+    DependsOnRuntimeControlFlow: *Node,
     Unsupported: *Node,
 };
 
@@ -199,6 +200,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
             },
             .BinOp, .UnOp => |t| b: {
                 var requeued = false;
+
                 for (curr.inputs()[1..]) |arg| {
                     if (arg.?.kind != .CInt) {
                         if (!requeued) work_list.appendAssumeCapacity(curr);
@@ -303,19 +305,64 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                     break :b bl.addIntImm(.none, curr.data_type, @bitCast(mem));
                 }
 
+                if (curr.base().kind == .BinOp and curr.base().inputs()[2].?.kind != .CInt) {
+                    work_list.appendAssumeCapacity(curr);
+                    work_list.appendAssumeCapacity(curr.base().inputs()[2].?);
+                    continue;
+                }
+
+                if (curr.base().kind == .BinOp and
+                    curr.base().extra(.BinOp).op.neutralElememnt() ==
+                        curr.base().inputs()[2].?.extra(.CInt).value)
+                {
+                    bl.func.subsume(curr.base().inputs()[1].?, curr.base());
+                }
+
                 var cursor = curr.mem();
+                const bs = work_list.items.len;
                 while (true) {
+                    const is_spilt = work_list.items.len != bs;
+                    if (is_spilt) {
+                        var data_dep_cont: usize = 0;
+                        if (for (cursor.outputs()) |o| {
+                            if (o.get().isLoad()) continue;
+                            if (o.get().schedule == 0) continue;
+                            data_dep_cont += 1;
+                        } else data_dep_cont > 1) {
+                            cursor.schedule = 0;
+                            cursor = work_list.pop().?;
+                        }
+                    }
+
                     if (cursor.isStore()) {
                         if (cursor.base() != curr.base()) {
                             cursor = cursor.mem();
-                        } else break :b cursor.value().?;
+                        } else if (!is_spilt) {
+                            break :b cursor.value().?;
+                        } else {
+                            return .{ .DependsOnRuntimeControlFlow = curr };
+                        }
                     } else if (cursor.kind == .Mem) {
                         if (cursor.inputs()[0].?.kind == .Start) {
                             return .{ .Unsupported = cursor };
                         }
                         cursor = cursor.inputs()[0].?.inputs()[0].?.inputs()[1].?;
                     } else if (cursor.kind == .Phi) {
-                        cursor = cursor.inputs()[1].?;
+                        if (cursor.cfg0().base.kind == .Loop) {
+                            cursor = cursor.inputs()[1].?;
+                            continue;
+                        }
+
+                        // NOTE: there are two main events occuring, etiher we
+                        // encounter a phi, in which case we both branches or,
+                        // we encounter a store that has two dependants, in
+                        // wich case we swap with the top of the stack and
+                        // traverse that instesd until we arrive to the same
+                        // joining point that has a dependence on the top of
+                        // the stack
+                        //
+                        work_list.appendAssumeCapacity(cursor.inputs()[1].?);
+                        cursor = cursor.inputs()[2].?;
                     } else {
                         return .{ .Unsupported = cursor };
                     }

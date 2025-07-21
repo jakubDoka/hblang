@@ -1,4 +1,4 @@
-functions 3 (errors):8:2: expected type, void is not
+functions 3 (errors):8:2: void is not callable
     imaginary()
     ^
 functions 3 (errors):9:2: expected 3 arguments, got 0

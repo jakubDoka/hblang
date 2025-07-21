@@ -525,27 +525,27 @@ pub fn EntStore(comptime M: type) type {
         const data_fields = std.meta.fields(Data);
         const Self = @This();
 
-        pub inline fn isValid(self: *Self, comptime kind: Tag, idx: usize) bool {
+        pub fn isValid(self: *Self, comptime kind: Tag, idx: usize) bool {
             return idx < @field(self.rpr, @tagName(kind)).items.len;
         }
 
-        pub inline fn fieldName(comptime Ty: type) std.builtin.Type.StructField {
+        pub fn fieldName(comptime Ty: type) std.builtin.Type.StructField {
             return for (decls, store_fields) |d, sf| {
                 if (@field(M, d.name) == Ty) return sf;
             } else @compileError(@typeName(Ty));
         }
 
-        pub inline fn add(self: *Self, gpa: std.mem.Allocator, vl: anytype) EntId(@TypeOf(vl)) {
+        pub fn add(self: *Self, gpa: std.mem.Allocator, vl: anytype) EntId(@TypeOf(vl)) {
             @field(self.rpr, fieldName(@TypeOf(vl)).name).append(gpa, vl) catch unreachable;
             return @enumFromInt(@field(self.rpr, fieldName(@TypeOf(vl)).name).items.len - 1);
         }
 
-        pub inline fn pop(self: *Self, vl: anytype) void {
+        pub fn pop(self: *Self, vl: anytype) void {
             std.debug.assert(@field(self.rpr, fieldName(@TypeOf(vl).Data).name).items.len == @intFromEnum(vl) + 1);
             _ = @field(self.rpr, fieldName(@TypeOf(vl).Data).name).pop().?;
         }
 
-        pub inline fn get(self: *Self, id: anytype) if (@hasDecl(@TypeOf(id), "identity")) @TypeOf(id) else *@TypeOf(id).Data {
+        pub fn get(self: *Self, id: anytype) if (@hasDecl(@TypeOf(id), "identity")) @TypeOf(id) else *@TypeOf(id).Data {
             if (@hasDecl(@TypeOf(id), "identity")) return id;
             return &@field(self.rpr, fieldName(@TypeOf(id).Data).name).items[@intFromEnum(id)];
         }

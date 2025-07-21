@@ -136,7 +136,7 @@ pub fn Mixin(comptime Backend: type) type {
                 const ov = n.get();
                 if (ov.kind != .LocalAlloc or ov.outputs().len != 1) continue :outer;
                 const o = ov.outputs()[0].get();
-                std.debug.assert(o.schedule == std.math.maxInt(u16));
+                ov.schedule = std.math.maxInt(u16);
 
                 // collect all loads and stores, bail on something else
                 //
@@ -378,16 +378,6 @@ pub fn Mixin(comptime Backend: type) type {
 
             for (to_remove.items) |tr| {
                 self.subsume(tr.mem(), tr);
-            }
-
-            for (self.start.outputs()[1].get().outputs()) |o| {
-                if (o.get().kind == .Local) {
-                    o.get().schedule = std.math.maxInt(u16);
-                }
-            }
-
-            for (postorder) |bb| {
-                bb.base.schedule = std.math.maxInt(u16);
             }
         }
     };
