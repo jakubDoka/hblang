@@ -1,14 +1,16 @@
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -8
+     addi64 $254, $254, -16
         jal $31, $0, :typeof is not comptime 1.broken1
-     addi64 $254, $254, 8
+         st $1, $254, 0, 8
+         ld $1, $254, 0, 8
+     addi64 $254, $254, 16
          ld $31, $254, -8, 8
          tx
 typeof is not comptime 1.broken1:
          st $31, $254, -8, 8
      addi64 $254, $254, -22
-       li64 $1, 1879048194
+       li32 $1, 1879048194
          st $1, $254, 10, 4
        li64 $5, 1
        li64 $1, 3

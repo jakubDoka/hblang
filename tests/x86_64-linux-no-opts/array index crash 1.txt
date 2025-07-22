@@ -1,33 +1,36 @@
 array index crash 1.awa:
-	sub rsp, 0x10
-	mov [rsp+0x08], dil
+	sub rsp, 0x20
+	mov [rsp+0x10], dil
+	mov dword ptr [rsp+0x0C], 0x20000001
+	mov byte ptr [rsp+0x08], 0x00
 	mov byte ptr [rsp+0x09], 0x00
 	mov byte ptr [rsp+0x0A], 0x00
-	mov byte ptr [rsp+0x0B], 0x00
 	mov qword ptr [rsp], 0x02
 	mov rdi, 0x0A
 	xor rsi, rsi
-1:	mov dl, [rsp+0x08]
+1:	mov dl, [rsp+0x10]
 	cmp dl, sil
 	jbe :0
 	mov rcx, [rsp]
-	lea rax, [rsp+0x09]
+	lea rax, [rsp+0x08]
 	add rax, rcx
 	mov [rax], dl
-	mov al, [rsp+0x08]
+	mov al, [rsp+0x10]
 	movzx rax, al
 	div dil
-	mov [rsp+0x08], al
+	mov [rsp+0x10], al
 	mov rax, [rsp]
 	dec rax
 	mov [rsp], rax
 	jmp :1
 0:	xor rax, rax
-	add rsp, 0x10
+	add rsp, 0x20
 	ret
 main:
 	sub rsp, 0x08
 	mov rdi, 0xFF
 	call :array index crash 1.awa
+	mov [rsp], eax
+	mov eax, [rsp]
 	add rsp, 0x08
 	ret

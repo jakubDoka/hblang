@@ -18,17 +18,20 @@ directives 13 (@Any).foo(u8):
 	add rsp, 0x10
 	ret
 main:
-	push rbx
+	sub rsp, 0x18
 	mov rdi, 0x01
 	mov rsi, 0x02
 	call :directives 13 (@Any).func(uint)
+	mov [rsp], rax
 	mov rdi, 0x05
 	call :directives 13 (@Any).foo(uint)
-	mov rbx, rax
+	mov [rsp+0x08], rax
 	mov rdi, 0x05
 	call :directives 13 (@Any).foo(u8)
-	movzx rax, al
-	add rbx, rax
-	mov rax, rbx
-	pop rbx
+	mov [rsp+0x10], al
+	mov rax, [rsp+0x08]
+	mov cl, [rsp+0x10]
+	movzx rcx, cl
+	add rax, rcx
+	add rsp, 0x18
 	ret

@@ -1,5 +1,5 @@
 generic structs 4.Array((())).get(uint):
-	sub rsp, 0x08
+	sub rsp, 0x18
 	mov [rsp], rdi
 	mov rdx, [rsp]
 	cmp rdx, 0x00
@@ -7,16 +7,18 @@ generic structs 4.Array((())).get(uint):
 	movzx rax, al
 	test al, al
 	jz :0
-	mov rax, [rsp+0x10]
+	mov rax, [rsp+0x20]
 	jmp :1
-0:	mov rdi, [rsp+0x18]
-	mov rsi, [rsp+0x20]
+0:	mov rdi, [rsp+0x28]
+	mov rsi, [rsp+0x30]
 	dec rdx
 	call :generic structs 4.Array(()).get(uint)
-1:	add rsp, 0x08
+	mov [rsp+0x08], rax
+	mov rax, [rsp+0x08]
+1:	add rsp, 0x18
 	ret
 generic structs 4.Array(()).get(uint):
-	sub rsp, 0x18
+	sub rsp, 0x28
 	mov [rsp], rdi
 	mov [rsp+0x08], rsi
 	mov [rsp+0x10], rdx
@@ -31,7 +33,9 @@ generic structs 4.Array(()).get(uint):
 0:	dec rsi
 	mov rdi, [rsp+0x08]
 	call :generic structs 4.Array().get(uint)
-1:	add rsp, 0x18
+	mov [rsp+0x18], rax
+	mov rax, [rsp+0x18]
+1:	add rsp, 0x28
 	ret
 generic structs 4.Array().get(uint):
 	sub rsp, 0x18
@@ -47,6 +51,8 @@ generic structs 4.Array().get(uint):
 	jmp :1
 0:	dec rdi
 	call :generic structs 4.Array.get(uint)
+	mov [rsp+0x10], rax
+	mov rax, [rsp+0x10]
 1:	add rsp, 0x18
 	ret
 generic structs 4.Array.get(uint):
@@ -54,34 +60,39 @@ generic structs 4.Array.get(uint):
 main:
 	push rbx
 	push rbp
-	sub rsp, 0x38
-	mov qword ptr [rsp+0x18], 0x01
-	mov qword ptr [rsp+0x20], 0x02
-	mov qword ptr [rsp+0x28], 0x03
+	sub rsp, 0x58
+	mov dword ptr [rsp+0x48], 0x70000005
+	mov qword ptr [rsp+0x20], 0x01
+	mov qword ptr [rsp+0x28], 0x02
+	mov qword ptr [rsp+0x30], 0x03
 	lea rdi, [rsp]
-	lea rsi, [rsp+0x18]
+	lea rsi, [rsp+0x20]
 	mov rdx, 0x18
 	call :memcpy
 	xor rdi, rdi
 	call :generic structs 4.Array((())).get(uint)
-	mov rbx, rax
+	mov [rsp+0x38], rax
 	lea rdi, [rsp]
+	lea rsi, [rsp+0x20]
 	mov rdx, 0x18
-	lea rsi, [rsp+0x18]
 	call :memcpy
 	mov rdi, 0x01
 	call :generic structs 4.Array((())).get(uint)
-	mov rbp, rax
+	mov [rsp+0x40], rax
 	lea rdi, [rsp]
+	mov rbx, [rsp+0x38]
+	mov rbp, [rsp+0x40]
+	lea rsi, [rsp+0x20]
 	mov rdx, 0x18
-	lea rsi, [rsp+0x18]
 	call :memcpy
 	mov rdi, 0x02
 	call :generic structs 4.Array((())).get(uint)
+	mov [rsp+0x18], rax
 	add rbx, rbp
+	mov rax, [rsp+0x18]
 	add rbx, rax
 	mov rax, rbx
-	add rsp, 0x38
+	add rsp, 0x58
 	pop rbp
 	pop rbx
 	ret

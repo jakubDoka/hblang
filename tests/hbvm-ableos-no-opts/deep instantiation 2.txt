@@ -1,78 +1,112 @@
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -8
+     addi64 $254, $254, -44
+       li32 $1, 1879048195
+         st $1, $254, 4, 4
+       li32 $7, 1879048197
+       li32 $6, 1879048198
+       li32 $5, 1879048199
+       li32 $4, 1879048200
+       li32 $3, 1879048201
+       li32 $2, 1879048202
+       li32 $1, 1879048196
+         st $1, $254, 8, 4
+         st $7, $254, 12, 4
+         st $6, $254, 16, 4
+         st $5, $254, 20, 4
+         st $4, $254, 24, 4
+         st $3, $254, 28, 4
+         st $2, $254, 32, 4
         jal $31, $0, :deep instantiation 2.S.get((((((((.Z))))))))
+         st $1, $254, 0, 4
        li64 $2, 8
+         ld $1, $254, 0, 4
        andi $1, $1, 4294967295
        cmpu $1, $1, $2
       cmpui $1, $1, 0
        andi $1, $1, 1
        andi $1, $1, 255
-     addi64 $254, $254, 8
+     addi64 $254, $254, 44
          ld $31, $254, -8, 8
          tx
 deep instantiation 2.S.get((((((((.Z)))))))):
          st $31, $254, -8, 8
-     addi64 $254, $254, -8
+     addi64 $254, $254, -12
         jal $31, $0, :deep instantiation 2.S.get(((((((.Z)))))))
+         st $1, $254, 0, 4
+         ld $1, $254, 0, 4
      addi32 $1, $1, 1
-     addi64 $254, $254, 8
+     addi64 $254, $254, 12
          ld $31, $254, -8, 8
        jala $0, $31, 0
 deep instantiation 2.S.get(((((((.Z))))))):
          st $31, $254, -8, 8
-     addi64 $254, $254, -8
+     addi64 $254, $254, -12
         jal $31, $0, :deep instantiation 2.S.get((((((.Z))))))
+         st $1, $254, 0, 4
+         ld $1, $254, 0, 4
      addi32 $1, $1, 1
-     addi64 $254, $254, 8
+     addi64 $254, $254, 12
          ld $31, $254, -8, 8
        jala $0, $31, 0
 deep instantiation 2.S.get((((((.Z)))))):
          st $31, $254, -8, 8
-     addi64 $254, $254, -8
+     addi64 $254, $254, -12
         jal $31, $0, :deep instantiation 2.S.get(((((.Z)))))
+         st $1, $254, 0, 4
+         ld $1, $254, 0, 4
      addi32 $1, $1, 1
-     addi64 $254, $254, 8
+     addi64 $254, $254, 12
          ld $31, $254, -8, 8
        jala $0, $31, 0
 deep instantiation 2.S.get(((((.Z))))):
          st $31, $254, -8, 8
-     addi64 $254, $254, -8
+     addi64 $254, $254, -12
         jal $31, $0, :deep instantiation 2.S.get((((.Z))))
+         st $1, $254, 0, 4
+         ld $1, $254, 0, 4
      addi32 $1, $1, 1
-     addi64 $254, $254, 8
+     addi64 $254, $254, 12
          ld $31, $254, -8, 8
        jala $0, $31, 0
 deep instantiation 2.S.get((((.Z)))):
          st $31, $254, -8, 8
-     addi64 $254, $254, -8
+     addi64 $254, $254, -12
         jal $31, $0, :deep instantiation 2.S.get(((.Z)))
+         st $1, $254, 0, 4
+         ld $1, $254, 0, 4
      addi32 $1, $1, 1
-     addi64 $254, $254, 8
+     addi64 $254, $254, 12
          ld $31, $254, -8, 8
        jala $0, $31, 0
 deep instantiation 2.S.get(((.Z))):
          st $31, $254, -8, 8
-     addi64 $254, $254, -8
+     addi64 $254, $254, -12
         jal $31, $0, :deep instantiation 2.S.get((.Z))
+         st $1, $254, 0, 4
+         ld $1, $254, 0, 4
      addi32 $1, $1, 1
-     addi64 $254, $254, 8
+     addi64 $254, $254, 12
          ld $31, $254, -8, 8
        jala $0, $31, 0
 deep instantiation 2.S.get((.Z)):
          st $31, $254, -8, 8
-     addi64 $254, $254, -8
+     addi64 $254, $254, -12
         jal $31, $0, :deep instantiation 2.S.get(.Z)
+         st $1, $254, 0, 4
+         ld $1, $254, 0, 4
      addi32 $1, $1, 1
-     addi64 $254, $254, 8
+     addi64 $254, $254, 12
          ld $31, $254, -8, 8
        jala $0, $31, 0
 deep instantiation 2.S.get(.Z):
          st $31, $254, -8, 8
-     addi64 $254, $254, -8
+     addi64 $254, $254, -12
         jal $31, $0, :deep instantiation 2.Z.get
+         st $1, $254, 0, 4
+         ld $1, $254, 0, 4
      addi32 $1, $1, 1
-     addi64 $254, $254, 8
+     addi64 $254, $254, 12
          ld $31, $254, -8, 8
        jala $0, $31, 0
 deep instantiation 2.Z.get:

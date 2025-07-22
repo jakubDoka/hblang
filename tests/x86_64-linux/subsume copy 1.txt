@@ -10,12 +10,12 @@ main:
 	shr ecx, 0x10
 	shl ecx, 0x10
 	or eax, ecx
-	mov [rsp+0x03], ax
+	mov [rsp+0x04], ax
 	shr eax, 0x10
-	mov [rsp+0x05], al
+	mov [rsp+0x06], al
 	mov edx, eax
-	mov al, [rsp+0x03]
-	mov cl, [rsp+0x04]
+	mov al, [rsp+0x04]
+	mov cl, [rsp+0x05]
 	movzx rax, al
 	movzx rcx, cl
 	add rax, rcx

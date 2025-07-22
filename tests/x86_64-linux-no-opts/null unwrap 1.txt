@@ -23,16 +23,19 @@ null unwrap 1.use_opt:
 null unwrap 1.null_unwrap:
 	ud2
 main:
-	sub rsp, 0x28
+	sub rsp, 0x38
 	mov byte ptr [rsp], 0x01
 	mov qword ptr [rsp+0x08], 0x01
 	mov rdi, [rsp]
 	mov rsi, [rsp+0x08]
 	call :null unwrap 1.use_opt
+	mov [rsp+0x20], rax
 	mov byte ptr [rsp+0x10], 0x00
 	mov rdi, [rsp+0x10]
 	mov rsi, [rsp+0x18]
 	call :null unwrap 1.use_opt
-	add rsp, 0x28
+	mov [rsp+0x28], rax
+	mov rax, [rsp+0x28]
+	add rsp, 0x38
 	ret
 memcpy:

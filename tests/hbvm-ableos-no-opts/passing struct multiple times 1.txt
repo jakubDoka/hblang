@@ -1,6 +1,6 @@
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -35
+     addi64 $254, $254, -43
        li64 $1, 1
          st $1, $254, 0, 8
        li64 $7, 3
@@ -16,17 +16,21 @@ main:
          st $5, $254, 25, 1
          st $4, $254, 26, 1
         jal $31, $0, :passing struct multiple times 1.foo
-     addi64 $254, $254, 35
+         st $1, $254, 27, 8
+         ld $1, $254, 27, 8
+     addi64 $254, $254, 43
          ld $31, $254, -8, 8
          tx
 passing struct multiple times 1.foo:
          st $31, $254, -8, 8
-     addi64 $254, $254, -8
+     addi64 $254, $254, -16
          cp $3, $1
          cp $1, $2
          cp $2, $3
         jal $31, $0, :passing struct multiple times 1.bar
-     addi64 $254, $254, 8
+         st $1, $254, 0, 8
+         ld $1, $254, 0, 8
+     addi64 $254, $254, 16
          ld $31, $254, -8, 8
        jala $0, $31, 0
 passing struct multiple times 1.bar:

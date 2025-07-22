@@ -1,9 +1,11 @@
 main:
-	sub rsp, 0x18
+	sub rsp, 0x28
 	mov rax, 0x123
 	xor rdi, rdi
 	xor rsi, rsi
 	syscall
+	mov [rsp+0x04], eax
+	mov eax, [rsp+0x04]
 	mov [rsp], eax
 	mov eax, [rsp]
 	cmp eax, 0x00
@@ -13,17 +15,19 @@ main:
 	jz :0
 	mov rax, 0x01
 	jmp :1
-0:	mov dword ptr [rsp+0x04], 0x01
-	mov qword ptr [rsp+0x08], 0x00
+0:	mov dword ptr [rsp+0x08], 0x01
+	mov qword ptr [rsp+0x0C], 0x00
 	mov rax, 0xE9
-	lea r10, [rsp+0x04]
+	lea r10, [rsp+0x08]
 	mov cx, [0x0000000000000007]
 	mov edi, [rsp]
 	movzx rsi, cx
 	xor rdx, rdx
 	syscall
-	mov [rsp+0x10], eax
-	mov eax, [rsp+0x10]
+	mov [rsp+0x18], eax
+	mov eax, [rsp+0x18]
+	mov [rsp+0x14], eax
+	mov eax, [rsp+0x14]
 	cmp eax, 0x00
 	setl al
 	movzx rax, al
@@ -32,5 +36,5 @@ main:
 	mov rax, 0x02
 1:	jmp :3
 2:	xor rax, rax
-3:	add rsp, 0x18
+3:	add rsp, 0x28
 	ret

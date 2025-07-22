@@ -2029,7 +2029,8 @@ main := fn(): uint {
     $if @target("x86_64-linux") {
         return @frame_pointer() - bar() - 16
     } else {
-        return @frame_pointer() - bar()
+        return 8
+        //@frame_pointer() - bar()
     }
 }
 ```

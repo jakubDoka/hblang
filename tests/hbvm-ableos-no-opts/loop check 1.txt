@@ -1,6 +1,6 @@
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -80
+     addi64 $254, $254, -82
         lra $1, $0, :loop check 1.main.aaaaaaaaaaaaaaaaaaaaa
          st $1, $254, 0, 8
        li64 $1, 21
@@ -33,9 +33,13 @@ main:
          ld $2, $254, 64, 8
          ld $1, $254, 56, 8
         jal $31, $0, :loop check 1.check
+         st $1, $254, 72, 1
+         ld $1, $254, 72, 1
        andi $1, $1, 255
         jeq $1, $0, :4
         jal $31, $0, :loop check 1.blackbox
+         st $1, $254, 73, 1
+         ld $1, $254, 73, 1
        andi $1, $1, 255
         not $1, $1
        andi $1, $1, 255
@@ -47,7 +51,7 @@ main:
 4:       st $0, $254, 16, 8
 7:      jmp :9
 2:     li32 $1, 1
-8:   addi64 $254, $254, 80
+8:   addi64 $254, $254, 82
          ld $31, $254, -8, 8
          tx
 loop check 1.nextPos:

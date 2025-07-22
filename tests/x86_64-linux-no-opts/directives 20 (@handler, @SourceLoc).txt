@@ -1,15 +1,15 @@
 directives 20 (@handler, @SourceLoc).main:
 	push rbx
 	sub rsp, 0x70
-	mov byte ptr [rsp+0x64], 0x00
-	lea rax, [rsp+0x64]
+	mov byte ptr [rsp+0x6C], 0x00
+	lea rax, [rsp+0x6C]
 	mov [rsp+0x40], rax
 	mov qword ptr [rsp+0x48], 0x01
-	mov byte ptr [rsp+0x60], 0x01
-	mov byte ptr [rsp+0x61], 0x02
-	mov byte ptr [rsp+0x62], 0x03
-	mov byte ptr [rsp+0x63], 0x04
-	mov edi, [rsp+0x60]
+	mov byte ptr [rsp+0x68], 0x01
+	mov byte ptr [rsp+0x69], 0x02
+	mov byte ptr [rsp+0x6A], 0x03
+	mov byte ptr [rsp+0x6B], 0x04
+	mov edi, [rsp+0x68]
 	call :directives 20 (@handler, @SourceLoc).produce_memcpy
 	xor rdx, rdx
 	mov rax, [rsp+0x48]
@@ -41,6 +41,8 @@ directives 20 (@handler, @SourceLoc).main:
 	mov rdi, [rsp+0x50]
 	mov rsi, [rsp+0x58]
 	call :directives 20 (@handler, @SourceLoc).use_slice
+	mov [rsp+0x60], rax
+	mov rax, [rsp+0x60]
 	add rsp, 0x70
 	pop rbx
 	ret
@@ -110,5 +112,7 @@ directives 20 (@handler, @SourceLoc).use_slice:
 _start:
 	sub rsp, 0x08
 	call :directives 20 (@handler, @SourceLoc).main
+	mov [rsp], rax
+	mov rax, [rsp]
 	add rsp, 0x08
 	ret

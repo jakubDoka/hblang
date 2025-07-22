@@ -11,11 +11,16 @@ generic structs 3.Foo.sub(uint):
 	add rsp, 0x10
 	ret
 main:
-	sub rsp, 0x08
-	mov qword ptr [rsp], 0x0A
-	mov rdi, [rsp]
+	sub rsp, 0x28
+	mov dword ptr [rsp+0x18], 0x70000002
+	mov dword ptr [rsp+0x1C], 0x70000003
+	mov qword ptr [rsp+0x08], 0x0A
+	mov rdi, [rsp+0x08]
 	call :generic structs 3.Foo.sub((uint))
-	mov rdi, rax
+	mov [rsp+0x10], rax
+	mov rdi, [rsp+0x10]
 	call :generic structs 3.Foo.sub(uint)
-	add rsp, 0x08
+	mov [rsp], rax
+	mov rax, [rsp]
+	add rsp, 0x28
 	ret

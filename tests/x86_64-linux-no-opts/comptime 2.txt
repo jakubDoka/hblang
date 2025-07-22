@@ -1,24 +1,32 @@
 comptime 2.main.some_fn3(uint, .some_fn):
 	sub rsp, 0x08
 	call :comptime 2.main.some_fn(uint)
+	mov [rsp], rax
+	mov rax, [rsp]
 	add rax, 0x0A
 	add rsp, 0x08
 	ret
 comptime 2.main.some_fn3(uint, (.some_fn2(.some_fn))):
 	sub rsp, 0x08
 	call :comptime 2.main.some_fn3(uint, .some_fn2(.some_fn))
+	mov [rsp], rax
+	mov rax, [rsp]
 	add rax, 0x0A
 	add rsp, 0x08
 	ret
 comptime 2.main.some_fn3(uint, .some_fn2(.some_fn)):
 	sub rsp, 0x08
 	call :comptime 2.main.some_fn2(uint, .some_fn)
+	mov [rsp], rax
+	mov rax, [rsp]
 	add rax, 0x0A
 	add rsp, 0x08
 	ret
 comptime 2.main.some_fn2(uint, .some_fn):
 	sub rsp, 0x08
 	call :comptime 2.main.some_fn(uint)
+	mov [rsp], rax
+	mov rax, [rsp]
 	inc rax
 	add rsp, 0x08
 	ret
@@ -26,20 +34,26 @@ comptime 2.main.some_fn(uint):
 	mov rax, 0x01
 	ret
 main:
-	push rbx
-	sub rsp, 0x10
-	mov dword ptr [rsp], 0x07
+	sub rsp, 0x38
+	mov dword ptr [rsp+0x10], 0x07
 	mov rax, 0x90000002
-	mov [rsp+0x04], eax
-	mov rcx, 0x80000000
+	mov [rsp+0x14], eax
+	mov rdx, 0x80000000
+	mov rcx, 0x90000007
 	mov rax, 0x90000003
-	mov [rsp+0x08], eax
-	mov [rsp+0x0C], ecx
+	mov [rsp+0x18], eax
+	mov [rsp+0x1C], edx
+	mov [rsp+0x20], ecx
 	call :comptime 2.main.some_fn3(uint, .some_fn)
-	mov rbx, rax
+	mov [rsp], rax
+	mov rcx, 0x9000000F
+	mov rax, 0x9000000C
+	mov [rsp+0x24], eax
+	mov [rsp+0x28], ecx
 	call :comptime 2.main.some_fn3(uint, (.some_fn2(.some_fn)))
-	add rbx, rax
-	mov rax, rbx
-	add rsp, 0x10
-	pop rbx
+	mov [rsp+0x08], rax
+	mov rax, [rsp]
+	mov rcx, [rsp+0x08]
+	add rax, rcx
+	add rsp, 0x38
 	ret

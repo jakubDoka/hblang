@@ -8,12 +8,14 @@ function pointers 4.DynObj.new(^.Obj):
 	add rsp, 0x10
 	ret
 function pointers 4.DynObj.func:
-	sub rsp, 0x08
+	sub rsp, 0x18
 	mov [rsp], rdi
 	mov rax, [rsp]
 	mov rdi, [rax+0x08]
 	mov rax, [rax]
-	add rsp, 0x08
+	mov [rsp+0x08], al
+	mov al, [rsp+0x08]
+	add rsp, 0x18
 	ret
 function pointers 4.Obj.func:
 	sub rsp, 0x10
@@ -32,5 +34,7 @@ main:
 	call :function pointers 4.DynObj.new(^.Obj)
 	lea rdi, [rsp]
 	call :function pointers 4.DynObj.func
+	mov [rsp+0x11], al
+	mov al, [rsp+0x11]
 	add rsp, 0x18
 	ret

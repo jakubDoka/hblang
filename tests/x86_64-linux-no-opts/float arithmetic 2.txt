@@ -70,15 +70,17 @@ float arithmetic 2.sin:
 	add rsp, 0x20
 	ret
 main:
-	sub rsp, 0x08
+	sub rsp, 0x18
 	mov rax, 0x447A0000
 	movd xmm0, eax
 	movss [rsp], xmm0
 	movss xmm0, dword ptr [rsp]
 	call :float arithmetic 2.sin
+	movss [rsp+0x08], xmm0
+	movss xmm0, dword ptr [rsp+0x08]
 	movss xmm1, dword ptr [rsp]
 	mulss xmm0, xmm1
 	cvttss2si rax, xmm0
 	sub rax, 0x33A
-	add rsp, 0x08
+	add rsp, 0x18
 	ret

@@ -2,6 +2,12 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### out of range access 1
+```hb
+bwa := fn(x: [7]?bool): u32 return 0
+main := fn(): u32 return bwa(.[null, null, null, null, null, null, null])
+```
+
 #### more comptime eval 1
 ```hb
 X := struct {

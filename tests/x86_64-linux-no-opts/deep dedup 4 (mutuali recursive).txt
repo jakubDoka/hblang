@@ -1,5 +1,5 @@
 deep dedup 4 (mutuali recursive).fib:
-	sub rsp, 0x08
+	sub rsp, 0x18
 	mov [rsp], rdi
 	mov rdi, [rsp]
 	cmp rdi, 0x02
@@ -10,10 +10,12 @@ deep dedup 4 (mutuali recursive).fib:
 	mov rax, 0x01
 	jmp :1
 0:	call :deep dedup 4 (mutuali recursive).fib_body
-1:	add rsp, 0x08
+	mov [rsp+0x08], rax
+	mov rax, [rsp+0x08]
+1:	add rsp, 0x18
 	ret
 deep dedup 4 (mutuali recursive).fib2:
-	sub rsp, 0x08
+	sub rsp, 0x18
 	mov [rsp], rdi
 	mov rdi, [rsp]
 	cmp rdi, 0x02
@@ -24,48 +26,52 @@ deep dedup 4 (mutuali recursive).fib2:
 	mov rax, 0x01
 	jmp :1
 0:	call :deep dedup 4 (mutuali recursive).fib_body2
-1:	add rsp, 0x08
+	mov [rsp+0x08], rax
+	mov rax, [rsp+0x08]
+1:	add rsp, 0x18
 	ret
 deep dedup 4 (mutuali recursive).fib_body2:
-	push rbx
-	sub rsp, 0x10
+	sub rsp, 0x18
 	mov [rsp], rdi
 	mov rdi, [rsp]
 	dec rdi
 	call :deep dedup 4 (mutuali recursive).fib2
-	mov rbx, rax
+	mov [rsp+0x08], rax
 	mov rdi, [rsp]
 	sub rdi, 0x02
 	call :deep dedup 4 (mutuali recursive).fib2
-	add rbx, rax
-	mov rax, rbx
-	add rsp, 0x10
-	pop rbx
+	mov [rsp+0x10], rax
+	mov rax, [rsp+0x08]
+	mov rcx, [rsp+0x10]
+	add rax, rcx
+	add rsp, 0x18
 	ret
 deep dedup 4 (mutuali recursive).fib_body:
-	push rbx
-	sub rsp, 0x10
+	sub rsp, 0x18
 	mov [rsp], rdi
 	mov rdi, [rsp]
 	dec rdi
 	call :deep dedup 4 (mutuali recursive).fib
-	mov rbx, rax
+	mov [rsp+0x08], rax
 	mov rdi, [rsp]
 	sub rdi, 0x02
 	call :deep dedup 4 (mutuali recursive).fib
-	add rbx, rax
-	mov rax, rbx
-	add rsp, 0x10
-	pop rbx
+	mov [rsp+0x10], rax
+	mov rax, [rsp+0x08]
+	mov rcx, [rsp+0x10]
+	add rax, rcx
+	add rsp, 0x18
 	ret
 main:
-	push rbx
+	sub rsp, 0x18
 	mov rdi, 0x03
 	call :deep dedup 4 (mutuali recursive).fib
-	mov rbx, rax
+	mov [rsp], rax
 	mov rdi, 0x03
 	call :deep dedup 4 (mutuali recursive).fib2
-	sub rbx, rax
-	mov rax, rbx
-	pop rbx
+	mov [rsp+0x08], rax
+	mov rax, [rsp]
+	mov rcx, [rsp+0x08]
+	sub rax, rcx
+	add rsp, 0x18
 	ret

@@ -17,12 +17,17 @@ generic structs 1.Vec.sub(uint):
 	add rsp, 0x10
 	ret
 main:
-	sub rsp, 0x18
+	sub rsp, 0x28
+	mov dword ptr [rsp+0x18], 0x70000002
+	mov dword ptr [rsp+0x1C], 0x70000002
+	mov dword ptr [rsp+0x20], 0x70000002
 	lea rdi, [rsp]
 	mov rsi, 0x01
 	call :generic structs 1.nvec(uint)
 	mov rdi, [rsp]
 	mov rsi, [rsp+0x08]
 	call :generic structs 1.Vec.sub(uint)
-	add rsp, 0x18
+	mov [rsp+0x10], rax
+	mov rax, [rsp+0x10]
+	add rsp, 0x28
 	ret

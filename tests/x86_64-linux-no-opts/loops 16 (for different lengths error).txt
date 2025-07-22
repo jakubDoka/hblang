@@ -44,7 +44,7 @@ main:
 	mov rax, [rsp+0x58]
 	inc rax
 	mov [rsp+0x58], rax
-	mov al, [rsp+0x60]
+	mov rax, [rsp+0x60]
 	inc rax
 	mov [rsp+0x60], rax
 	jmp :2

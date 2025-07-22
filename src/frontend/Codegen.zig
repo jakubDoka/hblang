@@ -594,7 +594,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
             .ByValuePair => |p| if (params[i] == .Stack) b: {
                 break :b self.bl.addParam(arg_sloc, i);
             } else b: {
-                const slot = self.bl.addLocal(arg_sloc, ty.size(self.types));
+                const slot = self.bl.addLocal(arg_sloc, p.size());
                 for (p.offsets(), 0..) |off, j| {
                     const arg = self.bl.addParam(arg_sloc, i + j);
                     self.bl.addFieldStore(arg_sloc, slot, @intCast(off), arg.data_type, arg);
@@ -738,24 +738,25 @@ pub fn emitNull(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
     const sloc = self.src(expr);
 
     if (nullable.nieche.offset(self.types)) |spec| {
-        switch (self.abiCata(nullable.inner)) {
+        const abi = self.abiCata(nullable.inner);
+        switch (abi) {
             .Impossible => unreachable,
             .Imaginary => return .{ .ty = ty },
             .ByValue => return .mkv(ty, self.bl.addIntImm(sloc, spec.kind.abi(), 0)),
             .ByValuePair, .ByRef => {
-                const loc = ctx.loc orelse
-                    self.bl.addLocal(sloc, nullable.inner.size(self.types));
+                const loc = ctx.loc orelse self.bl.addLocal(sloc, abi.size());
                 const flag_vl = self.bl.addIntImm(sloc, spec.kind.abi(), 0);
                 _ = self.bl.addFieldStore(sloc, loc, spec.offset, spec.kind.abi(), flag_vl);
                 return .mkp(ty, loc);
             },
         }
     } else {
-        switch (self.abiCata(ty)) {
+        const abi = self.abiCata(ty);
+        switch (abi) {
             .Impossible => unreachable,
             .Imaginary => return .{ .ty = ty },
             .ByValue, .ByValuePair, .ByRef => {
-                const loc = ctx.loc orelse self.bl.addLocal(sloc, ty.size(self.types));
+                const loc = ctx.loc orelse self.bl.addLocal(sloc, abi.size());
                 _ = self.bl.addStore(sloc, loc, .i8, self.bl.addIntImm(sloc, .i8, 0));
                 return .mkp(ty, loc);
             },
@@ -773,13 +774,14 @@ pub fn emitIdk(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
 
     const sloc = self.src(expr);
 
-    return switch (self.abiCata(ty)) {
+    const abi = self.abiCata(ty);
+    return switch (abi) {
         .Impossible => return self.report(expr, "can't make an uninitialized" ++
             " {}, its uninhabited", .{ty}) catch error.Unreachable,
         .Imaginary => .{ .ty = ty },
         .ByValue => |t| .mkv(ty, self.bl.addUninit(sloc, t)),
         .ByValuePair, .ByRef => {
-            const loc = self.bl.addLocal(sloc, ty.size(self.types));
+            const loc = self.bl.addLocal(sloc, abi.size());
             return .mkp(ty, loc);
         },
     };
@@ -929,13 +931,14 @@ pub fn emitTuple(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Tupl)) EmitEr
             alignment = @max(alignment, value.ty.alignment(self.types));
         }
         offset = std.mem.alignForward(u64, offset, alignment);
-        if (ctx.loc == null) self.bl.resizeLocal(local, offset);
+        const tuple = self.types.makeTuple(types);
+        if (ctx.loc == null) self.bl.resizeLocal(local, self.abiCata(tuple).size());
 
-        return .mkp(self.types.makeTuple(types), local);
+        return .mkp(tuple, local);
     } else {
         const oty = ctx.ty orelse try self.resolveAnonTy(e.ty);
         var ty = oty;
-        const local = ctx.loc orelse self.bl.addLocal(self.src(expr), oty.size(self.types));
+        const local = ctx.loc orelse self.bl.addLocal(sloc, self.abiCata(ty).size());
         var init_offset: u64 = 0;
 
         if (ty.needsTag(self.types)) {
@@ -1016,7 +1019,7 @@ pub fn emitArray(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Arry)) EmitEr
         break :b .{ elem_ty, array_ty };
     };
 
-    if (ctx.loc == null) self.bl.resizeLocal(local, res_ty.size(self.types));
+    if (ctx.loc == null) self.bl.resizeLocal(local, self.abiCata(res_ty).size());
 
     for (self.ast.exprs.view(e.fields), start..) |elem, i| {
         const elem_sloc = self.src(elem);
@@ -1063,7 +1066,7 @@ pub fn emitUnOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.UnOp)) EmitErr
                         return self.report(expr, "{} is not a slice but it was initialized as such", .{ty});
                     };
 
-                    const loc = ctx.loc orelse self.bl.addLocal(self.src(expr), ty.size(self.types));
+                    const loc = ctx.loc orelse self.bl.addLocal(sloc, self.abiCata(ty).size());
                     const ptr = self.bl.addIntImm(sloc, .i64, @bitCast(slice.elem.alignment(self.types)));
                     self.bl.addFieldStore(sloc, loc, TySlice.ptr_offset, .i64, ptr);
                     self.bl.addFieldStore(sloc, loc, TySlice.len_offset, .i64, self.bl.addIntImm(sloc, .i64, 0));
@@ -1172,7 +1175,7 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
                 // TODO: this wastes stack, we should fix up the stack
                 // allocation once we know this results into unwrapped
                 // value
-                var variable = self.bl.addLocal(sloc, lhs.ty.size(self.types));
+                var variable = self.bl.addLocal(sloc, self.abiCata(lhs.ty).size());
                 var cond = try self.checkNull(e.lhs, &lhs, .@"!=");
 
                 var builder = self.bl.addIfAndBeginThen(sloc, cond.getValue(sloc, self));
@@ -1256,7 +1259,7 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
                         const value = try self.emitStructFoldOp(expr, struct_ty, e.op, lhs.id.Pointer, rhs.id.Pointer);
                         return .mkv(.bool, value orelse self.bl.addIntImm(sloc, .i8, 1));
                     } else {
-                        const loc = ctx.loc orelse self.bl.addLocal(sloc, lhs.ty.size(self.types));
+                        const loc = ctx.loc orelse self.bl.addLocal(sloc, self.abiCata(lhs.ty).size());
                         try self.emitStructOp(expr, struct_ty, e.op, loc, lhs.id.Pointer, rhs.id.Pointer);
                         return .mkp(lhs.ty, loc);
                     }
@@ -1540,7 +1543,7 @@ pub fn emitIndex(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Index)) EmitE
         ) };
         const len = self.bl.addBinOp(sloc, .isub, .i64, end.getValue(sloc, self), start.getValue(sloc, self));
 
-        const loc = ctx.loc orelse self.bl.addLocal(self.src(expr), res_ty.size(self.types));
+        const loc = ctx.loc orelse self.bl.addLocal(sloc, self.abiCata(res_ty).size());
         self.bl.addFieldStore(sloc, loc, TySlice.ptr_offset, .i64, ptr.getValue(sloc, self));
         self.bl.addFieldStore(sloc, loc, TySlice.len_offset, .i64, len);
 
@@ -2368,7 +2371,7 @@ pub fn emitHandlerCall(self: *Codegen, handler: utils.EntId(tys.Func), expr: Ast
 
 pub fn emitSrcLoc(self: *Codegen, expr: Ast.Id) Value {
     const sloc = self.src(expr);
-    const src_loc = self.bl.addLocal(sloc, self.types.source_loc.size(self.types));
+    const src_loc = self.bl.addLocal(sloc, self.abiCata(self.types.source_loc).size());
     _ = self.emitString(.{ .loc = src_loc }, self.types.pool.arena.dupe(u8, self.ast.path), expr);
     const line, const col = Ast.lineCol(self.ast.source, self.ast.posOf(expr).index);
     comptime std.debug.assert(@import("builtin").cpu.arch.endian() == .little);
@@ -2450,7 +2453,7 @@ pub fn emitDecl(
         break :b self.emitTyped(.{ .loc = loc }, ty, e.value);
     };
 
-    self.bl.resizeLocal(loc, value.ty.size(self.types));
+    self.bl.resizeLocal(loc, self.abiCata(value.ty).size());
 
     var out = Value{};
     if (unwrap) {
@@ -2506,7 +2509,7 @@ pub fn typeCheck(self: *Codegen, expr: Ast.Id, got: *Value, expected: Types.Id) 
                 got.* = .mkv(expected, self.bl.addIntImm(sloc, .i8, 1));
             },
             else => {
-                const loc = self.bl.addLocal(self.src(expr), expected.size(self.types));
+                const loc = self.bl.addLocal(self.src(expr), self.abiCata(expected).size());
                 _ = self.bl.addStore(sloc, loc, .i8, self.bl.addIntImm(sloc, .i8, 1));
                 self.emitGenericStore(
                     sloc,
@@ -3241,7 +3244,7 @@ fn pushReturn(
 ) usize {
     if (self.abi.isByRefRet(ret_abi)) {
         call_args.arg_slots[0] = ctx.loc orelse
-            self.bl.addLocal(self.src(pos), ret.size(self.types));
+            self.bl.addLocal(self.src(pos), self.abiCata(ret).size());
         return 1;
     } else {
         return 0;
@@ -3304,7 +3307,7 @@ fn assembleReturn(
         .ByValuePair => |pair| if (self.abi.isByRefRet(ret_abi)) b: {
             break :b .mkp(ret, call_args.arg_slots[0]);
         } else b: {
-            const slot = ctx.loc orelse self.bl.addLocal(sloc, ret.size(self.types));
+            const slot = ctx.loc orelse self.bl.addLocal(sloc, self.abiCata(ret).size());
             for (pair.types, pair.offsets(), rets.?) |ty, off, vl| {
                 self.bl.addFieldStore(sloc, slot, @intCast(off), ty, vl);
             }
@@ -3509,7 +3512,7 @@ fn emitString(self: *Codegen, ctx: Ctx, data: []u8, expr: Ast.Id) Value {
 
     const slice_ty = self.types.string;
     const slice_loc = ctx.loc orelse
-        self.bl.addLocal(self.src(expr), slice_ty.size(self.types));
+        self.bl.addLocal(self.src(expr), self.abiCata(slice_ty).size());
     self.bl.addFieldStore(
         sloc,
         slice_loc,
@@ -3763,7 +3766,7 @@ fn emitDirective(
             const to_abi = self.abiCata(ret);
 
             if (to_abi != .ByValue) {
-                const loc = self.bl.addLocal(sloc, ret.size(self.types));
+                const loc = self.bl.addLocal(sloc, self.abiCata(ret).size());
                 self.emitGenericStore(sloc, loc, &oper);
                 return .mkp(ret, loc);
             } else {

@@ -29,7 +29,7 @@ loop check 1.blackbox:
 	mov rax, 0x01
 	ret
 main:
-	sub rsp, 0x48
+	sub rsp, 0x58
 	lea rax, [0x0000000000000007]
 	mov [rsp], rax
 	mov qword ptr [rsp+0x08], 0x15
@@ -60,9 +60,13 @@ main:
 	mov rsi, [rsp+0x38]
 	mov rdi, [rsp+0x30]
 	call :loop check 1.check
+	mov [rsp+0x48], al
+	mov al, [rsp+0x48]
 	test al, al
 	jz :1
 	call :loop check 1.blackbox
+	mov [rsp+0x49], al
+	mov al, [rsp+0x49]
 	xor al, 0x01
 	test al, al
 	jz :2
@@ -73,5 +77,5 @@ main:
 1:	mov qword ptr [rsp+0x40], 0x00
 3:	jmp :5
 0:	mov rax, 0x01
-4:	add rsp, 0x48
+4:	add rsp, 0x58
 	ret

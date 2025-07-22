@@ -1,5 +1,6 @@
 main:
-	sub rsp, 0x60
+	sub rsp, 0x70
+	mov dword ptr [rsp+0x60], 0x20000001
 	mov qword ptr [rsp+0x48], 0x01
 	lea rdi, [rsp]
 	mov [rsp+0x20], rdi
@@ -41,5 +42,5 @@ main:
 	add rax, 0x08
 	mov [rsp+0x40], rax
 	jmp :3
-2:	add rsp, 0x60
+2:	add rsp, 0x70
 	ret

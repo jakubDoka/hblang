@@ -36,7 +36,7 @@ structs 1.pass:
 	add rsp, 0x10
 	ret
 main:
-	sub rsp, 0x48
+	sub rsp, 0x58
 	mov qword ptr [rsp+0x18], 0x04
 	lea rdi, [rsp]
 	lea rsi, [rsp+0x18]
@@ -58,6 +58,8 @@ main:
 0:	mov rsi, [rsp+0x38]
 	mov rdi, [rsp+0x30]
 	call :structs 1.Ty.sum
+	mov [rsp+0x48], rax
+	mov rax, [rsp+0x48]
 	cmp rax, 0x00
 	setnz al
 	movzx rax, al
@@ -67,6 +69,8 @@ main:
 1:	jmp :3
 2:	lea rdi, [rsp+0x30]
 	call :structs 1.pass
-3:	add rsp, 0x48
+	mov [rsp+0x50], rax
+	mov rax, [rsp+0x50]
+3:	add rsp, 0x58
 	ret
 memcpy:

@@ -1,5 +1,5 @@
 eopll 2.epoll_wait:
-	sub rsp, 0x28
+	sub rsp, 0x38
 	mov [rsp], rdi
 	mov [rsp+0x08], rsi
 	mov [rsp+0x10], rdx
@@ -10,15 +10,20 @@ eopll 2.epoll_wait:
 	mov rdx, [rsp+0x10]
 	mov r10, [rsp+0x18]
 	syscall
+	mov [rsp+0x28], rax
+	mov rax, [rsp+0x28]
 	mov [rsp+0x20], rax
-	add rsp, 0x28
+	add rsp, 0x38
 	ret
 main:
 	sub rsp, 0x28
 	mov rax, 0x123
 	xor rdi, rdi
 	syscall
+	mov [rsp+0x1C], eax
+	mov eax, [rsp+0x1C]
 	mov [rsp+0x18], eax
+	mov dword ptr [rsp+0x20], 0x20000001
 	mov qword ptr [rsp+0x10], 0x00
 1:	mov rax, [rsp+0x10]
 	cmp rax, 0x00

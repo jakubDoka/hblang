@@ -1,5 +1,6 @@
 comptime 6 (strings).main.string_to_array("Edward"):
-	sub rsp, 0x10
+	sub rsp, 0x20
+	mov dword ptr [rsp+0x10], 0x20000001
 	mov qword ptr [rsp], 0x00
 	mov rsi, [0x0000000000000007]
 1:	mov rdx, [rsp]
@@ -22,7 +23,7 @@ comptime 6 (strings).main.string_to_array("Edward"):
 	shl rcx, 0x20
 	shl rax, 0x00
 	or rax, rcx
-	add rsp, 0x10
+	add rsp, 0x20
 	ret
 main:
 	sub rsp, 0x18

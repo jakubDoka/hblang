@@ -11,24 +11,30 @@ carry over call float op 1.opaque(uint):
 	add rsp, 0x10
 	ret
 main:
-	sub rsp, 0x18
+	sub rsp, 0x28
 	mov rax, 0x3F800000
 	movd xmm0, eax
 	call :carry over call float op 1.opaque(f32)
-	movss [rsp], xmm0
+	movss [rsp+0x0C], xmm0
 	mov rax, 0x40000000
+	movss xmm0, dword ptr [rsp+0x0C]
+	movss [rsp+0x08], xmm0
 	movd xmm0, eax
 	call :carry over call float op 1.opaque(f32)
-	movss [rsp+0x04], xmm0
+	movss [rsp+0x14], xmm0
 	xor rdi, rdi
+	movss xmm0, dword ptr [rsp+0x14]
+	movss [rsp+0x10], xmm0
 	call :carry over call float op 1.opaque(uint)
-	movss xmm0, dword ptr [rsp]
-	movss xmm1, dword ptr [rsp+0x04]
+	mov [rsp], rax
+	movss xmm0, dword ptr [rsp+0x08]
+	movss xmm1, dword ptr [rsp+0x10]
 	addss xmm0, xmm1
-	movss [rsp+0x08], xmm0
-	movss xmm0, dword ptr [rsp+0x08]
+	movss [rsp+0x18], xmm0
+	movss xmm0, dword ptr [rsp+0x18]
 	call :carry over call float op 1.opaque(f32)
-	movss xmm0, dword ptr [rsp+0x08]
+	movss [rsp+0x1C], xmm0
+	movss xmm0, dword ptr [rsp+0x18]
 	cvttss2si rax, xmm0
-	add rsp, 0x18
+	add rsp, 0x28
 	ret

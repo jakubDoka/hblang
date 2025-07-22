@@ -41,6 +41,8 @@ main:
 	mov [rsp], rax
 	mov qword ptr [rsp+0x08], 0x01
 	call :mem2reg crash 2.insert
+	mov [rsp+0x20], rax
+	mov rax, [rsp+0x20]
 	mov rax, [rax]
 	add rsp, 0x28
 	ret

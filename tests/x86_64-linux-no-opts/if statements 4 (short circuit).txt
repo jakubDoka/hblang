@@ -7,7 +7,7 @@ if statements 4 (short circuit).effectfull:
 	add rsp, 0x10
 	ret
 main:
-	sub rsp, 0x08
+	sub rsp, 0x18
 	mov byte ptr [rsp+0x01], 0x01
 	mov al, [rsp+0x01]
 	test al, al
@@ -16,42 +16,50 @@ main:
 	jmp :1
 0:	mov rdi, 0x01
 	call :if statements 4 (short circuit).effectfull
+	mov [rsp+0x03], al
+	mov al, [rsp+0x03]
 	mov [rsp+0x02], al
-1:	mov byte ptr [rsp+0x04], 0x00
-	mov al, [rsp+0x04]
+1:	mov byte ptr [rsp+0x05], 0x00
+	mov al, [rsp+0x05]
 	test al, al
 	jz :2
 	mov rdi, 0x02
 	call :if statements 4 (short circuit).effectfull
-	mov [rsp+0x03], al
+	mov [rsp+0x06], al
+	mov al, [rsp+0x06]
+	mov [rsp+0x04], al
 	jmp :3
-2:	mov byte ptr [rsp+0x03], 0x00
-3:	mov al, [rsp+0x03]
+2:	mov byte ptr [rsp+0x04], 0x00
+3:	mov al, [rsp+0x04]
 	test al, al
 	jz :5
 	jmp :5
-5:	mov byte ptr [rsp+0x05], 0x00
-	mov al, [rsp+0x05]
+5:	mov byte ptr [rsp+0x07], 0x00
+	mov al, [rsp+0x07]
 	test al, al
 	jz :5
 	mov rdi, 0x04
 	call :if statements 4 (short circuit).effectfull
-	mov [rsp+0x06], al
+	mov [rsp+0x09], al
+	mov al, [rsp+0x09]
+	mov [rsp+0x08], al
 	jmp :6
-5:	mov byte ptr [rsp+0x06], 0x00
-6:	mov al, [rsp+0x06]
-	mov [rsp+0x05], al
-	mov byte ptr [rsp+0x05], 0x01
-	mov al, [rsp+0x05]
+5:	mov byte ptr [rsp+0x08], 0x00
+6:	mov al, [rsp+0x08]
+	mov [rsp+0x07], al
+	mov byte ptr [rsp+0x07], 0x01
+	mov al, [rsp+0x07]
 	test al, al
 	jz :7
-	mov byte ptr [rsp], 0x01
+	mov byte ptr [rsp+0x0A], 0x01
 	jmp :8
 7:	mov rdi, 0x05
 	call :if statements 4 (short circuit).effectfull
 	mov [rsp], al
-8:	mov al, [rsp]
-	mov [rsp+0x05], al
+	mov al, [rsp]
+	mov [rsp+0x0A], al
+8:	mov al, [rsp+0x0A]
+	mov [rsp+0x07], al
 	mov rax, [0x0000000000000007]
-	add rsp, 0x08
+	add rsp, 0x18
 	ret

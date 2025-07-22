@@ -3,11 +3,11 @@ passing struct multiple times 1.foo:
 	push rbp
 	sub rsp, 0x28
 	lea rsi, [rsp+0x40]
-	mov [rsp+0x18], edi
+	mov [rsp+0x20], edi
 	mov rdx, 0x18
 	lea rdi, [rsp]
-	mov bp, [rsp+0x18]
-	mov bl, [rsp+0x1A]
+	mov bp, [rsp+0x20]
+	mov bl, [rsp+0x22]
 	call :memcpy
 	movzx edi, bp
 	movzx eax, bl
@@ -15,6 +15,8 @@ passing struct multiple times 1.foo:
 	shl eax, 0x10
 	or edi, eax
 	call :passing struct multiple times 1.bar
+	mov [rsp+0x18], rax
+	mov rax, [rsp+0x18]
 	add rsp, 0x28
 	pop rbp
 	pop rbx
@@ -41,18 +43,18 @@ passing struct multiple times 1.bar:
 main:
 	push rbx
 	push rbp
-	sub rsp, 0x38
+	sub rsp, 0x48
 	mov qword ptr [rsp+0x18], 0x01
 	mov qword ptr [rsp+0x20], 0x02
 	mov qword ptr [rsp+0x28], 0x03
-	mov byte ptr [rsp+0x30], 0x01
-	mov byte ptr [rsp+0x31], 0x02
-	mov byte ptr [rsp+0x32], 0x03
+	mov byte ptr [rsp+0x38], 0x01
+	mov byte ptr [rsp+0x39], 0x02
+	mov byte ptr [rsp+0x3A], 0x03
 	mov rdx, 0x18
 	lea rdi, [rsp]
 	lea rsi, [rsp+0x18]
-	mov bp, [rsp+0x30]
-	mov bl, [rsp+0x32]
+	mov bp, [rsp+0x38]
+	mov bl, [rsp+0x3A]
 	call :memcpy
 	movzx edi, bp
 	movzx eax, bl
@@ -60,7 +62,9 @@ main:
 	shl eax, 0x10
 	or edi, eax
 	call :passing struct multiple times 1.foo
-	add rsp, 0x38
+	mov [rsp+0x30], rax
+	mov rax, [rsp+0x30]
+	add rsp, 0x48
 	pop rbp
 	pop rbx
 	ret

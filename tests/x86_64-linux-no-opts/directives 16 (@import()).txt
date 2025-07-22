@@ -3,6 +3,8 @@ main:
 	sub rsp, 0x10
 	mov rdi, 0x08
 	call :malloc
+	mov [rsp+0x08], rax
+	mov rax, [rsp+0x08]
 	mov [rsp], rax
 	mov rax, [rsp]
 	mov qword ptr [rax], 0x0A

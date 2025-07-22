@@ -4,5 +4,7 @@ lib.some_num:
 main:
 	sub rsp, 0x08
 	call :lib.some_num
+	mov [rsp], rax
+	mov rax, [rsp]
 	add rsp, 0x08
 	ret

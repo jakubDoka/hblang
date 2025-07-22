@@ -2,18 +2,20 @@ comptime 5 (integers).main.func(1):
 	mov rax, 0x01
 	ret
 main:
-	sub rsp, 0x18
+	sub rsp, 0x28
 	mov qword ptr [rsp], 0x01
-	mov dword ptr [rsp+0x08], 0x70000002
+	mov dword ptr [rsp+0x10], 0x70000002
 	mov rcx, 0x80000000
 	mov rax, 0x90000002
-	mov [rsp+0x0C], eax
-	mov [rsp+0x10], ecx
+	mov [rsp+0x14], eax
+	mov [rsp+0x18], ecx
 	call :comptime 5 (integers).main.func(1)
-	mov rcx, rax
+	mov [rsp+0x08], rax
 	mov rax, [0x0000000000000007]
-	mov rdx, [0x0000000000000007]
+	mov rcx, [rsp+0x08]
+	mov dword ptr [rsp+0x1C], 0x70000003
 	sub rax, rcx
-	add rax, rdx
-	add rsp, 0x18
+	mov rcx, [0x0000000000000007]
+	add rax, rcx
+	add rsp, 0x28
 	ret

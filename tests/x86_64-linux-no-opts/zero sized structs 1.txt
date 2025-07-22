@@ -4,9 +4,11 @@ zero sized structs 1.main.X.test:
 	xor rax, rax
 	ret
 main:
-	sub rsp, 0x08
-	mov dword ptr [rsp], 0x70000002
+	sub rsp, 0x18
+	mov dword ptr [rsp+0x08], 0x70000002
 	call :zero sized structs 1.main.X.new
 	call :zero sized structs 1.main.X.test
-	add rsp, 0x08
+	mov [rsp], rax
+	mov rax, [rsp]
+	add rsp, 0x18
 	ret

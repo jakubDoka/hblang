@@ -12,11 +12,11 @@ main:
 	or eax, ecx
 	mov rcx, rax
 	shr ecx, 0x00
-	mov [rsp+0x03], cx
+	mov [rsp+0x04], cx
 	shr eax, 0x10
-	mov [rsp+0x05], al
-	mov ax, [rsp+0x03]
-	mov cl, [rsp+0x05]
+	mov [rsp+0x06], al
+	mov ax, [rsp+0x04]
+	mov cl, [rsp+0x06]
 	movzx eax, ax
 	movzx ecx, cl
 	shl eax, 0x00
@@ -24,12 +24,12 @@ main:
 	or eax, ecx
 	mov rcx, rax
 	shr ecx, 0x00
-	mov [rsp+0x06], cx
+	mov [rsp+0x08], cx
 	shr eax, 0x10
-	mov [rsp+0x08], al
-	mov al, [rsp+0x06]
-	mov dl, [rsp+0x07]
-	mov cl, [rsp+0x08]
+	mov [rsp+0x0A], al
+	mov al, [rsp+0x08]
+	mov dl, [rsp+0x09]
+	mov cl, [rsp+0x0A]
 	movzx rax, al
 	movzx rdx, dl
 	movzx rcx, cl

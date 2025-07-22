@@ -1,12 +1,15 @@
 main:
-         st $31, $254, -16, 16
-     addi64 $254, $254, -16
+         st $31, $254, -8, 8
+     addi64 $254, $254, -24
         jal $31, $0, :deep dedup 2 (generics).size(uint)
-         cp $32, $1
+         st $1, $254, 0, 8
         jal $31, $0, :deep dedup 2 (generics).size(int)
-      sub64 $1, $32, $1
-     addi64 $254, $254, 16
-         ld $31, $254, -16, 16
+         st $1, $254, 8, 8
+         ld $2, $254, 0, 8
+         ld $1, $254, 8, 8
+      sub64 $1, $2, $1
+     addi64 $254, $254, 24
+         ld $31, $254, -8, 8
          tx
 deep dedup 2 (generics).size(uint):
        li64 $1, 8

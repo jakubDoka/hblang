@@ -43,20 +43,20 @@ main:
 	mov [r10], rax
 	call :proper systemv abi 1 (spilled arg).load_of_args
 	mov rbx, rax
-	mov qword ptr [rsp+0x50], 0x00
-	mov qword ptr [rsp+0x58], 0x01
-	mov qword ptr [rsp+0x60], 0x02
-	mov qword ptr [rsp+0x30], 0x03
-	mov qword ptr [rsp+0x38], 0x04
-	mov qword ptr [rsp+0x40], 0x05
+	mov qword ptr [rsp+0x30], 0x00
+	mov qword ptr [rsp+0x38], 0x01
+	mov qword ptr [rsp+0x40], 0x02
+	mov qword ptr [rsp+0x50], 0x03
+	mov qword ptr [rsp+0x58], 0x04
+	mov qword ptr [rsp+0x60], 0x05
 	lea rbp, [rsp+0x18]
-	lea rsi, [rsp+0x50]
+	lea rsi, [rsp+0x30]
 	lea rdi, [rsp]
 	mov rax, 0x18
 	mov rdx, rax
 	call :memcpy
 	mov rdi, rbp
-	lea rsi, [rsp+0x30]
+	lea rsi, [rsp+0x50]
 	mov rdx, 0x18
 	call :memcpy
 	mov rdi, 0x06

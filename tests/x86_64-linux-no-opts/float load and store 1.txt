@@ -22,6 +22,8 @@ main:
 	mov eax, [rsp+0x14]
 	mov [rcx+0x08], eax
 	call :float load and store 1.fun
+	movss [rsp+0x18], xmm0
+	movss xmm0, dword ptr [rsp+0x18]
 	cvttss2si rax, xmm0
 	add rsp, 0x28
 	ret

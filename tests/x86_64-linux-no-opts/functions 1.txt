@@ -13,13 +13,15 @@ functions 1.add_two:
 	add rsp, 0x10
 	ret
 main:
-	push rbx
+	sub rsp, 0x18
 	mov rdi, 0x0A
 	call :functions 1.add_one
-	mov rbx, rax
+	mov [rsp], rax
 	mov rdi, 0x14
 	call :functions 1.add_two
-	add rbx, rax
-	mov rax, rbx
-	pop rbx
+	mov [rsp+0x08], rax
+	mov rax, [rsp]
+	mov rcx, [rsp+0x08]
+	add rax, rcx
+	add rsp, 0x18
 	ret

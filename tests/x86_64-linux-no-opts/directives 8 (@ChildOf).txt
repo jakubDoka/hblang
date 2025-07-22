@@ -6,9 +6,11 @@ directives 8 (@ChildOf).deref(^uint):
 	add rsp, 0x10
 	ret
 main:
-	sub rsp, 0x08
+	sub rsp, 0x18
 	mov qword ptr [rsp], 0x01
 	lea rdi, [rsp]
 	call :directives 8 (@ChildOf).deref(^uint)
-	add rsp, 0x08
+	mov [rsp+0x08], rax
+	mov rax, [rsp+0x08]
+	add rsp, 0x18
 	ret

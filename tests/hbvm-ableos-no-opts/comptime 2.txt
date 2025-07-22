@@ -1,51 +1,68 @@
 main:
-         st $31, $254, -16, 16
-     addi64 $254, $254, -32
+         st $31, $254, -8, 8
+     addi64 $254, $254, -52
        li32 $1, 7
          st $1, $254, 0, 4
-       li32 $3, -1879048189
-       li32 $2, -2147483648
+       li32 $4, -1879048189
+       li32 $3, -2147483648
+       li32 $2, -1879048185
        li32 $1, -1879048190
          st $1, $254, 4, 4
-         st $3, $254, 8, 4
-         st $2, $254, 12, 4
+         st $4, $254, 8, 4
+         st $3, $254, 12, 4
+         st $2, $254, 16, 4
         jal $31, $0, :comptime 2.main.some_fn3(uint, .some_fn)
-         cp $32, $1
+         st $1, $254, 20, 8
+       li32 $2, -1879048177
+       li32 $1, -1879048180
+         st $1, $254, 28, 4
+         st $2, $254, 32, 4
         jal $31, $0, :comptime 2.main.some_fn3(uint, (.some_fn2(.some_fn)))
-      add64 $1, $32, $1
-     addi64 $254, $254, 32
-         ld $31, $254, -16, 16
+         st $1, $254, 36, 8
+         ld $2, $254, 20, 8
+         ld $1, $254, 36, 8
+      add64 $1, $2, $1
+     addi64 $254, $254, 52
+         ld $31, $254, -8, 8
          tx
 comptime 2.main.some_fn3(uint, .some_fn):
          st $31, $254, -8, 8
-     addi64 $254, $254, -8
+     addi64 $254, $254, -16
         jal $31, $0, :comptime 2.main.some_fn(uint)
+         st $1, $254, 0, 8
+         ld $1, $254, 0, 8
      addi64 $1, $1, 10
-     addi64 $254, $254, 8
+     addi64 $254, $254, 16
          ld $31, $254, -8, 8
        jala $0, $31, 0
 comptime 2.main.some_fn3(uint, (.some_fn2(.some_fn))):
          st $31, $254, -8, 8
-     addi64 $254, $254, -8
+     addi64 $254, $254, -16
         jal $31, $0, :comptime 2.main.some_fn3(uint, .some_fn2(.some_fn))
+         st $1, $254, 0, 8
+         ld $1, $254, 0, 8
      addi64 $1, $1, 10
-     addi64 $254, $254, 8
+     addi64 $254, $254, 16
          ld $31, $254, -8, 8
        jala $0, $31, 0
 comptime 2.main.some_fn3(uint, .some_fn2(.some_fn)):
          st $31, $254, -8, 8
-     addi64 $254, $254, -8
+     addi64 $254, $254, -16
         jal $31, $0, :comptime 2.main.some_fn2(uint, .some_fn)
+         st $1, $254, 0, 8
+         ld $1, $254, 0, 8
      addi64 $1, $1, 10
-     addi64 $254, $254, 8
+     addi64 $254, $254, 16
          ld $31, $254, -8, 8
        jala $0, $31, 0
 comptime 2.main.some_fn2(uint, .some_fn):
          st $31, $254, -8, 8
-     addi64 $254, $254, -8
+     addi64 $254, $254, -16
         jal $31, $0, :comptime 2.main.some_fn(uint)
+         st $1, $254, 0, 8
+         ld $1, $254, 0, 8
      addi64 $1, $1, 1
-     addi64 $254, $254, 8
+     addi64 $254, $254, 16
          ld $31, $254, -8, 8
        jala $0, $31, 0
 comptime 2.main.some_fn(uint):

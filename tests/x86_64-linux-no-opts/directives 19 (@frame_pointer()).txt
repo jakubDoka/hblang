@@ -1,6 +1,8 @@
 directives 19 (@frame_pointer()).bar:
 	sub rsp, 0x08
 	call :directives 19 (@frame_pointer()).foo
+	mov [rsp], rax
+	mov rax, [rsp]
 	add rsp, 0x08
 	ret
 directives 19 (@frame_pointer()).foo:
@@ -9,9 +11,10 @@ directives 19 (@frame_pointer()).foo:
 main:
 	sub rsp, 0x08
 	call :directives 19 (@frame_pointer()).bar
-	mov rcx, rsp
-	sub rcx, rax
-	sub rcx, 0x10
-	mov rax, rcx
+	mov [rsp], rax
+	mov rcx, [rsp]
+	mov rax, rsp
+	sub rax, rcx
+	sub rax, 0x10
 	add rsp, 0x08
 	ret
