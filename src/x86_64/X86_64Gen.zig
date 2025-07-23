@@ -209,7 +209,7 @@ pub const Reg = enum(u8) {
     }
 
     pub fn stackOffset(self: Reg, slot_offset: u64) u64 {
-        return (@intFromEnum(self) - @intFromEnum(Reg.xmm15) - 1) * 8 + slot_offset;
+        return @as(u64, (@intFromEnum(self) - @intFromEnum(Reg.xmm15) - 1)) * 8 + slot_offset;
     }
 };
 
@@ -554,7 +554,7 @@ pub const Set = struct {
     bits: Mask,
     comptime bit_length: usize = @bitSizeOf(Mask),
 
-    const Mask = u64;
+    const Mask = u128;
 
     pub fn init(bits: Mask) Set {
         return .{ .bits = bits };
@@ -603,15 +603,15 @@ pub fn writeIntMask(_: *utils.Arena) Set {
 }
 
 pub fn splitFloatMask(_: *utils.Arena) Set {
-    return .init(0xFFFF_FFFF_FFFF_0000);
+    return .init(0xFFFF_FFFF_FFFF_FFFF_FFFF_FFFF_0000);
 }
 
 pub fn splitIntMask(arena: *utils.Arena) Set {
-    return .init(0xFFFF_FFFF_0000_0000 | writeIntMask(arena).bits);
+    return .init(0xFFFF_FFFF_FFFF_FFFF_FFFF_0000_0000 | writeIntMask(arena).bits);
 }
 
 pub fn readSplitIntMask(arena: *utils.Arena) Set {
-    return .init(0xFFFF_FFFF_0000_0000 | readIntMask(arena).bits);
+    return .init(0xFFFF_FFFF_FFFF_FFFF_FFFF_0000_0000 | readIntMask(arena).bits);
 }
 
 pub fn singleReg(reg: Reg, _: *utils.Arena) Set {
@@ -1553,7 +1553,9 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         self.emitBytes(&.{Reg.Mod.direct.rm(dst, src)});
                     },
                     .uext => {
-                        std.debug.assert(src_size < size);
+                        if (src_size >= size) {
+                            utils.panic("{} {} {}", .{ src_size, instr, inps[0] });
+                        }
 
                         if (instr.data_type == .i16) self.emitByte(0x66);
                         const opcode: []const u8 = switch (size << 4 | src_size) {

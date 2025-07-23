@@ -298,6 +298,11 @@ pub const DataType = enum(u16) {
         }
     };
 
+    pub fn memUnitForAlign(alignment: u64, float: bool) DataType {
+        if (float) return @enumFromInt(@intFromEnum(DataType.f32) + @min(std.math.log2_int(u64, alignment), 3) - 2);
+        return @enumFromInt(@intFromEnum(DataType.i8) + @min(std.math.log2_int(u64, alignment), 3));
+    }
+
     pub fn toRaw(self: DataType) Raw {
         return @bitCast(@intFromEnum(self));
     }
@@ -1300,7 +1305,9 @@ pub fn Func(comptime Backend: type) type {
                 const index = std.mem.indexOfScalar(Out, outs, .init(use, idx, self)) orelse {
                     utils.panic("removeUse: not found {} {any} {}", .{ use, self.outputs(), self });
                 };
-                std.mem.swap(Out, &outs[index], &outs[outs.len - 1]);
+
+                outs[index] = outs[outs.len - 1];
+                outs[outs.len - 1] = undefined;
                 self.output_len -= 1;
             }
 
@@ -1742,6 +1749,8 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn addUnOp(self: *Self, sloc: Sloc, op: UnOp, ty: DataType, oper: *Node) *Node {
+            if (!(op != .uext or ty.size() > oper.data_type.size())) utils.panic("{} {}", .{ ty, oper });
+            std.debug.assert(op != .sext or ty.size() > oper.data_type.size());
             if (oper.kind == .CInt and ty.isInt()) {
                 return self.addIntImm(sloc, ty, op.eval(oper.data_type, ty, oper.extra(.CInt).value));
             }

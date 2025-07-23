@@ -89,22 +89,13 @@ pub const Value = struct {
             const cata = self.abiCata(value.ty);
 
             if (cata.size() > value.ty.size(self.types)) {
-                var val: ?*Node = null;
-                var loader = graph.DataType.i64;
-                var offset: u64 = 0;
-                while (offset < value.ty.size(self.types)) {
-                    while (loader.size() + offset > value.ty.size(self.types)) {
-                        loader = @enumFromInt(@intFromEnum(loader) - 1);
-                    }
-
-                    const loaded = self.bl.addFieldLoad(sloc, value.id.Pointer, @intCast(offset), loader);
-                    const extended = self.bl.addUnOp(sloc, .uext, cata.ByValue, loaded);
-                    const shifted = self.bl.addBinOp(sloc, .ishl, cata.ByValue, extended, self.bl.addIntImm(sloc, .i64, @intCast(offset * 8)));
-                    val = if (val) |v| self.bl.addBinOp(sloc, .bor, cata.ByValue, v, shifted) else shifted;
-                    offset += loader.size();
-                }
-
-                value.id = .{ .Value = val.? };
+                value.id = .{ .Value = self.emitAlignedLoad(
+                    sloc,
+                    value.id.Pointer,
+                    value.ty.size(self.types),
+                    value.ty.alignment(self.types),
+                    cata.ByValue,
+                ) };
             } else {
                 value.id = .{ .Value = self.bl.addLoad(
                     sloc,
@@ -795,7 +786,7 @@ pub fn emitCtor(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Ctor)) EmitErr
 
     const oty = ctx.ty orelse try self.resolveAnonTy(e.ty);
     var ty = oty;
-    const local = ctx.loc orelse self.bl.addLocal(self.src(expr), ty.size(self.types));
+    const local = ctx.loc orelse self.bl.addLocal(self.src(expr), self.abiCata(ty).size());
     var offset_cursor: u64 = 0;
 
     const sloc = self.src(expr);
@@ -2134,7 +2125,16 @@ fn emitUserType(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Type)) !Value {
     }
 
     const rets = self.bl.addCall(sloc, .ablecall, Comptime.eca, args);
-    return .mkv(.type, rets.?[0]);
+    var ret: Value = .mkv(.type, rets.?[0]);
+    if (for (args.arg_slots) |a| {
+        if (a.kind != .CInt) break false;
+    } else true) {
+        self.types.stats.useless_ecas += 1;
+        return .mkv(.type, self.bl.addIntImm(sloc, .i32, @intCast(try self.partialEval(expr, &ret))));
+    }
+    self.types.stats.total_ecas += 1;
+
+    return ret;
 }
 
 fn emitFnPtr(self: *Codegen, _: Ctx, _: Ast.Id, e: *Expr(.FnPtr)) !Value {
@@ -2389,16 +2389,16 @@ pub fn unwrapNullable(self: *Codegen, expr: Ast.Id, base: *Value, do_check: bool
         return self.report(expr, "only nullable types can be unwrapped, {} is not", .{base.ty});
     };
 
-    if (!base.ty.needsTag(self.types)) {
-        base.ty = nullable.inner;
-        return;
-    }
-
     if (do_check) if (self.types.handlers.null_unwrap) |handler| {
         var check = try self.checkNull(expr, base, .@"==");
         var arg_values = [_]Value{undefined};
         self.emitHandlerCall(handler, expr, check.getValue(sloc, self), &arg_values);
     };
+
+    if (!base.ty.needsTag(self.types)) {
+        base.ty = nullable.inner;
+        return;
+    }
 
     base.* = switch (self.abiCata(nullable.inner)) {
         .Impossible => return self.report(expr, "option of uninhabited type cna not be unwrapped", .{}),
@@ -2718,28 +2718,75 @@ pub fn emitGenericStore(self: *Codegen, sloc: graph.Sloc, loc: *Node, value: *Va
 
     if (cata == .ByValue) {
         if (cata.ByValue.size() > value.ty.size(self.types)) {
-            var storer = graph.DataType.i64;
-            var offset: u64 = 0;
-            while (offset < value.ty.size(self.types)) {
-                while (storer.size() + offset > value.ty.size(self.types)) {
-                    storer = @enumFromInt(@intFromEnum(storer) - 1);
-                }
-
-                const shifted = self.bl.addBinOp(
-                    sloc,
-                    .ushr,
-                    cata.ByValue,
-                    value.getValue(sloc, self),
-                    self.bl.addIntImm(sloc, .i64, @intCast(offset * 8)),
-                );
-                self.bl.addFieldStore(sloc, loc, @intCast(offset), storer, shifted);
-                offset += storer.size();
-            }
+            self.emitAlignedStore(
+                value.getValue(sloc, self),
+                value.ty.size(self.types),
+                value.ty.alignment(self.types),
+                sloc,
+                loc,
+                cata.ByValue,
+            );
         } else {
             _ = self.bl.addStore(sloc, loc, cata.ByValue, value.getValue(sloc, self));
         }
     } else {
         _ = self.bl.addFixedMemCpy(sloc, loc, value.id.Pointer, value.ty.size(self.types));
+    }
+}
+
+pub fn emitAlignedLoad(
+    self: *Codegen,
+    sloc: graph.Sloc,
+    loc: *Node,
+    size: u64,
+    alignment: u64,
+    dt: graph.DataType,
+) *Node {
+    var loader = graph.DataType.memUnitForAlign(@min(alignment, dt.size()), dt.isFloat());
+
+    if (loader == dt) return self.bl.addLoad(sloc, loc, dt);
+
+    std.debug.assert(loader.size() < dt.size());
+
+    var offset: u64 = 0;
+    var value: ?*Node = null;
+    while (offset < size) {
+        const loaded = self.bl.addFieldLoad(sloc, loc, @intCast(offset), loader);
+        const extended = self.bl.addUnOp(sloc, .uext, dt, loaded);
+        if (value) |v| {
+            const shift = self.bl.addIntImm(sloc, .i8, @intCast(offset * 8));
+            const shifted = self.bl.addBinOp(sloc, .ishl, dt, extended, shift);
+            value = self.bl.addBinOp(sloc, .bor, dt, v, shifted);
+        } else {
+            std.debug.assert(offset == 0);
+            value = extended;
+        }
+        offset += loader.size();
+    }
+    return value.?;
+}
+
+pub fn emitAlignedStore(
+    self: *Codegen,
+    value: *Node,
+    size: u64,
+    alignment: u64,
+    sloc: graph.Sloc,
+    loc: *Node,
+    dt: graph.DataType,
+) void {
+    var storer = graph.DataType.memUnitForAlign(alignment, dt.isFloat());
+
+    if (storer == dt) return self.bl.addStore(sloc, loc, dt, value);
+
+    std.debug.assert(storer.size() < dt.size());
+
+    var offset: u64 = 0;
+    while (offset < size) {
+        const shift = self.bl.addIntImm(sloc, .i8, @intCast(offset * 8));
+        const shifted = self.bl.addBinOp(sloc, .ushr, dt, value, shift);
+        self.bl.addFieldStore(sloc, loc, @intCast(offset), storer, shifted);
+        offset += storer.size();
     }
 }
 
@@ -3277,8 +3324,14 @@ fn pushParam(
                 call_args.arg_slots[idx] = value.id.Pointer;
             } else {
                 for (pair.types, pair.offsets(), 0..) |t, off, j| {
-                    call_args.arg_slots[idx + j] =
-                        self.bl.addFieldLoad(sloc, value.id.Pointer, @intCast(off), t);
+                    const loc = self.bl.addFieldOffset(sloc, value.id.Pointer, @intCast(off));
+                    call_args.arg_slots[idx + j] = self.emitAlignedLoad(
+                        sloc,
+                        loc,
+                        value.ty.size(self.types) - off,
+                        value.ty.alignment(self.types),
+                        t,
+                    );
                 }
                 len = 2;
             }

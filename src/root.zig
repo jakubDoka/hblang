@@ -376,6 +376,10 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             );
         }
         try opts.diagnostics.print("  arena   : {}\n", .{types.pool.arena.consumed()});
+
+        inline for (std.meta.fields(@TypeOf(types.stats))) |field| {
+            try opts.diagnostics.print("  {s:<8}: {}\n", .{ field.name, @field(types.stats, field.name) });
+        }
     }
 
     const logs = if (opts.log_stats) opts.diagnostics else null;

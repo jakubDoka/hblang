@@ -178,7 +178,15 @@ pub fn categorize(self: Abi, ty: Id, types: *Types) TmpSpec {
             inline .Struct, .Tuple => |s| categorizeAbleosRecord(s, types),
             .Global, .Func, .Template => unreachable,
         },
-        .systemv => categorizeSystemv(ty, types),
+        .systemv => switch (ty.data()) {
+            inline .Struct, .Union => |s| {
+                if (types.store.get(s).abi) |abi| return abi;
+                const abi = categorizeSystemv(ty, types);
+                types.store.get(s).abi = abi;
+                return abi;
+            },
+            else => categorizeSystemv(ty, types),
+        },
         else => unreachable,
     };
 }
@@ -324,6 +332,7 @@ pub fn categorizeSystemv(ty: Id, types: *Types) TmpSpec {
         error.Impossible => return .Impossible,
     };
 
+    // NOTE: we do this after classify sinc classify catches impossible
     if (eight_bytes == 0) {
         return .Imaginary;
     }

@@ -2,6 +2,7 @@ const root = @import("hb");
 const Types = root.frontend.Types;
 const Ast = root.frontend.Ast;
 const graph = root.backend.graph;
+const Abi = root.frontend.Abi;
 const utils = root.utils;
 const TyId = Types.Id;
 const std = @import("std");
@@ -218,6 +219,7 @@ pub const Union = struct {
     key: Scope,
 
     fields: ?[]const Field = null,
+    abi: ?Abi.TmpSpec = null,
     index: Ast.Index,
 
     pub const Field = struct {
@@ -270,6 +272,7 @@ pub const Struct = struct {
     fields: ?[]const Field = null,
     size: ?u64 = null,
     alignment: ?u64 = null,
+    abi: ?Abi.TmpSpec = null,
     recursion_lock: bool = false,
 
     index: Ast.Index,
@@ -291,6 +294,7 @@ pub const Struct = struct {
             if (self.size) |a| return a;
 
             const max_alignment = getAlignment(id, types);
+            self = types.store.get(id);
 
             if (self.recursion_lock) {
                 types.report(self.key.loc.file, self.key.loc.ast, "the struct has infinite size", .{});

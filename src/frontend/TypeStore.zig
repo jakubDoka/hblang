@@ -35,6 +35,10 @@ handler_signatures: std.EnumArray(
     std.meta.FieldEnum(Handlers),
     ?Handlers.Signature,
 ) = undefined,
+stats: struct {
+    useless_ecas: u64 = 0,
+    total_ecas: u64 = 0,
+} = .{},
 
 const Types = @This();
 const Map = std.hash_map.HashMapUnmanaged(
