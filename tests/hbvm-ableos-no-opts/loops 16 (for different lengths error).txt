@@ -21,7 +21,7 @@ main:
       sub64 $1, $4, $1
         jeq $2, $1, :0
      addi64 $1, $254, 43
-        lra $2, $0, :loops 16 (for different lengths error).main.loops 16 (for different lengths error)
+        lra $2, $0, :loops 16 (for different lengths error)
          st $2, $254, 43, 8
        li64 $3, 8589934599
        li64 $2, 38

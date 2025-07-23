@@ -18,7 +18,8 @@ pub const Abi = root.frontend.Abi;
 
 store: utils.EntStore(tys) = .{},
 pool: utils.Pool,
-interner: Map = .{},
+interner: TypeIndex = .{},
+string_globals: StringGlobalIndex = .{},
 file_scopes: []Id,
 ct: Comptime,
 diagnostics: std.io.AnyWriter,
@@ -31,6 +32,8 @@ global_work_list: std.EnumArray(Target, std.ArrayListUnmanaged(utils.EntId(tys.G
 string: Id = undefined,
 source_loc: Id = undefined,
 handlers: Handlers = .{},
+tmp_templates: ?utils.EntId(tys.Template) = null,
+tmp_funcs: ?utils.EntId(tys.Func) = null,
 handler_signatures: std.EnumArray(
     std.meta.FieldEnum(Handlers),
     ?Handlers.Signature,
@@ -41,72 +44,18 @@ stats: struct {
 } = .{},
 
 const Types = @This();
-const Map = std.hash_map.HashMapUnmanaged(
+const TypeIndex = std.hash_map.HashMapUnmanaged(
     Id,
     void,
     TypeCtx,
     std.hash_map.default_max_load_percentage,
 );
-
-pub const Handlers = struct {
-    slice_ioob: ?utils.EntId(tys.Func) = null,
-    null_unwrap: ?utils.EntId(tys.Func) = null,
-    memcpy: ?utils.EntId(tys.Func) = null,
-    entry: ?utils.EntId(tys.Func) = null,
-    for_loop_length_mismatch: ?utils.EntId(tys.Func) = null,
-
-    pub const Signature = struct { args: []const Id, ret: Id };
-};
-
-pub const Scope = struct {
-    loc: struct {
-        file: Types.File,
-        scope: Id,
-        ast: Ast.Id,
-        unused2: u16 = 0,
-        unused: u32 = 0,
-    },
-    name: []const u8,
-    captures: []const Capture,
-
-    pub const Capture = struct {
-        id: packed struct(u32) {
-            index: u31,
-            from_any: bool = false,
-
-            pub fn fromIdent(id: Ast.Ident) @This() {
-                return .{ .index = @intCast(@intFromEnum(id)) };
-            }
-        },
-        ty: Id,
-        value: u64 = 0,
-
-        comptime {
-            std.debug.assert(@sizeOf(@This()) == 16);
-        }
-
-        pub fn ident(self: Capture) Ast.Ident {
-            return @enumFromInt(self.id.index);
-        }
-    };
-
-    pub const dummy = Scope{
-        .loc = .{
-            .file = .root,
-            .scope = .void,
-            .ast = .zeroSized(.Void),
-        },
-        .name = "",
-        .captures = &.{},
-    };
-
-    pub fn eql(self: Scope, other: Scope) bool {
-        return self.loc.file == other.loc.file and
-            self.loc.scope == other.loc.scope and
-            self.loc.ast == other.loc.ast and
-            std.mem.eql(u64, @ptrCast(self.captures), @ptrCast(other.captures));
-    }
-};
+const StringGlobalIndex = std.hash_map.HashMapUnmanaged(
+    utils.EntId(tys.Global),
+    void,
+    StringGlobalCtx,
+    std.hash_map.default_max_load_percentage,
+);
 
 pub const TypeCtx = struct {
     types: *Types,
@@ -169,6 +118,78 @@ pub const TypeCtx = struct {
             },
         }
         return hasher.final();
+    }
+};
+
+pub const StringGlobalCtx = struct {
+    types: *Types,
+
+    pub fn eql(self: @This(), a: utils.EntId(tys.Global), b: utils.EntId(tys.Global)) bool {
+        return std.mem.eql(u8, self.types.store.get(a).data.slice(), self.types.store.get(b).data.slice());
+    }
+
+    pub fn hash(self: @This(), adapted_key: utils.EntId(tys.Global)) u64 {
+        return std.hash.Fnv1a_64.hash(self.types.store.get(adapted_key).data.slice());
+    }
+};
+
+pub const Handlers = struct {
+    slice_ioob: ?utils.EntId(tys.Func) = null,
+    null_unwrap: ?utils.EntId(tys.Func) = null,
+    memcpy: ?utils.EntId(tys.Func) = null,
+    entry: ?utils.EntId(tys.Func) = null,
+    for_loop_length_mismatch: ?utils.EntId(tys.Func) = null,
+
+    pub const Signature = struct { args: []const Id, ret: Id };
+};
+
+pub const Scope = struct {
+    loc: struct {
+        file: Types.File,
+        scope: Id,
+        ast: Ast.Id,
+        unused2: u16 = 0,
+        unused: u32 = 0,
+    },
+    name: []const u8,
+    captures: []const Capture,
+
+    pub const Capture = struct {
+        id: packed struct(u32) {
+            index: u31,
+            from_any: bool = false,
+
+            pub fn fromIdent(id: Ast.Ident) @This() {
+                return .{ .index = @intCast(@intFromEnum(id)) };
+            }
+        },
+        ty: Id,
+        value: u64 = 0,
+
+        comptime {
+            std.debug.assert(@sizeOf(@This()) == 16);
+        }
+
+        pub fn ident(self: Capture) Ast.Ident {
+            return @enumFromInt(self.id.index);
+        }
+    };
+
+    pub const dummy = Scope{
+        .loc = .{
+            .file = .root,
+            .scope = .void,
+            .ast = .zeroSized(.Void),
+        },
+        .name = "",
+        .captures = &.{},
+    };
+
+    pub fn eql(self: Scope, other: Scope) bool {
+        return self.loc.file == other.loc.file and
+            self.loc.scope == other.loc.scope and
+            self.loc.ast == other.loc.ast and
+            std.mem.eql(u64, @ptrCast(self.captures), @ptrCast(other.captures));
     }
 };
 
@@ -636,6 +657,9 @@ pub const Id = enum(IdRepr) {
                         _ = work_list.pop();
                     },
                     .Func, .Global, .Template, .Struct, .Union, .Enum => {
+                        std.debug.assert(t.data() != .Template or
+                            self.tys.store.get(t.data().Template).temporary == false);
+
                         var cursor = t;
                         var depth: usize = 0;
                         const frame = scope_stack.items.len;
@@ -717,7 +741,7 @@ pub const Id = enum(IdRepr) {
                         if (slc.elem == .u8 and slc.len == null) {
                             const glb: utils.EntId(tys.Global) = @enumFromInt(global);
                             try writer.appendSlice(to.allocator(), "\"");
-                            try writer.appendSlice(to.allocator(), self.tys.store.get(glb).data[@intCast(base)..][0..@intCast(ln)]);
+                            try writer.appendSlice(to.allocator(), self.tys.store.get(glb).data.slice()[@intCast(base)..][0..@intCast(ln)]);
                             try writer.appendSlice(to.allocator(), "\"");
                             continue;
                         }
@@ -842,7 +866,7 @@ pub fn readFromGlobal(self: *Types, global: utils.EntId(tys.Global), ty: Id, off
     var value: u64 = 0;
     @memcpy(
         @as([*]u8, @ptrCast(&value))[0..@intCast(ty.size(self))],
-        glob.data[@intCast(offset)..][0..@intCast(ty.size(self))],
+        glob.data.slice()[@intCast(offset)..][0..@intCast(ty.size(self))],
     );
     return value;
 }
@@ -887,7 +911,7 @@ pub fn retainGlobals(self: *Types, target: Target, backend: anytype, scratch: ?*
             .id = @intFromEnum(global),
             .name = if (scratch) |s| root.frontend.Types.Id.init(.{ .Global = global })
                 .fmt(self).toString(s) else "",
-            .value = .{ .init = glob.data },
+            .value = .{ .init = glob.data.slice() },
             .relocs = relocs.items,
             .readonly = glob.readonly,
         });
@@ -911,7 +935,7 @@ pub fn findNestedGlobals(
         .Pointer => |p| {
             const base: Id = self.store.get(p).*;
 
-            const ptr_big: u64 = @bitCast(global.data[offset..][0..8].*);
+            const ptr_big: u64 = @bitCast(global.data.slice()[offset..][0..8].*);
             const ptr: usize = @intCast(ptr_big);
 
             const cap = base.size(self);
@@ -937,9 +961,9 @@ pub fn findNestedGlobals(
                     );
                 }
             } else {
-                const ptr_big: u64 = @bitCast(global.data[offset + tys.Slice.ptr_offset ..][0..8].*);
+                const ptr_big: u64 = @bitCast(global.data.slice()[offset + tys.Slice.ptr_offset ..][0..8].*);
                 const ptr: usize = @intCast(ptr_big);
-                const len_big: u64 = @bitCast(global.data[offset + tys.Slice.len_offset ..][0..8].*);
+                const len_big: u64 = @bitCast(global.data.slice()[offset + tys.Slice.len_offset ..][0..8].*);
                 const len: usize = @intCast(len_big);
 
                 const cap = len * slc.elem.size(self);
@@ -981,11 +1005,11 @@ pub fn isNullablePresent(self: *Types, n: utils.EntId(tys.Nullable), global: *ty
         var value: u64 = 0;
         @memcpy(
             @as(*[8]u8, @ptrCast(&value))[0..@intCast(size)],
-            global.data[@intCast(offset + niche.offset)..][0..@intCast(size)],
+            global.data.slice()[@intCast(offset + niche.offset)..][0..@intCast(size)],
         );
 
         break :b value != 0;
-    } else global.data[@intCast(offset)] != 0;
+    } else global.data.slice()[@intCast(offset)] != 0;
 }
 
 pub fn findSymForPtr(
@@ -1194,7 +1218,7 @@ pub fn makeTuple(self: *Types, v: []Id) Id {
     return self.internPtr(.Tuple, .{ .fields = @ptrCast(v) });
 }
 
-pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Scope) struct { Map.GetOrPutResult, std.meta.TagPayload(Data, kind) } {
+pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Scope) struct { TypeIndex.GetOrPutResult, std.meta.TagPayload(Data, kind) } {
     var mem: std.meta.TagPayload(Data, kind).Data = undefined;
     mem.key = key;
     const ty = self.store.add(self.pool.allocator(), mem);
@@ -1265,6 +1289,32 @@ pub fn dumpAnalErrors(self: *Types, anal_errors: *std.ArrayListUnmanaged(static_
     return anal_errors.items.len != 0;
 }
 
+pub fn addStringGlobal(self: *Types, data: []const u8) utils.EntId(tys.Global) {
+    const glob = self.store.add(self.pool.allocator(), tys.Global{
+        .key = .{
+            .loc = .{
+                .file = .root,
+                .scope = .void,
+                .ast = .zeroSized(.Void),
+            },
+            .name = data,
+            .captures = &.{},
+        },
+        .data = .{ .imm = data },
+        .ty = self.makeSlice(data.len, .u8),
+        .readonly = true,
+    });
+
+    const entry = self.string_globals.getOrPutContext(self.pool.allocator(), glob, .{ .types = self }) catch unreachable;
+    if (!entry.found_existing) {
+        self.store.get(glob).data = .{ .imm = data };
+    } else {
+        self.store.pop(glob);
+    }
+
+    return entry.key_ptr.*;
+}
+
 pub fn addUniqueGlobal(self: *Types, scope: Id) utils.EntId(tys.Global) {
     const glob = self.store.add(self.pool.allocator(), tys.Global{
         .key = .{
@@ -1276,7 +1326,6 @@ pub fn addUniqueGlobal(self: *Types, scope: Id) utils.EntId(tys.Global) {
             .name = "",
             .captures = &.{},
         },
-        .data = "",
         .ty = .never,
         .readonly = true,
     });
@@ -1308,4 +1357,38 @@ pub fn resolveGlobal(
         };
     }
     return .{ slot.key_ptr.*, !slot.found_existing };
+}
+
+// we keep linked list of these
+pub fn allocTempType(self: *Types, comptime T: type) utils.EntId(T) {
+    const field = switch (T) {
+        tys.Template => &self.tmp_templates,
+        tys.Func => &self.tmp_funcs,
+        else => comptime unreachable,
+    };
+    const name = @TypeOf(self.store).fieldName(T).name;
+
+    return if (field.*) |t| {
+        const tl = self.store.get(t);
+        field.* = if (tl.key.loc.scope == .void)
+            null
+        else
+            @field(tl.key.loc.scope.data(), name);
+        return t;
+    } else self.store.add(self.pool.allocator(), @as(T, undefined));
+}
+
+pub fn freeTempType(self: *Types, comptime T: type, scope: utils.EntId(T)) void {
+    const field = switch (T) {
+        tys.Template => &self.tmp_templates,
+        tys.Func => &self.tmp_funcs,
+        else => comptime unreachable,
+    };
+    const name = @TypeOf(self.store).fieldName(T).name;
+
+    self.store.get(scope).key.loc.scope = if (field.*) |t|
+        .init(@unionInit(@TypeOf(self.store).Data, name, t))
+    else
+        .void;
+    field.* = scope;
 }

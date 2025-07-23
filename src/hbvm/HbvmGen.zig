@@ -540,13 +540,9 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
     _ = tmp;
 
     errdefer unreachable;
-    outer: for (node.outputs()) |n| {
+    for (node.outputs()) |n| {
         const no = n.get();
         const inps = no.dataDeps();
-
-        if (no.kind != .Call) {
-            for (inps) |inp| if (inp.kind == .Uninit) continue :outer;
-        }
 
         switch (no.extra2()) {
             .FramePointer, .Zero => {},

@@ -34,38 +34,12 @@ pub fn Mixin(comptime Backend: type) type {
             return @alignCast(@fieldParentPtr("static_anal", self));
         }
 
-        pub fn analize(self: *Self, arena: *utils.Arena, errors: *std.ArrayListUnmanaged(Error), do_uninit_analisys: bool) void {
+        pub fn analize(self: *Self, arena: *utils.Arena, errors: *std.ArrayListUnmanaged(Error)) void {
             self.findTrivialStackEscapes(arena, errors);
             self.tryHardToFindMemoryEscapes(arena, errors);
             self.findConstantOobMemOps(arena, errors);
             self.findLoopInvariantConditions(arena, errors);
             self.findInfiniteLoopsWithBreaks(arena, errors);
-            if (do_uninit_analisys) self.findInvalidUninitReads(arena, errors);
-        }
-
-        pub fn findInvalidUninitReads(
-            self: *Self,
-            arena: *utils.Arena,
-            errors: *std.ArrayListUnmanaged(Error),
-        ) void {
-            errdefer unreachable;
-
-            const func = self.getGraph();
-
-            const uninit: *Node = for (func.start.outputs()) |out| {
-                if (out.get().kind == .Uninit) break out.get();
-            } else return;
-
-            for (uninit.outputs()) |out| {
-                if (out.get().kind == .Call) continue;
-                if (out.get().kind == .Return) continue;
-                if (out.get().kind == .Phi) continue;
-
-                std.debug.print("uninit: {any} {any}\n", .{ out.get(), uninit });
-                try errors.append(arena.allocator(), .{
-                    .ReadUninit = .{ .loc = out.get().sloc },
-                });
-            }
         }
 
         pub fn findInfiniteLoopsWithBreaks(

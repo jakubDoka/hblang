@@ -1,0 +1,47 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -11
+     addi64 $1, $254, 0
+        jal $31, $0, :nested options 1.defc
+         ld $1, $254, 0, 1
+       andi $1, $1, 255
+     addi64 $254, $254, 11
+         ld $31, $254, -8, 8
+         tx
+nested options 1.defc:
+         st $31, $254, -16, 16
+     addi64 $254, $254, -35
+         cp $32, $1
+       li64 $2, 3
+     addi64 $1, $254, 0
+         st $1, $254, 3, 8
+         st $2, $254, 11, 8
+         ld $1, $254, 3, 8
+         ld $2, $254, 11, 8
+        jal $31, $0, :nested options 1.reset
+         cp $1, $32
+        jal $31, $0, :nested options 1.defb
+     addi64 $254, $254, 35
+         ld $31, $254, -16, 16
+       jala $0, $31, 0
+nested options 1.reset:
+     addi64 $254, $254, -24
+         st $1, $254, 0, 8
+         st $2, $254, 8, 8
+        li8 $4, -1
+         st $0, $254, 16, 8
+         ld $3, $254, 8, 8
+4:       ld $2, $254, 16, 8
+       jltu $2, $3, :3
+     addi64 $254, $254, 24
+       jala $0, $31, 0
+3:       ld $1, $254, 0, 8
+      add64 $1, $1, $2
+         st $4, $1, 0, 1
+         ld $1, $254, 16, 8
+     addi64 $1, $1, 1
+         st $1, $254, 16, 8
+        jmp :4
+nested options 1.defb:
+         st $0, $1, 0, 1
+       jala $0, $31, 0

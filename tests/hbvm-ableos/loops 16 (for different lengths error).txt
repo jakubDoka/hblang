@@ -1,7 +1,7 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -40
-        lra $1, $0, :loops 16 (for different lengths error).main.loops 16 (for different lengths error)
+        lra $1, $0, :loops 16 (for different lengths error)
          st $1, $254, 0, 8
        li64 $3, 8589934599
      addi64 $1, $254, 0

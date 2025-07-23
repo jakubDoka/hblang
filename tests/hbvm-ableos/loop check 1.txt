@@ -1,7 +1,7 @@
 main:
          st $31, $254, -40, 40
      addi64 $254, $254, -40
-        lra $35, $0, :loop check 1.main.aaaaaaaaaaaaaaaaaaaaa
+        lra $35, $0, :aaaaaaaaaaaaaaaaaaaaa
        li64 $34, 21
          cp $32, $0
 8:    add64 $33, $35, $32
@@ -36,7 +36,8 @@ loop check 1.nextPos:
        li64 $2, 17
         li8 $1, 1
         jmp :a
-9:       cp $1, $0
+9:     li64 $2, -6148914691236517206
+         cp $1, $0
 a:     jala $0, $31, 0
 loop check 1.blackbox:
         li8 $1, 1

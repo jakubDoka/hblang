@@ -11,7 +11,7 @@ main:
 comptime 6 (strings).main.string_to_array("Edward"):
      addi64 $254, $254, -6
      addi64 $7, $254, 0
-        lra $6, $0, :comptime 6 (strings).main.Edward
+        lra $6, $0, :Edward
        li64 $5, 6
          cp $3, $0
 3:       cp $2, $3

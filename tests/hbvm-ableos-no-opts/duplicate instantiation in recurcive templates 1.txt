@@ -1,0 +1,128 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -20
+         st $0, $254, 0, 1
+     addi64 $1, $254, 0
+        li8 $2, 1
+         st $2, $254, 1, 1
+         st $0, $254, 2, 1
+        jal $31, $0, :duplicate instantiation in recurcive templates 1.foo(.Stru)
+         st $1, $254, 4, 8
+         ld $1, $254, 4, 8
+     addi64 $254, $254, 20
+         ld $31, $254, -8, 8
+         tx
+duplicate instantiation in recurcive templates 1.foo(.Stru):
+         st $31, $254, -24, 24
+     addi64 $254, $254, -60
+         cp $32, $1
+        lra $3, $0, :foo
+       li64 $33, 3
+       li32 $2, 1879048194
+        lra $1, $0, :duplicate instantiation in recurcive templates 1.var
+         st $3, $1, 0, 8
+         st $33, $1, 8, 8
+         st $2, $254, 0, 4
+         st $0, $254, 4, 8
+         cp $1, $32
+         ld $1, $1, 0, 1
+        jal $31, $0, :duplicate instantiation in recurcive templates 1.foo(.Stru2)
+         st $1, $254, 12, 8
+       li64 $1, 1
+         st $1, $254, 4, 8
+         cp $1, $32
+         ld $1, $1, 1, 1
+        jal $31, $0, :duplicate instantiation in recurcive templates 1.foo(.Stru.f)
+         st $1, $254, 20, 8
+       li64 $1, 2
+         st $1, $254, 4, 8
+         cp $1, $32
+         ld $1, $1, 2, 1
+         ld $2, $32, 3, 1
+        jal $31, $0, :duplicate instantiation in recurcive templates 1.foo(?.Stru2)
+         st $1, $254, 28, 8
+         st $33, $254, 4, 8
+         cp $1, $0
+     addi64 $254, $254, 60
+         ld $31, $254, -24, 24
+       jala $0, $31, 0
+duplicate instantiation in recurcive templates 1.foo(.Stru2):
+         st $31, $254, -8, 8
+     addi64 $254, $254, -29
+         st $1, $254, 0, 1
+        lra $4, $0, :foo
+       li64 $3, 3
+       li32 $2, 1879048195
+        lra $1, $0, :duplicate instantiation in recurcive templates 1.var
+         st $4, $1, 0, 8
+         st $3, $1, 8, 8
+         st $2, $254, 1, 4
+         st $0, $254, 5, 8
+         ld $1, $254, 0, 1
+        jal $31, $0, :duplicate instantiation in recurcive templates 1.foo(u8)
+         st $1, $254, 13, 8
+       li64 $1, 1
+         st $1, $254, 5, 8
+         cp $1, $0
+     addi64 $254, $254, 29
+         ld $31, $254, -8, 8
+       jala $0, $31, 0
+duplicate instantiation in recurcive templates 1.foo(.Stru.f):
+         st $31, $254, -8, 8
+     addi64 $254, $254, -29
+         st $1, $254, 0, 1
+        lra $4, $0, :foo
+       li64 $3, 3
+       li32 $2, 1879048196
+        lra $1, $0, :duplicate instantiation in recurcive templates 1.var
+         st $4, $1, 0, 8
+         st $3, $1, 8, 8
+         st $2, $254, 1, 4
+         st $0, $254, 5, 8
+         ld $1, $254, 0, 1
+        jal $31, $0, :duplicate instantiation in recurcive templates 1.foo(.Stru2)
+         st $1, $254, 13, 8
+       li64 $1, 1
+         st $1, $254, 5, 8
+         cp $1, $0
+     addi64 $254, $254, 29
+         ld $31, $254, -8, 8
+       jala $0, $31, 0
+duplicate instantiation in recurcive templates 1.foo(?.Stru2):
+         st $31, $254, -8, 8
+     addi64 $254, $254, -22
+         st $1, $254, 0, 1
+         st $2, $254, 1, 1
+       li64 $4, 3
+       li32 $3, 805306368
+        lra $2, $0, :duplicate instantiation in recurcive templates 1.var
+        lra $1, $0, :foo
+         st $1, $2, 0, 8
+         st $4, $2, 8, 8
+         st $3, $254, 2, 4
+         ld $1, $254, 0, 1
+       andi $1, $1, 255
+        jne $1, $0, :7
+         cp $1, $0
+        jmp :8
+7:       ld $1, $254, 1, 1
+        jal $31, $0, :duplicate instantiation in recurcive templates 1.foo(.Stru2)
+         st $1, $254, 6, 8
+         ld $1, $254, 6, 8
+8:   addi64 $254, $254, 22
+         ld $31, $254, -8, 8
+       jala $0, $31, 0
+duplicate instantiation in recurcive templates 1.foo(u8):
+     addi64 $254, $254, -5
+         st $1, $254, 0, 1
+        lra $4, $0, :foo
+       li64 $3, 3
+       li32 $2, 3
+        lra $1, $0, :duplicate instantiation in recurcive templates 1.var
+         st $4, $1, 0, 8
+         st $3, $1, 8, 8
+         st $2, $254, 1, 4
+         ld $1, $254, 0, 1
+       andi $1, $1, 255
+     addi64 $254, $254, 5
+       jala $0, $31, 0

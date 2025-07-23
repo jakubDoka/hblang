@@ -133,7 +133,6 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             while (cursor.schedule == no_def_sentinel and cursor.kind == .MachSplit) {
                 cursor = cursor.inputs()[1].?;
             }
-            if (cursor.kind == .Uninit) return false;
             return lrg_table[cursor.schedule] == self;
         }
 
@@ -261,7 +260,6 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 std.debug.assert(instr.isDataPhi());
                 var lrg = lrg_table_build[instr.schedule] orelse
                     for (instr.dataDeps()) |d| {
-                        if (d.kind == .Uninit) continue;
                         if (lrg_table_build[d.schedule]) |*l| {
                             l.* = l.*.unionFind();
                             l.*.mask.setIntersection(instr.regMask(func, 0, tmp.arena));
@@ -277,7 +275,6 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 lrg_table_build[instr.schedule] = lrg;
 
                 for (instr.dataDeps()) |d| {
-                    if (d.kind == .Uninit) continue;
                     if (lrg_table_build[d.schedule]) |l| {
                         if (lrg.unify(l.unionFind(), build_lrgs.items)) {
                             lrg.unionFind().fail(build_lrgs.items, &failed);
@@ -304,7 +301,6 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 lrg_table_build[instr.schedule] = lrg;
 
                 if (instr.inPlaceSlot()) |idx| {
-                    if (instr.dataDeps()[idx].kind == .Uninit) continue;
                     const up_lrg = lrg_table_build[instr.dataDeps()[idx].schedule].?.unionFind();
                     std.debug.assert(up_lrg.parent == null);
                     if (lrg.unify(up_lrg, build_lrgs.items)) {
@@ -610,7 +606,6 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                     break;
                 }
                 const k, const v = .{ lrg_table[out.schedule].index(lrgs), out.dataDeps()[i] };
-                if (v.kind == .Uninit) continue;
                 const other = pred_block.fetchPut(tmp.arena.allocator(), k, v) catch unreachable;
                 dirty = other == null or dirty;
             }

@@ -1,6 +1,6 @@
 main:
      addi64 $254, $254, -16
-        lra $1, $0, :out of bounds matching 1.main.hello, world
+        lra $1, $0, :hello, world
          st $1, $254, 0, 8
        li64 $1, 12
          st $1, $254, 8, 8

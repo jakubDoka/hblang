@@ -177,7 +177,7 @@ pub fn addIndexOffset(
     return self.func.addIndexOffset(sloc, base, op, elem_size, subscript);
 }
 
-pub fn addUninit(self: *Builder, sloc: graph.Sloc, ty: DataType) SpecificNode(.Uninit) {
+pub fn addUninit(self: *Builder, sloc: graph.Sloc, ty: DataType) SpecificNode(.CInt) {
     return self.func.addUninit(sloc, ty);
 }
 

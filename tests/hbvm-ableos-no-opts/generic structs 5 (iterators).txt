@@ -1,18 +1,18 @@
 main:
          st $31, $254, -16, 16
      addi64 $254, $254, -156
-        lra $1, $0, :generic structs 5 (iterators).main.abcd
+        lra $1, $0, :abcd
          st $1, $254, 0, 8
        li64 $1, 4
          st $1, $254, 8, 8
-        lra $7, $0, :generic structs 5 (iterators).main.cd
+        lra $7, $0, :cd
        li32 $6, 1879048194
        li32 $5, -1879048190
      addi64 $4, $254, 16
      addi64 $32, $254, 0
        li32 $3, 1879048195
      addi64 $2, $254, 32
-        lra $1, $0, :generic structs 5 (iterators).main.ab
+        lra $1, $0, :ab
          st $1, $254, 16, 8
        li64 $1, 2
          st $1, $254, 24, 8

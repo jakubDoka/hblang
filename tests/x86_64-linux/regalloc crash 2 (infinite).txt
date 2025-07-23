@@ -3,17 +3,24 @@ regalloc crash 2 (infinite).broken:
 main:
 	sub rsp, 0x08
 0:	xor rdi, rdi
+	mov rsi, 0xAAAAAAAAAAAAAAAA
 	call :regalloc crash 2 (infinite).broken
 	xor rdi, rdi
+	mov rsi, 0xAAAAAAAAAAAAAAAA
 	call :regalloc crash 2 (infinite).broken
 	xor rdi, rdi
+	mov rsi, 0xAAAAAAAAAAAAAAAA
 	call :regalloc crash 2 (infinite).broken
 	xor rdi, rdi
+	mov rsi, 0xAAAAAAAAAAAAAAAA
 	call :regalloc crash 2 (infinite).broken
 	xor rdi, rdi
+	mov rsi, 0xAAAAAAAAAAAAAAAA
 	call :regalloc crash 2 (infinite).broken
 	xor rdi, rdi
+	mov rsi, 0xAAAAAAAAAAAAAAAA
 	call :regalloc crash 2 (infinite).broken
 	xor rdi, rdi
+	mov rsi, 0xAAAAAAAAAAAAAAAA
 	call :regalloc crash 2 (infinite).broken
 	jmp :0

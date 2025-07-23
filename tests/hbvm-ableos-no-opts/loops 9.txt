@@ -1,6 +1,6 @@
 main:
      addi64 $254, $254, -32
-        lra $1, $0, :loops 9.main.abc
+        lra $1, $0, :abc
          st $1, $254, 0, 8
        li64 $1, 3
          st $1, $254, 8, 8

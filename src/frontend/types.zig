@@ -453,7 +453,24 @@ pub const Func = struct {
 pub const Global = struct {
     key: Scope,
     ty: TyId = .void,
-    data: []u8 = &.{},
+    data: if (std.debug.runtime_safety) union(enum) {
+        mut: []u8,
+        imm: []const u8,
+
+        pub fn slice(self: @This()) []const u8 {
+            return switch (self) {
+                .mut => |s| s,
+                .imm => |s| s,
+            };
+        }
+    } else union {
+        mut: []u8,
+        imm: []const u8,
+
+        pub fn slice(self: @This()) []const u8 {
+            return self.imm;
+        }
+    } = .{ .imm = &.{} },
     readonly: bool,
     completion: std.EnumArray(Types.Target, CompileState) = .{ .values = .{ .queued, .queued } },
 

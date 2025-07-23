@@ -492,8 +492,6 @@ pub fn Mixin(comptime Backend: type) type {
             if (visited.isSet(node.id)) return;
             visited.set(node.id);
 
-            if (node.kind == .Uninit) return;
-
             for (node.inputs()) |i| if (i) |ii| if (ii.kind != .Phi) {
                 gcm.shedEarly(ii, early, visited);
             };

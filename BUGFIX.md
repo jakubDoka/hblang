@@ -2,6 +2,57 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### nested options 1
+```hb
+reset := fn(x: []u8): void for i := 0..x.len x[i] = 0xFF
+defb := fn(): ??bool return null
+defc := fn(): ??bool {
+    x: ??bool = idk
+    reset(@as(^u8, @bit_cast(&x))[0..@size_of(??bool)])
+    return defb()
+}
+main := fn(): uint return defc() != null
+```
+
+#### duplicate instantiation in recurcive templates 1
+```hb
+main := fn(): uint {
+    return foo(Stru.(.(0), .(.(1)), null))
+}
+
+Stru2 := struct {
+    .a: u8;
+}
+
+Stru := struct {
+    .a: Stru2;
+    .c: f;
+    .b: ?Stru2
+
+    f := struct{.b: Stru2}
+}
+
+var := ""
+
+foo := fn(arg: @Any()): uint {
+    var = "foo"
+    ty := @TypeOf(arg)
+    $if @kind_of(ty) == 7 {
+        i := 0
+        $while i < @len_of(ty) {
+            _ = foo(arg[i])
+            i += 1
+        }
+        return 0
+    } else $if @kind_of(ty) == 3 {
+        if arg == null return 0
+        return foo(arg.?)
+    } else {
+        return arg
+    }
+}
+```
+
 #### struct capture eca mismatch 1
 ```hb
 cp := fn($_r0: u8, $_r1: u8): struct align(1){.op: u8 = 0; .r0: u8 = _r0; .r1: u8 = _r1} {

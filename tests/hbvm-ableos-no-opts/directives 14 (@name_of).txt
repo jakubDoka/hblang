@@ -1,8 +1,8 @@
 main:
      addi64 $254, $254, -32
-        lra $1, $0, :directives 14 (@name_of).main.uint
+        lra $1, $0, :uint
          st $1, $254, 0, 8
-        lra $3, $0, :directives 14 (@name_of).main.foo
+        lra $3, $0, :foo
        li64 $2, 3
        li64 $1, 4
          st $1, $254, 8, 8

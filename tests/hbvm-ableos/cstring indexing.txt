@@ -2,9 +2,9 @@ main:
          st $31, $254, -8, 8
      addi64 $254, $254, -56
        li64 $2, 2
-        lra $1, $0, :cstring indexing.main.aa
+        lra $1, $0, :aa
          st $1, $254, 0, 8
-        lra $1, $0, :cstring indexing.main.bb
+        lra $1, $0, :bb
          st $1, $254, 8, 8
      addi64 $6, $254, 0
          cp $5, $0
@@ -15,7 +15,7 @@ main:
          tx
 2:     jltu $5, $2, :3
      addi64 $1, $254, 16
-        lra $3, $0, :cstring indexing.main.cstring indexing
+        lra $3, $0, :cstring indexing
          st $3, $254, 16, 8
        li64 $4, 73014444048
        li64 $3, 16

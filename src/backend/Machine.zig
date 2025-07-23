@@ -774,11 +774,11 @@ pub const OptOptions = struct {
                     return @TypeOf(func.*).idealize(cx, fnc, nd, wl);
                 }
             }.wrap);
-        } else if (@hasDecl(Backend, "idealize")) {
+        } else if (@hasDecl(Backend, "idealize") and self.do_gcm) {
             func.iterPeeps(ctx, Backend.idealize);
         }
 
-        if (self.do_machine_peeps and @hasDecl(Backend, "idealizeMach")) {
+        if (self.do_machine_peeps and @hasDecl(Backend, "idealizeMach") and self.do_gcm) {
             func.iterPeeps(ctx, Backend.idealizeMach);
         }
 
@@ -793,7 +793,7 @@ pub const OptOptions = struct {
             );
 
         if (self.error_buf) |eb| {
-            func.static_anal.analize(self.arena.?, eb, self.do_uninit_analisys);
+            func.static_anal.analize(self.arena.?, eb);
             if (self.error_buf.?.items.len != 0) return error.HasErrors;
         }
     }
@@ -859,6 +859,25 @@ pub const OptOptions = struct {
             //
             std.mem.swap(Data, &out, bout);
 
+            for (out.syms.items) |sym| {
+                switch (sym.kind) {
+                    .func => {
+                        if (sym.linkage == .imported) continue;
+                        const func = &out.inline_funcs.items[sym.inline_func];
+                        var op = OptOptions.none;
+                        op.do_gcm = true;
+                        op.do_dead_code_elimination = false;
+                        op.do_machine_peeps = true;
+                        op.execute(Backend, backend, @ptrCast(func)) catch {
+                            func.corrupted = true;
+                        };
+                    },
+                    .data => {},
+                    .prealloc => unreachable,
+                    .invalid => {},
+                }
+            }
+
             for (out.syms.items, sym_to_idx) |sym, i| {
                 switch (sym.kind) {
                     .func => {
@@ -871,7 +890,9 @@ pub const OptOptions = struct {
                             .is_inline = false,
                             .optimizations = b: {
                                 var op = OptOptions.none;
-                                op.do_gcm = true;
+                                op.do_dead_code_elimination = false;
+                                op.do_gcm = false;
+                                op.do_machine_peeps = false;
                                 op.error_buf = optimizations.error_buf;
                                 op.arena = optimizations.arena;
                                 op.verbose = optimizations.verbose;

@@ -1,7 +1,7 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -45
-        lra $1, $0, :slices 4.main.abc
+        lra $1, $0, :abc
          st $1, $254, 0, 8
         li8 $5, 97
         li8 $4, 98

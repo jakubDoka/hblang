@@ -136,10 +136,10 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                 }
 
                 const global = types.addUniqueGlobal(scope);
-                types.store.get(global).data = types.pool.arena.alloc(
+                types.store.get(global).data = .{ .mut = types.pool.arena.alloc(
                     u8,
                     @intCast(curr.inputs()[1].?.extra(.LocalAlloc).size),
-                );
+                ) };
                 types.store.get(global).ty = ty;
                 curr.inputs()[1].?.extra(.LocalAlloc).meta = @intFromEnum(global);
 
@@ -164,7 +164,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
 
                 const value = curr.value().?.extra(.CInt).value;
                 @memcpy(
-                    data[@intCast(offset)..][0..@intCast(curr.data_type.size())],
+                    data.mut[@intCast(offset)..][0..@intCast(curr.data_type.size())],
                     @as([*]const u8, @ptrCast(&value))[0..@intCast(curr.data_type.size())],
                 );
 
@@ -298,7 +298,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                     var mem: u64 = 0;
                     @memcpy(
                         @as([*]u8, @ptrCast(&mem))[0..@intCast(curr.data_type.size())],
-                        glob.data[@intCast(offset)..][0..@intCast(curr.data_type.size())],
+                        glob.data.slice()[@intCast(offset)..][0..@intCast(curr.data_type.size())],
                     );
 
                     break :b bl.addIntImm(.none, curr.data_type, @bitCast(mem));
@@ -599,7 +599,9 @@ pub fn jitExprLow(
     value: Ast.Id,
 ) !struct { JitResult, Types.Id } {
     const types = self.getTypes();
-    const id = types.store.add(types.pool.allocator(), @as(tys.Func, undefined));
+
+    const id = types.allocTempType(tys.Func);
+    defer types.freeTempType(tys.Func, id);
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
@@ -749,7 +751,7 @@ pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(tys.Glo
     }
 
     const glbal = types.store.get(global);
-    glbal.data = data;
+    glbal.data = .{ .imm = data };
     glbal.ty = fty;
     if (fty == .type) {
         const typ: Types.Id = @enumFromInt(@as(u32, @bitCast(data[0..4].*)));

@@ -605,9 +605,6 @@ pub const builtin = enum {
         id: u32,
         pub const is_clone = true;
     };
-    pub const Uninit = extern struct {
-        pub const is_pinned = true;
-    };
 };
 
 pub const Arg = extern struct {
@@ -1296,7 +1293,6 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn hasUseFor(self: *Node, idx: usize, def: *Node) bool {
                 if (self.kind == .Call and def.kind == .StackArgOffset) return false;
-                if (def.kind == .Uninit) return false;
                 return self.dataDepOffset() <= idx and idx < self.input_ordered_len;
             }
 
@@ -1343,7 +1339,6 @@ pub fn Func(comptime Backend: type) type {
                     !self.isCfg() and
                     (self.kind != .Phi or self.isDataPhi()) and
                     self.kind != .LocalAlloc and
-                    self.kind != .Uninit and
                     self.kind != .Mem;
             }
 
@@ -1406,7 +1401,7 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn isInterned(kind: Kind, inpts: []const ?*Node) bool {
                 return switch (kind) {
-                    .CInt, .BinOp, .Load, .UnOp, .GlobalAddr, .FramePointer, .Uninit => true,
+                    .CInt, .BinOp, .Load, .UnOp, .GlobalAddr, .FramePointer => true,
                     .Phi => inpts[2] != null,
                     else => callCheck("isInterned", kind),
                 };
@@ -1729,7 +1724,7 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn addUninit(self: *Self, sloc: Sloc, ty: DataType) *Node {
-            return self.addNode(.Uninit, sloc, ty, &.{self.start}, .{});
+            return self.addIntImm(sloc, ty, @as(i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa))) & ty.mask().?);
         }
 
         pub fn addIntImm(self: *Self, sloc: Sloc, ty: DataType, value: i64) *Node {
@@ -2231,9 +2226,6 @@ pub fn Func(comptime Backend: type) type {
             const inps = node.inputs();
 
             if (node.kind == .Store) {
-                if (node.value() != null and node.value().?.kind == .Uninit)
-                    return node.mem();
-
                 if (node.outputs().len == 1) {
                     const succ = node.outputs()[0].get();
                     if (succ.kind == .Store and
@@ -2384,8 +2376,6 @@ pub fn Func(comptime Backend: type) type {
             }
 
             if (node.kind == .UnOp) {
-                if (node.inputs()[1].?.kind == .Uninit) return node.inputs()[1].?;
-
                 const op: UnOp = node.extra(.UnOp).op;
                 const oper = inps[1].?;
 
@@ -2405,10 +2395,6 @@ pub fn Func(comptime Backend: type) type {
             }
 
             if (node.kind == .BinOp) {
-                for (node.inputs()[1..]) |inp| {
-                    if (inp.?.kind == .Uninit) return inp.?;
-                }
-
                 const op: BinOp = node.extra(.BinOp).op;
                 var lhs = node.inputs()[1].?;
                 var rhs = node.inputs()[2].?;

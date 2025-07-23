@@ -380,6 +380,25 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         inline for (std.meta.fields(@TypeOf(types.stats))) |field| {
             try opts.diagnostics.print("  {s:<8}: {}\n", .{ field.name, @field(types.stats, field.name) });
         }
+
+        var runtim_functions: usize = 0;
+        var comptime_functions: usize = 0;
+        var dead_functions: usize = 0;
+
+        for (@as([]const frontend.types.Func, types.store.rpr.Func.items)) |f| {
+            if (f.completion.get(.@"comptime") == .compiled) comptime_functions += 1;
+            if (f.completion.get(.runtime) == .compiled) runtim_functions += 1;
+
+            if (f.completion.get(.@"comptime") == .queued and
+                f.completion.get(.runtime) == .queued)
+            {
+                dead_functions += 1;
+            }
+        }
+
+        try opts.diagnostics.print("  runtime functions: {}\n", .{runtim_functions});
+        try opts.diagnostics.print("  comptime functions: {}\n", .{comptime_functions});
+        try opts.diagnostics.print("  dead functions: {}\n", .{dead_functions});
     }
 
     const logs = if (opts.log_stats) opts.diagnostics else null;

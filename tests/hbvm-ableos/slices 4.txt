@@ -7,8 +7,8 @@ main:
         li8 $1, 98
          st $1, $254, 1, 1
          st $2, $254, 2, 1
-        lra $1, $0, :slices 4.main.abc
-        lra $3, $0, :slices 4.main.abc
+        lra $1, $0, :abc
+        lra $3, $0, :abc
        li64 $2, 3
        li64 $4, 3
         jal $31, $0, :slices 4.equals
@@ -18,7 +18,7 @@ main:
         jeq $1, $0, :2
         jmp :3
 2:   addi64 $1, $254, 0
-        lra $3, $0, :slices 4.main.abc
+        lra $3, $0, :abc
        li64 $2, 3
        li64 $4, 3
         jal $31, $0, :slices 4.equals

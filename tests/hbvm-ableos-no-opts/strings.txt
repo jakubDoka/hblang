@@ -1,6 +1,6 @@
 main:
      addi64 $254, $254, -16
-        lra $1, $0, :strings.main.	Edvard
+        lra $1, $0, :	Edvard
 ඞ
          st $1, $254, 0, 8
        li64 $1, 13

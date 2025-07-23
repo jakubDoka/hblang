@@ -2252,7 +2252,7 @@ fn emitUse(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Use)) EmitError!Value
             if (!slot.found_existing) {
                 self.types.store.get(alloc).* = .{
                     .key = self.types.store.get(alloc).key,
-                    .data = self.types.pool.arena.dupe(u8, file.source),
+                    .data = .{ .imm = file.source },
                     .ty = self.types.makeSlice(file.source.len, .u8),
                     .readonly = true,
                 };
@@ -2375,7 +2375,7 @@ pub fn emitHandlerCall(self: *Codegen, handler: utils.EntId(tys.Func), expr: Ast
 pub fn emitSrcLoc(self: *Codegen, expr: Ast.Id) Value {
     const sloc = self.src(expr);
     const src_loc = self.bl.addLocal(sloc, self.abiCata(self.types.source_loc).size());
-    _ = self.emitString(.{ .loc = src_loc }, self.types.pool.arena.dupe(u8, self.ast.path), expr);
+    _ = self.emitString(.{ .loc = src_loc }, self.ast.path, expr);
     const line, const col = Ast.lineCol(self.ast.source, self.ast.posOf(expr).index);
     comptime std.debug.assert(@import("builtin").cpu.arch.endian() == .little);
     const pcked = @as(u64, col) << 32 | @as(u64, line);
@@ -2930,7 +2930,7 @@ pub fn resolveGlobal(
         var report_scope = bsty;
         var cur: Types.Id = @enumFromInt(@as(
             Types.IdRepr,
-            @bitCast(global.data[0..@sizeOf(Types.Id)].*),
+            @bitCast(global.data.slice()[0..@sizeOf(Types.Id)].*),
         ));
 
         for (path, 0..) |ps, i| {
@@ -3173,7 +3173,10 @@ pub fn instantiateTemplate(
     const tmpl = self.types.store.get(typ.data().Template).*;
     const ast = self.ast;
 
-    const scope = self.types.store.add(self.types.pool.allocator(), tmpl);
+    const scope = self.types.allocTempType(tys.Template);
+    defer self.types.freeTempType(tys.Template, scope);
+
+    self.types.store.get(scope).* = tmpl;
     self.types.store.get(scope).temporary = true;
     self.types.store.get(scope).key.loc.scope = typ;
     self.types.store.get(scope).key.captures = &.{};
@@ -3558,12 +3561,9 @@ pub fn emitBranch(self: *Codegen, block: Ast.Id) usize {
     return 0;
 }
 
-fn emitString(self: *Codegen, ctx: Ctx, data: []u8, expr: Ast.Id) Value {
+fn emitString(self: *Codegen, ctx: Ctx, data: []const u8, expr: Ast.Id) Value {
     const sloc = self.src(expr);
-    const global = self.types.addUniqueGlobal(self.parent_scope.perm(self.types));
-    self.types.store.get(global).key.name = data;
-    self.types.store.get(global).data = data;
-    self.types.store.get(global).ty = self.types.makeSlice(data.len, .u8);
+    const global = self.types.addStringGlobal(data);
     self.types.queue(self.target, .init(.{ .Global = global }));
 
     const slice_ty = self.types.string;
@@ -3888,12 +3888,16 @@ fn emitDirective(
                     .{ idx, fields.len },
                 );
             }
-            return self.emitString(ctx, self.types.pool.arena.dupe(u8, fields[@intCast(idx)].name), expr);
+
+            return self.emitString(ctx, fields[@intCast(idx)].name, expr);
         },
         .name_of => {
             try assertDirectiveArgs(self, expr, args, "<ty/enum-variant>");
 
             var value = try self.emit(.{}, args[0]);
+
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
 
             const data = if (value.ty == .type) dt: {
                 const ty = try self.unwrapTyConst(args[0], &value);
@@ -3922,14 +3926,14 @@ fn emitDirective(
 
                     const fields = enum_ty.getFields(self.types);
                     if (fields.len == 1) {
-                        break :dt self.types.pool.arena.dupe(u8, fields[0].name);
+                        break :dt fields[0].name;
                     }
 
                     const id = try self.partialEval(args[0], &value);
                     if (id >= fields.len)
                         return self.report(args[0], "the enum value is" ++
                             " out of range or the enum", .{});
-                    break :dt self.types.pool.arena.dupe(u8, fields[@intCast(id)].name);
+                    break :dt fields[@intCast(id)].name;
                 },
                 else => return self.report(
                     args[0],

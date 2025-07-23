@@ -1,7 +1,7 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -82
-        lra $1, $0, :loop check 1.main.aaaaaaaaaaaaaaaaaaaaa
+        lra $1, $0, :aaaaaaaaaaaaaaaaaaaaa
          st $1, $254, 0, 8
        li64 $1, 21
          st $1, $254, 8, 8

@@ -16,42 +16,55 @@ main:
 	add rsp, 0xD8
 	ret
 0:	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
 	lea rdi, [rsp]
 	call :regalloc crash 3.broken
 	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
 	lea rdi, [rsp+0x20]
 	call :regalloc crash 3.broken
 	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
 	lea rdi, [rsp+0x40]
 	call :regalloc crash 3.broken
 	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
 	lea rdi, [rsp+0x60]
 	call :regalloc crash 3.broken
 	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
 	lea rdi, [rsp+0x80]
 	call :regalloc crash 3.broken
 	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
 	lea rdi, [rsp+0xA0]
 	call :regalloc crash 3.broken
 	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
 	lea rdi, [rsp+0xC0]
 	call :regalloc crash 3.broken
 	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
 	lea rdi, [rsp+0x30]
 	call :regalloc crash 3.broken
 	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
 	lea rdi, [rsp+0x70]
 	call :regalloc crash 3.broken
 	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
 	lea rdi, [rsp+0xB0]
 	call :regalloc crash 3.broken
 	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
 	lea rdi, [rsp+0x50]
 	call :regalloc crash 3.broken
 	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
 	lea rdi, [rsp+0x10]
 	call :regalloc crash 3.broken
 	lea rdi, [rsp+0x90]
 	xor rsi, rsi
+	mov rdx, 0xAAAAAAAAAAAAAAAA
 	call :regalloc crash 3.broken
 	jmp :1

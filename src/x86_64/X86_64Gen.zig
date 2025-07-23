@@ -1026,13 +1026,9 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    outer: for (block.outputs()) |in| {
+    for (block.outputs()) |in| {
         const instr = in.get();
         const inps = instr.dataDeps();
-
-        if (instr.kind != .Call) {
-            for (inps) |inp| if (inp.kind == .Uninit) continue :outer;
-        }
 
         self.ensureInstrSpace();
 

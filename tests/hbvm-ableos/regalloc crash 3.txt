@@ -9,30 +9,43 @@ main:
          ld $31, $254, -16, 16
          tx
 1:       cp $1, $0
+       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
+       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
+       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
+       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
+       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
+       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
+       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
+       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
+       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
+       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
+       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
+       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 3.broken
          cp $1, $0
+       li64 $2, -6148914691236517206
         jal $31, $0, :regalloc crash 3.broken
         jmp :3
 regalloc crash 3.broken:

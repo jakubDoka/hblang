@@ -27,7 +27,7 @@ null unwrap 1.use_opt:
        andi $1, $1, 255
         jne $1, $0, :1
      addi64 $1, $254, 16
-        lra $2, $0, :null unwrap 1.use_opt.null unwrap 1
+        lra $2, $0, :null unwrap 1
          st $2, $254, 16, 8
        li64 $3, 171798691847
        li64 $2, 13

@@ -1,0 +1,69 @@
+duplicate instantiation in recurcive templates 1.foo(.Stru):
+	sub rsp, 0x08
+	mov [rsp], edi
+	lea rcx, [0x0000000000000007]
+	lea rax, [0x0000000000000007]
+	mov [0x0000000000000007], rax
+	mov qword ptr [rcx+0x08], 0x03
+	mov dil, [rsp]
+	call :duplicate instantiation in recurcive templates 1.foo(.Stru2)
+	mov dil, [rsp+0x01]
+	call :duplicate instantiation in recurcive templates 1.foo(.Stru.f)
+	mov di, [rsp+0x02]
+	call :duplicate instantiation in recurcive templates 1.foo(?.Stru2)
+	xor rax, rax
+	add rsp, 0x08
+	ret
+duplicate instantiation in recurcive templates 1.foo(.Stru2):
+	sub rsp, 0x08
+	lea rcx, [0x0000000000000007]
+	lea rax, [0x0000000000000007]
+	mov [0x0000000000000007], rax
+	mov qword ptr [rcx+0x08], 0x03
+	call :duplicate instantiation in recurcive templates 1.foo(u8)
+	xor rax, rax
+	add rsp, 0x08
+	ret
+duplicate instantiation in recurcive templates 1.foo(.Stru.f):
+	sub rsp, 0x08
+	lea rcx, [0x0000000000000007]
+	lea rax, [0x0000000000000007]
+	mov [0x0000000000000007], rax
+	mov qword ptr [rcx+0x08], 0x03
+	call :duplicate instantiation in recurcive templates 1.foo(.Stru2)
+	xor rax, rax
+	add rsp, 0x08
+	ret
+duplicate instantiation in recurcive templates 1.foo(?.Stru2):
+	sub rsp, 0x08
+	mov [rsp], di
+	lea rdx, [0x0000000000000007]
+	xor rcx, rcx
+	lea rax, [0x0000000000000007]
+	mov [0x0000000000000007], rax
+	mov qword ptr [rdx+0x08], 0x03
+	mov al, [rsp]
+	cmp al, cl
+	jnz :0
+	xor rax, rax
+	jmp :1
+0:	mov dil, [rsp+0x01]
+	call :duplicate instantiation in recurcive templates 1.foo(.Stru2)
+1:	add rsp, 0x08
+	ret
+duplicate instantiation in recurcive templates 1.foo(u8):
+	lea rcx, [0x0000000000000007]
+	lea rax, [0x0000000000000007]
+	mov [0x0000000000000007], rax
+	mov qword ptr [rcx+0x08], 0x03
+	movzx rax, dil
+	ret
+main:
+	sub rsp, 0x08
+	mov byte ptr [rsp], 0x00
+	mov byte ptr [rsp+0x01], 0x01
+	mov byte ptr [rsp+0x02], 0x00
+	mov edi, [rsp]
+	call :duplicate instantiation in recurcive templates 1.foo(.Stru)
+	add rsp, 0x08
+	ret

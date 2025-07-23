@@ -1,7 +1,7 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -80
-        lra $1, $0, :wired string comparison 1.main.test
+        lra $1, $0, :test
          st $1, $254, 0, 8
      addi64 $2, $254, 48
      addi64 $4, $254, 0
