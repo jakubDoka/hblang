@@ -2,6 +2,17 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### struct capture eca mismatch 1
+```hb
+cp := fn($_r0: u8, $_r1: u8): struct align(1){.op: u8 = 0; .r0: u8 = _r0; .r1: u8 = _r1} {
+    return .{}
+}
+
+main := fn(): i32 {
+    return cp(1, 0).op
+}
+```
+
 #### out of range access 1
 ```hb
 bwa := fn(x: [7]?bool): u32 return 0

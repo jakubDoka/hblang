@@ -1,20 +1,26 @@
 passing struct multiple times 1.foo:
 	push rbx
 	push rbp
-	sub rsp, 0x28
+	push r12
+	sub rsp, 0x20
 	lea rsi, [rsp+0x40]
 	mov [rsp+0x18], edi
 	mov rdx, 0x18
 	lea rdi, [rsp]
-	mov bp, [rsp+0x18]
+	mov r12b, [rsp+0x18]
+	mov bpl, [rsp+0x19]
 	mov bl, [rsp+0x1A]
 	call :memcpy
-	movzx edi, bp
+	movzx ecx, bpl
+	movzx edi, r12b
 	movzx eax, bl
+	shl ecx, 0x08
 	shl eax, 0x10
+	or edi, ecx
 	or edi, eax
 	call :passing struct multiple times 1.bar
-	add rsp, 0x28
+	add rsp, 0x20
+	pop r12
 	pop rbp
 	pop rbx
 	ret
@@ -38,23 +44,16 @@ passing struct multiple times 1.bar:
 	add rsp, 0x10
 	ret
 main:
-	push rbx
-	sub rsp, 0x40
+	sub rsp, 0x38
 	mov qword ptr [rsp+0x18], 0x01
 	mov qword ptr [rsp+0x20], 0x02
 	mov qword ptr [rsp+0x28], 0x03
-	mov byte ptr [rsp+0x30], 0x01
-	mov byte ptr [rsp+0x31], 0x02
-	mov byte ptr [rsp+0x32], 0x03
 	mov rdx, 0x18
 	lea rdi, [rsp]
 	lea rsi, [rsp+0x18]
-	mov bx, [rsp+0x30]
 	call :memcpy
-	movzx edi, bx
-	or edi, 0x30000
+	mov rdi, 0x30201
 	call :passing struct multiple times 1.foo
-	add rsp, 0x40
-	pop rbx
+	add rsp, 0x38
 	ret
 memcpy:

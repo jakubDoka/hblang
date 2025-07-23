@@ -1,0 +1,28 @@
+struct capture eca mismatch 1.cp(1, ):
+	sub rsp, 0x10
+	mov al, [0x0000000000000006]
+	mov [rsp], al
+	mov al, [0x0000000000000006]
+	mov [rsp+0x01], al
+	mov al, [0x0000000000000006]
+	mov [rsp+0x02], al
+	mov al, [rsp]
+	mov dl, [rsp+0x01]
+	mov cl, [rsp+0x02]
+	movzx eax, al
+	movzx edx, dl
+	movzx ecx, cl
+	shl edx, 0x08
+	shl ecx, 0x10
+	or eax, edx
+	or eax, ecx
+	add rsp, 0x10
+	ret
+main:
+	sub rsp, 0x08
+	call :struct capture eca mismatch 1.cp(1, )
+	mov [rsp], eax
+	mov al, [rsp]
+	movzx eax, al
+	add rsp, 0x08
+	ret

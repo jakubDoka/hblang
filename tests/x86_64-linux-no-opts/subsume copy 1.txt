@@ -3,30 +3,42 @@ main:
 	mov byte ptr [rsp], 0x01
 	mov byte ptr [rsp+0x01], 0x02
 	mov byte ptr [rsp+0x02], 0x03
-	mov ax, [rsp]
+	mov al, [rsp]
+	mov dl, [rsp+0x01]
 	mov cl, [rsp+0x02]
-	movzx eax, ax
+	movzx eax, al
+	movzx edx, dl
 	movzx ecx, cl
-	shl eax, 0x00
+	shl edx, 0x08
 	shl ecx, 0x10
+	or eax, edx
 	or eax, ecx
 	mov rcx, rax
 	shr ecx, 0x00
-	mov [rsp+0x04], cx
-	shr eax, 0x10
-	mov [rsp+0x06], al
-	mov ax, [rsp+0x04]
+	mov [rsp+0x04], cl
+	mov rcx, rax
+	shr ecx, 0x10
+	shr eax, 0x08
+	mov [rsp+0x05], al
+	mov [rsp+0x06], cl
+	mov al, [rsp+0x04]
+	mov dl, [rsp+0x05]
 	mov cl, [rsp+0x06]
-	movzx eax, ax
+	movzx eax, al
+	movzx edx, dl
 	movzx ecx, cl
-	shl eax, 0x00
+	shl edx, 0x08
 	shl ecx, 0x10
+	or eax, edx
 	or eax, ecx
 	mov rcx, rax
 	shr ecx, 0x00
-	mov [rsp+0x08], cx
-	shr eax, 0x10
-	mov [rsp+0x0A], al
+	mov [rsp+0x08], cl
+	mov rcx, rax
+	shr ecx, 0x10
+	shr eax, 0x08
+	mov [rsp+0x09], al
+	mov [rsp+0x0A], cl
 	mov al, [rsp+0x08]
 	mov dl, [rsp+0x09]
 	mov cl, [rsp+0x0A]

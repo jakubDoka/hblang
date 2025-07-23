@@ -2120,7 +2120,10 @@ fn emitUserType(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Type)) !Value {
         args.arg_slots[prefix + slot_idx * 2 ..][0..2].* = switch (self.abiCata(val.ty)) {
             .Impossible => unreachable, // TODO: wah
             .Imaginary, .ByRef, .ByValuePair => .{ self.emitTyConst(val.ty).id.Value, self.bl.addIntImm(sloc, .i64, 0) },
-            .ByValue => .{ self.emitTyConst(val.ty).id.Value, val.getValue(sloc, self) },
+            .ByValue => |v| b: {
+                params[prefix + slot_idx * 2 + 1] = .{ .Reg = v };
+                break :b .{ self.emitTyConst(val.ty).id.Value, val.getValue(sloc, self) };
+            },
         };
     }
 

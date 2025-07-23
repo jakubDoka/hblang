@@ -6,18 +6,123 @@ out of range access 1.bwa:
 	add rsp, 0x10
 	ret
 main:
-	sub rsp, 0x18
-	mov byte ptr [rsp], 0x00
-	mov byte ptr [rsp+0x02], 0x00
-	mov byte ptr [rsp+0x04], 0x00
-	mov byte ptr [rsp+0x06], 0x00
-	mov byte ptr [rsp+0x08], 0x00
-	mov byte ptr [rsp+0x0A], 0x00
-	mov byte ptr [rsp+0x0C], 0x00
-	mov rdi, [rsp]
-	mov rsi, [rsp+0x08]
+	push rbx
+	push rbp
+	push r12
+	push r13
+	push r14
+	push r15
+	sub rsp, 0x48
+	mov byte ptr [rsp+0x28], 0x00
+	mov byte ptr [rsp+0x2A], 0x00
+	mov byte ptr [rsp+0x2C], 0x00
+	mov byte ptr [rsp+0x2E], 0x00
+	mov byte ptr [rsp+0x30], 0x00
+	mov byte ptr [rsp+0x32], 0x00
+	mov byte ptr [rsp+0x34], 0x00
+	mov dil, [rsp+0x28]
+	mov r14b, [rsp+0x29]
+	mov r11b, [rsp+0x2A]
+	mov r13b, [rsp+0x2B]
+	mov r10b, [rsp+0x2C]
+	mov r12b, [rsp+0x2D]
+	mov bpl, [rsp+0x2E]
+	mov bl, [rsp+0x2F]
+	mov r9b, [rsp+0x30]
+	mov r8b, [rsp+0x31]
+	mov dl, [rsp+0x32]
+	mov sil, [rsp+0x33]
+	mov cl, [rsp+0x34]
+	mov al, [rsp+0x35]
+	movzx rdi, dil
+	movzx r14, r14b
+	mov r15, r14
+	movzx r11, r11b
+	movzx r13, r13b
+	mov [rsp+0x10], r13
+	movzx r10, r10b
+	movzx r12, r12b
+	mov [rsp+0x08], r12
+	movzx rbp, bpl
+	mov [rsp], rbp
+	movzx rbx, bl
+	mov r14, rbx
+	movzx r9, r9b
+	movzx rbp, r8b
+	movzx rdx, dl
+	movzx rbx, sil
+	movzx r13, cl
+	movzx r12, al
+	mov rax, r15
+	shl rax, 0x08
+	mov r15, rax
+	shl r11, 0x10
+	mov rax, [rsp+0x10]
+	shl rax, 0x18
+	mov [rsp+0x20], rax
+	shl r10, 0x20
+	mov rax, [rsp+0x08]
+	shl rax, 0x28
+	mov [rsp+0x18], rax
+	mov rax, [rsp]
+	shl rax, 0x30
+	mov [rsp+0x10], rax
+	mov rax, r14
+	shl rax, 0x38
+	mov [rsp+0x08], rax
+	mov r8, r9
+	shl r8, 0x40
+	mov rax, rbp
+	shl rax, 0x48
+	mov rsi, rbp
+	shl rsi, 0x08
+	mov rcx, rdx
+	shl rcx, 0x50
+	mov rbp, rdx
+	shl rbp, 0x10
+	mov rdx, rbx
+	shl rdx, 0x58
+	shl rbx, 0x18
+	mov [rsp], rbx
+	mov rbx, r13
+	shl rbx, 0x60
+	mov r14, r13
+	shl r14, 0x20
+	mov r13, r12
+	shl r13, 0x68
+	shl r12, 0x28
+	or rdi, r15
+	or r9, rsi
+	or rdi, r11
+	or r9, rbp
+	mov rsi, [rsp+0x20]
+	or rdi, rsi
+	mov rsi, [rsp]
+	or r9, rsi
+	or rdi, r10
+	or r9, r14
+	mov rsi, [rsp+0x18]
+	or rdi, rsi
+	mov rsi, r9
+	or rsi, r12
+	mov r9, [rsp+0x10]
+	or rdi, r9
+	mov r9, [rsp+0x08]
+	or rdi, r9
+	or rdi, r8
+	or rdi, rax
+	or rdi, rcx
+	or rdi, rdx
+	or rdi, rbx
+	or rdi, r13
 	call :out of range access 1.bwa
-	mov [rsp+0x10], eax
-	mov eax, [rsp+0x10]
-	add rsp, 0x18
+	mov [rsp+0x38], eax
+	mov eax, [rsp+0x38]
+	add rsp, 0x48
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
 	ret

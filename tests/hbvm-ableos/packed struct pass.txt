@@ -1,11 +1,19 @@
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -8
+     addi64 $254, $254, -11
+         st $0, $254, 0, 1
+         st $0, $254, 1, 2
+        li8 $3, 8
+         ld $2, $254, 1, 1
+         ld $1, $254, 2, 1
+       andi $2, $2, 255
+       andi $1, $1, 255
+      slu16 $1, $1, $3
+         or $2, $2, $1
          cp $1, $0
-         cp $2, $0
         jal $31, $0, :packed struct pass.broken
          cp $1, $0
-     addi64 $254, $254, 8
+     addi64 $254, $254, 11
          ld $31, $254, -8, 8
          tx
 packed struct pass.broken:
