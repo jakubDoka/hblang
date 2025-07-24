@@ -1160,7 +1160,17 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
 
             if (self.types.store.unwrap(lhs.ty.data(), .Nullable)) |nullable| {
                 const inner = nullable.inner;
-                const is_compact = lhs.ty.data().Nullable.isCompact(self.types);
+
+                const nieche: ?tys.Nullable.NiecheSpec = nullable.nieche.offset(self.types);
+
+                if (nieche) |n| if (n.kind == .impossible) {
+                    _ = try self.emit(.{}, e.rhs);
+
+                    return self.report(e.lhs, "the default value needs to be unreachable since" ++
+                        " inner type of the nullable is uninhabited ({})", .{inner});
+                };
+
+                const is_compact = nieche != null;
 
                 // TODO: this wastes stack, we should fix up the stack
                 // allocation once we know this results into unwrapped

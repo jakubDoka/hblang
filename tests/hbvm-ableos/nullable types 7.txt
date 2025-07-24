@@ -1,0 +1,10 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        jal $31, $0, :nullable types 7.x
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+nullable types 7.x:
+         cp $1, $0
+       jala $0, $31, 0

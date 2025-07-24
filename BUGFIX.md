@@ -8,6 +8,13 @@ x := fn(y: ?never): u32 return 0
 main := fn(): u32 return x(null)
 ```
 
+#### nullable types 7
+```hb
+y := fn(w: never): u32 die
+x := fn(z: ?never): u32 return y(z || return 0)
+main := fn(): u32 return x(null)
+```
+
 #### custom one variant enum 1
 ```hb
 expectations := .{
