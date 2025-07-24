@@ -2492,7 +2492,10 @@ pub fn checkNull(self: *Codegen, expr: Ast.Id, lhs: *Value, op: Lexer.Lexeme) !V
     const nul: *tys.Nullable = self.types.store.get(lhs.ty.data().Nullable);
 
     var value = if (nul.nieche.offset(self.types)) |spec|
-        self.bl.addFieldLoad(sloc, lhs.id.Pointer, spec.offset, spec.kind.abi())
+        if (spec.kind == .impossible)
+            self.bl.addIntImm(sloc, .i8, 0)
+        else
+            self.bl.addFieldLoad(sloc, lhs.id.Pointer, spec.offset, spec.kind.abi())
     else switch (lhs.id) {
         .Imaginary => unreachable,
         .Value => self.bl.addBinOp(sloc, .band, .i8, lhs.id.Value, self.bl
