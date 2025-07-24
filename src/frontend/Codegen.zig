@@ -3179,6 +3179,8 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
     );
 }
 
+const ITRes = struct { []Value, Types.Id };
+
 pub fn instantiateTemplate(
     self: *Codegen,
     caller: *?Value,
@@ -3186,8 +3188,8 @@ pub fn instantiateTemplate(
     expr: Ast.Id,
     e: Expr(.Call),
     typ: Types.Id,
-) !struct { []Value, Types.Id } {
-    errdefer self.errored = true;
+) !ITRes {
+    errdefer |err| self.errored = err == error.Never;
 
     const tmpl = self.types.store.get(typ.data().Template).*;
     const ast = self.ast;
@@ -3206,8 +3208,8 @@ pub fn instantiateTemplate(
 
     const passed_args = e.args.len() + @intFromBool(caller.* != null);
     if (passed_args != tmpl_ast.args.len()) {
-        return self.report(expr, "expected {} arguments," ++
-            " got {}", .{ tmpl_ast.args.len(), passed_args });
+        return @as(EmitError!ITRes, self.report(expr, "expected {} arguments," ++
+            " got {}", .{ tmpl_ast.args.len(), passed_args }));
     }
 
     const captures = tmp.alloc(Types.Scope.Capture, tmpl_ast.args.len());
