@@ -5,17 +5,17 @@ main:
        li64 $2, 2
         jal $31, $0, :directives 13 (@Any).func(uint)
        li64 $1, 5
-        jal $31, $0, :directives 13 (@Any).foo(u8)
+        jal $31, $0, :directives 13 (@Any).foo(uint)
          cp $32, $1
         li8 $1, 5
-        jal $31, $0, :directives 13 (@Any).foo(u8)
+        jal $31, $0, :directives 13 (@Any).foo(uint)
        andi $1, $1, 255
       add64 $1, $32, $1
      addi64 $254, $254, 16
          ld $31, $254, -16, 16
          tx
+directives 13 (@Any).foo(uint):
+       jala $0, $31, 0
 directives 13 (@Any).func(uint):
          cp $1, $0
-       jala $0, $31, 0
-directives 13 (@Any).foo(u8):
        jala $0, $31, 0

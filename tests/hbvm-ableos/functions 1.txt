@@ -10,9 +10,9 @@ main:
      addi64 $254, $254, 16
          ld $31, $254, -16, 16
          tx
-functions 1.add_one:
-     addi64 $1, $1, 1
-       jala $0, $31, 0
 functions 1.add_two:
      addi64 $1, $1, 2
+       jala $0, $31, 0
+functions 1.add_one:
+     addi64 $1, $1, 1
        jala $0, $31, 0

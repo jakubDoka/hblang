@@ -3,7 +3,7 @@ main:
      addi64 $254, $254, -24
         jal $31, $0, :arithmetic 3.one
          cp $32, $1
-        jal $31, $0, :arithmetic 3.mero
+        jal $31, $0, :arithmetic 3.zero
        andi $33, $32, 255
        andi $32, $1, 255
        cmpu $1, $33, $32
@@ -56,7 +56,7 @@ b:     cmpu $1, $32, $33
 c:      jmp :e
 d:      jal $31, $0, :arithmetic 3.mne
          cp $32, $1
-        jal $31, $0, :arithmetic 3.mero
+        jal $31, $0, :arithmetic 3.zero
        sxt8 $33, $32
        sxt8 $32, $1
        cmps $1, $33, $32
@@ -109,7 +109,7 @@ e:      jmp :11
 19:      jmp :1b
 1a:      jal $31, $0, :arithmetic 3.one
          cp $32, $1
-        jal $31, $0, :arithmetic 3.mero
+        jal $31, $0, :arithmetic 3.zero
        andi $2, $32, 255
        andi $1, $1, 255
        jltu $2, $1, :1c
@@ -124,7 +124,7 @@ e:      jmp :11
         jmp :1b
 21:      jal $31, $0, :arithmetic 3.mne
          cp $32, $1
-        jal $31, $0, :arithmetic 3.mero
+        jal $31, $0, :arithmetic 3.zero
          cp $2, $32
        sxt8 $3, $2
          cp $2, $1
@@ -167,14 +167,14 @@ e:      jmp :11
 1b:   addi64 $254, $254, 24
          ld $31, $254, -24, 24
          tx
+arithmetic 3.mne:
+        li8 $1, -1
+       jala $0, $31, 0
+arithmetic 3.zero:
+         cp $1, $0
+       jala $0, $31, 0
 arithmetic 3.one:
         li8 $1, 1
        jala $0, $31, 0
 arithmetic 3.cond:
-       jala $0, $31, 0
-arithmetic 3.mne:
-        li8 $1, -1
-       jala $0, $31, 0
-arithmetic 3.mero:
-         cp $1, $0
        jala $0, $31, 0

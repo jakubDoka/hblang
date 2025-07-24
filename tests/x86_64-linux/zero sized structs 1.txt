@@ -1,7 +1,7 @@
-zero sized structs 1.main.X.new:
-	ret
 zero sized structs 1.main.X.test:
 	xor rax, rax
+	ret
+zero sized structs 1.main.X.new:
 	ret
 main:
 	sub rsp, 0x08

@@ -1,5 +1,3 @@
-directives 20 (@handler, @SourceLoc).produce_memcpy:
-	ret
 directives 20 (@handler, @SourceLoc).use_slice:
 	push rbx
 	sub rsp, 0x40
@@ -25,6 +23,8 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	movzx rax, al
 	add rsp, 0x40
 	pop rbx
+	ret
+directives 20 (@handler, @SourceLoc).produce_memcpy:
 	ret
 memcpy:
 1:	cmp rdx, 0x00

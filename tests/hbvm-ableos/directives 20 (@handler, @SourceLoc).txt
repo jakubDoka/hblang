@@ -18,8 +18,6 @@ entry:
      addi64 $254, $254, 13
          ld $31, $254, -8, 8
          tx
-directives 20 (@handler, @SourceLoc).produce_memcpy:
-       jala $0, $31, 0
 directives 20 (@handler, @SourceLoc).use_slice:
          st $31, $254, -8, 8
      addi64 $254, $254, -40
@@ -38,6 +36,8 @@ directives 20 (@handler, @SourceLoc).use_slice:
        andi $1, $1, 255
      addi64 $254, $254, 40
          ld $31, $254, -8, 8
+       jala $0, $31, 0
+directives 20 (@handler, @SourceLoc).produce_memcpy:
        jala $0, $31, 0
 directives 20 (@handler, @SourceLoc).slice_ioob:
          un

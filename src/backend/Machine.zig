@@ -277,8 +277,13 @@ pub const Data = struct {
         std.debug.assert(self.declaring_sym == null);
         self.declaring_sym = sym.*;
 
-        self.syms.items[@intFromEnum(sym.*)] = .{
-            .name = @intCast(self.names.items.len),
+        const slot = &self.syms.items[@intFromEnum(sym.*)];
+
+        const needs_name = slot.kind == .invalid;
+        std.debug.assert(needs_name or slot.kind == kind);
+
+        slot.* = .{
+            .name = if (needs_name) @intCast(self.names.items.len) else @intCast(slot.name),
             .offset = @intCast(self.code.items.len),
             .size = undefined,
             .reloc_offset = @intCast(self.relocs.items.len),
@@ -288,8 +293,11 @@ pub const Data = struct {
             .readonly = readonly,
             .is_inline = is_inline,
         };
-        try self.names.appendSlice(gpa, name);
-        try self.names.append(gpa, 0);
+
+        if (needs_name) {
+            try self.names.appendSlice(gpa, name);
+            try self.names.append(gpa, 0);
+        }
     }
 
     pub fn endDefineFunc(self: *Data, id: u32) void {
@@ -812,10 +820,6 @@ pub const OptOptions = struct {
             defer tmp.deinit();
 
             const bout: *Data = &backend.out;
-            const gpa: std.mem.Allocator = backend.gpa.allocator();
-
-            var out: Data = .{};
-            defer out.deinit(gpa);
 
             // do the exhausitve optimization pass with inlining, this should
             // hanlde stacked inlines as well
@@ -834,36 +838,20 @@ pub const OptOptions = struct {
                 sym_to_idx[@intFromEnum(sym)] = @intCast(i);
             }
 
-            for (bout.syms.items, sym_to_idx) |sym, i| {
+            for (bout.syms.items) |sym| {
                 if (sym.kind != .func) continue;
-                if (sym.linkage == .imported) {
-                    try out.startDefineFunc(
-                        gpa,
-                        @intCast(i),
-                        bout.lookupName(sym.name),
-                        sym.kind,
-                        sym.linkage,
-                        false,
-                    );
-                    out.endDefineFunc(@intCast(i));
-                    continue;
-                }
+                if (sym.linkage == .imported) continue;
                 const inline_func = &bout.inline_funcs.items[sym.inline_func];
                 pi_opts.execute(Backend, backend, @ptrCast(inline_func)) catch {
                     inline_func.corrupted = true;
                 };
             }
 
-            // we take out the current `out` that just encodes the code spec and
-            // and emit all functions to the new out without opts
-            //
-            std.mem.swap(Data, &out, bout);
-
-            for (out.syms.items) |sym| {
+            for (bout.syms.items) |sym| {
                 switch (sym.kind) {
                     .func => {
                         if (sym.linkage == .imported) continue;
-                        const func = &out.inline_funcs.items[sym.inline_func];
+                        const func = &bout.inline_funcs.items[sym.inline_func];
                         var op = OptOptions.none;
                         op.do_gcm = true;
                         op.do_dead_code_elimination = false;
@@ -878,13 +866,13 @@ pub const OptOptions = struct {
                 }
             }
 
-            for (out.syms.items, sym_to_idx) |sym, i| {
+            for (bout.syms.items, sym_to_idx) |sym, i| {
                 switch (sym.kind) {
                     .func => {
                         if (sym.linkage == .imported) continue;
-                        const func = &out.inline_funcs.items[sym.inline_func];
+                        const func = &bout.inline_funcs.items[sym.inline_func];
                         backend.emitFunc(@ptrCast(func), .{
-                            .name = out.lookupName(sym.name),
+                            .name = bout.lookupName(sym.name),
                             .id = @intCast(i),
                             .linkage = sym.linkage,
                             .is_inline = false,
@@ -901,29 +889,7 @@ pub const OptOptions = struct {
                             .builtins = builtins,
                         });
                     },
-                    .data => {
-                        var tmpa = tmp.arena.checkpoint();
-                        defer tmpa.deinit();
-
-                        const relocs = tmpa.arena.alloc(DataOptions.Reloc, sym.reloc_count);
-                        for (
-                            out.relocs.items[sym.reloc_offset..][0..sym.reloc_count],
-                            relocs,
-                        ) |rel, *dst| {
-                            dst.* = .{
-                                .target = sym_to_idx[@intFromEnum(rel.target)],
-                                .offset = rel.offset,
-                            };
-                        }
-
-                        backend.emitData(.{
-                            .name = out.lookupName(sym.name),
-                            .id = @intCast(i),
-                            .value = .{ .init = out.code.items[sym.offset..][0..sym.size] },
-                            .relocs = relocs,
-                            .readonly = sym.readonly,
-                        });
-                    },
+                    .data => {},
                     .prealloc => unreachable,
                     .invalid => {},
                 }

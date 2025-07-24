@@ -1,11 +1,11 @@
-foo.foo:
-	xor rax, rax
+bas.baz:
+	mov rax, 0x02
 	ret
 foo.bar:
 	mov rax, 0x01
 	ret
-bas.baz:
-	mov rax, 0x02
+foo.foo:
+	xor rax, rax
 	ret
 main:
 	push rbx

@@ -2,6 +2,16 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### custom one variant enum 1
+```hb
+expectations := .{
+    return_value: 5,
+}
+
+A := enum(uint){.b := 5}
+main := fn(): uint return @bit_cast(A.b)
+```
+
 #### nested options 1
 ```hb
 reset := fn(x: []u8): void for i := 0..x.len x[i] = 0xFF

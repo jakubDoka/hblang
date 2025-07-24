@@ -17,6 +17,9 @@ nested options 1.defc:
 	or eax, ecx
 	add rsp, 0x08
 	ret
+nested options 1.defb:
+	mov rax, 0xAAAAAA00
+	ret
 nested options 1.reset:
 	mov rdx, 0xFF
 	xor rcx, rcx
@@ -28,9 +31,6 @@ nested options 1.reset:
 	inc rcx
 	jmp :1
 0:	ret
-nested options 1.defb:
-	mov rax, 0xAAAAAA00
-	ret
 main:
 	sub rsp, 0x08
 	call :nested options 1.defc

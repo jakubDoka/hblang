@@ -6,8 +6,8 @@ main:
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
-zero sized structs 1.main.X.new:
-       jala $0, $31, 0
 zero sized structs 1.main.X.test:
          cp $1, $0
+       jala $0, $31, 0
+zero sized structs 1.main.X.new:
        jala $0, $31, 0

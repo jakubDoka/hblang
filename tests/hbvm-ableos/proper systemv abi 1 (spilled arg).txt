@@ -31,15 +31,6 @@ main:
      addi64 $254, $254, 64
          ld $31, $254, -16, 16
          tx
-proper systemv abi 1 (spilled arg).load_of_args:
-      add64 $1, $1, $2
-      add64 $1, $1, $3
-      add64 $1, $1, $4
-      add64 $1, $1, $5
-      add64 $1, $1, $6
-      add64 $1, $1, $7
-      add64 $1, $1, $8
-       jala $0, $31, 0
 proper systemv abi 1 (spilled arg).stack_args:
          ld $8, $1, 16, 8
          ld $7, $1, 0, 8
@@ -54,4 +45,13 @@ proper systemv abi 1 (spilled arg).stack_args:
       add64 $1, $1, $6
       add64 $1, $1, $3
       add64 $1, $1, $4
+       jala $0, $31, 0
+proper systemv abi 1 (spilled arg).load_of_args:
+      add64 $1, $1, $2
+      add64 $1, $1, $3
+      add64 $1, $1, $4
+      add64 $1, $1, $5
+      add64 $1, $1, $6
+      add64 $1, $1, $7
+      add64 $1, $1, $8
        jala $0, $31, 0

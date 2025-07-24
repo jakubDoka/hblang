@@ -1,11 +1,11 @@
-deep dedup 2 (generics).size(int):
+deep dedup 2 (generics).size(uint):
 	mov rax, 0x08
 	ret
 main:
 	push rbx
-	call :deep dedup 2 (generics).size(int)
+	call :deep dedup 2 (generics).size(uint)
 	mov rbx, rax
-	call :deep dedup 2 (generics).size(int)
+	call :deep dedup 2 (generics).size(uint)
 	sub rbx, rax
 	mov rax, rbx
 	pop rbx

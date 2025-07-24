@@ -1,9 +1,9 @@
-functions 1.add_one:
-	inc rdi
-	mov rax, rdi
-	ret
 functions 1.add_two:
 	add rdi, 0x02
+	mov rax, rdi
+	ret
+functions 1.add_one:
+	inc rdi
 	mov rax, rdi
 	ret
 main:

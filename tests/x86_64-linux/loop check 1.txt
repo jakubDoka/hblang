@@ -1,3 +1,6 @@
+loop check 1.check:
+	mov rax, 0x01
+	ret
 loop check 1.nextPos:
 	sub rsp, 0x10
 	cmp rdx, 0x01
@@ -14,9 +17,6 @@ loop check 1.nextPos:
 	jmp :1
 0:	mov byte ptr [rdi], 0x00
 1:	add rsp, 0x10
-	ret
-loop check 1.blackbox:
-	mov rax, 0x01
 	ret
 main:
 	push rbx
@@ -44,10 +44,10 @@ main:
 	jz :0
 	sub rsi, r12
 	mov rdi, rbp
-	call :loop check 1.blackbox
+	call :loop check 1.check
 	test al, al
 	jz :1
-	call :loop check 1.blackbox
+	call :loop check 1.check
 	xor al, 0x01
 	test al, al
 	jz :2

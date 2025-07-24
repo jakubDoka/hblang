@@ -10,9 +10,9 @@ main:
      addi64 $254, $254, 16
          ld $31, $254, -16, 16
          tx
-one.add:
-     addi64 $1, $1, 1
-       jala $0, $31, 0
 two.add:
      addi64 $1, $1, 2
+       jala $0, $31, 0
+one.add:
+     addi64 $1, $1, 1
        jala $0, $31, 0

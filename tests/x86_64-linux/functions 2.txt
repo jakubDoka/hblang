@@ -1,9 +1,9 @@
-one.add:
-	inc rdi
-	mov rax, rdi
-	ret
 two.add:
 	add rdi, 0x02
+	mov rax, rdi
+	ret
+one.add:
+	inc rdi
 	mov rax, rdi
 	ret
 main:

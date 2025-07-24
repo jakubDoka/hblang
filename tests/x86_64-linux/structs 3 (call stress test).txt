@@ -1,11 +1,10 @@
-structs 3 (call stress test).return_pair:
-	mov byte ptr [rdi], 0x01
-	mov qword ptr [rdi+0x08], 0x05
-	ret
-structs 3 (call stress test).return_triple:
-	mov qword ptr [rdi], 0x01
-	mov qword ptr [rdi+0x08], 0x02
-	mov byte ptr [rdi+0x10], 0x03
+structs 3 (call stress test).take_triple:
+	mov rdx, [rsp+0x10]
+	mov cl, [rsp+0x18]
+	mov rax, [rsp+0x08]
+	movzx rcx, cl
+	add rax, rdx
+	add rax, rcx
 	ret
 structs 3 (call stress test).take_pair:
 	sub rsp, 0x10
@@ -16,13 +15,14 @@ structs 3 (call stress test).take_pair:
 	add rax, rsi
 	add rsp, 0x10
 	ret
-structs 3 (call stress test).take_triple:
-	mov rdx, [rsp+0x10]
-	mov cl, [rsp+0x18]
-	mov rax, [rsp+0x08]
-	movzx rcx, cl
-	add rax, rdx
-	add rax, rcx
+structs 3 (call stress test).return_triple:
+	mov qword ptr [rdi], 0x01
+	mov qword ptr [rdi+0x08], 0x02
+	mov byte ptr [rdi+0x10], 0x03
+	ret
+structs 3 (call stress test).return_pair:
+	mov byte ptr [rdi], 0x01
+	mov qword ptr [rdi+0x08], 0x05
 	ret
 main:
 	push rbx

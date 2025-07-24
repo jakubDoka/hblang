@@ -1,4 +1,4 @@
-deep dedup 4 (mutuali recursive).fib2:
+deep dedup 4 (mutuali recursive).fib:
 	sub rsp, 0x08
 	cmp rdi, 0x02
 	setbe al
@@ -7,21 +7,21 @@ deep dedup 4 (mutuali recursive).fib2:
 	jz :0
 	mov rax, 0x01
 	jmp :1
-0:	call :deep dedup 4 (mutuali recursive).fib_body2
+0:	call :deep dedup 4 (mutuali recursive).fib_body
 1:	add rsp, 0x08
 	ret
-deep dedup 4 (mutuali recursive).fib_body2:
+deep dedup 4 (mutuali recursive).fib_body:
 	push rbx
 	push rbp
 	sub rsp, 0x08
 	mov rbp, rdi
 	mov rdi, rbp
 	dec rdi
-	call :deep dedup 4 (mutuali recursive).fib2
+	call :deep dedup 4 (mutuali recursive).fib
 	mov rbx, rax
 	mov rdi, rbp
 	sub rdi, 0x02
-	call :deep dedup 4 (mutuali recursive).fib2
+	call :deep dedup 4 (mutuali recursive).fib
 	add rbx, rax
 	mov rax, rbx
 	add rsp, 0x08
@@ -31,10 +31,10 @@ deep dedup 4 (mutuali recursive).fib_body2:
 main:
 	push rbx
 	mov rdi, 0x03
-	call :deep dedup 4 (mutuali recursive).fib2
+	call :deep dedup 4 (mutuali recursive).fib
 	mov rbx, rax
 	mov rdi, 0x03
-	call :deep dedup 4 (mutuali recursive).fib2
+	call :deep dedup 4 (mutuali recursive).fib
 	sub rbx, rax
 	mov rax, rbx
 	pop rbx

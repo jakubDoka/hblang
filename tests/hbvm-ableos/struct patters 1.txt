@@ -11,12 +11,12 @@ main:
      addi64 $254, $254, 24
          ld $31, $254, -24, 24
          tx
-foo.foo:
-         cp $1, $0
+bas.baz:
+       li64 $1, 2
        jala $0, $31, 0
 foo.bar:
        li64 $1, 1
        jala $0, $31, 0
-bas.baz:
-       li64 $1, 2
+foo.foo:
+         cp $1, $0
        jala $0, $31, 0

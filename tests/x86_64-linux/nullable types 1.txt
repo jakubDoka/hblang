@@ -1,3 +1,6 @@
+nullable types 1.mknull(uint):
+	mov byte ptr [rdi], 0x00
+	ret
 nullable types 1.mkval(uint):
 	sub rsp, 0x10
 	mov byte ptr [rsp], 0x01
@@ -7,9 +10,6 @@ nullable types 1.mkval(uint):
 	mov rax, [rsp+0x08]
 	mov [rdi+0x08], rax
 	add rsp, 0x10
-	ret
-nullable types 1.mknull(uint):
-	mov byte ptr [rdi], 0x00
 	ret
 main:
 	sub rsp, 0x28

@@ -1,7 +1,3 @@
-generic structs 2.Foo.Bar(uint, u8).init:
-	mov qword ptr [rdi], 0x01
-	mov byte ptr [rdi+0x08], 0x01
-	ret
 generic structs 2.Foo.Bar(uint, u8).sub:
 	sub rsp, 0x10
 	mov rax, rdi
@@ -12,6 +8,10 @@ generic structs 2.Foo.Bar(uint, u8).sub:
 	movzx rcx, cl
 	sub rax, rcx
 	add rsp, 0x10
+	ret
+generic structs 2.Foo.Bar(uint, u8).init:
+	mov qword ptr [rdi], 0x01
+	mov byte ptr [rdi+0x08], 0x01
 	ret
 main:
 	sub rsp, 0x18

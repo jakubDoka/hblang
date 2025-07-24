@@ -222,7 +222,7 @@ pub fn categorizeSystemv(ty: Id, types: *Types) TmpSpec {
                 },
                 .Enum => |e| b: {
                     if (e.getFields(ts).len == 0) return error.Impossible;
-                    if (e.getFields(ts).len == 1) return;
+                    if (e.getBackingInt(ts) == .void) return;
                     break :b .int;
                 },
                 .Pointer, .FnPtr => .int,

@@ -21,45 +21,6 @@ a:       cp $1, $0
 b:   addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
-various mem opts 1.store_pullout:
-         st $31, $254, -8, 8
-     addi64 $254, $254, -16
-       li64 $1, 1
-         st $1, $254, 0, 8
-     addi64 $1, $254, 0
-        jal $31, $0, :various mem opts 1.use(^uint)
-         cp $1, $0
-     addi64 $254, $254, 16
-         ld $31, $254, -8, 8
-       jala $0, $31, 0
-various mem opts 1.duplicate_store:
-         st $31, $254, -8, 8
-     addi64 $254, $254, -16
-       li64 $1, 1
-         st $1, $254, 0, 8
-     addi64 $1, $254, 0
-        jal $31, $0, :various mem opts 1.use(^uint)
-         st $0, $254, 0, 8
-     addi64 $1, $254, 0
-        jal $31, $0, :various mem opts 1.use(^uint)
-         ld $1, $254, 0, 8
-     addi64 $254, $254, 16
-         ld $31, $254, -8, 8
-       jala $0, $31, 0
-various mem opts 1.combine_pull_out_duplicate:
-         st $31, $254, -8, 8
-     addi64 $254, $254, -16
-       li64 $1, 1
-         st $1, $254, 0, 8
-     addi64 $1, $254, 0
-        jal $31, $0, :various mem opts 1.use(^uint)
-         st $0, $254, 0, 8
-     addi64 $1, $254, 0
-        jal $31, $0, :various mem opts 1.use(^uint)
-         ld $1, $254, 0, 8
-     addi64 $254, $254, 16
-         ld $31, $254, -8, 8
-       jala $0, $31, 0
 various mem opts 1.parallel_stores:
          st $31, $254, -8, 8
      addi64 $254, $254, -24
@@ -86,4 +47,43 @@ f:       ld $2, $254, 0, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0
 various mem opts 1.use(^uint):
+       jala $0, $31, 0
+various mem opts 1.combine_pull_out_duplicate:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -16
+       li64 $1, 1
+         st $1, $254, 0, 8
+     addi64 $1, $254, 0
+        jal $31, $0, :various mem opts 1.use(^uint)
+         st $0, $254, 0, 8
+     addi64 $1, $254, 0
+        jal $31, $0, :various mem opts 1.use(^uint)
+         ld $1, $254, 0, 8
+     addi64 $254, $254, 16
+         ld $31, $254, -8, 8
+       jala $0, $31, 0
+various mem opts 1.duplicate_store:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -16
+       li64 $1, 1
+         st $1, $254, 0, 8
+     addi64 $1, $254, 0
+        jal $31, $0, :various mem opts 1.use(^uint)
+         st $0, $254, 0, 8
+     addi64 $1, $254, 0
+        jal $31, $0, :various mem opts 1.use(^uint)
+         ld $1, $254, 0, 8
+     addi64 $254, $254, 16
+         ld $31, $254, -8, 8
+       jala $0, $31, 0
+various mem opts 1.store_pullout:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -16
+       li64 $1, 1
+         st $1, $254, 0, 8
+     addi64 $1, $254, 0
+        jal $31, $0, :various mem opts 1.use(^uint)
+         cp $1, $0
+     addi64 $254, $254, 16
+         ld $31, $254, -8, 8
        jala $0, $31, 0

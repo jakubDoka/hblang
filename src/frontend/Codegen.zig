@@ -2851,7 +2851,7 @@ pub fn lookupScopeItem(
 
         for (fields) |f| {
             if (std.mem.eql(u8, f.name, name))
-                if (fields.len <= 1) return .mkv(bsty, null) else {
+                if (self.abiCata(bsty) == .Imaginary) return .mkv(bsty, null) else {
                     return .mkv(bsty, self.bl.addIntImm(
                         sloc,
                         self.abiCata(bsty).ByValue,

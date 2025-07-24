@@ -6,11 +6,11 @@ main:
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
-generic structs 2.Foo.Bar(uint, u8).init:
-       li64 $1, 1
-        li8 $2, 1
-       jala $0, $31, 0
 generic structs 2.Foo.Bar(uint, u8).sub:
        andi $2, $2, 255
       sub64 $1, $1, $2
+       jala $0, $31, 0
+generic structs 2.Foo.Bar(uint, u8).init:
+       li64 $1, 1
+        li8 $2, 1
        jala $0, $31, 0

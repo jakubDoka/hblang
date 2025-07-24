@@ -1,8 +1,8 @@
-forced shl 1.two:
-	mov rax, 0x02
-	ret
 forced shl 1.one:
 	mov rax, 0x01
+	ret
+forced shl 1.two:
+	mov rax, 0x02
 	ret
 main:
 	push rbx

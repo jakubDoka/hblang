@@ -1,14 +1,14 @@
+arithmetic 3.mne:
+	mov rax, 0xFF
+	ret
+arithmetic 3.zero:
+	xor rax, rax
+	ret
 arithmetic 3.one:
 	mov rax, 0x01
 	ret
 arithmetic 3.cond:
 	mov rax, rdi
-	ret
-arithmetic 3.mne:
-	mov rax, 0xFF
-	ret
-arithmetic 3.mero:
-	xor rax, rax
 	ret
 main:
 	push rbx
@@ -16,7 +16,7 @@ main:
 	sub rsp, 0x08
 	call :arithmetic 3.one
 	mov rbp, rax
-	call :arithmetic 3.mero
+	call :arithmetic 3.zero
 	mov rbx, rax
 	mov rcx, rbx
 	mov rax, rbp
@@ -80,7 +80,7 @@ main:
 9:	jmp :11
 a:	call :arithmetic 3.mne
 	mov rbp, rax
-	call :arithmetic 3.mero
+	call :arithmetic 3.zero
 	mov rbx, rax
 	mov rcx, rbx
 	mov rax, rbp
@@ -144,7 +144,7 @@ f:	jmp :17
 15:	jmp :23
 16:	call :arithmetic 3.one
 	mov rbx, rax
-	call :arithmetic 3.mero
+	call :arithmetic 3.zero
 	mov rcx, rax
 	mov rdx, rcx
 	mov rax, rbx
@@ -183,7 +183,7 @@ f:	jmp :17
 21:	jmp :35
 22:	call :arithmetic 3.mne
 	mov rbx, rax
-	call :arithmetic 3.mero
+	call :arithmetic 3.zero
 	mov rdx, rax
 	mov rcx, rdx
 	mov rax, rbx

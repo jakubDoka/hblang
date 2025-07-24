@@ -20,6 +20,9 @@ nested options 1.defc:
      addi64 $254, $254, 19
          ld $31, $254, -16, 16
        jala $0, $31, 0
+nested options 1.defb:
+         st $0, $1, 0, 1
+       jala $0, $31, 0
 nested options 1.reset:
         li8 $5, -1
          cp $3, $0
@@ -31,6 +34,3 @@ nested options 1.reset:
          st $5, $4, 0, 1
      addi64 $3, $3, 1
         jmp :4
-nested options 1.defb:
-         st $0, $1, 0, 1
-       jala $0, $31, 0

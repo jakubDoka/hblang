@@ -1,10 +1,10 @@
-generic structs 1.nvec(uint):
-	mov [rdi], rsi
-	mov [rdi+0x08], rsi
-	ret
 generic structs 1.Vec.sub(uint):
 	sub rdi, rsi
 	mov rax, rdi
+	ret
+generic structs 1.nvec(uint):
+	mov [rdi], rsi
+	mov [rdi+0x08], rsi
 	ret
 main:
 	sub rsp, 0x18
