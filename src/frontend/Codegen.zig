@@ -2553,9 +2553,12 @@ pub fn typeCheck(self: *Codegen, expr: Ast.Id, got: *Value, expected: Types.Id) 
         }
 
         if (got.ty.data() == .Enum) {
-            const len = got.ty.data().Enum.getFields(self.types).len;
-            if (len <= 1) {
-                got.id = .{ .Value = self.bl.addIntImm(sloc, self.abiCata(expected).ByValue, 0) };
+            const fields = got.ty.data().Enum.getFields(self.types);
+            if (fields.len == 0) {
+                return self.report(expr, "empty enum ({}) can not upcast to an integer", .{got.ty});
+            }
+            if (fields.len == 1) {
+                got.id = .{ .Value = self.bl.addIntImm(sloc, self.abiCata(expected).ByValue, fields[0].value) };
             } else if (got.ty.size(self.types) < expected.size(self.types)) {
                 got.id = .{ .Value = self.bl.addUnOp(
                     sloc,

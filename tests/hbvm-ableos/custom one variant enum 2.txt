@@ -1,0 +1,11 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        jal $31, $0, :custom one variant enum 2.c
+     addi64 $1, $1, -5
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+custom one variant enum 2.c:
+       li64 $1, 5
+       jala $0, $31, 0

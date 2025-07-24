@@ -18,6 +18,13 @@ A := enum(uint){.b := 5}
 main := fn(): uint return @bit_cast(A.b)
 ```
 
+#### custom one variant enum 2
+```hb
+A := enum(uint){.b := 5}
+c := fn(): uint return A.b
+main := fn(): uint return c() - 5
+```
+
 #### nested options 1
 ```hb
 reset := fn(x: []u8): void for i := 0..x.len x[i] = 0xFF
