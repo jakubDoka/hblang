@@ -2,6 +2,12 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### nullable types 6
+```hb
+x := fn(y: ?never): u32 return 0
+main := fn(): u32 return x(null)
+```
+
 #### custom one variant enum 1
 ```hb
 expectations := .{

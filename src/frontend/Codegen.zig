@@ -731,8 +731,7 @@ pub fn emitNull(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
     if (nullable.nieche.offset(self.types)) |spec| {
         const abi = self.abiCata(nullable.inner);
         switch (abi) {
-            .Impossible => unreachable,
-            .Imaginary => return .{ .ty = ty },
+            .Impossible, .Imaginary => return .{ .ty = ty },
             .ByValue => return .mkv(ty, self.bl.addIntImm(sloc, spec.kind.abi(), 0)),
             .ByValuePair, .ByRef => {
                 const loc = ctx.loc orelse self.bl.addLocal(sloc, abi.size());

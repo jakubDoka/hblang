@@ -1,0 +1,8 @@
+nullable types 6.x:
+	xor rax, rax
+	ret
+main:
+	sub rsp, 0x08
+	call :nullable types 6.x
+	add rsp, 0x08
+	ret

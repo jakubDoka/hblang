@@ -512,7 +512,9 @@ pub const FnPtr = struct {
 
         for (self.args) |ty| {
             const arg_abi = abi.categorize(ty, types).toPerm(ty, types);
-            if (arg_abi == .Impossible) return null;
+            if (arg_abi == .Impossible) {
+                return null;
+            }
             cursor += builder.types(params[cursor..], false, arg_abi).len;
         }
 

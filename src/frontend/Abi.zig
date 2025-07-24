@@ -256,7 +256,10 @@ pub fn categorizeSystemv(ty: Id, types: *Types) TmpSpec {
                 .Nullable => |n| {
                     const nl = ts.store.get(n);
                     if (n.isCompact(ts)) {
-                        try classify(nl.inner, ts, offset, catas);
+                        classify(nl.inner, ts, offset, catas) catch |err| switch (err) {
+                            error.ByRef => return err,
+                            error.Impossible => return,
+                        };
                     } else {
                         try classify(.u8, ts, offset, catas);
                         try classify(nl.inner, ts, offset + nl.inner.alignment(ts), catas);
@@ -386,7 +389,10 @@ pub fn categorizeBuiltin(b: tys.Builtin) TmpSpec {
 pub fn categorizeAbleosNullable(id: utils.EntId(tys.Nullable), types: *Types) TmpSpec {
     const nullable = types.store.get(id);
     const base_abi = Abi.ableos.categorize(nullable.inner, types);
-    if (id.isCompact(types)) return base_abi;
+    if (id.isCompact(types)) {
+        if (base_abi == .Impossible) return .Imaginary;
+        return base_abi;
+    }
     return switch (base_abi) {
         .Impossible => .Imaginary,
         .Imaginary => .{ .ByValue = .i8 },
