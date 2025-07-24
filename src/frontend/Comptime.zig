@@ -556,16 +556,20 @@ pub fn jitExpr(
     ctx: Codegen.Ctx,
     value: Ast.Id,
 ) !struct { JitResult, Types.Id } {
-    return self.jitExprLow(name, scope, ctx, false, value) catch {
-        if (scope == .Tmp) scope.Tmp.errored = true;
-        return error.Never;
+    return self.jitExprLow(name, scope, ctx, false, value) catch |err| switch (err) {
+        error.Never => {
+            if (scope == .Tmp) scope.Tmp.errored = true;
+            return error.Never;
+        },
     };
 }
 
 pub fn inferType(self: *Comptime, name: []const u8, scope: Codegen.Scope, ctx: Codegen.Ctx, value: Ast.Id) !Types.Id {
-    return (self.jitExprLow(name, scope, ctx, true, value) catch {
-        if (scope == .Tmp) scope.Tmp.errored = true;
-        return error.Never;
+    return (self.jitExprLow(name, scope, ctx, true, value) catch |err| switch (err) {
+        error.Never => {
+            if (scope == .Tmp) scope.Tmp.errored = true;
+            return err;
+        },
     })[1];
 }
 
@@ -597,7 +601,7 @@ pub fn jitExprLow(
     ctx: Codegen.Ctx,
     only_inference: bool,
     value: Ast.Id,
-) !struct { JitResult, Types.Id } {
+) error{Never}!struct { JitResult, Types.Id } {
     const types = self.getTypes();
 
     const id = types.allocTempType(tys.Func);
@@ -629,7 +633,7 @@ pub fn jitExprLow(
         const ptr = gen.bl.addParam(.none, 0);
 
         ret = gen.emit(ctx.addLoc(ptr), value) catch |err| switch (err) {
-            error.Never => return err,
+            error.Never => return error.Never,
             error.Unreachable => .{ .ty = .never },
         };
         if (ctx.ty) |ty| {

@@ -21,6 +21,13 @@ x := fn(z: ?never): u32 return z != null
 main := fn(): u32 return x(null)
 ```
 
+#### nullable types 9
+```hb
+y := fn(w: never): u32 return 0
+x := fn(z: ?never): u32 if z == null return 0 else return y(z.?)
+main := fn(): u32 return x(null)
+```
+
 #### custom one variant enum 1
 ```hb
 expectations := .{

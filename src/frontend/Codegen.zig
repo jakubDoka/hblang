@@ -2407,13 +2407,17 @@ pub fn unwrapNullable(self: *Codegen, expr: Ast.Id, base: *Value, do_check: bool
         self.emitHandlerCall(handler, expr, check.getValue(sloc, self), &arg_values);
     };
 
-    if (!base.ty.needsTag(self.types)) {
+    if (nullable.nieche.offset(self.types)) |nieche| {
+        if (nieche.kind == .impossible) {
+            self.bl.addTrap(sloc, 0);
+            return error.Unreachable;
+        }
         base.ty = nullable.inner;
         return;
     }
 
     base.* = switch (self.abiCata(nullable.inner)) {
-        .Impossible => return self.report(expr, "option of uninhabited type cna not be unwrapped", .{}),
+        .Impossible => unreachable,
         .Imaginary => .{ .ty = nullable.inner },
         .ByValue, .ByRef, .ByValuePair => switch (base.id) {
             .Imaginary => unreachable,
@@ -2510,7 +2514,7 @@ pub fn checkNull(self: *Codegen, expr: Ast.Id, lhs: *Value, op: Lexer.Lexeme) !V
     return .mkv(.bool, value);
 }
 
-pub fn typeCheck(self: *Codegen, expr: Ast.Id, got: *Value, expected: Types.Id) !void {
+pub fn typeCheck(self: *Codegen, expr: Ast.Id, got: *Value, expected: Types.Id) error{Never}!void {
     const sloc = self.src(expr);
 
     if (self.types.store.unwrap(expected.data(), .Nullable)) |v| if (v.inner == got.ty) {
@@ -2588,7 +2592,7 @@ pub fn typeCheck(self: *Codegen, expr: Ast.Id, got: *Value, expected: Types.Id) 
     return;
 }
 
-pub fn report(self: *Codegen, expr: anytype, fmt: []const u8, args: anytype) EmitError {
+pub fn report(self: *Codegen, expr: anytype, fmt: []const u8, args: anytype) error{Never} {
     self.errored = true;
     self.types.report(self.parent_scope.file(self.types), expr, fmt, args);
     return error.Never;
