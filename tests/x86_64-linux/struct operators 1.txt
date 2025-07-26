@@ -1,3 +1,13 @@
 main:
+	sub rsp, 0x20
+	mov qword ptr [rsp], 0xFFFFFFFFFFFFFFFD
+	mov qword ptr [rsp+0x08], 0xFFFFFFFFFFFFFFFC
+	mov qword ptr [rsp+0x10], 0x01
+	mov qword ptr [rsp+0x18], 0x02
+	mov qword ptr [rsp], 0x01
+	mov qword ptr [rsp+0x08], 0x02
+	mov qword ptr [rsp+0x10], 0x03
+	mov qword ptr [rsp+0x18], 0x04
 	mov rax, 0x0A
+	add rsp, 0x20
 	ret

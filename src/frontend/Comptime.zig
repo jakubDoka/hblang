@@ -17,21 +17,24 @@ const Machine = root.backend.Machine;
 const HbvmGen = root.hbvm.HbvmGen;
 const Vm = root.hbvm.Vm;
 const tys = root.frontend.types;
+const OptOptions = root.backend.Machine.OptOptions;
 pub const eca = HbvmGen.eca;
 
 vm: Vm = .{},
 gen: HbvmGen,
 in_progress: std.ArrayListUnmanaged(Loc) = .{},
 
-pub const opts = root.backend.Machine.OptOptions{
-    .do_dead_code_elimination = true,
-    .do_inlining = false,
-    .do_generic_peeps = true,
-    .do_machine_peeps = true,
-    .mem2reg = true,
-    .do_gcm = true,
-    .do_uninit_analisys = true,
-};
+pub fn optimizeComptime(self: OptOptions, comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) []const u16 {
+    OptOptions.idealizeDead(Backend, ctx, func);
+    OptOptions.doMem2Reg(Backend, func);
+    OptOptions.idealizeGeneric(Backend, ctx, func, false);
+    OptOptions.idealizeMach(Backend, ctx, func);
+    OptOptions.doGcm(Backend, func);
+    if (self.error_buf != null) {
+        self.doStaticAnal(Backend, func);
+    }
+    return root.backend.Regalloc.rallocIgnoreStats(Backend, func);
+}
 
 pub const stack_size = 1024 * 100;
 
@@ -283,6 +286,8 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                         bl.func.subsume(call.inputs()[1].?, o);
                     }
                 }
+                // NOTE: the backend expects this
+                call.data_type = .bot;
                 bl.func.subsume(call.inputs()[0].?, curr);
                 continue;
             },
@@ -398,7 +403,7 @@ pub fn runVm(
     self.vm.regs.set(.stack_addr, stack_end - return_loc.len);
 
     var vm_ctx = Vm.SafeContext{
-        .writer = if (false) types.diagnostics else null,
+        .writer = if (false) std.io.getStdErr().writer().any() else null,
         .color_cfg = .escape_codes,
         .memory = self.gen.out.code.items,
         .code_start = 0,
@@ -653,13 +658,15 @@ pub fn jitExprLow(
             gen.errored = self.getTypes().retainGlobals(.@"comptime", &self.gen, null) or
                 gen.errored;
 
+            const reg_alloc_results = optimizeComptime(.debug, HbvmGen, &self.gen, @ptrCast(&gen.bl.func));
+
             self.gen.emitFunc(
                 @ptrCast(&gen.bl.func),
                 .{
                     .id = @intFromEnum(id),
                     .linkage = .exported,
                     .is_inline = false,
-                    .optimizations = opts,
+                    .optimizations = .{ .allocs = reg_alloc_results },
                     .builtins = .{},
                 },
             );
@@ -688,13 +695,15 @@ pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until:
         self.errored = self.types.retainGlobals(self.target, &self.types.ct.gen, null) or
             self.errored;
 
+        const reg_alloc_results = optimizeComptime(.debug, HbvmGen, &self.types.ct.gen, @ptrCast(&self.bl.func));
+
         self.types.ct.gen.emitFunc(
             @ptrCast(&self.bl.func),
             .{
                 .id = @intFromEnum(func),
                 .linkage = .local,
                 .is_inline = false,
-                .optimizations = opts,
+                .optimizations = .{ .allocs = reg_alloc_results },
                 .builtins = .{},
             },
         );

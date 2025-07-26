@@ -5,6 +5,7 @@ pub const backend = enum {
     pub const mem2reg = @import("backend/mem2reg.zig");
     pub const gcm = @import("backend/gcm.zig");
     pub const static_anal = @import("backend/static_anal.zig");
+    pub const inliner = @import("backend/inliner.zig");
     pub const graph = @import("backend/graph.zig");
 };
 
@@ -72,7 +73,7 @@ pub const CompileOptions = struct {
     path_projection: std.StringHashMapUnmanaged([]const u8) = .{}, // can be
     // specified multiple times as `--path-projection name path`, when the
     // `@use("name")` is encountered, its projected to `@use("path")` #CLI end
-    optimizations: backend.Machine.OptOptions = .none,
+    optimizations: backend.Machine.OptOptions.Mode = .debug,
     // run the compiler in succesion in order to collect more samples for
     // profiling
     benchmark_rounds: usize = 1,
@@ -116,8 +117,8 @@ pub const CompileOptions = struct {
 
                 switch (f.type) {
                     bool => val.* = true,
-                    frontend.Ast.InitOptions.Mode => val.* = std.meta.stringToEnum(
-                        @TypeOf(self.parser_mode),
+                    frontend.Ast.InitOptions.Mode, backend.Machine.OptOptions.Mode => val.* = std.meta.stringToEnum(
+                        @TypeOf(@field(self, f.name)),
                         args.next() orelse return error.mode,
                     ) orelse return error.@"legacy/latest",
                     []const u8 => val.* = args.next() orelse return error.target,
@@ -126,49 +127,6 @@ pub const CompileOptions = struct {
                         const key = args.next() orelse return error.@"key> <value";
                         const value = args.next() orelse return error.@"key> <value";
                         try val.put(arena, key, value);
-                    },
-                    backend.Machine.OptOptions => {
-                        const Preset = enum { none, all, custom };
-                        const preset = std.meta.stringToEnum(
-                            Preset,
-                            args.next() orelse return error.mode,
-                        ) orelse return error.@"none/all/custom";
-                        val.* = switch (preset) {
-                            .custom => b: {
-                                const options = args.next() orelse return error.@"mode=custom> <key[=value],...>";
-                                var iter = std.mem.splitScalar(u8, options, ',');
-                                var opts = backend.Machine.OptOptions.none;
-                                out: while (iter.next()) |opt| {
-                                    var key = opt;
-                                    var value: ?[]const u8 = null;
-                                    if (std.mem.indexOfScalar(u8, opt, '=')) |idx| {
-                                        key = key[0..idx];
-                                        value = key[idx + 1 ..];
-                                    }
-
-                                    inline for (std.meta.fields(backend.Machine.OptOptions)) |field| {
-                                        switch (field.type) {
-                                            bool => {
-                                                if (std.mem.eql(u8, key, field.name)) {
-                                                    @field(opts, field.name) = true;
-                                                    continue :out;
-                                                }
-                                            },
-                                            else => {},
-                                        }
-                                    }
-
-                                    try self.diagnostics.print("invalid optimization option: {s}\n", .{opt});
-                                    try self.diagnostics.print("valid options:\n", .{});
-                                    inline for (std.meta.fields(backend.Machine.OptOptions)) |field| {
-                                        if (field.type != bool) continue;
-                                        try self.diagnostics.print("\t{s}={s}\n", .{ field.name, @typeName(field.type) });
-                                    }
-                                }
-                                break :b opts;
-                            },
-                            inline else => |t| @field(backend.Machine.OptOptions, @tagName(t)),
-                        };
                     },
                     else => @compileError(@typeName(f.type)),
                 }
@@ -304,9 +262,12 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     const name = try std.mem.replaceOwned(u8, types.pool.arena.allocator(), opts.root_file, "/", "_");
 
     var anal_errors = std.ArrayListUnmanaged(backend.static_anal.Error){};
-    var optimizations: backend.Machine.OptOptions = opts.optimizations;
-    optimizations.error_buf = &anal_errors;
-    optimizations.arena = root_tmp.arena;
+
+    const optimizations = backend.Machine.OptOptions{
+        .mode = opts.optimizations,
+        .error_buf = &anal_errors,
+        .arena = root_tmp.arena,
+    };
 
     if (opts.dump_asm) {
         const out = bckend.finalizeBytes(.{
@@ -399,6 +360,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         try opts.diagnostics.print("  runtime functions: {}\n", .{runtim_functions});
         try opts.diagnostics.print("  comptime functions: {}\n", .{comptime_functions});
         try opts.diagnostics.print("  dead functions: {}\n", .{dead_functions});
+        try opts.diagnostics.print("  stale pool memory: {}\n", .{types.pool.staleMemory()});
     }
 
     const logs = if (opts.log_stats) opts.diagnostics else null;

@@ -27,10 +27,10 @@ main:
 	movss [rsp+0x10], xmm0
 	call :carry over call float op 1.opaque(uint)
 	mov [rsp], rax
-	movss xmm0, dword ptr [rsp+0x08]
-	movss xmm1, dword ptr [rsp+0x10]
-	addss xmm0, xmm1
-	movss [rsp+0x18], xmm0
+	movss xmm1, dword ptr [rsp+0x08]
+	movss xmm0, dword ptr [rsp+0x10]
+	addss xmm1, xmm0
+	movss [rsp+0x18], xmm1
 	movss xmm0, dword ptr [rsp+0x18]
 	call :carry over call float op 1.opaque(f32)
 	movss [rsp+0x1C], xmm0

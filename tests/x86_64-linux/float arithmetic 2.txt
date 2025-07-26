@@ -7,21 +7,21 @@ float arithmetic 2.sin:
 	mov rcx, 0x40C90FDB
 	mov rax, 0x43800000
 	movss xmm0, xmm1
-	cvtss2sd xmm0, xmm0
-	movq xmm6, r8
-	movq xmm5, rdi
-	movd xmm3, edx
-	movd xmm4, ecx
+	cvtss2sd xmm6, xmm0
+	movq xmm5, r8
+	movq xmm0, rdi
+	movd xmm4, edx
+	movd xmm3, ecx
 	movd xmm2, eax
-	mulsd xmm0, xmm6
-	divsd xmm0, xmm5
-	cvttsd2si rax, xmm0
+	mulsd xmm6, xmm5
+	divsd xmm6, xmm0
+	cvttsd2si rax, xmm6
 	mov rdx, rax
 	add rdx, 0x40
 	cvtsi2ss xmm0, rax
 	and rax, 0xFF
 	and rdx, 0xFF
-	mulss xmm0, xmm4
+	mulss xmm0, xmm3
 	imul rax, rsi
 	imul rdx, rsi
 	divss xmm0, xmm2
@@ -31,13 +31,12 @@ float arithmetic 2.sin:
 	add rax, rdx
 	subss xmm1, xmm0
 	movss xmm0, dword ptr [rcx]
-	movss xmm2, dword ptr [rax]
-	movss xmm4, xmm0
-	mulss xmm3, xmm4
-	movss xmm4, xmm1
-	mulss xmm3, xmm4
-	subss xmm2, xmm3
-	vfmadd231ss xmm0, xmm2, xmm1
+	movss xmm3, dword ptr [rax]
+	mulss xmm4, xmm0
+	movss xmm2, xmm1
+	mulss xmm4, xmm2
+	subss xmm3, xmm4
+	vfmadd231ss xmm0, xmm3, xmm1
 	ret
 main:
 	sub rsp, 0x08

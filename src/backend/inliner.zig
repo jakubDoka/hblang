@@ -80,8 +80,12 @@ pub fn Mixin(comptime Backend: type) type {
 
                 if (node.subclass(graph.Region)) |cfg| {
                     if (cfg.ext.cached_lca != null) {
-                        cfg.ext.cached_lca =
-                            new_node_table[cfg.base.asCfg().?.idom().base.id];
+                        const lca: *Func.Node = @ptrCast(cfg.ext.cached_lca.?);
+                        if (lca.id != std.math.maxInt(u16)) {
+                            cfg.ext.cached_lca = new_node_table[lca.id];
+                        } else {
+                            cfg.ext.cached_lca = null;
+                        }
                     }
                 }
             }
@@ -102,7 +106,7 @@ pub fn Mixin(comptime Backend: type) type {
             end: *graph.FuncNode(Backend),
             already_present: usize,
             into: *graph.Func(Backend),
-            new_nodes: union(enum) { new: []*graph.FuncNode(Backend), count: usize },
+            new_nodes: []*graph.FuncNode(Backend),
         ) void {
             errdefer unreachable;
 
@@ -111,10 +115,7 @@ pub fn Mixin(comptime Backend: type) type {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            const node_count = switch (new_nodes) {
-                .new => |n| n.len,
-                .count => |c| c,
-            };
+            const node_count = new_nodes.len;
 
             var interned = try Set.initEmpty(
                 tmp.arena.allocator(),
@@ -126,9 +127,7 @@ pub fn Mixin(comptime Backend: type) type {
 
             var deffered_phi_stack = std.ArrayListUnmanaged(*Func.Node){};
 
-            var limit: usize = 1000000;
             while (work.pop()) |node| {
-                limit -= 1;
                 if (node.id < already_present) {
                     // NOTE: this can happen, dont ask me how
                     continue;
@@ -172,7 +171,7 @@ pub fn Mixin(comptime Backend: type) type {
                     );
                     if (slot.found_existing) {
                         into.subsumeNoKill(slot.key_ptr.node, node);
-                        node.kill();
+                        into.kill(node);
                     } else {
                         slot.key_ptr.node = node;
                         for (node.inputs()) |on| if (on) |n| {
@@ -190,11 +189,9 @@ pub fn Mixin(comptime Backend: type) type {
                 }
             }
 
-            if (new_nodes == .new) {
-                for (new_nodes.new) |nn| if (nn.id != std.math.maxInt(u16)) {
-                    std.debug.assert(interned.isSet(nn.id));
-                };
-            }
+            for (new_nodes) |nn| if (nn.id != std.math.maxInt(u16)) {
+                std.debug.assert(interned.isSet(nn.id));
+            };
         }
 
         pub fn inlineInto(
@@ -205,7 +202,8 @@ pub fn Mixin(comptime Backend: type) type {
         ) void {
             errdefer unreachable;
 
-            const self: *const graph.Func(Backend) = @alignCast(@fieldParentPtr("inliner", inln));
+            const self: *const graph.Func(Backend) =
+                @alignCast(@fieldParentPtr("inliner", inln));
 
             func.gcm.loop_tree_built.assertUnlocked();
 
@@ -234,7 +232,7 @@ pub fn Mixin(comptime Backend: type) type {
             const end = cloned.new_node_table[self_end.id];
             const start = cloned.new_node_table[self_start.id];
 
-            internBatch(start, end, prev_next_id, func, .{ .new = cloned.new_nodes });
+            internBatch(start, end, prev_next_id, func, cloned.new_nodes);
 
             const entry = start.outputs()[0].get();
             std.debug.assert(entry.kind == .Entry);
@@ -251,7 +249,7 @@ pub fn Mixin(comptime Backend: type) type {
             std.debug.assert(call_end.kind == .CallEnd);
 
             var after_entry: *Func.Node = for (entry.outputs()) |o| {
-                if (o.get().isCfg()) break o.get();
+                if (o.get().isCfg() and o.get().data_type != .bot) break o.get();
             } else unreachable;
             std.debug.assert(after_entry.isBasicBlockEnd() or
                 after_entry.kind == .Region or after_entry.kind == .Loop);
@@ -359,7 +357,7 @@ pub fn Mixin(comptime Backend: type) type {
             dest.data_type = .bot;
             func_work.add(dest);
 
-            end.kill();
+            func.kill(end);
 
             for (cloned.new_nodes) |nn| if (nn.id != std.math.maxInt(u16)) {
                 func_work.add(nn);

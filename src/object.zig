@@ -253,9 +253,12 @@ pub const elf = enum {
         return data;
     }
 
-    pub fn flush(self: root.backend.Machine.Data, arch: Arch, writer: std.io.AnyWriter) anyerror!void {
+    pub fn flush(self: root.backend.Machine.Data, arch: Arch, writer_: std.io.AnyWriter) anyerror!void {
         var tmp = root.utils.Arena.scrath(null);
         defer tmp.deinit();
+
+        var writer_impl = std.io.bufferedWriter(writer_);
+        const writer = writer_impl.writer();
 
         comptime var positions: [sections.len]Word = undefined;
         const section_name_table = comptime b: {
@@ -475,6 +478,8 @@ pub const elf = enum {
                 }
             }
         }
+
+        try writer_impl.flush();
     }
 };
 

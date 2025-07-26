@@ -16,7 +16,7 @@ gpa: *utils.Pool,
 object_format: enum { elf, coff },
 memcpy: Mach.Data.SymIdx = .invalid,
 out: Mach.Data = .{},
-allocs: []u16 = undefined,
+allocs: []const u16 = undefined,
 ret_count: usize = undefined,
 local_relocs: std.ArrayListUnmanaged(Reloc) = undefined,
 block_offsets: []u32 = undefined,
@@ -316,6 +316,8 @@ pub fn isSwapped(node: *Func.Node) bool {
 
 // ================== PEEPHOLES ==================
 pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
+    const inps = node.inputs();
+
     if (Func.idealizeDead({}, func, node, worklist)) |n| return n;
 
     if (node.kind == .CInt and node.data_type == .f32) {
@@ -326,6 +328,14 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
     if (node.kind == .CInt and node.data_type == .f64) {
         const int_const = func.addIntImm(node.sloc, .i64, node.extra(.CInt).value);
         return func.addCast(node.sloc, .f64, int_const);
+    }
+
+    if (node.kind == .UnOp) {
+        if (node.data_type.meet(inps[1].?.data_type) == inps[1].?.data_type) {
+            if (node.extra(.UnOp).op == .uext or node.extra(.UnOp).op == .sext) {
+                return inps[1];
+            }
+        }
     }
 
     if (node.kind == .UnOp and node.extra(.UnOp).op == .fneg) {
@@ -823,23 +833,20 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     self.builtins = opts.builtins;
 
     try self.out.startDefineFunc(self.gpa.allocator(), id, name, .func, linkage, opts.is_inline);
-
     defer self.out.endDefineFunc(id);
 
     if (opts.linkage == .imported) return;
 
-    if (opts.optimizations.shouldDefer(id, opts.is_inline, X86_64Gen, func, self))
-        return;
+    if (opts.optimizations.apply(X86_64Gen, func, self, id)) return;
 
-    opts.optimizations.execute(X86_64Gen, self, func) catch return;
-
-    var tmp = utils.Arena.scrath(opts.optimizations.arena);
+    var tmp = utils.Arena.scrath(if (opts.optimizations == .opts)
+        opts.optimizations.opts.arena
+    else
+        null);
     defer tmp.deinit();
 
-    var visited = std.DynamicBitSetUnmanaged.initEmpty(tmp.arena.allocator(), func.next_id) catch unreachable;
-    const postorder = func.collectPostorder(tmp.arena.allocator(), &visited);
+    const postorder = func.gcm.postorder;
 
-    self.allocs = Regalloc.ralloc(X86_64Gen, func);
     self.ret_count = if (func.signature.returns()) |r| r.len else std.math.maxInt(usize);
     self.local_relocs = .initBuffer(tmp.arena.alloc(Reloc, 1024 * 10));
     self.block_offsets = tmp.arena.alloc(u32, postorder.len);

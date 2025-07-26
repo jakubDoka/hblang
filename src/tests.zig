@@ -27,7 +27,7 @@ var ran = false;
 
 pub fn runTest(name: []const u8, code: [:0]const u8) !void {
     if (!ran) {
-        utils.Arena.initScratch(1024 * 1024 * 16);
+        utils.Arena.initScratch(1024 * 1024 * 32);
         ran = true;
     }
 
@@ -47,13 +47,13 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
         const tests = [_]struct {
             []const u8,
             root.backend.Machine,
-            root.backend.Machine.OptOptions,
+            root.backend.Machine.OptOptions.Mode,
             root.frontend.Types.Abi,
         }{
-            .{ "hbvm-ableos", .init(&hbvm), .all, .ableos },
-            .{ "hbvm-ableos-no-opts", .init(&hbvm2), .none, .ableos },
-            .{ "x86_64-linux", .init(&x86_64), .all, .systemv },
-            .{ "x86_64-linux-no-opts", .init(&x86_642), .none, .systemv },
+            .{ "hbvm-ableos", .init(&hbvm), .release, .ableos },
+            .{ "hbvm-ableos-no-opts", .init(&hbvm2), .debug, .ableos },
+            .{ "x86_64-linux", .init(&x86_64), .release, .systemv },
+            .{ "x86_64-linux-no-opts", .init(&x86_642), .debug, .systemv },
         };
 
         for (tests) |tst| {
@@ -83,7 +83,7 @@ pub fn runMachineTest(
     code: [:0]const u8,
     machine: root.backend.Machine,
     abi: root.frontend.Types.Abi,
-    opts: root.backend.Machine.OptOptions,
+    opts: root.backend.Machine.OptOptions.Mode,
     gpa: std.mem.Allocator,
     out: std.io.AnyWriter,
     color: std.io.tty.Config,
@@ -173,9 +173,9 @@ pub fn runVendoredTest(path: []const u8, projs: []const [2][]const u8) !void {
     utils.Arena.initScratch(1024 * 1024 * 32);
     defer utils.Arena.deinitScratch();
     if (projs.len == 0) { // for hblsp tests
-        try test_util.runVendoredTest(path, projs, "hbvm-ableos", .all);
-        try test_util.runVendoredTest(path, projs, "hbvm-ableos-no-opts", .none);
+        try test_util.runVendoredTest(path, projs, "hbvm-ableos", .release);
+        try test_util.runVendoredTest(path, projs, "hbvm-ableos-no-opts", .debug);
     }
-    try test_util.runVendoredTest(path, projs, "x86_64-linux", .all);
-    try test_util.runVendoredTest(path, projs, "x86_64-linux-no-opts", .none);
+    try test_util.runVendoredTest(path, projs, "x86_64-linux", .release);
+    try test_util.runVendoredTest(path, projs, "x86_64-linux-no-opts", .debug);
 }

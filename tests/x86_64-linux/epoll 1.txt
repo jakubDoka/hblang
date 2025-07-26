@@ -1,7 +1,8 @@
 main:
 	sub rsp, 0x18
 	mov rax, 0x123
-	xor rdi, rdi
+	xor rcx, rcx
+	mov rdi, rcx
 	xor rsi, rsi
 	syscall
 	mov rdx, rax

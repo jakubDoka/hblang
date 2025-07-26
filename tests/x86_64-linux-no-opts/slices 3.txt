@@ -2,19 +2,19 @@ slices 3.reverse:
 	sub rsp, 0x30
 	mov [rsp], rsi
 	mov [rsp+0x08], rdx
-	mov rax, [rsp+0x08]
-	cmp rax, 0x00
-	setz cl
-	movzx rcx, cl
-	test cl, cl
+	mov rcx, [rsp+0x08]
+	cmp rcx, 0x00
+	setz al
+	movzx rax, al
+	test al, al
 	jz :0
 	mov rax, [rsp]
 	mov [rdi], rax
 	mov rax, [rsp+0x08]
 	mov [rdi+0x08], rax
 	jmp :1
-0:	dec rax
-	mov [rsp+0x10], rax
+0:	dec rcx
+	mov [rsp+0x10], rcx
 	mov qword ptr [rsp+0x18], 0x00
 	mov byte ptr [rsp+0x20], 0x00
 3:	mov rax, [rsp+0x10]
@@ -33,11 +33,11 @@ slices 3.reverse:
 	add rax, rdx
 	mov al, [rax]
 	mov [rcx], al
-	mov rax, [rsp]
-	mov rdx, [rsp+0x10]
-	mov cl, [rsp+0x20]
-	add rax, rdx
-	mov [rax], cl
+	mov rdx, [rsp]
+	mov rcx, [rsp+0x10]
+	mov al, [rsp+0x20]
+	add rdx, rcx
+	mov [rdx], al
 	mov rax, [rsp+0x18]
 	inc rax
 	mov [rsp+0x18], rax

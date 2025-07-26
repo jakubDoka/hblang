@@ -7,10 +7,10 @@ structs 1.pass:
 	sub rax, rcx
 	ret
 structs 1.Ty.sum:
-	sub rdi, 0x02
-	inc rsi
-	sub rdi, rsi
 	mov rax, rdi
+	sub rax, 0x02
+	inc rsi
+	sub rax, rsi
 	ret
 structs 1.odher_pass:
 	lea rsi, [rsp+0x08]

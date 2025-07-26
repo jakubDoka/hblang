@@ -1,13 +1,19 @@
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -40
-        lra $1, $0, :loops 16 (for different lengths error)
-         st $1, $254, 0, 8
+     addi64 $254, $254, -43
+        li8 $1, 1
+         st $1, $254, 0, 1
+        li8 $6, 3
+        lra $5, $0, :loops 16 (for different lengths error)
+       li64 $4, 38
        li64 $3, 8589934599
-     addi64 $1, $254, 0
-       li64 $2, 38
-         st $2, $254, 8, 8
-         st $3, $254, 16, 8
+     addi64 $1, $254, 3
+        li8 $2, 2
+         st $2, $254, 1, 1
+         st $6, $254, 2, 1
+         st $5, $254, 3, 8
+         st $4, $254, 11, 8
+         st $3, $254, 19, 8
         jal $31, $0, :loops 16 (for different lengths error).for_loop_length_mismatch
 loops 16 (for different lengths error).for_loop_length_mismatch:
          un

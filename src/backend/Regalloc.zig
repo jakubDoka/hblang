@@ -5,20 +5,31 @@ const graph = @import("graph.zig");
 const Map = std.AutoArrayHashMapUnmanaged;
 const Arry = std.ArrayListUnmanaged;
 const Error = error{RegallocFailed};
+const Regalloc = @This();
+
+max_lrgs: usize = 0,
+max_liveouts: usize = 0,
+max_blocks: usize = 0,
+max_instructions: usize = 0,
 
 pub inline fn swap(a: anytype, b: @TypeOf(a)) void {
     std.mem.swap(@TypeOf(a.*), a, b);
 }
 
-pub fn ralloc(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
+pub fn rallocIgnoreStats(comptime Backend: type, func: *graph.Func(Backend)) []u16 {
+    var slf = Regalloc{};
+    return slf.ralloc(Backend, func);
+}
+
+pub fn ralloc(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Backend)) []u16 {
     func.gcm.cfg_built.assertLocked();
 
-    for (0..10) |_| {
-        return rallocRound(Backend, func) catch continue;
+    for (0..7) |_| {
+        return slf.rallocRound(Backend, func) catch continue;
     } else unreachable;
 }
 
-pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u16 {
+pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Backend)) Error![]u16 {
     const Func = graph.Func(Backend);
     const Node = Func.Node;
     const CfgNode = Func.CfgNode;
@@ -226,6 +237,8 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
     const LiveMap = Map(u16, *Node);
 
+    slf.max_blocks = @max(slf.max_blocks, func.gcm.postorder.len);
+
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
@@ -241,6 +254,8 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             }
         }
     }
+
+    slf.max_instructions = @max(slf.max_instructions, func.gcm.instr_count);
 
     if (func.gcm.instr_count == 0) return &.{};
 
@@ -287,10 +302,19 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
                 break :lrg lrg;
             } else lrg: {
-                var lrg = lrg_table_build[instr.schedule] orelse
-                    LiveRange.init(&build_lrgs, instr.regMask(func, 0, tmp.arena), instr);
+                var blrg: ?*LiveRange = null;
 
-                if (lrg_table_build[instr.schedule] != null) {
+                blrg = blrg orelse lrg_table_build[instr.schedule];
+                if (instr.inPlaceSlot()) |idx| {
+                    const next_lrg = lrg_table_build[instr.dataDeps()[idx].schedule].?.unionFind();
+                    if (blrg) |l| _ = l.unify(next_lrg, build_lrgs.items);
+                    blrg = blrg orelse next_lrg;
+                }
+
+                const is_new = blrg == null;
+                var lrg = blrg orelse LiveRange.init(&build_lrgs, instr.regMask(func, 0, tmp.arena), instr);
+
+                if (!is_new) {
                     lrg.mask.setIntersection(instr.regMask(func, 0, tmp.arena));
                     if (lrg.mask.count() == 0) {
                         lrg.unionFind().fail(build_lrgs.items, &failed);
@@ -299,15 +323,6 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
                 lrg = lrg.unionFind();
                 lrg_table_build[instr.schedule] = lrg;
-
-                if (instr.inPlaceSlot()) |idx| {
-                    const up_lrg = lrg_table_build[instr.dataDeps()[idx].schedule].?.unionFind();
-                    std.debug.assert(up_lrg.parent == null);
-                    if (lrg.unify(up_lrg, build_lrgs.items)) {
-                        lrg.unionFind().fail(build_lrgs.items, &failed);
-                        continue;
-                    }
-                }
 
                 break :lrg lrg;
             };
@@ -330,6 +345,8 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
             }
         }
     }
+
+    slf.max_lrgs = @max(slf.max_lrgs, build_lrgs.items.len);
 
     for (lrg_table_build) |*lrg| {
         lrg.* = lrg.*.?.unionFind();
@@ -508,47 +525,9 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 const instr_lrg = lrg_table[instr.schedule];
                 const value = if (tmp_liveins.fetchSwapRemove(instr_lrg.index(lrgs))) |v| v.value else null;
                 _ = instr_lrg.selfConflict(instr, value, &conflicts, tmp.arena);
-
-                if (instr.kind == .Phi) continue;
-
-                for (tmp_liveins.entries.items(.value)) |concu| {
-                    const concu_lrg = lrg_table[concu.schedule];
-                    const concu_single_reg = concu_lrg.mask.count() == 1;
-                    const instr_single_reg = instr_lrg.mask.count() == 1;
-                    const first_concu = if (concu_single_reg) concu_lrg.mask.findFirstSet() else null;
-                    const first_instr = if (instr_single_reg) instr_lrg.mask.findFirstSet() else null;
-
-                    if (concu_single_reg and !instr_lrg.failed) {
-                        instr_lrg.mask.unset(first_concu.?);
-                        if (instr_lrg.mask.count() == 0) {
-                            if (should_log) {
-                                std.debug.print("killed by concu {}\n", .{concu_lrg});
-                                std.debug.print("                {}\n", .{instr_lrg});
-                            }
-                            instr_lrg.fail(lrgs, &failed);
-                        }
-                    }
-
-                    if (instr_single_reg and !concu_lrg.failed) {
-                        concu_lrg.mask.unset(first_instr.?);
-                        if (concu_lrg.mask.count() == 0) {
-                            if (should_log) {
-                                std.debug.print("killed by instr {}\n", .{instr_lrg});
-                                std.debug.print("                {}\n", .{concu_lrg});
-                            }
-                            concu_lrg.fail(lrgs, &failed);
-                        }
-                    }
-
-                    if (!concu_single_reg and !instr_single_reg and
-                        setIntersects(concu_lrg.mask, instr_lrg.mask))
-                    {
-                        std.debug.assert(instr_lrg.index(lrgs) != concu_lrg.index(lrgs));
-                        interference.set(concu_lrg.index(lrgs) + instr_lrg.index(lrgs) * lrgs.len);
-                        interference.set(instr_lrg.index(lrgs) + concu_lrg.index(lrgs) * lrgs.len);
-                    }
-                }
             }
+
+            if (instr.kind == .Phi) continue;
 
             const kills = instr.clobbers();
             if (kills != 0) for (tmp_liveins.entries.items(.key)) |al| {
@@ -567,8 +546,49 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
                 }
             };
 
+            if (instr.schedule != no_def_sentinel) {
+                const instr_lrg = lrg_table[instr.schedule];
+                for (tmp_liveins.entries.items(.key)) |id| {
+                    const concu_lrg = &lrgs[id];
+                    std.debug.assert(concu_lrg != instr_lrg);
+
+                    if (!setIntersects(concu_lrg.mask, instr_lrg.mask)) continue;
+
+                    if (instr_lrg.mask.count() != 1) {
+                        std.debug.assert(instr_lrg.index(lrgs) != concu_lrg.index(lrgs));
+                        interference.set(concu_lrg.index(lrgs) + instr_lrg.index(lrgs) * lrgs.len);
+                        interference.set(instr_lrg.index(lrgs) + concu_lrg.index(lrgs) * lrgs.len);
+                        continue;
+                    }
+
+                    concu_lrg.mask.unset(instr_lrg.mask.findFirstSet().?);
+                    if (concu_lrg.mask.count() == 0) {
+                        concu_lrg.fail(lrgs, &failed);
+                    }
+                }
+            }
+
             for (instr.dataDeps(), instr.dataDepOffset()..) |def, i| {
                 if (!instr.hasUseFor(i, def)) continue;
+
+                const out = instr.regMask(func, i, tmp.arena);
+                if (out.count() == 1) {
+                    for (
+                        tmp_liveins.entries.items(.key),
+                        @as([]*Node, tmp_liveins.entries.items(.value)),
+                    ) |concu, nd| {
+                        const concu_lrg = &lrgs[concu];
+
+                        if (nd == def) continue;
+                        if (!setIntersects(out, nd.regMask(func, 0, tmp.arena))) continue;
+
+                        concu_lrg.mask.unset(out.findFirstSet().?);
+                        if (concu_lrg.mask.count() == 0) {
+                            concu_lrg.fail(lrgs, &failed);
+                        }
+                    }
+                }
+
                 const other = if (tmp_liveins.fetchPut(
                     tmp.arena.allocator(),
                     lrg_table[def.schedule].index(lrgs),
@@ -583,6 +603,9 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
 
         for (bb.base.inputs(), 0..) |prd, i| {
             const pred: *Node = prd.?.inputs()[0].?;
+            if (pred.schedule == no_def_sentinel) {
+                func.fmtScheduled(std.io.getStdErr().writer().any(), .escape_codes);
+            }
             const pred_block = &block_liveouts[pred.schedule];
 
             var dirty: bool = false;
@@ -701,7 +724,9 @@ pub fn rallocRound(comptime Backend: type, func: *graph.Func(Backend)) Error![]u
     // coalsce
     //
     var coalesced = false;
-    for (func.gcm.postorder) |bb| {
+    for (func.gcm.postorder, 0..) |bb, j| {
+        slf.max_liveouts = @max(slf.max_liveouts, block_liveouts[j].entries.len);
+
         var removed: usize = 0;
         coalesce: for (tmp.arena.dupe(Node.Out, bb.base.outputs()), 0..) |in, i| {
             const instr = in.get();

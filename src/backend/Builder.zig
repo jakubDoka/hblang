@@ -69,7 +69,7 @@ pub fn addParam(self: *Builder, sloc: graph.Sloc, idx: usize) SpecificNode(.Arg)
 
 pub fn end(self: *Builder, _: BuildToken) void {
     //std.debug.assert(getScopeValues(self.pins).len == 0);
-    killScope(self.pins);
+    killScope(&self.func, self.pins);
 
     if (!self.isUnreachable()) self.addReturn(&.{});
 
@@ -290,7 +290,7 @@ pub fn mergeScopes(
     }
 
     func.setInputNoIntern(rhs, 0, new_ctrl);
-    killScope(lhs);
+    killScope(func, lhs);
 
     return rhs;
 }
@@ -315,9 +315,9 @@ pub fn _truncateScope(self: *Builder, scope: SpecificNode(.Scope), back_to: usiz
     }
 }
 
-pub fn killScope(scope: SpecificNode(.Scope)) void {
+pub fn killScope(func: *Func, scope: SpecificNode(.Scope)) void {
     scope.input_len = scope.input_ordered_len;
-    scope.kill();
+    func.kill(scope);
 }
 
 // #CONTROL ====================================================================
@@ -430,10 +430,10 @@ pub const Loop = struct {
             builder.func.subsume(init_values[0].inputs()[0].?, init_values[0]);
         }
 
-        if (builder.scope) |scope| killScope(scope);
+        if (builder.scope) |scope| killScope(&builder.func, scope);
         builder.scope = self.control.get(.@"break");
 
-        defer killScope(self.scope);
+        defer killScope(&builder.func, self.scope);
         const exit = builder.scope orelse {
             return;
         };
@@ -580,13 +580,13 @@ pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
         }
     }
 
-    killScope(self.scope.?);
+    killScope(&self.func, self.scope.?);
     self.scope = null;
 }
 
 pub fn addTrap(self: *Builder, sloc: graph.Sloc, code: u64) void {
     self.func.addTrap(sloc, self.control(), code);
 
-    killScope(self.scope.?);
+    killScope(&self.func, self.scope.?);
     self.scope = null;
 }

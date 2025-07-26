@@ -713,6 +713,7 @@ pub fn Func(comptime Backend: type) type {
         signature: Signature = .{},
         next_id: u16 = 0,
         corrupted: bool = false,
+        waste: usize = 0,
         start: *Node = undefined,
         end: *Node = undefined,
         gcm: gcm.Mixin(Backend) = .{},
@@ -1104,7 +1105,7 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn format(self: *const Node, comptime _: anytype, _: anytype, writer: anytype) !void {
                 const colors: std.io.tty.Config = if (!utils.freestanding and
-                    writer.writeFn == utils.getStdErr().writeFn)
+                    writer.writeFn == std.io.getStdErr().writer().any().writeFn)
                     std.io.tty.detectConfig(std.io.getStdErr())
                 else
                     .escape_codes;
@@ -1268,17 +1269,6 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn inputs(self: *Node) []?*Node {
                 return self.input_base[0..self.input_len];
-            }
-
-            pub fn kill(self: *Node) void {
-                if (self.output_len != 0) utils.panic("{any} {}\n", .{ self.outputs(), self });
-                std.debug.assert(self.output_len == 0);
-                for (self.inputs(), 0..) |oi, j| if (oi) |i| {
-                    i.removeUse(j, self);
-                };
-
-                self.* = undefined;
-                self.id = std.math.maxInt(u16);
             }
 
             pub fn tryCfg0(self: *Node) ?*CfgNode {
@@ -1507,6 +1497,7 @@ pub fn Func(comptime Backend: type) type {
         pub fn reset(self: *Self) void {
             std.debug.assert(self.arena.reset(.retain_capacity));
             self.next_id = 0;
+            self.waste = 0;
             self.start = self.addNode(.Start, .none, .top, &.{}, .{});
             self.interner = .{};
             self.gcm.cfg_built = .{};
@@ -1835,6 +1826,21 @@ pub fn Func(comptime Backend: type) type {
             return node == null or node.?.data_type == .bot;
         }
 
+        pub fn kill(func: *Self, self: *Node) void {
+            if (self.output_len != 0) utils.panic("{any} {}\n", .{ self.outputs(), self });
+            std.debug.assert(self.output_len == 0);
+            for (self.inputs(), 0..) |oi, j| if (oi) |i| {
+                i.removeUse(j, self);
+            };
+
+            func.waste += self.size();
+            func.waste += self.output_cap * @sizeOf(Node.Out);
+            func.waste += self.input_len * @sizeOf(?*Node);
+
+            self.* = undefined;
+            self.id = std.math.maxInt(u16);
+        }
+
         pub fn subsumeNoKillIgnoreIntern(self: *Self, this: *Node, target: *Node) void {
             self.ensureOutputCapacity(this, target.outputs().len);
 
@@ -1878,14 +1884,14 @@ pub fn Func(comptime Backend: type) type {
         pub fn subsumeIgnoreIntern(self: *Self, this: *Node, target: *Node) void {
             if (this.sloc == Sloc.none) this.sloc = target.sloc;
             self.subsumeNoKillIgnoreIntern(this, target);
-            target.kill();
+            self.kill(target);
         }
 
         pub fn subsume(self: *Self, this: *Node, target: *Node) void {
             if (this.sloc == Sloc.none) this.sloc = target.sloc;
             self.uninternNode(target);
             self.subsumeNoKill(this, target);
-            target.kill();
+            self.kill(target);
         }
 
         pub fn setInputNoIntern(self: *Self, use: *Node, idx: usize, def: ?*Node) void {
@@ -1917,7 +1923,7 @@ pub fn Func(comptime Backend: type) type {
             }
             if (self.reinternNode(use)) |nuse| {
                 self.subsumeNoKill(nuse, use);
-                use.kill();
+                self.kill(use);
                 return nuse;
             }
             return null;
@@ -1931,14 +1937,19 @@ pub fn Func(comptime Backend: type) type {
                     null,
                 ) == null)
             {
+                self.waste += @sizeOf(?*Node) * use.input_len;
                 const new_cap = @max(use.input_len, 1) * 2;
-                const new_inputs = self.arena.allocator().realloc(use.inputs(), new_cap) catch unreachable;
+                const new_inputs = self.arena.allocator()
+                    .realloc(use.inputs(), new_cap) catch unreachable;
                 @memset(new_inputs[use.input_len..], null);
                 use.input_base = new_inputs.ptr;
                 use.input_len = new_cap;
             }
 
-            for (use.input_base[use.input_ordered_len..use.input_len], use.input_ordered_len..) |*slot, i| {
+            for (
+                use.input_base[use.input_ordered_len..use.input_len],
+                use.input_ordered_len..,
+            ) |*slot, i| {
                 if (slot.* == null) {
                     slot.* = def;
                     return i;
@@ -1948,8 +1959,10 @@ pub fn Func(comptime Backend: type) type {
 
         pub fn ensureOutputCapacity(self: *Self, def: *Node, at_least: usize) void {
             if (def.output_cap < at_least) {
+                self.waste += @sizeOf(Node.Out) * @as(usize, def.output_cap);
                 const new_cap = @max(@max(def.output_cap, 1) * 2, at_least);
-                const new_outputs = self.arena.allocator().realloc(def.outputs(), new_cap) catch unreachable;
+                const new_outputs = self.arena.allocator()
+                    .realloc(def.outputs(), new_cap) catch unreachable;
                 def.output_base = new_outputs.ptr;
                 def.output_cap = @intCast(new_cap);
             }
@@ -2004,7 +2017,7 @@ pub fn Func(comptime Backend: type) type {
                 if (t.outputs().len == 0 and t != self.end) {
                     for (t.inputs()) |ii| if (ii) |ia| worklist.add(ia);
                     self.uninternNode(t);
-                    t.kill();
+                    self.kill(t);
                     continue;
                 }
 

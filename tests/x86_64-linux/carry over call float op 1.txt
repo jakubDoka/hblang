@@ -15,10 +15,10 @@ main:
 	movss [rsp], xmm0
 	xor rdi, rdi
 	call :carry over call float op 1.opaque(uint)
-	movss xmm0, dword ptr [rsp+0x08]
-	movss xmm1, dword ptr [rsp]
-	addss xmm0, xmm1
-	movss [rsp], xmm0
+	movss xmm1, dword ptr [rsp+0x08]
+	movss xmm0, dword ptr [rsp]
+	addss xmm1, xmm0
+	movss [rsp], xmm1
 	movss xmm0, dword ptr [rsp]
 	call :carry over call float op 1.opaque(f32)
 	movss xmm0, dword ptr [rsp]

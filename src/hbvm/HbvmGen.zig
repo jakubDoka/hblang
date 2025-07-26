@@ -4,7 +4,7 @@ emit_global_reloc_offsets: bool = false,
 local_relocs: std.ArrayListUnmanaged(BlockReloc) = undefined,
 ret_count: usize = undefined,
 block_offsets: []i32 = undefined,
-allocs: []u16 = undefined,
+allocs: []const u16 = undefined,
 spill_base: usize = undefined,
 entry: u32 = undefined,
 
@@ -419,33 +419,27 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     try self.out.startDefineFunc(self.gpa.allocator(), id, name, .func, opts.linkage, opts.is_inline);
     defer {
         self.out.endDefineFunc(id);
-
         if (self.emit_global_reloc_offsets) {
             self.out.makeRelocOffsetsGlobal(self.out.funcs.items[id]);
         }
     }
 
-    if (opts.optimizations.shouldDefer(id, opts.is_inline, HbvmGen, func, self))
-        return;
+    if (opts.optimizations.apply(HbvmGen, func, self, id)) return;
 
-    opts.optimizations.execute(HbvmGen, self, func) catch return;
-
-    const allocs = Regalloc.ralloc(HbvmGen, func);
-
-    var tmp = utils.Arena.scrath(opts.optimizations.arena);
+    var tmp = utils.Arena.scrath(if (opts.optimizations == .opts)
+        opts.optimizations.opts.arena
+    else
+        null);
     defer tmp.deinit();
 
     self.block_offsets = tmp.arena.alloc(i32, func.gcm.block_count);
     self.local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.gcm.block_count * 2));
-    self.allocs = allocs;
     self.ret_count = if (func.signature.returns()) |r| r.len else std.math.maxInt(usize);
 
     const is_tail = for (func.gcm.postorder) |bb| {
         if (bb.base.kind == .CallEnd) break false;
     } else true;
 
-    const reg_shift: u8 = 0;
-    for (self.allocs) |*r| r.* += reg_shift;
     const max_reg = if (self.allocs.len == 0) 0 else b: {
         var max: u16 = 0;
         for (self.allocs) |r| {

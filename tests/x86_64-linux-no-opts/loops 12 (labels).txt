@@ -10,18 +10,18 @@ main:
 	jz :0
 	jmp :1
 0:	mov qword ptr [rsp+0x10], 0x00
-5:	mov rcx, [rsp+0x08]
-	mov rdx, [rsp+0x10]
-	cmp rdx, 0x0A
+5:	mov rdx, [rsp+0x08]
+	mov rcx, [rsp+0x10]
+	cmp rcx, 0x0A
 	setz al
 	movzx rax, al
 	test al, al
 	jz :2
-	inc rcx
-	mov [rsp+0x08], rcx
+	inc rdx
+	mov [rsp+0x08], rdx
 	jmp :3
-2:	imul rcx, rdx
-	cmp rcx, 0x00
+2:	imul rdx, rcx
+	cmp rdx, 0x00
 	setz al
 	movzx rax, al
 	test al, al
@@ -30,7 +30,7 @@ main:
 	add rsp, 0x20
 	ret
 4:	mov rax, [rsp]
-	add rax, rcx
+	add rax, rdx
 	mov [rsp], rax
 	mov rax, [rsp+0x10]
 	inc rax

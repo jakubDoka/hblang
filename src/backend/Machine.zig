@@ -5,6 +5,7 @@ const utils = @import("../utils.zig");
 const Builder = @import("Builder.zig");
 const graph = @import("graph.zig");
 const static_anal = @import("static_anal.zig");
+const root = @import("hb");
 
 data: *anyopaque,
 _emitFunc: *const fn (self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void,
@@ -96,7 +97,7 @@ pub const Data = struct {
         func.arena = .init(gpa);
     }
 
-    pub fn getInlineFunc(self: *Data, comptime Backend: type, at: u32, force_inline: bool) ?*const graph.Func(Backend) {
+    pub fn getInlineFunc(self: *Data, comptime Backend: type, at: u32, force_inline: bool) ?*graph.Func(Backend) {
         if (self.funcs.items.len <= at or self.funcs.items[at] == .invalid) return null;
         const sym = &self.syms.items[@intFromEnum(self.funcs.items[at])];
         if (!sym.is_inline and !force_inline) return null;
@@ -688,121 +689,94 @@ pub const DataOptions = struct {
 };
 
 pub const OptOptions = struct {
-    do_dead_code_elimination: bool,
-    do_inlining: bool,
-    do_generic_peeps: bool,
-    do_machine_peeps: bool,
-    mem2reg: bool,
-    do_gcm: bool,
-    verbose: bool = false,
-    do_uninit_analisys: bool,
+    mode: Mode = .debug,
     arena: ?*utils.Arena = null,
     error_buf: ?*std.ArrayListUnmanaged(static_anal.Error) = null,
 
-    pub const all = @This(){
-        .do_dead_code_elimination = true,
-        .do_inlining = true,
-        .do_generic_peeps = true,
-        .do_machine_peeps = true,
-        .mem2reg = true,
-        .do_gcm = true,
-        .do_uninit_analisys = true,
-    };
+    pub const debug = @This(){ .mode = .debug };
+    pub const release = @This(){ .mode = .release };
 
-    pub const none = @This(){
-        .do_dead_code_elimination = true,
-        .do_inlining = false,
-        .mem2reg = false,
-        .do_generic_peeps = false,
-        .do_machine_peeps = true,
-        .do_gcm = true,
-        .do_uninit_analisys = false,
-    };
-
-    pub fn asPostInlining(self: @This()) @This() {
-        std.debug.assert(self.do_inlining);
-        var s = self;
-        s.verbose = false;
-        s.do_inlining = false;
-        s.do_gcm = false;
-        s.mem2reg = false;
-        s.arena = null;
-        s.error_buf = null;
-        return s;
-    }
-
-    pub fn asPreInline(self: @This()) @This() {
-        var s = self;
-        s.verbose = false;
-        s.do_machine_peeps = false;
-        s.do_gcm = false;
-        s.arena = null;
-        s.error_buf = null;
-        return s;
-    }
+    pub const Mode = enum { release, debug };
 
     pub fn shouldDefer(
         self: @This(),
         id: u32,
-        is_inline: bool,
         comptime B: type,
         func: *graph.Func(B),
         backend: *B,
     ) bool {
-        if (self.do_inlining or is_inline) {
-            self.asPreInline().execute(B, backend, func) catch unreachable;
-            backend.out.setInlineFunc(backend.gpa.allocator(), B, func, id);
+        switch (self.mode) {
+            .release => {
+                backend.out.setInlineFunc(backend.gpa.allocator(), B, func, id);
+                return true;
+            },
+            .debug => {
+                self.optimizeDebug(B, backend, func);
+                return false;
+            },
         }
-
-        return self.do_inlining;
     }
 
-    pub fn execute(self: @This(), comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) !void {
+    pub fn idealizeDead(comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) void {
         const Func = graph.Func(Backend);
         const Node = Func.Node;
 
         std.debug.assert(func.start.id != std.math.maxInt(u16));
 
-        if (self.do_dead_code_elimination) {
-            func.iterPeeps(ctx, struct {
-                fn wrap(cx: @TypeOf(ctx), fnc: *Func, nd: *Node, wl: *Func.WorkList) ?*Node {
-                    return @TypeOf(func.*).idealizeDead(cx, fnc, nd, wl);
-                }
-            }.wrap);
-            std.debug.assert(func.start.id != std.math.maxInt(u16));
-        }
+        func.iterPeeps(ctx, struct {
+            fn wrap(cx: @TypeOf(ctx), fnc: *Func, nd: *Node, wl: *Func.WorkList) ?*Node {
+                return @TypeOf(func.*).idealizeDead(cx, fnc, nd, wl);
+            }
+        }.wrap);
+        std.debug.assert(func.start.id != std.math.maxInt(u16));
+    }
 
-        if (self.mem2reg) {
-            func.mem2reg.run();
-        }
+    pub fn idealizeGeneric(comptime Backend: type, ctx: anytype, func: *graph.Func(Backend), minimal_only: bool) void {
+        const Func = graph.Func(Backend);
+        const Node = Func.Node;
 
-        if (self.do_generic_peeps) {
+        std.debug.assert(func.start.id != std.math.maxInt(u16));
+
+        if (minimal_only) {
+            func.iterPeeps(ctx, Backend.idealize);
+        } else {
             func.iterPeeps(ctx, struct {
                 fn wrap(cx: @TypeOf(ctx), fnc: *Func, nd: *Node, wl: *Func.WorkList) ?*Node {
                     return @TypeOf(func.*).idealize(cx, fnc, nd, wl);
                 }
             }.wrap);
-        } else if (@hasDecl(Backend, "idealize") and self.do_gcm) {
-            func.iterPeeps(ctx, Backend.idealize);
         }
+    }
 
-        if (self.do_machine_peeps and @hasDecl(Backend, "idealizeMach") and self.do_gcm) {
+    pub fn idealizeMach(comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) void {
+        if (@hasDecl(Backend, "idealizeMach")) {
             func.iterPeeps(ctx, Backend.idealizeMach);
         }
+    }
 
-        if (self.do_gcm) {
-            func.gcm.buildCfg();
-        }
+    pub fn doGcm(comptime Backend: type, func: *graph.Func(Backend)) void {
+        func.gcm.buildCfg();
+    }
 
-        if (!utils.freestanding and self.verbose)
-            func.fmtScheduled(
-                std.io.getStdErr().writer().any(),
-                std.io.tty.detectConfig(std.io.getStdErr()),
-            );
+    pub fn doStaticAnal(
+        self: OptOptions,
+        comptime Backend: type,
+        func: *graph.Func(Backend),
+    ) void {
+        func.static_anal.analize(self.arena.?, self.error_buf.?);
+    }
 
-        if (self.error_buf) |eb| {
-            func.static_anal.analize(self.arena.?, eb);
-            if (self.error_buf.?.items.len != 0) return error.HasErrors;
+    pub fn doMem2Reg(comptime Backend: type, func: *graph.Func(Backend)) void {
+        func.mem2reg.run();
+    }
+
+    pub fn optimizeDebug(self: OptOptions, comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) void {
+        idealizeDead(Backend, ctx, func);
+        idealizeGeneric(Backend, ctx, func, true);
+        idealizeMach(Backend, ctx, func);
+        doGcm(Backend, func);
+        if (self.error_buf != null) {
+            self.doStaticAnal(Backend, func);
         }
     }
 
@@ -815,7 +789,7 @@ pub const OptOptions = struct {
     ) bool {
         errdefer unreachable;
 
-        if (optimizations.do_inlining) {
+        if (optimizations.mode == .release) {
             var tmp = utils.Arena.scrath(optimizations.arena);
             defer tmp.deinit();
 
@@ -824,7 +798,6 @@ pub const OptOptions = struct {
             // do the exhausitve optimization pass with inlining, this should
             // hanlde stacked inlines as well
             //
-            const pi_opts = optimizations.asPostInlining();
 
             const sym_to_idx = tmp.arena.alloc(u32, bout.syms.items.len);
 
@@ -838,32 +811,40 @@ pub const OptOptions = struct {
                 sym_to_idx[@intFromEnum(sym)] = @intCast(i);
             }
 
-            for (bout.syms.items) |sym| {
-                if (sym.kind != .func) continue;
-                if (sym.linkage == .imported) continue;
-                const inline_func = &bout.inline_funcs.items[sym.inline_func];
-                pi_opts.execute(Backend, backend, @ptrCast(inline_func)) catch {
-                    inline_func.corrupted = true;
-                };
+            // might be faster like this
+
+            const funcs: []graph.Func(Backend) = @ptrCast(bout.inline_funcs.items);
+
+            var emit_waste: usize = 0;
+            var dead_waste: usize = 0;
+            var mem2reg_waste: usize = 0;
+            var generic_waste: usize = 0;
+            var mach_waste: usize = 0;
+            var gcm_waste: usize = 0;
+            var total_waste: usize = 0;
+            var regalloc = root.backend.Regalloc{};
+            const reg_alloc_results = tmp.arena.alloc([]u16, bout.inline_funcs.items.len);
+
+            for (funcs) |*sym| {
+                emit_waste += sym.waste;
+                idealizeDead(Backend, backend, sym);
+                dead_waste += sym.waste;
+                doMem2Reg(Backend, sym);
+                mem2reg_waste += sym.waste;
+                idealizeGeneric(Backend, backend, sym, false);
+                generic_waste += sym.waste;
             }
 
-            for (bout.syms.items) |sym| {
-                switch (sym.kind) {
-                    .func => {
-                        if (sym.linkage == .imported) continue;
-                        const func = &bout.inline_funcs.items[sym.inline_func];
-                        var op = OptOptions.none;
-                        op.do_gcm = true;
-                        op.do_dead_code_elimination = false;
-                        op.do_machine_peeps = true;
-                        op.execute(Backend, backend, @ptrCast(func)) catch {
-                            func.corrupted = true;
-                        };
-                    },
-                    .data => {},
-                    .prealloc => unreachable,
-                    .invalid => {},
+            for (funcs, reg_alloc_results) |*sym, *res| {
+                idealizeMach(Backend, backend, sym);
+                mach_waste += sym.waste;
+                doGcm(Backend, sym);
+                gcm_waste += sym.waste;
+                if (optimizations.error_buf != null) {
+                    optimizations.doStaticAnal(Backend, sym);
                 }
+                res.* = regalloc.ralloc(Backend, @ptrCast(sym));
+                total_waste += sym.waste;
             }
 
             for (bout.syms.items, sym_to_idx) |sym, i| {
@@ -876,16 +857,7 @@ pub const OptOptions = struct {
                             .id = @intCast(i),
                             .linkage = sym.linkage,
                             .is_inline = false,
-                            .optimizations = b: {
-                                var op = OptOptions.none;
-                                op.do_dead_code_elimination = false;
-                                op.do_gcm = false;
-                                op.do_machine_peeps = false;
-                                op.error_buf = optimizations.error_buf;
-                                op.arena = optimizations.arena;
-                                op.verbose = optimizations.verbose;
-                                break :b op;
-                            },
+                            .optimizations = .{ .allocs = reg_alloc_results[sym.inline_func] },
                             .builtins = builtins,
                         });
                     },
@@ -903,6 +875,14 @@ pub const OptOptions = struct {
                 inline for (std.meta.fields(Data)[1..]) |f| {
                     try d.print("  {s:<12}: {}\n", .{ f.name, @field(bout, f.name).items.len });
                 }
+
+                try d.print("  emit waste   :  {}\n", .{emit_waste});
+                try d.print("  dead waste   : +{}\n", .{dead_waste - emit_waste});
+                try d.print("  mem2reg waste: +{}\n", .{mem2reg_waste - dead_waste});
+                try d.print("  generic waste: +{}\n", .{generic_waste - mem2reg_waste});
+                try d.print("  mach waste   : +{}\n", .{mach_waste -| generic_waste});
+                try d.print("  gcm waste    : +{}\n", .{gcm_waste -| mach_waste});
+                try d.print("  waste        : +{}\n", .{total_waste -| gcm_waste});
             }
 
             bout.deduplicate();
@@ -920,6 +900,11 @@ pub const OptOptions = struct {
 
                 try d.print("  dead syms   : {}\n", .{bout.syms.items.len - alive_syms});
                 try d.print("  dead code   : {}\n", .{bout.code.items.len - alive_code});
+
+                try d.writeAll("regalloc:\n");
+                inline for (std.meta.fields(@TypeOf(regalloc))) |f| {
+                    try d.print("  {s:<12}: {}\n", .{ f.name, @field(regalloc, f.name) });
+                }
             }
         }
 
@@ -938,7 +923,29 @@ pub const EmitOptions = struct {
     name: []const u8 = &.{},
     is_inline: bool,
     linkage: Data.Linkage,
-    optimizations: OptOptions = .all,
+    optimizations: union(enum) {
+        opts: OptOptions,
+        allocs: []const u16,
+        pub fn apply(
+            self: @This(),
+            comptime Backend: type,
+            func: *graph.Func(Backend),
+            backend: *Backend,
+            id: u32,
+        ) bool {
+            switch (self) {
+                .opts => |pts| {
+                    if (pts.shouldDefer(id, Backend, func, backend)) return true;
+                    backend.allocs = root.backend.Regalloc.rallocIgnoreStats(Backend, func);
+                },
+                .allocs => |pts| {
+                    backend.allocs = pts;
+                },
+            }
+
+            return false;
+        }
+    },
     special: ?Special = null,
     builtins: Builtins,
 
@@ -956,14 +963,14 @@ pub const DisasmOpts = struct {
 
 pub const FinalizeOptions = struct {
     output: std.io.AnyWriter,
-    optimizations: OptOptions = .all,
+    optimizations: OptOptions,
     builtins: Builtins,
     logs: ?std.io.AnyWriter = null,
 };
 
 pub const FinalizeBytesOptions = struct {
     gpa: std.mem.Allocator,
-    optimizations: OptOptions = .all,
+    optimizations: OptOptions,
     builtins: Builtins,
     logs: ?std.io.AnyWriter = null,
 };

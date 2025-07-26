@@ -1,8 +1,7 @@
 regalloc crash 1.broken:
 	sub rsp, 0x10
 	lea r8, [rsp+0x18]
-	mov rax, rsi
-	mov [rsp], al
+	mov [rsp], sil
 	mov rdx, 0x18
 	xor rcx, rcx
 	mov al, [rsp]

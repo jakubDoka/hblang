@@ -34,12 +34,12 @@ main:
 	mov [rsp], rax
 	mov qword ptr [rsp+0x08], 0x15
 	mov qword ptr [rsp+0x40], 0x00
-5:	mov rcx, [rsp]
-	mov rdx, [rsp+0x40]
+5:	mov rdx, [rsp]
+	mov rcx, [rsp+0x40]
 	mov rax, [rsp+0x08]
-	add rcx, rdx
-	mov [rsp+0x20], rcx
-	sub rax, rdx
+	add rdx, rcx
+	mov [rsp+0x20], rdx
+	sub rax, rcx
 	mov [rsp+0x28], rax
 	mov rsi, [rsp+0x20]
 	mov rdx, [rsp+0x28]
@@ -50,13 +50,13 @@ main:
 	mov [rsp+0x10], rax
 	test cl, cl
 	jz :0
-	mov rcx, [rsp+0x10]
-	mov rdx, [rsp+0x40]
+	mov rdx, [rsp+0x10]
+	mov rcx, [rsp+0x40]
 	mov rax, [rsp]
-	sub rcx, rdx
-	add rax, rdx
+	sub rdx, rcx
+	add rax, rcx
 	mov [rsp+0x30], rax
-	mov [rsp+0x38], rcx
+	mov [rsp+0x38], rdx
 	mov rsi, [rsp+0x38]
 	mov rdi, [rsp+0x30]
 	call :loop check 1.check

@@ -11,10 +11,6 @@ pub fn ensureSlot(self: anytype, gpa: std.mem.Allocator, id: usize) !*std.meta.C
     return &self.items[id];
 }
 
-pub fn getStdErr() std.io.AnyWriter {
-    return if (freestanding) std.io.null_writer.any() else std.io.getStdErr().writer().any();
-}
-
 pub fn panic(comptime format: []const u8, args: anytype) noreturn {
     if (debug and !freestanding) std.debug.panic(format, args) else unreachable;
 }
@@ -39,6 +35,22 @@ pub const Pool = struct {
     pub fn sclassOf(size: usize) usize {
         std.debug.assert(size <= max_alloc_size);
         return std.math.log2_int_ceil(usize, size) -| sclass_offset;
+    }
+
+    pub fn staleMemory(self: *Pool) usize {
+        var total: usize = 0;
+
+        var unit: usize = page_size;
+        for (self.free) |header| {
+            var cursor = header;
+            while (cursor) |hdr| {
+                total += unit;
+                cursor = hdr.next;
+            }
+            unit *= 2;
+        }
+
+        return total;
     }
 
     pub fn allocator(self: *Pool) std.mem.Allocator {
@@ -100,7 +112,7 @@ pub const Arena = struct {
         arena: *Arena,
 
         pub fn deinit(self: *Scratch) void {
-            @memset(self.arena.pos[0 .. @intFromPtr(self.arena.pos) - @intFromPtr(self.prev_pos)], undefined);
+            @memset(self.prev_pos[0 .. @intFromPtr(self.arena.pos) - @intFromPtr(self.prev_pos)], undefined);
             self.arena.pos = self.prev_pos;
             self.* = undefined;
         }

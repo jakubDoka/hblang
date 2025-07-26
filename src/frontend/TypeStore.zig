@@ -666,7 +666,7 @@ pub const Id = enum(IdRepr) {
                         work_list.appendAssumeCapacity(.{ .PopScope = frame });
                         while (cursor != .void) : (depth += 1) {
                             if (std.mem.indexOfScalar(Id, scope_stack.items, cursor) != null) {
-                                work_list.appendAssumeCapacity(.{ .Name = "." });
+                                try work_list.append(tmp.arena.allocator(), .{ .Name = "." });
                                 break;
                             }
                             const key = cursor.getKey(self.tys);

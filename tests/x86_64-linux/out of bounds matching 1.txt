@@ -4,23 +4,30 @@ main:
 	mov [rsp], rax
 	mov qword ptr [rsp+0x08], 0x0C
 	xor rax, rax
-3:	mov rsi, [rsp+0x08]
-	cmp rsi, rax
+	lea rcx, [rsp]
+	mov [rsp+0x10], rcx
+3:	mov rsi, [rsp+0x10]
+	mov rcx, [rsi+0x08]
+	cmp rcx, rax
 	jnz :0
-	mov byte ptr [rsp+0x12], 0x00
-	mov cx, [rsp+0x12]
+	mov byte ptr [rsp+0x18], 0x00
+	mov cx, [rsp+0x18]
 	jmp :1
-0:	dec rsi
-	mov rcx, [rsp]
-	mov dl, [rcx]
+0:	mov rcx, [rsi]
+	mov cl, [rcx]
+	mov [rsp+0x1E], cl
+	mov rdx, [rsi+0x08]
+	mov rcx, [rsi]
+	dec rdx
 	inc rcx
-	mov [rsp], rcx
-	mov [rsp+0x08], rsi
-	mov byte ptr [rsp+0x14], 0x01
-	mov [rsp+0x15], dl
-	mov cx, [rsp+0x14]
-1:	mov [rsp+0x10], cx
-	mov cl, [rsp+0x10]
+	mov [rsi], rcx
+	mov [rsi+0x08], rdx
+	mov byte ptr [rsp+0x1C], 0x01
+	mov cl, [rsp+0x1E]
+	mov [rsp+0x1D], cl
+	mov cx, [rsp+0x1C]
+1:	mov [rsp+0x1A], cx
+	mov cl, [rsp+0x1A]
 	test cl, cl
 	jz :2
 	jmp :3

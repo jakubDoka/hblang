@@ -1,14 +1,13 @@
 regalloc crash 1.broken:
-	lea r8, [rsp+0x08]
-	mov rax, rsi
-	xor rcx, rcx
+	lea rcx, [rsp+0x08]
+	xor rax, rax
 	mov rdx, 0x18
-	cmp al, cl
+	cmp sil, al
 	jnz :0
-	mov rsi, r8
+	mov rsi, rcx
 	call :memcpy
 	jmp :1
-0:	mov rsi, r8
+0:	mov rsi, rcx
 	call :memcpy
 1:	ret
 main:

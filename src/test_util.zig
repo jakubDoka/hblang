@@ -71,7 +71,7 @@ pub fn runVendoredTest(
     path: []const u8,
     projs: []const [2][]const u8,
     target: []const u8,
-    optimizations: Mach.OptOptions,
+    optimizations: Mach.OptOptions.Mode,
 ) !void {
     var opts = root.CompileOptions{
         .diagnostics = std.io.getStdErr().writer().any(),
@@ -179,7 +179,7 @@ pub fn testBuilder(
     gpa: std.mem.Allocator,
     output: std.io.AnyWriter,
     gen: root.backend.Machine,
-    opts: root.backend.Machine.OptOptions,
+    opts: root.backend.Machine.OptOptions.Mode,
     abi: root.frontend.Types.Abi,
     colors: std.io.tty.Config,
     verbose: bool,
@@ -218,10 +218,12 @@ pub fn testBuilder(
     }
 
     var anal_errors = std.ArrayListUnmanaged(root.backend.static_anal.Error){};
-    var optimizations = opts;
-    optimizations.verbose = verbose;
-    optimizations.arena = func_arena.arena;
-    optimizations.error_buf = &anal_errors;
+
+    const optimizations = root.backend.Machine.OptOptions{
+        .mode = opts,
+        .error_buf = &anal_errors,
+        .arena = func_arena.arena,
+    };
 
     if (verbose) try header("CODEGEN", output, colors);
     var out = gen.finalizeBytes(.{

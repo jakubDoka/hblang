@@ -10,13 +10,13 @@ main:
 	lea rax, [rsp+0x68]
 	mov [rsp+0x40], rax
 	mov qword ptr [rsp+0x48], 0x03
-	mov rax, 0x02
-	mov rcx, [rsp+0x40]
-	mov [rsp+0x60], rcx
-	mov rdx, [rsp+0x48]
-	mov rcx, [rsp+0x58]
-	sub rax, rcx
-	cmp rdx, rax
+	mov rdx, 0x02
+	mov rax, [rsp+0x40]
+	mov [rsp+0x60], rax
+	mov rcx, [rsp+0x48]
+	mov rax, [rsp+0x58]
+	sub rdx, rax
+	cmp rcx, rdx
 	jz :2
 	lea rsi, [rsp+0x20]
 	lea rax, [0x0000000000000007]
@@ -29,17 +29,17 @@ main:
 	call :memcpy
 	call :loops 16 (for different lengths error).for_loop_length_mismatch
 2:	mov rax, [rsp+0x50]
-	mov rcx, [rsp+0x58]
-	cmp rcx, 0x02
-	setb dl
-	movzx rdx, dl
-	test dl, dl
+	mov rdx, [rsp+0x58]
+	cmp rdx, 0x02
+	setb cl
+	movzx rcx, cl
+	test cl, cl
 	jz :1
-	mov rdx, [rsp+0x60]
-	mov dl, [rdx]
-	movzx rdx, dl
-	add rcx, rdx
-	add rax, rcx
+	mov rcx, [rsp+0x60]
+	mov cl, [rcx]
+	movzx rcx, cl
+	add rdx, rcx
+	add rax, rdx
 	mov [rsp+0x50], rax
 	mov rax, [rsp+0x58]
 	inc rax

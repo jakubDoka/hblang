@@ -30,7 +30,8 @@ main:
 	mov rax, 0xFF
 	mov [rsp+0x10], al
 	lea rsi, [rsp+0x10]
-	lea rdi, [rsp]
+	lea rax, [rsp]
+	mov rdi, rax
 	call :function pointers 4.DynObj.new(^.Obj)
 	lea rdi, [rsp]
 	call :function pointers 4.DynObj.func

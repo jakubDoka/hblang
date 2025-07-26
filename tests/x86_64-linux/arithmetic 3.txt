@@ -145,91 +145,81 @@ f:	jmp :17
 16:	call :arithmetic 3.one
 	mov rbx, rax
 	call :arithmetic 3.zero
-	mov rcx, rax
-	mov rdx, rcx
-	mov rax, rbx
-	cmp al, dl
+	mov rcx, rbx
+	cmp cl, al
 	jnb :24
 	mov rax, 0x0D
 17:	jmp :25
 18:	mov rdx, rbx
-	mov rax, rbx
-	cmp dl, al
+	mov rcx, rbx
+	cmp dl, cl
 	jnb :26
 	mov rax, 0x0E
 19:	jmp :27
-1a:	mov rdx, rcx
-	mov rax, rbx
-	cmp al, dl
+1a:	mov rcx, rbx
+	cmp cl, al
 	jnbe :28
 	mov rax, 0x0F
 1b:	jmp :29
-1c:	mov rdx, rcx
-	mov rax, rbx
-	cmp dl, al
+1c:	mov rcx, rbx
+	cmp al, cl
 	jbe :30
 	mov rax, 0x10
 1d:	jmp :31
 1e:	mov rdx, rbx
-	mov rax, rbx
-	cmp dl, al
+	mov rcx, rbx
+	cmp dl, cl
 	jbe :32
 	mov rax, 0x11
 1f:	jmp :33
-20:	mov rax, rbx
-	cmp cl, al
+20:	mov rcx, rbx
+	cmp al, cl
 	jb :34
 	mov rax, 0x12
 21:	jmp :35
 22:	call :arithmetic 3.mne
 	mov rbx, rax
 	call :arithmetic 3.zero
-	mov rdx, rax
-	mov rcx, rdx
-	mov rax, rbx
-	cmp al, cl
+	mov rcx, rbx
+	cmp cl, al
 	jle :36
 	mov rax, 0x13
 23:	jmp :37
-24:	mov rcx, rbx
-	mov rax, rbx
-	cmp cl, al
+24:	mov rdx, rbx
+	mov rcx, rbx
+	cmp dl, cl
 	jle :38
 	mov rax, 0x14
 25:	jmp :39
-26:	mov rcx, rdx
-	mov rax, rbx
-	cmp al, cl
+26:	mov rcx, rbx
+	cmp cl, al
 	jl :40
 	mov rax, 0x15
 27:	jmp :41
-28:	mov rcx, rdx
-	mov rax, rbx
-	cmp cl, al
+28:	mov rcx, rbx
+	cmp al, cl
 	jnl :42
 	mov rax, 0x16
 29:	jmp :43
-2a:	mov rcx, rbx
-	mov rax, rbx
-	cmp cl, al
+2a:	mov rdx, rbx
+	mov rcx, rbx
+	cmp dl, cl
 	jnl :44
 	mov rax, 0x17
 2b:	jmp :45
-2c:	mov rcx, rdx
-	mov rax, rbx
-	cmp cl, al
+2c:	mov rcx, rbx
+	cmp al, cl
 	jnle :46
 	mov rax, 0x18
 2d:	jmp :47
-2e:	mov rcx, rbx
-	mov rax, rbx
-	cmp cl, al
+2e:	mov rdx, rbx
+	mov rcx, rbx
+	cmp dl, cl
 	jz :48
 	mov rax, 0x19
 2f:	jmp :49
-30:	mov rcx, rdx
-	mov rax, rbx
-	cmp al, cl
+30:	mov rcx, rbx
+	cmp cl, al
 	jnz :50
 	mov rax, 0x1A
 31:	jmp :51

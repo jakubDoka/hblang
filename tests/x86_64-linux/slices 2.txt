@@ -38,11 +38,11 @@ main:
 	jnz :1
 	inc r9
 	jmp :2
-1:	mov rsi, [r10]
-	mov r8, rdi
-	imul r8, rcx
+1:	mov r8, [r10]
+	mov rsi, rdi
+	imul rsi, rcx
 	inc rdi
-	add rsi, r8
-	mov rsi, [rsi]
+	add r8, rsi
+	mov rsi, [r8]
 	add rax, rsi
 	jmp :3

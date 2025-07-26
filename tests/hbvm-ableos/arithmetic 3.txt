@@ -127,8 +127,7 @@ e:      jmp :11
         jal $31, $0, :arithmetic 3.zero
          cp $2, $32
        sxt8 $3, $2
-         cp $2, $1
-       sxt8 $2, $2
+       sxt8 $2, $1
        jgts $3, $2, :22
        jgts $3, $3, :23
        jlts $3, $2, :24

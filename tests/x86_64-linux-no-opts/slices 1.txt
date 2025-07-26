@@ -61,13 +61,13 @@ main:
 	inc rcx
 	mov [rsp+0x98], rcx
 	jmp :2
-1:	mov rdx, [rsi]
-	mov rcx, [rsp+0x90]
-	add rdx, rdi
-	mov dl, [rdx]
-	movzx rdx, dl
-	add rcx, rdx
-	mov [rsp+0x90], rcx
+1:	mov rcx, [rsi]
+	mov rdx, [rsp+0x90]
+	add rcx, rdi
+	mov cl, [rcx]
+	movzx rcx, cl
+	add rdx, rcx
+	mov [rsp+0x90], rdx
 	mov rcx, [rsp+0xA0]
 	inc rcx
 	mov [rsp+0xA0], rcx

@@ -42,16 +42,39 @@ memcpy:
 directives 20 (@handler, @SourceLoc).slice_ioob:
 	ud2
 _start:
-	sub rsp, 0x08
-	mov byte ptr [rsp+0x04], 0x00
-	mov byte ptr [rsp], 0x01
-	mov byte ptr [rsp+0x01], 0x02
-	mov byte ptr [rsp+0x02], 0x03
-	mov byte ptr [rsp+0x03], 0x04
-	mov edi, [rsp]
+	push rbx
+	sub rsp, 0x60
+	mov byte ptr [rsp+0x54], 0x00
+	lea rax, [rsp+0x54]
+	mov [rsp+0x40], rax
+	mov qword ptr [rsp+0x48], 0x01
+	mov byte ptr [rsp+0x50], 0x01
+	mov byte ptr [rsp+0x51], 0x02
+	mov byte ptr [rsp+0x52], 0x03
+	mov byte ptr [rsp+0x53], 0x04
+	mov edi, [rsp+0x50]
 	call :directives 20 (@handler, @SourceLoc).produce_memcpy
-	lea rdi, [rsp+0x04]
+	mov rbx, [rsp+0x48]
+	xor rcx, rcx
+	mov rax, rbx
+	cmp rcx, rax
+	jbe :0
+	lea rsi, [rsp+0x20]
+	lea rax, [0x0000000000000007]
+	mov [rsp+0x20], rax
+	mov qword ptr [rsp+0x28], 0x24
+	mov rax, 0x100000001
+	mov [rsp+0x30], rax
+	mov rdx, 0x20
+	lea rdi, [rsp]
+	call :memcpy
+	xor rsi, rsi
+	xor rdx, rdx
+	mov rdi, rbx
+	call :directives 20 (@handler, @SourceLoc).slice_ioob
+0:	mov rdi, [rsp+0x40]
 	xor rsi, rsi
 	call :directives 20 (@handler, @SourceLoc).use_slice
-	add rsp, 0x08
+	add rsp, 0x60
+	pop rbx
 	ret

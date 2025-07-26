@@ -3,7 +3,8 @@ typeof is not comptime 1.broken1:
 	mov rax, 0x01
 	mov rdi, 0x02
 	lea rsi, [0x0000000000000007]
-	xor rdx, rdx
+	xor rcx, rcx
+	mov rdx, rcx
 	syscall
 	xor rax, rax
 	add rsp, 0x08

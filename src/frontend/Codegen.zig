@@ -223,7 +223,7 @@ pub fn emitReachable(
     types: *Types,
     abi: Types.Abi,
     backend: root.backend.Machine,
-    optimizations: root.backend.Machine.OptOptions,
+    optimizations: root.backend.Machine.OptOptions.Mode,
     has_main: bool,
     log_opts: struct {
         colors: std.io.tty.Config = .no_color,
@@ -271,10 +271,11 @@ pub fn emitReachable(
 
         const func_data: *root.frontend.types.Func = types.store.get(func);
 
-        var opts = optimizations;
-        opts.error_buf = &errors;
-        opts.arena = tmp.arena;
-        opts.verbose = log_opts.verbose;
+        const opts = root.backend.Machine.OptOptions{
+            .mode = optimizations,
+            .error_buf = &errors,
+            .arena = tmp.arena,
+        };
 
         backend.emitFunc(&codegen.bl.func, root.backend.Machine.EmitOptions{
             .id = @intFromEnum(func),
@@ -286,7 +287,7 @@ pub fn emitReachable(
             .is_inline = func_data.is_inline or func_data.key.name.len == 0,
             .linkage = func_data.visibility,
             .special = func_data.special,
-            .optimizations = opts,
+            .optimizations = .{ .opts = opts },
             .builtins = types.getBuiltins(),
         });
 
@@ -3097,7 +3098,10 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
 
         was_template = typ.data() == .Template;
         if (was_template) {
-            computed_args, typ = try self.instantiateTemplate(&caller, tmp.arena, expr, e, typ);
+            computed_args, typ = switch (try self.instantiateTemplate(&caller, tmp.arena, expr, e, typ)) {
+                .bypass => |v| return v,
+                .instance => |v| v,
+            };
         }
 
         const func: *tys.Func = self.types.store.unwrap(typ.data(), .Func) orelse {
@@ -3179,7 +3183,10 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
     );
 }
 
-const ITRes = struct { []Value, Types.Id };
+const ITRes = union(enum) {
+    bypass: Value,
+    instance: struct { []Value, Types.Id },
+};
 
 pub fn instantiateTemplate(
     self: *Codegen,
@@ -3283,6 +3290,23 @@ pub fn instantiateTemplate(
 
     const ret = try self.types.ct.evalTy("", template_scope, tmpl_ast.ret);
 
+    // NOTE: this is a shourtcut that avoids making a needless function instance
+    if (ret == .type and capture_idx == tmpl_ast.args.len() and
+        tmpl_ast.body.tag() == .Return and
+        tmpl_file.exprs.get(tmpl_ast.body).Return.value.tag() == .Type)
+    {
+        const prev_scope = self.parent_scope;
+        defer {
+            self.parent_scope = prev_scope;
+            self.ast = self.types.getFile(prev_scope.file(self.types));
+        }
+        self.parent_scope = template_scope;
+        self.ast = tmpl_file;
+        const value = tmpl_file.exprs.get(tmpl_ast.body).Return.value;
+        const res = try self.emitUserType(.{}, value, tmpl_file.exprs.get(value).Type);
+        return .{ .bypass = res };
+    }
+
     const slot, const alloc = self.types.intern(.Func, .{
         .loc = .{
             .scope = typ,
@@ -3305,7 +3329,7 @@ pub fn instantiateTemplate(
         alc.is_inline = tmpl.is_inline;
     }
 
-    return .{ arg_exprs, slot.key_ptr.* };
+    return .{ .instance = .{ arg_exprs, slot.key_ptr.* } };
 }
 
 fn pushReturn(

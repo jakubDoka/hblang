@@ -24,10 +24,10 @@ main:
 	inc rax
 	mov [rsp], rax
 	jmp :2
-1:	mov rax, [rsp+0x10]
-	mov rcx, [rsp+0x18]
-	add rax, rcx
-	mov [rsp+0x08], rax
+1:	mov rcx, [rsp+0x10]
+	mov rax, [rsp+0x18]
+	add rcx, rax
+	mov [rsp+0x08], rcx
 	mov rax, [rsp+0x18]
 	mov [rsp+0x10], rax
 	mov rax, [rsp+0x08]

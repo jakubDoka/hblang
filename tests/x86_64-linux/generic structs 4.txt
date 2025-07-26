@@ -59,8 +59,9 @@ main:
 	mov qword ptr [rsp+0x20], 0x02
 	mov qword ptr [rsp+0x28], 0x03
 	lea rdi, [rsp]
-	lea rsi, [rsp+0x18]
+	lea rax, [rsp+0x18]
 	mov rdx, 0x18
+	mov rsi, rax
 	call :memcpy
 	xor rdi, rdi
 	call :generic structs 4.Array((())).get(uint)

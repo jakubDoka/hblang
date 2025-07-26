@@ -9,30 +9,30 @@ main:
 	mov byte ptr [rsp+0xC6], 0x01
 	mov byte ptr [rsp+0xC7], 0x01
 	mov rdi, 0x04
-	mov al, [rsp+0xC0]
-	mov cl, [rsp+0xC4]
-	add eax, ecx
-	mov [rsp+0xC0], al
-	mov al, [rsp+0xC1]
-	mov cl, [rsp+0xC5]
-	add eax, ecx
-	mov [rsp+0xC1], al
-	mov al, [rsp+0xC2]
-	mov cl, [rsp+0xC6]
-	add eax, ecx
-	mov [rsp+0xC2], al
-	mov al, [rsp+0xC3]
-	mov cl, [rsp+0xC7]
-	add eax, ecx
-	mov [rsp+0xC3], al
-	mov al, [rsp+0xC2]
-	mov sil, [rsp+0xC1]
-	mov dl, [rsp+0xC0]
+	mov cl, [rsp+0xC0]
+	mov al, [rsp+0xC4]
+	add ecx, eax
+	mov [rsp+0xC0], cl
+	mov cl, [rsp+0xC1]
+	mov al, [rsp+0xC5]
+	add ecx, eax
+	mov [rsp+0xC1], cl
+	mov cl, [rsp+0xC2]
+	mov al, [rsp+0xC6]
+	add ecx, eax
+	mov [rsp+0xC2], cl
 	mov cl, [rsp+0xC3]
-	add eax, esi
-	add eax, edx
-	add eax, ecx
-	cmp al, dil
+	mov al, [rsp+0xC7]
+	add ecx, eax
+	mov [rsp+0xC3], cl
+	mov sil, [rsp+0xC2]
+	mov dl, [rsp+0xC1]
+	mov cl, [rsp+0xC0]
+	mov al, [rsp+0xC3]
+	add esi, edx
+	add esi, ecx
+	add esi, eax
+	cmp sil, dil
 	jz :0
 	mov rax, 0x3E9
 	jmp :1
@@ -41,17 +41,17 @@ main:
 	mov qword ptr [rsp+0x50], 0x01
 	mov qword ptr [rsp+0x58], 0x01
 	mov rsi, [rsp+0x40]
-	mov rax, [rsp+0x50]
+	mov rcx, [rsp+0x50]
 	mov rdx, [rsp+0x48]
-	mov rcx, [rsp+0x58]
-	cmp rsi, rax
-	setnz al
-	movzx rax, al
-	cmp rdx, rcx
+	mov rax, [rsp+0x58]
+	cmp rsi, rcx
 	setnz cl
 	movzx rcx, cl
-	or eax, ecx
-	test al, al
+	cmp rdx, rax
+	setnz al
+	movzx rax, al
+	or ecx, eax
+	test cl, cl
 	jz :2
 	mov rax, 0x3EA
 1:	jmp :3
@@ -60,17 +60,17 @@ main:
 	mov qword ptr [rsp+0x70], 0x01
 	mov qword ptr [rsp+0x78], 0x01
 	mov rsi, [rsp+0x60]
-	mov rax, [rsp+0x70]
+	mov rcx, [rsp+0x70]
 	mov rdx, [rsp+0x68]
-	mov rcx, [rsp+0x78]
-	cmp rsi, rax
-	setz al
-	movzx rax, al
-	cmp rdx, rcx
+	mov rax, [rsp+0x78]
+	cmp rsi, rcx
 	setz cl
 	movzx rcx, cl
-	and eax, ecx
-	test al, al
+	cmp rdx, rax
+	setz al
+	movzx rax, al
+	and ecx, eax
+	test cl, cl
 	jz :4
 	mov rax, 0x3EB
 3:	jmp :5
@@ -78,60 +78,60 @@ main:
 	mov qword ptr [rsp+0x88], 0x02
 	mov qword ptr [rsp+0x90], 0x03
 	mov qword ptr [rsp+0x98], 0x04
-	mov rax, [rsp+0x80]
-	mov rcx, [rsp+0x90]
-	add rax, rcx
-	mov [rsp], rax
-	mov rax, [rsp+0x88]
-	mov rcx, [rsp+0x98]
-	add rax, rcx
-	mov [rsp+0x08], rax
-	mov rax, [rsp+0x90]
 	mov rcx, [rsp+0x80]
-	sub rax, rcx
-	mov [rsp+0x10], rax
-	mov rax, [rsp+0x98]
+	mov rax, [rsp+0x90]
+	add rcx, rax
+	mov [rsp], rcx
 	mov rcx, [rsp+0x88]
-	sub rax, rcx
-	mov [rsp+0x18], rax
+	mov rax, [rsp+0x98]
+	add rcx, rax
+	mov [rsp+0x08], rcx
+	mov rcx, [rsp+0x90]
+	mov rax, [rsp+0x80]
+	sub rcx, rax
+	mov [rsp+0x10], rcx
+	mov rcx, [rsp+0x98]
+	mov rax, [rsp+0x88]
+	sub rcx, rax
+	mov [rsp+0x18], rcx
 	mov qword ptr [rsp+0xA0], 0x00
 	mov qword ptr [rsp+0xA8], 0x00
-	mov rax, [rsp+0xA0]
-	mov rcx, [rsp+0x90]
-	sub rax, rcx
-	mov [rsp+0x20], rax
-	mov rax, [rsp+0xA8]
-	mov rcx, [rsp+0x98]
-	sub rax, rcx
-	mov [rsp+0x28], rax
+	mov rcx, [rsp+0xA0]
+	mov rax, [rsp+0x90]
+	sub rcx, rax
+	mov [rsp+0x20], rcx
+	mov rcx, [rsp+0xA8]
+	mov rax, [rsp+0x98]
+	sub rcx, rax
+	mov [rsp+0x28], rcx
 	mov rax, [rsp+0x80]
 	mov [rsp+0x30], rax
 	mov rax, [rsp+0x88]
 	mov [rsp+0x38], rax
-	mov rax, [rsp+0x20]
-	mov rcx, [rsp]
-	add rax, rcx
-	mov [rsp+0x20], rax
-	mov rax, [rsp+0x28]
-	mov rcx, [rsp+0x08]
-	add rax, rcx
-	mov [rsp+0x28], rax
-	mov rax, [rsp+0x30]
-	mov rcx, [rsp+0x10]
-	add rax, rcx
-	mov [rsp+0x30], rax
-	mov rax, [rsp+0x38]
-	mov rcx, [rsp+0x18]
-	add rax, rcx
-	mov [rsp+0x38], rax
-	mov rax, [rsp+0x20]
+	mov rcx, [rsp+0x20]
+	mov rax, [rsp]
+	add rcx, rax
+	mov [rsp+0x20], rcx
+	mov rcx, [rsp+0x28]
+	mov rax, [rsp+0x08]
+	add rcx, rax
+	mov [rsp+0x28], rcx
 	mov rcx, [rsp+0x30]
-	add rax, rcx
-	mov [rsp+0xB0], rax
-	mov rax, [rsp+0x28]
+	mov rax, [rsp+0x10]
+	add rcx, rax
+	mov [rsp+0x30], rcx
 	mov rcx, [rsp+0x38]
-	add rax, rcx
-	mov [rsp+0xB8], rax
+	mov rax, [rsp+0x18]
+	add rcx, rax
+	mov [rsp+0x38], rcx
+	mov rcx, [rsp+0x20]
+	mov rax, [rsp+0x30]
+	add rcx, rax
+	mov [rsp+0xB0], rcx
+	mov rcx, [rsp+0x28]
+	mov rax, [rsp+0x38]
+	add rcx, rax
+	mov [rsp+0xB8], rcx
 	mov rax, [rsp+0xB0]
 	mov rcx, [rsp+0xB8]
 	add rax, rcx
