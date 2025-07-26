@@ -93,8 +93,8 @@ main := fn(): uint {
 
 #### float arithmetic 1
 ```hb
-main := fn(): f64 {
-    return 10.0 - 20.0 / 2.0 + 4.0 * (2.0 + 2.0) - 4.0 * 4.0 + 1.0 - 1.0
+main := fn(): int {
+    return @float_to_int(10.0 - 20.0 / 2.0 + 4.0 * (2.0 + 2.0) - 4.0 * 4.0 + 1.0 - 1.0)
 }
 ```
 

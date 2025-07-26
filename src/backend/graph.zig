@@ -993,7 +993,7 @@ pub fn Func(comptime Backend: type) type {
             // TODO: this is a hack, its here because otherwise everithing gets pulled out of
             // the loop and cloggs the register allocator
             pub fn isCheap(self: *Node) bool {
-                return self.kind == .StackArgOffset or (self.kind == .UnOp and self.extra(.UnOp).op == .cast);
+                return self.kind == .StackArgOffset;
             }
 
             pub fn dataDeps(self: *Node) []*Node {
@@ -2054,6 +2054,28 @@ pub fn Func(comptime Backend: type) type {
             visited.set(node.id);
             pos.append(node.asCfg().?) catch unreachable;
             for (node.outputs()) |o| if (o.get().isCfg()) collectPostorder3(self, o.get(), arena, pos, visited, only_basic);
+        }
+
+        pub fn compact(self: *Self) void {
+            if (self.arena.queryCapacity() > self.waste * 2) return;
+
+            const Inln = inliner.Mixin(Backend);
+
+            const prev_arena = self.arena;
+            defer prev_arena.deinit();
+            self.arena = .init(self.arena.child_allocator);
+            self.waste = 0;
+            self.interner = undefined;
+
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            const cloned = Inln.cloneNodes(self.start, self.end, self.next_id, &self.arena, 0, tmp.arena);
+
+            self.start = cloned.new_node_table[self.start.id];
+            self.end = cloned.new_node_table[self.end.id];
+            self.next_id = @intCast(cloned.new_node_table.len);
+            self.signature = self.signature.dupe(self.arena.allocator());
         }
 
         pub fn idealizeDead(_: anytype, self: *Self, node: *Node, worklist: *WorkList) ?*Node {

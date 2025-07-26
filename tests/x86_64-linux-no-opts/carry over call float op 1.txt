@@ -12,14 +12,12 @@ carry over call float op 1.opaque(uint):
 	ret
 main:
 	sub rsp, 0x28
-	mov rax, 0x3F800000
-	movd xmm0, eax
+	movss xmm0, dword ptr [0x0000000000000008]
 	call :carry over call float op 1.opaque(f32)
 	movss [rsp+0x0C], xmm0
-	mov rax, 0x40000000
-	movss xmm0, dword ptr [rsp+0x0C]
-	movss [rsp+0x08], xmm0
-	movd xmm0, eax
+	movss xmm0, dword ptr [0x0000000000000008]
+	movss xmm1, dword ptr [rsp+0x0C]
+	movss [rsp+0x08], xmm1
 	call :carry over call float op 1.opaque(f32)
 	movss [rsp+0x14], xmm0
 	xor rdi, rdi

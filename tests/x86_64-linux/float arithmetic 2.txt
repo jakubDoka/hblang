@@ -1,29 +1,24 @@
 float arithmetic 2.sin:
 	movss xmm1, xmm0
-	mov r8, 0x4060000000000000
-	mov rdi, 0x400921FB60000000
-	mov rsi, 0x04
-	mov rdx, 0x3F000000
-	mov rcx, 0x40C90FDB
-	mov rax, 0x43800000
+	movsd xmm6, qword ptr [0x0000000000000009]
+	movsd xmm5, qword ptr [0x0000000000000009]
+	mov rcx, 0x04
+	movss xmm4, dword ptr [0x0000000000000008]
+	movss xmm3, dword ptr [0x0000000000000008]
+	movss xmm2, dword ptr [0x0000000000000008]
 	movss xmm0, xmm1
-	cvtss2sd xmm6, xmm0
-	movq xmm5, r8
-	movq xmm0, rdi
-	movd xmm4, edx
-	movd xmm3, ecx
-	movd xmm2, eax
-	mulsd xmm6, xmm5
-	divsd xmm6, xmm0
-	cvttsd2si rax, xmm6
+	cvtss2sd xmm0, xmm0
+	mulsd xmm0, xmm6
+	divsd xmm0, xmm5
+	cvttsd2si rax, xmm0
 	mov rdx, rax
 	add rdx, 0x40
 	cvtsi2ss xmm0, rax
 	and rax, 0xFF
 	and rdx, 0xFF
 	mulss xmm0, xmm3
-	imul rax, rsi
-	imul rdx, rsi
+	imul rax, rcx
+	imul rdx, rcx
 	divss xmm0, xmm2
 	lea rcx, [0x0000000000000007]
 	add rcx, rax
@@ -40,12 +35,9 @@ float arithmetic 2.sin:
 	ret
 main:
 	sub rsp, 0x08
-	mov rax, 0x447A0000
-	movd xmm0, eax
-	movss [rsp], xmm0
-	movss xmm0, dword ptr [rsp]
+	movss xmm0, dword ptr [0x0000000000000008]
 	call :float arithmetic 2.sin
-	movss xmm1, dword ptr [rsp]
+	movss xmm1, dword ptr [0x0000000000000008]
 	mulss xmm0, xmm1
 	cvttss2si rax, xmm0
 	sub rax, 0x33A

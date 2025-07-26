@@ -885,6 +885,8 @@ pub const OptOptions = struct {
                 try d.print("  waste        : +{}\n", .{total_waste -| gcm_waste});
             }
 
+            if (@hasDecl(Backend, "preLinkHook")) backend.preLinkHook();
+
             bout.deduplicate();
             bout.elimitaneDeadCode();
 
@@ -906,6 +908,8 @@ pub const OptOptions = struct {
                     try d.print("  {s:<12}: {}\n", .{ f.name, @field(regalloc, f.name) });
                 }
             }
+        } else {
+            if (@hasDecl(Backend, "preLinkHook")) backend.preLinkHook();
         }
 
         if (optimizations.error_buf) |eb| if (eb.items.len != 0) return true;

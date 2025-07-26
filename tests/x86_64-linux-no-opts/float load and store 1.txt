@@ -7,14 +7,11 @@ float load and store 1.fun:
 	ret
 main:
 	sub rsp, 0x28
-	mov rsi, 0x3F800000
-	mov rdx, 0x40000000
-	mov rax, 0x40400000
-	lea rcx, [rsp]
-	movd xmm0, esi
+	movss xmm0, dword ptr [0x0000000000000008]
 	movss [rsp+0x0C], xmm0
-	movd xmm1, eax
-	movd xmm0, edx
+	movss xmm1, dword ptr [0x0000000000000008]
+	lea rcx, [rsp]
+	movss xmm0, dword ptr [0x0000000000000008]
 	movss [rsp+0x10], xmm0
 	movss [rsp+0x14], xmm1
 	mov rax, [rsp+0x0C]

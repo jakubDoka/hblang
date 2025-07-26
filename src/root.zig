@@ -117,7 +117,11 @@ pub const CompileOptions = struct {
 
                 switch (f.type) {
                     bool => val.* = true,
-                    frontend.Ast.InitOptions.Mode, backend.Machine.OptOptions.Mode => val.* = std.meta.stringToEnum(
+                    backend.Machine.OptOptions.Mode => val.* = std.meta.stringToEnum(
+                        @TypeOf(@field(self, f.name)),
+                        args.next() orelse return error.mode,
+                    ) orelse return error.@"debug/release",
+                    frontend.Ast.InitOptions.Mode => val.* = std.meta.stringToEnum(
                         @TypeOf(@field(self, f.name)),
                         args.next() orelse return error.mode,
                     ) orelse return error.@"legacy/latest",

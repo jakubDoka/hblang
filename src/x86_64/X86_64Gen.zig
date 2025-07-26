@@ -15,6 +15,10 @@ const Move = utils.Move(Reg);
 gpa: *utils.Pool,
 object_format: enum { elf, coff },
 memcpy: Mach.Data.SymIdx = .invalid,
+f32s: Mach.Data.SymIdx = .invalid,
+f32index: std.ArrayHashMapUnmanaged(f32, void, CtxF32, false) = .{},
+f64s: Mach.Data.SymIdx = .invalid,
+f64index: std.ArrayHashMapUnmanaged(f64, void, CtxF64, false) = .{},
 out: Mach.Data = .{},
 allocs: []const u16 = undefined,
 ret_count: usize = undefined,
@@ -24,6 +28,28 @@ arg_base: u32 = undefined,
 local_base: u32 = undefined,
 slot_base: c_int = undefined,
 builtins: Mach.Builtins = undefined,
+
+const CtxF32 = struct {
+    pub fn eql(_: @This(), a: f32, b: f32, _: usize) bool {
+        return a == b;
+    }
+    pub fn hash(_: @This(), key: f32) u32 {
+        return @bitCast(key);
+    }
+};
+
+const CtxF64 = struct {
+    pub fn eql(_: @This(), a: f64, b: f64, _: usize) bool {
+        return a == b;
+    }
+    pub fn hash(_: @This(), key: f64) u32 {
+        const k: packed struct(u64) {
+            a: u32,
+            b: u32,
+        } = @bitCast(key);
+        return k.a ^ k.b;
+    }
+};
 
 const syscall = std.math.maxInt(u32);
 const max_instruction_size = 15;
@@ -269,6 +295,16 @@ pub const classes = enum {
         base: graph.If = .{},
         op: graph.BinOp,
     };
+    pub const F32 = extern struct {
+        imm: f32,
+
+        pub const is_clone = true;
+    };
+    pub const F64 = extern struct {
+        imm: f64,
+
+        pub const is_clone = true;
+    };
 };
 
 pub const biased_regs = b: {
@@ -321,13 +357,15 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
     if (Func.idealizeDead({}, func, node, worklist)) |n| return n;
 
     if (node.kind == .CInt and node.data_type == .f32) {
-        const int_const = func.addIntImm(node.sloc, .i32, node.extra(.CInt).value);
-        return func.addCast(node.sloc, .f32, int_const);
+        return func.addNode(.F32, node.sloc, .f32, &.{null}, .{
+            .imm = @bitCast(@as(u32, @intCast(node.extra(.CInt).value))),
+        });
     }
 
     if (node.kind == .CInt and node.data_type == .f64) {
-        const int_const = func.addIntImm(node.sloc, .i64, node.extra(.CInt).value);
-        return func.addCast(node.sloc, .f64, int_const);
+        return func.addNode(.F64, node.sloc, .f64, &.{null}, .{
+            .imm = @bitCast(node.extra(.CInt).value),
+        });
     }
 
     if (node.kind == .UnOp) {
@@ -1051,6 +1089,16 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     self.emitImm(i64, extra.value);
                 }
             },
+            inline .F32, .F64 => |extra| {
+                const idx = &@field(self, @typeName(@TypeOf(extra.imm)) ++ "index");
+                const sym = &@field(self, @typeName(@TypeOf(extra.imm)) ++ "s");
+
+                const ty = @field(graph.DataType, @typeName(@TypeOf(extra.imm)));
+                self.emitMemStoreOrLoad(ty, self.getReg(instr), .rip, null, false);
+                const res = try idx.getOrPut(self.gpa.allocator(), extra.imm);
+                const dis: i16 = @intCast(@intFromPtr(res.key_ptr) - @intFromPtr(idx.entries.bytes));
+                try self.out.addReloc(self.gpa.allocator(), sym, 4, dis - 4, 4);
+            },
             .MemCpy => {
                 // call id
                 self.emitBytes(&.{ 0xe8, 0, 0, 0, 0 });
@@ -1103,8 +1151,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 self.emitByte(0x8d);
                 self.emitIndirectAddr(dst, .rip, .no_index, 1, null);
 
-                try self.out.addGlobalReloc(self.gpa
-                    .allocator(), extra.id, 4, -4, 4);
+                try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, 4, -4, 4);
             },
             .FuncAddr => |extra| {
                 // lea dst, [rip+reloc]
@@ -1935,6 +1982,19 @@ pub fn emitData(self: *X86_64Gen, opts: Mach.DataOptions) void {
     );
 }
 
+pub fn preLinkHook(self: *X86_64Gen) void {
+    errdefer unreachable;
+    inline for (.{ "f32", "f64" }) |name| {
+        const idx = @field(self, name ++ "index");
+        const sym = &@field(self, name ++ "s");
+
+        try self.out.startDefineSym(self.gpa.allocator(), sym, name ++ "s", .data, .local, true, false);
+        try self.out.code.appendSlice(self.gpa.allocator(), @ptrCast(idx.entries.items(.key)));
+        self.out.endDefineSym(sym.*);
+        try self.out.globals.append(self.gpa.allocator(), sym.*);
+    }
+}
+
 pub fn finalize(self: *X86_64Gen, opts: Mach.FinalizeOptions) void {
     errdefer unreachable;
 
@@ -1946,6 +2006,10 @@ pub fn finalize(self: *X86_64Gen, opts: Mach.FinalizeOptions) void {
     };
 
     self.memcpy = .invalid;
+    self.f32s = .invalid;
+    self.f64s = .invalid;
+    self.f32index.clearRetainingCapacity();
+    self.f64index.clearRetainingCapacity();
     self.out.reset();
 }
 
