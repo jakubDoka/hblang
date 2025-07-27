@@ -1333,6 +1333,13 @@ main := fn(): uint {
 }
 ```
 
+#### fmt prec 3
+```hb
+main := fn(): uint {
+    return (@as(??u8, null) || return 0) || return 1
+}
+```
+
 #### zero sized structs 1
 ```hb
 main := fn(): uint {

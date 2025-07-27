@@ -460,16 +460,28 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
         .Decl => |d| try self.fmtDecl(d),
         .BinOp => |co| {
             var o = co.*;
-            if (o.op == .@"=" and o.rhs.tag() == .BinOp and self.ast.exprs.getTyped(.BinOp, o.rhs).?.lhs == o.lhs) {
-                o.op = self.ast.exprs.getTyped(.BinOp, o.rhs).?.op.toAssignment();
-                o.rhs = self.ast.exprs.getTyped(.BinOp, o.rhs).?.rhs;
+            if (o.op == .@"=" and o.rhs.tag() == .BinOp and self.ast.exprs.get(o.rhs).BinOp.lhs == o.lhs) {
+                o.op = self.ast.exprs.get(o.rhs).BinOp.op.toAssignment();
+                o.rhs = self.ast.exprs.get(o.rhs).BinOp.rhs;
             }
-            if (prec < o.op.precedence(self.is_if_or_while)) try self.buf.appendSlice("(");
-            try self.fmtExprPrec(o.lhs, o.op.precedence(self.is_if_or_while));
+
+            const should_parenthesize = prec < o.op.precedence(self.is_if_or_while);
+
+            if (should_parenthesize) try self.buf.appendSlice("(");
+
+            if (o.lhs.tag() == .BinOp and self.ast.exprs.get(o.lhs).BinOp.rhs.tag() == .Return) {
+                try self.buf.appendSlice("(");
+                try self.fmtExprPrec(o.lhs, 255);
+                try self.buf.appendSlice(")");
+            } else {
+                try self.fmtExprPrec(o.lhs, o.op.precedence(self.is_if_or_while));
+            }
+
             try self.buf.appendSlice(" ");
             try self.buf.appendSlice(o.op.repr());
             if (!try self.preserveWrapping(o.rhs)) try self.buf.appendSlice(" ");
-            if (o.rhs.tag() == .BinOp and self.ast.exprs.getTyped(.BinOp, o.rhs).?
+
+            if (o.rhs.tag() == .BinOp and self.ast.exprs.get(o.rhs).BinOp
                 .op.precedence(self.is_if_or_while) == o.op.precedence(self.is_if_or_while))
             {
                 try self.buf.appendSlice("(");
@@ -478,7 +490,8 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             } else {
                 try self.fmtExprPrec(o.rhs, o.op.precedence(self.is_if_or_while));
             }
-            if (prec < o.op.precedence(self.is_if_or_while)) try self.buf.appendSlice(")");
+
+            if (should_parenthesize) try self.buf.appendSlice(")");
         },
         .Use => |use| {
             try self.buf.writer().print(
