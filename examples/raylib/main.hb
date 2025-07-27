@@ -160,7 +160,7 @@ main := fn(): uint {
 
 			if intersects(enemy.pos, enemy_size, player_pos, player_size) {
 				player_size -= $damage
-				if player_size == 0.0 init_world(screen_size)
+				if player_size == 0 init_world(screen_size)
 				player_pos += (player_pos - enemy.pos).norm() * .xy(player_size * 2.0)
 			}
 		}
@@ -170,7 +170,7 @@ main := fn(): uint {
 			bullet.pos += bullet.dir * .xy(get_frame_time())
 			bullet.pos = wrap_vec(bullet.pos, screen_size)
 			bullet.life -= get_frame_time()
-			if bullet.life <= 0.0 delete_bullet(i)
+			if bullet.life <= 0 delete_bullet(i)
 
 			for j := 0.., enemy := enemyes[..enemy_count] {
 				if intersects(bullet.pos, player_size * 0.5, enemy.pos, enemy_size) {
@@ -188,17 +188,17 @@ main := fn(): uint {
 				vel: V2 = .xy(@int_to_float(get_random_value(100, base_enemy_speed)))
 
 				if i % 4 == 0 {
-					pos.x = 0.0
+					pos.x = 0
 				} else if i % 4 == 1 {
 					pos.x = screen_size.x
 				} else if i % 4 == 2 {
-					pos.y = 0.0
+					pos.y = 0
 				} else {
 					pos.y = screen_size.y
 				}
 
 				if i % 2 == 0 {
-					vel = vel * .(-1.0, -1.0)
+					vel *= .(-1, -1)
 				}
 
 				create_enemy(pos, vel)

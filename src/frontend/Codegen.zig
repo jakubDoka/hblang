@@ -685,15 +685,21 @@ pub fn emitParseQuotes(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Quotes)) 
 }
 
 pub fn emitInteger(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Integer)) EmitError!Value {
-    var ty = ctx.ty orelse .uint;
-    if (self.types.store.unwrap(ty.data(), .Nullable)) |n| ty = n.inner;
-    if (!ty.isInteger()) ty = .uint;
     const shift: u8 = if (e.base == 10) 0 else 2;
     const num_str = self.ast.tokenSrc(e.pos.index)[shift..];
-    const parsed = std.fmt.parseInt(u64, num_str, e.base) catch |err| switch (err) {
+    var parsed = std.fmt.parseInt(u64, num_str, e.base) catch |err| switch (err) {
         error.InvalidCharacter => return self.report(expr, "invalid integer literal", .{}),
         error.Overflow => return self.report(expr, "number does not fit into 64 bits", .{}),
     };
+
+    var ty = ctx.ty orelse .uint;
+    if (self.types.store.unwrap(ty.data(), .Nullable)) |n| ty = n.inner;
+    if (ty.isFloat()) parsed = switch (ty) {
+        .f32 => @as(u32, @bitCast(@as(f32, @floatFromInt(parsed)))),
+        .f64 => @bitCast(@as(f64, @floatFromInt(parsed))),
+        else => unreachable,
+    } else if (!ty.isInteger()) ty = .uint;
+
     return .mkv(ty, self.bl.addIntImm(self.src(expr), self.abiCata(ty).ByValue, @bitCast(parsed)));
 }
 
