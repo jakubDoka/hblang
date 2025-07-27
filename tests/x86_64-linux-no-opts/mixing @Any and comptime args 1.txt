@@ -32,8 +32,8 @@ main:
 	mov rdi, [rsp]
 	call :mixing @Any and comptime args 1.bind(?i32, .main)
 	mov [rsp+0x18], rax
+	mov rax, [rsp+0x18]
+	mov [rsp+0x10], rax
 	xor rax, rax
-	mov rcx, [rsp+0x18]
-	mov [rsp+0x10], rcx
 	add rsp, 0x28
 	ret

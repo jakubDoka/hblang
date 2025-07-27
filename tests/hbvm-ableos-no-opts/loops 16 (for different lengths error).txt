@@ -3,30 +3,30 @@ main:
      addi64 $254, $254, -83
          st $0, $254, 0, 8
          st $0, $254, 8, 8
-        li8 $5, 3
+        li8 $4, 3
      addi64 $3, $254, 16
        li64 $2, 3
-       li64 $4, 2
         li8 $1, 1
          st $1, $254, 16, 1
         li8 $1, 2
          st $1, $254, 17, 1
-         st $5, $254, 18, 1
+         st $4, $254, 18, 1
          st $3, $254, 19, 8
          st $2, $254, 27, 8
          ld $1, $254, 19, 8
          st $1, $254, 35, 8
-         ld $2, $254, 27, 8
          ld $1, $254, 8, 8
+       li64 $4, 2
+         ld $2, $254, 27, 8
       sub64 $1, $4, $1
         jeq $2, $1, :0
+        lra $1, $0, :loops 16 (for different lengths error)
+         st $1, $254, 43, 8
+       li64 $1, 38
+         st $1, $254, 51, 8
+       li64 $1, 8589934599
+         st $1, $254, 59, 8
      addi64 $1, $254, 43
-        lra $2, $0, :loops 16 (for different lengths error)
-         st $2, $254, 43, 8
-       li64 $3, 8589934599
-       li64 $2, 38
-         st $2, $254, 51, 8
-         st $3, $254, 59, 8
         jal $31, $0, :loops 16 (for different lengths error).for_loop_length_mismatch
 0:       ld $1, $254, 0, 8
          ld $3, $254, 8, 8

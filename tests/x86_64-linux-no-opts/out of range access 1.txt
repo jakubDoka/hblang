@@ -12,110 +12,97 @@ main:
 	push r13
 	push r14
 	push r15
-	sub rsp, 0x48
-	mov byte ptr [rsp+0x28], 0x00
-	mov byte ptr [rsp+0x2A], 0x00
-	mov byte ptr [rsp+0x2C], 0x00
-	mov byte ptr [rsp+0x2E], 0x00
-	mov byte ptr [rsp+0x30], 0x00
-	mov byte ptr [rsp+0x32], 0x00
-	mov byte ptr [rsp+0x34], 0x00
-	mov dil, [rsp+0x28]
-	mov r14b, [rsp+0x29]
-	mov r13b, [rsp+0x2A]
-	mov r12b, [rsp+0x2B]
-	mov bpl, [rsp+0x2C]
-	mov bl, [rsp+0x2D]
-	mov cl, [rsp+0x2E]
-	mov r11b, [rsp+0x2F]
-	mov r10b, [rsp+0x30]
-	mov r9b, [rsp+0x31]
-	mov al, [rsp+0x32]
-	mov r8b, [rsp+0x33]
-	mov sil, [rsp+0x34]
-	mov dl, [rsp+0x35]
-	movzx rdi, dil
-	movzx r15, r14b
-	movzx r14, r13b
-	movzx r12, r12b
-	mov [rsp], r12
-	movzx rbp, bpl
-	mov r13, rbp
-	movzx rbx, bl
-	mov r12, rbx
-	movzx rcx, cl
-	movzx r11, r11b
-	mov rbx, r11
-	movzx r10, r10b
-	mov [rsp+0x20], r10
-	movzx rbp, r9b
+	sub rsp, 0x28
+	mov byte ptr [rsp+0x10], 0x00
+	mov byte ptr [rsp+0x12], 0x00
+	mov byte ptr [rsp+0x14], 0x00
+	mov byte ptr [rsp+0x16], 0x00
+	mov byte ptr [rsp+0x18], 0x00
+	mov byte ptr [rsp+0x1A], 0x00
+	mov byte ptr [rsp+0x1C], 0x00
+	mov al, [rsp+0x10]
+	movzx rdi, al
+	mov al, [rsp+0x12]
 	movzx rax, al
-	movzx r9, r8b
-	movzx r10, sil
-	movzx r11, dl
-	shl r15, 0x08
-	shl r14, 0x10
-	mov rdx, [rsp]
-	shl rdx, 0x18
-	mov [rsp+0x18], rdx
-	mov rdx, r13
-	shl rdx, 0x20
-	mov [rsp+0x10], rdx
-	mov rdx, r12
-	shl rdx, 0x28
-	mov [rsp+0x08], rdx
-	shl rcx, 0x30
-	mov rdx, rbx
-	shl rdx, 0x38
-	mov [rsp], rdx
-	mov rbx, [rsp+0x20]
-	shl rbx, 0x40
-	mov r8, rbp
-	shl r8, 0x48
-	shl rbp, 0x08
-	mov rdx, rax
-	shl rdx, 0x50
+	shl rax, 0x10
+	mov [rsp+0x08], rax
+	mov al, [rsp+0x15]
+	movzx r13, al
+	shl r13, 0x28
+	mov al, [rsp+0x18]
+	movzx r12, al
+	mov rbp, r12
+	shl rbp, 0x40
+	mov al, [rsp+0x1B]
+	movzx rax, al
+	mov rbx, rax
+	shl rbx, 0x58
+	mov r11, rax
+	shl r11, 0x18
+	mov al, [rsp+0x13]
+	movzx r14, al
+	shl r14, 0x18
+	mov al, [rsp+0x17]
+	movzx r9, al
+	shl r9, 0x38
+	mov al, [rsp+0x1C]
+	movzx rax, al
 	mov rsi, rax
-	shl rsi, 0x10
-	mov rax, r9
-	shl rax, 0x58
-	mov r12, r9
-	shl r12, 0x18
-	mov r9, r10
-	shl r9, 0x60
-	mov r13, r10
-	shl r13, 0x20
-	mov r10, r11
-	shl r10, 0x68
-	shl r11, 0x28
+	shl rsi, 0x60
+	mov rdx, rax
+	shl rdx, 0x20
+	mov al, [rsp+0x16]
+	movzx rax, al
+	shl rax, 0x30
+	mov [rsp], rax
+	mov al, [rsp+0x1D]
+	movzx rax, al
+	mov rcx, rax
+	shl rcx, 0x68
+	shl rax, 0x28
+	mov r8b, [rsp+0x1A]
+	movzx r10, r8b
+	mov r8, r10
+	shl r8, 0x50
+	shl r10, 0x10
+	mov r15b, [rsp+0x11]
+	movzx r15, r15b
+	shl r15, 0x08
 	or rdi, r15
-	mov r15, [rsp+0x20]
-	or r15, rbp
+	mov r15, [rsp+0x08]
+	or rdi, r15
 	or rdi, r14
-	or r15, rsi
-	mov rsi, [rsp+0x18]
-	or rdi, rsi
-	or r15, r12
-	mov rsi, [rsp+0x10]
-	or rdi, rsi
-	or r15, r13
-	mov rsi, [rsp+0x08]
-	or rdi, rsi
-	mov rsi, r15
-	or rsi, r11
-	or rdi, rcx
-	mov rcx, [rsp]
-	or rdi, rcx
-	or rdi, rbx
-	or rdi, r8
+	mov r14b, [rsp+0x19]
+	movzx r14, r14b
+	mov r15, r14
+	shl r15, 0x08
+	or r12, r15
+	or r12, r10
+	or r12, r11
+	mov r10, r12
+	or r10, rdx
+	mov r11, r14
+	shl r11, 0x48
+	mov dl, [rsp+0x14]
+	movzx rdx, dl
+	shl rdx, 0x20
 	or rdi, rdx
-	or rdi, rax
+	or rdi, r13
+	mov rdx, [rsp]
+	or rdi, rdx
 	or rdi, r9
-	or rdi, r10
+	or rdi, rbp
+	or rdi, r11
+	or rdi, r8
+	or rdi, rbx
+	or rdi, rsi
+	mov rsi, r10
+	or rsi, rax
+	or rdi, rcx
 	call :out of range access 1.bwa
-	mov [rsp+0x38], eax
-	mov eax, [rsp+0x38]
-	add rsp, 0x48
+	mov [rsp+0x20], eax
+	mov eax, [rsp+0x20]
+	add rsp, 0x28
 	pop r15
 	pop r14
 	pop r13

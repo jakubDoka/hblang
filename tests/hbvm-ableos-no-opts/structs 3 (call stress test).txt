@@ -45,16 +45,16 @@ structs 3 (call stress test).take_pair:
          st $1, $254, 0, 1
          st $2, $254, 8, 8
          ld $1, $254, 0, 1
-         ld $2, $254, 8, 8
-       andi $1, $1, 255
-      add64 $1, $1, $2
+       andi $2, $1, 255
+         ld $1, $254, 8, 8
+      add64 $1, $2, $1
      addi64 $254, $254, 16
        jala $0, $31, 0
 structs 3 (call stress test).take_triple:
          ld $3, $1, 0, 8
          ld $2, $1, 8, 8
-         ld $1, $1, 16, 1
       add64 $2, $3, $2
+         ld $1, $1, 16, 1
        andi $1, $1, 255
       add64 $1, $2, $1
        jala $0, $31, 0

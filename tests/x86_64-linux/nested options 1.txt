@@ -6,15 +6,15 @@ nested options 1.defc:
 	call :nested options 1.defb
 	mov [rsp+0x04], eax
 	mov al, [rsp+0x04]
-	mov dl, [rsp+0x05]
-	mov cl, [rsp+0x06]
 	movzx eax, al
-	movzx edx, dl
+	mov cl, [rsp+0x06]
+	movzx edx, cl
+	shl edx, 0x10
+	mov cl, [rsp+0x05]
 	movzx ecx, cl
-	shl edx, 0x08
-	shl ecx, 0x10
-	or eax, edx
+	shl ecx, 0x08
 	or eax, ecx
+	or eax, edx
 	add rsp, 0x08
 	ret
 nested options 1.defb:

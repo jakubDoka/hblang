@@ -1,8 +1,8 @@
 short and op precedence 1.foo:
 	sub rsp, 0x10
 	mov [rsp], di
-	mov cl, [rsp]
 	mov dl, [rsp+0x01]
+	mov cl, [rsp]
 	test cl, cl
 	jz :0
 	mov rax, rdx

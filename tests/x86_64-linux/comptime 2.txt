@@ -12,8 +12,8 @@ main:
 	call :comptime 2.main.some_fn(uint)
 	mov rbx, rax
 	call :comptime 2.main.some_fn2(uint, .some_fn)
-	add rbx, 0x0A
 	add rax, 0x14
+	add rbx, 0x0A
 	add rbx, rax
 	mov rax, rbx
 	pop rbx

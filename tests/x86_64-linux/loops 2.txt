@@ -11,8 +11,8 @@ loops 2.square:
 	jmp :2
 1:	mov rdx, rcx
 	imul rdx, rsi
-	inc rcx
 	add rax, rdx
+	inc rcx
 	jmp :3
 main:
 	sub rsp, 0x08

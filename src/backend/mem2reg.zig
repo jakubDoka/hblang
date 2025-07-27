@@ -245,13 +245,8 @@ pub fn Mixin(comptime Backend: type) type {
                     var buf: [2]*Func.Node = undefined;
                     var scheds: [2]u16 = undefined;
                     var len: usize = 0;
-                    //std.debug.print("bb {}\n", .{bb});
                     for (bb.outputs()) |use| {
                         if (use.get().isCfg()) {
-                            //std.debug.print("use {}\n", .{use});
-                            //if (use.kind == .If) {
-                            //    std.debug.print("use if {?}\n", .{use.inputs()[1]});
-                            //}
                             buf[len] = use.get();
                             scheds[len] = use.get().schedule;
                             len += 1;
@@ -259,11 +254,10 @@ pub fn Mixin(comptime Backend: type) type {
                     }
 
                     if (bb.isBasicBlockStart()) {
-                        @TypeOf(self.gcm).scheduleBlock(bb);
+                        scheduleBlock(bbc);
                     }
 
                     if (!(bb.kind == .If or len == 1)) {
-                        //self.fmtUnscheduled(std.io.getStdErr().writer().any(), .escape_codes);
                         unreachable;
                     }
 
@@ -379,6 +373,63 @@ pub fn Mixin(comptime Backend: type) type {
             for (to_remove.items) |tr| {
                 self.subsume(tr.mem(), tr);
             }
+        }
+
+        pub fn scheduleBlock(bb: *Func.CfgNode) void {
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            // init meta
+            const extra: []u8 = tmp.arena.alloc(u8, bb.base.outputs().len);
+            for (bb.base.outputs(), extra, 0..) |in, *e, i| {
+                const instr = in.get();
+                instr.schedule = @intCast(i);
+
+                e.* = 0;
+
+                if (instr.kind != .Phi) {
+                    for (instr.inputs()[1..]) |d| if (d) |def| {
+                        // if instr == df, this is a infinite loop
+                        if (def.tryCfg0() == bb or instr == def) {
+                            e.* += 1;
+                        }
+                    };
+                }
+            }
+
+            const outs = bb.base.outputs();
+            var ready: usize = 0;
+            for (outs) |*o| {
+                if (extra[o.get().schedule] == 0) {
+                    std.mem.swap(Node.Out, &outs[ready], o);
+                    ready += 1;
+                }
+            }
+
+            var scheduled: usize = 0;
+            if (ready != scheduled) while (scheduled < outs.len - 1) {
+                if (ready == scheduled) utils.panic(
+                    "{} {} {} {any}",
+                    .{ scheduled, outs.len, bb, outs[scheduled..] },
+                );
+
+                const n = outs[scheduled].get();
+                for (n.outputs()) |def| if (bb == def.get().tryCfg0() and
+                    def.get().kind != .Phi)
+                {
+                    extra[def.get().schedule] -= 1;
+                };
+
+                scheduled += 1;
+
+                for (outs[ready..]) |*o| {
+                    if (extra[o.get().schedule] == 0) {
+                        std.debug.assert(o.get().kind != .Phi);
+                        std.mem.swap(Node.Out, &outs[ready], o);
+                        ready += 1;
+                    }
+                }
+            };
         }
     };
 }

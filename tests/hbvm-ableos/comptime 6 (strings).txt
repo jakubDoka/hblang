@@ -13,17 +13,17 @@ comptime 6 (strings).main.string_to_array("Edward"):
      addi64 $7, $254, 0
         lra $6, $0, :Edward
        li64 $5, 6
-         cp $3, $0
-3:       cp $2, $3
-       jltu $2, $5, :2
+         cp $2, $0
+3:       cp $3, $2
+       jltu $3, $5, :2
         bmc $7, $1, 6
      addi64 $254, $254, 6
        jala $0, $31, 0
-2:       cp $2, $3
-      add64 $4, $7, $2
-         cp $2, $3
-      add64 $2, $6, $2
-     addi64 $3, $3, 1
-         ld $2, $2, 0, 1
-         st $2, $4, 0, 1
+2:       cp $3, $2
+      add64 $4, $7, $3
+         cp $3, $2
+      add64 $3, $6, $3
+         ld $3, $3, 0, 1
+         st $3, $4, 0, 1
+     addi64 $2, $2, 1
         jmp :3

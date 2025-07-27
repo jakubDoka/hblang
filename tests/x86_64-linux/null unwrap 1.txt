@@ -8,13 +8,13 @@ null unwrap 1.use_opt:
 	mov al, [rsp+0x40]
 	cmp al, dl
 	jnz :0
-	lea rsi, [rsp+0x20]
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x20], rax
 	mov qword ptr [rsp+0x28], 0x0D
-	mov rdx, 0x20
 	mov rax, 0x2800000007
 	mov [rsp+0x30], rax
+	lea rsi, [rsp+0x20]
+	mov rdx, 0x20
 	lea rdi, [rsp]
 	call :memcpy
 	call :null unwrap 1.null_unwrap

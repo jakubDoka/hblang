@@ -14,10 +14,10 @@ out of bounds matching 1.Iterator().for_each(.main):
 1:	mov rdi, [rsp]
 	call :out of bounds matching 1.Iterator().next
 	mov [rsp+0x0A], ax
-	mov cl, [rsp+0x0A]
-	mov al, [rsp+0x0B]
-	mov [rsp+0x08], al
-	test cl, cl
+	mov cl, [rsp+0x0B]
+	mov al, [rsp+0x0A]
+	mov [rsp+0x08], cl
+	test al, al
 	jz :0
 	mov dil, [rsp+0x08]
 	call :out of bounds matching 1.main
@@ -56,8 +56,8 @@ out of bounds matching 1.next:
 	mov [rsp+0x0C], al
 	mov rdx, [rsp]
 	mov rcx, [rdx]
-	mov rax, [rdx+0x08]
 	inc rcx
+	mov rax, [rdx+0x08]
 	mov [rdx], rcx
 	dec rax
 	mov [rdx+0x08], rax

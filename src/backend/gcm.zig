@@ -1,6 +1,7 @@
+const std = @import("std");
+
 const graph = @import("graph.zig");
 const utils = graph.utils;
-const std = @import("std");
 
 pub fn Mixin(comptime Backend: type) type {
     return struct {
@@ -319,7 +320,7 @@ pub fn Mixin(comptime Backend: type) type {
                     node.schedule = self.gcm.block_count;
                     self.gcm.block_count += 1;
 
-                    scheduleBlock(node);
+                    scheduleBlock(self, bb);
 
                     self.gcm.instr_count += @intCast(node.outputs().len);
                 }
@@ -405,46 +406,123 @@ pub fn Mixin(comptime Backend: type) type {
             return lca;
         }
 
-        pub fn scheduleBlock(node: *Func.Node) void {
-            const NodeMeta = struct {
-                unscheduled_deps: u16 = 0,
-                ready_unscheduled_deps: u16 = 0,
-                priority: u16,
+        pub fn scheduleBlock(func: *Func, bb: *Func.CfgNode) void {
+            const NodeMeta = packed struct(u16) {
+                unscheduled_deps: u6 = 0,
+                ready_unscheduled_deps: u6 = 0,
+                remote_def: bool = false,
+                remote_use: bool = false,
+                single_def: bool = false,
+                padding: u1 = 0,
+
+                pub fn priority(
+                    self: @This(),
+                    fnc: *Func,
+                    b: *Func.CfgNode,
+                    n: *Node,
+                    meta: []@This(),
+                ) usize {
+                    if (n.isSub(graph.Arg) or n.kind == .Phi or
+                        n.kind == .Mem or n.kind == .Ret) return 1000;
+                    if (n.isCfg()) {
+                        std.debug.assert(n.isBasicBlockEnd());
+                        return 0;
+                    }
+
+                    var score: usize = 500;
+                    if (!n.isDef()) return score;
+
+                    if (self.remote_def) score = 200;
+
+                    var cnts: [2]usize = @splat(0);
+                    const flags = b: {
+                        if (n.outputs().len > 1 and n.isClone() or n.isReadonly())
+                            break :b false;
+
+                        for (n.outputs()) |o| {
+                            if (o.get().cfg0() != b) continue;
+                            if (o.get().isCfg()) break :b true;
+                            cnts[@intFromBool(self.single_def)] += 1;
+                        }
+
+                        break :b false;
+                    };
+                    score -= @as(usize, @min(cnts[0], 2)) * 10;
+                    score -= @as(usize, @min(cnts[1], 2)) * 100;
+                    if (flags) return 10;
+
+                    var tmp = utils.Arena.scrath(null);
+                    defer tmp.deinit();
+
+                    cnts = @splat(0);
+                    for (n.dataDeps(), n.dataDepOffset()..) |def, i| {
+                        if (def.cfg0() != b) continue;
+                        if (def.outputs().len > 1) continue;
+                        cnts[
+                            @intFromBool(meta[def.schedule].single_def or
+                                n.regMask(fnc, i, tmp.arena).count() == 1)
+                        ] += 1;
+                    }
+
+                    score += @as(usize, @min(cnts[0], 2)) * 10;
+                    score += @as(usize, @min(cnts[1], 2)) * 100;
+
+                    std.debug.assert(10 <= score and score <= 990);
+                    return score;
+                }
             };
+
+            const bbn = &bb.base;
 
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             // init meta
-            const extra = tmp.arena.alloc(NodeMeta, node.outputs().len);
-            for (node.outputs(), extra, 0..) |in, *e, i| {
+            const metas: []NodeMeta = tmp.arena.alloc(NodeMeta, bbn.outputs().len);
+            for (bbn.outputs(), metas, 0..) |in, *m, i| {
                 const instr = in.get();
                 instr.schedule = @intCast(i);
-                e.* = .{ .priority = if (instr.isCfg())
-                    0
-                else if (instr.kind == .MachSplit)
-                    10
-                else if (instr.subclass(graph.Arg)) |arg|
-                    @intCast(99 - arg.ext.index)
-                else if (instr.kind == .Phi or instr.kind == .Mem or instr.kind == .Ret)
-                    100
-                else if (instr.isStore())
-                    75
-                else
-                    50 };
+
+                m.* = .{};
+
                 if (instr.kind != .Phi) {
                     for (instr.inputs()[1..]) |def| if (def) |df| {
-                        if ((!df.isCfg() and df.inputs()[0] == node) or instr == df) {
-                            e.unscheduled_deps += 1;
+                        // if instr == df, this is a infinite loop
+                        if ((!df.isCfg() and df.tryCfg0() == bb) or instr == df) {
+                            m.unscheduled_deps += 1;
+                        } else if (df.isDef()) {
+                            m.remote_use = true;
                         }
                     };
                 }
+
+                if (instr.isDef()) {
+                    var rmask = instr.regMask(func, 0, tmp.arena);
+                    for (instr.outputs()) |use| {
+                        if (!use.get().hasUseFor(use.pos(), instr)) continue;
+                        if (use.get().cfg0() != bb) m.remote_def = true;
+                        rmask.setIntersection(use.get()
+                            .regMask(func, use.pos(), tmp.arena));
+                    }
+
+                    m.single_def = rmask.count() == 1;
+                }
             }
 
-            const outs = node.outputs();
+            for (bbn.outputs(), metas) |in, *m| {
+                const instr = in.get();
+                if (instr.inPlaceSlot()) |slot| {
+                    const def = instr.dataDeps()[slot];
+                    if (def.cfg0() == bb) {
+                        m.single_def = metas[def.schedule].single_def;
+                    }
+                }
+            }
+
+            const outs = bb.base.outputs();
             var ready: usize = 0;
             for (outs) |*o| {
-                if (extra[o.get().schedule].unscheduled_deps == 0) {
+                if (metas[o.get().schedule].unscheduled_deps == 0) {
                     std.mem.swap(Node.Out, &outs[ready], o);
                     ready += 1;
                 }
@@ -452,26 +530,32 @@ pub fn Mixin(comptime Backend: type) type {
 
             var scheduled: usize = 0;
             if (ready != scheduled) while (scheduled < outs.len - 1) {
-                if (ready == scheduled) utils.panic("{} {} {} {any}", .{ scheduled, outs.len, node, outs[scheduled..] });
+                if (ready == scheduled) utils.panic("{} {} {} {any}", .{ scheduled, outs.len, bbn, outs[scheduled..] });
 
                 var pick = scheduled;
+                var pick_priority = metas[outs[pick].get().schedule]
+                    .priority(func, bb, outs[pick].get(), metas);
                 for (outs[scheduled + 1 .. ready], scheduled + 1..) |n, i| {
                     const o = n.get();
-                    if (extra[o.schedule].priority > extra[outs[pick].get().schedule].priority) {
+                    const o_priority = metas[o.schedule].priority(func, bb, o, metas);
+                    if (o_priority > pick_priority) {
                         pick = i;
+                        pick_priority = o_priority;
                     }
                 }
 
                 const n = outs[pick].get();
-                for (n.outputs()) |def| if (node == def.get().inputs()[0] and def.get().kind != .Phi) {
-                    extra[def.get().schedule].unscheduled_deps -= 1;
+                for (n.outputs()) |def| if (bb == def.get().tryCfg0() and
+                    def.get().kind != .Phi)
+                {
+                    metas[def.get().schedule].unscheduled_deps -= 1;
                 };
 
                 std.mem.swap(Node.Out, &outs[scheduled], &outs[pick]);
                 scheduled += 1;
 
                 for (outs[ready..]) |*o| {
-                    if (extra[o.get().schedule].unscheduled_deps == 0) {
+                    if (metas[o.get().schedule].unscheduled_deps == 0) {
                         std.debug.assert(o.get().kind != .Phi);
                         std.mem.swap(Node.Out, &outs[ready], o);
                         ready += 1;

@@ -8,7 +8,6 @@ main:
 	mov byte ptr [rsp+0xC5], 0x01
 	mov byte ptr [rsp+0xC6], 0x01
 	mov byte ptr [rsp+0xC7], 0x01
-	mov rdi, 0x04
 	mov cl, [rsp+0xC0]
 	mov al, [rsp+0xC4]
 	add ecx, eax
@@ -25,14 +24,15 @@ main:
 	mov al, [rsp+0xC7]
 	add ecx, eax
 	mov [rsp+0xC3], cl
-	mov sil, [rsp+0xC2]
-	mov dl, [rsp+0xC1]
-	mov cl, [rsp+0xC0]
-	mov al, [rsp+0xC3]
-	add esi, edx
-	add esi, ecx
-	add esi, eax
-	cmp sil, dil
+	mov dl, [rsp+0xC2]
+	mov al, [rsp+0xC1]
+	add edx, eax
+	mov al, [rsp+0xC0]
+	add edx, eax
+	mov cl, [rsp+0xC3]
+	mov rax, 0x04
+	add edx, ecx
+	cmp dl, al
 	jz :0
 	mov rax, 0x3E9
 	jmp :1
@@ -40,18 +40,18 @@ main:
 	mov qword ptr [rsp+0x48], 0x01
 	mov qword ptr [rsp+0x50], 0x01
 	mov qword ptr [rsp+0x58], 0x01
-	mov rsi, [rsp+0x40]
-	mov rcx, [rsp+0x50]
-	mov rdx, [rsp+0x48]
-	mov rax, [rsp+0x58]
-	cmp rsi, rcx
-	setnz cl
-	movzx rcx, cl
-	cmp rdx, rax
+	mov rcx, [rsp+0x40]
+	mov rax, [rsp+0x50]
+	cmp rcx, rax
+	setnz dl
+	movzx rdx, dl
+	mov rcx, [rsp+0x58]
+	mov rax, [rsp+0x48]
+	cmp rax, rcx
 	setnz al
 	movzx rax, al
-	or ecx, eax
-	test cl, cl
+	or edx, eax
+	test dl, dl
 	jz :2
 	mov rax, 0x3EA
 1:	jmp :3
@@ -59,18 +59,18 @@ main:
 	mov qword ptr [rsp+0x68], 0x02
 	mov qword ptr [rsp+0x70], 0x01
 	mov qword ptr [rsp+0x78], 0x01
-	mov rsi, [rsp+0x60]
-	mov rcx, [rsp+0x70]
-	mov rdx, [rsp+0x68]
-	mov rax, [rsp+0x78]
-	cmp rsi, rcx
-	setz cl
-	movzx rcx, cl
-	cmp rdx, rax
+	mov rcx, [rsp+0x60]
+	mov rax, [rsp+0x70]
+	cmp rcx, rax
+	setz dl
+	movzx rdx, dl
+	mov rcx, [rsp+0x78]
+	mov rax, [rsp+0x68]
+	cmp rax, rcx
 	setz al
 	movzx rax, al
-	and ecx, eax
-	test cl, cl
+	and edx, eax
+	test dl, dl
 	jz :4
 	mov rax, 0x3EB
 3:	jmp :5

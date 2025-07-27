@@ -1,8 +1,8 @@
 float load and store 1.fun:
-	movss xmm2, dword ptr [rsp+0x0C]
-	movss xmm1, dword ptr [rsp+0x10]
 	movss xmm0, dword ptr [rsp+0x08]
-	addss xmm0, xmm2
+	movss xmm1, dword ptr [rsp+0x0C]
+	addss xmm0, xmm1
+	movss xmm1, dword ptr [rsp+0x10]
 	subss xmm0, xmm1
 	ret
 main:
@@ -10,11 +10,11 @@ main:
 	movss xmm0, dword ptr [0x0000000000000008]
 	movss [rsp+0x0C], xmm0
 	movss xmm1, dword ptr [0x0000000000000008]
-	lea rcx, [rsp]
 	movss xmm0, dword ptr [0x0000000000000008]
 	movss [rsp+0x10], xmm0
 	movss [rsp+0x14], xmm1
 	mov rax, [rsp+0x0C]
+	lea rcx, [rsp]
 	mov [rcx], rax
 	mov eax, [rsp+0x14]
 	mov [rcx+0x08], eax

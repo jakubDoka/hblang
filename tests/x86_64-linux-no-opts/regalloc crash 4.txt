@@ -8,10 +8,10 @@ main:
 	sub rsp, 0x30
 	mov qword ptr [rsp+0x20], 0x01
 	xor rbx, rbx
-4:	mov cl, [0x0000000000000006]
-	mov rax, [0x0000000000000007]
-	mov [rsp], rax
-	test cl, cl
+4:	mov rcx, [0x0000000000000007]
+	mov al, [0x0000000000000006]
+	mov [rsp], rcx
+	test al, al
 	jz :0
 	mov al, [0x0000000000000006]
 	cmp al, bl
@@ -19,10 +19,10 @@ main:
 	jmp :3
 1:	mov rdi, [rsp+0x20]
 	call :regalloc crash 4.blackbox
-3:	mov cl, [0x0000000000000006]
-	mov rax, [0x0000000000000007]
-	mov [rsp+0x10], rax
-	test cl, cl
+3:	mov rcx, [0x0000000000000007]
+	mov al, [0x0000000000000006]
+	mov [rsp+0x10], rcx
+	test al, al
 	jz :3
 	mov rdi, [rsp+0x20]
 	call :regalloc crash 4.blackbox

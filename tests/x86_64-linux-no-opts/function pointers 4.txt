@@ -29,9 +29,8 @@ main:
 	sub rsp, 0x18
 	mov rax, 0xFF
 	mov [rsp+0x10], al
+	lea rdi, [rsp]
 	lea rsi, [rsp+0x10]
-	lea rax, [rsp]
-	mov rdi, rax
 	call :function pointers 4.DynObj.new(^.Obj)
 	lea rdi, [rsp]
 	call :function pointers 4.DynObj.func

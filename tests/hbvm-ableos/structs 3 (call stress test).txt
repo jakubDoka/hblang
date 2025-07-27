@@ -20,12 +20,12 @@ main:
          ld $31, $254, -24, 24
          tx
 structs 3 (call stress test).take_triple:
-         ld $3, $1, 8, 8
-         ld $2, $1, 16, 1
-         ld $1, $1, 0, 8
-       andi $2, $2, 255
-      add64 $1, $1, $3
-      add64 $1, $1, $2
+         ld $3, $1, 0, 8
+         ld $2, $1, 8, 8
+      add64 $2, $3, $2
+         ld $1, $1, 16, 1
+       andi $1, $1, 255
+      add64 $1, $2, $1
        jala $0, $31, 0
 structs 3 (call stress test).take_pair:
        andi $1, $1, 255

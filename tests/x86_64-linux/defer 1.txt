@@ -6,11 +6,11 @@ defer 1.main.ret_defer:
 main:
 	sub rsp, 0x08
 	mov rax, 0x01
-7:	cmp rax, 0x03
+7:	mov rdx, rax
+	inc rdx
+	cmp rax, 0x03
 	setz cl
 	movzx rcx, cl
-	mov rdx, rax
-	inc rdx
 	test cl, cl
 	jz :0
 	mov rax, rdx

@@ -1008,9 +1008,9 @@ main:
 	call :deep instantiation 1.S.get((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((.Z))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 	mov [rsp+0x0C], eax
 	mov eax, [rsp+0x0C]
-	mov rcx, [rsp]
-	mov eax, eax
-	cmp rax, rcx
+	mov ecx, eax
+	mov rax, [rsp]
+	cmp rcx, rax
 	setnz al
 	movzx rax, al
 	movzx eax, al

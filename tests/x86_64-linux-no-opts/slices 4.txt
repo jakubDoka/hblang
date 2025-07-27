@@ -24,8 +24,8 @@ slices 4.equals:
 	mov rax, 0x01
 	jmp :5
 4:	mov rcx, [rsp+0x10]
-	mov rax, [rsp]
 	add rcx, rdx
+	mov rax, [rsp]
 	add rax, rdx
 	mov cl, [rcx]
 	mov al, [rax]

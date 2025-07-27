@@ -1,48 +1,48 @@
 main:
 	sub rsp, 0x50
-	xor r8, r8
-	mov r10, 0x18
+	xor rdi, rdi
+	mov r9, 0x18
 	mov rcx, 0x08
-4:	cmp r8, 0x03
+4:	cmp rdi, 0x03
 	setz al
 	movzx rax, al
 	test al, al
 	jz :0
+	xor rdx, rdx
 	xor rax, rax
-	xor rsi, rsi
-2:	cmp rsi, 0x09
-	setz dl
-	movzx rdx, dl
-	test dl, dl
+2:	cmp rdx, 0x09
+	setz sil
+	movzx rsi, sil
+	test sil, sil
 	jz :1
 	add rsp, 0x50
 	ret
-1:	mov rdi, rsi
+1:	mov rdi, rdx
 	imul rdi, rcx
-	inc rsi
-	lea rdx, [rsp]
-	add rdx, rdi
-	mov rdx, [rdx]
-	add rax, rdx
-	jmp :2
-0:	mov rax, r8
-	imul rax, r10
-	lea r9, [rsp]
-	add r9, rax
-	xor rdx, rdx
-5:	cmp rdx, 0x03
-	setz al
-	movzx rax, al
-	test al, al
-	jz :3
-	inc r8
-	jmp :4
-3:	mov rdi, rdx
-	imul rdi, rcx
-	mov rsi, rdx
-	imul rsi, r8
+	lea rsi, [rsp]
+	add rsi, rdi
+	mov rsi, [rsi]
+	add rax, rsi
 	inc rdx
-	mov rax, r9
-	add rax, rdi
-	mov [rax], rsi
+	jmp :2
+0:	mov rax, rdi
+	imul rax, r9
+	lea r8, [rsp]
+	add r8, rax
+	xor rax, rax
+5:	cmp rax, 0x03
+	setz dl
+	movzx rdx, dl
+	test dl, dl
+	jz :3
+	inc rdi
+	jmp :4
+3:	mov rdx, rax
+	imul rdx, rcx
+	mov rsi, r8
+	add rsi, rdx
+	mov rdx, rax
+	imul rdx, rdi
+	mov [rsi], rdx
+	inc rax
 	jmp :5

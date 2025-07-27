@@ -28,9 +28,9 @@ main:
 	lea rdi, [rsp]
 	call :structs 2.swap
 	mov rax, [rsp]
-	mov rdx, [rsp+0x08]
+	mov rcx, [rsp+0x08]
+	add rax, rcx
 	mov rcx, [rsp+0x10]
-	add rax, rdx
 	add rax, rcx
 	add rsp, 0x38
 	ret

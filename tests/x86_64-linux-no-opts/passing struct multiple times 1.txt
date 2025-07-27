@@ -1,80 +1,78 @@
 passing struct multiple times 1.foo:
 	push rbx
 	push rbp
-	push r12
-	sub rsp, 0x30
-	lea rsi, [rsp+0x50]
+	sub rsp, 0x28
+	lea rsi, [rsp+0x40]
 	mov [rsp+0x20], edi
+	mov al, [rsp+0x20]
+	movzx ebx, al
+	mov al, [rsp+0x21]
+	movzx eax, al
+	shl eax, 0x08
+	or ebx, eax
+	mov al, [rsp+0x22]
+	movzx ebp, al
+	shl ebp, 0x10
 	mov rdx, 0x18
 	lea rdi, [rsp]
-	mov r12b, [rsp+0x20]
-	mov bpl, [rsp+0x21]
-	mov bl, [rsp+0x22]
 	call :memcpy
-	movzx ecx, bpl
-	movzx edi, r12b
-	movzx eax, bl
-	shl ecx, 0x08
-	shl eax, 0x10
-	or edi, ecx
-	or edi, eax
+	or ebx, ebp
+	mov rdi, rbx
 	call :passing struct multiple times 1.bar
 	mov [rsp+0x18], rax
 	mov rax, [rsp+0x18]
-	add rsp, 0x30
-	pop r12
+	add rsp, 0x28
 	pop rbp
 	pop rbx
 	ret
 passing struct multiple times 1.bar:
 	sub rsp, 0x10
 	mov [rsp], edi
-	mov r8, [rsp+0x20]
-	mov rdi, [rsp+0x28]
+	mov rdx, [rsp+0x20]
+	mov rcx, [rsp+0x28]
 	mov rax, [rsp+0x18]
-	mov sil, [rsp]
-	mov dl, [rsp+0x01]
-	mov cl, [rsp+0x02]
-	add rax, r8
-	movzx rsi, sil
-	movzx rdx, dl
-	movzx rcx, cl
-	sub rax, rdi
-	add rax, rsi
 	add rax, rdx
 	sub rax, rcx
+	mov cl, [rsp+0x02]
+	movzx rsi, cl
+	mov cl, [rsp+0x01]
+	movzx rdx, cl
+	mov cl, [rsp]
+	movzx rcx, cl
+	add rax, rcx
+	add rax, rdx
+	sub rax, rsi
 	add rsp, 0x10
 	ret
 main:
 	push rbx
 	push rbp
-	push r12
-	sub rsp, 0x40
+	sub rsp, 0x48
 	mov qword ptr [rsp+0x18], 0x01
 	mov qword ptr [rsp+0x20], 0x02
 	mov qword ptr [rsp+0x28], 0x03
 	mov byte ptr [rsp+0x38], 0x01
 	mov byte ptr [rsp+0x39], 0x02
 	mov byte ptr [rsp+0x3A], 0x03
+	mov al, [rsp+0x38]
+	movzx ebx, al
+	mov al, [rsp+0x39]
+	movzx eax, al
+	shl eax, 0x08
+	or ebx, eax
+	mov al, [rsp+0x3A]
+	movzx ebp, al
+	shl ebp, 0x10
 	mov rdx, 0x18
-	lea rdi, [rsp]
 	lea rsi, [rsp+0x18]
-	mov r12b, [rsp+0x38]
-	mov bpl, [rsp+0x39]
-	mov bl, [rsp+0x3A]
+	lea rdi, [rsp]
 	call :memcpy
-	movzx ecx, bpl
-	movzx edi, r12b
-	movzx eax, bl
-	shl ecx, 0x08
-	shl eax, 0x10
-	or edi, ecx
-	or edi, eax
+	or ebx, ebp
+	mov rdi, rbx
 	call :passing struct multiple times 1.foo
 	mov [rsp+0x30], rax
 	mov rax, [rsp+0x30]
-	add rsp, 0x40
-	pop r12
+	add rsp, 0x48
 	pop rbp
 	pop rbx
 	ret

@@ -2,9 +2,8 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x18
+	xor rdi, rdi
 	mov rax, 0x123
-	xor rcx, rcx
-	mov rdi, rcx
 	syscall
 	movsxd rbp, eax
 	xor rbx, rbx

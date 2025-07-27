@@ -1,26 +1,26 @@
 enums 4.NameMap([6]u8, [4]uint).get(.Nm):
 	sub rsp, 0x10
+	mov r9, 0x08
 	mov [rsp], rsi
 	mov [rsp+0x08], dl
-	mov r9, 0x08
-	mov rcx, [rsp]
+	mov rax, [rsp]
 	mov dl, [rsp+0x08]
-	mov rax, rcx
-	add rax, 0x08
-	movzx rsi, dl
-	mov r8, rsi
+	mov rcx, rax
+	add rcx, 0x08
+	movzx rdx, dl
+	mov r8, rdx
 	imul r8, r9
-	inc rsi
-	mov rdx, rax
-	add rdx, r8
-	imul rsi, r9
-	mov rdx, [rdx]
-	add rax, rsi
+	mov rsi, rcx
+	add rsi, r8
+	inc rdx
+	imul rdx, r9
 	add rcx, rdx
-	mov rax, [rax]
-	mov [rdi], rcx
-	sub rax, rdx
-	mov [rdi+0x08], rax
+	mov rdx, [rsi]
+	mov rcx, [rcx]
+	add rax, rdx
+	mov [rdi], rax
+	sub rcx, rdx
+	mov [rdi+0x08], rcx
 	add rsp, 0x10
 	ret
 main:

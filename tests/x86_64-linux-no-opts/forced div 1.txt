@@ -10,8 +10,8 @@ main:
 	mov [rsp], rax
 	call :forced div 1.one
 	mov [rsp+0x08], rax
-	mov rax, [rsp]
 	mov rcx, [rsp+0x08]
+	mov rax, [rsp]
 	xor rdx, rdx
 	div rcx
 	add rsp, 0x18

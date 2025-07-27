@@ -62,9 +62,9 @@ main:
 if statements 4 (short circuit).effectfull:
      addi64 $254, $254, -8
          st $1, $254, 0, 8
+        lra $2, $0, :if statements 4 (short circuit).global
+         ld $1, $254, 0, 8
+         st $1, $2, 0, 8
         li8 $1, 1
-        lra $3, $0, :if statements 4 (short circuit).global
-         ld $2, $254, 0, 8
-         st $2, $3, 0, 8
      addi64 $254, $254, 8
        jala $0, $31, 0

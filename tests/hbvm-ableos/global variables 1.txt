@@ -1,8 +1,8 @@
 main:
          st $31, $254, -16, 16
      addi64 $254, $254, -16
-        lra $32, $0, :global variables 1.counter
        li64 $1, 1
+        lra $32, $0, :global variables 1.counter
          st $1, $32, 0, 8
         jal $31, $0, :global variables 1.dec
          ld $1, $32, 0, 8

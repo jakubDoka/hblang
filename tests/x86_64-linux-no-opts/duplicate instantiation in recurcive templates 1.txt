@@ -57,12 +57,12 @@ duplicate instantiation in recurcive templates 1.foo(.Stru.f):
 duplicate instantiation in recurcive templates 1.foo(?.Stru2):
 	sub rsp, 0x18
 	mov [rsp+0x0C], di
-	lea rdx, [0x0000000000000007]
-	xor rcx, rcx
+	lea rcx, [0x0000000000000007]
 	lea rax, [0x0000000000000007]
 	mov [0x0000000000000007], rax
-	mov qword ptr [rdx+0x08], 0x03
+	mov qword ptr [rcx+0x08], 0x03
 	mov dword ptr [rsp+0x08], 0x30000000
+	xor rcx, rcx
 	mov al, [rsp+0x0C]
 	cmp al, cl
 	jnz :0

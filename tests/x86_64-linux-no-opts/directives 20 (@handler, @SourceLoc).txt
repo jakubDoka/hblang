@@ -22,13 +22,13 @@ directives 20 (@handler, @SourceLoc).main:
 	or eax, edx
 	test al, al
 	jz :0
-	lea rsi, [rsp+0x20]
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x20], rax
 	mov qword ptr [rsp+0x28], 0x24
-	mov rdx, 0x20
 	mov rax, 0x100000001
 	mov [rsp+0x30], rax
+	lea rsi, [rsp+0x20]
+	mov rdx, 0x20
 	lea rdi, [rsp]
 	call :memcpy
 	xor rsi, rsi
@@ -90,13 +90,13 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	mov rax, rbx
 	cmp rcx, rax
 	jb :0
-	lea rsi, [rsp+0x20]
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x20], rax
 	mov qword ptr [rsp+0x28], 0x24
-	mov rdx, 0x20
 	mov rax, 0xF00000012
 	mov [rsp+0x30], rax
+	lea rsi, [rsp+0x20]
+	mov rdx, 0x20
 	lea rdi, [rsp]
 	call :memcpy
 	xor rsi, rsi

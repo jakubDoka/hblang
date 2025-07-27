@@ -2,9 +2,9 @@ main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
         jal $31, $0, :deep instantiation 2.S.get((((((((.Z))))))))
-       li64 $2, 8
-       andi $1, $1, 4294967295
-       cmpu $1, $1, $2
+       andi $2, $1, 4294967295
+       li64 $1, 8
+       cmpu $1, $2, $1
       cmpui $1, $1, 0
        andi $1, $1, 1
        andi $1, $1, 255

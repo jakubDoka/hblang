@@ -3,9 +3,9 @@ main:
 	lea rax, [0x0000000000000007]
 	mov [rsp], rax
 	mov qword ptr [rsp+0x08], 0x0C
+	lea rax, [rsp]
+	mov [rsp+0x10], rax
 	xor rax, rax
-	lea rcx, [rsp]
-	mov [rsp+0x10], rcx
 3:	mov rsi, [rsp+0x10]
 	mov rcx, [rsi+0x08]
 	cmp rcx, rax
@@ -17,8 +17,8 @@ main:
 	mov cl, [rcx]
 	mov [rsp+0x1E], cl
 	mov rdx, [rsi+0x08]
-	mov rcx, [rsi]
 	dec rdx
+	mov rcx, [rsi]
 	inc rcx
 	mov [rsi], rcx
 	mov [rsi+0x08], rdx

@@ -7,15 +7,15 @@ struct capture eca mismatch 1.cp(1, ):
 	mov al, [0x0000000000000006]
 	mov [rsp+0x02], al
 	mov al, [rsp]
-	mov dl, [rsp+0x01]
-	mov cl, [rsp+0x02]
 	movzx eax, al
-	movzx edx, dl
+	mov cl, [rsp+0x02]
+	movzx edx, cl
+	shl edx, 0x10
+	mov cl, [rsp+0x01]
 	movzx ecx, cl
-	shl edx, 0x08
-	shl ecx, 0x10
-	or eax, edx
+	shl ecx, 0x08
 	or eax, ecx
+	or eax, edx
 	add rsp, 0x10
 	ret
 main:

@@ -1,17 +1,16 @@
 regalloc crash 1.broken:
 	sub rsp, 0x10
-	lea r8, [rsp+0x18]
-	mov [rsp], sil
+	mov rax, rsi
+	lea rsi, [rsp+0x18]
+	mov [rsp], al
 	mov rdx, 0x18
 	xor rcx, rcx
 	mov al, [rsp]
 	cmp al, cl
 	jnz :0
-	mov rsi, r8
 	call :memcpy
 	jmp :1
-0:	mov rsi, r8
-	call :memcpy
+0:	call :memcpy
 1:	add rsp, 0x10
 	ret
 main:
@@ -20,8 +19,8 @@ main:
 	mov qword ptr [rsp+0x38], 0x00
 	mov byte ptr [rsp+0x40], 0x00
 	mov rdx, 0x18
-	lea rdi, [rsp]
 	lea rsi, [rsp+0x30]
+	lea rdi, [rsp]
 	call :memcpy
 	lea rdi, [rsp+0x18]
 	mov rsi, 0x20

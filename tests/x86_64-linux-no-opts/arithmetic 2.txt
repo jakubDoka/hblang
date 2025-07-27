@@ -19,8 +19,8 @@ main:
 	inc eax
 	mov [rsp+0x04], eax
 	mov eax, [rsp+0x04]
-	mov ecx, [rsp]
 	mov eax, eax
+	mov ecx, [rsp]
 	movsxd rcx, ecx
 	add rax, rcx
 	add rsp, 0x10

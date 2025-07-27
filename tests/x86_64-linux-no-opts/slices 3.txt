@@ -26,18 +26,18 @@ slices 3.reverse:
 	mov al, [rax]
 	mov [rsp+0x20], al
 	mov rax, [rsp]
-	mov rsi, [rsp+0x18]
-	mov rdx, [rsp+0x10]
-	mov rcx, rax
-	add rcx, rsi
-	add rax, rdx
-	mov al, [rax]
-	mov [rcx], al
-	mov rdx, [rsp]
-	mov rcx, [rsp+0x10]
-	mov al, [rsp+0x20]
+	mov rcx, [rsp+0x18]
+	mov rdx, rax
 	add rdx, rcx
+	mov rcx, [rsp+0x10]
+	add rax, rcx
+	mov al, [rax]
 	mov [rdx], al
+	mov rcx, [rsp]
+	mov rax, [rsp+0x10]
+	add rcx, rax
+	mov al, [rsp+0x20]
+	mov [rcx], al
 	mov rax, [rsp+0x18]
 	inc rax
 	mov [rsp+0x18], rax
@@ -70,12 +70,12 @@ main:
 	mov rsi, [rsp+0x30]
 	call :slices 3.reverse
 	mov al, [rsp+0x40]
-	mov dl, [rsp+0x41]
-	mov cl, [rsp+0x42]
 	movzx rax, al
-	movzx rdx, dl
+	mov cl, [rsp+0x42]
+	movzx rdx, cl
+	mov cl, [rsp+0x41]
 	movzx rcx, cl
-	sub rax, rdx
 	sub rax, rcx
+	sub rax, rdx
 	add rsp, 0x48
 	ret

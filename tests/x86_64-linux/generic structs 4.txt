@@ -18,8 +18,8 @@ generic structs 4.Array((())).get(uint):
 	ret
 generic structs 4.Array(()).get(uint):
 	sub rsp, 0x08
-	mov rax, rdi
 	mov rcx, rdx
+	mov rax, rdi
 	mov rdx, rcx
 	cmp rdx, 0x00
 	setz dl
@@ -35,8 +35,8 @@ generic structs 4.Array(()).get(uint):
 	ret
 generic structs 4.Array().get(uint):
 	sub rsp, 0x08
-	mov rax, rdi
 	mov rcx, rsi
+	mov rax, rdi
 	mov rdx, rcx
 	cmp rdx, 0x00
 	setz dl
@@ -59,9 +59,8 @@ main:
 	mov qword ptr [rsp+0x20], 0x02
 	mov qword ptr [rsp+0x28], 0x03
 	lea rdi, [rsp]
-	lea rax, [rsp+0x18]
 	mov rdx, 0x18
-	mov rsi, rax
+	lea rsi, [rsp+0x18]
 	call :memcpy
 	xor rdi, rdi
 	call :generic structs 4.Array((())).get(uint)

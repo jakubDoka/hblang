@@ -6,10 +6,10 @@ main:
 	mov [rsp], rax
 	mov rax, [rsp+0x18]
 	mov [rsp+0x08], rax
-	mov cl, [rsp]
-	mov rax, [rsp+0x08]
-	mov [rsp+0x20], rax
-	test cl, cl
+	mov rcx, [rsp+0x08]
+	mov al, [rsp]
+	mov [rsp+0x20], rcx
+	test al, al
 	jz :0
 	mov rax, [rsp+0x20]
 	cmp rax, 0x00

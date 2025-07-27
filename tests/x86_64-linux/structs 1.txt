@@ -23,8 +23,8 @@ main:
 	mov qword ptr [rsp+0x20], 0x01
 	mov qword ptr [rsp+0x28], 0x03
 	mov rdx, 0x18
-	lea rdi, [rsp]
 	lea rsi, [rsp+0x18]
+	lea rdi, [rsp]
 	call :memcpy
 	lea rdi, [rsp+0x30]
 	call :structs 1.odher_pass

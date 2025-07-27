@@ -12,16 +12,16 @@ structs 3 (call stress test).take_pair:
 	mov [rsp], rdi
 	mov [rsp+0x08], rsi
 	mov al, [rsp]
-	mov rcx, [rsp+0x08]
 	movzx rax, al
+	mov rcx, [rsp+0x08]
 	add rax, rcx
 	add rsp, 0x10
 	ret
 structs 3 (call stress test).take_triple:
 	mov rax, [rsp+0x08]
-	mov rdx, [rsp+0x10]
+	mov rcx, [rsp+0x10]
+	add rax, rcx
 	mov cl, [rsp+0x18]
-	add rax, rdx
 	movzx rcx, cl
 	add rax, rcx
 	ret

@@ -1,9 +1,9 @@
 structs 3 (call stress test).take_triple:
-	mov rdx, [rsp+0x10]
-	mov cl, [rsp+0x18]
 	mov rax, [rsp+0x08]
+	mov rcx, [rsp+0x10]
+	add rax, rcx
+	mov cl, [rsp+0x18]
 	movzx rcx, cl
-	add rax, rdx
 	add rax, rcx
 	ret
 structs 3 (call stress test).take_pair:
@@ -35,8 +35,8 @@ main:
 	mov rsi, [rsp+0x20]
 	call :structs 3 (call stress test).take_pair
 	mov rbx, rax
-	lea rdi, [rsp]
 	mov rdx, 0x18
+	lea rdi, [rsp]
 	lea rsi, [rsp+0x28]
 	call :memcpy
 	call :structs 3 (call stress test).take_triple

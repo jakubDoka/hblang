@@ -5,10 +5,10 @@ main:
 	lea rdi, [rsp]
 	mov [rsp+0x20], rdi
 	mov qword ptr [rsp+0x28], 0x04
-	mov rsi, 0x08
 	mov rdx, [rsp+0x20]
 	mov [rsp+0x50], rdx
 	mov rax, [rsp+0x28]
+	mov rsi, 0x08
 	imul rax, rsi
 	add rdx, rax
 1:	mov rcx, [rsp+0x50]

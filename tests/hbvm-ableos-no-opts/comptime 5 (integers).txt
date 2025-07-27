@@ -12,14 +12,14 @@ main:
         jal $31, $0, :comptime 5 (integers).main.func(1)
          st $1, $254, 20, 8
        li32 $4, 1879048195
-        lra $3, $0, :comptime 5 (integers).main.param(1).global_value
+        lra $2, $0, :comptime 5 (integers).main.param(1).global_value
         lra $1, $0, :comptime 5 (integers).main.Ty(1).global_value
-         ld $2, $254, 20, 8
-         ld $1, $1, 0, 8
+         ld $3, $1, 0, 8
+         ld $1, $254, 20, 8
          st $4, $254, 28, 4
-      sub64 $2, $1, $2
-         ld $1, $3, 0, 8
-      add64 $1, $2, $1
+         ld $2, $2, 0, 8
+      sub64 $1, $3, $1
+      add64 $1, $1, $2
      addi64 $254, $254, 40
          ld $31, $254, -8, 8
          tx

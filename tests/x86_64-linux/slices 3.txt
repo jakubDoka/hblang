@@ -10,24 +10,22 @@ slices 3.reverse:
 	mov [rdi], rsi
 	mov rax, [rsp+0x08]
 	jmp :1
-0:	xor r9, r9
+0:	xor r8, r8
 	dec rdx
-3:	mov r8, rdx
-	mov rax, [rsp]
-	cmp r9, r8
+3:	mov rax, [rsp]
+	cmp r8, rdx
 	jnb :2
-	mov rsi, rax
-	add rsi, r9
+	mov rcx, rax
+	add rcx, rdx
+	mov sil, [rcx]
 	add rax, r8
-	mov rdx, r8
-	dec rdx
-	inc r9
-	mov cl, [rsi]
-	mov al, [rax]
-	mov [rsi], al
+	mov cl, [rax]
+	mov [rax], sil
 	mov rax, [rsp]
-	add rax, r8
+	add rax, rdx
 	mov [rax], cl
+	dec rdx
+	inc r8
 	jmp :3
 2:	mov [rdi], rax
 	mov rax, [rsp+0x08]
@@ -48,12 +46,12 @@ main:
 	mov rdx, 0x03
 	call :slices 3.reverse
 	mov al, [rsp+0x20]
-	mov dl, [rsp+0x21]
-	mov cl, [rsp+0x22]
 	movzx rax, al
-	movzx rdx, dl
+	mov cl, [rsp+0x22]
+	movzx rdx, cl
+	mov cl, [rsp+0x21]
 	movzx rcx, cl
-	sub rax, rdx
 	sub rax, rcx
+	sub rax, rdx
 	add rsp, 0x28
 	ret

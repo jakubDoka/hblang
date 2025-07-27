@@ -10,11 +10,12 @@ defer 1.main.ret_defer:
 main:
 	sub rsp, 0x18
 	mov qword ptr [rsp], 0x00
-	mov rcx, [rsp]
-	cmp rcx, 0x01
+	mov rax, [rsp]
+	mov rcx, rax
+	inc rcx
+	cmp rax, 0x01
 	setz al
 	movzx rax, al
-	inc rcx
 	test al, al
 	jz :0
 	mov [rsp], rcx

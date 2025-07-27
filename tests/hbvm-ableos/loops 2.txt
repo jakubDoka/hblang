@@ -17,6 +17,6 @@ loops 2.square:
      addi64 $4, $4, 1
         jmp :3
 2:    mul64 $2, $3, $4
-     addi64 $3, $3, 1
       add64 $5, $5, $2
+     addi64 $3, $3, 1
         jmp :4

@@ -4,8 +4,8 @@ main:
 	sub rsp, 0x18
 	mov byte ptr [rsp+0x03], 0x00
 	mov word ptr [rsp+0x04], 0x00
-	lea rcx, [rsp]
 	mov ax, [rsp+0x03]
+	lea rcx, [rsp]
 	mov [rcx], ax
 	mov al, [rsp+0x05]
 	mov [rcx+0x02], al

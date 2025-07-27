@@ -1,45 +1,45 @@
 float arithmetic 2.sin:
 	sub rsp, 0x20
-	movss [rsp+0x10], xmm0
-	movsd xmm4, qword ptr [0x0000000000000009]
-	movss xmm5, dword ptr [0x0000000000000008]
 	mov rcx, 0x04
-	movss xmm1, dword ptr [0x0000000000000008]
+	movss [rsp+0x10], xmm0
 	movss xmm0, dword ptr [0x0000000000000008]
 	movss [rsp+0x14], xmm0
 	mov dword ptr [rsp+0x18], 0x100
-	movss xmm2, dword ptr [rsp+0x10]
+	movss xmm4, dword ptr [0x0000000000000008]
+	movsd xmm2, qword ptr [0x0000000000000009]
+	movss xmm3, dword ptr [0x0000000000000008]
+	movss xmm0, dword ptr [rsp+0x10]
+	cvtss2sd xmm1, xmm0
+	mulsd xmm1, xmm2
 	mov eax, [rsp+0x18]
-	movss xmm0, dword ptr [rsp+0x14]
-	cvtss2sd xmm3, xmm2
 	movsxd rax, eax
-	cvtss2sd xmm2, xmm0
-	mulsd xmm3, xmm4
 	cvtsi2sd xmm0, rax
-	mulsd xmm3, xmm0
-	divsd xmm3, xmm2
-	cvttsd2si rax, xmm3
+	mulsd xmm1, xmm0
+	movss xmm0, dword ptr [rsp+0x14]
+	cvtss2sd xmm0, xmm0
+	divsd xmm1, xmm0
+	cvttsd2si rax, xmm1
 	mov [rsp], rax
-	movss xmm4, dword ptr [rsp+0x10]
-	mov rdx, [rsp]
-	movss xmm3, dword ptr [rsp+0x14]
+	movss xmm2, dword ptr [rsp+0x10]
+	mov rax, [rsp]
+	cvtsi2ss xmm1, rax
+	mulss xmm1, xmm4
+	movss xmm0, dword ptr [rsp+0x14]
+	mulss xmm1, xmm0
 	mov eax, [rsp+0x18]
-	cvtsi2ss xmm2, rdx
 	movsxd rax, eax
-	mulss xmm2, xmm5
 	cvtsi2ss xmm0, rax
-	mulss xmm2, xmm3
-	divss xmm2, xmm0
-	subss xmm4, xmm2
-	movss [rsp+0x1C], xmm4
+	divss xmm1, xmm0
+	subss xmm2, xmm1
+	movss [rsp+0x1C], xmm2
 	mov rdi, [rsp]
 	mov eax, [rsp+0x18]
 	movsxd rsi, eax
 	mov rax, rsi
 	cqo
 	idiv rcx
-	dec rsi
 	add rdi, rax
+	dec rsi
 	and rdi, rsi
 	mov [rsp+0x08], rdi
 	mov rdx, [rsp]
@@ -49,20 +49,20 @@ float arithmetic 2.sin:
 	and rdx, rax
 	mov [rsp], rdx
 	mov rax, [rsp]
-	mov rdx, [rsp+0x08]
-	movss xmm3, dword ptr [rsp+0x1C]
 	imul rax, rcx
+	lea rsi, [0x0000000000000007]
+	add rsi, rax
+	mov rdx, [rsp+0x08]
 	imul rdx, rcx
-	lea rcx, [0x0000000000000007]
-	add rcx, rax
 	lea rax, [0x0000000000000007]
 	add rax, rdx
-	movss xmm0, dword ptr [rcx]
 	movss xmm2, dword ptr [rax]
-	mulss xmm1, xmm0
-	mulss xmm1, xmm3
-	subss xmm2, xmm1
-	vfmadd231ss xmm0, xmm2, xmm3
+	movss xmm0, dword ptr [rsi]
+	mulss xmm3, xmm0
+	movss xmm1, dword ptr [rsp+0x1C]
+	mulss xmm3, xmm1
+	subss xmm2, xmm3
+	vfmadd231ss xmm0, xmm2, xmm1
 	add rsp, 0x20
 	ret
 main:

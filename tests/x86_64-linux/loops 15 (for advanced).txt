@@ -15,8 +15,8 @@ main:
 3:	cmp rcx, rsi
 	jnb :2
 	mov rdx, [rcx]
-	add rcx, 0x08
 	add rax, rdx
+	add rcx, 0x08
 	jmp :3
 2:	add rsp, 0x20
 	ret

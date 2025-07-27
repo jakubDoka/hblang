@@ -36,25 +36,25 @@ main:
 	mov [rsp], rax
 	jmp :2
 0:	mov qword ptr [rsp+0x58], 0x00
-5:	mov rax, [rsp+0x50]
-	mov rdx, [rsp+0x58]
-	cmp rdx, 0x03
-	setz sil
-	movzx rsi, sil
-	test sil, sil
+5:	mov rdi, [rsp+0x50]
+	mov rax, [rsp+0x58]
+	cmp rax, 0x03
+	setz dl
+	movzx rdx, dl
+	test dl, dl
 	jz :3
-	inc rax
-	mov [rsp+0x50], rax
+	inc rdi
+	mov [rsp+0x50], rdi
 	jmp :4
-3:	mov rdi, rax
-	imul rdi, r9
-	mov rsi, rdx
+3:	mov rsi, rdi
+	imul rsi, r9
+	lea rdx, [rsp+0x08]
+	add rdx, rsi
+	mov rsi, rax
 	imul rsi, rcx
-	imul rdx, rax
-	lea rax, [rsp+0x08]
-	add rax, rdi
-	add rax, rsi
-	mov [rax], rdx
+	add rdx, rsi
+	imul rax, rdi
+	mov [rdx], rax
 	mov rax, [rsp+0x58]
 	inc rax
 	mov [rsp+0x58], rax

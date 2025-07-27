@@ -1,6 +1,6 @@
 main:
-	mov eax, [0x0000000000000006]
 	mov rcx, 0x0A
+	mov eax, [0x0000000000000006]
 	cdq
 	idiv ecx
 	neg eax

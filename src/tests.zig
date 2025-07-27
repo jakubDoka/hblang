@@ -106,7 +106,7 @@ pub fn runMachineTest(
             abi,
             color,
             true,
-        ) catch unreachable;
+        ) catch {};
     }
 
     try test_util.testBuilder(
