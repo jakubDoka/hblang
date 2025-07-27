@@ -1,0 +1,28 @@
+regalloc crash 4.blackbox:
+	ret
+main:
+	push rbx
+	push rbp
+	sub rsp, 0x08
+	mov rbx, 0x01
+	xor rbp, rbp
+4:	mov al, [0x0000000000000006]
+	test al, al
+	jz :0
+	cmp al, bpl
+	jnz :1
+	jmp :3
+1:	mov rdi, rbx
+	call :regalloc crash 4.blackbox
+3:	mov al, [0x0000000000000006]
+	test al, al
+	jz :3
+	mov rdi, rbx
+	call :regalloc crash 4.blackbox
+	jmp :3
+3:	jmp :4
+0:	xor rax, rax
+	add rsp, 0x08
+	pop rbp
+	pop rbx
+	ret

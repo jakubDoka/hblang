@@ -1,0 +1,25 @@
+main:
+         st $31, $254, -24, 24
+     addi64 $254, $254, -24
+       li64 $32, 1
+        lra $33, $0, :regalloc crash 4.blackbox2
+6:       ld $1, $33, 0, 1
+       andi $1, $1, 255
+        jeq $1, $0, :1
+        jne $1, $0, :2
+        jmp :3
+2:       cp $1, $32
+        jal $31, $0, :regalloc crash 4.blackbox
+5:       ld $1, $33, 0, 1
+       andi $1, $1, 255
+        jeq $1, $0, :3
+         cp $1, $32
+        jal $31, $0, :regalloc crash 4.blackbox
+        jmp :5
+3:      jmp :6
+1:       cp $1, $0
+     addi64 $254, $254, 24
+         ld $31, $254, -24, 24
+         tx
+regalloc crash 4.blackbox:
+       jala $0, $31, 0

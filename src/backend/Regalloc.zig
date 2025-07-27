@@ -409,8 +409,10 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 std.debug.print("|- [{}] {}\n", .{ depth, o });
             };
 
+            var call_cnt: usize = 0;
             var min: u32, var max: u32 = .{ 1000, 0 };
             for (@as([]*Node, members.entries.items(.key))) |member| {
+                if (member.kind == .Call) call_cnt += 1;
                 if (lrg.hasDef(member, lrg_table)) {
                     min, max = LiveRange
                         .collectLoopDepth(func, member, member.cfg0(), min, max);
@@ -426,7 +428,6 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                         if (lrg.isSame(dep, lrg_table)) {
                             min, max = LiveRange
                                 .collectLoopDepth(func, member, member.cfg0(), min, max);
-                            break;
                         }
                     }
                 }
@@ -474,7 +475,10 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                         if (!lrg.isSame(dep, lrg_table)) continue;
 
                         if (min != max and func.loopDepth(member) > min and
-                            !dep.isClone() and !dep.isReadonly()) continue;
+                            !dep.isClone() and !dep.isReadonly() and
+                            // NOTE: more then one call, so we absolutely need to split on it
+                            // or we get into a split loop
+                            (call_cnt < 2 or member.kind != .Call)) continue;
 
                         func.splitBefore(member, j, dep, false, .@"use/loop/use");
                     }

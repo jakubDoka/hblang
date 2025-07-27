@@ -487,6 +487,21 @@ main := fn(): u32 loop if A == A return 0 else {
 }
 ```
 
+#### regalloc crash 4
+```hb
+blackbox := fn(self: ^u32): void {
+}
+blackbox2: ?int = null
+main := fn(): u32 {
+    x: ^u32 = @bit_cast(1)
+    loop if sh := blackbox2 {
+        if blackbox2 == null continue
+        blackbox(x)
+        while s := blackbox2 blackbox(x)
+    } else return 0
+}
+```
+
 #### regalloc crash 2 (infinite)
 ```hb
 expectations := .{
