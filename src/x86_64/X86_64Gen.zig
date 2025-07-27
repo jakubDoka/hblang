@@ -2018,9 +2018,6 @@ pub fn deinit(self: *X86_64Gen) void {
 }
 
 pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
-    // TODO: maybe we can do this in more platform independend way?
-    // Compiling a library in?
-
     errdefer unreachable;
 
     const zydis = @import("zydis").exports;

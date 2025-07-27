@@ -1916,10 +1916,10 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
             const range = self.ast.exprs.get(iter.value).Range;
 
             var start = try self.emitTyped(.{}, .uint, range.start);
-            if (start.id == .Value) start.id = .{
-                .Pointer = self.bl.addSpill(self.src(range.start), start.id.Value),
+            const rsloc = self.src(range.start);
+            start.id = .{
+                .Pointer = self.bl.addSpill(rsloc, start.getValue(rsloc, self)),
             };
-
             if (range.end.tag() == .Void) {
                 id.* = .{ .OpenedRange = .{ .idx = start } };
             } else {

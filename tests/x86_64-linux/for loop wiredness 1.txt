@@ -1,0 +1,11 @@
+main:
+	xor rcx, rcx
+1:	cmp rcx, 0x0A
+	setb al
+	movzx rax, al
+	test al, al
+	jz :0
+	inc rcx
+	jmp :1
+0:	xor rax, rax
+	ret

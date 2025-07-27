@@ -2,6 +2,16 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### for loop wiredness 1
+```hb
+main := fn(): u32 {
+    a: uint = 0
+    for i := a..10 {
+    }
+    return @int_cast(a)
+}
+```
+
 #### nullable types 6
 ```hb
 x := fn(y: ?never): u32 return 0
