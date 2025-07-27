@@ -1,0 +1,14 @@
+slices 5 (coersion).use_slice:
+	ret
+main:
+	sub rsp, 0x08
+	mov byte ptr [rsp], 0x01
+	mov byte ptr [rsp+0x01], 0x02
+	mov byte ptr [rsp+0x02], 0x03
+	mov byte ptr [rsp+0x03], 0x04
+	mov rsi, 0x04
+	lea rdi, [rsp]
+	call :slices 5 (coersion).use_slice
+	xor rax, rax
+	add rsp, 0x08
+	ret

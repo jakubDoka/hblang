@@ -1828,6 +1828,17 @@ main := fn(): uint {
 }
 ```
 
+#### slices 5 (coersion)
+```hb
+use_slice := fn(slice: []u8): void {
+}
+
+main := fn(): uint {
+    use_slice(&.[1, 2, 3, 4])
+    return 0
+}
+```
+
 #### global variables 3
 ```hb
 expectations := .{

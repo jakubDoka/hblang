@@ -1057,16 +1057,24 @@ pub fn emitUnOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.UnOp)) EmitErr
         .@"?" => return self.emitTyConst(self.types.makeNullable(try self.resolveAnonTy(e.oper))),
         .@"&" => {
             if (self.ast.exprs.getTyped(.Arry, e.oper)) |a| {
-                if (a.ty.tag() == .Void and a.fields.len() == 0) {
+                if (a.ty.tag() == .Void) {
                     const ty = ctx.ty orelse return self.report(expr, "empty slice need to have a known type", .{});
                     const slice = self.types.store.unwrap(ty.data(), .Slice) orelse {
                         return self.report(expr, "{} is not a slice but it was initialized as such", .{ty});
                     };
 
                     const loc = ctx.loc orelse self.bl.addLocal(sloc, self.abiCata(ty).size());
-                    const ptr = self.bl.addIntImm(sloc, .i64, @bitCast(slice.elem.alignment(self.types)));
+
+                    const len = self.bl.addIntImm(sloc, .i64, @intCast(a.fields.len()));
+                    const ptr = if (a.fields.len() == 0)
+                        self.bl.addIntImm(sloc, .i64, @bitCast(slice.elem.alignment(self.types)))
+                    else b: {
+                        const arr = self.types.makeSlice(a.fields.len(), slice.elem);
+                        const value = try self.emitArray(.{ .ty = arr }, e.oper, a);
+                        break :b value.id.Pointer;
+                    };
                     self.bl.addFieldStore(sloc, loc, TySlice.ptr_offset, .i64, ptr);
-                    self.bl.addFieldStore(sloc, loc, TySlice.len_offset, .i64, self.bl.addIntImm(sloc, .i64, 0));
+                    self.bl.addFieldStore(sloc, loc, TySlice.len_offset, .i64, len);
 
                     return .mkp(ty, loc);
                 }
