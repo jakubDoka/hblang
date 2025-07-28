@@ -58,8 +58,8 @@ const Parser = @This();
 const Error = error{ UnexpectedToken, StackOverflow } || std.mem.Allocator.Error;
 
 const FuncStats = struct {
-    loop_depth: u16 = 0,
-    max_loop_depth: u16 = 0,
+    loop_depth: u8 = 0,
+    max_loop_depth: u8 = 0,
     max_variable_count: u16 = 0,
     variable_count: u16 = 0,
 };

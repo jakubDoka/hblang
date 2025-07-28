@@ -407,9 +407,10 @@ pub const Struct = struct {
                                 .file = self.key.loc.file,
                                 .scope = .init(.{ .Struct = id }),
                                 .ast = field.value,
+                                .capture_len = 0,
                             },
-                            .name = name,
-                            .captures = &.{},
+                            .name_pos = ast.strPos(name),
+                            .captures_ptr = undefined,
                         },
                         .readonly = true,
                     });

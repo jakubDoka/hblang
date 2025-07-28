@@ -93,6 +93,19 @@ pub fn build(b: *std.Build) !void {
     const test_step = b.step("test", "run tests");
     const test_filter = b.option([]const u8, "tf", "passed as a filter to tests");
 
+    hb_test: {
+        test_step.dependOn(&b.addRunArtifact(b.addTest(.{
+            .root_module = hb,
+            .target = b.graph.host,
+            .optimize = optimize,
+            .filter = test_filter,
+            .use_llvm = use_llvm,
+            .use_lld = use_lld,
+        })).step);
+
+        break :hb_test;
+    }
+
     const test_module = test_module: {
         const module = b.addModule("test", .{
             .root_source_file = b.path("src/tests.zig"),

@@ -84,7 +84,8 @@ pub const Expr = union(enum) {
         ret: Id,
         body: Id,
         peak_vars: u16,
-        peak_loops: u16,
+        peak_loops: u8,
+        thread: ?u7 = null,
     },
     FnPtr: struct {
         pos: Pos,
@@ -470,6 +471,15 @@ pub fn posOf(self: *const Ast, origin: anytype) Pos {
         },
         else => self.posOfPayload(origin),
     };
+}
+
+pub fn strPos(self: *const Ast, str: []const u8) u32 {
+    if (str.ptr == self.path.ptr) return Types.Scope.file_name;
+    if (str.len == 0) return Types.Scope.empty_name;
+    if (@intFromPtr(str.ptr) < @intFromPtr(self.source.ptr) or
+        @intFromPtr(str.ptr) > @intFromPtr(self.source.ptr + self.source.len))
+        unreachable;
+    return @intCast(str.ptr - self.source.ptr);
 }
 
 fn posOfPayload(self: *const Ast, v: anytype) Pos {

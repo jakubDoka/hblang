@@ -16,6 +16,7 @@ const tys = root.frontend.types;
 
 pub const Abi = root.frontend.Abi;
 
+alignment: void align(std.atomic.cache_line) = {},
 store: utils.EntStore(tys) = .{},
 pool: utils.Pool,
 interner: TypeIndex = .{},
@@ -114,7 +115,7 @@ pub const TypeCtx = struct {
 
                 // we skip the name and also splat the captures since they
                 // have no padding bites
-                hasher.update(@ptrCast(scope.captures));
+                hasher.update(@ptrCast(scope.captures()));
             },
         }
         return hasher.final();
@@ -145,14 +146,23 @@ pub const Handlers = struct {
 
 pub const Scope = struct {
     loc: struct {
-        file: Types.File,
-        scope: Id,
-        ast: Ast.Id,
-        unused2: u16 = 0,
-        unused: u32 = 0,
-    },
-    name: []const u8,
-    captures: []const Capture,
+        file: Types.File = .root,
+        scope: Id = .void,
+        ast: Ast.Id = .zeroSized(.Void),
+        capture_len: u16 = 0,
+    } = .{},
+    name_pos: u32 = empty_name,
+    captures_ptr: [*]const Capture = undefined,
+
+    comptime {
+        std.debug.assert(std.meta.hasUniqueRepresentation(Scope));
+    }
+
+    pub const empty_name = std.math.maxInt(u32);
+    pub const generic_name = std.math.maxInt(u32) - 1;
+    pub const file_name = std.math.maxInt(u32) - 2;
+    pub const main = std.math.maxInt(u32) - 3;
+    pub const string = std.math.maxInt(u32) - 4;
 
     pub const Capture = struct {
         id: packed struct(u32) {
@@ -175,21 +185,34 @@ pub const Scope = struct {
         }
     };
 
-    pub const dummy = Scope{
-        .loc = .{
-            .file = .root,
-            .scope = .void,
-            .ast = .zeroSized(.Void),
-        },
-        .name = "",
-        .captures = &.{},
-    };
+    pub const dummy = Scope{};
+
+    pub fn captures(self: Scope) []const Capture {
+        return self.captures_ptr[0..self.loc.capture_len];
+    }
+
+    pub fn name(self: *const Scope, types: *Types) []const u8 {
+        if (self.name_pos == empty_name) return "";
+        if (self.name_pos == generic_name) return "-";
+        if (self.name_pos == file_name) return types.getFile(self.loc.file).path;
+        if (self.name_pos == main) return "main";
+        if (self.name_pos == string) {
+            const parent: *const tys.Global = @fieldParentPtr("key", self);
+            return parent.data.imm;
+        }
+        return types.getFile(self.loc.file).tokenSrc(self.name_pos);
+    }
+
+    pub fn setCaptures(self: *Scope, captres: []const Capture) void {
+        self.loc.capture_len = @intCast(captres.len);
+        self.captures_ptr = captres.ptr;
+    }
 
     pub fn eql(self: Scope, other: Scope) bool {
         return self.loc.file == other.loc.file and
             self.loc.scope == other.loc.scope and
             self.loc.ast == other.loc.ast and
-            std.mem.eql(u64, @ptrCast(self.captures), @ptrCast(other.captures));
+            std.mem.eql(u64, @ptrCast(self.captures()), @ptrCast(other.captures()));
     }
 };
 
@@ -348,11 +371,11 @@ pub const Id = enum(IdRepr) {
     }
 
     pub fn captures(self: Id, types: *Types) []const Scope.Capture {
-        return self.getKey(types).captures;
+        return self.getKey(types).captures();
     }
 
     pub fn findCapture(self: Id, id: Ast.Ident, types: *Types) ?*const Scope.Capture {
-        return for (self.getKey(types).captures) |*cp| {
+        return for (self.getKey(types).captures()) |*cp| {
             if (cp.id.index == @intFromEnum(id)) break cp;
         } else null;
     }
@@ -660,7 +683,7 @@ pub const Id = enum(IdRepr) {
                         std.debug.assert(t.data() != .Template or
                             self.tys.store.get(t.data().Template).temporary == false);
 
-                        var cursor = t;
+                        var cursor: Id = t;
                         var depth: usize = 0;
                         const frame = scope_stack.items.len;
                         work_list.appendAssumeCapacity(.{ .PopScope = frame });
@@ -673,8 +696,8 @@ pub const Id = enum(IdRepr) {
                             cursor = key.loc.scope;
 
                             captures_to_display.clearRetainingCapacity();
-                            try captures_to_display.ensureTotalCapacity(tmp.arena.allocator(), key.captures.len);
-                            for (key.captures) |cap| {
+                            try captures_to_display.ensureTotalCapacity(tmp.arena.allocator(), key.captures().len);
+                            for (key.captures()) |cap| {
                                 if (try seen_captures.fetchPut(tmp.arena.allocator(), cap, {}) == null) {
                                     captures_to_display.appendAssumeCapacity(cap);
                                 }
@@ -696,12 +719,13 @@ pub const Id = enum(IdRepr) {
                             }
 
                             work_list.appendAssumeCapacity(.{ .PushScope = cursor });
-                            if (key.name.len != 0 and (key.name.len != 1 or key.name[0] != '-')) {
+                            if (key.name_pos != Scope.empty_name and key.name_pos != Scope.generic_name) {
+                                const name = key.name(self.tys);
                                 if (key.loc.scope == .void) {
-                                    const end = std.mem.lastIndexOfScalar(u8, key.name, '.') orelse key.name.len;
-                                    work_list.appendAssumeCapacity(.{ .Name = key.name[0..end] });
+                                    const end = std.mem.lastIndexOfScalar(u8, name, '.') orelse name.len;
+                                    work_list.appendAssumeCapacity(.{ .Name = name[0..end] });
                                 } else {
-                                    work_list.appendAssumeCapacity(.{ .Name = key.name });
+                                    work_list.appendAssumeCapacity(.{ .Name = name });
                                 }
                                 work_list.appendAssumeCapacity(.{ .Name = "." });
                             }
@@ -1056,13 +1080,22 @@ pub fn queue(self: *Types, target: Target, task: Id) void {
     }
 }
 
-pub fn nextTask(self: *Types, target: Target, pop_limit: usize) ?utils.EntId(tys.Func) {
+pub fn nextTask(self: *Types, target: Target, pop_limit: usize, q: ?*root.Queue) ?utils.EntId(tys.Func) {
     while (self.func_work_list.get(target).items.len > pop_limit) {
         const func = self.func_work_list.getPtr(target).pop() orelse return null;
         if (self.store.get(func).completion.get(target) == .compiled) continue;
         self.store.get(func).completion.set(target, .compiled);
         return func;
     }
+
+    if (q) |qu| {
+        while (qu.dequeue()) |task| {
+            if (task.intoFunc(self)) |func| {
+                return func;
+            }
+        }
+    }
+
     return null;
 }
 
@@ -1090,12 +1123,8 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: std.io.AnyWriter) *
     slot.source_loc = .init(.{ .Struct = slot.store.add(slot.pool.allocator(), tys.Struct{
         .key = .{
             .loc = .{
-                .file = .root,
                 .scope = slot.getScope(.root),
-                .ast = .zeroSized(.Void),
             },
-            .name = "SrcLoc",
-            .captures = &.{},
         },
         .index = .empty,
         .alignment = 8,
@@ -1246,9 +1275,10 @@ pub fn resolveFielded(
             .scope = scope,
             .file = file,
             .ast = ast,
+            .capture_len = @intCast(captures.len),
         },
-        .name = name,
-        .captures = captures,
+        .name_pos = self.getFile(file).strPos(name),
+        .captures_ptr = captures.ptr,
     });
     if (!slot.found_existing) {
         self.store.get(alloc).* = .{
@@ -1292,13 +1322,7 @@ pub fn dumpAnalErrors(self: *Types, anal_errors: *std.ArrayListUnmanaged(static_
 pub fn addStringGlobal(self: *Types, data: []const u8) utils.EntId(tys.Global) {
     const glob = self.store.add(self.pool.allocator(), tys.Global{
         .key = .{
-            .loc = .{
-                .file = .root,
-                .scope = .void,
-                .ast = .zeroSized(.Void),
-            },
-            .name = data,
-            .captures = &.{},
+            .name_pos = Scope.string,
         },
         .data = .{ .imm = data },
         .ty = self.makeSlice(data.len, .u8),
@@ -1321,10 +1345,7 @@ pub fn addUniqueGlobal(self: *Types, scope: Id) utils.EntId(tys.Global) {
             .loc = .{
                 .file = scope.file(self).?,
                 .scope = scope,
-                .ast = .zeroSized(.Void),
             },
-            .name = "",
-            .captures = &.{},
         },
         .ty = .never,
         .readonly = true,
@@ -1346,8 +1367,7 @@ pub fn resolveGlobal(
             .file = scope.file(self).?,
             .ast = ast,
         },
-        .name = name,
-        .captures = &.{},
+        .name_pos = self.getFile(scope.file(self).?).strPos(name),
     });
 
     if (!slot.found_existing) {

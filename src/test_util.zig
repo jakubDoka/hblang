@@ -196,9 +196,11 @@ pub fn testBuilder(
     types.target = target;
     defer types.deinit();
 
+    var threading: root.Threading = .{ .single = .{ .types = types } };
+
     const errored = Codegen.emitReachable(
         func_arena.arena,
-        types,
+        &threading,
         abi,
         gen,
         opts,

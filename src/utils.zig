@@ -144,6 +144,15 @@ pub const Arena = struct {
         return @intFromPtr(self.end) - @intFromPtr(self.pos);
     }
 
+    pub fn subslice(self: *Arena, capacity: usize) Arena {
+        const ptr = self.allocRaw(4096, capacity);
+        return .{
+            .start = @alignCast(ptr),
+            .end = @alignCast(ptr + capacity),
+            .pos = ptr,
+        };
+    }
+
     pub fn scrathFromAlloc(except: ?std.mem.Allocator) Scratch {
         for (&scratch) |*slt| if (@as(*anyopaque, slt) != if (except) |e| e.ptr else null) return slt.checkpoint();
         unreachable;
@@ -222,7 +231,7 @@ pub const Arena = struct {
     pub fn allocRaw(self: *Arena, alignment: usize, size: usize) [*]u8 {
         self.pos = @ptrFromInt(std.mem.alignForward(usize, @intFromPtr(self.pos), alignment));
         self.pos += size;
-        std.debug.assert(@intFromPtr(self.end) > @intFromPtr(self.pos));
+        std.debug.assert(@intFromPtr(self.end) >= @intFromPtr(self.pos));
         return self.pos - size;
     }
 

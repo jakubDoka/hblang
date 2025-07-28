@@ -66,6 +66,7 @@ pub const CompileOptions = struct {
     log_stats: bool = false, // log stats about the compilation (memory)
     type_system_memory: usize = 1024 * 1024 * 256, // how much memory can type system use
     scratch_memory: usize = 1024 * 1024 * 128, // how much memory can each scratch arena use (there are 2)
+    shared_queue_capacity: usize = 1024 * 256, // estimated queue capacity
     target: []const u8 = "hbvm-ableos", // target triple to compile to (not
     // used yet since we have only one target)
     no_entry: bool = false, // wether compiler should look for main function
@@ -144,6 +145,193 @@ pub const CompileOptions = struct {
     }
 };
 
+pub fn SharedQueue(comptime T: type) type {
+    return struct {
+        shards: []Shard,
+        progress: usize = 0,
+        cached_counter: usize = 0,
+        self_id: usize = std.math.maxInt(usize),
+        tasks: []const []T,
+
+        const Self = @This();
+
+        pub const Shard = struct {
+            reserved: std.atomic.Value(usize) align(std.atomic.cache_line),
+            available: std.atomic.Value(usize) align(std.atomic.cache_line),
+        };
+
+        pub fn size_of(thread_count: usize, capacity: usize) usize {
+            return @sizeOf(T) * capacity * thread_count +
+                @sizeOf(Shard) * thread_count +
+                @sizeOf([]T) * thread_count;
+        }
+
+        pub fn init(arena: *Arena, thread_count: usize, capacity: usize) Self {
+            const tasks = arena.alloc([]T, thread_count);
+            const shards = arena.alloc(Shard, thread_count);
+            for (shards, tasks) |*s, *t| {
+                s.reserved.store(0, .unordered);
+                s.available.store(0, .unordered);
+                t.* = arena.alloc(T, capacity);
+            }
+
+            return .{ .shards = shards, .tasks = tasks };
+        }
+
+        pub fn enque(self: *Self, tasks: []const T) void {
+            const push_to = (if (!std.meta.hasMethod(T, "hash") and std.meta.hasUniqueRepresentation(T))
+                std.hash.Wyhash.hash(0, @ptrCast(tasks))
+            else
+                T.hash(tasks)) & self.shards.len - 1;
+
+            const idx = self.shards[push_to].reserved.fetchAdd(tasks.len, .monotonic);
+            @memcpy(self.tasks[push_to][idx..][0..tasks.len], tasks);
+            while (self.shards[push_to].available.cmpxchgWeak(idx, idx + tasks.len, .release, .monotonic) != null) {}
+        }
+
+        pub fn dequeue(self: *Self) ?T {
+            const shard = self.shards[self.self_id];
+            if (self.progress == self.cached_counter) {
+                self.cached_counter = shard.available.load(.acquire);
+                if (self.cached_counter == self.progress) return null;
+            }
+            self.progress += 1;
+            return self.tasks[self.self_id][self.progress - 1];
+        }
+    };
+}
+
+test "queue shard" {
+    const tasks_per_thread = 1024 * 1024;
+
+    const thread = struct {
+        fn runShardThread(ashard: SharedQueue(u64)) void {
+            var shard = ashard;
+            for (0..tasks_per_thread) |i| {
+                var tasks: u64 = i + shard.self_id * tasks_per_thread;
+                shard.enque((&tasks)[0..1]);
+                _ = shard.dequeue();
+            }
+        }
+    };
+
+    const thread_count = 8;
+
+    var arena = Arena.init(SharedQueue(u64).size_of(thread_count, tasks_per_thread * thread_count));
+    var shard = SharedQueue(u64).init(&arena, thread_count, tasks_per_thread * thread_count);
+
+    const Thrd = struct {
+        thread: std.Thread,
+    };
+
+    const tsrgs = std.testing.allocator.alloc(Thrd, thread_count) catch unreachable;
+    defer std.testing.allocator.free(tsrgs);
+    for (tsrgs, 0..) |*thrd, i| {
+        shard.self_id = i;
+        thrd.* = .{ .thread = try std.Thread.spawn(.{}, thread.runShardThread, .{shard}) };
+    }
+
+    for (tsrgs) |thrd| {
+        thrd.thread.join();
+    }
+
+    var bitset = try std.DynamicBitSetUnmanaged.initEmpty(std.testing.allocator, thread_count * tasks_per_thread);
+    defer bitset.deinit(std.testing.allocator);
+
+    for (shard.tasks, shard.shards) |thrd, shrd| {
+        for (thrd[0..shrd.available.load(.unordered)]) |task| {
+            bitset.set(@bitCast(task));
+        }
+    }
+
+    std.debug.assert(bitset.count() == thread_count * tasks_per_thread);
+}
+
+pub const Task = struct {
+    id: struct {
+        file: frontend.Types.File,
+        captures_len: u16,
+        ast: frontend.Ast.Id,
+    },
+    captures: [*]const frontend.types.Builtin,
+
+    pub fn hash(tasks: []const Task) u64 {
+        var hasher = std.hash.Wyhash.init(0);
+        for (tasks) |task| {
+            hasher.update(std.mem.asBytes(&task.id));
+            hasher.update(@ptrCast(task.captures[0..task.id.captures_len]));
+        }
+        return hasher.final();
+    }
+
+    pub fn tryFronFn(types: *frontend.Types, func: utils.EntId(frontend.types.Func)) !Task {
+        const fnc: *frontend.types.Func = types.store.get(func);
+
+        var tmp = utils.Arena.scrath(null);
+        defer tmp.deinit();
+
+        const captures = tmp.arena.alloc(frontend.types.Builtin, fnc.key.captures().len);
+        for (fnc.key.captures(), captures) |cap, *c| {
+            if (cap.ty != .type) return error.TooComplex;
+            const vty: frontend.Types.Id = @enumFromInt(cap.value);
+            if (vty.data() != .Builtin) return error.TooComplex;
+            c.* = vty.data().Builtin;
+        }
+
+        return Task{
+            .id = .{
+                .file = fnc.key.loc.file,
+                .captures_len = @intCast(captures.len),
+                .ast = fnc.key.loc.ast,
+            },
+            .captures = types.pool.arena.dupe(frontend.types.Builtin, captures).ptr,
+        };
+    }
+
+    pub fn intoFunc(self: Task, types: *frontend.Types) ?utils.EntId(frontend.types.Func) {
+        _ = self; // autofix
+        _ = types; // autofix
+
+        // const slot, const alloc = self.types.intern(.Func, .{
+        //     .loc = .{
+        //         .scope = typ,
+        //         .file = tmpl.key.loc.file,
+        //         .ast = tmpl.key.loc.ast,
+        //     },
+        //     .name = "-",
+        //     .captures = captures[0..capture_idx],
+        // });
+
+        // if (!slot.found_existing) {
+        //     const alc = self.types.store.get(alloc);
+        //     alc.* = .{
+        //         .key = alc.key,
+        //         .args = self.types.pool.arena.dupe(Types.Id, arg_tys),
+        //         .ret = ret,
+        //     };
+        //     alc.key.captures =
+        //         self.types.pool.arena.dupe(Types.Scope.Capture, alc.key.captures);
+        //     alc.is_inline = tmpl.is_inline;
+        // }
+        unreachable;
+    }
+};
+
+pub const Queue = SharedQueue(Task);
+
+pub const Threading = union(enum) {
+    single: struct {
+        types: *frontend.Types,
+    },
+    multi: Multi,
+
+    pub const Multi = struct {
+        pool: std.Thread.Pool,
+        queue: SharedQueue(Task),
+        types: []*frontend.Types,
+    };
+};
+
 pub fn compile(opts: CompileOptions) anyerror!struct {
     arena: Arena,
     ast: []const hb.frontend.Ast,
@@ -216,26 +404,72 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         return .{ .ast = asts, .arena = type_system_memory };
     }
 
-    const types = hb.frontend.Types.init(type_system_memory, asts, opts.diagnostics);
-    types.target = opts.target;
-    types.colors = opts.error_colors;
-    defer if (std.debug.runtime_safety) types.deinit();
+    var shared_arena: Arena = undefined;
+    var threading: Threading = if (opts.extra_threads == 0) .{ .single = .{
+        .types = b: {
+            const types = hb.frontend.Types.init(type_system_memory, asts, opts.diagnostics);
+            types.target = opts.target;
+            types.colors = opts.error_colors;
+            break :b types;
+        },
+    } } else b: {
+        const thread_count = opts.extra_threads + 1;
+
+        shared_arena = Arena.init(
+            Queue.size_of(
+                thread_count,
+                opts.shared_queue_capacity,
+            ) + @sizeOf(Queue) * thread_count + 4096,
+        );
+
+        var pool: std.Thread.Pool = undefined;
+        try std.Thread.Pool.init(&pool, .{
+            .allocator = shared_arena.allocator(),
+            .n_jobs = thread_count,
+        });
+
+        const types = type_system_memory.alloc(*hb.frontend.Types, thread_count);
+        const chunk_size = (opts.type_system_memory - type_system_memory.consumed()) / thread_count;
+        for (types) |*t| {
+            // TODO: diagnostics need to be agregated somehow in a sync manner
+            t.* = hb.frontend.Types.init(type_system_memory.subslice(chunk_size), asts, opts.diagnostics);
+            t.*.target = opts.target;
+            t.*.colors = opts.error_colors;
+        }
+
+        break :b .{
+            .multi = .{
+                .pool = pool,
+                .queue = .init(
+                    &shared_arena,
+                    opts.extra_threads + 1,
+                    opts.shared_queue_capacity / (opts.extra_threads + 1) * 2,
+                ),
+                .types = types,
+            },
+        };
+    };
 
     var bckend, const abi: hb.backend.graph.CallConv = if (std.mem.startsWith(u8, opts.target, "hbvm-ableos")) backend: {
-        const slot = types.pool.arena.create(hb.hbvm.HbvmGen);
-        slot.* = hb.hbvm.HbvmGen{ .gpa = &types.pool };
+        const slot = threading.single.types.pool.arena.create(hb.hbvm.HbvmGen);
+        slot.* = hb.hbvm.HbvmGen{ .gpa = &threading.single.types.pool };
         break :backend .{ hb.backend.Machine.init(slot), .ablecall };
     } else if (std.mem.startsWith(u8, opts.target, "x86_64-windows")) backend: {
-        const slot = types.pool.arena.create(hb.x86_64.X86_64Gen);
-        slot.* = hb.x86_64.X86_64Gen{ .gpa = &types.pool, .object_format = .coff };
+        const slot = threading.single.types.pool.arena.create(hb.x86_64.X86_64Gen);
+        slot.* = hb.x86_64.X86_64Gen{ .gpa = &threading.single.types.pool, .object_format = .coff };
         break :backend .{ hb.backend.Machine.init(slot), .fastcall };
     } else if (std.mem.startsWith(u8, opts.target, "x86_64-linux")) backend: {
-        const slot = types.pool.arena.create(hb.x86_64.X86_64Gen);
-        slot.* = hb.x86_64.X86_64Gen{ .gpa = &types.pool, .object_format = .elf };
+        const slot = threading.single.types.pool.arena.create(hb.x86_64.X86_64Gen);
+        slot.* = hb.x86_64.X86_64Gen{ .gpa = &threading.single.types.pool, .object_format = .elf };
         break :backend .{ hb.backend.Machine.init(slot), .systemv };
     } else if (std.mem.startsWith(u8, opts.target, "null")) backend: {
         var value = hb.backend.Machine.Null{};
-        types.target = "x86_64-linux";
+        switch (threading) {
+            .single => |s| s.types.target = "x86_64-linux",
+            .multi => |m| for (m.types) |t| {
+                t.target = "x86_64-linux";
+            },
+        }
         break :backend .{ hb.backend.Machine.init(&value), .systemv };
     } else {
         try opts.diagnostics.print(
@@ -251,7 +485,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
 
     const errored = hb.frontend.Codegen.emitReachable(
         root_tmp.arena,
-        types,
+        &threading,
         .{ .cc = abi },
         bckend,
         opts.optimizations,
@@ -263,7 +497,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         return error.Failed;
     }
 
-    const name = try std.mem.replaceOwned(u8, types.pool.arena.allocator(), opts.root_file, "/", "_");
+    const name = try std.mem.replaceOwned(u8, root_tmp.arena.allocator(), opts.root_file, "/", "_");
 
     var anal_errors = std.ArrayListUnmanaged(backend.static_anal.Error){};
 
@@ -273,9 +507,16 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         .arena = root_tmp.arena,
     };
 
+    if (threading == .multi) {
+        try opts.diagnostics.print("multi threading code emmision is not yet supported\n", .{});
+        return error.Failed;
+    }
+
+    const types = threading.single.types;
+
     if (opts.dump_asm) {
         const out = bckend.finalizeBytes(.{
-            .gpa = types.pool.arena.allocator(),
+            .gpa = root_tmp.arena.allocator(),
             .optimizations = optimizations,
             .builtins = types.getBuiltins(),
         });

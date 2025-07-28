@@ -201,6 +201,12 @@ pub const Ctx = struct {
     }
 };
 
+const LogOpts = struct {
+    colors: std.io.tty.Config = .no_color,
+    output: std.io.AnyWriter = std.io.null_writer.any(),
+    verbose: bool = false,
+};
+
 pub fn init(
     scratch: *utils.Arena,
     types: *Types,
@@ -217,19 +223,14 @@ pub fn init(
     return res;
 }
 
-/// returns true when errored
-pub fn emitReachable(
+pub fn emitReachableSingleThread(
     scrath: *utils.Arena,
     types: *Types,
     abi: Types.Abi,
     backend: root.backend.Machine,
     optimizations: root.backend.Machine.OptOptions.Mode,
     has_main: bool,
-    log_opts: struct {
-        colors: std.io.tty.Config = .no_color,
-        output: std.io.AnyWriter = std.io.null_writer.any(),
-        verbose: bool = false,
-    },
+    log_opts: LogOpts,
 ) bool {
     errdefer unreachable;
 
@@ -246,7 +247,7 @@ pub fn emitReachable(
     for (exports) |exp| types.queue(.runtime, .init(.{ .Func = exp }));
 
     var errored = false;
-    while (types.nextTask(.runtime, 0)) |func| {
+    while (types.nextTask(.runtime, 0, null)) |func| {
         defer codegen.bl.func.reset();
 
         const err = codegen.build(func);
@@ -280,11 +281,11 @@ pub fn emitReachable(
         backend.emitFunc(&codegen.bl.func, root.backend.Machine.EmitOptions{
             .id = @intFromEnum(func),
             .name = if (func_data.visibility != .local)
-                func_data.key.name
+                func_data.key.name(types)
             else
                 root.frontend.Types.Id.init(.{ .Func = func })
                     .fmt(types).toString(scrath),
-            .is_inline = func_data.is_inline or func_data.key.name.len == 0,
+            .is_inline = func_data.is_inline or func_data.key.name(types).len == 0,
             .linkage = func_data.visibility,
             .special = func_data.special,
             .optimizations = .{ .opts = opts },
@@ -295,6 +296,79 @@ pub fn emitReachable(
     }
 
     return errored;
+}
+
+pub fn emitReachableChildThread(
+    types: *Types,
+    queue: root.Queue,
+    abi: Types.Abi,
+    backend: root.backend.Machine,
+    optimizations: root.backend.Machine.OptOptions.Mode,
+    log_opts: LogOpts,
+) void {
+    _ = abi; // autofix
+    _ = backend; // autofix
+    _ = optimizations; // autofix
+    _ = log_opts; // autofix
+    _ = types; // autofix
+    _ = queue; // autofix
+
+}
+
+pub fn emitReachableMultiThread(
+    scrath: *utils.Arena,
+    threading: *root.Threading.Multi,
+    abi: Types.Abi,
+    backend: root.backend.Machine,
+    optimizations: root.backend.Machine.OptOptions.Mode,
+    has_main: bool,
+    log_opts: LogOpts,
+) bool {
+    var root_tmp = utils.Arena.scrath(scrath);
+    defer root_tmp.deinit();
+
+    const codegen = Codegen.init(root_tmp.arena, threading.types[0], .runtime, abi);
+    defer codegen.deinit();
+
+    const exports = codegen.collectExports(has_main, root_tmp.arena) catch {
+        return true;
+    };
+
+    for (exports) |exp| {
+        threading.queue.enque(&.{root.Task.tryFronFn(threading.types[0], exp) catch
+            unreachable});
+    }
+
+    var wait_group = std.Thread.WaitGroup{};
+    for (threading.types, 0..) |ty, i| {
+        var queue = threading.queue;
+        queue.self_id = i;
+        threading.pool.spawnWg(
+            &wait_group,
+            emitReachableChildThread,
+            .{ ty, queue, abi, backend, optimizations, log_opts },
+        );
+    }
+
+    wait_group.wait();
+
+    unreachable;
+}
+
+/// returns true when errored
+pub fn emitReachable(
+    scrath: *utils.Arena,
+    threading: *root.Threading,
+    abi: Types.Abi,
+    backend: root.backend.Machine,
+    optimizations: root.backend.Machine.OptOptions.Mode,
+    has_main: bool,
+    log_opts: LogOpts,
+) bool {
+    switch (threading.*) {
+        .single => |*s| return emitReachableSingleThread(scrath, s.types, abi, backend, optimizations, has_main, log_opts),
+        .multi => |*m| return emitReachableMultiThread(scrath, m, abi, backend, optimizations, has_main, log_opts),
+    }
 }
 
 pub fn deinit(self: *Codegen) void {
@@ -419,7 +493,7 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
                     exports_main = exports_main or std.mem.eql(u8, name_str, "main");
 
                     self.types.store.get(ty.data().Func).visibility = .exported;
-                    self.types.store.get(ty.data().Func).key.name = name_str;
+                    self.types.store.get(ty.data().Func).key.name_pos = fl.strPos(name_str);
                 },
                 else => unreachable,
             }
@@ -446,7 +520,7 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
         };
 
         self.types.store.get(entry).visibility = .exported;
-        self.types.store.get(entry).key.name = "main";
+        self.types.store.get(entry).key.name_pos = Types.Scope.main;
 
         try funcs.append(tmp.arena.allocator(), entry);
     }
@@ -524,7 +598,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
 
         if (args.len != 0) {
             const string = ast.exprs.get(args[0]).String;
-            func.key.name = ast.source[string.pos.index + 1 .. string.end - 1];
+            func.key.name_pos = string.pos.index + 1;
         }
 
         func.visibility = .imported;
@@ -2210,30 +2284,33 @@ fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
         }
     }
 
+    const file = self.parent_scope.file(self.types);
     if (e.comptime_args.len() != 0 or has_anytypes) {
         const slot, const alloc = self.types.intern(.Template, .{
             .loc = .{
                 .scope = self.parent_scope.perm(self.types),
-                .file = self.parent_scope.file(self.types),
+                .file = file,
                 .ast = expr,
+                .capture_len = @intCast(captures.len),
             },
-            .name = self.name,
-            .captures = captures,
+            .name_pos = self.types.getFile(file).strPos(self.name),
+            .captures_ptr = captures.ptr,
         });
         if (!slot.found_existing) {
-            self.types.store.get(alloc).key.captures =
-                self.types.pool.arena.dupe(Types.Scope.Capture, self.types.store.get(alloc).key.captures);
+            self.types.store.get(alloc).key.captures_ptr =
+                self.types.pool.arena.dupe(Types.Scope.Capture, self.types.store.get(alloc).key.captures()).ptr;
         }
         return self.emitTyConst(slot.key_ptr.*);
     } else {
         const slot, const alloc = self.types.intern(.Func, .{
             .loc = .{
                 .scope = self.parent_scope.perm(self.types),
-                .file = self.parent_scope.file(self.types),
+                .file = file,
                 .ast = expr,
+                .capture_len = @intCast(captures.len),
             },
-            .name = self.name,
-            .captures = captures,
+            .name_pos = self.types.getFile(file).strPos(self.name),
+            .captures_ptr = captures.ptr,
         });
         const id = slot.key_ptr.*;
         errdefer _ = self.types.interner.removeContext(id, .{ .types = self.types });
@@ -2248,11 +2325,11 @@ fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
                 .args = self.types.pool.arena.dupe(Types.Id, args),
                 .ret = ret,
             };
-            self.types.store.get(alloc).key.captures =
+            self.types.store.get(alloc).key.captures_ptr =
                 self.types.pool.arena.dupe(
                     Types.Scope.Capture,
-                    self.types.store.get(alloc).key.captures,
-                );
+                    self.types.store.get(alloc).key.captures(),
+                ).ptr;
         }
         return self.emitTyConst(id);
     }
@@ -2266,12 +2343,10 @@ fn emitUse(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Use)) EmitError!Value
             const file = self.types.getFile(e.file);
             const slot, const alloc = self.types.intern(.Global, .{
                 .loc = .{
-                    .scope = .void,
                     .file = e.file,
-                    .ast = .zeroSized(.Void),
                 },
-                .name = file.path,
-                .captures = &.{},
+                .name_pos = Types.Scope.file_name,
+                .captures_ptr = undefined,
             });
             if (!slot.found_existing) {
                 self.types.store.get(alloc).* = .{
@@ -2895,7 +2970,7 @@ pub fn lookupScopeItem(
         }
     }
 
-    const decl, const path, _ =
+    const decl, const path, const ident =
         (bsty.index(self.types) orelse {
             return self.report(pos, "the {} does not have a scope," ++
                 " so field access does not make sense", .{bsty});
@@ -2904,7 +2979,7 @@ pub fn lookupScopeItem(
         };
 
     const is_read_only = ast.source[ast.posOf(decl).index] == '$';
-    return self.resolveGlobal(name, bsty, ast, decl, path, is_read_only);
+    return self.resolveGlobal(ast.tokenSrc(ident.pos()), bsty, ast, decl, path, is_read_only);
 }
 
 pub fn resolveGlobalLow(
@@ -3221,7 +3296,7 @@ pub fn instantiateTemplate(
     self.types.store.get(scope).* = tmpl;
     self.types.store.get(scope).temporary = true;
     self.types.store.get(scope).key.loc.scope = typ;
-    self.types.store.get(scope).key.captures = &.{};
+    self.types.store.get(scope).key.setCaptures(&.{});
 
     const tmpl_file = self.types.getFile(tmpl.key.loc.file);
     const tmpl_ast = tmpl_file.exprs.getTyped(.Fn, tmpl.key.loc.ast).?;
@@ -3274,7 +3349,7 @@ pub fn instantiateTemplate(
             };
             capture_idx += 1;
             comptime_idx += 1;
-            self.types.store.get(scope).key.captures = captures[0..capture_idx];
+            self.types.store.get(scope).key.setCaptures(captures[0..capture_idx]);
         } else {
             arg_tys[arg_idx] = try self.types.ct.evalTy("", template_scope, param.ty);
             if (arg_tys[arg_idx] == .any) {
@@ -3288,7 +3363,7 @@ pub fn instantiateTemplate(
                 captures[capture_idx] = .{ .id = .fromIdent(binding.id), .ty = arg_tys[arg_idx] };
                 captures[capture_idx].id.from_any = true;
                 capture_idx += 1;
-                self.types.store.get(scope).key.captures = captures[0..capture_idx];
+                self.types.store.get(scope).key.setCaptures(captures[0..capture_idx]);
             } else if (arg == .Expr) {
                 arg_exprs[arg_expr_idx] =
                     try self.emitTyped(.{}, arg_tys[arg_idx], arg.Expr);
@@ -3326,9 +3401,10 @@ pub fn instantiateTemplate(
             .scope = typ,
             .file = tmpl.key.loc.file,
             .ast = tmpl.key.loc.ast,
+            .capture_len = @intCast(capture_idx),
         },
-        .name = "-",
-        .captures = captures[0..capture_idx],
+        .name_pos = Types.Scope.generic_name,
+        .captures_ptr = captures.ptr,
     });
 
     if (!slot.found_existing) {
@@ -3338,8 +3414,8 @@ pub fn instantiateTemplate(
             .args = self.types.pool.arena.dupe(Types.Id, arg_tys),
             .ret = ret,
         };
-        alc.key.captures =
-            self.types.pool.arena.dupe(Types.Scope.Capture, alc.key.captures);
+        alc.key.captures_ptr =
+            self.types.pool.arena.dupe(Types.Scope.Capture, alc.key.captures()).ptr;
         alc.is_inline = tmpl.is_inline;
     }
 

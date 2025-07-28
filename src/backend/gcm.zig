@@ -530,14 +530,18 @@ pub fn Mixin(comptime Backend: type) type {
 
             var scheduled: usize = 0;
             if (ready != scheduled) while (scheduled < outs.len - 1) {
-                if (ready == scheduled) utils.panic("{} {} {} {any}", .{ scheduled, outs.len, bbn, outs[scheduled..] });
+                if (ready == scheduled) utils.panic(
+                    "{} {} {} {any}",
+                    .{ scheduled, outs.len, bbn, outs[scheduled..] },
+                );
 
                 var pick = scheduled;
                 var pick_priority = metas[outs[pick].get().schedule]
                     .priority(func, bb, outs[pick].get(), metas);
                 for (outs[scheduled + 1 .. ready], scheduled + 1..) |n, i| {
                     const o = n.get();
-                    const o_priority = metas[o.schedule].priority(func, bb, o, metas);
+                    const o_priority = metas[o.schedule]
+                        .priority(func, bb, o, metas);
                     if (o_priority > pick_priority) {
                         pick = i;
                         pick_priority = o_priority;

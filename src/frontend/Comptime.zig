@@ -65,8 +65,8 @@ pub fn init(gpa: *utils.Pool) Comptime {
     return self;
 }
 
-inline fn getTypes(self: *Comptime) *Types {
-    return @fieldParentPtr("ct", self);
+pub fn getTypes(self: *Comptime) *Types {
+    return @alignCast(@fieldParentPtr("ct", self));
 }
 
 inline fn getGpa(self: *Comptime) std.mem.Allocator {
@@ -687,7 +687,7 @@ pub fn jitExprLow(
 }
 
 pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until: usize) !void {
-    while (self.types.nextTask(self.target, pop_until)) |func| {
+    while (self.types.nextTask(self.target, pop_until, null)) |func| {
         defer self.bl.func.reset();
 
         try self.build(func);
@@ -771,7 +771,7 @@ pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(tys.Glo
         inline for (.{ .Func, .Template }) |tag| {
             if (typ.data() == tag) {
                 const item = types.store.get(@field(typ.data(), @tagName(tag)));
-                if (std.mem.eql(u8, name, item.key.name)) item.is_inline = glbal.readonly;
+                if (std.mem.eql(u8, name, item.key.name(types))) item.is_inline = glbal.readonly;
             }
         }
     }
