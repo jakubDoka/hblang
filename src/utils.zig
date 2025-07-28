@@ -525,16 +525,15 @@ pub fn EntStore(comptime M: type) type {
             var fields: [decls.len]std.builtin.Type.StructField = undefined;
 
             for (decls, &fields) |d, *f| {
-                const Arr = std.ArrayListUnmanaged(@field(M, d.name));
+                const Arr = SegmentedList(@field(M, d.name));
                 f.* = .{
                     .name = d.name,
                     .type = Arr,
                     .alignment = @alignOf(Arr),
                     .is_comptime = false,
-                    .default_value_ptr = &Arr.empty,
+                    .default_value_ptr = &Arr{},
                 };
             }
-
             break :b @Type(.{ .@"struct" = .{
                 .layout = .auto,
                 .fields = &fields,
@@ -547,7 +546,7 @@ pub fn EntStore(comptime M: type) type {
         const Self = @This();
 
         pub fn isValid(self: *Self, comptime kind: Tag, idx: usize) bool {
-            return idx < @field(self.rpr, @tagName(kind)).items.len;
+            return idx < @field(self.rpr, @tagName(kind)).meta.len;
         }
 
         pub fn fieldName(comptime Ty: type) std.builtin.Type.StructField {
@@ -556,19 +555,19 @@ pub fn EntStore(comptime M: type) type {
             } else @compileError(@typeName(Ty));
         }
 
-        pub fn add(self: *Self, gpa: std.mem.Allocator, vl: anytype) EntId(@TypeOf(vl)) {
-            @field(self.rpr, fieldName(@TypeOf(vl)).name).append(gpa, vl) catch unreachable;
-            return @enumFromInt(@field(self.rpr, fieldName(@TypeOf(vl)).name).items.len - 1);
+        pub fn add(self: *Self, gpa: *Arena, vl: anytype) EntId(@TypeOf(vl)) {
+            @field(self.rpr, fieldName(@TypeOf(vl)).name).addOne(gpa).* = vl;
+            return @enumFromInt(@field(self.rpr, fieldName(@TypeOf(vl)).name).meta.len - 1);
         }
 
         pub fn pop(self: *Self, vl: anytype) void {
-            std.debug.assert(@field(self.rpr, fieldName(@TypeOf(vl).Data).name).items.len == @intFromEnum(vl) + 1);
+            std.debug.assert(@field(self.rpr, fieldName(@TypeOf(vl).Data).name).meta.len == @intFromEnum(vl) + 1);
             _ = @field(self.rpr, fieldName(@TypeOf(vl).Data).name).pop().?;
         }
 
         pub fn get(self: *Self, id: anytype) if (@hasDecl(@TypeOf(id), "identity")) @TypeOf(id) else *@TypeOf(id).Data {
             if (@hasDecl(@TypeOf(id), "identity")) return id;
-            return &@field(self.rpr, fieldName(@TypeOf(id).Data).name).items[@intFromEnum(id)];
+            return @field(self.rpr, fieldName(@TypeOf(id).Data).name).at(@intFromEnum(id));
         }
 
         pub fn TagPayload(comptime kind: Tag) type {
@@ -582,7 +581,7 @@ pub fn EntStore(comptime M: type) type {
             if (id != kind) return null;
             const i = @field(id, @tagName(kind));
             if (@hasDecl(TagPayload(kind), "identity")) return i;
-            return &@field(self.rpr, @tagName(kind)).items[@intFromEnum(i)];
+            return @field(self.rpr, @tagName(kind)).at(@intFromEnum(i));
         }
     };
 }
@@ -594,4 +593,194 @@ pub fn EntId(comptime D: type) type {
         _,
         pub const Data = D;
     };
+}
+
+pub fn SegmentedList(comptime T: type) type {
+    return struct {
+        pub const first_segment_size = 1024 * 16;
+        pub const first_segment_size_exp = std.math.log2_int(usize, first_segment_size);
+        pub const max_segment_size = 1024 * 1024;
+
+        pub const shelf_count = std.math.log2_int(usize, max_segment_size / first_segment_size) + 1;
+
+        shelfs: [shelf_count][*]T = undefined,
+        meta: packed struct(usize) {
+            active_shelf_count: ShelfIndex = 0,
+            len: std.meta.Int(.unsigned, @bitSizeOf(usize) - @bitSizeOf(ShelfIndex)) = 0,
+        } = .{},
+
+        const Self = @This();
+        const ShelfIndex = std.math.Log2Int(usize);
+
+        pub fn addOne(self: *Self, gpa: *Arena) *T {
+            self.ensureCapacity(gpa, self.meta.len + 1);
+            const shelf_index = shelfIndex(self.meta.len);
+            const box_index = boxIndex(self.meta.len, shelf_index);
+            self.meta.len += 1;
+            return &self.shelfs[shelf_index][box_index];
+        }
+
+        pub fn pop(self: *Self) ?T {
+            if (self.meta.len == 0) return null;
+
+            defer self.meta.len -= 1;
+            return self.at(self.meta.len - 1).*;
+        }
+
+        pub fn at(self: Self, index: usize) *T {
+            std.debug.assert(index < self.meta.len);
+            const shelf_index = shelfIndex(index);
+            const box_index = boxIndex(index, shelf_index);
+            return &self.shelfs[shelf_index][box_index];
+        }
+
+        pub fn ensureCapacity(self: *Self, arena: *Arena, new_capacity: usize) void {
+            const new_cap_shelf_count = shelfCount(new_capacity);
+            const old_shelf_count = self.meta.active_shelf_count;
+            if (new_cap_shelf_count <= old_shelf_count) {
+                @branchHint(.likely);
+                return;
+            }
+
+            var i: ShelfIndex = old_shelf_count;
+            while (i < new_cap_shelf_count) : (i += 1) {
+                self.shelfs[i] = arena.alloc(T, shelfSize(i)).ptr;
+            }
+            self.meta.active_shelf_count = new_cap_shelf_count;
+        }
+
+        fn shelfSize(shelf_index: ShelfIndex) usize {
+            return @as(usize, 1) << (shelf_index + (first_segment_size_exp + 1));
+        }
+
+        fn shelfIndex(list_index: usize) ShelfIndex {
+            return std.math.log2_int(usize, list_index + first_segment_size * 2) - first_segment_size_exp - 1;
+        }
+
+        fn boxIndex(list_index: usize, shelf_index: ShelfIndex) usize {
+            return list_index + first_segment_size * 2 - (@as(usize, 1) << ((first_segment_size_exp + 1) + shelf_index));
+        }
+
+        fn shelfCount(box_count: usize) ShelfIndex {
+            return @intCast(std.math.log2_int_ceil(usize, box_count + first_segment_size * 2) - first_segment_size_exp - 1);
+        }
+    };
+}
+
+pub const Foo = SegmentedList(usize);
+
+test "segmented list" {
+    var arena = Arena.init(1024 * 1024);
+    var list = SegmentedList(usize){};
+
+    for (0..1024 * 32) |i| {
+        list.addOne(&arena).* = i;
+    }
+
+    for (0..1024 * 32) |i| {
+        try std.testing.expectEqual(i, list.at(i).*);
+    }
+}
+
+pub fn SharedQueue(comptime T: type) type {
+    return struct {
+        shards: []Shard,
+        progress: usize = 0,
+        cached_counter: usize = 0,
+        self_id: usize = std.math.maxInt(usize),
+        tasks: []const []T,
+
+        const Self = @This();
+
+        pub const Shard = struct {
+            _align: void align(std.atomic.cache_line) = {},
+            reserved: std.atomic.Value(usize) = .init(0),
+            available: std.atomic.Value(usize) = .init(0),
+        };
+
+        pub fn size_of(thread_count: usize, capacity: usize) usize {
+            return @sizeOf(T) * capacity * thread_count +
+                @sizeOf(Shard) * thread_count +
+                @sizeOf([]T) * thread_count;
+        }
+
+        pub fn init(arena: *Arena, thread_count: usize, capacity: usize) Self {
+            const shards = arena.alloc(Shard, thread_count);
+            @memset(shards, .{});
+
+            const tasks = arena.alloc([]T, thread_count);
+            for (tasks) |*t| {
+                t.* = arena.alloc(T, capacity);
+            }
+
+            return .{ .shards = shards, .tasks = tasks };
+        }
+
+        pub fn enque(self: *Self, tasks: []const T) void {
+            const push_to = (if (!std.meta.hasMethod(T, "hash") and std.meta.hasUniqueRepresentation(T))
+                std.hash.Wyhash.hash(0, @ptrCast(tasks))
+            else
+                T.hash(tasks)) & self.shards.len - 1;
+
+            const idx = self.shards[push_to].reserved.fetchAdd(tasks.len, .monotonic);
+            @memcpy(self.tasks[push_to][idx..][0..tasks.len], tasks);
+            while (self.shards[push_to].available.cmpxchgWeak(idx, idx + tasks.len, .release, .monotonic) != null) {}
+        }
+
+        pub fn dequeue(self: *Self) ?T {
+            const shard = self.shards[self.self_id];
+            if (self.progress == self.cached_counter) {
+                self.cached_counter = shard.available.load(.acquire);
+                if (self.cached_counter == self.progress) return null;
+            }
+            self.progress += 1;
+            return self.tasks[self.self_id][self.progress - 1];
+        }
+    };
+}
+
+test "queue shard" {
+    const tasks_per_thread = 1024 * 1024;
+
+    const thread = struct {
+        fn runShardThread(ashard: SharedQueue(u64)) void {
+            var shard = ashard;
+            for (0..tasks_per_thread) |i| {
+                var tasks: u64 = i + shard.self_id * tasks_per_thread;
+                shard.enque((&tasks)[0..1]);
+                _ = shard.dequeue();
+            }
+        }
+    };
+
+    const thread_count = 8;
+
+    var arena = Arena.init(SharedQueue(u64).size_of(thread_count, tasks_per_thread * thread_count));
+    var shard = SharedQueue(u64).init(&arena, thread_count, tasks_per_thread * thread_count);
+
+    const Thrd = struct {
+        thread: std.Thread,
+    };
+
+    const tsrgs = std.testing.allocator.alloc(Thrd, thread_count) catch unreachable;
+    defer std.testing.allocator.free(tsrgs);
+    for (tsrgs, 0..) |*thrd, i| {
+        shard.self_id = i;
+        thrd.* = .{ .thread = try std.Thread.spawn(.{}, thread.runShardThread, .{shard}) };
+    }
+
+    for (tsrgs) |thrd| {
+        thrd.thread.join();
+    }
+
+    var bitset = try std.DynamicBitSetUnmanaged.initEmpty(std.testing.allocator, thread_count * tasks_per_thread);
+    defer bitset.deinit(std.testing.allocator);
+
+    for (shard.tasks, shard.shards) |thrd, shrd| {
+        for (thrd[0..shrd.available.load(.unordered)]) |task| {
+            bitset.set(@bitCast(task));
+        }
+    }
+
+    std.debug.assert(bitset.count() == thread_count * tasks_per_thread);
 }

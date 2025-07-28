@@ -289,12 +289,11 @@ pub const Struct = struct {
         pub const Data = Struct;
 
         pub fn getSize(id: Id, types: *Types) u64 {
-            var self = types.store.get(id);
+            const self = types.store.get(id);
 
             if (self.size) |a| return a;
 
             const max_alignment = getAlignment(id, types);
-            self = types.store.get(id);
 
             if (self.recursion_lock) {
                 types.report(self.key.loc.file, self.key.loc.ast, "the struct has infinite size", .{});
@@ -312,13 +311,12 @@ pub const Struct = struct {
             }
             siz = std.mem.alignForward(u64, siz, max_alignment);
 
-            self = types.store.get(id);
             self.size = siz;
             return siz;
         }
 
         pub fn getAlignment(id: Id, types: *Types) u64 {
-            var self = types.store.get(id);
+            const self = types.store.get(id);
 
             if (self.alignment) |a| return a;
 
@@ -336,7 +334,6 @@ pub const Struct = struct {
                 if (@hasField(Field, "alignment")) @compileError("assert fields <= alignment then base alignment");
                 self.alignment = @bitCast(types.ct.evalIntConst(.{ .Perm = .init(.{ .Struct = id }) }, struct_ast.alignment) catch 1);
                 if (self.alignment == 0 or !std.math.isPowerOfTwo(self.alignment.?)) {
-                    self = types.store.get(id);
                     types.report(self.key.loc.file, struct_ast.alignment, "the alignment needs to be power of 2, got {}", .{self.alignment.?});
                     self.alignment = 1;
                     return 1;
@@ -349,7 +346,6 @@ pub const Struct = struct {
                 alignm = @max(alignm, f.ty.alignment(types));
             }
 
-            self = types.store.get(id);
             self.alignment = alignm;
             return alignm;
         }
@@ -401,7 +397,7 @@ pub const Struct = struct {
                 const ty = types.ct.evalTy("", .{ .Perm = .init(.{ .Struct = id }) }, field.ty) catch .never;
                 fields[i] = .{ .name = name, .ty = ty };
                 if (field.value.tag() != .Void) {
-                    const value = types.store.add(types.pool.allocator(), Global{
+                    const value = types.store.add(&types.pool.arena, Global{
                         .key = .{
                             .loc = .{
                                 .file = self.key.loc.file,

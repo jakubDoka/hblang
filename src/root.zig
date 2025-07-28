@@ -43,6 +43,10 @@ const hb = @import("hb");
 const static_anal = hb.backend.static_anal;
 const Arena = hb.utils.Arena;
 
+test {
+    _ = &utils;
+}
+
 const max_file_len = std.math.maxInt(u31);
 
 pub const CompileOptions = struct {
@@ -145,108 +149,6 @@ pub const CompileOptions = struct {
     }
 };
 
-pub fn SharedQueue(comptime T: type) type {
-    return struct {
-        shards: []Shard,
-        progress: usize = 0,
-        cached_counter: usize = 0,
-        self_id: usize = std.math.maxInt(usize),
-        tasks: []const []T,
-
-        const Self = @This();
-
-        pub const Shard = struct {
-            reserved: std.atomic.Value(usize) align(std.atomic.cache_line),
-            available: std.atomic.Value(usize) align(std.atomic.cache_line),
-        };
-
-        pub fn size_of(thread_count: usize, capacity: usize) usize {
-            return @sizeOf(T) * capacity * thread_count +
-                @sizeOf(Shard) * thread_count +
-                @sizeOf([]T) * thread_count;
-        }
-
-        pub fn init(arena: *Arena, thread_count: usize, capacity: usize) Self {
-            const tasks = arena.alloc([]T, thread_count);
-            const shards = arena.alloc(Shard, thread_count);
-            for (shards, tasks) |*s, *t| {
-                s.reserved.store(0, .unordered);
-                s.available.store(0, .unordered);
-                t.* = arena.alloc(T, capacity);
-            }
-
-            return .{ .shards = shards, .tasks = tasks };
-        }
-
-        pub fn enque(self: *Self, tasks: []const T) void {
-            const push_to = (if (!std.meta.hasMethod(T, "hash") and std.meta.hasUniqueRepresentation(T))
-                std.hash.Wyhash.hash(0, @ptrCast(tasks))
-            else
-                T.hash(tasks)) & self.shards.len - 1;
-
-            const idx = self.shards[push_to].reserved.fetchAdd(tasks.len, .monotonic);
-            @memcpy(self.tasks[push_to][idx..][0..tasks.len], tasks);
-            while (self.shards[push_to].available.cmpxchgWeak(idx, idx + tasks.len, .release, .monotonic) != null) {}
-        }
-
-        pub fn dequeue(self: *Self) ?T {
-            const shard = self.shards[self.self_id];
-            if (self.progress == self.cached_counter) {
-                self.cached_counter = shard.available.load(.acquire);
-                if (self.cached_counter == self.progress) return null;
-            }
-            self.progress += 1;
-            return self.tasks[self.self_id][self.progress - 1];
-        }
-    };
-}
-
-test "queue shard" {
-    const tasks_per_thread = 1024 * 1024;
-
-    const thread = struct {
-        fn runShardThread(ashard: SharedQueue(u64)) void {
-            var shard = ashard;
-            for (0..tasks_per_thread) |i| {
-                var tasks: u64 = i + shard.self_id * tasks_per_thread;
-                shard.enque((&tasks)[0..1]);
-                _ = shard.dequeue();
-            }
-        }
-    };
-
-    const thread_count = 8;
-
-    var arena = Arena.init(SharedQueue(u64).size_of(thread_count, tasks_per_thread * thread_count));
-    var shard = SharedQueue(u64).init(&arena, thread_count, tasks_per_thread * thread_count);
-
-    const Thrd = struct {
-        thread: std.Thread,
-    };
-
-    const tsrgs = std.testing.allocator.alloc(Thrd, thread_count) catch unreachable;
-    defer std.testing.allocator.free(tsrgs);
-    for (tsrgs, 0..) |*thrd, i| {
-        shard.self_id = i;
-        thrd.* = .{ .thread = try std.Thread.spawn(.{}, thread.runShardThread, .{shard}) };
-    }
-
-    for (tsrgs) |thrd| {
-        thrd.thread.join();
-    }
-
-    var bitset = try std.DynamicBitSetUnmanaged.initEmpty(std.testing.allocator, thread_count * tasks_per_thread);
-    defer bitset.deinit(std.testing.allocator);
-
-    for (shard.tasks, shard.shards) |thrd, shrd| {
-        for (thrd[0..shrd.available.load(.unordered)]) |task| {
-            bitset.set(@bitCast(task));
-        }
-    }
-
-    std.debug.assert(bitset.count() == thread_count * tasks_per_thread);
-}
-
 pub const Task = struct {
     id: struct {
         file: frontend.Types.File,
@@ -317,7 +219,7 @@ pub const Task = struct {
     }
 };
 
-pub const Queue = SharedQueue(Task);
+pub const Queue = utils.SharedQueue(Task);
 
 pub const Threading = union(enum) {
     single: struct {
@@ -327,7 +229,7 @@ pub const Threading = union(enum) {
 
     pub const Multi = struct {
         pool: std.Thread.Pool,
-        queue: SharedQueue(Task),
+        queue: Queue,
         types: []*frontend.Types,
     };
 };
@@ -578,7 +480,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         inline for (std.meta.fields(@TypeOf(types.store.rpr))) |field| {
             try opts.diagnostics.print(
                 "  {s:<8}: {}\n",
-                .{ field.name, @field(types.store.rpr, field.name).items.len },
+                .{ field.name, @field(types.store.rpr, field.name).meta.len },
             );
         }
         try opts.diagnostics.print("  arena   : {}\n", .{types.pool.arena.consumed()});
@@ -587,24 +489,26 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             try opts.diagnostics.print("  {s:<8}: {}\n", .{ field.name, @field(types.stats, field.name) });
         }
 
-        var runtim_functions: usize = 0;
-        var comptime_functions: usize = 0;
-        var dead_functions: usize = 0;
+        if (false) {
+            var runtim_functions: usize = 0;
+            var comptime_functions: usize = 0;
+            var dead_functions: usize = 0;
 
-        for (@as([]const frontend.types.Func, types.store.rpr.Func.items)) |f| {
-            if (f.completion.get(.@"comptime") == .compiled) comptime_functions += 1;
-            if (f.completion.get(.runtime) == .compiled) runtim_functions += 1;
+            for (@as([]const frontend.types.Func, types.store.rpr.Func.items)) |f| {
+                if (f.completion.get(.@"comptime") == .compiled) comptime_functions += 1;
+                if (f.completion.get(.runtime) == .compiled) runtim_functions += 1;
 
-            if (f.completion.get(.@"comptime") == .queued and
-                f.completion.get(.runtime) == .queued)
-            {
-                dead_functions += 1;
+                if (f.completion.get(.@"comptime") == .queued and
+                    f.completion.get(.runtime) == .queued)
+                {
+                    dead_functions += 1;
+                }
             }
-        }
 
-        try opts.diagnostics.print("  runtime functions: {}\n", .{runtim_functions});
-        try opts.diagnostics.print("  comptime functions: {}\n", .{comptime_functions});
-        try opts.diagnostics.print("  dead functions: {}\n", .{dead_functions});
+            try opts.diagnostics.print("  runtime functions: {}\n", .{runtim_functions});
+            try opts.diagnostics.print("  comptime functions: {}\n", .{comptime_functions});
+            try opts.diagnostics.print("  dead functions: {}\n", .{dead_functions});
+        }
         try opts.diagnostics.print("  stale pool memory: {}\n", .{types.pool.staleMemory()});
     }
 

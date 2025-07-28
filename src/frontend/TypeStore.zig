@@ -1120,7 +1120,7 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: std.io.AnyWriter) *
     slot.ct.gen.emit_global_reloc_offsets = true;
 
     slot.string = slot.makeSlice(null, .u8);
-    slot.source_loc = .init(.{ .Struct = slot.store.add(slot.pool.allocator(), tys.Struct{
+    slot.source_loc = .init(.{ .Struct = slot.store.add(&slot.pool.arena, tys.Struct{
         .key = .{
             .loc = .{
                 .scope = slot.getScope(.root),
@@ -1216,7 +1216,7 @@ pub fn getScope(self: *Types, file: File) Id {
 }
 
 pub fn internPtr(self: *Types, comptime tag: std.meta.Tag(Data), payload: std.meta.TagPayload(Data, tag).Data) Id {
-    const vl = self.store.add(self.pool.allocator(), payload);
+    const vl = self.store.add(&self.pool.arena, payload);
     const id = Id.init(@unionInit(Data, @tagName(tag), vl));
     const slot = self.interner.getOrPutContext(self.pool.allocator(), id, .{ .types = self }) catch unreachable;
     if (slot.found_existing) {
@@ -1250,7 +1250,7 @@ pub fn makeTuple(self: *Types, v: []Id) Id {
 pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Scope) struct { TypeIndex.GetOrPutResult, std.meta.TagPayload(Data, kind) } {
     var mem: std.meta.TagPayload(Data, kind).Data = undefined;
     mem.key = key;
-    const ty = self.store.add(self.pool.allocator(), mem);
+    const ty = self.store.add(&self.pool.arena, mem);
     const id = Id.init(@unionInit(Data, @tagName(kind), ty));
     const slot = self.interner.getOrPutContext(self.pool.allocator(), id, .{ .types = self }) catch unreachable;
     if (slot.found_existing) {
@@ -1320,7 +1320,7 @@ pub fn dumpAnalErrors(self: *Types, anal_errors: *std.ArrayListUnmanaged(static_
 }
 
 pub fn addStringGlobal(self: *Types, data: []const u8) utils.EntId(tys.Global) {
-    const glob = self.store.add(self.pool.allocator(), tys.Global{
+    const glob = self.store.add(&self.pool.arena, tys.Global{
         .key = .{
             .name_pos = Scope.string,
         },
@@ -1340,7 +1340,7 @@ pub fn addStringGlobal(self: *Types, data: []const u8) utils.EntId(tys.Global) {
 }
 
 pub fn addUniqueGlobal(self: *Types, scope: Id) utils.EntId(tys.Global) {
-    const glob = self.store.add(self.pool.allocator(), tys.Global{
+    const glob = self.store.add(&self.pool.arena, tys.Global{
         .key = .{
             .loc = .{
                 .file = scope.file(self).?,
@@ -1395,7 +1395,7 @@ pub fn allocTempType(self: *Types, comptime T: type) utils.EntId(T) {
         else
             @field(tl.key.loc.scope.data(), name);
         return t;
-    } else self.store.add(self.pool.allocator(), @as(T, undefined));
+    } else self.store.add(&self.pool.arena, @as(T, undefined));
 }
 
 pub fn freeTempType(self: *Types, comptime T: type, scope: utils.EntId(T)) void {
