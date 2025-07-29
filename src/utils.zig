@@ -144,11 +144,16 @@ pub const Arena = struct {
         return @intFromPtr(self.end) - @intFromPtr(self.pos);
     }
 
+    pub fn getCapacity(self: *Arena) usize {
+        return @intFromPtr(self.end) - @intFromPtr(self.start);
+    }
+
     pub fn subslice(self: *Arena, capacity: usize) Arena {
-        const ptr = self.allocRaw(4096, capacity);
+        const cap = std.mem.alignBackward(usize, capacity, page_size);
+        const ptr = self.allocRaw(page_size, cap);
         return .{
             .start = @alignCast(ptr),
-            .end = @alignCast(ptr + capacity),
+            .end = @alignCast(ptr + cap),
             .pos = ptr,
         };
     }
@@ -696,6 +701,7 @@ pub fn SharedQueue(comptime T: type) type {
             _align: void align(std.atomic.cache_line) = {},
             reserved: std.atomic.Value(usize) = .init(0),
             available: std.atomic.Value(usize) = .init(0),
+            waker: std.atomic.Value(?*std.Thread.ResetEvent) = .init(null),
         };
 
         pub fn size_of(thread_count: usize, capacity: usize) usize {
@@ -717,24 +723,54 @@ pub fn SharedQueue(comptime T: type) type {
         }
 
         pub fn enque(self: *Self, tasks: []const T) void {
-            const push_to = (if (!std.meta.hasMethod(T, "hash") and std.meta.hasUniqueRepresentation(T))
-                std.hash.Wyhash.hash(0, @ptrCast(tasks))
-            else
-                T.hash(tasks)) & self.shards.len - 1;
+            const push_to = (if (!std.meta.hasMethod(T, "hash")) b: {
+                comptime std.debug.assert(std.meta.hasUniqueRepresentation(T));
+                break :b std.hash.Wyhash.hash(0, @ptrCast(tasks));
+            } else T.hash(tasks)) & self.shards.len - 1;
 
-            const idx = self.shards[push_to].reserved.fetchAdd(tasks.len, .monotonic);
+            const target = &self.shards[push_to];
+
+            const idx = target.reserved.fetchAdd(tasks.len, .monotonic);
             @memcpy(self.tasks[push_to][idx..][0..tasks.len], tasks);
-            while (self.shards[push_to].available.cmpxchgWeak(idx, idx + tasks.len, .release, .monotonic) != null) {}
+            while (target.available.cmpxchgWeak(idx, idx + tasks.len, .release, .monotonic) != null) {}
+            if (target.waker.swap(null, .acquire)) |wk| {
+                wk.set();
+            }
         }
 
         pub fn dequeue(self: *Self) ?T {
-            const shard = self.shards[self.self_id];
+            const shard = &self.shards[self.self_id];
             if (self.progress == self.cached_counter) {
                 self.cached_counter = shard.available.load(.acquire);
-                if (self.cached_counter == self.progress) return null;
+                if (self.progress == self.cached_counter) return null;
             }
             self.progress += 1;
             return self.tasks[self.self_id][self.progress - 1];
+        }
+
+        pub fn dequeueWait(self: *Self, timeout_ms: usize) ?T {
+            const shard = &self.shards[self.self_id];
+
+            while (true) {
+                var event = std.Thread.ResetEvent{};
+                shard.waker.store(&event, .release);
+                defer shard.waker.store(null, .release);
+
+                // the thread pushed while we were setting the waker
+                if (self.dequeue()) |task| return task;
+
+                // timeout means no more tasks
+                event.timedWait(timeout_ms * std.time.ns_per_ms) catch {
+                    std.debug.assert(self.dequeue() == null);
+                    return null;
+                };
+
+                // if we were woken up, we still might not have tasks, which
+                // happens so rarely it doesn't matter, so just try again
+                return self.dequeue() orelse {
+                    continue;
+                };
+            }
         }
     };
 }
@@ -743,12 +779,14 @@ test "queue shard" {
     const tasks_per_thread = 1024 * 1024;
 
     const thread = struct {
-        fn runShardThread(ashard: SharedQueue(u64)) void {
+        fn runShardThread(ashard: SharedQueue(u64), waker: *std.Thread.ResetEvent) void {
+            waker.wait();
+
             var shard = ashard;
             for (0..tasks_per_thread) |i| {
                 var tasks: u64 = i + shard.self_id * tasks_per_thread;
                 shard.enque((&tasks)[0..1]);
-                _ = shard.dequeue();
+                _ = shard.dequeue() orelse shard.dequeueWait(10);
             }
         }
     };
@@ -763,11 +801,14 @@ test "queue shard" {
     };
 
     const tsrgs = std.testing.allocator.alloc(Thrd, thread_count) catch unreachable;
+    var waker = std.Thread.ResetEvent{};
     defer std.testing.allocator.free(tsrgs);
     for (tsrgs, 0..) |*thrd, i| {
         shard.self_id = i;
-        thrd.* = .{ .thread = try std.Thread.spawn(.{}, thread.runShardThread, .{shard}) };
+        thrd.* = .{ .thread = try std.Thread.spawn(.{}, thread.runShardThread, .{ shard, &waker }) };
     }
+
+    waker.set();
 
     for (tsrgs) |thrd| {
         thrd.thread.join();
@@ -783,4 +824,29 @@ test "queue shard" {
     }
 
     std.debug.assert(bitset.count() == thread_count * tasks_per_thread);
+}
+
+test "dequeueWait" {
+    const thread = struct {
+        fn run(queue: SharedQueue(usize)) void {
+            var q = queue;
+            for (0..10) |i| {
+                q.enque(&.{i});
+                std.Thread.sleep(10 * std.time.ns_per_ms);
+            }
+        }
+    };
+
+    var arena = Arena.init(1024 * 1024);
+    var queue = SharedQueue(usize).init(&arena, 1, 100);
+    queue.self_id = 0;
+
+    var tread = std.Thread.spawn(.{}, thread.run, .{queue}) catch unreachable;
+
+    for (0..10) |i| {
+        const task = queue.dequeueWait(100).?;
+        std.debug.assert(task == i);
+    }
+
+    defer tread.join();
 }

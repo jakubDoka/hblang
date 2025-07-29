@@ -201,10 +201,14 @@ pub const Ctx = struct {
     }
 };
 
-const LogOpts = struct {
+const EmitOpts = struct {
     colors: std.io.tty.Config = .no_color,
     output: std.io.AnyWriter = std.io.null_writer.any(),
     verbose: bool = false,
+    has_main: bool = false,
+    abi: Types.Abi,
+    backend: root.backend.Machine,
+    optimizations: root.backend.Machine.OptOptions.Mode,
 };
 
 pub fn init(
@@ -223,36 +227,36 @@ pub fn init(
     return res;
 }
 
-pub fn emitReachableSingleThread(
-    scrath: *utils.Arena,
+pub fn emitReachableSingle(
+    scrath: ?*utils.Arena,
     types: *Types,
-    abi: Types.Abi,
-    backend: root.backend.Machine,
-    optimizations: root.backend.Machine.OptOptions.Mode,
-    has_main: bool,
-    log_opts: LogOpts,
+    queue: ?*root.Queue,
+    collect_exports: bool,
+    opts: EmitOpts,
 ) bool {
     errdefer unreachable;
 
     var root_tmp = utils.Arena.scrath(scrath);
     defer root_tmp.deinit();
 
-    const codegen = Codegen.init(root_tmp.arena, types, .runtime, abi);
+    const codegen = Codegen.init(root_tmp.arena, types, .runtime, opts.abi);
     defer codegen.deinit();
 
-    const exports = codegen.collectExports(has_main, root_tmp.arena) catch {
-        return true;
-    };
+    if (collect_exports) {
+        const exports = codegen.collectExports(opts.has_main, root_tmp.arena) catch {
+            return true;
+        };
 
-    for (exports) |exp| types.queue(.runtime, .init(.{ .Func = exp }));
+        for (exports) |exp| types.queue(.runtime, .init(.{ .Func = exp }));
+    }
 
     var errored = false;
-    while (types.nextTask(.runtime, 0, null)) |func| {
+    while (types.nextTask(.runtime, 0, queue) orelse types.retryNextTask(.runtime, 0, queue)) |func| {
         defer codegen.bl.func.reset();
 
         const err = codegen.build(func);
 
-        errored = types.retainGlobals(.runtime, backend, scrath) or
+        errored = types.retainGlobals(.runtime, opts.backend, scrath) or
             errored;
 
         err catch |e| switch (e) {
@@ -265,30 +269,32 @@ pub fn emitReachableSingleThread(
 
         var errors = std.ArrayListUnmanaged(static_anal.Error){};
 
-        if (log_opts.verbose) try root.test_utils.header("CODEGEN", log_opts.output, log_opts.colors);
+        if (opts.verbose) try root.test_utils.header("CODEGEN", opts.output, opts.colors);
 
         var tmp = root_tmp.arena.checkpoint();
         defer tmp.deinit();
 
         const func_data: *root.frontend.types.Func = types.store.get(func);
 
-        const opts = root.backend.Machine.OptOptions{
-            .mode = optimizations,
+        const optms = root.backend.Machine.OptOptions{
+            .mode = opts.optimizations,
             .error_buf = &errors,
             .arena = tmp.arena,
         };
 
-        backend.emitFunc(&codegen.bl.func, root.backend.Machine.EmitOptions{
+        opts.backend.emitFunc(&codegen.bl.func, root.backend.Machine.EmitOptions{
             .id = @intFromEnum(func),
             .name = if (func_data.visibility != .local)
                 func_data.key.name(types)
-            else
+            else if (scrath) |s|
                 root.frontend.Types.Id.init(.{ .Func = func })
-                    .fmt(types).toString(scrath),
+                    .fmt(types).toString(s)
+            else
+                "",
             .is_inline = func_data.is_inline or func_data.key.name(types).len == 0,
             .linkage = func_data.visibility,
             .special = func_data.special,
-            .optimizations = .{ .opts = opts },
+            .optimizations = .{ .opts = optms },
             .builtins = types.getBuiltins(),
         });
 
@@ -300,74 +306,57 @@ pub fn emitReachableSingleThread(
 
 pub fn emitReachableChildThread(
     types: *Types,
+    scratch_cap: usize,
     queue: root.Queue,
-    abi: Types.Abi,
-    backend: root.backend.Machine,
-    optimizations: root.backend.Machine.OptOptions.Mode,
-    log_opts: LogOpts,
+    opts: EmitOpts,
+    errored_out: *std.atomic.Value(bool),
 ) void {
-    _ = abi; // autofix
-    _ = backend; // autofix
-    _ = optimizations; // autofix
-    _ = log_opts; // autofix
-    _ = types; // autofix
-    _ = queue; // autofix
+    errdefer unreachable;
 
+    types.stack_base = @frameAddress();
+
+    utils.Arena.initScratch(scratch_cap);
+
+    var q = queue;
+    if (emitReachableSingle(null, types, &q, q.self_id == 0, opts)) {
+        errored_out.store(true, .unordered);
+    }
 }
 
 pub fn emitReachableMultiThread(
     scrath: *utils.Arena,
     threading: *root.Threading.Multi,
-    abi: Types.Abi,
-    backend: root.backend.Machine,
-    optimizations: root.backend.Machine.OptOptions.Mode,
-    has_main: bool,
-    log_opts: LogOpts,
+    opts: EmitOpts,
 ) bool {
     var root_tmp = utils.Arena.scrath(scrath);
     defer root_tmp.deinit();
 
-    const codegen = Codegen.init(root_tmp.arena, threading.types[0], .runtime, abi);
-    defer codegen.deinit();
-
-    const exports = codegen.collectExports(has_main, root_tmp.arena) catch {
-        return true;
-    };
-
-    for (exports) |exp| {
-        threading.queue.enque(&.{root.Task.tryFronFn(threading.types[0], exp) catch
-            unreachable});
-    }
-
     var wait_group = std.Thread.WaitGroup{};
+    var errored_out = std.atomic.Value(bool).init(false);
     for (threading.types, 0..) |ty, i| {
         var queue = threading.queue;
         queue.self_id = i;
         threading.pool.spawnWg(
             &wait_group,
             emitReachableChildThread,
-            .{ ty, queue, abi, backend, optimizations, log_opts },
+            .{ ty, root_tmp.arena.getCapacity(), queue, opts, &errored_out },
         );
     }
 
     wait_group.wait();
 
-    unreachable;
+    return errored_out.load(.unordered);
 }
 
 /// returns true when errored
 pub fn emitReachable(
     scrath: *utils.Arena,
     threading: *root.Threading,
-    abi: Types.Abi,
-    backend: root.backend.Machine,
-    optimizations: root.backend.Machine.OptOptions.Mode,
-    has_main: bool,
-    log_opts: LogOpts,
+    opts: EmitOpts,
 ) bool {
     switch (threading.*) {
-        .single => |*s| return emitReachableSingleThread(scrath, s.types, abi, backend, optimizations, has_main, log_opts),
-        .multi => |*m| return emitReachableMultiThread(scrath, m, abi, backend, optimizations, has_main, log_opts),
+        .single => |*s| return emitReachableSingle(scrath, s.types, null, true, opts),
+        .multi => |*m| return emitReachableMultiThread(scrath, m, opts),
     }
 }
 
@@ -520,7 +509,7 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
         };
 
         self.types.store.get(entry).visibility = .exported;
-        self.types.store.get(entry).key.name_pos = Types.Scope.main;
+        self.types.store.get(entry).key.name_pos = .main;
 
         try funcs.append(tmp.arena.allocator(), entry);
     }
@@ -598,7 +587,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
 
         if (args.len != 0) {
             const string = ast.exprs.get(args[0]).String;
-            func.key.name_pos = string.pos.index + 1;
+            func.key.name_pos = @enumFromInt(string.pos.index + 1);
         }
 
         func.visibility = .imported;
@@ -2297,8 +2286,9 @@ fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
             .captures_ptr = captures.ptr,
         });
         if (!slot.found_existing) {
-            self.types.store.get(alloc).key.captures_ptr =
-                self.types.pool.arena.dupe(Types.Scope.Capture, self.types.store.get(alloc).key.captures()).ptr;
+            self.types.store.get(alloc).* = .{
+                .key = self.types.store.get(alloc).key,
+            };
         }
         return self.emitTyConst(slot.key_ptr.*);
     } else {
@@ -2325,11 +2315,6 @@ fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
                 .args = self.types.pool.arena.dupe(Types.Id, args),
                 .ret = ret,
             };
-            self.types.store.get(alloc).key.captures_ptr =
-                self.types.pool.arena.dupe(
-                    Types.Scope.Capture,
-                    self.types.store.get(alloc).key.captures(),
-                ).ptr;
         }
         return self.emitTyConst(id);
     }
@@ -2345,7 +2330,7 @@ fn emitUse(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Use)) EmitError!Value
                 .loc = .{
                     .file = e.file,
                 },
-                .name_pos = Types.Scope.file_name,
+                .name_pos = .file_name,
                 .captures_ptr = undefined,
             });
             if (!slot.found_existing) {
@@ -3403,7 +3388,7 @@ pub fn instantiateTemplate(
             .ast = tmpl.key.loc.ast,
             .capture_len = @intCast(capture_idx),
         },
-        .name_pos = Types.Scope.generic_name,
+        .name_pos = .generic_name,
         .captures_ptr = captures.ptr,
     });
 
@@ -3414,9 +3399,6 @@ pub fn instantiateTemplate(
             .args = self.types.pool.arena.dupe(Types.Id, arg_tys),
             .ret = ret,
         };
-        alc.key.captures_ptr =
-            self.types.pool.arena.dupe(Types.Scope.Capture, alc.key.captures()).ptr;
-        alc.is_inline = tmpl.is_inline;
     }
 
     return .{ .instance = .{ arg_exprs, slot.key_ptr.* } };

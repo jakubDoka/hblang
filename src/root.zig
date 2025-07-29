@@ -150,72 +150,19 @@ pub const CompileOptions = struct {
 };
 
 pub const Task = struct {
-    id: struct {
-        file: frontend.Types.File,
-        captures_len: u16,
-        ast: frontend.Ast.Id,
-    },
-    captures: [*]const frontend.types.Builtin,
+    id: utils.EntId(frontend.types.Func),
+    padd: u32 = 0,
+    from: *frontend.Types,
 
-    pub fn hash(tasks: []const Task) u64 {
-        var hasher = std.hash.Wyhash.init(0);
-        for (tasks) |task| {
-            hasher.update(std.mem.asBytes(&task.id));
-            hasher.update(@ptrCast(task.captures[0..task.id.captures_len]));
-        }
-        return hasher.final();
+    pub fn fronFn(types: *frontend.Types, func: utils.EntId(frontend.types.Func)) Task {
+        return Task{ .id = func, .from = types };
     }
 
-    pub fn tryFronFn(types: *frontend.Types, func: utils.EntId(frontend.types.Func)) !Task {
-        const fnc: *frontend.types.Func = types.store.get(func);
-
-        var tmp = utils.Arena.scrath(null);
-        defer tmp.deinit();
-
-        const captures = tmp.arena.alloc(frontend.types.Builtin, fnc.key.captures().len);
-        for (fnc.key.captures(), captures) |cap, *c| {
-            if (cap.ty != .type) return error.TooComplex;
-            const vty: frontend.Types.Id = @enumFromInt(cap.value);
-            if (vty.data() != .Builtin) return error.TooComplex;
-            c.* = vty.data().Builtin;
-        }
-
-        return Task{
-            .id = .{
-                .file = fnc.key.loc.file,
-                .captures_len = @intCast(captures.len),
-                .ast = fnc.key.loc.ast,
-            },
-            .captures = types.pool.arena.dupe(frontend.types.Builtin, captures).ptr,
-        };
-    }
-
-    pub fn intoFunc(self: Task, types: *frontend.Types) ?utils.EntId(frontend.types.Func) {
-        _ = self; // autofix
-        _ = types; // autofix
-
-        // const slot, const alloc = self.types.intern(.Func, .{
-        //     .loc = .{
-        //         .scope = typ,
-        //         .file = tmpl.key.loc.file,
-        //         .ast = tmpl.key.loc.ast,
-        //     },
-        //     .name = "-",
-        //     .captures = captures[0..capture_idx],
-        // });
-
-        // if (!slot.found_existing) {
-        //     const alc = self.types.store.get(alloc);
-        //     alc.* = .{
-        //         .key = alc.key,
-        //         .args = self.types.pool.arena.dupe(Types.Id, arg_tys),
-        //         .ret = ret,
-        //     };
-        //     alc.key.captures =
-        //         self.types.pool.arena.dupe(Types.Scope.Capture, alc.key.captures);
-        //     alc.is_inline = tmpl.is_inline;
-        // }
-        unreachable;
+    pub fn intoFunc(self: Task, dest: *frontend.Types) ?utils.EntId(frontend.types.Func) {
+        if (self.from == dest) return self.id;
+        const id, const new = dest.cloneFrom(self.from, .init(.{ .Func = self.id }));
+        if (new) return id.data().Func;
+        return null;
     }
 };
 
@@ -307,14 +254,21 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     }
 
     var shared_arena: Arena = undefined;
-    var threading: Threading = if (opts.extra_threads == 0) .{ .single = .{
-        .types = b: {
-            const types = hb.frontend.Types.init(type_system_memory, asts, opts.diagnostics);
-            types.target = opts.target;
-            types.colors = opts.error_colors;
-            break :b types;
-        },
-    } } else b: {
+    var threading: Threading = undefined;
+    if (opts.extra_threads == 0) {
+        threading = .{ .single = .{
+            .types = b: {
+                const types = hb.frontend.Types.init(
+                    type_system_memory,
+                    asts,
+                    opts.diagnostics,
+                );
+                types.target = opts.target;
+                types.colors = opts.error_colors;
+                break :b types;
+            },
+        } };
+    } else {
         const thread_count = opts.extra_threads + 1;
 
         shared_arena = Arena.init(
@@ -324,8 +278,10 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             ) + @sizeOf(Queue) * thread_count + 4096,
         );
 
-        var pool: std.Thread.Pool = undefined;
-        try std.Thread.Pool.init(&pool, .{
+        threading = .{ .multi = undefined };
+        const ref = &threading.multi;
+
+        try std.Thread.Pool.init(&ref.pool, .{
             .allocator = shared_arena.allocator(),
             .n_jobs = thread_count,
         });
@@ -339,18 +295,13 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             t.*.colors = opts.error_colors;
         }
 
-        break :b .{
-            .multi = .{
-                .pool = pool,
-                .queue = .init(
-                    &shared_arena,
-                    opts.extra_threads + 1,
-                    opts.shared_queue_capacity / (opts.extra_threads + 1) * 2,
-                ),
-                .types = types,
-            },
-        };
-    };
+        ref.queue = .init(
+            &shared_arena,
+            opts.extra_threads + 1,
+            opts.shared_queue_capacity / (opts.extra_threads + 1) * 2,
+        );
+        ref.types = types;
+    }
 
     var bckend, const abi: hb.backend.graph.CallConv = if (std.mem.startsWith(u8, opts.target, "hbvm-ableos")) backend: {
         const slot = threading.single.types.pool.arena.create(hb.hbvm.HbvmGen);
@@ -388,11 +339,12 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     const errored = hb.frontend.Codegen.emitReachable(
         root_tmp.arena,
         &threading,
-        .{ .cc = abi },
-        bckend,
-        opts.optimizations,
-        !opts.no_entry,
-        .{},
+        .{
+            .abi = .{ .cc = abi },
+            .backend = bckend,
+            .has_main = !opts.no_entry,
+            .optimizations = opts.optimizations,
+        },
     );
     if (errored) {
         try opts.diagnostics.print("failed due to previous errors\n", .{});

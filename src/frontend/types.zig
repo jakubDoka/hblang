@@ -454,6 +454,10 @@ pub const Global = struct {
         mut: []u8,
         imm: []const u8,
 
+        pub fn freeze(self: *@This()) void {
+            self.* = .{ .imm = self.mut };
+        }
+
         pub fn slice(self: @This()) []const u8 {
             return switch (self) {
                 .mut => |s| s,
@@ -464,10 +468,13 @@ pub const Global = struct {
         mut: []u8,
         imm: []const u8,
 
+        pub fn freeze(_: *@This()) void {}
+
         pub fn slice(self: @This()) []const u8 {
             return self.imm;
         }
     } = .{ .imm = &.{} },
+    relocs: []const root.backend.Machine.DataOptions.Reloc = &.{},
     readonly: bool,
     completion: std.EnumArray(Types.Target, CompileState) = .{ .values = .{ .queued, .queued } },
 

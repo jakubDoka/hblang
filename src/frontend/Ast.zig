@@ -473,13 +473,13 @@ pub fn posOf(self: *const Ast, origin: anytype) Pos {
     };
 }
 
-pub fn strPos(self: *const Ast, str: []const u8) u32 {
-    if (str.ptr == self.path.ptr) return Types.Scope.file_name;
-    if (str.len == 0) return Types.Scope.empty_name;
+pub fn strPos(self: *const Ast, str: []const u8) Types.Scope.NamePos {
+    if (str.ptr == self.path.ptr) return .file_name;
+    if (str.len == 0) return .empty_name;
     if (@intFromPtr(str.ptr) < @intFromPtr(self.source.ptr) or
         @intFromPtr(str.ptr) > @intFromPtr(self.source.ptr + self.source.len))
         unreachable;
-    return @intCast(str.ptr - self.source.ptr);
+    return @enumFromInt(str.ptr - self.source.ptr);
 }
 
 fn posOfPayload(self: *const Ast, v: anytype) Pos {

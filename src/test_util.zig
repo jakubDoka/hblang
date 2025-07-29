@@ -201,11 +201,15 @@ pub fn testBuilder(
     const errored = Codegen.emitReachable(
         func_arena.arena,
         &threading,
-        abi,
-        gen,
-        opts,
-        true,
-        .{ .verbose = verbose, .colors = colors, .output = output },
+        .{
+            .verbose = verbose,
+            .colors = colors,
+            .output = output,
+            .abi = abi,
+            .backend = gen,
+            .optimizations = opts,
+            .has_main = true,
+        },
     );
 
     const expectations: Expectations = .init(&ast, func_arena.arena);

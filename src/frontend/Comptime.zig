@@ -112,6 +112,8 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                     const global = curr.inputs()[1].?.extra(.LocalAlloc).meta;
 
                     if (global != std.math.maxInt(u32)) {
+                        types.store.get(@as(utils.EntId(tys.Global), @enumFromInt(global))).data.freeze();
+
                         if (work_list.items.len == 0) {
                             return .{ .Arbitrary = @enumFromInt(global) };
                         } else {
@@ -445,7 +447,9 @@ pub fn runVm(
                     const struct_ast_id = self.ecaArgAst(2);
                     const struct_ast = ast.exprs.get(struct_ast_id).Type;
 
-                    const captures = types.pool.arena.alloc(Types.Scope.Capture, struct_ast.captures.len());
+                    var tmp = utils.Arena.scrath(null);
+                    defer tmp.deinit();
+                    const captures = tmp.arena.alloc(Types.Scope.Capture, struct_ast.captures.len());
 
                     const prefix = 5;
                     for (captures, ast.exprs.view(struct_ast.captures), 0..) |*slot, cp, i| {
