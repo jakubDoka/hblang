@@ -4144,18 +4144,20 @@ fn emitDirective(
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            var msg = std.ArrayList(u8).init(tmp.arena.allocator());
+            var msg = std.ArrayListUnmanaged(u8){};
             for (args) |arg| switch (arg.tag()) {
                 .String => {
                     const s = ast.exprs.getTyped(.String, arg).?;
-                    msg.appendSlice(ast.source[s.pos.index + 1 .. s.end - 1]) catch unreachable;
+                    msg.appendSlice(
+                        tmp.arena.allocator(),
+                        ast.source[s.pos.index + 1 .. s.end - 1],
+                    ) catch unreachable;
                 },
                 else => {
                     var value = try self.emit(.{}, arg);
                     if (value.ty == .type) {
-                        msg.writer().print("{}", .{
-                            (try self.unwrapTyConst(arg, &value)).fmt(self.types),
-                        }) catch unreachable;
+                        msg.appendSlice(tmp.arena.allocator(), (try self.unwrapTyConst(arg, &value))
+                            .fmt(self.types).toString(tmp.arena)) catch unreachable;
                     } else {
                         return self.report(arg, "only types and strings" ++
                             " are supported here, {} is not", .{value.ty});
