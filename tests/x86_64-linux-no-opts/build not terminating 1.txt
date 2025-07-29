@@ -1,0 +1,36 @@
+build not terminating 1.ignore:
+	sub rsp, 0x10
+	mov [rsp], rdi
+	add rsp, 0x10
+	ret
+build not terminating 1.b:
+	sub rsp, 0x10
+	mov al, [0x0000000000000006]
+	test al, al
+	jz :0
+	mov rax, 0x01
+	jmp :1
+0:	mov byte ptr [rsp], 0x00
+	mov al, [rsp]
+1:	add rsp, 0x10
+	ret
+main:
+	sub rsp, 0x18
+2:	mov qword ptr [rsp], 0x00
+	mov al, [0x0000000000000006]
+	test al, al
+	jz :1
+	mov qword ptr [rsp], 0x01
+	jmp :1
+1:	mov rdi, [rsp]
+	call :build not terminating 1.ignore
+	call :build not terminating 1.b
+	mov [rsp+0x08], al
+	mov al, [rsp+0x08]
+	test al, al
+	jz :1
+	mov [rsp+0x09], al
+	jmp :2
+1:	xor rax, rax
+	add rsp, 0x18
+	ret

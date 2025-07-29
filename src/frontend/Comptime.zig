@@ -92,7 +92,7 @@ pub const PartialEvalResult = union(enum) {
     Unsupported: *Node,
 };
 
-pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32, bl: *Builder, expr: *Node, ty: Types.Id) PartialEvalResult {
+pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32, bl: *Builder, expr: *Node) PartialEvalResult {
     const types = self.getTypes();
 
     var tmp = utils.Arena.scrath(null);
@@ -145,11 +145,8 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                     u8,
                     @intCast(curr.inputs()[1].?.extra(.LocalAlloc).size),
                 ) };
-                types.store.get(global).ty = ty;
+                types.store.get(global).ty = @enumFromInt(curr.inputs()[1].?.extra(.LocalAlloc).debug_ty);
                 curr.inputs()[1].?.extra(.LocalAlloc).meta = @intFromEnum(global);
-
-                var tmpa = tmp.arena.checkpoint();
-                defer tmpa.deinit();
 
                 continue;
             },
@@ -182,6 +179,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                 const below = work_list.getLastOrNull() orelse {
                     return .{ .Arbitrary = @enumFromInt(global) };
                 };
+                std.debug.assert(below.kind == .Store);
                 const gid: utils.EntId(tys.Global) = @enumFromInt(global);
                 if (types.store.get(gid).completion.get(.@"comptime") != .compiled) {
                     types.queue(.@"comptime", .init(.{ .Global = gid }));
@@ -639,7 +637,7 @@ pub fn jitExprLow(
         gen.name = name;
         gen.struct_ret_ptr = null;
 
-        const ptr = gen.bl.addParam(.none, 0);
+        const ptr = gen.bl.addParam(.none, 0, @intFromEnum(Types.Id.never));
 
         ret = gen.emit(ctx.addLoc(ptr), value) catch |err| switch (err) {
             error.Never => return error.Never,

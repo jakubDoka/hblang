@@ -1,3 +1,4 @@
 main:
-    li64 $1, 0
-      tx
+        lra $1, $0, :global.global
+         ld $1, $1, 0, 8
+         tx

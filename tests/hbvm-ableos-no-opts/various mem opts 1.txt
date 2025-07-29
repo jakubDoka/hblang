@@ -73,9 +73,10 @@ various mem opts 1.combine_pull_out_duplicate:
          ld $1, $1, 0, 1
        andi $1, $1, 255
         jeq $1, $0, :10
-        jmp :10
-10:       st $0, $254, 0, 8
          st $0, $254, 0, 8
+        jmp :11
+10:       st $0, $254, 0, 8
+11:       st $0, $254, 0, 8
      addi64 $1, $254, 0
         jal $31, $0, :various mem opts 1.use(^uint)
          ld $1, $254, 0, 8
@@ -95,13 +96,13 @@ various mem opts 1.parallel_stores:
          ld $1, $1, 0, 1
        li64 $2, 1
        andi $1, $1, 255
-        jeq $1, $0, :11
+        jeq $1, $0, :12
          st $2, $254, 0, 8
          st $2, $254, 8, 8
-        jmp :12
-11:       st $2, $254, 8, 8
+        jmp :13
+12:       st $2, $254, 8, 8
          st $2, $254, 0, 8
-12:       ld $2, $254, 0, 8
+13:       ld $2, $254, 0, 8
          ld $1, $254, 8, 8
       sub64 $1, $2, $1
      addi64 $254, $254, 24

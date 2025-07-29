@@ -1,0 +1,23 @@
+build not terminating 1.ignore:
+	ret
+main:
+	sub rsp, 0x08
+5:	mov al, [0x0000000000000006]
+	test al, al
+	jz :0
+	mov rdi, 0x01
+	jmp :1
+0:	xor rdi, rdi
+1:	call :build not terminating 1.ignore
+	mov al, [0x0000000000000006]
+	test al, al
+	jz :2
+	mov rax, 0x01
+	jmp :3
+2:	xor rax, rax
+3:	test al, al
+	jz :4
+	jmp :5
+4:	xor rax, rax
+	add rsp, 0x08
+	ret

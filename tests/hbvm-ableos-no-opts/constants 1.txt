@@ -1,4 +1,8 @@
 main:
-    li64 $1, 32
-  addi64 $1, $1, 10
-      tx
+        lra $1, $0, :constants 1.ans
+         ld $2, $1, 0, 8
+        lra $1, $0, :constants 1.wer
+         ld $1, $1, 0, 1
+       andi $1, $1, 255
+      add64 $1, $2, $1
+         tx

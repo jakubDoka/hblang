@@ -291,12 +291,13 @@ pub fn Mixin(comptime Backend: type) type {
                         // convention of the inlined function since the default
                         // call convention should be a bit customized
                         //
+                        const sarg = o.extra(.StructArg);
                         const alloc = func.addNode(
                             .LocalAlloc,
                             o.sloc,
                             .i64,
                             &.{ null, into_entry_mem },
-                            .{ .size = o.extra(.StructArg).spec.size },
+                            .{ .size = sarg.spec.size, .debug_ty = sarg.debug_ty },
                         );
                         const copy = func.addNode(.Local, o.sloc, .i64, &.{ null, alloc }, .{});
                         func.subsume(copy, dep);

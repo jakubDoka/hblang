@@ -2,6 +2,24 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### build not terminating 1
+```hb
+a := false
+$b := fn(): ?void {
+    if a return {
+    }
+    return null
+}
+ignore := fn(x: uint): void {
+}
+main := fn(): u32 loop {
+    x := 0
+    if a x = 1
+    ignore(x)
+    b() || return 0
+}
+```
+
 #### for loop wiredness 1
 ```hb
 main := fn(): u32 {

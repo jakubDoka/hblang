@@ -619,7 +619,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 tmp_liveins.entries.items(.value),
             ) |k, v| {
                 const other = pred_block.fetchPut(tmp.arena.allocator(), k, v) catch unreachable;
-                dirty = lrgs[k].selfConflict(v, if (other) |o| o.value else null, &conflicts, tmp.arena) or dirty;
+                _ = lrgs[k].selfConflict(v, if (other) |o| o.value else null, &conflicts, tmp.arena);
                 dirty = other == null or dirty;
             }
 

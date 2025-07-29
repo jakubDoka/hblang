@@ -57,12 +57,13 @@ pub fn begin(
     return @enumFromInt(0);
 }
 
-pub fn addParam(self: *Builder, sloc: graph.Sloc, idx: usize) SpecificNode(.Arg) {
+pub fn addParam(self: *Builder, sloc: graph.Sloc, idx: usize, debug_ty: u32) SpecificNode(.Arg) {
     return switch (self.func.signature.params()[idx]) {
         .Reg => |ty| self.func.addNode(.Arg, sloc, ty, &.{self.func.start}, .{ .index = idx }),
         .Stack => |spec| self.func.addNode(.StructArg, sloc, .i64, &.{self.func.start}, .{
             .base = .{ .index = idx },
             .spec = spec,
+            .debug_ty = debug_ty,
         }),
     };
 }
@@ -88,8 +89,11 @@ pub fn end(self: *Builder, _: BuildToken) void {
 
 // #MEM ========================================================================
 
-pub fn addLocal(self: *Builder, sloc: graph.Sloc, size: u64) SpecificNode(.Local) {
-    const alloc = self.func.addNode(.LocalAlloc, sloc, .i64, &.{self.root_mem}, .{ .size = size });
+pub fn addLocal(self: *Builder, sloc: graph.Sloc, size: u64, debug_ty: u32) SpecificNode(.Local) {
+    const alloc = self.func.addNode(.LocalAlloc, sloc, .i64, &.{self.root_mem}, .{
+        .size = size,
+        .debug_ty = debug_ty,
+    });
     return self.func.addNode(.Local, sloc, .i64, &.{ null, alloc }, .{});
 }
 
@@ -130,8 +134,8 @@ pub fn addFieldStore(
     _ = self.addStore(sloc, self.addFieldOffset(sloc, base, offset), ty, value);
 }
 
-pub fn addSpill(self: *Builder, sloc: graph.Sloc, value: *BuildNode) SpecificNode(.Local) {
-    const local = self.addLocal(sloc, value.data_type.size());
+pub fn addSpill(self: *Builder, sloc: graph.Sloc, value: *BuildNode, debug_ty: u32) SpecificNode(.Local) {
+    const local = self.addLocal(sloc, value.data_type.size(), debug_ty);
     _ = self.addStore(sloc, local, value.data_type, value);
     return local;
 }

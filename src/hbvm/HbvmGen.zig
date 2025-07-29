@@ -111,7 +111,7 @@ pub fn isInterned(kind: Func.Kind) bool {
 }
 
 // ================== PEEPHOLES ==================
-pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
+pub fn idealizeMach(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
     const inps = node.inputs();
 
     if (Func.idealizeDead({}, func, node, work)) |n| return n;
@@ -258,7 +258,7 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
         }
     }
 
-    return Func.idealize(self, func, node, work);
+    return null;
 }
 
 pub fn idealize(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
@@ -431,6 +431,8 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     else
         null);
     defer tmp.deinit();
+
+    //func.fmtScheduled(std.io.getStdErr().writer().any(), .escape_codes);
 
     self.block_offsets = tmp.arena.alloc(i32, func.gcm.block_count);
     self.local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.gcm.block_count * 2));
@@ -768,7 +770,9 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 self.emit(.cp, .{ dst, src });
             },
             .Never, .Mem, .MemJoin, .Ret, .Phi, .Jmp => {},
-            else => |e| utils.panic("{any}", .{e}),
+            else => |e| {
+                utils.panic("{any} {any}", .{ no, e });
+            },
         }
     }
 }
@@ -989,7 +993,9 @@ pub fn doInterrupt(
                 const dest = ctx.memory[@intCast(vm.regs.get(.arg(3)))..][0..@intCast(vm.regs.get(.arg(4)))];
                 prng.fill(dest);
             },
-            else => |v| utils.panic("{}", .{v}),
+            else => |v| {
+                utils.panic("{}", .{v});
+            },
         },
         else => unreachable,
     }

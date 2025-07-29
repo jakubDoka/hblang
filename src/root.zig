@@ -362,8 +362,10 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     };
 
     if (threading == .multi) {
-        try opts.diagnostics.print("multi threading code emmision is not yet supported\n", .{});
-        return error.Failed;
+        if (opts.benchmark_rounds == 1) {
+            try opts.diagnostics.print("multi threading code emmision is not yet supported\n", .{});
+        }
+        return .{ .arena = type_system_memory, .ast = asts };
     }
 
     const types = threading.single.types;

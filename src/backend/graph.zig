@@ -537,7 +537,7 @@ pub const builtin = enum {
     pub const LocalAlloc = extern struct {
         size: u64,
         meta: u32 = std.math.maxInt(u32),
-        ty: u32 = std.math.maxInt(u32),
+        debug_ty: u32,
 
         pub const is_floating = true;
         pub const is_pinned = true;
@@ -571,6 +571,7 @@ pub const builtin = enum {
         base: mod.Arg,
         spec: AbiParam.StackSpec,
         no_address: bool = false,
+        debug_ty: u32,
     };
     pub const StackArgOffset = extern struct {
         offset: u64, // from eg. rsp
