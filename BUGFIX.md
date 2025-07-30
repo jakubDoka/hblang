@@ -520,6 +520,18 @@ main := fn(): u32 {
 }
 ```
 
+#### regalloc crash 5
+```hb
+mod10 := fn(x: u32): u32 return x % 10
+ignore := fn(x: ^u8): void {
+}
+n: u16 = 10
+main := fn(): uint {
+    ignore("".ptr)
+    return mod10(@as(u32, @int_cast(n)))
+}
+```
+
 #### regalloc crash 2 (infinite)
 ```hb
 expectations := .{

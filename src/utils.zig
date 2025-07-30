@@ -701,7 +701,7 @@ pub fn SharedQueue(comptime T: type) type {
             _align: void align(std.atomic.cache_line) = {},
             reserved: std.atomic.Value(usize) = .init(0),
             available: std.atomic.Value(usize) = .init(0),
-            waker: std.atomic.Value(?*std.Thread.ResetEvent) = .init(null),
+            waker: std.Thread.ResetEvent = .{},
         };
 
         pub fn size_of(thread_count: usize, capacity: usize) usize {
@@ -733,9 +733,7 @@ pub fn SharedQueue(comptime T: type) type {
             const idx = target.reserved.fetchAdd(tasks.len, .monotonic);
             @memcpy(self.tasks[push_to][idx..][0..tasks.len], tasks);
             while (target.available.cmpxchgWeak(idx, idx + tasks.len, .release, .monotonic) != null) {}
-            if (target.waker.swap(null, .acquire)) |wk| {
-                wk.set();
-            }
+            target.waker.set();
         }
 
         pub fn dequeue(self: *Self) ?T {
@@ -752,24 +750,19 @@ pub fn SharedQueue(comptime T: type) type {
             const shard = &self.shards[self.self_id];
 
             while (true) {
-                var event = std.Thread.ResetEvent{};
-                shard.waker.store(&event, .release);
-                defer shard.waker.store(null, .release);
+                shard.waker.reset();
 
                 // the thread pushed while we were setting the waker
                 if (self.dequeue()) |task| return task;
 
                 // timeout means no more tasks
-                event.timedWait(timeout_ms * std.time.ns_per_ms) catch {
-                    std.debug.assert(self.dequeue() == null);
-                    return null;
+                shard.waker.timedWait(timeout_ms * std.time.ns_per_ms) catch {
+                    return self.dequeue();
                 };
 
                 // if we were woken up, we still might not have tasks, which
                 // happens so rarely it doesn't matter, so just try again
-                return self.dequeue() orelse {
-                    continue;
-                };
+                return self.dequeue() orelse continue;
             }
         }
     };
@@ -785,6 +778,7 @@ test "queue shard" {
             var shard = ashard;
             for (0..tasks_per_thread) |i| {
                 var tasks: u64 = i + shard.self_id * tasks_per_thread;
+                shard.enque((&tasks)[0..1]);
                 shard.enque((&tasks)[0..1]);
                 _ = shard.dequeue() orelse shard.dequeueWait(10);
             }

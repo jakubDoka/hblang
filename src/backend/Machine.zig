@@ -8,12 +8,17 @@ const static_anal = @import("static_anal.zig");
 const root = @import("hb");
 
 data: *anyopaque,
-_emitFunc: *const fn (self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void,
-_emitData: *const fn (self: *anyopaque, opts: DataOptions) void,
-_finalize: *const fn (self: *anyopaque, opts: FinalizeOptions) void,
-_disasm: *const fn (self: *anyopaque, opts: DisasmOpts) void,
-_run: *const fn (self: *anyopaque, env: RunEnv) anyerror!usize,
-_deinit: *const fn (self: *anyopaque) void,
+
+vtable: *const VTable,
+
+const VTable = struct {
+    emitFunc: *const fn (self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void,
+    emitData: *const fn (self: *anyopaque, opts: DataOptions) void,
+    finalize: *const fn (self: *anyopaque, opts: FinalizeOptions) void,
+    disasm: *const fn (self: *anyopaque, opts: DisasmOpts) void,
+    run: *const fn (self: *anyopaque, env: RunEnv) anyerror!usize,
+    deinit: *const fn (self: *anyopaque) void,
+};
 
 const BuilderFunc = graph.Func(Builder);
 const Machine = @This();
@@ -1013,12 +1018,14 @@ pub fn init(data: anytype) Machine {
 
     return .{
         .data = data,
-        ._emitFunc = fns.emitFunc,
-        ._emitData = fns.emitData,
-        ._finalize = fns.finalize,
-        ._disasm = fns.disasm,
-        ._run = fns.run,
-        ._deinit = fns.deinit,
+        .vtable = comptime &VTable{
+            .emitFunc = fns.emitFunc,
+            .emitData = fns.emitData,
+            .finalize = fns.finalize,
+            .disasm = fns.disasm,
+            .run = fns.run,
+            .deinit = fns.deinit,
+        },
     };
 }
 
@@ -1026,17 +1033,17 @@ pub fn init(data: anytype) Machine {
 ///
 /// this also runs optimization passes
 pub fn emitFunc(self: Machine, func: *BuilderFunc, opts: EmitOptions) void {
-    self._emitFunc(self.data, func, opts);
+    self.vtable.emitFunc(self.data, func, opts);
 }
 
 pub fn emitData(self: Machine, opts: DataOptions) void {
-    self._emitData(self.data, opts);
+    self.vtable.emitData(self.data, opts);
 }
 
 /// package the final output (.eg object file)
 /// this function should also restart the state for next emmiting
 pub fn finalize(self: Machine, opts: FinalizeOptions) void {
-    return self._finalize(self.data, opts);
+    return self.vtable.finalize(self.data, opts);
 }
 
 pub fn finalizeBytes(self: Machine, opts: FinalizeBytesOptions) std.ArrayListUnmanaged(u8) {
@@ -1053,15 +1060,15 @@ pub fn finalizeBytes(self: Machine, opts: FinalizeBytesOptions) std.ArrayListUnm
 /// visualize already compiled code, its best to include different colors
 /// for registers for better readability
 pub fn disasm(self: Machine, opts: DisasmOpts) void {
-    self._disasm(self.data, opts);
+    self.vtable.disasm(self.data, opts);
 }
 
 pub fn run(self: Machine, env: RunEnv) !usize {
-    return self._run(self.data, env);
+    return self.vtable.run(self.data, env);
 }
 
 /// frees the internal resources
 pub fn deinit(self: *Machine) void {
-    self._deinit(self.data);
+    self.vtable.deinit(self.data);
     self.* = undefined;
 }

@@ -1,0 +1,19 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        lra $1, $0, :
+        jal $31, $0, :regalloc crash 5.ignore
+        lra $1, $0, :regalloc crash 5.n
+         ld $1, $1, 0, 2
+       andi $1, $1, 65535
+        jal $31, $0, :regalloc crash 5.mod10
+       andi $1, $1, 4294967295
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+regalloc crash 5.mod10:
+       li32 $2, 10
+     diru32 $0, $1, $1, $2
+       jala $0, $31, 0
+regalloc crash 5.ignore:
+       jala $0, $31, 0

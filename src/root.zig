@@ -178,6 +178,55 @@ pub const Threading = union(enum) {
         pool: std.Thread.Pool,
         queue: Queue,
         types: []*frontend.Types,
+        machine: Sharded,
+    };
+
+    pub const Sharded = struct {
+        inner: backend.Machine,
+        shards: []Shard,
+
+        pub const Shard = struct {
+            gpa: *utils.Pool,
+
+            // TODO: make these more compact
+            func_ir: std.ArrayListUnmanaged(FuncRecord) = .empty,
+            global_ir: std.ArrayListUnmanaged(backend.Machine.DataOptions) = .empty,
+
+            const Func = backend.graph.Func(Shard);
+
+            pub const classes = enum {};
+
+            pub const i_know_the_api = {};
+
+            const FuncRecord = struct {
+                func: Func,
+                opts: backend.Machine.EmitOptions,
+            };
+
+            pub fn emitFunc(self: *Shard, func: *Func, opts: backend.Machine.EmitOptions) void {
+                errdefer unreachable;
+                try self.func_ir.append(self.gpa.allocator(), .{ .func = func.*, .opts = opts });
+                func.arena = .init(self.gpa.allocator());
+            }
+            pub fn emitData(self: *Shard, opts: backend.Machine.DataOptions) void {
+                errdefer unreachable;
+                try self.global_ir.append(self.gpa.allocator(), opts);
+            }
+            pub fn finalize(_: *Shard, _: anytype) void {
+                unreachable;
+            }
+            pub fn disasm(_: *Shard, _: anytype) void {
+                unreachable;
+            }
+            pub fn run(_: *Shard, _: anytype) !usize {
+                unreachable;
+            }
+            pub fn deinit(self: *Shard) void {
+                const gpa = self.gpa.allocator();
+                self.func_ir.deinit(gpa);
+                self.global_ir.deinit(gpa);
+            }
+        };
     };
 };
 
@@ -301,19 +350,25 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             opts.shared_queue_capacity / (opts.extra_threads + 1) * 2,
         );
         ref.types = types;
+        ref.machine.shards = shared_arena.alloc(Threading.Sharded.Shard, opts.extra_threads + 1);
     }
+
+    const global_pool = switch (threading) {
+        .single => &threading.single.types.pool,
+        .multi => undefined,
+    };
 
     var bckend, const abi: hb.backend.graph.CallConv = if (std.mem.startsWith(u8, opts.target, "hbvm-ableos")) backend: {
         const slot = threading.single.types.pool.arena.create(hb.hbvm.HbvmGen);
-        slot.* = hb.hbvm.HbvmGen{ .gpa = &threading.single.types.pool };
+        slot.* = hb.hbvm.HbvmGen{ .gpa = global_pool };
         break :backend .{ hb.backend.Machine.init(slot), .ablecall };
     } else if (std.mem.startsWith(u8, opts.target, "x86_64-windows")) backend: {
         const slot = threading.single.types.pool.arena.create(hb.x86_64.X86_64Gen);
-        slot.* = hb.x86_64.X86_64Gen{ .gpa = &threading.single.types.pool, .object_format = .coff };
+        slot.* = hb.x86_64.X86_64Gen{ .gpa = global_pool, .object_format = .coff };
         break :backend .{ hb.backend.Machine.init(slot), .fastcall };
     } else if (std.mem.startsWith(u8, opts.target, "x86_64-linux")) backend: {
         const slot = threading.single.types.pool.arena.create(hb.x86_64.X86_64Gen);
-        slot.* = hb.x86_64.X86_64Gen{ .gpa = &threading.single.types.pool, .object_format = .elf };
+        slot.* = hb.x86_64.X86_64Gen{ .gpa = global_pool, .object_format = .elf };
         break :backend .{ hb.backend.Machine.init(slot), .systemv };
     } else if (std.mem.startsWith(u8, opts.target, "null")) backend: {
         var value = hb.backend.Machine.Null{};

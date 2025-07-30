@@ -1,0 +1,30 @@
+regalloc crash 5.ignore:
+	sub rsp, 0x10
+	mov [rsp], rdi
+	add rsp, 0x10
+	ret
+regalloc crash 5.mod10:
+	sub rsp, 0x10
+	mov [rsp], edi
+	mov rcx, 0x0A
+	mov eax, [rsp]
+	xor edx, edx
+	div ecx
+	mov rax, rdx
+	add rsp, 0x10
+	ret
+main:
+	sub rsp, 0x18
+	lea rax, [0x0000000000000007]
+	mov [rsp], rax
+	mov qword ptr [rsp+0x08], 0x00
+	mov rdi, [rsp]
+	call :regalloc crash 5.ignore
+	mov ax, [0x0000000000000007]
+	movzx edi, ax
+	call :regalloc crash 5.mod10
+	mov [rsp+0x10], eax
+	mov eax, [rsp+0x10]
+	mov eax, eax
+	add rsp, 0x18
+	ret

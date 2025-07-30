@@ -439,6 +439,12 @@ pub const Func = struct {
     visibility: root.backend.Machine.Data.Linkage = .local,
     special: ?root.backend.Machine.EmitOptions.Special = null,
     completion: std.EnumArray(Types.Target, CompileState) = .{ .values = .{ .queued, .queued } },
+    backedge: ThreadBackedge = .{},
+
+    pub const ThreadBackedge = struct {
+        thread: u32 = std.math.maxInt(u32),
+        local_id: utils.EntId(Func) = undefined,
+    };
 
     pub const CompileState = enum { queued, compiled };
 

@@ -3862,6 +3862,15 @@ fn emitDirective(
                 return self.report(args[0], "expeced integer, {} is not", .{oper.ty});
             }
 
+            if (oper.ty.size(self.types) < ret.size(self.types)) {
+                return .mkv(ret, self.bl.addUnOp(
+                    sloc,
+                    if (oper.ty.isSigned()) .sext else .uext,
+                    self.abiCata(ret).ByValue,
+                    oper.getValue(sloc, self),
+                ));
+            }
+
             return .mkv(ret, self.bl.addUnOp(
                 sloc,
                 .ired,
