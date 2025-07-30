@@ -352,7 +352,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
         },
         .Buty => |b| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, b.pos.index)),
         .Block => |b| {
-            try self.fmtSliceLow(b.pos.flag.indented, true, b.stmts, .@"{", .@";", .@"}");
+            try self.fmtSliceLow(b.pos.flag.indented and b.stmts.len() != 0, true, b.stmts, .@"{", .@";", .@"}");
         },
         .SliceTy => |s| {
             const unprec = 1;
@@ -384,7 +384,7 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.buf.appendSlice("match ");
             try self.fmtExpr(m.value);
             try self.buf.appendSlice(" ");
-            try self.fmtSlice(true, m.arms, .@"{", .@",", .@"}");
+            try self.fmtSlice(m.arms.len() != 0, m.arms, .@"{", .@",", .@"}");
         },
         .Loop => |l| {
             if (l.pos.flag.@"comptime") try self.buf.appendSlice("$");

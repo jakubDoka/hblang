@@ -6,12 +6,10 @@ This file contains minimal repro tests that are not a good example for learning.
 ```hb
 a := false
 $b := fn(): ?void {
-    if a return {
-    }
+    if a return {}
     return null
 }
-ignore := fn(x: uint): void {
-}
+ignore := fn(x: uint): void {}
 main := fn(): u32 loop {
     x := 0
     if a x = 1
@@ -24,8 +22,7 @@ main := fn(): u32 loop {
 ```hb
 main := fn(): u32 {
     a: uint = 0
-    for i := a..10 {
-    }
+    for i := a..10 {}
     return @int_cast(a)
 }
 ```
@@ -226,8 +223,7 @@ X := struct {
 }
 
 main := fn(): uint {
-    X.(&fn(): void {
-    }).func()
+    X.(&fn(): void {}).func()
 
     return 0
 }
@@ -306,8 +302,7 @@ main := fn(): u32 {
 ```hb
 opaque := true
 
-use := fn(v: @Any()): void {
-}
+use := fn(v: @Any()): void {}
 
 store_pullout := fn(): uint {
     x := 1
@@ -507,8 +502,7 @@ main := fn(): u32 loop if A == A return 0 else {
 
 #### regalloc crash 4
 ```hb
-blackbox := fn(self: ^u32): void {
-}
+blackbox := fn(self: ^u32): void {}
 blackbox2: ?int = null
 main := fn(): u32 {
     x: ^u32 = @bit_cast(1)
@@ -523,8 +517,7 @@ main := fn(): u32 {
 #### regalloc crash 5
 ```hb
 mod10 := fn(x: u32): u32 return x % 10
-ignore := fn(x: ^u8): void {
-}
+ignore := fn(x: ^u8): void {}
 n: u16 = 10
 main := fn(): uint {
     ignore("".ptr)
@@ -538,8 +531,7 @@ expectations := .{
     times_out: true,
 }
 
-broken := fn(self: ?[]u8): void {
-}
+broken := fn(self: ?[]u8): void {}
 
 main := fn(): u32 loop {
     broken(null)
@@ -769,8 +761,7 @@ WrapperU8 := struct {
     .x: u8;
 }
 
-func := fn(op: u8, fd: u8, event: WrapperU8): void {
-}
+func := fn(op: u8, fd: u8, event: WrapperU8): void {}
 
 ZERO: u8 = 0
 
@@ -873,8 +864,7 @@ Broken := struct align(1) {
     .a: u8;
     .b: u16;
 }
-broken := fn(event: Broken): void {
-}
+broken := fn(event: Broken): void {}
 main := fn(): uint {
     broken(.(0, 0))
     return 0
@@ -929,8 +919,7 @@ main := fn(): uint {
 #### out of bounds matching 1
 ```hb
 main := fn(): uint {
-    byte_iter("hello, world").for_each(fn(x: u8): void {
-    })
+    byte_iter("hello, world").for_each(fn(x: u8): void {})
     return 0
 }
 
@@ -991,8 +980,7 @@ main := fn(): uint {
     vl := ptr.*
     ovl := optr.*
     ptr.* = idk
-    optr.* = {
-    }
+    optr.* = {}
 
     return 0
 }
@@ -1160,8 +1148,7 @@ main := fn(): uint {
 main := fn(): uint {
     $if !@target("x86_64-linux") return 0
     @syscall(291, 0)
-    loop {
-    }
+    loop {}
     return 0
 }
 ```
@@ -1172,8 +1159,7 @@ expectations := .{
     unreaches: true,
 }
 
-$no_op := fn(): void {
-}
+$no_op := fn(): void {}
 
 $unreachable := fn(): void die
 
@@ -1226,8 +1212,7 @@ main := fn(): uint {
         }
     }
     A := struct {
-        test := fn(): void {
-        }
+        test := fn(): void {}
     }
     B := Wrap(A)
     C := Wrap(B)
@@ -1578,8 +1563,7 @@ main := fn(): uint {
     return insert(0, 1)
 }
 
-bar := fn(): void {
-}
+bar := fn(): void {}
 
 insert := fn(a: uint, b: uint): uint {
     if a == 0 bar()
@@ -1611,8 +1595,7 @@ Self := struct {
 }
 
 insert := fn(self: ^Self, key: uint, value: uint): ?^uint {
-    if true {
-    }
+    if true {}
     idx := 0
     loop {
         offset := 0
@@ -1669,8 +1652,7 @@ main := fn(): u32 {
     loop {
         val1: ?u8 = null
         loop if val1 == null break else {
-            if val1.? == 0 {
-            }
+            if val1.? == 0 {}
             val1 = null
         }
     }
@@ -1807,8 +1789,7 @@ main := fn(): uint {
     _ = Ty.{p: 10}
     _ = Ty.{a: 1, b: 2, p: 10}
     _ = Ty.{a: 1, a: 2}
-    _ = Ty.(.{}, .(), {
-    })
+    _ = Ty.(.{}, .(), {})
     v := Ty.(0, 0, 0)
     return Ty.(v, 0)
 }
@@ -1860,8 +1841,7 @@ main := fn(): uint {
 
 #### slices 5 (coersion)
 ```hb
-use_slice := fn(slice: []u8): void {
-}
+use_slice := fn(slice: []u8): void {}
 
 main := fn(): uint {
     use_slice(&.[1, 2, 3, 4])

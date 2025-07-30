@@ -68,8 +68,7 @@ expectations := .{
 }
 
 main := fn(): uint {
-    v := {
-    }
+    v := {}
     return 1 + v * 10
 }
 ```
@@ -222,16 +221,13 @@ expectations := .{
 }
 
 main := fn(): uint {
-    imaginary := {
-    }
+    imaginary := {}
     imaginary()
     some_fn()
     _ = some_fn(0, 0, 0)
     _ = some_fn(0, 0)
-    vl := some_fn(0, {
-    }, 0, 0)
-    return some_fn(vl, {
-    }, 0)
+    vl := some_fn(0, {}, 0, 0)
+    return some_fn(vl, {}, 0)
 }
 
 some_fn := fn(a: uint, b: void, c: u8): uint {
@@ -348,10 +344,8 @@ main := fn(): uint {
 global := 0
 
 main := fn(): uint {
-    if false || true || effectfull(1) {
-    }
-    if true && false && effectfull(2) {
-    }
+    if false || true || effectfull(1) {}
+    if true && false && effectfull(2) {}
 
     v := false
     v &&= effectfull(4)
@@ -499,8 +493,7 @@ expectations := .{
 }
 
 main := fn(): uint {
-    if true loop {
-    }
+    if true loop {}
 
     return 0
 }
@@ -998,14 +991,12 @@ foo := fn(vl: int, $oo: type): Map(u8, oo) return .()
 #### generic structs 7 (template method call)
 ```hb
 A := struct {
-    apply := fn(self: ^@CurrentScope(), $func: type): void {
-    }
+    apply := fn(self: ^@CurrentScope(), $func: type): void {}
 }
 
 main := fn(): uint {
     z := A.()
-    y := z.apply(fn(): void {
-    })
+    y := z.apply(fn(): void {})
     return 0
 }
 ```
@@ -1314,8 +1305,7 @@ main := fn(): uint {
     Nm := enum{.a; .b; .c}
 
     match Nm.a {
-        .a => {
-        },
+        .a => {},
         Nm.b => return 1,
         .c => return 2,
     }
@@ -1331,8 +1321,7 @@ main := fn(): uint {
 ```hb
 main := fn(): uint {
     $match enum{.a}.a {
-        .a => {
-        },
+        .a => {},
     }
 
     $match enum{.a; .b}.a {
@@ -1349,20 +1338,16 @@ expectations := .{
 }
 
 main := fn(): void {
-    match enum{.a; .b}.a {
-    }
+    match enum{.a; .b}.a {}
 
     match enum{.a; .b}.a {
-        .a => {
-        },
+        .a => {},
     }
 
-    $match enum{.a; .b}.a {
-    }
+    $match enum{.a; .b}.a {}
 
     $match enum{.a; .b}.a {
-        .b => {
-        },
+        .b => {},
     }
 }
 ```
@@ -2057,8 +2042,7 @@ use_slice := fn(slice: []u8): uint {
     return slice[0]
 }
 
-produce_memcpy := fn(vl: [4]u8): void {
-}
+produce_memcpy := fn(vl: [4]u8): void {}
 
 main := fn(): uint {
     vl: u8 = 0
