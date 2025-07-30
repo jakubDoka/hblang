@@ -381,7 +381,7 @@ pub fn Mixin(comptime Backend: type) type {
                         }
                     },
                     .Phi => {
-                        for (o.inputs()[1..], o.cfg0().base.inputs()) |inp, oblk| if (inp.? == load.mem()) {
+                        for (o.ordInps()[1..], o.cfg0().base.ordInps()) |inp, oblk| if (inp.? == load.mem()) {
                             var stblck = oblk.?.cfg0();
                             if (stblck.ext.antidep == load.id) {
                                 lca = stblck.findLca(lca);
@@ -432,7 +432,7 @@ pub fn Mixin(comptime Backend: type) type {
                     var score: usize = 500;
                     if (!n.isDef()) return score;
 
-                    if (self.remote_def) score = 200;
+                    if (self.remote_def) score = 210;
 
                     var cnts: [2]usize = @splat(0);
                     const flags = b: {
@@ -467,7 +467,9 @@ pub fn Mixin(comptime Backend: type) type {
                     score += @as(usize, @min(cnts[0], 2)) * 10;
                     score += @as(usize, @min(cnts[1], 2)) * 100;
 
-                    std.debug.assert(10 <= score and score <= 990);
+                    if (!(10 <= score and score <= 990)) {
+                        unreachable;
+                    }
                     return score;
                 }
             };

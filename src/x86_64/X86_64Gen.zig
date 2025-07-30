@@ -292,7 +292,7 @@ pub const classes = enum {
         imm: i64,
     };
     pub const CondJump = extern struct {
-        base: graph.If = .{},
+        base: graph.If,
         op: graph.BinOp,
     };
     pub const F32 = extern struct {
@@ -510,7 +510,7 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
                 node.sloc,
                 cond.data_type,
                 &.{ node.inputs()[0], cond.inputs()[1], cond.inputs()[2] },
-                .{ .op = cond.extra(.BinOp).op },
+                .{ .op = cond.extra(.BinOp).op, .base = node.extra(.If).* },
             );
         }
     }

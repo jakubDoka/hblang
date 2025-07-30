@@ -7,8 +7,8 @@ main:
 	test cl, cl
 	jz :0
 	ret
-0:	xor rcx, rcx
-	xor r8, r8
+0:	xor r8, r8
+	xor rcx, rcx
 	mov rdi, 0x01
 3:	cmp rcx, 0x09
 	setz sil
@@ -17,9 +17,9 @@ main:
 	jz :1
 	inc rdx
 	jmp :2
-1:	mov rax, r8
+1:	inc rcx
+	mov rax, r8
 	add rax, rdi
-	inc rcx
 	mov r8, rdi
 	mov rdi, rax
 	jmp :3

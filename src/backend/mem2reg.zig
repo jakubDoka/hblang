@@ -269,7 +269,7 @@ pub fn Mixin(comptime Backend: type) type {
 
                 for (stmp.arena.dupe(Node.Out, bb.outputs())) |n| {
                     const o = n.get();
-                    if (o.id == std.math.maxInt(u16)) continue;
+                    if (o.isDead()) continue;
                     std.debug.assert(bb.kind != .Local);
 
                     if (o.isStore()) {

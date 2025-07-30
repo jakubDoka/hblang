@@ -9,9 +9,9 @@ loops 1.fib:
 	test cl, cl
 	jz :0
 	ret
-0:	mov rcx, rax
+0:	dec rdi
+	mov rcx, rax
 	add rcx, rdx
-	dec rdi
 	jmp :1
 main:
 	sub rsp, 0x08

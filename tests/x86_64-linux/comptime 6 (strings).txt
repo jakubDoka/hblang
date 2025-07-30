@@ -14,28 +14,28 @@ comptime 6 (strings).main.string_to_array("Edward"):
 	mov [rcx], al
 	inc rdx
 	jmp :1
-0:	mov al, [rsp+0x03]
-	movzx r8, al
-	shl r8, 0x18
+0:	mov al, [rsp+0x01]
+	movzx rcx, al
+	shl rcx, 0x08
+	mov al, [rsp+0x05]
+	movzx rdx, al
+	shl rdx, 0x28
 	mov al, [rsp]
 	movzx rax, al
-	mov cl, [rsp+0x05]
-	movzx rdi, cl
-	shl rdi, 0x28
-	mov cl, [rsp+0x04]
-	movzx rsi, cl
-	shl rsi, 0x20
+	or rax, rcx
 	mov cl, [rsp+0x02]
-	movzx rdx, cl
-	shl rdx, 0x10
-	mov cl, [rsp+0x01]
 	movzx rcx, cl
-	shl rcx, 0x08
+	shl rcx, 0x10
+	or rax, rcx
+	mov cl, [rsp+0x03]
+	movzx rcx, cl
+	shl rcx, 0x18
+	or rax, rcx
+	mov cl, [rsp+0x04]
+	movzx rcx, cl
+	shl rcx, 0x20
 	or rax, rcx
 	or rax, rdx
-	or rax, r8
-	or rax, rsi
-	or rax, rdi
 	add rsp, 0x10
 	ret
 main:

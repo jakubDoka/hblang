@@ -438,12 +438,14 @@ pub const Func = struct {
     is_inline: bool = false,
     visibility: root.backend.Machine.Data.Linkage = .local,
     special: ?root.backend.Machine.EmitOptions.Special = null,
-    completion: std.EnumArray(Types.Target, CompileState) = .{ .values = .{ .queued, .queued } },
-    backedge: ThreadBackedge = .{},
+    completion: std.EnumArray(Types.Target, CompileState) =
+        .{ .values = @splat(.queued) },
+    remote_id: RrmoteId = .{},
 
-    pub const ThreadBackedge = struct {
-        thread: u32 = std.math.maxInt(u32),
-        local_id: utils.EntId(Func) = undefined,
+    pub const RrmoteId = struct {
+        remote: utils.EntId(Func) = undefined,
+        from_thread: u32 = self_thread,
+        pub const self_thread = std.math.maxInt(u32);
     };
 
     pub const CompileState = enum { queued, compiled };
@@ -482,7 +484,8 @@ pub const Global = struct {
     } = .{ .imm = &.{} },
     relocs: []const root.backend.Machine.DataOptions.Reloc = &.{},
     readonly: bool,
-    completion: std.EnumArray(Types.Target, CompileState) = .{ .values = .{ .queued, .queued } },
+    completion: std.EnumArray(Types.Target, CompileState) =
+        .{ .values = @splat(.queued) },
 
     pub const CompileState = enum { queued, staged, compiled };
 };

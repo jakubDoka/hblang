@@ -45,7 +45,7 @@ pub const classes = enum {
     };
     // [?Cfg, lhs, rhs]
     pub const IfOp = extern struct {
-        base: graph.If = .{},
+        base: graph.If,
         op: isa.Op,
         swapped: bool,
     };
@@ -175,6 +175,7 @@ pub fn idealizeMach(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.Work
             const op_inps = inps[1].?.inputs();
 
             return func.addNode(.IfOp, node.sloc, .top, &.{ inps[0], op_inps[1], op_inps[2] }, .{
+                .base = node.extra(.If).*,
                 .op = instr,
                 .swapped = swap,
             });

@@ -1,0 +1,98 @@
+dump asm crash 1.cache(, , .Inner):
+	sub rsp, 0x38
+	mov [rsp+0x28], dil
+	mov [rsp], rsi
+	mov al, [rsp+0x28]
+	test al, al
+	jz :0
+	mov byte ptr [rsp+0x29], 0x01
+	jmp :1
+0:	xor rcx, rcx
+	mov al, [0x0000000000000006]
+	cmp al, cl
+	setz al
+	movzx rax, al
+	mov [rsp+0x29], al
+1:	mov al, [rsp+0x29]
+	test al, al
+	jz :2
+	mov byte ptr [rsp+0x2A], 0x01
+	jmp :3
+2:	mov ecx, [0x0000000000000006]
+	mov eax, [rsp+0x04]
+	cmp ecx, eax
+	setnz dl
+	movzx rdx, dl
+	mov ecx, [0x0000000000000006]
+	mov eax, [rsp]
+	cmp ecx, eax
+	setnz al
+	movzx rax, al
+	or eax, edx
+	mov [rsp+0x2A], al
+3:	mov al, [rsp+0x2A]
+	test al, al
+	jz :5
+	lea rax, [0x0000000000000007]
+	mov byte ptr [rax], 0x00
+	mov byte ptr [rsp+0x18], 0x01
+	mov rax, [rsp]
+	mov [rsp+0x1C], rax
+	mov rax, [rsp+0x18]
+	mov [0x0000000000000007], rax
+	mov eax, [rsp+0x20]
+	mov [0x0000000000000006], eax
+	jmp :5
+5:	mov al, [0x0000000000000006]
+	test al, al
+	jz :5
+	mov rax, [0x0000000000000007]
+	mov [rsp+0x08], rax
+	jmp :6
+5:	mov rdi, [rsp]
+	call :dump asm crash 1()
+	mov [rsp+0x24], eax
+	mov eax, [rsp+0x24]
+	mov [rsp+0x0C], eax
+6:	mov byte ptr [rsp+0x10], 0x01
+	mov eax, [rsp+0x0C]
+	mov [rsp+0x14], eax
+	mov rax, [rsp+0x10]
+	mov [0x0000000000000007], rax
+	mov eax, [0x0000000000000006]
+	add rsp, 0x38
+	ret
+dump asm crash 1():
+	sub rsp, 0x10
+	mov [rsp], rdi
+	mov eax, [rsp]
+	mov ecx, [rsp+0x04]
+	add eax, ecx
+	add rsp, 0x10
+	ret
+main:
+	sub rsp, 0x18
+	mov qword ptr [rsp], 0x00
+	mov dword ptr [rsp+0x10], 0x00
+1:	mov rax, [rsp]
+	cmp rax, 0x64
+	setb al
+	movzx rax, al
+	test al, al
+	jz :0
+	mov dword ptr [rsp+0x08], 0x01
+	mov dword ptr [rsp+0x0C], 0x02
+	mov rsi, [rsp+0x08]
+	xor rdi, rdi
+	call :dump asm crash 1.cache(, , .Inner)
+	mov [rsp+0x14], eax
+	mov eax, [rsp+0x14]
+	mov [rsp+0x10], eax
+	mov rax, [rsp]
+	inc rax
+	mov [rsp], rax
+	jmp :1
+0:	mov eax, [rsp+0x10]
+	sub eax, 0x03
+	add rsp, 0x18
+	ret

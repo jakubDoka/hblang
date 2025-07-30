@@ -81,10 +81,10 @@ pub fn Mixin(comptime Backend: type) type {
                 if (node.subclass(graph.Region)) |cfg| {
                     if (cfg.ext.cached_lca != null) {
                         const lca: *Func.Node = @ptrCast(cfg.ext.cached_lca.?);
-                        if (lca.id != std.math.maxInt(u16)) {
-                            cfg.ext.cached_lca = new_node_table[lca.id];
-                        } else {
+                        if (!lca.isSub(graph.If) or lca.subclass(graph.If).?.ext.id != node.id) {
                             cfg.ext.cached_lca = null;
+                        } else {
+                            cfg.ext.cached_lca = new_node_table[lca.id];
                         }
                     }
                 }
@@ -189,7 +189,7 @@ pub fn Mixin(comptime Backend: type) type {
                 }
             }
 
-            for (new_nodes) |nn| if (nn.id != std.math.maxInt(u16)) {
+            for (new_nodes) |nn| if (!nn.isDead()) {
                 std.debug.assert(interned.isSet(nn.id));
             };
         }
@@ -360,7 +360,7 @@ pub fn Mixin(comptime Backend: type) type {
 
             func.kill(end);
 
-            for (cloned.new_nodes) |nn| if (nn.id != std.math.maxInt(u16)) {
+            for (cloned.new_nodes) |nn| if (!nn.isDead()) {
                 func_work.add(nn);
             };
         }

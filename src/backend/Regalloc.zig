@@ -419,7 +419,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 }
 
                 if (member.kind == .Phi) {
-                    for (member.dataDeps(), member.cfg0().base.inputs()) |dep, cfg| {
+                    for (member.dataDeps(), member.cfg0().base.ordInps()) |dep, cfg| {
                         min, max = LiveRange
                             .collectLoopDepth(func, dep, cfg.?.cfg0(), min, max);
                     }
@@ -458,7 +458,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 }
 
                 if (member.kind == .Phi) {
-                    for (member.dataDeps(), member.cfg0().base.inputs(), member.dataDepOffset()..) |dep, c, j| {
+                    for (member.dataDeps(), member.cfg0().base.ordInps(), member.dataDepOffset()..) |dep, c, j| {
                         if (dep.kind == .MachSplit) continue;
 
                         const cfg = c.?.inputs()[0].?;
@@ -605,7 +605,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
         if (bb.base.kind == .Entry) continue;
 
-        for (bb.base.inputs(), 0..) |prd, i| {
+        for (bb.base.ordInps(), 0..) |prd, i| {
             const pred: *Node = prd.?.inputs()[0].?;
             if (pred.schedule == no_def_sentinel) {
                 func.fmtScheduled(std.io.getStdErr().writer().any(), .escape_codes);

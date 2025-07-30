@@ -606,6 +606,8 @@ pub const builtin = enum {
         id: u32,
         pub const is_clone = true;
     };
+
+    pub const Dead = extern struct {};
 };
 
 pub const Arg = extern struct {
@@ -625,6 +627,7 @@ pub const Store = extern struct {
 };
 pub const If = extern struct {
     base: Cfg = .{},
+    id: u32,
 };
 pub const Region = extern struct {
     base: Cfg = .{},
@@ -718,10 +721,13 @@ pub fn Func(comptime Backend: type) type {
         start: *Node = undefined,
         end: *Node = undefined,
         gcm: gcm.Mixin(Backend) = .{},
+        node_free_list: [sclass_spec.len]?*Node = @splat(null),
         mem2reg: mem2reg.Mixin(Backend) = .{},
         static_anal: static_anal.Mixin(Backend) = .{},
         inliner: inliner.Mixin(Backend) = .{},
         stopped_interning: std.debug.SafetyLock = .{},
+
+        const use_free_lists = true;
 
         pub fn optApi(comptime decl_name: []const u8, comptime Ty: type) bool {
             const prelude = @typeName(Backend) ++ " requires this unless `pub const i_know_the_api = {}` is declared:";
@@ -749,6 +755,38 @@ pub fn Func(comptime Backend: type) type {
         pub const biased_regs = if (optApi("biased_regs", u64)) Backend.biased_regs else 0;
         pub const all_classes = std.meta.fields(Union);
 
+        pub const sclass_spec: struct { vars: if (use_vec) @Vector(8, u8) else [8]u8, len: usize } = collect_sclasses: {
+            var variants: [8]u8 = @splat(0);
+            var found_count: usize = 0;
+            for (all_classes) |class| {
+                const size = std.mem.alignForward(u32, @sizeOf(class.type), @alignOf(Node));
+                for (variants[0..found_count]) |v| {
+                    if (v == size) break;
+                } else {
+                    variants[found_count] = size;
+                    found_count += 1;
+                }
+            }
+            break :collect_sclasses .{ .vars = variants, .len = found_count };
+        };
+
+        comptime {
+            _ = &sclass_spec;
+        }
+
+        const use_vec = @import("builtin").mode != .Debug;
+
+        pub fn sclassOf(kind: Kind) u3 {
+            const size = Node.size_map[@intFromEnum(kind)];
+            if (use_vec) {
+                return std.simd.firstIndexOfValue(sclass_spec.vars, size).?;
+            } else {
+                for (sclass_spec.vars, 0..) |v, i| {
+                    if (size == v) return @intCast(i);
+                } else unreachable;
+            }
+        }
+
         const Self = @This();
 
         pub const WorkList = struct {
@@ -765,7 +803,7 @@ pub fn Func(comptime Backend: type) type {
             pub fn add(self: *WorkList, node: *Node) void {
                 errdefer unreachable;
 
-                if (node.id == std.math.maxInt(u16)) utils.panic("{} {any}\n", .{ node, node.inputs() });
+                if (node.isDead()) utils.panic("{} {any}\n", .{ node, node.inputs() });
                 if (self.in_list.bit_length <= node.id) {
                     try self.in_list.resize(
                         self.list.allocator,
@@ -781,7 +819,7 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn pop(self: *WorkList) ?*Node {
                 var node = self.list.pop() orelse return null;
-                while (node.id == std.math.maxInt(u16)) {
+                while (node.isDead()) {
                     node = self.list.pop() orelse return null;
                 }
                 self.in_list.unset(node.id);
@@ -860,7 +898,8 @@ pub fn Func(comptime Backend: type) type {
                     return switch (cfg.base.extra2()) {
                         .Region => |extra| {
                             if (extra.cached_lca != null and
-                                @as(*Node, @ptrCast(extra.cached_lca)).id == std.math.maxInt(u16))
+                                (!@as(*Node, @ptrCast(extra.cached_lca)).isSub(If) or
+                                    @as(*Node, @ptrCast(extra.cached_lca)).subclass(If).?.ext.id != cfg.base.id))
                                 extra.cached_lca = null;
 
                             if (extra.cached_lca) |lca| {
@@ -868,6 +907,7 @@ pub fn Func(comptime Backend: type) type {
                             } else {
                                 const lca = findLca(cfg.base.inputs()[0].?.asCfg().?, cfg.base.inputs()[1].?.asCfg().?);
                                 cfg.base.extra(.Region).cached_lca = lca;
+                                lca.base.subclass(If).?.ext.id = cfg.base.id;
                                 return lca;
                             }
                         },
@@ -906,6 +946,8 @@ pub fn Func(comptime Backend: type) type {
             output_base: [*]Out,
             sloc: Sloc = .none,
 
+            edata: void = {},
+
             pub const OutInner = if (@sizeOf(*Node) == 8) packed struct(u64) {
                 node: u48,
                 pos: u16,
@@ -934,6 +976,10 @@ pub fn Func(comptime Backend: type) type {
                     try writer.print("{}:{any}", .{ self.pos(), self.get() });
                 }
             };
+
+            pub fn isDead(self: *Node) bool {
+                return self.kind == .Dead;
+            }
 
             pub fn preservesIdentityPhys(self: *Node) bool {
                 std.debug.assert(self.kind == .Region or self.kind == .Loop);
@@ -1099,9 +1145,8 @@ pub fn Func(comptime Backend: type) type {
                 return self.kind == .Local or self.kind == .StructArg;
             }
 
-            pub fn anyextra(self: *const Node) *const anyopaque {
-                const any: *const extern struct { n: Node, ex: u8 } = @ptrCast(self);
-                return &any.ex;
+            pub fn anyextra(self: *const Node) []const u64 {
+                return @as([*]const u64, @ptrCast(&self.edata))[0 .. size_map[@intFromEnum(self.kind)] / 8];
             }
 
             pub fn format(self: *const Node, comptime _: anytype, _: anytype, writer: anytype) !void {
@@ -1270,6 +1315,10 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn inputs(self: *Node) []?*Node {
                 return self.input_base[0..self.input_len];
+            }
+
+            pub fn ordInps(self: *Node) []?*Node {
+                return self.input_base[0..self.input_ordered_len];
             }
 
             pub fn tryCfg0(self: *Node) ?*CfgNode {
@@ -1441,25 +1490,22 @@ pub fn Func(comptime Backend: type) type {
 
             pub const size_map = b: {
                 var arr: [all_classes.len]u8 = undefined;
-                for (all_classes, &arr) |f, *s| s.* = @sizeOf(f.type);
+                for (all_classes, &arr) |f, *s| s.* =
+                    std.mem.alignForward(u8, @sizeOf(f.type), @alignOf(Node));
                 const m = arr;
                 break :b m;
             };
 
             pub fn size(node: *Node) usize {
-                return @sizeOf(Node) + std.mem.alignForward(
-                    usize,
-                    size_map[@intFromEnum(node.kind)],
-                    @alignOf(Node),
-                );
+                return @sizeOf(Node) + size_map[@intFromEnum(node.kind)];
             }
 
-            pub fn hash(kind: Kind, dt: DataType, inpts: []const ?*Node, extr: *const anyopaque) u64 {
+            pub fn hash(kind: Kind, dt: DataType, inpts: []const ?*Node, extr: []const u64) u64 {
                 var hasher = std.hash.Wyhash.init(0);
                 hasher.update(std.mem.asBytes(&kind));
                 hasher.update(std.mem.asBytes(&dt));
                 hasher.update(@ptrCast(inpts));
-                hasher.update(@as([*]const u8, @ptrCast(extr))[0..size_map[@intFromEnum(kind)]]);
+                hasher.update(@ptrCast(extr));
                 return hasher.final();
             }
 
@@ -1470,17 +1516,13 @@ pub fn Func(comptime Backend: type) type {
                 bdt: DataType,
                 ainputs: []const ?*Node,
                 binputs: []const ?*Node,
-                aextra: *const anyopaque,
-                bextra: *const anyopaque,
+                aextra: []const u64,
+                bextra: []const u64,
             ) bool {
                 return akind == bkind and
                     adt == bdt and
                     std.mem.eql(?*Node, ainputs, binputs) and
-                    std.mem.eql(
-                        u8,
-                        @as([*]const u8, @ptrCast(aextra))[0..size_map[@intFromEnum(akind)]],
-                        @as([*]const u8, @ptrCast(bextra))[0..size_map[@intFromEnum(bkind)]],
-                    );
+                    std.mem.eql(u64, aextra, bextra);
             }
         };
 
@@ -1499,6 +1541,7 @@ pub fn Func(comptime Backend: type) type {
             std.debug.assert(self.arena.reset(.retain_capacity));
             self.next_id = 0;
             self.waste = 0;
+            self.node_free_list = @splat(null);
             self.start = self.addNode(.Start, .none, .top, &.{}, .{});
             self.interner = .{};
             self.gcm.cfg_built = .{};
@@ -1510,7 +1553,7 @@ pub fn Func(comptime Backend: type) type {
             kind: Kind,
             dt: DataType,
             inputs: []const ?*Node,
-            extra: *const anyopaque,
+            extra: []const u64,
 
             pub fn hash(_: anytype, k: InternedNode) u64 {
                 return k.hash;
@@ -1616,7 +1659,7 @@ pub fn Func(comptime Backend: type) type {
             return new_node;
         }
 
-        pub fn internNode(self: *Self, kind: Kind, dt: DataType, inputs: []const ?*Node, extra: *const anyopaque) InsertMap.GetOrPutResult {
+        pub fn internNode(self: *Self, kind: Kind, dt: DataType, inputs: []const ?*Node, extra: []const u64) InsertMap.GetOrPutResult {
             const map: *InsertMap = @ptrCast(&self.interner);
 
             return map.getOrPutContext(self.arena.allocator(), .{
@@ -1772,37 +1815,53 @@ pub fn Func(comptime Backend: type) type {
                     typ = .top;
                 };
             }
-            const node = self.addNodeUntyped(kind, typ, inputs, extra);
+            var bytes: [Node.size_map[@intFromEnum(kind)] / 8]u64 = @splat(0);
+            @as(*ClassFor(kind), @ptrCast(&bytes)).* = extra;
+            const node = self.addNodeUntyped(kind, typ, inputs, comptime sclassOf(kind), &bytes);
             node.sloc = sloc;
             return node;
         }
 
-        pub fn addNodeUntyped(self: *Self, kind: Kind, dt: DataType, inputs: []const ?*Node, extra: anytype) *Node {
+        pub fn addNodeUntyped(self: *Self, kind: Kind, dt: DataType, inputs: []const ?*Node, sclass: usize, extra: []const u64) *Node {
             if (Node.isInterned(kind, inputs)) {
-                const entry = self.internNode(kind, dt, inputs, &extra);
+                const entry = self.internNode(kind, dt, inputs, extra);
                 if (!entry.found_existing) {
-                    entry.key_ptr.node = self.addNodeNoIntern(kind, dt, inputs, extra);
+                    entry.key_ptr.node = self.addNodeNoIntern(kind, dt, inputs, sclass, extra);
                 }
 
                 const node = entry.key_ptr.node;
 
                 return node;
             } else {
-                return self.addNodeNoIntern(kind, dt, inputs, extra);
+                return self.addNodeNoIntern(kind, dt, inputs, sclass, extra);
             }
         }
 
-        pub fn addNodeNoIntern(self: *Self, kind: Kind, ty: DataType, inputs: []const ?*Node, extra: anytype) *Node {
-            const Layout = extern struct {
-                base: Node,
-                extra: @TypeOf(extra),
-            };
+        pub fn addNodeNoIntern(self: *Self, kind: Kind, ty: DataType, inputs: []const ?*Node, sclass: usize, extra: []const u64) *Node {
+            errdefer unreachable;
+            var node: *Node = undefined;
+            if (if (use_free_lists) self.node_free_list[sclass] else null) |*slot| {
+                node = slot.*;
+                self.node_free_list[sclass] = @ptrFromInt(@as(usize, @intCast(@as(u64, @bitCast(node.sloc)))));
 
-            const node = self.arena.allocator().create(Layout) catch unreachable;
-            const owned_inputs = self.arena.allocator().dupe(?*Node, inputs) catch unreachable;
+                if (node.inputs().len >= inputs.len) {
+                    @memcpy(node.inputs()[0..inputs.len], inputs);
+                } else {
+                    node.input_base = (try self.arena.allocator().dupe(?*Node, inputs)).ptr;
+                }
+                node.input_len = @intCast(inputs.len);
+                node.input_ordered_len = @intCast(inputs.len);
 
-            node.* = .{
-                .base = .{
+                node.kind = kind;
+                node.schedule = std.math.maxInt(u16);
+                node.data_type = ty;
+                node.output_len = 0;
+            } else {
+                const size = @sizeOf(Node) + extra.len * @sizeOf(u64);
+                node = @alignCast(@ptrCast(self.arena.allocator().rawAlloc(size, .@"8", @returnAddress()).?));
+                const owned_inputs = try self.arena.allocator().dupe(?*Node, inputs);
+
+                node.* = .{
                     .input_base = owned_inputs.ptr,
                     .input_len = @intCast(owned_inputs.len),
                     .input_ordered_len = @intCast(owned_inputs.len),
@@ -1810,17 +1869,18 @@ pub fn Func(comptime Backend: type) type {
                     .kind = kind,
                     .id = self.next_id,
                     .data_type = ty,
-                },
-                .extra = extra,
+                };
+
+                self.next_id += 1;
+            }
+
+            @memcpy(@as([*]u64, @ptrCast(&node.edata)), extra);
+
+            for (node.ordInps(), 0..) |on, i| if (on) |def| {
+                self.addUse(def, i, node);
             };
 
-            for (owned_inputs, 0..) |on, i| if (on) |def| {
-                self.addUse(def, i, &node.base);
-            };
-
-            self.next_id += 1;
-
-            return &node.base;
+            return node;
         }
 
         pub fn isDead(node: ?*Node) bool {
@@ -1834,12 +1894,17 @@ pub fn Func(comptime Backend: type) type {
                 i.removeUse(j, self);
             };
 
-            func.waste += self.size();
-            func.waste += self.output_cap * @sizeOf(Node.Out);
-            func.waste += self.input_len * @sizeOf(?*Node);
-
-            self.* = undefined;
-            self.id = std.math.maxInt(u16);
+            if (use_free_lists) {
+                const slot = &func.node_free_list[sclassOf(self.kind)];
+                self.sloc = @bitCast(@as(u64, @intFromPtr(slot.*)));
+                slot.* = self;
+            } else {
+                func.waste += self.input_len * @sizeOf(?*Node);
+                func.waste += self.size();
+                func.waste += self.output_cap * @sizeOf(Node.Out);
+                self.* = undefined;
+            }
+            self.kind = .Dead;
         }
 
         pub fn subsumeNoKillIgnoreIntern(self: *Self, this: *Node, target: *Node) void {
@@ -1849,7 +1914,7 @@ pub fn Func(comptime Backend: type) type {
             defer tmp.deinit();
 
             for (tmp.arena.dupe(Node.Out, target.outputs())) |use| {
-                if (use.get().id == std.math.maxInt(u16)) continue;
+                if (use.get().isDead()) continue;
                 if (use.get() == target) {
                     target.removeUse(use.pos(), target);
                     target.inputs()[use.pos()] = null;
@@ -1871,7 +1936,7 @@ pub fn Func(comptime Backend: type) type {
             defer tmp.deinit();
 
             for (tmp.arena.dupe(Node.Out, target.outputs())) |use| {
-                if (use.get().id == std.math.maxInt(u16)) continue;
+                if (use.get().isDead()) continue;
 
                 if (use.get() == target) {
                     target.removeUse(use.pos(), target);
@@ -2013,7 +2078,7 @@ pub fn Func(comptime Backend: type) type {
             worklist.collectAll(self);
 
             while (worklist.pop()) |t| {
-                if (t.id == std.math.maxInt(u16)) continue;
+                if (t.isDead()) continue;
 
                 if (t.outputs().len == 0 and t != self.end) {
                     for (t.inputs()) |ii| if (ii) |ia| worklist.add(ia);
@@ -2139,9 +2204,7 @@ pub fn Func(comptime Backend: type) type {
                 node.inputs()[1].?.kind != .CInt)
             {
                 var cursor = node.cfg0();
-                while (cursor.base.kind != .Entry and
-                    cursor.base.id != std.math.maxInt(u16)) : (cursor = cursor.idom())
-                {
+                while (cursor.base.kind != .Entry) : (cursor = cursor.idom()) {
                     if (cursor.base.kind != .Then and cursor.base.kind != .Else) continue;
 
                     const if_node = cursor.base.inputs()[0].?;

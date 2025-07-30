@@ -105,7 +105,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
 
     while (true) {
         const curr: *Node = work_list.pop().?;
-        if (curr.id == std.math.maxInt(u16)) continue;
+        if (curr.isDead()) continue;
         const res = switch (curr.kind) {
             .Local => b: {
                 {

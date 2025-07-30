@@ -2,6 +2,42 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### dump asm crash 1
+```hb
+cache := fn($fnc: type, $Args: type): type {
+    Inner := struct {
+        cached: ?@TypeOf(fnc(@as(Args, idk))) = null
+        args: ?Args = null
+    }
+    return fn(invalidate: bool, args: Args): @TypeOf(fnc(@as(Args, idk))) {
+        if invalidate || Inner.args == null || Inner.args.? != args {
+            Inner.cached = null
+            Inner.args = args
+        }
+
+        Inner.cached ||= @inline(fnc, args)
+        return Inner.cached.?
+    }
+}
+
+add := cache(fn(args: @Any()): i32 {
+    //@syscall(1, 2, "computing...\n".ptr, "computing...\n".len)
+    return args.x + args.y
+}, struct{.x: i32; .y: i32})
+
+main := fn(): i32 {
+    $if !@target("x86_64-linux") return 0
+
+    i := 0
+    r: i32 = 0
+    while i < 100 {
+        r = add(false, .(1, 2))
+        i += 1
+    }
+    return r - 3
+}
+```
+
 #### build not terminating 1
 ```hb
 a := false

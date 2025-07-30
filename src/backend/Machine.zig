@@ -726,21 +726,21 @@ pub const OptOptions = struct {
         const Func = graph.Func(Backend);
         const Node = Func.Node;
 
-        std.debug.assert(func.start.id != std.math.maxInt(u16));
+        std.debug.assert(!func.start.isDead());
 
         func.iterPeeps(ctx, struct {
             fn wrap(cx: @TypeOf(ctx), fnc: *Func, nd: *Node, wl: *Func.WorkList) ?*Node {
                 return @TypeOf(func.*).idealizeDead(cx, fnc, nd, wl);
             }
         }.wrap);
-        std.debug.assert(func.start.id != std.math.maxInt(u16));
+        std.debug.assert(!func.start.isDead());
     }
 
     pub fn idealizeGeneric(comptime Backend: type, ctx: anytype, func: *graph.Func(Backend), minimal_only: bool) void {
         const Func = graph.Func(Backend);
         const Node = Func.Node;
 
-        std.debug.assert(func.start.id != std.math.maxInt(u16));
+        std.debug.assert(!func.start.isDead());
 
         if (minimal_only) {
             func.iterPeeps(ctx, Backend.idealize);

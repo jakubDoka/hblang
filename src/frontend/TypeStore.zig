@@ -1282,7 +1282,7 @@ pub fn nextTask(self: *Types, target: Target, pop_limit: usize, q: ?*root.Queue)
             if (task.intoFunc(self)) |func| {
                 // destribute work to others
                 while (self.nextLocalTask(target, 0)) |other| {
-                    qu.enque(&.{root.Task.fronFn(self, other)});
+                    qu.enque(&.{.fronFn(self, qu.self_id, other)});
                 }
                 return func;
             }
@@ -1294,7 +1294,7 @@ pub fn nextTask(self: *Types, target: Target, pop_limit: usize, q: ?*root.Queue)
         std.debug.assert(target == .runtime);
         std.debug.assert(pop_limit == 0);
         while (self.nextLocalTask(target, 0)) |other| {
-            qu.enque(&.{root.Task.fronFn(self, other)});
+            qu.enque(&.{.fronFn(self, qu.self_id, other)});
         }
     }
     return work;

@@ -137,9 +137,9 @@ main:
 	jnz :3
 	mov rax, 0x03
 	jmp :7
-3:	mov cl, [rsp+0x8D]
-	mov al, [rsp+0x91]
-	cmp al, cl
+3:	mov cl, [rsp+0x91]
+	mov al, [rsp+0x8D]
+	cmp cl, al
 	jz :4
 	mov rax, 0x04
 	jmp :7

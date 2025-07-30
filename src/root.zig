@@ -151,18 +151,24 @@ pub const CompileOptions = struct {
 
 pub const Task = struct {
     id: utils.EntId(frontend.types.Func),
-    padd: u32 = 0,
+    thread: u32,
     from: *frontend.Types,
 
-    pub fn fronFn(types: *frontend.Types, func: utils.EntId(frontend.types.Func)) Task {
-        return Task{ .id = func, .from = types };
+    pub fn fronFn(types: *frontend.Types, thread: usize, func: utils.EntId(frontend.types.Func)) Task {
+        return Task{ .id = func, .from = types, .thread = @intCast(thread) };
     }
 
     pub fn intoFunc(self: Task, dest: *frontend.Types) ?utils.EntId(frontend.types.Func) {
         if (self.from == dest) return self.id;
         const id, const new = dest.cloneFrom(self.from, .init(.{ .Func = self.id }));
-        if (new) return id.data().Func;
-        return null;
+        if (!new) return null;
+
+        dest.store.get(id.data().Func).remote_id = .{
+            .remote = self.id,
+            .from_thread = self.thread,
+        };
+
+        return id.data().Func;
     }
 };
 
@@ -178,55 +184,50 @@ pub const Threading = union(enum) {
         pool: std.Thread.Pool,
         queue: Queue,
         types: []*frontend.Types,
-        machine: Sharded,
+        shards: []Shard,
     };
 
-    pub const Sharded = struct {
-        inner: backend.Machine,
-        shards: []Shard,
+    pub const Shard = struct {
+        gpa: *utils.Pool,
 
-        pub const Shard = struct {
-            gpa: *utils.Pool,
+        // TODO: make these more compact
+        func_ir: std.ArrayListUnmanaged(FuncRecord) = .empty,
+        global_ir: std.ArrayListUnmanaged(backend.Machine.DataOptions) = .empty,
 
-            // TODO: make these more compact
-            func_ir: std.ArrayListUnmanaged(FuncRecord) = .empty,
-            global_ir: std.ArrayListUnmanaged(backend.Machine.DataOptions) = .empty,
+        const Func = backend.graph.Func(Shard);
 
-            const Func = backend.graph.Func(Shard);
+        pub const classes = enum {};
 
-            pub const classes = enum {};
+        pub const i_know_the_api = {};
 
-            pub const i_know_the_api = {};
-
-            const FuncRecord = struct {
-                func: Func,
-                opts: backend.Machine.EmitOptions,
-            };
-
-            pub fn emitFunc(self: *Shard, func: *Func, opts: backend.Machine.EmitOptions) void {
-                errdefer unreachable;
-                try self.func_ir.append(self.gpa.allocator(), .{ .func = func.*, .opts = opts });
-                func.arena = .init(self.gpa.allocator());
-            }
-            pub fn emitData(self: *Shard, opts: backend.Machine.DataOptions) void {
-                errdefer unreachable;
-                try self.global_ir.append(self.gpa.allocator(), opts);
-            }
-            pub fn finalize(_: *Shard, _: anytype) void {
-                unreachable;
-            }
-            pub fn disasm(_: *Shard, _: anytype) void {
-                unreachable;
-            }
-            pub fn run(_: *Shard, _: anytype) !usize {
-                unreachable;
-            }
-            pub fn deinit(self: *Shard) void {
-                const gpa = self.gpa.allocator();
-                self.func_ir.deinit(gpa);
-                self.global_ir.deinit(gpa);
-            }
+        const FuncRecord = struct {
+            func: Func,
+            opts: backend.Machine.EmitOptions,
         };
+
+        pub fn emitFunc(self: *Shard, func: *Func, opts: backend.Machine.EmitOptions) void {
+            errdefer unreachable;
+            try self.func_ir.append(self.gpa.allocator(), .{ .func = func.*, .opts = opts });
+            func.arena = .init(self.gpa.allocator());
+        }
+        pub fn emitData(self: *Shard, opts: backend.Machine.DataOptions) void {
+            errdefer unreachable;
+            try self.global_ir.append(self.gpa.allocator(), opts);
+        }
+        pub fn finalize(_: *Shard, _: anytype) void {
+            unreachable;
+        }
+        pub fn disasm(_: *Shard, _: anytype) void {
+            unreachable;
+        }
+        pub fn run(_: *Shard, _: anytype) !usize {
+            unreachable;
+        }
+        pub fn deinit(self: *Shard) void {
+            const gpa = self.gpa.allocator();
+            self.func_ir.deinit(gpa);
+            self.global_ir.deinit(gpa);
+        }
     };
 };
 
@@ -347,10 +348,13 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         ref.queue = .init(
             &shared_arena,
             opts.extra_threads + 1,
-            opts.shared_queue_capacity / (opts.extra_threads + 1) * 2,
+            opts.shared_queue_capacity / thread_count * 2,
         );
         ref.types = types;
-        ref.machine.shards = shared_arena.alloc(Threading.Sharded.Shard, opts.extra_threads + 1);
+        ref.shards = shared_arena.alloc(Threading.Shard, thread_count);
+        for (ref.shards, types) |*s, t| {
+            s.* = .{ .gpa = &t.pool };
+        }
     }
 
     const global_pool = switch (threading) {

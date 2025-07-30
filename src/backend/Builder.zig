@@ -369,7 +369,7 @@ pub const If = struct {
 
 pub fn addIfAndBeginThen(self: *Builder, sloc: graph.Sloc, cond: *BuildNode) If {
     const else_ = self.cloneScope();
-    const if_node = self.func.addNode(.If, sloc, .top, &.{ self.control(), cond }, .{});
+    const if_node = self.func.addNode(.If, sloc, .top, &.{ self.control(), cond }, .{ .id = 0 });
     self.func.setInputNoIntern(self.scope.?, 0, self.func.addNode(.Then, .none, .top, &.{if_node}, .{}));
     return .{
         .if_node = if_node,
