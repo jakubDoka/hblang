@@ -1,0 +1,19 @@
+main:
+	sub rsp, 0x10
+	mov qword ptr [rsp], 0x00
+	xor rdx, rdx
+2:	mov rcx, [rsp]
+	cmp rcx, 0x0A
+	setb al
+	movzx rax, al
+	test al, al
+	jz :0
+	cmp rcx, rdx
+	jnz :2
+	jmp :2
+2:	inc rcx
+	mov [rsp], rcx
+	jmp :2
+0:	xor rax, rax
+	add rsp, 0x10
+	ret

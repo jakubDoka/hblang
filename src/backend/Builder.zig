@@ -400,6 +400,19 @@ pub const Loop = struct {
         builder.scope = null;
     }
 
+    pub fn joinContinues(self: *Loop, builder: *Builder) void {
+        if (self.control.get(.@"continue")) |cscope| {
+            if (builder.scope) |scope| {
+                builder.scope = mergeScopes(&builder.func, scope, cscope);
+                builder.control().extra(.Region).preserve_identity_phys = true;
+            } else {
+                builder.scope = cscope;
+            }
+
+            self.control.set(.@"continue", null);
+        }
+    }
+
     pub fn end(self: *Loop, builder: *Builder) void {
         defer self.* = undefined;
         if (self.control.get(.@"continue")) |cscope| {

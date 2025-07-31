@@ -2,6 +2,16 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### for loop continues 1
+```hb
+main := fn(): u32 {
+    for i := 0..10 {
+        if i == 0 continue
+    }
+    return 0
+}
+```
+
 #### memset peephole 1
 ```hb
 memset := fn(len: uint, dest: ^u8, src: u8): void {

@@ -2107,27 +2107,7 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
     } else return self.report(e.pos, "cant determine the termination condition", .{});
 
     var if_builder = self.bl.addIfAndBeginThen(sloc, cond);
-    {
-        _ = self.emitBranch(e.body);
-
-        for (iter_data) |data| {
-            switch (data) {
-                inline .OpenedRange, .ClosedRange => |r| {
-                    var idx = r.idx;
-                    const off = self.bl.addIntImm(sloc, .i64, 1);
-                    const next = self.bl.addBinOp(sloc, .iadd, .i64, idx.getValue(sloc, self), off);
-                    self.bl.addStore(sloc, r.idx.id.Pointer, .i64, next);
-                },
-                .Slice => |s| {
-                    var base = s.base;
-                    const elem = base.ty.child(self.types).?;
-                    const off = self.bl.addIntImm(sloc, .i64, @intCast(elem.size(self.types)));
-                    const next = self.bl.addBinOp(sloc, .iadd, .i64, base.getValue(sloc, self), off);
-                    self.bl.addStore(sloc, s.base.id.Pointer, .i64, next);
-                },
-            }
-        }
-    }
+    _ = self.emitBranch(e.body);
     const end_else = if_builder.beginElse(&self.bl);
     {
         _ = self.loopControl(.@"break", expr) catch {};
@@ -2135,6 +2115,27 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
     if_builder.end(&self.bl, end_else);
 
     var loop: Builder.Loop = self.loops.pop().?.kind.Runtime;
+
+    loop.joinContinues(&self.bl);
+
+    for (iter_data) |data| {
+        switch (data) {
+            inline .OpenedRange, .ClosedRange => |r| {
+                var idx = r.idx;
+                const off = self.bl.addIntImm(sloc, .i64, 1);
+                const next = self.bl.addBinOp(sloc, .iadd, .i64, idx.getValue(sloc, self), off);
+                self.bl.addStore(sloc, r.idx.id.Pointer, .i64, next);
+            },
+            .Slice => |s| {
+                var base = s.base;
+                const elem = base.ty.child(self.types).?;
+                const off = self.bl.addIntImm(sloc, .i64, @intCast(elem.size(self.types)));
+                const next = self.bl.addBinOp(sloc, .iadd, .i64, base.getValue(sloc, self), off);
+                self.bl.addStore(sloc, s.base.id.Pointer, .i64, next);
+            },
+        }
+    }
+
     loop.end(&self.bl);
 
     std.debug.assert(!self.bl.isUnreachable());
