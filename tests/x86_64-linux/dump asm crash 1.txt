@@ -18,16 +18,16 @@ main:
 	jnz :1
 	mov rax, 0x01
 	jmp :2
-1:	mov edi, [rsp+0x24]
-	mov r8d, [rsp+0x20]
+1:	mov edi, [rsp+0x20]
 	mov eax, [0x0000000000000006]
 	cmp eax, edi
-	setnz dil
-	movzx rdi, dil
-	mov eax, [0x0000000000000006]
-	cmp eax, r8d
 	setnz al
 	movzx rax, al
+	mov r8d, [rsp+0x24]
+	mov edi, [0x0000000000000006]
+	cmp edi, r8d
+	setnz dil
+	movzx rdi, dil
 	or eax, edi
 2:	test al, al
 	jz :4

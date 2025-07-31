@@ -1,0 +1,18 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+         cp $1, $0
+         cp $2, $0
+         cp $3, $0
+        jal $31, $0, :memset peephole 1.memset
+         cp $1, $0
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+memset peephole 1.memset:
+       jgtu $1, $0, :1
+       jala $0, $31, 0
+1:       st $3, $2, 0, 1
+     addi64 $2, $2, 1
+     addi64 $1, $1, -1
+        jmp :memset peephole 1.memset

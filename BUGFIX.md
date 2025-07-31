@@ -2,6 +2,38 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### memset peephole 1
+```hb
+memset := fn(len: uint, dest: ^u8, src: u8): void {
+    while len > 0 {
+        dest.* = src
+        dest += 1
+        len -= 1
+    }
+}
+
+main := fn(): uint {
+    memset(0, @bit_cast(0), 0)
+    return 0
+}
+```
+
+#### memset peephole 2
+```hb
+$memset := fn(len: uint, dest: ^u8, src: u8): void {
+    while len > 0 {
+        dest.* = src
+        dest += 1
+        len -= 1
+    }
+}
+
+main := fn(): uint {
+    memset(0, @bit_cast(0), 0)
+    return 0
+}
+```
+
 #### dump asm crash 1
 ```hb
 cache := fn($fnc: type, $Args: type): type {

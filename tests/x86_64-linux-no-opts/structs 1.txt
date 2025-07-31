@@ -60,10 +60,7 @@ main:
 	call :structs 1.Ty.sum
 	mov [rsp+0x48], rax
 	mov rax, [rsp+0x48]
-	cmp rax, 0x00
-	setnz al
-	movzx rax, al
-	test al, al
+	test rax, rax
 	jz :2
 	mov rax, 0x64
 1:	jmp :3

@@ -836,6 +836,9 @@ pub const OptOptions = struct {
                 dead_waste += sym.waste;
                 doMem2Reg(Backend, sym);
                 mem2reg_waste += sym.waste;
+            }
+
+            for (funcs) |*sym| {
                 idealizeGeneric(Backend, backend, sym, false);
                 generic_waste += sym.waste;
             }

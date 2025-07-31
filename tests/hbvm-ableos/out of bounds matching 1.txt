@@ -19,23 +19,18 @@ main:
          ld $31, $254, -8, 8
          tx
 out of bounds matching 1.Iterator().for_each(.main):
-     addi64 $254, $254, -1
-5:       ld $2, $1, 8, 8
+         ld $2, $1, 8, 8
         jne $2, $0, :2
          cp $2, $0
         jmp :3
 2:       ld $2, $1, 0, 8
-         ld $2, $2, 0, 1
-         st $2, $254, 0, 1
+     addi64 $3, $2, 1
          ld $2, $1, 8, 8
-     addi64 $3, $2, -1
-         ld $2, $1, 0, 8
-     addi64 $2, $2, 1
-         st $2, $1, 0, 8
-         st $3, $1, 8, 8
+         st $3, $1, 0, 8
+     addi64 $2, $2, -1
+         st $2, $1, 8, 8
         li8 $2, 1
 3:     andi $2, $2, 255
         jeq $2, $0, :4
-        jmp :5
-4:   addi64 $254, $254, 1
-       jala $0, $31, 0
+        jmp :out of bounds matching 1.Iterator().for_each(.main)
+4:     jala $0, $31, 0

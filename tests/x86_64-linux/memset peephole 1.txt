@@ -1,0 +1,17 @@
+memset peephole 1.memset:
+1:	test rdi, rdi
+	jz :0
+	mov [rsi], dl
+	inc rsi
+	dec rdi
+	jmp :1
+0:	ret
+main:
+	sub rsp, 0x08
+	xor rdi, rdi
+	xor rdx, rdx
+	xor rsi, rsi
+	call :memset peephole 1.memset
+	xor rax, rax
+	add rsp, 0x08
+	ret

@@ -10,16 +10,14 @@ out of bounds matching 1.Iterator().for_each(.main):
 	mov ax, [rsp+0x02]
 	jmp :1
 0:	mov rax, [rdi]
-	mov al, [rax]
-	mov [rsp+0x06], al
+	mov rdx, rax
+	inc rdx
 	mov rcx, [rdi+0x08]
 	dec rcx
-	mov rax, [rdi]
-	inc rax
-	mov [rdi], rax
+	mov al, [rax]
+	mov [rdi], rdx
 	mov [rdi+0x08], rcx
 	mov byte ptr [rsp], 0x01
-	mov al, [rsp+0x06]
 	mov [rsp+0x01], al
 	mov ax, [rsp]
 1:	mov [rsp+0x04], ax

@@ -72,10 +72,7 @@ main:
 	mov rax, 0x03
 3:	jmp :5
 4:	call :various mem opts 1.parallel_stores
-	cmp rax, 0x00
-	setnz al
-	movzx rax, al
-	test al, al
+	test rax, rax
 	jz :6
 	mov rax, 0x04
 5:	jmp :7

@@ -39,10 +39,7 @@ main:
 0:	mov rdi, [rsp+0x30]
 	mov rsi, [rsp+0x38]
 	call :structs 1.Ty.sum
-	cmp rax, 0x00
-	setnz al
-	movzx rax, al
-	test al, al
+	test rax, rax
 	jz :2
 	mov rax, 0x64
 1:	jmp :3

@@ -2,10 +2,7 @@ main:
 	sub rsp, 0x10
 	mov qword ptr [rsp], 0x00
 2:	mov rax, [rsp]
-	cmp rax, 0x00
-	setnbe al
-	movzx rax, al
-	test al, al
+	test rax, rax
 	jz :0
 	xor rax, rax
 	add rsp, 0x10
