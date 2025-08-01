@@ -1,11 +1,10 @@
 memset peephole 1.memset:
-1:	test rdi, rdi
-	jz :0
-	mov [rsi], dl
-	inc rsi
-	dec rdi
-	jmp :1
-0:	ret
+	mov rax, rdx
+	mov rcx, rdi
+	mov rdi, rsi
+	cld
+	rep stosb
+	ret
 main:
 	sub rsp, 0x08
 	xor rdi, rdi

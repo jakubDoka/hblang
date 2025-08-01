@@ -362,11 +362,13 @@ pub fn Mixin(comptime Backend: type) type {
             std.debug.assert(load.isLoad());
 
             mark_antideps: {
+                errdefer unreachable;
+
                 var tmp = utils.Arena.scrath(null);
                 defer tmp.deinit();
 
                 var frontier = std.ArrayListUnmanaged(*Func.CfgNode).empty;
-                frontier.append(tmp.arena.allocator(), lca) catch unreachable;
+                try frontier.append(tmp.arena.allocator(), lca);
 
                 while (frontier.pop()) |cursor| {
                     if (cursor.ext.antidep == load.id) continue;
@@ -375,10 +377,10 @@ pub fn Mixin(comptime Backend: type) type {
                     std.debug.assert(cursor.base.kind != .Start);
                     if (cursor.base.kind == .Region) {
                         for (cursor.base.ordInps()) |i| {
-                            frontier.append(tmp.arena.allocator(), i.?.cfg0()) catch unreachable;
+                            try frontier.append(tmp.arena.allocator(), i.?.cfg0());
                         }
                     } else {
-                        frontier.append(tmp.arena.allocator(), cursor.idom()) catch unreachable;
+                        try frontier.append(tmp.arena.allocator(), cursor.idom());
                     }
                 }
 

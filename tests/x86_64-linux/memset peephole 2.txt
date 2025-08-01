@@ -1,11 +1,8 @@
 main:
+	xor rdi, rdi
 	xor rax, rax
-	mov rcx, rax
-	xor rdx, rdx
-1:	test rdx, rdx
-	jz :0
-	mov byte ptr [rcx], 0x00
-	dec rdx
-	inc rcx
-	jmp :1
-0:	ret
+	xor rcx, rcx
+	cld
+	rep stosb
+	xor rax, rax
+	ret

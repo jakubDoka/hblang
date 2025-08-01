@@ -248,6 +248,9 @@ pub const Reloc = struct {
 
 pub const classes = enum {
     pub const FusedMulAdd = extern struct {};
+    pub const RepStosb = extern struct {
+        base: graph.Store = .{},
+    };
     pub const GlobalLoad = extern struct {
         base: OffsetLoad,
         id: u32,
@@ -355,6 +358,75 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
     const inps = node.inputs();
 
     if (Func.idealizeDead({}, func, node, worklist)) |n| return n;
+
+    if (node.isStore()) rep_stosb: {
+        const store = node;
+        if (store.mem().kind != .Phi) break :rep_stosb;
+        const mem = store.mem();
+        const loop = mem.inputs()[0].?;
+
+        const ptr = store.tryBase() orelse break :rep_stosb;
+        if (ptr.kind != .Phi) break :rep_stosb;
+        if (ptr.inputs()[0].? != loop) break :rep_stosb;
+
+        if (loop.outputs().len > 4) break :rep_stosb;
+
+        // TODO: handle Else branch as well
+        if (loop.inputs()[1].?.kind != .Then) {
+            break :rep_stosb;
+        }
+
+        const loop_if = loop.inputs()[1].?.inputs()[0].?;
+
+        const if_cond = loop_if.inputs()[1].?;
+        // TODO: handle BinOp as well
+        if (if_cond.kind != .ImmOp) break :rep_stosb;
+
+        const cond_extra: *classes.ImmOp = if_cond.extra(.ImmOp);
+        // maybe also ne
+        if (cond_extra.base.op != .ugt) break :rep_stosb;
+        if (cond_extra.imm != 0) break :rep_stosb;
+
+        const dec_phi = if_cond.inputs()[1].?;
+        if (dec_phi.kind != .Phi) break :rep_stosb;
+
+        const dec = dec_phi.inputs()[2].?;
+        if (dec.kind != .ImmOp) break :rep_stosb;
+        if (dec.inputs()[1].? != dec_phi) break :rep_stosb;
+
+        const op_extra = dec.extra(.ImmOp);
+        if (op_extra.imm != 1 or op_extra.base.op != .isub) break :rep_stosb;
+
+        const inc = ptr.inputs()[2].?;
+        if (inc.kind != .ImmOp) break :rep_stosb;
+        const inc_extra = inc.extra(.ImmOp);
+        if (inc_extra.imm != 1 or inc_extra.base.op != .iadd) break :rep_stosb;
+        if (inc.inputs()[1].? != ptr) break :rep_stosb;
+
+        const final = func.addNode(.RepStosb, node.sloc, .top, &.{
+            loop.inputs()[0].?,
+            mem.inputs()[1].?,
+            ptr.inputs()[1].?,
+            store.value() orelse break :rep_stosb,
+            dec_phi.inputs()[1].?,
+        }, .{});
+
+        const other_mem_succ = for (mem.outputs()) |o| {
+            if (o.get() != store) break o.get();
+        } else unreachable;
+
+        std.debug.assert(store.data_type == .i8);
+
+        func.setInputNoIntern(other_mem_succ, 1, final);
+
+        func.setInputNoIntern(
+            loop_if,
+            1,
+            func.addIntImm(node.sloc, .i8, 0),
+        );
+
+        return final;
+    }
 
     if (node.kind == .CInt and node.data_type == .f32) {
         return func.addNode(.F32, node.sloc, .f32, &.{null}, .{
@@ -692,6 +764,7 @@ pub fn clobbers(node: *Func.Node) u64 {
             }
             break :b vl;
         },
+        .RepStosb => @as(u64, 1) << @intFromEnum(Reg.rdi),
         .BinOp => switch (node.extra(.BinOp).op) {
             .udiv, .sdiv, .umod, .smod => {
                 var base = @as(u64, 1) << @intFromEnum(Reg.rax);
@@ -788,6 +861,15 @@ pub fn regMask(
                 std.debug.assert(node.inputs()[idx].?.data_type.isInt());
                 return singleReg(Reg.system_v.args[reg_idx], arena);
             }
+        }
+    }
+
+    if (node.kind == .RepStosb) {
+        switch (idx) {
+            2 => return singleReg(Reg.rdi, arena),
+            3 => return singleReg(Reg.rax, arena),
+            4 => return singleReg(Reg.rcx, arena),
+            else => unreachable,
         }
     }
 
@@ -1176,6 +1258,11 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
 
                 try self.out.addFuncReloc(self.gpa
                     .allocator(), extra.id, 4, -4, 4);
+            },
+            .RepStosb => {
+                // cld
+                // rep stosb
+                self.emitBytes(&.{ 0xfc, 0xf3, 0xaa });
             },
             .GlobalStore => |extra| {
                 // mov [rip+dis+offset], src
