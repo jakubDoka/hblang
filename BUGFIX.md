@@ -2,6 +2,17 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### global load and store ordering 1
+```hb
+TRUE := true
+x: bool = true
+main := fn(): uint {
+    orig := x
+    if TRUE x = false
+    return x == orig
+}
+```
+
 #### for loop continues 1
 ```hb
 main := fn(): u32 {

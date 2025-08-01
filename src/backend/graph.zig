@@ -721,13 +721,10 @@ pub fn Func(comptime Backend: type) type {
         start: *Node = undefined,
         end: *Node = undefined,
         gcm: gcm.Mixin(Backend) = .{},
-        node_free_list: [sclass_spec.len]?*Node = @splat(null),
         mem2reg: mem2reg.Mixin(Backend) = .{},
         static_anal: static_anal.Mixin(Backend) = .{},
         inliner: inliner.Mixin(Backend) = .{},
         stopped_interning: std.debug.SafetyLock = .{},
-
-        const use_free_lists = true;
 
         pub fn optApi(comptime decl_name: []const u8, comptime Ty: type) bool {
             const prelude = @typeName(Backend) ++ " requires this unless `pub const i_know_the_api = {}` is declared:";
@@ -1541,7 +1538,6 @@ pub fn Func(comptime Backend: type) type {
             std.debug.assert(self.arena.reset(.retain_capacity));
             self.next_id = 0;
             self.waste = 0;
-            self.node_free_list = @splat(null);
             self.start = self.addNode(.Start, .none, .top, &.{}, .{});
             self.interner = .{};
             self.gcm.cfg_built = .{};
@@ -1817,62 +1813,43 @@ pub fn Func(comptime Backend: type) type {
             }
             var bytes: [Node.size_map[@intFromEnum(kind)] / 8]u64 = @splat(0);
             @as(*ClassFor(kind), @ptrCast(&bytes)).* = extra;
-            const node = self.addNodeUntyped(kind, typ, inputs, comptime sclassOf(kind), &bytes);
+            const node = self.addNodeUntyped(kind, typ, inputs, &bytes);
             node.sloc = sloc;
             return node;
         }
 
-        pub fn addNodeUntyped(self: *Self, kind: Kind, dt: DataType, inputs: []const ?*Node, sclass: usize, extra: []const u64) *Node {
+        pub fn addNodeUntyped(self: *Self, kind: Kind, dt: DataType, inputs: []const ?*Node, extra: []const u64) *Node {
             if (Node.isInterned(kind, inputs)) {
                 const entry = self.internNode(kind, dt, inputs, extra);
                 if (!entry.found_existing) {
-                    entry.key_ptr.node = self.addNodeNoIntern(kind, dt, inputs, sclass, extra);
+                    entry.key_ptr.node = self.addNodeNoIntern(kind, dt, inputs, extra);
                 }
 
                 const node = entry.key_ptr.node;
 
                 return node;
             } else {
-                return self.addNodeNoIntern(kind, dt, inputs, sclass, extra);
+                return self.addNodeNoIntern(kind, dt, inputs, extra);
             }
         }
 
-        pub fn addNodeNoIntern(self: *Self, kind: Kind, ty: DataType, inputs: []const ?*Node, sclass: usize, extra: []const u64) *Node {
+        pub fn addNodeNoIntern(self: *Self, kind: Kind, ty: DataType, inputs: []const ?*Node, extra: []const u64) *Node {
             errdefer unreachable;
-            var node: *Node = undefined;
-            if (if (use_free_lists) self.node_free_list[sclass] else null) |*slot| {
-                node = slot.*;
-                self.node_free_list[sclass] = @ptrFromInt(@as(usize, @intCast(@as(u64, @bitCast(node.sloc)))));
+            const size = @sizeOf(Node) + extra.len * @sizeOf(u64);
+            const node: *Node = @alignCast(@ptrCast(self.arena.allocator().rawAlloc(size, .@"8", @returnAddress()).?));
+            const owned_inputs = try self.arena.allocator().dupe(?*Node, inputs);
 
-                if (node.inputs().len >= inputs.len) {
-                    @memcpy(node.inputs()[0..inputs.len], inputs);
-                } else {
-                    node.input_base = (try self.arena.allocator().dupe(?*Node, inputs)).ptr;
-                }
-                node.input_len = @intCast(inputs.len);
-                node.input_ordered_len = @intCast(inputs.len);
+            node.* = .{
+                .input_base = owned_inputs.ptr,
+                .input_len = @intCast(owned_inputs.len),
+                .input_ordered_len = @intCast(owned_inputs.len),
+                .output_base = @ptrFromInt(@alignOf(Node.Out)),
+                .kind = kind,
+                .id = self.next_id,
+                .data_type = ty,
+            };
 
-                node.kind = kind;
-                node.schedule = std.math.maxInt(u16);
-                node.data_type = ty;
-                node.output_len = 0;
-            } else {
-                const size = @sizeOf(Node) + extra.len * @sizeOf(u64);
-                node = @alignCast(@ptrCast(self.arena.allocator().rawAlloc(size, .@"8", @returnAddress()).?));
-                const owned_inputs = try self.arena.allocator().dupe(?*Node, inputs);
-
-                node.* = .{
-                    .input_base = owned_inputs.ptr,
-                    .input_len = @intCast(owned_inputs.len),
-                    .input_ordered_len = @intCast(owned_inputs.len),
-                    .output_base = @ptrFromInt(@alignOf(Node.Out)),
-                    .kind = kind,
-                    .id = self.next_id,
-                    .data_type = ty,
-                };
-
-                self.next_id += 1;
-            }
+            self.next_id += 1;
 
             @memcpy(@as([*]u64, @ptrCast(&node.edata)), extra);
 
@@ -1894,16 +1871,10 @@ pub fn Func(comptime Backend: type) type {
                 i.removeUse(j, self);
             };
 
-            if (use_free_lists) {
-                const slot = &func.node_free_list[sclassOf(self.kind)];
-                self.sloc = @bitCast(@as(u64, @intFromPtr(slot.*)));
-                slot.* = self;
-            } else {
-                func.waste += self.input_len * @sizeOf(?*Node);
-                func.waste += self.size();
-                func.waste += self.output_cap * @sizeOf(Node.Out);
-                self.* = undefined;
-            }
+            func.waste += self.input_len * @sizeOf(?*Node);
+            func.waste += self.size();
+            func.waste += self.output_cap * @sizeOf(Node.Out);
+            self.* = undefined;
             self.kind = .Dead;
         }
 

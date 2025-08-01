@@ -36,8 +36,8 @@ main:
 	jz :0
 	xor rax, rax
 	jmp :1
-0:	mov rdi, [rsp+0x30]
-	mov rsi, [rsp+0x38]
+0:	mov rsi, [rsp+0x38]
+	mov rdi, [rsp+0x30]
 	call :structs 1.Ty.sum
 	test rax, rax
 	jz :2

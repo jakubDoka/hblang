@@ -213,7 +213,7 @@ pub fn Mixin(comptime Backend: type) type {
                 work_list.append(self.end) catch unreachable;
                 visited.set(self.end.id);
 
-                task: while (work_list.pop()) |t| {
+                task: while (@as(?*Node, work_list.pop())) |t| {
                     visited.unset(t.id);
                     std.debug.assert(late_scheds[t.id] == null);
 
@@ -248,9 +248,8 @@ pub fn Mixin(comptime Backend: type) type {
                             }
                             var lca = olca.?;
 
-                            if (t.isLoad()) add_antideps: {
+                            if (t.isLoad()) {
                                 lca = findAntideps(self, lca, t, late_scheds);
-                                break :add_antideps;
                             }
 
                             var best = lca;
@@ -381,12 +380,18 @@ pub fn Mixin(comptime Backend: type) type {
                         }
                     },
                     .Phi => {
-                        for (o.ordInps()[1..], o.cfg0().base.ordInps()) |inp, oblk| if (inp.? == load.mem()) {
-                            var stblck = oblk.?.cfg0();
-                            if (stblck.ext.antidep == load.id) {
-                                lca = stblck.findLca(lca);
+                        for (o.ordInps()[1..], o.cfg0().base.ordInps()) |inp, oblk| {
+                            if (inp.? == load.mem()) {
+                                var stblck = oblk.?.cfg0();
+                                if (stblck.ext.antidep == load.id) {
+                                    lca = stblck.findLca(lca);
+                                }
                             }
-                        };
+                        }
+
+                        if (o.cfg0().ext.antidep == load.id) {
+                            lca = o.cfg0().idom().findLca(lca);
+                        }
                     },
                     .Local => {},
                     .Return => {},

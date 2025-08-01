@@ -1,3 +1,3 @@
-resolve mem phi during partial eval 1:7:6: can't evaluate this at compile time since the value depends on runtime control flow (DEBUG: got stuck on [34m%3[0m = Load:i8: [34m%18[0m, [91m%8[0m [])
+resolve mem phi during partial eval 1:7:6: can't evaluate this at compile time since the value depends on runtime control flow (DEBUG: got stuck on [35m%19[0m = Load:i8: [34m%18[0m, [91m%8[0m [])
     $if cond || cond {
         ^

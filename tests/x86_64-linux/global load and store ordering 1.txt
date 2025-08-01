@@ -1,0 +1,14 @@
+main:
+	mov cl, [0x0000000000000006]
+	mov al, [0x0000000000000006]
+	test al, al
+	jz :1
+	lea rax, [0x0000000000000007]
+	mov byte ptr [rax], 0x00
+	jmp :1
+1:	mov al, [0x0000000000000006]
+	cmp al, cl
+	setz al
+	movzx rax, al
+	movzx rax, al
+	ret

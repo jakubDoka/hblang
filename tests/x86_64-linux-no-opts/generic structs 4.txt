@@ -30,8 +30,8 @@ generic structs 4.Array(()).get(uint):
 	jz :0
 	mov rax, [rsp]
 	jmp :1
-0:	mov rdi, [rsp+0x08]
-	dec rsi
+0:	dec rsi
+	mov rdi, [rsp+0x08]
 	call :generic structs 4.Array().get(uint)
 	mov [rsp+0x18], rax
 	mov rax, [rsp+0x18]

@@ -1,0 +1,18 @@
+main:
+	sub rsp, 0x10
+	mov al, [0x0000000000000006]
+	mov [rsp], al
+	mov al, [0x0000000000000006]
+	test al, al
+	jz :1
+	lea rax, [0x0000000000000007]
+	mov byte ptr [rax], 0x00
+	jmp :1
+1:	mov cl, [0x0000000000000006]
+	mov al, [rsp]
+	cmp cl, al
+	setz al
+	movzx rax, al
+	movzx rax, al
+	add rsp, 0x10
+	ret

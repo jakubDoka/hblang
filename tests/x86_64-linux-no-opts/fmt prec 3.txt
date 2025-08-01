@@ -5,14 +5,14 @@ main:
 	test al, al
 	jz :0
 	movzx eax, al
-	mov cl, [rsp+0x02]
-	movzx edx, cl
-	shl edx, 0x10
 	mov cl, [rsp+0x01]
 	movzx ecx, cl
 	shl ecx, 0x08
 	or eax, ecx
-	or eax, edx
+	mov cl, [rsp+0x02]
+	movzx ecx, cl
+	shl ecx, 0x10
+	or eax, ecx
 	mov rdx, rax
 	shr edx, 0x08
 	mov rcx, rax
