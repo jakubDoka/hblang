@@ -360,10 +360,29 @@ pub fn Mixin(comptime Backend: type) type {
             var lca = lca_;
             const early = load.cfg0();
             std.debug.assert(load.isLoad());
-            var cursor = lca;
-            while (cursor != early.idom()) : (cursor = cursor.idom()) {
-                std.debug.assert(cursor.base.kind != .Start);
-                cursor.ext.antidep = load.id;
+
+            mark_antideps: {
+                var tmp = utils.Arena.scrath(null);
+                defer tmp.deinit();
+
+                var frontier = std.ArrayListUnmanaged(*Func.CfgNode).empty;
+                frontier.append(tmp.arena.allocator(), lca) catch unreachable;
+
+                while (frontier.pop()) |cursor| {
+                    if (cursor.ext.antidep == load.id) continue;
+                    cursor.ext.antidep = load.id;
+                    if (cursor == early.idom()) continue;
+                    std.debug.assert(cursor.base.kind != .Start);
+                    if (cursor.base.kind == .Region) {
+                        for (cursor.base.ordInps()) |i| {
+                            frontier.append(tmp.arena.allocator(), i.?.cfg0()) catch unreachable;
+                        }
+                    } else {
+                        frontier.append(tmp.arena.allocator(), cursor.idom()) catch unreachable;
+                    }
+                }
+
+                break :mark_antideps;
             }
 
             for (load.mem().outputs()) |n| {
@@ -387,10 +406,6 @@ pub fn Mixin(comptime Backend: type) type {
                                     lca = stblck.findLca(lca);
                                 }
                             }
-                        }
-
-                        if (o.cfg0().ext.antidep == load.id) {
-                            lca = o.cfg0().idom().findLca(lca);
                         }
                     },
                     .Local => {},
