@@ -34,8 +34,9 @@ memset := fn(len: uint, dest: ^u8, src: u8): void {
 }
 
 main := fn(): uint {
-    memset(0, @bit_cast(0), 0)
-    return 0
+    arr: [8]u8 = idk
+    memset(arr.len, arr.ptr, 0)
+    return arr[0]
 }
 ```
 

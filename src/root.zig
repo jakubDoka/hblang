@@ -305,7 +305,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
 
     var shared_arena: Arena = undefined;
     var threading: Threading = undefined;
-    if (opts.extra_threads == 0) {
+    if (@import("builtin").single_threaded or opts.extra_threads == 0) {
         threading = .{ .single = .{
             .types = b: {
                 const types = hb.frontend.Types.init(

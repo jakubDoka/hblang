@@ -607,7 +607,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
         for (bb.base.ordInps(), 0..) |prd, i| {
             const pred: *Node = prd.?.inputs()[0].?;
-            if (pred.schedule == no_def_sentinel) {
+            if (should_log and pred.schedule == no_def_sentinel) {
                 func.fmtScheduled(std.io.getStdErr().writer().any(), .escape_codes);
             }
             const pred_block = &block_liveouts[pred.schedule];

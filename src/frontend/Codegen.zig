@@ -328,6 +328,8 @@ pub fn emitReachableMultiThread(
     threading: *root.Threading.Multi,
     opts: EmitOpts,
 ) bool {
+    if (@import("builtin").single_threaded) unreachable;
+
     var root_tmp = utils.Arena.scrath(scrath);
     defer root_tmp.deinit();
 

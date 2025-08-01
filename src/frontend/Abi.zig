@@ -155,7 +155,7 @@ pub const Spec = union(enum) {
     const Dts = std.BoundedArray(graph.DataType, max_subtypes);
     const Offs = std.BoundedArray(u64, max_subtypes);
 
-    pub fn size(self: Spec) usize {
+    pub fn size(self: Spec) u64 {
         return switch (self) {
             .ByValue => |v| v.size(),
             .ByValuePair => |p| p.size(),

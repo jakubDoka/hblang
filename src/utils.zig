@@ -728,10 +728,10 @@ pub fn SharedQueue(comptime T: type) type {
                 break :b std.hash.Wyhash.hash(0, @ptrCast(tasks));
             } else T.hash(tasks)) & self.shards.len - 1;
 
-            const target = &self.shards[push_to];
+            const target = &self.shards[@intCast(push_to)];
 
             const idx = target.reserved.fetchAdd(tasks.len, .monotonic);
-            @memcpy(self.tasks[push_to][idx..][0..tasks.len], tasks);
+            @memcpy(self.tasks[@intCast(push_to)][idx..][0..tasks.len], tasks);
             while (target.available.cmpxchgWeak(idx, idx + tasks.len, .release, .monotonic) != null) {}
             target.waker.set();
         }
@@ -754,6 +754,8 @@ pub fn SharedQueue(comptime T: type) type {
 
                 // the thread pushed while we were setting the waker
                 if (self.dequeue()) |task| return task;
+
+                if (@import("builtin").single_threaded) return null;
 
                 // timeout means no more tasks
                 shard.waker.timedWait(timeout_ms * std.time.ns_per_ms) catch {

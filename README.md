@@ -12,7 +12,7 @@ zig build install
 
 ## Tour
 
-Try out the examples on [depell](https://depell.mlokis.tech).
+Try out the examples on [depell](https://depell.mlokis.dev).
 
 Note: the examples are used to generate unit tests, `n = 1` from each group is
 most interesting, others are more for testing purposes.
