@@ -1,3 +1,16 @@
+const std = @import("std");
+pub const Set = std.DynamicBitSetUnmanaged;
+
+const matcher = @import("hbvm.HbvmGen");
+const root = @import("hb");
+const graph = root.backend.graph;
+const Mach = root.backend.Machine;
+const Regalloc = root.backend.Regalloc;
+const ExecHeader = root.hbvm.object.ExecHeader;
+const utils = root.utils;
+
+const isa = @import("isa.zig");
+
 gpa: *utils.Pool,
 out: Mach.Data = .{},
 emit_global_reloc_offsets: bool = false,
@@ -8,16 +21,8 @@ allocs: []const u16 = undefined,
 spill_base: usize = undefined,
 entry: u32 = undefined,
 
-const std = @import("std");
-const utils = root.utils;
-const root = @import("hb");
-const isa = @import("isa.zig");
-const graph = root.backend.graph;
-const Mach = root.backend.Machine;
 const Func = graph.Func(HbvmGen);
 const Kind = Func.Kind;
-const Regalloc = root.backend.Regalloc;
-const ExecHeader = root.hbvm.object.ExecHeader;
 const Move = utils.Move(isa.Reg);
 const HbvmGen = @This();
 
@@ -51,12 +56,14 @@ pub const classes = enum {
     };
     // [?Cfg, mem, ptr]
     pub const StackLd = extern struct {
-        base: Ld,
+        base: graph.Load = .{},
+        offset: i64,
         pub const data_dep_offset = 2;
     };
     // [?Cfg, mem, ptr, value, ...antideps]
     pub const StackSt = extern struct {
-        base: St,
+        base: graph.Store = .{},
+        offset: i64,
         pub const data_dep_offset = 2;
     };
     // [?Cfg, mem, ptr]
@@ -97,11 +104,8 @@ pub fn isSwapped(node: *Func.Node) bool {
 }
 
 pub fn getStaticOffset(node: *Func.Node) i64 {
-    return switch (node.kind) {
-        .Ld => node.extra(.Ld).offset,
-        .St => node.extra(.St).offset,
-        .StackLd => node.extra(.StackLd).base.offset,
-        .StackSt => node.extra(.StackSt).base.offset,
+    return switch (node.extra2()) {
+        inline .Ld, .St, .StackLd, .StackSt => |extra| extra.offset,
         else => 0,
     };
 }
@@ -111,138 +115,19 @@ pub fn isInterned(kind: Func.Kind) bool {
 }
 
 // ================== PEEPHOLES ==================
-pub fn idealizeMach(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
+pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
     const inps = node.inputs();
 
     if (Func.idealizeDead({}, func, node, work)) |n| return n;
 
-    if (node.kind == .BinOp) {
-        const op: graph.BinOp = node.extra(.BinOp).op;
-
-        if (inps[2].?.kind == .CInt) b: {
-            var imm = inps[2].?.extra(.CInt).value;
-
-            const instr: isa.Op = switch (op) {
-                .iadd => .addi8,
-                .imul => .muli8,
-                .isub => m: {
-                    imm *= -1;
-                    break :m .addi8;
-                },
-                .bor => .ori,
-                .bxor => .xori,
-                .band => .andi,
-                else => break :b,
-            };
-
-            return func.addNode(
-                .ImmBinOp,
-                node.sloc,
-                node.data_type,
-                &.{ null, node.inputs()[1] },
-                .{ .op = instr, .imm = imm },
-            );
-        }
-    }
-
-    if (node.kind == .CInt and node.extra(.CInt).value == 0)
-        return func.addNode(.Zero, node.sloc, .i64, &.{null}, .{});
-
-    if (node.kind == .UnOp and switch (node.extra(.UnOp).op) {
-        .cast, .ired => true,
-        else => false,
-    }) return inps[1];
+    if (matcher.idealize(self, func, node, work)) |n| return n;
 
     if (node.kind == .If) {
-        if (inps[1].?.kind == .BinOp) b: {
-            work.add(inps[1].?);
-            const op = inps[1].?.extra(.BinOp).op;
-            const instr: isa.Op, const swap = switch (op) {
-                .ule => .{ .jgtu, false },
-                .uge => .{ .jltu, false },
-                .ult => .{ .jltu, true },
-                .ugt => .{ .jgtu, true },
-
-                .sle => .{ .jgts, false },
-                .sge => .{ .jlts, false },
-                .slt => .{ .jlts, true },
-                .sgt => .{ .jgts, true },
-
-                .eq => .{ .jne, false },
-                .ne => .{ .jeq, false },
-                else => break :b,
-            };
-            const op_inps = inps[1].?.inputs();
-
-            return func.addNode(.IfOp, node.sloc, .top, &.{ inps[0], op_inps[1], op_inps[2] }, .{
-                .base = node.extra(.If).*,
-                .op = instr,
-                .swapped = swap,
-            });
-        }
-
         if (inps[1].?.data_type != .i64) {
             const new = func.addUnOp(node.sloc, .uext, .i64, inps[1].?);
             work.add(new);
             _ = func.setInput(node, 1, new);
         }
-    }
-
-    if (node.kind == .MemCpy) {
-        if (inps[4].?.kind == .CInt) {
-            return func.addNode(
-                .BlockCpy,
-                node.sloc,
-                .top,
-                &.{ inps[0], inps[1], inps[2], inps[3] },
-                .{ .size = @intCast(inps[4].?.extra(.CInt).value) },
-            );
-        }
-    }
-
-    if (node.kind == .Store) {
-        const base, const offset = node.base().knownOffset();
-        const st = func.addNode(
-            .St,
-            node.sloc,
-            node.data_type,
-            &.{ inps[0], inps[1], base, inps[3] },
-            .{ .offset = offset },
-        );
-
-        if (base.isStack()) {
-            st.kind = .StackSt;
-            func.setInputNoIntern(st, 2, base.inputs()[1]);
-        }
-
-        work.add(st);
-        return st;
-    }
-
-    if (node.kind == .St and node.base().isStack()) {
-        node.kind = .StackSt;
-    }
-
-    if (node.kind == .Load) {
-        const base, const offset = node.base().knownOffset();
-        const ld = if (base.isStack())
-            func.addNode(
-                .StackLd,
-                node.sloc,
-                node.data_type,
-                &.{ inps[0], inps[1], base.inputs()[1] },
-                .{ .base = .{ .offset = offset } },
-            )
-        else
-            func.addNode(
-                .Ld,
-                node.sloc,
-                node.data_type,
-                &.{ inps[0], inps[1], base },
-                .{ .offset = offset },
-            );
-        work.add(ld);
-        return ld;
     }
 
     if (node.kind == .StructArg) elim_local: {
@@ -294,8 +179,6 @@ pub fn idealize(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList
 
 // ================== REGALLOC ==================
 pub const set_cap = 254 + 32;
-pub const Set = std.DynamicBitSetUnmanaged;
-
 pub fn setMasks(set: *Set) []Set.MaskInt {
     return graph.setMasks(set.*);
 }
@@ -586,12 +469,12 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .StackLd => |extra| {
                 const size: u16 = @intCast(no.data_type.size());
-                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc).size)) + extra.base.offset;
+                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc).size)) + extra.offset;
                 self.emit(.ld, .{ self.getReg(no), .stack_addr, off, size });
             },
             .StackSt => |extra| {
                 const size: u16 = @intCast(no.data_type.size());
-                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc).size)) + extra.base.offset;
+                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc).size)) + extra.offset;
                 self.emit(.st, .{ self.getReg(inps[0]), .stack_addr, off, size });
             },
             .BlockCpy => {
@@ -770,7 +653,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 if (dst == src) continue;
                 self.emit(.cp, .{ dst, src });
             },
-            .Never, .Mem, .MemJoin, .Ret, .Phi, .Jmp => {},
+            .Never, .Mem, .Ret, .Phi, .Jmp => {},
             else => |e| {
                 utils.panic("{any} {any}", .{ no, e });
             },

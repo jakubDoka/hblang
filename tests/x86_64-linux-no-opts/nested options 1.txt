@@ -25,14 +25,13 @@ nested options 1.reset:
 	mov [rsp], rdi
 	mov [rsp+0x08], rsi
 	mov qword ptr [rsp+0x10], 0x00
-	mov rsi, 0xFF
 	mov rdx, [rsp+0x08]
 1:	mov rcx, [rsp+0x10]
 	cmp rcx, rdx
 	jnb :0
 	mov rax, [rsp]
 	add rax, rcx
-	mov [rax], sil
+	mov byte ptr [rax], 0xFF
 	mov rax, [rsp+0x10]
 	inc rax
 	mov [rsp+0x10], rax

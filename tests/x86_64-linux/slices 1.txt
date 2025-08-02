@@ -2,6 +2,8 @@ main:
 	sub rsp, 0x90
 	mov byte ptr [rsp+0x80], 0x01
 	lea rdx, [rsp+0x80]
+	lea rcx, [rsp+0x82]
+	lea rax, [rsp+0x81]
 	mov byte ptr [rsp+0x81], 0x02
 	mov byte ptr [rsp+0x82], 0x03
 	mov byte ptr [rsp+0x83], 0x04
@@ -9,12 +11,8 @@ main:
 	mov qword ptr [rsp+0x08], 0x04
 	mov [rsp+0x10], rdx
 	mov qword ptr [rsp+0x18], 0x02
-	lea rcx, [rsp+0x80]
-	add rcx, 0x02
 	mov [rsp+0x20], rcx
 	mov qword ptr [rsp+0x28], 0x02
-	lea rax, [rsp+0x80]
-	inc rax
 	mov [rsp+0x30], rax
 	mov qword ptr [rsp+0x38], 0x02
 	mov [rsp+0x40], rdx

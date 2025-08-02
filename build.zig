@@ -209,11 +209,49 @@ pub fn build(b: *std.Build) !void {
         break :fuzz_fidning_tests;
     }
 
+    rewrite_dsl_gen: {
+        const gen = b.addExecutable(.{
+            .name = "rewrite-dsl",
+            .root_source_file = b.path("scripts/rewrite_dsl.zig"),
+            .target = b.graph.host,
+            .optimize = .Debug,
+            .use_llvm = use_llvm,
+            .use_lld = use_lld,
+        });
+
+        const files = [_][]const u8{
+            "src/x86_64/mach_peeps.clj",
+            "src/hbvm/mach_peeps.clj",
+            "src/backend/ideal_peeps.clj",
+        };
+
+        const backends = [_][]const u8{
+            "x86_64.X86_64Gen",
+            "hbvm.HbvmGen",
+            "graph.IdealGen",
+        };
+
+        for (files, backends) |file, backend| {
+            const run_gen = b.addRunArtifact(gen);
+            run_gen.addFileArg(b.path(file));
+            const zig_file = try std.mem.replaceOwned(u8, b.allocator, file, ".clj", ".zig");
+            const out = run_gen.addOutputFileArg(zig_file);
+            hb.addAnonymousImport(backend, .{
+                .root_source_file = out,
+                .imports = &.{.{ .name = "hb", .module = hb }},
+            });
+        }
+
+        break :rewrite_dsl_gen;
+    }
+
     check: {
         const check_step = b.step("check", "type check");
+
         const t = b.addTest(.{ .root_module = test_module });
         const r = b.addRunArtifact(t);
         check_step.dependOn(&r.step);
+
         break :check;
     }
 

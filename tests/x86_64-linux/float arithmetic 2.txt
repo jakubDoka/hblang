@@ -1,34 +1,34 @@
 float arithmetic 2.sin:
+	lea rdx, [0x0000000000000007]
+	movsd xmm8, qword ptr [0x0000000000000009]
 	movsd xmm4, qword ptr [0x0000000000000009]
 	movsd xmm3, qword ptr [0x0000000000000009]
+	movss xmm7, dword ptr [0x0000000000000008]
 	movss xmm6, dword ptr [0x0000000000000008]
 	movss xmm5, dword ptr [0x0000000000000008]
 	movss xmm2, dword ptr [0x0000000000000008]
 	cvtss2sd xmm1, xmm0
+	mulsd xmm1, xmm8
 	mulsd xmm1, xmm4
 	divsd xmm1, xmm3
-	cvttsd2si rsi, xmm1
-	mov rax, rsi
-	and rax, 0xFF
-	shl rax, 0x02
-	lea rdx, [0x0000000000000007]
-	add rdx, rax
-	mov rcx, rsi
+	cvttsd2si rax, xmm1
+	mov rcx, rax
 	add rcx, 0x40
 	and rcx, 0xFF
-	shl rcx, 0x02
-	lea rax, [0x0000000000000007]
-	add rax, rcx
-	movss xmm4, dword ptr [rax]
-	cvtsi2ss xmm3, rsi
+	lea rcx, [rdx+rcx*4]
+	movss xmm4, dword ptr [rcx]
+	cvtsi2ss xmm3, rax
+	mulss xmm3, xmm6
 	mulss xmm3, xmm5
 	divss xmm3, xmm2
-	movss xmm1, dword ptr [rdx]
+	and rax, 0xFF
+	lea rax, [rdx+rax*4]
+	movss xmm1, dword ptr [rax]
 	movss xmm2, xmm1
-	mulss xmm6, xmm2
+	mulss xmm7, xmm2
 	subss xmm0, xmm3
-	mulss xmm6, xmm0
-	subss xmm4, xmm6
+	mulss xmm7, xmm0
+	subss xmm4, xmm7
 	vfmadd231ss xmm1, xmm4, xmm0
 	movss xmm0, xmm1
 	ret

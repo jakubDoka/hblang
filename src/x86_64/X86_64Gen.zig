@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const matcher = @import("x86_64.X86_64Gen");
 const root = @import("hb");
 const graph = root.backend.graph;
 const Mach = root.backend.Machine;
@@ -252,35 +253,50 @@ pub const classes = enum {
         base: graph.Store = .{},
     };
     pub const GlobalLoad = extern struct {
-        base: OffsetLoad,
+        base: graph.Load = .{},
+        dis: i32,
         id: u32,
 
         pub const data_dep_offset = 2;
     };
+    pub const ConstGlobalStore = extern struct {
+        base: graph.Store = .{},
+        dis: i32,
+        id: u32,
+        imm: i32,
+
+        pub const data_dep_offset = 2;
+    };
     pub const GlobalStore = extern struct {
-        base: OffsetStore,
+        base: graph.Store = .{},
+        dis: i32,
         id: u32,
 
         pub const data_dep_offset = 2;
     };
     pub const StackLoad = extern struct {
-        base: OffsetLoad,
+        base: graph.Load = .{},
+        dis: i32,
 
         pub const data_dep_offset = 2;
     };
     pub const StackStore = extern struct {
-        base: OffsetStore,
+        base: graph.Store = .{},
+        dis: i32,
 
         pub const data_dep_offset = 2;
     };
     pub const ConstStackStore = extern struct {
-        base: ConstStore,
+        base: graph.Store = .{},
+        dis: i32,
+        imm: i32,
 
         pub const data_dep_offset = 2;
     };
     pub const ConstStore = extern struct {
-        base: OffsetStore,
-        imm: i64,
+        base: graph.Store = .{},
+        dis: i32,
+        imm: i32,
     };
     pub const OffsetLoad = extern struct {
         base: graph.Load = .{},
@@ -291,8 +307,8 @@ pub const classes = enum {
         dis: i32,
     };
     pub const ImmOp = extern struct {
-        base: graph.builtin.BinOp,
-        imm: i64,
+        op: graph.BinOp,
+        imm: i32,
     };
     pub const CondJump = extern struct {
         base: graph.If,
@@ -308,6 +324,16 @@ pub const classes = enum {
 
         pub const is_clone = true;
     };
+    pub const StackLea = extern struct {
+        dis: i32,
+
+        pub const data_dep_offset = 1;
+        pub const is_clone = true;
+    };
+    pub const IndexLea = extern struct {
+        dis: i32,
+        scale: u8,
+    };
 };
 
 pub const biased_regs = b: {
@@ -318,15 +344,26 @@ pub const biased_regs = b: {
     break :b mask;
 };
 
+pub fn clampI32(value: i64) i64 {
+    return std.math.clamp(value, std.math.minInt(i32), std.math.maxInt(i32));
+}
+
+pub fn unwrapLocal(local: *Func.Node) *Func.Node {
+    return if (local.kind == .Local) local.inputs()[1].? else local;
+}
+
 // ================== BINDINGS ==================
 pub fn getStaticOffset(node: *Func.Node) i64 {
-    return switch (node.kind) {
-        .OffsetLoad => node.extra(.OffsetLoad).dis,
-        .OffsetStore => node.extra(.OffsetStore).dis,
-        .ConstStore => node.extra(.ConstStore).base.dis,
-        .StackLoad => node.extra(.StackLoad).base.dis,
-        .StackStore => node.extra(.StackStore).base.dis,
-        .ConstStackStore => node.extra(.ConstStackStore).base.base.dis,
+    return switch (node.extra2()) {
+        inline .OffsetLoad,
+        .OffsetStore,
+        .StackLoad,
+        .StackStore,
+        .ConstStore,
+        .ConstStackStore,
+        .GlobalLoad,
+        .GlobalStore,
+        => |extra| extra.dis,
         else => 0,
     };
 }
@@ -334,18 +371,26 @@ pub fn getStaticOffset(node: *Func.Node) i64 {
 pub fn knownOffset(node: *Func.Node) struct { *Func.Node, i64 } {
     return switch (node.extra2()) {
         .ImmOp => |extra| {
-            std.debug.assert(extra.base.op == .iadd or extra.base.op == .isub);
-            return .{ node.inputs()[1].?, if (extra.base.op == .iadd)
+            if (extra.op != .iadd and extra.op != .isub) {
+                return .{ node, 0 };
+            }
+            return .{ node.inputs()[1].?, if (extra.op == .iadd)
                 extra.imm
             else
                 -extra.imm };
         },
+        .StackLea => |extra| .{ node.inputs()[1].?, extra.dis },
         else => .{ node, 0 },
     };
 }
 
 pub fn isInterned(kind: Func.Kind) bool {
-    return kind == .OffsetLoad or kind == .StackLoad or kind == .ImmOp or kind == .FusedMulAdd;
+    return kind == .OffsetLoad or
+        kind == .GlobalLoad or
+        kind == .StackLoad or
+        kind == .StackLea or
+        kind == .ImmOp or
+        kind == .FusedMulAdd;
 }
 
 pub fn isSwapped(node: *Func.Node) bool {
@@ -353,208 +398,36 @@ pub fn isSwapped(node: *Func.Node) bool {
     return false;
 }
 
-// ================== PEEPHOLES ==================
-pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
-    const inps = node.inputs();
+pub fn postporcessRepStosb(
+    func: *Func,
+    final: *Func.Node,
+    mem: *Func.Node,
+    loop_if: *Func.Node,
+    store: *Func.Node,
+    worklist: *Func.WorkList,
+) void {
+    const other_mem_succ = for (mem.outputs()) |o| {
+        if (o.get() != store) break o.get();
+    } else unreachable;
 
+    std.debug.assert(store.data_type == .i8);
+
+    func.setInputNoIntern(other_mem_succ, 1, final);
+
+    func.setInputNoIntern(
+        loop_if,
+        1,
+        func.addIntImm(store.sloc, .i8, 0),
+    );
+
+    worklist.add(loop_if);
+}
+
+// ================== PEEPHOLES ==================
+pub fn idealizeMach(self: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
     if (Func.idealizeDead({}, func, node, worklist)) |n| return n;
 
-    if (node.isStore()) rep_stosb: {
-        const store = node;
-        if (store.mem().kind != .Phi) break :rep_stosb;
-        const mem = store.mem();
-        const loop = mem.inputs()[0].?;
-
-        const ptr = store.tryBase() orelse break :rep_stosb;
-        if (ptr.kind != .Phi) break :rep_stosb;
-        if (ptr.inputs()[0].? != loop) break :rep_stosb;
-
-        if (loop.outputs().len > 4) break :rep_stosb;
-
-        // TODO: handle Else branch as well
-        if (loop.inputs()[1].?.kind != .Then) {
-            break :rep_stosb;
-        }
-
-        const loop_if = loop.inputs()[1].?.inputs()[0].?;
-
-        const if_cond = loop_if.inputs()[1].?;
-        // TODO: handle BinOp as well
-        if (if_cond.kind != .ImmOp) break :rep_stosb;
-
-        const cond_extra: *classes.ImmOp = if_cond.extra(.ImmOp);
-        // maybe also ne
-        if (cond_extra.base.op != .ugt) break :rep_stosb;
-        if (cond_extra.imm != 0) break :rep_stosb;
-
-        const dec_phi = if_cond.inputs()[1].?;
-        if (dec_phi.kind != .Phi) break :rep_stosb;
-
-        const dec = dec_phi.inputs()[2].?;
-        if (dec.kind != .ImmOp) break :rep_stosb;
-        if (dec.inputs()[1].? != dec_phi) break :rep_stosb;
-
-        const op_extra = dec.extra(.ImmOp);
-        if (op_extra.imm != 1 or op_extra.base.op != .isub) break :rep_stosb;
-
-        const inc = ptr.inputs()[2].?;
-        if (inc.kind != .ImmOp) break :rep_stosb;
-        const inc_extra = inc.extra(.ImmOp);
-        if (inc_extra.imm != 1 or inc_extra.base.op != .iadd) break :rep_stosb;
-        if (inc.inputs()[1].? != ptr) break :rep_stosb;
-
-        const final = func.addNode(.RepStosb, node.sloc, .top, &.{
-            loop.inputs()[0].?,
-            mem.inputs()[1].?,
-            ptr.inputs()[1].?,
-            store.value() orelse break :rep_stosb,
-            dec_phi.inputs()[1].?,
-        }, .{});
-
-        const other_mem_succ = for (mem.outputs()) |o| {
-            if (o.get() != store) break o.get();
-        } else unreachable;
-
-        std.debug.assert(store.data_type == .i8);
-
-        func.setInputNoIntern(other_mem_succ, 1, final);
-
-        func.setInputNoIntern(
-            loop_if,
-            1,
-            func.addIntImm(node.sloc, .i8, 0),
-        );
-
-        return final;
-    }
-
-    if (node.kind == .CInt and node.data_type == .f32) {
-        return func.addNode(.F32, node.sloc, .f32, &.{null}, .{
-            .imm = @bitCast(@as(u32, @intCast(node.extra(.CInt).value))),
-        });
-    }
-
-    if (node.kind == .CInt and node.data_type == .f64) {
-        return func.addNode(.F64, node.sloc, .f64, &.{null}, .{
-            .imm = @bitCast(node.extra(.CInt).value),
-        });
-    }
-
-    if (node.kind == .UnOp) {
-        if (node.data_type.meet(inps[1].?.data_type) == inps[1].?.data_type) {
-            if (node.extra(.UnOp).op == .uext or node.extra(.UnOp).op == .sext) {
-                return inps[1];
-            }
-        }
-    }
-
-    if (node.kind == .UnOp and node.extra(.UnOp).op == .fneg) {
-        const src = node.inputs()[1].?;
-        const imm = func.addIntImm(node.sloc, if (node.data_type == .f32) .i32 else .i64, 0);
-        const dst = func.addUnOp(node.sloc, .cast, node.data_type, imm);
-        return func.addBinOp(node.sloc, .fsub, node.data_type, dst, src);
-    }
-
-    if (node.kind == .Load) {
-        const base, const offset = node.base().knownOffset();
-
-        // needs to be done since Loads are interned
-        const res = if (base.isStack())
-            func.addNode(
-                .StackLoad,
-                node.sloc,
-                node.data_type,
-                &.{ node.inputs()[0], node.mem(), if (base.kind == .Local) base.inputs()[1] else base },
-                .{ .base = .{ .dis = @intCast(offset) } },
-            )
-        else if (base.kind == .GlobalAddr)
-            func.addNode(
-                .GlobalLoad,
-                node.sloc,
-                node.data_type,
-                &.{ node.inputs()[0], node.mem(), null },
-                .{
-                    .base = .{ .dis = @intCast(offset) },
-                    .id = base.extra(.GlobalAddr).id,
-                },
-            )
-        else
-            func.addNode(
-                .OffsetLoad,
-                node.sloc,
-                node.data_type,
-                &.{ node.inputs()[0], node.mem(), base },
-                .{ .dis = @intCast(offset) },
-            );
-
-        worklist.add(res);
-        return res;
-    }
-
-    if (node.kind == .Store) {
-        const base, const offset = node.base().knownOffset();
-
-        store: {
-            const mask = if (node.data_type.mask()) |m| (m & 0xffffffff) >> 1 else break :store;
-            if (node.value().?.kind == .CInt and (@abs(node.value().?.extra(.CInt).value) <= mask)) {
-                const proj_dt = switch (node.data_type) {
-                    .f32 => .i32,
-                    .f64 => .i64,
-                    else => node.data_type,
-                };
-                const res = func.addNode(
-                    .ConstStore,
-                    node.sloc,
-                    proj_dt,
-                    &.{ node.inputs()[0], node.mem(), base },
-                    .{
-                        .base = .{ .dis = @intCast(offset) },
-                        .imm = node.value().?.extra(.CInt).value,
-                    },
-                );
-
-                if (base.isStack()) {
-                    res.kind = .ConstStackStore;
-                    if (base.kind == .Local) func.setInputNoIntern(res, 2, base.inputs()[1]);
-                }
-
-                worklist.add(res);
-                return res;
-            }
-        }
-
-        const res = if (base.kind == .GlobalAddr)
-            func.addNode(
-                .GlobalStore,
-                node.sloc,
-                node.data_type,
-                &.{ node.inputs()[0], node.mem(), null, node.value() },
-                .{
-                    .base = .{ .dis = @intCast(offset) },
-                    .id = base.extra(.GlobalAddr).id,
-                },
-            )
-        else
-            func.addNode(
-                .OffsetStore,
-                node.sloc,
-                node.data_type,
-                &.{ node.inputs()[0], node.mem(), base, node.value() },
-                .{ .dis = @intCast(offset) },
-            );
-
-        if (base.isStack()) {
-            res.kind = .StackStore;
-            if (base.kind == .Local) func.setInputNoIntern(res, 2, base.inputs()[1]);
-        }
-
-        worklist.add(res);
-        return res;
-    }
-
-    if (node.kind == .OffsetStore and node.base().isStack()) {
-        node.kind = .StackStore;
-    }
+    if (matcher.idealize(self, func, node, worklist)) |n| return n;
 
     if (node.kind == .StructArg) elim_local: {
         for (node.outputs()) |us| {
@@ -568,82 +441,6 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
             .StructArg => |n| n.no_address = true,
             else => unreachable,
         }
-    }
-
-    if (node.kind == .If) {
-        const cond = node.inputs()[1].?;
-        if (cond.kind == .BinOp) select_cond_jump: {
-            switch (cond.extra(.BinOp).op) {
-                .ne, .eq, .uge, .ule, .ugt, .ult, .sge, .sle, .sgt, .slt => {},
-                else => break :select_cond_jump,
-            }
-            return func.addNode(
-                .CondJump,
-                node.sloc,
-                cond.data_type,
-                &.{ node.inputs()[0], cond.inputs()[1], cond.inputs()[2] },
-                .{ .op = cond.extra(.BinOp).op, .base = node.extra(.If).* },
-            );
-        }
-
-        if (cond.kind == .ImmOp and
-            cond.extra(.ImmOp).imm == 0 and
-            (cond.extra(.ImmOp).base.op == .ugt or
-                cond.extra(.ImmOp).base.op == .ne))
-        {
-            return func.addNode(
-                .If,
-                node.sloc,
-                cond.data_type,
-                &.{ node.inputs()[0], cond.inputs()[1] },
-                node.extra(.If).*,
-            );
-        }
-    }
-
-    if (node.kind == .BinOp and node.inputs()[2].?.kind == .CInt) {
-        if (switch (node.extra(.BinOp).op) {
-            .udiv, .sdiv, .umod, .smod, .imul, .fadd, .fmul, .fsub, .fdiv, .fgt, .flt, .fge, .fle => false,
-            .band, .bor, .bxor => node.inputs()[2].?.data_type.size() > 1,
-            .eq,
-            .ne,
-            .uge,
-            .ule,
-            .ugt,
-            .ult,
-            .sge,
-            .sle,
-            .sgt,
-            .slt,
-            => node.inputs()[2].?.data_type.size() > 2 and node.inputs()[2].?.data_type.isInt(),
-
-            else => true,
-        }) {
-            if (std.math.cast(i32, node.inputs()[2].?.extra(.CInt).value) != null) {
-                return func.addNode(.ImmOp, node.sloc, node.data_type, node.inputs()[0..2], .{
-                    .base = node.extra(.BinOp).*,
-                    .imm = node.inputs()[2].?.extra(.CInt).value,
-                });
-            }
-        }
-    }
-
-    if (node.kind == .BinOp and node.extra(.BinOp).op == .fadd and
-        (node.inputs()[2].?.kind == .BinOp and node.inputs()[2].?.extra(.BinOp).op == .fmul))
-    {
-        const a = node.inputs()[1].?;
-        const b = node.inputs()[2].?.inputs()[1].?;
-        const c = node.inputs()[2].?.inputs()[2].?;
-        return func.addNode(.FusedMulAdd, node.sloc, node.data_type, &.{ null, a, b, c }, .{});
-    }
-
-    if (node.kind == .BinOp and node.extra(.BinOp).op == .fadd and
-        (node.inputs()[1].?.kind == .BinOp and node.inputs()[1].?.extra(.BinOp).op == .fmul))
-    {
-        const a = node.inputs()[2].?;
-        const b = node.inputs()[1].?.inputs()[1].?;
-        const c = node.inputs()[1].?.inputs()[2].?;
-        return func.addNode(.FusedMulAdd, node.sloc, node.data_type, &.{ null, a, b, c }, .{});
     }
 
     return null;
@@ -937,7 +734,7 @@ pub fn binOpInPlaceSlot(op: graph.BinOp) ?usize {
 
 pub fn inPlaceSlot(node: *Func.Node) ?usize {
     return switch (node.extra2()) {
-        .ImmOp => |extra| binOpInPlaceSlot(extra.base.op),
+        .ImmOp => |extra| binOpInPlaceSlot(extra.op),
         .BinOp => |extra| binOpInPlaceSlot(extra.op),
         .FusedMulAdd => 0,
         .UnOp => |extra| switch (@as(graph.UnOp, extra.op)) {
@@ -1264,18 +1061,32 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 // rep stosb
                 self.emitBytes(&.{ 0xfc, 0xf3, 0xaa });
             },
+            .ConstGlobalStore => |extra| {
+                // mov [rip+dis+offset], $vl
+                const vl = extra.imm;
+                const dis: i16 = @intCast(extra.dis);
+                const imm_size: i16 = @intCast(@min(instr.data_type.size(), 4));
+                self.emitMemConstStore(instr.data_type, vl, .rip, null);
+                try self.out.addGlobalReloc(
+                    self.gpa.allocator(),
+                    extra.id,
+                    4,
+                    dis - 4 - imm_size,
+                    @intCast(4 + imm_size),
+                );
+            },
             .GlobalStore => |extra| {
                 // mov [rip+dis+offset], src
                 const src = self.getReg(inps[0]);
                 self.emitMemStoreOrLoad(instr.data_type, src, .rip, null, true);
-                const dis: i16 = @intCast(extra.base.dis);
+                const dis: i16 = @intCast(extra.dis);
                 try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, 4, dis - 4, 4);
             },
             .GlobalLoad => |extra| {
                 // mov dst, [rip+dis+offset]
                 const dst = self.getReg(instr);
                 self.emitMemStoreOrLoad(instr.data_type, dst, .rip, null, false);
-                const dis: i16 = @intCast(extra.base.dis);
+                const dis: i16 = @intCast(extra.dis);
                 try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, 4, dis - 4, 4);
             },
             .LocalAlloc => {},
@@ -1283,19 +1094,38 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 // lea dst, [rsp+dis]
                 const dst = self.getReg(instr);
                 const dis = instr.inputs()[1].?.extra(.LocalAlloc).size + self.local_base;
+                self.emitStackLea(dst, @intCast(dis));
+            },
+            .IndexLea => {
+                // lea dst, [base+dis+index*scale]
+                const dst = self.getReg(instr);
+                const base = self.getReg(inps[0]);
+                const index = self.getReg(inps[1]);
+                const scale = instr.extra(.IndexLea).scale;
+                const dis = instr.extra(.IndexLea).dis;
+
+                self.emitRex(dst, base, index, 8);
+                self.emitByte(0x8d);
+                self.emitIndirectAddr(dst, base, index, @as(u64, 1) << @intCast(scale), dis);
+            },
+            .StackLea => {
+                // lea dst, [rsp+dis]
+                const dst = self.getReg(instr);
+                const dis = @as(i32, @intCast(instr.inputs()[1].?.extra(.LocalAlloc).size + self.local_base)) +
+                    instr.extra(.StackLea).dis;
                 self.emitStackLea(dst, dis);
             },
             .StructArg => |extra| if (!extra.no_address) {
                 // lea dst, [rsp+dis]
                 const dst = self.getReg(instr);
                 const dis = instr.extra(.StructArg).spec.size + self.arg_base;
-                self.emitStackLea(dst, dis);
+                self.emitStackLea(dst, @intCast(dis));
             },
             .StackArgOffset => {
                 // lea dst, [rsp+dis]
                 const dst = self.getReg(instr);
                 const dis = instr.extra(.StackArgOffset).offset;
-                self.emitStackLea(dst, dis);
+                self.emitStackLea(dst, @intCast(dis));
             },
             .OffsetLoad => |extra| {
                 // mov dst, [bse+dis]
@@ -1317,26 +1147,26 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 // mov [dst+dis], $vl
                 const dst = self.getReg(inps[0]);
                 const vl = extra.imm;
-                const dis: i32 = extra.base.dis;
+                const dis: i32 = extra.dis;
 
                 self.emitMemConstStore(instr.data_type, vl, dst, dis);
             },
             .ConstStackStore => |extra| {
                 // mov [rsp+dis], $vl
-                const vl = extra.base.imm;
-                const dis: i32 = extra.base.base.dis + self.stackBaseOf(instr);
+                const vl = extra.imm;
+                const dis: i32 = extra.dis + self.stackBaseOf(instr);
                 self.emitMemConstStore(instr.data_type, vl, .rsp, dis);
             },
             .StackLoad => |extra| {
                 // mov dst, [rsp+dis]
                 const dst = self.getReg(instr);
-                const dis: i32 = extra.base.dis + self.stackBaseOf(instr);
+                const dis: i32 = extra.dis + self.stackBaseOf(instr);
                 self.emitMemStoreOrLoad(instr.data_type, dst, .rsp, dis, false);
             },
             .StackStore => |extra| {
                 // mov [rsp+dis], vl
                 const vl = self.getReg(inps[0]);
-                const dis: i32 = extra.base.dis + self.stackBaseOf(instr);
+                const dis: i32 = extra.dis + self.stackBaseOf(instr);
                 self.emitMemStoreOrLoad(instr.data_type, vl, .rsp, dis, true);
             },
             .Call => |extra| {
@@ -1355,7 +1185,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     try self.out.addFuncReloc(self.gpa.allocator(), call.id, 4, -4, 4);
                 }
             },
-            .Arg, .Ret, .Mem, .Never, .MemJoin => {},
+            .Arg, .Ret, .Mem, .Never => {},
             .Trap => {
                 switch (instr.extra(.Trap).code) {
                     graph.unreachable_func_trap,
@@ -1409,7 +1239,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             .Jmp => {},
             .Return => {},
             .ImmOp => |extra| {
-                const op = extra.base.op;
+                const op = extra.op;
                 const op_dt = instr.inputs()[1].?.data_type;
                 const dst = self.getReg(instr);
                 const lhs = self.getReg(inps[0]);
@@ -1860,7 +1690,7 @@ pub fn stackBaseOf(self: *X86_64Gen, instr: *Func.Node) i32 {
     return @intCast(switch (instr.inputs()[2].?.extra2()) {
         .LocalAlloc => |n| n.size + self.local_base,
         .StructArg => |n| n.spec.size + self.arg_base,
-        else => unreachable,
+        else => utils.panic("{}", .{instr.inputs()[2].?}),
     });
 }
 
@@ -1885,7 +1715,7 @@ pub fn emitMemConstStore(
     dt: graph.DataType,
     vl: i64,
     bse: Reg,
-    dis: i64,
+    dis: ?i64,
 ) void {
     switch (dt) {
         .i16 => self.emitByte(0x66),
@@ -1991,10 +1821,10 @@ pub fn emitRex(self: *X86_64Gen, reg: Reg, ptr: Reg, idx: Reg, reg_size: u64) vo
     }
 }
 
-pub fn emitStackLea(self: *X86_64Gen, dst: Reg, dis: u64) void {
+pub fn emitStackLea(self: *X86_64Gen, dst: Reg, dis: i32) void {
     self.emitRex(dst, .rax, .rax, 8);
     self.emitByte(0x8d);
-    self.emitIndirectAddr(dst, .rsp, .no_index, 1, @intCast(dis));
+    self.emitIndirectAddr(dst, .rsp, .no_index, 1, dis);
 }
 
 pub fn emitRegOp(self: *X86_64Gen, op: u8, dst: Reg, src: Reg) void {
@@ -2029,11 +1859,11 @@ pub fn emitBytes(self: *X86_64Gen, bytes: []const u8) void {
     self.out.code.appendSliceAssumeCapacity(bytes);
 }
 
-pub fn emitImm(self: *X86_64Gen, comptime T: type, int: T) void {
+pub fn emitImm(self: *X86_64Gen, comptime T: type, int: i64) void {
     std.mem.writeInt(
         T,
         self.out.code.addManyAsArrayAssumeCapacity(@sizeOf(T)),
-        int,
+        @truncate(int),
         .little,
     );
 }

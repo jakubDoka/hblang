@@ -1064,17 +1064,21 @@ pub fn emitArray(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Arry)) EmitEr
             ty = n.inner;
         }
 
-        const slice = self.types.store.unwrap(ty.data(), .Slice) orelse {
-            return self.report(expr, "{} can not be initialized with array syntax", .{ty});
-        };
+        switch (ty.data()) {
+            .Slice => |s| {
+                const slice: *tys.Slice = self.types.store.get(s);
 
-        if (slice.len != e.fields.len()) if (slice.len) |len| {
-            return self.report(expr, "expected array with {} element, got {}", .{ len, e.fields.len() });
-        } else {
-            return self.report(expr, "expected {}, got array with {} elements", .{ ty, e.fields.len() });
-        };
+                if (slice.len != e.fields.len()) if (slice.len) |len| {
+                    return self.report(expr, "expected array with {} element, got {}", .{ len, e.fields.len() });
+                } else {
+                    return self.report(expr, "expected {}, got array with {} elements", .{ ty, e.fields.len() });
+                };
 
-        break :b .{ slice.elem, ret_ty };
+                break :b .{ slice.elem, ret_ty };
+            },
+            .Simd => |s| break :b .{ self.types.store.get(s).elem, ret_ty },
+            else => return self.report(expr, "{} can not be initialized with array syntax", .{ty}),
+        }
     } else b: {
         const elem_ty = try self.resolveAnonTy(e.ty);
         const array_ty = self.types.makeSlice(e.fields.len(), elem_ty);
@@ -4204,5 +4208,25 @@ fn emitDirective(
         .import => return self.report(expr, "can be only used as a body of the function", .{}),
         .frame_pointer => return .mkv(.uint, self.bl.addFramePointer(sloc, .i64)),
         .SrcLoc => return self.emitTyConst(self.types.source_loc),
+        .simd => {
+            try assertDirectiveArgs(self, expr, args, "<ty>, <len>");
+
+            const ty = try self.resolveAnonTy(args[0]);
+            var len_vl = try self.emitTyped(.{}, .uint, args[1]);
+            const len = try self.partialEval(args[1], &len_vl);
+
+            if (!ty.isFloat() and !ty.isInteger() and ty.data() != .Pointer) {
+                return self.report(args[0], "{} is not a valid type for @simd, " ++
+                    "only floats, integers and pointers are supported", .{ty});
+            }
+
+            const max_simd_len = 512 / 8;
+            if (ty.size(self.types) *| len > max_simd_len) {
+                return self.report(args[1], "the @simd is too long, " ++
+                    "the maximum size is {}", .{max_simd_len});
+            }
+
+            return self.emitTyConst(self.types.makeSimd(ty, @intCast(len)));
+        },
     }
 }

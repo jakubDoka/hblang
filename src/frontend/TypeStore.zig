@@ -71,8 +71,10 @@ pub const TypeCtx = struct {
                 return self.types.store.get(s).ret == self.types.store.get(bd.FnPtr).ret and
                     std.mem.eql(Id, self.types.store.get(s).args, self.types.store.get(bd.FnPtr).args);
             },
-            .Pointer => |s| std.meta.eql(self.types.store.get(s).*, self.types.store.get(bd.Pointer).*),
-            .Slice => |s| std.meta.eql(self.types.store.get(s).*, self.types.store.get(bd.Slice).*),
+            inline .Slice, .Simd, .Pointer => |s, t| std.meta.eql(
+                self.types.store.get(s).*,
+                self.types.store.get(@field(bd, @tagName(t))).*,
+            ),
             .Nullable => |n| std.meta.eql(self.types.store.get(n).inner, self.types.store.get(bd.Nullable).inner),
             .Tuple => |n| std.mem.eql(Id, @ptrCast(self.types.store.get(n).fields), @ptrCast(self.types.store.get(bd.Tuple).fields)),
             .Enum, .Union, .Struct, .Func, .Template, .Global => {
@@ -89,7 +91,7 @@ pub const TypeCtx = struct {
         std.hash.autoHash(&hasher, std.meta.activeTag(adk));
         switch (adk) {
             .Builtin => unreachable,
-            inline .Pointer, .Slice => |s| std.hash.autoHash(&hasher, self.types.store.get(s).*),
+            inline .Pointer, .Slice, .Simd => |s| std.hash.autoHash(&hasher, self.types.store.get(s).*),
             .Nullable => |n| std.hash.autoHash(&hasher, self.types.store.get(n).inner),
             // its an array of integers, splat
             .Tuple => |n| hasher.update(@ptrCast(self.types.store.get(n).fields)),
@@ -332,13 +334,13 @@ pub const Id = enum(IdRepr) {
         return switch (self.data()) {
             .Struct, .Union, .Enum => self,
             inline .Func, .Template, .Global => |t| types.store.get(t).key.loc.scope.firstType(types),
-            .Builtin, .Tuple, .Pointer, .Nullable, .Slice, .FnPtr => unreachable,
+            .Builtin, .Tuple, .Pointer, .Nullable, .Slice, .FnPtr, .Simd => unreachable,
         };
     }
 
     pub fn file(self: Id, types: *Types) ?File {
         return switch (self.data()) {
-            .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnPtr => null,
+            .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnPtr, .Simd => null,
             inline else => |v| types.store.get(v).key.loc.file,
         };
     }
@@ -352,7 +354,7 @@ pub const Id = enum(IdRepr) {
 
     pub fn getKey(self: Id, types: *Types) *Scope {
         return switch (self.data()) {
-            .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnPtr => utils.panic("{s}", .{@tagName(self.data())}),
+            .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnPtr, .Simd => utils.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| &types.store.get(v).key,
         };
     }
@@ -363,7 +365,7 @@ pub const Id = enum(IdRepr) {
 
     pub fn items(self: Id, ast: *const Ast, types: *Types) Ast.Slice {
         return switch (self.data()) {
-            .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnPtr => utils.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnPtr, .Simd => utils.panic("{s}", .{@tagName(self.data())}),
             .Template, .Func => .{},
             inline else => |v| ast.exprs.get(types.store.get(v).key.loc.ast).Type.fields,
         };
@@ -497,6 +499,7 @@ pub const Id = enum(IdRepr) {
             .Struct => |s| s.getSize(types),
             .Slice => |s| if (types.store.get(s).len) |l| l * types.store.get(s).elem.size(types) else 16,
             .Nullable => |n| n.size(types),
+            .Simd => |s| types.store.get(s).len * types.store.get(s).elem.size(types),
             .Global, .Func, .Template => 0,
         };
     }
@@ -518,6 +521,8 @@ pub const Id = enum(IdRepr) {
                 8
             else
                 types.store.get(s).elem.alignment(types),
+            .Simd => |s| types.store.get(s).elem.alignment(types) *
+                types.store.get(s).len,
             .Global, .Func, .Template => 1,
         };
     }
@@ -663,6 +668,15 @@ pub const Id = enum(IdRepr) {
                     .Nullable => |n| {
                         try writer.appendSlice(to.allocator(), "?");
                         work_list.appendAssumeCapacity(.{ .Type = self.tys.store.get(n).inner });
+                    },
+                    .Simd => |s| {
+                        try writer.appendSlice(to.allocator(), "@simd(");
+                        try work_list.appendSlice(tmp.arena.allocator(), &.{
+                            .{ .Name = ")" },
+                            .{ .Value = .{ .ty = .uint, .value = @intCast(self.tys.store.get(s).len) } },
+                            .{ .Name = ", " },
+                            .{ .Type = self.tys.store.get(s).elem },
+                        });
                     },
                     .Tuple => |tupl| {
                         try writer.appendSlice(to.allocator(), "(");
@@ -821,7 +835,7 @@ pub const Id = enum(IdRepr) {
                             .Value = .normalize(.{ .ty = ty, .value = global }, self.tys),
                         });
                     },
-                    .FnPtr => {
+                    .FnPtr, .Simd => {
                         unreachable;
                     },
                     .Tuple => |t| {
@@ -987,6 +1001,7 @@ pub fn cloneFrom(self: *Types, from: *Types, id: Id) struct { Id, bool } {
             .Pointer => |p| self.makePtr(self.cloneFrom(from, from.store.get(p).*)[0]),
             .Slice => |s| self.makeSlice(from.store.get(s).len, self.cloneFrom(from, from.store.get(s).elem)[0]),
             .Nullable => |n| self.makeNullable(self.cloneFrom(from, from.store.get(n).inner)[0]),
+            .Simd => |s| self.makeSimd(self.cloneFrom(from, from.store.get(s).elem)[0], from.store.get(s).len),
             .Tuple => |t| {
                 const fields = from.store.get(t).fields;
                 const new_fields = tmp.arena.alloc(Id, fields.len);
@@ -1180,6 +1195,20 @@ pub fn findNestedGlobals(
                     .offset = @intCast(offset + tys.Slice.ptr_offset),
                     .target = try self.findSymForPtr(ptr, cap),
                 }) catch unreachable;
+            }
+        },
+        .Simd => |s| {
+            const smd: *tys.Simd = self.store.get(s);
+
+            const elem_size = smd.elem.size(self);
+            for (0..smd.len) |idx| {
+                try self.findNestedGlobals(
+                    relocs,
+                    global,
+                    scratch,
+                    smd.elem,
+                    offset + idx * elem_size,
+                );
             }
         },
         inline .Struct, .Tuple => |t| {
@@ -1460,6 +1489,10 @@ pub fn makeNullable(self: *Types, v: Id) Id {
 
 pub fn makeTuple(self: *Types, v: []Id) Id {
     return self.internPtr(.Tuple, .{ .fields = @ptrCast(v) });
+}
+
+pub fn makeSimd(self: *Types, elem: Id, len: u32) Id {
+    return self.internPtr(.Simd, .{ .elem = elem, .len = len });
 }
 
 pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Scope) struct { TypeIndex.GetOrPutResult, std.meta.TagPayload(Data, kind) } {

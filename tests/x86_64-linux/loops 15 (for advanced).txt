@@ -1,9 +1,8 @@
 main:
 	sub rsp, 0x20
 	mov rcx, 0x01
-	lea rsi, [rsp]
-	add rsi, 0x20
 	lea rax, [rsp]
+	lea rsi, [rsp+0x20]
 1:	cmp rax, rsi
 	jnb :0
 	mov [rax], rcx
@@ -11,12 +10,12 @@ main:
 	inc rcx
 	jmp :1
 0:	xor rax, rax
-	lea rcx, [rsp]
-3:	cmp rcx, rsi
+	lea rdx, [rsp]
+3:	cmp rdx, rsi
 	jnb :2
-	mov rdx, [rcx]
-	add rax, rdx
-	add rcx, 0x08
+	mov rcx, [rdx]
+	add rax, rcx
+	add rdx, 0x08
 	jmp :3
 2:	add rsp, 0x20
 	ret

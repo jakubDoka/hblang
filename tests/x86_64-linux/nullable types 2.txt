@@ -17,8 +17,7 @@ main:
 	mov rax, 0x04
 	jmp :1
 0:	mov qword ptr [rsp+0x10], 0x01
-	lea rdi, [rsp]
-	add rdi, 0x08
+	lea rdi, [rsp+0x08]
 	call :nullable types 2.take
 	mov rax, [rsp+0x08]
 	mov rcx, [rsp+0x10]

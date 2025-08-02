@@ -1,37 +1,36 @@
 main:
 	sub rsp, 0x40
-	xor rsi, rsi
-	xor rax, rax
 	xor rdx, rdx
-	lea rcx, [0x0000000000000007]
-6:	cmp rsi, 0x64
-	setb dil
-	movzx rdi, dil
-	test dil, dil
+	xor rax, rax
+	xor rcx, rcx
+6:	cmp rdx, 0x64
+	setb sil
+	movzx rsi, sil
+	test sil, sil
 	jz :0
 	mov dword ptr [rsp+0x10], 0x01
 	mov dword ptr [rsp+0x14], 0x02
 	mov rax, [rsp+0x10]
 	mov [rsp+0x20], rax
 	mov al, [0x0000000000000006]
-	cmp al, dl
+	cmp al, cl
 	jnz :1
 	mov rax, 0x01
 	jmp :2
-1:	mov r8d, [0x0000000000000007]
-	mov edi, [rsp+0x24]
+1:	mov edi, [0x0000000000000006]
+	mov esi, [rsp+0x24]
 	mov eax, [0x0000000000000006]
-	cmp eax, edi
-	setnz dil
-	movzx rdi, dil
+	cmp eax, esi
+	setnz sil
+	movzx rsi, sil
 	mov eax, [rsp+0x20]
-	cmp r8d, eax
+	cmp edi, eax
 	setnz al
 	movzx rax, al
-	or eax, edi
+	or eax, esi
 2:	test al, al
 	jz :4
-	mov byte ptr [rcx], 0x00
+	mov byte ptr [0x0000000000000008], 0x00
 	mov byte ptr [rsp+0x28], 0x01
 	mov rax, [rsp+0x20]
 	mov [rsp+0x2C], rax
@@ -48,16 +47,16 @@ main:
 	jmp :5
 4:	mov rax, [rsp+0x20]
 	mov [rsp], rax
-	mov edi, [rsp]
+	mov esi, [rsp]
 	mov eax, [rsp+0x04]
-	add edi, eax
-	mov [rsp+0x1C], edi
+	add esi, eax
+	mov [rsp+0x1C], esi
 5:	mov byte ptr [rsp+0x08], 0x01
 	mov eax, [rsp+0x1C]
 	mov [rsp+0x0C], eax
 	mov rax, [rsp+0x08]
 	mov [0x0000000000000007], rax
-	inc rsi
+	inc rdx
 	mov eax, [0x0000000000000006]
 	jmp :6
 0:	sub eax, 0x03

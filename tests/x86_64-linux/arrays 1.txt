@@ -1,5 +1,6 @@
 main:
 	sub rsp, 0x40
+	lea rsi, [rsp]
 	xor rax, rax
 3:	cmp rax, 0x08
 	setz cl
@@ -15,18 +16,12 @@ main:
 	jz :1
 	add rsp, 0x40
 	ret
-1:	mov rsi, rcx
-	shl rsi, 0x03
-	lea rdx, [rsp]
-	add rdx, rsi
+1:	lea rdx, [rsi+rcx*8]
 	mov rdx, [rdx]
 	add rax, rdx
 	inc rcx
 	jmp :2
-0:	mov rdx, rax
-	shl rdx, 0x03
-	lea rcx, [rsp]
-	add rcx, rdx
+0:	lea rcx, [rsi+rax*8]
 	mov [rcx], rax
 	inc rax
 	jmp :3

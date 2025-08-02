@@ -176,6 +176,7 @@ pub fn categorize(self: Abi, ty: Id, types: *Types) TmpSpec {
             .Slice => |s| categorizeAbleosSlice(s, types),
             .Nullable => |n| categorizeAbleosNullable(n, types),
             inline .Struct, .Tuple => |s| categorizeAbleosRecord(s, types),
+            .Simd => .ByRef,
             .Global, .Func, .Template => unreachable,
         },
         .systemv => switch (ty.data()) {
@@ -220,6 +221,7 @@ pub fn categorizeSystemv(ty: Id, types: *Types) TmpSpec {
                     .u32, .i64, .u64, .int, .uint, .type => .int,
                     .f32, .f64 => .sse,
                 },
+                .Simd => .sse,
                 .Enum => |e| b: {
                     if (e.getFields(ts).len == 0) return error.Impossible;
                     if (e.getBackingInt(ts) == .void) return;

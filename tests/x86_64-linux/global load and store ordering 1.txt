@@ -3,8 +3,7 @@ main:
 	mov al, [0x0000000000000006]
 	test al, al
 	jz :1
-	lea rax, [0x0000000000000007]
-	mov byte ptr [rax], 0x00
+	mov byte ptr [0x0000000000000008], 0x00
 	jmp :1
 1:	mov al, [0x0000000000000006]
 	cmp al, cl

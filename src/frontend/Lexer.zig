@@ -159,6 +159,7 @@ pub const Lexeme = enum(u16) {
     @"@frame_pointer",
     @"@handler",
     @"@SrcLoc",
+    @"@simd",
 
     const data = @typeInfo(Lexeme).@"enum";
 

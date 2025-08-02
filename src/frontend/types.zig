@@ -534,3 +534,8 @@ pub const FnPtr = struct {
         return .{ params[0..cursor], returns, ret_abi };
     }
 };
+
+pub const Simd = struct {
+    elem: TyId,
+    len: u32,
+};

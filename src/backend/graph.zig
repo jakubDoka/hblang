@@ -1,6 +1,7 @@
 const std = @import("std");
 pub const utils = @import("../utils.zig");
 const Machine = @import("Machine.zig");
+const matcher = @import("graph.IdealGen");
 
 fn tu(int: i64) u64 {
     return @bitCast(int);
@@ -168,7 +169,10 @@ pub const BinOp = enum(u8) {
     }
 
     pub fn isAsociative(self: BinOp) bool {
-        return self.isComutative();
+        return switch (self) {
+            .iadd, .imul, .band, .bor, .bxor, .ne, .eq => true,
+            else => false,
+        };
     }
 
     pub fn neutralElememnt(self: BinOp) ?i64 {
@@ -177,6 +181,13 @@ pub const BinOp = enum(u8) {
             .band => -1,
             .imul, .sdiv, .udiv => 1,
             .fmul, .fdiv => @bitCast(@as(f64, 1.0)),
+            else => null,
+        };
+    }
+
+    pub fn killConstant(self: BinOp, c: i64) ?i64 {
+        return switch (self) {
+            .imul, .band => if (c == 0) 0 else null,
             else => null,
         };
     }
@@ -548,9 +559,6 @@ pub const builtin = enum {
     };
     pub const Phi = extern struct {
         pub const is_pinned = true;
-    };
-    pub const MemJoin = extern struct {
-        base: mod.Store = .{},
     };
     pub const MachSplit = extern struct {
         dbg: Dbg = .defualt,
@@ -1042,7 +1050,6 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn dataDeps(self: *Node) []*Node {
                 if (self.kind == .Phi and !self.isDataPhi()) return &.{};
-                if (self.kind == .MemJoin) return &.{};
                 const start = self.dataDepOffset();
                 const deps = self.input_base[start..self.input_ordered_len];
                 std.debug.assert(std.mem.indexOfScalar(?*Node, deps, null) == null);
@@ -1077,8 +1084,8 @@ pub fn Func(comptime Backend: type) type {
             pub fn knownOffset(self: *Node) struct { *Node, i64 } {
                 if (self.kind == .BinOp and self.inputs()[2].?.kind == .CInt) {
                     const op = self.extra(.BinOp).op;
+                    if (op != .iadd and op != .isub) return .{ self, 0 };
                     const magnitude = self.inputs()[2].?.extra(.CInt).value;
-                    std.debug.assert(op == .iadd or op == .isub);
                     return .{ self.inputs()[1].?, if (op == .iadd) magnitude else -magnitude };
                 }
                 if (@hasDecl(Backend, "knownOffset")) return Backend.knownOffset(self);
@@ -1139,7 +1146,7 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn isStack(self: *Node) bool {
-                return self.kind == .Local or self.kind == .StructArg;
+                return self.kind == .Local or self.kind == .StructArg or self.kind == .LocalAlloc;
             }
 
             pub fn anyextra(self: *const Node) []const u64 {
@@ -2290,6 +2297,8 @@ pub fn Func(comptime Backend: type) type {
 
             if (idealizeDead(ctx, self, node, work)) |w| return w;
 
+            if (matcher.idealize(ctx, self, node, work)) |w| return w;
+
             var tmp = utils.Arena.scrathFromAlloc(work.list.allocator);
             defer tmp.deinit();
 
@@ -2304,28 +2313,6 @@ pub fn Func(comptime Backend: type) type {
                     {
                         return node.mem();
                     }
-                }
-
-                if (false) parallelize: {
-                    var to_join = std.ArrayListUnmanaged(?*Node){};
-                    try to_join.appendSlice(tmp.arena.allocator(), &.{ null, node });
-                    var cursor = node.mem();
-                    while (cursor.kind == .Store and for (to_join.items[1..]) |item| {
-                        if (!item.?.noAlias(cursor)) break false;
-                    } else true) {
-                        try to_join.append(tmp.arena.allocator(), cursor);
-                        cursor = cursor.mem();
-                    }
-
-                    if (to_join.items.len <= 2) break :parallelize;
-
-                    for (to_join.items[1..], 1..) |item, i| {
-                        const deps = tmp.arena.dupe(?*Node, item.?.inputs());
-                        deps[1] = cursor;
-                        to_join.items[i] = self.addNode(.Store, item.?.sloc, item.?.data_type, deps, .{});
-                    }
-
-                    return self.addNode(.MemJoin, node.sloc, .top, to_join.items, .{});
                 }
 
                 const base, _ = node.base().knownOffset();
@@ -2372,28 +2359,11 @@ pub fn Func(comptime Backend: type) type {
                     return st;
                 }
 
-                var changed = true;
-                while (changed) {
-                    changed = false;
-
-                    while ((earlier.kind == .Store and
-                        (earlier.tryCfg0() == node.tryCfg0() or node.tryCfg0() == null) and
-                        earlier.noAlias(node)))
-                    {
-                        earlier = earlier.mem();
-                    }
-
-                    if (earlier.kind == .MemJoin) {
-                        for (earlier.inputs()[1..]) |store| {
-                            if (store.?.kind == .Store and
-                                store.?.base() == node.base() and
-                                store.?.data_type == node.data_type)
-                            {
-                                work.add(earlier);
-                                return store.?.value();
-                            }
-                        }
-                    }
+                while ((earlier.kind == .Store and
+                    (earlier.tryCfg0() == node.tryCfg0() or node.tryCfg0() == null) and
+                    earlier.noAlias(node)))
+                {
+                    earlier = earlier.mem();
                 }
 
                 if (earlier.kind == .Store and
@@ -2443,145 +2413,6 @@ pub fn Func(comptime Backend: type) type {
 
                 self.subsume(src, dst);
                 return mem;
-            }
-
-            if (node.kind == .UnOp) {
-                const op: UnOp = node.extra(.UnOp).op;
-                const oper = inps[1].?;
-
-                if (oper.kind == .CInt) {
-                    return self.addIntImm(
-                        node.sloc,
-                        node.data_type,
-                        op.eval(oper.data_type, node.data_type, oper.extra(.CInt).value),
-                    );
-                }
-
-                if (node.data_type.meet(inps[1].?.data_type) == inps[1].?.data_type) {
-                    if (op == .uext or op == .sext) {
-                        return inps[1];
-                    }
-                }
-            }
-
-            if (node.kind == .BinOp) {
-                const op: BinOp = node.extra(.BinOp).op;
-                var lhs = node.inputs()[1].?;
-                var rhs = node.inputs()[2].?;
-                if (lhs.kind == .CInt and rhs.kind == .CInt) {
-                    return self.addIntImm(
-                        node.sloc,
-                        lhs.data_type.meet(rhs.data_type),
-                        node.extra(.BinOp).op.eval(
-                            lhs.data_type,
-                            lhs.extra(.CInt).value,
-                            rhs.extra(.CInt).value,
-                        ),
-                    );
-                }
-
-                if (op.isComutative() and @intFromEnum(lhs.kind) > @intFromEnum(rhs.kind)) {
-                    std.mem.swap(*Node, &lhs, &rhs);
-                }
-
-                if (lhs == rhs) if (op.symetricConstant()) |c| {
-                    return self.addIntImm(node.sloc, lhs.data_type, c);
-                };
-
-                if (rhs.kind == .CInt and rhs.extra(.CInt).value == op.neutralElememnt()) {
-                    return lhs;
-                }
-
-                if (rhs.kind == .CInt and rhs.data_type.isInt() and
-                    rhs.extra(.CInt).value > 0 and std.math.isPowerOfTwo(rhs.extra(.CInt).value))
-                {
-                    const log2_rhs = std.math.log2_int(u64, @bitCast(rhs.extra(.CInt).value));
-                    switch (op) {
-                        .udiv => return self.addBinOp(node.sloc, .ushr, node.data_type, lhs, self
-                            .addIntImm(node.sloc, node.data_type, log2_rhs)),
-                        .sdiv => return self.addBinOp(node.sloc, .sshr, node.data_type, lhs, self
-                            .addIntImm(node.sloc, node.data_type, log2_rhs)),
-                        .umod, .smod => return self.addBinOp(node.sloc, .band, node.data_type, lhs, self
-                            .addIntImm(node.sloc, node.data_type, rhs.extra(.CInt).value - 1)),
-                        .imul => return self.addBinOp(node.sloc, .ishl, node.data_type, lhs, self
-                            .addIntImm(node.sloc, node.data_type, log2_rhs)),
-                        else => {},
-                    }
-                }
-
-                if (op.isAsociative() and lhs.kind == .BinOp and lhs.extra(.BinOp).op == op and
-                    rhs.kind == .CInt)
-                {
-                    if (lhs.rhs().kind == .CInt)
-                        return self.addBinOp(node.sloc, op, node.data_type, lhs.lhs(), self.addIntImm(
-                            node.sloc,
-                            node.data_type,
-                            op.eval(
-                                node.data_type,
-                                lhs.rhs().extra(.CInt).value,
-                                rhs.extra(.CInt).value,
-                            ),
-                        ));
-                }
-            }
-
-            if (node.kind == .Phi) {
-                const reg, const l, const r = .{ inps[0].?, inps[1].?, inps[2].? };
-
-                if (l == r and !node.cfg0().base.preservesIdentityPhys()) {
-                    return l;
-                }
-
-                if (r == node) {
-                    return l;
-                }
-
-                // pull common stored down
-                if (l.kind == .Store and r.kind == .Store and
-                    l.data_type == r.data_type and
-                    l.base() == r.base() and
-                    l.value() != null and r.value() != null)
-                {
-                    work.add(l);
-                    work.add(r);
-                    const mem = self.addNode(.Phi, node.sloc, .top, &.{ reg, l.mem(), r.mem() }, .{});
-                    const val = self.addNode(.Phi, node.sloc, l.data_type, &.{ reg, l.value().?, r.value().? }, .{});
-                    return self.addNode(.Store, node.sloc, l.data_type, &.{ reg, mem, l.base(), val }, .{});
-                }
-
-                if (l.kind == .MemJoin and r.kind == .MemJoin) {
-                    var phis = tmp.arena.makeArrayList(?*Node, l.inputs().len * r.inputs().len + 1);
-                    phis.appendAssumeCapacity(null);
-
-                    // make a phi for each aliasing store pair
-                    for (l.inputs()[1..]) |ln| {
-                        if (ln.?.kind != .Store) continue;
-                        for (r.inputs()[1..]) |rn| {
-                            if (rn.?.kind != .Store) continue;
-                            if (ln == rn) {
-                                phis.appendAssumeCapacity(ln.?);
-                            } else if (!ln.?.noAlias(rn.?)) {
-                                phis.appendAssumeCapacity(self.addNode(.Phi, node.sloc, l.data_type, &.{ reg, ln, rn }, .{}));
-                            }
-                        }
-                    }
-
-                    for (phis.items[1..]) |phi| work.add(phi.?);
-
-                    std.debug.assert(phis.items.len > 1);
-
-                    return self.addNode(.MemJoin, node.sloc, .top, phis.items, .{});
-                }
-            }
-
-            if (node.kind == .MemJoin) {
-                if (node.outputs().len == 1 and node.outputs()[0].get().kind == .Return) bail: {
-                    for (node.inputs()[1..]) |store| {
-                        if (store.?.kind != .Store) break :bail;
-                        if (store.?.base().kind != .Local) break :bail;
-                    }
-                    return node.inputs()[1].?.mem();
-                }
             }
 
             if (node.isLoad()) {

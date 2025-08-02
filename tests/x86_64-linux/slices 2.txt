@@ -9,38 +9,34 @@ main:
 	mov qword ptr [rsp+0x08], 0x04
 	mov [rsp+0x10], rax
 	mov qword ptr [rsp+0x18], 0x02
-	lea rax, [rsp+0x40]
-	add rax, 0x10
+	lea rax, [rsp+0x50]
 	mov [rsp+0x20], rax
 	mov qword ptr [rsp+0x28], 0x02
-	lea rax, [rsp+0x40]
-	add rax, 0x08
+	lea rax, [rsp+0x48]
 	mov [rsp+0x30], rax
 	mov qword ptr [rsp+0x38], 0x02
-	xor rdi, rdi
+	xor rsi, rsi
 	xor rax, rax
-2:	cmp rdi, 0x04
+2:	cmp rsi, 0x04
 	setz cl
 	movzx rcx, cl
 	test cl, cl
 	jz :0
 	add rsp, 0x60
 	ret
-0:	mov rcx, rdi
+0:	mov rcx, rsi
 	shl rcx, 0x04
-	lea r8, [rsp]
-	add r8, rcx
+	lea rdi, [rsp]
+	add rdi, rcx
 	xor rcx, rcx
-3:	mov rdx, [r8+0x08]
+3:	mov rdx, [rdi+0x08]
 	cmp rcx, rdx
 	jnz :1
-	inc rdi
+	inc rsi
 	jmp :2
-1:	mov rsi, [r8]
-	mov rdx, rcx
-	shl rdx, 0x03
-	add rsi, rdx
-	mov rdx, [rsi]
+1:	mov rdx, [rdi]
+	lea rdx, [rdx+rcx*8]
+	mov rdx, [rdx]
 	add rax, rdx
 	inc rcx
 	jmp :3

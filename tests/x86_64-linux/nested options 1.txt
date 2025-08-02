@@ -21,13 +21,12 @@ nested options 1.defb:
 	mov rax, 0xAAAAAA00
 	ret
 nested options 1.reset:
-	mov rdx, 0xFF
 	xor rcx, rcx
 1:	cmp rcx, rsi
 	jnb :0
 	mov rax, rdi
 	add rax, rcx
-	mov [rax], dl
+	mov byte ptr [rax], 0xFF
 	inc rcx
 	jmp :1
 0:	ret

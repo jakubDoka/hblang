@@ -17,10 +17,9 @@ function pointers 3.Obj.do_thing:
 	ret
 main:
 	sub rsp, 0x28
-	mov rax, 0xFF
-	mov [rsp+0x18], al
-	lea rsi, [rsp+0x18]
+	mov byte ptr [rsp+0x18], 0xFF
 	lea rdi, [rsp]
+	lea rsi, [rsp+0x18]
 	call :function pointers 3.DynObj.new(.Obj)
 	mov rax, [rsp]
 	mov [rsp+0x10], rax

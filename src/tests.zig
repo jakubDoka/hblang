@@ -59,6 +59,7 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
         for (tests) |tst| {
             const target, var machine, const opts, const abi = tst;
             defer machine.deinit();
+            //if (std.mem.indexOf(u8, target, "x") != null) continue;
             if (abi.cc == .systemv and std.mem.indexOf(u8, name, "sse") != null) return;
             try runMachineTest(
                 name,
@@ -176,6 +177,8 @@ pub fn runVendoredTest(path: []const u8, projs: []const [2][]const u8) !void {
         try test_util.runVendoredTest(path, projs, "hbvm-ableos", .release);
         try test_util.runVendoredTest(path, projs, "hbvm-ableos-no-opts", .debug);
     }
-    try test_util.runVendoredTest(path, projs, "x86_64-linux", .release);
-    try test_util.runVendoredTest(path, projs, "x86_64-linux-no-opts", .debug);
+    if (true) {
+        try test_util.runVendoredTest(path, projs, "x86_64-linux", .release);
+        try test_util.runVendoredTest(path, projs, "x86_64-linux-no-opts", .debug);
+    }
 }

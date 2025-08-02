@@ -431,7 +431,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
 
     if (opts.dump_asm) {
         const out = bckend.finalizeBytes(.{
-            .gpa = root_tmp.arena.allocator(),
+            .gpa = types.pool.arena.allocator(),
             .optimizations = optimizations,
             .builtins = types.getBuiltins(),
         });

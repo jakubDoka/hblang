@@ -8,9 +8,10 @@ main:
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x48], rax
 	xor rax, rax
-	xor rsi, rsi
-4:	mov rbx, rax
-	cmp rbx, 0x02
+	xor rdi, rdi
+	lea rsi, [rsp+0x40]
+	mov rbx, rax
+4:	cmp rbx, 0x02
 	setb al
 	movzx rax, al
 	test al, al
@@ -31,23 +32,19 @@ main:
 	mov rdx, rbx
 	mov rdi, 0x02
 	call :cstring indexing.slice_ioob
-1:	mov rcx, rbx
-	shl rcx, 0x03
-	lea rax, [rsp+0x40]
-	add rax, rcx
+1:	lea rax, [rsi+rbx*8]
 	mov rdx, [rax]
 	xor rax, rax
 3:	mov rcx, rdx
 	add rcx, rax
 	mov cl, [rcx]
-	cmp cl, sil
+	cmp cl, dil
 	jz :2
 	inc rax
 	jmp :3
 2:	mov [rsp+0x50], rdx
 	mov [rsp+0x58], rax
-	mov rax, rbx
-	inc rax
+	inc rbx
 	jmp :4
 0:	xor rax, rax
 	add rsp, 0x60

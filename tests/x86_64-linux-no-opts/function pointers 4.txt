@@ -27,8 +27,7 @@ function pointers 4.Obj.func:
 	ret
 main:
 	sub rsp, 0x18
-	mov rax, 0xFF
-	mov [rsp+0x10], al
+	mov byte ptr [rsp+0x10], 0xFF
 	lea rdi, [rsp]
 	lea rsi, [rsp+0x10]
 	call :function pointers 4.DynObj.new(^.Obj)

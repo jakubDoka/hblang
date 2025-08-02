@@ -2056,6 +2056,21 @@ main := fn(): uint {
 }
 ```
 
+#### directives 22 (@simd)
+```hb
+expectations := .{
+    return_value: 8,
+}
+
+opaque: @simd(u32, 4) = .[1, 1, 1, 1]
+
+main := fn(): uint {
+    value := opaque
+    value += value
+    return value[0] + value[1] + value[2] + value[3]
+}
+```
+
 ## progress
 
 - [x] hbvm-ableos target

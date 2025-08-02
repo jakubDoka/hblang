@@ -11,12 +11,10 @@ main:
 	mov qword ptr [rsp+0x08], 0x04
 	mov [rsp+0x10], rax
 	mov qword ptr [rsp+0x18], 0x02
-	lea rax, [rsp+0xA8]
-	add rax, 0x02
+	lea rax, [rsp+0xAA]
 	mov [rsp+0x20], rax
 	mov qword ptr [rsp+0x28], 0x02
-	lea rax, [rsp+0xA8]
-	inc rax
+	lea rax, [rsp+0xA9]
 	mov [rsp+0x30], rax
 	mov qword ptr [rsp+0x38], 0x02
 	mov rcx, [rsp+0x80]
