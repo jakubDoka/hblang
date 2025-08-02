@@ -7,7 +7,6 @@ main:
 	mov [rsp+0x40], rax
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x48], rax
-	mov rdi, 0x08
 	xor rax, rax
 	xor rsi, rsi
 4:	mov rbx, rax
@@ -33,7 +32,7 @@ main:
 	mov rdi, 0x02
 	call :cstring indexing.slice_ioob
 1:	mov rcx, rbx
-	imul rcx, rdi
+	shl rcx, 0x03
 	lea rax, [rsp+0x40]
 	add rax, rcx
 	mov rdx, [rax]

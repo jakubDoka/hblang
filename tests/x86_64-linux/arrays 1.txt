@@ -1,6 +1,5 @@
 main:
 	sub rsp, 0x40
-	mov rdi, 0x08
 	xor rax, rax
 3:	cmp rax, 0x08
 	setz cl
@@ -17,7 +16,7 @@ main:
 	add rsp, 0x40
 	ret
 1:	mov rsi, rcx
-	imul rsi, rdi
+	shl rsi, 0x03
 	lea rdx, [rsp]
 	add rdx, rsi
 	mov rdx, [rdx]
@@ -25,7 +24,7 @@ main:
 	inc rcx
 	jmp :2
 0:	mov rdx, rax
-	imul rdx, rdi
+	shl rdx, 0x03
 	lea rcx, [rsp]
 	add rcx, rdx
 	mov [rcx], rax

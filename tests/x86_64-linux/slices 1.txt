@@ -25,7 +25,6 @@ main:
 	mov qword ptr [rsp+0x68], 0x02
 	mov [rsp+0x70], rax
 	mov qword ptr [rsp+0x78], 0x02
-	mov r8, 0x10
 	xor rsi, rsi
 	xor rax, rax
 2:	cmp rsi, 0x08
@@ -36,7 +35,7 @@ main:
 	add rsp, 0x90
 	ret
 0:	mov rcx, rsi
-	imul rcx, r8
+	shl rcx, 0x04
 	lea rdi, [rsp]
 	add rdi, rcx
 	xor rcx, rcx

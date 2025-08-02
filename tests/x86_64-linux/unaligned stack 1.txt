@@ -1,9 +1,7 @@
 main:
-	mov rcx, 0x10
 	mov rax, rsp
-	xor rdx, rdx
-	div rcx
-	cmp rdx, 0x00
+	and rax, 0x0F
+	cmp rax, 0x00
 	setz al
 	movzx rax, al
 	test al, al

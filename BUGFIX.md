@@ -2,6 +2,31 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### generic structs 7 (template method call)
+```hb
+A := struct {
+    apply := fn(self: ^@CurrentScope(), $func: type): void {}
+}
+
+main := fn(): uint {
+    z := A.()
+    y := z.apply(fn(): void {})
+    return 0
+}
+```
+
+#### generic structs 6 (more iterators)
+```hb
+main := fn(): uint {
+    _ = @use("foo.hb").foo(0, u8)
+    return 0
+}
+
+// in: foo.hb
+Map := fn(I: type, F: type): type return struct{}
+foo := fn(vl: int, $oo: type): Map(u8, oo) return .()
+```
+
 #### global load and store ordering 1
 ```hb
 TRUE := true

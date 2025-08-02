@@ -2492,6 +2492,23 @@ pub fn Func(comptime Backend: type) type {
                     return lhs;
                 }
 
+                if (rhs.kind == .CInt and rhs.data_type.isInt() and
+                    rhs.extra(.CInt).value > 0 and std.math.isPowerOfTwo(rhs.extra(.CInt).value))
+                {
+                    const log2_rhs = std.math.log2_int(u64, @bitCast(rhs.extra(.CInt).value));
+                    switch (op) {
+                        .udiv => return self.addBinOp(node.sloc, .ushr, node.data_type, lhs, self
+                            .addIntImm(node.sloc, node.data_type, log2_rhs)),
+                        .sdiv => return self.addBinOp(node.sloc, .sshr, node.data_type, lhs, self
+                            .addIntImm(node.sloc, node.data_type, log2_rhs)),
+                        .umod, .smod => return self.addBinOp(node.sloc, .band, node.data_type, lhs, self
+                            .addIntImm(node.sloc, node.data_type, rhs.extra(.CInt).value - 1)),
+                        .imul => return self.addBinOp(node.sloc, .ishl, node.data_type, lhs, self
+                            .addIntImm(node.sloc, node.data_type, log2_rhs)),
+                        else => {},
+                    }
+                }
+
                 if (op.isAsociative() and lhs.kind == .BinOp and lhs.extra(.BinOp).op == op and
                     rhs.kind == .CInt)
                 {

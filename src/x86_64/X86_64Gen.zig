@@ -601,8 +601,8 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
         }
     }
 
-    if (node.kind == .BinOp and node.inputs()[2].?.kind == .CInt and
-        switch (node.extra(.BinOp).op) {
+    if (node.kind == .BinOp and node.inputs()[2].?.kind == .CInt) {
+        if (switch (node.extra(.BinOp).op) {
             .udiv, .sdiv, .umod, .smod, .imul, .fadd, .fmul, .fsub, .fdiv, .fgt, .flt, .fge, .fle => false,
             .band, .bor, .bxor => node.inputs()[2].?.data_type.size() > 1,
             .eq,
@@ -618,13 +618,13 @@ pub fn idealizeMach(_: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *Fun
             => node.inputs()[2].?.data_type.size() > 2 and node.inputs()[2].?.data_type.isInt(),
 
             else => true,
-        })
-    {
-        if (std.math.cast(i32, node.inputs()[2].?.extra(.CInt).value) != null) {
-            return func.addNode(.ImmOp, node.sloc, node.data_type, node.inputs()[0..2], .{
-                .base = node.extra(.BinOp).*,
-                .imm = node.inputs()[2].?.extra(.CInt).value,
-            });
+        }) {
+            if (std.math.cast(i32, node.inputs()[2].?.extra(.CInt).value) != null) {
+                return func.addNode(.ImmOp, node.sloc, node.data_type, node.inputs()[0..2], .{
+                    .base = node.extra(.BinOp).*,
+                    .imm = node.inputs()[2].?.extra(.CInt).value,
+                });
+            }
         }
     }
 

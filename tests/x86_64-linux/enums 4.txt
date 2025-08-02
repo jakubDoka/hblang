@@ -1,10 +1,9 @@
 enums 4.NameMap([6]u8, [4]uint).get(.Nm):
-	movzx rdx, dl
-	mov rax, 0x08
-	mov r8, rdx
+	movzx r8, dl
+	mov rdx, r8
+	shl rdx, 0x03
 	inc r8
-	imul r8, rax
-	imul rdx, rax
+	shl r8, 0x03
 	mov rax, rsi
 	add rax, 0x08
 	mov rcx, rax
