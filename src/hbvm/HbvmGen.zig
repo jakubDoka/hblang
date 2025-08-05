@@ -716,11 +716,13 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
 pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {
     errdefer unreachable;
 
+    defer {
+        self.out.reset();
+    }
+
     if (opts.optimizations.finalize(opts.builtins, HbvmGen, self, opts.logs)) return;
 
     try root.hbvm.object.flush(self.out, opts.output);
-
-    self.out.reset();
 }
 
 pub fn deinit(self: *HbvmGen) void {

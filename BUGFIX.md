@@ -527,12 +527,16 @@ main := fn(): u32 {
 ```
 
 #### insane regalloc crash 1 (infinite)
-```!hb
+```hb
+expectations := .{
+    should_error: true,
+}
+
 broken := fn(): void loop {
     $i := 0
     $while i < 64 {
         x: ?[]u8 = idk
-        if y := x {return}
+        if y := x return;
         i += 1
     }
 }
@@ -1391,7 +1395,11 @@ main := fn(): uint {
 ```
 
 #### comptime short circuit failure 1
-```!hb
+```hb
+expectations := .{
+    should_error: true,
+}
+
 main := fn(): uint {
     $if @kind_of(uint) == 7 && @align_of(uint) == 8 return 1
     return 0

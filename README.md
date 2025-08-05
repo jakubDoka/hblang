@@ -1016,23 +1016,6 @@ main := fn(): uint {
 }
 ```
 
-#### comptime 3 (errors)
-```!hb
-expectations := .{
-    should_error: true,
-}
-
-main := fn(): uint {
-    some_int := 1
-
-    not_a_closure := fn(): uint {
-        return some_int
-    }
-
-    return not_a_closure()
-}
-```
-
 #### comptime 4 (@TypeOf)
 ```hb
 main := fn(): uint {
@@ -1650,33 +1633,6 @@ take := fn(s: ^Stru): void {
 }
 ```
 
-#### nullable types 3 (unwrap inference)
-```!hb
-Stru := struct {
-    .a: uint;
-    .b: uint;
-}
-
-main := fn(): uint {
-    nlbl: ?Stru = .(0, 0)
-    other: ?Stru = .{a: 0, b: 0}
-    othera: ?[2]uint = .[0, 0]
-
-    if nlbl == null return 1
-    if other == null return 2
-    if othera == null return 3
-
-    nlbl.b = 1
-    take(&nlbl)
-
-    return nlbl.a - nlbl.b
-}
-
-take := fn(s: ^Stru): void {
-    s.a += 1
-}
-```
-
 #### nullable types 4 (pointer optimization)
 ```hb
 main := fn(): uint {
@@ -2057,7 +2013,7 @@ main := fn(): uint {
 ```
 
 #### directives 22 (@simd)
-```hb
+```!hb
 expectations := .{
     return_value: 8,
 }

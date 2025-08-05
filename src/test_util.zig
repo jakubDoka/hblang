@@ -220,6 +220,7 @@ pub fn testBuilder(
 
     if (errored) {
         try std.testing.expect(expectations.should_error);
+
         return;
     }
 

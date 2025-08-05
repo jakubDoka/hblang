@@ -1,0 +1,192 @@
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^
+insane regalloc crash 1 (infinite):9:3: the if condition is loop invariant but it decides wheter to break out ouf the loop
+        if y := x return;
+        ^

@@ -1929,19 +1929,21 @@ pub fn preLinkHook(self: *X86_64Gen) void {
 pub fn finalize(self: *X86_64Gen, opts: Mach.FinalizeOptions) void {
     errdefer unreachable;
 
+    defer {
+        self.memcpy = .invalid;
+        self.f32s = .invalid;
+        self.f64s = .invalid;
+        self.f32index.clearRetainingCapacity();
+        self.f64index.clearRetainingCapacity();
+        self.out.reset();
+    }
+
     if (opts.optimizations.finalize(opts.builtins, X86_64Gen, self, opts.logs)) return;
 
     try switch (self.object_format) {
         .elf => root.object.elf.flush(self.out, .x86_64, opts.output),
         .coff => unreachable, //root.object.coff.flush(self.out, .x86_64, out),
     };
-
-    self.memcpy = .invalid;
-    self.f32s = .invalid;
-    self.f64s = .invalid;
-    self.f32index.clearRetainingCapacity();
-    self.f64index.clearRetainingCapacity();
-    self.out.reset();
 }
 
 pub fn deinit(self: *X86_64Gen) void {
