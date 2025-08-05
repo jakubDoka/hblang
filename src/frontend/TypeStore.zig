@@ -681,16 +681,18 @@ pub const Id = enum(IdRepr) {
                     .Tuple => |tupl| {
                         try writer.appendSlice(to.allocator(), "(");
                         var iter = std.mem.reverseIterator(self.tys.store.get(tupl).fields);
-                        work_list.ensureUnusedCapacity(
-                            tmp.arena.allocator(),
-                            iter.index * 2,
-                        ) catch unreachable;
-                        work_list.appendAssumeCapacity(.{ .Name = ") " });
-                        while (iter.next()) |elem| {
-                            work_list.appendAssumeCapacity(.{ .Type = elem.ty });
-                            work_list.appendAssumeCapacity(.{ .Name = ", " });
+                        work_list.appendAssumeCapacity(.{ .Name = ")" });
+                        if (iter.index != 0) {
+                            work_list.ensureUnusedCapacity(
+                                tmp.arena.allocator(),
+                                iter.index * 2,
+                            ) catch unreachable;
+                            while (iter.next()) |elem| {
+                                work_list.appendAssumeCapacity(.{ .Type = elem.ty });
+                                work_list.appendAssumeCapacity(.{ .Name = ", " });
+                            }
+                            _ = work_list.pop();
                         }
-                        _ = work_list.pop();
                     },
                     .Func, .Global, .Template, .Struct, .Union, .Enum => {
                         std.debug.assert(t.data() != .Template or

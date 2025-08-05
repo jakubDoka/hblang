@@ -772,7 +772,7 @@ pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(tys.Glo
         glbal.ty = exp_ty;
         glbal.uninit = true;
         glbal.data = .{ .imm = &.{} };
-        glbal.data.imm.len = exp_ty.size(types);
+        glbal.data.imm.len = @intCast(exp_ty.size(types));
         return;
     }
 
