@@ -52,6 +52,7 @@ pub const elf = enum {
         ".rela.text",
         ".data",
         ".rela.data",
+        ".bss",
     };
 
     pub const FileHeader = extern struct {
@@ -193,6 +194,8 @@ pub const elf = enum {
         const str_tab = find_section_header(sctions, shstr_table, ".strtab").?;
         const str_table: []const u8 = bytes[str_tab.sh_offset..][0..str_tab.sh_size];
 
+        const bss = find_section_header(sctions, shstr_table, ".bss").?;
+
         const text_rela: []align(1) const Rela = if (find_section_header(sctions, shstr_table, ".rela.text")) |relocs|
             @ptrCast(bytes[relocs.sh_offset..][0..relocs.sh_size])
         else
@@ -226,8 +229,9 @@ pub const elf = enum {
                 false,
             );
 
-            if (s.shndx != .undef) {
-                const sction = sctions[@intFromEnum(s.shndx)];
+            if (s.shndx != .undef) append: {
+                const sction = &sctions[@intFromEnum(s.shndx)];
+                if (sction == bss) break :append;
                 const section = bytes[sction.sh_offset..][0..sction.sh_size];
                 try data.code.appendSlice(gpa, section[s.value..][0..s.size]);
             }
@@ -238,10 +242,12 @@ pub const elf = enum {
                         data.relocs.appendAssumeCapacity(.{
                             .target = @enumFromInt(r.info.sym - 1),
                             .offset = @intCast((r.offset - s.value) + data.syms.items[@intFromEnum(slot)].offset),
-                            .addend = @intCast(r.addend),
-                            .slot_size = switch (r.info.type) {
-                                .R_X86_64_PC32, .R_X86_64_PLT32 => 4,
-                                .R_X86_64_64 => 8,
+                            .meta = .{
+                                .addend = @intCast(r.addend),
+                                .slot_size = switch (r.info.type) {
+                                    .R_X86_64_PC32, .R_X86_64_PLT32 => .@"4",
+                                    .R_X86_64_64 => .@"8",
+                                },
                             },
                         });
                     }
@@ -334,14 +340,22 @@ pub const elf = enum {
 
         var text_size: usize = 0;
         var data_size: usize = 0;
+        var prealloc_size: usize = 0;
         var text_rel_count: usize = 0;
         var data_rel_count: usize = 0;
-        for (self.syms.items) |sm| if (sm.kind == .func) {
-            text_size += sm.size;
-            text_rel_count += sm.reloc_count;
-        } else if (sm.kind == .data) {
-            data_size += sm.size;
-            data_rel_count += sm.reloc_count;
+        for (self.syms.items) |sm| switch (sm.kind) {
+            .func => {
+                text_size += sm.size;
+                text_rel_count += sm.reloc_count;
+            },
+            .data => {
+                data_size += sm.size;
+                data_rel_count += sm.reloc_count;
+            },
+            .prealloc => {
+                prealloc_size += sm.size;
+            },
+            .invalid => {},
         };
 
         try writer.writeStruct(SectionHeader{
@@ -386,6 +400,16 @@ pub const elf = enum {
         });
         section_alloc_cursor += data_rel_count * @sizeOf(Rela);
 
+        try writer.writeStruct(SectionHeader{
+            .sh_name = positions[8],
+            .sh_type = .nobits,
+            .sh_flags = .{ .alloc = true, .write = true, .execinstr = false },
+            .sh_offset = @intCast(section_alloc_cursor),
+            .sh_size = @intCast(prealloc_size),
+            .sh_link = 3,
+        });
+        section_alloc_cursor += prealloc_size;
+
         try writer.writeAll(section_name_table);
         try writer.writeByte(0);
         try writer.writeAll(self.names.items);
@@ -426,7 +450,7 @@ pub const elf = enum {
                     .local, .exported => switch (sym.kind) {
                         .func => @enumFromInt(4),
                         .data => @enumFromInt(5),
-                        .prealloc => unreachable,
+                        .prealloc => @enumFromInt(8),
                         .invalid => unreachable,
                     },
                     .imported => @enumFromInt(0),
@@ -460,20 +484,19 @@ pub const elf = enum {
                     try writer.writeStruct(Rela{
                         .offset = rl.offset + poff,
                         .info = .{
-                            .type = switch (rl.slot_size) {
-                                4 => if (self.syms.items[@intFromEnum(rl.target)].linkage == .imported)
+                            .type = switch (rl.meta.slot_size) {
+                                .@"4" => if (self.syms.items[@intFromEnum(rl.target)].linkage == .imported)
                                     .R_X86_64_PLT32
                                 else
                                     .R_X86_64_PC32,
-                                else => unreachable,
-                                8 => b: {
+                                .@"8" => b: {
                                     std.debug.assert(k == .data);
                                     break :b .R_X86_64_64;
                                 },
                             },
                             .sym = reloc_proj[@intFromEnum(rl.target)] + 1,
                         },
-                        .addend = rl.addend,
+                        .addend = rl.meta.addend,
                     });
                 }
             }

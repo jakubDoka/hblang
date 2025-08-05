@@ -1,0 +1,15 @@
+main:
+	lea rdx, [0x0000000000000007]
+	xor rcx, rcx
+1:	cmp rcx, 0x10000
+	setb al
+	movzx rax, al
+	test al, al
+	jz :0
+	lea rax, [rdx+rcx*4]
+	mov dword ptr [rax], 0x01
+	inc rcx
+	jmp :1
+0:	mov eax, [0x0000000000000006]
+	mov eax, eax
+	ret

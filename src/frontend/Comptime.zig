@@ -36,7 +36,7 @@ pub fn optimizeComptime(self: OptOptions, comptime Backend: type, ctx: anytype, 
     return root.backend.Regalloc.rallocIgnoreStats(Backend, func);
 }
 
-pub const stack_size = 1024 * 100;
+pub const stack_size = 1024 * 128;
 
 pub const Loc = packed struct(u64) {
     ast: Ast.Id,
@@ -399,7 +399,15 @@ pub fn runVm(
 
     self.vm.fuel = 1024 * 128;
     self.vm.regs.set(.ret_addr, stack_size - 1); // return to hardcoded tx
-    if (return_loc.len != 0) self.vm.regs.set(.arg(0), stack_end - return_loc.len);
+    if (return_loc.len != 0) {
+        if (stack_end < return_loc.len) {
+            types.report(file, pos, "the global variable overflowed the" ++
+                " comptime stack, consider using `x: <type> = @embed(\"<filename>\")`" ++
+                " or `x: <type> = idk`", .{});
+            return error.Never;
+        }
+        self.vm.regs.set(.arg(0), stack_end - return_loc.len);
+    }
     self.vm.regs.set(.stack_addr, stack_end - return_loc.len);
 
     var vm_ctx = Vm.SafeContext{
@@ -753,8 +761,22 @@ pub fn evalIntConst(self: *Comptime, scope: Codegen.Scope, int_conts: Ast.Id) !i
 
 pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(tys.Global), ty: ?Types.Id, value: Ast.Id) error{Never}!void {
     const types = self.getTypes();
+    const glbal = types.store.get(global);
+    const file = glbal.key.loc.file;
+
+    if (value.tag() == .Idk) {
+        const exp_ty = ty orelse {
+            return types.report(file, value, "the uninitialized variable needs a type", .{});
+        };
+
+        glbal.ty = exp_ty;
+        glbal.uninit = true;
+        glbal.data = .{ .imm = &.{} };
+        glbal.data.imm.len = exp_ty.size(types);
+        return;
+    }
+
     const res, const fty = try self.jitExpr(name, .{ .Perm = self.getTypes().store.get(global).key.loc.scope }, .{ .ty = ty }, value);
-    const file = types.store.get(global).key.loc.file;
     const data = types.pool.arena.allocator().alloc(u8, @intCast(fty.size(types))) catch unreachable;
     switch (res) {
         .func => |id| {
@@ -765,7 +787,6 @@ pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(tys.Glo
         },
     }
 
-    const glbal = types.store.get(global);
     glbal.data = .{ .imm = data };
     glbal.ty = fty;
     if (fty == .type) {

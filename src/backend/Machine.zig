@@ -88,8 +88,21 @@ pub const Data = struct {
     pub const Reloc = struct {
         target: SymIdx,
         offset: u32,
-        addend: i16,
-        slot_size: u16,
+        meta: packed struct(u32) {
+            slot_size: SlotSize,
+            addend: i31,
+        },
+
+        const SlotSize = enum(u1) {
+            @"4",
+            @"8",
+            pub fn bytes(self: SlotSize) u8 {
+                return switch (self) {
+                    .@"4" => 4,
+                    .@"8" => 8,
+                };
+            }
+        };
     };
 
     pub const SymIdx = enum(u32) { invalid = std.math.maxInt(u32), _ };
@@ -147,22 +160,38 @@ pub const Data = struct {
         return self.names.items[name..][0..std.mem.indexOfScalar(u8, self.names.items[name..], 0).? :0];
     }
 
-    pub fn addFuncReloc(self: *Data, gpa: std.mem.Allocator, target: u32, slot_size: u8, addend: i16, back_shift: u32) !void {
+    pub fn addFuncReloc(
+        self: *Data,
+        gpa: std.mem.Allocator,
+        target: u32,
+        slot_size: Reloc.SlotSize,
+        addend: i31,
+        back_shift: u32,
+    ) !void {
         return self.addReloc(gpa, try utils.ensureSlot(&self.funcs, gpa, target), slot_size, addend, back_shift);
     }
 
-    pub fn addGlobalReloc(self: *Data, gpa: std.mem.Allocator, target: u32, slot_size: u8, addend: i16, back_shift: u32) !void {
+    pub fn addGlobalReloc(
+        self: *Data,
+        gpa: std.mem.Allocator,
+        target: u32,
+        slot_size: Reloc.SlotSize,
+        addend: i31,
+        back_shift: u32,
+    ) !void {
         return self.addReloc(gpa, try utils.ensureSlot(&self.globals, gpa, target), slot_size, addend, back_shift);
     }
 
-    pub fn addReloc(self: *Data, gpa: std.mem.Allocator, target: *SymIdx, slot_size: u8, addend: i16, back_shift: u32) !void {
+    pub fn addReloc(self: *Data, gpa: std.mem.Allocator, target: *SymIdx, slot_size: Reloc.SlotSize, addend: i31, back_shift: u32) !void {
         try self.relocs.append(gpa, .{
             .target = try self.declSym(gpa, target),
             .offset = @intCast(self.code.items.len -
                 self.syms.items[@intFromEnum(self.declaring_sym.?)].offset -
                 back_shift),
-            .addend = addend,
-            .slot_size = slot_size,
+            .meta = .{
+                .addend = addend,
+                .slot_size = slot_size,
+            },
         });
     }
 
@@ -239,9 +268,9 @@ pub const Data = struct {
         gpa: std.mem.Allocator,
         id: u32,
         name: []const u8,
-        kind: Kind,
         linkage: Linkage,
-        data: []const u8,
+        data: DataOptions.ValueSpec,
+        push_uninit: bool,
         relocs: []const DataOptions.Reloc,
         readonly: bool,
     ) !void {
@@ -253,19 +282,27 @@ pub const Data = struct {
             gpa,
             try utils.ensureSlot(&self.globals, gpa, id),
             name,
-            kind,
+            if (data == .init) .data else .prealloc,
             linkage,
             readonly,
             false,
         );
 
-        try self.code.appendSlice(gpa, data);
-        for (relocs) |rel| {
-            try self.addGlobalReloc(gpa, rel.target, 8, 0, @intCast(data.len - rel.offset));
-            std.debug.assert(rel.target != id);
+        if (data == .init) {
+            try self.code.appendSlice(gpa, data.init);
+            for (relocs) |rel| {
+                try self.addGlobalReloc(gpa, rel.target, .@"8", 0, @intCast(data.init.len - rel.offset));
+                std.debug.assert(rel.target != id);
+            }
+        } else {
+            if (push_uninit) {
+                try self.code.appendNTimes(gpa, 0, data.uninit);
+            }
         }
 
         self.endDefineSym(self.globals.items[id]);
+        self.syms.items[@intFromEnum(self.globals.items[id])].size =
+            if (data == .init) @intCast(data.init.len) else @intCast(data.uninit);
     }
 
     pub fn startDefineSym(
@@ -869,9 +906,7 @@ pub const OptOptions = struct {
                             .builtins = builtins,
                         });
                     },
-                    .data => {},
-                    .prealloc => unreachable,
-                    .invalid => {},
+                    .data, .prealloc, .invalid => {},
                 }
             }
 

@@ -989,8 +989,8 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const ty = @field(graph.DataType, @typeName(@TypeOf(extra.imm)));
                 self.emitMemStoreOrLoad(ty, self.getReg(instr), .rip, null, false);
                 const res = try idx.getOrPut(self.gpa.allocator(), extra.imm);
-                const dis: i16 = @intCast(@intFromPtr(res.key_ptr) - @intFromPtr(idx.entries.bytes));
-                try self.out.addReloc(self.gpa.allocator(), sym, 4, dis - 4, 4);
+                const dis: i31 = @intCast(@intFromPtr(res.key_ptr) - @intFromPtr(idx.entries.bytes));
+                try self.out.addReloc(self.gpa.allocator(), sym, .@"4", dis - 4, 4);
             },
             .MemCpy => {
                 // call id
@@ -998,9 +998,9 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 if (self.builtins.memcpy == std.math.maxInt(u32)) {
                     if (self.memcpy == .invalid)
                         try self.out.importSym(self.gpa.allocator(), &self.memcpy, "memcpy", .func);
-                    try self.out.addReloc(self.gpa.allocator(), &self.memcpy, 4, -4, 4);
+                    try self.out.addReloc(self.gpa.allocator(), &self.memcpy, .@"4", -4, 4);
                 } else {
-                    try self.out.addFuncReloc(self.gpa.allocator(), self.builtins.memcpy, 4, -4, 4);
+                    try self.out.addFuncReloc(self.gpa.allocator(), self.builtins.memcpy, .@"4", -4, 4);
                 }
             },
             .MachSplit => {
@@ -1044,7 +1044,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 self.emitByte(0x8d);
                 self.emitIndirectAddr(dst, .rip, .no_index, 1, null);
 
-                try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, 4, -4, 4);
+                try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, .@"4", -4, 4);
             },
             .FuncAddr => |extra| {
                 // lea dst, [rip+reloc]
@@ -1054,7 +1054,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 self.emitIndirectAddr(dst, .rip, .no_index, 1, null);
 
                 try self.out.addFuncReloc(self.gpa
-                    .allocator(), extra.id, 4, -4, 4);
+                    .allocator(), extra.id, .@"4", -4, 4);
             },
             .RepStosb => {
                 // cld
@@ -1064,13 +1064,13 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             .ConstGlobalStore => |extra| {
                 // mov [rip+dis+offset], $vl
                 const vl = extra.imm;
-                const dis: i16 = @intCast(extra.dis);
+                const dis: i31 = @intCast(extra.dis);
                 const imm_size: i16 = @intCast(@min(instr.data_type.size(), 4));
                 self.emitMemConstStore(instr.data_type, vl, .rip, null);
                 try self.out.addGlobalReloc(
                     self.gpa.allocator(),
                     extra.id,
-                    4,
+                    .@"4",
                     dis - 4 - imm_size,
                     @intCast(4 + imm_size),
                 );
@@ -1079,15 +1079,15 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 // mov [rip+dis+offset], src
                 const src = self.getReg(inps[0]);
                 self.emitMemStoreOrLoad(instr.data_type, src, .rip, null, true);
-                const dis: i16 = @intCast(extra.dis);
-                try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, 4, dis - 4, 4);
+                const dis: i31 = @intCast(extra.dis);
+                try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, .@"4", dis - 4, 4);
             },
             .GlobalLoad => |extra| {
                 // mov dst, [rip+dis+offset]
                 const dst = self.getReg(instr);
                 self.emitMemStoreOrLoad(instr.data_type, dst, .rip, null, false);
-                const dis: i16 = @intCast(extra.dis);
-                try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, 4, dis - 4, 4);
+                const dis: i31 = @intCast(extra.dis);
+                try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, .@"4", dis - 4, 4);
             },
             .LocalAlloc => {},
             .Local => {
@@ -1182,7 +1182,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 } else {
                     // call id
                     self.emitBytes(&.{ 0xe8, 0, 0, 0, 0 });
-                    try self.out.addFuncReloc(self.gpa.allocator(), call.id, 4, -4, 4);
+                    try self.out.addFuncReloc(self.gpa.allocator(), call.id, .@"4", -4, 4);
                 }
             },
             .Arg, .Ret, .Mem, .Never => {},
@@ -1905,9 +1905,9 @@ pub fn emitData(self: *X86_64Gen, opts: Mach.DataOptions) void {
         self.gpa.allocator(),
         opts.id,
         opts.name,
-        .data,
         .local,
-        opts.value.init,
+        opts.value,
+        false,
         opts.relocs,
         opts.readonly,
     );

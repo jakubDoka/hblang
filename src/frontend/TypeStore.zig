@@ -983,7 +983,7 @@ pub fn retainGlobals(self: *Types, target: Target, backend: anytype, scratch: ?*
             .id = @intFromEnum(global),
             .name = if (scratch) |s| root.frontend.Types.Id.init(.{ .Global = global })
                 .fmt(self).toString(s) else "",
-            .value = .{ .init = glob.data.slice() },
+            .value = if (glob.uninit) .{ .uninit = glob.data.slice().len } else .{ .init = glob.data.slice() },
             .relocs = if (target == .runtime) relocs.items else &.{},
             .readonly = glob.readonly,
         });

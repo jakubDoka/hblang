@@ -1,0 +1,34 @@
+for overflow 1:
+	mov rax, 0x10000
+	ret
+main:
+	sub rsp, 0x40
+	mov qword ptr [rsp], 0x00
+	mov qword ptr [rsp+0x08], 0x10000
+	mov dword ptr [rsp+0x28], 0x20000001
+	mov rdx, 0x04
+1:	mov rax, [rsp]
+	cmp rax, 0x10000
+	setb al
+	movzx rax, al
+	test al, al
+	jz :0
+	mov qword ptr [rsp+0x10], 0x10000
+	mov dword ptr [rsp+0x2C], 0x20000001
+	mov rcx, [rsp]
+	imul rcx, rdx
+	lea rax, [0x0000000000000007]
+	add rax, rcx
+	mov dword ptr [rax], 0x01
+	mov rax, [rsp]
+	inc rax
+	mov [rsp], rax
+	jmp :1
+0:	mov qword ptr [rsp+0x18], 0x10000
+	mov dword ptr [rsp+0x30], 0x20000001
+	mov qword ptr [rsp+0x20], 0x10000
+	mov dword ptr [rsp+0x34], 0x20000001
+	mov eax, [0x0000000000000006]
+	mov eax, eax
+	add rsp, 0x40
+	ret

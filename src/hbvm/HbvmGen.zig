@@ -14,6 +14,7 @@ const isa = @import("isa.zig");
 gpa: *utils.Pool,
 out: Mach.Data = .{},
 emit_global_reloc_offsets: bool = false,
+push_uninit_globals: bool = false,
 local_relocs: std.ArrayListUnmanaged(BlockReloc) = undefined,
 ret_count: usize = undefined,
 block_offsets: []i32 = undefined,
@@ -446,11 +447,11 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .Arg => {},
             .GlobalAddr => |extra| {
-                try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, 4, 3, 0);
+                try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, .@"4", 3, 0);
                 self.emit(.lra, .{ self.getReg(no), .null, 0 });
             },
             .FuncAddr => |extra| {
-                try self.out.addFuncReloc(self.gpa.allocator(), extra.id, 4, 3, 0);
+                try self.out.addFuncReloc(self.gpa.allocator(), extra.id, .@"4", 3, 0);
                 self.emit(.lra, .{ self.getReg(no), .null, 0 });
             },
             .LocalAlloc => {},
@@ -633,7 +634,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 } else if (extra.id == graph.indirect_call) {
                     self.emit(.jala, .{ .ret_addr, self.getReg(inps[0]), 0 });
                 } else {
-                    try self.out.addFuncReloc(self.gpa.allocator(), extra.id, 4, 3, 0);
+                    try self.out.addFuncReloc(self.gpa.allocator(), extra.id, .@"4", 3, 0);
                     self.emit(.jal, .{ .ret_addr, .null, 0 });
                 }
             },
@@ -700,9 +701,9 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
         self.gpa.allocator(),
         opts.id,
         opts.name,
-        if (opts.value == .init) .data else .prealloc,
         .local,
-        opts.value.init,
+        opts.value,
+        self.push_uninit_globals,
         opts.relocs,
         opts.readonly,
     );

@@ -484,6 +484,7 @@ pub const Global = struct {
     } = .{ .imm = &.{} },
     relocs: []const root.backend.Machine.DataOptions.Reloc = &.{},
     readonly: bool,
+    uninit: bool = false,
     completion: std.EnumArray(Types.Target, CompileState) =
         .{ .values = @splat(.queued) },
 

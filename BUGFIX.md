@@ -48,6 +48,22 @@ main := fn(): u32 {
 }
 ```
 
+#### for overflow 1
+```hb
+expectations := .{
+    return_value: 1,
+}
+
+x: [(fn(): uint {
+    if @target("hbvm-ableos") return 128
+    return 1 << 16
+})()]u32 = idk
+main := fn(): uint {
+    for i := 0..x.len x[i] = 1
+    return x[x.len - 1]
+}
+```
+
 #### memset peephole 1
 ```hb
 memset := fn(len: uint, dest: ^u8, src: u8): void {

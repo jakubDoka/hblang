@@ -71,11 +71,11 @@ pub fn jitLink(self: root.backend.Machine.Data, after: usize) void {
         const target = &self.syms.items[@intFromEnum(rel.target)];
         std.debug.assert(target.kind != .invalid);
         const jump = @as(i64, target.offset) - rel.offset;
-        const location: usize = @intCast(rel.offset + @as(u32, @intCast(rel.addend)));
+        const location: usize = @intCast(rel.offset + @as(u32, @intCast(rel.meta.addend)));
 
         @memcpy(
-            self.code.items[location..][0..rel.slot_size],
-            @as(*const [8]u8, @ptrCast(&jump))[0..rel.slot_size],
+            self.code.items[location..][0..rel.meta.slot_size.bytes()],
+            @as(*const [8]u8, @ptrCast(&jump))[0..rel.meta.slot_size.bytes()],
         );
     }
 }
@@ -148,11 +148,11 @@ pub fn flush(self: root.backend.Machine.Data, writer: std.io.AnyWriter) anyerror
             for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |*rel| {
                 const dest = offset_lookup[@intFromEnum(rel.target)];
                 const jump = @as(i64, dest) - (rel.offset + olp);
-                const location: usize = @intCast(rel.offset + sym.offset + @as(u32, @intCast(rel.addend)));
+                const location: usize = @intCast(rel.offset + sym.offset + @as(u32, @intCast(rel.meta.addend)));
 
                 @memcpy(
-                    self.code.items[location..][0..rel.slot_size],
-                    @as(*const [8]u8, @ptrCast(&jump))[0..rel.slot_size],
+                    self.code.items[location..][0..rel.meta.slot_size.bytes()],
+                    @as(*const [8]u8, @ptrCast(&jump))[0..rel.meta.slot_size.bytes()],
                 );
             }
         },
@@ -172,7 +172,9 @@ pub fn flush(self: root.backend.Machine.Data, writer: std.io.AnyWriter) anyerror
             }
         },
         .invalid => {},
-        else => unreachable,
+        .prealloc => {
+            std.debug.assert(sym.reloc_count == 0);
+        },
     };
 
     var sym_count: usize = @intFromBool(include_relocs);
@@ -182,7 +184,7 @@ pub fn flush(self: root.backend.Machine.Data, writer: std.io.AnyWriter) anyerror
 
     try writer.writeStruct(ExecHeader{
         .code_length = lengths.func,
-        .data_length = lengths.data,
+        .data_length = lengths.data + lengths.prealloc,
         .debug_length = sym_count * @sizeOf(Symbol) + self.names.items.len + 1,
         .symbol_count = sym_count,
     });
@@ -194,7 +196,11 @@ pub fn flush(self: root.backend.Machine.Data, writer: std.io.AnyWriter) anyerror
         }
 
         for (self.syms.items) |sym| if (sym.kind == v) {
-            try writer.writeAll(self.code.items[sym.offset..][0..sym.size]);
+            if (sym.kind == .prealloc) {
+                try writer.writeByteNTimes(0, sym.size);
+            } else {
+                try writer.writeAll(self.code.items[sym.offset..][0..sym.size]);
+            }
         };
 
         if (v == .data and include_relocs) {
