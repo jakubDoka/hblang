@@ -163,10 +163,11 @@ pub const Task = struct {
         const id, const new = dest.cloneFrom(self.from, .init(.{ .Func = self.id }));
         if (!new) return null;
 
-        dest.store.get(id.data().Func).remote_id = .{
+        dest.remote_ids.append(dest.pool.allocator(), .{
             .remote = self.id,
             .from_thread = self.thread,
-        };
+            .local = id.data().Func,
+        }) catch unreachable;
 
         return id.data().Func;
     }
@@ -185,6 +186,45 @@ pub const Threading = union(enum) {
         queue: Queue,
         types: []*frontend.Types,
         shards: []Shard,
+
+        pub fn buildMapping(self: *Multi, scratch: *utils.Arena) backend.Machine.GlobalMapping {
+            var global_table_size: usize = 0;
+            const local_bases = scratch.alloc(u32, self.types.len);
+            for (self.types, local_bases) |t, *gt| {
+                gt.* = @intCast(global_table_size);
+                global_table_size += t.remote_ids.items.len;
+            }
+
+            // Build a trivial table
+            //
+            var global_table = scratch.alloc(backend.Machine.LocalId, global_table_size);
+            for (self.types, local_bases, 0..) |t, lb, tid| {
+                for (0..t.store.rpr.Func.meta.len) |func_idx| {
+                    global_table[lb + func_idx] = .{
+                        .thread = @intCast(tid),
+                        .id = @intCast(func_idx),
+                    };
+                }
+            }
+
+            // Patch up remotes
+            //
+            for (self.types, 0..) |t, tid| {
+                for (t.remote_ids.items) |ri| {
+                    // make the remote point to outr function since they don't
+                    // have the compiled graph
+                    global_table[local_bases[ri.from_thread] + @intFromEnum(ri.remote)] = .{
+                        .thread = @intCast(tid),
+                        .id = @intCast(@intFromEnum(ri.local)),
+                    };
+                }
+            }
+
+            return .{
+                .global_table = global_table,
+                .local_bases = local_bases,
+            };
+        }
     };
 
     pub const Shard = struct {

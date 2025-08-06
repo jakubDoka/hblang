@@ -440,12 +440,12 @@ pub const Func = struct {
     special: ?root.backend.Machine.EmitOptions.Special = null,
     completion: std.EnumArray(Types.Target, CompileState) =
         .{ .values = @splat(.queued) },
-    remote_id: RrmoteId = .{},
 
     pub const RrmoteId = struct {
-        remote: utils.EntId(Func) = undefined,
-        from_thread: u32 = self_thread,
-        pub const self_thread = std.math.maxInt(u32);
+        // TODO: we can squeeze this into a single u64 if we want
+        from_thread: u32,
+        remote: utils.EntId(Func),
+        local: utils.EntId(Func),
     };
 
     pub const CompileState = enum { queued, compiled };

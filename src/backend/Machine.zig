@@ -1008,6 +1008,21 @@ pub const Builtins = struct {
     memcpy: u32 = std.math.maxInt(u32),
 };
 
+pub const LocalId = packed struct(u32) {
+    thread: u8,
+    id: u24,
+};
+
+pub const GlobalMapping = struct {
+    global_table: []const LocalId,
+    local_bases: []const u32,
+
+    pub fn normalizeId(self: GlobalMapping, local_id: LocalId) u32 {
+        const projected = self.global_table[self.local_bases[local_id.thread] + local_id.id];
+        return self.local_bases[projected.thread] + projected.id;
+    }
+};
+
 pub const EmitOptions = struct {
     id: u32,
     name: []const u8 = &.{},

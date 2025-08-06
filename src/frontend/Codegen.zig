@@ -232,7 +232,6 @@ pub fn emitReachableSingle(
     scrath: ?*utils.Arena,
     types: *Types,
     queue: ?*root.Queue,
-    collect_exports: bool,
     opts: EmitOpts,
 ) bool {
     errdefer unreachable;
@@ -243,7 +242,7 @@ pub fn emitReachableSingle(
     const codegen = Codegen.init(root_tmp.arena, types, .runtime, opts.abi);
     defer codegen.deinit();
 
-    if (collect_exports) {
+    if (queue == null or queue.?.self_id == 0) {
         var export_met = types.metrics.begin(.exports);
         defer export_met.end();
         const exports = codegen.collectExports(opts.has_main, root_tmp.arena) catch {
@@ -252,6 +251,8 @@ pub fn emitReachableSingle(
 
         for (exports) |exp| types.queue(.runtime, .init(.{ .Func = exp }));
     }
+
+    const thread_id = if (queue) |q| @as(u32, @intCast(q.self_id)) << 24 else 0;
 
     var errored = false;
     while (types.nextTask(.runtime, 0, queue) orelse types.retryNextTask(.runtime, 0, queue)) |func| {
@@ -291,7 +292,7 @@ pub fn emitReachableSingle(
 
         var emit_func_met = types.metrics.begin(.emit_func);
         opts.backend.emitFunc(&codegen.bl.func, root.backend.Machine.EmitOptions{
-            .id = @intFromEnum(func),
+            .id = @intFromEnum(func) | thread_id,
             .name = if (func_data.visibility != .local)
                 func_data.key.name(types)
             else if (scrath) |s|
@@ -329,7 +330,7 @@ pub fn emitReachableChildThread(
     utils.Arena.initScratch(scratch_cap);
 
     var q = queue;
-    if (emitReachableSingle(null, types, &q, q.self_id == 0, opts)) {
+    if (emitReachableSingle(null, types, &q, opts)) {
         errored_out.store(true, .unordered);
     }
 }
@@ -368,7 +369,7 @@ pub fn emitReachable(
     opts: EmitOpts,
 ) bool {
     switch (threading.*) {
-        .single => |*s| return emitReachableSingle(scrath, s.types, null, true, opts),
+        .single => |*s| return emitReachableSingle(scrath, s.types, null, opts),
         .multi => |*m| return emitReachableMultiThread(scrath, m, opts),
     }
 }
@@ -3289,6 +3290,9 @@ pub fn instantiateTemplate(
     e: Expr(.Call),
     typ: Types.Id,
 ) !ITRes {
+    var inst_met = self.types.metrics.begin(.instantiate);
+    defer inst_met.end();
+
     errdefer |err| self.errored = err == error.Never;
 
     const tmpl = self.types.store.get(typ.data().Template).*;
