@@ -43,6 +43,18 @@ stats: struct {
     useless_ecas: u64 = 0,
     total_ecas: u64 = 0,
 } = .{},
+metrics: Metrics,
+
+const Metrics = utils.TimeMetrics(enum {
+    exports,
+    build,
+    retain_globals,
+    emit_func,
+    dump_anal_errors,
+    jit,
+    jit_emit_func,
+    hbvm,
+});
 
 const Types = @This();
 const TypeIndex = std.hash_map.HashMapUnmanaged(
@@ -1361,6 +1373,7 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: std.io.AnyWriter) *
         .pool = .{ .arena = arena },
         .ct = .init(&slot.pool),
         .diagnostics = diagnostics,
+        .metrics = .init(),
     };
 
     slot.ct.gen.emit_global_reloc_offsets = true;

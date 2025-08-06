@@ -770,6 +770,94 @@ pub fn SharedQueue(comptime T: type) type {
     };
 }
 
+pub fn TimeMetrics(comptime StatNames: type) type {
+    return struct {
+        total: u64 = 0,
+        stats: Stats = .{},
+
+        const Self = @This();
+
+        const max_name_len = b: {
+            var max: usize = 0;
+            for (std.meta.fields(StatNames)) |f| {
+                max = @max(max, f.name.len);
+            }
+            break :b std.fmt.comptimePrint("{d}", .{max});
+        };
+
+        const Stats = @Type(b: {
+            var fields: [std.meta.fields(StatNames).len]std.builtin.Type.StructField = undefined;
+            for (std.meta.fields(StatNames), &fields) |f, *sf| {
+                sf.* = .{
+                    .name = f.name,
+                    .type = u64,
+                    .alignment = @alignOf(u64),
+                    .is_comptime = false,
+                    .default_value_ptr = &@as(u64, 0),
+                };
+            }
+            break :b .{
+                .@"struct" = .{
+                    .layout = .auto,
+                    .fields = &fields,
+                    .decls = &.{},
+                    .is_tuple = false,
+                },
+            };
+        });
+
+        pub const Scope = struct {
+            total: *u64,
+            stat: *u64,
+            timer: std.time.Timer,
+            prev_total: u64,
+
+            pub fn end(self: *@This()) void {
+                const elapsed = self.timer.lap() - (self.total.* - self.prev_total);
+                self.stat.* += elapsed;
+                self.total.* += elapsed;
+                self.* = undefined;
+            }
+        };
+
+        pub fn init() Self {
+            return .{};
+        }
+
+        // THIS handles the nesting
+        pub fn begin(self: *Self, comptime name: StatNames) Scope {
+            return .{
+                .stat = &@field(self.stats, @tagName(name)),
+                .timer = std.time.Timer.start() catch unreachable,
+                .total = &self.total,
+                .prev_total = self.total,
+            };
+        }
+
+        pub fn logStats(self: *Self, out: std.io.AnyWriter) void {
+            errdefer unreachable;
+            try out.print("time metrics:\n", .{});
+
+            var total: u64 = 0;
+            inline for (std.meta.fields(Stats)) |f| {
+                total += @field(self.stats, f.name);
+            }
+
+            const ftotal = @as(f64, @floatFromInt(total));
+            try out.print("  total: {d:.9}s\n", .{ftotal / std.time.ns_per_s});
+
+            inline for (std.meta.fields(Stats)) |f| {
+                const fvl = @as(f64, @floatFromInt(@field(self.stats, f.name)));
+                try out.print("  {s:<" ++ max_name_len ++ "}: ({d:>6.2}%) {d:>10.9}s\n", .{
+                    f.name,
+                    (fvl / ftotal) * 100,
+                    fvl / std.time.ns_per_s,
+                });
+            }
+        }
+    };
+}
+
 test "queue shard" {
     const tasks_per_thread = 1024 * 1024;
 

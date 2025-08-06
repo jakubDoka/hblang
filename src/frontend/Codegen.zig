@@ -206,6 +206,7 @@ const EmitOpts = struct {
     output: std.io.AnyWriter = std.io.null_writer.any(),
     verbose: bool = false,
     has_main: bool = false,
+    logs: ?std.io.AnyWriter = null,
     abi: Types.Abi,
     backend: root.backend.Machine,
     optimizations: root.backend.Machine.OptOptions.Mode,
@@ -243,6 +244,8 @@ pub fn emitReachableSingle(
     defer codegen.deinit();
 
     if (collect_exports) {
+        var export_met = types.metrics.begin(.exports);
+        defer export_met.end();
         const exports = codegen.collectExports(opts.has_main, root_tmp.arena) catch {
             return true;
         };
@@ -254,10 +257,14 @@ pub fn emitReachableSingle(
     while (types.nextTask(.runtime, 0, queue) orelse types.retryNextTask(.runtime, 0, queue)) |func| {
         defer codegen.bl.func.reset();
 
+        var build_met = types.metrics.begin(.build);
         const err = codegen.build(func);
+        build_met.end();
 
+        var retain_globals_met = types.metrics.begin(.retain_globals);
         errored = types.retainGlobals(.runtime, opts.backend, scrath) or
             errored;
+        retain_globals_met.end();
 
         err catch |e| switch (e) {
             error.HasErrors => {
@@ -282,6 +289,7 @@ pub fn emitReachableSingle(
             .arena = tmp.arena,
         };
 
+        var emit_func_met = types.metrics.begin(.emit_func);
         opts.backend.emitFunc(&codegen.bl.func, root.backend.Machine.EmitOptions{
             .id = @intFromEnum(func),
             .name = if (func_data.visibility != .local)
@@ -297,8 +305,11 @@ pub fn emitReachableSingle(
             .optimizations = .{ .opts = optms },
             .builtins = types.getBuiltins(),
         });
+        emit_func_met.end();
 
+        var dump_anal_errors_met = types.metrics.begin(.dump_anal_errors);
         errored = types.dumpAnalErrors(&errors) or errored;
+        dump_anal_errors_met.end();
     }
 
     return errored;

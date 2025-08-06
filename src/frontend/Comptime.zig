@@ -418,9 +418,13 @@ pub fn runVm(
         .code_end = 0,
     };
 
-    while (true) switch (self.vm.run(&vm_ctx) catch |err| {
-        types.report(file, pos, "comptime execution failed: {}", .{@errorName(err)});
-        return error.Never;
+    while (true) switch (b: {
+        var hbvm_met = types.metrics.begin(.hbvm);
+        defer hbvm_met.end();
+        break :b self.vm.run(&vm_ctx) catch |err| {
+            types.report(file, pos, "comptime execution failed: {}", .{@errorName(err)});
+            return error.Never;
+        };
     }) {
         .tx => break,
         .eca => {
@@ -619,6 +623,9 @@ pub fn jitExprLow(
 ) error{Never}!struct { JitResult, Types.Id } {
     const types = self.getTypes();
 
+    var jit_met = types.metrics.begin(.jit);
+    defer jit_met.end();
+
     const id = types.allocTempType(tys.Func);
     defer types.freeTempType(tys.Func, id);
 
@@ -670,6 +677,8 @@ pub fn jitExprLow(
 
             const reg_alloc_results = optimizeComptime(.debug, HbvmGen, &self.gen, @ptrCast(&gen.bl.func));
 
+            var emit_func_met = types.metrics.begin(.jit_emit_func);
+            defer emit_func_met.end();
             self.gen.emitFunc(
                 @ptrCast(&gen.bl.func),
                 .{
@@ -707,6 +716,7 @@ pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until:
 
         const reg_alloc_results = optimizeComptime(.debug, HbvmGen, &self.types.ct.gen, @ptrCast(&self.bl.func));
 
+        var emit_func_met = self.types.metrics.begin(.jit_emit_func);
         self.types.ct.gen.emitFunc(
             @ptrCast(&self.bl.func),
             .{
@@ -717,6 +727,7 @@ pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until:
                 .builtins = .{},
             },
         );
+        emit_func_met.end();
     }
 
     root.hbvm.object.jitLink(self.types.ct.gen.out, new_syms_pop_until);

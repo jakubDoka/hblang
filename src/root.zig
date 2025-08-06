@@ -395,6 +395,8 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     var root_tmp = utils.Arena.scrath(null);
     defer root_tmp.deinit();
 
+    const logs = if (opts.log_stats) opts.diagnostics else null;
+
     const errored = hb.frontend.Codegen.emitReachable(
         root_tmp.arena,
         &threading,
@@ -403,6 +405,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             .backend = bckend,
             .has_main = !opts.no_entry,
             .optimizations = opts.optimizations,
+            .logs = logs,
         },
     );
     if (errored) {
@@ -523,9 +526,9 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             try opts.diagnostics.print("  dead functions: {}\n", .{dead_functions});
         }
         try opts.diagnostics.print("  stale pool memory: {}\n", .{types.pool.staleMemory()});
-    }
 
-    const logs = if (opts.log_stats) opts.diagnostics else null;
+        types.metrics.logStats(opts.diagnostics);
+    }
 
     if (opts.colors == .no_color or opts.mangle_terminal) {
         bckend.finalize(.{

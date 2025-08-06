@@ -832,6 +832,18 @@ pub const OptOptions = struct {
         errdefer unreachable;
 
         if (optimizations.mode == .release) {
+            var metrics = utils.TimeMetrics(enum {
+                regalloc,
+                mem2reg,
+                generic,
+                mach,
+                gcm,
+                dead,
+                static_anal,
+                dedup,
+                elim,
+            }).init();
+
             var tmp = utils.Arena.scrath(optimizations.arena);
             defer tmp.deinit();
 
@@ -869,26 +881,50 @@ pub const OptOptions = struct {
 
             for (funcs) |*sym| {
                 emit_waste += sym.waste;
+
+                var dead = metrics.begin(.dead);
                 idealizeDead(Backend, backend, sym);
+                dead.end();
+
                 dead_waste += sym.waste;
+
+                var mem2reg = metrics.begin(.mem2reg);
                 doMem2Reg(Backend, sym);
+                mem2reg.end();
+
                 mem2reg_waste += sym.waste;
             }
 
             for (funcs) |*sym| {
+                var generic = metrics.begin(.generic);
                 idealizeGeneric(Backend, backend, sym, false);
+                generic.end();
+
                 generic_waste += sym.waste;
             }
 
             for (funcs, reg_alloc_results) |*sym, *res| {
+                var mach = metrics.begin(.mach);
                 idealizeMach(Backend, backend, sym);
+                mach.end();
+
                 mach_waste += sym.waste;
+
+                var gcm = metrics.begin(.gcm);
                 doGcm(Backend, sym);
+                gcm.end();
+
                 gcm_waste += sym.waste;
                 if (optimizations.error_buf != null) {
+                    var static_anal_met = metrics.begin(.static_anal);
                     optimizations.doStaticAnal(Backend, sym);
+                    static_anal_met.end();
                 }
+
+                var regalloc_met = metrics.begin(.regalloc);
                 res.* = regalloc.ralloc(Backend, @ptrCast(sym));
+                regalloc_met.end();
+
                 total_waste += sym.waste;
             }
 
@@ -930,8 +966,13 @@ pub const OptOptions = struct {
 
             if (@hasDecl(Backend, "preLinkHook")) backend.preLinkHook();
 
+            var dedup = metrics.begin(.dedup);
             bout.deduplicate();
+            dedup.end();
+
+            var elim = metrics.begin(.elim);
             bout.elimitaneDeadCode();
+            elim.end();
 
             if (logs) |d| {
                 var alive_syms: usize = 0;
@@ -950,6 +991,8 @@ pub const OptOptions = struct {
                 inline for (std.meta.fields(@TypeOf(regalloc))) |f| {
                     try d.print("  {s:<12}: {}\n", .{ f.name, @field(regalloc, f.name) });
                 }
+
+                metrics.logStats(d);
             }
         } else {
             if (@hasDecl(Backend, "preLinkHook")) backend.preLinkHook();
