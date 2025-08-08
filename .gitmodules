@@ -1,7 +1,7 @@
 [submodule "vendored/zydis"]
 	path = vendored/zydis
 	url = https://github.com/zyantific/zydis.git
-[submodule "vendored-tests/lily/"]
+[submodule "vendored-tests/lily"]
 	path = vendored-tests/lily
 	url = https://git.ablecorp.eu/lily-org/lily
 	branch = 0.2.0

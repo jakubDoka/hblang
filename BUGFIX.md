@@ -2,6 +2,14 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### scoping 1
+```hb
+A := struct {
+    $A: u32 = 0
+}
+main := fn(): uint return A.A
+```
+
 #### generic structs 7 (template method call)
 ```hb
 A := struct {

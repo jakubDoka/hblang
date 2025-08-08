@@ -27,7 +27,7 @@ const Kind = Func.Kind;
 const Move = utils.Move(isa.Reg);
 const HbvmGen = @This();
 
-pub const eca = std.math.maxInt(u32);
+pub const eca = root.backend.Machine.max_func;
 pub const tmp_registers = 2;
 pub const max_alloc_regs = @intFromEnum(isa.Reg.stack_addr) - 1 - tmp_registers;
 pub const biased_regs: u64 = 0;
@@ -720,7 +720,7 @@ pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {
         self.out.reset();
     }
 
-    if (opts.optimizations.finalize(opts.builtins, HbvmGen, self, opts.logs)) return;
+    if (opts.optimizations.finalize(opts.builtins, HbvmGen, self, opts.logs, opts.parallelism)) return;
 
     try root.hbvm.object.flush(self.out, opts.output);
 }

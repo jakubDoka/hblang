@@ -23,7 +23,7 @@ pub fn setMasks(s: Set) []Set.MaskInt {
 
 pub const infinite_loop_trap = std.math.maxInt(u64);
 pub const unreachable_func_trap = infinite_loop_trap - 1;
-pub const indirect_call = std.math.maxInt(u32) - 1000;
+pub const indirect_call = Machine.max_func - 100;
 
 pub const Sloc = packed struct(i64) {
     namespace: u32,

@@ -178,14 +178,15 @@ pub const Queue = utils.SharedQueue(Task);
 pub const Threading = union(enum) {
     single: struct {
         types: *frontend.Types,
+        machine: backend.Machine,
     },
     multi: Multi,
 
     pub const Multi = struct {
-        pool: std.Thread.Pool,
         queue: Queue,
         types: []*frontend.Types,
-        shards: []Shard,
+        para: backend.Machine.Parallelism,
+        machine: backend.Machine,
 
         pub fn buildMapping(self: *Multi, scratch: *utils.Arena) backend.Machine.GlobalMapping {
             var global_table_size: usize = 0;
@@ -202,7 +203,7 @@ pub const Threading = union(enum) {
                 for (0..t.store.rpr.Func.meta.len) |func_idx| {
                     global_table[lb + func_idx] = .{
                         .thread = @intCast(tid),
-                        .id = @intCast(func_idx),
+                        .index = @intCast(func_idx),
                     };
                 }
             }
@@ -215,7 +216,7 @@ pub const Threading = union(enum) {
                     // have the compiled graph
                     global_table[local_bases[ri.from_thread] + @intFromEnum(ri.remote)] = .{
                         .thread = @intCast(tid),
-                        .id = @intCast(@intFromEnum(ri.local)),
+                        .index = @intCast(@intFromEnum(ri.local)),
                     };
                 }
             }
@@ -227,54 +228,124 @@ pub const Threading = union(enum) {
         }
     };
 
-    pub const Shard = struct {
-        gpa: *utils.Pool,
-
-        // TODO: make these more compact
-        func_ir: std.ArrayListUnmanaged(FuncRecord) = .empty,
-        global_ir: std.ArrayListUnmanaged(backend.Machine.DataOptions) = .empty,
-
-        const Func = backend.graph.Func(Shard);
-
-        pub const classes = enum {};
-
-        pub const i_know_the_api = {};
-
-        const FuncRecord = struct {
-            func: Func,
-            opts: backend.Machine.EmitOptions,
+    pub fn singleBackend(self: *Threading) backend.Machine {
+        return switch (self.*) {
+            .single => |s| s.machine,
+            .multi => |m| m.machine,
         };
+    }
 
-        pub fn emitFunc(self: *Shard, func: *Func, opts: backend.Machine.EmitOptions) void {
-            errdefer unreachable;
-            try self.func_ir.append(self.gpa.allocator(), .{ .func = func.*, .opts = opts });
-            func.arena = .init(self.gpa.allocator());
+    pub fn ast(self: *Threading) []const hb.frontend.Ast {
+        return switch (self.*) {
+            .single => |s| s.types.files,
+            .multi => |m| m.types[0].files,
+        };
+    }
+
+    pub fn dumpAsm(
+        self: *Threading,
+        name: []const u8,
+        out: std.io.AnyWriter,
+        colors: std.io.tty.Config,
+        optimizations: backend.Machine.OptOptions.Mode,
+    ) void {
+        errdefer unreachable;
+
+        var tmp = utils.Arena.scrath(null);
+        defer tmp.deinit();
+
+        var output = std.ArrayListUnmanaged(u8){};
+        self.finalize(output.writer(tmp.arena.allocator()).any(), tmp.arena, null, optimizations);
+
+        self.singleBackend().disasm(.{
+            .name = name,
+            .bin = output.items,
+            .out = out,
+            .colors = colors,
+        });
+    }
+
+    pub fn runVendoredTest(
+        self: *Threading,
+        name: []const u8,
+        out: std.io.AnyWriter,
+        colors: std.io.tty.Config,
+        optimizations: backend.Machine.OptOptions.Mode,
+    ) !void {
+        var tmp = utils.Arena.scrath(null);
+        defer tmp.deinit();
+
+        var output = std.ArrayListUnmanaged(u8){};
+        self.finalize(output.writer(tmp.arena.allocator()).any(), tmp.arena, null, optimizations);
+
+        const expectations: test_utils.Expectations = .init(&self.ast()[0], tmp.arena);
+
+        errdefer {
+            self.singleBackend().disasm(.{
+                .name = name,
+                .bin = output.items,
+                .out = out,
+                .colors = colors,
+            });
+
+            _ = self.singleBackend().run(.{
+                .name = name,
+                .code = output.items,
+                .output = out,
+                .logs = out,
+                .colors = colors,
+            }) catch {};
         }
-        pub fn emitData(self: *Shard, opts: backend.Machine.DataOptions) void {
-            errdefer unreachable;
-            try self.global_ir.append(self.gpa.allocator(), opts);
+
+        try expectations.assert(self.singleBackend().run(.{
+            .name = name,
+            .code = output.items,
+            .output = out,
+            .colors = colors,
+        }));
+    }
+
+    pub fn finalize(
+        self: *Threading,
+        out: std.io.AnyWriter,
+        out_scratch: ?*utils.Arena,
+        logs: ?std.io.AnyWriter,
+        optimizations: backend.Machine.OptOptions.Mode,
+    ) void {
+        switch (self.*) {
+            .single => |s| {
+                s.machine.finalize(.{
+                    .optimizations = .{ .mode = optimizations },
+                    .builtins = s.types.getBuiltins(),
+                    .output = out,
+                    .output_scratch = out_scratch,
+                    .logs = logs,
+                });
+            },
+            .multi => |*m| {
+                var tmp = utils.Arena.scrath(null);
+                defer tmp.deinit();
+                m.para.mapping = m.buildMapping(tmp.arena);
+
+                m.machine.finalize(.{
+                    .optimizations = .{ .mode = optimizations },
+                    .builtins = m.types[0].getBuiltins(),
+                    .output = out,
+                    .output_scratch = out_scratch,
+                    .parallelism = &m.para,
+                    .logs = logs,
+                });
+            },
         }
-        pub fn finalize(_: *Shard, _: anytype) void {
-            unreachable;
-        }
-        pub fn disasm(_: *Shard, _: anytype) void {
-            unreachable;
-        }
-        pub fn run(_: *Shard, _: anytype) !usize {
-            unreachable;
-        }
-        pub fn deinit(self: *Shard) void {
-            const gpa = self.gpa.allocator();
-            self.func_ir.deinit(gpa);
-            self.global_ir.deinit(gpa);
-        }
-    };
+    }
+
+    pub fn logStats(self: *Threading, out: std.io.AnyWriter) void {
+        _ = self; // autofix
+        _ = out; // autofix
+    }
 };
 
-pub fn compile(opts: CompileOptions) anyerror!struct {
-    arena: Arena,
-    ast: []const hb.frontend.Ast,
-} {
+pub fn compile(opts: CompileOptions) anyerror!void {
     if (opts.help) {
         const help_str = comptime b: {
             @setEvalBranchQuota(2000);
@@ -291,7 +362,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
     }
 
     var type_system_memory = Arena.init(opts.type_system_memory);
-    errdefer type_system_memory.deinit();
+    defer if (std.debug.runtime_safety) type_system_memory.deinit();
 
     if (opts.fmt_stdout) {
         const source = try std.fs.cwd().readFileAllocOptions(
@@ -314,7 +385,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         try ast.fmt(&buf);
 
         try opts.output.writeAll(buf.items);
-        return .{ .ast = &.{}, .arena = type_system_memory };
+        return;
     }
 
     const asts, const base = try Loader.loadAll(
@@ -340,8 +411,19 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             const path = try std.fs.path.join(tmp.arena.allocator(), &.{ base, ast.path });
             try std.fs.cwd().writeFile(.{ .sub_path = path, .data = buf.items });
         }
-        return .{ .ast = asts, .arena = type_system_memory };
+        return;
     }
+
+    const target = hb.backend.Machine.SupportedTarget.fromStr(opts.target) orelse {
+        try opts.diagnostics.print("unknown target: {s}\n", .{opts.target});
+        try opts.diagnostics.print("supported targets are:\n", .{});
+        inline for (std.meta.fields(hb.backend.Machine.SupportedTarget)) |t| {
+            try opts.diagnostics.print("  {s}\n", .{t.name});
+        }
+        return error.Failed;
+    };
+
+    const abi = target.toCallConv();
 
     var shared_arena: Arena = undefined;
     var threading: Threading = undefined;
@@ -357,7 +439,9 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
                 types.colors = opts.error_colors;
                 break :b types;
             },
+            .machine = undefined,
         } };
+        threading.single.machine = target.toMachine(&threading.single.types.pool);
     } else {
         const thread_count = opts.extra_threads + 1;
 
@@ -371,7 +455,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         threading = .{ .multi = undefined };
         const ref = &threading.multi;
 
-        try std.Thread.Pool.init(&ref.pool, .{
+        try std.Thread.Pool.init(&ref.para.pool, .{
             .allocator = shared_arena.allocator(),
             .n_jobs = thread_count,
         });
@@ -391,46 +475,11 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             opts.shared_queue_capacity / thread_count * 2,
         );
         ref.types = types;
-        ref.shards = shared_arena.alloc(Threading.Shard, thread_count);
-        for (ref.shards, types) |*s, t| {
+        ref.para.shards = shared_arena.alloc(backend.Machine.Shard, thread_count);
+        for (ref.para.shards, types) |*s, t| {
             s.* = .{ .gpa = &t.pool };
         }
     }
-
-    const global_pool = switch (threading) {
-        .single => &threading.single.types.pool,
-        .multi => undefined,
-    };
-
-    var bckend, const abi: hb.backend.graph.CallConv = if (std.mem.startsWith(u8, opts.target, "hbvm-ableos")) backend: {
-        const slot = threading.single.types.pool.arena.create(hb.hbvm.HbvmGen);
-        slot.* = hb.hbvm.HbvmGen{ .gpa = global_pool };
-        break :backend .{ hb.backend.Machine.init(slot), .ablecall };
-    } else if (std.mem.startsWith(u8, opts.target, "x86_64-windows")) backend: {
-        const slot = threading.single.types.pool.arena.create(hb.x86_64.X86_64Gen);
-        slot.* = hb.x86_64.X86_64Gen{ .gpa = global_pool, .object_format = .coff };
-        break :backend .{ hb.backend.Machine.init(slot), .fastcall };
-    } else if (std.mem.startsWith(u8, opts.target, "x86_64-linux")) backend: {
-        const slot = threading.single.types.pool.arena.create(hb.x86_64.X86_64Gen);
-        slot.* = hb.x86_64.X86_64Gen{ .gpa = global_pool, .object_format = .elf };
-        break :backend .{ hb.backend.Machine.init(slot), .systemv };
-    } else if (std.mem.startsWith(u8, opts.target, "null")) backend: {
-        var value = hb.backend.Machine.Null{};
-        switch (threading) {
-            .single => |s| s.types.target = "x86_64-linux",
-            .multi => |m| for (m.types) |t| {
-                t.target = "x86_64-linux";
-            },
-        }
-        break :backend .{ hb.backend.Machine.init(&value), .systemv };
-    } else {
-        try opts.diagnostics.print(
-            "{s} is unsupported target, only `x86_64-(windows|linux)` and `hbvm-ableos` are supported",
-            .{opts.target},
-        );
-        return error.Failed;
-    };
-    defer bckend.deinit();
 
     var root_tmp = utils.Arena.scrath(null);
     defer root_tmp.deinit();
@@ -442,7 +491,6 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         &threading,
         .{
             .abi = .{ .cc = abi },
-            .backend = bckend,
             .has_main = !opts.no_entry,
             .optimizations = opts.optimizations,
             .logs = logs,
@@ -467,10 +515,11 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
         if (opts.benchmark_rounds == 1) {
             try opts.diagnostics.print("multi threading code emmision is not yet supported\n", .{});
         }
-        return .{ .arena = type_system_memory, .ast = asts };
+        return;
     }
 
     const types = threading.single.types;
+    const bckend = threading.single.machine;
 
     if (opts.dump_asm) {
         const out = bckend.finalizeBytes(.{
@@ -490,7 +539,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             .out = opts.output,
             .colors = opts.colors,
         });
-        return .{ .ast = asts, .arena = types.pool.arena };
+        return;
     }
 
     if (opts.vendored_test and !@import("options").dont_simulate) {
@@ -528,7 +577,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             .code = out.items,
         }));
 
-        return .{ .arena = types.pool.arena, .ast = asts };
+        return;
     }
 
     if (opts.log_stats) {
@@ -583,7 +632,7 @@ pub fn compile(opts: CompileOptions) anyerror!struct {
             return error.Failed;
         }
 
-        return .{ .ast = asts, .arena = types.pool.arena };
+        return;
     } else {
         bckend.finalize(.{
             .output = std.io.null_writer.any(),

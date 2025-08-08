@@ -19,10 +19,9 @@ pub fn main() !void {
     hb.utils.Arena.initScratch(opts.scratch_memory);
 
     for (0..opts.benchmark_rounds) |_| {
-        var arena = (hb.compile(opts) catch |err| switch (err) {
+        hb.compile(opts) catch |err| switch (err) {
             error.Failed => std.process.exit(1),
             else => return err,
-        }).arena;
-        if (std.debug.runtime_safety or opts.benchmark_rounds > 1) arena.deinit();
+        };
     }
 }

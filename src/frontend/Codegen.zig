@@ -208,7 +208,6 @@ const EmitOpts = struct {
     has_main: bool = false,
     logs: ?std.io.AnyWriter = null,
     abi: Types.Abi,
-    backend: root.backend.Machine,
     optimizations: root.backend.Machine.OptOptions.Mode,
 };
 
@@ -232,6 +231,7 @@ pub fn emitReachableSingle(
     scrath: ?*utils.Arena,
     types: *Types,
     queue: ?*root.Queue,
+    backend: root.backend.Machine,
     opts: EmitOpts,
 ) bool {
     errdefer unreachable;
@@ -252,8 +252,6 @@ pub fn emitReachableSingle(
         for (exports) |exp| types.queue(.runtime, .init(.{ .Func = exp }));
     }
 
-    const thread_id = if (queue) |q| @as(u32, @intCast(q.self_id)) << 24 else 0;
-
     var errored = false;
     while (types.nextTask(.runtime, 0, queue) orelse types.retryNextTask(.runtime, 0, queue)) |func| {
         defer codegen.bl.func.reset();
@@ -263,7 +261,7 @@ pub fn emitReachableSingle(
         build_met.end();
 
         var retain_globals_met = types.metrics.begin(.retain_globals);
-        errored = types.retainGlobals(.runtime, opts.backend, scrath) or
+        errored = types.retainGlobals(.runtime, backend) or
             errored;
         retain_globals_met.end();
 
@@ -291,15 +289,13 @@ pub fn emitReachableSingle(
         };
 
         var emit_func_met = types.metrics.begin(.emit_func);
-        opts.backend.emitFunc(&codegen.bl.func, root.backend.Machine.EmitOptions{
-            .id = @intFromEnum(func) | thread_id,
+        backend.emitFunc(&codegen.bl.func, root.backend.Machine.EmitOptions{
+            .id = @intFromEnum(func),
             .name = if (func_data.visibility != .local)
                 func_data.key.name(types)
-            else if (scrath) |s|
-                root.frontend.Types.Id.init(.{ .Func = func })
-                    .fmt(types).toString(s)
             else
-                "",
+                root.frontend.Types.Id.init(.{ .Func = func })
+                    .fmt(types).toString(tmp.arena),
             .is_inline = func_data.is_inline or func_data.key.name(types).len == 0,
             .linkage = func_data.visibility,
             .special = func_data.special,
@@ -320,6 +316,7 @@ pub fn emitReachableChildThread(
     types: *Types,
     scratch_cap: usize,
     queue: root.Queue,
+    backend: root.backend.Machine,
     opts: EmitOpts,
     errored_out: *std.atomic.Value(bool),
 ) void {
@@ -330,7 +327,7 @@ pub fn emitReachableChildThread(
     utils.Arena.initScratch(scratch_cap);
 
     var q = queue;
-    if (emitReachableSingle(null, types, &q, opts)) {
+    if (emitReachableSingle(null, types, &q, backend, opts)) {
         errored_out.store(true, .unordered);
     }
 }
@@ -347,13 +344,14 @@ pub fn emitReachableMultiThread(
 
     var wait_group = std.Thread.WaitGroup{};
     var errored_out = std.atomic.Value(bool).init(false);
-    for (threading.types, 0..) |ty, i| {
+    for (threading.types, threading.para.shards, 0..) |ty, *sh, i| {
         var queue = threading.queue;
         queue.self_id = i;
-        threading.pool.spawnWg(
+        const shard = root.backend.Machine.init(sh);
+        threading.para.pool.spawnWg(
             &wait_group,
             emitReachableChildThread,
-            .{ ty, root_tmp.arena.getCapacity(), queue, opts, &errored_out },
+            .{ ty, root_tmp.arena.getCapacity(), queue, shard, opts, &errored_out },
         );
     }
 
@@ -369,7 +367,7 @@ pub fn emitReachable(
     opts: EmitOpts,
 ) bool {
     switch (threading.*) {
-        .single => |*s| return emitReachableSingle(scrath, s.types, null, opts),
+        .single => |*s| return emitReachableSingle(scrath, s.types, null, s.machine, opts),
         .multi => |*m| return emitReachableMultiThread(scrath, m, opts),
     }
 }

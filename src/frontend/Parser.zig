@@ -239,9 +239,8 @@ fn declareExpr(self: *Parser, id: Id, unordered: bool) void {
     const sym: *Sym = while (iter.nextPtr()) |s| {
         if (s.id == ident.id) break s;
     } else if (unordered) {
-        // shadow
-
-        const repr = Lexer.peekStr(self.lexer.source, ident.pos.index);
+        var repr = Lexer.peekStr(self.lexer.source, ident.pos.index);
+        if (repr[0] == '$') repr = repr[1..];
         const slot = self.active_sym_table.getEntryAdapted(
             repr,
             InsertCtx{ .syms = self.active_syms.items },

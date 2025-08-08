@@ -1,0 +1,4 @@
+main:
+	mov eax, [0x0000000000000006]
+	mov eax, eax
+	ret

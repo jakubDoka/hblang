@@ -95,8 +95,7 @@ pub fn runVendoredTest(
             .putAssumeCapacity(proj[0], proj[1]);
     }
 
-    var ast = try root.compile(opts);
-    defer ast.arena.deinit();
+    try root.compile(opts);
 }
 
 pub inline fn header(comptime name: []const u8, writer: anytype, corors: std.io.tty.Config) !void {
@@ -196,7 +195,7 @@ pub fn testBuilder(
     types.target = target;
     defer types.deinit();
 
-    var threading: root.Threading = .{ .single = .{ .types = types } };
+    var threading: root.Threading = .{ .single = .{ .types = types, .machine = gen } };
 
     const errored = Codegen.emitReachable(
         func_arena.arena,
@@ -206,7 +205,6 @@ pub fn testBuilder(
             .colors = colors,
             .output = output,
             .abi = abi,
-            .backend = gen,
             .optimizations = opts,
             .has_main = true,
         },

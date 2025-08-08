@@ -52,7 +52,7 @@ const CtxF64 = struct {
     }
 };
 
-const syscall = std.math.maxInt(u32);
+const syscall = root.backend.Machine.max_func;
 const max_instruction_size = 15;
 
 pub const Reg = enum(u8) {
@@ -1182,6 +1182,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 } else {
                     // call id
                     self.emitBytes(&.{ 0xe8, 0, 0, 0, 0 });
+
                     try self.out.addFuncReloc(self.gpa.allocator(), call.id, .@"4", -4, 4);
                 }
             },
@@ -1938,7 +1939,7 @@ pub fn finalize(self: *X86_64Gen, opts: Mach.FinalizeOptions) void {
         self.out.reset();
     }
 
-    if (opts.optimizations.finalize(opts.builtins, X86_64Gen, self, opts.logs)) return;
+    if (opts.optimizations.finalizeSingleThread(opts.builtins, X86_64Gen, self, opts.logs)) return;
 
     try switch (self.object_format) {
         .elf => root.object.elf.flush(self.out, .x86_64, opts.output),

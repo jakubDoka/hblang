@@ -183,7 +183,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                 const gid: utils.EntId(tys.Global) = @enumFromInt(global);
                 if (types.store.get(gid).completion.get(.@"comptime") != .compiled) {
                     types.queue(.@"comptime", .init(.{ .Global = gid }));
-                    if (types.retainGlobals(.@"comptime", &self.gen, null)) {
+                    if (types.retainGlobals(.@"comptime", &self.gen)) {
                         return .{ .Unsupported = curr };
                     }
                 }
@@ -672,7 +672,7 @@ pub fn jitExprLow(
         gen.bl.end(token);
 
         if (!only_inference) {
-            gen.errored = self.getTypes().retainGlobals(.@"comptime", &self.gen, null) or
+            gen.errored = self.getTypes().retainGlobals(.@"comptime", &self.gen) or
                 gen.errored;
 
             const reg_alloc_results = optimizeComptime(.debug, HbvmGen, &self.gen, @ptrCast(&gen.bl.func));
@@ -711,7 +711,7 @@ pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until:
 
         try self.build(func);
 
-        self.errored = self.types.retainGlobals(self.target, &self.types.ct.gen, null) or
+        self.errored = self.types.retainGlobals(self.target, &self.types.ct.gen) or
             self.errored;
 
         const reg_alloc_results = optimizeComptime(.debug, HbvmGen, &self.types.ct.gen, @ptrCast(&self.bl.func));

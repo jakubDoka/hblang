@@ -966,14 +966,15 @@ pub fn retainClonedGlobals(self: *Types, pop_until: usize) void {
     }
 }
 
-pub fn retainGlobals(self: *Types, target: Target, backend: anytype, scratch: ?*utils.Arena) bool {
+pub fn retainGlobals(self: *Types, target: Target, backend: anytype) bool {
     errdefer unreachable;
 
+    const emit_names = @TypeOf(backend) == root.backend.Machine;
     var errored = false;
 
     const work_list = self.global_work_list.getPtr(target);
     while (work_list.pop()) |global| {
-        var scrath = utils.Arena.scrath(scratch);
+        var scrath = utils.Arena.scrath(null);
         defer scrath.deinit();
 
         const glob: *tys.Global = self.store.get(global);
@@ -997,8 +998,8 @@ pub fn retainGlobals(self: *Types, target: Target, backend: anytype, scratch: ?*
 
         backend.emitData(.{
             .id = @intFromEnum(global),
-            .name = if (scratch) |s| root.frontend.Types.Id.init(.{ .Global = global })
-                .fmt(self).toString(s) else "",
+            .name = if (emit_names) root.frontend.Types.Id.init(.{ .Global = global })
+                .fmt(self).toString(scrath.arena) else "",
             .value = if (glob.uninit) .{ .uninit = glob.data.slice().len } else .{ .init = glob.data.slice() },
             .relocs = if (target == .runtime) relocs.items else &.{},
             .readonly = glob.readonly,

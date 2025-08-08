@@ -11,6 +11,8 @@ data: *anyopaque,
 
 vtable: *const VTable,
 
+pub const max_func = std.math.maxInt(u24);
+
 const VTable = struct {
     emitFunc: *const fn (self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void,
     emitData: *const fn (self: *anyopaque, opts: DataOptions) void,
@@ -44,9 +46,105 @@ pub const Null = struct {
     pub fn deinit(_: *@This()) void {}
 };
 
-const InlinFunc = graph.Func(Builder);
+pub const Shard = struct {
+    alignment: void align(std.atomic.cache_line) = {},
+    gpa: *utils.Pool,
+
+    func_table: []const u32 = &.{},
+    func_ir: std.ArrayListUnmanaged(FuncRecord) = .empty,
+    global_table: []const u32 = &.{},
+    global_ir: std.ArrayListUnmanaged(DataOptions) = .empty,
+    owned: std.heap.ArenaAllocator.State = .{},
+
+    const Func = graph.Func(Shard);
+
+    pub const classes = enum {};
+
+    pub const i_know_the_api = {};
+
+    const FuncRecord = struct {
+        func: Func,
+        opts: EmitOptions,
+    };
+
+    pub fn buildTables(self: *Shard) void {
+        const func_table = self.gpa.arena.alloc(u32, self.func_table.len);
+        const global_table = self.gpa.arena.alloc(u32, self.global_table.len);
+
+        for (self.func_ir.items, 0..) |ir, i| {
+            func_table[ir.opts.id] = @intCast(i);
+        }
+
+        for (self.global_ir.items, 0..) |ir, i| {
+            global_table[ir.id] = @intCast(i);
+        }
+
+        self.func_table = func_table;
+        self.global_table = global_table;
+    }
+
+    pub fn emitFunc(self: *Shard, func: *Func, opts: EmitOptions) void {
+        errdefer unreachable;
+
+        self.func_table.len = @max(self.func_table.len, opts.id + 1);
+
+        const slot = try self.func_ir.addOne(self.gpa.allocator());
+        slot.* = .{ .func = func.*, .opts = opts };
+
+        var arena = self.owned.promote(self.gpa.allocator());
+        slot.opts.name = arena.allocator().dupe(u8, slot.opts.name) catch unreachable;
+        self.owned = arena.state;
+
+        func.arena = .init(self.gpa.allocator());
+    }
+
+    pub fn emitData(self: *Shard, opts: DataOptions) void {
+        errdefer unreachable;
+
+        self.global_table.len = @max(self.global_table.len, opts.id + 1);
+
+        const slot = try self.global_ir.addOne(self.gpa.allocator());
+        slot.* = opts;
+
+        var arena = self.owned.promote(self.gpa.allocator());
+        slot.name = try arena.allocator().dupe(u8, slot.name);
+        slot.relocs = try arena.allocator().dupe(
+            DataOptions.Reloc,
+            slot.relocs,
+        );
+        slot.value = switch (slot.value) {
+            .init => |v| .{ .init = try arena.allocator().dupe(u8, v) },
+            .uninit => slot.value,
+        };
+        self.owned = arena.state;
+
+        try self.global_ir.append(self.gpa.allocator(), opts);
+    }
+
+    pub fn finalize(_: *Shard, _: anytype) void {
+        unreachable;
+    }
+    pub fn disasm(_: *Shard, _: anytype) void {
+        unreachable;
+    }
+    pub fn run(_: *Shard, _: anytype) !usize {
+        unreachable;
+    }
+
+    pub fn deinit(self: *Shard) void {
+        const gpa = self.gpa.allocator();
+        self.func_ir.deinit(gpa);
+        self.global_ir.deinit(gpa);
+        self.owned.promote(gpa).deinit();
+    }
+};
+
+const InlineFunc = graph.Func(Builder);
+
+pub const FuncId = packed struct(u32) { thread: u8, index: u24 };
 
 pub const Data = struct {
+    parallelism: ?*Parallelism = null,
     declaring_sym: ?SymIdx = null,
     funcs: std.ArrayListUnmanaged(SymIdx) = .empty,
     globals: std.ArrayListUnmanaged(SymIdx) = .empty,
@@ -54,7 +152,7 @@ pub const Data = struct {
     names: std.ArrayListUnmanaged(u8) = .empty,
     code: std.ArrayListUnmanaged(u8) = .empty,
     relocs: std.ArrayListUnmanaged(Reloc) = .empty,
-    inline_funcs: std.ArrayListUnmanaged(InlinFunc) = .empty,
+    inline_funcs: std.ArrayListUnmanaged(InlineFunc) = .empty,
 
     pub const Sym = struct {
         name: u32,
@@ -111,7 +209,7 @@ pub const Data = struct {
         errdefer unreachable;
 
         self.syms.items[@intFromEnum(self.funcs.items[to])].inline_func = @intCast(self.inline_funcs.items.len);
-        try self.inline_funcs.append(gpa, @as(*InlinFunc, @ptrCast(func)).*);
+        try self.inline_funcs.append(gpa, @as(*InlineFunc, @ptrCast(func)).*);
         func.arena = .init(gpa);
     }
 
@@ -151,7 +249,7 @@ pub const Data = struct {
     }
 
     pub fn reset(self: *Data) void {
-        inline for (std.meta.fields(Data)[1..]) |f| {
+        inline for (std.meta.fields(Data)[2..]) |f| {
             @field(self, f.name).items.len = 0;
         }
     }
@@ -196,7 +294,7 @@ pub const Data = struct {
     }
 
     pub fn deinit(self: *Data, gpa: std.mem.Allocator) void {
-        inline for (std.meta.fields(Data)[1..]) |f| {
+        inline for (std.meta.fields(Data)[2..]) |f| {
             @field(self, f.name).deinit(gpa);
         }
         self.* = undefined;
@@ -250,7 +348,7 @@ pub const Data = struct {
         linkage: Linkage,
         is_inline: bool,
     ) !void {
-        std.debug.assert(id != std.math.maxInt(u32) and id != graph.indirect_call);
+        std.debug.assert(id != max_func and id != graph.indirect_call);
         const slot = try utils.ensureSlot(&self.funcs, gpa, id);
         try self.startDefineSym(
             gpa,
@@ -828,6 +926,27 @@ pub const OptOptions = struct {
         comptime Backend: type,
         backend: *Backend,
         logs: ?std.io.AnyWriter,
+        par: ?*Parallelism,
+    ) bool {
+        const parf = par orelse {
+            return finalizeSingleThread(optimizations, builtins, Backend, backend, logs);
+        };
+
+        _ = parf; // autofix
+
+        if (optimizations.mode == .release) {} else {
+            unreachable;
+        }
+
+        unreachable;
+    }
+
+    pub fn finalizeSingleThread(
+        optimizations: @This(),
+        builtins: Builtins,
+        comptime Backend: type,
+        backend: *Backend,
+        logs: ?std.io.AnyWriter,
     ) bool {
         errdefer unreachable;
 
@@ -951,7 +1070,7 @@ pub const OptOptions = struct {
             if (logs) |d| {
                 try d.writeAll("backend:\n");
 
-                inline for (std.meta.fields(Data)[1..]) |f| {
+                inline for (std.meta.fields(Data)[2..]) |f| {
                     try d.print("  {s:<12}: {}\n", .{ f.name, @field(bout, f.name).items.len });
                 }
 
@@ -1010,16 +1129,23 @@ pub const Builtins = struct {
 
 pub const LocalId = packed struct(u32) {
     thread: u8,
-    id: u24,
+    index: u24,
+
+    pub fn initLocal(id: u32) LocalId {
+        return .{ .thread = 0, .index = @intCast(id) };
+    }
+
+    pub fn initThread(thread: u64, id: u32) LocalId {
+        return .{ .thread = @intCast(thread), .index = @intCast(id) };
+    }
 };
 
 pub const GlobalMapping = struct {
     global_table: []const LocalId,
     local_bases: []const u32,
 
-    pub fn normalizeId(self: GlobalMapping, local_id: LocalId) u32 {
-        const projected = self.global_table[self.local_bases[local_id.thread] + local_id.id];
-        return self.local_bases[projected.thread] + projected.id;
+    pub fn normalizeId(self: GlobalMapping, local_id: LocalId) LocalId {
+        return self.global_table[self.local_bases[local_id.thread] + local_id.index];
     }
 };
 
@@ -1068,16 +1194,75 @@ pub const DisasmOpts = struct {
 
 pub const FinalizeOptions = struct {
     output: std.io.AnyWriter,
+    output_scratch: ?*utils.Arena = null,
     optimizations: OptOptions,
     builtins: Builtins,
+    parallelism: ?*Parallelism = null,
     logs: ?std.io.AnyWriter = null,
+};
+
+pub const Parallelism = struct {
+    shards: []Shard,
+    pool: std.Thread.Pool,
+    mapping: GlobalMapping,
 };
 
 pub const FinalizeBytesOptions = struct {
     gpa: std.mem.Allocator,
     optimizations: OptOptions,
     builtins: Builtins,
+    parallelism: ?*Parallelism = null,
     logs: ?std.io.AnyWriter = null,
+};
+
+pub const SupportedTarget = enum {
+    @"hbvm-ableos",
+    @"x86_64-windows",
+    @"x86_64-linux",
+    null,
+
+    pub fn fromStr(str: []const u8) ?SupportedTarget {
+        inline for (std.meta.fields(SupportedTarget)) |f| {
+            if (std.mem.startsWith(u8, str, f.name)) {
+                return @field(SupportedTarget, f.name);
+            }
+        }
+
+        return null;
+    }
+
+    pub fn toMachine(triple: SupportedTarget, pool: *utils.Pool) Machine {
+        switch (triple) {
+            .@"hbvm-ableos" => {
+                const slot = pool.arena.create(root.hbvm.HbvmGen);
+                slot.* = root.hbvm.HbvmGen{ .gpa = pool };
+                return .init(slot);
+            },
+            .@"x86_64-windows" => {
+                const slot = pool.arena.create(root.x86_64.X86_64Gen);
+                slot.* = root.x86_64.X86_64Gen{ .gpa = pool, .object_format = .coff };
+                return .init(slot);
+            },
+            .@"x86_64-linux" => {
+                const slot = pool.arena.create(root.x86_64.X86_64Gen);
+                slot.* = root.x86_64.X86_64Gen{ .gpa = pool, .object_format = .elf };
+                return .init(slot);
+            },
+            .null => {
+                var value = Null{};
+                return .init(&value);
+            },
+        }
+    }
+
+    pub fn toCallConv(triple: SupportedTarget) graph.CallConv {
+        return switch (triple) {
+            .@"hbvm-ableos" => .ablecall,
+            .@"x86_64-windows" => .fastcall,
+            .@"x86_64-linux" => .systemv,
+            .null => .systemv,
+        };
+    }
 };
 
 pub fn init(data: anytype) Machine {
@@ -1148,6 +1333,7 @@ pub fn finalizeBytes(self: Machine, opts: FinalizeBytesOptions) std.ArrayListUnm
         .output = out.writer(opts.gpa).any(),
         .optimizations = opts.optimizations,
         .builtins = opts.builtins,
+        .parallelism = opts.parallelism,
         .logs = opts.logs,
     });
     return out;
@@ -1164,7 +1350,6 @@ pub fn run(self: Machine, env: RunEnv) !usize {
 }
 
 /// frees the internal resources
-pub fn deinit(self: *Machine) void {
+pub fn deinit(self: Machine) void {
     self.vtable.deinit(self.data);
-    self.* = undefined;
 }
