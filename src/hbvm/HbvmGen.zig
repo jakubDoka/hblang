@@ -301,7 +301,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     const name = opts.name;
     const entry = opts.linkage == .exported;
 
-    try self.out.startDefineFunc(self.gpa.allocator(), id, name, .func, opts.linkage, opts.is_inline);
+    const sym = try self.out.startDefineFunc(self.gpa.allocator(), id, name, .func, opts.linkage, opts.is_inline);
     defer {
         self.out.endDefineFunc(id);
         if (self.emit_global_reloc_offsets) {
@@ -354,6 +354,8 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     const stack_size: i64 = used_reg_size + local_size + spill_count;
     self.spill_base = @intCast(used_reg_size + local_size);
+
+    sym.stack_size = @intCast(stack_size);
 
     prelude: {
         if (used_reg_size != 0) {

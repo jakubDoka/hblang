@@ -21,6 +21,7 @@ pub const x86_64 = enum {
 };
 
 pub const object = @import("object.zig");
+pub const dwarf = @import("dwarf.zig");
 
 pub const frontend = enum {
     pub const Lexer = @import("frontend/Lexer.zig");

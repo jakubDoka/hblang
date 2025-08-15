@@ -165,6 +165,7 @@ pub const Data = struct {
         readonly: bool,
         is_inline: bool,
         inline_func: u32 = no_inline_func,
+        stack_size: u32 = 0,
 
         pub const no_inline_func = std.math.maxInt(u32);
     };
@@ -347,10 +348,10 @@ pub const Data = struct {
         kind: Kind,
         linkage: Linkage,
         is_inline: bool,
-    ) !void {
+    ) !*Sym {
         std.debug.assert(id != max_func and id != graph.indirect_call);
         const slot = try utils.ensureSlot(&self.funcs, gpa, id);
-        try self.startDefineSym(
+        return try self.startDefineSym(
             gpa,
             slot,
             name,
@@ -376,7 +377,7 @@ pub const Data = struct {
         // to global id
         try self.code.appendSlice(gpa, std.mem.asBytes(&id));
 
-        try self.startDefineSym(
+        _ = try self.startDefineSym(
             gpa,
             try utils.ensureSlot(&self.globals, gpa, id),
             name,
@@ -412,7 +413,7 @@ pub const Data = struct {
         linkage: Linkage,
         readonly: bool,
         is_inline: bool,
-    ) !void {
+    ) !*Sym {
         _ = try self.declSym(gpa, sym);
 
         std.debug.assert(self.declaring_sym == null);
@@ -439,6 +440,8 @@ pub const Data = struct {
             try self.names.appendSlice(gpa, name);
             try self.names.append(gpa, 0);
         }
+
+        return slot;
     }
 
     pub fn endDefineFunc(self: *Data, id: u32) void {

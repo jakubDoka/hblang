@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Object = @This();
 const root = @import("hb");
+const dwarf = root.dwarf;
 
 pub const Arch = enum {
     x86_64,
@@ -43,16 +44,34 @@ pub const elf = enum {
         hiproc = 0xffff,
     };
 
-    const sections: []const []const u8 = &.{
-        "",
-        ".shstrtab",
-        ".strtab",
-        ".symtab",
-        ".text",
-        ".rela.text",
-        ".data",
-        ".rela.data",
-        ".bss",
+    pub const Sections = enum(Word) {
+        @".shstrtab" = 1,
+        @".strtab",
+        @".symtab",
+        @".text",
+        @".rela.text",
+        @".data",
+        @".rela.data",
+        @".debug_info",
+        @".rela.debug_info",
+        @".debug_abbrev",
+        @".bss",
+
+        const fnames = &[_][]const u8{""} ++ std.meta.fieldNames(Sections);
+
+        const section_specs = b: {
+            var positions: [fnames.len]Word = undefined;
+            var fs: []const u8 = "";
+            for (fnames, &positions) |s, *ps| {
+                ps.* = fs.len;
+                fs = fs ++ s ++ "\x00";
+            }
+            break :b .{ .fs = fs, .positions = positions };
+        };
+
+        pub fn pos(self: Sections) Word {
+            return section_specs.positions[@intFromEnum(self)];
+        }
     };
 
     pub const FileHeader = extern struct {
@@ -74,8 +93,8 @@ pub const elf = enum {
         phentsize: Half = 0,
         phnum: Half = 0,
         shentsize: Half = @sizeOf(SectionHeader),
-        shnum: Half = sections.len,
-        shstrndx: SectionIndex = @enumFromInt(1),
+        shnum: Half = std.meta.fields(Sections).len + 1,
+        shstrndx: SectionIndex = @enumFromInt(@intFromEnum(Sections.@".shstrtab")),
     };
 
     pub const Rela = extern struct {
@@ -211,7 +230,7 @@ pub const elf = enum {
             var name = str_table[@intFromEnum(s.name)..];
             name = name[0..std.mem.indexOfScalar(u8, name, 0).?];
 
-            try data.startDefineSym(
+            _ = try data.startDefineSym(
                 gpa,
                 &slot,
                 name,
@@ -266,16 +285,6 @@ pub const elf = enum {
         var writer_impl = std.io.bufferedWriter(writer_);
         const writer = writer_impl.writer();
 
-        comptime var positions: [sections.len]Word = undefined;
-        const section_name_table = comptime b: {
-            var fs: []const u8 = "";
-            for (sections, &positions) |s, *ps| {
-                ps.* = fs.len;
-                fs = fs ++ s ++ "\x00";
-            }
-            break :b fs;
-        };
-
         var section_alloc_cursor: usize = 0;
 
         const header = FileHeader{
@@ -286,21 +295,21 @@ pub const elf = enum {
 
         try writer.writeStruct(header);
         section_alloc_cursor += @sizeOf(FileHeader);
-        section_alloc_cursor += @sizeOf(SectionHeader) * sections.len;
+        section_alloc_cursor += @sizeOf(SectionHeader) * Sections.fnames.len;
 
         try writer.writeStruct(SectionHeader.first);
 
         try writer.writeStruct(SectionHeader{
-            .sh_name = positions[1],
+            .sh_name = Sections.@".shstrtab".pos(),
             .sh_type = .strtab,
             .sh_flags = .empty,
             .sh_offset = @intCast(section_alloc_cursor),
-            .sh_size = @intCast(section_name_table.len),
+            .sh_size = @intCast(Sections.section_specs.fs.len),
         });
-        section_alloc_cursor += section_name_table.len;
+        section_alloc_cursor += Sections.section_specs.fs.len;
 
         try writer.writeStruct(SectionHeader{
-            .sh_name = positions[2],
+            .sh_name = Sections.@".strtab".pos(),
             .sh_type = .strtab,
             .sh_flags = .empty,
             .sh_offset = @intCast(section_alloc_cursor),
@@ -327,7 +336,7 @@ pub const elf = enum {
         for (self.syms.items) |s| sym_count += @intFromBool(s.kind != .invalid);
 
         try writer.writeStruct(SectionHeader{
-            .sh_name = positions[3],
+            .sh_name = Sections.@".symtab".pos(),
             .sh_type = .symtab,
             .sh_flags = .empty,
             .sh_offset = @intCast(section_alloc_cursor),
@@ -359,7 +368,7 @@ pub const elf = enum {
         };
 
         try writer.writeStruct(SectionHeader{
-            .sh_name = positions[4],
+            .sh_name = Sections.@".text".pos(),
             .sh_type = .progbits,
             .sh_flags = .{ .alloc = true, .execinstr = true, .write = false },
             .sh_offset = @intCast(section_alloc_cursor),
@@ -368,7 +377,19 @@ pub const elf = enum {
         section_alloc_cursor += text_size;
 
         try writer.writeStruct(SectionHeader{
-            .sh_name = positions[6],
+            .sh_name = Sections.@".rela.text".pos(),
+            .sh_type = .rela,
+            .sh_flags = .empty,
+            .sh_offset = @intCast(section_alloc_cursor),
+            .sh_size = @intCast(text_rel_count * @sizeOf(Rela)),
+            .sh_entsize = @sizeOf(Rela),
+            .sh_info = @intFromEnum(Sections.@".text"),
+            .sh_link = @intFromEnum(Sections.@".symtab"),
+        });
+        section_alloc_cursor += text_rel_count * @sizeOf(Rela);
+
+        try writer.writeStruct(SectionHeader{
+            .sh_name = Sections.@".data".pos(),
             .sh_type = .progbits,
             .sh_flags = .{ .alloc = true, .write = true, .execinstr = false },
             .sh_offset = @intCast(section_alloc_cursor),
@@ -377,40 +398,105 @@ pub const elf = enum {
         section_alloc_cursor += data_size;
 
         try writer.writeStruct(SectionHeader{
-            .sh_name = positions[5],
-            .sh_type = .rela,
-            .sh_flags = .empty,
-            .sh_offset = @intCast(section_alloc_cursor),
-            .sh_size = @intCast(text_rel_count * @sizeOf(Rela)),
-            .sh_entsize = @sizeOf(Rela),
-            .sh_info = 4,
-            .sh_link = 3,
-        });
-        section_alloc_cursor += text_rel_count * @sizeOf(Rela);
-
-        try writer.writeStruct(SectionHeader{
-            .sh_name = positions[7],
+            .sh_name = Sections.@".rela.data".pos(),
             .sh_type = .rela,
             .sh_flags = .empty,
             .sh_offset = @intCast(section_alloc_cursor),
             .sh_size = @intCast(data_rel_count * @sizeOf(Rela)),
             .sh_entsize = @sizeOf(Rela),
-            .sh_info = 5,
-            .sh_link = 3,
+            .sh_info = @intFromEnum(Sections.@".data"),
+            .sh_link = @intFromEnum(Sections.@".symtab"),
         });
         section_alloc_cursor += data_rel_count * @sizeOf(Rela);
 
+        // compute size of debug info
+        // and collect the relocations
+        var debug_info_rela = std.ArrayListUnmanaged(Rela){};
+
+        const root_file = "main.hb";
+
+        var debug_size = std.io.countingWriter(std.io.null_writer);
+
+        try debug_size.writer().writeStruct(dwarf.UnitHeader{ .unit_length = 0 });
+        {
+            const prev_len = debug_size.bytes_written;
+            const base_reloc = dwarf.writeCompileUnit(debug_size.writer().any(), root_file, @intCast(text_size));
+            try debug_info_rela.append(tmp.arena.allocator(), .{
+                .offset = prev_len + base_reloc.text_base_offset,
+                .info = .{
+                    // grab the func at offset 0
+                    // TODO: rather then doing this, maybe emit a symbol
+                    .sym = for (self.syms.items, 0..) |s, i| {
+                        if (s.kind == .func) break @intCast(i);
+                    } else unreachable,
+                    .type = .R_X86_64_64,
+                },
+                .addend = 0,
+            });
+        }
+
+        for (self.syms.items, 0..) |s, i| {
+            if (s.kind != .func) continue;
+            const prev_len = debug_size.bytes_written;
+            const reloc = dwarf.writeSubprogram(debug_size.writer().any(), self.lookupName(s.name), s.size, s.stack_size);
+            try debug_info_rela.append(tmp.arena.allocator(), .{
+                .offset = prev_len + reloc.text_base_offset,
+                .info = .{
+                    // this well get projected later
+                    .sym = @intCast(i),
+                    .type = .R_X86_64_64,
+                },
+                .addend = 0,
+            });
+        }
+
+        dwarf.endSiblings(debug_size.writer().any());
+
+        const debug_info_size = debug_size.bytes_written;
         try writer.writeStruct(SectionHeader{
-            .sh_name = positions[8],
+            .sh_name = Sections.@".debug_info".pos(),
+            .sh_type = .progbits,
+            .sh_flags = .{ .alloc = true, .write = false, .execinstr = false },
+            .sh_offset = @intCast(section_alloc_cursor),
+            .sh_size = @intCast(debug_info_size),
+            .sh_link = @intFromEnum(Sections.@".symtab"),
+        });
+        section_alloc_cursor += debug_info_size;
+
+        try writer.writeStruct(SectionHeader{
+            .sh_name = Sections.@".rela.debug_info".pos(),
+            .sh_type = .rela,
+            .sh_flags = .empty,
+            .sh_offset = @intCast(section_alloc_cursor),
+            .sh_size = @intCast(debug_info_rela.items.len * @sizeOf(Rela)),
+            .sh_entsize = @sizeOf(Rela),
+            .sh_info = @intFromEnum(Sections.@".debug_info"),
+            .sh_link = @intFromEnum(Sections.@".symtab"),
+        });
+        section_alloc_cursor += debug_info_rela.items.len * @sizeOf(Rela);
+
+        debug_size.bytes_written = 0;
+        dwarf.writeAbbrev(debug_size.writer().any());
+        try writer.writeStruct(SectionHeader{
+            .sh_name = Sections.@".debug_abbrev".pos(),
+            .sh_type = .progbits,
+            .sh_flags = .{ .alloc = true, .write = false, .execinstr = false },
+            .sh_offset = @intCast(section_alloc_cursor),
+            .sh_size = @intCast(debug_size.bytes_written),
+        });
+        section_alloc_cursor += debug_size.bytes_written;
+
+        try writer.writeStruct(SectionHeader{
+            .sh_name = Sections.@".bss".pos(),
             .sh_type = .nobits,
             .sh_flags = .{ .alloc = true, .write = true, .execinstr = false },
             .sh_offset = @intCast(section_alloc_cursor),
             .sh_size = @intCast(prealloc_size),
-            .sh_link = 3,
+            .sh_link = @intFromEnum(Sections.@".symtab"),
         });
         section_alloc_cursor += prealloc_size;
 
-        try writer.writeAll(section_name_table);
+        try writer.writeAll(Sections.section_specs.fs);
         try writer.writeByte(0);
         try writer.writeAll(self.names.items);
         try writer.writeStruct(Symbol.first);
@@ -448,9 +534,9 @@ pub const elf = enum {
                 },
                 .shndx = switch (sym.linkage) {
                     .local, .exported => switch (sym.kind) {
-                        .func => @enumFromInt(4),
-                        .data => @enumFromInt(5),
-                        .prealloc => @enumFromInt(8),
+                        .func => @enumFromInt(@intFromEnum(Sections.@".text")),
+                        .data => @enumFromInt(@intFromEnum(Sections.@".data")),
+                        .prealloc => @enumFromInt(@intFromEnum(Sections.@".bss")),
                         .invalid => unreachable,
                     },
                     .imported => @enumFromInt(0),
@@ -471,9 +557,7 @@ pub const elf = enum {
                 if (sym.kind != k) continue;
                 try writer.writeAll(self.code.items[sym.offset..][0..sym.size]);
             }
-        }
 
-        inline for (.{ .func, .data }) |k| {
             for (projection, projected_offsets) |symid, poff| {
                 const sym = &self.syms.items[symid];
                 if (sym.kind != k) continue;
@@ -501,6 +585,25 @@ pub const elf = enum {
                 }
             }
         }
+
+        try writer.writeStruct(dwarf.UnitHeader{ .unit_length = @intCast(debug_info_size - 4) });
+
+        _ = dwarf.writeCompileUnit(writer.any(), root_file, @intCast(text_size));
+
+        for (self.syms.items) |s| {
+            if (s.kind != .func) continue;
+            _ = dwarf.writeSubprogram(writer.any(), self.lookupName(s.name), s.size, s.stack_size);
+        }
+
+        dwarf.endSiblings(writer.any());
+
+        for (debug_info_rela.items) |*rl| {
+            rl.info.sym = reloc_proj[rl.info.sym] + 1;
+        }
+
+        try writer.writeAll(@ptrCast(debug_info_rela.items));
+
+        dwarf.writeAbbrev(writer.any());
 
         try writer_impl.flush();
     }

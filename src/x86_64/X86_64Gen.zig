@@ -763,7 +763,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         opts.name;
     self.builtins = opts.builtins;
 
-    try self.out.startDefineFunc(self.gpa.allocator(), id, name, .func, linkage, opts.is_inline);
+    const sym = try self.out.startDefineFunc(self.gpa.allocator(), id, name, .func, linkage, opts.is_inline);
     defer self.out.endDefineFunc(id);
 
     if (opts.linkage == .imported) return;
@@ -864,6 +864,8 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
                 self.arg_base += 8;
             }
         }
+
+        sym.stack_size = @intCast(self.arg_base);
 
         if (stack_size != 0) {
             // sub rsp, stack_size
@@ -1920,7 +1922,7 @@ pub fn preLinkHook(self: *X86_64Gen) void {
         const idx = @field(self, name ++ "index");
         const sym = &@field(self, name ++ "s");
 
-        try self.out.startDefineSym(self.gpa.allocator(), sym, name ++ "s", .data, .local, true, false);
+        _ = try self.out.startDefineSym(self.gpa.allocator(), sym, name ++ "s", .data, .local, true, false);
         try self.out.code.appendSlice(self.gpa.allocator(), @ptrCast(idx.entries.items(.key)));
         self.out.endDefineSym(sym.*);
         try self.out.globals.append(self.gpa.allocator(), sym.*);
