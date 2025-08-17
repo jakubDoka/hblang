@@ -161,7 +161,10 @@ pub fn writeUnwindInfo(writer: std.io.AnyWriter, stack_size: u32) void {
     try writer.writeByte(@intFromEnum(Op.call_frame_cfa));
 }
 
-pub fn writeFrameEntry(writer: std.io.AnyWriter, stack_size: u32) void {}
+pub fn writeFrameEntry(writer: std.io.AnyWriter, stack_size: u32) void {
+    _ = writer; // autofix
+    _ = stack_size; // autofix
+}
 
 pub fn writeAbbrevEntry(
     writer: std.io.AnyWriter,

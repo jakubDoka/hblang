@@ -53,7 +53,6 @@ main:
 	call :comptime 2.main.some_fn3(uint, (.some_fn2(.some_fn)))
 	mov [rsp+0x08], rax
 	mov rax, [rsp]
-	mov rcx, [rsp+0x08]
-	add rax, rcx
+	add rax, [rsp+0x08]
 	add rsp, 0x38
 	ret

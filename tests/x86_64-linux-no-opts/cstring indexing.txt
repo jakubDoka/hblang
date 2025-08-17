@@ -4,19 +4,18 @@ cstring indexing.cstr:
 	sub rsp, 0x10
 	mov [rsp], rsi
 	mov qword ptr [rsp+0x08], 0x00
-	xor rsi, rsi
-1:	mov rdx, [rsp+0x08]
-	mov rcx, [rsp]
+	xor rdx, rdx
+1:	mov rcx, [rsp]
 	mov rax, rcx
-	add rax, rdx
+	add rax, [rsp+0x08]
 	mov al, [rax]
-	cmp al, sil
+	cmp al, dl
 	jz :0
-	inc rdx
-	mov [rsp+0x08], rdx
+	add qword ptr [rsp+0x08], 0x01
 	jmp :1
-0:	mov [rdi], rcx
-	mov [rdi+0x08], rdx
+0:	mov rax, [rsp+0x08]
+	mov [rdi], rcx
+	mov [rdi+0x08], rax
 	add rsp, 0x10
 	ret
 main:

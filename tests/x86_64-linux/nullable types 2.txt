@@ -20,7 +20,6 @@ main:
 	lea rdi, [rsp+0x08]
 	call :nullable types 2.take
 	mov rax, [rsp+0x08]
-	mov rcx, [rsp+0x10]
-	sub rax, rcx
+	sub rax, [rsp+0x10]
 1:	add rsp, 0x18
 	ret

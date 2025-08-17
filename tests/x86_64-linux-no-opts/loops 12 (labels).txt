@@ -29,9 +29,7 @@ main:
 1:	mov rax, [rsp]
 	add rsp, 0x20
 	ret
-4:	mov rax, [rsp]
-	add rax, rdx
-	mov [rsp], rax
+4:	add [rsp], rdx
 	mov rax, [rsp+0x10]
 	inc rax
 	mov [rsp+0x10], rax

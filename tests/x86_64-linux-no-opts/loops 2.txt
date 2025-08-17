@@ -12,17 +12,15 @@ loops 2.square:
 	ret
 0:	mov qword ptr [rsp+0x18], 0x00
 3:	mov rdx, [rsp+0x10]
-	mov rcx, [rsp+0x18]
-	mov rax, [rsp]
-	cmp rcx, rax
+	mov rcx, [rsp]
+	mov rax, [rsp+0x18]
+	cmp rax, rcx
 	jnz :1
 	inc rdx
 	mov [rsp+0x10], rdx
 	jmp :2
-1:	imul rcx, rdx
-	mov rax, [rsp+0x08]
-	add rax, rcx
-	mov [rsp+0x08], rax
+1:	imul rax, rdx
+	add [rsp+0x08], rax
 	mov rax, [rsp+0x18]
 	inc rax
 	mov [rsp+0x18], rax

@@ -23,9 +23,8 @@ main:
 	call :comptime 1.main.some_fn(uint)(uint)
 	mov [rsp+0x10], rax
 	mov rax, [rsp]
-	mov rdx, [rsp+0x08]
-	mov rcx, [rsp+0x10]
-	add rdx, rcx
-	sub rax, rdx
+	mov rcx, [rsp+0x08]
+	add rcx, [rsp+0x10]
+	sub rax, rcx
 	add rsp, 0x28
 	ret

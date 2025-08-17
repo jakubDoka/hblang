@@ -17,26 +17,23 @@ slices 3.reverse:
 	mov [rsp+0x10], rcx
 	mov qword ptr [rsp+0x18], 0x00
 	mov byte ptr [rsp+0x20], 0x00
-3:	mov rax, [rsp+0x10]
-	mov rcx, [rsp+0x18]
+3:	mov rcx, [rsp+0x18]
+	mov rax, [rsp+0x10]
 	cmp rcx, rax
 	jnb :2
 	mov rax, [rsp]
-	add rax, rcx
+	add rax, [rsp+0x18]
 	mov al, [rax]
 	mov [rsp+0x20], al
 	mov rax, [rsp]
-	mov rcx, [rsp+0x18]
-	mov rdx, rax
-	add rdx, rcx
-	mov rcx, [rsp+0x10]
-	add rax, rcx
+	mov rcx, rax
+	add rcx, [rsp+0x18]
+	add rax, [rsp+0x10]
 	mov al, [rax]
-	mov [rdx], al
+	mov [rcx], al
 	mov rcx, [rsp]
-	mov rax, [rsp+0x10]
-	add rcx, rax
 	mov al, [rsp+0x20]
+	add rcx, [rsp+0x10]
 	mov [rcx], al
 	mov rax, [rsp+0x18]
 	inc rax

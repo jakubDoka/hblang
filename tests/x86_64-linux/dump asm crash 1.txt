@@ -47,10 +47,9 @@ main:
 	jmp :5
 4:	mov rax, [rsp+0x20]
 	mov [rsp], rax
-	mov esi, [rsp]
-	mov eax, [rsp+0x04]
-	add esi, eax
-	mov [rsp+0x1C], esi
+	mov eax, [rsp]
+	add eax, [rsp+0x04]
+	mov [rsp+0x1C], eax
 5:	mov byte ptr [rsp+0x08], 0x01
 	mov eax, [rsp+0x1C]
 	mov [rsp+0x0C], eax

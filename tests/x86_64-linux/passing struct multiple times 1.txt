@@ -26,11 +26,9 @@ passing struct multiple times 1.foo:
 passing struct multiple times 1.bar:
 	sub rsp, 0x10
 	mov [rsp], edi
-	mov rdx, [rsp+0x20]
-	mov rcx, [rsp+0x28]
 	mov rax, [rsp+0x18]
-	add rax, rdx
-	sub rax, rcx
+	add rax, [rsp+0x20]
+	sub rax, [rsp+0x28]
 	mov cl, [rsp+0x02]
 	movzx rsi, cl
 	mov cl, [rsp+0x01]

@@ -656,8 +656,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             for (tmp.arena.dupe(Node.Out, instr.outputs())) |us| {
                 const use = us.get();
                 if (use.inPlaceSlot()) |idx| if (use.dataDeps()[idx] == instr) {
-                    std.debug.assert(use.dataDepOffset() == 1);
-                    func.splitBefore(use, idx + 1, instr, true, .@"conflict/in-place-slot/use");
+                    func.splitBefore(use, idx + use.dataDepOffset(), instr, true, .@"conflict/in-place-slot/use");
                 };
 
                 if (use.kind == .Phi and !(use.cfg0().base.kind == .Loop and
@@ -680,8 +679,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             }
 
             if (instr.inPlaceSlot()) |slt| {
-                std.debug.assert(instr.dataDepOffset() == 1);
-                func.splitBefore(instr, slt + 1, instr.dataDeps()[slt], true, .@"conflict/in-place-slot/def");
+                func.splitBefore(instr, slt + instr.dataDepOffset(), instr.dataDeps()[slt], true, .@"conflict/in-place-slot/def");
             }
         }
     }

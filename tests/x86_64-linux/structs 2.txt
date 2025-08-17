@@ -32,10 +32,8 @@ main:
 	lea rdi, [rsp]
 	call :structs 2.swap
 	mov rax, [rsp]
-	mov rcx, [rsp+0x08]
-	add rax, rcx
-	mov rcx, [rsp+0x10]
-	add rax, rcx
+	add rax, [rsp+0x08]
+	add rax, [rsp+0x10]
 	add rsp, 0x38
 	ret
 memcpy:

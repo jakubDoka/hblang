@@ -5,14 +5,14 @@ main:
 	lea rdi, [rsp]
 	mov [rsp+0x20], rdi
 	mov qword ptr [rsp+0x28], 0x04
-	mov rdx, [rsp+0x20]
-	mov [rsp+0x50], rdx
+	mov rsi, [rsp+0x20]
+	mov [rsp+0x50], rsi
 	mov rax, [rsp+0x28]
-	mov rsi, 0x08
-	imul rax, rsi
-	add rdx, rax
+	mov rdx, 0x08
+	imul rax, rdx
+	add rsi, rax
 1:	mov rcx, [rsp+0x50]
-	cmp rcx, rdx
+	cmp rcx, rsi
 	jnb :0
 	mov rax, [rsp+0x48]
 	mov [rcx], rax
@@ -26,21 +26,20 @@ main:
 0:	mov qword ptr [rsp+0x58], 0x00
 	mov [rsp+0x30], rdi
 	mov qword ptr [rsp+0x38], 0x04
-	mov rdx, [rsp+0x30]
-	mov [rsp+0x40], rdx
+	mov rcx, [rsp+0x30]
+	mov [rsp+0x40], rcx
 	mov rax, [rsp+0x38]
-	imul rax, rsi
-	add rdx, rax
-3:	mov rax, [rsp+0x58]
-	mov rcx, [rsp+0x40]
-	cmp rcx, rdx
+	imul rax, rdx
+	add rcx, rax
+3:	mov rax, [rsp+0x40]
+	cmp rax, rcx
 	jnb :2
-	mov rcx, [rcx]
-	add rax, rcx
-	mov [rsp+0x58], rax
+	mov rax, [rax]
+	add [rsp+0x58], rax
 	mov rax, [rsp+0x40]
 	add rax, 0x08
 	mov [rsp+0x40], rax
 	jmp :3
-2:	add rsp, 0x70
+2:	mov rax, [rsp+0x58]
+	add rsp, 0x70
 	ret

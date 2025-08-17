@@ -60,12 +60,10 @@ main:
 	mov [rsp+0x98], rax
 	jmp :2
 1:	mov rax, [rsi]
-	add rax, rdx
+	add rax, [rsp+0xA0]
 	mov al, [rax]
-	movzx rcx, al
-	mov rax, [rsp+0x90]
-	add rax, rcx
-	mov [rsp+0x90], rax
+	movzx rax, al
+	add [rsp+0x90], rax
 	mov rax, [rsp+0xA0]
 	inc rax
 	mov [rsp+0xA0], rax

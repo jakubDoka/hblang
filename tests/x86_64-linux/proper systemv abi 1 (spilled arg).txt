@@ -1,15 +1,10 @@
 proper systemv abi 1 (spilled arg).stack_args:
-	mov rdx, [rsp+0x10]
-	mov rcx, [rsp+0x18]
 	mov rax, [rsp+0x08]
-	add rax, rdx
-	add rax, rcx
-	mov rcx, [rsp+0x20]
-	add rax, rcx
-	mov rcx, [rsp+0x28]
-	add rax, rcx
-	mov rcx, [rsp+0x30]
-	add rax, rcx
+	add rax, [rsp+0x10]
+	add rax, [rsp+0x18]
+	add rax, [rsp+0x20]
+	add rax, [rsp+0x28]
+	add rax, [rsp+0x30]
 	add rax, rdi
 	add rax, rsi
 	ret
@@ -20,10 +15,8 @@ proper systemv abi 1 (spilled arg).load_of_args:
 	add rax, rcx
 	add rax, r8
 	add rax, r9
-	mov rcx, [rsp+0x08]
-	add rax, rcx
-	mov rcx, [rsp+0x10]
-	add rax, rcx
+	add rax, [rsp+0x08]
+	add rax, [rsp+0x10]
 	ret
 main:
 	push rbx

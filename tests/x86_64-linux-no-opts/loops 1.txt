@@ -12,8 +12,7 @@ loops 1.fib:
 	jz :0
 	add rsp, 0x20
 	ret
-0:	mov rcx, [rsp+0x08]
-	add rax, rcx
+0:	add rax, [rsp+0x08]
 	mov [rsp+0x18], rax
 	mov rax, [rsp+0x08]
 	mov [rsp+0x10], rax

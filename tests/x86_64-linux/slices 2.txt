@@ -36,7 +36,6 @@ main:
 	jmp :2
 1:	mov rdx, [rdi]
 	lea rdx, [rdx+rcx*8]
-	mov rdx, [rdx]
-	add rax, rdx
+	add rax, [rdx]
 	inc rcx
 	jmp :3

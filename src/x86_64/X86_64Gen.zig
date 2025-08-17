@@ -306,6 +306,44 @@ pub const classes = enum {
         base: graph.Store = .{},
         dis: i32,
     };
+    pub const OpLoad = extern struct {
+        base: graph.Load = .{},
+        op: graph.BinOp,
+        dis: i32,
+    };
+    pub const OpStackLoad = extern struct {
+        base: graph.Load = .{},
+        op: graph.BinOp,
+        dis: i32,
+
+        pub const data_dep_offset = 2;
+    };
+    pub const OpStore = extern struct {
+        base: graph.Store = .{},
+        op: graph.BinOp,
+        dis: i32,
+    };
+    pub const OpStackStore = extern struct {
+        base: graph.Store = .{},
+        op: graph.BinOp,
+        dis: i32,
+
+        pub const data_dep_offset = 2;
+    };
+    pub const ConstOpStackStore = extern struct {
+        base: graph.Store = .{},
+        op: graph.BinOp,
+        dis: i32,
+        imm: i32,
+
+        pub const data_dep_offset = 2;
+    };
+    pub const ConstOpStore = extern struct {
+        base: graph.Store = .{},
+        op: graph.BinOp,
+        imm: i32,
+        dis: i32,
+    };
     pub const ImmOp = extern struct {
         op: graph.BinOp,
         imm: i32,
@@ -363,6 +401,11 @@ pub fn getStaticOffset(node: *Func.Node) i64 {
         .ConstStackStore,
         .GlobalLoad,
         .GlobalStore,
+        .ConstGlobalStore,
+        .ConstOpStore,
+        .ConstOpStackStore,
+        .OpLoad,
+        .OpStackLoad,
         => |extra| extra.dis,
         else => 0,
     };
@@ -387,6 +430,8 @@ pub fn knownOffset(node: *Func.Node) struct { *Func.Node, i64 } {
 pub fn isInterned(kind: Func.Kind) bool {
     return kind == .OffsetLoad or
         kind == .GlobalLoad or
+        kind == .OpLoad or
+        kind == .OpStackLoad or
         kind == .StackLoad or
         kind == .StackLea or
         kind == .ImmOp or
@@ -734,8 +779,8 @@ pub fn binOpInPlaceSlot(op: graph.BinOp) ?usize {
 
 pub fn inPlaceSlot(node: *Func.Node) ?usize {
     return switch (node.extra2()) {
-        .ImmOp => |extra| binOpInPlaceSlot(extra.op),
-        .BinOp => |extra| binOpInPlaceSlot(extra.op),
+        inline .ImmOp, .BinOp, .OpStackLoad => |extra| binOpInPlaceSlot(extra.op),
+        .OpLoad => |extra| if (binOpInPlaceSlot(extra.op)) |f| f + 1 else null,
         .FusedMulAdd => 0,
         .UnOp => |extra| switch (@as(graph.UnOp, extra.op)) {
             .ineg, .bnot, .ired, .not => 0,
@@ -1129,47 +1174,29 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const dis = instr.extra(.StackArgOffset).offset;
                 self.emitStackLea(dst, @intCast(dis));
             },
-            .OffsetLoad => |extra| {
+            inline .OffsetLoad, .StackLoad => |extra, t| {
                 // mov dst, [bse+dis]
                 const dst = self.getReg(instr);
-                const bse = self.getReg(inps[0]);
-                const dis: i32 = extra.dis;
+                const bse = if (t == .OffsetLoad) self.getReg(inps[0]) else .rsp;
+                const dis: i32 = if (t == .OffsetLoad) extra.dis else (extra.dis + self.stackBaseOf(instr));
 
                 self.emitMemStoreOrLoad(instr.data_type, dst, bse, dis, false);
             },
-            .OffsetStore => |extra| {
+            inline .OffsetStore, .StackStore => |extra, t| {
                 // mov [dst+dis], vl
-                const dst = self.getReg(inps[0]);
-                const vl = self.getReg(inps[1]);
-                const dis: i32 = extra.dis;
+                const dst = if (t == .OffsetStore) self.getReg(inps[0]) else .rsp;
+                const vl = if (t == .OffsetStore) self.getReg(inps[1]) else self.getReg(inps[0]);
+                const dis: i32 = if (t == .OffsetStore) extra.dis else (extra.dis + self.stackBaseOf(instr));
 
                 self.emitMemStoreOrLoad(instr.data_type, vl, dst, dis, true);
             },
-            .ConstStore => |extra| {
+            inline .ConstStore, .ConstStackStore => |extra, t| {
                 // mov [dst+dis], $vl
-                const dst = self.getReg(inps[0]);
+                const dst = if (t == .ConstStore) self.getReg(inps[0]) else .rsp;
                 const vl = extra.imm;
-                const dis: i32 = extra.dis;
+                const dis: i32 = if (t == .ConstStore) extra.dis else (extra.dis + self.stackBaseOf(instr));
 
                 self.emitMemConstStore(instr.data_type, vl, dst, dis);
-            },
-            .ConstStackStore => |extra| {
-                // mov [rsp+dis], $vl
-                const vl = extra.imm;
-                const dis: i32 = extra.dis + self.stackBaseOf(instr);
-                self.emitMemConstStore(instr.data_type, vl, .rsp, dis);
-            },
-            .StackLoad => |extra| {
-                // mov dst, [rsp+dis]
-                const dst = self.getReg(instr);
-                const dis: i32 = extra.dis + self.stackBaseOf(instr);
-                self.emitMemStoreOrLoad(instr.data_type, dst, .rsp, dis, false);
-            },
-            .StackStore => |extra| {
-                // mov [rsp+dis], vl
-                const vl = self.getReg(inps[0]);
-                const dis: i32 = extra.dis + self.stackBaseOf(instr);
-                self.emitMemStoreOrLoad(instr.data_type, vl, .rsp, dis, true);
             },
             .Call => |extra| {
                 const call = instr.extra(.Call);
@@ -1241,6 +1268,100 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             },
             .Jmp => {},
             .Return => {},
+            inline .OpLoad, .OpStackLoad => |extra, t| {
+                const op = extra.op;
+                const op_dt = instr.data_type;
+                const dst = self.getReg(instr);
+                const lhs = if (t == .OpLoad) self.getReg(inps[1]) else self.getReg(inps[0]);
+                const base = if (t == .OpLoad) self.getReg(inps[0]) else .rsp;
+                const dis = if (t == .OpLoad) extra.dis else (extra.dis + self.stackBaseOf(instr));
+
+                switch (op) {
+                    .iadd, .isub, .bor, .band, .bxor => {
+                        std.debug.assert(lhs == dst);
+
+                        if (op_dt == .i16) self.emitByte(0x66);
+                        self.emitRexBinop(dst, base, .rax, op_dt.size());
+                        const opcode: u8 = switch (op) {
+                            .iadd => 0x03,
+                            .band => 0x23,
+                            .bor => 0x0b,
+                            .bxor => 0x33,
+                            .isub => 0x2b,
+                            else => unreachable,
+                        };
+                        self.emitByte(opcode);
+                        self.emitIndirectAddr(dst, base, .no_index, 1, dis);
+                    },
+                    else => utils.panic("{}", .{op}),
+                }
+            },
+            inline .OpStore, .OpStackStore => |extra, t| {
+                const op = extra.op;
+                const base = if (t == .OpStore) self.getReg(inps[0]) else .rsp;
+                const rhs = if (t == .OpStore) self.getReg(inps[1]) else self.getReg(inps[0]);
+                const dis = if (t == .OpStore) extra.dis else (extra.dis + self.stackBaseOf(instr));
+
+                switch (op) {
+                    .iadd, .isub, .bor, .band, .bxor => {
+                        if (instr.data_type == .i16) self.emitByte(0x66);
+                        self.emitRexBinop(rhs, base, .rax, instr.data_type.size());
+                        const opcode: u8 = switch (op) {
+                            .iadd => 0x01,
+                            .band => 0x21,
+                            .bor => 0x09,
+                            .bxor => 0x31,
+                            .isub => 0x29,
+                            else => unreachable,
+                        };
+                        self.emitByte(opcode);
+                        self.emitIndirectAddr(rhs, base, .no_index, 1, dis);
+                    },
+                    else => utils.panic("{}", .{op}),
+                }
+            },
+            inline .ConstOpStore, .ConstOpStackStore => |extra, t| {
+                const op = extra.op;
+                const base = if (t == .ConstOpStore) self.getReg(inps[0]) else .rsp;
+                const rhs = extra.imm;
+                const crhs = std.math.cast(i8, rhs);
+                const dis = if (t == .ConstOpStore) extra.dis else (extra.dis + self.stackBaseOf(instr));
+
+                switch (op) {
+                    .iadd, .isub, .bor, .band, .bxor => {
+                        if (instr.data_type == .i16) self.emitByte(0x66);
+                        self.emitRexNoReg(base, .rax, instr.data_type.size());
+                        const sub_opcode: u8 = switch (op) {
+                            .iadd => 0b000,
+                            .band => 0b100,
+                            .bor => 0b001,
+                            .bxor => 0b110,
+                            .isub => 0b101,
+                            else => unreachable,
+                        };
+
+                        switch (instr.data_type) {
+                            .i32, .i64, .i16 => self.emitByte(if (crhs == null) 0x81 else 0x83),
+                            .i8 => self.emitByte(0x80),
+                            else => utils.panic("{}", .{instr.data_type}),
+                        }
+
+                        self.emitIndirectAddr(@enumFromInt(sub_opcode), base, .no_index, 1, dis);
+
+                        if (crhs) |c| {
+                            self.emitImm(i8, c);
+                        } else {
+                            switch (instr.data_type) {
+                                .i8 => self.emitImm(i8, @intCast(rhs)),
+                                .i16 => self.emitImm(i16, @intCast(rhs)),
+                                .i32, .i64 => self.emitImm(i32, @intCast(rhs)),
+                                else => unreachable,
+                            }
+                        }
+                    },
+                    else => utils.panic("{}", .{op}),
+                }
+            },
             .ImmOp => |extra| {
                 const op = extra.op;
                 const op_dt = instr.inputs()[1].?.data_type;
@@ -2072,6 +2193,7 @@ pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
                     std.debug.assert(zydis.ZYAN_SUCCESS(status));
 
                     const printed = buf[0..std.mem.indexOfScalar(u8, &buf, 0).?];
+                    //std.debug.print("{s}\n", .{printed});
 
                     if (label_map.get(uaddr)) |nm| {
                         const fmt, const args = .{ "{x}:", .{nm} };

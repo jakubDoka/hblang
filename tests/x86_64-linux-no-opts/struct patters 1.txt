@@ -9,21 +9,17 @@ bas.baz:
 	ret
 main:
 	push rbx
-	push rbp
-	sub rsp, 0x18
+	sub rsp, 0x20
 	call :foo.foo
 	mov [rsp], rax
 	call :foo.bar
 	mov [rsp+0x08], rax
 	mov rbx, [rsp]
-	mov rbp, [rsp+0x08]
+	add rbx, [rsp+0x08]
 	call :bas.baz
 	mov [rsp+0x10], rax
-	add rbx, rbp
-	mov rax, [rsp+0x10]
-	add rbx, rax
+	add rbx, [rsp+0x10]
 	mov rax, rbx
-	add rsp, 0x18
-	pop rbp
+	add rsp, 0x20
 	pop rbx
 	ret

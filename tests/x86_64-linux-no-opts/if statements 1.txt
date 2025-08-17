@@ -17,8 +17,7 @@ if statements 1.fib:
 	call :if statements 1.fib
 	mov [rsp+0x10], rax
 	mov rax, [rsp+0x08]
-	mov rcx, [rsp+0x10]
-	add rax, rcx
+	add rax, [rsp+0x10]
 1:	add rsp, 0x18
 	ret
 main:

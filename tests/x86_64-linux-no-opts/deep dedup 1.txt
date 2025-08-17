@@ -25,7 +25,6 @@ main:
 	call :deep dedup 1.b
 	mov [rsp+0x08], rax
 	mov rax, [rsp]
-	mov rcx, [rsp+0x08]
-	sub rax, rcx
+	sub rax, [rsp+0x08]
 	add rsp, 0x18
 	ret

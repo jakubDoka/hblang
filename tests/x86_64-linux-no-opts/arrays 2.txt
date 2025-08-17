@@ -4,41 +4,40 @@ main:
 	mov dword ptr [rsp+0x70], 0x20000002
 	mov qword ptr [rsp+0x50], 0x00
 	mov r9, 0x18
-	mov rcx, 0x08
+	mov rax, 0x08
 	lea r8, [rsp+0x08]
-4:	mov rax, [rsp+0x50]
-	cmp rax, 0x03
-	setz al
-	movzx rax, al
-	test al, al
+4:	mov rcx, [rsp+0x50]
+	cmp rcx, 0x03
+	setz cl
+	movzx rcx, cl
+	test cl, cl
 	jz :0
 	mov dword ptr [rsp+0x78], 0x20000003
 	mov [rsp+0x60], r8
 	mov qword ptr [rsp+0x68], 0x00
 	mov qword ptr [rsp], 0x00
-2:	mov rax, [rsp+0x68]
-	mov rsi, [rsp]
-	cmp rsi, 0x09
-	setz dl
-	movzx rdx, dl
-	test dl, dl
+2:	mov rdx, [rsp]
+	cmp rdx, 0x09
+	setz cl
+	movzx rcx, cl
+	test cl, cl
 	jz :1
+	mov rax, [rsp+0x68]
 	add rsp, 0x80
 	ret
-1:	imul rsi, rcx
-	mov rdx, [rsp+0x60]
-	add rdx, rsi
-	mov rdx, [rdx]
-	add rax, rdx
-	mov [rsp+0x68], rax
-	mov rax, [rsp]
-	inc rax
-	mov [rsp], rax
+1:	imul rdx, rax
+	mov rcx, [rsp+0x60]
+	add rcx, rdx
+	mov rcx, [rcx]
+	add [rsp+0x68], rcx
+	mov rcx, [rsp]
+	inc rcx
+	mov [rsp], rcx
 	jmp :2
 0:	mov qword ptr [rsp+0x58], 0x00
 5:	mov rdi, [rsp+0x50]
-	mov rax, [rsp+0x58]
-	cmp rax, 0x03
+	mov rcx, [rsp+0x58]
+	cmp rcx, 0x03
 	setz dl
 	movzx rdx, dl
 	test dl, dl
@@ -50,12 +49,12 @@ main:
 	imul rsi, r9
 	lea rdx, [rsp+0x08]
 	add rdx, rsi
-	mov rsi, rax
-	imul rsi, rcx
+	mov rsi, rcx
+	imul rsi, rax
 	add rdx, rsi
-	imul rax, rdi
-	mov [rdx], rax
-	mov rax, [rsp+0x58]
-	inc rax
-	mov [rsp+0x58], rax
+	imul rcx, rdi
+	mov [rdx], rcx
+	mov rcx, [rsp+0x58]
+	inc rcx
+	mov [rsp+0x58], rcx
 	jmp :5

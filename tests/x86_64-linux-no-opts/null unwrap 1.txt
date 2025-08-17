@@ -17,7 +17,7 @@ null unwrap 1.use_opt:
 	call :memcpy
 	call :null unwrap 1.null_unwrap
 0:	mov rax, [rsp+0x48]
-	add rax, rax
+	add rax, [rsp+0x48]
 	add rsp, 0x58
 	ret
 null unwrap 1.null_unwrap:

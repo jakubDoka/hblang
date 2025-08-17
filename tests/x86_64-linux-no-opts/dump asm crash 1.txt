@@ -65,8 +65,7 @@ dump asm crash 1():
 	sub rsp, 0x10
 	mov [rsp], rdi
 	mov eax, [rsp]
-	mov ecx, [rsp+0x04]
-	add eax, ecx
+	add eax, [rsp+0x04]
 	add rsp, 0x10
 	ret
 main:
