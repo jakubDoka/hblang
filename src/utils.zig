@@ -2,6 +2,22 @@ const std = @import("std");
 
 pub const freestanding = @import("builtin").target.os.tag == .freestanding;
 
+pub fn dedupeSorted(comptime T: type, slice: []T) usize {
+    if (slice.len == 0) return 0;
+
+    var write_index: usize = 1;
+    var last = slice[0];
+
+    for (slice[1..]) |value| {
+        if (value != last) {
+            slice[write_index] = value;
+            last = value;
+            write_index += 1;
+        }
+    }
+    return write_index;
+}
+
 pub fn ensureSlot(self: anytype, gpa: std.mem.Allocator, id: usize) !*std.meta.Child(@TypeOf(self.items)) {
     if (self.items.len <= id) {
         const prev_len = self.items.len;

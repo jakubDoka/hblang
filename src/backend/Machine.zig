@@ -224,11 +224,11 @@ pub const Data = struct {
             null;
     }
 
-    pub fn readFromSym(self: Data, id: u32, offset: i64, size: u64) ?union(enum) { value: i64, global: u32 } {
+    pub fn readFromSym(self: Data, id: u32, offset: i64, size: u64, force_readonly: bool) ?union(enum) { value: i64, global: u32 } {
         if (self.globals.items.len <= id) return null;
         const sym = &self.syms.items[@intFromEnum(self.globals.items[id])];
 
-        if (!sym.readonly) return null;
+        if (!sym.readonly and !force_readonly) return null;
 
         var value: i64 = 0;
 
@@ -913,6 +913,11 @@ pub const OptOptions = struct {
         func.mem2reg.run();
     }
 
+    pub fn doAliasAnal(comptime Backend: type, func: *graph.Func(Backend)) void {
+        _ = func; // autofix
+        //func.alias_anal.run();
+    }
+
     pub fn optimizeDebug(self: OptOptions, comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) void {
         idealizeDead(Backend, ctx, func);
         idealizeGeneric(Backend, ctx, func, true);
@@ -1013,6 +1018,8 @@ pub const OptOptions = struct {
                 var mem2reg = metrics.begin(.mem2reg);
                 doMem2Reg(Backend, sym);
                 mem2reg.end();
+
+                doAliasAnal(Backend, sym);
 
                 mem2reg_waste += sym.waste;
             }

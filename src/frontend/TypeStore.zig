@@ -43,6 +43,10 @@ handler_signatures: std.EnumArray(
 stats: struct {
     useless_ecas: u64 = 0,
     total_ecas: u64 = 0,
+    full_jit_exprs: u64 = 0,
+    skipped_global_jit_exprs: u64 = 0,
+    skipped_constant_jit_exprs: u64 = 0,
+    skipped_buty_jit_exprs: u64 = 0,
 } = .{},
 metrics: Metrics,
 

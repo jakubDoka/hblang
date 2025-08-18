@@ -235,34 +235,7 @@ pub fn Mixin(comptime Backend: type) type {
                     }
                 }
 
-                // we do it here because some loads are scheduled already and removing them in this loop messes up the
-                // cheduling in other blocks, we need to hack this becaus there are no anty deps on loads yet, since this
-                // runs before gcm
-                //
-                {
-                    // carefull, the scheduleBlock messes up the node.schedule
-                    //
-                    var buf: [2]*Func.Node = undefined;
-                    var scheds: [2]u16 = undefined;
-                    var len: usize = 0;
-                    for (bb.outputs()) |use| {
-                        if (use.get().isCfg()) {
-                            buf[len] = use.get();
-                            scheds[len] = use.get().schedule;
-                            len += 1;
-                        }
-                    }
-
-                    if (bb.isBasicBlockStart()) {
-                        scheduleBlock(bbc);
-                    }
-
-                    if (!(bb.kind == .If or len == 1)) {
-                        unreachable;
-                    }
-
-                    for (buf[0..len], scheds[0..len]) |n, s| n.schedule = s;
-                }
+                bbc.scheduleBlockAndRestoreBlockIds();
 
                 var stmp = utils.Arena.scrath(tmp.arena);
                 defer stmp.deinit();
@@ -373,63 +346,6 @@ pub fn Mixin(comptime Backend: type) type {
             for (to_remove.items) |tr| {
                 self.subsume(tr.mem(), tr);
             }
-        }
-
-        pub fn scheduleBlock(bb: *Func.CfgNode) void {
-            var tmp = utils.Arena.scrath(null);
-            defer tmp.deinit();
-
-            // init meta
-            const extra: []u8 = tmp.arena.alloc(u8, bb.base.outputs().len);
-            for (bb.base.outputs(), extra, 0..) |in, *e, i| {
-                const instr = in.get();
-                instr.schedule = @intCast(i);
-
-                e.* = 0;
-
-                if (instr.kind != .Phi) {
-                    for (instr.inputs()[1..]) |d| if (d) |def| {
-                        // if instr == df, this is a infinite loop
-                        if (def.tryCfg0() == bb or instr == def) {
-                            e.* += 1;
-                        }
-                    };
-                }
-            }
-
-            const outs = bb.base.outputs();
-            var ready: usize = 0;
-            for (outs) |*o| {
-                if (extra[o.get().schedule] == 0) {
-                    std.mem.swap(Node.Out, &outs[ready], o);
-                    ready += 1;
-                }
-            }
-
-            var scheduled: usize = 0;
-            if (ready != scheduled) while (scheduled < outs.len - 1) {
-                if (ready == scheduled) utils.panic(
-                    "{} {} {} {any}",
-                    .{ scheduled, outs.len, bb, outs[scheduled..] },
-                );
-
-                const n = outs[scheduled].get();
-                for (n.outputs()) |def| if (bb == def.get().tryCfg0() and
-                    def.get().kind != .Phi)
-                {
-                    extra[def.get().schedule] -= 1;
-                };
-
-                scheduled += 1;
-
-                for (outs[ready..]) |*o| {
-                    if (extra[o.get().schedule] == 0) {
-                        std.debug.assert(o.get().kind != .Phi);
-                        std.mem.swap(Node.Out, &outs[ready], o);
-                        ready += 1;
-                    }
-                }
-            };
         }
     };
 }

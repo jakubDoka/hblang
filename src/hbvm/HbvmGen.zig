@@ -311,6 +311,8 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     if (opts.optimizations.apply(HbvmGen, func, self, id)) return;
 
+    // func.fmtScheduled(std.io.getStdErr().writer().any(), .escape_codes);
+
     var tmp = utils.Arena.scrath(if (opts.optimizations == .opts)
         opts.optimizations.opts.arena
     else

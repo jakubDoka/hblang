@@ -8,7 +8,6 @@ slices 3.reverse:
 	test al, al
 	jz :0
 	mov [rdi], rsi
-	mov rax, [rsp+0x08]
 	jmp :1
 0:	xor r8, r8
 	dec rdx
@@ -28,8 +27,8 @@ slices 3.reverse:
 	inc r8
 	jmp :3
 2:	mov [rdi], rax
-	mov rax, [rsp+0x08]
-1:	mov [rdi+0x08], rax
+	mov rdx, [rsp+0x08]
+1:	mov [rdi+0x08], rdx
 	add rsp, 0x10
 	ret
 main:

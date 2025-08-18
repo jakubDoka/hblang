@@ -7,8 +7,7 @@ nullable types 1.mkval(uint):
 	mov [rsp+0x08], rsi
 	mov rax, [rsp]
 	mov [rdi], rax
-	mov rax, [rsp+0x08]
-	mov [rdi+0x08], rax
+	mov [rdi+0x08], rsi
 	add rsp, 0x10
 	ret
 main:

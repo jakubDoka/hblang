@@ -607,6 +607,7 @@ pub const builtin = enum {
     pub const Mem = extern struct {
         pub const is_pinned = true;
     };
+    pub const MemJoin = extern struct {};
     pub const MemCpy = mod.MemCpy;
     pub const Load = mod.Load;
     pub const Store = mod.Store;
@@ -713,6 +714,7 @@ const gcm = @import("gcm.zig");
 const mem2reg = @import("mem2reg.zig");
 const static_anal = @import("static_anal.zig");
 const inliner = @import("inliner.zig");
+const alias_anal = @import("alias_anal.zig");
 
 pub fn FuncNode(comptime Backend: type) type {
     return Func(Backend).Node;
@@ -730,6 +732,7 @@ pub fn Func(comptime Backend: type) type {
         end: *Node = undefined,
         gcm: gcm.Mixin(Backend) = .{},
         mem2reg: mem2reg.Mixin(Backend) = .{},
+        alias_anal: alias_anal.Mixin(Backend) = .{},
         static_anal: static_anal.Mixin(Backend) = .{},
         inliner: inliner.Mixin(Backend) = .{},
         stopped_interning: std.debug.SafetyLock = .{},
@@ -910,9 +913,12 @@ pub fn Func(comptime Backend: type) type {
                             if (extra.cached_lca) |lca| {
                                 return @ptrCast(lca);
                             } else {
-                                const lca = findLca(cfg.base.inputs()[0].?.asCfg().?, cfg.base.inputs()[1].?.asCfg().?);
+                                const lca = findLca(
+                                    cfg.base.inputs()[0].?.asCfg().?,
+                                    cfg.base.inputs()[1].?.asCfg().?,
+                                );
                                 cfg.base.extra(.Region).cached_lca = lca;
-                                lca.base.subclass(If).?.ext.id = cfg.base.id;
+                                (lca.base.subclass(If) orelse return lca).ext.id = cfg.base.id;
                                 return lca;
                             }
                         },
@@ -928,6 +934,95 @@ pub fn Func(comptime Backend: type) type {
 
                 pub fn format(self: *const CfgNode, comptime a: anytype, b: anytype, writer: anytype) !void {
                     try self.base.format(a, b, writer);
+                }
+
+                pub fn scheduleBlockAndRestoreBlockIds(bbc: *CfgNode) void {
+                    // we do it here because some loads are scheduled already and removing them in this loop messes up the
+                    // cheduling in other blocks, we need to hack this becaus there are no anty deps on loads yet, since this
+                    // runs before gcm
+                    //
+
+                    const bb = &bbc.base;
+
+                    // carefull, the scheduleBlock messes up the node.schedule
+                    //
+                    var buf: [2]*Node = undefined;
+                    var scheds: [2]u16 = undefined;
+                    var len: usize = 0;
+                    for (bb.outputs()) |use| {
+                        if (use.get().isCfg()) {
+                            buf[len] = use.get();
+                            scheds[len] = use.get().schedule;
+                            len += 1;
+                        }
+                    }
+
+                    if (bb.isBasicBlockStart()) {
+                        scheduleBlock(bb.asCfg().?);
+                    }
+
+                    if (!(bb.kind == .If or len == 1)) {
+                        unreachable;
+                    }
+
+                    for (buf[0..len], scheds[0..len]) |n, s| n.schedule = s;
+                }
+
+                pub fn scheduleBlock(bb: *CfgNode) void {
+                    var tmp = utils.Arena.scrath(null);
+                    defer tmp.deinit();
+
+                    // init meta
+                    const extr: []u8 = tmp.arena.alloc(u8, bb.base.outputs().len);
+                    for (bb.base.outputs(), extr, 0..) |in, *e, i| {
+                        const instr = in.get();
+                        instr.schedule = @intCast(i);
+
+                        e.* = 0;
+
+                        if (instr.kind != .Phi) {
+                            for (instr.inputs()[1..]) |d| if (d) |def| {
+                                // if instr == df, this is a infinite loop
+                                if (def.tryCfg0() == bb or instr == def) {
+                                    e.* += 1;
+                                }
+                            };
+                        }
+                    }
+
+                    const outs = bb.base.outputs();
+                    var ready: usize = 0;
+                    for (outs) |*o| {
+                        if (extr[o.get().schedule] == 0) {
+                            std.mem.swap(Node.Out, &outs[ready], o);
+                            ready += 1;
+                        }
+                    }
+
+                    var scheduled: usize = 0;
+                    if (ready != scheduled) while (scheduled < outs.len - 1) {
+                        if (ready == scheduled) utils.panic(
+                            "{} {} {} {any}",
+                            .{ scheduled, outs.len, bb, outs[scheduled..] },
+                        );
+
+                        const n = outs[scheduled].get();
+                        for (n.outputs()) |def| if (bb == def.get().tryCfg0() and
+                            def.get().kind != .Phi)
+                        {
+                            extr[def.get().schedule] -= 1;
+                        };
+
+                        scheduled += 1;
+
+                        for (outs[ready..]) |*o| {
+                            if (extr[o.get().schedule] == 0) {
+                                std.debug.assert(o.get().kind != .Phi);
+                                std.mem.swap(Node.Out, &outs[ready], o);
+                                ready += 1;
+                            }
+                        }
+                    };
                 }
             };
         }
@@ -1129,20 +1224,53 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn noAlias(self: *Node, other: *Node) bool {
-                const lsize: i64 = @bitCast(self.data_type.size());
-                const rsize: i64 = @bitCast(other.data_type.size());
+                const lsize: i64 = if (self.kind == .MemCpy and
+                    if (self.inputs()[4].?.kind != .CInt) return false else true)
+                    self.inputs()[4].?.extra(.CInt).value
+                else
+                    @bitCast(self.data_type.size());
+                const rsize: i64 = if (other.kind == .MemCpy and
+                    if (other.inputs()[4].?.kind != .CInt) return false else true)
+                    other.inputs()[4].?.extra(.CInt).value
+                else
+                    @bitCast(other.data_type.size());
                 const lbase, var loff = knownOffset(self.base());
                 const rbase, var roff = knownOffset(other.base());
                 loff += self.getStaticOffset();
                 roff += other.getStaticOffset();
 
-                if ((lbase.kind == .Local or lbase.kind == .StructArg) and
-                    (rbase.kind == .Local or rbase.kind == .StructArg))
-                    return (lbase != rbase) or (loff + lsize <= roff) or (roff + rsize <= loff);
-                if (lbase.kind == .Local and rbase.kind == .Arg) return true;
-                if (rbase.kind == .Arg and rbase.kind == .Local) return true;
-                if (lbase == rbase) return (loff + lsize <= roff) or (roff + rsize <= loff);
-                return false;
+                if (lbase.ptrsNoAlias(rbase)) return true;
+                if (lbase != rbase) return false;
+
+                return (loff + lsize <= roff) or (roff + rsize <= loff);
+            }
+
+            pub fn fullAlias(self: *Node, other: *Node) bool {
+                const lsize: i64 = if (self.kind == .MemCpy and
+                    if (self.inputs()[4].?.kind != .CInt) return false else true)
+                    self.inputs()[4].?.extra(.CInt).value
+                else
+                    @bitCast(self.data_type.size());
+                const rsize: i64 = if (other.kind == .MemCpy and
+                    if (other.inputs()[4].?.kind != .CInt) return false else true)
+                    other.inputs()[4].?.extra(.CInt).value
+                else
+                    @bitCast(other.data_type.size());
+                const lbase, var loff = knownOffset(self.base());
+                const rbase, var roff = knownOffset(other.base());
+                loff += self.getStaticOffset();
+                roff += other.getStaticOffset();
+
+                if (lbase.ptrsNoAlias(rbase)) return false;
+                if (lbase != rbase) return true;
+
+                return (loff <= roff) and (roff + rsize <= loff + lsize);
+            }
+
+            pub fn ptrsNoAlias(self: *Node, other: *Node) bool {
+                return ((self.kind == .Local or self.kind == .StructArg or self.kind == .Arg) and
+                    (other.kind == .Local or other.kind == .StructArg or other.kind == .Arg)) and
+                    (self != other and (self.kind != .Arg or other.kind != .Arg));
             }
 
             pub fn isStack(self: *Node) bool {
@@ -1790,6 +1918,18 @@ pub fn Func(comptime Backend: type) type {
             return self.addNode(.UnOp, sloc, ty, &.{ null, oper }, .{ .op = op });
         }
 
+        pub fn addMemJoin(self: *Self, to_join: []const *Node) *Node {
+            errdefer unreachable;
+
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            if (to_join.len == 1) return to_join[0];
+
+            const inps = try std.mem.concat(tmp.arena.allocator(), ?*Node, &.{ &.{null}, to_join });
+            return self.addNode(.MemJoin, .none, .top, inps, .{});
+        }
+
         pub fn addTrap(self: *Self, sloc: Sloc, ctrl: *Node, code: u64) void {
             self.addTrapLow(sloc, ctrl, code, setInputNoIntern);
         }
@@ -2183,6 +2323,7 @@ pub fn Func(comptime Backend: type) type {
             {
                 var cursor = node.cfg0();
                 while (cursor.base.kind != .Entry) : (cursor = cursor.idom()) {
+                    if (cursor.base.data_type == .bot) break;
                     if (cursor.base.kind != .Then and cursor.base.kind != .Else) continue;
 
                     const if_node = cursor.base.inputs()[0].?;
@@ -2422,6 +2563,7 @@ pub fn Func(comptime Backend: type) type {
                         base.extra(.GlobalAddr).id,
                         offset + node.getStaticOffset(),
                         node.data_type.size(),
+                        false,
                     ) orelse break :fold_const_read;
 
                     switch (res) {

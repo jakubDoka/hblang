@@ -622,6 +622,12 @@ pub fn jitExprLow(
     value: Ast.Id,
 ) error{Never}!struct { JitResult, Types.Id } {
     const types = self.getTypes();
+    const ast = types.getFile(scope.file(types));
+
+    if (value.tag() == .Buty) {
+        types.stats.skipped_buty_jit_exprs += 1;
+        return .{ .{ .constant = @intFromEnum(Types.Id.fromLexeme(ast.exprs.get(value).Buty.*.bt)) }, .type };
+    }
 
     var jit_met = types.metrics.begin(.jit);
     defer jit_met.end();
@@ -647,7 +653,7 @@ pub fn jitExprLow(
         defer gen.bl.func.reset();
 
         const token = gen.beginBuilder(tmp.arena, .never, &.{.{ .Reg = .i64 }}, &.{}, .{});
-        gen.ast = types.getFile(scope.file(types));
+        gen.ast = ast;
         gen.parent_scope = scope;
         gen.name = name;
         gen.struct_ret_ptr = null;
@@ -664,8 +670,27 @@ pub fn jitExprLow(
 
         if (ret.id == .Value and ret.id.Value.kind == .CInt) {
             types.func_work_list.getPtr(.@"comptime").items.len = pop_until;
+            types.stats.skipped_constant_jit_exprs += 1;
             return .{ .{ .constant = ret.id.Value.extra(.CInt).value }, ret.ty };
         }
+
+        if (types.retainGlobals(.@"comptime", &self.gen)) return error.Never;
+
+        if (ret.id == .Pointer and gen.abiCata(ret.ty) == .ByValue and
+            ret.id.Pointer.kind == .GlobalAddr)
+        {
+            types.func_work_list.getPtr(.@"comptime").items.len = pop_until;
+            const cnst = self.gen.out.readFromSym(
+                ret.id.Pointer.extra(.GlobalAddr).id,
+                0,
+                @intCast(ret.ty.size(self.getTypes())),
+                true,
+            ).?.value;
+            types.stats.skipped_global_jit_exprs += 1;
+            return .{ .{ .constant = cnst }, ret.ty };
+        }
+
+        types.stats.full_jit_exprs += 1;
 
         gen.emitGenericStore(.none, ptr, &ret);
 

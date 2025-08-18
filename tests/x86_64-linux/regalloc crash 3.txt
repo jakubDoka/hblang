@@ -1,11 +1,6 @@
 regalloc crash 3.broken:
-	sub rsp, 0x10
-	mov [rsp], rsi
-	mov [rsp+0x08], rdx
 	mov [rdi], rsi
-	mov rax, [rsp+0x08]
-	mov [rdi+0x08], rax
-	add rsp, 0x10
+	mov [rdi+0x08], rdx
 	ret
 main:
 	sub rsp, 0xD8
