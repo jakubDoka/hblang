@@ -46,6 +46,12 @@ pub fn Mixin(comptime Backend: type) type {
             for (postorder) |bbc| {
                 const bb = &bbc.base;
 
+                if (bb.kind == .Call or bb.kind == .Return) {
+                    std.debug.assert(threads.items.len != 0);
+                    const join = self.addMemJoin(threads.items);
+                    self.setInputNoIntern(bb, 1, join);
+                }
+
                 if (bb.outputs().len == 0) continue;
 
                 var parent_succs: usize = 0;
@@ -84,7 +90,7 @@ pub fn Mixin(comptime Backend: type) type {
                         if (std.mem.indexOfScalar(*Node, matches.items, cursor) == null) {
                             try matches.append(stmp.arena.allocator(), cursor);
                         }
-                        if (thread.*.isStore() and !thread.*.fullAlias(o)) {
+                        if (thread.*.isStore() and !o.fullAlias(thread.*)) {
                             try preserved.append(stmp.arena.allocator(), thread.*);
                         }
                     }
@@ -99,12 +105,6 @@ pub fn Mixin(comptime Backend: type) type {
                     @memcpy(threads.items, preserved.items);
 
                     try threads.append(tmp.arena.allocator(), o);
-                }
-
-                if (bb.kind == .Call or bb.kind == .Return) {
-                    std.debug.assert(threads.items.len != 0);
-                    const join = self.addMemJoin(threads.items);
-                    self.setInputNoIntern(bb, 1, join);
                 }
 
                 if (bb.kind == .CallEnd) {

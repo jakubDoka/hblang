@@ -1144,7 +1144,7 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn dataDeps(self: *Node) []*Node {
-                if (self.kind == .Phi and !self.isDataPhi()) return &.{};
+                if ((self.kind == .Phi and !self.isDataPhi()) or self.kind == .MemJoin) return &.{};
                 const start = self.dataDepOffset();
                 const deps = self.input_base[start..self.input_ordered_len];
                 std.debug.assert(std.mem.indexOfScalar(?*Node, deps, null) == null);
@@ -1224,20 +1224,8 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn noAlias(self: *Node, other: *Node) bool {
-                const lsize: i64 = if (self.kind == .MemCpy and
-                    if (self.inputs()[4].?.kind != .CInt) return false else true)
-                    self.inputs()[4].?.extra(.CInt).value
-                else
-                    @bitCast(self.data_type.size());
-                const rsize: i64 = if (other.kind == .MemCpy and
-                    if (other.inputs()[4].?.kind != .CInt) return false else true)
-                    other.inputs()[4].?.extra(.CInt).value
-                else
-                    @bitCast(other.data_type.size());
-                const lbase, var loff = knownOffset(self.base());
-                const rbase, var roff = knownOffset(other.base());
-                loff += self.getStaticOffset();
-                roff += other.getStaticOffset();
+                const lsize, const loff, const lbase = self.getOffsetSizeBase() orelse return false;
+                const rsize, const roff, const rbase = other.getOffsetSizeBase() orelse return false;
 
                 if (lbase.ptrsNoAlias(rbase)) return true;
                 if (lbase != rbase) return false;
@@ -1246,25 +1234,24 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn fullAlias(self: *Node, other: *Node) bool {
-                const lsize: i64 = if (self.kind == .MemCpy and
-                    if (self.inputs()[4].?.kind != .CInt) return false else true)
-                    self.inputs()[4].?.extra(.CInt).value
-                else
-                    @bitCast(self.data_type.size());
-                const rsize: i64 = if (other.kind == .MemCpy and
-                    if (other.inputs()[4].?.kind != .CInt) return false else true)
-                    other.inputs()[4].?.extra(.CInt).value
-                else
-                    @bitCast(other.data_type.size());
-                const lbase, var loff = knownOffset(self.base());
-                const rbase, var roff = knownOffset(other.base());
-                loff += self.getStaticOffset();
-                roff += other.getStaticOffset();
+                const lsize, const loff, const lbase = self.getOffsetSizeBase() orelse return false;
+                const rsize, const roff, const rbase = other.getOffsetSizeBase() orelse return false;
 
                 if (lbase.ptrsNoAlias(rbase)) return false;
                 if (lbase != rbase) return true;
 
                 return (loff <= roff) and (roff + rsize <= loff + lsize);
+            }
+
+            pub fn getOffsetSizeBase(self: *Node) ?struct { i64, i64, *Node } {
+                const siz: i64 = if (self.kind == .MemCpy and
+                    if (self.inputs()[4].?.kind != .CInt) return null else true)
+                    self.inputs()[4].?.extra(.CInt).value
+                else
+                    @bitCast(self.data_type.size());
+                const bas, var off = knownOffset(self.base());
+                off += self.getStaticOffset();
+                return .{ siz, off, bas };
             }
 
             pub fn ptrsNoAlias(self: *Node, other: *Node) bool {
@@ -1511,6 +1498,7 @@ pub fn Func(comptime Backend: type) type {
                     !self.isCfg() and
                     (self.kind != .Phi or self.isDataPhi()) and
                     self.kind != .LocalAlloc and
+                    self.kind != .MemJoin and
                     self.kind != .Mem;
             }
 
@@ -1925,6 +1913,34 @@ pub fn Func(comptime Backend: type) type {
             defer tmp.deinit();
 
             if (to_join.len == 1) return to_join[0];
+
+            var loads = std.ArrayListUnmanaged(*Node){};
+            for (to_join) |st| {
+                var cursor = st;
+                while (cursor.kind == .Store) {
+                    for (cursor.outputs()) |out| {
+                        if (out.pos() == 1 and out.get().kind == .Load) {
+                            try loads.append(tmp.arena.allocator(), out.get());
+                        }
+                    }
+                    cursor = cursor.mem();
+                }
+            }
+
+            for (loads.items) |load| {
+                for (to_join) |st| {
+                    var cursor = st;
+                    while (cursor.kind == .Store) {
+                        if (cursor.base() == load.base() and
+                            cursor.data_type == load.data_type)
+                        {
+                            self.subsume(cursor.value().?, load);
+                        }
+
+                        cursor = cursor.mem();
+                    }
+                }
+            }
 
             const inps = try std.mem.concat(tmp.arena.allocator(), ?*Node, &.{ &.{null}, to_join });
             return self.addNode(.MemJoin, .none, .top, inps, .{});

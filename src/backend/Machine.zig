@@ -914,8 +914,7 @@ pub const OptOptions = struct {
     }
 
     pub fn doAliasAnal(comptime Backend: type, func: *graph.Func(Backend)) void {
-        _ = func; // autofix
-        //func.alias_anal.run();
+        if (0 == 1) func.alias_anal.run();
     }
 
     pub fn optimizeDebug(self: OptOptions, comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) void {
@@ -1019,8 +1018,6 @@ pub const OptOptions = struct {
                 doMem2Reg(Backend, sym);
                 mem2reg.end();
 
-                doAliasAnal(Backend, sym);
-
                 mem2reg_waste += sym.waste;
             }
 
@@ -1028,6 +1025,8 @@ pub const OptOptions = struct {
                 var generic = metrics.begin(.generic);
                 idealizeGeneric(Backend, backend, sym, false);
                 generic.end();
+
+                doAliasAnal(Backend, sym);
 
                 generic_waste += sym.waste;
             }

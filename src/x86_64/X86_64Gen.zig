@@ -1215,7 +1215,6 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     try self.out.addFuncReloc(self.gpa.allocator(), call.id, .@"4", -4, 4);
                 }
             },
-            .Arg, .Ret, .Mem, .Never => {},
             .Trap => {
                 switch (instr.extra(.Trap).code) {
                     graph.unreachable_func_trap,
@@ -1266,8 +1265,6 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 // j[op] dst
                 self.emitBytes(&.{ 0x0f, jmpCompOp(extra.op), 0, 0, 0, 0 });
             },
-            .Jmp => {},
-            .Return => {},
             inline .OpLoad, .OpStackLoad => |extra, t| {
                 const op = extra.op;
                 const op_dt = instr.data_type;
@@ -1761,6 +1758,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     .fneg => unreachable,
                 }
             },
+            .Arg, .Ret, .MemJoin, .Mem, .Never, .Jmp, .Return => {},
             else => {
                 utils.panic("{any}", .{instr});
             },

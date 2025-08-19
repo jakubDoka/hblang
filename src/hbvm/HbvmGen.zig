@@ -311,8 +311,6 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     if (opts.optimizations.apply(HbvmGen, func, self, id)) return;
 
-    // func.fmtScheduled(std.io.getStdErr().writer().any(), .escape_codes);
-
     var tmp = utils.Arena.scrath(if (opts.optimizations == .opts)
         opts.optimizations.opts.arena
     else
@@ -658,7 +656,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 if (dst == src) continue;
                 self.emit(.cp, .{ dst, src });
             },
-            .Never, .Mem, .Ret, .Phi, .Jmp => {},
+            .Never, .Mem, .MemJoin, .Ret, .Phi, .Jmp => {},
             else => |e| {
                 utils.panic("{any} {any}", .{ no, e });
             },
