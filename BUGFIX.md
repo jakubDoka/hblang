@@ -2,6 +2,25 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### mul reduction 1
+```hb
+expectations := .{
+    return_value: 10,
+}
+
+main := fn(): uint {
+    return foo(1, 2, 3) + bar(6, 2, 4)
+}
+
+foo := fn(a: uint, b: uint, c: uint): uint {
+    return a * b + a * c
+}
+
+bar := fn(a: uint, b: uint, c: uint): uint {
+    return a / b + c / b
+}
+```
+
 #### scoping 1
 ```hb
 A := struct {

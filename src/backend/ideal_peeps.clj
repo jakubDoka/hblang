@@ -3,10 +3,25 @@
   (CInt _ (:value rhs))
 ) : (CInt c (:value {op.eval(data_type, lhs, rhs)}))
 
+(BinOp ?ct (:op op && {op.isDistributing()})
+  (BinOp _ (:op other_op &&
+    {other_op.isDistributive() and other_op.isComutative()}) a b)
+  (BinOp _ (:op (&other_op)) c d @ e f g =
+    {hb.utils.undistributeComutative(a, b, c, d) orelse break :rule})
+) : (BinOp ct (:op other_op) e (BinOp ct (:op) f g))
+
+(BinOp ?ct (:op op && {op.isDistributing()})
+  (BinOp _ (:op other_op &&
+    {other_op.isRightDistributive()}) a b)
+  (BinOp _ (:op (&other_op)) c d @ e f g =
+    {hb.utils.undistribute(a, b, c, d, true) orelse break :rule})
+) : (BinOp ct (:op other_op) (BinOp ct (:op) e f) g)
+
 (BinOp ?c (:op op @ cnst = {op.symetricConstant()}) a (&a)) :
   (CInt c (:value {cnst orelse break :rule}))
 
-(BinOp _ :op lhs (CInt (:value rhs & {op.neutralElememnt()}))) : lhs
+(BinOp _ :data_type :op lhs
+  (CInt (:value rhs & {op.neutralElememnt(data_type)}))) : lhs
 
 (BinOp ?c :op _ (CInt (:value v @ nvl = {op.killConstant(v)}))) :
   (CInt c (:value {nvl orelse break :rule}))

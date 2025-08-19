@@ -1,0 +1,26 @@
+mul reduction 1.bar:
+	mov rax, rdi
+	add rax, rdx
+	xor rdx, rdx
+	div rsi
+	ret
+mul reduction 1.foo:
+	add rsi, rdx
+	mov rax, rdi
+	imul rax, rsi
+	ret
+main:
+	push rbx
+	mov rsi, 0x02
+	mov rdi, 0x01
+	mov rdx, 0x03
+	call :mul reduction 1.foo
+	mov rbx, rax
+	mov rdi, 0x06
+	mov rdx, 0x04
+	mov rsi, 0x02
+	call :mul reduction 1.bar
+	add rbx, rax
+	mov rax, rbx
+	pop rbx
+	ret

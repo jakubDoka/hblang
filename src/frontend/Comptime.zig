@@ -316,7 +316,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                 }
 
                 if (curr.base().kind == .BinOp and
-                    curr.base().extra(.BinOp).op.neutralElememnt() ==
+                    curr.base().extra(.BinOp).op.neutralElememnt(.i64) ==
                         curr.base().inputs()[2].?.extra(.CInt).value)
                 {
                     bl.func.subsume(curr.base().inputs()[1].?, curr.base());

@@ -175,12 +175,33 @@ pub const BinOp = enum(u8) {
         };
     }
 
-    pub fn neutralElememnt(self: BinOp) ?i64 {
+    pub fn isDistributive(self: BinOp) bool {
+        return switch (self) {
+            .imul => true,
+            else => false,
+        };
+    }
+
+    pub fn isRightDistributive(self: BinOp) bool {
+        return switch (self) {
+            .udiv, .sdiv => true,
+            else => false,
+        };
+    }
+
+    pub fn isDistributing(self: BinOp) bool {
+        return switch (self) {
+            .iadd, .isub => true,
+            else => false,
+        };
+    }
+
+    pub fn neutralElememnt(self: BinOp, ty: DataType) ?i64 {
         return switch (self) {
             .iadd, .isub, .fsub, .fadd, .bxor, .bor, .ishl, .sshr, .ushr => 0,
-            .band => -1,
+            .band => @as(i64, -1) & ty.mask().?,
             .imul, .sdiv, .udiv => 1,
-            .fmul, .fdiv => @bitCast(@as(f64, 1.0)),
+            .fmul, .fdiv => if (ty == .f64) @bitCast(@as(f64, 1.0)) else @as(u32, @bitCast(@as(f32, 1.0))),
             else => null,
         };
     }

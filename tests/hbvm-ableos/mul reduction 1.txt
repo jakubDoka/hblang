@@ -1,0 +1,24 @@
+main:
+         st $31, $254, -16, 16
+     addi64 $254, $254, -16
+       li64 $2, 2
+       li64 $1, 1
+       li64 $3, 3
+        jal $31, $0, :mul reduction 1.foo
+         cp $32, $1
+       li64 $1, 6
+       li64 $3, 4
+       li64 $2, 2
+        jal $31, $0, :mul reduction 1.bar
+      add64 $1, $32, $1
+     addi64 $254, $254, 16
+         ld $31, $254, -16, 16
+         tx
+mul reduction 1.bar:
+      add64 $1, $1, $3
+     diru64 $1, $0, $1, $2
+       jala $0, $31, 0
+mul reduction 1.foo:
+      add64 $2, $2, $3
+      mul64 $1, $1, $2
+       jala $0, $31, 0

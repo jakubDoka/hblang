@@ -2,6 +2,36 @@ const std = @import("std");
 
 pub const freestanding = @import("builtin").target.os.tag == .freestanding;
 
+pub fn undistributeComutative(
+    a: anytype,
+    b: @TypeOf(a),
+    c: @TypeOf(a),
+    d: @TypeOf(a),
+) ?struct { @TypeOf(a), @TypeOf(a), @TypeOf(a) } {
+    if (a == b) return .{ a, c, d };
+    if (a == c) return .{ a, b, d };
+    if (a == d) return .{ a, b, c };
+
+    if (b == c) return .{ b, a, d };
+    if (b == d) return .{ b, a, c };
+
+    if (c == d) return .{ c, a, b };
+
+    return null;
+}
+
+pub fn undistribute(
+    a: anytype,
+    b: @TypeOf(a),
+    c: @TypeOf(a),
+    d: @TypeOf(a),
+    is_rhs: bool,
+) ?struct { @TypeOf(a), @TypeOf(a), @TypeOf(a) } {
+    if (b == d and is_rhs) return .{ a, c, b };
+    if (a == c and !is_rhs) return .{ a, b, d };
+    return null;
+}
+
 pub fn dedupeSorted(comptime T: type, slice: []T) usize {
     if (slice.len == 0) return 0;
 

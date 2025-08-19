@@ -1,0 +1,47 @@
+mul reduction 1.foo:
+	sub rsp, 0x20
+	mov [rsp], rdi
+	mov [rsp+0x08], rsi
+	mov [rsp+0x10], rdx
+	mov rsi, [rsp+0x08]
+	mov rdx, [rsp+0x10]
+	mov rcx, [rsp]
+	mov rax, rcx
+	imul rax, rsi
+	imul rcx, rdx
+	add rax, rcx
+	add rsp, 0x20
+	ret
+mul reduction 1.bar:
+	sub rsp, 0x20
+	mov [rsp], rdi
+	mov [rsp+0x08], rsi
+	mov [rsp+0x10], rdx
+	mov rsi, [rsp+0x08]
+	mov rax, [rsp]
+	xor rdx, rdx
+	div rsi
+	mov rcx, rax
+	mov rax, [rsp+0x10]
+	xor rdx, rdx
+	div rsi
+	add rcx, rax
+	mov rax, rcx
+	add rsp, 0x20
+	ret
+main:
+	sub rsp, 0x18
+	mov rsi, 0x02
+	mov rdi, 0x01
+	mov rdx, 0x03
+	call :mul reduction 1.foo
+	mov [rsp], rax
+	mov rdx, 0x04
+	mov rdi, 0x06
+	mov rsi, 0x02
+	call :mul reduction 1.bar
+	mov [rsp+0x08], rax
+	mov rax, [rsp]
+	add rax, [rsp+0x08]
+	add rsp, 0x18
+	ret
