@@ -11,9 +11,10 @@ pub fn main() !void {
 
     const out_file = try std.fs.cwd().createFile(out, .{});
     defer out_file.close();
-    const writer = out_file.writer();
+    var buffer: [1024 * 4]u8 = undefined;
+    var writer = out_file.writer(&buffer);
 
-    try writer.print(
+    try writer.interface.print(
         \\const utils = @import("utils");
         \\
         \\
@@ -32,7 +33,7 @@ pub fn main() !void {
         body = try std.mem.replaceOwned(u8, arena, body, "\r", "\\r");
         body = try std.mem.replaceOwned(u8, arena, body, "\"", "\\\"");
 
-        try writer.print(
+        try writer.interface.print(
             \\test "{s}" {{
             \\    try utils.runTest(
             \\        "{s}",
@@ -42,11 +43,13 @@ pub fn main() !void {
             .{ name, name, body },
         );
 
-        try writer.writeAll(
+        try writer.interface.writeAll(
             \\    );
             \\}
             \\
             \\
         );
     }
+
+    try writer.interface.flush();
 }

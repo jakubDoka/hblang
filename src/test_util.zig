@@ -73,19 +73,20 @@ pub fn runVendoredTest(
     target: []const u8,
     optimizations: Mach.OptOptions.Mode,
 ) !void {
+    const stderr = std.fs.File.stderr();
+    var stderr_writer = stderr.writer(&.{});
+
     var opts = root.CompileOptions{
-        .diagnostics = std.io.getStdErr().writer().any(),
-        .colors = std.io.tty.detectConfig(std.io.getStdErr()),
-        .output = std.io.null_writer.any(),
+        .diagnostics = &stderr_writer.interface,
+        .colors = std.io.tty.detectConfig(std.fs.File.stderr()),
         .mangle_terminal = true,
         .vendored_test = true,
         .root_file = path,
         .target = target,
         .optimizations = optimizations,
     };
-    utils.Arena.initScratch(opts.scratch_memory);
-
     const scratch = utils.Arena.scrath(null);
+
     opts.path_projection.ensureTotalCapacity(
         scratch.arena.allocator(),
         @intCast(projs.len),
@@ -98,7 +99,9 @@ pub fn runVendoredTest(
     try root.compile(opts);
 }
 
-pub inline fn header(comptime name: []const u8, writer: anytype, corors: std.io.tty.Config) !void {
+pub inline fn header(comptime name: []const u8, owriter: ?*std.Io.Writer, corors: std.io.tty.Config) !void {
+    const writer = owriter orelse return;
+
     const side = "========";
     const msg = "\n" ++ side ++ " " ++ name ++ " " ++ side ++ "\n";
     try corors.setColor(writer, .dim);
@@ -106,7 +109,7 @@ pub inline fn header(comptime name: []const u8, writer: anytype, corors: std.io.
     try corors.setColor(writer, .reset);
 }
 
-pub fn parseExample(arena: *utils.Arena, name: []const u8, code: []const u8, output: std.io.AnyWriter) ![]Ast {
+pub fn parseExample(arena: *utils.Arena, name: []const u8, code: []const u8, output: *std.Io.Writer) ![]Ast {
     const FileRecord = struct {
         path: []const u8,
         source: [:0]const u8,
@@ -126,8 +129,7 @@ pub fn parseExample(arena: *utils.Arena, name: []const u8, code: []const u8, out
 
     var tmp = utils.Arena.scrath(arena);
     defer tmp.deinit();
-    var files = std.ArrayList(FileRecord).init(tmp.arena.allocator());
-    defer files.deinit();
+    var files = std.ArrayList(FileRecord).empty;
 
     const signifier = "// in: ";
     var prev_name: []const u8 = name;
@@ -138,7 +140,7 @@ pub fn parseExample(arena: *utils.Arena, name: []const u8, code: []const u8, out
             .path = prev_name,
             .source = arena.allocator().dupeZ(u8, std.mem.trim(u8, code[prev_end..next_end], "\t \n")) catch unreachable,
         };
-        try files.append(fr);
+        try files.append(tmp.arena.allocator(), fr);
         prev_end = next_end + signifier.len;
         if (prev_end < code.len) if (std.mem.indexOf(u8, code[prev_end..], "\n")) |idx| {
             prev_name = code[prev_end..][0..idx];
@@ -176,7 +178,7 @@ pub fn testBuilder(
     code: []const u8,
     target: []const u8,
     gpa: std.mem.Allocator,
-    output: std.io.AnyWriter,
+    output: *std.Io.Writer,
     gen: root.backend.Machine,
     opts: root.backend.Machine.OptOptions.Mode,
     abi: root.frontend.Types.Abi,
@@ -256,7 +258,7 @@ pub fn testBuilder(
         .name = name,
         .code = out.items,
         .colors = colors,
-        .output = if (verbose) output else std.io.null_writer.any(),
+        .output = if (verbose) output else null,
     }));
 }
 
@@ -266,7 +268,7 @@ pub fn testFmt(
     name: []const u8,
     path: []const u8,
     code: [:0]const u8,
-    out: std.io.AnyWriter,
+    out: *std.Io.Writer,
     color: std.io.tty.Config,
 ) !void {
     var tmp = utils.Arena.scrath(null);
@@ -285,17 +287,16 @@ pub fn testFmt(
         );
     }
 
-    var fmtd = std.ArrayList(u8).init(gpa);
-    defer fmtd.deinit();
+    var fmtd = std.Io.Writer.Allocating.init(gpa);
 
-    try ast.fmt(&fmtd);
+    try ast.fmt(&fmtd.writer);
 
     if (!std.mem.eql(
         u8,
         std.mem.trim(u8, code, "\n"),
-        std.mem.trim(u8, fmtd.items, "\n"),
+        std.mem.trim(u8, fmtd.written(), "\n"),
     )) {
-        try diff.printDiff(fmtd.items, code, gpa, out, color);
+        try diff.printDiff(fmtd.written(), code, gpa, out, color);
         return error.TestFailed;
     }
 }
@@ -304,7 +305,7 @@ pub fn checkOrUpdatePrintTest(
     name: []const u8,
     category: []const u8,
     output: []const u8,
-    out: std.io.AnyWriter,
+    out: *std.Io.Writer,
     color: std.io.tty.Config,
 ) !void {
     var tests_root = try std.fs.cwd().openDir("tests", .{});

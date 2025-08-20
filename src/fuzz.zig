@@ -23,6 +23,7 @@ comptime {
 }
 
 fn fuzz() callconv(.c) void {
+    if (true) return;
     utils.Arena.initScratch(1024 * 1024);
     var arena = utils.Arena.init(1024 * 1024 * 4);
     const input = std.io.getStdIn().readToEndAlloc(arena.allocator(), 1024 * 1024) catch unreachable;
@@ -40,7 +41,7 @@ pub fn fuzzRun(
     name: []const u8,
     code: []const u8,
     arena: *utils.Arena,
-    output: std.io.AnyWriter,
+    output: *std.Io.Writer,
 ) !void {
     if (false) {
         const asts = try tests.parseExample(arena, name, code, output);

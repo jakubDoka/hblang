@@ -29,7 +29,7 @@ pub fn main() !void {
             .{ .iterate = true },
         );
 
-        var escaped = std.ArrayList(u8).init(arena);
+        var escaped = std.ArrayList(u8).empty;
         var iter2 = worker_dir.iterate();
         while (try iter2.next()) |file| {
             if (!std.mem.startsWith(u8, file.name, "id:")) continue;
@@ -42,9 +42,9 @@ pub fn main() !void {
             escaped.items.len = 0;
             for (body) |c| {
                 if (std.ascii.isPrint(c)) {
-                    try escaped.append(c);
+                    try escaped.append(arena, c);
                 } else {
-                    try escaped.writer().print("\\x{x:02}", .{c});
+                    try escaped.writer(arena).print("\\x{x:02}", .{c});
                 }
             }
             body = escaped.items;

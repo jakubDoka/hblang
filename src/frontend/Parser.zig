@@ -17,7 +17,7 @@ cur: Lexer.Token,
 current: Types.File,
 path: []const u8,
 loader: Loader,
-diagnostics: std.io.AnyWriter,
+diagnostics: ?*std.Io.Writer,
 colors: std.io.tty.Config,
 stack_base: usize,
 store: Ast.Store = .{},
@@ -89,7 +89,7 @@ pub const Loader = struct {
         from: Types.File,
         pos: u32,
         colors: std.io.tty.Config,
-        diagnostics: std.io.AnyWriter,
+        diagnostics: ?*std.Io.Writer,
         type: Kind,
 
         pub const Kind = enum(u1) { use, embed };
@@ -105,7 +105,7 @@ pub const Loader = struct {
             .data = value,
             ._load = struct {
                 fn load(self: *anyopaque, opts: LoadOptions) ?Types.File {
-                    const slf: *Ty = @alignCast(@ptrCast(self));
+                    const slf: *Ty = @ptrCast(@alignCast(self));
                     return slf.load(opts);
                 }
             }.load,

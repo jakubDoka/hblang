@@ -72,7 +72,7 @@ pub const CompileUnitRelocs = struct {
     text_base_offset: usize,
 };
 
-pub fn writeCompileUnit(writer: std.io.AnyWriter, root_file: []const u8, code_size: u32) CompileUnitRelocs {
+pub fn writeCompileUnit(writer: *std.Io.Writer, root_file: []const u8, code_size: u32) CompileUnitRelocs {
     errdefer unreachable;
 
     var buf: [10]u8 = undefined;
@@ -101,7 +101,7 @@ pub const SubprogramRelocs = struct {
     text_base_offset: usize,
 };
 
-pub fn writeSubprogram(writer: std.io.AnyWriter, name: []const u8, size: u32, stack_size: u32) SubprogramRelocs {
+pub fn writeSubprogram(writer: *std.Io.Writer, name: []const u8, size: u32, stack_size: u32) SubprogramRelocs {
     errdefer unreachable;
 
     var buf: [10]u8 = undefined;
@@ -121,13 +121,13 @@ pub fn writeSubprogram(writer: std.io.AnyWriter, name: []const u8, size: u32, st
     };
 }
 
-pub fn endSiblings(writer: std.io.AnyWriter) void {
+pub fn endSiblings(writer: *std.Io.Writer) void {
     errdefer unreachable;
     var buf: [10]u8 = undefined;
     try writer.writeAll(writeUleb128(&buf, 0));
 }
 
-pub fn writeAbbrev(writer: std.io.AnyWriter) void {
+pub fn writeAbbrev(writer: *std.Io.Writer) void {
     errdefer unreachable;
 
     writeAbbrevEntry(writer, compile_unit_abbrev, .compile_unit, true, &.{
@@ -151,7 +151,7 @@ pub fn writeAbbrev(writer: std.io.AnyWriter) void {
     try writer.writeAll(writeUleb128(&buf, 0));
 }
 
-pub fn writeUnwindInfo(writer: std.io.AnyWriter, stack_size: u32) void {
+pub fn writeUnwindInfo(writer: *std.Io.Writer, stack_size: u32) void {
     _ = stack_size; // autofix
     errdefer unreachable;
 
@@ -161,13 +161,13 @@ pub fn writeUnwindInfo(writer: std.io.AnyWriter, stack_size: u32) void {
     try writer.writeByte(@intFromEnum(Op.call_frame_cfa));
 }
 
-pub fn writeFrameEntry(writer: std.io.AnyWriter, stack_size: u32) void {
+pub fn writeFrameEntry(writer: *std.Io.Writer, stack_size: u32) void {
     _ = writer; // autofix
     _ = stack_size; // autofix
 }
 
 pub fn writeAbbrevEntry(
-    writer: std.io.AnyWriter,
+    writer: *std.Io.Writer,
     code: u64,
     tag: Tag,
     has_children: bool,

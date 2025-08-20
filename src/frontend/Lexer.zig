@@ -206,13 +206,13 @@ pub const Lexeme = enum(u16) {
 
         var variants: [void_variant_count + 2]std.builtin.Type.UnionField = undefined;
         for (variants[0..void_variant_count], data.fields[0..void_variant_count]) |*v, vv| {
-            v.* = .{ .name = vv.name, .type = void, .alignment = 0 };
+            v.* = .{ .name = vv.name, .type = void, .alignment = 1 };
         }
 
         variants[void_variant_count + 0] = .{ .name = "Type", .type = Type, .alignment = @alignOf(Type) };
         variants[void_variant_count + 1] = .{ .name = "Directive", .type = Directive, .alignment = @alignOf(Directive) };
 
-        break :b @Type(.{ .@"union" = .{ .layout = .@"extern", .tag_type = tag, .fields = &variants, .decls = &.{} } });
+        break :b @Type(.{ .@"union" = .{ .layout = .auto, .tag_type = tag, .fields = &variants, .decls = &.{} } });
     };
 
     pub fn isKeyword(self: Lexeme) bool {
@@ -223,7 +223,7 @@ pub const Lexeme = enum(u16) {
     pub fn expand(self: Lexeme) Expanded {
         var vl = @intFromEnum(self);
         if (vl >= 256) vl = @byteSwap(vl);
-        return @bitCast(vl);
+        return @as(*const Expanded, @ptrCast(&vl)).*;
     }
 
     pub const precedence_groups = [_][]const Lexeme{
@@ -314,7 +314,7 @@ pub const Lexeme = enum(u16) {
         return @enumFromInt(@intFromEnum(self) + 128);
     }
 
-    pub fn format(self: *const Lexeme, comptime _: anytype, _: anytype, writer: anytype) !void {
+    pub fn format(self: *const Lexeme, writer: *std.io.Writer) !void {
         try writer.writeAll(@tagName(self.*));
     }
 };

@@ -177,7 +177,7 @@ pub fn packMany(comptime instrs: anytype) []const u8 {
 pub fn disasm(
     code: []const u8,
     arena: std.mem.Allocator,
-    writer: anytype,
+    writer: *std.Io.Writer,
     colors: std.io.tty.Config,
 ) !void {
     const ExecHeader = root.hbvm.object.ExecHeader;
@@ -204,7 +204,7 @@ pub fn disasmOne(
     cursor: usize,
     labelMap: *const std.AutoHashMap(u32, u32),
     symbols: *const std.AutoHashMapUnmanaged(u32, []const u8),
-    writer: anytype,
+    writer: *std.Io.Writer,
     color: std.io.tty.Config,
 ) !usize {
     const padding = if (labelMap.count() != 0)
@@ -243,7 +243,7 @@ fn disasmArg(
     ptr: [*]const u8,
     labelMap: *const std.AutoHashMap(u32, u32),
     symbols: *const std.AutoHashMapUnmanaged(u32, []const u8),
-    writer: anytype,
+    writer: *std.Io.Writer,
     colors: std.io.tty.Config,
 ) !usize {
     try utils.setColor(colors, writer, arg.color());

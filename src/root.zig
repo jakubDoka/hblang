@@ -51,10 +51,10 @@ test {
 const max_file_len = std.math.maxInt(u31);
 
 pub const CompileOptions = struct {
-    diagnostics: std.io.AnyWriter = std.io.null_writer.any(),
+    diagnostics: ?*std.Io.Writer = null,
     error_colors: std.io.tty.Config = .no_color,
     colors: std.io.tty.Config = .no_color,
-    output: std.io.AnyWriter,
+    output: ?*std.Io.Writer = null,
     raw_binary: bool = false,
 
     // #CLI start
@@ -84,6 +84,10 @@ pub const CompileOptions = struct {
     // profiling
     benchmark_rounds: usize = 1,
     // #CLI end
+
+    pub fn logDiag(self: CompileOptions, comptime fmt: []const u8, args: anytype) void {
+        if (self.diagnostics) |d| d.print(fmt, args) catch unreachable;
+    }
 
     pub fn loadCli(self: *CompileOptions, arena: std.mem.Allocator) !void {
         var args = try std.process.ArgIterator.initWithAllocator(arena);
@@ -117,7 +121,7 @@ pub const CompileOptions = struct {
                 const val = &@field(self, f.name);
 
                 errdefer |err| {
-                    self.diagnostics.print("--{s} <{s}>", .{ f.name, @errorName(err) }) catch unreachable;
+                    self.logDiag("--{s} <{s}>", .{ f.name, @errorName(err) });
                     std.process.exit(1);
                 }
 
@@ -144,7 +148,7 @@ pub const CompileOptions = struct {
                 continue :parse;
             }
 
-            try self.diagnostics.print("unknown flag: --{s}", .{arg});
+            self.logDiag("unknown flag: --{s}", .{arg});
             std.process.exit(1);
         }
     }
@@ -246,7 +250,7 @@ pub const Threading = union(enum) {
     pub fn dumpAsm(
         self: *Threading,
         name: []const u8,
-        out: std.io.AnyWriter,
+        out: *std.Io.Writer,
         colors: std.io.tty.Config,
         optimizations: backend.Machine.OptOptions.Mode,
     ) void {
@@ -255,12 +259,12 @@ pub const Threading = union(enum) {
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
 
-        var output = std.ArrayListUnmanaged(u8){};
-        self.finalize(output.writer(tmp.arena.allocator()).any(), tmp.arena, null, optimizations);
+        var output = std.Io.Writer.Allocating.init(tmp.arena.allocator());
+        self.finalize(&output.writer, tmp.arena, null, optimizations);
 
         self.singleBackend().disasm(.{
             .name = name,
-            .bin = output.items,
+            .bin = output.written(),
             .out = out,
             .colors = colors,
         });
@@ -269,29 +273,29 @@ pub const Threading = union(enum) {
     pub fn runVendoredTest(
         self: *Threading,
         name: []const u8,
-        out: std.io.AnyWriter,
+        out: *std.Io.Writer,
         colors: std.io.tty.Config,
         optimizations: backend.Machine.OptOptions.Mode,
     ) !void {
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
 
-        var output = std.ArrayListUnmanaged(u8){};
-        self.finalize(output.writer(tmp.arena.allocator()).any(), tmp.arena, null, optimizations);
+        var output = std.Io.Writer.Allocating.init(tmp.arena.allocator());
+        self.finalize(&output.writer, tmp.arena, null, optimizations);
 
         const expectations: test_utils.Expectations = .init(&self.ast()[0], tmp.arena);
 
         errdefer {
             self.singleBackend().disasm(.{
                 .name = name,
-                .bin = output.items,
+                .bin = output.written(),
                 .out = out,
                 .colors = colors,
             });
 
             _ = self.singleBackend().run(.{
                 .name = name,
-                .code = output.items,
+                .code = output.written(),
                 .output = out,
                 .logs = out,
                 .colors = colors,
@@ -300,7 +304,7 @@ pub const Threading = union(enum) {
 
         try expectations.assert(self.singleBackend().run(.{
             .name = name,
-            .code = output.items,
+            .code = output.written(),
             .output = out,
             .colors = colors,
         }));
@@ -308,9 +312,9 @@ pub const Threading = union(enum) {
 
     pub fn finalize(
         self: *Threading,
-        out: std.io.AnyWriter,
+        out: *std.Io.Writer,
         out_scratch: ?*utils.Arena,
-        logs: ?std.io.AnyWriter,
+        logs: ?*std.Io.Writer,
         optimizations: backend.Machine.OptOptions.Mode,
     ) void {
         switch (self.*) {
@@ -340,7 +344,7 @@ pub const Threading = union(enum) {
         }
     }
 
-    pub fn logStats(self: *Threading, out: std.io.AnyWriter) void {
+    pub fn logStats(self: *Threading, out: *std.Io.Writer) void {
         _ = self; // autofix
         _ = out; // autofix
     }
@@ -358,7 +362,7 @@ pub fn compile(opts: CompileOptions) anyerror!void {
             break :b std.mem.trimRight(u8, source[start..end], "\n\t\r ") ++ "";
         };
 
-        try opts.diagnostics.writeAll(help_str);
+        if (opts.diagnostics) |d| try d.writeAll(help_str);
         return error.Failed;
     }
 
@@ -371,7 +375,7 @@ pub fn compile(opts: CompileOptions) anyerror!void {
             opts.root_file,
             max_file_len,
             null,
-            @alignOf(u8),
+            .of(u8),
             0,
         );
         const ast = try hb.frontend.Ast.init(&type_system_memory, .{
@@ -382,10 +386,7 @@ pub fn compile(opts: CompileOptions) anyerror!void {
             .colors = opts.error_colors,
         });
 
-        var buf = std.ArrayList(u8).init(type_system_memory.allocator());
-        try ast.fmt(&buf);
-
-        try opts.output.writeAll(buf.items);
+        if (opts.output) |o| try ast.fmt(o);
         return;
     }
 
@@ -397,7 +398,7 @@ pub fn compile(opts: CompileOptions) anyerror!void {
         opts.error_colors,
         opts.parser_mode,
     ) orelse {
-        try opts.diagnostics.print("failed due to previous errors (codegen skipped)\n", .{});
+        opts.logDiag("failed due to previous errors (codegen skipped)\n", .{});
         return error.Failed;
     };
 
@@ -406,20 +407,20 @@ pub fn compile(opts: CompileOptions) anyerror!void {
             var tmp = Arena.scrath(null);
             defer tmp.deinit();
 
-            var buf = std.ArrayList(u8).init(tmp.arena.allocator());
-            try ast.fmt(&buf);
+            var buf = std.Io.Writer.Allocating.init(tmp.arena.allocator());
+            try ast.fmt(&buf.writer);
 
             const path = try std.fs.path.join(tmp.arena.allocator(), &.{ base, ast.path });
-            try std.fs.cwd().writeFile(.{ .sub_path = path, .data = buf.items });
+            try std.fs.cwd().writeFile(.{ .sub_path = path, .data = buf.written() });
         }
         return;
     }
 
     const target = hb.backend.Machine.SupportedTarget.fromStr(opts.target) orelse {
-        try opts.diagnostics.print("unknown target: {s}\n", .{opts.target});
-        try opts.diagnostics.print("supported targets are:\n", .{});
+        opts.logDiag("unknown target: {s}\n", .{opts.target});
+        opts.logDiag("supported targets are:\n", .{});
         inline for (std.meta.fields(hb.backend.Machine.SupportedTarget)) |t| {
-            try opts.diagnostics.print("  {s}\n", .{t.name});
+            opts.logDiag("  {s}\n", .{t.name});
         }
         return error.Failed;
     };
@@ -498,7 +499,7 @@ pub fn compile(opts: CompileOptions) anyerror!void {
         },
     );
     if (errored) {
-        try opts.diagnostics.print("failed due to previous errors\n", .{});
+        opts.logDiag("failed due to previous errors\n", .{});
         return error.Failed;
     }
 
@@ -514,7 +515,7 @@ pub fn compile(opts: CompileOptions) anyerror!void {
 
     if (threading == .multi) {
         if (opts.benchmark_rounds == 1) {
-            try opts.diagnostics.print("multi threading code emmision is not yet supported\n", .{});
+            opts.logDiag("multi threading code emmision is not yet supported\n", .{});
         }
         return;
     }
@@ -530,7 +531,7 @@ pub fn compile(opts: CompileOptions) anyerror!void {
         });
 
         if (types.dumpAnalErrors(&anal_errors)) {
-            try opts.diagnostics.print("failed due to previous errors\n", .{});
+            opts.logDiag("failed due to previous errors\n", .{});
             return error.Failed;
         }
 
@@ -553,7 +554,7 @@ pub fn compile(opts: CompileOptions) anyerror!void {
         });
 
         if (types.dumpAnalErrors(&anal_errors)) {
-            try opts.diagnostics.print("failed due to previous errors\n", .{});
+            opts.logDiag("failed due to previous errors\n", .{});
             return error.Failed;
         }
 
@@ -578,21 +579,30 @@ pub fn compile(opts: CompileOptions) anyerror!void {
             .code = out.items,
         }));
 
+        bckend.disasm(.{
+            .name = name,
+            .bin = out.items,
+            .out = opts.output,
+            .colors = .no_color,
+        });
+
         return;
     }
 
-    if (opts.log_stats) {
-        try opts.diagnostics.writeAll("type system:\n");
+    if (opts.log_stats) b: {
+        const diags = opts.diagnostics orelse break :b;
+
+        try diags.writeAll("type system:\n");
         inline for (std.meta.fields(@TypeOf(types.store.rpr))) |field| {
-            try opts.diagnostics.print(
+            try diags.print(
                 "  {s:<8}: {}\n",
                 .{ field.name, @field(types.store.rpr, field.name).meta.len },
             );
         }
-        try opts.diagnostics.print("  arena   : {}\n", .{types.pool.arena.consumed()});
+        try diags.print("  arena   : {}\n", .{types.pool.arena.consumed()});
 
         inline for (std.meta.fields(@TypeOf(types.stats))) |field| {
-            try opts.diagnostics.print("  {s:<8}: {}\n", .{ field.name, @field(types.stats, field.name) });
+            try diags.print("  {s:<8}: {}\n", .{ field.name, @field(types.stats, field.name) });
         }
 
         if (false) {
@@ -611,13 +621,13 @@ pub fn compile(opts: CompileOptions) anyerror!void {
                 }
             }
 
-            try opts.diagnostics.print("  runtime functions: {}\n", .{runtim_functions});
-            try opts.diagnostics.print("  comptime functions: {}\n", .{comptime_functions});
-            try opts.diagnostics.print("  dead functions: {}\n", .{dead_functions});
+            try diags.print("  runtime functions: {}\n", .{runtim_functions});
+            try diags.print("  comptime functions: {}\n", .{comptime_functions});
+            try diags.print("  dead functions: {}\n", .{dead_functions});
         }
-        try opts.diagnostics.print("  stale pool memory: {}\n", .{types.pool.staleMemory()});
+        try diags.print("  stale pool memory: {}\n", .{types.pool.staleMemory()});
 
-        types.metrics.logStats(opts.diagnostics);
+        types.metrics.logStats(diags);
     }
 
     if (opts.colors == .no_color or opts.mangle_terminal) {
@@ -629,26 +639,26 @@ pub fn compile(opts: CompileOptions) anyerror!void {
         });
 
         if (types.dumpAnalErrors(&anal_errors)) {
-            try opts.diagnostics.print("failed due to previous errors\n", .{});
+            opts.logDiag("failed due to previous errors\n", .{});
             return error.Failed;
         }
 
         return;
     } else {
         bckend.finalize(.{
-            .output = std.io.null_writer.any(),
+            .output = null,
             .optimizations = optimizations,
             .builtins = types.getBuiltins(),
             .logs = logs,
         });
 
         if (types.dumpAnalErrors(&anal_errors)) {
-            try opts.diagnostics.print("failed due to previous errors\n", .{});
+            opts.logDiag("failed due to previous errors\n", .{});
             return error.Failed;
         }
 
-        try opts.diagnostics.writeAll("can't dump the executable to the stdout since it" ++
-            " supports colors (pass --mangle-terminal if you dont care)");
+        opts.logDiag("can't dump the executable to the stdout since it" ++
+            " supports colors (pass --mangle-terminal if you dont care)", .{});
         return error.Failed;
     }
 }
@@ -710,7 +720,7 @@ const Loader = struct {
 
         const slot = self.files.addOne(arena) catch return null;
         slot.path = self.arena.dupe(u8, canon);
-        slot.source = std.fs.cwd().readFileAllocOptions(arena, path, max_file_len, null, @alignOf(u8), 0) catch |err| {
+        slot.source = std.fs.cwd().readFileAllocOptions(arena, path, max_file_len, null, .of(u8), 0) catch |err| {
             file.report(
                 opts,
                 opts.pos,
@@ -729,7 +739,7 @@ const Loader = struct {
         arena: *Arena,
         path_projections: std.StringHashMapUnmanaged([]const u8),
         root: []const u8,
-        diagnostics: std.io.AnyWriter,
+        diagnostics: ?*std.Io.Writer,
         colors: std.io.tty.Config,
         parser_mode: hb.frontend.Ast.InitOptions.Mode,
     ) !?struct { []const hb.frontend.Ast, []const u8 } {
@@ -743,8 +753,8 @@ const Loader = struct {
 
         const slot = try self.files.addOne(self.arena.allocator());
         slot.path = std.fs.path.basename(root);
-        slot.source = std.fs.cwd().readFileAllocOptions(arena.allocator(), root, max_file_len, null, @alignOf(u8), 0) catch {
-            try diagnostics.print("could not read the root file: {s}\n", .{root});
+        slot.source = std.fs.cwd().readFileAllocOptions(arena.allocator(), root, max_file_len, null, .of(u8), 0) catch {
+            if (diagnostics) |d| try d.print("could not read the root file: {s}\n", .{root});
             return null;
         };
 

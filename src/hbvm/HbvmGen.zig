@@ -317,7 +317,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         null);
     defer tmp.deinit();
 
-    //func.fmtScheduled(std.io.getStdErr().writer().any(), .escape_codes);
+    //func.fmtScheduled(std.fs.File.stderr().writer().any(), .escape_codes);
 
     self.block_offsets = tmp.arena.alloc(i32, func.gcm.block_count);
     self.local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.gcm.block_count * 2));
@@ -370,7 +370,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     for (func.gcm.postorder) |bb| {
         if (bb.base.schedule == std.math.maxInt(u16)) {
-            utils.panic("{}", .{bb});
+            utils.panic("{f}", .{bb});
         }
     }
 
@@ -404,7 +404,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
             if (last.outputs()[@intFromBool(last.isSwapped())].get()
                 .schedule == std.math.maxInt(u16))
             {
-                utils.panic("{} {}\n", .{ last.outputs()[@intFromBool(last.isSwapped())], last });
+                utils.panic("{f} {f}\n", .{ last.outputs()[@intFromBool(last.isSwapped())], last });
             }
             self.local_relocs.appendAssumeCapacity(.{
                 .dest_block = last.outputs()[@intFromBool(last.isSwapped())].get().schedule,
@@ -724,7 +724,7 @@ pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {
 
     if (opts.optimizations.finalize(opts.builtins, HbvmGen, self, opts.logs, opts.parallelism)) return;
 
-    try root.hbvm.object.flush(self.out, opts.output);
+    try root.hbvm.object.flush(self.out, opts.output orelse return);
 }
 
 pub fn deinit(self: *HbvmGen) void {
@@ -736,7 +736,7 @@ pub fn disasm(_: *HbvmGen, opts: Mach.DisasmOpts) void {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    isa.disasm(opts.bin, tmp.arena.allocator(), opts.out, opts.colors) catch unreachable;
+    isa.disasm(opts.bin, tmp.arena.allocator(), opts.out orelse return, opts.colors) catch unreachable;
 }
 
 const page_size = 1024 * 4;
@@ -864,7 +864,7 @@ pub fn doInterrupt(
                 else => |v| utils.panic("{}", .{v}),
             },
             7 => utils.panic("I don't think I will", .{}),
-            1 => {
+            1 => if (env.logs) |logs| {
                 const LogLevel = enum(u8) {
                     Error,
                     Warn,
@@ -876,7 +876,7 @@ pub fn doInterrupt(
                 const msg: Msg = @bitCast(ctx.memory[@intCast(vm.regs.get(.arg(2)))..][0..@sizeOf(Msg)].*);
                 const str = ctx.memory[@intCast(msg.str_ptr)..][0..@intCast(msg.str_len)];
 
-                env.logs.print("{s}\n", .{str}) catch {};
+                logs.print("{s}\n", .{str}) catch {};
             },
             4 => {
                 const dest = ctx.memory[@intCast(vm.regs.get(.arg(3)))..][0..@intCast(vm.regs.get(.arg(4)))];

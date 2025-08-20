@@ -61,7 +61,7 @@ pub fn panic(comptime format: []const u8, args: anytype) noreturn {
     if (debug and !freestanding) std.debug.panic(format, args) else unreachable;
 }
 
-pub fn setColor(cfg: std.io.tty.Config, writer: std.io.AnyWriter, color: std.io.tty.Color) !void {
+pub fn setColor(cfg: std.io.tty.Config, writer: *std.Io.Writer, color: std.io.tty.Color) !void {
     if (@import("builtin").target.os.tag != .freestanding) try cfg.setColor(writer, color);
 }
 
@@ -102,7 +102,7 @@ pub const Pool = struct {
     pub fn allocator(self: *Pool) std.mem.Allocator {
         const alc_impl = enum {
             fn alloc(ptr: *anyopaque, size: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
-                const slf: *Pool = @alignCast(@ptrCast(ptr));
+                const slf: *Pool = @ptrCast(@alignCast(ptr));
                 const alignm = @max(alignment.toByteUnits(), @alignOf(Header));
                 std.debug.assert(alignm <= page_size);
                 const size_class = sclassOf(size);
@@ -120,9 +120,9 @@ pub const Pool = struct {
             }
             fn free(ptr: *anyopaque, mem: []u8, _: std.mem.Alignment, _: usize) void {
                 @memset(mem, undefined);
-                const slf: *Pool = @alignCast(@ptrCast(ptr));
+                const slf: *Pool = @ptrCast(@alignCast(ptr));
                 const size_class = sclassOf(mem.len);
-                const header: *Header = @alignCast(@ptrCast(mem.ptr));
+                const header: *Header = @ptrCast(@alignCast(mem.ptr));
                 header.next = slf.free[size_class];
                 slf.free[size_class] = header;
             }
@@ -227,7 +227,7 @@ pub const Arena = struct {
     pub fn allocator(self: *Arena) std.mem.Allocator {
         const alc_impl = enum {
             fn alloc(ptr: *anyopaque, size: usize, alignment: std.mem.Alignment, _: usize) ?[*]u8 {
-                const slf: *Arena = @alignCast(@ptrCast(ptr));
+                const slf: *Arena = @ptrCast(@alignCast(ptr));
                 return slf.allocRaw(alignment.toByteUnits(), size);
             }
             fn free(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize) void {}
@@ -236,7 +236,7 @@ pub const Arena = struct {
                 return null;
             }
             fn resize(ptr: *anyopaque, mem: []u8, _: std.mem.Alignment, new_len: usize, _: usize) bool {
-                const slf: *Arena = @alignCast(@ptrCast(ptr));
+                const slf: *Arena = @ptrCast(@alignCast(ptr));
                 if (mem.ptr + mem.len == slf.pos) {
                     slf.pos += new_len;
                     slf.pos -= mem.len;
@@ -273,7 +273,7 @@ pub const Arena = struct {
     }
 
     pub fn alloc(self: *Arena, comptime T: type, count: usize) []T {
-        const ptr: [*]T = @alignCast(@ptrCast(self.allocRaw(@alignOf(T), @sizeOf(T) * count)));
+        const ptr: [*]T = @ptrCast(@alignCast(self.allocRaw(@alignOf(T), @sizeOf(T) * count)));
         const mem = ptr[0..count];
         @memset(mem, undefined);
         return mem;
@@ -353,7 +353,7 @@ pub fn EnumSlice(comptime T: type) type {
 
 pub fn EnumStore(comptime T: type) type {
     return struct {
-        store: std.ArrayListAlignedUnmanaged(u8, payload_align) = .{},
+        store: std.ArrayListAlignedUnmanaged(u8, .fromByteUnits(payload_align)) = .{},
 
         const Self = @This();
         const payload_align = b: {
@@ -412,13 +412,13 @@ pub fn EnumStore(comptime T: type) type {
             const padded_len = std.mem.alignForward(usize, self.store.items.len, alignment);
             const required_space = padded_len + @sizeOf(E) * count;
             try self.store.resize(gpa, required_space);
-            const dest: [*]E = @alignCast(@ptrCast(self.store.items.ptr + padded_len));
+            const dest: [*]E = @ptrCast(@alignCast(self.store.items.ptr + padded_len));
             return dest[0..count];
         }
 
         pub fn get(self: *const Self, id: Id) AsRef(T) {
             const Layout = extern struct { ptr: *align(payload_align) const anyopaque, tag: usize };
-            return @bitCast(Layout{ .tag = @intFromEnum(id.tag()), .ptr = @ptrCast(@alignCast(&self.store.items[id.index()])) });
+            return @as(*const AsRef(T), @ptrCast(&Layout{ .tag = @intFromEnum(id.tag()), .ptr = @ptrCast(@alignCast(&self.store.items[id.index()])) })).*;
         }
 
         pub inline fn getTyped(
@@ -469,7 +469,7 @@ pub fn AsRef(comptime E: type) type {
     }
 
     return @Type(.{ .@"union" = .{
-        .layout = .@"extern",
+        .layout = .auto,
         .tag_type = std.meta.Tag(E),
         .fields = &field_arr,
         .decls = &.{},
@@ -880,7 +880,7 @@ pub fn TimeMetrics(comptime StatNames: type) type {
             };
         }
 
-        pub fn logStats(self: *Self, out: std.io.AnyWriter) void {
+        pub fn logStats(self: *Self, out: *std.Io.Writer) void {
             errdefer unreachable;
             try out.print("time metrics:\n", .{});
 

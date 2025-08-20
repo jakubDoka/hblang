@@ -1574,7 +1574,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         std.debug.assert(rhs != .rdx);
                         const dest_reg: Reg = if (op == .udiv or op == .sdiv) .rax else .rdx;
                         if (dst != dest_reg) {
-                            utils.panic("{} {} {} {}", .{ dst, dest_reg, op, instr });
+                            utils.panic("{} {} {} {f}", .{ dst, dest_reg, op, instr });
                         }
 
                         // div rhs
@@ -1656,7 +1656,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     },
                     .uext => {
                         if (src_size >= size) {
-                            utils.panic("{} {} {}", .{ src_size, instr, inps[0] });
+                            utils.panic("{} {f} {f}", .{ src_size, instr, inps[0] });
                         }
 
                         if (instr.data_type == .i16) self.emitByte(0x66);
@@ -1812,7 +1812,7 @@ pub fn stackBaseOf(self: *X86_64Gen, instr: *Func.Node) i32 {
     return @intCast(switch (instr.inputs()[2].?.extra2()) {
         .LocalAlloc => |n| n.size + self.local_base,
         .StructArg => |n| n.spec.size + self.arg_base,
-        else => utils.panic("{}", .{instr.inputs()[2].?}),
+        else => utils.panic("{f}", .{instr.inputs()[2].?}),
     });
 }
 
@@ -2063,8 +2063,8 @@ pub fn finalize(self: *X86_64Gen, opts: Mach.FinalizeOptions) void {
     if (opts.optimizations.finalizeSingleThread(opts.builtins, X86_64Gen, self, opts.logs)) return;
 
     try switch (self.object_format) {
-        .elf => root.object.elf.flush(self.out, .x86_64, opts.output),
-        .coff => unreachable, //root.object.coff.flush(self.out, .x86_64, out),
+        .elf => root.object.elf.flush(self.out, .x86_64, opts.output orelse return),
+        .coff => unreachable, //root.object.coff.flush(self.out, .x86_64, out),try
     };
 }
 
@@ -2123,14 +2123,7 @@ pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
         const bytes = data.code.items[v.offset..][0..v.size];
         switch (v.kind) {
             .func => {
-                {
-                    const fmt, const args = .{ "{s}:\n", .{name} };
-                    if (opts.colors == .no_color) {
-                        try opts.out.print(fmt, args);
-                    } else {
-                        try std.io.getStdErr().writer().print(fmt, args);
-                    }
-                }
+                opts.print("{s}:\n", .{name});
 
                 var inst = zydis.ZydisDecodedInstruction{};
                 var ops: [zydis.ZYDIS_MAX_OPERAND_COUNT]zydis.ZydisDecodedOperand = undefined;
@@ -2194,41 +2187,18 @@ pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
                     //std.debug.print("{s}\n", .{printed});
 
                     if (label_map.get(uaddr)) |nm| {
-                        const fmt, const args = .{ "{x}:", .{nm} };
-                        if (opts.colors == .no_color) {
-                            try opts.out.print(fmt, args);
-                        } else {
-                            try std.io.getStdErr().writer().print(fmt, args);
-                        }
+                        opts.print("{x}:", .{nm});
                     }
 
                     if (util.isJump(inst.mnemonic)) {
                         const label = label_map.get(@intCast(addr +
                             ops[0].unnamed_0.imm.value.s + inst.length)).?;
-                        const fmt, const args = .{
-                            "\t{s} :{}\n",
-                            .{ zydis.ZydisMnemonicGetString(inst.mnemonic), label },
-                        };
-                        if (opts.colors == .no_color) {
-                            try opts.out.print(fmt, args);
-                        } else {
-                            try std.io.getStdErr().writer().print(fmt, args);
-                        }
+                        opts.print("\t{s} :{}\n", .{ zydis.ZydisMnemonicGetString(inst.mnemonic), label });
                     } else if (inst.mnemonic == zydis.ZYDIS_MNEMONIC_CALL) {
                         const nm = func_map.get(v.offset + uaddr + 1) orelse continue;
-                        const fmt, const args = .{ "\tcall :{s}\n", .{nm} };
-                        if (opts.colors == .no_color) {
-                            try opts.out.print(fmt, args);
-                        } else {
-                            try std.io.getStdErr().writer().print(fmt, args);
-                        }
+                        opts.print("\tcall :{s}\n", .{nm});
                     } else {
-                        const fmt, const args = .{ "\t{s}\n", .{printed} };
-                        if (opts.colors == .no_color) {
-                            try opts.out.print(fmt, args);
-                        } else {
-                            try std.io.getStdErr().writer().print(fmt, args);
-                        }
+                        opts.print("\t{s}\n", .{printed});
                     }
                 }
             },

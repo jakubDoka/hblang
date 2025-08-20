@@ -1,9 +1,9 @@
-struct capture eca mismatch 1.cp(1, ):
+struct capture eca mismatch 1.cp(1, 0):
 	mov rax, 0x100
 	ret
 main:
 	sub rsp, 0x08
-	call :struct capture eca mismatch 1.cp(1, )
+	call :struct capture eca mismatch 1.cp(1, 0)
 	mov [rsp], eax
 	mov al, [rsp]
 	movzx eax, al

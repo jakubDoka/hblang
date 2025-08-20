@@ -463,7 +463,8 @@ pub const Global = struct {
         imm: []const u8,
 
         pub fn freeze(self: *@This()) void {
-            self.* = .{ .imm = self.mut };
+            const tmp = self.mut;
+            self.* = .{ .imm = tmp };
         }
 
         pub fn slice(self: @This()) []const u8 {

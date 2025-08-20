@@ -9,7 +9,7 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(arena);
     const in_file, const out_file = args[1..3].*;
 
-    const in = try std.fs.cwd().readFileAllocOptions(arena, in_file, 1024 * 1024, null, 1, 0);
+    const in = try std.fs.cwd().readFileAllocOptions(arena, in_file, 1024 * 1024, null, .of(u8), 0);
 
     const ast = try Ast.init(in_file, in);
 
@@ -17,10 +17,10 @@ pub fn main() !void {
     const out = try std.fs.cwd().createFile(out_file, .{});
     defer out.close();
 
-    var writer_impl = std.io.bufferedWriter(out.writer());
-    const writer = writer_impl.writer().any();
+    var buffer: [1024 * 4]u8 = undefined;
+    var writer = out.writer(&buffer);
 
-    try writer.writeAll(
+    try writer.interface.writeAll(
         \\const hb = @import("hb");
         \\const std = @import("std");
         \\const Graph = hb.backend.graph.Func;
@@ -41,35 +41,35 @@ pub fn main() !void {
     );
 
     for (ast.rules) |rule| {
-        try writer.writeAll("    rule: {\n");
-        try writer.writeAll("        if (false) break :rule;\n");
-        try formatPattern("node", "", rule.pattern, writer);
+        try writer.interface.writeAll("    rule: {\n");
+        try writer.interface.writeAll("        if (false) break :rule;\n");
+        try formatPattern("node", "", rule.pattern, &writer.interface);
         maybe_id = 0;
 
         if (rule.postprocess) |postprocess| {
-            try writer.writeAll("        const res = ");
-            try formatReplacement(rule.replacement, writer);
-            try writer.writeAll(";\n");
-            try writer.writeAll(postprocess);
-            try writer.writeAll("return res;\n");
+            try writer.interface.writeAll("        const res = ");
+            try formatReplacement(rule.replacement, &writer.interface);
+            try writer.interface.writeAll(";\n");
+            try writer.interface.writeAll(postprocess);
+            try writer.interface.writeAll("return res;\n");
         } else {
-            try writer.writeAll("        return ");
-            try formatReplacement(rule.replacement, writer);
-            try writer.writeAll(";\n");
+            try writer.interface.writeAll("        return ");
+            try formatReplacement(rule.replacement, &writer.interface);
+            try writer.interface.writeAll(";\n");
         }
 
-        try writer.writeAll("    }\n");
+        try writer.interface.writeAll("    }\n");
     }
 
-    try writer.writeAll("    return null;\n");
-    try writer.writeAll("}\n");
+    try writer.interface.writeAll("    return null;\n");
+    try writer.interface.writeAll("}\n");
 
-    try writer_impl.flush();
+    try writer.interface.flush();
 }
 
 var maybe_id: usize = 0;
 
-pub fn formatPattern(root_node: []const u8, tag: []const u8, pattern: *Ast.Expr, writer: std.io.AnyWriter) anyerror!void {
+pub fn formatPattern(root_node: []const u8, tag: []const u8, pattern: *Ast.Expr, writer: *std.Io.Writer) anyerror!void {
     const p = "        ";
     switch (pattern.*) {
         .Atom => |pat| {
@@ -174,7 +174,7 @@ pub fn formatPattern(root_node: []const u8, tag: []const u8, pattern: *Ast.Expr,
 
 var indent: usize = 2;
 
-pub fn doIndent(writer: std.io.AnyWriter) anyerror!void {
+pub fn doIndent(writer: *std.io.Writer) anyerror!void {
     for (0..indent) |_| {
         try writer.writeAll("    ");
     }
@@ -182,7 +182,7 @@ pub fn doIndent(writer: std.io.AnyWriter) anyerror!void {
 
 const builtin_fields = [_][]const u8{ "sloc", "data_type" };
 
-pub fn formatReplacement(replacement: *Ast.Expr, writer: std.io.AnyWriter) anyerror!void {
+pub fn formatReplacement(replacement: *Ast.Expr, writer: *std.Io.Writer) anyerror!void {
     switch (replacement.*) {
         .Atom => |a| {
             try writer.print(
@@ -299,17 +299,14 @@ pub const Ast = struct {
     pub fn init(file_name: []const u8, in: [:0]const u8) !Ast {
         var parser = Parser.init(file_name, in);
 
-        var rules = std.ArrayList(Rule).init(arena);
-        defer rules.deinit();
+        var rules = std.ArrayList(Rule).empty;
 
         while (parser.lexer.peek().kind != .eof) {
             const rule = try parser.parseRule();
-            try rules.append(rule);
+            try rules.append(arena, rule);
         }
 
-        return Ast{
-            .rules = try rules.toOwnedSlice(),
-        };
+        return Ast{ .rules = rules.items };
     }
 };
 
@@ -380,11 +377,11 @@ pub const Parser = struct {
                     } else null,
                     .extra = if (self.lexer.peek().kind == .@"@") blk: {
                         _ = self.lexer.next();
-                        var bindings = std.ArrayList(*Ast.Expr).init(arena);
+                        var bindings = std.ArrayList(*Ast.Expr).empty;
 
                         while (true) {
                             const binding = try self.parseExpr();
-                            try bindings.append(binding);
+                            try bindings.append(arena, binding);
 
                             if (self.lexer.peek().kind == .@"=") break;
                         }
@@ -394,7 +391,7 @@ pub const Parser = struct {
                         const zig_expr = try self.parseExpr();
 
                         break :blk .{
-                            .bindings = try bindings.toOwnedSlice(),
+                            .bindings = bindings.items,
                             .zig_expr = zig_expr,
                         };
                     } else null,
@@ -503,33 +500,34 @@ pub const Parser = struct {
     }
 
     pub fn parseExprList(self: *Parser) ![]*Ast.Expr {
-        var list = std.ArrayList(*Ast.Expr).init(arena);
-        defer list.deinit();
+        var list = std.ArrayList(*Ast.Expr).empty;
 
         while (self.lexer.peek().kind != .@")") {
             if (self.lexer.peek().kind == .eof) {
                 return self.reportError(null, "expected end of atom, found eof", .{});
             }
             const expr = try self.parseExpr();
-            try list.append(expr);
+            try list.append(arena, expr);
         }
 
         _ = self.lexer.next();
 
-        return list.toOwnedSlice();
+        return list.items;
     }
 
     pub fn reportError(self: *Parser, pos: ?usize, comptime fmt: []const u8, args: anytype) Error {
-        const output = std.io.getStdErr().writer().any();
+        var buffer: [1024 * 4]u8 = undefined;
+        var output = std.fs.File.stderr().writer(&buffer);
 
         const line, const col = lineCol(self.lexer.source, pos orelse self.lexer.pos);
-        try output.print(
+        try output.interface.print(
             "error: {s}:{}:{}: " ++ fmt ++ "\n",
             .{ self.file_name, line, col } ++ args,
         );
 
-        try pointToCode(self.lexer.source, self.lexer.pos, output);
-        try output.print("\n", .{});
+        try pointToCode(self.lexer.source, self.lexer.pos, &output.interface);
+        try output.interface.print("\n", .{});
+        try output.interface.flush();
         return error.InvalidToken;
     }
 };
@@ -544,7 +542,7 @@ pub fn lineCol(source: []const u8, index: usize) struct { usize, usize } {
     return .{ line + 1, @intCast(@as(isize, @bitCast(index)) - last_nline) };
 }
 
-pub fn pointToCode(source: []const u8, index_m: usize, writer: std.io.AnyWriter) !void {
+pub fn pointToCode(source: []const u8, index_m: usize, writer: *std.Io.Writer) !void {
     const index = @min(index_m, source.len -| 1); // might be an empty file
     const line_start = if (std.mem.lastIndexOfScalar(u8, source[0..index], '\n')) |l| l + 1 else 0;
     const line_end = if (std.mem.indexOfScalar(u8, source[index..], '\n')) |l| l + index else source.len;

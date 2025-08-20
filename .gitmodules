@@ -11,3 +11,6 @@
 [submodule "vendored-tests/hblsp"]
 	path = vendored-tests/hblsp
 	url = https://git.ablecorp.eu/chayleaf/hblsp.git
+[submodule "vendored/arocc"]
+	path = vendored/arocc
+	url = https://github.com/Vexu/arocc.git

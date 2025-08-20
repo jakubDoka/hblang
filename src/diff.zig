@@ -4,7 +4,7 @@ pub fn printDiff(
     a: []const u8,
     b: []const u8,
     arena: std.mem.Allocator,
-    out: std.io.AnyWriter,
+    out: *std.Io.Writer,
     color: std.io.tty.Config,
 ) !void {
     const linesA = try splitLines(arena, a);
@@ -82,11 +82,11 @@ fn lcsLines(a: []const u8, b: []const u8, arena: std.mem.Allocator) ![][]const u
     return result;
 }
 
-fn splitLines(allocator: std.mem.Allocator, input: []const u8) ![][]const u8 {
-    var list = std.ArrayList([]const u8).init(allocator);
+fn splitLines(arena: std.mem.Allocator, input: []const u8) ![][]const u8 {
+    var list = std.ArrayList([]const u8).empty;
     var it = std.mem.tokenizeAny(u8, input, "\n");
     while (it.next()) |line| {
-        try list.append(line);
+        try list.append(arena, line);
     }
-    return list.toOwnedSlice();
+    return list.items;
 }

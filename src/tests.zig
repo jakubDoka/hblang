@@ -33,10 +33,11 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
 
     const gpa = std.testing.allocator;
 
-    const stderr = std.io.getStdErr();
+    const stderr = std.fs.File.stderr();
+    var stderr_writer = stderr.writer(&.{});
     const colors = std.io.tty.detectConfig(stderr);
 
-    const failed_fmt = test_util.testFmt(name, name, code, stderr.writer().any(), colors);
+    const failed_fmt = test_util.testFmt(name, name, code, &stderr_writer.interface, colors);
     var pool = utils.Pool{ .arena = utils.Arena.init(1024 * 1024 * 16) };
     {
         var hbvm = root.hbvm.HbvmGen{ .gpa = &pool };
@@ -69,7 +70,7 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
                 abi,
                 opts,
                 gpa,
-                stderr.writer().any(),
+                &stderr_writer.interface,
                 colors,
             );
         }
@@ -86,16 +87,16 @@ pub fn runMachineTest(
     abi: root.frontend.Types.Abi,
     opts: root.backend.Machine.OptOptions.Mode,
     gpa: std.mem.Allocator,
-    out: std.io.AnyWriter,
+    out: *std.Io.Writer,
     color: std.io.tty.Config,
 ) !void {
     if (false) std.debug.print("{s}\n", .{category});
-    var output = std.ArrayList(u8).init(gpa);
+    var output = std.Io.Writer.Allocating.init(gpa);
     defer output.deinit();
 
     errdefer |err| {
         if (err != error.TestFailed)
-            test_util.checkOrUpdatePrintTest(name, category, output.items, out, color) catch {};
+            test_util.checkOrUpdatePrintTest(name, category, output.written(), out, color) catch {};
         test_util.testBuilder(
             name,
             code,
@@ -115,7 +116,7 @@ pub fn runMachineTest(
         code,
         category,
         gpa,
-        output.writer().any(),
+        &output.writer,
         machine,
         opts,
         abi,
@@ -124,7 +125,7 @@ pub fn runMachineTest(
     );
 
     if (!test_util.hasEnv("SKIP_DIFF"))
-        try test_util.checkOrUpdatePrintTest(name, category, output.items, out, color);
+        try test_util.checkOrUpdatePrintTest(name, category, output.written(), out, color);
 }
 
 pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
@@ -138,7 +139,7 @@ pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
     const ast = try root.frontend.Ast.init(tmp.arena, .{
         .path = name,
         .code = code,
-        .diagnostics = std.io.getStdErr().writer().any(),
+        .diagnostics = std.fs.File.stderr().writer().any(),
     });
 
     var buf = std.ArrayList(u8).init(tmp.arena.allocator());
@@ -147,7 +148,7 @@ pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
     std.debug.print("{s}\n", .{buf.items});
 
     //errdefer {
-    //const stderr = std.io.getStdErr();
+    //const stderr = std.fs.File.stderr();
     //const colors = std.io.tty.detectConfig(stderr);
     //test_util.testBuilder(name, code, gpa, stderr.writer().any(), colors, true) catch {};
     //}
@@ -173,12 +174,13 @@ pub fn runVendoredTest(path: []const u8, projs: []const [2][]const u8) !void {
 
     utils.Arena.initScratch(1024 * 1024 * 32);
     defer utils.Arena.deinitScratch();
+
     if (projs.len == 0) { // for hblsp tests
-        try test_util.runVendoredTest(path, projs, "hbvm-ableos", .release);
-        try test_util.runVendoredTest(path, projs, "hbvm-ableos-no-opts", .debug);
+        _ = try test_util.runVendoredTest(path, projs, "hbvm-ableos", .release);
+        _ = try test_util.runVendoredTest(path, projs, "hbvm-ableos-no-opts", .debug);
     }
     if (true) {
-        try test_util.runVendoredTest(path, projs, "x86_64-linux", .release);
-        try test_util.runVendoredTest(path, projs, "x86_64-linux-no-opts", .debug);
+        _ = try test_util.runVendoredTest(path, projs, "x86_64-linux", .release);
+        _ = try test_util.runVendoredTest(path, projs, "x86_64-linux-no-opts", .debug);
     }
 }

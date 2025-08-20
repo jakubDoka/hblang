@@ -23,7 +23,7 @@ interner: TypeIndex = .{},
 string_globals: StringGlobalIndex = .{},
 file_scopes: []Id,
 ct: Comptime,
-diagnostics: std.io.AnyWriter,
+diagnostics: ?*std.Io.Writer,
 colors: std.io.tty.Config = .no_color,
 files: []const Ast,
 stack_base: usize,
@@ -578,12 +578,12 @@ pub const Id = enum(IdRepr) {
         pub fn toString(self: *const Fmt, arena: *utils.Arena) []u8 {
             var tmp = utils.Arena.scrath(arena);
             defer tmp.deinit();
-            var arr = std.ArrayListUnmanaged(u8).empty;
-            self.fmt(&arr, tmp.arena);
-            return arena.dupe(u8, arr.items);
+            var arr = std.Io.Writer.Allocating.init(tmp.arena.allocator());
+            self.fmt(&arr.writer, tmp.arena);
+            return arena.dupe(u8, arr.written());
         }
 
-        pub fn fmt(self: *const Fmt, writer: *std.ArrayListUnmanaged(u8), to: *utils.Arena) void {
+        pub fn fmt(self: *const Fmt, writer: *std.Io.Writer, to: ?*utils.Arena) void {
             errdefer unreachable;
 
             var tmp = utils.Arena.scrath(to);
@@ -609,36 +609,13 @@ pub const Id = enum(IdRepr) {
                     }
                 };
 
-                pub fn format(s: *const @This(), comptime _: []const u8, _: anytype, wrter: anytype) !void {
+                pub fn format(s: *const @This(), wrter: *std.Io.Writer) !void {
                     switch (s.*) {
                         .Name => |n| try wrter.print("name: {s}", .{n}),
                         .Type => |t| try wrter.print("ty: {}", .{t.data()}),
                         .Value => |v| try wrter.print("v: {}", .{v}),
                         .PopScope => try wrter.writeAll("pop scope"),
                     }
-                }
-
-                pub fn writeSignedInt(val: i64, wrter: *std.ArrayListUnmanaged(u8), t: *utils.Arena) !void {
-                    if (val < 0) {
-                        _ = try wrter.write("-");
-                        try writeInt(@intCast(-val), wrter, t);
-                    } else {
-                        try writeInt(@intCast(val), wrter, t);
-                    }
-                }
-
-                pub fn writeInt(val: u64, wrter: *std.ArrayListUnmanaged(u8), t: *utils.Arena) !void {
-                    var chars: [20]u8 = undefined;
-                    var value = val;
-                    const base = 10;
-                    var i: usize = 0;
-                    while (value != 0) : (i += 1) {
-                        chars[i] = '0' + @as(u8, @truncate(value % base));
-                        value /= base;
-                    }
-                    std.mem.reverse(u8, chars[0..i]);
-
-                    _ = try wrter.appendSlice(t.allocator(), chars[0..i]);
                 }
             };
 
@@ -654,13 +631,13 @@ pub const Id = enum(IdRepr) {
                 .PopScope => |v| scope_stack.items.len = v,
                 .PushScope => |v| try scope_stack.append(tmp.arena.allocator(), v),
                 .Type => |t| switch (t.data()) {
-                    .Builtin => |b| try writer.appendSlice(to.allocator(), @tagName(b)),
+                    .Builtin => |b| try writer.writeAll(@tagName(b)),
                     .Pointer => |p| {
-                        try writer.appendSlice(to.allocator(), "^");
+                        try writer.writeAll("^");
                         work_list.appendAssumeCapacity(.{ .Type = self.tys.store.get(p).* });
                     },
                     .FnPtr => |p| {
-                        try writer.appendSlice(to.allocator(), "^fn(");
+                        try writer.writeAll("^fn(");
                         const fp = self.tys.store.get(p);
                         work_list.ensureUnusedCapacity(
                             tmp.arena.allocator(),
@@ -676,19 +653,19 @@ pub const Id = enum(IdRepr) {
                         _ = work_list.pop();
                     },
                     .Slice => |s| {
-                        try writer.appendSlice(to.allocator(), "[");
+                        try writer.writeAll("[");
                         if (self.tys.store.get(s).len) |l| {
-                            try Task.writeInt(l, writer, to);
+                            try writer.print("{d}", .{l});
                         }
-                        try writer.appendSlice(to.allocator(), "]");
+                        try writer.writeAll("]");
                         work_list.appendAssumeCapacity(.{ .Type = self.tys.store.get(s).elem });
                     },
                     .Nullable => |n| {
-                        try writer.appendSlice(to.allocator(), "?");
+                        try writer.writeAll("?");
                         work_list.appendAssumeCapacity(.{ .Type = self.tys.store.get(n).inner });
                     },
                     .Simd => |s| {
-                        try writer.appendSlice(to.allocator(), "@simd(");
+                        try writer.writeAll("@simd(");
                         try work_list.appendSlice(tmp.arena.allocator(), &.{
                             .{ .Name = ")" },
                             .{ .Value = .{ .ty = .uint, .value = @intCast(self.tys.store.get(s).len) } },
@@ -697,7 +674,7 @@ pub const Id = enum(IdRepr) {
                         });
                     },
                     .Tuple => |tupl| {
-                        try writer.appendSlice(to.allocator(), "(");
+                        try writer.writeAll("(");
                         var iter = std.mem.reverseIterator(self.tys.store.get(tupl).fields);
                         work_list.appendAssumeCapacity(.{ .Name = ")" });
                         if (iter.index != 0) {
@@ -766,16 +743,17 @@ pub const Id = enum(IdRepr) {
                         _ = work_list.pop();
                     },
                 },
-                .Name => |n| try writer.appendSlice(to.allocator(), n),
+                .Name => |n| try writer.writeAll(n),
                 .Value => |v| switch (v.ty.data()) {
                     .Builtin => |b| switch (@as(Builtin, b)) {
-                        .never, .any => try writer.appendSlice(to.allocator(), "<invalid>"),
-                        .void => try writer.appendSlice(to.allocator(), ".()"),
-                        .bool => try writer.appendSlice(to.allocator(), if (v.value != 0) "true" else "false"),
-                        .u8, .u16, .u32, .u64, .uint => try Task.writeInt(v.value, writer, to),
-                        .i8, .i16, .i32, .i64, .int => try Task.writeInt(@bitCast(v.value), writer, to),
-                        .f32 => try writer.writer(to.allocator()).print("{}", .{@as(f32, @bitCast(@as(u32, @truncate(v.value))))}),
-                        .f64 => try writer.writer(to.allocator()).print("{}", .{@as(f64, @bitCast(@as(u64, @truncate(v.value))))}),
+                        .never, .any => try writer.writeAll("<invalid>"),
+                        .void => try writer.writeAll(".()"),
+                        .bool => try writer.writeAll(if (v.value != 0) "true" else "false"),
+                        .u8, .u16, .u32, .u64, .uint => try writer.print("{d}", .{v.value}),
+                        // FIXME: this will not display smaller ints correctly
+                        .i8, .i16, .i32, .i64, .int => try writer.print("{d}", .{@as(i64, @bitCast(v.value))}),
+                        .f32 => try writer.print("{}", .{@as(f32, @bitCast(@as(u32, @truncate(v.value))))}),
+                        .f64 => try writer.print("{}", .{@as(f64, @bitCast(@as(u64, @truncate(v.value))))}),
                         .type => work_list.appendAssumeCapacity(.{ .Type = @enumFromInt(v.value) }),
                     },
                     .Slice => |s| {
@@ -788,25 +766,25 @@ pub const Id = enum(IdRepr) {
 
                             const global = self.tys.findSymForPtr(@intCast(ptr), ln * slc.elem.size(self.tys));
                             break :b .{ ln, global catch |err| {
-                                try writer.appendSlice(to.allocator(), "<corrupted-slice>(");
-                                try writer.appendSlice(to.allocator(), @errorName(err));
-                                try writer.appendSlice(to.allocator(), ")");
+                                try writer.writeAll("<corrupted-slice>(");
+                                try writer.writeAll(@errorName(err));
+                                try writer.writeAll(")");
                                 continue;
                             }, 0 };
                         };
 
                         if (slc.elem == .u8 and slc.len == null) {
                             const glb: utils.EntId(tys.Global) = @enumFromInt(global);
-                            try writer.appendSlice(to.allocator(), "\"");
-                            try writer.appendSlice(to.allocator(), self.tys.store.get(glb).data.slice()[@intCast(base)..][0..@intCast(ln)]);
-                            try writer.appendSlice(to.allocator(), "\"");
+                            try writer.writeAll("\"");
+                            try writer.writeAll(self.tys.store.get(glb).data.slice()[@intCast(base)..][0..@intCast(ln)]);
+                            try writer.writeAll("\"");
                             continue;
                         }
 
                         if (slc.len == null) {
-                            try writer.appendSlice(to.allocator(), "&.[");
+                            try writer.writeAll("&.[");
                         } else {
-                            try writer.appendSlice(to.allocator(), ".[");
+                            try writer.writeAll(".[");
                         }
 
                         work_list.ensureUnusedCapacity(tmp.arena.allocator(), @intCast(ln * 2)) catch unreachable;
@@ -824,7 +802,7 @@ pub const Id = enum(IdRepr) {
                     },
                     .Struct => |s| {
                         var offsets = @as(tys.Struct.Id, s).offsetIter(self.tys);
-                        try writer.appendSlice(to.allocator(), ".{");
+                        try writer.writeAll(".{");
                         work_list.ensureUnusedCapacity(tmp.arena.allocator(), offsets.fields.len * 2) catch unreachable;
                         work_list.appendAssumeCapacity(.{ .Name = "}" });
                         const base = work_list.items.len;
@@ -844,13 +822,13 @@ pub const Id = enum(IdRepr) {
                     .Pointer => |p| {
                         const ty: Id = self.tys.store.get(p).*;
                         const global = self.tys.findSymForPtr(@intCast(v.value), ty.size(self.tys)) catch |err| {
-                            try writer.appendSlice(to.allocator(), "<corrupted-pointer>(");
-                            try writer.appendSlice(to.allocator(), @errorName(err));
-                            try writer.appendSlice(to.allocator(), ")");
+                            try writer.writeAll("<corrupted-pointer>(");
+                            try writer.writeAll(@errorName(err));
+                            try writer.writeAll(")");
                             return;
                         };
 
-                        try writer.appendSlice(to.allocator(), "&");
+                        try writer.writeAll("&");
                         work_list.appendAssumeCapacity(.{
                             .Value = .normalize(.{ .ty = ty, .value = global }, self.tys),
                         });
@@ -859,7 +837,7 @@ pub const Id = enum(IdRepr) {
                         unreachable;
                     },
                     .Tuple => |t| {
-                        try writer.appendSlice(to.allocator(), ".(");
+                        try writer.writeAll(".(");
                         var iter = @as(tys.Tuple.Id, t).offsetIter(self.tys);
                         while (iter.next()) |elem| {
                             work_list.appendAssumeCapacity(.{ .Name = ", " });
@@ -873,13 +851,13 @@ pub const Id = enum(IdRepr) {
                         _ = work_list.pop();
                     },
                     .Enum => |e| {
-                        try writer.appendSlice(to.allocator(), ".");
-                        try writer.appendSlice(to.allocator(), e.getFields(self.tys)[@intCast(v.value)].name);
+                        try writer.writeAll(".");
+                        try writer.writeAll(e.getFields(self.tys)[@intCast(v.value)].name);
                     },
                     .Nullable => |n| {
                         const global = self.tys.store.get(@as(utils.EntId(tys.Global), @enumFromInt(v.value)));
                         if (self.tys.isNullablePresent(n, global, v.offset)) {
-                            try writer.appendSlice(to.allocator(), "null");
+                            try writer.writeAll("null");
                             continue;
                         }
 
@@ -892,18 +870,14 @@ pub const Id = enum(IdRepr) {
                             .offset = @intCast(v.offset + next_offset),
                         }, self.tys) });
                     },
-                    .Union => try writer.appendSlice(to.allocator(), "<union: cant display>"),
+                    .Union => try writer.writeAll("<union: cant display>"),
                     .Template, .Global, .Func => unreachable,
                 },
             };
         }
 
-        pub fn format(self: *const Fmt, comptime _: []const u8, _: anytype, writer: anytype) !void {
-            var tmp = utils.Arena.scrath(null);
-            defer tmp.deinit();
-            var arr = std.ArrayListUnmanaged(u8).empty;
-            self.fmt(&arr, tmp.arena);
-            try writer.writeAll(arr.items);
+        pub fn format(self: *const Fmt, writer: *std.Io.Writer) !void {
+            self.fmt(writer, null);
         }
     };
 
@@ -1144,7 +1118,7 @@ pub fn cloneCaptureFrom(self: *Types, from: *Types, capture: Scope.Capture) Scop
                 .value = @intFromEnum(global),
             };
         },
-        else => utils.panic("{}", .{capture.ty.fmt(from)}),
+        else => utils.panic("{f}", .{capture.ty.fmt(from)}),
     };
 }
 
@@ -1366,7 +1340,7 @@ pub fn retryNextTask(self: *Types, target: Target, pop_limit: usize, q: ?*root.Q
     }
 }
 
-pub fn init(arena_: Arena, source: []const Ast, diagnostics: std.io.AnyWriter) *Types {
+pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer) *Types {
     var arena = arena_;
     const scopes = arena.alloc(Id, source.len);
     @memset(scopes, .void);

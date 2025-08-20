@@ -765,14 +765,14 @@ pub const Data = struct {
         }
 
         var visited_syms = try Set.initEmpty(tmp.arena.allocator(), self.syms.items.len);
-        var frontier = std.ArrayList(SymIdx).init(tmp.arena.allocator());
+        var frontier = std.ArrayList(SymIdx).empty;
 
         for (self.funcs.items) |fid| {
             if (fid == .invalid) continue;
             const f = &self.syms.items[@intFromEnum(fid)];
             if (f.kind == .func and f.linkage == .exported) {
                 visited_syms.set(@intFromEnum(fid));
-                try frontier.append(fid);
+                try frontier.append(tmp.arena.allocator(), fid);
             }
         }
 
@@ -781,7 +781,7 @@ pub const Data = struct {
             const g = &self.syms.items[@intFromEnum(gid)];
             if (g.kind == .data and g.linkage == .exported) {
                 visited_syms.set(@intFromEnum(gid));
-                try frontier.append(gid);
+                try frontier.append(tmp.arena.allocator(), gid);
             }
         }
 
@@ -791,7 +791,7 @@ pub const Data = struct {
             for (self.relocs.items[f.reloc_offset..][0..f.reloc_count]) |rel| {
                 if (visited_syms.isSet(@intFromEnum(rel.target))) continue;
                 visited_syms.set(@intFromEnum(rel.target));
-                try frontier.append(rel.target);
+                try frontier.append(tmp.arena.allocator(), rel.target);
             }
         }
 
@@ -811,8 +811,8 @@ pub const Data = struct {
 pub const RunEnv = struct {
     name: []const u8,
     code: []const u8,
-    output: std.io.AnyWriter = std.io.null_writer.any(),
-    logs: std.io.AnyWriter = std.io.null_writer.any(),
+    output: ?*std.Io.Writer = null,
+    logs: ?*std.Io.Writer = null,
     colors: std.io.tty.Config = .no_color,
 };
 
@@ -932,7 +932,7 @@ pub const OptOptions = struct {
         builtins: Builtins,
         comptime Backend: type,
         backend: *Backend,
-        logs: ?std.io.AnyWriter,
+        logs: ?*std.Io.Writer,
         par: ?*Parallelism,
     ) bool {
         const parf = par orelse {
@@ -953,7 +953,7 @@ pub const OptOptions = struct {
         builtins: Builtins,
         comptime Backend: type,
         backend: *Backend,
-        logs: ?std.io.AnyWriter,
+        logs: ?*std.Io.Writer,
     ) bool {
         errdefer unreachable;
 
@@ -1197,17 +1197,25 @@ const Vidsibility = enum { local, exported, imported };
 pub const DisasmOpts = struct {
     name: []const u8,
     bin: []const u8,
-    out: std.io.AnyWriter = std.io.null_writer.any(),
+    out: ?*std.Io.Writer,
     colors: std.io.tty.Config = .no_color,
+
+    pub fn print(self: DisasmOpts, comptime fmt: []const u8, args: anytype) void {
+        if (self.colors == .no_color) {
+            if (self.out) |o| o.print(fmt, args) catch unreachable;
+        } else {
+            std.debug.print(fmt, args);
+        }
+    }
 };
 
 pub const FinalizeOptions = struct {
-    output: std.io.AnyWriter,
+    output: ?*std.io.Writer,
     output_scratch: ?*utils.Arena = null,
     optimizations: OptOptions,
     builtins: Builtins,
     parallelism: ?*Parallelism = null,
-    logs: ?std.io.AnyWriter = null,
+    logs: ?*std.Io.Writer = null,
 };
 
 pub const Parallelism = struct {
@@ -1221,7 +1229,7 @@ pub const FinalizeBytesOptions = struct {
     optimizations: OptOptions,
     builtins: Builtins,
     parallelism: ?*Parallelism = null,
-    logs: ?std.io.AnyWriter = null,
+    logs: ?*std.Io.Writer = null,
 };
 
 pub const SupportedTarget = enum {
@@ -1280,28 +1288,28 @@ pub fn init(data: anytype) Machine {
 
     const fns = struct {
         fn emitFunc(self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void {
-            const slf: *Type = @alignCast(@ptrCast(self));
-            const fnc: *graph.Func(Type) = @alignCast(@ptrCast(func));
+            const slf: *Type = @ptrCast(@alignCast(self));
+            const fnc: *graph.Func(Type) = @ptrCast(@alignCast(func));
             slf.emitFunc(fnc, opts);
         }
         fn emitData(self: *anyopaque, opts: DataOptions) void {
-            const slf: *Type = @alignCast(@ptrCast(self));
+            const slf: *Type = @ptrCast(@alignCast(self));
             slf.emitData(opts);
         }
         fn finalize(self: *anyopaque, opts: FinalizeOptions) void {
-            const slf: *Type = @alignCast(@ptrCast(self));
+            const slf: *Type = @ptrCast(@alignCast(self));
             return slf.finalize(opts);
         }
         fn disasm(self: *anyopaque, opts: DisasmOpts) void {
-            const slf: *Type = @alignCast(@ptrCast(self));
+            const slf: *Type = @ptrCast(@alignCast(self));
             return slf.disasm(opts);
         }
         fn run(self: *anyopaque, env: RunEnv) !usize {
-            const slf: *Type = @alignCast(@ptrCast(self));
+            const slf: *Type = @ptrCast(@alignCast(self));
             return slf.run(env);
         }
         fn deinit(self: *anyopaque) void {
-            const slf: *Type = @alignCast(@ptrCast(self));
+            const slf: *Type = @ptrCast(@alignCast(self));
             slf.deinit();
         }
     };
@@ -1336,16 +1344,16 @@ pub fn finalize(self: Machine, opts: FinalizeOptions) void {
     return self.vtable.finalize(self.data, opts);
 }
 
-pub fn finalizeBytes(self: Machine, opts: FinalizeBytesOptions) std.ArrayListUnmanaged(u8) {
-    var out = std.ArrayListUnmanaged(u8).empty;
+pub fn finalizeBytes(self: Machine, opts: FinalizeBytesOptions) std.ArrayList(u8) {
+    var out = std.Io.Writer.Allocating.init(opts.gpa);
     self.finalize(.{
-        .output = out.writer(opts.gpa).any(),
+        .output = &out.writer,
         .optimizations = opts.optimizations,
         .builtins = opts.builtins,
         .parallelism = opts.parallelism,
         .logs = opts.logs,
     });
-    return out;
+    return out.toArrayList();
 }
 
 /// visualize already compiled code, its best to include different colors

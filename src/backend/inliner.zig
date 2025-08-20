@@ -38,7 +38,7 @@ pub fn Mixin(comptime Backend: type) type {
 
                 const node_size = node.size();
                 const new_slot = try arena.allocator()
-                    .alignedAlloc(u8, @alignOf(Func.Node), node_size);
+                    .alignedAlloc(u8, .of(Func.Node), node_size);
                 @memcpy(new_slot, @as([*]const u8, @ptrCast(node)));
                 const new_node: *Func.Node = @ptrCast(new_slot);
 
@@ -215,7 +215,7 @@ pub fn Mixin(comptime Backend: type) type {
 
             const prev_next_id = func.next_id;
 
-            var tmp = utils.Arena.scrathFromAlloc(func_work.list.allocator);
+            var tmp = utils.Arena.scrathFromAlloc(func_work.allocator);
             defer tmp.deinit();
 
             const cloned = cloneNodes(

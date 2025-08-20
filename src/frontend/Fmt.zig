@@ -1,4 +1,4 @@
-buf: *std.ArrayList(u8),
+buf: *std.Io.Writer,
 indent: u32 = 0,
 is_if_or_while: bool = false,
 ast: *const Ast,
@@ -8,7 +8,7 @@ const Ast = @import("Ast.zig");
 const Id = Ast.Id;
 const Slice = Ast.Slice;
 const Lexer = @import("Lexer.zig");
-const Error = std.mem.Allocator.Error;
+const Error = std.Io.Writer.Error;
 const root = @import("hb");
 const Fmt = @This();
 
@@ -170,7 +170,7 @@ pub fn fmt(self: *Fmt) Error!void {
             if (id.tag() != .Comment) try self.autoInsertSep(items[i], .@";");
             try self.preserveSpace(items[i]);
         }
-        try self.buf.appendSlice("\n");
+        try self.buf.writeAll("\n");
     }
 }
 
@@ -183,7 +183,7 @@ fn preserveSpace(self: *Fmt, id: anytype) Error!void {
     const preceding = self.ast.source[0..pos.index];
     const preceding_whitespace = preceding[std.mem.trimRight(u8, preceding, " \t\r\n").len..];
     const nline_count = std.mem.count(u8, preceding_whitespace, "\n");
-    if (nline_count > 1) try self.buf.appendSlice("\n");
+    if (nline_count > 1) try self.buf.writeAll("\n");
 }
 
 fn preserveWrapping(self: *Fmt, id: anytype) Error!bool {
@@ -192,8 +192,8 @@ fn preserveWrapping(self: *Fmt, id: anytype) Error!bool {
     const preceding_whitespace = preceding[std.mem.trimRight(u8, preceding, " \t\r\n").len..];
     const nline_count = std.mem.count(u8, preceding_whitespace, "\n");
     if (nline_count > 0) {
-        try self.buf.appendSlice("\n");
-        try self.buf.appendNTimes('\t', self.indent + 1);
+        try self.buf.writeAll("\n");
+        for (0..self.indent + 1) |_| try self.buf.writeByte('\t');
         return true;
     }
     return false;
@@ -223,22 +223,22 @@ fn autoInsertSep(self: *Fmt, id: anytype, sep: Lexer.Lexeme) Error!void {
     }
 
     if ((starting_token.kind.precedence(false) < 255 or last_token == .@"return") and last_token != .Comment)
-        try self.buf.appendSlice(@tagName(sep));
+        try self.buf.writeAll(@tagName(sep));
 }
 
 fn fmtDecl(self: *Fmt, d: *Ast.Decl) Error!void {
     try self.fmtExpr(d.bindings);
     if (d.ty.tag() != .Void) {
-        try self.buf.appendSlice(": ");
+        try self.buf.writeAll(": ");
         try self.fmtExpr(d.ty);
         if (d.value.tag() != .Void) {
-            try self.buf.appendSlice(" ");
+            try self.buf.writeAll(" ");
         }
     } else {
-        try self.buf.appendSlice(" :");
+        try self.buf.writeAll(" :");
     }
     if (d.value.tag() != .Void) {
-        try self.buf.appendSlice("= ");
+        try self.buf.writeAll("= ");
         try self.fmtExpr(d.value);
     }
 }
@@ -246,30 +246,30 @@ fn fmtDecl(self: *Fmt, d: *Ast.Decl) Error!void {
 fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
     switch (self.ast.exprs.get(id)) {
         .Void => {},
-        .Wildcard => try self.buf.appendSlice("_"),
+        .Wildcard => try self.buf.writeAll("_"),
         .Comment => |c| {
             const comment_token = Lexer.peek(self.ast.source, c.index);
             const content = std.mem.trimRight(u8, comment_token.view(self.ast.source), "\n");
-            try self.buf.appendSlice(content);
+            try self.buf.writeAll(content);
         },
-        .Idk => try self.buf.appendSlice("idk"),
-        .Die => try self.buf.appendSlice("die"),
-        .Ident => |i| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, i.pos.index)),
+        .Idk => try self.buf.writeAll("idk"),
+        .Die => try self.buf.writeAll("die"),
+        .Ident => |i| try self.buf.writeAll(Lexer.peekStr(self.ast.source, i.pos.index)),
         .Fn => |f| {
             const fn_prec = 1;
-            if (prec < fn_prec) try self.buf.appendSlice("(");
-            try self.buf.appendSlice("fn");
+            if (prec < fn_prec) try self.buf.writeAll("(");
+            try self.buf.writeAll("fn");
             try self.fmtSlice(f.pos.flag.indented, f.args, .@"(", .@",", .@")");
-            try self.buf.appendSlice(": ");
+            try self.buf.writeAll(": ");
             try self.fmtExpr(f.ret);
-            try self.buf.appendSlice(" ");
+            try self.buf.writeAll(" ");
             try self.fmtExpr(f.body);
-            if (prec < fn_prec) try self.buf.appendSlice(")");
+            if (prec < fn_prec) try self.buf.writeAll(")");
         },
         .FnPtr => |f| {
-            try self.buf.appendSlice("^fn");
+            try self.buf.writeAll("^fn");
             try self.fmtSlice(f.pos.flag.indented, f.args, .@"(", .@",", .@")");
-            try self.buf.appendSlice(": ");
+            try self.buf.writeAll(": ");
             try self.fmtExpr(f.ret);
         },
         .Type => |s| {
@@ -278,18 +278,18 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
                 else => unreachable,
             };
 
-            try self.buf.appendSlice(name);
+            try self.buf.writeAll(name);
 
             if (s.tag.tag() != .Void) {
-                try self.buf.appendSlice("(");
+                try self.buf.writeAll("(");
                 try self.fmtExpr(s.tag);
-                try self.buf.appendSlice(")");
+                try self.buf.writeAll(")");
             }
 
             if (s.alignment.tag() != .Void) {
-                try self.buf.appendSlice(" align(");
+                try self.buf.writeAll(" align(");
                 try self.fmtExpr(s.alignment);
-                try self.buf.appendSlice(")");
+                try self.buf.writeAll(")");
             }
 
             const forced = for (self.ast.exprs.view(s.fields)) |e| {
@@ -298,50 +298,50 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
                 if (s.kind != .@"enum" and (e.tag() == .Decl and
                     self.ast.exprs.get(e).Decl.bindings.tag() != .Tag)) break true;
             } else false;
-            if (s.pos.flag.indented or forced) try self.buf.appendSlice(" ");
+            if (s.pos.flag.indented or forced) try self.buf.writeAll(" ");
             try self.fmtSliceLow(s.pos.flag.indented or forced, forced, s.fields, .@"{", .@";", .@"}");
         },
         .Directive => |d| {
-            try self.buf.appendSlice("@");
-            try self.buf.appendSlice(@tagName(d.kind));
+            try self.buf.writeAll("@");
+            try self.buf.writeAll(@tagName(d.kind));
             try self.fmtSlice(d.pos.flag.indented, d.args, .@"(", .@",", .@")");
         },
         .Range => |r| {
             try self.fmtExpr(r.start);
-            try self.buf.appendSlice("..");
+            try self.buf.writeAll("..");
             try self.fmtExpr(r.end);
         },
         .Index => |i| {
             try self.fmtExprPrec(i.base, 0);
-            try self.buf.appendSlice("[");
+            try self.buf.writeAll("[");
             try self.fmtExpr(i.subscript);
-            try self.buf.appendSlice("]");
+            try self.buf.writeAll("]");
         },
         .Call => |c| {
             try self.fmtExprPrec(c.called, 0);
             try self.fmtSlice(c.arg_pos.flag.indented, c.args, .@"(", .@",", .@")");
         },
         .Tag => |t| {
-            try self.buf.appendSlice(".");
-            try self.buf.appendSlice(Lexer.peekStr(self.ast.source, t.index + 1));
+            try self.buf.writeAll(".");
+            try self.buf.writeAll(Lexer.peekStr(self.ast.source, t.index + 1));
         },
         .Defer => |d| {
-            try self.buf.appendSlice("defer ");
+            try self.buf.writeAll("defer ");
             try self.fmtExpr(d.*);
         },
         .Unwrap => |u| {
             try self.fmtExprPrec(u.*, 0);
-            try self.buf.appendSlice(".?");
+            try self.buf.writeAll(".?");
         },
         .Deref => |u| {
             try self.fmtExprPrec(u.*, 0);
-            try self.buf.appendSlice(".*");
+            try self.buf.writeAll(".*");
         },
         .Field => |f| {
             try self.fmtExprPrec(f.base, 0);
             _ = try self.preserveWrapping(Ast.Pos{ .index = f.field.index - 1 });
-            try self.buf.appendSlice(".");
-            try self.buf.appendSlice(Lexer.peekStr(self.ast.source, f.field.index));
+            try self.buf.writeAll(".");
+            try self.buf.writeAll(Lexer.peekStr(self.ast.source, f.field.index));
         },
         inline .Ctor, .Tupl, .Arry => |v, t| {
             try self.fmtExprPrec(v.ty, 0);
@@ -350,52 +350,52 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             const end = if (t == .Ctor) .@"}" else if (t == .Tupl) .@")" else .@"]";
             try self.fmtSlice(v.pos.flag.indented, v.fields, start, sep, end);
         },
-        .Buty => |b| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, b.pos.index)),
+        .Buty => |b| try self.buf.writeAll(Lexer.peekStr(self.ast.source, b.pos.index)),
         .Block => |b| {
             try self.fmtSliceLow(b.pos.flag.indented and b.stmts.len() != 0, true, b.stmts, .@"{", .@";", .@"}");
         },
         .SliceTy => |s| {
             const unprec = 1;
-            if (prec < unprec) try self.buf.appendSlice("(");
-            try self.buf.appendSlice("[");
+            if (prec < unprec) try self.buf.writeAll("(");
+            try self.buf.writeAll("[");
             try self.fmtExpr(s.len);
-            try self.buf.appendSlice("]");
+            try self.buf.writeAll("]");
             try self.fmtExpr(s.elem);
-            if (prec < unprec) try self.buf.appendSlice(")");
+            if (prec < unprec) try self.buf.writeAll(")");
         },
         .If => |i| {
-            if (i.pos.flag.@"comptime") try self.buf.appendSlice("$");
-            try self.buf.appendSlice("if ");
+            if (i.pos.flag.@"comptime") try self.buf.writeAll("$");
+            try self.buf.writeAll("if ");
             {
                 const prev_is_if_or_while = self.is_if_or_while;
                 defer self.is_if_or_while = prev_is_if_or_while;
                 self.is_if_or_while = true;
                 try self.fmtExpr(i.cond);
             }
-            try self.buf.appendSlice(" ");
+            try self.buf.writeAll(" ");
             try self.fmtExpr(i.then);
             if (i.else_.tag() != .Void) {
-                try self.buf.appendSlice(" else ");
+                try self.buf.writeAll(" else ");
                 try self.fmtExpr(i.else_);
             }
         },
         .Match => |m| {
-            if (m.pos.flag.@"comptime") try self.buf.appendSlice("$");
-            try self.buf.appendSlice("match ");
+            if (m.pos.flag.@"comptime") try self.buf.writeAll("$");
+            try self.buf.writeAll("match ");
             try self.fmtExpr(m.value);
-            try self.buf.appendSlice(" ");
+            try self.buf.writeAll(" ");
             try self.fmtSlice(m.arms.len() != 0, m.arms, .@"{", .@",", .@"}");
         },
         .Loop => |l| {
-            if (l.pos.flag.@"comptime") try self.buf.appendSlice("$");
+            if (l.pos.flag.@"comptime") try self.buf.writeAll("$");
 
             if (l.body.tag() == .If and self.ast.exprs.get(l.body).If.pos == l.pos) {
-                try self.buf.appendSlice("while");
+                try self.buf.writeAll("while");
                 if (l.label.tag() != .Void) {
-                    try self.buf.appendSlice(":");
+                    try self.buf.writeAll(":");
                     try self.fmtExpr(l.label);
                 }
-                try self.buf.appendSlice(" ");
+                try self.buf.writeAll(" ");
                 const if_body = self.ast.exprs.get(l.body).If;
                 {
                     const prev_is_if_or_while = self.is_if_or_while;
@@ -403,59 +403,59 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
                     self.is_if_or_while = true;
                     try self.fmtExpr(if_body.cond);
                 }
-                try self.buf.appendSlice(" ");
+                try self.buf.writeAll(" ");
                 try self.fmtExpr(if_body.then);
             } else {
-                try self.buf.appendSlice("loop");
+                try self.buf.writeAll("loop");
                 if (l.label.tag() != .Void) {
-                    try self.buf.appendSlice(":");
+                    try self.buf.writeAll(":");
                     try self.fmtExpr(l.label);
                 }
-                try self.buf.appendSlice(" ");
+                try self.buf.writeAll(" ");
                 try self.fmtExpr(l.body);
             }
         },
         .For => |f| {
-            try self.buf.appendSlice("for");
+            try self.buf.writeAll("for");
             if (f.label.tag() != .Void) {
-                try self.buf.appendSlice(":");
+                try self.buf.writeAll(":");
                 try self.fmtExpr(f.label);
             }
-            try self.buf.appendSlice(" ");
+            try self.buf.writeAll(" ");
             for (self.ast.exprs.view(f.iters), 0..) |*iter, i| {
-                if (i != 0) try self.buf.appendSlice(", ");
+                if (i != 0) try self.buf.writeAll(", ");
                 try self.fmtDecl(iter);
             }
-            try self.buf.appendSlice(" ");
+            try self.buf.writeAll(" ");
             try self.fmtExpr(f.body);
         },
         .Break => |b| {
-            try self.buf.appendSlice("break");
+            try self.buf.writeAll("break");
             if (b.label.tag() != .Void) {
-                try self.buf.appendSlice(":");
+                try self.buf.writeAll(":");
                 try self.fmtExpr(b.label);
             }
         },
         .Continue => |c| {
-            try self.buf.appendSlice("continue");
+            try self.buf.writeAll("continue");
             if (c.label.tag() != .Void) {
-                try self.buf.appendSlice(":");
+                try self.buf.writeAll(":");
                 try self.fmtExpr(c.label);
             }
         },
         .Return => |r| {
-            try self.buf.appendSlice("return");
+            try self.buf.writeAll("return");
             if (r.value.tag() != .Void) {
-                try self.buf.appendSlice(" ");
+                try self.buf.writeAll(" ");
                 try self.fmtExpr(r.value);
             }
         },
         .UnOp => |o| {
             const unprec = 1;
-            if (prec < unprec) try self.buf.appendSlice("(");
-            try self.buf.appendSlice(o.op.repr());
+            if (prec < unprec) try self.buf.writeAll("(");
+            try self.buf.writeAll(o.op.repr());
             try self.fmtExprPrec(o.oper, unprec);
-            if (prec < unprec) try self.buf.appendSlice(")");
+            if (prec < unprec) try self.buf.writeAll(")");
         },
         .Decl => |d| try self.fmtDecl(d),
         .BinOp => |co| {
@@ -467,44 +467,44 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
 
             const should_parenthesize = prec < o.op.precedence(self.is_if_or_while);
 
-            if (should_parenthesize) try self.buf.appendSlice("(");
+            if (should_parenthesize) try self.buf.writeAll("(");
 
             if (o.lhs.tag() == .BinOp and self.ast.exprs.get(o.lhs).BinOp.rhs.tag() == .Return) {
-                try self.buf.appendSlice("(");
+                try self.buf.writeAll("(");
                 try self.fmtExprPrec(o.lhs, 255);
-                try self.buf.appendSlice(")");
+                try self.buf.writeAll(")");
             } else {
                 try self.fmtExprPrec(o.lhs, o.op.precedence(self.is_if_or_while));
             }
 
-            try self.buf.appendSlice(" ");
-            try self.buf.appendSlice(o.op.repr());
-            if (!try self.preserveWrapping(o.rhs)) try self.buf.appendSlice(" ");
+            try self.buf.writeAll(" ");
+            try self.buf.writeAll(o.op.repr());
+            if (!try self.preserveWrapping(o.rhs)) try self.buf.writeAll(" ");
 
             if (o.rhs.tag() == .BinOp and self.ast.exprs.get(o.rhs).BinOp
                 .op.precedence(self.is_if_or_while) == o.op.precedence(self.is_if_or_while))
             {
-                try self.buf.appendSlice("(");
+                try self.buf.writeAll("(");
                 try self.fmtExprPrec(o.rhs, 255);
-                try self.buf.appendSlice(")");
+                try self.buf.writeAll(")");
             } else {
                 try self.fmtExprPrec(o.rhs, o.op.precedence(self.is_if_or_while));
             }
 
-            if (should_parenthesize) try self.buf.appendSlice(")");
+            if (should_parenthesize) try self.buf.writeAll(")");
         },
         .Use => |use| {
-            try self.buf.writer().print(
+            try self.buf.print(
                 "@{s}({s})",
                 .{ @tagName(use.pos.flag.use_kind), Lexer.peekStr(self.ast.source, use.pos.index) },
             );
         },
-        .Integer => |i| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, i.pos.index)),
-        .Float => |f| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, f.index)),
-        .Bool => |b| try self.buf.appendSlice(if (b.value) "true" else "false"),
-        .String => |s| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, s.pos.index)),
-        .Quotes => |s| try self.buf.appendSlice(Lexer.peekStr(self.ast.source, s.pos.index)),
-        .Null => try self.buf.appendSlice("null"),
+        .Integer => |i| try self.buf.writeAll(Lexer.peekStr(self.ast.source, i.pos.index)),
+        .Float => |f| try self.buf.writeAll(Lexer.peekStr(self.ast.source, f.index)),
+        .Bool => |b| try self.buf.writeAll(if (b.value) "true" else "false"),
+        .String => |s| try self.buf.writeAll(Lexer.peekStr(self.ast.source, s.pos.index)),
+        .Quotes => |s| try self.buf.writeAll(Lexer.peekStr(self.ast.source, s.pos.index)),
+        .Null => try self.buf.writeAll("null"),
     }
 }
 
@@ -532,7 +532,7 @@ fn fmtSliceLow(
     defer self.is_if_or_while = prev_is_if_or_while;
     self.is_if_or_while = false;
 
-    try self.buf.appendSlice(start.repr());
+    try self.buf.writeAll(start.repr());
 
     const view = self.ast.exprs.view(slice);
 
@@ -543,24 +543,24 @@ fn fmtSliceLow(
 
     if (indent) {
         self.indent += 1;
-        try self.buf.appendSlice("\n");
+        try self.buf.writeAll("\n");
     }
 
     for (view, 1..) |id, i| {
-        if (indent) try self.buf.appendNTimes('\t', self.indent);
+        if (indent) for (0..self.indent) |_| try self.buf.writeByte('\t');
         if (@TypeOf(id) == Ast.Arg) {
             try self.fmtExpr(id.bindings);
-            try self.buf.appendSlice(": ");
+            try self.buf.writeAll(": ");
             try self.fmtExpr(id.ty);
         } else if (@TypeOf(id) == Ast.CtorField) {
-            try self.buf.appendSlice(self.ast.tokenSrc(id.pos.index));
+            try self.buf.writeAll(self.ast.tokenSrc(id.pos.index));
             if (id.pos.index != if (self.ast.exprs.getTyped(.Ident, id.value)) |ident| ident.pos.index else std.math.maxInt(u31)) {
-                try self.buf.appendSlice(": ");
+                try self.buf.writeAll(": ");
                 try self.fmtExpr(id.value);
             }
         } else if (@TypeOf(id) == Ast.MatchArm) {
             try self.fmtExpr(id.pat);
-            try self.buf.appendSlice(" => ");
+            try self.buf.writeAll(" => ");
             try self.fmtExpr(id.body);
         } else try self.fmtExpr(id);
         if (forced) {
@@ -570,16 +570,16 @@ fn fmtSliceLow(
             }
         } else if (indent or i != view.len) {
             if (@TypeOf(id) != Ast.Id or id.tag() != .Comment)
-                try self.buf.appendSlice(sep.repr());
-            if (!indent) try self.buf.appendSlice(" ");
+                try self.buf.writeAll(sep.repr());
+            if (!indent) try self.buf.writeAll(" ");
         }
-        if (indent) try self.buf.appendSlice("\n");
+        if (indent) try self.buf.writeAll("\n");
     }
 
     if (indent) {
         self.indent -= 1;
-        try self.buf.appendNTimes('\t', self.indent);
+        for (0..self.indent) |_| try self.buf.writeByte('\t');
     }
 
-    try self.buf.appendSlice(end.repr());
+    try self.buf.writeAll(end.repr());
 }

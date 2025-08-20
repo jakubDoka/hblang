@@ -70,12 +70,37 @@ pub fn build(b: *std.Build) !void {
         break :hb hb;
     };
 
+    cc: {
+        const cc = b.addExecutable(.{
+            .name = "cc",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/cc.zig"),
+                .target = target,
+                .optimize = optimize,
+            }),
+        });
+
+        const aro = b.dependency("arocc", .{
+            .target = target,
+            .optimize = optimize,
+        });
+
+        cc.root_module.addImport("aro", aro.module("aro"));
+        cc.root_module.addImport("hb", hb);
+
+        b.installArtifact(cc);
+
+        break :cc;
+    }
+
     hbc: {
         const exe = b.addExecutable(.{
             .name = "hbc",
-            .root_source_file = b.path("src/hbc.zig"),
-            .target = target,
-            .optimize = optimize,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/hbc.zig"),
+                .target = target,
+                .optimize = optimize,
+            }),
             .use_llvm = use_llvm,
             .use_lld = use_lld,
             //.single_threaded = true,
@@ -91,14 +116,12 @@ pub fn build(b: *std.Build) !void {
     }
 
     const test_step = b.step("test", "run tests");
-    const test_filter = b.option([]const u8, "tf", "passed as a filter to tests");
+    const test_filter = if (b.option([]const u8, "tf", "passed as a filter to tests")) |f| &.{f} else &.{};
 
     hb_test: {
         test_step.dependOn(&b.addRunArtifact(b.addTest(.{
             .root_module = hb,
-            .target = b.graph.host,
-            .optimize = optimize,
-            .filter = test_filter,
+            .filters = test_filter,
             .use_llvm = use_llvm,
             .use_lld = use_lld,
         })).step);
@@ -122,9 +145,11 @@ pub fn build(b: *std.Build) !void {
     vendored_tests: {
         const grn = b.addExecutable(.{
             .name = "gen_vendored_tests",
-            .root_source_file = b.path("scripts/gen_vendored_tests.zig"),
-            .target = b.graph.host,
-            .optimize = .Debug,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("scripts/gen_vendored_tests.zig"),
+                .target = b.graph.host,
+                .optimize = .Debug,
+            }),
             .use_llvm = use_llvm,
             .use_lld = use_lld,
         });
@@ -137,10 +162,12 @@ pub fn build(b: *std.Build) !void {
 
         const test_run = b.addTest(.{
             .name = "vendored_tests",
-            .root_source_file = out,
-            .target = b.graph.host,
-            .optimize = optimize,
-            .filter = test_filter,
+            .root_module = b.createModule(.{
+                .root_source_file = out,
+                .target = b.graph.host,
+                .optimize = optimize,
+            }),
+            .filters = test_filter,
             .use_llvm = use_llvm,
             .use_lld = use_lld,
         });
@@ -156,9 +183,11 @@ pub fn build(b: *std.Build) !void {
     example_tests: {
         const gen = b.addExecutable(.{
             .name = "gen_tests.zig",
-            .root_source_file = b.path("scripts/gen_tests.zig"),
-            .target = b.graph.host,
-            .optimize = .Debug,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("scripts/gen_tests.zig"),
+                .target = b.graph.host,
+                .optimize = .Debug,
+            }),
             .use_llvm = use_llvm,
             .use_lld = use_lld,
         });
@@ -173,10 +202,12 @@ pub fn build(b: *std.Build) !void {
 
             const test_run = b.addTest(.{
                 .name = name,
-                .root_source_file = out,
-                .target = b.graph.host,
-                .optimize = optimize,
-                .filter = test_filter,
+                .root_module = b.createModule(.{
+                    .root_source_file = out,
+                    .target = b.graph.host,
+                    .optimize = optimize,
+                }),
+                .filters = test_filter,
                 .use_llvm = use_llvm,
                 .use_lld = use_lld,
             });
@@ -193,10 +224,12 @@ pub fn build(b: *std.Build) !void {
     fuzz_fidning_tests: {
         const test_run = b.addTest(.{
             .name = "fuzz_finding_tests",
-            .root_source_file = b.path("src/fuzz_finding_tests.zig"),
-            .target = b.graph.host,
-            .optimize = optimize,
-            .filter = test_filter,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/fuzz_finding_tests.zig"),
+                .target = b.graph.host,
+                .optimize = optimize,
+            }),
+            .filters = test_filter,
             .use_llvm = use_llvm,
             .use_lld = use_lld,
         });
@@ -212,9 +245,11 @@ pub fn build(b: *std.Build) !void {
     rewrite_dsl_gen: {
         const gen = b.addExecutable(.{
             .name = "rewrite-dsl",
-            .root_source_file = b.path("scripts/rewrite_dsl.zig"),
-            .target = b.graph.host,
-            .optimize = .Debug,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("scripts/rewrite_dsl.zig"),
+                .target = b.graph.host,
+                .optimize = .Debug,
+            }),
             .use_llvm = use_llvm,
             .use_lld = use_lld,
         });
@@ -249,8 +284,7 @@ pub fn build(b: *std.Build) !void {
         const check_step = b.step("check", "type check");
 
         const t = b.addTest(.{ .root_module = test_module });
-        const r = b.addRunArtifact(t);
-        check_step.dependOn(&r.step);
+        check_step.dependOn(&t.step);
 
         break :check;
     }
@@ -258,9 +292,11 @@ pub fn build(b: *std.Build) !void {
     fuzzing: {
         const dict_gen = b.addExecutable(.{
             .name = "gen_fuzz_dict.zig",
-            .root_source_file = b.path("scripts/gen_fuzz_dict.zig"),
-            .target = b.graph.host,
-            .optimize = .Debug,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("scripts/gen_fuzz_dict.zig"),
+                .target = b.graph.host,
+                .optimize = .Debug,
+            }),
             .use_llvm = use_llvm,
             .use_lld = use_lld,
         });
@@ -273,13 +309,14 @@ pub fn build(b: *std.Build) !void {
         run_gen.addFileArg(b.path("BUGFIX.md"));
         const cases = run_gen.addOutputDirectoryArg("fuzz-cases");
 
-        const fuzz = b.addStaticLibrary(.{
+        const fuzz = b.addLibrary(.{
             .name = "fuzz",
-            .root_source_file = b.path("src/fuzz.zig"),
-            .single_threaded = true,
-            .target = b.graph.host,
-            .optimize = optimize,
-            .strip = false,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/fuzz.zig"),
+                .target = b.graph.host,
+                .optimize = optimize,
+                .single_threaded = true,
+            }),
         });
         fuzz.pie = true;
         fuzz.want_lto = true;
@@ -300,9 +337,11 @@ pub fn build(b: *std.Build) !void {
 
         const gen_finding_tests = b.addExecutable(.{
             .name = "gen_fuzz_finding_tests.zig",
-            .root_source_file = b.path("scripts/gen_fuzz_finding_tests.zig"),
-            .target = b.graph.host,
-            .optimize = .Debug,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("scripts/gen_fuzz_finding_tests.zig"),
+                .target = b.graph.host,
+                .optimize = .Debug,
+            }),
             .use_llvm = use_llvm,
             .use_lld = use_lld,
         });

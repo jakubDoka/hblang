@@ -821,21 +821,23 @@ pub fn Func(comptime Backend: type) type {
         pub const WorkList = struct {
             list: std.ArrayList(*Node),
             in_list: std.DynamicBitSetUnmanaged,
+            allocator: std.mem.Allocator,
 
             pub fn init(gpa: std.mem.Allocator, cap: usize) !WorkList {
                 return .{
                     .list = try .initCapacity(gpa, cap),
                     .in_list = try .initEmpty(gpa, cap),
+                    .allocator = gpa,
                 };
             }
 
             pub fn add(self: *WorkList, node: *Node) void {
                 errdefer unreachable;
 
-                if (node.isDead()) utils.panic("{} {any}\n", .{ node, node.inputs() });
+                if (node.isDead()) utils.panic("{f} {any}\n", .{ node, node.inputs() });
                 if (self.in_list.bit_length <= node.id) {
                     try self.in_list.resize(
-                        self.list.allocator,
+                        self.allocator,
                         try std.math.ceilPowerOfTwo(usize, node.id + 1),
                         false,
                     );
@@ -843,7 +845,7 @@ pub fn Func(comptime Backend: type) type {
 
                 if (self.in_list.isSet(node.id)) return;
                 self.in_list.set(node.id);
-                try self.list.append(node);
+                try self.list.append(self.allocator, node);
             }
 
             pub fn pop(self: *WorkList) ?*Node {
@@ -914,8 +916,8 @@ pub fn Func(comptime Backend: type) type {
                     while (lc != rc) {
                         std.debug.assert(lc.base.kind != .Start);
                         std.debug.assert(rc.base.kind != .Start);
-                        if (!lc.base.isCfg()) utils.panic("{}", .{lc.base});
-                        if (!rc.base.isCfg()) utils.panic("{}", .{rc.base});
+                        if (!lc.base.isCfg()) utils.panic("{f}", .{lc.base});
+                        if (!rc.base.isCfg()) utils.panic("{f}", .{rc.base});
                         const diff = @as(i64, idepth(lc)) - idepth(rc);
                         if (diff >= 0) lc = lc.idom();
                         if (diff <= 0) rc = rc.idom();
@@ -953,8 +955,8 @@ pub fn Func(comptime Backend: type) type {
                         (to_sched.kind != .MachSplit and !to_sched.isCheap() and func.gcm.loopDepthOf(cfg) < func.gcm.loopDepthOf(best)));
                 }
 
-                pub fn format(self: *const CfgNode, comptime a: anytype, b: anytype, writer: anytype) !void {
-                    try self.base.format(a, b, writer);
+                pub fn format(self: *const CfgNode, writer: *std.Io.Writer) !void {
+                    try self.base.format(writer);
                 }
 
                 pub fn scheduleBlockAndRestoreBlockIds(bbc: *CfgNode) void {
@@ -1023,7 +1025,7 @@ pub fn Func(comptime Backend: type) type {
                     var scheduled: usize = 0;
                     if (ready != scheduled) while (scheduled < outs.len - 1) {
                         if (ready == scheduled) utils.panic(
-                            "{} {} {} {any}",
+                            "{} {} {f} {any}",
                             .{ scheduled, outs.len, bb, outs[scheduled..] },
                         );
 
@@ -1093,7 +1095,7 @@ pub fn Func(comptime Backend: type) type {
                     return @intCast(self.inner.pos);
                 }
 
-                pub fn format(self: *const Out, comptime _: anytype, _: anytype, writer: anytype) !void {
+                pub fn format(self: *const Out, writer: *std.Io.Writer) !void {
                     try writer.print("{}:{any}", .{ self.pos(), self.get() });
                 }
             };
@@ -1289,10 +1291,10 @@ pub fn Func(comptime Backend: type) type {
                 return @as([*]const u64, @ptrCast(&self.edata))[0 .. size_map[@intFromEnum(self.kind)] / 8];
             }
 
-            pub fn format(self: *const Node, comptime _: anytype, _: anytype, writer: anytype) !void {
+            pub fn format(self: *const Node, writer: *std.Io.Writer) !void {
                 const colors: std.io.tty.Config = if (!utils.freestanding and
-                    writer.writeFn == std.io.getStdErr().writer().any().writeFn)
-                    std.io.tty.detectConfig(std.io.getStdErr())
+                    writer.vtable.drain == std.fs.File.stderr().writer(&.{}).interface.vtable.drain)
+                    std.io.tty.detectConfig(std.fs.File.stderr())
                 else
                     .escape_codes;
                 self.fmt(null, writer, colors);
@@ -1479,7 +1481,7 @@ pub fn Func(comptime Backend: type) type {
             pub fn removeUse(self: *Node, idx: usize, use: *Node) void {
                 const outs = self.outputs();
                 const index = std.mem.indexOfScalar(Out, outs, .init(use, idx, self)) orelse {
-                    utils.panic("removeUse: not found {} {any} {}", .{ use, self.outputs(), self });
+                    utils.panic("removeUse: not found {f} {any} {f}", .{ use, self.outputs(), self });
                 };
 
                 outs[index] = outs[outs.len - 1];
@@ -1497,21 +1499,21 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn extraConst(self: *const Node, comptime kind: Kind) *const ClassFor(kind) {
                 std.debug.assert(self.kind == kind);
-                const ptr: *const LayoutFor(kind) = @alignCast(@ptrCast(self));
+                const ptr: *const LayoutFor(kind) = @ptrCast(@alignCast(self));
                 return &ptr.ext;
             }
 
             pub fn extra(self: *Node, comptime kind: Kind) *ClassFor(kind) {
                 std.debug.assert(self.kind == kind);
-                const ptr: *LayoutFor(kind) = @alignCast(@ptrCast(self));
+                const ptr: *LayoutFor(kind) = @ptrCast(@alignCast(self));
                 return &ptr.ext;
             }
 
             pub fn extra2(self: *Node) utils.AsRef(Union) {
                 const Repr = extern struct { data: *anyopaque, kind: Kind };
 
-                const ptr: *extern struct { base: Node, ext: u8 } = @alignCast(@ptrCast(self));
-                return @bitCast(Repr{ .kind = self.kind, .data = &ptr.ext });
+                const ptr: *extern struct { base: Node, ext: u8 } = @ptrCast(@alignCast(self));
+                return @as(*const utils.AsRef(Union), @ptrCast(&Repr{ .kind = self.kind, .data = &ptr.ext })).*;
             }
 
             pub fn isDef(self: *Node) bool {
@@ -1781,7 +1783,7 @@ pub fn Func(comptime Backend: type) type {
 
             const node_size = def.size();
             const new_slot = try self.arena.allocator()
-                .alignedAlloc(u8, @alignOf(Node), node_size);
+                .alignedAlloc(u8, .of(Node), node_size);
             @memcpy(new_slot, @as([*]const u8, @ptrCast(def)));
             const new_node: *Node = @ptrCast(new_slot);
 
@@ -1919,8 +1921,8 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn addUnOp(self: *Self, sloc: Sloc, op: UnOp, ty: DataType, oper: *Node) *Node {
-            if (!(op != .uext or ty.size() > oper.data_type.size())) utils.panic("{} {}", .{ ty, oper });
-            std.debug.assert(op != .sext or ty.size() > oper.data_type.size());
+            if (!(op != .uext or ty.size() > oper.data_type.size())) utils.panic("{} {f}", .{ ty, oper });
+            if (!(op != .sext or ty.size() > oper.data_type.size())) utils.panic("{} {f}", .{ ty, oper });
             if (oper.kind == .CInt and ty.isInt()) {
                 return self.addIntImm(sloc, ty, op.eval(oper.data_type, ty, oper.extra(.CInt).value));
             }
@@ -2020,7 +2022,7 @@ pub fn Func(comptime Backend: type) type {
         pub fn addNodeNoIntern(self: *Self, kind: Kind, ty: DataType, inputs: []const ?*Node, extra: []const u64) *Node {
             errdefer unreachable;
             const size = @sizeOf(Node) + extra.len * @sizeOf(u64);
-            const node: *Node = @alignCast(@ptrCast(self.arena.allocator().rawAlloc(size, .@"8", @returnAddress()).?));
+            const node: *Node = @ptrCast(@alignCast(self.arena.allocator().rawAlloc(size, .@"8", @returnAddress()).?));
             const owned_inputs = try self.arena.allocator().dupe(?*Node, inputs);
 
             node.* = .{
@@ -2049,7 +2051,7 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn kill(func: *Self, self: *Node) void {
-            if (self.output_len != 0) utils.panic("{any} {}\n", .{ self.outputs(), self });
+            if (self.output_len != 0) utils.panic("{any} {f}\n", .{ self.outputs(), self });
             std.debug.assert(self.output_len == 0);
             for (self.inputs(), 0..) |oi, j| if (oi) |i| {
                 i.removeUse(j, self);
@@ -2081,7 +2083,7 @@ pub fn Func(comptime Backend: type) type {
 
         pub fn subsumeNoKill(self: *Self, this: *Node, target: *Node) void {
             if (this == target) {
-                utils.panic("{} {}\n", .{ this, target });
+                utils.panic("{f} {f}\n", .{ this, target });
             }
             errdefer unreachable;
 
@@ -2117,7 +2119,7 @@ pub fn Func(comptime Backend: type) type {
 
         pub fn setInputNoIntern(self: *Self, use: *Node, idx: usize, def: ?*Node) void {
             if (self.setInput(use, idx, def)) |new| {
-                utils.panic("setInputNoIntern: {}", .{new});
+                utils.panic("setInputNoIntern: {f}", .{new});
             }
         }
 
@@ -2197,10 +2199,18 @@ pub fn Func(comptime Backend: type) type {
 
         pub const Frame = struct { *Node, []const Node.Out };
 
-        pub fn traversePostorder(ctx: anytype, inp: *Node, stack: *std.ArrayList(Frame), visited: *std.DynamicBitSetUnmanaged) void {
+        pub fn traversePostorder(
+            ctx: anytype,
+            inp: *Node,
+            stack: *std.ArrayList(Frame),
+            visited: *std.DynamicBitSetUnmanaged,
+            gpa: std.mem.Allocator,
+        ) void {
+            errdefer unreachable;
+
             const Ctx = if (@typeInfo(@TypeOf(ctx)) == .pointer) @TypeOf(ctx.*) else @TypeOf(ctx);
 
-            stack.append(.{ inp, inp.outputs() }) catch unreachable;
+            try stack.append(gpa, .{ inp, inp.outputs() });
             visited.set(inp.id);
             while (stack.items.len > 0) {
                 const frame = &stack.items[stack.items.len - 1];
@@ -2214,7 +2224,7 @@ pub fn Func(comptime Backend: type) type {
                 const n = node.get();
                 if ((!@hasDecl(Ctx, "filter") or ctx.filter(n)) and !visited.isSet(n.id)) {
                     visited.set(n.id);
-                    stack.append(.{ n, n.outputs() }) catch unreachable;
+                    try stack.append(gpa, .{ n, n.outputs() });
                 }
             }
         }
@@ -2256,7 +2266,7 @@ pub fn Func(comptime Backend: type) type {
             arena: std.mem.Allocator,
             visited: *std.DynamicBitSetUnmanaged,
         ) []*CfgNode {
-            var postorder = std.ArrayList(*CfgNode).init(arena);
+            var postorder = std.ArrayList(*CfgNode).empty;
             collectPostorder3(self, self.start, arena, &postorder, visited, true);
             return postorder.items;
         }
@@ -2273,7 +2283,7 @@ pub fn Func(comptime Backend: type) type {
                 return;
             }
             visited.set(node.id);
-            pos.append(node.asCfg().?) catch unreachable;
+            pos.append(arena, node.asCfg().?) catch unreachable;
             for (node.outputs()) |o| if (o.get().isCfg()) collectPostorder3(self, o.get(), arena, pos, visited, only_basic);
         }
 
@@ -2477,7 +2487,7 @@ pub fn Func(comptime Backend: type) type {
 
             if (matcher.idealize(ctx, self, node, work)) |w| return w;
 
-            var tmp = utils.Arena.scrathFromAlloc(work.list.allocator);
+            var tmp = utils.Arena.scrathFromAlloc(work.allocator);
             defer tmp.deinit();
 
             const inps = node.inputs();
@@ -2636,8 +2646,12 @@ pub fn Func(comptime Backend: type) type {
             try utils.setColor(cc, wr, .reset);
         }
 
-        pub fn collectPostorder(self: *Self, arena: std.mem.Allocator, visited: *std.DynamicBitSetUnmanaged) []*CfgNode {
-            var postorder = std.ArrayList(*CfgNode).init(arena);
+        pub fn collectPostorder(
+            self: *Self,
+            arena: std.mem.Allocator,
+            visited: *std.DynamicBitSetUnmanaged,
+        ) []*CfgNode {
+            var postorder = std.ArrayList(*CfgNode).empty;
 
             collectPostorder2(self, self.start, arena, &postorder, visited, true);
 
@@ -2676,7 +2690,7 @@ pub fn Func(comptime Backend: type) type {
                 },
             }
 
-            if (!only_basic or node.isBasicBlockStart()) pos.append(node.asCfg().?) catch unreachable;
+            if (!only_basic or node.isBasicBlockStart()) pos.append(arena, node.asCfg().?) catch unreachable;
             if (node.isSwapped()) {
                 var iter = std.mem.reverseIterator(node.outputs());
                 while (iter.next()) |o| if (o.get().isCfg()) collectPostorder2(self, o.get(), arena, pos, visited, only_basic);

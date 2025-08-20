@@ -411,7 +411,7 @@ pub fn runVm(
     self.vm.regs.set(.stack_addr, stack_end - return_loc.len);
 
     var vm_ctx = Vm.SafeContext{
-        .writer = if (false) std.io.getStdErr().writer().any() else null,
+        .writer = if (false) std.fs.File.stderr().writer().any() else null,
         .color_cfg = .escape_codes,
         .memory = self.gen.out.code.items,
         .code_start = 0,

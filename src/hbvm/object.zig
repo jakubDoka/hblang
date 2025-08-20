@@ -80,7 +80,7 @@ pub fn jitLink(self: root.backend.Machine.Data, after: usize) void {
     }
 }
 
-pub fn flush(self: root.backend.Machine.Data, writer: std.io.AnyWriter) anyerror!void {
+pub fn flush(self: root.backend.Machine.Data, writer: *std.Io.Writer) anyerror!void {
     var tmp = root.utils.Arena.scrath(null);
     defer tmp.deinit();
 
@@ -187,7 +187,7 @@ pub fn flush(self: root.backend.Machine.Data, writer: std.io.AnyWriter) anyerror
         .data_length = lengths.data + lengths.prealloc,
         .debug_length = sym_count * @sizeOf(Symbol) + self.names.items.len + 1,
         .symbol_count = sym_count,
-    });
+    }, .little);
 
     inline for (sets) |v| {
         if (v == .func and include_relocs) {
@@ -197,7 +197,7 @@ pub fn flush(self: root.backend.Machine.Data, writer: std.io.AnyWriter) anyerror
 
         for (self.syms.items) |sym| if (sym.kind == v) {
             if (sym.kind == .prealloc) {
-                try writer.writeByteNTimes(0, sym.size);
+                for (0..sym.size) |_| try writer.writeByte(0);
             } else {
                 try writer.writeAll(self.code.items[sym.offset..][0..sym.size]);
             }
@@ -217,7 +217,7 @@ pub fn flush(self: root.backend.Machine.Data, writer: std.io.AnyWriter) anyerror
                 .data, .prealloc => .data,
                 .invalid => continue,
             },
-        });
+        }, .little);
     }
 
     if (include_relocs) {
@@ -225,7 +225,7 @@ pub fn flush(self: root.backend.Machine.Data, writer: std.io.AnyWriter) anyerror
             .name = 0,
             .offset = global_reloc_offset,
             .kind = .data,
-        });
+        }, .little);
     }
 
     try writer.writeByte(0);

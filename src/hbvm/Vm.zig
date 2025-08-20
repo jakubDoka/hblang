@@ -12,7 +12,7 @@ const one: u64 = 1;
 
 pub const SafeContext = struct {
     color_cfg: std.io.tty.Config = .no_color,
-    writer: ?std.io.AnyWriter = null,
+    writer: ?*std.Io.Writer = null,
     symbols: std.AutoHashMapUnmanaged(u32, []const u8) = .{},
     memory: []u8,
     code_start: usize,
@@ -236,8 +236,6 @@ inline fn fbinOp(self: *Vm, comptime base: isa.Op, comptime op: isa.Op, ctx: any
         .fc64t32 => @as(f32, @floatCast(lhs)),
         .fti32 => b: {
             const ty = if (Repr == f32) i32 else i64;
-            if (lhs > std.math.maxInt(ty)) return error.FloatToIntOverflow;
-            if (lhs < std.math.minInt(ty)) return error.FloatToIntOverflow;
             break :b @as(ty, @intFromFloat(lhs));
         },
         else => |t| @compileError(std.fmt.comptimePrint("unspupported op {any}", .{t})),
@@ -341,7 +339,7 @@ fn readOp(self: *Vm, ctx: anytype) !isa.Op {
     return @enumFromInt(byte);
 }
 
-fn readOpArgs(self: *Vm, op: isa.Op, argTys: []const u8, ctx: anytype, wrt: std.io.AnyWriter) !void {
+fn readOpArgs(self: *Vm, op: isa.Op, argTys: []const u8, ctx: anytype, wrt: *std.Io.Writer) !void {
     const prev_ip = self.ip - 1;
     var seen_regs = std.EnumSet(isa.Reg){};
     for (argTys, 0..) |argTy, i| {
@@ -362,7 +360,7 @@ fn displayArg(
     ctx: anytype,
     seen_regs: *std.EnumSet(isa.Reg),
     ty: enum { int, f32, f64 },
-    wrt: std.io.AnyWriter,
+    wrt: *std.Io.Writer,
 ) !void {
     switch (arg) {
         inline .reg => |t| {

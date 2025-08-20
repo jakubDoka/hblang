@@ -40,6 +40,8 @@ pub fn Mixin(comptime Backend: type) type {
         };
 
         pub fn buildLoopTree(gcm: *Self) void {
+            errdefer unreachable;
+
             gcm.loop_tree_built.lock();
             const self = gcm.getGraph();
 
@@ -47,28 +49,30 @@ pub fn Mixin(comptime Backend: type) type {
             defer tmp.deinit();
 
             var builder = LoopTreeBuilder{
-                .post_walked = std.DynamicBitSetUnmanaged.initEmpty(tmp.arena.allocator(), self.next_id) catch unreachable,
+                .post_walked = try .initEmpty(tmp.arena.allocator(), self.next_id),
                 .pre_levels = tmp.arena.alloc(u16, self.next_id),
-                .tree = std.ArrayList(LoopTree).init(tmp.arena.allocator()),
+                .tree = .empty,
             };
             @memset(builder.pre_levels, 0);
 
-            builder.tree.append(.{ .head = self.start.asCfg().?, .par = 0, .depth = 1 }) catch unreachable;
+            try builder.tree.append(tmp.arena.allocator(), .{ .head = self.start.asCfg().?, .par = 0, .depth = 1 });
             self.end.asCfg().?.ext.loop = 0;
             self.start.asCfg().?.ext.loop = 0;
 
-            _ = postwaklBuildLoopTree(self, 2, self.start.asCfg().?, &builder);
+            _ = postwaklBuildLoopTree(self, 2, self.start.asCfg().?, &builder, tmp.arena);
 
-            gcm.loop_tree = self.arena.allocator().dupe(LoopTree, builder.tree.items) catch unreachable;
+            gcm.loop_tree = try self.arena.allocator().dupe(LoopTree, builder.tree.items);
         }
 
-        pub fn postwaklBuildLoopTree(self: *Func, par_preorder: u16, from: *CfgNode, builder: *LoopTreeBuilder) u16 {
+        pub fn postwaklBuildLoopTree(self: *Func, par_preorder: u16, from: *CfgNode, builder: *LoopTreeBuilder, scratch: *utils.Arena) u16 {
+            errdefer unreachable;
+
             if (builder.pre_levels[from.base.id] != 0) return par_preorder;
             builder.pre_levels[from.base.id] = par_preorder;
             var postorder = par_preorder + 1;
 
             for (from.base.outputs()) |o| if (o.get().asCfg()) |oc| {
-                postorder = postwaklBuildLoopTree(self, postorder, oc, builder);
+                postorder = postwaklBuildLoopTree(self, postorder, oc, builder, scratch);
             };
 
             var inner: ?u16 = null;
@@ -88,7 +92,7 @@ pub fn Mixin(comptime Backend: type) type {
                     const id: u16 = @intCast(builder.tree.items.len);
                     oc.ext.loop = id;
                     ltree = id;
-                    builder.tree.append(.{ .head = oc }) catch unreachable;
+                    try builder.tree.append(scratch.allocator(), .{ .head = oc });
                 }
 
                 const cur = inner orelse {
@@ -133,6 +137,8 @@ pub fn Mixin(comptime Backend: type) type {
         }
 
         pub fn buildCfg(gcm: *Self) void {
+            errdefer unreachable;
+
             const self = gcm.getGraph();
 
             self.stopped_interning.lock();
@@ -143,21 +149,28 @@ pub fn Mixin(comptime Backend: type) type {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            var visited = std.DynamicBitSetUnmanaged.initEmpty(tmp.arena.allocator(), self.next_id) catch unreachable;
-            var stack = std.ArrayList(Func.Frame).init(tmp.arena.allocator());
+            var visited = try std.DynamicBitSetUnmanaged.initEmpty(tmp.arena.allocator(), self.next_id);
+            var stack = std.ArrayList(Func.Frame).empty;
 
             const cfg_rpo: []*CfgNode = cfg_rpo: {
-                var rpo = std.ArrayList(*CfgNode).init(tmp.arena.allocator());
+                var rpo = std.ArrayList(*CfgNode).empty;
 
-                Func.traversePostorder(struct {
-                    rpo: *std.ArrayList(*CfgNode),
-                    pub fn each(ctx: @This(), node: *Node) void {
-                        ctx.rpo.append(node.asCfg().?) catch unreachable;
-                    }
-                    pub fn filter(_: @This(), node: *Node) bool {
-                        return node.isCfg();
-                    }
-                }{ .rpo = &rpo }, self.start, &stack, &visited);
+                Func.traversePostorder(
+                    struct {
+                        rpo: *std.ArrayList(*CfgNode),
+                        gpa: std.mem.Allocator,
+                        pub fn each(ctx: @This(), node: *Node) void {
+                            ctx.rpo.append(ctx.gpa, node.asCfg().?) catch unreachable;
+                        }
+                        pub fn filter(_: @This(), node: *Node) bool {
+                            return node.isCfg();
+                        }
+                    }{ .rpo = &rpo, .gpa = tmp.arena.allocator() },
+                    self.start,
+                    &stack,
+                    &visited,
+                    tmp.arena.allocator(),
+                );
 
                 std.mem.reverse(*CfgNode, rpo.items);
 
@@ -170,7 +183,7 @@ pub fn Mixin(comptime Backend: type) type {
                         self.setInputIgnoreIntern(&n.base, i, self.addNode(.Jmp, n.base.sloc, .top, &.{n.base.inputs()[i].?}, .{}));
                     }
 
-                    visited.resize(tmp.arena.allocator(), self.next_id, true) catch unreachable;
+                    try visited.resize(tmp.arena.allocator(), self.next_id, true);
                 };
                 break :add_mach_moves;
             }
@@ -207,10 +220,10 @@ pub fn Mixin(comptime Backend: type) type {
                 @memset(late_scheds, null);
                 const nodes = tmp.arena.alloc(?*Node, self.next_id);
                 @memset(nodes, null);
-                var work_list = std.ArrayList(*Node).init(tmp.arena.allocator());
+                var work_list = std.ArrayList(*Node).empty;
                 visited.setRangeValue(.{ .start = 0, .end = visited.capacity() }, false);
 
-                work_list.append(self.end) catch unreachable;
+                try work_list.append(tmp.arena.allocator(), self.end);
                 visited.set(self.end.id);
 
                 task: while (@as(?*Node, work_list.pop())) |t| {
@@ -275,7 +288,7 @@ pub fn Mixin(comptime Backend: type) type {
                             if (late_scheds[o.id] == null) {
                                 if (!visited.isSet(o.id)) {
                                     visited.set(o.id);
-                                    work_list.append(o) catch unreachable;
+                                    try work_list.append(tmp.arena.allocator(), o);
                                 }
                             }
                         }
@@ -285,7 +298,7 @@ pub fn Mixin(comptime Backend: type) type {
                         if (late_scheds[def.id] == null) {
                             if (!visited.isSet(def.id)) {
                                 visited.set(def.id);
-                                work_list.append(def) catch unreachable;
+                                try work_list.append(tmp.arena.allocator(), def);
                             }
                         }
                         if (t.isStore() or t.kind == .Call)
@@ -293,7 +306,7 @@ pub fn Mixin(comptime Backend: type) type {
                                 const out = ot.get();
                                 if (out.isLoad() and late_scheds[out.id] == null and !visited.isSet(out.id)) {
                                     visited.set(out.id);
-                                    work_list.append(out) catch unreachable;
+                                    try work_list.append(tmp.arena.allocator(), out);
                                 }
                             };
                     };
@@ -556,7 +569,7 @@ pub fn Mixin(comptime Backend: type) type {
             var scheduled: usize = 0;
             if (ready != scheduled) while (scheduled < outs.len - 1) {
                 if (ready == scheduled) utils.panic(
-                    "{} {} {} {any}",
+                    "{} {} {f} {any}",
                     .{ scheduled, outs.len, bbn, outs[scheduled..] },
                 );
 
@@ -611,7 +624,7 @@ pub fn Mixin(comptime Backend: type) type {
 
             if (!node.isPinned()) {
                 if (node.kind == .Start) {
-                    utils.panic("{}\n", .{node});
+                    utils.panic("{f}\n", .{node});
                 }
 
                 var best = early;

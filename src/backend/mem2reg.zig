@@ -223,7 +223,7 @@ pub fn Mixin(comptime Backend: type) type {
                 };
                 std.debug.assert(parent.isCfg());
                 for (parent.outputs()) |o| parent_succs += @intFromBool(o.get().isCfg());
-                if (!(parent_succs >= 1 and parent_succs <= 2)) utils.panic("{}\n", .{bb});
+                if (!(parent_succs >= 1 and parent_succs <= 2)) utils.panic("{f}\n", .{bb});
                 // handle fork
                 if (parent_succs == 2) {
                     // this is the second branch, restore the value
@@ -255,7 +255,7 @@ pub fn Mixin(comptime Backend: type) type {
                                     return std.math.order(a, b);
                                 }
                             }.inner) orelse {
-                                utils.panic("{} {any} {}", .{ o, alloc_offsets.items, offs });
+                                utils.panic("{f} {any} {}", .{ o, alloc_offsets.items, offs });
                             };
                             locals[idx] = .compact(.{ .Node = o.value().? });
                         }
@@ -290,11 +290,11 @@ pub fn Mixin(comptime Backend: type) type {
                 // handle joins
                 if (child_preds == 2 and child.kind != .TrapRegion and child.kind != .Return) {
                     if (!(child.kind == .Region or child.kind == .Loop)) {
-                        utils.panic("{}\n", .{child});
+                        utils.panic("{f}\n", .{child});
                     }
                     // either we arrived from the back branch or the other side of the split
                     if (states[child.schedule].expand(locals.len).Join) |s| {
-                        if (s.ctrl != child) utils.panic("{} {} {} {}\n", .{ s.ctrl, s.ctrl.schedule, child, child.schedule });
+                        if (s.ctrl != child) utils.panic("{f} {} {f} {}\n", .{ s.ctrl, s.ctrl.schedule, child, child.schedule });
                         for (s.items, locals, 0..) |clhs, crhsm, i| {
                             var lhs = clhs.expand() orelse continue;
                             if (lhs == .Node and lhs.Node.isLazyPhi(s.ctrl)) {

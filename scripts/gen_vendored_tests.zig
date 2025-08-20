@@ -9,9 +9,10 @@ pub fn main() !void {
 
     const out_file = try std.fs.cwd().createFile(out, .{});
     defer out_file.close();
-    const writer = out_file.writer();
+    var buffer: [1024 * 4]u8 = undefined;
+    var writer = out_file.writer(&buffer);
 
-    try writer.print(
+    try writer.interface.print(
         \\const utils = @import("utils");
         \\
         \\
@@ -28,8 +29,8 @@ pub fn main() !void {
     while (try walker.next()) |node| {
         if (node.kind != .directory) std.debug.panic("vendored dir can only contain directories {s}", .{node.name});
 
-        var test_args = std.ArrayList(u8).init(arena);
-        const pwriter = test_args.writer();
+        var test_args = std.ArrayList(u8).empty;
+        const pwriter = test_args.writer(arena);
         {
             const projs = path_projections.get(node.name) orelse &.{};
             try pwriter.writeAll("&.{");
@@ -48,7 +49,7 @@ pub fn main() !void {
 
             const path = try std.fs.path.join(arena, &.{ vendored_tests, node.name, example_dir, example.path });
             const name = try std.mem.replaceOwned(u8, arena, path, "\\", "\\\\");
-            try writer.print(
+            try writer.interface.print(
                 \\test "{s}" {{
                 \\    try utils.runVendoredTest("{s}", {s});
                 \\}}
@@ -61,4 +62,6 @@ pub fn main() !void {
             });
         }
     }
+
+    try writer.interface.flush();
 }

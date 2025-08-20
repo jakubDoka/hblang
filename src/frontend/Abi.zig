@@ -458,7 +458,7 @@ pub fn categorizeAbleosRecord(stru: anytype, types: *Types) TmpSpec {
         if (res == .ByValuePair) return .ByRef;
         std.debug.assert(res != .ByRef);
 
-        res = .{ .ByValuePair = .{
+        const tmp = TmpSpec{ .ByValuePair = .{
             .types = .{ res.ByValue, fspec.ByValue },
             .padding = @intCast(elem.offset - prev_offset),
             .alignment = @intCast(@min(4, std.math.log2_int(
@@ -466,6 +466,7 @@ pub fn categorizeAbleosRecord(stru: anytype, types: *Types) TmpSpec {
                 @max(res.ByValue.size(), fspec.ByValue.size()),
             ))),
         } };
+        res = tmp;
     }
     return res;
 }

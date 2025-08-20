@@ -608,7 +608,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
         for (bb.base.ordInps(), 0..) |prd, i| {
             const pred: *Node = prd.?.inputs()[0].?;
             if (should_log and pred.schedule == no_def_sentinel) {
-                func.fmtScheduled(std.io.getStdErr().writer().any(), .escape_codes);
+                func.fmtScheduled(std.fs.File.stderr().writer().any(), .escape_codes);
             }
             const pred_block = &block_liveouts[pred.schedule];
 
@@ -944,20 +944,20 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             pub fn logCollision(fnc: *Func, block: *CfgNode, def: *Node, clobber: *Node, use: *Node, allc: []u16) void {
                 if (utils.freestanding) return;
                 for (fnc.gcm.postorder) |bb| {
-                    std.debug.print("{}\n", .{bb});
+                    std.debug.print("{f}\n", .{bb});
                     for (bb.base.outputs()) |in| {
                         const instr = in.get();
                         if (instr.schedule != no_def_sentinel) {
-                            std.debug.print("  {} {}\n", .{ allc[instr.schedule], instr });
+                            std.debug.print("  {} {f}\n", .{ allc[instr.schedule], instr });
                         } else {
-                            std.debug.print("    {}\n", .{instr});
+                            std.debug.print("    {f}\n", .{instr});
                         }
                     }
                 }
                 utils.panic(
                     \\
                     \\block:   {any}
-                    \\def:     {} {any}
+                    \\hef:     {} {any}
                     \\clobber: {} {any}
                     \\use:        {any}
                 , .{
@@ -1019,7 +1019,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                     while (block != root_block) {
                         std.debug.assert(block.base.kind != .Start);
                         if (!block.base.isBasicBlockStart()) {
-                            utils.panic("{}", .{block});
+                            utils.panic("{f}", .{block});
                         }
                         for (block.base.outputs()) |o| {
                             const other = o.get();

@@ -241,7 +241,7 @@ pub const InitOptions = struct {
     path: []const u8,
     code: [:0]const u8,
     loader: Parser.Loader = .noop,
-    diagnostics: std.io.AnyWriter = std.io.null_writer.any(),
+    diagnostics: ?*std.Io.Writer = null,
     ignore_errors: bool = false,
     mode: Mode = .latest,
     colors: std.io.tty.Config = .no_color,
@@ -498,18 +498,20 @@ fn posOfPayload(self: *const Ast, v: anytype) Pos {
     };
 }
 
-pub fn fmtExpr(self: *const Ast, buf: *std.ArrayList(u8), expr: Ast.Id) !void {
+pub fn fmtExpr(self: *const Ast, buf: *std.Io.Writer, expr: Ast.Id) !void {
     var ft = Fmt{ .buf = buf, .ast = self };
     try ft.fmtExpr(expr);
 }
 
-pub fn fmt(self: *const Ast, buf: *std.ArrayList(u8)) !void {
+pub fn fmt(self: *const Ast, buf: *std.Io.Writer) !void {
     var ft = Fmt{ .buf = buf, .ast = self };
     try ft.fmt();
 }
 
 pub fn report(self: *const Ast, types: anytype, pos: u32, msg: []const u8, args: anytype) void {
     errdefer unreachable;
+
+    const diags = types.diagnostics orelse return;
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
@@ -518,16 +520,18 @@ pub fn report(self: *const Ast, types: anytype, pos: u32, msg: []const u8, args:
     var argss: [fields.len + 1][]const u8 = undefined;
     inline for (0..fields.len) |i| {
         if (fields[i].type == Types.Id) {
-            argss[i] = try std.fmt.allocPrint(tmp.arena.allocator(), "{}", .{args[i].fmt(types)});
-        } else if (@typeInfo(fields[i].type) == .pointer) {
+            argss[i] = args[i].fmt(types).toString(tmp.arena);
+        } else if (@typeInfo(fields[i].type) == .pointer and std.meta.Child(fields[i].type) == u8) {
             argss[i] = try std.fmt.allocPrint(tmp.arena.allocator(), "{s}", .{args[i]});
+        } else if (std.meta.hasMethod(fields[i].type, "format")) {
+            argss[i] = try std.fmt.allocPrint(tmp.arena.allocator(), "{f}", .{args[i]});
         } else {
             argss[i] = try std.fmt.allocPrint(tmp.arena.allocator(), "{}", .{args[i]});
         }
     }
     argss[fields.len] = "";
 
-    Ast.reportLow(self.path, self.source, pos, msg, &argss, types.colors, types.diagnostics);
+    Ast.reportLow(self.path, self.source, pos, msg, &argss, types.colors, diags);
 }
 
 pub fn reportLow(
@@ -537,7 +541,7 @@ pub fn reportLow(
     fmt_str: []const u8,
     args: []const []const u8,
     colors: std.io.tty.Config,
-    out: std.io.AnyWriter,
+    out: *std.Io.Writer,
 ) void {
     errdefer unreachable;
     const line, const col = Ast.lineCol(file, pos);
@@ -557,7 +561,7 @@ pub fn reportLow(
         idx += 1;
     }
 
-    try out.print("\n{}\n", .{CodePointer{
+    try out.print("\n{f}\n", .{CodePointer{
         .source = file,
         .index = pos,
         .colors = colors,
@@ -569,7 +573,7 @@ pub const CodePointer = struct {
     index: usize,
     colors: std.io.tty.Config,
 
-    pub fn format(slf: *const @This(), comptime _: anytype, _: anytype, writer: anytype) !void {
+    pub fn format(slf: *const @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
         try pointToCode(slf.source, slf.index, slf.colors, writer);
     }
 };
@@ -591,7 +595,7 @@ pub fn lineCol(source: []const u8, index: usize) struct { usize, usize } {
 pub fn highlightCode(
     source: []const u8,
     colors: std.io.tty.Config,
-    writer: std.io.AnyWriter,
+    writer: *std.Io.Writer,
 ) !void {
     errdefer unreachable;
 
@@ -616,7 +620,7 @@ pub fn highlightCode(
     try writer.writeAll(source[last..]);
 }
 
-pub fn pointToCode(source: []const u8, index_m: usize, colors: std.io.tty.Config, writer: std.io.AnyWriter) !void {
+pub fn pointToCode(source: []const u8, index_m: usize, colors: std.io.tty.Config, writer: *std.Io.Writer) std.Io.Writer.Error!void {
     const index = @min(index_m, source.len -| 1); // might be an empty file
     const line_start = if (std.mem.lastIndexOfScalar(u8, source[0..index], '\n')) |l| l + 1 else 0;
     const line_end = if (std.mem.indexOfScalar(u8, source[index..], '\n')) |l| l + index else source.len;
@@ -636,7 +640,7 @@ pub fn pointToCode(source: []const u8, index_m: usize, colors: std.io.tty.Config
         } else break j;
     } else the_line.len;
 
-    try colors.setColor(writer, .white);
+    colors.setColor(writer, .white) catch return error.WriteFailed;
     try highlightCode(the_line[code_start..][0 .. the_line.len - code_start], colors, writer);
     try writer.writeAll("\n");
 
@@ -644,7 +648,7 @@ pub fn pointToCode(source: []const u8, index_m: usize, colors: std.io.tty.Config
     for (0..col) |_| {
         try writer.writeAll(" ");
     }
-    try colors.setColor(writer, .green);
+    colors.setColor(writer, .green) catch return error.WriteFailed;
     try writer.writeAll("^");
-    try colors.setColor(writer, .reset);
+    colors.setColor(writer, .reset) catch return error.WriteFailed;
 }

@@ -89,17 +89,19 @@ pub const Value = struct {
             const cata = self.abiCata(value.ty);
 
             if (cata.size() > value.ty.size(self.types)) {
+                const tmp = value.id.Pointer;
                 value.id = .{ .Value = self.emitAlignedLoad(
                     sloc,
-                    value.id.Pointer,
+                    tmp,
                     value.ty.size(self.types),
                     value.ty.alignment(self.types),
                     cata.ByValue,
                 ) };
             } else {
+                const tmp = value.id.Pointer;
                 value.id = .{ .Value = self.bl.addLoad(
                     sloc,
-                    value.id.Pointer,
+                    tmp,
                     cata.ByValue,
                 ) };
             }
@@ -203,10 +205,10 @@ pub const Ctx = struct {
 
 const EmitOpts = struct {
     colors: std.io.tty.Config = .no_color,
-    output: std.io.AnyWriter = std.io.null_writer.any(),
+    output: ?*std.Io.Writer = null,
     verbose: bool = false,
     has_main: bool = false,
-    logs: ?std.io.AnyWriter = null,
+    logs: ?*std.io.Writer = null,
     abi: Types.Abi,
     optimizations: root.backend.Machine.OptOptions.Mode,
 };
@@ -505,17 +507,19 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
 
     if (has_main and !exports_main and self.types.handlers.entry == null) {
         const entry = self.getEntry(.root, "main") catch {
-            try self.types.diagnostics.writeAll(
-                \\...you can define the `main` in the mentioned file (or pass --no-entry):
-                \\
-            );
+            if (self.types.diagnostics) |diags| {
+                try diags.writeAll(
+                    \\...you can define the `main` in the mentioned file (or pass --no-entry):
+                    \\
+                );
 
-            try Ast.highlightCode(
-                \\main := fn(): uint {
-                \\    return 0
-                \\}
-                \\
-            , self.types.colors, self.types.diagnostics);
+                try Ast.highlightCode(
+                    \\main := fn(): uint {
+                    \\    return 0
+                    \\}
+                    \\
+                , self.types.colors, diags);
+            }
 
             return error.Never;
         };
@@ -713,10 +717,10 @@ pub fn src(self: *Codegen, loc: anytype) graph.Sloc {
 pub fn listFileds(arena: *utils.Arena, fields: anytype) []const u8 {
     if (fields.len == 0) return "none actually";
 
-    var field_list = std.ArrayList(u8).init(arena.allocator());
-    for (fields) |f| field_list.writer().print(", `.{s}`", .{f.name}) catch unreachable;
+    var field_list = std.Io.Writer.Allocating.init(arena.allocator());
+    for (fields) |f| field_list.writer.print(", `.{s}`", .{f.name}) catch unreachable;
 
-    return field_list.items[2..];
+    return field_list.written()[2..];
 }
 
 pub fn foo() usize {
@@ -1628,9 +1632,10 @@ pub fn emitIndex(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Index)) EmitE
             self.emitHandlerCall(handler, e.subscript, check, &arg_values);
         };
 
+        const tmpv = ptr.getValue(sloc, self);
         ptr.id = .{ .Value = self.bl.addIndexOffset(
             sloc,
-            ptr.getValue(sloc, self),
+            tmpv,
             .iadd,
             elem.size(self.types),
             start.getValue(sloc, self),
@@ -1806,11 +1811,11 @@ fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError
             arena: *utils.Arena,
             filds: []const root.frontend.types.Enum.Field,
         ) []const u8 {
-            var missing_list = std.ArrayList(u8).init(arena.allocator());
+            var missing_list = std.Io.Writer.Allocating.init(arena.allocator());
             for (slf.slots, filds) |p, f| if (p == .Unmatched) {
-                missing_list.writer().print(", `.{s}`", .{f.name}) catch unreachable;
+                missing_list.writer.print(", `.{s}`", .{f.name}) catch unreachable;
             };
-            return missing_list.items[2..];
+            return missing_list.written()[2..];
         }
 
         pub fn decomposeArm(
@@ -2010,8 +2015,9 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
 
             var start = try self.emitTyped(.{}, .uint, range.start);
             const rsloc = self.src(range.start);
+            const tmpv = start.getValue(rsloc, self);
             start.id = .{
-                .Pointer = self.bl.addSpill(rsloc, start.getValue(rsloc, self), @intFromEnum(Types.Id.uint)),
+                .Pointer = self.bl.addSpill(rsloc, tmpv, @intFromEnum(Types.Id.uint)),
             };
             if (range.end.tag() == .Void) {
                 id.* = .{ .OpenedRange = .{ .idx = start } };
@@ -2643,22 +2649,24 @@ pub fn typeCheck(self: *Codegen, expr: Ast.Id, got: *Value, expected: Types.Id) 
 
     if (got.ty != expected) {
         if (got.ty.isSigned() and got.ty.size(self.types) < expected.size(self.types)) {
+            const tmp = got.getValue(sloc, self);
             got.id = .{ .Value = self.bl.addUnOp(
                 sloc,
                 .sext,
                 self.abiCata(expected).ByValue,
-                got.getValue(sloc, self),
+                tmp,
             ) };
         }
 
         if ((got.ty.isUnsigned() or got.ty == .bool) and
             got.ty.size(self.types) < expected.size(self.types))
         {
+            const tmp = got.getValue(sloc, self);
             got.id = .{ .Value = self.bl.addUnOp(
                 sloc,
                 .uext,
                 self.abiCata(expected).ByValue,
-                got.getValue(sloc, self),
+                tmp,
             ) };
         }
 
@@ -2670,11 +2678,12 @@ pub fn typeCheck(self: *Codegen, expr: Ast.Id, got: *Value, expected: Types.Id) 
             if (fields.len == 1) {
                 got.id = .{ .Value = self.bl.addIntImm(sloc, self.abiCata(expected).ByValue, fields[0].value) };
             } else if (got.ty.size(self.types) < expected.size(self.types)) {
+                const tmp = got.getValue(sloc, self);
                 got.id = .{ .Value = self.bl.addUnOp(
                     sloc,
                     .uext,
                     self.abiCata(expected).ByValue,
-                    got.getValue(sloc, self),
+                    tmp,
                 ) };
             }
         }
@@ -3239,7 +3248,8 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
 
     if (caller) |*value| {
         if (value.ty.data() == .Pointer and sig.args[0].data() != .Pointer) {
-            value.id = .{ .Pointer = value.getValue(sloc, self) };
+            const tmpv = value.getValue(sloc, self);
+            value.id = .{ .Pointer = tmpv };
             value.ty = self.types.store.get(value.ty.data().Pointer).*;
         }
 
@@ -3566,7 +3576,8 @@ fn loopControl(self: *Codegen, kind: Builder.Loop.Control, ctrl: Ast.Id) !Value 
 
 pub fn emitAutoDeref(self: *Codegen, sloc: graph.Sloc, value: *Value) void {
     if (value.ty.data() == .Pointer) {
-        value.id = .{ .Pointer = value.getValue(sloc, self) };
+        const tmpv = value.getValue(sloc, self);
+        value.id = .{ .Pointer = tmpv };
         value.ty = self.types.store.get(value.ty.data().Pointer).*;
     }
 }
@@ -4049,7 +4060,7 @@ fn emitDirective(
                 const ty = try self.unwrapTyConst(args[0], &value);
                 break :dt std.fmt.allocPrint(
                     self.types.pool.arena.allocator(),
-                    "{}",
+                    "{f}",
                     .{ty.fmt(self.types)},
                 ) catch unreachable;
             } else switch (value.ty.data()) {
