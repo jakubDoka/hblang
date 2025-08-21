@@ -70,7 +70,7 @@ pub fn build(b: *std.Build) !void {
         break :hb hb;
     };
 
-    cc: {
+    const cc = cc: {
         const cc = b.addExecutable(.{
             .name = "cc",
             .root_module = b.createModule(.{
@@ -85,13 +85,19 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
         });
 
+        b.installDirectory(.{
+            .source_dir = aro.path("include"),
+            .install_dir = .prefix,
+            .install_subdir = "include",
+        });
+
         cc.root_module.addImport("aro", aro.module("aro"));
         cc.root_module.addImport("hb", hb);
 
         b.installArtifact(cc);
 
-        break :cc;
-    }
+        break :cc cc;
+    };
 
     hbc: {
         const exe = b.addExecutable(.{
@@ -285,6 +291,7 @@ pub fn build(b: *std.Build) !void {
 
         const t = b.addTest(.{ .root_module = test_module });
         check_step.dependOn(&t.step);
+        check_step.dependOn(&cc.step);
 
         break :check;
     }

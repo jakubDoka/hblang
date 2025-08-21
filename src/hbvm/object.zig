@@ -230,4 +230,6 @@ pub fn flush(self: root.backend.Machine.Data, writer: *std.Io.Writer) anyerror!v
 
     try writer.writeByte(0);
     try writer.writeAll(self.names.items);
+
+    try writer.flush();
 }

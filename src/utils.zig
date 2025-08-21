@@ -153,6 +153,9 @@ pub const Arena = struct {
 
     const page_size = std.heap.pageSize();
 
+    threadlocal var inited: bool = false;
+    pub threadlocal var scratch: [2]Arena = undefined;
+
     pub const Scratch = struct {
         prev_pos: [*]u8,
         arena: *Arena,
@@ -164,13 +167,19 @@ pub const Arena = struct {
         }
     };
 
-    pub threadlocal var scratch: [2]Arena = undefined;
-
     pub fn initScratch(cap: usize) void {
+        if (std.debug.runtime_safety) {
+            std.debug.assert(!inited);
+            inited = true;
+        }
         for (&scratch) |*slt| slt.* = init(cap);
     }
 
     pub fn deinitScratch() void {
+        if (std.debug.runtime_safety) {
+            std.debug.assert(inited);
+            inited = false;
+        }
         for (&scratch) |*slt| slt.deinit();
     }
 
