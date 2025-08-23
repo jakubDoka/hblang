@@ -478,7 +478,7 @@ pub fn strPos(self: *const Ast, str: []const u8) Types.Scope.NamePos {
     if (str.len == 0) return .empty_name;
     if (@intFromPtr(str.ptr) < @intFromPtr(self.source.ptr) or
         @intFromPtr(str.ptr) > @intFromPtr(self.source.ptr + self.source.len))
-        unreachable;
+        utils.panic("the string was out of file bounds {s}", .{str});
     return @enumFromInt(str.ptr - self.source.ptr);
 }
 

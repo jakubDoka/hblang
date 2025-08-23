@@ -3401,12 +3401,15 @@ pub fn instantiateTemplate(
         tmpl_file.exprs.get(tmpl_ast.body).Return.value.tag() == .Type)
     {
         const prev_scope = self.parent_scope;
+        const prev_name = self.name;
         defer {
             self.parent_scope = prev_scope;
             self.ast = self.types.getFile(prev_scope.file(self.types));
+            self.name = prev_name;
         }
         self.parent_scope = template_scope;
         self.ast = tmpl_file;
+        self.name = "";
         const value = tmpl_file.exprs.get(tmpl_ast.body).Return.value;
         const res = try self.emitUserType(.{}, value, tmpl_file.exprs.get(value).Type);
         return .{ .bypass = res };

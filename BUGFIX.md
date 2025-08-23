@@ -2,6 +2,22 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### other file span oob
+```hb
+broken := @use("broken.hb")
+
+main := fn(): u32 {
+    x := broken.X(u8).run()
+    return 0
+}
+
+// in: broken.hb
+
+X := fn($T: type): type return struct {
+    run := fn(): void @CurrentScope().does_not_exist
+}
+```
+
 #### mul reduction 1
 ```hb
 expectations := .{
