@@ -2,6 +2,21 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### enum and struct
+```hb
+A := enum(u8) {
+    .BROKEN := 0xFF;
+}
+B := struct {
+    .a: u8;
+    .b: u32;
+    .c: A;
+}
+
+broken := fn(data: B): u32 return data.a
+main := fn(): u32 return broken(B.(0, 0, .BROKEN))
+```
+
 #### nested structs
 ```hb
 A := struct {
@@ -18,6 +33,10 @@ main := fn(): u32 {
 
 #### other file span oob
 ```hb
+expectations := .{
+    should_error: true,
+}
+
 broken := @use("broken.hb")
 
 main := fn(): u32 {

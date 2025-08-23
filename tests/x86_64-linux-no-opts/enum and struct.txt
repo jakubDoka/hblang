@@ -1,0 +1,25 @@
+enum and struct.broken:
+	sub rsp, 0x10
+	mov [rsp], rdi
+	mov [rsp+0x08], esi
+	mov al, [rsp]
+	movzx eax, al
+	add rsp, 0x10
+	ret
+main:
+	sub rsp, 0x18
+	mov byte ptr [rsp], 0x00
+	mov dword ptr [rsp+0x04], 0x00
+	mov byte ptr [rsp+0x08], 0xFF
+	mov eax, [rsp]
+	mov edi, eax
+	mov esi, [rsp+0x08]
+	mov eax, [rsp+0x04]
+	mov eax, eax
+	shl rax, 0x20
+	or rdi, rax
+	call :enum and struct.broken
+	mov [rsp+0x0C], eax
+	mov eax, [rsp+0x0C]
+	add rsp, 0x18
+	ret

@@ -1,0 +1,16 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -20
+         st $0, $254, 0, 1
+         st $0, $254, 4, 4
+        li8 $1, -1
+         st $1, $254, 8, 1
+     addi64 $1, $254, 0
+        jal $31, $0, :enum and struct.broken
+     addi64 $254, $254, 20
+         ld $31, $254, -8, 8
+         tx
+enum and struct.broken:
+         ld $1, $1, 0, 1
+       andi $1, $1, 255
+       jala $0, $31, 0

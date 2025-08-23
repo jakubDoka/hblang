@@ -3487,7 +3487,7 @@ fn pushParam(
                     call_args.arg_slots[idx + j] = self.emitAlignedLoad(
                         sloc,
                         loc,
-                        value.ty.size(self.types) - off,
+                        @min(value.ty.size(self.types) - off, 8),
                         value.ty.alignment(self.types),
                         t,
                     );
