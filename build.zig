@@ -94,7 +94,7 @@ pub fn build(b: *std.Build) !void {
         cc.root_module.addImport("aro", aro.module("aro"));
         cc.root_module.addImport("hb", hb);
 
-        b.installArtifact(cc);
+        //b.installArtifact(cc);
 
         break :cc cc;
     };
