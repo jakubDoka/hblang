@@ -1121,15 +1121,8 @@ pub fn emitSliceTy(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.SliceTy)) E
         var ty = try self.emitTyped(.{}, .type, e.elem);
         return self.emitInternalEca(ctx, .make_array, &.{ len.getValue(sloc, self), ty.getValue(sloc, self) }, .type);
     } else {
-        const len: ?usize = null;
         const elem = try self.resolveAnonTy(e.elem);
-
-        const res, const ov = @mulWithOverflow(len orelse 0, elem.size(self.types));
-        if (ov != 0 or res > std.math.maxInt(u48)) {
-            return self.report(expr, "the array is bigger then most modern virtual memory spaces", .{});
-        }
-
-        return self.emitTyConst(self.types.makeSlice(len, elem));
+        return self.emitTyConst(self.types.makeSlice(null, elem));
     }
 }
 
@@ -1163,7 +1156,16 @@ pub fn emitUnOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.UnOp)) EmitErr
                 }
             }
 
-            var addrd = try self.emit(.{}, e.oper);
+            const inferred_type = parse: {
+                const ty = ctx.ty orelse break :parse null;
+
+                break :parse (self.types.store.unwrap(
+                    ty.data(),
+                    .Pointer,
+                ) orelse break :parse null).*;
+            };
+
+            var addrd = try self.emit(.{ .ty = inferred_type }, e.oper);
 
             if (ctx.ty) |fty| function_pointer: {
                 const sig: *tys.FnPtr = self.types.store.unwrap(fty.data(), .FnPtr) orelse

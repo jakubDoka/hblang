@@ -628,6 +628,7 @@ fn categorize(param: aro.QualType, comp: *const aro.Compilation, arena: *utils.A
             64 => .{ .Reg = .f64 },
             else => unreachable,
         },
+        .array => .{ .Reg = .i64 },
         .typedef => |td| return categorize(td.base, comp, arena),
         else => utils.panic("not implemented yet: {any}", .{param.type(comp)}),
     }});

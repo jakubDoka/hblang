@@ -322,6 +322,7 @@ pub const Struct = struct {
 
             if (self.recursion_lock) {
                 types.report(self.key.loc.file, self.key.loc.ast, "the struct has undecidable alignment (cycle)", .{});
+                std.debug.dumpCurrentStackTrace(@returnAddress());
                 return 1;
             }
             self.recursion_lock = true;

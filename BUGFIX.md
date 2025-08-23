@@ -2,6 +2,20 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### nested structs
+```hb
+A := struct {
+    .x: struct {
+        .y: []A;
+    };
+}
+
+main := fn(): u32 {
+    a := A.(.(idk))
+    return 0
+}
+```
+
 #### other file span oob
 ```hb
 broken := @use("broken.hb")
