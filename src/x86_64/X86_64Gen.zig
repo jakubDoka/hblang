@@ -1062,11 +1062,24 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     self.emitByte(if (instr.data_type == .f32) 0xf3 else 0xf2);
                     self.emitRex(rhs, lhs, .rax, instr.data_type.size());
                     self.emitBytes(&.{ 0x0f, 0x11, Reg.Mod.direct.rm(rhs, lhs) });
-                } else {
+                } else b: {
                     const lhs_stack = lhs.isStack();
 
+                    if (lhs_stack and rhs.isStack()) {
+                        // push [rsp+dis]
+                        self.emitByte(0xff);
+                        const lhs_off = lhs.stackOffset(@intCast(self.slot_base));
+                        self.emitIndirectAddr(@enumFromInt(0b110), .rsp, .no_index, 1, @intCast(lhs_off));
+
+                        // pop [rsp+dis]
+                        self.emitByte(0x8f);
+                        const rhs_off = rhs.stackOffset(@intCast(self.slot_base));
+                        self.emitIndirectAddr(@enumFromInt(0b000), .rsp, .no_index, 1, @intCast(rhs_off));
+
+                        break :b;
+                    }
+
                     if (lhs_stack) {
-                        std.debug.assert(!rhs.isStack());
                         std.mem.swap(Reg, &lhs, &rhs);
                     }
 
