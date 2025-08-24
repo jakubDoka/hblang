@@ -386,7 +386,11 @@ pub fn compile(opts: CompileOptions) anyerror!void {
             .colors = opts.error_colors,
         });
 
-        if (opts.output) |o| try ast.fmt(o);
+        if (opts.output) |o| {
+            try ast.fmt(o);
+            try o.flush();
+        }
+
         return;
     }
 
@@ -407,12 +411,13 @@ pub fn compile(opts: CompileOptions) anyerror!void {
             var tmp = Arena.scrath(null);
             defer tmp.deinit();
 
-            var buf = std.Io.Writer.Allocating.init(tmp.arena.allocator());
-            try ast.fmt(&buf.writer);
-
             const path = try std.fs.path.join(tmp.arena.allocator(), &.{ base, ast.path });
-            try std.fs.cwd().writeFile(.{ .sub_path = path, .data = buf.written() });
+            var buf: [4096]u8 = undefined;
+            var writer = (try std.fs.cwd().openFile(path, .{ .mode = .write_only })).writer(&buf);
+            try ast.fmt(&writer.interface);
+            try writer.interface.flush();
         }
+
         return;
     }
 
@@ -541,6 +546,9 @@ pub fn compile(opts: CompileOptions) anyerror!void {
             .out = opts.output,
             .colors = opts.colors,
         });
+
+        if (opts.output) |o| try o.flush();
+
         return;
     }
 
