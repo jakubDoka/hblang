@@ -861,7 +861,9 @@ pub fn TimeMetrics(comptime StatNames: type) type {
             };
         });
 
-        pub const Scope = struct {
+        pub const Scope = if (freestanding) struct {
+            pub fn end(_: *@This()) void {}
+        } else struct {
             total: *u64,
             stat: *u64,
             timer: std.time.Timer,
@@ -881,7 +883,7 @@ pub fn TimeMetrics(comptime StatNames: type) type {
 
         // THIS handles the nesting
         pub fn begin(self: *Self, comptime name: StatNames) Scope {
-            return .{
+            return if (freestanding) .{} else .{
                 .stat = &@field(self.stats, @tagName(name)),
                 .timer = std.time.Timer.start() catch unreachable,
                 .total = &self.total,
