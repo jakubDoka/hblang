@@ -5,7 +5,8 @@ main:
 	sub rsp, 0x40
 	mov qword ptr [rsp], 0x00
 	mov qword ptr [rsp+0x08], 0x10000
-	mov dword ptr [rsp+0x28], 0x20000001
+	mov rsi, 0xD0000000
+	mov [rsp+0x28], esi
 	mov rdx, 0x04
 1:	mov rax, [rsp]
 	cmp rax, 0x10000
@@ -14,7 +15,7 @@ main:
 	test al, al
 	jz :0
 	mov qword ptr [rsp+0x10], 0x10000
-	mov dword ptr [rsp+0x2C], 0x20000001
+	mov [rsp+0x2C], esi
 	mov rcx, [rsp]
 	imul rcx, rdx
 	lea rax, [0x0000000000000007]
@@ -25,9 +26,9 @@ main:
 	mov [rsp], rax
 	jmp :1
 0:	mov qword ptr [rsp+0x18], 0x10000
-	mov dword ptr [rsp+0x30], 0x20000001
+	mov [rsp+0x30], esi
 	mov qword ptr [rsp+0x20], 0x10000
-	mov dword ptr [rsp+0x34], 0x20000001
+	mov [rsp+0x34], esi
 	mov eax, [0x0000000000000006]
 	mov eax, eax
 	add rsp, 0x40

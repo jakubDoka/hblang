@@ -800,7 +800,8 @@ pub const Data = struct {
                 switch (sym.kind) {
                     .func => self.funcs.items[idx] = .invalid,
                     .data => self.globals.items[idx] = .invalid,
-                    else => unreachable,
+                    .prealloc => self.globals.items[idx] = .invalid,
+                    else => unreachable, // TODO: remove
                 }
                 sym.kind = .invalid;
             }

@@ -173,7 +173,12 @@ pub fn categorize(self: Abi, ty: Id, types: *Types) TmpSpec {
             .Pointer, .FnPtr => .{ .ByValue = .i64 },
             .Enum => |enm| self.categorize(enm.getBackingInt(types), types),
             .Union => |s| categorizeAbleosUnion(s, types),
-            .Slice => |s| categorizeAbleosSlice(s, types),
+            .Slice => return .{ .ByValuePair = .{
+                .types = .{ .i64, .i64 },
+                .padding = 0,
+                .alignment = 3,
+            } },
+            .Array => |s| categorizeAbleosArray(s, types),
             .Nullable => |n| categorizeAbleosNullable(n, types),
             inline .Struct, .Tuple => |s| categorizeAbleosRecord(s, types),
             .Simd => .ByRef,
@@ -243,16 +248,16 @@ pub fn categorizeSystemv(ty: Id, types: *Types) TmpSpec {
                     if (impossible) return error.Impossible;
                     return;
                 },
-                .Slice => |s| {
-                    const slc = ts.store.get(s);
-                    if (slc.len) |len| {
-                        for (0..len) |i| {
-                            try classify(slc.elem, ts, offset + i * slc.elem.size(ts), catas);
-                        }
-                    } else {
-                        try classify(.uint, ts, offset + tys.Slice.len_offset, catas);
-                        try classify(.uint, ts, offset + tys.Slice.ptr_offset, catas);
+                .Array => |s| {
+                    const arr = ts.store.get(s);
+                    for (0..arr.len) |i| {
+                        try classify(arr.elem, ts, offset + i * arr.elem.size(ts), catas);
                     }
+                    return;
+                },
+                .Slice => {
+                    try classify(.uint, ts, offset + tys.Slice.len_offset, catas);
+                    try classify(.uint, ts, offset + tys.Slice.ptr_offset, catas);
                     return;
                 },
                 .Nullable => |n| {
@@ -407,13 +412,8 @@ pub fn categorizeAbleosNullable(id: utils.EntId(tys.Nullable), types: *Types) Tm
     };
 }
 
-pub fn categorizeAbleosSlice(id: utils.EntId(tys.Slice), types: *Types) TmpSpec {
+pub fn categorizeAbleosArray(id: utils.EntId(tys.Array), types: *Types) TmpSpec {
     const slice = types.store.get(id);
-    if (slice.len == null) return .{ .ByValuePair = .{
-        .types = .{ .i64, .i64 },
-        .padding = 0,
-        .alignment = 3,
-    } };
     if (slice.len == 0) return .Imaginary;
     const elem_abi = Abi.ableos.categorize(slice.elem, types);
     if (elem_abi == .Impossible) return .Impossible;

@@ -89,7 +89,7 @@ pub const TypeCtx = struct {
                 return self.types.store.get(s).ret == self.types.store.get(bd.FnPtr).ret and
                     std.mem.eql(Id, self.types.store.get(s).args, self.types.store.get(bd.FnPtr).args);
             },
-            inline .Slice, .Simd, .Pointer => |s, t| std.meta.eql(
+            inline .Slice, .Simd, .Pointer, .Array => |s, t| std.meta.eql(
                 self.types.store.get(s).*,
                 self.types.store.get(@field(bd, @tagName(t))).*,
             ),
@@ -109,7 +109,7 @@ pub const TypeCtx = struct {
         std.hash.autoHash(&hasher, std.meta.activeTag(adk));
         switch (adk) {
             .Builtin => unreachable,
-            inline .Pointer, .Slice, .Simd => |s| std.hash.autoHash(&hasher, self.types.store.get(s).*),
+            inline .Pointer, .Slice, .Simd, .Array => |s| std.hash.autoHash(&hasher, self.types.store.get(s).*),
             .Nullable => |n| std.hash.autoHash(&hasher, self.types.store.get(n).inner),
             // its an array of integers, splat
             .Tuple => |n| hasher.update(@ptrCast(self.types.store.get(n).fields)),
@@ -352,13 +352,13 @@ pub const Id = enum(IdRepr) {
         return switch (self.data()) {
             .Struct, .Union, .Enum => self,
             inline .Func, .Template, .Global => |t| types.store.get(t).key.loc.scope.firstType(types),
-            .Builtin, .Tuple, .Pointer, .Nullable, .Slice, .FnPtr, .Simd => unreachable,
+            .Builtin, .Tuple, .Pointer, .Nullable, .Slice, .FnPtr, .Simd, .Array => unreachable,
         };
     }
 
     pub fn file(self: Id, types: *Types) ?File {
         return switch (self.data()) {
-            .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnPtr, .Simd => null,
+            .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnPtr, .Simd, .Array => null,
             inline else => |v| types.store.get(v).key.loc.file,
         };
     }
@@ -372,7 +372,7 @@ pub const Id = enum(IdRepr) {
 
     pub fn getKey(self: Id, types: *Types) *Scope {
         return switch (self.data()) {
-            .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnPtr, .Simd => utils.panic("{s}", .{@tagName(self.data())}),
+            .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnPtr, .Simd, .Array => utils.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| &types.store.get(v).key,
         };
     }
@@ -383,7 +383,7 @@ pub const Id = enum(IdRepr) {
 
     pub fn items(self: Id, ast: *const Ast, types: *Types) Ast.Slice {
         return switch (self.data()) {
-            .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnPtr, .Simd => utils.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnPtr, .Simd, .Array => utils.panic("{s}", .{@tagName(self.data())}),
             .Template, .Func => .{},
             inline else => |v| ast.exprs.get(types.store.get(v).key.loc.ast).Type.fields,
         };
@@ -433,6 +433,7 @@ pub const Id = enum(IdRepr) {
             .Pointer => |p| types.store.get(p).*,
             .Nullable => |n| types.store.get(n).inner,
             .Slice => |s| types.store.get(s).elem,
+            .Array => |s| types.store.get(s).elem,
             else => null,
         };
     }
@@ -440,7 +441,7 @@ pub const Id = enum(IdRepr) {
     pub fn len(self: Id, types: *Types) ?usize {
         return switch (self.data()) {
             inline .Struct, .Union, .Enum, .Tuple => |s| s.getFields(types).len,
-            .Slice => |s| types.store.get(s).len,
+            .Array => |s| types.store.get(s).len,
             else => null,
         };
     }
@@ -460,10 +461,7 @@ pub const Id = enum(IdRepr) {
             else
                 null,
             .Pointer => return .{ .offset = 0, .kind = .ptr },
-            .Slice => |s| if (types.store.get(s).len == null)
-                return .{ .offset = tys.Slice.ptr_offset, .kind = .ptr }
-            else
-                null,
+            .Slice => return .{ .offset = tys.Slice.ptr_offset, .kind = .ptr },
             .Struct => |s| {
                 var offs: tys.Struct.Id.OffIter = s.offsetIter(types);
 
@@ -515,7 +513,8 @@ pub const Id = enum(IdRepr) {
                 return max_size;
             },
             .Struct => |s| s.getSize(types),
-            .Slice => |s| if (types.store.get(s).len) |l| l * types.store.get(s).elem.size(types) else 16,
+            .Array => |s| types.store.get(s).len * types.store.get(s).elem.size(types),
+            .Slice => 16,
             .Nullable => |n| n.size(types),
             .Simd => |s| types.store.get(s).len * types.store.get(s).elem.size(types),
             .Global, .Func, .Template => 0,
@@ -535,10 +534,8 @@ pub const Id = enum(IdRepr) {
                 }
                 return alignm;
             },
-            .Slice => |s| if (types.store.get(s).len == null)
-                8
-            else
-                types.store.get(s).elem.alignment(types),
+            .Slice => 8,
+            .Array => |s| types.store.get(s).elem.alignment(types),
             .Simd => |s| types.store.get(s).elem.alignment(types) *
                 types.store.get(s).len,
             .Global, .Func, .Template => 1,
@@ -575,6 +572,36 @@ pub const Id = enum(IdRepr) {
         tys: *Types,
         root: Id = .void,
 
+        const Task = union(enum) {
+            Name: []const u8,
+            Type: Id,
+            Value: Val,
+            PushScope: Id,
+            PopScope: usize,
+
+            const Val = struct {
+                ty: Id,
+                offset: u32 = 0,
+                value: u64,
+
+                pub fn normalize(slf: Val, ts: *Types) Val {
+                    return .{ .value = switch (Abi.ableos.categorize(slf.ty, ts)) {
+                        .Impossible, .Imaginary, .ByValue => readFromGlobal(ts, @enumFromInt(slf.value), slf.ty, slf.offset),
+                        .ByRef, .ByValuePair => slf.value,
+                    }, .ty = slf.ty, .offset = slf.offset };
+                }
+            };
+
+            pub fn format(s: *const @This(), wrter: *std.Io.Writer) !void {
+                switch (s.*) {
+                    .Name => |n| try wrter.print("name: {s}", .{n}),
+                    .Type => |t| try wrter.print("ty: {}", .{t.data()}),
+                    .Value => |v| try wrter.print("v: {}", .{v}),
+                    .PopScope => try wrter.writeAll("pop scope"),
+                }
+            }
+        };
+
         pub fn toString(self: *const Fmt, arena: *utils.Arena) []u8 {
             var tmp = utils.Arena.scrath(arena);
             defer tmp.deinit();
@@ -588,36 +615,6 @@ pub const Id = enum(IdRepr) {
 
             var tmp = utils.Arena.scrath(to);
             defer tmp.deinit();
-
-            const Task = union(enum) {
-                Name: []const u8,
-                Type: Id,
-                Value: Val,
-                PushScope: Id,
-                PopScope: usize,
-
-                const Val = struct {
-                    ty: Id,
-                    offset: u32 = 0,
-                    value: u64,
-
-                    pub fn normalize(slf: Val, ts: *Types) Val {
-                        return .{ .value = switch (Abi.ableos.categorize(slf.ty, ts)) {
-                            .Impossible, .Imaginary, .ByValue => readFromGlobal(ts, @enumFromInt(slf.value), slf.ty, slf.offset),
-                            .ByRef, .ByValuePair => slf.value,
-                        }, .ty = slf.ty, .offset = slf.offset };
-                    }
-                };
-
-                pub fn format(s: *const @This(), wrter: *std.Io.Writer) !void {
-                    switch (s.*) {
-                        .Name => |n| try wrter.print("name: {s}", .{n}),
-                        .Type => |t| try wrter.print("ty: {}", .{t.data()}),
-                        .Value => |v| try wrter.print("v: {}", .{v}),
-                        .PopScope => try wrter.writeAll("pop scope"),
-                    }
-                }
-            };
 
             var work_list = tmp.arena.makeArrayList(Task, 16);
             var seen_captures = std.AutoArrayHashMapUnmanaged(Scope.Capture, void).empty;
@@ -653,11 +650,11 @@ pub const Id = enum(IdRepr) {
                         _ = work_list.pop();
                     },
                     .Slice => |s| {
-                        try writer.writeAll("[");
-                        if (self.tys.store.get(s).len) |l| {
-                            try writer.print("{d}", .{l});
-                        }
-                        try writer.writeAll("]");
+                        try writer.writeAll("[]");
+                        work_list.appendAssumeCapacity(.{ .Type = self.tys.store.get(s).elem });
+                    },
+                    .Array => |s| {
+                        try writer.print("[{d}]", .{self.tys.store.get(s).len});
                         work_list.appendAssumeCapacity(.{ .Type = self.tys.store.get(s).elem });
                     },
                     .Nullable => |n| {
@@ -756,11 +753,17 @@ pub const Id = enum(IdRepr) {
                         .f64 => try writer.print("{}", .{@as(f64, @bitCast(@as(u64, @truncate(v.value))))}),
                         .type => work_list.appendAssumeCapacity(.{ .Type = @enumFromInt(v.value) }),
                     },
+                    .Array => |s| {
+                        const arr: *tys.Array = self.tys.store.get(s);
+                        const ln, const global = .{ arr.len, v.value };
+
+                        try writer.writeAll(".[");
+
+                        try self.formatSeq(&work_list, tmp.arena, arr.elem, ln, global);
+                    },
                     .Slice => |s| {
                         const slc: tys.Slice = self.tys.store.get(s).*;
-                        const ln, const global, const base = if (slc.len) |l| b: {
-                            break :b .{ l, v.value, v.offset };
-                        } else b: {
+                        const ln, const global, const base = b: {
                             const ptr = readFromGlobal(self.tys, @enumFromInt(v.value), .uint, v.offset + tys.Slice.ptr_offset);
                             const ln = readFromGlobal(self.tys, @enumFromInt(v.value), .uint, v.offset + tys.Slice.len_offset);
 
@@ -773,7 +776,7 @@ pub const Id = enum(IdRepr) {
                             }, 0 };
                         };
 
-                        if (slc.elem == .u8 and slc.len == null) {
+                        if (slc.elem == .u8) {
                             const glb: utils.EntId(tys.Global) = @enumFromInt(global);
                             try writer.writeAll("\"");
                             try writer.writeAll(self.tys.store.get(glb).data.slice()[@intCast(base)..][0..@intCast(ln)]);
@@ -781,24 +784,9 @@ pub const Id = enum(IdRepr) {
                             continue;
                         }
 
-                        if (slc.len == null) {
-                            try writer.writeAll("&.[");
-                        } else {
-                            try writer.writeAll(".[");
-                        }
+                        try writer.writeAll("&.[");
 
-                        work_list.ensureUnusedCapacity(tmp.arena.allocator(), @intCast(ln * 2)) catch unreachable;
-                        try work_list.append(tmp.arena.allocator(), .{ .Name = "]" });
-                        for (0..@intCast(ln)) |i| {
-                            const off = i * slc.elem.size(self.tys);
-                            work_list.appendAssumeCapacity(.{ .Value = .normalize(.{
-                                .ty = slc.elem,
-                                .value = global,
-                                .offset = @intCast(off),
-                            }, self.tys) });
-                            work_list.appendAssumeCapacity(.{ .Name = ", " });
-                        }
-                        _ = work_list.pop();
+                        try self.formatSeq(&work_list, tmp.arena, slc.elem, ln, global);
                     },
                     .Struct => |s| {
                         var offsets = @as(tys.Struct.Id, s).offsetIter(self.tys);
@@ -874,6 +862,21 @@ pub const Id = enum(IdRepr) {
                     .Template, .Global, .Func => unreachable,
                 },
             };
+        }
+
+        pub fn formatSeq(self: *const Fmt, work_list: *std.ArrayListUnmanaged(Task), arena: *utils.Arena, elem: Types.Id, ln: usize, global: u64) !void {
+            work_list.ensureUnusedCapacity(arena.allocator(), @intCast(ln * 2)) catch unreachable;
+            try work_list.append(arena.allocator(), .{ .Name = "]" });
+            for (0..@intCast(ln)) |i| {
+                const off = i * elem.size(self.tys);
+                work_list.appendAssumeCapacity(.{ .Value = .normalize(.{
+                    .ty = elem,
+                    .value = global,
+                    .offset = @intCast(off),
+                }, self.tys) });
+                work_list.appendAssumeCapacity(.{ .Name = ", " });
+            }
+            _ = work_list.pop();
         }
 
         pub fn format(self: *const Fmt, writer: *std.Io.Writer) !void {
@@ -994,7 +997,8 @@ pub fn cloneFrom(self: *Types, from: *Types, id: Id) struct { Id, bool } {
         switch (id.data()) {
             .Builtin => id,
             .Pointer => |p| self.makePtr(self.cloneFrom(from, from.store.get(p).*)[0]),
-            .Slice => |s| self.makeSlice(from.store.get(s).len, self.cloneFrom(from, from.store.get(s).elem)[0]),
+            .Slice => |s| self.makeSlice(self.cloneFrom(from, from.store.get(s).elem)[0]),
+            .Array => |a| self.makeArray(from.store.get(a).len, self.cloneFrom(from, from.store.get(a).elem)[0]),
             .Nullable => |n| self.makeNullable(self.cloneFrom(from, from.store.get(n).inner)[0]),
             .Simd => |s| self.makeSimd(self.cloneFrom(from, from.store.get(s).elem)[0], from.store.get(s).len),
             .Tuple => |t| {
@@ -1103,10 +1107,7 @@ pub fn cloneCaptureFrom(self: *Types, from: *Types, capture: Scope.Capture) Scop
             .value = capture.value,
         },
         .FnPtr => unreachable,
-        .Slice => |s| {
-            const slice: *tys.Slice = self.store.get(s);
-            std.debug.assert(slice.len == null);
-
+        .Slice => {
             var global: utils.EntId(tys.Global) = @enumFromInt(capture.value);
             const pop_until = self.global_work_list.get(.@"comptime").items.len;
             global = self.cloneGlobal(from, global);
@@ -1160,37 +1161,37 @@ pub fn findNestedGlobals(
 
             relocs.append(scratch.allocator(), .{
                 .offset = @intCast(offset),
-                .target = try self.findSymForPtr(ptr, cap),
+                .target = try self.findSymForPtr(ptr, std.math.maxInt(u64)),
             }) catch unreachable;
+        },
+        .Array => |a| {
+            const arr: *tys.Array = self.store.get(a);
+            const elem_size = arr.elem.size(self);
+            for (0..arr.len) |idx| {
+                try self.findNestedGlobals(
+                    relocs,
+                    global,
+                    scratch,
+                    arr.elem,
+                    offset + idx * elem_size,
+                );
+            }
         },
         .Slice => |s| {
             const slc: *tys.Slice = self.store.get(s);
 
-            if (slc.len) |len| {
-                const elem_size = slc.elem.size(self);
-                for (0..len) |idx| {
-                    try self.findNestedGlobals(
-                        relocs,
-                        global,
-                        scratch,
-                        slc.elem,
-                        offset + idx * elem_size,
-                    );
-                }
-            } else {
-                const ptr_big: u64 = @bitCast(global.data.slice()[offset + tys.Slice.ptr_offset ..][0..8].*);
-                const ptr: usize = @intCast(ptr_big);
-                const len_big: u64 = @bitCast(global.data.slice()[offset + tys.Slice.len_offset ..][0..8].*);
-                const len: usize = @intCast(len_big);
+            const ptr_big: u64 = @bitCast(global.data.slice()[offset + tys.Slice.ptr_offset ..][0..8].*);
+            const ptr: usize = @intCast(ptr_big);
+            const len_big: u64 = @bitCast(global.data.slice()[offset + tys.Slice.len_offset ..][0..8].*);
+            const len: usize = @intCast(len_big);
 
-                const cap = len * slc.elem.size(self);
-                if (cap == 0) return;
+            const cap = len * slc.elem.size(self);
+            if (cap == 0) return;
 
-                relocs.append(scratch.allocator(), .{
-                    .offset = @intCast(offset + tys.Slice.ptr_offset),
-                    .target = try self.findSymForPtr(ptr, cap),
-                }) catch unreachable;
-            }
+            relocs.append(scratch.allocator(), .{
+                .offset = @intCast(offset + tys.Slice.ptr_offset),
+                .target = try self.findSymForPtr(ptr, cap),
+            }) catch unreachable;
         },
         .Simd => |s| {
             const smd: *tys.Simd = self.store.get(s);
@@ -1266,7 +1267,7 @@ pub fn findSymForPtr(
     self.queue(.runtime, .init(.{ .Global = id }));
     const sym = &data.syms.items[@intFromEnum(data.globals.items[@intFromEnum(id)])];
 
-    if (sym.size != cap)
+    if (sym.size != cap and cap != std.math.maxInt(u64))
         return error.@"to a global with different size";
 
     return @intFromEnum(id);
@@ -1359,7 +1360,7 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer) *T
 
     slot.ct.gen.emit_global_reloc_offsets = true;
 
-    slot.string = slot.makeSlice(null, .u8);
+    slot.string = slot.makeSlice(.u8);
     slot.source_loc = .init(.{ .Struct = slot.store.add(&slot.pool.arena, tys.Struct{
         .key = .{
             .loc = .{
@@ -1471,8 +1472,12 @@ pub fn internPtr(self: *Types, comptime tag: std.meta.Tag(Data), payload: std.me
     return slot.key_ptr.*;
 }
 
-pub fn makeSlice(self: *Types, len: ?usize, elem: Id) Id {
-    return self.internPtr(.Slice, .{ .len = len, .elem = elem });
+pub fn makeSlice(self: *Types, elem: Id) Id {
+    return self.internPtr(.Slice, .{ .elem = elem });
+}
+
+pub fn makeArray(self: *Types, len: usize, elem: Id) Id {
+    return self.internPtr(.Array, .{ .len = len, .elem = elem });
 }
 
 pub fn makePtr(self: *Types, v: Id) Id {
@@ -1570,7 +1575,7 @@ pub fn addStringGlobal(self: *Types, data: []const u8) utils.EntId(tys.Global) {
     const glob = self.store.add(&self.pool.arena, tys.Global{
         .key = .{ .name_pos = .string },
         .data = .{ .imm = data },
-        .ty = self.makeSlice(data.len, .u8),
+        .ty = self.makeArray(data.len, .u8),
         .readonly = true,
     });
 

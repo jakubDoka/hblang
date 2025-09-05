@@ -12,7 +12,6 @@ pub const Builtin = Types.Id.Builtin;
 pub const Pointer = TyId;
 
 pub const Slice = struct {
-    len: ?usize,
     elem: TyId,
 
     pub const ptr_offset = 0;
@@ -541,4 +540,9 @@ pub const FnPtr = struct {
 pub const Simd = struct {
     elem: TyId,
     len: u32,
+};
+
+pub const Array = struct {
+    elem: TyId,
+    len: u64,
 };

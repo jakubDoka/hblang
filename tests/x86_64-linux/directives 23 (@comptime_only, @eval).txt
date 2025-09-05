@@ -1,0 +1,49 @@
+directives 23 (@comptime_only, @eval).type_id(u8):
+	xor rax, rax
+	ret
+directives 23 (@comptime_only, @eval).type_id(i8):
+	mov rax, 0x01
+	ret
+directives 23 (@comptime_only, @eval).type_id(u64):
+	mov rax, 0x02
+	ret
+directives 23 (@comptime_only, @eval).type_id(u32):
+	mov rax, 0x03
+	ret
+directives 23 (@comptime_only, @eval).type_id(u16):
+	mov rax, 0x04
+	ret
+main:
+	push rbx
+	push rbp
+	push r12
+	push r13
+	push r14
+	call :directives 23 (@comptime_only, @eval).type_id(u8)
+	mov r14, rax
+	call :directives 23 (@comptime_only, @eval).type_id(u16)
+	mov r13, rax
+	call :directives 23 (@comptime_only, @eval).type_id(u32)
+	mov r12, rax
+	call :directives 23 (@comptime_only, @eval).type_id(u64)
+	mov rbp, rax
+	call :directives 23 (@comptime_only, @eval).type_id(i8)
+	mov rbx, rax
+	call :directives 23 (@comptime_only, @eval).type_id(u8)
+	mov rcx, rax
+	mov rdx, r13
+	mov rax, r14
+	add rax, rdx
+	mov rdx, r12
+	add rax, rdx
+	mov rdx, rbp
+	add rax, rdx
+	mov rdx, rbx
+	add rax, rdx
+	add rax, rcx
+	pop r14
+	pop r13
+	pop r12
+	pop rbp
+	pop rbx
+	ret

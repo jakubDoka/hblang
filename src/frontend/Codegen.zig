@@ -1079,23 +1079,23 @@ pub fn emitArray(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Arry)) EmitEr
         }
 
         switch (ty.data()) {
-            .Slice => |s| {
-                const slice: *tys.Slice = self.types.store.get(s);
+            .Slice => {
+                return self.report(expr, "expected {}, got array with {} elements", .{ ty, e.fields.len() });
+            },
+            .Array => |a| {
+                const array: *tys.Array = self.types.store.get(a);
+                if (array.len != e.fields.len()) {
+                    return self.report(expr, "expected array with {} element, got {}", .{ array.len, e.fields.len() });
+                }
 
-                if (slice.len != e.fields.len()) if (slice.len) |len| {
-                    return self.report(expr, "expected array with {} element, got {}", .{ len, e.fields.len() });
-                } else {
-                    return self.report(expr, "expected {}, got array with {} elements", .{ ty, e.fields.len() });
-                };
-
-                break :b .{ slice.elem, ret_ty };
+                break :b .{ array.elem, ret_ty };
             },
             .Simd => |s| break :b .{ self.types.store.get(s).elem, ret_ty },
             else => return self.report(expr, "{} can not be initialized with array syntax", .{ty}),
         }
     } else b: {
         const elem_ty = try self.resolveAnonTy(e.ty);
-        const array_ty = self.types.makeSlice(e.fields.len(), elem_ty);
+        const array_ty = self.types.makeArray(e.fields.len(), elem_ty);
         break :b .{ elem_ty, array_ty };
     };
 
@@ -1122,7 +1122,7 @@ pub fn emitSliceTy(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.SliceTy)) E
         return self.emitInternalEca(ctx, .make_array, &.{ len.getValue(sloc, self), ty.getValue(sloc, self) }, .type);
     } else {
         const elem = try self.resolveAnonTy(e.elem);
-        return self.emitTyConst(self.types.makeSlice(null, elem));
+        return self.emitTyConst(self.types.makeSlice(elem));
     }
 }
 
@@ -1145,7 +1145,7 @@ pub fn emitUnOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.UnOp)) EmitErr
                     const ptr = if (a.fields.len() == 0)
                         self.bl.addIntImm(sloc, .i64, @bitCast(slice.elem.alignment(self.types)))
                     else b: {
-                        const arr = self.types.makeSlice(a.fields.len(), slice.elem);
+                        const arr = self.types.makeArray(a.fields.len(), slice.elem);
                         const value = try self.emitArray(.{ .ty = arr }, e.oper, a);
                         break :b value.id.Pointer;
                     };
@@ -1545,28 +1545,32 @@ pub fn emitField(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Field)) EmitErr
         .Slice => |slice_ty| {
             const slice = self.types.store.get(slice_ty);
             if (std.mem.eql(u8, fname, "len")) {
-                if (slice.len) |l| {
-                    return .mkv(.uint, self.bl.addIntImm(sloc, .i64, @intCast(l)));
-                } else {
-                    return .mkp(.uint, self.bl.addFieldOffset(
-                        sloc,
-                        base.id.Pointer,
-                        TySlice.len_offset,
-                    ));
-                }
+                return .mkp(.uint, self.bl.addFieldOffset(
+                    sloc,
+                    base.id.Pointer,
+                    TySlice.len_offset,
+                ));
             } else if (std.mem.eql(u8, fname, "ptr")) {
                 const ptr_ty = self.types.makePtr(slice.elem);
-                if (slice.len != null) {
-                    return .mkv(ptr_ty, base.id.Pointer);
-                } else {
-                    return .mkp(ptr_ty, self.bl.addFieldOffset(
-                        sloc,
-                        base.id.Pointer,
-                        TySlice.ptr_offset,
-                    ));
-                }
+                return .mkp(ptr_ty, self.bl.addFieldOffset(
+                    sloc,
+                    base.id.Pointer,
+                    TySlice.ptr_offset,
+                ));
             } else {
-                return self.report(e.field, "slices and arrays only support" ++
+                return self.report(e.field, "slices only support" ++
+                    " `.ptr` and `.len` field", .{});
+            }
+        },
+        .Array => |array_ty| {
+            const slice = self.types.store.get(array_ty);
+            if (std.mem.eql(u8, fname, "len")) {
+                return .mkv(.uint, self.bl.addIntImm(sloc, .i64, @intCast(slice.len)));
+            } else if (std.mem.eql(u8, fname, "ptr")) {
+                const ptr_ty = self.types.makePtr(slice.elem);
+                return .mkv(ptr_ty, base.id.Pointer);
+            } else {
+                return self.report(e.field, "arrays only support" ++
                     " `.ptr` and `.len` field", .{});
             }
         },
@@ -1595,38 +1599,37 @@ pub fn emitIndex(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Index)) EmitE
         else
             try self.emitTyped(.{}, .uint, range.start);
         var end: Value = if (range.end.tag() == .Void) switch (base.ty.data()) {
-            .Slice => |slice_ty| if (self.types.store.get(slice_ty).len) |l|
-                .mkv(.uint, self.bl.addIntImm(sloc, .i64, @intCast(l)))
-            else
-                .mkv(.uint, self.bl.addFieldLoad(sloc, base.id.Pointer, TySlice.len_offset, .i64)),
+            .Array => |array_ty| .mkv(.uint, self.bl.addIntImm(sloc, .i64, @intCast(
+                self.types.store.get(array_ty).len,
+            ))),
+            .Slice => .mkv(.uint, self.bl.addFieldLoad(sloc, base.id.Pointer, TySlice.len_offset, .i64)),
             else => {
                 return self.report(e.subscript, "unbound range is only allowed" ++
                     " on arrays and slices, {} is not", .{base.ty});
             },
         } else try self.emitTyped(.{}, .uint, range.end);
 
-        const res_ty = self.types.makeSlice(null, elem);
+        const res_ty = self.types.makeSlice(elem);
 
         var ptr: Value = switch (base.ty.data()) {
             .Pointer => base,
-            .Slice => |slice_ty| if (self.types.store.get(slice_ty).len == null)
-                .mkv(
-                    self.types.makePtr(elem),
-                    self.bl.addFieldLoad(sloc, base.id.Pointer, TySlice.ptr_offset, .i64),
-                )
-            else
-                .mkv(self.types.makePtr(elem), base.id.Pointer),
+            .Slice => .mkv(
+                self.types.makePtr(elem),
+                self.bl.addFieldLoad(sloc, base.id.Pointer, TySlice.ptr_offset, .i64),
+            ),
+            .Array => .mkv(self.types.makePtr(elem), base.id.Pointer),
             else => {
                 return self.report(expr, "only structs and slices" ++
                     " can be indexed, {} is not", .{base.ty});
             },
         };
 
-        if (base.ty.data() == .Slice) if (self.types.handlers.slice_ioob) |handler| {
-            var len = Value.mkv(.uint, if (self.types.store.get(base.ty.data().Slice).len) |l|
-                self.bl.addIntImm(sloc, .i64, @intCast(l))
-            else
-                self.bl.addFieldLoad(sloc, base.id.Pointer, TySlice.len_offset, .i64));
+        if (self.types.handlers.slice_ioob) |handler| if (switch (base.ty.data()) {
+            .Slice => self.bl.addFieldLoad(sloc, base.id.Pointer, TySlice.len_offset, .i64),
+            .Array => |array_ty| self.bl.addIntImm(sloc, .i64, @intCast(self.types.store.get(array_ty).len)),
+            else => null,
+        }) |ln| {
+            var len = Value.mkv(.uint, ln);
             const range_check = self.bl.addBinOp(sloc, .ugt, .i8, end.getValue(sloc, self), len.getValue(sloc, self));
             const order_check = self.bl.addBinOp(sloc, .ugt, .i8, start.getValue(sloc, self), end.getValue(sloc, self));
             const check = self.bl.addBinOp(sloc, .bor, .i8, range_check, order_check);
@@ -1679,19 +1682,34 @@ pub fn emitIndex(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Index)) EmitE
             },
             .Slice => |slice_ty| {
                 const slice = self.types.store.get(slice_ty);
-                const index_base = if (slice.len == null)
-                    self.bl.addLoad(sloc, base.id.Pointer, .i64)
-                else switch (base.id) {
+                const index_base = self.bl.addLoad(sloc, base.id.Pointer, .i64);
+
+                if (self.types.handlers.slice_ioob) |handler| {
+                    var len = Value.mkv(.uint, self.bl.addFieldLoad(sloc, base.id.Pointer, TySlice.len_offset, .i64));
+
+                    const check = self.bl.addBinOp(sloc, .uge, .i8, idx_value.getValue(sloc, self), len.getValue(sloc, self));
+                    var arg_values = [_]Value{ undefined, len, idx_value, idx_value };
+                    self.emitHandlerCall(handler, e.subscript, check, &arg_values);
+                }
+
+                return .mkp(slice.elem, self.bl.addIndexOffset(
+                    sloc,
+                    index_base,
+                    .iadd,
+                    slice.elem.size(self.types),
+                    idx_value.getValue(sloc, self),
+                ));
+            },
+            .Array => |array_ty| {
+                const slice = self.types.store.get(array_ty);
+                const index_base = switch (base.id) {
                     .Imaginary => return self.report(expr, "indexing into an empty array is not allowed", .{}),
-                    .Value => self.bl.addSpill(sloc, base.id.Value, @intFromEnum(slice_ty)),
+                    .Value => self.bl.addSpill(sloc, base.id.Value, @intFromEnum(array_ty)),
                     .Pointer => base.id.Pointer,
                 };
 
                 if (self.types.handlers.slice_ioob) |handler| {
-                    var len = Value.mkv(.uint, if (slice.len) |len|
-                        self.bl.addIntImm(sloc, .i64, @intCast(len))
-                    else
-                        self.bl.addFieldLoad(sloc, base.id.Pointer, TySlice.len_offset, .i64));
+                    var len = Value.mkv(.uint, self.bl.addIntImm(sloc, .i64, @intCast(slice.len)));
 
                     const check = self.bl.addBinOp(sloc, .uge, .i8, idx_value.getValue(sloc, self), len.getValue(sloc, self));
                     var arg_values = [_]Value{ undefined, len, idx_value, idx_value };
@@ -2033,23 +2051,24 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
         } else {
             const slice = try self.emit(.{}, iter.value);
 
-            if (slice.ty.data() != .Slice) {
-                return self.report(iter, "expected a slice", .{});
-            }
-
-            const slc: tys.Slice = self.types.store.get(slice.ty.data().Slice).*;
-
-            if (slc.len != null) {
-                return self.report(iter, "TODO: arrays", .{});
-            } else {
-                const base = self.bl.addFieldLoad(sloc, slice.id.Pointer, tys.Slice.ptr_offset, .i64);
-                const base_ty = self.types.makePtr(slc.elem);
-                const base_id = self.bl.addSpill(sloc, base, @intFromEnum(base_ty));
-                const len = self.bl.addFieldLoad(sloc, slice.id.Pointer, tys.Slice.len_offset, .i64);
-                const unit = self.bl.addIntImm(sloc, .i64, @intCast(slc.elem.size(self.types)));
-                const byte_len = self.bl.addBinOp(sloc, .imul, .i64, len, unit);
-                const bound = self.bl.addBinOp(sloc, .iadd, .i64, base, byte_len);
-                id.* = .{ .Slice = .{ .base = .mkp(base_ty, base_id), .len = len, .bound = bound } };
+            switch (slice.ty.data()) {
+                .Slice => |slice_ty| {
+                    const slc: tys.Slice = self.types.store.get(slice_ty).*;
+                    const base = self.bl.addFieldLoad(sloc, slice.id.Pointer, tys.Slice.ptr_offset, .i64);
+                    const base_ty = self.types.makePtr(slc.elem);
+                    const base_id = self.bl.addSpill(sloc, base, @intFromEnum(base_ty));
+                    const len = self.bl.addFieldLoad(sloc, slice.id.Pointer, tys.Slice.len_offset, .i64);
+                    const unit = self.bl.addIntImm(sloc, .i64, @intCast(slc.elem.size(self.types)));
+                    const byte_len = self.bl.addBinOp(sloc, .imul, .i64, len, unit);
+                    const bound = self.bl.addBinOp(sloc, .iadd, .i64, base, byte_len);
+                    id.* = .{ .Slice = .{ .base = .mkp(base_ty, base_id), .len = len, .bound = bound } };
+                },
+                .Array => {
+                    return self.report(iter, "TODO: arrays", .{});
+                },
+                else => {
+                    return self.report(iter, "expected a slice", .{});
+                },
             }
         }
     }
@@ -2363,7 +2382,7 @@ fn emitUse(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Use)) EmitError!Value
                 self.types.store.get(alloc).* = .{
                     .key = self.types.store.get(alloc).key,
                     .data = .{ .imm = file.source },
-                    .ty = self.types.makeSlice(file.source.len, .u8),
+                    .ty = self.types.makeArray(file.source.len, .u8),
                     .readonly = true,
                 };
             }
@@ -3076,6 +3095,20 @@ pub fn resolveGlobal(
     return .mkp(global.ty, self.bl.addGlobalAddr(.none, @intFromEnum(global_id)));
 }
 
+pub fn captureToValue(self: *Codegen, sloc: graph.Sloc, c: *const Types.Scope.Capture) !Value {
+    return .{ .ty = c.ty, .id = switch (self.abiCata(c.ty)) {
+        .Impossible => return error.Unreachable,
+        .Imaginary => .Imaginary,
+        .ByValue => |v| .{
+            .Value = self.bl.addIntImm(sloc, v, @bitCast(c.value)),
+        },
+        .ByValuePair, .ByRef => b: {
+            self.types.queue(self.target, .init(.{ .Global = @enumFromInt(c.value) }));
+            break :b .{ .Pointer = self.bl.addGlobalAddr(sloc, @intCast(c.value)) };
+        },
+    } };
+}
+
 pub fn loadIdent(self: *Codegen, expr: Ast.Pos, id: Ast.Ident) !Value {
     const sloc = self.src(expr);
     const ast = self.ast;
@@ -3093,17 +3126,7 @@ pub fn loadIdent(self: *Codegen, expr: Ast.Pos, id: Ast.Ident) !Value {
         const decl, const path, _ = while (!cursor.empty()) {
             if (cursor.index(self.types)) |idx| if (idx.search(id)) |v| break v;
             if (cursor.findCapture(expr, id, self.types, &slot)) |c| {
-                return .{ .ty = c.ty, .id = switch (self.abiCata(c.ty)) {
-                    .Impossible => return error.Unreachable,
-                    .Imaginary => .Imaginary,
-                    .ByValue => |v| .{
-                        .Value = self.bl.addIntImm(sloc, v, @bitCast(c.value)),
-                    },
-                    .ByValuePair, .ByRef => b: {
-                        self.types.queue(self.target, .init(.{ .Global = @enumFromInt(c.value) }));
-                        break :b .{ .Pointer = self.bl.addGlobalAddr(sloc, @intCast(c.value)) };
-                    },
-                } };
+                return try self.captureToValue(sloc, c);
             }
             cursor = cursor.parent(self.types);
         } else {
@@ -3434,6 +3457,7 @@ pub fn instantiateTemplate(
             .key = alc.key,
             .args = self.types.pool.arena.dupe(Types.Id, arg_tys),
             .ret = ret,
+            .is_inline = tmpl.is_inline,
         };
     }
 
@@ -4077,12 +4101,11 @@ fn emitDirective(
                                 " values, {} is not", .{vl.ty});
                         }
 
-                        const string = self.types.makeSlice(null, .u8);
                         return self.emitInternalEca(
                             ctx,
                             .name_of,
                             &.{ self.emitTyConst(vl.ty).id.Value, vl.getValue(sloc, self) },
-                            string,
+                            self.types.string,
                         );
                     }
 
@@ -4256,6 +4279,16 @@ fn emitDirective(
             }
 
             return self.emitTyConst(self.types.makeSimd(ty, @intCast(len)));
+        },
+        .eval => {
+            try assertDirectiveArgs(self, expr, args, "<expr>");
+
+            var expr_value = try self.emit(.{}, args[0]);
+            const value = try self.partialEval(args[0], &expr_value);
+            return self.captureToValue(
+                self.src(expr),
+                &.{ .ty = expr_value.ty, .value = value, .id = undefined },
+            );
         },
     }
 }

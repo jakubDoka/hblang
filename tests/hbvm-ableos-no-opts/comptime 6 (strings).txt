@@ -25,7 +25,7 @@ main:
          tx
 comptime 6 (strings).main.string_to_array("Edward"):
      addi64 $254, $254, -18
-       li32 $2, 536870913
+       li32 $2, -805306368
          st $2, $254, 14, 4
          st $0, $254, 0, 8
      addi64 $7, $254, 8

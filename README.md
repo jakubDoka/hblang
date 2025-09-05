@@ -2027,6 +2027,77 @@ main := fn(): uint {
 }
 ```
 
+#### directives 23
+```hb
+expectations := .{
+    return_value: 10,
+}
+
+main := fn(): uint {
+    return type_id(u8) + type_id(u16) + type_id(u32) +
+        type_id(u64) + type_id(i8) + type_id(u8)
+}
+
+$type_id := fn($T: type): uint {
+    return @eval(inc())
+}
+
+type_counter := 0
+inc := fn(): uint {
+    defer type_counter += 1
+    return type_counter
+}
+```
+
+#### comptime arena 1
+```hb
+expectations := .{
+    return_value: 10,
+}
+
+main := fn(): uint {
+    return @eval(something(10))
+}
+
+something := fn(len: uint): uint {
+    tmp := comptime_arena.checkpoint()
+    defer tmp.restore()
+
+    arr := tmp.arena.alloc(u8, len)
+
+    for i := arr {
+        i.* = 1
+    }
+
+    return arr.len
+}
+
+Arena := struct {
+    .pos: ^u8
+
+    $alloc := fn(self: ^Arena, $Elem: type, len: uint): []Elem {
+        defer self.pos += @align_of(Elem) - 1 + @bit_cast(self.pos) & @align_of(Elem) - 1
+        return self.pos[0..len]
+    }
+
+    $checkpoint := fn(self: ^Arena): CheckPoint {
+        return CheckPoint.(self, self.pos)
+    }
+}
+
+CheckPoint := struct {
+    .arena: ^Arena;
+    .prev_pos: ^u8
+
+    $restore := fn(self: ^CheckPoint): void {
+        self.arena.pos = self.prev_pos
+    }
+}
+
+comptime_arena_mem: [1024]u8 = idk
+comptime_arena := Arena.(&comptime_arena_mem[0])
+```
+
 ## progress
 
 - [x] hbvm-ableos target

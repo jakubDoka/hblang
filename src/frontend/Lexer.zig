@@ -160,6 +160,7 @@ pub const Lexeme = enum(u16) {
     @"@handler",
     @"@SrcLoc",
     @"@simd",
+    @"@eval",
 
     const data = @typeInfo(Lexeme).@"enum";
 
@@ -351,6 +352,8 @@ fn isKeyword(name: []const u8) bool {
 }
 
 const keyword_map = b: {
+    @setEvalBranchQuota(2000);
+
     const auto_migration_mapping = [_]struct { []const u8, Lexeme }{
         .{ "@sizeof", .@"@size_of" },
         .{ "@alignof", .@"@align_of" },

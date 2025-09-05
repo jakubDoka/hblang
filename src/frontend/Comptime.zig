@@ -512,7 +512,7 @@ pub fn runVm(
                 .make_array => {
                     const len = self.ecaArg(1);
                     const ty: Types.Id = @enumFromInt(self.ecaArg(2));
-                    const slice = types.makeSlice(@intCast(len), ty);
+                    const slice = types.makeArray(@intCast(len), ty);
                     self.vm.regs.set(.ret(0), @intFromEnum(slice));
                 },
                 .ChildOf => {

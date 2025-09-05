@@ -4,17 +4,11 @@ main:
         li8 $1, -1
          st $1, $254, 0, 1
      addi64 $1, $254, 0
-        jal $31, $0, :function pointers 3.DynObj.new(.Obj)
-         cp $3, $1
-         cp $1, $2
-       jala $31, $3, 0
+        lra $2, $0, :function pointers 3.Obj.do_thing
+       jala $31, $2, 0
      addi64 $254, $254, 9
          ld $31, $254, -8, 8
          tx
-function pointers 3.DynObj.new(.Obj):
-         cp $2, $1
-        lra $1, $0, :function pointers 3.Obj.do_thing
-       jala $0, $31, 0
 function pointers 3.Obj.do_thing:
          ld $1, $1, 0, 1
       addi8 $1, $1, 1

@@ -9,7 +9,8 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x418
-	mov dword ptr [rsp+0x410], 0x20000001
+	mov rax, 0xD0000000
+	mov [rsp+0x410], eax
 	lea rbp, [rsp]
 	mov [rsp+0x400], rbp
 	mov qword ptr [rsp+0x408], 0x00

@@ -1,7 +1,8 @@
 array index crash 1.awa:
 	sub rsp, 0x20
 	mov [rsp+0x10], dil
-	mov dword ptr [rsp+0x0C], 0x20000001
+	mov rax, 0xD0000000
+	mov [rsp+0x0C], eax
 	mov byte ptr [rsp+0x08], 0x00
 	mov byte ptr [rsp+0x09], 0x00
 	mov byte ptr [rsp+0x0A], 0x00

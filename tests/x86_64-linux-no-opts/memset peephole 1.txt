@@ -20,10 +20,11 @@ memset peephole 1.memset:
 	ret
 main:
 	sub rsp, 0x18
-	mov dword ptr [rsp+0x08], 0x20000001
-	mov rdi, 0x08
+	mov rax, 0xD0000000
+	mov [rsp+0x08], eax
 	lea rsi, [rsp]
 	xor rdx, rdx
+	mov rdi, 0x08
 	call :memset peephole 1.memset
 	mov al, [rsp]
 	movzx rax, al
