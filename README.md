@@ -2105,6 +2105,14 @@ main := fn(): uint {
     $if @type_info(struct{}).kind != .@struct return 2
     $if @type_info(enum{}).kind != .@enum return 3
 
+    strct := @type_info(struct{.a: u8; .b: u16})
+    $if strct.kind != .@struct return 4
+    $if strct.data.@struct.alignment != 2 return 5
+    $if strct.data.@struct.fields[0].name[0] != 'a' return 6
+    $if strct.data.@struct.fields[1].name[0] != 'b' return 7
+    $if strct.data.@struct.fields[0].ty != u8 return 8
+    $if strct.data.@struct.fields[1].ty != u16 return 9
+
     return 0
 }
 ```

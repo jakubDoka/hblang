@@ -3734,7 +3734,7 @@ pub fn partialEvalLow(self: *Codegen, pos: u32, value: *Value, can_recover: bool
             }
 
             return self.report(pos, "can't evaluate this at compile time (yet)," ++
-                " (DEBUG: got stuck on {})", .{n});
+                " (DEBUG: got stuck on {} {})", .{ n[0], n[1] });
         },
     };
 }

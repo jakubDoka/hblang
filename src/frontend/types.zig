@@ -11,7 +11,7 @@ const Scope = Types.Scope;
 pub const Builtin = Types.Id.Builtin;
 pub const Pointer = TyId;
 
-pub const Slice = struct {
+pub const Slice = extern struct {
     elem: TyId,
 
     pub const ptr_offset = 0;
@@ -542,7 +542,7 @@ pub const Simd = struct {
     len: u32,
 };
 
-pub const Array = struct {
+pub const Array = extern struct {
     elem: TyId,
     len: u64,
 };

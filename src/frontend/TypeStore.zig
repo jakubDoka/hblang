@@ -1400,7 +1400,7 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer) *T
     return slot;
 }
 
-const TypeInfo = extern struct {
+pub const TypeInfo = extern struct {
     kind: enum(u8) {
         builtin,
         pointer,
@@ -1411,7 +1411,7 @@ const TypeInfo = extern struct {
         @"@union",
         @"@struct",
         template,
-        func,
+        @"@fn",
         global,
         fnptr,
         simd,
@@ -1420,11 +1420,11 @@ const TypeInfo = extern struct {
     data: extern union {
         builtin: void,
         pointer: Id,
-        slice: Id,
+        slice: tys.Slice,
         nullable: Id,
         tuple: Slice(Id),
         @"@enum": extern struct {
-            backing_int: Optional(Id),
+            backing_int: Id,
             fields: Slice(extern struct {
                 name: Slice(u8),
                 value: i64,
@@ -1437,7 +1437,7 @@ const TypeInfo = extern struct {
             }),
         },
         @"@struct": extern struct {
-            alignment: Optional(u64),
+            alignment: u64,
             fields: Slice(extern struct {
                 name: Slice(u8),
                 ty: Id,
@@ -1447,7 +1447,7 @@ const TypeInfo = extern struct {
         template: extern struct {
             is_inline: bool,
         },
-        func: extern struct {
+        @"@fn": extern struct {
             args: Slice(Id),
             ret: Id,
         },
@@ -1463,10 +1463,7 @@ const TypeInfo = extern struct {
             elem: Id,
             len: u32,
         },
-        array: extern struct {
-            elem: Id,
-            len: u64,
-        },
+        array: tys.Array,
     },
 };
 
@@ -1494,8 +1491,24 @@ pub fn Slice(comptime Elem: type) type {
         pub const is_slice = true;
         pub const elem = Elem;
 
-        ptr: [*c]Elem,
+        elem_ptr: u64,
         len: u64,
+
+        pub fn dupe(gen: *HbvmGen, slce: []const Elem) @This() {
+            const slf = alloc(gen, slce.len);
+            @memcpy(slf.slice(gen), slce);
+            return slf;
+        }
+
+        pub fn alloc(gen: *HbvmGen, len: u64) @This() {
+            const ptr = std.mem.alignForward(usize, gen.out.code.items.len, @alignOf(Elem));
+            gen.out.code.resize(gen.gpa.allocator(), ptr + @sizeOf(Elem) * len) catch unreachable;
+            return .{ .elem_ptr = ptr, .len = len };
+        }
+
+        pub fn slice(slf: @This(), gen: *HbvmGen) []Elem {
+            return @as([*]Elem, @ptrCast(@alignCast(&gen.out.code.items[@intCast(slf.elem_ptr)])))[0..@intCast(slf.len)];
+        }
     };
 }
 
@@ -1509,6 +1522,8 @@ pub fn Pointer(comptime Elem: type) type {
 }
 
 pub fn convertZigTypeToHbType(self: *Types, comptime T: type) Id {
+    if (T == Id) return .type;
+
     return switch (@typeInfo(T)) {
         .void => .void,
         .@"opaque" => .void,
