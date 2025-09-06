@@ -4,7 +4,7 @@ comptime 5 (integers).main.func(1):
 main:
 	sub rsp, 0x28
 	mov qword ptr [rsp], 0x01
-	mov dword ptr [rsp+0x10], 0x70000002
+	mov dword ptr [rsp+0x10], 0x7000000F
 	mov rcx, 0x80000000
 	mov rax, 0x90000002
 	mov [rsp+0x14], eax
@@ -13,7 +13,7 @@ main:
 	mov [rsp+0x08], rax
 	mov rax, [0x0000000000000007]
 	sub rax, [rsp+0x08]
-	mov dword ptr [rsp+0x1C], 0x70000003
+	mov dword ptr [rsp+0x1C], 0x70000010
 	mov rcx, [0x0000000000000007]
 	add rax, rcx
 	add rsp, 0x28

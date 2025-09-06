@@ -1096,7 +1096,7 @@ pub fn Func(comptime Backend: type) type {
                 }
 
                 pub fn format(self: *const Out, writer: *std.Io.Writer) !void {
-                    try writer.print("{}:{any}", .{ self.pos(), self.get() });
+                    try writer.print("{}:{f}", .{ self.pos(), self.get() });
                 }
             };
 

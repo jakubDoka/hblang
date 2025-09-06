@@ -1429,13 +1429,18 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
                     const binop = try self.lexemeToBinOp(expr, e.op, lhs.ty);
                     try self.typeCheck(e.rhs, &rhs, lhs.ty);
 
-                    return .mkv(.bool, self.bl.addBinOp(
-                        sloc,
-                        binop,
-                        self.abiCata(lhs.ty).ByValue,
-                        lhs.getValue(sloc, self),
-                        rhs.getValue(sloc, self),
-                    ));
+                    return switch (self.abiCata(lhs.ty)) {
+                        .Impossible => unreachable,
+                        .Imaginary => .mkv(.bool, self.bl.addIntImm(sloc, .i8, 1)),
+                        .ByValue => |vty| .mkv(.bool, self.bl.addBinOp(
+                            sloc,
+                            binop,
+                            vty,
+                            lhs.getValue(sloc, self),
+                            rhs.getValue(sloc, self),
+                        )),
+                        .ByValuePair, .ByRef => unreachable,
+                    };
                 },
                 else => return self.report(expr, "{} does not support binary operations", .{lhs.ty}),
             }
@@ -2765,16 +2770,39 @@ fn emitInternalEca(
 
     var builder = Types.Abi.ableos.builder();
 
-    const params = tmp.arena.alloc(graph.AbiParam, 1 + args.len);
+    const ret_ref = self.abi.isByRefRet(self.abiCata(ret_ty));
 
-    params[0] = .{ .Reg = .i64 };
-    for (args, params[1..]) |a, *ca| ca.* = .{ .Reg = a.data_type };
+    std.debug.assert(!ret_ref);
+
+    const params = tmp.arena.alloc(graph.AbiParam, @intFromBool(ret_ref) + (1 + args.len));
+
+    var cursor: usize = 0;
+
+    if (ret_ref) {
+        params[0] = .{ .Reg = .i64 };
+        cursor += 1;
+    }
+
+    params[cursor] = .{ .Reg = .i64 };
+    cursor += 1;
+
+    for (args, params[cursor..]) |a, *ca| ca.* = .{ .Reg = a.data_type };
     const ret_buf = tmp.arena.alloc(graph.AbiParam, Types.Abi.Builder.max_elems);
     const returns = builder.types(ret_buf, true, self.abiCata(ret_ty));
     const c_args = self.bl.allocCallArgs(tmp.arena, params, returns, null);
 
-    c_args.arg_slots[0] = self.bl.addIntImm(.none, .i64, @intCast(@intFromEnum(ic)));
-    @memcpy(c_args.arg_slots[1..], args);
+    cursor = 0;
+    if (ret_ref) {
+        // TODO: add source loc
+        c_args.arg_slots[0] = ctx.loc orelse
+            self.bl.addLocal(.none, self.abiCata(ret_ty).size(), @intFromEnum(ret_ty));
+        cursor += 1;
+    }
+
+    c_args.arg_slots[cursor] = self.bl.addIntImm(.none, .i64, @intCast(@intFromEnum(ic)));
+    cursor += 1;
+
+    @memcpy(c_args.arg_slots[cursor..], args);
 
     return self.assembleReturn(
         Ast.Id.zeroSized(.Void),
@@ -3219,7 +3247,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
 
     var computed_args: ?[]Value = null;
     var was_template = false;
-    const sig, const ptr, const literal_func = if (typ_res.ty == .type) b: {
+    const sig: tys.FnPtr, const ptr, const literal_func = if (typ_res.ty == .type) b: {
         var typ = try self.unwrapTyConst(expr, &typ_res);
 
         was_template = typ.data() == .Template;
@@ -4289,6 +4317,10 @@ fn emitDirective(
                 self.src(expr),
                 &.{ .ty = expr_value.ty, .value = value, .id = undefined },
             );
+        },
+        .type_info => {
+            try assertDirectiveArgs(self, expr, args, "<ty>");
+            return try self.emitComptimeDirectiveEca(ctx, args[0], .type_info, self.types.type_info);
         },
     }
 }

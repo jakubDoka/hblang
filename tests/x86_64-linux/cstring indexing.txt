@@ -2,14 +2,14 @@ cstring indexing.slice_ioob:
 	ud2
 main:
 	push rbx
-	sub rsp, 0x60
+	sub rsp, 0x50
 	lea rax, [0x0000000000000007]
-	mov [rsp+0x40], rax
+	mov [rsp+0x18], rax
 	lea rax, [0x0000000000000007]
-	mov [rsp+0x48], rax
+	mov [rsp+0x20], rax
 	xor rax, rax
 	xor rdi, rdi
-	lea rsi, [rsp+0x40]
+	lea rsi, [rsp+0x18]
 	mov rbx, rax
 4:	cmp rbx, 0x02
 	setb al
@@ -20,12 +20,12 @@ main:
 	cmp rbx, rax
 	jb :1
 	lea rax, [0x0000000000000007]
-	mov [rsp+0x20], rax
-	mov qword ptr [rsp+0x28], 0x10
+	mov [rsp+0x38], rax
+	mov qword ptr [rsp+0x40], 0x10
 	mov rax, 0x1100000010
-	mov [rsp+0x30], rax
-	lea rsi, [rsp+0x20]
-	mov rdx, 0x20
+	mov [rsp+0x48], rax
+	lea rsi, [rsp+0x38]
+	mov rdx, 0x18
 	lea rdi, [rsp]
 	call :memcpy
 	mov rsi, rbx
@@ -42,12 +42,12 @@ main:
 	jz :2
 	inc rax
 	jmp :3
-2:	mov [rsp+0x50], rdx
-	mov [rsp+0x58], rax
+2:	mov [rsp+0x28], rdx
+	mov [rsp+0x30], rax
 	inc rbx
 	jmp :4
 0:	xor rax, rax
-	add rsp, 0x60
+	add rsp, 0x50
 	pop rbx
 	ret
 memcpy:

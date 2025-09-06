@@ -5,13 +5,13 @@ main:
          st $1, $254, 0, 8
        li32 $3, -1879048190
        li32 $2, -2147483648
-       li32 $1, 1879048194
+       li32 $1, 1879048207
          st $1, $254, 8, 4
          st $3, $254, 12, 4
          st $2, $254, 16, 4
         jal $31, $0, :comptime 5 (integers).main.func(1)
          st $1, $254, 20, 8
-       li32 $4, 1879048195
+       li32 $4, 1879048208
         lra $2, $0, :comptime 5 (integers).main.param(1).global_value
         lra $1, $0, :comptime 5 (integers).main.Ty(1).global_value
          ld $3, $1, 0, 8

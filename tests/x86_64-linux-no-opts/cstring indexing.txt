@@ -21,20 +21,20 @@ cstring indexing.cstr:
 main:
 	push rbx
 	push rbp
-	sub rsp, 0x88
+	sub rsp, 0x78
 	lea rax, [0x0000000000000007]
-	mov [rsp+0x50], rax
-	mov qword ptr [rsp+0x58], 0x03
+	mov [rsp+0x28], rax
+	mov qword ptr [rsp+0x30], 0x03
 	lea rcx, [0x0000000000000007]
-	mov rax, [rsp+0x50]
-	mov [rsp+0x40], rax
-	mov [rsp+0x60], rcx
-	mov qword ptr [rsp+0x68], 0x03
-	mov rax, [rsp+0x60]
-	mov [rsp+0x48], rax
-	mov qword ptr [rsp+0x80], 0x00
+	mov rax, [rsp+0x28]
+	mov [rsp+0x18], rax
+	mov [rsp+0x38], rcx
+	mov qword ptr [rsp+0x40], 0x03
+	mov rax, [rsp+0x38]
+	mov [rsp+0x20], rax
+	mov qword ptr [rsp+0x58], 0x00
 	mov rbp, 0x08
-2:	mov rbx, [rsp+0x80]
+2:	mov rbx, [rsp+0x58]
 	cmp rbx, 0x02
 	setb al
 	movzx rax, al
@@ -44,12 +44,12 @@ main:
 	cmp rbx, rax
 	jb :1
 	lea rax, [0x0000000000000007]
-	mov [rsp+0x20], rax
-	mov qword ptr [rsp+0x28], 0x10
+	mov [rsp+0x60], rax
+	mov qword ptr [rsp+0x68], 0x10
 	mov rax, 0x1100000010
-	mov [rsp+0x30], rax
-	lea rsi, [rsp+0x20]
-	mov rdx, 0x20
+	mov [rsp+0x70], rax
+	lea rsi, [rsp+0x60]
+	mov rdx, 0x18
 	lea rdi, [rsp]
 	call :memcpy
 	mov rsi, rbx
@@ -57,17 +57,17 @@ main:
 	mov rdi, 0x02
 	call :cstring indexing.slice_ioob
 1:	imul rbx, rbp
-	lea rax, [rsp+0x40]
+	lea rax, [rsp+0x18]
 	add rax, rbx
 	mov rsi, [rax]
-	lea rdi, [rsp+0x70]
+	lea rdi, [rsp+0x48]
 	call :cstring indexing.cstr
-	mov rax, [rsp+0x80]
+	mov rax, [rsp+0x58]
 	inc rax
-	mov [rsp+0x80], rax
+	mov [rsp+0x58], rax
 	jmp :2
 0:	xor rax, rax
-	add rsp, 0x88
+	add rsp, 0x78
 	pop rbp
 	pop rbx
 	ret

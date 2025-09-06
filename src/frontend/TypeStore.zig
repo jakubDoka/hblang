@@ -32,6 +32,7 @@ func_work_list: std.EnumArray(Target, std.ArrayListUnmanaged(utils.EntId(tys.Fun
 global_work_list: std.EnumArray(Target, std.ArrayListUnmanaged(utils.EntId(tys.Global))),
 remote_ids: std.ArrayListUnmanaged(tys.Func.RrmoteId) = .empty,
 string: Id = undefined,
+type_info: Id = undefined,
 source_loc: Id = undefined,
 handlers: Handlers = .{},
 tmp_templates: ?utils.EntId(tys.Template) = null,
@@ -1361,21 +1362,13 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer) *T
     slot.ct.gen.emit_global_reloc_offsets = true;
 
     slot.string = slot.makeSlice(.u8);
-    slot.source_loc = .init(.{ .Struct = slot.store.add(&slot.pool.arena, tys.Struct{
-        .key = .{
-            .loc = .{
-                .scope = slot.getScope(.root),
-            },
-        },
-        .index = .empty,
-        .alignment = 8,
-        .size = 32,
-        .fields = slot.pool.arena.dupe(tys.Struct.Field, &.{
-            .{ .name = "src", .ty = slot.string },
-            .{ .name = "line", .ty = .u32 },
-            .{ .name = "col", .ty = .u32 },
-        }),
-    }) });
+    slot.source_loc = slot.convertZigTypeToHbType(extern struct {
+        file: Slice(u8),
+        line: u32,
+        col: u32,
+    });
+
+    slot.type_info = slot.convertZigTypeToHbType(TypeInfo);
 
     const u8_ptr = slot.makePtr(.u8);
     slot.handler_signatures = .{
@@ -1405,6 +1398,236 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer) *T
     };
 
     return slot;
+}
+
+const TypeInfo = extern struct {
+    kind: enum(u8) {
+        builtin,
+        pointer,
+        slice,
+        nullable,
+        tuple,
+        @"@enum",
+        @"@union",
+        @"@struct",
+        template,
+        func,
+        global,
+        fnptr,
+        simd,
+        array,
+    },
+    data: extern union {
+        builtin: void,
+        pointer: Id,
+        slice: Id,
+        nullable: Id,
+        tuple: Slice(Id),
+        @"@enum": extern struct {
+            backing_int: Optional(Id),
+            fields: Slice(extern struct {
+                name: Slice(u8),
+                value: i64,
+            }),
+        },
+        @"@union": extern struct {
+            fields: Slice(extern struct {
+                name: Slice(u8),
+                ty: Id,
+            }),
+        },
+        @"@struct": extern struct {
+            alignment: Optional(u64),
+            fields: Slice(extern struct {
+                name: Slice(u8),
+                ty: Id,
+                defalut_value: *anyopaque,
+            }),
+        },
+        template: extern struct {
+            is_inline: bool,
+        },
+        func: extern struct {
+            args: Slice(Id),
+            ret: Id,
+        },
+        global: extern struct {
+            ty: Id,
+            readonly: bool,
+        },
+        fnptr: extern struct {
+            args: Slice(Id),
+            ret: Id,
+        },
+        simd: extern struct {
+            elem: Id,
+            len: u32,
+        },
+        array: extern struct {
+            elem: Id,
+            len: u64,
+        },
+    },
+};
+
+pub fn Optional(comptime Elem: type) type {
+    return extern struct {
+        pub const is_optional = true;
+        pub const elem = Elem;
+
+        present: bool,
+        ptr: Elem,
+    };
+}
+
+pub fn CompactOptional(comptime Elem: type) type {
+    return extern struct {
+        pub const is_optional = true;
+        pub const elem = Elem;
+
+        ptr: Elem,
+    };
+}
+
+pub fn Slice(comptime Elem: type) type {
+    return extern struct {
+        pub const is_slice = true;
+        pub const elem = Elem;
+
+        ptr: [*c]Elem,
+        len: u64,
+    };
+}
+
+pub fn Pointer(comptime Elem: type) type {
+    return extern struct {
+        pub const is_pointer = true;
+        pub const elem = Elem;
+
+        ptr: [*c]Elem,
+    };
+}
+
+pub fn convertZigTypeToHbType(self: *Types, comptime T: type) Id {
+    return switch (@typeInfo(T)) {
+        .void => .void,
+        .@"opaque" => .void,
+        .bool => .bool,
+        .noreturn => .never,
+        .@"fn" => |f| {
+            const args = self.pool.arena.alloc(Id, f.args.len) catch unreachable;
+            inline for (f.args, args) |a, i| {
+                args[i] = self.convertZigTypeToHbType(a);
+            }
+
+            return self.internPtr(.FnPtr, .{
+                .args = args,
+                .ret = self.convertZigTypeToHbType(f.return_type.?),
+            });
+        },
+        .int => |t| switch (t.signedness) {
+            .signed => switch (t.bits) {
+                8 => .i8,
+                16 => .i16,
+                32 => .i32,
+                64 => .i64,
+                else => unreachable,
+            },
+            .unsigned => switch (t.bits) {
+                8 => .u8,
+                16 => .u16,
+                32 => .u32,
+                64 => .u64,
+                else => unreachable,
+            },
+        },
+        .float => |t| switch (t.bits) {
+            32 => .f32,
+            64 => .f64,
+            else => unreachable,
+        },
+        .pointer => |t| {
+            return self.makePtr(self.convertZigTypeToHbType(t.child));
+        },
+        .@"struct" => |t| {
+            if (@hasDecl(T, "is_slice")) {
+                return self.makeSlice(self.convertZigTypeToHbType(T.elem));
+            }
+
+            if (@hasDecl(T, "is_pointer")) {
+                return self.makePtr(self.convertZigTypeToHbType(T.elem));
+            }
+
+            if (@hasDecl(T, "is_optional")) {
+                return self.makeNullable(self.convertZigTypeToHbType(T.elem));
+            }
+
+            comptime std.debug.assert(t.layout == .@"extern");
+
+            var fields: [t.fields.len]tys.Struct.Field = undefined;
+            inline for (t.fields, 0..) |f, i| {
+                fields[i] = .{
+                    .name = f.name,
+                    .ty = self.convertZigTypeToHbType(f.type),
+                };
+            }
+
+            return .init(.{ .Struct = self.store.add(&self.pool.arena, tys.Struct{
+                .key = .{
+                    .loc = .{
+                        .scope = self.getScope(.root),
+                    },
+                },
+                .index = .empty,
+                .alignment = @alignOf(T),
+                .size = @sizeOf(T),
+                .fields = self.pool.arena.dupe(tys.Struct.Field, &fields),
+            }) });
+        },
+        .@"enum" => |t| {
+            var fields: [t.fields.len]tys.Enum.Field = undefined;
+            inline for (t.fields, 0..) |f, i| {
+                fields[i] = .{
+                    .name = f.name,
+                    .value = @intCast(f.value),
+                };
+            }
+
+            return .init(.{ .Enum = self.store.add(&self.pool.arena, tys.Enum{
+                .key = .{
+                    .loc = .{
+                        .scope = self.getScope(.root),
+                    },
+                },
+                .index = .empty,
+                .backing_int = self.convertZigTypeToHbType(t.tag_type),
+                .fields = self.pool.arena.dupe(tys.Enum.Field, &fields),
+            }) });
+        },
+        .@"union" => |t| {
+            comptime std.debug.assert(t.layout == .@"extern");
+            comptime std.debug.assert(t.tag_type == null);
+
+            var fields: [t.fields.len]tys.Union.Field = undefined;
+            inline for (t.fields, 0..) |f, i| {
+                fields[i] = .{
+                    .name = f.name,
+                    .ty = self.convertZigTypeToHbType(f.type),
+                };
+            }
+
+            return .init(.{ .Union = self.store.add(&self.pool.arena, tys.Union{
+                .key = .{
+                    .loc = .{
+                        .scope = self.getScope(.root),
+                    },
+                },
+                .index = .empty,
+                .fields = self.pool.arena.dupe(tys.Union.Field, &fields),
+            }) });
+        },
+        else => @compileError("TODO " ++ @typeName(T)),
+    };
 }
 
 pub fn checkStack(self: *Types, file: File, pos: anytype) !void {

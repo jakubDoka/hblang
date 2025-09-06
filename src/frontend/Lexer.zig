@@ -161,6 +161,7 @@ pub const Lexeme = enum(u16) {
     @"@SrcLoc",
     @"@simd",
     @"@eval",
+    @"@type_info",
 
     const data = @typeInfo(Lexeme).@"enum";
 

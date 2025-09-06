@@ -4,7 +4,7 @@ duplicate instantiation in recurcive templates 1.foo(.Stru):
 	lea rax, [0x0000000000000007]
 	mov [0x0000000000000007], rax
 	mov qword ptr [0x000000000000000B], 0x03
-	mov dword ptr [rsp+0x24], 0x70000002
+	mov dword ptr [rsp+0x24], 0x7000000F
 	mov qword ptr [rsp], 0x00
 	mov dil, [rsp+0x20]
 	call :duplicate instantiation in recurcive templates 1.foo(.Stru2)
@@ -27,7 +27,7 @@ duplicate instantiation in recurcive templates 1.foo(.Stru2):
 	lea rax, [0x0000000000000007]
 	mov [0x0000000000000007], rax
 	mov qword ptr [0x000000000000000B], 0x03
-	mov dword ptr [rsp+0x10], 0x70000003
+	mov dword ptr [rsp+0x10], 0x70000010
 	mov qword ptr [rsp], 0x00
 	mov dil, [rsp+0x14]
 	call :duplicate instantiation in recurcive templates 1.foo(u8)
@@ -42,7 +42,7 @@ duplicate instantiation in recurcive templates 1.foo(.Stru.f):
 	lea rax, [0x0000000000000007]
 	mov [0x0000000000000007], rax
 	mov qword ptr [0x000000000000000B], 0x03
-	mov dword ptr [rsp+0x10], 0x70000004
+	mov dword ptr [rsp+0x10], 0x70000011
 	mov qword ptr [rsp], 0x00
 	mov dil, [rsp+0x14]
 	call :duplicate instantiation in recurcive templates 1.foo(.Stru2)
@@ -57,7 +57,7 @@ duplicate instantiation in recurcive templates 1.foo(?.Stru2):
 	lea rax, [0x0000000000000007]
 	mov [0x0000000000000007], rax
 	mov qword ptr [0x000000000000000B], 0x03
-	mov dword ptr [rsp+0x08], 0x30000000
+	mov dword ptr [rsp+0x08], 0x30000002
 	xor rcx, rcx
 	mov al, [rsp+0x0C]
 	cmp al, cl

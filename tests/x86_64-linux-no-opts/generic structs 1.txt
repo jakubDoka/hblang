@@ -17,9 +17,9 @@ generic structs 1.Vec.sub(uint):
 	ret
 main:
 	sub rsp, 0x28
-	mov dword ptr [rsp+0x18], 0x70000002
-	mov dword ptr [rsp+0x1C], 0x70000002
-	mov dword ptr [rsp+0x20], 0x70000002
+	mov dword ptr [rsp+0x18], 0x7000000F
+	mov dword ptr [rsp+0x1C], 0x7000000F
+	mov dword ptr [rsp+0x20], 0x7000000F
 	lea rdi, [rsp]
 	mov rsi, 0x01
 	call :generic structs 1.nvec(uint)

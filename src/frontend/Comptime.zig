@@ -54,6 +54,7 @@ pub const InteruptCode = enum(u64) {
     len_of,
     size_of,
     align_of,
+    type_info,
 };
 
 pub fn init(gpa: *utils.Pool) Comptime {
@@ -322,26 +323,80 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                     bl.func.subsume(curr.base().inputs()[1].?, curr.base());
                 }
 
+                const loop_bit = 1 << 0;
+                const if_bit = 1 << 1;
+
+                const util = enum {
+                    pub fn setBit(v: u16, bit: u16) u16 {
+                        return v | bit;
+                    }
+
+                    pub fn clearBit(v: u16, bit: u16) u16 {
+                        return v & ~bit;
+                    }
+
+                    pub fn hasBit(v: u16, bit: u16) bool {
+                        return v & bit != 0;
+                    }
+                };
+
                 var cursor = curr.mem();
                 const bs = work_list.items.len;
-                while (true) {
-                    const is_spilt = work_list.items.len != bs;
-                    if (is_spilt) {
+                var seen = std.AutoArrayHashMapUnmanaged(*Node, void){};
+                var no_errors = false;
+                defer if (!no_errors) for (seen.entries.items(.key)) |v| {
+                    v.schedule = std.math.maxInt(u16);
+                };
+
+                var loop_depth: usize = 0;
+                for (0..10000) |_| {
+                    //std.debug.print("{f}\n", .{cursor});
+                    if (work_list.items.len != bs) {
                         var data_dep_cont: usize = 0;
-                        if (for (cursor.outputs()) |o| {
+                        for (cursor.outputs()) |o| {
                             if (o.get().isLoad()) continue;
-                            if (o.get().schedule == 0) continue;
+                            if (o.get().kind == .Call and o.pos() != 1) {
+                                continue;
+                            }
+                            if (o.get().kind == .Scope) continue;
+
                             data_dep_cont += 1;
-                        } else data_dep_cont > 1) {
-                            cursor.schedule = 0;
-                            cursor = work_list.pop().?;
+                        }
+                        if (data_dep_cont > 1) {
+                            if (data_dep_cont > 3) {
+                                for (cursor.outputs()) |o| {
+                                    std.debug.print("{f}\n\n", .{o});
+
+                                    for (o.get().inputs()) |oo| {
+                                        std.debug.print("<-{f}\n", .{oo.?});
+                                    }
+                                    std.debug.print("\n", .{});
+                                    for (o.get().outputs()) |oo| {
+                                        std.debug.print("->{f}\n", .{oo.get()});
+                                    }
+                                    std.debug.print("\n", .{});
+                                }
+
+                                std.debug.print("{f}\n", .{types.getFile(file).codePointer(pos)});
+                                unreachable;
+                            }
+                            if (util.hasBit(cursor.schedule, if_bit)) {
+                                cursor.schedule = util.clearBit(cursor.schedule, if_bit);
+                                std.mem.swap(*Node, &work_list.items[work_list.items.len - 1], &cursor);
+                                seen.put(tmp.arena.allocator(), cursor, {}) catch unreachable;
+                                continue;
+                            } else {
+                                cursor.schedule = util.setBit(cursor.schedule, if_bit);
+                                _ = work_list.pop().?;
+                            }
                         }
                     }
 
                     if (cursor.isStore()) {
                         if (cursor.base() != curr.base()) {
                             cursor = cursor.mem();
-                        } else if (!is_spilt) {
+                        } else if (work_list.items.len == bs and loop_depth == 0) {
+                            no_errors = true;
                             break :b cursor.value().?;
                         } else {
                             return .{ .DependsOnRuntimeControlFlow = curr };
@@ -353,24 +408,29 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                         cursor = cursor.inputs()[0].?.inputs()[0].?.inputs()[1].?;
                     } else if (cursor.kind == .Phi) {
                         if (cursor.cfg0().base.kind == .Loop) {
-                            cursor = cursor.inputs()[1].?;
-                            continue;
-                        }
+                            if (cursor.inputs()[2] == null) {
+                                cursor = cursor.inputs()[1].?;
+                                continue;
+                            }
 
-                        // NOTE: there are two main events occuring, etiher we
-                        // encounter a phi, in which case we both branches or,
-                        // we encounter a store that has two dependants, in
-                        // wich case we swap with the top of the stack and
-                        // traverse that instesd until we arrive to the same
-                        // joining point that has a dependence on the top of
-                        // the stack
-                        //
-                        work_list.appendAssumeCapacity(cursor.inputs()[1].?);
-                        cursor = cursor.inputs()[2].?;
+                            if (util.hasBit(cursor.schedule, loop_bit)) {
+                                seen.put(tmp.arena.allocator(), cursor, {}) catch unreachable;
+                                cursor.schedule = util.clearBit(cursor.schedule, loop_bit);
+                                cursor = cursor.inputs()[2].?;
+                                loop_depth += 1;
+                            } else {
+                                cursor.schedule = util.setBit(cursor.schedule, loop_bit);
+                                cursor = cursor.inputs()[1].?;
+                                loop_depth -= 1;
+                            }
+                        } else {
+                            work_list.appendAssumeCapacity(cursor.inputs()[1].?);
+                            cursor = cursor.inputs()[2].?;
+                        }
                     } else {
                         return .{ .Unsupported = cursor };
                     }
-                }
+                } else unreachable;
             },
             else => return .{ .Unsupported = curr },
         };
@@ -450,7 +510,7 @@ pub fn runVm(
                 break :end_interrupt;
             }
 
-            switch (@as(InteruptCode, @enumFromInt(self.vm.regs.get(.arg(0))))) {
+            switch (@as(InteruptCode, @enumFromInt(self.ecaArg(0)))) {
                 .Struct, .Union, .Enum => |t| {
                     const scope: Types.Id = @enumFromInt(self.ecaArg(1));
                     const ast = types.getFile(scope.file(types).?);
@@ -543,6 +603,14 @@ pub fn runVm(
                 .align_of => {
                     const ty: Types.Id = @enumFromInt(self.ecaArg(2));
                     self.vm.regs.set(.ret(0), ty.alignment(types));
+                },
+                .type_info => {
+                    const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+                    _ = ty; // autofix
+
+                    //return types.reportSloc(self.ecaArgSloc(1), "TODO: implement @type_info", .{});
+
+                    unreachable;
                 },
             }
         },

@@ -1,18 +1,18 @@
 directives 20 (@handler, @SourceLoc).use_slice:
 	push rbx
-	sub rsp, 0x40
+	sub rsp, 0x30
 	mov rbx, rsi
 	mov rcx, rbx
 	xor rax, rax
 	cmp rax, rcx
 	jb :0
 	lea rax, [0x0000000000000007]
-	mov [rsp+0x20], rax
-	mov qword ptr [rsp+0x28], 0x24
+	mov [rsp+0x18], rax
+	mov qword ptr [rsp+0x20], 0x24
 	mov rax, 0xF00000012
-	mov [rsp+0x30], rax
-	lea rsi, [rsp+0x20]
-	mov rdx, 0x20
+	mov [rsp+0x28], rax
+	lea rsi, [rsp+0x18]
+	mov rdx, 0x18
 	lea rdi, [rsp]
 	call :memcpy
 	mov rdi, rbx
@@ -21,7 +21,7 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	call :directives 20 (@handler, @SourceLoc).slice_ioob
 0:	mov al, [rdi]
 	movzx rax, al
-	add rsp, 0x40
+	add rsp, 0x30
 	pop rbx
 	ret
 directives 20 (@handler, @SourceLoc).produce_memcpy:

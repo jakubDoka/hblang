@@ -20,7 +20,7 @@ main:
          tx
 null unwrap 1.use_opt:
          st $31, $254, -8, 8
-     addi64 $254, $254, -56
+     addi64 $254, $254, -48
          st $1, $254, 0, 1
          st $2, $254, 8, 8
          ld $1, $254, 0, 1
@@ -36,7 +36,7 @@ null unwrap 1.use_opt:
         jal $31, $0, :null unwrap 1.null_unwrap
 1:       ld $1, $254, 8, 8
       add64 $1, $1, $1
-     addi64 $254, $254, 56
+     addi64 $254, $254, 48
          ld $31, $254, -8, 8
        jala $0, $31, 0
 null unwrap 1.null_unwrap:

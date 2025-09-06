@@ -2098,11 +2098,22 @@ comptime_arena_mem: [1024]u8 = idk
 comptime_arena := Arena.(&comptime_arena_mem[0])
 ```
 
+#### directives 24 (@type_info)
+```!hb
+main := fn(): uint {
+    $if @type_info(u8).kind != .builtin return 1
+    $if @type_info(struct{}).kind != .@struct return 2
+    $if @type_info(enum{}).kind != .@enum return 3
+
+    return 0
+}
+```
+
 ## progress
 
 - [x] hbvm-ableos target
 - [x] x86_64-linux target
-  - [ ] folating point math
+  - [x] folating point math
 - [ ] x86_64-windows target
 - [x] diagnostics
   - [x] don't crash on cycles

@@ -1,0 +1,6 @@
+comptime edge cases 1:14:15: can't evaluate this at compile time since the value depends on runtime control flow (DEBUG: got stuck on [36m%20[0m = Load:i64: [35m%19[0m, [90m%7[0m [])
+    return @eval(vl)
+                 ^
+comptime edge cases 1:7:20: function returns a uint, which has more then 1 value, but end of the function body is reachable
+main := fn(): uint {
+                   ^

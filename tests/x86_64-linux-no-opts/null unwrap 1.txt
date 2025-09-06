@@ -1,24 +1,24 @@
 null unwrap 1.use_opt:
-	sub rsp, 0x58
-	mov [rsp+0x40], rdi
-	mov [rsp+0x48], rsi
+	sub rsp, 0x48
+	mov [rsp+0x18], rdi
+	mov [rsp+0x20], rsi
 	xor rcx, rcx
-	mov al, [rsp+0x40]
+	mov al, [rsp+0x18]
 	cmp al, cl
 	jnz :0
 	lea rax, [0x0000000000000007]
-	mov [rsp+0x20], rax
-	mov qword ptr [rsp+0x28], 0x0D
+	mov [rsp+0x28], rax
+	mov qword ptr [rsp+0x30], 0x0D
 	mov rax, 0x2800000007
-	mov [rsp+0x30], rax
-	lea rsi, [rsp+0x20]
-	mov rdx, 0x20
+	mov [rsp+0x38], rax
+	lea rsi, [rsp+0x28]
+	mov rdx, 0x18
 	lea rdi, [rsp]
 	call :memcpy
 	call :null unwrap 1.null_unwrap
-0:	mov rax, [rsp+0x48]
-	add rax, [rsp+0x48]
-	add rsp, 0x58
+0:	mov rax, [rsp+0x20]
+	add rax, [rsp+0x20]
+	add rsp, 0x48
 	ret
 null unwrap 1.null_unwrap:
 	ud2

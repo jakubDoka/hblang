@@ -20,7 +20,7 @@ entry:
          tx
 directives 20 (@handler, @SourceLoc).use_slice:
          st $31, $254, -8, 8
-     addi64 $254, $254, -40
+     addi64 $254, $254, -32
        jltu $0, $2, :2
         lra $1, $0, :directives 20 (@handler, @SourceLoc)
          st $1, $254, 0, 8
@@ -34,7 +34,7 @@ directives 20 (@handler, @SourceLoc).use_slice:
         jal $31, $0, :directives 20 (@handler, @SourceLoc).slice_ioob
 2:       ld $1, $1, 0, 1
        andi $1, $1, 255
-     addi64 $254, $254, 40
+     addi64 $254, $254, 32
          ld $31, $254, -8, 8
        jala $0, $31, 0
 directives 20 (@handler, @SourceLoc).produce_memcpy:

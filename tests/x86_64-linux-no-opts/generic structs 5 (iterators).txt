@@ -84,7 +84,7 @@ main:
 	mov qword ptr [rsp+0x18], 0x02
 	mov [rsp+0x20], rdx
 	mov qword ptr [rsp+0x28], 0x02
-	mov dword ptr [rsp+0x78], 0x70000002
+	mov dword ptr [rsp+0x78], 0x7000000F
 	mov [rsp+0x7C], ecx
 	mov rax, [rsp+0x10]
 	mov [rsp+0x30], rax
@@ -94,7 +94,7 @@ main:
 	mov [rsp+0x40], rax
 	mov rax, [rsp+0x08]
 	mov [rsp+0x48], rax
-	mov dword ptr [rsp+0x80], 0x70000003
+	mov dword ptr [rsp+0x80], 0x70000010
 	mov byte ptr [rsp+0x50], 0x00
 	mov rax, [rsp+0x10]
 	mov [rsp+0x58], rax

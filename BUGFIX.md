@@ -2,6 +2,124 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### comptime edge cases 1
+```hb
+expectations := .{
+    should_error: true,
+}
+
+opaque := false
+
+main := fn(): uint {
+    vl := 0
+
+    if opaque {
+        vl = 1
+    }
+
+    return @eval(vl)
+}
+```
+
+#### comptime edge cases 2
+```hb
+expectations := .{
+    should_error: true,
+}
+
+opaque := false
+
+main := fn(): uint {
+    vl := 0
+    ovl := 0
+
+    if opaque {
+        vl = 1
+        ovl = 1
+    }
+
+    return @eval(vl)
+}
+```
+
+#### comptime edge cases 3
+```hb
+expectations := .{
+    should_error: true,
+}
+
+opaque := false
+
+main := fn(): uint {
+    vl := 0
+
+    while vl < 1 while vl < 1 vl += 1
+
+    return @eval(vl)
+}
+```
+
+#### comptime edge cases 4
+```hb
+opaque := false
+
+main := fn(): uint {
+    vl := 1
+    ovl := 0
+
+    while ovl < 1 while ovl < 1 ovl += vl
+
+    return @eval(vl - 1)
+}
+```
+
+#### comptime edge cases 5
+```hb
+main := fn(): uint {
+    $parse_ty := u8
+    if true && true {
+        $out_ty := @eval(parse_ty)
+    }
+
+    len := 10
+
+    $i := 0
+    $while i < len {
+        i += 1
+    }
+
+    return 0
+}
+```
+
+#### comptime edge cases 6
+```hb
+main := fn(): uint {
+    $len := 3
+    loop {
+        if true {
+            break
+        }
+        if true {
+            _ = @as(?[]u8, null) || return 0
+        } else {
+            _ = @as(?[]u8, null) || return 0
+        }
+        if true {
+            fun()
+            _ = @as(?[]u8, null) || return 0
+        }
+    }
+    $i := 0
+    $while i < len {
+        i += 1
+    }
+    return 0
+}
+
+fun := fn(): void {}
+```
+
 #### enum and struct
 ```hb
 A := enum(u8) {
