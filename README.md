@@ -2099,7 +2099,7 @@ comptime_arena := Arena.(&comptime_arena_mem[0])
 ```
 
 #### directives 24 (@type_info)
-```!hb
+```hb
 main := fn(): uint {
     $if @type_info(u8).kind != .builtin return 1
     $if @type_info(struct{}).kind != .@struct return 2

@@ -94,6 +94,8 @@ pub const PartialEvalResult = union(enum) {
 };
 
 pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32, bl: *Builder, expr: *Node) PartialEvalResult {
+    errdefer unreachable;
+
     const types = self.getTypes();
 
     var tmp = utils.Arena.scrath(null);
@@ -104,7 +106,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
 
     work_list.appendAssumeCapacity(expr);
 
-    while (true) {
+    for (0..100000) |_| {
         const curr: *Node = work_list.pop().?;
         if (curr.isDead()) continue;
         const res = switch (curr.kind) {
@@ -138,6 +140,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                         }
                     }
                     if (use.kind == .Call) continue;
+                    if (use.kind == .Load) continue;
                     return .{ .Unsupported = curr };
                 }
 
@@ -175,12 +178,13 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
 
                 continue;
             },
-            .GlobalAddr => {
+            .GlobalAddr => b: {
                 const global = curr.extra(.GlobalAddr).id;
                 const below = work_list.getLastOrNull() orelse {
                     return .{ .Arbitrary = @enumFromInt(global) };
                 };
-                std.debug.assert(below.kind == .Store);
+                _ = below; // autofix
+
                 const gid: utils.EntId(tys.Global) = @enumFromInt(global);
                 if (types.store.get(gid).completion.get(.@"comptime") != .compiled) {
                     types.queue(.@"comptime", .init(.{ .Global = gid }));
@@ -190,8 +194,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                 }
 
                 const addr = self.gen.out.syms.items[@intFromEnum(self.gen.out.globals.items[global])].offset;
-                bl.func.setInputNoIntern(below, 3, bl.addIntImm(curr.sloc, .i64, addr));
-                continue;
+                break :b bl.addIntImm(curr.sloc, .i64, addr);
             },
             .CInt => {
                 if (work_list.items.len == 0) {
@@ -310,6 +313,41 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                     break :b bl.addIntImm(.none, curr.data_type, @bitCast(mem));
                 }
 
+                if (base.kind == .CInt) {
+                    var mem: u64 = 0;
+                    @memcpy(
+                        @as([*]u8, @ptrCast(&mem))[0..@intCast(curr.data_type.size())],
+                        self.gen.out.code.items[@intCast(base.extra(.CInt).value)..][0..@intCast(curr.data_type.size())],
+                    );
+
+                    break :b bl.addIntImm(.none, curr.data_type, @bitCast(mem));
+                }
+
+                if (base.kind == .Local) fold_initializer: {
+                    var call: ?*Node = null;
+                    var has_stores = false;
+                    for (base.outputs()) |o| {
+                        if (o.get().kind == .Call and o.pos() >= 2) {
+                            if (call) |_| {
+                                return .{ .Unsupported = curr };
+                            }
+                            call = o.get();
+                        }
+
+                        has_stores = has_stores or o.get().isStore();
+                    }
+
+                    const initializer = call orelse {
+                        break :fold_initializer;
+                    };
+
+                    if (has_stores) return .{ .Unsupported = curr };
+
+                    work_list.appendAssumeCapacity(curr);
+                    work_list.appendAssumeCapacity(initializer.outputs()[0].get());
+                    continue;
+                }
+
                 if (curr.base().kind == .BinOp and curr.base().inputs()[2].?.kind != .CInt) {
                     work_list.appendAssumeCapacity(curr);
                     work_list.appendAssumeCapacity(curr.base().inputs()[2].?);
@@ -342,15 +380,14 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
 
                 var cursor = curr.mem();
                 const bs = work_list.items.len;
-                var seen = std.AutoArrayHashMapUnmanaged(*Node, void){};
+                var seen = std.ArrayList(*Node).empty;
                 var no_errors = false;
-                defer if (!no_errors) for (seen.entries.items(.key)) |v| {
+                defer if (!no_errors) for (seen.items) |v| {
                     v.schedule = std.math.maxInt(u16);
                 };
 
                 var loop_depth: usize = 0;
                 for (0..10000) |_| {
-                    //std.debug.print("{f}\n", .{cursor});
                     if (work_list.items.len != bs) {
                         var data_dep_cont: usize = 0;
                         for (cursor.outputs()) |o| {
@@ -383,7 +420,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                             if (util.hasBit(cursor.schedule, if_bit)) {
                                 cursor.schedule = util.clearBit(cursor.schedule, if_bit);
                                 std.mem.swap(*Node, &work_list.items[work_list.items.len - 1], &cursor);
-                                seen.put(tmp.arena.allocator(), cursor, {}) catch unreachable;
+                                try seen.append(tmp.arena.allocator(), cursor);
                                 continue;
                             } else {
                                 cursor.schedule = util.setBit(cursor.schedule, if_bit);
@@ -414,7 +451,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                             }
 
                             if (util.hasBit(cursor.schedule, loop_bit)) {
-                                seen.put(tmp.arena.allocator(), cursor, {}) catch unreachable;
+                                try seen.append(tmp.arena.allocator(), cursor);
                                 cursor.schedule = util.clearBit(cursor.schedule, loop_bit);
                                 cursor = cursor.inputs()[2].?;
                                 loop_depth += 1;
@@ -437,7 +474,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
 
         bl.func.subsume(res, curr);
         work_list.appendAssumeCapacity(res);
-    }
+    } else unreachable;
 }
 
 pub fn runVm(
@@ -605,12 +642,17 @@ pub fn runVm(
                     self.vm.regs.set(.ret(0), ty.alignment(types));
                 },
                 .type_info => {
-                    const ty: Types.Id = @enumFromInt(self.ecaArg(2));
-                    _ = ty; // autofix
+                    const ret_addr = self.ecaArg(1);
+                    const ty: Types.Id = @enumFromInt(self.ecaArg(3));
 
-                    //return types.reportSloc(self.ecaArgSloc(1), "TODO: implement @type_info", .{});
+                    vm_ctx.memory[@intCast(ret_addr)..][0] = @intFromEnum(std.meta.activeTag(ty.data()));
 
-                    unreachable;
+                    switch (ty.data()) {
+                        .Builtin => {},
+                        .Struct => {},
+                        .Enum => {},
+                        else => unreachable,
+                    }
                 },
             }
         },

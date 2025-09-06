@@ -2772,19 +2772,17 @@ fn emitInternalEca(
 
     const ret_ref = self.abi.isByRefRet(self.abiCata(ret_ty));
 
-    std.debug.assert(!ret_ref);
-
     const params = tmp.arena.alloc(graph.AbiParam, @intFromBool(ret_ref) + (1 + args.len));
 
     var cursor: usize = 0;
 
-    if (ret_ref) {
-        params[0] = .{ .Reg = .i64 };
-        cursor += 1;
-    }
-
     params[cursor] = .{ .Reg = .i64 };
     cursor += 1;
+
+    if (ret_ref) {
+        params[cursor] = .{ .Reg = .i64 };
+        cursor += 1;
+    }
 
     for (args, params[cursor..]) |a, *ca| ca.* = .{ .Reg = a.data_type };
     const ret_buf = tmp.arena.alloc(graph.AbiParam, Types.Abi.Builder.max_elems);
@@ -2792,17 +2790,24 @@ fn emitInternalEca(
     const c_args = self.bl.allocCallArgs(tmp.arena, params, returns, null);
 
     cursor = 0;
-    if (ret_ref) {
-        // TODO: add source loc
-        c_args.arg_slots[0] = ctx.loc orelse
-            self.bl.addLocal(.none, self.abiCata(ret_ty).size(), @intFromEnum(ret_ty));
-        cursor += 1;
-    }
 
     c_args.arg_slots[cursor] = self.bl.addIntImm(.none, .i64, @intCast(@intFromEnum(ic)));
     cursor += 1;
 
+    if (ret_ref) {
+        // TODO: add source loc
+        c_args.arg_slots[cursor] = ctx.loc orelse
+            self.bl.addLocal(.none, self.abiCata(ret_ty).size(), @intFromEnum(ret_ty));
+        cursor += 1;
+    }
+
     @memcpy(c_args.arg_slots[cursor..], args);
+
+    if (ret_ref) {
+        const sloc = self.src(Ast.Id.zeroSized(.Void));
+        _ = self.bl.addCall(sloc, self.abi.cc, Comptime.eca, c_args);
+        return .mkp(ret_ty, c_args.arg_slots[1]);
+    }
 
     return self.assembleReturn(
         Ast.Id.zeroSized(.Void),
