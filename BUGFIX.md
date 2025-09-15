@@ -2,6 +2,32 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### nested globals 11
+```hb
+expectations := .{
+    return_value: 69,
+}
+
+main := fn(): uint {
+    return @eval(@type_info(enum{.Edward})).data.@enum.fields[0].name[0]
+}
+```
+
+#### nested globals 10
+```hb
+expectations := .{
+    return_value: 69,
+}
+
+strings := ([]u8).["Edward"]
+
+string_slice := strings[..]
+
+main := fn(): uint {
+    return string_slice[0][0]
+}
+```
+
 #### comptime edge cases 1
 ```hb
 expectations := .{

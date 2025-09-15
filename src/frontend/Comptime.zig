@@ -5,6 +5,7 @@ const isa = root.hbvm.isa;
 const Types = root.frontend.Types;
 const Builder = root.backend.Builder;
 const Node = Builder.BuildNode;
+const Func = root.backend.graph.Func(Builder);
 const graph = root.backend.graph;
 const utils = root.utils;
 const static_anal = root.backend.static_anal;
@@ -93,6 +94,189 @@ pub const PartialEvalResult = union(enum) {
     Unsupported: struct { *Node, []const u8 },
 };
 
+pub const PartialEvalResult2 = union(enum) {
+    Arbitrary: utils.EntId(tys.Global),
+    DependsOnRuntimeControlFlow: *Node,
+    Unsupported: struct { *Node, []const u8 },
+};
+
+const PartialEvalCtx = struct {
+    file: Types.File,
+    scope: Types.Id,
+    pos: u32,
+    error_slot: *PartialEvalResult2,
+
+    pub inline fn err(self: PartialEvalCtx, res: PartialEvalResult2) error{Never} {
+        self.error_slot.* = res;
+        return error.Never;
+    }
+};
+
+pub fn partialEval2(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, expr: *Node) error{Never}!*Node {
+    const types = self.getTypes();
+
+    switch (expr.extra2()) {
+        .CInt => return expr,
+        .UnOp => |extra| {
+            const opr = expr.inputs()[1].?;
+            const oper = try self.partialEval2(ctx, bl, opr);
+
+            const res = extra.op.eval(expr.data_type, opr.data_type, oper.extra(.CInt).value);
+            const node_res = bl.addIntImm(.none, expr.data_type, res);
+            bl.func.subsume(node_res, expr);
+            return node_res;
+        },
+        .BinOp => |extra| {
+            const lhs = expr.inputs()[1].?;
+            const rhs = expr.inputs()[2].?;
+            const lhs_val = try self.partialEval2(ctx, bl, lhs);
+            const rhs_val = try self.partialEval2(ctx, bl, rhs);
+
+            if (lhs_val.kind != .CInt) {
+                if (rhs_val.kind != .CInt) {
+                    return ctx.err(.{ .Unsupported = .{ rhs_val, "rhs of binop" } });
+                }
+
+                return expr;
+            }
+
+            const res = extra.op.eval(expr.data_type, lhs_val.extra(.CInt).value, rhs_val.extra(.CInt).value);
+            const node_res = bl.addIntImm(.none, expr.data_type, res);
+            bl.func.subsume(node_res, expr);
+            return node_res;
+        },
+        .Local => {
+            const global = types.addUniqueGlobal(ctx.scope);
+            const mem = types.pool.arena.alloc(
+                u8,
+                @intCast(expr.inputs()[1].?.extra(.LocalAlloc).size),
+            );
+            types.store.get(global).data = .{ .mut = mem };
+            types.store.get(global).ty = @enumFromInt(expr.inputs()[1].?.extra(.LocalAlloc).debug_ty);
+            expr.inputs()[1].?.extra(.LocalAlloc).meta = @intFromEnum(global);
+
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            var lca: ?*Func.CfgNode = null;
+            var interestingOps = std.ArrayList(*Node){};
+            for (expr.outputs()) |o| {
+                if (o.get().kind != .BinOp) {
+                    if (!o.get().isMemOp() or
+                        o.get().base() != o.get() or
+                        o.get().isSub(graph.MemCpy))
+                    {
+                        return ctx.err(.{ .Unsupported = .{ o.get(), "stack mem op" } });
+                    }
+                }
+
+                const use = o.get().tryCfg0() orelse switch (o.get().extra2()) {
+                    .BinOp => |extra| {
+                        if (extra.op != .iadd and extra.op != .isub) {
+                            return ctx.err(.{ .Unsupported = .{ o.get(), "stack binop" } });
+                        }
+
+                        for (o.get().outputs()) |oo| {
+                            if (!oo.get().isMemOp() or
+                                oo.get().base() != o.get() or
+                                oo.get().isSub(graph.MemCpy))
+                            {
+                                return ctx.err(.{ .Unsupported = .{ oo.get(), "stack mem op" } });
+                            }
+
+                            const use = oo.get().tryCfg0() orelse continue;
+                            lca = (lca orelse use).findLca(use);
+                            interestingOps.append(tmp.arena.allocator(), oo.get()) catch unreachable;
+                        }
+
+                        continue;
+                    },
+                    else => return ctx.err(.{ .Unsupported = .{ o.get(), "floating stack op" } }),
+                };
+                lca = (lca orelse use).findLca(use);
+                interestingOps.append(tmp.arena.allocator(), o.get()) catch unreachable;
+            }
+
+            for (interestingOps.items) |op| {
+                if (op.cfg0() == lca) continue;
+
+                for (interestingOps.items) |oop| {
+                    if (oop.cfg0() == lca or oop == op or
+                        oop.cfg0().idepth() < op.cfg0().idepth()) continue;
+
+                    var cursor = oop.cfg0();
+                    while (cursor != lca) {
+                        if (op.cfg0() == cursor) break;
+                        cursor = cursor.idom();
+                    } else {
+                        return ctx.err(.{ .DependsOnRuntimeControlFlow = oop });
+                    }
+                }
+            }
+
+            for (interestingOps.items) |op| {
+                switch (op.kind) {
+                    .Store => {
+                        const base, const offset = op.base().knownOffset();
+                        std.debug.assert(base == expr);
+
+                        const val = try self.partialEval2(ctx, bl, op.value().?);
+
+                        switch (val.extra2()) {
+                            .CInt => |extra| {
+                                @memcpy(
+                                    mem[@intCast(offset)..][0..op.data_type.size()],
+                                    std.mem.asBytes(&extra.value)[0..op.data_type.size()],
+                                );
+                            },
+                            else => return ctx.err(.{ .Unsupported = .{ val, "stack store value" } }),
+                        }
+                    },
+                    else => return ctx.err(.{ .Unsupported = .{ op, "TODO: stack mut op" } }),
+                }
+            }
+
+            types.queue(.@"comptime", .init(.{ .Global = global }));
+
+            return bl.addGlobalAddr(.none, @intFromEnum(global));
+        },
+        .Load => {
+            const base, const offset = (try self.partialEval2(ctx, bl, expr.base())).knownOffset();
+
+            switch (base.extra2()) {
+                .GlobalAddr => |extra| {
+                    const gid: utils.EntId(tys.Global) = @enumFromInt(extra.id);
+                    const global: *tys.Global = types.store.get(gid);
+
+                    if (types.store.get(gid).completion.get(.@"comptime") != .compiled) {
+                        types.queue(.@"comptime", .init(.{ .Global = gid }));
+                        if (types.retainGlobals(.@"comptime", &self.gen)) {
+                            return ctx.err(.{ .Unsupported = .{ base, "retained globals" } });
+                        }
+                    }
+
+                    for (global.relocs) |rel| {
+                        if (rel.offset == offset) {
+                            return bl.addGlobalAddr(.none, rel.target);
+                        }
+                    }
+
+                    const mem = global.data.mut;
+                    var value: i64 = 0;
+                    @memcpy(
+                        std.mem.asBytes(&value)[0..expr.data_type.size()],
+                        mem[@intCast(offset)..][0..expr.data_type.size()],
+                    );
+
+                    return bl.addIntImm(.none, expr.data_type, value);
+                },
+                else => return ctx.err(.{ .Unsupported = .{ base, "load base" } }),
+            }
+        },
+        else => return ctx.err(.{ .Unsupported = .{ expr, "TODO: generic op" } }),
+    }
+}
+
 pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32, bl: *Builder, expr: *Node) PartialEvalResult {
     errdefer unreachable;
 
@@ -109,6 +293,7 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
     for (0..100000) |_| {
         const curr: *Node = work_list.pop().?;
         if (curr.isDead()) continue;
+        std.debug.print("{f}\n", .{curr});
         const res = switch (curr.kind) {
             .Local => b: {
                 {
@@ -135,13 +320,17 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                         if (op[0].isStore() and base == curr) {
                             work_list.appendAssumeCapacity(op[0]);
                             continue;
-                        } else if (op[0].isStore()) {
+                        } else if (op[0].isStore() or op[0].isLoad()) {
                             continue;
                         }
                     }
-                    if (use.kind == .Call) continue;
-                    if (use.kind == .Load) continue;
+                    if (use.kind == .Call) {
+                        std.debug.print("foob\n", .{});
+                        work_list.appendAssumeCapacity(use.outputs()[0].get());
+                        continue;
+                    }
                     if (use.kind == .Scope) continue;
+                    if (use.outputs().len == 0) continue;
                     return .{ .Unsupported = .{ use, "local" } };
                 }
 
@@ -314,9 +503,10 @@ pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32,
                     break :b bl.addIntImm(.none, curr.data_type, @bitCast(mem));
                 } else if (base.kind == .CInt) {
                     var mem: u64 = 0;
+
                     @memcpy(
                         @as([*]u8, @ptrCast(&mem))[0..@intCast(curr.data_type.size())],
-                        self.gen.out.code.items[@intCast(base.extra(.CInt).value)..][0..@intCast(curr.data_type.size())],
+                        self.gen.out.code.items[@intCast(base.extra(.CInt).value + offset)..][0..@intCast(curr.data_type.size())],
                     );
 
                     break :b bl.addIntImm(.none, curr.data_type, @bitCast(mem));
@@ -660,12 +850,11 @@ pub fn runVm(
 
                             const Field = @TypeOf(@as(Types.TypeInfo, undefined).data.@"@struct".fields).elem;
 
-                            const field_mem = Types.Slice(Field).alloc(&self.gen, fields.len);
+                            const field_mem = tmp.arena.alloc(Field, fields.len);
 
                             for (fields, 0..) |f, i| {
-                                const name = Types.Slice(u8).dupe(&self.gen, f.name);
-                                field_mem.slice(&self.gen)[i] = .{
-                                    .name = name,
+                                field_mem[i] = .{
+                                    .name = .alloc(self, f.name),
                                     .ty = f.ty,
                                     .defalut_value = undefined,
                                 };
@@ -673,7 +862,7 @@ pub fn runVm(
 
                             break :b .{ .kind = .@"@struct", .data = .{ .@"@struct" = .{
                                 .alignment = struct_ty.getAlignment(types),
-                                .fields = field_mem,
+                                .fields = .alloc(self, field_mem),
                             } } };
                         },
                         .Enum => |enum_ty| b: {
@@ -681,19 +870,15 @@ pub fn runVm(
 
                             const Field = @TypeOf(@as(Types.TypeInfo, undefined).data.@"@enum".fields).elem;
 
-                            const field_mem = Types.Slice(Field).alloc(&self.gen, fields.len);
+                            const field_mem = tmp.arena.alloc(Field, fields.len);
 
                             for (fields, 0..) |f, i| {
-                                const name = Types.Slice(u8).dupe(&self.gen, f.name);
-                                field_mem.slice(&self.gen)[i] = .{
-                                    .name = name,
-                                    .value = f.value,
-                                };
+                                field_mem[i] = .{ .name = .alloc(self, f.name), .value = f.value };
                             }
 
                             break :b .{ .kind = .@"@enum", .data = .{ .@"@enum" = .{
                                 .backing_int = enum_ty.getBackingInt(types),
-                                .fields = field_mem,
+                                .fields = .alloc(self, field_mem),
                             } } };
                         },
                         .Union => |union_ty| b: {
@@ -701,46 +886,36 @@ pub fn runVm(
 
                             const Field = @TypeOf(@as(Types.TypeInfo, undefined).data.@"@union".fields).elem;
 
-                            const field_mem = Types.Slice(Field).alloc(&self.gen, fields.len);
+                            const field_mem = tmp.arena.alloc(Field, fields.len);
 
                             for (fields, 0..) |f, i| {
-                                const name = Types.Slice(u8).dupe(&self.gen, f.name);
-                                field_mem.slice(&self.gen)[i] = .{
-                                    .name = name,
-                                    .ty = f.ty,
-                                };
+                                field_mem[i] = .{ .name = .alloc(self, f.name), .ty = f.ty };
                             }
 
                             break :b .{ .kind = .@"@union", .data = .{ .@"@union" = .{
-                                .fields = field_mem,
+                                .fields = .alloc(self, field_mem),
                             } } };
                         },
                         .FnPtr => |fnptr_ty| b: {
                             const sig: *tys.FnPtr = types.store.get(fnptr_ty);
 
-                            const Param = @TypeOf(@as(Types.TypeInfo, undefined).data.fnptr.args).elem;
-
                             break :b .{ .kind = .fnptr, .data = .{ .fnptr = .{
-                                .args = Types.Slice(Param).dupe(&self.gen, sig.args),
+                                .args = .alloc(self, sig.args),
                                 .ret = sig.ret,
                             } } };
                         },
                         .Func => |fn_ty| b: {
                             const sig: *tys.Func = types.store.get(fn_ty);
 
-                            const Param = @TypeOf(@as(Types.TypeInfo, undefined).data.@"@fn".args).elem;
-
                             break :b .{ .kind = .@"@fn", .data = .{ .@"@fn" = .{
-                                .args = Types.Slice(Param).dupe(&self.gen, sig.args),
+                                .args = .alloc(self, sig.args),
                                 .ret = sig.ret,
                             } } };
                         },
                         .Tuple => |tuple_ty| b: {
                             const fields = tuple_ty.getFields(types);
 
-                            const field_mem = Types.Slice(Types.Id).dupe(&self.gen, @ptrCast(fields));
-
-                            break :b .{ .kind = .tuple, .data = .{ .tuple = field_mem } };
+                            break :b .{ .kind = .tuple, .data = .{ .tuple = .alloc(self, @ptrCast(fields)) } };
                         },
                         .Template => |template_ty| b: {
                             const template: *tys.Template = types.store.get(template_ty);

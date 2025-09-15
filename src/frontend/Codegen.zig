@@ -4325,6 +4325,7 @@ fn emitDirective(
         },
         .type_info => {
             try assertDirectiveArgs(self, expr, args, "<ty>");
+
             return try self.emitComptimeDirectiveEca(ctx, args[0], .type_info, self.types.type_info);
         },
     }

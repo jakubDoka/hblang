@@ -2001,6 +2001,7 @@ pub fn Func(comptime Backend: type) type {
             @as(*ClassFor(kind), @ptrCast(&bytes)).* = extra;
             const node = self.addNodeUntyped(kind, typ, inputs, &bytes);
             node.sloc = sloc;
+
             return node;
         }
 

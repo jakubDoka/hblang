@@ -1494,20 +1494,21 @@ pub fn Slice(comptime Elem: type) type {
         elem_ptr: u64,
         len: u64,
 
-        pub fn dupe(gen: *HbvmGen, slce: []const Elem) @This() {
-            const slf = alloc(gen, slce.len);
-            @memcpy(slf.slice(gen), slce);
-            return slf;
+        pub fn alloc(ct: *Comptime, slce: []const Elem) @This() {
+            const types = ct.getTypes();
+            const global = types.addUniqueGlobal(.void);
+            types.store.get(global).data = .{ .imm = types.pool.arena.dupe(u8, @ptrCast(slce)) };
+            types.store.get(global).ty = types.makeArray(slce.len, types.convertZigTypeToHbType(Elem));
+            types.queue(.@"comptime", .init(.{ .Global = global }));
+
+            std.debug.assert(!types.retainGlobals(.@"comptime", &ct.gen));
+
+            const off = ct.gen.out.syms.items[@intFromEnum(ct.gen.out.globals.items[@intFromEnum(global)])].offset;
+            return .{ .elem_ptr = off, .len = slce.len };
         }
 
-        pub fn alloc(gen: *HbvmGen, len: u64) @This() {
-            const ptr = std.mem.alignForward(usize, gen.out.code.items.len, @alignOf(Elem));
-            gen.out.code.resize(gen.gpa.allocator(), ptr + @sizeOf(Elem) * len) catch unreachable;
-            return .{ .elem_ptr = ptr, .len = len };
-        }
-
-        pub fn slice(slf: @This(), gen: *HbvmGen) []Elem {
-            return @as([*]Elem, @ptrCast(@alignCast(&gen.out.code.items[@intCast(slf.elem_ptr)])))[0..@intCast(slf.len)];
+        pub fn slice(slf: @This(), ct: *Comptime) []Elem {
+            return @as([*]Elem, @ptrCast(@alignCast(&ct.gen.out.code.items[@intCast(slf.elem_ptr)])))[0..@intCast(slf.len)];
         }
     };
 }
@@ -1831,7 +1832,7 @@ pub fn addUniqueGlobal(self: *Types, scope: Id) utils.EntId(tys.Global) {
     const glob = self.store.add(&self.pool.arena, tys.Global{
         .key = .{
             .loc = .{
-                .file = scope.file(self).?,
+                .file = scope.file(self) orelse .root,
                 .scope = scope,
             },
         },
