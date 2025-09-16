@@ -9,22 +9,19 @@ comptime 1.main.some_fn(uint)(uint):
 	add rsp, 0x10
 	ret
 main:
-	sub rsp, 0x28
-	mov dword ptr [rsp+0x18], 0x07
-	mov rax, 0x80000000
-	mov [rsp+0x1C], eax
+	sub rsp, 0x18
 	mov rdi, 0x09
 	call :comptime 1.main.some_fn(uint)(uint)
-	mov [rsp], rax
+	mov [rsp+0x10], rax
 	mov rdi, 0x05
 	call :comptime 1.main.some_fn(uint)(uint)
-	mov [rsp+0x08], rax
+	mov [rsp], rax
 	mov rdi, 0x07
 	call :comptime 1.main.some_fn(uint)(uint)
-	mov [rsp+0x10], rax
-	mov rax, [rsp]
-	mov rcx, [rsp+0x08]
-	add rcx, [rsp+0x10]
+	mov [rsp+0x08], rax
+	mov rax, [rsp+0x10]
+	mov rcx, [rsp]
+	add rcx, [rsp+0x08]
 	sub rax, rcx
-	add rsp, 0x28
+	add rsp, 0x18
 	ret

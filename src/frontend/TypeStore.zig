@@ -141,11 +141,17 @@ pub const StringGlobalCtx = struct {
     types: *Types,
 
     pub fn eql(self: @This(), a: utils.EntId(tys.Global), b: utils.EntId(tys.Global)) bool {
-        return std.mem.eql(u8, self.types.store.get(a).data.slice(), self.types.store.get(b).data.slice());
+        return std.mem.eql(
+            u8,
+            self.types.store.get(a).data.slice(&self.types.ct),
+            self.types.store.get(b).data.slice(&self.types.ct),
+        );
     }
 
     pub fn hash(self: @This(), adapted_key: utils.EntId(tys.Global)) u64 {
-        return std.hash.Fnv1a_64.hash(self.types.store.get(adapted_key).data.slice());
+        return std.hash.Fnv1a_64.hash(
+            self.types.store.get(adapted_key).data.slice(&self.types.ct),
+        );
     }
 };
 
@@ -192,7 +198,7 @@ pub const Scope = struct {
             }
         },
         ty: Id,
-        value: u64 = 0,
+        value: i64 = 0,
 
         comptime {
             std.debug.assert(@sizeOf(@This()) == 16);
@@ -217,7 +223,7 @@ pub const Scope = struct {
             .main => "main",
             .string => b: {
                 const parent: *const tys.Global = @fieldParentPtr("key", self);
-                break :b parent.data.imm;
+                break :b parent.data.slice(&types.ct);
             },
             else => types.getFile(self.loc.file).tokenSrc(@intFromEnum(self.name_pos)),
         };
@@ -307,8 +313,8 @@ pub const Id = enum(IdRepr) {
         return @enumFromInt(@intFromEnum(Id.u8) + std.math.log2_int_ceil(u64, value) / 8);
     }
 
-    pub fn fromRaw(raw: u32, types: *Types) ?Id {
-        const repr: Repr = @bitCast(raw);
+    pub fn fromRaw(raw: i64, types: *Types) ?Id {
+        const repr: Repr = @bitCast(std.math.cast(u32, raw) orelse return null);
         if (repr.flag >= std.meta.fields(Data).len) return null;
 
         switch (repr.tag()) {
@@ -503,16 +509,7 @@ pub const Id = enum(IdRepr) {
                 total_size = std.mem.alignForward(u64, total_size, alignm);
                 return total_size;
             },
-            .Union => |u| {
-                var max_size: u64 = 0;
-                var alignm: u64 = 1;
-                for (u.getFields(types)) |f| {
-                    alignm = @max(alignm, f.ty.alignment(types));
-                    max_size = @max(max_size, f.ty.size(types));
-                }
-                max_size = std.mem.alignForward(u64, max_size, alignm);
-                return max_size;
-            },
+            .Union => |u| u.size(types),
             .Struct => |s| s.getSize(types),
             .Array => |s| types.store.get(s).len * types.store.get(s).elem.size(types),
             .Slice => 16,
@@ -528,7 +525,8 @@ pub const Id = enum(IdRepr) {
             .Pointer, .FnPtr => 8,
             .Nullable => |n| types.store.get(n).inner.alignment(types),
             .Struct => |s| s.getAlignment(types),
-            inline .Union, .Tuple => |s| {
+            .Union => |u| u.alignment(types),
+            .Tuple => |s| {
                 var alignm: u64 = 1;
                 for (s.getFields(types)) |f| {
                     alignm = @max(alignm, f.ty.alignment(types));
@@ -583,7 +581,7 @@ pub const Id = enum(IdRepr) {
             const Val = struct {
                 ty: Id,
                 offset: u32 = 0,
-                value: u64,
+                value: i64,
 
                 pub fn normalize(slf: Val, ts: *Types) Val {
                     return .{ .value = switch (Abi.ableos.categorize(slf.ty, ts)) {
@@ -750,8 +748,8 @@ pub const Id = enum(IdRepr) {
                         .u8, .u16, .u32, .u64, .uint => try writer.print("{d}", .{v.value}),
                         // FIXME: this will not display smaller ints correctly
                         .i8, .i16, .i32, .i64, .int => try writer.print("{d}", .{@as(i64, @bitCast(v.value))}),
-                        .f32 => try writer.print("{}", .{@as(f32, @bitCast(@as(u32, @truncate(v.value))))}),
-                        .f64 => try writer.print("{}", .{@as(f64, @bitCast(@as(u64, @truncate(v.value))))}),
+                        .f32 => try writer.print("{}", .{@as(f32, @bitCast(@as(u32, @truncate(@as(u64, @bitCast(v.value))))))}),
+                        .f64 => try writer.print("{}", .{@as(f64, @bitCast(@as(u64, @bitCast(v.value))))}),
                         .type => work_list.appendAssumeCapacity(.{ .Type = @enumFromInt(v.value) }),
                     },
                     .Array => |s| {
@@ -768,7 +766,7 @@ pub const Id = enum(IdRepr) {
                             const ptr = readFromGlobal(self.tys, @enumFromInt(v.value), .uint, v.offset + tys.Slice.ptr_offset);
                             const ln = readFromGlobal(self.tys, @enumFromInt(v.value), .uint, v.offset + tys.Slice.len_offset);
 
-                            const global = self.tys.findSymForPtr(@intCast(ptr), ln * slc.elem.size(self.tys));
+                            const global = self.tys.findSymForPtr(@intCast(ptr), @as(u64, @bitCast(ln)) * slc.elem.size(self.tys));
                             break :b .{ ln, global catch |err| {
                                 try writer.writeAll("<corrupted-slice>(");
                                 try writer.writeAll(@errorName(err));
@@ -780,14 +778,15 @@ pub const Id = enum(IdRepr) {
                         if (slc.elem == .u8) {
                             const glb: utils.EntId(tys.Global) = @enumFromInt(global);
                             try writer.writeAll("\"");
-                            try writer.writeAll(self.tys.store.get(glb).data.slice()[@intCast(base)..][0..@intCast(ln)]);
+                            try writer.writeAll(self.tys.store.get(glb).data
+                                .slice(&self.tys.ct)[@intCast(base)..][0..@intCast(ln)]);
                             try writer.writeAll("\"");
                             continue;
                         }
 
                         try writer.writeAll("&.[");
 
-                        try self.formatSeq(&work_list, tmp.arena, slc.elem, ln, global);
+                        try self.formatSeq(&work_list, tmp.arena, slc.elem, @intCast(ln), global);
                     },
                     .Struct => |s| {
                         var offsets = @as(tys.Struct.Id, s).offsetIter(self.tys);
@@ -865,7 +864,7 @@ pub const Id = enum(IdRepr) {
             };
         }
 
-        pub fn formatSeq(self: *const Fmt, work_list: *std.ArrayListUnmanaged(Task), arena: *utils.Arena, elem: Types.Id, ln: usize, global: u64) !void {
+        pub fn formatSeq(self: *const Fmt, work_list: *std.ArrayListUnmanaged(Task), arena: *utils.Arena, elem: Types.Id, ln: usize, global: i64) !void {
             work_list.ensureUnusedCapacity(arena.allocator(), @intCast(ln * 2)) catch unreachable;
             try work_list.append(arena.allocator(), .{ .Name = "]" });
             for (0..@intCast(ln)) |i| {
@@ -896,12 +895,12 @@ pub const Id = enum(IdRepr) {
 
 pub const Target = enum { @"comptime", runtime };
 
-pub fn readFromGlobal(self: *Types, global: utils.EntId(tys.Global), ty: Id, offset: u64) u64 {
+pub fn readFromGlobal(self: *Types, global: utils.EntId(tys.Global), ty: Id, offset: u64) i64 {
     const glob = self.store.get(global);
-    var value: u64 = 0;
+    var value: i64 = 0;
     @memcpy(
         @as([*]u8, @ptrCast(&value))[0..@intCast(ty.size(self))],
-        glob.data.slice()[@intCast(offset)..][0..@intCast(ty.size(self))],
+        glob.data.slice(&self.ct)[@intCast(offset)..][0..@intCast(ty.size(self))],
     );
     return value;
 }
@@ -931,13 +930,13 @@ pub fn retainClonedGlobals(self: *Types, pop_until: usize) void {
         self.ct.gen.emitData(.{
             .id = @intFromEnum(global),
             .name = "",
-            .value = .{ .init = glob.data.slice() },
+            .value = .{ .init = glob.data.slice(&self.ct) },
             .relocs = &.{},
             .readonly = glob.readonly,
         });
 
         if (glob.relocs.len == 0) continue;
-        const final_data = self.pool.arena.dupe(u8, glob.data.slice());
+        const final_data = self.pool.arena.dupe(u8, glob.data.slice(&self.ct));
         for (glob.relocs) |reloc| {
             const sym = self.ct.gen.out.globals.items[reloc.target];
             const offset: u64 = self.ct.gen.out.syms.items[@intFromEnum(sym)].offset;
@@ -948,7 +947,7 @@ pub fn retainClonedGlobals(self: *Types, pop_until: usize) void {
     }
 }
 
-pub fn retainGlobals(self: *Types, target: Target, backend: anytype) bool {
+pub fn retainGlobals(self: *Types, target: Target, backend: anytype, detect_nested: bool) bool {
     errdefer unreachable;
 
     const emit_names = @TypeOf(backend) == root.backend.Machine;
@@ -964,28 +963,45 @@ pub fn retainGlobals(self: *Types, target: Target, backend: anytype) bool {
         glob.completion.getPtr(target).* = .compiled;
 
         var relocs = std.ArrayListUnmanaged(Machine.DataOptions.Reloc){};
-        self.findNestedGlobals(&relocs, glob, scrath.arena, glob.ty, 0) catch |err| {
-            errored = true;
-            self.report(
-                glob.key.loc.file,
-                glob.key.loc.ast,
-                "global is corrupted (of type {}) (global_id: {}): contains a pointer {}",
-                .{ glob.ty, @intFromEnum(global), @errorName(err) },
-            );
-        };
+        if (detect_nested) {
+            self.findNestedGlobals(&relocs, glob, scrath.arena, glob.ty, 0) catch |err| {
+                errored = true;
+                self.report(
+                    glob.key.loc.file,
+                    glob.key.loc.ast,
+                    "global is corrupted (of type {}) (global_id: {}): contains a pointer {}",
+                    .{ glob.ty, @intFromEnum(global), @errorName(err) },
+                );
+            };
+        }
 
         if (target == .@"comptime") {
             glob.relocs = relocs.items;
+        }
+
+        if (glob.data == .@"comptime" and target == .@"comptime") {
+            continue;
         }
 
         backend.emitData(.{
             .id = @intFromEnum(global),
             .name = if (emit_names) root.frontend.Types.Id.init(.{ .Global = global })
                 .fmt(self).toString(scrath.arena) else "",
-            .value = if (glob.uninit) .{ .uninit = glob.data.slice().len } else .{ .init = glob.data.slice() },
+            .value = if (glob.uninit)
+                .{ .uninit = glob.data.slice(&self.ct).len }
+            else
+                .{ .init = glob.data.slice(&self.ct) },
             .relocs = if (target == .runtime) relocs.items else &.{},
             .readonly = glob.readonly,
         });
+
+        if (@TypeOf(backend) == *HbvmGen) {
+            const len = glob.data.slice(&self.ct).len;
+            glob.data = .{ .@"comptime" = .{
+                .base = backend.out.syms.items[@intFromEnum(backend.out.globals.items[@intFromEnum(global)])].offset,
+                .len = len,
+            } };
+        }
     }
 
     return errored;
@@ -1149,12 +1165,27 @@ pub fn findNestedGlobals(
 ) !void {
     const offset: usize = @intCast(offset_f);
     switch (ty.data()) {
-        .Union, .Enum, .Builtin => {},
+        .Enum, .Builtin => {},
+        .Union => |u| {
+            const tag: Id = u.getTag(self);
+            if (tag == .void) return;
+
+            const tag_offset: u64 = u.tagOffset(self);
+
+            var tag_value: u64 = 0;
+            @memcpy(
+                std.mem.asBytes(&tag_value)[0..tag.size(self)],
+                global.data.slice(&self.ct)[@intCast(offset_f + tag_offset)..][0..tag.size(self)],
+            );
+
+            const inner_repr: Id = u.getFields(self)[tag_value].ty;
+            try self.findNestedGlobals(relocs, global, scratch, inner_repr, offset_f);
+        },
         .FnPtr => unreachable,
         .Pointer => |p| {
             const base: Id = self.store.get(p).*;
 
-            const ptr_big: u64 = @bitCast(global.data.slice()[offset..][0..8].*);
+            const ptr_big: u64 = @bitCast(global.data.slice(&self.ct)[offset..][0..8].*);
             const ptr: usize = @intCast(ptr_big);
 
             const cap = base.size(self);
@@ -1181,9 +1212,9 @@ pub fn findNestedGlobals(
         .Slice => |s| {
             const slc: *tys.Slice = self.store.get(s);
 
-            const ptr_big: u64 = @bitCast(global.data.slice()[offset + tys.Slice.ptr_offset ..][0..8].*);
+            const ptr_big: u64 = @bitCast(global.data.slice(&self.ct)[offset + tys.Slice.ptr_offset ..][0..8].*);
             const ptr: usize = @intCast(ptr_big);
-            const len_big: u64 = @bitCast(global.data.slice()[offset + tys.Slice.len_offset ..][0..8].*);
+            const len_big: u64 = @bitCast(global.data.slice(&self.ct)[offset + tys.Slice.len_offset ..][0..8].*);
             const len: usize = @intCast(len_big);
 
             const cap = len * slc.elem.size(self);
@@ -1238,11 +1269,11 @@ pub fn isNullablePresent(self: *Types, n: utils.EntId(tys.Nullable), global: *ty
         var value: u64 = 0;
         @memcpy(
             @as(*[8]u8, @ptrCast(&value))[0..@intCast(size)],
-            global.data.slice()[@intCast(offset + niche.offset)..][0..@intCast(size)],
+            global.data.slice(&self.ct)[@intCast(offset + niche.offset)..][0..@intCast(size)],
         );
 
         break :b value != 0;
-    } else global.data.slice()[@intCast(offset)] != 0;
+    } else global.data.slice(&self.ct)[@intCast(offset)] != 0;
 }
 
 pub fn findSymForPtr(
@@ -1401,22 +1432,6 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer) *T
 }
 
 pub const TypeInfo = extern struct {
-    kind: enum(u8) {
-        builtin,
-        pointer,
-        slice,
-        nullable,
-        tuple,
-        @"@enum",
-        @"@union",
-        @"@struct",
-        template,
-        @"@fn",
-        global,
-        fnptr,
-        simd,
-        array,
-    },
     data: extern union {
         builtin: void,
         pointer: Id,
@@ -1465,6 +1480,24 @@ pub const TypeInfo = extern struct {
         },
         array: tys.Array,
     },
+    kind: enum(u8) {
+        builtin,
+        pointer,
+        slice,
+        nullable,
+        tuple,
+        @"@enum",
+        @"@union",
+        @"@struct",
+        template,
+        @"@fn",
+        global,
+        fnptr,
+        simd,
+        array,
+    },
+
+    pub const is_tagged_union = true;
 };
 
 pub fn Optional(comptime Elem: type) type {
@@ -1501,7 +1534,7 @@ pub fn Slice(comptime Elem: type) type {
             types.store.get(global).ty = types.makeArray(slce.len, types.convertZigTypeToHbType(Elem));
             types.queue(.@"comptime", .init(.{ .Global = global }));
 
-            std.debug.assert(!types.retainGlobals(.@"comptime", &ct.gen));
+            std.debug.assert(!types.retainGlobals(.@"comptime", &ct.gen, true));
 
             const off = ct.gen.out.syms.items[@intFromEnum(ct.gen.out.globals.items[@intFromEnum(global)])].offset;
             return .{ .elem_ptr = off, .len = slce.len };
@@ -1576,6 +1609,14 @@ pub fn convertZigTypeToHbType(self: *Types, comptime T: type) Id {
 
             if (@hasDecl(T, "is_optional")) {
                 return self.makeNullable(self.convertZigTypeToHbType(T.elem));
+            }
+
+            if (@hasDecl(T, "is_tagged_union")) {
+                const tag = self.convertZigTypeToHbType(t.fields[1].type);
+
+                const unon = self.convertZigTypeToHbType(t.fields[0].type);
+                self.store.get(unon.data().Union).tag = tag;
+                return unon;
             }
 
             comptime std.debug.assert(t.layout == .@"extern");

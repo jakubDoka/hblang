@@ -272,6 +272,15 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.buf.writeAll(": ");
             try self.fmtExpr(f.ret);
         },
+        .EnumWildcard => |s| {
+            try self.buf.writeAll("enum");
+
+            if (s.tag.tag() != .Void) {
+                try self.buf.writeAll("(");
+                try self.fmtExpr(s.tag);
+                try self.buf.writeAll(")");
+            }
+        },
         .Type => |s| {
             const name = switch (s.kind) {
                 inline .@"struct", .@"union", .@"enum" => |t| @tagName(t),

@@ -73,19 +73,16 @@ generic structs 5 (iterators).main.Chain(.Chars, .Chars).next:
 	ret
 main:
 	push rbx
-	sub rsp, 0xA0
+	sub rsp, 0x90
 	lea rax, [0x0000000000000007]
 	mov [rsp], rax
 	mov qword ptr [rsp+0x08], 0x04
-	lea rdx, [0x0000000000000007]
-	mov rcx, 0x90000002
+	lea rcx, [0x0000000000000007]
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x10], rax
 	mov qword ptr [rsp+0x18], 0x02
-	mov [rsp+0x20], rdx
+	mov [rsp+0x20], rcx
 	mov qword ptr [rsp+0x28], 0x02
-	mov dword ptr [rsp+0x78], 0x7000000F
-	mov [rsp+0x7C], ecx
 	mov rax, [rsp+0x10]
 	mov [rsp+0x30], rax
 	mov rax, [rsp+0x18]
@@ -94,7 +91,6 @@ main:
 	mov [rsp+0x40], rax
 	mov rax, [rsp+0x08]
 	mov [rsp+0x48], rax
-	mov dword ptr [rsp+0x80], 0x70000010
 	mov byte ptr [rsp+0x50], 0x00
 	mov rax, [rsp+0x10]
 	mov [rsp+0x58], rax
@@ -107,10 +103,10 @@ main:
 	xor rbx, rbx
 8:	lea rdi, [rsp+0x30]
 	call :generic structs 5 (iterators).main.Chars.next
-	mov [rsp+0x86], ax
-	mov ax, [rsp+0x86]
-	mov [rsp+0x84], ax
-	mov al, [rsp+0x84]
+	mov [rsp+0x80], ax
+	mov ax, [rsp+0x80]
+	mov [rsp+0x7E], ax
+	mov al, [rsp+0x7E]
 	cmp al, bl
 	jnz :0
 	mov rax, [rsp]
@@ -119,26 +115,26 @@ main:
 	mov [rsp+0x48], rax
 5:	lea rdi, [rsp+0x40]
 	call :generic structs 5 (iterators).main.Chars.next
-	mov [rsp+0x8E], ax
-	mov ax, [rsp+0x8E]
-	mov [rsp+0x8C], ax
-	mov al, [rsp+0x8C]
+	mov [rsp+0x78], ax
+	mov ax, [rsp+0x78]
+	mov [rsp+0x86], ax
+	mov al, [rsp+0x86]
 	cmp al, bl
 	jnz :1
 	xor rax, rax
 	jmp :7
 1:	lea rdi, [rsp+0x50]
 	call :generic structs 5 (iterators).main.Chain(.Chars, .Chars).next
-	mov [rsp+0x92], ax
-	mov ax, [rsp+0x92]
-	mov [rsp+0x90], ax
-	mov al, [rsp+0x90]
+	mov [rsp+0x7C], ax
+	mov ax, [rsp+0x7C]
+	mov [rsp+0x7A], ax
+	mov al, [rsp+0x7A]
 	cmp al, bl
 	jnz :3
 	mov rax, 0x03
 	jmp :7
-3:	mov cl, [rsp+0x8D]
-	mov al, [rsp+0x91]
+3:	mov cl, [rsp+0x87]
+	mov al, [rsp+0x7B]
 	cmp al, cl
 	jz :4
 	mov rax, 0x04
@@ -146,20 +142,20 @@ main:
 4:	jmp :5
 0:	lea rdi, [rsp+0x40]
 	call :generic structs 5 (iterators).main.Chars.next
-	mov [rsp+0x8A], ax
-	mov ax, [rsp+0x8A]
-	mov [rsp+0x88], ax
-	mov al, [rsp+0x88]
+	mov [rsp+0x84], ax
+	mov ax, [rsp+0x84]
+	mov [rsp+0x82], ax
+	mov al, [rsp+0x82]
 	cmp al, bl
 	jnz :6
 	mov rax, 0x01
 	jmp :7
-6:	mov cl, [rsp+0x89]
-	mov al, [rsp+0x85]
+6:	mov cl, [rsp+0x83]
+	mov al, [rsp+0x7F]
 	cmp al, cl
 	jz :7
 	mov rax, 0x02
-7:	add rsp, 0xA0
+7:	add rsp, 0x90
 	pop rbx
 	ret
 7:	jmp :8

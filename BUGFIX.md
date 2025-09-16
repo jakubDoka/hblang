@@ -9,7 +9,7 @@ expectations := .{
 }
 
 main := fn(): uint {
-    return @eval(@type_info(enum{.Edward})).data.@enum.fields[0].name[0]
+    return @eval(@type_info(enum{.Edward})).@enum.fields[0].name[0]
 }
 ```
 

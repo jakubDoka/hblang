@@ -13,9 +13,7 @@ generic structs 2.Foo.Bar(uint, u8).sub:
 	add rsp, 0x10
 	ret
 main:
-	sub rsp, 0x28
-	mov dword ptr [rsp+0x18], 0x7000000F
-	mov dword ptr [rsp+0x1C], 0x70000010
+	sub rsp, 0x18
 	lea rdi, [rsp]
 	call :generic structs 2.Foo.Bar(uint, u8).init
 	mov rdi, [rsp]
@@ -23,5 +21,5 @@ main:
 	call :generic structs 2.Foo.Bar(uint, u8).sub
 	mov [rsp+0x10], rax
 	mov rax, [rsp+0x10]
-	add rsp, 0x28
+	add rsp, 0x18
 	ret

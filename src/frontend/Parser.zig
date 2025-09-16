@@ -515,8 +515,14 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 _ = try self.expectAdvance(.@")");
             }
 
+            if (!self.tryAdvance(.@"{")) {
+                if (token.kind == .@"enum") {
+                    break :b .{ .EnumWildcard = .{ .pos = .init(token.pos), .tag = tag } };
+                }
+            }
+
             const capture_scope = self.captures.items.len;
-            const fields = try self.parseList(.@"{", .@";", .@"}", parseUnorderedExpr);
+            const fields = try self.parseList(null, .@";", .@"}", parseUnorderedExpr);
             self.finalizeVariables(scope_frame);
             const captures = self.popCaptures(capture_scope, prev_capture_boundary != 0);
             break :b .{ .Type = .{

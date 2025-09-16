@@ -60,7 +60,6 @@ generic structs 4.Array.get(uint):
 main:
 	push rbx
 	sub rsp, 0x50
-	mov dword ptr [rsp+0x48], 0x70000012
 	mov qword ptr [rsp+0x20], 0x01
 	mov qword ptr [rsp+0x28], 0x02
 	mov qword ptr [rsp+0x30], 0x03
@@ -70,24 +69,24 @@ main:
 	call :memcpy
 	xor rdi, rdi
 	call :generic structs 4.Array((())).get(uint)
-	mov [rsp+0x38], rax
+	mov [rsp+0x40], rax
 	lea rdi, [rsp]
 	lea rsi, [rsp+0x20]
 	mov rdx, 0x18
 	call :memcpy
 	mov rdi, 0x01
 	call :generic structs 4.Array((())).get(uint)
-	mov [rsp+0x40], rax
-	mov rbx, [rsp+0x38]
-	add rbx, [rsp+0x40]
+	mov [rsp+0x18], rax
+	mov rbx, [rsp+0x40]
+	add rbx, [rsp+0x18]
 	lea rdi, [rsp]
 	lea rsi, [rsp+0x20]
 	mov rdx, 0x18
 	call :memcpy
 	mov rdi, 0x02
 	call :generic structs 4.Array((())).get(uint)
-	mov [rsp+0x18], rax
-	add rbx, [rsp+0x18]
+	mov [rsp+0x38], rax
+	add rbx, [rsp+0x38]
 	mov rax, rbx
 	add rsp, 0x50
 	pop rbx

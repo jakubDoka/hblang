@@ -34,25 +34,12 @@ comptime 2.main.some_fn(uint):
 	mov rax, 0x01
 	ret
 main:
-	sub rsp, 0x38
-	mov dword ptr [rsp+0x10], 0x07
-	mov rax, 0x90000002
-	mov [rsp+0x14], eax
-	mov rdx, 0x80000000
-	mov rcx, 0x90000005
-	mov rax, 0x90000003
-	mov [rsp+0x18], eax
-	mov [rsp+0x1C], edx
-	mov [rsp+0x20], ecx
+	sub rsp, 0x18
 	call :comptime 2.main.some_fn3(uint, .some_fn)
 	mov [rsp], rax
-	mov rcx, 0x90000009
-	mov rax, 0x90000007
-	mov [rsp+0x24], eax
-	mov [rsp+0x28], ecx
 	call :comptime 2.main.some_fn3(uint, (.some_fn2(.some_fn)))
 	mov [rsp+0x08], rax
 	mov rax, [rsp]
 	add rax, [rsp+0x08]
-	add rsp, 0x38
+	add rsp, 0x18
 	ret

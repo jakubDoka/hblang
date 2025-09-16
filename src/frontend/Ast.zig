@@ -100,6 +100,10 @@ pub const Expr = union(enum) {
         fields: Slice,
         kind: Lexer.Lexeme,
     },
+    EnumWildcard: struct {
+        pos: Pos,
+        tag: Id,
+    },
     Directive: struct {
         pos: Pos,
         kind: Lexer.Lexeme.Directive,

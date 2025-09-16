@@ -1,20 +1,16 @@
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -40
-       li32 $1, 1879048207
-         st $1, $254, 16, 4
-       li64 $2, 10
-       li32 $1, 1879048208
-         st $1, $254, 20, 4
-         st $2, $254, 8, 8
-         ld $1, $254, 8, 8
-        jal $31, $0, :generic structs 3.Foo.sub((uint))
-         st $1, $254, 24, 8
-         ld $1, $254, 24, 8
-        jal $31, $0, :generic structs 3.Foo.sub(uint)
+     addi64 $254, $254, -32
+       li64 $1, 10
          st $1, $254, 0, 8
          ld $1, $254, 0, 8
-     addi64 $254, $254, 40
+        jal $31, $0, :generic structs 3.Foo.sub((uint))
+         st $1, $254, 8, 8
+         ld $1, $254, 8, 8
+        jal $31, $0, :generic structs 3.Foo.sub(uint)
+         st $1, $254, 16, 8
+         ld $1, $254, 16, 8
+     addi64 $254, $254, 32
          ld $31, $254, -8, 8
          tx
 generic structs 3.Foo.sub((uint)):

@@ -74,70 +74,78 @@ generic structs 5 (iterators).main.Chars.next:
 	ret
 main:
 	push rbx
-	sub rsp, 0x60
-	lea rax, [0x0000000000000007]
+	sub rsp, 0x80
 	lea rdx, [0x0000000000000007]
-	mov [rsp], rax
-	mov qword ptr [rsp+0x08], 0x04
-	mov [rsp+0x10], rdx
-	mov qword ptr [rsp+0x18], 0x02
-	mov [rsp+0x20], rax
 	lea rcx, [0x0000000000000007]
+	mov [rsp], rdx
+	mov qword ptr [rsp+0x08], 0x04
+	mov [rsp+0x10], rcx
+	mov qword ptr [rsp+0x18], 0x02
+	lea rax, [0x0000000000000007]
+	mov [rsp+0x20], rax
+	mov qword ptr [rsp+0x28], 0x02
+	mov [rsp+0x30], rcx
+	mov qword ptr [rsp+0x38], 0x02
+	mov [rsp+0x40], rdx
 	mov rax, [rsp+0x08]
-	mov [rsp+0x28], rax
-	mov byte ptr [rsp+0x30], 0x00
-	mov [rsp+0x38], rdx
-	mov qword ptr [rsp+0x40], 0x02
-	mov [rsp+0x48], rcx
-	mov qword ptr [rsp+0x50], 0x02
+	mov [rsp+0x48], rax
+	mov byte ptr [rsp+0x50], 0x00
+	mov rax, [rsp+0x10]
+	mov [rsp+0x58], rax
+	mov rax, [rsp+0x18]
+	mov [rsp+0x60], rax
+	mov rax, [rsp+0x20]
+	mov [rsp+0x68], rax
+	mov rax, [rsp+0x28]
+	mov [rsp+0x70], rax
 	xor rbx, rbx
-8:	lea rdi, [rsp+0x10]
+8:	lea rdi, [rsp+0x30]
 	call :generic structs 5 (iterators).main.Chars.next
-	mov [rsp+0x5A], ax
-	mov al, [rsp+0x5A]
+	mov [rsp+0x7E], ax
+	mov al, [rsp+0x7E]
 	cmp al, bl
 	jnz :0
 	mov rax, [rsp]
-	mov [rsp+0x20], rax
+	mov [rsp+0x40], rax
 	mov rax, [rsp+0x08]
-	mov [rsp+0x28], rax
-5:	lea rdi, [rsp+0x20]
+	mov [rsp+0x48], rax
+5:	lea rdi, [rsp+0x40]
 	call :generic structs 5 (iterators).main.Chars.next
-	mov [rsp+0x5C], ax
-	mov al, [rsp+0x5C]
+	mov [rsp+0x78], ax
+	mov al, [rsp+0x78]
 	cmp al, bl
 	jnz :1
 	xor rax, rax
 	jmp :7
-1:	lea rdi, [rsp+0x30]
+1:	lea rdi, [rsp+0x50]
 	call :generic structs 5 (iterators).main.Chain(.Chars, .Chars).next
-	mov [rsp+0x58], ax
-	mov al, [rsp+0x58]
+	mov [rsp+0x7A], ax
+	mov al, [rsp+0x7A]
 	cmp al, bl
 	jnz :3
 	mov rax, 0x03
 	jmp :7
-3:	mov cl, [rsp+0x5D]
-	mov al, [rsp+0x59]
+3:	mov cl, [rsp+0x79]
+	mov al, [rsp+0x7B]
 	cmp al, cl
 	jz :4
 	mov rax, 0x04
 	jmp :7
 4:	jmp :5
-0:	lea rdi, [rsp+0x20]
+0:	lea rdi, [rsp+0x40]
 	call :generic structs 5 (iterators).main.Chars.next
-	mov [rsp+0x5E], ax
-	mov al, [rsp+0x5E]
+	mov [rsp+0x7C], ax
+	mov al, [rsp+0x7C]
 	cmp al, bl
 	jnz :6
 	mov rax, 0x01
 	jmp :7
-6:	mov cl, [rsp+0x5F]
-	mov al, [rsp+0x5B]
+6:	mov cl, [rsp+0x7D]
+	mov al, [rsp+0x7F]
 	cmp al, cl
 	jz :7
 	mov rax, 0x02
-7:	add rsp, 0x60
+7:	add rsp, 0x80
 	pop rbx
 	ret
 7:	jmp :8

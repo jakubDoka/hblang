@@ -317,7 +317,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         null);
     defer tmp.deinit();
 
-    //func.fmtScheduled(std.fs.File.stderr().writer().any(), .escape_codes);
+    func.fmtScheduledLog();
 
     self.block_offsets = tmp.arena.alloc(i32, func.gcm.block_count);
     self.local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.gcm.block_count * 2));

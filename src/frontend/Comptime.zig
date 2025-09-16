@@ -95,7 +95,6 @@ pub const PartialEvalResult = union(enum) {
 };
 
 pub const PartialEvalResult2 = union(enum) {
-    Arbitrary: utils.EntId(tys.Global),
     DependsOnRuntimeControlFlow: *Node,
     Unsupported: struct { *Node, []const u8 },
 };
@@ -112,14 +111,37 @@ const PartialEvalCtx = struct {
     }
 };
 
-pub fn partialEval2(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, expr: *Node) error{Never}!*Node {
+pub fn partialEval(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, expr: *Node) error{Never}!*Node {
     const types = self.getTypes();
 
+    const revisited = expr.schedule == 0;
+    if (revisited) return expr;
+    expr.schedule = 0;
+    errdefer {
+        expr.schedule = std.math.maxInt(u16);
+    }
+
     switch (expr.extra2()) {
-        .CInt => return expr,
+        .GlobalAddr => |extra| {
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+
+            _ = try self.partialEvalGlobal(ctx, expr, extra.id, false);
+            const interestingOps = try self.collectInterestingOps(ctx, expr, tmp.arena);
+            try self.executeInterestingOps(ctx, bl, interestingOps, expr);
+
+            _ = try self.partialEvalGlobal(ctx, expr, extra.id, true);
+
+            expr.schedule = std.math.maxInt(u16);
+            return expr;
+        },
+        .CInt => {
+            expr.schedule = std.math.maxInt(u16);
+            return expr;
+        },
         .UnOp => |extra| {
             const opr = expr.inputs()[1].?;
-            const oper = try self.partialEval2(ctx, bl, opr);
+            const oper = try self.partialEval(ctx, bl, opr);
 
             const res = extra.op.eval(expr.data_type, opr.data_type, oper.extra(.CInt).value);
             const node_res = bl.addIntImm(.none, expr.data_type, res);
@@ -129,8 +151,8 @@ pub fn partialEval2(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, expr: *N
         .BinOp => |extra| {
             const lhs = expr.inputs()[1].?;
             const rhs = expr.inputs()[2].?;
-            const lhs_val = try self.partialEval2(ctx, bl, lhs);
-            const rhs_val = try self.partialEval2(ctx, bl, rhs);
+            const lhs_val = try self.partialEval(ctx, bl, lhs);
+            const rhs_val = try self.partialEval(ctx, bl, rhs);
 
             if (lhs_val.kind != .CInt) {
                 if (rhs_val.kind != .CInt) {
@@ -158,510 +180,241 @@ pub fn partialEval2(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, expr: *N
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            var lca: ?*Func.CfgNode = null;
-            var interestingOps = std.ArrayList(*Node){};
-            for (expr.outputs()) |o| {
-                if (o.get().kind != .BinOp) {
-                    if (!o.get().isMemOp() or
-                        o.get().base() != o.get() or
-                        o.get().isSub(graph.MemCpy))
-                    {
-                        return ctx.err(.{ .Unsupported = .{ o.get(), "stack mem op" } });
-                    }
-                }
+            const interestingOps = try self.collectInterestingOps(ctx, expr, tmp.arena);
 
-                const use = o.get().tryCfg0() orelse switch (o.get().extra2()) {
-                    .BinOp => |extra| {
-                        if (extra.op != .iadd and extra.op != .isub) {
-                            return ctx.err(.{ .Unsupported = .{ o.get(), "stack binop" } });
-                        }
+            const res = bl.addGlobalAddr(.none, @intFromEnum(global));
+            bl.func.subsume(res, expr);
 
-                        for (o.get().outputs()) |oo| {
-                            if (!oo.get().isMemOp() or
-                                oo.get().base() != o.get() or
-                                oo.get().isSub(graph.MemCpy))
-                            {
-                                return ctx.err(.{ .Unsupported = .{ oo.get(), "stack mem op" } });
-                            }
+            try self.executeInterestingOps(ctx, bl, interestingOps, res);
 
-                            const use = oo.get().tryCfg0() orelse continue;
-                            lca = (lca orelse use).findLca(use);
-                            interestingOps.append(tmp.arena.allocator(), oo.get()) catch unreachable;
-                        }
-
-                        continue;
-                    },
-                    else => return ctx.err(.{ .Unsupported = .{ o.get(), "floating stack op" } }),
-                };
-                lca = (lca orelse use).findLca(use);
-                interestingOps.append(tmp.arena.allocator(), o.get()) catch unreachable;
-            }
-
-            for (interestingOps.items) |op| {
-                if (op.cfg0() == lca) continue;
-
-                for (interestingOps.items) |oop| {
-                    if (oop.cfg0() == lca or oop == op or
-                        oop.cfg0().idepth() < op.cfg0().idepth()) continue;
-
-                    var cursor = oop.cfg0();
-                    while (cursor != lca) {
-                        if (op.cfg0() == cursor) break;
-                        cursor = cursor.idom();
-                    } else {
-                        return ctx.err(.{ .DependsOnRuntimeControlFlow = oop });
-                    }
-                }
-            }
-
-            for (interestingOps.items) |op| {
-                switch (op.kind) {
-                    .Store => {
-                        const base, const offset = op.base().knownOffset();
-                        std.debug.assert(base == expr);
-
-                        const val = try self.partialEval2(ctx, bl, op.value().?);
-
-                        switch (val.extra2()) {
-                            .CInt => |extra| {
-                                @memcpy(
-                                    mem[@intCast(offset)..][0..op.data_type.size()],
-                                    std.mem.asBytes(&extra.value)[0..op.data_type.size()],
-                                );
-                            },
-                            else => return ctx.err(.{ .Unsupported = .{ val, "stack store value" } }),
-                        }
-                    },
-                    else => return ctx.err(.{ .Unsupported = .{ op, "TODO: stack mut op" } }),
-                }
-            }
-
-            types.queue(.@"comptime", .init(.{ .Global = global }));
-
-            return bl.addGlobalAddr(.none, @intFromEnum(global));
+            return res;
         },
         .Load => {
-            const base, const offset = (try self.partialEval2(ctx, bl, expr.base())).knownOffset();
+            const base, const offset = (try self.partialEval(ctx, bl, expr.base())).knownOffset();
 
-            switch (base.extra2()) {
-                .GlobalAddr => |extra| {
+            const res = switch (base.extra2()) {
+                .GlobalAddr => |extra| b: {
+                    _ = try self.partialEvalGlobal(ctx, base, extra.id, true);
+
                     const gid: utils.EntId(tys.Global) = @enumFromInt(extra.id);
                     const global: *tys.Global = types.store.get(gid);
 
-                    if (types.store.get(gid).completion.get(.@"comptime") != .compiled) {
-                        types.queue(.@"comptime", .init(.{ .Global = gid }));
-                        if (types.retainGlobals(.@"comptime", &self.gen)) {
-                            return ctx.err(.{ .Unsupported = .{ base, "retained globals" } });
-                        }
-                    }
-
                     for (global.relocs) |rel| {
                         if (rel.offset == offset) {
-                            return bl.addGlobalAddr(.none, rel.target);
+                            break :b bl.addGlobalAddr(.none, rel.target);
                         }
                     }
 
-                    const mem = global.data.mut;
+                    const mem = global.data.slice(self);
                     var value: i64 = 0;
                     @memcpy(
                         std.mem.asBytes(&value)[0..expr.data_type.size()],
                         mem[@intCast(offset)..][0..expr.data_type.size()],
                     );
 
-                    return bl.addIntImm(.none, expr.data_type, value);
+                    break :b bl.addIntImm(.none, expr.data_type, value);
                 },
                 else => return ctx.err(.{ .Unsupported = .{ base, "load base" } }),
-            }
+            };
+
+            bl.func.subsume(res, expr);
+            return res;
         },
+        .Ret => return (try self.partialEvalCall(ctx, bl, expr.inputs()[0].?, expr)).?,
         else => return ctx.err(.{ .Unsupported = .{ expr, "TODO: generic op" } }),
     }
 }
 
-pub fn partialEval(self: *Comptime, file: Types.File, scope: Types.Id, pos: u32, bl: *Builder, expr: *Node) PartialEvalResult {
-    errdefer unreachable;
+pub fn executeInterestingOps(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, interestingOps: []*Node, res: *Node) !void {
+    const mem = self.getTypes().store.get(@as(
+        utils.EntId(tys.Global),
+        @enumFromInt(res.extra(.GlobalAddr).id),
+    )).data.mutSlice(self).?;
 
+    for (interestingOps) |op| {
+        switch (op.kind) {
+            .Store => {
+                const base, const offset = op.base().knownOffset();
+                std.debug.assert(base == res);
+
+                const val = try self.partialEval(ctx, bl, op.value().?);
+
+                switch (val.extra2()) {
+                    .CInt => |extra| {
+                        @memcpy(
+                            mem[@intCast(offset)..][0..op.data_type.size()],
+                            std.mem.asBytes(&extra.value)[0..op.data_type.size()],
+                        );
+                    },
+                    else => return ctx.err(.{ .Unsupported = .{ val, "stack store value" } }),
+                }
+
+                bl.func.subsume(op.mem(), op);
+            },
+            .Call => _ = try self.partialEvalCall(ctx, bl, op.outputs()[0].get(), null),
+            .Load => {
+                if (op.schedule == 0) {
+                    continue;
+                }
+
+                _ = try self.partialEval(ctx, bl, op);
+            },
+            else => return ctx.err(.{ .Unsupported = .{ op, "TODO: stack mut op" } }),
+        }
+    }
+}
+
+pub fn collectInterestingOps(self: *Comptime, ctx: PartialEvalCtx, expr: *Node, scratch: *Arena) ![]*Node {
+    _ = self; // autofix
+    var lca: ?*Func.CfgNode = null;
+    var interestingOps = std.ArrayList(*Node){};
+    for (expr.outputs()) |o| {
+        if (o.get().kind != .BinOp and o.get().kind != .Scope) {
+            if ((!o.get().isMemOp() or o.get().isSub(graph.MemCpy)) and
+                o.get().kind != .Call)
+            {
+                return ctx.err(.{ .Unsupported = .{ o.get(), "stack direct mem op" } });
+            }
+        }
+
+        const use = o.get().tryCfg0() orelse switch (o.get().extra2()) {
+            .BinOp => |extra| {
+                if (extra.op != .iadd and extra.op != .isub) {
+                    return ctx.err(.{ .Unsupported = .{ o.get(), "stack binop" } });
+                }
+
+                for (o.get().outputs()) |oo| {
+                    if ((!oo.get().isMemOp() or
+                        oo.get().base() != o.get() or
+                        oo.get().isSub(graph.MemCpy)) and
+                        o.get().kind != .Call)
+                    {
+                        return ctx.err(.{ .Unsupported = .{ oo.get(), "stack indirect mem op" } });
+                    }
+
+                    const use = oo.get().tryCfg0() orelse continue;
+                    lca = (lca orelse use).findLca(use);
+                    interestingOps.append(scratch.allocator(), oo.get()) catch unreachable;
+                }
+
+                continue;
+            },
+            .Scope => continue,
+            .Load => {
+                interestingOps.append(scratch.allocator(), o.get()) catch unreachable;
+                continue;
+            },
+            else => return ctx.err(.{ .Unsupported = .{ o.get(), "floating stack op" } }),
+        };
+        lca = (lca orelse use).findLca(use);
+        interestingOps.append(scratch.allocator(), o.get()) catch unreachable;
+    }
+
+    for (interestingOps.items) |op| {
+        if (op.kind == .Load) continue;
+        if (op.cfg0() == lca) continue;
+
+        for (interestingOps.items) |oo| {
+            const oop = if (oo.kind == .Load) oo.mem() else oo;
+
+            if (oop.cfg0() == lca or oop == op or
+                oop.cfg0().idepth() < op.cfg0().idepth()) continue;
+
+            var cursor = oop.cfg0();
+            while (cursor != lca) {
+                if (op.cfg0() == cursor) break;
+                cursor = cursor.idom();
+            } else {
+                return ctx.err(.{ .DependsOnRuntimeControlFlow = oop });
+            }
+        }
+    }
+
+    return interestingOps.items;
+}
+
+pub fn partialEvalCall(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, curr: *Node, from_ret: ?*Node) !?*Node {
     const types = self.getTypes();
+
+    const call: *Node = curr.inputs()[0].?;
+    std.debug.assert(call.kind == .Call);
+
+    if (call.extra(.Call).id != eca) {
+        const func_id: utils.EntId(tys.Func) = @enumFromInt(call.extra(.Call).id);
+        const func = types.store.get(func_id);
+
+        if (func.recursion_lock) {
+            types.report(func.key.loc.file, func.key.loc.ast, "the functions types most likely depend on it being evaluated", .{});
+            return ctx.err(.{ .Unsupported = .{ curr, "recursive call" } });
+        }
+
+        if (func.completion.get(.@"comptime") == .queued) {
+            self.jitFunc(func_id) catch return ctx.err(.{ .Unsupported = .{ curr, "jit func" } });
+        }
+        if (types.store.get(func_id).errored) return ctx.err(.{ .Unsupported = .{ curr, "errored" } });
+        std.debug.assert(types.store.get(func_id).completion.get(.@"comptime") == .compiled);
+        std.debug.assert(self.gen.out.funcs.items.len > call.extra(.Call).id);
+    }
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    // TODO: maybe use the vm stack instead
-    var work_list = std.ArrayListUnmanaged(*Node).initBuffer(tmp.arena.alloc(*Node, 1024));
-
-    work_list.appendAssumeCapacity(expr);
-
-    for (0..100000) |_| {
-        const curr: *Node = work_list.pop().?;
-        if (curr.isDead()) continue;
-        std.debug.print("{f}\n", .{curr});
-        const res = switch (curr.kind) {
-            .Local => b: {
-                {
-                    const global = curr.inputs()[1].?.extra(.LocalAlloc).meta;
-
-                    if (global != std.math.maxInt(u32)) {
-                        types.store.get(@as(utils.EntId(tys.Global), @enumFromInt(global))).data.freeze();
-
-                        if (work_list.items.len == 0) {
-                            return .{ .Arbitrary = @enumFromInt(global) };
-                        } else {
-                            break :b bl.addGlobalAddr(curr.sloc, global);
-                        }
-                    }
-                }
-
-                work_list.appendAssumeCapacity(curr);
-
-                var iter = std.mem.reverseIterator(curr.outputs());
-                while (iter.next()) |o| {
-                    const use: *Node = o.get();
-                    if (use.knownMemOp()) |op| {
-                        const base, _ = op[0].base().knownOffset();
-                        if (op[0].isStore() and base == curr) {
-                            work_list.appendAssumeCapacity(op[0]);
-                            continue;
-                        } else if (op[0].isStore() or op[0].isLoad()) {
-                            continue;
-                        }
-                    }
-                    if (use.kind == .Call) {
-                        std.debug.print("foob\n", .{});
-                        work_list.appendAssumeCapacity(use.outputs()[0].get());
-                        continue;
-                    }
-                    if (use.kind == .Scope) continue;
-                    if (use.outputs().len == 0) continue;
-                    return .{ .Unsupported = .{ use, "local" } };
-                }
-
-                const global = types.addUniqueGlobal(scope);
-                types.store.get(global).data = .{ .mut = types.pool.arena.alloc(
-                    u8,
-                    @intCast(curr.inputs()[1].?.extra(.LocalAlloc).size),
-                ) };
-                types.store.get(global).ty = @enumFromInt(curr.inputs()[1].?.extra(.LocalAlloc).debug_ty);
-                curr.inputs()[1].?.extra(.LocalAlloc).meta = @intFromEnum(global);
-
-                continue;
+    var globals = std.ArrayList(*Node){};
+    for (call.inputs()[2..], 0..) |arg, arg_idx| {
+        const argv = try self.partialEval(ctx, bl, arg.?);
+        types.ct.vm.regs.set(.arg(arg_idx), switch (argv.extra2()) {
+            .CInt => |extra| @bitCast(extra.value),
+            .GlobalAddr => |extra| b: {
+                globals.append(tmp.arena.allocator(), argv) catch unreachable;
+                break :b try self.partialEvalGlobal(ctx, argv, extra.id, false);
             },
-            .Store => {
-                const base, const offset = curr.base().knownOffset();
-                if (base.kind != .Local) {
-                    return .{ .Unsupported = .{ curr, "non local store" } };
-                }
-                const global: utils.EntId(tys.Global) = @enumFromInt(base.inputs()[1].?.extra(.LocalAlloc).meta);
-                const data = types.store.get(global).data;
+            else => return ctx.err(.{ .Unsupported = .{ argv, "function argument" } }),
+        });
+    }
 
-                if (curr.value().?.kind != .CInt) {
-                    work_list.appendAssumeCapacity(curr);
-                    work_list.appendAssumeCapacity(curr.value().?);
-                    continue;
-                }
+    types.ct.runVm(ctx.file, ctx.pos, call.extra(.Call).id, &.{}) catch {
+        return ctx.err(.{ .Unsupported = .{ curr, "vm error" } });
+    };
 
-                const value = curr.value().?.extra(.CInt).value;
-                @memcpy(
-                    data.mut[@intCast(offset)..][0..@intCast(curr.data_type.size())],
-                    @as([*]const u8, @ptrCast(&value))[0..@intCast(curr.data_type.size())],
-                );
+    for (globals.items) |g| {
+        _ = try self.partialEvalGlobal(ctx, g, g.extra(.GlobalAddr).id, true);
+    }
 
-                bl.func.subsume(curr.mem(), curr);
+    var rret: ?*Node = null;
+    for (tmp.arena.dupe(Node.Out, curr.outputs())) |n| {
+        const o = n.get();
+        if (o.kind == .Ret) {
+            const idx = o.extra(.Ret).index;
+            const ret = types.ct.vm.regs.get(.ret(idx));
+            const ret_vl = bl.addIntImm(.none, o.data_type, @bitCast(ret));
+            if (o == from_ret) rret = ret_vl;
+            bl.func.subsume(ret_vl, o);
+        }
+        if (o.kind == .Mem) {
+            bl.func.subsume(call.inputs()[1].?, o);
+        }
+    }
+    // NOTE: the backend expects this
+    call.data_type = .bot;
+    bl.func.subsume(call.inputs()[0].?, curr);
 
-                continue;
-            },
-            .GlobalAddr => b: {
-                const global = curr.extra(.GlobalAddr).id;
-                const below = work_list.getLastOrNull() orelse {
-                    return .{ .Arbitrary = @enumFromInt(global) };
-                };
-                _ = below; // autofix
+    return rret;
+}
 
-                const gid: utils.EntId(tys.Global) = @enumFromInt(global);
-                if (types.store.get(gid).completion.get(.@"comptime") != .compiled) {
-                    types.queue(.@"comptime", .init(.{ .Global = gid }));
-                    if (types.retainGlobals(.@"comptime", &self.gen)) {
-                        return .{ .Unsupported = .{ curr, "retained globals" } };
-                    }
-                }
+pub fn partialEvalGlobal(self: *Comptime, ctx: PartialEvalCtx, curr: *Node, global: u32, detect_nested: bool) !u64 {
+    const types = self.getTypes();
+    const gid: utils.EntId(tys.Global) = @enumFromInt(global);
+    // TODO: clean this up
 
-                const addr = self.gen.out.syms.items[@intFromEnum(self.gen.out.globals.items[global])].offset;
-                break :b bl.addIntImm(curr.sloc, .i64, addr);
-            },
-            .CInt => {
-                if (work_list.items.len == 0) {
-                    return .{ .Resolved = @as(u64, @bitCast(curr.extra(.CInt).*)) };
-                }
+    types.store.get(gid).completion.getPtr(.@"comptime").* = .queued;
+    if (types.store.get(gid).completion.get(.@"comptime") != .compiled) {
+        types.queue(.@"comptime", .init(.{ .Global = gid }));
+        if (types.retainGlobals(.@"comptime", &self.gen, detect_nested)) {
+            return ctx.err(.{ .Unsupported = .{ curr, "retained globals" } });
+        }
+    }
 
-                continue;
-            },
-            .Phi => b: {
-                if (curr.inputs()[0].?.kind == .Loop and curr.inputs()[2] == null) {
-                    break :b curr.inputs()[1].?;
-                } else {
-                    return .{ .Unsupported = .{ curr, "phi" } };
-                }
-            },
-            .BinOp, .UnOp => |t| b: {
-                var requeued = false;
-
-                for (curr.inputs()[1..]) |arg| {
-                    if (arg.?.kind != .CInt) {
-                        if (!requeued) work_list.appendAssumeCapacity(curr);
-                        work_list.appendAssumeCapacity(arg.?);
-                        requeued = true;
-                    }
-                }
-                if (requeued) continue;
-
-                switch (t) {
-                    .BinOp => {
-                        const lhs, const rhs = .{ curr.inputs()[1].?.extra(.CInt).value, curr.inputs()[2].?.extra(.CInt).value };
-                        break :b bl.addIntImm(.none, curr.data_type, curr.extra(.BinOp).op.eval(curr.data_type, lhs, rhs));
-                    },
-                    .UnOp => {
-                        const oper = curr.inputs()[1].?.extra(.CInt).value;
-                        break :b bl.addIntImm(.none, curr.data_type, curr.extra(.UnOp).op
-                            .eval(curr.inputs()[1].?.data_type, curr.data_type, oper));
-                    },
-                    else => unreachable,
-                }
-            },
-            .Ret => {
-                work_list.appendAssumeCapacity(curr.inputs()[0].?);
-                continue;
-            },
-            .CallEnd => {
-                const call: *Node = curr.inputs()[0].?;
-                std.debug.assert(call.kind == .Call);
-
-                if (call.extra(.Call).id != eca) {
-                    const func_id: utils.EntId(tys.Func) = @enumFromInt(call.extra(.Call).id);
-                    const func = types.store.get(func_id);
-
-                    if (func.recursion_lock) {
-                        types.report(func.key.loc.file, func.key.loc.ast, "the functions types most likely depend on it being evaluated", .{});
-                        return .{ .Unsupported = .{ curr, "recursive call" } };
-                    }
-
-                    if (func.completion.get(.@"comptime") == .queued) {
-                        self.jitFunc(func_id) catch return .{ .Unsupported = .{ curr, "jit func" } };
-                    }
-                    if (types.store.get(func_id).errored) return .{ .Unsupported = .{ curr, "errored" } };
-                    std.debug.assert(types.store.get(func_id).completion.get(.@"comptime") == .compiled);
-                    std.debug.assert(self.gen.out.funcs.items.len > call.extra(.Call).id);
-                }
-
-                var requeued = false;
-                for (call.inputs()[2..], 0..) |arg, arg_idx| {
-                    if (arg.?.kind != .CInt) {
-                        if (!requeued) work_list.appendAssumeCapacity(curr);
-                        work_list.appendAssumeCapacity(arg.?);
-                        requeued = true;
-                    } else {
-                        types.ct.vm.regs.set(.arg(arg_idx), @bitCast(arg.?.extra(.CInt).*));
-                    }
-                }
-
-                if (requeued) continue;
-
-                types.ct.runVm(file, pos, call.extra(.Call).id, &.{}) catch {
-                    return .{ .Unsupported = .{ curr, "vm error" } };
-                };
-
-                for (tmp.arena.dupe(Node.Out, curr.outputs())) |n| {
-                    const o = n.get();
-                    if (o.kind == .Ret) {
-                        const idx = o.extra(.Ret).index;
-                        const ret = types.ct.vm.regs.get(.ret(idx));
-                        const ret_vl = bl.addIntImm(.none, o.data_type, @bitCast(ret));
-                        bl.func.subsume(ret_vl, o);
-                        work_list.appendAssumeCapacity(ret_vl);
-                    }
-                    if (o.kind == .Mem) {
-                        bl.func.subsume(call.inputs()[1].?, o);
-                    }
-                }
-                // NOTE: the backend expects this
-                call.data_type = .bot;
-                bl.func.subsume(call.inputs()[0].?, curr);
-                continue;
-            },
-            .Load => b: {
-                const base, const offset = curr.base().knownOffset();
-
-                if (base.kind == .GlobalAddr) {
-                    const glob_id: utils.EntId(tys.Global) = @enumFromInt(base.extra(.GlobalAddr).id);
-                    const glob: *tys.Global = types.store.get(glob_id);
-
-                    std.debug.assert(curr.data_type.isInt());
-
-                    var mem: u64 = 0;
-                    @memcpy(
-                        @as([*]u8, @ptrCast(&mem))[0..@intCast(curr.data_type.size())],
-                        glob.data.slice()[@intCast(offset)..][0..@intCast(curr.data_type.size())],
-                    );
-
-                    break :b bl.addIntImm(.none, curr.data_type, @bitCast(mem));
-                } else if (base.kind == .CInt) {
-                    var mem: u64 = 0;
-
-                    @memcpy(
-                        @as([*]u8, @ptrCast(&mem))[0..@intCast(curr.data_type.size())],
-                        self.gen.out.code.items[@intCast(base.extra(.CInt).value + offset)..][0..@intCast(curr.data_type.size())],
-                    );
-
-                    break :b bl.addIntImm(.none, curr.data_type, @bitCast(mem));
-                } else if (base.kind == .Local) fold_initializer: {
-                    var call: ?*Node = null;
-                    var has_stores = false;
-                    for (base.outputs()) |o| {
-                        if (o.get().kind == .Call and o.pos() >= 2) {
-                            if (call) |_| {
-                                return .{ .Unsupported = .{ curr, "multiple calls" } };
-                            }
-                            call = o.get();
-                        }
-
-                        has_stores = has_stores or o.get().isStore();
-                    }
-
-                    const initializer = call orelse {
-                        break :fold_initializer;
-                    };
-
-                    if (has_stores) return .{ .Unsupported = .{ curr, "initializer has stores" } };
-
-                    work_list.appendAssumeCapacity(curr);
-                    work_list.appendAssumeCapacity(initializer.outputs()[0].get());
-                    continue;
-                } else if (curr.base().kind == .BinOp and curr.base().inputs()[2].?.kind != .CInt) {
-                    work_list.appendAssumeCapacity(curr);
-                    work_list.appendAssumeCapacity(curr.base().inputs()[2].?);
-                    continue;
-                } else if (curr.base().kind == .BinOp and
-                    curr.base().extra(.BinOp).op.neutralElememnt(.i64) ==
-                        curr.base().inputs()[2].?.extra(.CInt).value)
-                {
-                    bl.func.subsume(curr.base().inputs()[1].?, curr.base());
-                } else {
-                    work_list.appendAssumeCapacity(curr);
-                    work_list.appendAssumeCapacity(curr.base());
-                    continue;
-                }
-
-                const loop_bit = 1 << 0;
-                const if_bit = 1 << 1;
-
-                const util = enum {
-                    pub fn setBit(v: u16, bit: u16) u16 {
-                        return v | bit;
-                    }
-
-                    pub fn clearBit(v: u16, bit: u16) u16 {
-                        return v & ~bit;
-                    }
-
-                    pub fn hasBit(v: u16, bit: u16) bool {
-                        return v & bit != 0;
-                    }
-                };
-
-                var cursor = curr.mem();
-                const bs = work_list.items.len;
-                var seen = std.ArrayList(*Node).empty;
-                var no_errors = false;
-                defer if (!no_errors) for (seen.items) |v| {
-                    v.schedule = std.math.maxInt(u16);
-                };
-
-                var loop_depth: usize = 0;
-                for (0..10000) |_| {
-                    if (work_list.items.len != bs) {
-                        var data_dep_cont: usize = 0;
-                        for (cursor.outputs()) |o| {
-                            if (o.get().isLoad()) continue;
-                            if (o.get().kind == .Call and o.pos() != 1) {
-                                continue;
-                            }
-                            if (o.get().kind == .Scope) continue;
-
-                            data_dep_cont += 1;
-                        }
-                        if (data_dep_cont > 1) {
-                            if (data_dep_cont > 3) {
-                                for (cursor.outputs()) |o| {
-                                    std.debug.print("{f}\n\n", .{o});
-
-                                    for (o.get().inputs()) |oo| {
-                                        std.debug.print("<-{f}\n", .{oo.?});
-                                    }
-                                    std.debug.print("\n", .{});
-                                    for (o.get().outputs()) |oo| {
-                                        std.debug.print("->{f}\n", .{oo.get()});
-                                    }
-                                    std.debug.print("\n", .{});
-                                }
-
-                                std.debug.print("{f}\n", .{types.getFile(file).codePointer(pos)});
-                                unreachable;
-                            }
-                            if (util.hasBit(cursor.schedule, if_bit)) {
-                                cursor.schedule = util.clearBit(cursor.schedule, if_bit);
-                                std.mem.swap(*Node, &work_list.items[work_list.items.len - 1], &cursor);
-                                try seen.append(tmp.arena.allocator(), cursor);
-                                continue;
-                            } else {
-                                cursor.schedule = util.setBit(cursor.schedule, if_bit);
-                                _ = work_list.pop().?;
-                            }
-                        }
-                    }
-
-                    if (cursor.isStore()) {
-                        if (cursor.base() != curr.base()) {
-                            cursor = cursor.mem();
-                        } else if (work_list.items.len == bs and loop_depth == 0) {
-                            no_errors = true;
-                            break :b cursor.value().?;
-                        } else {
-                            return .{ .DependsOnRuntimeControlFlow = curr };
-                        }
-                    } else if (cursor.kind == .Mem) {
-                        if (cursor.inputs()[0].?.kind == .Start) {
-                            return .{ .Unsupported = .{ cursor, "uninit comptime mem" } };
-                        }
-                        cursor = cursor.inputs()[0].?.inputs()[0].?.inputs()[1].?;
-                    } else if (cursor.kind == .Phi) {
-                        if (cursor.cfg0().base.kind == .Loop) {
-                            if (cursor.inputs()[2] == null) {
-                                cursor = cursor.inputs()[1].?;
-                                continue;
-                            }
-
-                            if (util.hasBit(cursor.schedule, loop_bit)) {
-                                try seen.append(tmp.arena.allocator(), cursor);
-                                cursor.schedule = util.clearBit(cursor.schedule, loop_bit);
-                                cursor = cursor.inputs()[2].?;
-                                loop_depth += 1;
-                            } else {
-                                cursor.schedule = util.setBit(cursor.schedule, loop_bit);
-                                cursor = cursor.inputs()[1].?;
-                                loop_depth -= 1;
-                            }
-                        } else {
-                            work_list.appendAssumeCapacity(cursor.inputs()[1].?);
-                            cursor = cursor.inputs()[2].?;
-                        }
-                    } else {
-                        return .{ .Unsupported = .{ cursor, "undandled load" } };
-                    }
-                } else unreachable;
-            },
-            else => return .{ .Unsupported = .{ curr, "undandled node" } },
-        };
-
-        bl.func.subsume(res, curr);
-        work_list.appendAssumeCapacity(res);
-    } else unreachable;
+    return self.gen.out.syms.items[@intFromEnum(self.gen.out.globals.items[global])].offset;
 }
 
 pub fn runVm(
@@ -750,10 +503,10 @@ pub fn runVm(
                         slot.* = .{
                             .id = .fromIdent(cp.id),
                             .ty = @enumFromInt(self.ecaArg(prefix + i * 2)),
-                            .value = self.ecaArg(prefix + i * 2 + 1),
+                            .value = @bitCast(self.ecaArg(prefix + i * 2 + 1)),
                         };
                         if (slot.ty.size(types) < 8) slot.value &=
-                            (@as(u64, 1) << @intCast(slot.ty.size(types) * 8)) - 1;
+                            (@as(i64, 1) << @intCast(slot.ty.size(types) * 8)) - 1;
                     }
 
                     const res = switch (t) {
@@ -1069,7 +822,7 @@ pub fn jitExprLow(
             return .{ .{ .constant = ret.id.Value.extra(.CInt).value }, ret.ty };
         }
 
-        if (types.retainGlobals(.@"comptime", &self.gen)) return error.Never;
+        if (types.retainGlobals(.@"comptime", &self.gen, true)) return error.Never;
 
         if (ret.id == .Pointer and gen.abiCata(ret.ty) == .ByValue and
             ret.id.Pointer.kind == .GlobalAddr)
@@ -1092,7 +845,7 @@ pub fn jitExprLow(
         gen.bl.end(token);
 
         if (!only_inference) {
-            gen.errored = self.getTypes().retainGlobals(.@"comptime", &self.gen) or
+            gen.errored = self.getTypes().retainGlobals(.@"comptime", &self.gen, true) or
                 gen.errored;
 
             const reg_alloc_results = optimizeComptime(.debug, HbvmGen, &self.gen, @ptrCast(&gen.bl.func));
@@ -1131,7 +884,7 @@ pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until:
 
         try self.build(func);
 
-        self.errored = self.types.retainGlobals(self.target, &self.types.ct.gen) or
+        self.errored = self.types.retainGlobals(self.target, &self.types.ct.gen, true) or
             self.errored;
 
         const reg_alloc_results = optimizeComptime(.debug, HbvmGen, &self.types.ct.gen, @ptrCast(&self.bl.func));
@@ -1162,13 +915,13 @@ pub fn evalTy(self: *Comptime, name: []const u8, scope: Codegen.Scope, ty_expr: 
         .func => |id| {
             var data: [8]u8 = undefined;
             try self.runVm(scope.file(types), types.getFile(file).posOf(ty_expr).index, @intFromEnum(id), &data);
-            return Types.Id.fromRaw(@bitCast(data[0..4].*), types) orelse {
+            return Types.Id.fromRaw(@as(u32, @bitCast(data[0..4].*)), types) orelse {
                 types.report(scope.file(types), ty_expr, "resulting type has a corrupted value", .{});
                 return error.Never;
             };
         },
         .constant => |vl| {
-            return Types.Id.fromRaw(@truncate(@as(u64, @bitCast(vl))), types) orelse {
+            return Types.Id.fromRaw(vl, types) orelse {
                 types.report(scope.file(types), ty_expr, "resulting type has a corrupted value", .{});
                 return error.Never;
             };

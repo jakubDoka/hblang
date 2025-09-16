@@ -1,5 +1,6 @@
 const root = @import("hb");
 const Types = root.frontend.Types;
+const Comptime = root.frontend.Comptime;
 const Ast = root.frontend.Ast;
 const graph = root.backend.graph;
 const Abi = root.frontend.Abi;
@@ -217,8 +218,11 @@ pub const Enum = struct {
 pub const Union = struct {
     key: Scope,
 
+    tag: TyId = .void,
     fields: ?[]const Field = null,
     abi: ?Abi.TmpSpec = null,
+    payload_size: ?u64 = null,
+    payload_align: ?u64 = null,
     index: Ast.Index,
 
     pub const Field = struct {
@@ -230,6 +234,93 @@ pub const Union = struct {
         _,
 
         pub const Data = Union;
+
+        pub fn tagOffset(id: Id, types: *Types) u64 {
+            const self: *Union = types.store.get(id);
+            if (self.payload_size == null) {
+                id.computeLayout(types);
+            }
+            return self.payload_size.?;
+        }
+
+        pub fn size(id: Id, types: *Types) u64 {
+            const self: *Union = types.store.get(id);
+
+            if (self.payload_size == null) {
+                id.computeLayout(types);
+            }
+
+            return self.payload_size.? + if (id.getTag(types) != .void) self.payload_align.? else 0;
+        }
+
+        pub fn alignment(id: Id, types: *Types) u64 {
+            const self: *Union = types.store.get(id);
+
+            if (self.payload_align == null) {
+                id.computeLayout(types);
+            }
+
+            return @max(self.payload_align.?, self.tag.alignment(types));
+        }
+
+        fn computeLayout(id: Id, types: *Types) void {
+            const self: *Union = types.store.get(id);
+
+            var max_size: u64 = 0;
+            var alignm: u64 = 1;
+            for (id.getFields(types)) |f| {
+                alignm = @max(alignm, f.ty.alignment(types));
+                max_size = @max(max_size, f.ty.size(types));
+            }
+            max_size = std.mem.alignForward(u64, max_size, alignm);
+
+            self.payload_size = max_size;
+            self.payload_align = alignm;
+        }
+
+        pub fn getTag(id: Id, types: *Types) TyId {
+            const self: *Union = types.store.get(id);
+
+            if (self.tag != .void) {
+                return self.tag;
+            }
+
+            const ast = types.getFile(self.key.loc.file);
+            const union_ast = ast.exprs.get(self.key.loc.ast).Type;
+            if (union_ast.tag.tag() == .Void) return .void;
+
+            if (union_ast.tag.tag() == .EnumWildcard) {
+                const rfields = id.getFields(types);
+                const fields = types.pool.arena.alloc(Enum.Field, rfields.len);
+                for (rfields, fields, 0..) |ref, *slot, i| {
+                    slot.* = .{ .name = ref.name, .value = @intCast(i) };
+                }
+
+                const slot, const ty = types.intern(.Enum, .{
+                    .loc = .{
+                        .scope = .init(.{ .Union = id }),
+                        .file = self.key.loc.file,
+                        .ast = .zeroSized(.Void),
+                        .capture_len = 0,
+                    },
+                    .name_pos = self.key.name_pos,
+                    .captures_ptr = undefined,
+                });
+
+                std.debug.assert(!slot.found_existing);
+
+                const enm: *Enum = types.store.get(ty);
+                enm.fields = fields;
+                enm.index = .empty;
+                enm.backing_int = .u8; // todo
+
+                self.tag = .init(.{ .Enum = ty });
+            } else {
+                self.tag = types.ct.evalTy("", .init(.{ .Union = id }), union_ast.tag) catch .never;
+            }
+
+            return self.tag;
+        }
 
         pub fn getFields(id: Id, types: *Types) []const Field {
             const self: *Union = types.store.get(id);
@@ -458,7 +549,11 @@ pub const Func = struct {
 pub const Global = struct {
     key: Scope,
     ty: TyId = .void,
-    data: if (std.debug.runtime_safety) union(enum) {
+    data: union(enum) {
+        @"comptime": struct {
+            base: usize,
+            len: usize,
+        },
         mut: []u8,
         imm: []const u8,
 
@@ -467,20 +562,20 @@ pub const Global = struct {
             self.* = .{ .imm = tmp };
         }
 
-        pub fn slice(self: @This()) []const u8 {
+        pub fn slice(self: @This(), ct: *Comptime) []const u8 {
             return switch (self) {
+                .@"comptime" => |s| ct.gen.out.code.items[s.base..][0..s.len],
                 .mut => |s| s,
                 .imm => |s| s,
             };
         }
-    } else union {
-        mut: []u8,
-        imm: []const u8,
 
-        pub fn freeze(_: *@This()) void {}
-
-        pub fn slice(self: @This()) []const u8 {
-            return self.imm;
+        pub fn mutSlice(self: @This(), ct: *Comptime) ?[]u8 {
+            return switch (self) {
+                .@"comptime" => |s| ct.gen.out.code.items[s.base..][0..s.len],
+                .mut => |s| s,
+                .imm => null,
+            };
         }
     } = .{ .imm = &.{} },
     relocs: []const root.backend.Machine.DataOptions.Reloc = &.{},

@@ -1,6 +1,3 @@
 main:
-	sub rsp, 0x10
-	mov dword ptr [rsp], 0x7000000F
 	mov rax, 0x04
-	add rsp, 0x10
 	ret

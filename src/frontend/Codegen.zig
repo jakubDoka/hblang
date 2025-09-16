@@ -176,7 +176,7 @@ pub const Scope = union(enum) {
                     slot.* = .{
                         .ty = se.ty,
                         .id = .fromIdent(id),
-                        .value = t.partialEvalLow(t.posOf(ast).index, &value, true) catch 0,
+                        .value = t.partialEvalCaptureLow(ast, &value, true) catch 0,
                     };
                     return slot;
                 }
@@ -263,7 +263,7 @@ pub fn emitReachableSingle(
         build_met.end();
 
         var retain_globals_met = types.metrics.begin(.retain_globals);
-        errored = types.retainGlobals(.runtime, backend) or
+        errored = types.retainGlobals(.runtime, backend, true) or
             errored;
         retain_globals_met.end();
 
@@ -723,10 +723,6 @@ pub fn listFileds(arena: *utils.Arena, fields: anytype) []const u8 {
     return field_list.written()[2..];
 }
 
-pub fn foo() usize {
-    return @frameAddress();
-}
-
 pub fn emitParseString(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.String)) !Value {
     const lit = self.ast.source[e.pos.index + 1 .. e.end - 1];
 
@@ -960,8 +956,8 @@ pub fn emitCtor(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Ctor)) EmitErr
             const field_ast = self.ast.exprs.view(e.fields)[0];
             const fname = self.ast.tokenSrc(field_ast.pos.index);
 
-            const f = for (fields) |f| {
-                if (std.mem.eql(u8, f.name, fname)) break f;
+            const f, const i = for (fields, 0..) |f, i| {
+                if (std.mem.eql(u8, f.name, fname)) break .{ f, i };
             } else {
                 var tmp = utils.Arena.scrath(null);
                 defer tmp.deinit();
@@ -976,6 +972,15 @@ pub fn emitCtor(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Ctor)) EmitErr
             const off = self.bl.addFieldOffset(sloc, local, @intCast(offset_cursor));
             var value = try self.emitTyped(.{ .loc = off }, f.ty, field_ast.value);
             self.emitGenericStore(sloc, off, &value);
+
+            const tag = union_ty.getTag(self.types);
+            if (tag != .void) {
+                const offset = union_ty.tagOffset(self.types);
+                const val = tag.data().Enum.getFields(self.types)[i].value;
+                const vl_ty = self.abiCata(tag).ByValue;
+                const value_cnst = self.bl.addIntImm(sloc, vl_ty, val);
+                self.bl.addFieldStore(sloc, local, @intCast(offset_cursor + offset), vl_ty, value_cnst);
+            }
         },
         else => {
             return self.report(expr, "{} can not be constructed with '.{..}'", .{ty});
@@ -1348,7 +1353,18 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
                 },
             };
 
+            if (lhs.ty.data() == .Union and e.rhs.tag() == .Tag and (e.op == .@"==" or e.op == .@"!=")) {
+                const unon: tys.Union.Id = lhs.ty.data().Union;
+                var tag_value = try self.emit(.{ .ty = unon.getTag(self.types) }, e.rhs);
+
+                return self.checkTag(e.rhs, lhs, unon, &tag_value, e.op);
+            }
+
             var rhs = try self.emit(.{ .ty = lhs.ty }, e.rhs);
+
+            if (lhs.ty.data() == .Union and rhs.ty == lhs.ty.data().Union.getTag(self.types)) {
+                return self.checkTag(e.rhs, lhs, lhs.ty.data().Union, &rhs, e.op);
+            }
 
             switch (lhs.ty.data()) {
                 .Struct => |struct_ty| {
@@ -1664,7 +1680,7 @@ pub fn emitIndex(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Index)) EmitE
         var idx_value = try self.emitTyped(.{}, .uint, e.subscript);
         switch (base.ty.data()) {
             inline .Struct, .Tuple => |struct_ty| {
-                const idx = try self.partialEval(e.subscript, &idx_value);
+                const idx = try self.partialEvalConst(e.subscript, &idx_value);
 
                 var iter = struct_ty.offsetIter(self.types);
 
@@ -1760,7 +1776,7 @@ fn emitIf(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.If)) EmitError!Value
     const sloc = self.src(expr);
     if (e.pos.flag.@"comptime") {
         var cond = try self.emitTyped(ctx, .bool, e.cond);
-        if (try self.partialEval(e.cond, &cond) != 0) {
+        if (try self.partialEvalConst(e.cond, &cond) != 0) {
             _ = self.emitTyped(ctx, .void, e.then) catch |err| switch (err) {
                 error.Never => {},
                 error.Unreachable => return err,
@@ -1867,15 +1883,10 @@ fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError
             const arm_value = if (cg.abiCata(match_pat.ty) == .Imaginary)
                 0
             else
-                try cg.partialEval(arm.pat, &match_pat);
-
-            // do a binary search instead
-            //const idx = for (slf.fields, 0..) |field, j| {
-            //    if (field.value == arm_value) break j;
-            //} else unreachable;
+                try cg.partialEvalConst(arm.pat, &match_pat);
 
             const idx = std.sort.binarySearch(tys.Enum.Field, slf.fields, arm_value, struct {
-                fn lessThenFn(ar: u64, lhs: tys.Enum.Field) std.math.Order {
+                fn lessThenFn(ar: i64, lhs: tys.Enum.Field) std.math.Order {
                     return std.math.order(ar, lhs.value);
                 }
             }.lessThenFn).?;
@@ -1905,7 +1916,7 @@ fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError
         const value_idx = if (self.abiCata(value.ty) == .Imaginary)
             0
         else
-            try self.partialEval(e.value, &value);
+            try self.partialEvalConst(e.value, &value);
 
         var matched_branch: ?Ast.Id = null;
         for (self.ast.exprs.view(e.arms), 0..) |arm, i| {
@@ -2270,7 +2281,7 @@ fn emitUserType(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Type)) !Value {
         if (a.kind != .CInt) break false;
     } else true) {
         self.types.stats.useless_ecas += 1;
-        return .mkv(.type, self.bl.addIntImm(sloc, .i32, @intCast(try self.partialEval(expr, &ret))));
+        return .mkv(.type, self.bl.addIntImm(sloc, .i32, try self.partialEvalConst(expr, &ret)));
     }
     self.types.stats.total_ecas += 1;
 
@@ -2308,7 +2319,7 @@ fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
         slot.* = .{
             .id = .fromIdent(cp.id),
             .ty = val.ty,
-            .value = try self.partialEval(cp.id, &val),
+            .value = try self.partialEvalCapture(cp.id, &val),
         };
     }
 
@@ -2457,6 +2468,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .Directive => |e| return self.emitDirective(ctx, expr, e),
         .Wildcard => return self.report(expr, "wildcard does not make sense here", .{}),
         .Range => return self.report(expr, "range does not make sense here", .{}),
+        .EnumWildcard => return self.report(expr, "enum wildcard can only be only specified as a union tag", .{}),
     };
 }
 
@@ -2608,6 +2620,33 @@ pub fn emitDecl(
     self.bl.pushPin(loc);
 
     return out;
+}
+
+pub fn checkTag(
+    self: *Codegen,
+    pos: anytype,
+    union_value: Value,
+    unon: tys.Union.Id,
+    tag_value: *Value,
+    op: Lexer.Lexeme,
+) Value {
+    std.debug.assert(op == .@"!=" or op == .@"==");
+    std.debug.assert(unon.getTag(self.types) == tag_value.ty);
+
+    const sloc = self.src(pos);
+
+    return .mkv(.bool, self.bl.addBinOp(
+        sloc,
+        self.lexemeToBinOp(pos, op, tag_value.ty) catch unreachable,
+        .i8,
+        self.bl.addFieldLoad(
+            sloc,
+            union_value.id.Pointer,
+            @intCast(unon.tagOffset(self.types)),
+            self.abiCata(tag_value.ty).ByValue,
+        ),
+        tag_value.getValue(sloc, self),
+    ));
 }
 
 pub fn checkNull(self: *Codegen, expr: Ast.Id, lhs: *Value, op: Lexer.Lexeme) !Value {
@@ -2999,8 +3038,9 @@ pub fn unwrapTyConst(self: *Codegen, pos: anytype, cnst: *Value) !Types.Id {
     if (cnst.ty != .type) {
         return self.report(pos, "expected type, {} is not", .{cnst.ty});
     }
+    var value = try self.partialEval(pos, cnst);
     return Types.Id.fromRaw(
-        @truncate(try self.partialEval(pos, cnst)),
+        value.getValue(.none, self).extra(.CInt).value,
         self.types,
     ) orelse {
         return self.report(pos, "type value of this expression is corrupted", .{});
@@ -3105,7 +3145,7 @@ pub fn resolveGlobal(
         var report_scope = bsty;
         var cur: Types.Id = @enumFromInt(@as(
             Types.IdRepr,
-            @bitCast(global.data.slice()[0..@sizeOf(Types.Id)].*),
+            @bitCast(global.data.slice(&self.types.ct)[0..@sizeOf(Types.Id)].*),
         ));
 
         for (path, 0..) |ps, i| {
@@ -3414,10 +3454,10 @@ pub fn instantiateTemplate(
                         .Expr => |ex| try self.resolveAnonTy(ex),
                     })
                 else switch (arg) {
-                    .Value => |v| try self.partialEval(expr, v),
+                    .Value => |v| try self.partialEvalCapture(expr, v),
                     .Expr => |ar| b: {
                         var val = try self.emitTyped(.{}, ty, ar);
-                        break :b try self.partialEval(ar, &val);
+                        break :b try self.partialEvalCapture(ar, &val);
                     },
                 },
             };
@@ -3704,24 +3744,27 @@ pub fn encodeString(
     return .{ .ok = str.items };
 }
 
-pub fn partialEvalLow(self: *Codegen, pos: u32, value: *Value, can_recover: bool) !u64 {
+pub fn partialEvalLow(self: *Codegen, pos: u32, value: *Value, can_recover: bool) !Value {
     const file = self.parent_scope.file(self.types);
-    return switch (self.types.ct.partialEval(
-        file,
-        self.parent_scope.perm(self.types),
-        pos,
+    var err: Comptime.PartialEvalResult2 = undefined;
+    const res = self.types.ct.partialEval(
+        .{
+            .file = file,
+            .scope = self.parent_scope.perm(self.types),
+            .pos = pos,
+            .error_slot = &err,
+        },
         &self.bl,
         switch (self.abiCata(value.ty)) {
-            .Impossible, .Imaginary => return 0,
+            .Impossible => return error.Unreachable,
+            .Imaginary => return .{},
             .ByValue => value.getValue(.none, self),
             .ByValuePair, .ByRef => value.id.Pointer,
         },
-    )) {
-        .Resolved => |r| r,
-        .Arbitrary => |a| @intFromEnum(a),
+    ) catch switch (err) {
         .DependsOnRuntimeControlFlow => |n| {
             if (can_recover) {
-                return 0;
+                return .{ .ty = value.ty };
             }
 
             return self.report(pos, "can't evaluate this at compile time since" ++
@@ -3730,12 +3773,18 @@ pub fn partialEvalLow(self: *Codegen, pos: u32, value: *Value, can_recover: bool
         },
         .Unsupported => |n| {
             if (can_recover) {
-                return 0;
+                return .{ .ty = value.ty };
             }
 
             return self.report(pos, "can't evaluate this at compile time (yet)," ++
                 " (DEBUG: got stuck on {} {})", .{ n[0], n[1] });
         },
+    };
+
+    return switch (value.id) {
+        .Imaginary => unreachable,
+        .Value => .mkv(value.ty, res),
+        .Pointer => .mkp(value.ty, res),
     };
 }
 
@@ -3743,7 +3792,28 @@ pub fn posOf(self: *Codegen, pos: anytype) Ast.Pos {
     return self.types.posOf(self.parent_scope.file(self.types), pos);
 }
 
-pub fn partialEval(self: *Codegen, pos: anytype, value: *Value) !u64 {
+pub fn partialEvalConst(self: *Codegen, pos: anytype, value: *Value) !i64 {
+    var evaled = try self.partialEval(pos, value);
+    return evaled.getValue(.none, self).extra(.CInt).value;
+}
+
+pub fn partialEvalCapture(self: *Codegen, pos: anytype, value: *Value) !i64 {
+    return self.partialEvalCaptureLow(pos, value, false);
+}
+
+pub fn partialEvalCaptureLow(self: *Codegen, pos: anytype, value: *Value, can_recover: bool) !i64 {
+    const evaled = try self.partialEvalLow(self.posOf(pos).index, value, can_recover);
+    switch (evaled.id) {
+        .Imaginary => unreachable,
+        .Value => |val| return val.extra(.CInt).value,
+        .Pointer => |ptr| switch (ptr.extra2()) {
+            .GlobalAddr => |extra| return extra.id,
+            else => unreachable,
+        },
+    }
+}
+
+pub fn partialEval(self: *Codegen, pos: anytype, value: *Value) !Value {
     return self.partialEvalLow(self.posOf(pos).index, value, false);
 }
 
@@ -4098,7 +4168,7 @@ fn emitDirective(
                 return self.report(args[0], "expected struct type, {} is not", .{ty});
             }
             var idx_value = try self.emitTyped(.{}, .uint, args[1]);
-            const idx = try self.partialEval(args[1], &idx_value);
+            const idx = try self.partialEvalConst(args[1], &idx_value);
             const fields: []const tys.Struct.Field = ty.data().Struct.getFields(self.types);
             if (idx >= fields.len) {
                 return self.report(
@@ -4147,7 +4217,7 @@ fn emitDirective(
                         break :dt fields[0].name;
                     }
 
-                    const id = try self.partialEval(args[0], &value);
+                    const id = try self.partialEvalConst(args[0], &value);
                     if (id >= fields.len)
                         return self.report(args[0], "the enum value is" ++
                             " out of range or the enum", .{});
@@ -4298,7 +4368,7 @@ fn emitDirective(
 
             const ty = try self.resolveAnonTy(args[0]);
             var len_vl = try self.emitTyped(.{}, .uint, args[1]);
-            const len = try self.partialEval(args[1], &len_vl);
+            const len: u64 = @bitCast(try self.partialEvalConst(args[1], &len_vl));
 
             if (!ty.isFloat() and !ty.isInteger() and ty.data() != .Pointer) {
                 return self.report(args[0], "{} is not a valid type for @simd, " ++
@@ -4317,7 +4387,7 @@ fn emitDirective(
             try assertDirectiveArgs(self, expr, args, "<expr>");
 
             var expr_value = try self.emit(.{}, args[0]);
-            const value = try self.partialEval(args[0], &expr_value);
+            const value = try self.partialEvalCapture(args[0], &expr_value);
             return self.captureToValue(
                 self.src(expr),
                 &.{ .ty = expr_value.ty, .value = value, .id = undefined },

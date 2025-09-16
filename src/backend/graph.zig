@@ -2700,6 +2700,11 @@ pub fn Func(comptime Backend: type) type {
             }
         }
 
+        pub fn fmtScheduledLog(self: *Self) void {
+            var writer = std.fs.File.stderr().writer(&.{});
+            self.fmtScheduled(&writer.interface, .escape_codes);
+        }
+
         pub fn fmtScheduled(self: *Self, writer: anytype, colors: std.io.tty.Config) void {
             errdefer unreachable;
 

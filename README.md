@@ -1152,6 +1152,23 @@ main := fn(): uint {
 }
 ```
 
+#### tagged union 1
+```hb
+main := fn(): uint {
+    Tagged := union(enum) {
+        .a: u32;
+        .b: f32;
+    }
+
+    val := Tagged.{a: 0}
+
+    if val == .b return 1
+    if val != .a return 2
+
+    return val.a
+}
+```
+
 #### enums 1
 ```hb
 expectations := .{
