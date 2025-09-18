@@ -660,6 +660,7 @@ pub fn runVm(
                             }
 
                             break :b .{ .kind = .@"@union", .data = .{ .@"@union" = .{
+                                .tag = union_ty.getTag(types),
                                 .fields = .alloc(self, field_mem),
                             } } };
                         },

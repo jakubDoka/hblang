@@ -13,7 +13,15 @@ main:
 	jz :2
 	mov rax, 0x02
 1:	jmp :3
-2:	mov eax, [rsp]
+2:	movsx rax, cl
+	cmp rax, 0x01
+	setz al
+	movzx rax, al
+	test al, al
+	jz :4
+	mov rax, 0x03
+3:	jmp :5
+4:	mov eax, [rsp]
 	mov eax, eax
-3:	add rsp, 0x10
+5:	add rsp, 0x10
 	ret

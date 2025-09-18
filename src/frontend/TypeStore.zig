@@ -1436,6 +1436,7 @@ pub const TypeInfo = extern struct {
             }),
         },
         @"@union": extern struct {
+            tag: Id,
             fields: Slice(extern struct {
                 name: Slice(u8),
                 ty: Id,

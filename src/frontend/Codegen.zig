@@ -1821,19 +1821,97 @@ fn emitIf(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.If)) EmitError!Value
     }
 }
 
+const ArmSlot = union(enum) {
+    Unmatched,
+    Matched: Ast.Id,
+};
+
+const Matcher = struct {
+    iter_until: usize,
+    else_arm: ?Ast.Id = null,
+    slots: []ArmSlot,
+    fields: []const root.frontend.types.Enum.Field,
+    ty: Types.Id,
+
+    pub fn missingBranches(
+        self: *@This(),
+        arena: *utils.Arena,
+    ) []const u8 {
+        var missing_list = std.Io.Writer.Allocating.init(arena.allocator());
+        for (self.slots, self.fields) |p, f| if (p == .Unmatched) {
+            missing_list.writer.print(", `.{s}`", .{f.name}) catch unreachable;
+        };
+        return missing_list.written()[2..];
+    }
+
+    pub fn decomposeArm(
+        self: *@This(),
+        cg: *Codegen,
+        i: usize,
+        arm: Ast.MatchArm,
+    ) !?struct { usize, Ast.Id } {
+        if (arm.pat.tag() == .Wildcard or i == self.iter_until) {
+            if (self.else_arm) |erm| if (i == self.iter_until) {
+                cg.report(erm, "useless esle match arm," ++
+                    " all cases are covered", .{}) catch {};
+            } else {
+                cg.report(arm.body, "duplicate else match arm", .{}) catch {};
+                cg.report(erm, "...previouslly matched here", .{}) catch {};
+            } else {
+                self.iter_until += 1;
+                self.else_arm = arm.body;
+            }
+            return null;
+        }
+
+        var match_pat = try cg.emitTyped(.{}, self.ty, arm.pat);
+        const arm_value = if (cg.abiCata(match_pat.ty) == .Imaginary)
+            0
+        else
+            try cg.partialEvalConst(arm.pat, &match_pat);
+
+        const idx = std.sort.binarySearch(tys.Enum.Field, self.fields, arm_value, struct {
+            fn lessThenFn(ar: i64, lhs: tys.Enum.Field) std.math.Order {
+                return std.math.order(ar, lhs.value);
+            }
+        }.lessThenFn).?;
+
+        switch (self.slots[@intCast(idx)]) {
+            .Unmatched => self.slots[@intCast(idx)] = .{ .Matched = arm.body },
+            .Matched => |pos| {
+                cg.report(arm.body, "duplicate match arm", .{}) catch {};
+                cg.report(pos, "...previouslly matched here", .{}) catch {};
+                return null;
+            },
+        }
+
+        return .{ @intCast(idx), arm.body };
+    }
+};
+
 fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError!Value {
     const sloc = self.src(expr);
-    var value = try self.emit(.{}, e.value);
+    var full_value = try self.emit(.{}, e.value);
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    _ = self.types.store.unwrap(value.ty.data(), .Enum) orelse {
-        return self.report(e.value, "can only match on enums right now," ++
-            " {} is not", .{value.ty});
+    const tag, var tag_value = switch (full_value.ty.data()) {
+        .Enum => |enum_ty| .{ enum_ty, full_value },
+        .Union => |union_ty| .{
+            union_ty.getTag(self.types).data().Enum,
+            Value.mkv(union_ty.getTag(self.types), self.bl.addFieldLoad(
+                sloc,
+                full_value.id.Pointer,
+                @intCast(union_ty.tagOffset(self.types)),
+                self.abiCata(union_ty.getTag(self.types)).ByValue,
+            )),
+        },
+        else => return self.report(e.value, "can only match on enums and unions right now," ++
+            " {} is not", .{full_value.ty}),
     };
 
-    const fields = value.ty.data().Enum.getFields(self.types);
+    const fields = tag.getFields(self.types);
 
     if (fields.len == 0) {
         self.bl.addTrap(sloc, 0);
@@ -1844,88 +1922,19 @@ fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError
         return self.report(e.pos, "the matched type has non zero possible values, " ++
             "therefore empty match statement is invalid", .{});
 
-    const ArmSlot = union(enum) {
-        Unmatched,
-        Matched: Ast.Id,
-    };
-
-    const Matcher = struct {
-        iter_until: usize,
-        else_arm: ?Ast.Id = null,
-        slots: []ArmSlot,
-        fields: []const root.frontend.types.Enum.Field,
-        ty: Types.Id,
-
-        pub fn missingBranches(
-            slf: *@This(),
-            arena: *utils.Arena,
-            filds: []const root.frontend.types.Enum.Field,
-        ) []const u8 {
-            var missing_list = std.Io.Writer.Allocating.init(arena.allocator());
-            for (slf.slots, filds) |p, f| if (p == .Unmatched) {
-                missing_list.writer.print(", `.{s}`", .{f.name}) catch unreachable;
-            };
-            return missing_list.written()[2..];
-        }
-
-        pub fn decomposeArm(
-            slf: *@This(),
-            cg: *Codegen,
-            i: usize,
-            arm: Ast.MatchArm,
-        ) !?struct { usize, Ast.Id } {
-            if (arm.pat.tag() == .Wildcard or i == slf.iter_until) {
-                if (slf.else_arm) |erm| if (i == slf.iter_until) {
-                    cg.report(erm, "useless esle match arm," ++
-                        " all cases are covered", .{}) catch {};
-                } else {
-                    cg.report(arm.body, "duplicate else match arm", .{}) catch {};
-                    cg.report(erm, "...previouslly matched here", .{}) catch {};
-                } else {
-                    slf.iter_until += 1;
-                    slf.else_arm = arm.body;
-                }
-                return null;
-            }
-
-            var match_pat = try cg.emitTyped(.{}, slf.ty, arm.pat);
-            const arm_value = if (cg.abiCata(match_pat.ty) == .Imaginary)
-                0
-            else
-                try cg.partialEvalConst(arm.pat, &match_pat);
-
-            const idx = std.sort.binarySearch(tys.Enum.Field, slf.fields, arm_value, struct {
-                fn lessThenFn(ar: i64, lhs: tys.Enum.Field) std.math.Order {
-                    return std.math.order(ar, lhs.value);
-                }
-            }.lessThenFn).?;
-
-            switch (slf.slots[@intCast(idx)]) {
-                .Unmatched => slf.slots[@intCast(idx)] = .{ .Matched = arm.body },
-                .Matched => |pos| {
-                    cg.report(arm.body, "duplicate match arm", .{}) catch {};
-                    cg.report(pos, "...previouslly matched here", .{}) catch {};
-                    return null;
-                },
-            }
-
-            return .{ @intCast(idx), arm.body };
-        }
-    };
-
     var matcher = Matcher{
         .iter_until = fields.len - 1,
         .slots = tmp.arena.alloc(ArmSlot, fields.len),
         .fields = fields,
-        .ty = value.ty,
+        .ty = tag_value.ty,
     };
     @memset(matcher.slots, .Unmatched);
 
     if (e.pos.flag.@"comptime") {
-        const value_idx = if (self.abiCata(value.ty) == .Imaginary)
+        const value_idx = if (self.abiCata(tag_value.ty) == .Imaginary)
             0
         else
-            try self.partialEvalConst(e.value, &value);
+            try self.partialEvalConst(e.value, &tag_value);
 
         var matched_branch: ?Ast.Id = null;
         for (self.ast.exprs.view(e.arms), 0..) |arm, i| {
@@ -1941,7 +1950,7 @@ fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError
             return self.report(
                 e.pos,
                 "not all branches are covered: {}",
-                .{matcher.missingBranches(tmp.arena, fields)},
+                .{matcher.missingBranches(tmp.arena)},
             );
         };
 
@@ -1957,7 +1966,7 @@ fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError
                 continue;
             };
 
-            const vl = self.bl.addUnOp(arm_sloc, .sext, .i64, value.getValue(arm_sloc, self));
+            const vl = self.bl.addUnOp(arm_sloc, .sext, .i64, tag_value.getValue(arm_sloc, self));
             const cond = self.bl.addBinOp(
                 arm_sloc,
                 .eq,
@@ -1977,7 +1986,7 @@ fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError
             return self.report(
                 e.pos,
                 "not all branches are covered: {}",
-                .{matcher.missingBranches(tmp.arena, fields)},
+                .{matcher.missingBranches(tmp.arena)},
             );
         };
         unreachable_count += self.emitBranch(final_else);
@@ -4423,8 +4432,6 @@ fn emitDirective(
 
             return .mkv(.bool, self.bl.addIntImm(sloc, .i8, @intFromBool(has_decl)));
         },
-        .handler, .@"export" => return self.report(expr, "can only be used in the file scope", .{}),
-        .import => return self.report(expr, "can be only used as a body of the function", .{}),
         .frame_pointer => return .mkv(.uint, self.bl.addFramePointer(sloc, .i64)),
         .SrcLoc => return self.emitTyConst(self.types.source_loc),
         .simd => {
@@ -4459,8 +4466,10 @@ fn emitDirective(
         },
         .type_info => {
             try assertDirectiveArgs(self, expr, args, "<ty>");
-
             return try self.emitComptimeDirectiveEca(ctx, args[0], .type_info, self.types.type_info);
         },
+
+        .handler, .@"export" => return self.report(expr, "can only be used in the file scope", .{}),
+        .import => return self.report(expr, "can be only used as a body of the function", .{}),
     }
 }
