@@ -1,53 +1,49 @@
 comptime 6 (strings).main.string_to_array("Edward"):
-	sub rsp, 0x20
-	mov rax, 0xD0000000
-	mov [rsp+0x10], eax
-	mov qword ptr [rsp], 0x00
+	sub rsp, 0x10
+	mov qword ptr [rsp+0x08], 0x00
 	mov rdx, [0x0000000000000007]
-1:	mov rax, [rsp]
+1:	mov rax, [rsp+0x08]
 	cmp rax, rdx
 	jnb :0
 	mov rax, [0x0000000000000007]
-	lea rcx, [rsp+0x08]
-	add rcx, [rsp]
-	add rax, [rsp]
+	lea rcx, [rsp]
+	add rcx, [rsp+0x08]
+	add rax, [rsp+0x08]
 	mov al, [rax]
 	mov [rcx], al
-	mov rax, [rsp]
+	mov rax, [rsp+0x08]
 	inc rax
-	mov [rsp], rax
+	mov [rsp+0x08], rax
 	jmp :1
-0:	mov al, [rsp+0x0D]
+0:	mov al, [rsp+0x05]
 	movzx rdi, al
 	shl rdi, 0x28
-	mov al, [rsp+0x0A]
+	mov al, [rsp+0x02]
 	movzx rsi, al
 	shl rsi, 0x10
-	mov al, [rsp+0x0C]
+	mov al, [rsp+0x04]
 	movzx rdx, al
 	shl rdx, 0x20
-	mov al, [rsp+0x08]
+	mov al, [rsp]
 	movzx rax, al
-	mov cl, [rsp+0x09]
+	mov cl, [rsp+0x01]
 	movzx rcx, cl
 	shl rcx, 0x08
 	or rax, rcx
 	or rax, rsi
-	mov cl, [rsp+0x0B]
+	mov cl, [rsp+0x03]
 	movzx rcx, cl
 	shl rcx, 0x18
 	or rax, rcx
 	or rax, rdx
 	or rax, rdi
-	add rsp, 0x20
+	add rsp, 0x10
 	ret
 main:
-	sub rsp, 0x18
-	mov rax, 0x80000000
-	mov [rsp+0x08], eax
+	sub rsp, 0x08
 	call :comptime 6 (strings).main.string_to_array("Edward")
 	mov [rsp], rax
 	mov al, [rsp]
 	movzx rax, al
-	add rsp, 0x18
+	add rsp, 0x08
 	ret

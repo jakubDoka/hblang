@@ -3,11 +3,11 @@ main:
      addi64 $254, $254, -8
        li64 $1, 1
         jal $31, $0, :generic structs 1.nvec(uint)
-        jal $31, $0, :generic structs 1.Vec.sub(uint)
+        jal $31, $0, :generic structs 1.Vec(uint).sub
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
-generic structs 1.Vec.sub(uint):
+generic structs 1.Vec(uint).sub:
       sub64 $1, $1, $2
        jala $0, $31, 0
 generic structs 1.nvec(uint):

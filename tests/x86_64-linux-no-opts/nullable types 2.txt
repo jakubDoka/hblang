@@ -8,15 +8,13 @@ nullable types 2.take:
 	add rsp, 0x10
 	ret
 main:
-	sub rsp, 0x68
+	sub rsp, 0x58
 	mov byte ptr [rsp+0x10], 0x01
 	mov qword ptr [rsp+0x18], 0x00
 	mov qword ptr [rsp+0x20], 0x00
 	mov byte ptr [rsp+0x28], 0x01
 	mov qword ptr [rsp+0x30], 0x00
 	mov qword ptr [rsp+0x38], 0x00
-	mov rax, 0xD0000000
-	mov [rsp+0x58], eax
 	mov byte ptr [rsp+0x40], 0x01
 	mov qword ptr [rsp+0x48], 0x00
 	mov qword ptr [rsp+0x50], 0x00
@@ -52,5 +50,5 @@ main:
 	call :nullable types 2.take
 	mov rax, [rsp+0x18]
 	sub rax, [rsp+0x20]
-7:	add rsp, 0x68
+7:	add rsp, 0x58
 	ret

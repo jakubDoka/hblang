@@ -1,4 +1,4 @@
-generic structs 4.Array((())).get(uint):
+generic structs 4.Array((((uint), uint), uint), uint).get:
 	sub rsp, 0x18
 	mov [rsp], rdi
 	mov rdx, [rsp]
@@ -12,12 +12,12 @@ generic structs 4.Array((())).get(uint):
 0:	mov rdi, [rsp+0x28]
 	mov rsi, [rsp+0x30]
 	dec rdx
-	call :generic structs 4.Array(()).get(uint)
+	call :generic structs 4.Array(((uint), uint), uint).get
 	mov [rsp+0x08], rax
 	mov rax, [rsp+0x08]
 1:	add rsp, 0x18
 	ret
-generic structs 4.Array(()).get(uint):
+generic structs 4.Array(((uint), uint), uint).get:
 	sub rsp, 0x28
 	mov [rsp], rdi
 	mov [rsp+0x08], rsi
@@ -32,12 +32,12 @@ generic structs 4.Array(()).get(uint):
 	jmp :1
 0:	dec rsi
 	mov rdi, [rsp+0x08]
-	call :generic structs 4.Array().get(uint)
+	call :generic structs 4.Array((uint), uint).get
 	mov [rsp+0x18], rax
 	mov rax, [rsp+0x18]
 1:	add rsp, 0x28
 	ret
-generic structs 4.Array().get(uint):
+generic structs 4.Array((uint), uint).get:
 	sub rsp, 0x18
 	mov [rsp], rdi
 	mov [rsp+0x08], rsi
@@ -50,12 +50,12 @@ generic structs 4.Array().get(uint):
 	mov rax, [rsp]
 	jmp :1
 0:	dec rdi
-	call :generic structs 4.Array.get(uint)
+	call :generic structs 4.Array(uint).get
 	mov [rsp+0x10], rax
 	mov rax, [rsp+0x10]
 1:	add rsp, 0x18
 	ret
-generic structs 4.Array.get(uint):
+generic structs 4.Array(uint).get:
 	ud2
 main:
 	push rbx
@@ -68,14 +68,14 @@ main:
 	mov rdx, 0x18
 	call :memcpy
 	xor rdi, rdi
-	call :generic structs 4.Array((())).get(uint)
+	call :generic structs 4.Array((((uint), uint), uint), uint).get
 	mov [rsp+0x40], rax
 	lea rdi, [rsp]
 	lea rsi, [rsp+0x20]
 	mov rdx, 0x18
 	call :memcpy
 	mov rdi, 0x01
-	call :generic structs 4.Array((())).get(uint)
+	call :generic structs 4.Array((((uint), uint), uint), uint).get
 	mov [rsp+0x18], rax
 	mov rbx, [rsp+0x40]
 	add rbx, [rsp+0x18]
@@ -84,7 +84,7 @@ main:
 	mov rdx, 0x18
 	call :memcpy
 	mov rdi, 0x02
-	call :generic structs 4.Array((())).get(uint)
+	call :generic structs 4.Array((((uint), uint), uint), uint).get
 	mov [rsp+0x38], rax
 	add rbx, [rsp+0x38]
 	mov rax, rbx

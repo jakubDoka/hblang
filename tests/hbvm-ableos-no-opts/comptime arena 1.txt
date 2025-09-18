@@ -12,10 +12,7 @@
      addi64 $2, $2, 8
        jltu $1, $5, :1
 main:
-     addi64 $254, $254, -8
        li64 $1, 10
-         st $1, $254, 0, 8
-     addi64 $254, $254, 8
          tx
 comptime arena 1.something:
          st $31, $254, -16, 16

@@ -1,4 +1,4 @@
-generic structs 1.Vec.sub(uint):
+generic structs 1.Vec(uint).sub:
 	mov rax, rdi
 	sub rax, rsi
 	ret
@@ -13,6 +13,6 @@ main:
 	call :generic structs 1.nvec(uint)
 	mov rdi, [rsp]
 	mov rsi, [rsp+0x08]
-	call :generic structs 1.Vec.sub(uint)
+	call :generic structs 1.Vec(uint).sub
 	add rsp, 0x18
 	ret

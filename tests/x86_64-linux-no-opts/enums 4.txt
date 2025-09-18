@@ -1,4 +1,4 @@
-enums 4.NameMap([6]u8, [4]uint).get(.Nm):
+enums 4.NameMap(.Nm)([4]uint, [6]u8).get:
 	sub rsp, 0x10
 	mov r9, 0x08
 	mov [rsp], rsi
@@ -27,7 +27,7 @@ main:
 	lea rdi, [rsp]
 	lea rsi, [0x0000000000000007]
 	xor rdx, rdx
-	call :enums 4.NameMap([6]u8, [4]uint).get(.Nm)
+	call :enums 4.NameMap(.Nm)([4]uint, [6]u8).get
 	mov rax, [rsp]
 	mov al, [rax]
 	movzx rax, al

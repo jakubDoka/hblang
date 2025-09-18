@@ -1,9 +1,9 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -24
-        jal $31, $0, :comptime 2.main.some_fn3(uint, .some_fn)
+        jal $31, $0, :comptime 2.main.some_fn3(uint)(.some_fn(uint))
          st $1, $254, 0, 8
-        jal $31, $0, :comptime 2.main.some_fn3(uint, (.some_fn2(.some_fn)))
+        jal $31, $0, :comptime 2.main.some_fn3(uint)((.some_fn2(.some_fn(uint), uint)))
          st $1, $254, 8, 8
          ld $2, $254, 0, 8
          ld $1, $254, 8, 8
@@ -11,7 +11,7 @@ main:
      addi64 $254, $254, 24
          ld $31, $254, -8, 8
          tx
-comptime 2.main.some_fn3(uint, .some_fn):
+comptime 2.main.some_fn3(uint)(.some_fn(uint)):
          st $31, $254, -8, 8
      addi64 $254, $254, -16
         jal $31, $0, :comptime 2.main.some_fn(uint)
@@ -21,27 +21,27 @@ comptime 2.main.some_fn3(uint, .some_fn):
      addi64 $254, $254, 16
          ld $31, $254, -8, 8
        jala $0, $31, 0
-comptime 2.main.some_fn3(uint, (.some_fn2(.some_fn))):
+comptime 2.main.some_fn3(uint)((.some_fn2(.some_fn(uint), uint))):
          st $31, $254, -8, 8
      addi64 $254, $254, -16
-        jal $31, $0, :comptime 2.main.some_fn3(uint, .some_fn2(.some_fn))
+        jal $31, $0, :comptime 2.main.some_fn3(uint)(.some_fn2(.some_fn(uint), uint))
          st $1, $254, 0, 8
          ld $1, $254, 0, 8
      addi64 $1, $1, 10
      addi64 $254, $254, 16
          ld $31, $254, -8, 8
        jala $0, $31, 0
-comptime 2.main.some_fn3(uint, .some_fn2(.some_fn)):
+comptime 2.main.some_fn3(uint)(.some_fn2(.some_fn(uint), uint)):
          st $31, $254, -8, 8
      addi64 $254, $254, -16
-        jal $31, $0, :comptime 2.main.some_fn2(uint, .some_fn)
+        jal $31, $0, :comptime 2.main.some_fn2(.some_fn(uint), uint)
          st $1, $254, 0, 8
          ld $1, $254, 0, 8
      addi64 $1, $1, 10
      addi64 $254, $254, 16
          ld $31, $254, -8, 8
        jala $0, $31, 0
-comptime 2.main.some_fn2(uint, .some_fn):
+comptime 2.main.some_fn2(.some_fn(uint), uint):
          st $31, $254, -8, 8
      addi64 $254, $254, -16
         jal $31, $0, :comptime 2.main.some_fn(uint)

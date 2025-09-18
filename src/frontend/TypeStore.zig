@@ -190,11 +190,12 @@ pub const Scope = struct {
 
     pub const Capture = struct {
         id: packed struct(u32) {
-            index: u31,
+            index: u30,
             from_any: bool = false,
+            has_value: bool,
 
-            pub fn fromIdent(id: Ast.Ident) @This() {
-                return .{ .index = @intCast(@intFromEnum(id)) };
+            pub fn fromCapture(cap: Ast.Capture) @This() {
+                return .{ .index = @intCast(cap.id.pos()), .has_value = cap.pos.flag.@"comptime" };
             }
         },
         ty: Id,
@@ -616,10 +617,7 @@ pub const Id = enum(IdRepr) {
             defer tmp.deinit();
 
             var work_list = tmp.arena.makeArrayList(Task, 16);
-            var seen_captures = std.AutoArrayHashMapUnmanaged(Scope.Capture, void).empty;
-            var captures_to_display = std.ArrayListUnmanaged(Scope.Capture).empty;
             var scope_stack = std.ArrayListUnmanaged(Id).empty;
-            try seen_captures.ensureTotalCapacity(tmp.arena.allocator(), 32);
 
             work_list.appendAssumeCapacity(.{ .Type = self.self });
 
@@ -701,19 +699,10 @@ pub const Id = enum(IdRepr) {
                             const key = cursor.getKey(self.tys);
                             cursor = key.loc.scope;
 
-                            captures_to_display.clearRetainingCapacity();
-                            try captures_to_display.ensureTotalCapacity(tmp.arena.allocator(), key.captures().len);
-                            for (key.captures()) |cap| {
-                                if (try seen_captures.fetchPut(tmp.arena.allocator(), cap, {}) == null) {
-                                    captures_to_display.appendAssumeCapacity(cap);
-                                }
-                            }
-
-                            try work_list.ensureUnusedCapacity(tmp.arena.allocator(), captures_to_display.items.len * 2 + 4);
-                            if (captures_to_display.items.len != 0) {
+                            try work_list.ensureUnusedCapacity(tmp.arena.allocator(), key.captures().len * 2 + 4);
+                            if (key.captures().len != 0) {
                                 work_list.appendAssumeCapacity(.{ .Name = ")" });
-                                var iter = std.mem.reverseIterator(captures_to_display.items);
-                                while (iter.next()) |cap| {
+                                for (key.captures()) |cap| {
                                     if (cap.id.from_any) {
                                         work_list.appendAssumeCapacity(.{ .Type = cap.ty });
                                     } else {
@@ -955,8 +944,8 @@ pub fn retainGlobals(self: *Types, target: Target, backend: anytype, detect_nest
 
     const work_list = self.global_work_list.getPtr(target);
     while (work_list.pop()) |global| {
-        var scrath = utils.Arena.scrath(null);
-        defer scrath.deinit();
+        var tmp = utils.Arena.scrath(null);
+        defer tmp.deinit();
 
         const glob: *tys.Global = self.store.get(global);
         if (glob.completion.get(target) == .compiled) continue;
@@ -964,7 +953,7 @@ pub fn retainGlobals(self: *Types, target: Target, backend: anytype, detect_nest
 
         var relocs = std.ArrayListUnmanaged(Machine.DataOptions.Reloc){};
         if (detect_nested) {
-            self.findNestedGlobals(&relocs, glob, scrath.arena, glob.ty, 0) catch |err| {
+            self.findNestedGlobals(&relocs, glob, tmp.arena, glob.ty, 0) catch |err| {
                 errored = true;
                 self.report(
                     glob.key.loc.file,
@@ -973,10 +962,10 @@ pub fn retainGlobals(self: *Types, target: Target, backend: anytype, detect_nest
                     .{ glob.ty, @intFromEnum(global), @errorName(err) },
                 );
             };
-        }
 
-        if (target == .@"comptime") {
-            glob.relocs = relocs.items;
+            if (target == .@"comptime") {
+                glob.relocs = self.pool.arena.dupe(Machine.DataOptions.Reloc, relocs.items);
+            }
         }
 
         if (glob.data == .@"comptime" and target == .@"comptime") {
@@ -986,7 +975,7 @@ pub fn retainGlobals(self: *Types, target: Target, backend: anytype, detect_nest
         backend.emitData(.{
             .id = @intFromEnum(global),
             .name = if (emit_names) root.frontend.Types.Id.init(.{ .Global = global })
-                .fmt(self).toString(scrath.arena) else "",
+                .fmt(self).toString(tmp.arena) else "",
             .value = if (glob.uninit)
                 .{ .uninit = glob.data.slice(&self.ct).len }
             else
@@ -1242,7 +1231,7 @@ pub fn findNestedGlobals(
         inline .Struct, .Tuple => |t| {
             var fields_iter = t.offsetIter(self);
             while (fields_iter.next()) |elem| {
-                try self.findNestedGlobals(relocs, global, scratch, elem.field.ty, elem.offset);
+                try self.findNestedGlobals(relocs, global, scratch, elem.field.ty, offset_f + elem.offset);
             }
         },
         .Nullable => |n| {
@@ -1391,6 +1380,7 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer) *T
     };
 
     slot.ct.gen.emit_global_reloc_offsets = true;
+    slot.ct.gen.push_uninit_globals = true;
 
     slot.string = slot.makeSlice(.u8);
     slot.source_loc = slot.convertZigTypeToHbType(extern struct {

@@ -1,60 +1,60 @@
-deep instantiation 2.S.get((((((((.Z)))))))):
+deep instantiation 2.S((((((((.Z)))))))).get:
 	sub rsp, 0x08
-	call :deep instantiation 2.S.get(((((((.Z)))))))
+	call :deep instantiation 2.S(((((((.Z))))))).get
 	mov [rsp], eax
 	mov eax, [rsp]
 	inc eax
 	add rsp, 0x08
 	ret
-deep instantiation 2.S.get(((((((.Z))))))):
+deep instantiation 2.S(((((((.Z))))))).get:
 	sub rsp, 0x08
-	call :deep instantiation 2.S.get((((((.Z))))))
+	call :deep instantiation 2.S((((((.Z)))))).get
 	mov [rsp], eax
 	mov eax, [rsp]
 	inc eax
 	add rsp, 0x08
 	ret
-deep instantiation 2.S.get((((((.Z)))))):
+deep instantiation 2.S((((((.Z)))))).get:
 	sub rsp, 0x08
-	call :deep instantiation 2.S.get(((((.Z)))))
+	call :deep instantiation 2.S(((((.Z))))).get
 	mov [rsp], eax
 	mov eax, [rsp]
 	inc eax
 	add rsp, 0x08
 	ret
-deep instantiation 2.S.get(((((.Z))))):
+deep instantiation 2.S(((((.Z))))).get:
 	sub rsp, 0x08
-	call :deep instantiation 2.S.get((((.Z))))
+	call :deep instantiation 2.S((((.Z)))).get
 	mov [rsp], eax
 	mov eax, [rsp]
 	inc eax
 	add rsp, 0x08
 	ret
-deep instantiation 2.S.get((((.Z)))):
+deep instantiation 2.S((((.Z)))).get:
 	sub rsp, 0x08
-	call :deep instantiation 2.S.get(((.Z)))
+	call :deep instantiation 2.S(((.Z))).get
 	mov [rsp], eax
 	mov eax, [rsp]
 	inc eax
 	add rsp, 0x08
 	ret
-deep instantiation 2.S.get(((.Z))):
+deep instantiation 2.S(((.Z))).get:
 	sub rsp, 0x08
-	call :deep instantiation 2.S.get((.Z))
+	call :deep instantiation 2.S((.Z)).get
 	mov [rsp], eax
 	mov eax, [rsp]
 	inc eax
 	add rsp, 0x08
 	ret
-deep instantiation 2.S.get((.Z)):
+deep instantiation 2.S((.Z)).get:
 	sub rsp, 0x08
-	call :deep instantiation 2.S.get(.Z)
+	call :deep instantiation 2.S(.Z).get
 	mov [rsp], eax
 	mov eax, [rsp]
 	inc eax
 	add rsp, 0x08
 	ret
-deep instantiation 2.S.get(.Z):
+deep instantiation 2.S(.Z).get:
 	sub rsp, 0x08
 	call :deep instantiation 2.Z.get
 	mov [rsp], eax
@@ -67,7 +67,7 @@ deep instantiation 2.Z.get:
 	ret
 main:
 	sub rsp, 0x08
-	call :deep instantiation 2.S.get((((((((.Z))))))))
+	call :deep instantiation 2.S((((((((.Z)))))))).get
 	mov [rsp], eax
 	mov eax, [rsp]
 	cmp eax, 0x08

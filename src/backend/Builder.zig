@@ -1,7 +1,6 @@
 func: Func,
 scope: ?*Func.Node = undefined,
 root_mem: *Func.Node = undefined,
-pins: *Func.Node = undefined,
 
 const std = @import("std");
 const utils = graph.utils;
@@ -50,7 +49,6 @@ pub fn begin(
     self.root_mem = self.func.addNode(.Mem, .none, .top, &.{self.func.start}, .{});
     self.scope = self.func.addNode(.Scope, .none, .top, &.{ ctrl, self.root_mem }, .{});
     self.func.end = self.func.addNode(.Return, .none, .top, &.{ null, null, null }, .{});
-    self.pins = self.func.addNode(.Scope, .none, .top, &.{}, .{});
 
     self.func.signature = .init(call_conv, params, return_values, self.func.arena.allocator());
 
@@ -70,7 +68,6 @@ pub fn addParam(self: *Builder, sloc: graph.Sloc, idx: usize, debug_ty: u32) Spe
 
 pub fn end(self: *Builder, _: BuildToken) void {
     //std.debug.assert(getScopeValues(self.pins).len == 0);
-    killScope(&self.func, self.pins);
 
     if (!self.isUnreachable()) self.addReturn(&.{});
 
@@ -97,9 +94,10 @@ pub fn addLocal(self: *Builder, sloc: graph.Sloc, size: u64, debug_ty: u32) Spec
     return self.func.addNode(.Local, sloc, .i64, &.{ null, alloc }, .{});
 }
 
-pub fn resizeLocal(_: *Builder, here: SpecificNode(.Local), to_size: u64) void {
+pub fn resizeLocal(_: *Builder, here: SpecificNode(.Local), to_size: u64, debug_ty: u32) void {
     std.debug.assert(here.inputs()[1].?.extra(.LocalAlloc).size == 0);
     here.inputs()[1].?.extra(.LocalAlloc).size = to_size;
+    here.inputs()[1].?.extra(.LocalAlloc).debug_ty = debug_ty;
 }
 
 pub fn addLoad(self: *Builder, sloc: graph.Sloc, addr: *BuildNode, ty: DataType) SpecificNode(.Store) {
@@ -115,6 +113,9 @@ pub fn addFieldLoad(self: *Builder, sloc: graph.Sloc, base: *BuildNode, offset: 
 }
 
 pub fn addStore(self: *Builder, sloc: graph.Sloc, addr: *BuildNode, ty: DataType, value: *BuildNode) void {
+    std.debug.assert(!addr.isDead());
+    std.debug.assert(!value.isDead());
+
     if (value.data_type == .bot) return;
     if (value.data_type.size() == 0) utils.panic("{}", .{value.data_type});
     const mem = self.memory();
@@ -209,8 +210,34 @@ pub fn control(self: *Builder) *Func.Node {
 
 pub const scope_value_start = 2;
 
-pub fn pushPin(self: *Builder, value: *BuildNode) void {
-    self.pushToScope(self.pins, value);
+pub const Pins = struct {
+    scope: *BuildNode,
+
+    pub fn push(self: Pins, bl: *Builder, value: *BuildNode) void {
+        bl.pushToScope(self.scope, value);
+    }
+
+    pub fn getValue(self: Pins, index: usize) *Func.Node {
+        return getScopeValues(self.scope)[index];
+    }
+
+    pub fn pop(self: Pins, bl: *Builder) *Func.Node {
+        const value = self.getValue(self.scope.input_ordered_len - 1);
+        bl._truncateScope(self.scope, self.scope.input_ordered_len - 1);
+        return value;
+    }
+
+    pub fn truncate(self: Pins, bl: *Builder, back_to: usize) void {
+        bl._truncateScope(self.scope, back_to);
+    }
+
+    pub fn deinit(self: Pins, bl: *Builder) void {
+        killScope(&bl.func, self.scope);
+    }
+};
+
+pub fn addPins(self: *Builder) Pins {
+    return .{ .scope = self.func.addNode(.Scope, .none, .top, &.{}, .{}) };
 }
 
 pub fn pushScopeValue(self: *Builder, value: *BuildNode) void {
@@ -232,10 +259,6 @@ fn pushToScope(self: *Builder, scope: *BuildNode, value: *BuildNode) void {
     scope.input_base[scope.input_ordered_len] = value;
     self.func.addUse(value, scope.input_ordered_len, scope);
     scope.input_ordered_len += 1;
-}
-
-pub fn getPinValue(self: *Builder, index: usize) *Func.Node {
-    return getScopeValueMulty(&self.func, self.pins, index);
 }
 
 pub fn getScopeValue(self: *Builder, index: usize) *Func.Node {
@@ -306,10 +329,6 @@ pub fn cloneScope(self: *Builder) SpecificNode(.Scope) {
 
 pub inline fn truncateScope(self: *Builder, back_to: usize) void {
     self._truncateScope(self.scope orelse return, scope_value_start + back_to);
-}
-
-pub inline fn truncatePins(self: *Builder, back_to: usize) void {
-    self._truncateScope(self.pins, back_to);
 }
 
 pub fn _truncateScope(self: *Builder, scope: SpecificNode(.Scope), back_to: usize) void {

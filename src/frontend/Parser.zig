@@ -29,7 +29,8 @@ active_sym_table: std.HashMapUnmanaged(
 ) = .{},
 active_syms: std.ArrayListUnmanaged(Sym) = .{},
 capture_boundary: usize = 0,
-captures: std.ArrayListUnmanaged(Capture) = .{},
+boundary_depth: u8 = 0,
+captures: std.ArrayListUnmanaged(StackedCapture) = .{},
 comptime_idents: std.ArrayListUnmanaged(Ident) = .{},
 mode: Ast.InitOptions.Mode,
 list_pos: Ast.Pos = undefined,
@@ -37,7 +38,8 @@ deferring: bool = false,
 errored: bool = false,
 in_if_or_while: bool = false,
 func_stats: FuncStats = .{},
-scope_depth: u8 = 0,
+
+const StackedCapture = struct { inner: Capture, boundary_depth: u32 };
 
 const Hasher = struct {
     syms: []const Sym,
@@ -70,6 +72,7 @@ const Sym = struct {
     declared: bool = false,
     unordered: bool = true,
     used: bool = false,
+    boundary_depth: u8,
     shadows: ?u31 = null,
 };
 
@@ -362,26 +365,30 @@ fn codePointer(self: *const Parser, pos: usize) Ast.CodePointer {
     return .{ .source = self.lexer.source, .index = pos };
 }
 
-fn popCaptures(self: *Parser, scope: usize, preserve: bool) []const Capture {
+fn popCaptures(self: *Parser, scope: usize, scratch: *utils.Arena) []const Capture {
+    self.boundary_depth -= 1;
+
     const slc = self.captures.items[@min(scope, self.captures.items.len)..];
-    if (!preserve) self.captures.items.len = scope;
-    if (slc.len > 1) {
-        std.sort.pdq(Capture, slc, {}, struct {
-            pub fn inner(_: void, a: Capture, b: Capture) bool {
-                return a.id.pos() < b.id.pos();
-            }
-        }.inner);
-        var i: usize = 0;
-        for (slc[1..]) |s| {
-            if (s.id != slc[i].id) {
-                i += 1;
-                slc[i] = s;
-            }
-        }
-        if (preserve) self.captures.items.len = scope + i + 1;
-        return slc[0 .. i + 1];
+    if (self.boundary_depth == 0) {
+        std.debug.assert(self.captures.items.len == 0);
     }
-    return slc;
+
+    const buf = scratch.alloc(Capture, slc.len);
+    var buf_len: usize = 0;
+    var retained: usize = 0;
+    for (slc) |c| {
+        if (c.boundary_depth == self.boundary_depth) {
+            buf[buf_len] = c.inner;
+            buf_len += 1;
+        } else {
+            slc[retained] = c;
+            retained += 1;
+        }
+    }
+
+    self.captures.items.len = scope + retained;
+
+    return buf[0..buf_len];
 }
 
 fn parseCtorField(self: *Parser) Error!Ast.CtorField {
@@ -420,6 +427,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             defer self.func_stats = prev_func_stats;
             self.func_stats = .{};
 
+            self.boundary_depth += 1;
             const prev_capture_boundary = self.capture_boundary;
             self.capture_boundary = self.active_syms.items.len;
             defer self.capture_boundary = prev_capture_boundary;
@@ -443,10 +451,14 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 self.arena.allocator(),
                 self.comptime_idents.items[comptime_arg_start..comptime_idents_end],
             );
+
+            var tmp = utils.Arena.scrath(self.arena);
+            defer tmp.deinit();
+
             const captures = try self.store.allocSlice(
                 Capture,
                 self.arena.allocator(),
-                self.popCaptures(capture_scope, prev_capture_boundary != 0),
+                self.popCaptures(capture_scope, tmp.arena),
             );
             std.debug.assert(comptime_args.end == captures.start);
 
@@ -498,6 +510,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             const prev_func_stats = self.func_stats;
             defer self.func_stats = prev_func_stats;
 
+            self.boundary_depth += 1;
             const prev_capture_boundary = self.capture_boundary;
             self.capture_boundary = self.active_syms.items.len;
             defer self.capture_boundary = prev_capture_boundary;
@@ -524,7 +537,11 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             const capture_scope = self.captures.items.len;
             const fields = try self.parseList(null, .@";", .@"}", parseUnorderedExpr);
             self.finalizeVariables(scope_frame);
-            const captures = self.popCaptures(capture_scope, prev_capture_boundary != 0);
+
+            var tmp = utils.Arena.scrath(self.arena);
+            defer tmp.deinit();
+
+            const captures = self.popCaptures(capture_scope, tmp.arena);
             break :b .{ .Type = .{
                 .fields = fields,
                 .tag = tag,
@@ -815,7 +832,7 @@ fn finalizeVariablesLow(self: *Parser, start: usize) usize {
             new_len += 1;
         } else {
             while (for (self.captures.items, 0..) |c, i| {
-                if (c.id == s.id) break i;
+                if (c.inner.id == s.id) break i;
             } else null) |idx| {
                 _ = self.captures.swapRemove(idx);
             }
@@ -866,8 +883,18 @@ fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
         const s = &self.active_syms.items[i];
         s.used = true;
 
-        if (i < self.capture_boundary and !s.unordered) {
-            try self.captures.append(self.arena.allocator(), .{ .id = s.id, .pos = .init(token.pos) });
+        if (i < self.capture_boundary and !s.unordered) b: {
+            for (self.captures.items) |c| {
+                if (c.inner.id == s.id) break :b;
+            }
+
+            try self.captures.append(
+                self.arena.allocator(),
+                .{ .inner = .{ .id = s.id, .pos = .{
+                    .index = @intCast(token.pos),
+                    .flag = .{ .@"comptime" = s.id.isComptime(self.lexer.source) },
+                } }, .boundary_depth = s.boundary_depth },
+            );
         }
 
         return try self.store.alloc(self.arena.allocator(), .Ident, .{
@@ -883,7 +910,11 @@ fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
     });
     if (token.kind == .@"$") try self.comptime_idents.append(self.arena.allocator(), id);
     slot.key_ptr.* = @intCast(self.active_syms.items.len);
-    try self.active_syms.append(self.arena.allocator(), .{ .name = repr, .id = id });
+    try self.active_syms.append(self.arena.allocator(), .{
+        .name = repr,
+        .id = id,
+        .boundary_depth = self.boundary_depth,
+    });
     return alloc;
 }
 
@@ -935,7 +966,8 @@ fn parseArg(self: *Parser) Error!Ast.Arg {
     if (bindings.tag() != .Ident) {
         self.report(pos, "expected ident", .{});
     }
-    _ = self.declareExpr(bindings, false);
+    _ = self.declareExpr(bindings, self.store.get(bindings)
+        .Ident.id.isComptime(self.lexer.source));
     _ = try self.expectAdvance(.@":");
 
     const prev = self.comptime_idents.items.len;

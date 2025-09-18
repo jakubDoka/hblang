@@ -2193,6 +2193,8 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn addUse(self: *Self, def: *Node, index: usize, use: *Node) void {
+            std.debug.assert(!def.isDead());
+
             self.ensureOutputCapacity(def, def.output_len + 1);
             def.output_base[def.output_len] = .init(use, index, def);
             def.output_len += 1;

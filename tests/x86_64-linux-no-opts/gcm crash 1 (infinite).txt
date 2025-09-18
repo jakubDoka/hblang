@@ -9,8 +9,6 @@ main:
 	push rbx
 	push rbp
 	sub rsp, 0x418
-	mov rax, 0xD0000000
-	mov [rsp+0x410], eax
 	lea rbp, [rsp]
 	mov [rsp+0x400], rbp
 	mov qword ptr [rsp+0x408], 0x00
@@ -19,7 +17,7 @@ main:
 	cmp rax, rbx
 	jb :0
 	mov al, [0x0000000000000006]
-	mov [rsp+0x414], al
+	mov [rsp+0x410], al
 	mov rcx, [rsp+0x408]
 	cmp rcx, rbx
 	jnz :2
@@ -28,7 +26,7 @@ main:
 	mov [rsp+0x408], rcx
 	jmp :2
 2:	mov sil, [0x0000000000000007]
-	mov dl, [rsp+0x414]
+	mov dl, [rsp+0x410]
 	xor rdi, rdi
 	call :gcm crash 1 (infinite).func
 	jmp :3

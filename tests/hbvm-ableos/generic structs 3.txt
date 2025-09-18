@@ -2,10 +2,10 @@ main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
        li64 $1, 10
-        jal $31, $0, :generic structs 3.Foo.sub((uint))
-        jal $31, $0, :generic structs 3.Foo.sub((uint))
+        jal $31, $0, :generic structs 3.Foo((uint)).sub
+        jal $31, $0, :generic structs 3.Foo((uint)).sub
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
-generic structs 3.Foo.sub((uint)):
+generic structs 3.Foo((uint)).sub:
        jala $0, $31, 0

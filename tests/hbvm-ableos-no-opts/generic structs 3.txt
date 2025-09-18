@@ -4,22 +4,22 @@ main:
        li64 $1, 10
          st $1, $254, 0, 8
          ld $1, $254, 0, 8
-        jal $31, $0, :generic structs 3.Foo.sub((uint))
+        jal $31, $0, :generic structs 3.Foo((uint)).sub
          st $1, $254, 8, 8
          ld $1, $254, 8, 8
-        jal $31, $0, :generic structs 3.Foo.sub(uint)
+        jal $31, $0, :generic structs 3.Foo(uint).sub
          st $1, $254, 16, 8
          ld $1, $254, 16, 8
      addi64 $254, $254, 32
          ld $31, $254, -8, 8
          tx
-generic structs 3.Foo.sub((uint)):
+generic structs 3.Foo((uint)).sub:
      addi64 $254, $254, -8
          st $1, $254, 0, 8
          ld $1, $254, 0, 8
      addi64 $254, $254, 8
        jala $0, $31, 0
-generic structs 3.Foo.sub(uint):
+generic structs 3.Foo(uint).sub:
      addi64 $254, $254, -8
          st $1, $254, 0, 8
          ld $1, $254, 0, 8

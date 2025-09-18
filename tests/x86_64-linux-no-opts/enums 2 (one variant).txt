@@ -5,11 +5,9 @@ enums 2 (one variant).Target.current:
 	mov rax, 0x01
 	ret
 main:
-	sub rsp, 0x18
-	mov byte ptr [rsp+0x0C], 0x01
-	mov dword ptr [rsp+0x08], 0x7000000F
+	sub rsp, 0x08
 	call :ableos.page_size
 	mov [rsp], rax
 	mov rax, [rsp]
-	add rsp, 0x18
+	add rsp, 0x08
 	ret

@@ -979,7 +979,7 @@ main := fn(): uint {
 #### comptime 1
 ```hb
 main := fn(): uint {
-    some_int := uint
+    $some_int := uint
     some_fn := fn($ui: type, x: some_int): ui {
         val: some_int = x + 1
         return val * val
@@ -996,17 +996,17 @@ expectations := .{
 }
 
 main := fn(): uint {
-    some_int := uint
+    $some_int := uint
 
-    some_fn := fn(): some_int {
+    $some_fn := fn(): some_int {
         return 1
     }
 
-    some_fn2 := fn(): some_int {
+    $some_fn2 := fn(): some_int {
         return some_fn() + 1
     }
 
-    some_fn3 := fn($fnc: type): type {
+    $some_fn3 := fn($fnc: type): type {
         return fn(): some_int {
             return fnc() + 10
         }
@@ -1030,7 +1030,7 @@ main := fn(): uint {
 #### comptime 5 (integers)
 ```hb
 main := fn(): uint {
-    value := 1
+    $value := 1
 
     Ty := struct {
         global_value := value
@@ -1074,7 +1074,7 @@ expectations := .{
 }
 
 main := fn(): uint {
-    Dims := struct{.x: uint; .y: uint}
+    $Dims := struct{.x: uint; .y: uint}
     arr := fn($dims: Dims): [dims.x][dims.y]uint {
         return idk
     }
@@ -2118,17 +2118,17 @@ comptime_arena := Arena.(&comptime_arena_mem[0])
 #### directives 24 (@type_info)
 ```hb
 main := fn(): uint {
-    $if @type_info(u8).kind != .builtin return 1
-    $if @type_info(struct{}).kind != .@struct return 2
-    $if @type_info(enum{}).kind != .@enum return 3
+    $if @type_info(u8) != .builtin return 1
+    $if @type_info(struct{}) != .@struct return 2
+    $if @type_info(enum{}) != .@enum return 3
 
     strct := @type_info(struct{.a: u8; .b: u16})
-    $if strct.kind != .@struct return 4
-    $if strct.data.@struct.alignment != 2 return 5
-    $if strct.data.@struct.fields[0].name[0] != 'a' return 6
-    $if strct.data.@struct.fields[1].name[0] != 'b' return 7
-    $if strct.data.@struct.fields[0].ty != u8 return 8
-    $if strct.data.@struct.fields[1].ty != u16 return 9
+    $if strct != .@struct return 4
+    $if strct.@struct.alignment != 2 return 5
+    $if strct.@struct.fields[0].name[0] != 'a' return 6
+    $if strct.@struct.fields[1].name[0] != 'b' return 7
+    $if strct.@struct.fields[0].ty != u8 return 8
+    $if strct.@struct.fields[1].ty != u16 return 9
 
     return 0
 }

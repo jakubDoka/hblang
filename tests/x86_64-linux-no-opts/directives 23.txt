@@ -1,32 +1,17 @@
 directives 23.type_id(u8):
-	sub rsp, 0x10
-	mov qword ptr [rsp], 0x00
 	xor rax, rax
-	add rsp, 0x10
 	ret
 directives 23.type_id(u16):
-	sub rsp, 0x10
-	mov qword ptr [rsp], 0x04
 	mov rax, 0x04
-	add rsp, 0x10
 	ret
 directives 23.type_id(u32):
-	sub rsp, 0x10
-	mov qword ptr [rsp], 0x03
 	mov rax, 0x03
-	add rsp, 0x10
 	ret
 directives 23.type_id(u64):
-	sub rsp, 0x10
-	mov qword ptr [rsp], 0x02
 	mov rax, 0x02
-	add rsp, 0x10
 	ret
 directives 23.type_id(i8):
-	sub rsp, 0x10
-	mov qword ptr [rsp], 0x01
 	mov rax, 0x01
-	add rsp, 0x10
 	ret
 directives 23.inc:
 	mov rax, [0x0000000000000007]

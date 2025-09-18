@@ -1,7 +1,5 @@
 main:
 	sub rsp, 0x10
-	mov rax, 0xD0000000
-	mov [rsp+0x08], eax
 	lea rax, [0x0000000000000007]
 	mov [rsp], rax
 	mov rax, [rsp]

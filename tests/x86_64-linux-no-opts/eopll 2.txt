@@ -21,10 +21,8 @@ main:
 	mov rax, 0x123
 	syscall
 	mov [rsp+0x1C], eax
-	mov rcx, 0xD0000000
 	mov eax, [rsp+0x1C]
 	mov [rsp+0x18], eax
-	mov [rsp+0x20], ecx
 	mov qword ptr [rsp+0x10], 0x00
 1:	mov rax, [rsp+0x10]
 	cmp rax, 0x00

@@ -1,41 +1,39 @@
 main:
-	sub rsp, 0x60
-	mov rax, 0xD0000000
-	mov [rsp+0x50], eax
-	mov qword ptr [rsp+0x48], 0x00
+	sub rsp, 0x50
+	mov qword ptr [rsp+0x40], 0x00
 	mov rsi, 0x08
-3:	mov rdx, [rsp+0x48]
+3:	mov rdx, [rsp+0x40]
 	cmp rdx, 0x08
 	setz al
 	movzx rax, al
 	test al, al
 	jz :0
-	mov qword ptr [rsp+0x48], 0x00
 	mov qword ptr [rsp+0x40], 0x00
-2:	mov rcx, [rsp+0x48]
+	mov qword ptr [rsp+0x48], 0x00
+2:	mov rcx, [rsp+0x40]
 	cmp rcx, 0x08
 	setz al
 	movzx rax, al
 	test al, al
 	jz :1
-	mov rax, [rsp+0x40]
-	add rsp, 0x60
+	mov rax, [rsp+0x48]
+	add rsp, 0x50
 	ret
 1:	imul rcx, rsi
 	lea rax, [rsp]
 	add rax, rcx
 	mov rax, [rax]
-	add [rsp+0x40], rax
-	mov rax, [rsp+0x48]
+	add [rsp+0x48], rax
+	mov rax, [rsp+0x40]
 	inc rax
-	mov [rsp+0x48], rax
+	mov [rsp+0x40], rax
 	jmp :2
 0:	mov rcx, rdx
 	imul rcx, rsi
 	lea rax, [rsp]
 	add rax, rcx
 	mov [rax], rdx
-	mov rax, [rsp+0x48]
+	mov rax, [rsp+0x40]
 	inc rax
-	mov [rsp+0x48], rax
+	mov [rsp+0x40], rax
 	jmp :3

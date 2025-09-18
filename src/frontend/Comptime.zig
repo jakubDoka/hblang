@@ -88,24 +88,18 @@ pub inline fn ecaArgSloc(self: *Comptime, idx: usize) graph.Sloc {
 }
 
 pub const PartialEvalResult = union(enum) {
-    Resolved: u64,
-    Arbitrary: utils.EntId(tys.Global),
     DependsOnRuntimeControlFlow: *Node,
     Unsupported: struct { *Node, []const u8 },
-};
-
-pub const PartialEvalResult2 = union(enum) {
-    DependsOnRuntimeControlFlow: *Node,
-    Unsupported: struct { *Node, []const u8 },
+    InvalidCaptureAccess: graph.Sloc,
 };
 
 const PartialEvalCtx = struct {
     file: Types.File,
     scope: Types.Id,
     pos: u32,
-    error_slot: *PartialEvalResult2,
+    error_slot: *PartialEvalResult,
 
-    pub inline fn err(self: PartialEvalCtx, res: PartialEvalResult2) error{Never} {
+    pub inline fn err(self: PartialEvalCtx, res: PartialEvalResult) error{Never} {
         self.error_slot.* = res;
         return error.Never;
     }
@@ -137,6 +131,9 @@ pub fn partialEval(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, expr: *No
         },
         .CInt => {
             expr.schedule = std.math.maxInt(u16);
+            if (expr.data_type == .top) {
+                return ctx.err(.{ .InvalidCaptureAccess = expr.sloc });
+            }
             return expr;
         },
         .UnOp => |extra| {
@@ -150,8 +147,8 @@ pub fn partialEval(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, expr: *No
         },
         .BinOp => |extra| {
             const lhs = expr.inputs()[1].?;
-            const rhs = expr.inputs()[2].?;
             const lhs_val = try self.partialEval(ctx, bl, lhs);
+            const rhs = expr.inputs()[2].?;
             const rhs_val = try self.partialEval(ctx, bl, rhs);
 
             if (lhs_val.kind != .CInt) {
@@ -184,6 +181,9 @@ pub fn partialEval(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, expr: *No
 
             const res = bl.addGlobalAddr(.none, @intFromEnum(global));
             bl.func.subsume(res, expr);
+
+            res.schedule = 0;
+            defer res.schedule = std.math.maxInt(u16);
 
             try self.executeInterestingOps(ctx, bl, interestingOps, res);
 
@@ -235,7 +235,9 @@ pub fn executeInterestingOps(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder,
         switch (op.kind) {
             .Store => {
                 const base, const offset = op.base().knownOffset();
-                std.debug.assert(base == res);
+                if (base != res) {
+                    continue;
+                }
 
                 const val = try self.partialEval(ctx, bl, op.value().?);
 
@@ -246,12 +248,19 @@ pub fn executeInterestingOps(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder,
                             std.mem.asBytes(&extra.value)[0..op.data_type.size()],
                         );
                     },
+                    .GlobalAddr => |extra| {
+                        const addr = try self.partialEvalGlobal(ctx, val, extra.id, true);
+                        std.debug.assert(op.data_type.size() == 8);
+                        @memcpy(mem[@intCast(offset)..][0..8], std.mem.asBytes(&addr));
+                    },
                     else => return ctx.err(.{ .Unsupported = .{ val, "stack store value" } }),
                 }
 
                 bl.func.subsume(op.mem(), op);
             },
-            .Call => _ = try self.partialEvalCall(ctx, bl, op.outputs()[0].get(), null),
+            .Call => if (op.outputs().len != 0) {
+                _ = try self.partialEvalCall(ctx, bl, op.outputs()[0].get(), null);
+            },
             .Load => {
                 if (op.schedule == 0) {
                     continue;
@@ -359,17 +368,23 @@ pub fn partialEvalCall(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, curr:
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    var globals = std.ArrayList(*Node){};
+    var globals = tmp.arena.makeArrayList(*Node, call.inputs().len - 2);
+    // we need this because another call could clogger us
+    var args = tmp.arena.alloc(u64, call.inputs().len - 2);
     for (call.inputs()[2..], 0..) |arg, arg_idx| {
         const argv = try self.partialEval(ctx, bl, arg.?);
-        types.ct.vm.regs.set(.arg(arg_idx), switch (argv.extra2()) {
+        args[arg_idx] = switch (argv.extra2()) {
             .CInt => |extra| @bitCast(extra.value),
             .GlobalAddr => |extra| b: {
-                globals.append(tmp.arena.allocator(), argv) catch unreachable;
+                globals.appendAssumeCapacity(argv);
                 break :b try self.partialEvalGlobal(ctx, argv, extra.id, false);
             },
             else => return ctx.err(.{ .Unsupported = .{ argv, "function argument" } }),
-        });
+        };
+    }
+
+    for (args, 0..) |a, i| {
+        types.ct.vm.regs.set(.arg(i), a);
     }
 
     types.ct.runVm(ctx.file, ctx.pos, call.extra(.Call).id, &.{}) catch {
@@ -501,10 +516,11 @@ pub fn runVm(
                     const prefix = 5;
                     for (captures, ast.exprs.view(struct_ast.captures), 0..) |*slot, cp, i| {
                         slot.* = .{
-                            .id = .fromIdent(cp.id),
+                            .id = .fromCapture(cp),
                             .ty = @enumFromInt(self.ecaArg(prefix + i * 2)),
                             .value = @bitCast(self.ecaArg(prefix + i * 2 + 1)),
                         };
+                        slot.id.has_value = true;
                         if (slot.ty.size(types) < 8) slot.value &=
                             (@as(i64, 1) << @intCast(slot.ty.size(types) * 8)) - 1;
                     }
@@ -584,8 +600,6 @@ pub fn runVm(
                 .type_info => {
                     const ret_addr = self.ecaArg(1);
                     const ty: Types.Id = @enumFromInt(self.ecaArg(3));
-
-                    vm_ctx.memory[@intCast(ret_addr)..][0] = @intFromEnum(std.meta.activeTag(ty.data()));
 
                     var tmp = utils.Arena.scrath(null);
                     defer tmp.deinit();

@@ -1,18 +1,18 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -25
-        jal $31, $0, :generic structs 2.Foo.Bar(uint, u8).init
+        jal $31, $0, :generic structs 2.Foo(uint).Bar(u8).init
          st $1, $254, 8, 8
          st $2, $254, 16, 1
          ld $1, $254, 8, 8
          ld $2, $254, 16, 1
-        jal $31, $0, :generic structs 2.Foo.Bar(uint, u8).sub
+        jal $31, $0, :generic structs 2.Foo(uint).Bar(u8).sub
          st $1, $254, 0, 8
          ld $1, $254, 0, 8
      addi64 $254, $254, 25
          ld $31, $254, -8, 8
          tx
-generic structs 2.Foo.Bar(uint, u8).init:
+generic structs 2.Foo(uint).Bar(u8).init:
      addi64 $254, $254, -9
        li64 $1, 1
          st $1, $254, 0, 8
@@ -22,7 +22,7 @@ generic structs 2.Foo.Bar(uint, u8).init:
          ld $2, $254, 8, 1
      addi64 $254, $254, 9
        jala $0, $31, 0
-generic structs 2.Foo.Bar(uint, u8).sub:
+generic structs 2.Foo(uint).Bar(u8).sub:
      addi64 $254, $254, -9
          st $1, $254, 0, 8
          st $2, $254, 8, 1

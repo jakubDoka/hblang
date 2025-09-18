@@ -161,7 +161,7 @@ pub const Spec = union(enum) {
             .ByValuePair => |p| p.size(),
             .ByRef => |r| r.size,
             .Imaginary => 0,
-            .Impossible => unreachable,
+            .Impossible => 0,
         };
     }
 };

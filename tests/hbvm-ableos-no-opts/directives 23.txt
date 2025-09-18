@@ -28,34 +28,19 @@ main:
          ld $31, $254, -48, 48
          tx
 directives 23.type_id(u8):
-     addi64 $254, $254, -8
-         st $0, $254, 0, 8
          cp $1, $0
-     addi64 $254, $254, 8
        jala $0, $31, 0
 directives 23.type_id(u16):
-     addi64 $254, $254, -8
        li64 $1, 4
-         st $1, $254, 0, 8
-     addi64 $254, $254, 8
        jala $0, $31, 0
 directives 23.type_id(u32):
-     addi64 $254, $254, -8
        li64 $1, 3
-         st $1, $254, 0, 8
-     addi64 $254, $254, 8
        jala $0, $31, 0
 directives 23.type_id(u64):
-     addi64 $254, $254, -8
        li64 $1, 2
-         st $1, $254, 0, 8
-     addi64 $254, $254, 8
        jala $0, $31, 0
 directives 23.type_id(i8):
-     addi64 $254, $254, -8
        li64 $1, 1
-         st $1, $254, 0, 8
-     addi64 $254, $254, 8
        jala $0, $31, 0
 directives 23.inc:
         lra $3, $0, :directives 23.type_counter

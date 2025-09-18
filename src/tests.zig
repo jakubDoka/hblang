@@ -59,7 +59,7 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
 
         for (tests) |tst| {
             const target, var machine, const opts, const abi = tst;
-            std.debug.print("{s}\n", .{target});
+            //std.debug.print("{s}\n", .{target});
             defer machine.deinit();
             //if (std.mem.indexOf(u8, target, "x") != null) continue;
             if (abi.cc == .systemv and std.mem.indexOf(u8, name, "sse") != null) return;

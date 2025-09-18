@@ -1,9 +1,21 @@
-struct capture eca mismatch 1.cp(1, 0):
-	mov rax, 0x100
+struct capture eca mismatch 1:1:70: can not access the identifier
+cp := fn($_r0: u8, $_r1: u8): struct align(1){.op: u8 = 0; .r0: u8 = _r0; .r1: u8 = _r1} {
+                                                                     ^
+struct capture eca mismatch 1:1:11: the idnet is declared here
+cp := fn($_r0: u8, $_r1: u8): struct align(1){.op: u8 = 0; .r0: u8 = _r0; .r1: u8 = _r1} {
+          ^
+struct capture eca mismatch 1:1:85: can not access the identifier
+cp := fn($_r0: u8, $_r1: u8): struct align(1){.op: u8 = 0; .r0: u8 = _r0; .r1: u8 = _r1} {
+                                                                                    ^
+struct capture eca mismatch 1:1:21: the idnet is declared here
+cp := fn($_r0: u8, $_r1: u8): struct align(1){.op: u8 = 0; .r0: u8 = _r0; .r1: u8 = _r1} {
+                    ^
+struct capture eca mismatch 1.cp(0, 1):
+	mov rax, 0x30200
 	ret
 main:
 	sub rsp, 0x08
-	call :struct capture eca mismatch 1.cp(1, 0)
+	call :struct capture eca mismatch 1.cp(0, 1)
 	mov [rsp], eax
 	mov al, [rsp]
 	movzx eax, al

@@ -68,8 +68,5 @@ comptime arena 1.CheckPoint.restore:
 	add rsp, 0x10
 	ret
 main:
-	sub rsp, 0x10
-	mov qword ptr [rsp], 0x0A
 	mov rax, 0x0A
-	add rsp, 0x10
 	ret

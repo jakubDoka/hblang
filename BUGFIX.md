@@ -320,7 +320,7 @@ main := fn(): uint {
 #### dump asm crash 1
 ```hb
 cache := fn($fnc: type, $Args: type): type {
-    Inner := struct {
+    $Inner := struct {
         cached: ?@TypeOf(fnc(@as(Args, idk))) = null
         args: ?Args = null
     }
@@ -1560,7 +1560,7 @@ main := fn(): uint {
 #### false positive in cycle detection
 ```hb
 main := fn(): uint {
-    Wrapper := fn($T: type): type return struct{.x: T}
+    $Wrapper := fn($T: type): type return struct{.x: T}
     Wrap := fn($T: type): type return struct {
         test := fn(): Wrapper(@TypeOf(T.test())) {
             return .(T.test())
