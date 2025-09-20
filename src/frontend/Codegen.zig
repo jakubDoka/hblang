@@ -1956,8 +1956,7 @@ fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError
 
         _ = try self.emitTyped(ctx, .void, final_branch);
     } else {
-        var if_stack = std.ArrayListUnmanaged(Builder.If)
-            .initBuffer(tmp.arena.alloc(Builder.If, e.arms.len()));
+        var if_stack = tmp.arena.makeArrayList(Builder.If, e.arms.len());
 
         var unreachable_count: usize = 0;
         for (self.ast.exprs.view(e.arms), 0..) |arm, i| {
@@ -4307,19 +4306,22 @@ fn emitDirective(
         },
         .align_of => {
             try assertDirectiveArgs(self, expr, args, "<ty>");
+            const rty = if (ctx.ty != null and ctx.ty.?.isInteger()) ctx.ty.? else .uint;
+
             if (self.target == .@"comptime") {
-                return self.emitComptimeDirectiveEca(ctx, args[0], .align_of, .uint);
+                return self.emitComptimeDirectiveEca(ctx, args[0], .align_of, rty);
             }
             const ty = try self.resolveAnonTy(args[0]);
-            return .mkv(.uint, self.bl.addIntImm(sloc, .i64, @bitCast(ty.alignment(self.types))));
+            return .mkv(rty, self.bl.addIntImm(sloc, .i64, @bitCast(ty.alignment(self.types))));
         },
         .size_of => {
             try assertDirectiveArgs(self, expr, args, "<ty>");
+            const rty = if (ctx.ty != null and ctx.ty.?.isInteger()) ctx.ty.? else .uint;
             if (self.target == .@"comptime") {
-                return self.emitComptimeDirectiveEca(ctx, args[0], .size_of, .uint);
+                return self.emitComptimeDirectiveEca(ctx, args[0], .size_of, rty);
             }
             const ty = try self.resolveAnonTy(args[0]);
-            return .mkv(.uint, self.bl.addIntImm(sloc, .i64, @bitCast(ty.size(self.types))));
+            return .mkv(rty, self.bl.addIntImm(sloc, .i64, @bitCast(ty.size(self.types))));
         },
         .target => {
             try assertDirectiveArgs(self, expr, args, "<string>");
@@ -4468,7 +4470,15 @@ fn emitDirective(
             try assertDirectiveArgs(self, expr, args, "<ty>");
             return try self.emitComptimeDirectiveEca(ctx, args[0], .type_info, self.types.type_info);
         },
+        .Type => {
+            try assertDirectiveArgs(self, expr, args, "<ty>");
 
+            const vl = try self.emitTyped(.{}, self.types.type_info, args[0]);
+            return self.emitInternalEca(ctx, .Type, &.{
+                self.bl.addIntImm(.none, .i64, @bitCast(self.src(expr))),
+                vl.id.Pointer,
+            }, .type);
+        },
         .handler, .@"export" => return self.report(expr, "can only be used in the file scope", .{}),
         .import => return self.report(expr, "can be only used as a body of the function", .{}),
     }

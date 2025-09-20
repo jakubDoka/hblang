@@ -24,6 +24,37 @@ pub const eca = HbvmGen.eca;
 vm: Vm = .{},
 gen: HbvmGen,
 in_progress: std.ArrayListUnmanaged(Loc) = .{},
+type_instances: std.HashMapUnmanaged(
+    Types.Id,
+    void,
+    TypeInstanceCtx,
+    std.hash_map.default_max_load_percentage,
+) = .{},
+
+pub const TypeInstanceCtx = struct {
+    types: *Types,
+
+    pub fn eql(self: @This(), a: Types.Id, b: Types.Id) bool {
+        const ad, const bd = .{ a.data(), b.data() };
+        if (std.meta.activeTag(ad) != std.meta.activeTag(bd)) return false;
+
+        return switch (ad) {
+            .Struct => |s| s.deepEqual(self.types, bd.Struct),
+            else => utils.panic("{s}", .{@tagName(ad)}),
+        };
+    }
+
+    pub fn hash(self: @This(), key: Types.Id) u64 {
+        var hasher = std.hash.Fnv1a_64.init();
+        const adk = key.data();
+        std.hash.autoHash(&hasher, std.meta.activeTag(adk));
+        switch (adk) {
+            .Struct => |s| s.deepHash(self.types, &hasher),
+            else => utils.panic("{s}", .{@tagName(adk)}),
+        }
+        return hasher.final();
+    }
+};
 
 pub fn optimizeComptime(self: OptOptions, comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) []const u16 {
     OptOptions.idealizeDead(Backend, ctx, func);
@@ -45,6 +76,7 @@ pub const Loc = packed struct(u64) {
 };
 
 pub const InteruptCode = enum(u64) {
+    Type,
     Struct,
     Union,
     Enum,
@@ -503,6 +535,164 @@ pub fn runVm(
             }
 
             switch (@as(InteruptCode, @enumFromInt(self.ecaArg(0)))) {
+                .Type => {
+                    const sloc = self.ecaArgSloc(1);
+                    const data: Types.TypeInfo = @bitCast(vm_ctx.memory[self.ecaArg(2)..][0..@sizeOf(Types.TypeInfo)].*);
+
+                    var tmp = utils.Arena.scrath(null);
+                    defer tmp.deinit();
+
+                    const res = switch (data.kind) {
+                        .@"@struct" => str: {
+                            const struct_data = data.data.@"@struct";
+
+                            const raw_fields = struct_data.fields.slice(self);
+                            const fields = tmp.arena.alloc(tys.Struct.Field, raw_fields.len);
+
+                            for (raw_fields, fields) |rf, *f| {
+                                f.* = .{
+                                    .name = rf.name.slice(self),
+                                    .ty = rf.ty,
+                                    .defalut_value = undefined,
+                                };
+                            }
+
+                            const stru = tys.Struct{
+                                .key = .{}, // TODO: add more information into this
+                                .index = .empty,
+                                .alignment = if (struct_data.alignment != 0) struct_data.alignment else b: {
+                                    var max: u64 = 0;
+                                    for (fields) |f| max = @max(max, f.ty.alignment(types));
+                                    break :b max;
+                                },
+                                .fields = fields,
+                            };
+
+                            const id: tys.Struct.Id = types.store.add(&types.pool.arena, stru);
+                            const entry = self.type_instances.getOrPutContext(
+                                types.pool.allocator(),
+                                .init(.{ .Struct = id }),
+                                .{ .types = types },
+                            ) catch unreachable;
+
+                            if (!entry.found_existing) {
+                                const stru_data: *tys.Struct = types.store.get(id);
+                                const perm_fields = types.pool.arena.dupe(tys.Struct.Field, stru_data.fields.?);
+                                for (perm_fields) |*f| {
+                                    f.name = types.pool.arena.dupe(u8, f.name);
+                                }
+                                stru_data.fields = perm_fields;
+                            } else {
+                                types.store.pop(id);
+                            }
+
+                            break :str entry.key_ptr.*;
+                        },
+                        .@"@union" => uni: {
+                            const union_data = data.data.@"@union";
+
+                            const raw_fields = union_data.fields.slice(self);
+                            const fields = tmp.arena.alloc(tys.Union.Field, raw_fields.len);
+
+                            for (raw_fields, fields) |rf, *f| {
+                                f.* = .{
+                                    .name = rf.name.slice(self),
+                                    .ty = rf.ty,
+                                };
+                            }
+
+                            const stru = tys.Union{
+                                .key = .{}, // TODO: add more information into this
+                                .index = .empty,
+                                .tag = union_data.tag,
+                                .fields = fields,
+                            };
+
+                            const id: tys.Union.Id = types.store.add(&types.pool.arena, stru);
+                            const entry = self.type_instances.getOrPutContext(
+                                types.pool.allocator(),
+                                .init(.{ .Union = id }),
+                                .{ .types = types },
+                            ) catch unreachable;
+
+                            if (!entry.found_existing) {
+                                const stru_data: *tys.Union = types.store.get(id);
+                                const perm_fields = types.pool.arena.dupe(tys.Union.Field, stru_data.fields.?);
+                                for (perm_fields) |*f| {
+                                    f.name = types.pool.arena.dupe(u8, f.name);
+                                }
+                                stru_data.fields = perm_fields;
+                            } else {
+                                types.store.pop(id);
+                            }
+
+                            break :uni entry.key_ptr.*;
+                        },
+                        .@"@enum" => enu: {
+                            const enum_data = data.data.@"@enum";
+
+                            const raw_fields = enum_data.fields.slice(self);
+                            const fields = tmp.arena.alloc(tys.Enum.Field, raw_fields.len);
+
+                            for (raw_fields, fields) |rf, *f| {
+                                f.* = .{
+                                    .name = rf.name.slice(self),
+                                    .value = rf.value,
+                                };
+                            }
+
+                            const stru = tys.Enum{
+                                .key = .{}, // TODO: add more information into this
+                                .index = .empty,
+                                .backing_int = enum_data.backing_int,
+                                .fields = fields,
+                            };
+
+                            const id: tys.Enum.Id = types.store.add(&types.pool.arena, stru);
+                            const entry = self.type_instances.getOrPutContext(
+                                types.pool.allocator(),
+                                .init(.{ .Enum = id }),
+                                .{ .types = types },
+                            ) catch unreachable;
+
+                            if (!entry.found_existing) {
+                                const stru_data: *tys.Enum = types.store.get(id);
+                                const perm_fields = types.pool.arena.dupe(tys.Enum.Field, stru_data.fields.?);
+                                for (perm_fields) |*f| {
+                                    f.name = types.pool.arena.dupe(u8, f.name);
+                                }
+                                stru_data.fields = perm_fields;
+                            } else {
+                                types.store.pop(id);
+                            }
+
+                            break :enu entry.key_ptr.*;
+                        },
+                        .pointer => types.makePtr(data.data.pointer),
+                        .slice => types.makeSlice(data.data.slice.elem),
+                        .nullable => types.makeNullable(data.data.nullable),
+                        .tuple => types.makeTuple(tpl: {
+                            const ts = data.data.tuple.slice(self);
+                            const fields = tmp.arena.alloc(Types.Id, ts.len);
+                            @memcpy(fields, ts);
+                            break :tpl @ptrCast(fields);
+                        }),
+                        .fnptr => types.internPtr(.FnPtr, .{
+                            .args = args: {
+                                const as = data.data.fnptr.args.slice(self);
+                                const fields = tmp.arena.alloc(Types.Id, as.len);
+                                @memcpy(fields, as);
+                                break :args fields;
+                            },
+                            .ret = data.data.fnptr.ret,
+                        }),
+                        .array => types.makeArray(data.data.array.len, data.data.array.elem),
+                        .simd => types.makeSimd(data.data.simd.elem, data.data.simd.len),
+                        .builtin, .template, .global, .@"@fn" => return types.reportSloc(sloc, "can not be constructed (yet?)", .{}),
+                    };
+
+                    self.vm.regs.set(.ret(0), @intFromEnum(res));
+                },
                 .Struct, .Union, .Enum => |t| {
                     const scope: Types.Id = @enumFromInt(self.ecaArg(1));
                     const ast = types.getFile(scope.file(types).?);

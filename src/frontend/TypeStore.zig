@@ -104,9 +104,9 @@ pub const TypeCtx = struct {
         };
     }
 
-    pub fn hash(self: @This(), adapted_key: Id) u64 {
+    pub fn hash(self: @This(), key: Id) u64 {
         var hasher = std.hash.Fnv1a_64.init();
-        const adk = adapted_key.data();
+        const adk = key.data();
         std.hash.autoHash(&hasher, std.meta.activeTag(adk));
         switch (adk) {
             .Builtin => unreachable,
@@ -124,13 +124,7 @@ pub const TypeCtx = struct {
                     else => unreachable,
                 };
 
-                // we can safely hash the prefix as it contains
-                // only integers
-                hasher.update(std.mem.asBytes(&scope.loc));
-
-                // we skip the name and also splat the captures since they
-                // have no padding bites
-                hasher.update(@ptrCast(scope.captures()));
+                scope.hash(&hasher);
             },
         }
         return hasher.final();
@@ -240,6 +234,16 @@ pub const Scope = struct {
             self.loc.scope == other.loc.scope and
             self.loc.ast == other.loc.ast and
             std.mem.eql(u64, @ptrCast(self.captures()), @ptrCast(other.captures()));
+    }
+
+    pub fn hash(self: Scope, hasher: anytype) void {
+        // we can safely hash the prefix as it contains
+        // only integers
+        hasher.update(std.mem.asBytes(&self.loc));
+
+        // we skip the name and also splat the captures since they
+        // have no padding bites
+        hasher.update(@ptrCast(self.captures()));
     }
 };
 
@@ -1531,8 +1535,8 @@ pub fn Slice(comptime Elem: type) type {
             return .{ .elem_ptr = off, .len = slce.len };
         }
 
-        pub fn slice(slf: @This(), ct: *Comptime) []Elem {
-            return @as([*]Elem, @ptrCast(@alignCast(&ct.gen.out.code.items[@intCast(slf.elem_ptr)])))[0..@intCast(slf.len)];
+        pub fn slice(slf: @This(), ct: *Comptime) []align(1) Elem {
+            return @as([*]align(1) Elem, @ptrCast(@alignCast(&ct.gen.out.code.items[@intCast(slf.elem_ptr)])))[0..@intCast(slf.len)];
         }
     };
 }

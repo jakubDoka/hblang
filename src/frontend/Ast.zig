@@ -528,7 +528,9 @@ pub fn report(self: *const Ast, types: anytype, pos: u32, msg: []const u8, args:
     const fields = std.meta.fields(@TypeOf(args));
     var argss: [fields.len + 1][]const u8 = undefined;
     inline for (0..fields.len) |i| {
-        if (fields[i].type == Types.Id) {
+        if (fields[i].type == []const u8) {
+            argss[i] = args[i];
+        } else if (fields[i].type == Types.Id) {
             argss[i] = args[i].fmt(types).toString(tmp.arena);
         } else if (@typeInfo(fields[i].type) == .pointer and std.meta.Child(fields[i].type) == u8) {
             argss[i] = try std.fmt.allocPrint(tmp.arena.allocator(), "{s}", .{args[i]});

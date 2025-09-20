@@ -378,6 +378,35 @@ pub const Struct = struct {
 
         pub const Data = Struct;
 
+        pub fn deepEqual(lsh: Id, types: *Types, rhs: Id) bool {
+            const lhs_data: *Struct = types.store.get(lsh);
+            const rhs_data: *Struct = types.store.get(rhs);
+
+            if (!lhs_data.key.eql(rhs_data.key)) return false;
+
+            if (lhs_data.alignment.? != rhs_data.alignment.?) return false;
+
+            for (lhs_data.fields.?, rhs_data.fields.?) |lhsf, rhsf| {
+                if (!std.mem.eql(u8, lhsf.name, rhsf.name)) return false;
+                if (lhsf.ty != rhsf.ty) return false;
+            }
+
+            return true;
+        }
+
+        pub fn deepHash(id: Id, types: *Types, hasher: anytype) void {
+            const data: *Struct = types.store.get(id);
+
+            data.key.hash(hasher);
+
+            std.hash.autoHash(hasher, data.alignment.?);
+
+            for (data.fields.?) |f| {
+                hasher.update(f.name);
+                std.hash.autoHash(hasher, f.ty);
+            }
+        }
+
         pub fn getSize(id: Id, types: *Types) u64 {
             const self = types.store.get(id);
 

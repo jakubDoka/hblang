@@ -2137,6 +2137,31 @@ main := fn(): uint {
 }
 ```
 
+#### directives 25 (@Type)
+```hb
+main := fn(): uint {
+    $Stru := MakeStruct("foo", u8)
+    $StruI := MakeStruct("foo", u8)
+
+    s: StruI = .(0)
+    b := Stru.(0)
+    s = b
+
+    return s.foo
+}
+
+MakeStruct := fn(fname: []u8, ftype: type): type {
+    return @Type(.{@struct: .{
+        alignment: @align_of(ftype),
+        fields: &.[.{
+            name: fname,
+            ty: ftype,
+            defalut_value: idk,
+        }],
+    }})
+}
+```
+
 ## progress
 
 - [x] hbvm-ableos target
