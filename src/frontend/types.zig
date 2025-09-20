@@ -137,6 +137,35 @@ pub const Enum = struct {
 
         pub const getFields = Enum.getFields;
         pub const getBackingInt = Enum.getBackingInt;
+
+        pub fn deepEqual(lsh: Id, types: *Types, rhs: Id) bool {
+            const lhs_data: *Enum = types.store.get(lsh);
+            const rhs_data: *Enum = types.store.get(rhs);
+
+            if (!lhs_data.key.eql(rhs_data.key)) return false;
+
+            if (lhs_data.backing_int != rhs_data.backing_int) return false;
+
+            for (lhs_data.fields.?, rhs_data.fields.?) |lhsf, rhsf| {
+                if (!std.mem.eql(u8, lhsf.name, rhsf.name)) return false;
+                if (lhsf.value != rhsf.value) return false;
+            }
+
+            return true;
+        }
+
+        pub fn deepHash(id: Id, types: *Types, hasher: anytype) void {
+            const data: *Enum = types.store.get(id);
+
+            data.key.hash(hasher);
+
+            std.hash.autoHash(hasher, data.backing_int);
+
+            for (data.fields.?) |f| {
+                hasher.update(f.name);
+                std.hash.autoHash(hasher, f.value);
+            }
+        }
     };
 
     pub fn getBackingInt(id: Id, types: *Types) TyId {
@@ -235,6 +264,35 @@ pub const Union = struct {
 
         pub const Data = Union;
 
+        pub fn deepEqual(lsh: Id, types: *Types, rhs: Id) bool {
+            const lhs_data: *Union = types.store.get(lsh);
+            const rhs_data: *Union = types.store.get(rhs);
+
+            if (!lhs_data.key.eql(rhs_data.key)) return false;
+
+            if (lhs_data.tag != rhs_data.tag) return false;
+
+            for (lhs_data.fields.?, rhs_data.fields.?) |lhsf, rhsf| {
+                if (!std.mem.eql(u8, lhsf.name, rhsf.name)) return false;
+                if (lhsf.ty != rhsf.ty) return false;
+            }
+
+            return true;
+        }
+
+        pub fn deepHash(id: Id, types: *Types, hasher: anytype) void {
+            const data: *Union = types.store.get(id);
+
+            data.key.hash(hasher);
+
+            std.hash.autoHash(hasher, data.tag);
+
+            for (data.fields.?) |f| {
+                hasher.update(f.name);
+                std.hash.autoHash(hasher, f.ty);
+            }
+        }
+
         pub fn tagOffset(id: Id, types: *Types) u64 {
             const self: *Union = types.store.get(id);
             if (self.payload_size == null) {
@@ -286,6 +344,7 @@ pub const Union = struct {
             }
 
             const ast = types.getFile(self.key.loc.file);
+            if (self.key.loc.ast.tag() == .Void) return .void;
             const union_ast = ast.exprs.get(self.key.loc.ast).Type;
             if (union_ast.tag.tag() == .Void) return .void;
 

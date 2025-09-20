@@ -39,7 +39,7 @@ pub const TypeInstanceCtx = struct {
         if (std.meta.activeTag(ad) != std.meta.activeTag(bd)) return false;
 
         return switch (ad) {
-            .Struct => |s| s.deepEqual(self.types, bd.Struct),
+            inline .Struct, .Union, .Enum => |s, t| s.deepEqual(self.types, @field(bd, @tagName(t))),
             else => utils.panic("{s}", .{@tagName(ad)}),
         };
     }
@@ -49,7 +49,7 @@ pub const TypeInstanceCtx = struct {
         const adk = key.data();
         std.hash.autoHash(&hasher, std.meta.activeTag(adk));
         switch (adk) {
-            .Struct => |s| s.deepHash(self.types, &hasher),
+            inline .Struct, .Union, .Enum => |s| s.deepHash(self.types, &hasher),
             else => utils.panic("{s}", .{@tagName(adk)}),
         }
         return hasher.final();

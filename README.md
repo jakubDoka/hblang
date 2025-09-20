@@ -2147,6 +2147,20 @@ main := fn(): uint {
     b := Stru.(0)
     s = b
 
+    $Unio := MakeUnion("foo", u8)
+    $UnioI := MakeUnion("foo", u8)
+
+    u: UnioI = .{foo: 0}
+    c := Unio.{foo: 0}
+    u = c
+
+    $Enum := MakeEnum("foo")
+    $EnumI := MakeEnum("foo")
+
+    e: EnumI = .foo
+    d := Enum.foo
+    e = d
+
     return s.foo
 }
 
@@ -2157,6 +2171,26 @@ MakeStruct := fn(fname: []u8, ftype: type): type {
             name: fname,
             ty: ftype,
             defalut_value: idk,
+        }],
+    }})
+}
+
+MakeUnion := fn(fname: []u8, ftype: type): type {
+    return @Type(.{@union: .{
+        tag: void,
+        fields: &.[.{
+            name: fname,
+            ty: ftype,
+        }],
+    }})
+}
+
+MakeEnum := fn(fname: []u8): type {
+    return @Type(.{@enum: .{
+        backing_int: u8,
+        fields: &.[.{
+            name: fname,
+            value: 0,
         }],
     }})
 }
