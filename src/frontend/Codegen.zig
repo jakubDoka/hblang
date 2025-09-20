@@ -2265,7 +2265,8 @@ fn emitUserType(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Type)) !Value {
     const sloc = self.src(expr);
 
     const code: Comptime.InteruptCode = @enumFromInt(@intFromEnum(e.kind) -
-        @intFromEnum(Lexer.Lexeme.@"struct"));
+        @intFromEnum(Lexer.Lexeme.@"struct") +
+        @intFromEnum(Comptime.InteruptCode.Struct));
 
     if (self.target == .runtime) {
         const captures = try computeCaptures(self, e.captures, tmp.arena);

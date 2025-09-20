@@ -76,10 +76,10 @@ pub const Loc = packed struct(u64) {
 };
 
 pub const InteruptCode = enum(u64) {
-    Type,
     Struct,
     Union,
     Enum,
+    Type,
     name_of,
     make_array,
     ChildOf,

@@ -1,0 +1,18 @@
+main:
+	sub rsp, 0x10
+	mov byte ptr [rsp], 0x00
+	mov byte ptr [rsp+0x01], 0x00
+	mov al, [rsp+0x01]
+	mov [rsp], al
+	mov byte ptr [rsp+0x04], 0x00
+	mov byte ptr [rsp+0x05], 0x00
+	mov al, [rsp+0x05]
+	mov [rsp+0x04], al
+	mov byte ptr [rsp+0x02], 0x00
+	mov byte ptr [rsp+0x03], 0x00
+	mov al, [rsp+0x03]
+	mov [rsp+0x02], al
+	mov al, [rsp]
+	movzx rax, al
+	add rsp, 0x10
+	ret
