@@ -344,7 +344,7 @@ pub const Union = struct {
             }
 
             const ast = types.getFile(self.key.loc.file);
-            if (self.key.loc.ast.tag() == .Void) return .void;
+            if (self.key.loc.ast.tag() == .Directive) return .void;
             const union_ast = ast.exprs.get(self.key.loc.ast).Type;
             if (union_ast.tag.tag() == .Void) return .void;
 

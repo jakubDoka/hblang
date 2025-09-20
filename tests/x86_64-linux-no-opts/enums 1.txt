@@ -1,9 +1,9 @@
 main:
 	sub rsp, 0x10
-	mov byte ptr [rsp+0x01], 0x00
-	mov byte ptr [rsp], 0x01
-	mov al, [rsp+0x01]
-	mov cl, [rsp]
+	mov byte ptr [rsp], 0x00
+	mov byte ptr [rsp+0x01], 0x01
+	mov al, [rsp]
+	mov cl, [rsp+0x01]
 	cmp al, cl
 	jnz :0
 	mov rax, 0x0A

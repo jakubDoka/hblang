@@ -9,10 +9,10 @@ main:
 	mov qword ptr [rsp+0x10], 0x03
 	lea rdi, [rsp+0x10]
 	call :nullable types 4 (pointer optimization).opaque(^uint)
-	mov [rsp], rax
-	mov rax, [rsp]
 	mov [rsp+0x08], rax
 	mov rax, [rsp+0x08]
+	mov [rsp], rax
+	mov rax, [rsp]
 	mov qword ptr [rax], 0x00
 	mov rax, [rsp+0x10]
 	add rsp, 0x18

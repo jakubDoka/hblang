@@ -2649,6 +2649,43 @@ pub fn Func(comptime Backend: type) type {
             try utils.setColor(cc, wr, .reset);
         }
 
+        pub fn computeStackLayout(self: *Self, start_pos: i64) i64 {
+            if (self.start.outputs().len < 2) return 0;
+
+            const mem = self.start.outputs()[1].get();
+            std.debug.assert(mem.kind == .Mem);
+
+            var local_size: i64 = start_pos;
+
+            std.sort.pdq(Node.Out, mem.outputs(), {}, struct {
+                fn isBigger(_: void, lhs: Node.Out, rhs: Node.Out) bool {
+                    return switch (lhs.get().extra2()) {
+                        .LocalAlloc => |l| @ctz(l.size) > switch (rhs.get().extra2()) {
+                            .LocalAlloc => |r| @ctz(r.size),
+                            else => return true,
+                        },
+                        else => false,
+                    };
+                }
+            }.isBigger);
+
+            std.debug.assert(self.start.outputs()[1].get().kind == .Mem);
+            for (mem.outputs(), 0..) |o, i| {
+                if (o.get().kind != .LocalAlloc) {
+                    std.debug.assert(for (mem.outputs()[i + 1 ..]) |oo| {
+                        if (oo.get().kind == .LocalAlloc) break false;
+                    } else true);
+                    break;
+                }
+                const extra = o.get().extra(.LocalAlloc);
+                const size = extra.size;
+                extra.size = @bitCast(local_size);
+                local_size += @intCast(size);
+            }
+
+            return local_size;
+        }
+
         pub fn collectPostorder(
             self: *Self,
             arena: std.mem.Allocator,

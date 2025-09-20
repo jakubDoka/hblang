@@ -821,6 +821,7 @@ pub const DataOptions = struct {
     id: u32,
     name: []const u8 = &.{},
     relocs: []const Reloc = &.{},
+    alignment: u64 = 1,
     value: ValueSpec,
     readonly: bool,
 

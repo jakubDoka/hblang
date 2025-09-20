@@ -15,6 +15,7 @@ gpa: *utils.Pool,
 out: Mach.Data = .{},
 emit_global_reloc_offsets: bool = false,
 push_uninit_globals: bool = false,
+align_globlals: bool = false,
 local_relocs: std.ArrayListUnmanaged(BlockReloc) = undefined,
 ret_count: usize = undefined,
 block_offsets: []i32 = undefined,
@@ -341,16 +342,8 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     const used_reg_size = @as(u16, (used_registers + @intFromBool(!is_tail))) * 8;
     const spill_count = (max_reg -| max_regs) * 8;
 
-    var local_size: i64 = 0;
-    if (func.start.outputs().len > 1) {
-        std.debug.assert(func.start.outputs()[1].get().kind == .Mem);
-        for (func.start.outputs()[1].get().outputs()) |o| if (o.get().kind == .LocalAlloc) {
-            const extra = o.get().extra(.LocalAlloc);
-            const size = extra.size;
-            extra.size = @bitCast(local_size);
-            local_size += @intCast(size);
-        };
-    }
+    var local_size: i64 = func.computeStackLayout(0);
+    local_size = std.mem.alignForward(i64, local_size, 8);
 
     const stack_size: i64 = used_reg_size + local_size + spill_count;
     self.spill_base = @intCast(used_reg_size + local_size);
@@ -699,6 +692,12 @@ pub fn reloc(self: *HbvmGen, sub_offset: u8, arg: isa.Arg) Reloc {
 
 pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
     errdefer unreachable;
+    if (self.align_globlals) {
+        const would_be_pos = (self.out.code.items.len + @intFromPtr(self.out.code.items.ptr)) + @sizeOf(u32);
+        const padding = std.mem.alignForward(usize, would_be_pos, opts.alignment) - would_be_pos;
+        try self.out.code.appendNTimes(self.gpa.allocator(), 0, padding);
+    }
+
     try self.out.defineGlobal(
         self.gpa.allocator(),
         opts.id,

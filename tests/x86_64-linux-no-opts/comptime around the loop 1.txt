@@ -1,31 +1,31 @@
 main:
 	sub rsp, 0x20
-	mov qword ptr [rsp+0x08], 0x00
 	mov qword ptr [rsp+0x10], 0x00
-3:	mov rax, [rsp+0x10]
+	mov qword ptr [rsp], 0x00
+3:	mov rax, [rsp]
 	cmp rax, 0x0A
 	setb al
 	movzx rax, al
 	test al, al
 	jz :0
-	mov qword ptr [rsp], 0x00
-2:	mov rax, [rsp]
-	mov rcx, [rsp+0x10]
+	mov qword ptr [rsp+0x08], 0x00
+2:	mov rax, [rsp+0x08]
+	mov rcx, [rsp]
 	cmp rax, 0x0A
 	setb al
 	movzx rax, al
 	test al, al
 	jz :1
-	add rcx, [rsp]
-	add [rsp+0x08], rcx
-	mov rax, [rsp]
+	add rcx, [rsp+0x08]
+	add [rsp+0x10], rcx
+	mov rax, [rsp+0x08]
 	inc rax
-	mov [rsp], rax
+	mov [rsp+0x08], rax
 	jmp :2
 1:	inc rcx
-	mov [rsp+0x10], rcx
+	mov [rsp], rcx
 	jmp :3
-0:	mov rax, [rsp+0x08]
+0:	mov rax, [rsp+0x10]
 	sub rax, 0x384
 	add rsp, 0x20
 	ret

@@ -2268,65 +2268,54 @@ fn emitUserType(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Type)) !Value {
         @intFromEnum(Lexer.Lexeme.@"struct") +
         @intFromEnum(Comptime.InteruptCode.Struct));
 
-    if (self.target == .runtime) {
-        const captures = try computeCaptures(self, e.captures, tmp.arena);
+    const prefix = 5;
+    const params = tmp.arena.alloc(graph.AbiParam, prefix + e.captures.len() * 2);
+    @memset(params, .{ .Reg = self.abiCata(.type).ByValue });
+    params[0] = .{ .Reg = .i64 };
+    params[2] = .{ .Reg = .i64 };
+    const returns = [_]graph.AbiParam{.{ .Reg = self.abiCata(.type).ByValue }};
 
-        const file = self.parent_scope.file(self.types);
-        const scope = self.parent_scope.perm(self.types);
+    const args = self.bl.allocCallArgs(tmp.arena, params, &returns, null);
 
-        const res = switch (code) {
-            inline .Struct, .Union, .Enum => |tg| self.types.resolveFielded(
-                @field(std.meta.Tag(Types.Data), @tagName(tg)),
-                scope,
-                file,
-                self.name,
-                expr,
-                captures,
-            ),
-            else => unreachable,
+    args.arg_slots[0] = self.bl.addIntImm(sloc, .i64, @intCast(@intFromEnum(code)));
+    args.arg_slots[1] = self.emitTyConst(self.parent_scope.perm(self.types)).id.Value;
+    args.arg_slots[2] = self.bl.addIntImm(sloc, .i64, @intFromEnum(expr));
+    args.arg_slots[3] = self.bl.addIntImm(sloc, .i64, @bitCast(@as(u64, @intFromPtr(self.name.ptr))));
+    args.arg_slots[4] = self.bl.addIntImm(sloc, .i64, @bitCast(@as(u64, self.name.len)));
+
+    for (self.ast.exprs.view(e.captures), 0..) |cp, slot_idx| {
+        var val = try self.loadIdent(cp.pos, cp.id);
+        args.arg_slots[prefix + slot_idx * 2 ..][0..2].* = switch (self.abiCata(val.ty)) {
+            .Impossible => unreachable, // TODO: wah
+            .Imaginary, .ByRef, .ByValuePair => .{
+                self.emitTyConst(val.ty).id.Value,
+                self.bl.addIntImm(sloc, .i64, 0),
+            },
+            .ByValue => |v| b: {
+                params[prefix + slot_idx * 2 + 1] = .{ .Reg = v };
+                break :b .{
+                    self.emitTyConst(val.ty).id.Value,
+                    if (cp.id.isComptime(self.ast.source) or
+                        self.target == .@"comptime")
+                        val.getValue(sloc, self)
+                    else
+                        self.bl.addIntImm(sloc, .i64, 0),
+                };
+            },
         };
-
-        return self.emitTyConst(res);
-    } else {
-        const prefix = 5;
-        const params = tmp.arena.alloc(graph.AbiParam, prefix + e.captures.len() * 2);
-        @memset(params, .{ .Reg = self.abiCata(.type).ByValue });
-        params[0] = .{ .Reg = .i64 };
-        params[2] = .{ .Reg = .i64 };
-        const returns = [_]graph.AbiParam{.{ .Reg = self.abiCata(.type).ByValue }};
-
-        const args = self.bl.allocCallArgs(tmp.arena, params, &returns, null);
-
-        args.arg_slots[0] = self.bl.addIntImm(sloc, .i64, @intCast(@intFromEnum(code)));
-        args.arg_slots[1] = self.emitTyConst(self.parent_scope.perm(self.types)).id.Value;
-        args.arg_slots[2] = self.bl.addIntImm(sloc, .i64, @intFromEnum(expr));
-        args.arg_slots[3] = self.bl.addIntImm(sloc, .i64, @bitCast(@as(u64, @intFromPtr(self.name.ptr))));
-        args.arg_slots[4] = self.bl.addIntImm(sloc, .i64, @bitCast(@as(u64, self.name.len)));
-
-        for (self.ast.exprs.view(e.captures), 0..) |cp, slot_idx| {
-            var val = try self.loadIdent(cp.pos, cp.id);
-            args.arg_slots[prefix + slot_idx * 2 ..][0..2].* = switch (self.abiCata(val.ty)) {
-                .Impossible => unreachable, // TODO: wah
-                .Imaginary, .ByRef, .ByValuePair => .{ self.emitTyConst(val.ty).id.Value, self.bl.addIntImm(sloc, .i64, 0) },
-                .ByValue => |v| b: {
-                    params[prefix + slot_idx * 2 + 1] = .{ .Reg = v };
-                    break :b .{ self.emitTyConst(val.ty).id.Value, val.getValue(sloc, self) };
-                },
-            };
-        }
-
-        const rets = self.bl.addCall(sloc, .ablecall, Comptime.eca, args);
-        var ret: Value = .mkv(.type, rets.?[0]);
-        if (for (args.arg_slots) |a| {
-            if (a.kind != .CInt) break false;
-        } else true) {
-            self.types.stats.useless_ecas += 1;
-            return .mkv(.type, self.bl.addIntImm(sloc, .i32, try self.partialEvalConst(expr, &ret)));
-        }
-        self.types.stats.total_ecas += 1;
-
-        return ret;
     }
+
+    const rets = self.bl.addCall(sloc, .ablecall, Comptime.eca, args);
+    var ret: Value = .mkv(.type, rets.?[0]);
+    if (for (args.arg_slots) |a| {
+        if (a.kind != .CInt) break false;
+    } else true) {
+        self.types.stats.useless_ecas += 1;
+        return .mkv(.type, self.bl.addIntImm(sloc, .i32, try self.partialEvalConst(expr, &ret)));
+    }
+    self.types.stats.total_ecas += 1;
+
+    return ret;
 }
 
 fn emitFnPtr(self: *Codegen, _: Ctx, _: Ast.Id, e: *Expr(.FnPtr)) !Value {
@@ -4477,6 +4466,8 @@ fn emitDirective(
             const vl = try self.emitTyped(.{}, self.types.type_info, args[0]);
             return self.emitInternalEca(ctx, .Type, &.{
                 self.bl.addIntImm(.none, .i64, @bitCast(self.src(expr))),
+                self.bl.addIntImm(.none, .i32, @intFromEnum(self.parent_scope.perm(self.types))),
+                self.bl.addIntImm(.none, .i32, @intFromEnum(expr)),
                 vl.id.Pointer,
             }, .type);
         },

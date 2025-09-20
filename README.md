@@ -2140,6 +2140,24 @@ main := fn(): uint {
 #### directives 25 (@Type)
 ```hb
 main := fn(): uint {
+    $Tuple := @Type(.{tuple: &.[u8, u8]})
+    $if Tuple != @TypeOf(.(@as(u8, 0), @as(u8, 0))) return 1
+
+    $Ptr := @Type(.{pointer: u8})
+    $if Ptr != ^u8 return 2
+
+    $Slice := @Type(.{slice: u8})
+    $if Slice != []u8 return 3
+
+    $Nullable := @Type(.{nullable: u8})
+    $if Nullable != ?u8 return 4
+
+    $Array := @Type(.{array: .{elem: u8, len: 1}})
+    $if Array != [1]u8 return 5
+
+    $FnPtr := @Type(.{fnptr: .{args: &.[u8, u8], ret: u8}})
+    $if FnPtr != ^fn(u8, u8): u8 return 6
+
     $Stru := MakeStruct("foo", u8)
     $StruI := MakeStruct("foo", u8)
 
@@ -2186,12 +2204,20 @@ MakeUnion := fn(fname: []u8, ftype: type): type {
 }
 
 MakeEnum := fn(fname: []u8): type {
+    // just triggering stack alignment bug
+    fields := @TypeOf(@type_info(idk).@enum.fields[0]).[.{
+        name: fname,
+        value: 0,
+    }, .{
+        name: idk,
+        value: 1,
+    }]
+    onm := u8.['b', 'a', 'r']
+    fields[1].name = onm[..]
+
     return @Type(.{@enum: .{
         backing_int: u8,
-        fields: &.[.{
-            name: fname,
-            value: 0,
-        }],
+        fields: fields[..],
     }})
 }
 ```

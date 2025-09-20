@@ -95,7 +95,7 @@ pub fn init(gpa: *utils.Pool) Comptime {
     self.gen.out.code.resize(gpa.allocator(), stack_size) catch unreachable;
     self.gen.out.code.items[self.gen.out.code.items.len - 1] = @intFromEnum(isa.Op.tx);
     self.gen.out.code.items[self.gen.out.code.items.len - 2] = @intFromEnum(isa.Op.eca);
-    self.vm.regs.set(.stack_addr, stack_size - 2);
+    self.vm.regs.set(.stack_addr, stack_size - 8);
     return self;
 }
 
@@ -377,6 +377,9 @@ pub fn collectInterestingOps(self: *Comptime, ctx: PartialEvalCtx, expr: *Node, 
 pub fn partialEvalCall(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, curr: *Node, from_ret: ?*Node) !?*Node {
     const types = self.getTypes();
 
+    if (curr.schedule == 0) return null;
+    curr.schedule = 0;
+
     const call: *Node = curr.inputs()[0].?;
     std.debug.assert(call.kind == .Call);
 
@@ -537,7 +540,15 @@ pub fn runVm(
             switch (@as(InteruptCode, @enumFromInt(self.ecaArg(0)))) {
                 .Type => {
                     const sloc = self.ecaArgSloc(1);
-                    const data: Types.TypeInfo = @bitCast(vm_ctx.memory[self.ecaArg(2)..][0..@sizeOf(Types.TypeInfo)].*);
+                    const scope: Types.Id = @enumFromInt(self.ecaArg(2));
+                    const ast = self.ecaArgAst(3);
+                    const data: Types.TypeInfo = @bitCast(vm_ctx.memory[self.ecaArg(4)..][0..@sizeOf(Types.TypeInfo)].*);
+
+                    const key = Types.Scope{ .loc = .{
+                        .scope = scope,
+                        .file = @enumFromInt(sloc.namespace),
+                        .ast = ast,
+                    } };
 
                     var tmp = utils.Arena.scrath(null);
                     defer tmp.deinit();
@@ -558,7 +569,7 @@ pub fn runVm(
                             }
 
                             const stru = tys.Struct{
-                                .key = .{}, // TODO: add more information into this
+                                .key = key,
                                 .index = .empty,
                                 .alignment = if (struct_data.alignment != 0) struct_data.alignment else b: {
                                     var max: u64 = 0;
@@ -602,7 +613,7 @@ pub fn runVm(
                             }
 
                             const stru = tys.Union{
-                                .key = .{}, // TODO: add more information into this
+                                .key = key,
                                 .index = .empty,
                                 .tag = union_data.tag,
                                 .fields = fields,
@@ -642,7 +653,7 @@ pub fn runVm(
                             }
 
                             const stru = tys.Enum{
-                                .key = .{}, // TODO: add more information into this
+                                .key = key,
                                 .index = .empty,
                                 .backing_int = enum_data.backing_int,
                                 .fields = fields,
@@ -669,21 +680,17 @@ pub fn runVm(
                             break :enu entry.key_ptr.*;
                         },
                         .pointer => types.makePtr(data.data.pointer),
-                        .slice => types.makeSlice(data.data.slice.elem),
+                        .slice => types.makeSlice(data.data.slice),
                         .nullable => types.makeNullable(data.data.nullable),
-                        .tuple => types.makeTuple(tpl: {
-                            const ts = data.data.tuple.slice(self);
-                            const fields = tmp.arena.alloc(Types.Id, ts.len);
-                            @memcpy(fields, ts);
-                            break :tpl @ptrCast(fields);
-                        }),
+                        .tuple => types.makeTuple(@ptrCast(types.pool.arena.dupe(
+                            Types.Id,
+                            data.data.tuple.slice(self),
+                        ))),
                         .fnptr => types.internPtr(.FnPtr, .{
-                            .args = args: {
-                                const as = data.data.fnptr.args.slice(self);
-                                const fields = tmp.arena.alloc(Types.Id, as.len);
-                                @memcpy(fields, as);
-                                break :args fields;
-                            },
+                            .args = @ptrCast(types.pool.arena.dupe(
+                                Types.Id,
+                                data.data.fnptr.args.slice(self),
+                            )),
                             .ret = data.data.fnptr.ret,
                         }),
                         .array => types.makeArray(data.data.array.len, data.data.array.elem),
@@ -797,7 +804,7 @@ pub fn runVm(
                     const tp: Types.TypeInfo = switch (ty.data()) {
                         .Builtin => .{ .kind = .builtin, .data = .{ .builtin = {} } },
                         .Pointer => |ptr_ty| .{ .kind = .pointer, .data = .{ .pointer = types.store.get(ptr_ty).* } },
-                        .Slice => |slice_ty| .{ .kind = .slice, .data = .{ .slice = types.store.get(slice_ty).* } },
+                        .Slice => |slice_ty| .{ .kind = .slice, .data = .{ .slice = types.store.get(slice_ty).elem } },
                         .Nullable => |nullable_ty| .{ .kind = .nullable, .data = .{ .nullable = types.store.get(nullable_ty).inner } },
                         .Array => |array_ty| .{ .kind = .array, .data = .{ .array = types.store.get(array_ty).* } },
                         .Struct => |sty| b: {

@@ -836,29 +836,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         }
     }
 
-    var local_size: i64 = 0;
-    if (func.start.outputs().len > 1) {
-        var locals = std.ArrayListUnmanaged(*FuncNode).empty;
-
-        std.debug.assert(func.start.outputs()[1].get().kind == .Mem);
-        for (func.start.outputs()[1].get().outputs()) |o| if (o.get().kind == .LocalAlloc) {
-            try locals.append(tmp.arena.allocator(), o.get());
-        };
-
-        std.sort.pdq(*FuncNode, locals.items, {}, struct {
-            fn isBigger(_: void, lhs: *FuncNode, rhs: *FuncNode) bool {
-                return @ctz(lhs.extra(.LocalAlloc).size) > @ctz(rhs.extra(.LocalAlloc).size);
-            }
-        }.isBigger);
-
-        std.debug.assert(func.start.outputs()[1].get().kind == .Mem);
-        for (locals.items) |o| {
-            const extra = o.extra(.LocalAlloc);
-            const size = extra.size;
-            extra.size = @bitCast(local_size);
-            local_size += @intCast(size);
-        }
-    }
+    const local_size: i64 = func.computeStackLayout(0);
 
     const spill_slot_count = if (self.allocs.len == 0) 0 else std.mem.max(u16, self.allocs) -| 31;
     var stack_size: i64 = std.mem.alignForward(i64, local_size, 8) +

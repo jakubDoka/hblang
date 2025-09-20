@@ -984,6 +984,7 @@ pub fn retainGlobals(self: *Types, target: Target, backend: anytype, detect_nest
                 .{ .uninit = glob.data.slice(&self.ct).len }
             else
                 .{ .init = glob.data.slice(&self.ct) },
+            .alignment = glob.ty.alignment(self),
             .relocs = if (target == .runtime) relocs.items else &.{},
             .readonly = glob.readonly,
         });
@@ -1385,6 +1386,7 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer) *T
 
     slot.ct.gen.emit_global_reloc_offsets = true;
     slot.ct.gen.push_uninit_globals = true;
+    slot.ct.gen.align_globlals = true;
 
     slot.string = slot.makeSlice(.u8);
     slot.source_loc = slot.convertZigTypeToHbType(extern struct {
@@ -1429,7 +1431,7 @@ pub const TypeInfo = extern struct {
     data: extern union {
         builtin: void,
         pointer: Id,
-        slice: tys.Slice,
+        slice: Id,
         nullable: Id,
         tuple: Slice(Id),
         @"@enum": extern struct {
@@ -1535,8 +1537,8 @@ pub fn Slice(comptime Elem: type) type {
             return .{ .elem_ptr = off, .len = slce.len };
         }
 
-        pub fn slice(slf: @This(), ct: *Comptime) []align(1) Elem {
-            return @as([*]align(1) Elem, @ptrCast(@alignCast(&ct.gen.out.code.items[@intCast(slf.elem_ptr)])))[0..@intCast(slf.len)];
+        pub fn slice(slf: @This(), ct: *Comptime) []Elem {
+            return @as([*]Elem, @ptrCast(@alignCast(&ct.gen.out.code.items[@intCast(slf.elem_ptr)])))[0..@intCast(slf.len)];
         }
     };
 }
