@@ -70,35 +70,6 @@ pub fn build(b: *std.Build) !void {
         break :hb hb;
     };
 
-    const cc = cc: {
-        const cc = b.addExecutable(.{
-            .name = "cc",
-            .root_module = b.createModule(.{
-                .root_source_file = b.path("src/cc.zig"),
-                .target = target,
-                .optimize = optimize,
-            }),
-        });
-
-        const aro = b.dependency("arocc", .{
-            .target = target,
-            .optimize = optimize,
-        });
-
-        b.installDirectory(.{
-            .source_dir = aro.path("include"),
-            .install_dir = .prefix,
-            .install_subdir = "include",
-        });
-
-        cc.root_module.addImport("aro", aro.module("aro"));
-        cc.root_module.addImport("hb", hb);
-
-        //b.installArtifact(cc);
-
-        break :cc cc;
-    };
-
     hbc: {
         const exe = b.addExecutable(.{
             .name = "hbc",
@@ -291,7 +262,6 @@ pub fn build(b: *std.Build) !void {
 
         const t = b.addTest(.{ .root_module = test_module });
         check_step.dependOn(&t.step);
-        check_step.dependOn(&cc.step);
 
         break :check;
     }
