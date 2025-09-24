@@ -345,8 +345,8 @@ pub const Threading = union(enum) {
     }
 
     pub fn logStats(self: *Threading, out: *std.Io.Writer) void {
-        _ = self; // autofix
-        _ = out; // autofix
+        _ = self;
+        _ = out;
     }
 };
 

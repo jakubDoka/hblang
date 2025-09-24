@@ -291,7 +291,8 @@ pub fn collectMemOps(self: *Comptime, ctx: PartialEvalCtx, expr: *Node, scratch:
         var cursor = op.cfg0();
         while (cursor != lca) {
             if (cursor.base.kind == .Else or cursor.base.kind == .Then) {
-                seen_if_branch = cursor.base.inputs()[0].?;
+                seen_if_branch = cursor.base.inputs()[0].?
+                    .outputs()[@intFromBool(cursor.base.kind == .Then)].get();
             }
             if (cursor.base.kind == .Loop) {
                 const to_find = seen_if_branch orelse

@@ -1,3 +1,6 @@
-comptime edge cases 3:8:15: the loop was declared with breaks or returns but they are all unreachable
-    while vl < 1 while vl < 1 vl += 1
+comptime edge cases 3:10:15: can't evaluate this at compile time since the value depends on runtime control flow (DEBUG: got stuck on [97m%29[0m = Store:i64: [95m%27[0m, [90m%22[0m, [91m%8[0m, [96m%28[0m [, [90m%22[0m])
+    return @eval(vl)
                  ^
+comptime edge cases 3:5:20: function returns a uint, which has more then 1 value, but end of the function body is reachable
+main := fn(): uint {
+                   ^
