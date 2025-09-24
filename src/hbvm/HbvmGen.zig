@@ -21,6 +21,8 @@ ret_count: usize = undefined,
 block_offsets: []i32 = undefined,
 allocs: []const u16 = undefined,
 spill_base: usize = undefined,
+local_base: u32 = undefined,
+stack_size: u32 = undefined,
 entry: u32 = undefined,
 
 const Func = graph.Func(HbvmGen);
@@ -324,9 +326,18 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     self.local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.gcm.block_count * 2));
     self.ret_count = if (func.signature.returns()) |r| r.len else std.math.maxInt(usize);
 
-    const is_tail = for (func.gcm.postorder) |bb| {
-        if (bb.base.kind == .CallEnd) break false;
-    } else true;
+    var is_tail = true;
+    var call_slot_size: u64 = 0;
+    for (func.gcm.postorder) |bb| {
+        if (bb.base.kind == .CallEnd) {
+            const call = bb.base.inputs()[0].?;
+            const signature: *graph.Signature = &call.extra(.Call).signature;
+            call_slot_size = @max(signature.stackSize(), call_slot_size);
+            is_tail = false;
+        }
+    }
+
+    func.computeStructArgLayout();
 
     const max_reg = if (self.allocs.len == 0) 0 else b: {
         var max: u16 = 0;
@@ -345,10 +356,12 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     var local_size: i64 = func.computeStackLayout(0);
     local_size = std.mem.alignForward(i64, local_size, 8);
 
-    const stack_size: i64 = used_reg_size + local_size + spill_count;
+    const stack_size: i64 = used_reg_size + local_size + spill_count + @as(i64, @intCast(call_slot_size));
     self.spill_base = @intCast(used_reg_size + local_size);
+    self.local_base = @intCast(call_slot_size);
 
     sym.stack_size = @intCast(stack_size);
+    self.stack_size = @intCast(stack_size);
 
     prelude: {
         if (used_reg_size != 0) {
@@ -450,8 +463,14 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 self.emit(.lra, .{ self.getReg(no), .null, 0 });
             },
             .LocalAlloc => {},
+            .StructArg => {
+                self.emit(.addi64, .{ self.getReg(no), .stack_addr, no.extra(.StructArg).spec.size + self.stack_size });
+            },
+            .StackArgOffset => {
+                self.emit(.addi64, .{ self.getReg(no), .stack_addr, no.extra(.StackArgOffset).offset });
+            },
             .Local => {
-                self.emit(.addi64, .{ self.getReg(no), .stack_addr, no.inputs()[1].?.extra(.LocalAlloc).size });
+                self.emit(.addi64, .{ self.getReg(no), .stack_addr, no.inputs()[1].?.extra(.LocalAlloc).size + self.local_base });
             },
             .Ld => |extra| {
                 const size: u16 = @intCast(no.data_type.size());
@@ -465,12 +484,12 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .StackLd => |extra| {
                 const size: u16 = @intCast(no.data_type.size());
-                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc).size)) + extra.offset;
+                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc).size)) + extra.offset + self.local_base;
                 self.emit(.ld, .{ self.getReg(no), .stack_addr, off, size });
             },
             .StackSt => |extra| {
                 const size: u16 = @intCast(no.data_type.size());
-                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc).size)) + extra.offset;
+                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc).size)) + extra.offset + self.local_base;
                 self.emit(.st, .{ self.getReg(inps[0]), .stack_addr, off, size });
             },
             .BlockCpy => {

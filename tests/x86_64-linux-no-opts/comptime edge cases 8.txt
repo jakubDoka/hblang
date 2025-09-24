@@ -1,0 +1,67 @@
+comptime edge cases 8.main.read_only((uint, uint, uint)):
+	mov rax, [rsp+0x08]
+	ret
+comptime edge cases 8.fun((uint, uint, uint)):
+	mov rax, [rsp+0x08]
+	dec rax
+	ret
+comptime edge cases 8.fun(^(uint, uint, uint)):
+	sub rsp, 0x10
+	mov [rsp], rdi
+	mov rax, [rsp]
+	mov rax, [rax]
+	dec rax
+	add rsp, 0x10
+	ret
+comptime edge cases 8.main.modify:
+	sub rsp, 0x10
+	mov [rsp], rdi
+	mov rcx, [rsp]
+	mov rax, [rcx]
+	inc rax
+	mov [rcx], rax
+	add rsp, 0x10
+	ret
+main:
+	sub rsp, 0x58
+	mov qword ptr [rsp+0x28], 0x00
+	mov qword ptr [rsp+0x30], 0x01
+	mov rcx, [rsp+0x28]
+	mov rax, [rsp+0x30]
+	cmp rcx, rax
+	jnz :0
+	mov rax, 0x01
+	jmp :1
+0:	lea rsi, [0x0000000000000007]
+	lea rdi, [rsp]
+	mov rdx, 0x18
+	call :memcpy
+	call :comptime edge cases 8.main.read_only((uint, uint, uint))
+	mov [rsp+0x50], rax
+	mov rax, [rsp+0x50]
+	mov [rsp+0x48], rax
+	lea rsi, [0x0000000000000007]
+	lea rdi, [rsp]
+	mov rdx, 0x18
+	call :memcpy
+	call :comptime edge cases 8.main.read_only((uint, uint, uint))
+	mov [rsp+0x20], rax
+	mov rax, [rsp+0x20]
+	mov [rsp+0x18], rax
+	mov rcx, [rsp+0x48]
+	mov rax, [rsp+0x18]
+	cmp rcx, rax
+	jnz :2
+	mov rax, 0x02
+1:	jmp :3
+2:	lea rsi, [0x0000000000000007]
+	lea rdi, [rsp]
+	mov rdx, 0x18
+	call :memcpy
+	call :comptime edge cases 8.fun((uint, uint, uint))
+	mov [rsp+0x40], rax
+	mov qword ptr [rsp+0x38], 0x00
+	xor rax, rax
+3:	add rsp, 0x58
+	ret
+memcpy:

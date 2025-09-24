@@ -1,6 +1,6 @@
 main:
          st $31, $254, -24, 24
-     addi64 $254, $254, -34
+     addi64 $254, $254, -40
         lra $33, $0, :build not terminating 1.a
        li64 $32, 1
 5:       st $0, $254, 0, 8
@@ -19,7 +19,7 @@ main:
          st $2, $254, 9, 1
         jmp :5
 4:       cp $1, $0
-     addi64 $254, $254, 34
+     addi64 $254, $254, 40
          ld $31, $254, -24, 24
          tx
 build not terminating 1.ignore:
@@ -28,7 +28,7 @@ build not terminating 1.ignore:
      addi64 $254, $254, 8
        jala $0, $31, 0
 build not terminating 1.b:
-     addi64 $254, $254, -1
+     addi64 $254, $254, -8
         lra $1, $0, :build not terminating 1.a
          ld $1, $1, 0, 1
        andi $1, $1, 255
@@ -37,5 +37,5 @@ build not terminating 1.b:
         jmp :7
 6:       st $0, $254, 0, 1
          ld $1, $254, 0, 1
-7:   addi64 $254, $254, 1
+7:   addi64 $254, $254, 8
        jala $0, $31, 0

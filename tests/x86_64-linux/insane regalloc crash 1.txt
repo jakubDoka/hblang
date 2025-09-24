@@ -1,58 +1,58 @@
 main:
 	sub rsp, 0x200
-	mov rax, [rsp+0x10]
+	mov rax, [rsp+0x20]
 	test rax, rax
 	jz :0
 	jmp :1
-0:	mov rax, [rsp+0x20]
+0:	mov rax, [rsp+0x50]
 	test rax, rax
 	jz :2
 1:	jmp :3
-2:	mov rax, [rsp+0x40]
+2:	mov rax, [rsp+0x80]
 	test rax, rax
 	jz :4
 3:	jmp :5
-4:	mov rax, [rsp+0x50]
+4:	mov rax, [rsp+0xB0]
 	test rax, rax
 	jz :6
 5:	jmp :7
-6:	mov rax, [rsp+0x60]
+6:	mov rax, [rsp+0xE0]
 	test rax, rax
 	jz :8
 7:	jmp :9
-8:	mov rax, [rsp+0x80]
+8:	mov rax, [rsp+0x100]
 	test rax, rax
 	jz :10
 9:	jmp :11
-a:	mov rax, [rsp+0x90]
+a:	mov rax, [rsp+0x140]
 	test rax, rax
 	jz :12
 b:	jmp :13
-c:	mov rax, [rsp+0xA0]
+c:	mov rax, [rsp+0x170]
 	test rax, rax
 	jz :14
 d:	jmp :15
-e:	mov rax, [rsp+0xC0]
+e:	mov rax, [rsp+0x1A0]
 	test rax, rax
 	jz :16
 f:	jmp :17
-10:	mov rax, [rsp+0xE0]
+10:	mov rax, [rsp+0x1D0]
 	test rax, rax
 	jz :18
 11:	jmp :19
-12:	mov rax, [rsp+0xF0]
+12:	mov rax, [rsp+0x1F0]
 	test rax, rax
 	jz :20
 13:	jmp :21
-14:	mov rax, [rsp+0x110]
+14:	mov rax, [rsp+0x1E0]
 	test rax, rax
 	jz :22
 15:	jmp :23
-16:	mov rax, [rsp+0x120]
+16:	mov rax, [rsp+0x1B0]
 	test rax, rax
 	jz :24
 17:	jmp :25
-18:	mov rax, [rsp+0x130]
+18:	mov rax, [rsp+0x180]
 	test rax, rax
 	jz :26
 19:	jmp :27
@@ -60,71 +60,71 @@ f:	jmp :17
 	test rax, rax
 	jz :28
 1b:	jmp :29
-1c:	mov rax, [rsp+0x170]
+1c:	mov rax, [rsp+0x120]
 	test rax, rax
 	jz :30
 1d:	jmp :31
-1e:	mov rax, [rsp+0x180]
+1e:	mov rax, [rsp+0x110]
 	test rax, rax
 	jz :32
 1f:	jmp :33
-20:	mov rax, [rsp+0x1A0]
+20:	mov rax, [rsp+0xC0]
 	test rax, rax
 	jz :34
 21:	jmp :35
-22:	mov rax, [rsp+0x1C0]
+22:	mov rax, [rsp+0x90]
 	test rax, rax
 	jz :36
 23:	jmp :37
-24:	mov rax, [rsp+0x1D0]
+24:	mov rax, [rsp+0x60]
 	test rax, rax
 	jz :38
 25:	jmp :39
-26:	mov rax, [rsp+0x1F0]
+26:	mov rax, [rsp+0x30]
 	test rax, rax
 	jz :40
 27:	jmp :41
-28:	mov rax, [rsp]
+28:	mov rax, [rsp+0x10]
 	test rax, rax
 	jz :42
 29:	jmp :43
-2a:	mov rax, [rsp+0xD0]
+2a:	mov rax, [rsp+0x1C0]
 	test rax, rax
 	jz :44
 2b:	jmp :45
-2c:	mov rax, [rsp+0x1B0]
+2c:	mov rax, [rsp+0xA0]
 	test rax, rax
 	jz :46
 2d:	jmp :47
-2e:	mov rax, [rsp+0x160]
+2e:	mov rax, [rsp+0x130]
 	test rax, rax
 	jz :48
 2f:	jmp :49
-30:	mov rax, [rsp+0x1E0]
+30:	mov rax, [rsp+0x40]
 	test rax, rax
 	jz :50
 31:	jmp :51
-32:	mov rax, [rsp+0x190]
+32:	mov rax, [rsp+0xD0]
 	test rax, rax
 	jz :52
 33:	jmp :53
-34:	mov rax, [rsp+0x140]
+34:	mov rax, [rsp+0x160]
 	test rax, rax
 	jz :54
 35:	jmp :55
-36:	mov rax, [rsp+0x100]
+36:	mov rax, [rsp]
 	test rax, rax
 	jz :56
 37:	jmp :57
-38:	mov rax, [rsp+0xB0]
+38:	mov rax, [rsp+0x190]
 	test rax, rax
 	jz :58
 39:	jmp :59
-3a:	mov rax, [rsp+0x70]
+3a:	mov rax, [rsp+0xF0]
 	test rax, rax
 	jz :60
 3b:	jmp :61
-3c:	mov rax, [rsp+0x30]
+3c:	mov rax, [rsp+0x70]
 	test rax, rax
 	jz :63
 3d:	jmp :63

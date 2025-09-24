@@ -74,8 +74,6 @@ expectations := .{
     should_error: true,
 }
 
-opaque := false
-
 main := fn(): uint {
     vl := 0
 
@@ -87,8 +85,6 @@ main := fn(): uint {
 
 #### comptime edge cases 4
 ```hb
-opaque := false
-
 main := fn(): uint {
     vl := 1
     ovl := 0
@@ -144,6 +140,63 @@ main := fn(): uint {
 }
 
 fun := fn(): void {}
+```
+
+#### comptime edge cases 7
+```hb
+expectations := .{
+    should_error: true,
+}
+
+main := fn(): uint {
+    vl := 0
+    v := 0
+
+    while v < 1 while v < 1 v += 1
+
+    vl = 1
+
+    return @eval(vl - 1)
+}
+```
+
+#### comptime edge cases 8
+```hb
+main := fn(): uint {
+    $var := 0
+
+    modify := fn(vl: ^uint): void vl.* += 1
+
+    capture_val1 := @eval(var)
+    modify(&var)
+    capture_val2 := @eval(var)
+
+    if capture_val1 == capture_val2 return 1
+
+    $big_var := .(0, 0, 0)
+
+    read_only := fn(vl: @Any()): uint return vl[0]
+
+    capture_val3 := read_only(big_var)
+    modify(&big_var[0])
+    capture_val4 := read_only(big_var)
+
+    _ = @eval(big_var)
+
+    if capture_val3 == capture_val4 return 2
+
+    vl := .(1, 0, 0)
+
+    _ = fun(vl)
+
+    _ = fun(&vl)
+
+    return @eval(vl[0] - 1)
+}
+
+fun := fn(vl: @Any()): uint {
+    return vl[0] - 1
+}
 ```
 
 #### enum and struct

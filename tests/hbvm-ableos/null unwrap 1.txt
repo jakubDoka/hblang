@@ -12,19 +12,21 @@ main:
          tx
 null unwrap 1.use_opt:
          st $31, $254, -8, 8
-     addi64 $254, $254, -32
+     addi64 $254, $254, -56
        andi $1, $1, 255
         jne $1, $0, :1
+     addi64 $3, $254, 24
         lra $1, $0, :null unwrap 1
-         st $1, $254, 0, 8
+         st $1, $254, 24, 8
+       li64 $2, 171798691847
        li64 $1, 13
-         st $1, $254, 8, 8
-       li64 $1, 171798691847
-         st $1, $254, 16, 8
+         st $1, $254, 32, 8
+         st $2, $254, 40, 8
      addi64 $1, $254, 0
+        bmc $3, $1, 24
         jal $31, $0, :null unwrap 1.null_unwrap
 1:    add64 $1, $2, $2
-     addi64 $254, $254, 32
+     addi64 $254, $254, 56
          ld $31, $254, -8, 8
        jala $0, $31, 0
 null unwrap 1.null_unwrap:

@@ -1,6 +1,6 @@
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -12
+     addi64 $254, $254, -16
         li8 $1, 1
          st $1, $254, 0, 1
         li8 $3, 3
@@ -13,7 +13,7 @@ main:
        li64 $2, 4
         jal $31, $0, :slices 5 (coersion).use_slice
          cp $1, $0
-     addi64 $254, $254, 12
+     addi64 $254, $254, 16
          ld $31, $254, -8, 8
          tx
 slices 5 (coersion).use_slice:

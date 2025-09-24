@@ -126,6 +126,7 @@ pub const PartialEvalResult = union(enum) {
 };
 
 const PartialEvalCtx = struct {
+    target: Types.Target,
     file: Types.File,
     scope: Types.Id,
     pos: u32,
@@ -152,11 +153,9 @@ pub fn partialEval(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, expr: *No
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            _ = try self.partialEvalGlobal(ctx, expr, extra.id, false);
-            const interestingOps = try self.collectInterestingOps(ctx, expr, tmp.arena);
-            try self.executeInterestingOps(ctx, bl, interestingOps, expr);
-
-            _ = try self.partialEvalGlobal(ctx, expr, extra.id, true);
+            _ = try self.partialEvalGlobal(ctx, expr, extra.id);
+            const interestingOps = try self.collectMemOps(ctx, expr, tmp.arena);
+            try self.executeMemOps(ctx, bl, interestingOps, @enumFromInt(extra.id), expr);
 
             expr.schedule = std.math.maxInt(u16);
             return expr;
@@ -209,7 +208,7 @@ pub fn partialEval(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, expr: *No
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            const interestingOps = try self.collectInterestingOps(ctx, expr, tmp.arena);
+            const interestingOps = try self.collectMemOps(ctx, expr, tmp.arena);
 
             const res = bl.addGlobalAddr(.none, @intFromEnum(global));
             bl.func.subsume(res, expr);
@@ -217,7 +216,7 @@ pub fn partialEval(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, expr: *No
             res.schedule = 0;
             defer res.schedule = std.math.maxInt(u16);
 
-            try self.executeInterestingOps(ctx, bl, interestingOps, res);
+            try self.executeMemOps(ctx, bl, interestingOps, global, res);
 
             return res;
         },
@@ -226,18 +225,21 @@ pub fn partialEval(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, expr: *No
 
             const res = switch (base.extra2()) {
                 .GlobalAddr => |extra| b: {
-                    _ = try self.partialEvalGlobal(ctx, base, extra.id, true);
+                    _ = try self.partialEvalGlobal(ctx, base, extra.id);
 
                     const gid: utils.EntId(tys.Global) = @enumFromInt(extra.id);
                     const global: *tys.Global = types.store.get(gid);
+                    const mem = global.data.slice(self);
 
                     for (global.relocs) |rel| {
                         if (rel.offset == offset) {
-                            break :b bl.addGlobalAddr(.none, rel.target);
+                            var ptr: u64 = 0;
+                            @memcpy(std.mem.asBytes(&ptr), mem[rel.offset..][0..8]);
+                            const target = types.findSymForPtr(ptr) catch unreachable;
+                            break :b bl.addGlobalAddr(.none, target);
                         }
                     }
 
-                    const mem = global.data.slice(self);
                     var value: i64 = 0;
                     @memcpy(
                         std.mem.asBytes(&value)[0..expr.data_type.size()],
@@ -257,13 +259,106 @@ pub fn partialEval(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, expr: *No
     }
 }
 
-pub fn executeInterestingOps(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, interestingOps: []*Node, res: *Node) !void {
+pub fn collectMemOps(self: *Comptime, ctx: PartialEvalCtx, expr: *Node, scratch: *Arena) ![]Node.Out {
+    _ = self;
+    var interestingOps = std.ArrayList(Node.Out){};
+    for (expr.outputs()) |o| {
+        errdefer unreachable;
+        if (o.get().kind == .BinOp) {
+            for (o.get().outputs()) |oo| try interestingOps.append(scratch.allocator(), oo);
+        } else {
+            try interestingOps.append(scratch.allocator(), o);
+        }
+    }
+
+    // lca saves us some time, maybe
+    var lca: ?*Func.CfgNode = null;
+    for (interestingOps.items) |o| {
+        const op = o.get();
+        if (op.isStore()) {
+            lca = (lca orelse op.cfg0()).findLca(op.cfg0());
+        }
+    }
+
+    // vlaidate we dont depend on runtim control flow
+    for (interestingOps.items) |o| {
+        const op = o.get();
+        if (!op.isStore()) continue;
+        if (op.cfg0() == lca) continue;
+
+        var seen_if_branch: ?*Node = null;
+
+        var cursor = op.cfg0();
+        while (cursor != lca) {
+            if (cursor.base.kind == .Else or cursor.base.kind == .Then) {
+                seen_if_branch = cursor.base.inputs()[0].?;
+            }
+            if (cursor.base.kind == .Loop) {
+                const to_find = seen_if_branch orelse
+                    return ctx.err(.{ .DependsOnRuntimeControlFlow = op });
+                var back_cursor = cursor.base.inputs()[1].?.asCfg().?;
+                while (back_cursor != cursor) {
+                    if (&back_cursor.base == to_find) {
+                        seen_if_branch = null;
+                        break;
+                    }
+                    back_cursor = back_cursor.idom();
+                }
+            }
+            cursor = cursor.idom();
+        }
+
+        if (seen_if_branch != null) {
+            return ctx.err(.{ .DependsOnRuntimeControlFlow = op });
+        }
+    }
+
+    return interestingOps.items;
+}
+
+pub fn executeMemOps(
+    self: *Comptime,
+    ctx: PartialEvalCtx,
+    bl: *Builder,
+    interestingOps: []Node.Out,
+    glob: utils.EntId(tys.Global),
+    res: *Node,
+) !void {
+    // TODO: this is not actualy handling the order of operations properly
+
+    const types = self.getTypes();
+
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
     const mem = self.getTypes().store.get(@as(
         utils.EntId(tys.Global),
         @enumFromInt(res.extra(.GlobalAddr).id),
     )).data.mutSlice(self).?;
 
-    for (interestingOps) |op| {
+    var red_from = false;
+    var snapshots = std.ArrayList(struct { utils.EntId(tys.Global), usize }){};
+    for (interestingOps, 0..) |o, i| {
+        const op = o.get();
+
+        if (op.kind == .Scope) continue;
+
+        const is_comptime_ref =
+            (op.isStore() and op.base() == op.inputs()[o.pos()].?) or
+            op.kind == .Call or op.kind == .Load;
+
+        if (is_comptime_ref and red_from) {
+            const snapshot = types.addUniqueGlobal(ctx.scope);
+            snapshot.get(types).data = .{ .imm = types.pool.arena.dupe(u8, glob.get(types).data.slice(self)) };
+            snapshot.get(types).ty = glob.get(types).ty;
+            snapshots.append(tmp.arena.allocator(), .{ snapshot, i }) catch unreachable;
+            types.queue(ctx.target, .init(.{ .Global = snapshot }));
+
+            red_from = false;
+        } else {
+            if (!is_comptime_ref) red_from = true;
+        }
+
         switch (op.kind) {
             .Store => {
                 const base, const offset = op.base().knownOffset();
@@ -281,7 +376,7 @@ pub fn executeInterestingOps(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder,
                         );
                     },
                     .GlobalAddr => |extra| {
-                        const addr = try self.partialEvalGlobal(ctx, val, extra.id, true);
+                        const addr = try self.partialEvalGlobal(ctx, val, extra.id);
                         std.debug.assert(op.data_type.size() == 8);
                         @memcpy(mem[@intCast(offset)..][0..8], std.mem.asBytes(&addr));
                     },
@@ -300,78 +395,41 @@ pub fn executeInterestingOps(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder,
 
                 _ = try self.partialEval(ctx, bl, op);
             },
+            .Scope => {},
+            .MemCpy => {
+                if (op.knownOffset()[0] == res)
+                    return ctx.err(.{ .Unsupported = .{ op, "TODO: memcpy dest" } });
+            },
             else => return ctx.err(.{ .Unsupported = .{ op, "TODO: stack mut op" } }),
         }
     }
-}
 
-pub fn collectInterestingOps(self: *Comptime, ctx: PartialEvalCtx, expr: *Node, scratch: *Arena) ![]*Node {
-    _ = self; // autofix
-    var lca: ?*Func.CfgNode = null;
-    var interestingOps = std.ArrayList(*Node){};
-    for (expr.outputs()) |o| {
-        if (o.get().kind != .BinOp and o.get().kind != .Scope) {
-            if ((!o.get().isMemOp() or o.get().isSub(graph.MemCpy)) and
-                o.get().kind != .Call)
-            {
-                return ctx.err(.{ .Unsupported = .{ o.get(), "stack direct mem op" } });
-            }
+    var prev_up_to: usize = 0;
+    for (snapshots.items) |snap| {
+        const snap_glob, const up_to = snap;
+        const node = bl.addGlobalAddr(.none, @intFromEnum(snap_glob));
+
+        for (interestingOps[prev_up_to..up_to]) |op| {
+            if (op.get().isDead()) continue;
+
+            const base = op.get().inputs()[op.pos()].?;
+
+            const replacement = if (base == res) node else if (base.kind == .BinOp) b: {
+                const edit_pos = for (base.inputs(), 0..) |inp, i| {
+                    if (inp.? == res) break i;
+                } else unreachable;
+
+                const deps = tmp.arena.dupe(?*Node, base.inputs());
+                deps[edit_pos] = node;
+
+                break :b bl.func.addNode(.BinOp, base.sloc, base.data_type, deps, base.extra(.BinOp).*);
+            } else unreachable;
+
+            _ = bl.func.setInput(op.get(), op.pos(), replacement);
         }
 
-        const use = o.get().tryCfg0() orelse switch (o.get().extra2()) {
-            .BinOp => |extra| {
-                if (extra.op != .iadd and extra.op != .isub) {
-                    return ctx.err(.{ .Unsupported = .{ o.get(), "stack binop" } });
-                }
-
-                for (o.get().outputs()) |oo| {
-                    if ((!oo.get().isMemOp() or
-                        oo.get().base() != o.get() or
-                        oo.get().isSub(graph.MemCpy)) and
-                        o.get().kind != .Call)
-                    {
-                        return ctx.err(.{ .Unsupported = .{ oo.get(), "stack indirect mem op" } });
-                    }
-
-                    const use = oo.get().tryCfg0() orelse continue;
-                    lca = (lca orelse use).findLca(use);
-                    interestingOps.append(scratch.allocator(), oo.get()) catch unreachable;
-                }
-
-                continue;
-            },
-            .Scope => continue,
-            .Load => {
-                interestingOps.append(scratch.allocator(), o.get()) catch unreachable;
-                continue;
-            },
-            else => return ctx.err(.{ .Unsupported = .{ o.get(), "floating stack op" } }),
-        };
-        lca = (lca orelse use).findLca(use);
-        interestingOps.append(scratch.allocator(), o.get()) catch unreachable;
+        prev_up_to = up_to;
     }
-
-    for (interestingOps.items) |op| {
-        if (op.kind == .Load) continue;
-        if (op.cfg0() == lca) continue;
-
-        for (interestingOps.items) |oo| {
-            const oop = if (oo.kind == .Load) oo.mem() else oo;
-
-            if (oop.cfg0() == lca or oop == op or
-                oop.cfg0().idepth() < op.cfg0().idepth()) continue;
-
-            var cursor = oop.cfg0();
-            while (cursor != lca) {
-                if (op.cfg0() == cursor) break;
-                cursor = cursor.idom();
-            } else {
-                return ctx.err(.{ .DependsOnRuntimeControlFlow = oop });
-            }
-        }
-    }
-
-    return interestingOps.items;
 }
 
 pub fn partialEvalCall(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, curr: *Node, from_ret: ?*Node) !?*Node {
@@ -412,7 +470,7 @@ pub fn partialEvalCall(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, curr:
             .CInt => |extra| @bitCast(extra.value),
             .GlobalAddr => |extra| b: {
                 globals.appendAssumeCapacity(argv);
-                break :b try self.partialEvalGlobal(ctx, argv, extra.id, false);
+                break :b try self.partialEvalGlobal(ctx, argv, extra.id);
             },
             else => return ctx.err(.{ .Unsupported = .{ argv, "function argument" } }),
         };
@@ -427,7 +485,7 @@ pub fn partialEvalCall(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, curr:
     };
 
     for (globals.items) |g| {
-        _ = try self.partialEvalGlobal(ctx, g, g.extra(.GlobalAddr).id, true);
+        _ = try self.partialEvalGlobal(ctx, g, g.extra(.GlobalAddr).id);
     }
 
     var rret: ?*Node = null;
@@ -451,17 +509,15 @@ pub fn partialEvalCall(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, curr:
     return rret;
 }
 
-pub fn partialEvalGlobal(self: *Comptime, ctx: PartialEvalCtx, curr: *Node, global: u32, detect_nested: bool) !u64 {
+pub fn partialEvalGlobal(self: *Comptime, ctx: PartialEvalCtx, curr: *Node, global: u32) !u64 {
     const types = self.getTypes();
     const gid: utils.EntId(tys.Global) = @enumFromInt(global);
     // TODO: clean this up
 
-    types.store.get(gid).completion.getPtr(.@"comptime").* = .queued;
-    if (types.store.get(gid).completion.get(.@"comptime") != .compiled) {
-        types.queue(.@"comptime", .init(.{ .Global = gid }));
-        if (types.retainGlobals(.@"comptime", &self.gen, detect_nested)) {
-            return ctx.err(.{ .Unsupported = .{ curr, "retained globals" } });
-        }
+    gid.get(types).completion.set(.@"comptime", .queued);
+    types.queue(.@"comptime", .init(.{ .Global = gid }));
+    if (types.retainGlobals(.@"comptime", &self.gen, false)) {
+        return ctx.err(.{ .Unsupported = .{ curr, "retained globals" } });
     }
 
     return self.gen.out.syms.items[@intFromEnum(self.gen.out.globals.items[global])].offset;

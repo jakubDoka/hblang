@@ -12,12 +12,12 @@ cp := fn($_r0: u8, $_r1: u8): struct align(1){.op: u8 = 0; .r0: u8 = _r0; .r1: u
                     ^
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -11
+     addi64 $254, $254, -16
      addi64 $1, $254, 0
         jal $31, $0, :struct capture eca mismatch 1.cp(0, 1)
          ld $1, $254, 0, 1
        andi $1, $1, 255
-     addi64 $254, $254, 11
+     addi64 $254, $254, 16
          ld $31, $254, -8, 8
          tx
 struct capture eca mismatch 1.cp(0, 1):

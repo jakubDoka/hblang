@@ -43,7 +43,11 @@ pub const Builder = union(graph.CallConv) {
                 .ByValue => |d| slice(buf, 1).* = .{ .Reg = d },
                 .ByValuePair => |pair| slice(buf, 2).* =
                     .{ .{ .Reg = pair.types[0] }, .{ .Reg = pair.types[1] } },
-                .ByRef => slice(buf, 1).* = .{ .Reg = .i64 },
+                .ByRef => |size| if (is_ret) {
+                    slice(buf, 1).* = .{ .Reg = .i64 };
+                } else {
+                    slice(buf, 1).* = .{ .Stack = size };
+                },
             },
             .systemv => |*s| switch (spec) {
                 .Impossible => unreachable,

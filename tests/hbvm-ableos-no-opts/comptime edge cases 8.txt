@@ -1,0 +1,66 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -96
+         st $0, $254, 40, 8
+       li64 $1, 1
+         st $1, $254, 48, 8
+         ld $2, $254, 40, 8
+         ld $1, $254, 48, 8
+        jne $2, $1, :0
+       li64 $1, 1
+        jmp :1
+0:      lra $2, $0, :comptime edge cases 8.main
+     addi64 $1, $254, 0
+        bmc $2, $1, 24
+        jal $31, $0, :comptime edge cases 8.main.read_only((uint, uint, uint))
+         st $1, $254, 80, 8
+        lra $2, $0, :comptime edge cases 8.main
+         ld $1, $254, 80, 8
+         st $1, $254, 72, 8
+     addi64 $1, $254, 0
+        bmc $2, $1, 24
+        jal $31, $0, :comptime edge cases 8.main.read_only((uint, uint, uint))
+         st $1, $254, 32, 8
+         ld $1, $254, 32, 8
+         st $1, $254, 24, 8
+         ld $2, $254, 72, 8
+         ld $1, $254, 24, 8
+        jne $2, $1, :5
+       li64 $1, 2
+1:      jmp :6
+5:      lra $2, $0, :comptime edge cases 8.main
+     addi64 $1, $254, 0
+        bmc $2, $1, 24
+        jal $31, $0, :comptime edge cases 8.fun((uint, uint, uint))
+         st $1, $254, 64, 8
+         st $0, $254, 56, 8
+         cp $1, $0
+6:   addi64 $254, $254, 96
+         ld $31, $254, -8, 8
+         tx
+comptime edge cases 8.main.read_only((uint, uint, uint)):
+     addi64 $1, $254, 0
+         ld $1, $1, 0, 8
+       jala $0, $31, 0
+comptime edge cases 8.fun((uint, uint, uint)):
+     addi64 $1, $254, 0
+         ld $1, $1, 0, 8
+     addi64 $1, $1, -1
+       jala $0, $31, 0
+comptime edge cases 8.fun(^(uint, uint, uint)):
+     addi64 $254, $254, -8
+         st $1, $254, 0, 8
+         ld $1, $254, 0, 8
+         ld $1, $1, 0, 8
+     addi64 $1, $1, -1
+     addi64 $254, $254, 8
+       jala $0, $31, 0
+comptime edge cases 8.main.modify:
+     addi64 $254, $254, -8
+         st $1, $254, 0, 8
+         ld $2, $254, 0, 8
+         ld $1, $2, 0, 8
+     addi64 $1, $1, 1
+         st $1, $2, 0, 8
+     addi64 $254, $254, 8
+       jala $0, $31, 0

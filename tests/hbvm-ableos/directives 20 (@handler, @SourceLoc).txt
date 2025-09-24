@@ -1,40 +1,44 @@
 entry:
          st $31, $254, -8, 8
-     addi64 $254, $254, -13
-        li8 $4, 1
-        li8 $3, 2
-        li8 $2, 3
+     addi64 $254, $254, -20
+        li8 $5, 1
+        li8 $4, 2
+        li8 $3, 3
         li8 $1, 4
-         st $0, $254, 4, 1
-         st $4, $254, 0, 1
-         st $3, $254, 1, 1
-         st $2, $254, 2, 1
-         st $1, $254, 3, 1
+     addi64 $2, $254, 4
+         st $0, $254, 8, 1
+         st $5, $254, 4, 1
+         st $4, $254, 5, 1
+         st $3, $254, 6, 1
+         st $1, $254, 7, 1
      addi64 $1, $254, 0
+        bmc $2, $1, 4
         jal $31, $0, :directives 20 (@handler, @SourceLoc).produce_memcpy
-     addi64 $1, $254, 4
+     addi64 $1, $254, 8
          cp $2, $0
         jal $31, $0, :directives 20 (@handler, @SourceLoc).use_slice
-     addi64 $254, $254, 13
+     addi64 $254, $254, 20
          ld $31, $254, -8, 8
          tx
 directives 20 (@handler, @SourceLoc).use_slice:
          st $31, $254, -8, 8
-     addi64 $254, $254, -32
+     addi64 $254, $254, -56
        jltu $0, $2, :2
+     addi64 $4, $254, 24
         lra $1, $0, :directives 20 (@handler, @SourceLoc)
-         st $1, $254, 0, 8
+         st $1, $254, 24, 8
+       li64 $3, 64424509458
        li64 $1, 36
-         st $1, $254, 8, 8
-       li64 $1, 64424509458
-         st $1, $254, 16, 8
+         st $1, $254, 32, 8
+         st $3, $254, 40, 8
      addi64 $1, $254, 0
+        bmc $4, $1, 24
          cp $3, $0
          cp $4, $0
         jal $31, $0, :directives 20 (@handler, @SourceLoc).slice_ioob
 2:       ld $1, $1, 0, 1
        andi $1, $1, 255
-     addi64 $254, $254, 32
+     addi64 $254, $254, 56
          ld $31, $254, -8, 8
        jala $0, $31, 0
 directives 20 (@handler, @SourceLoc).produce_memcpy:

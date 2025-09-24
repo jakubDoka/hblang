@@ -1,0 +1,15 @@
+main:
+	xor rax, rax
+	mov rsi, 0x01
+	mov rcx, rax
+3:	cmp rcx, 0x01
+	setb dl
+	movzx rdx, dl
+	test dl, dl
+	jz :0
+2:	cmp rcx, rsi
+	jnb :1
+	inc rcx
+	jmp :2
+1:	jmp :3
+0:	ret

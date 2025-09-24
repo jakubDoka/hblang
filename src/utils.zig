@@ -557,6 +557,7 @@ pub fn TupleOf(comptime T: type) type {
 pub fn EntStore(comptime M: type) type {
     return struct {
         const Tag = std.meta.DeclEnum(M);
+
         pub const Data = b: {
             var fields: [decls.len]std.builtin.Type.UnionField = undefined;
 
@@ -652,6 +653,10 @@ pub fn EntId(comptime D: type) type {
     return enum(u32) {
         _,
         pub const Data = D;
+
+        pub fn get(self: @This(), cont: anytype) *D {
+            return cont.store.get(self);
+        }
     };
 }
 

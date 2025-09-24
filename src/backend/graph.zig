@@ -487,7 +487,7 @@ pub const Signature = extern struct {
 
     pub fn stackSize(self: @This()) u64 {
         switch (self.call_conv) {
-            .systemv => {
+            .systemv, .ablecall => {
                 var size: u64 = 0;
                 for (self.params()) |par| {
                     if (par == .Stack) {
@@ -2647,6 +2647,21 @@ pub fn Func(comptime Backend: type) type {
             try utils.setColor(cc, wr, @enumFromInt(1 + nid % 15));
             try wr.print("%{d}", .{nid});
             try utils.setColor(cc, wr, .reset);
+        }
+
+        pub fn computeStructArgLayout(self: *Self) void {
+            var stack_arg_offset: u64 = 0;
+            for (self.signature.params(), 0..) |par, j| {
+                const argn = for (self.gcm.postorder[0].base.outputs()) |o| {
+                    if (o.get().subclass(Arg)) |sub| if (sub.ext.index == j) break o.get();
+                } else continue; // is dead
+
+                if (par == .Stack) {
+                    stack_arg_offset = std.mem.alignForward(u64, stack_arg_offset, @as(u64, 1) << par.Stack.alignment);
+                    argn.extra(.StructArg).spec.size = @intCast(stack_arg_offset);
+                    stack_arg_offset += par.Stack.size;
+                }
+            }
         }
 
         pub fn computeStackLayout(self: *Self, start_pos: i64) i64 {

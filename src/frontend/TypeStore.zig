@@ -759,7 +759,7 @@ pub const Id = enum(IdRepr) {
                             const ptr = readFromGlobal(self.tys, @enumFromInt(v.value), .uint, v.offset + tys.Slice.ptr_offset);
                             const ln = readFromGlobal(self.tys, @enumFromInt(v.value), .uint, v.offset + tys.Slice.len_offset);
 
-                            const global = self.tys.findSymForPtr(@intCast(ptr), @as(u64, @bitCast(ln)) * slc.elem.size(self.tys));
+                            const global = self.tys.findSymForPtr(@intCast(ptr));
                             break :b .{ ln, global catch |err| {
                                 try writer.writeAll("<corrupted-slice>(");
                                 try writer.writeAll(@errorName(err));
@@ -802,7 +802,7 @@ pub const Id = enum(IdRepr) {
                     },
                     .Pointer => |p| {
                         const ty: Id = self.tys.store.get(p).*;
-                        const global = self.tys.findSymForPtr(@intCast(v.value), ty.size(self.tys)) catch |err| {
+                        const global = self.tys.findSymForPtr(@intCast(v.value)) catch |err| {
                             try writer.writeAll("<corrupted-pointer>(");
                             try writer.writeAll(@errorName(err));
                             try writer.writeAll(")");
@@ -889,7 +889,7 @@ pub const Id = enum(IdRepr) {
 pub const Target = enum { @"comptime", runtime };
 
 pub fn readFromGlobal(self: *Types, global: utils.EntId(tys.Global), ty: Id, offset: u64) i64 {
-    const glob = self.store.get(global);
+    const glob = global.get(self);
     var value: i64 = 0;
     @memcpy(
         @as([*]u8, @ptrCast(&value))[0..@intCast(ty.size(self))],
@@ -916,7 +916,7 @@ pub fn retainClonedGlobals(self: *Types, pop_until: usize) void {
         var scrath = utils.Arena.scrath(null);
         defer scrath.deinit();
 
-        const glob: *tys.Global = self.store.get(global);
+        const glob: *tys.Global = global.get(self);
         if (glob.completion.get(.@"comptime") == .compiled) continue;
         glob.completion.getPtr(.@"comptime").* = .compiled;
 
@@ -940,36 +940,43 @@ pub fn retainClonedGlobals(self: *Types, pop_until: usize) void {
     }
 }
 
-pub fn retainGlobals(self: *Types, target: Target, backend: anytype, detect_nested: bool) bool {
+pub fn retainGlobals(self: *Types, target: Target, backend: anytype, handle_errors: bool) bool {
     errdefer unreachable;
 
     const emit_names = @TypeOf(backend) == root.backend.Machine;
     var errored = false;
 
     const work_list = self.global_work_list.getPtr(target);
-    while (work_list.pop()) |global| {
+    out: while (work_list.pop()) |global| {
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
 
-        const glob: *tys.Global = self.store.get(global);
+        const glob: *tys.Global = global.get(self);
         if (glob.completion.get(target) == .compiled) continue;
         glob.completion.getPtr(target).* = .compiled;
 
-        var relocs = std.ArrayListUnmanaged(Machine.DataOptions.Reloc){};
-        if (detect_nested) {
-            self.findNestedGlobals(&relocs, glob, tmp.arena, glob.ty, 0) catch |err| {
-                errored = true;
-                self.report(
-                    glob.key.loc.file,
-                    glob.key.loc.ast,
-                    "global is corrupted (of type {}) (global_id: {}): contains a pointer {}",
-                    .{ glob.ty, @intFromEnum(global), @errorName(err) },
-                );
-            };
+        if (glob.relocs.len == 0) {
+            // TODO: add a flag that we did this
+            var relocs = std.ArrayListUnmanaged(Machine.DataOptions.Reloc){};
+            self.findPointerOffsets(&relocs, glob, tmp.arena, glob.ty, 0);
+            glob.relocs = self.pool.arena.dupe(Machine.DataOptions.Reloc, relocs.items);
+        }
 
-            if (target == .@"comptime") {
-                glob.relocs = self.pool.arena.dupe(Machine.DataOptions.Reloc, relocs.items);
-            }
+        for (glob.relocs) |*r| {
+            const ptr_big: u64 = @bitCast(glob.data.slice(&self.ct)[r.offset..][0..8].*);
+            const ptr: usize = @intCast(ptr_big);
+            r.target = self.findSymForPtr(ptr) catch |err| {
+                if (handle_errors) {
+                    errored = true;
+                    self.report(
+                        glob.key.loc.file,
+                        glob.key.loc.ast,
+                        "global is corrupted (of type {}) (global_id: {}): contains a pointer {}",
+                        .{ glob.ty, @intFromEnum(global), @errorName(err) },
+                    );
+                }
+                continue :out;
+            };
         }
 
         if (glob.data == .@"comptime" and target == .@"comptime") {
@@ -985,7 +992,7 @@ pub fn retainGlobals(self: *Types, target: Target, backend: anytype, detect_nest
             else
                 .{ .init = glob.data.slice(&self.ct) },
             .alignment = glob.ty.alignment(self),
-            .relocs = if (target == .runtime) relocs.items else &.{},
+            .relocs = if (target == .runtime) glob.relocs else &.{},
             .readonly = glob.readonly,
         });
 
@@ -1041,8 +1048,8 @@ pub fn cloneFrom(self: *Types, from: *Types, id: Id) struct { Id, bool } {
                 if (!res.found_existing) {
                     switch (t) {
                         inline .Enum, .Union, .Struct => {
-                            self.store.get(alloc).* = .{
-                                .key = self.store.get(alloc).key,
+                            alloc.get(self).* = .{
+                                .key = alloc.get(self).key,
                                 .index = Ast.Index.build(
                                     self.getFile(file),
                                     self.getFile(file).exprs.get(key.loc.ast).Type.fields,
@@ -1051,7 +1058,7 @@ pub fn cloneFrom(self: *Types, from: *Types, id: Id) struct { Id, bool } {
                             };
                         },
                         .Func => {
-                            const func: *tys.Func = self.store.get(alloc);
+                            const func: *tys.Func = alloc.get(self);
                             const other: *tys.Func = from.store.get(v);
                             const args = self.pool.arena.alloc(Types.Id, other.args.len);
                             for (other.args, args) |oa, *a| {
@@ -1067,11 +1074,11 @@ pub fn cloneFrom(self: *Types, from: *Types, id: Id) struct { Id, bool } {
                             };
                         },
                         .Template => {
-                            const templ: *tys.Template = self.store.get(alloc);
+                            const templ: *tys.Template = alloc.get(self);
                             templ.* = .{ .key = templ.key, .is_inline = templ.is_inline };
                         },
                         .Global => {
-                            const glob: *tys.Global = self.store.get(alloc);
+                            const glob: *tys.Global = alloc.get(self);
                             glob.* = .{ .key = glob.key, .data = glob.data, .readonly = glob.readonly };
                         },
                         else => comptime unreachable,
@@ -1135,7 +1142,7 @@ pub fn cloneCaptureFrom(self: *Types, from: *Types, capture: Scope.Capture) Scop
 }
 
 pub fn cloneGlobal(self: *Types, from: *Types, id: utils.EntId(tys.Global)) utils.EntId(tys.Global) {
-    const global: *tys.Global = self.store.get(id);
+    const global: *tys.Global = id.get(self);
 
     const new = self.store.add(&self.pool.arena, global.*);
     self.queue(.@"comptime", .init(.{ .Global = new }));
@@ -1157,6 +1164,17 @@ pub fn findNestedGlobals(
     ty: Id,
     offset_f: u64,
 ) !void {
+    self.findPointerOffsets(relocs, global, scratch, ty, offset_f);
+}
+
+pub fn findPointerOffsets(
+    self: *Types,
+    relocs: *std.ArrayListUnmanaged(Machine.DataOptions.Reloc),
+    global: *tys.Global,
+    scratch: *utils.Arena,
+    ty: Id,
+    offset_f: u64,
+) void {
     const offset: usize = @intCast(offset_f);
     switch (ty.data()) {
         .Enum, .Builtin => {},
@@ -1172,29 +1190,28 @@ pub fn findNestedGlobals(
                 global.data.slice(&self.ct)[@intCast(offset_f + tag_offset)..][0..tag.size(self)],
             );
 
+            if (tag_value > u.getFields(self).len) return;
+
             const inner_repr: Id = u.getFields(self)[tag_value].ty;
-            try self.findNestedGlobals(relocs, global, scratch, inner_repr, offset_f);
+            self.findPointerOffsets(relocs, global, scratch, inner_repr, offset_f);
         },
         .FnPtr => unreachable,
         .Pointer => |p| {
-            const base: Id = self.store.get(p).*;
-
-            const ptr_big: u64 = @bitCast(global.data.slice(&self.ct)[offset..][0..8].*);
-            const ptr: usize = @intCast(ptr_big);
+            const base: Id = p.get(self).*;
 
             const cap = base.size(self);
             if (cap == 0) return;
 
             relocs.append(scratch.allocator(), .{
                 .offset = @intCast(offset),
-                .target = try self.findSymForPtr(ptr, std.math.maxInt(u64)),
+                .target = undefined,
             }) catch unreachable;
         },
         .Array => |a| {
-            const arr: *tys.Array = self.store.get(a);
+            const arr: *tys.Array = a.get(self);
             const elem_size = arr.elem.size(self);
             for (0..arr.len) |idx| {
-                try self.findNestedGlobals(
+                self.findPointerOffsets(
                     relocs,
                     global,
                     scratch,
@@ -1204,10 +1221,8 @@ pub fn findNestedGlobals(
             }
         },
         .Slice => |s| {
-            const slc: *tys.Slice = self.store.get(s);
+            const slc: *tys.Slice = s.get(self);
 
-            const ptr_big: u64 = @bitCast(global.data.slice(&self.ct)[offset + tys.Slice.ptr_offset ..][0..8].*);
-            const ptr: usize = @intCast(ptr_big);
             const len_big: u64 = @bitCast(global.data.slice(&self.ct)[offset + tys.Slice.len_offset ..][0..8].*);
             const len: usize = @intCast(len_big);
 
@@ -1216,15 +1231,15 @@ pub fn findNestedGlobals(
 
             relocs.append(scratch.allocator(), .{
                 .offset = @intCast(offset + tys.Slice.ptr_offset),
-                .target = try self.findSymForPtr(ptr, cap),
+                .target = undefined,
             }) catch unreachable;
         },
         .Simd => |s| {
-            const smd: *tys.Simd = self.store.get(s);
+            const smd: *tys.Simd = s.get(self);
 
             const elem_size = smd.elem.size(self);
             for (0..smd.len) |idx| {
-                try self.findNestedGlobals(
+                self.findPointerOffsets(
                     relocs,
                     global,
                     scratch,
@@ -1236,23 +1251,23 @@ pub fn findNestedGlobals(
         inline .Struct, .Tuple => |t| {
             var fields_iter = t.offsetIter(self);
             while (fields_iter.next()) |elem| {
-                try self.findNestedGlobals(relocs, global, scratch, elem.field.ty, offset_f + elem.offset);
+                self.findPointerOffsets(relocs, global, scratch, elem.field.ty, offset_f + elem.offset);
             }
         },
         .Nullable => |n| {
             if (self.isNullablePresent(n, global, offset)) return;
 
-            const data: *tys.Nullable = self.store.get(n);
+            const data: *tys.Nullable = n.get(self);
             const nieche: ?tys.Nullable.NiecheSpec = data.nieche.offset(self);
             const next_offset = if (nieche != null) data.inner.alignment(self) else 0;
-            try self.findNestedGlobals(relocs, global, scratch, data.inner, offset + next_offset);
+            self.findPointerOffsets(relocs, global, scratch, data.inner, offset + next_offset);
         },
         .Global, .Func, .Template => unreachable,
     }
 }
 
 pub fn isNullablePresent(self: *Types, n: utils.EntId(tys.Nullable), global: *tys.Global, offset: u64) bool {
-    const data: *tys.Nullable = self.store.get(n);
+    const data: *tys.Nullable = n.get(self);
     const nieche: ?tys.Nullable.NiecheSpec = data.nieche.offset(self);
 
     return if (nieche) |niche| b: {
@@ -1273,7 +1288,6 @@ pub fn isNullablePresent(self: *Types, n: utils.EntId(tys.Nullable), global: *ty
 pub fn findSymForPtr(
     self: *Types,
     ptr: usize,
-    cap: u64,
 ) !u32 {
     const data = &self.ct.gen.out;
 
@@ -1291,10 +1305,6 @@ pub fn findSymForPtr(
         return error.@"to something thats not a global";
 
     self.queue(.runtime, .init(.{ .Global = id }));
-    const sym = &data.syms.items[@intFromEnum(data.globals.items[@intFromEnum(id)])];
-
-    if (sym.size != cap and cap != std.math.maxInt(u64))
-        return error.@"to a global with different size";
 
     return @intFromEnum(id);
 }
@@ -1303,11 +1313,11 @@ pub fn queue(self: *Types, target: Target, task: Id) void {
     errdefer unreachable;
     switch (task.data()) {
         .Func => |func| {
-            if (self.store.get(func).completion.get(target) == .compiled) return;
+            if (func.get(self).completion.get(target) == .compiled) return;
             try self.func_work_list.getPtr(target).append(self.pool.allocator(), func);
         },
         .Global => |global| {
-            if (self.store.get(global).completion.get(target) == .compiled) return;
+            if (global.get(self).completion.get(target) == .compiled) return;
             try self.global_work_list.getPtr(target).append(self.pool.allocator(), global);
         },
         else => unreachable,
@@ -1317,8 +1327,8 @@ pub fn queue(self: *Types, target: Target, task: Id) void {
 pub fn nextLocalTask(self: *Types, target: Target, pop_limit: usize) ?utils.EntId(tys.Func) {
     while (self.func_work_list.get(target).items.len > pop_limit) {
         const func = self.func_work_list.getPtr(target).pop() orelse return null;
-        if (self.store.get(func).completion.get(target) == .compiled) continue;
-        self.store.get(func).completion.set(target, .compiled);
+        if (func.get(self).completion.get(target) == .compiled) continue;
+        func.get(self).completion.set(target, .compiled);
         return func;
     }
 
@@ -1612,7 +1622,7 @@ pub fn convertZigTypeToHbType(self: *Types, comptime T: type) Id {
                 const tag = self.convertZigTypeToHbType(t.fields[1].type);
 
                 const unon = self.convertZigTypeToHbType(t.fields[0].type);
-                self.store.get(unon.data().Union).tag = tag;
+                unon.data().Union.get(self).tag = tag;
                 return unon;
             }
 
@@ -1742,10 +1752,10 @@ pub fn internPtr(self: *Types, comptime tag: std.meta.Tag(Data), payload: std.me
         return slot.key_ptr.*;
     }
     if (@TypeOf(payload) == tys.Tuple) {
-        self.store.get(vl).fields = self.pool.arena.dupe(tys.Tuple.Field, payload.fields);
+        vl.get(self).fields = self.pool.arena.dupe(tys.Tuple.Field, payload.fields);
     } else if (@TypeOf(payload) == tys.FnPtr) {
-        self.store.get(vl).args = self.pool.arena.dupe(Id, payload.args);
-    } else self.store.get(vl).* = payload;
+        vl.get(self).args = self.pool.arena.dupe(Id, payload.args);
+    } else vl.get(self).* = payload;
     return slot.key_ptr.*;
 }
 
@@ -1784,8 +1794,8 @@ pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Scope) struc
         self.store.pop(ty);
         return .{ slot, @field(slot.key_ptr.data(), @tagName(kind)) };
     } else {
-        self.store.get(ty).key.captures_ptr =
-            self.pool.arena.dupe(Types.Scope.Capture, self.store.get(ty).key.captures()).ptr;
+        ty.get(self).key.captures_ptr =
+            self.pool.arena.dupe(Types.Scope.Capture, ty.get(self).key.captures()).ptr;
     }
     return .{ slot, ty };
 }
@@ -1810,8 +1820,8 @@ pub fn resolveFielded(
         .captures_ptr = captures.ptr,
     });
     if (!slot.found_existing) {
-        self.store.get(alloc).* = .{
-            .key = self.store.get(alloc).key,
+        alloc.get(self).* = .{
+            .key = alloc.get(self).key,
             .index = Ast.Index.build(
                 self.getFile(file),
                 self.getFile(file).exprs.get(ast).Type.fields,
@@ -1858,7 +1868,7 @@ pub fn addStringGlobal(self: *Types, data: []const u8) utils.EntId(tys.Global) {
 
     const entry = self.string_globals.getOrPutContext(self.pool.allocator(), glob, .{ .types = self }) catch unreachable;
     if (!entry.found_existing) {
-        self.store.get(glob).data = .{ .imm = data };
+        glob.get(self).data = .{ .imm = data };
     } else {
         self.store.pop(glob);
     }
@@ -1898,8 +1908,8 @@ pub fn resolveGlobal(
     });
 
     if (!slot.found_existing) {
-        self.store.get(alloc).* = .{
-            .key = self.store.get(alloc).key,
+        alloc.get(self).* = .{
+            .key = alloc.get(self).key,
             .readonly = readonly,
         };
     }
@@ -1916,7 +1926,7 @@ pub fn allocTempType(self: *Types, comptime T: type) utils.EntId(T) {
     const name = @TypeOf(self.store).fieldName(T).name;
 
     return if (field.*) |t| {
-        const tl = self.store.get(t);
+        const tl = t.get(self);
         field.* = if (tl.key.loc.scope == .void)
             null
         else
@@ -1933,7 +1943,7 @@ pub fn freeTempType(self: *Types, comptime T: type, scope: utils.EntId(T)) void 
     };
     const name = @TypeOf(self.store).fieldName(T).name;
 
-    self.store.get(scope).key.loc.scope = if (field.*) |t|
+    scope.get(self).key.loc.scope = if (field.*) |t|
         .init(@unionInit(@TypeOf(self.store).Data, name, t))
     else
         .void;

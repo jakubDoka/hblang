@@ -45,6 +45,10 @@ pub const Nullable = struct {
 
         pub const Data = Nullable;
 
+        pub fn get(self: @This(), cont: anytype) *Data {
+            return cont.store.get(self);
+        }
+
         pub fn isCompact(id: Id, types: *Types) bool {
             const self = types.store.get(id);
 
@@ -87,6 +91,10 @@ pub const Tuple = struct {
         _,
 
         pub const Data = Tuple;
+
+        pub fn get(self: @This(), cont: anytype) *Data {
+            return cont.store.get(self);
+        }
 
         pub fn getFields(id: Id, types: *Types) []Field {
             return types.store.get(id).fields;
@@ -134,6 +142,10 @@ pub const Enum = struct {
         _,
 
         pub const Data = Enum;
+
+        pub fn get(self: @This(), cont: anytype) *Data {
+            return cont.store.get(self);
+        }
 
         pub const getFields = Enum.getFields;
         pub const getBackingInt = Enum.getBackingInt;
@@ -263,6 +275,10 @@ pub const Union = struct {
         _,
 
         pub const Data = Union;
+
+        pub fn get(self: @This(), cont: anytype) *Data {
+            return cont.store.get(self);
+        }
 
         pub fn deepEqual(lsh: Id, types: *Types, rhs: Id) bool {
             const lhs_data: *Union = types.store.get(lsh);
@@ -436,6 +452,10 @@ pub const Struct = struct {
         _,
 
         pub const Data = Struct;
+
+        pub fn get(self: @This(), cont: anytype) *Data {
+            return cont.store.get(self);
+        }
 
         pub fn deepEqual(lsh: Id, types: *Types, rhs: Id) bool {
             const lhs_data: *Struct = types.store.get(lsh);
@@ -666,13 +686,13 @@ pub const Global = struct {
             };
         }
     } = .{ .imm = &.{} },
-    relocs: []const root.backend.Machine.DataOptions.Reloc = &.{},
+    relocs: []root.backend.Machine.DataOptions.Reloc = &.{},
     readonly: bool,
     uninit: bool = false,
     completion: std.EnumArray(Types.Target, CompileState) =
         .{ .values = @splat(.queued) },
 
-    pub const CompileState = enum { queued, staged, compiled };
+    pub const CompileState = enum { queued, compiled };
 };
 
 pub const FnPtr = struct {

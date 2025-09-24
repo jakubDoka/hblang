@@ -453,7 +453,7 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
                             " TODO: where is the original?", .{}) catch continue;
                     }
 
-                    const func_data: *tys.Func = self.types.store.get(ty.data().Func);
+                    const func_data: *tys.Func = ty.data().Func.get(self.types);
                     const ast = self.types.getFile(func_data.key.loc.file);
                     const func_ast = ast.exprs.get(func_data.key.loc.ast).Fn;
 
@@ -485,20 +485,20 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
                     field_ptr.* = ty.data().Func;
 
                     if (field == .entry and has_main) {
-                        self.types.store.get(ty.data().Func).visibility = .exported;
-                        self.types.store.get(ty.data().Func).special = .entry;
+                        ty.data().Func.get(self.types).visibility = .exported;
+                        ty.data().Func.get(self.types).special = .entry;
                         continue;
                     }
 
                     if (field == .memcpy) {
-                        self.types.store.get(ty.data().Func).special = .memcpy;
+                        ty.data().Func.get(self.types).special = .memcpy;
                     }
                 },
                 .@"export" => {
                     exports_main = exports_main or std.mem.eql(u8, name_str, "main");
 
-                    self.types.store.get(ty.data().Func).visibility = .exported;
-                    self.types.store.get(ty.data().Func).key.name_pos = fl.strPos(name_str);
+                    ty.data().Func.get(self.types).visibility = .exported;
+                    ty.data().Func.get(self.types).key.name_pos = fl.strPos(name_str);
                 },
                 else => unreachable,
             }
@@ -526,8 +526,8 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
             return error.Never;
         };
 
-        self.types.store.get(entry).visibility = .exported;
-        self.types.store.get(entry).key.name_pos = .main;
+        entry.get(self.types).visibility = .exported;
+        entry.get(self.types).key.name_pos = .main;
 
         try funcs.append(tmp.arena.allocator(), entry);
     }
@@ -585,13 +585,13 @@ const BuildError = error{ Uninhabited, HasErrors };
 
 pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) BuildError!void {
     errdefer {
-        self.types.store.get(func_id).errored = true;
+        func_id.get(self.types).errored = true;
     }
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    var func: *root.frontend.types.Func = self.types.store.get(func_id);
+    var func: *root.frontend.types.Func = func_id.get(self.types);
 
     self.ast = self.types.getFile(func.key.loc.file);
     const ast = self.ast;
@@ -636,7 +636,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
     }
     func.recursion_lock = true;
     defer {
-        func = self.types.store.get(func_id);
+        func = func_id.get(self.types);
         func.recursion_lock = false;
     }
 
@@ -653,7 +653,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
     for (ast.exprs.view(fn_ast.args)) |aarg| {
         const ident = ast.exprs.getTyped(.Ident, aarg.bindings).?;
         if (ident.pos.flag.@"comptime") continue;
-        func = self.types.store.get(func_id);
+        func = func_id.get(self.types);
         const ty = func.args[ty_idx];
         const abi = self.abiCata(ty);
         const arg_sloc = self.src(aarg);
@@ -690,7 +690,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
     }
 
     var termintes = false;
-    func = self.types.store.get(func_id);
+    func = func_id.get(self.types);
     _ = self.emit(.{}, ast.exprs.getTyped(.Fn, func.key.loc.ast).?.body) catch |err| switch (err) {
         error.Never => {},
         error.Unreachable => termintes = true,
@@ -704,7 +704,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
             self.report(fn_ast.body, msg ++ "but it returns at least once", .{func.ret}) catch {};
         }
     } else if (!termintes and ret_abi != .Imaginary) {
-        func = self.types.store.get(func_id);
+        func = func_id.get(self.types);
         self.report(fn_ast.body, "function returns a {}, which has more then" ++
             " 1 value, but end of the function body is reachable", .{func.ret}) catch {};
     }
@@ -879,7 +879,7 @@ pub fn emitCtor(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Ctor)) EmitErr
     const sloc = self.src(expr);
 
     if (ty.needsTag(self.types)) {
-        ty = self.types.store.get(ty.data().Nullable).inner;
+        ty = ty.data().Nullable.get(self.types).inner;
         _ = self.bl.addStore(sloc, local, .i8, self.bl.addIntImm(sloc, .i8, 1));
         offset_cursor += ty.alignment(self.types);
     } else if (self.types.store.unwrap(ty.data(), .Nullable)) |n| {
@@ -1029,7 +1029,7 @@ pub fn emitTuple(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Tupl)) EmitEr
         var init_offset: u64 = 0;
 
         if (ty.needsTag(self.types)) {
-            ty = self.types.store.get(ty.data().Nullable).inner;
+            ty = ty.data().Nullable.get(self.types).inner;
             _ = self.bl.addStore(sloc, local, .i8, self.bl.addIntImm(sloc, .i8, 1));
             init_offset += ty.alignment(self.types);
         } else if (self.types.store.unwrap(ty.data(), .Nullable)) |n| {
@@ -1082,7 +1082,7 @@ pub fn emitArray(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Arry)) EmitEr
     const elem_ty, const res_ty: Types.Id = if (ctx.ty) |ret_ty| b: {
         var ty = ret_ty;
         if (ty.needsTag(self.types)) {
-            ty = self.types.store.get(ty.data().Nullable).inner;
+            ty = ty.data().Nullable.get(self.types).inner;
             _ = self.bl.addStore(sloc, local, .i8, self.bl.addIntImm(sloc, .i8, 1));
             start += 1;
         } else if (self.types.store.unwrap(ty.data(), .Nullable)) |n| {
@@ -1094,14 +1094,14 @@ pub fn emitArray(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Arry)) EmitEr
                 return self.report(expr, "expected {}, got array with {} elements", .{ ty, e.fields.len() });
             },
             .Array => |a| {
-                const array: *tys.Array = self.types.store.get(a);
+                const array: *tys.Array = a.get(self.types);
                 if (array.len != e.fields.len()) {
                     return self.report(expr, "expected array with {} element, got {}", .{ array.len, e.fields.len() });
                 }
 
                 break :b .{ array.elem, ret_ty };
             },
-            .Simd => |s| break :b .{ self.types.store.get(s).elem, ret_ty },
+            .Simd => |s| break :b .{ s.get(self.types).elem, ret_ty },
             else => return self.report(expr, "{} can not be initialized with array syntax", .{ty}),
         }
     } else b: {
@@ -1764,8 +1764,7 @@ pub fn emitIndex(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Index)) EmitE
 
 fn emitBlock(self: *Codegen, ctx: Ctx, _: Ast.Id, e: *Expr(.Block)) EmitError!Value {
     const prev_scope_height = self.scope.items.len;
-    defer self.scope.items.len = prev_scope_height;
-    defer self.scope_pins.truncate(&self.bl, prev_scope_height);
+    defer self.popScope(prev_scope_height);
 
     const defer_scope = self.defers.items.len;
     defer self.defers.items.len = defer_scope;
@@ -1779,6 +1778,20 @@ fn emitBlock(self: *Codegen, ctx: Ctx, _: Ast.Id, e: *Expr(.Block)) EmitError!Va
     try self.emitDefers(defer_scope);
 
     return .{};
+}
+
+fn popScope(self: *Codegen, to: usize) void {
+    for (to..self.scope.items.len) |i| {
+        const vl = self.scope_pins.getValue(i);
+        if (vl.outputs().len > 1 and vl.kind == .GlobalAddr) {
+            self.types.queue(self.target, .init(.{
+                .Global = @enumFromInt(vl.extra(.GlobalAddr).id),
+            }));
+        }
+    }
+
+    self.scope.items.len = to;
+    self.scope_pins.truncate(&self.bl, to);
 }
 
 fn emitIf(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.If)) EmitError!Value {
@@ -1808,8 +1821,7 @@ fn emitIf(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.If)) EmitError!Value
         unreachable_count += self.emitBranch(e.then);
         // we remove any unwraps int the condition so that else does not
         // have acces to them
-        self.scope.items.len = prev_scope_height;
-        self.scope_pins.truncate(&self.bl, prev_scope_height);
+        defer self.popScope(prev_scope_height);
 
         const end_else = if_builder.beginElse(&self.bl);
         unreachable_count += self.emitBranch(e.else_);
@@ -2137,8 +2149,7 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
     }
 
     const prev_scope_height = self.scope.items.len;
-    defer self.scope.items.len = prev_scope_height;
-    defer self.scope_pins.truncate(&self.bl, prev_scope_height);
+    defer self.popScope(prev_scope_height);
 
     for (self.ast.exprs.view(e.iters), iter_data) |iter, data| {
         if (iter.bindings.tag() != .Ident) {
@@ -2383,8 +2394,8 @@ fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
             .captures_ptr = captures.ptr,
         });
         if (!slot.found_existing) {
-            self.types.store.get(alloc).* = .{
-                .key = self.types.store.get(alloc).key,
+            alloc.get(self.types).* = .{
+                .key = alloc.get(self.types).key,
             };
         }
         return self.emitTyConst(slot.key_ptr.*);
@@ -2407,8 +2418,8 @@ fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
                 arg.* = try self.resolveAnonTy(ty);
             };
             const ret = try self.resolveAnonTy(e.ret);
-            self.types.store.get(alloc).* = .{
-                .key = self.types.store.get(alloc).key,
+            alloc.get(self.types).* = .{
+                .key = alloc.get(self.types).key,
                 .args = self.types.pool.arena.dupe(Types.Id, args),
                 .ret = ret,
             };
@@ -2431,8 +2442,8 @@ fn emitUse(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Use)) EmitError!Value
                 .captures_ptr = undefined,
             });
             if (!slot.found_existing) {
-                self.types.store.get(alloc).* = .{
-                    .key = self.types.store.get(alloc).key,
+                alloc.get(self.types).* = .{
+                    .key = alloc.get(self.types).key,
                     .data = .{ .imm = file.source },
                     .ty = self.types.makeArray(file.source.len, .u8),
                     .readonly = true,
@@ -2440,7 +2451,7 @@ fn emitUse(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Use)) EmitError!Value
             }
             self.types.queue(self.target, .init(.{ .Global = alloc }));
             return .mkp(
-                self.types.store.get(alloc).ty,
+                alloc.get(self.types).ty,
                 self.bl.addGlobalAddr(sloc, @intFromEnum(alloc)),
             );
         },
@@ -2517,7 +2528,7 @@ pub fn emitSpill(self: *Codegen, expr: Ast.Id, value: *Value) void {
 }
 
 pub fn emitHandlerCall(self: *Codegen, handler: utils.EntId(tys.Func), expr: Ast.Id, check: *Node, arg_values: []Value) void {
-    const func: *tys.Func = self.types.store.get(handler);
+    const func: *tys.Func = handler.get(self.types);
 
     var builder = self.bl.addIfAndBeginThen(self.src(expr), check);
 
@@ -3467,10 +3478,10 @@ pub fn instantiateTemplate(
     const scope = self.types.allocTempType(tys.Template);
     defer self.types.freeTempType(tys.Template, scope);
 
-    self.types.store.get(scope).* = tmpl;
-    self.types.store.get(scope).temporary = true;
-    self.types.store.get(scope).key.loc.scope = typ;
-    self.types.store.get(scope).key.setCaptures(&.{});
+    scope.get(self.types).* = tmpl;
+    scope.get(self.types).temporary = true;
+    scope.get(self.types).key.loc.scope = typ;
+    scope.get(self.types).key.setCaptures(&.{});
 
     const tmpl_file = self.types.getFile(tmpl.key.loc.file);
     const tmpl_ast = tmpl_file.exprs.getTyped(.Fn, tmpl.key.loc.ast).?;
@@ -3526,7 +3537,7 @@ pub fn instantiateTemplate(
             };
             capture_idx += 1;
             comptime_idx += 1;
-            self.types.store.get(scope).key.setCaptures(captures[0..capture_idx]);
+            scope.get(self.types).key.setCaptures(captures[0..capture_idx]);
         } else {
             arg_tys[arg_idx] = try self.types.ct.evalTy("", template_scope, param.ty);
             if (arg_tys[arg_idx] == .any) {
@@ -3546,7 +3557,7 @@ pub fn instantiateTemplate(
                     .ty = arg_tys[arg_idx],
                 };
                 capture_idx += 1;
-                self.types.store.get(scope).key.setCaptures(captures[0..capture_idx]);
+                scope.get(self.types).key.setCaptures(captures[0..capture_idx]);
             } else if (arg == .Expr) {
                 arg_exprs[arg_expr_idx] =
                     try self.emitTyped(.{}, arg_tys[arg_idx], arg.Expr);
@@ -3562,26 +3573,6 @@ pub fn instantiateTemplate(
 
     const ret = try self.types.ct.evalTy("", template_scope, tmpl_ast.ret);
 
-    // NOTE: this is a shourtcut that avoids making a needless function instance
-    //if (ret == .type and capture_idx == tmpl_ast.args.len() and
-    //    tmpl_ast.body.tag() == .Return and
-    //    tmpl_file.exprs.get(tmpl_ast.body).Return.value.tag() == .Type)
-    //{
-    //    const prev_scope = self.parent_scope;
-    //    const prev_name = self.name;
-    //    defer {
-    //        self.parent_scope = prev_scope;
-    //        self.ast = self.types.getFile(prev_scope.file(self.types));
-    //        self.name = prev_name;
-    //    }
-    //    self.parent_scope = template_scope;
-    //    self.ast = tmpl_file;
-    //    self.name = "";
-    //    const value = tmpl_file.exprs.get(tmpl_ast.body).Return.value;
-    //    const res = try self.emitUserType(.{}, value, tmpl_file.exprs.get(value).Type);
-    //    return .{ .bypass = res };
-    //}
-
     const slot, const alloc = self.types.intern(.Func, .{
         .loc = .{
             .scope = typ,
@@ -3594,7 +3585,7 @@ pub fn instantiateTemplate(
     });
 
     if (!slot.found_existing) {
-        const alc = self.types.store.get(alloc);
+        const alc = alloc.get(self.types);
         alc.* = .{
             .key = alc.key,
             .args = self.types.pool.arena.dupe(Types.Id, arg_tys),
@@ -3822,6 +3813,7 @@ pub fn partialEvalLow(self: *Codegen, pos: u32, value: *Value) !Value {
             .scope = self.parent_scope.perm(self.types),
             .pos = pos,
             .error_slot = &err,
+            .target = self.target,
         },
         &self.bl,
         switch (self.abiCata(value.ty)) {
@@ -3887,8 +3879,7 @@ pub fn binOpUpcast(self: *Codegen, lhs: Types.Id, rhs: Types.Id) !Types.Id {
 
 pub fn emitBranch(self: *Codegen, block: Ast.Id) usize {
     const prev_scope_height = self.scope.items.len;
-    defer self.scope.items.len = prev_scope_height;
-    defer self.scope_pins.truncate(&self.bl, prev_scope_height);
+    defer self.popScope(prev_scope_height);
 
     const prev_defer_height = self.defers.items.len;
     defer self.defers.items.len = prev_defer_height;

@@ -1,12 +1,12 @@
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -9
+     addi64 $254, $254, -16
         li8 $1, -1
          st $1, $254, 0, 1
      addi64 $1, $254, 0
         lra $2, $0, :function pointers 4.Obj.func
        jala $31, $2, 0
-     addi64 $254, $254, 9
+     addi64 $254, $254, 16
          ld $31, $254, -8, 8
          tx
 function pointers 4.Obj.func:

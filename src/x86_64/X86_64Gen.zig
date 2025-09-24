@@ -848,7 +848,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         if (bb.base.kind == .MemCpy) has_call = true;
         if (bb.base.kind == .CallEnd) {
             const call = bb.base.inputs()[0].?;
-            const signature = &call.extra(.Call).signature;
+            const signature: *graph.Signature = &call.extra(.Call).signature;
             call_slot_size = @max(signature.stackSize(), call_slot_size);
             has_call = true;
         }
@@ -896,30 +896,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
             self.emitImmOp(0x81, 0b101, .rsp, stack_size);
         }
 
-        var i: usize = 0;
-        var f: usize = 0;
-        var stack_arg_offset: u64 = 0;
-        for (func.signature.params(), 0..) |par, j| {
-            defer {
-                if (par != .Stack) {
-                    if (par.Reg.isInt()) {
-                        i += 1;
-                    } else {
-                        f += 1;
-                    }
-                }
-            }
-
-            const argn = for (postorder[0].base.outputs()) |o| {
-                if (o.get().subclass(graph.Arg)) |sub| if (sub.ext.index == j) break o.get();
-            } else continue; // is dead
-
-            if (par == .Stack) {
-                stack_arg_offset = std.mem.alignForward(u64, stack_arg_offset, @as(u64, 1) << par.Stack.alignment);
-                argn.extra(.StructArg).spec.size = @intCast(stack_arg_offset);
-                stack_arg_offset += par.Stack.size;
-            }
-        }
+        func.computeStructArgLayout();
 
         break :prelude;
     }

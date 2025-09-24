@@ -1,15 +1,15 @@
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -14
+     addi64 $254, $254, -16
      addi64 $1, $254, 0
         jal $31, $0, :comptime 6 (strings).main.string_to_array("Edward")
          ld $1, $254, 0, 1
        andi $1, $1, 255
-     addi64 $254, $254, 14
+     addi64 $254, $254, 16
          ld $31, $254, -8, 8
          tx
 comptime 6 (strings).main.string_to_array("Edward"):
-     addi64 $254, $254, -6
+     addi64 $254, $254, -8
      addi64 $7, $254, 0
         lra $6, $0, :Edward
        li64 $5, 6
@@ -17,7 +17,7 @@ comptime 6 (strings).main.string_to_array("Edward"):
 3:       cp $3, $2
        jltu $3, $5, :2
         bmc $7, $1, 6
-     addi64 $254, $254, 6
+     addi64 $254, $254, 8
        jala $0, $31, 0
 2:       cp $3, $2
       add64 $4, $7, $3

@@ -1,0 +1,35 @@
+comptime edge cases 8.fun((uint, uint, uint)):
+	mov rax, [rsp+0x08]
+	dec rax
+	ret
+comptime edge cases 8.main.read_only((uint, uint, uint)):
+	mov rax, [rsp+0x08]
+	ret
+main:
+	push rbx
+	sub rsp, 0x20
+	lea rsi, [0x0000000000000007]
+	lea rdi, [rsp]
+	mov rdx, 0x18
+	call :memcpy
+	call :comptime edge cases 8.main.read_only((uint, uint, uint))
+	mov rbx, rax
+	lea rsi, [0x0000000000000007]
+	lea rdi, [rsp]
+	mov rdx, 0x18
+	call :memcpy
+	call :comptime edge cases 8.main.read_only((uint, uint, uint))
+	cmp rbx, rax
+	jnz :0
+	mov rax, 0x02
+	jmp :1
+0:	lea rsi, [0x0000000000000007]
+	lea rdi, [rsp]
+	mov rdx, 0x18
+	call :memcpy
+	call :comptime edge cases 8.fun((uint, uint, uint))
+	xor rax, rax
+1:	add rsp, 0x20
+	pop rbx
+	ret
+memcpy:
