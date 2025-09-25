@@ -47,14 +47,14 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
 
         const tests = [_]struct {
             []const u8,
-            root.backend.Machine,
+            *root.backend.Machine,
             root.backend.Machine.OptOptions.Mode,
             root.frontend.Types.Abi,
         }{
-            .{ "hbvm-ableos", .init(&hbvm), .release, .ableos },
-            .{ "hbvm-ableos-no-opts", .init(&hbvm2), .debug, .ableos },
-            .{ "x86_64-linux", .init(&x86_64), .release, .systemv },
-            .{ "x86_64-linux-no-opts", .init(&x86_642), .debug, .systemv },
+            .{ "hbvm-ableos", &hbvm.mach, .release, .ableos },
+            .{ "hbvm-ableos-no-opts", &hbvm2.mach, .debug, .ableos },
+            .{ "x86_64-linux", &x86_64.mach, .release, .systemv },
+            .{ "x86_64-linux-no-opts", &x86_642.mach, .debug, .systemv },
         };
 
         for (tests) |tst| {
@@ -84,7 +84,7 @@ pub fn runMachineTest(
     name: []const u8,
     category: []const u8,
     code: [:0]const u8,
-    machine: root.backend.Machine,
+    machine: *root.backend.Machine,
     abi: root.frontend.Types.Abi,
     opts: root.backend.Machine.OptOptions.Mode,
     gpa: std.mem.Allocator,

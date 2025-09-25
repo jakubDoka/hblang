@@ -1100,6 +1100,11 @@ pub fn Func(comptime Backend: type) type {
                 }
             };
 
+            pub fn isKillable(self: *Node) bool {
+                return self.kind != .Return and
+                    (!@hasDecl(Backend, "isKillable") or Backend.isKillable(self));
+            }
+
             pub fn isDead(self: *Node) bool {
                 return self.kind == .Dead;
             }
@@ -2232,6 +2237,14 @@ pub fn Func(comptime Backend: type) type {
             }
         }
 
+        pub fn killNodes(self: *Self) void {
+            self.iterPeeps({}, struct {
+                fn strategy(_: void, _: *Func(Backend), _: *Node, _: *WorkList) ?*Node {
+                    return null;
+                }
+            }.strategy);
+        }
+
         pub fn iterPeeps(
             self: *Self,
             ctx: anytype,
@@ -2248,7 +2261,7 @@ pub fn Func(comptime Backend: type) type {
             while (worklist.pop()) |t| {
                 if (t.isDead()) continue;
 
-                if (t.outputs().len == 0 and t != self.end) {
+                if (t.outputs().len == 0 and t.isKillable()) {
                     for (t.inputs()) |ii| if (ii) |ia| worklist.add(ia);
                     self.uninternNode(t);
                     self.kill(t);
@@ -2372,7 +2385,9 @@ pub fn Func(comptime Backend: type) type {
                 node.inputs()[1].?.kind != .CInt)
             {
                 var cursor = node.cfg0();
-                while (cursor.base.kind != .Entry) : (cursor = cursor.idom()) {
+                while (cursor.base.kind != .Entry and
+                    cursor.base.kind != .Loop) : (cursor = cursor.idom())
+                {
                     if (cursor.base.data_type == .bot) break;
                     if (cursor.base.kind != .Then and cursor.base.kind != .Else) continue;
 
@@ -2609,7 +2624,7 @@ pub fn Func(comptime Backend: type) type {
             if (node.isLoad()) {
                 const base, const offset = node.base().knownOffset();
                 if (base.kind == .GlobalAddr) fold_const_read: {
-                    const res = ctx.out.readFromSym(
+                    const res = ctx.mach.out.readFromSym(
                         base.extra(.GlobalAddr).id,
                         offset + node.getStaticOffset(),
                         node.data_type.size(),
@@ -2625,7 +2640,7 @@ pub fn Func(comptime Backend: type) type {
 
             if (node.kind == .Call and node.data_type != .bot) {
                 const force_inline = node.extra(.Call).signature.call_conv == .@"inline";
-                if (ctx.out.getInlineFunc(Backend, node.extra(.Call).id, force_inline)) |inline_func| {
+                if (ctx.mach.out.getInlineFunc(Backend, node.extra(.Call).id, force_inline)) |inline_func| {
                     inline_func.inliner.inlineInto(self, node, work);
                     return null;
                 }

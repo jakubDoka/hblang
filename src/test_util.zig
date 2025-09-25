@@ -179,7 +179,7 @@ pub fn testBuilder(
     target: []const u8,
     gpa: std.mem.Allocator,
     output: *std.Io.Writer,
-    gen: root.backend.Machine,
+    gen: *root.backend.Machine,
     opts: root.backend.Machine.OptOptions.Mode,
     abi: root.frontend.Types.Abi,
     colors: std.io.tty.Config,

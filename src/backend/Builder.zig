@@ -22,6 +22,10 @@ pub const classes = enum {
     };
 };
 
+pub fn isKillable(self: *BuildNode) bool {
+    return self.kind != .Scope;
+}
+
 pub fn SpecificNode(comptime _: Kind) type {
     return *BuildNode;
 }
@@ -233,6 +237,14 @@ pub const Pins = struct {
 
     pub fn deinit(self: Pins, bl: *Builder) void {
         killScope(&bl.func, self.scope);
+    }
+
+    pub fn len(self: Pins) usize {
+        return getScopeValues(self.scope).len;
+    }
+
+    pub fn set(self: Pins, bl: *Builder, idx: usize, value: *BuildNode) void {
+        bl.func.setInputNoIntern(self.scope, idx, value);
     }
 };
 

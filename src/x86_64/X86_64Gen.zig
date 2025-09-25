@@ -14,13 +14,13 @@ const FuncNode = Func.Node;
 const Move = utils.Move(Reg);
 
 gpa: *utils.Pool,
+mach: Mach = .init(X86_64Gen),
 object_format: enum { elf, coff },
 memcpy: Mach.Data.SymIdx = .invalid,
 f32s: Mach.Data.SymIdx = .invalid,
 f32index: std.ArrayHashMapUnmanaged(f32, void, CtxF32, false) = .{},
 f64s: Mach.Data.SymIdx = .invalid,
 f64index: std.ArrayHashMapUnmanaged(f64, void, CtxF64, false) = .{},
-out: Mach.Data = .{},
 allocs: []const u16 = undefined,
 ret_count: usize = undefined,
 local_relocs: std.ArrayListUnmanaged(Reloc) = undefined,
@@ -808,8 +808,8 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         opts.name;
     self.builtins = opts.builtins;
 
-    const sym = try self.out.startDefineFunc(self.gpa.allocator(), id, name, .func, linkage, opts.is_inline);
-    defer self.out.endDefineFunc(id);
+    const sym = try self.mach.out.startDefineFunc(self.gpa.allocator(), id, name, .func, linkage, opts.is_inline);
+    defer self.mach.out.endDefineFunc(id);
 
     if (opts.linkage == .imported) return;
 
@@ -902,7 +902,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     }
 
     for (postorder, 0..) |bb, i| {
-        self.block_offsets[bb.base.schedule] = @intCast(self.out.code.items.len);
+        self.block_offsets[bb.base.schedule] = @intCast(self.mach.out.code.items.len);
         std.debug.assert(bb.base.schedule == i);
 
         self.emitBlockBody(&bb.base);
@@ -937,13 +937,13 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
             std.debug.assert(last.outputs()[0].get().isBasicBlockStart());
             self.local_relocs.appendAssumeCapacity(.{
                 .dest = last.outputs()[@intFromBool(last.isSwapped())].get().schedule,
-                .offset = @intCast(self.out.code.items.len),
+                .offset = @intCast(self.mach.out.code.items.len),
                 .off = 1,
                 .class = .rel32,
             });
             // jmp dest
             self.ensureInstrSpace();
-            try self.out.code.appendSlice(self.gpa.allocator(), &.{ 0xE9, 0, 0, 0, 0 });
+            try self.mach.out.code.appendSlice(self.gpa.allocator(), &.{ 0xE9, 0, 0, 0, 0 });
         }
     }
 
@@ -954,7 +954,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         const jump = dst_offset - rl.offset - size - rl.off; // welp we learned
 
         @memcpy(
-            self.out.code.items[rl.offset + rl.off ..][0..size],
+            self.mach.out.code.items[rl.offset + rl.off ..][0..size],
             @as(*const [8]u8, @ptrCast(&jump))[0..size],
         );
     }
@@ -992,17 +992,17 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 self.emitMemStoreOrLoad(ty, self.getReg(instr), .rip, null, false);
                 const res = try idx.getOrPut(self.gpa.allocator(), extra.imm);
                 const dis: i31 = @intCast(@intFromPtr(res.key_ptr) - @intFromPtr(idx.entries.bytes));
-                try self.out.addReloc(self.gpa.allocator(), sym, .@"4", dis - 4, 4);
+                try self.mach.out.addReloc(self.gpa.allocator(), sym, .@"4", dis - 4, 4);
             },
             .MemCpy => {
                 // call id
                 self.emitBytes(&.{ 0xe8, 0, 0, 0, 0 });
                 if (self.builtins.memcpy == std.math.maxInt(u32)) {
                     if (self.memcpy == .invalid)
-                        try self.out.importSym(self.gpa.allocator(), &self.memcpy, "memcpy", .func);
-                    try self.out.addReloc(self.gpa.allocator(), &self.memcpy, .@"4", -4, 4);
+                        try self.mach.out.importSym(self.gpa.allocator(), &self.memcpy, "memcpy", .func);
+                    try self.mach.out.addReloc(self.gpa.allocator(), &self.memcpy, .@"4", -4, 4);
                 } else {
-                    try self.out.addFuncReloc(self.gpa.allocator(), self.builtins.memcpy, .@"4", -4, 4);
+                    try self.mach.out.addFuncReloc(self.gpa.allocator(), self.builtins.memcpy, .@"4", -4, 4);
                 }
             },
             .MachSplit => {
@@ -1059,7 +1059,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 self.emitByte(0x8d);
                 self.emitIndirectAddr(dst, .rip, .no_index, 1, null);
 
-                try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, .@"4", -4, 4);
+                try self.mach.out.addGlobalReloc(self.gpa.allocator(), extra.id, .@"4", -4, 4);
             },
             .FuncAddr => |extra| {
                 // lea dst, [rip+reloc]
@@ -1068,7 +1068,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 self.emitByte(0x8d);
                 self.emitIndirectAddr(dst, .rip, .no_index, 1, null);
 
-                try self.out.addFuncReloc(self.gpa
+                try self.mach.out.addFuncReloc(self.gpa
                     .allocator(), extra.id, .@"4", -4, 4);
             },
             .RepStosb => {
@@ -1082,7 +1082,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const dis: i31 = @intCast(extra.dis);
                 const imm_size: i16 = @intCast(@min(instr.data_type.size(), 4));
                 self.emitMemConstStore(instr.data_type, vl, .rip, null);
-                try self.out.addGlobalReloc(
+                try self.mach.out.addGlobalReloc(
                     self.gpa.allocator(),
                     extra.id,
                     .@"4",
@@ -1095,14 +1095,14 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const src = self.getReg(inps[0]);
                 self.emitMemStoreOrLoad(instr.data_type, src, .rip, null, true);
                 const dis: i31 = @intCast(extra.dis);
-                try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, .@"4", dis - 4, 4);
+                try self.mach.out.addGlobalReloc(self.gpa.allocator(), extra.id, .@"4", dis - 4, 4);
             },
             .GlobalLoad => |extra| {
                 // mov dst, [rip+dis+offset]
                 const dst = self.getReg(instr);
                 self.emitMemStoreOrLoad(instr.data_type, dst, .rip, null, false);
                 const dis: i31 = @intCast(extra.dis);
-                try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, .@"4", dis - 4, 4);
+                try self.mach.out.addGlobalReloc(self.gpa.allocator(), extra.id, .@"4", dis - 4, 4);
             },
             .LocalAlloc => {},
             .Local => {
@@ -1180,7 +1180,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     // call id
                     self.emitBytes(&.{ 0xe8, 0, 0, 0, 0 });
 
-                    try self.out.addFuncReloc(self.gpa.allocator(), call.id, .@"4", -4, 4);
+                    try self.mach.out.addFuncReloc(self.gpa.allocator(), call.id, .@"4", -4, 4);
                 }
             },
             .Trap => {
@@ -1209,7 +1209,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
 
                 self.local_relocs.appendAssumeCapacity(.{
                     .dest = instr.outputs()[1].get().schedule,
-                    .offset = @intCast(self.out.code.items.len),
+                    .offset = @intCast(self.mach.out.code.items.len),
                     .class = .rel32,
                     .off = 2,
                 });
@@ -1225,7 +1225,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
 
                 self.local_relocs.appendAssumeCapacity(.{
                     .dest = instr.outputs()[1].get().schedule,
-                    .offset = @intCast(self.out.code.items.len),
+                    .offset = @intCast(self.mach.out.code.items.len),
                     .class = .rel32,
                     .off = 2,
                 });
@@ -1770,7 +1770,7 @@ pub const Rip = struct {};
 pub const SizeHint = struct { bytes: u64 };
 
 pub fn ensureInstrSpace(self: *X86_64Gen) void {
-    self.out.code.ensureUnusedCapacity(
+    self.mach.out.code.ensureUnusedCapacity(
         self.gpa.allocator(),
         max_instruction_size,
     ) catch unreachable;
@@ -1942,17 +1942,17 @@ pub fn emitSingleOp(self: *X86_64Gen, op_base: u8, dst: Reg) void {
 }
 
 pub fn emitByte(self: *X86_64Gen, byte: u8) void {
-    self.out.code.appendAssumeCapacity(byte);
+    self.mach.out.code.appendAssumeCapacity(byte);
 }
 
 pub fn emitBytes(self: *X86_64Gen, bytes: []const u8) void {
-    self.out.code.appendSliceAssumeCapacity(bytes);
+    self.mach.out.code.appendSliceAssumeCapacity(bytes);
 }
 
 pub fn emitImm(self: *X86_64Gen, comptime T: type, int: i64) void {
     std.mem.writeInt(
         T,
-        self.out.code.addManyAsArrayAssumeCapacity(@sizeOf(T)),
+        self.mach.out.code.addManyAsArrayAssumeCapacity(@sizeOf(T)),
         @truncate(int),
         .little,
     );
@@ -1991,7 +1991,7 @@ pub fn getReg(self: X86_64Gen, node: *FuncNode) Reg {
 pub fn emitData(self: *X86_64Gen, opts: Mach.DataOptions) void {
     errdefer unreachable;
 
-    try self.out.defineGlobal(
+    try self.mach.out.defineGlobal(
         self.gpa.allocator(),
         opts.id,
         opts.name,
@@ -2009,10 +2009,10 @@ pub fn preLinkHook(self: *X86_64Gen) void {
         const idx = @field(self, name ++ "index");
         const sym = &@field(self, name ++ "s");
 
-        _ = try self.out.startDefineSym(self.gpa.allocator(), sym, name ++ "s", .data, .local, true, false);
-        try self.out.code.appendSlice(self.gpa.allocator(), @ptrCast(idx.entries.items(.key)));
-        self.out.endDefineSym(sym.*);
-        try self.out.globals.append(self.gpa.allocator(), sym.*);
+        _ = try self.mach.out.startDefineSym(self.gpa.allocator(), sym, name ++ "s", .data, .local, true, false);
+        try self.mach.out.code.appendSlice(self.gpa.allocator(), @ptrCast(idx.entries.items(.key)));
+        self.mach.out.endDefineSym(sym.*);
+        try self.mach.out.globals.append(self.gpa.allocator(), sym.*);
     }
 }
 
@@ -2025,19 +2025,19 @@ pub fn finalize(self: *X86_64Gen, opts: Mach.FinalizeOptions) void {
         self.f64s = .invalid;
         self.f32index.clearRetainingCapacity();
         self.f64index.clearRetainingCapacity();
-        self.out.reset();
+        self.mach.out.reset();
     }
 
     if (opts.optimizations.finalizeSingleThread(opts.builtins, X86_64Gen, self, opts.logs)) return;
 
     try switch (self.object_format) {
-        .elf => root.object.elf.flush(self.out, .x86_64, opts.output orelse return),
-        .coff => unreachable, //root.object.coff.flush(self.out, .x86_64, out),try
+        .elf => root.object.elf.flush(self.mach.out, .x86_64, opts.output orelse return),
+        .coff => unreachable, //root.object.coff.flush(self.mach.out, .x86_64, out),try
     };
 }
 
 pub fn deinit(self: *X86_64Gen) void {
-    self.out.deinit(self.gpa.allocator());
+    self.mach.out.deinit(self.gpa.allocator());
 }
 
 pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {

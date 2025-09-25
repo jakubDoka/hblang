@@ -7,24 +7,25 @@ const graph = @import("graph.zig");
 const static_anal = @import("static_anal.zig");
 const root = @import("hb");
 
-data: *anyopaque,
-
+out: Data,
 vtable: *const VTable,
 
 pub const max_func = std.math.maxInt(u24);
 
 const VTable = struct {
-    emitFunc: *const fn (self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void,
-    emitData: *const fn (self: *anyopaque, opts: DataOptions) void,
-    finalize: *const fn (self: *anyopaque, opts: FinalizeOptions) void,
-    disasm: *const fn (self: *anyopaque, opts: DisasmOpts) void,
-    run: *const fn (self: *anyopaque, env: RunEnv) anyerror!usize,
-    deinit: *const fn (self: *anyopaque) void,
+    emitFunc: *const fn (self: *Machine, func: *BuilderFunc, opts: EmitOptions) void,
+    emitData: *const fn (self: *Machine, opts: DataOptions) void,
+    finalize: *const fn (self: *Machine, opts: FinalizeOptions) void,
+    disasm: *const fn (self: *Machine, opts: DisasmOpts) void,
+    run: *const fn (self: *Machine, env: RunEnv) anyerror!usize,
+    deinit: *const fn (self: *Machine) void,
 };
 
 const BuilderFunc = graph.Func(Builder);
 const Machine = @This();
 pub const Null = struct {
+    mach: Machine = .init(Null),
+
     const Func = graph.Func(Null);
 
     pub const classes = enum {};
@@ -32,8 +33,8 @@ pub const Null = struct {
     pub const i_know_the_api = {};
 
     comptime {
-        var s = Null{};
-        _ = init(&s);
+        const s = Null{};
+        _ = s;
     }
 
     pub fn emitFunc(_: *@This(), _: *Func, _: EmitOptions) void {}
@@ -49,6 +50,7 @@ pub const Null = struct {
 pub const Shard = struct {
     alignment: void align(std.atomic.cache_line) = {},
     gpa: *utils.Pool,
+    mach: Machine = .init(Shard),
 
     func_table: []const u32 = &.{},
     func_ir: std.ArrayListUnmanaged(FuncRecord) = .empty,
@@ -852,7 +854,7 @@ pub const OptOptions = struct {
     ) bool {
         switch (self.mode) {
             .release => {
-                backend.out.setInlineFunc(backend.gpa.allocator(), B, func, id);
+                backend.mach.out.setInlineFunc(backend.gpa.allocator(), B, func, id);
                 return true;
             },
             .debug => {
@@ -941,7 +943,7 @@ pub const OptOptions = struct {
             return finalizeSingleThread(optimizations, builtins, Backend, backend, logs);
         };
 
-        _ = parf; // autofix
+        _ = parf;
 
         if (optimizations.mode == .release) {} else {
             unreachable;
@@ -975,7 +977,7 @@ pub const OptOptions = struct {
             var tmp = utils.Arena.scrath(optimizations.arena);
             defer tmp.deinit();
 
-            const bout: *Data = &backend.out;
+            const bout: *Data = &backend.mach.out;
 
             // do the exhausitve optimization pass with inlining, this should
             // hanlde stacked inlines as well
@@ -1250,26 +1252,27 @@ pub const SupportedTarget = enum {
         return null;
     }
 
-    pub fn toMachine(triple: SupportedTarget, pool: *utils.Pool) Machine {
+    pub fn toMachine(triple: SupportedTarget, pool: *utils.Pool) *Machine {
         switch (triple) {
             .@"hbvm-ableos" => {
                 const slot = pool.arena.create(root.hbvm.HbvmGen);
                 slot.* = root.hbvm.HbvmGen{ .gpa = pool };
-                return .init(slot);
+                return &slot.mach;
             },
             .@"x86_64-windows" => {
                 const slot = pool.arena.create(root.x86_64.X86_64Gen);
                 slot.* = root.x86_64.X86_64Gen{ .gpa = pool, .object_format = .coff };
-                return .init(slot);
+                return &slot.mach;
             },
             .@"x86_64-linux" => {
                 const slot = pool.arena.create(root.x86_64.X86_64Gen);
                 slot.* = root.x86_64.X86_64Gen{ .gpa = pool, .object_format = .elf };
-                return .init(slot);
+                return &slot.mach;
             },
             .null => {
-                var value = Null{};
-                return .init(&value);
+                const slot = pool.arena.create(Null);
+                slot.* = Null{};
+                return &slot.mach;
             },
         }
     }
@@ -1284,40 +1287,39 @@ pub const SupportedTarget = enum {
     }
 };
 
-pub fn init(data: anytype) Machine {
-    const Type = @TypeOf(data.*);
+pub fn init(comptime Type: type) Machine {
     if (!@hasDecl(Type, "classes")) @compileError("expected `pub const classes = enum { ... }` to be present");
 
     const fns = struct {
-        fn emitFunc(self: *anyopaque, func: *BuilderFunc, opts: EmitOptions) void {
-            const slf: *Type = @ptrCast(@alignCast(self));
+        fn emitFunc(self: *Machine, func: *BuilderFunc, opts: EmitOptions) void {
+            const slf: *Type = @alignCast(@fieldParentPtr("mach", self));
             const fnc: *graph.Func(Type) = @ptrCast(@alignCast(func));
             slf.emitFunc(fnc, opts);
         }
-        fn emitData(self: *anyopaque, opts: DataOptions) void {
-            const slf: *Type = @ptrCast(@alignCast(self));
+        fn emitData(self: *Machine, opts: DataOptions) void {
+            const slf: *Type = @alignCast(@fieldParentPtr("mach", self));
             slf.emitData(opts);
         }
-        fn finalize(self: *anyopaque, opts: FinalizeOptions) void {
-            const slf: *Type = @ptrCast(@alignCast(self));
+        fn finalize(self: *Machine, opts: FinalizeOptions) void {
+            const slf: *Type = @alignCast(@fieldParentPtr("mach", self));
             return slf.finalize(opts);
         }
-        fn disasm(self: *anyopaque, opts: DisasmOpts) void {
-            const slf: *Type = @ptrCast(@alignCast(self));
+        fn disasm(self: *Machine, opts: DisasmOpts) void {
+            const slf: *Type = @alignCast(@fieldParentPtr("mach", self));
             return slf.disasm(opts);
         }
-        fn run(self: *anyopaque, env: RunEnv) !usize {
-            const slf: *Type = @ptrCast(@alignCast(self));
+        fn run(self: *Machine, env: RunEnv) !usize {
+            const slf: *Type = @alignCast(@fieldParentPtr("mach", self));
             return slf.run(env);
         }
-        fn deinit(self: *anyopaque) void {
-            const slf: *Type = @ptrCast(@alignCast(self));
+        fn deinit(self: *Machine) void {
+            const slf: *Type = @alignCast(@fieldParentPtr("mach", self));
             slf.deinit();
         }
     };
 
     return .{
-        .data = data,
+        .out = .{},
         .vtable = comptime &VTable{
             .emitFunc = fns.emitFunc,
             .emitData = fns.emitData,
@@ -1332,21 +1334,21 @@ pub fn init(data: anytype) Machine {
 /// generate apropriate final output for a function
 ///
 /// this also runs optimization passes
-pub fn emitFunc(self: Machine, func: *BuilderFunc, opts: EmitOptions) void {
-    self.vtable.emitFunc(self.data, func, opts);
+pub fn emitFunc(self: *Machine, func: *BuilderFunc, opts: EmitOptions) void {
+    self.vtable.emitFunc(self, func, opts);
 }
 
-pub fn emitData(self: Machine, opts: DataOptions) void {
-    self.vtable.emitData(self.data, opts);
+pub fn emitData(self: *Machine, opts: DataOptions) void {
+    self.vtable.emitData(self, opts);
 }
 
 /// package the final output (.eg object file)
 /// this function should also restart the state for next emmiting
-pub fn finalize(self: Machine, opts: FinalizeOptions) void {
-    return self.vtable.finalize(self.data, opts);
+pub fn finalize(self: *Machine, opts: FinalizeOptions) void {
+    return self.vtable.finalize(self, opts);
 }
 
-pub fn finalizeBytes(self: Machine, opts: FinalizeBytesOptions) std.ArrayList(u8) {
+pub fn finalizeBytes(self: *Machine, opts: FinalizeBytesOptions) std.ArrayList(u8) {
     var out = std.Io.Writer.Allocating.init(opts.gpa);
     self.finalize(.{
         .output = &out.writer,
@@ -1360,15 +1362,15 @@ pub fn finalizeBytes(self: Machine, opts: FinalizeBytesOptions) std.ArrayList(u8
 
 /// visualize already compiled code, its best to include different colors
 /// for registers for better readability
-pub fn disasm(self: Machine, opts: DisasmOpts) void {
-    self.vtable.disasm(self.data, opts);
+pub fn disasm(self: *Machine, opts: DisasmOpts) void {
+    self.vtable.disasm(self, opts);
 }
 
-pub fn run(self: Machine, env: RunEnv) !usize {
-    return self.vtable.run(self.data, env);
+pub fn run(self: *Machine, env: RunEnv) !usize {
+    return self.vtable.run(self, env);
 }
 
 /// frees the internal resources
-pub fn deinit(self: Machine) void {
-    self.vtable.deinit(self.data);
+pub fn deinit(self: *Machine) void {
+    self.vtable.deinit(self);
 }

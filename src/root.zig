@@ -183,7 +183,7 @@ pub const Queue = utils.SharedQueue(Task);
 pub const Threading = union(enum) {
     single: struct {
         types: *frontend.Types,
-        machine: backend.Machine,
+        machine: *backend.Machine,
     },
     multi: Multi,
 
@@ -191,7 +191,7 @@ pub const Threading = union(enum) {
         queue: Queue,
         types: []*frontend.Types,
         para: backend.Machine.Parallelism,
-        machine: backend.Machine,
+        machine: *backend.Machine,
 
         pub fn buildMapping(self: *Multi, scratch: *utils.Arena) backend.Machine.GlobalMapping {
             var global_table_size: usize = 0;
@@ -233,7 +233,7 @@ pub const Threading = union(enum) {
         }
     };
 
-    pub fn singleBackend(self: *Threading) backend.Machine {
+    pub fn singleBackend(self: *Threading) *backend.Machine {
         return switch (self.*) {
             .single => |s| s.machine,
             .multi => |m| m.machine,
@@ -318,7 +318,7 @@ pub const Threading = union(enum) {
         optimizations: backend.Machine.OptOptions.Mode,
     ) void {
         switch (self.*) {
-            .single => |s| {
+            .single => |*s| {
                 s.machine.finalize(.{
                     .optimizations = .{ .mode = optimizations },
                     .builtins = s.types.getBuiltins(),

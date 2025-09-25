@@ -672,7 +672,7 @@ pub const Global = struct {
 
         pub fn slice(self: @This(), ct: *Comptime) []const u8 {
             return switch (self) {
-                .@"comptime" => |s| ct.gen.out.code.items[s.base..][0..s.len],
+                .@"comptime" => |s| ct.gen.mach.out.code.items[s.base..][0..s.len],
                 .mut => |s| s,
                 .imm => |s| s,
             };
@@ -680,7 +680,7 @@ pub const Global = struct {
 
         pub fn mutSlice(self: @This(), ct: *Comptime) ?[]u8 {
             return switch (self) {
-                .@"comptime" => |s| ct.gen.out.code.items[s.base..][0..s.len],
+                .@"comptime" => |s| ct.gen.mach.out.code.items[s.base..][0..s.len],
                 .mut => |s| s,
                 .imm => null,
             };

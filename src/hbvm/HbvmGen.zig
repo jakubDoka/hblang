@@ -12,7 +12,7 @@ const utils = root.utils;
 const isa = @import("isa.zig");
 
 gpa: *utils.Pool,
-out: Mach.Data = .{},
+mach: Mach = .init(HbvmGen),
 emit_global_reloc_offsets: bool = false,
 push_uninit_globals: bool = false,
 align_globlals: bool = false,
@@ -304,11 +304,11 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     const name = opts.name;
     const entry = opts.linkage == .exported;
 
-    const sym = try self.out.startDefineFunc(self.gpa.allocator(), id, name, .func, opts.linkage, opts.is_inline);
+    const sym = try self.mach.out.startDefineFunc(self.gpa.allocator(), id, name, .func, opts.linkage, opts.is_inline);
     defer {
-        self.out.endDefineFunc(id);
+        self.mach.out.endDefineFunc(id);
         if (self.emit_global_reloc_offsets) {
-            self.out.makeRelocOffsetsGlobal(self.out.funcs.items[id]);
+            self.mach.out.makeRelocOffsetsGlobal(self.mach.out.funcs.items[id]);
         }
     }
 
@@ -381,7 +381,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     }
 
     for (func.gcm.postorder, 0..) |bb, i| {
-        self.block_offsets[bb.base.schedule] = @intCast(self.out.code.items.len);
+        self.block_offsets[bb.base.schedule] = @intCast(self.mach.out.code.items.len);
         std.debug.assert(bb.base.schedule == i);
         self.emitBlockBody(tmp.arena.allocator(), &bb.base);
         const last = bb.base.outputs()[bb.base.output_len - 1].get();
@@ -455,11 +455,11 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .Arg => {},
             .GlobalAddr => |extra| {
-                try self.out.addGlobalReloc(self.gpa.allocator(), extra.id, .@"4", 3, 0);
+                try self.mach.out.addGlobalReloc(self.gpa.allocator(), extra.id, .@"4", 3, 0);
                 self.emit(.lra, .{ self.getReg(no), .null, 0 });
             },
             .FuncAddr => |extra| {
-                try self.out.addFuncReloc(self.gpa.allocator(), extra.id, .@"4", 3, 0);
+                try self.mach.out.addFuncReloc(self.gpa.allocator(), extra.id, .@"4", 3, 0);
                 self.emit(.lra, .{ self.getReg(no), .null, 0 });
             },
             .LocalAlloc => {},
@@ -648,7 +648,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 } else if (extra.id == graph.indirect_call) {
                     self.emit(.jala, .{ .ret_addr, self.getReg(inps[0]), 0 });
                 } else {
-                    try self.out.addFuncReloc(self.gpa.allocator(), extra.id, .@"4", 3, 0);
+                    try self.mach.out.addFuncReloc(self.gpa.allocator(), extra.id, .@"4", 3, 0);
                     self.emit(.jal, .{ .ret_addr, .null, 0 });
                 }
             },
@@ -686,7 +686,7 @@ pub fn doReloc(self: *HbvmGen, rel: Reloc, dest: i64) void {
         else => unreachable,
     };
 
-    @memcpy(self.out.code.items[location..][0..size], @as(*const [8]u8, @ptrCast(&jump))[0..size]);
+    @memcpy(self.mach.out.code.items[location..][0..size], @as(*const [8]u8, @ptrCast(&jump))[0..size]);
 }
 
 const max_regs = @intFromEnum(isa.Reg.max);
@@ -701,23 +701,23 @@ fn emit(self: *HbvmGen, comptime op: isa.Op, args: isa.TupleOf(isa.ArgsOf(op))) 
 
 fn emitLow(self: *HbvmGen, comptime arg_str: []const u8, op: isa.Op, args: isa.TupleOf(isa.ArgsOfStr(arg_str))) void {
     if (!std.mem.eql(u8, isa.spec[@intFromEnum(op)][1], arg_str)) utils.panic("{} {s} {s}", .{ op, arg_str, isa.spec[@intFromEnum(op)][1] });
-    self.out.code.append(self.gpa.allocator(), @intFromEnum(op)) catch unreachable;
-    self.out.code.appendSlice(self.gpa.allocator(), std.mem.asBytes(&isa.packTo(isa.ArgsOfStr(arg_str), args))) catch unreachable;
+    self.mach.out.code.append(self.gpa.allocator(), @intFromEnum(op)) catch unreachable;
+    self.mach.out.code.appendSlice(self.gpa.allocator(), std.mem.asBytes(&isa.packTo(isa.ArgsOfStr(arg_str), args))) catch unreachable;
 }
 
 pub fn reloc(self: *HbvmGen, sub_offset: u8, arg: isa.Arg) Reloc {
-    return .{ .offset = @intCast(self.out.code.items.len), .sub_offset = sub_offset, .operand = arg };
+    return .{ .offset = @intCast(self.mach.out.code.items.len), .sub_offset = sub_offset, .operand = arg };
 }
 
 pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
     errdefer unreachable;
     if (self.align_globlals) {
-        const would_be_pos = (self.out.code.items.len + @intFromPtr(self.out.code.items.ptr)) + @sizeOf(u32);
+        const would_be_pos = (self.mach.out.code.items.len + @intFromPtr(self.mach.out.code.items.ptr)) + @sizeOf(u32);
         const padding = std.mem.alignForward(usize, would_be_pos, opts.alignment) - would_be_pos;
-        try self.out.code.appendNTimes(self.gpa.allocator(), 0, padding);
+        try self.mach.out.code.appendNTimes(self.gpa.allocator(), 0, padding);
     }
 
-    try self.out.defineGlobal(
+    try self.mach.out.defineGlobal(
         self.gpa.allocator(),
         opts.id,
         opts.name,
@@ -729,7 +729,7 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
     );
 
     if (self.emit_global_reloc_offsets) {
-        self.out.makeRelocOffsetsGlobal(self.out.globals.items[opts.id]);
+        self.mach.out.makeRelocOffsetsGlobal(self.mach.out.globals.items[opts.id]);
     }
 }
 
@@ -737,16 +737,16 @@ pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {
     errdefer unreachable;
 
     defer {
-        self.out.reset();
+        self.mach.out.reset();
     }
 
     if (opts.optimizations.finalize(opts.builtins, HbvmGen, self, opts.logs, opts.parallelism)) return;
 
-    try root.hbvm.object.flush(self.out, opts.output orelse return);
+    try root.hbvm.object.flush(self.mach.out, opts.output orelse return);
 }
 
 pub fn deinit(self: *HbvmGen) void {
-    self.out.deinit(self.gpa.allocator());
+    self.mach.out.deinit(self.gpa.allocator());
     self.* = undefined;
 }
 

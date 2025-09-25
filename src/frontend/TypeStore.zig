@@ -931,8 +931,8 @@ pub fn retainClonedGlobals(self: *Types, pop_until: usize) void {
         if (glob.relocs.len == 0) continue;
         const final_data = self.pool.arena.dupe(u8, glob.data.slice(&self.ct));
         for (glob.relocs) |reloc| {
-            const sym = self.ct.gen.out.globals.items[reloc.target];
-            const offset: u64 = self.ct.gen.out.syms.items[@intFromEnum(sym)].offset;
+            const sym = self.ct.gen.mach.out.globals.items[reloc.target];
+            const offset: u64 = self.ct.gen.mach.out.syms.items[@intFromEnum(sym)].offset;
 
             @memcpy(final_data[reloc.offset..][0..8], @as(*const [8]u8, @ptrCast(&offset))[0..8]);
         }
@@ -940,10 +940,10 @@ pub fn retainClonedGlobals(self: *Types, pop_until: usize) void {
     }
 }
 
-pub fn retainGlobals(self: *Types, target: Target, backend: anytype, handle_errors: bool) bool {
+pub fn retainGlobals(self: *Types, target: Target, backend: *Machine, handle_errors: bool) bool {
     errdefer unreachable;
 
-    const emit_names = @TypeOf(backend) == root.backend.Machine;
+    const emit_names = target == .runtime;
     var errored = false;
 
     const work_list = self.global_work_list.getPtr(target);
@@ -996,7 +996,7 @@ pub fn retainGlobals(self: *Types, target: Target, backend: anytype, handle_erro
             .readonly = glob.readonly,
         });
 
-        if (@TypeOf(backend) == *HbvmGen) {
+        if (target == .@"comptime") {
             const len = glob.data.slice(&self.ct).len;
             glob.data = .{ .@"comptime" = .{
                 .base = backend.out.syms.items[@intFromEnum(backend.out.globals.items[@intFromEnum(global)])].offset,
@@ -1289,7 +1289,7 @@ pub fn findSymForPtr(
     self: *Types,
     ptr: usize,
 ) !u32 {
-    const data = &self.ct.gen.out;
+    const data = &self.ct.gen.mach.out;
 
     if (ptr < Comptime.stack_size)
         return error.@"to comptime stack";
@@ -1541,14 +1541,14 @@ pub fn Slice(comptime Elem: type) type {
             types.store.get(global).ty = types.makeArray(slce.len, types.convertZigTypeToHbType(Elem));
             types.queue(.@"comptime", .init(.{ .Global = global }));
 
-            std.debug.assert(!types.retainGlobals(.@"comptime", &ct.gen, true));
+            std.debug.assert(!types.retainGlobals(.@"comptime", &ct.gen.mach, true));
 
-            const off = ct.gen.out.syms.items[@intFromEnum(ct.gen.out.globals.items[@intFromEnum(global)])].offset;
+            const off = ct.gen.mach.out.syms.items[@intFromEnum(ct.gen.mach.out.globals.items[@intFromEnum(global)])].offset;
             return .{ .elem_ptr = off, .len = slce.len };
         }
 
         pub fn slice(slf: @This(), ct: *Comptime) []Elem {
-            return @as([*]Elem, @ptrCast(@alignCast(&ct.gen.out.code.items[@intCast(slf.elem_ptr)])))[0..@intCast(slf.len)];
+            return @as([*]Elem, @ptrCast(@alignCast(&ct.gen.mach.out.code.items[@intCast(slf.elem_ptr)])))[0..@intCast(slf.len)];
         }
     };
 }

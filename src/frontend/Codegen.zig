@@ -235,7 +235,7 @@ pub fn emitReachableSingle(
     scrath: ?*utils.Arena,
     types: *Types,
     queue: ?*root.Queue,
-    backend: root.backend.Machine,
+    backend: *root.backend.Machine,
     opts: EmitOpts,
 ) bool {
     errdefer unreachable;
@@ -320,7 +320,7 @@ pub fn emitReachableChildThread(
     types: *Types,
     scratch_cap: usize,
     queue: root.Queue,
-    backend: root.backend.Machine,
+    backend: *root.backend.Machine,
     opts: EmitOpts,
     errored_out: *std.atomic.Value(bool),
 ) void {
@@ -351,7 +351,7 @@ pub fn emitReachableMultiThread(
     for (threading.types, threading.para.shards, 0..) |ty, *sh, i| {
         var queue = threading.queue;
         queue.self_id = i;
-        const shard = root.backend.Machine.init(sh);
+        const shard = &sh.mach;
         threading.para.pool.spawnWg(
             &wait_group,
             emitReachableChildThread,

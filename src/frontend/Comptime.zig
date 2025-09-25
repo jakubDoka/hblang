@@ -92,9 +92,9 @@ pub const InteruptCode = enum(u64) {
 
 pub fn init(gpa: *utils.Pool) Comptime {
     var self = Comptime{ .gen = .{ .gpa = gpa } };
-    self.gen.out.code.resize(gpa.allocator(), stack_size) catch unreachable;
-    self.gen.out.code.items[self.gen.out.code.items.len - 1] = @intFromEnum(isa.Op.tx);
-    self.gen.out.code.items[self.gen.out.code.items.len - 2] = @intFromEnum(isa.Op.eca);
+    self.gen.mach.out.code.resize(gpa.allocator(), stack_size) catch unreachable;
+    self.gen.mach.out.code.items[self.gen.mach.out.code.items.len - 1] = @intFromEnum(isa.Op.tx);
+    self.gen.mach.out.code.items[self.gen.mach.out.code.items.len - 2] = @intFromEnum(isa.Op.eca);
     self.vm.regs.set(.stack_addr, stack_size - 8);
     return self;
 }
@@ -289,7 +289,7 @@ pub fn collectMemOps(self: *Comptime, ctx: PartialEvalCtx, expr: *Node, scratch:
         var seen_if_branch: ?*Node = null;
 
         var cursor = op.cfg0();
-        while (cursor != lca) {
+        while (cursor != lca) : (cursor = cursor.idom()) {
             if (cursor.base.kind == .Else or cursor.base.kind == .Then) {
                 seen_if_branch = cursor.base.inputs()[0].?
                     .outputs()[@intFromBool(cursor.base.kind == .Then)].get();
@@ -298,15 +298,13 @@ pub fn collectMemOps(self: *Comptime, ctx: PartialEvalCtx, expr: *Node, scratch:
                 const to_find = seen_if_branch orelse
                     return ctx.err(.{ .DependsOnRuntimeControlFlow = op });
                 var back_cursor = cursor.base.inputs()[1].?.asCfg().?;
-                while (back_cursor != cursor) {
+                while (back_cursor != cursor) : (back_cursor = back_cursor.idom()) {
                     if (&back_cursor.base == to_find) {
                         seen_if_branch = null;
                         break;
                     }
-                    back_cursor = back_cursor.idom();
                 }
             }
-            cursor = cursor.idom();
         }
 
         if (seen_if_branch != null) {
@@ -456,7 +454,7 @@ pub fn partialEvalCall(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, curr:
         }
         if (types.store.get(func_id).errored) return ctx.err(.{ .Unsupported = .{ curr, "errored" } });
         std.debug.assert(types.store.get(func_id).completion.get(.@"comptime") == .compiled);
-        std.debug.assert(self.gen.out.funcs.items.len > call.extra(.Call).id);
+        std.debug.assert(self.gen.mach.out.funcs.items.len > call.extra(.Call).id);
     }
 
     var tmp = utils.Arena.scrath(null);
@@ -517,11 +515,11 @@ pub fn partialEvalGlobal(self: *Comptime, ctx: PartialEvalCtx, curr: *Node, glob
 
     gid.get(types).completion.set(.@"comptime", .queued);
     types.queue(.@"comptime", .init(.{ .Global = gid }));
-    if (types.retainGlobals(.@"comptime", &self.gen, false)) {
+    if (types.retainGlobals(.@"comptime", &self.gen.mach, false)) {
         return ctx.err(.{ .Unsupported = .{ curr, "retained globals" } });
     }
 
-    return self.gen.out.syms.items[@intFromEnum(self.gen.out.globals.items[global])].offset;
+    return self.gen.mach.out.syms.items[@intFromEnum(self.gen.mach.out.globals.items[global])].offset;
 }
 
 pub fn runVm(
@@ -538,8 +536,8 @@ pub fn runVm(
     self.vm.ip = if (entry_id == eca)
         stack_size - 2
     else
-        self.gen.out.syms.items[@intFromEnum(self.gen.out.funcs.items[entry_id])].offset;
-    std.debug.assert(self.vm.ip < self.gen.out.code.items.len);
+        self.gen.mach.out.syms.items[@intFromEnum(self.gen.mach.out.funcs.items[entry_id])].offset;
+    std.debug.assert(self.vm.ip < self.gen.mach.out.code.items.len);
 
     self.vm.fuel = 1024 * 128;
     self.vm.regs.set(.ret_addr, stack_size - 1); // return to hardcoded tx
@@ -557,7 +555,7 @@ pub fn runVm(
     var vm_ctx = Vm.SafeContext{
         .writer = if (false) std.fs.File.stderr().writer().any() else null,
         .color_cfg = .escape_codes,
-        .memory = self.gen.out.code.items,
+        .memory = self.gen.mach.out.code.items,
         .code_start = 0,
         .code_end = 0,
     };
@@ -808,10 +806,10 @@ pub fn runVm(
                         unreachable; // TODO: the enum value is corrupted
                     }
 
-                    const ret_addr = self.gen.out.code.items.len;
+                    const ret_addr = self.gen.mach.out.code.items.len;
 
-                    self.gen.out.code.appendSlice(self.getGpa(), fields[@intCast(value)].name) catch unreachable;
-                    vm_ctx.memory = self.gen.out.code.items;
+                    self.gen.mach.out.code.appendSlice(self.getGpa(), fields[@intCast(value)].name) catch unreachable;
+                    vm_ctx.memory = self.gen.mach.out.code.items;
 
                     self.vm.regs.set(.ret(0), ret_addr);
                     self.vm.regs.set(.ret(1), fields[@intCast(value)].name.len);
@@ -966,7 +964,7 @@ pub fn runVm(
         else => unreachable,
     };
 
-    @memcpy(return_loc, self.gen.out.code.items[@intCast(stack_end - return_loc.len)..@intCast(stack_end)]);
+    @memcpy(return_loc, self.gen.mach.out.code.items[@intCast(stack_end - return_loc.len)..@intCast(stack_end)]);
     self.vm.regs.set(.stack_addr, stack_end);
 }
 
@@ -981,7 +979,7 @@ pub fn jitFunc(self: *Comptime, fnc: utils.EntId(tys.Func)) !void {
     try compileDependencies(
         gen,
         self.getTypes().func_work_list.get(gen.target).items.len - 1,
-        self.getTypes().ct.gen.out.relocs.items.len,
+        self.getTypes().ct.gen.mach.out.relocs.items.len,
     );
 }
 
@@ -1061,7 +1059,7 @@ pub fn jitExprLow(
     gen.only_inference = only_inference;
 
     const pop_until = types.func_work_list.get(.@"comptime").items.len;
-    const new_syms_pop_until = self.getTypes().ct.gen.out.relocs.items.len;
+    const new_syms_pop_until = self.getTypes().ct.gen.mach.out.relocs.items.len;
 
     var ret: Codegen.Value = undefined;
     {
@@ -1091,13 +1089,13 @@ pub fn jitExprLow(
             return .{ .{ .constant = ret.id.Value.extra(.CInt).value }, ret.ty };
         }
 
-        if (types.retainGlobals(.@"comptime", &self.gen, true)) return error.Never;
+        if (types.retainGlobals(.@"comptime", &self.gen.mach, true)) return error.Never;
 
         if (ret.id == .Pointer and gen.abiCata(ret.ty) == .ByValue and
             ret.id.Pointer.kind == .GlobalAddr)
         {
             types.func_work_list.getPtr(.@"comptime").items.len = pop_until;
-            const cnst = self.gen.out.readFromSym(
+            const cnst = self.gen.mach.out.readFromSym(
                 ret.id.Pointer.extra(.GlobalAddr).id,
                 0,
                 @intCast(ret.ty.size(self.getTypes())),
@@ -1114,7 +1112,7 @@ pub fn jitExprLow(
         gen.bl.end(token);
 
         if (!only_inference) {
-            gen.errored = self.getTypes().retainGlobals(.@"comptime", &self.gen, true) or
+            gen.errored = self.getTypes().retainGlobals(.@"comptime", &self.gen.mach, true) or
                 gen.errored;
 
             const reg_alloc_results = optimizeComptime(.debug, HbvmGen, &self.gen, @ptrCast(&gen.bl.func));
@@ -1153,7 +1151,7 @@ pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until:
 
         try self.build(func);
 
-        self.errored = self.types.retainGlobals(self.target, &self.types.ct.gen, true) or
+        self.errored = self.types.retainGlobals(self.target, &self.types.ct.gen.mach, true) or
             self.errored;
 
         const reg_alloc_results = optimizeComptime(.debug, HbvmGen, &self.types.ct.gen, @ptrCast(&self.bl.func));
@@ -1172,7 +1170,7 @@ pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until:
         emit_func_met.end();
     }
 
-    root.hbvm.object.jitLink(self.types.ct.gen.out, new_syms_pop_until);
+    root.hbvm.object.jitLink(self.types.ct.gen.mach.out, new_syms_pop_until);
 }
 
 pub fn evalTy(self: *Comptime, name: []const u8, scope: Codegen.Scope, ty_expr: Ast.Id) !Types.Id {
