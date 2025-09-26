@@ -48,6 +48,7 @@ stats: struct {
     skipped_global_jit_exprs: u64 = 0,
     skipped_constant_jit_exprs: u64 = 0,
     skipped_buty_jit_exprs: u64 = 0,
+    unique_globals: u64 = 0,
 } = .{},
 metrics: Metrics,
 
@@ -1314,11 +1315,11 @@ pub fn queue(self: *Types, target: Target, task: Id) void {
     switch (task.data()) {
         .Func => |func| {
             if (func.get(self).completion.get(target) == .compiled) return;
-            try self.func_work_list.getPtr(target).append(self.pool.allocator(), func);
+            try self.func_work_list.getPtr(target).append(self.ct.getGpa(), func);
         },
         .Global => |global| {
             if (global.get(self).completion.get(target) == .compiled) return;
-            try self.global_work_list.getPtr(target).append(self.pool.allocator(), global);
+            try self.global_work_list.getPtr(target).append(self.ct.getGpa(), global);
         },
         else => unreachable,
     }
@@ -1377,7 +1378,7 @@ pub fn retryNextTask(self: *Types, target: Target, pop_limit: usize, q: ?*root.Q
     }
 }
 
-pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer) *Types {
+pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer, gpa: std.mem.Allocator) *Types {
     var arena = arena_;
     const scopes = arena.alloc(Id, source.len);
     @memset(scopes, .void);
@@ -1389,7 +1390,7 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer) *T
         .files = source,
         .file_scopes = scopes,
         .pool = .{ .arena = arena },
-        .ct = .init(&slot.pool),
+        .ct = .init(gpa),
         .diagnostics = diagnostics,
         .metrics = .init(),
     };
@@ -1704,9 +1705,17 @@ pub fn checkStack(self: *Types, file: File, pos: anytype) !void {
 }
 
 pub fn deinit(self: *Types) void {
+    if (!std.debug.runtime_safety) return;
+
+    for (&self.global_work_list.values) |*list| list.deinit(self.ct.getGpa());
+    for (&self.func_work_list.values) |*list| list.deinit(self.ct.getGpa());
+    self.interner.deinit(self.ct.getGpa());
+    self.string_globals.deinit(self.ct.getGpa());
+    self.remote_ids.deinit(self.ct.getGpa());
+
+    self.ct.deinit();
+
     var arena = self.pool.arena;
-    self.ct.in_progress.deinit(self.ct.gen.gpa.allocator());
-    self.ct.gen.deinit();
     self.* = undefined;
     arena.deinit();
 }
@@ -1746,7 +1755,7 @@ pub fn getScope(self: *Types, file: File) Id {
 pub fn internPtr(self: *Types, comptime tag: std.meta.Tag(Data), payload: std.meta.TagPayload(Data, tag).Data) Id {
     const vl = self.store.add(&self.pool.arena, payload);
     const id = Id.init(@unionInit(Data, @tagName(tag), vl));
-    const slot = self.interner.getOrPutContext(self.pool.allocator(), id, .{ .types = self }) catch unreachable;
+    const slot = self.interner.getOrPutContext(self.ct.getGpa(), id, .{ .types = self }) catch unreachable;
     if (slot.found_existing) {
         self.store.pop(vl);
         return slot.key_ptr.*;
@@ -1788,7 +1797,7 @@ pub fn intern(self: *Types, comptime kind: std.meta.Tag(Data), key: Scope) struc
     mem.key = key;
     const ty = self.store.add(&self.pool.arena, mem);
     const id = Id.init(@unionInit(Data, @tagName(kind), ty));
-    const slot = self.interner.getOrPutContext(self.pool.allocator(), id, .{ .types = self }) catch unreachable;
+    const slot = self.interner.getOrPutContext(self.ct.getGpa(), id, .{ .types = self }) catch unreachable;
     if (slot.found_existing) {
         std.debug.assert(slot.key_ptr.data() == kind);
         self.store.pop(ty);
@@ -1866,7 +1875,7 @@ pub fn addStringGlobal(self: *Types, data: []const u8) utils.EntId(tys.Global) {
         .readonly = true,
     });
 
-    const entry = self.string_globals.getOrPutContext(self.pool.allocator(), glob, .{ .types = self }) catch unreachable;
+    const entry = self.string_globals.getOrPutContext(self.ct.getGpa(), glob, .{ .types = self }) catch unreachable;
     if (!entry.found_existing) {
         glob.get(self).data = .{ .imm = data };
     } else {
@@ -1877,6 +1886,8 @@ pub fn addStringGlobal(self: *Types, data: []const u8) utils.EntId(tys.Global) {
 }
 
 pub fn addUniqueGlobal(self: *Types, scope: Id) utils.EntId(tys.Global) {
+    self.stats.unique_globals += 1;
+
     const glob = self.store.add(&self.pool.arena, tys.Global{
         .key = .{
             .loc = .{

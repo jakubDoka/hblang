@@ -38,12 +38,11 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
     const colors = std.io.tty.detectConfig(stderr);
 
     const failed_fmt = test_util.testFmt(name, name, code, &stderr_writer.interface, colors);
-    var pool = utils.Pool{ .arena = utils.Arena.init(1024 * 1024 * 16) };
     {
-        var hbvm = root.hbvm.HbvmGen{ .gpa = &pool };
-        var hbvm2 = root.hbvm.HbvmGen{ .gpa = &pool };
-        var x86_64 = root.x86_64.X86_64Gen{ .gpa = &pool, .object_format = .elf };
-        var x86_642 = root.x86_64.X86_64Gen{ .gpa = &pool, .object_format = .elf };
+        var hbvm = root.hbvm.HbvmGen{ .gpa = gpa };
+        var hbvm_no_opt = root.hbvm.HbvmGen{ .gpa = gpa };
+        var x86_64 = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
+        var x86_64_no_opt = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
 
         const tests = [_]struct {
             []const u8,
@@ -52,9 +51,9 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
             root.frontend.Types.Abi,
         }{
             .{ "hbvm-ableos", &hbvm.mach, .release, .ableos },
-            .{ "hbvm-ableos-no-opts", &hbvm2.mach, .debug, .ableos },
+            .{ "hbvm-ableos-no-opts", &hbvm_no_opt.mach, .debug, .ableos },
             .{ "x86_64-linux", &x86_64.mach, .release, .systemv },
-            .{ "x86_64-linux-no-opts", &x86_642.mach, .debug, .systemv },
+            .{ "x86_64-linux-no-opts", &x86_64_no_opt.mach, .debug, .systemv },
         };
 
         for (tests) |tst| {

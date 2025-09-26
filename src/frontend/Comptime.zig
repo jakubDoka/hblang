@@ -90,21 +90,27 @@ pub const InteruptCode = enum(u64) {
     type_info,
 };
 
-pub fn init(gpa: *utils.Pool) Comptime {
+pub fn init(gpa: std.mem.Allocator) Comptime {
     var self = Comptime{ .gen = .{ .gpa = gpa } };
-    self.gen.mach.out.code.resize(gpa.allocator(), stack_size) catch unreachable;
+    self.gen.mach.out.code.resize(gpa, stack_size) catch unreachable;
     self.gen.mach.out.code.items[self.gen.mach.out.code.items.len - 1] = @intFromEnum(isa.Op.tx);
     self.gen.mach.out.code.items[self.gen.mach.out.code.items.len - 2] = @intFromEnum(isa.Op.eca);
     self.vm.regs.set(.stack_addr, stack_size - 8);
     return self;
 }
 
+pub fn deinit(self: *Comptime) void {
+    self.in_progress.deinit(self.getGpa());
+    self.type_instances.deinit(self.getGpa());
+    self.gen.deinit();
+}
+
 pub fn getTypes(self: *Comptime) *Types {
     return @alignCast(@fieldParentPtr("ct", self));
 }
 
-inline fn getGpa(self: *Comptime) std.mem.Allocator {
-    return self.gen.gpa.allocator();
+pub inline fn getGpa(self: *Comptime) std.mem.Allocator {
+    return self.gen.gpa;
 }
 
 pub inline fn ecaArg(self: *Comptime, idx: usize) u64 {
@@ -636,7 +642,7 @@ pub fn runVm(
 
                             const id: tys.Struct.Id = types.store.add(&types.pool.arena, stru);
                             const entry = self.type_instances.getOrPutContext(
-                                types.pool.allocator(),
+                                self.getGpa(),
                                 .init(.{ .Struct = id }),
                                 .{ .types = types },
                             ) catch unreachable;
@@ -676,7 +682,7 @@ pub fn runVm(
 
                             const id: tys.Union.Id = types.store.add(&types.pool.arena, stru);
                             const entry = self.type_instances.getOrPutContext(
-                                types.pool.allocator(),
+                                self.getGpa(),
                                 .init(.{ .Union = id }),
                                 .{ .types = types },
                             ) catch unreachable;
@@ -716,7 +722,7 @@ pub fn runVm(
 
                             const id: tys.Enum.Id = types.store.add(&types.pool.arena, stru);
                             const entry = self.type_instances.getOrPutContext(
-                                types.pool.allocator(),
+                                self.getGpa(),
                                 .init(.{ .Enum = id }),
                                 .{ .types = types },
                             ) catch unreachable;
@@ -1228,7 +1234,7 @@ pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(tys.Glo
     }
 
     const res, const fty = try self.jitExpr(name, .{ .Perm = self.getTypes().store.get(global).key.loc.scope }, .{ .ty = ty }, value);
-    const data = types.pool.arena.allocator().alloc(u8, @intCast(fty.size(types))) catch unreachable;
+    const data = types.pool.arena.alloc(u8, @intCast(fty.size(types)));
     switch (res) {
         .func => |id| {
             try self.runVm(file, types.posOf(file, value).index, @intFromEnum(id), data);

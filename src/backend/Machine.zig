@@ -213,7 +213,7 @@ pub const Data = struct {
 
         self.syms.items[@intFromEnum(self.funcs.items[to])].inline_func = @intCast(self.inline_funcs.items.len);
         try self.inline_funcs.append(gpa, @as(*InlineFunc, @ptrCast(func)).*);
-        func.arena = .init(gpa);
+        func.arena = .init(func.arena.child_allocator);
     }
 
     pub fn getInlineFunc(self: *Data, comptime Backend: type, at: u32, force_inline: bool) ?*graph.Func(Backend) {
@@ -854,7 +854,7 @@ pub const OptOptions = struct {
     ) bool {
         switch (self.mode) {
             .release => {
-                backend.mach.out.setInlineFunc(backend.gpa.allocator(), B, func, id);
+                backend.mach.out.setInlineFunc(backend.gpa, B, func, id);
                 return true;
             },
             .debug => {
@@ -866,32 +866,22 @@ pub const OptOptions = struct {
 
     pub fn idealizeDead(comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) void {
         const Func = graph.Func(Backend);
-        const Node = Func.Node;
 
         std.debug.assert(!func.start.isDead());
 
-        func.iterPeeps(ctx, struct {
-            fn wrap(cx: @TypeOf(ctx), fnc: *Func, nd: *Node, wl: *Func.WorkList) ?*Node {
-                return @TypeOf(func.*).idealizeDead(cx, fnc, nd, wl);
-            }
-        }.wrap);
+        func.iterPeeps(ctx, Func.idealizeDead);
         std.debug.assert(!func.start.isDead());
     }
 
     pub fn idealizeGeneric(comptime Backend: type, ctx: anytype, func: *graph.Func(Backend), minimal_only: bool) void {
         const Func = graph.Func(Backend);
-        const Node = Func.Node;
 
         std.debug.assert(!func.start.isDead());
 
         if (minimal_only) {
             func.iterPeeps(ctx, Backend.idealize);
         } else {
-            func.iterPeeps(ctx, struct {
-                fn wrap(cx: @TypeOf(ctx), fnc: *Func, nd: *Node, wl: *Func.WorkList) ?*Node {
-                    return @TypeOf(func.*).idealize(cx, fnc, nd, wl);
-                }
-            }.wrap);
+            func.iterPeeps(ctx, Func.idealize);
         }
     }
 
@@ -1060,7 +1050,9 @@ pub const OptOptions = struct {
                 total_waste += sym.waste;
             }
 
-            for (bout.syms.items, sym_to_idx) |sym, i| {
+            for (sym_to_idx, 0..) |i, syn_idx| {
+                const sym = &bout.syms.items[syn_idx];
+
                 switch (sym.kind) {
                     .func => {
                         if (sym.linkage == .imported) continue;
@@ -1252,25 +1244,25 @@ pub const SupportedTarget = enum {
         return null;
     }
 
-    pub fn toMachine(triple: SupportedTarget, pool: *utils.Pool) *Machine {
+    pub fn toMachine(triple: SupportedTarget, scratch: *utils.Arena, gpa: std.mem.Allocator) *Machine {
         switch (triple) {
             .@"hbvm-ableos" => {
-                const slot = pool.arena.create(root.hbvm.HbvmGen);
-                slot.* = root.hbvm.HbvmGen{ .gpa = pool };
+                const slot = scratch.create(root.hbvm.HbvmGen);
+                slot.* = root.hbvm.HbvmGen{ .gpa = gpa };
                 return &slot.mach;
             },
             .@"x86_64-windows" => {
-                const slot = pool.arena.create(root.x86_64.X86_64Gen);
-                slot.* = root.x86_64.X86_64Gen{ .gpa = pool, .object_format = .coff };
+                const slot = scratch.create(root.x86_64.X86_64Gen);
+                slot.* = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .coff };
                 return &slot.mach;
             },
             .@"x86_64-linux" => {
-                const slot = pool.arena.create(root.x86_64.X86_64Gen);
-                slot.* = root.x86_64.X86_64Gen{ .gpa = pool, .object_format = .elf };
+                const slot = scratch.create(root.x86_64.X86_64Gen);
+                slot.* = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
                 return &slot.mach;
             },
             .null => {
-                const slot = pool.arena.create(Null);
+                const slot = scratch.create(Null);
                 slot.* = Null{};
                 return &slot.mach;
             },

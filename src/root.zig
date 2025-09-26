@@ -56,6 +56,7 @@ pub const CompileOptions = struct {
     colors: std.io.tty.Config = .no_color,
     output: ?*std.Io.Writer = null,
     raw_binary: bool = false,
+    gpa: std.mem.Allocator = std.heap.smp_allocator,
 
     // #CLI start
     // #ARGS (main.hb)
@@ -107,7 +108,7 @@ pub const CompileOptions = struct {
 
             arg = arg[2..];
 
-            inline for (std.meta.fields(CompileOptions)[5..]) |f| flag: {
+            inline for (std.meta.fields(CompileOptions)[6..]) |f| flag: {
                 const name = comptime b: {
                     var mem = f.name[0..f.name.len].*;
                     for (&mem) |*c| if (c.* == '_') {
@@ -168,7 +169,7 @@ pub const Task = struct {
         const id, const new = dest.cloneFrom(self.from, .init(.{ .Func = self.id }));
         if (!new) return null;
 
-        dest.remote_ids.append(dest.pool.allocator(), .{
+        dest.remote_ids.append(dest.ct.getGpa(), .{
             .remote = self.id,
             .from_thread = self.thread,
             .local = id.data().Func,
@@ -441,6 +442,7 @@ pub fn compile(opts: CompileOptions) anyerror!void {
                     type_system_memory,
                     asts,
                     opts.diagnostics,
+                    opts.gpa,
                 );
                 types.target = opts.target;
                 types.colors = opts.error_colors;
@@ -448,7 +450,10 @@ pub fn compile(opts: CompileOptions) anyerror!void {
             },
             .machine = undefined,
         } };
-        threading.single.machine = target.toMachine(&threading.single.types.pool);
+        threading.single.machine = target.toMachine(
+            &threading.single.types.pool.arena,
+            std.heap.smp_allocator,
+        );
     } else {
         const thread_count = opts.extra_threads + 1;
 
@@ -471,7 +476,7 @@ pub fn compile(opts: CompileOptions) anyerror!void {
         const chunk_size = (opts.type_system_memory - type_system_memory.consumed()) / thread_count;
         for (types) |*t| {
             // TODO: diagnostics need to be agregated somehow in a sync manner
-            t.* = hb.frontend.Types.init(type_system_memory.subslice(chunk_size), asts, opts.diagnostics);
+            t.* = hb.frontend.Types.init(type_system_memory.subslice(chunk_size), asts, opts.diagnostics, opts.gpa);
             t.*.target = opts.target;
             t.*.colors = opts.error_colors;
         }

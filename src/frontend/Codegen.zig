@@ -78,8 +78,8 @@ pub const Value = struct {
         Pointer: *Node,
     };
 
-    inline fn mkv(ty: Types.Id, oid: ?*Node) Value {
-        return .{ .ty = ty, .id = if (oid) |id| .{ .Value = id } else .Imaginary };
+    inline fn mkv(ty: Types.Id, id: *Node) Value {
+        return .{ .ty = ty, .id = .{ .Value = id } };
     }
 
     inline fn mkp(ty: Types.Id, id: *Node) Value {
@@ -1549,7 +1549,7 @@ pub fn emitField(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Field)) EmitErr
             }
 
             return switch (base.id) {
-                .Imaginary => .mkv(ftype, null),
+                .Imaginary => .{ .ty = ftype },
                 .Value => |v| .mkv(ftype, v),
                 .Pointer => |p| .mkp(ftype, self.bl.addFieldOffset(sloc, p, @intCast(offset))),
             };
@@ -1702,7 +1702,7 @@ pub fn emitIndex(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Index)) EmitE
                 for (0..@as(usize, @intCast(idx)) + 1) |_| elem = iter.next().?;
 
                 return switch (base.id) {
-                    .Imaginary => .mkv(elem.field.ty, null),
+                    .Imaginary => .{ .ty = elem.field.ty },
                     .Value => |v| .mkv(elem.field.ty, v),
                     .Pointer => |p| .mkp(
                         elem.field.ty,
@@ -3118,7 +3118,7 @@ pub fn lookupScopeItem(
 
         for (fields) |f| {
             if (std.mem.eql(u8, f.name, name))
-                if (self.abiCata(bsty) == .Imaginary) return .mkv(bsty, null) else {
+                if (self.abiCata(bsty) == .Imaginary) return .{ .ty = bsty } else {
                     return .mkv(bsty, self.bl.addIntImm(
                         sloc,
                         self.abiCata(bsty).ByValue,
@@ -3671,7 +3671,7 @@ fn assembleReturn(
     const rets = self.bl.addCall(sloc, cc, id orelse graph.indirect_call, call_args);
     return switch (ret_abi) {
         .Impossible => return error.Unreachable,
-        .Imaginary => .mkv(ret, null),
+        .Imaginary => .{ .ty = ret },
         .ByValue => .mkp(ret, self.bl.addSpill(sloc, rets.?[0], @intFromEnum(ret))),
         .ByValuePair => |pair| if (self.abi.isByRefRet(ret_abi)) b: {
             break :b .mkp(ret, call_args.arg_slots[0]);

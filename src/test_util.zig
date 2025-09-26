@@ -193,7 +193,7 @@ pub fn testBuilder(
     var func_arena = utils.Arena.scrath(null);
     defer func_arena.deinit();
 
-    const types = Types.init(type_system_arena, asts, output);
+    const types = Types.init(type_system_arena, asts, output, gpa);
     types.target = target;
     defer types.deinit();
 

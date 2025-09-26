@@ -1071,6 +1071,10 @@ pub fn Func(comptime Backend: type) type {
 
             edata: void = {},
 
+            comptime {
+                std.debug.assert(@sizeOf(Node) == 40);
+            }
+
             pub const OutInner = if (@sizeOf(*Node) == 8) packed struct(u64) {
                 node: u48,
                 pos: u16,
@@ -1323,7 +1327,7 @@ pub fn Func(comptime Backend: type) type {
                 return true;
             }
 
-            fn logExtra(writ: anytype, ex: anytype, comptime fir: bool) !void {
+            fn logExtra(writ: *std.Io.Writer, ex: anytype, comptime fir: bool) !void {
                 switch (@typeInfo(@TypeOf(ex.*))) {
                     .@"struct" => |s| {
                         comptime var fields = std.mem.reverseIterator(s.fields);
@@ -1367,7 +1371,7 @@ pub fn Func(comptime Backend: type) type {
             pub fn fmt(
                 self: *const Node,
                 scheduled: ?u16,
-                writer: anytype,
+                writer: *std.Io.Writer,
                 colors: std.io.tty.Config,
             ) void {
                 logNid(writer, self.id, colors);
@@ -1702,7 +1706,7 @@ pub fn Func(comptime Backend: type) type {
             inputs: []const ?*Node,
             extra: []const u64,
 
-            pub fn hash(_: anytype, k: InternedNode) u64 {
+            pub fn hash(_: @This(), k: InternedNode) u64 {
                 return k.hash;
             }
 
@@ -1816,11 +1820,11 @@ pub fn Func(comptime Backend: type) type {
         }
 
         const Uninserter = struct {
-            pub fn hash(_: anytype, k: InternedNode) u64 {
+            pub fn hash(_: @This(), k: InternedNode) u64 {
                 return k.hash;
             }
 
-            pub fn eql(_: anytype, a: InternedNode, b: InternedNode) bool {
+            pub fn eql(_: @This(), a: InternedNode, b: InternedNode) bool {
                 return a.node == b.node;
             }
         };
@@ -2247,8 +2251,8 @@ pub fn Func(comptime Backend: type) type {
 
         pub fn iterPeeps(
             self: *Self,
-            ctx: anytype,
-            strategy: fn (@TypeOf(ctx), *Self, *Node, *WorkList) ?*Node,
+            ctx: *Backend,
+            strategy: fn (*Backend, *Self, *Node, *WorkList) ?*Node,
         ) void {
             self.gcm.cfg_built.assertUnlocked();
 
@@ -2325,7 +2329,7 @@ pub fn Func(comptime Backend: type) type {
             self.signature = self.signature.dupe(self.arena.allocator());
         }
 
-        pub fn idealizeDead(_: anytype, self: *Self, node: *Node, worklist: *WorkList) ?*Node {
+        pub fn idealizeDead(_: *Backend, self: *Self, node: *Node, worklist: *WorkList) ?*Node {
             const inps = node.inputs();
 
             var is_dead = node.kind == .Region and isDead(inps[0]) and isDead(inps[1]);
@@ -2496,7 +2500,7 @@ pub fn Func(comptime Backend: type) type {
             return null;
         }
 
-        pub fn idealize(ctx: anytype, self: *Self, node: *Node, work: *WorkList) ?*Node {
+        pub fn idealize(ctx: *Backend, self: *Self, node: *Node, work: *WorkList) ?*Node {
             errdefer unreachable;
 
             if (node.data_type == .bot) return null;
@@ -2656,7 +2660,7 @@ pub fn Func(comptime Backend: type) type {
             return fn (C, *Self, *Node, *WorkList) ?*Node;
         }
 
-        pub fn logNid(wr: anytype, nid: usize, cc: std.io.tty.Config) void {
+        pub fn logNid(wr: *std.Io.Writer, nid: usize, cc: std.io.tty.Config) void {
             errdefer unreachable;
 
             try utils.setColor(cc, wr, @enumFromInt(1 + nid % 15));
@@ -2774,7 +2778,7 @@ pub fn Func(comptime Backend: type) type {
             self.fmtScheduled(&writer.interface, .escape_codes);
         }
 
-        pub fn fmtScheduled(self: *Self, writer: anytype, colors: std.io.tty.Config) void {
+        pub fn fmtScheduled(self: *Self, writer: *std.Io.Writer, colors: std.io.tty.Config) void {
             errdefer unreachable;
 
             var tmp = utils.Arena.scrath(null);
@@ -2802,7 +2806,7 @@ pub fn Func(comptime Backend: type) type {
             }
         }
 
-        pub fn fmtUnscheduled(self: *Self, writer: anytype, colors: std.io.tty.Config) void {
+        pub fn fmtUnscheduled(self: *Self, writer: *std.Io.Writer, colors: std.io.tty.Config) void {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
