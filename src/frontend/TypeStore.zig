@@ -138,15 +138,22 @@ pub const StringGlobalCtx = struct {
     pub fn eql(self: @This(), a: utils.EntId(tys.Global), b: utils.EntId(tys.Global)) bool {
         return std.mem.eql(
             u8,
-            self.types.store.get(a).data.slice(&self.types.ct),
-            self.types.store.get(b).data.slice(&self.types.ct),
+            a.get(self.types).data.slice(&self.types.ct),
+            b.get(self.types).data.slice(&self.types.ct),
+        ) and std.mem.eql(
+            tys.Global.Reloc,
+            a.get(self.types).relocs,
+            b.get(self.types).relocs,
         );
     }
 
     pub fn hash(self: @This(), adapted_key: utils.EntId(tys.Global)) u64 {
-        return std.hash.Fnv1a_64.hash(
-            self.types.store.get(adapted_key).data.slice(&self.types.ct),
-        );
+        var hasher = std.hash.Fnv1a_64.init();
+
+        hasher.update(adapted_key.get(self.types).data.slice(&self.types.ct));
+        hasher.update(@ptrCast(adapted_key.get(self.types).relocs));
+
+        return hasher.final();
     }
 };
 
@@ -838,7 +845,7 @@ pub const Id = enum(IdRepr) {
                     },
                     .Nullable => |n| {
                         const global = self.tys.store.get(@as(utils.EntId(tys.Global), @enumFromInt(v.value)));
-                        if (self.tys.isNullablePresent(n, global, v.offset)) {
+                        if (self.tys.isNullablePresent(n, global.data.slice(&self.tys.ct), v.offset)) {
                             try writer.writeAll("null");
                             continue;
                         }
@@ -959,7 +966,7 @@ pub fn retainGlobals(self: *Types, target: Target, backend: *Machine, handle_err
         if (glob.relocs.len == 0) {
             // TODO: add a flag that we did this
             var relocs = std.ArrayListUnmanaged(Machine.DataOptions.Reloc){};
-            self.findPointerOffsets(&relocs, glob, tmp.arena, glob.ty, 0);
+            self.findPointerOffsets(&relocs, glob.data.slice(&self.ct), tmp.arena, glob.ty, 0);
             glob.relocs = self.pool.arena.dupe(Machine.DataOptions.Reloc, relocs.items);
         }
 
@@ -1160,7 +1167,7 @@ pub fn cloneGlobal(self: *Types, from: *Types, id: utils.EntId(tys.Global)) util
 pub fn findNestedGlobals(
     self: *Types,
     relocs: *std.ArrayListUnmanaged(Machine.DataOptions.Reloc),
-    global: *tys.Global,
+    global: []const u8,
     scratch: *utils.Arena,
     ty: Id,
     offset_f: u64,
@@ -1171,7 +1178,7 @@ pub fn findNestedGlobals(
 pub fn findPointerOffsets(
     self: *Types,
     relocs: *std.ArrayListUnmanaged(Machine.DataOptions.Reloc),
-    global: *tys.Global,
+    global: []const u8,
     scratch: *utils.Arena,
     ty: Id,
     offset_f: u64,
@@ -1188,7 +1195,7 @@ pub fn findPointerOffsets(
             var tag_value: u64 = 0;
             @memcpy(
                 std.mem.asBytes(&tag_value)[0..tag.size(self)],
-                global.data.slice(&self.ct)[@intCast(offset_f + tag_offset)..][0..tag.size(self)],
+                global[@intCast(offset_f + tag_offset)..][0..tag.size(self)],
             );
 
             if (tag_value > u.getFields(self).len) return;
@@ -1224,7 +1231,7 @@ pub fn findPointerOffsets(
         .Slice => |s| {
             const slc: *tys.Slice = s.get(self);
 
-            const len_big: u64 = @bitCast(global.data.slice(&self.ct)[offset + tys.Slice.len_offset ..][0..8].*);
+            const len_big: u64 = @bitCast(global[offset + tys.Slice.len_offset ..][0..8].*);
             const len: usize = @intCast(len_big);
 
             const cap = len * slc.elem.size(self);
@@ -1267,7 +1274,7 @@ pub fn findPointerOffsets(
     }
 }
 
-pub fn isNullablePresent(self: *Types, n: utils.EntId(tys.Nullable), global: *tys.Global, offset: u64) bool {
+pub fn isNullablePresent(self: *Types, n: utils.EntId(tys.Nullable), global: []const u8, offset: u64) bool {
     const data: *tys.Nullable = n.get(self);
     const nieche: ?tys.Nullable.NiecheSpec = data.nieche.offset(self);
 
@@ -1279,11 +1286,11 @@ pub fn isNullablePresent(self: *Types, n: utils.EntId(tys.Nullable), global: *ty
         var value: u64 = 0;
         @memcpy(
             @as(*[8]u8, @ptrCast(&value))[0..@intCast(size)],
-            global.data.slice(&self.ct)[@intCast(offset + niche.offset)..][0..@intCast(size)],
+            global[@intCast(offset + niche.offset)..][0..@intCast(size)],
         );
 
         break :b value != 0;
-    } else global.data.slice(&self.ct)[@intCast(offset)] != 0;
+    } else global[@intCast(offset)] != 0;
 }
 
 pub fn findSymForPtr(
@@ -1537,11 +1544,11 @@ pub fn Slice(comptime Elem: type) type {
 
         pub fn alloc(ct: *Comptime, slce: []const Elem) @This() {
             const types = ct.getTypes();
-            const global = types.addUniqueGlobal(.void);
-            types.store.get(global).data = .{ .imm = types.pool.arena.dupe(u8, @ptrCast(slce)) };
-            types.store.get(global).ty = types.makeArray(slce.len, types.convertZigTypeToHbType(Elem));
+            const global = types.addInternedGlobal(
+                types.makeArray(slce.len, types.convertZigTypeToHbType(Elem)),
+                @ptrCast(slce),
+            );
             types.queue(.@"comptime", .init(.{ .Global = global }));
-
             std.debug.assert(!types.retainGlobals(.@"comptime", &ct.gen.mach, true));
 
             const off = ct.gen.mach.out.syms.items[@intFromEnum(ct.gen.mach.out.globals.items[@intFromEnum(global)])].offset;
@@ -1867,17 +1874,26 @@ pub fn dumpAnalErrors(self: *Types, anal_errors: *std.ArrayListUnmanaged(static_
     return anal_errors.items.len != 0;
 }
 
-pub fn addStringGlobal(self: *Types, data: []const u8) utils.EntId(tys.Global) {
+pub fn addInternedGlobal(self: *Types, ty: Id, data: []const u8) utils.EntId(tys.Global) {
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    var relocs = std.ArrayListUnmanaged(Machine.DataOptions.Reloc){};
+    self.findNestedGlobals(&relocs, data, tmp.arena, ty, 0) catch unreachable;
+
     const glob = self.store.add(&self.pool.arena, tys.Global{
-        .key = .{ .name_pos = .string },
+        .key = .{ .name_pos = if (ty.data() == .Array and
+            ty.data().Array.get(self).elem == .u8) .string else .empty_name },
         .data = .{ .imm = data },
-        .ty = self.makeArray(data.len, .u8),
+        .ty = ty,
         .readonly = true,
+        .relocs = &.{},
     });
 
     const entry = self.string_globals.getOrPutContext(self.ct.getGpa(), glob, .{ .types = self }) catch unreachable;
     if (!entry.found_existing) {
-        glob.get(self).data = .{ .imm = data };
+        glob.get(self).data = .{ .imm = self.pool.arena.dupe(u8, data) };
+        glob.get(self).relocs = self.pool.arena.dupe(tys.Global.Reloc, relocs.items);
     } else {
         self.store.pop(glob);
     }

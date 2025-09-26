@@ -3895,7 +3895,7 @@ pub fn emitBranch(self: *Codegen, block: Ast.Id) usize {
 
 fn emitString(self: *Codegen, ctx: Ctx, data: []const u8, expr: Ast.Id) Value {
     const sloc = self.src(expr);
-    const global = self.types.addStringGlobal(data);
+    const global = self.types.addInternedGlobal(self.types.makeArray(data.len, .u8), data);
     self.types.queue(self.target, .init(.{ .Global = global }));
 
     const slice_ty = self.types.string;

@@ -827,7 +827,7 @@ pub const DataOptions = struct {
     value: ValueSpec,
     readonly: bool,
 
-    pub const Reloc = struct {
+    pub const Reloc = packed struct(u64) {
         target: u32,
         offset: u32,
     };

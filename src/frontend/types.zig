@@ -686,13 +686,15 @@ pub const Global = struct {
             };
         }
     } = .{ .imm = &.{} },
-    relocs: []root.backend.Machine.DataOptions.Reloc = &.{},
+    relocs: []Reloc = &.{},
     readonly: bool,
     uninit: bool = false,
     completion: std.EnumArray(Types.Target, CompileState) =
         .{ .values = @splat(.queued) },
 
     pub const CompileState = enum { queued, compiled };
+
+    pub const Reloc = root.backend.Machine.DataOptions.Reloc;
 };
 
 pub const FnPtr = struct {
