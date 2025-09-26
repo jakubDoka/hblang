@@ -3,6 +3,7 @@ const std = @import("std");
 const Object = @This();
 const root = @import("hb");
 const dwarf = root.dwarf;
+const utils = root.utils;
 
 pub const Arch = enum {
     x86_64,
@@ -55,6 +56,8 @@ pub const elf = enum {
         @".debug_info",
         @".rela.debug_info",
         @".debug_abbrev",
+        @".eh_frame",
+        @".rela.eh_frame",
         @".bss",
 
         const fnames = &[_][]const u8{""} ++ std.meta.fieldNames(Sections);
@@ -435,7 +438,7 @@ pub const elf = enum {
         for (self.syms.items, 0..) |s, i| {
             if (s.kind != .func) continue;
             const prev_len = debug_size.count;
-            const reloc = dwarf.writeSubprogram(&debug_size.writer, self.lookupName(s.name), s.size, s.stack_size);
+            const reloc = dwarf.writeSubprogram(&debug_size.writer, self.lookupName(s.name), s.size);
             try debug_info_rela.append(tmp.arena.allocator(), .{
                 .offset = prev_len + reloc.text_base_offset,
                 .info = .{
@@ -482,6 +485,55 @@ pub const elf = enum {
             .sh_size = @intCast(debug_size.count),
         }, .little);
         section_alloc_cursor += debug_size.count;
+
+        debug_size.count = 0;
+
+        const eh_align = 8;
+        var eh_frame_rela = std.ArrayListUnmanaged(Rela){};
+
+        debug_size.count = 0;
+        dwarf.writeCie(&debug_size.writer);
+        std.debug.assert(debug_size.count % eh_align == 0);
+
+        for (self.syms.items, 0..) |s, i| {
+            if (s.kind != .func) continue;
+            const prev_len = debug_size.count;
+            const reloc = dwarf.writeFde(&debug_size.writer, @intCast(prev_len), s.size, s.stack_size);
+            try eh_frame_rela.append(tmp.arena.allocator(), .{
+                .offset = prev_len + reloc.function_address,
+                .info = .{
+                    // this well get projected later
+                    .sym = @intCast(i),
+                    .type = .R_X86_64_64,
+                },
+                .addend = 0,
+            });
+
+            std.debug.assert(debug_size.count % eh_align == 0);
+        }
+
+        dwarf.endEhFrame(&debug_size.writer);
+
+        try writer.writeStruct(SectionHeader{
+            .sh_name = Sections.@".eh_frame".pos(),
+            .sh_type = .progbits,
+            .sh_flags = .{ .alloc = true, .write = false, .execinstr = false },
+            .sh_offset = @intCast(section_alloc_cursor),
+            .sh_size = @intCast(debug_size.count),
+        }, .little);
+        section_alloc_cursor += debug_size.count;
+
+        try writer.writeStruct(SectionHeader{
+            .sh_name = Sections.@".rela.eh_frame".pos(),
+            .sh_type = .rela,
+            .sh_flags = .empty,
+            .sh_offset = @intCast(section_alloc_cursor),
+            .sh_size = @intCast(eh_frame_rela.items.len * @sizeOf(Rela)),
+            .sh_entsize = @sizeOf(Rela),
+            .sh_info = @intFromEnum(Sections.@".eh_frame"),
+            .sh_link = @intFromEnum(Sections.@".symtab"),
+        }, .little);
+        section_alloc_cursor += eh_frame_rela.items.len * @sizeOf(Rela);
 
         try writer.writeStruct(SectionHeader{
             .sh_name = Sections.@".bss".pos(),
@@ -589,21 +641,43 @@ pub const elf = enum {
         );
 
         _ = dwarf.writeCompileUnit(writer, root_file, @intCast(text_size));
-
         for (self.syms.items) |s| {
             if (s.kind != .func) continue;
-            _ = dwarf.writeSubprogram(writer, self.lookupName(s.name), s.size, s.stack_size);
+            _ = dwarf.writeSubprogram(writer, self.lookupName(s.name), s.size);
         }
-
         dwarf.endSiblings(writer);
 
         for (debug_info_rela.items) |*rl| {
             rl.info.sym = reloc_proj[rl.info.sym] + 1;
         }
-
         try writer.writeAll(@ptrCast(debug_info_rela.items));
 
         dwarf.writeAbbrev(writer);
+
+        const prv_len = debug_size.count;
+        debug_size.count = 0;
+        dwarf.writeCie(writer);
+        dwarf.writeCie(&debug_size.writer);
+        std.debug.assert(debug_size.count % eh_align == 0);
+
+        for (self.syms.items) |s| {
+            if (s.kind != .func) continue;
+            const prev_len = debug_size.count;
+            _ = dwarf.writeFde(writer, @intCast(prev_len), s.size, s.stack_size);
+            _ = dwarf.writeFde(&debug_size.writer, @intCast(prev_len), s.size, s.stack_size);
+            std.debug.assert(debug_size.count % eh_align == 0);
+        }
+        dwarf.endEhFrame(writer);
+        dwarf.endEhFrame(&debug_size.writer);
+
+        if (debug_size.count != prv_len) {
+            utils.panic("eh_frame size mismatch {} != {}\n", .{ debug_size.count, prv_len });
+        }
+
+        for (eh_frame_rela.items) |*rl| {
+            rl.info.sym = reloc_proj[rl.info.sym] + 1;
+        }
+        try writer.writeAll(@ptrCast(eh_frame_rela.items));
 
         try writer.flush();
     }

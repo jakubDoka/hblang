@@ -1,5 +1,9 @@
 const std = @import("std");
 
+pub const Long = u32;
+pub const Quad = u64;
+pub const Byte = u8;
+
 pub const UnitHeader = extern struct {
     unit_length: u32,
     version: u16 = 5,
@@ -72,61 +76,6 @@ pub const CompileUnitRelocs = struct {
     text_base_offset: usize,
 };
 
-pub fn writeCompileUnit(writer: *std.Io.Writer, root_file: []const u8, code_size: u32) CompileUnitRelocs {
-    errdefer unreachable;
-
-    var buf: [10]u8 = undefined;
-    try writer.writeAll(writeUleb128(&buf, compile_unit_abbrev));
-
-    const producer = "fbc\x00";
-
-    try writer.writeAll(producer);
-    try writer.writeByte(0x29);
-
-    try writer.writeAll(root_file);
-    try writer.writeByte(0);
-
-    try writer.writeInt(u64, 0, .little);
-    try writer.writeInt(u32, code_size, .little);
-
-    return CompileUnitRelocs{
-        .text_base_offset = writeUleb128(&buf, compile_unit_abbrev).len +
-            producer.len +
-            1 +
-            root_file.len + 1,
-    };
-}
-
-pub const SubprogramRelocs = struct {
-    text_base_offset: usize,
-};
-
-pub fn writeSubprogram(writer: *std.Io.Writer, name: []const u8, size: u32, stack_size: u32) SubprogramRelocs {
-    errdefer unreachable;
-
-    var buf: [10]u8 = undefined;
-    try writer.writeAll(writeUleb128(&buf, subprogram_abbrev));
-
-    try writer.writeAll(name);
-    try writer.writeByte(0);
-
-    try writer.writeInt(u64, 0, .little);
-    try writer.writeInt(u32, size, .little);
-
-    writeUnwindInfo(writer, stack_size);
-
-    return SubprogramRelocs{
-        .text_base_offset = writeUleb128(&buf, subprogram_abbrev).len +
-            name.len + 1,
-    };
-}
-
-pub fn endSiblings(writer: *std.Io.Writer) void {
-    errdefer unreachable;
-    var buf: [10]u8 = undefined;
-    try writer.writeAll(writeUleb128(&buf, 0));
-}
-
 pub fn writeAbbrev(writer: *std.Io.Writer) void {
     errdefer unreachable;
 
@@ -143,27 +92,62 @@ pub fn writeAbbrev(writer: *std.Io.Writer) void {
         .{ .name, .string },
         .{ .low_pc, .addr },
         .{ .high_pc, .data4 },
-        .{ .frame_base, .exprloc },
-        .{ .call_all_tail_calls, .flag_present },
     });
 
     var buf: [10]u8 = undefined;
     try writer.writeAll(writeUleb128(&buf, 0));
 }
 
-pub fn writeUnwindInfo(writer: *std.Io.Writer, stack_size: u32) void {
-    _ = stack_size; // autofix
+pub fn writeCompileUnit(writer: *std.Io.Writer, root_file: []const u8, code_size: u32) CompileUnitRelocs {
     errdefer unreachable;
 
+    try writer.writeUleb128(compile_unit_abbrev);
+
+    const producer = "hbc\x00";
+
+    try writer.writeAll(producer);
+    try writer.writeByte(0x29);
+
+    try writer.writeAll(root_file);
+    try writer.writeByte(0);
+
+    try writer.writeInt(u64, 0, .little);
+    try writer.writeInt(u32, code_size, .little);
+
     var buf: [10]u8 = undefined;
-    const expr_size = 1;
-    try writer.writeAll(writeUleb128(&buf, expr_size));
-    try writer.writeByte(@intFromEnum(Op.call_frame_cfa));
+    return CompileUnitRelocs{
+        .text_base_offset = writeUleb128(&buf, compile_unit_abbrev).len +
+            producer.len +
+            1 +
+            root_file.len + 1,
+    };
 }
 
-pub fn writeFrameEntry(writer: *std.Io.Writer, stack_size: u32) void {
-    _ = writer; // autofix
-    _ = stack_size; // autofix
+pub const SubprogramRelocs = struct {
+    text_base_offset: usize,
+};
+
+pub fn writeSubprogram(writer: *std.Io.Writer, name: []const u8, size: u32) SubprogramRelocs {
+    errdefer unreachable;
+
+    try writer.writeUleb128(subprogram_abbrev);
+
+    try writer.writeAll(name);
+    try writer.writeByte(0);
+
+    try writer.writeInt(u64, 0, .little);
+    try writer.writeInt(u32, size, .little);
+
+    var buf: [10]u8 = undefined;
+    return SubprogramRelocs{
+        .text_base_offset = writeUleb128(&buf, subprogram_abbrev).len +
+            name.len + 1,
+    };
+}
+
+pub fn endSiblings(writer: *std.Io.Writer) void {
+    errdefer unreachable;
+    try writer.writeUleb128(0);
 }
 
 pub fn writeAbbrevEntry(
@@ -187,6 +171,94 @@ pub fn writeAbbrevEntry(
     }
 
     try writer.writeAll(&.{ 0, 0 });
+}
+
+pub fn writeCie(writer: *std.Io.Writer) void {
+    //.LCIE0:
+    //  .long 0x14 - 4           # length
+    //  .long 0x0                # CIE ID
+    //  .byte 1                  # version
+    //  .string "zR"             # augmentation
+    //  .uleb128 1               # code alignment factor
+    //  .sleb128 -8              # data alignment factor
+    //  .byte 16                 # return address register
+    //  .byte 0x1b               # augmentation data (FDE pointer encoding)
+    //  .byte 0x0c               # DW_CFA_def_cfa
+    //  .uleb128 7               # rsp
+    //  .uleb128 8               # CFA = rsp+8
+    //  .byte 0x90               # DW_CFA_offset r16, encoded as DW_CFA_offset+regnum (0x80 + 16)
+    //  .uleb128 1               # offset = 1 (-8 bytes)
+    //  .byte 0x00               # DW_CFA_nop
+    //  .byte 0x00               # DW_CFA_nop
+    errdefer unreachable;
+
+    var padding: u32 = 0;
+    if (!@inComptime()) {
+        const length: u32 = comptime b: {
+            var counter = std.Io.Writer.Discarding.init(&.{});
+            writeCie(&counter.writer);
+            break :b @intCast(counter.count);
+        };
+
+        padding = std.mem.alignForward(u32, length + 4, 8) - length - 4;
+
+        try writer.writeInt(Long, length + padding, .little);
+    }
+
+    try writer.writeInt(Long, 0, .little);
+    try writer.writeByte(1);
+    try writer.writeByte(0);
+    try writer.writeUleb128(1);
+    try writer.writeSleb128(-8);
+    try writer.writeByte(16);
+
+    try writer.writeByte(0x0c);
+    try writer.writeUleb128(7);
+    try writer.writeUleb128(8);
+
+    try writer.writeByte(0x90);
+    try writer.writeUleb128(1);
+
+    for (0..padding) |_| try writer.writeByte(0);
+}
+
+pub const FdeRelocs = struct {
+    function_address: usize,
+};
+
+pub fn writeFde(writer: *std.Io.Writer, offset: Long, func_size: Quad, stack_size: u64) FdeRelocs {
+    errdefer unreachable;
+
+    const length: u32 = b: {
+        var counter = std.Io.Writer.Discarding.init(&.{});
+        writeFdeLow(&counter.writer, offset, func_size, stack_size);
+        break :b @intCast(counter.count);
+    };
+
+    const padding = std.mem.alignForward(u32, length + 4, 8) - length - 4;
+
+    try writer.writeInt(Long, length + padding, .little);
+    writeFdeLow(writer, offset, func_size, stack_size);
+    for (0..padding) |_| try writer.writeByte(0);
+    return .{
+        .function_address = @sizeOf(Long) + @sizeOf(Long),
+    };
+}
+
+pub fn writeFdeLow(writer: *std.Io.Writer, offset: Long, func_size: Quad, stack_size: u64) void {
+    errdefer unreachable;
+
+    try writer.writeInt(Long, offset + 4, .little);
+    try writer.writeInt(Quad, 0, .little);
+    try writer.writeInt(Quad, func_size, .little);
+
+    try writer.writeByte(0x0e);
+    try writer.writeUleb128(stack_size);
+}
+
+pub fn endEhFrame(writer: *std.Io.Writer) void {
+    errdefer unreachable;
+    try writer.writeInt(Long, 0, .little);
 }
 
 pub const Op = enum(u8) {
