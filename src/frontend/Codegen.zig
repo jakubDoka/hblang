@@ -555,7 +555,7 @@ pub fn getEntry(self: *Codegen, file: Types.File, name: []const u8) !utils.EntId
     defer tmp.deinit();
 
     self.ast = self.types.getFile(file);
-    _ = self.beginBuilder(tmp.arena, .never, &.{}, &.{}, .{});
+    _ = self.beginBuilder(tmp.arena, .never, &.{}, &.{}, 0, 0);
     defer self.bl.func.reset();
     self.parent_scope = .{ .Perm = self.types.getScope(file) };
     self.struct_ret_ptr = null;
@@ -574,18 +574,16 @@ pub fn beginBuilder(
     ret: Types.Id,
     params: []const graph.AbiParam,
     returns: ?[]const graph.AbiParam,
-    caps: struct {
-        scope_cap: usize = 0,
-        loop_cap: usize = 0,
-    },
+    scope_cap: usize,
+    loop_cap: usize,
 ) Builder.BuildToken {
     self.errored = false;
     self.ret = ret;
     const res = self.bl.begin(self.abi.cc, params, returns);
 
-    self.scope = .initBuffer(scratch.alloc(ScopeEntry, caps.scope_cap));
-    self.loops = .initBuffer(scratch.alloc(Loop, caps.loop_cap));
-    self.defers = .initBuffer(scratch.alloc(Ast.Id, 32));
+    self.scope = scratch.makeArrayList(ScopeEntry, scope_cap);
+    self.loops = scratch.makeArrayList(Loop, loop_cap);
+    self.defers = scratch.makeArrayList(Ast.Id, 32);
     self.scope_pins = self.bl.addPins();
     self.tmp_pins = self.bl.addPins();
 
@@ -633,7 +631,8 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
         func.ret,
         params,
         returns,
-        .{ .scope_cap = fn_ast.peak_vars, .loop_cap = fn_ast.peak_loops },
+        fn_ast.peak_vars,
+        fn_ast.peak_loops,
     );
     self.parent_scope = .init(.{ .Func = func_id });
     self.name = "";

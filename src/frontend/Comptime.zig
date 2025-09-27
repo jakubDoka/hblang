@@ -1073,7 +1073,7 @@ pub fn jitExprLow(
         defer scratch.deinit();
         defer gen.bl.func.reset();
 
-        const token = gen.beginBuilder(tmp.arena, .never, &.{.{ .Reg = .i64 }}, &.{}, .{});
+        const token = gen.beginBuilder(tmp.arena, .never, &.{.{ .Reg = .i64 }}, &.{}, 0, 0);
         gen.ast = ast;
         gen.parent_scope = scope;
         gen.name = name;
