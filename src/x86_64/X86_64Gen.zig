@@ -7,6 +7,7 @@ const Mach = root.backend.Machine;
 const Regalloc = root.backend.Regalloc;
 const utils = root.utils;
 const object = root.object;
+const dwarf = root.dwarf;
 
 const X86_64Gen = @This();
 const Func = graph.Func(X86_64Gen);
@@ -21,6 +22,8 @@ f32s: Mach.Data.SymIdx = .invalid,
 f32index: std.ArrayHashMapUnmanaged(f32, void, CtxF32, false) = .{},
 f64s: Mach.Data.SymIdx = .invalid,
 f64index: std.ArrayHashMapUnmanaged(f64, void, CtxF64, false) = .{},
+lpe: dwarf.LineProgramEncoder = .{},
+
 allocs: []const u16 = undefined,
 ret_count: usize = undefined,
 local_relocs: std.ArrayListUnmanaged(Reloc) = undefined,
@@ -28,7 +31,10 @@ block_offsets: []u32 = undefined,
 arg_base: u32 = undefined,
 local_base: u32 = undefined,
 slot_base: c_int = undefined,
+code_base: u32 = undefined,
 builtins: Mach.Builtins = undefined,
+lpe_writer: *std.Io.Writer = undefined,
+files: []const utils.LineIndex = undefined,
 
 const CtxF32 = struct {
     pub fn eql(_: @This(), a: f32, b: f32, _: usize) bool {
@@ -823,9 +829,27 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
 
     const postorder = func.gcm.postorder;
 
+    self.code_base = @intCast(self.mach.out.code.items.len);
     self.ret_count = if (func.signature.returns()) |r| r.len else std.math.maxInt(usize);
     self.local_relocs = .initBuffer(tmp.arena.alloc(Reloc, 1024 * 10));
     self.block_offsets = tmp.arena.alloc(u32, postorder.len);
+
+    var lpe_writer = std.Io.Writer.Allocating
+        .fromArrayList(self.gpa, &self.mach.out.line_info);
+    defer self.mach.out.line_info = lpe_writer.toArrayList();
+    self.lpe_writer = &lpe_writer.writer;
+    self.files = opts.files;
+
+    const base = lpe_writer.written().len;
+    const offset = self.lpe.begin(self.lpe_writer);
+    try self.mach.out.line_info_relocs.append(self.gpa, .{
+        .offset = @intCast(base + offset),
+        .target = self.mach.out.funcs.items[id],
+        .meta = .{
+            .slot_size = .@"8",
+            .addend = 0,
+        },
+    });
 
     var used_regs = std.EnumSet(Reg){};
     for (self.allocs) |a| {
@@ -971,6 +995,18 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
         const inps = instr.dataDeps();
 
         self.ensureInstrSpace();
+
+        if (instr.sloc != graph.Sloc.none) {
+            const line, const col = self.files[instr.sloc.namespace]
+                .lineCol(instr.sloc.index);
+            self.lpe.addInstruction(
+                self.lpe_writer,
+                @intCast(self.mach.out.code.items.len - self.code_base),
+                instr.sloc.namespace,
+                line,
+                col,
+            );
+        }
 
         switch (instr.extra2()) {
             .FramePointer => {},
@@ -2027,12 +2063,25 @@ pub fn finalize(self: *X86_64Gen, opts: Mach.FinalizeOptions) void {
         self.mach.out.reset();
     }
 
-    if (opts.optimizations.finalizeSingleThread(opts.builtins, X86_64Gen, self, opts.logs)) return;
+    if (opts.optimizations.finalizeSingleThread(X86_64Gen, self, opts)) return;
 
-    try switch (self.object_format) {
-        .elf => root.object.elf.flush(self.mach.out, .x86_64, opts.output orelse return),
+    switch (self.object_format) {
+        .elf => {
+            var writer = std.Io.Writer.Allocating.fromArrayList(
+                self.gpa,
+                &self.mach.out.line_info,
+            );
+            root.dwarf.LineProgramEncoder.end(&writer.writer);
+            self.mach.out.line_info = writer.toArrayList();
+
+            try root.object.elf.flush(
+                self.mach.out,
+                .x86_64,
+                opts.output orelse return,
+            );
+        },
         .coff => unreachable, //root.object.coff.flush(self.mach.out, .x86_64, out),try
-    };
+    }
 }
 
 pub fn deinit(self: *X86_64Gen) void {

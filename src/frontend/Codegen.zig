@@ -246,6 +246,15 @@ pub fn emitReachableSingle(
     const codegen = Codegen.init(root_tmp.arena, types, .runtime, opts.abi);
     defer codegen.deinit();
 
+    const files = types.pool.arena.alloc(
+        root.backend.Machine.Data.File,
+        types.files.len,
+    );
+    for (files, types.files) |*out_file, file| {
+        out_file.* = .{ .name = file.path, .size = @intCast(file.source.len) };
+    }
+    backend.out.files = files;
+
     if (queue == null or queue.?.self_id == 0) {
         var export_met = types.metrics.begin(.exports);
         defer export_met.end();
@@ -305,6 +314,7 @@ pub fn emitReachableSingle(
             .special = func_data.special,
             .optimizations = .{ .opts = optms },
             .builtins = types.getBuiltins(),
+            .files = types.line_indexes,
         });
         emit_func_met.end();
 

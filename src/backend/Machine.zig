@@ -23,6 +23,7 @@ const VTable = struct {
 
 const BuilderFunc = graph.Func(Builder);
 const Machine = @This();
+
 pub const Null = struct {
     mach: Machine = .init(Null),
 
@@ -148,6 +149,7 @@ pub const FuncId = packed struct(u32) { thread: u8, index: u24 };
 pub const Data = struct {
     parallelism: ?*Parallelism = null,
     declaring_sym: ?SymIdx = null,
+    files: []const File = &.{},
     funcs: std.ArrayListUnmanaged(SymIdx) = .empty,
     globals: std.ArrayListUnmanaged(SymIdx) = .empty,
     syms: std.ArrayListUnmanaged(Sym) = .empty,
@@ -155,6 +157,13 @@ pub const Data = struct {
     code: std.ArrayListUnmanaged(u8) = .empty,
     relocs: std.ArrayListUnmanaged(Reloc) = .empty,
     inline_funcs: std.ArrayListUnmanaged(InlineFunc) = .empty,
+    line_info: std.ArrayListUnmanaged(u8) = .empty,
+    line_info_relocs: std.ArrayListUnmanaged(Reloc) = .empty,
+
+    pub const File = struct {
+        name: []const u8,
+        size: u32,
+    };
 
     pub const Sym = struct {
         name: u32,
@@ -252,7 +261,7 @@ pub const Data = struct {
     }
 
     pub fn reset(self: *Data) void {
-        inline for (std.meta.fields(Data)[2..]) |f| {
+        inline for (std.meta.fields(Data)[3..]) |f| {
             @field(self, f.name).items.len = 0;
         }
     }
@@ -297,7 +306,7 @@ pub const Data = struct {
     }
 
     pub fn deinit(self: *Data, gpa: std.mem.Allocator) void {
-        inline for (std.meta.fields(Data)[2..]) |f| {
+        inline for (std.meta.fields(Data)[3..]) |f| {
             @field(self, f.name).deinit(gpa);
         }
         self.* = undefined;
@@ -923,14 +932,18 @@ pub const OptOptions = struct {
 
     pub fn finalize(
         optimizations: @This(),
-        builtins: Builtins,
         comptime Backend: type,
         backend: *Backend,
-        logs: ?*std.Io.Writer,
         par: ?*Parallelism,
+        opts: FinalizeOptions,
     ) bool {
         const parf = par orelse {
-            return finalizeSingleThread(optimizations, builtins, Backend, backend, logs);
+            return finalizeSingleThread(
+                optimizations,
+                Backend,
+                backend,
+                opts,
+            );
         };
 
         _ = parf;
@@ -944,10 +957,9 @@ pub const OptOptions = struct {
 
     pub fn finalizeSingleThread(
         optimizations: @This(),
-        builtins: Builtins,
         comptime Backend: type,
         backend: *Backend,
-        logs: ?*std.Io.Writer,
+        opts: FinalizeOptions,
     ) bool {
         errdefer unreachable;
 
@@ -1063,7 +1075,8 @@ pub const OptOptions = struct {
                             .linkage = sym.linkage,
                             .is_inline = false,
                             .optimizations = .{ .allocs = reg_alloc_results[sym.inline_func] },
-                            .builtins = builtins,
+                            .builtins = opts.builtins,
+                            .files = opts.files,
                         });
                     },
                     .data, .prealloc, .invalid => {},
@@ -1072,10 +1085,10 @@ pub const OptOptions = struct {
 
             if (optimizations.error_buf) |eb| if (eb.items.len != 0) return true;
 
-            if (logs) |d| {
+            if (opts.logs) |d| {
                 try d.writeAll("backend:\n");
 
-                inline for (std.meta.fields(Data)[2..]) |f| {
+                inline for (std.meta.fields(Data)[3..]) |f| {
                     try d.print("  {s:<12}: {}\n", .{ f.name, @field(bout, f.name).items.len });
                 }
 
@@ -1098,7 +1111,7 @@ pub const OptOptions = struct {
             bout.elimitaneDeadCode();
             elim.end();
 
-            if (logs) |d| {
+            if (opts.logs) |d| {
                 var alive_syms: usize = 0;
                 var alive_code: usize = 0;
                 for (bout.syms.items) |s| {
@@ -1184,6 +1197,7 @@ pub const EmitOptions = struct {
     },
     special: ?Special = null,
     builtins: Builtins,
+    files: []const utils.LineIndex = &.{},
 
     pub const Special = enum { entry, memcpy };
 };
@@ -1212,6 +1226,7 @@ pub const FinalizeOptions = struct {
     builtins: Builtins,
     parallelism: ?*Parallelism = null,
     logs: ?*std.Io.Writer = null,
+    files: []const utils.LineIndex,
 };
 
 pub const Parallelism = struct {
@@ -1226,6 +1241,7 @@ pub const FinalizeBytesOptions = struct {
     builtins: Builtins,
     parallelism: ?*Parallelism = null,
     logs: ?*std.Io.Writer = null,
+    files: []const utils.LineIndex,
 };
 
 pub const SupportedTarget = enum {
@@ -1348,6 +1364,7 @@ pub fn finalizeBytes(self: *Machine, opts: FinalizeBytesOptions) std.ArrayList(u
         .builtins = opts.builtins,
         .parallelism = opts.parallelism,
         .logs = opts.logs,
+        .files = opts.files,
     });
     return out.toArrayList();
 }

@@ -741,7 +741,7 @@ pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {
         self.mach.out.reset();
     }
 
-    if (opts.optimizations.finalize(opts.builtins, HbvmGen, self, opts.logs, opts.parallelism)) return;
+    if (opts.optimizations.finalize(HbvmGen, self, null, opts)) return;
 
     try root.hbvm.object.flush(self.mach.out, opts.output orelse return);
 }

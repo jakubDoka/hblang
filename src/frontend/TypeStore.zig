@@ -21,11 +21,12 @@ store: utils.EntStore(tys) = .{},
 pool: utils.Pool,
 interner: TypeIndex = .{},
 string_globals: StringGlobalIndex = .{},
-file_scopes: []Id,
 ct: Comptime,
 diagnostics: ?*std.Io.Writer,
 colors: std.io.tty.Config = .no_color,
 files: []const Ast,
+file_scopes: []Id,
+line_indexes: []const utils.LineIndex,
 stack_base: usize,
 target: []const u8 = "hbvm-ableos",
 func_work_list: std.EnumArray(Target, std.ArrayListUnmanaged(utils.EntId(tys.Func))),
@@ -1390,12 +1391,17 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer, gp
     const scopes = arena.alloc(Id, source.len);
     @memset(scopes, .void);
     const slot = arena.create(Types);
+    const line_indexes = arena.alloc(utils.LineIndex, source.len);
+    for (source, 0..) |fl, i| {
+        line_indexes[i] = try utils.LineIndex.init(fl.source, &arena);
+    }
     slot.* = .{
         .func_work_list = .{ .values = @splat(.empty) },
         .global_work_list = .{ .values = .{ .empty, .empty } },
         .stack_base = @frameAddress(),
         .files = source,
         .file_scopes = scopes,
+        .line_indexes = line_indexes,
         .pool = .{ .arena = arena },
         .ct = .init(gpa),
         .diagnostics = diagnostics,

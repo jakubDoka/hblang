@@ -237,6 +237,7 @@ pub fn testBuilder(
         .gpa = gpa,
         .optimizations = optimizations,
         .builtins = types.getBuiltins(),
+        .files = types.line_indexes,
     });
     defer out.deinit(gpa);
 

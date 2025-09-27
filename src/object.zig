@@ -58,6 +58,8 @@ pub const elf = enum {
         @".debug_abbrev",
         @".eh_frame",
         @".rela.eh_frame",
+        @".debug_line",
+        @".rela.debug_line",
         @".bss",
 
         const fnames = &[_][]const u8{""} ++ std.meta.fieldNames(Sections);
@@ -427,6 +429,8 @@ pub const elf = enum {
                     // grab the func at offset 0
                     // TODO: rather then doing this, maybe emit a symbol
                     .sym = for (self.syms.items, 0..) |s, i| {
+                        if (s.kind == .func and s.linkage == .local) break @intCast(i);
+                    } else for (self.syms.items, 0..) |s, i| {
                         if (s.kind == .func) break @intCast(i);
                     } else unreachable,
                     .type = .R_X86_64_64,
@@ -534,6 +538,48 @@ pub const elf = enum {
             .sh_link = @intFromEnum(Sections.@".symtab"),
         }, .little);
         section_alloc_cursor += eh_frame_rela.items.len * @sizeOf(Rela);
+
+        var line_info_header = dwarf.LineInfoHeader{
+            .file_names = @ptrCast(self.files),
+        };
+        line_info_header.computeHeaderLength();
+
+        debug_size.count = 0;
+        line_info_header.write(&debug_size.writer);
+        const header_size = debug_size.count;
+        try debug_size.writer.writeAll(self.line_info.items);
+
+        line_info_header.unit_length = @intCast(debug_size.count - 4);
+
+        try writer.writeStruct(SectionHeader{
+            .sh_name = Sections.@".debug_line".pos(),
+            .sh_type = .progbits,
+            .sh_flags = .empty,
+            .sh_offset = @intCast(section_alloc_cursor),
+            .sh_size = @intCast(debug_size.count),
+        }, .little);
+        section_alloc_cursor += debug_size.count;
+
+        var retain_idx: usize = 0;
+        var line_info_relocs = self.line_info_relocs.items;
+        for (line_info_relocs) |rl| {
+            if (self.syms.items[@intFromEnum(rl.target)].kind != .func) continue;
+            self.line_info_relocs.items[retain_idx] = rl;
+            retain_idx += 1;
+        }
+        line_info_relocs.len = retain_idx;
+
+        try writer.writeStruct(SectionHeader{
+            .sh_name = Sections.@".rela.debug_line".pos(),
+            .sh_type = .rela,
+            .sh_flags = .empty,
+            .sh_offset = @intCast(section_alloc_cursor),
+            .sh_size = @intCast(line_info_relocs.len * @sizeOf(Rela)),
+            .sh_entsize = @sizeOf(Rela),
+            .sh_link = @intFromEnum(Sections.@".symtab"),
+            .sh_info = @intFromEnum(Sections.@".debug_line"),
+        }, .little);
+        section_alloc_cursor += line_info_relocs.len * @sizeOf(Rela);
 
         try writer.writeStruct(SectionHeader{
             .sh_name = Sections.@".bss".pos(),
@@ -654,7 +700,6 @@ pub const elf = enum {
 
         dwarf.writeAbbrev(writer);
 
-        const prv_len = debug_size.count;
         debug_size.count = 0;
         dwarf.writeCie(writer);
         dwarf.writeCie(&debug_size.writer);
@@ -670,14 +715,27 @@ pub const elf = enum {
         dwarf.endEhFrame(writer);
         dwarf.endEhFrame(&debug_size.writer);
 
-        if (debug_size.count != prv_len) {
-            utils.panic("eh_frame size mismatch {} != {}\n", .{ debug_size.count, prv_len });
-        }
-
         for (eh_frame_rela.items) |*rl| {
             rl.info.sym = reloc_proj[rl.info.sym] + 1;
         }
         try writer.writeAll(@ptrCast(eh_frame_rela.items));
+
+        line_info_header.write(writer);
+        try writer.writeAll(self.line_info.items);
+
+        for (line_info_relocs) |rl| {
+            try writer.writeStruct(Rela{
+                .offset = @intCast(rl.offset + header_size),
+                .info = .{
+                    .type = switch (rl.meta.slot_size) {
+                        .@"4" => .R_X86_64_PC32,
+                        .@"8" => .R_X86_64_64,
+                    },
+                    .sym = reloc_proj[@intFromEnum(rl.target)] + 1,
+                },
+                .addend = rl.meta.addend,
+            }, .little);
+        }
 
         try writer.flush();
     }

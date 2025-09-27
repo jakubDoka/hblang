@@ -248,75 +248,13 @@ pub const Threading = union(enum) {
         };
     }
 
-    pub fn dumpAsm(
-        self: *Threading,
-        name: []const u8,
-        out: *std.Io.Writer,
-        colors: std.io.tty.Config,
-        optimizations: backend.Machine.OptOptions.Mode,
-    ) void {
-        errdefer unreachable;
-
-        var tmp = utils.Arena.scrath(null);
-        defer tmp.deinit();
-
-        var output = std.Io.Writer.Allocating.init(tmp.arena.allocator());
-        self.finalize(&output.writer, tmp.arena, null, optimizations);
-
-        self.singleBackend().disasm(.{
-            .name = name,
-            .bin = output.written(),
-            .out = out,
-            .colors = colors,
-        });
-    }
-
-    pub fn runVendoredTest(
-        self: *Threading,
-        name: []const u8,
-        out: *std.Io.Writer,
-        colors: std.io.tty.Config,
-        optimizations: backend.Machine.OptOptions.Mode,
-    ) !void {
-        var tmp = utils.Arena.scrath(null);
-        defer tmp.deinit();
-
-        var output = std.Io.Writer.Allocating.init(tmp.arena.allocator());
-        self.finalize(&output.writer, tmp.arena, null, optimizations);
-
-        const expectations: test_utils.Expectations = .init(&self.ast()[0], tmp.arena);
-
-        errdefer {
-            self.singleBackend().disasm(.{
-                .name = name,
-                .bin = output.written(),
-                .out = out,
-                .colors = colors,
-            });
-
-            _ = self.singleBackend().run(.{
-                .name = name,
-                .code = output.written(),
-                .output = out,
-                .logs = out,
-                .colors = colors,
-            }) catch {};
-        }
-
-        try expectations.assert(self.singleBackend().run(.{
-            .name = name,
-            .code = output.written(),
-            .output = out,
-            .colors = colors,
-        }));
-    }
-
     pub fn finalize(
         self: *Threading,
         out: *std.Io.Writer,
         out_scratch: ?*utils.Arena,
         logs: ?*std.Io.Writer,
         optimizations: backend.Machine.OptOptions.Mode,
+        files: []const utils.LineIndex,
     ) void {
         switch (self.*) {
             .single => |*s| {
@@ -326,6 +264,7 @@ pub const Threading = union(enum) {
                     .output = out,
                     .output_scratch = out_scratch,
                     .logs = logs,
+                    .files = files,
                 });
             },
             .multi => |*m| {
@@ -340,6 +279,7 @@ pub const Threading = union(enum) {
                     .output_scratch = out_scratch,
                     .parallelism = &m.para,
                     .logs = logs,
+                    .files = files,
                 });
             },
         }
@@ -538,6 +478,7 @@ pub fn compile(opts: CompileOptions) anyerror!void {
             .gpa = types.pool.arena.allocator(),
             .optimizations = optimizations,
             .builtins = types.getBuiltins(),
+            .files = types.line_indexes,
         });
 
         if (types.dumpAnalErrors(&anal_errors)) {
@@ -564,6 +505,7 @@ pub fn compile(opts: CompileOptions) anyerror!void {
             .gpa = types.pool.arena.allocator(),
             .optimizations = optimizations,
             .builtins = types.getBuiltins(),
+            .files = types.line_indexes,
         });
 
         if (types.dumpAnalErrors(&anal_errors)) {
@@ -649,6 +591,7 @@ pub fn compile(opts: CompileOptions) anyerror!void {
             .optimizations = optimizations,
             .builtins = types.getBuiltins(),
             .logs = logs,
+            .files = types.line_indexes,
         });
 
         if (types.dumpAnalErrors(&anal_errors)) {
@@ -663,6 +606,7 @@ pub fn compile(opts: CompileOptions) anyerror!void {
             .optimizations = optimizations,
             .builtins = types.getBuiltins(),
             .logs = logs,
+            .files = types.line_indexes,
         });
 
         if (types.dumpAnalErrors(&anal_errors)) {

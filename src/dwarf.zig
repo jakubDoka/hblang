@@ -1,8 +1,11 @@
 const std = @import("std");
 
+pub const InitialLength = u32;
 pub const Long = u32;
 pub const Quad = u64;
+pub const Half = u16;
 pub const Byte = u8;
+pub const SByte = i8;
 
 pub const UnitHeader = extern struct {
     unit_length: u32,
@@ -20,53 +23,10 @@ pub const UnitType = enum(u8) {
     compile = 0x01,
 };
 
-pub fn writeIleb128(buf: *[10]u8, arg: i64) []u8 {
-    const Int = @TypeOf(arg);
-    const Signed = if (@typeInfo(Int).int.bits < 8) i8 else Int;
-    const Unsigned = std.meta.Int(.unsigned, @typeInfo(Signed).int.bits);
-    var value: Signed = arg;
-
-    var i: usize = 0;
-    while (true) : (i += 1) {
-        const unsigned: Unsigned = @bitCast(value);
-        const byte: u8 = @truncate(unsigned);
-        value >>= 6;
-        if (value == -1 or value == 0) {
-            buf[i] = byte & 0x7F;
-            i += 1;
-            break;
-        } else {
-            value >>= 1;
-            buf[i] = byte | 0x80;
-        }
-    }
-
-    std.debug.assert(i > 0);
-
-    return buf[0..i];
-}
-
-pub fn writeUleb128(buf: *[10]u8, arg: u64) []u8 {
-    const Int = @TypeOf(arg);
-    const Value = if (@typeInfo(Int).int.bits < 8) u8 else Int;
-    var value: Value = arg;
-
-    var i: usize = 0;
-    while (true) : (i += 1) {
-        const byte: u8 = @truncate(value & 0x7f);
-        value >>= 7;
-        if (value == 0) {
-            buf[i] = byte;
-            i += 1;
-            break;
-        } else {
-            buf[i] = byte | 0x80;
-        }
-    }
-
-    std.debug.assert(i > 0);
-
-    return buf[0..i];
+pub fn uleb128Size(value: u64) usize {
+    var counter = std.Io.Writer.Discarding.init(&.{});
+    counter.writer.writeUleb128(value) catch unreachable;
+    return counter.count;
 }
 
 const compile_unit_abbrev = 1;
@@ -85,6 +45,7 @@ pub fn writeAbbrev(writer: *std.Io.Writer) void {
         .{ .name, .string },
         .{ .low_pc, .addr },
         .{ .high_pc, .data4 },
+        .{ .stmt_list, .data4 },
     });
 
     // generic subprogram
@@ -94,8 +55,7 @@ pub fn writeAbbrev(writer: *std.Io.Writer) void {
         .{ .high_pc, .data4 },
     });
 
-    var buf: [10]u8 = undefined;
-    try writer.writeAll(writeUleb128(&buf, 0));
+    try writer.writeUleb128(0);
 }
 
 pub fn writeCompileUnit(writer: *std.Io.Writer, root_file: []const u8, code_size: u32) CompileUnitRelocs {
@@ -106,7 +66,7 @@ pub fn writeCompileUnit(writer: *std.Io.Writer, root_file: []const u8, code_size
     const producer = "hbc\x00";
 
     try writer.writeAll(producer);
-    try writer.writeByte(0x29);
+    try writer.writeByte(29);
 
     try writer.writeAll(root_file);
     try writer.writeByte(0);
@@ -114,9 +74,10 @@ pub fn writeCompileUnit(writer: *std.Io.Writer, root_file: []const u8, code_size
     try writer.writeInt(u64, 0, .little);
     try writer.writeInt(u32, code_size, .little);
 
-    var buf: [10]u8 = undefined;
+    try writer.writeInt(u32, 0, .little);
+
     return CompileUnitRelocs{
-        .text_base_offset = writeUleb128(&buf, compile_unit_abbrev).len +
+        .text_base_offset = uleb128Size(compile_unit_abbrev) +
             producer.len +
             1 +
             root_file.len + 1,
@@ -138,9 +99,8 @@ pub fn writeSubprogram(writer: *std.Io.Writer, name: []const u8, size: u32) Subp
     try writer.writeInt(u64, 0, .little);
     try writer.writeInt(u32, size, .little);
 
-    var buf: [10]u8 = undefined;
     return SubprogramRelocs{
-        .text_base_offset = writeUleb128(&buf, subprogram_abbrev).len +
+        .text_base_offset = uleb128Size(subprogram_abbrev) +
             name.len + 1,
     };
 }
@@ -159,37 +119,19 @@ pub fn writeAbbrevEntry(
 ) void {
     errdefer unreachable;
 
-    var tbuf: [10]u8 = undefined;
-
-    try writer.writeAll(writeUleb128(&tbuf, code));
-    try writer.writeAll(writeUleb128(&tbuf, @intFromEnum(tag)));
+    try writer.writeUleb128(code);
+    try writer.writeUleb128(@intFromEnum(tag));
     try writer.writeByte(@intFromBool(has_children));
 
     for (fields) |field| {
-        try writer.writeAll(writeUleb128(&tbuf, @intFromEnum(field[0])));
-        try writer.writeAll(writeUleb128(&tbuf, @intFromEnum(field[1])));
+        try writer.writeUleb128(@intFromEnum(field[0]));
+        try writer.writeUleb128(@intFromEnum(field[1]));
     }
 
     try writer.writeAll(&.{ 0, 0 });
 }
 
 pub fn writeCie(writer: *std.Io.Writer) void {
-    //.LCIE0:
-    //  .long 0x14 - 4           # length
-    //  .long 0x0                # CIE ID
-    //  .byte 1                  # version
-    //  .string "zR"             # augmentation
-    //  .uleb128 1               # code alignment factor
-    //  .sleb128 -8              # data alignment factor
-    //  .byte 16                 # return address register
-    //  .byte 0x1b               # augmentation data (FDE pointer encoding)
-    //  .byte 0x0c               # DW_CFA_def_cfa
-    //  .uleb128 7               # rsp
-    //  .uleb128 8               # CFA = rsp+8
-    //  .byte 0x90               # DW_CFA_offset r16, encoded as DW_CFA_offset+regnum (0x80 + 16)
-    //  .uleb128 1               # offset = 1 (-8 bytes)
-    //  .byte 0x00               # DW_CFA_nop
-    //  .byte 0x00               # DW_CFA_nop
     errdefer unreachable;
 
     var padding: u32 = 0;
@@ -202,21 +144,21 @@ pub fn writeCie(writer: *std.Io.Writer) void {
 
         padding = std.mem.alignForward(u32, length + 4, 8) - length - 4;
 
-        try writer.writeInt(Long, length + padding, .little);
+        try writer.writeInt(Long, length + padding, .little); // length
     }
 
-    try writer.writeInt(Long, 0, .little);
-    try writer.writeByte(1);
-    try writer.writeByte(0);
-    try writer.writeUleb128(1);
-    try writer.writeSleb128(-8);
-    try writer.writeByte(16);
+    try writer.writeInt(Long, 0, .little); // CIE ID
+    try writer.writeByte(1); // version
+    try writer.writeByte(0); // augmentation
+    try writer.writeUleb128(1); // code alignment factor
+    try writer.writeSleb128(-8); // data alignment factor
+    try writer.writeByte(16); // return address register
 
-    try writer.writeByte(0x0c);
+    try writer.writeByte(Cfa.def_cfa.raw());
     try writer.writeUleb128(7);
     try writer.writeUleb128(8);
 
-    try writer.writeByte(0x90);
+    try writer.writeByte(Cfa.offset(16).raw());
     try writer.writeUleb128(1);
 
     for (0..padding) |_| try writer.writeByte(0);
@@ -252,7 +194,7 @@ pub fn writeFdeLow(writer: *std.Io.Writer, offset: Long, func_size: Quad, stack_
     try writer.writeInt(Quad, 0, .little);
     try writer.writeInt(Quad, func_size, .little);
 
-    try writer.writeByte(0x0e);
+    try writer.writeByte(Cfa.def_cfa_offset.raw());
     try writer.writeUleb128(stack_size);
 }
 
@@ -260,6 +202,173 @@ pub fn endEhFrame(writer: *std.Io.Writer) void {
     errdefer unreachable;
     try writer.writeInt(Long, 0, .little);
 }
+
+pub const LineInfoHeader = struct {
+    unit_length: u32 = 0,
+    version: Half = 5,
+    addr_size: Byte = 8,
+    segment_selector_size: Byte = 0,
+    header_length: u32 = 0,
+    minimum_instruction_length: Byte = 1,
+    maximum_operations_per_instruction: Byte = 1,
+    default_is_stmt: Byte = 1,
+    line_base: SByte = -5,
+    line_range: Byte = 14,
+    opcode_base: Byte = hard_opcode_base,
+    standard_opcode_lengths: [hard_opcode_base - 1]Byte = .{
+        0x00, 0x01, 0x01, 0x01, 0x01, 0x00,
+        0x00, 0x00, 0x01, 0x00, 0x00, 0x01,
+    },
+
+    __end_of_fixed_fields: void = {},
+
+    comptime directory_entry_format: []const EntryFormat = &.{
+        .{ .path, .string },
+    },
+    directoryes: []const []const u8 = &.{"."},
+    comptime file_name_entry_format: []const EntryFormat = &.{
+        .{ .path, .string },
+        .{ .size, .data4 },
+    },
+    file_names: []const File,
+
+    const hard_opcode_base = 13;
+
+    pub const EntryFormat = struct { Lnct, Form };
+
+    pub const File = struct {
+        path: []const u8,
+        size: u32,
+    };
+
+    pub const prefix_length = b: {
+        var total: usize = 0;
+        for (std.meta.fields(LineInfoHeader)) |f| {
+            total += @sizeOf(f.type);
+            if (std.mem.eql(u8, f.name, "header_length")) break;
+        }
+        break :b total;
+    };
+
+    pub fn computeHeaderLength(self: *LineInfoHeader) void {
+        const header_length = b: {
+            var counter = std.Io.Writer.Discarding.init(&.{});
+            self.write(&counter.writer);
+            break :b counter.count - prefix_length;
+        };
+
+        self.header_length = @intCast(header_length);
+    }
+
+    pub fn write(self: LineInfoHeader, writer: *std.Io.Writer) void {
+        errdefer unreachable;
+
+        inline for (std.meta.fields(LineInfoHeader)) |f| {
+            if (comptime std.mem.eql(u8, f.name, "__end_of_fixed_fields")) {
+                break;
+            }
+
+            if (@typeInfo(f.type) == .array) {
+                try writer.writeAll(&@field(self, f.name));
+            } else {
+                try writer.writeInt(f.type, @field(self, f.name), .little);
+            }
+        }
+
+        try writer.writeByte(@intCast(self.directory_entry_format.len));
+        for (self.directory_entry_format) |entry_format| {
+            try writer.writeByte(@intFromEnum(entry_format[0]));
+            try writer.writeByte(@intFromEnum(entry_format[1]));
+        }
+
+        try writer.writeUleb128(self.directoryes.len);
+        for (self.directoryes) |directory| {
+            try writer.writeAll(directory);
+            try writer.writeByte(0);
+        }
+
+        try writer.writeByte(@intCast(self.file_name_entry_format.len));
+        for (self.file_name_entry_format) |entry_format| {
+            try writer.writeByte(@intFromEnum(entry_format[0]));
+            try writer.writeByte(@intFromEnum(entry_format[1]));
+        }
+
+        try writer.writeUleb128(self.file_names.len);
+        for (self.file_names) |file_name| {
+            try writer.writeAll(file_name.path);
+            try writer.writeByte(0);
+            try writer.writeInt(Long, file_name.size, .little);
+        }
+    }
+};
+
+pub const LineProgramEncoder = struct {
+    address: u32 = 0,
+    file: u32 = 1,
+    line: u32 = 1,
+    column: u32 = 0,
+
+    pub fn begin(self: *LineProgramEncoder, dest: *std.Io.Writer) usize {
+        errdefer unreachable;
+
+        self.address = 0;
+
+        try dest.writeByte(0);
+        try dest.writeUleb128(9);
+        try dest.writeByte(Lne.set_address.raw());
+        try dest.writeInt(u64, 0, .little);
+
+        return 3;
+    }
+
+    pub fn addInstruction(
+        self: *LineProgramEncoder,
+        dest: *std.Io.Writer,
+        address: u32,
+        file: u32,
+        line: u32,
+        column: u32,
+    ) void {
+        errdefer unreachable;
+
+        // TODO: we could use special opcodes
+
+        if (self.address != address) {
+            std.debug.assert(self.address < address);
+            try dest.writeByte(Lns.advance_pc.raw());
+            try dest.writeUleb128(address - self.address);
+            self.address = address;
+        }
+
+        if (self.file != file) {
+            try dest.writeByte(Lns.set_file.raw());
+            try dest.writeUleb128(file);
+            self.file = file;
+        }
+
+        if (self.line != line) {
+            try dest.writeByte(Lns.advance_line.raw());
+            try dest.writeSleb128(@as(i64, line) - self.line);
+            self.line = line;
+        }
+
+        if (self.column != column) {
+            try dest.writeByte(Lns.set_column.raw());
+            try dest.writeUleb128(self.column);
+            self.column = column;
+        }
+
+        try dest.writeByte(Lns.copy.raw());
+    }
+
+    pub fn end(dest: *std.Io.Writer) void {
+        errdefer unreachable;
+
+        try dest.writeByte(0);
+        try dest.writeUleb128(1);
+        try dest.writeByte(Lne.end_sequence.raw());
+    }
+};
 
 pub const Op = enum(u8) {
     addr = 0x03, // 1 constant address (size is target specific)
@@ -539,6 +648,87 @@ pub const Attribute = enum(u8) {
 
     const lo_user = 0x2000;
     const hi_user = 0x3f;
+};
+
+pub const Cfa = enum(u8) {
+    set_loc = 0x01, // address
+    advance_loc1 = 0x02, // 1-byte delta
+    advance_loc2 = 0x03, // 2-byte delta
+    advance_loc4 = 0x04, // 4-byte delta
+    offset_extended = 0x05, // ULEB128 register ULEB128 offset
+    restore_extended = 0x06, // ULEB128 register
+    undefined = 0x07, // ULEB128 register
+    same_value = 0x08, // ULEB128 register
+    register = 0x09, // ULEB128 register ULEB128 offset
+    remember_state = 0x0a, //
+    restore_state = 0x0b, //
+    def_cfa = 0x0c, // ULEB128 register ULEB128 offset
+    def_cfa_register = 0x0d, // ULEB128 register
+    def_cfa_offset = 0x0e, // ULEB128 offset
+    def_cfa_expression = 0x0f, // BLOCK
+    expression = 0x10, // ULEB128 register BLOCK
+    offset_extended_sf = 0x11, // ULEB128 register SLEB128 offset
+    def_cfa_sf = 0x12, // ULEB128 register SLEB128 offset
+    def_cfa_offset_sf = 0x13, // SLEB128 offset
+    val_offset = 0x14, // ULEB128 ULEB128
+    val_offset_sf = 0x15, // ULEB128 SLEB128
+    val_expression = 0x16, // ULEB128 BLOCK
+    lo_user = 0x1c, //
+    hi_user = 0x3f, //
+    _,
+
+    pub fn advanceLoc(delta: u6) Cfa {
+        return @enumFromInt(@as(u8, 0x1) << 6 | delta);
+    }
+
+    pub fn offset(delta: u6) Cfa {
+        return @enumFromInt(@as(u8, 0x2) << 6 | delta);
+    }
+
+    pub fn restore(reg: u6) Cfa {
+        return @enumFromInt(@as(u8, 0x3) << 6 | reg);
+    }
+
+    pub fn raw(self: Cfa) u8 {
+        return @intFromEnum(self);
+    }
+};
+
+pub const Lnct = enum(u8) {
+    path = 0x1,
+    directory_index = 0x2,
+    timestamp = 0x3,
+    size = 0x4,
+    MD5 = 0x5,
+};
+
+pub const Lns = enum(u8) {
+    copy = 0x01,
+    advance_pc = 0x02, // (ULEB128)
+    advance_line = 0x03, // (SLEB128)
+    set_file = 0x04, // (ULEB128)
+    set_column = 0x05, // (ULEB128)
+    negate_stmt = 0x06, // ()
+    set_basic_block = 0x07, // ()
+    const_add_pc = 0x08, // (???)
+    fixed_advance_pc = 0x09, // (Half)
+    set_prologue_end = 0x0a, // ()
+    set_epilogue_begin = 0x0b, // ()
+    set_isa = 0x0c, // (ULEB128)
+
+    pub fn raw(self: Lns) u8 {
+        return @intFromEnum(self);
+    }
+};
+
+pub const Lne = enum(u8) {
+    end_sequence = 0x01, // ()
+    set_address = 0x02, // (u64)
+    set_discriminator = 0x04, // (ULEB128)
+
+    pub fn raw(self: Lne) u8 {
+        return @intFromEnum(self);
+    }
 };
 
 pub const Form = enum(u8) {
