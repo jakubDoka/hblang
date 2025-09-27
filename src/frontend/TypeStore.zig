@@ -1393,7 +1393,7 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer, gp
     const slot = arena.create(Types);
     const line_indexes = arena.alloc(utils.LineIndex, source.len);
     for (source, 0..) |fl, i| {
-        line_indexes[i] = try utils.LineIndex.init(fl.source, &arena);
+        line_indexes[i] = utils.LineIndex.init(fl.source, &arena);
     }
     slot.* = .{
         .func_work_list = .{ .values = @splat(.empty) },

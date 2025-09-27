@@ -11,6 +11,8 @@ pub fn build(b: *std.Build) !void {
         (b.graph.host.result.os.tag == .windows) or optimize != .Debug;
     const stack_size = b.option(usize, "stack-size", "the amount of stack for the build") orelse 1024 * 1024 * 4;
 
+    const check_step = b.step("check", "type check");
+
     const options = b.addOptions();
     options.addOption(usize, "stack_size", stack_size);
     options.addOption(bool, "dont_simulate", dont_simulate);
@@ -131,6 +133,8 @@ pub fn build(b: *std.Build) !void {
             .use_lld = use_lld,
         });
 
+        check_step.dependOn(&grn.step);
+
         const run_gen = b.addRunArtifact(grn);
         run_gen.has_side_effects = true;
         run_gen.addDirectoryArg(b.path("vendored-tests"));
@@ -168,6 +172,8 @@ pub fn build(b: *std.Build) !void {
             .use_llvm = use_llvm,
             .use_lld = use_lld,
         });
+
+        check_step.dependOn(&gen.step);
 
         inline for (
             .{ "example_tests", "bugfix_tests" },
@@ -231,6 +237,8 @@ pub fn build(b: *std.Build) !void {
             .use_lld = use_lld,
         });
 
+        check_step.dependOn(&gen.step);
+
         const files = [_][]const u8{
             "src/x86_64/mach_peeps.clj",
             "src/hbvm/mach_peeps.clj",
@@ -258,15 +266,13 @@ pub fn build(b: *std.Build) !void {
     }
 
     check: {
-        const check_step = b.step("check", "type check");
-
         const t = b.addTest(.{ .root_module = test_module });
         check_step.dependOn(&t.step);
 
         break :check;
     }
 
-    fuzzing: {
+    if (false) fuzzing: {
         const dict_gen = b.addExecutable(.{
             .name = "gen_fuzz_dict.zig",
             .root_module = b.createModule(.{
@@ -277,6 +283,8 @@ pub fn build(b: *std.Build) !void {
             .use_llvm = use_llvm,
             .use_lld = use_lld,
         });
+
+        check_step.dependOn(&dict_gen.step);
 
         dict_gen.root_module.addAnonymousImport("Lexer", .{ .root_source_file = b.path("src/frontend/Lexer.zig") });
 
@@ -296,8 +304,12 @@ pub fn build(b: *std.Build) !void {
             }),
         });
         fuzz.pie = true;
-        fuzz.want_lto = true;
+        fuzz.lto = .full; // this crashes the compiler
         fuzz.bundle_compiler_rt = true;
+
+        fuzz.root_module.addImport("hb", hb);
+
+        check_step.dependOn(&fuzz.step);
 
         const afl_lto = b.addSystemCommand(&.{ "afl-clang-lto", "-o" });
         const afl_lto_out = afl_lto.addOutputFileArg("fuzz");
@@ -322,6 +334,8 @@ pub fn build(b: *std.Build) !void {
             .use_llvm = use_llvm,
             .use_lld = use_lld,
         });
+
+        check_step.dependOn(&gen_finding_tests.step);
 
         const run_gen_finding_tests = b.addRunArtifact(gen_finding_tests);
         run_gen_finding_tests.has_side_effects = true;

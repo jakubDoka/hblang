@@ -1015,7 +1015,7 @@ pub const LineIndex = struct {
         return .{ @intCast(start), pos - self.nlines[start - 1] };
     }
 
-    pub fn init(file_content: []const u8, arena: *Arena) !LineIndex {
+    pub fn init(file_content: []const u8, arena: *Arena) LineIndex {
         var line_count: usize = 1;
         for (file_content) |c| {
             if (c == '\n') line_count += 1;
@@ -1049,7 +1049,7 @@ test LineIndex {
     var arena = Arena.init(4096);
     defer arena.deinit();
 
-    const line_index = try LineIndex.init(file_content, &arena);
+    const line_index = LineIndex.init(file_content, &arena);
 
     var line: u32 = 1;
     var last_nl: usize = 0;

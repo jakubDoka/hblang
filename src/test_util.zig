@@ -109,7 +109,7 @@ pub inline fn header(comptime name: []const u8, owriter: ?*std.Io.Writer, corors
     try corors.setColor(writer, .reset);
 }
 
-pub fn parseExample(arena: *utils.Arena, name: []const u8, code: []const u8, output: *std.Io.Writer) ![]Ast {
+pub fn parseExample(arena: *utils.Arena, name: []const u8, code: []const u8, output: ?*std.Io.Writer) ![]Ast {
     const FileRecord = struct {
         path: []const u8,
         source: [:0]const u8,

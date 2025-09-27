@@ -9,7 +9,8 @@ pub fn main() !void {
 
     const out_file = try std.fs.cwd().createFile(out, .{});
     defer out_file.close();
-    const writer = out_file.writer();
+    var writer_impl = out_file.writer(&.{});
+    const writer = &writer_impl.interface;
 
     try writer.print(
         \\const utils = @import("utils");
