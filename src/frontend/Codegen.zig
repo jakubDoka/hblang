@@ -21,6 +21,7 @@ types: *Types,
 target: Types.Target,
 abi: Types.Abi,
 only_inference: bool = false,
+
 name: []const u8 = undefined,
 parent_scope: Scope = undefined,
 ast: *const Ast = undefined,

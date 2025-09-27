@@ -16,15 +16,17 @@ mach: Mach = .init(HbvmGen),
 emit_global_reloc_offsets: bool = false,
 push_uninit_globals: bool = false,
 align_globlals: bool = false,
+ctx: *Ctx = undefined,
 
-local_relocs: std.ArrayListUnmanaged(BlockReloc) = undefined,
-ret_count: usize = undefined,
-block_offsets: []i32 = undefined,
-allocs: []const u16 = undefined,
-spill_base: usize = undefined,
-local_base: u32 = undefined,
-stack_size: u32 = undefined,
-entry: u32 = undefined,
+pub const Ctx = struct {
+    local_relocs: std.ArrayListUnmanaged(BlockReloc),
+    ret_count: usize,
+    block_offsets: []i32,
+    allocs: []const u16,
+    spill_base: usize,
+    local_base: u32,
+    stack_size: u32,
+};
 
 const Func = graph.Func(HbvmGen);
 const Kind = Func.Kind;
@@ -313,7 +315,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         }
     }
 
-    if (opts.optimizations.apply(HbvmGen, func, self, id)) return;
+    const allocs = opts.optimizations.apply(HbvmGen, func, self, id) orelse return;
 
     var tmp = utils.Arena.scrath(if (opts.optimizations == .opts)
         opts.optimizations.opts.arena
@@ -322,10 +324,6 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     defer tmp.deinit();
 
     //func.fmtScheduledLog();
-
-    self.block_offsets = tmp.arena.alloc(i32, func.gcm.block_count);
-    self.local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.gcm.block_count * 2));
-    self.ret_count = if (func.signature.returns()) |r| r.len else std.math.maxInt(usize);
 
     var is_tail = true;
     var call_slot_size: u64 = 0;
@@ -340,15 +338,15 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     func.computeStructArgLayout();
 
-    const max_reg = if (self.allocs.len == 0) 0 else b: {
+    const max_reg = if (allocs.len == 0) 0 else b: {
         var max: u16 = 0;
-        for (self.allocs) |r| {
+        for (allocs) |r| {
             if (r == 254) continue;
             max = @max(r, max);
         }
         break :b max;
     };
-    const used_registers = if (self.allocs.len == 0) 0 else @min(max_reg, max_alloc_regs) -|
+    const used_registers = if (allocs.len == 0) 0 else @min(max_reg, max_alloc_regs) -|
         (@intFromEnum(isa.Reg.ret_addr) - @intFromBool(is_tail));
 
     const used_reg_size = @as(u16, (used_registers + @intFromBool(!is_tail))) * 8;
@@ -358,11 +356,18 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     local_size = std.mem.alignForward(i64, local_size, 8);
 
     const stack_size: i64 = used_reg_size + local_size + spill_count + @as(i64, @intCast(call_slot_size));
-    self.spill_base = @intCast(used_reg_size + local_size);
-    self.local_base = @intCast(call_slot_size);
-
     sym.stack_size = @intCast(stack_size);
-    self.stack_size = @intCast(stack_size);
+
+    var ctx = Ctx{
+        .allocs = allocs,
+        .block_offsets = tmp.arena.alloc(i32, func.gcm.postorder.len),
+        .local_relocs = .initBuffer(tmp.arena.alloc(BlockReloc, func.gcm.postorder.len * 2)),
+        .ret_count = if (func.signature.returns()) |r| r.len else std.math.maxInt(usize),
+        .spill_base = @intCast(used_reg_size + local_size),
+        .local_base = @intCast(call_slot_size),
+        .stack_size = @intCast(stack_size),
+    };
+    self.ctx = &ctx;
 
     prelude: {
         if (used_reg_size != 0) {
@@ -382,7 +387,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     }
 
     for (func.gcm.postorder, 0..) |bb, i| {
-        self.block_offsets[bb.base.schedule] = @intCast(self.mach.out.code.items.len);
+        self.ctx.block_offsets[bb.base.schedule] = @intCast(self.mach.out.code.items.len);
         std.debug.assert(bb.base.schedule == i);
         self.emitBlockBody(tmp.arena.allocator(), &bb.base);
         const last = bb.base.outputs()[bb.base.output_len - 1].get();
@@ -413,7 +418,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
             {
                 utils.panic("{f} {f}\n", .{ last.outputs()[@intFromBool(last.isSwapped())], last });
             }
-            self.local_relocs.appendAssumeCapacity(.{
+            self.ctx.local_relocs.appendAssumeCapacity(.{
                 .dest_block = last.outputs()[@intFromBool(last.isSwapped())].get().schedule,
                 .rel = self.reloc(1, .rel32),
             });
@@ -421,8 +426,8 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         }
     }
 
-    for (self.local_relocs.items) |lr| {
-        self.doReloc(lr.rel, self.block_offsets[lr.dest_block]);
+    for (self.ctx.local_relocs.items) |lr| {
+        self.doReloc(lr.rel, self.ctx.block_offsets[lr.dest_block]);
     }
 }
 
@@ -465,13 +470,13 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .LocalAlloc => {},
             .StructArg => {
-                self.emit(.addi64, .{ self.getReg(no), .stack_addr, no.extra(.StructArg).spec.size + self.stack_size });
+                self.emit(.addi64, .{ self.getReg(no), .stack_addr, no.extra(.StructArg).spec.size + self.ctx.stack_size });
             },
             .StackArgOffset => {
                 self.emit(.addi64, .{ self.getReg(no), .stack_addr, no.extra(.StackArgOffset).offset });
             },
             .Local => {
-                self.emit(.addi64, .{ self.getReg(no), .stack_addr, no.inputs()[1].?.extra(.LocalAlloc).size + self.local_base });
+                self.emit(.addi64, .{ self.getReg(no), .stack_addr, no.inputs()[1].?.extra(.LocalAlloc).size + self.ctx.local_base });
             },
             .Ld => |extra| {
                 const size: u16 = @intCast(no.data_type.size());
@@ -485,12 +490,12 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .StackLd => |extra| {
                 const size: u16 = @intCast(no.data_type.size());
-                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc).size)) + extra.offset + self.local_base;
+                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc).size)) + extra.offset + self.ctx.local_base;
                 self.emit(.ld, .{ self.getReg(no), .stack_addr, off, size });
             },
             .StackSt => |extra| {
                 const size: u16 = @intCast(no.data_type.size());
-                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc).size)) + extra.offset + self.local_base;
+                const off = @as(i64, @intCast(no.inputs()[2].?.extra(.LocalAlloc).size)) + extra.offset + self.ctx.local_base;
                 self.emit(.st, .{ self.getReg(inps[0]), .stack_addr, off, size });
             },
             .BlockCpy => {
@@ -629,7 +634,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                     no.outputs()[@intFromBool(!extra.swapped)].get().schedule !=
                         std.math.maxInt(u16),
                 );
-                self.local_relocs.appendAssumeCapacity(.{
+                self.ctx.local_relocs.appendAssumeCapacity(.{
                     .dest_block = no.outputs()[@intFromBool(!extra.swapped)].get().schedule,
                     .rel = self.reloc(3, .rel16),
                 });
@@ -637,7 +642,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             },
             .If => {
                 std.debug.assert(no.outputs()[1].get().schedule != std.math.maxInt(u16));
-                self.local_relocs.appendAssumeCapacity(.{
+                self.ctx.local_relocs.appendAssumeCapacity(.{
                     .dest_block = no.outputs()[1].get().schedule,
                     .rel = self.reloc(3, .rel16),
                 });
@@ -693,7 +698,7 @@ pub fn doReloc(self: *HbvmGen, rel: Reloc, dest: i64) void {
 const max_regs = @intFromEnum(isa.Reg.max);
 
 fn getReg(self: *HbvmGen, n: ?*Func.Node) isa.Reg {
-    return @enumFromInt(self.allocs[n.?.schedule]);
+    return @enumFromInt(self.ctx.allocs[n.?.schedule]);
 }
 
 fn emit(self: *HbvmGen, comptime op: isa.Op, args: isa.TupleOf(isa.ArgsOf(op))) void {

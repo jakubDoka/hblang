@@ -1175,24 +1175,21 @@ pub const EmitOptions = struct {
     optimizations: union(enum) {
         opts: OptOptions,
         allocs: []const u16,
+
         pub fn apply(
             self: @This(),
             comptime Backend: type,
             func: *graph.Func(Backend),
             backend: *Backend,
             id: u32,
-        ) bool {
+        ) ?[]const u16 {
             switch (self) {
                 .opts => |pts| {
-                    if (pts.shouldDefer(id, Backend, func, backend)) return true;
-                    backend.allocs = root.backend.Regalloc.rallocIgnoreStats(Backend, func);
+                    if (pts.shouldDefer(id, Backend, func, backend)) return null;
+                    return root.backend.Regalloc.rallocIgnoreStats(Backend, func);
                 },
-                .allocs => |pts| {
-                    backend.allocs = pts;
-                },
+                .allocs => |pts| return pts,
             }
-
-            return false;
         }
     },
     special: ?Special = null,

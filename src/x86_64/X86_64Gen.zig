@@ -23,18 +23,21 @@ f32index: std.ArrayHashMapUnmanaged(f32, void, CtxF32, false) = .{},
 f64s: Mach.Data.SymIdx = .invalid,
 f64index: std.ArrayHashMapUnmanaged(f64, void, CtxF64, false) = .{},
 lpe: dwarf.LineProgramEncoder = .{},
+ctx: *Ctx = undefined,
 
-allocs: []const u16 = undefined,
-ret_count: usize = undefined,
-local_relocs: std.ArrayListUnmanaged(Reloc) = undefined,
-block_offsets: []u32 = undefined,
-arg_base: u32 = undefined,
-local_base: u32 = undefined,
-slot_base: c_int = undefined,
-code_base: u32 = undefined,
-builtins: Mach.Builtins = undefined,
-lpe_writer: *std.Io.Writer = undefined,
-files: []const utils.LineIndex = undefined,
+pub const Ctx = struct {
+    allocs: []const u16,
+    ret_count: usize,
+    local_relocs: std.ArrayListUnmanaged(Reloc),
+    block_offsets: []u32,
+    arg_base: u32,
+    local_base: u32,
+    slot_base: c_int,
+    code_base: u32,
+    builtins: Mach.Builtins,
+    lpe_writer: *std.Io.Writer,
+    files: []const utils.LineIndex,
+};
 
 const CtxF32 = struct {
     pub fn eql(_: @This(), a: f32, b: f32, _: usize) bool {
@@ -812,14 +815,13 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         }
     else
         opts.name;
-    self.builtins = opts.builtins;
 
     const sym = try self.mach.out.startDefineFunc(self.gpa, id, name, .func, linkage, opts.is_inline);
     defer self.mach.out.endDefineFunc(id);
 
     if (opts.linkage == .imported) return;
 
-    if (opts.optimizations.apply(X86_64Gen, func, self, id)) return;
+    const allocs = opts.optimizations.apply(X86_64Gen, func, self, id) orelse return;
 
     var tmp = utils.Arena.scrath(if (opts.optimizations == .opts)
         opts.optimizations.opts.arena
@@ -829,19 +831,12 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
 
     const postorder = func.gcm.postorder;
 
-    self.code_base = @intCast(self.mach.out.code.items.len);
-    self.ret_count = if (func.signature.returns()) |r| r.len else std.math.maxInt(usize);
-    self.local_relocs = .initBuffer(tmp.arena.alloc(Reloc, 1024 * 10));
-    self.block_offsets = tmp.arena.alloc(u32, postorder.len);
-
     var lpe_writer = std.Io.Writer.Allocating
         .fromArrayList(self.gpa, &self.mach.out.line_info);
     defer self.mach.out.line_info = lpe_writer.toArrayList();
-    self.lpe_writer = &lpe_writer.writer;
-    self.files = opts.files;
 
     const base = lpe_writer.written().len;
-    const offset = self.lpe.begin(self.lpe_writer);
+    const offset = self.lpe.begin(&lpe_writer.writer);
     try self.mach.out.line_info_relocs.append(self.gpa, .{
         .offset = @intCast(base + offset),
         .target = self.mach.out.funcs.items[id],
@@ -852,7 +847,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     });
 
     var used_regs = std.EnumSet(Reg){};
-    for (self.allocs) |a| {
+    for (allocs) |a| {
         if (std.meta.intToEnum(Reg, a)) |enm| {
             used_regs.insert(enm);
         } else |_| {
@@ -862,7 +857,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
 
     const local_size: i64 = func.computeStackLayout(0);
 
-    const spill_slot_count = if (self.allocs.len == 0) 0 else std.mem.max(u16, self.allocs) -| 31;
+    const spill_slot_count = if (allocs.len == 0) 0 else std.mem.max(u16, allocs) -| 31;
     var stack_size: i64 = std.mem.alignForward(i64, local_size, 8) +
         spill_slot_count * 8;
 
@@ -897,10 +892,22 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         stack_size += padding;
     }
 
-    self.slot_base = @intCast(call_slot_size);
-    self.local_base = @intCast(self.slot_base + spill_slot_count * 8);
-    self.arg_base = @intCast(stack_size);
-    self.arg_base += 8; // call adress
+    var ctx = Ctx{
+        .builtins = opts.builtins,
+        .files = opts.files,
+        .lpe_writer = &lpe_writer.writer,
+        .allocs = allocs,
+        .code_base = @intCast(self.mach.out.code.items.len),
+        .ret_count = if (func.signature.returns()) |r| r.len else std.math.maxInt(usize),
+        .local_relocs = .initBuffer(tmp.arena.alloc(Reloc, 1024 * 10)),
+        .block_offsets = tmp.arena.alloc(u32, postorder.len),
+        .slot_base = @intCast(call_slot_size),
+        .local_base = @intCast(call_slot_size + spill_slot_count * 8),
+        .arg_base = @intCast(stack_size),
+    };
+    self.ctx = &ctx;
+
+    self.ctx.arg_base += 8; // call adress
 
     prelude: {
         for (Reg.system_v.callee_saved) |r| {
@@ -908,11 +915,11 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
                 self.ensureInstrSpace();
                 // push r
                 self.emitSingleOp(0x50, r);
-                self.arg_base += 8;
+                self.ctx.arg_base += 8;
             }
         }
 
-        sym.stack_size = @intCast(self.arg_base);
+        sym.stack_size = @intCast(self.ctx.arg_base);
 
         if (stack_size != 0) {
             // sub rsp, stack_size
@@ -926,7 +933,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     }
 
     for (postorder, 0..) |bb, i| {
-        self.block_offsets[bb.base.schedule] = @intCast(self.mach.out.code.items.len);
+        self.ctx.block_offsets[bb.base.schedule] = @intCast(self.mach.out.code.items.len);
         std.debug.assert(bb.base.schedule == i);
 
         self.emitBlockBody(&bb.base);
@@ -959,7 +966,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
             // noop
         } else {
             std.debug.assert(last.outputs()[0].get().isBasicBlockStart());
-            self.local_relocs.appendAssumeCapacity(.{
+            self.ctx.local_relocs.appendAssumeCapacity(.{
                 .dest = last.outputs()[@intFromBool(last.isSwapped())].get().schedule,
                 .offset = @intCast(self.mach.out.code.items.len),
                 .off = 1,
@@ -971,10 +978,10 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         }
     }
 
-    for (self.local_relocs.items) |rl| {
+    for (self.ctx.local_relocs.items) |rl| {
         const size = @intFromEnum(rl.class);
 
-        const dst_offset: i64 = self.block_offsets[rl.dest];
+        const dst_offset: i64 = self.ctx.block_offsets[rl.dest];
         const jump = dst_offset - rl.offset - size - rl.off; // welp we learned
 
         @memcpy(
@@ -997,11 +1004,11 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
         self.ensureInstrSpace();
 
         if (instr.sloc != graph.Sloc.none) {
-            const line, const col = self.files[instr.sloc.namespace]
+            const line, const col = self.ctx.files[instr.sloc.namespace]
                 .lineCol(instr.sloc.index);
             self.lpe.addInstruction(
-                self.lpe_writer,
-                @intCast(self.mach.out.code.items.len - self.code_base),
+                self.ctx.lpe_writer,
+                @intCast(self.mach.out.code.items.len - self.ctx.code_base),
                 instr.sloc.namespace,
                 line,
                 col,
@@ -1033,12 +1040,12 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             .MemCpy => {
                 // call id
                 self.emitBytes(&.{ 0xe8, 0, 0, 0, 0 });
-                if (self.builtins.memcpy == std.math.maxInt(u32)) {
+                if (self.ctx.builtins.memcpy == std.math.maxInt(u32)) {
                     if (self.memcpy == .invalid)
                         try self.mach.out.importSym(self.gpa, &self.memcpy, "memcpy", .func);
                     try self.mach.out.addReloc(self.gpa, &self.memcpy, .@"4", -4, 4);
                 } else {
-                    try self.mach.out.addFuncReloc(self.gpa, self.builtins.memcpy, .@"4", -4, 4);
+                    try self.mach.out.addFuncReloc(self.gpa, self.ctx.builtins.memcpy, .@"4", -4, 4);
                 }
             },
             .MachSplit => {
@@ -1059,12 +1066,12 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     if (lhs_stack and rhs.isStack()) {
                         // push [rsp+dis]
                         self.emitByte(0xff);
-                        const lhs_off = lhs.stackOffset(@intCast(self.slot_base));
+                        const lhs_off = lhs.stackOffset(@intCast(self.ctx.slot_base));
                         self.emitIndirectAddr(@enumFromInt(0b110), .rsp, .no_index, 1, @intCast(lhs_off));
 
                         // pop [rsp+dis]
                         self.emitByte(0x8f);
-                        const rhs_off = rhs.stackOffset(@intCast(self.slot_base));
+                        const rhs_off = rhs.stackOffset(@intCast(self.ctx.slot_base));
                         self.emitIndirectAddr(@enumFromInt(0b000), .rsp, .no_index, 1, @intCast(rhs_off));
 
                         break :b;
@@ -1083,7 +1090,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         self.emitByte(if (lhs_stack) 0x89 else 0x8b);
                     }
 
-                    const offset = rhs.stackOffset(@intCast(self.slot_base));
+                    const offset = rhs.stackOffset(@intCast(self.ctx.slot_base));
                     self.emitIndirectAddr(lhs, .rsp, .no_index, 1, @intCast(offset));
                 }
             },
@@ -1143,7 +1150,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             .Local => {
                 // lea dst, [rsp+dis]
                 const dst = self.getReg(instr);
-                const dis = instr.inputs()[1].?.extra(.LocalAlloc).size + self.local_base;
+                const dis = instr.inputs()[1].?.extra(.LocalAlloc).size + self.ctx.local_base;
                 self.emitStackLea(dst, @intCast(dis));
             },
             .IndexLea => {
@@ -1161,14 +1168,14 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
             .StackLea => {
                 // lea dst, [rsp+dis]
                 const dst = self.getReg(instr);
-                const dis = @as(i32, @intCast(instr.inputs()[1].?.extra(.LocalAlloc).size + self.local_base)) +
+                const dis = @as(i32, @intCast(instr.inputs()[1].?.extra(.LocalAlloc).size + self.ctx.local_base)) +
                     instr.extra(.StackLea).dis;
                 self.emitStackLea(dst, dis);
             },
             .StructArg => |extra| if (!extra.no_address) {
                 // lea dst, [rsp+dis]
                 const dst = self.getReg(instr);
-                const dis = instr.extra(.StructArg).spec.size + self.arg_base;
+                const dis = instr.extra(.StructArg).spec.size + self.ctx.arg_base;
                 self.emitStackLea(dst, @intCast(dis));
             },
             .StackArgOffset => {
@@ -1242,7 +1249,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 self.emitRex(cond, cond, .rax, cond_size);
                 self.emitBytes(&.{ opcode, Reg.Mod.direct.rm(cond, cond) });
 
-                self.local_relocs.appendAssumeCapacity(.{
+                self.ctx.local_relocs.appendAssumeCapacity(.{
                     .dest = instr.outputs()[1].get().schedule,
                     .offset = @intCast(self.mach.out.code.items.len),
                     .class = .rel32,
@@ -1258,7 +1265,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
 
                 self.emitBinopCmp(lhs, rhs, oper_dt);
 
-                self.local_relocs.appendAssumeCapacity(.{
+                self.ctx.local_relocs.appendAssumeCapacity(.{
                     .dest = instr.outputs()[1].get().schedule,
                     .offset = @intCast(self.mach.out.code.items.len),
                     .class = .rel32,
@@ -1813,8 +1820,8 @@ pub fn ensureInstrSpace(self: *X86_64Gen) void {
 
 pub fn stackBaseOf(self: *X86_64Gen, instr: *Func.Node) i32 {
     return @intCast(switch (instr.inputs()[2].?.extra2()) {
-        .LocalAlloc => |n| n.size + self.local_base,
-        .StructArg => |n| n.spec.size + self.arg_base,
+        .LocalAlloc => |n| n.size + self.ctx.local_base,
+        .StructArg => |n| n.spec.size + self.ctx.arg_base,
         else => utils.panic("{f}", .{instr.inputs()[2].?}),
     });
 }
@@ -2020,7 +2027,7 @@ pub fn setOff(op: graph.BinOp) u8 {
 }
 
 pub fn getReg(self: X86_64Gen, node: *FuncNode) Reg {
-    return @enumFromInt(self.allocs[node.schedule]);
+    return @enumFromInt(self.ctx.allocs[node.schedule]);
 }
 
 pub fn emitData(self: *X86_64Gen, opts: Mach.DataOptions) void {
