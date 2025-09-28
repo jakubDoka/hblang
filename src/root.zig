@@ -454,7 +454,7 @@ pub fn compile(opts: CompileOptions) anyerror!void {
             .logs = logs,
         },
     );
-    if (errored) {
+    if (errored or threading.single.types.errored) {
         opts.logDiag("failed due to previous errors\n", .{});
         return error.Failed;
     }

@@ -7,7 +7,7 @@ main := fn(argn: uint, argv: ^^u8): uint {
 }
 
 Command := struct {
-	.step: Step = .{vtable: Step.Vtable.init(Command)};
+	.step: Step = .{vtable: .init(Command)};
 	.args: [][]u8;
 	.env: []Var = &.[]
 

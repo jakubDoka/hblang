@@ -3372,10 +3372,14 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
     var typ_res: Value, var caller: ?Value = if (e.called.tag() == .Tag) b: {
         const pos = ast.exprs.getTyped(.Tag, e.called).?;
         const name = ast.tokenSrc(pos.index + 1);
-        const ty = ctx.ty orelse {
+        var ty = ctx.ty orelse {
             return self.report(e.called, "can infer the implicit access," ++
                 " you can specify the type: <ty>.{}", .{name});
         };
+
+        if (ty.data() == .Pointer) {
+            ty = ty.data().Pointer.get(self.types).*;
+        }
 
         break :b .{ try self.lookupScopeItem(pos.*, ty, name), null };
     } else if (e.called.tag() == .Field) b: {

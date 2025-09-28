@@ -16,6 +16,7 @@ const tys = root.frontend.types;
 
 pub const Abi = root.frontend.Abi;
 
+errored: bool = false,
 alignment: void align(std.atomic.cache_line) = {},
 store: utils.EntStore(tys) = .{},
 pool: utils.Pool,

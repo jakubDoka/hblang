@@ -610,7 +610,9 @@ pub const Struct = struct {
                         .readonly = true,
                     });
 
-                    types.ct.evalGlobal(name, value, ty, field.value) catch {};
+                    types.ct.evalGlobal(name, value, ty, field.value) catch {
+                        types.errored = true;
+                    };
 
                     fields[i].defalut_value = value;
                 }
