@@ -1385,21 +1385,67 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
                 return self.checkTag(e.rhs, lhs, lhs.ty.data().Union, &rhs, e.op);
             }
 
-            switch (lhs.ty.data()) {
-                .Struct => |struct_ty| {
+            const Precond = struct {
+                res_slot: *Node,
+                builder: Builder.If,
+            };
+
+            var precondition: ?Precond = null;
+
+            if ((rhs.ty.data() == .Nullable or lhs.ty.data() == .Nullable) and e.op.isComparison()) nullable: {
+                const rhs_base = if (rhs.ty.data() == .Nullable) rhs.ty.data().Nullable.get(self.types).inner else rhs.ty;
+                const lhs_base = if (lhs.ty.data() == .Nullable) lhs.ty.data().Nullable.get(self.types).inner else lhs.ty;
+
+                if (e.op != .@"==" and e.op != .@"!=")
+                    return self.report(expr, "nullable types only support `!=` and `==`", .{});
+
+                if (lhs_base != rhs_base) {
+                    return self.report(e.lhs, "cant compare nullable types since" ++
+                        " base type does not match ({} != {})", .{ lhs_base, rhs_base });
+                }
+
+                if (rhs_base.data() == .Pointer) {
+                    rhs.ty = rhs_base;
+                    lhs.ty = lhs_base;
+                    break :nullable;
+                }
+
+                const lhs_flag = if (lhs.ty.data() == .Nullable)
+                    self.emitNullableTagLoad(sloc, lhs.ty.data().Nullable.get(self.types), &lhs)
+                else
+                    self.bl.addIntImm(sloc, .i8, 1);
+                const rhs_flag = if (rhs.ty.data() == .Nullable)
+                    self.emitNullableTagLoad(sloc, rhs.ty.data().Nullable.get(self.types), &rhs)
+                else
+                    self.bl.addIntImm(sloc, .i8, 1);
+
+                const matches = self.bl.addBinOp(sloc, .eq, .i8, lhs_flag, rhs_flag);
+
+                if (rhs.ty.data() == .Nullable and lhs.ty.data() == .Nullable) {
+                    return self.report(e.lhs, "cant do that yet", .{});
+                }
+
+                precondition = Precond{
+                    .res_slot = self.bl.addLocal(sloc, 1, @intFromEnum(Types.Id.i8)),
+                    .builder = self.bl.addIfAndBeginThen(sloc, matches),
+                };
+            }
+
+            var res: Value = switch (lhs.ty.data()) {
+                .Struct => |struct_ty| b: {
                     try self.typeCheck(e.rhs, &rhs, lhs.ty);
                     if (e.op.isComparison()) {
                         if (e.op != .@"==" and e.op != .@"!=")
                             return self.report(expr, "structs only support `!=` and `==`", .{});
                         const value = try self.emitStructFoldOp(expr, struct_ty, e.op, lhs.id.Pointer, rhs.id.Pointer);
-                        return .mkv(.bool, value orelse self.bl.addIntImm(sloc, .i8, 1));
+                        break :b .mkv(.bool, value orelse self.bl.addIntImm(sloc, .i8, 1));
                     } else {
                         const loc = ctx.loc orelse self.bl.addLocal(sloc, self.abiCata(lhs.ty).size(), @intFromEnum(lhs.ty));
                         try self.emitStructOp(expr, struct_ty, e.op, loc, lhs.id.Pointer, rhs.id.Pointer);
-                        return .mkp(lhs.ty, loc);
+                        break :b .mkp(lhs.ty, loc);
                     }
                 },
-                .Builtin => {
+                .Builtin => b: {
                     const binop = try self.lexemeToBinOp(expr, e.op, lhs.ty);
                     const lhs_ty = (if (e.op.isComparison() or
                         (ctx.ty != null and (ctx.ty.?.data() == .Pointer)))
@@ -1419,7 +1465,7 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
                     }
 
                     const dest_ty = if (e.op.isComparison()) .bool else upcast_ty;
-                    return .mkv(dest_ty, self.bl.addBinOp(
+                    break :b .mkv(dest_ty, self.bl.addBinOp(
                         sloc,
                         binop,
                         self.abiCata(dest_ty).ByValue,
@@ -1427,7 +1473,7 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
                         rhs.getValue(sloc, self),
                     ));
                 },
-                .Pointer => |ptr_ty| if (rhs.ty.data() == .Pointer) {
+                .Pointer => |ptr_ty| if (rhs.ty.data() == .Pointer) b: {
                     if (e.op != .@"-" and !e.op.isComparison())
                         return self.report(expr, "two pointers can only be subtracted or compared", .{});
 
@@ -1435,21 +1481,21 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
                     try self.typeCheck(e.rhs, &rhs, lhs.ty);
                     const dest_ty: Types.Id = if (e.op.isComparison()) .bool else .int;
 
-                    return .mkv(dest_ty, self.bl.addBinOp(
+                    break :b .mkv(dest_ty, self.bl.addBinOp(
                         sloc,
                         binop,
                         self.abiCata(dest_ty).ByValue,
                         lhs.getValue(sloc, self),
                         rhs.getValue(sloc, self),
                     ));
-                } else {
+                } else b: {
                     if (e.op != .@"-" and e.op != .@"+")
                         return self.report(expr, "you can only subtract or add an integer to a pointer", .{});
 
                     const upcast: Types.Id = if (rhs.ty.isSigned()) .int else .uint;
                     try self.typeCheck(e.rhs, &rhs, upcast);
 
-                    return .mkv(lhs.ty, self.bl.addIndexOffset(
+                    break :b .mkv(lhs.ty, self.bl.addIndexOffset(
                         sloc,
                         lhs.getValue(sloc, self),
                         if (e.op == .@"-") .isub else .iadd,
@@ -1457,14 +1503,14 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
                         rhs.getValue(sloc, self),
                     ));
                 },
-                .Enum => {
+                .Enum => b: {
                     if (!e.op.isComparison())
                         return self.report(expr, "only comparison operators are allowed for enums", .{});
 
                     const binop = try self.lexemeToBinOp(expr, e.op, lhs.ty);
                     try self.typeCheck(e.rhs, &rhs, lhs.ty);
 
-                    return switch (self.abiCata(lhs.ty)) {
+                    break :b switch (self.abiCata(lhs.ty)) {
                         .Impossible => unreachable,
                         .Imaginary => .mkv(.bool, self.bl.addIntImm(sloc, .i8, 1)),
                         .ByValue => |vty| .mkv(.bool, self.bl.addBinOp(
@@ -1478,7 +1524,17 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
                     };
                 },
                 else => return self.report(expr, "{} does not support binary operations", .{lhs.ty}),
+            };
+
+            if (precondition) |*p| {
+                self.bl.addStore(sloc, p.res_slot, .i8, res.getValue(sloc, self));
+                const end = p.builder.beginElse(&self.bl);
+                self.bl.addStore(sloc, p.res_slot, .i8, self.bl.addIntImm(sloc, .i8, @intFromBool(e.op == .@"!=")));
+                p.builder.end(&self.bl, end);
+                return .mkp(.bool, p.res_slot);
             }
+
+            return res;
         },
     }
 }
@@ -2724,23 +2780,27 @@ pub fn checkNull(self: *Codegen, expr: Ast.Id, lhs: *Value, op: Lexer.Lexeme) !V
 
     const nul: *tys.Nullable = self.types.store.get(lhs.ty.data().Nullable);
 
-    var value = if (nul.nieche.offset(self.types)) |spec|
-        if (spec.kind == .impossible)
-            self.bl.addIntImm(sloc, .i8, 0)
-        else
-            self.bl.addFieldLoad(sloc, lhs.id.Pointer, spec.offset, spec.kind.abi())
-    else switch (lhs.id) {
-        .Imaginary => unreachable,
-        .Value => self.bl.addBinOp(sloc, .band, .i8, lhs.id.Value, self.bl
-            .addIntImm(sloc, .i8, 255)),
-        .Pointer => self.bl.addLoad(sloc, lhs.id.Pointer, .i8),
-    };
+    var value = self.emitNullableTagLoad(sloc, nul, lhs);
 
     if (op == .@"==") {
         value = self.bl.addBinOp(sloc, .eq, .i8, value, self.bl.addIntImm(sloc, value.data_type, 0));
     }
 
     return .mkv(.bool, value);
+}
+
+pub fn emitNullableTagLoad(self: *Codegen, sloc: graph.Sloc, nul: *tys.Nullable, value: *Value) *Node {
+    return if (nul.nieche.offset(self.types)) |spec|
+        if (spec.kind == .impossible)
+            self.bl.addIntImm(sloc, .i8, 0)
+        else
+            self.bl.addFieldLoad(sloc, value.id.Pointer, spec.offset, spec.kind.abi())
+    else switch (value.id) {
+        .Imaginary => unreachable,
+        .Value => self.bl.addBinOp(sloc, .band, .i8, value.id.Value, self.bl
+            .addIntImm(sloc, .i8, 255)),
+        .Pointer => self.bl.addLoad(sloc, value.id.Pointer, .i8),
+    };
 }
 
 pub fn typeCheck(self: *Codegen, expr: Ast.Id, got: *Value, expected: Types.Id) error{Never}!void {

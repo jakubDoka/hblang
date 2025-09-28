@@ -7,9 +7,10 @@ main := fn(argn: uint, argv: ^^u8): uint {
 		@syscall(1, 2, "\n")
 	}
 
-	arena := Arena.new(4096)
+	Arena.init_scratch(4096)
+	defer Arena.deinit_scratch()
 
-	tmp := arena.scope()
+	tmp := Arena.scratch(null)
 	defer tmp.pop()
 
 	mem := tmp.arena.alloc(u8, 10)
@@ -26,6 +27,30 @@ Arena := struct {
 	.pos: ^u8;
 	.end: ^u8
 
+	scratch_arenas: [2]Arena = @thread_local_storage()
+
+	init_scratch := fn(cap: uint): void {
+		for arena := scratch_arenas[..] {
+			arena.* = .init(cap)
+		}
+	}
+
+	deinit_scratch := fn(): void {
+		for arena := scratch_arenas[..] {
+			arena.deinit()
+		}
+	}
+
+	scratch := fn(other: ?^Arena): Scope {
+		for arena := scratch_arenas[..] {
+			if arena != other {
+				return arena.scope()
+			}
+		}
+
+		die
+	}
+
 	Scope := struct {
 		.arena: ^Arena;
 		.pos: ^u8
@@ -39,9 +64,13 @@ Arena := struct {
 		return .(self, self.pos)
 	}
 
-	new := fn(size: uint): Arena {
+	init := fn(size: uint): Arena {
 		ptr := mmap(null, size, .read | .write, .private | .anonymous, -1, 0)
 		return .(ptr, ptr, ptr + size)
+	}
+
+	deinit := fn(self: ^Arena): void {
+		munmap(self.ptr, @int_cast(self.end - self.ptr))
 	}
 
 	alloc := fn(self: ^Arena, $elem: type, count: uint): []elem {
@@ -76,6 +105,10 @@ align_forward := fn($T: type, pos: T, alignment: uint): T {
 
 mmap := fn(addr: ?^u8, len: uint, prot: MmapProt, flags: MmapFlags, fd: i32, offset: u64): ^u8 {
 	return @syscall(9, addr, len, prot.vl, flags.vl, fd, offset)
+}
+
+munmap := fn(addr: ^u8, len: uint): void {
+	@syscall(11, addr, len)
 }
 
 MmapProt := struct {

@@ -965,7 +965,7 @@ pub fn retainGlobals(self: *Types, target: Target, backend: *Machine, handle_err
         if (glob.completion.get(target) == .compiled) continue;
         glob.completion.getPtr(target).* = .compiled;
 
-        if (glob.relocs.len == 0) {
+        if (glob.relocs.len == 0 and !glob.uninit) {
             // TODO: add a flag that we did this
             var relocs = std.ArrayListUnmanaged(Machine.DataOptions.Reloc){};
             self.findPointerOffsets(&relocs, glob.data.slice(&self.ct), tmp.arena, glob.ty, 0);
