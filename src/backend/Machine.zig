@@ -185,6 +185,7 @@ pub const Data = struct {
         func,
         data,
         prealloc,
+        tls_prealloc,
 
         invalid,
     };
@@ -383,6 +384,7 @@ pub const Data = struct {
         push_uninit: bool,
         relocs: []const DataOptions.Reloc,
         readonly: bool,
+        thread_local: bool,
     ) !void {
         // this is there to support N(1) reverse lookup form a memory offset
         // to global id
@@ -392,7 +394,7 @@ pub const Data = struct {
             gpa,
             try utils.ensureSlot(&self.globals, gpa, id),
             name,
-            if (data == .init) .data else .prealloc,
+            if (data == .init) .data else if (thread_local) .tls_prealloc else .prealloc,
             linkage,
             readonly,
             false,
@@ -835,6 +837,7 @@ pub const DataOptions = struct {
     alignment: u64 = 1,
     value: ValueSpec,
     readonly: bool,
+    thread_local: bool,
 
     pub const Reloc = packed struct(u64) {
         target: u32,
@@ -1079,7 +1082,7 @@ pub const OptOptions = struct {
                             .files = opts.files,
                         });
                     },
-                    .data, .prealloc, .invalid => {},
+                    .data, .prealloc, .tls_prealloc, .invalid => {},
                 }
             }
 

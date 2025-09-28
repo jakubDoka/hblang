@@ -2042,6 +2042,7 @@ pub fn emitData(self: *X86_64Gen, opts: Mach.DataOptions) void {
         false,
         opts.relocs,
         opts.readonly,
+        opts.thread_local,
     );
 }
 

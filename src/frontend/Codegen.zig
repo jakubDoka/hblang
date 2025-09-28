@@ -4474,5 +4474,6 @@ fn emitDirective(
         },
         .handler, .@"export" => return self.report(expr, "can only be used in the file scope", .{}),
         .import => return self.report(expr, "can be only used as a body of the function", .{}),
+        .thread_local_storage => return self.report(expr, "can only be used as a global variable value", .{}),
     }
 }

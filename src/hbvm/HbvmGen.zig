@@ -732,6 +732,7 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
         self.push_uninit_globals,
         opts.relocs,
         opts.readonly,
+        opts.thread_local,
     );
 
     if (self.emit_global_reloc_offsets) {

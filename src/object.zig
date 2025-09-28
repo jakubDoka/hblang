@@ -61,6 +61,7 @@ pub const elf = enum {
         @".debug_line",
         @".rela.debug_line",
         @".bss",
+        @".tbss",
 
         const fnames = &[_][]const u8{""} ++ std.meta.fieldNames(Sections);
 
@@ -147,7 +148,7 @@ pub const elf = enum {
     pub const SectionHeader = extern struct {
         sh_name: Word,
         sh_type: SectionType,
-        sh_flags: SectionFlags,
+        sh_flags: SectionFlags = .{},
         sh_addr: Addr = 0,
         sh_offset: Off,
         sh_size: XWord,
@@ -160,12 +161,18 @@ pub const elf = enum {
     };
 
     pub const SectionFlags = packed struct(Word) {
-        write: bool,
-        alloc: bool,
-        execinstr: bool,
-        pad: u29 = 0,
-
-        pub const empty = SectionFlags{ .write = false, .alloc = false, .execinstr = false };
+        write: bool = false,
+        alloc: bool = false,
+        execinstr: bool = false,
+        merge: bool = false,
+        strings: bool = false,
+        info_link: bool = false,
+        link_order: bool = false,
+        os_nonconforming: bool = false,
+        group: bool = false,
+        tls: bool = false,
+        compressed: bool = false,
+        pad: u21 = 0,
     };
 
     pub const SymbolName = enum(Word) {
@@ -219,6 +226,7 @@ pub const elf = enum {
         const str_table: []const u8 = bytes[str_tab.sh_offset..][0..str_tab.sh_size];
 
         const bss = find_section_header(sctions, shstr_table, ".bss").?;
+        const tbss = find_section_header(sctions, shstr_table, ".tbss").?;
 
         const text_rela: []align(1) const Rela = if (find_section_header(sctions, shstr_table, ".rela.text")) |relocs|
             @ptrCast(bytes[relocs.sh_offset..][0..relocs.sh_size])
@@ -255,7 +263,7 @@ pub const elf = enum {
 
             if (s.shndx != .undef) append: {
                 const sction = &sctions[@intFromEnum(s.shndx)];
-                if (sction == bss) break :append;
+                if (sction == bss or sction == tbss) break :append;
                 const section = bytes[sction.sh_offset..][0..sction.sh_size];
                 try data.code.appendSlice(gpa, section[s.value..][0..s.size]);
             }
@@ -299,12 +307,13 @@ pub const elf = enum {
         section_alloc_cursor += @sizeOf(FileHeader);
         section_alloc_cursor += @sizeOf(SectionHeader) * Sections.fnames.len;
 
+        // TODO: handle alignment properly
+
         try writer.writeStruct(SectionHeader.first, .little);
 
         try writer.writeStruct(SectionHeader{
             .sh_name = Sections.@".shstrtab".pos(),
             .sh_type = .strtab,
-            .sh_flags = .empty,
             .sh_offset = @intCast(section_alloc_cursor),
             .sh_size = @intCast(Sections.section_specs.fs.len),
         }, .little);
@@ -313,7 +322,6 @@ pub const elf = enum {
         try writer.writeStruct(SectionHeader{
             .sh_name = Sections.@".strtab".pos(),
             .sh_type = .strtab,
-            .sh_flags = .empty,
             .sh_offset = @intCast(section_alloc_cursor),
             .sh_size = @intCast(self.names.items.len + 1),
         }, .little);
@@ -340,7 +348,6 @@ pub const elf = enum {
         try writer.writeStruct(SectionHeader{
             .sh_name = Sections.@".symtab".pos(),
             .sh_type = .symtab,
-            .sh_flags = .empty,
             .sh_offset = @intCast(section_alloc_cursor),
             .sh_size = @intCast(sym_count * @sizeOf(Symbol)),
             .sh_entsize = @sizeOf(Symbol),
@@ -352,6 +359,7 @@ pub const elf = enum {
         var text_size: usize = 0;
         var data_size: usize = 0;
         var prealloc_size: usize = 0;
+        var tls_prealloc_size: usize = 0;
         var text_rel_count: usize = 0;
         var data_rel_count: usize = 0;
         for (self.syms.items) |sm| switch (sm.kind) {
@@ -366,13 +374,16 @@ pub const elf = enum {
             .prealloc => {
                 prealloc_size += sm.size;
             },
+            .tls_prealloc => {
+                tls_prealloc_size += sm.size;
+            },
             .invalid => {},
         };
 
         try writer.writeStruct(SectionHeader{
             .sh_name = Sections.@".text".pos(),
             .sh_type = .progbits,
-            .sh_flags = .{ .alloc = true, .execinstr = true, .write = false },
+            .sh_flags = .{ .alloc = true, .execinstr = true },
             .sh_offset = @intCast(section_alloc_cursor),
             .sh_size = @intCast(text_size),
         }, .little);
@@ -381,7 +392,6 @@ pub const elf = enum {
         try writer.writeStruct(SectionHeader{
             .sh_name = Sections.@".rela.text".pos(),
             .sh_type = .rela,
-            .sh_flags = .empty,
             .sh_offset = @intCast(section_alloc_cursor),
             .sh_size = @intCast(text_rel_count * @sizeOf(Rela)),
             .sh_entsize = @sizeOf(Rela),
@@ -393,7 +403,7 @@ pub const elf = enum {
         try writer.writeStruct(SectionHeader{
             .sh_name = Sections.@".data".pos(),
             .sh_type = .progbits,
-            .sh_flags = .{ .alloc = true, .write = true, .execinstr = false },
+            .sh_flags = .{ .alloc = true, .write = true },
             .sh_offset = @intCast(section_alloc_cursor),
             .sh_size = @intCast(data_size),
         }, .little);
@@ -402,7 +412,6 @@ pub const elf = enum {
         try writer.writeStruct(SectionHeader{
             .sh_name = Sections.@".rela.data".pos(),
             .sh_type = .rela,
-            .sh_flags = .empty,
             .sh_offset = @intCast(section_alloc_cursor),
             .sh_size = @intCast(data_rel_count * @sizeOf(Rela)),
             .sh_entsize = @sizeOf(Rela),
@@ -460,7 +469,7 @@ pub const elf = enum {
         try writer.writeStruct(SectionHeader{
             .sh_name = Sections.@".debug_info".pos(),
             .sh_type = .progbits,
-            .sh_flags = .{ .alloc = true, .write = false, .execinstr = false },
+            .sh_flags = .{ .alloc = true },
             .sh_offset = @intCast(section_alloc_cursor),
             .sh_size = @intCast(debug_info_size),
             .sh_link = @intFromEnum(Sections.@".symtab"),
@@ -470,7 +479,6 @@ pub const elf = enum {
         try writer.writeStruct(SectionHeader{
             .sh_name = Sections.@".rela.debug_info".pos(),
             .sh_type = .rela,
-            .sh_flags = .empty,
             .sh_offset = @intCast(section_alloc_cursor),
             .sh_size = @intCast(debug_info_rela.items.len * @sizeOf(Rela)),
             .sh_entsize = @sizeOf(Rela),
@@ -484,7 +492,7 @@ pub const elf = enum {
         try writer.writeStruct(SectionHeader{
             .sh_name = Sections.@".debug_abbrev".pos(),
             .sh_type = .progbits,
-            .sh_flags = .{ .alloc = true, .write = false, .execinstr = false },
+            .sh_flags = .{ .alloc = true },
             .sh_offset = @intCast(section_alloc_cursor),
             .sh_size = @intCast(debug_size.count),
         }, .little);
@@ -521,7 +529,7 @@ pub const elf = enum {
         try writer.writeStruct(SectionHeader{
             .sh_name = Sections.@".eh_frame".pos(),
             .sh_type = .progbits,
-            .sh_flags = .{ .alloc = true, .write = false, .execinstr = false },
+            .sh_flags = .{ .alloc = true },
             .sh_offset = @intCast(section_alloc_cursor),
             .sh_size = @intCast(debug_size.count),
         }, .little);
@@ -530,7 +538,6 @@ pub const elf = enum {
         try writer.writeStruct(SectionHeader{
             .sh_name = Sections.@".rela.eh_frame".pos(),
             .sh_type = .rela,
-            .sh_flags = .empty,
             .sh_offset = @intCast(section_alloc_cursor),
             .sh_size = @intCast(eh_frame_rela.items.len * @sizeOf(Rela)),
             .sh_entsize = @sizeOf(Rela),
@@ -554,7 +561,6 @@ pub const elf = enum {
         try writer.writeStruct(SectionHeader{
             .sh_name = Sections.@".debug_line".pos(),
             .sh_type = .progbits,
-            .sh_flags = .empty,
             .sh_offset = @intCast(section_alloc_cursor),
             .sh_size = @intCast(debug_size.count),
         }, .little);
@@ -572,7 +578,6 @@ pub const elf = enum {
         try writer.writeStruct(SectionHeader{
             .sh_name = Sections.@".rela.debug_line".pos(),
             .sh_type = .rela,
-            .sh_flags = .empty,
             .sh_offset = @intCast(section_alloc_cursor),
             .sh_size = @intCast(line_info_relocs.len * @sizeOf(Rela)),
             .sh_entsize = @sizeOf(Rela),
@@ -584,12 +589,22 @@ pub const elf = enum {
         try writer.writeStruct(SectionHeader{
             .sh_name = Sections.@".bss".pos(),
             .sh_type = .nobits,
-            .sh_flags = .{ .alloc = true, .write = true, .execinstr = false },
+            .sh_flags = .{ .alloc = true, .write = true },
             .sh_offset = @intCast(section_alloc_cursor),
             .sh_size = @intCast(prealloc_size),
             .sh_link = @intFromEnum(Sections.@".symtab"),
         }, .little);
         section_alloc_cursor += prealloc_size;
+
+        try writer.writeStruct(SectionHeader{
+            .sh_name = Sections.@".tbss".pos(),
+            .sh_type = .nobits,
+            .sh_flags = .{ .alloc = true, .write = true },
+            .sh_offset = @intCast(section_alloc_cursor),
+            .sh_size = @intCast(tls_prealloc_size),
+            .sh_link = @intFromEnum(Sections.@".symtab"),
+        }, .little);
+        section_alloc_cursor += tls_prealloc_size;
 
         try writer.writeAll(Sections.section_specs.fs);
         try writer.writeByte(0);
@@ -602,6 +617,7 @@ pub const elf = enum {
         var text_offset_cursor: u32 = 0;
         var data_offset_cursor: u32 = 0;
         var prealloc_offset_cursor: u32 = 0;
+        var tls_prealloc_offset_cursor: u32 = 0;
         for (projection[0 .. sym_count - 1], projected_offsets[0 .. sym_count - 1], 0..) |symid, *poff, i| {
             reloc_proj[symid] = @intCast(i);
 
@@ -610,6 +626,7 @@ pub const elf = enum {
                 .func => text_offset_cursor,
                 .data => data_offset_cursor,
                 .prealloc => prealloc_offset_cursor,
+                .tls_prealloc => tls_prealloc_offset_cursor,
                 .invalid => unreachable,
             };
             try writer.writeStruct(elf.Symbol{
@@ -619,7 +636,7 @@ pub const elf = enum {
                 .info = .{
                     .type = switch (sym.kind) {
                         .func => .func,
-                        .data, .prealloc => .object,
+                        .data, .prealloc, .tls_prealloc => .object,
                         .invalid => unreachable,
                     },
                     .bind = switch (sym.linkage) {
@@ -632,6 +649,7 @@ pub const elf = enum {
                         .func => @enumFromInt(@intFromEnum(Sections.@".text")),
                         .data => @enumFromInt(@intFromEnum(Sections.@".data")),
                         .prealloc => @enumFromInt(@intFromEnum(Sections.@".bss")),
+                        .tls_prealloc => @enumFromInt(@intFromEnum(Sections.@".tbss")),
                         .invalid => unreachable,
                     },
                     .imported => @enumFromInt(0),
@@ -642,6 +660,7 @@ pub const elf = enum {
                 .func => text_offset_cursor += sym.size,
                 .data => data_offset_cursor += sym.size,
                 .prealloc => prealloc_offset_cursor += sym.size,
+                .tls_prealloc => tls_prealloc_offset_cursor += sym.size,
                 .invalid => unreachable,
             }
         }

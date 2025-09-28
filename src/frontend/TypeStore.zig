@@ -935,6 +935,7 @@ pub fn retainClonedGlobals(self: *Types, pop_until: usize) void {
             .value = .{ .init = glob.data.slice(&self.ct) },
             .relocs = &.{},
             .readonly = glob.readonly,
+            .thread_local = glob.thread_local,
         });
 
         if (glob.relocs.len == 0) continue;
@@ -1003,6 +1004,7 @@ pub fn retainGlobals(self: *Types, target: Target, backend: *Machine, handle_err
             .alignment = glob.ty.alignment(self),
             .relocs = if (target == .runtime) glob.relocs else &.{},
             .readonly = glob.readonly,
+            .thread_local = glob.thread_local,
         });
 
         if (target == .@"comptime") {

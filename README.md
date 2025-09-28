@@ -2222,6 +2222,16 @@ MakeEnum := fn(fname: []u8): type {
 }
 ```
 
+#### directives 26 (@thread_local_storage)
+```hb
+local_int: uint = @thread_local_storage()
+
+main := fn(): uint {
+    local_int = 1
+    return local_int - 1
+}
+```
+
 ## progress
 
 - [x] hbvm-ableos target

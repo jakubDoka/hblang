@@ -1,0 +1,6 @@
+main:
+       li64 $2, 1
+        lra $1, $0, :directives 26 (@thread_local_storage).local_int
+         st $2, $1, 0, 8
+         cp $1, $0
+         tx

@@ -87,8 +87,8 @@ pub fn flush(self: root.backend.Machine.Data, writer: *std.Io.Writer) anyerror!v
     const offset_lookup = tmp.arena.alloc(u32, self.syms.items.len);
 
     var code_cursor: u32 = @sizeOf(ExecHeader);
-    var lengths: struct { func: u32, data: u32, prealloc: u32 } = undefined;
-    const sets = .{ .func, .data, .prealloc };
+    var lengths: struct { func: u32, data: u32, prealloc: u32, tls_prealloc: u32 } = undefined;
+    const sets = .{ .func, .data, .prealloc, .tls_prealloc };
     var prev_len: u32 = code_cursor;
     var global_reloc_count: u32 = 0;
     var global_reloc_offset: u32 = undefined;
@@ -175,6 +175,9 @@ pub fn flush(self: root.backend.Machine.Data, writer: *std.Io.Writer) anyerror!v
         .prealloc => {
             std.debug.assert(sym.reloc_count == 0);
         },
+        .tls_prealloc => {
+            std.debug.assert(sym.reloc_count == 0);
+        },
     };
 
     var sym_count: usize = @intFromBool(include_relocs);
@@ -184,7 +187,7 @@ pub fn flush(self: root.backend.Machine.Data, writer: *std.Io.Writer) anyerror!v
 
     try writer.writeStruct(ExecHeader{
         .code_length = lengths.func,
-        .data_length = lengths.data + lengths.prealloc,
+        .data_length = lengths.data + lengths.prealloc + lengths.tls_prealloc,
         .debug_length = sym_count * @sizeOf(Symbol) + self.names.items.len + 1,
         .symbol_count = sym_count,
     }, .little);
@@ -214,7 +217,7 @@ pub fn flush(self: root.backend.Machine.Data, writer: *std.Io.Writer) anyerror!v
             .offset = off,
             .kind = switch (sym.kind) {
                 .func => .func,
-                .data, .prealloc => .data,
+                .data, .prealloc, .tls_prealloc => .data,
                 .invalid => continue,
             },
         }, .little);

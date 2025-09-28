@@ -1,0 +1,4 @@
+main:
+	mov qword ptr [0x000000000000000B], 0x01
+	xor rax, rax
+	ret

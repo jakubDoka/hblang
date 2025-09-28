@@ -1218,8 +1218,9 @@ pub fn evalIntConst(self: *Comptime, scope: Codegen.Scope, int_conts: Ast.Id) !i
 
 pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(tys.Global), ty: ?Types.Id, value: Ast.Id) error{Never}!void {
     const types = self.getTypes();
-    const glbal = types.store.get(global);
+    const glbal = global.get(types);
     const file = glbal.key.loc.file;
+    const ast = types.getFile(file);
 
     if (value.tag() == .Idk) {
         const exp_ty = ty orelse {
@@ -1228,6 +1229,24 @@ pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(tys.Glo
 
         glbal.ty = exp_ty;
         glbal.uninit = true;
+        glbal.data = .{ .imm = &.{} };
+        glbal.data.imm.len = @intCast(exp_ty.size(types));
+        return;
+    }
+
+    if (value.tag() == .Directive and ast.exprs.get(value).Directive.kind == .thread_local_storage) {
+        const expr = ast.exprs.get(value).Directive;
+        if (expr.args.len() != 0) {
+            return types.report(file, expr, "the @thread_local_storage directive only takes 0 arguments, TODO: support initializer", .{});
+        }
+
+        const exp_ty = ty orelse {
+            return types.report(file, value, "the uninitialized variable needs a type", .{});
+        };
+
+        glbal.ty = exp_ty;
+        glbal.uninit = true;
+        glbal.thread_local = true;
         glbal.data = .{ .imm = &.{} };
         glbal.data.imm.len = @intCast(exp_ty.size(types));
         return;

@@ -689,6 +689,7 @@ pub const Global = struct {
     relocs: []Reloc = &.{},
     readonly: bool,
     uninit: bool = false,
+    thread_local: bool = false,
     completion: std.EnumArray(Types.Target, CompileState) =
         .{ .values = @splat(.queued) },
 
