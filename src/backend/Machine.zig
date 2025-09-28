@@ -403,7 +403,11 @@ pub const Data = struct {
         if (data == .init) {
             try self.code.appendSlice(gpa, data.init);
             for (relocs) |rel| {
-                try self.addGlobalReloc(gpa, rel.target, .@"8", 0, @intCast(data.init.len - rel.offset));
+                if (rel.is_func) {
+                    try self.addFuncReloc(gpa, rel.target, .@"8", 0, @intCast(data.init.len - rel.offset));
+                } else {
+                    try self.addGlobalReloc(gpa, rel.target, .@"8", 0, @intCast(data.init.len - rel.offset));
+                }
                 std.debug.assert(rel.target != id);
             }
         } else {
@@ -841,7 +845,8 @@ pub const DataOptions = struct {
 
     pub const Reloc = packed struct(u64) {
         target: u32,
-        offset: u32,
+        offset: u31,
+        is_func: bool = false,
     };
 
     pub const ValueSpec = union(enum) { init: []const u8, uninit: usize };

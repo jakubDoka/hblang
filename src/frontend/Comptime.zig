@@ -80,6 +80,7 @@ pub const InteruptCode = enum(u64) {
     Union,
     Enum,
     Type,
+    indirect_call,
     name_of,
     make_array,
     ChildOf,
@@ -799,6 +800,9 @@ pub fn runVm(
                     };
 
                     self.vm.regs.set(.ret(0), @intFromEnum(res));
+                },
+                .indirect_call => {
+                    unreachable;
                 },
                 .name_of => {
                     const ty: Types.Id = @enumFromInt(self.ecaArg(1));

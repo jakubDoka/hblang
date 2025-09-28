@@ -705,6 +705,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                         const vl = self.store.get(try self.parseExpr());
                         if (vl != .Decl) {
                             self.report(ps, "expected a declaration", .{});
+                            break;
                         }
                         try buf.append(tmp.arena.allocator(), vl.Decl.*);
                         if (!self.tryAdvance(.@",")) break;

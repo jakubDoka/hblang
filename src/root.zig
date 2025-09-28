@@ -319,13 +319,19 @@ pub fn compile(opts: CompileOptions) anyerror!void {
             .of(u8),
             0,
         );
-        const ast = try hb.frontend.Ast.init(&type_system_memory, .{
+        const ast = hb.frontend.Ast.init(&type_system_memory, .{
             .path = opts.root_file,
             .code = source,
             .diagnostics = opts.diagnostics,
             .mode = opts.parser_mode,
             .colors = opts.error_colors,
-        });
+        }) catch |err| switch (err) {
+            error.ParsingFailed => {
+                if (opts.diagnostics) |d| d.flush() catch {};
+                return error.Failed;
+            },
+            else => return err,
+        };
 
         if (opts.output) |o| {
             try ast.fmt(o);

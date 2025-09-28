@@ -29,9 +29,9 @@ file_scopes: []Id,
 line_indexes: []const utils.LineIndex,
 stack_base: usize,
 target: []const u8 = "hbvm-ableos",
-func_work_list: std.EnumArray(Target, std.ArrayListUnmanaged(utils.EntId(tys.Func))),
-global_work_list: std.EnumArray(Target, std.ArrayListUnmanaged(utils.EntId(tys.Global))),
-remote_ids: std.ArrayListUnmanaged(tys.Func.RrmoteId) = .empty,
+func_work_list: std.EnumArray(Target, std.ArrayList(utils.EntId(tys.Func))),
+global_work_list: std.EnumArray(Target, std.ArrayList(utils.EntId(tys.Global))),
+remote_ids: std.ArrayList(tys.Func.RrmoteId) = .empty,
 string: Id = undefined,
 type_info: Id = undefined,
 source_loc: Id = undefined,
@@ -630,7 +630,7 @@ pub const Id = enum(IdRepr) {
             defer tmp.deinit();
 
             var work_list = tmp.arena.makeArrayList(Task, 16);
-            var scope_stack = std.ArrayListUnmanaged(Id).empty;
+            var scope_stack = std.ArrayList(Id).empty;
 
             work_list.appendAssumeCapacity(.{ .Type = self.self });
 
@@ -866,7 +866,7 @@ pub const Id = enum(IdRepr) {
             };
         }
 
-        pub fn formatSeq(self: *const Fmt, work_list: *std.ArrayListUnmanaged(Task), arena: *utils.Arena, elem: Types.Id, ln: usize, global: i64) !void {
+        pub fn formatSeq(self: *const Fmt, work_list: *std.ArrayList(Task), arena: *utils.Arena, elem: Types.Id, ln: usize, global: i64) !void {
             work_list.ensureUnusedCapacity(arena.allocator(), @intCast(ln * 2)) catch unreachable;
             try work_list.append(arena.allocator(), .{ .Name = "]" });
             for (0..@intCast(ln)) |i| {
@@ -967,7 +967,7 @@ pub fn retainGlobals(self: *Types, target: Target, backend: *Machine, handle_err
 
         if (glob.relocs.len == 0 and !glob.uninit) {
             // TODO: add a flag that we did this
-            var relocs = std.ArrayListUnmanaged(Machine.DataOptions.Reloc){};
+            var relocs = std.ArrayList(Machine.DataOptions.Reloc){};
             self.findPointerOffsets(&relocs, glob.data.slice(&self.ct), tmp.arena, glob.ty, 0);
             glob.relocs = self.pool.arena.dupe(Machine.DataOptions.Reloc, relocs.items);
         }
@@ -975,18 +975,28 @@ pub fn retainGlobals(self: *Types, target: Target, backend: *Machine, handle_err
         for (glob.relocs) |*r| {
             const ptr_big: u64 = @bitCast(glob.data.slice(&self.ct)[r.offset..][0..8].*);
             const ptr: usize = @intCast(ptr_big);
-            r.target = self.findSymForPtr(ptr) catch |err| {
-                if (handle_errors) {
-                    errored = true;
-                    self.report(
-                        glob.key.loc.file,
-                        glob.key.loc.ast,
-                        "global is corrupted (of type {}) (global_id: {}): contains a pointer {}",
-                        .{ glob.ty, @intFromEnum(global), @errorName(err) },
-                    );
+
+            if (r.is_func) {
+                if (target == .@"comptime") {
+                    r.target = std.math.maxInt(u32);
+                } else {
+                    r.target = @intCast(ptr);
+                    self.queue(target, .init(.{ .Func = @enumFromInt(ptr) }));
                 }
-                continue :out;
-            };
+            } else {
+                r.target = self.findSymForPtr(ptr) catch |err| {
+                    if (handle_errors) {
+                        errored = true;
+                        self.report(
+                            glob.key.loc.file,
+                            glob.key.loc.ast,
+                            "global is corrupted (of type {}) (global_id: {}): contains a pointer {}",
+                            .{ glob.ty, @intFromEnum(global), @errorName(err) },
+                        );
+                    }
+                    continue :out;
+                };
+            }
         }
 
         if (glob.data == .@"comptime" and target == .@"comptime") {
@@ -1167,20 +1177,9 @@ pub fn cloneGlobal(self: *Types, from: *Types, id: utils.EntId(tys.Global)) util
     return new;
 }
 
-pub fn findNestedGlobals(
-    self: *Types,
-    relocs: *std.ArrayListUnmanaged(Machine.DataOptions.Reloc),
-    global: []const u8,
-    scratch: *utils.Arena,
-    ty: Id,
-    offset_f: u64,
-) !void {
-    self.findPointerOffsets(relocs, global, scratch, ty, offset_f);
-}
-
 pub fn findPointerOffsets(
     self: *Types,
-    relocs: *std.ArrayListUnmanaged(Machine.DataOptions.Reloc),
+    relocs: *std.ArrayList(Machine.DataOptions.Reloc),
     global: []const u8,
     scratch: *utils.Arena,
     ty: Id,
@@ -1206,7 +1205,13 @@ pub fn findPointerOffsets(
             const inner_repr: Id = u.getFields(self)[tag_value].ty;
             self.findPointerOffsets(relocs, global, scratch, inner_repr, offset_f);
         },
-        .FnPtr => unreachable,
+        .FnPtr => {
+            relocs.append(scratch.allocator(), .{
+                .offset = @intCast(offset),
+                .target = undefined,
+                .is_func = true,
+            }) catch unreachable;
+        },
         .Pointer => |p| {
             const base: Id = p.get(self).*;
 
@@ -1856,7 +1861,7 @@ pub fn resolveFielded(
     return slot.key_ptr.*;
 }
 
-pub fn dumpAnalErrors(self: *Types, anal_errors: *std.ArrayListUnmanaged(static_anal.Error)) bool {
+pub fn dumpAnalErrors(self: *Types, anal_errors: *std.ArrayList(static_anal.Error)) bool {
     for (anal_errors.items) |err| switch (err) {
         .ReturningStack => |loc| {
             self.reportSloc(loc.slot, "stack location escapes the function", .{});
@@ -1886,8 +1891,15 @@ pub fn addInternedGlobal(self: *Types, ty: Id, data: []const u8) utils.EntId(tys
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    var relocs = std.ArrayListUnmanaged(Machine.DataOptions.Reloc){};
-    self.findNestedGlobals(&relocs, data, tmp.arena, ty, 0) catch unreachable;
+    var relocs = std.ArrayList(Machine.DataOptions.Reloc){};
+    self.findPointerOffsets(&relocs, data, tmp.arena, ty, 0);
+
+    for (relocs.items) |*r| {
+        const ptr_big: u64 = @bitCast(data[r.offset..][0..8].*);
+        const ptr: usize = @intCast(ptr_big);
+        std.debug.assert(!r.is_func);
+        r.target = self.findSymForPtr(ptr) catch unreachable;
+    }
 
     const glob = self.store.add(&self.pool.arena, tys.Global{
         .key = .{ .name_pos = if (ty.data() == .Array and

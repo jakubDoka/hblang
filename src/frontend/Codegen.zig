@@ -1213,8 +1213,12 @@ pub fn emitUnOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.UnOp)) EmitErr
                         "expected {}, got {}", .{ sig.ret, func.ret });
                 }
 
-                self.types.queue(self.target, ty);
-                return .mkv(fty, self.bl.addFuncAddr(sloc, @intFromEnum(ty.data().Func)));
+                if (self.target == .@"comptime") {
+                    return .mkv(fty, self.bl.addIntImm(sloc, .i64, @intFromEnum(ty.data().Func)));
+                } else {
+                    self.types.queue(self.target, ty);
+                    return .mkv(fty, self.bl.addFuncAddr(sloc, @intFromEnum(ty.data().Func)));
+                }
             }
 
             self.emitSpill(expr, &addrd);
@@ -3463,13 +3467,19 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
             self.types.queue(self.target, .init(.{ .Func = typ.data().Func }));
     }
 
-    const passed_args = e.args.len() + @intFromBool(caller != null);
+    const needs_trampoline = self.target == .@"comptime" and ptr != null;
+
+    std.debug.assert(!needs_trampoline or caller != null);
+
+    const passed_args =
+        @intFromBool(needs_trampoline) * @as(usize, 2) +
+        e.args.len() + @intFromBool(caller != null);
     if (!was_template and passed_args != sig.args.len) {
         return self.report(expr, "expected {} arguments," ++
             " got {}", .{ sig.args.len, passed_args });
     }
 
-    const params, const returns, const ret_abi =
+    var params, const returns, const ret_abi =
         sig.computeAbi(self.abi, self.types, tmp.arena) orelse {
             std.debug.assert(computed_args == null);
             const args_ast = ast.exprs.view(e.args);
@@ -3481,10 +3491,21 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
             }
             unreachable;
         };
+
+    if (needs_trampoline) {
+        const new_params = tmp.arena.alloc(graph.AbiParam, passed_args);
+        new_params[0] = .{ .Reg = .i64 };
+        new_params[1] = .{ .Reg = .i64 };
+        @memcpy(new_params[2..], params);
+
+        params = new_params;
+    }
+
     const args = self.bl.allocCallArgs(tmp.arena, params, returns, ptr);
 
     var i: usize = self.pushReturn(expr, args, ret_abi, sig.ret, ctx);
 
+    var inited_args: usize = 0;
     if (caller) |*value| {
         if (value.ty.data() == .Pointer and sig.args[0].data() != .Pointer) {
             const tmpv = value.getValue(sloc, self);
@@ -3500,10 +3521,21 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
 
         const abi = self.abiCata(value.ty);
         i += self.pushParam(sloc, args, abi, i, value);
+
+        inited_args += 1;
+    }
+
+    if (needs_trampoline) {
+        var value = Value.mkv(.i64, self.bl.addIntImm(sloc, .i64, @intFromEnum(Comptime.InteruptCode.indirect_call)));
+        i += self.pushParam(sloc, args, .{ .ByValue = .i64 }, i, &value);
+        value.id = .{ .Value = ptr.? };
+        i += self.pushParam(sloc, args, .{ .ByValue = .i64 }, i, &value);
+
+        inited_args += 2;
     }
 
     const args_ast = ast.exprs.view(e.args);
-    for (sig.args[@intFromBool(caller != null)..], 0..) |ty, k| {
+    for (sig.args[inited_args..], 0..) |ty, k| {
         const abi = self.abiCata(ty);
         var value = if (computed_args) |a| a[k] else try self.emitTyped(.{}, ty, args_ast[k]);
         i += self.pushParam(self.src(args_ast[k]), args, abi, i, &value);
@@ -3515,7 +3547,12 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
 
     return self.assembleReturn(
         expr,
-        if (literal_func) |ty| @intFromEnum(ty.data().Func) else null,
+        if (literal_func) |ty|
+            @intFromEnum(ty.data().Func)
+        else if (needs_trampoline)
+            HbvmGen.eca
+        else
+            null,
         args,
         ctx,
         sig.ret,
@@ -4531,6 +4568,51 @@ fn emitDirective(
                 self.bl.addIntImm(.none, .i32, @intFromEnum(expr)),
                 vl.id.Pointer,
             }, .type);
+        },
+        .parent_ptr => {
+            try assertDirectiveArgs(self, expr, args, "<parent-field-name>, <ptr>");
+
+            const res_ty = ctx.ty orelse {
+                return reportInferrence(self, expr, "ty", name);
+            };
+
+            if (res_ty.data() != .Pointer) {
+                return self.report(expr, "expected a pointer result type, {} is not", .{res_ty});
+            }
+
+            const base = res_ty.data().Pointer.get(self.types).*;
+
+            if (base.data() != .Struct) {
+                return self.report(expr, "expected a pointer to struct result type, {} is not", .{base});
+            }
+
+            const name_ast = ast.exprs.get(args[0]);
+            if (name_ast != .String)
+                return self.report(args[0], "the name needs to be hardcoded (for now)", .{});
+            const name_str = ast.source[name_ast.String.pos.index + 1 .. name_ast.String.end - 1];
+
+            var rhs = try self.emit(.{}, args[1]);
+
+            if (rhs.ty.data() != .Pointer) {
+                return self.report(args[1], "expected a pointer, {} is not", .{rhs.ty});
+            }
+
+            const rhs_base = rhs.ty.data().Pointer.get(self.types).*;
+
+            var fields: tys.Struct.Id.OffIter = base.data().Struct.offsetIter(self.types);
+            while (fields.next()) |field| {
+                if (std.mem.eql(u8, field.field.name, name_str)) {
+                    if (rhs_base != field.field.ty) {
+                        return self.report(args[1], "the field type of the parent is {}" ++
+                            " but the child pointer base is {}", .{ field.field.ty, rhs.ty });
+                    }
+
+                    const offset = self.bl.addIntImm(sloc, .i64, @intCast(field.offset));
+                    return .mkv(res_ty, self.bl.addBinOp(sloc, .isub, .i64, rhs.getValue(sloc, self), offset));
+                }
+            }
+
+            return self.report(args[0], "the parent struct does not have a field named {}", .{name_str});
         },
         .handler, .@"export" => return self.report(expr, "can only be used in the file scope", .{}),
         .import => return self.report(expr, "can be only used as a body of the function", .{}),

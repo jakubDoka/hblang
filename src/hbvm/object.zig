@@ -69,7 +69,9 @@ pub fn loadSymMap(arena: std.mem.Allocator, code: []const u8) !std.AutoHashMapUn
 pub fn jitLink(self: root.backend.Machine.Data, after: usize) void {
     for (self.relocs.items[after..]) |rel| {
         const target = &self.syms.items[@intFromEnum(rel.target)];
-        std.debug.assert(target.kind != .invalid);
+        if (target.kind == .invalid) {
+            utils.panic("invalid symbol reloc {any}", .{rel});
+        }
         const jump = @as(i64, target.offset) - rel.offset;
         const location: usize = @intCast(rel.offset + @as(u32, @intCast(rel.meta.addend)));
 
