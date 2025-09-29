@@ -483,7 +483,7 @@ pub fn idealizeMach(self: *X86_64Gen, func: *Func, node: *Func.Node, worklist: *
 
     if (matcher.idealize(self, func, node, worklist)) |n| return n;
 
-    if (node.kind == .StructArg) elim_local: {
+    if (false and node.kind == .StructArg) elim_local: {
         for (node.outputs()) |us| {
             const use = us.get();
             if (((!use.isStore() or use.value() == node) and !use.isLoad()) or use.isSub(graph.MemCpy)) {

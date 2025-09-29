@@ -1,17 +1,43 @@
-main := fn(argn: uint, argv: ^^u8): uint {
+main := fn(argn: uint, argv: ^^u8, envp: ^?^u8): uint {
+	sys.env = envp
+
 	Arena.init_scratch(4096)
 
-	_ = Command.{args: &.["/bin/ls", "-al"]}.step.execute()
+	tmp := Arena.scratch(null)
+	defer tmp.pop()
+
+	cmd := Command.init("ls", tmp.arena)
+
 
 	return 1
 }
 
+LazyPath := union(enum) {
+	.path: []u8;
+	.generated: GeneratedFile;
+}
+
+GeneratedFile := struct {
+	.by: ^Step;
+	.name: []u8;
+}
+
 Command := struct {
 	.step: Step = .{vtable: .init(Command)};
-	.args: [][]u8;
-	.env: []Var = &.[]
+	.args: ArrayList(Arg) = .empty;
+	.env: []Var = &.[];
+	.stdout: ?i32 = null
+
+	Arg := union(enum) {
+		.bytes: []u8;
+		.lazy_path: LazyPath;
+	}
 
 	Var := struct{.name: []u8; .value: []u8}
+
+	init := fn(cmd: []u8, scratch: ^Arena): Command {
+		return .{args: scratch.dupe(Arg, &.[.{path: cmd}])}
+	}
 
 	execute := fn(step: ^Step): ?Step.Hash {
 		self: ^Command = @parent_ptr("step", step)
@@ -22,10 +48,7 @@ Command := struct {
 		args := tmp.arena.alloc(?^u8, self.args.len + 1)
 
 		for slot := args[..args.len - 1], arg := self.args {
-			scratch := tmp.arena.alloc(u8, arg.len + 1)
-			mem.cpy(u8, scratch[..scratch.len - 1], arg.*)
-			scratch[scratch.len - 1] = 0
-			slot.* = scratch.ptr
+			slot.* = tmp.arena.dupe_z(arg.*)
 		}
 		args[args.len - 1] = null
 
@@ -41,7 +64,18 @@ Command := struct {
 		}
 		env[env.len - 1] = null
 
-		sys.execve(args[0].?, args.ptr, env.ptr)
+		args[0] = tmp.arena.dupe_z(sys.resolve_exe_path(self.args[0], tmp.arena) || return null)
+
+		result := sys.fork()
+		if result < 0 {
+			return null
+		}
+
+		if result == 0 {
+			if sys.execve(args[0].?, args.ptr, env.ptr) != 0 {}
+		} else {
+			_ = sys.waitpid(result, &0, 0)
+		}
 
 		return null
 	}
@@ -49,7 +83,7 @@ Command := struct {
 
 Step := struct {
 	.vtable: ^Vtable;
-	.dependencies: []^Step = &.[];
+	.dependencies: ArrayList(^Step) = .empty;
 	.last_hash: ?Hash = null;
 	.has_side_effects: bool = false
 
@@ -126,6 +160,29 @@ Arena := struct {
 		return @as(^elem, @bit_cast(raw))[0..count]
 	}
 
+	grow := fn(self: ^Arena, $elem: type, slice: []elem, new_cap: uint): ^elem {
+		if slice.ptr + slice.len == self.pos {
+			self.pos = slice.ptr
+		}
+
+		new := self.alloc(elem, new_cap)
+		mem.cpy(elem, new[..slice.len], slice)
+		return new.ptr
+	}
+
+	dupe := fn(self: ^Arena, $elem: type, slice: []elem): []elem {
+		slc := self.alloc(elem, slice.len)
+		mem.cpy(elem, slc, slice)
+		return slc
+	}
+
+	dupe_z := fn(self: ^Arena, slice: []u8): ^u8 {
+		slc := self.alloc(u8, slice.len + 1)
+		mem.cpy(u8, slc[..slice.len], slice)
+		slc[slice.len] = 0
+		return slc.ptr
+	}
+
 	alloc_raw := fn(self: ^Arena, size: uint, alignment: uint): ^u8 {
 		self.pos = @bit_cast(mem.align_forward(uint, @bit_cast(self.pos), alignment))
 		self.pos += size
@@ -136,8 +193,32 @@ Arena := struct {
 	}
 }
 
+ArrayList := fn($T: type): type return struct {
+	.items: []T;
+	.capacity: uint
+
+	Self := @CurrentScope()
+
+	empty := Self.{items: &.[], capacity: 0}
+
+	push := fn(self: ^Self, item: T, scratch: ^Arena): void {
+		if self.capacity == self.items.len {
+			new_cap := max(uint, self.capacity * 2, 8)
+			self.items.ptr = scratch.grow(T, self.items.ptr[0..self.capacity], new_cap)
+			self.capacity = new_cap
+		}
+
+		self.items[self.items.len] = item
+		self.items.len += 1
+	}
+}
+
+max := fn($T: type, a: T, b: T): T {
+	if a > b return a else return b
+}
+
 mem := enum {
-	align_forward := fn($T: type, pos: T, alignment: uint): T {
+	align_forward := fn($T: type, pos: T, alignment: T): T {
 		return pos + alignment - 1 & ~(alignment - 1)
 	}
 
@@ -152,6 +233,20 @@ mem := enum {
 	str_to_slice := fn(str: ^u8): []u8 {
 		len := strlen(str)
 		return str[0..len]
+	}
+
+	starts_with := fn($elem: type, str: []elem, prefix: []elem): bool {
+		if str.len < prefix.len {
+			return false
+		}
+
+		for i := 0..prefix.len {
+			if str[i] != prefix[i] {
+				return false
+			}
+		}
+
+		return true
 	}
 
 	set := fn(region: []u8, value: u8): void {
@@ -179,6 +274,42 @@ mem := enum {
 			len -= 1
 		}
 	}
+
+	index := fn($elem: type, str: []elem, sep: []elem): ?uint {
+		for i := 0..str.len - sep.len {
+			if mem.starts_with(elem, str[i..], sep) {
+				return i
+			}
+		}
+		return null
+	}
+
+	SplitIter := fn($elem: type): type return struct {
+		.remaining: []elem;
+		.sep: []elem
+
+		Self := @CurrentScope()
+
+		next := fn(self: ^Self): ?[]elem {
+			if self.remaining.len == 0 {
+				return null
+			}
+
+			pos := mem.index(elem, self.remaining, self.sep) || {
+				defer self.remaining.len = 0
+				return self.remaining
+			}
+
+			ret := self.remaining[0..pos]
+			self.remaining = self.remaining[pos + self.sep.len..]
+
+			return ret
+		}
+	}
+
+	split := fn($elem: type, str: []elem, sep: []elem): SplitIter($elem) {
+		return .(str, sep)
+	}
 }
 
 debug := enum {
@@ -188,8 +319,78 @@ debug := enum {
 sys := enum {
 	$page_size := 4096
 
-	execve := fn(path: ^u8, argv: ^?^u8, envp: ^?^u8): void {
-		@syscall(59, path, argv, envp)
+	access := fn(path: ^u8, mode: AccessMode): i32 {
+		return @syscall(21, path, mode)
+	}
+
+	AccessMode := struct {
+		.bits: uint
+
+		exists := AccessMode.(0)
+		read := AccessMode.(1)
+		write := AccessMode.(2)
+		execute := AccessMode.(4)
+	}
+
+	resolve_exe_path := fn(path: []u8, scratch: ^Arena): ?[]u8 {
+		if mem.starts_with(u8, path, "/") || mem.starts_with(u8, path, "./") {
+			return path
+		}
+
+		vl := sys.getenv("PATH") || return null
+
+		iter := mem.split(u8, vl, ":")
+
+		while pp := iter.next() {
+			tmp := Arena.scratch(scratch)
+			defer tmp.pop()
+
+			slot := tmp.arena.alloc(u8, pp.len + 1 + path.len + 1)
+			mem.cpy(u8, slot[..pp.len], pp)
+			slot[pp.len] = '/'
+			mem.cpy(u8, slot[pp.len + 1..slot.len - 1], path)
+			slot[slot.len - 1] = 0
+
+			if sys.access(slot.ptr, .exists) == 0 {
+				return scratch.dupe(u8, slot[..slot.len - 1])
+			}
+		}
+
+		return null
+	}
+
+	env: ^?^u8 = idk
+
+	getenv := fn(name: []u8): ?[]u8 {
+		cur := env
+		while c := cur.* {
+			str := mem.str_to_slice(c)
+
+			if mem.starts_with(u8, str, name) &&
+				str.len > name.len && str[name.len] == '=' {
+				return str[name.len + 1..]
+			}
+
+			cur += 1
+		}
+
+		return null
+	}
+
+	dup2 := fn(oldfd: i32, newfd: i32): i32 {
+		return @syscall(63, oldfd, newfd)
+	}
+
+	fork := fn(): i32 {
+		return @syscall(57)
+	}
+
+	waitpid := fn(pid: i32, status: ^i32, options: i32): i32 {
+		return @syscall(61, pid, status, options)
+	}
+
+	execve := fn(path: ^u8, argv: ^?^u8, envp: ^?^u8): uint {
+		return @syscall(59, path, argv, envp)
 	}
 
 	mmap := fn(addr: ?^u8, len: uint, prot: MmapProt, flags: MmapFlags, fd: i32, offset: u64): ^u8 {
