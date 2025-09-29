@@ -6,65 +6,136 @@ main := fn(argn: uint, argv: ^^u8, envp: ^?^u8): uint {
 	tmp := Arena.scratch(null)
 	defer tmp.pop()
 
-	cmd := Command.init("ls", tmp.arena)
+	compile := Command.init(tmp.arena, "gcc")
+	compile.add_arg(tmp.arena, "-c")
+	compile.add_input_file_arg(tmp.arena, .{src: "main.c"})
+	compile.add_arg(tmp.arena, "-o")
+	object := compile.add_file_output_arg(tmp.arena, "main.o")
 
+	link := Command.init(tmp.arena, "gcc")
+	link.add_input_file_arg(tmp.arena, object)
+
+	link.step.run()
 
 	return 1
 }
 
 LazyPath := union(enum) {
-	.path: []u8;
-	.generated: GeneratedFile;
+	.src: []u8;
+	.generated: ^GeneratedFile;
 }
 
 GeneratedFile := struct {
 	.by: ^Step;
 	.name: []u8;
+	.path: ?[]u8 = null
+
+	tmp_dir := "bs-build"
+
+	path_id := 0
+
+	init_path := fn(self: ^GeneratedFile, scratch: ^Arena): []u8 {
+		display_int := fn(i: uint, buf: []u8): []u8 {
+			if i == 0 {
+				buf[0] = '0'
+				return buf[..1]
+			}
+
+			idx := buf.len
+			while i > 0 {
+				idx -= 1
+				buf[idx] = @int_cast('0' + i % 10)
+				i /= 10
+			}
+			return buf[idx..]
+		}
+
+		buf: [10]u8 = idk
+		id := display_int(path_id, buf[..])
+		path_id += 1
+
+		self.path = scratch.concat(u8, &.[tmp_dir, "/", self.name, ".", id])
+
+		return self.path.?
+	}
 }
 
 Command := struct {
 	.step: Step = .{vtable: .init(Command)};
 	.args: ArrayList(Arg) = .empty;
-	.env: []Var = &.[];
-	.stdout: ?i32 = null
+	.env: []Var = &.[]
 
 	Arg := union(enum) {
 		.bytes: []u8;
-		.lazy_path: LazyPath;
+		.lazy_input: LazyPath;
+		.lazy_output: LazyPath;
 	}
 
 	Var := struct{.name: []u8; .value: []u8}
 
-	init := fn(cmd: []u8, scratch: ^Arena): Command {
-		return .{args: scratch.dupe(Arg, &.[.{path: cmd}])}
+	init := fn(scratch: ^Arena, cmd: []u8): ^Command {
+		return scratch.spill(Command, .{args: .init_slice(scratch.dupe(Arg, &.[.{bytes: cmd}]))})
 	}
 
-	execute := fn(step: ^Step): ?Step.Hash {
+	add_arg := fn(self: ^Command, scratch: ^Arena, arg: []u8): void {
+		self.args.push(scratch, .{bytes: arg})
+	}
+
+	add_input_file_arg := fn(self: ^Command, scratch: ^Arena, file: LazyPath): void {
+		match file {
+			.generated => self.step.dependencies.push(scratch, file.generated.by),
+			_ => {},
+		}
+
+		self.args.push(scratch, .{lazy_input: file})
+	}
+
+	add_file_output_arg := fn(self: ^Command, scratch: ^Arena, name: []u8): LazyPath {
+		gf := scratch.create(GeneratedFile)
+		gf.* = .{by: &self.step, name: name}
+		self.args.push(scratch, .{lazy_output: .{generated: gf}})
+		return .{generated: gf}
+	}
+
+	execute := fn(step: ^Step, scratch: ^Arena): ?Step.Hash {
 		self: ^Command = @parent_ptr("step", step)
 
-		tmp := Arena.scratch(null)
+		tmp := Arena.scratch(scratch)
 		defer tmp.pop()
 
-		args := tmp.arena.alloc(?^u8, self.args.len + 1)
+		args := tmp.arena.alloc(?^u8, self.args.items.len + 1)
 
-		for slot := args[..args.len - 1], arg := self.args {
-			slot.* = tmp.arena.dupe_z(arg.*)
+		exe_path := sys.resolve_exe_path(self.args.items[0].bytes, tmp.arena) || return null
+		args[0] = tmp.arena.dupe_z(exe_path)
+
+		for slot := args[1..args.len - 1], arg := self.args.items[1..] {
+			res: []u8 = idk
+			match arg.* {
+				.bytes => res = arg.bytes,
+				.lazy_input => match arg.lazy_input {
+					.src => res = arg.lazy_input.src,
+					.generated => res = arg.lazy_input.generated.path.?,
+				},
+				.lazy_output => match arg.lazy_output {
+					.src => res = arg.lazy_output.src,
+					.generated => res = arg.lazy_output.generated.init_path(scratch),
+				},
+			}
+			slot.* = tmp.arena.dupe_z(res)
 		}
 		args[args.len - 1] = null
 
 		env := tmp.arena.alloc(?^u8, self.env.len + 1)
 
 		for slot := env[..env.len - 1], var := self.env {
-			scratch := tmp.arena.alloc(u8, var.name.len + 1 + var.value.len + 1)
-			mem.cpy(u8, scratch[..var.name.len], var.name)
-			scratch[var.name.len] = '='
-			mem.cpy(u8, scratch[var.name.len + 1..][..var.value.len], var.value)
-			scratch[var.name.len + 1 + var.value.len] = 0
-			slot.* = scratch.ptr
+			buf := tmp.arena.alloc(u8, var.name.len + 1 + var.value.len + 1)
+			mem.cpy(u8, buf[..var.name.len], var.name)
+			buf[var.name.len] = '='
+			mem.cpy(u8, buf[var.name.len + 1..][..var.value.len], var.value)
+			buf[var.name.len + 1 + var.value.len] = 0
+			slot.* = buf.ptr
 		}
 		env[env.len - 1] = null
-
-		args[0] = tmp.arena.dupe_z(sys.resolve_exe_path(self.args[0], tmp.arena) || return null)
 
 		result := sys.fork()
 		if result < 0 {
@@ -72,7 +143,7 @@ Command := struct {
 		}
 
 		if result == 0 {
-			if sys.execve(args[0].?, args.ptr, env.ptr) != 0 {}
+			if sys.execve(args[0].?, args.ptr, sys.env) != 0 {}
 		} else {
 			_ = sys.waitpid(result, &0, 0)
 		}
@@ -85,12 +156,13 @@ Step := struct {
 	.vtable: ^Vtable;
 	.dependencies: ArrayList(^Step) = .empty;
 	.last_hash: ?Hash = null;
-	.has_side_effects: bool = false
+	.has_side_effects: bool = false;
+	.seen: bool = false
 
 	Hash := [16]u8
 
 	Vtable := struct {
-		.execute: ^fn(self: ^Step): ?Hash
+		.execute: ^fn(self: ^Step, scratch: ^Arena): ?Hash
 
 		$init := fn($T: type): ^Vtable {
 			return &struct {
@@ -99,8 +171,30 @@ Step := struct {
 		}
 	}
 
-	execute := fn(self: ^Step): ?Hash {
-		return self.vtable.execute(self)
+	execute := fn(self: ^Step, scratch: ^Arena): ?Hash {
+		return self.vtable.execute(self, scratch)
+	}
+
+	collect := fn(root: ^Step, scratch: ^Arena, exec_order: ^ArrayList(^Step)): void {
+		if root.seen return root.seen = true
+
+		for dep := root.dependencies.items {
+			collect(dep.*, scratch, exec_order)
+		}
+
+		exec_order.push(scratch, root)
+	}
+
+	run := fn(self: ^Step): void {
+		tmp := Arena.scratch(null)
+		defer tmp.pop()
+
+		exec_order := ArrayList(^Step).empty
+		self.collect(tmp.arena, &exec_order)
+
+		for step := exec_order.items {
+			_ = step.*.execute(tmp.arena)
+		}
 	}
 }
 
@@ -160,14 +254,24 @@ Arena := struct {
 		return @as(^elem, @bit_cast(raw))[0..count]
 	}
 
+	create := fn(self: ^Arena, $elem: type): ^elem {
+		return self.alloc(elem, 1).ptr
+	}
+
 	grow := fn(self: ^Arena, $elem: type, slice: []elem, new_cap: uint): ^elem {
-		if slice.ptr + slice.len == self.pos {
-			self.pos = slice.ptr
+		if self.pos == @bit_cast(slice.ptr + slice.len) {
+			self.pos = @bit_cast(slice.ptr)
 		}
 
 		new := self.alloc(elem, new_cap)
 		mem.cpy(elem, new[..slice.len], slice)
 		return new.ptr
+	}
+
+	spill := fn(self: ^Arena, $T: type, vl: T): ^T {
+		slot := self.alloc(T, 1).ptr
+		slot.* = vl
+		return slot
 	}
 
 	dupe := fn(self: ^Arena, $elem: type, slice: []elem): []elem {
@@ -181,6 +285,22 @@ Arena := struct {
 		mem.cpy(u8, slc[..slice.len], slice)
 		slc[slice.len] = 0
 		return slc.ptr
+	}
+
+	concat := fn(self: ^Arena, $elem: type, slice: [][]elem): []elem {
+		len := 0
+		for s := slice {
+			len += s.len
+		}
+
+		new := self.alloc(elem, len)
+		pos := 0
+		for s := slice {
+			mem.cpy(elem, new[pos..][..s.len], s.*)
+			pos += s.len
+		}
+
+		return new
 	}
 
 	alloc_raw := fn(self: ^Arena, size: uint, alignment: uint): ^u8 {
@@ -201,7 +321,11 @@ ArrayList := fn($T: type): type return struct {
 
 	empty := Self.{items: &.[], capacity: 0}
 
-	push := fn(self: ^Self, item: T, scratch: ^Arena): void {
+	init_slice := fn(items: []T): Self {
+		return .(items, items.len)
+	}
+
+	push := fn(self: ^Self, scratch: ^Arena, item: T): void {
 		if self.capacity == self.items.len {
 			new_cap := max(uint, self.capacity * 2, 8)
 			self.items.ptr = scratch.grow(T, self.items.ptr[0..self.capacity], new_cap)

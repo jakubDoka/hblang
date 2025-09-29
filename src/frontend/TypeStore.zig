@@ -1272,7 +1272,7 @@ pub fn findPointerOffsets(
             }
         },
         .Nullable => |n| {
-            if (self.isNullablePresent(n, global, offset)) return;
+            if (!self.isNullablePresent(n, global, offset)) return;
 
             const data: *tys.Nullable = n.get(self);
             const nieche: ?tys.Nullable.NiecheSpec = data.nieche.offset(self);
