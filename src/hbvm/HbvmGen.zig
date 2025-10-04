@@ -315,15 +315,17 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         }
     }
 
-    const allocs = opts.optimizations.apply(HbvmGen, func, self, id) orelse return;
+    const allocs = opts.optimizations.apply(HbvmGen, func, self, id) orelse {
+        //func.fmtScheduledLog();
+        //func.fmtUnscheduledLog();
+        return;
+    };
 
     var tmp = utils.Arena.scrath(if (opts.optimizations == .opts)
         opts.optimizations.opts.arena
     else
         null);
     defer tmp.deinit();
-
-    //func.fmtScheduledLog();
 
     var is_tail = true;
     var call_slot_size: u64 = 0;

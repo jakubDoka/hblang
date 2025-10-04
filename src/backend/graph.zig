@@ -844,6 +844,7 @@ pub fn Func(comptime Backend: type) type {
                 }
 
                 if (self.in_list.isSet(node.id)) return;
+
                 self.in_list.set(node.id);
                 try self.list.append(self.allocator, node);
             }
@@ -2062,6 +2063,7 @@ pub fn Func(comptime Backend: type) type {
 
         pub fn kill(func: *Self, self: *Node) void {
             if (self.output_len != 0) utils.panic("{any} {f}\n", .{ self.outputs(), self });
+
             std.debug.assert(self.output_len == 0);
             for (self.inputs(), 0..) |oi, j| if (oi) |i| {
                 i.removeUse(j, self);
@@ -2817,6 +2819,11 @@ pub fn Func(comptime Backend: type) type {
                 p.fmt(null, writer, colors);
                 writer.writeAll("\n") catch unreachable;
             }
+        }
+
+        pub fn fmtUnscheduledLog(self: *Self) void {
+            var writer = std.fs.File.stderr().writer(&.{});
+            self.fmtUnscheduled(&writer.interface, .escape_codes);
         }
     };
 }

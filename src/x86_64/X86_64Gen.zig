@@ -813,11 +813,13 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
 
     if (opts.linkage == .imported) return;
 
-    const allocs = opts.optimizations.apply(X86_64Gen, func, self, id) orelse return;
+    const allocs = opts.optimizations.apply(X86_64Gen, func, self, id) orelse {
+        //if (std.mem.indexOf(u8, name, "main") != null) {
+        //    func.fmtScheduledLog();
+        //}
 
-    //if (std.mem.indexOf(u8, name, "foo") != null) {
-    //    func.fmtScheduledLog();
-    //}
+        return;
+    };
 
     var tmp = utils.Arena.scrath(if (opts.optimizations == .opts)
         opts.optimizations.opts.arena

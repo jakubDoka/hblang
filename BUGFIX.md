@@ -2592,3 +2592,37 @@ main := fn(): i64 {
     return Kind.keyword_range
 }
 ```
+
+#### double loop search 1
+```hb
+main := fn(): uint {
+    kind := 1
+
+    for kv := 0..2 {
+        if kv == 0 {
+            kind = 0
+        }
+    }
+
+    //for kv := 0..2 {}
+
+    return kind
+}
+```
+
+#### double loop search 2
+```hb
+main := fn(): uint {
+    kind := 1
+
+    for kv := 0..2 {
+        if kv == 0 {
+            kind = 0
+        }
+    }
+
+    for kv := 0..2 {}
+
+    return kind
+}
+```

@@ -68,6 +68,8 @@ pub fn Mixin(comptime Backend: type) type {
                         if (scope[index].expand().? == .Loop) {
                             scope[index] = .compact(.{ .Node = resolve(func, loop.items, index) });
                         }
+
+                        // std.debug.dumpCurrentStackTrace(@returnAddress());
                         return scope[index].expand().?.Node;
                     },
                 };
@@ -257,6 +259,7 @@ pub fn Mixin(comptime Backend: type) type {
                             }.inner) orelse {
                                 utils.panic("{f} {any} {}", .{ o, alloc_offsets.items, offs });
                             };
+                            _ = Local.resolve(self, locals, idx);
                             locals[idx] = .compact(.{ .Node = o.value().? });
                         }
                     }
@@ -292,15 +295,35 @@ pub fn Mixin(comptime Backend: type) type {
                     if (!(child.kind == .Region or child.kind == .Loop)) {
                         utils.panic("{f}\n", .{child});
                     }
+
+                    //  const foo = struct {
+                    //      fn fmt(locals_: []Local, depth: usize) void {
+                    //          for (locals_) |l| {
+                    //              const le = l.expand() orelse {
+                    //                  for (0..depth) |_| std.debug.print("  ", .{});
+                    //                  std.debug.print("--- null\n", .{});
+                    //                  continue;
+                    //              };
+                    //              if (le != .Node) {
+                    //                  fmt(le.Loop.items, depth + 1);
+                    //                  continue;
+                    //              }
+                    //              for (0..depth) |_| std.debug.print("  ", .{});
+                    //              std.debug.print("--- {f}\n", .{le.Node});
+                    //          }
+                    //      }
+                    //  };
+
                     // either we arrived from the back branch or the other side of the split
                     if (states[child.schedule].expand(locals.len).Join) |s| {
                         if (s.ctrl != child) utils.panic("{f} {} {f} {}\n", .{ s.ctrl, s.ctrl.schedule, child, child.schedule });
-                        for (s.items, locals, 0..) |clhs, crhsm, i| {
+                        for (s.items, locals, 0..) |clhs, crhs, i| {
                             var lhs = clhs.expand() orelse continue;
                             if (lhs == .Node and lhs.Node.isLazyPhi(s.ctrl)) {
-                                var rhs = crhsm.expand() orelse Local.Expanded{
+                                var rhs = crhs.expand() orelse Local.Expanded{
                                     .Node = self.addUninit(lhs.Node.sloc, .i64),
                                 };
+
                                 if (rhs == .Loop and (rhs.Loop != s or s.ctrl.preservesIdentityPhys())) {
                                     rhs = .{ .Node = Local.resolve(self, locals, i) };
                                 }
@@ -345,6 +368,17 @@ pub fn Mixin(comptime Backend: type) type {
 
             for (to_remove.items) |tr| {
                 self.subsume(tr.mem(), tr);
+            }
+
+            if (std.debug.runtime_safety) {
+                var worklist = Func.WorkList.init(tmp.arena.allocator(), self.next_id) catch unreachable;
+                worklist.collectAll(self);
+
+                for (worklist.items()) |node| {
+                    if (!(node.kind != .Phi or node.inputs()[2] != null)) {
+                        utils.panic("{f}", .{node});
+                    }
+                }
             }
         }
     };

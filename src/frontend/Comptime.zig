@@ -127,6 +127,10 @@ pub inline fn ecaArgSloc(self: *Comptime, idx: usize) graph.Sloc {
     return @bitCast(self.ecaArg(idx));
 }
 
+pub inline fn ecaArgTy(self: *Comptime, idx: usize) Types.Id {
+    return @enumFromInt(@as(u32, @truncate(self.vm.regs.get(.arg(idx)))));
+}
+
 pub const PartialEvalResult = union(enum) {
     DependsOnRuntimeControlFlow: *Node,
     Unsupported: struct { *Node, []const u8 },
@@ -614,7 +618,7 @@ pub fn doInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
     switch (@as(InteruptCode, @enumFromInt(self.ecaArg(0)))) {
         .Type => self.doTypeInterrupt(vm_ctx),
         .Struct, .Union, .Enum => |t| {
-            const scope: Types.Id = @enumFromInt(self.ecaArg(1));
+            const scope = self.ecaArgTy(1);
             const ast = types.getFile(scope.file(types).?);
             const struct_ast_id = self.ecaArgAst(2);
             const struct_ast = ast.exprs.get(struct_ast_id).Type;
@@ -656,7 +660,7 @@ pub fn doInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
             unreachable;
         },
         .name_of => {
-            const ty: Types.Id = @enumFromInt(self.ecaArg(1));
+            const ty = self.ecaArgTy(1);
             const value = self.ecaArg(2);
 
             const enm: tys.Enum.Id = ty.data().Enum;
@@ -677,12 +681,12 @@ pub fn doInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
         },
         .make_array => {
             const len = self.ecaArg(1);
-            const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+            const ty = self.ecaArgTy(2);
             const slice = types.makeArray(@intCast(len), ty);
             self.vm.regs.set(.ret(0), @intFromEnum(slice));
         },
         .ChildOf => {
-            const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+            const ty = self.ecaArgTy(2);
 
             self.vm.regs.set(.ret(0), @intFromEnum(ty.child(types) orelse b: {
                 types.reportSloc(self.ecaArgSloc(1), "directive only work on pointer" ++
@@ -691,11 +695,11 @@ pub fn doInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
             }));
         },
         .kind_of => {
-            const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+            const ty = self.ecaArgTy(2);
             self.vm.regs.set(.ret(0), @intFromEnum(ty.data()));
         },
         .len_of => {
-            const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+            const ty = self.ecaArgTy(2);
             self.vm.regs.set(.ret(0), ty.len(types) orelse b: {
                 types.reportSloc(self.ecaArgSloc(1), "directive only works on structs" ++
                     " and arrays, {} is not", .{ty});
@@ -703,16 +707,16 @@ pub fn doInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
             });
         },
         .size_of => {
-            const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+            const ty = self.ecaArgTy(2);
             self.vm.regs.set(.ret(0), ty.size(types));
         },
         .align_of => {
-            const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+            const ty = self.ecaArgTy(2);
             self.vm.regs.set(.ret(0), ty.alignment(types));
         },
         .type_info => self.doTypeInfoInterrupt(vm_ctx),
         .alloc_global => {
-            const elem_ty: Types.Id = @enumFromInt(self.ecaArg(1));
+            const elem_ty = self.ecaArgTy(1);
             const ptr = self.ecaArg(2);
             const len: usize = @intCast(self.ecaArg(3));
 
@@ -737,7 +741,7 @@ pub fn doTypeInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
     const types = self.getTypes();
 
     const sloc = self.ecaArgSloc(1);
-    const scope: Types.Id = @enumFromInt(self.ecaArg(2));
+    const scope = self.ecaArgTy(2);
     const ast = self.ecaArgAst(3);
     const data: Types.TypeInfo = @bitCast(vm_ctx.memory[self.ecaArg(4)..][0..@sizeOf(Types.TypeInfo)].*);
 
@@ -902,7 +906,7 @@ pub fn doTypeInfoInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
     const types = self.getTypes();
 
     const ret_addr = self.ecaArg(1);
-    const ty: Types.Id = @enumFromInt(self.ecaArg(3));
+    const ty = self.ecaArgTy(3);
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
