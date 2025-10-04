@@ -987,7 +987,7 @@ inline fn tryAdvance(self: *Parser, expected: Lexer.Lexeme) bool {
 
 fn expectAdvance(self: *Parser, expected: Lexer.Lexeme) !Lexer.Token {
     if (self.cur.kind != expected) {
-        self.report(self.cur.pos, "expected {s}, got {s}", .{ @tagName(expected), @tagName(self.cur.kind) });
+        self.report(self.cur.pos, "expected {}, got {}", .{ @tagName(expected), @tagName(self.cur.kind) });
         return error.UnexpectedToken;
     }
     return self.advance();

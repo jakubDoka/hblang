@@ -2232,6 +2232,25 @@ main := fn(): uint {
 }
 ```
 
+#### directives 27 (@alloc_global)
+```hb
+
+mk_arr := fn(len: uint): []u8 {
+    buf: [1024]u8 = idk
+
+    for i := 0..len {
+        buf[i] = @int_cast(i)
+    }
+
+    return @alloc_global(buf[..len])
+}
+
+main := fn(): uint {
+    arr := @eval(mk_arr(10))
+    return arr[0]
+}
+```
+
 ## progress
 
 - [x] hbvm-ableos target

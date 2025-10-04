@@ -2576,3 +2576,19 @@ main := fn(): uint {
     return i
 }
 ```
+
+#### enum range 1
+```hb
+Kind := enum(u8) {
+    .eof := 0;
+    .ident;
+    .decl;
+    .k_fn
+
+    keyword_range := @type_info(Kind).@enum.fields[0].value
+}
+
+main := fn(): i64 {
+    return Kind.keyword_range
+}
+```

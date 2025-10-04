@@ -4618,6 +4618,21 @@ fn emitDirective(
 
             return self.report(args[0], "the parent struct does not have a field named {}", .{name_str});
         },
+        .alloc_global => {
+            try assertDirectiveArgs(self, expr, args, "<slice>");
+
+            const slice = try self.emit(.{}, args[0]);
+
+            if (slice.ty.data() != .Slice) {
+                return self.report(args[0], "expected a slice, {} is not", .{slice.ty});
+            }
+
+            return self.emitInternalEca(ctx, .alloc_global, &.{
+                self.emitTyConst(slice.ty.data().Slice.get(self.types).elem).id.Value,
+                self.bl.addFieldLoad(sloc, slice.id.Pointer, TySlice.ptr_offset, .i64),
+                self.bl.addFieldLoad(sloc, slice.id.Pointer, TySlice.len_offset, .i64),
+            }, slice.ty);
+        },
         .handler, .@"export" => return self.report(expr, "can only be used in the file scope", .{}),
         .import => return self.report(expr, "can be only used as a body of the function", .{}),
         .thread_local_storage => return self.report(expr, "can only be used as a global variable value", .{}),

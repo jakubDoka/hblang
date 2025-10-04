@@ -1,4 +1,5 @@
 wired string comparison 1.broken:
+	lea rax, [rsp+0x08]
 	mov rax, [rsp+0x10]
 	mov [rdi], rax
 	mov rax, [rsp+0x18]

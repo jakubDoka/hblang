@@ -152,14 +152,6 @@ pub const Reg = enum(u8) {
         return 8 <= @intFromEnum(self) and @intFromEnum(self) < 16;
     }
 
-    //  public static int modrm(MOD mod, int reg, int m_r) {
-    //      if( reg == -1 ) reg=0;  // Missing reg in this flavor
-    //      // combine all the bits
-    //      assert 0 <= reg  &&  reg < 16;
-    //      assert 0 <= m_r  &&  m_r < 16;
-    //      return (mod.ordinal() << 6) | ((reg & 0x07) << 3) | m_r & 0x07;
-    //  }
-
     pub const Mod = enum(u2) {
         indirect,
         indirect_disp8,
@@ -822,6 +814,10 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     if (opts.linkage == .imported) return;
 
     const allocs = opts.optimizations.apply(X86_64Gen, func, self, id) orelse return;
+
+    //if (std.mem.indexOf(u8, name, "foo") != null) {
+    //    func.fmtScheduledLog();
+    //}
 
     var tmp = utils.Arena.scrath(if (opts.optimizations == .opts)
         opts.optimizations.opts.arena

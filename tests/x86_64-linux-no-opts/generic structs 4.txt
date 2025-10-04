@@ -1,5 +1,6 @@
 generic structs 4.Array((((uint), uint), uint), uint).get:
 	sub rsp, 0x18
+	lea rax, [rsp+0x20]
 	mov [rsp], rdi
 	mov rdx, [rsp]
 	cmp rdx, 0x00

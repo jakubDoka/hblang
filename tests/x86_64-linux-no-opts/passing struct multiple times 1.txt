@@ -27,6 +27,7 @@ passing struct multiple times 1.foo:
 	ret
 passing struct multiple times 1.bar:
 	sub rsp, 0x10
+	lea rax, [rsp+0x18]
 	mov [rsp], edi
 	mov rax, [rsp+0x18]
 	add rax, [rsp+0x20]

@@ -1,0 +1,4 @@
+main:
+        lra $1, $0, :enum range 1.Kind.keyword_range
+         ld $1, $1, 0, 8
+         tx

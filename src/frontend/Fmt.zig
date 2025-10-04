@@ -189,7 +189,7 @@ fn preserveSpace(self: *Fmt, id: anytype) Error!void {
 fn preserveWrapping(self: *Fmt, id: anytype) Error!bool {
     const pos = self.ast.posOf(id);
     const preceding = self.ast.source[0..pos.index];
-    const preceding_whitespace = preceding[std.mem.trimRight(u8, preceding, " \t\r\n").len..];
+    const preceding_whitespace = preceding[std.mem.trimRight(u8, preceding, " \t\r\n(").len..];
     const nline_count = std.mem.count(u8, preceding_whitespace, "\n");
     if (nline_count > 0) {
         try self.buf.writeAll("\n");

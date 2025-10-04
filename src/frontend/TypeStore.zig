@@ -963,7 +963,9 @@ pub fn retainGlobals(self: *Types, target: Target, backend: *Machine, handle_err
         defer tmp.deinit();
 
         const glob: *tys.Global = global.get(self);
-        if (glob.completion.get(target) == .compiled) continue;
+        if (glob.completion.get(target) == .compiled) {
+            continue;
+        }
         glob.completion.getPtr(target).* = .compiled;
 
         if (glob.relocs.len == 0 and !glob.uninit) {
@@ -991,11 +993,12 @@ pub fn retainGlobals(self: *Types, target: Target, backend: *Machine, handle_err
                         self.report(
                             glob.key.loc.file,
                             glob.key.loc.ast,
-                            "global is corrupted (of type {}) (global_id: {}): contains a pointer {}",
+                            "global is corrupted (of type {}) (global_id: {}): contains a pointer {}, @alloc_global might help",
                             .{ glob.ty, @intFromEnum(global), @errorName(err) },
                         );
+                        continue :out;
                     }
-                    continue :out;
+                    continue;
                 };
             }
         }
@@ -1892,7 +1895,7 @@ pub fn addInternedGlobal(self: *Types, ty: Id, data: []const u8) utils.EntId(tys
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    var relocs = std.ArrayList(Machine.DataOptions.Reloc){};
+    var relocs = std.ArrayList(Machine.DataOptions.Reloc).empty;
     self.findPointerOffsets(&relocs, data, tmp.arena, ty, 0);
 
     for (relocs.items) |*r| {
@@ -1908,10 +1911,14 @@ pub fn addInternedGlobal(self: *Types, ty: Id, data: []const u8) utils.EntId(tys
         .data = .{ .imm = data },
         .ty = ty,
         .readonly = true,
-        .relocs = &.{},
+        .relocs = relocs.items,
     });
 
-    const entry = self.string_globals.getOrPutContext(self.ct.getGpa(), glob, .{ .types = self }) catch unreachable;
+    const entry = self.string_globals.getOrPutContext(
+        self.ct.getGpa(),
+        glob,
+        .{ .types = self },
+    ) catch unreachable;
     if (!entry.found_existing) {
         glob.get(self).data = .{ .imm = self.pool.arena.dupe(u8, data) };
         glob.get(self).relocs = self.pool.arena.dupe(tys.Global.Reloc, relocs.items);

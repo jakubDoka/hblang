@@ -89,6 +89,7 @@ pub const InteruptCode = enum(u64) {
     size_of,
     align_of,
     type_info,
+    alloc_global,
 };
 
 pub fn init(gpa: std.mem.Allocator) Comptime {
@@ -559,8 +560,9 @@ pub fn runVm(
     }
     self.vm.regs.set(.stack_addr, stack_end - return_loc.len);
 
+    var stderr = std.fs.File.stderr().writer(&.{});
     var vm_ctx = Vm.SafeContext{
-        .writer = if (false) std.fs.File.stderr().writer().any() else null,
+        .writer = if (false) &stderr.interface else null,
         .color_cfg = .escape_codes,
         .memory = self.gen.mach.out.code.items,
         .code_start = 0,
@@ -576,406 +578,460 @@ pub fn runVm(
         };
     }) {
         .tx => break,
-        .eca => {
-            const InterruptFrame = extern struct {
-                ip: usize,
-                fuel: usize,
-            };
-
-            begin_interrup: {
-                const stack_ptr = self.vm.regs.get(.stack_addr) - @sizeOf(InterruptFrame);
-                vm_ctx.memory[@intCast(stack_ptr)..][0..@sizeOf(InterruptFrame)].* =
-                    @bitCast(InterruptFrame{ .ip = self.vm.ip, .fuel = self.vm.fuel });
-                self.vm.regs.set(.stack_addr, stack_ptr);
-                break :begin_interrup;
-            }
-
-            defer end_interrupt: {
-                const stack_ptr = self.vm.regs.get(.stack_addr);
-                const frame: InterruptFrame = @bitCast(vm_ctx.memory[@intCast(stack_ptr)..][0..@sizeOf(InterruptFrame)].*);
-                self.vm.ip = frame.ip;
-                self.vm.fuel = frame.fuel;
-                self.vm.regs.set(.stack_addr, stack_ptr + @sizeOf(InterruptFrame));
-                break :end_interrupt;
-            }
-
-            switch (@as(InteruptCode, @enumFromInt(self.ecaArg(0)))) {
-                .Type => {
-                    const sloc = self.ecaArgSloc(1);
-                    const scope: Types.Id = @enumFromInt(self.ecaArg(2));
-                    const ast = self.ecaArgAst(3);
-                    const data: Types.TypeInfo = @bitCast(vm_ctx.memory[self.ecaArg(4)..][0..@sizeOf(Types.TypeInfo)].*);
-
-                    const key = Types.Scope{ .loc = .{
-                        .scope = scope,
-                        .file = @enumFromInt(sloc.namespace),
-                        .ast = ast,
-                    } };
-
-                    var tmp = utils.Arena.scrath(null);
-                    defer tmp.deinit();
-
-                    const res = switch (data.kind) {
-                        .@"@struct" => str: {
-                            const struct_data = data.data.@"@struct";
-
-                            const raw_fields = struct_data.fields.slice(self);
-                            const fields = tmp.arena.alloc(tys.Struct.Field, raw_fields.len);
-
-                            for (raw_fields, fields) |rf, *f| {
-                                f.* = .{
-                                    .name = rf.name.slice(self),
-                                    .ty = rf.ty,
-                                    .defalut_value = undefined,
-                                };
-                            }
-
-                            const stru = tys.Struct{
-                                .key = key,
-                                .index = .empty,
-                                .alignment = if (struct_data.alignment != 0) struct_data.alignment else b: {
-                                    var max: u64 = 0;
-                                    for (fields) |f| max = @max(max, f.ty.alignment(types));
-                                    break :b max;
-                                },
-                                .fields = fields,
-                            };
-
-                            const id: tys.Struct.Id = types.store.add(&types.pool.arena, stru);
-                            const entry = self.type_instances.getOrPutContext(
-                                self.getGpa(),
-                                .init(.{ .Struct = id }),
-                                .{ .types = types },
-                            ) catch unreachable;
-
-                            if (!entry.found_existing) {
-                                const stru_data: *tys.Struct = types.store.get(id);
-                                const perm_fields = types.pool.arena.dupe(tys.Struct.Field, stru_data.fields.?);
-                                for (perm_fields) |*f| {
-                                    f.name = types.pool.arena.dupe(u8, f.name);
-                                }
-                                stru_data.fields = perm_fields;
-                            } else {
-                                types.store.pop(id);
-                            }
-
-                            break :str entry.key_ptr.*;
-                        },
-                        .@"@union" => uni: {
-                            const union_data = data.data.@"@union";
-
-                            const raw_fields = union_data.fields.slice(self);
-                            const fields = tmp.arena.alloc(tys.Union.Field, raw_fields.len);
-
-                            for (raw_fields, fields) |rf, *f| {
-                                f.* = .{
-                                    .name = rf.name.slice(self),
-                                    .ty = rf.ty,
-                                };
-                            }
-
-                            const stru = tys.Union{
-                                .key = key,
-                                .index = .empty,
-                                .tag = union_data.tag,
-                                .fields = fields,
-                            };
-
-                            const id: tys.Union.Id = types.store.add(&types.pool.arena, stru);
-                            const entry = self.type_instances.getOrPutContext(
-                                self.getGpa(),
-                                .init(.{ .Union = id }),
-                                .{ .types = types },
-                            ) catch unreachable;
-
-                            if (!entry.found_existing) {
-                                const stru_data: *tys.Union = types.store.get(id);
-                                const perm_fields = types.pool.arena.dupe(tys.Union.Field, stru_data.fields.?);
-                                for (perm_fields) |*f| {
-                                    f.name = types.pool.arena.dupe(u8, f.name);
-                                }
-                                stru_data.fields = perm_fields;
-                            } else {
-                                types.store.pop(id);
-                            }
-
-                            break :uni entry.key_ptr.*;
-                        },
-                        .@"@enum" => enu: {
-                            const enum_data = data.data.@"@enum";
-
-                            const raw_fields = enum_data.fields.slice(self);
-                            const fields = tmp.arena.alloc(tys.Enum.Field, raw_fields.len);
-
-                            for (raw_fields, fields) |rf, *f| {
-                                f.* = .{
-                                    .name = rf.name.slice(self),
-                                    .value = rf.value,
-                                };
-                            }
-
-                            const stru = tys.Enum{
-                                .key = key,
-                                .index = .empty,
-                                .backing_int = enum_data.backing_int,
-                                .fields = fields,
-                            };
-
-                            const id: tys.Enum.Id = types.store.add(&types.pool.arena, stru);
-                            const entry = self.type_instances.getOrPutContext(
-                                self.getGpa(),
-                                .init(.{ .Enum = id }),
-                                .{ .types = types },
-                            ) catch unreachable;
-
-                            if (!entry.found_existing) {
-                                const stru_data: *tys.Enum = types.store.get(id);
-                                const perm_fields = types.pool.arena.dupe(tys.Enum.Field, stru_data.fields.?);
-                                for (perm_fields) |*f| {
-                                    f.name = types.pool.arena.dupe(u8, f.name);
-                                }
-                                stru_data.fields = perm_fields;
-                            } else {
-                                types.store.pop(id);
-                            }
-
-                            break :enu entry.key_ptr.*;
-                        },
-                        .pointer => types.makePtr(data.data.pointer),
-                        .slice => types.makeSlice(data.data.slice),
-                        .nullable => types.makeNullable(data.data.nullable),
-                        .tuple => types.makeTuple(@ptrCast(types.pool.arena.dupe(
-                            Types.Id,
-                            data.data.tuple.slice(self),
-                        ))),
-                        .fnptr => types.internPtr(.FnPtr, .{
-                            .args = @ptrCast(types.pool.arena.dupe(
-                                Types.Id,
-                                data.data.fnptr.args.slice(self),
-                            )),
-                            .ret = data.data.fnptr.ret,
-                        }),
-                        .array => types.makeArray(data.data.array.len, data.data.array.elem),
-                        .simd => types.makeSimd(data.data.simd.elem, data.data.simd.len),
-                        .builtin, .template, .global, .@"@fn" => return types.reportSloc(sloc, "can not be constructed (yet?)", .{}),
-                    };
-
-                    self.vm.regs.set(.ret(0), @intFromEnum(res));
-                },
-                .Struct, .Union, .Enum => |t| {
-                    const scope: Types.Id = @enumFromInt(self.ecaArg(1));
-                    const ast = types.getFile(scope.file(types).?);
-                    const struct_ast_id = self.ecaArgAst(2);
-                    const struct_ast = ast.exprs.get(struct_ast_id).Type;
-
-                    var tmp = utils.Arena.scrath(null);
-                    defer tmp.deinit();
-                    const captures = tmp.arena.alloc(Types.Scope.Capture, struct_ast.captures.len());
-
-                    const prefix = 5;
-                    for (captures, ast.exprs.view(struct_ast.captures), 0..) |*slot, cp, i| {
-                        slot.* = .{
-                            .id = .fromCapture(cp),
-                            .ty = @enumFromInt(self.ecaArg(prefix + i * 2)),
-                            .value = @bitCast(self.ecaArg(prefix + i * 2 + 1)),
-                        };
-                        slot.id.has_value = true;
-                        if (slot.ty.size(types) < 8) slot.value &=
-                            (@as(i64, 1) << @intCast(slot.ty.size(types) * 8)) - 1;
-                    }
-
-                    const res = switch (t) {
-                        inline .Struct, .Union, .Enum => |tg| types.resolveFielded(
-                            @field(std.meta.Tag(Types.Data), @tagName(tg)),
-                            scope,
-                            scope.file(types).?,
-                            @as(
-                                [*]const u8,
-                                @ptrFromInt(@as(usize, @intCast(self.vm.regs.get(.arg(3))))),
-                            )[0..@intCast(self.vm.regs.get(.arg(4)))],
-                            struct_ast_id,
-                            captures,
-                        ),
-                        else => unreachable,
-                    };
-
-                    self.vm.regs.set(.ret(0), @intFromEnum(res));
-                },
-                .indirect_call => {
-                    unreachable;
-                },
-                .name_of => {
-                    const ty: Types.Id = @enumFromInt(self.ecaArg(1));
-                    const value = self.ecaArg(2);
-
-                    const enm: tys.Enum.Id = ty.data().Enum;
-                    const fields = enm.getFields(types);
-
-                    if (value > fields.len) {
-                        //   types.report(lfile, expr, "the enum value is out of bounds, it has no name", .{});
-                        unreachable; // TODO: the enum value is corrupted
-                    }
-
-                    const ret_addr = self.gen.mach.out.code.items.len;
-
-                    self.gen.mach.out.code.appendSlice(self.getGpa(), fields[@intCast(value)].name) catch unreachable;
-                    vm_ctx.memory = self.gen.mach.out.code.items;
-
-                    self.vm.regs.set(.ret(0), ret_addr);
-                    self.vm.regs.set(.ret(1), fields[@intCast(value)].name.len);
-                },
-                .make_array => {
-                    const len = self.ecaArg(1);
-                    const ty: Types.Id = @enumFromInt(self.ecaArg(2));
-                    const slice = types.makeArray(@intCast(len), ty);
-                    self.vm.regs.set(.ret(0), @intFromEnum(slice));
-                },
-                .ChildOf => {
-                    const ty: Types.Id = @enumFromInt(self.ecaArg(2));
-
-                    self.vm.regs.set(.ret(0), @intFromEnum(ty.child(types) orelse b: {
-                        types.reportSloc(self.ecaArgSloc(1), "directive only work on pointer" ++
-                            " types and slices, {} is not", .{ty});
-                        break :b .never;
-                    }));
-                },
-                .kind_of => {
-                    const ty: Types.Id = @enumFromInt(self.ecaArg(2));
-                    self.vm.regs.set(.ret(0), @intFromEnum(ty.data()));
-                },
-                .len_of => {
-                    const ty: Types.Id = @enumFromInt(self.ecaArg(2));
-                    self.vm.regs.set(.ret(0), ty.len(types) orelse b: {
-                        types.reportSloc(self.ecaArgSloc(1), "directive only works on structs" ++
-                            " and arrays, {} is not", .{ty});
-                        break :b 0;
-                    });
-                },
-                .size_of => {
-                    const ty: Types.Id = @enumFromInt(self.ecaArg(2));
-                    self.vm.regs.set(.ret(0), ty.size(types));
-                },
-                .align_of => {
-                    const ty: Types.Id = @enumFromInt(self.ecaArg(2));
-                    self.vm.regs.set(.ret(0), ty.alignment(types));
-                },
-                .type_info => {
-                    const ret_addr = self.ecaArg(1);
-                    const ty: Types.Id = @enumFromInt(self.ecaArg(3));
-
-                    var tmp = utils.Arena.scrath(null);
-                    defer tmp.deinit();
-
-                    const tp: Types.TypeInfo = switch (ty.data()) {
-                        .Builtin => .{ .kind = .builtin, .data = .{ .builtin = {} } },
-                        .Pointer => |ptr_ty| .{ .kind = .pointer, .data = .{ .pointer = types.store.get(ptr_ty).* } },
-                        .Slice => |slice_ty| .{ .kind = .slice, .data = .{ .slice = types.store.get(slice_ty).elem } },
-                        .Nullable => |nullable_ty| .{ .kind = .nullable, .data = .{ .nullable = types.store.get(nullable_ty).inner } },
-                        .Array => |array_ty| .{ .kind = .array, .data = .{ .array = types.store.get(array_ty).* } },
-                        .Struct => |sty| b: {
-                            const struct_ty: tys.Struct.Id = sty;
-
-                            const fields = struct_ty.getFields(types);
-
-                            const Field = @TypeOf(@as(Types.TypeInfo, undefined).data.@"@struct".fields).elem;
-
-                            const field_mem = tmp.arena.alloc(Field, fields.len);
-
-                            for (fields, 0..) |f, i| {
-                                field_mem[i] = .{
-                                    .name = .alloc(self, f.name),
-                                    .ty = f.ty,
-                                    .defalut_value = undefined,
-                                };
-                            }
-
-                            break :b .{ .kind = .@"@struct", .data = .{ .@"@struct" = .{
-                                .alignment = struct_ty.getAlignment(types),
-                                .fields = .alloc(self, field_mem),
-                            } } };
-                        },
-                        .Enum => |enum_ty| b: {
-                            const fields = enum_ty.getFields(types);
-
-                            const Field = @TypeOf(@as(Types.TypeInfo, undefined).data.@"@enum".fields).elem;
-
-                            const field_mem = tmp.arena.alloc(Field, fields.len);
-
-                            for (fields, 0..) |f, i| {
-                                field_mem[i] = .{ .name = .alloc(self, f.name), .value = f.value };
-                            }
-
-                            break :b .{ .kind = .@"@enum", .data = .{ .@"@enum" = .{
-                                .backing_int = enum_ty.getBackingInt(types),
-                                .fields = .alloc(self, field_mem),
-                            } } };
-                        },
-                        .Union => |union_ty| b: {
-                            const fields = union_ty.getFields(types);
-
-                            const Field = @TypeOf(@as(Types.TypeInfo, undefined).data.@"@union".fields).elem;
-
-                            const field_mem = tmp.arena.alloc(Field, fields.len);
-
-                            for (fields, 0..) |f, i| {
-                                field_mem[i] = .{ .name = .alloc(self, f.name), .ty = f.ty };
-                            }
-
-                            break :b .{ .kind = .@"@union", .data = .{ .@"@union" = .{
-                                .tag = union_ty.getTag(types),
-                                .fields = .alloc(self, field_mem),
-                            } } };
-                        },
-                        .FnPtr => |fnptr_ty| b: {
-                            const sig: *tys.FnPtr = types.store.get(fnptr_ty);
-
-                            break :b .{ .kind = .fnptr, .data = .{ .fnptr = .{
-                                .args = .alloc(self, sig.args),
-                                .ret = sig.ret,
-                            } } };
-                        },
-                        .Func => |fn_ty| b: {
-                            const sig: *tys.Func = types.store.get(fn_ty);
-
-                            break :b .{ .kind = .@"@fn", .data = .{ .@"@fn" = .{
-                                .args = .alloc(self, sig.args),
-                                .ret = sig.ret,
-                            } } };
-                        },
-                        .Tuple => |tuple_ty| b: {
-                            const fields = tuple_ty.getFields(types);
-
-                            break :b .{ .kind = .tuple, .data = .{ .tuple = .alloc(self, @ptrCast(fields)) } };
-                        },
-                        .Template => |template_ty| b: {
-                            const template: *tys.Template = types.store.get(template_ty);
-                            break :b .{ .kind = .template, .data = .{ .template = .{ .is_inline = template.is_inline } } };
-                        },
-                        .Global => |global_ty| b: {
-                            const global: *tys.Global = types.store.get(global_ty);
-                            break :b .{ .kind = .global, .data = .{ .global = .{
-                                .ty = global.ty,
-                                .readonly = global.readonly,
-                            } } };
-                        },
-                        .Simd => |simd_ty| b: {
-                            const simd: *tys.Simd = types.store.get(simd_ty);
-                            break :b .{ .kind = .simd, .data = .{ .simd = .{
-                                .elem = simd.elem,
-                                .len = simd.len,
-                            } } };
-                        },
-                    };
-
-                    @as(*align(1) Types.TypeInfo, @ptrCast(vm_ctx.memory[@intCast(ret_addr)..].ptr)).* = tp;
-                },
-            }
-        },
+        .eca => self.doInterrupt(&vm_ctx),
         else => unreachable,
     };
 
     @memcpy(return_loc, self.gen.mach.out.code.items[@intCast(stack_end - return_loc.len)..@intCast(stack_end)]);
     self.vm.regs.set(.stack_addr, stack_end);
+}
+
+pub fn doInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
+    const types = self.getTypes();
+
+    const InterruptFrame = extern struct {
+        ip: usize,
+        fuel: usize,
+    };
+
+    begin_interrup: {
+        const stack_ptr = self.vm.regs.get(.stack_addr) - @sizeOf(InterruptFrame);
+        vm_ctx.memory[@intCast(stack_ptr)..][0..@sizeOf(InterruptFrame)].* =
+            @bitCast(InterruptFrame{ .ip = self.vm.ip, .fuel = self.vm.fuel });
+        self.vm.regs.set(.stack_addr, stack_ptr);
+        break :begin_interrup;
+    }
+
+    defer end_interrupt: {
+        const stack_ptr = self.vm.regs.get(.stack_addr);
+        const frame: InterruptFrame = @bitCast(vm_ctx.memory[@intCast(stack_ptr)..][0..@sizeOf(InterruptFrame)].*);
+        self.vm.ip = frame.ip;
+        self.vm.fuel = frame.fuel;
+        self.vm.regs.set(.stack_addr, stack_ptr + @sizeOf(InterruptFrame));
+        break :end_interrupt;
+    }
+
+    switch (@as(InteruptCode, @enumFromInt(self.ecaArg(0)))) {
+        .Type => self.doTypeInterrupt(vm_ctx),
+        .Struct, .Union, .Enum => |t| {
+            const scope: Types.Id = @enumFromInt(self.ecaArg(1));
+            const ast = types.getFile(scope.file(types).?);
+            const struct_ast_id = self.ecaArgAst(2);
+            const struct_ast = ast.exprs.get(struct_ast_id).Type;
+
+            var tmp = utils.Arena.scrath(null);
+            defer tmp.deinit();
+            const captures = tmp.arena.alloc(Types.Scope.Capture, struct_ast.captures.len());
+
+            const prefix = 5;
+            for (captures, ast.exprs.view(struct_ast.captures), 0..) |*slot, cp, i| {
+                slot.* = .{
+                    .id = .fromCapture(cp),
+                    .ty = @enumFromInt(self.ecaArg(prefix + i * 2)),
+                    .value = @bitCast(self.ecaArg(prefix + i * 2 + 1)),
+                };
+                slot.id.has_value = true;
+                if (slot.ty.size(types) < 8) slot.value &=
+                    (@as(i64, 1) << @intCast(slot.ty.size(types) * 8)) - 1;
+            }
+
+            const res = switch (t) {
+                inline .Struct, .Union, .Enum => |tg| types.resolveFielded(
+                    @field(std.meta.Tag(Types.Data), @tagName(tg)),
+                    scope,
+                    scope.file(types).?,
+                    @as(
+                        [*]const u8,
+                        @ptrFromInt(@as(usize, @intCast(self.vm.regs.get(.arg(3))))),
+                    )[0..@intCast(self.vm.regs.get(.arg(4)))],
+                    struct_ast_id,
+                    captures,
+                ),
+                else => unreachable,
+            };
+
+            self.vm.regs.set(.ret(0), @intFromEnum(res));
+        },
+        .indirect_call => {
+            unreachable;
+        },
+        .name_of => {
+            const ty: Types.Id = @enumFromInt(self.ecaArg(1));
+            const value = self.ecaArg(2);
+
+            const enm: tys.Enum.Id = ty.data().Enum;
+            const fields = enm.getFields(types);
+
+            if (value > fields.len) {
+                //   types.report(lfile, expr, "the enum value is out of bounds, it has no name", .{});
+                unreachable; // TODO: the enum value is corrupted
+            }
+
+            const ret_addr = self.gen.mach.out.code.items.len;
+
+            self.gen.mach.out.code.appendSlice(self.getGpa(), fields[@intCast(value)].name) catch unreachable;
+            vm_ctx.memory = self.gen.mach.out.code.items;
+
+            self.vm.regs.set(.ret(0), ret_addr);
+            self.vm.regs.set(.ret(1), fields[@intCast(value)].name.len);
+        },
+        .make_array => {
+            const len = self.ecaArg(1);
+            const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+            const slice = types.makeArray(@intCast(len), ty);
+            self.vm.regs.set(.ret(0), @intFromEnum(slice));
+        },
+        .ChildOf => {
+            const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+
+            self.vm.regs.set(.ret(0), @intFromEnum(ty.child(types) orelse b: {
+                types.reportSloc(self.ecaArgSloc(1), "directive only work on pointer" ++
+                    " types and slices, {} is not", .{ty});
+                break :b .never;
+            }));
+        },
+        .kind_of => {
+            const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+            self.vm.regs.set(.ret(0), @intFromEnum(ty.data()));
+        },
+        .len_of => {
+            const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+            self.vm.regs.set(.ret(0), ty.len(types) orelse b: {
+                types.reportSloc(self.ecaArgSloc(1), "directive only works on structs" ++
+                    " and arrays, {} is not", .{ty});
+                break :b 0;
+            });
+        },
+        .size_of => {
+            const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+            self.vm.regs.set(.ret(0), ty.size(types));
+        },
+        .align_of => {
+            const ty: Types.Id = @enumFromInt(self.ecaArg(2));
+            self.vm.regs.set(.ret(0), ty.alignment(types));
+        },
+        .type_info => self.doTypeInfoInterrupt(vm_ctx),
+        .alloc_global => {
+            const elem_ty: Types.Id = @enumFromInt(self.ecaArg(1));
+            const ptr = self.ecaArg(2);
+            const len: usize = @intCast(self.ecaArg(3));
+
+            const mem = vm_ctx.memory[@intCast(ptr)..][0 .. len * elem_ty.size(types)];
+
+            const slice = types.addInternedGlobal(types.makeArray(len, elem_ty), mem);
+
+            types.queue(.@"comptime", .init(.{ .Global = slice }));
+            if (types.retainGlobals(.@"comptime", &self.gen.mach, true)) {
+                self.vm.regs.set(.ret(0), elem_ty.alignment(types));
+                self.vm.regs.set(.ret(1), 0);
+            } else {
+                const off = self.gen.mach.out.syms.items[@intFromEnum(self.gen.mach.out.globals.items[@intFromEnum(slice)])].offset;
+                self.vm.regs.set(.ret(0), off);
+                self.vm.regs.set(.ret(1), len);
+            }
+        },
+    }
+}
+
+pub fn doTypeInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
+    const types = self.getTypes();
+
+    const sloc = self.ecaArgSloc(1);
+    const scope: Types.Id = @enumFromInt(self.ecaArg(2));
+    const ast = self.ecaArgAst(3);
+    const data: Types.TypeInfo = @bitCast(vm_ctx.memory[self.ecaArg(4)..][0..@sizeOf(Types.TypeInfo)].*);
+
+    const key = Types.Scope{ .loc = .{
+        .scope = scope,
+        .file = @enumFromInt(sloc.namespace),
+        .ast = ast,
+    } };
+
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    const res = switch (data.kind) {
+        .@"@struct" => str: {
+            const struct_data = data.data.@"@struct";
+
+            const raw_fields = struct_data.fields.slice(self);
+            const fields = tmp.arena.alloc(tys.Struct.Field, raw_fields.len);
+
+            for (raw_fields, fields) |rf, *f| {
+                f.* = .{
+                    .name = rf.name.slice(self),
+                    .ty = rf.ty,
+                    .defalut_value = undefined,
+                };
+            }
+
+            const stru = tys.Struct{
+                .key = key,
+                .index = .empty,
+                .alignment = if (struct_data.alignment != 0) struct_data.alignment else b: {
+                    var max: u64 = 0;
+                    for (fields) |f| max = @max(max, f.ty.alignment(types));
+                    break :b max;
+                },
+                .fields = fields,
+            };
+
+            const id: tys.Struct.Id = types.store.add(&types.pool.arena, stru);
+            const entry = self.type_instances.getOrPutContext(
+                self.getGpa(),
+                .init(.{ .Struct = id }),
+                .{ .types = types },
+            ) catch unreachable;
+
+            if (!entry.found_existing) {
+                const stru_data: *tys.Struct = types.store.get(id);
+                const perm_fields = types.pool.arena.dupe(tys.Struct.Field, stru_data.fields.?);
+                for (perm_fields) |*f| {
+                    f.name = types.pool.arena.dupe(u8, f.name);
+                }
+                stru_data.fields = perm_fields;
+            } else {
+                types.store.pop(id);
+            }
+
+            break :str entry.key_ptr.*;
+        },
+        .@"@union" => uni: {
+            const union_data = data.data.@"@union";
+
+            const raw_fields = union_data.fields.slice(self);
+            const fields = tmp.arena.alloc(tys.Union.Field, raw_fields.len);
+
+            for (raw_fields, fields) |rf, *f| {
+                f.* = .{
+                    .name = rf.name.slice(self),
+                    .ty = rf.ty,
+                };
+            }
+
+            const stru = tys.Union{
+                .key = key,
+                .index = .empty,
+                .tag = union_data.tag,
+                .fields = fields,
+            };
+
+            const id: tys.Union.Id = types.store.add(&types.pool.arena, stru);
+            const entry = self.type_instances.getOrPutContext(
+                self.getGpa(),
+                .init(.{ .Union = id }),
+                .{ .types = types },
+            ) catch unreachable;
+
+            if (!entry.found_existing) {
+                const stru_data: *tys.Union = types.store.get(id);
+                const perm_fields = types.pool.arena.dupe(tys.Union.Field, stru_data.fields.?);
+                for (perm_fields) |*f| {
+                    f.name = types.pool.arena.dupe(u8, f.name);
+                }
+                stru_data.fields = perm_fields;
+            } else {
+                types.store.pop(id);
+            }
+
+            break :uni entry.key_ptr.*;
+        },
+        .@"@enum" => enu: {
+            const enum_data = data.data.@"@enum";
+
+            const raw_fields = enum_data.fields.slice(self);
+            const fields = tmp.arena.alloc(tys.Enum.Field, raw_fields.len);
+
+            for (raw_fields, fields) |rf, *f| {
+                f.* = .{
+                    .name = rf.name.slice(self),
+                    .value = rf.value,
+                };
+            }
+
+            const stru = tys.Enum{
+                .key = key,
+                .index = .empty,
+                .backing_int = enum_data.backing_int,
+                .fields = fields,
+            };
+
+            const id: tys.Enum.Id = types.store.add(&types.pool.arena, stru);
+            const entry = self.type_instances.getOrPutContext(
+                self.getGpa(),
+                .init(.{ .Enum = id }),
+                .{ .types = types },
+            ) catch unreachable;
+
+            if (!entry.found_existing) {
+                const stru_data: *tys.Enum = types.store.get(id);
+                const perm_fields = types.pool.arena.dupe(tys.Enum.Field, stru_data.fields.?);
+                for (perm_fields) |*f| {
+                    f.name = types.pool.arena.dupe(u8, f.name);
+                }
+                stru_data.fields = perm_fields;
+            } else {
+                types.store.pop(id);
+            }
+
+            break :enu entry.key_ptr.*;
+        },
+        .pointer => types.makePtr(data.data.pointer),
+        .slice => types.makeSlice(data.data.slice),
+        .nullable => types.makeNullable(data.data.nullable),
+        .tuple => types.makeTuple(@ptrCast(types.pool.arena.dupe(
+            Types.Id,
+            data.data.tuple.slice(self),
+        ))),
+        .fnptr => types.internPtr(.FnPtr, .{
+            .args = @ptrCast(types.pool.arena.dupe(
+                Types.Id,
+                data.data.fnptr.args.slice(self),
+            )),
+            .ret = data.data.fnptr.ret,
+        }),
+        .array => types.makeArray(data.data.array.len, data.data.array.elem),
+        .simd => types.makeSimd(data.data.simd.elem, data.data.simd.len),
+        .builtin, .template, .global, .@"@fn" => return types.reportSloc(sloc, "can not be constructed (yet?)", .{}),
+    };
+
+    self.vm.regs.set(.ret(0), @intFromEnum(res));
+}
+
+pub fn doTypeInfoInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
+    const types = self.getTypes();
+
+    const ret_addr = self.ecaArg(1);
+    const ty: Types.Id = @enumFromInt(self.ecaArg(3));
+
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    const tp: Types.TypeInfo = switch (ty.data()) {
+        .Builtin => .{ .kind = .builtin, .data = .{ .builtin = {} } },
+        .Pointer => |ptr_ty| .{
+            .kind = .pointer,
+            .data = .{ .pointer = types.store.get(ptr_ty).* },
+        },
+        .Slice => |slice_ty| .{
+            .kind = .slice,
+            .data = .{ .slice = types.store.get(slice_ty).elem },
+        },
+        .Nullable => |nullable_ty| .{
+            .kind = .nullable,
+            .data = .{ .nullable = types.store.get(nullable_ty).inner },
+        },
+        .Array => |array_ty| .{
+            .kind = .array,
+            .data = .{ .array = types.store.get(array_ty).* },
+        },
+        .Struct => |sty| b: {
+            const struct_ty: tys.Struct.Id = sty;
+
+            const fields = struct_ty.getFields(types);
+
+            const Field = @TypeOf(@as(Types.TypeInfo, undefined)
+                .data.@"@struct".fields).elem;
+
+            const field_mem = tmp.arena.alloc(Field, fields.len);
+
+            for (fields, 0..) |f, i| {
+                field_mem[i] = .{
+                    .name = .alloc(self, f.name),
+                    .ty = f.ty,
+                    .defalut_value = undefined,
+                };
+            }
+
+            break :b .{ .kind = .@"@struct", .data = .{ .@"@struct" = .{
+                .alignment = struct_ty.getAlignment(types),
+                .fields = .alloc(self, field_mem),
+            } } };
+        },
+        .Enum => |enum_ty| b: {
+            const fields = enum_ty.getFields(types);
+
+            const Field = @TypeOf(@as(Types.TypeInfo, undefined)
+                .data.@"@enum".fields).elem;
+
+            const field_mem = tmp.arena.alloc(Field, fields.len);
+
+            for (fields, 0..) |f, i| {
+                field_mem[i] = .{ .name = .alloc(self, f.name), .value = f.value };
+            }
+
+            break :b .{ .kind = .@"@enum", .data = .{ .@"@enum" = .{
+                .backing_int = enum_ty.getBackingInt(types),
+                .fields = .alloc(self, field_mem),
+            } } };
+        },
+        .Union => |union_ty| b: {
+            const fields = union_ty.getFields(types);
+
+            const Field = @TypeOf(@as(Types.TypeInfo, undefined)
+                .data.@"@union".fields).elem;
+
+            const field_mem = tmp.arena.alloc(Field, fields.len);
+
+            for (fields, 0..) |f, i| {
+                field_mem[i] = .{ .name = .alloc(self, f.name), .ty = f.ty };
+            }
+
+            break :b .{ .kind = .@"@union", .data = .{ .@"@union" = .{
+                .tag = union_ty.getTag(types),
+                .fields = .alloc(self, field_mem),
+            } } };
+        },
+        .FnPtr => |fnptr_ty| b: {
+            const sig: *tys.FnPtr = types.store.get(fnptr_ty);
+
+            break :b .{ .kind = .fnptr, .data = .{ .fnptr = .{
+                .args = .alloc(self, sig.args),
+                .ret = sig.ret,
+            } } };
+        },
+        .Func => |fn_ty| b: {
+            const sig: *tys.Func = types.store.get(fn_ty);
+
+            break :b .{ .kind = .@"@fn", .data = .{ .@"@fn" = .{
+                .args = .alloc(self, sig.args),
+                .ret = sig.ret,
+            } } };
+        },
+        .Tuple => |tuple_ty| b: {
+            const fields = tuple_ty.getFields(types);
+
+            break :b .{
+                .kind = .tuple,
+                .data = .{ .tuple = .alloc(self, @ptrCast(fields)) },
+            };
+        },
+        .Template => |template_ty| b: {
+            const template: *tys.Template = types.store.get(template_ty);
+            break :b .{
+                .kind = .template,
+                .data = .{ .template = .{ .is_inline = template.is_inline } },
+            };
+        },
+        .Global => |global_ty| b: {
+            const global: *tys.Global = types.store.get(global_ty);
+            break :b .{ .kind = .global, .data = .{ .global = .{
+                .ty = global.ty,
+                .readonly = global.readonly,
+            } } };
+        },
+        .Simd => |simd_ty| b: {
+            const simd: *tys.Simd = types.store.get(simd_ty);
+            break :b .{ .kind = .simd, .data = .{ .simd = .{
+                .elem = simd.elem,
+                .len = simd.len,
+            } } };
+        },
+    };
+
+    vm_ctx.memory = self.gen.mach.out.code.items;
+    const ptr = vm_ctx.memory[@intCast(ret_addr)..].ptr;
+    @as(*align(1) Types.TypeInfo, @ptrCast(ptr)).* = tp;
 }
 
 pub fn jitFunc(self: *Comptime, fnc: utils.EntId(tys.Func)) !void {

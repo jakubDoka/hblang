@@ -81,10 +81,9 @@
   l (StackLoad _ (:data_type (&data_type)) :dis m p)) :
   (OpStackLoad (:op) (:dis) c m p l)
 
-(BinOp ?c :data_type (:op op & .iadd | .isub | .bor | .band | .bxor)
-  l (OffsetLoad _ (:data_type (&data_type)) :dis m p)) :
+(BinOp _ :data_type (:op op & .iadd | .isub | .bor | .band | .bxor)
+  l (OffsetLoad ?c && {c == null} (:data_type (&data_type)) :dis m p)) :
   (OpLoad (:op) (:dis) c m p l)
-
 
 (BinOp ?c (:op .iadd) bs @ base dis = {bs.knownOffset()}
   (ImmOp _ (:op .ishl) (:imm scale & 0 .. 3) index)) :

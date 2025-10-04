@@ -1,4 +1,6 @@
 proper systemv abi 1 (spilled arg).stack_args:
+	lea rax, [rsp+0x20]
+	lea rax, [rsp+0x08]
 	mov rax, [rsp+0x08]
 	add rax, [rsp+0x10]
 	add rax, [rsp+0x18]
@@ -9,6 +11,8 @@ proper systemv abi 1 (spilled arg).stack_args:
 	add rax, rsi
 	ret
 proper systemv abi 1 (spilled arg).load_of_args:
+	lea rax, [rsp+0x10]
+	lea rax, [rsp+0x08]
 	mov rax, rdi
 	add rax, rsi
 	add rax, rdx
