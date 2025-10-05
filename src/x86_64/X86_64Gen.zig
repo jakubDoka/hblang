@@ -533,6 +533,8 @@ pub const Set = struct {
 
     const Mask = u128;
 
+    const spill_mask = ~@as(Mask, (1 << 32) - 1);
+
     pub fn init(bits: Mask) Set {
         return .{ .bits = bits };
     }
@@ -579,16 +581,16 @@ pub fn writeIntMask(_: *utils.Arena) Set {
     return .init(0xFFFF & ~(@as(Set.Mask, 1) << @intFromEnum(Reg.rsp)));
 }
 
-pub fn splitFloatMask(_: *utils.Arena) Set {
-    return .init(0xFFFF_FFFF_FFFF_FFFF_FFFF_FFFF_0000);
+pub fn splitFloatMask(arena: *utils.Arena) Set {
+    return .init(Set.spill_mask | floatMask(arena).bits);
 }
 
 pub fn splitIntMask(arena: *utils.Arena) Set {
-    return .init(0xFFFF_FFFF_FFFF_FFFF_FFFF_0000_0000 | writeIntMask(arena).bits);
+    return .init(Set.spill_mask | writeIntMask(arena).bits);
 }
 
 pub fn readSplitIntMask(arena: *utils.Arena) Set {
-    return .init(0xFFFF_FFFF_FFFF_FFFF_FFFF_0000_0000 | readIntMask(arena).bits);
+    return .init(Set.spill_mask | readIntMask(arena).bits);
 }
 
 pub fn singleReg(reg: Reg, _: *utils.Arena) Set {

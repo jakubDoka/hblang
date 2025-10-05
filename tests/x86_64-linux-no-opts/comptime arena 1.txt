@@ -51,9 +51,9 @@ comptime arena 1.Arena.alloc(u8):
 	mov [rdi], rax
 	mov [rdi+0x08], rcx
 	mov rcx, [rsp]
-	add rdx, [rcx]
-	and rdx, 0x00
 	mov rax, [rcx]
+	add rdx, rax
+	and rdx, 0x00
 	add rax, rdx
 	mov [rcx], rax
 	add rsp, 0x10

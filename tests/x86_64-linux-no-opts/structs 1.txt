@@ -30,7 +30,8 @@ structs 1.pass:
 	mov [rcx], rax
 	mov rcx, [rsp]
 	mov rax, [rcx]
-	sub rax, [rcx+0x08]
+	mov rcx, [rcx+0x08]
+	sub rax, rcx
 	add rsp, 0x10
 	ret
 main:

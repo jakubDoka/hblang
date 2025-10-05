@@ -55,11 +55,10 @@ main:
 	mov [rsp+0x78], rdx
 	jmp :2
 1:	imul rdi, rcx
-	mov rsi, [r8]
-	add rsi, rdi
-	mov rdx, [rsp+0x70]
-	add rdx, [rsi]
-	mov [rsp+0x70], rdx
+	mov rdx, [r8]
+	add rdx, rdi
+	mov rdx, [rdx]
+	add [rsp+0x70], rdx
 	mov rdx, [rsp+0x80]
 	inc rdx
 	mov [rsp+0x80], rdx

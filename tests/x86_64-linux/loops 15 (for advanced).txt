@@ -10,13 +10,12 @@ main:
 	inc rcx
 	jmp :1
 0:	xor rax, rax
-	lea rcx, [rsp]
-3:	mov rdx, rcx
-	cmp rdx, rsi
+	lea rdx, [rsp]
+3:	cmp rdx, rsi
 	jnb :2
-	mov rcx, rdx
-	add rcx, 0x08
-	add rax, [rdx]
+	mov rcx, [rdx]
+	add rax, rcx
+	add rdx, 0x08
 	jmp :3
 2:	add rsp, 0x20
 	ret

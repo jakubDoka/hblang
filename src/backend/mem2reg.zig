@@ -259,7 +259,9 @@ pub fn Mixin(comptime Backend: type) type {
                             }.inner) orelse {
                                 utils.panic("{f} {any} {}", .{ o, alloc_offsets.items, offs });
                             };
-                            _ = Local.resolve(self, locals, idx);
+                            if (locals[idx].expand() != null) {
+                                _ = Local.resolve(self, locals, idx);
+                            }
                             locals[idx] = .compact(.{ .Node = o.value().? });
                         }
                     }
@@ -360,7 +362,11 @@ pub fn Mixin(comptime Backend: type) type {
                             .ctrl = child,
                             .items = tmp.arena.dupe(Local, locals),
                         };
-                        @memset(locals, .compact(.{ .Loop = loop }));
+                        for (locals) |*l| {
+                            if (l.expand() != null) {
+                                l.* = .compact(.{ .Loop = loop });
+                            }
+                        }
                         states[child.schedule] = .compact(.{ .Join = loop });
                     }
                 }

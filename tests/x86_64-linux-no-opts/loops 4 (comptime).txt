@@ -1,38 +1,42 @@
 main:
 	sub rsp, 0x30
 	mov qword ptr [rsp], 0x01
-	mov rcx, 0x08
+	mov rdx, 0x08
 	mov qword ptr [rsp+0x08], 0x02
 	mov qword ptr [rsp+0x10], 0x03
 	mov qword ptr [rsp+0x18], 0x04
 	mov qword ptr [rsp+0x20], 0x00
 	xor rax, rax
-	imul rax, rcx
-	lea rdi, [rsp]
-	add rdi, rax
-	mov rax, 0x03
-	imul rax, rcx
-	lea rsi, [rsp]
-	add rsi, rax
-	mov rax, 0x02
-	imul rax, rcx
-	lea rdx, [rsp]
-	add rdx, rax
-	mov rax, 0x01
-	imul rax, rcx
+	imul rax, rdx
 	lea rcx, [rsp]
 	add rcx, rax
+	mov rax, 0x03
+	imul rax, rdx
+	lea rdi, [rsp]
+	add rdi, rax
+	mov rax, 0x02
+	imul rax, rdx
+	lea rsi, [rsp]
+	add rsi, rax
+	mov rax, 0x01
+	imul rax, rdx
+	lea rdx, [rsp]
+	add rdx, rax
+	mov rcx, [rcx]
 	mov rax, [rsp+0x20]
-	add rax, [rdi]
+	add rax, rcx
 	mov [rsp+0x20], rax
+	mov rcx, [rdx]
 	mov rax, [rsp+0x20]
-	add rax, [rcx]
+	add rax, rcx
 	mov [rsp+0x20], rax
+	mov rcx, [rsi]
 	mov rax, [rsp+0x20]
-	add rax, [rdx]
+	add rax, rcx
 	mov [rsp+0x20], rax
+	mov rcx, [rdi]
 	mov rax, [rsp+0x20]
-	add rax, [rsi]
+	add rax, rcx
 	mov [rsp+0x20], rax
 	mov rax, [rsp+0x20]
 	add rsp, 0x30

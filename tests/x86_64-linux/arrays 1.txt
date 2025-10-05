@@ -17,7 +17,8 @@ main:
 	add rsp, 0x40
 	ret
 1:	lea rdx, [rsi+rcx*8]
-	add rax, [rdx]
+	mov rdx, [rdx]
+	add rax, rdx
 	inc rcx
 	jmp :2
 0:	lea rcx, [rsi+rax*8]

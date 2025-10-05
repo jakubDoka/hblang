@@ -3,7 +3,8 @@ structs 1.pass:
 	dec rax
 	inc rax
 	mov [rdi], rax
-	sub rax, [rdi+0x08]
+	mov rcx, [rdi+0x08]
+	sub rax, rcx
 	ret
 structs 1.Ty.sum:
 	mov rax, rdi

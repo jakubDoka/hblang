@@ -2261,7 +2261,7 @@ pub fn Func(comptime Backend: type) type {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            var worklist = WorkList.init(tmp.arena.allocator(), self.next_id * 2) catch unreachable;
+            var worklist = WorkList.init(tmp.arena.allocator(), self.next_id) catch unreachable;
             worklist.collectAll(self);
 
             while (worklist.pop()) |t| {

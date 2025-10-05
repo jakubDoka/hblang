@@ -2232,8 +2232,9 @@ main := fn(): uint {
 }
 ```
 
+note: this fails because the comptime and runtime call conventions are different
 #### directives 27 (@alloc_global)
-```hb
+```!hb
 
 mk_arr := fn(len: uint): []u8 {
     buf: [1024]u8 = idk
