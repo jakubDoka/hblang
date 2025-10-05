@@ -2605,7 +2605,11 @@ pub fn Func(comptime Backend: type) type {
                 // If store happens after us, it could be a swap so be pesimiztic
                 //
                 for (node.outputs()) |use| {
-                    if (if (use.get().knownMemOp()) |op| !op[0].isLoad() else false) break :memcpy;
+                    if (use.get().kind == .Call) break :memcpy;
+                    if (if (use.get().knownMemOp()) |op|
+                        !op[0].isLoad()
+                    else
+                        false) break :memcpy;
                 }
 
                 // We cause side effects if our dest is not .Local
@@ -2624,6 +2628,7 @@ pub fn Func(comptime Backend: type) type {
                 }
 
                 self.subsume(src, dst);
+
                 return mem;
             }
 

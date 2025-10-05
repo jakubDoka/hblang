@@ -2626,3 +2626,39 @@ main := fn(): uint {
     return kind
 }
 ```
+
+#### modify tmp 1
+```hb
+Parser := struct {
+    .tok: Tok
+
+    Tok := struct {
+        .kind: Kind;
+        .value: uint;
+        .value2: uint
+
+        Kind := enum(u8) {
+            .ident;
+            .tint;
+        }
+    }
+
+    expr := fn(self: ^Parser): uint {
+        ptok := self.tok
+
+        self.tok = mm()
+
+        return ptok.kind
+    }
+
+    mm := fn(): Tok {
+        return .(.tint, 0, 0)
+    }
+}
+
+main := fn(): uint {
+    p := Parser.(.(.ident, 0, 0))
+    return p.expr()
+}
+
+```
