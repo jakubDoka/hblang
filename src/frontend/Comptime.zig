@@ -551,7 +551,7 @@ pub fn runVm(
         self.gen.mach.out.syms.items[@intFromEnum(self.gen.mach.out.funcs.items[entry_id])].offset;
     std.debug.assert(self.vm.ip < self.gen.mach.out.code.items.len);
 
-    self.vm.fuel = 1024;
+    self.vm.fuel = 1024 * 16;
     self.vm.regs.set(.ret_addr, stack_size - 1); // return to hardcoded tx
     if (return_loc.len != 0) {
         if (stack_end < return_loc.len) {
@@ -720,8 +720,6 @@ pub fn doInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
             const elem_ty = self.ecaArgTy(1);
             const ptr = self.ecaArg(2);
             const len: usize = @intCast(self.ecaArg(3));
-
-            std.debug.print("{}\n", .{elem_ty});
 
             const mem = vm_ctx.memory[@intCast(ptr)..][0 .. len * elem_ty.size(types)];
 

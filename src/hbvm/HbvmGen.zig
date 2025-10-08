@@ -13,10 +13,10 @@ const isa = @import("isa.zig");
 
 gpa: std.mem.Allocator,
 mach: Mach = .init(HbvmGen),
+ctx: *Ctx = undefined,
 emit_global_reloc_offsets: bool = false,
 push_uninit_globals: bool = false,
 align_globlals: bool = false,
-ctx: *Ctx = undefined,
 
 pub const Ctx = struct {
     local_relocs: std.ArrayListUnmanaged(BlockReloc),

@@ -158,6 +158,8 @@ pub const Enum = struct {
 
             if (lhs_data.backing_int != rhs_data.backing_int) return false;
 
+            if (lhs_data.fields.?.len != rhs_data.fields.?.len) return false;
+
             for (lhs_data.fields.?, rhs_data.fields.?) |lhsf, rhsf| {
                 if (!std.mem.eql(u8, lhsf.name, rhsf.name)) return false;
                 if (lhsf.value != rhsf.value) return false;

@@ -20,7 +20,20 @@ pub const x86_64 = enum {
     pub const X86_64Gen = @import("x86_64/X86_64Gen.zig");
 };
 
-pub const object = @import("object.zig");
+pub const wasm = enum {
+    pub const WasmGen = @import("wasm/WasmGen.zig");
+    pub const object = @import("wasm/object.zig");
+};
+
+pub const object = enum {
+    pub const elf = @import("object/elf.zig");
+    pub const coff = @import("object/coff.zig");
+
+    pub const Arch = enum {
+        x86_64,
+    };
+};
+
 pub const dwarf = @import("dwarf.zig");
 
 pub const frontend = enum {

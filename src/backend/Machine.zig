@@ -1253,6 +1253,7 @@ pub const SupportedTarget = enum {
     @"hbvm-ableos",
     @"x86_64-windows",
     @"x86_64-linux",
+    @"wasm-freestanding",
     null,
 
     pub fn fromStr(str: []const u8) ?SupportedTarget {
@@ -1282,6 +1283,11 @@ pub const SupportedTarget = enum {
                 slot.* = root.x86_64.X86_64Gen{ .gpa = gpa, .object_format = .elf };
                 return &slot.mach;
             },
+            .@"wasm-freestanding" => {
+                const slot = scratch.create(root.wasm.WasmGen);
+                slot.* = root.wasm.WasmGen{ .gpa = gpa };
+                return &slot.mach;
+            },
             .null => {
                 const slot = scratch.create(Null);
                 slot.* = Null{};
@@ -1295,6 +1301,7 @@ pub const SupportedTarget = enum {
             .@"hbvm-ableos" => .ablecall,
             .@"x86_64-windows" => .fastcall,
             .@"x86_64-linux" => .systemv,
+            .@"wasm-freestanding" => .ablecall,
             .null => .systemv,
         };
     }
