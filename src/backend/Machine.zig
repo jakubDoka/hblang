@@ -1180,7 +1180,12 @@ pub const EmitOptions = struct {
     name: []const u8 = &.{},
     is_inline: bool,
     linkage: Data.Linkage,
-    optimizations: union(enum) {
+    optimizations: Optimizations,
+    special: ?Special = null,
+    builtins: Builtins,
+    files: []const utils.LineIndex = &.{},
+
+    pub const Optimizations = union(enum) {
         opts: OptOptions,
         allocs: []const u16,
 
@@ -1199,10 +1204,7 @@ pub const EmitOptions = struct {
                 .allocs => |pts| return pts,
             }
         }
-    },
-    special: ?Special = null,
-    builtins: Builtins,
-    files: []const utils.LineIndex = &.{},
+    };
 
     pub const Special = enum { entry, memcpy };
 };

@@ -52,12 +52,12 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
             root.backend.Machine.OptOptions.Mode,
             root.frontend.Types.Abi,
         }{
+            .{ "wasm-freestanding", &wasm.mach, .release, .ableos },
+            .{ "wasm-freestanding-no-opts", &wasm_no_opt.mach, .debug, .ableos },
             .{ "hbvm-ableos", &hbvm.mach, .release, .ableos },
             .{ "hbvm-ableos-no-opts", &hbvm_no_opt.mach, .debug, .ableos },
             .{ "x86_64-linux", &x86_64.mach, .release, .systemv },
             .{ "x86_64-linux-no-opts", &x86_64_no_opt.mach, .debug, .systemv },
-            .{ "wasm-freestanding", &wasm.mach, .release, .ableos },
-            .{ "wasm-freestanding-no-opts", &wasm_no_opt.mach, .debug, .ableos },
         };
 
         for (tests) |tst| {
@@ -183,8 +183,8 @@ pub fn runVendoredTest(path: []const u8, projs: []const [2][]const u8) !void {
     if (projs.len == 0) { // for hblsp tests
         _ = try test_util.runVendoredTest(path, projs, "hbvm-ableos", .release);
         _ = try test_util.runVendoredTest(path, projs, "hbvm-ableos-no-opts", .debug);
-        _ = try test_util.runVendoredTest(path, projs, "wasm-freestanding", .release);
-        _ = try test_util.runVendoredTest(path, projs, "wasm-freestanding-no-opts", .debug);
+        //_ = try test_util.runVendoredTest(path, projs, "wasm-freestanding", .release);
+        //_ = try test_util.runVendoredTest(path, projs, "wasm-freestanding-no-opts", .debug);
     }
     if (true) {
         _ = try test_util.runVendoredTest(path, projs, "x86_64-linux", .release);

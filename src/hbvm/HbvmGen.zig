@@ -755,6 +755,7 @@ pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {
 }
 
 pub fn deinit(self: *HbvmGen) void {
+    // TODO: move this to Mach.deinit
     self.mach.out.deinit(self.gpa);
     self.* = undefined;
 }
