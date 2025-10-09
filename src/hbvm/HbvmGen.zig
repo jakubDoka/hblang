@@ -327,16 +327,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         null);
     defer tmp.deinit();
 
-    var is_tail = true;
-    var call_slot_size: u64 = 0;
-    for (func.gcm.postorder) |bb| {
-        if (bb.base.kind == .CallEnd) {
-            const call = bb.base.inputs()[0].?;
-            const signature: *graph.Signature = &call.extra(.Call).signature;
-            call_slot_size = @max(signature.stackSize(), call_slot_size);
-            is_tail = false;
-        }
-    }
+    const has_call, const call_slot_size = func.computeCallSlotSize();
 
     func.computeStructArgLayout();
 
@@ -349,9 +340,9 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         break :b max;
     };
     const used_registers = if (allocs.len == 0) 0 else @min(max_reg, max_alloc_regs) -|
-        (@intFromEnum(isa.Reg.ret_addr) - @intFromBool(is_tail));
+        (@intFromEnum(isa.Reg.ret_addr) - @intFromBool(!has_call));
 
-    const used_reg_size = @as(u16, (used_registers + @intFromBool(!is_tail))) * 8;
+    const used_reg_size = @as(u16, (used_registers + @intFromBool(has_call))) * 8;
     const spill_count = (max_reg -| max_regs) * 8;
 
     var local_size: i64 = func.computeStackLayout(0);

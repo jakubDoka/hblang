@@ -865,17 +865,17 @@ pub const OptOptions = struct {
     pub fn shouldDefer(
         self: @This(),
         id: u32,
-        comptime B: type,
-        func: *graph.Func(B),
-        backend: *B,
+        comptime Backend: type,
+        func: *graph.Func(Backend),
+        backend: *Backend,
     ) bool {
         switch (self.mode) {
             .release => {
-                backend.mach.out.setInlineFunc(backend.gpa, B, func, id);
+                backend.mach.out.setInlineFunc(backend.gpa, Backend, func, id);
                 return true;
             },
             .debug => {
-                self.optimizeDebug(B, backend, func);
+                self.optimizeDebug(Backend, backend, func);
                 return false;
             },
         }

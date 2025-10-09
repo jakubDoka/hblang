@@ -2690,6 +2690,21 @@ pub fn Func(comptime Backend: type) type {
             }
         }
 
+        pub fn computeCallSlotSize(self: *Self) struct { bool, u64 } {
+            var has_call = false;
+            var call_slot_size: u64 = 0;
+            for (self.gcm.postorder) |bb| {
+                if (bb.base.kind == .MemCpy) has_call = true;
+                if (bb.base.kind == .CallEnd) {
+                    const call = bb.base.inputs()[0].?;
+                    const signature: *Signature = &call.extra(.Call).signature;
+                    call_slot_size = @max(signature.stackSize(), call_slot_size);
+                    has_call = true;
+                }
+            }
+            return .{ has_call, call_slot_size };
+        }
+
         pub fn computeStackLayout(self: *Self, start_pos: i64) i64 {
             if (self.start.outputs().len < 2) return 0;
 

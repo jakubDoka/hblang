@@ -6,4 +6,7 @@
     local.set 0
     local.get 0
     return)
+  (memory (;0;) 2)
+  (global (;0;) (mut i64) (i64.const 131072))
+  (export "__stack_pointer" (global 0))
   (export "main" (func $main)))

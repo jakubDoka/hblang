@@ -861,17 +861,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     var stack_size: i64 = std.mem.alignForward(i64, local_size, 8) +
         spill_slot_count * 8;
 
-    var has_call = false;
-    var call_slot_size: u64 = 0;
-    for (postorder) |bb| {
-        if (bb.base.kind == .MemCpy) has_call = true;
-        if (bb.base.kind == .CallEnd) {
-            const call = bb.base.inputs()[0].?;
-            const signature: *graph.Signature = &call.extra(.Call).signature;
-            call_slot_size = @max(signature.stackSize(), call_slot_size);
-            has_call = true;
-        }
-    }
+    const has_call, const call_slot_size = func.computeCallSlotSize();
 
     stack_size += @intCast(call_slot_size);
 

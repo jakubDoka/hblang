@@ -9,9 +9,11 @@ const object = root.wasm.object;
 
 const WasmGen = @This();
 const Func = graph.Func(WasmGen);
+const opb = object.opb;
 
 gpa: std.mem.Allocator,
 mach: Mach = .init(WasmGen),
+stack_size: u64 = 1024 * 128,
 func_ids: std.ArrayList(Mach.Data.SymIdx) = .empty,
 func_id_counter: u32 = 0,
 ctx: *Ctx = undefined,
@@ -34,10 +36,14 @@ pub const Ctx = struct {
 pub const classes = enum {};
 
 pub fn idealize(self: *WasmGen, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
-    _ = node; // autofix
-    _ = worklist; // autofix
-    _ = self; // autofix
-    _ = func; // autofix
+    _ = worklist;
+    _ = self;
+    _ = func;
+
+    // TODO: this is most likely wrong
+    if (false and node.kind == .UnOp and node.extra(.UnOp).op == .uext) {
+        return node.inputs()[1].?;
+    }
 
     return null;
 }
@@ -48,10 +54,10 @@ pub fn regMask(
     idx: usize,
     arena: *utils.Arena,
 ) Set {
-    _ = node; // autofix
-    _ = func; // autofix
-    _ = idx; // autofix
-    _ = arena; // autofix
+    _ = node;
+    _ = func;
+    _ = idx;
+    _ = arena;
 
     return .{};
 }
@@ -98,6 +104,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     _ = self.addFuncId(id);
 
+    // TDDO: actually make the release mode work
     opts.optimizations.opts.optimizeDebug(WasmGen, self, func);
 
     var tmp = utils.Arena.scrath(null);
@@ -110,6 +117,10 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     defer self.mach.out.code = ctx.buf.toArrayList();
 
     self.ctx = &ctx;
+
+    // NOTE: this is inneficient and we make more locals then we need but its
+    // also simple and lets me focus on one problem at a time, just generate
+    // wasm that works.
 
     // backpatch later
     try self.ctx.buf.writer.writeInt(u32, 0, .little);
@@ -219,46 +230,263 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         }
     }
 
-    // NOTE: this is inneficient and we make more locals then we need but its
-    // also simple and lets me focus on one problem at a time, just generate
-    // wasm that works.
+    const frame_alignment = 8;
 
-    // TODO: other cfg, we will need to carefully order the blocks
-    std.debug.assert(func.gcm.postorder.len == 1);
+    var stack_size = func.computeStackLayout(0);
+    stack_size = std.mem.alignForward(i64, stack_size, frame_alignment);
+
+    func.computeStructArgLayout();
+
+    const has_call, const call_slot_size = func.computeCallSlotSize();
+    _ = has_call;
+
+    std.debug.assert(call_slot_size == 0); // TODO
+
+    if (stack_size != 0) {
+        try self.ctx.buf.writer.writeByte(opb(.global_get));
+        try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
+
+        try self.ctx.buf.writer.writeByte(opb(.i64_const));
+        try self.ctx.buf.writer.writeUleb128(stack_size);
+
+        try self.ctx.buf.writer.writeByte(opb(.i64_sub));
+
+        try self.ctx.buf.writer.writeByte(opb(.global_set));
+        try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
+    }
+
+    std.debug.assert(func.gcm.postorder.len == 1); // TODO: other cfg,
+    // we will need to carefully order the blocks
 
     for (func.gcm.postorder) |block| {
         for (block.base.outputs()) |out| {
             const instr = out.get();
+
+            if (instr.kind == .Return) {
+                if (stack_size != 0) {
+                    try self.ctx.buf.writer.writeByte(opb(.i64_const));
+                    try self.ctx.buf.writer.writeUleb128(stack_size);
+                    // global.get __stack_pointer
+                    try self.ctx.buf.writer.writeByte(opb(.global_get));
+                    try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
+                    // i64.add
+                    try self.ctx.buf.writer.writeByte(opb(.i64_add));
+                    // global.set __stack_pointer
+                    try self.ctx.buf.writer.writeByte(opb(.global_set));
+                    try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
+                }
+            }
+
             self.emitInstr(instr);
         }
     }
 
-    try self.ctx.buf.writer.writeByte(0x0b);
+    try self.ctx.buf.writer.writeByte(opb(.end));
 }
 
 pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
     errdefer unreachable;
 
+    const inps = instr.dataDeps();
+
     switch (instr.extra2()) {
         .CInt => |extra| {
             switch (dataTypeToWasmType(instr.data_type)) {
+                .i32 => {
+                    // i32.const value
+                    try self.ctx.buf.writer.writeByte(opb(.i32_const));
+                    const value: u32 = @truncate(@as(u64, @bitCast(extra.value)));
+                    try self.ctx.buf.writer.writeUleb128(value);
+                },
                 .i64 => {
-                    try self.ctx.buf.writer.writeByte(0x42);
+                    // i64.const value
+                    try self.ctx.buf.writer.writeByte(opb(.i64_const));
                     try self.ctx.buf.writer
                         .writeUleb128(@as(u64, @bitCast(extra.value)));
-                    try self.ctx.buf.writer.writeByte(0x21);
-                    try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
                 },
+
                 else => utils.panic("{}", .{instr.data_type}),
             }
+
+            // local.set reg
+            try self.ctx.buf.writer.writeByte(opb(.local_set));
+            try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
+        },
+        .UnOp => |extra| {
+            // local.get oper
+            try self.ctx.buf.writer.writeByte(opb(.local_get));
+            try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
+            // op
+            const op_code: u8 = switch (extra.op) {
+                .sext => switch (inps[0].data_type) {
+                    .i8 => switch (instr.data_type) {
+                        .i32, .i16 => opb(.i32_extend8_s),
+                        .i64 => b: {
+                            try self.ctx.buf.writer.writeByte(opb(.i32_extend8_s));
+                            break :b opb(.i64_extend_i32_s);
+                        },
+                        else => unreachable,
+                    },
+                    .i16 => switch (instr.data_type) {
+                        .i32 => 0xC1,
+                        .i64 => b: {
+                            try self.ctx.buf.writer.writeByte(opb(.i32_extend16_s));
+                            break :b opb(.i64_extend_i32_s);
+                        },
+                        else => unreachable,
+                    },
+                    .i32 => 0xAC,
+                    else => unreachable,
+                },
+                .uext => switch (inps[0].data_type) {
+                    .i8 => switch (instr.data_type) {
+                        .i16, .i32 => b: {
+                            try self.ctx.buf.writer.writeByte(opb(.i32_const));
+                            try self.ctx.buf.writer.writeUleb128(0xFF);
+                            break :b opb(.i32_and);
+                        },
+                        .i64 => b: {
+                            try self.ctx.buf.writer.writeByte(opb(.i32_const));
+                            try self.ctx.buf.writer.writeUleb128(0xFF);
+
+                            try self.ctx.buf.writer.writeByte(opb(.i32_and));
+
+                            break :b opb(.i64_extend_i32_u);
+                        },
+                        else => unreachable,
+                    },
+                    .i16 => switch (instr.data_type) {
+                        .i32 => b: {
+                            try self.ctx.buf.writer.writeByte(opb(.i32_const));
+                            try self.ctx.buf.writer.writeUleb128(0xFFFF);
+
+                            break :b opb(.i32_and);
+                        },
+                        .i64 => b: {
+                            try self.ctx.buf.writer.writeByte(opb(.i32_const));
+                            try self.ctx.buf.writer.writeUleb128(0xFFFF);
+                            try self.ctx.buf.writer.writeByte(opb(.i32_and));
+
+                            break :b opb(.i64_extend_i32_u);
+                        },
+                        else => unreachable,
+                    },
+                    .i32 => opb(.i64_extend_i32_u),
+                    else => unreachable,
+                },
+                else => utils.panic("{}", .{extra.op}),
+            };
+            try self.ctx.buf.writer.writeByte(op_code);
+            // local.set reg
+            try self.ctx.buf.writer.writeByte(opb(.local_set));
+            try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
+        },
+        .BinOp => |extra| {
+            // local.get lhs
+            try self.ctx.buf.writer.writeByte(opb(.local_get));
+            try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
+            // local.get rhs
+            try self.ctx.buf.writer.writeByte(opb(.local_get));
+            try self.ctx.buf.writer.writeUleb128(self.regOf(inps[1]));
+            // op
+            const op_ty = dataTypeToWasmType(instr.data_type);
+            const op_code: u8 = switch (extra.op) {
+                .iadd => switch (op_ty) {
+                    .i32 => opb(.i32_add),
+                    .i64 => opb(.i64_add),
+                    .f32 => opb(.f32_add),
+                    .f64 => opb(.f64_add),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .isub => switch (op_ty) {
+                    .i32 => opb(.i32_sub),
+                    .i64 => opb(.i64_sub),
+                    .f32 => opb(.f32_sub),
+                    .f64 => opb(.f64_sub),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+
+                else => utils.panic("{}", .{extra.op}),
+            };
+            try self.ctx.buf.writer.writeByte(op_code);
+            // local.set reg
+            try self.ctx.buf.writer.writeByte(opb(.local_set));
+            try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
+        },
+        .Store => {
+            // TODO: we can emit specialized stores
+
+            // local.get addr
+            try self.ctx.buf.writer.writeByte(opb(.local_get));
+            try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
+            // i32.wrap_i64
+            try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
+            // local.get value
+            try self.ctx.buf.writer.writeByte(opb(.local_get));
+            try self.ctx.buf.writer.writeUleb128(self.regOf(inps[1]));
+            // [ty].store[size] (align: size, offset: 0)
+            const op_code: u8 = switch (instr.data_type) {
+                .i32 => opb(.i32_store),
+                .i64 => opb(.i64_store),
+                .f32 => opb(.f32_store),
+                .f64 => opb(.f64_store),
+                .i8 => opb(.i32_store8),
+                .i16 => opb(.i32_store16),
+                else => unreachable,
+            };
+            try self.ctx.buf.writer.writeByte(op_code);
+            const alignment = std.math.log2_int(usize, instr.data_type.size());
+            try self.ctx.buf.writer.writeUleb128(alignment);
+            try self.ctx.buf.writer.writeByte(0);
+        },
+        .Load => {
+            // TODO: we can emit specialized loads, maybe even sign extension
+
+            // local.get addr
+            try self.ctx.buf.writer.writeByte(opb(.local_get));
+            try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
+            // i32.wrap_i64
+            try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
+            // i64.load[size]_u (align: size, offset: 0)
+            const op_code: u8 = switch (instr.data_type) {
+                .i32 => opb(.i32_load),
+                .i64 => opb(.i64_load),
+                .f32 => opb(.f32_load),
+                .f64 => opb(.f64_load),
+                .i8 => opb(.i32_load8_u),
+                .i16 => opb(.i32_load16_u),
+                else => unreachable,
+            };
+            try self.ctx.buf.writer.writeByte(op_code);
+            const alignment = std.math.log2_int(usize, instr.data_type.size());
+            try self.ctx.buf.writer.writeUleb128(alignment);
+            try self.ctx.buf.writer.writeUleb128(0);
+            // local.set reg
+            try self.ctx.buf.writer.writeByte(opb(.local_set));
+            try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
+        },
+        .Local => {
+            const offset = instr.inputs()[1].?.extra(.LocalAlloc).size;
+
+            // i64.const local_offset
+            try self.ctx.buf.writer.writeByte(opb(.i64_const));
+            try self.ctx.buf.writer.writeUleb128(offset);
+            // global.get __stack_pointer
+            try self.ctx.buf.writer.writeByte(opb(.global_get));
+            try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
+            // i64.add
+            try self.ctx.buf.writer.writeByte(opb(.i64_add));
+            // local.set reg
+            try self.ctx.buf.writer.writeByte(opb(.local_set));
+            try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
         },
         .Return => {
             for (instr.dataDeps()) |d| {
-                try self.ctx.buf.writer.writeByte(0x20);
+                try self.ctx.buf.writer.writeByte(opb(.local_get));
                 try self.ctx.buf.writer.writeUleb128(self.regOf(d));
             }
 
-            try self.ctx.buf.writer.writeByte(0x0f);
+            try self.ctx.buf.writer.writeByte(opb(.@"return"));
         },
         else => {
             utils.panic("unhandled op {f}", .{instr});
@@ -266,8 +494,8 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
     }
 }
 
-pub fn regOf(self: *WasmGen, node: *Func.Node) u16 {
-    return self.ctx.allocs[node.schedule];
+pub fn regOf(self: *WasmGen, node: ?*Func.Node) u16 {
+    return self.ctx.allocs[node.?.schedule];
 }
 
 pub fn emitData(self: *WasmGen, opts: Mach.DataOptions) void {
@@ -280,6 +508,7 @@ pub fn finalize(self: *WasmGen, opts: Mach.FinalizeOptions) void {
     root.wasm.object.flush(
         self.mach.out,
         opts.output orelse return,
+        self.stack_size,
     ) catch unreachable;
 }
 
@@ -363,7 +592,9 @@ pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
     }
 
     const exe_prefix = "main() => i64:";
-    std.debug.assert(std.mem.startsWith(u8, stdout.items, exe_prefix));
+    if (!std.mem.startsWith(u8, stdout.items, exe_prefix)) {
+        utils.panic("{s}\n", .{stdout.items});
+    }
     std.debug.assert(std.mem.endsWith(u8, stdout.items, "\n"));
     stdout.items = stdout.items[exe_prefix.len .. stdout.items.len - 1];
 
