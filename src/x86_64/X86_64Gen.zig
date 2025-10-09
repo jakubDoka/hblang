@@ -2020,6 +2020,7 @@ pub fn getReg(self: X86_64Gen, node: *FuncNode) Reg {
     return @enumFromInt(self.ctx.allocs[node.schedule]);
 }
 
+// TODO: alignment
 pub fn emitData(self: *X86_64Gen, opts: Mach.DataOptions) void {
     errdefer unreachable;
 

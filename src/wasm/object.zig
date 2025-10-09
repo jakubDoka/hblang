@@ -1,6 +1,7 @@
 const std = @import("std");
 const root = @import("hb");
 const Mach = root.backend.Machine;
+const utils = root.utils;
 
 const WasmGen = @import("WasmGen.zig");
 const uleb128Size = root.dwarf.uleb128Size;
@@ -11,6 +12,259 @@ pub const Header = extern struct {
     magic: [4]u8 = "\x00asm".*,
     version: u32 = 1,
 };
+
+pub const SigLenTy = u32;
+pub fn parseFunction(raw: []const u8) [2][]const u8 {
+    const sig_len: SigLenTy = @bitCast(raw[0..@sizeOf(SigLenTy)].*);
+    return .{
+        raw[@sizeOf(SigLenTy)..][0..sig_len],
+        raw[@sizeOf(SigLenTy) + sig_len ..],
+    };
+}
+
+pub fn flush(self: Mach.Data, out: *std.Io.Writer, stack_size: u64) !void {
+    try out.writeStruct(Header{}, .little);
+
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    var type_section_size: u64 = 0;
+    var func_section_size: u64 = 0;
+    var func_count: u32 = 0;
+    var memory_section_size: u64 = 0;
+    var memory_count: u64 = 0;
+    var global_section_size: u64 = 0;
+    var global_count: u64 = 0;
+    var export_section_size: u64 = 0;
+    var exprted_count: u32 = 0;
+    var code_section_size: u64 = 0;
+    var name_section_size: u64 = 0;
+    var data_section_size: u64 = 0;
+    var global_offsets = tmp.arena.alloc(u32, self.syms.items.len);
+    for (self.syms.items, 0..) |s, i| {
+        switch (s.kind) {
+            .func => {
+                const sig, const body = parseFunction(self.code.items[s.offset..][0..s.size]);
+                const name = self.lookupName(s.name);
+
+                type_section_size += sig.len;
+
+                func_section_size += uleb128Size(func_count);
+
+                if (s.linkage == .exported) {
+                    export_section_size += uleb128Size(name.len) + name.len;
+                    export_section_size += 1 + uleb128Size(func_count);
+                    exprted_count += 1;
+                }
+
+                code_section_size += uleb128Size(body.len) + body.len;
+
+                name_section_size += uleb128Size(func_count);
+                name_section_size += uleb128Size(name.len) + name.len;
+
+                func_count += 1;
+            },
+            .data => {
+                global_section_size += 1; // global pointer type
+                global_section_size += 1; // immutable
+                global_section_size += 1 +
+                    uleb128Size(stack_size + data_section_size) + 1; // offset
+
+                global_offsets[i] = @intCast(data_section_size);
+
+                data_section_size += s.size;
+                global_count += 1;
+            },
+            .prealloc, .tls_prealloc => unreachable,
+            .invalid => {},
+        }
+    }
+
+    type_section_size += uleb128Size(func_count);
+
+    func_section_size += uleb128Size(func_count);
+
+    memory_count += 1; // global memory, prefixed with stack and global variables
+    memory_section_size += uleb128Size(memory_count);
+    memory_section_size += 1 +
+        uleb128Size(stack_size / std.math.maxInt(u16)); // memory type
+
+    global_count += 1; // stack pointer
+    global_section_size += uleb128Size(global_count);
+    global_section_size += 1; // stack pointer type
+    global_section_size += 1; // stack pointer mutability
+    global_section_size += 1 + uleb128Size(stack_size) + 1; // stack pointer initializer
+
+    exprted_count += 1; // stack pointer
+    const stack_pointer_export_name = "__stack_pointer";
+    export_section_size +=
+        uleb128Size(stack_pointer_export_name.len) +
+        stack_pointer_export_name.len +
+        1 + uleb128Size(0);
+
+    export_section_size += uleb128Size(exprted_count);
+
+    code_section_size += uleb128Size(func_count);
+
+    name_section_size += uleb128Size(func_count); // name map size
+    const function_name_subsection_size = name_section_size;
+    name_section_size += uleb128Size(function_name_subsection_size); // subsection size
+    name_section_size += 1; // subsection id
+    const name_section_prefix = "name";
+    name_section_size += uleb128Size(name_section_prefix.len) +
+        name_section_prefix.len;
+
+    const init_data_size = data_section_size;
+    data_section_size += uleb128Size(1); // data count
+    data_section_size += 1; // tag
+    data_section_size += 1 + uleb128Size(stack_size) + 1; // offset
+    data_section_size += uleb128Size(init_data_size); // data
+
+    try out.writeByte(SectionId.type.raw());
+    try out.writeUleb128(type_section_size);
+    {
+        try out.writeUleb128(func_count);
+        for (self.syms.items) |s| {
+            if (s.kind != .func) continue;
+            const sig, _ = parseFunction(self.code.items[s.offset..][0..s.size]);
+            try out.writeAll(sig);
+        }
+    }
+
+    try out.writeByte(SectionId.function.raw());
+    try out.writeUleb128(func_section_size);
+    {
+        try out.writeUleb128(func_count);
+        var i: u32 = 0;
+        for (self.syms.items) |s| {
+            if (s.kind != .func) continue;
+            try out.writeUleb128(i);
+            i += 1;
+        }
+    }
+
+    try out.writeByte(SectionId.memory.raw());
+    try out.writeUleb128(memory_section_size);
+    {
+        try out.writeUleb128(memory_count);
+        try out.writeByte(0); // no limmit
+        try out.writeUleb128(std.mem.alignForward(
+            usize,
+            stack_size + data_section_size,
+            std.math.maxInt(u16) + 1,
+        ) / std.math.maxInt(u16) + 1);
+    }
+
+    try out.writeByte(SectionId.global.raw());
+    try out.writeUleb128(global_section_size);
+    {
+        try out.writeUleb128(global_count);
+
+        try out.writeByte(Type.i64.raw());
+        try out.writeByte(1);
+
+        try out.writeByte(opb(.i64_const));
+        try out.writeUleb128(stack_size);
+
+        try out.writeByte(opb(.end));
+
+        for (self.syms.items, global_offsets) |s, off| {
+            if (s.kind != .data) continue;
+            try out.writeByte(Type.i64.raw());
+            try out.writeByte(0);
+
+            try out.writeByte(opb(.i64_const));
+            try out.writeUleb128(stack_size + off);
+            try out.writeByte(opb(.end));
+        }
+    }
+
+    try out.writeByte(SectionId.@"export".raw());
+    try out.writeUleb128(export_section_size);
+    {
+        try out.writeUleb128(exprted_count);
+
+        try out.writeUleb128(stack_pointer_export_name.len);
+        try out.writeAll(stack_pointer_export_name);
+        try out.writeByte(ExternIdx.global.raw());
+        try out.writeUleb128(0);
+
+        var i: u32 = 0;
+        for (self.syms.items) |s| {
+            if (s.kind != .func) continue;
+            defer i += 1;
+            if (s.linkage != .exported) continue;
+            const name = self.lookupName(s.name);
+            try out.writeUleb128(name.len);
+            try out.writeAll(name);
+            try out.writeByte(ExternIdx.func.raw());
+            try out.writeUleb128(i);
+        }
+    }
+
+    try out.writeByte(SectionId.code.raw());
+    try out.writeUleb128(code_section_size);
+    {
+        try out.writeUleb128(func_count);
+        for (self.syms.items) |s| {
+            if (s.kind != .func) continue;
+            _, const body = parseFunction(self.code.items[s.offset..][0..s.size]);
+            try out.writeUleb128(body.len);
+            try out.writeAll(body);
+        }
+    }
+
+    try out.writeByte(SectionId.data.raw());
+    try out.writeUleb128(data_section_size);
+    {
+        try out.writeUleb128(1); // data count
+        try out.writeUleb128(0); // active memory
+
+        // offset
+        try out.writeByte(opb(.i32_const));
+        try out.writeUleb128(stack_size);
+        try out.writeByte(opb(.end));
+
+        // data
+        try out.writeUleb128(init_data_size);
+        for (self.syms.items) |s| {
+            if (s.kind != .data) continue;
+
+            const mem = self.code.items[s.offset..][0..s.size];
+
+            for (self.relocs.items[s.reloc_offset..][0..s.reloc_count]) |rel| {
+                const target = global_offsets[@intFromEnum(rel.target)] + stack_size;
+                @memcpy(mem[rel.offset..][0..8], std.mem.asBytes(&target));
+            }
+
+            try out.writeAll(mem);
+        }
+    }
+
+    try out.writeByte(SectionId.custom.raw());
+    try out.writeUleb128(name_section_size);
+    {
+        try out.writeUleb128(name_section_prefix.len);
+        try out.writeAll(name_section_prefix);
+
+        try out.writeByte(NameSectionId.function.raw());
+        try out.writeUleb128(function_name_subsection_size);
+        {
+            try out.writeUleb128(func_count);
+            var i: u32 = 0;
+            for (self.syms.items) |s| {
+                if (s.kind != .func) continue;
+                const name = self.lookupName(s.name);
+                try out.writeUleb128(i);
+                try out.writeUleb128(name.len);
+                try out.writeAll(name);
+                i += 1;
+            }
+        }
+    }
+
+    try out.flush();
+}
 
 pub inline fn opb(comptime op: Op) u8 {
     return @intFromEnum(op);
@@ -274,192 +528,3 @@ pub const ExternIdx = enum(u8) {
         return @intFromEnum(self);
     }
 };
-
-pub const SigLenTy = u32;
-pub fn parseFunction(raw: []const u8) [2][]const u8 {
-    const sig_len: SigLenTy = @bitCast(raw[0..@sizeOf(SigLenTy)].*);
-    return .{
-        raw[@sizeOf(SigLenTy)..][0..sig_len],
-        raw[@sizeOf(SigLenTy) + sig_len ..],
-    };
-}
-
-pub fn flush(self: Mach.Data, out: *std.Io.Writer, stack_size: u64) !void {
-    try out.writeStruct(Header{}, .little);
-
-    var type_section_size: u64 = 0;
-    var func_section_size: u64 = 0;
-    var func_count: u32 = 0;
-    var memory_section_size: u64 = 0;
-    var memory_count: u64 = 0;
-    var global_section_size: u64 = 0;
-    var global_count: u64 = 0;
-    var export_section_size: u64 = 0;
-    var exprted_count: u32 = 0;
-    var code_section_size: u64 = 0;
-    var name_section_size: u64 = 0;
-    for (self.syms.items) |s| {
-        if (s.kind != .func) continue;
-
-        const sig, const body = parseFunction(self.code.items[s.offset..][0..s.size]);
-        const name = self.lookupName(s.name);
-
-        type_section_size += sig.len;
-
-        func_section_size += uleb128Size(func_count);
-
-        if (s.linkage == .exported) {
-            export_section_size += uleb128Size(name.len) + name.len;
-            export_section_size += 1 + uleb128Size(func_count);
-            exprted_count += 1;
-        }
-
-        code_section_size += uleb128Size(body.len) + body.len;
-
-        name_section_size += uleb128Size(func_count);
-        name_section_size += uleb128Size(name.len) + name.len;
-
-        func_count += 1;
-    }
-
-    type_section_size += uleb128Size(func_count);
-
-    func_section_size += uleb128Size(func_count);
-
-    memory_count += 1; // global memory, prefixed with stack and global variables
-    memory_section_size += uleb128Size(memory_count);
-    memory_section_size += 1 + uleb128Size(stack_size / std.math.maxInt(u16)); // memory type
-
-    global_count += 1; // stack pointer
-    global_section_size += uleb128Size(global_count);
-    global_section_size += 1; // stack pointer type
-    global_section_size += 1; // stack pointer mutability
-    global_section_size += 1 + uleb128Size(stack_size) + 1; // stack pointer initializer
-
-    exprted_count += 1; // stack pointer
-    const stack_pointer_export_name = "__stack_pointer";
-    export_section_size +=
-        uleb128Size(stack_pointer_export_name.len) +
-        stack_pointer_export_name.len +
-        1 + uleb128Size(0);
-
-    export_section_size += uleb128Size(exprted_count);
-
-    code_section_size += uleb128Size(func_count);
-
-    name_section_size += uleb128Size(func_count); // name map size
-    const function_name_subsection_size = name_section_size;
-    name_section_size += uleb128Size(function_name_subsection_size); // subsection size
-    name_section_size += 1; // subsection id
-    const name_section_prefix = "name";
-    name_section_size += uleb128Size(name_section_prefix.len) +
-        name_section_prefix.len;
-
-    try out.writeByte(SectionId.type.raw());
-    try out.writeUleb128(type_section_size);
-    {
-        try out.writeUleb128(func_count);
-        for (self.syms.items) |s| {
-            if (s.kind != .func) continue;
-            const sig, _ = parseFunction(self.code.items[s.offset..][0..s.size]);
-            try out.writeAll(sig);
-        }
-    }
-
-    try out.writeByte(SectionId.function.raw());
-    try out.writeUleb128(func_section_size);
-    {
-        try out.writeUleb128(func_count);
-        var i: u32 = 0;
-        for (self.syms.items) |s| {
-            if (s.kind != .func) continue;
-            try out.writeUleb128(i);
-            i += 1;
-        }
-    }
-
-    try out.writeByte(SectionId.memory.raw());
-    try out.writeUleb128(memory_section_size);
-    {
-        try out.writeUleb128(memory_count);
-        try out.writeByte(0); // no limmit
-        try out.writeUleb128(stack_size / std.math.maxInt(u16));
-    }
-
-    try out.writeByte(SectionId.global.raw());
-    try out.writeUleb128(global_section_size);
-    {
-        try out.writeUleb128(global_count);
-
-        try out.writeByte(Type.i64.raw());
-        try out.writeByte(1);
-
-        try out.writeByte(opb(.i64_const));
-        try out.writeUleb128(stack_size);
-
-        try out.writeByte(opb(.end));
-    }
-
-    try out.writeByte(SectionId.@"export".raw());
-    try out.writeUleb128(export_section_size);
-    {
-        try out.writeUleb128(exprted_count);
-
-        try out.writeUleb128(stack_pointer_export_name.len);
-        try out.writeAll(stack_pointer_export_name);
-        try out.writeByte(ExternIdx.global.raw());
-        try out.writeUleb128(0);
-
-        var i: u32 = 0;
-        for (self.syms.items) |s| {
-            if (s.kind != .func) continue;
-            defer i += 1;
-            if (s.linkage != .exported) continue;
-            const name = self.lookupName(s.name);
-            try out.writeUleb128(name.len);
-            try out.writeAll(name);
-            try out.writeByte(ExternIdx.func.raw());
-            try out.writeUleb128(i);
-        }
-    }
-
-    try out.writeByte(SectionId.code.raw());
-    try out.writeUleb128(code_section_size);
-    {
-        try out.writeUleb128(func_count);
-        for (self.syms.items) |s| {
-            if (s.kind != .func) continue;
-            _, const body = parseFunction(self.code.items[s.offset..][0..s.size]);
-            try out.writeUleb128(body.len);
-            try out.writeAll(body);
-        }
-    }
-
-    try out.writeByte(SectionId.custom.raw());
-    try out.writeUleb128(name_section_size);
-    {
-        try out.writeUleb128(name_section_prefix.len);
-        try out.writeAll(name_section_prefix);
-
-        try out.writeByte(NameSectionId.function.raw());
-        try out.writeUleb128(function_name_subsection_size);
-        {
-            try out.writeUleb128(func_count);
-            var i: u32 = 0;
-            for (self.syms.items) |s| {
-                if (s.kind != .func) continue;
-                const name = self.lookupName(s.name);
-                try out.writeUleb128(i);
-                try out.writeUleb128(name.len);
-                try out.writeAll(name);
-                i += 1;
-            }
-        }
-    }
-
-    for (self.syms.items) |s| {
-        std.debug.assert(s.kind == .func or s.kind == .invalid);
-    }
-
-    try out.flush();
-}

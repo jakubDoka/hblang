@@ -16,6 +16,8 @@ mach: Mach = .init(WasmGen),
 stack_size: u64 = 1024 * 128,
 func_ids: std.ArrayList(Mach.Data.SymIdx) = .empty,
 func_id_counter: u32 = 0,
+global_ids: std.ArrayList(Mach.Data.SymIdx) = .empty,
+global_id_counter: u32 = 1,
 ctx: *Ctx = undefined,
 
 pub const i_know_the_api = {};
@@ -36,14 +38,10 @@ pub const Ctx = struct {
 pub const classes = enum {};
 
 pub fn idealize(self: *WasmGen, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
+    _ = node;
     _ = worklist;
     _ = self;
     _ = func;
-
-    // TODO: this is most likely wrong
-    if (false and node.kind == .UnOp and node.extra(.UnOp).op == .uext) {
-        return node.inputs()[1].?;
-    }
 
     return null;
 }
@@ -82,6 +80,21 @@ pub fn addFuncId(self: *WasmGen, id: u32) u32 {
 
     slot.* = @enumFromInt(fid);
     self.func_id_counter += 1;
+
+    return fid;
+}
+
+// TODO: deduplicate
+pub fn addGlobalId(self: *WasmGen, id: u32) u32 {
+    errdefer unreachable;
+
+    const fid = self.global_id_counter;
+    const slot = try utils.ensureSlot(&self.global_ids, self.gpa, id);
+
+    if (slot.* != .invalid) return @intFromEnum(slot.*);
+
+    slot.* = @enumFromInt(fid);
+    self.global_id_counter += 1;
 
     return fid;
 }
@@ -293,13 +306,11 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
         .CInt => |extra| {
             switch (dataTypeToWasmType(instr.data_type)) {
                 .i32 => {
-                    // i32.const value
                     try self.ctx.buf.writer.writeByte(opb(.i32_const));
                     const value: u32 = @truncate(@as(u64, @bitCast(extra.value)));
                     try self.ctx.buf.writer.writeUleb128(value);
                 },
                 .i64 => {
-                    // i64.const value
                     try self.ctx.buf.writer.writeByte(opb(.i64_const));
                     try self.ctx.buf.writer
                         .writeUleb128(@as(u64, @bitCast(extra.value)));
@@ -308,15 +319,12 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 else => utils.panic("{}", .{instr.data_type}),
             }
 
-            // local.set reg
             try self.ctx.buf.writer.writeByte(opb(.local_set));
             try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
         },
         .UnOp => |extra| {
-            // local.get oper
             try self.ctx.buf.writer.writeByte(opb(.local_get));
             try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
-            // op
             const op_code: u8 = switch (extra.op) {
                 .sext => switch (inps[0].data_type) {
                     .i8 => switch (instr.data_type) {
@@ -377,18 +385,17 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 else => utils.panic("{}", .{extra.op}),
             };
             try self.ctx.buf.writer.writeByte(op_code);
-            // local.set reg
+
             try self.ctx.buf.writer.writeByte(opb(.local_set));
             try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
         },
         .BinOp => |extra| {
-            // local.get lhs
             try self.ctx.buf.writer.writeByte(opb(.local_get));
             try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
-            // local.get rhs
+
             try self.ctx.buf.writer.writeByte(opb(.local_get));
             try self.ctx.buf.writer.writeUleb128(self.regOf(inps[1]));
-            // op
+
             const op_ty = dataTypeToWasmType(instr.data_type);
             const op_code: u8 = switch (extra.op) {
                 .iadd => switch (op_ty) {
@@ -409,22 +416,21 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 else => utils.panic("{}", .{extra.op}),
             };
             try self.ctx.buf.writer.writeByte(op_code);
-            // local.set reg
+
             try self.ctx.buf.writer.writeByte(opb(.local_set));
             try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
         },
         .Store => {
             // TODO: we can emit specialized stores
 
-            // local.get addr
             try self.ctx.buf.writer.writeByte(opb(.local_get));
             try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
-            // i32.wrap_i64
+
             try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
-            // local.get value
+
             try self.ctx.buf.writer.writeByte(opb(.local_get));
             try self.ctx.buf.writer.writeUleb128(self.regOf(inps[1]));
-            // [ty].store[size] (align: size, offset: 0)
+
             const op_code: u8 = switch (instr.data_type) {
                 .i32 => opb(.i32_store),
                 .i64 => opb(.i64_store),
@@ -461,22 +467,29 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             const alignment = std.math.log2_int(usize, instr.data_type.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
             try self.ctx.buf.writer.writeUleb128(0);
-            // local.set reg
+
             try self.ctx.buf.writer.writeByte(opb(.local_set));
             try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
         },
         .Local => {
             const offset = instr.inputs()[1].?.extra(.LocalAlloc).size;
 
-            // i64.const local_offset
             try self.ctx.buf.writer.writeByte(opb(.i64_const));
             try self.ctx.buf.writer.writeUleb128(offset);
-            // global.get __stack_pointer
+
             try self.ctx.buf.writer.writeByte(opb(.global_get));
             try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
-            // i64.add
+
             try self.ctx.buf.writer.writeByte(opb(.i64_add));
-            // local.set reg
+
+            try self.ctx.buf.writer.writeByte(opb(.local_set));
+            try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
+        },
+        .GlobalAddr => |extra| {
+            const id = self.addGlobalId(extra.id);
+            try self.ctx.buf.writer.writeByte(opb(.global_get));
+            try self.ctx.buf.writer.writeUleb128(id);
+
             try self.ctx.buf.writer.writeByte(opb(.local_set));
             try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
         },
@@ -499,9 +512,19 @@ pub fn regOf(self: *WasmGen, node: ?*Func.Node) u16 {
 }
 
 pub fn emitData(self: *WasmGen, opts: Mach.DataOptions) void {
-    _ = opts;
-    _ = self;
-    //unreachable;
+    errdefer unreachable;
+
+    try self.mach.out.defineGlobal(
+        self.gpa,
+        opts.id,
+        opts.name,
+        .local,
+        opts.value,
+        false,
+        opts.relocs,
+        opts.readonly,
+        opts.thread_local,
+    );
 }
 
 pub fn finalize(self: *WasmGen, opts: Mach.FinalizeOptions) void {
@@ -604,5 +627,6 @@ pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
 pub fn deinit(self: *WasmGen) void {
     self.mach.out.deinit(self.gpa);
     self.func_ids.deinit(self.gpa);
+    self.global_ids.deinit(self.gpa);
     self.* = undefined;
 }
