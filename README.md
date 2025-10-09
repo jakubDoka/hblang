@@ -56,7 +56,7 @@ expectations := .{
     return_value: 1,
 }
 
-main := fn(): bool {
+main := fn(): uint {
     return 3 == 2 * 2 - 1
 }
 ```
