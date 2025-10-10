@@ -268,7 +268,10 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
     }
 
-    std.debug.assert(func.gcm.postorder.len == 1); // TODO: other cfg,
+    if (func.gcm.postorder.len != 1) {
+        func.fmtScheduledLog();
+        unreachable;
+    }
     // we will need to carefully order the blocks
 
     for (func.gcm.postorder) |block| {
@@ -279,12 +282,12 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
                 if (stack_size != 0) {
                     try self.ctx.buf.writer.writeByte(opb(.i64_const));
                     try self.ctx.buf.writer.writeUleb128(stack_size);
-                    // global.get __stack_pointer
+
                     try self.ctx.buf.writer.writeByte(opb(.global_get));
                     try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
-                    // i64.add
+
                     try self.ctx.buf.writer.writeByte(opb(.i64_add));
-                    // global.set __stack_pointer
+
                     try self.ctx.buf.writer.writeByte(opb(.global_set));
                     try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
                 }

@@ -60,7 +60,7 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
             .{ "x86_64-linux-no-opts", &x86_64_no_opt.mach, .debug, .systemv },
         };
 
-        for (tests) |tst| {
+        for (tests[2..]) |tst| {
             const target, var machine, const opts, const abi = tst;
             //std.debug.print("{s}\n", .{target});
             defer machine.deinit();

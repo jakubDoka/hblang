@@ -1,0 +1,30 @@
+modify tmp 1.Parser.expr:
+	sub rsp, 0x28
+	mov [rsp], rdi
+	mov rdx, 0x18
+	lea rdi, [rsp+0x08]
+	mov rsi, [rsp]
+	call :memcpy
+	mov rdi, [rsp]
+	call :modify tmp 1.Parser.mm
+	mov al, [rsp+0x08]
+	movzx rax, al
+	add rsp, 0x28
+	ret
+modify tmp 1.Parser.mm:
+	mov byte ptr [rdi], 0x01
+	mov qword ptr [rdi+0x08], 0x00
+	mov qword ptr [rdi+0x10], 0x00
+	ret
+main:
+	sub rsp, 0x28
+	mov byte ptr [rsp], 0x00
+	mov qword ptr [rsp+0x08], 0x00
+	mov qword ptr [rsp+0x10], 0x00
+	lea rdi, [rsp]
+	call :modify tmp 1.Parser.expr
+	mov [rsp+0x18], rax
+	mov rax, [rsp+0x18]
+	add rsp, 0x28
+	ret
+memcpy:
