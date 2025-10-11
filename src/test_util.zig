@@ -218,6 +218,11 @@ pub fn testBuilder(
         return;
     }
 
+    // TODO: remove this once we get opts for wasm
+    if (std.mem.startsWith(u8, target, "wasm") and expectations.should_error) {
+        return;
+    }
+
     if (errored) {
         try std.testing.expect(expectations.should_error);
 

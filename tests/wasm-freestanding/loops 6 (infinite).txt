@@ -1,0 +1,14 @@
+(module
+  (type (;0;) (func (result i64)))
+  (func $main (type 0) (result i64)
+    loop  ;; label = @1
+      block  ;; label = @2
+      end
+      br 0 (;@1;)
+    end
+    unreachable)
+  (memory (;0;) 4)
+  (global (;0;) (mut i64) (i64.const 131072))
+  (export "__stack_pointer" (global 0))
+  (export "main" (func $main))
+  (data (;0;) (i32.const 131072) ""))

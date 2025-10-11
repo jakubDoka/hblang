@@ -48,6 +48,7 @@ pub const Ctx = struct {
     buf: std.Io.Writer.Allocating,
     allocs: []u16 = undefined,
     scope_stack: std.ArrayListUnmanaged(ScopeRange) = undefined,
+    stack_base: u64 = undefined,
 };
 
 pub const classes = enum {};
@@ -271,10 +272,10 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     func.computeStructArgLayout();
 
-    const has_call, const call_slot_size = func.computeCallSlotSize();
-    _ = has_call;
+    _, const call_slot_size = func.computeCallSlotSize();
 
-    std.debug.assert(call_slot_size == 0); // TODO
+    self.ctx.stack_base = call_slot_size;
+    stack_size += @intCast(call_slot_size);
 
     if (stack_size != 0) {
         try self.ctx.buf.writer.writeByte(opb(.global_get));
@@ -680,8 +681,23 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeByte(opb(.local_set));
             try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
         },
+        .StackArgOffset => |extra| {
+            const offset = extra.offset;
+
+            try self.ctx.buf.writer.writeByte(opb(.i64_const));
+            try self.ctx.buf.writer.writeUleb128(offset);
+
+            try self.ctx.buf.writer.writeByte(opb(.global_get));
+            try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
+
+            try self.ctx.buf.writer.writeByte(opb(.i64_add));
+
+            try self.ctx.buf.writer.writeByte(opb(.local_set));
+            try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
+        },
         .Local => {
-            const offset = instr.inputs()[1].?.extra(.LocalAlloc).size;
+            const offset = instr.inputs()[1].?.extra(.LocalAlloc).size +
+                self.ctx.stack_base;
 
             try self.ctx.buf.writer.writeByte(opb(.i64_const));
             try self.ctx.buf.writer.writeUleb128(offset);
@@ -720,6 +736,10 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
         },
         .Call => |extra| {
             for (inps) |inp| {
+                if (inp.kind == .StackArgOffset) {
+                    continue;
+                }
+
                 try self.ctx.buf.writer.writeByte(opb(.local_get));
                 try self.ctx.buf.writer.writeUleb128(self.regOf(inp));
             }
@@ -801,7 +821,15 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
 
             try self.ctx.buf.writer.writeByte(opb(.@"return"));
         },
-        .Phi, .Mem, .Ret, .Arg => {},
+        .Phi, .Mem, .Ret, .Arg, .Never => {},
+        .Trap => |extra| {
+            switch (extra.code) {
+                graph.unreachable_func_trap => {},
+                graph.infinite_loop_trap => {},
+                0 => try self.ctx.buf.writer.writeByte(opb(.@"unreachable")),
+                else => utils.panic("{}", .{extra.code}),
+            }
+        },
         else => {
             utils.panic("unhandled op {f}", .{instr});
         },
