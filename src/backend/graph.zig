@@ -1335,7 +1335,7 @@ pub fn Func(comptime Backend: type) type {
                         comptime var first = fir;
                         inline while (fields.next()) |f| {
                             if (comptime std.mem.eql(u8, f.name, "antidep") or
-                                std.mem.eql(u8, f.name, "loop") or
+                                //std.mem.eql(u8, f.name, "loop") or
                                 std.mem.eql(u8, f.name, "par_base") or
                                 std.mem.eql(u8, f.name, "ret_base") or
                                 !isVisibel(f.type))
@@ -1632,7 +1632,7 @@ pub fn Func(comptime Backend: type) type {
                 return self.kind == .Phi and self.data_type != .top;
             }
 
-            pub inline fn isBasicBlockStart(self: *const Node) bool {
+            pub fn isBasicBlockStart(self: *const Node) bool {
                 return (comptime bakeFlagBitset("is_basic_block_start")).contains(self.kind);
             }
 
@@ -1863,7 +1863,8 @@ pub fn Func(comptime Backend: type) type {
 
         pub fn loopDepth(self: *Self, node: *Node) u16 {
             self.gcm.loop_tree_built.assertLocked();
-            const cfg = node.asCfg() orelse node.cfg0();
+            var cfg = node.asCfg() orelse node.cfg0();
+            if (cfg.base.isBasicBlockEnd()) cfg = cfg.idom();
             const tree = &self.gcm.loop_tree[cfg.ext.loop];
             if (tree.depth != 0) return tree.depth;
             if (tree.par == null) {
@@ -1989,11 +1990,11 @@ pub fn Func(comptime Backend: type) type {
 
         pub fn addTrapLow(self: *Self, sloc: Sloc, ctrl: *Node, code: u64, comptime setter: anytype) void {
             if (self.end.inputs()[2] == null) {
-                setter(self, self.end, 2, self.addNode(.TrapRegion, sloc, .top, &.{}, .{}));
+                setter(self, self.end, 2, self.addNode(.TrapRegion, sloc, .top, &.{}, .{ .base = .{ .loop = 0 } }));
             }
 
             const region = self.end.inputs()[2].?;
-            const trap = self.addNode(.Trap, sloc, .top, &.{ctrl}, .{ .code = code });
+            const trap = self.addNode(.Trap, sloc, .top, &.{ctrl}, .{ .code = code, .base = .{ .loop = 0 } });
 
             const idx = self.addDep(region, trap);
             self.addUse(trap, idx, region);
@@ -2742,6 +2743,64 @@ pub fn Func(comptime Backend: type) type {
             return local_size;
         }
 
+        // returns the loop ranges and wether order was changed
+        pub fn backshiftLoopBodies(func: *Self, scratch: *utils.Arena) struct { [][2]u16, bool } {
+            // so this is slow? maybe we can mark nodes we visited each round and then
+            // exit early
+
+            var ranges = scratch.makeArrayList([2]u16, func.gcm.postorder.len);
+            var changed = false;
+            for (func.gcm.postorder, 0..) |bb, i| {
+                if (bb.base.kind != .Loop) continue;
+
+                var backshift_cursor = i + 1;
+                for (func.gcm.postorder[i + 1 ..], i + 1..) |inb, j| {
+                    var cursor = inb;
+                    while (cursor.idepth() >= bb.idepth()) : (cursor = cursor.idom()) {
+                        if (cursor == bb) {
+                            std.mem.swap(
+                                *CfgNode,
+                                &func.gcm.postorder[backshift_cursor],
+                                &func.gcm.postorder[j],
+                            );
+                            func.gcm.postorder[backshift_cursor].base.schedule = @intCast(backshift_cursor);
+                            func.gcm.postorder[j].base.schedule = @intCast(j);
+                            backshift_cursor += 1;
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+
+                ranges.appendAssumeCapacity(.{ @intCast(i), @intCast(backshift_cursor - 1) });
+            }
+
+            if (std.debug.runtime_safety) {
+                for (func.gcm.postorder, 0..) |bb, i| {
+                    if (bb.base.kind != .Loop) continue;
+
+                    var seen_non_dom = false;
+                    for (func.gcm.postorder[i..]) |inb| {
+                        var cursor = inb;
+                        while (cursor.idepth() >= bb.idepth()) : (cursor = cursor.idom()) {
+                            if (cursor == bb) {
+                                if (seen_non_dom) {
+                                    func.fmtScheduledLog();
+                                    std.debug.print("\n{f}\n{f}\n", .{ bb, inb });
+                                    unreachable;
+                                }
+                                break;
+                            }
+                        } else {
+                            seen_non_dom = true;
+                        }
+                    }
+                }
+            }
+
+            return .{ ranges.items, changed };
+        }
+
         pub fn collectPostorder(
             self: *Self,
             arena: std.mem.Allocator,
@@ -2749,14 +2808,10 @@ pub fn Func(comptime Backend: type) type {
         ) []*CfgNode {
             var postorder = std.ArrayList(*CfgNode).empty;
 
-            collectPostorder2(self, self.start, arena, &postorder, visited, true);
+            collectPostorder2(self, self.start, arena, &postorder, visited);
 
-            return postorder.items;
-        }
+            std.mem.reverse(*CfgNode, postorder.items);
 
-        pub fn collectPostorderAll(self: *Self, arena: std.mem.Allocator, visited: *std.DynamicBitSetUnmanaged) []*CfgNode {
-            var postorder = std.ArrayList(*CfgNode).init(arena);
-            self.collectPostorder2(self.start, arena, &postorder, visited, false);
             return postorder.items;
         }
 
@@ -2766,18 +2821,9 @@ pub fn Func(comptime Backend: type) type {
             arena: std.mem.Allocator,
             pos: *std.ArrayList(*CfgNode),
             visited: *std.DynamicBitSetUnmanaged,
-            comptime only_basic: bool,
         ) void {
             switch (node.kind) {
                 .TrapRegion => return,
-                .Region => {
-                    if (!visited.isSet(node.id)) {
-                        visited.set(node.id);
-                        if (node.inputs()[0].?.inputs()[0] != null and node.inputs()[1].?.inputs()[0] != null) {
-                            return;
-                        }
-                    }
-                },
                 else => {
                     if (visited.isSet(node.id)) {
                         return;
@@ -2786,13 +2832,22 @@ pub fn Func(comptime Backend: type) type {
                 },
             }
 
-            if (!only_basic or node.isBasicBlockStart()) pos.append(arena, node.asCfg().?) catch unreachable;
             if (node.isSwapped()) {
-                var iter = std.mem.reverseIterator(node.outputs());
-                while (iter.next()) |o| if (o.get().isCfg()) collectPostorder2(self, o.get(), arena, pos, visited, only_basic);
+                for (node.outputs()) |o| {
+                    if (o.get().isCfg()) {
+                        collectPostorder2(self, o.get(), arena, pos, visited);
+                    }
+                }
             } else {
-                for (node.outputs()) |o| if (o.get().isCfg()) collectPostorder2(self, o.get(), arena, pos, visited, only_basic);
+                var iter = std.mem.reverseIterator(node.outputs());
+                while (@as(?Node.Out, iter.next())) |o| {
+                    if (o.get().isCfg()) {
+                        collectPostorder2(self, o.get(), arena, pos, visited);
+                    }
+                }
             }
+
+            if (node.isBasicBlockStart()) pos.append(arena, node.asCfg().?) catch unreachable;
         }
 
         pub fn fmtScheduledLog(self: *Self) void {
@@ -2806,8 +2861,6 @@ pub fn Func(comptime Backend: type) type {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            var visited = try std.DynamicBitSetUnmanaged.initEmpty(tmp.arena.allocator(), self.next_id);
-
             self.start.fmt(self.gcm.block_count, writer, colors);
             if (self.start.outputs().len > 1 and self.start.outputs()[1].get().kind == .Mem) {
                 for (self.start.outputs()[1].get().outputs()) |oo| if (oo.get().kind == .LocalAlloc) {
@@ -2816,7 +2869,7 @@ pub fn Func(comptime Backend: type) type {
                 };
             }
             try writer.writeAll("\n");
-            for (collectPostorder(self, tmp.arena.allocator(), &visited)) |p| {
+            for (self.gcm.postorder) |p| {
                 p.base.fmt(self.gcm.block_count, writer, colors);
 
                 try writer.writeAll("\n");

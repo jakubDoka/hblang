@@ -29,10 +29,25 @@ pub const Set = struct {
     pub fn setIntersection(_: Set, _: Set) void {}
 };
 
+pub const ScopeRange = struct {
+    kind: enum { loop, block },
+    range: [2]u16,
+    signifier: *Func.Node,
+
+    pub fn format(slf: *const @This(), writer: *std.Io.Writer) !void {
+        try writer.print("{s} {any} {f}", .{
+            @tagName(slf.kind),
+            slf.range,
+            slf.signifier,
+        });
+    }
+};
+
 pub const Ctx = struct {
     start_pos: usize,
     buf: std.Io.Writer.Allocating,
     allocs: []u16 = undefined,
+    scope_stack: std.ArrayListUnmanaged(ScopeRange) = undefined,
 };
 
 pub const classes = enum {};
@@ -115,13 +130,17 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     _ = sym;
     defer self.mach.out.endDefineFunc(id);
 
-    _ = self.addFuncId(id);
+    if (opts.linkage == .exported) {
+        _ = self.addFuncId(id);
+    }
 
     // TDDO: actually make the release mode work
     opts.optimizations.opts.optimizeDebug(WasmGen, self, func);
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
+
+    const loop_ranges, _ = func.backshiftLoopBodies(tmp.arena);
 
     var ctx = Ctx{
         .start_pos = self.mach.out.code.items.len,
@@ -180,10 +199,12 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     for (func.gcm.postorder) |block| {
         for (block.base.outputs()) |out| {
-            if (!out.get().isDef() or out.get().kind == .Arg) continue;
+            if (!out.get().isDef()) continue;
 
             out.get().schedule = func.gcm.instr_count;
             func.gcm.instr_count += 1;
+
+            if (out.get().kind == .Arg) continue;
 
             switch (dataTypeToWasmType(out.get().data_type)) {
                 .fnc, .vec => unreachable,
@@ -214,7 +235,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         cursor += fld;
     }
 
-    self.ctx.allocs = tmp.arena.alloc(u16, cursor);
+    self.ctx.allocs = tmp.arena.alloc(u16, func.signature.params().len + cursor);
 
     for (func.gcm.postorder) |block| {
         for (block.base.outputs()) |out| {
@@ -268,14 +289,94 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
     }
 
-    if (func.gcm.postorder.len != 1) {
-        func.fmtScheduledLog();
-        unreachable;
-    }
-    // we will need to carefully order the blocks
+    var scope_ranges = tmp.arena.makeArrayList(ScopeRange, func.gcm.postorder.len);
 
-    for (func.gcm.postorder) |block| {
-        for (block.base.outputs()) |out| {
+    for (loop_ranges) |lr| {
+        scope_ranges.appendAssumeCapacity(.{
+            .kind = .loop,
+            .range = lr,
+            .signifier = &func.gcm.postorder[lr[0]].base,
+        });
+    }
+
+    for (func.gcm.postorder) |rbb| {
+        if (rbb.base.kind == .Then or rbb.base.kind == .Else) {
+            const if_schedule = rbb.base.inputs()[0].?.inputs()[0].?.schedule;
+            if (if_schedule != rbb.base.schedule - 1) {
+                scope_ranges.appendAssumeCapacity(.{
+                    .kind = .block,
+                    .range = .{
+                        if_schedule,
+                        rbb.base.schedule - 1,
+                    },
+                    .signifier = rbb.base.inputs()[0].?,
+                });
+            }
+        }
+
+        if (rbb.base.kind == .Region) {
+            for (rbb.base.inputs()) |inp| {
+                std.debug.assert(inp.?.kind == .Jmp);
+                const pred = inp.?.inputs()[0].?;
+                if (pred.schedule + 1 != rbb.base.schedule) {
+                    scope_ranges.appendAssumeCapacity(.{
+                        .kind = .block,
+                        .range = .{
+                            pred.schedule,
+                            rbb.base.schedule - 1,
+                        },
+                        .signifier = pred,
+                    });
+                }
+            }
+        }
+    }
+
+    std.sort.pdq(ScopeRange, scope_ranges.items, {}, enum {
+        fn lessThenFn(_: void, a: ScopeRange, b: ScopeRange) bool {
+            return a.range[1] > b.range[1];
+        }
+    }.lessThenFn);
+
+    for (scope_ranges.items) |*sr| {
+        if (sr.kind == .loop) continue;
+        for (scope_ranges.items) |*osr| {
+            if (sr == osr) continue;
+            if (sr.range[0] >= osr.range[0] and sr.range[0] <= osr.range[1] and sr.range[1] > osr.range[1]) {
+                sr.range[0] = osr.range[0];
+            }
+        }
+    }
+
+    const log_cfg = false;
+
+    if (log_cfg) {
+        func.fmtScheduledLog();
+        for (scope_ranges.items) |lr| {
+            std.debug.print("{f}\n", .{lr});
+        }
+    }
+
+    self.ctx.scope_stack = tmp.arena.makeArrayList(ScopeRange, scope_ranges.items.len);
+
+    for (func.gcm.postorder, 0..) |bb, i| {
+        for (scope_ranges.items) |sr| {
+            // longer range comes first so we should not have overlaping
+            // elements on the stack
+            if (sr.range[0] == i) {
+                switch (sr.kind) {
+                    .loop => try self.ctx.buf.writer.writeByte(opb(.loop)),
+                    .block => try self.ctx.buf.writer.writeByte(opb(.block)),
+                }
+                try self.ctx.buf.writer.writeByte(0x40);
+                if (log_cfg) std.debug.print("start: {s}\n", .{@tagName(sr.kind)});
+                self.ctx.scope_stack.appendAssumeCapacity(sr);
+            }
+        }
+
+        if (log_cfg) std.debug.print("{f}\n", .{bb});
+
+        for (bb.base.outputs()) |out| {
             const instr = out.get();
 
             if (instr.kind == .Return) {
@@ -293,10 +394,18 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
                 }
             }
 
+            if (log_cfg) std.debug.print("  {f}\n", .{instr});
             self.emitInstr(instr);
+        }
+
+        while (self.ctx.scope_stack.items.len > 0 and self.ctx.scope_stack.getLast().range[1] == i) {
+            const sr = self.ctx.scope_stack.pop().?;
+            try self.ctx.buf.writer.writeByte(opb(.end));
+            if (log_cfg) std.debug.print("end: {s}\n", .{@tagName(sr.kind)});
         }
     }
 
+    try self.ctx.buf.writer.writeByte(opb(.@"unreachable"));
     try self.ctx.buf.writer.writeByte(opb(.end));
 }
 
@@ -311,14 +420,21 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 .i32 => {
                     try self.ctx.buf.writer.writeByte(opb(.i32_const));
                     const value: u32 = @truncate(@as(u64, @bitCast(extra.value)));
-                    try self.ctx.buf.writer.writeUleb128(value);
+                    try self.ctx.buf.writer.writeSleb128(value);
                 },
                 .i64 => {
                     try self.ctx.buf.writer.writeByte(opb(.i64_const));
                     try self.ctx.buf.writer
-                        .writeUleb128(@as(u64, @bitCast(extra.value)));
+                        .writeSleb128(@as(u64, @bitCast(extra.value)));
                 },
-
+                .f32 => {
+                    try self.ctx.buf.writer.writeByte(opb(.f32_const));
+                    try self.ctx.buf.writer.writeAll(std.mem.asBytes(&extra.value)[0..4]);
+                },
+                .f64 => {
+                    try self.ctx.buf.writer.writeByte(opb(.f64_const));
+                    try self.ctx.buf.writer.writeAll(std.mem.asBytes(&extra.value));
+                },
                 else => utils.panic("{}", .{instr.data_type}),
             }
 
@@ -385,6 +501,37 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                     .i32 => opb(.i64_extend_i32_u),
                     else => unreachable,
                 },
+                .fti => switch (inps[0].data_type) {
+                    .f32 => switch (instr.data_type) {
+                        .i32 => opb(.i32_trunc_f32_s),
+                        .i64 => opb(.i64_trunc_f32_s),
+                        else => utils.panic("{}", .{instr.data_type}),
+                    },
+                    .f64 => switch (instr.data_type) {
+                        .i32 => opb(.i32_trunc_f64_s),
+                        .i64 => opb(.i64_trunc_f64_s),
+                        else => utils.panic("{}", .{instr.data_type}),
+                    },
+                    else => utils.panic("{}", .{inps[0].data_type}),
+                },
+                .itf => switch (inps[0].data_type) {
+                    .i32 => switch (instr.data_type) {
+                        .f32 => opb(.f32_convert_i32_s),
+                        .f64 => opb(.f64_convert_i32_s),
+                        else => utils.panic("{}", .{instr.data_type}),
+                    },
+                    .i64 => switch (instr.data_type) {
+                        .f32 => opb(.f32_convert_i64_s),
+                        .f64 => opb(.f64_convert_i64_s),
+                        else => utils.panic("{}", .{instr.data_type}),
+                    },
+                    else => utils.panic("{}", .{inps[0].data_type}),
+                },
+                .fcst => switch (instr.data_type) {
+                    .f32 => opb(.f32_demote_f64),
+                    .f64 => opb(.f32_promote_f64),
+                    else => utils.panic("{}", .{extra.op}),
+                },
                 else => utils.panic("{}", .{extra.op}),
             };
             try self.ctx.buf.writer.writeByte(op_code);
@@ -404,18 +551,77 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 .iadd => switch (op_ty) {
                     .i32 => opb(.i32_add),
                     .i64 => opb(.i64_add),
-                    .f32 => opb(.f32_add),
-                    .f64 => opb(.f64_add),
                     else => utils.panic("{}", .{op_ty}),
                 },
                 .isub => switch (op_ty) {
                     .i32 => opb(.i32_sub),
                     .i64 => opb(.i64_sub),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .imul => switch (instr.data_type) {
+                    .i32 => opb(.i32_mul),
+                    .i64 => opb(.i64_mul),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .band => switch (instr.data_type) {
+                    .i32 => opb(.i32_and),
+                    .i64 => opb(.i64_and),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .ne => switch (inps[0].data_type) {
+                    .i32 => opb(.i32_ne),
+                    .i64 => opb(.i64_ne),
+                    .f32 => opb(.f32_ne),
+                    .f64 => opb(.f64_ne),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .eq => switch (inps[0].data_type) {
+                    .i32 => opb(.i32_eq),
+                    .i64 => opb(.i64_eq),
+                    .f32 => opb(.f32_eq),
+                    .f64 => opb(.f64_eq),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .ult => switch (inps[0].data_type) {
+                    .i32 => opb(.i32_lt_u),
+                    .i64 => opb(.i64_lt_u),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .ugt => switch (inps[0].data_type) {
+                    .i32 => opb(.i32_gt_u),
+                    .i64 => opb(.i64_gt_u),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .ule => switch (inps[0].data_type) {
+                    .i32 => opb(.i32_le_u),
+                    .i64 => opb(.i64_le_u),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .sdiv => switch (instr.data_type) {
+                    .i32 => opb(.i32_div_s),
+                    .i64 => opb(.i64_div_s),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .fadd => switch (instr.data_type) {
+                    .f32 => opb(.f32_add),
+                    .f64 => opb(.f64_add),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .fsub => switch (instr.data_type) {
                     .f32 => opb(.f32_sub),
                     .f64 => opb(.f64_sub),
                     else => utils.panic("{}", .{op_ty}),
                 },
-
+                .fmul => switch (instr.data_type) {
+                    .f32 => opb(.f32_mul),
+                    .f64 => opb(.f64_mul),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .fdiv => switch (instr.data_type) {
+                    .f32 => opb(.f32_div),
+                    .f64 => opb(.f64_div),
+                    else => utils.panic("{}", .{op_ty}),
+                },
                 else => utils.panic("{}", .{extra.op}),
             };
             try self.ctx.buf.writer.writeByte(op_code);
@@ -490,11 +696,102 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
         },
         .GlobalAddr => |extra| {
             const id = self.addGlobalId(extra.id);
+            try self.mach.out.addPlaceholderGlobalReloc(self.gpa, extra.id);
+
             try self.ctx.buf.writer.writeByte(opb(.global_get));
             try self.ctx.buf.writer.writeUleb128(id);
 
             try self.ctx.buf.writer.writeByte(opb(.local_set));
             try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
+        },
+        .MemCpy => {
+            for (inps) |inp| {
+                try self.ctx.buf.writer.writeByte(opb(.local_get));
+                try self.ctx.buf.writer.writeUleb128(self.regOf(inp));
+                try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
+            }
+
+            // memory.copy
+            try self.ctx.buf.writer.writeByte(opb(.prefix_fc));
+            try self.ctx.buf.writer.writeUleb128(10);
+
+            try self.ctx.buf.writer.writeUleb128(0);
+            try self.ctx.buf.writer.writeUleb128(0);
+        },
+        .Call => |extra| {
+            for (inps) |inp| {
+                try self.ctx.buf.writer.writeByte(opb(.local_get));
+                try self.ctx.buf.writer.writeUleb128(self.regOf(inp));
+            }
+
+            try self.ctx.buf.writer.writeByte(opb(.call));
+            try self.ctx.buf.writer.writeUleb128(self.addFuncId(extra.id));
+            try self.mach.out.addPlaceholderFuncReloc(self.gpa, extra.id);
+
+            const ret = extra.signature.returns() orelse return;
+            for (0..ret.len) |i| {
+                for (instr.outputs()[0].get().outputs()) |out| {
+                    if (out.get().kind == .Ret and out.get().extra(.Ret).index == ret.len - 1 - i) {
+                        try self.ctx.buf.writer.writeByte(opb(.local_set));
+                        try self.ctx.buf.writer.writeUleb128(self.regOf(out.get()));
+                    }
+                }
+            }
+        },
+        .If => {
+            var iter = std.mem.reverseIterator(self.ctx.scope_stack.items);
+            var j: usize = 0;
+            const label_id = while (iter.next()) |sr| : (j += 1) {
+                if (sr.signifier == instr and sr.kind == .block) {
+                    break j;
+                }
+            } else unreachable;
+
+            try self.ctx.buf.writer.writeByte(opb(.local_get));
+            try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
+
+            try self.ctx.buf.writer.writeByte(opb(.i32_eqz));
+            try self.ctx.buf.writer.writeByte(opb(.br_if));
+            try self.ctx.buf.writer.writeUleb128(label_id);
+        },
+        .Jmp => {
+            const region = instr.outputs()[0];
+            for (region.get().outputs()) |out| {
+                if (out.get().isDataPhi()) {
+                    try self.ctx.buf.writer.writeByte(opb(.local_get));
+                    try self.ctx.buf.writer.writeUleb128(self.regOf(out.get().inputs()[1 + region.pos()]));
+                    try self.ctx.buf.writer.writeByte(opb(.local_set));
+                    try self.ctx.buf.writer.writeUleb128(self.regOf(out.get()));
+                }
+            }
+
+            const pred = instr.inputs()[0].?;
+
+            if (region.get().kind == .Loop and region.pos() == 1) {
+                var iter = std.mem.reverseIterator(self.ctx.scope_stack.items);
+                var j: usize = 0;
+                const label_id = while (iter.next()) |sr| : (j += 1) {
+                    if (sr.signifier == region.get()) {
+                        break j;
+                    }
+                } else unreachable;
+
+                try self.ctx.buf.writer.writeByte(opb(.br));
+                try self.ctx.buf.writer.writeUleb128(label_id);
+            }
+
+            if (region.get().kind == .Region and pred.schedule + 1 != region.get().schedule) {
+                var iter = std.mem.reverseIterator(self.ctx.scope_stack.items);
+                var j: usize = 0;
+                const label_id = while (iter.next()) |sr| : (j += 1) {
+                    if (sr.signifier == pred) {
+                        break j;
+                    }
+                } else unreachable;
+
+                try self.ctx.buf.writer.writeByte(opb(.br));
+                try self.ctx.buf.writer.writeUleb128(label_id);
+            }
         },
         .Return => {
             for (instr.dataDeps()) |d| {
@@ -504,6 +801,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
 
             try self.ctx.buf.writer.writeByte(opb(.@"return"));
         },
+        .Phi, .Mem, .Ret, .Arg => {},
         else => {
             utils.panic("unhandled op {f}", .{instr});
         },
@@ -531,11 +829,23 @@ pub fn emitData(self: *WasmGen, opts: Mach.DataOptions) void {
 }
 
 pub fn finalize(self: *WasmGen, opts: Mach.FinalizeOptions) void {
+    // TODO: relocations are not emitted properly
+    // the function ids get hardcoded
+    //
+    //self.mach.out.deduplicate();
+    self.mach.out.elimitaneDeadCode();
+
     root.wasm.object.flush(
         self.mach.out,
         opts.output orelse return,
         self.stack_size,
     ) catch unreachable;
+
+    self.mach.out.reset();
+    self.global_ids.items.len = 0;
+    self.global_id_counter = 0;
+    self.func_ids.items.len = 0;
+    self.func_id_counter = 0;
 }
 
 pub fn disasm(_: *WasmGen, opts: Mach.DisasmOpts) void {
@@ -544,7 +854,7 @@ pub fn disasm(_: *WasmGen, opts: Mach.DisasmOpts) void {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    var child = std.process.Child.init(&.{ "wasm2wat", "-" }, tmp.arena.allocator());
+    var child = std.process.Child.init(&.{ "wasm2wat", "--no-check", "-" }, tmp.arena.allocator());
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = .Pipe;
     child.stdin_behavior = .Pipe;
@@ -579,7 +889,7 @@ pub fn disasm(_: *WasmGen, opts: Mach.DisasmOpts) void {
 }
 
 pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
-    const cleanup = false;
+    const cleanup = true;
 
     var tmp = root.utils.Arena.scrath(null);
     defer tmp.deinit();

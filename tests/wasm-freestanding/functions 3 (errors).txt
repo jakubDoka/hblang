@@ -1,0 +1,24 @@
+functions 3 (errors):7:2: void is not callable
+    imaginary()
+    ^
+functions 3 (errors):8:2: expected 3 arguments, got 0
+    some_fn()
+    ^
+functions 3 (errors):9:17: expected void got uint
+    _ = some_fn(0, 0, 0)
+                   ^
+functions 3 (errors):10:6: expected 3 arguments, got 2
+    _ = some_fn(0, 0)
+        ^
+functions 3 (errors):11:8: expected 3 arguments, got 4
+    vl := some_fn(0, {}, 0, 0)
+          ^
+functions 3 (errors):5:20: function returns a uint, which has more then 1 value, but end of the function body is reachable
+main := fn(): uint {
+                   ^
+functions 3 (errors):16:2: expected uint got void
+    return
+    ^
+functions 3 (errors):15:46: function returns a uint, which has more then 1 value, but end of the function body is reachable
+some_fn := fn(a: uint, b: void, c: u8): uint {
+                                             ^

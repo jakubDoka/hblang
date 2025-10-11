@@ -1,0 +1,315 @@
+(module
+  (type (;0;) (func (result i64)))
+  (type (;1;) (func (param f32) (result f32)))
+  (func $main (type 0) (result i64)
+    (local i64 i64 i64 i64 f32 f32 f32 f32)
+    global.get 0
+    i64.const 8
+    i64.sub
+    global.set 0
+    f32.const 0x1.f4p+9 (;=1000;)
+    local.set 4
+    local.get 4
+    call $float_arithmetic_2.sin
+    local.set 5
+    i64.const 0
+    global.get 0
+    i64.add
+    local.set 0
+    local.get 0
+    i32.wrap_i64
+    local.get 5
+    f32.store
+    i64.const 826
+    local.set 1
+    local.get 0
+    i32.wrap_i64
+    f32.load
+    local.set 6
+    local.get 6
+    local.get 4
+    f32.mul
+    local.set 7
+    local.get 7
+    i64.trunc_f32_s
+    local.set 2
+    local.get 2
+    local.get 1
+    i64.sub
+    local.set 3
+    i64.const 8
+    global.get 0
+    i64.add
+    global.set 0
+    local.get 3
+    return
+    unreachable)
+  (func $float_arithmetic_2.sin (type 1) (param f32) (result f32)
+    (local i32 i32 i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 f32 f32 f32 f32 f32 f32 f32 f32 f32 f32 f32 f32 f32 f32 f32 f32 f32 f32 f32 f32 f32 f64 f64 f64 f64 f64 f64 f64)
+    global.get 0
+    i64.const 32
+    i64.sub
+    global.set 0
+    i64.const 16
+    global.get 0
+    i64.add
+    local.set 6
+    i64.const 20
+    global.get 0
+    i64.add
+    local.set 7
+    i64.const 24
+    global.get 0
+    i64.add
+    local.set 8
+    i64.const 0
+    global.get 0
+    i64.add
+    local.set 9
+    i64.const 28
+    global.get 0
+    i64.add
+    local.set 10
+    i64.const 8
+    global.get 0
+    i64.add
+    local.set 11
+    i64.const 4
+    local.set 12
+    i64.const 1
+    local.set 13
+    global.get 1
+    local.set 14
+    local.get 6
+    i32.wrap_i64
+    local.get 0
+    f32.store
+    f64.const 0x1p-1 (;=0.5;)
+    local.set 56
+    i32.const 256
+    local.set 1
+    f32.const 0x1p+1 (;=2;)
+    local.set 35
+    f32.const 0x1p-1 (;=0.5;)
+    local.set 36
+    f32.const 0x1.921fb6p+1 (;=3.14159;)
+    local.set 37
+    local.get 7
+    i32.wrap_i64
+    local.get 37
+    f32.store
+    local.get 8
+    i32.wrap_i64
+    local.get 1
+    i32.store
+    local.get 8
+    i32.wrap_i64
+    i32.load
+    local.set 2
+    local.get 2
+    i64.extend_i32_s
+    local.set 15
+    local.get 15
+    f64.convert_i64_s
+    local.set 57
+    local.get 7
+    i32.wrap_i64
+    f32.load
+    local.set 38
+    local.get 38
+    f64.promote_f32
+    local.set 58
+    local.get 6
+    i32.wrap_i64
+    f32.load
+    local.set 39
+    local.get 39
+    f64.promote_f32
+    local.set 59
+    local.get 59
+    local.get 56
+    f64.mul
+    local.set 60
+    local.get 60
+    local.get 57
+    f64.mul
+    local.set 61
+    local.get 61
+    local.get 58
+    f64.div
+    local.set 62
+    local.get 62
+    i64.trunc_f64_s
+    local.set 16
+    local.get 9
+    i32.wrap_i64
+    local.get 16
+    i64.store
+    local.get 6
+    i32.wrap_i64
+    f32.load
+    local.set 40
+    local.get 9
+    i32.wrap_i64
+    i64.load
+    local.set 17
+    local.get 17
+    f32.convert_i64_s
+    local.set 41
+    local.get 41
+    local.get 35
+    f32.mul
+    local.set 42
+    local.get 7
+    i32.wrap_i64
+    f32.load
+    local.set 43
+    local.get 42
+    local.get 43
+    f32.mul
+    local.set 44
+    local.get 8
+    i32.wrap_i64
+    i32.load
+    local.set 3
+    local.get 3
+    i64.extend_i32_s
+    local.set 18
+    local.get 18
+    f32.convert_i64_s
+    local.set 45
+    local.get 44
+    local.get 45
+    f32.div
+    local.set 46
+    local.get 40
+    local.get 46
+    f32.sub
+    local.set 47
+    local.get 10
+    i32.wrap_i64
+    local.get 47
+    f32.store
+    local.get 9
+    i32.wrap_i64
+    i64.load
+    local.set 19
+    local.get 8
+    i32.wrap_i64
+    i32.load
+    local.set 4
+    local.get 4
+    i64.extend_i32_s
+    local.set 20
+    local.get 20
+    local.get 12
+    i64.div_s
+    local.set 21
+    local.get 19
+    local.get 21
+    i64.add
+    local.set 22
+    local.get 20
+    local.get 13
+    i64.sub
+    local.set 23
+    local.get 22
+    local.get 23
+    i64.and
+    local.set 24
+    local.get 11
+    i32.wrap_i64
+    local.get 24
+    i64.store
+    local.get 9
+    i32.wrap_i64
+    i64.load
+    local.set 25
+    local.get 8
+    i32.wrap_i64
+    i32.load
+    local.set 5
+    local.get 5
+    i64.extend_i32_s
+    local.set 26
+    local.get 26
+    local.get 13
+    i64.sub
+    local.set 27
+    local.get 25
+    local.get 27
+    i64.and
+    local.set 28
+    local.get 9
+    i32.wrap_i64
+    local.get 28
+    i64.store
+    local.get 9
+    i32.wrap_i64
+    i64.load
+    local.set 29
+    local.get 29
+    local.get 12
+    i64.mul
+    local.set 30
+    local.get 14
+    local.get 30
+    i64.add
+    local.set 31
+    local.get 11
+    i32.wrap_i64
+    i64.load
+    local.set 32
+    local.get 32
+    local.get 12
+    i64.mul
+    local.set 33
+    local.get 14
+    local.get 33
+    i64.add
+    local.set 34
+    local.get 34
+    i32.wrap_i64
+    f32.load
+    local.set 48
+    local.get 31
+    i32.wrap_i64
+    f32.load
+    local.set 49
+    local.get 36
+    local.get 49
+    f32.mul
+    local.set 50
+    local.get 10
+    i32.wrap_i64
+    f32.load
+    local.set 51
+    local.get 50
+    local.get 51
+    f32.mul
+    local.set 52
+    local.get 48
+    local.get 52
+    f32.sub
+    local.set 53
+    local.get 53
+    local.get 51
+    f32.mul
+    local.set 54
+    local.get 49
+    local.get 54
+    f32.add
+    local.set 55
+    i64.const 32
+    global.get 0
+    i64.add
+    global.set 0
+    local.get 55
+    return
+    unreachable)
+  (memory (;0;) 4)
+  (global (;0;) (mut i64) (i64.const 131072))
+  (global (;1;) i64 (i64.const 131072))
+  (export "__stack_pointer" (global 0))
+  (export "main" (func $main))
+  (data (;0;) (i32.const 131072) "\00\00\00\00\b0\0a\c9<0\fbH=\05\a9\96=6\bd\c8=s\b2\fa=\83@\16>\a2\10/>\c2\c5G>\13\5c`>\cc\cfx>\93\8e\88>1\a0\94>\e5\9a\a0>\d4|\ac>*D\b8>\15\ef\c3>\ca{\cf>\80\e8\da>u3\e6>\eaZ\f1>']\fc>=\9c\03?\9b\f5\08?\da9\0e?*h\13?\c0\7f\18?\d1\7f\1d?\99g\22?V6'?J\eb+?\bb\850?\f3\045?Bh9?\f9\ae=?p\d8A?\03\e4E?\12\d1I?\02\9fM?=MQ?1\dbT?SHX?\1a\94[?\05\be^?\98\c5a?Y\aad?\d8kg?\a7\09j?^\83l?\9e\d8n?\08\09q?G\14s?\0b\fat?\07\bav?\f8Sx?\9d\c7y?\be\14{?(;|?\ac:}?$\13~?m\c4~?mN\7f?\0f\b1\7f?C\ec\7f?\00\00\80?C\ec\7f?\0f\b1\7f?mN\7f?m\c4~?$\13~?\ac:}?(;|?\be\14{?\9d\c7y?\f8Sx?\07\bav?\0b\fat?G\14s?\08\09q?\9e\d8n?^\83l?\a7\09j?\d8kg?Y\aad?\98\c5a?\05\be^?\1a\94[?SHX?1\dbT?=MQ?\02\9fM?\12\d1I?\03\e4E?p\d8A?\f9\ae=?Bh9?\f3\045?\bb\850?J\eb+?V6'?\99g\22?\d1\7f\1d?\c0\7f\18?*h\13?\da9\0e?\9b\f5\08?=\9c\03?']\fc>\eaZ\f1>u3\e6>\80\e8\da>\ca{\cf>\15\ef\c3>*D\b8>\d4|\ac>\e5\9a\a0>1\a0\94>\93\8e\88>\cc\cfx>\13\5c`>\c2\c5G>\a2\10/>\83@\16>s\b2\fa=6\bd\c8=\05\a9\96=0\fbH=\b0\0a\c9<\00\00\00\00\b0\0a\c9\bc0\fbH\bd\05\a9\96\bd6\bd\c8\bds\b2\fa\bd\83@\16\be\a2\10/\be\c2\c5G\be\13\5c`\be\cc\cfx\be\93\8e\88\be1\a0\94\be\e5\9a\a0\be\d4|\ac\be*D\b8\be\15\ef\c3\be\ca{\cf\be\80\e8\da\beu3\e6\be\eaZ\f1\be']\fc\be=\9c\03\bf\9b\f5\08\bf\da9\0e\bf*h\13\bf\c0\7f\18\bf\d1\7f\1d\bf\99g\22\bfV6'\bfJ\eb+\bf\bb\850\bf\f3\045\bfBh9\bf\f9\ae=\bfp\d8A\bf\03\e4E\bf\12\d1I\bf\02\9fM\bf=MQ\bf1\dbT\bfSHX\bf\1a\94[\bf\05\be^\bf\98\c5a\bfY\aad\bf\d8kg\bf\a7\09j\bf^\83l\bf\9e\d8n\bf\08\09q\bfG\14s\bf\0b\fat\bf\07\bav\bf\f8Sx\bf\9d\c7y\bf\be\14{\bf(;|\bf\ac:}\bf$\13~\bfm\c4~\bfmN\7f\bf\0f\b1\7f\bfC\ec\7f\bf\00\00\80\bfC\ec\7f\bf\0f\b1\7f\bfmN\7f\bfm\c4~\bf$\13~\bf\ac:}\bf(;|\bf\be\14{\bf\9d\c7y\bf\f8Sx\bf\07\bav\bf\0b\fat\bfG\14s\bf\08\09q\bf\9e\d8n\bf^\83l\bf\a7\09j\bf\d8kg\bfY\aad\bf\98\c5a\bf\05\be^\bf\1a\94[\bfSHX\bf1\dbT\bf=MQ\bf\02\9fM\bf\12\d1I\bf\03\e4E\bfp\d8A\bf\f9\ae=\bfBh9\bf\f3\045\bf\bb\850\bfJ\eb+\bfV6'\bf\99g\22\bf\d1\7f\1d\bf\c0\7f\18\bf*h\13\bf\da9\0e\bf\9b\f5\08\bf=\9c\03\bf']\fc\be\eaZ\f1\beu3\e6\be\80\e8\da\be\ca{\cf\be\15\ef\c3\be*D\b8\be\d4|\ac\be\e5\9a\a0\be1\a0\94\be\93\8e\88\be\cc\cfx\be\13\5c`\be\c2\c5G\be\a2\10/\be\83@\16\bes\b2\fa\bd6\bd\c8\bd\05\a9\96\bd0\fbH\bd\b0\0a\c9\bc"))

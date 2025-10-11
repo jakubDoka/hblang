@@ -282,6 +282,10 @@ pub const Data = struct {
         return self.addReloc(gpa, try utils.ensureSlot(&self.funcs, gpa, target), slot_size, addend, back_shift);
     }
 
+    pub fn addPlaceholderFuncReloc(self: *Data, gpa: std.mem.Allocator, target: u32) !void {
+        try self.addPlaceholderReloc(gpa, try utils.ensureSlot(&self.funcs, gpa, target));
+    }
+
     pub fn addGlobalReloc(
         self: *Data,
         gpa: std.mem.Allocator,
@@ -291,6 +295,10 @@ pub const Data = struct {
         back_shift: u32,
     ) !void {
         return self.addReloc(gpa, try utils.ensureSlot(&self.globals, gpa, target), slot_size, addend, back_shift);
+    }
+
+    pub fn addPlaceholderGlobalReloc(self: *Data, gpa: std.mem.Allocator, target: u32) !void {
+        try self.addPlaceholderReloc(gpa, try utils.ensureSlot(&self.globals, gpa, target));
     }
 
     pub fn addReloc(self: *Data, gpa: std.mem.Allocator, target: *SymIdx, slot_size: Reloc.SlotSize, addend: i31, back_shift: u32) !void {
@@ -303,6 +311,14 @@ pub const Data = struct {
                 .addend = addend,
                 .slot_size = slot_size,
             },
+        });
+    }
+
+    pub fn addPlaceholderReloc(self: *Data, gpa: std.mem.Allocator, target: *SymIdx) !void {
+        try self.relocs.append(gpa, .{
+            .target = try self.declSym(gpa, target),
+            .offset = 0,
+            .meta = .{ .addend = 0, .slot_size = .@"4" },
         });
     }
 
@@ -816,8 +832,7 @@ pub const Data = struct {
             if (!visited_syms.isSet(i)) {
                 switch (sym.kind) {
                     .func => self.funcs.items[idx] = .invalid,
-                    .data => self.globals.items[idx] = .invalid,
-                    .prealloc => self.globals.items[idx] = .invalid,
+                    .data, .prealloc, .tls_prealloc => self.globals.items[idx] = .invalid,
                     else => unreachable, // TODO: remove
                 }
                 sym.kind = .invalid;

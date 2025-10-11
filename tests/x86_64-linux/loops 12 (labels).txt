@@ -7,7 +7,7 @@ main:
 	test al, al
 	jz :0
 	mov rax, rcx
-	jmp :1
+	jmp :5
 0:	xor rax, rax
 5:	cmp rax, 0x0A
 	setz dl
@@ -24,7 +24,8 @@ main:
 	test dl, dl
 	jz :4
 	mov rax, rcx
-1:	ret
+	jmp :5
 4:	add rcx, rsi
 	inc rax
 	jmp :5
+5:	ret

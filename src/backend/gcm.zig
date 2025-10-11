@@ -124,10 +124,8 @@ pub fn Mixin(comptime Backend: type) type {
             }
 
             const dead = func.addNode(.Never, .none, .top, &.{loop.base.inputs()[1].?}, .{});
-            const then = func.addNode(.Then, .none, .top, &.{dead}, .{});
-            const else_ = func.addNode(.Else, .none, .top, &.{dead}, .{});
-
-            else_.asCfg().?.ext.loop = 0;
+            const then = func.addNode(.Then, .none, .top, &.{dead}, .{ .base = .{ .loop = loop.ext.loop } });
+            const else_ = func.addNode(.Else, .none, .top, &.{dead}, .{ .base = .{ .loop = 0 } });
 
             func.setInputIgnoreIntern(&loop.base, 1, else_);
 

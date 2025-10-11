@@ -108,10 +108,12 @@ sin := fn(theta: f32): f32 {
     d := theta - @int_to_float(si) * 2.0 * PI / @int_to_float(TABLE_SIZE)
     ci := si + TABLE_SIZE / 4 & TABLE_SIZE - 1
     si &= TABLE_SIZE - 1
+    //return @int_to_float(si)
     return sin_table[@bit_cast(si)] + (sin_table[@bit_cast(ci)] - 0.5 * sin_table[@bit_cast(si)] * d) * d
 }
 
 main := fn(): int {
+    //return @float_to_int(sin(0.0))
     return @float_to_int(sin(1000.0) * 1000.0) - 826
 }
 ```

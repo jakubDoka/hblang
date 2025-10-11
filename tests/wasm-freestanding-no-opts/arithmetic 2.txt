@@ -129,10 +129,10 @@
     i64.add
     global.set 0
     local.get 25
-    return)
+    return
+    unreachable)
   (memory (;0;) 4)
   (global (;0;) (mut i64) (i64.const 131072))
-  (global (;1;) i64 (i64.const 131072))
   (export "__stack_pointer" (global 0))
   (export "main" (func $main))
-  (data (;0;) (i32.const 131072) "\01\00\00\90"))
+  (data (;0;) (i32.const 131072) ""))

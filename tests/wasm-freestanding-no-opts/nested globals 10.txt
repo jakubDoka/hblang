@@ -22,13 +22,13 @@
     i64.extend_i32_u
     local.set 4
     local.get 4
-    return)
+    return
+    unreachable)
   (memory (;0;) 4)
   (global (;0;) (mut i64) (i64.const 131072))
   (global (;1;) i64 (i64.const 131072))
   (global (;2;) i64 (i64.const 131088))
   (global (;3;) i64 (i64.const 131104))
-  (global (;4;) i64 (i64.const 131110))
   (export "__stack_pointer" (global 0))
   (export "main" (func $main))
-  (data (;0;) (i32.const 131072) "\10\00\02\00\00\00\00\00\01\00\00\00\00\00\00\00 \00\02\00\00\00\00\00\06\00\00\00\00\00\00\00Edward\01\00\00\90"))
+  (data (;0;) (i32.const 131072) "\10\00\02\00\00\00\00\00\01\00\00\00\00\00\00\00 \00\02\00\00\00\00\00\06\00\00\00\00\00\00\00Edward"))

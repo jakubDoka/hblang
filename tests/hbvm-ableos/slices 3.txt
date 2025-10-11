@@ -30,7 +30,7 @@ slices 3.reverse:
 1:   addi64 $8, $2, -1
          cp $7, $0
 4:     jltu $7, $8, :3
-2:     jala $0, $31, 0
+        jmp :2
 3:    add64 $6, $1, $7
       add64 $5, $1, $8
          ld $4, $6, 0, 1
@@ -40,3 +40,4 @@ slices 3.reverse:
      addi64 $7, $7, 1
      addi64 $8, $8, -1
         jmp :4
+2:     jala $0, $31, 0
