@@ -9,6 +9,7 @@ main:
      addi64 $1, $254, 0
         bmc $2, $1, 12
         jal $31, $0, :enum and struct.broken
+       andi $1, $1, 4294967295
      addi64 $254, $254, 36
          ld $31, $254, -8, 8
          tx

@@ -1,0 +1,3 @@
+broken.hb:2:36: broken.X(u8) does not declare this
+    run := fn(): void @CurrentScope().does_not_exist
+                                      ^

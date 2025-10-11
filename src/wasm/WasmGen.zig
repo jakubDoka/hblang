@@ -49,6 +49,7 @@ pub const Ctx = struct {
     allocs: []u16 = undefined,
     scope_stack: std.ArrayListUnmanaged(ScopeRange) = undefined,
     stack_base: u64 = undefined,
+    arg_base: u32 = undefined,
 };
 
 pub const classes = enum {};
@@ -151,6 +152,8 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     self.ctx = &ctx;
 
+    func.computeStructArgLayout();
+
     // NOTE: this is inneficient and we make more locals then we need but its
     // also simple and lets me focus on one problem at a time, just generate
     // wasm that works.
@@ -159,8 +162,16 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     try self.ctx.buf.writer.writeInt(u32, 0, .little);
 
     var params_len: u32 = 0;
-    for (func.signature.params()) |param| {
-        if (param == .Reg) params_len += 1;
+    for (func.signature.params(), 0..) |param, i| {
+        if (param == .Reg) {
+            for (func.gcm.postorder[0].base.outputs()) |out| {
+                if (out.get().kind == .Arg and out.get().extra(.Arg).index == i) {
+                    out.get().extra(.Arg).index = params_len;
+                    break;
+                }
+            }
+            params_len += 1;
+        }
     }
 
     var results_len: u32 = 0;
@@ -236,7 +247,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         cursor += fld;
     }
 
-    self.ctx.allocs = tmp.arena.alloc(u16, func.signature.params().len + cursor);
+    self.ctx.allocs = tmp.arena.alloc(u16, params_len + cursor);
 
     for (func.gcm.postorder) |block| {
         for (block.base.outputs()) |out| {
@@ -255,8 +266,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
                 inline else => |ty| @field(counters, @tagName(ty)),
             };
 
-            self.ctx.allocs[instr.schedule] =
-                @intCast(prev + func.signature.params().len);
+            self.ctx.allocs[instr.schedule] = @intCast(params_len + prev);
 
             switch (dataTypeToWasmType(instr.data_type)) {
                 .fnc, .vec => unreachable,
@@ -270,12 +280,11 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     var stack_size = func.computeStackLayout(0);
     stack_size = std.mem.alignForward(i64, stack_size, frame_alignment);
 
-    func.computeStructArgLayout();
-
     _, const call_slot_size = func.computeCallSlotSize();
 
     self.ctx.stack_base = call_slot_size;
     stack_size += @intCast(call_slot_size);
+    self.ctx.arg_base = @intCast(stack_size);
 
     if (stack_size != 0) {
         try self.ctx.buf.writer.writeByte(opb(.global_get));
@@ -548,6 +557,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeUleb128(self.regOf(inps[1]));
 
             const op_ty = dataTypeToWasmType(instr.data_type);
+            const oper_ty = dataTypeToWasmType(inps[0].data_type);
             const op_code: u8 = switch (extra.op) {
                 .iadd => switch (op_ty) {
                     .i32 => opb(.i32_add),
@@ -569,33 +579,38 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                     .i64 => opb(.i64_and),
                     else => utils.panic("{}", .{op_ty}),
                 },
-                .ne => switch (inps[0].data_type) {
+                .ne => switch (oper_ty) {
                     .i32 => opb(.i32_ne),
                     .i64 => opb(.i64_ne),
                     .f32 => opb(.f32_ne),
                     .f64 => opb(.f64_ne),
-                    else => utils.panic("{}", .{op_ty}),
+                    else => utils.panic("{}", .{oper_ty}),
                 },
-                .eq => switch (inps[0].data_type) {
+                .eq => switch (oper_ty) {
                     .i32 => opb(.i32_eq),
                     .i64 => opb(.i64_eq),
                     .f32 => opb(.f32_eq),
                     .f64 => opb(.f64_eq),
-                    else => utils.panic("{}", .{op_ty}),
+                    else => utils.panic("{}", .{oper_ty}),
                 },
-                .ult => switch (inps[0].data_type) {
+                .ult => switch (oper_ty) {
                     .i32 => opb(.i32_lt_u),
                     .i64 => opb(.i64_lt_u),
-                    else => utils.panic("{}", .{op_ty}),
+                    else => utils.panic("{}", .{oper_ty}),
                 },
-                .ugt => switch (inps[0].data_type) {
+                .ugt => switch (oper_ty) {
                     .i32 => opb(.i32_gt_u),
                     .i64 => opb(.i64_gt_u),
-                    else => utils.panic("{}", .{op_ty}),
+                    else => utils.panic("{}", .{oper_ty}),
                 },
-                .ule => switch (inps[0].data_type) {
+                .ule => switch (oper_ty) {
                     .i32 => opb(.i32_le_u),
                     .i64 => opb(.i64_le_u),
+                    else => utils.panic("{}", .{oper_ty}),
+                },
+                .udiv => switch (instr.data_type) {
+                    .i32 => opb(.i32_div_u),
+                    .i64 => opb(.i64_div_u),
                     else => utils.panic("{}", .{op_ty}),
                 },
                 .sdiv => switch (instr.data_type) {
@@ -698,6 +713,20 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
         .Local => {
             const offset = instr.inputs()[1].?.extra(.LocalAlloc).size +
                 self.ctx.stack_base;
+
+            try self.ctx.buf.writer.writeByte(opb(.i64_const));
+            try self.ctx.buf.writer.writeUleb128(offset);
+
+            try self.ctx.buf.writer.writeByte(opb(.global_get));
+            try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
+
+            try self.ctx.buf.writer.writeByte(opb(.i64_add));
+
+            try self.ctx.buf.writer.writeByte(opb(.local_set));
+            try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
+        },
+        .StructArg => |extra| {
+            const offset = extra.spec.size + self.ctx.arg_base;
 
             try self.ctx.buf.writer.writeByte(opb(.i64_const));
             try self.ctx.buf.writer.writeUleb128(offset);
@@ -917,7 +946,7 @@ pub fn disasm(_: *WasmGen, opts: Mach.DisasmOpts) void {
 }
 
 pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
-    const cleanup = true;
+    const cleanup = false;
 
     var tmp = root.utils.Arena.scrath(null);
     defer tmp.deinit();
@@ -953,6 +982,10 @@ pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
     if (res.Exited != 0) {
         std.debug.print("{s}\n", .{stderr.items});
         return error.WasmInterpError;
+    }
+
+    if (std.mem.startsWith(u8, stdout.items, "main() => error: unreachable executed")) {
+        return error.Unreachable;
     }
 
     const exe_prefix = "main() => i64:";

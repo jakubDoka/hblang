@@ -21,5 +21,6 @@ main:
 	call :enum and struct.broken
 	mov [rsp+0x0C], eax
 	mov eax, [rsp+0x0C]
+	mov eax, eax
 	add rsp, 0x18
 	ret

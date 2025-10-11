@@ -1,0 +1,22 @@
+(module
+  (type (;0;) (func (result i64)))
+  (func $main (type 0) (result i64)
+    (local i32 i64 i64)
+    global.get 1
+    local.set 1
+    local.get 1
+    i32.wrap_i64
+    i32.load
+    local.set 0
+    local.get 0
+    i64.extend_i32_u
+    local.set 2
+    local.get 2
+    return
+    unreachable)
+  (memory (;0;) 4)
+  (global (;0;) (mut i64) (i64.const 131072))
+  (global (;1;) i64 (i64.const 131072))
+  (export "__stack_pointer" (global 0))
+  (export "main" (func $main))
+  (data (;0;) (i32.const 131072) "\00\00\00\00"))

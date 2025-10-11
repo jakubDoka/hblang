@@ -211,7 +211,7 @@ B := struct {
 }
 
 broken := fn(data: B): u32 return data.a
-main := fn(): u32 return broken(B.(0, 0, .BROKEN))
+main := fn(): uint return broken(B.(0, 0, .BROKEN))
 ```
 
 #### nested structs
@@ -222,7 +222,7 @@ A := struct {
     };
 }
 
-main := fn(): u32 {
+main := fn(): uint {
     a := A.(.(idk))
     return 0
 }
@@ -236,7 +236,7 @@ expectations := .{
 
 broken := @use("broken.hb")
 
-main := fn(): u32 {
+main := fn(): uint {
     x := broken.X(u8).run()
     return 0
 }
