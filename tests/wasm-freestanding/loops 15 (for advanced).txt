@@ -3,14 +3,14 @@
   (func $main (type 0) (result i64)
     (local i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
-    i64.const -32
+    i64.const 96
     i64.sub
     global.set 0
     i64.const 48
     global.get 0
     i64.add
     local.set 2
-    i64.const -56
+    i64.const 72
     global.get 0
     i64.add
     local.set 3
@@ -30,7 +30,7 @@
     i64.store
     i64.const 4
     local.set 6
-    i64.const -48
+    i64.const 80
     global.get 0
     i64.add
     local.set 7
@@ -121,11 +121,11 @@
       local.get 8
       i64.add
       local.set 22
-      i64.const -64
+      i64.const 64
       global.get 0
       i64.add
       local.set 23
-      i64.const -40
+      i64.const 88
       global.get 0
       i64.add
       local.set 24
@@ -204,7 +204,7 @@
           i64.store
           br 1 (;@2;)
         end
-        i64.const -32
+        i64.const 96
         global.get 0
         i64.add
         global.set 0

@@ -45,7 +45,7 @@ cp := fn($_r0: u8, $_r1: u8): struct align(1){.op: u8 = 0; .r0: u8 = _r0; .r1: u
     (local i64 i64 i64 i64 i64 i64 i64)
     i64.const 1
     local.set 1
-    global.get 1
+    global.get 3
     local.set 2
     local.get 0
     i32.wrap_i64
@@ -73,7 +73,7 @@ cp := fn($_r0: u8, $_r1: u8): struct align(1){.op: u8 = 0; .r0: u8 = _r0; .r1: u
     local.get 1
     i32.wrap_i64
     memory.copy
-    global.get 3
+    global.get 1
     local.set 7
     local.get 4
     i32.wrap_i64

@@ -5,7 +5,7 @@
   (func $main (type 0) (result i64)
     (local i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
-    i64.const -40
+    i64.const 88
     i64.sub
     global.set 0
     block  ;; label = @1
@@ -68,7 +68,7 @@
           memory.copy
           call $comptime_edge_cases_8.main.read_only__uint__uint__uint__
           local.set 11
-          i64.const -48
+          i64.const 80
           global.get 0
           i64.add
           local.set 12
@@ -82,7 +82,7 @@
           i32.wrap_i64
           i64.load
           local.set 14
-          i64.const -56
+          i64.const 72
           global.get 0
           i64.add
           local.set 15
@@ -162,7 +162,7 @@
       memory.copy
       call $comptime_edge_cases_8.fun__uint__uint__uint__
       local.set 27
-      i64.const -64
+      i64.const 64
       global.get 0
       i64.add
       local.set 28
@@ -181,7 +181,7 @@
       local.get 4
       local.set 30
     end
-    i64.const -40
+    i64.const 88
     global.get 0
     i64.add
     global.set 0

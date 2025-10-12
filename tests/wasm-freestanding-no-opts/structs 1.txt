@@ -6,7 +6,7 @@
   (func $main (type 0) (result i64)
     (local i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
-    i64.const -40
+    i64.const 88
     i64.sub
     global.set 0
     i64.const 24
@@ -106,7 +106,7 @@
           local.get 18
           call $structs_1.Ty.sum
           local.set 19
-          i64.const -56
+          i64.const 72
           global.get 0
           i64.add
           local.set 20
@@ -137,7 +137,7 @@
       local.get 9
       call $structs_1.pass
       local.set 24
-      i64.const -48
+      i64.const 80
       global.get 0
       i64.add
       local.set 25
@@ -152,7 +152,7 @@
       local.get 26
       local.set 27
     end
-    i64.const -40
+    i64.const 88
     global.get 0
     i64.add
     global.set 0

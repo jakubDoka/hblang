@@ -254,7 +254,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
 
         try self.ctx.buf.writer.writeByte(opb(.i64_const));
-        try self.ctx.buf.writer.writeUleb128(stack_size);
+        try self.ctx.buf.writer.writeSleb128(stack_size);
 
         try self.ctx.buf.writer.writeByte(opb(.i64_sub));
 
@@ -355,7 +355,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
             if (instr.kind == .Return) {
                 if (stack_size != 0) {
                     try self.ctx.buf.writer.writeByte(opb(.i64_const));
-                    try self.ctx.buf.writer.writeUleb128(stack_size);
+                    try self.ctx.buf.writer.writeSleb128(stack_size);
 
                     try self.ctx.buf.writer.writeByte(opb(.global_get));
                     try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
@@ -675,7 +675,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             const offset = extra.offset;
 
             try self.ctx.buf.writer.writeByte(opb(.i64_const));
-            try self.ctx.buf.writer.writeUleb128(offset);
+            try self.ctx.buf.writer.writeSleb128(offset);
 
             try self.ctx.buf.writer.writeByte(opb(.global_get));
             try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
@@ -690,7 +690,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 self.ctx.stack_base;
 
             try self.ctx.buf.writer.writeByte(opb(.i64_const));
-            try self.ctx.buf.writer.writeUleb128(offset);
+            try self.ctx.buf.writer.writeSleb128(offset);
 
             try self.ctx.buf.writer.writeByte(opb(.global_get));
             try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
@@ -704,7 +704,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             const offset = extra.spec.size + self.ctx.arg_base;
 
             try self.ctx.buf.writer.writeByte(opb(.i64_const));
-            try self.ctx.buf.writer.writeUleb128(offset);
+            try self.ctx.buf.writer.writeSleb128(offset);
 
             try self.ctx.buf.writer.writeByte(opb(.global_get));
             try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
@@ -863,9 +863,6 @@ pub fn emitData(self: *WasmGen, opts: Mach.DataOptions) void {
 }
 
 pub fn finalize(self: *WasmGen, opts: Mach.FinalizeOptions) void {
-    // TODO: relocations are not emitted properly
-    // the function ids get hardcoded
-    //
     //self.mach.out.deduplicate();
     self.mach.out.elimitaneDeadCode();
 
@@ -919,7 +916,7 @@ pub fn disasm(_: *WasmGen, opts: Mach.DisasmOpts) void {
 }
 
 pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
-    const cleanup = false;
+    const cleanup = true;
 
     var tmp = root.utils.Arena.scrath(null);
     defer tmp.deinit();

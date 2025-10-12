@@ -87,7 +87,7 @@
     global.get 0
     i64.add
     local.set 4
-    global.get 1
+    global.get 2
     local.set 5
     i64.const 8
     local.set 6
@@ -95,7 +95,7 @@
     local.get 6
     i64.add
     local.set 7
-    global.get 2
+    global.get 1
     local.set 8
     local.get 5
     i32.wrap_i64
@@ -192,7 +192,7 @@
     global.get 0
     i64.add
     local.set 2
-    global.get 1
+    global.get 2
     local.set 3
     local.get 2
     i32.wrap_i64
@@ -204,7 +204,7 @@
     local.get 4
     i64.add
     local.set 5
-    global.get 2
+    global.get 1
     local.set 6
     local.get 3
     i32.wrap_i64
@@ -250,7 +250,7 @@
     global.get 0
     i64.add
     local.set 2
-    global.get 1
+    global.get 2
     local.set 3
     local.get 2
     i32.wrap_i64
@@ -262,7 +262,7 @@
     local.get 4
     i64.add
     local.set 5
-    global.get 2
+    global.get 1
     local.set 6
     local.get 3
     i32.wrap_i64
@@ -310,13 +310,13 @@
         global.get 0
         i64.add
         local.set 6
-        global.get 1
+        global.get 2
         local.set 7
         local.get 6
         i32.wrap_i64
         local.get 0
         i32.store8
-        global.get 2
+        global.get 1
         local.set 8
         i64.const 8
         local.set 9
@@ -402,7 +402,7 @@
     global.get 0
     i64.add
     local.set 2
-    global.get 1
+    global.get 2
     local.set 3
     local.get 2
     i32.wrap_i64
@@ -414,7 +414,7 @@
     local.get 4
     i64.add
     local.set 5
-    global.get 2
+    global.get 1
     local.set 6
     local.get 3
     i32.wrap_i64

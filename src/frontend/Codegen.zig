@@ -4206,6 +4206,7 @@ fn emitDirective(
                 ));
             }
 
+            oper.ty = ret;
             return oper;
         },
         .float_cast => {
