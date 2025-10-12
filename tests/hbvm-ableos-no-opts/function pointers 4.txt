@@ -11,6 +11,7 @@ main:
         jal $31, $0, :function pointers 4.DynObj.func
          st $1, $254, 17, 1
          ld $1, $254, 17, 1
+       andi $1, $1, 255
      addi64 $254, $254, 32
          ld $31, $254, -8, 8
          tx

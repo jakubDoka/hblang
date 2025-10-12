@@ -649,7 +649,7 @@ Obj := struct {
     do_thing := fn(self: ^Obj): u8 return self.x + 1
 }
 
-main := fn(): u8 {
+main := fn(): uint {
     obj := Obj.(255)
     dyn_obj := DynObj.new(Obj, &obj)
     fptr := dyn_obj.do_thing
@@ -676,7 +676,7 @@ Obj := struct {
     func := fn(self: ^Obj): u8 return self.state + 1
 }
 
-main := fn(): u8 {
+main := fn(): uint {
     obj := Obj.(255)
     dyn_obj := DynObj.new(&obj)
     return dyn_obj.func()
@@ -694,7 +694,7 @@ foo := fn(x: ?u8): bool {
     return false
 }
 
-main := fn(): u32 {
+main := fn(): uint {
     if foo(null) return 1
     if !foo(1) return 2
     val := true && false

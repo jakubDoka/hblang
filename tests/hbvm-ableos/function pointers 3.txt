@@ -6,6 +6,7 @@ main:
      addi64 $1, $254, 0
         lra $2, $0, :function pointers 3.Obj.do_thing
        jala $31, $2, 0
+       andi $1, $1, 255
      addi64 $254, $254, 16
          ld $31, $254, -8, 8
          tx

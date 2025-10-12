@@ -6,6 +6,8 @@ const utils = root.utils;
 const WasmGen = @import("WasmGen.zig");
 const uleb128Size = root.dwarf.uleb128Size;
 
+pub const normal_addend = 0;
+pub const fn_ptr_addend = 1;
 pub const reloc_int_size = 4;
 pub const RelocInt = std.meta.Int(.unsigned, reloc_int_size * 7);
 
@@ -25,27 +27,44 @@ pub fn parseFunction(raw: []const u8) [2][]const u8 {
     };
 }
 
-pub fn flush(self: Mach.Data, out: *std.Io.Writer, stack_size: u64) !void {
+pub fn flush(
+    self: Mach.Data,
+    out: *std.Io.Writer,
+    stack_size: u64,
+    extra_function_types: []const u8,
+    extra_function_type_count: u64,
+) !void {
     try out.writeStruct(Header{}, .little);
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    var type_section_size: u64 = 0;
+    var type_section_size: u64 = extra_function_types.len;
     var func_section_size: u64 = 0;
     var func_count: u32 = 0;
+    var table_section_size: u64 = 0;
     var memory_section_size: u64 = 0;
     var memory_count: u64 = 0;
     var global_section_size: u64 = 0;
     var global_count: u64 = 0;
     var export_section_size: u64 = 0;
     var exprted_count: u32 = 0;
+    var element_section_size: u64 = 0;
     var code_section_size: u64 = 0;
     var name_section_size: u64 = 0;
     var data_section_size: u64 = 0;
     var global_offsets = tmp.arena.alloc(u32, self.syms.items.len);
     var reloc_ids = tmp.arena.alloc(RelocInt, self.syms.items.len);
+    var referenced_funcs = std.AutoArrayHashMapUnmanaged(Mach.Data.SymIdx, void).empty;
+
     for (self.syms.items, 0..) |s, i| {
+        if (s.kind != .invalid) {
+            for (self.relocs.items[s.reloc_offset..][0..s.reloc_count]) |rel| {
+                if (rel.meta.addend != fn_ptr_addend) continue;
+                referenced_funcs.put(tmp.arena.allocator(), rel.target, {}) catch unreachable;
+            }
+        }
+
         switch (s.kind) {
             .func => {
                 const sig, const body = parseFunction(self.code.items[s.offset..][0..s.size]);
@@ -53,7 +72,7 @@ pub fn flush(self: Mach.Data, out: *std.Io.Writer, stack_size: u64) !void {
 
                 type_section_size += sig.len;
 
-                func_section_size += uleb128Size(func_count);
+                func_section_size += uleb128Size(func_count + extra_function_type_count);
 
                 if (s.linkage == .exported) {
                     export_section_size += uleb128Size(name.len) + name.len;
@@ -104,9 +123,14 @@ pub fn flush(self: Mach.Data, out: *std.Io.Writer, stack_size: u64) !void {
         }
     }
 
-    type_section_size += uleb128Size(func_count);
+    type_section_size += uleb128Size(extra_function_type_count + func_count);
 
     func_section_size += uleb128Size(func_count);
+
+    table_section_size += uleb128Size(1); // always one table
+
+    table_section_size += 1; // funcref
+    table_section_size += 1 + uleb128Size(referenced_funcs.entries.len); // no limmit
 
     memory_count += 1; // global memory, prefixed with stack and global variables
     memory_section_size += uleb128Size(memory_count);
@@ -128,6 +152,16 @@ pub fn flush(self: Mach.Data, out: *std.Io.Writer, stack_size: u64) !void {
 
     export_section_size += uleb128Size(exprted_count);
 
+    element_section_size += 1; // elem count
+
+    element_section_size += uleb128Size(0); // kind
+    element_section_size += 1 + uleb128Size(0) + 1; // offset
+
+    element_section_size += uleb128Size(referenced_funcs.entries.len);
+    for (referenced_funcs.entries.items(.key)) |idx| {
+        element_section_size += uleb128Size(reloc_ids[@intFromEnum(idx)]);
+    }
+
     code_section_size += uleb128Size(func_count);
 
     name_section_size += uleb128Size(func_count); // name map size
@@ -147,7 +181,10 @@ pub fn flush(self: Mach.Data, out: *std.Io.Writer, stack_size: u64) !void {
     try out.writeByte(SectionId.type.raw());
     try out.writeUleb128(type_section_size);
     {
-        try out.writeUleb128(func_count);
+        try out.writeUleb128(func_count + extra_function_type_count);
+
+        try out.writeAll(extra_function_types);
+
         for (self.syms.items) |s| {
             if (s.kind != .func) continue;
             const sig, _ = parseFunction(self.code.items[s.offset..][0..s.size]);
@@ -162,9 +199,19 @@ pub fn flush(self: Mach.Data, out: *std.Io.Writer, stack_size: u64) !void {
         var i: u32 = 0;
         for (self.syms.items) |s| {
             if (s.kind != .func) continue;
-            try out.writeUleb128(i);
+            try out.writeUleb128(extra_function_type_count + i);
             i += 1;
         }
+    }
+
+    try out.writeByte(SectionId.table.raw());
+    try out.writeUleb128(table_section_size);
+    {
+        try out.writeUleb128(1);
+
+        try out.writeByte(0x70); // funcref
+        try out.writeByte(0); // no limmit
+        try out.writeUleb128(referenced_funcs.entries.len);
     }
 
     try out.writeByte(SectionId.memory.raw());
@@ -226,6 +273,22 @@ pub fn flush(self: Mach.Data, out: *std.Io.Writer, stack_size: u64) !void {
         }
     }
 
+    try out.writeByte(SectionId.element.raw());
+    try out.writeUleb128(element_section_size);
+    {
+        try out.writeUleb128(1);
+
+        try out.writeUleb128(0);
+        try out.writeByte(opb(.i32_const));
+        try out.writeSleb128(0);
+        try out.writeByte(opb(.end));
+
+        try out.writeUleb128(referenced_funcs.entries.len);
+        for (referenced_funcs.entries.items(.key)) |idx| {
+            try out.writeUleb128(reloc_ids[@intFromEnum(idx)]);
+        }
+    }
+
     try out.writeByte(SectionId.code.raw());
     try out.writeUleb128(code_section_size);
     {
@@ -235,8 +298,22 @@ pub fn flush(self: Mach.Data, out: *std.Io.Writer, stack_size: u64) !void {
             const mem = self.code.items[s.offset..][0..s.size];
 
             for (self.relocs.items[s.reloc_offset..][0..s.reloc_count]) |rel| {
-                const target = reloc_ids[@intFromEnum(rel.target)];
-                std.leb.writeUnsignedFixed(reloc_int_size, mem[rel.offset..][0..reloc_int_size], target);
+                if (rel.meta.addend == fn_ptr_addend) {
+                    const target = referenced_funcs.getIndex(rel.target).?;
+                    std.leb.writeSignedFixed(
+                        reloc_int_size,
+                        mem[rel.offset..][0..reloc_int_size],
+                        @intCast(target),
+                    );
+                } else {
+                    std.debug.assert(rel.meta.addend == normal_addend);
+                    const target = reloc_ids[@intFromEnum(rel.target)];
+                    std.leb.writeUnsignedFixed(
+                        reloc_int_size,
+                        mem[rel.offset..][0..reloc_int_size],
+                        target,
+                    );
+                }
             }
 
             _, const body = parseFunction(mem);
@@ -264,8 +341,13 @@ pub fn flush(self: Mach.Data, out: *std.Io.Writer, stack_size: u64) !void {
             const mem = self.code.items[s.offset..][0..s.size];
 
             for (self.relocs.items[s.reloc_offset..][0..s.reloc_count]) |rel| {
-                const target = global_offsets[@intFromEnum(rel.target)] + stack_size;
-                @memcpy(mem[rel.offset..][0..8], std.mem.asBytes(&target));
+                if (rel.meta.addend == fn_ptr_addend) {
+                    const target: u64 = referenced_funcs.getIndex(rel.target).?;
+                    @memcpy(mem[rel.offset..][0..8], std.mem.asBytes(&target));
+                } else {
+                    const target = global_offsets[@intFromEnum(rel.target)] + stack_size;
+                    @memcpy(mem[rel.offset..][0..8], std.mem.asBytes(&target));
+                }
             }
 
             try out.writeAll(mem);

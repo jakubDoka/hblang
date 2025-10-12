@@ -1,0 +1,12 @@
+match 3 (errors):6:2: the matched type has non zero possible values, therefore empty match statement is invalid
+    match enum{.a; .b}.a {}
+    ^
+match 3 (errors):8:2: not all branches are covered: `.b`
+    match enum{.a; .b}.a {
+    ^
+match 3 (errors):12:2: the matched type has non zero possible values, therefore empty match statement is invalid
+    $match enum{.a; .b}.a {}
+    ^
+match 3 (errors):14:2: not all branches are covered: `.a`
+    $match enum{.a; .b}.a {
+    ^

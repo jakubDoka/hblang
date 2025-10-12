@@ -28,24 +28,21 @@ main:
          ld $1, $254, 0, 8
         jeq $1, $2, :7
        li64 $1, 3
-        jmp :3
+3:      jmp :8
 7:       st $0, $254, 8, 8
      addi64 $1, $254, 8
         jal $31, $0, :defer 1.main.ret_defer
          ld $2, $254, 8, 8
        li64 $1, 1
-        jeq $2, $1, :9
+        jeq $2, $1, :a
        li64 $1, 4
-        jmp :a
-9:       cp $1, $0
-        jmp :b
-6:       st $2, $254, 0, 8
-5:      jmp :2
+8:      jmp :b
+a:       cp $1, $0
 b:   addi64 $254, $254, 24
          ld $31, $254, -8, 8
          tx
-a:      jmp :b
-3:      jmp :a
+6:       st $2, $254, 0, 8
+5:      jmp :2
 defer 1.main.ret_defer:
      addi64 $254, $254, -8
          st $1, $254, 0, 8

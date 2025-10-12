@@ -13,6 +13,8 @@ const opb = object.opb;
 
 gpa: std.mem.Allocator,
 mach: Mach = .init(WasmGen),
+indirect_signatures: std.ArrayList(u8) = .empty,
+indirect_signature_count: u64 = 0,
 stack_size: u64 = 1024 * 128,
 ctx: *Ctx = undefined,
 
@@ -83,6 +85,36 @@ pub fn dataTypeToWasmType(ty: graph.DataType) object.Type {
     };
 }
 
+pub fn encodeFnType(writer: *std.Io.Writer, ty: graph.Signature) void {
+    errdefer unreachable;
+
+    var params_len: u32 = 0;
+    for (ty.params()) |param| {
+        if (param == .Reg) params_len += 1;
+    }
+
+    var results_len: u32 = 0;
+    for (ty.returns() orelse &.{}) |param| {
+        if (param == .Reg) results_len += 1;
+    }
+
+    try writer.writeByte(0x60);
+
+    try writer.writeUleb128(params_len);
+    for (ty.params()) |param| {
+        if (param == .Reg) {
+            try writer.writeByte(dataTypeToWasmType(param.Reg).raw());
+        }
+    }
+
+    try writer.writeUleb128(results_len);
+    for (ty.returns() orelse &.{}) |param| {
+        if (param == .Reg) {
+            try writer.writeByte(dataTypeToWasmType(param.Reg).raw());
+        }
+    }
+}
+
 pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     errdefer unreachable;
 
@@ -105,7 +137,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    const loop_ranges, _ = func.backshiftLoopBodies(tmp.arena);
+    const loop_ranges, const changed = func.backshiftLoopBodies(tmp.arena);
 
     var ctx = Ctx{
         .start_pos = self.mach.out.code.items.len,
@@ -124,6 +156,13 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     // backpatch later
     try self.ctx.buf.writer.writeInt(u32, 0, .little);
 
+    encodeFnType(&self.ctx.buf.writer, func.signature);
+
+    self.ctx.buf.writer
+        .buffer[self.ctx.start_pos..][0..4].* =
+        @bitCast(@as(u32, @intCast(self.ctx.buf.writer.end -
+        self.ctx.start_pos - @sizeOf(u32))));
+
     var params_len: u32 = 0;
     for (func.signature.params(), 0..) |param, i| {
         if (param == .Reg) {
@@ -136,32 +175,6 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
             params_len += 1;
         }
     }
-
-    var results_len: u32 = 0;
-    for (func.signature.returns() orelse &.{}) |param| {
-        if (param == .Reg) results_len += 1;
-    }
-
-    try self.ctx.buf.writer.writeByte(0x60);
-
-    try self.ctx.buf.writer.writeUleb128(params_len);
-    for (func.signature.params()) |param| {
-        if (param == .Reg) {
-            try self.ctx.buf.writer.writeByte(dataTypeToWasmType(param.Reg).raw());
-        }
-    }
-
-    try self.ctx.buf.writer.writeUleb128(results_len);
-    for (func.signature.returns() orelse &.{}) |param| {
-        if (param == .Reg) {
-            try self.ctx.buf.writer.writeByte(dataTypeToWasmType(param.Reg).raw());
-        }
-    }
-
-    self.ctx.buf.writer
-        .buffer[self.ctx.start_pos..][0..4].* =
-        @bitCast(@as(u32, @intCast(self.ctx.buf.writer.end -
-        self.ctx.start_pos - @sizeOf(u32))));
 
     var counters: struct {
         i32: usize = 0,
@@ -311,7 +324,19 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         }
     }.lessThenFn);
 
+    const log_cfg = false;
+
+    if (log_cfg) {
+        std.debug.print("{}\n", .{changed});
+
+        for (scope_ranges.items) |lr| {
+            std.debug.print("{f}\n", .{lr});
+        }
+    }
+
     for (scope_ranges.items) |*sr| {
+        std.debug.assert(sr.range[0] <= sr.range[1]);
+
         if (sr.kind == .loop) continue;
         for (scope_ranges.items) |*osr| {
             if (sr == osr) continue;
@@ -320,8 +345,6 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
             }
         }
     }
-
-    const log_cfg = false;
 
     if (log_cfg) {
         func.fmtScheduledLog();
@@ -378,6 +401,8 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         }
     }
 
+    std.debug.assert(self.ctx.scope_stack.items.len == 0);
+
     try self.ctx.buf.writer.writeByte(opb(.@"unreachable"));
     try self.ctx.buf.writer.writeByte(opb(.end));
 }
@@ -417,6 +442,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
         .UnOp => |extra| {
             try self.ctx.buf.writer.writeByte(opb(.local_get));
             try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
+            const op_ty = dataTypeToWasmType(inps[0].data_type);
             const op_code: u8 = switch (extra.op) {
                 .sext => switch (inps[0].data_type) {
                     .i8 => switch (instr.data_type) {
@@ -510,7 +536,12 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 .fcst => switch (instr.data_type) {
                     .f32 => opb(.f32_demote_f64),
                     .f64 => opb(.f32_promote_f64),
-                    else => utils.panic("{}", .{extra.op}),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .not => switch (op_ty) {
+                    .i32 => opb(.i32_eqz),
+                    .i64 => opb(.i64_eqz),
+                    else => utils.panic("{}", .{op_ty}),
                 },
                 else => utils.panic("{}", .{extra.op}),
             };
@@ -539,17 +570,17 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                     .i64 => opb(.i64_sub),
                     else => utils.panic("{}", .{op_ty}),
                 },
-                .imul => switch (instr.data_type) {
+                .imul => switch (op_ty) {
                     .i32 => opb(.i32_mul),
                     .i64 => opb(.i64_mul),
                     else => utils.panic("{}", .{op_ty}),
                 },
-                .bor => switch (instr.data_type) {
+                .bor => switch (op_ty) {
                     .i32 => opb(.i32_or),
                     .i64 => opb(.i64_or),
                     else => utils.panic("{}", .{op_ty}),
                 },
-                .band => switch (instr.data_type) {
+                .band => switch (op_ty) {
                     .i32 => opb(.i32_and),
                     .i64 => opb(.i64_and),
                     else => utils.panic("{}", .{op_ty}),
@@ -714,11 +745,22 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeByte(opb(.local_set));
             try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
         },
+        .FuncAddr => |extra| {
+            try self.ctx.buf.writer.writeByte(opb(.i64_const));
+
+            self.mach.out.code = self.ctx.buf.toArrayList();
+            try self.mach.out.addFuncReloc(self.gpa, extra.id, .@"4", object.fn_ptr_addend, 0);
+            self.ctx.buf = .fromArrayList(self.gpa, &self.mach.out.code);
+
+            try self.ctx.buf.writer.writeUleb128(std.math.maxInt(object.RelocInt));
+        },
         .GlobalAddr => |extra| {
             try self.ctx.buf.writer.writeByte(opb(.global_get));
+
             self.mach.out.code = self.ctx.buf.toArrayList();
-            try self.mach.out.addGlobalReloc(self.gpa, extra.id, .@"4", 0, 0);
+            try self.mach.out.addGlobalReloc(self.gpa, extra.id, .@"4", object.normal_addend, 0);
             self.ctx.buf = .fromArrayList(self.gpa, &self.mach.out.code);
+
             try self.ctx.buf.writer.writeUleb128(std.math.maxInt(object.RelocInt));
 
             try self.ctx.buf.writer.writeByte(opb(.local_set));
@@ -739,7 +781,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeUleb128(0);
         },
         .Call => |extra| {
-            for (inps) |inp| {
+            for (inps[@intFromBool(extra.id == graph.indirect_call)..]) |inp| {
                 if (inp.kind == .StackArgOffset) {
                     continue;
                 }
@@ -748,11 +790,26 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 try self.ctx.buf.writer.writeUleb128(self.regOf(inp));
             }
 
-            try self.ctx.buf.writer.writeByte(opb(.call));
-            self.mach.out.code = self.ctx.buf.toArrayList();
-            try self.mach.out.addFuncReloc(self.gpa, extra.id, .@"4", 0, 0);
-            self.ctx.buf = .fromArrayList(self.gpa, &self.mach.out.code);
-            try self.ctx.buf.writer.writeUleb128(std.math.maxInt(object.RelocInt));
+            if (extra.id == graph.indirect_call) {
+                try self.ctx.buf.writer.writeByte(opb(.local_get));
+                try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
+                try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
+
+                try self.ctx.buf.writer.writeByte(opb(.call_indirect));
+                try self.ctx.buf.writer.writeUleb128(self.indirect_signature_count);
+                try self.ctx.buf.writer.writeUleb128(0); // table index
+
+                var writer = std.Io.Writer.Allocating.fromArrayList(self.gpa, &self.indirect_signatures);
+                encodeFnType(&writer.writer, extra.signature);
+                self.indirect_signatures = writer.toArrayList();
+                self.indirect_signature_count += 1;
+            } else {
+                try self.ctx.buf.writer.writeByte(opb(.call));
+                self.mach.out.code = self.ctx.buf.toArrayList();
+                try self.mach.out.addFuncReloc(self.gpa, extra.id, .@"4", object.normal_addend, 0);
+                self.ctx.buf = .fromArrayList(self.gpa, &self.mach.out.code);
+                try self.ctx.buf.writer.writeUleb128(std.math.maxInt(object.RelocInt));
+            }
 
             const ret = extra.signature.returns() orelse return;
             for (0..ret.len) |i| {
@@ -859,6 +916,7 @@ pub fn emitData(self: *WasmGen, opts: Mach.DataOptions) void {
         opts.relocs,
         opts.readonly,
         opts.thread_local,
+        object.fn_ptr_addend,
     );
 }
 
@@ -870,9 +928,13 @@ pub fn finalize(self: *WasmGen, opts: Mach.FinalizeOptions) void {
         self.mach.out,
         opts.output orelse return,
         self.stack_size,
+        self.indirect_signatures.items,
+        self.indirect_signature_count,
     ) catch unreachable;
 
     self.mach.out.reset();
+    self.indirect_signatures.items.len = 0;
+    self.indirect_signature_count = 0;
 }
 
 pub fn disasm(_: *WasmGen, opts: Mach.DisasmOpts) void {
@@ -974,5 +1036,6 @@ pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
 
 pub fn deinit(self: *WasmGen) void {
     self.mach.out.deinit(self.gpa);
+    self.indirect_signatures.deinit(self.gpa);
     self.* = undefined;
 }

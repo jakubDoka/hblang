@@ -2759,13 +2759,7 @@ pub fn Func(comptime Backend: type) type {
                     var cursor = inb;
                     while (cursor.idepth() >= bb.idepth()) : (cursor = cursor.idom()) {
                         if (cursor == bb) {
-                            std.mem.swap(
-                                *CfgNode,
-                                &func.gcm.postorder[backshift_cursor],
-                                &func.gcm.postorder[j],
-                            );
-                            func.gcm.postorder[backshift_cursor].base.schedule = @intCast(backshift_cursor);
-                            func.gcm.postorder[j].base.schedule = @intCast(j);
+                            std.mem.rotate(*CfgNode, func.gcm.postorder[backshift_cursor .. j + 1], j - backshift_cursor);
                             backshift_cursor += 1;
                             changed = true;
                             break;
@@ -2774,6 +2768,12 @@ pub fn Func(comptime Backend: type) type {
                 }
 
                 ranges.appendAssumeCapacity(.{ @intCast(i), @intCast(backshift_cursor - 1) });
+            }
+
+            if (changed) {
+                for (func.gcm.postorder, 0..) |bb, i| {
+                    bb.base.schedule = @intCast(i);
+                }
             }
 
             if (std.debug.runtime_safety) {

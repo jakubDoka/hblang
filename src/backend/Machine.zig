@@ -401,6 +401,7 @@ pub const Data = struct {
         relocs: []const DataOptions.Reloc,
         readonly: bool,
         thread_local: bool,
+        func_addend: u32,
     ) !void {
         // this is there to support N(1) reverse lookup form a memory offset
         // to global id
@@ -420,7 +421,13 @@ pub const Data = struct {
             try self.code.appendSlice(gpa, data.init);
             for (relocs) |rel| {
                 if (rel.is_func) {
-                    try self.addFuncReloc(gpa, rel.target, .@"8", 0, @intCast(data.init.len - rel.offset));
+                    try self.addFuncReloc(
+                        gpa,
+                        rel.target,
+                        .@"8",
+                        @intCast(func_addend),
+                        @intCast(data.init.len - rel.offset),
+                    );
                 } else {
                     try self.addGlobalReloc(gpa, rel.target, .@"8", 0, @intCast(data.init.len - rel.offset));
                 }
@@ -820,6 +827,8 @@ pub const Data = struct {
 
         while (frontier.pop()) |fid| {
             const f = &self.syms.items[@intFromEnum(fid)];
+
+            std.debug.assert(f.kind != .invalid);
 
             for (self.relocs.items[f.reloc_offset..][0..f.reloc_count]) |rel| {
                 if (visited_syms.isSet(@intFromEnum(rel.target))) continue;

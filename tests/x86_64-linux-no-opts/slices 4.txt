@@ -15,14 +15,14 @@ slices 4.equals:
 	cmp rax, rcx
 	jnz :2
 	mov rax, 0x01
-1:	jmp :7
+1:	jmp :5
 2:	mov qword ptr [rsp+0x20], 0x00
-7:	mov rdx, [rsp+0x20]
+6:	mov rdx, [rsp+0x20]
 	mov rax, [rsp+0x08]
 	cmp rdx, rax
 	jnz :4
 	mov rax, 0x01
-	jmp :8
+	jmp :5
 4:	mov rcx, [rsp+0x10]
 	add rcx, [rsp+0x20]
 	mov rax, [rsp]
@@ -30,15 +30,13 @@ slices 4.equals:
 	mov cl, [rcx]
 	mov al, [rax]
 	cmp al, cl
-	jz :6
+	jz :5
 	xor rax, rax
-	jmp :7
-6:	inc rdx
-	mov [rsp+0x20], rdx
-	jmp :7
-8:	add rsp, 0x30
+5:	add rsp, 0x30
 	ret
-7:	jmp :8
+5:	inc rdx
+	mov [rsp+0x20], rdx
+	jmp :6
 main:
 	sub rsp, 0x28
 	lea rax, [0x0000000000000007]

@@ -35,5 +35,6 @@ main:
 	call :function pointers 4.DynObj.func
 	mov [rsp+0x11], al
 	mov al, [rsp+0x11]
+	movzx rax, al
 	add rsp, 0x18
 	ret

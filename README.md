@@ -1744,22 +1744,24 @@ main := fn(): uint {
         struct{.a: uint; .b: uint}.(1, 2),
         struct{.a: uint; .b: uint; .c: uint}.(3, 4, 5),
     )
-    return @syscall(60, 3)
+    $if @target("x86_64-linux") return @syscall(60, 3)
+
+    return 3
 }
 ```
 
 #### directives 4 (@int_cast)
 ```hb
-main := fn(): u8 {
+main := fn(): uint {
     v: uint = 0
-    return @int_cast(v)
+    return @as(u8, @int_cast(v))
 }
 ```
 
 #### directives 5 (@bit_cast)
 ```hb
-main := fn(): u32 {
-    return @bit_cast(@as(struct{.l: u16; .r: u16}, @bit_cast(@as(u32, 0))))
+main := fn(): uint {
+    return @as(u32, @bit_cast(@as(struct{.l: u16; .r: u16}, @bit_cast(@as(u32, 0)))))
 }
 ```
 

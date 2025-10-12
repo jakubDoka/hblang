@@ -6,7 +6,7 @@ main:
         jal $31, $0, :short and op precedence 1.foo
        andi $1, $1, 255
         jeq $1, $0, :1
-       li32 $1, 1
+       li64 $1, 1
         jmp :2
 1:      li8 $1, 1
         li8 $2, 1
@@ -15,7 +15,7 @@ main:
         not $1, $1
        andi $1, $1, 255
         jeq $1, $0, :3
-       li32 $1, 2
+       li64 $1, 2
 2:      jmp :4
 3:       cp $1, $0
 4:   addi64 $254, $254, 8

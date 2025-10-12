@@ -29,7 +29,7 @@ main:
 	test al, al
 	jz :2
 	mov rax, 0x02
-1:	jmp :8
+1:	jmp :3
 2:	mov rsi, 0x03
 	mov rdx, 0x04
 b:	mov rcx, [rsp]
@@ -49,7 +49,7 @@ b:	mov rcx, [rsp]
 	test al, al
 	jz :7
 	mov rax, 0x03
-	jmp :8
+3:	jmp :8
 7:	mov qword ptr [rsp+0x08], 0x00
 	lea rdi, [rsp+0x08]
 	call :defer 1.main.ret_defer
@@ -58,14 +58,11 @@ b:	mov rcx, [rsp]
 	setnz al
 	movzx rax, al
 	test al, al
-	jz :8
+	jz :9
 	mov rax, 0x04
-	jmp :12
-8:	xor rax, rax
-	jmp :12
+8:	jmp :10
+9:	xor rax, rax
+a:	add rsp, 0x18
+	ret
 6:	mov [rsp], rax
 5:	jmp :11
-c:	add rsp, 0x18
-	ret
-c:	jmp :12
-8:	jmp :12

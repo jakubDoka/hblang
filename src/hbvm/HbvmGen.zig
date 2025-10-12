@@ -179,6 +179,10 @@ pub fn idealize(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList
             work.add(new);
             _ = func.setInput(node, 1, new);
         }
+
+        if (op == .uext and inps[1].?.data_type == .i64) {
+            return inps[1].?;
+        }
     }
 
     return null;
@@ -726,6 +730,7 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
         opts.relocs,
         opts.readonly,
         opts.thread_local,
+        0,
     );
 
     if (self.emit_global_reloc_offsets) {
