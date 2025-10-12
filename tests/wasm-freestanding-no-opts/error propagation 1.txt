@@ -1,0 +1,6 @@
+error propagation 1:5:30: function returns a type, which has more then 1 value, but end of the function body is reachable
+Broken := fn($T: type): type struct{}
+                             ^
+error propagation 1:6:26: can't evaluate this at compile time (yet), (DEBUG: got stuck on [96m%13[0m = CallEnd:top: loop: 43690, idepth: 0, [95m%12[0m [, [34m%3[0m, [97m%14[0m, [31m%15[0m, [34m%18[0m] jit func)
+broken := fn($T: type): ?Broken(T) {
+                         ^

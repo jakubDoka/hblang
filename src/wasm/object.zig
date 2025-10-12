@@ -330,7 +330,7 @@ pub fn flush(
 
         // offset
         try out.writeByte(opb(.i32_const));
-        try out.writeUleb128(stack_size);
+        try out.writeSleb128(stack_size);
         try out.writeByte(opb(.end));
 
         // data
@@ -571,11 +571,11 @@ pub const Op = enum(u8) {
     f32_reinterpret_i32 = 0xbe,
     f64_reinterpret_i64 = 0xbf,
 
-    i32_extend8_s = 0xc1,
-    i32_extend16_s = 0xc2,
-    i64_extend8_s = 0xc3,
-    i64_extend16_s = 0xc4,
-    i64_extend32_s = 0xc5,
+    i32_extend8_s = 0xc0,
+    i32_extend16_s = 0xc1,
+    i64_extend8_s = 0xc2,
+    i64_extend16_s = 0xc3,
+    i64_extend32_s = 0xc4,
 
     prefix_fb = 0xfb,
     prefix_fc = 0xfc,

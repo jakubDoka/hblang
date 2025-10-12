@@ -52,11 +52,24 @@ pub const Ctx = struct {
 
 pub const classes = enum {};
 
-pub fn idealize(self: *WasmGen, func: *Func, node: *Func.Node, worklist: *Func.WorkList) ?*Func.Node {
-    _ = node;
-    _ = worklist;
+pub fn idealize(self: *WasmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
     _ = self;
-    _ = func;
+    const inps = node.inputs();
+
+    if (node.kind == .BinOp) {
+        const op: graph.BinOp = node.extra(.BinOp).op;
+
+        if (op.isCmp() and !op.isFloat()) {
+            const ext_op: graph.UnOp = if (op.isSigned()) .sext else .uext;
+            inline for (inps[1..3], 1..) |inp, i| {
+                if (inp.?.data_type.size() < 4) {
+                    const new = func.addUnOp(node.sloc, ext_op, .i32, inp.?);
+                    work.add(new);
+                    _ = func.setInput(node, i, new);
+                }
+            }
+        }
+    }
 
     return null;
 }
@@ -123,7 +136,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     const name = if (opts.special == .memcpy)
         "memcpy"
     else if (opts.special == .entry)
-        "_start"
+        "main"
     else
         opts.name;
 
@@ -416,14 +429,16 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
         .CInt => |extra| {
             switch (dataTypeToWasmType(instr.data_type)) {
                 .i32 => {
+                    // TODO: this is incorrect we need to refactor the comptime eval
+                    // to preserve signed byts
                     try self.ctx.buf.writer.writeByte(opb(.i32_const));
                     const value: u32 = @truncate(@as(u64, @bitCast(extra.value)));
-                    try self.ctx.buf.writer.writeSleb128(value);
+                    try self.ctx.buf.writer.writeSleb128(@as(i32, @bitCast(value)));
                 },
                 .i64 => {
                     try self.ctx.buf.writer.writeByte(opb(.i64_const));
                     try self.ctx.buf.writer
-                        .writeSleb128(@as(u64, @bitCast(extra.value)));
+                        .writeSleb128(@as(i64, @bitCast(@as(u64, @bitCast(extra.value)))));
                 },
                 .f32 => {
                     try self.ctx.buf.writer.writeByte(opb(.f32_const));
@@ -440,8 +455,10 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
         },
         .UnOp => |extra| {
-            try self.ctx.buf.writer.writeByte(opb(.local_get));
-            try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
+            if (extra.op != .ineg) {
+                try self.ctx.buf.writer.writeByte(opb(.local_get));
+                try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
+            }
             const op_ty = dataTypeToWasmType(inps[0].data_type);
             const op_code: u8 = switch (extra.op) {
                 .sext => switch (inps[0].data_type) {
@@ -454,14 +471,14 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                         else => unreachable,
                     },
                     .i16 => switch (instr.data_type) {
-                        .i32 => 0xC1,
+                        .i32 => opb(.i32_extend16_s),
                         .i64 => b: {
                             try self.ctx.buf.writer.writeByte(opb(.i32_extend16_s));
                             break :b opb(.i64_extend_i32_s);
                         },
                         else => unreachable,
                     },
-                    .i32 => 0xAC,
+                    .i32 => opb(.i64_extend_i32_s),
                     else => unreachable,
                 },
                 .ired => switch (inps[0].data_type) {
@@ -475,12 +492,12 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                     .i8 => switch (instr.data_type) {
                         .i16, .i32 => b: {
                             try self.ctx.buf.writer.writeByte(opb(.i32_const));
-                            try self.ctx.buf.writer.writeUleb128(0xFF);
+                            try self.ctx.buf.writer.writeSleb128(0xFF);
                             break :b opb(.i32_and);
                         },
                         .i64 => b: {
                             try self.ctx.buf.writer.writeByte(opb(.i32_const));
-                            try self.ctx.buf.writer.writeUleb128(0xFF);
+                            try self.ctx.buf.writer.writeSleb128(0xFF);
 
                             try self.ctx.buf.writer.writeByte(opb(.i32_and));
 
@@ -491,13 +508,13 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                     .i16 => switch (instr.data_type) {
                         .i32 => b: {
                             try self.ctx.buf.writer.writeByte(opb(.i32_const));
-                            try self.ctx.buf.writer.writeUleb128(0xFFFF);
+                            try self.ctx.buf.writer.writeSleb128(0xFFFF);
 
                             break :b opb(.i32_and);
                         },
                         .i64 => b: {
                             try self.ctx.buf.writer.writeByte(opb(.i32_const));
-                            try self.ctx.buf.writer.writeUleb128(0xFFFF);
+                            try self.ctx.buf.writer.writeSleb128(0xFFFF);
                             try self.ctx.buf.writer.writeByte(opb(.i32_and));
 
                             break :b opb(.i64_extend_i32_u);
@@ -543,6 +560,23 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                     .i64 => opb(.i64_eqz),
                     else => utils.panic("{}", .{op_ty}),
                 },
+                .ineg => b: {
+                    try self.ctx.buf.writer.writeByte(switch (op_ty) {
+                        .i32 => opb(.i32_const),
+                        .i64 => opb(.i64_const),
+                        else => utils.panic("{}", .{op_ty}),
+                    });
+                    try self.ctx.buf.writer.writeSleb128(0);
+
+                    try self.ctx.buf.writer.writeByte(opb(.local_get));
+                    try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
+
+                    break :b switch (op_ty) {
+                        .i32 => opb(.i32_sub),
+                        .i64 => opb(.i64_sub),
+                        else => utils.panic("{}", .{op_ty}),
+                    };
+                },
                 else => utils.panic("{}", .{extra.op}),
             };
             try self.ctx.buf.writer.writeByte(op_code);
@@ -575,6 +609,26 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                     .i64 => opb(.i64_mul),
                     else => utils.panic("{}", .{op_ty}),
                 },
+                .udiv => switch (op_ty) {
+                    .i32 => opb(.i32_div_u),
+                    .i64 => opb(.i64_div_u),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .sdiv => switch (op_ty) {
+                    .i32 => opb(.i32_div_s),
+                    .i64 => opb(.i64_div_s),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .umod => switch (op_ty) {
+                    .i32 => opb(.i32_rem_u),
+                    .i64 => opb(.i64_rem_u),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .smod => switch (op_ty) {
+                    .i32 => opb(.i32_rem_s),
+                    .i64 => opb(.i64_rem_s),
+                    else => utils.panic("{}", .{op_ty}),
+                },
                 .bor => switch (op_ty) {
                     .i32 => opb(.i32_or),
                     .i64 => opb(.i64_or),
@@ -583,6 +637,26 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 .band => switch (op_ty) {
                     .i32 => opb(.i32_and),
                     .i64 => opb(.i64_and),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .bxor => switch (op_ty) {
+                    .i32 => opb(.i32_xor),
+                    .i64 => opb(.i64_xor),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .ishl => switch (op_ty) {
+                    .i32 => opb(.i32_shl),
+                    .i64 => opb(.i64_shl),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .ushr => switch (op_ty) {
+                    .i32 => opb(.i32_shr_u),
+                    .i64 => opb(.i64_shr_u),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .sshr => switch (op_ty) {
+                    .i32 => opb(.i32_shr_s),
+                    .i64 => opb(.i64_shr_s),
                     else => utils.panic("{}", .{op_ty}),
                 },
                 .ne => switch (oper_ty) {
@@ -614,37 +688,71 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                     .i64 => opb(.i64_le_u),
                     else => utils.panic("{}", .{oper_ty}),
                 },
-                .udiv => switch (instr.data_type) {
-                    .i32 => opb(.i32_div_u),
-                    .i64 => opb(.i64_div_u),
-                    else => utils.panic("{}", .{op_ty}),
+                .uge => switch (oper_ty) {
+                    .i32 => opb(.i32_ge_u),
+                    .i64 => opb(.i64_ge_u),
+                    else => utils.panic("{}", .{oper_ty}),
                 },
-                .sdiv => switch (instr.data_type) {
-                    .i32 => opb(.i32_div_s),
-                    .i64 => opb(.i64_div_s),
-                    else => utils.panic("{}", .{op_ty}),
+                .sge => switch (oper_ty) {
+                    .i32 => opb(.i32_ge_s),
+                    .i64 => opb(.i64_ge_s),
+                    else => utils.panic("{}", .{oper_ty}),
                 },
-                .fadd => switch (instr.data_type) {
+                .sle => switch (oper_ty) {
+                    .i32 => opb(.i32_le_s),
+                    .i64 => opb(.i64_le_s),
+                    else => utils.panic("{}", .{oper_ty}),
+                },
+                .sgt => switch (oper_ty) {
+                    .i32 => opb(.i32_gt_s),
+                    .i64 => opb(.i64_gt_s),
+                    else => utils.panic("{}", .{oper_ty}),
+                },
+                .slt => switch (oper_ty) {
+                    .i32 => opb(.i32_lt_s),
+                    .i64 => opb(.i64_lt_s),
+                    else => utils.panic("{}", .{oper_ty}),
+                },
+                .fge => switch (oper_ty) {
+                    .f32 => opb(.f32_ge),
+                    .f64 => opb(.f64_ge),
+                    else => utils.panic("{}", .{oper_ty}),
+                },
+                .fle => switch (oper_ty) {
+                    .f32 => opb(.f32_le),
+                    .f64 => opb(.f64_le),
+                    else => utils.panic("{}", .{oper_ty}),
+                },
+                .fgt => switch (oper_ty) {
+                    .f32 => opb(.f32_gt),
+                    .f64 => opb(.f64_gt),
+                    else => utils.panic("{}", .{oper_ty}),
+                },
+                .flt => switch (oper_ty) {
+                    .f32 => opb(.f32_lt),
+                    .f64 => opb(.f64_lt),
+                    else => utils.panic("{}", .{oper_ty}),
+                },
+                .fadd => switch (op_ty) {
                     .f32 => opb(.f32_add),
                     .f64 => opb(.f64_add),
                     else => utils.panic("{}", .{op_ty}),
                 },
-                .fsub => switch (instr.data_type) {
+                .fsub => switch (op_ty) {
                     .f32 => opb(.f32_sub),
                     .f64 => opb(.f64_sub),
                     else => utils.panic("{}", .{op_ty}),
                 },
-                .fmul => switch (instr.data_type) {
+                .fmul => switch (op_ty) {
                     .f32 => opb(.f32_mul),
                     .f64 => opb(.f64_mul),
                     else => utils.panic("{}", .{op_ty}),
                 },
-                .fdiv => switch (instr.data_type) {
+                .fdiv => switch (op_ty) {
                     .f32 => opb(.f32_div),
                     .f64 => opb(.f64_div),
                     else => utils.panic("{}", .{op_ty}),
                 },
-                else => utils.panic("{}", .{extra.op}),
             };
             try self.ctx.buf.writer.writeByte(op_code);
 
@@ -833,7 +941,12 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeByte(opb(.local_get));
             try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
 
-            try self.ctx.buf.writer.writeByte(opb(.i32_eqz));
+            if (inps[0].data_type == .i64) {
+                try self.ctx.buf.writer.writeByte(opb(.i64_eqz));
+            } else {
+                try self.ctx.buf.writer.writeByte(opb(.i32_eqz));
+            }
+
             try self.ctx.buf.writer.writeByte(opb(.br_if));
             try self.ctx.buf.writer.writeUleb128(label_id);
         },
@@ -968,7 +1081,22 @@ pub fn disasm(_: *WasmGen, opts: Mach.DisasmOpts) void {
     const term = try child.wait();
     if (term != .Exited or term.Exited != 0) {
         std.debug.print("{s}\n", .{stderr.items});
-        std.debug.print("{x}\n", .{opts.bin});
+        if (std.mem.indexOf(u8, stderr.items, ": error:")) |idx| {
+            const idx_in = std.fmt.parseInt(usize, stderr.items[0..idx], 16) catch unreachable;
+            std.debug.print("{x}\n", .{opts.bin[idx_in - 1 ..]});
+
+            var reader = std.io.Reader{
+                .buffer = tmp.arena.dupe(u8, opts.bin),
+                .end = opts.bin.len,
+                .seek = idx_in,
+                .vtable = undefined,
+            };
+
+            std.debug.print("{x}\n", .{reader.takeLeb128(i32) catch unreachable});
+        } else {
+            std.debug.print("{x}\n", .{opts.bin});
+            unreachable;
+        }
     }
 
     if (opts.out) |out| {

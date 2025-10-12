@@ -1,0 +1,12 @@
+invalid item 3:6:2: unexpected item, only field declarations (.field_name: field_type), and declarations (decl_name := expr)
+    .invalid = u32;
+    ^
+invalid item 3:7:2: unexpected item, only field declarations (.field_name: field_type), and declarations (decl_name := expr)
+    .invalid;
+    ^
+invalid item 3:11:32: invalid item 3.InvalidUnion does not have a field called invalid, is has: none actually
+    uni := InvalidUnion.{invalid: 10}
+                                  ^
+invalid item 3:10:20: function returns a uint, which has more then 1 value, but end of the function body is reachable
+main := fn(): uint {
+                   ^

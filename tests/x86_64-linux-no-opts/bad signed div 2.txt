@@ -12,6 +12,6 @@ main:
 	cmp eax, 0x78
 	setnz al
 	movzx rax, al
-	movzx eax, al
+	movzx rax, al
 	add rsp, 0x10
 	ret

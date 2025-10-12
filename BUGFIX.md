@@ -771,7 +771,7 @@ main := fn(): uint {
 
 #### array index crash 1
 ```hb
-awa := fn(x: u8): u32 {
+awa := fn(x: u8): uint {
     buf: [3]u8 = .[0, 0, 0]
     i := 2
     while x > 0 {
@@ -781,18 +781,18 @@ awa := fn(x: u8): u32 {
     }
     return 0
 }
-main := fn(): u32 return awa(255)
+main := fn(): uint return awa(255)
 ```
 
 #### bad signed div 1
 ```hb
 x: i32 = -1200
-main := fn(): u32 return -(x / 10) != 120
+main := fn(): uint return -(x / 10) != 120
 ```
 
 #### bad signed div 2
 ```hb
-main := fn(): u32 {
+main := fn(): uint {
     $x: i32 = -1200
     $y := -(x / 10)
     return y != 120
@@ -813,12 +813,12 @@ broken := fn(): void loop {
         i += 1
     }
 }
-main := fn(): u32 loop broken()
+main := fn(): uint loop broken()
 ```
 
 #### insane regalloc crash 1
 ```hb
-main := fn(): u32 {
+main := fn(): uint {
     $i := 0
     $while i < 32 {
         if val := @as(?[]u8, idk) return 0
@@ -836,7 +836,7 @@ nextPos := fn(buf: []u8): ?uint {
 }
 check := fn(buf: []u8): bool return true
 blackbox := fn(): bool return true
-main := fn(): u32 {
+main := fn(): uint {
     data := "aaaaaaaaaaaaaaaaaaaaa"
     i := 0
     while j := nextPos(data[i..]) {
@@ -882,7 +882,7 @@ expectations := .{
 }
 
 $blackbox := fn(): u32 return 0
-main := fn(): u32 loop if false return blackbox()
+main := fn(): uint loop if false return blackbox()
 ```
 
 #### regalloc crash 3
@@ -891,7 +891,7 @@ Broken := struct{.inner: ?[]u8}
 broken := fn(self: Broken): ?[]u8 return self.inner
 
 A := 5
-main := fn(): u32 loop if A == A return 0 else {
+main := fn(): uint loop if A == A return 0 else {
     _ = broken(.(null))
     _ = broken(.(null))
     _ = broken(.(null))
@@ -912,7 +912,7 @@ main := fn(): u32 loop if A == A return 0 else {
 ```hb
 blackbox := fn(self: ^u32): void {}
 blackbox2: ?int = null
-main := fn(): u32 {
+main := fn(): uint {
     x: ^u32 = @bit_cast(1)
     loop if sh := blackbox2 {
         if blackbox2 == null continue
@@ -941,7 +941,7 @@ expectations := .{
 
 broken := fn(self: ?[]u8): void {}
 
-main := fn(): u32 loop {
+main := fn(): uint loop {
     broken(null)
     broken(null)
     broken(null)
@@ -978,7 +978,7 @@ broken := fn(self: X, n: u8): X {
     if n == 0 return self
     return self
 }
-main := fn(): u32 {
+main := fn(): uint {
     _ = broken(.(0, 0, 0), ' ')
     return 0
 }
@@ -990,7 +990,7 @@ expectations := .{
     should_error: true,
 }
 
-main := fn(): u32 {
+main := fn(): uint {
     return (fn(): type return struct{}).test
 }
 ```
@@ -1005,7 +1005,7 @@ Z := struct {
     get := fn(): u32 return 0
 }
 
-main := fn(): u32 {
+main := fn(): uint {
     $i := 0
     $T := Z
     $while i < 100 {
@@ -1026,7 +1026,7 @@ Z := struct {
     get := fn(): u32 return 0
 }
 
-main := fn(): u32 {
+main := fn(): uint {
     return S(S(S(S(S(S(S(S(Z)))))))).get() != 8
 }
 ```
@@ -1636,7 +1636,7 @@ broken1 := fn(): uint {
     $if @target("hbvm-ableos") {
         AllocEcall := struct align(1){.pad: u8; .pages_new: uint; .zeroed: bool}
         @ecall(3, 2, AllocEcall.(0, 1, false), @size_of(AllocEcall))
-    } else {
+    } else if @target("x86_64-linux") {
         @syscall(1, 2, "".ptr, 0)
     }
     return 0
@@ -2060,7 +2060,7 @@ expectations := .{
     unreaches: true,
 }
 
-main := fn(): u32 {
+main := fn(): uint {
     loop {
         val1: ?u8 = null
         loop if val1 == null break else {
@@ -2322,14 +2322,17 @@ main := fn(): uint {
 
 ableos := @use("ableos.hb")
 linux := @use("ableos.hb")
+wasm_freestanding := @use("wasm_freestanding.hb")
 
 Target := enum {
     .AbleOS;
-    .x86_64_linux
+    .x86_64_linux;
+    .wasm_freestanding
 
     current := fn(): Target {
         $if @target("hbvm-ableos") return .AbleOS
         $if @target("x86_64-linux") return .x86_64_linux
+        $if @target("wasm-freestanding") return .wasm_freestanding
         @error("Unknown target")
     }
 
@@ -2337,6 +2340,7 @@ Target := enum {
         match target {
             .AbleOS => return ableos,
             .x86_64_linux => return linux,
+            .wasm_freestanding => return wasm_freestanding,
         }
     }
 }
@@ -2345,6 +2349,9 @@ Target := enum {
 page_size := fn(): uint return 0
 
 // in: linux.hb
+page_size := fn(): uint return 0
+
+// in: wasm_freestanding.hb
 page_size := fn(): uint return 0
 ```
 

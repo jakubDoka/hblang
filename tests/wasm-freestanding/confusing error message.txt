@@ -1,0 +1,6 @@
+confusing error message:6:14: expected []type, got array with 2 elements
+    x: []type = .[i32, i32]
+                ^
+confusing error message:5:20: function returns a uint, which has more then 1 value, but end of the function body is reachable
+main := fn(): uint {
+                   ^

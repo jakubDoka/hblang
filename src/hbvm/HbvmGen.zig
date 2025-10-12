@@ -571,8 +571,12 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                         self.emitLow("RR", op, .{ self.getReg(no), self.getReg(inps[0]) });
                     },
                     .uext => {
-                        const mask = (@as(u64, 1) << @intCast(inps[0].data_type.size() * 8)) - 1;
-                        self.emit(.andi, .{ self.getReg(no), self.getReg(inps[0]), mask });
+                        if (inps[0].data_type == .i64) {
+                            self.emit(.cp, .{ self.getReg(no), self.getReg(inps[0]) });
+                        } else {
+                            const mask = (@as(u64, 1) << @intCast(inps[0].data_type.size() * 8)) - 1;
+                            self.emit(.andi, .{ self.getReg(no), self.getReg(inps[0]), mask });
+                        }
                     },
                     .ineg => self.emit(.neg, .{ self.getReg(no), self.getReg(inps[0]) }),
                     .fneg => if (no.data_type == .f32) {

@@ -1836,7 +1836,7 @@ expectations := .{
     return_value: 1,
 }
 
-global: bool = @target("hbvm-ableos") | @target("x86_64-linux")
+global: bool = @target("hbvm-ableos") | @target("x86_64-linux") | @target("wasm-freestanding")
 
 main := fn(): uint {
     $if @is_comptime() @error("unecpected")
@@ -1917,6 +1917,7 @@ destroy := fn(ptr: ^void): void @import("free")
 
 main := fn(): uint {
     $if @target("hbvm-ableos") return 10
+    $if @target("wasm-freestanding") return 10
     // wont work
 
     ptr: ^uint = @bit_cast(create(8))

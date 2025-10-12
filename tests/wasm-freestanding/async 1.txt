@@ -1,0 +1,9 @@
+async 1:45:2: out of order declaration in ordered scope
+    T := Async(i32, struct {
+    ^
+async 1:17:43: undeclared identifier
+bind := fn(self: @Any(), $f: type): Async(T, struct {
+                                          ^
+async 1:20:10: undeclared identifier
+        .left: Poll;
+               ^

@@ -1,0 +1,150 @@
+(module
+  (type (;0;) (func (result i64)))
+  (type (;1;) (func))
+  (type (;2;) (func (param i64)))
+  (type (;3;) (func (param i64)))
+  (type (;4;) (func))
+  (func $main (type 0) (result i64)
+    (local i32 i64 i64 i64 i64 i64)
+    global.get 0
+    i64.const 8
+    i64.sub
+    global.set 0
+    call $exhausitve_inlining_1.no_op
+    i64.const 0
+    global.get 0
+    i64.add
+    local.set 1
+    i64.const 0
+    local.set 2
+    local.get 1
+    i32.wrap_i64
+    local.get 2
+    i64.store
+    local.get 1
+    call $exhausitve_inlining_1.some_mem_ops
+    block  ;; label = @1
+      block  ;; label = @2
+        i64.const 1
+        local.set 3
+        local.get 1
+        i32.wrap_i64
+        i64.load
+        local.set 4
+        local.get 4
+        local.get 3
+        i64.ne
+        local.set 0
+        local.get 0
+        i32.eqz
+        br_if 0 (;@2;)
+        br 1 (;@1;)
+      end
+      i64.const 10
+      local.set 5
+      local.get 5
+      call $exhausitve_inlining_1.loop_fn
+      call $exhausitve_inlining_1.unreachable
+    end
+    i64.const 8
+    global.get 0
+    i64.add
+    global.set 0
+    local.get 2
+    return
+    unreachable)
+  (func $exhausitve_inlining_1.no_op (type 1)
+    return
+    unreachable)
+  (func $exhausitve_inlining_1.some_mem_ops (type 2) (param i64)
+    (local i64 i64 i64 i64)
+    global.get 0
+    i64.const 8
+    i64.sub
+    global.set 0
+    i64.const 0
+    global.get 0
+    i64.add
+    local.set 1
+    local.get 1
+    i32.wrap_i64
+    local.get 0
+    i64.store
+    i64.const 8
+    local.set 2
+    local.get 1
+    i32.wrap_i64
+    i64.load
+    local.set 3
+    local.get 3
+    local.get 2
+    i64.add
+    local.set 4
+    local.get 1
+    i32.wrap_i64
+    local.get 4
+    i64.store
+    i64.const 8
+    global.get 0
+    i64.add
+    global.set 0
+    return
+    unreachable)
+  (func $exhausitve_inlining_1.loop_fn (type 3) (param i64)
+    (local i32 i64 i64 i64 i64 i64)
+    global.get 0
+    i64.const 8
+    i64.sub
+    global.set 0
+    i64.const 0
+    global.get 0
+    i64.add
+    local.set 2
+    local.get 2
+    i32.wrap_i64
+    local.get 0
+    i64.store
+    i64.const 1
+    local.set 3
+    i64.const 0
+    local.set 4
+    loop  ;; label = @1
+      block  ;; label = @2
+        local.get 2
+        i32.wrap_i64
+        i64.load
+        local.set 5
+        local.get 5
+        local.get 4
+        i64.eq
+        local.set 1
+        local.get 1
+        i32.eqz
+        br_if 0 (;@2;)
+        i64.const 8
+        global.get 0
+        i64.add
+        global.set 0
+        return
+      end
+      local.get 5
+      local.get 3
+      i64.sub
+      local.set 6
+      local.get 2
+      i32.wrap_i64
+      local.get 6
+      i64.store
+      br 0 (;@1;)
+    end
+    unreachable)
+  (func $exhausitve_inlining_1.unreachable (type 4)
+    unreachable
+    unreachable)
+  (table (;0;) 0 funcref)
+  (memory (;0;) 3)
+  (global (;0;) (mut i64) (i64.const 131072))
+  (export "__stack_pointer" (global 0))
+  (export "main" (func $main))
+  (elem (;0;) (i32.const 0) func)
+  (data (;0;) (i32.const 131072) ""))

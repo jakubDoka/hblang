@@ -1,0 +1,42 @@
+(module
+  (type (;0;) (func (result i64)))
+  (func $main (type 0) (result i64)
+    (local i32 i32 i32 i32 i32 i32 i64 i64)
+    global.get 1
+    local.set 6
+    local.get 6
+    i32.wrap_i64
+    i32.load
+    local.set 0
+    i32.const 120
+    local.set 1
+    i32.const 10
+    local.set 2
+    local.get 0
+    local.get 2
+    i32.div_s
+    local.set 3
+    i32.const 0
+    local.get 3
+    i32.sub
+    local.set 4
+    local.get 4
+    local.get 1
+    i32.ne
+    local.set 5
+    local.get 5
+    i32.const 255
+    i32.and
+    i64.extend_i32_u
+    local.set 7
+    local.get 7
+    return
+    unreachable)
+  (table (;0;) 0 funcref)
+  (memory (;0;) 4)
+  (global (;0;) (mut i64) (i64.const 131072))
+  (global (;1;) i64 (i64.const 131072))
+  (export "__stack_pointer" (global 0))
+  (export "main" (func $main))
+  (elem (;0;) (i32.const 0) func)
+  (data (;0;) (i32.const 131072) "P\fb\ff\ff"))

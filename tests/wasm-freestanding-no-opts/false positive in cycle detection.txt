@@ -1,0 +1,31 @@
+(module
+  (type (;0;) (func (result i64)))
+  (type (;1;) (func))
+  (type (;2;) (func))
+  (type (;3;) (func))
+  (func $main (type 0) (result i64)
+    (local i64)
+    call $false_positive_in_cycle_detection.main.Wrap_.Wrapper___.A__.test
+    i64.const 0
+    local.set 0
+    local.get 0
+    return
+    unreachable)
+  (func $false_positive_in_cycle_detection.main.Wrap_.Wrapper___.A__.test (type 1)
+    call $false_positive_in_cycle_detection.main.Wrap_.Wrapper__.A_.test
+    return
+    unreachable)
+  (func $false_positive_in_cycle_detection.main.Wrap_.Wrapper__.A_.test (type 2)
+    call $false_positive_in_cycle_detection.main.A.test
+    return
+    unreachable)
+  (func $false_positive_in_cycle_detection.main.A.test (type 3)
+    return
+    unreachable)
+  (table (;0;) 0 funcref)
+  (memory (;0;) 3)
+  (global (;0;) (mut i64) (i64.const 131072))
+  (export "__stack_pointer" (global 0))
+  (export "main" (func $main))
+  (elem (;0;) (i32.const 0) func)
+  (data (;0;) (i32.const 131072) ""))

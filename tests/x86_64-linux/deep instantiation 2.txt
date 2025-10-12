@@ -55,6 +55,6 @@ main:
 	cmp eax, 0x08
 	setnz al
 	movzx rax, al
-	movzx eax, al
+	movzx rax, al
 	add rsp, 0x08
 	ret

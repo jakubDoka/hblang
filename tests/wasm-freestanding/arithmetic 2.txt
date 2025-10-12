@@ -49,7 +49,7 @@
     i32.load8_u
     local.set 3
     local.get 3
-    i32.extend16_s
+    i32.extend8_s
     local.set 4
     local.get 4
     local.get 1
