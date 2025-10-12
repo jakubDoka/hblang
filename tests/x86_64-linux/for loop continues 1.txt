@@ -1,11 +1,11 @@
 main:
-	xor rcx, rcx
+	xor rax, rax
+	mov rcx, rax
 1:	cmp rcx, 0x0A
-	setb al
-	movzx rax, al
-	test al, al
+	setb dl
+	movzx rdx, dl
+	test dl, dl
 	jz :0
 	inc rcx
 	jmp :1
-0:	xor rax, rax
-	ret
+0:	ret

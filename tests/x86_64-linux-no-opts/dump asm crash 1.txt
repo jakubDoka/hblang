@@ -91,6 +91,7 @@ main:
 	mov [rsp], rax
 	jmp :1
 0:	mov eax, [rsp+0x10]
-	sub eax, 0x03
+	movsxd rax, eax
+	sub rax, 0x03
 	add rsp, 0x18
 	ret

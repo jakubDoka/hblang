@@ -4197,12 +4197,16 @@ fn emitDirective(
                 ));
             }
 
-            return .mkv(ret, self.bl.addUnOp(
-                sloc,
-                .ired,
-                self.abiCata(ret).ByValue,
-                oper.getValue(sloc, self),
-            ));
+            if (oper.ty.size(self.types) > ret.size(self.types)) {
+                return .mkv(ret, self.bl.addUnOp(
+                    sloc,
+                    .ired,
+                    self.abiCata(ret).ByValue,
+                    oper.getValue(sloc, self),
+                ));
+            }
+
+            return oper;
         },
         .float_cast => {
             try assertDirectiveArgs(self, expr, args, "<float>");

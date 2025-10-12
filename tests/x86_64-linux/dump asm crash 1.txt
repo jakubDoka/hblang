@@ -1,63 +1,64 @@
 main:
 	sub rsp, 0x40
-	xor rdx, rdx
-	xor rax, rax
 	xor rcx, rcx
-6:	cmp rdx, 0x64
-	setb sil
-	movzx rsi, sil
-	test sil, sil
+	xor rsi, rsi
+	xor rax, rax
+6:	cmp rcx, 0x64
+	setb dl
+	movzx rdx, dl
+	test dl, dl
 	jz :0
 	mov dword ptr [rsp+0x10], 0x01
 	mov dword ptr [rsp+0x14], 0x02
-	mov rax, [rsp+0x10]
-	mov [rsp+0x20], rax
-	mov al, [0x0000000000000006]
-	cmp al, cl
+	mov rdx, [rsp+0x10]
+	mov [rsp+0x20], rdx
+	mov dl, [0x0000000000000006]
+	cmp dl, al
 	jnz :1
-	mov rax, 0x01
+	mov rdx, 0x01
 	jmp :2
 1:	mov edi, [0x0000000000000006]
 	mov esi, [rsp+0x24]
-	mov eax, [0x0000000000000006]
-	cmp eax, esi
+	mov edx, [0x0000000000000006]
+	cmp edx, esi
 	setnz sil
 	movzx rsi, sil
-	mov eax, [rsp+0x20]
-	cmp edi, eax
-	setnz al
-	movzx rax, al
-	or eax, esi
-2:	test al, al
+	mov edx, [rsp+0x20]
+	cmp edi, edx
+	setnz dl
+	movzx rdx, dl
+	or edx, esi
+2:	test dl, dl
 	jz :4
 	mov byte ptr [0x0000000000000008], 0x00
 	mov byte ptr [rsp+0x28], 0x01
-	mov rax, [rsp+0x20]
-	mov [rsp+0x2C], rax
-	mov rax, [rsp+0x28]
-	mov [0x0000000000000007], rax
-	mov eax, [rsp+0x30]
-	mov [0x0000000000000006], eax
+	mov rdx, [rsp+0x20]
+	mov [rsp+0x2C], rdx
+	mov rdx, [rsp+0x28]
+	mov [0x0000000000000007], rdx
+	mov edx, [rsp+0x30]
+	mov [0x0000000000000006], edx
 	jmp :4
-4:	mov al, [0x0000000000000006]
-	test al, al
+4:	mov dl, [0x0000000000000006]
+	test dl, dl
 	jz :4
-	mov rax, [0x0000000000000007]
-	mov [rsp+0x18], rax
+	mov rdx, [0x0000000000000007]
+	mov [rsp+0x18], rdx
 	jmp :5
-4:	mov rax, [rsp+0x20]
-	mov [rsp], rax
-	mov eax, [rsp]
-	add eax, [rsp+0x04]
-	mov [rsp+0x1C], eax
+4:	mov rdx, [rsp+0x20]
+	mov [rsp], rdx
+	mov edx, [rsp]
+	add edx, [rsp+0x04]
+	mov [rsp+0x1C], edx
 5:	mov byte ptr [rsp+0x08], 0x01
-	mov eax, [rsp+0x1C]
-	mov [rsp+0x0C], eax
-	mov rax, [rsp+0x08]
-	mov [0x0000000000000007], rax
-	inc rdx
-	mov eax, [0x0000000000000006]
+	mov edx, [rsp+0x1C]
+	mov [rsp+0x0C], edx
+	mov rdx, [rsp+0x08]
+	mov [0x0000000000000007], rdx
+	inc rcx
+	mov esi, [0x0000000000000006]
 	jmp :6
-0:	sub eax, 0x03
+0:	movsxd rax, esi
+	sub rax, 0x03
 	add rsp, 0x40
 	ret

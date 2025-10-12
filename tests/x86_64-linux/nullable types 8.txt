@@ -4,5 +4,6 @@ nullable types 8.x:
 main:
 	sub rsp, 0x08
 	call :nullable types 8.x
+	mov eax, eax
 	add rsp, 0x08
 	ret

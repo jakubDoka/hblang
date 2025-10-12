@@ -71,6 +71,7 @@ main:
 	call :out of range access 1.bwa
 	mov [rsp+0x10], eax
 	mov eax, [rsp+0x10]
+	mov eax, eax
 	add rsp, 0x18
 	pop rbp
 	pop rbx

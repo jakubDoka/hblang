@@ -313,7 +313,7 @@ main := fn(): uint {
 
 #### for loop continues 1
 ```hb
-main := fn(): u32 {
+main := fn(): uint {
     for i := 0..10 {
         if i == 0 continue
     }
@@ -393,7 +393,7 @@ add := cache(fn(args: @Any()): i32 {
     return args.x + args.y
 }, struct{.x: i32; .y: i32})
 
-main := fn(): i32 {
+main := fn(): int {
     $if !@target("x86_64-linux") return 0
 
     i := 0
@@ -414,7 +414,7 @@ $b := fn(): ?void {
     return null
 }
 ignore := fn(x: uint): void {}
-main := fn(): u32 loop {
+main := fn(): uint loop {
     x := 0
     if a x = 1
     ignore(x)
@@ -424,7 +424,7 @@ main := fn(): u32 loop {
 
 #### for loop wiredness 1
 ```hb
-main := fn(): u32 {
+main := fn(): uint {
     a: uint = 0
     for i := a..10 {}
     return @int_cast(a)
@@ -434,34 +434,34 @@ main := fn(): u32 {
 #### nullable types 6
 ```hb
 x := fn(y: ?never): u32 return 0
-main := fn(): u32 return x(null)
+main := fn(): uint return x(null)
 ```
 
 #### nullable types 7
 ```hb
-y := fn(w: never): u32 die
+y := fn(w: never): uint die
 x := fn(z: ?never): u32 return y(z || return 0)
-main := fn(): u32 return x(null)
+main := fn(): uint return x(null)
 ```
 
 #### nullable types 8
 ```hb
 x := fn(z: ?never): u32 return z != null
-main := fn(): u32 return x(null)
+main := fn(): uint return x(null)
 ```
 
 #### nullable types 9
 ```hb
 y := fn(w: never): u32 return 0
 x := fn(z: ?never): u32 if z == null return 0 else return y(z.?)
-main := fn(): u32 return x(null)
+main := fn(): uint return x(null)
 ```
 
 #### nullable types 10
 ```hb
 y := fn(w: @Any()): u32 die
 x := fn(z: ?never): u32 return y(z || return 0)
-main := fn(): u32 return x(null)
+main := fn(): uint return x(null)
 ```
 
 #### custom one variant enum 1
@@ -538,7 +538,7 @@ cp := fn($_r0: u8, $_r1: u8): struct align(1){.op: u8 = 0; .r0: u8 = _r0; .r1: u
     return .{}
 }
 
-main := fn(): i32 {
+main := fn(): int {
     return cp(1, 0).op
 }
 ```
@@ -546,7 +546,7 @@ main := fn(): i32 {
 #### out of range access 1
 ```hb
 bwa := fn(x: [7]?bool): u32 return 0
-main := fn(): u32 return bwa(.[null, null, null, null, null, null, null])
+main := fn(): uint return bwa(.[null, null, null, null, null, null, null])
 ```
 
 #### more comptime eval 1

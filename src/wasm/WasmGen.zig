@@ -14,10 +14,6 @@ const opb = object.opb;
 gpa: std.mem.Allocator,
 mach: Mach = .init(WasmGen),
 stack_size: u64 = 1024 * 128,
-func_ids: std.ArrayList(Mach.Data.SymIdx) = .empty,
-func_id_counter: u32 = 0,
-global_ids: std.ArrayList(Mach.Data.SymIdx) = .empty,
-global_id_counter: u32 = 1,
 ctx: *Ctx = undefined,
 
 pub const i_know_the_api = {};
@@ -87,35 +83,6 @@ pub fn dataTypeToWasmType(ty: graph.DataType) object.Type {
     };
 }
 
-pub fn addFuncId(self: *WasmGen, id: u32) u32 {
-    errdefer unreachable;
-
-    const fid = self.func_id_counter;
-    const slot = try utils.ensureSlot(&self.func_ids, self.gpa, id);
-
-    if (slot.* != .invalid) return @intFromEnum(slot.*);
-
-    slot.* = @enumFromInt(fid);
-    self.func_id_counter += 1;
-
-    return fid;
-}
-
-// TODO: deduplicate
-pub fn addGlobalId(self: *WasmGen, id: u32) u32 {
-    errdefer unreachable;
-
-    const fid = self.global_id_counter;
-    const slot = try utils.ensureSlot(&self.global_ids, self.gpa, id);
-
-    if (slot.* != .invalid) return @intFromEnum(slot.*);
-
-    slot.* = @enumFromInt(fid);
-    self.global_id_counter += 1;
-
-    return fid;
-}
-
 pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     errdefer unreachable;
 
@@ -131,10 +98,6 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     const sym = try self.mach.out.startDefineFunc(self.gpa, id, name, .func, linkage, opts.is_inline);
     _ = sym;
     defer self.mach.out.endDefineFunc(id);
-
-    if (opts.linkage == .exported) {
-        _ = self.addFuncId(id);
-    }
 
     // TDDO: actually make the release mode work
     opts.optimizations.opts.optimizeDebug(WasmGen, self, func);
@@ -475,6 +438,13 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                     .i32 => 0xAC,
                     else => unreachable,
                 },
+                .ired => switch (inps[0].data_type) {
+                    .i64 => switch (instr.data_type) {
+                        .i32, .i16, .i8 => opb(.i32_wrap_i64),
+                        else => utils.panic("{} {}", .{ instr.data_type, inps[0].data_type }),
+                    },
+                    else => unreachable,
+                },
                 .uext => switch (inps[0].data_type) {
                     .i8 => switch (instr.data_type) {
                         .i16, .i32 => b: {
@@ -572,6 +542,11 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 .imul => switch (instr.data_type) {
                     .i32 => opb(.i32_mul),
                     .i64 => opb(.i64_mul),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .bor => switch (instr.data_type) {
+                    .i32 => opb(.i32_or),
+                    .i64 => opb(.i64_or),
                     else => utils.panic("{}", .{op_ty}),
                 },
                 .band => switch (instr.data_type) {
@@ -740,11 +715,11 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
         },
         .GlobalAddr => |extra| {
-            const id = self.addGlobalId(extra.id);
-            try self.mach.out.addPlaceholderGlobalReloc(self.gpa, extra.id);
-
             try self.ctx.buf.writer.writeByte(opb(.global_get));
-            try self.ctx.buf.writer.writeUleb128(id);
+            self.mach.out.code = self.ctx.buf.toArrayList();
+            try self.mach.out.addGlobalReloc(self.gpa, extra.id, .@"4", 0, 0);
+            self.ctx.buf = .fromArrayList(self.gpa, &self.mach.out.code);
+            try self.ctx.buf.writer.writeUleb128(std.math.maxInt(object.RelocInt));
 
             try self.ctx.buf.writer.writeByte(opb(.local_set));
             try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
@@ -774,8 +749,10 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             }
 
             try self.ctx.buf.writer.writeByte(opb(.call));
-            try self.ctx.buf.writer.writeUleb128(self.addFuncId(extra.id));
-            try self.mach.out.addPlaceholderFuncReloc(self.gpa, extra.id);
+            self.mach.out.code = self.ctx.buf.toArrayList();
+            try self.mach.out.addFuncReloc(self.gpa, extra.id, .@"4", 0, 0);
+            self.ctx.buf = .fromArrayList(self.gpa, &self.mach.out.code);
+            try self.ctx.buf.writer.writeUleb128(std.math.maxInt(object.RelocInt));
 
             const ret = extra.signature.returns() orelse return;
             for (0..ret.len) |i| {
@@ -899,10 +876,6 @@ pub fn finalize(self: *WasmGen, opts: Mach.FinalizeOptions) void {
     ) catch unreachable;
 
     self.mach.out.reset();
-    self.global_ids.items.len = 0;
-    self.global_id_counter = 0;
-    self.func_ids.items.len = 0;
-    self.func_id_counter = 0;
 }
 
 pub fn disasm(_: *WasmGen, opts: Mach.DisasmOpts) void {
@@ -988,6 +961,10 @@ pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
         return error.Unreachable;
     }
 
+    if (std.mem.startsWith(u8, stdout.items, "main() => error: out of bounds")) {
+        return error.OutOfBounds;
+    }
+
     const exe_prefix = "main() => i64:";
     if (!std.mem.startsWith(u8, stdout.items, exe_prefix)) {
         utils.panic("{s}\n", .{stdout.items});
@@ -1000,7 +977,5 @@ pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
 
 pub fn deinit(self: *WasmGen) void {
     self.mach.out.deinit(self.gpa);
-    self.func_ids.deinit(self.gpa);
-    self.global_ids.deinit(self.gpa);
     self.* = undefined;
 }

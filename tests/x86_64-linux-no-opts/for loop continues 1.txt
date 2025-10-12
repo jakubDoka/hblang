@@ -1,19 +1,18 @@
 main:
 	sub rsp, 0x10
 	mov qword ptr [rsp], 0x00
-	xor rdx, rdx
-2:	mov rcx, [rsp]
-	cmp rcx, 0x0A
-	setb al
-	movzx rax, al
-	test al, al
+	xor rax, rax
+2:	mov rdx, [rsp]
+	cmp rdx, 0x0A
+	setb cl
+	movzx rcx, cl
+	test cl, cl
 	jz :0
-	cmp rcx, rdx
+	cmp rdx, rax
 	jnz :2
 	jmp :2
-2:	inc rcx
-	mov [rsp], rcx
+2:	inc rdx
+	mov [rsp], rdx
 	jmp :2
-0:	xor rax, rax
-	add rsp, 0x10
+0:	add rsp, 0x10
 	ret

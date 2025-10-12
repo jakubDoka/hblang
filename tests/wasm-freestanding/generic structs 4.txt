@@ -405,7 +405,7 @@
   (func $generic_structs_4.Array_uint_.get (type 4) (param i64) (result i64)
     unreachable
     unreachable)
-  (memory (;0;) 4)
+  (memory (;0;) 3)
   (global (;0;) (mut i64) (i64.const 131072))
   (export "__stack_pointer" (global 0))
   (export "main" (func $main))

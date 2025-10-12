@@ -35,6 +35,6 @@ main:
 	call :struct capture eca mismatch 1.cp(0, 1)
 	mov [rsp], eax
 	mov al, [rsp]
-	movzx eax, al
+	movzx rax, al
 	add rsp, 0x08
 	ret

@@ -12,6 +12,7 @@ main:
      addi64 $1, $254, 0
         bmc $2, $1, 14
         jal $31, $0, :out of range access 1.bwa
+       andi $1, $1, 4294967295
      addi64 $254, $254, 38
          ld $31, $254, -8, 8
          tx

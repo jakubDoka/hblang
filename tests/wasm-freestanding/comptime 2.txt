@@ -1,0 +1,196 @@
+(module
+  (type (;0;) (func (result i64)))
+  (type (;1;) (func (result i64)))
+  (type (;2;) (func (result i64)))
+  (type (;3;) (func (result i64)))
+  (type (;4;) (func (result i64)))
+  (type (;5;) (func (result i64)))
+  (func $main (type 0) (result i64)
+    (local i64 i64 i64 i64 i64 i64 i64)
+    global.get 0
+    i64.const 16
+    i64.sub
+    global.set 0
+    call $comptime_2.main.some_fn3_uint__.some_fn_uint__
+    local.set 0
+    i64.const 0
+    global.get 0
+    i64.add
+    local.set 1
+    local.get 1
+    i32.wrap_i64
+    local.get 0
+    i64.store
+    call $comptime_2.main.some_fn3_uint___.some_fn2_.some_fn_uint___uint___
+    local.set 2
+    i64.const 8
+    global.get 0
+    i64.add
+    local.set 3
+    local.get 3
+    i32.wrap_i64
+    local.get 2
+    i64.store
+    local.get 1
+    i32.wrap_i64
+    i64.load
+    local.set 4
+    local.get 3
+    i32.wrap_i64
+    i64.load
+    local.set 5
+    local.get 4
+    local.get 5
+    i64.add
+    local.set 6
+    i64.const 16
+    global.get 0
+    i64.add
+    global.set 0
+    local.get 6
+    return
+    unreachable)
+  (func $comptime_2.main.some_fn3_uint__.some_fn_uint__ (type 1) (result i64)
+    (local i64 i64 i64 i64 i64)
+    global.get 0
+    i64.const 8
+    i64.sub
+    global.set 0
+    call $comptime_2.main.some_fn_uint_
+    local.set 0
+    i64.const 0
+    global.get 0
+    i64.add
+    local.set 1
+    local.get 1
+    i32.wrap_i64
+    local.get 0
+    i64.store
+    i64.const 10
+    local.set 2
+    local.get 1
+    i32.wrap_i64
+    i64.load
+    local.set 3
+    local.get 3
+    local.get 2
+    i64.add
+    local.set 4
+    i64.const 8
+    global.get 0
+    i64.add
+    global.set 0
+    local.get 4
+    return
+    unreachable)
+  (func $comptime_2.main.some_fn3_uint___.some_fn2_.some_fn_uint___uint___ (type 2) (result i64)
+    (local i64 i64 i64 i64 i64)
+    global.get 0
+    i64.const 8
+    i64.sub
+    global.set 0
+    call $comptime_2.main.some_fn3_uint__.some_fn2_.some_fn_uint___uint__
+    local.set 0
+    i64.const 0
+    global.get 0
+    i64.add
+    local.set 1
+    local.get 1
+    i32.wrap_i64
+    local.get 0
+    i64.store
+    i64.const 10
+    local.set 2
+    local.get 1
+    i32.wrap_i64
+    i64.load
+    local.set 3
+    local.get 3
+    local.get 2
+    i64.add
+    local.set 4
+    i64.const 8
+    global.get 0
+    i64.add
+    global.set 0
+    local.get 4
+    return
+    unreachable)
+  (func $comptime_2.main.some_fn3_uint__.some_fn2_.some_fn_uint___uint__ (type 3) (result i64)
+    (local i64 i64 i64 i64 i64)
+    global.get 0
+    i64.const 8
+    i64.sub
+    global.set 0
+    call $comptime_2.main.some_fn2_.some_fn_uint___uint_
+    local.set 0
+    i64.const 0
+    global.get 0
+    i64.add
+    local.set 1
+    local.get 1
+    i32.wrap_i64
+    local.get 0
+    i64.store
+    i64.const 10
+    local.set 2
+    local.get 1
+    i32.wrap_i64
+    i64.load
+    local.set 3
+    local.get 3
+    local.get 2
+    i64.add
+    local.set 4
+    i64.const 8
+    global.get 0
+    i64.add
+    global.set 0
+    local.get 4
+    return
+    unreachable)
+  (func $comptime_2.main.some_fn2_.some_fn_uint___uint_ (type 4) (result i64)
+    (local i64 i64 i64 i64 i64)
+    global.get 0
+    i64.const 8
+    i64.sub
+    global.set 0
+    call $comptime_2.main.some_fn_uint_
+    local.set 0
+    i64.const 0
+    global.get 0
+    i64.add
+    local.set 1
+    local.get 1
+    i32.wrap_i64
+    local.get 0
+    i64.store
+    i64.const 1
+    local.set 2
+    local.get 1
+    i32.wrap_i64
+    i64.load
+    local.set 3
+    local.get 3
+    local.get 2
+    i64.add
+    local.set 4
+    i64.const 8
+    global.get 0
+    i64.add
+    global.set 0
+    local.get 4
+    return
+    unreachable)
+  (func $comptime_2.main.some_fn_uint_ (type 5) (result i64)
+    (local i64)
+    i64.const 1
+    local.set 0
+    local.get 0
+    return
+    unreachable)
+  (memory (;0;) 3)
+  (global (;0;) (mut i64) (i64.const 131072))
+  (export "__stack_pointer" (global 0))
+  (export "main" (func $main))
+  (data (;0;) (i32.const 131072) ""))

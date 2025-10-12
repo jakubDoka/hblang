@@ -6,6 +6,9 @@ const utils = root.utils;
 const WasmGen = @import("WasmGen.zig");
 const uleb128Size = root.dwarf.uleb128Size;
 
+pub const reloc_int_size = 4;
+pub const RelocInt = std.meta.Int(.unsigned, reloc_int_size * 7);
+
 pub const stack_pointer_id = 0;
 
 pub const Header = extern struct {
@@ -41,6 +44,7 @@ pub fn flush(self: Mach.Data, out: *std.Io.Writer, stack_size: u64) !void {
     var name_section_size: u64 = 0;
     var data_section_size: u64 = 0;
     var global_offsets = tmp.arena.alloc(u32, self.syms.items.len);
+    var reloc_ids = tmp.arena.alloc(RelocInt, self.syms.items.len);
     for (self.syms.items, 0..) |s, i| {
         switch (s.kind) {
             .func => {
@@ -62,6 +66,7 @@ pub fn flush(self: Mach.Data, out: *std.Io.Writer, stack_size: u64) !void {
                 name_section_size += uleb128Size(func_count);
                 name_section_size += uleb128Size(name.len) + name.len;
 
+                reloc_ids[i] = @intCast(func_count);
                 func_count += 1;
             },
             .data => {
@@ -73,10 +78,29 @@ pub fn flush(self: Mach.Data, out: *std.Io.Writer, stack_size: u64) !void {
                 global_offsets[i] = @intCast(data_section_size);
 
                 data_section_size += s.size;
+
+                reloc_ids[i] = @intCast(global_count + 1);
                 global_count += 1;
             },
-            .prealloc, .tls_prealloc => unreachable,
+            .prealloc, .tls_prealloc => {},
             .invalid => {},
+        }
+    }
+
+    var total_prealloc_size = data_section_size;
+    for (self.syms.items, 0..) |s, i| {
+        if (s.kind == .prealloc or s.kind == .tls_prealloc) {
+            global_section_size += 1; // global pointer type
+            global_section_size += 1; // immutable
+            global_section_size += 1 +
+                uleb128Size(stack_size + total_prealloc_size) + 1; // offset
+
+            global_offsets[i] = @intCast(total_prealloc_size);
+
+            total_prealloc_size += s.size;
+
+            reloc_ids[i] = @intCast(global_count + 1);
+            global_count += 1;
         }
     }
 
@@ -150,7 +174,7 @@ pub fn flush(self: Mach.Data, out: *std.Io.Writer, stack_size: u64) !void {
         try out.writeByte(0); // no limmit
         try out.writeUleb128(std.mem.alignForward(
             usize,
-            stack_size + data_section_size,
+            stack_size + total_prealloc_size,
             std.math.maxInt(u16) + 1,
         ) / std.math.maxInt(u16) + 1);
     }
@@ -169,7 +193,7 @@ pub fn flush(self: Mach.Data, out: *std.Io.Writer, stack_size: u64) !void {
         try out.writeByte(opb(.end));
 
         for (self.syms.items, global_offsets) |s, off| {
-            if (s.kind != .data) continue;
+            if (s.kind != .data and s.kind != .prealloc and s.kind != .tls_prealloc) continue;
             try out.writeByte(Type.i64.raw());
             try out.writeByte(0);
 
@@ -208,7 +232,14 @@ pub fn flush(self: Mach.Data, out: *std.Io.Writer, stack_size: u64) !void {
         try out.writeUleb128(func_count);
         for (self.syms.items) |s| {
             if (s.kind != .func) continue;
-            _, const body = parseFunction(self.code.items[s.offset..][0..s.size]);
+            const mem = self.code.items[s.offset..][0..s.size];
+
+            for (self.relocs.items[s.reloc_offset..][0..s.reloc_count]) |rel| {
+                const target = reloc_ids[@intFromEnum(rel.target)];
+                std.leb.writeUnsignedFixed(reloc_int_size, mem[rel.offset..][0..reloc_int_size], target);
+            }
+
+            _, const body = parseFunction(mem);
             try out.writeUleb128(body.len);
             try out.writeAll(body);
         }

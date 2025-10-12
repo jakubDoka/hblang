@@ -1932,8 +1932,9 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn addUnOp(self: *Self, sloc: Sloc, op: UnOp, ty: DataType, oper: *Node) *Node {
-            if (!(op != .uext or ty.size() > oper.data_type.size())) utils.panic("{} {f}", .{ ty, oper });
-            if (!(op != .sext or ty.size() > oper.data_type.size())) utils.panic("{} {f}", .{ ty, oper });
+            if (op == .uext and ty.size() < oper.data_type.size()) utils.panic("{} {f}", .{ ty, oper });
+            if (op == .sext and ty.size() < oper.data_type.size()) utils.panic("{} {f}", .{ ty, oper });
+            if (op == .ired and ty.size() >= oper.data_type.size()) utils.panic("{} {f}", .{ ty, oper });
             if (oper.kind == .CInt and ty.isInt()) {
                 return self.addIntImm(sloc, ty, op.eval(oper.data_type, ty, oper.extra(.CInt).value));
             }

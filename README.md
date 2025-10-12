@@ -911,7 +911,7 @@ Array := fn(E: type, len: uint): type if len == 0 {
 ```
 
 #### generic structs 5 (iterators)
-```hb
+```!hb
 main := fn(): uint {
     ref := "abcd"
 

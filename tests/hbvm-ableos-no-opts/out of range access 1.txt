@@ -14,6 +14,7 @@ main:
         jal $31, $0, :out of range access 1.bwa
          st $1, $254, 14, 4
          ld $1, $254, 14, 4
+       andi $1, $1, 4294967295
      addi64 $254, $254, 46
          ld $31, $254, -8, 8
          tx
