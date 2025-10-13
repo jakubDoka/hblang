@@ -8,30 +8,30 @@
     i64.sub
     global.set 0
     call $custom_one_variant_enum_2.c
-    local.set 0
+    local.set 4
     i64.const 0
     global.get 0
     i64.add
-    local.set 1
-    local.get 1
+    local.set 3
+    local.get 3
     i32.wrap_i64
-    local.get 0
+    local.get 4
     i64.store
     i64.const 5
     local.set 2
-    local.get 1
+    local.get 3
     i32.wrap_i64
     i64.load
-    local.set 3
-    local.get 3
+    local.set 1
+    local.get 1
     local.get 2
     i64.sub
-    local.set 4
+    local.set 0
     i64.const 8
     global.get 0
     i64.add
     global.set 0
-    local.get 4
+    local.get 0
     return
     unreachable)
   (func $custom_one_variant_enum_2.c (type 1) (result i64)

@@ -225,13 +225,26 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     func.gcm.instr_count = 0;
 
     for (func.gcm.postorder) |block| {
-        for (block.base.outputs()) |out| {
+        var iter = std.mem.reverseIterator(block.base.outputs());
+        while (@as(?Func.Node.Out, iter.next())) |out| {
             if (!out.get().isDef()) continue;
 
-            if (out.get().kind != .Phi and out.get().kind != .Arg and
-                out.get().outputs().len == 1 and
-                block.base.outputs()[out.pos() + 1].get() == out.get().outputs()[0].get() and
-                out.get().outputs()[0].get().dataDepOffset() == out.get().outputs()[0].pos())
+            var real_dep: ?Func.Node.Out = null;
+            var has_many = false;
+            for (out.get().outputs()) |dep| {
+                if (dep.get().hasUseFor(dep.pos(), out.get())) {
+                    if (real_dep != null) {
+                        has_many = true;
+                        break;
+                    }
+
+                    real_dep = dep;
+                }
+            }
+
+            if (!has_many and real_dep != null and out.get().kind != .Phi and out.get().kind != .Arg and
+                block.base.outputs()[out.pos() + 1].get() == real_dep.?.get() and
+                out.get().outputs()[0].get().dataDepOffset() == real_dep.?.pos())
             {
                 out.get().schedule = on_stack_schedule;
                 continue;
@@ -274,7 +287,8 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     self.ctx.allocs = tmp.arena.alloc(u16, params_len + cursor);
 
     for (func.gcm.postorder) |block| {
-        for (block.base.outputs()) |out| {
+        var iter = std.mem.reverseIterator(block.base.outputs());
+        while (@as(?Func.Node.Out, iter.next())) |out| {
             const instr = out.get();
 
             if (!instr.isDef()) continue;

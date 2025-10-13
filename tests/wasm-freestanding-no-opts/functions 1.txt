@@ -10,45 +10,45 @@
     global.set 0
     i64.const 10
     call $functions_1.add_one
-    local.set 0
+    local.set 2
     i64.const 0
     global.get 0
     i64.add
     local.set 1
     local.get 1
     i32.wrap_i64
-    local.get 0
+    local.get 2
     i64.store
     i64.const 20
-    local.set 2
-    local.get 2
+    local.set 0
+    local.get 0
     call $functions_1.add_two
-    local.set 3
+    local.set 7
     i64.const 8
     global.get 0
     i64.add
-    local.set 4
-    local.get 4
+    local.set 6
+    local.get 6
     i32.wrap_i64
-    local.get 3
+    local.get 7
     i64.store
     local.get 1
     i32.wrap_i64
     i64.load
     local.set 5
-    local.get 4
+    local.get 6
     i32.wrap_i64
     i64.load
-    local.set 6
+    local.set 4
     local.get 5
-    local.get 6
+    local.get 4
     i64.add
-    local.set 7
+    local.set 3
     i64.const 16
     global.get 0
     i64.add
     global.set 0
-    local.get 7
+    local.get 3
     return
     unreachable)
   (func $functions_1.add_one (type 1) (param i64) (result i64)
@@ -60,26 +60,26 @@
     i64.const 0
     global.get 0
     i64.add
-    local.set 1
-    local.get 1
+    local.set 4
+    local.get 4
     i32.wrap_i64
     local.get 0
     i64.store
     i64.const 1
-    local.set 2
-    local.get 1
+    local.set 3
+    local.get 4
     i32.wrap_i64
     i64.load
-    local.set 3
-    local.get 3
+    local.set 2
     local.get 2
+    local.get 3
     i64.add
-    local.set 4
+    local.set 1
     i64.const 8
     global.get 0
     i64.add
     global.set 0
-    local.get 4
+    local.get 1
     return
     unreachable)
   (func $functions_1.add_two (type 2) (param i64) (result i64)
@@ -91,26 +91,26 @@
     i64.const 0
     global.get 0
     i64.add
-    local.set 1
-    local.get 1
+    local.set 4
+    local.get 4
     i32.wrap_i64
     local.get 0
     i64.store
     i64.const 2
-    local.set 2
-    local.get 1
+    local.set 3
+    local.get 4
     i32.wrap_i64
     i64.load
-    local.set 3
-    local.get 3
+    local.set 2
     local.get 2
+    local.get 3
     i64.add
-    local.set 4
+    local.set 1
     i64.const 8
     global.get 0
     i64.add
     global.set 0
-    local.get 4
+    local.get 1
     return
     unreachable)
   (table (;0;) 0 funcref)

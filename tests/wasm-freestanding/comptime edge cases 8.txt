@@ -15,124 +15,124 @@
             i64.const 40
             global.get 0
             i64.add
-            local.set 2
+            local.set 7
             i64.const 48
             global.get 0
             i64.add
-            local.set 3
+            local.set 6
             i64.const 0
-            local.set 4
-            local.get 2
-            i32.wrap_i64
-            local.get 4
-            i64.store
-            i64.const 1
             local.set 5
-            local.get 3
+            local.get 7
             i32.wrap_i64
             local.get 5
             i64.store
-            local.get 2
-            i32.wrap_i64
-            i64.load
-            local.set 6
-            local.get 3
-            i32.wrap_i64
-            i64.load
-            local.set 7
+            i64.const 1
+            local.set 4
             local.get 6
+            i32.wrap_i64
+            local.get 4
+            i64.store
             local.get 7
+            i32.wrap_i64
+            i64.load
+            local.set 3
+            local.get 6
+            i32.wrap_i64
+            i64.load
+            local.set 2
+            local.get 3
+            local.get 2
             i64.eq
             local.set 0
             local.get 0
             i32.eqz
             br_if 0 (;@4;)
-            local.get 5
+            local.get 4
             local.set 24
             br 1 (;@3;)
           end
           global.get 1
-          local.set 8
+          local.set 10
           i64.const 24
           local.set 9
           i64.const 0
           global.get 0
           i64.add
-          local.set 10
-          local.get 10
-          i32.wrap_i64
+          local.set 8
           local.get 8
+          i32.wrap_i64
+          local.get 10
           i32.wrap_i64
           local.get 9
           i32.wrap_i64
           memory.copy
           call $comptime_edge_cases_8.main.read_only__uint__uint__uint__
-          local.set 11
+          local.set 16
           i64.const 80
-          global.get 0
-          i64.add
-          local.set 12
-          local.get 12
-          i32.wrap_i64
-          local.get 11
-          i64.store
-          global.get 2
-          local.set 13
-          local.get 12
-          i32.wrap_i64
-          i64.load
-          local.set 14
-          i64.const 72
           global.get 0
           i64.add
           local.set 15
           local.get 15
           i32.wrap_i64
-          local.get 14
+          local.get 16
+          i64.store
+          global.get 2
+          local.set 14
+          local.get 15
+          i32.wrap_i64
+          i64.load
+          local.set 13
+          i64.const 72
+          global.get 0
+          i64.add
+          local.set 12
+          local.get 12
+          i32.wrap_i64
+          local.get 13
           i64.store
           i64.const 0
           global.get 0
           i64.add
-          local.set 16
-          local.get 16
+          local.set 11
+          local.get 11
           i32.wrap_i64
-          local.get 13
+          local.get 14
           i32.wrap_i64
           local.get 9
           i32.wrap_i64
           memory.copy
           call $comptime_edge_cases_8.main.read_only__uint__uint__uint__
-          local.set 17
+          local.set 22
           i64.const 24
           global.get 0
           i64.add
-          local.set 18
+          local.set 21
           i64.const 32
           global.get 0
           i64.add
-          local.set 19
-          local.get 19
-          i32.wrap_i64
-          local.get 17
-          i64.store
-          local.get 19
-          i32.wrap_i64
-          i64.load
           local.set 20
-          local.get 18
-          i32.wrap_i64
           local.get 20
-          i64.store
-          local.get 18
           i32.wrap_i64
-          i64.load
-          local.set 21
-          local.get 15
-          i32.wrap_i64
-          i64.load
-          local.set 22
           local.get 22
+          i64.store
+          local.get 20
+          i32.wrap_i64
+          i64.load
+          local.set 19
           local.get 21
+          i32.wrap_i64
+          local.get 19
+          i64.store
+          local.get 21
+          i32.wrap_i64
+          i64.load
+          local.set 18
+          local.get 12
+          i32.wrap_i64
+          i64.load
+          local.set 17
+          local.get 17
+          local.get 18
           i64.eq
           local.set 1
           local.get 1
@@ -148,37 +148,37 @@
         br 1 (;@1;)
       end
       global.get 2
-      local.set 25
+      local.set 26
       i64.const 0
       global.get 0
       i64.add
-      local.set 26
-      local.get 26
-      i32.wrap_i64
+      local.set 25
       local.get 25
+      i32.wrap_i64
+      local.get 26
       i32.wrap_i64
       local.get 9
       i32.wrap_i64
       memory.copy
       call $comptime_edge_cases_8.fun__uint__uint__uint__
-      local.set 27
+      local.set 29
       i64.const 64
       global.get 0
       i64.add
       local.set 28
       local.get 28
       i32.wrap_i64
-      local.get 27
+      local.get 29
       i64.store
       i64.const 56
       global.get 0
       i64.add
-      local.set 29
-      local.get 29
+      local.set 27
+      local.get 27
       i32.wrap_i64
-      local.get 4
+      local.get 5
       i64.store
-      local.get 4
+      local.get 5
       local.set 30
     end
     i64.const 88
@@ -206,14 +206,14 @@
     i64.add
     i32.wrap_i64
     i64.load
-    local.set 0
+    local.set 2
     i64.const 1
     local.set 1
-    local.get 0
+    local.get 2
     local.get 1
     i64.sub
-    local.set 2
-    local.get 2
+    local.set 0
+    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

@@ -8,24 +8,24 @@
     i64.sub
     global.set 0
     call $typeof_is_not_comptime_1.broken1
-    local.set 0
+    local.set 2
     i64.const 0
     global.get 0
     i64.add
     local.set 1
     local.get 1
     i32.wrap_i64
-    local.get 0
+    local.get 2
     i64.store
     local.get 1
     i32.wrap_i64
     i64.load
-    local.set 2
+    local.set 0
     i64.const 8
     global.get 0
     i64.add
     global.set 0
-    local.get 2
+    local.get 0
     return
     unreachable)
   (func $typeof_is_not_comptime_1.broken1 (type 1) (result i64)
