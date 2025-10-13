@@ -1,14 +1,13 @@
 (module
   (type (;0;) (func (result i64)))
   (type (;1;) (func (result i64)))
-  (type (;2;) (func (result i64)))
   (func $main (type 0) (result i64)
     (local i32 i64 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 16
     i64.sub
     global.set 0
-    call $literals_2.hex
+    call $literals_2.dec
     local.set 1
     i64.const 0
     global.get 0
@@ -63,14 +62,7 @@
     local.get 9
     return
     unreachable)
-  (func $literals_2.hex (type 1) (result i64)
-    (local i64)
-    i64.const 45
-    local.set 0
-    local.get 0
-    return
-    unreachable)
-  (func $literals_2.dec (type 2) (result i64)
+  (func $literals_2.dec (type 1) (result i64)
     (local i64)
     i64.const 45
     local.set 0

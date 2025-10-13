@@ -1074,7 +1074,7 @@ pub fn emitData(self: *WasmGen, opts: Mach.DataOptions) void {
 }
 
 pub fn finalize(self: *WasmGen, opts: Mach.FinalizeOptions) void {
-    //self.mach.out.deduplicate();
+    self.mach.out.deduplicate();
     self.mach.out.elimitaneDeadCode();
 
     root.wasm.object.flush(

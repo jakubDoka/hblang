@@ -1,10 +1,9 @@
 (module
   (type (;0;) (func (result i64)))
   (type (;1;) (func (result i32)))
-  (type (;2;) (func (result i32)))
-  (type (;3;) (func (param i32) (result i32)))
+  (type (;2;) (func (param i32) (result i32)))
+  (type (;3;) (func (result i32)))
   (type (;4;) (func (result i32)))
-  (type (;5;) (func (result i32)))
   (func $main (type 0) (result i64)
     (local i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
@@ -33,7 +32,7 @@
     i32.wrap_i64
     local.get 1
     i32.store8
-    call $arithmetic_3.zero
+    call $arithmetic_3.mero
     local.set 2
     i64.const 4
     global.get 0
@@ -692,7 +691,7 @@
                                                               i32.wrap_i64
                                                               local.get 85
                                                               i32.store8
-                                                              call $arithmetic_3.zero
+                                                              call $arithmetic_3.mero
                                                               local.set 86
                                                               i64.const 24
                                                               global.get 0
@@ -1039,14 +1038,7 @@
     local.get 0
     return
     unreachable)
-  (func $arithmetic_3.zero (type 2) (result i32)
-    (local i32)
-    i32.const 0
-    local.set 0
-    local.get 0
-    return
-    unreachable)
-  (func $arithmetic_3.cond (type 3) (param i32) (result i32)
+  (func $arithmetic_3.cond (type 2) (param i32) (result i32)
     (local i32 i64)
     global.get 0
     i64.const 8
@@ -1071,14 +1063,14 @@
     local.get 1
     return
     unreachable)
-  (func $arithmetic_3.mne (type 4) (result i32)
+  (func $arithmetic_3.mne (type 3) (result i32)
     (local i32)
     i32.const 255
     local.set 0
     local.get 0
     return
     unreachable)
-  (func $arithmetic_3.mero (type 5) (result i32)
+  (func $arithmetic_3.mero (type 4) (result i32)
     (local i32)
     i32.const 0
     local.set 0

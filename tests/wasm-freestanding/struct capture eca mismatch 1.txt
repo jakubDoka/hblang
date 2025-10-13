@@ -45,7 +45,7 @@ cp := fn($_r0: u8, $_r1: u8): struct align(1){.op: u8 = 0; .r0: u8 = _r0; .r1: u
     (local i64 i64 i64 i64 i64 i64 i64)
     i64.const 1
     local.set 1
-    global.get 3
+    global.get 2
     local.set 2
     local.get 0
     i32.wrap_i64
@@ -64,7 +64,7 @@ cp := fn($_r0: u8, $_r1: u8): struct align(1){.op: u8 = 0; .r0: u8 = _r0; .r1: u
     local.get 1
     i64.add
     local.set 5
-    global.get 2
+    global.get 1
     local.set 6
     local.get 5
     i32.wrap_i64
@@ -89,7 +89,6 @@ cp := fn($_r0: u8, $_r1: u8): struct align(1){.op: u8 = 0; .r0: u8 = _r0; .r1: u
   (global (;0;) (mut i64) (i64.const 131072))
   (global (;1;) i64 (i64.const 131072))
   (global (;2;) i64 (i64.const 131072))
-  (global (;3;) i64 (i64.const 131072))
   (export "__stack_pointer" (global 0))
   (export "main" (func $main))
   (elem (;0;) (i32.const 0) func)
