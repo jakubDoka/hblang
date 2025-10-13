@@ -3,60 +3,58 @@
   (type (;1;) (func (param f32) (result f32)))
   (type (;2;) (func (param i64) (result i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 f32 f32 f32 f32 f32 f32 f32 f32 f32 f32 f32 f32)
+    (local i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 f32 f32 f32 f32 f32 f32 f32 f32 f32 f32 f32)
     global.get 0
     i64.const 32
     i64.sub
     global.set 0
     f32.const 0x1p+0 (;=1;)
-    local.set 10
-    local.get 10
     call $carry_over_call_float_op_1.opaque_f32_
-    local.set 11
+    local.set 10
     i64.const 12
     global.get 0
     i64.add
     local.set 0
     local.get 0
     i32.wrap_i64
-    local.get 11
+    local.get 10
     f32.store
     local.get 0
     i32.wrap_i64
     f32.load
-    local.set 12
+    local.set 11
     i64.const 8
     global.get 0
     i64.add
     local.set 1
     local.get 1
     i32.wrap_i64
-    local.get 12
+    local.get 11
     f32.store
     f32.const 0x1p+1 (;=2;)
-    local.set 13
-    local.get 13
+    local.set 12
+    local.get 12
     call $carry_over_call_float_op_1.opaque_f32_
-    local.set 14
+    local.set 13
     i64.const 20
     global.get 0
     i64.add
     local.set 2
     local.get 2
     i32.wrap_i64
-    local.get 14
+    local.get 13
     f32.store
     local.get 2
     i32.wrap_i64
     f32.load
-    local.set 15
+    local.set 14
     i64.const 16
     global.get 0
     i64.add
     local.set 3
     local.get 3
     i32.wrap_i64
-    local.get 15
+    local.get 14
     f32.store
     i64.const 0
     local.set 4
@@ -74,43 +72,43 @@
     local.get 1
     i32.wrap_i64
     f32.load
-    local.set 16
+    local.set 15
     local.get 3
     i32.wrap_i64
     f32.load
-    local.set 17
+    local.set 16
+    local.get 15
     local.get 16
-    local.get 17
     f32.add
-    local.set 18
+    local.set 17
     i64.const 24
     global.get 0
     i64.add
     local.set 7
     local.get 7
     i32.wrap_i64
-    local.get 18
+    local.get 17
     f32.store
     local.get 7
     i32.wrap_i64
     f32.load
-    local.set 19
-    local.get 19
+    local.set 18
+    local.get 18
     call $carry_over_call_float_op_1.opaque_f32_
-    local.set 20
+    local.set 19
     i64.const 28
     global.get 0
     i64.add
     local.set 8
     local.get 8
     i32.wrap_i64
-    local.get 20
+    local.get 19
     f32.store
     local.get 7
     i32.wrap_i64
     f32.load
-    local.set 21
-    local.get 21
+    local.set 20
+    local.get 20
     i64.trunc_f32_s
     local.set 9
     i64.const 32

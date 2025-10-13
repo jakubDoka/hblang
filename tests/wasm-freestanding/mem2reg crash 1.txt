@@ -36,7 +36,7 @@
     return
     unreachable)
   (func $mem2reg_crash_1.insert (type 1) (param i64 i64) (result i64)
-    (local i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
+    (local i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 32
     i64.sub
@@ -141,21 +141,19 @@
           local.get 6
           i32.wrap_i64
           i64.load
-          local.set 17
           i64.const 32
           global.get 0
           i64.add
           global.set 0
-          local.get 17
           return
         end
         local.get 13
         local.get 12
         i64.add
-        local.set 18
+        local.set 17
         local.get 10
         i32.wrap_i64
-        local.get 18
+        local.get 17
         i64.store
         br 0 (;@2;)
       end

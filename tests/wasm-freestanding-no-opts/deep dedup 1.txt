@@ -75,10 +75,7 @@
     return
     unreachable)
   (func $deep_dedup_1.c (type 2) (result i64)
-    (local i64)
     i64.const 1
-    local.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

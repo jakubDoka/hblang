@@ -112,10 +112,7 @@
     return
     unreachable)
   (func $adding_difference_to_a_pointer_1.one (type 1) (result i64)
-    (local i64)
     i64.const 1
-    local.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

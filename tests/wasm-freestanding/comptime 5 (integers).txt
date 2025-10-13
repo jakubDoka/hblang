@@ -49,10 +49,7 @@
     return
     unreachable)
   (func $comptime_5__integers_.main.func_1_ (type 1) (result i64)
-    (local i64)
     i64.const 1
-    local.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

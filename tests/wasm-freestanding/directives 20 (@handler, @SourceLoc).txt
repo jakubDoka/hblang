@@ -251,7 +251,7 @@
     unreachable
     unreachable)
   (func $directives_20__@handler__@SourceLoc_.use_slice (type 4) (param i64 i64) (result i64)
-    (local i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
+    (local i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 64
     i64.sub
@@ -341,8 +341,6 @@
     local.get 6
     i32.wrap_i64
     i64.load
-    local.set 18
-    local.get 18
     i32.wrap_i64
     i32.load8_u
     local.set 3
@@ -350,12 +348,12 @@
     i32.const 255
     i32.and
     i64.extend_i32_u
-    local.set 19
+    local.set 18
     i64.const 64
     global.get 0
     i64.add
     global.set 0
-    local.get 19
+    local.get 18
     return
     unreachable)
   (table (;0;) 0 funcref)

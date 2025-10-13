@@ -3,16 +3,14 @@
   (type (;1;) (func (param i64) (result i32 i64)))
   (type (;2;) (func (result i32 i64)))
   (func $main (type 0) (result i64)
-    (local i32 i32 i32 i32 i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
+    (local i32 i32 i32 i32 i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 32
     i64.sub
     global.set 0
     i64.const 10
-    local.set 7
-    local.get 7
     call $nullable_types_1.mkval_uint_
-    local.set 8
+    local.set 7
     local.set 0
     block  ;; label = @1
       block  ;; label = @2
@@ -21,24 +19,24 @@
             i64.const 0
             global.get 0
             i64.add
-            local.set 9
-            local.get 9
+            local.set 8
+            local.get 8
             i32.wrap_i64
             local.get 0
             i32.store8
             i32.const 0
             local.set 1
             i64.const 8
-            local.set 10
-            local.get 9
-            local.get 10
-            i64.add
-            local.set 11
-            local.get 11
-            i32.wrap_i64
+            local.set 9
             local.get 8
-            i64.store
             local.get 9
+            i64.add
+            local.set 10
+            local.get 10
+            i32.wrap_i64
+            local.get 7
+            i64.store
+            local.get 8
             i32.wrap_i64
             i32.load8_u
             local.set 2
@@ -54,31 +52,31 @@
             i32.eqz
             br_if 0 (;@4;)
             i64.const 1
-            local.set 12
-            local.get 12
-            local.set 17
+            local.set 11
+            local.get 11
+            local.set 16
             br 1 (;@3;)
           end
           call $nullable_types_1.mknull_uint_
-          local.set 13
+          local.set 12
           local.set 5
           i64.const 16
           global.get 0
           i64.add
-          local.set 14
-          local.get 14
+          local.set 13
+          local.get 13
           i32.wrap_i64
           local.get 5
           i32.store8
-          local.get 14
-          local.get 10
-          i64.add
-          local.set 15
-          local.get 15
-          i32.wrap_i64
           local.get 13
-          i64.store
+          local.get 9
+          i64.add
+          local.set 14
           local.get 14
+          i32.wrap_i64
+          local.get 12
+          i64.store
+          local.get 13
           i32.wrap_i64
           i32.load8_u
           local.set 6
@@ -86,26 +84,26 @@
           i32.eqz
           br_if 1 (;@2;)
           i64.const 2
+          local.set 15
+          local.get 15
           local.set 16
-          local.get 16
-          local.set 17
         end
-        local.get 17
-        local.set 19
+        local.get 16
+        local.set 18
         br 1 (;@1;)
       end
-      local.get 11
+      local.get 10
       i32.wrap_i64
       i64.load
+      local.set 17
+      local.get 17
       local.set 18
-      local.get 18
-      local.set 19
     end
     i64.const 32
     global.get 0
     i64.add
     global.set 0
-    local.get 19
+    local.get 18
     return
     unreachable)
   (func $nullable_types_1.mkval_uint_ (type 1) (param i64) (result i32 i64)

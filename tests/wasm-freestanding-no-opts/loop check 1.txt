@@ -382,10 +382,7 @@
     return
     unreachable)
   (func $loop_check_1.blackbox (type 3) (result i32)
-    (local i32)
     i32.const 1
-    local.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

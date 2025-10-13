@@ -1,7 +1,7 @@
 (module
   (type (;0;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i32 i32 i32 i32 i32 i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
+    (local i32 i32 i32 i32 i32 i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 32
     i64.sub
@@ -73,8 +73,6 @@
           local.get 11
           i32.wrap_i64
           i64.load
-          local.set 18
-          local.get 18
           i32.wrap_i64
           i32.load8_u
           local.set 3
@@ -102,8 +100,8 @@
               local.get 14
               i32.wrap_i64
               i64.load
-              local.set 19
-              local.get 19
+              local.set 18
+              local.get 18
               local.get 16
               i64.eq
               local.set 7
@@ -112,13 +110,13 @@
               br_if 0 (;@5;)
               br 3 (;@2;)
             end
-            local.get 19
+            local.get 18
             local.get 16
             i64.mul
-            local.set 20
+            local.set 19
             local.get 14
             i32.wrap_i64
-            local.get 20
+            local.get 19
             i64.store
             br 0 (;@4;)
           end
@@ -127,14 +125,14 @@
       local.get 15
       i32.wrap_i64
       i64.load
-      local.set 21
-      local.get 21
+      local.set 20
+      local.get 20
       local.get 13
       i64.add
-      local.set 22
+      local.set 21
       local.get 15
       i32.wrap_i64
-      local.get 22
+      local.get 21
       i64.store
       br 0 (;@1;)
     end

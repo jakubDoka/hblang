@@ -5,7 +5,7 @@
   (type (;3;) (func (param i64)))
   (type (;4;) (func))
   (func $main (type 0) (result i64)
-    (local i32 i64 i64 i64 i64 i64)
+    (local i32 i64 i64 i64 i64)
     global.get 0
     i64.const 8
     i64.sub
@@ -41,8 +41,6 @@
         br 1 (;@1;)
       end
       i64.const 10
-      local.set 5
-      local.get 5
       call $exhausitve_inlining_1.loop_fn
       call $exhausitve_inlining_1.unreachable
     end

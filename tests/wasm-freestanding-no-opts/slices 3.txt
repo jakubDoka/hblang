@@ -180,7 +180,7 @@
     return
     unreachable)
   (func $slices_3.reverse (type 1) (param i64 i64) (result i64 i64)
-    (local i32 i32 i32 i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
+    (local i32 i32 i32 i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 40
     i64.sub
@@ -223,9 +223,9 @@
         i64.load
         local.set 13
         local.get 13
-        local.set 36
+        local.set 35
         local.get 12
-        local.set 37
+        local.set 36
         br 1 (;@1;)
       end
       i32.const 0
@@ -284,8 +284,6 @@
           local.get 20
           local.get 21
           i64.add
-          local.set 22
-          local.get 22
           i32.wrap_i64
           i32.load8_u
           local.set 5
@@ -296,93 +294,93 @@
           local.get 9
           i32.wrap_i64
           i64.load
-          local.set 23
+          local.set 22
           local.get 17
           i32.wrap_i64
           i64.load
-          local.set 24
+          local.set 23
+          local.get 22
           local.get 23
-          local.get 24
           i64.add
-          local.set 25
+          local.set 24
           local.get 14
           i32.wrap_i64
           i64.load
-          local.set 26
-          local.get 23
-          local.get 26
+          local.set 25
+          local.get 22
+          local.get 25
           i64.add
-          local.set 27
-          local.get 27
+          local.set 26
+          local.get 26
           i32.wrap_i64
           i32.load8_u
           local.set 6
-          local.get 25
+          local.get 24
           i32.wrap_i64
           local.get 6
           i32.store8
           local.get 9
           i32.wrap_i64
           i64.load
-          local.set 28
+          local.set 27
           local.get 14
           i32.wrap_i64
           i64.load
-          local.set 29
+          local.set 28
+          local.get 27
           local.get 28
-          local.get 29
           i64.add
-          local.set 30
+          local.set 29
           local.get 18
           i32.wrap_i64
           i32.load8_u
           local.set 7
-          local.get 30
+          local.get 29
           i32.wrap_i64
           local.get 7
           i32.store8
           local.get 17
           i32.wrap_i64
           i64.load
-          local.set 31
-          local.get 31
+          local.set 30
+          local.get 30
           local.get 15
           i64.add
-          local.set 32
+          local.set 31
           local.get 17
           i32.wrap_i64
-          local.get 32
+          local.get 31
           i64.store
           local.get 14
           i32.wrap_i64
           i64.load
-          local.set 33
-          local.get 33
+          local.set 32
+          local.get 32
           local.get 15
           i64.sub
-          local.set 34
+          local.set 33
           local.get 14
           i32.wrap_i64
-          local.get 34
+          local.get 33
           i64.store
           br 1 (;@2;)
         end
         local.get 11
         i32.wrap_i64
         i64.load
-        local.set 35
+        local.set 34
         local.get 20
+        local.set 35
+        local.get 34
         local.set 36
-        local.get 35
-        local.set 37
       end
     end
     i64.const 40
     global.get 0
     i64.add
     global.set 0
+    local.get 35
     local.get 36
-    local.get 37
     return
     unreachable)
   (table (;0;) 0 funcref)

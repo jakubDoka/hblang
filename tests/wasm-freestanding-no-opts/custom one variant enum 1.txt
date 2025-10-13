@@ -1,10 +1,7 @@
 (module
   (type (;0;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i64)
     i64.const 5
-    local.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

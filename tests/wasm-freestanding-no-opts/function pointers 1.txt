@@ -10,6 +10,7 @@
     i64.sub
     global.set 0
     i64.const 0
+    local.set 3
     i32.const 10
     local.set 0
     local.get 3

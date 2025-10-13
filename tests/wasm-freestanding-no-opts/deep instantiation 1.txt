@@ -3447,10 +3447,7 @@
     return
     unreachable)
   (func $deep_instantiation_1.Z.get (type 101) (result i32)
-    (local i32)
     i32.const 0
-    local.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

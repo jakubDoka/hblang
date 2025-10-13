@@ -1,7 +1,7 @@
 (module
   (type (;0;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
+    (local i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 136
     i64.sub
@@ -218,12 +218,10 @@
         local.get 26
         i32.wrap_i64
         i64.load
-        local.set 42
         i64.const 136
         global.get 0
         i64.add
         global.set 0
-        local.get 42
         return
       end
       local.get 20
@@ -235,83 +233,83 @@
           local.get 19
           i32.wrap_i64
           i64.load
-          local.set 43
-          local.get 43
+          local.set 42
+          local.get 42
           local.get 22
           i64.mul
-          local.set 44
+          local.set 43
           local.get 12
+          local.get 43
+          i64.add
+          local.set 44
           local.get 44
+          local.get 27
           i64.add
           local.set 45
           local.get 45
-          local.get 27
-          i64.add
-          local.set 46
-          local.get 46
           i32.wrap_i64
           i64.load
-          local.set 47
+          local.set 46
           local.get 20
           i32.wrap_i64
           i64.load
-          local.set 48
-          local.get 48
+          local.set 47
           local.get 47
+          local.get 46
           i64.eq
           local.set 1
           local.get 1
           i32.eqz
           br_if 0 (;@3;)
-          local.get 43
+          local.get 42
           local.get 21
           i64.add
-          local.set 49
+          local.set 48
           local.get 19
           i32.wrap_i64
-          local.get 49
+          local.get 48
           i64.store
           br 2 (;@1;)
         end
-        local.get 48
+        local.get 47
         local.get 27
         i64.mul
-        local.set 50
-        local.get 45
+        local.set 49
+        local.get 44
         i32.wrap_i64
         i64.load
+        local.set 50
+        local.get 50
+        local.get 49
+        i64.add
         local.set 51
         local.get 51
-        local.get 50
-        i64.add
+        i32.wrap_i64
+        i64.load
         local.set 52
-        local.get 52
+        local.get 26
         i32.wrap_i64
         i64.load
         local.set 53
-        local.get 26
-        i32.wrap_i64
-        i64.load
-        local.set 54
-        local.get 54
         local.get 53
+        local.get 52
         i64.add
-        local.set 55
+        local.set 54
         local.get 26
         i32.wrap_i64
-        local.get 55
+        local.get 54
         i64.store
         local.get 20
         i32.wrap_i64
         i64.load
-        local.set 56
-        local.get 56
+        local.set 55
+        local.get 55
         local.get 21
         i64.add
-        local.set 57
+        local.set 56
         local.get 20
         i32.wrap_i64
-        local.get 57
+        local.get 56
         i64.store
         br 0 (;@2;)
       end

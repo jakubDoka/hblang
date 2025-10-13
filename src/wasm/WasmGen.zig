@@ -27,6 +27,8 @@ pub const Set = struct {
     pub fn setIntersection(_: Set, _: Set) void {}
 };
 
+pub const on_stack_schedule = std.math.maxInt(u16);
+
 pub const ScopeRange = struct {
     kind: enum { loop, block },
     range: [2]u16,
@@ -68,6 +70,30 @@ pub fn idealize(self: *WasmGen, func: *Func, node: *Func.Node, work: *Func.WorkL
                     _ = func.setInput(node, i, new);
                 }
             }
+        }
+    }
+
+    if (node.kind == .UnOp) {
+        const op: graph.UnOp = node.extra(.UnOp).op;
+
+        if (op == .ineg) {
+            return func.addBinOp(
+                node.sloc,
+                .isub,
+                node.data_type,
+                func.addIntImm(node.sloc, node.data_type, 0),
+                node.inputs()[1].?,
+            );
+        }
+
+        if (op == .bnot) {
+            return func.addBinOp(
+                node.sloc,
+                .bxor,
+                node.data_type,
+                func.addIntImm(node.sloc, node.data_type, -1),
+                node.inputs()[1].?,
+            );
         }
     }
 
@@ -202,6 +228,15 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         for (block.base.outputs()) |out| {
             if (!out.get().isDef()) continue;
 
+            if (out.get().kind != .Phi and out.get().kind != .Arg and
+                out.get().outputs().len == 1 and
+                block.base.outputs()[out.pos() + 1].get() == out.get().outputs()[0].get() and
+                out.get().outputs()[0].get().dataDepOffset() == out.get().outputs()[0].pos())
+            {
+                out.get().schedule = on_stack_schedule;
+                continue;
+            }
+
             out.get().schedule = func.gcm.instr_count;
             func.gcm.instr_count += 1;
 
@@ -247,6 +282,10 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
             if (instr.kind == .Arg) {
                 self.ctx.allocs[instr.schedule] =
                     @intCast(instr.extra(.Arg).index);
+                continue;
+            }
+
+            if (instr.schedule == on_stack_schedule) {
                 continue;
             }
 
@@ -451,14 +490,10 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 else => utils.panic("{}", .{instr.data_type}),
             }
 
-            try self.ctx.buf.writer.writeByte(opb(.local_set));
-            try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
+            self.emitLocalStore(instr);
         },
         .UnOp => |extra| {
-            if (extra.op != .ineg and extra.op != .bnot) {
-                try self.ctx.buf.writer.writeByte(opb(.local_get));
-                try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
-            }
+            self.emitLocalLoad(inps[0]);
             const op_ty = dataTypeToWasmType(inps[0].data_type);
             const op_code: u8 = switch (extra.op) {
                 .sext => switch (inps[0].data_type) {
@@ -560,40 +595,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                     .i64 => opb(.i64_eqz),
                     else => utils.panic("{}", .{op_ty}),
                 },
-                .ineg => b: {
-                    try self.ctx.buf.writer.writeByte(switch (op_ty) {
-                        .i32 => opb(.i32_const),
-                        .i64 => opb(.i64_const),
-                        else => utils.panic("{}", .{op_ty}),
-                    });
-                    try self.ctx.buf.writer.writeSleb128(0);
-
-                    try self.ctx.buf.writer.writeByte(opb(.local_get));
-                    try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
-
-                    break :b switch (op_ty) {
-                        .i32 => opb(.i32_sub),
-                        .i64 => opb(.i64_sub),
-                        else => utils.panic("{}", .{op_ty}),
-                    };
-                },
-                .bnot => b: {
-                    try self.ctx.buf.writer.writeByte(switch (op_ty) {
-                        .i32 => opb(.i32_const),
-                        .i64 => opb(.i64_const),
-                        else => utils.panic("{}", .{op_ty}),
-                    });
-                    try self.ctx.buf.writer.writeSleb128(-1);
-
-                    try self.ctx.buf.writer.writeByte(opb(.local_get));
-                    try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
-
-                    break :b switch (op_ty) {
-                        .i32 => opb(.i32_xor),
-                        .i64 => opb(.i64_xor),
-                        else => utils.panic("{}", .{op_ty}),
-                    };
-                },
+                .ineg, .bnot => unreachable,
                 .fneg => switch (op_ty) {
                     .f32 => opb(.f32_neg),
                     .f64 => opb(.f64_neg),
@@ -621,15 +623,11 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             };
             try self.ctx.buf.writer.writeByte(op_code);
 
-            try self.ctx.buf.writer.writeByte(opb(.local_set));
-            try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
+            self.emitLocalStore(instr);
         },
         .BinOp => |extra| {
-            try self.ctx.buf.writer.writeByte(opb(.local_get));
-            try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
-
-            try self.ctx.buf.writer.writeByte(opb(.local_get));
-            try self.ctx.buf.writer.writeUleb128(self.regOf(inps[1]));
+            self.emitLocalLoad(inps[0]);
+            self.emitLocalLoad(inps[1]);
 
             const op_ty = dataTypeToWasmType(instr.data_type);
             const oper_ty = dataTypeToWasmType(inps[0].data_type);
@@ -796,19 +794,15 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             };
             try self.ctx.buf.writer.writeByte(op_code);
 
-            try self.ctx.buf.writer.writeByte(opb(.local_set));
-            try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
+            self.emitLocalStore(instr);
         },
         .Store => {
             // TODO: we can emit specialized stores
 
-            try self.ctx.buf.writer.writeByte(opb(.local_get));
-            try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
-
+            self.emitLocalLoad(inps[0]);
             try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
 
-            try self.ctx.buf.writer.writeByte(opb(.local_get));
-            try self.ctx.buf.writer.writeUleb128(self.regOf(inps[1]));
+            self.emitLocalLoad(inps[1]);
 
             const op_code: u8 = switch (instr.data_type) {
                 .i32 => opb(.i32_store),
@@ -828,8 +822,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             // TODO: we can emit specialized loads, maybe even sign extension
 
             // local.get addr
-            try self.ctx.buf.writer.writeByte(opb(.local_get));
-            try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
+            self.emitLocalLoad(inps[0]);
             // i32.wrap_i64
             try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
             // i64.load[size]_u (align: size, offset: 0)
@@ -847,8 +840,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeUleb128(alignment);
             try self.ctx.buf.writer.writeUleb128(0);
 
-            try self.ctx.buf.writer.writeByte(opb(.local_set));
-            try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
+            self.emitLocalStore(instr);
         },
         .StackArgOffset => |extra| {
             const offset = extra.offset;
@@ -861,8 +853,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
 
             try self.ctx.buf.writer.writeByte(opb(.i64_add));
 
-            try self.ctx.buf.writer.writeByte(opb(.local_set));
-            try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
+            self.emitLocalStore(instr);
         },
         .Local => {
             const offset = instr.inputs()[1].?.extra(.LocalAlloc).size +
@@ -876,8 +867,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
 
             try self.ctx.buf.writer.writeByte(opb(.i64_add));
 
-            try self.ctx.buf.writer.writeByte(opb(.local_set));
-            try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
+            self.emitLocalStore(instr);
         },
         .StructArg => |extra| {
             const offset = extra.spec.size + self.ctx.arg_base;
@@ -890,8 +880,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
 
             try self.ctx.buf.writer.writeByte(opb(.i64_add));
 
-            try self.ctx.buf.writer.writeByte(opb(.local_set));
-            try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
+            self.emitLocalStore(instr);
         },
         .FuncAddr => |extra| {
             try self.ctx.buf.writer.writeByte(opb(.i64_const));
@@ -901,6 +890,8 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.ctx.buf = .fromArrayList(self.gpa, &self.mach.out.code);
 
             try self.ctx.buf.writer.writeUleb128(std.math.maxInt(object.RelocInt));
+
+            self.emitLocalStore(instr);
         },
         .GlobalAddr => |extra| {
             try self.ctx.buf.writer.writeByte(opb(.global_get));
@@ -911,13 +902,11 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
 
             try self.ctx.buf.writer.writeUleb128(std.math.maxInt(object.RelocInt));
 
-            try self.ctx.buf.writer.writeByte(opb(.local_set));
-            try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
+            self.emitLocalStore(instr);
         },
         .MemCpy => {
             for (inps) |inp| {
-                try self.ctx.buf.writer.writeByte(opb(.local_get));
-                try self.ctx.buf.writer.writeUleb128(self.regOf(inp));
+                self.emitLocalLoad(inp);
                 try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
             }
 
@@ -934,13 +923,11 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                     continue;
                 }
 
-                try self.ctx.buf.writer.writeByte(opb(.local_get));
-                try self.ctx.buf.writer.writeUleb128(self.regOf(inp));
+                self.emitLocalLoad(inp);
             }
 
             if (extra.id == graph.indirect_call) {
-                try self.ctx.buf.writer.writeByte(opb(.local_get));
-                try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
+                self.emitLocalLoad(inps[0]);
                 try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
 
                 try self.ctx.buf.writer.writeByte(opb(.call_indirect));
@@ -963,8 +950,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             for (0..ret.len) |i| {
                 for (instr.outputs()[0].get().outputs()) |out| {
                     if (out.get().kind == .Ret and out.get().extra(.Ret).index == ret.len - 1 - i) {
-                        try self.ctx.buf.writer.writeByte(opb(.local_set));
-                        try self.ctx.buf.writer.writeUleb128(self.regOf(out.get()));
+                        self.emitLocalStore(out.get());
                     }
                 }
             }
@@ -978,8 +964,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 }
             } else unreachable;
 
-            try self.ctx.buf.writer.writeByte(opb(.local_get));
-            try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
+            self.emitLocalLoad(inps[0]);
 
             if (inps[0].data_type == .i64) {
                 try self.ctx.buf.writer.writeByte(opb(.i64_eqz));
@@ -1031,8 +1016,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
         },
         .Return => {
             for (instr.dataDeps()) |d| {
-                try self.ctx.buf.writer.writeByte(opb(.local_get));
-                try self.ctx.buf.writer.writeUleb128(self.regOf(d));
+                self.emitLocalLoad(d);
             }
 
             try self.ctx.buf.writer.writeByte(opb(.@"return"));
@@ -1071,6 +1055,28 @@ pub fn emitData(self: *WasmGen, opts: Mach.DataOptions) void {
         opts.thread_local,
         object.fn_ptr_addend,
     );
+}
+
+pub fn emitLocalLoad(self: *WasmGen, for_instr: *Func.Node) void {
+    if (for_instr.schedule == on_stack_schedule) {
+        return;
+    }
+
+    errdefer unreachable;
+
+    try self.ctx.buf.writer.writeByte(opb(.local_get));
+    try self.ctx.buf.writer.writeUleb128(self.regOf(for_instr));
+}
+
+pub fn emitLocalStore(self: *WasmGen, for_instr: *Func.Node) void {
+    if (for_instr.schedule == on_stack_schedule) {
+        return;
+    }
+
+    errdefer unreachable;
+
+    try self.ctx.buf.writer.writeByte(opb(.local_set));
+    try self.ctx.buf.writer.writeUleb128(self.regOf(for_instr));
 }
 
 pub fn finalize(self: *WasmGen, opts: Mach.FinalizeOptions) void {

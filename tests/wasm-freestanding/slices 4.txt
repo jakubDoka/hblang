@@ -175,7 +175,7 @@
     return
     unreachable)
   (func $slices_4.equals (type 1) (param i64 i64 i64 i64) (result i32)
-    (local i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
+    (local i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 40
     i64.sub
@@ -302,12 +302,10 @@
               local.get 20
               i32.wrap_i64
               i64.load
-              local.set 31
-              local.get 31
               local.get 30
               i64.add
-              local.set 32
-              local.get 32
+              local.set 31
+              local.get 31
               i32.wrap_i64
               i32.load8_u
               local.set 10
@@ -318,12 +316,12 @@
               local.get 18
               i32.wrap_i64
               i64.load
-              local.set 33
-              local.get 33
+              local.set 32
+              local.get 32
               local.get 30
               i64.add
-              local.set 34
-              local.get 34
+              local.set 33
+              local.get 33
               i32.wrap_i64
               i32.load8_u
               local.set 12
@@ -345,10 +343,10 @@
             local.get 30
             local.get 28
             i64.add
-            local.set 35
+            local.set 34
             local.get 27
             i32.wrap_i64
-            local.get 35
+            local.get 34
             i64.store
             br 1 (;@3;)
           end

@@ -63,10 +63,7 @@
     return
     unreachable)
   (func $literals_2.dec (type 1) (result i64)
-    (local i64)
     i64.const 45
-    local.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)
