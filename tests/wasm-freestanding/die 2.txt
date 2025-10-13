@@ -2,37 +2,29 @@
   (type (;0;) (func))
   (type (;1;) (func (result i64)))
   (func $main (type 0)
-    (local i32 i64 i64 i64 i64 i64 i64)
+    (local i32 i64 i64 i64 i64)
     global.get 0
     i64.const 16
     i64.sub
     global.set 0
     call $die_2.fallible
-    local.set 6
+    local.set 4
     block  ;; label = @1
-      i64.const 0
       global.get 0
-      i64.add
-      local.set 5
-      i64.const 8
-      global.get 0
-      i64.add
-      local.set 4
-      local.get 4
       i32.wrap_i64
-      local.get 6
-      i64.store
+      local.get 4
+      i64.store offset=8
       i64.const 0
       local.set 3
-      local.get 4
+      global.get 0
       i32.wrap_i64
-      i64.load
+      i64.load offset=8
       local.set 2
-      local.get 5
+      global.get 0
       i32.wrap_i64
       local.get 2
       i64.store
-      local.get 5
+      global.get 0
       i32.wrap_i64
       i64.load
       local.set 1

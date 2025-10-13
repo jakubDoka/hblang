@@ -1,7 +1,6 @@
 (module
   (type (;0;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 512
     i64.sub
@@ -70,384 +69,256 @@
                                                                                                                               block  ;; label = @62
                                                                                                                                 block  ;; label = @63
                                                                                                                                   block  ;; label = @64
-                                                                                                                                    i64.const 32
                                                                                                                                     global.get 0
-                                                                                                                                    i64.add
                                                                                                                                     i32.wrap_i64
-                                                                                                                                    i64.load
-                                                                                                                                    local.set 0
-                                                                                                                                    local.get 0
+                                                                                                                                    i64.load offset=32
                                                                                                                                     i64.eqz
                                                                                                                                     br_if 0 (;@64;)
                                                                                                                                     br 1 (;@63;)
                                                                                                                                   end
-                                                                                                                                  i64.const 80
                                                                                                                                   global.get 0
-                                                                                                                                  i64.add
                                                                                                                                   i32.wrap_i64
-                                                                                                                                  i64.load
-                                                                                                                                  local.set 1
-                                                                                                                                  local.get 1
+                                                                                                                                  i64.load offset=80
                                                                                                                                   i64.eqz
                                                                                                                                   br_if 1 (;@62;)
                                                                                                                                 end
                                                                                                                                 br 1 (;@61;)
                                                                                                                               end
-                                                                                                                              i64.const 128
                                                                                                                               global.get 0
-                                                                                                                              i64.add
                                                                                                                               i32.wrap_i64
-                                                                                                                              i64.load
-                                                                                                                              local.set 2
-                                                                                                                              local.get 2
+                                                                                                                              i64.load offset=128
                                                                                                                               i64.eqz
                                                                                                                               br_if 1 (;@60;)
                                                                                                                             end
                                                                                                                             br 1 (;@59;)
                                                                                                                           end
-                                                                                                                          i64.const 176
                                                                                                                           global.get 0
-                                                                                                                          i64.add
                                                                                                                           i32.wrap_i64
-                                                                                                                          i64.load
-                                                                                                                          local.set 3
-                                                                                                                          local.get 3
+                                                                                                                          i64.load offset=176
                                                                                                                           i64.eqz
                                                                                                                           br_if 1 (;@58;)
                                                                                                                         end
                                                                                                                         br 1 (;@57;)
                                                                                                                       end
-                                                                                                                      i64.const 224
                                                                                                                       global.get 0
-                                                                                                                      i64.add
                                                                                                                       i32.wrap_i64
-                                                                                                                      i64.load
-                                                                                                                      local.set 4
-                                                                                                                      local.get 4
+                                                                                                                      i64.load offset=224
                                                                                                                       i64.eqz
                                                                                                                       br_if 1 (;@56;)
                                                                                                                     end
                                                                                                                     br 1 (;@55;)
                                                                                                                   end
-                                                                                                                  i64.const 256
                                                                                                                   global.get 0
-                                                                                                                  i64.add
                                                                                                                   i32.wrap_i64
-                                                                                                                  i64.load
-                                                                                                                  local.set 5
-                                                                                                                  local.get 5
+                                                                                                                  i64.load offset=256
                                                                                                                   i64.eqz
                                                                                                                   br_if 1 (;@54;)
                                                                                                                 end
                                                                                                                 br 1 (;@53;)
                                                                                                               end
-                                                                                                              i64.const 320
                                                                                                               global.get 0
-                                                                                                              i64.add
                                                                                                               i32.wrap_i64
-                                                                                                              i64.load
-                                                                                                              local.set 6
-                                                                                                              local.get 6
+                                                                                                              i64.load offset=320
                                                                                                               i64.eqz
                                                                                                               br_if 1 (;@52;)
                                                                                                             end
                                                                                                             br 1 (;@51;)
                                                                                                           end
-                                                                                                          i64.const 368
                                                                                                           global.get 0
-                                                                                                          i64.add
                                                                                                           i32.wrap_i64
-                                                                                                          i64.load
-                                                                                                          local.set 7
-                                                                                                          local.get 7
+                                                                                                          i64.load offset=368
                                                                                                           i64.eqz
                                                                                                           br_if 1 (;@50;)
                                                                                                         end
                                                                                                         br 1 (;@49;)
                                                                                                       end
-                                                                                                      i64.const 416
                                                                                                       global.get 0
-                                                                                                      i64.add
                                                                                                       i32.wrap_i64
-                                                                                                      i64.load
-                                                                                                      local.set 8
-                                                                                                      local.get 8
+                                                                                                      i64.load offset=416
                                                                                                       i64.eqz
                                                                                                       br_if 1 (;@48;)
                                                                                                     end
                                                                                                     br 1 (;@47;)
                                                                                                   end
-                                                                                                  i64.const 464
                                                                                                   global.get 0
-                                                                                                  i64.add
                                                                                                   i32.wrap_i64
-                                                                                                  i64.load
-                                                                                                  local.set 9
-                                                                                                  local.get 9
+                                                                                                  i64.load offset=464
                                                                                                   i64.eqz
                                                                                                   br_if 1 (;@46;)
                                                                                                 end
                                                                                                 br 1 (;@45;)
                                                                                               end
-                                                                                              i64.const 496
                                                                                               global.get 0
-                                                                                              i64.add
                                                                                               i32.wrap_i64
-                                                                                              i64.load
-                                                                                              local.set 10
-                                                                                              local.get 10
+                                                                                              i64.load offset=496
                                                                                               i64.eqz
                                                                                               br_if 1 (;@44;)
                                                                                             end
                                                                                             br 1 (;@43;)
                                                                                           end
-                                                                                          i64.const 480
                                                                                           global.get 0
-                                                                                          i64.add
                                                                                           i32.wrap_i64
-                                                                                          i64.load
-                                                                                          local.set 11
-                                                                                          local.get 11
+                                                                                          i64.load offset=480
                                                                                           i64.eqz
                                                                                           br_if 1 (;@42;)
                                                                                         end
                                                                                         br 1 (;@41;)
                                                                                       end
-                                                                                      i64.const 432
                                                                                       global.get 0
-                                                                                      i64.add
                                                                                       i32.wrap_i64
-                                                                                      i64.load
-                                                                                      local.set 12
-                                                                                      local.get 12
+                                                                                      i64.load offset=432
                                                                                       i64.eqz
                                                                                       br_if 1 (;@40;)
                                                                                     end
                                                                                     br 1 (;@39;)
                                                                                   end
-                                                                                  i64.const 384
                                                                                   global.get 0
-                                                                                  i64.add
                                                                                   i32.wrap_i64
-                                                                                  i64.load
-                                                                                  local.set 13
-                                                                                  local.get 13
+                                                                                  i64.load offset=384
                                                                                   i64.eqz
                                                                                   br_if 1 (;@38;)
                                                                                 end
                                                                                 br 1 (;@37;)
                                                                               end
-                                                                              i64.const 336
                                                                               global.get 0
-                                                                              i64.add
                                                                               i32.wrap_i64
-                                                                              i64.load
-                                                                              local.set 14
-                                                                              local.get 14
+                                                                              i64.load offset=336
                                                                               i64.eqz
                                                                               br_if 1 (;@36;)
                                                                             end
                                                                             br 1 (;@35;)
                                                                           end
-                                                                          i64.const 288
                                                                           global.get 0
-                                                                          i64.add
                                                                           i32.wrap_i64
-                                                                          i64.load
-                                                                          local.set 15
-                                                                          local.get 15
+                                                                          i64.load offset=288
                                                                           i64.eqz
                                                                           br_if 1 (;@34;)
                                                                         end
                                                                         br 1 (;@33;)
                                                                       end
-                                                                      i64.const 272
                                                                       global.get 0
-                                                                      i64.add
                                                                       i32.wrap_i64
-                                                                      i64.load
-                                                                      local.set 16
-                                                                      local.get 16
+                                                                      i64.load offset=272
                                                                       i64.eqz
                                                                       br_if 1 (;@32;)
                                                                     end
                                                                     br 1 (;@31;)
                                                                   end
-                                                                  i64.const 192
                                                                   global.get 0
-                                                                  i64.add
                                                                   i32.wrap_i64
-                                                                  i64.load
-                                                                  local.set 17
-                                                                  local.get 17
+                                                                  i64.load offset=192
                                                                   i64.eqz
                                                                   br_if 1 (;@30;)
                                                                 end
                                                                 br 1 (;@29;)
                                                               end
-                                                              i64.const 144
                                                               global.get 0
-                                                              i64.add
                                                               i32.wrap_i64
-                                                              i64.load
-                                                              local.set 18
-                                                              local.get 18
+                                                              i64.load offset=144
                                                               i64.eqz
                                                               br_if 1 (;@28;)
                                                             end
                                                             br 1 (;@27;)
                                                           end
-                                                          i64.const 96
                                                           global.get 0
-                                                          i64.add
                                                           i32.wrap_i64
-                                                          i64.load
-                                                          local.set 19
-                                                          local.get 19
+                                                          i64.load offset=96
                                                           i64.eqz
                                                           br_if 1 (;@26;)
                                                         end
                                                         br 1 (;@25;)
                                                       end
-                                                      i64.const 48
                                                       global.get 0
-                                                      i64.add
                                                       i32.wrap_i64
-                                                      i64.load
-                                                      local.set 20
-                                                      local.get 20
+                                                      i64.load offset=48
                                                       i64.eqz
                                                       br_if 1 (;@24;)
                                                     end
                                                     br 1 (;@23;)
                                                   end
-                                                  i64.const 16
                                                   global.get 0
-                                                  i64.add
                                                   i32.wrap_i64
-                                                  i64.load
-                                                  local.set 21
-                                                  local.get 21
+                                                  i64.load offset=16
                                                   i64.eqz
                                                   br_if 1 (;@22;)
                                                 end
                                                 br 1 (;@21;)
                                               end
-                                              i64.const 448
                                               global.get 0
-                                              i64.add
                                               i32.wrap_i64
-                                              i64.load
-                                              local.set 22
-                                              local.get 22
+                                              i64.load offset=448
                                               i64.eqz
                                               br_if 1 (;@20;)
                                             end
                                             br 1 (;@19;)
                                           end
-                                          i64.const 160
                                           global.get 0
-                                          i64.add
                                           i32.wrap_i64
-                                          i64.load
-                                          local.set 23
-                                          local.get 23
+                                          i64.load offset=160
                                           i64.eqz
                                           br_if 1 (;@18;)
                                         end
                                         br 1 (;@17;)
                                       end
-                                      i64.const 304
                                       global.get 0
-                                      i64.add
                                       i32.wrap_i64
-                                      i64.load
-                                      local.set 24
-                                      local.get 24
+                                      i64.load offset=304
                                       i64.eqz
                                       br_if 1 (;@16;)
                                     end
                                     br 1 (;@15;)
                                   end
-                                  i64.const 64
                                   global.get 0
-                                  i64.add
                                   i32.wrap_i64
-                                  i64.load
-                                  local.set 25
-                                  local.get 25
+                                  i64.load offset=64
                                   i64.eqz
                                   br_if 1 (;@14;)
                                 end
                                 br 1 (;@13;)
                               end
-                              i64.const 208
                               global.get 0
-                              i64.add
                               i32.wrap_i64
-                              i64.load
-                              local.set 26
-                              local.get 26
+                              i64.load offset=208
                               i64.eqz
                               br_if 1 (;@12;)
                             end
                             br 1 (;@11;)
                           end
-                          i64.const 352
                           global.get 0
-                          i64.add
                           i32.wrap_i64
-                          i64.load
-                          local.set 27
-                          local.get 27
+                          i64.load offset=352
                           i64.eqz
                           br_if 1 (;@10;)
                         end
                         br 1 (;@9;)
                       end
-                      i64.const 0
                       global.get 0
-                      i64.add
                       i32.wrap_i64
                       i64.load
-                      local.set 28
-                      local.get 28
                       i64.eqz
                       br_if 1 (;@8;)
                     end
                     br 1 (;@7;)
                   end
-                  i64.const 400
                   global.get 0
-                  i64.add
                   i32.wrap_i64
-                  i64.load
-                  local.set 29
-                  local.get 29
+                  i64.load offset=400
                   i64.eqz
                   br_if 1 (;@6;)
                 end
                 br 1 (;@5;)
               end
-              i64.const 240
               global.get 0
-              i64.add
               i32.wrap_i64
-              i64.load
-              local.set 30
-              local.get 30
+              i64.load offset=240
               i64.eqz
               br_if 1 (;@4;)
             end
             br 1 (;@3;)
           end
-          i64.const 112
           global.get 0
-          i64.add
           i32.wrap_i64
-          i64.load
-          local.set 31
-          local.get 31
+          i64.load offset=112
           i64.eqz
           br_if 1 (;@2;)
         end

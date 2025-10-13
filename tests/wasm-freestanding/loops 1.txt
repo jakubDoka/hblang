@@ -2,23 +2,19 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i64) (result i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64)
+    (local i64 i64)
     global.get 0
     i64.const 8
     i64.sub
     global.set 0
     i64.const 10
     call $loops_1.fib
-    local.set 2
-    i64.const 0
-    global.get 0
-    i64.add
     local.set 1
-    local.get 1
+    global.get 0
     i32.wrap_i64
-    local.get 2
-    i64.store
     local.get 1
+    i64.store
+    global.get 0
     i32.wrap_i64
     i64.load
     local.set 0
@@ -30,55 +26,39 @@
     return
     unreachable)
   (func $loops_1.fib (type 1) (param i64) (result i64)
-    (local i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
+    (local i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 32
     i64.sub
     global.set 0
-    i64.const 0
     global.get 0
-    i64.add
-    local.set 7
-    local.get 7
     i32.wrap_i64
     local.get 0
     i64.store
-    i64.const 8
-    global.get 0
-    i64.add
-    local.set 6
     i64.const 1
-    local.set 5
-    local.get 6
-    i32.wrap_i64
-    local.get 5
-    i64.store
-    i64.const 0
-    local.set 4
-    i64.const 24
-    global.get 0
-    i64.add
     local.set 3
-    i64.const 16
     global.get 0
-    i64.add
-    local.set 2
-    local.get 2
     i32.wrap_i64
-    local.get 4
-    i64.store
+    local.get 3
+    i64.store offset=8
+    i64.const 0
+    local.set 2
+    global.get 0
+    i32.wrap_i64
+    local.get 2
+    i64.store offset=16
     loop  ;; label = @1
       block  ;; label = @2
-        local.get 7
+        global.get 0
         i32.wrap_i64
         i64.load
-        local.set 9
+        local.set 5
+        global.get 0
+        i32.wrap_i64
+        i64.load offset=16
+        local.set 4
+        local.get 5
         local.get 2
-        i32.wrap_i64
-        i64.load
-        local.set 8
-        local.get 9
-        local.get 4
         i64.eq
         local.set 1
         local.get 1
@@ -88,48 +68,48 @@
         global.get 0
         i64.add
         global.set 0
-        local.get 8
+        local.get 4
         return
       end
-      local.get 6
+      global.get 0
       i32.wrap_i64
-      i64.load
-      local.set 15
-      local.get 8
-      local.get 15
-      i64.add
-      local.set 14
-      local.get 3
-      i32.wrap_i64
-      local.get 14
-      i64.store
-      local.get 6
-      i32.wrap_i64
-      i64.load
-      local.set 13
-      local.get 2
-      i32.wrap_i64
-      local.get 13
-      i64.store
-      local.get 3
-      i32.wrap_i64
-      i64.load
-      local.set 12
-      local.get 6
-      i32.wrap_i64
-      local.get 12
-      i64.store
-      local.get 7
-      i32.wrap_i64
-      i64.load
+      i64.load offset=8
       local.set 11
+      local.get 4
       local.get 11
-      local.get 5
-      i64.sub
+      i64.add
       local.set 10
-      local.get 7
+      global.get 0
       i32.wrap_i64
       local.get 10
+      i64.store offset=24
+      global.get 0
+      i32.wrap_i64
+      i64.load offset=8
+      local.set 9
+      global.get 0
+      i32.wrap_i64
+      local.get 9
+      i64.store offset=16
+      global.get 0
+      i32.wrap_i64
+      i64.load offset=24
+      local.set 8
+      global.get 0
+      i32.wrap_i64
+      local.get 8
+      i64.store offset=8
+      global.get 0
+      i32.wrap_i64
+      i64.load
+      local.set 7
+      local.get 7
+      local.get 3
+      i64.sub
+      local.set 6
+      global.get 0
+      i32.wrap_i64
+      local.get 6
       i64.store
       br 0 (;@1;)
     end

@@ -58,9 +58,19 @@ pub const classes = enum {
         base: graph.Store = .{},
         offset: i64,
     };
+    pub const StackStore = extern struct {
+        base: graph.Store = .{},
+        offset: i64,
+        pub const data_dep_offset = 2;
+    };
     pub const WLoad = extern struct {
         base: graph.Load = .{},
         offset: i64,
+    };
+    pub const StackLoad = extern struct {
+        base: graph.Load = .{},
+        offset: i64,
+        pub const data_dep_offset = 2;
     };
 };
 
@@ -263,8 +273,8 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
 
                 const dep = real_dep orelse break :on_stack;
 
+                if (dep.pos() == 3 and dep.get().isSub(graph.Store)) break :on_stack;
                 if (false) {
-                    if (dep.pos() == 3 and dep.get().kind == .Store) break :on_stack;
                     if (dep.get().kind == .MemCpy) break :on_stack;
                 } else {
                     if (dep.pos() != dep.get().dataDepOffset()) break :on_stack;
@@ -936,6 +946,30 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeUleb128(alignment);
             try self.ctx.buf.writer.writeSleb128(extra.offset);
         },
+        .StackStore => |extra| {
+            const offset = @as(i64, @intCast(instr.base().extra(.LocalAlloc).size +
+                self.ctx.stack_base)) + extra.offset;
+
+            try self.ctx.buf.writer.writeByte(opb(.global_get));
+            try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
+            try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
+
+            self.emitLocalLoad(inps[0]);
+
+            const op_code: u8 = switch (instr.data_type) {
+                .i32 => opb(.i32_store),
+                .i64 => opb(.i64_store),
+                .f32 => opb(.f32_store),
+                .f64 => opb(.f64_store),
+                .i8 => opb(.i32_store8),
+                .i16 => opb(.i32_store16),
+                else => unreachable,
+            };
+            try self.ctx.buf.writer.writeByte(op_code);
+            const alignment = std.math.log2_int(usize, instr.data_type.size());
+            try self.ctx.buf.writer.writeUleb128(alignment);
+            try self.ctx.buf.writer.writeSleb128(offset);
+        },
         .WLoad => |extra| {
             // TODO: we can emit specialized loads, maybe even sign extension
 
@@ -957,6 +991,30 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             const alignment = std.math.log2_int(usize, instr.data_type.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
             try self.ctx.buf.writer.writeSleb128(extra.offset);
+
+            self.emitLocalStore(instr);
+        },
+        .StackLoad => |extra| {
+            const offset = @as(i64, @intCast(instr.base().extra(.LocalAlloc).size +
+                self.ctx.stack_base)) + extra.offset;
+
+            try self.ctx.buf.writer.writeByte(opb(.global_get));
+            try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
+            try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
+
+            const op_code: u8 = switch (instr.data_type) {
+                .i32 => opb(.i32_load),
+                .i64 => opb(.i64_load),
+                .f32 => opb(.f32_load),
+                .f64 => opb(.f64_load),
+                .i8 => opb(.i32_load8_u),
+                .i16 => opb(.i32_load16_u),
+                else => unreachable,
+            };
+            try self.ctx.buf.writer.writeByte(op_code);
+            const alignment = std.math.log2_int(usize, instr.data_type.size());
+            try self.ctx.buf.writer.writeUleb128(alignment);
+            try self.ctx.buf.writer.writeUleb128(offset);
 
             self.emitLocalStore(instr);
         },

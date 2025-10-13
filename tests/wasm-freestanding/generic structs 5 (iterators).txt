@@ -3,7 +3,7 @@
   (type (;1;) (func (param i64) (result i32 i32)))
   (type (;2;) (func (param i64) (result i32 i32)))
   (func $main (type 0) (result i64)
-    (local i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
+    (local i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 128
     i64.sub
@@ -11,121 +11,113 @@
     i64.const 16
     global.get 0
     i64.add
-    local.set 47
-    i64.const 32
-    global.get 0
-    i64.add
-    local.set 46
-    global.get 3
     local.set 45
-    global.get 2
+    global.get 3
     local.set 44
-    global.get 1
+    global.get 0
+    i32.wrap_i64
+    local.get 44
+    i64.store
+    global.get 2
     local.set 43
+    global.get 1
+    local.set 42
     i32.const 0
     local.set 1
     i64.const 8
-    local.set 42
-    i64.const 24
     local.set 41
-    i64.const 48
+    i64.const 24
+    local.set 40
+    i64.const 32
     global.get 0
     i64.add
-    local.set 40
-    i64.const 16
     local.set 39
     i64.const 64
     global.get 0
     i64.add
     local.set 38
-    i64.const 80
-    global.get 0
-    i64.add
-    local.set 37
-    local.get 37
-    local.get 42
-    i64.add
-    local.set 36
-    local.get 37
-    local.get 41
-    i64.add
-    local.set 35
-    i64.const 2
-    local.set 34
     i64.const 0
     global.get 0
     i64.add
-    local.set 33
-    local.get 33
-    i32.wrap_i64
-    local.get 45
-    i64.store
-    i64.const 126
+    local.set 37
+    i64.const 2
+    local.set 36
+    i64.const 80
     global.get 0
     i64.add
+    local.set 35
+    local.get 35
+    local.get 41
+    i64.add
+    local.set 34
+    local.get 35
+    local.get 40
+    i64.add
+    local.set 33
+    i64.const 16
     local.set 32
     i32.const 0
     local.set 0
     i64.const 4
     local.set 31
-    local.get 33
+    global.get 0
     i32.wrap_i64
     local.get 31
     i64.store offset=8
-    local.get 47
-    i32.wrap_i64
-    local.get 44
-    i64.store
-    local.get 47
-    i32.wrap_i64
-    local.get 34
-    i64.store offset=8
-    local.get 46
+    global.get 0
     i32.wrap_i64
     local.get 43
-    i64.store
-    local.get 46
+    i64.store offset=16
+    global.get 0
     i32.wrap_i64
-    local.get 34
-    i64.store offset=8
-    local.get 40
+    local.get 36
+    i64.store offset=24
+    global.get 0
     i32.wrap_i64
-    local.get 47
+    local.get 42
+    i64.store offset=32
+    global.get 0
     i32.wrap_i64
-    local.get 39
+    local.get 36
+    i64.store offset=40
+    i64.const 48
+    global.get 0
+    i64.add
+    local.set 30
+    local.get 30
+    i32.wrap_i64
+    local.get 45
+    i32.wrap_i64
+    local.get 32
     i32.wrap_i64
     memory.copy
     local.get 38
     i32.wrap_i64
+    local.get 37
+    i32.wrap_i64
+    local.get 32
+    i32.wrap_i64
+    memory.copy
+    global.get 0
+    i32.wrap_i64
+    local.get 1
+    i32.store8 offset=80
+    local.get 34
+    i32.wrap_i64
+    local.get 45
+    i32.wrap_i64
+    local.get 32
+    i32.wrap_i64
+    memory.copy
     local.get 33
     i32.wrap_i64
     local.get 39
     i32.wrap_i64
-    memory.copy
-    local.get 37
-    i32.wrap_i64
-    local.get 1
-    i32.store8
-    local.get 36
-    i32.wrap_i64
-    local.get 47
-    i32.wrap_i64
-    local.get 39
+    local.get 32
     i32.wrap_i64
     memory.copy
-    local.get 35
-    i32.wrap_i64
-    local.get 46
-    i32.wrap_i64
-    local.get 39
-    i32.wrap_i64
-    memory.copy
-    i64.const 120
-    global.get 0
-    i64.add
-    local.set 30
     loop  ;; label = @1
-      local.get 40
+      local.get 30
       call $generic_structs_5__iterators_.main.Chars.next
       local.set 5
       local.set 6
@@ -134,17 +126,17 @@
           block  ;; label = @4
             block  ;; label = @5
               block  ;; label = @6
-                local.get 32
+                global.get 0
                 i32.wrap_i64
                 local.get 6
-                i32.store8
-                local.get 32
+                i32.store8 offset=126
+                global.get 0
                 i32.wrap_i64
                 local.get 5
-                i32.store8 offset=1
-                local.get 32
+                i32.store8 offset=127
+                global.get 0
                 i32.wrap_i64
-                i32.load8_u
+                i32.load8_u offset=126
                 local.set 4
                 local.get 4
                 i32.const 255
@@ -159,36 +151,28 @@
                 br_if 0 (;@6;)
                 local.get 38
                 i32.wrap_i64
-                local.get 33
+                local.get 37
                 i32.wrap_i64
-                local.get 39
+                local.get 32
                 i32.wrap_i64
                 memory.copy
-                i64.const 122
-                global.get 0
-                i64.add
-                local.set 49
-                i64.const 124
-                global.get 0
-                i64.add
-                local.set 48
                 loop  ;; label = @7
                   local.get 38
                   call $generic_structs_5__iterators_.main.Chars.next
                   local.set 10
                   local.set 11
                   block  ;; label = @8
-                    local.get 49
+                    global.get 0
                     i32.wrap_i64
                     local.get 11
-                    i32.store8
-                    local.get 49
+                    i32.store8 offset=122
+                    global.get 0
                     i32.wrap_i64
                     local.get 10
-                    i32.store8 offset=1
-                    local.get 49
+                    i32.store8 offset=123
+                    global.get 0
                     i32.wrap_i64
-                    i32.load8_u
+                    i32.load8_u offset=122
                     local.set 9
                     local.get 9
                     i32.const 255
@@ -202,27 +186,27 @@
                     i32.eqz
                     br_if 0 (;@8;)
                     i64.const 0
-                    local.set 50
-                    local.get 50
-                    local.set 56
+                    local.set 46
+                    local.get 46
+                    local.set 52
                     br 5 (;@3;)
                   end
-                  local.get 37
+                  local.get 35
                   call $generic_structs_5__iterators_.main.Chain_.Chars__.Chars_.next
                   local.set 15
                   local.set 16
                   block  ;; label = @8
-                    local.get 48
+                    global.get 0
                     i32.wrap_i64
                     local.get 16
-                    i32.store8
-                    local.get 48
+                    i32.store8 offset=124
+                    global.get 0
                     i32.wrap_i64
                     local.get 15
-                    i32.store8 offset=1
-                    local.get 48
+                    i32.store8 offset=125
+                    global.get 0
                     i32.wrap_i64
-                    i32.load8_u
+                    i32.load8_u offset=124
                     local.set 14
                     local.get 14
                     i32.const 255
@@ -236,21 +220,21 @@
                     i32.eqz
                     br_if 0 (;@8;)
                     i64.const 3
-                    local.set 51
-                    local.get 51
-                    local.set 54
+                    local.set 47
+                    local.get 47
+                    local.set 50
                     br 3 (;@5;)
                   end
                   block  ;; label = @8
-                    local.get 49
+                    global.get 0
                     i32.wrap_i64
-                    i32.load8_u offset=1
+                    i32.load8_u offset=123
                     i32.const 255
                     i32.and
                     local.set 20
-                    local.get 48
+                    global.get 0
                     i32.wrap_i64
-                    i32.load8_u offset=1
+                    i32.load8_u offset=125
                     local.set 19
                     local.get 19
                     i32.const 255
@@ -264,7 +248,7 @@
                     i32.eqz
                     br_if 0 (;@8;)
                     local.get 31
-                    local.set 55
+                    local.set 51
                     br 4 (;@4;)
                   end
                   br 0 (;@7;)
@@ -276,17 +260,17 @@
               local.set 25
               block  ;; label = @6
                 block  ;; label = @7
-                  local.get 30
+                  global.get 0
                   i32.wrap_i64
                   local.get 25
-                  i32.store8
-                  local.get 30
+                  i32.store8 offset=120
+                  global.get 0
                   i32.wrap_i64
                   local.get 24
-                  i32.store8 offset=1
-                  local.get 30
+                  i32.store8 offset=121
+                  global.get 0
                   i32.wrap_i64
-                  i32.load8_u
+                  i32.load8_u offset=120
                   local.set 23
                   local.get 23
                   i32.const 255
@@ -300,20 +284,20 @@
                   i32.eqz
                   br_if 0 (;@7;)
                   i64.const 1
-                  local.set 52
-                  local.get 52
-                  local.set 53
+                  local.set 48
+                  local.get 48
+                  local.set 49
                   br 1 (;@6;)
                 end
-                local.get 30
+                global.get 0
                 i32.wrap_i64
-                i32.load8_u offset=1
+                i32.load8_u offset=121
                 i32.const 255
                 i32.and
                 local.set 29
-                local.get 32
+                global.get 0
                 i32.wrap_i64
-                i32.load8_u offset=1
+                i32.load8_u offset=127
                 local.set 28
                 local.get 28
                 i32.const 255
@@ -326,47 +310,43 @@
                 local.get 26
                 i32.eqz
                 br_if 4 (;@2;)
-                local.get 34
-                local.set 53
+                local.get 36
+                local.set 49
               end
-              local.get 53
-              local.set 54
+              local.get 49
+              local.set 50
             end
-            local.get 54
-            local.set 55
+            local.get 50
+            local.set 51
           end
-          local.get 55
-          local.set 56
+          local.get 51
+          local.set 52
         end
         i64.const 128
         global.get 0
         i64.add
         global.set 0
-        local.get 56
+        local.get 52
         return
       end
       br 0 (;@1;)
     end
     unreachable)
   (func $generic_structs_5__iterators_.main.Chars.next (type 1) (param i64) (result i32 i32)
-    (local i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
+    (local i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 16
     i64.sub
     global.set 0
     block  ;; label = @1
       block  ;; label = @2
-        i64.const 0
-        local.set 14
-        i64.const 0
         global.get 0
-        i64.add
-        local.set 13
-        local.get 13
         i32.wrap_i64
         local.get 0
         i64.store
-        local.get 13
+        i64.const 0
+        local.set 13
+        global.get 0
         i32.wrap_i64
         i64.load
         local.set 12
@@ -375,29 +355,25 @@
         i64.load offset=8
         local.set 11
         local.get 11
-        local.get 14
+        local.get 13
         i64.eq
         local.set 1
         local.get 1
         i32.eqz
         br_if 0 (;@2;)
-        i64.const 8
-        global.get 0
-        i64.add
-        local.set 15
         i32.const 0
         local.set 4
-        local.get 15
+        global.get 0
         i32.wrap_i64
         local.get 4
-        i32.store8
-        local.get 15
+        i32.store8 offset=8
+        global.get 0
         i32.wrap_i64
-        i32.load8_u offset=1
+        i32.load8_u offset=9
         local.set 3
-        local.get 15
+        global.get 0
         i32.wrap_i64
-        i32.load8_u
+        i32.load8_u offset=8
         local.set 2
         local.get 2
         local.set 10
@@ -406,64 +382,60 @@
         br 1 (;@1;)
       end
       i64.const 1
-      local.set 23
-      i64.const 10
-      global.get 0
-      i64.add
-      local.set 22
+      local.set 20
       i32.const 1
       local.set 8
       local.get 12
       i32.wrap_i64
       i64.load
-      local.set 21
-      local.get 22
+      local.set 19
+      global.get 0
       i32.wrap_i64
       local.get 8
-      i32.store8
-      local.get 21
+      i32.store8 offset=10
+      local.get 19
       i32.wrap_i64
       i32.load8_u
       local.set 7
-      local.get 22
+      global.get 0
       i32.wrap_i64
       local.get 7
-      i32.store8 offset=1
-      local.get 13
+      i32.store8 offset=11
+      global.get 0
       i32.wrap_i64
       i64.load
-      local.set 20
-      local.get 20
-      i32.wrap_i64
-      i64.load offset=8
-      local.set 19
-      local.get 19
-      local.get 23
-      i64.sub
       local.set 18
-      local.get 20
+      local.get 18
       i32.wrap_i64
       i64.load
       local.set 17
       local.get 17
-      local.get 23
+      local.get 20
       i64.add
       local.set 16
-      local.get 22
+      local.get 18
       i32.wrap_i64
-      i32.load8_u offset=1
-      local.set 6
-      local.get 22
-      i32.wrap_i64
-      i32.load8_u
-      local.set 5
+      i64.load offset=8
+      local.set 15
+      local.get 15
       local.get 20
+      i64.sub
+      local.set 14
+      global.get 0
+      i32.wrap_i64
+      i32.load8_u offset=11
+      local.set 6
+      global.get 0
+      i32.wrap_i64
+      i32.load8_u offset=10
+      local.set 5
+      local.get 18
       i32.wrap_i64
       local.get 16
       i64.store
-      local.get 20
-      i32.wrap_i64
       local.get 18
+      i32.wrap_i64
+      local.get 14
       i64.store offset=8
       local.get 5
       local.set 10
@@ -479,34 +451,22 @@
     return
     unreachable)
   (func $generic_structs_5__iterators_.main.Chain_.Chars__.Chars_.next (type 2) (param i64) (result i32 i32)
-    (local i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
+    (local i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 16
     i64.sub
     global.set 0
-    i64.const 0
     global.get 0
-    i64.add
-    local.set 26
-    local.get 26
     i32.wrap_i64
     local.get 0
     i64.store
     i64.const 0
-    local.set 25
-    i64.const 1
-    local.set 24
-    i64.const 24
     local.set 23
-    i64.const 10
-    global.get 0
-    i64.add
+    i64.const 1
     local.set 22
-    i64.const 8
+    i64.const 24
     local.set 21
     i64.const 8
-    global.get 0
-    i64.add
     local.set 20
     i32.const 1
     local.set 2
@@ -519,50 +479,50 @@
             block  ;; label = @5
               block  ;; label = @6
                 block  ;; label = @7
-                  local.get 26
+                  global.get 0
                   i32.wrap_i64
                   i64.load
-                  local.set 28
-                  local.get 28
+                  local.set 25
+                  local.get 25
                   i32.wrap_i64
                   i32.load8_u
                   local.set 4
                   local.get 4
                   i32.extend8_s
                   i64.extend_i32_s
-                  local.set 27
-                  local.get 27
-                  local.get 25
+                  local.set 24
+                  local.get 24
+                  local.get 23
                   i64.eq
                   local.set 3
                   local.get 3
                   i32.eqz
                   br_if 0 (;@7;)
-                  local.get 28
-                  local.get 21
+                  local.get 25
+                  local.get 20
                   i64.add
                   call $generic_structs_5__iterators_.main.Chars.next
                   local.set 6
                   local.set 7
                   block  ;; label = @8
-                    local.get 20
+                    global.get 0
                     i32.wrap_i64
                     local.get 7
-                    i32.store8
-                    local.get 20
+                    i32.store8 offset=8
+                    global.get 0
                     i32.wrap_i64
                     local.get 6
-                    i32.store8 offset=1
-                    local.get 20
+                    i32.store8 offset=9
+                    global.get 0
                     i32.wrap_i64
-                    i32.load8_u
+                    i32.load8_u offset=8
                     local.set 5
                     local.get 5
                     i32.eqz
                     br_if 0 (;@8;)
-                    local.get 20
+                    global.get 0
                     i32.wrap_i64
-                    i32.load8_u offset=1
+                    i32.load8_u offset=9
                     local.set 8
                     local.get 5
                     local.set 14
@@ -570,7 +530,7 @@
                     local.set 13
                     br 2 (;@6;)
                   end
-                  local.get 26
+                  global.get 0
                   i32.wrap_i64
                   i64.load
                   i32.wrap_i64
@@ -578,35 +538,35 @@
                   i32.store8
                   br 3 (;@4;)
                 end
-                local.get 27
                 local.get 24
+                local.get 22
                 i64.eq
                 i32.eqz
                 br_if 3 (;@3;)
-                local.get 28
-                local.get 23
+                local.get 25
+                local.get 21
                 i64.add
                 call $generic_structs_5__iterators_.main.Chars.next
                 local.set 10
                 local.set 11
-                local.get 22
+                global.get 0
                 i32.wrap_i64
                 local.get 11
-                i32.store8
-                local.get 22
+                i32.store8 offset=10
+                global.get 0
                 i32.wrap_i64
                 local.get 10
-                i32.store8 offset=1
-                local.get 22
+                i32.store8 offset=11
+                global.get 0
                 i32.wrap_i64
-                i32.load8_u
+                i32.load8_u offset=10
                 local.set 9
                 local.get 9
                 i32.eqz
                 br_if 1 (;@5;)
-                local.get 22
+                global.get 0
                 i32.wrap_i64
-                i32.load8_u offset=1
+                i32.load8_u offset=11
                 local.set 12
                 local.get 9
                 local.set 14
@@ -619,7 +579,7 @@
               local.set 18
               br 3 (;@2;)
             end
-            local.get 26
+            global.get 0
             i32.wrap_i64
             i64.load
             i32.wrap_i64
@@ -628,23 +588,19 @@
           end
           br 2 (;@1;)
         end
-        i64.const 12
-        global.get 0
-        i64.add
-        local.set 29
         i32.const 0
         local.set 17
-        local.get 29
+        global.get 0
         i32.wrap_i64
         local.get 17
-        i32.store8
-        local.get 29
+        i32.store8 offset=12
+        global.get 0
         i32.wrap_i64
-        i32.load8_u offset=1
+        i32.load8_u offset=13
         local.set 16
-        local.get 29
+        global.get 0
         i32.wrap_i64
-        i32.load8_u
+        i32.load8_u offset=12
         local.set 15
         local.get 15
         local.set 19
