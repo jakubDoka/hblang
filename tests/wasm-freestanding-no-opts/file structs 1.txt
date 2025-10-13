@@ -2,43 +2,37 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i64) (result i64 i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64 i64 i64 i64 i64 i64)
+    (local i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 16
     i64.sub
     global.set 0
     i64.const 2
     call $Foo.init
-    local.set 6
-    local.set 7
+    local.set 4
+    local.set 5
     i64.const 0
     global.get 0
-    i64.add
-    local.set 5
-    local.get 5
-    i32.wrap_i64
-    local.get 7
-    i64.store
-    i64.const 8
-    local.set 4
-    local.get 5
-    local.get 4
     i64.add
     local.set 3
     local.get 3
     i32.wrap_i64
-    local.get 6
+    local.get 5
     i64.store
+    local.get 3
+    i32.wrap_i64
+    local.get 4
+    i64.store offset=8
     local.get 3
     i32.wrap_i64
     i64.load
     local.set 2
-    local.get 5
+    local.get 3
     i32.wrap_i64
-    i64.load
+    i64.load offset=8
     local.set 1
-    local.get 1
     local.get 2
+    local.get 1
     i64.sub
     local.set 0
     i64.const 16
@@ -49,7 +43,7 @@
     return
     unreachable)
   (func $Foo.init (type 1) (param i64) (result i64 i64)
-    (local i64 i64 i64 i64 i64 i64 i64 i64)
+    (local i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 24
     i64.sub
@@ -57,44 +51,38 @@
     i64.const 16
     global.get 0
     i64.add
-    local.set 8
+    local.set 6
     i64.const 0
     global.get 0
     i64.add
-    local.set 7
-    local.get 8
+    local.set 5
+    local.get 6
     i32.wrap_i64
     local.get 0
     i64.store
-    i64.const 8
-    local.set 6
-    local.get 7
     local.get 6
-    i64.add
-    local.set 5
-    local.get 8
     i32.wrap_i64
     i64.load
     local.set 4
-    local.get 7
+    local.get 5
     i32.wrap_i64
     local.get 4
     i64.store
-    local.get 8
+    local.get 6
     i32.wrap_i64
     i64.load
     local.set 3
     local.get 5
     i32.wrap_i64
     local.get 3
-    i64.store
-    local.get 7
+    i64.store offset=8
+    local.get 5
     i32.wrap_i64
     i64.load
     local.set 2
     local.get 5
     i32.wrap_i64
-    i64.load
+    i64.load offset=8
     local.set 1
     i64.const 24
     global.get 0

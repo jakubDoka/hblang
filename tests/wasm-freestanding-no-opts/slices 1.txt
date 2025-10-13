@@ -1,7 +1,7 @@
 (module
   (type (;0;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i32 i32 i32 i32 i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
+    (local i32 i32 i32 i32 i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 176
     i64.sub
@@ -9,291 +9,195 @@
     i64.const 168
     global.get 0
     i64.add
-    local.set 60
-    i64.const 2
-    local.set 59
+    local.set 29
     i64.const 128
     global.get 0
     i64.add
-    local.set 58
+    local.set 28
     i64.const 4
-    local.set 57
-    i32.const 2
-    local.set 3
+    local.set 27
+    i64.const 2
+    local.set 26
     i32.const 3
-    local.set 2
-    i64.const 3
-    local.set 56
-    local.get 60
-    local.get 56
-    i64.add
-    local.set 55
+    local.set 3
     i32.const 4
-    local.set 1
+    local.set 2
     i32.const 1
-    local.set 0
-    local.get 60
-    i32.wrap_i64
-    local.get 0
-    i32.store8
-    i64.const 24
-    local.set 54
-    i64.const 32
-    local.set 53
-    i64.const 40
-    local.set 52
-    i64.const 48
-    local.set 51
-    i64.const 56
-    local.set 50
-    i64.const 64
-    local.set 49
-    i64.const 72
-    local.set 48
-    i64.const 80
-    local.set 47
-    i64.const 88
-    local.set 46
-    i64.const 96
-    local.set 45
-    i64.const 104
-    local.set 44
-    i64.const 112
-    local.set 43
-    i64.const 120
-    local.set 42
-    local.get 60
-    local.get 59
-    i64.add
-    local.set 41
-    i64.const 16
-    local.set 40
-    i64.const 1
-    local.set 39
-    local.get 60
-    local.get 39
-    i64.add
-    local.set 38
-    local.get 38
-    i32.wrap_i64
-    local.get 3
-    i32.store8
-    local.get 41
-    i32.wrap_i64
-    local.get 2
-    i32.store8
-    local.get 55
+    local.set 1
+    local.get 29
     i32.wrap_i64
     local.get 1
     i32.store8
-    local.get 58
-    i32.wrap_i64
-    local.get 60
-    i64.store
-    i64.const 8
-    local.set 37
-    local.get 58
-    local.get 37
-    i64.add
-    local.set 36
-    local.get 36
-    i32.wrap_i64
-    local.get 57
-    i64.store
-    i64.const 0
-    local.set 35
-    i64.const 152
-    global.get 0
-    i64.add
-    local.set 34
-    i64.const 160
-    global.get 0
-    i64.add
-    local.set 33
-    i64.const 0
-    global.get 0
-    i64.add
-    local.set 32
-    local.get 32
-    local.get 54
-    i64.add
-    local.set 31
-    local.get 32
-    local.get 53
-    i64.add
-    local.set 30
-    local.get 32
-    local.get 52
-    i64.add
-    local.set 29
-    local.get 32
-    local.get 51
-    i64.add
-    local.set 28
-    local.get 32
-    local.get 50
-    i64.add
-    local.set 27
-    local.get 32
-    local.get 49
-    i64.add
-    local.set 26
-    local.get 32
-    local.get 48
-    i64.add
-    local.set 25
-    local.get 32
-    local.get 47
-    i64.add
-    local.set 24
-    local.get 32
-    local.get 46
-    i64.add
-    local.set 23
-    local.get 32
-    local.get 45
-    i64.add
-    local.set 22
-    local.get 32
-    local.get 44
-    i64.add
-    local.set 21
-    local.get 32
-    i32.wrap_i64
-    local.get 60
-    i64.store
-    local.get 32
-    local.get 43
-    i64.add
-    local.set 20
-    local.get 32
-    local.get 42
-    i64.add
-    local.set 19
-    local.get 32
-    local.get 37
-    i64.add
-    local.set 18
-    local.get 18
-    i32.wrap_i64
-    local.get 57
-    i64.store
-    local.get 32
-    local.get 40
-    i64.add
-    local.set 17
-    local.get 17
-    i32.wrap_i64
-    local.get 60
-    i64.store
-    local.get 31
-    i32.wrap_i64
-    local.get 59
-    i64.store
-    local.get 30
-    i32.wrap_i64
-    local.get 41
-    i64.store
+    i32.const 2
+    local.set 0
     local.get 29
     i32.wrap_i64
-    local.get 59
+    local.get 0
+    i32.store8 offset=1
+    local.get 29
+    i32.wrap_i64
+    local.get 3
+    i32.store8 offset=2
+    local.get 29
+    i32.wrap_i64
+    local.get 2
+    i32.store8 offset=3
+    local.get 28
+    i32.wrap_i64
+    local.get 29
     i64.store
     local.get 28
     i32.wrap_i64
-    local.get 38
-    i64.store
     local.get 27
+    i64.store offset=8
+    local.get 29
+    local.get 26
+    i64.add
+    local.set 25
+    i64.const 160
+    global.get 0
+    i64.add
+    local.set 24
+    i64.const 16
+    local.set 23
+    i64.const 8
+    local.set 22
+    i64.const 0
+    global.get 0
+    i64.add
+    local.set 21
+    local.get 21
     i32.wrap_i64
-    local.get 59
+    local.get 29
     i64.store
-    local.get 58
+    local.get 21
+    i32.wrap_i64
+    local.get 27
+    i64.store offset=8
+    local.get 21
+    i32.wrap_i64
+    local.get 29
+    i64.store offset=16
+    local.get 21
+    i32.wrap_i64
+    local.get 26
+    i64.store offset=24
+    local.get 21
+    i32.wrap_i64
+    local.get 25
+    i64.store offset=32
+    local.get 21
+    i32.wrap_i64
+    local.get 26
+    i64.store offset=40
+    i64.const 1
+    local.set 20
+    local.get 29
+    local.get 20
+    i64.add
+    local.set 19
+    local.get 21
+    i32.wrap_i64
+    local.get 19
+    i64.store offset=48
+    local.get 21
+    i32.wrap_i64
+    local.get 26
+    i64.store offset=56
+    local.get 28
+    i32.wrap_i64
+    i64.load
+    local.set 18
+    local.get 28
+    i32.wrap_i64
+    i64.load offset=8
+    local.set 17
+    local.get 21
+    i32.wrap_i64
+    local.get 18
+    i64.store offset=64
+    local.get 21
+    i32.wrap_i64
+    local.get 17
+    i64.store offset=72
+    local.get 28
     i32.wrap_i64
     i64.load
     local.set 16
-    local.get 36
+    local.get 21
+    i32.wrap_i64
+    local.get 16
+    i64.store offset=80
+    local.get 21
+    i32.wrap_i64
+    local.get 26
+    i64.store offset=88
+    local.get 28
     i32.wrap_i64
     i64.load
     local.set 15
-    local.get 26
-    i32.wrap_i64
-    local.get 16
-    i64.store
-    local.get 25
-    i32.wrap_i64
     local.get 15
-    i64.store
-    local.get 58
-    i32.wrap_i64
-    i64.load
+    local.get 26
+    i64.add
     local.set 14
-    local.get 24
+    local.get 28
+    i32.wrap_i64
+    i64.load offset=8
+    local.set 13
+    local.get 21
     i32.wrap_i64
     local.get 14
-    i64.store
-    local.get 23
-    i32.wrap_i64
-    local.get 59
-    i64.store
-    local.get 36
-    i32.wrap_i64
-    i64.load
-    local.set 13
+    i64.store offset=96
     local.get 13
-    local.get 59
+    local.get 26
     i64.sub
     local.set 12
-    local.get 58
+    local.get 21
+    i32.wrap_i64
+    local.get 12
+    i64.store offset=104
+    local.get 28
     i32.wrap_i64
     i64.load
     local.set 11
     local.get 11
-    local.get 59
+    local.get 20
     i64.add
     local.set 10
-    local.get 22
-    i32.wrap_i64
-    local.get 10
-    i64.store
     local.get 21
     i32.wrap_i64
-    local.get 12
-    i64.store
-    local.get 58
+    local.get 10
+    i64.store offset=112
+    local.get 21
     i32.wrap_i64
-    i64.load
-    local.set 9
-    local.get 9
-    local.get 39
+    local.get 26
+    i64.store offset=120
+    i64.const 152
+    global.get 0
     i64.add
+    local.set 9
+    i64.const 0
     local.set 8
-    local.get 20
-    i32.wrap_i64
-    local.get 8
-    i64.store
-    local.get 19
-    i32.wrap_i64
-    local.get 59
-    i64.store
     i64.const 144
     global.get 0
     i64.add
     local.set 7
     local.get 7
     i32.wrap_i64
-    local.get 35
+    local.get 8
     i64.store
-    local.get 34
+    local.get 9
     i32.wrap_i64
-    local.get 35
+    local.get 8
     i64.store
     loop  ;; label = @1
       block  ;; label = @2
-        local.get 34
+        local.get 9
         i32.wrap_i64
         i64.load
-        local.set 61
-        local.get 61
-        local.get 37
+        local.set 30
+        local.get 30
+        local.get 22
         i64.eq
         local.set 4
         local.get 4
@@ -308,60 +212,56 @@
         global.set 0
         return
       end
-      local.get 33
+      local.get 24
       i32.wrap_i64
-      local.get 35
+      local.get 8
       i64.store
       loop  ;; label = @2
         block  ;; label = @3
-          local.get 34
+          local.get 9
           i32.wrap_i64
           i64.load
-          local.set 67
-          local.get 67
-          local.get 40
+          local.set 35
+          local.get 35
+          local.get 23
           i64.mul
-          local.set 66
-          local.get 32
-          local.get 66
+          local.set 34
+          local.get 21
+          local.get 34
           i64.add
-          local.set 65
-          local.get 65
-          local.get 37
-          i64.add
-          local.set 64
-          local.get 64
-          i32.wrap_i64
-          i64.load
-          local.set 63
+          local.set 33
           local.get 33
           i32.wrap_i64
+          i64.load offset=8
+          local.set 32
+          local.get 24
+          i32.wrap_i64
           i64.load
-          local.set 62
-          local.get 62
-          local.get 63
+          local.set 31
+          local.get 31
+          local.get 32
           i64.eq
           local.set 5
           local.get 5
           i32.eqz
           br_if 0 (;@3;)
-          local.get 67
-          local.get 39
+          local.get 35
+          local.get 20
           i64.add
-          local.set 68
-          local.get 34
+          local.set 36
+          local.get 9
           i32.wrap_i64
-          local.get 68
+          local.get 36
           i64.store
           br 2 (;@1;)
         end
-        local.get 65
+        local.get 33
         i32.wrap_i64
         i64.load
-        local.get 62
+        local.get 31
         i64.add
-        local.set 74
-        local.get 74
+        local.set 42
+        local.get 42
         i32.wrap_i64
         i32.load8_u
         local.set 6
@@ -369,30 +269,30 @@
         i32.const 255
         i32.and
         i64.extend_i32_u
-        local.set 73
+        local.set 41
         local.get 7
         i32.wrap_i64
         i64.load
-        local.set 72
-        local.get 72
-        local.get 73
+        local.set 40
+        local.get 40
+        local.get 41
         i64.add
-        local.set 71
+        local.set 39
         local.get 7
         i32.wrap_i64
-        local.get 71
-        i64.store
-        local.get 33
-        i32.wrap_i64
-        i64.load
-        local.set 70
-        local.get 70
         local.get 39
-        i64.add
-        local.set 69
-        local.get 33
+        i64.store
+        local.get 24
         i32.wrap_i64
-        local.get 69
+        i64.load
+        local.set 38
+        local.get 38
+        local.get 20
+        i64.add
+        local.set 37
+        local.get 24
+        i32.wrap_i64
+        local.get 37
         i64.store
         br 0 (;@2;)
       end

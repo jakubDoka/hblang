@@ -242,12 +242,14 @@ pub fn build(b: *std.Build) !void {
         const files = [_][]const u8{
             "src/x86_64/mach_peeps.clj",
             "src/hbvm/mach_peeps.clj",
+            "src/wasm/mach_peeps.clj",
             "src/backend/ideal_peeps.clj",
         };
 
         const backends = [_][]const u8{
             "x86_64.X86_64Gen",
             "hbvm.HbvmGen",
+            "wasm.WasmGen",
             "graph.IdealGen",
         };
 

@@ -6,6 +6,7 @@ const Mach = root.backend.Machine;
 const Regalloc = root.backend.Regalloc;
 const utils = root.utils;
 const object = root.wasm.object;
+const matcher = @import("wasm.WasmGen");
 
 const WasmGen = @This();
 const Func = graph.Func(WasmGen);
@@ -52,7 +53,16 @@ pub const Ctx = struct {
     arg_base: u32 = undefined,
 };
 
-pub const classes = enum {};
+pub const classes = enum {
+    pub const WStore = extern struct {
+        base: graph.Store = .{},
+        offset: i64,
+    };
+    pub const WLoad = extern struct {
+        base: graph.Load = .{},
+        offset: i64,
+    };
+};
 
 pub fn idealize(self: *WasmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
     _ = self;
@@ -96,6 +106,12 @@ pub fn idealize(self: *WasmGen, func: *Func, node: *Func.Node, work: *Func.WorkL
             );
         }
     }
+
+    return null;
+}
+
+pub fn idealizeMach(self: *WasmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
+    if (matcher.idealize(self, func, node, work)) |n| return n;
 
     return null;
 }
@@ -229,26 +245,112 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         while (@as(?Func.Node.Out, iter.next())) |out| {
             if (!out.get().isDef()) continue;
 
-            var real_dep: ?Func.Node.Out = null;
-            var has_many = false;
-            for (out.get().outputs()) |dep| {
-                if (dep.get().hasUseFor(dep.pos(), out.get())) {
-                    if (real_dep != null) {
-                        has_many = true;
-                        break;
+            on_stack: {
+                if (out.get().kind == .Phi or out.get().kind == .Arg) break :on_stack;
+
+                var real_dep: ?Func.Node.Out = null;
+                for (out.get().outputs()) |dep| {
+                    if (dep.get().hasUseFor(dep.pos(), out.get())) {
+                        if (real_dep != null) {
+                            break :on_stack;
+                        }
+
+                        if (dep.get().inputs()[0].? != out.get().inputs()[0].?) break :on_stack;
+
+                        real_dep = dep;
                     }
-
-                    real_dep = dep;
                 }
-            }
 
-            if (!has_many and real_dep != null and out.get().kind != .Phi and out.get().kind != .Arg and
-                block.base.outputs()[out.pos() + 1].get() == real_dep.?.get() and
-                out.get().outputs()[0].get().dataDepOffset() == real_dep.?.pos())
-            {
+                const dep = real_dep orelse break :on_stack;
+
+                if (false) {
+                    if (dep.pos() == 3 and dep.get().kind == .Store) break :on_stack;
+                    if (dep.get().kind == .MemCpy) break :on_stack;
+                } else {
+                    if (dep.pos() != dep.get().dataDepOffset()) break :on_stack;
+                }
+
+                if (dep.get().kind == .Call and dep.get().extra(.Call).id == graph.indirect_call) {
+                    break :on_stack;
+                }
+
+                if (false) {
+                    var pending_stack = tmp.arena.makeArrayList(*Func.Node, block.base.outputs().len - out.pos());
+
+                    for (block.base.outputs()[out.pos()..]) |inbetween| {
+                        if (inbetween.get() == dep.get()) {
+                            break;
+                        }
+
+                        if (inbetween.get().schedule != on_stack_schedule) {
+                            continue;
+                        }
+
+                        for (dep.get().ordInps()[0..dep.pos()]) |idep| {
+                            if (idep == null) continue;
+                            if (idep.? == inbetween.get()) {
+                                break :on_stack;
+                            }
+                        }
+
+                        for (inbetween.get().outputs()) |idep| {
+                            if (idep.get().hasUseFor(idep.pos(), inbetween.get()) and idep.get() != dep.get()) {
+                                pending_stack.appendAssumeCapacity(idep.get());
+                            }
+                        }
+
+                        // NOTE: this can occure multiple times
+                        var i: usize = 0;
+                        while (i < pending_stack.items.len) {
+                            if (pending_stack.items[i] == inbetween.get()) {
+                                _ = pending_stack.swapRemove(i);
+                            } else {
+                                i += 1;
+                            }
+                        }
+                    } else unreachable;
+
+                    if (pending_stack.items.len != 0) {
+                        break :on_stack;
+                    }
+                } else {
+                    if (out.get().outputs()[0].get() != block.base.outputs()[out.pos() + 1].get()) break :on_stack;
+                }
+
                 out.get().schedule = on_stack_schedule;
                 continue;
             }
+
+            if (false) {
+                var frointer = std.ArrayList(*Func.Node).empty;
+                out.get().schedule = on_stack_schedule;
+                try frointer.append(tmp.arena.allocator(), out.get());
+                while (frointer.pop()) |node| {
+                    if (node.cfg0() != out.get().cfg0()) continue;
+                    if (node.schedule == 0) continue;
+                    node.schedule = 0;
+
+                    for (node.outputs()) |dep| {
+                        if (dep.get().hasUseFor(dep.pos(), node)) {
+                            try frointer.appendSlice(
+                                tmp.arena.allocator(),
+                                @ptrCast(dep.get().ordInps()[dep.pos() + 1 ..]),
+                            );
+                        }
+                    }
+                }
+            } else {
+                out.get().schedule = 0;
+            }
+        }
+    }
+
+    for (func.gcm.postorder) |block| {
+        var iter = std.mem.reverseIterator(block.base.outputs());
+        while (@as(?Func.Node.Out, iter.next())) |out| {
+            if (!out.get().isDef()) continue;
+
+            if (out.get().schedule == on_stack_schedule) continue;
 
             out.get().schedule = func.gcm.instr_count;
             func.gcm.instr_count += 1;
@@ -616,21 +718,23 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                     else => utils.panic("{}", .{op_ty}),
                 },
                 .cast => switch (op_ty) {
-                    .i32 => switch (inps[0].data_type) {
+                    .i32 => switch (instr.data_type) {
                         .f32 => opb(.f32_reinterpret_i32),
-                        else => utils.panic("{}", .{inps[0].data_type}),
+                        else => utils.panic("{}", .{instr.data_type}),
                     },
-                    .i64 => switch (inps[0].data_type) {
+                    .i64 => switch (instr.data_type) {
                         .f64 => opb(.f64_reinterpret_i64),
-                        else => utils.panic("{}", .{inps[0].data_type}),
+                        else => {
+                            utils.panic("{}", .{instr.data_type});
+                        },
                     },
-                    .f32 => switch (inps[0].data_type) {
+                    .f32 => switch (instr.data_type) {
                         .i32 => opb(.i32_reinterpret_f32),
-                        else => utils.panic("{}", .{inps[0].data_type}),
+                        else => utils.panic("{}", .{instr.data_type}),
                     },
-                    .f64 => switch (inps[0].data_type) {
+                    .f64 => switch (instr.data_type) {
                         .i64 => opb(.i64_reinterpret_f64),
-                        else => utils.panic("{}", .{inps[0].data_type}),
+                        else => utils.panic("{}", .{instr.data_type}),
                     },
                     else => utils.panic("{}", .{op_ty}),
                 },
@@ -810,7 +914,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
 
             self.emitLocalStore(instr);
         },
-        .Store => {
+        .WStore => |extra| {
             // TODO: we can emit specialized stores
 
             self.emitLocalLoad(inps[0]);
@@ -830,9 +934,9 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeByte(op_code);
             const alignment = std.math.log2_int(usize, instr.data_type.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
-            try self.ctx.buf.writer.writeByte(0);
+            try self.ctx.buf.writer.writeSleb128(extra.offset);
         },
-        .Load => {
+        .WLoad => |extra| {
             // TODO: we can emit specialized loads, maybe even sign extension
 
             // local.get addr
@@ -852,7 +956,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeByte(op_code);
             const alignment = std.math.log2_int(usize, instr.data_type.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
-            try self.ctx.buf.writer.writeUleb128(0);
+            try self.ctx.buf.writer.writeSleb128(extra.offset);
 
             self.emitLocalStore(instr);
         },
@@ -1166,7 +1270,7 @@ pub fn disasm(_: *WasmGen, opts: Mach.DisasmOpts) void {
 }
 
 pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
-    const cleanup = true;
+    const cleanup = false;
 
     var tmp = root.utils.Arena.scrath(null);
     defer tmp.deinit();
