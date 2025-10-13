@@ -455,7 +455,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeUleb128(self.regOf(instr));
         },
         .UnOp => |extra| {
-            if (extra.op != .ineg) {
+            if (extra.op != .ineg and extra.op != .bnot) {
                 try self.ctx.buf.writer.writeByte(opb(.local_get));
                 try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
             }
@@ -577,7 +577,47 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                         else => utils.panic("{}", .{op_ty}),
                     };
                 },
-                else => utils.panic("{}", .{extra.op}),
+                .bnot => b: {
+                    try self.ctx.buf.writer.writeByte(switch (op_ty) {
+                        .i32 => opb(.i32_const),
+                        .i64 => opb(.i64_const),
+                        else => utils.panic("{}", .{op_ty}),
+                    });
+                    try self.ctx.buf.writer.writeSleb128(-1);
+
+                    try self.ctx.buf.writer.writeByte(opb(.local_get));
+                    try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
+
+                    break :b switch (op_ty) {
+                        .i32 => opb(.i32_xor),
+                        .i64 => opb(.i64_xor),
+                        else => utils.panic("{}", .{op_ty}),
+                    };
+                },
+                .fneg => switch (op_ty) {
+                    .f32 => opb(.f32_neg),
+                    .f64 => opb(.f64_neg),
+                    else => utils.panic("{}", .{op_ty}),
+                },
+                .cast => switch (op_ty) {
+                    .i32 => switch (inps[0].data_type) {
+                        .f32 => opb(.f32_reinterpret_i32),
+                        else => utils.panic("{}", .{inps[0].data_type}),
+                    },
+                    .i64 => switch (inps[0].data_type) {
+                        .f64 => opb(.f64_reinterpret_i64),
+                        else => utils.panic("{}", .{inps[0].data_type}),
+                    },
+                    .f32 => switch (inps[0].data_type) {
+                        .i32 => opb(.i32_reinterpret_f32),
+                        else => utils.panic("{}", .{inps[0].data_type}),
+                    },
+                    .f64 => switch (inps[0].data_type) {
+                        .i64 => opb(.i64_reinterpret_f64),
+                        else => utils.panic("{}", .{inps[0].data_type}),
+                    },
+                    else => utils.panic("{}", .{op_ty}),
+                },
             };
             try self.ctx.buf.writer.writeByte(op_code);
 
