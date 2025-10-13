@@ -1,59 +1,112 @@
 main:
-         st $31, $254, -16, 16
-     addi64 $254, $254, -136
-     addi64 $8, $254, 16
-     addi64 $7, $254, 80
-       li64 $3, 4
-        lra $2, $0, :ab
-        lra $6, $0, :cd
-     addi64 $5, $254, 0
+         st $31, $254, -24, 24
+     addi64 $254, $254, -144
+     addi64 $7, $254, 16
         lra $1, $0, :abcd
          st $1, $254, 0, 8
-         st $3, $254, 8, 8
-         st $2, $254, 16, 8
+        lra $6, $0, :ab
+        lra $5, $0, :cd
      addi64 $4, $254, 32
-     addi64 $3, $7, 8
-     addi64 $2, $7, 24
+     addi64 $33, $254, 0
+     addi64 $1, $254, 80
+     addi64 $3, $1, 8
+     addi64 $1, $254, 80
+     addi64 $2, $1, 24
+       li64 $1, 4
+         st $1, $254, 8, 8
+         st $6, $254, 16, 8
        li64 $1, 2
          st $1, $254, 24, 8
-         st $6, $254, 32, 8
+         st $5, $254, 32, 8
        li64 $1, 2
          st $1, $254, 40, 8
      addi64 $1, $254, 64
-        bmc $8, $1, 16
+        bmc $7, $1, 16
      addi64 $1, $254, 48
-        bmc $5, $1, 16
+        bmc $33, $1, 16
          st $0, $254, 80, 1
-        bmc $8, $3, 16
+        bmc $7, $3, 16
         bmc $4, $2, 16
-8:   addi64 $1, $254, 64
+d:   addi64 $1, $254, 64
         jal $31, $0, :generic structs 5 (iterators).main.Chars.next
          cp $32, $2
        andi $1, $1, 255
         jne $1, $0, :4
+     addi64 $1, $254, 48
+        bmc $33, $1, 16
+a:   addi64 $1, $254, 48
+        jal $31, $0, :generic structs 5 (iterators).main.Chars.next
+         cp $32, $2
+       andi $1, $1, 255
+        jne $1, $0, :5
          cp $1, $0
-        jmp :5
+        jmp :6
+5:   addi64 $1, $254, 80
+        jal $31, $0, :generic structs 5 (iterators).main.Chain(.Chars, .Chars).next
+       andi $1, $1, 255
+        jne $1, $0, :8
+       li64 $1, 3
+        jmp :6
+8:     andi $2, $2, 255
+       andi $1, $32, 255
+        jeq $2, $1, :9
+       li64 $1, 4
+        jmp :6
+9:      jmp :a
 4:   addi64 $1, $254, 48
         jal $31, $0, :generic structs 5 (iterators).main.Chars.next
        andi $1, $1, 255
-        jne $1, $0, :6
+        jne $1, $0, :b
        li64 $1, 1
-        jmp :5
-6:     andi $3, $32, 255
+        jmp :6
+b:     andi $3, $32, 255
        andi $1, $2, 255
-        jeq $3, $1, :7
+        jeq $3, $1, :c
        li64 $1, 2
-5:   addi64 $254, $254, 136
-         ld $31, $254, -16, 16
+6:   addi64 $254, $254, 144
+         ld $31, $254, -24, 24
          tx
-7:      jmp :8
+c:      jmp :d
+generic structs 5 (iterators).main.Chain(.Chars, .Chars).next:
+         st $31, $254, -40, 40
+     addi64 $254, $254, -40
+         cp $35, $1
+       li64 $34, 1
+         cp $1, $35
+     addi64 $33, $1, 24
+         cp $1, $35
+     addi64 $32, $1, 8
+15:       ld $1, $35, 0, 1
+       sxt8 $1, $1
+        jne $1, $0, :e
+         cp $1, $32
+        jal $31, $0, :generic structs 5 (iterators).main.Chars.next
+       andi $3, $1, 255
+        jeq $3, $0, :f
+        jmp :10
+f:      li8 $1, 1
+        jmp :11
+e:      jne $1, $34, :12
+         cp $1, $33
+        jal $31, $0, :generic structs 5 (iterators).main.Chars.next
+       andi $3, $1, 255
+        jeq $3, $0, :13
+10:      jmp :14
+13:      li8 $1, 2
+11:       st $1, $35, 0, 1
+        jmp :15
+12:     li64 $2, -6148914691236517206
+         cp $1, $0
+14:   addi64 $254, $254, 40
+         ld $31, $254, -40, 40
+       jala $0, $31, 0
 generic structs 5 (iterators).main.Chars.next:
          ld $2, $1, 8, 8
-        jne $2, $0, :9
+        jne $2, $0, :16
        li64 $2, -6148914691236517206
          cp $1, $0
-        jmp :a
-9:       ld $5, $1, 0, 8
+        jmp :17
+16:       ld $5, $1, 0, 8
      addi64 $4, $5, 1
          ld $2, $1, 8, 8
      addi64 $3, $2, -1
@@ -61,4 +114,4 @@ generic structs 5 (iterators).main.Chars.next:
          st $4, $1, 0, 8
          st $3, $1, 8, 8
         li8 $1, 1
-a:     jala $0, $31, 0
+17:     jala $0, $31, 0

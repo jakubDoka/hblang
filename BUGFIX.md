@@ -1668,7 +1668,7 @@ main := fn(): uint {
 ```
 
 #### comptime short circuit failure 1
-```!hb
+```hb
 expectations := .{
     should_error: true,
 }

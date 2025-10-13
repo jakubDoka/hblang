@@ -911,7 +911,7 @@ Array := fn(E: type, len: uint): type if len == 0 {
 ```
 
 #### generic structs 5 (iterators)
-```!hb
+```hb
 main := fn(): uint {
     ref := "abcd"
 
@@ -2263,6 +2263,8 @@ main := fn(): uint {
 - [x] x86_64-linux target
   - [x] folating point math
 - [ ] x86_64-windows target
+- [x] wasm-freestanding
+  - [ ] specific optimizations
 - [x] diagnostics
   - [x] don't crash on cycles
   - [x] colors
@@ -2301,7 +2303,7 @@ main := fn(): uint {
 - [x] global variables
   - [x] strings
   - [x] comptime evaluation
-  - [ ] references
+  - [x] references
   - [x] immutable
     - [x] noop compatibility
 - [ ] types
@@ -2338,13 +2340,14 @@ main := fn(): uint {
     - [x] operators
     - [x] comparison
   - [x] enums
-    - [ ] ? specific values
-    - [ ] ? backing integer
+    - [x] specific values
+    - [x] backing integer
     - [x] scope
   - [x] unions
     - [ ] ? alignment
     - [ ] ? field alignment
-    - [ ] ? tag + customizable
+    - [x] tag
+      - [ ] ? customizable
     - [x] scope
   - [x] pointers
     - [x] slicing
@@ -2460,16 +2463,3 @@ When contributing make sure to:
 - implementing more peephole optimizations (located inside `fn idealize*`)
 - implementing new target triple (the [Machine](./src/backend/Machine.zig))
   - look at [HbvmGen](./src/hbvm/HbvmGen.zig)
-
-Partial evaluation is revamped, previously I had a messy stack based graph evaluator that had hacks all over. I changed the value returned ba partial evaluation to be a `*Node` which prooves to model the partial evaluation quite nicel. It was not obvious that `fn(*Node): *Node` is the right model but it fits perfectly since I can encode constant, global reference and even offset into a global reference. The evaluator just tries to reduce everithing to these three.
-
-This refactore uncovered a serious problem. The interaction between local variables and scopes that capture them was kind of a hack where compiler would silently ignore an error in partial evaluation which was mostly acceptable if it was used in `@TypeOf`. New partial eval code converts captured values to unique globals, so this was no longer possible. This forced me to make local comptime variables explicit. So now, it one wants to use the value of a local variable in a struct like this:
-
-```rust
-    value := 1
-    return struct {
-        foo := value
-    }
-```
-
-Has to use `$value` instead. All in all this avoids mistakes and compiler can leave the `value` unchanged in case only type of the variable is used. The type only captures generate special nodes that partial evaluation reports so even advanced usage like `@TypeOf(struct[i])` knows it needs a value of `i` to resolve the type of the expression.
