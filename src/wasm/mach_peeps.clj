@@ -7,6 +7,14 @@
 (Store ?c m bs @ base offset = {bs.knownOffset()} v) :
   (WStore (:offset) c m base v)
 
+(UnOp _ (:op .sext) (:data_type)
+  (StackLoad ?c (:data_type src_ty) (:offset) m bs)) :
+  (SignedStackLoad (:src_ty) (:data_type) (:offset) c m bs)
+
+(UnOp _ (:op .sext) (:data_type)
+  (WLoad ?c (:data_type src_ty) (:offset) m bs)) :
+  (SignedLoad (:src_ty) (:data_type) (:offset) c m bs)
+
 (Load ?c m bs @ (Local _ LocalAlloc:l) offset = {bs.knownOffset()}) :
   (StackLoad (:offset) c m l)
 

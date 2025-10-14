@@ -121,7 +121,7 @@ pub fn Mixin(comptime Backend: type) type {
             if ((!mem_op.isLoad() and !mem_op.isStore()) or mem_op.isSub(graph.MemCpy)) return;
             if (mem_op.isStore() and mem_op.value() == addr) return;
             if (mem_op.isLoad() and mem_op.base() != addr and mem_op.base() != local) return;
-            const end_offset = offset + @as(i64, @intCast(mem_op.data_type.size()));
+            const end_offset = offset + @as(i64, @intCast(mem_op.loadDatatype().size()));
             if (offset < 0 or end_offset > local.extra(.LocalAlloc).size) {
                 try errors.append(arena.allocator(), .{ .StackOob = .{
                     .slot = local.sloc,

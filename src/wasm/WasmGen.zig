@@ -19,6 +19,13 @@ indirect_signature_count: u64 = 0,
 stack_size: u64 = 1024 * 128,
 ctx: *Ctx = undefined,
 
+pub fn loadDatatype(node: *Func.Node) graph.DataType {
+    return switch (node.extra2()) {
+        inline .SignedLoad, .SignedStackLoad => |extra| extra.src_ty,
+        else => node.data_type,
+    };
+}
+
 pub const i_know_the_api = {};
 pub const Set = struct {
     pub fn count(_: Set) usize {
@@ -67,8 +74,19 @@ pub const classes = enum {
         base: graph.Load = .{},
         offset: i64,
     };
+    pub const SignedLoad = extern struct {
+        base: graph.Load = .{},
+        src_ty: graph.DataType,
+        offset: i64,
+    };
     pub const StackLoad = extern struct {
         base: graph.Load = .{},
+        offset: i64,
+        pub const data_dep_offset = 2;
+    };
+    pub const SignedStackLoad = extern struct {
+        base: graph.Load = .{},
+        src_ty: graph.DataType,
         offset: i64,
         pub const data_dep_offset = 2;
     };
@@ -246,15 +264,6 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         }
     }
 
-    var counters: struct {
-        i32: usize = 0,
-        i64: usize = 0,
-        f32: usize = 0,
-        f64: usize = 0,
-    } = .{};
-
-    func.gcm.instr_count = 0;
-
     for (func.gcm.postorder) |block| {
         for (block.base.outputs(), 0..) |out, i| {
             out.get().schedule = @intCast(i);
@@ -321,6 +330,15 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         }
     }
 
+    var counters: struct {
+        i32: usize = 0,
+        i64: usize = 0,
+        f32: usize = 0,
+        f64: usize = 0,
+    } = .{};
+
+    func.gcm.instr_count = 0;
+
     for (func.gcm.postorder) |block| {
         for (block.base.outputs()) |out| {
             if (!out.get().isDef()) {
@@ -384,14 +402,14 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
                 continue;
             }
 
-            const prev = switch (dataTypeToWasmType(instr.data_type)) {
+            const prev = switch (dataTypeToWasmType(out.get().data_type)) {
                 .fnc, .vec => unreachable,
                 inline else => |ty| @field(counters, @tagName(ty)),
             };
 
             self.ctx.allocs[instr.schedule] = @intCast(params_len + prev);
 
-            switch (dataTypeToWasmType(instr.data_type)) {
+            switch (dataTypeToWasmType(out.get().data_type)) {
                 .fnc, .vec => unreachable,
                 inline else => |ty| @field(counters, @tagName(ty)) += 1,
             }
@@ -552,6 +570,51 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     try self.ctx.buf.writer.writeByte(opb(.@"unreachable"));
     try self.ctx.buf.writer.writeByte(opb(.end));
+}
+
+// assuming we are sign extending
+pub fn selectSignedLoadOp(dest_ty: graph.DataType, src_ty: graph.DataType) u8 {
+    return switch (src_ty) {
+        .i8 => switch (dest_ty) {
+            .i16, .i32 => opb(.i32_load8_s),
+            .i64 => opb(.i64_load8_s),
+            else => unreachable,
+        },
+        .i16 => switch (dest_ty) {
+            .i32 => opb(.i32_load16_s),
+            .i64 => opb(.i64_load16_s),
+            else => unreachable,
+        },
+        .i32 => b: {
+            std.debug.assert(dest_ty == .i64);
+            break :b opb(.i64_load32_s);
+        },
+        else => unreachable,
+    };
+}
+
+pub fn selectStoreOp(ty: graph.DataType) u8 {
+    return switch (ty) {
+        .i32 => opb(.i32_store),
+        .i64 => opb(.i64_store),
+        .f32 => opb(.f32_store),
+        .f64 => opb(.f64_store),
+        .i8 => opb(.i32_store8),
+        .i16 => opb(.i32_store16),
+        else => unreachable,
+    };
+}
+
+pub fn selectLoadOp(ty: graph.DataType) u8 {
+    return switch (ty) {
+        .i32 => opb(.i32_load),
+        .i64 => opb(.i64_load),
+        .f32 => opb(.f32_load),
+        .f64 => opb(.f64_load),
+        .i8 => opb(.i32_load8_u),
+        .i16 => opb(.i32_load16_u),
+        else => unreachable,
+    };
 }
 
 pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
@@ -738,168 +801,57 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalLoad(inps[0]);
             self.emitLocalLoad(inps[1]);
 
+            const utl = enum {
+                fn selectOp(op_ty: object.Type, prefix: anytype, name: anytype) u8 {
+                    return switch (op_ty) {
+                        inline @field(object.Type, @tagName(prefix) ++ "32"),
+                        @field(object.Type, @tagName(prefix) ++ "64"),
+                        => |t| opb(@field(object.Op, @tagName(t) ++ "_" ++ @tagName(name))),
+                        else => utils.panic("{}", .{op_ty}),
+                    };
+                }
+            };
+
             const op_ty = dataTypeToWasmType(instr.data_type);
             const oper_ty = dataTypeToWasmType(inps[0].data_type);
             const op_code: u8 = switch (extra.op) {
-                .iadd => switch (op_ty) {
-                    .i32 => opb(.i32_add),
-                    .i64 => opb(.i64_add),
-                    else => utils.panic("{}", .{op_ty}),
-                },
-                .isub => switch (op_ty) {
-                    .i32 => opb(.i32_sub),
-                    .i64 => opb(.i64_sub),
-                    else => utils.panic("{}", .{op_ty}),
-                },
-                .imul => switch (op_ty) {
-                    .i32 => opb(.i32_mul),
-                    .i64 => opb(.i64_mul),
-                    else => utils.panic("{}", .{op_ty}),
-                },
-                .udiv => switch (op_ty) {
-                    .i32 => opb(.i32_div_u),
-                    .i64 => opb(.i64_div_u),
-                    else => utils.panic("{}", .{op_ty}),
-                },
-                .sdiv => switch (op_ty) {
-                    .i32 => opb(.i32_div_s),
-                    .i64 => opb(.i64_div_s),
-                    else => utils.panic("{}", .{op_ty}),
-                },
-                .umod => switch (op_ty) {
-                    .i32 => opb(.i32_rem_u),
-                    .i64 => opb(.i64_rem_u),
-                    else => utils.panic("{}", .{op_ty}),
-                },
-                .smod => switch (op_ty) {
-                    .i32 => opb(.i32_rem_s),
-                    .i64 => opb(.i64_rem_s),
-                    else => utils.panic("{}", .{op_ty}),
-                },
-                .bor => switch (op_ty) {
-                    .i32 => opb(.i32_or),
-                    .i64 => opb(.i64_or),
-                    else => utils.panic("{}", .{op_ty}),
-                },
-                .band => switch (op_ty) {
-                    .i32 => opb(.i32_and),
-                    .i64 => opb(.i64_and),
-                    else => utils.panic("{}", .{op_ty}),
-                },
-                .bxor => switch (op_ty) {
-                    .i32 => opb(.i32_xor),
-                    .i64 => opb(.i64_xor),
-                    else => utils.panic("{}", .{op_ty}),
-                },
-                .ishl => switch (op_ty) {
-                    .i32 => opb(.i32_shl),
-                    .i64 => opb(.i64_shl),
-                    else => utils.panic("{}", .{op_ty}),
-                },
-                .ushr => switch (op_ty) {
-                    .i32 => opb(.i32_shr_u),
-                    .i64 => opb(.i64_shr_u),
-                    else => utils.panic("{}", .{op_ty}),
-                },
-                .sshr => switch (op_ty) {
-                    .i32 => opb(.i32_shr_s),
-                    .i64 => opb(.i64_shr_s),
-                    else => utils.panic("{}", .{op_ty}),
+                .iadd => utl.selectOp(op_ty, .i, .add),
+                .isub => utl.selectOp(op_ty, .i, .sub),
+                .imul => utl.selectOp(op_ty, .i, .mul),
+                .udiv => utl.selectOp(op_ty, .i, .div_u),
+                .sdiv => utl.selectOp(op_ty, .i, .div_s),
+                .umod => utl.selectOp(op_ty, .i, .rem_u),
+                .smod => utl.selectOp(op_ty, .i, .rem_s),
+                .bor => utl.selectOp(op_ty, .i, .@"or"),
+                .band => utl.selectOp(op_ty, .i, .@"and"),
+                .bxor => utl.selectOp(op_ty, .i, .xor),
+                .ishl => utl.selectOp(op_ty, .i, .shl),
+                .ushr => utl.selectOp(op_ty, .i, .shr_u),
+                .sshr => utl.selectOp(op_ty, .i, .shr_s),
+                .eq => switch (oper_ty) {
+                    inline .i32, .i64, .f32, .f64 => |t| opb(@field(object.Op, @tagName(t) ++ "_eq")),
+                    else => utils.panic("{}", .{oper_ty}),
                 },
                 .ne => switch (oper_ty) {
-                    .i32 => opb(.i32_ne),
-                    .i64 => opb(.i64_ne),
-                    .f32 => opb(.f32_ne),
-                    .f64 => opb(.f64_ne),
+                    inline .i32, .i64, .f32, .f64 => |t| opb(@field(object.Op, @tagName(t) ++ "_ne")),
                     else => utils.panic("{}", .{oper_ty}),
                 },
-                .eq => switch (oper_ty) {
-                    .i32 => opb(.i32_eq),
-                    .i64 => opb(.i64_eq),
-                    .f32 => opb(.f32_eq),
-                    .f64 => opb(.f64_eq),
-                    else => utils.panic("{}", .{oper_ty}),
-                },
-                .ult => switch (oper_ty) {
-                    .i32 => opb(.i32_lt_u),
-                    .i64 => opb(.i64_lt_u),
-                    else => utils.panic("{}", .{oper_ty}),
-                },
-                .ugt => switch (oper_ty) {
-                    .i32 => opb(.i32_gt_u),
-                    .i64 => opb(.i64_gt_u),
-                    else => utils.panic("{}", .{oper_ty}),
-                },
-                .ule => switch (oper_ty) {
-                    .i32 => opb(.i32_le_u),
-                    .i64 => opb(.i64_le_u),
-                    else => utils.panic("{}", .{oper_ty}),
-                },
-                .uge => switch (oper_ty) {
-                    .i32 => opb(.i32_ge_u),
-                    .i64 => opb(.i64_ge_u),
-                    else => utils.panic("{}", .{oper_ty}),
-                },
-                .sge => switch (oper_ty) {
-                    .i32 => opb(.i32_ge_s),
-                    .i64 => opb(.i64_ge_s),
-                    else => utils.panic("{}", .{oper_ty}),
-                },
-                .sle => switch (oper_ty) {
-                    .i32 => opb(.i32_le_s),
-                    .i64 => opb(.i64_le_s),
-                    else => utils.panic("{}", .{oper_ty}),
-                },
-                .sgt => switch (oper_ty) {
-                    .i32 => opb(.i32_gt_s),
-                    .i64 => opb(.i64_gt_s),
-                    else => utils.panic("{}", .{oper_ty}),
-                },
-                .slt => switch (oper_ty) {
-                    .i32 => opb(.i32_lt_s),
-                    .i64 => opb(.i64_lt_s),
-                    else => utils.panic("{}", .{oper_ty}),
-                },
-                .fge => switch (oper_ty) {
-                    .f32 => opb(.f32_ge),
-                    .f64 => opb(.f64_ge),
-                    else => utils.panic("{}", .{oper_ty}),
-                },
-                .fle => switch (oper_ty) {
-                    .f32 => opb(.f32_le),
-                    .f64 => opb(.f64_le),
-                    else => utils.panic("{}", .{oper_ty}),
-                },
-                .fgt => switch (oper_ty) {
-                    .f32 => opb(.f32_gt),
-                    .f64 => opb(.f64_gt),
-                    else => utils.panic("{}", .{oper_ty}),
-                },
-                .flt => switch (oper_ty) {
-                    .f32 => opb(.f32_lt),
-                    .f64 => opb(.f64_lt),
-                    else => utils.panic("{}", .{oper_ty}),
-                },
-                .fadd => switch (op_ty) {
-                    .f32 => opb(.f32_add),
-                    .f64 => opb(.f64_add),
-                    else => utils.panic("{}", .{op_ty}),
-                },
-                .fsub => switch (op_ty) {
-                    .f32 => opb(.f32_sub),
-                    .f64 => opb(.f64_sub),
-                    else => utils.panic("{}", .{op_ty}),
-                },
-                .fmul => switch (op_ty) {
-                    .f32 => opb(.f32_mul),
-                    .f64 => opb(.f64_mul),
-                    else => utils.panic("{}", .{op_ty}),
-                },
-                .fdiv => switch (op_ty) {
-                    .f32 => opb(.f32_div),
-                    .f64 => opb(.f64_div),
-                    else => utils.panic("{}", .{op_ty}),
-                },
+                .ult => utl.selectOp(oper_ty, .i, .lt_u),
+                .ugt => utl.selectOp(oper_ty, .i, .gt_u),
+                .ule => utl.selectOp(oper_ty, .i, .le_u),
+                .uge => utl.selectOp(oper_ty, .i, .ge_u),
+                .sge => utl.selectOp(oper_ty, .i, .ge_s),
+                .sle => utl.selectOp(oper_ty, .i, .le_s),
+                .sgt => utl.selectOp(oper_ty, .i, .gt_s),
+                .slt => utl.selectOp(oper_ty, .i, .lt_s),
+                .fadd => utl.selectOp(op_ty, .f, .add),
+                .fsub => utl.selectOp(op_ty, .f, .sub),
+                .fmul => utl.selectOp(op_ty, .f, .mul),
+                .fdiv => utl.selectOp(op_ty, .f, .div),
+                .fge => utl.selectOp(oper_ty, .f, .ge),
+                .flt => utl.selectOp(oper_ty, .f, .lt),
+                .fgt => utl.selectOp(oper_ty, .f, .gt),
+                .fle => utl.selectOp(oper_ty, .f, .le),
             };
             try self.ctx.buf.writer.writeByte(op_code);
 
@@ -937,39 +889,26 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
 
             self.emitLocalLoad(inps[0]);
 
-            const op_code: u8 = switch (instr.data_type) {
-                .i32 => opb(.i32_store),
-                .i64 => opb(.i64_store),
-                .f32 => opb(.f32_store),
-                .f64 => opb(.f64_store),
-                .i8 => opb(.i32_store8),
-                .i16 => opb(.i32_store16),
-                else => unreachable,
-            };
-            try self.ctx.buf.writer.writeByte(op_code);
+            try self.ctx.buf.writer.writeByte(selectStoreOp(instr.data_type));
             const alignment = std.math.log2_int(usize, instr.data_type.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
             try self.ctx.buf.writer.writeSleb128(offset);
         },
         .WLoad => |extra| {
-            // TODO: we can emit specialized loads, maybe even sign extension
-
-            // local.get addr
             self.emitLocalLoad(inps[0]);
-            // i32.wrap_i64
             try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
-            // i64.load[size]_u (align: size, offset: 0)
-            const op_code: u8 = switch (instr.data_type) {
-                .i32 => opb(.i32_load),
-                .i64 => opb(.i64_load),
-                .f32 => opb(.f32_load),
-                .f64 => opb(.f64_load),
-                .i8 => opb(.i32_load8_u),
-                .i16 => opb(.i32_load16_u),
-                else => unreachable,
-            };
-            try self.ctx.buf.writer.writeByte(op_code);
+            try self.ctx.buf.writer.writeByte(selectLoadOp(instr.data_type));
             const alignment = std.math.log2_int(usize, instr.data_type.size());
+            try self.ctx.buf.writer.writeUleb128(alignment);
+            try self.ctx.buf.writer.writeSleb128(extra.offset);
+
+            self.emitLocalStore(instr);
+        },
+        .SignedLoad => |extra| {
+            self.emitLocalLoad(inps[0]);
+            try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
+            try self.ctx.buf.writer.writeByte(selectSignedLoadOp(instr.data_type, extra.src_ty));
+            const alignment = std.math.log2_int(usize, extra.src_ty.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
             try self.ctx.buf.writer.writeSleb128(extra.offset);
 
@@ -983,17 +922,23 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
             try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
 
-            const op_code: u8 = switch (instr.data_type) {
-                .i32 => opb(.i32_load),
-                .i64 => opb(.i64_load),
-                .f32 => opb(.f32_load),
-                .f64 => opb(.f64_load),
-                .i8 => opb(.i32_load8_u),
-                .i16 => opb(.i32_load16_u),
-                else => unreachable,
-            };
-            try self.ctx.buf.writer.writeByte(op_code);
+            try self.ctx.buf.writer.writeByte(selectLoadOp(instr.data_type));
             const alignment = std.math.log2_int(usize, instr.data_type.size());
+            try self.ctx.buf.writer.writeUleb128(alignment);
+            try self.ctx.buf.writer.writeUleb128(offset);
+
+            self.emitLocalStore(instr);
+        },
+        .SignedStackLoad => |extra| {
+            const offset = @as(i64, @intCast(instr.base().extra(.LocalAlloc).size +
+                self.ctx.stack_base)) + extra.offset;
+
+            try self.ctx.buf.writer.writeByte(opb(.global_get));
+            try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
+            try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
+
+            try self.ctx.buf.writer.writeByte(selectSignedLoadOp(instr.data_type, extra.src_ty));
+            const alignment = std.math.log2_int(usize, extra.src_ty.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
             try self.ctx.buf.writer.writeUleb128(offset);
 

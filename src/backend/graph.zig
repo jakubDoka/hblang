@@ -1105,6 +1105,11 @@ pub fn Func(comptime Backend: type) type {
                 }
             };
 
+            pub fn loadDatatype(self: *Node) DataType {
+                if (@hasDecl(Backend, "loadDatatype")) return Backend.loadDatatype(self);
+                return self.data_type;
+            }
+
             pub fn isKillable(self: *Node) bool {
                 return self.kind != .Return and
                     (!@hasDecl(Backend, "isKillable") or Backend.isKillable(self));
