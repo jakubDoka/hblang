@@ -2,11 +2,8 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func))
   (func $main (type 0) (result i64)
-    (local i64)
     call $comments_1.foo
     i64.const 0
-    local.set 0
-    local.get 0
     return
     unreachable)
   (func $comments_1.foo (type 1)

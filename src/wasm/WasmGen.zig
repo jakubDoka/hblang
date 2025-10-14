@@ -251,116 +251,80 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     func.gcm.instr_count = 0;
 
     for (func.gcm.postorder) |block| {
-        var iter = std.mem.reverseIterator(block.base.outputs());
-        while (@as(?Func.Node.Out, iter.next())) |out| {
-            if (!out.get().isDef()) continue;
+        for (block.base.outputs(), 0..) |out, i| {
+            out.get().schedule = @intCast(i);
 
-            on_stack: {
-                if (out.get().kind == .Phi or out.get().kind == .Arg) break :on_stack;
+            const pre_deps = out.get().dataDeps();
 
-                var real_dep: ?Func.Node.Out = null;
-                for (out.get().outputs()) |dep| {
-                    if (dep.get().hasUseFor(dep.pos(), out.get())) {
-                        if (real_dep != null) {
-                            break :on_stack;
-                        }
+            if (out.get().kind == .BinOp and
+                out.get().extra(.BinOp).op.isComutative() and
+                pre_deps[0].schedule > pre_deps[1].schedule)
+            {
+                std.mem.swap(*Func.Node, &pre_deps[0], &pre_deps[1]);
+            }
 
-                        if (dep.get().inputs()[0].? != out.get().inputs()[0].?) break :on_stack;
+            var deps = tmp.arena.dupe(*Func.Node, pre_deps);
 
-                        real_dep = dep;
-                    }
-                }
+            if (out.get().kind == .Call and out.get().extra(.Call).id == graph.indirect_call) {
+                std.mem.rotate(*Func.Node, deps[0..], 1);
+            }
 
-                const dep = real_dep orelse break :on_stack;
-
-                if (dep.pos() == 3 and dep.get().isSub(graph.Store)) break :on_stack;
-                if (false) {
-                    if (dep.get().kind == .MemCpy) break :on_stack;
-                } else {
-                    if (dep.pos() != dep.get().dataDepOffset()) break :on_stack;
-                }
-
-                if (dep.get().kind == .Call and dep.get().extra(.Call).id == graph.indirect_call) {
-                    break :on_stack;
-                }
-
-                if (false) {
-                    var pending_stack = tmp.arena.makeArrayList(*Func.Node, block.base.outputs().len - out.pos());
-
-                    for (block.base.outputs()[out.pos()..]) |inbetween| {
-                        if (inbetween.get() == dep.get()) {
-                            break;
-                        }
-
-                        if (inbetween.get().schedule != on_stack_schedule) {
-                            continue;
-                        }
-
-                        for (dep.get().ordInps()[0..dep.pos()]) |idep| {
-                            if (idep == null) continue;
-                            if (idep.? == inbetween.get()) {
-                                break :on_stack;
-                            }
-                        }
-
-                        for (inbetween.get().outputs()) |idep| {
-                            if (idep.get().hasUseFor(idep.pos(), inbetween.get()) and idep.get() != dep.get()) {
-                                pending_stack.appendAssumeCapacity(idep.get());
-                            }
-                        }
-
-                        // NOTE: this can occure multiple times
-                        var i: usize = 0;
-                        while (i < pending_stack.items.len) {
-                            if (pending_stack.items[i] == inbetween.get()) {
-                                _ = pending_stack.swapRemove(i);
-                            } else {
-                                i += 1;
-                            }
-                        }
-                    } else unreachable;
-
-                    if (pending_stack.items.len != 0) {
-                        break :on_stack;
-                    }
-                } else {
-                    if (out.get().outputs()[0].get() != block.base.outputs()[out.pos() + 1].get()) break :on_stack;
-                }
-
-                out.get().schedule = on_stack_schedule;
+            if (out.get().isSub(graph.MemCpy)) {
                 continue;
             }
 
-            if (false) {
-                var frointer = std.ArrayList(*Func.Node).empty;
-                out.get().schedule = on_stack_schedule;
-                try frointer.append(tmp.arena.allocator(), out.get());
-                while (frointer.pop()) |node| {
-                    if (node.cfg0() != out.get().cfg0()) continue;
-                    if (node.schedule == 0) continue;
-                    node.schedule = 0;
+            // could we possibly overcome this?
+            if (out.get().isSub(graph.Store)) {
+                deps = deps[0 .. deps.len - 1];
+            }
 
-                    for (node.outputs()) |dep| {
-                        if (dep.get().hasUseFor(dep.pos(), node)) {
-                            try frointer.appendSlice(
-                                tmp.arena.allocator(),
-                                @ptrCast(dep.get().ordInps()[dep.pos() + 1 ..]),
-                            );
-                        }
+            // Algorithm to reduce usage of locals, we look at inputs of each
+            // value and check if they can be passed on the stack:
+            // - they are in a correct order
+            // - they are not preceded by failed value
+            // - they dont overlap with some other value that waits for the instr that
+            // waits for a stack arg
+            var last_idx: usize = 0;
+            out: for (deps) |dep| {
+                if (dep.cfg0() != block) break :out;
+                if (last_idx > dep.schedule) break :out;
+                last_idx = dep.schedule;
+
+                if (dep.kind == .Phi or dep.kind == .Arg) break :out;
+
+                var used_count: usize = 0;
+                for (dep.outputs()) |dep_out| {
+                    if (dep_out.get().hasUseFor(dep_out.pos(), out.get()) and
+                        (dep_out.get() != out.get() or used_count != 0))
+                    {
+                        break :out;
+                    }
+                    if (dep_out.get() == out.get()) used_count += 1;
+                }
+
+                const until = out.get().schedule;
+                for (block.base.outputs()[dep.schedule..until]) |inbetween| {
+                    for (inbetween.get().dataDeps()) |idep| {
+                        if (idep.cfg0() != block) break;
+                        if (idep.schedule != on_stack_schedule) break;
+                        if (idep.schedule > dep.schedule) break :out;
                     }
                 }
-            } else {
-                out.get().schedule = 0;
+
+                dep.schedule = on_stack_schedule;
             }
         }
     }
 
     for (func.gcm.postorder) |block| {
-        var iter = std.mem.reverseIterator(block.base.outputs());
-        while (@as(?Func.Node.Out, iter.next())) |out| {
-            if (!out.get().isDef()) continue;
+        for (block.base.outputs()) |out| {
+            if (!out.get().isDef()) {
+                continue;
+            }
 
-            if (out.get().schedule == on_stack_schedule) continue;
+            if (out.get().schedule == on_stack_schedule) {
+                continue;
+            }
 
             out.get().schedule = func.gcm.instr_count;
             func.gcm.instr_count += 1;
@@ -1328,7 +1292,7 @@ pub fn disasm(_: *WasmGen, opts: Mach.DisasmOpts) void {
 }
 
 pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
-    const cleanup = false;
+    const cleanup = true;
 
     var tmp = root.utils.Arena.scrath(null);
     defer tmp.deinit();

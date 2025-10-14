@@ -3,7 +3,7 @@
   (type (;1;) (func (result i64)))
   (type (;2;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64 i64 i64)
+    (local i64 i64 i64)
     global.get 0
     i64.const 16
     i64.sub
@@ -15,21 +15,17 @@
     local.get 0
     i64.store
     call $deep_dedup_1.a
-    local.set 4
+    local.set 2
     global.get 0
     i32.wrap_i64
-    local.get 4
+    local.get 2
     i64.store offset=8
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 3
     global.get 0
     i32.wrap_i64
     i64.load offset=8
-    local.set 2
-    local.get 3
-    local.get 2
     i64.sub
     local.set 1
     i64.const 16
@@ -40,26 +36,24 @@
     return
     unreachable)
   (func $deep_dedup_1.a (type 1) (result i64)
-    (local i64 i64)
+    (local i64)
     global.get 0
     i64.const 8
     i64.sub
     global.set 0
     call $deep_dedup_1.c
-    local.set 1
+    local.set 0
     global.get 0
     i32.wrap_i64
-    local.get 1
+    local.get 0
     i64.store
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 0
     i64.const 8
     global.get 0
     i64.add
     global.set 0
-    local.get 0
     return
     unreachable)
   (func $deep_dedup_1.c (type 2) (result i64)

@@ -4,41 +4,35 @@
   (type (;2;) (func (param i32) (result i32)))
   (type (;3;) (func (param i64 i32) (result i32)))
   (func $main (type 1) (result i64)
-    (local i32 i32 i32 i64 i64)
+    (local i32 i64)
     global.get 0
     i64.const 8
     i64.sub
     global.set 0
     i64.const 0
-    local.set 3
     i32.const 10
-    local.set 0
-    local.get 3
-    local.get 0
     call $function_pointers_1.call
-    local.set 2
+    local.set 0
     global.get 0
     i32.wrap_i64
-    local.get 2
+    local.get 0
     i32.store8
     global.get 0
     i32.wrap_i64
     i32.load8_u
-    local.set 1
-    local.get 1
     i32.const 255
     i32.and
     i64.extend_i32_u
-    local.set 4
+    local.set 1
     i64.const 8
     global.get 0
     i64.add
     global.set 0
-    local.get 4
+    local.get 1
     return
     unreachable)
   (func $function_pointers_1.main (type 2) (param i32) (result i32)
-    (local i32 i32 i32)
+    (local i32 i32)
     global.get 0
     i64.const 8
     i64.sub
@@ -48,13 +42,11 @@
     local.get 0
     i32.store8
     i32.const 10
-    local.set 3
+    local.set 2
     global.get 0
     i32.wrap_i64
     i32.load8_u
-    local.set 2
     local.get 2
-    local.get 3
     i32.sub
     local.set 1
     i64.const 8
@@ -65,7 +57,7 @@
     return
     unreachable)
   (func $function_pointers_1.call (type 3) (param i64 i32) (result i32)
-    (local i32 i32 i32 i64)
+    (local i32 i64)
     global.get 0
     i64.const 16
     i64.sub
@@ -81,29 +73,25 @@
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 5
+    local.set 3
     global.get 0
     i32.wrap_i64
     i32.load8_u offset=8
-    local.set 2
-    local.get 2
-    local.get 5
+    local.get 3
     i32.wrap_i64
     call_indirect (type 0)
-    local.set 4
+    local.set 2
     global.get 0
     i32.wrap_i64
-    local.get 4
+    local.get 2
     i32.store8 offset=9
     global.get 0
     i32.wrap_i64
     i32.load8_u offset=9
-    local.set 3
     i64.const 16
     global.get 0
     i64.add
     global.set 0
-    local.get 3
     return
     unreachable)
   (table (;0;) 1 funcref)

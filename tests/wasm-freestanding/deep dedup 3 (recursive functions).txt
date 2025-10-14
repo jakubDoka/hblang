@@ -2,7 +2,7 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i64) (result i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64 i64 i64 i64)
+    (local i64 i64 i64 i64)
     global.get 0
     i64.const 16
     i64.sub
@@ -18,21 +18,17 @@
     i64.store
     local.get 0
     call $deep_dedup_3__recursive_functions_.fib2
-    local.set 5
+    local.set 3
     global.get 0
     i32.wrap_i64
-    local.get 5
+    local.get 3
     i64.store offset=8
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 4
     global.get 0
     i32.wrap_i64
     i64.load offset=8
-    local.set 3
-    local.get 4
-    local.get 3
     i64.sub
     local.set 2
     i64.const 16
@@ -43,7 +39,7 @@
     return
     unreachable)
   (func $deep_dedup_3__recursive_functions_.fib2 (type 1) (param i64) (result i64)
-    (local i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
+    (local i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 24
     i64.sub
@@ -55,68 +51,60 @@
         local.get 0
         i64.store
         i64.const 1
-        local.set 4
-        i64.const 2
         local.set 3
+        i64.const 2
+        local.set 2
         global.get 0
         i32.wrap_i64
         i64.load
-        local.set 2
-        local.get 2
-        local.get 3
-        i64.le_u
         local.set 1
         local.get 1
+        local.get 2
+        i64.le_u
         i32.eqz
         br_if 0 (;@2;)
-        local.get 4
-        local.set 12
+        local.get 3
+        local.set 8
         br 1 (;@1;)
       end
-      local.get 2
-      local.get 4
+      local.get 1
+      local.get 3
       i64.sub
+      call $deep_dedup_3__recursive_functions_.fib2
+      local.set 5
+      global.get 0
+      i32.wrap_i64
+      local.get 5
+      i64.store offset=8
+      global.get 0
+      i32.wrap_i64
+      i64.load
+      local.get 2
+      i64.sub
+      local.set 4
+      local.get 4
       call $deep_dedup_3__recursive_functions_.fib2
       local.set 7
       global.get 0
       i32.wrap_i64
       local.get 7
-      i64.store offset=8
-      global.get 0
-      i32.wrap_i64
-      i64.load
-      local.set 6
-      local.get 6
-      local.get 3
-      i64.sub
-      local.set 5
-      local.get 5
-      call $deep_dedup_3__recursive_functions_.fib2
-      local.set 11
-      global.get 0
-      i32.wrap_i64
-      local.get 11
       i64.store offset=16
       global.get 0
       i32.wrap_i64
       i64.load offset=8
-      local.set 10
       global.get 0
       i32.wrap_i64
       i64.load offset=16
-      local.set 9
-      local.get 10
-      local.get 9
       i64.add
+      local.set 6
+      local.get 6
       local.set 8
-      local.get 8
-      local.set 12
     end
     i64.const 24
     global.get 0
     i64.add
     global.set 0
-    local.get 12
+    local.get 8
     return
     unreachable)
   (table (;0;) 0 funcref)

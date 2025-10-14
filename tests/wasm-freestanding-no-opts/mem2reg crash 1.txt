@@ -3,36 +3,30 @@
   (type (;1;) (func (param i64 i64) (result i64)))
   (type (;2;) (func))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64 i64)
+    (local i64)
     global.get 0
     i64.const 8
     i64.sub
     global.set 0
     i64.const 0
-    local.set 1
     i64.const 1
-    local.set 0
-    local.get 1
-    local.get 0
     call $mem2reg_crash_1.insert
-    local.set 3
+    local.set 0
     global.get 0
     i32.wrap_i64
-    local.get 3
+    local.get 0
     i64.store
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 2
     i64.const 8
     global.get 0
     i64.add
     global.set 0
-    local.get 2
     return
     unreachable)
   (func $mem2reg_crash_1.insert (type 1) (param i64 i64) (result i64)
-    (local i32 i32 i32 i64 i64 i64 i64 i64 i64 i64 i64)
+    (local i32 i32 i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 32
     i64.sub
@@ -50,11 +44,9 @@
         global.get 0
         i32.wrap_i64
         i64.load
-        local.set 6
         i64.const 0
-        local.set 5
-        local.get 6
-        local.get 5
+        local.set 4
+        local.get 4
         i64.eq
         local.set 2
         local.get 2
@@ -66,28 +58,26 @@
     end
     global.get 0
     i32.wrap_i64
-    local.get 5
+    local.get 4
     i64.store offset=16
     i64.const 8
-    local.set 8
+    local.set 6
     i64.const 1
-    local.set 7
+    local.set 5
     loop  ;; label = @1
       global.get 0
       i32.wrap_i64
-      local.get 5
+      local.get 4
       i64.store offset=24
       loop  ;; label = @2
         block  ;; label = @3
           global.get 0
           i32.wrap_i64
           i64.load offset=24
-          local.set 9
-          local.get 9
-          local.get 8
+          local.set 7
+          local.get 7
+          local.get 6
           i64.ge_u
-          local.set 3
-          local.get 3
           i32.eqz
           br_if 0 (;@3;)
           block  ;; label = @4
@@ -95,12 +85,12 @@
           global.get 0
           i32.wrap_i64
           i64.load offset=16
-          local.get 7
+          local.get 5
           i64.add
-          local.set 10
+          local.set 8
           global.get 0
           i32.wrap_i64
-          local.get 10
+          local.get 8
           i64.store offset=16
           br 2 (;@1;)
         end
@@ -108,12 +98,10 @@
           global.get 0
           i32.wrap_i64
           i64.load offset=8
-          local.set 11
-          local.get 9
-          local.get 11
+          local.get 7
           i64.eq
-          local.set 4
-          local.get 4
+          local.set 3
+          local.get 3
           i32.eqz
           br_if 0 (;@3;)
           global.get 0
@@ -125,13 +113,13 @@
           global.set 0
           return
         end
-        local.get 9
         local.get 7
+        local.get 5
         i64.add
-        local.set 12
+        local.set 9
         global.get 0
         i32.wrap_i64
-        local.get 12
+        local.get 9
         i64.store offset=24
         br 0 (;@2;)
       end

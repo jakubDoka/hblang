@@ -2,7 +2,7 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i64 i64)))
   (func $main (type 0) (result i64)
-    (local i32 i32 i32 i32 i64 i64 i64 i64 i64)
+    (local i32 i32 i32 i32 i64 i64)
     global.get 0
     i64.const 24
     i64.sub
@@ -20,9 +20,9 @@
     i64.const 16
     global.get 0
     i64.add
-    local.set 7
+    local.set 5
     i64.const 4
-    local.set 6
+    local.set 4
     i32.const 2
     local.set 0
     global.get 0
@@ -39,30 +39,24 @@
     i32.store8 offset=19
     global.get 0
     i32.wrap_i64
-    local.get 7
+    local.get 5
     i64.store
     global.get 0
     i32.wrap_i64
-    local.get 6
+    local.get 4
     i64.store offset=8
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 5
     global.get 0
     i32.wrap_i64
     i64.load offset=8
-    local.set 4
-    local.get 5
-    local.get 4
     call $slices_5__coersion_.use_slice
     i64.const 0
-    local.set 8
     i64.const 24
     global.get 0
     i64.add
     global.set 0
-    local.get 8
     return
     unreachable)
   (func $slices_5__coersion_.use_slice (type 1) (param i64 i64)

@@ -2,7 +2,7 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i64 i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
+    (local i64)
     global.get 0
     i64.const 112
     i64.sub
@@ -17,13 +17,9 @@
       global.get 0
       i32.wrap_i64
       i64.load
-      local.set 2
       global.get 0
       i32.wrap_i64
       i64.load offset=8
-      local.set 1
-      local.get 2
-      local.get 1
       call $regalloc_crash_2__infinite_.broken
       global.get 0
       i32.wrap_i64
@@ -32,13 +28,9 @@
       global.get 0
       i32.wrap_i64
       i64.load offset=16
-      local.set 4
       global.get 0
       i32.wrap_i64
       i64.load offset=24
-      local.set 3
-      local.get 4
-      local.get 3
       call $regalloc_crash_2__infinite_.broken
       global.get 0
       i32.wrap_i64
@@ -47,13 +39,9 @@
       global.get 0
       i32.wrap_i64
       i64.load offset=32
-      local.set 6
       global.get 0
       i32.wrap_i64
       i64.load offset=40
-      local.set 5
-      local.get 6
-      local.get 5
       call $regalloc_crash_2__infinite_.broken
       global.get 0
       i32.wrap_i64
@@ -62,13 +50,9 @@
       global.get 0
       i32.wrap_i64
       i64.load offset=48
-      local.set 8
       global.get 0
       i32.wrap_i64
       i64.load offset=56
-      local.set 7
-      local.get 8
-      local.get 7
       call $regalloc_crash_2__infinite_.broken
       global.get 0
       i32.wrap_i64
@@ -77,13 +61,9 @@
       global.get 0
       i32.wrap_i64
       i64.load offset=64
-      local.set 10
       global.get 0
       i32.wrap_i64
       i64.load offset=72
-      local.set 9
-      local.get 10
-      local.get 9
       call $regalloc_crash_2__infinite_.broken
       global.get 0
       i32.wrap_i64
@@ -92,13 +72,9 @@
       global.get 0
       i32.wrap_i64
       i64.load offset=80
-      local.set 12
       global.get 0
       i32.wrap_i64
       i64.load offset=88
-      local.set 11
-      local.get 12
-      local.get 11
       call $regalloc_crash_2__infinite_.broken
       global.get 0
       i32.wrap_i64
@@ -107,13 +83,9 @@
       global.get 0
       i32.wrap_i64
       i64.load offset=96
-      local.set 14
       global.get 0
       i32.wrap_i64
       i64.load offset=104
-      local.set 13
-      local.get 14
-      local.get 13
       call $regalloc_crash_2__infinite_.broken
       block  ;; label = @2
       end

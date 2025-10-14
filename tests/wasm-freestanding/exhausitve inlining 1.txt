@@ -5,34 +5,28 @@
   (type (;3;) (func (param i64)))
   (type (;4;) (func))
   (func $main (type 0) (result i64)
-    (local i32 i64 i64 i64 i64)
+    (local i32 i64)
     global.get 0
     i64.const 8
     i64.sub
     global.set 0
     call $exhausitve_inlining_1.no_op
     i64.const 0
-    local.set 2
+    local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 2
+    local.get 1
     i64.store
     i64.const 0
     global.get 0
     i64.add
-    local.set 1
-    local.get 1
     call $exhausitve_inlining_1.some_mem_ops
     block  ;; label = @1
       block  ;; label = @2
         i64.const 1
-        local.set 4
         global.get 0
         i32.wrap_i64
         i64.load
-        local.set 3
-        local.get 3
-        local.get 4
         i64.ne
         local.set 0
         local.get 0
@@ -48,14 +42,14 @@
     global.get 0
     i64.add
     global.set 0
-    local.get 2
+    local.get 1
     return
     unreachable)
   (func $exhausitve_inlining_1.no_op (type 1)
     return
     unreachable)
   (func $exhausitve_inlining_1.some_mem_ops (type 2) (param i64)
-    (local i64 i64 i64)
+    (local i64)
     global.get 0
     i64.const 8
     i64.sub
@@ -65,13 +59,9 @@
     local.get 0
     i64.store
     i64.const 8
-    local.set 3
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 2
-    local.get 2
-    local.get 3
     i64.add
     local.set 1
     global.get 0
@@ -85,7 +75,7 @@
     return
     unreachable)
   (func $exhausitve_inlining_1.loop_fn (type 3) (param i64)
-    (local i32 i64 i64 i64 i64)
+    (local i64 i64 i64 i64)
     global.get 0
     i64.const 8
     i64.sub
@@ -95,20 +85,18 @@
     local.get 0
     i64.store
     i64.const 1
-    local.set 3
-    i64.const 0
     local.set 2
+    i64.const 0
+    local.set 1
     loop  ;; label = @1
       block  ;; label = @2
         global.get 0
         i32.wrap_i64
         i64.load
-        local.set 4
-        local.get 4
-        local.get 2
-        i64.eq
-        local.set 1
+        local.set 3
+        local.get 3
         local.get 1
+        i64.eq
         i32.eqz
         br_if 0 (;@2;)
         i64.const 8
@@ -117,13 +105,13 @@
         global.set 0
         return
       end
-      local.get 4
       local.get 3
+      local.get 2
       i64.sub
-      local.set 5
+      local.set 4
       global.get 0
       i32.wrap_i64
-      local.get 5
+      local.get 4
       i64.store
       br 0 (;@1;)
     end
