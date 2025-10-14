@@ -67,8 +67,7 @@
       block  ;; label = @2
         block  ;; label = @3
           local.get 3
-          local.get 1
-          i64.eq
+          i64.eqz
           br_if 0 (;@3;)
           br 1 (;@2;)
         end

@@ -208,7 +208,6 @@
         i32.wrap_i64
         local.get 0
         i64.store
-        i64.const 0
         global.get 0
         i32.wrap_i64
         i64.load
@@ -216,7 +215,7 @@
         local.get 12
         i32.wrap_i64
         i64.load offset=8
-        i64.eq
+        i64.eqz
         local.set 1
         local.get 1
         br_if 0 (;@2;)

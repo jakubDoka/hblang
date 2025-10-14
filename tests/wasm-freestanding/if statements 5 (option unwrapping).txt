@@ -60,8 +60,7 @@
       global.get 0
       i32.wrap_i64
       i64.load offset=32
-      local.get 4
-      i64.eq
+      i64.eqz
       local.set 2
       global.get 0
       i32.wrap_i64

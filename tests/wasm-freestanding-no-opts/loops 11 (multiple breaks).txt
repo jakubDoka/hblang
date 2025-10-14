@@ -21,9 +21,8 @@
           i32.wrap_i64
           i64.load
           local.set 2
-          local.get 1
           local.get 2
-          i64.eq
+          i64.eqz
           br_if 0 (;@3;)
           block  ;; label = @4
             local.get 2

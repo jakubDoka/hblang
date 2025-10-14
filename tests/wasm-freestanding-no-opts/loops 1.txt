@@ -33,17 +33,17 @@
     i32.wrap_i64
     local.get 0
     i64.store
-    i64.const 1
-    local.set 3
-    global.get 0
-    i32.wrap_i64
-    local.get 3
-    i64.store offset=8
     i64.const 0
+    local.set 3
+    i64.const 1
     local.set 2
     global.get 0
     i32.wrap_i64
     local.get 2
+    i64.store offset=8
+    global.get 0
+    i32.wrap_i64
+    local.get 3
     i64.store offset=16
     loop  ;; label = @1
       block  ;; label = @2
@@ -54,8 +54,7 @@
         i32.wrap_i64
         i64.load offset=16
         local.set 4
-        local.get 2
-        i64.eq
+        i64.eqz
         local.set 1
         local.get 1
         br_if 0 (;@2;)
@@ -88,7 +87,7 @@
         global.get 0
         i32.wrap_i64
         i64.load
-        local.get 3
+        local.get 2
         i64.sub
         local.set 5
         global.get 0

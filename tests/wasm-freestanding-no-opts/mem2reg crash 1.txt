@@ -44,10 +44,7 @@
         global.get 0
         i32.wrap_i64
         i64.load
-        i64.const 0
-        local.set 4
-        local.get 4
-        i64.eq
+        i64.eqz
         local.set 2
         local.get 2
         br_if 0 (;@2;)
@@ -55,18 +52,20 @@
       end
       call $mem2reg_crash_1.bar
     end
+    i64.const 0
+    local.set 6
     global.get 0
     i32.wrap_i64
-    local.get 4
+    local.get 6
     i64.store offset=16
     i64.const 8
-    local.set 6
-    i64.const 1
     local.set 5
+    i64.const 1
+    local.set 4
     loop  ;; label = @1
       global.get 0
       i32.wrap_i64
-      local.get 4
+      local.get 6
       i64.store offset=24
       loop  ;; label = @2
         block  ;; label = @3
@@ -75,7 +74,7 @@
           i64.load offset=24
           local.set 7
           local.get 7
-          local.get 6
+          local.get 5
           i64.ge_u
           br_if 0 (;@3;)
           block  ;; label = @4
@@ -88,7 +87,7 @@
             local.get 3
             br_if 0 (;@4;)
             local.get 7
-            local.get 5
+            local.get 4
             i64.add
             local.set 8
             global.get 0
@@ -111,7 +110,7 @@
         global.get 0
         i32.wrap_i64
         i64.load offset=16
-        local.get 5
+        local.get 4
         i64.add
         local.set 9
         global.get 0

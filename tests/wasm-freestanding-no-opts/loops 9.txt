@@ -69,8 +69,7 @@
               i64.load offset=24
               local.set 9
               local.get 9
-              local.get 5
-              i64.eq
+              i64.eqz
               br_if 0 (;@5;)
               local.get 9
               local.get 5

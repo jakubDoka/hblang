@@ -72,6 +72,7 @@ pub const classes = enum {
         offset: i64,
         pub const data_dep_offset = 2;
     };
+    pub const Eqz = extern struct {};
 };
 
 pub fn isSwapped(node: *Func.Node) bool {
@@ -583,6 +584,18 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 },
                 else => utils.panic("{}", .{instr.data_type}),
             }
+
+            self.emitLocalStore(instr);
+        },
+        .Eqz => {
+            self.emitLocalLoad(inps[0]);
+
+            const op_ty = dataTypeToWasmType(inps[0].data_type);
+            try self.ctx.buf.writer.writeByte(switch (op_ty) {
+                .i32 => opb(.i32_eqz),
+                .i64 => opb(.i64_eqz),
+                else => utils.panic("{}", .{op_ty}),
+            });
 
             self.emitLocalStore(instr);
         },

@@ -48,20 +48,19 @@
         i64.load
         i32.wrap_i64
         i64.load
-        local.set 2
-        i64.const 0
         local.set 1
-        local.get 2
         local.get 1
-        i64.eq
+        i64.eqz
         br_if 0 (;@2;)
         i64.const 1
-        local.set 3
-        local.get 3
+        local.set 2
+        local.get 2
         local.set 4
         br 1 (;@1;)
       end
-      local.get 1
+      i64.const 0
+      local.set 3
+      local.get 3
       local.set 4
     end
     i64.const 8

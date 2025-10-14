@@ -1,19 +1,17 @@
 (module
   (type (;0;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i32 i32 i32 i32)
+    (local i32 i32 i32)
     global.get 0
     i64.const 8
     i64.sub
     global.set 0
     i32.const 0
-    local.set 1
-    i32.const 0
     local.set 0
     loop  ;; label = @1
       global.get 0
       i32.wrap_i64
-      local.get 1
+      local.get 0
       i32.store8
       loop  ;; label = @2
         block  ;; label = @3
@@ -22,10 +20,9 @@
           i32.load8_u
           i32.const 255
           i32.and
-          local.set 2
-          local.get 0
-          local.get 2
-          i32.eq
+          local.set 1
+          local.get 1
+          i32.eqz
           br_if 0 (;@3;)
           block  ;; label = @4
             block  ;; label = @5
@@ -34,17 +31,16 @@
               i32.load8_u offset=1
               i32.const 255
               i32.and
-              local.set 3
-              local.get 3
-              local.get 0
-              i32.eq
+              local.set 2
+              local.get 2
+              i32.eqz
               br_if 0 (;@5;)
               br 1 (;@4;)
             end
           end
           global.get 0
           i32.wrap_i64
-          local.get 1
+          local.get 0
           i32.store8
           br 1 (;@2;)
         end

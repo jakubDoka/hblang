@@ -1,3 +1,6 @@
+(BinOp ?c (:op .eq) (_:lhs (:data_type .i64 | .i32 | .i16 | .i8)) (CInt (:value 0))) :
+  (Eqz c lhs)
+
 (Store ?c m bs @ (Local _ LocalAlloc:l) offset = {bs.knownOffset()} v) :
   (StackStore (:offset) c m l v)
 
