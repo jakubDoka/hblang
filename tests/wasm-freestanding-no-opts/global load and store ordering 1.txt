@@ -23,16 +23,15 @@
         i32.load8_u
         local.set 0
         local.get 0
-        i32.eqz
         br_if 0 (;@2;)
-        i32.const 0
-        local.set 2
-        local.get 5
-        i32.wrap_i64
-        local.get 2
-        i32.store8
         br 1 (;@1;)
       end
+      i32.const 0
+      local.set 2
+      local.get 5
+      i32.wrap_i64
+      local.get 2
+      i32.store8
     end
     local.get 5
     i32.wrap_i64

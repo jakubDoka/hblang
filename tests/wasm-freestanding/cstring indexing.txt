@@ -1,7 +1,7 @@
 (module
   (type (;0;) (func (result i64)))
-  (type (;1;) (func (param i64 i64 i64)))
-  (type (;2;) (func (param i64) (result i64 i64)))
+  (type (;1;) (func (param i64) (result i64 i64)))
+  (type (;2;) (func (param i64 i64 i64)))
   (func $main (type 0) (result i64)
     (local i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
@@ -71,98 +71,93 @@
         local.get 10
         local.get 3
         i64.lt_u
-        i32.eqz
         br_if 0 (;@2;)
-        block  ;; label = @3
-          local.get 10
-          local.get 3
-          i64.ge_u
-          i32.eqz
-          br_if 0 (;@3;)
-          i64.const 96
-          global.get 0
-          i64.add
-          local.set 16
-          global.get 1
-          local.set 15
-          global.get 0
-          i32.wrap_i64
-          local.get 15
-          i64.store offset=96
-          i64.const 73014444048
-          local.set 14
-          i64.const 24
-          local.set 13
-          i64.const 16
-          local.set 12
-          global.get 0
-          i32.wrap_i64
-          local.get 12
-          i64.store offset=104
-          global.get 0
-          i32.wrap_i64
-          local.get 14
-          i64.store offset=112
-          i64.const 0
-          global.get 0
-          i64.add
-          local.set 11
-          local.get 11
-          i32.wrap_i64
-          local.get 16
-          i32.wrap_i64
-          local.get 13
-          i32.wrap_i64
-          memory.copy
-          local.get 3
-          local.get 10
-          local.get 10
-          call $cstring_indexing.slice_ioob
-        end
+        i64.const 120
+        global.get 0
+        i64.add
+        global.set 0
+        local.get 0
+        return
+      end
+      block  ;; label = @2
+        local.get 10
+        local.get 3
+        i64.ge_u
+        br_if 0 (;@2;)
         local.get 10
         local.get 1
         i64.mul
         local.get 2
         i64.add
-        local.set 17
-        local.get 17
+        local.set 11
+        local.get 11
         i32.wrap_i64
         i64.load
         call $cstring_indexing.cstr
-        local.set 19
-        local.set 20
+        local.set 13
+        local.set 14
         global.get 0
         i32.wrap_i64
-        local.get 20
+        local.get 14
         i64.store offset=72
         global.get 0
         i32.wrap_i64
-        local.get 19
+        local.get 13
         i64.store offset=80
         global.get 0
         i32.wrap_i64
         i64.load offset=88
         local.get 4
         i64.add
-        local.set 18
+        local.set 12
         global.get 0
         i32.wrap_i64
-        local.get 18
+        local.get 12
         i64.store offset=88
         br 1 (;@1;)
       end
-      i64.const 120
+      i64.const 96
       global.get 0
       i64.add
-      global.set 0
-      local.get 0
-      return
+      local.set 20
+      global.get 1
+      local.set 19
+      global.get 0
+      i32.wrap_i64
+      local.get 19
+      i64.store offset=96
+      i64.const 73014444048
+      local.set 18
+      i64.const 24
+      local.set 17
+      i64.const 16
+      local.set 16
+      global.get 0
+      i32.wrap_i64
+      local.get 16
+      i64.store offset=104
+      global.get 0
+      i32.wrap_i64
+      local.get 18
+      i64.store offset=112
+      i64.const 0
+      global.get 0
+      i64.add
+      local.set 15
+      local.get 15
+      i32.wrap_i64
+      local.get 20
+      i32.wrap_i64
+      local.get 17
+      i32.wrap_i64
+      memory.copy
+      local.get 3
+      local.get 10
+      local.get 10
+      call $cstring_indexing.slice_ioob
     end
     unreachable)
-  (func $cstring_indexing.slice_ioob (type 1) (param i64 i64 i64)
-    unreachable
-    unreachable)
-  (func $cstring_indexing.cstr (type 2) (param i64) (result i64 i64)
+  (func $cstring_indexing.cstr (type 1) (param i64) (result i64 i64)
     (local i32 i32 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 32
@@ -201,38 +196,40 @@
         local.get 2
         local.get 1
         i32.ne
-        i32.eqz
         br_if 0 (;@2;)
-        local.get 6
-        local.get 3
-        i64.add
-        local.set 7
         global.get 0
         i32.wrap_i64
-        local.get 7
-        i64.store offset=24
-        br 1 (;@1;)
+        local.get 5
+        i64.store
+        global.get 0
+        i32.wrap_i64
+        local.get 6
+        i64.store offset=8
+        global.get 0
+        i32.wrap_i64
+        i64.load
+        global.get 0
+        i32.wrap_i64
+        i64.load offset=8
+        i64.const 32
+        global.get 0
+        i64.add
+        global.set 0
+        return
       end
-      global.get 0
-      i32.wrap_i64
-      local.get 5
-      i64.store
-      global.get 0
-      i32.wrap_i64
       local.get 6
-      i64.store offset=8
-      global.get 0
-      i32.wrap_i64
-      i64.load
-      global.get 0
-      i32.wrap_i64
-      i64.load offset=8
-      i64.const 32
-      global.get 0
+      local.get 3
       i64.add
-      global.set 0
-      return
+      local.set 7
+      global.get 0
+      i32.wrap_i64
+      local.get 7
+      i64.store offset=24
+      br 0 (;@1;)
     end
+    unreachable)
+  (func $cstring_indexing.slice_ioob (type 2) (param i64 i64 i64)
+    unreachable
     unreachable)
   (table (;0;) 0 funcref)
   (memory (;0;) 4)

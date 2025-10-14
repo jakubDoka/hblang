@@ -30,73 +30,67 @@
           i64.eq
           local.set 0
           local.get 0
-          i32.eqz
           br_if 0 (;@3;)
-          br 1 (;@2;)
-        end
-        global.get 0
-        i32.wrap_i64
-        local.get 3
-        i64.store offset=16
-        loop  ;; label = @3
-          block  ;; label = @4
-            global.get 0
-            i32.wrap_i64
-            i64.load offset=8
-            local.set 5
-            global.get 0
-            i32.wrap_i64
-            i64.load offset=16
-            local.set 4
-            local.get 4
-            local.get 2
-            i64.eq
-            i32.eqz
-            br_if 0 (;@4;)
+          global.get 0
+          i32.wrap_i64
+          local.get 3
+          i64.store offset=16
+          loop  ;; label = @4
+            block  ;; label = @5
+              global.get 0
+              i32.wrap_i64
+              i64.load offset=8
+              local.set 5
+              global.get 0
+              i32.wrap_i64
+              i64.load offset=16
+              local.set 4
+              local.get 4
+              local.get 2
+              i64.eq
+              br_if 0 (;@5;)
+              block  ;; label = @6
+                local.get 5
+                local.get 4
+                i64.mul
+                local.set 6
+                local.get 6
+                local.get 3
+                i64.eq
+                br_if 0 (;@6;)
+                global.get 0
+                i32.wrap_i64
+                i64.load
+                local.get 6
+                i64.add
+                local.set 8
+                global.get 0
+                i32.wrap_i64
+                local.get 8
+                i64.store
+                global.get 0
+                i32.wrap_i64
+                i64.load offset=16
+                local.get 1
+                i64.add
+                local.set 7
+                global.get 0
+                i32.wrap_i64
+                local.get 7
+                i64.store offset=16
+                br 2 (;@4;)
+              end
+              br 3 (;@2;)
+            end
             local.get 5
             local.get 1
-            i64.add
-            local.set 6
-            global.get 0
-            i32.wrap_i64
-            local.get 6
-            i64.store offset=8
-            br 3 (;@1;)
-          end
-          block  ;; label = @4
-            block  ;; label = @5
-              local.get 5
-              local.get 4
-              i64.mul
-              local.set 7
-              local.get 7
-              local.get 3
-              i64.eq
-              i32.eqz
-              br_if 0 (;@5;)
-              br 1 (;@4;)
-            end
-            global.get 0
-            i32.wrap_i64
-            i64.load
-            local.get 7
             i64.add
             local.set 9
             global.get 0
             i32.wrap_i64
             local.get 9
-            i64.store
-            global.get 0
-            i32.wrap_i64
-            i64.load offset=16
-            local.get 1
-            i64.add
-            local.set 8
-            global.get 0
-            i32.wrap_i64
-            local.get 8
-            i64.store offset=16
-            br 1 (;@3;)
+            i64.store offset=8
+            br 3 (;@1;)
           end
         end
       end

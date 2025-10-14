@@ -1,4 +1,3 @@
-
 (Store ?c m bs @ (Local _ LocalAlloc:l) offset = {bs.knownOffset()} v) :
   (StackStore (:offset) c m l v)
 

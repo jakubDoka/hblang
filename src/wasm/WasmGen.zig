@@ -74,6 +74,10 @@ pub const classes = enum {
     };
 };
 
+pub fn isSwapped(node: *Func.Node) bool {
+    return node.kind == .If;
+}
+
 pub fn idealize(self: *WasmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
     _ = self;
     const inps = node.inputs();
@@ -1107,9 +1111,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalLoad(inps[0]);
 
             if (inps[0].data_type == .i64) {
-                try self.ctx.buf.writer.writeByte(opb(.i64_eqz));
-            } else {
-                try self.ctx.buf.writer.writeByte(opb(.i32_eqz));
+                try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
             }
 
             try self.ctx.buf.writer.writeByte(opb(.br_if));

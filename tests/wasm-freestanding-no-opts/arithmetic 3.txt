@@ -82,331 +82,227 @@
                                                     block  ;; label = @25
                                                       block  ;; label = @26
                                                         block  ;; label = @27
+                                                          global.get 0
+                                                          i32.wrap_i64
+                                                          local.get 6
+                                                          i32.store8 offset=5
+                                                          global.get 0
+                                                          i32.wrap_i64
+                                                          i32.load8_u offset=5
+                                                          br_if 0 (;@27;)
+                                                          global.get 0
+                                                          i32.wrap_i64
+                                                          i32.load8_u offset=14
+                                                          i32.const 255
+                                                          i32.and
+                                                          local.set 7
+                                                          local.get 7
+                                                          local.get 7
+                                                          i32.lt_u
+                                                          call $arithmetic_3.cond
+                                                          local.set 8
                                                           block  ;; label = @28
+                                                            global.get 0
+                                                            i32.wrap_i64
+                                                            local.get 8
+                                                            i32.store8 offset=6
+                                                            global.get 0
+                                                            i32.wrap_i64
+                                                            i32.load8_u offset=6
+                                                            br_if 0 (;@28;)
+                                                            global.get 0
+                                                            i32.wrap_i64
+                                                            i32.load8_u offset=3
+                                                            i32.const 255
+                                                            i32.and
+                                                            local.set 10
+                                                            global.get 0
+                                                            i32.wrap_i64
+                                                            i32.load8_u offset=14
+                                                            i32.const 255
+                                                            i32.and
+                                                            local.set 9
+                                                            local.get 9
+                                                            local.get 10
+                                                            i32.le_u
+                                                            call $arithmetic_3.cond
+                                                            local.set 11
                                                             block  ;; label = @29
+                                                              global.get 0
+                                                              i32.wrap_i64
+                                                              local.get 11
+                                                              i32.store8 offset=7
+                                                              global.get 0
+                                                              i32.wrap_i64
+                                                              i32.load8_u offset=7
+                                                              br_if 0 (;@29;)
+                                                              global.get 0
+                                                              i32.wrap_i64
+                                                              i32.load8_u offset=3
+                                                              i32.const 255
+                                                              i32.and
+                                                              local.set 13
+                                                              global.get 0
+                                                              i32.wrap_i64
+                                                              i32.load8_u offset=14
+                                                              i32.const 255
+                                                              i32.and
+                                                              local.set 12
+                                                              local.get 13
+                                                              local.get 12
+                                                              i32.gt_u
+                                                              call $arithmetic_3.cond
+                                                              local.set 14
                                                               block  ;; label = @30
+                                                                global.get 0
+                                                                i32.wrap_i64
+                                                                local.get 14
+                                                                i32.store8 offset=8
+                                                                global.get 0
+                                                                i32.wrap_i64
+                                                                i32.load8_u offset=8
+                                                                br_if 0 (;@30;)
+                                                                global.get 0
+                                                                i32.wrap_i64
+                                                                i32.load8_u offset=14
+                                                                i32.const 255
+                                                                i32.and
+                                                                local.set 15
+                                                                local.get 15
+                                                                local.get 15
+                                                                i32.gt_u
+                                                                call $arithmetic_3.cond
+                                                                local.set 16
                                                                 block  ;; label = @31
+                                                                  global.get 0
+                                                                  i32.wrap_i64
+                                                                  local.get 16
+                                                                  i32.store8 offset=9
+                                                                  global.get 0
+                                                                  i32.wrap_i64
+                                                                  i32.load8_u offset=9
+                                                                  br_if 0 (;@31;)
+                                                                  global.get 0
+                                                                  i32.wrap_i64
+                                                                  i32.load8_u offset=3
+                                                                  i32.const 255
+                                                                  i32.and
+                                                                  local.set 18
+                                                                  global.get 0
+                                                                  i32.wrap_i64
+                                                                  i32.load8_u offset=14
+                                                                  i32.const 255
+                                                                  i32.and
+                                                                  local.set 17
+                                                                  local.get 18
+                                                                  local.get 17
+                                                                  i32.ge_u
+                                                                  call $arithmetic_3.cond
+                                                                  local.set 19
                                                                   block  ;; label = @32
+                                                                    global.get 0
+                                                                    i32.wrap_i64
+                                                                    local.get 19
+                                                                    i32.store8 offset=10
+                                                                    global.get 0
+                                                                    i32.wrap_i64
+                                                                    i32.load8_u offset=10
+                                                                    br_if 0 (;@32;)
+                                                                    call $arithmetic_3.mne
+                                                                    local.set 21
+                                                                    global.get 0
+                                                                    i32.wrap_i64
+                                                                    local.get 21
+                                                                    i32.store8 offset=12
+                                                                    global.get 0
+                                                                    i32.wrap_i64
+                                                                    i32.load8_u offset=12
+                                                                    local.set 20
+                                                                    global.get 0
+                                                                    i32.wrap_i64
+                                                                    local.get 20
+                                                                    i32.store8 offset=11
+                                                                    call $arithmetic_3.mero
+                                                                    local.set 25
+                                                                    global.get 0
+                                                                    i32.wrap_i64
+                                                                    local.get 25
+                                                                    i32.store8
+                                                                    global.get 0
+                                                                    i32.wrap_i64
+                                                                    i32.load8_u
+                                                                    local.set 24
+                                                                    global.get 0
+                                                                    i32.wrap_i64
+                                                                    local.get 24
+                                                                    i32.store8 offset=13
+                                                                    global.get 0
+                                                                    i32.wrap_i64
+                                                                    i32.load8_u offset=11
+                                                                    i32.extend8_s
+                                                                    local.set 23
+                                                                    global.get 0
+                                                                    i32.wrap_i64
+                                                                    i32.load8_u offset=13
+                                                                    i32.extend8_s
+                                                                    local.set 22
+                                                                    local.get 23
+                                                                    local.get 22
+                                                                    i32.gt_s
+                                                                    call $arithmetic_3.cond
+                                                                    local.set 26
                                                                     block  ;; label = @33
+                                                                      global.get 0
+                                                                      i32.wrap_i64
+                                                                      local.get 26
+                                                                      i32.store8 offset=19
+                                                                      global.get 0
+                                                                      i32.wrap_i64
+                                                                      i32.load8_u offset=19
+                                                                      br_if 0 (;@33;)
+                                                                      global.get 0
+                                                                      i32.wrap_i64
+                                                                      i32.load8_u offset=11
+                                                                      i32.extend8_s
+                                                                      local.set 27
+                                                                      local.get 27
+                                                                      local.get 27
+                                                                      i32.gt_s
+                                                                      call $arithmetic_3.cond
+                                                                      local.set 28
                                                                       block  ;; label = @34
+                                                                        global.get 0
+                                                                        i32.wrap_i64
+                                                                        local.get 28
+                                                                        i32.store8 offset=15
+                                                                        global.get 0
+                                                                        i32.wrap_i64
+                                                                        i32.load8_u offset=15
+                                                                        br_if 0 (;@34;)
+                                                                        global.get 0
+                                                                        i32.wrap_i64
+                                                                        i32.load8_u offset=13
+                                                                        i32.extend8_s
+                                                                        local.set 30
+                                                                        global.get 0
+                                                                        i32.wrap_i64
+                                                                        i32.load8_u offset=11
+                                                                        i32.extend8_s
+                                                                        local.set 29
+                                                                        local.get 29
+                                                                        local.get 30
+                                                                        i32.ge_s
+                                                                        call $arithmetic_3.cond
+                                                                        local.set 31
                                                                         block  ;; label = @35
-                                                                          block  ;; label = @36
-                                                                            block  ;; label = @37
-                                                                              block  ;; label = @38
-                                                                                block  ;; label = @39
-                                                                                  block  ;; label = @40
-                                                                                    block  ;; label = @41
-                                                                                      block  ;; label = @42
-                                                                                        block  ;; label = @43
-                                                                                          block  ;; label = @44
-                                                                                            block  ;; label = @45
-                                                                                              block  ;; label = @46
-                                                                                                block  ;; label = @47
-                                                                                                  block  ;; label = @48
-                                                                                                    block  ;; label = @49
-                                                                                                      block  ;; label = @50
-                                                                                                        block  ;; label = @51
-                                                                                                          block  ;; label = @52
-                                                                                                            global.get 0
-                                                                                                            i32.wrap_i64
-                                                                                                            local.get 6
-                                                                                                            i32.store8 offset=5
-                                                                                                            global.get 0
-                                                                                                            i32.wrap_i64
-                                                                                                            i32.load8_u offset=5
-                                                                                                            i32.eqz
-                                                                                                            br_if 0 (;@52;)
-                                                                                                            i64.const 1
-                                                                                                            local.set 57
-                                                                                                            local.get 57
-                                                                                                            local.set 59
-                                                                                                            br 1 (;@51;)
-                                                                                                          end
-                                                                                                          global.get 0
-                                                                                                          i32.wrap_i64
-                                                                                                          i32.load8_u offset=14
-                                                                                                          i32.const 255
-                                                                                                          i32.and
-                                                                                                          local.set 7
-                                                                                                          local.get 7
-                                                                                                          local.get 7
-                                                                                                          i32.lt_u
-                                                                                                          call $arithmetic_3.cond
-                                                                                                          local.set 8
-                                                                                                          global.get 0
-                                                                                                          i32.wrap_i64
-                                                                                                          local.get 8
-                                                                                                          i32.store8 offset=6
-                                                                                                          global.get 0
-                                                                                                          i32.wrap_i64
-                                                                                                          i32.load8_u offset=6
-                                                                                                          i32.eqz
-                                                                                                          br_if 1 (;@50;)
-                                                                                                          i64.const 2
-                                                                                                          local.set 58
-                                                                                                          local.get 58
-                                                                                                          local.set 59
-                                                                                                        end
-                                                                                                        local.get 59
-                                                                                                        local.set 61
-                                                                                                        br 1 (;@49;)
-                                                                                                      end
-                                                                                                      global.get 0
-                                                                                                      i32.wrap_i64
-                                                                                                      i32.load8_u offset=3
-                                                                                                      i32.const 255
-                                                                                                      i32.and
-                                                                                                      local.set 10
-                                                                                                      global.get 0
-                                                                                                      i32.wrap_i64
-                                                                                                      i32.load8_u offset=14
-                                                                                                      i32.const 255
-                                                                                                      i32.and
-                                                                                                      local.set 9
-                                                                                                      local.get 9
-                                                                                                      local.get 10
-                                                                                                      i32.le_u
-                                                                                                      call $arithmetic_3.cond
-                                                                                                      local.set 11
-                                                                                                      global.get 0
-                                                                                                      i32.wrap_i64
-                                                                                                      local.get 11
-                                                                                                      i32.store8 offset=7
-                                                                                                      global.get 0
-                                                                                                      i32.wrap_i64
-                                                                                                      i32.load8_u offset=7
-                                                                                                      i32.eqz
-                                                                                                      br_if 1 (;@48;)
-                                                                                                      i64.const 3
-                                                                                                      local.set 60
-                                                                                                      local.get 60
-                                                                                                      local.set 61
-                                                                                                    end
-                                                                                                    local.get 61
-                                                                                                    local.set 63
-                                                                                                    br 1 (;@47;)
-                                                                                                  end
-                                                                                                  global.get 0
-                                                                                                  i32.wrap_i64
-                                                                                                  i32.load8_u offset=3
-                                                                                                  i32.const 255
-                                                                                                  i32.and
-                                                                                                  local.set 13
-                                                                                                  global.get 0
-                                                                                                  i32.wrap_i64
-                                                                                                  i32.load8_u offset=14
-                                                                                                  i32.const 255
-                                                                                                  i32.and
-                                                                                                  local.set 12
-                                                                                                  local.get 13
-                                                                                                  local.get 12
-                                                                                                  i32.gt_u
-                                                                                                  call $arithmetic_3.cond
-                                                                                                  local.set 14
-                                                                                                  global.get 0
-                                                                                                  i32.wrap_i64
-                                                                                                  local.get 14
-                                                                                                  i32.store8 offset=8
-                                                                                                  global.get 0
-                                                                                                  i32.wrap_i64
-                                                                                                  i32.load8_u offset=8
-                                                                                                  i32.eqz
-                                                                                                  br_if 1 (;@46;)
-                                                                                                  i64.const 4
-                                                                                                  local.set 62
-                                                                                                  local.get 62
-                                                                                                  local.set 63
-                                                                                                end
-                                                                                                local.get 63
-                                                                                                local.set 65
-                                                                                                br 1 (;@45;)
-                                                                                              end
-                                                                                              global.get 0
-                                                                                              i32.wrap_i64
-                                                                                              i32.load8_u offset=14
-                                                                                              i32.const 255
-                                                                                              i32.and
-                                                                                              local.set 15
-                                                                                              local.get 15
-                                                                                              local.get 15
-                                                                                              i32.gt_u
-                                                                                              call $arithmetic_3.cond
-                                                                                              local.set 16
-                                                                                              global.get 0
-                                                                                              i32.wrap_i64
-                                                                                              local.get 16
-                                                                                              i32.store8 offset=9
-                                                                                              global.get 0
-                                                                                              i32.wrap_i64
-                                                                                              i32.load8_u offset=9
-                                                                                              i32.eqz
-                                                                                              br_if 1 (;@44;)
-                                                                                              i64.const 5
-                                                                                              local.set 64
-                                                                                              local.get 64
-                                                                                              local.set 65
-                                                                                            end
-                                                                                            local.get 65
-                                                                                            local.set 67
-                                                                                            br 1 (;@43;)
-                                                                                          end
-                                                                                          global.get 0
-                                                                                          i32.wrap_i64
-                                                                                          i32.load8_u offset=3
-                                                                                          i32.const 255
-                                                                                          i32.and
-                                                                                          local.set 18
-                                                                                          global.get 0
-                                                                                          i32.wrap_i64
-                                                                                          i32.load8_u offset=14
-                                                                                          i32.const 255
-                                                                                          i32.and
-                                                                                          local.set 17
-                                                                                          local.get 18
-                                                                                          local.get 17
-                                                                                          i32.ge_u
-                                                                                          call $arithmetic_3.cond
-                                                                                          local.set 19
-                                                                                          global.get 0
-                                                                                          i32.wrap_i64
-                                                                                          local.get 19
-                                                                                          i32.store8 offset=10
-                                                                                          global.get 0
-                                                                                          i32.wrap_i64
-                                                                                          i32.load8_u offset=10
-                                                                                          i32.eqz
-                                                                                          br_if 1 (;@42;)
-                                                                                          i64.const 6
-                                                                                          local.set 66
-                                                                                          local.get 66
-                                                                                          local.set 67
-                                                                                        end
-                                                                                        local.get 67
-                                                                                        local.set 69
-                                                                                        br 1 (;@41;)
-                                                                                      end
-                                                                                      call $arithmetic_3.mne
-                                                                                      local.set 21
-                                                                                      global.get 0
-                                                                                      i32.wrap_i64
-                                                                                      local.get 21
-                                                                                      i32.store8 offset=12
-                                                                                      global.get 0
-                                                                                      i32.wrap_i64
-                                                                                      i32.load8_u offset=12
-                                                                                      local.set 20
-                                                                                      global.get 0
-                                                                                      i32.wrap_i64
-                                                                                      local.get 20
-                                                                                      i32.store8 offset=11
-                                                                                      call $arithmetic_3.mero
-                                                                                      local.set 25
-                                                                                      global.get 0
-                                                                                      i32.wrap_i64
-                                                                                      local.get 25
-                                                                                      i32.store8
-                                                                                      global.get 0
-                                                                                      i32.wrap_i64
-                                                                                      i32.load8_u
-                                                                                      local.set 24
-                                                                                      global.get 0
-                                                                                      i32.wrap_i64
-                                                                                      local.get 24
-                                                                                      i32.store8 offset=13
-                                                                                      global.get 0
-                                                                                      i32.wrap_i64
-                                                                                      i32.load8_u offset=11
-                                                                                      i32.extend8_s
-                                                                                      local.set 23
-                                                                                      global.get 0
-                                                                                      i32.wrap_i64
-                                                                                      i32.load8_u offset=13
-                                                                                      i32.extend8_s
-                                                                                      local.set 22
-                                                                                      local.get 23
-                                                                                      local.get 22
-                                                                                      i32.gt_s
-                                                                                      call $arithmetic_3.cond
-                                                                                      local.set 26
-                                                                                      global.get 0
-                                                                                      i32.wrap_i64
-                                                                                      local.get 26
-                                                                                      i32.store8 offset=19
-                                                                                      global.get 0
-                                                                                      i32.wrap_i64
-                                                                                      i32.load8_u offset=19
-                                                                                      i32.eqz
-                                                                                      br_if 1 (;@40;)
-                                                                                      i64.const 7
-                                                                                      local.set 68
-                                                                                      local.get 68
-                                                                                      local.set 69
-                                                                                    end
-                                                                                    local.get 69
-                                                                                    local.set 71
-                                                                                    br 1 (;@39;)
-                                                                                  end
-                                                                                  global.get 0
-                                                                                  i32.wrap_i64
-                                                                                  i32.load8_u offset=11
-                                                                                  i32.extend8_s
-                                                                                  local.set 27
-                                                                                  local.get 27
-                                                                                  local.get 27
-                                                                                  i32.gt_s
-                                                                                  call $arithmetic_3.cond
-                                                                                  local.set 28
-                                                                                  global.get 0
-                                                                                  i32.wrap_i64
-                                                                                  local.get 28
-                                                                                  i32.store8 offset=15
-                                                                                  global.get 0
-                                                                                  i32.wrap_i64
-                                                                                  i32.load8_u offset=15
-                                                                                  i32.eqz
-                                                                                  br_if 1 (;@38;)
-                                                                                  i64.const 8
-                                                                                  local.set 70
-                                                                                  local.get 70
-                                                                                  local.set 71
-                                                                                end
-                                                                                local.get 71
-                                                                                local.set 73
-                                                                                br 1 (;@37;)
-                                                                              end
-                                                                              global.get 0
-                                                                              i32.wrap_i64
-                                                                              i32.load8_u offset=13
-                                                                              i32.extend8_s
-                                                                              local.set 30
-                                                                              global.get 0
-                                                                              i32.wrap_i64
-                                                                              i32.load8_u offset=11
-                                                                              i32.extend8_s
-                                                                              local.set 29
-                                                                              local.get 29
-                                                                              local.get 30
-                                                                              i32.ge_s
-                                                                              call $arithmetic_3.cond
-                                                                              local.set 31
-                                                                              global.get 0
-                                                                              i32.wrap_i64
-                                                                              local.get 31
-                                                                              i32.store8 offset=17
-                                                                              global.get 0
-                                                                              i32.wrap_i64
-                                                                              i32.load8_u offset=17
-                                                                              i32.eqz
-                                                                              br_if 1 (;@36;)
-                                                                              i64.const 9
-                                                                              local.set 72
-                                                                              local.get 72
-                                                                              local.set 73
-                                                                            end
-                                                                            local.get 73
-                                                                            local.set 75
-                                                                            br 1 (;@35;)
-                                                                          end
+                                                                          global.get 0
+                                                                          i32.wrap_i64
+                                                                          local.get 31
+                                                                          i32.store8 offset=17
+                                                                          global.get 0
+                                                                          i32.wrap_i64
+                                                                          i32.load8_u offset=17
+                                                                          br_if 0 (;@35;)
                                                                           global.get 0
                                                                           i32.wrap_i64
                                                                           i32.load8_u offset=13
@@ -422,375 +318,453 @@
                                                                           i32.lt_s
                                                                           call $arithmetic_3.cond
                                                                           local.set 34
-                                                                          global.get 0
-                                                                          i32.wrap_i64
-                                                                          local.get 34
-                                                                          i32.store8 offset=18
-                                                                          global.get 0
-                                                                          i32.wrap_i64
-                                                                          i32.load8_u offset=18
-                                                                          i32.eqz
-                                                                          br_if 1 (;@34;)
+                                                                          block  ;; label = @36
+                                                                            global.get 0
+                                                                            i32.wrap_i64
+                                                                            local.get 34
+                                                                            i32.store8 offset=18
+                                                                            global.get 0
+                                                                            i32.wrap_i64
+                                                                            i32.load8_u offset=18
+                                                                            br_if 0 (;@36;)
+                                                                            global.get 0
+                                                                            i32.wrap_i64
+                                                                            i32.load8_u offset=11
+                                                                            i32.extend8_s
+                                                                            local.set 35
+                                                                            local.get 35
+                                                                            local.get 35
+                                                                            i32.lt_s
+                                                                            call $arithmetic_3.cond
+                                                                            local.set 36
+                                                                            block  ;; label = @37
+                                                                              global.get 0
+                                                                              i32.wrap_i64
+                                                                              local.get 36
+                                                                              i32.store8 offset=1
+                                                                              global.get 0
+                                                                              i32.wrap_i64
+                                                                              i32.load8_u offset=1
+                                                                              br_if 0 (;@37;)
+                                                                              global.get 0
+                                                                              i32.wrap_i64
+                                                                              i32.load8_u offset=13
+                                                                              i32.extend8_s
+                                                                              local.set 38
+                                                                              global.get 0
+                                                                              i32.wrap_i64
+                                                                              i32.load8_u offset=11
+                                                                              i32.extend8_s
+                                                                              local.set 37
+                                                                              local.get 38
+                                                                              local.get 37
+                                                                              i32.le_s
+                                                                              call $arithmetic_3.cond
+                                                                              local.set 39
+                                                                              block  ;; label = @38
+                                                                                global.get 0
+                                                                                i32.wrap_i64
+                                                                                local.get 39
+                                                                                i32.store8 offset=20
+                                                                                global.get 0
+                                                                                i32.wrap_i64
+                                                                                i32.load8_u offset=20
+                                                                                br_if 0 (;@38;)
+                                                                                call $arithmetic_3.one
+                                                                                local.set 41
+                                                                                global.get 0
+                                                                                i32.wrap_i64
+                                                                                local.get 41
+                                                                                i32.store8 offset=22
+                                                                                global.get 0
+                                                                                i32.wrap_i64
+                                                                                i32.load8_u offset=22
+                                                                                local.set 40
+                                                                                global.get 0
+                                                                                i32.wrap_i64
+                                                                                local.get 40
+                                                                                i32.store8 offset=21
+                                                                                call $arithmetic_3.mero
+                                                                                local.set 46
+                                                                                block  ;; label = @39
+                                                                                  global.get 0
+                                                                                  i32.wrap_i64
+                                                                                  local.get 46
+                                                                                  i32.store8 offset=24
+                                                                                  global.get 0
+                                                                                  i32.wrap_i64
+                                                                                  i32.load8_u offset=24
+                                                                                  local.set 45
+                                                                                  global.get 0
+                                                                                  i32.wrap_i64
+                                                                                  local.get 45
+                                                                                  i32.store8 offset=23
+                                                                                  global.get 0
+                                                                                  i32.wrap_i64
+                                                                                  i32.load8_u offset=21
+                                                                                  global.get 0
+                                                                                  i32.wrap_i64
+                                                                                  i32.load8_u offset=23
+                                                                                  local.set 44
+                                                                                  i32.const 255
+                                                                                  i32.and
+                                                                                  local.set 43
+                                                                                  local.get 44
+                                                                                  i32.const 255
+                                                                                  i32.and
+                                                                                  local.set 42
+                                                                                  local.get 43
+                                                                                  local.get 42
+                                                                                  i32.lt_u
+                                                                                  br_if 0 (;@39;)
+                                                                                  block  ;; label = @40
+                                                                                    local.get 43
+                                                                                    local.get 43
+                                                                                    i32.lt_u
+                                                                                    br_if 0 (;@40;)
+                                                                                    block  ;; label = @41
+                                                                                      local.get 43
+                                                                                      local.get 42
+                                                                                      i32.le_u
+                                                                                      br_if 0 (;@41;)
+                                                                                      block  ;; label = @42
+                                                                                        local.get 42
+                                                                                        local.get 43
+                                                                                        i32.gt_u
+                                                                                        br_if 0 (;@42;)
+                                                                                        block  ;; label = @43
+                                                                                          local.get 43
+                                                                                          local.get 43
+                                                                                          i32.gt_u
+                                                                                          br_if 0 (;@43;)
+                                                                                          block  ;; label = @44
+                                                                                            local.get 42
+                                                                                            local.get 43
+                                                                                            i32.ge_u
+                                                                                            br_if 0 (;@44;)
+                                                                                            call $arithmetic_3.mne
+                                                                                            local.set 48
+                                                                                            global.get 0
+                                                                                            i32.wrap_i64
+                                                                                            local.get 48
+                                                                                            i32.store8 offset=26
+                                                                                            global.get 0
+                                                                                            i32.wrap_i64
+                                                                                            i32.load8_u offset=26
+                                                                                            local.set 47
+                                                                                            global.get 0
+                                                                                            i32.wrap_i64
+                                                                                            local.get 47
+                                                                                            i32.store8 offset=25
+                                                                                            call $arithmetic_3.mero
+                                                                                            local.set 54
+                                                                                            block  ;; label = @45
+                                                                                              global.get 0
+                                                                                              i32.wrap_i64
+                                                                                              local.get 54
+                                                                                              i32.store8 offset=16
+                                                                                              global.get 0
+                                                                                              i32.wrap_i64
+                                                                                              i32.load8_u offset=16
+                                                                                              local.set 53
+                                                                                              global.get 0
+                                                                                              i32.wrap_i64
+                                                                                              local.get 53
+                                                                                              i32.store8 offset=27
+                                                                                              global.get 0
+                                                                                              i32.wrap_i64
+                                                                                              i32.load8_u offset=25
+                                                                                              local.set 52
+                                                                                              global.get 0
+                                                                                              i32.wrap_i64
+                                                                                              i32.load8_u offset=27
+                                                                                              local.set 51
+                                                                                              local.get 52
+                                                                                              i32.extend8_s
+                                                                                              local.set 50
+                                                                                              local.get 51
+                                                                                              i32.extend8_s
+                                                                                              local.set 49
+                                                                                              local.get 50
+                                                                                              local.get 49
+                                                                                              i32.gt_s
+                                                                                              br_if 0 (;@45;)
+                                                                                              block  ;; label = @46
+                                                                                                local.get 50
+                                                                                                local.get 50
+                                                                                                i32.gt_s
+                                                                                                br_if 0 (;@46;)
+                                                                                                block  ;; label = @47
+                                                                                                  local.get 50
+                                                                                                  local.get 49
+                                                                                                  i32.ge_s
+                                                                                                  br_if 0 (;@47;)
+                                                                                                  block  ;; label = @48
+                                                                                                    local.get 49
+                                                                                                    local.get 50
+                                                                                                    i32.lt_s
+                                                                                                    br_if 0 (;@48;)
+                                                                                                    block  ;; label = @49
+                                                                                                      local.get 50
+                                                                                                      local.get 50
+                                                                                                      i32.lt_s
+                                                                                                      br_if 0 (;@49;)
+                                                                                                      block  ;; label = @50
+                                                                                                        local.get 49
+                                                                                                        local.get 50
+                                                                                                        i32.le_s
+                                                                                                        br_if 0 (;@50;)
+                                                                                                        block  ;; label = @51
+                                                                                                          local.get 52
+                                                                                                          i32.const 255
+                                                                                                          i32.and
+                                                                                                          local.set 55
+                                                                                                          local.get 55
+                                                                                                          local.get 55
+                                                                                                          i32.ne
+                                                                                                          br_if 0 (;@51;)
+                                                                                                          block  ;; label = @52
+                                                                                                            local.get 51
+                                                                                                            i32.const 255
+                                                                                                            i32.and
+                                                                                                            local.set 56
+                                                                                                            local.get 55
+                                                                                                            local.get 56
+                                                                                                            i32.eq
+                                                                                                            br_if 0 (;@52;)
+                                                                                                            i64.const 0
+                                                                                                            local.set 57
+                                                                                                            local.get 57
+                                                                                                            local.set 109
+                                                                                                            br 51 (;@1;)
+                                                                                                          end
+                                                                                                          i64.const 26
+                                                                                                          local.set 58
+                                                                                                          local.get 58
+                                                                                                          local.set 108
+                                                                                                          br 49 (;@2;)
+                                                                                                        end
+                                                                                                        i64.const 25
+                                                                                                        local.set 59
+                                                                                                        local.get 59
+                                                                                                        local.set 107
+                                                                                                        br 47 (;@3;)
+                                                                                                      end
+                                                                                                      i64.const 24
+                                                                                                      local.set 60
+                                                                                                      local.get 60
+                                                                                                      local.set 106
+                                                                                                      br 45 (;@4;)
+                                                                                                    end
+                                                                                                    i64.const 23
+                                                                                                    local.set 61
+                                                                                                    local.get 61
+                                                                                                    local.set 105
+                                                                                                    br 43 (;@5;)
+                                                                                                  end
+                                                                                                  i64.const 22
+                                                                                                  local.set 62
+                                                                                                  local.get 62
+                                                                                                  local.set 104
+                                                                                                  br 41 (;@6;)
+                                                                                                end
+                                                                                                i64.const 21
+                                                                                                local.set 63
+                                                                                                local.get 63
+                                                                                                local.set 103
+                                                                                                br 39 (;@7;)
+                                                                                              end
+                                                                                              i64.const 20
+                                                                                              local.set 64
+                                                                                              local.get 64
+                                                                                              local.set 102
+                                                                                              br 37 (;@8;)
+                                                                                            end
+                                                                                            i64.const 19
+                                                                                            local.set 65
+                                                                                            local.get 65
+                                                                                            local.set 101
+                                                                                            br 35 (;@9;)
+                                                                                          end
+                                                                                          i64.const 18
+                                                                                          local.set 66
+                                                                                          local.get 66
+                                                                                          local.set 100
+                                                                                          br 33 (;@10;)
+                                                                                        end
+                                                                                        i64.const 17
+                                                                                        local.set 67
+                                                                                        local.get 67
+                                                                                        local.set 99
+                                                                                        br 31 (;@11;)
+                                                                                      end
+                                                                                      i64.const 16
+                                                                                      local.set 68
+                                                                                      local.get 68
+                                                                                      local.set 98
+                                                                                      br 29 (;@12;)
+                                                                                    end
+                                                                                    i64.const 15
+                                                                                    local.set 69
+                                                                                    local.get 69
+                                                                                    local.set 97
+                                                                                    br 27 (;@13;)
+                                                                                  end
+                                                                                  i64.const 14
+                                                                                  local.set 70
+                                                                                  local.get 70
+                                                                                  local.set 96
+                                                                                  br 25 (;@14;)
+                                                                                end
+                                                                                i64.const 13
+                                                                                local.set 71
+                                                                                local.get 71
+                                                                                local.set 95
+                                                                                br 23 (;@15;)
+                                                                              end
+                                                                              i64.const 12
+                                                                              local.set 72
+                                                                              local.get 72
+                                                                              local.set 94
+                                                                              br 21 (;@16;)
+                                                                            end
+                                                                            i64.const 11
+                                                                            local.set 73
+                                                                            local.get 73
+                                                                            local.set 93
+                                                                            br 19 (;@17;)
+                                                                          end
                                                                           i64.const 10
                                                                           local.set 74
                                                                           local.get 74
-                                                                          local.set 75
+                                                                          local.set 92
+                                                                          br 17 (;@18;)
                                                                         end
+                                                                        i64.const 9
+                                                                        local.set 75
                                                                         local.get 75
-                                                                        local.set 77
-                                                                        br 1 (;@33;)
+                                                                        local.set 91
+                                                                        br 15 (;@19;)
                                                                       end
-                                                                      global.get 0
-                                                                      i32.wrap_i64
-                                                                      i32.load8_u offset=11
-                                                                      i32.extend8_s
-                                                                      local.set 35
-                                                                      local.get 35
-                                                                      local.get 35
-                                                                      i32.lt_s
-                                                                      call $arithmetic_3.cond
-                                                                      local.set 36
-                                                                      global.get 0
-                                                                      i32.wrap_i64
-                                                                      local.get 36
-                                                                      i32.store8 offset=1
-                                                                      global.get 0
-                                                                      i32.wrap_i64
-                                                                      i32.load8_u offset=1
-                                                                      i32.eqz
-                                                                      br_if 1 (;@32;)
-                                                                      i64.const 11
+                                                                      i64.const 8
                                                                       local.set 76
                                                                       local.get 76
-                                                                      local.set 77
+                                                                      local.set 90
+                                                                      br 13 (;@20;)
                                                                     end
+                                                                    i64.const 7
+                                                                    local.set 77
                                                                     local.get 77
-                                                                    local.set 79
-                                                                    br 1 (;@31;)
+                                                                    local.set 89
+                                                                    br 11 (;@21;)
                                                                   end
-                                                                  global.get 0
-                                                                  i32.wrap_i64
-                                                                  i32.load8_u offset=13
-                                                                  i32.extend8_s
-                                                                  local.set 38
-                                                                  global.get 0
-                                                                  i32.wrap_i64
-                                                                  i32.load8_u offset=11
-                                                                  i32.extend8_s
-                                                                  local.set 37
-                                                                  local.get 38
-                                                                  local.get 37
-                                                                  i32.le_s
-                                                                  call $arithmetic_3.cond
-                                                                  local.set 39
-                                                                  global.get 0
-                                                                  i32.wrap_i64
-                                                                  local.get 39
-                                                                  i32.store8 offset=20
-                                                                  global.get 0
-                                                                  i32.wrap_i64
-                                                                  i32.load8_u offset=20
-                                                                  i32.eqz
-                                                                  br_if 1 (;@30;)
-                                                                  i64.const 12
+                                                                  i64.const 6
                                                                   local.set 78
                                                                   local.get 78
-                                                                  local.set 79
+                                                                  local.set 88
+                                                                  br 9 (;@22;)
                                                                 end
+                                                                i64.const 5
+                                                                local.set 79
                                                                 local.get 79
-                                                                local.set 81
-                                                                br 1 (;@29;)
+                                                                local.set 87
+                                                                br 7 (;@23;)
                                                               end
-                                                              call $arithmetic_3.one
-                                                              local.set 41
-                                                              global.get 0
-                                                              i32.wrap_i64
-                                                              local.get 41
-                                                              i32.store8 offset=22
-                                                              global.get 0
-                                                              i32.wrap_i64
-                                                              i32.load8_u offset=22
-                                                              local.set 40
-                                                              global.get 0
-                                                              i32.wrap_i64
-                                                              local.get 40
-                                                              i32.store8 offset=21
-                                                              call $arithmetic_3.mero
-                                                              local.set 46
-                                                              global.get 0
-                                                              i32.wrap_i64
-                                                              local.get 46
-                                                              i32.store8 offset=24
-                                                              global.get 0
-                                                              i32.wrap_i64
-                                                              i32.load8_u offset=24
-                                                              local.set 45
-                                                              global.get 0
-                                                              i32.wrap_i64
-                                                              local.get 45
-                                                              i32.store8 offset=23
-                                                              global.get 0
-                                                              i32.wrap_i64
-                                                              i32.load8_u offset=21
-                                                              global.get 0
-                                                              i32.wrap_i64
-                                                              i32.load8_u offset=23
-                                                              local.set 44
-                                                              i32.const 255
-                                                              i32.and
-                                                              local.set 43
-                                                              local.get 44
-                                                              i32.const 255
-                                                              i32.and
-                                                              local.set 42
-                                                              local.get 43
-                                                              local.get 42
-                                                              i32.lt_u
-                                                              i32.eqz
-                                                              br_if 1 (;@28;)
-                                                              i64.const 13
+                                                              i64.const 4
                                                               local.set 80
                                                               local.get 80
-                                                              local.set 81
+                                                              local.set 86
+                                                              br 5 (;@24;)
                                                             end
+                                                            i64.const 3
+                                                            local.set 81
                                                             local.get 81
-                                                            local.set 83
-                                                            br 1 (;@27;)
+                                                            local.set 85
+                                                            br 3 (;@25;)
                                                           end
-                                                          local.get 43
-                                                          local.get 43
-                                                          i32.lt_u
-                                                          i32.eqz
-                                                          br_if 1 (;@26;)
-                                                          i64.const 14
+                                                          i64.const 2
                                                           local.set 82
                                                           local.get 82
-                                                          local.set 83
+                                                          local.set 84
+                                                          br 1 (;@26;)
                                                         end
+                                                        i64.const 1
+                                                        local.set 83
                                                         local.get 83
-                                                        local.set 85
-                                                        br 1 (;@25;)
+                                                        local.set 84
                                                       end
-                                                      local.get 43
-                                                      local.get 42
-                                                      i32.le_u
-                                                      i32.eqz
-                                                      br_if 1 (;@24;)
-                                                      i64.const 15
-                                                      local.set 84
                                                       local.get 84
                                                       local.set 85
                                                     end
                                                     local.get 85
-                                                    local.set 87
-                                                    br 1 (;@23;)
+                                                    local.set 86
                                                   end
-                                                  local.get 42
-                                                  local.get 43
-                                                  i32.gt_u
-                                                  i32.eqz
-                                                  br_if 1 (;@22;)
-                                                  i64.const 16
-                                                  local.set 86
                                                   local.get 86
                                                   local.set 87
                                                 end
                                                 local.get 87
-                                                local.set 89
-                                                br 1 (;@21;)
+                                                local.set 88
                                               end
-                                              local.get 43
-                                              local.get 43
-                                              i32.gt_u
-                                              i32.eqz
-                                              br_if 1 (;@20;)
-                                              i64.const 17
-                                              local.set 88
                                               local.get 88
                                               local.set 89
                                             end
                                             local.get 89
-                                            local.set 91
-                                            br 1 (;@19;)
+                                            local.set 90
                                           end
-                                          local.get 42
-                                          local.get 43
-                                          i32.ge_u
-                                          i32.eqz
-                                          br_if 1 (;@18;)
-                                          i64.const 18
-                                          local.set 90
                                           local.get 90
                                           local.set 91
                                         end
                                         local.get 91
-                                        local.set 93
-                                        br 1 (;@17;)
+                                        local.set 92
                                       end
-                                      call $arithmetic_3.mne
-                                      local.set 48
-                                      global.get 0
-                                      i32.wrap_i64
-                                      local.get 48
-                                      i32.store8 offset=26
-                                      global.get 0
-                                      i32.wrap_i64
-                                      i32.load8_u offset=26
-                                      local.set 47
-                                      global.get 0
-                                      i32.wrap_i64
-                                      local.get 47
-                                      i32.store8 offset=25
-                                      call $arithmetic_3.mero
-                                      local.set 54
-                                      global.get 0
-                                      i32.wrap_i64
-                                      local.get 54
-                                      i32.store8 offset=16
-                                      global.get 0
-                                      i32.wrap_i64
-                                      i32.load8_u offset=16
-                                      local.set 53
-                                      global.get 0
-                                      i32.wrap_i64
-                                      local.get 53
-                                      i32.store8 offset=27
-                                      global.get 0
-                                      i32.wrap_i64
-                                      i32.load8_u offset=25
-                                      local.set 52
-                                      global.get 0
-                                      i32.wrap_i64
-                                      i32.load8_u offset=27
-                                      local.set 51
-                                      local.get 52
-                                      i32.extend8_s
-                                      local.set 50
-                                      local.get 51
-                                      i32.extend8_s
-                                      local.set 49
-                                      local.get 50
-                                      local.get 49
-                                      i32.gt_s
-                                      i32.eqz
-                                      br_if 1 (;@16;)
-                                      i64.const 19
-                                      local.set 92
                                       local.get 92
                                       local.set 93
                                     end
                                     local.get 93
-                                    local.set 95
-                                    br 1 (;@15;)
+                                    local.set 94
                                   end
-                                  local.get 50
-                                  local.get 50
-                                  i32.gt_s
-                                  i32.eqz
-                                  br_if 1 (;@14;)
-                                  i64.const 20
-                                  local.set 94
                                   local.get 94
                                   local.set 95
                                 end
                                 local.get 95
-                                local.set 97
-                                br 1 (;@13;)
+                                local.set 96
                               end
-                              local.get 50
-                              local.get 49
-                              i32.ge_s
-                              i32.eqz
-                              br_if 1 (;@12;)
-                              i64.const 21
-                              local.set 96
                               local.get 96
                               local.set 97
                             end
                             local.get 97
-                            local.set 99
-                            br 1 (;@11;)
+                            local.set 98
                           end
-                          local.get 49
-                          local.get 50
-                          i32.lt_s
-                          i32.eqz
-                          br_if 1 (;@10;)
-                          i64.const 22
-                          local.set 98
                           local.get 98
                           local.set 99
                         end
                         local.get 99
-                        local.set 101
-                        br 1 (;@9;)
+                        local.set 100
                       end
-                      local.get 50
-                      local.get 50
-                      i32.lt_s
-                      i32.eqz
-                      br_if 1 (;@8;)
-                      i64.const 23
-                      local.set 100
                       local.get 100
                       local.set 101
                     end
                     local.get 101
-                    local.set 103
-                    br 1 (;@7;)
+                    local.set 102
                   end
-                  local.get 49
-                  local.get 50
-                  i32.le_s
-                  i32.eqz
-                  br_if 1 (;@6;)
-                  i64.const 24
-                  local.set 102
                   local.get 102
                   local.set 103
                 end
                 local.get 103
-                local.set 105
-                br 1 (;@5;)
+                local.set 104
               end
-              local.get 52
-              i32.const 255
-              i32.and
-              local.set 55
-              local.get 55
-              local.get 55
-              i32.ne
-              i32.eqz
-              br_if 1 (;@4;)
-              i64.const 25
-              local.set 104
               local.get 104
               local.set 105
             end
             local.get 105
-            local.set 107
-            br 1 (;@3;)
+            local.set 106
           end
-          local.get 51
-          i32.const 255
-          i32.and
-          local.set 56
-          local.get 55
-          local.get 56
-          i32.eq
-          i32.eqz
-          br_if 1 (;@2;)
-          i64.const 26
-          local.set 106
           local.get 106
           local.set 107
         end
         local.get 107
-        local.set 109
-        br 1 (;@1;)
+        local.set 108
       end
-      i64.const 0
-      local.set 108
       local.get 108
       local.set 109
     end

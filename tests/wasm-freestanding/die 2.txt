@@ -29,7 +29,6 @@
       i64.eq
       local.set 0
       local.get 0
-      i32.eqz
       br_if 0 (;@1;)
       unreachable
     end

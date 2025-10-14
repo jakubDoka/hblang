@@ -46,47 +46,46 @@
         local.get 1
         local.get 2
         i64.le_u
-        i32.eqz
         br_if 0 (;@2;)
+        local.get 1
+        local.get 3
+        i64.sub
+        call $if_statements_2.fib
+        local.set 5
         global.get 0
         i32.wrap_i64
-        local.get 3
+        local.get 5
+        i64.store offset=8
+        global.get 0
+        i32.wrap_i64
+        i64.load
+        local.get 2
+        i64.sub
+        local.set 4
+        local.get 4
+        call $if_statements_2.fib
+        local.set 7
+        global.get 0
+        i32.wrap_i64
+        local.get 7
+        i64.store offset=16
+        global.get 0
+        i32.wrap_i64
+        i64.load offset=8
+        global.get 0
+        i32.wrap_i64
+        i64.load offset=16
+        i64.add
+        local.set 6
+        global.get 0
+        i32.wrap_i64
+        local.get 6
         i64.store
         br 1 (;@1;)
       end
-      local.get 1
+      global.get 0
+      i32.wrap_i64
       local.get 3
-      i64.sub
-      call $if_statements_2.fib
-      local.set 5
-      global.get 0
-      i32.wrap_i64
-      local.get 5
-      i64.store offset=8
-      global.get 0
-      i32.wrap_i64
-      i64.load
-      local.get 2
-      i64.sub
-      local.set 4
-      local.get 4
-      call $if_statements_2.fib
-      local.set 7
-      global.get 0
-      i32.wrap_i64
-      local.get 7
-      i64.store offset=16
-      global.get 0
-      i32.wrap_i64
-      i64.load offset=8
-      global.get 0
-      i32.wrap_i64
-      i64.load offset=16
-      i64.add
-      local.set 6
-      global.get 0
-      i32.wrap_i64
-      local.get 6
       i64.store
     end
     global.get 0

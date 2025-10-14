@@ -83,7 +83,6 @@
         local.get 3
         local.get 2
         i32.eq
-        i32.eqz
         br_if 0 (;@2;)
         local.get 0
         i32.wrap_i64

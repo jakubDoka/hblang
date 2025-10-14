@@ -38,291 +38,291 @@
                                                                 block  ;; label = @31
                                                                   block  ;; label = @32
                                                                     block  ;; label = @33
+                                                                      global.get 0
+                                                                      i32.wrap_i64
+                                                                      i64.load offset=32
+                                                                      i32.wrap_i64
+                                                                      br_if 0 (;@33;)
                                                                       block  ;; label = @34
+                                                                        global.get 0
+                                                                        i32.wrap_i64
+                                                                        i64.load offset=80
+                                                                        i32.wrap_i64
+                                                                        br_if 0 (;@34;)
                                                                         block  ;; label = @35
+                                                                          global.get 0
+                                                                          i32.wrap_i64
+                                                                          i64.load offset=128
+                                                                          i32.wrap_i64
+                                                                          br_if 0 (;@35;)
                                                                           block  ;; label = @36
+                                                                            global.get 0
+                                                                            i32.wrap_i64
+                                                                            i64.load offset=176
+                                                                            i32.wrap_i64
+                                                                            br_if 0 (;@36;)
                                                                             block  ;; label = @37
+                                                                              global.get 0
+                                                                              i32.wrap_i64
+                                                                              i64.load offset=224
+                                                                              i32.wrap_i64
+                                                                              br_if 0 (;@37;)
                                                                               block  ;; label = @38
+                                                                                global.get 0
+                                                                                i32.wrap_i64
+                                                                                i64.load offset=256
+                                                                                i32.wrap_i64
+                                                                                br_if 0 (;@38;)
                                                                                 block  ;; label = @39
+                                                                                  global.get 0
+                                                                                  i32.wrap_i64
+                                                                                  i64.load offset=320
+                                                                                  i32.wrap_i64
+                                                                                  br_if 0 (;@39;)
                                                                                   block  ;; label = @40
+                                                                                    global.get 0
+                                                                                    i32.wrap_i64
+                                                                                    i64.load offset=368
+                                                                                    i32.wrap_i64
+                                                                                    br_if 0 (;@40;)
                                                                                     block  ;; label = @41
+                                                                                      global.get 0
+                                                                                      i32.wrap_i64
+                                                                                      i64.load offset=416
+                                                                                      i32.wrap_i64
+                                                                                      br_if 0 (;@41;)
                                                                                       block  ;; label = @42
+                                                                                        global.get 0
+                                                                                        i32.wrap_i64
+                                                                                        i64.load offset=464
+                                                                                        i32.wrap_i64
+                                                                                        br_if 0 (;@42;)
                                                                                         block  ;; label = @43
+                                                                                          global.get 0
+                                                                                          i32.wrap_i64
+                                                                                          i64.load offset=496
+                                                                                          i32.wrap_i64
+                                                                                          br_if 0 (;@43;)
                                                                                           block  ;; label = @44
+                                                                                            global.get 0
+                                                                                            i32.wrap_i64
+                                                                                            i64.load offset=480
+                                                                                            i32.wrap_i64
+                                                                                            br_if 0 (;@44;)
                                                                                             block  ;; label = @45
+                                                                                              global.get 0
+                                                                                              i32.wrap_i64
+                                                                                              i64.load offset=432
+                                                                                              i32.wrap_i64
+                                                                                              br_if 0 (;@45;)
                                                                                               block  ;; label = @46
+                                                                                                global.get 0
+                                                                                                i32.wrap_i64
+                                                                                                i64.load offset=384
+                                                                                                i32.wrap_i64
+                                                                                                br_if 0 (;@46;)
                                                                                                 block  ;; label = @47
+                                                                                                  global.get 0
+                                                                                                  i32.wrap_i64
+                                                                                                  i64.load offset=336
+                                                                                                  i32.wrap_i64
+                                                                                                  br_if 0 (;@47;)
                                                                                                   block  ;; label = @48
+                                                                                                    global.get 0
+                                                                                                    i32.wrap_i64
+                                                                                                    i64.load offset=288
+                                                                                                    i32.wrap_i64
+                                                                                                    br_if 0 (;@48;)
                                                                                                     block  ;; label = @49
+                                                                                                      global.get 0
+                                                                                                      i32.wrap_i64
+                                                                                                      i64.load offset=272
+                                                                                                      i32.wrap_i64
+                                                                                                      br_if 0 (;@49;)
                                                                                                       block  ;; label = @50
+                                                                                                        global.get 0
+                                                                                                        i32.wrap_i64
+                                                                                                        i64.load offset=192
+                                                                                                        i32.wrap_i64
+                                                                                                        br_if 0 (;@50;)
                                                                                                         block  ;; label = @51
+                                                                                                          global.get 0
+                                                                                                          i32.wrap_i64
+                                                                                                          i64.load offset=144
+                                                                                                          i32.wrap_i64
+                                                                                                          br_if 0 (;@51;)
                                                                                                           block  ;; label = @52
+                                                                                                            global.get 0
+                                                                                                            i32.wrap_i64
+                                                                                                            i64.load offset=96
+                                                                                                            i32.wrap_i64
+                                                                                                            br_if 0 (;@52;)
                                                                                                             block  ;; label = @53
+                                                                                                              global.get 0
+                                                                                                              i32.wrap_i64
+                                                                                                              i64.load offset=48
+                                                                                                              i32.wrap_i64
+                                                                                                              br_if 0 (;@53;)
                                                                                                               block  ;; label = @54
+                                                                                                                global.get 0
+                                                                                                                i32.wrap_i64
+                                                                                                                i64.load offset=16
+                                                                                                                i32.wrap_i64
+                                                                                                                br_if 0 (;@54;)
                                                                                                                 block  ;; label = @55
+                                                                                                                  global.get 0
+                                                                                                                  i32.wrap_i64
+                                                                                                                  i64.load offset=448
+                                                                                                                  i32.wrap_i64
+                                                                                                                  br_if 0 (;@55;)
                                                                                                                   block  ;; label = @56
+                                                                                                                    global.get 0
+                                                                                                                    i32.wrap_i64
+                                                                                                                    i64.load offset=160
+                                                                                                                    i32.wrap_i64
+                                                                                                                    br_if 0 (;@56;)
                                                                                                                     block  ;; label = @57
+                                                                                                                      global.get 0
+                                                                                                                      i32.wrap_i64
+                                                                                                                      i64.load offset=304
+                                                                                                                      i32.wrap_i64
+                                                                                                                      br_if 0 (;@57;)
                                                                                                                       block  ;; label = @58
+                                                                                                                        global.get 0
+                                                                                                                        i32.wrap_i64
+                                                                                                                        i64.load offset=64
+                                                                                                                        i32.wrap_i64
+                                                                                                                        br_if 0 (;@58;)
                                                                                                                         block  ;; label = @59
+                                                                                                                          global.get 0
+                                                                                                                          i32.wrap_i64
+                                                                                                                          i64.load offset=208
+                                                                                                                          i32.wrap_i64
+                                                                                                                          br_if 0 (;@59;)
                                                                                                                           block  ;; label = @60
+                                                                                                                            global.get 0
+                                                                                                                            i32.wrap_i64
+                                                                                                                            i64.load offset=352
+                                                                                                                            i32.wrap_i64
+                                                                                                                            br_if 0 (;@60;)
                                                                                                                             block  ;; label = @61
+                                                                                                                              global.get 0
+                                                                                                                              i32.wrap_i64
+                                                                                                                              i64.load
+                                                                                                                              i32.wrap_i64
+                                                                                                                              br_if 0 (;@61;)
                                                                                                                               block  ;; label = @62
+                                                                                                                                global.get 0
+                                                                                                                                i32.wrap_i64
+                                                                                                                                i64.load offset=400
+                                                                                                                                i32.wrap_i64
+                                                                                                                                br_if 0 (;@62;)
                                                                                                                                 block  ;; label = @63
+                                                                                                                                  global.get 0
+                                                                                                                                  i32.wrap_i64
+                                                                                                                                  i64.load offset=240
+                                                                                                                                  i32.wrap_i64
+                                                                                                                                  br_if 0 (;@63;)
                                                                                                                                   block  ;; label = @64
                                                                                                                                     global.get 0
                                                                                                                                     i32.wrap_i64
-                                                                                                                                    i64.load offset=32
-                                                                                                                                    i64.eqz
+                                                                                                                                    i64.load offset=112
+                                                                                                                                    i32.wrap_i64
                                                                                                                                     br_if 0 (;@64;)
-                                                                                                                                    br 1 (;@63;)
+                                                                                                                                    br 63 (;@1;)
                                                                                                                                   end
-                                                                                                                                  global.get 0
-                                                                                                                                  i32.wrap_i64
-                                                                                                                                  i64.load offset=80
-                                                                                                                                  i64.eqz
-                                                                                                                                  br_if 1 (;@62;)
+                                                                                                                                  br 61 (;@2;)
                                                                                                                                 end
-                                                                                                                                br 1 (;@61;)
+                                                                                                                                br 59 (;@3;)
                                                                                                                               end
-                                                                                                                              global.get 0
-                                                                                                                              i32.wrap_i64
-                                                                                                                              i64.load offset=128
-                                                                                                                              i64.eqz
-                                                                                                                              br_if 1 (;@60;)
+                                                                                                                              br 57 (;@4;)
                                                                                                                             end
-                                                                                                                            br 1 (;@59;)
+                                                                                                                            br 55 (;@5;)
                                                                                                                           end
-                                                                                                                          global.get 0
-                                                                                                                          i32.wrap_i64
-                                                                                                                          i64.load offset=176
-                                                                                                                          i64.eqz
-                                                                                                                          br_if 1 (;@58;)
+                                                                                                                          br 53 (;@6;)
                                                                                                                         end
-                                                                                                                        br 1 (;@57;)
+                                                                                                                        br 51 (;@7;)
                                                                                                                       end
-                                                                                                                      global.get 0
-                                                                                                                      i32.wrap_i64
-                                                                                                                      i64.load offset=224
-                                                                                                                      i64.eqz
-                                                                                                                      br_if 1 (;@56;)
+                                                                                                                      br 49 (;@8;)
                                                                                                                     end
-                                                                                                                    br 1 (;@55;)
+                                                                                                                    br 47 (;@9;)
                                                                                                                   end
-                                                                                                                  global.get 0
-                                                                                                                  i32.wrap_i64
-                                                                                                                  i64.load offset=256
-                                                                                                                  i64.eqz
-                                                                                                                  br_if 1 (;@54;)
+                                                                                                                  br 45 (;@10;)
                                                                                                                 end
-                                                                                                                br 1 (;@53;)
+                                                                                                                br 43 (;@11;)
                                                                                                               end
-                                                                                                              global.get 0
-                                                                                                              i32.wrap_i64
-                                                                                                              i64.load offset=320
-                                                                                                              i64.eqz
-                                                                                                              br_if 1 (;@52;)
+                                                                                                              br 41 (;@12;)
                                                                                                             end
-                                                                                                            br 1 (;@51;)
+                                                                                                            br 39 (;@13;)
                                                                                                           end
-                                                                                                          global.get 0
-                                                                                                          i32.wrap_i64
-                                                                                                          i64.load offset=368
-                                                                                                          i64.eqz
-                                                                                                          br_if 1 (;@50;)
+                                                                                                          br 37 (;@14;)
                                                                                                         end
-                                                                                                        br 1 (;@49;)
+                                                                                                        br 35 (;@15;)
                                                                                                       end
-                                                                                                      global.get 0
-                                                                                                      i32.wrap_i64
-                                                                                                      i64.load offset=416
-                                                                                                      i64.eqz
-                                                                                                      br_if 1 (;@48;)
+                                                                                                      br 33 (;@16;)
                                                                                                     end
-                                                                                                    br 1 (;@47;)
+                                                                                                    br 31 (;@17;)
                                                                                                   end
-                                                                                                  global.get 0
-                                                                                                  i32.wrap_i64
-                                                                                                  i64.load offset=464
-                                                                                                  i64.eqz
-                                                                                                  br_if 1 (;@46;)
+                                                                                                  br 29 (;@18;)
                                                                                                 end
-                                                                                                br 1 (;@45;)
+                                                                                                br 27 (;@19;)
                                                                                               end
-                                                                                              global.get 0
-                                                                                              i32.wrap_i64
-                                                                                              i64.load offset=496
-                                                                                              i64.eqz
-                                                                                              br_if 1 (;@44;)
+                                                                                              br 25 (;@20;)
                                                                                             end
-                                                                                            br 1 (;@43;)
+                                                                                            br 23 (;@21;)
                                                                                           end
-                                                                                          global.get 0
-                                                                                          i32.wrap_i64
-                                                                                          i64.load offset=480
-                                                                                          i64.eqz
-                                                                                          br_if 1 (;@42;)
+                                                                                          br 21 (;@22;)
                                                                                         end
-                                                                                        br 1 (;@41;)
+                                                                                        br 19 (;@23;)
                                                                                       end
-                                                                                      global.get 0
-                                                                                      i32.wrap_i64
-                                                                                      i64.load offset=432
-                                                                                      i64.eqz
-                                                                                      br_if 1 (;@40;)
+                                                                                      br 17 (;@24;)
                                                                                     end
-                                                                                    br 1 (;@39;)
+                                                                                    br 15 (;@25;)
                                                                                   end
-                                                                                  global.get 0
-                                                                                  i32.wrap_i64
-                                                                                  i64.load offset=384
-                                                                                  i64.eqz
-                                                                                  br_if 1 (;@38;)
+                                                                                  br 13 (;@26;)
                                                                                 end
-                                                                                br 1 (;@37;)
+                                                                                br 11 (;@27;)
                                                                               end
-                                                                              global.get 0
-                                                                              i32.wrap_i64
-                                                                              i64.load offset=336
-                                                                              i64.eqz
-                                                                              br_if 1 (;@36;)
+                                                                              br 9 (;@28;)
                                                                             end
-                                                                            br 1 (;@35;)
+                                                                            br 7 (;@29;)
                                                                           end
-                                                                          global.get 0
-                                                                          i32.wrap_i64
-                                                                          i64.load offset=288
-                                                                          i64.eqz
-                                                                          br_if 1 (;@34;)
+                                                                          br 5 (;@30;)
                                                                         end
-                                                                        br 1 (;@33;)
+                                                                        br 3 (;@31;)
                                                                       end
-                                                                      global.get 0
-                                                                      i32.wrap_i64
-                                                                      i64.load offset=272
-                                                                      i64.eqz
-                                                                      br_if 1 (;@32;)
+                                                                      br 1 (;@32;)
                                                                     end
-                                                                    br 1 (;@31;)
                                                                   end
-                                                                  global.get 0
-                                                                  i32.wrap_i64
-                                                                  i64.load offset=192
-                                                                  i64.eqz
-                                                                  br_if 1 (;@30;)
                                                                 end
-                                                                br 1 (;@29;)
                                                               end
-                                                              global.get 0
-                                                              i32.wrap_i64
-                                                              i64.load offset=144
-                                                              i64.eqz
-                                                              br_if 1 (;@28;)
                                                             end
-                                                            br 1 (;@27;)
                                                           end
-                                                          global.get 0
-                                                          i32.wrap_i64
-                                                          i64.load offset=96
-                                                          i64.eqz
-                                                          br_if 1 (;@26;)
                                                         end
-                                                        br 1 (;@25;)
                                                       end
-                                                      global.get 0
-                                                      i32.wrap_i64
-                                                      i64.load offset=48
-                                                      i64.eqz
-                                                      br_if 1 (;@24;)
                                                     end
-                                                    br 1 (;@23;)
                                                   end
-                                                  global.get 0
-                                                  i32.wrap_i64
-                                                  i64.load offset=16
-                                                  i64.eqz
-                                                  br_if 1 (;@22;)
                                                 end
-                                                br 1 (;@21;)
                                               end
-                                              global.get 0
-                                              i32.wrap_i64
-                                              i64.load offset=448
-                                              i64.eqz
-                                              br_if 1 (;@20;)
                                             end
-                                            br 1 (;@19;)
                                           end
-                                          global.get 0
-                                          i32.wrap_i64
-                                          i64.load offset=160
-                                          i64.eqz
-                                          br_if 1 (;@18;)
                                         end
-                                        br 1 (;@17;)
                                       end
-                                      global.get 0
-                                      i32.wrap_i64
-                                      i64.load offset=304
-                                      i64.eqz
-                                      br_if 1 (;@16;)
                                     end
-                                    br 1 (;@15;)
                                   end
-                                  global.get 0
-                                  i32.wrap_i64
-                                  i64.load offset=64
-                                  i64.eqz
-                                  br_if 1 (;@14;)
                                 end
-                                br 1 (;@13;)
                               end
-                              global.get 0
-                              i32.wrap_i64
-                              i64.load offset=208
-                              i64.eqz
-                              br_if 1 (;@12;)
                             end
-                            br 1 (;@11;)
                           end
-                          global.get 0
-                          i32.wrap_i64
-                          i64.load offset=352
-                          i64.eqz
-                          br_if 1 (;@10;)
                         end
-                        br 1 (;@9;)
                       end
-                      global.get 0
-                      i32.wrap_i64
-                      i64.load
-                      i64.eqz
-                      br_if 1 (;@8;)
                     end
-                    br 1 (;@7;)
                   end
-                  global.get 0
-                  i32.wrap_i64
-                  i64.load offset=400
-                  i64.eqz
-                  br_if 1 (;@6;)
                 end
-                br 1 (;@5;)
               end
-              global.get 0
-              i32.wrap_i64
-              i64.load offset=240
-              i64.eqz
-              br_if 1 (;@4;)
             end
-            br 1 (;@3;)
           end
-          global.get 0
-          i32.wrap_i64
-          i64.load offset=112
-          i64.eqz
-          br_if 1 (;@2;)
         end
-        br 1 (;@1;)
       end
     end
     i64.const 0

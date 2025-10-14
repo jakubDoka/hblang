@@ -60,26 +60,25 @@
         local.get 1
         local.get 2
         i64.le_u
-        i32.eqz
         br_if 0 (;@2;)
-        i64.const 1
+        local.get 1
+        call $deep_dedup_4__mutuali_recursive_.fib_body2
+        local.set 4
+        global.get 0
+        i32.wrap_i64
+        local.get 4
+        i64.store offset=8
+        global.get 0
+        i32.wrap_i64
+        i64.load offset=8
         local.set 3
         local.get 3
         local.set 6
         br 1 (;@1;)
       end
-      local.get 1
-      call $deep_dedup_4__mutuali_recursive_.fib_body2
+      i64.const 1
       local.set 5
-      global.get 0
-      i32.wrap_i64
       local.get 5
-      i64.store offset=8
-      global.get 0
-      i32.wrap_i64
-      i64.load offset=8
-      local.set 4
-      local.get 4
       local.set 6
     end
     i64.const 16

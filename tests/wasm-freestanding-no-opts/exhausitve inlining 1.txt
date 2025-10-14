@@ -30,13 +30,12 @@
         i64.ne
         local.set 0
         local.get 0
-        i32.eqz
         br_if 0 (;@2;)
+        i64.const 10
+        call $exhausitve_inlining_1.loop_fn
+        call $exhausitve_inlining_1.unreachable
         br 1 (;@1;)
       end
-      i64.const 10
-      call $exhausitve_inlining_1.loop_fn
-      call $exhausitve_inlining_1.unreachable
     end
     i64.const 8
     global.get 0
@@ -97,23 +96,22 @@
         local.get 3
         local.get 1
         i64.eq
-        i32.eqz
         br_if 0 (;@2;)
-        i64.const 8
+        local.get 3
+        local.get 2
+        i64.sub
+        local.set 4
         global.get 0
-        i64.add
-        global.set 0
-        return
+        i32.wrap_i64
+        local.get 4
+        i64.store
+        br 1 (;@1;)
       end
-      local.get 3
-      local.get 2
-      i64.sub
-      local.set 4
+      i64.const 8
       global.get 0
-      i32.wrap_i64
-      local.get 4
-      i64.store
-      br 0 (;@1;)
+      i64.add
+      global.set 0
+      return
     end
     unreachable)
   (func $exhausitve_inlining_1.unreachable (type 4)

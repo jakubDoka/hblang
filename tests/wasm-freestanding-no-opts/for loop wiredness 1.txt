@@ -33,26 +33,25 @@
         local.get 4
         local.get 0
         i64.lt_u
-        i32.eqz
         br_if 0 (;@2;)
-        local.get 4
-        local.get 1
-        i64.add
-        local.set 5
         global.get 0
         i32.wrap_i64
-        local.get 5
-        i64.store offset=8
-        br 1 (;@1;)
+        i64.load
+        i64.const 16
+        global.get 0
+        i64.add
+        global.set 0
+        return
       end
+      local.get 4
+      local.get 1
+      i64.add
+      local.set 5
       global.get 0
       i32.wrap_i64
-      i64.load
-      i64.const 16
-      global.get 0
-      i64.add
-      global.set 0
-      return
+      local.get 5
+      i64.store offset=8
+      br 0 (;@1;)
     end
     unreachable)
   (table (;0;) 0 funcref)

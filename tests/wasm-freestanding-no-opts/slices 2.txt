@@ -139,90 +139,88 @@
         i64.eq
         local.set 0
         local.get 0
-        i32.eqz
         br_if 0 (;@2;)
         global.get 0
         i32.wrap_i64
-        i64.load offset=112
-        i64.const 136
-        global.get 0
-        i64.add
-        global.set 0
-        return
-      end
-      global.get 0
-      i32.wrap_i64
-      local.get 15
-      i64.store offset=128
-      loop  ;; label = @2
-        block  ;; label = @3
-          global.get 0
-          i32.wrap_i64
-          i64.load offset=120
-          local.set 22
-          local.get 22
-          local.get 13
-          i64.mul
-          local.get 14
-          i64.add
-          local.set 21
-          local.get 21
-          i32.wrap_i64
-          i64.load offset=8
-          global.get 0
-          i32.wrap_i64
-          i64.load offset=128
-          local.set 20
-          local.get 20
-          i64.eq
-          local.set 1
-          local.get 1
-          i32.eqz
-          br_if 0 (;@3;)
+        local.get 15
+        i64.store offset=128
+        loop  ;; label = @3
+          block  ;; label = @4
+            global.get 0
+            i32.wrap_i64
+            i64.load offset=120
+            local.set 22
+            local.get 22
+            local.get 13
+            i64.mul
+            local.get 14
+            i64.add
+            local.set 21
+            local.get 21
+            i32.wrap_i64
+            i64.load offset=8
+            global.get 0
+            i32.wrap_i64
+            i64.load offset=128
+            local.set 20
+            local.get 20
+            i64.eq
+            local.set 1
+            local.get 1
+            br_if 0 (;@4;)
+            local.get 20
+            local.get 8
+            i64.mul
+            local.get 21
+            i32.wrap_i64
+            i64.load
+            i64.add
+            local.set 26
+            local.get 26
+            i32.wrap_i64
+            i64.load
+            global.get 0
+            i32.wrap_i64
+            i64.load offset=112
+            i64.add
+            local.set 25
+            global.get 0
+            i32.wrap_i64
+            local.get 25
+            i64.store offset=112
+            global.get 0
+            i32.wrap_i64
+            i64.load offset=128
+            local.set 24
+            local.get 16
+            local.get 24
+            i64.add
+            local.set 23
+            global.get 0
+            i32.wrap_i64
+            local.get 23
+            i64.store offset=128
+            br 1 (;@3;)
+          end
           local.get 22
           local.get 16
           i64.add
-          local.set 23
+          local.set 27
           global.get 0
           i32.wrap_i64
-          local.get 23
+          local.get 27
           i64.store offset=120
           br 2 (;@1;)
         end
-        local.get 20
-        local.get 8
-        i64.mul
-        local.get 21
-        i32.wrap_i64
-        i64.load
-        i64.add
-        local.set 27
-        local.get 27
-        i32.wrap_i64
-        i64.load
-        global.get 0
-        i32.wrap_i64
-        i64.load offset=112
-        i64.add
-        local.set 26
-        global.get 0
-        i32.wrap_i64
-        local.get 26
-        i64.store offset=112
-        global.get 0
-        i32.wrap_i64
-        i64.load offset=128
-        local.set 25
-        local.get 16
-        local.get 25
-        i64.add
-        local.set 24
-        global.get 0
-        i32.wrap_i64
-        local.get 24
-        i64.store offset=128
-        br 0 (;@2;)
       end
+      global.get 0
+      i32.wrap_i64
+      i64.load offset=112
+      i64.const 136
+      global.get 0
+      i64.add
+      global.set 0
+      return
     end
     unreachable)
   (table (;0;) 0 funcref)

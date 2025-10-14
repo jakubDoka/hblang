@@ -2,8 +2,8 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (result i64)))
   (type (;2;) (func))
-  (type (;3;) (func (param i64 i64 i64)))
-  (type (;4;) (func (param i64 i64) (result i64)))
+  (type (;3;) (func (param i64 i64) (result i64)))
+  (type (;4;) (func (param i64 i64 i64)))
   (func $main (type 0) (result i64)
     (local i64)
     global.get 0
@@ -107,88 +107,84 @@
       i32.or
       local.set 5
       local.get 5
-      i32.eqz
       br_if 0 (;@1;)
-      i64.const 56
-      global.get 0
-      i64.add
-      local.set 18
-      global.get 1
-      local.set 17
       global.get 0
       i32.wrap_i64
-      local.get 17
-      i64.store offset=56
-      i64.const 4294967297
-      local.set 16
-      i64.const 24
-      local.set 15
-      i64.const 36
+      i64.load offset=24
+      local.set 13
+      global.get 0
+      i32.wrap_i64
+      local.get 13
+      i64.store offset=40
+      global.get 0
+      i32.wrap_i64
+      local.get 12
+      i64.store offset=48
+      global.get 0
+      i32.wrap_i64
+      i64.load offset=40
+      global.get 0
+      i32.wrap_i64
+      i64.load offset=48
+      call $directives_20__@handler__@SourceLoc_.use_slice
       local.set 14
       global.get 0
       i32.wrap_i64
       local.get 14
-      i64.store offset=64
+      i64.store offset=80
       global.get 0
       i32.wrap_i64
-      local.get 16
-      i64.store offset=72
-      i64.const 0
+      i64.load offset=80
+      i64.const 96
       global.get 0
       i64.add
-      local.set 13
-      local.get 13
-      i32.wrap_i64
-      local.get 18
-      i32.wrap_i64
-      local.get 15
-      i32.wrap_i64
-      memory.copy
-      local.get 11
-      local.get 12
-      local.get 12
-      call $directives_20__@handler__@SourceLoc_.slice_ioob
+      global.set 0
+      return
     end
+    i64.const 56
     global.get 0
-    i32.wrap_i64
-    i64.load offset=24
+    i64.add
+    local.set 20
+    global.get 1
     local.set 19
     global.get 0
     i32.wrap_i64
     local.get 19
-    i64.store offset=40
+    i64.store offset=56
+    i64.const 4294967297
+    local.set 18
+    i64.const 24
+    local.set 17
+    i64.const 36
+    local.set 16
     global.get 0
     i32.wrap_i64
-    local.get 12
-    i64.store offset=48
+    local.get 16
+    i64.store offset=64
     global.get 0
     i32.wrap_i64
-    i64.load offset=40
-    global.get 0
-    i32.wrap_i64
-    i64.load offset=48
-    call $directives_20__@handler__@SourceLoc_.use_slice
-    local.set 20
-    global.get 0
-    i32.wrap_i64
-    local.get 20
-    i64.store offset=80
-    global.get 0
-    i32.wrap_i64
-    i64.load offset=80
-    i64.const 96
+    local.get 18
+    i64.store offset=72
+    i64.const 0
     global.get 0
     i64.add
-    global.set 0
-    return
+    local.set 15
+    local.get 15
+    i32.wrap_i64
+    local.get 20
+    i32.wrap_i64
+    local.get 17
+    i32.wrap_i64
+    memory.copy
+    local.get 11
+    local.get 12
+    local.get 12
+    call $directives_20__@handler__@SourceLoc_.slice_ioob
     unreachable)
   (func $directives_20__@handler__@SourceLoc_.produce_memcpy (type 2)
     return
     unreachable)
-  (func $directives_20__@handler__@SourceLoc_.slice_ioob (type 3) (param i64 i64 i64)
-    unreachable
-    unreachable)
-  (func $directives_20__@handler__@SourceLoc_.use_slice (type 4) (param i64 i64) (result i64)
+  (func $directives_20__@handler__@SourceLoc_.use_slice (type 3) (param i64 i64) (result i64)
     (local i32 i64 i64 i64 i64 i64 i64 i64 i64)
     global.get 0
     i64.const 64
@@ -212,63 +208,65 @@
       local.get 4
       local.get 3
       i64.ge_u
-      i32.eqz
       br_if 0 (;@1;)
-      i64.const 40
+      global.get 0
+      i32.wrap_i64
+      i64.load offset=24
+      i32.wrap_i64
+      i32.load8_u
+      local.set 2
+      local.get 2
+      i32.const 255
+      i32.and
+      i64.extend_i32_u
+      i64.const 64
       global.get 0
       i64.add
-      local.set 10
-      global.get 1
-      local.set 9
-      global.get 0
-      i32.wrap_i64
-      local.get 9
-      i64.store offset=40
-      i64.const 64424509458
-      local.set 8
-      i64.const 24
-      local.set 7
-      i64.const 36
-      local.set 6
-      global.get 0
-      i32.wrap_i64
-      local.get 6
-      i64.store offset=48
-      global.get 0
-      i32.wrap_i64
-      local.get 8
-      i64.store offset=56
-      i64.const 0
-      global.get 0
-      i64.add
-      local.set 5
-      local.get 5
-      i32.wrap_i64
-      local.get 10
-      i32.wrap_i64
-      local.get 7
-      i32.wrap_i64
-      memory.copy
-      local.get 3
-      local.get 4
-      local.get 4
-      call $directives_20__@handler__@SourceLoc_.slice_ioob
+      global.set 0
+      return
     end
-    global.get 0
-    i32.wrap_i64
-    i64.load offset=24
-    i32.wrap_i64
-    i32.load8_u
-    local.set 2
-    local.get 2
-    i32.const 255
-    i32.and
-    i64.extend_i32_u
-    i64.const 64
+    i64.const 40
     global.get 0
     i64.add
-    global.set 0
-    return
+    local.set 10
+    global.get 1
+    local.set 9
+    global.get 0
+    i32.wrap_i64
+    local.get 9
+    i64.store offset=40
+    i64.const 64424509458
+    local.set 8
+    i64.const 24
+    local.set 7
+    i64.const 36
+    local.set 6
+    global.get 0
+    i32.wrap_i64
+    local.get 6
+    i64.store offset=48
+    global.get 0
+    i32.wrap_i64
+    local.get 8
+    i64.store offset=56
+    i64.const 0
+    global.get 0
+    i64.add
+    local.set 5
+    local.get 5
+    i32.wrap_i64
+    local.get 10
+    i32.wrap_i64
+    local.get 7
+    i32.wrap_i64
+    memory.copy
+    local.get 3
+    local.get 4
+    local.get 4
+    call $directives_20__@handler__@SourceLoc_.slice_ioob
+    unreachable)
+  (func $directives_20__@handler__@SourceLoc_.slice_ioob (type 4) (param i64 i64 i64)
+    unreachable
     unreachable)
   (table (;0;) 0 funcref)
   (memory (;0;) 4)

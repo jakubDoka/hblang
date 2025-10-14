@@ -29,70 +29,67 @@
         local.get 3
         local.get 0
         i64.lt_u
-        i32.eqz
         br_if 0 (;@2;)
-        block  ;; label = @3
+        global.get 0
+        i32.wrap_i64
+        local.get 1
+        i64.store offset=16
+        loop  ;; label = @3
           block  ;; label = @4
-            local.get 3
-            local.get 1
-            i64.eq
-            i32.eqz
+            global.get 0
+            i32.wrap_i64
+            i64.load offset=16
+            local.set 4
+            local.get 4
+            local.get 0
+            i64.lt_u
             br_if 0 (;@4;)
             global.get 0
             i32.wrap_i64
-            local.get 1
-            i64.store
-            br 1 (;@3;)
+            i64.load
+            i64.const 24
+            global.get 0
+            i64.add
+            global.set 0
+            return
           end
-        end
-        global.get 0
-        i32.wrap_i64
-        i64.load offset=8
-        local.set 5
-        local.get 2
-        local.get 5
-        i64.add
-        local.set 4
-        global.get 0
-        i32.wrap_i64
-        local.get 4
-        i64.store offset=8
-        br 1 (;@1;)
-      end
-      global.get 0
-      i32.wrap_i64
-      local.get 1
-      i64.store offset=16
-      loop  ;; label = @2
-        block  ;; label = @3
-          global.get 0
-          i32.wrap_i64
-          i64.load offset=16
-          local.set 6
-          local.get 6
-          local.get 0
-          i64.lt_u
-          i32.eqz
-          br_if 0 (;@3;)
           local.get 2
-          local.get 6
+          local.get 4
           i64.add
-          local.set 7
+          local.set 5
           global.get 0
           i32.wrap_i64
-          local.get 7
+          local.get 5
           i64.store offset=16
+          br 0 (;@3;)
+        end
+      end
+      block  ;; label = @2
+        block  ;; label = @3
+          local.get 3
+          local.get 1
+          i64.eq
+          br_if 0 (;@3;)
           br 1 (;@2;)
         end
         global.get 0
         i32.wrap_i64
-        i64.load
-        i64.const 24
-        global.get 0
-        i64.add
-        global.set 0
-        return
+        local.get 1
+        i64.store
       end
+      global.get 0
+      i32.wrap_i64
+      i64.load offset=8
+      local.set 7
+      local.get 2
+      local.get 7
+      i64.add
+      local.set 6
+      global.get 0
+      i32.wrap_i64
+      local.get 6
+      i64.store offset=8
+      br 0 (;@1;)
     end
     unreachable)
   (table (;0;) 0 funcref)

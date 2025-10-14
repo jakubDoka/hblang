@@ -28,21 +28,21 @@
         i64.load
         local.set 1
         local.get 1
-        i64.eqz
-        br_if 0 (;@2;)
-        i32.const 1
-        local.set 0
-        local.get 1
         i32.wrap_i64
-        local.get 0
-        i32.store8
-        i64.const 0
+        br_if 0 (;@2;)
+        i64.const 1
         local.set 4
         local.get 4
         local.set 6
         br 1 (;@1;)
       end
-      i64.const 1
+      i32.const 1
+      local.set 0
+      local.get 1
+      i32.wrap_i64
+      local.get 0
+      i32.store8
+      i64.const 0
       local.set 5
       local.get 5
       local.set 6

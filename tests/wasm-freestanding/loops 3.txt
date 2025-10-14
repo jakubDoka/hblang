@@ -25,24 +25,23 @@
         local.get 3
         local.get 0
         i64.eq
-        i32.eqz
         br_if 0 (;@2;)
-        i64.const 8
-        global.get 0
-        i64.add
-        global.set 0
         local.get 3
-        return
+        local.get 1
+        i64.add
+        local.set 4
+        global.get 0
+        i32.wrap_i64
+        local.get 4
+        i64.store
+        br 1 (;@1;)
       end
-      local.get 3
-      local.get 1
-      i64.add
-      local.set 4
+      i64.const 8
       global.get 0
-      i32.wrap_i64
-      local.get 4
-      i64.store
-      br 0 (;@1;)
+      i64.add
+      global.set 0
+      local.get 3
+      return
     end
     unreachable)
   (table (;0;) 0 funcref)
