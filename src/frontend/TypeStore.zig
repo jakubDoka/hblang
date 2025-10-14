@@ -460,7 +460,7 @@ pub const Id = enum(IdRepr) {
         };
     }
 
-    pub fn len(self: Id, types: *Types) ?usize {
+    pub fn len(self: Id, types: *Types) ?u64 {
         return switch (self.data()) {
             inline .Struct, .Union, .Enum, .Tuple => |s| s.getFields(types).len,
             .Array => |s| types.store.get(s).len,
@@ -867,7 +867,7 @@ pub const Id = enum(IdRepr) {
             };
         }
 
-        pub fn formatSeq(self: *const Fmt, work_list: *std.ArrayList(Task), arena: *utils.Arena, elem: Types.Id, ln: usize, global: i64) !void {
+        pub fn formatSeq(self: *const Fmt, work_list: *std.ArrayList(Task), arena: *utils.Arena, elem: Types.Id, ln: u64, global: i64) !void {
             work_list.ensureUnusedCapacity(arena.allocator(), @intCast(ln * 2)) catch unreachable;
             try work_list.append(arena.allocator(), .{ .Name = "]" });
             for (0..@intCast(ln)) |i| {
@@ -1200,13 +1200,13 @@ pub fn findPointerOffsets(
 
             var tag_value: u64 = 0;
             @memcpy(
-                std.mem.asBytes(&tag_value)[0..tag.size(self)],
-                global[@intCast(offset_f + tag_offset)..][0..tag.size(self)],
+                std.mem.asBytes(&tag_value)[0..@intCast(tag.size(self))],
+                global[@intCast(offset_f + tag_offset)..][0..@intCast(tag.size(self))],
             );
 
             if (tag_value > u.getFields(self).len) return;
 
-            const inner_repr: Id = u.getFields(self)[tag_value].ty;
+            const inner_repr: Id = u.getFields(self)[@intCast(tag_value)].ty;
             self.findPointerOffsets(relocs, global, scratch, inner_repr, offset_f);
         },
         .FnPtr => {
@@ -1230,7 +1230,7 @@ pub fn findPointerOffsets(
         .Array => |a| {
             const arr: *tys.Array = a.get(self);
             const elem_size = arr.elem.size(self);
-            for (0..arr.len) |idx| {
+            for (0..@intCast(arr.len)) |idx| {
                 self.findPointerOffsets(
                     relocs,
                     global,
@@ -1307,7 +1307,7 @@ pub fn isNullablePresent(self: *Types, n: utils.EntId(tys.Nullable), global: []c
 
 pub fn findSymForPtr(
     self: *Types,
-    ptr: usize,
+    ptr: u64,
 ) !u32 {
     const data = &self.ct.gen.mach.out;
 
@@ -1319,7 +1319,7 @@ pub fn findSymForPtr(
     }
 
     const id: utils.EntId(tys.Global) =
-        @enumFromInt(@as(u32, @bitCast(data.code.items[ptr - 4 ..][0..4].*)));
+        @enumFromInt(@as(u32, @bitCast(data.code.items[@intCast(ptr - 4)..][0..4].*)));
 
     if (!self.store.isValid(.Global, @intFromEnum(id)))
         return error.@"to something thats not a global";
@@ -1397,7 +1397,7 @@ pub fn retryNextTask(self: *Types, target: Target, pop_limit: usize, q: ?*root.Q
     }
 }
 
-pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer, gpa: std.mem.Allocator) *Types {
+pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer, gpa: ?std.mem.Allocator) *Types {
     var arena = arena_;
     const scopes = arena.alloc(Id, source.len);
     @memset(scopes, .void);
@@ -1414,10 +1414,12 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer, gp
         .file_scopes = scopes,
         .line_indexes = line_indexes,
         .pool = .{ .arena = arena },
-        .ct = .init(gpa),
+        .ct = undefined,
         .diagnostics = diagnostics,
         .metrics = .init(),
     };
+
+    slot.ct = .init(gpa orelse slot.pool.allocator());
 
     slot.ct.gen.emit_global_reloc_offsets = true;
     slot.ct.gen.push_uninit_globals = true;
@@ -1796,7 +1798,7 @@ pub fn makeSlice(self: *Types, elem: Id) Id {
     return self.internPtr(.Slice, .{ .elem = elem });
 }
 
-pub fn makeArray(self: *Types, len: usize, elem: Id) Id {
+pub fn makeArray(self: *Types, len: u64, elem: Id) Id {
     return self.internPtr(.Array, .{ .len = len, .elem = elem });
 }
 

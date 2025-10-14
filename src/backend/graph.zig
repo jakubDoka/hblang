@@ -1072,10 +1072,6 @@ pub fn Func(comptime Backend: type) type {
 
             edata: void = {},
 
-            comptime {
-                std.debug.assert(@sizeOf(Node) == 40);
-            }
-
             pub const OutInner = if (@sizeOf(*Node) == 8) packed struct(u64) {
                 node: u48,
                 pos: u16,

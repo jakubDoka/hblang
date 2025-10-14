@@ -254,7 +254,7 @@ pub fn categorizeSystemv(ty: Id, types: *Types) TmpSpec {
                 },
                 .Array => |s| {
                     const arr = ts.store.get(s);
-                    for (0..arr.len) |i| {
+                    for (0..@intCast(arr.len)) |i| {
                         try classify(arr.elem, ts, offset + i * arr.elem.size(ts), catas);
                     }
                     return;

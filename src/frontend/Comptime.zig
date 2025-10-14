@@ -254,8 +254,8 @@ pub fn partialEval(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, expr: *No
 
                     var value: i64 = 0;
                     @memcpy(
-                        std.mem.asBytes(&value)[0..expr.data_type.size()],
-                        mem[@intCast(offset)..][0..expr.data_type.size()],
+                        std.mem.asBytes(&value)[0..@intCast(expr.data_type.size())],
+                        mem[@intCast(offset)..][0..@intCast(expr.data_type.size())],
                     );
 
                     break :b bl.addIntImm(.none, expr.data_type, value);
@@ -382,8 +382,8 @@ pub fn executeMemOps(
                 switch (val.extra2()) {
                     .CInt => |extra| {
                         @memcpy(
-                            mem[@intCast(offset)..][0..op.data_type.size()],
-                            std.mem.asBytes(&extra.value)[0..op.data_type.size()],
+                            mem[@intCast(offset)..][0..@intCast(op.data_type.size())],
+                            std.mem.asBytes(&extra.value)[0..@intCast(op.data_type.size())],
                         );
                     },
                     .GlobalAddr => |extra| {
@@ -564,9 +564,10 @@ pub fn runVm(
     }
     self.vm.regs.set(.stack_addr, stack_end - return_loc.len);
 
-    var stderr = std.fs.File.stderr().writer(&.{});
+    const log = false;
+    var stderr = if (log) std.fs.File.stderr().writer(&.{});
     var vm_ctx = Vm.SafeContext{
-        .writer = if (false) &stderr.interface else null,
+        .writer = if (log) &stderr.interface else null,
         .color_cfg = .escape_codes,
         .memory = self.gen.mach.out.code.items,
         .code_start = 0,
@@ -578,7 +579,7 @@ pub fn runVm(
         defer hbvm_met.end();
         break :b self.vm.run(&vm_ctx) catch |err| {
             types.report(file, pos, "comptime execution failed: {}", .{@errorName(err)});
-            std.debug.dumpCurrentStackTrace(@returnAddress());
+            // std.debug.dumpCurrentStackTrace(@returnAddress());
             return error.Never;
         };
     }) {
@@ -721,7 +722,7 @@ pub fn doInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
             const ptr = self.ecaArg(2);
             const len: usize = @intCast(self.ecaArg(3));
 
-            const mem = vm_ctx.memory[@intCast(ptr)..][0 .. len * elem_ty.size(types)];
+            const mem = vm_ctx.memory[@intCast(ptr)..][0..@intCast(len * elem_ty.size(types))];
 
             const slice = types.addInternedGlobal(types.makeArray(len, elem_ty), mem);
 
@@ -744,7 +745,7 @@ pub fn doTypeInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
     const sloc = self.ecaArgSloc(1);
     const scope = self.ecaArgTy(2);
     const ast = self.ecaArgAst(3);
-    const data: Types.TypeInfo = @bitCast(vm_ctx.memory[self.ecaArg(4)..][0..@sizeOf(Types.TypeInfo)].*);
+    const data: Types.TypeInfo = @bitCast(vm_ctx.memory[@intCast(self.ecaArg(4))..][0..@sizeOf(Types.TypeInfo)].*);
 
     const key = Types.Scope{ .loc = .{
         .scope = scope,

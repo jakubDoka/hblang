@@ -720,8 +720,8 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
     errdefer unreachable;
     if (self.align_globlals) {
         const would_be_pos = (self.mach.out.code.items.len + @intFromPtr(self.mach.out.code.items.ptr)) + @sizeOf(u32);
-        const padding = std.mem.alignForward(usize, would_be_pos, opts.alignment) - would_be_pos;
-        try self.mach.out.code.appendNTimes(self.gpa, 0, padding);
+        const padding = std.mem.alignForward(u64, would_be_pos, opts.alignment) - would_be_pos;
+        try self.mach.out.code.appendNTimes(self.gpa, 0, @intCast(padding));
     }
 
     try self.mach.out.defineGlobal(
