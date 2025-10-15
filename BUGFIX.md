@@ -2,6 +2,55 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### malformed global union 3
+```hb
+Aaa := union(enum) {
+    .a: struct{};
+}
+
+func := fn(): Aaa {
+    return .{a: .()}
+}
+
+main := fn(): uint {
+    if func() == .a return 0
+    return 1
+}
+```
+
+#### malformed global union 2
+```hb
+Aaa := union(enum) {
+    .a: struct{};
+}
+
+main := fn(): uint {
+    e := Aaa.{a: .()}
+
+    if e == .a return 0
+
+    return 1
+}
+```
+
+#### malformed global union 1
+```hb
+$a := (fn(): union(enum) {
+    .a: u32;
+    .b: u32;
+} {
+    $if true return .{b: 0}
+    return .{a: 1}
+})()
+
+main := fn(): uint {
+    $match a {
+        .a => return 1,
+        .b => return 0,
+    }
+}
+```
+
 #### nested globals 11
 ```hb
 expectations := .{

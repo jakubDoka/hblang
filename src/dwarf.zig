@@ -26,7 +26,7 @@ pub const UnitType = enum(u8) {
 pub fn uleb128Size(value: u64) usize {
     var counter = std.Io.Writer.Discarding.init(&.{});
     counter.writer.writeUleb128(value) catch unreachable;
-    return counter.count;
+    return @intCast(counter.count);
 }
 
 const compile_unit_abbrev = 1;

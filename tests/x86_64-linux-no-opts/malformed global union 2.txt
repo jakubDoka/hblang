@@ -1,0 +1,12 @@
+main:
+	sub rsp, 0x10
+	mov byte ptr [rsp], 0x00
+	xor rcx, rcx
+	mov al, [rsp]
+	cmp al, cl
+	jnz :0
+	xor rax, rax
+	jmp :1
+0:	mov rax, 0x01
+1:	add rsp, 0x10
+	ret

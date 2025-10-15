@@ -86,6 +86,7 @@ cp := fn($_r0: u8, $_r1: u8): struct align(1){.op: u8 = 0; .r0: u8 = _r0; .r1: u
   (global (;1;) i64 (i64.const 131072))
   (global (;2;) i64 (i64.const 131072))
   (export "__stack_pointer" (global 0))
+  (export "memory" (memory 0))
   (export "main" (func $main))
   (elem (;0;) (i32.const 0) func)
   (data (;0;) (i32.const 131072) "\00"))

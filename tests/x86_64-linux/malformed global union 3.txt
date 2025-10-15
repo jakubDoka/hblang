@@ -1,0 +1,14 @@
+malformed global union 3.func:
+	xor rax, rax
+	ret
+main:
+	sub rsp, 0x08
+	call :malformed global union 3.func
+	xor rcx, rcx
+	cmp al, cl
+	jnz :0
+	xor rax, rax
+	jmp :1
+0:	mov rax, 0x01
+1:	add rsp, 0x08
+	ret

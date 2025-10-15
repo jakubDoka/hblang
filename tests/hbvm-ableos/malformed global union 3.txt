@@ -1,0 +1,15 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+        jal $31, $0, :malformed global union 3.func
+       andi $1, $1, 255
+        jne $1, $0, :1
+         cp $1, $0
+        jmp :2
+1:     li64 $1, 1
+2:   addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+malformed global union 3.func:
+         cp $1, $0
+       jala $0, $31, 0

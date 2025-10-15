@@ -607,6 +607,9 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
 
     const fn_ast = ast.exprs.getTyped(.Fn, func.key.loc.ast).?;
 
+    const params, const returns, const ret_abi =
+        func.sig().computeAbi(self.abi, self.types, tmp.arena) orelse return error.Uninhabited;
+
     if (fn_ast.body.tag() == .Directive and ast.exprs.get(fn_ast.body).Directive.kind == .import) {
         if (self.abi.cc == .ablecall) {
             return self.report(fn_ast.body, "cant use @import() on this target", .{}) catch error.HasErrors;
@@ -621,11 +624,17 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
 
         func.visibility = .imported;
 
+        // This is still needed at some platforms
+        self.bl.func.signature = graph.Signature.init(
+            self.abi.cc,
+            params,
+            returns,
+            self.bl.func.arena.allocator(),
+        );
+
         return;
     }
 
-    const params, const returns, const ret_abi =
-        func.sig().computeAbi(self.abi, self.types, tmp.arena) orelse return error.Uninhabited;
     const token = self.beginBuilder(
         tmp.arena,
         func.ret,

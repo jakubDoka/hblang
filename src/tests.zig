@@ -52,8 +52,8 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
             root.backend.Machine.OptOptions.Mode,
             root.frontend.Types.Abi,
         }{
-            .{ "wasm-freestanding", &wasm.mach, .release, .ableos },
-            .{ "wasm-freestanding-no-opts", &wasm_no_opt.mach, .debug, .ableos },
+            .{ "wasm-freestanding", &wasm.mach, .release, .wasm },
+            .{ "wasm-freestanding-no-opts", &wasm_no_opt.mach, .debug, .wasm },
             .{ "hbvm-ableos", &hbvm.mach, .release, .ableos },
             .{ "hbvm-ableos-no-opts", &hbvm_no_opt.mach, .debug, .ableos },
             .{ "x86_64-linux", &x86_64.mach, .release, .systemv },

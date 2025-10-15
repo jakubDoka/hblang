@@ -433,6 +433,7 @@ pub const CallConv = enum(u8) {
     refcall,
     systemv,
     ablecall,
+    wasmcall,
     fastcall,
     @"inline",
 };
@@ -487,7 +488,7 @@ pub const Signature = extern struct {
 
     pub fn stackSize(self: @This()) u64 {
         switch (self.call_conv) {
-            .systemv, .ablecall => {
+            .systemv, .ablecall, .wasmcall => {
                 var size: u64 = 0;
                 for (self.params()) |par| {
                     if (par == .Stack) {
@@ -2777,7 +2778,7 @@ pub fn Func(comptime Backend: type) type {
                 }
             }
 
-            if (std.debug.runtime_safety) {
+            if (std.debug.runtime_safety and !utils.freestanding) {
                 for (func.gcm.postorder, 0..) |bb, i| {
                     if (bb.base.kind != .Loop) continue;
 

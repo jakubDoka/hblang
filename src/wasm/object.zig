@@ -34,12 +34,12 @@ pub fn flush(
     extra_function_types: []const u8,
     extra_function_type_count: u64,
 ) !void {
-    try out.writeStruct(Header{}, .little);
-
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
     var type_section_size: u64 = extra_function_types.len;
+    var import_section_size: u64 = 0;
+    var import_count: u32 = 0;
     var func_section_size: u64 = 0;
     var func_count: u32 = 0;
     var table_section_size: u64 = 0;
@@ -57,6 +57,25 @@ pub fn flush(
     var reloc_ids = tmp.arena.alloc(RelocInt, self.syms.items.len);
     var referenced_funcs = std.AutoArrayHashMapUnmanaged(Mach.Data.SymIdx, void).empty;
 
+    const import_module_name = "env";
+
+    // imports preced the declarations
+    for (self.syms.items, 0..) |s, i| {
+        if (s.kind != .func or s.linkage != .imported) continue;
+
+        const name = self.lookupName(s.name);
+
+        import_section_size += uleb128Size(import_module_name.len) + import_module_name.len;
+        import_section_size += uleb128Size(name.len) + name.len;
+        import_section_size += 1 + uleb128Size(extra_function_type_count + import_count);
+
+        type_section_size += s.size;
+
+        reloc_ids[i] = @intCast(import_count);
+
+        import_count += 1;
+    }
+
     for (self.syms.items, 0..) |s, i| {
         if (s.kind != .invalid) {
             for (self.relocs.items[s.reloc_offset..][0..s.reloc_count]) |rel| {
@@ -67,25 +86,27 @@ pub fn flush(
 
         switch (s.kind) {
             .func => {
+                if (s.linkage == .imported) continue;
+
                 const sig, const body = parseFunction(self.code.items[s.offset..][0..s.size]);
                 const name = self.lookupName(s.name);
 
                 type_section_size += sig.len;
 
-                func_section_size += uleb128Size(func_count + extra_function_type_count);
+                func_section_size += uleb128Size(extra_function_type_count + import_count + func_count);
 
                 if (s.linkage == .exported) {
                     export_section_size += uleb128Size(name.len) + name.len;
-                    export_section_size += 1 + uleb128Size(func_count);
+                    export_section_size += 1 + uleb128Size(import_count + func_count);
                     exprted_count += 1;
                 }
 
                 code_section_size += uleb128Size(body.len) + body.len;
 
-                name_section_size += uleb128Size(func_count);
+                name_section_size += uleb128Size(import_count + func_count);
                 name_section_size += uleb128Size(name.len) + name.len;
 
-                reloc_ids[i] = @intCast(func_count);
+                reloc_ids[i] = @intCast(import_count + func_count);
                 func_count += 1;
             },
             .data => {
@@ -123,7 +144,9 @@ pub fn flush(
         }
     }
 
-    type_section_size += uleb128Size(extra_function_type_count + func_count);
+    type_section_size += uleb128Size(extra_function_type_count + import_count + func_count);
+
+    import_section_size += uleb128Size(import_count);
 
     func_section_size += uleb128Size(func_count);
 
@@ -143,11 +166,18 @@ pub fn flush(
     global_section_size += 1; // stack pointer mutability
     global_section_size += 1 + uleb128Size(stack_size) + 1; // stack pointer initializer
 
-    exprted_count += 1; // stack pointer
     const stack_pointer_export_name = "__stack_pointer";
+    exprted_count += 1;
     export_section_size +=
         uleb128Size(stack_pointer_export_name.len) +
         stack_pointer_export_name.len +
+        1 + uleb128Size(0);
+
+    const memory_export_name = "memory";
+    exprted_count += 1;
+    export_section_size +=
+        uleb128Size(memory_export_name.len) +
+        memory_export_name.len +
         1 + uleb128Size(0);
 
     export_section_size += uleb128Size(exprted_count);
@@ -178,17 +208,46 @@ pub fn flush(
     data_section_size += 1 + uleb128Size(stack_size) + 1; // offset
     data_section_size += uleb128Size(init_data_size); // data
 
+    try out.writeStruct(Header{}, .little);
+
     try out.writeByte(SectionId.type.raw());
     try out.writeUleb128(type_section_size);
     {
-        try out.writeUleb128(func_count + extra_function_type_count);
+        try out.writeUleb128(extra_function_type_count + import_count + func_count);
 
         try out.writeAll(extra_function_types);
 
         for (self.syms.items) |s| {
-            if (s.kind != .func) continue;
+            if (s.kind != .func or s.linkage != .imported) continue;
+            try out.writeAll(self.code.items[s.offset..][0..s.size]);
+        }
+
+        for (self.syms.items) |s| {
+            if (s.kind != .func or s.linkage == .imported) continue;
             const sig, _ = parseFunction(self.code.items[s.offset..][0..s.size]);
             try out.writeAll(sig);
+        }
+    }
+
+    try out.writeByte(SectionId.import.raw());
+    try out.writeUleb128(import_section_size);
+    {
+        try out.writeUleb128(import_count);
+
+        var i: u32 = 0;
+        for (self.syms.items) |s| {
+            if (s.kind != .func or s.linkage != .imported) continue;
+
+            try out.writeUleb128(import_module_name.len);
+            try out.writeAll(import_module_name);
+
+            const name = self.lookupName(s.name);
+            try out.writeUleb128(name.len);
+            try out.writeAll(name);
+
+            try out.writeByte(ExternIdx.func.raw());
+            try out.writeUleb128(extra_function_type_count + i);
+            i += 1;
         }
     }
 
@@ -198,8 +257,8 @@ pub fn flush(
         try out.writeUleb128(func_count);
         var i: u32 = 0;
         for (self.syms.items) |s| {
-            if (s.kind != .func) continue;
-            try out.writeUleb128(extra_function_type_count + i);
+            if (s.kind != .func or s.linkage == .imported) continue;
+            try out.writeUleb128(extra_function_type_count + import_count + i);
             i += 1;
         }
     }
@@ -220,7 +279,7 @@ pub fn flush(
         try out.writeUleb128(memory_count);
         try out.writeByte(0); // no limmit
         try out.writeUleb128(std.mem.alignForward(
-            usize,
+            u64,
             stack_size + total_prealloc_size,
             std.math.maxInt(u16) + 1,
         ) / std.math.maxInt(u16) + 1);
@@ -260,7 +319,12 @@ pub fn flush(
         try out.writeByte(ExternIdx.global.raw());
         try out.writeUleb128(0);
 
-        var i: u32 = 0;
+        try out.writeUleb128(memory_export_name.len);
+        try out.writeAll(memory_export_name);
+        try out.writeByte(ExternIdx.memory.raw());
+        try out.writeUleb128(0);
+
+        var i: u32 = import_count;
         for (self.syms.items) |s| {
             if (s.kind != .func) continue;
             defer i += 1;
@@ -294,7 +358,7 @@ pub fn flush(
     {
         try out.writeUleb128(func_count);
         for (self.syms.items) |s| {
-            if (s.kind != .func) continue;
+            if (s.kind != .func or s.linkage == .imported) continue;
             const mem = self.code.items[s.offset..][0..s.size];
 
             for (self.relocs.items[s.reloc_offset..][0..s.reloc_count]) |rel| {
@@ -364,11 +428,11 @@ pub fn flush(
         try out.writeUleb128(function_name_subsection_size);
         {
             try out.writeUleb128(func_count);
-            var i: u32 = 0;
+            var i: u32 = import_count;
             for (self.syms.items) |s| {
-                if (s.kind != .func) continue;
-                const name = self.lookupName(s.name);
+                if (s.kind != .func or s.linkage == .imported) continue;
                 try out.writeUleb128(i);
+                const name = self.lookupName(s.name);
                 try out.writeUleb128(name.len);
                 try out.writeAll(name);
                 i += 1;

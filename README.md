@@ -1915,9 +1915,19 @@ expectations := .{
 create := fn(size: uint): ^void @import("malloc")
 destroy := fn(ptr: ^void): void @import("free")
 
+smh := fn(): uint @import("smh")
+opaque := false
+
 main := fn(): uint {
-    $if @target("hbvm-ableos") return 10
-    $if @target("wasm-freestanding") return 10
+    $if @target("hbvm-ableos") {
+        return 10
+    }
+    $if @target("wasm-freestanding") {
+        //if opaque {
+        //    return smh()
+        //}
+        return 10
+    }
     // wont work
 
     ptr: ^uint = @bit_cast(create(8))

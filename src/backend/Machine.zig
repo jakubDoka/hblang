@@ -1327,7 +1327,7 @@ pub const SupportedTarget = enum {
             .@"hbvm-ableos" => .ablecall,
             .@"x86_64-windows" => .fastcall,
             .@"x86_64-linux" => .systemv,
-            .@"wasm-freestanding" => .ablecall,
+            .@"wasm-freestanding" => .wasmcall,
             .null => .systemv,
         };
     }

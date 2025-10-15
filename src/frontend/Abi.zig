@@ -10,6 +10,7 @@ const Abi = @This();
 
 pub const ableos = Abi{ .cc = .ablecall };
 pub const systemv = Abi{ .cc = .systemv };
+pub const wasm = Abi{ .cc = .wasmcall };
 
 cc: graph.CallConv,
 
@@ -20,6 +21,7 @@ pub const Builder = union(graph.CallConv) {
         remining_xmm_regs: usize = 8,
     },
     ablecall,
+    wasmcall,
     fastcall,
     @"inline",
 
@@ -37,7 +39,7 @@ pub const Builder = union(graph.CallConv) {
         var buf_tmp = bufr;
         const buf = &buf_tmp;
         switch (self.*) {
-            .ablecall => switch (spec) {
+            .ablecall, .wasmcall => switch (spec) {
                 .Impossible => unreachable,
                 .Imaginary => _ = slice(buf, 0),
                 .ByValue => |d| slice(buf, 1).* = .{ .Reg = d },
@@ -172,7 +174,7 @@ pub const Spec = union(enum) {
 
 pub fn categorize(self: Abi, ty: Id, types: *Types) TmpSpec {
     return switch (self.cc) {
-        .ablecall => switch (ty.data()) {
+        .ablecall, .wasmcall => switch (ty.data()) {
             .Builtin => |b| categorizeBuiltin(b),
             .Pointer, .FnPtr => .{ .ByValue = .i64 },
             .Enum => |enm| self.categorize(enm.getBackingInt(types), types),
@@ -249,6 +251,11 @@ pub fn categorizeSystemv(ty: Id, types: *Types) TmpSpec {
                         };
                         impossible = false;
                     }
+
+                    if (s.getTag(ts) != .void) {
+                        try classify(s.getTag(ts), ts, offset + s.tagOffset(ts), catas);
+                    }
+
                     if (impossible) return error.Impossible;
                     return;
                 },
@@ -440,6 +447,20 @@ pub fn categorizeAbleosUnion(id: utils.EntId(tys.Union), types: *Types) TmpSpec 
         if (fspec == .Impossible) continue;
         if (!std.meta.eql(res, fspec)) return .ByRef;
     }
+    if (id.getTag(types) != .void) {
+        const tag_abi = Abi.ableos.categorize(id.getTag(types), types);
+        if (res == .Imaginary) return tag_abi;
+
+        if (res == .ByValue) return .{
+            .ByValuePair = .{
+                .types = .{ res.ByValue, tag_abi.ByValue },
+                .padding = 0, // TODO: this is wrong
+                .alignment = @intCast(std.math.log2_int(u64, res.ByValue.size())),
+            },
+        };
+
+        return .ByRef;
+    }
     return res;
 }
 
@@ -484,7 +505,7 @@ pub fn builder(self: Abi) Builder {
 
 pub fn isByRefRet(self: Abi, spec: Spec) bool {
     return switch (self.cc) {
-        .ablecall => switch (spec) {
+        .ablecall, .wasmcall => switch (spec) {
             .ByRef => true,
             else => false,
         },

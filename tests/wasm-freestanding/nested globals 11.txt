@@ -25,6 +25,7 @@
   (global (;2;) i64 (i64.const 131104))
   (global (;3;) i64 (i64.const 131128))
   (export "__stack_pointer" (global 0))
+  (export "memory" (memory 0))
   (export "main" (func $main))
   (elem (;0;) (i32.const 0) func)
   (data (;0;) (i32.const 131072) "\01\00\00\00\aa\aa\aa\aa \00\02\00\00\00\00\00\01\00\00\00\00\00\00\00\05\aa\aa\aa\aa\aa\aa\aa8\00\02\00\00\00\00\00\06\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00Edward"))

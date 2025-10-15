@@ -219,6 +219,18 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     _ = sym;
     defer self.mach.out.endDefineFunc(id);
 
+    var ctx = Ctx{
+        .start_pos = self.mach.out.code.items.len,
+        .buf = .fromArrayList(self.gpa, &self.mach.out.code),
+    };
+    defer self.mach.out.code = ctx.buf.toArrayList();
+
+    // For inport, we smuggle the signature with the function
+    if (opts.linkage == .imported) {
+        encodeFnType(&ctx.buf.writer, func.signature);
+        return;
+    }
+
     // TDDO: actually make the release mode work
     opts.optimizations.opts.optimizeDebug(WasmGen, self, func);
 
@@ -226,12 +238,6 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     defer tmp.deinit();
 
     const loop_ranges, const changed = func.backshiftLoopBodies(tmp.arena);
-
-    var ctx = Ctx{
-        .start_pos = self.mach.out.code.items.len,
-        .buf = .fromArrayList(self.gpa, &self.mach.out.code),
-    };
-    defer self.mach.out.code = ctx.buf.toArrayList();
 
     self.ctx = &ctx;
 
@@ -875,7 +881,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 else => unreachable,
             };
             try self.ctx.buf.writer.writeByte(op_code);
-            const alignment = std.math.log2_int(usize, instr.data_type.size());
+            const alignment = std.math.log2_int(u64, instr.data_type.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
             try self.ctx.buf.writer.writeSleb128(extra.offset);
         },
@@ -890,7 +896,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalLoad(inps[0]);
 
             try self.ctx.buf.writer.writeByte(selectStoreOp(instr.data_type));
-            const alignment = std.math.log2_int(usize, instr.data_type.size());
+            const alignment = std.math.log2_int(u64, instr.data_type.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
             try self.ctx.buf.writer.writeSleb128(offset);
         },
@@ -898,7 +904,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalLoad(inps[0]);
             try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
             try self.ctx.buf.writer.writeByte(selectLoadOp(instr.data_type));
-            const alignment = std.math.log2_int(usize, instr.data_type.size());
+            const alignment = std.math.log2_int(u64, instr.data_type.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
             try self.ctx.buf.writer.writeSleb128(extra.offset);
 
@@ -908,7 +914,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalLoad(inps[0]);
             try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
             try self.ctx.buf.writer.writeByte(selectSignedLoadOp(instr.data_type, extra.src_ty));
-            const alignment = std.math.log2_int(usize, extra.src_ty.size());
+            const alignment = std.math.log2_int(u64, extra.src_ty.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
             try self.ctx.buf.writer.writeSleb128(extra.offset);
 
@@ -923,7 +929,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
 
             try self.ctx.buf.writer.writeByte(selectLoadOp(instr.data_type));
-            const alignment = std.math.log2_int(usize, instr.data_type.size());
+            const alignment = std.math.log2_int(u64, instr.data_type.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
             try self.ctx.buf.writer.writeUleb128(offset);
 
@@ -938,7 +944,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
 
             try self.ctx.buf.writer.writeByte(selectSignedLoadOp(instr.data_type, extra.src_ty));
-            const alignment = std.math.log2_int(usize, extra.src_ty.size());
+            const alignment = std.math.log2_int(u64, extra.src_ty.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
             try self.ctx.buf.writer.writeUleb128(offset);
 
@@ -1197,6 +1203,8 @@ pub fn finalize(self: *WasmGen, opts: Mach.FinalizeOptions) void {
 }
 
 pub fn disasm(_: *WasmGen, opts: Mach.DisasmOpts) void {
+    if (utils.freestanding) unreachable;
+
     errdefer unreachable;
 
     var tmp = utils.Arena.scrath(null);
@@ -1229,16 +1237,28 @@ pub fn disasm(_: *WasmGen, opts: Mach.DisasmOpts) void {
         std.debug.print("{s}\n", .{stderr.items});
         if (std.mem.indexOf(u8, stderr.items, ": error:")) |idx| {
             const idx_in = std.fmt.parseInt(usize, stderr.items[0..idx], 16) catch unreachable;
-            std.debug.print("{x}\n", .{opts.bin[idx_in - 1 ..]});
 
-            var reader = std.io.Reader{
-                .buffer = tmp.arena.dupe(u8, opts.bin),
-                .end = opts.bin.len,
-                .seek = idx_in,
-                .vtable = undefined,
-            };
+            for (0..std.mem.alignBackward(usize, opts.bin.len, 16) / 16) |i| {
+                std.debug.print("{x:0>4} ", .{i * 16});
+                var slicer = opts.bin[i * 16 ..];
+                for (0..4) |j| {
+                    std.debug.print("{x} ", .{
+                        slicer[@min(j * 4, slicer.len)..@min(j * 4 + 4, slicer.len)],
+                    });
+                }
+                std.debug.print("\n", .{});
+            }
 
-            std.debug.print("{x}\n", .{reader.takeLeb128(i32) catch unreachable});
+            if (false) {
+                var reader = std.io.Reader{
+                    .buffer = tmp.arena.dupe(u8, opts.bin),
+                    .end = opts.bin.len,
+                    .seek = idx_in,
+                    .vtable = undefined,
+                };
+
+                std.debug.print("{x}\n", .{reader.takeLeb128(i32) catch unreachable});
+            }
         } else {
             std.debug.print("{x}\n", .{opts.bin});
             unreachable;
@@ -1252,7 +1272,9 @@ pub fn disasm(_: *WasmGen, opts: Mach.DisasmOpts) void {
 }
 
 pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
-    const cleanup = true;
+    if (utils.freestanding) unreachable;
+
+    const cleanup = false;
 
     var tmp = root.utils.Arena.scrath(null);
     defer tmp.deinit();

@@ -84,6 +84,7 @@
   (memory (;0;) 3)
   (global (;0;) (mut i64) (i64.const 131072))
   (export "__stack_pointer" (global 0))
+  (export "memory" (memory 0))
   (export "main" (func $main))
   (elem (;0;) (i32.const 0) func)
   (data (;0;) (i32.const 131072) ""))
