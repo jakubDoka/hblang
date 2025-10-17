@@ -306,42 +306,29 @@ pub fn init(
 }
 
 pub const Index = struct {
-    linear: std.MultiArrayList(Entry),
     map: HashMap,
 
-    pub const empty = Index{ .linear = .empty, .map = .empty };
+    pub const empty = Index{ .map = .empty };
 
-    const HashMap = std.HashMapUnmanaged(u32, void, Hasher, 70);
-
-    const Hasher = struct {
-        syms: []const Entry.Meta,
-
-        pub fn hash(h: Hasher, vl: u32) u64 {
-            return std.hash.Fnv1a_64.hash(h.syms[vl].name);
-        }
-
-        pub fn eql(h: Hasher, a: u32, b: u32) bool {
-            return std.mem.eql(u8, h.syms[a].name, h.syms[b].name);
-        }
-    };
+    const HashMap = std.ArrayHashMapUnmanaged(Ident, Meta, void, true);
 
     pub const Entry = struct {
         id: Ident,
         meta: Meta,
+    };
 
-        pub const Meta = struct {
-            name: []const u8,
-            path: []Pos,
-            decl: Id,
-        };
+    pub const Meta = struct {
+        name: []const u8,
+        path: []Pos,
+        decl: Id,
     };
 
     pub fn collectBindings(
         ast: *const Ast,
         bindings: Ast.Id,
         value: Ast.Id,
-        pos_stack: *std.ArrayListUnmanaged(Pos),
-        into: *std.ArrayListUnmanaged(Entry),
+        pos_stack: *std.ArrayList(Pos),
+        into: *std.ArrayList(Entry),
         arena: *utils.Arena,
         scratch: *utils.Arena,
     ) void {
@@ -378,87 +365,65 @@ pub const Index = struct {
         var tmp = utils.Arena.scrath(arena);
         defer tmp.deinit();
 
-        var fseq = std.ArrayListUnmanaged(Pos).initBuffer(tmp.arena.alloc(Pos, 128));
-        var entries = std.ArrayListUnmanaged(Entry).initBuffer(tmp.arena.alloc(Entry, slice.len() * 5 / 4 + 3));
+        var fseq = tmp.arena.makeArrayList(Pos, 64);
+        var entries = tmp.arena.makeArrayList(Entry, slice.len() * 5 / 4 + 3);
         for (ast.exprs.view(slice)) |d| {
             const decl = ast.exprs.getTyped(.Decl, d) orelse continue;
             collectBindings(ast, decl.bindings, d, &fseq, &entries, arena, tmp.arena);
         }
 
-        std.sort.pdq(Entry, entries.items, {}, struct {
-            fn lt(_: void, lhs: Entry, rhs: Entry) bool {
-                return @intFromEnum(lhs.id) < @intFromEnum(rhs.id);
-            }
-        }.lt);
-
-        var linear = std.MultiArrayList(Entry){};
-        try linear.setCapacity(arena.allocator(), entries.items.len);
-        var map = HashMap{};
-        try map.ensureTotalCapacityContext(arena.allocator(), @intCast(entries.items.len), undefined);
-        for (entries.items, 0..) |it, i| {
-            linear.appendAssumeCapacity(it);
-
+        var map = HashMap.empty;
+        try map.ensureTotalCapacity(arena.allocator(), entries.items.len);
+        for (entries.items) |it| {
             const slot = map.getOrPutAssumeCapacityAdapted(it.meta.name, struct {
                 syms: []const Entry,
 
-                pub fn hash(_: @This(), vl: []const u8) u64 {
-                    return std.hash.Fnv1a_64.hash(vl);
+                pub fn hash(_: @This(), vl: []const u8) u32 {
+                    return std.hash.Fnv1a_32.hash(vl);
                 }
 
-                pub fn eql(h: @This(), a: []const u8, b: u32) bool {
-                    return std.mem.eql(u8, a, h.syms[b].meta.name);
+                pub fn eql(h: @This(), a: []const u8, _: Ident, idx: usize) bool {
+                    return std.mem.eql(u8, a, h.syms[idx].meta.name);
                 }
             }{
                 .syms = entries.items,
             });
 
-            slot.key_ptr.* = @intCast(i);
+            slot.key_ptr.* = it.id;
+            slot.value_ptr.* = it.meta;
         }
 
-        return .{ .linear = linear, .map = map };
+        return .{ .map = map };
     }
 
     pub fn search(self: Index, id: anytype) ?struct { Id, []Pos, Ident } {
         switch (@TypeOf(id)) {
             Ident => {
-                if (self.linear.len > 1024) {
-                    if (std.sort.binarySearch(u32, @ptrCast(self.linear.items(.id)), @intFromEnum(id), struct {
-                        fn ord(a: u32, b: u32) std.math.Order {
-                            return std.math.order(a, b);
-                        }
-                    }.ord)) |pos|
-                        return .{
-                            self.linear.items(.meta)[pos].decl,
-                            self.linear.items(.meta)[pos].path,
-                            id,
-                        };
-                } else {
-                    if (std.mem.indexOfScalar(Ident, self.linear.items(.id), id)) |pos|
-                        return .{
-                            self.linear.items(.meta)[pos].decl,
-                            self.linear.items(.meta)[pos].path,
-                            id,
-                        };
-                }
+                if (std.mem.indexOfScalar(Ident, self.map.entries.items(.key), id)) |pos|
+                    return .{
+                        self.map.entries.items(.value)[pos].decl,
+                        self.map.entries.items(.value)[pos].path,
+                        id,
+                    };
             },
             []const u8 => {
-                if (self.map.getKeyAdapted(id, struct {
-                    syms: []const Entry.Meta,
+                if (self.map.getIndexAdapted(id, struct {
+                    syms: []const Meta,
 
-                    pub fn hash(_: @This(), vl: []const u8) u64 {
-                        return std.hash.Fnv1a_64.hash(vl);
+                    pub fn hash(_: @This(), vl: []const u8) u32 {
+                        return std.hash.Fnv1a_32.hash(vl);
                     }
 
-                    pub fn eql(h: @This(), a: []const u8, b: u32) bool {
-                        return std.mem.eql(u8, a, h.syms[b].name);
+                    pub fn eql(h: @This(), a: []const u8, _: Ident, idx: usize) bool {
+                        return std.mem.eql(u8, a, h.syms[idx].name);
                     }
                 }{
-                    .syms = self.linear.items(.meta),
+                    .syms = self.map.entries.items(.value),
                 })) |pos| {
                     return .{
-                        self.linear.items(.meta)[pos].decl,
-                        self.linear.items(.meta)[pos].path,
-                        self.linear.items(.id)[pos],
+                        self.map.entries.items(.value)[pos].decl,
+                        self.map.entries.items(.value)[pos].path,
+                        self.map.entries.items(.key)[pos],
                     };
                 }
             },

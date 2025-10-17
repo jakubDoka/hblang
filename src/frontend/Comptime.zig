@@ -86,6 +86,7 @@ pub const InteruptCode = enum(u64) {
     ChildOf,
     kind_of,
     len_of,
+    decl_count_of,
     size_of,
     align_of,
     type_info,
@@ -720,6 +721,10 @@ pub fn doInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
         .kind_of => {
             const ty = self.ecaArgTy(2);
             self.vm.regs.set(.ret(0), @intFromEnum(ty.data()));
+        },
+        .decl_count_of => {
+            const ty = self.ecaArgTy(2);
+            self.vm.regs.set(.ret(0), if (ty.index(types)) |i| i.map.entries.len else 0);
         },
         .len_of => {
             const ty = self.ecaArgTy(2);

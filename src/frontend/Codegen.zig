@@ -1744,6 +1744,7 @@ pub fn emitIndex(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Index)) EmitE
 
         self.emitAutoDeref(sloc, &base);
         var idx_value = try self.emitTyped(.{}, .uint, e.subscript);
+
         switch (base.ty.data()) {
             inline .Struct, .Tuple => |struct_ty| {
                 const idx = try self.partialEvalConst(e.subscript, &idx_value);
@@ -1811,8 +1812,38 @@ pub fn emitIndex(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Index)) EmitE
                     idx_value.getValue(sloc, self),
                 ));
             },
+            .Builtin => switch (base.ty) {
+                .type => {
+                    const ty = try self.unwrapTyConst(e.base, &base);
+                    const pos = try self.partialEvalConst(expr, &idx_value);
+
+                    const index = ty.index(self.types) orelse
+                        return self.report(expr, "only struct, union and enum types" ++
+                            " can be indexed, {} is not", .{ty});
+
+                    if (pos < 0) {
+                        return self.report(expr, "index out of bounds (negative)", .{});
+                    }
+
+                    if (index.map.entries.len <= @as(usize, @intCast(pos))) {
+                        return self.report(
+                            expr,
+                            "index out of bounds (too large) ({} <= {})",
+                            .{ index.map.entries.len, pos },
+                        );
+                    }
+
+                    const meta = index.map.entries.items(.value)[@intCast(pos)];
+                    const ast = self.types.getFile(ty.file(self.types).?);
+                    const is_read_only = ast.source[ast.posOf(meta.decl).index] == '$';
+                    return self.resolveGlobal(meta.name, ty, ast, meta.decl, meta.path, is_read_only);
+                },
+                else => {
+                    return self.report(expr, "only builtin type type can be indexed", .{});
+                },
+            },
             else => {
-                return self.report(expr, "only structs and slices" ++
+                return self.report(expr, "only structs, slices and types" ++
                     " can be indexed, {} is not", .{base.ty});
             },
         }
@@ -4300,6 +4331,20 @@ fn emitDirective(
 
             const len = try self.resolveAnonTy(args[0]);
             return .mkv(.u8, self.bl.addIntImm(sloc, .i8, @intFromEnum(len.data())));
+        },
+        .decl_count_of => {
+            try assertDirectiveArgs(self, expr, args, "<ty>");
+
+            if (self.target == .@"comptime") {
+                return self.emitComptimeDirectiveEca(ctx, args[0], .decl_count_of, .uint);
+            }
+
+            const ty = try self.resolveAnonTy(args[0]);
+            return .mkv(.uint, self.bl.addIntImm(
+                sloc,
+                .i64,
+                @intCast(if (ty.index(self.types)) |i| i.map.entries.len else 0),
+            ));
         },
         .len_of => {
             try assertDirectiveArgs(self, expr, args, "<ty>");

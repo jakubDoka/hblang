@@ -1,0 +1,16 @@
+main:
+        lra $1, $0, :directives 28 (@decl_count_of).bag.a
+         ld $5, $1, 0, 8
+        lra $1, $0, :directives 28 (@decl_count_of).bag.c
+         ld $4, $1, 0, 8
+        lra $1, $0, :directives 28 (@decl_count_of).bag.e
+         ld $3, $1, 0, 8
+        lra $1, $0, :directives 28 (@decl_count_of).bag.d
+         ld $2, $1, 0, 8
+        lra $1, $0, :directives 28 (@decl_count_of).bag.b
+         ld $1, $1, 0, 8
+      add64 $1, $5, $1
+      add64 $1, $1, $4
+      add64 $1, $1, $2
+      add64 $1, $1, $3
+         tx

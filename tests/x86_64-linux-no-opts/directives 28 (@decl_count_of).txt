@@ -1,0 +1,26 @@
+main:
+	sub rsp, 0x10
+	mov qword ptr [rsp], 0x00
+	mov rcx, [rsp]
+	mov rax, [0x0000000000000007]
+	add rcx, rax
+	mov [rsp], rcx
+	mov rcx, [rsp]
+	mov rax, [0x0000000000000007]
+	add rcx, rax
+	mov [rsp], rcx
+	mov rcx, [rsp]
+	mov rax, [0x0000000000000007]
+	add rcx, rax
+	mov [rsp], rcx
+	mov rcx, [rsp]
+	mov rax, [0x0000000000000007]
+	add rcx, rax
+	mov [rsp], rcx
+	mov rcx, [rsp]
+	mov rax, [0x0000000000000007]
+	add rcx, rax
+	mov [rsp], rcx
+	mov rax, [rsp]
+	add rsp, 0x10
+	ret

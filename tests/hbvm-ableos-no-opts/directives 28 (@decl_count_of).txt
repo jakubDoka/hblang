@@ -1,0 +1,31 @@
+main:
+     addi64 $254, $254, -8
+         st $0, $254, 0, 8
+        lra $6, $0, :directives 28 (@decl_count_of).bag.b
+        lra $5, $0, :directives 28 (@decl_count_of).bag.c
+        lra $4, $0, :directives 28 (@decl_count_of).bag.d
+        lra $3, $0, :directives 28 (@decl_count_of).bag.e
+        lra $1, $0, :directives 28 (@decl_count_of).bag.a
+         ld $2, $1, 0, 8
+         ld $1, $254, 0, 8
+      add64 $1, $1, $2
+         st $1, $254, 0, 8
+         ld $2, $6, 0, 8
+         ld $1, $254, 0, 8
+      add64 $1, $1, $2
+         st $1, $254, 0, 8
+         ld $2, $5, 0, 8
+         ld $1, $254, 0, 8
+      add64 $1, $1, $2
+         st $1, $254, 0, 8
+         ld $2, $4, 0, 8
+         ld $1, $254, 0, 8
+      add64 $1, $1, $2
+         st $1, $254, 0, 8
+         ld $2, $3, 0, 8
+         ld $1, $254, 0, 8
+      add64 $1, $1, $2
+         st $1, $254, 0, 8
+         ld $1, $254, 0, 8
+     addi64 $254, $254, 8
+         tx

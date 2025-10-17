@@ -2280,6 +2280,31 @@ main := fn(): uint {
 }
 ```
 
+#### directives 28 (@decl_count_of)
+```hb
+expectations := .{
+    return_value: 10,
+}
+
+bag := enum {
+    a := 0
+    b := 1
+    c := 2
+    d := 3
+    e := 4
+}
+
+main := fn(): uint {
+    $i := 0
+    $sum := 0
+    $while i < @decl_count_of(bag) {
+        sum += bag[i]
+        i += 1
+    }
+    return sum
+}
+```
+
 ## progress
 
 - [x] hbvm-ableos target
