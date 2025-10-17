@@ -11,6 +11,7 @@ max_lrgs: usize = 0,
 max_liveouts: usize = 0,
 max_blocks: usize = 0,
 max_instructions: usize = 0,
+inserted_splits: usize = 0,
 
 pub inline fn swap(a: anytype, b: @TypeOf(a)) void {
     std.mem.swap(@TypeOf(a.*), a, b);
@@ -180,12 +181,19 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             return .{ @min(min, depth), @max(max, depth) };
         }
 
-        pub fn splitAfterSubsume(self: *Func, def: *Node, must: bool, lrg_table: []const *LiveRange, dbg: graph.builtin.MachSplit.Dbg) void {
+        pub fn splitAfterSubsume(
+            self: *Func,
+            def: *Node,
+            must: bool,
+            lrg_table: []const *LiveRange,
+            dbg: graph.builtin.MachSplit.Dbg,
+            counter: *usize,
+        ) void {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             const block = def.cfg0();
-            const ins = self.addSplit(block, def, dbg);
+            const ins = self.addSplit(block, def, dbg, counter);
             self.ensureOutputCapacity(ins, def.outputs().len);
 
             for (tmp.arena.dupe(Node.Out, def.outputs())) |us| {
@@ -194,6 +202,9 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 if (!use.hasUseFor(us.pos(), def)) continue;
                 if (!must and use.kind == .MachSplit and
                     isSameBlockNoClobber(use, lrg_table)) continue;
+
+                std.debug.assert(use.dataDepOffset() <= us.pos());
+
                 self.setInputIgnoreIntern(use, us.pos(), ins);
             }
 
@@ -239,11 +250,13 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
     slf.max_blocks = @max(slf.max_blocks, func.gcm.postorder.len);
 
+    const scnt = &slf.inserted_splits;
+
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
     func.gcm.instr_count = 0;
-    const should_log = 0 == 1;
+    const should_log = 1 == 0;
     for (func.gcm.postorder) |bb| {
         for (bb.base.outputs()) |instr| {
             if (instr.get().isDef()) {
@@ -440,7 +453,12 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                     if (member.schedule == no_def_sentinel) {
                         std.debug.print("<- {f}\n", .{member});
                     } else {
-                        std.debug.print("* {} {f} {f} {any}\n", .{ lrg.hasDef(member, lrg_table), member, lrg_table[member.schedule], member.outputs() });
+                        std.debug.print("* {} {f} {f} {any}\n", .{
+                            lrg.hasDef(member, lrg_table),
+                            member,
+                            lrg_table[member.schedule],
+                            member.outputs(),
+                        });
                     }
                 };
                 unreachable;
@@ -455,7 +473,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                     !(member.outputs().len == 1 and member.outputs()[0].get().kind == .MachSplit and
                         LiveRange.isSameBlockNoClobber(member.outputs()[0].get(), lrg_table)))
                 {
-                    LiveRange.splitAfterSubsume(func, member, true, lrg_table, .@"def/loop");
+                    LiveRange.splitAfterSubsume(func, member, true, lrg_table, .@"def/loop", scnt);
                 }
 
                 if (member.kind == .Phi) {
@@ -469,7 +487,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                         if (member.cfg0().base.kind == .Loop and j == 2 and
                             dep.kind == .Phi and dep.cfg0() == member.cfg0()) continue;
 
-                        func.splitBefore(member, j, dep, true, .@"use/loop/phi");
+                        func.splitBefore(member, j, dep, true, .@"use/loop/phi", scnt);
                     }
                 } else {
                     for (member.dataDeps(), member.dataDepOffset()..) |dep, j| {
@@ -481,7 +499,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                             // or we get into a split loop
                             (call_cnt < 2 or member.kind != .Call)) continue;
 
-                        func.splitBefore(member, j, dep, false, .@"use/loop/use");
+                        func.splitBefore(member, j, dep, false, .@"use/loop/use", scnt);
                     }
                 }
             }
@@ -574,6 +592,8 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             }
 
             for (instr.dataDeps(), instr.dataDepOffset()..) |def, i| {
+                //std.debug.assert(def.isDef());
+
                 if (!instr.hasUseFor(i, def)) continue;
 
                 const out = instr.regMask(func, i, tmp.arena);
@@ -657,30 +677,65 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             for (tmp.arena.dupe(Node.Out, instr.outputs())) |us| {
                 const use = us.get();
                 if (use.inPlaceSlot()) |idx| if (use.dataDeps()[idx] == instr) {
-                    func.splitBefore(use, idx + use.dataDepOffset(), instr, true, .@"conflict/in-place-slot/use");
+                    func.splitBefore(
+                        use,
+                        idx + use.dataDepOffset(),
+                        instr,
+                        true,
+                        .@"conflict/in-place-slot/use",
+                        scnt,
+                    );
                 };
 
                 if (use.kind == .Phi and !(use.cfg0().base.kind == .Loop and
                     use.inputs()[2] == instr and instr.cfg0().idepth() > use.cfg0().idepth()))
                 {
-                    func.splitBefore(use, us.pos(), instr, true, .@"conflict/phi/use");
+                    func.splitBefore(use, us.pos(), instr, true, .@"conflict/phi/use", scnt);
                 }
             }
 
             if (instr.kind == .Phi) {
-                LiveRange.splitAfterSubsume(func, instr, false, lrg_table, .@"conflict/phi/def");
-                func.splitBefore(instr, 1, instr.inputs()[1].?, true, .@"conflict/phi/def");
+                LiveRange.splitAfterSubsume(
+                    func,
+                    instr,
+                    false,
+                    lrg_table,
+                    .@"conflict/phi/def",
+                    scnt,
+                );
+                func.splitBefore(
+                    instr,
+                    1,
+                    instr.inputs()[1].?,
+                    true,
+                    .@"conflict/phi/def",
+                    scnt,
+                );
                 for (instr.inputs()[2].?.outputs()) |o| {
                     // another phi has same liverange, split or we get stuck
                     if (o.get() != instr and o.get().kind == .Phi) {
-                        func.splitBefore(instr, 2, instr.inputs()[2].?, true, .@"conflict/phi/def");
+                        func.splitBefore(
+                            instr,
+                            2,
+                            instr.inputs()[2].?,
+                            true,
+                            .@"conflict/phi/def",
+                            scnt,
+                        );
                         break;
                     }
                 }
             }
 
             if (instr.inPlaceSlot()) |slt| {
-                func.splitBefore(instr, slt + instr.dataDepOffset(), instr.dataDeps()[slt], true, .@"conflict/in-place-slot/def");
+                func.splitBefore(
+                    instr,
+                    slt + instr.dataDepOffset(),
+                    instr.dataDeps()[slt],
+                    true,
+                    .@"conflict/in-place-slot/def",
+                    scnt,
+                );
             }
         }
     }

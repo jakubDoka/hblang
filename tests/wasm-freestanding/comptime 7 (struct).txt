@@ -2,30 +2,17 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (result i64 i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64)
-    global.get 0
-    i64.const 16
-    i64.sub
-    global.set 0
+    (local i64)
     call $comptime_7__struct_.main.arr_.Dims__._x:_2__y:_1__
-    local.set 0
-    local.set 1
-    global.get 0
-    i32.wrap_i64
-    local.get 1
-    i64.store
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store offset=8
+    drop
+    drop
     i64.const 2
-    i64.const 16
-    global.get 0
-    i64.add
-    global.set 0
+    local.set 0
+    local.get 0
     return
     unreachable)
   (func $comptime_7__struct_.main.arr_.Dims__._x:_2__y:_1__ (type 1) (result i64 i64)
+    (local i64 i64)
     global.get 0
     i64.const 16
     i64.sub
@@ -33,13 +20,17 @@
     global.get 0
     i32.wrap_i64
     i64.load
+    local.set 0
     global.get 0
     i32.wrap_i64
     i64.load offset=8
+    local.set 1
     i64.const 16
     global.get 0
     i64.add
     global.set 0
+    local.get 0
+    local.get 1
     return
     unreachable)
   (table (;0;) 0 funcref)

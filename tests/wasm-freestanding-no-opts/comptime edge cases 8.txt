@@ -3,7 +3,7 @@
   (type (;1;) (func (result i64)))
   (type (;2;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i32 i32 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 i64)
+    (local i32 i64 i64 i64 i64)
     global.get 0
     i64.const 88
     i64.sub
@@ -12,10 +12,10 @@
       block  ;; label = @2
         block  ;; label = @3
           i64.const 0
-          local.set 3
+          local.set 1
           global.get 0
           i32.wrap_i64
-          local.get 3
+          local.get 1
           i64.store offset=40
           i64.const 1
           local.set 2
@@ -26,124 +26,128 @@
           global.get 0
           i32.wrap_i64
           i64.load offset=40
+          local.set 3
           global.get 0
           i32.wrap_i64
           i64.load offset=48
+          local.set 2
+          local.get 3
+          local.get 2
           i64.eq
           local.set 0
           local.get 0
           br_if 0 (;@3;)
           global.get 1
-          local.set 6
+          local.set 3
           i64.const 24
-          local.set 5
+          local.set 4
           i64.const 0
           global.get 0
           i64.add
-          local.set 4
+          local.set 2
+          local.get 2
+          i32.wrap_i64
+          local.get 3
+          i32.wrap_i64
           local.get 4
-          i32.wrap_i64
-          local.get 6
-          i32.wrap_i64
-          local.get 5
           i32.wrap_i64
           memory.copy
           call $comptime_edge_cases_8.main.read_only__uint__uint__uint__
-          local.set 10
+          local.set 2
           global.get 0
           i32.wrap_i64
-          local.get 10
+          local.get 2
           i64.store offset=80
           global.get 2
-          local.set 9
+          local.set 3
           global.get 0
           i32.wrap_i64
           i64.load offset=80
-          local.set 8
+          local.set 2
           global.get 0
           i32.wrap_i64
-          local.get 8
+          local.get 2
           i64.store offset=72
           i64.const 0
           global.get 0
           i64.add
-          local.set 7
-          local.get 7
+          local.set 2
+          local.get 2
           i32.wrap_i64
-          local.get 9
+          local.get 3
           i32.wrap_i64
-          local.get 5
+          local.get 4
           i32.wrap_i64
           memory.copy
           call $comptime_edge_cases_8.main.read_only__uint__uint__uint__
-          local.set 12
+          local.set 2
           block  ;; label = @4
             global.get 0
             i32.wrap_i64
-            local.get 12
+            local.get 2
             i64.store offset=32
             global.get 0
             i32.wrap_i64
             i64.load offset=32
-            local.set 11
+            local.set 2
             global.get 0
             i32.wrap_i64
-            local.get 11
+            local.get 2
             i64.store offset=24
             global.get 0
             i32.wrap_i64
             i64.load offset=72
+            local.set 3
             global.get 0
             i32.wrap_i64
             i64.load offset=24
+            local.set 2
+            local.get 3
+            local.get 2
             i64.eq
-            local.set 1
-            local.get 1
+            local.set 0
+            local.get 0
             br_if 0 (;@4;)
             global.get 2
-            local.set 14
+            local.set 3
             i64.const 0
             global.get 0
             i64.add
-            local.set 13
-            local.get 13
+            local.set 2
+            local.get 2
             i32.wrap_i64
-            local.get 14
+            local.get 3
             i32.wrap_i64
-            local.get 5
+            local.get 4
             i32.wrap_i64
             memory.copy
             call $comptime_edge_cases_8.fun__uint__uint__uint__
-            local.set 15
+            local.set 2
             global.get 0
             i32.wrap_i64
-            local.get 15
+            local.get 2
             i64.store offset=64
             global.get 0
             i32.wrap_i64
-            local.get 3
+            local.get 1
             i64.store offset=56
-            local.get 3
-            local.set 18
+            i64.const 0
+            local.set 2
             br 3 (;@1;)
           end
           i64.const 2
-          local.set 16
-          local.get 16
-          local.set 17
+          local.set 2
           br 1 (;@2;)
         end
-        local.get 2
-        local.set 17
+        i64.const 1
+        local.set 2
       end
-      local.get 17
-      local.set 18
     end
     i64.const 88
     global.get 0
     i64.add
     global.set 0
-    local.get 18
+    local.get 2
     return
     unreachable)
   (func $comptime_edge_cases_8.main.read_only__uint__uint__uint__ (type 1) (result i64)
@@ -151,6 +155,8 @@
     i64.const 0
     global.get 0
     i64.add
+    local.set 0
+    local.get 0
     i32.wrap_i64
     i64.load
     local.set 0
@@ -162,6 +168,8 @@
     i64.const 0
     global.get 0
     i64.add
+    local.set 0
+    local.get 0
     i32.wrap_i64
     i64.load
     local.set 1
@@ -170,6 +178,8 @@
     local.get 1
     local.get 0
     i64.sub
+    local.set 0
+    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

@@ -1,18 +1,12 @@
 main:
          st $31, $254, -8, 8
-     addi64 $254, $254, -64
-        li8 $1, 1
-         st $1, $254, 48, 1
-        li8 $6, 3
-        lra $5, $0, :loops 16 (for different lengths error)
-       li64 $4, 38
+     addi64 $254, $254, -56
+        lra $1, $0, :loops 16 (for different lengths error)
+         st $1, $254, 24, 8
        li64 $3, 8589934599
      addi64 $2, $254, 24
-        li8 $1, 2
-         st $1, $254, 49, 1
-         st $6, $254, 50, 1
-         st $5, $254, 24, 8
-         st $4, $254, 32, 8
+       li64 $1, 38
+         st $1, $254, 32, 8
          st $3, $254, 40, 8
      addi64 $1, $254, 0
         bmc $2, $1, 24

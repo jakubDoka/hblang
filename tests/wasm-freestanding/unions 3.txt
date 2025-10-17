@@ -3,44 +3,16 @@
   (type (;1;) (func (result i64)))
   (func $main (type 0) (result i64)
     (local i64)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
     call $unions_3.TypeInfo_uint_
     local.set 0
-    global.get 0
-    i32.wrap_i64
     local.get 0
-    i64.store
-    global.get 0
-    i32.wrap_i64
-    i64.load
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
   (func $unions_3.TypeInfo_uint_ (type 1) (result i64)
     (local i64)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
     i64.const 8
     local.set 0
-    global.get 0
-    i32.wrap_i64
     local.get 0
-    i64.store
-    global.get 0
-    i32.wrap_i64
-    i64.load
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
   (table (;0;) 0 funcref)

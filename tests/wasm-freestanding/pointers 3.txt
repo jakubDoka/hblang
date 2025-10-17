@@ -2,9 +2,9 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i64) (result i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64)
+    (local i64)
     global.get 0
-    i64.const 16
+    i64.const 8
     i64.sub
     global.set 0
     i64.const 1
@@ -16,58 +16,42 @@
     i64.const 0
     global.get 0
     i64.add
+    local.set 0
+    local.get 0
     call $pointers_3.do_stuff
-    local.set 1
-    global.get 0
-    i32.wrap_i64
-    local.get 1
-    i64.store offset=8
+    drop
     global.get 0
     i32.wrap_i64
     i64.load
-    i64.const 16
+    local.set 0
+    i64.const 8
     global.get 0
     i64.add
     global.set 0
+    local.get 0
     return
     unreachable)
   (func $pointers_3.do_stuff (type 1) (param i64) (result i64)
-    (local i64 i64 i64 i64)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
+    (local i32)
     block  ;; label = @1
       block  ;; label = @2
-        global.get 0
-        i32.wrap_i64
         local.get 0
-        i64.store
-        global.get 0
         i32.wrap_i64
         i64.load
-        i32.wrap_i64
-        i64.load
+        local.set 0
+        local.get 0
+        i64.eqz
         local.set 1
         local.get 1
-        i64.eqz
         br_if 0 (;@2;)
         i64.const 1
-        local.set 2
-        local.get 2
-        local.set 4
+        local.set 0
         br 1 (;@1;)
       end
       i64.const 0
-      local.set 3
-      local.get 3
-      local.set 4
+      local.set 0
     end
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
-    local.get 4
+    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

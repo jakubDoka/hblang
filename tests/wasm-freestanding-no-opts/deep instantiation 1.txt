@@ -102,7 +102,7 @@
   (type (;100;) (func (result i32)))
   (type (;101;) (func (result i32)))
   (func $main (type 0) (result i64)
-    (local i32 i64 i64 i64)
+    (local i32 i64 i64)
     global.get 0
     i64.const 8
     i64.sub
@@ -114,17 +114,23 @@
     local.get 0
     i32.store
     global.get 1
+    local.set 1
+    local.get 1
     i32.wrap_i64
     i64.load
-    local.set 3
+    local.set 2
     global.get 0
     i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
     i64.extend_i32_u
-    local.set 2
-    local.get 3
+    local.set 1
+    local.get 1
     local.get 2
     i64.ne
+    local.set 0
+    local.get 0
     i32.const 255
     i32.and
     i64.extend_i32_u
@@ -143,15 +149,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S___________________________________________________________________________________________________.Z___________________________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -168,15 +178,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S__________________________________________________________________________________________________.Z__________________________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -193,15 +207,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_________________________________________________________________________________________________.Z_________________________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -218,15 +236,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S________________________________________________________________________________________________.Z________________________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -243,15 +265,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_______________________________________________________________________________________________.Z_______________________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -268,15 +294,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S______________________________________________________________________________________________.Z______________________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -293,15 +323,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_____________________________________________________________________________________________.Z_____________________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -318,15 +352,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S____________________________________________________________________________________________.Z____________________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -343,15 +381,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S___________________________________________________________________________________________.Z___________________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -368,15 +410,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S__________________________________________________________________________________________.Z__________________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -393,15 +439,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_________________________________________________________________________________________.Z_________________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -418,15 +468,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S________________________________________________________________________________________.Z________________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -443,15 +497,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_______________________________________________________________________________________.Z_______________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -468,15 +526,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S______________________________________________________________________________________.Z______________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -493,15 +555,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_____________________________________________________________________________________.Z_____________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -518,15 +584,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S____________________________________________________________________________________.Z____________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -543,15 +613,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S___________________________________________________________________________________.Z___________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -568,15 +642,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S__________________________________________________________________________________.Z__________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -593,15 +671,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_________________________________________________________________________________.Z_________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -618,15 +700,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S________________________________________________________________________________.Z________________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -643,15 +729,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_______________________________________________________________________________.Z_______________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -668,15 +758,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S______________________________________________________________________________.Z______________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -693,15 +787,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_____________________________________________________________________________.Z_____________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -718,15 +816,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S____________________________________________________________________________.Z____________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -743,15 +845,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S___________________________________________________________________________.Z___________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -768,15 +874,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S__________________________________________________________________________.Z__________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -793,15 +903,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_________________________________________________________________________.Z_________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -818,15 +932,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S________________________________________________________________________.Z________________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -843,15 +961,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_______________________________________________________________________.Z_______________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -868,15 +990,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S______________________________________________________________________.Z______________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -893,15 +1019,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_____________________________________________________________________.Z_____________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -918,15 +1048,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S____________________________________________________________________.Z____________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -943,15 +1077,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S___________________________________________________________________.Z___________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -968,15 +1106,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S__________________________________________________________________.Z__________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -993,15 +1135,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_________________________________________________________________.Z_________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1018,15 +1164,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S________________________________________________________________.Z________________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1043,15 +1193,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_______________________________________________________________.Z_______________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1068,15 +1222,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S______________________________________________________________.Z______________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1093,15 +1251,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_____________________________________________________________.Z_____________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1118,15 +1280,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S____________________________________________________________.Z____________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1143,15 +1309,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S___________________________________________________________.Z___________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1168,15 +1338,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S__________________________________________________________.Z__________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1193,15 +1367,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_________________________________________________________.Z_________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1218,15 +1396,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S________________________________________________________.Z________________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1243,15 +1425,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_______________________________________________________.Z_______________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1268,15 +1454,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S______________________________________________________.Z______________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1293,15 +1483,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_____________________________________________________.Z_____________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1318,15 +1512,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S____________________________________________________.Z____________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1343,15 +1541,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S___________________________________________________.Z___________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1368,15 +1570,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S__________________________________________________.Z__________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1393,15 +1599,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_________________________________________________.Z_________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1418,15 +1628,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S________________________________________________.Z________________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1443,15 +1657,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_______________________________________________.Z_______________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1468,15 +1686,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S______________________________________________.Z______________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1493,15 +1715,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_____________________________________________.Z_____________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1518,15 +1744,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S____________________________________________.Z____________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1543,15 +1773,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S___________________________________________.Z___________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1568,15 +1802,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S__________________________________________.Z__________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1593,15 +1831,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_________________________________________.Z_________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1618,15 +1860,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S________________________________________.Z________________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1643,15 +1889,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_______________________________________.Z_______________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1668,15 +1918,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S______________________________________.Z______________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1693,15 +1947,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_____________________________________.Z_____________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1718,15 +1976,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S____________________________________.Z____________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1743,15 +2005,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S___________________________________.Z___________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1768,15 +2034,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S__________________________________.Z__________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1793,15 +2063,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_________________________________.Z_________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1818,15 +2092,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S________________________________.Z________________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1843,15 +2121,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_______________________________.Z_______________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1868,15 +2150,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S______________________________.Z______________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1893,15 +2179,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_____________________________.Z_____________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1918,15 +2208,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S____________________________.Z____________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1943,15 +2237,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S___________________________.Z___________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1968,15 +2266,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S__________________________.Z__________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -1993,15 +2295,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_________________________.Z_________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2018,15 +2324,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S________________________.Z________________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2043,15 +2353,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_______________________.Z_______________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2068,15 +2382,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S______________________.Z______________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2093,15 +2411,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_____________________.Z_____________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2118,15 +2440,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S____________________.Z____________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2143,15 +2469,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S___________________.Z___________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2168,15 +2498,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S__________________.Z__________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2193,15 +2527,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_________________.Z_________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2218,15 +2556,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S________________.Z________________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2243,15 +2585,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_______________.Z_______________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2268,15 +2614,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S______________.Z______________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2293,15 +2643,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_____________.Z_____________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2318,15 +2672,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S____________.Z____________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2343,15 +2701,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S___________.Z___________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2368,15 +2730,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S__________.Z__________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2393,15 +2759,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_________.Z_________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2418,15 +2788,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S________.Z________.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2443,15 +2817,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_______.Z_______.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2468,15 +2846,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S______.Z______.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2493,15 +2875,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_____.Z_____.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2518,15 +2904,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S____.Z____.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2543,15 +2933,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S___.Z___.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2568,15 +2962,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S__.Z__.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2593,15 +2991,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.S_.Z_.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2618,15 +3020,19 @@
     i64.sub
     global.set 0
     call $deep_instantiation_1.Z.get
+    local.set 0
+    global.get 0
+    i32.wrap_i64
+    local.get 0
+    i32.store
+    i32.const 1
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i32.store
-    i32.const 1
-    global.get 0
-    i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
+    local.get 1
     i32.add
     local.set 0
     i64.const 8
@@ -2637,7 +3043,10 @@
     return
     unreachable)
   (func $deep_instantiation_1.Z.get (type 101) (result i32)
+    (local i32)
     i32.const 0
+    local.set 0
+    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

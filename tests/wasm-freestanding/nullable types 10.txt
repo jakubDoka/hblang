@@ -3,30 +3,19 @@
   (type (;1;) (func (result i32)))
   (func $main (type 0) (result i64)
     (local i32 i64)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
     call $nullable_types_10.x
     local.set 0
-    global.get 0
-    i32.wrap_i64
     local.get 0
-    i32.store
-    global.get 0
-    i32.wrap_i64
-    i32.load
     i64.extend_i32_u
     local.set 1
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     local.get 1
     return
     unreachable)
   (func $nullable_types_10.x (type 1) (result i32)
+    (local i32)
     i32.const 0
+    local.set 0
+    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

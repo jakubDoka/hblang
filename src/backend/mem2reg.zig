@@ -40,21 +40,22 @@ pub fn Mixin(comptime Backend: type) type {
 
             const L = @This();
 
-            fn resolve(func: *Func, scope: []L, index: usize) *Node {
+            fn resolve(func: *Func, scope: []L, index: usize, ty: graph.DataType) *Node {
                 return switch (scope[index].expand() orelse {
-                    return func.addUninit(.none, .i64);
+                    return func.addUninit(.none, ty);
                 }) {
                     .Node => |n| n,
                     .Loop => |loop| {
                         if (loop.items[index].expand() == null) {
-                            const vl = func.addUninit(.none, .i64);
+                            const vl = func.addUninit(.none, ty);
                             scope[index] = .compact(.{ .Node = vl });
                             return vl;
                         }
                         if (!loop.done) {
-                            const initVal = resolve(func, loop.items, index);
+                            const initVal = resolve(func, loop.items, index, ty);
 
                             if (!loop.items[index].expand().?.Node.isLazyPhi(loop.ctrl)) {
+                                std.debug.assert(initVal.data_type == ty);
                                 loop.items[index] = .compact(.{ .Node = func.addNode(
                                     .Phi,
                                     initVal.sloc,
@@ -66,10 +67,11 @@ pub fn Mixin(comptime Backend: type) type {
                         }
                         scope[index] = loop.items[index];
                         if (scope[index].expand().? == .Loop) {
-                            scope[index] = .compact(.{ .Node = resolve(func, loop.items, index) });
+                            scope[index] = .compact(.{ .Node = resolve(func, loop.items, index, ty) });
                         }
 
                         // std.debug.dumpCurrentStackTrace(@returnAddress());
+                        std.debug.assert(scope[index].expand().?.Node.data_type == ty);
                         return scope[index].expand().?.Node;
                     },
                 };
@@ -260,7 +262,7 @@ pub fn Mixin(comptime Backend: type) type {
                                 utils.panic("{f} {any} {}", .{ o, alloc_offsets.items, offs });
                             };
                             if (locals[idx].expand() != null) {
-                                _ = Local.resolve(self, locals, idx);
+                                _ = Local.resolve(self, locals, idx, o.data_type);
                             }
                             locals[idx] = .compact(.{ .Node = o.value().? });
                         }
@@ -278,7 +280,7 @@ pub fn Mixin(comptime Backend: type) type {
                                             return std.math.order(a, b);
                                         }
                                     }.inner).?;
-                                    const su = Local.resolve(self, locals, idx);
+                                    const su = Local.resolve(self, locals, idx, lo.data_type);
                                     self.subsume(su, lo);
                                 }
                             }
@@ -323,11 +325,11 @@ pub fn Mixin(comptime Backend: type) type {
                             var lhs = clhs.expand() orelse continue;
                             if (lhs == .Node and lhs.Node.isLazyPhi(s.ctrl)) {
                                 var rhs = crhs.expand() orelse Local.Expanded{
-                                    .Node = self.addUninit(lhs.Node.sloc, .i64),
+                                    .Node = self.addUninit(lhs.Node.sloc, lhs.Node.data_type),
                                 };
 
                                 if (rhs == .Loop and (rhs.Loop != s or s.ctrl.preservesIdentityPhys())) {
-                                    rhs = .{ .Node = Local.resolve(self, locals, i) };
+                                    rhs = .{ .Node = Local.resolve(self, locals, i, lhs.Node.data_type) };
                                 }
 
                                 if (rhs == .Node) {

@@ -16,6 +16,8 @@
     global.get 0
     i32.wrap_i64
     i32.load
+    local.set 0
+    local.get 0
     i64.extend_i32_u
     local.set 1
     i64.const 8
@@ -26,7 +28,10 @@
     return
     unreachable)
   (func $nullable_types_6.x (type 1) (result i32)
+    (local i32)
     i32.const 0
+    local.set 0
+    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

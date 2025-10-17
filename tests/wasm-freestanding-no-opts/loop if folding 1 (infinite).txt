@@ -7,8 +7,6 @@
     i64.sub
     global.set 0
     loop  ;; label = @1
-      block  ;; label = @2
-      end
       i64.const 0
       local.set 0
       global.get 0

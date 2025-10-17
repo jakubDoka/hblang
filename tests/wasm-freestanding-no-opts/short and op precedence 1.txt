@@ -2,7 +2,7 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i32 i32) (result i32)))
   (func $main (type 0) (result i64)
-    (local i32 i32 i32 i32 i32 i32 i64 i64 i64 i64 i64)
+    (local i32 i32 i32 i64)
     global.get 0
     i64.const 8
     i64.sub
@@ -16,21 +16,27 @@
     global.get 0
     i32.wrap_i64
     i32.load8_u
+    local.set 1
     global.get 0
     i32.wrap_i64
     i32.load8_u offset=1
+    local.set 2
+    local.get 1
+    local.get 2
     call $short_and_op_precedence_1.foo
-    local.set 1
+    local.set 2
     block  ;; label = @1
       block  ;; label = @2
         block  ;; label = @3
           global.get 0
           i32.wrap_i64
-          local.get 1
+          local.get 2
           i32.store8 offset=4
           global.get 0
           i32.wrap_i64
           i32.load8_u offset=4
+          local.set 2
+          local.get 2
           br_if 0 (;@3;)
           i32.const 1
           local.set 2
@@ -45,22 +51,28 @@
           global.get 0
           i32.wrap_i64
           i32.load8_u offset=2
+          local.set 1
           global.get 0
           i32.wrap_i64
           i32.load8_u offset=3
+          local.set 2
+          local.get 1
+          local.get 2
           call $short_and_op_precedence_1.foo
-          local.set 4
+          local.set 2
           block  ;; label = @4
             global.get 0
             i32.wrap_i64
-            local.get 4
+            local.get 2
             i32.store8 offset=5
             global.get 0
             i32.wrap_i64
             i32.load8_u offset=5
+            local.set 2
+            local.get 2
             i32.eqz
-            local.set 3
-            local.get 3
+            local.set 2
+            local.get 2
             br_if 0 (;@4;)
             global.get 0
             i32.wrap_i64
@@ -69,40 +81,32 @@
             global.get 0
             i32.wrap_i64
             i32.load8_u offset=7
-            local.set 5
+            local.set 2
             global.get 0
             i32.wrap_i64
-            local.get 5
+            local.get 2
             i32.store8 offset=6
             i64.const 0
-            local.set 6
-            local.get 6
-            local.set 10
+            local.set 3
             br 3 (;@1;)
           end
           i64.const 2
-          local.set 7
-          local.get 7
-          local.set 9
+          local.set 3
           br 1 (;@2;)
         end
         i64.const 1
-        local.set 8
-        local.get 8
-        local.set 9
+        local.set 3
       end
-      local.get 9
-      local.set 10
     end
     i64.const 8
     global.get 0
     i64.add
     global.set 0
-    local.get 10
+    local.get 3
     return
     unreachable)
   (func $short_and_op_precedence_1.foo (type 1) (param i32 i32) (result i32)
-    (local i32 i32 i32 i32 i32 i32 i32 i32)
+    (local i32)
     global.get 0
     i64.const 8
     i64.sub
@@ -120,38 +124,40 @@
         global.get 0
         i32.wrap_i64
         i32.load8_u offset=1
-        local.set 3
-        i32.const 0
         local.set 2
+        i32.const 0
+        local.set 0
         global.get 0
         i32.wrap_i64
         i32.load8_u
-        global.get 0
-        i32.wrap_i64
-        local.get 3
-        i32.store8 offset=2
-        br_if 0 (;@2;)
+        local.set 1
         global.get 0
         i32.wrap_i64
         local.get 2
+        i32.store8 offset=2
+        local.get 1
+        br_if 0 (;@2;)
+        global.get 0
+        i32.wrap_i64
+        local.get 0
         i32.store8 offset=6
         br 1 (;@1;)
       end
       global.get 0
       i32.wrap_i64
       i32.load8_u offset=1
-      local.set 5
+      local.set 2
       global.get 0
       i32.wrap_i64
       i32.load8_u
-      local.set 4
+      local.set 1
       global.get 0
       i32.wrap_i64
-      local.get 5
+      local.get 2
       i32.store8 offset=4
       global.get 0
       i32.wrap_i64
-      local.get 4
+      local.get 1
       i32.store8 offset=6
     end
     block  ;; label = @1
@@ -159,35 +165,37 @@
         global.get 0
         i32.wrap_i64
         i32.load8_u offset=6
+        local.set 1
+        local.get 1
         br_if 0 (;@2;)
-        local.get 2
-        local.set 9
         br 1 (;@1;)
       end
       global.get 0
       i32.wrap_i64
       i32.load8_u offset=2
+      local.set 0
+      local.get 0
       i32.const 255
       i32.and
-      local.set 8
+      local.set 1
       global.get 0
       i32.wrap_i64
       i32.load8_u offset=4
+      local.set 0
+      local.get 0
       i32.const 255
       i32.and
-      local.set 7
-      local.get 8
-      local.get 7
+      local.set 0
+      local.get 1
+      local.get 0
       i32.eq
-      local.set 6
-      local.get 6
-      local.set 9
+      local.set 0
     end
     i64.const 8
     global.get 0
     i64.add
     global.set 0
-    local.get 9
+    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

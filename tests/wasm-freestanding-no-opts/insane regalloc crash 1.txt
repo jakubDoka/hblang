@@ -1,6 +1,7 @@
 (module
   (type (;0;) (func (result i64)))
   (func $main (type 0) (result i64)
+    (local i64)
     global.get 0
     i64.const 512
     i64.sub
@@ -41,192 +42,256 @@
                                                                       global.get 0
                                                                       i32.wrap_i64
                                                                       i64.load offset=32
+                                                                      local.set 0
+                                                                      local.get 0
                                                                       i32.wrap_i64
                                                                       br_if 0 (;@33;)
                                                                       block  ;; label = @34
                                                                         global.get 0
                                                                         i32.wrap_i64
                                                                         i64.load offset=80
+                                                                        local.set 0
+                                                                        local.get 0
                                                                         i32.wrap_i64
                                                                         br_if 0 (;@34;)
                                                                         block  ;; label = @35
                                                                           global.get 0
                                                                           i32.wrap_i64
                                                                           i64.load offset=128
+                                                                          local.set 0
+                                                                          local.get 0
                                                                           i32.wrap_i64
                                                                           br_if 0 (;@35;)
                                                                           block  ;; label = @36
                                                                             global.get 0
                                                                             i32.wrap_i64
                                                                             i64.load offset=176
+                                                                            local.set 0
+                                                                            local.get 0
                                                                             i32.wrap_i64
                                                                             br_if 0 (;@36;)
                                                                             block  ;; label = @37
                                                                               global.get 0
                                                                               i32.wrap_i64
                                                                               i64.load offset=224
+                                                                              local.set 0
+                                                                              local.get 0
                                                                               i32.wrap_i64
                                                                               br_if 0 (;@37;)
                                                                               block  ;; label = @38
                                                                                 global.get 0
                                                                                 i32.wrap_i64
                                                                                 i64.load offset=256
+                                                                                local.set 0
+                                                                                local.get 0
                                                                                 i32.wrap_i64
                                                                                 br_if 0 (;@38;)
                                                                                 block  ;; label = @39
                                                                                   global.get 0
                                                                                   i32.wrap_i64
                                                                                   i64.load offset=320
+                                                                                  local.set 0
+                                                                                  local.get 0
                                                                                   i32.wrap_i64
                                                                                   br_if 0 (;@39;)
                                                                                   block  ;; label = @40
                                                                                     global.get 0
                                                                                     i32.wrap_i64
                                                                                     i64.load offset=368
+                                                                                    local.set 0
+                                                                                    local.get 0
                                                                                     i32.wrap_i64
                                                                                     br_if 0 (;@40;)
                                                                                     block  ;; label = @41
                                                                                       global.get 0
                                                                                       i32.wrap_i64
                                                                                       i64.load offset=416
+                                                                                      local.set 0
+                                                                                      local.get 0
                                                                                       i32.wrap_i64
                                                                                       br_if 0 (;@41;)
                                                                                       block  ;; label = @42
                                                                                         global.get 0
                                                                                         i32.wrap_i64
                                                                                         i64.load offset=464
+                                                                                        local.set 0
+                                                                                        local.get 0
                                                                                         i32.wrap_i64
                                                                                         br_if 0 (;@42;)
                                                                                         block  ;; label = @43
                                                                                           global.get 0
                                                                                           i32.wrap_i64
                                                                                           i64.load offset=496
+                                                                                          local.set 0
+                                                                                          local.get 0
                                                                                           i32.wrap_i64
                                                                                           br_if 0 (;@43;)
                                                                                           block  ;; label = @44
                                                                                             global.get 0
                                                                                             i32.wrap_i64
                                                                                             i64.load offset=480
+                                                                                            local.set 0
+                                                                                            local.get 0
                                                                                             i32.wrap_i64
                                                                                             br_if 0 (;@44;)
                                                                                             block  ;; label = @45
                                                                                               global.get 0
                                                                                               i32.wrap_i64
                                                                                               i64.load offset=432
+                                                                                              local.set 0
+                                                                                              local.get 0
                                                                                               i32.wrap_i64
                                                                                               br_if 0 (;@45;)
                                                                                               block  ;; label = @46
                                                                                                 global.get 0
                                                                                                 i32.wrap_i64
                                                                                                 i64.load offset=384
+                                                                                                local.set 0
+                                                                                                local.get 0
                                                                                                 i32.wrap_i64
                                                                                                 br_if 0 (;@46;)
                                                                                                 block  ;; label = @47
                                                                                                   global.get 0
                                                                                                   i32.wrap_i64
                                                                                                   i64.load offset=336
+                                                                                                  local.set 0
+                                                                                                  local.get 0
                                                                                                   i32.wrap_i64
                                                                                                   br_if 0 (;@47;)
                                                                                                   block  ;; label = @48
                                                                                                     global.get 0
                                                                                                     i32.wrap_i64
                                                                                                     i64.load offset=288
+                                                                                                    local.set 0
+                                                                                                    local.get 0
                                                                                                     i32.wrap_i64
                                                                                                     br_if 0 (;@48;)
                                                                                                     block  ;; label = @49
                                                                                                       global.get 0
                                                                                                       i32.wrap_i64
                                                                                                       i64.load offset=272
+                                                                                                      local.set 0
+                                                                                                      local.get 0
                                                                                                       i32.wrap_i64
                                                                                                       br_if 0 (;@49;)
                                                                                                       block  ;; label = @50
                                                                                                         global.get 0
                                                                                                         i32.wrap_i64
                                                                                                         i64.load offset=192
+                                                                                                        local.set 0
+                                                                                                        local.get 0
                                                                                                         i32.wrap_i64
                                                                                                         br_if 0 (;@50;)
                                                                                                         block  ;; label = @51
                                                                                                           global.get 0
                                                                                                           i32.wrap_i64
                                                                                                           i64.load offset=144
+                                                                                                          local.set 0
+                                                                                                          local.get 0
                                                                                                           i32.wrap_i64
                                                                                                           br_if 0 (;@51;)
                                                                                                           block  ;; label = @52
                                                                                                             global.get 0
                                                                                                             i32.wrap_i64
                                                                                                             i64.load offset=96
+                                                                                                            local.set 0
+                                                                                                            local.get 0
                                                                                                             i32.wrap_i64
                                                                                                             br_if 0 (;@52;)
                                                                                                             block  ;; label = @53
                                                                                                               global.get 0
                                                                                                               i32.wrap_i64
                                                                                                               i64.load offset=48
+                                                                                                              local.set 0
+                                                                                                              local.get 0
                                                                                                               i32.wrap_i64
                                                                                                               br_if 0 (;@53;)
                                                                                                               block  ;; label = @54
                                                                                                                 global.get 0
                                                                                                                 i32.wrap_i64
                                                                                                                 i64.load offset=16
+                                                                                                                local.set 0
+                                                                                                                local.get 0
                                                                                                                 i32.wrap_i64
                                                                                                                 br_if 0 (;@54;)
                                                                                                                 block  ;; label = @55
                                                                                                                   global.get 0
                                                                                                                   i32.wrap_i64
                                                                                                                   i64.load offset=448
+                                                                                                                  local.set 0
+                                                                                                                  local.get 0
                                                                                                                   i32.wrap_i64
                                                                                                                   br_if 0 (;@55;)
                                                                                                                   block  ;; label = @56
                                                                                                                     global.get 0
                                                                                                                     i32.wrap_i64
                                                                                                                     i64.load offset=160
+                                                                                                                    local.set 0
+                                                                                                                    local.get 0
                                                                                                                     i32.wrap_i64
                                                                                                                     br_if 0 (;@56;)
                                                                                                                     block  ;; label = @57
                                                                                                                       global.get 0
                                                                                                                       i32.wrap_i64
                                                                                                                       i64.load offset=304
+                                                                                                                      local.set 0
+                                                                                                                      local.get 0
                                                                                                                       i32.wrap_i64
                                                                                                                       br_if 0 (;@57;)
                                                                                                                       block  ;; label = @58
                                                                                                                         global.get 0
                                                                                                                         i32.wrap_i64
                                                                                                                         i64.load offset=64
+                                                                                                                        local.set 0
+                                                                                                                        local.get 0
                                                                                                                         i32.wrap_i64
                                                                                                                         br_if 0 (;@58;)
                                                                                                                         block  ;; label = @59
                                                                                                                           global.get 0
                                                                                                                           i32.wrap_i64
                                                                                                                           i64.load offset=208
+                                                                                                                          local.set 0
+                                                                                                                          local.get 0
                                                                                                                           i32.wrap_i64
                                                                                                                           br_if 0 (;@59;)
                                                                                                                           block  ;; label = @60
                                                                                                                             global.get 0
                                                                                                                             i32.wrap_i64
                                                                                                                             i64.load offset=352
+                                                                                                                            local.set 0
+                                                                                                                            local.get 0
                                                                                                                             i32.wrap_i64
                                                                                                                             br_if 0 (;@60;)
                                                                                                                             block  ;; label = @61
                                                                                                                               global.get 0
                                                                                                                               i32.wrap_i64
                                                                                                                               i64.load
+                                                                                                                              local.set 0
+                                                                                                                              local.get 0
                                                                                                                               i32.wrap_i64
                                                                                                                               br_if 0 (;@61;)
                                                                                                                               block  ;; label = @62
                                                                                                                                 global.get 0
                                                                                                                                 i32.wrap_i64
                                                                                                                                 i64.load offset=400
+                                                                                                                                local.set 0
+                                                                                                                                local.get 0
                                                                                                                                 i32.wrap_i64
                                                                                                                                 br_if 0 (;@62;)
                                                                                                                                 block  ;; label = @63
                                                                                                                                   global.get 0
                                                                                                                                   i32.wrap_i64
                                                                                                                                   i64.load offset=240
+                                                                                                                                  local.set 0
+                                                                                                                                  local.get 0
                                                                                                                                   i32.wrap_i64
                                                                                                                                   br_if 0 (;@63;)
                                                                                                                                   block  ;; label = @64
                                                                                                                                     global.get 0
                                                                                                                                     i32.wrap_i64
                                                                                                                                     i64.load offset=112
+                                                                                                                                    local.set 0
+                                                                                                                                    local.get 0
                                                                                                                                     i32.wrap_i64
                                                                                                                                     br_if 0 (;@64;)
                                                                                                                                     br 63 (;@1;)
@@ -326,10 +391,12 @@
       end
     end
     i64.const 0
+    local.set 0
     i64.const 512
     global.get 0
     i64.add
     global.set 0
+    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

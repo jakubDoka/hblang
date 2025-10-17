@@ -1166,16 +1166,31 @@ pub fn Func(comptime Backend: type) type {
                 break :b offs;
             };
 
-            pub fn dataDepOffset(self: *Node) usize {
+            pub fn dataDepOffsetWeak(self: *Node) usize {
                 const kind_idx = @intFromEnum(self.kind);
-                return dep_offset[kind_idx / per_dep_elem] >>
+                const off = dep_offset[kind_idx / per_dep_elem] >>
                     @intCast((kind_idx % per_dep_elem) * sub_elem_width) & ((@as(u16, 1) << sub_elem_width) - 1);
+
+                return off;
+            }
+
+            pub fn dataDepOffset(self: *Node) usize {
+                const off = self.dataDepOffsetWeak();
+                return off + if (@hasDecl(Backend, "dataDepOffset")) Backend.dataDepOffset(self, off) else 0;
             }
 
             // TODO: this is a hack, its here because otherwise everithing gets pulled out of
             // the loop and cloggs the register allocator
             pub fn isCheap(self: *Node) bool {
                 return self.kind == .StackArgOffset;
+            }
+
+            pub fn dataDepsWeak(self: *Node) []*Node {
+                if ((self.kind == .Phi and !self.isDataPhi()) or self.kind == .MemJoin) return &.{};
+                const start = self.dataDepOffsetWeak();
+                const deps = self.input_base[start..self.input_ordered_len];
+                std.debug.assert(std.mem.indexOfScalar(?*Node, deps, null) == null);
+                return @ptrCast(deps);
             }
 
             pub fn dataDeps(self: *Node) []*Node {
@@ -1485,6 +1500,12 @@ pub fn Func(comptime Backend: type) type {
                 return forceSubclass((self.inputs()[0].?), Cfg);
             }
 
+            // TODO: brah
+            pub fn hasUseForWeak(self: *Node, idx: usize, def: *Node) bool {
+                if (self.kind == .Call and def.kind == .StackArgOffset) return false;
+                return self.dataDepOffsetWeak() <= idx and idx < self.input_ordered_len;
+            }
+
             pub fn hasUseFor(self: *Node, idx: usize, def: *Node) bool {
                 if (self.kind == .Call and def.kind == .StackArgOffset) return false;
                 return self.dataDepOffset() <= idx and idx < self.input_ordered_len;
@@ -1534,7 +1555,8 @@ pub fn Func(comptime Backend: type) type {
                     (self.kind != .Phi or self.isDataPhi()) and
                     self.kind != .LocalAlloc and
                     self.kind != .MemJoin and
-                    self.kind != .Mem;
+                    self.kind != .Mem and
+                    (!@hasDecl(Backend, "isDef") or Backend.isDef(self));
             }
 
             pub fn kills(self: *Node) bool {
@@ -1730,12 +1752,22 @@ pub fn Func(comptime Backend: type) type {
 
         const InsertMap = InternMap(Inserter);
 
-        pub fn addSplit(self: *Self, block: *CfgNode, def: *Node, dgb: builtin.MachSplit.Dbg) *Node {
+        pub fn addSplit(self: *Self, block: *CfgNode, def: *Node, dgb: builtin.MachSplit.Dbg, counter: *usize) *Node {
+            counter.* += 1;
             return self.addNode(.MachSplit, def.sloc, def.data_type, &.{ &block.base, null }, .{ .dbg = dgb });
         }
 
-        pub fn splitBefore(self: *Self, use: *Node, idx: usize, def: *Node, skip: bool, dbg: builtin.MachSplit.Dbg) void {
-            std.debug.assert(idx > 0);
+        pub fn splitBefore(
+            self: *Self,
+            use: *Node,
+            idx: usize,
+            def: *Node,
+            skip: bool,
+            dbg: builtin.MachSplit.Dbg,
+            counter: *usize,
+        ) void {
+            std.debug.assert(idx >= use.dataDepOffset());
+
             const block = if (use.kind == .Phi)
                 use.cfg0().base.inputs()[idx - 1].?.inputs()[0].?.asCfg().?
             else
@@ -1781,7 +1813,7 @@ pub fn Func(comptime Backend: type) type {
                 def.kind == .MachSplit and def.cfg0() == block)
             b: {
                 break :b def.inputs()[1].?;
-            } else def, dbg);
+            } else def, dbg, counter);
 
             self.setInputIgnoreIntern(use, idx, ins);
             if (ins.kind == .MachSplit) self.setInputIgnoreIntern(ins, 1, def);
@@ -2418,7 +2450,9 @@ pub fn Func(comptime Backend: type) type {
 
             if (is_dead and node.data_type != .bot) {
                 node.data_type = .bot;
-                for (node.outputs()) |o| worklist.add(o.get());
+                for (node.outputs()) |o| {
+                    worklist.add(o.get());
+                }
                 return null;
             }
 
@@ -2509,9 +2543,9 @@ pub fn Func(comptime Backend: type) type {
         pub fn idealize(ctx: *Backend, self: *Self, node: *Node, work: *WorkList) ?*Node {
             errdefer unreachable;
 
-            if (node.data_type == .bot) return null;
-
             if (idealizeDead(ctx, self, node, work)) |w| return w;
+
+            if (node.data_type == .bot) return null;
 
             if (matcher.idealize(ctx, self, node, work)) |w| return w;
 

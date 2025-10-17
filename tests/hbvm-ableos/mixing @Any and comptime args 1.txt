@@ -20,6 +20,6 @@ mixing @Any and comptime args 1.bind(.main, ?i32):
      addi32 $2, $2, 5
         li8 $1, 1
         jmp :2
-1:     li64 $2, -6148914691236517206
+1:     li32 $2, -1431655766
          cp $1, $0
 2:     jala $0, $31, 0

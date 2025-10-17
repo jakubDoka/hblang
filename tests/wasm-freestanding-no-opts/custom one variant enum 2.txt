@@ -2,22 +2,24 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64)
+    (local i64 i64)
     global.get 0
     i64.const 8
     i64.sub
     global.set 0
     call $custom_one_variant_enum_2.c
-    local.set 2
+    local.set 0
     global.get 0
     i32.wrap_i64
-    local.get 2
+    local.get 0
     i64.store
     i64.const 5
     local.set 1
     global.get 0
     i32.wrap_i64
     i64.load
+    local.set 0
+    local.get 0
     local.get 1
     i64.sub
     local.set 0
@@ -29,7 +31,10 @@
     return
     unreachable)
   (func $custom_one_variant_enum_2.c (type 1) (result i64)
+    (local i64)
     i64.const 5
+    local.set 0
+    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

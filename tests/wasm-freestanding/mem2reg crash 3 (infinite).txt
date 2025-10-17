@@ -1,30 +1,7 @@
 (module
   (type (;0;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64)
-    global.get 0
-    i64.const 16
-    i64.sub
-    global.set 0
     loop  ;; label = @1
-      block  ;; label = @2
-      end
-      global.get 0
-      i32.wrap_i64
-      i64.load
-      local.set 1
-      global.get 0
-      i32.wrap_i64
-      i64.load offset=8
-      local.set 0
-      global.get 0
-      i32.wrap_i64
-      local.get 1
-      i64.store
-      global.get 0
-      i32.wrap_i64
-      local.get 0
-      i64.store offset=8
       br 0 (;@1;)
     end
     unreachable)

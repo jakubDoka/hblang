@@ -11,18 +11,6 @@
     return
     unreachable)
   (func $foo.foo_u8_ (type 1) (param i64)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
   (table (;0;) 0 funcref)

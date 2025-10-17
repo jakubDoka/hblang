@@ -952,6 +952,17 @@ pub const OptOptions = struct {
         if (0 == 1) func.alias_anal.run();
     }
 
+    pub fn optimizeRelease(self: OptOptions, comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) void {
+        idealizeDead(Backend, ctx, func);
+        doMem2Reg(Backend, func);
+        idealizeGeneric(Backend, ctx, func, false);
+        idealizeMach(Backend, ctx, func);
+        doGcm(Backend, func);
+        if (self.error_buf != null) {
+            self.doStaticAnal(Backend, func);
+        }
+    }
+
     pub fn optimizeDebug(self: OptOptions, comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) void {
         idealizeDead(Backend, ctx, func);
         idealizeGeneric(Backend, ctx, func, true);

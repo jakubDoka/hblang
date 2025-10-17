@@ -4,107 +4,49 @@
   (type (;2;) (func (param i64) (result i64)))
   (type (;3;) (func (param i32) (result i32)))
   (func $main (type 0) (result i64)
-    (local i32 i64 i64 i64 i64)
-    global.get 0
-    i64.const 24
-    i64.sub
-    global.set 0
+    (local i32 i64 i64)
     i64.const 1
-    i64.const 2
-    call $directives_13__@Any_.func_uint_
     local.set 1
-    global.get 0
-    i32.wrap_i64
-    local.get 1
-    i64.store
-    i64.const 5
-    call $directives_13__@Any_.foo_uint_
+    i64.const 2
     local.set 2
-    global.get 0
-    i32.wrap_i64
+    local.get 1
     local.get 2
-    i64.store offset=8
+    call $directives_13__@Any_.func_uint_
+    drop
+    i64.const 5
+    local.set 2
+    local.get 2
+    call $directives_13__@Any_.foo_uint_
+    local.set 1
     i32.const 5
+    local.set 0
+    local.get 0
     call $directives_13__@Any_.foo_u8_
     local.set 0
-    global.get 0
-    i32.wrap_i64
     local.get 0
-    i32.store8 offset=16
-    global.get 0
-    i32.wrap_i64
-    i64.load offset=8
-    local.set 4
-    global.get 0
-    i32.wrap_i64
-    i32.load8_u offset=16
     i32.const 255
     i32.and
     i64.extend_i32_u
-    local.set 3
-    local.get 4
-    local.get 3
+    local.set 2
+    local.get 1
+    local.get 2
     i64.add
-    i64.const 24
-    global.get 0
-    i64.add
-    global.set 0
+    local.set 2
+    local.get 2
     return
     unreachable)
   (func $directives_13__@Any_.func_uint_ (type 1) (param i64 i64) (result i64)
-    global.get 0
-    i64.const 16
-    i64.sub
-    global.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store
-    global.get 0
-    i32.wrap_i64
-    local.get 1
-    i64.store offset=8
     i64.const 0
-    i64.const 16
-    global.get 0
-    i64.add
-    global.set 0
+    local.set 0
+    local.get 0
     return
     unreachable)
   (func $directives_13__@Any_.foo_uint_ (type 2) (param i64) (result i64)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    global.get 0
-    i32.wrap_i64
     local.get 0
-    i64.store
-    global.get 0
-    i32.wrap_i64
-    i64.load
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
   (func $directives_13__@Any_.foo_u8_ (type 3) (param i32) (result i32)
-    global.get 0
-    i64.const 8
-    i64.sub
-    global.set 0
-    global.get 0
-    i32.wrap_i64
     local.get 0
-    i32.store8
-    global.get 0
-    i32.wrap_i64
-    i32.load8_u
-    i64.const 8
-    global.get 0
-    i64.add
-    global.set 0
     return
     unreachable)
   (table (;0;) 0 funcref)

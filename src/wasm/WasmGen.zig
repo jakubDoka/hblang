@@ -26,16 +26,41 @@ pub fn loadDatatype(node: *Func.Node) graph.DataType {
     };
 }
 
-pub const i_know_the_api = {};
-pub const Set = struct {
-    pub fn count(_: Set) usize {
-        return 100;
+pub const Set = std.DynamicBitSetUnmanaged;
+
+pub fn dataDepOffset(node: *Func.Node, off: usize) usize {
+    var extra: usize = 0;
+    for (node.ordInps()[off..]) |in| {
+        if (in.?.id == on_stack_id) {
+            extra += 1;
+        } else {
+            for (node.ordInps()[off + extra ..]) |inn| {
+                std.debug.assert(inn.?.id != on_stack_id);
+            }
+            break;
+        }
     }
 
-    pub fn setIntersection(_: Set, _: Set) void {}
-};
+    return extra;
+}
 
-pub const on_stack_schedule = std.math.maxInt(u16);
+pub fn setMasks(set: *Set) []Set.MaskInt {
+    return graph.setMasks(set.*);
+}
+
+pub fn setIntersects(a: Set, b: Set) bool {
+    return for (graph.setMasks(a), graph.setMasks(b)) |aa, bb| {
+        if (aa & bb != 0) return true;
+    } else false;
+}
+
+pub const i_know_the_api = {};
+
+pub fn isDef(self: *Func.Node) bool {
+    return self.id != on_stack_id;
+}
+
+pub const on_stack_id = std.math.maxInt(u16);
 
 pub const ScopeRange = struct {
     kind: enum { loop, block },
@@ -149,18 +174,60 @@ pub fn idealizeMach(self: *WasmGen, func: *Func, node: *Func.Node, work: *Func.W
     return null;
 }
 
+const set_cap = 256;
+const group_cap: usize = 64;
+
+pub fn typeMaskOffset(ty: graph.DataType) usize {
+    return group_cap * @as(usize, switch (dataTypeToWasmType(ty)) {
+        .i32 => 0,
+        .i64 => 1,
+        .f32 => 2,
+        .f64 => 3,
+        else => unreachable,
+    });
+}
+
+pub fn typeMask(ty: graph.DataType, arena: *utils.Arena) Set {
+    errdefer unreachable;
+
+    var mask = try Set.initEmpty(arena.allocator(), set_cap);
+
+    mask.setRangeValue(.{ .start = typeMaskOffset(ty), .end = typeMaskOffset(ty) + group_cap }, true);
+
+    return mask;
+}
+
 pub fn regMask(
     node: *Func.Node,
     func: *Func,
     idx: usize,
     arena: *utils.Arena,
 ) Set {
-    _ = node;
-    _ = func;
-    _ = idx;
-    _ = arena;
+    errdefer unreachable;
 
-    return .{};
+    if (node.kind == .Arg) {
+        std.debug.assert(idx == 0);
+
+        var mask = try Set.initEmpty(arena.allocator(), set_cap);
+
+        var pos: usize = 0;
+        for (func.signature.params()[0..node.extra(.Arg).index]) |param| {
+            if (param == .Reg and dataTypeToWasmType(param.Reg) == dataTypeToWasmType(node.data_type)) {
+                pos += 1;
+            }
+        }
+
+        mask.set(pos + typeMaskOffset(node.data_type));
+
+        return mask;
+    }
+
+    if (idx == 0) {
+        std.debug.assert(node.isDef());
+        return typeMask(node.data_type, arena);
+    }
+
+    return try Set.initFull(arena.allocator(), set_cap);
 }
 
 pub fn dataTypeToWasmType(ty: graph.DataType) object.Type {
@@ -219,20 +286,29 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     _ = sym;
     defer self.mach.out.endDefineFunc(id);
 
+    // For inport, we smuggle the signature with the function
+    if (opts.linkage == .imported) {
+        var ctx = Ctx{
+            .start_pos = self.mach.out.code.items.len,
+            .buf = .fromArrayList(self.gpa, &self.mach.out.code),
+        };
+        defer self.mach.out.code = ctx.buf.toArrayList();
+
+        encodeFnType(&ctx.buf.writer, func.signature);
+        return;
+    }
+
+    if (opts.optimizations.opts.mode == .release) {
+        opts.optimizations.opts.optimizeRelease(WasmGen, self, func);
+    } else {
+        opts.optimizations.opts.optimizeDebug(WasmGen, self, func);
+    }
+
     var ctx = Ctx{
         .start_pos = self.mach.out.code.items.len,
         .buf = .fromArrayList(self.gpa, &self.mach.out.code),
     };
     defer self.mach.out.code = ctx.buf.toArrayList();
-
-    // For inport, we smuggle the signature with the function
-    if (opts.linkage == .imported) {
-        encodeFnType(&ctx.buf.writer, func.signature);
-        return;
-    }
-
-    // TDDO: actually make the release mode work
-    opts.optimizations.opts.optimizeDebug(WasmGen, self, func);
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
@@ -257,6 +333,142 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         @bitCast(@as(u32, @intCast(self.ctx.buf.writer.end -
         self.ctx.start_pos - @sizeOf(u32))));
 
+    for (0..2) |_| {
+        if (false) {
+            for (func.gcm.postorder) |block| {
+                for (block.base.outputs(), 0..) |out, i| {
+                    out.get().schedule = @intCast(i);
+
+                    const pre_deps = out.get().dataDepsWeak();
+
+                    if (out.get().kind == .BinOp and
+                        out.get().extra(.BinOp).op.isComutative() and
+                        pre_deps[0].schedule > pre_deps[1].schedule)
+                    {
+                        std.mem.swap(*Func.Node, &pre_deps[0], &pre_deps[1]);
+
+                        for (pre_deps[0..], 1..) |dep, j| {
+                            for (dep.outputs()) |*pre_out| {
+                                if (pre_out.get() == out.get()) {
+                                    pre_out.* = .init(out.get(), j, dep);
+                                }
+                            }
+                        }
+                    }
+
+                    var deps = tmp.arena.dupe(*Func.Node, pre_deps);
+
+                    if (out.get().kind == .Call and out.get().extra(.Call).id == graph.indirect_call) {
+                        continue;
+                    }
+
+                    if (out.get().isSub(graph.MemCpy)) {
+                        continue;
+                    }
+
+                    // could we possibly overcome this?
+                    if (out.get().isSub(graph.Store)) {
+                        deps = deps[0 .. deps.len - 1];
+                    }
+
+                    // Algorithm to reduce usage of locals, we look at inputs of each
+                    // value and check if they can be passed on the stack:
+                    // - they are in a correct order
+                    // - they are not preceded by failed value
+                    // - they dont overlap with some other value that waits for the instr that
+                    // waits for a stack arg
+                    var last_idx: usize = 0;
+                    out: for (deps) |dep| {
+                        if (dep.cfg0() != block) break :out;
+                        if (last_idx > dep.schedule) break :out;
+                        last_idx = dep.schedule;
+
+                        if (dep.kind == .Phi or dep.kind == .Arg or dep.kind == .Ret) break :out;
+
+                        var used_count: usize = 0;
+                        for (dep.outputs()) |dep_out| {
+                            if (dep_out.get().hasUseForWeak(dep_out.pos(), out.get()) and
+                                (dep_out.get() != out.get() or used_count != 0))
+                            {
+                                break :out;
+                            }
+                            if (dep_out.get() == out.get()) used_count += 1;
+                        }
+
+                        const until = out.get().schedule;
+                        for (block.base.outputs()[dep.schedule..until]) |inbetween| {
+                            for (inbetween.get().dataDepsWeak()) |idep| {
+                                if (idep.cfg0() != block) break;
+                                //if (idep.id != on_stack_id) break;
+                                if (idep.schedule > dep.schedule) break :out;
+                            }
+                        }
+
+                        dep.id = on_stack_id;
+                    }
+
+                    _ = out.get().dataDepOffset();
+                }
+            }
+        } else if (false) {
+            for (func.gcm.postorder) |block| {
+                var iter = std.mem.reverseIterator(block.base.outputs());
+                var i: usize = block.base.outputs().len;
+                out: while (@as(?Func.Node.Out, iter.next())) |out| {
+                    i -= 1;
+
+                    const instr = out.get();
+                    instr.schedule = @intCast(i);
+
+                    if (!instr.isDef()) continue;
+
+                    if (instr.kind == .Arg or instr.kind == .Ret or instr.kind == .Phi) continue;
+
+                    var ouse: ?Func.Node.Out = null;
+                    for (instr.outputs()) |instr_out| {
+                        if (instr_out.get().hasUseForWeak(instr_out.pos(), instr)) {
+                            if (ouse != null) continue :out;
+                            ouse = instr_out;
+                        }
+                    }
+
+                    const use = ouse.?;
+
+                    if (use.pos() != use.get().dataDepOffsetWeak()) continue;
+                    if (use.get().cfg0() != block) continue;
+                    if (use.get().schedule != i + 1) continue;
+
+                    instr.id = on_stack_id;
+                }
+            }
+        }
+
+        var rloc = Regalloc{};
+        self.ctx.allocs = rloc.ralloc(WasmGen, func);
+
+        if (rloc.inserted_splits == 0) {
+            break;
+        }
+    } else unreachable;
+
+    const LocalCounts = struct {
+        i32: usize = 0,
+        i64: usize = 0,
+        f32: usize = 0,
+        f64: usize = 0,
+
+        pub fn get(slf: *@This(), ty: graph.DataType) *usize {
+            return switch (dataTypeToWasmType(ty)) {
+                .vec, .fnc => unreachable,
+                inline else => |t| &@field(slf, @tagName(t)),
+            };
+        }
+    };
+
+    var param_counts: LocalCounts = .{};
+    var seen = try Set.initEmpty(tmp.arena.allocator(), set_cap);
+    const new_allocs = tmp.arena.alloc(u16, set_cap);
+
     var params_len: u32 = 0;
     for (func.signature.params(), 0..) |param, i| {
         if (param == .Reg) {
@@ -266,104 +478,38 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
                     break;
                 }
             }
+
+            const cnt = param_counts.get(param.Reg);
+            seen.set(typeMaskOffset(param.Reg) + cnt.*);
+            new_allocs[typeMaskOffset(param.Reg) + cnt.*] = @intCast(params_len);
+            cnt.* += 1;
+
             params_len += 1;
         }
     }
 
-    for (func.gcm.postorder) |block| {
-        for (block.base.outputs(), 0..) |out, i| {
-            out.get().schedule = @intCast(i);
-
-            const pre_deps = out.get().dataDeps();
-
-            if (out.get().kind == .BinOp and
-                out.get().extra(.BinOp).op.isComutative() and
-                pre_deps[0].schedule > pre_deps[1].schedule)
-            {
-                std.mem.swap(*Func.Node, &pre_deps[0], &pre_deps[1]);
-            }
-
-            var deps = tmp.arena.dupe(*Func.Node, pre_deps);
-
-            if (out.get().kind == .Call and out.get().extra(.Call).id == graph.indirect_call) {
-                std.mem.rotate(*Func.Node, deps[0..], 1);
-            }
-
-            if (out.get().isSub(graph.MemCpy)) {
-                continue;
-            }
-
-            // could we possibly overcome this?
-            if (out.get().isSub(graph.Store)) {
-                deps = deps[0 .. deps.len - 1];
-            }
-
-            // Algorithm to reduce usage of locals, we look at inputs of each
-            // value and check if they can be passed on the stack:
-            // - they are in a correct order
-            // - they are not preceded by failed value
-            // - they dont overlap with some other value that waits for the instr that
-            // waits for a stack arg
-            var last_idx: usize = 0;
-            out: for (deps) |dep| {
-                if (dep.cfg0() != block) break :out;
-                if (last_idx > dep.schedule) break :out;
-                last_idx = dep.schedule;
-
-                if (dep.kind == .Phi or dep.kind == .Arg) break :out;
-
-                var used_count: usize = 0;
-                for (dep.outputs()) |dep_out| {
-                    if (dep_out.get().hasUseFor(dep_out.pos(), out.get()) and
-                        (dep_out.get() != out.get() or used_count != 0))
-                    {
-                        break :out;
-                    }
-                    if (dep_out.get() == out.get()) used_count += 1;
-                }
-
-                const until = out.get().schedule;
-                for (block.base.outputs()[dep.schedule..until]) |inbetween| {
-                    for (inbetween.get().dataDeps()) |idep| {
-                        if (idep.cfg0() != block) break;
-                        if (idep.schedule != on_stack_schedule) break;
-                        if (idep.schedule > dep.schedule) break :out;
-                    }
-                }
-
-                dep.schedule = on_stack_schedule;
-            }
-        }
-    }
-
-    var counters: struct {
-        i32: usize = 0,
-        i64: usize = 0,
-        f32: usize = 0,
-        f64: usize = 0,
-    } = .{};
+    var counters: LocalCounts = .{};
 
     func.gcm.instr_count = 0;
 
     for (func.gcm.postorder) |block| {
         for (block.base.outputs()) |out| {
-            if (!out.get().isDef()) {
+            const instr = out.get();
+
+            if (!instr.isDef()) {
                 continue;
             }
 
-            if (out.get().schedule == on_stack_schedule) {
-                continue;
-            }
+            const alloc = self.ctx.allocs[instr.schedule];
 
-            out.get().schedule = func.gcm.instr_count;
-            func.gcm.instr_count += 1;
+            if (instr.kind == .Arg) continue;
 
-            if (out.get().kind == .Arg) continue;
+            if (seen.isSet(alloc)) continue;
+            seen.set(alloc);
 
-            switch (dataTypeToWasmType(out.get().data_type)) {
-                .fnc, .vec => unreachable,
-                inline else => |ty| @field(counters, @tagName(ty)) += 1,
-            }
+            const cnt = counters.get(instr.data_type);
+            new_allocs[alloc] = @intCast(cnt.*);
+            cnt.* += 1;
         }
     }
 
@@ -389,36 +535,23 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         cursor += fld;
     }
 
-    self.ctx.allocs = tmp.arena.alloc(u16, params_len + cursor);
-
     for (func.gcm.postorder) |block| {
-        var iter = std.mem.reverseIterator(block.base.outputs());
-        while (@as(?Func.Node.Out, iter.next())) |out| {
+        for (block.base.outputs()) |out| {
             const instr = out.get();
 
             if (!instr.isDef()) continue;
 
-            if (instr.kind == .Arg) {
-                self.ctx.allocs[instr.schedule] =
-                    @intCast(instr.extra(.Arg).index);
+            if (instr.id == on_stack_id) {
                 continue;
             }
 
-            if (instr.schedule == on_stack_schedule) {
-                continue;
-            }
+            const base = counters.get(instr.data_type).*;
+            const param_count = param_counts.get(instr.data_type).*;
+            const alloc = self.ctx.allocs[instr.schedule];
 
-            const prev = switch (dataTypeToWasmType(out.get().data_type)) {
-                .fnc, .vec => unreachable,
-                inline else => |ty| @field(counters, @tagName(ty)),
-            };
+            const prefix = if (alloc - typeMaskOffset(instr.data_type) < param_count) 0 else params_len + base;
 
-            self.ctx.allocs[instr.schedule] = @intCast(params_len + prev);
-
-            switch (dataTypeToWasmType(out.get().data_type)) {
-                .fnc, .vec => unreachable,
-                inline else => |ty| @field(counters, @tagName(ty)) += 1,
-            }
+            self.ctx.allocs[instr.schedule] = @intCast(prefix + new_allocs[self.ctx.allocs[instr.schedule]]);
         }
     }
 
@@ -457,7 +590,9 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     }
 
     for (func.gcm.postorder) |rbb| {
-        if (rbb.base.kind == .Then or rbb.base.kind == .Else) {
+        if ((rbb.base.kind == .Then or rbb.base.kind == .Else) and
+            rbb.base.inputs()[0].?.kind == .If)
+        {
             const if_schedule = rbb.base.inputs()[0].?.inputs()[0].?.schedule;
             if (if_schedule != rbb.base.schedule - 1) {
                 scope_ranges.appendAssumeCapacity(.{
@@ -626,7 +761,7 @@ pub fn selectLoadOp(ty: graph.DataType) u8 {
 pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
     errdefer unreachable;
 
-    const inps = instr.dataDeps();
+    const inps: []*Func.Node = @ptrCast(instr.ordInps()[1..]);
 
     switch (instr.extra2()) {
         .CInt => |extra| {
@@ -866,21 +1001,12 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
         .WStore => |extra| {
             // TODO: we can emit specialized stores
 
-            self.emitLocalLoad(inps[0]);
+            self.emitLocalLoad(inps[1]);
             try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
 
-            self.emitLocalLoad(inps[1]);
+            self.emitLocalLoad(inps[2]);
 
-            const op_code: u8 = switch (instr.data_type) {
-                .i32 => opb(.i32_store),
-                .i64 => opb(.i64_store),
-                .f32 => opb(.f32_store),
-                .f64 => opb(.f64_store),
-                .i8 => opb(.i32_store8),
-                .i16 => opb(.i32_store16),
-                else => unreachable,
-            };
-            try self.ctx.buf.writer.writeByte(op_code);
+            try self.ctx.buf.writer.writeByte(selectStoreOp(instr.data_type));
             const alignment = std.math.log2_int(u64, instr.data_type.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
             try self.ctx.buf.writer.writeSleb128(extra.offset);
@@ -893,7 +1019,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
             try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
 
-            self.emitLocalLoad(inps[0]);
+            self.emitLocalLoad(inps[2]);
 
             try self.ctx.buf.writer.writeByte(selectStoreOp(instr.data_type));
             const alignment = std.math.log2_int(u64, instr.data_type.size());
@@ -901,7 +1027,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeSleb128(offset);
         },
         .WLoad => |extra| {
-            self.emitLocalLoad(inps[0]);
+            self.emitLocalLoad(inps[1]);
             try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
             try self.ctx.buf.writer.writeByte(selectLoadOp(instr.data_type));
             const alignment = std.math.log2_int(u64, instr.data_type.size());
@@ -911,7 +1037,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalStore(instr);
         },
         .SignedLoad => |extra| {
-            self.emitLocalLoad(inps[0]);
+            self.emitLocalLoad(inps[1]);
             try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
             try self.ctx.buf.writer.writeByte(selectSignedLoadOp(instr.data_type, extra.src_ty));
             const alignment = std.math.log2_int(u64, extra.src_ty.size());
@@ -964,7 +1090,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalStore(instr);
         },
         .Local => {
-            const offset = instr.inputs()[1].?.extra(.LocalAlloc).size +
+            const offset = inps[0].extra(.LocalAlloc).size +
                 self.ctx.stack_base;
 
             try self.ctx.buf.writer.writeByte(opb(.i64_const));
@@ -1013,7 +1139,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalStore(instr);
         },
         .MemCpy => {
-            for (inps) |inp| {
+            for (inps[1..]) |inp| {
                 self.emitLocalLoad(inp);
                 try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
             }
@@ -1026,7 +1152,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeUleb128(0);
         },
         .Call => |extra| {
-            for (inps[@intFromBool(extra.id == graph.indirect_call)..]) |inp| {
+            for (inps[@as(usize, 1) + @intFromBool(extra.id == graph.indirect_call) ..]) |inp| {
                 if (inp.kind == .StackArgOffset) {
                     continue;
                 }
@@ -1035,7 +1161,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             }
 
             if (extra.id == graph.indirect_call) {
-                self.emitLocalLoad(inps[0]);
+                self.emitLocalLoad(inps[1]);
                 try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
 
                 try self.ctx.buf.writer.writeByte(opb(.call_indirect));
@@ -1059,7 +1185,10 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 for (instr.outputs()[0].get().outputs()) |out| {
                     if (out.get().kind == .Ret and out.get().extra(.Ret).index == ret.len - 1 - i) {
                         self.emitLocalStore(out.get());
+                        break;
                     }
+                } else {
+                    try self.ctx.buf.writer.writeByte(opb(.drop));
                 }
             }
         },
@@ -1081,16 +1210,20 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeByte(opb(.br_if));
             try self.ctx.buf.writer.writeUleb128(label_id);
         },
+        .MachSplit => {
+            self.emitLocalLoad(inps[0]);
+            self.emitLocalStore(instr);
+        },
         .Jmp => {
             const region = instr.outputs()[0];
-            for (region.get().outputs()) |out| {
-                if (out.get().isDataPhi()) {
-                    try self.ctx.buf.writer.writeByte(opb(.local_get));
-                    try self.ctx.buf.writer.writeUleb128(self.regOf(out.get().inputs()[1 + region.pos()]));
-                    try self.ctx.buf.writer.writeByte(opb(.local_set));
-                    try self.ctx.buf.writer.writeUleb128(self.regOf(out.get()));
-                }
-            }
+            //for (region.get().outputs()) |out| {
+            //    if (out.get().isDataPhi()) {
+            //        try self.ctx.buf.writer.writeByte(opb(.local_get));
+            //        try self.ctx.buf.writer.writeUleb128(self.regOf(out.get().inputs()[1 + region.pos()]));
+            //        try self.ctx.buf.writer.writeByte(opb(.local_set));
+            //        try self.ctx.buf.writer.writeUleb128(self.regOf(out.get()));
+            //    }
+            //}
 
             const pred = instr.inputs()[0].?;
 
@@ -1164,7 +1297,7 @@ pub fn emitData(self: *WasmGen, opts: Mach.DataOptions) void {
 }
 
 pub fn emitLocalLoad(self: *WasmGen, for_instr: *Func.Node) void {
-    if (for_instr.schedule == on_stack_schedule) {
+    if (for_instr.id == on_stack_id) {
         return;
     }
 
@@ -1175,7 +1308,7 @@ pub fn emitLocalLoad(self: *WasmGen, for_instr: *Func.Node) void {
 }
 
 pub fn emitLocalStore(self: *WasmGen, for_instr: *Func.Node) void {
-    if (for_instr.schedule == on_stack_schedule) {
+    if (for_instr.id == on_stack_id) {
         return;
     }
 

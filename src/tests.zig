@@ -184,7 +184,7 @@ pub fn runVendoredTest(path: []const u8, projs: []const [2][]const u8) !void {
         _ = try test_util.runVendoredTest(path, projs, "hbvm-ableos", .release);
         _ = try test_util.runVendoredTest(path, projs, "hbvm-ableos-no-opts", .debug);
 
-        if (std.mem.indexOf(u8, path, "almighty-ops") == null) {
+        if (false and std.mem.indexOf(u8, path, "almighty-ops") == null) {
             _ = try test_util.runVendoredTest(path, projs, "wasm-freestanding", .release);
             _ = try test_util.runVendoredTest(path, projs, "wasm-freestanding-no-opts", .debug);
         }

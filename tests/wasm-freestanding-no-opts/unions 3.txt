@@ -16,10 +16,12 @@
     global.get 0
     i32.wrap_i64
     i64.load
+    local.set 0
     i64.const 8
     global.get 0
     i64.add
     global.set 0
+    local.get 0
     return
     unreachable)
   (func $unions_3.TypeInfo_uint_ (type 1) (result i64)
@@ -37,10 +39,12 @@
     global.get 0
     i32.wrap_i64
     i64.load
+    local.set 0
     i64.const 8
     global.get 0
     i64.add
     global.set 0
+    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

@@ -2,9 +2,6 @@ loops 16 (for different lengths error).for_loop_length_mismatch:
 	ud2
 main:
 	sub rsp, 0x38
-	mov byte ptr [rsp+0x30], 0x01
-	mov byte ptr [rsp+0x31], 0x02
-	mov byte ptr [rsp+0x32], 0x03
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x18], rax
 	mov qword ptr [rsp+0x20], 0x26
