@@ -2,6 +2,32 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### bad opt 1
+```hb
+$Result := fn($Value: type, $Error: type): type return union(enum) {
+    .value: Value;
+    .error: Error
+
+    This := @CurrentScope()
+
+    $value := fn(v: Value): This return .{value: v}
+    $error := fn(e: Error): This return .{error: e}
+}
+
+main := fn(): int {
+    return Result(i32, i32).value(0).value
+}
+```
+
+#### type_info error 1
+```hb
+main := fn(): uint {
+    $info := @type_info(main).@fn
+    $if info.ret == uint return 0
+    return 1
+}
+```
+
 #### malformed global union 3
 ```hb
 Aaa := union(enum) {

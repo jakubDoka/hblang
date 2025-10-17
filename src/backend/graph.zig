@@ -2367,7 +2367,7 @@ pub fn Func(comptime Backend: type) type {
             self.signature = self.signature.dupe(self.arena.allocator());
         }
 
-        pub fn idealizeDead(_: *Backend, self: *Self, node: *Node, worklist: *WorkList) ?*Node {
+        pub fn idealizeDead(ctx: *Backend, self: *Self, node: *Node, work: *WorkList) ?*Node {
             const inps = node.inputs();
 
             var is_dead = node.kind == .Region and isDead(inps[0]) and isDead(inps[1]);
@@ -2375,13 +2375,13 @@ pub fn Func(comptime Backend: type) type {
                 node.kind != .TrapRegion and node.isCfg() and isDead(inps[0]));
 
             if (is_dead and node.kind == .Return and inps[0] != null) {
-                worklist.add(inps[0].?);
-                worklist.add(inps[1].?);
+                work.add(inps[0].?);
+                work.add(inps[1].?);
                 self.setInputNoIntern(node, 0, null);
                 self.setInputNoIntern(node, 1, null);
                 for (3..node.inputs().len) |i| {
                     if (inps[i] == null) continue;
-                    worklist.add(inps[i].?);
+                    work.add(inps[i].?);
                     self.setInputNoIntern(node, i, null);
                 }
                 return null;
@@ -2392,7 +2392,7 @@ pub fn Func(comptime Backend: type) type {
                 for (node.inputs(), 0..) |*inp, i| {
                     if (inp.* != null and isDead(inp.*)) {
                         inp.*.?.removeUse(i, node);
-                        worklist.add(inp.*.?);
+                        work.add(inp.*.?);
                         inp.* = null;
                     }
                     is_dead = is_dead and isDead(inp.*);
@@ -2417,7 +2417,7 @@ pub fn Func(comptime Backend: type) type {
 
                     self.setInputNoIntern(self.end, 2, null);
 
-                    worklist.add(node);
+                    work.add(node);
                 }
 
                 return null;
@@ -2442,7 +2442,7 @@ pub fn Func(comptime Backend: type) type {
                             .i8,
                             @intFromBool(cursor.base.kind == .Then),
                         ));
-                        for (node.outputs()) |o| worklist.add(o.get());
+                        for (node.outputs()) |o| work.add(o.get());
                         return null;
                     }
                 }
@@ -2451,7 +2451,7 @@ pub fn Func(comptime Backend: type) type {
             if (is_dead and node.data_type != .bot) {
                 node.data_type = .bot;
                 for (node.outputs()) |o| {
-                    worklist.add(o.get());
+                    work.add(o.get());
                 }
                 return null;
             }
@@ -2465,8 +2465,8 @@ pub fn Func(comptime Backend: type) type {
                 var iter = std.mem.reverseIterator(node.outputs());
                 while (iter.next()) |ot| if (ot.get().kind == .Phi) {
                     const o = ot.get();
-                    for (o.outputs()) |oo| worklist.add(oo.get());
-                    worklist.add(o.inputs()[idx + 1].?);
+                    for (o.outputs()) |oo| work.add(oo.get());
+                    work.add(o.inputs()[idx + 1].?);
                     self.subsume(o.inputs()[(1 - idx) + 1].?, o);
                 };
 
@@ -2489,8 +2489,8 @@ pub fn Func(comptime Backend: type) type {
                 var iter = std.mem.reverseIterator(node.outputs());
                 while (iter.next()) |ot| if (ot.get().kind == .Phi) {
                     const o = ot.get();
-                    for (o.outputs()) |oo| worklist.add(oo.get());
-                    worklist.add(o.inputs()[2].?);
+                    for (o.outputs()) |oo| work.add(oo.get());
+                    work.add(o.inputs()[2].?);
                     self.subsume(o.inputs()[1].?, o);
                 };
 
@@ -2502,7 +2502,7 @@ pub fn Func(comptime Backend: type) type {
                 const cond = if_node.inputs()[1].?;
                 if (cond.kind == .CInt and cond.extra(.CInt).value != 0) {
                     if_node.data_type = .bot;
-                    worklist.add(if_node.outputs()[1].get());
+                    work.add(if_node.outputs()[1].get());
                     return if_node.inputs()[0].?;
                 }
             }
@@ -2512,7 +2512,7 @@ pub fn Func(comptime Backend: type) type {
                 const cond = if_node.inputs()[1].?;
                 if (cond.kind == .CInt and cond.extra(.CInt).value == 0) {
                     if_node.data_type = .bot;
-                    worklist.add(if_node.outputs()[0].get());
+                    work.add(if_node.outputs()[0].get());
                     return if_node.inputs()[0].?;
                 }
             }
@@ -2534,6 +2534,14 @@ pub fn Func(comptime Backend: type) type {
 
                 if (r == node) {
                     return l;
+                }
+            }
+
+            if (node.kind == .Call and node.data_type != .bot) {
+                const force_inline = node.extra(.Call).signature.call_conv == .@"inline";
+                if (ctx.mach.out.getInlineFunc(Backend, node.extra(.Call).id, force_inline)) |inline_func| {
+                    inline_func.inliner.inlineInto(self, node, work);
+                    return null;
                 }
             }
 
@@ -2684,14 +2692,6 @@ pub fn Func(comptime Backend: type) type {
                         .value => |v| return self.addIntImm(node.sloc, node.data_type, v),
                         .global => |g| return self.addGlobalAddr(node.sloc, g),
                     }
-                }
-            }
-
-            if (node.kind == .Call and node.data_type != .bot) {
-                const force_inline = node.extra(.Call).signature.call_conv == .@"inline";
-                if (ctx.mach.out.getInlineFunc(Backend, node.extra(.Call).id, force_inline)) |inline_func| {
-                    inline_func.inliner.inlineInto(self, node, work);
-                    return null;
                 }
             }
 

@@ -1,0 +1,18 @@
+bad opt 1.Result(i32, i32).value:
+	sub rsp, 0x10
+	mov [rsp+0x08], edi
+	mov eax, [rsp+0x08]
+	mov [rsp], eax
+	mov byte ptr [rsp+0x04], 0x00
+	mov rax, [rsp]
+	add rsp, 0x10
+	ret
+main:
+	sub rsp, 0x08
+	xor rdi, rdi
+	call :bad opt 1.Result(i32, i32).value
+	mov [rsp], rax
+	mov eax, [rsp]
+	movsxd rax, eax
+	add rsp, 0x08
+	ret

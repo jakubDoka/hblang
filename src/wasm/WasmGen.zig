@@ -1441,7 +1441,7 @@ pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
     };
 
     if (res.Exited != 0) {
-        std.debug.print("{s}\n", .{stderr.items});
+        std.debug.print("{s}\n", .{stdout.items});
         return error.WasmInterpError;
     }
 

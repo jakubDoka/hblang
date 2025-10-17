@@ -1246,7 +1246,7 @@ pub fn findPointerOffsets(
             const len_big: u64 = @bitCast(global[offset + tys.Slice.len_offset ..][0..8].*);
             const len: usize = @intCast(len_big);
 
-            const cap = len * slc.elem.size(self);
+            const cap = len *% slc.elem.size(self);
             if (cap == 0) return;
 
             relocs.append(scratch.allocator(), .{

@@ -1,0 +1,10 @@
+main:
+	sub rsp, 0x10
+	mov dword ptr [rsp+0x08], 0x00
+	mov byte ptr [rsp+0x0C], 0x00
+	mov rax, [rsp+0x08]
+	mov [rsp], rax
+	mov eax, [rsp]
+	movsxd rax, eax
+	add rsp, 0x10
+	ret

@@ -408,8 +408,29 @@ pub fn executeMemOps(
             },
             .Scope => {},
             .MemCpy => {
-                if (op.knownOffset()[0] == res)
-                    return ctx.err(.{ .Unsupported = .{ op, "TODO: memcpy dest" } });
+                const other, const dst_offset = op.base().knownOffset();
+                if (other != res) continue;
+
+                const src, const src_offset = (try self.partialEval(ctx, bl, op.inputs()[3].?))
+                    .knownOffset();
+                if (src.kind != .GlobalAddr) return ctx.err(.{ .Unsupported = .{ op, "TODO: memcpy src" } });
+
+                _ = try self.partialEvalGlobal(ctx, src, src.extra(.GlobalAddr).id);
+
+                const len = try self.partialEval(ctx, bl, op.inputs()[4].?);
+                if (len.kind != .CInt) return ctx.err(.{ .Unsupported = .{ op, "TODO: memcpy len" } });
+
+                const other_mem = self.getTypes().store.get(@as(
+                    utils.EntId(tys.Global),
+                    @enumFromInt(src.extra(.GlobalAddr).id),
+                )).data.mutSlice(self).?;
+
+                @memcpy(
+                    mem[@intCast(dst_offset)..][0..@intCast(len.extra(.CInt).value)],
+                    other_mem[@intCast(src_offset)..][0..@intCast(len.extra(.CInt).value)],
+                );
+
+                bl.func.subsume(op.mem(), op);
             },
             else => return ctx.err(.{ .Unsupported = .{ op, "TODO: stack mut op" } }),
         }
