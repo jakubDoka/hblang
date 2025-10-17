@@ -1477,6 +1477,7 @@ pub const TypeInfo = extern struct {
                 name: Slice(u8),
                 value: i64,
             }),
+            decls: Slice(Decl),
         },
         @"@union": extern struct {
             tag: Id,
@@ -1484,6 +1485,7 @@ pub const TypeInfo = extern struct {
                 name: Slice(u8),
                 ty: Id,
             }),
+            decls: Slice(Decl),
         },
         @"@struct": extern struct {
             alignment: u64,
@@ -1492,6 +1494,7 @@ pub const TypeInfo = extern struct {
                 ty: Id,
                 defalut_value: *anyopaque,
             }),
+            decls: Slice(Decl),
         },
         template: extern struct {
             is_inline: bool,
@@ -1530,6 +1533,10 @@ pub const TypeInfo = extern struct {
         simd,
         array,
     },
+
+    pub const Decl = extern struct {
+        name: Slice(u8),
+    };
 
     pub const is_tagged_union = true;
 };

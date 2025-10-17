@@ -978,6 +978,7 @@ pub fn doTypeInfoInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
             break :b .{ .kind = .@"@struct", .data = .{ .@"@struct" = .{
                 .alignment = struct_ty.getAlignment(types),
                 .fields = .alloc(self, field_mem),
+                .decls = self.allocDecls(ty),
             } } };
         },
         .Enum => |enum_ty| b: {
@@ -995,6 +996,7 @@ pub fn doTypeInfoInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
             break :b .{ .kind = .@"@enum", .data = .{ .@"@enum" = .{
                 .backing_int = enum_ty.getBackingInt(types),
                 .fields = .alloc(self, field_mem),
+                .decls = self.allocDecls(ty),
             } } };
         },
         .Union => |union_ty| b: {
@@ -1012,6 +1014,7 @@ pub fn doTypeInfoInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
             break :b .{ .kind = .@"@union", .data = .{ .@"@union" = .{
                 .tag = union_ty.getTag(types),
                 .fields = .alloc(self, field_mem),
+                .decls = self.allocDecls(ty),
             } } };
         },
         .FnPtr => |fnptr_ty| b: {
@@ -1064,6 +1067,21 @@ pub fn doTypeInfoInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
     vm_ctx.memory = self.gen.mach.out.code.items;
     const ptr = vm_ctx.memory[@intCast(ret_addr)..].ptr;
     @as(*align(1) Types.TypeInfo, @ptrCast(ptr)).* = tp;
+}
+
+pub fn allocDecls(self: *Comptime, ty: Types.Id) Types.Slice(Types.TypeInfo.Decl) {
+    const index = ty.index(self.getTypes()).?;
+
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    const decls = tmp.arena.alloc(Types.TypeInfo.Decl, index.map.entries.len);
+    for (index.map.entries.items(.value), decls) |key, *d| {
+        d.* = .{
+            .name = .alloc(self, key.name),
+        };
+    }
+    return .alloc(self, decls);
 }
 
 pub fn jitFunc(self: *Comptime, fnc: utils.EntId(tys.Func)) !void {

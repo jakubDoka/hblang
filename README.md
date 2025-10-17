@@ -2218,6 +2218,7 @@ MakeStruct := fn(fname: []u8, ftype: type): type {
             ty: ftype,
             defalut_value: idk,
         }],
+        decls: &.[],
     }})
 }
 
@@ -2228,6 +2229,7 @@ MakeUnion := fn(fname: []u8, ftype: type): type {
             name: fname,
             ty: ftype,
         }],
+        decls: &.[],
     }})
 }
 
@@ -2246,6 +2248,7 @@ MakeEnum := fn(fname: []u8): type {
     return @Type(.{@enum: .{
         backing_int: u8,
         fields: fields[..],
+        decls: &.[],
     }})
 }
 ```
