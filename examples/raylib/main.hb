@@ -14,6 +14,16 @@ is_key_down := fn(key: u8): bool @import("IsKeyDown")
 set_random_seed := fn(seed: uint): void @import("SetRandomSeed")
 get_random_value := fn(min: int, max: int): int @import("GetRandomValue")
 
+VTable := struct {
+	.do_thing: ^fn(inst: ^void): u8
+
+	new := fn(t: type): VTable {
+		return &enum {
+			vl := VTable.(@bit_cast(@as(^fn(foo: ^t): u8, &t.do_thing)))
+		}
+	}
+}
+
 V2 := struct {
 	.x: f32;
 	.y: f32

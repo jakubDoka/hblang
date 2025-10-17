@@ -166,6 +166,7 @@ pub const Lexeme = enum(u16) {
     @"@thread_local_storage",
     @"@parent_ptr",
     @"@alloc_global",
+    @"@fnptr_of",
 
     const data = @typeInfo(Lexeme).@"enum";
 

@@ -1198,36 +1198,14 @@ pub fn emitUnOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.UnOp)) EmitErr
             var addrd = try self.emit(.{ .ty = inferred_type }, e.oper);
 
             if (ctx.ty) |fty| function_pointer: {
-                const sig: *tys.FnPtr = self.types.store.unwrap(fty.data(), .FnPtr) orelse
-                    break :function_pointer;
+                if (fty.data() != .FnPtr) break :function_pointer;
+                if (addrd.ty != .type) break :function_pointer;
 
                 const ty = try self.unwrapTyConst(expr, &addrd);
-                const func: *tys.Func = self.types.store.unwrap(ty.data(), .Func) orelse
-                    break :function_pointer;
+                if (ty.data() != .Func) break :function_pointer;
 
-                errdefer self.report(
-                    e.oper,
-                    "...while triing to coerse {} to {}",
-                    .{ ty, fty },
-                ) catch {};
-
-                for (func.args, sig.args, 0..) |harg, earg, i| {
-                    if (harg == earg) continue;
-                    return self.report(e.oper, "the argument no. {} does not match, " ++
-                        "expected {}, got {}", .{ i, earg, harg });
-                }
-
-                if (func.ret != sig.ret) {
-                    return self.report(e.oper, "the return type does not match, " ++
-                        "expected {}, got {}", .{ sig.ret, func.ret });
-                }
-
-                if (self.target == .@"comptime") {
-                    return .mkv(fty, self.bl.addIntImm(sloc, .i64, @intFromEnum(ty.data().Func)));
-                } else {
-                    self.types.queue(self.target, ty);
-                    return .mkv(fty, self.bl.addFuncAddr(sloc, @intFromEnum(ty.data().Func)));
-                }
+                return self.report(e.oper, "you are trying to coerse the ^type to" ++
+                    " function pointer, use @fnptr_of instead", .{});
             }
 
             self.emitSpill(expr, &addrd);
@@ -4646,6 +4624,25 @@ fn emitDirective(
                 self.bl.addFieldLoad(sloc, slice.id.Pointer, TySlice.ptr_offset, .i64),
                 self.bl.addFieldLoad(sloc, slice.id.Pointer, TySlice.len_offset, .i64),
             }, slice.ty);
+        },
+        .fnptr_of => {
+            try assertDirectiveArgs(self, expr, args, "<fn-ty>");
+
+            var addrd = try self.emit(.{}, args[0]);
+
+            const ty = try self.unwrapTyConst(expr, &addrd);
+            const func: *tys.Func = self.types.store.unwrap(ty.data(), .Func) orelse {
+                return self.report(expr, "{} is not a function type", .{ty});
+            };
+
+            const fty = self.types.internPtr(.FnPtr, .{ .args = func.args, .ret = func.ret });
+
+            if (self.target == .@"comptime") {
+                return .mkv(fty, self.bl.addIntImm(sloc, .i64, @intFromEnum(ty.data().Func)));
+            } else {
+                self.types.queue(self.target, ty);
+                return .mkv(fty, self.bl.addFuncAddr(sloc, @intFromEnum(ty.data().Func)));
+            }
         },
         .handler, .@"export" => return self.report(expr, "can only be used in the file scope", .{}),
         .import => return self.report(expr, "can be only used as a body of the function", .{}),

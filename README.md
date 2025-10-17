@@ -1685,6 +1685,19 @@ main := fn(): uint {
 call := fn(f: ^fn(u8): u8, v: u8): u8 return f(v)
 
 main := fn(): uint {
+    return call(@fnptr_of(fn(x: u8): u8 return x - 10), 10)
+}
+```
+
+#### function pointers 5 (errors)
+```hb
+expectations := .{
+    should_error: true,
+}
+
+call := fn(f: ^fn(u8): u8, v: u8): u8 return f(v)
+
+main := fn(): uint {
     return call(&fn(x: u8): u8 return x - 10, 10)
 }
 ```

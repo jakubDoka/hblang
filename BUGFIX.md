@@ -702,7 +702,7 @@ X := struct {
 }
 
 main := fn(): uint {
-    X.(&fn(): void {}).func()
+    X.(@fnptr_of(fn(): void {})).func()
 
     return 0
 }
@@ -715,7 +715,7 @@ DynObj := struct {
     .obj: ^void
 
     $new := fn($T: type, inst: ^T): DynObj {
-        return .(@bit_cast(@as(^fn(foo: ^T): u8, &T.do_thing)), @bit_cast(inst))
+        return .(@bit_cast(@fnptr_of(T.do_thing)), @bit_cast(inst))
     }
 }
 
@@ -742,7 +742,7 @@ DynObj := struct {
         return self.v_func(self.obj)
     }
     $new := fn(obj: @Any()): DynObj {
-        return .(&@TypeOf(obj.*).func, obj)
+        return .(@fnptr_of(@TypeOf(obj.*).func), obj)
     }
 }
 
