@@ -442,8 +442,6 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
                     if (use.get().cfg0() != block) continue;
                     if (use.get().schedule != i + 1) continue;
 
-                    std.debug.print("{f}\n", .{instr});
-
                     instr.id = on_stack_id;
                 }
             }
