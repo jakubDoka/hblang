@@ -18,12 +18,8 @@
         global.get 0
         i32.wrap_i64
         i32.load8_u offset=1
-        local.set 1
-        local.get 1
         br_if 0 (;@2;)
         i64.const 1
-        local.set 3
-        local.get 3
         call $if_statements_4__short_circuit_.effectfull
         local.set 1
         global.get 0
@@ -32,11 +28,9 @@
         i32.store8 offset=3
         global.get 0
         i32.wrap_i64
-        i32.load8_u offset=3
-        local.set 1
         global.get 0
         i32.wrap_i64
-        local.get 1
+        i32.load8_u offset=3
         i32.store8 offset=2
         br 1 (;@1;)
       end
@@ -56,8 +50,6 @@
         global.get 0
         i32.wrap_i64
         i32.load8_u offset=5
-        local.set 1
-        local.get 1
         br_if 0 (;@2;)
         global.get 0
         i32.wrap_i64
@@ -66,8 +58,6 @@
         br 1 (;@1;)
       end
       i64.const 2
-      local.set 3
-      local.get 3
       call $if_statements_4__short_circuit_.effectfull
       local.set 1
       global.get 0
@@ -76,11 +66,9 @@
       i32.store8 offset=6
       global.get 0
       i32.wrap_i64
-      i32.load8_u offset=6
-      local.set 1
       global.get 0
       i32.wrap_i64
-      local.get 1
+      i32.load8_u offset=6
       i32.store8 offset=4
     end
     block  ;; label = @1
@@ -88,8 +76,6 @@
         global.get 0
         i32.wrap_i64
         i32.load8_u offset=4
-        local.set 1
-        local.get 1
         br_if 0 (;@2;)
         br 1 (;@1;)
       end
@@ -103,8 +89,6 @@
         global.get 0
         i32.wrap_i64
         i32.load8_u offset=7
-        local.set 1
-        local.get 1
         br_if 0 (;@2;)
         global.get 0
         i32.wrap_i64
@@ -113,8 +97,6 @@
         br 1 (;@1;)
       end
       i64.const 4
-      local.set 3
-      local.get 3
       call $if_statements_4__short_circuit_.effectfull
       local.set 1
       global.get 0
@@ -123,22 +105,18 @@
       i32.store8 offset=9
       global.get 0
       i32.wrap_i64
-      i32.load8_u offset=9
-      local.set 1
       global.get 0
       i32.wrap_i64
-      local.get 1
+      i32.load8_u offset=9
       i32.store8 offset=8
     end
     block  ;; label = @1
       block  ;; label = @2
         global.get 0
         i32.wrap_i64
-        i32.load8_u offset=8
-        local.set 1
         global.get 0
         i32.wrap_i64
-        local.get 1
+        i32.load8_u offset=8
         i32.store8 offset=7
         global.get 0
         i32.wrap_i64
@@ -147,12 +125,8 @@
         global.get 0
         i32.wrap_i64
         i32.load8_u offset=7
-        local.set 1
-        local.get 1
         br_if 0 (;@2;)
         i64.const 5
-        local.set 3
-        local.get 3
         call $if_statements_4__short_circuit_.effectfull
         local.set 1
         global.get 0
@@ -161,11 +135,9 @@
         i32.store8
         global.get 0
         i32.wrap_i64
-        i32.load8_u
-        local.set 1
         global.get 0
         i32.wrap_i64
-        local.get 1
+        i32.load8_u
         i32.store8 offset=10
         br 1 (;@1;)
       end
@@ -178,25 +150,20 @@
     local.set 3
     global.get 0
     i32.wrap_i64
-    i32.load8_u offset=10
-    local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
+    i32.load8_u offset=10
     i32.store8 offset=7
     local.get 3
     i32.wrap_i64
     i64.load
-    local.set 3
     i64.const 16
     global.get 0
     i64.add
     global.set 0
-    local.get 3
     return
     unreachable)
   (func $if_statements_4__short_circuit_.effectfull (type 1) (param i64) (result i32)
-    (local i32 i64)
     global.get 0
     i64.const 8
     i64.sub
@@ -206,22 +173,16 @@
     local.get 0
     i64.store
     global.get 1
-    local.set 2
+    i32.wrap_i64
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 0
-    local.get 2
-    i32.wrap_i64
-    local.get 0
     i64.store
     i32.const 1
-    local.set 1
     i64.const 8
     global.get 0
     i64.add
     global.set 0
-    local.get 1
     return
     unreachable)
   (table (;0;) 0 funcref)

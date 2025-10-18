@@ -3,74 +3,58 @@
   (type (;1;) (func (param i32 i64) (result i64)))
   (type (;2;) (func))
   (func $main (type 0) (result i64)
-    (local i32 i64)
+    (local i64)
     global.get 0
     i64.const 48
     i64.sub
     global.set 0
+    global.get 0
+    i32.wrap_i64
     i32.const 1
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
     i32.store8
-    i64.const 1
-    local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
+    i64.const 1
     i64.store offset=8
     global.get 0
     i32.wrap_i64
     i32.load8_u
-    local.set 0
     global.get 0
     i32.wrap_i64
     i64.load offset=8
-    local.set 1
-    local.get 0
-    local.get 1
     call $null_unwrap_1.use_opt
-    local.set 1
-    global.get 0
-    i32.wrap_i64
-    local.get 1
-    i64.store offset=32
-    i32.const 0
     local.set 0
     global.get 0
     i32.wrap_i64
     local.get 0
+    i64.store offset=32
+    global.get 0
+    i32.wrap_i64
+    i32.const 0
     i32.store8 offset=16
     global.get 0
     i32.wrap_i64
     i32.load8_u offset=16
-    local.set 0
     global.get 0
     i32.wrap_i64
     i64.load offset=24
-    local.set 1
-    local.get 0
-    local.get 1
     call $null_unwrap_1.use_opt
-    local.set 1
+    local.set 0
     global.get 0
     i32.wrap_i64
-    local.get 1
+    local.get 0
     i64.store offset=40
     global.get 0
     i32.wrap_i64
     i64.load offset=40
-    local.set 1
     i64.const 48
     global.get 0
     i64.add
     global.set 0
-    local.get 1
     return
     unreachable)
   (func $null_unwrap_1.use_opt (type 1) (param i32 i64) (result i64)
-    (local i64 i64 i64)
+    (local i64 i64)
     global.get 0
     i64.const 64
     i64.sub
@@ -87,15 +71,9 @@
       global.get 0
       i32.wrap_i64
       i32.load8_u offset=24
-      local.set 0
-      local.get 0
       i32.const 255
       i32.and
-      local.set 0
-      local.get 0
       i32.eqz
-      local.set 0
-      local.get 0
       br_if 0 (;@1;)
       global.get 0
       i32.wrap_i64
@@ -104,33 +82,27 @@
       local.get 1
       local.get 1
       i64.add
-      local.set 1
       i64.const 64
       global.get 0
       i64.add
       global.set 0
-      local.get 1
       return
     end
     i64.const 40
     global.get 0
     i64.add
     local.set 2
-    global.get 1
-    local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
+    global.get 1
     i64.store offset=40
     i64.const 171798691847
     local.set 3
     i64.const 24
-    local.set 4
-    i64.const 13
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
+    i64.const 13
     i64.store offset=48
     global.get 0
     i32.wrap_i64
@@ -139,12 +111,10 @@
     i64.const 0
     global.get 0
     i64.add
-    local.set 1
-    local.get 1
     i32.wrap_i64
     local.get 2
     i32.wrap_i64
-    local.get 4
+    local.get 1
     i32.wrap_i64
     memory.copy
     call $null_unwrap_1.null_unwrap

@@ -4,16 +4,12 @@
   (func $main (type 0) (result i64)
     (local i64 i64)
     i64.const 2
-    local.set 0
-    local.get 0
     call $Foo.init
-    local.set 0
     local.set 1
-    local.get 1
-    local.get 0
-    i64.sub
     local.set 0
     local.get 0
+    local.get 1
+    i64.sub
     return
     unreachable)
   (func $Foo.init (type 1) (param i64) (result i64 i64)

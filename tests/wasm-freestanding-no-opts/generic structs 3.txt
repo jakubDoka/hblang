@@ -7,17 +7,13 @@
     i64.const 24
     i64.sub
     global.set 0
-    i64.const 10
-    local.set 0
     global.get 0
     i32.wrap_i64
-    local.get 0
+    i64.const 10
     i64.store
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 0
-    local.get 0
     call $generic_structs_3.Foo_uint_.sub
     local.set 0
     global.get 0
@@ -27,8 +23,6 @@
     global.get 0
     i32.wrap_i64
     i64.load offset=8
-    local.set 0
-    local.get 0
     call $generic_structs_3.Foo_uint_.sub
     local.set 0
     global.get 0
@@ -38,12 +32,10 @@
     global.get 0
     i32.wrap_i64
     i64.load offset=16
-    local.set 0
     i64.const 24
     global.get 0
     i64.add
     global.set 0
-    local.get 0
     return
     unreachable)
   (func $generic_structs_3.Foo_uint_.sub (type 1) (param i64) (result i64)
@@ -58,12 +50,10 @@
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 0
     i64.const 8
     global.get 0
     i64.add
     global.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

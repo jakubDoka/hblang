@@ -121,20 +121,14 @@
     global.get 0
     i32.wrap_i64
     i64.load offset=64
-    local.set 7
     global.get 0
     i32.wrap_i64
     i64.load offset=120
-    local.set 8
-    local.get 7
-    local.get 8
     i64.sub
-    local.set 8
     i64.const 128
     global.get 0
     i64.add
     global.set 0
-    local.get 8
     return
     unreachable)
   (func $proper_systemv_abi_1__spilled_arg_.load_of_args (type 1) (param i64 i64 i64 i64 i64 i64 i64 i64) (result i64)
@@ -177,72 +171,52 @@
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 1
     global.get 0
     i32.wrap_i64
     i64.load offset=8
-    local.set 0
-    local.get 1
-    local.get 0
     i64.add
-    local.set 6
-    global.get 0
-    i32.wrap_i64
-    i64.load offset=24
-    local.set 5
-    global.get 0
-    i32.wrap_i64
-    i64.load offset=32
     local.set 4
     global.get 0
     i32.wrap_i64
-    i64.load offset=40
+    i64.load offset=24
     local.set 3
     global.get 0
     i32.wrap_i64
-    i64.load offset=48
+    i64.load offset=32
     local.set 2
     global.get 0
     i32.wrap_i64
-    i64.load offset=56
+    i64.load offset=40
     local.set 1
     global.get 0
     i32.wrap_i64
-    i64.load offset=16
+    i64.load offset=48
     local.set 0
-    local.get 6
-    local.get 0
-    i64.add
-    local.set 0
-    local.get 0
-    local.get 5
-    i64.add
-    local.set 0
-    local.get 0
-    local.get 4
-    i64.add
-    local.set 0
-    local.get 0
-    local.get 3
-    i64.add
-    local.set 0
-    local.get 0
-    local.get 2
-    i64.add
-    local.set 0
+    global.get 0
+    i32.wrap_i64
+    i64.load offset=56
     local.get 0
     local.get 1
+    local.get 2
+    local.get 3
+    local.get 4
+    global.get 0
+    i32.wrap_i64
+    i64.load offset=16
     i64.add
-    local.set 0
+    i64.add
+    i64.add
+    i64.add
+    i64.add
+    i64.add
     i64.const 64
     global.get 0
     i64.add
     global.set 0
-    local.get 0
     return
     unreachable)
   (func $proper_systemv_abi_1__spilled_arg_.stack_args (type 2) (param i64 i64) (result i64)
-    (local i64 i64 i64 i64 i64)
+    (local i64 i64 i64 i64)
     global.get 0
     i64.const 16
     i64.sub
@@ -274,60 +248,40 @@
     local.get 3
     i32.wrap_i64
     i64.load offset=16
-    local.set 6
+    local.set 1
     local.get 2
     i32.wrap_i64
     i64.load offset=8
-    local.set 3
+    local.set 0
+    local.get 1
+    local.get 5
+    local.get 4
     local.get 2
     i32.wrap_i64
     i64.load offset=16
-    local.set 1
+    local.get 0
     local.get 2
     i32.wrap_i64
     i64.load
-    local.set 0
-    local.get 0
-    local.get 3
+    i64.add
+    i64.add
+    i64.add
+    i64.add
     i64.add
     local.set 0
-    local.get 0
-    local.get 1
-    i64.add
-    local.set 0
-    local.get 0
-    local.get 4
-    i64.add
-    local.set 0
-    local.get 0
-    local.get 5
-    i64.add
-    local.set 0
-    local.get 0
-    local.get 6
-    i64.add
-    local.set 3
     global.get 0
     i32.wrap_i64
     i64.load offset=8
-    local.set 1
+    local.get 0
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 0
-    local.get 3
-    local.get 0
     i64.add
-    local.set 0
-    local.get 0
-    local.get 1
     i64.add
-    local.set 0
     i64.const 16
     global.get 0
     i64.add
     global.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

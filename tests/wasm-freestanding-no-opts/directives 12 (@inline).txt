@@ -8,8 +8,6 @@
     i64.sub
     global.set 0
     i64.const 10
-    local.set 0
-    local.get 0
     call $directives_12__@inline_.foo
     local.set 0
     global.get 0
@@ -19,12 +17,10 @@
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 0
     i64.const 8
     global.get 0
     i64.add
     global.set 0
-    local.get 0
     return
     unreachable)
   (func $directives_12__@inline_.foo (type 1) (param i64) (result i64)
@@ -39,12 +35,10 @@
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 0
     i64.const 8
     global.get 0
     i64.add
     global.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

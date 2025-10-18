@@ -5,42 +5,26 @@
   (func $main (type 0) (result i64)
     (local i64 i64)
     i64.const 10
-    local.set 0
-    local.get 0
     call $functions_1.add_one
-    local.set 1
+    local.set 0
     i64.const 20
-    local.set 0
-    local.get 0
     call $functions_1.add_two
-    local.set 0
+    local.set 1
+    local.get 0
     local.get 1
-    local.get 0
     i64.add
-    local.set 0
-    local.get 0
     return
     unreachable)
   (func $functions_1.add_one (type 1) (param i64) (result i64)
-    (local i64)
+    local.get 0
     i64.const 1
-    local.set 1
-    local.get 0
-    local.get 1
     i64.add
-    local.set 0
-    local.get 0
     return
     unreachable)
   (func $functions_1.add_two (type 2) (param i64) (result i64)
-    (local i64)
+    local.get 0
     i64.const 2
-    local.set 1
-    local.get 0
-    local.get 1
     i64.add
-    local.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

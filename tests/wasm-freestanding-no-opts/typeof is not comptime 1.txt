@@ -16,19 +16,14 @@
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 0
     i64.const 8
     global.get 0
     i64.add
     global.set 0
-    local.get 0
     return
     unreachable)
   (func $typeof_is_not_comptime_1.broken1 (type 1) (result i64)
-    (local i64)
     i64.const 0
-    local.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

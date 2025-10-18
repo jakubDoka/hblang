@@ -1180,18 +1180,10 @@ pub fn Func(comptime Backend: type) type {
                 return self.kind == .StackArgOffset;
             }
 
-            pub fn dataDepsWeak(self: *Node) []*Node {
-                if ((self.kind == .Phi and !self.isDataPhi()) or self.kind == .MemJoin) return &.{};
-                const start = self.dataDepOffset();
-                const deps = self.input_base[start..self.input_ordered_len];
-                std.debug.assert(std.mem.indexOfScalar(?*Node, deps, null) == null);
-                return @ptrCast(deps);
-            }
-
             pub fn dataDeps(self: *Node) []*Node {
                 if ((self.kind == .Phi and !self.isDataPhi()) or self.kind == .MemJoin) return &.{};
                 const start = self.dataDepOffset();
-                const len = if (@hasDecl(Backend, "dataDepLen")) Backend.dataDepLen(self) else self.input_ordered_len;
+                const len = self.input_ordered_len;
                 const deps = self.input_base[start..len];
                 std.debug.assert(std.mem.indexOfScalar(?*Node, deps, null) == null);
                 return @ptrCast(deps);
@@ -1496,15 +1488,9 @@ pub fn Func(comptime Backend: type) type {
                 return forceSubclass((self.inputs()[0].?), Cfg);
             }
 
-            // TODO: brah
-            pub fn hasUseForWeak(self: *Node, idx: usize, def: *Node) bool {
-                if (self.kind == .Call and def.kind == .StackArgOffset) return false;
-                return self.dataDepOffset() <= idx and idx < self.input_ordered_len;
-            }
-
             pub fn hasUseFor(self: *Node, idx: usize, def: *Node) bool {
                 if (self.kind == .Call and def.kind == .StackArgOffset) return false;
-                return self.dataDepOffset() <= idx and idx < if (@hasDecl(Backend, "dataDepLen")) Backend.dataDepLen(self) else self.input_ordered_len;
+                return self.dataDepOffset() <= idx and idx < self.input_ordered_len;
             }
 
             pub fn removeUse(self: *Node, idx: usize, use: *Node) void {

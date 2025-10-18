@@ -62,7 +62,10 @@ pub fn setIntersects(a: Set, b: Set) bool {
 pub const i_know_the_api = {};
 
 pub fn isDef(self: *Func.Node) bool {
-    return self.id != on_stack_id and self.kind != .GetLocal;
+    return self.id != on_stack_id and
+        self.kind != .GetLocal and
+        self.kind != .WrapI64 and
+        self.kind != .StackAddr;
 }
 
 pub const on_stack_id = std.math.maxInt(u16);
@@ -122,6 +125,8 @@ pub const classes = enum {
         pub const data_dep_offset = 2;
     };
     pub const GetLocal = extern struct {};
+    pub const WrapI64 = extern struct {};
+    pub const StackAddr = extern struct {};
     pub const Eqz = extern struct {};
 };
 
@@ -277,6 +282,125 @@ pub fn encodeFnType(writer: *std.Io.Writer, ty: graph.Signature) void {
     }
 }
 
+const Stacker = struct {
+    gen: *WasmGen,
+    index: usize,
+    func: *Func,
+    block: *Func.CfgNode,
+    second_round: bool,
+
+    pub fn recoverTree(self: *@This()) bool {
+        const instr = self.block.base.outputs()[self.index].get();
+
+        if (instr.kind == .Phi or instr.kind == .WrapI64 or instr.kind == .GetLocal) {
+            return undefined;
+        }
+
+        var dataDeps = instr.dataDeps();
+
+        if (dataDeps.len != 0 and instr.kind == .BinOp and instr.extra(.BinOp).op.isComutative() and
+            dataDeps[0].schedule > dataDeps[1].schedule)
+        {
+            for (dataDeps[0..], 1..) |dep, j| {
+                const idx = dep.posOfOutput(j, instr);
+                dep.outputs()[idx] = .init(instr, 3 - j, null);
+            }
+            std.mem.swap(*Func.Node, &dataDeps[0], &dataDeps[1]);
+        }
+
+        var tmp = utils.Arena.scrath(null);
+        defer tmp.deinit();
+
+        dataDeps = tmp.arena.dupe(*Func.Node, dataDeps);
+
+        const is_indirect = instr.kind == .Call and instr.extra(.Call).id == graph.indirect_call;
+
+        // in case of indirect calls, first argument becomes the last
+        if (is_indirect) {
+            std.mem.rotate(*Func.Node, dataDeps, dataDeps.len - 1);
+        }
+
+        var iter = std.mem.reverseIterator(dataDeps);
+        var i: usize = dataDeps.len;
+        while (@as(?*Func.Node, iter.next())) |def| {
+            i -= 1;
+            defer instr.input_ordered_len -= 1;
+
+            if (def.kind == .StackArgOffset and instr.kind == .Call) continue;
+
+            var appended: usize = 0;
+
+            const needs_load = b: {
+                // TODO: we should push blocks before calls so that the stack actualy aligns
+                if (def.kind == .Ret or def.kind == .Arg or def.kind == .Phi) break :b true;
+
+                if (def.cfg0() != self.block) break :b true;
+
+                var count: usize = 0;
+                for (def.outputs()) |o| {
+                    if (o.get().hasUseFor(o.pos(), def)) count += 1;
+                }
+
+                if (count != 1) {
+                    break :b true;
+                }
+
+                if (def.schedule != self.index - 1) {
+                    break :b true;
+                }
+
+                break :b false;
+            };
+
+            if (needs_load) {
+                _ = self.func.addNode(.GetLocal, def.sloc, def.data_type, &.{ &self.block.base, def }, .{});
+                appended += 1;
+            }
+
+            const needs_wrap =
+                instr.kind == .MemCpy or
+                (instr.isStore() and dataDeps.len != 1 and i == 0) or
+                (is_indirect and i == dataDeps.len - 1) or
+                instr.isLoad();
+            if (needs_wrap) {
+                _ = self.func.addNode(.WrapI64, def.sloc, .top, &.{&self.block.base}, .{});
+                appended += 1;
+            }
+
+            const to_rotate = self.block.base.outputs()[self.index..];
+            std.mem.rotate(Func.Node.Out, to_rotate, to_rotate.len - appended);
+
+            if (!needs_load) {
+                def.id = on_stack_id;
+                self.index -= 1;
+                _ = self.recoverTree();
+            }
+        }
+
+        if (!self.second_round and switch (instr.kind) {
+            .StackLoad, .StackStore, .SignedStackLoad => true,
+            else => false,
+        }) {
+            _ = self.func.addNode(.StackAddr, .none, .top, &.{&self.block.base}, .{});
+            const to_rotate = self.block.base.outputs()[self.index..];
+            std.mem.rotate(Func.Node.Out, to_rotate, to_rotate.len - 1);
+        }
+
+        return undefined;
+    }
+
+    pub fn recoverBlockTrees(self: *@This()) void {
+        for (self.block.base.outputs(), 0..) |out, i| {
+            out.get().schedule = @intCast(i);
+        }
+
+        while (self.index > 0) {
+            self.index -= 1;
+            _ = self.recoverTree();
+        }
+    }
+};
+
 pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     errdefer unreachable;
 
@@ -340,142 +464,16 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         @bitCast(@as(u32, @intCast(self.ctx.buf.writer.end -
         self.ctx.start_pos - @sizeOf(u32))));
 
-    const Stacker = struct {
-        gen: *WasmGen,
-        index: usize,
-        func: *Func,
-        block: *Func.CfgNode,
-
-        pub fn recoverTree(slf: *@This()) bool {
-            var stopped = false;
-            const instr = slf.block.base.outputs()[slf.index].get();
-
-            //std.debug.assert(instr.kind != .GetLocal);
-
-            if (instr.kind == .Phi) {
-                return undefined;
-            }
-
-            var dataDeps = instr.dataDepsWeak();
-
-            if (instr.kind == .BinOp and instr.extra(.BinOp).op.isComutative() and
-                dataDeps[0].schedule > dataDeps[1].schedule)
-            {
-                for (dataDeps[0..], 1..) |dep, j| {
-                    const idx = dep.posOfOutput(j, instr);
-                    dep.outputs()[idx] = .init(instr, 3 - j, null);
-                }
-                std.mem.swap(*Func.Node, &dataDeps[0], &dataDeps[1]);
-            }
-
-            if (instr.kind == .Call and instr.extra(.Call).id == graph.indirect_call) {
-                return undefined; // Does not matter what we return
-            }
-
-            if (instr.isSub(graph.MemCpy)) {
-                return undefined; // Does not matter what we return
-            }
-
-            if (instr.isStore()) {
-                dataDeps = dataDeps[0 .. dataDeps.len - 1];
-            }
-
-            var iter = std.mem.reverseIterator(dataDeps);
-            var i: usize = instr.input_ordered_len;
-            while (@as(?*Func.Node, iter.next())) |def| {
-                i -= 1;
-                if (false and def.isClone() and def.outputs().len < 3) {
-                    def.id = cloned_on_stack_id;
-                } else if (!stopped and def.cfg0() == slf.block and
-                    def.schedule == slf.index - 1 and
-                    !(def.kind == .Ret or def.kind == .Phi or def.kind == .Arg))
-                {
-                    var dep_count: usize = 0;
-
-                    for (def.outputs()) |out| {
-                        if (out.get().hasUseForWeak(out.pos(), def))
-                            dep_count += 1;
-                    }
-                    if (dep_count == 1) {
-                        slf.index -= 1;
-                        def.id = on_stack_id;
-                        stopped = slf.recoverTree();
-                    } else {
-                        // TODO: opportunity to use local.tee
-                        stopped = true;
-                    }
-                } else {
-                    stopped = true;
-                }
-
-                if (stopped) {
-                    // TODO: is this actually inefficient?
-                    _ = slf.func.addNode(.GetLocal, def.sloc, def.data_type, &.{ &slf.block.base, def }, .{});
-                    const to_rotate = slf.block.base.outputs()[slf.index..];
-                    std.mem.rotate(Func.Node.Out, to_rotate, to_rotate.len - 1);
-                }
-            }
-
-            return stopped;
-        }
-
-        pub fn recoverBlockTrees(slf: *@This()) void {
-            for (slf.block.base.outputs(), 0..) |out, i| {
-                out.get().schedule = @intCast(i);
-                //out.get().id = @intCast(i);
-            }
-
-            while (slf.index > 0) {
-                slf.index -= 1;
-                _ = slf.recoverTree();
-            }
-        }
-    };
-
-    for (0..2) |_| {
-        if (false) {
-            for (func.gcm.postorder) |block| {
-                var iter = std.mem.reverseIterator(block.base.outputs());
-                var i: usize = block.base.outputs().len;
-                out: while (@as(?Func.Node.Out, iter.next())) |out| {
-                    i -= 1;
-
-                    const instr = out.get();
-                    instr.schedule = @intCast(i);
-
-                    if (!instr.isDef()) continue;
-
-                    if (instr.kind == .Arg or instr.kind == .Ret or instr.kind == .Phi) continue;
-
-                    var ouse: ?Func.Node.Out = null;
-                    for (instr.outputs()) |instr_out| {
-                        if (instr_out.get().hasUseForWeak(instr_out.pos(), instr)) {
-                            if (ouse != null) continue :out;
-                            ouse = instr_out;
-                        }
-                    }
-
-                    const use = ouse.?;
-
-                    if (use.pos() == 3 and use.get().isStore()) continue;
-                    if (use.get().kind == .Call and use.get().extra(.Call).id == graph.indirect_call) continue;
-                    if (use.pos() != use.get().dataDepOffsetWeak()) continue;
-                    if (use.get().cfg0() != block) continue;
-                    if (use.get().schedule != i + 1) continue;
-
-                    instr.id = on_stack_id;
-                }
-            }
-        } else if (false) {
-            for (func.gcm.postorder) |block| {
-                var stacker = Stacker{
-                    .gen = self,
-                    .index = block.base.outputs().len,
-                    .func = func,
-                    .block = block,
-                };
-                stacker.recoverBlockTrees();
-            }
+    for (0..2) |i| {
+        for (func.gcm.postorder) |block| {
+            var stacker = Stacker{
+                .gen = self,
+                .index = block.base.outputs().len,
+                .func = func,
+                .block = block,
+                .second_round = i != 0,
+            };
+            stacker.recoverBlockTrees();
         }
 
         if (false) {
@@ -490,7 +488,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         var rloc = Regalloc{};
         self.ctx.allocs = rloc.ralloc(WasmGen, func);
 
-        if (true or rloc.inserted_splits == 0) break;
+        if (rloc.inserted_splits == 0) break;
     } else unreachable;
 
     const LocalCounts = struct {
@@ -803,7 +801,7 @@ pub fn selectLoadOp(ty: graph.DataType) u8 {
 pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
     errdefer unreachable;
 
-    const inps: []*Func.Node = @ptrCast(instr.ordInps()[1..]);
+    const inps: []*Func.Node = @ptrCast(instr.inputs()[1..]);
 
     switch (instr.extra2()) {
         .GetLocal => {
@@ -813,6 +811,14 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
 
             try self.ctx.buf.writer.writeByte(opb(.local_get));
             try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
+        },
+        .WrapI64 => {
+            try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
+        },
+        .StackAddr => {
+            try self.ctx.buf.writer.writeByte(opb(.global_get));
+            try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
+            try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
         },
         .CInt => |extra| {
             switch (dataTypeToWasmType(instr.data_type)) {
@@ -842,7 +848,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalStore(instr);
         },
         .Eqz => {
-            self.emitLocalLoad(inps[0]);
+            //self.emitLocalLoad(inps[0]);
 
             const op_ty = dataTypeToWasmType(inps[0].data_type);
             try self.ctx.buf.writer.writeByte(switch (op_ty) {
@@ -854,7 +860,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalStore(instr);
         },
         .UnOp => |extra| {
-            self.emitLocalLoad(inps[0]);
+            //self.emitLocalLoad(inps[0]);
             const op_ty = dataTypeToWasmType(inps[0].data_type);
             const op_code: u8 = switch (extra.op) {
                 .sext => switch (inps[0].data_type) {
@@ -989,8 +995,8 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalStore(instr);
         },
         .BinOp => |extra| {
-            self.emitLocalLoad(inps[0]);
-            self.emitLocalLoad(inps[1]);
+            // self.emitLocalLoad(inps[0]);
+            // self.emitLocalLoad(inps[1]);
 
             const utl = enum {
                 fn selectOp(op_ty: object.Type, prefix: anytype, name: anytype) u8 {
@@ -1051,11 +1057,6 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
         .WStore => |extra| {
             // TODO: we can emit specialized stores
 
-            self.emitLocalLoad(inps[1]);
-            try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
-
-            self.emitLocalLoad(inps[2]);
-
             try self.ctx.buf.writer.writeByte(selectStoreOp(instr.data_type));
             const alignment = std.math.log2_int(u64, instr.data_type.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
@@ -1065,20 +1066,12 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             const offset = @as(i64, @intCast(instr.base().extra(.LocalAlloc).size +
                 self.ctx.stack_base)) + extra.offset;
 
-            try self.ctx.buf.writer.writeByte(opb(.global_get));
-            try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
-            try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
-
-            self.emitLocalLoad(inps[2]);
-
             try self.ctx.buf.writer.writeByte(selectStoreOp(instr.data_type));
             const alignment = std.math.log2_int(u64, instr.data_type.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
             try self.ctx.buf.writer.writeSleb128(offset);
         },
         .WLoad => |extra| {
-            self.emitLocalLoad(inps[1]);
-            try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
             try self.ctx.buf.writer.writeByte(selectLoadOp(instr.data_type));
             const alignment = std.math.log2_int(u64, instr.data_type.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
@@ -1087,8 +1080,6 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalStore(instr);
         },
         .SignedLoad => |extra| {
-            self.emitLocalLoad(inps[1]);
-            try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
             try self.ctx.buf.writer.writeByte(selectSignedLoadOp(instr.data_type, extra.src_ty));
             const alignment = std.math.log2_int(u64, extra.src_ty.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
@@ -1100,10 +1091,6 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             const offset = @as(i64, @intCast(instr.base().extra(.LocalAlloc).size +
                 self.ctx.stack_base)) + extra.offset;
 
-            try self.ctx.buf.writer.writeByte(opb(.global_get));
-            try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
-            try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
-
             try self.ctx.buf.writer.writeByte(selectLoadOp(instr.data_type));
             const alignment = std.math.log2_int(u64, instr.data_type.size());
             try self.ctx.buf.writer.writeUleb128(alignment);
@@ -1114,10 +1101,6 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
         .SignedStackLoad => |extra| {
             const offset = @as(i64, @intCast(instr.base().extra(.LocalAlloc).size +
                 self.ctx.stack_base)) + extra.offset;
-
-            try self.ctx.buf.writer.writeByte(opb(.global_get));
-            try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
-            try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
 
             try self.ctx.buf.writer.writeByte(selectSignedLoadOp(instr.data_type, extra.src_ty));
             const alignment = std.math.log2_int(u64, extra.src_ty.size());
@@ -1189,10 +1172,10 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalStore(instr);
         },
         .MemCpy => {
-            for (inps[1..]) |inp| {
-                self.emitLocalLoad(inp);
-                try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
-            }
+            //for (inps[1..]) |inp| {
+            //    self.emitLocalLoad(inp);
+            //    try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
+            //}
 
             // memory.copy
             try self.ctx.buf.writer.writeByte(opb(.prefix_fc));
@@ -1202,17 +1185,17 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeUleb128(0);
         },
         .Call => |extra| {
-            for (inps[@as(usize, 1) + @intFromBool(extra.id == graph.indirect_call) ..]) |inp| {
-                if (inp.kind == .StackArgOffset) {
-                    continue;
-                }
+            //for (inps[@as(usize, 1) + @intFromBool(extra.id == graph.indirect_call) ..]) |inp| {
+            //    if (inp.kind == .StackArgOffset) {
+            //        continue;
+            //    }
 
-                self.emitLocalLoad(inp);
-            }
+            //    self.emitLocalLoad(inp);
+            //}
 
             if (extra.id == graph.indirect_call) {
-                self.emitLocalLoad(inps[1]);
-                try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
+                //self.emitLocalLoad(inps[1]);
+                //try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
 
                 try self.ctx.buf.writer.writeByte(opb(.call_indirect));
                 try self.ctx.buf.writer.writeUleb128(self.indirect_signature_count);
@@ -1251,7 +1234,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 }
             } else unreachable;
 
-            self.emitLocalLoad(inps[0]);
+            //self.emitLocalLoad(inps[0]);
 
             if (inps[0].data_type == .i64) {
                 try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
@@ -1261,7 +1244,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeUleb128(label_id);
         },
         .MachSplit => {
-            self.emitLocalLoad(inps[0]);
+            //self.emitLocalLoad(inps[0]);
             self.emitLocalStore(instr);
         },
         .Jmp => {
@@ -1304,9 +1287,9 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             }
         },
         .Return => {
-            for (instr.dataDeps()) |d| {
-                self.emitLocalLoad(d);
-            }
+            //for (instr.dataDeps()) |d| {
+            //    self.emitLocalLoad(d);
+            //}
 
             try self.ctx.buf.writer.writeByte(opb(.@"return"));
         },
@@ -1346,9 +1329,7 @@ pub fn emitData(self: *WasmGen, opts: Mach.DataOptions) void {
     );
 }
 
-pub fn emitLocalLoad(self: *WasmGen, for_instr: *Func.Node) void {
-    //if (true) return;
-
+pub fn _emitLocalLoad(self: *WasmGen, for_instr: *Func.Node) void {
     if (for_instr.id == on_stack_id) {
         return;
     }

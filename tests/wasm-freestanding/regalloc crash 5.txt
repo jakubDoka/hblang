@@ -3,38 +3,25 @@
   (type (;1;) (func (param i64)))
   (type (;2;) (func (param i32) (result i32)))
   (func $main (type 0) (result i64)
-    (local i32 i64)
+    (local i32)
     global.get 2
-    local.set 1
-    local.get 1
     call $regalloc_crash_5.ignore
     global.get 1
-    local.set 1
-    local.get 1
     i32.wrap_i64
     i32.load16_u
-    local.set 0
-    local.get 0
     call $regalloc_crash_5.mod10
     local.set 0
     local.get 0
     i64.extend_i32_u
-    local.set 1
-    local.get 1
     return
     unreachable)
   (func $regalloc_crash_5.ignore (type 1) (param i64)
     return
     unreachable)
   (func $regalloc_crash_5.mod10 (type 2) (param i32) (result i32)
-    (local i32)
+    local.get 0
     i32.const 10
-    local.set 1
-    local.get 0
-    local.get 1
     i32.rem_u
-    local.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

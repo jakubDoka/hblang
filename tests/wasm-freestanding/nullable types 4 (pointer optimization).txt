@@ -2,39 +2,31 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i64) (result i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64)
+    (local i64)
     global.get 0
     i64.const 8
     i64.sub
     global.set 0
-    i64.const 3
-    local.set 0
     global.get 0
     i32.wrap_i64
-    local.get 0
+    i64.const 3
     i64.store
     i64.const 0
     global.get 0
     i64.add
-    local.set 0
-    local.get 0
     call $nullable_types_4__pointer_optimization_.opaque_^uint_
-    local.set 1
-    i64.const 0
     local.set 0
-    local.get 1
-    i32.wrap_i64
     local.get 0
+    i32.wrap_i64
+    i64.const 0
     i64.store
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 0
     i64.const 8
     global.get 0
     i64.add
     global.set 0
-    local.get 0
     return
     unreachable)
   (func $nullable_types_4__pointer_optimization_.opaque_^uint_ (type 1) (param i64) (result i64)
