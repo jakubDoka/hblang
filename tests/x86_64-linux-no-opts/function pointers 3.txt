@@ -25,6 +25,7 @@ main:
 	mov [rsp+0x10], rax
 	mov rax, [rsp+0x10]
 	mov rdi, [rsp+0x08]
+	call rax
 	mov [rsp+0x19], al
 	mov al, [rsp+0x19]
 	movzx rax, al

@@ -7,6 +7,7 @@ main:
 	mov byte ptr [rsp], 0xFF
 	lea rax, [0x0000000000000007]
 	lea rdi, [rsp]
+	call rax
 	movzx rax, al
 	add rsp, 0x08
 	ret

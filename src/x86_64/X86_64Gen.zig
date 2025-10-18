@@ -2213,7 +2213,10 @@ pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
                             ops[0].unnamed_0.imm.value.s + inst.length)).?;
                         opts.print("\t{s} :{}\n", .{ zydis.ZydisMnemonicGetString(inst.mnemonic), label });
                     } else if (inst.mnemonic == zydis.ZYDIS_MNEMONIC_CALL) {
-                        const nm = func_map.get(v.offset + uaddr + 1) orelse continue;
+                        const nm = func_map.get(v.offset + uaddr + 1) orelse {
+                            opts.print("\t{s}\n", .{printed});
+                            continue;
+                        };
                         opts.print("\tcall :{s}\n", .{nm});
                     } else {
                         opts.print("\t{s}\n", .{printed});

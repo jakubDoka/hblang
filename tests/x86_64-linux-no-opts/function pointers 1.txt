@@ -11,6 +11,7 @@ function pointers 1.call:
 	mov [rsp+0x08], sil
 	mov rax, [rsp]
 	mov dil, [rsp+0x08]
+	call rax
 	mov [rsp+0x09], al
 	mov al, [rsp+0x09]
 	add rsp, 0x18
