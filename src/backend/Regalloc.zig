@@ -789,6 +789,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
         coalesce: for (tmp.arena.dupe(Node.Out, bb.base.outputs()), 0..) |in, i| {
             const instr = in.get();
             if (instr.kind != .MachSplit) continue;
+            if (instr.dataDeps().len != 1) continue;
 
             const splitLrg = lrg_table[instr.schedule].unionFind();
             const defLrg = lrg_table[instr.dataDeps()[0].schedule].unionFind();

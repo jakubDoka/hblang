@@ -28,8 +28,6 @@
     i64.const 0
     local.set 2
     i64.const 1
-    local.set 3
-    local.get 3
     local.get 2
     call $slices_3.reverse
     drop
@@ -37,19 +35,17 @@
     i64.const 0
     global.get 0
     i64.add
-    local.set 2
-    i64.const 3
     local.set 3
-    local.get 2
+    i64.const 3
+    local.set 2
     local.get 3
+    local.get 2
     call $slices_3.reverse
     drop
     drop
     global.get 0
     i32.wrap_i64
     i32.load8_u
-    local.set 0
-    local.get 0
     i32.const 255
     i32.and
     i64.extend_i32_u
@@ -57,34 +53,26 @@
     global.get 0
     i32.wrap_i64
     i32.load8_u offset=2
-    local.set 0
-    local.get 0
+    i32.const 255
+    i32.and
+    i64.extend_i32_u
+    local.set 3
+    global.get 0
+    i32.wrap_i64
+    i32.load8_u offset=1
     i32.const 255
     i32.and
     i64.extend_i32_u
     local.set 2
-    global.get 0
-    i32.wrap_i64
-    i32.load8_u offset=1
-    local.set 0
-    local.get 0
-    i32.const 255
-    i32.and
-    i64.extend_i32_u
-    local.set 3
     local.get 4
-    local.get 3
-    i64.sub
-    local.set 3
-    local.get 3
     local.get 2
     i64.sub
-    local.set 3
+    local.get 3
+    i64.sub
     i64.const 8
     global.get 0
     i64.add
     global.set 0
-    local.get 3
     return
     unreachable)
   (func $slices_3.reverse (type 1) (param i64 i64) (result i64 i64)
@@ -93,8 +81,6 @@
       block  ;; label = @2
         local.get 1
         i64.eqz
-        local.set 2
-        local.get 2
         br_if 0 (;@2;)
         i64.const 0
         local.set 4
@@ -109,8 +95,6 @@
             local.get 4
             local.get 6
             i64.lt_u
-            local.set 2
-            local.get 2
             br_if 0 (;@4;)
             br 3 (;@1;)
           end
@@ -125,18 +109,18 @@
           local.get 7
           i32.wrap_i64
           i32.load8_u
-          local.set 3
+          local.set 2
           local.get 8
           i32.wrap_i64
           i32.load8_u
-          local.set 2
+          local.set 3
           local.get 7
           i32.wrap_i64
-          local.get 2
+          local.get 3
           i32.store8
           local.get 8
           i32.wrap_i64
-          local.get 3
+          local.get 2
           i32.store8
           local.get 4
           local.get 5

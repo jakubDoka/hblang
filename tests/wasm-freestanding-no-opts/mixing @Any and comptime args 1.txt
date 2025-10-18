@@ -59,12 +59,10 @@
     local.get 0
     i32.store offset=20
     i64.const 0
-    local.set 4
     i64.const 24
     global.get 0
     i64.add
     global.set 0
-    local.get 4
     return
     unreachable)
   (func $mixing_@Any_and_comptime_args_1.bind_.main__?i32_ (type 1) (param i32 i32) (result i32 i32)
@@ -85,8 +83,6 @@
         global.get 0
         i32.wrap_i64
         i32.load8_u
-        local.set 0
-        local.get 0
         br_if 0 (;@2;)
         i32.const 0
         local.set 0
@@ -107,8 +103,6 @@
       global.get 0
       i32.wrap_i64
       i32.load offset=4
-      local.set 0
-      local.get 0
       call $mixing_@Any_and_comptime_args_1.main
       local.set 0
       local.set 1

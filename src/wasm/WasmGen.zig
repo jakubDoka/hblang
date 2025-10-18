@@ -35,7 +35,9 @@ pub fn dataDepOffset(node: *Func.Node, off: usize) usize {
             extra += 1;
         } else {
             for (node.ordInps()[off + extra ..]) |inn| {
-                std.debug.assert(inn.?.id != on_stack_id);
+                if (inn.?.id == on_stack_id) {
+                    //utils.panic("{f} {f}\n", .{ inn.?, node });
+                }
             }
             break;
         }
@@ -410,7 +412,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
                     _ = out.get().dataDepOffset();
                 }
             }
-        } else if (false) {
+        } else if (true) {
             for (func.gcm.postorder) |block| {
                 var iter = std.mem.reverseIterator(block.base.outputs());
                 var i: usize = block.base.outputs().len;
@@ -434,11 +436,24 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
 
                     const use = ouse.?;
 
+                    if (use.pos() == 3 and use.get().isStore()) continue;
+                    if (use.get().kind == .Call and use.get().extra(.Call).id == graph.indirect_call) continue;
                     if (use.pos() != use.get().dataDepOffsetWeak()) continue;
                     if (use.get().cfg0() != block) continue;
                     if (use.get().schedule != i + 1) continue;
 
+                    std.debug.print("{f}\n", .{instr});
+
                     instr.id = on_stack_id;
+                }
+            }
+
+            if (false) {
+                for (func.gcm.postorder) |block| {
+                    std.debug.print("{f}\n", .{block});
+                    for (block.base.outputs()) |out| {
+                        std.debug.print("  {f}\n", .{out.get()});
+                    }
                 }
             }
         }

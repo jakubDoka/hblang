@@ -10,15 +10,10 @@
     local.get 0
     local.get 1
     i64.sub
-    local.set 1
-    local.get 1
     return
     unreachable)
   (func $custom_one_variant_enum_2.c (type 1) (result i64)
-    (local i64)
     i64.const 5
-    local.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

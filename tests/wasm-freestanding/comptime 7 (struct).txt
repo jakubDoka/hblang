@@ -2,13 +2,10 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (result i64 i64)))
   (func $main (type 0) (result i64)
-    (local i64)
     call $comptime_7__struct_.main.arr_.Dims__._x:_2__y:_1__
     drop
     drop
     i64.const 2
-    local.set 0
-    local.get 0
     return
     unreachable)
   (func $comptime_7__struct_.main.arr_.Dims__._x:_2__y:_1__ (type 1) (result i64 i64)

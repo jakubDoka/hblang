@@ -11,8 +11,6 @@
     local.get 1
     i64.store
     i64.const 0
-    local.set 1
-    local.get 1
     return
     unreachable)
   (table (;0;) 0 funcref)

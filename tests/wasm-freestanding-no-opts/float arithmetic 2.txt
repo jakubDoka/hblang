@@ -2,42 +2,34 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param f32) (result f32)))
   (func $main (type 0) (result i64)
-    (local i64 i64 f32 f32)
+    (local i64 f32 f32)
     global.get 0
     i64.const 8
     i64.sub
     global.set 0
     f32.const 0x1.f4p+9 (;=1000;)
-    local.set 2
-    local.get 2
+    local.set 1
+    local.get 1
     call $float_arithmetic_2.sin
-    local.set 3
+    local.set 2
     global.get 0
     i32.wrap_i64
-    local.get 3
+    local.get 2
     f32.store
     i64.const 826
     local.set 0
     global.get 0
     i32.wrap_i64
     f32.load
-    local.set 3
-    local.get 3
-    local.get 2
-    f32.mul
-    local.set 3
-    local.get 3
-    i64.trunc_f32_s
-    local.set 1
     local.get 1
+    f32.mul
+    i64.trunc_f32_s
     local.get 0
     i64.sub
-    local.set 1
     i64.const 8
     global.get 0
     i64.add
     global.set 0
-    local.get 1
     return
     unreachable)
   (func $float_arithmetic_2.sin (type 1) (param f32) (result f32)
@@ -67,7 +59,7 @@
     f32.const 0x1p-1 (;=0.5;)
     local.set 8
     f32.const 0x1p+1 (;=2;)
-    local.set 9
+    local.set 0
     i32.const 256
     local.set 1
     global.get 0
@@ -77,37 +69,27 @@
     global.get 0
     i32.wrap_i64
     f32.load offset=16
-    local.set 0
-    local.get 0
     f64.promote_f32
-    local.set 13
-    local.get 13
     local.get 12
     f64.mul
-    local.set 12
+    local.set 13
     global.get 0
     i32.wrap_i64
     i64.load32_s offset=24
-    local.set 5
-    local.get 5
     f64.convert_i64_s
-    local.set 13
-    local.get 12
-    local.get 13
-    f64.mul
     local.set 12
+    local.get 13
+    local.get 12
+    f64.mul
+    local.set 13
     global.get 0
     i32.wrap_i64
     f32.load offset=20
-    local.set 0
-    local.get 0
     f64.promote_f32
-    local.set 13
+    local.set 12
+    local.get 13
     local.get 12
-    local.get 13
     f64.div
-    local.set 13
-    local.get 13
     i64.trunc_f64_s
     local.set 5
     global.get 0
@@ -117,38 +99,32 @@
     global.get 0
     i32.wrap_i64
     f32.load offset=16
-    local.set 10
+    local.set 9
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 5
-    local.get 5
     f32.convert_i64_s
-    local.set 0
     local.get 0
-    local.get 9
     f32.mul
-    local.set 9
+    local.set 10
     global.get 0
     i32.wrap_i64
     f32.load offset=20
     local.set 0
-    local.get 9
+    local.get 10
     local.get 0
     f32.mul
-    local.set 9
+    local.set 10
     global.get 0
     i32.wrap_i64
     i64.load32_s offset=24
-    local.set 5
-    local.get 5
     f32.convert_i64_s
     local.set 0
-    local.get 9
+    local.get 10
     local.get 0
     f32.div
     local.set 0
-    local.get 10
+    local.get 9
     local.get 0
     f32.sub
     local.set 0
@@ -191,8 +167,6 @@
     global.get 0
     i32.wrap_i64
     i64.load32_s offset=24
-    local.set 5
-    local.get 5
     local.get 3
     i64.sub
     local.set 5
@@ -207,8 +181,6 @@
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 5
-    local.get 5
     local.get 2
     i64.mul
     local.set 5
@@ -219,52 +191,44 @@
     global.get 0
     i32.wrap_i64
     i64.load offset=8
-    local.set 5
-    local.get 5
     local.get 2
     i64.mul
     local.set 5
     local.get 4
     local.get 5
     i64.add
-    local.set 5
-    local.get 5
     i32.wrap_i64
     f32.load
     local.set 11
     local.get 6
     i32.wrap_i64
     f32.load
-    local.set 10
+    local.set 9
     local.get 8
-    local.get 10
+    local.get 9
     f32.mul
     local.set 0
     global.get 0
     i32.wrap_i64
     f32.load offset=28
-    local.set 9
+    local.set 10
     local.get 0
-    local.get 9
+    local.get 10
     f32.mul
     local.set 0
     local.get 11
     local.get 0
     f32.sub
-    local.set 0
-    local.get 0
-    local.get 9
+    local.get 10
     f32.mul
     local.set 0
-    local.get 10
+    local.get 9
     local.get 0
     f32.add
-    local.set 0
     i64.const 32
     global.get 0
     i64.add
     global.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

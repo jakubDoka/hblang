@@ -63,29 +63,27 @@
     i64.const 72
     global.get 0
     i64.add
-    local.set 2
+    local.set 3
     i64.const 48
     global.get 0
     i64.add
-    local.set 3
+    local.set 4
     i64.const 24
     global.get 0
     i64.add
-    local.set 4
+    local.set 5
     i64.const 0
     global.get 0
     i64.add
-    local.set 5
-    local.get 5
     i32.wrap_i64
-    local.get 2
+    local.get 3
     i32.wrap_i64
     local.get 9
     i32.wrap_i64
     memory.copy
-    local.get 4
+    local.get 5
     i32.wrap_i64
-    local.get 3
+    local.get 4
     i32.wrap_i64
     local.get 9
     i32.wrap_i64
@@ -97,44 +95,28 @@
     local.get 8
     local.get 5
     i64.sub
-    local.set 5
     i64.const 96
     global.get 0
     i64.add
     global.set 0
-    local.get 5
     return
     unreachable)
   (func $proper_systemv_abi_1__spilled_arg_.load_of_args (type 1) (param i64 i64 i64 i64 i64 i64 i64 i64) (result i64)
     local.get 0
     local.get 1
     i64.add
-    local.set 0
-    local.get 0
     local.get 2
     i64.add
-    local.set 0
-    local.get 0
     local.get 3
     i64.add
-    local.set 0
-    local.get 0
     local.get 4
     i64.add
-    local.set 0
-    local.get 0
     local.get 5
     i64.add
-    local.set 0
-    local.get 0
     local.get 6
     i64.add
-    local.set 0
-    local.get 0
     local.get 7
     i64.add
-    local.set 0
-    local.get 0
     return
     unreachable)
   (func $proper_systemv_abi_1__spilled_arg_.stack_args (type 2) (param i64 i64) (result i64)
@@ -158,48 +140,38 @@
     local.get 2
     i32.wrap_i64
     i64.load
-    local.set 2
-    local.get 2
     local.get 4
     i64.add
-    local.set 2
-    local.get 2
     local.get 5
     i64.add
-    local.set 5
+    local.set 4
     local.get 3
     i32.wrap_i64
     i64.load
-    local.set 2
-    local.get 5
-    local.get 2
-    i64.add
     local.set 5
+    local.get 4
+    local.get 5
+    i64.add
+    local.set 4
     local.get 3
     i32.wrap_i64
     i64.load offset=8
-    local.set 2
-    local.get 5
-    local.get 2
-    i64.add
     local.set 5
+    local.get 4
+    local.get 5
+    i64.add
+    local.set 4
     local.get 3
     i32.wrap_i64
     i64.load offset=16
-    local.set 2
+    local.set 5
+    local.get 4
     local.get 5
-    local.get 2
     i64.add
-    local.set 2
-    local.get 2
     local.get 0
     i64.add
-    local.set 0
-    local.get 0
     local.get 1
     i64.add
-    local.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

@@ -34,8 +34,6 @@
     local.get 0
     local.get 2
     i64.sub
-    local.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

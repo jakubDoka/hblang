@@ -75,13 +75,11 @@
     global.get 0
     i32.wrap_i64
     i64.load offset=40
-    local.set 2
+    local.set 3
     global.get 0
     i32.wrap_i64
     i64.load offset=32
-    local.set 3
     local.get 3
-    local.get 2
     call $slices_3.reverse
     local.set 3
     local.set 2
@@ -96,8 +94,6 @@
     global.get 0
     i32.wrap_i64
     i32.load8_u offset=64
-    local.set 0
-    local.get 0
     i32.const 255
     i32.and
     i64.extend_i32_u
@@ -105,8 +101,6 @@
     global.get 0
     i32.wrap_i64
     i32.load8_u offset=66
-    local.set 0
-    local.get 0
     i32.const 255
     i32.and
     i64.extend_i32_u
@@ -114,8 +108,6 @@
     global.get 0
     i32.wrap_i64
     i32.load8_u offset=65
-    local.set 0
-    local.get 0
     i32.const 255
     i32.and
     i64.extend_i32_u
@@ -123,16 +115,12 @@
     local.get 4
     local.get 3
     i64.sub
-    local.set 3
-    local.get 3
     local.get 2
     i64.sub
-    local.set 3
     i64.const 72
     global.get 0
     i64.add
     global.set 0
-    local.get 3
     return
     unreachable)
   (func $slices_3.reverse (type 1) (param i64 i64) (result i64 i64)
@@ -157,8 +145,6 @@
         local.set 1
         local.get 1
         i64.eqz
-        local.set 2
-        local.get 2
         br_if 0 (;@2;)
         i64.const 0
         local.set 3
@@ -199,8 +185,6 @@
             local.get 1
             local.get 3
             i64.lt_u
-            local.set 2
-            local.get 2
             br_if 0 (;@4;)
             global.get 0
             i32.wrap_i64
@@ -211,8 +195,6 @@
           local.get 0
           local.get 1
           i64.add
-          local.set 0
-          local.get 0
           i32.wrap_i64
           i32.load8_u
           local.set 2
@@ -239,8 +221,6 @@
           local.get 3
           local.get 0
           i64.add
-          local.set 0
-          local.get 0
           i32.wrap_i64
           i32.load8_u
           local.set 2
@@ -271,8 +251,6 @@
           global.get 0
           i32.wrap_i64
           i64.load offset=24
-          local.set 0
-          local.get 0
           local.get 4
           i64.add
           local.set 0
@@ -283,8 +261,6 @@
           global.get 0
           i32.wrap_i64
           i64.load offset=16
-          local.set 0
-          local.get 0
           local.get 4
           i64.sub
           local.set 0

@@ -70,28 +70,19 @@
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 3
-    local.get 3
     i32.wrap_i64
     i32.load8_u
-    local.set 0
-    local.get 0
     i32.const 255
     i32.and
     i64.extend_i32_u
-    local.set 3
     i64.const 24
     global.get 0
     i64.add
     global.set 0
-    local.get 3
     return
     unreachable)
   (func $adding_difference_to_a_pointer_1.one (type 1) (result i64)
-    (local i64)
     i64.const 1
-    local.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

@@ -27,10 +27,7 @@
     return
     unreachable)
   (func $null_check_misshap_1.alloc (type 1) (result i64)
-    (local i64)
     global.get 1
-    local.set 0
-    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

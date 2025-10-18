@@ -1753,6 +1753,7 @@ pub fn Func(comptime Backend: type) type {
         const InsertMap = InternMap(Inserter);
 
         pub fn addSplit(self: *Self, block: *CfgNode, def: *Node, dgb: builtin.MachSplit.Dbg, counter: *usize) *Node {
+            std.debug.assert(def.isDef());
             counter.* += 1;
             return self.addNode(.MachSplit, def.sloc, def.data_type, &.{ &block.base, null }, .{ .dbg = dgb });
         }

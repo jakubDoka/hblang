@@ -33,12 +33,8 @@
           global.get 0
           i32.wrap_i64
           i64.load offset=1032
-          local.set 7
-          local.get 7
           local.get 4
           i64.ge_u
-          local.set 1
-          local.get 1
           br_if 0 (;@3;)
           global.get 0
           i32.wrap_i64
@@ -63,25 +59,23 @@
             global.get 0
             i32.wrap_i64
             i64.load offset=1032
-            local.set 8
-            local.get 8
+            local.set 7
+            local.get 7
             i64.eqz
-            local.set 1
-            local.get 1
             br_if 0 (;@4;)
             br 1 (;@3;)
           end
           global.get 0
           i32.wrap_i64
           i64.load offset=1024
-          local.set 7
-          global.get 0
-          i32.wrap_i64
-          local.get 7
-          i64.store offset=1024
+          local.set 8
           global.get 0
           i32.wrap_i64
           local.get 8
+          i64.store offset=1024
+          global.get 0
+          i32.wrap_i64
+          local.get 7
           i64.store offset=1032
         end
         local.get 5

@@ -57,12 +57,10 @@
     local.get 4
     call $slices_5__coersion_.use_slice
     i64.const 0
-    local.set 4
     i64.const 24
     global.get 0
     i64.add
     global.set 0
-    local.get 4
     return
     unreachable)
   (func $slices_5__coersion_.use_slice (type 1) (param i64 i64)
