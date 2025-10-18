@@ -4,8 +4,11 @@
   (type (;2;) (func))
   (type (;3;) (func))
   (func $main (type 0) (result i64)
+    (local i64)
     call $false_positive_in_cycle_detection.main.Wrap_.Wrapper___.A__.test
     i64.const 0
+    local.set 0
+    local.get 0
     return
     unreachable)
   (func $false_positive_in_cycle_detection.main.Wrap_.Wrapper___.A__.test (type 1)

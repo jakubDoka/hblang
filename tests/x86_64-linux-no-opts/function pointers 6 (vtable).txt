@@ -1,0 +1,73 @@
+function pointers 6 (vtable).Dyn2.a:
+	sub rsp, 0x10
+	mov [rsp], rdi
+	mov rax, [rsp]
+	mov dword ptr [rax], 0x62
+	add rsp, 0x10
+	ret
+function pointers 6 (vtable).Test.from(^.Dyn2):
+	push rbx
+	sub rsp, 0x10
+	mov rbx, rdi
+	mov [rsp], rsi
+	mov rdi, rbx
+	call :function pointers 6 (vtable).vtable(.Dyn2, .Test)
+	mov rax, [rsp]
+	mov [rbx+0x10], rax
+	add rsp, 0x10
+	pop rbx
+	ret
+function pointers 6 (vtable).Test.a:
+	sub rsp, 0x08
+	mov [rsp], rdi
+	mov rax, [rsp]
+	mov rdi, [rax+0x10]
+	mov rax, [rax]
+	call rax
+	add rsp, 0x08
+	ret
+function pointers 6 (vtable).Test.b:
+	sub rsp, 0x18
+	mov [rsp], rdi
+	mov rax, [rsp]
+	mov rdi, [rax+0x10]
+	mov rax, [rax+0x08]
+	call rax
+	mov [rsp+0x08], eax
+	mov eax, [rsp+0x08]
+	add rsp, 0x18
+	ret
+function pointers 6 (vtable).Dyn2.b:
+	sub rsp, 0x10
+	mov [rsp], rdi
+	mov rax, [rsp]
+	mov eax, [rax]
+	add rsp, 0x10
+	ret
+function pointers 6 (vtable).vtable(.Dyn2, .Test):
+	sub rsp, 0x10
+	lea rcx, [0x0000000000000007]
+	lea rax, [0x0000000000000007]
+	mov [rsp], rax
+	mov [rsp+0x08], rcx
+	mov rax, [rsp]
+	mov [rdi], rax
+	mov rax, [rsp+0x08]
+	mov [rdi+0x08], rax
+	add rsp, 0x10
+	ret
+main:
+	sub rsp, 0x28
+	mov dword ptr [rsp+0x18], 0xFF
+	lea rdi, [rsp]
+	lea rsi, [rsp+0x18]
+	call :function pointers 6 (vtable).Test.from(^.Dyn2)
+	lea rdi, [rsp]
+	call :function pointers 6 (vtable).Test.a
+	lea rdi, [rsp]
+	call :function pointers 6 (vtable).Test.b
+	mov [rsp+0x1C], eax
+	mov eax, [rsp+0x1C]
+	movsxd rax, eax
+	add rsp, 0x28
+	ret

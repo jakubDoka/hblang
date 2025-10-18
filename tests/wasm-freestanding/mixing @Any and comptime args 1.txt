@@ -51,10 +51,12 @@
     drop
     drop
     i64.const 0
+    local.set 4
     i64.const 16
     global.get 0
     i64.add
     global.set 0
+    local.get 4
     return
     unreachable)
   (func $mixing_@Any_and_comptime_args_1.bind_.main__?i32_ (type 1) (param i32 i32) (result i32 i32)

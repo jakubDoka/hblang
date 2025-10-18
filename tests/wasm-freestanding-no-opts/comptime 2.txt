@@ -34,14 +34,16 @@
     local.get 1
     local.get 0
     i64.add
+    local.set 0
     i64.const 16
     global.get 0
     i64.add
     global.set 0
+    local.get 0
     return
     unreachable)
   (func $comptime_2.main.some_fn3_uint__.some_fn_uint__ (type 1) (result i64)
-    (local i64)
+    (local i64 i64)
     global.get 0
     i64.const 8
     i64.sub
@@ -53,20 +55,24 @@
     local.get 0
     i64.store
     i64.const 10
-    local.set 0
+    local.set 1
     global.get 0
     i32.wrap_i64
     i64.load
+    local.set 0
     local.get 0
+    local.get 1
     i64.add
+    local.set 0
     i64.const 8
     global.get 0
     i64.add
     global.set 0
+    local.get 0
     return
     unreachable)
   (func $comptime_2.main.some_fn3_uint___.some_fn2_.some_fn_uint___uint___ (type 2) (result i64)
-    (local i64)
+    (local i64 i64)
     global.get 0
     i64.const 8
     i64.sub
@@ -78,20 +84,24 @@
     local.get 0
     i64.store
     i64.const 10
-    local.set 0
+    local.set 1
     global.get 0
     i32.wrap_i64
     i64.load
+    local.set 0
     local.get 0
+    local.get 1
     i64.add
+    local.set 0
     i64.const 8
     global.get 0
     i64.add
     global.set 0
+    local.get 0
     return
     unreachable)
   (func $comptime_2.main.some_fn3_uint__.some_fn2_.some_fn_uint___uint__ (type 3) (result i64)
-    (local i64)
+    (local i64 i64)
     global.get 0
     i64.const 8
     i64.sub
@@ -103,20 +113,24 @@
     local.get 0
     i64.store
     i64.const 10
-    local.set 0
+    local.set 1
     global.get 0
     i32.wrap_i64
     i64.load
+    local.set 0
     local.get 0
+    local.get 1
     i64.add
+    local.set 0
     i64.const 8
     global.get 0
     i64.add
     global.set 0
+    local.get 0
     return
     unreachable)
   (func $comptime_2.main.some_fn2_.some_fn_uint___uint_ (type 4) (result i64)
-    (local i64)
+    (local i64 i64)
     global.get 0
     i64.const 8
     i64.sub
@@ -128,20 +142,27 @@
     local.get 0
     i64.store
     i64.const 1
-    local.set 0
+    local.set 1
     global.get 0
     i32.wrap_i64
     i64.load
+    local.set 0
     local.get 0
+    local.get 1
     i64.add
+    local.set 0
     i64.const 8
     global.get 0
     i64.add
     global.set 0
+    local.get 0
     return
     unreachable)
   (func $comptime_2.main.some_fn_uint_ (type 5) (result i64)
+    (local i64)
     i64.const 1
+    local.set 0
+    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

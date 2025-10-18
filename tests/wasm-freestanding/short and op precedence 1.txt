@@ -25,6 +25,8 @@
           block  ;; label = @4
             local.get 1
             i32.eqz
+            local.set 1
+            local.get 1
             br_if 0 (;@4;)
             i64.const 0
             local.set 2

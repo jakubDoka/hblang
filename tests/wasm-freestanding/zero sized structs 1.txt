@@ -14,7 +14,10 @@
     return
     unreachable)
   (func $zero_sized_structs_1.main.X.test (type 2) (result i64)
+    (local i64)
     i64.const 0
+    local.set 0
+    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

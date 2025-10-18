@@ -4,6 +4,8 @@
   (func $main (type 0) (result i64)
     (local i64)
     i64.const 10
+    local.set 0
+    local.get 0
     call $directives_12__@inline_.foo
     local.set 0
     local.get 0

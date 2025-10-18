@@ -15,10 +15,12 @@
     local.get 1
     i32.wrap_i64
     i64.load
+    local.set 1
+    local.get 1
     return
     unreachable)
   (func $global_variables_1.dec (type 1)
-    (local i64 i64)
+    (local i64 i64 i64)
     global.get 1
     local.set 0
     i64.const 1
@@ -26,12 +28,14 @@
     local.get 0
     i32.wrap_i64
     i64.load
+    local.set 2
+    local.get 2
     local.get 1
     i64.sub
-    local.set 1
+    local.set 2
     local.get 0
     i32.wrap_i64
-    local.get 1
+    local.get 2
     i64.store
     return
     unreachable)

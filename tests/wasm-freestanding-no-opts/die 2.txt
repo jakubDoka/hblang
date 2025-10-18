@@ -2,37 +2,44 @@
   (type (;0;) (func))
   (type (;1;) (func (result i64)))
   (func $main (type 0)
-    (local i64)
+    (local i32 i64)
     global.get 0
     i64.const 16
     i64.sub
     global.set 0
     call $die_2.fallible
-    local.set 0
+    local.set 1
     block  ;; label = @1
       global.get 0
       i32.wrap_i64
-      local.get 0
+      local.get 1
       i64.store offset=8
       global.get 0
       i32.wrap_i64
       i64.load offset=8
-      local.set 0
+      local.set 1
       global.get 0
       i32.wrap_i64
-      local.get 0
+      local.get 1
       i64.store
       global.get 0
       i32.wrap_i64
       i64.load
+      local.set 1
+      local.get 1
       i64.eqz
+      local.set 0
+      local.get 0
       br_if 0 (;@1;)
       unreachable
     end
     unreachable
     unreachable)
   (func $die_2.fallible (type 1) (result i64)
+    (local i64)
     i64.const 0
+    local.set 0
+    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

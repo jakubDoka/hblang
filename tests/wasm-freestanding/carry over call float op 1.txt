@@ -3,17 +3,23 @@
   (type (;1;) (func (param f32) (result f32)))
   (type (;2;) (func (param i64) (result i64)))
   (func $main (type 0) (result i64)
-    (local f32 f32)
+    (local i64 f32 f32)
     f32.const 0x1p+0 (;=1;)
+    local.set 1
+    local.get 1
     call $carry_over_call_float_op_1.opaque_f32_
-    local.set 0
+    local.set 2
     f32.const 0x1p+1 (;=2;)
+    local.set 1
+    local.get 1
     call $carry_over_call_float_op_1.opaque_f32_
     local.set 1
     i64.const 0
+    local.set 0
+    local.get 0
     call $carry_over_call_float_op_1.opaque_uint_
     drop
-    local.get 0
+    local.get 2
     local.get 1
     f32.add
     local.set 1
@@ -22,6 +28,8 @@
     drop
     local.get 1
     i64.trunc_f32_s
+    local.set 0
+    local.get 0
     return
     unreachable)
   (func $carry_over_call_float_op_1.opaque_f32_ (type 1) (param f32) (result f32)

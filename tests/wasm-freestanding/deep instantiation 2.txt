@@ -10,7 +10,7 @@
   (type (;8;) (func (result i32)))
   (type (;9;) (func (result i32)))
   (func $main (type 0) (result i64)
-    (local i32 i32)
+    (local i32 i32 i64)
     call $deep_instantiation_2.S________.Z________.get
     local.set 0
     i32.const 8
@@ -18,9 +18,13 @@
     local.get 0
     local.get 1
     i32.ne
+    local.set 1
+    local.get 1
     i32.const 255
     i32.and
     i64.extend_i32_u
+    local.set 2
+    local.get 2
     return
     unreachable)
   (func $deep_instantiation_2.S________.Z________.get (type 1) (result i32)
@@ -32,6 +36,8 @@
     local.get 0
     local.get 1
     i32.add
+    local.set 1
+    local.get 1
     return
     unreachable)
   (func $deep_instantiation_2.S_______.Z_______.get (type 2) (result i32)
@@ -43,6 +49,8 @@
     local.get 0
     local.get 1
     i32.add
+    local.set 1
+    local.get 1
     return
     unreachable)
   (func $deep_instantiation_2.S______.Z______.get (type 3) (result i32)
@@ -54,6 +62,8 @@
     local.get 0
     local.get 1
     i32.add
+    local.set 1
+    local.get 1
     return
     unreachable)
   (func $deep_instantiation_2.S_____.Z_____.get (type 4) (result i32)
@@ -65,6 +75,8 @@
     local.get 0
     local.get 1
     i32.add
+    local.set 1
+    local.get 1
     return
     unreachable)
   (func $deep_instantiation_2.S____.Z____.get (type 5) (result i32)
@@ -76,6 +88,8 @@
     local.get 0
     local.get 1
     i32.add
+    local.set 1
+    local.get 1
     return
     unreachable)
   (func $deep_instantiation_2.S___.Z___.get (type 6) (result i32)
@@ -87,6 +101,8 @@
     local.get 0
     local.get 1
     i32.add
+    local.set 1
+    local.get 1
     return
     unreachable)
   (func $deep_instantiation_2.S__.Z__.get (type 7) (result i32)
@@ -98,6 +114,8 @@
     local.get 0
     local.get 1
     i32.add
+    local.set 1
+    local.get 1
     return
     unreachable)
   (func $deep_instantiation_2.S_.Z_.get (type 8) (result i32)
@@ -109,10 +127,15 @@
     local.get 0
     local.get 1
     i32.add
+    local.set 1
+    local.get 1
     return
     unreachable)
   (func $deep_instantiation_2.Z.get (type 9) (result i32)
+    (local i32)
     i32.const 0
+    local.set 0
+    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

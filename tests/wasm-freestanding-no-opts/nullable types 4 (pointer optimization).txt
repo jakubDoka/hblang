@@ -16,6 +16,8 @@
     i64.const 16
     global.get 0
     i64.add
+    local.set 0
+    local.get 0
     call $nullable_types_4__pointer_optimization_.opaque_^uint_
     local.set 0
     global.get 0
@@ -35,16 +37,20 @@
     global.get 0
     i32.wrap_i64
     i64.load
+    local.set 0
+    local.get 0
     i32.wrap_i64
     local.get 1
     i64.store
     global.get 0
     i32.wrap_i64
     i64.load offset=16
+    local.set 0
     i64.const 24
     global.get 0
     i64.add
     global.set 0
+    local.get 0
     return
     unreachable)
   (func $nullable_types_4__pointer_optimization_.opaque_^uint_ (type 1) (param i64) (result i64)
@@ -59,10 +65,12 @@
     global.get 0
     i32.wrap_i64
     i64.load
+    local.set 0
     i64.const 8
     global.get 0
     i64.add
     global.set 0
+    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

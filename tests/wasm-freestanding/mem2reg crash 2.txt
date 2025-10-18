@@ -34,6 +34,8 @@
     i64.const 0
     global.get 0
     i64.add
+    local.set 2
+    local.get 2
     local.get 0
     local.get 1
     call $mem2reg_crash_2.insert
@@ -41,55 +43,65 @@
     local.get 2
     i32.wrap_i64
     i64.load
+    local.set 2
     i64.const 32
     global.get 0
     i64.add
     global.set 0
+    local.get 2
     return
     unreachable)
   (func $mem2reg_crash_2.insert (type 1) (param i64 i64 i64) (result i64)
-    (local i64 i64 i64 i64)
+    (local i32 i64 i64 i64 i64 i64)
     i64.const 1
-    local.set 3
-    i64.const 8
     local.set 4
-    i64.const 0
+    i64.const 8
     local.set 5
+    i64.const 0
+    local.set 6
     loop  ;; label = @1
       i64.const 0
-      local.set 6
+      local.set 7
       loop  ;; label = @2
         block  ;; label = @3
-          local.get 6
-          local.get 4
+          local.get 7
+          local.get 5
           i64.ge_u
+          local.set 3
+          local.get 3
           br_if 0 (;@3;)
           block  ;; label = @4
             local.get 0
             i32.wrap_i64
             i64.load
-            local.set 2
-            local.get 2
+            local.set 8
+            local.get 8
             i32.wrap_i64
             i64.load
+            local.set 2
+            local.get 2
             local.get 1
             i64.eq
-            br_if 0 (;@4;)
-            local.get 6
+            local.set 3
             local.get 3
+            br_if 0 (;@4;)
+            local.get 7
+            local.get 4
             i64.add
-            local.set 6
+            local.set 7
             br 2 (;@2;)
           end
-          local.get 2
-          local.get 4
+          local.get 8
+          local.get 5
           i64.add
+          local.set 0
+          local.get 0
           return
         end
-        local.get 5
-        local.get 3
+        local.get 6
+        local.get 4
         i64.add
-        local.set 5
+        local.set 6
         br 1 (;@1;)
       end
     end

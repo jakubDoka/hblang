@@ -19,10 +19,12 @@
     local.get 1
     i64.store offset=8
     i64.const 2
+    local.set 1
     i64.const 16
     global.get 0
     i64.add
     global.set 0
+    local.get 1
     return
     unreachable)
   (func $comptime_7__struct_.main.arr_.Dims__._x:_2__y:_1__ (type 1) (result i64 i64)

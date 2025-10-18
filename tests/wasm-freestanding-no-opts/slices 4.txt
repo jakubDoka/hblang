@@ -2,7 +2,7 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i64 i64 i64 i64) (result i32)))
   (func $main (type 0) (result i64)
-    (local i32 i32 i64 i64 i64)
+    (local i32 i32 i64 i64 i64 i64)
     global.get 0
     i64.const 40
     i64.sub
@@ -73,7 +73,11 @@
           global.get 0
           i32.wrap_i64
           i32.load8_u offset=35
+          local.set 1
+          local.get 1
           i32.eqz
+          local.set 1
+          local.get 1
           br_if 0 (;@3;)
           global.get 0
           i32.wrap_i64
@@ -82,16 +86,18 @@
           global.get 0
           i32.wrap_i64
           i64.load
-          local.set 2
+          local.set 5
           global.get 0
           i32.wrap_i64
           i64.load offset=24
-          local.set 3
+          local.set 2
           global.get 0
           i32.wrap_i64
           i64.load offset=16
+          local.set 3
           local.get 3
           local.get 2
+          local.get 5
           local.get 4
           call $slices_4.equals
           local.set 1
@@ -103,7 +109,11 @@
             global.get 0
             i32.wrap_i64
             i32.load8_u offset=36
+            local.set 1
+            local.get 1
             i32.eqz
+            local.set 1
+            local.get 1
             br_if 0 (;@4;)
             i64.const 0
             local.set 3
@@ -123,7 +133,7 @@
     return
     unreachable)
   (func $slices_4.equals (type 1) (param i64 i64 i64 i64) (result i32)
-    (local i32)
+    (local i32 i32)
     global.get 0
     i64.const 40
     i64.sub
@@ -159,6 +169,8 @@
             local.get 1
             local.get 0
             i64.ne
+            local.set 4
+            local.get 4
             br_if 0 (;@4;)
             block  ;; label = @5
               global.get 0
@@ -172,6 +184,8 @@
               local.get 0
               local.get 1
               i64.eq
+              local.set 4
+              local.get 4
               br_if 0 (;@5;)
               i64.const 0
               local.set 0
@@ -186,35 +200,49 @@
                   global.get 0
                   i32.wrap_i64
                   i64.load offset=8
-                  local.set 1
+                  local.set 0
                   global.get 0
                   i32.wrap_i64
                   i64.load offset=32
-                  local.set 0
-                  local.get 0
+                  local.set 1
                   local.get 1
+                  local.get 0
                   i64.eq
+                  local.set 4
+                  local.get 4
                   br_if 0 (;@7;)
                   block  ;; label = @8
                     global.get 0
                     i32.wrap_i64
                     i64.load offset=16
+                    local.set 0
                     local.get 0
+                    local.get 1
                     i64.add
+                    local.set 0
+                    local.get 0
                     i32.wrap_i64
                     i32.load8_u
-                    local.set 4
+                    local.set 5
                     global.get 0
                     i32.wrap_i64
                     i64.load
+                    local.set 0
                     local.get 0
+                    local.get 1
                     i64.add
+                    local.set 0
+                    local.get 0
                     i32.wrap_i64
                     i32.load8_u
+                    local.set 4
                     local.get 4
+                    local.get 5
                     i32.ne
+                    local.set 4
+                    local.get 4
                     br_if 0 (;@8;)
-                    local.get 0
+                    local.get 1
                     local.get 2
                     i64.add
                     local.set 0

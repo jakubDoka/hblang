@@ -13,8 +13,12 @@
     local.get 0
     i32.wrap_i64
     i64.load
+    local.set 0
+    local.get 0
     local.get 1
     i64.sub
+    local.set 0
+    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

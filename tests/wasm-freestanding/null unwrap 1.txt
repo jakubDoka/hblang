@@ -33,15 +33,21 @@
       local.get 0
       i32.const 255
       i32.and
+      local.set 0
+      local.get 0
       i32.eqz
+      local.set 0
+      local.get 0
       br_if 0 (;@1;)
       local.get 1
       local.get 1
       i64.add
+      local.set 1
       i64.const 48
       global.get 0
       i64.add
       global.set 0
+      local.get 1
       return
     end
     i64.const 24
@@ -71,6 +77,8 @@
     i64.const 0
     global.get 0
     i64.add
+    local.set 1
+    local.get 1
     i32.wrap_i64
     local.get 2
     i32.wrap_i64

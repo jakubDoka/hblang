@@ -2,8 +2,11 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func))
   (func $main (type 0) (result i64)
+    (local i64)
     call $fmt_prec_2.f
     i64.const 0
+    local.set 0
+    local.get 0
     return
     unreachable)
   (func $fmt_prec_2.f (type 1)

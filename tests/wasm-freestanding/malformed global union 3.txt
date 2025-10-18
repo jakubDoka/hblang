@@ -10,7 +10,11 @@
         local.get 0
         i32.const 255
         i32.and
+        local.set 0
+        local.get 0
         i32.eqz
+        local.set 0
+        local.get 0
         br_if 0 (;@2;)
         i64.const 1
         local.set 1
@@ -23,7 +27,10 @@
     return
     unreachable)
   (func $malformed_global_union_3.func (type 1) (result i32)
+    (local i32)
     i32.const 0
+    local.set 0
+    local.get 0
     return
     unreachable)
   (table (;0;) 0 funcref)

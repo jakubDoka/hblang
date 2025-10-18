@@ -18,35 +18,37 @@
     i64.const 24
     global.get 0
     i64.add
-    call $function_pointers_3.DynObj.new_.Obj_
-    local.set 2
     local.set 1
-    global.get 0
-    i32.wrap_i64
     local.get 1
-    i64.store
+    call $function_pointers_3.DynObj.new_.Obj_
+    local.set 1
+    local.set 2
     global.get 0
     i32.wrap_i64
     local.get 2
+    i64.store
+    global.get 0
+    i32.wrap_i64
+    local.get 1
     i64.store offset=8
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 2
+    local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 2
+    local.get 1
     i64.store offset=16
     global.get 0
     i32.wrap_i64
     i64.load offset=16
-    local.set 1
+    local.set 2
     global.get 0
     i32.wrap_i64
     i64.load offset=8
-    local.set 2
-    local.get 2
+    local.set 1
     local.get 1
+    local.get 2
     i32.wrap_i64
     call_indirect (type 0)
     local.set 0
@@ -57,13 +59,17 @@
     global.get 0
     i32.wrap_i64
     i32.load8_u offset=25
+    local.set 0
+    local.get 0
     i32.const 255
     i32.and
     i64.extend_i32_u
+    local.set 1
     i64.const 32
     global.get 0
     i64.add
     global.set 0
+    local.get 1
     return
     unreachable)
   (func $function_pointers_3.DynObj.new_.Obj_ (type 2) (param i64) (result i64 i64)
@@ -107,7 +113,7 @@
     return
     unreachable)
   (func $function_pointers_3.Obj.do_thing (type 3) (param i64) (result i32)
-    (local i32)
+    (local i32 i32)
     global.get 0
     i64.const 8
     i64.sub
@@ -121,14 +127,20 @@
     global.get 0
     i32.wrap_i64
     i64.load
+    local.set 0
+    local.get 0
     i32.wrap_i64
     i32.load8_u
+    local.set 2
+    local.get 2
     local.get 1
     i32.add
+    local.set 2
     i64.const 8
     global.get 0
     i64.add
     global.set 0
+    local.get 2
     return
     unreachable)
   (table (;0;) 1 funcref)

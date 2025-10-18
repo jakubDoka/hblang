@@ -28,22 +28,25 @@ pub fn loadDatatype(node: *Func.Node) graph.DataType {
 
 pub const Set = std.DynamicBitSetUnmanaged;
 
-pub fn dataDepOffset(node: *Func.Node, off: usize) usize {
-    var extra: usize = 0;
-    for (node.ordInps()[off..]) |in| {
+pub fn dataDepLen(node: *Func.Node) usize {
+    var len: usize = node.input_ordered_len;
+    var iter = std.mem.reverseIterator(node.ordInps());
+    while (@as(??*Func.Node, iter.next())) |in| {
+        if (in == null) break;
         if (in.?.id == on_stack_id) {
-            extra += 1;
+            len -= 1;
         } else {
-            for (node.ordInps()[off + extra ..]) |inn| {
-                if (inn.?.id == on_stack_id) {
-                    //utils.panic("{f} {f}\n", .{ inn.?, node });
+            for (node.ordInps()[0..len]) |inn| {
+                if (inn == null) break;
+                if (inn.?.id == on_stack_id and inn.?.kind != .StackArgOffset) {
+                    utils.panic("{f} {f}\n", .{ inn.?, node });
                 }
             }
             break;
         }
     }
 
-    return extra;
+    return len;
 }
 
 pub fn setMasks(set: *Set) []Set.MaskInt {
@@ -59,10 +62,11 @@ pub fn setIntersects(a: Set, b: Set) bool {
 pub const i_know_the_api = {};
 
 pub fn isDef(self: *Func.Node) bool {
-    return self.id != on_stack_id;
+    return self.id != on_stack_id and self.kind != .GetLocal;
 }
 
 pub const on_stack_id = std.math.maxInt(u16);
+pub const cloned_on_stack_id = on_stack_id - 1;
 
 pub const ScopeRange = struct {
     kind: enum { loop, block },
@@ -117,6 +121,7 @@ pub const classes = enum {
         offset: i64,
         pub const data_dep_offset = 2;
     };
+    pub const GetLocal = extern struct {};
     pub const Eqz = extern struct {};
 };
 
@@ -335,84 +340,100 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         @bitCast(@as(u32, @intCast(self.ctx.buf.writer.end -
         self.ctx.start_pos - @sizeOf(u32))));
 
-    for (0..2) |_| {
-        if (false) {
-            for (func.gcm.postorder) |block| {
-                for (block.base.outputs(), 0..) |out, i| {
-                    out.get().schedule = @intCast(i);
+    const Stacker = struct {
+        gen: *WasmGen,
+        index: usize,
+        func: *Func,
+        block: *Func.CfgNode,
 
-                    const pre_deps = out.get().dataDepsWeak();
+        pub fn recoverTree(slf: *@This()) bool {
+            var stopped = false;
+            const instr = slf.block.base.outputs()[slf.index].get();
 
-                    if (out.get().kind == .BinOp and
-                        out.get().extra(.BinOp).op.isComutative() and
-                        pre_deps[0].schedule > pre_deps[1].schedule)
-                    {
-                        std.mem.swap(*Func.Node, &pre_deps[0], &pre_deps[1]);
+            //std.debug.assert(instr.kind != .GetLocal);
 
-                        for (pre_deps[0..], 1..) |dep, j| {
-                            for (dep.outputs()) |*pre_out| {
-                                if (pre_out.get() == out.get()) {
-                                    pre_out.* = .init(out.get(), j, dep);
-                                }
-                            }
-                        }
+            if (instr.kind == .Phi) {
+                return undefined;
+            }
+
+            var dataDeps = instr.dataDepsWeak();
+
+            if (instr.kind == .BinOp and instr.extra(.BinOp).op.isComutative() and
+                dataDeps[0].schedule > dataDeps[1].schedule)
+            {
+                for (dataDeps[0..], 1..) |dep, j| {
+                    const idx = dep.posOfOutput(j, instr);
+                    dep.outputs()[idx] = .init(instr, 3 - j, null);
+                }
+                std.mem.swap(*Func.Node, &dataDeps[0], &dataDeps[1]);
+            }
+
+            if (instr.kind == .Call and instr.extra(.Call).id == graph.indirect_call) {
+                return undefined; // Does not matter what we return
+            }
+
+            if (instr.isSub(graph.MemCpy)) {
+                return undefined; // Does not matter what we return
+            }
+
+            if (instr.isStore()) {
+                dataDeps = dataDeps[0 .. dataDeps.len - 1];
+            }
+
+            var iter = std.mem.reverseIterator(dataDeps);
+            var i: usize = instr.input_ordered_len;
+            while (@as(?*Func.Node, iter.next())) |def| {
+                i -= 1;
+                if (false and def.isClone() and def.outputs().len < 3) {
+                    def.id = cloned_on_stack_id;
+                } else if (!stopped and def.cfg0() == slf.block and
+                    def.schedule == slf.index - 1 and
+                    !(def.kind == .Ret or def.kind == .Phi or def.kind == .Arg))
+                {
+                    var dep_count: usize = 0;
+
+                    for (def.outputs()) |out| {
+                        if (out.get().hasUseForWeak(out.pos(), def))
+                            dep_count += 1;
                     }
-
-                    var deps = tmp.arena.dupe(*Func.Node, pre_deps);
-
-                    if (out.get().kind == .Call and out.get().extra(.Call).id == graph.indirect_call) {
-                        continue;
+                    if (dep_count == 1) {
+                        slf.index -= 1;
+                        def.id = on_stack_id;
+                        stopped = slf.recoverTree();
+                    } else {
+                        // TODO: opportunity to use local.tee
+                        stopped = true;
                     }
+                } else {
+                    stopped = true;
+                }
 
-                    if (out.get().isSub(graph.MemCpy)) {
-                        continue;
-                    }
-
-                    // could we possibly overcome this?
-                    if (out.get().isSub(graph.Store)) {
-                        deps = deps[0 .. deps.len - 1];
-                    }
-
-                    // Algorithm to reduce usage of locals, we look at inputs of each
-                    // value and check if they can be passed on the stack:
-                    // - they are in a correct order
-                    // - they are not preceded by failed value
-                    // - they dont overlap with some other value that waits for the instr that
-                    // waits for a stack arg
-                    var last_idx: usize = 0;
-                    out: for (deps) |dep| {
-                        if (dep.cfg0() != block) break :out;
-                        if (last_idx > dep.schedule) break :out;
-                        last_idx = dep.schedule;
-
-                        if (dep.kind == .Phi or dep.kind == .Arg or dep.kind == .Ret) break :out;
-
-                        var used_count: usize = 0;
-                        for (dep.outputs()) |dep_out| {
-                            if (dep_out.get().hasUseForWeak(dep_out.pos(), out.get()) and
-                                (dep_out.get() != out.get() or used_count != 0))
-                            {
-                                break :out;
-                            }
-                            if (dep_out.get() == out.get()) used_count += 1;
-                        }
-
-                        const until = out.get().schedule;
-                        for (block.base.outputs()[dep.schedule..until]) |inbetween| {
-                            for (inbetween.get().dataDepsWeak()) |idep| {
-                                if (idep.cfg0() != block) break;
-                                //if (idep.id != on_stack_id) break;
-                                if (idep.schedule > dep.schedule) break :out;
-                            }
-                        }
-
-                        dep.id = on_stack_id;
-                    }
-
-                    _ = out.get().dataDepOffset();
+                if (stopped) {
+                    // TODO: is this actually inefficient?
+                    _ = slf.func.addNode(.GetLocal, def.sloc, def.data_type, &.{ &slf.block.base, def }, .{});
+                    const to_rotate = slf.block.base.outputs()[slf.index..];
+                    std.mem.rotate(Func.Node.Out, to_rotate, to_rotate.len - 1);
                 }
             }
-        } else if (true) {
+
+            return stopped;
+        }
+
+        pub fn recoverBlockTrees(slf: *@This()) void {
+            for (slf.block.base.outputs(), 0..) |out, i| {
+                out.get().schedule = @intCast(i);
+                //out.get().id = @intCast(i);
+            }
+
+            while (slf.index > 0) {
+                slf.index -= 1;
+                _ = slf.recoverTree();
+            }
+        }
+    };
+
+    for (0..2) |_| {
+        if (false) {
             for (func.gcm.postorder) |block| {
                 var iter = std.mem.reverseIterator(block.base.outputs());
                 var i: usize = block.base.outputs().len;
@@ -445,13 +466,23 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
                     instr.id = on_stack_id;
                 }
             }
+        } else if (false) {
+            for (func.gcm.postorder) |block| {
+                var stacker = Stacker{
+                    .gen = self,
+                    .index = block.base.outputs().len,
+                    .func = func,
+                    .block = block,
+                };
+                stacker.recoverBlockTrees();
+            }
+        }
 
-            if (false) {
-                for (func.gcm.postorder) |block| {
-                    std.debug.print("{f}\n", .{block});
-                    for (block.base.outputs()) |out| {
-                        std.debug.print("  {f}\n", .{out.get()});
-                    }
+        if (false) {
+            for (func.gcm.postorder) |block| {
+                std.debug.print("{f}\n", .{block});
+                for (block.base.outputs()) |out| {
+                    std.debug.print("  {f}\n", .{out.get()});
                 }
             }
         }
@@ -459,9 +490,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         var rloc = Regalloc{};
         self.ctx.allocs = rloc.ralloc(WasmGen, func);
 
-        if (rloc.inserted_splits == 0) {
-            break;
-        }
+        if (true or rloc.inserted_splits == 0) break;
     } else unreachable;
 
     const LocalCounts = struct {
@@ -777,6 +806,14 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
     const inps: []*Func.Node = @ptrCast(instr.ordInps()[1..]);
 
     switch (instr.extra2()) {
+        .GetLocal => {
+            if (!inps[0].isDef()) {
+                utils.panic("{f}", .{inps[0]});
+            }
+
+            try self.ctx.buf.writer.writeByte(opb(.local_get));
+            try self.ctx.buf.writer.writeUleb128(self.regOf(inps[0]));
+        },
         .CInt => |extra| {
             switch (dataTypeToWasmType(instr.data_type)) {
                 .i32 => {
@@ -1310,6 +1347,8 @@ pub fn emitData(self: *WasmGen, opts: Mach.DataOptions) void {
 }
 
 pub fn emitLocalLoad(self: *WasmGen, for_instr: *Func.Node) void {
+    //if (true) return;
+
     if (for_instr.id == on_stack_id) {
         return;
     }
@@ -1455,6 +1494,7 @@ pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
 
     if (res.Exited != 0) {
         std.debug.print("{s}\n", .{stdout.items});
+        std.debug.print("{s}\n", .{stderr.items});
         return error.WasmInterpError;
     }
 
@@ -1464,6 +1504,10 @@ pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
 
     if (std.mem.startsWith(u8, stdout.items, "main() => error: out of bounds")) {
         return error.OutOfBounds;
+    }
+
+    if (std.mem.startsWith(u8, stdout.items, "main() => error: indirect call signature mismatch")) {
+        return error.IndirectCallSignatureMismatch;
     }
 
     const exe_prefix = "main() => i64:";

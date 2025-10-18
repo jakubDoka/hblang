@@ -1,7 +1,7 @@
 (module
   (type (;0;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i32 i64)
+    (local i32 i64 i64)
     global.get 0
     i64.const 8
     i64.sub
@@ -21,15 +21,21 @@
     global.get 0
     i32.wrap_i64
     i32.load16_u
+    local.set 0
+    local.get 0
     i32.const 65535
     i32.and
     i64.extend_i32_u
+    local.set 2
+    local.get 2
     local.get 1
     i64.sub
+    local.set 2
     i64.const 8
     global.get 0
     i64.add
     global.set 0
+    local.get 2
     return
     unreachable)
   (table (;0;) 0 funcref)

@@ -1166,17 +1166,12 @@ pub fn Func(comptime Backend: type) type {
                 break :b offs;
             };
 
-            pub fn dataDepOffsetWeak(self: *Node) usize {
+            pub fn dataDepOffset(self: *Node) usize {
                 const kind_idx = @intFromEnum(self.kind);
                 const off = dep_offset[kind_idx / per_dep_elem] >>
                     @intCast((kind_idx % per_dep_elem) * sub_elem_width) & ((@as(u16, 1) << sub_elem_width) - 1);
 
                 return off;
-            }
-
-            pub fn dataDepOffset(self: *Node) usize {
-                const off = self.dataDepOffsetWeak();
-                return off + if (@hasDecl(Backend, "dataDepOffset")) Backend.dataDepOffset(self, off) else 0;
             }
 
             // TODO: this is a hack, its here because otherwise everithing gets pulled out of
@@ -1187,7 +1182,7 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn dataDepsWeak(self: *Node) []*Node {
                 if ((self.kind == .Phi and !self.isDataPhi()) or self.kind == .MemJoin) return &.{};
-                const start = self.dataDepOffsetWeak();
+                const start = self.dataDepOffset();
                 const deps = self.input_base[start..self.input_ordered_len];
                 std.debug.assert(std.mem.indexOfScalar(?*Node, deps, null) == null);
                 return @ptrCast(deps);
@@ -1196,7 +1191,8 @@ pub fn Func(comptime Backend: type) type {
             pub fn dataDeps(self: *Node) []*Node {
                 if ((self.kind == .Phi and !self.isDataPhi()) or self.kind == .MemJoin) return &.{};
                 const start = self.dataDepOffset();
-                const deps = self.input_base[start..self.input_ordered_len];
+                const len = if (@hasDecl(Backend, "dataDepLen")) Backend.dataDepLen(self) else self.input_ordered_len;
+                const deps = self.input_base[start..len];
                 std.debug.assert(std.mem.indexOfScalar(?*Node, deps, null) == null);
                 return @ptrCast(deps);
             }
@@ -1503,12 +1499,12 @@ pub fn Func(comptime Backend: type) type {
             // TODO: brah
             pub fn hasUseForWeak(self: *Node, idx: usize, def: *Node) bool {
                 if (self.kind == .Call and def.kind == .StackArgOffset) return false;
-                return self.dataDepOffsetWeak() <= idx and idx < self.input_ordered_len;
+                return self.dataDepOffset() <= idx and idx < self.input_ordered_len;
             }
 
             pub fn hasUseFor(self: *Node, idx: usize, def: *Node) bool {
                 if (self.kind == .Call and def.kind == .StackArgOffset) return false;
-                return self.dataDepOffset() <= idx and idx < self.input_ordered_len;
+                return self.dataDepOffset() <= idx and idx < if (@hasDecl(Backend, "dataDepLen")) Backend.dataDepLen(self) else self.input_ordered_len;
             }
 
             pub fn removeUse(self: *Node, idx: usize, use: *Node) void {

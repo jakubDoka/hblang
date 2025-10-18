@@ -1346,8 +1346,12 @@ pub fn queue(self: *Types, target: Target, task: Id) void {
     }
 }
 
+pub fn canPop(self: *Types, target: Target, pop_limit: usize) bool {
+    return self.func_work_list.get(target).items.len > pop_limit;
+}
+
 pub fn nextLocalTask(self: *Types, target: Target, pop_limit: usize) ?utils.EntId(tys.Func) {
-    while (self.func_work_list.get(target).items.len > pop_limit) {
+    while (self.canPop(target, pop_limit)) {
         const func = self.func_work_list.getPtr(target).pop() orelse return null;
         if (func.get(self).completion.get(target) == .compiled) continue;
         func.get(self).completion.set(target, .compiled);

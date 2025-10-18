@@ -32,10 +32,12 @@
         local.get 0
         br_if 0 (;@2;)
         i64.const 0
+        local.set 1
         i64.const 40
         global.get 0
         i64.add
         global.set 0
+        local.get 1
         return
       end
       block  ;; label = @2
@@ -43,11 +45,17 @@
           local.get 2
           i32.wrap_i64
           i32.load8_u
+          local.set 0
+          local.get 0
           i32.eqz
+          local.set 0
+          local.get 0
           br_if 0 (;@3;)
           global.get 0
           i32.wrap_i64
           i64.load offset=32
+          local.set 1
+          local.get 1
           call $regalloc_crash_4.blackbox
           loop  ;; label = @4
             block  ;; label = @5
@@ -70,6 +78,8 @@
             global.get 0
             i32.wrap_i64
             i64.load offset=32
+            local.set 1
+            local.get 1
             call $regalloc_crash_4.blackbox
             br 0 (;@4;)
           end

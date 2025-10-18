@@ -41,10 +41,12 @@
     local.get 1
     local.get 0
     i64.sub
+    local.set 0
     i64.const 16
     global.get 0
     i64.add
     global.set 0
+    local.get 0
     return
     unreachable)
   (func $pointers_2.swap (type 1) (param i64 i64)

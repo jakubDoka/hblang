@@ -148,6 +148,7 @@ const PartialEvalCtx = struct {
     scope: Types.Id,
     pos: u32,
     error_slot: *PartialEvalResult,
+    runtime_abi: Types.Abi,
 
     pub inline fn err(self: PartialEvalCtx, res: PartialEvalResult) error{Never} {
         self.error_slot.* = res;
@@ -488,7 +489,7 @@ pub fn partialEvalCall(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, curr:
         }
 
         if (func.completion.get(.@"comptime") == .queued) {
-            self.jitFunc(func_id) catch return ctx.err(.{ .Unsupported = .{ curr, "jit func" } });
+            self.jitFunc(func_id, ctx.runtime_abi) catch return ctx.err(.{ .Unsupported = .{ curr, "jit func" } });
         }
         if (types.store.get(func_id).errored) return ctx.err(.{ .Unsupported = .{ curr, "errored" } });
         std.debug.assert(types.store.get(func_id).completion.get(.@"comptime") == .compiled);
@@ -1088,7 +1089,7 @@ pub fn allocDecls(self: *Comptime, ty: Types.Id) Types.Slice(Types.TypeInfo.Decl
     return .alloc(self, decls);
 }
 
-pub fn jitFunc(self: *Comptime, fnc: utils.EntId(tys.Func)) !void {
+pub fn jitFunc(self: *Comptime, fnc: utils.EntId(tys.Func), root_abi: Types.Abi) !void {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
@@ -1100,6 +1101,7 @@ pub fn jitFunc(self: *Comptime, fnc: utils.EntId(tys.Func)) !void {
         gen,
         self.getTypes().func_work_list.get(gen.target).items.len - 1,
         self.getTypes().ct.gen.mach.out.relocs.items.len,
+        root_abi,
     );
 }
 
@@ -1257,7 +1259,7 @@ pub fn jitExprLow(
     }
 
     if (!only_inference) {
-        compileDependencies(gen, pop_until, new_syms_pop_until) catch return error.Never;
+        compileDependencies(gen, pop_until, new_syms_pop_until, gen.abi) catch return error.Never;
     } else {
         types.func_work_list.getPtr(.@"comptime").items.len = pop_until;
     }
@@ -1265,8 +1267,12 @@ pub fn jitExprLow(
     return .{ .{ .func = id }, ret.ty };
 }
 
-pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until: usize) !void {
+pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until: usize, root_abi: Types.Abi) !void {
     while (self.types.nextTask(self.target, pop_until, null)) |func| {
+        if (!self.types.canPop(self.target, pop_until)) {
+            self.abi = root_abi;
+        }
+
         defer self.bl.func.reset();
 
         try self.build(func);

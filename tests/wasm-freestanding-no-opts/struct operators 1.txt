@@ -135,12 +135,20 @@
             local.get 3
             local.get 1
             i32.add
+            local.set 1
+            local.get 1
             local.get 0
             i32.add
+            local.set 1
+            local.get 1
             i32.const 255
             i32.and
+            local.set 1
+            local.get 1
             local.get 2
             i32.ne
+            local.set 1
+            local.get 1
             br_if 0 (;@4;)
             block  ;; label = @5
               i64.const 1
@@ -176,16 +184,20 @@
               global.get 0
               i32.wrap_i64
               i64.load offset=88
-              local.set 6
+              local.set 5
               global.get 0
               i32.wrap_i64
               i64.load offset=72
+              local.set 6
               local.get 6
+              local.get 5
               i64.ne
               local.set 1
               local.get 0
               local.get 1
               i32.or
+              local.set 1
+              local.get 1
               br_if 0 (;@5;)
               block  ;; label = @6
                 global.get 0
@@ -221,16 +233,20 @@
                 global.get 0
                 i32.wrap_i64
                 i64.load offset=120
-                local.set 6
+                local.set 5
                 global.get 0
                 i32.wrap_i64
                 i64.load offset=104
+                local.set 6
                 local.get 6
+                local.get 5
                 i64.eq
                 local.set 1
                 local.get 0
                 local.get 1
                 i32.and
+                local.set 1
+                local.get 1
                 br_if 0 (;@6;)
                 global.get 0
                 i32.wrap_i64
@@ -263,6 +279,8 @@
                 i64.const 32
                 global.get 0
                 i64.add
+                local.set 6
+                local.get 6
                 local.get 8
                 i64.add
                 local.set 7
@@ -380,11 +398,13 @@
                 global.get 0
                 i32.wrap_i64
                 i64.load
-                local.set 6
+                local.set 5
                 global.get 0
                 i32.wrap_i64
                 i64.load offset=32
+                local.set 6
                 local.get 6
+                local.get 5
                 i64.add
                 local.set 6
                 global.get 0
@@ -394,11 +414,13 @@
                 global.get 0
                 i32.wrap_i64
                 i64.load offset=8
-                local.set 6
+                local.set 5
                 global.get 0
                 i32.wrap_i64
                 i64.load offset=40
+                local.set 6
                 local.get 6
+                local.get 5
                 i64.add
                 local.set 6
                 global.get 0
@@ -408,11 +430,13 @@
                 global.get 0
                 i32.wrap_i64
                 i64.load offset=16
-                local.set 6
+                local.set 5
                 global.get 0
                 i32.wrap_i64
                 i64.load offset=48
+                local.set 6
                 local.get 6
+                local.get 5
                 i64.add
                 local.set 6
                 global.get 0
@@ -438,11 +462,13 @@
                 global.get 0
                 i32.wrap_i64
                 i64.load offset=48
-                local.set 6
+                local.set 5
                 global.get 0
                 i32.wrap_i64
                 i64.load offset=32
+                local.set 6
                 local.get 6
+                local.get 5
                 i64.add
                 local.set 6
                 global.get 0
@@ -452,11 +478,13 @@
                 global.get 0
                 i32.wrap_i64
                 i64.load offset=56
-                local.set 6
+                local.set 5
                 global.get 0
                 i32.wrap_i64
                 i64.load offset=40
+                local.set 6
                 local.get 6
+                local.get 5
                 i64.add
                 local.set 6
                 global.get 0

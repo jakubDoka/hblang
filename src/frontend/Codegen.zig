@@ -2993,6 +2993,10 @@ fn emitInternalEca(
 
     var builder = Types.Abi.ableos.builder();
 
+    const prev_abi = self.abi;
+    defer self.abi = prev_abi;
+    self.abi = .ableos;
+
     const ret_ref = self.abi.isByRefRet(self.abiCata(ret_ty));
 
     const params = tmp.arena.alloc(graph.AbiParam, @intFromBool(ret_ref) + (1 + args.len));
@@ -3979,6 +3983,7 @@ pub fn partialEvalLow(self: *Codegen, pos: u32, value: *Value) !Value {
             .pos = pos,
             .error_slot = &err,
             .target = self.target,
+            .runtime_abi = self.abi,
         },
         &self.bl,
         switch (self.abiCata(value.ty)) {

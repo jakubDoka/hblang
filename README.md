@@ -1702,6 +1702,88 @@ main := fn(): uint {
 }
 ```
 
+#### function pointers 6 (vtable)
+```hb
+expectations := .{
+    return_value: 98,
+}
+
+$vtable_entries := fn($T: type): []type {
+    $scratch: [128]type = idk
+    $n := 0
+    $i := 0
+    $while n < @decl_count_of(T) {
+        $decl := T[n]
+        $if @TypeOf(decl) == type $if @type_info(decl) == .@fn {
+            $args := @type_info(decl).@fn.args
+            $if args.len > 0 $if args[0] == ^T {
+                scratch[i] = @TypeOf(@fnptr_of(decl))
+                i += 1
+            }
+        }
+        n += 1
+    }
+    return @alloc_global(scratch[..i])
+}
+
+Vtable := fn($T: type): type {
+    $entries := vtable_entries(T)
+    $n := 0
+
+    Field := @ChildOf(@TypeOf(@type_info(T).@struct.fields))
+    $decls: [entries.len]Field = idk
+
+    $while n < entries.len {
+        decls[n] = .(&.[], entries[n], idk)
+        n += 1
+    }
+    return @Type(.{@struct: .(@align_of(^void), decls[..], &.[])})
+}
+
+$vtable := fn($V: type, $Dyn: type): Vtable(V) {
+    $entries := @eval(vtable_entries(Dyn))
+
+    $if @len_of(Vtable(V)) != entries.len @error(Dyn, " is not an object of kind ", V)
+
+    $tmp: Vtable(V) = idk
+    $n := 0
+    $while n < @len_of(Vtable(V)) {
+        tmp[n] = @bit_cast(@fnptr_of(Dyn[n]))
+        n += 1
+    }
+
+    return tmp
+}
+
+Test := struct {
+    .vt: Vtable(Test);
+    .obj: ^Test
+
+    $from := fn(obj: @Any()): Test {
+        return .(vtable(Test, @ChildOf(@TypeOf(obj))), @bit_cast(obj))
+    }
+    $a := fn(this: ^Test): void return this.vt[0](this.obj)
+    $b := fn(this: ^Test): i32 return this.vt[1](this.obj)
+}
+
+Dyn2 := struct {
+    .inner: i32
+    $a := fn(this: ^Dyn2): void {
+        this.inner = 98
+    }
+    $b := fn(this: ^Dyn2): i32 {
+        return this.inner
+    }
+}
+
+main := fn(): int {
+    a := Dyn2.(255)
+    b := Test.from(&a)
+    _ = b.a()
+    return b.b()
+}
+```
+
 #### struct patters 1
 ```hb
 expectations := .{
@@ -2263,9 +2345,8 @@ main := fn(): uint {
 }
 ```
 
-note: this fails because the comptime and runtime call conventions are different
 #### directives 27 (@alloc_global)
-```!hb
+```hb
 
 mk_arr := fn(len: uint): []u8 {
     buf: [1024]u8 = idk

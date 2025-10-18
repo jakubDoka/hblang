@@ -300,24 +300,6 @@ pub fn Mixin(comptime Backend: type) type {
                         utils.panic("{f}\n", .{child});
                     }
 
-                    //  const foo = struct {
-                    //      fn fmt(locals_: []Local, depth: usize) void {
-                    //          for (locals_) |l| {
-                    //              const le = l.expand() orelse {
-                    //                  for (0..depth) |_| std.debug.print("  ", .{});
-                    //                  std.debug.print("--- null\n", .{});
-                    //                  continue;
-                    //              };
-                    //              if (le != .Node) {
-                    //                  fmt(le.Loop.items, depth + 1);
-                    //                  continue;
-                    //              }
-                    //              for (0..depth) |_| std.debug.print("  ", .{});
-                    //              std.debug.print("--- {f}\n", .{le.Node});
-                    //          }
-                    //      }
-                    //  };
-
                     // either we arrived from the back branch or the other side of the split
                     if (states[child.schedule].expand(locals.len).Join) |s| {
                         if (s.ctrl != child) utils.panic("{f} {} {f} {}\n", .{ s.ctrl, s.ctrl.schedule, child, child.schedule });
