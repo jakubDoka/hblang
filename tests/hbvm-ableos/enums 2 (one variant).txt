@@ -1,10 +1,10 @@
 main:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
-        jal $31, $0, :enums 2 (one variant).Target.current
+        jal $31, $0, :ableos.page_size
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
-enums 2 (one variant).Target.current:
+ableos.page_size:
          cp $1, $0
        jala $0, $31, 0

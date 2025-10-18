@@ -1,0 +1,3 @@
+comptime only leftover 1:6:9: this expression is comptime only and cannot be called at runtime, use @eval(...) to force it into comptime, this is nescessary because the comptime evaluation in runtime context is lazy
+    return @Type(.{@struct: .{
+           ^

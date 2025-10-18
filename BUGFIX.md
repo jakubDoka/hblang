@@ -2,6 +2,26 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### comptime only leftover 1
+```hb
+expectations := .{
+    should_error: true,
+}
+
+Aaaa := fn(): type {
+    return @Type(.{@struct: .{
+        alignment: @align_of(void),
+        fields: &.[],
+        decls: &.[],
+    }})
+}
+
+main := fn(): uint {
+    T := Aaaa()
+    return 0
+}
+```
+
 #### bad opt 1
 ```hb
 $Result := fn($Value: type, $Error: type): type return union(enum) {

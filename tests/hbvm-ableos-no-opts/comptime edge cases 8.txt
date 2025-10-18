@@ -47,20 +47,3 @@ comptime edge cases 8.fun((uint, uint, uint)):
          ld $1, $1, 0, 8
      addi64 $1, $1, -1
        jala $0, $31, 0
-comptime edge cases 8.fun(^(uint, uint, uint)):
-     addi64 $254, $254, -8
-         st $1, $254, 0, 8
-         ld $1, $254, 0, 8
-         ld $1, $1, 0, 8
-     addi64 $1, $1, -1
-     addi64 $254, $254, 8
-       jala $0, $31, 0
-comptime edge cases 8.main.modify:
-     addi64 $254, $254, -8
-         st $1, $254, 0, 8
-         ld $2, $254, 0, 8
-         ld $1, $2, 0, 8
-     addi64 $1, $1, 1
-         st $1, $2, 0, 8
-     addi64 $254, $254, 8
-       jala $0, $31, 0

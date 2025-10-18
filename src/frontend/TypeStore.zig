@@ -16,6 +16,8 @@ const tys = root.frontend.types;
 
 pub const Abi = root.frontend.Abi;
 
+pub const comptime_only_fn = Machine.max_func - 1;
+
 errored: bool = false,
 alignment: void align(std.atomic.cache_line) = {},
 store: utils.EntStore(tys) = .{},
@@ -351,7 +353,7 @@ pub const Id = enum(IdRepr) {
         return @enumFromInt(@intFromEnum(lexeme));
     }
 
-    pub inline fn init(dt: Data) Id {
+    pub fn init(dt: Data) Id {
         const raw: *const RawData = @ptrCast(&dt);
         const raw_id = Repr{ .flag = @intFromEnum(dt), .data = @intCast(raw.id) };
         return @enumFromInt(@as(IdRepr, @bitCast(raw_id)));
@@ -1424,6 +1426,7 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer, gp
     slot.ct.gen.emit_global_reloc_offsets = true;
     slot.ct.gen.push_uninit_globals = true;
     slot.ct.gen.align_globlals = true;
+    slot.ct.gen.comptime_only_fn = comptime_only_fn;
 
     slot.string = slot.makeSlice(.u8);
     slot.source_loc = slot.convertZigTypeToHbType(extern struct {

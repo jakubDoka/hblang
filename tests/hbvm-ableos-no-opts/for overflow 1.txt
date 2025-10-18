@@ -17,6 +17,3 @@ main:
      addi64 $1, $1, 1
          st $1, $254, 0, 8
         jmp :2
-for overflow 1:
-       li64 $1, 128
-       jala $0, $31, 0

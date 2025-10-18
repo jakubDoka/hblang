@@ -8,9 +8,6 @@ main:
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
          tx
-function pointers 1.main:
-      addi8 $1, $1, -10
-       jala $0, $31, 0
 function pointers 1.call:
          st $31, $254, -8, 8
      addi64 $254, $254, -8
@@ -19,4 +16,7 @@ function pointers 1.call:
        jala $31, $3, 0
      addi64 $254, $254, 8
          ld $31, $254, -8, 8
+       jala $0, $31, 0
+function pointers 1.main:
+      addi8 $1, $1, -10
        jala $0, $31, 0

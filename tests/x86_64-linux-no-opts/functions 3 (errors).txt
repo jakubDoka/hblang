@@ -16,9 +16,3 @@ functions 3 (errors):11:8: expected 3 arguments, got 4
 functions 3 (errors):5:20: function returns a uint, which has more then 1 value, but end of the function body is reachable
 main := fn(): uint {
                    ^
-functions 3 (errors):16:2: expected uint got void
-    return
-    ^
-functions 3 (errors):15:46: function returns a uint, which has more then 1 value, but end of the function body is reachable
-some_fn := fn(a: uint, b: void, c: u8): uint {
-                                             ^

@@ -45,6 +45,8 @@ pub fn fuzzRun(
     arena: *utils.Arena,
     output: ?*std.Io.Writer,
 ) !void {
+    if (true) unreachable;
+
     const asts = try tests.parseExample(arena, name, code, output);
 
     const gpa = arena.allocator();

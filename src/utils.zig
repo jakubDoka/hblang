@@ -50,6 +50,9 @@ pub fn dedupeSorted(comptime T: type, slice: []T) usize {
 
 pub fn ensureSlot(self: anytype, gpa: std.mem.Allocator, id: usize) !*std.meta.Child(@TypeOf(self.items)) {
     if (self.items.len <= id) {
+        // this can happen when we fuck up
+        std.debug.assert(id < std.math.maxInt(u32) - 1000);
+
         const prev_len = self.items.len;
         try self.resize(gpa, id + 1);
         @memset(self.items[prev_len..], .invalid);

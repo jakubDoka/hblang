@@ -13,12 +13,6 @@ directives 23.type_id(u64):
 directives 23.type_id(i8):
 	mov rax, 0x01
 	ret
-directives 23.inc:
-	mov rax, [0x0000000000000007]
-	mov rcx, rax
-	inc rcx
-	mov [0x0000000000000007], rcx
-	ret
 main:
 	push rbx
 	sub rsp, 0x30

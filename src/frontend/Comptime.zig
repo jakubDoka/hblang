@@ -21,6 +21,10 @@ const tys = root.frontend.types;
 const OptOptions = root.backend.Machine.OptOptions;
 pub const eca = HbvmGen.eca;
 
+pub const comptime_opts = Machine.OptOptions{
+    .mode = .debug,
+};
+
 vm: Vm = .{},
 gen: HbvmGen,
 in_progress: std.ArrayListUnmanaged(Loc) = .{},
@@ -474,7 +478,7 @@ pub fn partialEvalCall(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, curr:
     const call: *Node = curr.inputs()[0].?;
     std.debug.assert(call.kind == .Call);
 
-    if (call.extra(.Call).id != eca) {
+    if (call.extra(.Call).id != Types.comptime_only_fn) {
         const func_id: utils.EntId(tys.Func) = @enumFromInt(call.extra(.Call).id);
         const func = types.store.get(func_id);
 
@@ -567,7 +571,7 @@ pub fn runVm(
 
     const stack_end = self.vm.regs.get(.stack_addr);
 
-    self.vm.ip = if (entry_id == eca)
+    self.vm.ip = if (entry_id == Types.comptime_only_fn)
         stack_size - 2
     else
         self.gen.mach.out.syms.items[@intFromEnum(self.gen.mach.out.funcs.items[entry_id])].offset;
@@ -1231,7 +1235,7 @@ pub fn jitExprLow(
             gen.errored = self.getTypes().retainGlobals(.@"comptime", &self.gen.mach, true) or
                 gen.errored;
 
-            const reg_alloc_results = optimizeComptime(.debug, HbvmGen, &self.gen, @ptrCast(&gen.bl.func));
+            const reg_alloc_results = optimizeComptime(comptime_opts, HbvmGen, &self.gen, @ptrCast(&gen.bl.func));
 
             var emit_func_met = types.metrics.begin(.jit_emit_func);
             defer emit_func_met.end();
@@ -1270,7 +1274,7 @@ pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until:
         self.errored = self.types.retainGlobals(self.target, &self.types.ct.gen.mach, true) or
             self.errored;
 
-        const reg_alloc_results = optimizeComptime(.debug, HbvmGen, &self.types.ct.gen, @ptrCast(&self.bl.func));
+        const reg_alloc_results = optimizeComptime(comptime_opts, HbvmGen, &self.types.ct.gen, @ptrCast(&self.bl.func));
 
         var emit_func_met = self.types.metrics.begin(.jit_emit_func);
         self.types.ct.gen.emitFunc(

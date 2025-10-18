@@ -1,3 +1,27 @@
+generic structs 5 (iterators).main.Chars.next:
+	sub rsp, 0x10
+	mov rax, [rdi+0x08]
+	cmp rax, 0x00
+	setz al
+	movzx rax, al
+	test al, al
+	jz :0
+	mov byte ptr [rsp], 0x00
+	mov ax, [rsp]
+	jmp :1
+0:	mov rax, [rdi]
+	mov byte ptr [rsp+0x02], 0x01
+	mov al, [rax]
+	mov [rsp+0x03], al
+	mov rdx, [rdi+0x08]
+	dec rdx
+	mov rcx, [rdi]
+	inc rcx
+	mov ax, [rsp+0x02]
+	mov [rdi], rcx
+	mov [rdi+0x08], rdx
+1:	add rsp, 0x10
+	ret
 generic structs 5 (iterators).main.Chain(.Chars, .Chars).next:
 	push rbx
 	push rbp
@@ -47,30 +71,6 @@ generic structs 5 (iterators).main.Chain(.Chars, .Chars).next:
 	pop r12
 	pop rbp
 	pop rbx
-	ret
-generic structs 5 (iterators).main.Chars.next:
-	sub rsp, 0x10
-	mov rax, [rdi+0x08]
-	cmp rax, 0x00
-	setz al
-	movzx rax, al
-	test al, al
-	jz :0
-	mov byte ptr [rsp], 0x00
-	mov ax, [rsp]
-	jmp :1
-0:	mov rax, [rdi]
-	mov byte ptr [rsp+0x02], 0x01
-	mov al, [rax]
-	mov [rsp+0x03], al
-	mov rdx, [rdi+0x08]
-	dec rdx
-	mov rcx, [rdi]
-	inc rcx
-	mov ax, [rsp+0x02]
-	mov [rdi], rcx
-	mov [rdi+0x08], rdx
-1:	add rsp, 0x10
 	ret
 main:
 	push rbx

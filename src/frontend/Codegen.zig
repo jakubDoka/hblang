@@ -267,7 +267,7 @@ pub fn emitReachableSingle(
     }
 
     var errored = false;
-    while (types.nextTask(.runtime, 0, queue) orelse types.retryNextTask(.runtime, 0, queue)) |func| {
+    while (types.nextTask(.runtime, 0, queue)) |func| {
         defer codegen.bl.func.reset();
 
         var build_met = types.metrics.begin(.build);
@@ -286,6 +286,11 @@ pub fn emitReachableSingle(
             },
             error.Uninhabited => continue,
         };
+
+        if (codegen.findComptimeOnlyFunctions(&codegen.bl.func)) {
+            errored = true;
+            continue;
+        }
 
         var errors = std.ArrayListUnmanaged(static_anal.Error){};
 
@@ -325,6 +330,35 @@ pub fn emitReachableSingle(
     }
 
     return errored;
+}
+
+pub fn findComptimeOnlyFunctions(
+    self: *Codegen,
+    func: *graph.Func(Builder),
+) bool {
+    errdefer unreachable;
+
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    var seen = try std.DynamicBitSetUnmanaged
+        .initEmpty(tmp.arena.allocator(), func.next_id);
+
+    var found = false;
+    for (func.collectDfs(tmp.arena.allocator(), &seen)) |node| {
+        if (node.base.kind == .Call and node.base.data_type != .bot) {
+            if (node.base.extra(.Call).id == Types.comptime_only_fn) {
+                self.types.reportSloc(node.base.sloc, "this expression is comptime only and cannot" ++
+                    " be called at runtime, use @eval(...) to force it into comptime, this is " ++
+                    "nescessary because the comptime evaluation in runtime context is lazy", .{});
+                found = true;
+            } else if (self.types.store.isValid(.Func, node.base.extra(.Call).id)) {
+                self.types.queue(self.target, .init(.{ .Func = @enumFromInt(node.base.extra(.Call).id) }));
+            }
+        }
+    }
+
+    return found;
 }
 
 pub fn emitReachableChildThread(
@@ -1149,7 +1183,7 @@ pub fn emitSliceTy(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.SliceTy)) E
     if (e.len.tag() != .Void) {
         var len = try self.emitTyped(.{}, .uint, e.len);
         var ty = try self.emitTyped(.{}, .type, e.elem);
-        return self.emitInternalEca(ctx, .make_array, &.{ len.getValue(sloc, self), ty.getValue(sloc, self) }, .type);
+        return self.emitInternalEca(ctx, expr, .make_array, &.{ len.getValue(sloc, self), ty.getValue(sloc, self) }, .type);
     } else {
         const elem = try self.resolveAnonTy(e.elem);
         return self.emitTyConst(self.types.makeSlice(elem));
@@ -2404,7 +2438,7 @@ fn emitUserType(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Type)) !Value {
         };
     }
 
-    const rets = self.bl.addCall(sloc, .ablecall, Comptime.eca, args);
+    const rets = self.bl.addCall(sloc, .ablecall, Types.comptime_only_fn, args);
     var ret: Value = .mkv(.type, rets.?[0]);
     if (for (args.arg_slots) |a| {
         if (a.kind != .CInt) break false;
@@ -2947,10 +2981,13 @@ pub fn lexemeToBinOpLow(self: Lexer.Lexeme, ty: Types.Id) ?graph.BinOp {
 fn emitInternalEca(
     self: *Codegen,
     ctx: Ctx,
+    expr: Ast.Id,
     ic: Comptime.InteruptCode,
     args: []const *Node,
     ret_ty: Types.Id,
 ) Value {
+    const eca = Types.comptime_only_fn;
+
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
@@ -2990,14 +3027,13 @@ fn emitInternalEca(
     @memcpy(c_args.arg_slots[cursor..], args);
 
     if (ret_ref) {
-        const sloc = self.src(Ast.Id.zeroSized(.Void));
-        _ = self.bl.addCall(sloc, self.abi.cc, Comptime.eca, c_args);
+        _ = self.bl.addCall(self.src(expr), self.abi.cc, eca, c_args);
         return .mkp(ret_ty, c_args.arg_slots[1]);
     }
 
     return self.assembleReturn(
-        Ast.Id.zeroSized(.Void),
-        Comptime.eca,
+        expr,
+        eca,
         c_args,
         ctx,
         ret_ty,
@@ -3484,9 +3520,9 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
     };
 
     if (literal_func) |typ| {
-        const func: root.frontend.types.Func = self.types.store.get(typ.data().Func).*;
-        if (self.target != .runtime or func.ret != .type)
+        if (self.target == .@"comptime") {
             self.types.queue(self.target, .init(.{ .Func = typ.data().Func }));
+        }
     }
 
     const needs_trampoline = self.target == .@"comptime" and ptr != null;
@@ -4147,7 +4183,7 @@ fn assertDirectiveArgsLow(
 fn emitComptimeDirectiveEca(self: *Codegen, ctx: Ctx, expr: Ast.Id, code: Comptime.InteruptCode, ret_ty: Types.Id) !Value {
     var vl = try self.emitTyped(.{}, .type, expr);
 
-    return self.emitInternalEca(ctx, code, &.{
+    return self.emitInternalEca(ctx, expr, code, &.{
         self.bl.addIntImm(.none, .i64, @bitCast(self.src(expr))),
         vl.getValue(self.src(expr), self),
     }, ret_ty);
@@ -4407,6 +4443,7 @@ fn emitDirective(
 
                         return self.emitInternalEca(
                             ctx,
+                            expr,
                             .name_of,
                             &.{ self.emitTyConst(vl.ty).id.Value, vl.getValue(sloc, self) },
                             self.types.string,
@@ -4603,7 +4640,7 @@ fn emitDirective(
             try assertDirectiveArgs(self, expr, args, "<ty>");
 
             const vl = try self.emitTyped(.{}, self.types.type_info, args[0]);
-            return self.emitInternalEca(ctx, .Type, &.{
+            return self.emitInternalEca(ctx, expr, .Type, &.{
                 self.bl.addIntImm(.none, .i64, @bitCast(self.src(expr))),
                 self.bl.addIntImm(.none, .i32, @intFromEnum(self.parent_scope.perm(self.types))),
                 self.bl.addIntImm(.none, .i32, @intFromEnum(expr)),
@@ -4664,7 +4701,7 @@ fn emitDirective(
                 return self.report(args[0], "expected a slice, {} is not", .{slice.ty});
             }
 
-            return self.emitInternalEca(ctx, .alloc_global, &.{
+            return self.emitInternalEca(ctx, expr, .alloc_global, &.{
                 self.emitTyConst(slice.ty.data().Slice.get(self.types).elem).id.Value,
                 self.bl.addFieldLoad(sloc, slice.id.Pointer, TySlice.ptr_offset, .i64),
                 self.bl.addFieldLoad(sloc, slice.id.Pointer, TySlice.len_offset, .i64),

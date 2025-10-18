@@ -1,13 +1,13 @@
-function pointers 1.main:
-	sub dil, 0x0A
-	mov rax, rdi
-	ret
 function pointers 1.call:
 	sub rsp, 0x08
 	mov rax, rdi
 	mov rcx, rsi
 	mov rdi, rcx
 	add rsp, 0x08
+	ret
+function pointers 1.main:
+	sub dil, 0x0A
+	mov rax, rdi
 	ret
 main:
 	sub rsp, 0x08

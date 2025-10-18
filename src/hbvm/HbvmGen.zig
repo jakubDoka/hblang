@@ -17,6 +17,7 @@ ctx: *Ctx = undefined,
 emit_global_reloc_offsets: bool = false,
 push_uninit_globals: bool = false,
 align_globlals: bool = false,
+comptime_only_fn: ?u32 = null,
 
 pub const Ctx = struct {
     local_relocs: std.ArrayListUnmanaged(BlockReloc),
@@ -650,7 +651,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 self.emit(.jeq, .{ self.getReg(inps[0]), .null, 0 });
             },
             .Call => |extra| {
-                if (extra.id == eca) {
+                if (extra.id == eca or extra.id == self.comptime_only_fn) {
                     self.emit(.eca, .{});
                 } else if (extra.id == graph.indirect_call) {
                     self.emit(.jala, .{ .ret_addr, self.getReg(inps[0]), 0 });

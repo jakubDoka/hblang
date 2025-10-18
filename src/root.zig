@@ -261,43 +261,6 @@ pub const Threading = union(enum) {
         };
     }
 
-    pub fn finalize(
-        self: *Threading,
-        out: *std.Io.Writer,
-        out_scratch: ?*utils.Arena,
-        logs: ?*std.Io.Writer,
-        optimizations: backend.Machine.OptOptions.Mode,
-        files: []const utils.LineIndex,
-    ) void {
-        switch (self.*) {
-            .single => |*s| {
-                s.machine.finalize(.{
-                    .optimizations = .{ .mode = optimizations },
-                    .builtins = s.types.getBuiltins(),
-                    .output = out,
-                    .output_scratch = out_scratch,
-                    .logs = logs,
-                    .files = files,
-                });
-            },
-            .multi => |*m| {
-                var tmp = utils.Arena.scrath(null);
-                defer tmp.deinit();
-                m.para.mapping = m.buildMapping(tmp.arena);
-
-                m.machine.finalize(.{
-                    .optimizations = .{ .mode = optimizations },
-                    .builtins = m.types[0].getBuiltins(),
-                    .output = out,
-                    .output_scratch = out_scratch,
-                    .parallelism = &m.para,
-                    .logs = logs,
-                    .files = files,
-                });
-            },
-        }
-    }
-
     pub fn logStats(self: *Threading, out: *std.Io.Writer) void {
         _ = self;
         _ = out;

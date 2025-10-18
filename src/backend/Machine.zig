@@ -10,7 +10,7 @@ const root = @import("hb");
 out: Data,
 vtable: *const VTable,
 
-pub const max_func = std.math.maxInt(u24);
+pub const max_func = std.math.maxInt(u32);
 
 const VTable = struct {
     emitFunc: *const fn (self: *Machine, func: *BuilderFunc, opts: EmitOptions) void,
@@ -647,7 +647,9 @@ pub const Data = struct {
                     continue;
                 }
 
-                std.debug.assert(sym.kind != .invalid);
+                if (sym.kind == .invalid) {
+                    utils.panic("{} {}\n", .{ frame.node, sym });
+                }
                 const next_node = @intFromEnum(self.relocs.items[sym.reloc_offset + frame.dep_idx].target);
                 frame.dep_idx += 1;
 
@@ -880,9 +882,6 @@ pub const OptOptions = struct {
     mode: Mode = .debug,
     arena: ?*utils.Arena = null,
     error_buf: ?*std.ArrayListUnmanaged(static_anal.Error) = null,
-
-    pub const debug = @This(){ .mode = .debug };
-    pub const release = @This(){ .mode = .release };
 
     pub const Mode = enum { release, debug };
 

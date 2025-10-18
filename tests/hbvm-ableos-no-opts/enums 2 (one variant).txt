@@ -10,6 +10,3 @@ main:
 ableos.page_size:
          cp $1, $0
        jala $0, $31, 0
-enums 2 (one variant).Target.current:
-         cp $1, $0
-       jala $0, $31, 0
