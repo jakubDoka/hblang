@@ -22,3 +22,4 @@
   (WLoad (:offset) c m base)
 
 (UnOp _ (:op .uext) (:data_type .i32 | .i16) (WLoad:l)) : l
+(UnOp _ (:op .uext) (:data_type .i32 | .i16) (StackLoad:l)) : l

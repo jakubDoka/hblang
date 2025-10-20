@@ -24,15 +24,11 @@
             i32.wrap_i64
             local.get 0
             i32.store8 offset=4
+            i64.const 1
+            local.set 3
             global.get 0
             i32.wrap_i64
             i32.load8_u offset=4
-            local.set 0
-            i64.const 1
-            local.set 3
-            local.get 0
-            i32.const 255
-            i32.and
             local.set 0
             local.get 1
             local.get 0

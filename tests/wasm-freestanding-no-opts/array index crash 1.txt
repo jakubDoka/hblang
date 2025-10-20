@@ -68,8 +68,6 @@
         i32.load8_u offset=8
         local.set 0
         local.get 0
-        i32.const 255
-        i32.and
         local.get 1
         i32.gt_u
         br_if 0 (;@2;)

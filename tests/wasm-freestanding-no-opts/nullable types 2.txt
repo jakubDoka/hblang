@@ -63,8 +63,6 @@
               global.get 0
               i32.wrap_i64
               i32.load8_u offset=16
-              i32.const 255
-              i32.and
               local.set 0
               i64.const 1
               local.set 1
@@ -75,16 +73,12 @@
                 global.get 0
                 i32.wrap_i64
                 i32.load8_u offset=40
-                i32.const 255
-                i32.and
                 i32.eqz
                 br_if 0 (;@6;)
                 block  ;; label = @7
                   global.get 0
                   i32.wrap_i64
                   i32.load8_u offset=64
-                  i32.const 255
-                  i32.and
                   i32.eqz
                   br_if 0 (;@7;)
                   block  ;; label = @8

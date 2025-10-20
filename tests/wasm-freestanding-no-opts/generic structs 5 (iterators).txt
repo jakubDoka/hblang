@@ -132,8 +132,6 @@
               global.get 0
               i32.wrap_i64
               i32.load8_u offset=126
-              i32.const 255
-              i32.and
               i32.eqz
               br_if 0 (;@5;)
               local.get 8
@@ -153,21 +151,15 @@
                   global.get 0
                   i32.wrap_i64
                   i32.load8_u offset=120
-                  i32.const 255
-                  i32.and
                   i32.eqz
                   br_if 0 (;@7;)
                   block  ;; label = @8
                     global.get 0
                     i32.wrap_i64
                     i32.load8_u offset=121
-                    i32.const 255
-                    i32.and
                     global.get 0
                     i32.wrap_i64
                     i32.load8_u offset=127
-                    i32.const 255
-                    i32.and
                     i32.ne
                     br_if 0 (;@8;)
                     br 7 (;@1;)
@@ -206,8 +198,6 @@
                   global.get 0
                   i32.wrap_i64
                   i32.load8_u offset=122
-                  i32.const 255
-                  i32.and
                   i32.eqz
                   br_if 0 (;@7;)
                   local.get 11
@@ -226,21 +216,15 @@
                     global.get 0
                     i32.wrap_i64
                     i32.load8_u offset=124
-                    i32.const 255
-                    i32.and
                     i32.eqz
                     br_if 0 (;@8;)
                     block  ;; label = @9
                       global.get 0
                       i32.wrap_i64
                       i32.load8_u offset=123
-                      i32.const 255
-                      i32.and
                       global.get 0
                       i32.wrap_i64
                       i32.load8_u offset=125
-                      i32.const 255
-                      i32.and
                       i32.ne
                       br_if 0 (;@9;)
                       br 4 (;@5;)
