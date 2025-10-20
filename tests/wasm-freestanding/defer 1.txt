@@ -52,17 +52,17 @@
                         local.get 5
                         i64.ne
                         br_if 0 (;@10;)
-                        i64.const 0
-                        local.set 4
-                        global.get 0
-                        i32.wrap_i64
-                        local.get 4
-                        i64.store
-                        i64.const 0
-                        global.get 0
-                        i64.add
-                        call $defer_1.main.ret_defer
                         block  ;; label = @11
+                          i64.const 0
+                          local.set 4
+                          global.get 0
+                          i32.wrap_i64
+                          local.get 4
+                          i64.store
+                          i64.const 0
+                          global.get 0
+                          i64.add
+                          call $defer_1.main.ret_defer
                           global.get 0
                           i32.wrap_i64
                           i64.load

@@ -24,45 +24,45 @@
     local.get 1
     i64.store offset=64
     loop  ;; label = @1
-      global.get 0
-      i32.wrap_i64
-      i64.load
-      local.set 2
-      global.get 0
-      i32.wrap_i64
-      i64.load offset=64
-      local.set 3
-      local.get 2
-      local.get 3
-      i64.add
-      local.set 4
-      global.get 0
-      i32.wrap_i64
-      i64.load offset=8
-      local.set 2
-      global.get 0
-      i32.wrap_i64
-      local.get 4
-      i64.store offset=32
-      global.get 0
-      i32.wrap_i64
-      local.get 2
-      local.get 3
-      i64.sub
-      i64.store offset=40
-      global.get 0
-      i32.wrap_i64
-      i64.load offset=32
-      global.get 0
-      i32.wrap_i64
-      i64.load offset=40
-      call $loop_check_1.nextPos
-      local.set 2
-      local.set 0
       block  ;; label = @2
         block  ;; label = @3
           block  ;; label = @4
             block  ;; label = @5
+              global.get 0
+              i32.wrap_i64
+              i64.load
+              local.set 2
+              global.get 0
+              i32.wrap_i64
+              i64.load offset=64
+              local.set 3
+              local.get 2
+              local.get 3
+              i64.add
+              local.set 4
+              global.get 0
+              i32.wrap_i64
+              i64.load offset=8
+              local.set 2
+              global.get 0
+              i32.wrap_i64
+              local.get 4
+              i64.store offset=32
+              global.get 0
+              i32.wrap_i64
+              local.get 2
+              local.get 3
+              i64.sub
+              i64.store offset=40
+              global.get 0
+              i32.wrap_i64
+              i64.load offset=32
+              global.get 0
+              i32.wrap_i64
+              i64.load offset=40
+              call $loop_check_1.nextPos
+              local.set 2
+              local.set 0
               global.get 0
               i32.wrap_i64
               local.get 0
@@ -89,41 +89,41 @@
               local.set 1
               br 1 (;@4;)
             end
-            global.get 0
-            i32.wrap_i64
-            i64.load offset=16
-            local.set 2
-            global.get 0
-            i32.wrap_i64
-            i64.load offset=64
-            local.set 4
-            local.get 2
-            local.get 4
-            i64.sub
-            local.set 2
-            global.get 0
-            i32.wrap_i64
-            local.get 4
-            global.get 0
-            i32.wrap_i64
-            i64.load
-            i64.add
-            i64.store offset=48
-            global.get 0
-            i32.wrap_i64
-            local.get 2
-            i64.store offset=56
-            global.get 0
-            i32.wrap_i64
-            i64.load offset=56
-            local.set 2
-            global.get 0
-            i32.wrap_i64
-            i64.load offset=48
-            local.get 2
-            call $loop_check_1.check
-            local.set 0
             block  ;; label = @5
+              global.get 0
+              i32.wrap_i64
+              i64.load offset=16
+              local.set 2
+              global.get 0
+              i32.wrap_i64
+              i64.load offset=64
+              local.set 4
+              local.get 2
+              local.get 4
+              i64.sub
+              local.set 2
+              global.get 0
+              i32.wrap_i64
+              local.get 4
+              global.get 0
+              i32.wrap_i64
+              i64.load
+              i64.add
+              i64.store offset=48
+              global.get 0
+              i32.wrap_i64
+              local.get 2
+              i64.store offset=56
+              global.get 0
+              i32.wrap_i64
+              i64.load offset=56
+              local.set 2
+              global.get 0
+              i32.wrap_i64
+              i64.load offset=48
+              local.get 2
+              call $loop_check_1.check
+              local.set 0
               global.get 0
               i32.wrap_i64
               local.get 0

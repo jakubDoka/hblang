@@ -3,9 +3,9 @@
   (type (;1;) (func (result i64)))
   (func $main (type 0)
     (local i64)
-    call $die_2.fallible
-    local.set 0
     block  ;; label = @1
+      call $die_2.fallible
+      local.set 0
       local.get 0
       i64.eqz
       br_if 0 (;@1;)

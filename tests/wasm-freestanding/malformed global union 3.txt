@@ -3,10 +3,10 @@
   (type (;1;) (func (result i32)))
   (func $main (type 0) (result i64)
     (local i32 i64)
-    call $malformed_global_union_3.func
-    local.set 0
     block  ;; label = @1
       block  ;; label = @2
+        call $malformed_global_union_3.func
+        local.set 0
         local.get 0
         i32.const 255
         i32.and

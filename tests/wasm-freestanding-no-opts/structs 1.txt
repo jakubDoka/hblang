@@ -9,51 +9,51 @@
     i64.const 88
     i64.sub
     global.set 0
-    i64.const 24
-    global.get 0
-    i64.add
-    local.set 0
-    i64.const 8
-    local.set 1
-    global.get 0
-    i32.wrap_i64
-    i64.const 4
-    i64.store offset=24
-    i64.const 24
-    local.set 2
-    local.get 0
-    local.get 1
-    i64.add
-    i32.wrap_i64
-    global.get 1
-    i32.wrap_i64
-    local.get 1
-    i32.wrap_i64
-    memory.copy
-    i64.const 3
-    local.set 3
-    global.get 0
-    i32.wrap_i64
-    local.get 3
-    i64.store offset=40
-    i64.const 48
-    global.get 0
-    i64.add
-    local.set 4
-    i64.const 0
-    global.get 0
-    i64.add
-    i32.wrap_i64
-    local.get 0
-    i32.wrap_i64
-    local.get 2
-    i32.wrap_i64
-    memory.copy
-    local.get 4
-    call $structs_1.odher_pass
     block  ;; label = @1
       block  ;; label = @2
         block  ;; label = @3
+          i64.const 24
+          global.get 0
+          i64.add
+          local.set 0
+          i64.const 8
+          local.set 1
+          global.get 0
+          i32.wrap_i64
+          i64.const 4
+          i64.store offset=24
+          i64.const 24
+          local.set 2
+          local.get 0
+          local.get 1
+          i64.add
+          i32.wrap_i64
+          global.get 1
+          i32.wrap_i64
+          local.get 1
+          i32.wrap_i64
+          memory.copy
+          i64.const 3
+          local.set 3
+          global.get 0
+          i32.wrap_i64
+          local.get 3
+          i64.store offset=40
+          i64.const 48
+          global.get 0
+          i64.add
+          local.set 4
+          i64.const 0
+          global.get 0
+          i64.add
+          i32.wrap_i64
+          local.get 0
+          i32.wrap_i64
+          local.get 2
+          i32.wrap_i64
+          memory.copy
+          local.get 4
+          call $structs_1.odher_pass
           global.get 0
           i32.wrap_i64
           i64.load offset=64
@@ -64,17 +64,17 @@
           local.get 3
           i64.ne
           br_if 0 (;@3;)
-          global.get 0
-          i32.wrap_i64
-          i64.load offset=56
-          local.set 1
-          global.get 0
-          i32.wrap_i64
-          i64.load offset=48
-          local.get 1
-          call $structs_1.Ty.sum
-          local.set 1
           block  ;; label = @4
+            global.get 0
+            i32.wrap_i64
+            i64.load offset=56
+            local.set 1
+            global.get 0
+            i32.wrap_i64
+            i64.load offset=48
+            local.get 1
+            call $structs_1.Ty.sum
+            local.set 1
             global.get 0
             i32.wrap_i64
             local.get 1

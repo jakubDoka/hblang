@@ -7,59 +7,59 @@
     i64.const 40
     i64.sub
     global.set 0
-    i64.const 3
-    local.set 1
-    global.get 0
-    i32.wrap_i64
-    global.get 1
-    i64.store
-    global.get 0
-    i32.wrap_i64
-    local.get 1
-    i64.store offset=8
-    i32.const 99
-    local.set 0
-    i64.const 32
-    global.get 0
-    i64.add
-    local.set 2
-    global.get 0
-    i32.wrap_i64
-    i32.const 97
-    i32.store8 offset=32
-    global.get 0
-    i32.wrap_i64
-    i32.const 98
-    i32.store8 offset=33
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i32.store8 offset=34
-    global.get 0
-    i32.wrap_i64
-    local.get 2
-    i64.store offset=16
-    global.get 0
-    i32.wrap_i64
-    local.get 1
-    i64.store offset=24
-    global.get 0
-    i32.wrap_i64
-    i64.load
-    local.set 1
-    global.get 0
-    i32.wrap_i64
-    i64.load offset=8
-    local.set 2
-    local.get 1
-    local.get 2
-    local.get 1
-    local.get 2
-    call $slices_4.equals
-    local.set 0
     block  ;; label = @1
       block  ;; label = @2
         block  ;; label = @3
+          i64.const 3
+          local.set 1
+          global.get 0
+          i32.wrap_i64
+          global.get 1
+          i64.store
+          global.get 0
+          i32.wrap_i64
+          local.get 1
+          i64.store offset=8
+          i32.const 99
+          local.set 0
+          i64.const 32
+          global.get 0
+          i64.add
+          local.set 2
+          global.get 0
+          i32.wrap_i64
+          i32.const 97
+          i32.store8 offset=32
+          global.get 0
+          i32.wrap_i64
+          i32.const 98
+          i32.store8 offset=33
+          global.get 0
+          i32.wrap_i64
+          local.get 0
+          i32.store8 offset=34
+          global.get 0
+          i32.wrap_i64
+          local.get 2
+          i64.store offset=16
+          global.get 0
+          i32.wrap_i64
+          local.get 1
+          i64.store offset=24
+          global.get 0
+          i32.wrap_i64
+          i64.load
+          local.set 1
+          global.get 0
+          i32.wrap_i64
+          i64.load offset=8
+          local.set 2
+          local.get 1
+          local.get 2
+          local.get 1
+          local.get 2
+          call $slices_4.equals
+          local.set 0
           global.get 0
           i32.wrap_i64
           local.get 0
@@ -69,27 +69,27 @@
           i32.load8_u offset=35
           i32.eqz
           br_if 0 (;@3;)
-          global.get 0
-          i32.wrap_i64
-          i64.load offset=8
-          local.set 3
-          global.get 0
-          i32.wrap_i64
-          i64.load
-          local.set 1
-          global.get 0
-          i32.wrap_i64
-          i64.load offset=24
-          local.set 2
-          global.get 0
-          i32.wrap_i64
-          i64.load offset=16
-          local.get 2
-          local.get 1
-          local.get 3
-          call $slices_4.equals
-          local.set 0
           block  ;; label = @4
+            global.get 0
+            i32.wrap_i64
+            i64.load offset=8
+            local.set 3
+            global.get 0
+            i32.wrap_i64
+            i64.load
+            local.set 1
+            global.get 0
+            i32.wrap_i64
+            i64.load offset=24
+            local.set 2
+            global.get 0
+            i32.wrap_i64
+            i64.load offset=16
+            local.get 2
+            local.get 1
+            local.get 3
+            call $slices_4.equals
+            local.set 0
             global.get 0
             i32.wrap_i64
             local.get 0

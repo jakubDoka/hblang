@@ -11,13 +11,13 @@
     i64.const 32
     i64.sub
     global.set 0
-    call $various_mem_opts_1.store_pullout
-    local.set 0
     block  ;; label = @1
       block  ;; label = @2
         block  ;; label = @3
           block  ;; label = @4
             block  ;; label = @5
+              call $various_mem_opts_1.store_pullout
+              local.set 0
               global.get 0
               i32.wrap_i64
               local.get 0
@@ -32,9 +32,9 @@
               local.get 0
               i64.ne
               br_if 0 (;@5;)
-              call $various_mem_opts_1.duplicate_store
-              local.set 1
               block  ;; label = @6
+                call $various_mem_opts_1.duplicate_store
+                local.set 1
                 global.get 0
                 i32.wrap_i64
                 local.get 1
@@ -45,9 +45,9 @@
                 local.get 0
                 i64.ne
                 br_if 0 (;@6;)
-                call $various_mem_opts_1.combine_pull_out_duplicate
-                local.set 1
                 block  ;; label = @7
+                  call $various_mem_opts_1.combine_pull_out_duplicate
+                  local.set 1
                   global.get 0
                   i32.wrap_i64
                   local.get 1
@@ -58,9 +58,9 @@
                   local.get 0
                   i64.ne
                   br_if 0 (;@7;)
-                  call $various_mem_opts_1.parallel_stores
-                  local.set 1
                   block  ;; label = @8
+                    call $various_mem_opts_1.parallel_stores
+                    local.set 1
                     global.get 0
                     i32.wrap_i64
                     local.get 1
@@ -104,16 +104,16 @@
     i64.const 8
     i64.sub
     global.set 0
-    global.get 0
-    i32.wrap_i64
-    i64.const 1
-    i64.store
-    i64.const 0
-    global.get 0
-    i64.add
-    call $various_mem_opts_1.use_^uint_
     block  ;; label = @1
       block  ;; label = @2
+        global.get 0
+        i32.wrap_i64
+        i64.const 1
+        i64.store
+        i64.const 0
+        global.get 0
+        i64.add
+        call $various_mem_opts_1.use_^uint_
         global.get 1
         local.set 0
         i64.const 0
@@ -184,17 +184,17 @@
     i64.const 8
     i64.sub
     global.set 0
-    global.get 0
-    i32.wrap_i64
-    i64.const 1
-    i64.store
-    i64.const 0
-    global.get 0
-    i64.add
-    local.tee 0
-    call $various_mem_opts_1.use_^uint_
     block  ;; label = @1
       block  ;; label = @2
+        global.get 0
+        i32.wrap_i64
+        i64.const 1
+        i64.store
+        i64.const 0
+        global.get 0
+        i64.add
+        local.tee 0
+        call $various_mem_opts_1.use_^uint_
         global.get 1
         local.set 1
         i64.const 0
@@ -235,26 +235,26 @@
     i64.const 16
     i64.sub
     global.set 0
-    i64.const 0
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store offset=8
-    i64.const 0
-    global.get 0
-    i64.add
-    call $various_mem_opts_1.use_^uint_
-    i64.const 8
-    global.get 0
-    i64.add
-    call $various_mem_opts_1.use_^uint_
     block  ;; label = @1
       block  ;; label = @2
+        i64.const 0
+        local.set 0
+        global.get 0
+        i32.wrap_i64
+        local.get 0
+        i64.store
+        global.get 0
+        i32.wrap_i64
+        local.get 0
+        i64.store offset=8
+        i64.const 0
+        global.get 0
+        i64.add
+        call $various_mem_opts_1.use_^uint_
+        i64.const 8
+        global.get 0
+        i64.add
+        call $various_mem_opts_1.use_^uint_
         global.get 1
         local.set 1
         i64.const 1

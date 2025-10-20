@@ -96,13 +96,13 @@
     local.get 0
     i64.store
     loop  ;; label = @1
-      global.get 0
-      i32.wrap_i64
-      i64.load
-      call $out_of_bounds_matching_1.Iterator__.next
-      local.set 2
-      local.set 1
       block  ;; label = @2
+        global.get 0
+        i32.wrap_i64
+        i64.load
+        call $out_of_bounds_matching_1.Iterator__.next
+        local.set 2
+        local.set 1
         global.get 0
         i32.wrap_i64
         local.get 1

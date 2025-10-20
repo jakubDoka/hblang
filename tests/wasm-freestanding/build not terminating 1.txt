@@ -22,11 +22,11 @@
         i64.const 1
         local.set 3
       end
-      local.get 3
-      call $build_not_terminating_1.ignore
-      call $build_not_terminating_1.b
-      local.set 0
       block  ;; label = @2
+        local.get 3
+        call $build_not_terminating_1.ignore
+        call $build_not_terminating_1.b
+        local.set 0
         local.get 0
         br_if 0 (;@2;)
         local.get 2

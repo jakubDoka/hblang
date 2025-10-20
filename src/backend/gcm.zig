@@ -457,7 +457,12 @@ pub fn Mixin(comptime Backend: type) type {
                     meta: []@This(),
                 ) usize {
                     if (n.isSub(graph.Arg) or n.kind == .Phi or
-                        n.kind == .Mem or n.kind == .Ret) return 1000;
+                        n.kind == .Mem) return 1000;
+                    // usefull for targets like wasm
+                    if (n.kind == .Ret) {
+                        std.debug.assert(n.extra(.Ret).index < 9); // you serious?
+                        return 1000 - n.extra(.Ret).index - 1;
+                    }
                     if (n.isCfg()) {
                         std.debug.assert(n.isBasicBlockEnd());
                         return 0;

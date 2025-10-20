@@ -7,9 +7,9 @@
     i64.const 16
     i64.sub
     global.set 0
-    call $die_2.fallible
-    local.set 0
     block  ;; label = @1
+      call $die_2.fallible
+      local.set 0
       global.get 0
       i32.wrap_i64
       local.get 0

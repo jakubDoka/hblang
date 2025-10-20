@@ -7,10 +7,10 @@
     i64.const 16
     i64.sub
     global.set 0
-    call $null_check_misshap_1.alloc
-    local.set 0
     block  ;; label = @1
       block  ;; label = @2
+        call $null_check_misshap_1.alloc
+        local.set 0
         global.get 0
         i32.wrap_i64
         local.get 0

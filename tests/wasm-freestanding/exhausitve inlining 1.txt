@@ -10,19 +10,19 @@
     i64.const 8
     i64.sub
     global.set 0
-    call $exhausitve_inlining_1.no_op
-    i64.const 0
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
-    i64.store
-    i64.const 0
-    global.get 0
-    i64.add
-    call $exhausitve_inlining_1.some_mem_ops
     block  ;; label = @1
       block  ;; label = @2
+        call $exhausitve_inlining_1.no_op
+        i64.const 0
+        local.set 0
+        global.get 0
+        i32.wrap_i64
+        local.get 0
+        i64.store
+        i64.const 0
+        global.get 0
+        i64.add
+        call $exhausitve_inlining_1.some_mem_ops
         i64.const 1
         global.get 0
         i32.wrap_i64

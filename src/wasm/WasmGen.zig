@@ -316,6 +316,8 @@ const Stacker = struct {
 
         var iter = std.mem.reverseIterator(dataDeps);
         var i: usize = dataDeps.len;
+        const sentinel = 100;
+        var ret_idx: usize = sentinel;
         while (@as(?*Func.Node, iter.next())) |def| {
             i -= 1;
             defer instr.input_ordered_len -= 1;
@@ -325,8 +327,23 @@ const Stacker = struct {
             var appended: usize = 0;
 
             const needs_load = b: {
-                // TODO: we should push blocks before calls so that the stack actualy aligns
-                if (def.kind == .Ret or def.kind == .Arg or def.kind == .Phi) break :b true;
+                if (def.kind == .Arg or def.kind == .Phi) break :b true;
+
+                if (def.kind == .Ret) {
+                    if (true) break :b true;
+
+                    if (ret_idx == sentinel) {
+                        ret_idx = def.extra(.Ret).index;
+                    } else {
+                        if (ret_idx != def.extra(.Ret).index + 1) break :b true;
+                        ret_idx -= 1;
+
+                        // NOTE: we dont need to check for 0 since we would not
+                        // find more rets anyway
+                    }
+                }
+                // NOTE: rets are the last thing in the block, and we dont care
+                // about Mem so nothing else to handle
 
                 if (def.cfg0() != self.block) break :b true;
 
@@ -689,6 +706,10 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         for (scope_ranges.items) |lr| {
             std.debug.print("{f}\n", .{lr});
         }
+    }
+
+    for (scope_ranges.items) |*sr| {
+        while (func.gcm.postorder[sr.range[0]].base.kind == .CallEnd) sr.range[0] -= 1;
     }
 
     for (scope_ranges.items) |*sr| {
@@ -1201,11 +1222,6 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalStore(instr);
         },
         .MemCpy => {
-            //for (inps[1..]) |inp| {
-            //    self.emitLocalLoad(inp);
-            //    try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
-            //}
-
             // memory.copy
             try self.ctx.buf.writer.writeByte(opb(.prefix_fc));
             try self.ctx.buf.writer.writeUleb128(10);
@@ -1214,18 +1230,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeUleb128(0);
         },
         .Call => |extra| {
-            //for (inps[@as(usize, 1) + @intFromBool(extra.id == graph.indirect_call) ..]) |inp| {
-            //    if (inp.kind == .StackArgOffset) {
-            //        continue;
-            //    }
-
-            //    self.emitLocalLoad(inp);
-            //}
-
             if (extra.id == graph.indirect_call) {
-                //self.emitLocalLoad(inps[1]);
-                //try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
-
                 try self.ctx.buf.writer.writeByte(opb(.call_indirect));
                 try self.ctx.buf.writer.writeUleb128(self.indirect_signature_count);
                 try self.ctx.buf.writer.writeUleb128(0); // table index
@@ -1243,14 +1248,24 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             }
 
             const ret = extra.signature.returns() orelse return;
+            var dropped = false;
             for (0..ret.len) |i| {
                 for (instr.outputs()[0].get().outputs()) |out| {
-                    if (out.get().kind == .Ret and out.get().extra(.Ret).index == ret.len - 1 - i) {
-                        self.emitLocalStore(out.get());
-                        break;
+                    if (out.get().kind == .Ret) {
+                        if (out.get().id == on_stack_id) {
+                            std.debug.assert(!dropped);
+                            break;
+                        }
+
+                        if (out.get().extra(.Ret).index == ret.len - 1 - i) {
+                            self.emitLocalStore(out.get());
+                            dropped = true;
+                            break;
+                        }
                     }
                 } else {
                     try self.ctx.buf.writer.writeByte(opb(.drop));
+                    dropped = true;
                 }
             }
         },
@@ -1263,8 +1278,6 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 }
             } else unreachable;
 
-            //self.emitLocalLoad(inps[0]);
-
             if (inps[0].data_type == .i64) {
                 try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
             }
@@ -1273,7 +1286,6 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeUleb128(label_id);
         },
         .MachSplit => {
-            //self.emitLocalLoad(inps[0]);
             self.emitLocalStore(instr);
         },
         .Jmp => {

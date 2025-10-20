@@ -7,10 +7,10 @@
     i64.const 8
     i64.sub
     global.set 0
-    call $malformed_global_union_3.func
-    local.set 0
     block  ;; label = @1
       block  ;; label = @2
+        call $malformed_global_union_3.func
+        local.set 0
         global.get 0
         i32.wrap_i64
         local.get 0

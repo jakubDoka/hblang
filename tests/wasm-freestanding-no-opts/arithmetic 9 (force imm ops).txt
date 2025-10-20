@@ -7,12 +7,12 @@
     i64.const 8
     i64.sub
     global.set 0
-    i64.const -1
-    local.tee 0
-    call $arithmetic_9__force_imm_ops_.box_uint_
-    local.set 1
     block  ;; label = @1
       block  ;; label = @2
+        i64.const -1
+        local.tee 0
+        call $arithmetic_9__force_imm_ops_.box_uint_
+        local.set 1
         global.get 0
         i32.wrap_i64
         local.get 1

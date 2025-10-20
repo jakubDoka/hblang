@@ -43,11 +43,11 @@
   (func $out_of_bounds_matching_1.Iterator__.for_each_.main_ (type 2) (param i64)
     (local i32 i32)
     loop  ;; label = @1
-      local.get 0
-      call $out_of_bounds_matching_1.Iterator__.next
-      local.set 2
-      local.set 1
       block  ;; label = @2
+        local.get 0
+        call $out_of_bounds_matching_1.Iterator__.next
+        local.set 2
+        local.set 1
         local.get 1
         br_if 0 (;@2;)
         return

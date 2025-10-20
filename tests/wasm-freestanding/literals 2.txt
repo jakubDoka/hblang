@@ -3,12 +3,12 @@
   (type (;1;) (func (result i64)))
   (func $main (type 0) (result i64)
     (local i64 i64)
-    call $literals_2.dec
-    local.set 0
-    call $literals_2.dec
-    local.set 1
     block  ;; label = @1
       block  ;; label = @2
+        call $literals_2.dec
+        local.set 0
+        call $literals_2.dec
+        local.set 1
         local.get 0
         local.get 1
         i64.ne

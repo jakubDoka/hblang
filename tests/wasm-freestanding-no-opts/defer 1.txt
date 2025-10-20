@@ -83,15 +83,15 @@
                         i64.load
                         i64.ne
                         br_if 0 (;@10;)
-                        global.get 0
-                        i32.wrap_i64
-                        local.get 0
-                        i64.store offset=8
-                        i64.const 8
-                        global.get 0
-                        i64.add
-                        call $defer_1.main.ret_defer
                         block  ;; label = @11
+                          global.get 0
+                          i32.wrap_i64
+                          local.get 0
+                          i64.store offset=8
+                          i64.const 8
+                          global.get 0
+                          i64.add
+                          call $defer_1.main.ret_defer
                           global.get 0
                           i32.wrap_i64
                           i64.load offset=8

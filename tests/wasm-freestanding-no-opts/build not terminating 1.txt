@@ -32,13 +32,13 @@
         local.get 3
         i64.store
       end
-      global.get 0
-      i32.wrap_i64
-      i64.load
-      call $build_not_terminating_1.ignore
-      call $build_not_terminating_1.b
-      local.set 0
       block  ;; label = @2
+        global.get 0
+        i32.wrap_i64
+        i64.load
+        call $build_not_terminating_1.ignore
+        call $build_not_terminating_1.b
+        local.set 0
         global.get 0
         i32.wrap_i64
         local.get 0
