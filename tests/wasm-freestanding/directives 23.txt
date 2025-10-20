@@ -6,7 +6,7 @@
   (type (;4;) (func (result i64)))
   (type (;5;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64 i64 i64 i64)
+    (local i64 i64 i64 i64 i64)
     call $directives_23.type_id_u8_
     local.set 0
     call $directives_23.type_id_u16_
@@ -18,8 +18,6 @@
     call $directives_23.type_id_i8_
     local.set 4
     call $directives_23.type_id_u8_
-    local.set 5
-    local.get 5
     local.get 4
     local.get 3
     local.get 2

@@ -74,8 +74,6 @@
             i64.load offset=48
             local.get 1
             call $structs_1.Ty.sum
-            local.set 1
-            local.get 1
             local.get 2
             i64.ne
             br_if 0 (;@4;)

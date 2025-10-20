@@ -37,8 +37,6 @@
     i32.wrap_i64
     memory.copy
     call $enum_and_struct.broken
-    local.set 0
-    local.get 0
     i64.extend_i32_u
     i64.const 28
     global.get 0

@@ -53,8 +53,6 @@
     i32.wrap_i64
     memory.copy
     call $out_of_range_access_1.bwa
-    local.set 0
-    local.get 0
     i64.extend_i32_u
     i64.const 30
     global.get 0

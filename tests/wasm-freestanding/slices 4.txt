@@ -32,8 +32,6 @@
           local.get 2
           local.get 1
           call $slices_4.equals
-          local.set 0
-          local.get 0
           i32.eqz
           br_if 0 (;@3;)
           block  ;; label = @4
@@ -44,8 +42,6 @@
             local.get 2
             local.get 1
             call $slices_4.equals
-            local.set 0
-            local.get 0
             i32.eqz
             br_if 0 (;@4;)
             i64.const 0

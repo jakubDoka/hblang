@@ -4,14 +4,12 @@
   (type (;2;) (func (result i64)))
   (type (;3;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64)
+    (local i64 i64)
     call $foo.foo
     local.set 0
     call $foo.bar
     local.set 1
     call $bas.baz
-    local.set 2
-    local.get 2
     local.get 0
     local.get 1
     i64.add

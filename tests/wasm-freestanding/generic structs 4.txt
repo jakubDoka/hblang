@@ -59,7 +59,7 @@
     memory.copy
     local.get 2
     call $generic_structs_4.Array____uint___uint___uint___uint_.get
-    local.set 2
+    local.set 0
     i64.const 0
     global.get 0
     i64.add
@@ -71,10 +71,8 @@
     memory.copy
     local.get 1
     call $generic_structs_4.Array____uint___uint___uint___uint_.get
-    local.set 0
-    local.get 0
     local.get 5
-    local.get 2
+    local.get 0
     i64.add
     i64.add
     i64.const 48

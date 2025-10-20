@@ -2,13 +2,8 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i64) (result i64 i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64)
     i64.const 2
     call $Foo.init
-    local.set 1
-    local.set 0
-    local.get 0
-    local.get 1
     i64.sub
     return
     unreachable)

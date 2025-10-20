@@ -2,10 +2,7 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i64)
     call $custom_one_variant_enum_2.c
-    local.set 0
-    local.get 0
     i64.const 5
     i64.sub
     return

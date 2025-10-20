@@ -22,22 +22,16 @@
               br_if 0 (;@5;)
               block  ;; label = @6
                 call $various_mem_opts_1.duplicate_store
-                local.set 0
-                local.get 0
                 local.get 1
                 i64.ne
                 br_if 0 (;@6;)
                 block  ;; label = @7
                   call $various_mem_opts_1.combine_pull_out_duplicate
-                  local.set 0
-                  local.get 0
                   local.get 1
                   i64.ne
                   br_if 0 (;@7;)
                   block  ;; label = @8
                     call $various_mem_opts_1.parallel_stores
-                    local.set 0
-                    local.get 0
                     local.get 1
                     i64.ne
                     br_if 0 (;@8;)

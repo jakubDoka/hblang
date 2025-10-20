@@ -5,7 +5,7 @@
   (type (;3;) (func (param i64) (result i32)))
   (type (;4;) (func (param i64) (result i32)))
   (func $main (type 1) (result i64)
-    (local i32 i64 i64)
+    (local i64 i64)
     global.get 0
     i64.const 24
     i64.sub
@@ -18,22 +18,20 @@
     global.get 0
     i64.add
     call $function_pointers_4.DynObj.new_^.Obj_
-    local.set 2
     local.set 1
+    local.set 0
     global.get 0
     i32.wrap_i64
-    local.get 1
+    local.get 0
     i64.store
     global.get 0
     i32.wrap_i64
-    local.get 2
+    local.get 1
     i64.store offset=8
     i64.const 0
     global.get 0
     i64.add
     call $function_pointers_4.DynObj.func
-    local.set 0
-    local.get 0
     i32.const 255
     i32.and
     i64.extend_i32_u

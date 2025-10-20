@@ -37,8 +37,6 @@
     i32.wrap_i64
     memory.copy
     call $float_load_and_store_1.fun
-    local.set 2
-    local.get 2
     i64.trunc_f32_s
     i64.const 28
     global.get 0

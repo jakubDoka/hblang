@@ -10,10 +10,7 @@
   (type (;8;) (func (result i32)))
   (type (;9;) (func (result i32)))
   (func $main (type 0) (result i64)
-    (local i32)
     call $deep_instantiation_2.S________.Z________.get
-    local.set 0
-    local.get 0
     i32.const 8
     i32.ne
     i32.const 255
@@ -22,73 +19,49 @@
     return
     unreachable)
   (func $deep_instantiation_2.S________.Z________.get (type 1) (result i32)
-    (local i32)
     call $deep_instantiation_2.S_______.Z_______.get
-    local.set 0
-    local.get 0
     i32.const 1
     i32.add
     return
     unreachable)
   (func $deep_instantiation_2.S_______.Z_______.get (type 2) (result i32)
-    (local i32)
     call $deep_instantiation_2.S______.Z______.get
-    local.set 0
-    local.get 0
     i32.const 1
     i32.add
     return
     unreachable)
   (func $deep_instantiation_2.S______.Z______.get (type 3) (result i32)
-    (local i32)
     call $deep_instantiation_2.S_____.Z_____.get
-    local.set 0
-    local.get 0
     i32.const 1
     i32.add
     return
     unreachable)
   (func $deep_instantiation_2.S_____.Z_____.get (type 4) (result i32)
-    (local i32)
     call $deep_instantiation_2.S____.Z____.get
-    local.set 0
-    local.get 0
     i32.const 1
     i32.add
     return
     unreachable)
   (func $deep_instantiation_2.S____.Z____.get (type 5) (result i32)
-    (local i32)
     call $deep_instantiation_2.S___.Z___.get
-    local.set 0
-    local.get 0
     i32.const 1
     i32.add
     return
     unreachable)
   (func $deep_instantiation_2.S___.Z___.get (type 6) (result i32)
-    (local i32)
     call $deep_instantiation_2.S__.Z__.get
-    local.set 0
-    local.get 0
     i32.const 1
     i32.add
     return
     unreachable)
   (func $deep_instantiation_2.S__.Z__.get (type 7) (result i32)
-    (local i32)
     call $deep_instantiation_2.S_.Z_.get
-    local.set 0
-    local.get 0
     i32.const 1
     i32.add
     return
     unreachable)
   (func $deep_instantiation_2.S_.Z_.get (type 8) (result i32)
-    (local i32)
     call $deep_instantiation_2.Z.get
-    local.set 0
-    local.get 0
     i32.const 1
     i32.add
     return

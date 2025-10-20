@@ -283,7 +283,7 @@ const Stacker = struct {
     block: *Func.CfgNode,
     second_round: bool,
 
-    pub fn recoverTree(self: *@This()) bool {
+    pub fn recoverTree(self: *@This(), is_last: bool) bool {
         const instr = self.block.base.outputs()[self.index].get();
 
         if (instr.kind == .Phi or instr.kind == .WrapI64 or instr.kind == .GetLocal) {
@@ -314,10 +314,48 @@ const Stacker = struct {
             std.mem.rotate(*Func.Node, dataDeps, dataDeps.len - 1);
         }
 
+        var can_stack_returns = true;
+
+        const needs_extra = !self.second_round and switch (instr.kind) {
+            .StackLoad, .StackStore, .SignedStackLoad, .UnsignedStackLoad => true,
+            else => false,
+        };
+
+        detect_return_stack: {
+            if (needs_extra or !is_last) {
+                can_stack_returns = false;
+                break :detect_return_stack;
+            }
+
+            var last_ret: ?*Func.Node = null;
+            for (dataDeps, 0..) |d, i| {
+                if (d.kind == .Ret) {
+                    if (d.extra(.Ret).index != i) {
+                        can_stack_returns = false;
+                        break :detect_return_stack;
+                    }
+
+                    if (d.cfg0() != self.block) {
+                        can_stack_returns = false;
+                        break :detect_return_stack;
+                    }
+                    last_ret = d;
+                }
+            }
+
+            if (last_ret) |lr| {
+                if (lr.cfg0().base.cfg0().base.extra(.Call)
+                    .signature.returns().?.len != lr.extra(.Ret).index + 1)
+                {
+                    can_stack_returns = false;
+                }
+            } else {
+                can_stack_returns = false;
+            }
+        }
+
         var iter = std.mem.reverseIterator(dataDeps);
         var i: usize = dataDeps.len;
-        const sentinel = 100;
-        var ret_idx: usize = sentinel;
         while (@as(?*Func.Node, iter.next())) |def| {
             i -= 1;
             defer instr.input_ordered_len -= 1;
@@ -329,21 +367,7 @@ const Stacker = struct {
             const needs_load = b: {
                 if (def.kind == .Arg or def.kind == .Phi) break :b true;
 
-                if (def.kind == .Ret) {
-                    if (true) break :b true;
-
-                    if (ret_idx == sentinel) {
-                        ret_idx = def.extra(.Ret).index;
-                    } else {
-                        if (ret_idx != def.extra(.Ret).index + 1) break :b true;
-                        ret_idx -= 1;
-
-                        // NOTE: we dont need to check for 0 since we would not
-                        // find more rets anyway
-                    }
-                }
-                // NOTE: rets are the last thing in the block, and we dont care
-                // about Mem so nothing else to handle
+                if (def.kind == .Ret and !can_stack_returns) break :b true;
 
                 if (def.cfg0() != self.block) break :b true;
 
@@ -380,14 +404,11 @@ const Stacker = struct {
             if (!needs_load) {
                 def.id = on_stack_id;
                 self.index -= 1;
-                _ = self.recoverTree();
+                _ = self.recoverTree(!needs_extra and i == 0);
             }
         }
 
-        if (!self.second_round and switch (instr.kind) {
-            .StackLoad, .StackStore, .SignedStackLoad, .UnsignedStackLoad => true,
-            else => false,
-        }) {
+        if (needs_extra) {
             _ = self.func.addNode(.StackAddr, .none, .top, &.{&self.block.base}, .{});
             const to_rotate = self.block.base.outputs()[self.index..];
             std.mem.rotate(Func.Node.Out, to_rotate, to_rotate.len - 1);
@@ -403,7 +424,7 @@ const Stacker = struct {
 
         while (self.index > 0) {
             self.index -= 1;
-            _ = self.recoverTree();
+            _ = self.recoverTree(self.index == 0);
         }
     }
 };

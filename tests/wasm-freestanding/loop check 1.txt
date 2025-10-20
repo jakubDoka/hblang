@@ -46,8 +46,6 @@
               br 3 (;@2;)
             end
             call $loop_check_1.blackbox
-            local.set 0
-            local.get 0
             i32.eqz
             br_if 1 (;@3;)
             i64.const 0

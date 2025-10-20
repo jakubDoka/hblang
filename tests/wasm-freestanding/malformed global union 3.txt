@@ -2,24 +2,22 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (result i32)))
   (func $main (type 0) (result i64)
-    (local i32 i64)
+    (local i64)
     block  ;; label = @1
       block  ;; label = @2
         call $malformed_global_union_3.func
-        local.set 0
-        local.get 0
         i32.const 255
         i32.and
         i32.eqz
         br_if 0 (;@2;)
         i64.const 1
-        local.set 1
+        local.set 0
         br 1 (;@1;)
       end
       i64.const 0
-      local.set 1
+      local.set 0
     end
-    local.get 1
+    local.get 0
     return
     unreachable)
   (func $malformed_global_union_3.func (type 1) (result i32)
