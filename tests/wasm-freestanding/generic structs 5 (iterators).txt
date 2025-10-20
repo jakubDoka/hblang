@@ -79,8 +79,7 @@
     i64.const 64
     global.get 0
     i64.add
-    local.set 7
-    local.get 7
+    local.tee 7
     i32.wrap_i64
     local.get 3
     i32.wrap_i64
@@ -296,8 +295,7 @@
                 local.get 0
                 i32.wrap_i64
                 i64.load8_s
-                local.set 4
-                local.get 4
+                local.tee 4
                 i64.eqz
                 br_if 0 (;@6;)
                 block  ;; label = @7

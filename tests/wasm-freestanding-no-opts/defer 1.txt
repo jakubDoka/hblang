@@ -53,8 +53,7 @@
                       global.get 0
                       i32.wrap_i64
                       i64.load
-                      local.set 1
-                      local.get 1
+                      local.tee 1
                       local.get 2
                       i64.add
                       local.set 3
@@ -155,8 +154,7 @@
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 0
-    local.get 0
+    local.tee 0
     i32.wrap_i64
     local.get 1
     local.get 0

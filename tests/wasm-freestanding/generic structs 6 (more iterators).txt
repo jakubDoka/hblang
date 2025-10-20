@@ -4,8 +4,7 @@
   (func $main (type 0) (result i64)
     (local i64)
     i64.const 0
-    local.set 0
-    local.get 0
+    local.tee 0
     call $foo.foo_u8_
     local.get 0
     return

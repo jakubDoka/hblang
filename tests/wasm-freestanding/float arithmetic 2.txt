@@ -4,8 +4,7 @@
   (func $main (type 0) (result i64)
     (local f32 f32)
     f32.const 0x1.f4p+9 (;=1000;)
-    local.set 0
-    local.get 0
+    local.tee 0
     call $float_arithmetic_2.sin
     local.set 1
     local.get 0
@@ -86,8 +85,7 @@
     local.get 5
     i32.wrap_i64
     f32.load
-    local.set 0
-    local.get 0
+    local.tee 0
     local.get 9
     local.get 10
     local.get 9

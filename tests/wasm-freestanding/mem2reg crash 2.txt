@@ -66,8 +66,7 @@
             local.get 0
             i32.wrap_i64
             i64.load
-            local.set 2
-            local.get 2
+            local.tee 2
             i32.wrap_i64
             i64.load
             local.get 1

@@ -184,8 +184,7 @@
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 0
-    local.get 0
+    local.tee 0
     i32.wrap_i64
     local.get 0
     i32.wrap_i64
@@ -196,8 +195,7 @@
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 0
-    local.get 0
+    local.tee 0
     i32.wrap_i64
     local.get 1
     local.get 0
@@ -208,8 +206,7 @@
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 1
-    local.get 1
+    local.tee 1
     i32.wrap_i64
     i64.load offset=8
     local.set 0

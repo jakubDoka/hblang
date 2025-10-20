@@ -16,8 +16,7 @@
     local.get 0
     local.get 1
     f32.add
-    local.set 1
-    local.get 1
+    local.tee 1
     call $carry_over_call_float_op_1.opaque_f32_
     drop
     local.get 1

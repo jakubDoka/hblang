@@ -11,8 +11,7 @@
     i64.const 64
     global.get 0
     i64.add
-    local.set 1
-    local.get 1
+    local.tee 1
     i64.const 16
     i64.add
     local.set 2

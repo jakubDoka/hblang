@@ -57,8 +57,6 @@
     local.get 0
     i32.wrap_i64
     i64.load offset=8
-    local.set 0
-    local.get 0
     local.get 2
     i32.wrap_i64
     call_indirect (type 0)

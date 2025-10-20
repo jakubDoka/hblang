@@ -17,8 +17,7 @@
     local.get 0
     i32.const 255
     i32.and
-    local.set 0
-    local.get 0
+    local.tee 0
     local.get 2
     i32.lt_u
     call $arithmetic_3.cond
@@ -101,8 +100,7 @@
                                                                     local.set 2
                                                                     local.get 0
                                                                     i32.extend8_s
-                                                                    local.set 0
-                                                                    local.get 0
+                                                                    local.tee 0
                                                                     local.get 2
                                                                     i32.gt_s
                                                                     call $arithmetic_3.cond
@@ -162,8 +160,7 @@
                                                                                   local.get 2
                                                                                   i32.const 255
                                                                                   i32.and
-                                                                                  local.set 1
-                                                                                  local.get 1
+                                                                                  local.tee 1
                                                                                   local.get 0
                                                                                   i32.lt_u
                                                                                   br_if 0 (;@39;)
@@ -236,8 +233,7 @@
                                                                                                           local.get 3
                                                                                                           i32.const 255
                                                                                                           i32.and
-                                                                                                          local.set 1
-                                                                                                          local.get 1
+                                                                                                          local.tee 1
                                                                                                           local.get 1
                                                                                                           i32.ne
                                                                                                           br_if 0 (;@51;)

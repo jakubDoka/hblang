@@ -8,8 +8,7 @@
     i64.sub
     global.set 0
     f32.const 0x1.f4p+9 (;=1000;)
-    local.set 1
-    local.get 1
+    local.tee 1
     call $float_arithmetic_2.sin
     local.set 2
     global.get 0

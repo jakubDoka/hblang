@@ -34,8 +34,7 @@
           global.get 0
           i32.wrap_i64
           i64.load
-          local.set 2
-          local.get 2
+          local.tee 2
           local.get 1
           i64.lt_u
           br_if 0 (;@3;)

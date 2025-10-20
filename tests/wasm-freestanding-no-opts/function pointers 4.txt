@@ -78,7 +78,7 @@
     return
     unreachable)
   (func $function_pointers_4.DynObj.func (type 3) (param i64) (result i32)
-    (local i32 i64)
+    (local i32)
     global.get 0
     i64.const 16
     i64.sub
@@ -90,13 +90,10 @@
     global.get 0
     i32.wrap_i64
     i64.load
-    local.set 2
-    local.get 2
+    local.tee 0
     i32.wrap_i64
     i64.load offset=8
-    local.set 0
     local.get 0
-    local.get 2
     i32.wrap_i64
     i64.load
     i32.wrap_i64

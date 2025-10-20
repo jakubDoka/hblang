@@ -14,8 +14,7 @@
         local.get 0
         i32.wrap_i64
         i64.load
-        local.set 3
-        local.get 3
+        local.tee 3
         local.get 3
         i64.eq
         br_if 0 (;@2;)

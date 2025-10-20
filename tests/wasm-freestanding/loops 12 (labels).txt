@@ -29,8 +29,7 @@
                 local.get 4
                 local.get 0
                 i64.mul
-                local.set 5
-                local.get 5
+                local.tee 5
                 i64.eqz
                 br_if 0 (;@6;)
                 local.get 5

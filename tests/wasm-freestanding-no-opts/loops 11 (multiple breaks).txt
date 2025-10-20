@@ -18,8 +18,7 @@
           global.get 0
           i32.wrap_i64
           i64.load
-          local.set 1
-          local.get 1
+          local.tee 1
           i64.eqz
           br_if 0 (;@3;)
           block  ;; label = @4

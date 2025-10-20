@@ -79,8 +79,7 @@
     i64.const 48
     global.get 0
     i64.add
-    local.set 6
-    local.get 6
+    local.tee 6
     i32.wrap_i64
     local.get 2
     i32.wrap_i64
@@ -268,8 +267,7 @@
         global.get 0
         i32.wrap_i64
         i64.load
-        local.set 0
-        local.get 0
+        local.tee 0
         i32.wrap_i64
         i64.load offset=8
         i64.eqz
@@ -376,12 +374,10 @@
                 global.get 0
                 i32.wrap_i64
                 i64.load
-                local.set 8
-                local.get 8
+                local.tee 8
                 i32.wrap_i64
                 i64.load8_s
-                local.set 0
-                local.get 0
+                local.tee 0
                 i64.eqz
                 br_if 0 (;@6;)
                 block  ;; label = @7
@@ -421,8 +417,7 @@
                   global.get 0
                   i32.wrap_i64
                   i32.load8_u offset=10
-                  local.set 4
-                  local.get 4
+                  local.tee 4
                   br_if 0 (;@7;)
                   global.get 0
                   i32.wrap_i64
@@ -455,8 +450,7 @@
               global.get 0
               i32.wrap_i64
               i32.load8_u offset=8
-              local.set 4
-              local.get 4
+              local.tee 4
               br_if 1 (;@4;)
               global.get 0
               i32.wrap_i64

@@ -12,8 +12,7 @@
   (func $loops_1.fib (type 1) (param i64) (result i64)
     (local i64 i64 i64 i64)
     i64.const 1
-    local.set 1
-    local.get 1
+    local.tee 1
     local.set 2
     i64.const 0
     local.set 3

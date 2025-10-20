@@ -141,14 +141,12 @@
             global.get 0
             i32.wrap_i64
             i64.load offset=120
-            local.set 0
-            local.get 0
+            local.tee 0
             local.get 6
             i64.mul
             local.get 5
             i64.add
-            local.set 9
-            local.get 9
+            local.tee 9
             i32.wrap_i64
             i64.load offset=8
             local.set 1

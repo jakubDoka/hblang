@@ -8,8 +8,7 @@
     i64.sub
     global.set 0
     i64.const 3
-    local.set 0
-    local.get 0
+    local.tee 0
     call $deep_dedup_3__recursive_functions_.fib2
     local.set 1
     global.get 0
@@ -55,8 +54,7 @@
         global.get 0
         i32.wrap_i64
         i64.load
-        local.set 2
-        local.get 2
+        local.tee 2
         local.get 1
         i64.le_u
         br_if 0 (;@2;)

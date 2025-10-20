@@ -122,8 +122,7 @@
   (func $structs_1.pass (type 3) (param i64) (result i64)
     (local i64)
     i64.const 1
-    local.set 1
-    local.get 1
+    local.tee 1
     local.get 0
     i32.wrap_i64
     i64.load

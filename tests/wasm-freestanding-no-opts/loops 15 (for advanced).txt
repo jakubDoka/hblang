@@ -49,8 +49,7 @@
         global.get 0
         i32.wrap_i64
         i64.load offset=80
-        local.set 4
-        local.get 4
+        local.tee 4
         local.get 5
         i64.lt_u
         br_if 0 (;@2;)
@@ -91,8 +90,7 @@
             global.get 0
             i32.wrap_i64
             i64.load offset=64
-            local.set 4
-            local.get 4
+            local.tee 4
             local.get 3
             i64.lt_u
             br_if 0 (;@4;)

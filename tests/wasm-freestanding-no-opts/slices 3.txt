@@ -115,8 +115,7 @@
         global.get 0
         i32.wrap_i64
         i64.load offset=8
-        local.set 1
-        local.get 1
+        local.tee 1
         i64.eqz
         br_if 0 (;@2;)
         i64.const 0
@@ -152,8 +151,7 @@
             global.get 0
             i32.wrap_i64
             i64.load offset=24
-            local.set 1
-            local.get 1
+            local.tee 1
             local.get 4
             i64.lt_u
             br_if 0 (;@4;)
@@ -174,8 +172,7 @@
           global.get 0
           i32.wrap_i64
           i64.load
-          local.set 0
-          local.get 0
+          local.tee 0
           global.get 0
           i32.wrap_i64
           i64.load offset=24

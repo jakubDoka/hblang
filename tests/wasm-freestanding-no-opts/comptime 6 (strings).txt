@@ -46,8 +46,7 @@
         global.get 0
         i32.wrap_i64
         i64.load
-        local.set 5
-        local.get 5
+        local.tee 5
         local.get 4
         i64.lt_u
         br_if 0 (;@2;)

@@ -4,8 +4,7 @@
   (func $main (type 0) (result i64)
     (local i64 i64)
     i64.const -1
-    local.set 0
-    local.get 0
+    local.tee 0
     call $arithmetic_9__force_imm_ops_.box_uint_
     local.set 1
     block  ;; label = @1

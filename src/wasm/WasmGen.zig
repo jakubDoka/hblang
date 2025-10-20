@@ -21,33 +21,16 @@ ctx: *Ctx = undefined,
 
 pub fn loadDatatype(node: *Func.Node) graph.DataType {
     return switch (node.extra2()) {
-        inline .SignedLoad, .SignedStackLoad, .UnsignedLoad, .UnsignedStackLoad => |extra| extra.src_ty,
+        inline .SignedLoad,
+        .SignedStackLoad,
+        .UnsignedLoad,
+        .UnsignedStackLoad,
+        => |extra| extra.src_ty,
         else => node.data_type,
     };
 }
 
 pub const Set = std.DynamicBitSetUnmanaged;
-
-pub fn dataDepLen(node: *Func.Node) usize {
-    var len: usize = node.input_ordered_len;
-    var iter = std.mem.reverseIterator(node.ordInps());
-    while (@as(??*Func.Node, iter.next())) |in| {
-        if (in == null) break;
-        if (in.?.id == on_stack_id) {
-            len -= 1;
-        } else {
-            for (node.ordInps()[0..len]) |inn| {
-                if (inn == null) break;
-                if (inn.?.id == on_stack_id and inn.?.kind != .StackArgOffset) {
-                    utils.panic("{f} {f}\n", .{ inn.?, node });
-                }
-            }
-            break;
-        }
-    }
-
-    return len;
-}
 
 pub fn setMasks(set: *Set) []Set.MaskInt {
     return graph.setMasks(set.*);
@@ -69,7 +52,7 @@ pub fn isDef(self: *Func.Node) bool {
 }
 
 pub const on_stack_id = std.math.maxInt(u16);
-pub const cloned_on_stack_id = on_stack_id - 1;
+pub const uses_tee_id = on_stack_id - 1;
 
 pub const ScopeRange = struct {
     kind: enum { loop, block },
@@ -347,18 +330,14 @@ const Stacker = struct {
 
                 if (def.cfg0() != self.block) break :b true;
 
+                if (def.schedule != self.index - 1) break :b true;
+
                 var count: usize = 0;
                 for (def.outputs()) |o| {
                     if (o.get().hasUseFor(o.pos(), def)) count += 1;
                 }
 
-                if (count != 1) {
-                    break :b true;
-                }
-
-                if (def.schedule != self.index - 1) {
-                    break :b true;
-                }
+                if (count > 1) break :b true;
 
                 break :b false;
             };
@@ -501,6 +480,27 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
 
         if (rloc.inserted_splits == 0) break;
     } else unreachable;
+
+    // Discover TEE oportunities
+    for (func.gcm.postorder) |bb| {
+        var outs = bb.base.outputs();
+        var i: usize = 0;
+        while (i < outs.len - 1) : (i += 1) {
+            const curr = outs[i];
+            const next = outs[i + 1];
+
+            if (next.get().kind == .GetLocal and
+                next.get().inputs()[1].? == curr.get() and
+                curr.get().kind != .Phi and curr.get().kind != .Arg and
+                curr.get().kind != .Ret)
+            {
+                std.mem.rotate(Func.Node.Out, outs[i..], 1);
+                func.kill(next.get());
+                outs = bb.base.outputs();
+                curr.get().id = uses_tee_id;
+            }
+        }
+    }
 
     const LocalCounts = struct {
         i32: usize = 0,
@@ -1358,17 +1358,6 @@ pub fn emitData(self: *WasmGen, opts: Mach.DataOptions) void {
     );
 }
 
-pub fn _emitLocalLoad(self: *WasmGen, for_instr: *Func.Node) void {
-    if (for_instr.id == on_stack_id) {
-        return;
-    }
-
-    errdefer unreachable;
-
-    try self.ctx.buf.writer.writeByte(opb(.local_get));
-    try self.ctx.buf.writer.writeUleb128(self.regOf(for_instr));
-}
-
 pub fn emitLocalStore(self: *WasmGen, for_instr: *Func.Node) void {
     if (for_instr.id == on_stack_id) {
         return;
@@ -1376,7 +1365,11 @@ pub fn emitLocalStore(self: *WasmGen, for_instr: *Func.Node) void {
 
     errdefer unreachable;
 
-    try self.ctx.buf.writer.writeByte(opb(.local_set));
+    if (for_instr.id == uses_tee_id) {
+        try self.ctx.buf.writer.writeByte(opb(.local_tee));
+    } else {
+        try self.ctx.buf.writer.writeByte(opb(.local_set));
+    }
     try self.ctx.buf.writer.writeUleb128(self.regOf(for_instr));
 }
 

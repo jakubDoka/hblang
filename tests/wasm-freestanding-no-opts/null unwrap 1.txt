@@ -76,8 +76,7 @@
       global.get 0
       i32.wrap_i64
       i64.load offset=32
-      local.set 1
-      local.get 1
+      local.tee 1
       local.get 1
       i64.add
       i64.const 64

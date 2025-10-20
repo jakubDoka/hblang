@@ -57,8 +57,7 @@
               global.get 0
               i32.wrap_i64
               i64.load offset=24
-              local.set 4
-              local.get 4
+              local.tee 4
               i64.eqz
               br_if 0 (;@5;)
               global.get 0
