@@ -22,8 +22,7 @@
         br_if 0 (;@2;)
         local.get 1
         i32.wrap_i64
-        i32.load offset=262140
-        i64.extend_i32_u
+        i64.load32_u offset=262140
         return
       end
       local.get 1

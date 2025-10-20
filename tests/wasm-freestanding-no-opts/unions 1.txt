@@ -20,10 +20,7 @@
     local.set 1
     global.get 0
     i32.wrap_i64
-    i32.load16_u
-    i32.const 65535
-    i32.and
-    i64.extend_i32_u
+    i64.load16_u
     local.get 1
     i64.sub
     i64.const 8

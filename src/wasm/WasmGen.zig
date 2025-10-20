@@ -21,7 +21,7 @@ ctx: *Ctx = undefined,
 
 pub fn loadDatatype(node: *Func.Node) graph.DataType {
     return switch (node.extra2()) {
-        inline .SignedLoad, .SignedStackLoad => |extra| extra.src_ty,
+        inline .SignedLoad, .SignedStackLoad, .UnsignedLoad, .UnsignedStackLoad => |extra| extra.src_ty,
         else => node.data_type,
     };
 }
@@ -108,6 +108,11 @@ pub const classes = enum {
         base: graph.Load = .{},
         offset: i64,
     };
+    pub const UnsignedLoad = extern struct {
+        base: graph.Load = .{},
+        src_ty: graph.DataType,
+        offset: i64,
+    };
     pub const SignedLoad = extern struct {
         base: graph.Load = .{},
         src_ty: graph.DataType,
@@ -115,6 +120,12 @@ pub const classes = enum {
     };
     pub const StackLoad = extern struct {
         base: graph.Load = .{},
+        offset: i64,
+        pub const data_dep_offset = 2;
+    };
+    pub const UnsignedStackLoad = extern struct {
+        base: graph.Load = .{},
+        src_ty: graph.DataType,
         offset: i64,
         pub const data_dep_offset = 2;
     };
@@ -378,7 +389,7 @@ const Stacker = struct {
         }
 
         if (!self.second_round and switch (instr.kind) {
-            .StackLoad, .StackStore, .SignedStackLoad => true,
+            .StackLoad, .StackStore, .SignedStackLoad, .UnsignedStackLoad => true,
             else => false,
         }) {
             _ = self.func.addNode(.StackAddr, .none, .top, &.{&self.block.base}, .{});
@@ -753,6 +764,15 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     try self.ctx.buf.writer.writeByte(opb(.end));
 }
 
+pub fn selectUnsignedLoadOp(src_ty: graph.DataType) u8 {
+    return switch (src_ty) {
+        .i8 => opb(.i64_load8_u),
+        .i16 => opb(.i64_load16_u),
+        .i32 => opb(.i64_load32_u),
+        else => unreachable,
+    };
+}
+
 // assuming we are sign extending
 pub fn selectSignedLoadOp(dest_ty: graph.DataType, src_ty: graph.DataType) u8 {
     return switch (src_ty) {
@@ -796,6 +816,14 @@ pub fn selectLoadOp(ty: graph.DataType) u8 {
         .i16 => opb(.i32_load16_u),
         else => unreachable,
     };
+}
+
+pub fn emitMemArg(self: *WasmGen, ty: graph.DataType, offset: i64) void {
+    errdefer unreachable;
+
+    const alignment = std.math.log2_int(u64, ty.size());
+    try self.ctx.buf.writer.writeUleb128(alignment);
+    try self.ctx.buf.writer.writeSleb128(offset);
 }
 
 pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
@@ -1055,35 +1083,31 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             self.emitLocalStore(instr);
         },
         .WStore => |extra| {
-            // TODO: we can emit specialized stores
-
             try self.ctx.buf.writer.writeByte(selectStoreOp(instr.data_type));
-            const alignment = std.math.log2_int(u64, instr.data_type.size());
-            try self.ctx.buf.writer.writeUleb128(alignment);
-            try self.ctx.buf.writer.writeSleb128(extra.offset);
+            self.emitMemArg(instr.data_type, extra.offset);
         },
         .StackStore => |extra| {
             const offset = @as(i64, @intCast(instr.base().extra(.LocalAlloc).size +
                 self.ctx.stack_base)) + extra.offset;
 
             try self.ctx.buf.writer.writeByte(selectStoreOp(instr.data_type));
-            const alignment = std.math.log2_int(u64, instr.data_type.size());
-            try self.ctx.buf.writer.writeUleb128(alignment);
-            try self.ctx.buf.writer.writeSleb128(offset);
+            self.emitMemArg(instr.data_type, offset);
         },
         .WLoad => |extra| {
             try self.ctx.buf.writer.writeByte(selectLoadOp(instr.data_type));
-            const alignment = std.math.log2_int(u64, instr.data_type.size());
-            try self.ctx.buf.writer.writeUleb128(alignment);
-            try self.ctx.buf.writer.writeSleb128(extra.offset);
+            self.emitMemArg(instr.data_type, extra.offset);
+
+            self.emitLocalStore(instr);
+        },
+        .UnsignedLoad => |extra| {
+            try self.ctx.buf.writer.writeByte(selectUnsignedLoadOp(extra.src_ty));
+            self.emitMemArg(extra.src_ty, extra.offset);
 
             self.emitLocalStore(instr);
         },
         .SignedLoad => |extra| {
             try self.ctx.buf.writer.writeByte(selectSignedLoadOp(instr.data_type, extra.src_ty));
-            const alignment = std.math.log2_int(u64, extra.src_ty.size());
-            try self.ctx.buf.writer.writeUleb128(alignment);
-            try self.ctx.buf.writer.writeSleb128(extra.offset);
+            self.emitMemArg(extra.src_ty, extra.offset);
 
             self.emitLocalStore(instr);
         },
@@ -1092,9 +1116,16 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 self.ctx.stack_base)) + extra.offset;
 
             try self.ctx.buf.writer.writeByte(selectLoadOp(instr.data_type));
-            const alignment = std.math.log2_int(u64, instr.data_type.size());
-            try self.ctx.buf.writer.writeUleb128(alignment);
-            try self.ctx.buf.writer.writeUleb128(offset);
+            self.emitMemArg(instr.data_type, offset);
+
+            self.emitLocalStore(instr);
+        },
+        .UnsignedStackLoad => |extra| {
+            const offset = @as(i64, @intCast(instr.base().extra(.LocalAlloc).size +
+                self.ctx.stack_base)) + extra.offset;
+
+            try self.ctx.buf.writer.writeByte(selectUnsignedLoadOp(extra.src_ty));
+            self.emitMemArg(extra.src_ty, offset);
 
             self.emitLocalStore(instr);
         },
@@ -1103,9 +1134,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 self.ctx.stack_base)) + extra.offset;
 
             try self.ctx.buf.writer.writeByte(selectSignedLoadOp(instr.data_type, extra.src_ty));
-            const alignment = std.math.log2_int(u64, extra.src_ty.size());
-            try self.ctx.buf.writer.writeUleb128(alignment);
-            try self.ctx.buf.writer.writeUleb128(offset);
+            self.emitMemArg(extra.src_ty, offset);
 
             self.emitLocalStore(instr);
         },

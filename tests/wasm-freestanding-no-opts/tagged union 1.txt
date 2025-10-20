@@ -48,8 +48,7 @@
                 br_if 0 (;@6;)
                 global.get 0
                 i32.wrap_i64
-                i32.load
-                i64.extend_i32_u
+                i64.load32_u
                 local.set 3
                 br 5 (;@1;)
               end

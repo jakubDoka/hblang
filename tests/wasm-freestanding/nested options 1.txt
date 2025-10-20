@@ -14,10 +14,7 @@
     call $nested_options_1.defc
     global.get 0
     i32.wrap_i64
-    i32.load8_u
-    i32.const 255
-    i32.and
-    i64.extend_i32_u
+    i64.load8_u
     i64.const 8
     global.get 0
     i64.add

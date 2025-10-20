@@ -21,5 +21,14 @@
 (Load ?c m bs @ base offset = {bs.knownOffset()}) :
   (WLoad (:offset) c m base)
 
+(UnOp _ (:op .uext) (:data_type .i64)
+  (WLoad ?c (:data_type src_ty) (:offset) m bs)) :
+  (UnsignedLoad (:offset) (:src_ty) c m bs)
+
+(UnOp _ (:op .uext) (:data_type .i64)
+  (StackLoad ?c (:data_type src_ty) (:offset) m bs)) :
+  (UnsignedStackLoad (:offset) (:src_ty) c m bs)
+
 (UnOp _ (:op .uext) (:data_type .i32 | .i16) (WLoad:l)) : l
+
 (UnOp _ (:op .uext) (:data_type .i32 | .i16) (StackLoad:l)) : l

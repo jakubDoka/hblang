@@ -11,8 +11,7 @@
     i32.store
     global.get 0
     i32.wrap_i64
-    i32.load
-    i64.extend_i32_u
+    i64.load32_u
     i64.const 8
     global.get 0
     i64.add

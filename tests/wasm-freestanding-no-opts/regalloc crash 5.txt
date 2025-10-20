@@ -31,8 +31,7 @@
     i32.store offset=16
     global.get 0
     i32.wrap_i64
-    i32.load offset=16
-    i64.extend_i32_u
+    i64.load32_u offset=16
     i64.const 24
     global.get 0
     i64.add
