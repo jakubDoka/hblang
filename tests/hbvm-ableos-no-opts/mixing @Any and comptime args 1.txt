@@ -9,14 +9,14 @@ main:
         bmc $1, $2, 8
          ld $1, $254, 0, 1
          ld $2, $254, 4, 4
-        jal $31, $0, :mixing @Any and comptime args 1.bind(.main, ?i32)
+        jal $31, $0, :mixing @Any and comptime args 1.bind(.main.a, ?i32)
          st $1, $254, 16, 1
          st $2, $254, 20, 4
          cp $1, $0
      addi64 $254, $254, 32
          ld $31, $254, -8, 8
          tx
-mixing @Any and comptime args 1.bind(.main, ?i32):
+mixing @Any and comptime args 1.bind(.main.a, ?i32):
          st $31, $254, -8, 8
      addi64 $254, $254, -32
          st $1, $254, 0, 1
@@ -25,7 +25,7 @@ mixing @Any and comptime args 1.bind(.main, ?i32):
        andi $1, $1, 255
         jeq $1, $0, :1
          ld $1, $254, 4, 4
-        jal $31, $0, :mixing @Any and comptime args 1.main
+        jal $31, $0, :mixing @Any and comptime args 1.main.a
          st $1, $254, 8, 1
          st $2, $254, 12, 4
          ld $1, $254, 8, 1
@@ -37,7 +37,7 @@ mixing @Any and comptime args 1.bind(.main, ?i32):
 3:   addi64 $254, $254, 32
          ld $31, $254, -8, 8
        jala $0, $31, 0
-mixing @Any and comptime args 1.main:
+mixing @Any and comptime args 1.main.a:
      addi64 $254, $254, -16
          st $1, $254, 8, 4
         li8 $2, 1

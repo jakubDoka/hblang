@@ -533,7 +533,10 @@ pub const Struct = struct {
 
             if (struct_ast.alignment.tag() != .Void) {
                 if (@hasField(Field, "alignment")) @compileError("assert fields <= alignment then base alignment");
-                self.alignment = @bitCast(types.ct.evalIntConst(.{ .Perm = .init(.{ .Struct = id }) }, struct_ast.alignment) catch 1);
+                self.alignment = @bitCast(types.ct.evalIntConst(
+                    .{ .Perm = .init(.{ .Struct = id }) },
+                    struct_ast.alignment,
+                ) catch 1);
                 if (self.alignment == 0 or !std.math.isPowerOfTwo(self.alignment.?)) {
                     types.report(self.key.loc.file, struct_ast.alignment, "the alignment needs to be power of 2, got {}", .{self.alignment.?});
                     self.alignment = 1;
@@ -653,7 +656,7 @@ pub const Func = struct {
 
     pub const CompileState = enum { queued, compiled };
 
-    pub fn sig(self: Func) FnPtr {
+    pub fn sig(self: Func) FnTy {
         return .{ .ret = self.ret, .args = self.args };
     }
 };
@@ -702,12 +705,12 @@ pub const Global = struct {
     pub const Reloc = root.backend.Machine.DataOptions.Reloc;
 };
 
-pub const FnPtr = struct {
+pub const FnTy = struct {
     args: []TyId,
     ret: TyId,
 
     pub fn computeAbi(
-        self: FnPtr,
+        self: FnTy,
         abi: Types.Abi,
         types: *Types,
         scratch: *utils.Arena,

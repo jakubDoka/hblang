@@ -1,25 +1,30 @@
-mixing @Any and comptime args 1.bind(.main, ?i32):
-	sub rsp, 0x20
+mixing @Any and comptime args 1.bind(.main.a, ?i32):
+	sub rsp, 0x18
 	mov [rsp], rdi
 	mov al, [rsp]
 	test al, al
 	jz :0
-	mov eax, [rsp+0x04]
-	mov byte ptr [rsp+0x08], 0x01
-	add eax, 0x05
-	mov [rsp+0x0C], eax
-	mov rax, [rsp+0x08]
+	mov edi, [rsp+0x04]
+	call :mixing @Any and comptime args 1.main.a
 	jmp :1
-0:	mov byte ptr [rsp+0x10], 0x00
-	mov rax, [rsp+0x10]
-1:	add rsp, 0x20
+0:	mov byte ptr [rsp+0x08], 0x00
+	mov rax, [rsp+0x08]
+1:	add rsp, 0x18
+	ret
+mixing @Any and comptime args 1.main.a:
+	sub rsp, 0x10
+	mov byte ptr [rsp], 0x01
+	add edi, 0x05
+	mov [rsp+0x04], edi
+	mov rax, [rsp]
+	add rsp, 0x10
 	ret
 main:
 	sub rsp, 0x08
 	mov byte ptr [rsp], 0x01
 	mov dword ptr [rsp+0x04], 0x00
 	mov rdi, [rsp]
-	call :mixing @Any and comptime args 1.bind(.main, ?i32)
+	call :mixing @Any and comptime args 1.bind(.main.a, ?i32)
 	xor rax, rax
 	add rsp, 0x08
 	ret

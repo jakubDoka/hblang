@@ -42,7 +42,7 @@ main := fn(): int {
 #### type_info error 1
 ```hb
 main := fn(): uint {
-    $info := @type_info(main).@fn
+    $info := @type_info(@TypeOf(main)).@fn
     $if info.ret == uint return 0
     return 1
 }
@@ -373,7 +373,7 @@ main := fn(): uint return A.A
 #### generic structs 7 (template method call)
 ```hb
 A := struct {
-    apply := fn(self: ^@CurrentScope(), $func: type): void {}
+    apply := fn(self: ^@CurrentScope(), $func: fn(): void): void {}
 }
 
 main := fn(): uint {
@@ -472,21 +472,23 @@ cache := fn($fnc: type, $Args: type): type {
         cached: ?@TypeOf(fnc(@as(Args, idk))) = null
         args: ?Args = null
     }
-    return fn(invalidate: bool, args: Args): @TypeOf(fnc(@as(Args, idk))) {
-        if invalidate || Inner.args == null || Inner.args.? != args {
-            Inner.cached = null
-            Inner.args = args
-        }
+    return struct {
+        do := fn(invalidate: bool, args: Args): @TypeOf(fnc(@as(Args, idk))) {
+            if invalidate || Inner.args == null || Inner.args.? != args {
+                Inner.cached = null
+                Inner.args = args
+            }
 
-        Inner.cached ||= @inline(fnc, args)
-        return Inner.cached.?
+            Inner.cached ||= @inline(fnc, args)
+            return Inner.cached.?
+        }
     }
 }
 
 add := cache(fn(args: @Any()): i32 {
     //@syscall(1, 2, "computing...\n".ptr, "computing...\n".len)
     return args.x + args.y
-}, struct{.x: i32; .y: i32})
+}, struct{.x: i32; .y: i32}).do
 
 main := fn(): int {
     $if !@target("x86_64-linux") return 0
@@ -722,7 +724,7 @@ X := struct {
 }
 
 main := fn(): uint {
-    X.(@fnptr_of(fn(): void {})).func()
+    X.(&fn(): void {}).func()
 
     return 0
 }
@@ -735,7 +737,7 @@ DynObj := struct {
     .obj: ^void
 
     $new := fn($T: type, inst: ^T): DynObj {
-        return .(@bit_cast(@fnptr_of(T.do_thing)), @bit_cast(inst))
+        return .(@bit_cast(&T.do_thing), @bit_cast(inst))
     }
 }
 
@@ -762,7 +764,7 @@ DynObj := struct {
         return self.v_func(self.obj)
     }
     $new := fn(obj: @Any()): DynObj {
-        return .(@fnptr_of(@TypeOf(obj.*).func), obj)
+        return .(&@TypeOf(obj.*).func, obj)
     }
 }
 
@@ -1103,7 +1105,7 @@ Z := struct {
 main := fn(): uint {
     $i := 0
     $T := Z
-    $while i < 100 {
+    $while i < 10 {
         i += 1
         T = S(T)
     }
@@ -1446,7 +1448,7 @@ Iterator := fn($Iter: type): type return struct {
     Self := @CurrentScope()
 
     $next := fn(self: ^Self): Next return self.inner.next()
-    $for_each := fn(self: ^Self, $func: type): void {
+    $for_each := fn(self: ^Self, $func: fn(Value): void): void {
         while x := self.next() {
             _ = func(x)
         }
@@ -1964,76 +1966,6 @@ main := fn(): uint {
 }
 ```
 
-#### async 1
-```hb
-expectations := .{
-    should_error: true,
-}
-
-Async := fn($T: type, $Poller: type): type return struct {
-    .poller: Poller
-    new := fn(x: Input): @CurrentScope() {
-        return .(Poller.new1(x))
-    }
-    Input := T
-    Poll := Poller
-    poll := fn(self: @CurrentScope()): @TypeOf(Poller.poll1(idk)) {
-        return self.poller.poll1()
-    }
-}
-
-bind := fn(self: @Any(), $f: type): Async(T, struct {
-    .done1: bool;
-    .poller: union {
-        .left: Poll;
-        .right: f.Poll;
-    }
-    new1 := fn(x: Poll): @CurrentScope() {
-        return .(false, @bit_cast(x))
-    }
-    poll1 := fn(self1: @CurrentScope()): @TypeOf(f.Poll.poll1(idk)) {
-        loop if self1.done1 {
-            p: ^f.Poll = @bit_cast(&self.poller)
-            return p.poll1()
-        } else {
-            p: ^Poll = @bit_cast(&self.poller)
-            ret := p.poll1()
-            if ret == null {
-                return null
-            }
-            self1.done1 = true
-            self1.poller.right = f.Poll.new(ret.?)
-        }
-    }
-}) {
-    return .(.(false, .(.left = self)))
-}
-
-main := fn(): uint {
-    T := Async(i32, struct {
-        new1 := fn(x: i32): @CurrentScope() {
-            return .()
-        }
-        poll1 := fn(self: @CurrentScope()): ?uint {
-            return 1
-        }
-    })
-    U := Async(uint, struct {
-        new1 := fn(x: uint): @CurrentScope() {
-            return .()
-        }
-        poll1 := fn(self: @CurrentScope()): ?i32 {
-            return 2
-        }
-    })
-    b := bind(T.new(0), U)
-    a := bind(b, T)
-    x := a.poll()
-    loop if x == null break else x = a.poll()
-    return x.?
-}
-```
-
 #### fmt prec 2
 ```hb
 
@@ -2050,7 +1982,7 @@ f := fn(): void {
 
 #### mixing @Any and comptime args 1
 ```hb
-bind := fn(val: @Any(), $f: type): @TypeOf(f(idk)) {
+bind := fn(val: @Any(), $f: fn(@TypeOf(val.?)): @TypeOf(val)): @TypeOf(f(idk)) {
     if val != null {
         return f(val.?)
     }

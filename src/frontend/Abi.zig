@@ -176,7 +176,8 @@ pub fn categorize(self: Abi, ty: Id, types: *Types) TmpSpec {
     return switch (self.cc) {
         .ablecall, .wasmcall => switch (ty.data()) {
             .Builtin => |b| categorizeBuiltin(b),
-            .Pointer, .FnPtr => .{ .ByValue = .i64 },
+            .Pointer => .{ .ByValue = .i64 },
+            .FnTy => .{ .ByValue = .i32 },
             .Enum => |enm| self.categorize(enm.getBackingInt(types), types),
             .Union => |s| categorizeAbleosUnion(s, types),
             .Slice => return .{ .ByValuePair = .{
@@ -238,7 +239,8 @@ pub fn categorizeSystemv(ty: Id, types: *Types) TmpSpec {
                     if (e.getBackingInt(ts) == .void) return;
                     break :b .int;
                 },
-                .Pointer, .FnPtr => .int,
+                .Pointer => .int,
+                .FnTy => .int,
                 .Union => |s| {
                     if (s.getFields(ts).len == 0) return error.Impossible;
 

@@ -187,7 +187,9 @@ pub fn testBuilder(
 ) !void {
     var type_system_arena = utils.Arena.init(1024 * 1024 * 32);
 
-    const asts = parseExample(&type_system_arena, name, code, output) catch return;
+    const asts = parseExample(&type_system_arena, name, code, output) catch {
+        return error.TestFailed;
+    };
     const ast = asts[0];
 
     var func_arena = utils.Arena.scrath(null);
@@ -225,7 +227,6 @@ pub fn testBuilder(
 
     if (errored) {
         try std.testing.expect(expectations.should_error);
-
         return;
     }
 

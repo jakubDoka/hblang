@@ -1008,7 +1008,7 @@ main := fn(): uint {
         return some_fn() + 1
     }
 
-    $some_fn3 := fn($fnc: type): type {
+    $some_fn3 := fn($fnc: fn(): some_int): (fn(): some_int) {
         return fn(): some_int {
             return fnc() + 10
         }
@@ -1680,12 +1680,29 @@ main := fn(): uint {
 }
 ```
 
+#### function types 1
+```hb
+expectations := .{
+    return_value: 11,
+}
+
+main := fn(): uint {
+    fun := fn(x: uint): uint return x + 1
+
+    take_fun := fn($f: fn(uint): uint): uint {
+        return f(10)
+    }
+
+    return take_fun(fun)
+}
+```
+
 #### function pointers 1
 ```hb
 call := fn(f: ^fn(u8): u8, v: u8): u8 return f(v)
 
 main := fn(): uint {
-    return call(@fnptr_of(fn(x: u8): u8 return x - 10), 10)
+    return call(&fn(x: u8): u8 return x - 10, 10)
 }
 ```
 
@@ -1714,10 +1731,10 @@ $vtable_entries := fn($T: type): []type {
     $i := 0
     $while n < @decl_count_of(T) {
         $decl := T[n]
-        $if @TypeOf(decl) == type $if @type_info(decl) == .@fn {
-            $args := @type_info(decl).@fn.args
+        $if @type_info(@TypeOf(decl)) == .fnty {
+            $args := @type_info(@TypeOf(decl)).fnty.args
             $if args.len > 0 $if args[0] == ^T {
-                scratch[i] = @TypeOf(@fnptr_of(decl))
+                scratch[i] = @TypeOf(&decl)
                 i += 1
             }
         }
@@ -1748,7 +1765,7 @@ $vtable := fn($V: type, $Dyn: type): Vtable(V) {
     $tmp: Vtable(V) = idk
     $n := 0
     $while n < @len_of(Vtable(V)) {
-        tmp[n] = @bit_cast(@fnptr_of(Dyn[n]))
+        tmp[n] = @bit_cast(&Dyn[n])
         n += 1
     }
 
@@ -2265,8 +2282,8 @@ main := fn(): uint {
     $Array := @Type(.{array: .{elem: u8, len: 1}})
     $if Array != [1]u8 return 5
 
-    $FnPtr := @Type(.{fnptr: .{args: &.[u8, u8], ret: u8}})
-    $if FnPtr != ^fn(u8, u8): u8 return 6
+    $FnTy := @Type(.{fnty: .{args: &.[u8, u8], ret: u8}})
+    $if FnTy != (fn(u8, u8): u8) return 6
 
     $Stru := MakeStruct("foo", u8)
     $StruI := MakeStruct("foo", u8)

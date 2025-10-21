@@ -1,4 +1,4 @@
-dump asm crash 1.cache(, )(.Inner):
+dump asm crash 1.cache(, )(.Inner).do:
 	sub rsp, 0x38
 	mov [rsp+0x28], dil
 	mov [rsp], rsi
@@ -82,7 +82,7 @@ main:
 	mov dword ptr [rsp+0x0C], 0x02
 	mov rsi, [rsp+0x08]
 	xor rdi, rdi
-	call :dump asm crash 1.cache(, )(.Inner)
+	call :dump asm crash 1.cache(, )(.Inner).do
 	mov [rsp+0x14], eax
 	mov eax, [rsp+0x14]
 	mov [rsp+0x10], eax

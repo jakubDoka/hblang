@@ -266,11 +266,22 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
             try self.fmtExpr(f.body);
             if (prec < fn_prec) try self.buf.writeAll(")");
         },
-        .FnPtr => |f| {
-            try self.buf.writeAll("^fn");
+        .FnTy => |f| {
+            const is_parentesized =
+                f.pos.index != 0 and self.ast.source[f.pos.index - 1] == '(' and
+                f.terminator.index != self.ast.source.len and self.ast.source[f.terminator.index] == ')';
+
+            const should_keep_parentheses = is_parentesized and
+                !Lexer.peek(self.ast.source, f.terminator.index + 1).kind.cantStartExpression();
+
+            if (should_keep_parentheses) try self.buf.writeAll("(");
+
+            try self.buf.writeAll("fn");
             try self.fmtSlice(f.pos.flag.indented, f.args, .@"(", .@",", .@")");
             try self.buf.writeAll(": ");
             try self.fmtExpr(f.ret);
+
+            if (should_keep_parentheses) try self.buf.writeAll(")");
         },
         .EnumWildcard => |s| {
             try self.buf.writeAll("enum");
@@ -557,11 +568,7 @@ fn fmtSliceLow(
 
     for (view, 1..) |id, i| {
         if (indent) for (0..self.indent) |_| try self.buf.writeByte('\t');
-        if (@TypeOf(id) == Ast.Arg) {
-            try self.fmtExpr(id.bindings);
-            try self.buf.writeAll(": ");
-            try self.fmtExpr(id.ty);
-        } else if (@TypeOf(id) == Ast.CtorField) {
+        if (@TypeOf(id) == Ast.CtorField) {
             try self.buf.writeAll(self.ast.tokenSrc(id.pos.index));
             if (id.pos.index != if (self.ast.exprs.getTyped(.Ident, id.value)) |ident| ident.pos.index else std.math.maxInt(u31)) {
                 try self.buf.writeAll(": ");

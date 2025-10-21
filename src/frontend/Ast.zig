@@ -46,11 +46,6 @@ pub fn cmpLow(pos: u32, source: [:0]const u8, repr: []const u8) bool {
     return std.mem.eql(u8, str, repr);
 }
 
-pub const Arg = struct {
-    bindings: Id,
-    ty: Id,
-};
-
 pub const CtorField = struct {
     pos: Pos,
     value: Id,
@@ -85,17 +80,18 @@ pub const Expr = union(enum) {
         pos: Pos,
         comptime_args: Idents,
         captures: Captures,
-        args: utils.EnumSlice(Arg),
+        args: Slice,
         ret: Id,
         body: Id,
         peak_vars: u16,
         peak_loops: u8,
         thread: ?u7 = null,
     },
-    FnPtr: struct {
+    FnTy: struct {
         pos: Pos,
         args: Slice,
         ret: Id,
+        terminator: Pos,
     },
     Type: struct {
         pos: Pos,
@@ -439,11 +435,15 @@ pub fn tokenSrc(self: *const Ast, pos: u32) []const u8 {
 }
 
 pub fn posOf(self: *const Ast, origin: anytype) Pos {
+    return posOfLow(&self.exprs, origin);
+}
+
+pub fn posOfLow(self: *const Store, origin: anytype) Pos {
     return switch (@TypeOf(origin)) {
         Id => switch (origin.tag()) {
-            inline else => |v| self.posOfPayload(self.exprs.getTyped(v, origin).?.*),
+            inline else => |v| posOfPayload(self, self.getTyped(v, origin).?.*),
         },
-        else => self.posOfPayload(origin),
+        else => posOfPayload(self, origin),
     };
 }
 
@@ -456,19 +456,19 @@ pub fn strPos(self: *const Ast, str: []const u8) Types.Scope.NamePos {
     return @enumFromInt(str.ptr - self.source.ptr);
 }
 
-fn posOfPayload(self: *const Ast, v: anytype) Pos {
-    if (@typeInfo(@TypeOf(v)) == .pointer) return self.posOfPayload(v.*);
+fn posOfPayload(self: *const Store, v: anytype) Pos {
+    if (@typeInfo(@TypeOf(v)) == .pointer) return posOfPayload(self, v.*);
     return switch (@TypeOf(v)) {
         void => .init(0),
         Ident => .init(v.pos()),
         Pos => v,
         u32, u31 => .init(v),
-        Id => self.posOf(v),
-        Ctor => if (v.ty.tag() != .Void) self.posOf(v.ty) else v.pos,
+        Id => posOfLow(self, v),
+        Ctor => if (v.ty.tag() != .Void) posOfLow(self, v.ty) else v.pos,
         else => |Vt| if (@hasField(Vt, "pos"))
             v.pos
         else
-            self.posOf(@field(v, std.meta.fields(Vt)[0].name)),
+            posOfLow(self, @field(v, std.meta.fields(Vt)[0].name)),
     };
 }
 

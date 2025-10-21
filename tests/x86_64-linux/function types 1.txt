@@ -1,0 +1,15 @@
+function types 1.main.take_fun(.fun):
+	sub rsp, 0x08
+	mov rdi, 0x0A
+	call :function types 1.main.fun
+	add rsp, 0x08
+	ret
+function types 1.main.fun:
+	inc rdi
+	mov rax, rdi
+	ret
+main:
+	sub rsp, 0x08
+	call :function types 1.main.take_fun(.fun)
+	add rsp, 0x08
+	ret

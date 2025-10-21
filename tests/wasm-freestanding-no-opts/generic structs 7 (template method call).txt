@@ -5,11 +5,11 @@
     i64.const 0
     global.get 0
     i64.add
-    call $generic_structs_7__template_method_call_.A.apply_.main_
+    call $generic_structs_7__template_method_call_.A.apply_.main.y_
     i64.const 0
     return
     unreachable)
-  (func $generic_structs_7__template_method_call_.A.apply_.main_ (type 1) (param i64)
+  (func $generic_structs_7__template_method_call_.A.apply_.main.y_ (type 1) (param i64)
     global.get 0
     i64.const 8
     i64.sub

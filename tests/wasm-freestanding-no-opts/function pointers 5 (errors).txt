@@ -1,6 +1,0 @@
-function pointers 5 (errors):8:15: you are trying to coerse the ^type to function pointer, use @fnptr_of instead
-    return call(&fn(x: u8): u8 return x - 10, 10)
-                 ^
-function pointers 5 (errors):7:20: function returns a uint, which has more then 1 value, but end of the function body is reachable
-main := fn(): uint {
-                   ^

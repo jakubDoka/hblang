@@ -1,6 +1,20 @@
-function pointers 5 (errors):8:15: you are trying to coerse the ^type to function pointer, use @fnptr_of instead
-    return call(&fn(x: u8): u8 return x - 10, 10)
-                 ^
-function pointers 5 (errors):7:20: function returns a uint, which has more then 1 value, but end of the function body is reachable
-main := fn(): uint {
-                   ^
+function pointers 5 (errors).call:
+	sub rsp, 0x08
+	mov rax, rdi
+	mov rcx, rsi
+	mov rdi, rcx
+	call rax
+	add rsp, 0x08
+	ret
+function pointers 5 (errors).main:
+	sub dil, 0x0A
+	mov rax, rdi
+	ret
+main:
+	sub rsp, 0x08
+	lea rdi, [0x0000000000000007]
+	mov rsi, 0x0A
+	call :function pointers 5 (errors).call
+	movzx rax, al
+	add rsp, 0x08
+	ret

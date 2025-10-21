@@ -1,64 +1,79 @@
-main:
-	sub rsp, 0x40
-	xor rcx, rcx
-	xor rsi, rsi
-	xor rax, rax
-6:	cmp rcx, 0x64
-	setb dl
-	movzx rdx, dl
-	test dl, dl
+dump asm crash 1.cache(, )(.Inner).do:
+	sub rsp, 0x30
+	mov [rsp+0x08], rsi
+	test dil, dil
 	jz :0
-	mov dword ptr [rsp+0x10], 0x01
-	mov dword ptr [rsp+0x14], 0x02
-	mov rdx, [rsp+0x10]
-	mov [rsp+0x20], rdx
-	mov dl, [0x0000000000000006]
-	cmp dl, al
-	jnz :1
-	mov rdx, 0x01
-	jmp :2
-1:	mov edi, [0x0000000000000006]
-	mov esi, [rsp+0x24]
-	mov edx, [0x0000000000000006]
-	cmp edx, esi
-	setnz sil
-	movzx rsi, sil
-	mov edx, [rsp+0x20]
-	cmp edi, edx
-	setnz dl
-	movzx rdx, dl
-	or edx, esi
-2:	test dl, dl
-	jz :4
+	mov rax, 0x01
+	jmp :1
+0:	xor rcx, rcx
+	mov al, [0x0000000000000006]
+	cmp al, cl
+	setz al
+	movzx rax, al
+1:	test al, al
+	jz :2
+	mov rcx, 0x01
+	jmp :3
+2:	mov ecx, [0x0000000000000006]
+	mov edx, [rsp+0x0C]
+	mov eax, [rsp+0x08]
+	cmp ecx, eax
+	setnz cl
+	movzx rcx, cl
+	mov eax, [0x0000000000000006]
+	cmp eax, edx
+	setnz al
+	movzx rax, al
+	or ecx, eax
+3:	test cl, cl
+	jz :5
 	mov byte ptr [0x0000000000000008], 0x00
-	mov byte ptr [rsp+0x28], 0x01
-	mov rdx, [rsp+0x20]
-	mov [rsp+0x2C], rdx
-	mov rdx, [rsp+0x28]
-	mov [0x0000000000000007], rdx
-	mov edx, [rsp+0x30]
-	mov [0x0000000000000006], edx
-	jmp :4
-4:	mov dl, [0x0000000000000006]
-	test dl, dl
-	jz :4
-	mov rdx, [0x0000000000000007]
-	mov [rsp+0x18], rdx
+	mov byte ptr [rsp+0x20], 0x01
+	mov rax, [rsp+0x08]
+	mov [rsp+0x24], rax
+	mov rax, [rsp+0x20]
+	mov [0x0000000000000007], rax
+	mov eax, [rsp+0x28]
+	mov [0x0000000000000006], eax
 	jmp :5
-4:	mov rdx, [rsp+0x20]
-	mov [rsp], rdx
-	mov edx, [rsp]
-	add edx, [rsp+0x04]
-	mov [rsp+0x1C], edx
-5:	mov byte ptr [rsp+0x08], 0x01
-	mov edx, [rsp+0x1C]
-	mov [rsp+0x0C], edx
-	mov rdx, [rsp+0x08]
-	mov [0x0000000000000007], rdx
-	inc rcx
-	mov esi, [0x0000000000000006]
+5:	mov al, [0x0000000000000006]
+	test al, al
+	jz :5
+	mov rax, [0x0000000000000007]
+	mov [rsp], rax
 	jmp :6
-0:	movsxd rax, esi
+5:	mov rax, [rsp+0x08]
+	mov [rsp+0x10], rax
+	mov eax, [rsp+0x10]
+	add eax, [rsp+0x14]
+	mov [rsp+0x04], eax
+6:	mov byte ptr [rsp+0x18], 0x01
+	mov eax, [rsp+0x04]
+	mov [rsp+0x1C], eax
+	mov rax, [rsp+0x18]
+	mov [0x0000000000000007], rax
+	mov eax, [0x0000000000000006]
+	add rsp, 0x30
+	ret
+main:
+	push rbx
+	sub rsp, 0x10
+	xor rbx, rbx
+	xor rax, rax
+1:	cmp rbx, 0x64
+	setb cl
+	movzx rcx, cl
+	test cl, cl
+	jz :0
+	mov dword ptr [rsp], 0x01
+	mov dword ptr [rsp+0x04], 0x02
+	mov rsi, [rsp]
+	xor rdi, rdi
+	call :dump asm crash 1.cache(, )(.Inner).do
+	inc rbx
+	jmp :1
+0:	movsxd rax, eax
 	sub rax, 0x03
-	add rsp, 0x40
+	add rsp, 0x10
+	pop rbx
 	ret

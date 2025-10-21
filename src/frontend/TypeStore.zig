@@ -17,6 +17,7 @@ const tys = root.frontend.types;
 pub const Abi = root.frontend.Abi;
 
 pub const comptime_only_fn = Machine.max_func - 1;
+pub const disabled_handler = 0;
 
 errored: bool = false,
 alignment: void align(std.atomic.cache_line) = {},
@@ -91,9 +92,9 @@ pub const TypeCtx = struct {
 
         return switch (ad) {
             .Builtin => |bl| bl == bd.Builtin,
-            .FnPtr => |s| {
-                return self.types.store.get(s).ret == self.types.store.get(bd.FnPtr).ret and
-                    std.mem.eql(Id, self.types.store.get(s).args, self.types.store.get(bd.FnPtr).args);
+            .FnTy => |s| {
+                return self.types.store.get(s).ret == self.types.store.get(bd.FnTy).ret and
+                    std.mem.eql(Id, self.types.store.get(s).args, self.types.store.get(bd.FnTy).args);
             },
             inline .Slice, .Simd, .Pointer, .Array => |s, t| std.meta.eql(
                 self.types.store.get(s).*,
@@ -119,7 +120,7 @@ pub const TypeCtx = struct {
             .Nullable => |n| std.hash.autoHash(&hasher, self.types.store.get(n).inner),
             // its an array of integers, splat
             .Tuple => |n| hasher.update(@ptrCast(self.types.store.get(n).fields)),
-            .FnPtr => |s| {
+            .FnTy => |s| {
                 hasher.update(std.mem.asBytes(&self.types.store.get(s).ret));
                 hasher.update(@ptrCast(self.types.store.get(s).args));
             },
@@ -376,13 +377,13 @@ pub const Id = enum(IdRepr) {
         return switch (self.data()) {
             .Struct, .Union, .Enum => self,
             inline .Func, .Template, .Global => |t| types.store.get(t).key.loc.scope.firstType(types),
-            .Builtin, .Tuple, .Pointer, .Nullable, .Slice, .FnPtr, .Simd, .Array => unreachable,
+            .Builtin, .Tuple, .Pointer, .Nullable, .Slice, .FnTy, .Simd, .Array => unreachable,
         };
     }
 
     pub fn file(self: Id, types: *Types) ?File {
         return switch (self.data()) {
-            .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnPtr, .Simd, .Array => null,
+            .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnTy, .Simd, .Array => null,
             inline else => |v| types.store.get(v).key.loc.file,
         };
     }
@@ -396,7 +397,7 @@ pub const Id = enum(IdRepr) {
 
     pub fn getKey(self: Id, types: *Types) *Scope {
         return switch (self.data()) {
-            .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnPtr, .Simd, .Array => utils.panic("{s}", .{@tagName(self.data())}),
+            .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnTy, .Simd, .Array => utils.panic("{s}", .{@tagName(self.data())}),
             inline else => |v| &types.store.get(v).key,
         };
     }
@@ -407,7 +408,7 @@ pub const Id = enum(IdRepr) {
 
     pub fn items(self: Id, ast: *const Ast, types: *Types) Ast.Slice {
         return switch (self.data()) {
-            .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnPtr, .Simd, .Array => utils.panic("{s}", .{@tagName(self.data())}),
+            .Global, .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnTy, .Simd, .Array => utils.panic("{s}", .{@tagName(self.data())}),
             .Template, .Func => .{},
             inline else => |v| ast.exprs.get(types.store.get(v).key.loc.ast).Type.fields,
         };
@@ -429,6 +430,10 @@ pub const Id = enum(IdRepr) {
 
     pub fn isInteger(self: Id) bool {
         return self.isUnsigned() or self.isSigned();
+    }
+
+    pub fn isFnPtr(self: Id, types: *Types) bool {
+        return self.data() == .Pointer and self.data().Pointer.get(types).data() == .FnTy;
     }
 
     pub fn isFloat(self: Id) bool {
@@ -513,7 +518,8 @@ pub const Id = enum(IdRepr) {
                 .u32, .i32, .f32 => 4,
                 .uint, .i64, .f64, .u64, .int => 8,
             },
-            .Pointer, .FnPtr => 8,
+            .Pointer => 8,
+            .FnTy => @sizeOf(u32),
             .Enum => |e| e.getBackingInt(types).size(types),
             .Tuple => |t| {
                 var total_size: u64 = 0;
@@ -539,7 +545,8 @@ pub const Id = enum(IdRepr) {
     pub fn alignment(self: Id, types: *Types) u64 {
         return switch (self.data()) {
             .Builtin, .Enum => @max(1, self.size(types)),
-            .Pointer, .FnPtr => 8,
+            .Pointer => 8,
+            .FnTy => @sizeOf(u32),
             .Nullable => |n| types.store.get(n).inner.alignment(types),
             .Struct => |s| s.getAlignment(types),
             .Union => |u| u.alignment(types),
@@ -614,6 +621,7 @@ pub const Id = enum(IdRepr) {
                     .Type => |t| try wrter.print("ty: {}", .{t.data()}),
                     .Value => |v| try wrter.print("v: {}", .{v}),
                     .PopScope => try wrter.writeAll("pop scope"),
+                    .PushScope => try wrter.writeAll("push scope"),
                 }
             }
         };
@@ -637,7 +645,9 @@ pub const Id = enum(IdRepr) {
 
             work_list.appendAssumeCapacity(.{ .Type = self.self });
 
-            while (work_list.pop()) |task| switch (task) {
+            while (work_list.pop()) |task| switch (b: {
+                break :b task;
+            }) {
                 .PopScope => |v| scope_stack.items.len = v,
                 .PushScope => |v| try scope_stack.append(tmp.arena.allocator(), v),
                 .Type => |t| switch (t.data()) {
@@ -646,21 +656,23 @@ pub const Id = enum(IdRepr) {
                         try writer.writeAll("^");
                         work_list.appendAssumeCapacity(.{ .Type = self.tys.store.get(p).* });
                     },
-                    .FnPtr => |p| {
-                        try writer.writeAll("^fn(");
+                    .FnTy => |p| {
+                        try writer.writeAll("fn(");
                         const fp = self.tys.store.get(p);
                         work_list.ensureUnusedCapacity(
                             tmp.arena.allocator(),
-                            fp.args.len + 3,
+                            fp.args.len * 2 + 2,
                         ) catch unreachable;
                         work_list.appendAssumeCapacity(.{ .Type = fp.ret });
                         work_list.appendAssumeCapacity(.{ .Name = "): " });
-                        var iter = std.mem.reverseIterator(fp.args);
-                        while (iter.next()) |arg| {
-                            work_list.appendAssumeCapacity(.{ .Type = arg });
-                            work_list.appendAssumeCapacity(.{ .Name = ", " });
+                        if (fp.args.len != 0) {
+                            var iter = std.mem.reverseIterator(fp.args);
+                            while (iter.next()) |arg| {
+                                work_list.appendAssumeCapacity(.{ .Type = arg });
+                                work_list.appendAssumeCapacity(.{ .Name = ", " });
+                            }
+                            _ = work_list.pop();
                         }
-                        _ = work_list.pop();
                     },
                     .Slice => |s| {
                         try writer.writeAll("[]");
@@ -704,10 +716,9 @@ pub const Id = enum(IdRepr) {
                             self.tys.store.get(t.data().Template).temporary == false);
 
                         var cursor: Id = t;
-                        var depth: usize = 0;
                         const frame = scope_stack.items.len;
                         work_list.appendAssumeCapacity(.{ .PopScope = frame });
-                        while (cursor != .void) : (depth += 1) {
+                        while (cursor != .void) {
                             if (std.mem.indexOfScalar(Id, scope_stack.items, cursor) != null) {
                                 try work_list.append(tmp.arena.allocator(), .{ .Name = "." });
                                 break;
@@ -826,9 +837,11 @@ pub const Id = enum(IdRepr) {
                             .Value = .normalize(.{ .ty = ty, .value = global }, self.tys),
                         });
                     },
-                    .FnPtr, .Simd => {
-                        unreachable;
+                    .FnTy => {
+                        const id: utils.EntId(tys.Func) = @enumFromInt(v.value);
+                        work_list.appendAssumeCapacity(.{ .Type = .init(.{ .Func = id }) });
                     },
+                    .Simd => {},
                     .Tuple => |t| {
                         try writer.writeAll(".(");
                         var iter = @as(tys.Tuple.Id, t).offsetIter(self.tys);
@@ -1054,13 +1067,13 @@ pub fn cloneFrom(self: *Types, from: *Types, id: Id) struct { Id, bool } {
                 }
                 return .{ self.makeTuple(new_fields), false };
             },
-            .FnPtr => |f| {
+            .FnTy => |f| {
                 const fptr = from.store.get(f);
                 const new_params = tmp.arena.alloc(Id, fptr.args.len);
                 for (fptr.args, new_params) |a, *na| {
                     na.* = self.cloneFrom(from, a)[0];
                 }
-                return .{ self.internPtr(.FnPtr, .{
+                return .{ self.internPtr(.FnTy, .{
                     .args = new_params,
                     .ret = self.cloneFrom(from, fptr.ret)[0],
                 }), false };
@@ -1151,7 +1164,7 @@ pub fn cloneCaptureFrom(self: *Types, from: *Types, capture: Scope.Capture) Scop
             .ty = ty,
             .value = capture.value,
         },
-        .FnPtr => unreachable,
+        .FnTy => unreachable,
         .Slice => {
             var global: utils.EntId(tys.Global) = @enumFromInt(capture.value);
             const pop_until = self.global_work_list.get(.@"comptime").items.len;
@@ -1211,13 +1224,6 @@ pub fn findPointerOffsets(
             const inner_repr: Id = u.getFields(self)[@intCast(tag_value)].ty;
             self.findPointerOffsets(relocs, global, scratch, inner_repr, offset_f);
         },
-        .FnPtr => {
-            relocs.append(scratch.allocator(), .{
-                .offset = @intCast(offset),
-                .target = undefined,
-                .is_func = true,
-            }) catch unreachable;
-        },
         .Pointer => |p| {
             const base: Id = p.get(self).*;
 
@@ -1227,6 +1233,7 @@ pub fn findPointerOffsets(
             relocs.append(scratch.allocator(), .{
                 .offset = @intCast(offset),
                 .target = undefined,
+                .is_func = base.data() == .FnTy,
             }) catch unreachable;
         },
         .Array => |a| {
@@ -1284,6 +1291,7 @@ pub fn findPointerOffsets(
             const next_offset = if (nieche != null) data.inner.alignment(self) else 0;
             self.findPointerOffsets(relocs, global, scratch, data.inner, offset + next_offset);
         },
+        .FnTy => {},
         .Global, .Func, .Template => unreachable,
     }
 }
@@ -1426,6 +1434,7 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer, gp
     };
 
     slot.ct = .init(gpa orelse slot.pool.allocator());
+    _ = slot.store.add(&slot.pool.arena, tys.Func{ .key = .{}, .args = &.{}, .ret = .never });
 
     slot.ct.gen.emit_global_reloc_offsets = true;
     slot.ct.gen.push_uninit_globals = true;
@@ -1514,7 +1523,7 @@ pub const TypeInfo = extern struct {
             ty: Id,
             readonly: bool,
         },
-        fnptr: extern struct {
+        fnty: extern struct {
             args: Slice(Id),
             ret: Id,
         },
@@ -1536,7 +1545,7 @@ pub const TypeInfo = extern struct {
         template,
         @"@fn",
         global,
-        fnptr,
+        fnty,
         simd,
         array,
     },
@@ -1802,7 +1811,7 @@ pub fn internPtr(self: *Types, comptime tag: std.meta.Tag(Data), payload: std.me
     }
     if (@TypeOf(payload) == tys.Tuple) {
         vl.get(self).fields = self.pool.arena.dupe(tys.Tuple.Field, payload.fields);
-    } else if (@TypeOf(payload) == tys.FnPtr) {
+    } else if (@TypeOf(payload) == tys.FnTy) {
         vl.get(self).args = self.pool.arena.dupe(Id, payload.args);
     } else vl.get(self).* = payload;
     return slot.key_ptr.*;

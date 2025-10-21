@@ -578,6 +578,8 @@ pub fn runVm(
         self.gen.mach.out.syms.items[@intFromEnum(self.gen.mach.out.funcs.items[entry_id])].offset;
     std.debug.assert(self.vm.ip < self.gen.mach.out.code.items.len);
 
+    @memcpy(self.gen.mach.out.code.items[@intCast(stack_end - return_loc.len)..@intCast(stack_end)], return_loc);
+
     self.vm.fuel = 1024 * 16;
     self.vm.regs.set(.ret_addr, stack_size - 1); // return to hardcoded tx
     if (return_loc.len != 0) {
@@ -920,12 +922,12 @@ pub fn doTypeInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
             Types.Id,
             data.data.tuple.slice(self),
         ))),
-        .fnptr => types.internPtr(.FnPtr, .{
+        .fnty => types.internPtr(.FnTy, .{
             .args = @ptrCast(types.pool.arena.dupe(
                 Types.Id,
-                data.data.fnptr.args.slice(self),
+                data.data.fnty.args.slice(self),
             )),
-            .ret = data.data.fnptr.ret,
+            .ret = data.data.fnty.ret,
         }),
         .array => types.makeArray(data.data.array.len, data.data.array.elem),
         .simd => types.makeSimd(data.data.simd.elem, data.data.simd.len),
@@ -1022,10 +1024,10 @@ pub fn doTypeInfoInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
                 .decls = self.allocDecls(ty),
             } } };
         },
-        .FnPtr => |fnptr_ty| b: {
-            const sig: *tys.FnPtr = types.store.get(fnptr_ty);
+        .FnTy => |fnptr_ty| b: {
+            const sig: *tys.FnTy = types.store.get(fnptr_ty);
 
-            break :b .{ .kind = .fnptr, .data = .{ .fnptr = .{
+            break :b .{ .kind = .fnty, .data = .{ .fnty = .{
                 .args = .alloc(self, sig.args),
                 .ret = sig.ret,
             } } };
@@ -1300,40 +1302,32 @@ pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until:
 }
 
 pub fn evalTy(self: *Comptime, name: []const u8, scope: Codegen.Scope, ty_expr: Ast.Id) !Types.Id {
-    const types = self.getTypes();
-    const res, _ = try self.jitExpr(name, scope, .{ .ty = .type }, ty_expr);
-    const file = scope.file(types);
+    const res, _ = try self.eval(name, scope, ty_expr, .type);
 
+    const types = self.getTypes();
+    return Types.Id.fromRaw(res, types) orelse {
+        types.report(scope.file(types), ty_expr, "resulting type has a corrupted value", .{});
+        return error.Never;
+    };
+}
+
+pub fn eval(self: *Comptime, name: []const u8, scope: Codegen.Scope, int_conts: Ast.Id, ty: ?Types.Id) !struct { i64, Types.Id } {
+    const res, const t = try self.jitExpr(name, scope, .{ .ty = ty }, int_conts);
+    const types = self.getTypes();
+    const file = scope.file(types);
     switch (res) {
         .func => |id| {
-            var data: [8]u8 = undefined;
-            try self.runVm(scope.file(types), types.getFile(file).posOf(ty_expr).index, @intFromEnum(id), &data);
-            return Types.Id.fromRaw(@as(u32, @bitCast(data[0..4].*)), types) orelse {
-                types.report(scope.file(types), ty_expr, "resulting type has a corrupted value", .{});
-                return error.Never;
-            };
+            var data: [8]u8 = @splat(0);
+            try self.runVm(file, types.posOf(file, int_conts).index, @intFromEnum(id), &data);
+            return .{ @bitCast(data), t };
         },
-        .constant => |vl| {
-            return Types.Id.fromRaw(vl, types) orelse {
-                types.report(scope.file(types), ty_expr, "resulting type has a corrupted value", .{});
-                return error.Never;
-            };
-        },
+        .constant => |c| return .{ c, t },
     }
 }
 
 pub fn evalIntConst(self: *Comptime, scope: Codegen.Scope, int_conts: Ast.Id) !i64 {
-    const res, _ = try self.jitExpr("", scope, .{ .ty = .uint }, int_conts);
-    const types = self.getTypes();
-    const file = scope.file(types);
-    switch (res) {
-        .func => |id| {
-            var data: [8]u8 = undefined;
-            try self.runVm(file, types.posOf(file, int_conts).index, @intFromEnum(id), &data);
-            return @bitCast(data);
-        },
-        .constant => |c| return c,
-    }
+    const res, _ = try self.eval("", scope, int_conts, null);
+    return res;
 }
 
 pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(tys.Global), ty: ?Types.Id, value: Ast.Id) error{Never}!void {
@@ -1387,11 +1381,15 @@ pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(tys.Glo
     glbal.ty = fty;
     if (fty == .type) {
         const typ: Types.Id = @enumFromInt(@as(u32, @bitCast(data[0..4].*)));
-        inline for (.{ .Func, .Template }) |tag| {
-            if (typ.data() == tag) {
-                const item = types.store.get(@field(typ.data(), @tagName(tag)));
-                if (std.mem.eql(u8, name, item.key.name(types))) item.is_inline = glbal.readonly;
-            }
+        if (typ.data() == .Template) {
+            const item = typ.data().Template.get(types);
+            if (std.mem.eql(u8, name, item.key.name(types))) item.is_inline = glbal.readonly;
         }
+    }
+
+    if (fty.data() == .FnTy) {
+        const id: utils.EntId(tys.Func) = @enumFromInt(@as(u32, @bitCast(data[0..4].*)));
+        const func = types.store.get(id);
+        if (std.mem.eql(u8, name, func.key.name(types))) func.is_inline = glbal.readonly;
     }
 }

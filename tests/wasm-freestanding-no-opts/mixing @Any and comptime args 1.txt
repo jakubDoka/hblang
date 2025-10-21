@@ -39,7 +39,7 @@
     global.get 0
     i32.wrap_i64
     i32.load offset=4
-    call $mixing_@Any_and_comptime_args_1.bind_.main__?i32_
+    call $mixing_@Any_and_comptime_args_1.bind_.main.a__?i32_
     local.set 1
     local.set 0
     global.get 0
@@ -57,7 +57,7 @@
     global.set 0
     return
     unreachable)
-  (func $mixing_@Any_and_comptime_args_1.bind_.main__?i32_ (type 1) (param i32 i32) (result i32 i32)
+  (func $mixing_@Any_and_comptime_args_1.bind_.main.a__?i32_ (type 1) (param i32 i32) (result i32 i32)
     global.get 0
     i64.const 24
     i64.sub
@@ -93,7 +93,7 @@
       global.get 0
       i32.wrap_i64
       i32.load offset=4
-      call $mixing_@Any_and_comptime_args_1.main
+      call $mixing_@Any_and_comptime_args_1.main.a
       local.set 0
       local.set 1
       global.get 0
@@ -121,7 +121,7 @@
     global.set 0
     return
     unreachable)
-  (func $mixing_@Any_and_comptime_args_1.main (type 2) (param i32) (result i32 i32)
+  (func $mixing_@Any_and_comptime_args_1.main.a (type 2) (param i32) (result i32 i32)
     (local i32 i32)
     global.get 0
     i64.const 16

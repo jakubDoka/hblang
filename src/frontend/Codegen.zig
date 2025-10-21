@@ -460,19 +460,16 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
 
             const scope = self.types.getScope(@enumFromInt(i));
             self.parent_scope = .{ .Perm = scope };
-            const ty = try self.types.ct.evalTy(name_str, .{ .Perm = scope }, func);
+            const res, const ty = try self.types.ct.eval(name_str, .{ .Perm = scope }, func, null);
 
-            if (ty.data() != .Func) {
-                if (dir.kind == .handler and ty == .void) continue;
-
-                if (dir.kind == .@"export") {
-                    self.report(func, "only function types can be used here", .{}) catch continue;
-                } else {
-                    self.report(func, "only functions and `void` (usefull for" ++
-                        " conditional compilation) can be a handler", .{}) catch continue;
-                }
+            if (ty.data() != .FnTy) {
+                self.report(func, "only functions can be used here, if you want to" ++
+                    " disable a handler, use `@disabled_handler()` directive", .{}) catch continue;
             }
 
+            if (dir.kind == .handler and res == Types.disabled_handler) continue;
+
+            const fnc: utils.EntId(tys.Func) = @enumFromInt(res);
             switch (dir.kind) {
                 .handler => {
                     const field = std.meta.stringToEnum(
@@ -498,7 +495,7 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
                             " TODO: where is the original?", .{}) catch continue;
                     }
 
-                    const func_data: *tys.Func = ty.data().Func.get(self.types);
+                    const func_data: *tys.Func = fnc.get(self.types);
                     const ast = self.types.getFile(func_data.key.loc.file);
                     const func_ast = ast.exprs.get(func_data.key.loc.ast).Fn;
 
@@ -527,28 +524,28 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
                         }
                     }
 
-                    field_ptr.* = ty.data().Func;
+                    field_ptr.* = fnc;
 
                     if (field == .entry and has_main) {
-                        ty.data().Func.get(self.types).visibility = .exported;
-                        ty.data().Func.get(self.types).special = .entry;
+                        fnc.get(self.types).visibility = .exported;
+                        fnc.get(self.types).special = .entry;
                         continue;
                     }
 
                     if (field == .memcpy) {
-                        ty.data().Func.get(self.types).special = .memcpy;
+                        fnc.get(self.types).special = .memcpy;
                     }
                 },
                 .@"export" => {
                     exports_main = exports_main or std.mem.eql(u8, name_str, "main");
 
-                    ty.data().Func.get(self.types).visibility = .exported;
-                    ty.data().Func.get(self.types).key.name_pos = fl.strPos(name_str);
+                    fnc.get(self.types).visibility = .exported;
+                    fnc.get(self.types).key.name_pos = fl.strPos(name_str);
                 },
                 else => unreachable,
             }
 
-            try funcs.append(tmp.arena.allocator(), ty.data().Func);
+            try funcs.append(tmp.arena.allocator(), fnc);
         }
     }
 
@@ -596,10 +593,12 @@ pub fn getEntry(self: *Codegen, file: Types.File, name: []const u8) !utils.EntId
     self.name = "";
 
     var entry_vl = try self.lookupScopeItem(.init(0), self.types.getScope(file), name);
-    const entry_ty = try self.unwrapTyConst(Ast.Pos.init(0), &entry_vl);
+    if (entry_vl.ty.data() != .FnTy) {
+        return self.report(Ast.Pos.init(0), "main declaration should be a function", .{});
+    }
+    const entry_ty = try self.partialEvalConst(Ast.Pos.init(0), &entry_vl);
 
-    if (entry_ty.data() != .Func) return error.Never;
-    return entry_ty.data().Func;
+    return @enumFromInt(entry_ty);
 }
 
 pub fn beginBuilder(
@@ -703,7 +702,9 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
     }
 
     var ty_idx: usize = 0;
-    for (ast.exprs.view(fn_ast.args)) |aarg| {
+    for (ast.exprs.view(fn_ast.args)) |a| {
+        const aarg = ast.exprs.get(a).Decl;
+
         const ident = ast.exprs.getTyped(.Ident, aarg.bindings).?;
         if (ident.pos.flag.@"comptime") continue;
         func = func_id.get(self.types);
@@ -1231,15 +1232,17 @@ pub fn emitUnOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.UnOp)) EmitErr
 
             var addrd = try self.emit(.{ .ty = inferred_type }, e.oper);
 
-            if (ctx.ty) |fty| function_pointer: {
-                if (fty.data() != .FnPtr) break :function_pointer;
-                if (addrd.ty != .type) break :function_pointer;
-
-                const ty = try self.unwrapTyConst(expr, &addrd);
-                if (ty.data() != .Func) break :function_pointer;
-
-                return self.report(e.oper, "you are trying to coerse the ^type to" ++
-                    " function pointer, use @fnptr_of instead", .{});
+            if (addrd.ty.data() == .FnTy) {
+                // TODO: this will cause issues in the future
+                const fty = self.types.makePtr(addrd.ty);
+                if (self.target == .@"comptime") {
+                    addrd.ty = fty;
+                    return addrd;
+                } else {
+                    const id = try self.partialEvalConst(e.oper, &addrd);
+                    self.types.queue(self.target, .init(.{ .Func = @enumFromInt(id) }));
+                    return .mkv(fty, self.bl.addFuncAddr(sloc, @intCast(id)));
+                }
             }
 
             self.emitSpill(expr, &addrd);
@@ -2451,7 +2454,7 @@ fn emitUserType(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Type)) !Value {
     return ret;
 }
 
-fn emitFnPtr(self: *Codegen, _: Ctx, _: Ast.Id, e: *Expr(.FnPtr)) !Value {
+fn emitFnTy(self: *Codegen, _: Ctx, _: Ast.Id, e: *Expr(.FnTy)) !Value {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
@@ -2464,7 +2467,7 @@ fn emitFnPtr(self: *Codegen, _: Ctx, _: Ast.Id, e: *Expr(.FnPtr)) !Value {
         ty.* = try self.resolveAnonTy(arg);
     }
 
-    return self.emitTyConst(self.types.internPtr(.FnPtr, .{
+    return self.emitTyConst(self.types.internPtr(.FnTy, .{
         .args = args,
         .ret = try self.resolveAnonTy(e.ret),
     }));
@@ -2495,7 +2498,8 @@ fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
     const args = tmp.arena.alloc(Types.Id, e.args.len());
     var has_anytypes = false;
     if (e.comptime_args.len() == 0) {
-        for (self.ast.exprs.view(e.args), args) |argid, *arg| {
+        for (self.ast.exprs.view(e.args), args) |a, *arg| {
+            const argid = self.ast.exprs.get(a).Decl;
             const ty = argid.ty;
             arg.* = try self.resolveAnonTy(ty);
             has_anytypes = has_anytypes or arg.* == .any;
@@ -2535,7 +2539,8 @@ fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
         const id = slot.key_ptr.*;
         errdefer _ = self.types.interner.removeContext(id, .{ .types = self.types });
         if (!slot.found_existing) {
-            if (!has_anytypes) for (self.ast.exprs.view(e.args), args) |argid, *arg| {
+            if (!has_anytypes) for (self.ast.exprs.view(e.args), args) |a, *arg| {
+                const argid = self.ast.exprs.get(a).Decl;
                 const ty = argid.ty;
                 arg.* = try self.resolveAnonTy(ty);
             };
@@ -2546,7 +2551,9 @@ fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
                 .ret = ret,
             };
         }
-        return self.emitTyConst(id);
+
+        const ty = self.types.internPtr(.FnTy, id.data().Func.get(self.types).sig());
+        return .mkv(ty, self.bl.addIntImm(self.src(expr), .i32, @intFromEnum(id.data().Func)));
     }
 }
 
@@ -2632,7 +2639,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
         .Buty => |e| return self.emitTyConst(.fromLexeme(e.bt)),
         .Type => |e| self.emitUserType(ctx, expr, e),
         .Fn => |e| self.emitFn(ctx, expr, e),
-        .FnPtr => |e| self.emitFnPtr(ctx, expr, e),
+        .FnTy => |e| self.emitFnTy(ctx, expr, e),
         .Use => |e| self.emitUse(ctx, expr, e),
         .Directive => |e| return self.emitDirective(ctx, expr, e),
         .Wildcard => return self.report(expr, "wildcard does not make sense here", .{}),
@@ -3499,33 +3506,36 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
 
     var computed_args: ?[]Value = null;
     var was_template = false;
-    const sig: tys.FnPtr, const ptr, const literal_func = if (typ_res.ty == .type) b: {
-        var typ = try self.unwrapTyConst(expr, &typ_res);
+    const sig: tys.FnTy, const ptr, const literal_func = if (typ_res.ty == .type) b: {
+        const typ = try self.unwrapTyConst(expr, &typ_res);
 
-        was_template = typ.data() == .Template;
-        if (was_template) {
-            computed_args, typ = switch (try self.instantiateTemplate(&caller, tmp.arena, expr, e, typ)) {
-                .bypass => |v| return v,
-                .instance => |v| v,
-            };
+        if (typ.data() != .Template) {
+            return self.report(e.called, "{} is not a template", .{typ});
         }
 
-        const func: *tys.Func = self.types.store.unwrap(typ.data(), .Func) orelse {
-            return self.report(e.called, "{} is not callable", .{typ});
+        was_template = true;
+        computed_args, const instance =
+            try self.instantiateTemplate(&caller, tmp.arena, expr, e, typ);
+
+        break :b .{ instance.get(self.types).sig(), null, instance };
+    } else if (typ_res.ty.data() == .FnTy) b: {
+        const func = try self.partialEvalConst(expr, &typ_res);
+        break :b .{ typ_res.ty.data().FnTy.get(self.types).*, null, @as(utils.EntId(tys.Func), @enumFromInt(func)) };
+    } else b: {
+        const ptr: *Types.Id = self.types.store.unwrap(typ_res.ty.data(), .Pointer) orelse {
+            return self.report(e.called, "{} is not callable", .{typ_res.ty});
         };
 
-        break :b .{ func.sig(), null, typ };
-    } else b: {
-        const func: *tys.FnPtr = self.types.store.unwrap(typ_res.ty.data(), .FnPtr) orelse {
+        const func: *tys.FnTy = self.types.store.unwrap(ptr.data(), .FnTy) orelse {
             return self.report(e.called, "{} is not callable", .{typ_res.ty});
         };
 
         break :b .{ func.*, typ_res.getValue(sloc, self), null };
     };
 
-    if (literal_func) |typ| {
+    if (literal_func) |func| {
         if (self.target == .@"comptime") {
-            self.types.queue(self.target, .init(.{ .Func = typ.data().Func }));
+            self.types.queue(self.target, .init(.{ .Func = func }));
         }
     }
 
@@ -3609,8 +3619,8 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
 
     return self.assembleReturn(
         expr,
-        if (literal_func) |ty|
-            @intFromEnum(ty.data().Func)
+        if (literal_func) |func|
+            @intFromEnum(func)
         else if (needs_trampoline)
             HbvmGen.eca
         else
@@ -3623,10 +3633,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
     );
 }
 
-const ITRes = union(enum) {
-    bypass: Value,
-    instance: struct { []Value, Types.Id },
-};
+const ITRes = struct { []Value, utils.EntId(tys.Func) };
 
 pub fn instantiateTemplate(
     self: *Codegen,
@@ -3675,7 +3682,8 @@ pub fn instantiateTemplate(
 
     const template_scope: Scope = .{ .Perm = .init(.{ .Template = scope }) };
 
-    for (tmpl_file.exprs.view(tmpl_ast.args)) |param| {
+    for (tmpl_file.exprs.view(tmpl_ast.args)) |a| {
+        const param = tmpl_file.exprs.get(a).Decl;
         const arg: union(enum) { Value: *Value, Expr: Ast.Id } =
             if (caller_slot) |c|
                 .{ .Value = c }
@@ -3763,7 +3771,7 @@ pub fn instantiateTemplate(
         };
     }
 
-    return .{ .instance = .{ arg_exprs, slot.key_ptr.* } };
+    return .{ arg_exprs, slot.key_ptr.*.data().Func };
 }
 
 fn pushReturn(
@@ -4535,7 +4543,7 @@ fn emitDirective(
                 argum.* = slot.ty;
             }
 
-            var dummy_func: tys.FnPtr = undefined;
+            var dummy_func: tys.FnTy = undefined;
             dummy_func.args = argums;
             dummy_func.ret = ret;
 
@@ -4712,24 +4720,11 @@ fn emitDirective(
                 self.bl.addFieldLoad(sloc, slice.id.Pointer, TySlice.len_offset, .i64),
             }, slice.ty);
         },
-        .fnptr_of => {
-            try assertDirectiveArgs(self, expr, args, "<fn-ty>");
-
-            var addrd = try self.emit(.{}, args[0]);
-
-            const ty = try self.unwrapTyConst(expr, &addrd);
-            const func: *tys.Func = self.types.store.unwrap(ty.data(), .Func) orelse {
-                return self.report(expr, "{} is not a function type", .{ty});
-            };
-
-            const fty = self.types.internPtr(.FnPtr, .{ .args = func.args, .ret = func.ret });
-
-            if (self.target == .@"comptime") {
-                return .mkv(fty, self.bl.addIntImm(sloc, .i64, @intFromEnum(ty.data().Func)));
-            } else {
-                self.types.queue(self.target, ty);
-                return .mkv(fty, self.bl.addFuncAddr(sloc, @intFromEnum(ty.data().Func)));
-            }
+        .disabled_handler => {
+            return .mkv(self.types.internPtr(.FnTy, .{
+                .args = &.{},
+                .ret = .never,
+            }), self.bl.addIntImm(sloc, .i32, Types.disabled_handler));
         },
         .handler, .@"export" => return self.report(expr, "can only be used in the file scope", .{}),
         .import => return self.report(expr, "can be only used as a body of the function", .{}),

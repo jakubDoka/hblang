@@ -1,3 +1,6 @@
+directives 20 (@handler, @SourceLoc):15:24: only functions can be used here, if you want to disable a handler, use `@disabled_handler()` directive
+@handler("slice_ioob", void)
+                       ^
 entry:
          st $31, $254, -8, 8
      addi64 $254, $254, -20

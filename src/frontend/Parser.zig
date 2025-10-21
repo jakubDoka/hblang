@@ -365,6 +365,16 @@ fn codePointer(self: *const Parser, pos: usize) Ast.CodePointer {
     return .{ .source = self.lexer.source, .index = pos };
 }
 
+fn forwardCaptures(self: *Parser, scope: usize) void {
+    self.boundary_depth -= 1;
+
+    for (self.captures.items[@min(scope, self.captures.items.len)..]) |*c| {
+        if (c.boundary_depth == self.boundary_depth) {
+            c.boundary_depth -= 1;
+        }
+    }
+}
+
 fn popCaptures(self: *Parser, scope: usize, scratch: *utils.Arena) []const Capture {
     self.boundary_depth -= 1;
 
@@ -435,7 +445,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             const capture_scope = self.captures.items.len;
             const comptime_arg_start = self.comptime_idents.items.len;
             defer self.comptime_idents.items.len = comptime_arg_start;
-            const args = try self.parseListTyped(.@"(", .@",", .@")", Ast.Arg, parseArg);
+            const args = try self.parseList(.@"(", .@",", .@")", parseArg);
             const comptime_idents_end = self.comptime_idents.items.len;
             const indented_args = self.list_pos.flag;
             _ = try self.expectAdvance(.@":");
@@ -443,6 +453,17 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
 
             const body = body: {
                 defer self.finalizeVariables(scope_frame);
+
+                if (self.cur.kind.cantStartExpression()) {
+                    self.forwardCaptures(capture_scope);
+                    break :b .{ .FnTy = .{
+                        .args = args,
+                        .pos = .{ .index = @intCast(token.pos), .flag = indented_args },
+                        .ret = ret,
+                        .terminator = .init(self.cur.pos),
+                    } };
+                }
+
                 break :body try self.parseExpr();
             };
 
@@ -462,12 +483,19 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             );
             std.debug.assert(comptime_args.end == captures.start);
 
+            for (self.store.view(args)) |arg| {
+                if (arg.tag() != .Decl) {
+                    self.report(Ast.posOfLow(&self.store, arg).index, "expected a declaration", .{});
+                    return error.UnexpectedToken;
+                }
+            }
+
             break :b .{ .Fn = .{
                 .args = args,
-                .comptime_args = comptime_args,
-                .captures = captures,
                 .pos = .{ .index = @intCast(token.pos), .flag = indented_args },
                 .ret = ret,
+                .comptime_args = comptime_args,
+                .captures = captures,
                 .body = body,
                 .peak_vars = self.func_stats.max_variable_count,
                 .peak_loops = self.func_stats.max_loop_depth,
@@ -604,19 +632,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 return error.UnexpectedToken;
             },
         },
-        .@"^" => if (self.tryAdvance(.@"fn")) .{ .FnPtr = .{
-            .args = try self.parseList(.@"(", .@",", .@")", parseScopedExpr),
-            .ret = b: {
-                _ = try self.expectAdvance(.@":");
-                break :b try self.parseExpr();
-            },
-            .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
-        } } else .{ .UnOp = .{
-            .pos = .init(token.pos),
-            .op = token.kind,
-            .oper = try self.parseUnit(),
-        } },
-        .@"&", .@"-", .@"~", .@"!", .@"?" => .{ .UnOp = .{
+        .@"^", .@"&", .@"-", .@"~", .@"!", .@"?" => .{ .UnOp = .{
             .pos = .init(token.pos),
             .op = token.kind,
             .oper = try self.parseUnit(),
@@ -961,22 +977,9 @@ fn parseMatchArm(self: *Parser) Error!Ast.MatchArm {
     };
 }
 
-fn parseArg(self: *Parser) Error!Ast.Arg {
-    const pos = self.cur.pos;
-    const bindings = try self.parseUnitWithoutTail();
-    if (bindings.tag() != .Ident) {
-        self.report(pos, "expected ident", .{});
-    }
-    _ = self.declareExpr(bindings, self.store.get(bindings)
-        .Ident.id.isComptime(self.lexer.source));
-    _ = try self.expectAdvance(.@":");
-
-    const prev = self.comptime_idents.items.len;
-    defer self.comptime_idents.items.len = prev;
-    return .{
-        .bindings = bindings,
-        .ty = try self.parseExpr(),
-    };
+fn parseArg(self: *Parser) Error!Id {
+    const is_comptime = self.lexer.source[self.cur.pos] == '$';
+    return try self.parseBinExpr(try self.parseUnit(), 254, is_comptime);
 }
 
 inline fn tryAdvance(self: *Parser, expected: Lexer.Lexeme) bool {

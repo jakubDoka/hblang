@@ -1,3 +1,6 @@
+directives 20 (@handler, @SourceLoc):15:24: only functions can be used here, if you want to disable a handler, use `@disabled_handler()` directive
+@handler("slice_ioob", void)
+                       ^
 directives 20 (@handler, @SourceLoc).main:
 	push rbx
 	sub rsp, 0x60
