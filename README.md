@@ -278,6 +278,15 @@ main := fn(): uint {
 $foo := fn(): uint return 0
 ```
 
+#### functions 6 (comptime @Any)
+```hb
+main := fn(): uint {
+    return foo(fn(): uint return 0)
+}
+
+foo := fn($f: @Any()): uint return f()
+```
+
 #### comments 1
 ```hb
 // commant is an item

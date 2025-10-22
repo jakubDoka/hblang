@@ -41,11 +41,6 @@ const Codegen = @This();
 
 pub const EmitError = error{ Never, Unreachable };
 
-pub const Sloc = struct {
-    file: Types.File,
-    pos: Ast.Pos,
-};
-
 const Loop = struct {
     id: Ast.Ident,
     defer_base: usize,
@@ -56,11 +51,6 @@ const Loop = struct {
             Controlled: Ast.Id,
         },
     },
-};
-
-const Task = union(enum) {
-    Func: utils.EntId(root.frontend.types.Func),
-    Global: utils.EntId(root.frontend.types.Global),
 };
 
 const ScopeEntry = struct {
@@ -299,7 +289,7 @@ pub fn emitReachableSingle(
         var tmp = root_tmp.arena.checkpoint();
         defer tmp.deinit();
 
-        const func_data: *root.frontend.types.Func = types.store.get(func);
+        const func_data = func.get(types);
 
         const optms = root.backend.Machine.OptOptions{
             .mode = opts.optimizations,
@@ -430,12 +420,12 @@ pub inline fn abiCata(self: *Codegen, ty: Types.Id) Types.Abi.Spec {
     return @as(Types.Abi.TmpSpec, self.abi.categorize(ty, self.types)).toPerm(ty, self.types);
 }
 
-pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]utils.EntId(root.frontend.types.Func) {
+pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]utils.EntId(tys.Func) {
     var tmp = utils.Arena.scrath(scrath);
     defer tmp.deinit();
 
     var exports_main = false;
-    var funcs = std.ArrayList(utils.EntId(root.frontend.types.Func)){};
+    var funcs = std.ArrayList(utils.EntId(tys.Func)){};
     for (self.types.files, 0..) |fl, i| {
         self.ast = &fl;
         for (fl.exprs.view(fl.items)) |it| {
@@ -578,10 +568,10 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
         try funcs.append(tmp.arena.allocator(), entry);
     }
 
-    return scrath.dupe(utils.EntId(root.frontend.types.Func), funcs.items);
+    return scrath.dupe(utils.EntId(tys.Func), funcs.items);
 }
 
-pub fn getEntry(self: *Codegen, file: Types.File, name: []const u8) !utils.EntId(root.frontend.types.Func) {
+pub fn getEntry(self: *Codegen, file: Types.File, name: []const u8) !utils.EntId(tys.Func) {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
@@ -625,7 +615,7 @@ pub fn beginBuilder(
 
 const BuildError = error{ Uninhabited, HasErrors };
 
-pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) BuildError!void {
+pub fn build(self: *Codegen, func_id: utils.EntId(tys.Func)) BuildError!void {
     errdefer {
         func_id.get(self.types).errored = true;
     }
@@ -633,7 +623,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    var func: *root.frontend.types.Func = func_id.get(self.types);
+    var func: *tys.Func = func_id.get(self.types);
 
     self.ast = self.types.getFile(func.key.loc.file);
     const ast = self.ast;
@@ -657,7 +647,7 @@ pub fn build(self: *Codegen, func_id: utils.EntId(root.frontend.types.Func)) Bui
 
         func.visibility = .imported;
 
-        // This is still needed at some platforms
+        // This is still needed on some platforms
         self.bl.func.signature = graph.Signature.init(
             self.abi.cc,
             params,
@@ -3684,7 +3674,7 @@ pub fn instantiateTemplate(
 
     for (tmpl_file.exprs.view(tmpl_ast.args)) |a| {
         const param = tmpl_file.exprs.get(a).Decl;
-        const arg: union(enum) { Value: *Value, Expr: Ast.Id } =
+        var arg: union(enum) { Value: *Value, Expr: Ast.Id } =
             if (caller_slot) |c|
                 .{ .Value = c }
             else
@@ -3692,7 +3682,21 @@ pub fn instantiateTemplate(
 
         const binding = tmpl_file.exprs.getTyped(.Ident, param.bindings).?;
         if (binding.pos.flag.@"comptime") {
-            const ty = try self.types.ct.evalTy("", template_scope, param.ty);
+            var ty = try self.types.ct.evalTy("", template_scope, param.ty);
+
+            const from_any = ty == .any;
+            var val_slot: Value = undefined;
+            if (from_any) {
+                ty = switch (arg) {
+                    .Value => |v| v.ty,
+                    .Expr => |ar| b: {
+                        val_slot = try self.emit(.{}, ar);
+                        arg = .{ .Value = &val_slot };
+                        break :b val_slot.ty;
+                    },
+                };
+            }
+
             captures[capture_idx] = .{
                 .id = .fromCapture(.{
                     .id = comptime_args[comptime_idx],
@@ -3712,6 +3716,7 @@ pub fn instantiateTemplate(
                     },
                 },
             };
+
             capture_idx += 1;
             comptime_idx += 1;
             scope.get(self.types).key.setCaptures(captures[0..capture_idx]);
