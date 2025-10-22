@@ -197,8 +197,7 @@ pub const Scope = struct {
 
     pub const Capture = struct {
         id: packed struct(u32) {
-            index: u30,
-            from_any: bool = false,
+            index: u31,
             has_value: bool,
 
             pub fn fromCapture(cap: Ast.Capture) @This() {
@@ -730,10 +729,10 @@ pub const Id = enum(IdRepr) {
                             if (key.captures().len != 0) {
                                 work_list.appendAssumeCapacity(.{ .Name = ")" });
                                 for (key.captures()) |cap| {
-                                    if (cap.id.from_any) {
-                                        work_list.appendAssumeCapacity(.{ .Type = cap.ty });
-                                    } else {
+                                    if (cap.id.has_value) {
                                         work_list.appendAssumeCapacity(.{ .Value = .{ .ty = cap.ty, .value = cap.value } });
+                                    } else {
+                                        work_list.appendAssumeCapacity(.{ .Type = cap.ty });
                                     }
                                     work_list.appendAssumeCapacity(.{ .Name = ", " });
                                 }
@@ -1148,7 +1147,7 @@ pub fn cloneKeyFrom(self: *Types, from: *Types, key: *Scope) void {
 pub fn cloneCaptureFrom(self: *Types, from: *Types, capture: Scope.Capture) Scope.Capture {
     const ty = self.cloneFrom(from, capture.ty)[0];
 
-    if (capture.id.from_any) return .{ .id = capture.id, .ty = ty };
+    if (!capture.id.has_value) return .{ .id = capture.id, .ty = ty };
 
     return switch (ty.data()) {
         .Builtin => |b| switch (b) {

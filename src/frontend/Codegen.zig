@@ -3733,7 +3733,6 @@ pub fn instantiateTemplate(
                 captures[capture_idx] = .{
                     .id = .{
                         .has_value = false,
-                        .from_any = true,
                         .index = @intCast(binding.id.pos()),
                     },
                     .ty = arg_tys[arg_idx],
