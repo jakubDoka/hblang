@@ -125,7 +125,7 @@ pub fn Mixin(comptime Backend: type) type {
             work.add(start);
             work.add(end);
 
-            var deffered_phi_stack = std.ArrayListUnmanaged(*Func.Node){};
+            var deffered_phi_stack = std.ArrayList(*Func.Node){};
 
             while (work.pop()) |node| {
                 if (node.id < already_present) {

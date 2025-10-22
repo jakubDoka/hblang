@@ -72,7 +72,7 @@ pub const Ctx = struct {
     start_pos: usize,
     buf: std.Io.Writer.Allocating,
     allocs: []u16 = undefined,
-    scope_stack: std.ArrayListUnmanaged(ScopeRange) = undefined,
+    scope_stack: std.ArrayList(ScopeRange) = undefined,
     stack_base: u64 = undefined,
     arg_base: u32 = undefined,
 };

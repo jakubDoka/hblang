@@ -3,7 +3,7 @@ const utils = graph.utils;
 const graph = @import("graph.zig");
 
 const Map = std.AutoArrayHashMapUnmanaged;
-const Arry = std.ArrayListUnmanaged;
+const Arry = std.ArrayList;
 const Error = error{RegallocFailed};
 const Regalloc = @This();
 
@@ -981,7 +981,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
     }
 
     // first allocate into tmp since its near in memory
-    var alloc = std.ArrayListUnmanaged(u16).initCapacity(
+    var alloc = std.ArrayList(u16).initCapacity(
         func.arena.allocator(),
         func.gcm.instr_count,
     ) catch unreachable;

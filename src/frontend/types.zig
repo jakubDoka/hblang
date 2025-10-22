@@ -204,7 +204,7 @@ pub const Enum = struct {
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
 
-        var fields = std.ArrayListUnmanaged(Field){};
+        var fields = std.ArrayList(Field){};
 
         var value: i64 = 0;
         for (ast.exprs.view(enum_ast.fields)) |fast| {

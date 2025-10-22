@@ -230,7 +230,7 @@ pub fn testBuilder(
         return;
     }
 
-    var anal_errors = std.ArrayListUnmanaged(root.backend.static_anal.Error){};
+    var anal_errors = std.ArrayList(root.backend.static_anal.Error){};
 
     const optimizations = root.backend.Machine.OptOptions{
         .mode = opts,

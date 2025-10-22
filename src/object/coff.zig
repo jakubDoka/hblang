@@ -132,11 +132,11 @@ pub const Builder = struct {
     // | String Table       |
     // +--------------------+
 
-    text: std.ArrayListUnmanaged(u8) = .{},
+    text: std.ArrayList(u8) = .{},
 
-    symbol_table: std.ArrayListUnmanaged(Symbol) = .{},
+    symbol_table: std.ArrayList(Symbol) = .{},
 
-    string_table: std.ArrayListUnmanaged(u8) = .{},
+    string_table: std.ArrayList(u8) = .{},
 
     pub fn flush(self: *Builder, arch: Arch, writer: *std.Io.Writer) !void {
         const section_data_start = @sizeOf(FileHeader) + @sizeOf(SectionHeader);

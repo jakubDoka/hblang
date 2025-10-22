@@ -113,7 +113,7 @@ pub fn Mixin(comptime Backend: type) type {
         }
 
         const Set = std.DynamicBitSetUnmanaged;
-        const Arry = std.ArrayListUnmanaged;
+        const Arry = std.ArrayList;
 
         pub fn run(m2r: *Self) void {
             errdefer unreachable;

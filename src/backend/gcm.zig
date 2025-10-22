@@ -378,7 +378,7 @@ pub fn Mixin(comptime Backend: type) type {
                 var tmp = utils.Arena.scrath(null);
                 defer tmp.deinit();
 
-                var frontier = std.ArrayListUnmanaged(*Func.CfgNode).empty;
+                var frontier = std.ArrayList(*Func.CfgNode).empty;
                 try frontier.append(tmp.arena.allocator(), lca);
 
                 while (frontier.pop()) |cursor| {

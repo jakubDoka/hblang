@@ -437,7 +437,7 @@ pub fn compile(opts: CompileOptions) anyerror!void {
 
     const name = try std.mem.replaceOwned(u8, root_tmp.arena.allocator(), opts.root_file, "/", "_");
 
-    var anal_errors = std.ArrayListUnmanaged(backend.static_anal.Error){};
+    var anal_errors = std.ArrayList(backend.static_anal.Error){};
 
     const optimizations = backend.Machine.OptOptions{
         .mode = opts.optimizations,
@@ -636,7 +636,7 @@ const Loader = struct {
     arena: *Arena,
     base: []const u8,
     path_projections: std.StringHashMapUnmanaged([]const u8),
-    files: std.ArrayListUnmanaged(hb.frontend.Ast) = .{},
+    files: std.ArrayList(hb.frontend.Ast) = .{},
 
     pub fn load(self: *Loader, opts: hb.frontend.Ast.Loader.LoadOptions) ?hb.frontend.Types.File {
         var tmp = Arena.scrath(null);

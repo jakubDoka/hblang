@@ -27,7 +27,7 @@ pub const comptime_opts = Machine.OptOptions{
 
 vm: Vm = .{},
 gen: HbvmGen,
-in_progress: std.ArrayListUnmanaged(Loc) = .{},
+in_progress: std.ArrayList(Loc) = .{},
 type_instances: std.HashMapUnmanaged(
     Types.Id,
     void,

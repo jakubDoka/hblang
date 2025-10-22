@@ -54,9 +54,9 @@ pub const Shard = struct {
     mach: Machine = .init(Shard),
 
     func_table: []const u32 = &.{},
-    func_ir: std.ArrayListUnmanaged(FuncRecord) = .empty,
+    func_ir: std.ArrayList(FuncRecord) = .empty,
     global_table: []const u32 = &.{},
-    global_ir: std.ArrayListUnmanaged(DataOptions) = .empty,
+    global_ir: std.ArrayList(DataOptions) = .empty,
     owned: std.heap.ArenaAllocator.State = .{},
 
     const Func = graph.Func(Shard);
@@ -150,15 +150,15 @@ pub const Data = struct {
     parallelism: ?*Parallelism = null,
     declaring_sym: ?SymIdx = null,
     files: []const File = &.{},
-    funcs: std.ArrayListUnmanaged(SymIdx) = .empty,
-    globals: std.ArrayListUnmanaged(SymIdx) = .empty,
-    syms: std.ArrayListUnmanaged(Sym) = .empty,
-    names: std.ArrayListUnmanaged(u8) = .empty,
-    code: std.ArrayListUnmanaged(u8) = .empty,
-    relocs: std.ArrayListUnmanaged(Reloc) = .empty,
-    inline_funcs: std.ArrayListUnmanaged(InlineFunc) = .empty,
-    line_info: std.ArrayListUnmanaged(u8) = .empty,
-    line_info_relocs: std.ArrayListUnmanaged(Reloc) = .empty,
+    funcs: std.ArrayList(SymIdx) = .empty,
+    globals: std.ArrayList(SymIdx) = .empty,
+    syms: std.ArrayList(Sym) = .empty,
+    names: std.ArrayList(u8) = .empty,
+    code: std.ArrayList(u8) = .empty,
+    relocs: std.ArrayList(Reloc) = .empty,
+    inline_funcs: std.ArrayList(InlineFunc) = .empty,
+    line_info: std.ArrayList(u8) = .empty,
+    line_info_relocs: std.ArrayList(Reloc) = .empty,
 
     pub const File = struct {
         name: []const u8,
@@ -518,7 +518,7 @@ pub const Data = struct {
         //
         const strong_groups = tmp.arena.alloc(u32, self.syms.items.len);
 
-        var strong_group_meta = std.ArrayListUnmanaged([]const u32){};
+        var strong_group_meta = std.ArrayList([]const u32){};
 
         const indexes = tmp.arena.alloc(packed struct(u32) {
             in_stack: bool,
@@ -881,7 +881,7 @@ pub const DataOptions = struct {
 pub const OptOptions = struct {
     mode: Mode = .debug,
     arena: ?*utils.Arena = null,
-    error_buf: ?*std.ArrayListUnmanaged(static_anal.Error) = null,
+    error_buf: ?*std.ArrayList(static_anal.Error) = null,
 
     pub const Mode = enum { release, debug };
 

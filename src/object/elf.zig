@@ -416,7 +416,7 @@ pub fn flush(self: root.backend.Machine.Data, arch: Arch, writer: *std.Io.Writer
 
     // compute size of debug info
     // and collect the relocations
-    var debug_info_rela = std.ArrayListUnmanaged(Rela){};
+    var debug_info_rela = std.ArrayList(Rela){};
 
     const root_file = "main.hb";
 
@@ -495,7 +495,7 @@ pub fn flush(self: root.backend.Machine.Data, arch: Arch, writer: *std.Io.Writer
     debug_size.count = 0;
 
     const eh_align = 8;
-    var eh_frame_rela = std.ArrayListUnmanaged(Rela){};
+    var eh_frame_rela = std.ArrayList(Rela){};
 
     debug_size.count = 0;
     dwarf.writeCie(&debug_size.writer);

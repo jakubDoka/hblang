@@ -26,11 +26,11 @@ name: []const u8 = undefined,
 parent_scope: Scope = undefined,
 ast: *const Ast = undefined,
 struct_ret_ptr: ?*Node = undefined,
-scope: std.ArrayListUnmanaged(ScopeEntry) = undefined,
+scope: std.ArrayList(ScopeEntry) = undefined,
 scope_pins: Builder.Pins = undefined,
 tmp_pins: Builder.Pins = undefined,
-loops: std.ArrayListUnmanaged(Loop) = undefined,
-defers: std.ArrayListUnmanaged(Ast.Id) = undefined,
+loops: std.ArrayList(Loop) = undefined,
+defers: std.ArrayList(Ast.Id) = undefined,
 ret: Types.Id = undefined,
 errored: bool = undefined,
 
@@ -292,7 +292,7 @@ pub fn emitReachableSingle(
             continue;
         }
 
-        var errors = std.ArrayListUnmanaged(static_anal.Error){};
+        var errors = std.ArrayList(static_anal.Error){};
 
         if (opts.verbose) try root.test_utils.header("CODEGEN", opts.output, opts.colors);
 
@@ -435,7 +435,7 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
     defer tmp.deinit();
 
     var exports_main = false;
-    var funcs = std.ArrayListUnmanaged(utils.EntId(root.frontend.types.Func)){};
+    var funcs = std.ArrayList(utils.EntId(root.frontend.types.Func)){};
     for (self.types.files, 0..) |fl, i| {
         self.ast = &fl;
         for (fl.exprs.view(fl.items)) |it| {
@@ -3936,7 +3936,7 @@ pub fn encodeString(
     std.debug.assert(SPECIAL_CHARS.len == TO_BYTES.len);
 
     var alc = std.heap.FixedBufferAllocator.init(buf);
-    var str = std.ArrayListUnmanaged(u8).initBuffer(buf);
+    var str = std.ArrayList(u8).initBuffer(buf);
     var bytes = std.mem.splitScalar(u8, literal, '\\');
 
     while (bytes.next()) |chunk| {
@@ -4569,7 +4569,7 @@ fn emitDirective(
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            var msg = std.ArrayListUnmanaged(u8){};
+            var msg = std.ArrayList(u8){};
             for (args) |arg| switch (arg.tag()) {
                 .String => {
                     const s = ast.exprs.getTyped(.String, arg).?;

@@ -28,7 +28,7 @@ ctx: *Ctx = undefined,
 pub const Ctx = struct {
     allocs: []const u16,
     ret_count: usize,
-    local_relocs: std.ArrayListUnmanaged(Reloc),
+    local_relocs: std.ArrayList(Reloc),
     block_offsets: []u32,
     arg_base: u32,
     local_base: u32,

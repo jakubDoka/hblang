@@ -1966,7 +1966,7 @@ pub fn Func(comptime Backend: type) type {
 
             if (to_join.len == 1) return to_join[0];
 
-            var loads = std.ArrayListUnmanaged(*Node){};
+            var loads = std.ArrayList(*Node){};
             for (to_join) |st| {
                 var cursor = st;
                 while (cursor.kind == .Store) {

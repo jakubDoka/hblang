@@ -28,7 +28,7 @@ pub fn build(b: *std.Build) !void {
         m.addIncludePath(b.path("vendored/zydis/src/"));
         m.addIncludePath(b.path("vendored/zydis/dependencies/zycore/include/"));
 
-        var files = std.ArrayListUnmanaged([]const u8).empty;
+        var files = std.ArrayList([]const u8).empty;
 
         inline for (.{
             "vendored/zydis/src/",

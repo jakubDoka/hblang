@@ -298,7 +298,7 @@ pub const Arena = struct {
         return self.pos - size;
     }
 
-    pub fn makeArrayList(self: *Arena, comptime T: type, cap: usize) std.ArrayListUnmanaged(T) {
+    pub fn makeArrayList(self: *Arena, comptime T: type, cap: usize) std.ArrayList(T) {
         return .initBuffer(self.alloc(T, cap));
     }
 

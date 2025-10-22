@@ -20,7 +20,7 @@ align_globlals: bool = false,
 comptime_only_fn: ?u32 = null,
 
 pub const Ctx = struct {
-    local_relocs: std.ArrayListUnmanaged(BlockReloc),
+    local_relocs: std.ArrayList(BlockReloc),
     ret_count: usize,
     block_offsets: []i32,
     allocs: []const u16,

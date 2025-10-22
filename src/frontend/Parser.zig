@@ -27,11 +27,11 @@ active_sym_table: std.HashMapUnmanaged(
     Hasher,
     std.hash_map.default_max_load_percentage,
 ) = .{},
-active_syms: std.ArrayListUnmanaged(Sym) = .{},
+active_syms: std.ArrayList(Sym) = .{},
 capture_boundary: usize = 0,
 boundary_depth: u8 = 0,
-captures: std.ArrayListUnmanaged(StackedCapture) = .{},
-comptime_idents: std.ArrayListUnmanaged(Ident) = .{},
+captures: std.ArrayList(StackedCapture) = .{},
+comptime_idents: std.ArrayList(Ident) = .{},
 mode: Ast.InitOptions.Mode,
 list_pos: Ast.Pos = undefined,
 deferring: bool = false,
@@ -124,7 +124,7 @@ pub fn parse(self: *Parser) !Ast.Slice {
     var tmp = Arena.scrath(self.arena);
     defer tmp.deinit();
 
-    var item_buf = std.ArrayListUnmanaged(Id){};
+    var item_buf = std.ArrayList(Id){};
     while (self.cur.kind != .Eof) {
         try item_buf.append(tmp.arena.allocator(), try self.parseUnorderedExpr());
         _ = self.tryAdvance(.@";");
@@ -609,7 +609,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
 
                 var tmp = Arena.scrath(self.arena);
                 defer tmp.deinit();
-                var buf = std.ArrayListUnmanaged(Id){};
+                var buf = std.ArrayList(Id){};
                 while (!self.tryAdvance(.@"}")) {
                     try buf.append(tmp.arena.allocator(), try self.parseExpr());
                     _ = self.tryAdvance(.@";");
@@ -715,7 +715,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                     var tmp = Arena.scrath(self.arena);
                     defer tmp.deinit();
 
-                    var buf = std.ArrayListUnmanaged(Ast.Decl){};
+                    var buf = std.ArrayList(Ast.Decl){};
                     while (true) {
                         const ps = self.cur.pos;
                         const vl = self.store.get(try self.parseExpr());
@@ -958,7 +958,7 @@ fn parseListTyped(
 
     const pos = self.cur.pos;
     if (start) |s| _ = try self.expectAdvance(s);
-    var buf = std.ArrayListUnmanaged(Elem){};
+    var buf = std.ArrayList(Elem){};
     var indented = false;
     while (!self.tryAdvance(end)) {
         try buf.append(tmp.arena.allocator(), try parser(self));

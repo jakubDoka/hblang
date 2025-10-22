@@ -35,7 +35,7 @@ pub fn Mixin(comptime Backend: type) type {
             return @alignCast(@fieldParentPtr("static_anal", self));
         }
 
-        pub fn analize(self: *Self, arena: *utils.Arena, errors: *std.ArrayListUnmanaged(Error)) void {
+        pub fn analize(self: *Self, arena: *utils.Arena, errors: *std.ArrayList(Error)) void {
             self.findTrivialStackEscapes(arena, errors);
             self.tryHardToFindMemoryEscapes(arena, errors);
             self.findConstantOobMemOps(arena, errors);
@@ -46,7 +46,7 @@ pub fn Mixin(comptime Backend: type) type {
         pub fn findInfiniteLoopsWithBreaks(
             self: *Self,
             arena: *utils.Arena,
-            errors: *std.ArrayListUnmanaged(Error),
+            errors: *std.ArrayList(Error),
         ) void {
             errdefer unreachable;
             const func = self.getGraph();
@@ -60,7 +60,7 @@ pub fn Mixin(comptime Backend: type) type {
         pub fn findLoopInvariantConditions(
             self: *Self,
             arena: *utils.Arena,
-            errors: *std.ArrayListUnmanaged(Error),
+            errors: *std.ArrayList(Error),
         ) void {
             errdefer unreachable;
             var tmp = utils.Arena.scrath(arena);
@@ -93,7 +93,7 @@ pub fn Mixin(comptime Backend: type) type {
         pub fn findConstantOobMemOps(
             self: *Self,
             arena: *utils.Arena,
-            errors: *std.ArrayListUnmanaged(Error),
+            errors: *std.ArrayList(Error),
         ) void {
             const func = self.getGraph();
 
@@ -116,7 +116,7 @@ pub fn Mixin(comptime Backend: type) type {
             }
         }
 
-        pub fn checkLocalForOob(op: *Func.Node, local: *Func.Node, addr: ?*Func.Node, arena: *utils.Arena, errors: *std.ArrayListUnmanaged(Error)) void {
+        pub fn checkLocalForOob(op: *Func.Node, local: *Func.Node, addr: ?*Func.Node, arena: *utils.Arena, errors: *std.ArrayList(Error)) void {
             errdefer unreachable;
             const mem_op, const offset = op.knownMemOp() orelse return;
             if ((!mem_op.isLoad() and !mem_op.isStore()) or mem_op.isSub(graph.MemCpy)) return;
@@ -138,7 +138,7 @@ pub fn Mixin(comptime Backend: type) type {
         pub fn tryHardToFindMemoryEscapes(
             self: *Self,
             arena: *utils.Arena,
-            errors: *std.ArrayListUnmanaged(Error),
+            errors: *std.ArrayList(Error),
         ) void {
             errdefer unreachable;
             const func = self.getGraph();
@@ -149,7 +149,7 @@ pub fn Mixin(comptime Backend: type) type {
                 var tmp = utils.Arena.scrath(arena);
                 defer tmp.deinit();
 
-                var local_stores = std.ArrayListUnmanaged(*Node){};
+                var local_stores = std.ArrayList(*Node){};
 
                 // find stores that store pointer to local variable
                 for (arg.outputs()) |ao| {
@@ -215,7 +215,7 @@ pub fn Mixin(comptime Backend: type) type {
         pub fn findTrivialStackEscapes(
             self: *Self,
             arena: *utils.Arena,
-            errors: *std.ArrayListUnmanaged(Error),
+            errors: *std.ArrayList(Error),
         ) void {
             errdefer unreachable;
             const func = self.getGraph();

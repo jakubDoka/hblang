@@ -9,7 +9,7 @@ pub fn Mixin(comptime Backend: type) type {
         const Node = Func.Node;
 
         const Set = std.DynamicBitSetUnmanaged;
-        const Arry = std.ArrayListUnmanaged;
+        const Arry = std.ArrayList;
 
         pub fn getGraph(self: *Self) *Func {
             return @alignCast(@fieldParentPtr("alias_anal", self));
