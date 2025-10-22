@@ -41,8 +41,6 @@ comptime 6 (strings).main.string_to_array("Edward"):
 main:
 	sub rsp, 0x08
 	call :comptime 6 (strings).main.string_to_array("Edward")
-	mov [rsp], rax
-	mov al, [rsp]
 	movzx rax, al
 	add rsp, 0x08
 	ret

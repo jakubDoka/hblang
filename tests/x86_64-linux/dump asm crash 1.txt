@@ -14,10 +14,9 @@ dump asm crash 1.cache(, )(.Inner).do:
 	jz :2
 	mov rcx, 0x01
 	jmp :3
-2:	mov ecx, [0x0000000000000006]
-	mov edx, [rsp+0x0C]
-	mov eax, [rsp+0x08]
-	cmp ecx, eax
+2:	mov edx, [rsp+0x0C]
+	mov eax, [0x0000000000000006]
+	cmp eax, esi
 	setnz cl
 	movzx rcx, cl
 	mov eax, [0x0000000000000006]
@@ -44,7 +43,6 @@ dump asm crash 1.cache(, )(.Inner).do:
 	jmp :6
 5:	mov rax, [rsp+0x08]
 	mov [rsp+0x10], rax
-	mov eax, [rsp+0x10]
 	add eax, [rsp+0x14]
 	mov [rsp+0x04], eax
 6:	mov byte ptr [rsp+0x18], 0x01

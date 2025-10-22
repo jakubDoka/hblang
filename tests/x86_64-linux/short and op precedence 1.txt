@@ -1,17 +1,19 @@
 short and op precedence 1.foo:
 	sub rsp, 0x10
-	mov [rsp], di
+	mov rax, rdi
+	mov rcx, rax
+	mov [rsp], cx
 	mov dl, [rsp+0x01]
-	mov cl, [rsp]
+	mov rcx, rax
 	test cl, cl
 	jz :0
-	mov rax, rdx
+	mov rcx, rdx
 	jmp :1
-0:	mov rax, 0xAA
-	xor rcx, rcx
-1:	test cl, cl
+0:	mov rcx, 0xAA
+	xor rax, rax
+1:	test al, al
 	jz :2
-	cmp dl, al
+	cmp dl, cl
 	setz al
 	movzx rax, al
 	jmp :3

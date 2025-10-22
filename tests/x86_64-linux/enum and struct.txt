@@ -1,10 +1,5 @@
 enum and struct.broken:
-	sub rsp, 0x10
-	mov [rsp], rdi
-	mov [rsp+0x08], esi
-	mov al, [rsp]
-	movzx eax, al
-	add rsp, 0x10
+	movzx eax, dil
 	ret
 main:
 	sub rsp, 0x18

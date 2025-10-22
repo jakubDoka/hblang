@@ -1,13 +1,7 @@
 generic structs 2.Foo(uint).Bar(u8).sub:
-	sub rsp, 0x10
 	mov rax, rdi
-	mov rcx, rax
-	mov [rsp], rcx
-	mov [rsp+0x08], rsi
-	mov cl, [rsp+0x08]
-	movzx rcx, cl
+	movzx rcx, sil
 	sub rax, rcx
-	add rsp, 0x10
 	ret
 generic structs 2.Foo(uint).Bar(u8).init:
 	mov qword ptr [rdi], 0x01

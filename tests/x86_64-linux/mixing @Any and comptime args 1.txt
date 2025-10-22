@@ -1,8 +1,7 @@
 mixing @Any and comptime args 1.bind(.main.a, ?i32):
 	sub rsp, 0x18
 	mov [rsp], rdi
-	mov al, [rsp]
-	test al, al
+	test dil, dil
 	jz :0
 	mov edi, [rsp+0x04]
 	call :mixing @Any and comptime args 1.main.a

@@ -16,8 +16,6 @@ struct capture eca mismatch 1.cp(0, 1):
 main:
 	sub rsp, 0x08
 	call :struct capture eca mismatch 1.cp(0, 1)
-	mov [rsp], eax
-	mov al, [rsp]
 	movzx rax, al
 	add rsp, 0x08
 	ret

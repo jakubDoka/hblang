@@ -4,15 +4,14 @@ passing struct multiple times 1.foo:
 	sub rsp, 0x28
 	lea rsi, [rsp+0x40]
 	mov [rsp+0x18], edi
-	mov al, [rsp+0x18]
-	movzx ebx, al
 	mov al, [rsp+0x19]
-	movzx eax, al
-	shl eax, 0x08
-	or ebx, eax
+	movzx ecx, al
+	shl ecx, 0x08
 	mov al, [rsp+0x1A]
 	movzx ebp, al
 	shl ebp, 0x10
+	movzx ebx, dil
+	or ebx, ecx
 	mov rdx, 0x18
 	lea rdi, [rsp]
 	call :memcpy
@@ -34,8 +33,7 @@ passing struct multiple times 1.bar:
 	movzx rsi, cl
 	mov cl, [rsp+0x01]
 	movzx rdx, cl
-	mov cl, [rsp]
-	movzx rcx, cl
+	movzx rcx, dil
 	add rax, rcx
 	add rax, rdx
 	sub rax, rsi

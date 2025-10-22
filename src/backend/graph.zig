@@ -2585,6 +2585,22 @@ pub fn Func(comptime Backend: type) type {
                 }
             }
 
+            if (node.kind == .UnOp) {
+                if (node.extra(.UnOp).op == .ired) {
+                    const inp = node.inputs()[1].?;
+                    if (inp.kind == .UnOp and inp.extra(.UnOp).op == .uext) {
+                        unreachable;
+                    }
+                }
+
+                if (node.extra(.UnOp).op == .uext) {
+                    const inp = node.inputs()[1].?;
+                    if (inp.kind == .UnOp and inp.extra(.UnOp).op == .ired) {
+                        unreachable;
+                    }
+                }
+            }
+
             // pull loads up the memory chain with hope that they find a store
             // with the same addr and type to just use the value
             //
@@ -2608,10 +2624,15 @@ pub fn Func(comptime Backend: type) type {
                 }
 
                 if (earlier.kind == .Store and
-                    earlier.base() == node.base() and
-                    earlier.data_type == node.data_type)
+                    earlier.base() == node.base() and earlier.value() != null)
                 {
-                    return earlier.value();
+                    if (earlier.data_type == node.data_type) {
+                        return earlier.value().?;
+                    }
+
+                    if (earlier.data_type.meet(node.data_type) == earlier.data_type) {
+                        return self.addUnOp(earlier.sloc, .ired, node.data_type, earlier.value().?);
+                    }
                 }
 
                 if (false and earlier != node.mem()) {

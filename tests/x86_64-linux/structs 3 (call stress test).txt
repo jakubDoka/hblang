@@ -7,13 +7,8 @@ structs 3 (call stress test).take_triple:
 	add rax, rcx
 	ret
 structs 3 (call stress test).take_pair:
-	sub rsp, 0x10
-	mov [rsp], rdi
-	mov [rsp+0x08], rsi
-	mov al, [rsp]
-	movzx rax, al
+	movzx rax, dil
 	add rax, rsi
-	add rsp, 0x10
 	ret
 structs 3 (call stress test).return_triple:
 	mov qword ptr [rdi], 0x01
