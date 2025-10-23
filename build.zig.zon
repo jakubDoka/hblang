@@ -2,7 +2,12 @@
     .name = .hblang,
     .fingerprint = 0xa6da53c767f0ddf0,
     .version = "0.0.0",
-    .dependencies = .{},
+    .dependencies = .{
+        .afl_kit = .{
+            .url = "git+https://github.com/kristoff-it/zig-afl-kit#8ef04d1db48650345dca68da1e1b8f2615125c40",
+            .hash = "afl_kit-0.1.0-NdJ3cvscAACLEvjZTB017IAks_Uq5ux1qpA-klDe384Y",
+        },
+    },
     .paths = .{
         "build.zig",
         "build.zig.zon",

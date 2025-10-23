@@ -24,7 +24,6 @@
     return
     unreachable)
   (func $if_statements_2.fib (type 1) (param i64) (result i64)
-    (local i64 i64)
     global.get 0
     i64.const 24
     i64.sub
@@ -35,19 +34,15 @@
         i32.wrap_i64
         local.get 0
         i64.store
-        i64.const 1
-        local.set 1
-        i64.const 2
-        local.set 2
         global.get 0
         i32.wrap_i64
         i64.load
         local.tee 0
-        local.get 2
+        i64.const 2
         i64.le_u
         br_if 0 (;@2;)
         local.get 0
-        local.get 1
+        i64.const 1
         i64.sub
         call $if_statements_2.fib
         local.set 0
@@ -58,7 +53,7 @@
         global.get 0
         i32.wrap_i64
         i64.load
-        local.get 2
+        i64.const 2
         i64.sub
         call $if_statements_2.fib
         local.set 0
@@ -80,7 +75,7 @@
       end
       global.get 0
       i32.wrap_i64
-      local.get 1
+      i64.const 1
       i64.store
     end
     global.get 0

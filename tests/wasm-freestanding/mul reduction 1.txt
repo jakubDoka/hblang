@@ -4,15 +4,13 @@
   (type (;2;) (func (param i64 i64 i64) (result i64)))
   (func $main (type 0) (result i64)
     (local i64 i64)
-    i64.const 2
-    local.set 0
     i64.const 1
-    local.get 0
+    i64.const 2
     i64.const 3
     call $mul_reduction_1.foo
     local.set 1
     i64.const 6
-    local.get 0
+    i64.const 2
     i64.const 4
     call $mul_reduction_1.bar
     local.set 0

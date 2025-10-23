@@ -2,20 +2,18 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i64 i64) (result i64 i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64 i64)
-    global.get 1
-    local.set 0
+    (local i64 i64 i64)
     i64.const 0
     local.set 1
     i64.const -6148914691236517206
     local.set 2
     loop  ;; label = @1
       block  ;; label = @2
-        local.get 0
+        global.get 1
         i32.wrap_i64
         i64.load
-        local.tee 3
-        local.get 3
+        local.tee 0
+        local.get 0
         i64.eq
         br_if 0 (;@2;)
         local.get 1

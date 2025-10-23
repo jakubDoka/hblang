@@ -20,8 +20,6 @@
     i32.wrap_i64
     local.get 0
     i64.store offset=8
-    i64.const 0
-    local.set 0
     global.get 0
     i32.wrap_i64
     global.get 0
@@ -32,7 +30,7 @@
     i32.wrap_i64
     i64.load
     i32.wrap_i64
-    local.get 0
+    i64.const 0
     i64.store
     global.get 0
     i32.wrap_i64

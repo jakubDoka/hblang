@@ -53,6 +53,7 @@ pub fn isDef(self: *Func.Node) bool {
 
 pub const on_stack_id = std.math.maxInt(u16);
 pub const uses_tee_id = on_stack_id - 1;
+pub const deleted_id = on_stack_id - 2;
 
 pub const ScopeRange = struct {
     kind: enum { loop, block },
@@ -124,6 +125,20 @@ pub const classes = enum {
     pub const Eqz = extern struct {};
 };
 
+pub fn isInterned(kind: Func.Kind) bool {
+    return switch (kind) {
+        .WLoad,
+        .UnsignedLoad,
+        .SignedLoad,
+        .StackLoad,
+        .UnsignedStackLoad,
+        .SignedStackLoad,
+        .Eqz,
+        => true,
+        else => false,
+    };
+}
+
 pub fn isSwapped(node: *Func.Node) bool {
     return node.kind == .If;
 }
@@ -131,6 +146,13 @@ pub fn isSwapped(node: *Func.Node) bool {
 pub fn idealize(self: *WasmGen, func: *Func, node: *Func.Node, work: *Func.WorkList) ?*Func.Node {
     _ = self;
     const inps = node.inputs();
+
+    if (node.kind == .CInt) {
+        if (node.data_type.size() < 4) {
+            std.debug.assert(node.data_type.isInt());
+            return func.addIntImm(node.sloc, .i32, node.extra(.CInt).value);
+        }
+    }
 
     if (node.kind == .BinOp) {
         const op: graph.BinOp = node.extra(.BinOp).op;
@@ -364,6 +386,13 @@ const Stacker = struct {
 
             var appended: usize = 0;
 
+            var ref_count: usize = 0;
+            var used_by_phi: bool = false;
+            for (def.outputs()) |o| {
+                if (o.get().hasUseFor(o.pos(), def)) ref_count += 1;
+                if (o.get().kind == .Phi) used_by_phi = true;
+            }
+
             const needs_load = b: {
                 if (def.kind == .Arg or def.kind == .Phi) break :b true;
 
@@ -373,18 +402,21 @@ const Stacker = struct {
 
                 if (def.schedule != self.index - 1) break :b true;
 
-                var count: usize = 0;
-                for (def.outputs()) |o| {
-                    if (o.get().hasUseFor(o.pos(), def)) count += 1;
-                }
-
-                if (count > 1) break :b true;
+                if (ref_count > 1) break :b true;
 
                 break :b false;
             };
 
+            const max_clone_uses = 4;
+
             if (needs_load) {
-                _ = self.func.addNode(.GetLocal, def.sloc, def.data_type, &.{ &self.block.base, def }, .{});
+                if (def.isClone() and ref_count < max_clone_uses) {
+                    const node = self.func.clone(def, self.block);
+                    node.id = on_stack_id;
+                } else {
+                    _ = self.func.addNode(.GetLocal, def.sloc, def.data_type, &.{ &self.block.base, def }, .{});
+                }
+
                 appended += 1;
             }
 
@@ -400,6 +432,10 @@ const Stacker = struct {
 
             const to_rotate = self.block.base.outputs()[self.index..];
             std.mem.rotate(Func.Node.Out, to_rotate, to_rotate.len - appended);
+
+            if (def.isClone() and ref_count < max_clone_uses and !used_by_phi) {
+                def.id = deleted_id;
+            }
 
             if (!needs_load) {
                 def.id = on_stack_id;
@@ -422,9 +458,17 @@ const Stacker = struct {
             out.get().schedule = @intCast(i);
         }
 
+        const effective_end = for (self.block.base.outputs(), 0..) |out, i| {
+            if (out.get().kind == .Phi or out.get().kind == .Ret or
+                out.get().kind == .Mem)
+            {} else {
+                break i;
+            }
+        } else unreachable;
+
         while (self.index > 0) {
             self.index -= 1;
-            _ = self.recoverTree(self.index == 0);
+            _ = self.recoverTree(self.index == effective_end);
         }
     }
 };
@@ -790,6 +834,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
             }
 
             if (log_cfg) std.debug.print("  {f}\n", .{instr});
+            if (instr.id == deleted_id) continue;
             self.emitInstr(instr);
         }
 
@@ -1495,7 +1540,7 @@ pub fn disasm(_: *WasmGen, opts: Mach.DisasmOpts) void {
 pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
     if (utils.freestanding) unreachable;
 
-    const cleanup = false;
+    const cleanup = true;
 
     var tmp = root.utils.Arena.scrath(null);
     defer tmp.deinit();

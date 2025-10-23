@@ -14,8 +14,7 @@
           br_if 0 (;@3;)
           block  ;; label = @4
             i32.const 1
-            local.tee 0
-            local.get 0
+            i32.const 1
             call $short_and_op_precedence_1.foo
             i32.eqz
             br_if 0 (;@4;)

@@ -2,30 +2,20 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func))
   (func $main (type 0) (result i64)
-    (local i32 i64 i64 i64 i64)
+    (local i32 i64 i64 i64)
     global.get 0
     i64.const 96
     i64.sub
     global.set 0
     block  ;; label = @1
-      i64.const 0
-      local.set 1
       global.get 0
       i32.wrap_i64
-      local.get 1
+      i64.const 0
       i64.store offset=40
       global.get 0
       i32.wrap_i64
-      local.get 1
+      i64.const 0
       i64.store offset=48
-      i32.const 3
-      local.set 0
-      i64.const 88
-      global.get 0
-      i64.add
-      local.set 2
-      i64.const 3
-      local.set 1
       global.get 0
       i32.wrap_i64
       i32.const 1
@@ -36,15 +26,17 @@
       i32.store8 offset=89
       global.get 0
       i32.wrap_i64
-      local.get 0
+      i32.const 3
       i32.store8 offset=90
       global.get 0
       i32.wrap_i64
-      local.get 2
+      i64.const 88
+      global.get 0
+      i64.add
       i64.store offset=24
       global.get 0
       i32.wrap_i64
-      local.get 1
+      i64.const 3
       i64.store offset=32
       global.get 0
       i32.wrap_i64
@@ -59,31 +51,27 @@
       global.get 0
       i32.wrap_i64
       i64.load offset=48
-      local.set 1
-      i64.const 2
       local.set 3
       local.get 2
+      i64.const 2
       local.get 3
-      local.get 1
       i64.sub
       i64.ne
       br_if 0 (;@1;)
-      i64.const 1
-      local.set 4
       loop  ;; label = @2
         block  ;; label = @3
           global.get 0
           i32.wrap_i64
           i64.load offset=40
-          local.set 2
+          local.set 3
           global.get 0
           i32.wrap_i64
           i64.load offset=48
           local.tee 1
-          local.get 3
+          i64.const 2
           i64.lt_u
           br_if 0 (;@3;)
-          local.get 2
+          local.get 3
           i64.const 96
           global.get 0
           i64.add
@@ -92,7 +80,7 @@
         end
         global.get 0
         i32.wrap_i64
-        local.get 2
+        local.get 3
         global.get 0
         i32.wrap_i64
         i64.load offset=56
@@ -104,7 +92,7 @@
         i64.store offset=40
         global.get 0
         i32.wrap_i64
-        local.get 4
+        i64.const 1
         global.get 0
         i32.wrap_i64
         i64.load offset=48
@@ -112,7 +100,7 @@
         i64.store offset=48
         global.get 0
         i32.wrap_i64
-        local.get 4
+        i64.const 1
         global.get 0
         i32.wrap_i64
         i64.load offset=56
@@ -121,33 +109,27 @@
         br 0 (;@2;)
       end
     end
-    i64.const 64
-    global.get 0
-    i64.add
-    local.set 4
     global.get 0
     i32.wrap_i64
     global.get 1
     i64.store offset=64
-    i64.const 8589934599
-    local.set 2
-    i64.const 24
-    local.set 1
     global.get 0
     i32.wrap_i64
     i64.const 38
     i64.store offset=72
     global.get 0
     i32.wrap_i64
-    local.get 2
+    i64.const 8589934599
     i64.store offset=80
     i64.const 0
     global.get 0
     i64.add
     i32.wrap_i64
-    local.get 4
+    i64.const 64
+    global.get 0
+    i64.add
     i32.wrap_i64
-    local.get 1
+    i64.const 24
     i32.wrap_i64
     memory.copy
     call $loops_16__for_different_lengths_error_.for_loop_length_mismatch

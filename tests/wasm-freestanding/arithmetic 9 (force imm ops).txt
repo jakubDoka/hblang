@@ -6,25 +6,24 @@
     block  ;; label = @1
       block  ;; label = @2
         i64.const -1
-        local.tee 0
         call $arithmetic_9__force_imm_ops_.box_uint_
-        local.set 1
-        local.get 0
-        local.get 1
-        i64.xor
         local.set 0
-        i64.const 0
-        local.set 1
+        i64.const -1
         local.get 0
+        i64.xor
+        local.set 1
+        i64.const 0
+        local.set 0
         local.get 1
+        i64.const 0
         i64.ne
         br_if 0 (;@2;)
         br 1 (;@1;)
       end
       i64.const 1
-      local.set 1
+      local.set 0
     end
-    local.get 1
+    local.get 0
     return
     unreachable)
   (func $arithmetic_9__force_imm_ops_.box_uint_ (type 1) (param i64) (result i64)

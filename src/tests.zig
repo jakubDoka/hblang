@@ -2,7 +2,6 @@ const std = @import("std");
 pub const utils = root.utils;
 pub const root = @import("hb");
 pub const test_util = root.test_utils;
-pub const fuzz = @import("fuzz.zig");
 pub const Regalloc = root.backend.Regalloc;
 
 comptime {
@@ -133,40 +132,34 @@ pub fn runMachineTest(
 }
 
 pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
-    if (true) return;
     utils.Arena.initScratch(1024 * 1024 * 10);
     defer utils.Arena.deinitScratch();
+    std.debug.print("{s}\n", .{code});
 
     const gpa = std.testing.allocator;
 
     var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+    var diagnostics = std.fs.File.stderr().writer(&.{});
     const ast = try root.frontend.Ast.init(tmp.arena, .{
         .path = name,
         .code = code,
-        .diagnostics = std.fs.File.stderr().writer().any(),
+        .diagnostics = &diagnostics.interface,
     });
 
-    var buf = std.ArrayList(u8).init(tmp.arena.allocator());
-    try ast.fmt(&buf);
-
-    std.debug.print("{s}\n", .{buf.items});
-
-    //errdefer {
-    //const stderr = std.fs.File.stderr();
-    //const colors = std.io.tty.detectConfig(stderr);
-    //test_util.testBuilder(name, code, gpa, stderr.writer().any(), colors, true) catch {};
-    //}
+    try ast.fmt(&diagnostics.interface);
 
     var hbvm = root.hbvm.HbvmGen{ .gpa = gpa };
+    defer hbvm.deinit();
 
     try test_util.testBuilder(
         name,
         code,
         "hbvm-ableos",
         gpa,
-        std.io.null_writer.any(),
-        .init("hbvm-ableos", &hbvm),
-        .all,
+        &diagnostics.interface,
+        &hbvm.mach,
+        .release,
         .ableos,
         .no_color,
         false,

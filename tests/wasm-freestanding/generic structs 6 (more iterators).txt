@@ -4,9 +4,8 @@
   (func $main (type 0) (result i64)
     (local i64)
     i64.const 0
-    local.tee 0
     call $foo.foo_u8_
-    local.get 0
+    i64.const 0
     return
     unreachable)
   (func $foo.foo_u8_ (type 1) (param i64)

@@ -20,10 +20,12 @@ pub fn main() !void {
 
     if (std.mem.eql(u8, switch_arg, "disabled")) return;
 
-    var crash_dir = try std.fs.openDirAbsolute(case_dir, .{ .iterate = true });
+    var crash_dir = try std.fs.cwd().openDir(case_dir, .{ .iterate = true });
     var iter = crash_dir.iterate();
     while (try iter.next()) |worker| {
-        std.debug.assert(std.mem.startsWith(u8, worker.name, "worker") and worker.kind == .directory);
+        if (!std.mem.startsWith(u8, worker.name, "worker") or worker.kind != .directory) {
+            continue;
+        }
 
         const worker_dir = try crash_dir.openDir(
             try std.fs.path.join(arena, &.{ worker.name, "crashes" }),

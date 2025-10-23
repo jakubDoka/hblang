@@ -14,22 +14,19 @@
           i32.wrap_i64
           i32.const 97
           i32.store8
-          i32.const 99
-          local.set 0
           global.get 0
           i32.wrap_i64
           i32.const 98
           i32.store8 offset=1
           global.get 0
           i32.wrap_i64
-          local.get 0
+          i32.const 99
           i32.store8 offset=2
           i64.const 3
           local.set 1
           global.get 1
-          local.tee 2
           local.get 1
-          local.get 2
+          global.get 1
           local.get 1
           call $slices_4.equals
           i32.eqz
@@ -39,7 +36,7 @@
             global.get 0
             i64.add
             local.get 1
-            local.get 2
+            global.get 1
             local.get 1
             call $slices_4.equals
             i32.eqz
@@ -78,8 +75,6 @@
               br_if 0 (;@5;)
               i64.const 0
               local.set 5
-              i64.const 1
-              local.set 3
               loop  ;; label = @6
                 block  ;; label = @7
                   local.get 5
@@ -100,7 +95,7 @@
                     i32.ne
                     br_if 0 (;@8;)
                     local.get 5
-                    local.get 3
+                    i64.const 1
                     i64.add
                     local.set 5
                     br 2 (;@6;)

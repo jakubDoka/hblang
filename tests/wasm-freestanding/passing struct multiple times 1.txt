@@ -3,37 +3,23 @@
   (type (;1;) (func (result i64)))
   (type (;2;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64 i64)
+    (local i64)
     global.get 0
     i64.const 64
     i64.sub
     global.set 0
-    i64.const 3
-    local.set 0
-    i64.const 2
-    local.set 1
     global.get 0
     i32.wrap_i64
     i64.const 1
     i64.store offset=32
     global.get 0
     i32.wrap_i64
-    local.get 1
+    i64.const 2
     i64.store offset=40
     global.get 0
     i32.wrap_i64
-    local.get 0
+    i64.const 3
     i64.store offset=48
-    i64.const 56
-    global.get 0
-    i64.add
-    local.set 2
-    i64.const 32
-    global.get 0
-    i64.add
-    local.set 3
-    i64.const 24
-    local.set 1
     global.get 0
     i32.wrap_i64
     i32.const 1
@@ -50,23 +36,27 @@
     global.get 0
     i64.add
     i32.wrap_i64
-    local.get 2
+    i64.const 56
+    global.get 0
+    i64.add
     i32.wrap_i64
-    local.get 0
+    i64.const 3
     i32.wrap_i64
     memory.copy
     i64.const 8
     global.get 0
     i64.add
     i32.wrap_i64
-    local.get 3
+    i64.const 32
+    global.get 0
+    i64.add
     i32.wrap_i64
-    local.get 1
+    i64.const 24
     i32.wrap_i64
     memory.copy
     call $passing_struct_multiple_times_1.foo
-    local.set 1
-    local.get 1
+    local.set 0
+    local.get 0
     i64.const 64
     global.get 0
     i64.add
@@ -74,7 +64,7 @@
     return
     unreachable)
   (func $passing_struct_multiple_times_1.foo (type 1) (result i64)
-    (local i64 i64 i64 i64)
+    (local i64 i64 i64)
     global.get 0
     i64.const 27
     i64.sub
@@ -87,17 +77,13 @@
     global.get 0
     i64.add
     local.set 1
-    i64.const 24
-    local.set 2
-    i64.const 3
-    local.set 3
     i64.const 0
     global.get 0
     i64.add
     i32.wrap_i64
     local.get 0
     i32.wrap_i64
-    local.get 2
+    i64.const 24
     i32.wrap_i64
     memory.copy
     i64.const 24
@@ -106,12 +92,12 @@
     i32.wrap_i64
     local.get 1
     i32.wrap_i64
-    local.get 3
+    i64.const 3
     i32.wrap_i64
     memory.copy
     call $passing_struct_multiple_times_1.bar
-    local.set 3
-    local.get 3
+    local.set 2
+    local.get 2
     i64.const 27
     global.get 0
     i64.add

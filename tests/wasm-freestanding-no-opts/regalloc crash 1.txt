@@ -2,50 +2,40 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i64 i32)))
   (func $main (type 0) (result i64)
-    (local i32 i64 i64 i64)
+    (local i32 i64)
     global.get 0
     i64.const 72
     i64.sub
     global.set 0
+    global.get 0
+    i32.wrap_i64
     i32.const 0
-    local.set 0
-    global.get 0
-    i32.wrap_i64
-    local.get 0
     i32.store8 offset=48
-    i64.const 48
-    global.get 0
-    i64.add
-    local.set 1
-    i64.const 24
-    local.set 2
-    i64.const 0
-    local.set 3
     global.get 0
     i32.wrap_i64
-    local.get 3
+    i64.const 0
     i64.store offset=56
     global.get 0
     i32.wrap_i64
-    local.get 0
+    i32.const 0
     i32.store8 offset=64
     i64.const 0
     global.get 0
     i64.add
     i32.wrap_i64
-    local.get 1
+    i64.const 48
+    global.get 0
+    i64.add
     i32.wrap_i64
-    local.get 2
+    i64.const 24
     i32.wrap_i64
     memory.copy
-    i32.const 32
-    local.set 0
     i64.const 24
     global.get 0
     i64.add
-    local.get 0
+    i32.const 32
     call $regalloc_crash_1.broken
-    local.get 3
+    i64.const 0
     i64.const 72
     global.get 0
     i64.add
@@ -72,8 +62,6 @@
         i32.wrap_i64
         i32.load8_u
         local.set 1
-        i64.const 24
-        local.set 3
         local.get 1
         i32.eqz
         br_if 0 (;@2;)
@@ -81,7 +69,7 @@
         i32.wrap_i64
         local.get 2
         i32.wrap_i64
-        local.get 3
+        i64.const 24
         i32.wrap_i64
         memory.copy
         br 1 (;@1;)
@@ -90,7 +78,7 @@
       i32.wrap_i64
       local.get 2
       i32.wrap_i64
-      local.get 3
+      i64.const 24
       i32.wrap_i64
       memory.copy
     end

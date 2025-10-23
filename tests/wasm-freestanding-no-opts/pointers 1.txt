@@ -2,7 +2,7 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64)
+    (local i64)
     global.get 0
     i64.const 16
     i64.sub
@@ -21,17 +21,13 @@
     i32.wrap_i64
     i64.load offset=8
     call $pointers_1.modify
-    i64.const 2
-    local.set 0
-    i64.const 4
-    local.set 1
     global.get 0
     i32.wrap_i64
     i64.load offset=8
-    local.tee 2
+    local.tee 0
     i32.wrap_i64
+    i64.const 2
     local.get 0
-    local.get 2
     i32.wrap_i64
     i64.load
     i64.add
@@ -41,7 +37,7 @@
     i64.load offset=8
     i32.wrap_i64
     i64.load
-    local.get 1
+    i64.const 4
     i64.sub
     i64.const 16
     global.get 0
@@ -58,13 +54,11 @@
     i32.wrap_i64
     local.get 0
     i64.store
-    i64.const 2
-    local.set 0
     global.get 0
     i32.wrap_i64
     i64.load
     i32.wrap_i64
-    local.get 0
+    i64.const 2
     i64.store
     i64.const 8
     global.get 0

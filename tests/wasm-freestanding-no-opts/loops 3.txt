@@ -1,7 +1,7 @@
 (module
   (type (;0;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64)
+    (local i64)
     global.get 0
     i64.const 8
     i64.sub
@@ -10,28 +10,24 @@
     i32.wrap_i64
     i64.const 0
     i64.store
-    i64.const 1
-    local.set 0
-    i64.const 4
-    local.set 1
     loop  ;; label = @1
       block  ;; label = @2
         global.get 0
         i32.wrap_i64
         i64.load
-        local.tee 2
-        local.get 1
+        local.tee 0
+        i64.const 4
         i64.eq
         br_if 0 (;@2;)
         global.get 0
         i32.wrap_i64
-        local.get 2
         local.get 0
+        i64.const 1
         i64.add
         i64.store
         br 1 (;@1;)
       end
-      local.get 2
+      local.get 0
       i64.const 8
       global.get 0
       i64.add

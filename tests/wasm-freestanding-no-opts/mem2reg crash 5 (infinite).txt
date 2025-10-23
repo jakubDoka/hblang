@@ -6,12 +6,10 @@
     i64.const 8
     i64.sub
     global.set 0
-    i32.const 0
-    local.set 0
     loop  ;; label = @1
       global.get 0
       i32.wrap_i64
-      local.get 0
+      i32.const 0
       i32.store8
       loop  ;; label = @2
         block  ;; label = @3
@@ -32,7 +30,7 @@
           end
           global.get 0
           i32.wrap_i64
-          local.get 0
+          i32.const 0
           i32.store8
           br 1 (;@2;)
         end

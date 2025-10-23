@@ -13,11 +13,9 @@
     block  ;; label = @1
       block  ;; label = @2
         call $exhausitve_inlining_1.no_op
-        i64.const 0
-        local.set 0
         global.get 0
         i32.wrap_i64
-        local.get 0
+        i64.const 0
         i64.store
         i64.const 0
         global.get 0
@@ -35,7 +33,7 @@
         br 1 (;@1;)
       end
     end
-    local.get 0
+    i64.const 0
     i64.const 8
     global.get 0
     i64.add
@@ -69,7 +67,6 @@
     return
     unreachable)
   (func $exhausitve_inlining_1.loop_fn (type 3) (param i64)
-    (local i64)
     global.get 0
     i64.const 8
     i64.sub
@@ -78,8 +75,6 @@
     i32.wrap_i64
     local.get 0
     i64.store
-    i64.const 1
-    local.set 1
     loop  ;; label = @1
       block  ;; label = @2
         global.get 0
@@ -91,7 +86,7 @@
         global.get 0
         i32.wrap_i64
         local.get 0
-        local.get 1
+        i64.const 1
         i64.sub
         i64.store
         br 1 (;@1;)

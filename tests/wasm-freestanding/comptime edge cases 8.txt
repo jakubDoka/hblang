@@ -3,7 +3,7 @@
   (type (;1;) (func (result i64)))
   (type (;2;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64)
+    (local i64 i64)
     global.get 0
     i64.const 24
     i64.sub
@@ -14,47 +14,39 @@
           i32.const 0
           br_if 0 (;@3;)
           block  ;; label = @4
+            i64.const 0
+            global.get 0
+            i64.add
+            i32.wrap_i64
             global.get 1
-            local.set 0
+            i32.wrap_i64
             i64.const 24
+            i32.wrap_i64
+            memory.copy
+            call $comptime_edge_cases_8.main.read_only__uint__uint__uint__
             local.set 1
             i64.const 0
             global.get 0
             i64.add
             i32.wrap_i64
-            local.get 0
-            i32.wrap_i64
-            local.get 1
-            i32.wrap_i64
-            memory.copy
-            call $comptime_edge_cases_8.main.read_only__uint__uint__uint__
-            local.set 2
             global.get 2
-            local.set 0
-            i64.const 0
-            global.get 0
-            i64.add
             i32.wrap_i64
-            local.get 0
-            i32.wrap_i64
-            local.get 1
+            i64.const 24
             i32.wrap_i64
             memory.copy
             call $comptime_edge_cases_8.main.read_only__uint__uint__uint__
             local.set 0
-            local.get 2
+            local.get 1
             local.get 0
             i64.eq
             br_if 0 (;@4;)
-            global.get 2
-            local.set 0
             i64.const 0
             global.get 0
             i64.add
             i32.wrap_i64
-            local.get 0
+            global.get 2
             i32.wrap_i64
-            local.get 1
+            i64.const 24
             i32.wrap_i64
             memory.copy
             call $comptime_edge_cases_8.fun__uint__uint__uint__

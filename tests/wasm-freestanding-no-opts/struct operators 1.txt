@@ -1,7 +1,7 @@
 (module
   (type (;0;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i32 i32 i64 i64 i64 i64)
+    (local i32 i32 i64 i64)
     global.get 0
     i64.const 200
     i64.sub
@@ -46,8 +46,6 @@
             i32.wrap_i64
             local.get 1
             i32.store8 offset=199
-            i32.const 4
-            local.set 0
             global.get 0
             i32.wrap_i64
             global.get 0
@@ -96,7 +94,7 @@
             i32.load8_u offset=193
             i32.add
             local.set 1
-            local.get 0
+            i32.const 4
             global.get 0
             i32.wrap_i64
             i32.load8_u offset=195
@@ -150,11 +148,9 @@
                 i32.wrap_i64
                 local.get 2
                 i64.store offset=96
-                i64.const 2
-                local.set 3
                 global.get 0
                 i32.wrap_i64
-                local.get 3
+                i64.const 2
                 i64.store offset=104
                 global.get 0
                 i32.wrap_i64
@@ -184,29 +180,19 @@
                 i32.wrap_i64
                 local.get 2
                 i64.store offset=128
-                i64.const 16
-                local.set 4
-                i64.const 0
-                local.set 5
                 global.get 0
                 i32.wrap_i64
-                local.get 3
+                i64.const 2
                 i64.store offset=136
-                i64.const 4
-                local.set 3
                 global.get 0
                 i32.wrap_i64
                 i64.const 3
                 i64.store offset=144
                 global.get 0
                 i32.wrap_i64
-                local.get 3
+                i64.const 4
                 i64.store offset=152
-                i64.const 128
-                global.get 0
-                i64.add
-                local.set 2
-                local.get 4
+                i64.const 16
                 i64.const 32
                 global.get 0
                 i64.add
@@ -254,11 +240,11 @@
                 i64.store offset=24
                 global.get 0
                 i32.wrap_i64
-                local.get 5
+                i64.const 0
                 i64.store offset=160
                 global.get 0
                 i32.wrap_i64
-                local.get 5
+                i64.const 0
                 i64.store offset=168
                 global.get 0
                 i32.wrap_i64
@@ -282,9 +268,11 @@
                 i64.store offset=40
                 local.get 3
                 i32.wrap_i64
-                local.get 2
+                i64.const 128
+                global.get 0
+                i64.add
                 i32.wrap_i64
-                local.get 4
+                i64.const 16
                 i32.wrap_i64
                 memory.copy
                 global.get 0

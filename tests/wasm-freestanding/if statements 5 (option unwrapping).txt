@@ -5,12 +5,13 @@
     block  ;; label = @1
       block  ;; label = @2
         i32.const 1
-        local.tee 0
         br_if 0 (;@2;)
         i32.const 0
         local.set 0
         br 1 (;@1;)
       end
+      i32.const 1
+      local.set 0
     end
     block  ;; label = @1
       block  ;; label = @2

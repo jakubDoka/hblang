@@ -2,22 +2,20 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i64 i64) (result i64 i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64 i64)
+    (local i64 i64 i64)
     global.get 0
     i64.const 416
     i64.sub
     global.set 0
-    global.get 1
-    local.set 0
     i64.const 0
     local.set 1
     loop  ;; label = @1
       block  ;; label = @2
-        local.get 0
+        global.get 1
         i32.wrap_i64
         i64.load
-        local.tee 2
-        local.get 2
+        local.tee 0
+        local.get 0
         i64.eq
         br_if 0 (;@2;)
         global.get 0
@@ -31,15 +29,15 @@
         i32.wrap_i64
         i64.load offset=200
         call $regalloc_crash_3.broken
+        local.set 0
         local.set 2
-        local.set 3
-        global.get 0
-        i32.wrap_i64
-        local.get 3
-        i64.store offset=32
         global.get 0
         i32.wrap_i64
         local.get 2
+        i64.store offset=32
+        global.get 0
+        i32.wrap_i64
+        local.get 0
         i64.store offset=40
         global.get 0
         i32.wrap_i64
@@ -52,15 +50,15 @@
         i32.wrap_i64
         i64.load offset=56
         call $regalloc_crash_3.broken
+        local.set 0
         local.set 2
-        local.set 3
-        global.get 0
-        i32.wrap_i64
-        local.get 3
-        i64.store offset=64
         global.get 0
         i32.wrap_i64
         local.get 2
+        i64.store offset=64
+        global.get 0
+        i32.wrap_i64
+        local.get 0
         i64.store offset=72
         global.get 0
         i32.wrap_i64
@@ -73,15 +71,15 @@
         i32.wrap_i64
         i64.load offset=88
         call $regalloc_crash_3.broken
+        local.set 0
         local.set 2
-        local.set 3
-        global.get 0
-        i32.wrap_i64
-        local.get 3
-        i64.store offset=96
         global.get 0
         i32.wrap_i64
         local.get 2
+        i64.store offset=96
+        global.get 0
+        i32.wrap_i64
+        local.get 0
         i64.store offset=104
         global.get 0
         i32.wrap_i64
@@ -94,15 +92,15 @@
         i32.wrap_i64
         i64.load offset=120
         call $regalloc_crash_3.broken
+        local.set 0
         local.set 2
-        local.set 3
-        global.get 0
-        i32.wrap_i64
-        local.get 3
-        i64.store offset=128
         global.get 0
         i32.wrap_i64
         local.get 2
+        i64.store offset=128
+        global.get 0
+        i32.wrap_i64
+        local.get 0
         i64.store offset=136
         global.get 0
         i32.wrap_i64
@@ -115,15 +113,15 @@
         i32.wrap_i64
         i64.load offset=152
         call $regalloc_crash_3.broken
+        local.set 0
         local.set 2
-        local.set 3
-        global.get 0
-        i32.wrap_i64
-        local.get 3
-        i64.store offset=160
         global.get 0
         i32.wrap_i64
         local.get 2
+        i64.store offset=160
+        global.get 0
+        i32.wrap_i64
+        local.get 0
         i64.store offset=168
         global.get 0
         i32.wrap_i64
@@ -136,15 +134,15 @@
         i32.wrap_i64
         i64.load offset=232
         call $regalloc_crash_3.broken
+        local.set 0
         local.set 2
-        local.set 3
-        global.get 0
-        i32.wrap_i64
-        local.get 3
-        i64.store
         global.get 0
         i32.wrap_i64
         local.get 2
+        i64.store
+        global.get 0
+        i32.wrap_i64
+        local.get 0
         i64.store offset=8
         global.get 0
         i32.wrap_i64
@@ -157,15 +155,15 @@
         i32.wrap_i64
         i64.load offset=392
         call $regalloc_crash_3.broken
+        local.set 0
         local.set 2
-        local.set 3
-        global.get 0
-        i32.wrap_i64
-        local.get 3
-        i64.store offset=176
         global.get 0
         i32.wrap_i64
         local.get 2
+        i64.store offset=176
+        global.get 0
+        i32.wrap_i64
+        local.get 0
         i64.store offset=184
         global.get 0
         i32.wrap_i64
@@ -178,15 +176,15 @@
         i32.wrap_i64
         i64.load offset=248
         call $regalloc_crash_3.broken
+        local.set 0
         local.set 2
-        local.set 3
-        global.get 0
-        i32.wrap_i64
-        local.get 3
-        i64.store offset=256
         global.get 0
         i32.wrap_i64
         local.get 2
+        i64.store offset=256
+        global.get 0
+        i32.wrap_i64
+        local.get 0
         i64.store offset=264
         global.get 0
         i32.wrap_i64
@@ -199,15 +197,15 @@
         i32.wrap_i64
         i64.load offset=280
         call $regalloc_crash_3.broken
+        local.set 0
         local.set 2
-        local.set 3
-        global.get 0
-        i32.wrap_i64
-        local.get 3
-        i64.store offset=288
         global.get 0
         i32.wrap_i64
         local.get 2
+        i64.store offset=288
+        global.get 0
+        i32.wrap_i64
+        local.get 0
         i64.store offset=296
         global.get 0
         i32.wrap_i64
@@ -220,15 +218,15 @@
         i32.wrap_i64
         i64.load offset=312
         call $regalloc_crash_3.broken
+        local.set 0
         local.set 2
-        local.set 3
-        global.get 0
-        i32.wrap_i64
-        local.get 3
-        i64.store offset=320
         global.get 0
         i32.wrap_i64
         local.get 2
+        i64.store offset=320
+        global.get 0
+        i32.wrap_i64
+        local.get 0
         i64.store offset=328
         global.get 0
         i32.wrap_i64
@@ -241,15 +239,15 @@
         i32.wrap_i64
         i64.load offset=344
         call $regalloc_crash_3.broken
+        local.set 0
         local.set 2
-        local.set 3
-        global.get 0
-        i32.wrap_i64
-        local.get 3
-        i64.store offset=352
         global.get 0
         i32.wrap_i64
         local.get 2
+        i64.store offset=352
+        global.get 0
+        i32.wrap_i64
+        local.get 0
         i64.store offset=360
         global.get 0
         i32.wrap_i64
@@ -262,15 +260,15 @@
         i32.wrap_i64
         i64.load offset=376
         call $regalloc_crash_3.broken
+        local.set 0
         local.set 2
-        local.set 3
-        global.get 0
-        i32.wrap_i64
-        local.get 3
-        i64.store offset=16
         global.get 0
         i32.wrap_i64
         local.get 2
+        i64.store offset=16
+        global.get 0
+        i32.wrap_i64
+        local.get 0
         i64.store offset=24
         global.get 0
         i32.wrap_i64
@@ -283,15 +281,15 @@
         i32.wrap_i64
         i64.load offset=408
         call $regalloc_crash_3.broken
+        local.set 0
         local.set 2
-        local.set 3
-        global.get 0
-        i32.wrap_i64
-        local.get 3
-        i64.store offset=208
         global.get 0
         i32.wrap_i64
         local.get 2
+        i64.store offset=208
+        global.get 0
+        i32.wrap_i64
+        local.get 0
         i64.store offset=216
         br 1 (;@1;)
       end

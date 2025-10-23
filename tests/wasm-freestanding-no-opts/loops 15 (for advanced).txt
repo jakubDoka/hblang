@@ -1,56 +1,50 @@
 (module
   (type (;0;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64 i64 i64 i64)
+    (local i64 i64 i64 i64)
     global.get 0
     i64.const 96
     i64.sub
     global.set 0
-    i64.const 1
-    local.set 0
     global.get 0
     i32.wrap_i64
-    local.get 0
+    i64.const 1
     i64.store offset=72
+    global.get 0
+    i32.wrap_i64
     i64.const 0
     global.get 0
     i64.add
+    i64.store offset=48
+    i64.const 8
     local.set 1
     global.get 0
     i32.wrap_i64
-    local.get 1
-    i64.store offset=48
-    i64.const 8
-    local.set 2
     i64.const 4
-    local.set 3
-    global.get 0
-    i32.wrap_i64
-    local.get 3
     i64.store offset=56
     global.get 0
     i32.wrap_i64
     i64.load offset=48
-    local.set 4
+    local.set 0
     global.get 0
     i32.wrap_i64
-    local.get 4
+    local.get 0
     i64.store offset=80
-    local.get 4
-    local.get 2
+    local.get 0
+    local.get 1
     global.get 0
     i32.wrap_i64
     i64.load offset=56
     i64.mul
     i64.add
-    local.set 5
+    local.set 2
     loop  ;; label = @1
       block  ;; label = @2
         global.get 0
         i32.wrap_i64
         i64.load offset=80
-        local.tee 4
-        local.get 5
+        local.tee 0
+        local.get 2
         i64.lt_u
         br_if 0 (;@2;)
         global.get 0
@@ -59,22 +53,24 @@
         i64.store offset=88
         global.get 0
         i32.wrap_i64
-        local.get 1
+        i64.const 0
+        global.get 0
+        i64.add
         i64.store offset=32
         global.get 0
         i32.wrap_i64
-        local.get 3
+        i64.const 4
         i64.store offset=40
         global.get 0
         i32.wrap_i64
         i64.load offset=32
-        local.set 4
+        local.set 0
         global.get 0
         i32.wrap_i64
-        local.get 4
+        local.get 0
         i64.store offset=64
-        local.get 4
-        local.get 2
+        local.get 0
+        local.get 1
         global.get 0
         i32.wrap_i64
         i64.load offset=40
@@ -86,15 +82,15 @@
             global.get 0
             i32.wrap_i64
             i64.load offset=88
-            local.set 5
+            local.set 2
             global.get 0
             i32.wrap_i64
             i64.load offset=64
-            local.tee 4
+            local.tee 0
             local.get 3
             i64.lt_u
             br_if 0 (;@4;)
-            local.get 5
+            local.get 2
             i64.const 96
             global.get 0
             i64.add
@@ -103,10 +99,10 @@
           end
           global.get 0
           i32.wrap_i64
-          local.get 4
+          local.get 0
           i32.wrap_i64
           i64.load
-          local.get 5
+          local.get 2
           i64.add
           i64.store offset=88
           global.get 0
@@ -114,13 +110,13 @@
           global.get 0
           i32.wrap_i64
           i64.load offset=64
-          local.get 2
+          local.get 1
           i64.add
           i64.store offset=64
           br 0 (;@3;)
         end
       end
-      local.get 4
+      local.get 0
       i32.wrap_i64
       global.get 0
       i32.wrap_i64
@@ -128,7 +124,7 @@
       i64.store
       global.get 0
       i32.wrap_i64
-      local.get 0
+      i64.const 1
       global.get 0
       i32.wrap_i64
       i64.load offset=72
@@ -136,7 +132,7 @@
       i64.store offset=72
       global.get 0
       i32.wrap_i64
-      local.get 2
+      local.get 1
       global.get 0
       i32.wrap_i64
       i64.load offset=80

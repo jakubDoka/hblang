@@ -274,7 +274,7 @@ pub fn build(b: *std.Build) !void {
         break :check;
     }
 
-    if (false) fuzzing: {
+    fuzzing: {
         const dict_gen = b.addExecutable(.{
             .name = "gen_fuzz_dict.zig",
             .root_module = b.createModule(.{
@@ -296,26 +296,28 @@ pub fn build(b: *std.Build) !void {
         run_gen.addFileArg(b.path("BUGFIX.md"));
         const cases = run_gen.addOutputDirectoryArg("fuzz-cases");
 
-        const fuzz = b.addLibrary(.{
+        const afl_kit = @import("afl_kit");
+
+        const fuzz = b.addObject(.{
             .name = "fuzz",
             .root_module = b.createModule(.{
                 .root_source_file = b.path("src/fuzz.zig"),
                 .target = b.graph.host,
                 .optimize = optimize,
                 .single_threaded = true,
+                .fuzz = true,
+                .stack_check = false,
+                .link_libc = true,
             }),
+            .use_llvm = true,
+            .use_lld = true,
         });
-        fuzz.pie = true;
-        fuzz.lto = .full; // this crashes the compiler
-        fuzz.bundle_compiler_rt = true;
 
         fuzz.root_module.addImport("hb", hb);
 
         check_step.dependOn(&fuzz.step);
 
-        const afl_lto = b.addSystemCommand(&.{ "afl-clang-lto", "-o" });
-        const afl_lto_out = afl_lto.addOutputFileArg("fuzz");
-        afl_lto.addArtifactArg(fuzz);
+        const instrumented = afl_kit.addInstrumentedExe(b, target, optimize, null, true, fuzz).?;
 
         const fuzz_duration = b.option([]const u8, "fuzz-duration", "n seconds to fuzz for") orelse "1";
 
@@ -358,7 +360,7 @@ pub fn build(b: *std.Build) !void {
             run_afl.addFileArg(dict_out);
             run_afl.addArgs(&.{ "-V", fuzz_duration });
             run_afl.addArg("--");
-            run_afl.addFileArg(afl_lto_out);
+            run_afl.addFileArg(instrumented);
             run_afl.has_side_effects = true;
 
             run_gen_finding_tests.step.dependOn(&run_afl.step);

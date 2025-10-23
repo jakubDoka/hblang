@@ -18,36 +18,33 @@ const HbvmGen = root.hbvm.HbvmGen;
 const Vm = root.hbvm.Vm;
 const tests = root.test_utils;
 
-comptime {
-    if (@import("root") == @This()) @export(&fuzz, .{ .name = "main", .linkage = .strong });
+var glob_arena: Arena = undefined;
+
+export fn zig_fuzz_init() void {
+    glob_arena = Arena.init(1024 * 1024 * 128);
+    Arena.initScratch(1024 * 1024 * 32);
 }
 
-fn fuzz() callconv(.c) void {
-    utils.Arena.initScratch(1024 * 1024);
-    var arena = utils.Arena.init(1024 * 1024 * 128);
-
-    var stdin = std.fs.File.stdin();
-    const input = stdin.readToEndAlloc(arena.allocator(), 1024 * 1024) catch unreachable;
-
-    fuzzRun("fuzz", input, &arena, null) catch |err| switch (err) {
+export fn zig_fuzz_test(buf: [*]u8, len: isize) void {
+    const src = buf[0..@intCast(len)];
+    fuzzRun("fuzz", src, &glob_arena, null) catch |err| switch (err) {
         error.UnexpectedToken, error.ParsingFailed, error.Never => {},
         else => @panic(""),
     };
 }
 
-pub fn main() void {
-    fuzz();
-}
-
 pub fn fuzzRun(
     name: []const u8,
     code: []const u8,
-    arena: *utils.Arena,
+    arena: *Arena,
     output: ?*std.Io.Writer,
 ) !void {
-    if (true) unreachable;
+    var point = arena.checkpoint();
+    defer point.deinit();
 
     const asts = try tests.parseExample(arena, name, code, output);
+
+    if (asts.len == 0) return error.Never;
 
     const gpa = arena.allocator();
 
@@ -77,7 +74,7 @@ pub fn fuzzRun(
 
     hbgen.finalize(.{
         .output = null,
-        .optimizations = .release,
+        .optimizations = .{ .mode = .release },
         .builtins = .{},
         .files = types.line_indexes,
     });

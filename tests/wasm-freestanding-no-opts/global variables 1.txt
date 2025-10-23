@@ -2,32 +2,25 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func))
   (func $main (type 0) (result i64)
-    (local i64 i64)
-    i64.const 1
-    local.set 0
+    (local i64)
     global.get 1
-    local.tee 1
     i32.wrap_i64
-    local.get 0
+    i64.const 1
     i64.store
     call $global_variables_1.dec
-    local.get 1
+    global.get 1
     i32.wrap_i64
     i64.load
     return
     unreachable)
   (func $global_variables_1.dec (type 1)
-    (local i64 i64)
+    (local i64)
     global.get 1
-    local.set 0
-    i64.const 1
-    local.set 1
-    local.get 0
     i32.wrap_i64
-    local.get 0
+    global.get 1
     i32.wrap_i64
     i64.load
-    local.get 1
+    i64.const 1
     i64.sub
     i64.store
     return

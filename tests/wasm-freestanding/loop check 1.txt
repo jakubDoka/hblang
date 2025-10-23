@@ -68,10 +68,10 @@
         i64.const 1
         i64.ge_u
         br_if 0 (;@2;)
-        i32.const 0
-        local.set 2
         i64.const -6148914691236517206
         local.set 0
+        i32.const 0
+        local.set 2
         br 1 (;@1;)
       end
       i64.const 17

@@ -21,14 +21,17 @@
     i64.const 0
     global.get 0
     i64.add
-    local.tee 0
     i64.const 24
     global.get 0
     i64.add
     call $function_pointers_6__vtable_.Test.from_^.Dyn2_
-    local.get 0
+    i64.const 0
+    global.get 0
+    i64.add
     call $function_pointers_6__vtable_.Test.a
-    local.get 0
+    i64.const 0
+    global.get 0
+    i64.add
     call $function_pointers_6__vtable_.Test.b
     i64.extend_i32_s
     i64.const 32

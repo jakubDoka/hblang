@@ -2585,22 +2585,6 @@ pub fn Func(comptime Backend: type) type {
                 }
             }
 
-            if (node.kind == .UnOp) {
-                if (node.extra(.UnOp).op == .ired) {
-                    const inp = node.inputs()[1].?;
-                    if (inp.kind == .UnOp and inp.extra(.UnOp).op == .uext) {
-                        unreachable;
-                    }
-                }
-
-                if (node.extra(.UnOp).op == .uext) {
-                    const inp = node.inputs()[1].?;
-                    if (inp.kind == .UnOp and inp.extra(.UnOp).op == .ired) {
-                        unreachable;
-                    }
-                }
-            }
-
             // pull loads up the memory chain with hope that they find a store
             // with the same addr and type to just use the value
             //

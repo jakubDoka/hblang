@@ -1,58 +1,54 @@
 (module
   (type (;0;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64 i64 i64 i64 i64)
+    (local i64 i64 i64 i64)
     i64.const 0
     local.set 0
-    i64.const 1
-    local.set 1
-    i64.const 10
-    local.set 2
     i64.const 0
-    local.set 3
+    local.set 2
     loop  ;; label = @1
       block  ;; label = @2
         block  ;; label = @3
           local.get 0
-          local.get 2
+          i64.const 10
           i64.eq
           br_if 0 (;@3;)
           i64.const 0
-          local.set 4
+          local.set 3
           loop  ;; label = @4
             block  ;; label = @5
-              local.get 4
-              local.get 2
+              local.get 3
+              i64.const 10
               i64.eq
               br_if 0 (;@5;)
               block  ;; label = @6
-                local.get 4
+                local.get 3
                 local.get 0
                 i64.mul
-                local.tee 5
+                local.tee 1
                 i64.eqz
                 br_if 0 (;@6;)
-                local.get 5
+                local.get 1
+                local.get 2
+                i64.add
+                local.set 2
                 local.get 3
+                i64.const 1
                 i64.add
                 local.set 3
-                local.get 4
-                local.get 1
-                i64.add
-                local.set 4
                 br 2 (;@4;)
               end
               br 3 (;@2;)
             end
             local.get 0
-            local.get 1
+            i64.const 1
             i64.add
             local.set 0
             br 3 (;@1;)
           end
         end
       end
-      local.get 3
+      local.get 2
       return
     end
     unreachable)

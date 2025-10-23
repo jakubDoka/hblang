@@ -3,7 +3,7 @@
   (type (;1;) (func (param i32 i32) (result i32 i32)))
   (type (;2;) (func (param i32) (result i32 i32)))
   (func $main (type 0) (result i64)
-    (local i32 i32 i64 i64 i64)
+    (local i32 i32 i64)
     global.get 0
     i64.const 24
     i64.sub
@@ -12,25 +12,19 @@
     i32.wrap_i64
     i32.const 1
     i32.store8 offset=8
-    i64.const 0
-    global.get 0
-    i64.add
-    local.set 2
-    i64.const 8
-    global.get 0
-    i64.add
-    local.set 3
-    i64.const 8
-    local.set 4
     global.get 0
     i32.wrap_i64
     i32.const 0
     i32.store offset=12
-    local.get 2
+    i64.const 0
+    global.get 0
+    i64.add
     i32.wrap_i64
-    local.get 3
+    i64.const 8
+    global.get 0
+    i64.add
     i32.wrap_i64
-    local.get 4
+    i64.const 8
     i32.wrap_i64
     memory.copy
     global.get 0
@@ -122,7 +116,6 @@
     return
     unreachable)
   (func $mixing_@Any_and_comptime_args_1.main.a (type 2) (param i32) (result i32 i32)
-    (local i32 i32)
     global.get 0
     i64.const 16
     i64.sub
@@ -131,21 +124,17 @@
     i32.wrap_i64
     local.get 0
     i32.store offset=8
-    i32.const 5
-    local.set 1
-    i32.const 1
-    local.set 2
     global.get 0
     i32.wrap_i64
     i32.load offset=8
     local.set 0
     global.get 0
     i32.wrap_i64
-    local.get 2
+    i32.const 1
     i32.store8
     global.get 0
     i32.wrap_i64
-    local.get 1
+    i32.const 5
     local.get 0
     i32.add
     i32.store offset=4

@@ -26,7 +26,6 @@
     return
     unreachable)
   (func $mem2reg_crash_1.insert (type 1) (param i64 i64) (result i64)
-    (local i64 i64)
     global.get 0
     i64.const 32
     i64.sub
@@ -50,20 +49,14 @@
       end
       call $mem2reg_crash_1.bar
     end
-    i64.const 0
-    local.set 2
     global.get 0
     i32.wrap_i64
-    local.get 2
+    i64.const 0
     i64.store offset=16
-    i64.const 8
-    local.set 3
-    i64.const 1
-    local.set 1
     loop  ;; label = @1
       global.get 0
       i32.wrap_i64
-      local.get 2
+      i64.const 0
       i64.store offset=24
       loop  ;; label = @2
         block  ;; label = @3
@@ -71,7 +64,7 @@
           i32.wrap_i64
           i64.load offset=24
           local.tee 0
-          local.get 3
+          i64.const 8
           i64.ge_u
           br_if 0 (;@3;)
           block  ;; label = @4
@@ -84,7 +77,7 @@
             global.get 0
             i32.wrap_i64
             local.get 0
-            local.get 1
+            i64.const 1
             i64.add
             i64.store offset=24
             br 2 (;@2;)
@@ -103,7 +96,7 @@
         global.get 0
         i32.wrap_i64
         i64.load offset=16
-        local.get 1
+        i64.const 1
         i64.add
         i64.store offset=16
         br 1 (;@1;)

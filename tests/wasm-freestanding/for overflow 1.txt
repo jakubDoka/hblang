@@ -1,42 +1,32 @@
 (module
   (type (;0;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i32 i64 i64 i64 i64 i64)
-    global.get 1
-    local.set 1
-    i64.const 2
-    local.set 2
-    i32.const 1
-    local.set 0
+    (local i32 i64 i64)
     i64.const 0
-    local.set 3
-    i64.const 1
-    local.set 4
-    i64.const 65536
-    local.set 5
+    local.set 2
     loop  ;; label = @1
       block  ;; label = @2
-        local.get 3
-        local.get 5
+        local.get 2
+        i64.const 65536
         i64.lt_u
         br_if 0 (;@2;)
-        local.get 1
+        global.get 1
         i32.wrap_i64
         i64.load32_u offset=262140
         return
       end
-      local.get 1
-      local.get 3
+      global.get 1
       local.get 2
+      i64.const 2
       i64.shl
       i64.add
       i32.wrap_i64
-      local.get 0
+      i32.const 1
       i32.store
-      local.get 3
-      local.get 4
+      local.get 2
+      i64.const 1
       i64.add
-      local.set 3
+      local.set 2
       br 0 (;@1;)
     end
     unreachable)

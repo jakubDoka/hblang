@@ -14,7 +14,7 @@
           br_if 0 (;@3;)
           block  ;; label = @4
             local.get 0
-            local.get 1
+            i64.const 1
             i64.eq
             br_if 0 (;@4;)
             i64.const 1
