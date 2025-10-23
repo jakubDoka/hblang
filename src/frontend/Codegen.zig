@@ -111,6 +111,13 @@ pub const Scope = union(enum) {
         return .{ .Perm = .init(td) };
     }
 
+    pub fn firstFunction(self: Scope, types: *Types) ?utils.EntId(tys.Func) {
+        return switch (self) {
+            .Perm => |p| p.firstFunction(types),
+            .Tmp => |t| t.parent_scope.firstFunction(types),
+        };
+    }
+
     pub fn firstType(self: Scope, types: *Types) Types.Id {
         return switch (self) {
             .Perm => |p| p.firstType(types),
@@ -2486,6 +2493,7 @@ fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
     const captures = try computeCaptures(self, e.captures, tmp.arena);
 
     const args = tmp.arena.alloc(Types.Id, e.args.len());
+    var return_ty: Types.Id = undefined;
     var has_anytypes = false;
     if (e.comptime_args.len() == 0) {
         for (self.ast.exprs.view(e.args), args) |a, *arg| {
@@ -2494,6 +2502,11 @@ fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
             arg.* = try self.resolveAnonTy(ty);
             has_anytypes = has_anytypes or arg.* == .any;
             if (has_anytypes) break;
+        }
+
+        if (!has_anytypes) {
+            return_ty = try self.resolveAnonTy(e.ret);
+            if (return_ty == .any) has_anytypes = true;
         }
     }
 
@@ -3505,7 +3518,7 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
 
         was_template = true;
         computed_args, const instance =
-            try self.instantiateTemplate(&caller, tmp.arena, expr, e, typ);
+            try self.instantiateTemplate(ctx, &caller, tmp.arena, expr, e, typ);
 
         break :b .{ instance.get(self.types).sig(), null, instance };
     } else if (typ_res.ty.data() == .FnTy) b: {
@@ -3627,6 +3640,7 @@ const ITRes = struct { []Value, utils.EntId(tys.Func) };
 
 pub fn instantiateTemplate(
     self: *Codegen,
+    ctx: Ctx,
     caller: *?Value,
     tmp: *utils.Arena,
     expr: Ast.Id,
@@ -3752,7 +3766,17 @@ pub fn instantiateTemplate(
         caller_slot = null;
     }
 
-    const ret = try self.types.ct.evalTy("", template_scope, tmpl_ast.ret);
+    var ret = try self.types.ct.evalTy("", template_scope, tmpl_ast.ret);
+
+    if (ret == .any) {
+        ret = ctx.ty orelse {
+            return @as(
+                EmitError!ITRes,
+                self.report(expr, "function requires known return" ++
+                    " type as it returns @Any()", .{}),
+            );
+        };
+    }
 
     const slot, const alloc = self.types.intern(.Func, .{
         .loc = .{
@@ -4223,6 +4247,13 @@ fn emitDirective(
         .CurrentScope => {
             try assertDirectiveArgs(self, expr, args, "");
             return self.emitTyConst(self.parent_scope.firstType(self.types));
+        },
+        .ReturnType => {
+            try assertDirectiveArgs(self, expr, args, "");
+            const func = self.parent_scope.firstFunction(self.types) orelse {
+                return self.report(expr, "can only be used inside a function", .{});
+            };
+            return self.emitTyConst(func.get(self.types).ret);
         },
         .RootScope => {
             try assertDirectiveArgs(self, expr, args, "");

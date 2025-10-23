@@ -287,6 +287,18 @@ main := fn(): uint {
 foo := fn($f: @Any()): uint return f()
 ```
 
+#### functions 7 (return postion @Any)
+```hb
+main := fn(): uint {
+    return @as(u8, quirky_int_cast(@as(uint, 1)))
+}
+
+quirky_int_cast := fn(x: @Any()): @Any() {
+    v: @ReturnType() = @int_cast(x - 1)
+    return v
+}
+```
+
 #### comments 1
 ```hb
 // commant is an item

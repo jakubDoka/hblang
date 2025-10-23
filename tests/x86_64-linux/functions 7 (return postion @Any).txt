@@ -1,0 +1,11 @@
+functions 7 (return postion @Any).quirky_int_cast(uint):
+	dec rdi
+	mov rax, rdi
+	ret
+main:
+	sub rsp, 0x08
+	mov rdi, 0x01
+	call :functions 7 (return postion @Any).quirky_int_cast(uint)
+	movzx rax, al
+	add rsp, 0x08
+	ret

@@ -1,0 +1,12 @@
+main:
+         st $31, $254, -8, 8
+     addi64 $254, $254, -8
+       li64 $1, 1
+        jal $31, $0, :functions 7 (return postion @Any).quirky_int_cast(uint)
+       andi $1, $1, 255
+     addi64 $254, $254, 8
+         ld $31, $254, -8, 8
+         tx
+functions 7 (return postion @Any).quirky_int_cast(uint):
+     addi64 $1, $1, -1
+       jala $0, $31, 0

@@ -380,6 +380,14 @@ pub const Id = enum(IdRepr) {
         };
     }
 
+    pub fn firstFunction(self: Id, types: *Types) ?utils.EntId(tys.Func) {
+        return switch (self.data()) {
+            .Func => |t| t,
+            inline .Struct, .Union, .Enum, .Global => |t| types.store.get(t).key.loc.scope.firstFunction(types),
+            else => null,
+        };
+    }
+
     pub fn file(self: Id, types: *Types) ?File {
         return switch (self.data()) {
             .Builtin, .Pointer, .Slice, .Nullable, .Tuple, .FnTy, .Simd, .Array => null,
