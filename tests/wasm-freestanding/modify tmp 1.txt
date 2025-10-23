@@ -24,8 +24,6 @@
     global.get 0
     i64.add
     call $modify_tmp_1.Parser.expr
-    local.set 0
-    local.get 0
     i64.const 24
     global.get 0
     i64.add

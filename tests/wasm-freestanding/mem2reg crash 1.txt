@@ -3,12 +3,9 @@
   (type (;1;) (func (param i64 i64) (result i64)))
   (type (;2;) (func))
   (func $main (type 0) (result i64)
-    (local i64)
     i64.const 0
     i64.const 1
     call $mem2reg_crash_1.insert
-    local.set 0
-    local.get 0
     return
     unreachable)
   (func $mem2reg_crash_1.insert (type 1) (param i64 i64) (result i64)

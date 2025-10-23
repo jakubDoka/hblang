@@ -36,210 +36,180 @@
                                                           call $arithmetic_3.one
                                                           local.set 0
                                                           call $arithmetic_3.mero
-                                                          local.set 1
-                                                          local.get 1
                                                           i32.const 255
                                                           i32.and
-                                                          local.set 2
+                                                          local.set 1
                                                           local.get 0
                                                           i32.const 255
                                                           i32.and
                                                           local.tee 0
-                                                          local.get 2
+                                                          local.get 1
                                                           i32.lt_u
                                                           call $arithmetic_3.cond
-                                                          local.set 1
-                                                          local.get 1
                                                           br_if 0 (;@27;)
                                                           block  ;; label = @28
                                                             local.get 0
                                                             local.get 0
                                                             i32.lt_u
                                                             call $arithmetic_3.cond
-                                                            local.set 1
-                                                            local.get 1
                                                             br_if 0 (;@28;)
                                                             block  ;; label = @29
                                                               local.get 0
-                                                              local.get 2
+                                                              local.get 1
                                                               i32.le_u
                                                               call $arithmetic_3.cond
-                                                              local.set 1
-                                                              local.get 1
                                                               br_if 0 (;@29;)
                                                               block  ;; label = @30
-                                                                local.get 2
+                                                                local.get 1
                                                                 local.get 0
                                                                 i32.gt_u
                                                                 call $arithmetic_3.cond
-                                                                local.set 1
-                                                                local.get 1
                                                                 br_if 0 (;@30;)
                                                                 block  ;; label = @31
                                                                   local.get 0
                                                                   local.get 0
                                                                   i32.gt_u
                                                                   call $arithmetic_3.cond
-                                                                  local.set 1
-                                                                  local.get 1
                                                                   br_if 0 (;@31;)
                                                                   block  ;; label = @32
-                                                                    local.get 2
+                                                                    local.get 1
                                                                     local.get 0
                                                                     i32.ge_u
                                                                     call $arithmetic_3.cond
-                                                                    local.set 1
-                                                                    local.get 1
                                                                     br_if 0 (;@32;)
                                                                     block  ;; label = @33
                                                                       call $arithmetic_3.mne
                                                                       local.set 0
                                                                       call $arithmetic_3.mero
-                                                                      local.set 1
-                                                                      local.get 1
                                                                       i32.extend8_s
-                                                                      local.set 2
+                                                                      local.set 1
                                                                       local.get 0
                                                                       i32.extend8_s
                                                                       local.tee 0
-                                                                      local.get 2
+                                                                      local.get 1
                                                                       i32.gt_s
                                                                       call $arithmetic_3.cond
-                                                                      local.set 1
-                                                                      local.get 1
                                                                       br_if 0 (;@33;)
                                                                       block  ;; label = @34
                                                                         local.get 0
                                                                         local.get 0
                                                                         i32.gt_s
                                                                         call $arithmetic_3.cond
-                                                                        local.set 1
-                                                                        local.get 1
                                                                         br_if 0 (;@34;)
                                                                         block  ;; label = @35
                                                                           local.get 0
-                                                                          local.get 2
+                                                                          local.get 1
                                                                           i32.ge_s
                                                                           call $arithmetic_3.cond
-                                                                          local.set 1
-                                                                          local.get 1
                                                                           br_if 0 (;@35;)
                                                                           block  ;; label = @36
-                                                                            local.get 2
+                                                                            local.get 1
                                                                             local.get 0
                                                                             i32.lt_s
                                                                             call $arithmetic_3.cond
-                                                                            local.set 1
-                                                                            local.get 1
                                                                             br_if 0 (;@36;)
                                                                             block  ;; label = @37
                                                                               local.get 0
                                                                               local.get 0
                                                                               i32.lt_s
                                                                               call $arithmetic_3.cond
-                                                                              local.set 1
-                                                                              local.get 1
                                                                               br_if 0 (;@37;)
                                                                               block  ;; label = @38
-                                                                                local.get 2
+                                                                                local.get 1
                                                                                 local.get 0
                                                                                 i32.le_s
                                                                                 call $arithmetic_3.cond
-                                                                                local.set 1
-                                                                                local.get 1
                                                                                 br_if 0 (;@38;)
                                                                                 block  ;; label = @39
                                                                                   call $arithmetic_3.one
-                                                                                  local.set 2
-                                                                                  call $arithmetic_3.mero
-                                                                                  local.set 1
-                                                                                  local.get 1
-                                                                                  i32.const 255
-                                                                                  i32.and
                                                                                   local.set 0
-                                                                                  local.get 2
+                                                                                  call $arithmetic_3.mero
                                                                                   i32.const 255
                                                                                   i32.and
-                                                                                  local.tee 1
+                                                                                  local.set 1
                                                                                   local.get 0
+                                                                                  i32.const 255
+                                                                                  i32.and
+                                                                                  local.tee 0
+                                                                                  local.get 1
                                                                                   i32.lt_u
                                                                                   br_if 0 (;@39;)
                                                                                   block  ;; label = @40
-                                                                                    local.get 1
-                                                                                    local.get 1
+                                                                                    local.get 0
+                                                                                    local.get 0
                                                                                     i32.lt_u
                                                                                     br_if 0 (;@40;)
                                                                                     block  ;; label = @41
-                                                                                      local.get 1
                                                                                       local.get 0
+                                                                                      local.get 1
                                                                                       i32.le_u
                                                                                       br_if 0 (;@41;)
                                                                                       block  ;; label = @42
-                                                                                        local.get 0
                                                                                         local.get 1
+                                                                                        local.get 0
                                                                                         i32.gt_u
                                                                                         br_if 0 (;@42;)
                                                                                         block  ;; label = @43
-                                                                                          local.get 1
-                                                                                          local.get 1
+                                                                                          local.get 0
+                                                                                          local.get 0
                                                                                           i32.gt_u
                                                                                           br_if 0 (;@43;)
                                                                                           block  ;; label = @44
-                                                                                            local.get 0
                                                                                             local.get 1
+                                                                                            local.get 0
                                                                                             i32.ge_u
                                                                                             br_if 0 (;@44;)
                                                                                             block  ;; label = @45
                                                                                               call $arithmetic_3.mne
-                                                                                              local.set 3
-                                                                                              call $arithmetic_3.mero
                                                                                               local.set 2
-                                                                                              local.get 3
-                                                                                              i32.extend8_s
-                                                                                              local.set 0
+                                                                                              call $arithmetic_3.mero
+                                                                                              local.set 3
                                                                                               local.get 2
                                                                                               i32.extend8_s
                                                                                               local.set 1
-                                                                                              local.get 0
+                                                                                              local.get 3
+                                                                                              i32.extend8_s
+                                                                                              local.set 0
                                                                                               local.get 1
+                                                                                              local.get 0
                                                                                               i32.gt_s
                                                                                               br_if 0 (;@45;)
                                                                                               block  ;; label = @46
-                                                                                                local.get 0
-                                                                                                local.get 0
+                                                                                                local.get 1
+                                                                                                local.get 1
                                                                                                 i32.gt_s
                                                                                                 br_if 0 (;@46;)
                                                                                                 block  ;; label = @47
-                                                                                                  local.get 0
                                                                                                   local.get 1
+                                                                                                  local.get 0
                                                                                                   i32.ge_s
                                                                                                   br_if 0 (;@47;)
                                                                                                   block  ;; label = @48
-                                                                                                    local.get 1
                                                                                                     local.get 0
+                                                                                                    local.get 1
                                                                                                     i32.lt_s
                                                                                                     br_if 0 (;@48;)
                                                                                                     block  ;; label = @49
-                                                                                                      local.get 0
-                                                                                                      local.get 0
+                                                                                                      local.get 1
+                                                                                                      local.get 1
                                                                                                       i32.lt_s
                                                                                                       br_if 0 (;@49;)
                                                                                                       block  ;; label = @50
-                                                                                                        local.get 1
                                                                                                         local.get 0
+                                                                                                        local.get 1
                                                                                                         i32.le_s
                                                                                                         br_if 0 (;@50;)
                                                                                                         block  ;; label = @51
-                                                                                                          local.get 3
+                                                                                                          local.get 2
                                                                                                           i32.const 255
                                                                                                           i32.and
-                                                                                                          local.tee 1
-                                                                                                          local.get 1
+                                                                                                          local.tee 0
+                                                                                                          local.get 0
                                                                                                           i32.ne
                                                                                                           br_if 0 (;@51;)
                                                                                                           block  ;; label = @52
-                                                                                                            local.get 1
-                                                                                                            local.get 2
+                                                                                                            local.get 0
+                                                                                                            local.get 3
                                                                                                             i32.const 255
                                                                                                             i32.and
                                                                                                             i32.eq

@@ -23,8 +23,6 @@
     local.get 0
     i32.wrap_i64
     call_indirect (type 0)
-    local.set 1
-    local.get 1
     return
     unreachable)
   (table (;0;) 1 funcref)

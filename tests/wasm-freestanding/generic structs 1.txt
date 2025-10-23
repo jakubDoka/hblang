@@ -3,16 +3,9 @@
   (type (;1;) (func (param i64) (result i64 i64)))
   (type (;2;) (func (param i64 i64) (result i64)))
   (func $main (type 0) (result i64)
-    (local i64 i64)
     i64.const 1
     call $generic_structs_1.nvec_uint_
-    local.set 1
-    local.set 0
-    local.get 0
-    local.get 1
     call $generic_structs_1.Vec_uint_.sub
-    local.set 1
-    local.get 1
     return
     unreachable)
   (func $generic_structs_1.nvec_uint_ (type 1) (param i64) (result i64 i64)

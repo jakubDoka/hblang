@@ -47,19 +47,17 @@
     return
     unreachable)
   (func $function_pointers_4.DynObj.func (type 3) (param i64) (result i32)
-    (local i32 i64)
+    (local i64)
     local.get 0
     i32.wrap_i64
     i64.load
-    local.set 2
+    local.set 1
     local.get 0
     i32.wrap_i64
     i64.load offset=8
-    local.get 2
+    local.get 1
     i32.wrap_i64
     call_indirect (type 0)
-    local.set 1
-    local.get 1
     return
     unreachable)
   (func $function_pointers_4.Obj.func (type 4) (param i64) (result i32)

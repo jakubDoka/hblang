@@ -2,11 +2,8 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i64) (result i64)))
   (func $main (type 0) (result i64)
-    (local i64)
     i64.const 3
     call $if_statements_2.fib
-    local.set 0
-    local.get 0
     return
     unreachable)
   (func $if_statements_2.fib (type 1) (param i64) (result i64)

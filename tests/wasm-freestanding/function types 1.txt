@@ -3,18 +3,12 @@
   (type (;1;) (func (result i64)))
   (type (;2;) (func (param i64) (result i64)))
   (func $main (type 0) (result i64)
-    (local i64)
     call $function_types_1.main.take_fun_.fun_
-    local.set 0
-    local.get 0
     return
     unreachable)
   (func $function_types_1.main.take_fun_.fun_ (type 1) (result i64)
-    (local i64)
     i64.const 10
     call $function_types_1.main.fun
-    local.set 0
-    local.get 0
     return
     unreachable)
   (func $function_types_1.main.fun (type 2) (param i64) (result i64)

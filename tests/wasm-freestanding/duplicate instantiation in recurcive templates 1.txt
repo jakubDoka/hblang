@@ -35,8 +35,6 @@
     i32.wrap_i64
     memory.copy
     call $duplicate_instantiation_in_recurcive_templates_1.foo_.Stru_
-    local.set 0
-    local.get 0
     i64.const 12
     global.get 0
     i64.add

@@ -3,10 +3,7 @@
   (type (;1;) (func (result i64)))
   (type (;2;) (func))
   (func $main (type 0) (result i64)
-    (local i64)
     call $something_with_the_machine_1__infinite_.foo
-    local.set 0
-    local.get 0
     return
     unreachable)
   (func $something_with_the_machine_1__infinite_.foo (type 1) (result i64)

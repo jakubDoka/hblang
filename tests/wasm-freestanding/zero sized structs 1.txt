@@ -3,11 +3,8 @@
   (type (;1;) (func))
   (type (;2;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i64)
     call $zero_sized_structs_1.main.X.new
     call $zero_sized_structs_1.main.X.test
-    local.set 0
-    local.get 0
     return
     unreachable)
   (func $zero_sized_structs_1.main.X.new (type 1)

@@ -58,13 +58,8 @@
     end
     unreachable)
   (func $out_of_bounds_matching_1.Iterator__.next (type 3) (param i64) (result i32 i32)
-    (local i32 i32)
     local.get 0
     call $out_of_bounds_matching_1.next
-    local.set 2
-    local.set 1
-    local.get 1
-    local.get 2
     return
     unreachable)
   (func $out_of_bounds_matching_1.main (type 4) (param i32)

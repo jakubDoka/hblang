@@ -38,8 +38,6 @@
               local.get 3
               i64.sub
               call $loop_check_1.check
-              local.set 0
-              local.get 0
               br_if 0 (;@5;)
               i64.const 0
               local.set 3

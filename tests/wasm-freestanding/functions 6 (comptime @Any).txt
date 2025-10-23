@@ -3,17 +3,11 @@
   (type (;1;) (func (result i64)))
   (type (;2;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i64)
     call $functions_6__comptime_@Any_.foo_.main_
-    local.set 0
-    local.get 0
     return
     unreachable)
   (func $functions_6__comptime_@Any_.foo_.main_ (type 1) (result i64)
-    (local i64)
     call $functions_6__comptime_@Any_.main
-    local.set 0
-    local.get 0
     return
     unreachable)
   (func $functions_6__comptime_@Any_.main (type 2) (result i64)

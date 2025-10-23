@@ -11,8 +11,6 @@
     i32.const 0
     i64.const -6148914691236517206
     call $null_unwrap_1.use_opt
-    local.set 0
-    local.get 0
     return
     unreachable)
   (func $null_unwrap_1.use_opt (type 1) (param i32 i64) (result i64)

@@ -2,11 +2,8 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i64) (result i64)))
   (func $main (type 0) (result i64)
-    (local i64)
     i64.const 10
     call $directives_12__@inline_.foo
-    local.set 0
-    local.get 0
     return
     unreachable)
   (func $directives_12__@inline_.foo (type 1) (param i64) (result i64)

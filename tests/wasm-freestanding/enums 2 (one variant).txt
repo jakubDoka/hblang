@@ -2,10 +2,7 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (result i64)))
   (func $main (type 0) (result i64)
-    (local i64)
     call $wasm_freestanding.page_size
-    local.set 0
-    local.get 0
     return
     unreachable)
   (func $wasm_freestanding.page_size (type 1) (result i64)

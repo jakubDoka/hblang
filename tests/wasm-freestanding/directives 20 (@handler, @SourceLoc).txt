@@ -8,10 +8,7 @@ directives 20 (@handler, @SourceLoc):15:24: only functions can be used here, if 
   (type (;3;) (func (param i64 i64) (result i64)))
   (type (;4;) (func (param i64 i64 i64)))
   (func $main (type 0) (result i64)
-    (local i64)
     call $directives_20__@handler__@SourceLoc_.main
-    local.set 0
-    local.get 0
     return
     unreachable)
   (func $directives_20__@handler__@SourceLoc_.main (type 1) (result i64)
@@ -57,8 +54,6 @@ directives 20 (@handler, @SourceLoc):15:24: only functions can be used here, if 
     i64.add
     i64.const 0
     call $directives_20__@handler__@SourceLoc_.use_slice
-    local.set 1
-    local.get 1
     i64.const 12
     global.get 0
     i64.add

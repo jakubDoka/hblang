@@ -2,15 +2,13 @@
   (type (;0;) (func (result i64)))
   (type (;1;) (func (param i32 i32) (result i32)))
   (func $main (type 0) (result i64)
-    (local i32 i64)
+    (local i64)
     block  ;; label = @1
       block  ;; label = @2
         block  ;; label = @3
           i32.const 0
           i32.const 170
           call $short_and_op_precedence_1.foo
-          local.set 0
-          local.get 0
           br_if 0 (;@3;)
           block  ;; label = @4
             i32.const 1
@@ -19,18 +17,18 @@
             i32.eqz
             br_if 0 (;@4;)
             i64.const 0
-            local.set 1
+            local.set 0
             br 3 (;@1;)
           end
           i64.const 2
-          local.set 1
+          local.set 0
           br 1 (;@2;)
         end
         i64.const 1
-        local.set 1
+        local.set 0
       end
     end
-    local.get 1
+    local.get 0
     return
     unreachable)
   (func $short_and_op_precedence_1.foo (type 1) (param i32 i32) (result i32)
