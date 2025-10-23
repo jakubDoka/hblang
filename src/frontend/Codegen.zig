@@ -3366,7 +3366,7 @@ pub fn captureToValue(self: *Codegen, sloc: graph.Sloc, c: *const Types.Scope.Ca
     if (!c.id.has_value) {
         if (!self.only_inference) {
             return self.report(sloc.index, "the variable is not marked with $" ++
-                " so its value is not accessible", .{});
+                " so its value is not accessible (foo)", .{});
         }
 
         return .{ .ty = c.ty, .id = switch (self.abiCata(c.ty)) {
@@ -4677,7 +4677,11 @@ fn emitDirective(
             const value = try self.partialEvalCapture(args[0], &expr_value);
             return self.captureToValue(
                 self.src(expr),
-                &.{ .ty = expr_value.ty, .value = value, .id = undefined },
+                &.{
+                    .ty = expr_value.ty,
+                    .value = value,
+                    .id = .{ .index = undefined, .has_value = true },
+                },
             );
         },
         .type_info => {
