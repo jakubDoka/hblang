@@ -9,7 +9,7 @@
     call $null_unwrap_1.use_opt
     drop
     i32.const 0
-    i64.const -6148914691236517206
+    i64.const 0
     call $null_unwrap_1.use_opt
     return
     unreachable)

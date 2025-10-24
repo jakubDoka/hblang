@@ -1,3 +1,15 @@
+(UnOp ?c (:op op && {op.propagatesPoison()}) :data_type (Poison) _) :
+  (Poison c :data_type)
+
+(BinOp ?c (:op op && {op.propagatesPoison() == .yes}) :data_type (Poison) _) :
+  (Poison c :data_type)
+
+(BinOp ?c (:op op && {op.propagatesPoison() == .yes}) :data_type _ (Poison)) :
+  (Poison c :data_type)
+
+(BinOp _ (:op op && {op.propagatesPoison() == .into_other_value}) (Poison) vl) : vl
+(BinOp _ (:op op && {op.propagatesPoison() == .into_other_value}) vl (Poison)) : vl
+
 (BinOp ?c :op :data_type
   (CInt _ (:value lhs))
   (CInt _ (:value rhs))

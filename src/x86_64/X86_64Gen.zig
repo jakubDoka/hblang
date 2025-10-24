@@ -1017,6 +1017,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     self.emitImm(i64, extra.value);
                 }
             },
+            .Poison => {},
             inline .F32, .F64 => |extra| {
                 const idx = &@field(self, @typeName(@TypeOf(extra.imm)) ++ "index");
                 const sym = &@field(self, @typeName(@TypeOf(extra.imm)) ++ "s");
@@ -1758,9 +1759,9 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     .fneg => unreachable,
                 }
             },
-            .Arg, .Ret, .MemJoin, .Mem, .Never, .Jmp, .Return => {},
+            .Arg, .Ret, .Mem, .Never, .Jmp, .Return => {},
             else => {
-                utils.panic("{any}", .{instr});
+                utils.panic("{f}", .{instr});
             },
         }
     }

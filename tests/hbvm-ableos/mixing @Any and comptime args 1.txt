@@ -22,8 +22,7 @@ mixing @Any and comptime args 1.bind(.main.a, ?i32):
          cp $1, $2
         jal $31, $0, :mixing @Any and comptime args 1.main.a
         jmp :3
-1:     li32 $2, -1431655766
-         cp $1, $0
+1:       cp $1, $0
 3:   addi64 $254, $254, 8
          ld $31, $254, -8, 8
        jala $0, $31, 0

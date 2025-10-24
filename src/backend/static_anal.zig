@@ -20,55 +20,82 @@ pub const Error = union(enum) {
     InfiniteLoopWithBreak: struct {
         loop: graph.Sloc,
     },
-    ReadUninit: struct {
+    UsedPoison: struct {
         loc: graph.Sloc,
     },
 };
 
-pub fn Mixin(comptime Backend: type) type {
+pub fn Anal(comptime Backend: type) type {
     return struct {
         const Self = @This();
         const Func = graph.Func(Backend);
         const Node = Func.Node;
 
-        pub fn getGraph(self: *Self) *Func {
-            return @alignCast(@fieldParentPtr("static_anal", self));
+        func: *Func,
+        errors: *std.ArrayList(Error),
+        arena: *utils.Arena,
+
+        pub fn analize(self: Self) void {
+            self.findTrivialStackEscapes();
+            self.tryHardToFindMemoryEscapes();
+            self.findConstantOobMemOps();
+            self.findLoopInvariantConditions();
+            self.findInfiniteLoopsWithBreaks();
+            self.findInvalidPoisonReads();
         }
 
-        pub fn analize(self: *Self, arena: *utils.Arena, errors: *std.ArrayList(Error)) void {
-            self.findTrivialStackEscapes(arena, errors);
-            self.tryHardToFindMemoryEscapes(arena, errors);
-            self.findConstantOobMemOps(arena, errors);
-            self.findLoopInvariantConditions(arena, errors);
-            self.findInfiniteLoopsWithBreaks(arena, errors);
+        pub fn addError(self: Self, err: Error) void {
+            self.errors.append(self.arena.allocator(), err) catch unreachable;
         }
 
-        pub fn findInfiniteLoopsWithBreaks(
-            self: *Self,
-            arena: *utils.Arena,
-            errors: *std.ArrayList(Error),
-        ) void {
-            errdefer unreachable;
-            const func = self.getGraph();
-            for (func.gcm.postorder) |bb| {
-                if (bb.base.kind == .Loop and bb.base.extra(.Loop).anal_stage == .has_dead_break) {
-                    try errors.append(arena.allocator(), .{ .InfiniteLoopWithBreak = .{ .loop = bb.base.sloc } });
+        pub fn findInvalidPoisonReads(self: Self) void {
+            for (self.func.gcm.postorder) |bb| {
+                for (bb.base.outputs()) |out| {
+                    const instr = out.get();
+
+                    if (instr.kind == .Poison) {
+                        self.findInvalidPoisonReadsLow(instr);
+                    }
                 }
             }
         }
 
-        pub fn findLoopInvariantConditions(
-            self: *Self,
-            arena: *utils.Arena,
-            errors: *std.ArrayList(Error),
-        ) void {
-            errdefer unreachable;
-            var tmp = utils.Arena.scrath(arena);
+        pub fn findInvalidPoisonReadsLow(self: Self, instr: *Func.Node) void {
+            for (instr.outputs()) |out| {
+                if (out.get().kind == .Phi) {
+                    continue;
+                }
+
+                if (out.get().kind == .Return) {
+                    continue;
+                }
+
+                if (out.get().isSub(graph.builtin.Call)) {
+                    continue;
+                }
+
+                if (out.get().isStore()) {
+                    continue;
+                }
+
+                self.addError(.{ .UsedPoison = .{ .loc = out.get().sloc } });
+            }
+        }
+
+        pub fn findInfiniteLoopsWithBreaks(self: Self) void {
+            const func = self.func;
+            for (func.gcm.postorder) |bb| {
+                if (bb.base.kind == .Loop and bb.base.extra(.Loop).anal_stage == .has_dead_break) {
+                    self.addError(.{ .InfiniteLoopWithBreak = .{ .loop = bb.base.sloc } });
+                }
+            }
+        }
+
+        pub fn findLoopInvariantConditions(self: Self) void {
+            var tmp = utils.Arena.scrath(self.arena);
             defer tmp.deinit();
 
-            std.debug.assert(tmp.arena != arena);
-
-            const func = self.getGraph();
+            const func = self.func;
 
             for (func.gcm.postorder) |bb| {
                 const node = bb.base.outputs()[bb.base.outputs().len - 1].get();
@@ -83,19 +110,15 @@ pub fn Mixin(comptime Backend: type) type {
                         if (func.loopDepth(inp.?) == ld) break :b;
                     }
 
-                    try errors.append(arena.allocator(), .{
+                    self.addError(.{
                         .LoopInvariantBreak = .{ .if_node = node.sloc },
                     });
                 }
             }
         }
 
-        pub fn findConstantOobMemOps(
-            self: *Self,
-            arena: *utils.Arena,
-            errors: *std.ArrayList(Error),
-        ) void {
-            const func = self.getGraph();
+        pub fn findConstantOobMemOps(self: Self) void {
+            const func = self.func;
 
             if (func.start.outputs().len < 2 or func.start.outputs()[1].get().kind != .Mem) return;
 
@@ -106,25 +129,24 @@ pub fn Mixin(comptime Backend: type) type {
                         const op = n.get();
                         if (op.kind == .Local) {
                             for (op.outputs()) |use| {
-                                checkLocalForOob(use.get(), local, op, arena, errors);
+                                self.checkLocalForOob(use.get(), local, op);
                             }
                         } else {
-                            checkLocalForOob(op, local, null, arena, errors);
+                            self.checkLocalForOob(op, local, null);
                         }
                     }
                 }
             }
         }
 
-        pub fn checkLocalForOob(op: *Func.Node, local: *Func.Node, addr: ?*Func.Node, arena: *utils.Arena, errors: *std.ArrayList(Error)) void {
-            errdefer unreachable;
+        pub fn checkLocalForOob(self: Self, op: *Func.Node, local: *Func.Node, addr: ?*Func.Node) void {
             const mem_op, const offset = op.knownMemOp() orelse return;
             if ((!mem_op.isLoad() and !mem_op.isStore()) or mem_op.isSub(graph.MemCpy)) return;
             if (mem_op.isStore() and mem_op.value() == addr) return;
             if (mem_op.isLoad() and mem_op.base() != addr and mem_op.base() != local) return;
             const end_offset = offset + @as(i64, @intCast(mem_op.loadDatatype().size()));
             if (offset < 0 or end_offset > local.extra(.LocalAlloc).size) {
-                try errors.append(arena.allocator(), .{ .StackOob = .{
+                self.addError(.{ .StackOob = .{
                     .slot = local.sloc,
                     .op = mem_op.id,
                     .access = op.sloc,
@@ -135,18 +157,15 @@ pub fn Mixin(comptime Backend: type) type {
         }
 
         // NOTE: this is a heuristic, it can miss things
-        pub fn tryHardToFindMemoryEscapes(
-            self: *Self,
-            arena: *utils.Arena,
-            errors: *std.ArrayList(Error),
-        ) void {
+        pub fn tryHardToFindMemoryEscapes(self: Self) void {
             errdefer unreachable;
-            const func = self.getGraph();
+
+            const func = self.func;
             for (func.start.outputs()[0].get().outputs()) |ar| {
                 const arg = ar.get();
                 if (arg.kind != .Arg) continue;
 
-                var tmp = utils.Arena.scrath(arena);
+                var tmp = utils.Arena.scrath(self.arena);
                 defer tmp.deinit();
 
                 var local_stores = std.ArrayList(*Node){};
@@ -205,23 +224,17 @@ pub fn Mixin(comptime Backend: type) type {
                 }
 
                 for (local_stores.items) |marked| {
-                    try errors.append(arena.allocator(), .{
-                        .ReturningStack = .{ .slot = marked.value().?.sloc },
-                    });
+                    self.addError(.{ .ReturningStack = .{ .slot = marked.value().?.sloc } });
                 }
             }
         }
 
-        pub fn findTrivialStackEscapes(
-            self: *Self,
-            arena: *utils.Arena,
-            errors: *std.ArrayList(Error),
-        ) void {
+        pub fn findTrivialStackEscapes(self: Self) void {
             errdefer unreachable;
-            const func = self.getGraph();
+            const func = self.func;
             if (func.end.inputs()[0] == null) return;
 
-            var tmp = utils.Arena.scrath(arena);
+            var tmp = utils.Arena.scrath(self.arena);
             defer tmp.deinit();
 
             var frontier = std.AutoArrayHashMapUnmanaged(*Node, void){};
@@ -235,13 +248,29 @@ pub fn Mixin(comptime Backend: type) type {
             while (i < frontier.entries.len) : (i += 1) {
                 const nd = frontier.entries.items(.key)[i];
                 if (nd.kind == .Local) {
-                    try errors.append(arena.allocator(), .{ .ReturningStack = .{ .slot = nd.sloc } });
+                    self.addError(.{ .ReturningStack = .{ .slot = nd.sloc } });
                 } else if (nd.kind == .Phi) {
                     for (nd.inputs()[1..]) |n| {
                         try frontier.put(tmp.arena.allocator(), n.?, {});
                     }
                 }
             }
+        }
+    };
+}
+
+pub fn Mixin(comptime Backend: type) type {
+    return struct {
+        const Self = @This();
+        const Func = graph.Func(Backend);
+        const Node = Func.Node;
+
+        pub fn getGraph(self: *Self) *Func {
+            return @alignCast(@fieldParentPtr("static_anal", self));
+        }
+
+        pub fn analize(self: *Self, arena: *utils.Arena, errors: *std.ArrayList(Error)) void {
+            (Anal(Backend){ .func = self.getGraph(), .errors = errors, .arena = arena }).analize();
         }
     };
 }

@@ -250,7 +250,7 @@
         i64.store offset=8
         br 1 (;@1;)
       end
-      i32.const 170
+      i32.const 0
       local.set 2
       i32.const 0
       local.set 1
@@ -286,7 +286,7 @@
                   i64.const 1
                   i64.eq
                   br_if 0 (;@7;)
-                  i32.const 170
+                  i32.const 0
                   local.set 1
                   i32.const 0
                   local.set 2

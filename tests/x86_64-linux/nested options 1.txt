@@ -17,7 +17,7 @@ nested options 1.defc:
 	add rsp, 0x08
 	ret
 nested options 1.defb:
-	mov rax, 0xAAAA00
+	xor rax, rax
 	ret
 nested options 1.reset:
 	xor rcx, rcx

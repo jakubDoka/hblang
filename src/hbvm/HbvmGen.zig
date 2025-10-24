@@ -429,6 +429,25 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     }
 }
 
+pub fn emitCInt(self: *HbvmGen, no: *Func.Node, value: i64) void {
+    switch (no.data_type) {
+        inline .i8, .i16, .i32, .i64 => |t| self.emit(
+            @field(isa.Op, "l" ++ @tagName(t)),
+            .{ self.getReg(no), @truncate(@as(u64, @bitCast(value))) },
+        ),
+        .f32 => {
+            self.emit(.li32, .{
+                self.getReg(no),
+                @truncate(@as(u64, @bitCast(value))),
+            });
+        },
+        .f64 => {
+            self.emit(.li64, .{ self.getReg(no), @bitCast(value) });
+        },
+        else => utils.panic("{}\n", .{no.data_type}),
+    }
+}
+
 pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) void {
     _ = tmp;
 
@@ -439,24 +458,8 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
 
         switch (no.extra2()) {
             .FramePointer, .Zero => {},
-            .CInt => |extra| {
-                switch (no.data_type) {
-                    inline .i8, .i16, .i32, .i64 => |t| self.emit(
-                        @field(isa.Op, "l" ++ @tagName(t)),
-                        .{ self.getReg(no), @truncate(@as(u64, @bitCast(extra.value))) },
-                    ),
-                    .f32 => {
-                        self.emit(.li32, .{
-                            self.getReg(no),
-                            @truncate(@as(u64, @bitCast(extra.*))),
-                        });
-                    },
-                    .f64 => {
-                        self.emit(.li64, .{ self.getReg(no), @bitCast(extra.value) });
-                    },
-                    else => utils.panic("{}\n", .{no.data_type}),
-                }
-            },
+            .CInt => |extra| self.emitCInt(no, extra.value),
+            .Poison => {},
             .Arg => {},
             .GlobalAddr => |extra| {
                 try self.mach.out.addGlobalReloc(self.gpa, extra.id, .@"4", 3, 0);
@@ -676,7 +679,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 if (dst == src) continue;
                 self.emit(.cp, .{ dst, src });
             },
-            .Never, .Mem, .MemJoin, .Ret, .Phi, .Jmp => {},
+            .Never, .Mem, .Ret, .Phi, .Jmp => {},
             else => |e| {
                 utils.panic("{any} {any}", .{ no, e });
             },

@@ -7,7 +7,7 @@
       block  ;; label = @2
         block  ;; label = @3
           i32.const 0
-          i32.const 170
+          i32.const 0
           call $short_and_op_precedence_1.foo
           br_if 0 (;@3;)
           block  ;; label = @4
@@ -37,7 +37,7 @@
       block  ;; label = @2
         local.get 0
         br_if 0 (;@2;)
-        i32.const 170
+        i32.const 0
         local.set 2
         i32.const 0
         local.set 0

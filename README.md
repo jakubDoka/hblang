@@ -697,6 +697,19 @@ do_stuff := fn(v: ^uint): uint {
 }
 ```
 
+#### uninit memory 1 (errors)
+```hb
+expectations := .{
+    should_error: true,
+}
+
+main := fn(): uint {
+    if idk return 0
+
+    return 1
+}
+```
+
 #### pointers 4 (errors)
 ```hb
 expectations := .{
@@ -2573,7 +2586,7 @@ main := fn(): uint {
 - [ ] optimizations
   - [ ] assumptions
   - [ ] memory
-    - [ ] uninitialized global memory
+    - [x] uninitialized global memory
     - [x] constant global loads
     - [x] stack elimination
     - [x] load alias reordering

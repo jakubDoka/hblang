@@ -42,7 +42,7 @@
     unreachable)
   (func $nullable_types_1.mknull_uint_ (type 2) (result i32 i64)
     i32.const 0
-    i64.const -6148914691236517206
+    i64.const 0
     return
     unreachable)
   (table (;0;) 0 funcref)

@@ -913,6 +913,36 @@ pub fn emitMemArg(self: *WasmGen, ty: graph.DataType, offset: i64) void {
     try self.ctx.buf.writer.writeSleb128(offset);
 }
 
+pub fn emitCInt(self: *WasmGen, instr: *Func.Node, value: i64) void {
+    errdefer unreachable;
+
+    switch (dataTypeToWasmType(instr.data_type)) {
+        .i32 => {
+            // TODO: this is incorrect we need to refactor the comptime eval
+            // to preserve signed byts
+            try self.ctx.buf.writer.writeByte(opb(.i32_const));
+            const vl: u32 = @truncate(@as(u64, @bitCast(value)));
+            try self.ctx.buf.writer.writeSleb128(@as(i32, @bitCast(vl)));
+        },
+        .i64 => {
+            try self.ctx.buf.writer.writeByte(opb(.i64_const));
+            try self.ctx.buf.writer
+                .writeSleb128(@as(i64, @bitCast(@as(u64, @bitCast(value)))));
+        },
+        .f32 => {
+            try self.ctx.buf.writer.writeByte(opb(.f32_const));
+            try self.ctx.buf.writer.writeAll(std.mem.asBytes(&value)[0..4]);
+        },
+        .f64 => {
+            try self.ctx.buf.writer.writeByte(opb(.f64_const));
+            try self.ctx.buf.writer.writeAll(std.mem.asBytes(&value));
+        },
+        else => utils.panic("{}", .{instr.data_type}),
+    }
+
+    self.emitLocalStore(instr);
+}
+
 pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
     errdefer unreachable;
 
@@ -935,33 +965,8 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
             try self.ctx.buf.writer.writeUleb128(object.stack_pointer_id);
             try self.ctx.buf.writer.writeByte(opb(.i32_wrap_i64));
         },
-        .CInt => |extra| {
-            switch (dataTypeToWasmType(instr.data_type)) {
-                .i32 => {
-                    // TODO: this is incorrect we need to refactor the comptime eval
-                    // to preserve signed byts
-                    try self.ctx.buf.writer.writeByte(opb(.i32_const));
-                    const value: u32 = @truncate(@as(u64, @bitCast(extra.value)));
-                    try self.ctx.buf.writer.writeSleb128(@as(i32, @bitCast(value)));
-                },
-                .i64 => {
-                    try self.ctx.buf.writer.writeByte(opb(.i64_const));
-                    try self.ctx.buf.writer
-                        .writeSleb128(@as(i64, @bitCast(@as(u64, @bitCast(extra.value)))));
-                },
-                .f32 => {
-                    try self.ctx.buf.writer.writeByte(opb(.f32_const));
-                    try self.ctx.buf.writer.writeAll(std.mem.asBytes(&extra.value)[0..4]);
-                },
-                .f64 => {
-                    try self.ctx.buf.writer.writeByte(opb(.f64_const));
-                    try self.ctx.buf.writer.writeAll(std.mem.asBytes(&extra.value));
-                },
-                else => utils.panic("{}", .{instr.data_type}),
-            }
-
-            self.emitLocalStore(instr);
-        },
+        .CInt => |extra| self.emitCInt(instr, extra.value),
+        .Poison => self.emitCInt(instr, 0),
         .Eqz => {
             //self.emitLocalLoad(inps[0]);
 

@@ -5,7 +5,7 @@
     (local i64 i64)
     i64.const 0
     local.set 0
-    i64.const -6148914691236517206
+    i64.const 0
     local.set 1
     loop  ;; label = @1
       local.get 0

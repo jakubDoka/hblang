@@ -104,7 +104,7 @@
         i64.store offset=8
         br 1 (;@1;)
       end
-      i32.const 170
+      i32.const 0
       local.set 2
       i32.const 0
       local.set 1

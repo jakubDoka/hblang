@@ -48,7 +48,7 @@
       block  ;; label = @2
         local.get 0
         br_if 0 (;@2;)
-        i32.const -1431655766
+        i32.const 0
         local.set 0
         i32.const 0
         local.set 1

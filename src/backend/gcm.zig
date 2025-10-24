@@ -421,7 +421,6 @@ pub fn Mixin(comptime Backend: type) type {
                             }
                         }
                     },
-                    .MemJoin => {},
                     .Local => {},
                     .Return => {},
                     else => if (o.isLoad() or o.kind == .LocalAlloc) {} else if (o.isStore()) {

@@ -18,7 +18,6 @@ main:
          ld $31, $254, -16, 16
          tx
 nullable types 1.mknull(uint):
-       li64 $2, -6148914691236517206
          cp $1, $0
        jala $0, $31, 0
 nullable types 1.mkval(uint):

@@ -1915,7 +1915,7 @@ pub fn dumpAnalErrors(self: *Types, anal_errors: *std.ArrayList(static_anal.Erro
             self.reportSloc(loc.loop, "the loop was declared with breaks or" ++
                 " returns but they are all unreachable", .{});
         },
-        .ReadUninit => |loc| {
+        .UsedPoison => |loc| {
             self.reportSloc(loc.loc, "reading from an uninitialized memory location", .{});
         },
     };

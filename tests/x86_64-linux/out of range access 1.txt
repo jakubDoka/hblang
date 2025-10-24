@@ -3,8 +3,8 @@ out of range access 1.bwa:
 	ret
 main:
 	sub rsp, 0x08
-	mov rdi, 0xAA00AA00AA00AA00
-	mov rsi, 0xAA00AA00AA00
+	xor rdi, rdi
+	xor rsi, rsi
 	call :out of range access 1.bwa
 	mov eax, eax
 	add rsp, 0x08

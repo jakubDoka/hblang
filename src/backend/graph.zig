@@ -161,6 +161,13 @@ pub const BinOp = enum(u8) {
         }) & dt.mask().?;
     }
 
+    pub fn propagatesPoison(self: BinOp) enum { yes, into_other_value } {
+        return switch (self) {
+            .bor => .into_other_value,
+            else => .yes,
+        };
+    }
+
     pub fn isComutative(self: BinOp) bool {
         return switch (self) {
             .iadd, .imul, .band, .bor, .bxor, .fadd, .fmul, .ne, .eq => true,
@@ -233,6 +240,10 @@ pub const UnOp = enum(u8) {
     itf,
     fti,
     fcst,
+
+    pub inline fn propagatesPoison(_: UnOp) bool {
+        return true;
+    }
 
     pub fn eval(self: UnOp, src: DataType, dst: DataType, oper: i64) i64 {
         return @as(i64, switch (self) {
@@ -629,7 +640,6 @@ pub const builtin = enum {
     pub const Mem = extern struct {
         pub const is_pinned = true;
     };
-    pub const MemJoin = extern struct {};
     pub const MemCpy = mod.MemCpy;
     pub const Load = mod.Load;
     pub const Store = mod.Store;
@@ -637,8 +647,10 @@ pub const builtin = enum {
         id: u32,
         pub const is_clone = true;
     };
-
     pub const Dead = extern struct {};
+    pub const Poison = extern struct {
+        pub const is_clone = true;
+    };
 };
 
 pub const Arg = extern struct {
@@ -1181,7 +1193,7 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn dataDeps(self: *Node) []*Node {
-                if ((self.kind == .Phi and !self.isDataPhi()) or self.kind == .MemJoin) return &.{};
+                if ((self.kind == .Phi and !self.isDataPhi())) return &.{};
                 const start = self.dataDepOffset();
                 const len = self.input_ordered_len;
                 const deps = self.input_base[start..len];
@@ -1536,7 +1548,6 @@ pub fn Func(comptime Backend: type) type {
                     !self.isCfg() and
                     (self.kind != .Phi or self.isDataPhi()) and
                     self.kind != .LocalAlloc and
-                    self.kind != .MemJoin and
                     self.kind != .Mem and
                     (!@hasDecl(Backend, "isDef") or Backend.isDef(self));
             }
@@ -1600,7 +1611,7 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn isInterned(kind: Kind, inpts: []const ?*Node) bool {
                 return switch (kind) {
-                    .CInt, .BinOp, .Load, .UnOp, .GlobalAddr, .FramePointer => true,
+                    .CInt, .Poison, .BinOp, .Load, .UnOp, .GlobalAddr, .FramePointer => true,
                     .Phi => inpts[2] != null,
                     else => callCheck("isInterned", kind),
                 };
@@ -1929,7 +1940,7 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn addUninit(self: *Self, sloc: Sloc, ty: DataType) *Node {
-            return self.addIntImm(sloc, ty, @as(i64, @bitCast(@as(u64, 0xaaaaaaaaaaaaaaaa))) & ty.mask().?);
+            return self.addNode(.Poison, sloc, ty, &.{null}, .{});
         }
 
         pub fn addIntImm(self: *Self, sloc: Sloc, ty: DataType, value: i64) *Node {
