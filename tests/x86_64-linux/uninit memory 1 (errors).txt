@@ -1,0 +1,9 @@
+uninit memory 1 (errors):9:2: reading from an uninitialized memory location
+    if idk return 0
+    ^
+uninit memory 1 (errors):40:6: reading from an uninitialized memory location
+        if s.b == 0 return 11
+           ^
+uninit memory 1 (errors):21:2: reading from an uninitialized memory location
+    if val == 1 return 0
+    ^

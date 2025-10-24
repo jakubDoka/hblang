@@ -61,8 +61,9 @@ pub fn Anal(comptime Backend: type) type {
         }
 
         pub fn findInvalidPoisonReadsLow(self: Self, instr: *Func.Node) void {
-            for (instr.outputs()) |out| {
+            out: for (instr.outputs()) |out| {
                 if (out.get().kind == .Phi) {
+                    self.findInvalidPoisonReadsLow(out.get());
                     continue;
                 }
 
@@ -76,6 +77,19 @@ pub fn Anal(comptime Backend: type) type {
 
                 if (out.get().isStore()) {
                     continue;
+                }
+
+                if (instr.kind != .Poison) {
+                    // This is pesimistic if the phi is used conditionally, we
+                    // can't really tell if it is invalid
+                    //
+                    std.debug.assert(instr.kind == .Phi);
+                    var cursor = out.get().cfg0();
+                    while (cursor != instr.cfg0()) : (cursor = cursor.idom()) {
+                        if (cursor.base.kind == .Else or cursor.base.kind == .Then) {
+                            continue :out;
+                        }
+                    }
                 }
 
                 self.addError(.{ .UsedPoison = .{ .loc = out.get().sloc } });

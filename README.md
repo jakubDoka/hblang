@@ -703,8 +703,43 @@ expectations := .{
     should_error: true,
 }
 
+opaque := false
+
 main := fn(): uint {
+    // trivial
     if idk return 0
+
+    // missing init path
+
+    val: uint = idk
+
+    if opaque {
+        val = 0
+    } else {
+        // val = 1 // forgotten
+    }
+
+    if val == 1 return 0
+
+    Stru := struct{.a: uint; .b: uint}
+
+    // quite smart
+    s := Stru.{a: 1, b: idk}
+
+    if opaque {
+        s.b = 1
+    } else {
+        // s.b = 0 forgotten
+    }
+
+    if s.b == 0 return 0
+    if s.a == 0 return 10
+
+    if opaque {
+        // this is not detectable (conditional)
+        // TODO: we should detect at least trivial stuff like this
+        if s.b == 0 return 11
+    }
 
     return 1
 }
