@@ -23,12 +23,16 @@ pub fn refAllDeclsRecursive(comptime T: type, depth: usize) void {
 }
 
 var ran = false;
+var glb_arena: utils.Arena = undefined;
 
 pub fn runTest(name: []const u8, code: [:0]const u8) !void {
     if (!ran) {
         utils.Arena.initScratch(1024 * 1024 * 32);
         ran = true;
+        glb_arena = utils.Arena.init(1024 * 1024 * 64);
     }
+
+    glb_arena.reset();
 
     const gpa = std.testing.allocator;
 
@@ -60,6 +64,9 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
         };
 
         for (tests[0..]) |tst| {
+            var tmp = glb_arena.checkpoint();
+            defer tmp.deinit();
+
             const target, var machine, const opts, const abi = tst;
             //std.debug.print("{s}\n", .{target});
             defer machine.deinit();
@@ -69,6 +76,7 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
                 name,
                 target,
                 code,
+                tmp.arena,
                 machine,
                 abi,
                 opts,
@@ -86,6 +94,7 @@ pub fn runMachineTest(
     name: []const u8,
     category: []const u8,
     code: [:0]const u8,
+    arena: *utils.Arena,
     machine: *root.backend.Machine,
     abi: root.frontend.Types.Abi,
     opts: root.backend.Machine.OptOptions.Mode,
@@ -105,6 +114,7 @@ pub fn runMachineTest(
             code,
             category,
             gpa,
+            arena,
             out,
             machine,
             opts,
@@ -114,11 +124,15 @@ pub fn runMachineTest(
         ) catch unreachable;
     }
 
+    var tmp = arena.checkpoint();
+    defer tmp.deinit();
+
     try test_util.testBuilder(
         name,
         code,
         category,
         gpa,
+        tmp.arena,
         &output.writer,
         machine,
         opts,
@@ -134,7 +148,17 @@ pub fn runMachineTest(
 pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
     utils.Arena.initScratch(1024 * 1024 * 10);
     defer utils.Arena.deinitScratch();
-    std.debug.print("{s}\n", .{code});
+
+    {
+        var arena = utils.Arena.init(1024 * 1024 * 128);
+
+        try @import("fuzz.zig").fuzzRun(name, code, &arena, null);
+
+        if (true) return;
+    }
+
+    var arena = utils.Arena.init(1024 * 1024 * 32);
+    defer arena.deinit();
 
     const gpa = std.testing.allocator;
 
@@ -157,6 +181,7 @@ pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
         code,
         "hbvm-ableos",
         gpa,
+        &arena,
         &diagnostics.interface,
         &hbvm.mach,
         .release,

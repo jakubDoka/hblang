@@ -85,7 +85,6 @@ pub const Expr = union(enum) {
         body: Id,
         peak_vars: u16,
         peak_loops: u8,
-        thread: ?u7 = null,
     },
     FnTy: struct {
         pos: Pos,

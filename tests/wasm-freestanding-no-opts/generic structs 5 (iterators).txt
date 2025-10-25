@@ -333,7 +333,7 @@
     return
     unreachable)
   (func $generic_structs_5__iterators_.main.Chain_.Chars__.Chars_.next (type 2) (param i64) (result i32 i32)
-    (local i32 i32 i64)
+    (local i32 i32)
     global.get 0
     i64.const 16
     i64.sub
@@ -351,14 +351,15 @@
                 global.get 0
                 i32.wrap_i64
                 i64.load
-                local.tee 3
+                local.tee 0
                 i32.wrap_i64
                 i64.load8_s
-                local.tee 0
                 i64.eqz
                 br_if 0 (;@6;)
                 block  ;; label = @7
                   local.get 0
+                  i32.wrap_i64
+                  i64.load8_s
                   i64.const 1
                   i64.eq
                   br_if 0 (;@7;)
@@ -377,7 +378,7 @@
                   br 5 (;@2;)
                 end
                 block  ;; label = @7
-                  local.get 3
+                  local.get 0
                   i64.const 24
                   i64.add
                   call $generic_structs_5__iterators_.main.Chars.next
@@ -410,7 +411,7 @@
                 local.set 1
                 br 3 (;@3;)
               end
-              local.get 3
+              local.get 0
               i64.const 8
               i64.add
               call $generic_structs_5__iterators_.main.Chars.next

@@ -140,6 +140,7 @@ pub const PartialEvalResult = union(enum) {
     DependsOnRuntimeControlFlow: *Node,
     Unsupported: struct { *Node, []const u8 },
     InvalidCaptureAccess: graph.Sloc,
+    OutOfBounds: struct { graph.Sloc, u64, i65 },
 };
 
 const PartialEvalCtx = struct {
@@ -258,10 +259,23 @@ pub fn partialEval(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, expr: *No
                         }
                     }
 
+                    const abs_off = std.math.cast(u64, offset) orelse
+                        return ctx.err(.{
+                            .OutOfBounds = .{ expr.sloc, mem.len, offset },
+                        });
+
+                    const up_to = abs_off + expr.data_type.size();
+
+                    if (mem.len <= up_to) {
+                        return ctx.err(.{
+                            .OutOfBounds = .{ expr.sloc, mem.len, up_to },
+                        });
+                    }
+
                     var value: i64 = 0;
                     @memcpy(
                         std.mem.asBytes(&value)[0..@intCast(expr.data_type.size())],
-                        mem[@intCast(offset)..][0..@intCast(expr.data_type.size())],
+                        mem[@intCast(abs_off)..][0..@intCast(expr.data_type.size())],
                     );
 
                     break :b bl.addIntImm(.none, expr.data_type, value);
@@ -358,7 +372,7 @@ pub fn executeMemOps(
     for (interestingOps, 0..) |o, i| {
         const op = o.get();
 
-        if (op.kind == .Scope) continue;
+        if (op.kind == .Scope or op.kind == .Pin) continue;
 
         const is_comptime_ref =
             (op.isStore() and op.base() == op.inputs()[o.pos()].?) or

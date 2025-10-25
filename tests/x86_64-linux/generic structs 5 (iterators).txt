@@ -35,8 +35,8 @@ generic structs 5 (iterators).main.Chain(.Chars, .Chars).next:
 	add rax, 0x08
 	mov rbp, rax
 7:	mov al, [rbx]
-	movsx rcx, al
-	cmp rcx, 0x00
+	movsx rax, al
+	cmp rax, 0x00
 	setz al
 	movzx rax, al
 	test al, al
@@ -49,7 +49,9 @@ generic structs 5 (iterators).main.Chain(.Chars, .Chars).next:
 	jmp :2
 1:	mov rax, 0x01
 	jmp :3
-0:	cmp rcx, 0x01
+0:	mov al, [rbx]
+	movsx rax, al
+	cmp rax, 0x01
 	setz al
 	movzx rax, al
 	test al, al

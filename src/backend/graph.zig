@@ -1531,7 +1531,9 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn extra(self: *Node, comptime kind: Kind) *ClassFor(kind) {
-                std.debug.assert(self.kind == kind);
+                if (self.kind != kind) {
+                    utils.panic("{f} expected {}, got {}", .{ self, kind, self.kind });
+                }
                 const ptr: *LayoutFor(kind) = @ptrCast(@alignCast(self));
                 return &ptr.ext;
             }

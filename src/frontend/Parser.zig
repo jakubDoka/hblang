@@ -843,9 +843,14 @@ fn finalizeVariablesLow(self: *Parser, start: usize) usize {
     for (self.active_syms.items[start..], start..) |s, j| {
         if (!s.declared) {
             if (new_len != j) {
-                self.active_sym_table.getEntryContext(@intCast(j), .{
+                const entry = self.active_sym_table.getEntryContext(@intCast(j), .{
                     .syms = self.active_syms.items,
-                }).?.key_ptr.* = @intCast(new_len);
+                }) orelse {
+                    std.debug.assert(self.errored);
+                    continue;
+                };
+
+                entry.key_ptr.* = @intCast(new_len);
                 self.active_syms.items[new_len] = s;
             }
             new_len += 1;
@@ -858,12 +863,11 @@ fn finalizeVariablesLow(self: *Parser, start: usize) usize {
             if (s.shadows) |shadows| {
                 const entry = self.active_sym_table.getEntryContext(@intCast(j), .{
                     .syms = self.active_syms.items,
-                });
-                if (entry == null) {
+                }) orelse {
                     std.debug.assert(self.errored);
                     continue;
-                }
-                entry.?.key_ptr.* = shadows;
+                };
+                entry.key_ptr.* = shadows;
             } else {
                 std.debug.assert(self.active_sym_table.removeContext(@intCast(j), .{
                     .syms = self.active_syms.items,

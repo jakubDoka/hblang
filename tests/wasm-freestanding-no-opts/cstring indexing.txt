@@ -45,7 +45,7 @@
         global.get 0
         i32.wrap_i64
         i64.load offset=88
-        local.tee 1
+        local.tee 0
         i64.const 2
         i64.lt_u
         br_if 0 (;@2;)
@@ -57,11 +57,11 @@
         return
       end
       block  ;; label = @2
-        local.get 1
+        local.get 0
         i64.const 2
         i64.ge_u
         br_if 0 (;@2;)
-        local.get 1
+        local.get 0
         i64.const 8
         i64.mul
         i64.const 24
@@ -106,6 +106,12 @@
       i64.const 0
       global.get 0
       i64.add
+      local.set 1
+      global.get 0
+      i32.wrap_i64
+      i64.load offset=88
+      local.set 0
+      local.get 1
       i32.wrap_i64
       i64.const 96
       global.get 0
@@ -115,8 +121,8 @@
       i32.wrap_i64
       memory.copy
       i64.const 2
-      local.get 1
-      local.get 1
+      local.get 0
+      local.get 0
       call $cstring_indexing.slice_ioob
     end
     unreachable)

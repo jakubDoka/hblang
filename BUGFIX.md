@@ -780,6 +780,13 @@ main := fn(): uint {
 }
 ```
 
+#### short circuit token bug 1
+```!hb
+main := fn(): uint {
+    &&= true
+}
+```
+
 #### short and op precedence 1
 ```hb
 

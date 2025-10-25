@@ -108,8 +108,8 @@ pub const Lexeme = enum(u16) {
     @"||" = '|' + 32,
     @"&&" = '&' + 32,
 
-    @"||=" = '|' + 32 + 128,
-    @"&&=" = '&' + 32 + 128,
+    @"||=" = '|' + 32 + 1,
+    @"&&=" = '&' + 32 + 1,
 
     ty_never = 0x100,
     ty_void,
@@ -301,26 +301,27 @@ pub const Lexeme = enum(u16) {
 
     pub fn innerOp(self: Lexeme) ?Lexeme {
         const byte = @intFromEnum(self);
-        switch (byte -| 128) {
-            '+',
-            '-',
-            '*',
-            '/',
-            '%',
-            '&',
-            '^',
-            '|',
-            '<' - 10,
-            '>' - 10,
-            '|' + 32,
-            '&' + 32,
+
+        switch (self) {
+            .@"||=", .@"&&=" => return @enumFromInt(byte - 1),
+            .@"+=",
+            .@"-=",
+            .@"*=",
+            .@"/=",
+            .@"%=",
+            .@"&=",
+            .@"^=",
+            .@"|=",
+            .@"<<=",
+            .@">>=",
             => return @enumFromInt(byte - 128),
             else => return null,
         }
     }
 
     pub fn toAssignment(self: Lexeme) Lexeme {
-        return @enumFromInt(@intFromEnum(self) + 128);
+        const shift: usize = if (self == .@"||" or self == .@"&&") 1 else 128;
+        return @enumFromInt(@intFromEnum(self) + shift);
     }
 
     pub fn format(self: *const Lexeme, writer: *std.io.Writer) !void {
@@ -503,7 +504,7 @@ pub fn next(self: *Lexer) Token {
             switch (self.source[self.cursor]) {
                 '=' => {
                     self.cursor += 1;
-                    break :state @enumFromInt(@as(u16, self.source[self.cursor - 2]) + 32 + 128);
+                    break :state @enumFromInt(@as(u16, self.source[self.cursor - 2]) + 32 + 1);
                 },
                 else => break :state @enumFromInt(self.source[self.cursor - 2] + 32),
             }

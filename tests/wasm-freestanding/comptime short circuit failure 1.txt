@@ -1,3 +1,3 @@
-comptime short circuit failure 1:6:6: can't evaluate this at compile time since the value depends on runtime control flow (DEBUG: got stuck on [33m%17[0m = Store:i8: [97m%14[0m, [33m%2[0m, [91m%8[0m, [32m%16[0m [, [37m%21[0m])
+comptime short circuit failure 1:6:6: can't evaluate this at compile time since the value depends on runtime control flow (DEBUG: got stuck on [32m%16[0m = Store:i8: [96m%13[0m, [33m%2[0m, [90m%7[0m, [31m%15[0m [, [36m%20[0m])
     $if @kind_of(uint) == 7 && @align_of(uint) == 8 return 1
         ^

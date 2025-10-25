@@ -1,6 +1,7 @@
 func: Func,
 scope: ?*Func.Node = undefined,
 root_mem: *Func.Node = undefined,
+pin_free_list: ?*Func.Node = undefined,
 
 const std = @import("std");
 const utils = graph.utils;
@@ -17,9 +18,10 @@ pub const BinOp = graph.BinOp;
 pub const UnOp = graph.UnOp;
 pub const classes = enum {
     // [Cfg, mem, ...values]
-    pub const Scope = extern struct {
-        pub const is_temporary = true;
-    };
+    pub const Scope = extern struct {};
+
+    // [pinned_node]
+    pub const Pin = extern struct {};
 };
 
 pub fn isKillable(self: *BuildNode) bool {
@@ -55,6 +57,8 @@ pub fn begin(
     self.func.end = self.func.addNode(.Return, .none, .top, &.{ null, null, null }, .{});
 
     self.func.signature = .init(call_conv, params, return_values, self.func.arena.allocator());
+
+    self.pin_free_list = null;
 
     return @enumFromInt(0);
 }
@@ -203,6 +207,24 @@ pub fn addUnOp(self: *Builder, sloc: graph.Sloc, op: UnOp, ty: DataType, oper: *
 }
 
 // #SCOPE ======================================================================
+
+pub fn pin(self: *Builder, to_pin: *Func.Node) SpecificNode(.Pin) {
+    if (self.pin_free_list) |pfl| {
+        self.pin_free_list = @ptrFromInt(@as(u64, @bitCast(pfl.sloc)));
+        self.func.setInputNoIntern(pfl, 0, to_pin);
+        return pfl;
+    }
+
+    return self.func.addNode(.Pin, .none, .bot, &.{to_pin}, .{});
+}
+
+pub fn unpin(self: *Builder, to_unpin: SpecificNode(.Pin)) *Func.Node {
+    const unpinned = to_unpin.inputs()[0].?;
+    self.func.setInputNoIntern(to_unpin, 0, null);
+    to_unpin.sloc = @bitCast(@as(u64, @intFromPtr(self.pin_free_list)));
+    self.pin_free_list = to_unpin;
+    return unpinned;
+}
 
 pub fn memory(self: *Builder) *Func.Node {
     return self._readScopeValue(1);

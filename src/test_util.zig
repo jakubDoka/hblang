@@ -178,6 +178,7 @@ pub fn testBuilder(
     code: []const u8,
     target: []const u8,
     gpa: std.mem.Allocator,
+    arena: *utils.Arena,
     output: *std.Io.Writer,
     gen: *root.backend.Machine,
     opts: root.backend.Machine.OptOptions.Mode,
@@ -185,9 +186,7 @@ pub fn testBuilder(
     colors: std.io.tty.Config,
     verbose: bool,
 ) !void {
-    var type_system_arena = utils.Arena.init(1024 * 1024 * 32);
-
-    const asts = parseExample(&type_system_arena, name, code, output) catch {
+    const asts = parseExample(arena, name, code, output) catch {
         return error.TestFailed;
     };
     const ast = asts[0];
@@ -195,7 +194,7 @@ pub fn testBuilder(
     var func_arena = utils.Arena.scrath(null);
     defer func_arena.deinit();
 
-    const types = Types.init(type_system_arena, asts, output, gpa);
+    const types = Types.init(arena.subslice(1024 * 1024 * 24), asts, output, gpa);
     types.target = target;
     defer types.deinit();
 

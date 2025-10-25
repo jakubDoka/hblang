@@ -1771,9 +1771,9 @@ pub fn deinit(self: *Types) void {
 
     self.ct.deinit();
 
-    var arena = self.pool.arena;
+    //var arena = self.pool.arena;
     self.* = undefined;
-    arena.deinit();
+    //arena.deinit();
 }
 
 pub fn reportSloc(self: *Types, sloc: graph.Sloc, fmt: []const u8, args: anytype) void {

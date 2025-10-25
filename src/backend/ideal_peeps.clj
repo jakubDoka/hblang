@@ -61,6 +61,10 @@
   (CInt _ (:value rv))
 ) : (BinOp c :op lhs (CInt c (:value {op.eval(lhs.data_type, rl, rv)})))
 
+(Store _ mem _ (Poison)) : mem
+
+(MemCpy _ mem _ _ (CInt _ (:value 0))) : mem
+
 (Phi c && {!c.preservesIdentityPhys()} l (&l)) : l
 
 (Phi:p _ l (&p)) : l

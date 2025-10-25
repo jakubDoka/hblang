@@ -28,7 +28,6 @@ ast: *const Ast = undefined,
 struct_ret_ptr: ?*Node = undefined,
 scope: std.ArrayList(ScopeEntry) = undefined,
 scope_pins: Builder.Pins = undefined,
-tmp_pins: Builder.Pins = undefined,
 loops: std.ArrayList(Loop) = undefined,
 defers: std.ArrayList(Ast.Id) = undefined,
 ret: Types.Id = undefined,
@@ -77,29 +76,61 @@ pub const Value = struct {
         return .{ .ty = ty, .id = .{ .Pointer = id } };
     }
 
-    pub fn getValue(value: *Value, sloc: graph.Sloc, self: *Codegen) *Node {
+    pub fn getValueCached(value: *Value, sloc: graph.Sloc, self: *Codegen) *Node {
+        if (value.id == .Pointer) {
+            const vl = value.getValue(sloc, self);
+            value.id = .{ .Value = vl };
+        }
+
+        return value.id.Value;
+    }
+
+    pub fn getValue(value: Value, sloc: graph.Sloc, self: *Codegen) *Node {
         if (value.id == .Pointer) {
             const cata = self.abiCata(value.ty);
 
             if (cata.size() > value.ty.size(self.types)) {
                 const tmp = value.id.Pointer;
-                value.id = .{ .Value = self.emitAlignedLoad(
+                return self.emitAlignedLoad(
                     sloc,
                     tmp,
                     value.ty.size(self.types),
                     value.ty.alignment(self.types),
                     cata.ByValue,
-                ) };
+                );
             } else {
                 const tmp = value.id.Pointer;
-                value.id = .{ .Value = self.bl.addLoad(
+                return self.bl.addLoad(
                     sloc,
                     tmp,
                     cata.ByValue,
-                ) };
+                );
             }
         }
+
         return value.id.Value;
+    }
+
+    pub fn pin(self: Value, cg: *Codegen) ?*Node {
+        switch (self.id) {
+            .Imaginary => return null,
+            .Value => |v| return cg.bl.pin(v),
+            .Pointer => |p| return cg.bl.pin(p),
+        }
+    }
+
+    pub fn update(self: *Value, pn: ?*Node) void {
+        switch (self.id) {
+            .Imaginary => std.debug.assert(pn == null),
+            .Value, .Pointer => |*v| v.* = pn.?.inputs()[0].?,
+        }
+    }
+
+    pub fn unpin(self: *Value, cg: *Codegen, pn: ?*Node) void {
+        switch (self.id) {
+            .Imaginary => std.debug.assert(pn == null),
+            .Value, .Pointer => |*v| v.* = cg.bl.unpin(pn.?),
+        }
     }
 };
 
@@ -431,6 +462,8 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
     var tmp = utils.Arena.scrath(scrath);
     defer tmp.deinit();
 
+    self.parent_scope = .{ .Perm = self.types.getScope(.root) };
+
     var exports_main = false;
     var funcs = std.ArrayList(utils.EntId(tys.Func)){};
     for (self.types.files, 0..) |fl, i| {
@@ -615,7 +648,6 @@ pub fn beginBuilder(
     self.loops = scratch.makeArrayList(Loop, loop_cap);
     self.defers = scratch.makeArrayList(Ast.Id, 32);
     self.scope_pins = self.bl.addPins();
-    self.tmp_pins = self.bl.addPins();
 
     return res;
 }
@@ -700,9 +732,14 @@ pub fn build(self: *Codegen, func_id: utils.EntId(tys.Func)) BuildError!void {
 
     var ty_idx: usize = 0;
     for (ast.exprs.view(fn_ast.args)) |a| {
-        const aarg = ast.exprs.get(a).Decl;
+        const aarg = ast.exprs.getTyped(.Decl, a) orelse {
+            self.report(a, "expected declaration", .{}) catch continue;
+        };
 
-        const ident = ast.exprs.getTyped(.Ident, aarg.bindings).?;
+        const ident = ast.exprs.getTyped(.Ident, aarg.bindings) orelse {
+            self.report(aarg.bindings, "expected identifier", .{}) catch continue;
+        };
+
         if (ident.pos.flag.@"comptime") continue;
         func = func_id.get(self.types);
         const ty = func.args[ty_idx];
@@ -763,7 +800,6 @@ pub fn build(self: *Codegen, func_id: utils.EntId(tys.Func)) BuildError!void {
     if (self.errored) return error.HasErrors;
 
     self.scope_pins.deinit(&self.bl);
-    self.tmp_pins.deinit(&self.bl);
     self.bl.end(token);
 }
 
@@ -1280,10 +1316,10 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
                 return self.report(e.lhs, "can't assign to this", .{});
             }
 
-            self.tmp_pins.push(&self.bl, loc.id.Pointer);
+            const pin = loc.pin(self);
             var val = try self.emitTyped(ctx.addLoc(loc.id.Pointer), loc.ty, e.rhs);
 
-            loc.id.Pointer = self.tmp_pins.pop(&self.bl);
+            loc.unpin(self, pin);
             self.emitGenericStore(sloc, loc.id.Pointer, &val);
             return .{};
         },
@@ -2133,6 +2169,9 @@ fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError
 }
 
 fn emitLoop(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Loop)) EmitError!Value {
+    if (self.loops.items.len == 0)
+        return self.report(expr, "loops are not allowed in this context", .{});
+
     if (e.pos.flag.@"comptime") {
         self.loops.appendAssumeCapacity(.{
             .id = if (e.label.tag() != .Void) self.ast.exprs.get(e.label).Ident.id else .invalid,
@@ -2329,20 +2368,25 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
 
     loop.joinContinues(&self.bl);
 
-    for (iter_data) |data| {
+    for (iter_data, 0..) |data, i| {
+        const pos = self.scope_pins.len() - 1 - (iter_data.len - 1 - i);
         switch (data) {
             inline .OpenedRange, .ClosedRange => |r| {
                 var idx = r.idx;
+                idx.id.Pointer = self.scope_pins.getValue(pos);
+
                 const off = self.bl.addIntImm(sloc, .i64, 1);
                 const next = self.bl.addBinOp(sloc, .iadd, .i64, idx.getValue(sloc, self), off);
-                self.bl.addStore(sloc, r.idx.id.Pointer, .i64, next);
+                self.bl.addStore(sloc, idx.id.Pointer, .i64, next);
             },
             .Slice => |s| {
                 var base = s.base;
+                base.id.Pointer = self.scope_pins.getValue(pos);
+
                 const elem = base.ty.child(self.types).?;
                 const off = self.bl.addIntImm(sloc, .i64, @intCast(elem.size(self.types)));
                 const next = self.bl.addBinOp(sloc, .iadd, .i64, base.getValue(sloc, self), off);
-                self.bl.addStore(sloc, s.base.id.Pointer, .i64, next);
+                self.bl.addStore(sloc, base.id.Pointer, .i64, next);
             },
         }
     }
@@ -2759,6 +2803,9 @@ pub fn emitDecl(
     e: *const Expr(.Decl),
     unwrap: bool,
 ) !Value {
+    if (self.scope.items.len == 0)
+        return self.report(expr, "declarations are not allowed in this context", .{});
+
     const sloc = self.src(expr);
     const ast = self.ast;
     const loc = self.bl.addLocal(self.src(expr), 0, @intFromEnum(e.ty));
@@ -4025,7 +4072,7 @@ pub fn partialEvalLow(self: *Codegen, pos: u32, value: *Value) !Value {
         switch (self.abiCata(value.ty)) {
             .Impossible => return error.Unreachable,
             .Imaginary => return .{ .ty = value.ty },
-            .ByValue => value.getValue(.none, self),
+            .ByValue => value.getValueCached(.none, self),
             .ByValuePair, .ByRef => value.id.Pointer,
         },
     ) catch switch (err) {
@@ -4041,6 +4088,10 @@ pub fn partialEvalLow(self: *Codegen, pos: u32, value: *Value) !Value {
         .InvalidCaptureAccess => |sloc| {
             return self.report(sloc.index, "the variable is not marked with $" ++
                 " so its value is not accessible", .{});
+        },
+        .OutOfBounds => |n| {
+            return self.report(n[0].index, "the index is out of bounds, the array" ++
+                " has {} elements, but the index is {}", .{ n[1], n[2] });
         },
     };
 
