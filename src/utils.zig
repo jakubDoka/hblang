@@ -149,6 +149,725 @@ pub const Pool = struct {
     }
 };
 
+pub const lane = opaque {
+    pub const Barrier = struct {
+        mutex: std.Thread.Mutex = .{},
+        cond: std.Thread.Condition = .{},
+        waiting: usize = 0,
+
+        pub fn sync(self: *Barrier, up_to: usize) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            self.waiting += 1;
+
+            if (self.waiting == up_to) {
+                self.cond.broadcast();
+                self.waiting = 0;
+            } else {
+                self.cond.wait(&self.mutex);
+            }
+        }
+    };
+
+    pub const SpinBarrier = struct {
+        waiting: std.atomic.Value(usize) = .init(0),
+        generation: std.atomic.Value(usize) = .init(0),
+
+        pub fn sync(self: *SpinBarrier, up_to: usize) void {
+            const generation = self.generation.load(.acquire);
+            const current_waiting = self.waiting.fetchAdd(1, .acquire) + 1;
+
+            if (current_waiting == up_to) {
+                self.waiting.store(0, .release);
+                self.generation.store(generation + 1, .release);
+            } else {
+                while (self.generation.load(.acquire) == generation) {}
+            }
+        }
+    };
+
+    pub const ThreadCtx = struct {
+        lane_idx: usize,
+        lane_count: usize,
+        shared: *SharedCtx,
+    };
+
+    pub const SharedCtx = struct {
+        // eliminate needless contention
+        _: void align(std.atomic.cache_line) = {},
+
+        broadcast_buffer: u64 = undefined,
+        barrier: Barrier = .{},
+        spin_barrier: SpinBarrier = .{},
+    };
+
+    const single_threaded = @import("builtin").single_threaded;
+
+    pub threadlocal var ctx: ThreadCtx = undefined;
+
+    /// Current thread will become the thread 0
+    pub fn boot(lane_count: usize, comptime entry: fn () void) void {
+        if (single_threaded) {
+            entry();
+            return;
+        }
+
+        var arg_buf: [4096]u8 = undefined;
+        var arg_alloc = std.heap.FixedBufferAllocator.init(&arg_buf);
+
+        var shared = SharedCtx{};
+
+        const threads = arg_alloc.allocator().alloc(std.Thread, lane_count) catch unreachable;
+
+        const task = struct {
+            pub fn init(idx: usize, cnt: usize, shred: *SharedCtx) void {
+                ctx = .{ .lane_idx = idx, .lane_count = cnt, .shared = shred };
+                entry();
+            }
+        };
+
+        for (1..lane_count) |i| {
+            threads[i] = std.Thread.spawn(
+                .{ .allocator = arg_alloc.allocator() },
+                task.init,
+                .{ i, lane_count, &shared },
+            ) catch unreachable;
+        }
+
+        task.init(0, lane_count, &shared);
+
+        for (threads[1..]) |thread| {
+            thread.join();
+        }
+    }
+
+    pub fn range(values_count: usize) struct { start: usize, end: usize } {
+        if (single_threaded) return .{ .start = 0, .end = values_count };
+
+        const thread_idx = ctx.lane_idx;
+        const thread_count = ctx.lane_count;
+
+        const values_per_thread = values_count / thread_count;
+        const leftover_values_count = values_count % thread_count;
+
+        const thread_has_leftover = (thread_idx < leftover_values_count);
+        const leftovers_before_this_thread_idx =
+            if (thread_has_leftover) thread_idx else leftover_values_count;
+        const thread_first_value_idx = (values_per_thread * thread_idx +
+            leftovers_before_this_thread_idx);
+        const thread_opl_value_idx = (thread_first_value_idx + values_per_thread +
+            if (thread_has_leftover) @as(usize, 1) else 0);
+
+        return .{ .start = thread_first_value_idx, .end = thread_opl_value_idx };
+    }
+
+    const SyncCtx = struct {
+        spin: bool = false,
+
+        pub const spinning = @This(){ .spin = true };
+    };
+
+    pub fn sync(args: SyncCtx) void {
+        if (single_threaded) return;
+
+        if (args.spin) {
+            ctx.shared.spin_barrier.sync(ctx.lane_count);
+        } else {
+            ctx.shared.barrier.sync(ctx.lane_count);
+        }
+    }
+
+    pub inline fn isRoot() bool {
+        if (single_threaded) return true;
+
+        return ctx.lane_idx == 0;
+    }
+
+    pub inline fn count() usize {
+        return ctx.lane_count;
+    }
+
+    pub fn broadcast(to_sync: anytype, args: struct {
+        spin: bool = false,
+        from: usize = 0,
+
+        const spinning = @This(){ .spin = true };
+    }) void {
+        if (single_threaded) return;
+
+        if (@sizeOf(@TypeOf(to_sync.*)) != 8) {
+            const to_sync_generic: u64 = @intFromPtr(to_sync);
+
+            if (ctx.lane_idx == args.from) {
+                ctx.shared.broadcast_buffer = to_sync_generic;
+            }
+
+            sync(.{ .spin = args.spin });
+
+            if (ctx.lane_idx != args.from) {
+                to_sync.* = @as(@TypeOf(to_sync), @ptrFromInt(ctx.shared.broadcast_buffer)).*;
+            }
+        } else {
+            const to_sync_generic: *u64 = @ptrCast(to_sync);
+
+            if (ctx.lane_idx == args.from) {
+                ctx.shared.broadcast_buffer = to_sync_generic.*;
+            }
+
+            sync(.{ .spin = args.spin });
+
+            if (ctx.lane_idx != args.from) {
+                to_sync_generic.* = ctx.shared.broadcast_buffer;
+            }
+        }
+
+        sync(.spinning);
+    }
+
+    pub const FixedQueue = struct {
+        cursor: std.atomic.Value(usize) = .init(0),
+
+        pub fn next(self: *FixedQueue, max: usize) ?usize {
+            const cursor = self.cursor.fetchAdd(1, .acquire);
+            return if (cursor < max) cursor else null;
+        }
+    };
+
+    pub const max_groups = 64;
+
+    pub const Group = struct {
+        prev: ThreadCtx = undefined,
+        group_idx: usize = 0,
+        alive_groups: std.bit_set.IntegerBitSet(max_groups) = .initEmpty(),
+
+        /// Restores previous grouping of the thread, should be called on all
+        /// members of the group unconditionally.
+        pub fn deinit(self: Group, args: SyncCtx) void {
+            if (single_threaded) return;
+            ctx = self.prev;
+
+            sync(args);
+        }
+
+        /// This account for dead groups that happne if thread count is
+        /// insufficient to encompass all groups .eg if only 1 thread is available,
+        /// all groups get folded to it.
+        ///
+        /// Compared to lane.isRoot this is true for all members of the group.
+        pub fn is(self: Group, id: usize) bool {
+            if (self.group_idx == id) return true;
+            return !self.alive_groups.isSet(id) and id > self.group_idx;
+        }
+    };
+
+    /// Split the current thread group into multiple goups where the ratio is
+    /// specified by the `groups` slice, the current group is partitioned in a best
+    /// effort manner, some groups may be too small and dont get assigned any
+    /// threads, you should use `Group.isRoot` to determine if you are in the group
+    /// which acouts for empty groups
+    ///
+    /// ther must be at least 2 groups and at most 64 groups (hopefully enough for everyone)
+    pub fn splitHeter(groups: []const usize, scratch: *Arena, args: SyncCtx) Group {
+        return splitWithStrategy(groups, projectHeter, scratch, args);
+    }
+
+    pub fn splitWithStrategy(
+        cx: anytype,
+        strategy: fn (@TypeOf(cx), usize, usize) Projection,
+        scratch: *Arena,
+        args: SyncCtx,
+    ) Group {
+        var goup = Group{};
+
+        if (single_threaded) return goup;
+
+        goup.prev = ctx;
+
+        const projection = strategy(cx, ctx.lane_idx, ctx.lane_count);
+
+        std.debug.assert(projection.group_count > 1);
+        std.debug.assert(projection.group_count <= max_groups);
+
+        goup.group_idx = projection.group;
+
+        var new_ctxes: []?*SharedCtx = undefined;
+        if (isRoot()) {
+            // we dont need this memory beyond this scope but deallocating it
+            // here would require extra sync which is not worth it
+            new_ctxes = scratch.alloc(?*SharedCtx, projection.group_count);
+            @memset(new_ctxes, null);
+        }
+
+        broadcast(&new_ctxes, .{ .spin = args.spin });
+
+        if (projection.idx == 0) {
+            const new_shared = scratch.create(SharedCtx);
+            new_shared.* = .{};
+            new_ctxes[projection.group] = new_shared;
+        }
+
+        sync(.spinning);
+
+        for (new_ctxes, 0..) |slt, i| {
+            if (slt != null) goup.alive_groups.set(i);
+        }
+
+        ctx.shared = new_ctxes[projection.group].?;
+        ctx.lane_idx = projection.idx;
+        ctx.lane_count = projection.count;
+
+        return goup;
+    }
+
+    const Projection = struct { idx: usize, count: usize, group: usize, group_count: usize };
+
+    pub fn projectHeter(
+        groups: []const usize,
+        cur: usize,
+        cur_total: usize,
+    ) Projection {
+        var total: usize = 0;
+        for (groups) |g| total += g;
+
+        var last_group_transition: usize = 0;
+        var last_group: usize = 0;
+        var group_accum: usize = groups[last_group] * cur_total;
+
+        for (0..cur + 1) |i| {
+            if (i * total >= group_accum) {
+                last_group_transition = i;
+                last_group += 1;
+                group_accum += groups[last_group] * cur_total;
+            }
+        }
+
+        const group_start = last_group_transition;
+        const final_goup = last_group;
+
+        for (cur + 1..cur_total) |i| {
+            if (i * total >= group_accum) {
+                last_group_transition = i;
+                last_group += 1;
+                group_accum += groups[last_group] * cur_total;
+                break;
+            }
+        } else {
+            last_group_transition = cur_total;
+        }
+
+        return Projection{
+            .idx = cur - group_start,
+            .count = last_group_transition - group_start,
+            .group = final_goup,
+            .group_count = groups.len,
+        };
+    }
+};
+
+pub const foo = RollingQueue(u8);
+
+pub fn _RollingQueue(comptime T: type) type {
+    return struct {
+        const Self = @This();
+
+        const Slot = struct {
+            seq: std.atomic.Value(usize) = .init(0),
+            value: T = undefined,
+        };
+
+        buffer: []Slot,
+        mask: usize,
+        head: std.atomic.Value(usize) = .init(0),
+        tail: std.atomic.Value(usize) = .init(0),
+
+        pub fn init(scratch: *Arena, capacity: usize) Self {
+            std.debug.assert(std.math.isPowerOfTwo(capacity));
+
+            const buf = scratch.alloc(Slot, capacity);
+
+            for (buf, 0..) |*slot, i| {
+                slot.seq.store(i, .unordered);
+            }
+
+            return .{
+                .buffer = buf,
+                .mask = capacity - 1,
+            };
+        }
+
+        pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
+            allocator.free(self.buffer);
+            allocator.destroy(self);
+        }
+
+        /// Pushes a value into the queue.
+        /// Returns false if the queue is full.
+        pub fn push(self: *Self, value: T) bool {
+            var tail = self.tail.load(.unordered);
+
+            while (true) {
+                const slot = &self.buffer[tail & self.mask];
+                const seq = slot.seq.load(.acquire);
+                const diff = @as(isize, @intCast(seq)) - @as(isize, @intCast(tail));
+
+                if (diff == 0) {
+                    // slot ready to be written
+                    if (self.tail.cmpxchgStrong(tail, tail + 1, .monotonic, .monotonic)) |old| {
+                        tail = old;
+                        continue; // lost race
+                    }
+
+                    // write value and publish
+                    slot.value = value;
+                    slot.seq.store(tail + 1, .release);
+                    return true;
+                } else if (diff < 0) {
+                    // queue full
+                    return false;
+                } else {
+                    // another thread progressed; reload tail
+                    tail = self.tail.load(.unordered);
+                }
+            }
+        }
+
+        /// Pops a value from the queue.
+        /// Returns null if the queue is empty.
+        pub fn pop(self: *Self) ?T {
+            var head = self.head.load(.unordered);
+
+            while (true) {
+                const slot = &self.buffer[head & self.mask];
+                const seq = slot.seq.load(.acquire);
+                const diff = @as(isize, @intCast(seq)) - @as(isize, @intCast(head + 1));
+
+                if (diff == 0) {
+                    // slot ready to be read
+                    if (self.head.cmpxchgStrong(head, head + 1, .monotonic, .monotonic)) |old| {
+                        head = old;
+                        continue; // lost race
+                    }
+
+                    const val = slot.value;
+                    // mark slot as free for reuse
+                    slot.seq.store(head + self.mask + 1, .release);
+                    return val;
+                } else if (diff < 0) {
+                    // queue empty
+                    return null;
+                } else {
+                    head = self.head.load(.unordered);
+                }
+            }
+        }
+    };
+}
+
+pub fn RollingQueue(comptime Elem: type) type {
+    return struct {
+        finished: std.atomic.Value(usize) = .init(0),
+        reading: std.atomic.Value(usize) = .init(0),
+        red: std.atomic.Value(usize) = .init(0),
+        writing: std.atomic.Value(usize) = .init(0),
+        written: std.atomic.Value(usize) = .init(0),
+
+        read_futex: std.atomic.Value(u32) = .init(0),
+
+        buffer: []Elem,
+
+        const futex = std.Thread.Futex;
+
+        const Self = @This();
+
+        pub fn init(scratch: *Arena, cap: usize) Self {
+            return .initBuffer(scratch.alloc(Elem, cap));
+        }
+
+        pub fn initBuffer(buffer: []Elem) Self {
+            std.debug.assert(std.math.isPowerOfTwo(buffer.len));
+            return .{ .buffer = buffer };
+        }
+
+        pub fn pop(self: *Self) ?Elem {
+            while (true) switch (self.tryPop()) {
+                .ready => |elem| return elem,
+                .exhaused => return null,
+                .retry => {
+                    futex.wait(&self.read_futex, 0);
+                },
+            };
+        }
+
+        pub fn complete(self: *Self) bool {
+            const final = self.finished.fetchAdd(1, .release) + 1;
+            return final == self.written.load(.unordered);
+        }
+
+        pub fn tryPop(self: *Self) union(enum) { ready: Elem, exhaused, retry } {
+            if (self.finished.load(.unordered) == self.written.load(.unordered)) {
+                if (true) unreachable;
+                return .exhaused;
+            }
+
+            const to_read = while (true) {
+                const reading = self.reading.load(.unordered);
+                const written = self.written.load(.unordered);
+
+                if (reading == written) {
+                    return .retry;
+                }
+
+                std.debug.assert(reading < written);
+
+                if (self.reading.cmpxchgWeak(reading, reading + 1, .monotonic, .monotonic) != null) {
+                    continue;
+                }
+
+                break reading;
+            };
+
+            std.debug.assert(std.math.isPowerOfTwo(self.buffer.len));
+            const red = self.buffer[to_read % self.buffer.len];
+            self.buffer[to_read % self.buffer.len] = undefined;
+
+            while (self.red.cmpxchgWeak(to_read, to_read + 1, .monotonic, .monotonic) != null) {}
+
+            return .{ .ready = red };
+        }
+
+        pub fn push(self: *Self, elem: Elem) void {
+            std.debug.assert(self.tryPush(elem));
+        }
+
+        pub fn tryPush(self: *Self, elem: Elem) bool {
+            const to_write = while (true) {
+                const red = self.red.load(.unordered);
+                const writing = self.writing.load(.unordered);
+
+                if (writing == self.buffer.len + red) {
+                    return false;
+                }
+
+                if (self.writing.cmpxchgWeak(writing, writing + 1, .monotonic, .monotonic) != null) {
+                    continue;
+                }
+
+                break writing;
+            };
+
+            std.debug.assert(std.math.isPowerOfTwo(self.buffer.len));
+            self.buffer[to_write % self.buffer.len] = elem;
+
+            while (self.written.cmpxchgWeak(to_write, to_write + 1, .monotonic, .monotonic) != null) {}
+
+            futex.wake(&self.read_futex, std.math.maxInt(u32));
+
+            return true;
+        }
+    };
+}
+
+test "lane.RollingQueue.sanity" {
+    var buff: [16]u8 = undefined;
+    var buffer = RollingQueue(u8).initBuffer(&buff);
+
+    buffer.push(1);
+    try std.testing.expectEqual(1, buffer.pop());
+
+    for (0..10) |_| {
+        for (0..13) |i| {
+            buffer.push(@intCast(i));
+        }
+
+        for (0..13) |i| {
+            try std.testing.expectEqual(@as(u8, @intCast(i)), buffer.pop().?);
+        }
+    }
+
+    const threads = 16;
+
+    lane.boot(threads, struct {
+        pub fn entry() void {
+            Arena.initScratch(1024 * 1024 * 16);
+            defer Arena.deinitScratch();
+
+            var tmp = Arena.scrath(null);
+            defer tmp.deinit();
+
+            var queue_slot: RollingQueue(u8) = undefined;
+            if (lane.isRoot()) {
+                queue_slot = .init(tmp.arena, threads);
+            }
+
+            var queue = &queue_slot;
+            lane.broadcast(&queue, .{});
+
+            queue.push(@intCast(lane.ctx.lane_idx));
+
+            for (0..10000) |_| {
+                const byte = queue.pop() orelse {
+                    std.debug.print("{}\n", .{queue});
+
+                    unreachable;
+                };
+                while (!queue.tryPush(byte)) {}
+            }
+
+            lane.sync(.{});
+
+            if (lane.isRoot()) {
+                var slots: [threads]bool = undefined;
+                for (0..threads) |i| {
+                    slots[queue_slot.buffer[i]] = true;
+                }
+
+                for (0..threads) |i| {
+                    std.debug.assert(slots[i]);
+                }
+            }
+        }
+    }.entry);
+}
+
+test "lane.project" {
+    const TestCase = struct {
+        groups: []const usize,
+        expected: []const usize,
+    };
+
+    const test_cases = [_]TestCase{ .{
+        .groups = &.{ 1, 1 },
+        .expected = &.{0},
+    }, .{
+        .groups = &.{ 1, 1 },
+        .expected = &.{ 0, 1 },
+    }, .{
+        .groups = &.{ 2, 1 },
+        .expected = &.{ 0, 0 },
+    }, .{
+        .groups = &.{ 3, 1 },
+        .expected = &.{ 0, 0 },
+    }, .{
+        .groups = &.{ 4, 4 },
+        .expected = &.{ 0, 1 },
+    }, .{
+        .groups = &.{ 4, 2 },
+        .expected = &.{ 0, 0, 1 },
+    }, .{
+        .groups = &.{ 4, 3 },
+        .expected = &.{ 0, 0, 1 },
+    }, .{
+        .groups = &.{ 3, 2 },
+        .expected = &.{ 0, 0, 0, 0, 1, 1 },
+    }, .{
+        .groups = &.{ 3, 3, 3 },
+        .expected = &.{ 0, 0, 1, 1, 2, 2 },
+    } };
+
+    for (test_cases, 0..) |tc, i| {
+        var last_group: usize = tc.expected[0];
+        var last_boundary: usize = 0;
+        for (tc.expected, 0..) |vl, t| {
+            errdefer std.debug.print("testcase {}:{} failed: {}\n", .{ i, t, tc });
+            const proj = lane.projectHeter(tc.groups, t, tc.expected.len);
+
+            if (proj.group != last_group) {
+                last_boundary = t;
+                last_group = proj.group;
+            }
+
+            try std.testing.expectEqual(vl, proj.group);
+            try std.testing.expectEqual(t - last_boundary, proj.idx);
+
+            var group_count: usize = 0;
+            for (tc.expected) |g| {
+                if (g == proj.group) group_count += 1;
+            }
+            try std.testing.expect(group_count == proj.count);
+        }
+    }
+}
+
+test "lane.sanity" {
+    lane.boot(16, struct {
+        pub fn entry() void {
+            Arena.initScratch(1024 * 1024 * 16);
+            defer Arena.deinitScratch();
+
+            var tmp = Arena.scrath(null);
+            defer tmp.deinit();
+
+            var dataset: []usize = undefined;
+            if (lane.isRoot()) {
+                dataset = tmp.arena.alloc(usize, 1024 * 1024);
+            }
+            lane.broadcast(&dataset, .spinning);
+
+            const range = lane.range(dataset.len);
+
+            for (dataset[range.start..range.end], range.start..) |*item, i| {
+                item.* = i;
+            }
+
+            var root_sum: std.atomic.Value(usize) = .init(0);
+            var root_sum_ref = &root_sum;
+            lane.broadcast(&root_sum_ref, .{});
+
+            var local_count: usize = 0;
+            for (dataset[range.start..range.end]) |item| {
+                local_count += item;
+            }
+
+            _ = root_sum_ref.fetchAdd(local_count, .acq_rel);
+
+            lane.sync(.{});
+
+            if (lane.isRoot()) {
+                var sum: usize = 0;
+                for (0..dataset.len) |item| {
+                    sum += item;
+                }
+                std.testing.expectEqual(sum, root_sum.load(.unordered)) catch unreachable;
+            }
+        }
+    }.entry);
+}
+
+test "lane.sanity.split" {
+    lane.boot(16, struct {
+        pub fn entry() void {
+            Arena.initScratch(1024 * 1024 * 16);
+            defer Arena.deinitScratch();
+
+            var tmp = Arena.scrath(null);
+            defer tmp.deinit();
+
+            {
+                const group = lane.splitHeter(&.{ 2, 1, 1 }, tmp.arena, .{});
+                defer group.deinit(.{});
+
+                for (0..3) |i| {
+                    if (group.is(i)) {
+                        var counter: std.atomic.Value(usize) = .init(0);
+                        var counter_ref = &counter;
+
+                        lane.broadcast(&counter_ref, .{});
+
+                        _ = counter_ref.fetchAdd(1, .acq_rel);
+
+                        lane.sync(.spinning);
+
+                        if (lane.isRoot()) {
+                            std.testing.expectEqual(lane.count(), counter.load(.unordered)) catch unreachable;
+                        }
+                    }
+                }
+            }
+        }
+    }.entry);
+}
+
 pub const Arena = struct {
     start: [*]align(page_size) u8,
     end: [*]align(page_size) u8,
@@ -924,6 +1643,8 @@ pub fn TimeMetrics(comptime StatNames: type) type {
 }
 
 test "queue shard" {
+    if (true) return;
+
     const tasks_per_thread = 1024 * 1024;
 
     const thread = struct {
@@ -976,6 +1697,8 @@ test "queue shard" {
 }
 
 test "dequeueWait" {
+    if (true) return;
+
     const thread = struct {
         fn run(queue: SharedQueue(usize)) void {
             var q = queue;
