@@ -74,33 +74,142 @@ pub const CompileOptions = struct {
     raw_binary: bool = false,
     gpa: std.mem.Allocator = if (utils.lane.single_threaded) alloc.allocator() else std.heap.smp_allocator,
 
-    // #CLI start
-    // #ARGS (main.hb)
+    arg_start: void = {},
+
     root_file: []const u8 = "main.hb",
-    // #FLAGS (--help)
-    parser_mode: hb.frontend.Ast.InitOptions.Mode = .latest, // or "legacy" for migrating code
-    help: bool = false, // print this help message
-    fmt: bool = false, // format all files reachable from the root_file
-    fmt_stdout: bool = false, // format only the root file and print it to stdout
-    dump_asm: bool = false, // dump assembly of the program
-    mangle_terminal: bool = false, // dump the executable even if colors are supported
-    vendored_test: bool = false, // run the file in a vendored test setting
-    log_stats: bool = false, // log stats about the compilation (memory)
-    type_system_memory: usize = 1024 * 1024 * 256, // how much memory can type system use
-    scratch_memory: usize = 1024 * 1024 * 128, // how much memory can each scratch arena use (there are 2)
-    shared_queue_capacity: usize = 1024 * 256, // estimated queue capacity
-    target: hb.backend.Machine.SupportedTarget = .@"hbvm-ableos", // target triple to compile to (not
-    // used yet since we have only one target)
-    no_entry: bool = false, // wether compiler should look for main function
-    extra_threads: usize = 0, // extra threads used for the compilation (not used yet)
-    path_projection: std.StringHashMapUnmanaged([]const u8) = .{}, // can be
-    // specified multiple times as `--path-projection name path`, when the
-    // `@use("name")` is encountered, its projected to `@use("path")` #CLI end
+
+    flag_start: void = {},
+
+    parser_mode: hb.frontend.Ast.InitOptions.Mode = .latest,
+    help: bool = false,
+    fmt: bool = false,
+    fmt_stdout: bool = false,
+    dump_asm: bool = false,
+    mangle_terminal: bool = false,
+    vendored_test: bool = false,
+    log_stats: bool = false,
+    type_system_memory: usize = 1024 * 1024 * 256,
+    scratch_memory: usize = 1024 * 1024 * 128,
+    target: hb.backend.Machine.SupportedTarget = .@"hbvm-ableos",
+    no_entry: bool = false,
+    extra_threads: usize = 127,
+    path_projection: std.StringHashMapUnmanaged([]const u8) = .{},
     optimizations: backend.Machine.OptOptions.Mode = .debug,
-    // run the compiler in succesion in order to collect more samples for
-    // profiling
     benchmark_rounds: usize = 1,
-    // #CLI end
+
+    const option_docs = .{
+        .root_file = "the root file to compile from",
+
+        .parser_mode = "use `legacy` for migrating code",
+        .help = "print this help message",
+        .fmt = "format from the root file",
+        .fmt_stdout = "format only the root file and print it to stdout",
+        .dump_asm = "dump assembly of the program",
+        .mangle_terminal = "dump the executable even if colors are supported",
+        .vendored_test = "run the file in a vendored test setting",
+        .log_stats = "log stats about the compilation",
+        .type_system_memory = "how much memory can type system use, this is per thread",
+        .scratch_memory = "how much memory can each scratch arena use, there are 2 per thread",
+        .target = "target triple to compile to",
+        .no_entry = "wether compiler should look for main function",
+        .extra_threads = "extra threads used for the compilation, the value will" ++
+            " be truncated to the number of cpus",
+        .path_projection = "can be specified multiple times as" ++
+            "`--path-projection name path`, when the `@use(\"name\")`" ++
+            " is encountered, its projected to `@use(\"path\")`",
+        .optimizations = "or release for optimizations",
+        .benchmark_rounds = "run the compiler in succesion in order to" ++
+            " collect more samples for profiling",
+    };
+
+    fn typeToArgHint(comptime T: type, default: T) []const u8 {
+        return switch (T) {
+            bool => "",
+            []const u8 => "<string> =" ++ default,
+            usize => "<integer> =" ++ std.fmt.comptimePrint("{d}", .{default}),
+            backend.Machine.OptOptions.Mode,
+            frontend.Ast.InitOptions.Mode,
+            hb.backend.Machine.SupportedTarget,
+            => {
+                var value: []const u8 = "[";
+                inline for (std.meta.fields(T)) |f| {
+                    if (f.name[0] == '@') continue;
+                    value = value ++ f.name ++ "|";
+                }
+                value = value[0 .. value.len - 1] ++ "] =" ++ @tagName(default);
+
+                return value;
+            },
+            std.StringHashMapUnmanaged([]const u8) => "<name> <path>",
+            else => @compileError("unsupported type: " ++ @typeName(T)),
+        };
+    }
+
+    pub const help_str = b: {
+        var msg: []const u8 = "";
+
+        msg = msg ++ "hbc - the hblang compiler\n";
+        msg = msg ++ "usage: hbc [root-file] [--flags [vlaues...]]\n";
+        msg = msg ++ "\n";
+
+        var arg_offset: usize = 0;
+        var flag_offset: usize = 0;
+        for (std.meta.fields(CompileOptions), 0..) |f, i| {
+            if (std.mem.eql(u8, f.name, "arg_start")) {
+                arg_offset = i + 1;
+            }
+
+            if (std.mem.eql(u8, f.name, "flag_start")) {
+                flag_offset = i + 1;
+            }
+        }
+        std.debug.assert(arg_offset != 0);
+        std.debug.assert(flag_offset != 0);
+
+        msg = msg ++ "arguments:\n";
+        for (std.meta.fields(CompileOptions)[arg_offset .. flag_offset - 1]) |f| {
+            msg = msg ++ "  " ++ f.name ++ "" ++ " - " ++ @field(option_docs, f.name) ++ "\n";
+        }
+
+        const too_long_trigger = 20;
+
+        var max_flag_len: usize = 0;
+        var max_arg_len: usize = 0;
+        var args: [std.meta.fields(CompileOptions).len][]const u8 = undefined;
+        for (std.meta.fields(CompileOptions)[flag_offset..], 0..) |f, i| {
+            max_flag_len = @max(max_flag_len, f.name.len);
+            args[i] = typeToArgHint(f.type, f.defaultValue().?);
+            if (args[i].len > too_long_trigger) {
+                continue;
+            }
+            max_arg_len = @max(max_arg_len, args[i].len);
+        }
+
+        const arg_padding = " " ** max_arg_len;
+        const flag_padding = " " ** max_flag_len;
+
+        msg = msg ++ "flags:\n";
+        for (std.meta.fields(CompileOptions)[flag_offset..], 0..) |f, i| {
+            const name = p: {
+                var mem = f.name[0..f.name.len].*;
+                for (&mem) |*c| if (c.* == '_') {
+                    c.* = '-';
+                };
+                break :p mem ++ "";
+            };
+
+            msg = msg ++ "  --" ++ name ++ flag_padding[f.name.len..];
+            msg = msg ++ " " ++ args[i];
+            if (args[i].len > too_long_trigger) {
+                msg = msg ++ "\n" ++ " " ** (2 + 2 + flag_padding.len + 1 + arg_padding.len);
+            } else {
+                msg = msg ++ arg_padding[args[i].len..];
+            }
+            msg = msg ++ " - " ++ @field(option_docs, f.name) ++ "\n";
+        }
+
+        break :b msg;
+    };
 
     pub fn logDiag(self: CompileOptions, comptime fmt: []const u8, args: anytype) void {
         if (lane.isRoot()) {
@@ -127,6 +236,8 @@ pub const CompileOptions = struct {
             arg = arg[2..];
 
             inline for (std.meta.fields(CompileOptions)[6..]) |f| flag: {
+                if (f.type == void) continue;
+
                 const name = comptime b: {
                     var mem = f.name[0..f.name.len].*;
                     for (&mem) |*c| if (c.* == '_') {
@@ -139,52 +250,43 @@ pub const CompileOptions = struct {
 
                 const val = &@field(self, f.name);
 
-                errdefer |err| {
-                    self.logDiag("--{s} <{s}>\n", .{ f.name, @errorName(err) });
+                var failed = true;
+                defer if (failed) {
+                    self.logDiag("--{s} {s}\n", .{ f.name, comptime typeToArgHint(f.type, f.defaultValue().?) });
                     if (self.diagnostics) |d| d.flush() catch unreachable;
-
-                    if (!lane.isRoot()) {
-                        // Dont interrupt the main thread
-                        std.Thread.sleep(10 * std.time.ns_per_ms);
-                    }
-
-                    std.process.exit(1);
-                }
+                    self.help = true;
+                };
 
                 switch (f.type) {
                     bool => val.* = true,
-                    backend.Machine.OptOptions.Mode, frontend.Ast.InitOptions.Mode, hb.backend.Machine.SupportedTarget => {
-                        const str_value = args.next() orelse return error.mode;
+                    backend.Machine.OptOptions.Mode,
+                    frontend.Ast.InitOptions.Mode,
+                    hb.backend.Machine.SupportedTarget,
+                    => {
+                        const str_value = args.next() orelse continue :parse;
                         const value = if (@hasDecl(f.type, "fromStr"))
                             f.type.fromStr(str_value)
                         else
                             std.meta.stringToEnum(f.type, str_value);
 
-                        val.* = value orelse {
-                            self.logDiag("unknown {s}: {s}\n", .{ @typeName(f.type), str_value });
-                            self.logDiag("supported {s} are:\n", .{@typeName(f.type)});
-                            inline for (std.meta.fields(f.type)) |t| {
-                                self.logDiag("  {s}\n", .{t.name});
-                            }
-
-                            return error.mode;
-                        };
+                        val.* = value orelse continue :parse;
                     },
-                    []const u8 => val.* = args.next() orelse return error.target,
-                    usize => val.* = try std.fmt.parseInt(usize, args.next() orelse return error.integer, 10),
+                    []const u8 => val.* = args.next() orelse continue :parse,
+                    usize => val.* = std.fmt.parseInt(usize, args.next() orelse continue :parse, 10) catch continue :parse,
                     std.StringHashMapUnmanaged([]const u8) => {
-                        const key = args.next() orelse return error.@"key> <value";
-                        const value = args.next() orelse return error.@"key> <value";
+                        const key = args.next() orelse continue :parse;
+                        const value = args.next() orelse continue :parse;
                         try val.put(arena, key, value);
                     },
                     else => @compileError(@typeName(f.type)),
                 }
 
+                failed = false;
                 continue :parse;
             }
 
-            self.logDiag("unknown flag: --{s}", .{arg});
-            std.process.exit(1);
+            self.logDiag("unknown flag: --{s}\n", .{arg});
+            self.help = true;
         }
     }
 };
@@ -217,18 +319,8 @@ pub const Queue = utils.SharedQueue(Task);
 
 pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!void {
     if (opts.help) {
-        const help_str = comptime b: {
-            @setEvalBranchQuota(2000);
-            const source = @embedFile("root.zig");
-            const start_pat = "// #CLI start";
-            const end_pat = "// #CLI end";
-            const start = std.mem.indexOf(u8, source, start_pat).? + start_pat.len;
-            const end = std.mem.indexOfPos(u8, source, start, end_pat).?;
-            break :b std.mem.trimRight(u8, source[start..end], "\n\t\r ") ++ "";
-        };
-
-        if (lane.isRoot()) if (opts.diagnostics) |d| try d.writeAll(help_str);
-
+        if (lane.isRoot()) if (opts.diagnostics) |d|
+            try d.writeAll(CompileOptions.help_str);
         return error.Failed;
     }
 

@@ -2,35 +2,42 @@ const std = @import("std");
 
 const hb = @import("hb");
 
-threadlocal var cli_buff: [1024 * 8]u8 = undefined;
-threadlocal var err_buffer: [1024 * 4]u8 = undefined;
-threadlocal var out_buffer: [1024 * 4]u8 = undefined;
-
 pub fn main() !void {
-    const thread_count = std.Thread.getCpuCount() catch 1;
+    const extra_threads = parseCliArgs(null, null).extra_threads + 1;
+
+    const thread_count = @min(extra_threads, std.Thread.getCpuCount() catch 1);
     hb.utils.lane.boot(thread_count, {}, entry);
 }
 
-fn entry(_: void) void {
-    var diag_writer = std.fs.File.stderr().writer(&err_buffer);
-    var out_writer = std.fs.File.stdout().writer(&out_buffer);
-
+threadlocal var cli_buff: [1024 * 8]u8 = undefined;
+fn parseCliArgs(diagnostics: ?*std.Io.Writer, output: ?*std.Io.Writer) hb.CompileOptions {
     var opts = hb.CompileOptions{
-        .diagnostics = &diag_writer.interface,
+        .diagnostics = diagnostics,
         .error_colors = std.io.tty.detectConfig(std.fs.File.stderr()),
         .colors = std.io.tty.detectConfig(std.fs.File.stdout()),
-        .output = &out_writer.interface,
+        .output = output,
     };
 
     var cli_scratch = std.heap.FixedBufferAllocator.init(&cli_buff);
 
     opts.loadCli(cli_scratch.allocator()) catch {
-        diag_writer.interface.print(
+        opts.logDiag(
             "failed to load cli arguments (OOM)\n",
             .{},
-        ) catch {};
-        diag_writer.interface.flush() catch {};
+        );
+        if (diagnostics) |d| d.flush() catch unreachable;
     };
+
+    return opts;
+}
+
+threadlocal var err_buffer: [1024 * 4]u8 = undefined;
+threadlocal var out_buffer: [1024 * 4]u8 = undefined;
+fn entry(_: void) void {
+    var diag_writer = std.fs.File.stderr().writer(&err_buffer);
+    var out_writer = std.fs.File.stdout().writer(&out_buffer);
+
+    const opts = parseCliArgs(&diag_writer.interface, &out_writer.interface);
 
     hb.utils.Arena.initScratch(opts.scratch_memory);
 
@@ -38,7 +45,7 @@ fn entry(_: void) void {
         hb.compile(opts) catch |err| switch (err) {
             error.Failed => {
                 diag_writer.interface.flush() catch {};
-                std.process.exit(1);
+                if (hb.utils.lane.isRoot()) std.process.exit(1);
             },
             else => unreachable,
         };
