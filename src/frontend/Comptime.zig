@@ -21,6 +21,8 @@ const tys = root.frontend.types;
 const OptOptions = root.backend.Machine.OptOptions;
 pub const eca = HbvmGen.eca;
 
+pub const comptime_uuid = Machine.Data.uuidConst("comptime");
+
 pub const comptime_opts = Machine.OptOptions{
     .mode = .debug,
 };
@@ -1266,6 +1268,7 @@ pub fn jitExprLow(
                     .is_inline = false,
                     .optimizations = .{ .allocs = reg_alloc_results },
                     .builtins = .{},
+                    .uuid = comptime_uuid,
                 },
             );
         }
@@ -1308,6 +1311,7 @@ pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until:
                 .is_inline = false,
                 .optimizations = .{ .allocs = reg_alloc_results },
                 .builtins = .{},
+                .uuid = comptime_uuid,
             },
         );
         emit_func_met.end();

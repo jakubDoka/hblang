@@ -347,6 +347,7 @@ pub fn emitReachable(
             .optimizations = .{ .opts = optms },
             .builtins = types.getBuiltins(),
             .files = types.line_indexes,
+            .uuid = Types.Id.init(.{ .Func = func }).uuid(types),
         });
         emit_func_met.end();
 

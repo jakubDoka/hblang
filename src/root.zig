@@ -443,26 +443,28 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
 
     defer lane.sync(.{});
 
-    //const backends = lane.productBroadcast(root_tmp.arena, bckend);
-    //_ = backends; // autofix
+    const bckend = opts.target.toMachine(&types.pool.arena, opts.gpa);
+
+    const errored = hb.frontend.Codegen.emitReachable(
+        types,
+        bckend,
+        .{
+            .abi = .{ .cc = abi },
+            .has_main = !opts.no_entry,
+            .optimizations = opts.optimizations,
+            .logs = logs,
+        },
+    );
+
+    if (errored or types.errored) {
+        return error.Failed;
+    }
+
+    const backends = lane.productBroadcast(root_tmp.arena, bckend);
+    _ = backends; // autofix
 
     if (lane.isRoot()) {
-        const bckend = opts.target.toMachine(&types.pool.arena, opts.gpa);
-
-        const errored = hb.frontend.Codegen.emitReachable(
-            types,
-            bckend,
-            .{
-                .abi = .{ .cc = abi },
-                .has_main = !opts.no_entry,
-                .optimizations = opts.optimizations,
-                .logs = logs,
-            },
-        );
-
-        if (errored or types.errored) {
-            return error.Failed;
-        }
+        //bckend.merge(backends[1..]);
 
         if (opts.log_stats) b: {
             const diags = opts.diagnostics orelse break :b;

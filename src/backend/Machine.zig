@@ -80,6 +80,15 @@ pub const Data = struct {
         size: u32,
     };
 
+    pub const UUID = [UUIDHasher.mac_length]u8;
+    pub const UUIDHasher = std.hash.SipHash128(1, 1);
+
+    pub fn uuidConst(id: []const u8) UUID {
+        var h = UUIDHasher.init(&@splat(0));
+        h.update(id);
+        return h.finalResult();
+    }
+
     pub const Sym = struct {
         name: u32,
         offset: u32,
@@ -92,6 +101,7 @@ pub const Data = struct {
         is_inline: bool,
         inline_func: u32 = no_inline_func,
         stack_size: u32 = 0,
+        uuid: UUID,
 
         pub const no_inline_func = std.math.maxInt(u32);
     };
@@ -260,8 +270,14 @@ pub const Data = struct {
         return slot.*;
     }
 
-    pub fn importFunc(self: *Data, gpa: std.mem.Allocator, id: u32, name: []const u8) !void {
-        try self.importSym(gpa, try utils.ensureSlot(&self.funcs, gpa, id), name, .func);
+    pub fn importFunc(
+        self: *Data,
+        gpa: std.mem.Allocator,
+        id: u32,
+        name: []const u8,
+        uuid: UUID,
+    ) !void {
+        try self.importSym(gpa, try utils.ensureSlot(&self.funcs, gpa, id), name, .func, uuid);
     }
 
     pub fn importSym(
@@ -270,6 +286,7 @@ pub const Data = struct {
         sym: *SymIdx,
         name: []const u8,
         kind: Kind,
+        uuid: UUID,
     ) !void {
         _ = try self.declSym(gpa, sym);
         self.syms.items[@intFromEnum(sym.*)] = .{
@@ -282,6 +299,7 @@ pub const Data = struct {
             .linkage = .imported,
             .readonly = true,
             .is_inline = false,
+            .uuid = uuid,
         };
         try self.names.appendSlice(gpa, name);
         try self.names.append(gpa, 0);
@@ -290,77 +308,71 @@ pub const Data = struct {
     pub fn startDefineFunc(
         self: *Data,
         gpa: std.mem.Allocator,
-        id: u32,
         name: []const u8,
-        kind: Kind,
-        linkage: Linkage,
-        is_inline: bool,
+        opts: EmitOptions,
     ) !*Sym {
-        std.debug.assert(id != max_func and id != graph.indirect_call);
-        const slot = try utils.ensureSlot(&self.funcs, gpa, id);
+        std.debug.assert(opts.id != max_func and opts.id != graph.indirect_call);
+        const slot = try utils.ensureSlot(&self.funcs, gpa, opts.id);
         return try self.startDefineSym(
             gpa,
             slot,
             name,
-            kind,
-            linkage,
+            .func,
+            opts.linkage,
             true,
-            is_inline,
+            opts.is_inline,
+            opts.uuid,
         );
     }
 
     pub fn defineGlobal(
         self: *Data,
         gpa: std.mem.Allocator,
-        id: u32,
-        name: []const u8,
-        linkage: Linkage,
-        data: DataOptions.ValueSpec,
         push_uninit: bool,
-        relocs: []const DataOptions.Reloc,
-        readonly: bool,
-        thread_local: bool,
+        linkage: Linkage,
         func_addend: u32,
+        opts: DataOptions,
     ) !void {
         // this is there to support N(1) reverse lookup form a memory offset
         // to global id
-        try self.code.appendSlice(gpa, std.mem.asBytes(&id));
+        try self.code.appendSlice(gpa, std.mem.asBytes(&opts.id));
 
         _ = try self.startDefineSym(
             gpa,
-            try utils.ensureSlot(&self.globals, gpa, id),
-            name,
-            if (data == .init) .data else if (thread_local) .tls_prealloc else .prealloc,
+            try utils.ensureSlot(&self.globals, gpa, opts.id),
+            opts.name,
+            if (opts.value == .init) .data else if (opts.thread_local) .tls_prealloc else .prealloc,
             linkage,
-            readonly,
+            opts.readonly,
             false,
+            opts.uuid,
         );
 
-        if (data == .init) {
-            try self.code.appendSlice(gpa, data.init);
-            for (relocs) |rel| {
+        if (opts.value == .init) {
+            try self.code.appendSlice(gpa, opts.value.init);
+            for (opts.relocs) |rel| {
                 if (rel.is_func) {
                     try self.addFuncReloc(
                         gpa,
                         rel.target,
                         .@"8",
                         @intCast(func_addend),
-                        @intCast(data.init.len - rel.offset),
+                        @intCast(opts.value.init.len - rel.offset),
                     );
                 } else {
-                    try self.addGlobalReloc(gpa, rel.target, .@"8", 0, @intCast(data.init.len - rel.offset));
+                    try self.addGlobalReloc(gpa, rel.target, .@"8", 0, @intCast(opts.value.init.len - rel.offset));
                 }
-                std.debug.assert(rel.target != id);
+                std.debug.assert(rel.target != opts.id);
             }
         } else {
             if (push_uninit) {
-                try self.code.appendNTimes(gpa, 0, data.uninit);
+                try self.code.appendNTimes(gpa, 0, opts.value.uninit);
             }
         }
 
-        self.endDefineSym(self.globals.items[id]);
-        self.syms.items[@intFromEnum(self.globals.items[id])].size =
-            if (data == .init) @intCast(data.init.len) else @intCast(data.uninit);
+        self.endDefineSym(self.globals.items[opts.id]);
+        self.syms.items[@intFromEnum(self.globals.items[opts.id])].size =
+            if (opts.value == .init) @intCast(opts.value.init.len) else @intCast(opts.value.uninit);
     }
 
     pub fn startDefineSym(
@@ -372,6 +384,7 @@ pub const Data = struct {
         linkage: Linkage,
         readonly: bool,
         is_inline: bool,
+        uuid: UUID,
     ) !*Sym {
         _ = try self.declSym(gpa, sym);
 
@@ -393,6 +406,7 @@ pub const Data = struct {
             .linkage = linkage,
             .readonly = readonly,
             .is_inline = is_inline,
+            .uuid = uuid,
         };
 
         if (needs_name) {
@@ -787,6 +801,7 @@ pub const DataOptions = struct {
     value: ValueSpec,
     readonly: bool,
     thread_local: bool,
+    uuid: Data.UUID,
 
     pub const Reloc = packed struct(u64) {
         target: u32,
@@ -1013,6 +1028,7 @@ pub const OptOptions = struct {
                             .optimizations = .{ .allocs = reg_alloc_results[sym.inline_func] },
                             .builtins = opts.builtins,
                             .files = opts.files,
+                            .uuid = sym.uuid,
                         });
                     },
                     .data, .prealloc, .tls_prealloc, .invalid => {},
@@ -1090,6 +1106,7 @@ pub const EmitOptions = struct {
     special: ?Special = null,
     builtins: Builtins,
     files: []const utils.LineIndex = &.{},
+    uuid: Data.UUID,
 
     pub const Optimizations = union(enum) {
         opts: OptOptions,

@@ -476,8 +476,6 @@ const Stacker = struct {
 pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     errdefer unreachable;
 
-    const id = opts.id;
-    const linkage = opts.linkage;
     const name = if (opts.special == .memcpy)
         "memcpy"
     else if (opts.special == .entry)
@@ -485,9 +483,9 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     else
         opts.name;
 
-    const sym = try self.mach.out.startDefineFunc(self.gpa, id, name, .func, linkage, opts.is_inline);
+    const sym = try self.mach.out.startDefineFunc(self.gpa, name, opts);
     _ = sym;
-    defer self.mach.out.endDefineFunc(id);
+    defer self.mach.out.endDefineFunc(opts.id);
 
     // For inport, we smuggle the signature with the function
     if (opts.linkage == .imported) {
@@ -1426,19 +1424,7 @@ pub fn regOf(self: *WasmGen, node: ?*Func.Node) u16 {
 
 pub fn emitData(self: *WasmGen, opts: Mach.DataOptions) void {
     errdefer unreachable;
-
-    try self.mach.out.defineGlobal(
-        self.gpa,
-        opts.id,
-        opts.name,
-        .local,
-        opts.value,
-        false,
-        opts.relocs,
-        opts.readonly,
-        opts.thread_local,
-        object.fn_ptr_addend,
-    );
+    try self.mach.out.defineGlobal(self.gpa, false, .local, object.fn_ptr_addend, opts);
 }
 
 pub fn emitLocalStore(self: *WasmGen, for_instr: *Func.Node) void {

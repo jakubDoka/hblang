@@ -57,82 +57,6 @@ stats: struct {
 } = .{},
 metrics: Metrics,
 
-pub const UUID = struct {
-    bytes: [2]u64,
-
-    pub fn from(ty: Id, types: *Types) UUID {
-        var lhash = std.hash.Wyhash.init(0);
-        var rhash = std.hash.Wyhash.init(1);
-
-        fromRecur(ty, types, &lhash);
-        fromRecur(ty, types, &rhash);
-
-        return UUID{
-            .bytes = [2]u64{
-                lhash.final(),
-                rhash.final(),
-            },
-        };
-    }
-
-    pub fn fromRecur(ty: Id, types: *Types, hash: *std.hash.Wyhash) void {
-        hash.update(std.mem.asBytes(&std.meta.activeTag(ty.data())));
-
-        switch (ty.data()) {
-            .Builtin => |b| {
-                hash.update(std.mem.asBytes(&b));
-            },
-            .Pointer => |p| {
-                fromRecur(p.get(types).*, types, hash);
-            },
-            .Slice => |s| {
-                fromRecur(s.get(types).elem, types, hash);
-            },
-            .Simd => {
-                unreachable; // TODO
-            },
-            .Array => |a| {
-                fromRecur(a.get(types).elem, types, hash);
-                hash.update(std.mem.asBytes(&a.get(types).len));
-            },
-            .Nullable => |n| {
-                fromRecur(n.get(types).inner, types, hash);
-            },
-            // its an array of integers, splat
-            .Tuple => |t| {
-                for (t.get(types).fields) |elem| {
-                    fromRecur(elem.ty, types, hash);
-                }
-            },
-            .FnTy => |f| {
-                for (f.get(types).args) |param| {
-                    fromRecur(param, types, hash);
-                }
-                fromRecur(f.get(types).ret, types, hash);
-            },
-            .Enum, .Union, .Struct, .Func, .Template, .Global => {
-                const key: *Scope = switch (ty.data()) {
-                    inline .Enum, .Union, .Struct, .Func, .Template, .Global => |v| &v.get(types).key,
-                    else => unreachable,
-                };
-
-                fromRecur(key.loc.scope, types, hash);
-                hash.update(std.mem.asBytes(&key.loc.ast));
-                hash.update(std.mem.asBytes(&key.loc.file));
-
-                for (key.captures()) |cap| {
-                    hash.update(std.mem.asBytes(&cap.id));
-                    fromRecur(cap.ty, types, hash);
-                    if (cap.id.has_value) {
-                        std.debug.assert(cap.ty == .type); // TODO
-                        fromRecur(@enumFromInt(cap.value), types, hash);
-                    }
-                }
-            },
-        }
-    }
-};
-
 const Metrics = utils.TimeMetrics(enum {
     exports,
     build,
@@ -420,6 +344,75 @@ pub const Id = enum(IdRepr) {
         }
 
         return @enumFromInt(raw);
+    }
+
+    pub const UUID = Machine.Data.UUID;
+    pub const UUIDHasher = Machine.Data.UUIDHasher;
+
+    pub fn uuid(ty: Id, types: *Types) UUID {
+        var hash = UUIDHasher.init(&@splat(0));
+
+        uuidRecur(ty, types, &hash);
+
+        return hash.finalResult();
+    }
+
+    pub fn uuidRecur(ty: Id, types: *Types, hash: *UUIDHasher) void {
+        hash.update(std.mem.asBytes(&std.meta.activeTag(ty.data())));
+
+        switch (ty.data()) {
+            .Builtin => |b| {
+                hash.update(std.mem.asBytes(&b));
+            },
+            .Pointer => |p| {
+                uuidRecur(p.get(types).*, types, hash);
+            },
+            .Slice => |s| {
+                uuidRecur(s.get(types).elem, types, hash);
+            },
+            .Simd => {
+                unreachable; // TODO
+            },
+            .Array => |a| {
+                uuidRecur(a.get(types).elem, types, hash);
+                hash.update(std.mem.asBytes(&a.get(types).len));
+            },
+            .Nullable => |n| {
+                uuidRecur(n.get(types).inner, types, hash);
+            },
+            // its an array of integers, splat
+            .Tuple => |t| {
+                for (t.get(types).fields) |elem| {
+                    uuidRecur(elem.ty, types, hash);
+                }
+            },
+            .FnTy => |f| {
+                for (f.get(types).args) |param| {
+                    uuidRecur(param, types, hash);
+                }
+                uuidRecur(f.get(types).ret, types, hash);
+            },
+            .Enum, .Union, .Struct, .Func, .Template, .Global => {
+                const key: *Scope = switch (ty.data()) {
+                    inline .Enum, .Union, .Struct, .Func, .Template, .Global => |v| &v.get(types).key,
+                    else => unreachable,
+                };
+
+                uuidRecur(key.loc.scope, types, hash);
+                hash.update(std.mem.asBytes(&key.loc.ast));
+                hash.update(std.mem.asBytes(&key.loc.file));
+                hash.update(key.name(types));
+
+                for (key.captures()) |cap| {
+                    hash.update(std.mem.asBytes(&cap.id));
+                    uuidRecur(cap.ty, types, hash);
+                    if (cap.id.has_value) {
+                        std.debug.assert(cap.ty == .type); // TODO
+                        uuidRecur(@enumFromInt(cap.value), types, hash);
+                    }
+                }
+            },
+        }
     }
 
     pub fn fromLexeme(lexeme: Lexer.Lexeme.Type) Id {
@@ -1035,6 +1028,7 @@ pub fn retainClonedGlobals(self: *Types, pop_until: usize) void {
             .relocs = &.{},
             .readonly = glob.readonly,
             .thread_local = glob.thread_local,
+            .uuid = Types.Id.init(.{ .Global = global }).uuid(self),
         });
 
         if (glob.relocs.len == 0) continue;
@@ -1118,6 +1112,7 @@ pub fn retainGlobals(self: *Types, target: Target, backend: *Machine, handle_err
             .relocs = if (target == .runtime) glob.relocs else &.{},
             .readonly = glob.readonly,
             .thread_local = glob.thread_local,
+            .uuid = Types.Id.init(.{ .Global = global }).uuid(self),
         });
 
         if (target == .@"comptime") {

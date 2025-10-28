@@ -308,19 +308,17 @@ pub fn oldRegMask(node: *Func.Node, idx: usize, tmp: *utils.Arena) std.DynamicBi
 pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
     errdefer unreachable;
 
-    const id = opts.id;
-    const name = opts.name;
     const entry = opts.linkage == .exported;
 
-    const sym = try self.mach.out.startDefineFunc(self.gpa, id, name, .func, opts.linkage, opts.is_inline);
+    const sym = try self.mach.out.startDefineFunc(self.gpa, opts.name, opts);
     defer {
-        self.mach.out.endDefineFunc(id);
+        self.mach.out.endDefineFunc(opts.id);
         if (self.emit_global_reloc_offsets) {
-            self.mach.out.makeRelocOffsetsGlobal(self.mach.out.funcs.items[id]);
+            self.mach.out.makeRelocOffsetsGlobal(self.mach.out.funcs.items[opts.id]);
         }
     }
 
-    const allocs = opts.optimizations.apply(HbvmGen, func, self, id) orelse {
+    const allocs = opts.optimizations.apply(HbvmGen, func, self, opts.id) orelse {
         //func.fmtScheduledLog();
         //func.fmtUnscheduledLog();
         return;
@@ -728,18 +726,7 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
         try self.mach.out.code.appendNTimes(self.gpa, 0, @intCast(padding));
     }
 
-    try self.mach.out.defineGlobal(
-        self.gpa,
-        opts.id,
-        opts.name,
-        .local,
-        opts.value,
-        self.push_uninit_globals,
-        opts.relocs,
-        opts.readonly,
-        opts.thread_local,
-        0,
-    );
+    try self.mach.out.defineGlobal(self.gpa, self.push_uninit_globals, .local, 0, opts);
 
     if (self.emit_global_reloc_offsets) {
         self.mach.out.makeRelocOffsetsGlobal(self.mach.out.globals.items[opts.id]);

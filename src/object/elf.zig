@@ -253,6 +253,7 @@ pub fn read(bytes: []const u8, gpa: std.mem.Allocator) anyerror!root.backend.Mac
             },
             true,
             false,
+            @splat(0),
         );
 
         if (s.shndx != .undef) append: {

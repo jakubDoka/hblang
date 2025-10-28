@@ -14,6 +14,8 @@ const Func = graph.Func(X86_64Gen);
 const FuncNode = Func.Node;
 const Move = utils.Move(Reg);
 
+const memcpy_uuid = Mach.Data.uuidConst("memcpy");
+
 gpa: std.mem.Allocator,
 mach: Mach = .init(X86_64Gen),
 object_format: enum { elf, coff },
@@ -798,8 +800,6 @@ pub fn inPlaceSlot(node: *Func.Node) ?usize {
 pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     errdefer unreachable;
 
-    const id = opts.id;
-    const linkage = opts.linkage;
     const name = if (opts.special == .memcpy)
         "memcpy"
     else if (opts.special == .entry)
@@ -810,12 +810,12 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     else
         opts.name;
 
-    const sym = try self.mach.out.startDefineFunc(self.gpa, id, name, .func, linkage, opts.is_inline);
-    defer self.mach.out.endDefineFunc(id);
+    const sym = try self.mach.out.startDefineFunc(self.gpa, name, opts);
+    defer self.mach.out.endDefineFunc(opts.id);
 
     if (opts.linkage == .imported) return;
 
-    const allocs = opts.optimizations.apply(X86_64Gen, func, self, id) orelse {
+    const allocs = opts.optimizations.apply(X86_64Gen, func, self, opts.id) orelse {
         //if (std.mem.indexOf(u8, name, "main") != null) {
         //    func.fmtScheduledLog();
         //}
@@ -839,7 +839,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     const offset = self.lpe.begin(&lpe_writer.writer);
     try self.mach.out.line_info_relocs.append(self.gpa, .{
         .offset = @intCast(base + offset),
-        .target = self.mach.out.funcs.items[id],
+        .target = self.mach.out.funcs.items[opts.id],
         .meta = .{
             .slot_size = .@"8",
             .addend = 0,
@@ -1033,7 +1033,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 self.emitBytes(&.{ 0xe8, 0, 0, 0, 0 });
                 if (self.ctx.builtins.memcpy == std.math.maxInt(u32)) {
                     if (self.memcpy == .invalid)
-                        try self.mach.out.importSym(self.gpa, &self.memcpy, "memcpy", .func);
+                        try self.mach.out.importSym(self.gpa, &self.memcpy, "memcpy", .func, memcpy_uuid);
                     try self.mach.out.addReloc(self.gpa, &self.memcpy, .@"4", -4, 4);
                 } else {
                     try self.mach.out.addFuncReloc(self.gpa, self.ctx.builtins.memcpy, .@"4", -4, 4);
@@ -2025,18 +2025,7 @@ pub fn getReg(self: X86_64Gen, node: *FuncNode) Reg {
 pub fn emitData(self: *X86_64Gen, opts: Mach.DataOptions) void {
     errdefer unreachable;
 
-    try self.mach.out.defineGlobal(
-        self.gpa,
-        opts.id,
-        opts.name,
-        .local,
-        opts.value,
-        false,
-        opts.relocs,
-        opts.readonly,
-        opts.thread_local,
-        0,
-    );
+    try self.mach.out.defineGlobal(self.gpa, false, .local, 0, opts);
 }
 
 pub fn preLinkHook(self: *X86_64Gen) void {
@@ -2045,7 +2034,9 @@ pub fn preLinkHook(self: *X86_64Gen) void {
         const idx = @field(self, name ++ "index");
         const sym = &@field(self, name ++ "s");
 
-        _ = try self.mach.out.startDefineSym(self.gpa, sym, name ++ "s", .data, .local, true, false);
+        const uuid = Mach.Data.uuidConst(@ptrCast(idx.entries.items(.key)));
+
+        _ = try self.mach.out.startDefineSym(self.gpa, sym, name ++ "s", .data, .local, true, false, uuid);
         try self.mach.out.code.appendSlice(self.gpa, @ptrCast(idx.entries.items(.key)));
         self.mach.out.endDefineSym(sym.*);
         try self.mach.out.globals.append(self.gpa, sym.*);
