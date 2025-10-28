@@ -28,7 +28,6 @@ export fn zig_fuzz_init() void {
 export fn zig_fuzz_test(buf: [*]u8, len: isize) void {
     const src = buf[0..@intCast(len)];
     fuzzRun("fuzz", src, &glob_arena, null) catch |err| switch (err) {
-        error.UnexpectedToken,
         error.ParsingFailed,
         error.Never,
         => {},
@@ -63,8 +62,7 @@ pub fn fuzzRun(
     var hbgen = HbvmGen{ .gpa = gpa };
     defer hbgen.deinit();
 
-    var threading = root.Threading{ .single = .{ .types = types, .machine = &hbgen.mach } };
-    const errored = root.frontend.Codegen.emitReachable(func_arena.arena, &threading, .{
+    const errored = root.frontend.Codegen.emitReachable(types, &hbgen.mach, .{
         .abi = .ableos,
         .optimizations = .release,
         .has_main = true,

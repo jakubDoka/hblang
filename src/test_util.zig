@@ -50,7 +50,7 @@ pub const Expectations = struct {
         return slf;
     }
 
-    pub fn assert(expectations: Expectations, res: anyerror!usize) !void {
+    pub fn assert(expectations: Expectations, res: Mach.RunError!usize) (error{ TestUnexpectedResult, TestExpectedEqual } || Mach.RunError)!void {
         const ret = res catch |err| switch (err) {
             error.Timeout => {
                 try std.testing.expect(expectations.times_out);
@@ -60,7 +60,7 @@ pub const Expectations = struct {
                 try std.testing.expect(expectations.unreaches);
                 return;
             },
-            else => return err,
+            else => |e| return e,
         };
 
         try std.testing.expectEqual(expectations.return_value, ret);
@@ -82,7 +82,7 @@ pub fn runVendoredTest(
         .mangle_terminal = true,
         .vendored_test = true,
         .root_file = path,
-        .target = target,
+        .target = Mach.SupportedTarget.fromStr(target).?,
         .optimizations = optimizations,
     };
     const scratch = utils.Arena.scrath(null);
@@ -120,7 +120,9 @@ pub fn parseExample(arena: *utils.Arena, name: []const u8, code: []const u8, out
 
         pub fn load(self: *@This(), opts: Ast.Loader.LoadOptions) ?Types.File {
             return for (self.files, 0..) |fr, i| {
-                if (std.mem.eql(u8, fr.path, opts.path)) break @enumFromInt(i);
+                if (std.mem.eql(u8, fr.path, opts.path)) {
+                    break @enumFromInt(i);
+                }
             } else {
                 return null;
             };
@@ -198,11 +200,9 @@ pub fn testBuilder(
     types.target = target;
     defer types.deinit();
 
-    var threading: root.Threading = .{ .single = .{ .types = types, .machine = gen } };
-
     const errored = Codegen.emitReachable(
-        func_arena.arena,
-        &threading,
+        types,
+        gen,
         .{
             .verbose = verbose,
             .colors = colors,

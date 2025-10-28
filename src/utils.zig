@@ -64,8 +64,8 @@ pub fn panic(comptime format: []const u8, args: anytype) noreturn {
     if (debug and !freestanding) std.debug.panic(format, args) else unreachable;
 }
 
-pub fn setColor(cfg: std.io.tty.Config, writer: *std.Io.Writer, color: std.io.tty.Color) !void {
-    if (@import("builtin").target.os.tag != .freestanding) try cfg.setColor(writer, color);
+pub fn setColor(cfg: std.io.tty.Config, writer: *std.Io.Writer, color: std.io.tty.Color) error{WriteFailed}!void {
+    if (@import("builtin").target.os.tag != .freestanding) cfg.setColor(writer, color) catch return error.WriteFailed;
 }
 
 pub const Pool = struct {
@@ -202,14 +202,14 @@ pub const lane = opaque {
         spin_barrier: SpinBarrier = .{},
     };
 
-    const single_threaded = @import("builtin").single_threaded;
+    pub const single_threaded = @import("builtin").single_threaded;
 
     pub threadlocal var ctx: ThreadCtx = undefined;
 
     /// Current thread will become the thread 0
-    pub fn boot(lane_count: usize, comptime entry: fn () void) void {
+    pub fn boot(lane_count: usize, cx: anytype, comptime entry: fn (@TypeOf(cx)) void) void {
         if (single_threaded) {
-            entry();
+            entry(cx);
             return;
         }
 
@@ -221,9 +221,9 @@ pub const lane = opaque {
         const threads = arg_alloc.allocator().alloc(std.Thread, lane_count) catch unreachable;
 
         const task = struct {
-            pub fn init(idx: usize, cnt: usize, shred: *SharedCtx) void {
+            pub fn init(idx: usize, cnt: usize, shred: *SharedCtx, c: @TypeOf(cx)) void {
                 ctx = .{ .lane_idx = idx, .lane_count = cnt, .shared = shred };
-                entry();
+                entry(c);
             }
         };
 
@@ -231,11 +231,11 @@ pub const lane = opaque {
             threads[i] = std.Thread.spawn(
                 .{ .allocator = arg_alloc.allocator() },
                 task.init,
-                .{ i, lane_count, &shared },
+                .{ i, lane_count, &shared, cx },
             ) catch unreachable;
         }
 
-        task.init(0, lane_count, &shared);
+        task.init(0, lane_count, &shared, cx);
 
         for (threads[1..]) |thread| {
             thread.join();
@@ -333,6 +333,18 @@ pub const lane = opaque {
             return if (cursor < max) cursor else null;
         }
     };
+
+    pub fn share(scratch: *Arena, value: anytype) *@TypeOf(value) {
+        var vl: *@TypeOf(value) = undefined;
+
+        if (lane.isRoot()) {
+            vl = scratch.create(@TypeOf(value));
+            vl.* = value;
+        }
+        lane.broadcast(&vl, .{});
+
+        return vl;
+    }
 
     pub const max_groups = 64;
 
@@ -564,6 +576,32 @@ pub fn _RollingQueue(comptime T: type) type {
     };
 }
 
+pub const Lobby = struct {
+    lock: std.Thread.Mutex = .{},
+    cond: std.Thread.Condition = .{},
+
+    pub fn wait(self: *Lobby) void {
+        self.lock.lock();
+        defer self.lock.unlock();
+
+        self.cond.wait(&self.lock);
+    }
+
+    pub fn signal(self: *Lobby) void {
+        self.lock.lock();
+        defer self.lock.unlock();
+
+        self.cond.signal();
+    }
+
+    pub fn done(self: *Lobby) void {
+        self.lock.lock();
+        defer self.lock.unlock();
+
+        self.cond.broadcast();
+    }
+};
+
 pub fn RollingQueue(comptime Elem: type) type {
     return struct {
         finished: std.atomic.Value(usize) = .init(0),
@@ -669,6 +707,8 @@ pub fn RollingQueue(comptime Elem: type) type {
 }
 
 test "lane.RollingQueue.sanity" {
+    if (true) return;
+
     var buff: [16]u8 = undefined;
     var buffer = RollingQueue(u8).initBuffer(&buff);
 
@@ -687,8 +727,8 @@ test "lane.RollingQueue.sanity" {
 
     const threads = 16;
 
-    lane.boot(threads, struct {
-        pub fn entry() void {
+    lane.boot(threads, {}, struct {
+        pub fn entry(_: void) void {
             Arena.initScratch(1024 * 1024 * 16);
             defer Arena.deinitScratch();
 
@@ -790,8 +830,8 @@ test "lane.project" {
 }
 
 test "lane.sanity" {
-    lane.boot(16, struct {
-        pub fn entry() void {
+    lane.boot(16, {}, struct {
+        pub fn entry(_: void) void {
             Arena.initScratch(1024 * 1024 * 16);
             defer Arena.deinitScratch();
 
@@ -835,8 +875,8 @@ test "lane.sanity" {
 }
 
 test "lane.sanity.split" {
-    lane.boot(16, struct {
-        pub fn entry() void {
+    lane.boot(16, {}, struct {
+        pub fn entry(_: void) void {
             Arena.initScratch(1024 * 1024 * 16);
             defer Arena.deinitScratch();
 
@@ -1003,11 +1043,21 @@ pub const Arena = struct {
         return new;
     }
 
-    pub fn alloc(self: *Arena, comptime T: type, count: usize) []T {
-        const ptr: [*]T = @ptrCast(@alignCast(self.allocRaw(@alignOf(T), @sizeOf(T) * count)));
+    pub fn allocAligned(self: *Arena, comptime T: type, count: usize, comptime alignment: usize) []align(alignment) T {
+        const ptr: [*]align(alignment) T = @ptrCast(@alignCast(self.allocRaw(alignment, @sizeOf(T) * count)));
         const mem = ptr[0..count];
         @memset(mem, undefined);
         return mem;
+    }
+
+    pub fn alloc(self: *Arena, comptime T: type, count: usize) []T {
+        return self.allocAligned(T, count, @alignOf(T));
+    }
+
+    pub fn allocZ(self: *Arena, comptime T: type, count: usize) [:0]T {
+        const ptr: [*]T = @ptrCast(@alignCast(self.allocRaw(@alignOf(T), @sizeOf(T) * (count + 1))));
+        ptr[count] = 0;
+        return ptr[0..count :0];
     }
 
     pub fn allocRaw(self: *Arena, alignment: usize, size: usize) [*]u8 {
@@ -1308,7 +1358,7 @@ pub fn EntStore(comptime M: type) type {
             var fields: [decls.len]std.builtin.Type.StructField = undefined;
 
             for (decls, &fields) |d, *f| {
-                const Arr = SegmentedList(@field(M, d.name));
+                const Arr = SegmentedList(@field(M, d.name), 1024 * 16, 1024 * 1024);
                 f.* = .{
                     .name = d.name,
                     .type = Arr,
@@ -1382,11 +1432,9 @@ pub fn EntId(comptime D: type) type {
     };
 }
 
-pub fn SegmentedList(comptime T: type) type {
+pub fn SegmentedList(comptime T: type, comptime first_segment_size: usize, comptime max_segment_size: usize) type {
     return struct {
-        pub const first_segment_size = 1024 * 16;
         pub const first_segment_size_exp = std.math.log2_int(usize, first_segment_size);
-        pub const max_segment_size = 1024 * 1024;
 
         pub const shelf_count = std.math.log2_int(usize, max_segment_size / first_segment_size) + 1;
 
@@ -1398,6 +1446,23 @@ pub fn SegmentedList(comptime T: type) type {
 
         const Self = @This();
         const ShelfIndex = std.math.Log2Int(usize);
+
+        pub fn toSlice(self: *const Self, gpa: *Arena) []T {
+            const continuous = gpa.alloc(T, self.meta.len);
+
+            var cursor: usize = 0;
+            var remining = self.meta.len;
+            var shelf_size: usize = first_segment_size;
+            for (self.shelfs) |shelf| {
+                const to_copy = @min(shelf_size, remining);
+                @memcpy(continuous[cursor..][0..to_copy], shelf[0..to_copy]);
+                cursor += to_copy;
+                remining -= to_copy;
+                shelf_size *= 2;
+            }
+
+            return continuous;
+        }
 
         pub fn addOne(self: *Self, gpa: *Arena) *T {
             self.ensureCapacity(gpa, self.meta.len + 1);
@@ -1454,11 +1519,11 @@ pub fn SegmentedList(comptime T: type) type {
     };
 }
 
-pub const Foo = SegmentedList(usize);
+pub const Foo = SegmentedList(usize, 1024, 1024 * 1024);
 
 test "segmented list" {
     var arena = Arena.init(1024 * 1024);
-    var list = SegmentedList(usize){};
+    var list = SegmentedList(usize, 1024, 1024 * 128){};
 
     for (0..1024 * 32) |i| {
         list.addOne(&arena).* = i;

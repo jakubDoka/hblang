@@ -12,12 +12,22 @@ vtable: *const VTable,
 
 pub const max_func = std.math.maxInt(u32);
 
+pub const RunError = error{
+    Timeout,
+    Unreachable,
+    OutOfMemory,
+    MalformedBinary,
+    SegmentationFault,
+    InvalidCall,
+    InvalidInstruction,
+};
+
 const VTable = struct {
     emitFunc: *const fn (self: *Machine, func: *BuilderFunc, opts: EmitOptions) void,
     emitData: *const fn (self: *Machine, opts: DataOptions) void,
     finalize: *const fn (self: *Machine, opts: FinalizeOptions) void,
     disasm: *const fn (self: *Machine, opts: DisasmOpts) void,
-    run: *const fn (self: *Machine, env: RunEnv) anyerror!usize,
+    run: *const fn (self: *Machine, env: RunEnv) RunError!usize,
     deinit: *const fn (self: *Machine) void,
 };
 
@@ -42,104 +52,10 @@ pub const Null = struct {
     pub fn emitData(_: *@This(), _: DataOptions) void {}
     pub fn finalize(_: *@This(), _: FinalizeOptions) void {}
     pub fn disasm(_: *@This(), _: DisasmOpts) void {}
-    pub fn run(_: *@This(), _: RunEnv) !usize {
+    pub fn run(_: *@This(), _: RunEnv) RunError!usize {
         return 0;
     }
     pub fn deinit(_: *@This()) void {}
-};
-
-pub const Shard = struct {
-    alignment: void align(std.atomic.cache_line) = {},
-    gpa: *utils.Pool,
-    mach: Machine = .init(Shard),
-
-    func_table: []const u32 = &.{},
-    func_ir: std.ArrayList(FuncRecord) = .empty,
-    global_table: []const u32 = &.{},
-    global_ir: std.ArrayList(DataOptions) = .empty,
-    owned: std.heap.ArenaAllocator.State = .{},
-
-    const Func = graph.Func(Shard);
-
-    pub const classes = enum {};
-
-    pub const i_know_the_api = {};
-
-    const FuncRecord = struct {
-        func: Func,
-        opts: EmitOptions,
-    };
-
-    pub fn buildTables(self: *Shard) void {
-        const func_table = self.gpa.arena.alloc(u32, self.func_table.len);
-        const global_table = self.gpa.arena.alloc(u32, self.global_table.len);
-
-        for (self.func_ir.items, 0..) |ir, i| {
-            func_table[ir.opts.id] = @intCast(i);
-        }
-
-        for (self.global_ir.items, 0..) |ir, i| {
-            global_table[ir.id] = @intCast(i);
-        }
-
-        self.func_table = func_table;
-        self.global_table = global_table;
-    }
-
-    pub fn emitFunc(self: *Shard, func: *Func, opts: EmitOptions) void {
-        errdefer unreachable;
-
-        self.func_table.len = @max(self.func_table.len, opts.id + 1);
-
-        const slot = try self.func_ir.addOne(self.gpa.allocator());
-        slot.* = .{ .func = func.*, .opts = opts };
-
-        var arena = self.owned.promote(self.gpa.allocator());
-        slot.opts.name = arena.allocator().dupe(u8, slot.opts.name) catch unreachable;
-        self.owned = arena.state;
-
-        func.arena = .init(self.gpa.allocator());
-    }
-
-    pub fn emitData(self: *Shard, opts: DataOptions) void {
-        errdefer unreachable;
-
-        self.global_table.len = @max(self.global_table.len, opts.id + 1);
-
-        const slot = try self.global_ir.addOne(self.gpa.allocator());
-        slot.* = opts;
-
-        var arena = self.owned.promote(self.gpa.allocator());
-        slot.name = try arena.allocator().dupe(u8, slot.name);
-        slot.relocs = try arena.allocator().dupe(
-            DataOptions.Reloc,
-            slot.relocs,
-        );
-        slot.value = switch (slot.value) {
-            .init => |v| .{ .init = try arena.allocator().dupe(u8, v) },
-            .uninit => slot.value,
-        };
-        self.owned = arena.state;
-
-        try self.global_ir.append(self.gpa.allocator(), opts);
-    }
-
-    pub fn finalize(_: *Shard, _: anytype) void {
-        unreachable;
-    }
-    pub fn disasm(_: *Shard, _: anytype) void {
-        unreachable;
-    }
-    pub fn run(_: *Shard, _: anytype) !usize {
-        unreachable;
-    }
-
-    pub fn deinit(self: *Shard) void {
-        const gpa = self.gpa.allocator();
-        self.func_ir.deinit(gpa);
-        self.global_ir.deinit(gpa);
-        self.owned.promote(gpa).deinit();
-    }
 };
 
 const InlineFunc = graph.Func(Builder);
@@ -147,7 +63,6 @@ const InlineFunc = graph.Func(Builder);
 pub const FuncId = packed struct(u32) { thread: u8, index: u24 };
 
 pub const Data = struct {
-    parallelism: ?*Parallelism = null,
     declaring_sym: ?SymIdx = null,
     files: []const File = &.{},
     funcs: std.ArrayList(SymIdx) = .empty,
@@ -244,6 +159,10 @@ pub const Data = struct {
 
         var value: i64 = 0;
 
+        if (sym.offset + offset + @as(i64, @intCast(size)) >
+            @as(i64, @intCast(self.code.items.len)) or
+            sym.offset + offset < 0) return null;
+
         @memcpy(
             @as(*[@sizeOf(@TypeOf(value))]u8, @ptrCast(&value))[0..@intCast(size)],
             self.code.items[@intCast(sym.offset + offset)..][0..@intCast(size)],
@@ -262,7 +181,7 @@ pub const Data = struct {
     }
 
     pub fn reset(self: *Data) void {
-        inline for (std.meta.fields(Data)[3..]) |f| {
+        inline for (std.meta.fields(Data)[2..]) |f| {
             @field(self, f.name).items.len = 0;
         }
     }
@@ -323,7 +242,7 @@ pub const Data = struct {
     }
 
     pub fn deinit(self: *Data, gpa: std.mem.Allocator) void {
-        inline for (std.meta.fields(Data)[3..]) |f| {
+        inline for (std.meta.fields(Data)[2..]) |f| {
             @field(self, f.name).deinit(gpa);
         }
         self.* = undefined;
@@ -976,31 +895,6 @@ pub const OptOptions = struct {
         optimizations: @This(),
         comptime Backend: type,
         backend: *Backend,
-        par: ?*Parallelism,
-        opts: FinalizeOptions,
-    ) bool {
-        const parf = par orelse {
-            return finalizeSingleThread(
-                optimizations,
-                Backend,
-                backend,
-                opts,
-            );
-        };
-
-        _ = parf;
-
-        if (optimizations.mode == .release) {} else {
-            unreachable;
-        }
-
-        unreachable;
-    }
-
-    pub fn finalizeSingleThread(
-        optimizations: @This(),
-        comptime Backend: type,
-        backend: *Backend,
         opts: FinalizeOptions,
     ) bool {
         errdefer unreachable;
@@ -1187,28 +1081,6 @@ pub const Builtins = struct {
     memcpy: u32 = std.math.maxInt(u32),
 };
 
-pub const LocalId = packed struct(u32) {
-    thread: u8,
-    index: u24,
-
-    pub fn initLocal(id: u32) LocalId {
-        return .{ .thread = 0, .index = @intCast(id) };
-    }
-
-    pub fn initThread(thread: u64, id: u32) LocalId {
-        return .{ .thread = @intCast(thread), .index = @intCast(id) };
-    }
-};
-
-pub const GlobalMapping = struct {
-    global_table: []const LocalId,
-    local_bases: []const u32,
-
-    pub fn normalizeId(self: GlobalMapping, local_id: LocalId) LocalId {
-        return self.global_table[self.local_bases[local_id.thread] + local_id.index];
-    }
-};
-
 pub const EmitOptions = struct {
     id: u32,
     name: []const u8 = &.{},
@@ -1265,22 +1137,14 @@ pub const FinalizeOptions = struct {
     output_scratch: ?*utils.Arena = null,
     optimizations: OptOptions,
     builtins: Builtins,
-    parallelism: ?*Parallelism = null,
     logs: ?*std.Io.Writer = null,
     files: []const utils.LineIndex,
-};
-
-pub const Parallelism = struct {
-    shards: []Shard,
-    pool: std.Thread.Pool,
-    mapping: GlobalMapping,
 };
 
 pub const FinalizeBytesOptions = struct {
     gpa: std.mem.Allocator,
     optimizations: OptOptions,
     builtins: Builtins,
-    parallelism: ?*Parallelism = null,
     logs: ?*std.Io.Writer = null,
     files: []const utils.LineIndex,
 };
@@ -1410,7 +1274,6 @@ pub fn finalizeBytes(self: *Machine, opts: FinalizeBytesOptions) std.ArrayList(u
         .output = &out.writer,
         .optimizations = opts.optimizations,
         .builtins = opts.builtins,
-        .parallelism = opts.parallelism,
         .logs = opts.logs,
         .files = opts.files,
     });

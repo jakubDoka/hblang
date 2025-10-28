@@ -2064,7 +2064,7 @@ pub fn finalize(self: *X86_64Gen, opts: Mach.FinalizeOptions) void {
         self.mach.out.reset();
     }
 
-    if (opts.optimizations.finalizeSingleThread(X86_64Gen, self, opts)) return;
+    if (opts.optimizations.finalize(X86_64Gen, self, opts)) return;
 
     switch (self.object_format) {
         .elf => {
@@ -2229,7 +2229,7 @@ pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
     }
 }
 
-pub fn run(_: *X86_64Gen, env: Mach.RunEnv) !usize {
+pub fn run(_: *X86_64Gen, env: Mach.RunEnv) Mach.RunError!usize {
     const cleanup = true;
     const res = b: {
         errdefer unreachable;
@@ -2277,7 +2277,7 @@ pub fn run(_: *X86_64Gen, env: Mach.RunEnv) !usize {
         if (res.Signal == 4) {
             return error.Unreachable;
         } else if (res.Signal == 11 or res.Signal == 8) {
-            return error.Fucked;
+            return error.SegmentationFault;
         } else utils.panic("{}\n", .{res});
     }
     return res.Exited;

@@ -232,7 +232,6 @@ pub const Pos = packed struct(Pos.Repr) {
     flag: packed union {
         indented: bool,
         @"comptime": bool,
-        use_kind: Loader.LoadOptions.Kind,
     } = .{ .indented = false },
 
     pub fn init(index: Lexer.Pos) Pos {
@@ -256,7 +255,7 @@ pub const InitOptions = struct {
 pub fn init(
     arena: *utils.Arena,
     opts: InitOptions,
-) !Ast {
+) error{ ParsingFailed, OutOfMemory }!Ast {
     var lexer = Lexer.init(opts.code, 0);
 
     var parser = Parser{
@@ -277,7 +276,7 @@ pub fn init(
 
     const items: Slice = parser.parse() catch |err| switch (err) {
         error.UnexpectedToken, error.StackOverflow => .{},
-        error.OutOfMemory => return err,
+        error.OutOfMemory => unreachable,
     };
 
     if (parser.errored and !opts.ignore_errors) {

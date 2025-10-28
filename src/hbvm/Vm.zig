@@ -10,6 +10,14 @@ const debug = @import("builtin").mode == .Debug;
 
 const one: u64 = 1;
 
+pub const Error = error{
+    MemOob,
+    InvalidOp,
+    Unreachable,
+    DivideByZero,
+    Timeout,
+};
+
 pub const SafeContext = struct {
     color_cfg: std.io.tty.Config = .no_color,
     writer: ?*std.Io.Writer = null,
@@ -70,7 +78,7 @@ pub const SafeContext = struct {
     }
 };
 
-pub fn run(self: *Vm, ctx: anytype) !isa.Op {
+pub fn run(self: *Vm, ctx: anytype) Error!isa.Op {
     @setEvalBranchQuota(3000);
     while (self.fuel > 0) : (self.fuel -= 1) switch (try self.readOp(ctx)) {
         .un => return error.Unreachable,
@@ -325,6 +333,8 @@ fn readOp(self: *Vm, ctx: anytype) !isa.Op {
     }
 
     if (ctx.writer) |wrt| {
+        errdefer unreachable;
+
         const prev_ip = self.ip;
         const instr = @as(isa.Op, @enumFromInt(byte));
         const instr_name = @tagName(instr);
@@ -361,7 +371,7 @@ fn displayArg(
     seen_regs: *std.EnumSet(isa.Reg),
     ty: enum { int, f32, f64 },
     wrt: *std.Io.Writer,
-) !void {
+) error{ WriteFailed, MemOob }!void {
     switch (arg) {
         inline .reg => |t| {
             const value = try self.progRead(isa.ArgType(t), ctx);

@@ -260,16 +260,14 @@ pub fn init(
     return res;
 }
 
-pub fn emitReachableSingle(
-    scrath: ?*utils.Arena,
+pub fn emitReachable(
     types: *Types,
-    queue: ?*root.Queue,
     backend: *root.backend.Machine,
     opts: EmitOpts,
 ) bool {
     errdefer unreachable;
 
-    var root_tmp = utils.Arena.scrath(scrath);
+    var root_tmp = utils.Arena.scrath(null);
     defer root_tmp.deinit();
 
     const codegen = Codegen.init(root_tmp.arena, types, .runtime, opts.abi);
@@ -284,7 +282,7 @@ pub fn emitReachableSingle(
     }
     backend.out.files = files;
 
-    if (queue == null or queue.?.self_id == 0) {
+    {
         var export_met = types.metrics.begin(.exports);
         defer export_met.end();
         const exports = codegen.collectExports(opts.has_main, root_tmp.arena) catch {
@@ -295,7 +293,7 @@ pub fn emitReachableSingle(
     }
 
     var errored = false;
-    while (types.nextTask(.runtime, 0, queue)) |func| {
+    while (types.nextTask(.runtime, 0, null)) |func| {
         defer codegen.bl.func.reset();
 
         var build_met = types.metrics.begin(.build);
@@ -387,66 +385,6 @@ pub fn findComptimeOnlyFunctions(
     }
 
     return found;
-}
-
-pub fn emitReachableChildThread(
-    types: *Types,
-    scratch_cap: usize,
-    queue: root.Queue,
-    backend: *root.backend.Machine,
-    opts: EmitOpts,
-    errored_out: *std.atomic.Value(bool),
-) void {
-    errdefer unreachable;
-
-    types.stack_base = @frameAddress();
-
-    utils.Arena.initScratch(scratch_cap);
-
-    var q = queue;
-    if (emitReachableSingle(null, types, &q, backend, opts)) {
-        errored_out.store(true, .unordered);
-    }
-}
-
-pub fn emitReachableMultiThread(
-    scrath: *utils.Arena,
-    threading: *root.Threading.Multi,
-    opts: EmitOpts,
-) bool {
-    if (@import("builtin").single_threaded) unreachable;
-
-    var root_tmp = utils.Arena.scrath(scrath);
-    defer root_tmp.deinit();
-
-    var wait_group = std.Thread.WaitGroup{};
-    var errored_out = std.atomic.Value(bool).init(false);
-    for (threading.types, threading.para.shards, 0..) |ty, *sh, i| {
-        var queue = threading.queue;
-        queue.self_id = i;
-        const shard = &sh.mach;
-        threading.para.pool.spawnWg(
-            &wait_group,
-            emitReachableChildThread,
-            .{ ty, root_tmp.arena.getCapacity(), queue, shard, opts, &errored_out },
-        );
-    }
-
-    wait_group.wait();
-
-    return errored_out.load(.unordered);
-}
-
-/// returns true when errored
-pub fn emitReachable(
-    scrath: *utils.Arena,
-    threading: *root.Threading,
-    opts: EmitOpts,
-) bool {
-    switch (threading.*) {
-        .single => |*s| return emitReachableSingle(scrath, s.types, null, s.machine, opts),
-        .multi => |*m| return emitReachableMultiThread(scrath, m, opts),
-    }
 }
 
 pub fn deinit(self: *Codegen) void {
@@ -1955,7 +1893,7 @@ fn popScope(self: *Codegen, to: usize) void {
 fn emitIf(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.If)) EmitError!Value {
     const sloc = self.src(expr);
     if (e.pos.flag.@"comptime") {
-        var cond = try self.emitTyped(ctx, .bool, e.cond);
+        var cond = try self.emitTyped(.{}, .bool, e.cond);
         if (try self.partialEvalConst(e.cond, &cond) != 0) {
             _ = self.emitTyped(ctx, .void, e.then) catch |err| switch (err) {
                 error.Never => {},
@@ -2169,7 +2107,7 @@ fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError
 }
 
 fn emitLoop(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Loop)) EmitError!Value {
-    if (self.loops.items.len == 0)
+    if (self.loops.capacity == 0)
         return self.report(expr, "loops are not allowed in this context", .{});
 
     if (e.pos.flag.@"comptime") {
@@ -2366,28 +2304,30 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
 
     var loop: Builder.Loop = self.loops.pop().?.kind.Runtime;
 
-    loop.joinContinues(&self.bl);
+    if (!self.bl.isUnreachable()) {
+        loop.joinContinues(&self.bl);
 
-    for (iter_data, 0..) |data, i| {
-        const pos = self.scope_pins.len() - 1 - (iter_data.len - 1 - i);
-        switch (data) {
-            inline .OpenedRange, .ClosedRange => |r| {
-                var idx = r.idx;
-                idx.id.Pointer = self.scope_pins.getValue(pos);
+        for (iter_data, 0..) |data, i| {
+            const pos = self.scope_pins.len() - 1 - (iter_data.len - 1 - i);
+            switch (data) {
+                inline .OpenedRange, .ClosedRange => |r| {
+                    var idx = r.idx;
+                    idx.id.Pointer = self.scope_pins.getValue(pos);
 
-                const off = self.bl.addIntImm(sloc, .i64, 1);
-                const next = self.bl.addBinOp(sloc, .iadd, .i64, idx.getValue(sloc, self), off);
-                self.bl.addStore(sloc, idx.id.Pointer, .i64, next);
-            },
-            .Slice => |s| {
-                var base = s.base;
-                base.id.Pointer = self.scope_pins.getValue(pos);
+                    const off = self.bl.addIntImm(sloc, .i64, 1);
+                    const next = self.bl.addBinOp(sloc, .iadd, .i64, idx.getValue(sloc, self), off);
+                    self.bl.addStore(sloc, idx.id.Pointer, .i64, next);
+                },
+                .Slice => |s| {
+                    var base = s.base;
+                    base.id.Pointer = self.scope_pins.getValue(pos);
 
-                const elem = base.ty.child(self.types).?;
-                const off = self.bl.addIntImm(sloc, .i64, @intCast(elem.size(self.types)));
-                const next = self.bl.addBinOp(sloc, .iadd, .i64, base.getValue(sloc, self), off);
-                self.bl.addStore(sloc, base.id.Pointer, .i64, next);
-            },
+                    const elem = base.ty.child(self.types).?;
+                    const off = self.bl.addIntImm(sloc, .i64, @intCast(elem.size(self.types)));
+                    const next = self.bl.addBinOp(sloc, .iadd, .i64, base.getValue(sloc, self), off);
+                    self.bl.addStore(sloc, base.id.Pointer, .i64, next);
+                },
+            }
         }
     }
 
@@ -2604,34 +2544,8 @@ fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
     }
 }
 
-fn emitUse(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Use)) EmitError!Value {
-    switch (e.pos.flag.use_kind) {
-        .use => return self.emitTyConst(self.types.getScope(e.file)),
-        .embed => {
-            const sloc = self.src(expr);
-            const file = self.types.getFile(e.file);
-            const slot, const alloc = self.types.intern(.Global, .{
-                .loc = .{
-                    .file = e.file,
-                },
-                .name_pos = .file_name,
-                .captures_ptr = undefined,
-            });
-            if (!slot.found_existing) {
-                alloc.get(self.types).* = .{
-                    .key = alloc.get(self.types).key,
-                    .data = .{ .imm = file.source },
-                    .ty = self.types.makeArray(file.source.len, .u8),
-                    .readonly = true,
-                };
-            }
-            self.types.queue(self.target, .init(.{ .Global = alloc }));
-            return .mkp(
-                alloc.get(self.types).ty,
-                self.bl.addGlobalAddr(sloc, @intFromEnum(alloc)),
-            );
-        },
-    }
+fn emitUse(self: *Codegen, _: Ctx, _: Ast.Id, e: *Expr(.Use)) EmitError!Value {
+    return self.emitTyConst(self.types.getScope(e.file));
 }
 
 pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
@@ -2803,7 +2717,7 @@ pub fn emitDecl(
     e: *const Expr(.Decl),
     unwrap: bool,
 ) !Value {
-    if (self.scope.items.len == 0)
+    if (self.scope.capacity == 0)
         return self.report(expr, "declarations are not allowed in this context", .{});
 
     const sloc = self.src(expr);
@@ -4294,7 +4208,6 @@ fn emitDirective(
     const args = ast.exprs.view(e.args);
 
     switch (e.kind) {
-        .use, .embed => unreachable,
         .CurrentScope => {
             try assertDirectiveArgs(self, expr, args, "");
             return self.emitTyConst(self.parent_scope.firstType(self.types));
@@ -4816,8 +4729,10 @@ fn emitDirective(
                 .ret = .never,
             }), self.bl.addIntImm(sloc, .i32, Types.disabled_handler));
         },
+        .embed => return self.report(expr, "TODO", .{}),
         .handler, .@"export" => return self.report(expr, "can only be used in the file scope", .{}),
         .import => return self.report(expr, "can be only used as a body of the function", .{}),
         .thread_local_storage => return self.report(expr, "can only be used as a global variable value", .{}),
+        .use => unreachable,
     }
 }

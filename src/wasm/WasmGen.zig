@@ -1542,7 +1542,7 @@ pub fn disasm(_: *WasmGen, opts: Mach.DisasmOpts) void {
     }
 }
 
-pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
+pub fn run(_: *WasmGen, env: Mach.RunEnv) Mach.RunError!usize {
     if (utils.freestanding) unreachable;
 
     const cleanup = true;
@@ -1581,7 +1581,7 @@ pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
     if (res.Exited != 0) {
         std.debug.print("{s}\n", .{stdout.items});
         std.debug.print("{s}\n", .{stderr.items});
-        return error.WasmInterpError;
+        return error.MalformedBinary;
     }
 
     if (std.mem.startsWith(u8, stdout.items, "main() => error: unreachable executed")) {
@@ -1589,11 +1589,11 @@ pub fn run(_: *WasmGen, env: Mach.RunEnv) !usize {
     }
 
     if (std.mem.startsWith(u8, stdout.items, "main() => error: out of bounds")) {
-        return error.OutOfBounds;
+        return error.SegmentationFault;
     }
 
     if (std.mem.startsWith(u8, stdout.items, "main() => error: indirect call signature mismatch")) {
-        return error.IndirectCallSignatureMismatch;
+        return error.InvalidCall;
     }
 
     const exe_prefix = "main() => i64:";

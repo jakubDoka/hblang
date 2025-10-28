@@ -51,6 +51,7 @@ pub const frontend = enum {
 pub const utils = @import("utils.zig");
 pub const test_utils = @import("test_util.zig");
 pub const diff = @import("diff.zig");
+pub const lane = utils.lane;
 
 const std = @import("std");
 const hb = @import("hb");
@@ -63,13 +64,15 @@ test {
 
 const max_file_len = std.math.maxInt(u31);
 
+var alloc = std.heap.GeneralPurposeAllocator(.{}).init;
+
 pub const CompileOptions = struct {
     diagnostics: ?*std.Io.Writer = null,
     error_colors: std.io.tty.Config = .no_color,
     colors: std.io.tty.Config = .no_color,
     output: ?*std.Io.Writer = null,
     raw_binary: bool = false,
-    gpa: std.mem.Allocator = std.heap.smp_allocator,
+    gpa: std.mem.Allocator = if (utils.lane.single_threaded) alloc.allocator() else std.heap.smp_allocator,
 
     // #CLI start
     // #ARGS (main.hb)
@@ -86,7 +89,7 @@ pub const CompileOptions = struct {
     type_system_memory: usize = 1024 * 1024 * 256, // how much memory can type system use
     scratch_memory: usize = 1024 * 1024 * 128, // how much memory can each scratch arena use (there are 2)
     shared_queue_capacity: usize = 1024 * 256, // estimated queue capacity
-    target: []const u8 = "hbvm-ableos", // target triple to compile to (not
+    target: hb.backend.Machine.SupportedTarget = .@"hbvm-ableos", // target triple to compile to (not
     // used yet since we have only one target)
     no_entry: bool = false, // wether compiler should look for main function
     extra_threads: usize = 0, // extra threads used for the compilation (not used yet)
@@ -100,10 +103,12 @@ pub const CompileOptions = struct {
     // #CLI end
 
     pub fn logDiag(self: CompileOptions, comptime fmt: []const u8, args: anytype) void {
-        if (self.diagnostics) |d| d.print(fmt, args) catch unreachable;
+        if (lane.isRoot()) {
+            if (self.diagnostics) |d| d.print(fmt, args) catch unreachable;
+        }
     }
 
-    pub fn loadCli(self: *CompileOptions, arena: std.mem.Allocator) !void {
+    pub fn loadCli(self: *CompileOptions, arena: std.mem.Allocator) std.mem.Allocator.Error!void {
         var args = try std.process.ArgIterator.initWithAllocator(arena);
         _ = args.next();
 
@@ -135,20 +140,36 @@ pub const CompileOptions = struct {
                 const val = &@field(self, f.name);
 
                 errdefer |err| {
-                    self.logDiag("--{s} <{s}>", .{ f.name, @errorName(err) });
+                    self.logDiag("--{s} <{s}>\n", .{ f.name, @errorName(err) });
+                    if (self.diagnostics) |d| d.flush() catch unreachable;
+
+                    if (!lane.isRoot()) {
+                        // Dont interrupt the main thread
+                        std.Thread.sleep(10 * std.time.ns_per_ms);
+                    }
+
                     std.process.exit(1);
                 }
 
                 switch (f.type) {
                     bool => val.* = true,
-                    backend.Machine.OptOptions.Mode => val.* = std.meta.stringToEnum(
-                        @TypeOf(@field(self, f.name)),
-                        args.next() orelse return error.mode,
-                    ) orelse return error.@"debug/release",
-                    frontend.Ast.InitOptions.Mode => val.* = std.meta.stringToEnum(
-                        @TypeOf(@field(self, f.name)),
-                        args.next() orelse return error.mode,
-                    ) orelse return error.@"legacy/latest",
+                    backend.Machine.OptOptions.Mode, frontend.Ast.InitOptions.Mode, hb.backend.Machine.SupportedTarget => {
+                        const str_value = args.next() orelse return error.mode;
+                        const value = if (@hasDecl(f.type, "fromStr"))
+                            f.type.fromStr(str_value)
+                        else
+                            std.meta.stringToEnum(f.type, str_value);
+
+                        val.* = value orelse {
+                            self.logDiag("unknown {s}: {s}\n", .{ @typeName(f.type), str_value });
+                            self.logDiag("supported {s} are:\n", .{@typeName(f.type)});
+                            inline for (std.meta.fields(f.type)) |t| {
+                                self.logDiag("  {s}\n", .{t.name});
+                            }
+
+                            return error.mode;
+                        };
+                    },
                     []const u8 => val.* = args.next() orelse return error.target,
                     usize => val.* = try std.fmt.parseInt(usize, args.next() orelse return error.integer, 10),
                     std.StringHashMapUnmanaged([]const u8) => {
@@ -194,80 +215,7 @@ pub const Task = struct {
 
 pub const Queue = utils.SharedQueue(Task);
 
-pub const Threading = union(enum) {
-    single: struct {
-        types: *frontend.Types,
-        machine: *backend.Machine,
-    },
-    multi: Multi,
-
-    pub const Multi = struct {
-        queue: Queue,
-        types: []*frontend.Types,
-        para: backend.Machine.Parallelism,
-        machine: *backend.Machine,
-
-        pub fn buildMapping(self: *Multi, scratch: *utils.Arena) backend.Machine.GlobalMapping {
-            var global_table_size: usize = 0;
-            const local_bases = scratch.alloc(u32, self.types.len);
-            for (self.types, local_bases) |t, *gt| {
-                gt.* = @intCast(global_table_size);
-                global_table_size += t.remote_ids.items.len;
-            }
-
-            // Build a trivial table
-            //
-            var global_table = scratch.alloc(backend.Machine.LocalId, global_table_size);
-            for (self.types, local_bases, 0..) |t, lb, tid| {
-                for (0..t.store.rpr.Func.meta.len) |func_idx| {
-                    global_table[lb + func_idx] = .{
-                        .thread = @intCast(tid),
-                        .index = @intCast(func_idx),
-                    };
-                }
-            }
-
-            // Patch up remotes
-            //
-            for (self.types, 0..) |t, tid| {
-                for (t.remote_ids.items) |ri| {
-                    // make the remote point to outr function since they don't
-                    // have the compiled graph
-                    global_table[local_bases[ri.from_thread] + @intFromEnum(ri.remote)] = .{
-                        .thread = @intCast(tid),
-                        .index = @intCast(@intFromEnum(ri.local)),
-                    };
-                }
-            }
-
-            return .{
-                .global_table = global_table,
-                .local_bases = local_bases,
-            };
-        }
-    };
-
-    pub fn singleBackend(self: *Threading) *backend.Machine {
-        return switch (self.*) {
-            .single => |s| s.machine,
-            .multi => |m| m.machine,
-        };
-    }
-
-    pub fn ast(self: *Threading) []const hb.frontend.Ast {
-        return switch (self.*) {
-            .single => |s| s.types.files,
-            .multi => |m| m.types[0].files,
-        };
-    }
-
-    pub fn logStats(self: *Threading, out: *std.Io.Writer) void {
-        _ = self;
-        _ = out;
-    }
-};
-
-pub fn compile(opts: CompileOptions) anyerror!void {
+pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!void {
     if (opts.help) {
         const help_str = comptime b: {
             @setEvalBranchQuota(2000);
@@ -279,39 +227,47 @@ pub fn compile(opts: CompileOptions) anyerror!void {
             break :b std.mem.trimRight(u8, source[start..end], "\n\t\r ") ++ "";
         };
 
-        if (opts.diagnostics) |d| try d.writeAll(help_str);
+        if (lane.isRoot()) if (opts.diagnostics) |d| try d.writeAll(help_str);
+
         return error.Failed;
     }
 
     var type_system_memory = Arena.init(opts.type_system_memory);
-    defer if (std.debug.runtime_safety) type_system_memory.deinit();
+    defer if (std.debug.runtime_safety) {
+        type_system_memory.deinit();
+    };
 
     if (opts.fmt_stdout) {
-        const source = try std.fs.cwd().readFileAllocOptions(
-            type_system_memory.allocator(),
-            opts.root_file,
-            max_file_len,
-            null,
-            .of(u8),
-            0,
-        );
-        const ast = hb.frontend.Ast.init(&type_system_memory, .{
-            .path = opts.root_file,
-            .code = source,
-            .diagnostics = opts.diagnostics,
-            .mode = opts.parser_mode,
-            .colors = opts.error_colors,
-        }) catch |err| switch (err) {
-            error.ParsingFailed => {
-                if (opts.diagnostics) |d| d.flush() catch {};
+        if (lane.isRoot()) {
+            const source = std.fs.cwd().readFileAllocOptions(
+                type_system_memory.allocator(),
+                opts.root_file,
+                max_file_len,
+                null,
+                .of(u8),
+                0,
+            ) catch {
+                opts.logDiag("cant find root file: {s}", .{opts.root_file});
                 return error.Failed;
-            },
-            else => return err,
-        };
+            };
 
-        if (opts.output) |o| {
-            try ast.fmt(o);
-            try o.flush();
+            const ast = hb.frontend.Ast.init(&type_system_memory, .{
+                .path = opts.root_file,
+                .code = source,
+                .diagnostics = opts.diagnostics,
+                .mode = opts.parser_mode,
+                .colors = opts.error_colors,
+            }) catch |err| switch (err) {
+                error.ParsingFailed => {
+                    return error.Failed;
+                },
+                else => |e| return e,
+            };
+
+            if (opts.output) |o| {
+                try ast.fmt(o);
+                try o.flush();
+            }
         }
 
         return;
@@ -325,280 +281,242 @@ pub fn compile(opts: CompileOptions) anyerror!void {
         opts.error_colors,
         opts.parser_mode,
     ) orelse {
-        opts.logDiag("failed due to previous errors (codegen skipped)\n", .{});
+        if (lane.isRoot()) {
+            opts.logDiag("failed due to previous errors (codegen skipped)\n", .{});
+        }
         return error.Failed;
     };
 
     if (opts.fmt) {
-        for (asts) |ast| {
-            var tmp = Arena.scrath(null);
-            defer tmp.deinit();
+        var tmp = Arena.scrath(null);
+        defer tmp.deinit();
 
-            const path = try std.fs.path.join(tmp.arena.allocator(), &.{ base, ast.path });
+        const queue = lane.share(tmp.arena, lane.FixedQueue{});
+        while (queue.next(asts.len)) |i| {
+            const ast = asts[i];
+
+            var frame = tmp.arena.checkpoint();
+            defer frame.deinit();
+
+            const path = try std.fs.path.join(
+                frame.arena.allocator(),
+                &.{ base, ast.path },
+            );
             var buf: [4096]u8 = undefined;
-            var writer = (try std.fs.cwd().openFile(path, .{ .mode = .write_only })).writer(&buf);
+            const file = std.fs.cwd().openFile(
+                path,
+                .{ .mode = .write_only },
+            ) catch {
+                opts.logDiag("cant open file: {s}", .{path});
+                continue;
+            };
+
+            var writer = file.writer(&buf);
+
             try ast.fmt(&writer.interface);
             try writer.interface.flush();
+
+            file.setEndPos(writer.pos) catch {
+                opts.logDiag("cant truncate file: {s}", .{path});
+            };
         }
+
+        lane.sync(.{});
 
         return;
     }
 
-    const target = hb.backend.Machine.SupportedTarget.fromStr(opts.target) orelse {
-        opts.logDiag("unknown target: {s}\n", .{opts.target});
-        opts.logDiag("supported targets are:\n", .{});
-        inline for (std.meta.fields(hb.backend.Machine.SupportedTarget)) |t| {
-            opts.logDiag("  {s}\n", .{t.name});
-        }
-        return error.Failed;
-    };
+    const abi = opts.target.toCallConv();
 
-    const abi = target.toCallConv();
+    if (lane.isRoot()) {
+        const types = hb.frontend.Types.init(
+            type_system_memory,
+            asts,
+            opts.diagnostics,
+            opts.gpa,
+        );
+        types.target = @tagName(opts.target);
+        types.colors = opts.error_colors;
+        const bckend = opts.target.toMachine(&types.pool.arena, opts.gpa);
 
-    var shared_arena: Arena = undefined;
-    var threading: Threading = undefined;
-    if (@import("builtin").single_threaded or opts.extra_threads == 0) {
-        threading = .{ .single = .{
-            .types = b: {
-                const types = hb.frontend.Types.init(
-                    type_system_memory,
-                    asts,
-                    opts.diagnostics,
-                    opts.gpa,
-                );
-                types.target = opts.target;
-                types.colors = opts.error_colors;
-                break :b types;
+        var root_tmp = utils.Arena.scrath(null);
+        defer root_tmp.deinit();
+
+        const logs = if (opts.log_stats) opts.diagnostics else null;
+
+        const errored = hb.frontend.Codegen.emitReachable(
+            types,
+            bckend,
+            .{
+                .abi = .{ .cc = abi },
+                .has_main = !opts.no_entry,
+                .optimizations = opts.optimizations,
+                .logs = logs,
             },
-            .machine = undefined,
-        } };
-        threading.single.machine = target.toMachine(
-            &threading.single.types.pool.arena,
-            std.heap.smp_allocator,
         );
-    } else {
-        const thread_count = opts.extra_threads + 1;
-
-        shared_arena = Arena.init(
-            Queue.size_of(
-                thread_count,
-                opts.shared_queue_capacity,
-            ) + @sizeOf(Queue) * thread_count + 4096,
-        );
-
-        threading = .{ .multi = undefined };
-        const ref = &threading.multi;
-
-        try std.Thread.Pool.init(&ref.para.pool, .{
-            .allocator = shared_arena.allocator(),
-            .n_jobs = thread_count,
-        });
-
-        const types = type_system_memory.alloc(*hb.frontend.Types, thread_count);
-        const chunk_size = (opts.type_system_memory - type_system_memory.consumed()) / thread_count;
-        for (types) |*t| {
-            // TODO: diagnostics need to be agregated somehow in a sync manner
-            t.* = hb.frontend.Types.init(type_system_memory.subslice(chunk_size), asts, opts.diagnostics, opts.gpa);
-            t.*.target = opts.target;
-            t.*.colors = opts.error_colors;
-        }
-
-        ref.queue = .init(
-            &shared_arena,
-            opts.extra_threads + 1,
-            opts.shared_queue_capacity / thread_count * 2,
-        );
-        ref.types = types;
-        ref.para.shards = shared_arena.alloc(backend.Machine.Shard, thread_count);
-        for (ref.para.shards, types) |*s, t| {
-            s.* = .{ .gpa = &t.pool };
-        }
-    }
-
-    var root_tmp = utils.Arena.scrath(null);
-    defer root_tmp.deinit();
-
-    const logs = if (opts.log_stats) opts.diagnostics else null;
-
-    const errored = hb.frontend.Codegen.emitReachable(
-        root_tmp.arena,
-        &threading,
-        .{
-            .abi = .{ .cc = abi },
-            .has_main = !opts.no_entry,
-            .optimizations = opts.optimizations,
-            .logs = logs,
-        },
-    );
-    if (errored or threading.single.types.errored) {
-        opts.logDiag("failed due to previous errors\n", .{});
-        return error.Failed;
-    }
-
-    const name = try std.mem.replaceOwned(u8, root_tmp.arena.allocator(), opts.root_file, "/", "_");
-
-    var anal_errors = std.ArrayList(backend.static_anal.Error){};
-
-    const optimizations = backend.Machine.OptOptions{
-        .mode = opts.optimizations,
-        .error_buf = &anal_errors,
-        .arena = root_tmp.arena,
-    };
-
-    if (threading == .multi) {
-        if (opts.benchmark_rounds == 1) {
-            opts.logDiag("multi threading code emmision is not yet supported\n", .{});
-        }
-        return;
-    }
-
-    const types = threading.single.types;
-    const bckend = threading.single.machine;
-
-    if (opts.dump_asm) {
-        const out = bckend.finalizeBytes(.{
-            .gpa = types.pool.arena.allocator(),
-            .optimizations = optimizations,
-            .builtins = types.getBuiltins(),
-            .files = types.line_indexes,
-        });
-
-        if (types.dumpAnalErrors(&anal_errors)) {
+        if (errored or types.errored) {
             opts.logDiag("failed due to previous errors\n", .{});
             return error.Failed;
         }
 
-        bckend.disasm(.{
-            .name = name,
-            .bin = out.items,
-            .out = opts.output,
-            .colors = opts.colors,
-        });
+        const name = try std.mem.replaceOwned(u8, root_tmp.arena.allocator(), opts.root_file, "/", "_");
 
-        if (opts.output) |o| try o.flush();
+        var anal_errors = std.ArrayList(backend.static_anal.Error){};
 
-        return;
-    }
+        const optimizations = backend.Machine.OptOptions{
+            .mode = opts.optimizations,
+            .error_buf = &anal_errors,
+            .arena = root_tmp.arena,
+        };
 
-    if (opts.vendored_test and !@import("options").dont_simulate) {
-        const expectations: test_utils.Expectations = .init(&asts[0], &types.pool.arena);
+        if (opts.dump_asm) {
+            const out = bckend.finalizeBytes(.{
+                .gpa = types.pool.arena.allocator(),
+                .optimizations = optimizations,
+                .builtins = types.getBuiltins(),
+                .files = types.line_indexes,
+            });
 
-        const out = bckend.finalizeBytes(.{
-            .gpa = types.pool.arena.allocator(),
-            .optimizations = optimizations,
-            .builtins = types.getBuiltins(),
-            .files = types.line_indexes,
-        });
+            if (types.dumpAnalErrors(&anal_errors)) {
+                opts.logDiag("failed due to previous errors\n", .{});
+                return error.Failed;
+            }
 
-        if (types.dumpAnalErrors(&anal_errors)) {
-            opts.logDiag("failed due to previous errors\n", .{});
-            return error.Failed;
-        }
-
-        errdefer {
             bckend.disasm(.{
                 .name = name,
                 .bin = out.items,
-                .out = opts.diagnostics,
+                .out = opts.output,
                 .colors = opts.colors,
             });
+
+            if (opts.output) |o| try o.flush();
+
+            return;
+        }
+
+        if (opts.vendored_test and !@import("options").dont_simulate) {
+            const expectations: test_utils.Expectations = .init(&asts[0], &types.pool.arena);
+
+            const out = bckend.finalizeBytes(.{
+                .gpa = types.pool.arena.allocator(),
+                .optimizations = optimizations,
+                .builtins = types.getBuiltins(),
+                .files = types.line_indexes,
+            });
+
+            if (types.dumpAnalErrors(&anal_errors)) {
+                opts.logDiag("failed due to previous errors\n", .{});
+                return error.Failed;
+            }
+
+            errdefer {
+                bckend.disasm(.{
+                    .name = name,
+                    .bin = out.items,
+                    .out = opts.diagnostics,
+                    .colors = opts.colors,
+                });
+
+                expectations.assert(bckend.run(.{
+                    .name = name,
+                    .code = out.items,
+                    .output = opts.diagnostics,
+                    .colors = opts.colors,
+                })) catch unreachable;
+            }
 
             expectations.assert(bckend.run(.{
                 .name = name,
                 .code = out.items,
-                .output = opts.diagnostics,
-                .colors = opts.colors,
-            })) catch unreachable;
+            })) catch |err| {
+                opts.logDiag("failed to run the test: {s}", .{@errorName(err)});
+                return error.Failed;
+            };
+
+            bckend.disasm(.{
+                .name = name,
+                .bin = out.items,
+                .out = opts.output,
+                .colors = .no_color,
+            });
+
+            return;
         }
 
-        try expectations.assert(bckend.run(.{
-            .name = name,
-            .code = out.items,
-        }));
+        if (opts.log_stats) b: {
+            const diags = opts.diagnostics orelse break :b;
 
-        bckend.disasm(.{
-            .name = name,
-            .bin = out.items,
-            .out = opts.output,
-            .colors = .no_color,
-        });
+            try diags.writeAll("type system:\n");
+            inline for (std.meta.fields(@TypeOf(types.store.rpr))) |field| {
+                try diags.print(
+                    "  {s:<8}: {}\n",
+                    .{ field.name, @field(types.store.rpr, field.name).meta.len },
+                );
+            }
+            try diags.print("  arena   : {}\n", .{types.pool.arena.consumed()});
 
-        return;
-    }
-
-    if (opts.log_stats) b: {
-        const diags = opts.diagnostics orelse break :b;
-
-        try diags.writeAll("type system:\n");
-        inline for (std.meta.fields(@TypeOf(types.store.rpr))) |field| {
-            try diags.print(
-                "  {s:<8}: {}\n",
-                .{ field.name, @field(types.store.rpr, field.name).meta.len },
-            );
-        }
-        try diags.print("  arena   : {}\n", .{types.pool.arena.consumed()});
-
-        inline for (std.meta.fields(@TypeOf(types.stats))) |field| {
-            try diags.print("  {s:<8}: {}\n", .{ field.name, @field(types.stats, field.name) });
-        }
-
-        if (false) {
-            var runtim_functions: usize = 0;
-            var comptime_functions: usize = 0;
-            var dead_functions: usize = 0;
-
-            for (@as([]const frontend.types.Func, types.store.rpr.Func.items)) |f| {
-                if (f.completion.get(.@"comptime") == .compiled) comptime_functions += 1;
-                if (f.completion.get(.runtime) == .compiled) runtim_functions += 1;
-
-                if (f.completion.get(.@"comptime") == .queued and
-                    f.completion.get(.runtime) == .queued)
-                {
-                    dead_functions += 1;
-                }
+            inline for (std.meta.fields(@TypeOf(types.stats))) |field| {
+                try diags.print("  {s:<8}: {}\n", .{ field.name, @field(types.stats, field.name) });
             }
 
-            try diags.print("  runtime functions: {}\n", .{runtim_functions});
-            try diags.print("  comptime functions: {}\n", .{comptime_functions});
-            try diags.print("  dead functions: {}\n", .{dead_functions});
+            if (false) {
+                var runtim_functions: usize = 0;
+                var comptime_functions: usize = 0;
+                var dead_functions: usize = 0;
+
+                for (@as([]const frontend.types.Func, types.store.rpr.Func.items)) |f| {
+                    if (f.completion.get(.@"comptime") == .compiled) comptime_functions += 1;
+                    if (f.completion.get(.runtime) == .compiled) runtim_functions += 1;
+
+                    if (f.completion.get(.@"comptime") == .queued and
+                        f.completion.get(.runtime) == .queued)
+                    {
+                        dead_functions += 1;
+                    }
+                }
+
+                try diags.print("  runtime functions: {}\n", .{runtim_functions});
+                try diags.print("  comptime functions: {}\n", .{comptime_functions});
+                try diags.print("  dead functions: {}\n", .{dead_functions});
+            }
+            try diags.print("  stale pool memory: {}\n", .{types.pool.staleMemory()});
+
+            types.metrics.logStats(diags);
         }
-        try diags.print("  stale pool memory: {}\n", .{types.pool.staleMemory()});
 
-        types.metrics.logStats(diags);
-    }
+        if (opts.colors == .no_color or opts.mangle_terminal) {
+            bckend.finalize(.{
+                .output = opts.output,
+                .optimizations = optimizations,
+                .builtins = types.getBuiltins(),
+                .logs = logs,
+                .files = types.line_indexes,
+            });
 
-    if (opts.colors == .no_color or opts.mangle_terminal) {
-        bckend.finalize(.{
-            .output = opts.output,
-            .optimizations = optimizations,
-            .builtins = types.getBuiltins(),
-            .logs = logs,
-            .files = types.line_indexes,
-        });
+            if (types.dumpAnalErrors(&anal_errors)) {
+                opts.logDiag("failed due to previous errors\n", .{});
+                return error.Failed;
+            }
 
-        if (types.dumpAnalErrors(&anal_errors)) {
-            opts.logDiag("failed due to previous errors\n", .{});
+            return;
+        } else {
+            bckend.finalize(.{
+                .output = null,
+                .optimizations = optimizations,
+                .builtins = types.getBuiltins(),
+                .logs = logs,
+                .files = types.line_indexes,
+            });
+
+            if (types.dumpAnalErrors(&anal_errors)) {
+                opts.logDiag("failed due to previous errors\n", .{});
+                return error.Failed;
+            }
+
+            opts.logDiag("can't dump the executable to the stdout since it" ++
+                " supports colors (pass --mangle-terminal if you dont care)", .{});
             return error.Failed;
         }
-
-        return;
-    } else {
-        bckend.finalize(.{
-            .output = null,
-            .optimizations = optimizations,
-            .builtins = types.getBuiltins(),
-            .logs = logs,
-            .files = types.line_indexes,
-        });
-
-        if (types.dumpAnalErrors(&anal_errors)) {
-            opts.logDiag("failed due to previous errors\n", .{});
-            return error.Failed;
-        }
-
-        opts.logDiag("can't dump the executable to the stdout since it" ++
-            " supports colors (pass --mangle-terminal if you dont care)", .{});
-        return error.Failed;
     }
 }
 
@@ -634,104 +552,187 @@ pub fn makeRelative(arena: std.mem.Allocator, path: []const u8, base: []const u8
 
 const Loader = struct {
     arena: *Arena,
-    base: []const u8,
-    path_projections: std.StringHashMapUnmanaged([]const u8),
-    files: std.ArrayList(hb.frontend.Ast) = .{},
+    shared: *Shared,
+
+    pub const Shared = struct {
+        base: []const u8,
+        path_projections: std.StringHashMapUnmanaged([]const u8),
+        files: std.ArrayList(hb.frontend.Ast) = .{},
+        in_progress: usize = 0,
+        completed: usize = 0,
+        failed: std.atomic.Value(bool) = .init(false),
+        state_lock: std.Thread.Mutex = .{},
+        lobby: utils.Lobby = .{},
+    };
 
     pub fn load(self: *Loader, opts: hb.frontend.Ast.Loader.LoadOptions) ?hb.frontend.Types.File {
         var tmp = Arena.scrath(null);
         defer tmp.deinit();
 
-        const arena = self.arena.allocator();
-
-        const base = self.base;
-        const file = self.files.items[@intFromEnum(opts.from)];
+        const base = self.shared.base;
+        self.shared.state_lock.lock();
+        const file = self.shared.files.items[@intFromEnum(opts.from)];
+        self.shared.state_lock.unlock();
         const rel_base = std.fs.path.dirname(file.path) orelse "";
-        const mangled_path = self.path_projections.get(opts.path) orelse
+        const mangled_path = self.shared.path_projections.get(opts.path) orelse
             std.fs.path.join(tmp.arena.allocator(), &.{ base, rel_base, opts.path }) catch return null;
         const path = std.fs.cwd().realpathAlloc(tmp.arena.allocator(), mangled_path) catch mangled_path;
 
         const canon = makeRelative(tmp.arena.allocator(), path, base) catch return null;
 
-        for (self.files.items, 0..) |fl, i| {
-            if (std.mem.eql(u8, fl.path, canon)) return @enumFromInt(i);
-        }
-
-        const slot = self.files.addOne(arena) catch return null;
-        slot.path = self.arena.dupe(u8, canon);
-        slot.source = std.fs.cwd().readFileAllocOptions(arena, path, max_file_len, null, .of(u8), 0) catch |err| {
-            file.report(
-                opts,
-                opts.pos,
-                "can't open used file: {}: {}",
-                .{ path, @errorName(err) },
-            );
-
-            slot.source = "";
-            return null;
+        _ = std.fs.cwd().statFile(path) catch |err| {
+            file.report(opts, opts.pos, "can't stat used file: {}: {}", .{ path, @errorName(err) });
         };
 
-        return @enumFromInt(self.files.items.len - 1);
+        {
+            defer self.shared.lobby.signal();
+
+            const arena = self.arena;
+
+            self.shared.state_lock.lock();
+            defer self.shared.state_lock.unlock();
+
+            // This search might be too slow, but we want such problems
+            for (self.shared.files.items, 0..) |fl, i| {
+                if (std.mem.eql(u8, fl.path, canon)) return @enumFromInt(i);
+            }
+
+            const slot = self.shared.files.addOne(arena.allocator()) catch unreachable;
+            slot.path = self.arena.dupe(u8, canon);
+
+            return @enumFromInt(self.shared.files.items.len - 1);
+        }
     }
 
+    pub const Options = struct {};
+
+    pub const Error = error{ OutOfMemory, WriteFailed };
+
     pub fn loadAll(
-        arena: *Arena,
+        scratch: *Arena,
         path_projections: std.StringHashMapUnmanaged([]const u8),
         root: []const u8,
         diagnostics: ?*std.Io.Writer,
         colors: std.io.tty.Config,
         parser_mode: hb.frontend.Ast.InitOptions.Mode,
-    ) !?struct { []const hb.frontend.Ast, []const u8 } {
-        const real_root = std.fs.cwd().realpathAlloc(arena.allocator(), root) catch root;
+    ) Error!?struct { []const hb.frontend.Ast, []const u8 } {
+        var root_tmp = utils.Arena.scrath(scratch);
+        defer root_tmp.deinit();
 
-        var self = Loader{
-            .arena = arena,
-            .base = std.fs.path.dirname(real_root) orelse "",
-            .path_projections = path_projections,
-        };
+        var shared: *Shared = undefined;
+        if (lane.isRoot()) {
+            const arena = scratch.allocator();
 
-        const slot = try self.files.addOne(self.arena.allocator());
-        slot.path = std.fs.path.basename(root);
-        slot.source = std.fs.cwd().readFileAllocOptions(arena.allocator(), root, max_file_len, null, .of(u8), 0) catch {
-            if (diagnostics) |d| try d.print("could not read the root file: {s}\n", .{root});
-            return null;
-        };
+            const real_root = std.fs.cwd().realpathAlloc(arena, root) catch root;
 
-        var failed = false;
-        var i: usize = 0;
-        while (i < self.files.items.len) : (i += 1) {
-            var tmp = Arena.scrath(arena);
+            shared = root_tmp.arena.create(Shared);
+            shared.* = Shared{
+                .base = std.fs.path.dirname(real_root) orelse "",
+                .path_projections = path_projections,
+            };
+
+            const slot = try shared.files.addOne(arena);
+            slot.path = std.fs.path.basename(root);
+            _ = std.fs.cwd().statFile(root) catch |err| {
+                if (diagnostics) |d| try d.print("could not stat the root file ({s}): {s}\n", .{ root, @errorName(err) });
+                return null;
+            };
+        }
+        lane.broadcast(&shared, .{});
+
+        var self = Loader{ .arena = scratch, .shared = shared };
+
+        while (true) {
+            var tmp = root_tmp.arena.checkpoint();
             defer tmp.deinit();
 
-            const file = self.files.items[i];
+            self.shared.state_lock.lock();
+
+            // we are done
+            if (self.shared.completed == self.shared.files.items.len) {
+                self.shared.state_lock.unlock();
+                self.shared.lobby.done();
+                break;
+            }
+
+            // all available taks are taken, go to lobby
+            if (self.shared.in_progress == self.shared.files.items.len) {
+                self.shared.state_lock.unlock();
+                self.shared.lobby.wait();
+                continue;
+            }
+
+            std.debug.assert(self.shared.in_progress < self.shared.files.items.len);
+
+            // steal a task
+            const i = self.shared.in_progress;
+            self.shared.in_progress += 1;
+            const slot_path = self.shared.files.items[i].path;
+
+            self.shared.state_lock.unlock();
+
+            var failed = true;
+            defer {
+                self.shared.failed.store(failed, .unordered);
+                self.shared.state_lock.lock();
+                self.shared.completed += 1;
+                self.shared.state_lock.unlock();
+            }
+
             const fid: hb.frontend.Types.File = @enumFromInt(i);
 
-            const ast_res = hb.frontend.Ast.init(tmp.arena, .{
+            const path = try std.fs.path.join(
+                tmp.arena.allocator(),
+                &.{ self.shared.base, slot_path },
+            );
+
+            const source = std.fs.cwd().readFileAllocOptions(
+                self.arena.allocator(),
+                path,
+                1024 * 1024 * 1024,
+                null,
+                .of(u8),
+                0,
+            ) catch |err| {
+                if (diagnostics) |d| try d.print("could not read the file ({s}) ({s})," ++
+                    " did it get deleted in the mean itme?\n", .{ slot_path, @errorName(err) });
+                continue;
+            };
+
+            var ast_res = hb.frontend.Ast.init(tmp.arena, .{
                 .current = fid,
-                .path = file.path,
-                .code = file.source,
+                .path = slot_path,
+                .code = source,
                 .loader = .init(&self),
                 .diagnostics = diagnostics,
                 .mode = parser_mode,
                 .colors = colors,
             });
 
-            if (ast_res) |ast| {
-                self.files.items[i] = ast;
-                self.files.items[i].exprs = try self.files.items[i].exprs.dupe(self.arena.allocator());
+            if (ast_res) |*ast| {
+                ast.exprs = try ast.exprs.dupe(self.arena.allocator());
+
+                self.shared.state_lock.lock();
+                self.shared.files.items[i] = ast.*;
+                self.shared.state_lock.unlock();
             } else |err| {
                 switch (err) {
                     error.ParsingFailed => {
-                        failed = true;
                         continue;
                     },
-                    else => return err,
+                    else => |e| return e,
                 }
             }
+
+            failed = self.shared.failed.load(.unordered);
         }
 
-        if (failed) return null;
+        const base = self.shared.base;
+        const files = self.shared.files.items;
+        lane.sync(.{});
 
-        return .{ self.files.items, self.base };
+        if (self.shared.failed.raw) return null;
+
+        return .{ files, base };
     }
 };

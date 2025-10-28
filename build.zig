@@ -79,10 +79,10 @@ pub fn build(b: *std.Build) !void {
                 .root_source_file = b.path("src/hbc.zig"),
                 .target = target,
                 .optimize = optimize,
+                //.single_threaded = true,
             }),
             .use_llvm = use_llvm,
             .use_lld = use_lld,
-            //.single_threaded = true,
             //.strip = false,
         });
         exe.stack_size = stack_size;
@@ -147,6 +147,7 @@ pub fn build(b: *std.Build) !void {
                 .root_source_file = out,
                 .target = b.graph.host,
                 .optimize = optimize,
+                .single_threaded = true,
             }),
             .filters = test_filter,
             .use_llvm = use_llvm,
@@ -168,6 +169,7 @@ pub fn build(b: *std.Build) !void {
                 .root_source_file = b.path("scripts/gen_tests.zig"),
                 .target = b.graph.host,
                 .optimize = .Debug,
+                .single_threaded = true,
             }),
             .use_llvm = use_llvm,
             .use_lld = use_lld,
@@ -211,6 +213,7 @@ pub fn build(b: *std.Build) !void {
                 .root_source_file = b.path("src/fuzz_finding_tests.zig"),
                 .target = b.graph.host,
                 .optimize = optimize,
+                .single_threaded = true,
             }),
             .filters = test_filter,
             .use_llvm = use_llvm,
@@ -308,6 +311,7 @@ pub fn build(b: *std.Build) !void {
                 .fuzz = true,
                 .stack_check = false,
                 .link_libc = true,
+                .strip = false,
             }),
             .use_llvm = true,
             .use_lld = true,
@@ -349,6 +353,8 @@ pub fn build(b: *std.Build) !void {
 
         for (0..fuzzes) |i| {
             const run_afl = b.addSystemCommand(&.{"afl-fuzz"});
+
+            run_afl.setEnvironmentVariable("AFL_BENCH_UNTIL_CRASH", "1");
 
             run_afl.addArg("-i");
             run_afl.addDirectoryArg(cases);

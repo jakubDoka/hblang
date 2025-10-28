@@ -2,11 +2,16 @@ const std = @import("std");
 
 const hb = @import("hb");
 
-var cli_buff: [1024 * 8]u8 = undefined;
-var err_buffer: [1024 * 4]u8 = undefined;
-var out_buffer: [1024 * 4]u8 = undefined;
+threadlocal var cli_buff: [1024 * 8]u8 = undefined;
+threadlocal var err_buffer: [1024 * 4]u8 = undefined;
+threadlocal var out_buffer: [1024 * 4]u8 = undefined;
 
 pub fn main() !void {
+    const thread_count = std.Thread.getCpuCount() catch 1;
+    hb.utils.lane.boot(thread_count, {}, entry);
+}
+
+fn entry(_: void) void {
     var diag_writer = std.fs.File.stderr().writer(&err_buffer);
     var out_writer = std.fs.File.stdout().writer(&out_buffer);
 
@@ -19,7 +24,13 @@ pub fn main() !void {
 
     var cli_scratch = std.heap.FixedBufferAllocator.init(&cli_buff);
 
-    try opts.loadCli(cli_scratch.allocator());
+    opts.loadCli(cli_scratch.allocator()) catch {
+        diag_writer.interface.print(
+            "failed to load cli arguments (OOM)\n",
+            .{},
+        ) catch {};
+        diag_writer.interface.flush() catch {};
+    };
 
     hb.utils.Arena.initScratch(opts.scratch_memory);
 
@@ -29,7 +40,7 @@ pub fn main() !void {
                 diag_writer.interface.flush() catch {};
                 std.process.exit(1);
             },
-            else => return err,
+            else => unreachable,
         };
     }
 }

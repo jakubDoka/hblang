@@ -515,8 +515,8 @@ fn fmtExprPrec(self: *Fmt, id: Id, prec: u8) Error!void {
         },
         .Use => |use| {
             try self.buf.print(
-                "@{s}({s})",
-                .{ @tagName(use.pos.flag.use_kind), Lexer.peekStr(self.ast.source, use.pos.index) },
+                "@use({s})",
+                .{Lexer.peekStr(self.ast.source, use.pos.index)},
             );
         },
         .Integer => |i| try self.buf.writeAll(Lexer.peekStr(self.ast.source, i.pos.index)),

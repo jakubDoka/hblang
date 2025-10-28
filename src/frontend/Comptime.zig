@@ -259,14 +259,15 @@ pub fn partialEval(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, expr: *No
                         }
                     }
 
-                    const abs_off = std.math.cast(u64, offset) orelse
+                    const abs_off = std.math.cast(u64, offset) orelse {
                         return ctx.err(.{
                             .OutOfBounds = .{ expr.sloc, mem.len, offset },
                         });
+                    };
 
                     const up_to = abs_off + expr.data_type.size();
 
-                    if (mem.len <= up_to) {
+                    if (mem.len < up_to) {
                         return ctx.err(.{
                             .OutOfBounds = .{ expr.sloc, mem.len, up_to },
                         });

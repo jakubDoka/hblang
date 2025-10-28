@@ -1,5 +1,5 @@
 const std = @import("std");
-pub const utils = root.utils;
+const utils = root.utils;
 pub const root = @import("hb");
 pub const test_util = root.test_utils;
 pub const Regalloc = root.backend.Regalloc;
@@ -148,6 +148,8 @@ pub fn runMachineTest(
 pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
     utils.Arena.initScratch(1024 * 1024 * 10);
     defer utils.Arena.deinitScratch();
+
+    std.debug.print("{s}\n", .{code});
 
     {
         var arena = utils.Arena.init(1024 * 1024 * 128);

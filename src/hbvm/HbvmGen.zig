@@ -753,7 +753,7 @@ pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {
         self.mach.out.reset();
     }
 
-    if (opts.optimizations.finalize(HbvmGen, self, null, opts)) return;
+    if (opts.optimizations.finalize(HbvmGen, self, opts)) return;
 
     try root.hbvm.object.flush(self.mach.out, opts.output orelse return);
 }
@@ -773,7 +773,7 @@ pub fn disasm(_: *HbvmGen, opts: Mach.DisasmOpts) void {
 
 const page_size = 1024 * 4;
 
-pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
+pub fn run(_: *HbvmGen, env: Mach.RunEnv) Mach.RunError!usize {
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
@@ -804,7 +804,12 @@ pub fn run(_: *HbvmGen, env: Mach.RunEnv) !usize {
 
     var prng = std.Random.Pcg.init(0);
     var page_cursor: usize = 1;
-    while (true) switch (try vm.run(&ctx)) {
+    while (true) switch (vm.run(&ctx) catch |err| return switch (err) {
+        error.MemOob => error.SegmentationFault,
+        error.DivideByZero => error.SegmentationFault,
+        error.InvalidOp => error.InvalidInstruction,
+        else => |e| e,
+    }) {
         .tx => break,
         .eca => try doInterrupt(&vm, &ctx, &prng, &page_cursor, env),
         else => unreachable,
@@ -819,7 +824,7 @@ pub fn doInterrupt(
     prng: *std.Random.Pcg,
     page_cursor: *usize,
     env: Mach.RunEnv,
-) !void {
+) Mach.RunError!void {
     switch (vm.regs.get(.arg(0))) {
         100 => {
             std.debug.assert(vm.regs.get(.arg(1)) == 1);
@@ -854,7 +859,7 @@ pub fn doInterrupt(
                         msg.dest + msg.len > ctx.memory.len or
                         msg.src + msg.count > ctx.memory.len)
                     {
-                        return error.MemOob;
+                        return error.SegmentationFault;
                     }
 
                     const dst, const src = .{
@@ -875,7 +880,7 @@ pub fn doInterrupt(
                         msg.dest + msg.len > ctx.memory.len or
                         msg.src + msg.len > ctx.memory.len)
                     {
-                        return error.MemOob;
+                        return error.SegmentationFault;
                     }
 
                     const dst, const src = .{

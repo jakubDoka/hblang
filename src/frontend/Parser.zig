@@ -93,9 +93,6 @@ pub const Loader = struct {
         pos: u32,
         colors: std.io.tty.Config,
         diagnostics: ?*std.Io.Writer,
-        type: Kind,
-
-        pub const Kind = enum(u1) { use, embed };
     };
 
     pub fn isNoop(self: Loader) bool {
@@ -504,9 +501,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             } };
         },
         .Directive => |k| switch (k) {
-            inline .use, .embed => |t| b: {
-                const ty = @field(Loader.LoadOptions.Kind, @tagName(t));
-
+            .use => b: {
                 _ = try self.expectAdvance(.@"(");
                 token = try self.expectAdvance(.@"\"");
                 const path = token.view(self.lexer.source);
@@ -516,7 +511,6 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                     .file = self.loader.load(.{
                         .from = self.current,
                         .path = path[1 .. path.len - 1],
-                        .type = ty,
                         .pos = token.pos,
                         .colors = self.colors,
                         .diagnostics = self.diagnostics,
@@ -524,10 +518,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                         self.errored = true;
                         break :c .root;
                     },
-                    .pos = .{
-                        .index = @intCast(token.pos),
-                        .flag = .{ .use_kind = ty },
-                    },
+                    .pos = .{ .index = @intCast(token.pos) },
                 } };
             },
             else => .{ .Directive = .{

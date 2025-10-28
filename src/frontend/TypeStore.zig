@@ -1015,7 +1015,8 @@ pub fn retainGlobals(self: *Types, target: Target, backend: *Machine, handle_err
                         self.report(
                             glob.key.loc.file,
                             glob.key.loc.ast,
-                            "global is corrupted (of type {}) (global_id: {}): contains a pointer {}, @alloc_global might help",
+                            "global is corrupted (of type {}) (global_id: {}):" ++
+                                " contains a pointer {}, @alloc_global might help",
                             .{ glob.ty, @intFromEnum(global), @errorName(err) },
                         );
                         continue :out;
