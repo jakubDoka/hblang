@@ -2064,7 +2064,7 @@ pub fn finalize(self: *X86_64Gen, opts: Mach.FinalizeOptions) void {
         self.mach.out.reset();
     }
 
-    if (opts.optimizations.finalize(X86_64Gen, self, opts)) return;
+    if (opts.interface.optimizations.finalize(X86_64Gen, self, opts.interface)) return;
 
     switch (self.object_format) {
         .elf => {

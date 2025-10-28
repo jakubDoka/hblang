@@ -252,7 +252,10 @@ pub const CompileOptions = struct {
 
                 var failed = true;
                 defer if (failed) {
-                    self.logDiag("--{s} {s}\n", .{ f.name, comptime typeToArgHint(f.type, f.defaultValue().?) });
+                    self.logDiag("--{s} {s}\n", .{
+                        f.name,
+                        comptime typeToArgHint(f.type, f.defaultValue().?),
+                    });
                     if (self.diagnostics) |d| d.flush() catch unreachable;
                     self.help = true;
                 };
@@ -272,7 +275,10 @@ pub const CompileOptions = struct {
                         val.* = value orelse continue :parse;
                     },
                     []const u8 => val.* = args.next() orelse continue :parse,
-                    usize => val.* = std.fmt.parseInt(usize, args.next() orelse continue :parse, 10) catch continue :parse,
+                    usize => {
+                        const str_value = args.next() orelse continue :parse;
+                        val.* = std.fmt.parseInt(usize, str_value, 10) catch continue :parse;
+                    },
                     std.StringHashMapUnmanaged([]const u8) => {
                         const key = args.next() orelse continue :parse;
                         const value = args.next() orelse continue :parse;
@@ -324,6 +330,10 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
         return error.Failed;
     }
 
+    errdefer {
+        opts.logDiag("failed due to previous errors\n", .{});
+    }
+
     var type_system_memory = Arena.init(opts.type_system_memory);
     defer if (std.debug.runtime_safety) {
         type_system_memory.deinit();
@@ -373,9 +383,6 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
         opts.error_colors,
         opts.parser_mode,
     ) orelse {
-        if (lane.isRoot()) {
-            opts.logDiag("failed due to previous errors (codegen skipped)\n", .{});
-        }
         return error.Failed;
     };
 
@@ -420,21 +427,27 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
 
     const abi = opts.target.toCallConv();
 
+    const types = hb.frontend.Types.init(
+        type_system_memory,
+        asts,
+        opts.diagnostics,
+        opts.gpa,
+    );
+    types.target = @tagName(opts.target);
+    types.colors = opts.error_colors;
+
+    var root_tmp = utils.Arena.scrath(null);
+    defer root_tmp.deinit();
+
+    const logs = if (opts.log_stats) opts.diagnostics else null;
+
+    defer lane.sync(.{});
+
+    //const backends = lane.productBroadcast(root_tmp.arena, bckend);
+    //_ = backends; // autofix
+
     if (lane.isRoot()) {
-        const types = hb.frontend.Types.init(
-            type_system_memory,
-            asts,
-            opts.diagnostics,
-            opts.gpa,
-        );
-        types.target = @tagName(opts.target);
-        types.colors = opts.error_colors;
         const bckend = opts.target.toMachine(&types.pool.arena, opts.gpa);
-
-        var root_tmp = utils.Arena.scrath(null);
-        defer root_tmp.deinit();
-
-        const logs = if (opts.log_stats) opts.diagnostics else null;
 
         const errored = hb.frontend.Codegen.emitReachable(
             types,
@@ -446,33 +459,68 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
                 .logs = logs,
             },
         );
+
         if (errored or types.errored) {
-            opts.logDiag("failed due to previous errors\n", .{});
             return error.Failed;
+        }
+
+        if (opts.log_stats) b: {
+            const diags = opts.diagnostics orelse break :b;
+
+            try diags.writeAll("type system:\n");
+            inline for (std.meta.fields(@TypeOf(types.store.rpr))) |field| {
+                try diags.print(
+                    "  {s:<8}: {}\n",
+                    .{ field.name, @field(types.store.rpr, field.name).meta.len },
+                );
+            }
+            try diags.print("  arena   : {}\n", .{types.pool.arena.consumed()});
+
+            inline for (std.meta.fields(@TypeOf(types.stats))) |field| {
+                try diags.print("  {s:<8}: {}\n", .{ field.name, @field(types.stats, field.name) });
+            }
+
+            var runtim_functions: usize = 0;
+            var comptime_functions: usize = 0;
+            var dead_functions: usize = 0;
+
+            for (0..types.store.rpr.Func.meta.len) |i| {
+                const f: *frontend.types.Func = types.store.rpr.Func.at(i);
+                if (f.completion.get(.@"comptime") == .compiled) comptime_functions += 1;
+                if (f.completion.get(.runtime) == .compiled) runtim_functions += 1;
+
+                if (f.completion.get(.@"comptime") == .queued and
+                    f.completion.get(.runtime) == .queued)
+                {
+                    dead_functions += 1;
+                }
+            }
+
+            try diags.print("  runtime functions:  {}\n", .{runtim_functions});
+            try diags.print("  comptime functions: {}\n", .{comptime_functions});
+            try diags.print("  dead functions:     {}\n", .{dead_functions});
+            try diags.print("  stale pool memory:  {}\n", .{types.pool.staleMemory()});
+
+            types.metrics.logStats(diags);
         }
 
         const name = try std.mem.replaceOwned(u8, root_tmp.arena.allocator(), opts.root_file, "/", "_");
 
         var anal_errors = std.ArrayList(backend.static_anal.Error){};
 
-        const optimizations = backend.Machine.OptOptions{
-            .mode = opts.optimizations,
-            .error_buf = &anal_errors,
-            .arena = root_tmp.arena,
+        const options = backend.Machine.FinalizeOptionsInterface{
+            .optimizations = .{
+                .mode = opts.optimizations,
+                .error_buf = &anal_errors,
+                .arena = root_tmp.arena,
+            },
+            .builtins = types.getBuiltins(),
+            .files = types.line_indexes,
         };
 
         if (opts.dump_asm) {
-            const out = bckend.finalizeBytes(.{
-                .gpa = types.pool.arena.allocator(),
-                .optimizations = optimizations,
-                .builtins = types.getBuiltins(),
-                .files = types.line_indexes,
-            });
-
-            if (types.dumpAnalErrors(&anal_errors)) {
-                opts.logDiag("failed due to previous errors\n", .{});
-                return error.Failed;
-            }
+            const out = bckend.finalizeBytes(types.pool.arena.allocator(), options);
+            if (types.dumpAnalErrors(&anal_errors)) return error.Failed;
 
             bckend.disasm(.{
                 .name = name,
@@ -489,17 +537,8 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
         if (opts.vendored_test and !@import("options").dont_simulate) {
             const expectations: test_utils.Expectations = .init(&asts[0], &types.pool.arena);
 
-            const out = bckend.finalizeBytes(.{
-                .gpa = types.pool.arena.allocator(),
-                .optimizations = optimizations,
-                .builtins = types.getBuiltins(),
-                .files = types.line_indexes,
-            });
-
-            if (types.dumpAnalErrors(&anal_errors)) {
-                opts.logDiag("failed due to previous errors\n", .{});
-                return error.Failed;
-            }
+            const out = bckend.finalizeBytes(types.pool.arena.allocator(), options);
+            if (types.dumpAnalErrors(&anal_errors)) return error.Failed;
 
             errdefer {
                 bckend.disasm(.{
@@ -535,75 +574,12 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
             return;
         }
 
-        if (opts.log_stats) b: {
-            const diags = opts.diagnostics orelse break :b;
-
-            try diags.writeAll("type system:\n");
-            inline for (std.meta.fields(@TypeOf(types.store.rpr))) |field| {
-                try diags.print(
-                    "  {s:<8}: {}\n",
-                    .{ field.name, @field(types.store.rpr, field.name).meta.len },
-                );
-            }
-            try diags.print("  arena   : {}\n", .{types.pool.arena.consumed()});
-
-            inline for (std.meta.fields(@TypeOf(types.stats))) |field| {
-                try diags.print("  {s:<8}: {}\n", .{ field.name, @field(types.stats, field.name) });
-            }
-
-            if (false) {
-                var runtim_functions: usize = 0;
-                var comptime_functions: usize = 0;
-                var dead_functions: usize = 0;
-
-                for (@as([]const frontend.types.Func, types.store.rpr.Func.items)) |f| {
-                    if (f.completion.get(.@"comptime") == .compiled) comptime_functions += 1;
-                    if (f.completion.get(.runtime) == .compiled) runtim_functions += 1;
-
-                    if (f.completion.get(.@"comptime") == .queued and
-                        f.completion.get(.runtime) == .queued)
-                    {
-                        dead_functions += 1;
-                    }
-                }
-
-                try diags.print("  runtime functions: {}\n", .{runtim_functions});
-                try diags.print("  comptime functions: {}\n", .{comptime_functions});
-                try diags.print("  dead functions: {}\n", .{dead_functions});
-            }
-            try diags.print("  stale pool memory: {}\n", .{types.pool.staleMemory()});
-
-            types.metrics.logStats(diags);
-        }
-
         if (opts.colors == .no_color or opts.mangle_terminal) {
-            bckend.finalize(.{
-                .output = opts.output,
-                .optimizations = optimizations,
-                .builtins = types.getBuiltins(),
-                .logs = logs,
-                .files = types.line_indexes,
-            });
-
-            if (types.dumpAnalErrors(&anal_errors)) {
-                opts.logDiag("failed due to previous errors\n", .{});
-                return error.Failed;
-            }
-
-            return;
+            bckend.finalize(opts.output, options);
+            if (types.dumpAnalErrors(&anal_errors)) return error.Failed;
         } else {
-            bckend.finalize(.{
-                .output = null,
-                .optimizations = optimizations,
-                .builtins = types.getBuiltins(),
-                .logs = logs,
-                .files = types.line_indexes,
-            });
-
-            if (types.dumpAnalErrors(&anal_errors)) {
-                opts.logDiag("failed due to previous errors\n", .{});
-                return error.Failed;
-            }
+            bckend.finalize(null, options);
+            if (types.dumpAnalErrors(&anal_errors)) return error.Failed;
 
             opts.logDiag("can't dump the executable to the stdout since it" ++
                 " supports colors (pass --mangle-terminal if you dont care)", .{});

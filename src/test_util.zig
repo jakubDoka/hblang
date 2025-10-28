@@ -238,8 +238,7 @@ pub fn testBuilder(
     };
 
     if (verbose) try header("CODEGEN", output, colors);
-    var out = gen.finalizeBytes(.{
-        .gpa = gpa,
+    var out = gen.finalizeBytes(gpa, .{
         .optimizations = optimizations,
         .builtins = types.getBuiltins(),
         .files = types.line_indexes,

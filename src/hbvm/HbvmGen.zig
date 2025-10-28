@@ -753,7 +753,7 @@ pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {
         self.mach.out.reset();
     }
 
-    if (opts.optimizations.finalize(HbvmGen, self, opts)) return;
+    if (opts.interface.optimizations.finalize(HbvmGen, self, opts.interface)) return;
 
     try root.hbvm.object.flush(self.mach.out, opts.output orelse return);
 }

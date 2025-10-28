@@ -206,9 +206,25 @@ pub const lane = opaque {
 
     pub threadlocal var ctx: ThreadCtx = undefined;
 
+    pub fn initSingleThreaded() void {
+        const global = opaque {
+            var shared = SharedCtx{};
+        };
+
+        ctx = .{
+            .lane_idx = 0,
+            .lane_count = 1,
+            .shared = &global.shared,
+        };
+    }
+
+    pub inline fn isSingleThreaded() bool {
+        return single_threaded or ctx.lane_count == 1;
+    }
+
     /// Current thread will become the thread 0
     pub fn boot(lane_count: usize, cx: anytype, comptime entry: fn (@TypeOf(cx)) void) void {
-        if (single_threaded) {
+        if (isSingleThreaded()) {
             entry(cx);
             return;
         }
@@ -243,7 +259,7 @@ pub const lane = opaque {
     }
 
     pub fn range(values_count: usize) struct { start: usize, end: usize } {
-        if (single_threaded) return .{ .start = 0, .end = values_count };
+        if (isSingleThreaded()) return .{ .start = 0, .end = values_count };
 
         const thread_idx = ctx.lane_idx;
         const thread_count = ctx.lane_count;
@@ -269,7 +285,7 @@ pub const lane = opaque {
     };
 
     pub fn sync(args: SyncCtx) void {
-        if (single_threaded) return;
+        if (isSingleThreaded()) return;
 
         if (args.spin) {
             ctx.shared.spin_barrier.sync(ctx.lane_count);
@@ -279,7 +295,7 @@ pub const lane = opaque {
     }
 
     pub inline fn isRoot() bool {
-        if (single_threaded) return true;
+        if (isSingleThreaded()) return true;
 
         return ctx.lane_idx == 0;
     }
@@ -288,13 +304,35 @@ pub const lane = opaque {
         return ctx.lane_count;
     }
 
+    pub fn productBroadcast(scratch: *Arena, to_extract: anytype) []@TypeOf(to_extract) {
+        if (isSingleThreaded()) {
+            const slot = scratch.create(@TypeOf(to_extract));
+            slot.* = to_extract;
+            return slot[0..1];
+        }
+
+        // TODO: this has one extra sync that is not needed
+        //
+        var buffer: []@TypeOf(to_extract) = undefined;
+        if (lane.isRoot()) {
+            buffer = scratch.alloc(@TypeOf(to_extract), count());
+        }
+        broadcast(&buffer, .{});
+
+        buffer[ctx.lane_idx] = to_extract;
+
+        sync(.spinning);
+
+        return buffer;
+    }
+
     pub fn broadcast(to_sync: anytype, args: struct {
         spin: bool = false,
         from: usize = 0,
 
         const spinning = @This(){ .spin = true };
     }) void {
-        if (single_threaded) return;
+        if (isSingleThreaded()) return;
 
         if (@sizeOf(@TypeOf(to_sync.*)) != 8) {
             const to_sync_generic: u64 = @intFromPtr(to_sync);
@@ -356,7 +394,7 @@ pub const lane = opaque {
         /// Restores previous grouping of the thread, should be called on all
         /// members of the group unconditionally.
         pub fn deinit(self: Group, args: SyncCtx) void {
-            if (single_threaded) return;
+            if (isSingleThreaded()) return;
             ctx = self.prev;
 
             sync(args);
@@ -368,6 +406,7 @@ pub const lane = opaque {
         ///
         /// Compared to lane.isRoot this is true for all members of the group.
         pub fn is(self: Group, id: usize) bool {
+            if (isSingleThreaded()) return true;
             if (self.group_idx == id) return true;
             return !self.alive_groups.isSet(id) and id > self.group_idx;
         }
@@ -390,18 +429,21 @@ pub const lane = opaque {
         scratch: *Arena,
         args: SyncCtx,
     ) Group {
-        var goup = Group{};
+        var group = Group{};
 
-        if (single_threaded) return goup;
+        if (isSingleThreaded()) {
+            group.alive_groups.set(0);
+            return group;
+        }
 
-        goup.prev = ctx;
+        group.prev = ctx;
 
         const projection = strategy(cx, ctx.lane_idx, ctx.lane_count);
 
         std.debug.assert(projection.group_count > 1);
         std.debug.assert(projection.group_count <= max_groups);
 
-        goup.group_idx = projection.group;
+        group.group_idx = projection.group;
 
         var new_ctxes: []?*SharedCtx = undefined;
         if (isRoot()) {
@@ -422,14 +464,14 @@ pub const lane = opaque {
         sync(.spinning);
 
         for (new_ctxes, 0..) |slt, i| {
-            if (slt != null) goup.alive_groups.set(i);
+            if (slt != null) group.alive_groups.set(i);
         }
 
         ctx.shared = new_ctxes[projection.group].?;
         ctx.lane_idx = projection.idx;
         ctx.lane_count = projection.count;
 
-        return goup;
+        return group;
     }
 
     const Projection = struct { idx: usize, count: usize, group: usize, group_count: usize };

@@ -44,7 +44,7 @@ if [ "$mode" == "m" ]; then
 
 	echo "main := fn(): void {"
 	for i in $(seq $file_count); do
-		echo "    mod$i.func$i()"
+		echo "    mod$i.main()"
 	done
 	echo "}"
 fi

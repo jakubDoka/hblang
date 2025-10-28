@@ -70,8 +70,7 @@ pub fn fuzzRun(
 
     if (errored) return error.Never;
 
-    hbgen.finalize(.{
-        .output = null,
+    hbgen.mach.finalize(null, .{
         .optimizations = .{ .mode = .release },
         .builtins = .{},
         .files = types.line_indexes,

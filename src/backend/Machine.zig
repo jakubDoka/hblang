@@ -895,7 +895,7 @@ pub const OptOptions = struct {
         optimizations: @This(),
         comptime Backend: type,
         backend: *Backend,
-        opts: FinalizeOptions,
+        opts: FinalizeOptionsInterface,
     ) bool {
         errdefer unreachable;
 
@@ -1132,17 +1132,8 @@ pub const DisasmOpts = struct {
     }
 };
 
-pub const FinalizeOptions = struct {
-    output: ?*std.io.Writer,
+pub const FinalizeOptionsInterface = struct {
     output_scratch: ?*utils.Arena = null,
-    optimizations: OptOptions,
-    builtins: Builtins,
-    logs: ?*std.Io.Writer = null,
-    files: []const utils.LineIndex,
-};
-
-pub const FinalizeBytesOptions = struct {
-    gpa: std.mem.Allocator,
     optimizations: OptOptions,
     builtins: Builtins,
     logs: ?*std.Io.Writer = null,
@@ -1262,16 +1253,20 @@ pub fn emitData(self: *Machine, opts: DataOptions) void {
     self.vtable.emitData(self, opts);
 }
 
+pub const FinalizeOptions = struct {
+    output: ?*std.io.Writer,
+    interface: FinalizeOptionsInterface,
+};
+
 /// package the final output (.eg object file)
 /// this function should also restart the state for next emmiting
-pub fn finalize(self: *Machine, opts: FinalizeOptions) void {
-    return self.vtable.finalize(self, opts);
+pub fn finalize(self: *Machine, out: ?*std.io.Writer, opts: FinalizeOptionsInterface) void {
+    return self.vtable.finalize(self, .{ .output = out, .interface = opts });
 }
 
-pub fn finalizeBytes(self: *Machine, opts: FinalizeBytesOptions) std.ArrayList(u8) {
-    var out = std.Io.Writer.Allocating.init(opts.gpa);
-    self.finalize(.{
-        .output = &out.writer,
+pub fn finalizeBytes(self: *Machine, gpa: std.mem.Allocator, opts: FinalizeOptionsInterface) std.ArrayList(u8) {
+    var out = std.Io.Writer.Allocating.init(gpa);
+    self.finalize(&out.writer, .{
         .optimizations = opts.optimizations,
         .builtins = opts.builtins,
         .logs = opts.logs,
