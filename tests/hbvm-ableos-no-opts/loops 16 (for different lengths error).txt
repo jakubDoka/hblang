@@ -23,7 +23,7 @@ main:
      addi64 $3, $254, 64
         lra $1, $0, :loops 16 (for different lengths error)
          st $1, $254, 64, 8
-       li64 $2, 8589934599
+       li64 $2, 4294967303
        li64 $1, 38
          st $1, $254, 72, 8
          st $2, $254, 80, 8

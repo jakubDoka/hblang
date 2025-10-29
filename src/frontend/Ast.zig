@@ -3,6 +3,8 @@ path: []const u8,
 source: [:0]const u8,
 items: Slice,
 root_struct: Id,
+lines: utils.LineIndex,
+index: Index,
 
 const std = @import("std");
 const root = @import("hb");
@@ -254,6 +256,7 @@ pub const InitOptions = struct {
 
 pub fn init(
     arena: *utils.Arena,
+    final_arena: *utils.Arena,
     opts: InitOptions,
 ) error{ ParsingFailed, OutOfMemory }!Ast {
     var lexer = Lexer.init(opts.code, 0);
@@ -283,7 +286,7 @@ pub fn init(
         return error.ParsingFailed;
     }
 
-    return .{
+    var ast = Ast{
         .items = items,
         .path = opts.path,
         .source = opts.code,
@@ -296,7 +299,13 @@ pub fn init(
             .captures = .{},
         }),
         .exprs = parser.store,
+        .lines = .init(opts.code, final_arena),
+        .index = undefined,
     };
+
+    ast.index = .build(&ast, ast.items, final_arena);
+
+    return ast;
 }
 
 pub const Index = struct {

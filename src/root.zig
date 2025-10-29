@@ -353,13 +353,17 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
                 return error.Failed;
             };
 
-            const ast = hb.frontend.Ast.init(&type_system_memory, .{
-                .path = opts.root_file,
-                .code = source,
-                .diagnostics = opts.diagnostics,
-                .mode = opts.parser_mode,
-                .colors = opts.error_colors,
-            }) catch |err| switch (err) {
+            const ast = hb.frontend.Ast.init(
+                &type_system_memory,
+                &type_system_memory,
+                .{
+                    .path = opts.root_file,
+                    .code = source,
+                    .diagnostics = opts.diagnostics,
+                    .mode = opts.parser_mode,
+                    .colors = opts.error_colors,
+                },
+            ) catch |err| switch (err) {
                 error.ParsingFailed => {
                     return error.Failed;
                 },
@@ -460,8 +464,10 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
         return error.Failed;
     }
 
-    const backends = lane.productBroadcast(root_tmp.arena, bckend);
-    _ = backends; // autofix
+    //const backends = lane.productBroadcast(root_tmp.arena, bckend);
+    //_ = backends; // autofix
+
+    if (!lane.isSingleThreaded()) return;
 
     if (lane.isRoot()) {
         //bckend.merge(backends[1..]);
@@ -769,7 +775,7 @@ const Loader = struct {
                 continue;
             };
 
-            var ast_res = hb.frontend.Ast.init(tmp.arena, .{
+            var ast_res = hb.frontend.Ast.init(tmp.arena, self.arena, .{
                 .current = fid,
                 .path = slot_path,
                 .code = source,

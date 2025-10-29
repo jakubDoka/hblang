@@ -353,6 +353,8 @@ fn report(self: *Parser, pos: u32, msg: []const u8, args: anytype) void {
         .exprs = undefined,
         .items = undefined,
         .root_struct = undefined,
+        .lines = undefined,
+        .index = undefined,
     };
 
     file.report(self, pos, msg, args);

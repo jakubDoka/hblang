@@ -154,7 +154,7 @@ pub fn parseExample(arena: *utils.Arena, name: []const u8, code: []const u8, out
     const asts = arena.alloc(Ast, files.items.len);
     for (asts, files.items, 0..) |*ast, fr, i| {
         if (std.mem.endsWith(u8, fr.path, ".hb") or i == 0) {
-            ast.* = try Ast.init(arena, .{
+            ast.* = try Ast.init(arena, arena, .{
                 .current = @enumFromInt(i),
                 .path = fr.path,
                 .code = fr.source,
@@ -168,6 +168,8 @@ pub fn parseExample(arena: *utils.Arena, name: []const u8, code: []const u8, out
                 .root_struct = .zeroSized(.Void),
                 .items = .{},
                 .exprs = .{},
+                .index = undefined,
+                .lines = undefined,
             };
         }
     }
@@ -281,7 +283,11 @@ pub fn testFmt(
 
     const gpa = tmp.arena.allocator();
 
-    var ast = try Ast.init(tmp.arena, .{ .path = path, .code = code, .ignore_errors = true });
+    var ast = try Ast.init(
+        tmp.arena,
+        tmp.arena,
+        .{ .path = path, .code = code, .ignore_errors = true },
+    );
 
     const ast_overhead = @as(f64, @floatFromInt(ast.exprs.store.items.len)) /
         @as(f64, @floatFromInt(ast.source.len));

@@ -191,6 +191,7 @@ pub fn build(b: *std.Build) !void {
                     .root_source_file = out,
                     .target = b.graph.host,
                     .optimize = optimize,
+                    .single_threaded = true,
                 }),
                 .filters = test_filter,
                 .use_llvm = use_llvm,

@@ -698,6 +698,7 @@ pub fn doInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
                     )[0..@intCast(self.vm.regs.get(.arg(4)))],
                     struct_ast_id,
                     captures,
+                    null,
                 ),
                 else => unreachable,
             };
@@ -1209,8 +1210,7 @@ pub fn jitExprLow(
         defer gen.bl.func.reset();
 
         const token = gen.beginBuilder(tmp.arena, .never, &.{.{ .Reg = .i64 }}, &.{}, 0, 0);
-        gen.ast = ast;
-        gen.parent_scope = scope;
+        gen.source = .init(scope, types);
         gen.name = name;
         gen.struct_ret_ptr = null;
 
@@ -1288,7 +1288,7 @@ pub fn jitExprLow(
 }
 
 pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until: usize, root_abi: Types.Abi) !void {
-    while (self.types.nextTask(self.target, pop_until, null)) |func| {
+    while (self.types.nextTask(self.target, pop_until)) |func| {
         if (!self.types.canPop(self.target, pop_until)) {
             self.abi = root_abi;
         }

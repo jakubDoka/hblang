@@ -5,7 +5,7 @@ main:
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x18], rax
 	mov qword ptr [rsp+0x20], 0x26
-	mov rax, 0x200000007
+	mov rax, 0x100000007
 	mov [rsp+0x28], rax
 	lea rsi, [rsp+0x18]
 	mov rdx, 0x18

@@ -101,7 +101,7 @@
       i64.store offset=104
       global.get 0
       i32.wrap_i64
-      i64.const 73014444048
+      i64.const 68719476752
       i64.store offset=112
       i64.const 0
       global.get 0

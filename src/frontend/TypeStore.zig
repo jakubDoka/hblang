@@ -13,6 +13,7 @@ const HbvmGen = root.hbvm.HbvmGen;
 const Vm = root.hbvm.Vm;
 const Machine = root.backend.Machine;
 const tys = root.frontend.types;
+const lane = utils.lane;
 
 pub const Abi = root.frontend.Abi;
 
@@ -406,7 +407,7 @@ pub const Id = enum(IdRepr) {
                 for (key.captures()) |cap| {
                     hash.update(std.mem.asBytes(&cap.id));
                     uuidRecur(cap.ty, types, hash);
-                    if (cap.id.has_value) {
+                    if (cap.id.has_value and !lane.isSingleThreaded()) {
                         std.debug.assert(cap.ty == .type); // TODO
                         uuidRecur(@enumFromInt(cap.value), types, hash);
                     }
@@ -1437,7 +1438,7 @@ pub fn canPop(self: *Types, target: Target, pop_limit: usize) bool {
     return self.func_work_list.get(target).items.len > pop_limit;
 }
 
-pub fn nextLocalTask(self: *Types, target: Target, pop_limit: usize) ?utils.EntId(tys.Func) {
+pub fn nextTask(self: *Types, target: Target, pop_limit: usize) ?utils.EntId(tys.Func) {
     while (self.canPop(target, pop_limit)) {
         const func = self.func_work_list.getPtr(target).pop() orelse return null;
         if (func.get(self).completion.get(target) == .compiled) continue;
@@ -1448,57 +1449,18 @@ pub fn nextLocalTask(self: *Types, target: Target, pop_limit: usize) ?utils.EntI
     return null;
 }
 
-pub fn nextTask(self: *Types, target: Target, pop_limit: usize, q: ?*root.Queue) ?utils.EntId(tys.Func) {
-    if (q) |qu| {
-        std.debug.assert(target == .runtime);
-        std.debug.assert(pop_limit == 0);
-        while (qu.dequeue()) |task| {
-            if (task.intoFunc(self)) |func| {
-                // destribute work to others
-                while (self.nextLocalTask(target, 0)) |other| {
-                    qu.enque(&.{.fronFn(self, qu.self_id, other)});
-                }
-                return func;
-            }
-        }
-    }
-
-    const work = self.nextLocalTask(target, pop_limit);
-    if (q) |qu| {
-        std.debug.assert(target == .runtime);
-        std.debug.assert(pop_limit == 0);
-        while (self.nextLocalTask(target, 0)) |other| {
-            qu.enque(&.{.fronFn(self, qu.self_id, other)});
-        }
-    }
-    return work;
-}
-
-pub fn retryNextTask(self: *Types, target: Target, pop_limit: usize, q: ?*root.Queue) ?utils.EntId(tys.Func) {
-    const qu = q orelse return null;
-
-    std.debug.assert(target == .runtime);
-    std.debug.assert(pop_limit == 0);
-
-    while (true) {
-        var task = qu.dequeueWait(5) orelse {
-            return null;
-        };
-        if (task.intoFunc(self)) |func| {
-            return func;
-        }
-    }
-}
-
 pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer, gpa: ?std.mem.Allocator) *Types {
     var arena = arena_;
     const scopes = arena.alloc(Id, source.len);
     @memset(scopes, .void);
     const slot = arena.create(Types);
+
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
     const line_indexes = arena.alloc(utils.LineIndex, source.len);
-    for (source, 0..) |fl, i| {
-        line_indexes[i] = utils.LineIndex.init(fl.source, &arena);
-    }
+    for (source, 0..) |fl, i| line_indexes[i] = fl.lines;
+
     slot.* = .{
         .func_work_list = .{ .values = @splat(.empty) },
         .global_work_list = .{ .values = .{ .empty, .empty } },
@@ -1874,6 +1836,7 @@ pub fn getScope(self: *Types, file: File) Id {
             self.getFile(file).path,
             self.getFile(file).root_struct,
             &.{},
+            self.getFile(file).index,
         );
     }
 
@@ -1945,6 +1908,7 @@ pub fn resolveFielded(
     name: []const u8,
     ast: Ast.Id,
     captures: []const Scope.Capture,
+    existing_index: ?Ast.Index,
 ) Id {
     const slot, const alloc = self.intern(tag, .{
         .loc = .{
@@ -1959,7 +1923,7 @@ pub fn resolveFielded(
     if (!slot.found_existing) {
         alloc.get(self).* = .{
             .key = alloc.get(self).key,
-            .index = Ast.Index.build(
+            .index = existing_index orelse Ast.Index.build(
                 self.getFile(file),
                 self.getFile(file).exprs.get(ast).Type.fields,
                 &self.pool.arena,

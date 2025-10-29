@@ -22,7 +22,7 @@ main:
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x28], rax
 	mov qword ptr [rsp+0x30], 0x10
-	mov rax, 0x1100000010
+	mov rax, 0x1000000010
 	mov [rsp+0x38], rax
 	lea rsi, [rsp+0x28]
 	mov rdx, 0x18

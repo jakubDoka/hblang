@@ -15,6 +15,7 @@ const Vm = root.hbvm.Vm;
 const TySlice = root.frontend.types.Slice;
 const tys = root.frontend.types;
 const Expr = Ast.Store.TagPayload;
+const lane = utils.lane;
 
 bl: Builder,
 types: *Types,
@@ -23,8 +24,7 @@ abi: Types.Abi,
 only_inference: bool = false,
 
 name: []const u8 = undefined,
-parent_scope: Scope = undefined,
-ast: *const Ast = undefined,
+source: SourceCtx = undefined,
 struct_ret_ptr: ?*Node = undefined,
 scope: std.ArrayList(ScopeEntry) = undefined,
 scope_pins: Builder.Pins = undefined,
@@ -37,6 +37,20 @@ const Func = graph.Func(Builder);
 const Node = Builder.BuildNode;
 const DataType = Builder.DataType;
 const Codegen = @This();
+
+pub const SourceCtx = struct {
+    scope: Scope,
+    file: Types.File,
+    ast: *const Ast,
+
+    pub fn init(scope: Scope, types: *Types) SourceCtx {
+        return .{
+            .scope = scope,
+            .file = scope.file(types),
+            .ast = types.getFile(scope.file(types)),
+        };
+    }
+};
 
 pub const EmitError = error{ Never, Unreachable };
 
@@ -145,28 +159,28 @@ pub const Scope = union(enum) {
     pub fn firstFunction(self: Scope, types: *Types) ?utils.EntId(tys.Func) {
         return switch (self) {
             .Perm => |p| p.firstFunction(types),
-            .Tmp => |t| t.parent_scope.firstFunction(types),
+            .Tmp => |t| t.source.scope.firstFunction(types),
         };
     }
 
     pub fn firstType(self: Scope, types: *Types) Types.Id {
         return switch (self) {
             .Perm => |p| p.firstType(types),
-            .Tmp => |t| t.parent_scope.firstType(types),
+            .Tmp => |t| t.source.scope.firstType(types),
         };
     }
 
     pub fn parent(self: Scope, types: *Types) Scope {
         return switch (self) {
             .Perm => |p| .{ .Perm = p.parent(types) },
-            .Tmp => |t| t.parent_scope,
+            .Tmp => |t| t.source.scope,
         };
     }
 
     pub fn perm(self: Scope, types: *Types) Types.Id {
         return switch (self) {
             .Perm => |p| p.perm(types),
-            .Tmp => |t| t.parent_scope.perm(types),
+            .Tmp => |t| t.source.scope.perm(types),
         };
     }
 
@@ -180,21 +194,21 @@ pub const Scope = union(enum) {
     pub fn file(self: Scope, types: *Types) Types.File {
         return switch (self) {
             .Perm => |p| p.file(types).?,
-            .Tmp => |t| t.parent_scope.file(types),
+            .Tmp => |t| t.source.file,
         };
     }
 
     pub fn index(self: Scope, types: *Types) ?*Ast.Index {
         return switch (self) {
             .Perm => |p| p.index(types),
-            .Tmp => |t| t.parent_scope.index(types),
+            .Tmp => |t| t.source.scope.index(types),
         };
     }
 
     pub fn items(self: Scope, ast: *const Ast, types: *Types) Ast.Slice {
         return switch (self) {
             .Perm => |p| p.items(ast, types),
-            .Tmp => |t| t.parent_scope.items(ast, types),
+            .Tmp => |t| t.source.scope.items(ast, types),
         };
     }
 
@@ -282,18 +296,50 @@ pub fn emitReachable(
     }
     backend.out.files = files;
 
-    {
+    const Task = struct {
+        from: *Types,
+        func: utils.EntId(tys.Func),
+
+        pub fn take(q: *lane.WorkStealingQueue(@This()), home: *Types) ?utils.EntId(tys.Func) {
+            while (q.pop()) |task| {
+                if (home == task.from) {
+                    // So we can just take this since we own the task
+                    return task.func;
+                }
+
+                const id, const new = home.cloneFrom(task.from, .init(.{ .Func = task.func }));
+                const func: *tys.Func = id.data().Func.get(home);
+
+                if (!new and func.completion.get(.runtime) == .compiled) continue;
+
+                return id.data().Func;
+            } else return null;
+        }
+    };
+
+    var queue: *lane.WorkStealingQueue(Task) = undefined;
+    if (lane.isRoot()) {
+        queue = root_tmp.arena.create(@TypeOf(queue.*));
+        queue.* = .init(root_tmp.arena, 256);
+
         var export_met = types.metrics.begin(.exports);
         defer export_met.end();
         const exports = codegen.collectExports(opts.has_main, root_tmp.arena) catch {
+            std.debug.assert(lane.isSingleThreaded()); // TODO
             return true;
         };
 
-        for (exports) |exp| types.queue(.runtime, .init(.{ .Func = exp }));
+        const tasks = root_tmp.arena.alloc(Task, exports.len - 1);
+        for (exports[1..], 0..) |exp, i| tasks[i] = .{ .func = exp, .from = types };
+
+        for (exports[0 .. 1 + queue.push(tasks)]) |exp| types.queue(.runtime, .init(.{ .Func = exp }));
     }
+    lane.broadcast(&queue, .{});
+
+    defer lane.sync(.{});
 
     var errored = false;
-    while (types.nextTask(.runtime, 0, null)) |func| {
+    while (types.nextTask(.runtime, 0) orelse Task.take(queue, types)) |func| {
         defer codegen.bl.func.reset();
 
         var build_met = types.metrics.begin(.build);
@@ -318,12 +364,19 @@ pub fn emitReachable(
             continue;
         }
 
+        var tmp = root_tmp.arena.checkpoint();
+        defer tmp.deinit();
+
+        const q = types.func_work_list.getPtr(.runtime);
+        if (q.items.len > 1) {
+            const tasks = tmp.arena.alloc(Task, q.items.len - 1);
+            for (q.items[1..], 0..) |item, i| tasks[i] = .{ .func = item, .from = types };
+            q.items.len = 1 + queue.push(tasks);
+        }
+
         var errors = std.ArrayList(static_anal.Error){};
 
         if (opts.verbose) try root.test_utils.header("CODEGEN", opts.output, opts.colors);
-
-        var tmp = root_tmp.arena.checkpoint();
-        defer tmp.deinit();
 
         const func_data = func.get(types);
 
@@ -401,12 +454,12 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
     var tmp = utils.Arena.scrath(scrath);
     defer tmp.deinit();
 
-    self.parent_scope = .{ .Perm = self.types.getScope(.root) };
-
     var exports_main = false;
     var funcs = std.ArrayList(utils.EntId(tys.Func)){};
     for (self.types.files, 0..) |fl, i| {
-        self.ast = &fl;
+        const scope = self.types.getScope(@enumFromInt(i));
+        self.source = .init(.{ .Perm = scope }, self.types);
+
         for (fl.exprs.view(fl.items)) |it| {
             const item: Ast.Id = it;
 
@@ -427,8 +480,6 @@ pub fn collectExports(self: *Codegen, has_main: bool, scrath: *utils.Arena) ![]u
             const name_string = fl.exprs.get(name).String;
             const name_str = fl.source[name_string.pos.index + 1 .. name_string.end - 1];
 
-            const scope = self.types.getScope(@enumFromInt(i));
-            self.parent_scope = .{ .Perm = scope };
             const res, const ty = try self.types.ct.eval(name_str, .{ .Perm = scope }, func, null);
 
             if (ty.data() != .FnTy) {
@@ -554,12 +605,12 @@ pub fn getEntry(self: *Codegen, file: Types.File, name: []const u8) !utils.EntId
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    self.ast = self.types.getFile(file);
-    _ = self.beginBuilder(tmp.arena, .never, &.{}, &.{}, 0, 0);
-    defer self.bl.func.reset();
-    self.parent_scope = .{ .Perm = self.types.getScope(file) };
+    self.source = .init(.{ .Perm = self.types.getScope(file) }, self.types);
     self.struct_ret_ptr = null;
     self.name = "";
+
+    _ = self.beginBuilder(tmp.arena, .never, &.{}, &.{}, 0, 0);
+    defer self.bl.func.reset();
 
     var entry_vl = try self.lookupScopeItem(.init(0), self.types.getScope(file), name);
     if (entry_vl.ty.data() != .FnTy) {
@@ -603,8 +654,10 @@ pub fn build(self: *Codegen, func_id: utils.EntId(tys.Func)) BuildError!void {
 
     var func: *tys.Func = func_id.get(self.types);
 
-    self.ast = self.types.getFile(func.key.loc.file);
-    const ast = self.ast;
+    self.source = .init(.init(.{ .Func = func_id }), self.types);
+    self.name = "";
+
+    const ast = self.source.ast;
 
     const fn_ast = ast.exprs.getTyped(.Fn, func.key.loc.ast).?;
 
@@ -644,8 +697,6 @@ pub fn build(self: *Codegen, func_id: utils.EntId(tys.Func)) BuildError!void {
         fn_ast.peak_vars,
         fn_ast.peak_loops,
     );
-    self.parent_scope = .init(.{ .Func = func_id });
-    self.name = "";
 
     self.types.checkStack(func.key.loc.file, func.key.loc.ast) catch return error.HasErrors;
 
@@ -743,7 +794,10 @@ pub fn build(self: *Codegen, func_id: utils.EntId(tys.Func)) BuildError!void {
 }
 
 pub fn src(self: *Codegen, loc: anytype) graph.Sloc {
-    return .{ .namespace = @intFromEnum(self.parent_scope.file(self.types)), .index = self.ast.posOf(loc).index };
+    return .{
+        .namespace = @intFromEnum(self.source.file),
+        .index = self.source.ast.posOf(loc).index,
+    };
 }
 
 pub fn listFileds(arena: *utils.Arena, fields: anytype) []const u8 {
@@ -756,7 +810,7 @@ pub fn listFileds(arena: *utils.Arena, fields: anytype) []const u8 {
 }
 
 pub fn emitParseString(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.String)) !Value {
-    const lit = self.ast.source[e.pos.index + 1 .. e.end - 1];
+    const lit = self.source.ast.source[e.pos.index + 1 .. e.end - 1];
 
     const data = switch (encodeString(lit, self.types.pool.arena.alloc(u8, lit.len)) catch unreachable) {
         .ok => |dt| dt,
@@ -771,7 +825,7 @@ pub fn emitParseString(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.String)
 }
 
 pub fn emitParseQuotes(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Quotes)) !Value {
-    const lit = self.ast.source[e.pos.index + 1 .. e.end - 1];
+    const lit = self.source.ast.source[e.pos.index + 1 .. e.end - 1];
 
     var char: [1]u8 = undefined;
 
@@ -793,7 +847,7 @@ pub fn emitParseQuotes(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Quotes)) 
 
 pub fn emitInteger(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Integer)) EmitError!Value {
     const shift: u8 = if (e.base == 10) 0 else 2;
-    const num_str = self.ast.tokenSrc(e.pos.index)[shift..];
+    const num_str = self.source.ast.tokenSrc(e.pos.index)[shift..];
     var parsed = std.fmt.parseInt(u64, num_str, e.base) catch |err| switch (err) {
         error.InvalidCharacter => return self.report(expr, "invalid integer literal", .{}),
         error.Overflow => return self.report(expr, "number does not fit into 64 bits", .{}),
@@ -814,7 +868,7 @@ pub fn emitFloat(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Float)) EmitE
     var ty = ctx.ty orelse .f32;
     if (!ty.isFloat()) ty = .f32;
 
-    const content = self.ast.tokenSrc(e.index);
+    const content = self.source.ast.tokenSrc(e.index);
     const sloc = self.src(expr);
 
     if (ty == .f32) {
@@ -934,9 +988,9 @@ pub fn emitCtor(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Ctor)) EmitErr
                 }
             }
 
-            for (self.ast.exprs.view(e.fields)) |field| {
+            for (self.source.ast.exprs.view(e.fields)) |field| {
                 const field_sloc = self.src(field.pos.index);
-                const fname = self.ast.tokenSrc(field.pos.index);
+                const fname = self.source.ast.tokenSrc(field.pos.index);
                 const slot, const ftype = for (fields, slots) |tf, *s| {
                     if (std.mem.eql(u8, tf.name, fname)) break .{ s, tf.ty };
                 } else {
@@ -985,8 +1039,8 @@ pub fn emitCtor(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Ctor)) EmitErr
 
             const fields = union_ty.getFields(self.types);
 
-            const field_ast = self.ast.exprs.view(e.fields)[0];
-            const fname = self.ast.tokenSrc(field_ast.pos.index);
+            const field_ast = self.source.ast.exprs.view(e.fields)[0];
+            const fname = self.source.ast.tokenSrc(field_ast.pos.index);
 
             const f, const i = for (fields, 0..) |f, i| {
                 if (std.mem.eql(u8, f.name, fname)) break .{ f, i };
@@ -1034,7 +1088,7 @@ pub fn emitTuple(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Tupl)) EmitEr
         var alignment: u64 = 1;
         const types = tmp.arena.alloc(Types.Id, e.fields.len());
 
-        for (self.ast.exprs.view(e.fields), types) |field, *ty| {
+        for (self.source.ast.exprs.view(e.fields), types) |field, *ty| {
             const field_sloc = self.src(field);
             var value = try self.emit(.{}, field);
             ty.* = value.ty;
@@ -1077,7 +1131,7 @@ pub fn emitTuple(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Tupl)) EmitEr
 
         var iter = struct_ty.offsetIter(self.types);
         iter.offset = init_offset;
-        for (self.ast.exprs.view(e.fields)) |field| {
+        for (self.source.ast.exprs.view(e.fields)) |field| {
             const field_sloc = self.src(field);
             const elem = iter.next().?;
             const ftype = elem.field.ty;
@@ -1138,7 +1192,7 @@ pub fn emitArray(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Arry)) EmitEr
 
     if (ctx.loc == null) self.bl.resizeLocal(local, self.abiCata(res_ty).size(), @intFromEnum(res_ty));
 
-    for (self.ast.exprs.view(e.fields), start..) |elem, i| {
+    for (self.source.ast.exprs.view(e.fields), start..) |elem, i| {
         const elem_sloc = self.src(elem);
         const off = self.bl.addFieldOffset(elem_sloc, local, @intCast(i * elem_ty.size(self.types)));
         var value = self.emitTyped(.{ .loc = off }, elem_ty, elem) catch |err| switch (err) {
@@ -1169,7 +1223,7 @@ pub fn emitUnOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.UnOp)) EmitErr
         .@"^" => return self.emitTyConst(self.types.makePtr(try self.resolveAnonTy(e.oper))),
         .@"?" => return self.emitTyConst(self.types.makeNullable(try self.resolveAnonTy(e.oper))),
         .@"&" => {
-            if (self.ast.exprs.getTyped(.Arry, e.oper)) |a| {
+            if (self.source.ast.exprs.getTyped(.Arry, e.oper)) |a| {
                 if (a.ty.tag() == .Void) {
                     const ty = ctx.ty orelse return self.report(expr, "empty slice need to have a known type", .{});
                     const slice = self.types.store.unwrap(ty.data(), .Slice) orelse {
@@ -1573,10 +1627,10 @@ pub fn emitParseUnwrap(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Deref))
 pub fn emitTag(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Tag)) EmitError!Value {
     const ty = ctx.ty orelse {
         return self.report(expr, "cant infer the type of the implicit access, " ++
-            " you can specify the type: <ty>.{}", .{self.ast.tokenSrc(e.index + 1)});
+            " you can specify the type: <ty>.{}", .{self.source.ast.tokenSrc(e.index + 1)});
     };
 
-    return try self.lookupScopeItem(e.*, ty, self.ast.tokenSrc(e.index + 1));
+    return try self.lookupScopeItem(e.*, ty, self.source.ast.tokenSrc(e.index + 1));
 }
 
 pub fn emitField(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Field)) EmitError!Value {
@@ -1590,10 +1644,10 @@ pub fn emitField(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Field)) EmitErr
 
     if (base.ty == .type) {
         const bsty = try self.unwrapTyConst(e.base, &base);
-        return try self.lookupScopeItem(e.field, bsty, self.ast.tokenSrc(e.field.index));
+        return try self.lookupScopeItem(e.field, bsty, self.source.ast.tokenSrc(e.field.index));
     }
 
-    const fname = self.ast.tokenSrc(e.field.index);
+    const fname = self.source.ast.tokenSrc(e.field.index);
 
     switch (base.ty.data()) {
         .Struct => |struct_ty| {
@@ -1683,7 +1737,7 @@ pub fn emitIndex(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Index)) EmitE
     if (e.subscript.tag() == .Range) {
         var base = try self.emit(.{}, e.base);
 
-        const range = self.ast.exprs.getTyped(.Range, e.subscript).?;
+        const range = self.source.ast.exprs.getTyped(.Range, e.subscript).?;
 
         const elem = base.ty.child(self.types) orelse {
             return self.report(e.base, "only pointers," ++
@@ -1866,7 +1920,7 @@ fn emitBlock(self: *Codegen, ctx: Ctx, _: Ast.Id, e: *Expr(.Block)) EmitError!Va
     const defer_scope = self.defers.items.len;
     defer self.defers.items.len = defer_scope;
 
-    for (self.ast.exprs.view(e.stmts)) |s| {
+    for (self.source.ast.exprs.view(e.stmts)) |s| {
         _ = self.emitTyped(ctx, .void, s) catch |err| switch (err) {
             error.Never => {},
             error.Unreachable => return err,
@@ -2046,7 +2100,7 @@ fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError
             try self.partialEvalConst(e.value, &tag_value);
 
         var matched_branch: ?Ast.Id = null;
-        for (self.ast.exprs.view(e.arms), 0..) |arm, i| {
+        for (self.source.ast.exprs.view(e.arms), 0..) |arm, i| {
             const idx, const body = try matcher.decomposeArm(self, i, arm) orelse continue;
 
             if (idx == value_idx) {
@@ -2068,7 +2122,7 @@ fn emitMatch(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.Match)) EmitError
         var if_stack = tmp.arena.makeArrayList(Builder.If, e.arms.len());
 
         var unreachable_count: usize = 0;
-        for (self.ast.exprs.view(e.arms), 0..) |arm, i| {
+        for (self.source.ast.exprs.view(e.arms), 0..) |arm, i| {
             const arm_sloc = self.src(arm);
             const idx, const body = try matcher.decomposeArm(self, i, arm) orelse {
                 continue;
@@ -2113,7 +2167,7 @@ fn emitLoop(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Loop)) EmitError!Val
 
     if (e.pos.flag.@"comptime") {
         self.loops.appendAssumeCapacity(.{
-            .id = if (e.label.tag() != .Void) self.ast.exprs.get(e.label).Ident.id else .invalid,
+            .id = if (e.label.tag() != .Void) self.source.ast.exprs.get(e.label).Ident.id else .invalid,
             .defer_base = self.defers.items.len,
             .kind = .{ .Comptime = .Clean },
         });
@@ -2139,7 +2193,7 @@ fn emitLoop(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Loop)) EmitError!Val
         return .{};
     } else {
         self.loops.appendAssumeCapacity(.{
-            .id = if (e.label.tag() != .Void) self.ast.exprs.get(e.label).Ident.id else .invalid,
+            .id = if (e.label.tag() != .Void) self.source.ast.exprs.get(e.label).Ident.id else .invalid,
             .defer_base = self.defers.items.len,
             .kind = .{ .Runtime = self.bl.addLoopAndBeginBody(self.src(expr)) },
         });
@@ -2174,9 +2228,9 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
 
     const iter_data = tmp.arena.alloc(ForIter, e.iters.len());
 
-    for (self.ast.exprs.view(e.iters), iter_data) |iter, *id| {
+    for (self.source.ast.exprs.view(e.iters), iter_data) |iter, *id| {
         if (iter.value.tag() == .Range) {
-            const range = self.ast.exprs.get(iter.value).Range;
+            const range = self.source.ast.exprs.get(iter.value).Range;
 
             var start = try self.emitTyped(.{}, .uint, range.start);
             const rsloc = self.src(range.start);
@@ -2251,7 +2305,7 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
     const prev_scope_height = self.scope.items.len;
     defer self.popScope(prev_scope_height);
 
-    for (self.ast.exprs.view(e.iters), iter_data) |iter, data| {
+    for (self.source.ast.exprs.view(e.iters), iter_data) |iter, data| {
         if (iter.bindings.tag() != .Ident) {
             return self.report(iter.bindings, "TODO: pattern matching", .{});
         }
@@ -2266,17 +2320,17 @@ pub fn emitFor(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.For)) !Value {
             inline .Slice => |s| s.base.ty,
         };
 
-        const ident = self.ast.exprs.get(iter.bindings).Ident;
+        const ident = self.source.ast.exprs.get(iter.bindings).Ident;
         self.scope.appendAssumeCapacity(.{
             .ty = ty,
             .name = ident.id,
-            .@"comptime" = ident.id.isComptime(self.ast.source),
+            .@"comptime" = ident.id.isComptime(self.source.ast.source),
         });
         self.scope_pins.push(&self.bl, slot);
     }
 
     self.loops.appendAssumeCapacity(.{
-        .id = if (e.label.tag() != .Void) self.ast.exprs.get(e.label).Ident.id else .invalid,
+        .id = if (e.label.tag() != .Void) self.source.ast.exprs.get(e.label).Ident.id else .invalid,
         .defer_base = self.defers.items.len,
         .kind = .{ .Runtime = self.bl.addLoopAndBeginBody(sloc) },
     });
@@ -2396,12 +2450,12 @@ fn emitUserType(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Type)) !Value {
     const args = self.bl.allocCallArgs(tmp.arena, params, &returns, null);
 
     args.arg_slots[0] = self.bl.addIntImm(sloc, .i64, @intCast(@intFromEnum(code)));
-    args.arg_slots[1] = self.emitTyConst(self.parent_scope.perm(self.types)).id.Value;
+    args.arg_slots[1] = self.emitTyConst(self.source.scope.perm(self.types)).id.Value;
     args.arg_slots[2] = self.bl.addIntImm(sloc, .i64, @intFromEnum(expr));
     args.arg_slots[3] = self.bl.addIntImm(sloc, .i64, @bitCast(@as(u64, @intFromPtr(self.name.ptr))));
     args.arg_slots[4] = self.bl.addIntImm(sloc, .i64, @bitCast(@as(u64, self.name.len)));
 
-    for (self.ast.exprs.view(e.captures), 0..) |cp, slot_idx| {
+    for (self.source.ast.exprs.view(e.captures), 0..) |cp, slot_idx| {
         var val = try self.loadIdent(cp.pos, cp.id);
         args.arg_slots[prefix + slot_idx * 2 ..][0..2].* = switch (self.abiCata(val.ty)) {
             .Impossible => unreachable, // TODO: wah
@@ -2413,7 +2467,7 @@ fn emitUserType(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Type)) !Value {
                 params[prefix + slot_idx * 2 + 1] = .{ .Reg = v };
                 break :b .{
                     self.emitTyConst(val.ty).id.Value,
-                    if (cp.id.isComptime(self.ast.source) or
+                    if (cp.id.isComptime(self.source.ast.source) or
                         self.target == .@"comptime")
                         val.getValue(sloc, self)
                     else
@@ -2441,10 +2495,10 @@ fn emitFnTy(self: *Codegen, _: Ctx, _: Ast.Id, e: *Expr(.FnTy)) !Value {
     defer tmp.deinit();
 
     const args = tmp.arena.alloc(Types.Id, e.args.len());
-    for (args, self.ast.exprs.view(e.args)) |*ty, a| {
+    for (args, self.source.ast.exprs.view(e.args)) |*ty, a| {
         var arg: Ast.Id = a;
         if (arg.tag() == .Decl) {
-            arg = self.ast.exprs.get(arg).Decl.ty;
+            arg = self.source.ast.exprs.get(arg).Decl.ty;
         }
         ty.* = try self.resolveAnonTy(arg);
     }
@@ -2458,7 +2512,7 @@ fn emitFnTy(self: *Codegen, _: Ctx, _: Ast.Id, e: *Expr(.FnTy)) !Value {
 fn computeCaptures(self: *Codegen, ast_captures: Ast.Captures, scratch: *utils.Arena) ![]Types.Scope.Capture {
     const captures = scratch.alloc(Types.Scope.Capture, ast_captures.len());
 
-    for (self.ast.exprs.view(ast_captures), captures) |cp, *slot| {
+    for (self.source.ast.exprs.view(ast_captures), captures) |cp, *slot| {
         var val = try self.loadIdent(cp.pos, cp.id);
 
         slot.* = .{
@@ -2481,8 +2535,8 @@ fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
     var return_ty: Types.Id = undefined;
     var has_anytypes = false;
     if (e.comptime_args.len() == 0) {
-        for (self.ast.exprs.view(e.args), args) |a, *arg| {
-            const argid = self.ast.exprs.get(a).Decl;
+        for (self.source.ast.exprs.view(e.args), args) |a, *arg| {
+            const argid = self.source.ast.exprs.get(a).Decl;
             const ty = argid.ty;
             arg.* = try self.resolveAnonTy(ty);
             has_anytypes = has_anytypes or arg.* == .any;
@@ -2495,11 +2549,11 @@ fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
         }
     }
 
-    const file = self.parent_scope.file(self.types);
+    const file = self.source.file;
     if (e.comptime_args.len() != 0 or has_anytypes) {
         const slot, const alloc = self.types.intern(.Template, .{
             .loc = .{
-                .scope = self.parent_scope.perm(self.types),
+                .scope = self.source.scope.perm(self.types),
                 .file = file,
                 .ast = expr,
                 .capture_len = @intCast(captures.len),
@@ -2516,7 +2570,7 @@ fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
     } else {
         const slot, const alloc = self.types.intern(.Func, .{
             .loc = .{
-                .scope = self.parent_scope.perm(self.types),
+                .scope = self.source.scope.perm(self.types),
                 .file = file,
                 .ast = expr,
                 .capture_len = @intCast(captures.len),
@@ -2527,8 +2581,8 @@ fn emitFn(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Fn)) !Value {
         const id = slot.key_ptr.*;
         errdefer _ = self.types.interner.removeContext(id, .{ .types = self.types });
         if (!slot.found_existing) {
-            if (!has_anytypes) for (self.ast.exprs.view(e.args), args) |a, *arg| {
-                const argid = self.ast.exprs.get(a).Decl;
+            if (!has_anytypes) for (self.source.ast.exprs.view(e.args), args) |a, *arg| {
+                const argid = self.source.ast.exprs.get(a).Decl;
                 const ty = argid.ty;
                 arg.* = try self.resolveAnonTy(ty);
             };
@@ -2554,7 +2608,7 @@ pub fn emit(self: *Codegen, ctx: Ctx, expr: Ast.Id) EmitError!Value {
     defer tmp.deinit();
 
     const sloc = self.src(expr);
-    const ast = self.ast;
+    const ast = self.source.ast;
     return switch (ast.exprs.get(expr)) {
         .Comment => .{},
         .Void => .{},
@@ -2659,8 +2713,9 @@ pub fn emitHandlerCall(self: *Codegen, handler: utils.EntId(tys.Func), expr: Ast
 pub fn emitSrcLoc(self: *Codegen, expr: Ast.Id) Value {
     const sloc = self.src(expr);
     const src_loc = self.bl.addLocal(sloc, self.abiCata(self.types.source_loc).size(), @intFromEnum(self.types.source_loc));
-    _ = self.emitString(.{ .loc = src_loc }, self.ast.path, expr);
-    const line, const col = Ast.lineCol(self.ast.source, self.ast.posOf(expr).index);
+    _ = self.emitString(.{ .loc = src_loc }, self.source.ast.path, expr);
+    const line, const col =
+        self.source.ast.lines.lineCol(self.source.ast.posOf(expr).index);
     comptime std.debug.assert(@import("builtin").cpu.arch.endian() == .little);
     const pcked = @as(u64, col) << 32 | @as(u64, line);
     _ = self.bl.addFieldStore(sloc, src_loc, 16, .i64, self.bl.addIntImm(sloc, .i64, @intCast(pcked)));
@@ -2722,7 +2777,7 @@ pub fn emitDecl(
         return self.report(expr, "declarations are not allowed in this context", .{});
 
     const sloc = self.src(expr);
-    const ast = self.ast;
+    const ast = self.source.ast;
     const loc = self.bl.addLocal(self.src(expr), 0, @intFromEnum(e.ty));
 
     const prev_name = self.name;
@@ -2914,7 +2969,7 @@ pub fn typeCheck(self: *Codegen, expr: Ast.Id, got: *Value, expected: Types.Id) 
 
 pub fn report(self: *Codegen, expr: anytype, fmt: []const u8, args: anytype) error{Never} {
     self.errored = true;
-    self.types.report(self.parent_scope.file(self.types), expr, fmt, args);
+    self.types.report(self.source.file, expr, fmt, args);
     return error.Never;
 }
 
@@ -3259,13 +3314,9 @@ pub fn resolveGlobalLow(
     try self.types.ct.addInProgress(vari.value, bsty);
     defer _ = self.types.ct.in_progress.pop().?;
 
-    const prev_scope = self.parent_scope;
-    defer {
-        self.parent_scope = prev_scope;
-        self.ast = self.types.getFile(prev_scope.file(self.types));
-    }
-    self.parent_scope = .{ .Perm = bsty };
-    self.ast = self.types.getFile(self.parent_scope.file(self.types));
+    const prev_scope = self.source.scope;
+    defer self.source = .init(prev_scope, self.types);
+    self.source = .init(.{ .Perm = bsty }, self.types);
 
     const ty = if (vari.ty.tag() == .Void) null else try self.resolveAnonTy(vari.ty);
 
@@ -3307,9 +3358,9 @@ pub fn resolveGlobal(
         for (path, 0..) |ps, i| {
             var vl = try self.lookupScopeItem(ps, cur, ast.tokenSrc(ps.index));
 
-            const prev_scope = self.parent_scope;
-            defer self.parent_scope = prev_scope;
-            self.parent_scope = .{ .Perm = report_scope };
+            const prev_scope = self.source.scope;
+            defer self.source = .init(prev_scope, self.types);
+            self.source = .init(.{ .Perm = report_scope }, self.types);
             report_scope = cur;
 
             if (i == path.len - 1) {
@@ -3354,7 +3405,7 @@ pub fn captureToValue(self: *Codegen, sloc: graph.Sloc, c: *const Types.Scope.Ca
 
 pub fn loadIdent(self: *Codegen, expr: Ast.Pos, id: Ast.Ident) !Value {
     const sloc = self.src(expr);
-    const ast = self.ast;
+    const ast = self.source.ast;
     for (self.scope.items, 0..) |se, i| {
         if (se.name == id) {
             if (se.ty == .never) return error.Never;
@@ -3367,7 +3418,7 @@ pub fn loadIdent(self: *Codegen, expr: Ast.Pos, id: Ast.Ident) !Value {
             return .mkp(se.ty, value);
         }
     } else {
-        var cursor = self.parent_scope;
+        var cursor = self.source.scope;
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
         var slot: Types.Scope.Capture = undefined;
@@ -3395,7 +3446,7 @@ pub fn loadIdent(self: *Codegen, expr: Ast.Pos, id: Ast.Ident) !Value {
 
 pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: Expr(.Call)) !Value {
     const sloc = self.src(expr);
-    const ast = self.ast;
+    const ast = self.source.ast;
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
@@ -3615,7 +3666,7 @@ pub fn instantiateTemplate(
     errdefer |err| self.errored = err == error.Never;
 
     const tmpl = self.types.store.get(typ.data().Template).*;
-    const ast = self.ast;
+    const ast = self.source.ast;
 
     const scope = self.types.allocTempType(tys.Template);
     defer self.types.freeTempType(tys.Template, scope);
@@ -3865,7 +3916,7 @@ fn loopControl(self: *Codegen, kind: Builder.Loop.Control, ctrl: Ast.Id) !Value 
         return self.report(ctrl, "{} outside of the loop", .{@tagName(kind)});
     }
 
-    const label = switch (self.ast.exprs.get(ctrl)) {
+    const label = switch (self.source.ast.exprs.get(ctrl)) {
         .Break => |b| b.label,
         .Continue => |b| b.label,
         .Loop => |b| b.label,
@@ -3873,7 +3924,7 @@ fn loopControl(self: *Codegen, kind: Builder.Loop.Control, ctrl: Ast.Id) !Value 
         else => unreachable,
     };
 
-    const id = if (label.tag() != .Void) self.ast.exprs.get(label).Ident.id else .invalid;
+    const id = if (label.tag() != .Void) self.source.ast.exprs.get(label).Ident.id else .invalid;
 
     var cursor = std.mem.reverseIterator(self.loops.items);
     const loop = while (cursor.nextPtr()) |p| {
@@ -3972,12 +4023,12 @@ pub fn encodeString(
 }
 
 pub fn partialEvalLow(self: *Codegen, pos: u32, value: *Value) !Value {
-    const file = self.parent_scope.file(self.types);
+    const file = self.source.file;
     var err: Comptime.PartialEvalResult = undefined;
     const res = self.types.ct.partialEval(
         .{
             .file = file,
-            .scope = self.parent_scope.perm(self.types),
+            .scope = self.source.scope.perm(self.types),
             .pos = pos,
             .error_slot = &err,
             .target = self.target,
@@ -4018,7 +4069,7 @@ pub fn partialEvalLow(self: *Codegen, pos: u32, value: *Value) !Value {
 }
 
 pub fn posOf(self: *Codegen, pos: anytype) Ast.Pos {
-    return self.types.posOf(self.parent_scope.file(self.types), pos);
+    return self.types.posOf(self.source.file, pos);
 }
 
 pub fn partialEvalConst(self: *Codegen, pos: anytype, value: *Value) !i64 {
@@ -4203,7 +4254,7 @@ fn emitDirective(
     e: *const Expr(.Directive),
 ) !Value {
     const sloc = self.src(expr);
-    const ast = self.ast;
+    const ast = self.source.ast;
 
     const name = ast.tokenSrc(e.pos.index);
     const args = ast.exprs.view(e.args);
@@ -4211,11 +4262,11 @@ fn emitDirective(
     switch (e.kind) {
         .CurrentScope => {
             try assertDirectiveArgs(self, expr, args, "");
-            return self.emitTyConst(self.parent_scope.firstType(self.types));
+            return self.emitTyConst(self.source.scope.firstType(self.types));
         },
         .ReturnType => {
             try assertDirectiveArgs(self, expr, args, "");
-            const func = self.parent_scope.firstFunction(self.types) orelse {
+            const func = self.source.scope.firstFunction(self.types) orelse {
                 return self.report(expr, "can only be used inside a function", .{});
             };
             return self.emitTyConst(func.get(self.types).ret);
@@ -4659,7 +4710,7 @@ fn emitDirective(
             const vl = try self.emitTyped(.{}, self.types.type_info, args[0]);
             return self.emitInternalEca(ctx, expr, .Type, &.{
                 self.bl.addIntImm(.none, .i64, @bitCast(self.src(expr))),
-                self.bl.addIntImm(.none, .i32, @intFromEnum(self.parent_scope.perm(self.types))),
+                self.bl.addIntImm(.none, .i32, @intFromEnum(self.source.scope.perm(self.types))),
                 self.bl.addIntImm(.none, .i32, @intFromEnum(expr)),
                 vl.id.Pointer,
             }, .type);

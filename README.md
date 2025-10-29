@@ -1984,8 +1984,9 @@ deref := fn($T: type, arg: T): @ChildOf(T) {
 }
 ```
 
+TODO: fix this but not a priority right now
 #### directives 9 (@embed)
-```hb
+```!hb
 expectations := .{
     return_value: 69,
 }

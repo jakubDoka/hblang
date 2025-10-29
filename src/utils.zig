@@ -204,17 +204,18 @@ pub const lane = opaque {
 
     pub const single_threaded = @import("builtin").single_threaded;
 
-    pub threadlocal var ctx: ThreadCtx = undefined;
+    pub var shared_ = SharedCtx{};
+    pub threadlocal var ctx: ThreadCtx = if (single_threaded) .{
+        .lane_idx = 0,
+        .lane_count = 1,
+        .shared = &shared_,
+    } else undefined;
 
     pub fn initSingleThreaded() void {
-        const global = opaque {
-            var shared = SharedCtx{};
-        };
-
         ctx = .{
             .lane_idx = 0,
             .lane_count = 1,
-            .shared = &global.shared,
+            .shared = &shared_,
         };
     }
 
@@ -371,6 +372,119 @@ pub const lane = opaque {
             return if (cursor < max) cursor else null;
         }
     };
+
+    pub fn WorkStealingQueue(comptime Elem: type) type {
+        return struct {
+            queues: if (!single_threaded) []SubQueue else void,
+
+            wait_mutex: std.Thread.Mutex = .{},
+            wait_cond: std.Thread.Condition = .{},
+            wait_count: if (!single_threaded) usize else void = if (!single_threaded) 0,
+
+            const SubQueue = struct {
+                _: void align(std.atomic.cache_line) = {},
+
+                // TODO: maybe we can go wild and make this wait free
+                tasks: std.ArrayList(Elem) = .empty,
+                lock: std.Thread.Mutex = .{},
+            };
+
+            const Self = @This();
+
+            pub fn init(scratch: *Arena, lane_cap: usize) Self {
+                errdefer unreachable;
+
+                if (isSingleThreaded()) return undefined;
+
+                const queues = scratch.alloc(SubQueue, ctx.lane_count);
+                for (queues) |*queue| queue.* = .{ .tasks = try .initCapacity(scratch.allocator(), lane_cap) };
+                return .{ .queues = queues };
+            }
+
+            pub fn push(self: *Self, task: []Elem) usize {
+                if (isSingleThreaded()) return task.len;
+
+                var pushed: usize = 0;
+                defer for (0..pushed) |_| self.wait_cond.signal();
+
+                const queue = &self.queues[lane.ctx.lane_idx];
+                queue.lock.lock();
+                defer queue.lock.unlock();
+
+                const max_push = @min(task.len, queue.tasks.capacity - queue.tasks.items.len);
+
+                queue.tasks.appendSliceAssumeCapacity(task[task.len - max_push ..]);
+
+                pushed = max_push;
+
+                return task.len - max_push;
+            }
+
+            pub fn pop(self: *Self) ?Elem {
+                if (isSingleThreaded()) return null;
+
+                const queue = &self.queues[lane.ctx.lane_idx];
+                {
+                    queue.lock.lock();
+                    defer queue.lock.unlock();
+
+                    if (queue.tasks.pop()) |task| {
+                        @branchHint(.likely);
+                        return task;
+                    }
+                }
+
+                // TODO: we should make a better access pattern, if that actually matters
+                while (true) {
+                    // steal
+                    for (self.queues) |*other| {
+                        if (other == queue) continue;
+
+                        if (other.lock.tryLock()) {
+                            defer other.lock.unlock();
+
+                            if (other.tasks.pop()) |task| {
+                                return task;
+                            }
+                        }
+                    }
+
+                    // steal harder
+                    for (self.queues) |*other| {
+                        if (other == queue) continue;
+
+                        other.lock.lock();
+                        defer other.lock.unlock();
+
+                        if (other.tasks.pop()) |task| {
+                            return task;
+                        }
+                    }
+
+                    // wait for more work, possibly terminate
+                    self.wait_mutex.lock();
+                    defer self.wait_mutex.unlock();
+
+                    self.wait_count += 1;
+
+                    if (self.wait_count == self.queues.len) {
+                        self.wait_cond.broadcast();
+                        return null;
+                    } else {
+                        self.wait_cond.wait(&self.wait_mutex);
+
+                        if (self.wait_count == self.queues.len) {
+                            return null;
+                        }
+
+                        self.wait_count -= 1;
+                    }
+                }
+            }
+        };
+    }
+
+    pub const Queue = WorkStealingQueue(u8);
 
     pub fn share(scratch: *Arena, value: anytype) *@TypeOf(value) {
         var vl: *@TypeOf(value) = undefined;
