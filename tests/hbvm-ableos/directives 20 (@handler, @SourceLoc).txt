@@ -1,6 +1,3 @@
-directives 20 (@handler, @SourceLoc):15:24: only functions can be used here, if you want to disable a handler, use `@disabled_handler()` directive
-@handler("slice_ioob", void)
-                       ^
 entry:
          st $31, $254, -8, 8
      addi64 $254, $254, -20
@@ -30,7 +27,7 @@ directives 20 (@handler, @SourceLoc).use_slice:
      addi64 $4, $254, 24
         lra $1, $0, :directives 20 (@handler, @SourceLoc)
          st $1, $254, 24, 8
-       li64 $3, 64424509458
+       li64 $3, 60129542162
        li64 $1, 36
          st $1, $254, 32, 8
          st $3, $254, 40, 8

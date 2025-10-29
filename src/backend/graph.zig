@@ -2553,7 +2553,7 @@ pub fn Func(comptime Backend: type) type {
 
             if (matcher.idealize(ctx, self, node, work)) |w| return w;
 
-            var tmp = utils.Arena.scrathFromAlloc(work.allocator);
+            var tmp = utils.Arena.scrath(work.allocator.ptr);
             defer tmp.deinit();
 
             const inps = node.inputs();

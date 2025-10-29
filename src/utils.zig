@@ -305,6 +305,10 @@ pub const lane = opaque {
         return ctx.lane_count;
     }
 
+    pub inline fn index() u16 {
+        return @intCast(ctx.lane_idx);
+    }
+
     pub fn productBroadcast(scratch: *Arena, to_extract: anytype) []@TypeOf(to_extract) {
         if (isSingleThreaded()) {
             const slot = scratch.create(@TypeOf(to_extract));
@@ -1131,13 +1135,9 @@ pub const Arena = struct {
         };
     }
 
-    pub fn scrathFromAlloc(except: ?std.mem.Allocator) Scratch {
-        for (&scratch) |*slt| if (@as(*anyopaque, slt) != if (except) |e| e.ptr else null) return slt.checkpoint();
-        unreachable;
-    }
-
-    pub fn scrath(except: ?*Arena) Scratch {
-        for (&scratch) |*slt| if (slt != except) return slt.checkpoint();
+    pub fn scrath(except: ?*anyopaque) Scratch {
+        for (&scratch) |*slt| if (@as(*anyopaque, slt) != except)
+            return slt.checkpoint();
         unreachable;
     }
 

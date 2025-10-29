@@ -2184,7 +2184,7 @@ expectations := .{
 })
 
 // ignored in this case
-@handler("slice_ioob", void)
+@handler("slice_ioob", @disabled_handler())
 
 use_slice := fn(slice: []u8): uint {
     return slice[0]

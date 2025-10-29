@@ -1,6 +1,3 @@
-directives 20 (@handler, @SourceLoc):15:24: only functions can be used here, if you want to disable a handler, use `@disabled_handler()` directive
-@handler("slice_ioob", void)
-                       ^
 directives 20 (@handler, @SourceLoc).use_slice:
 	push rbx
 	sub rsp, 0x30
@@ -12,7 +9,7 @@ directives 20 (@handler, @SourceLoc).use_slice:
 	lea rax, [0x0000000000000007]
 	mov [rsp+0x18], rax
 	mov qword ptr [rsp+0x20], 0x24
-	mov rax, 0xF00000012
+	mov rax, 0xE00000012
 	mov [rsp+0x28], rax
 	lea rsi, [rsp+0x18]
 	mov rdx, 0x18

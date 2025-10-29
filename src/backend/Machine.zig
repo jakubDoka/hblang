@@ -6,6 +6,7 @@ const Builder = @import("Builder.zig");
 const graph = @import("graph.zig");
 const static_anal = @import("static_anal.zig");
 const root = @import("hb");
+const lane = root.utils.lane;
 
 out: Data,
 vtable: *const VTable,
@@ -25,6 +26,7 @@ pub const RunError = error{
 const VTable = struct {
     emitFunc: *const fn (self: *Machine, func: *BuilderFunc, opts: EmitOptions) void,
     emitData: *const fn (self: *Machine, opts: DataOptions) void,
+    merge: *const fn (self: *Machine, others: []*Machine) bool,
     finalize: *const fn (self: *Machine, opts: FinalizeOptions) void,
     disasm: *const fn (self: *Machine, opts: DisasmOpts) void,
     run: *const fn (self: *Machine, env: RunEnv) RunError!usize,
@@ -71,9 +73,16 @@ pub const Data = struct {
     names: std.ArrayList(u8) = .empty,
     code: std.ArrayList(u8) = .empty,
     relocs: std.ArrayList(Reloc) = .empty,
+    remote_funcs: std.ArrayList(RemoteFunc) = .empty,
     inline_funcs: std.ArrayList(InlineFunc) = .empty,
     line_info: std.ArrayList(u8) = .empty,
     line_info_relocs: std.ArrayList(Reloc) = .empty,
+
+    pub const RemoteFunc = struct {
+        local_sym: u32,
+        remote_sym: u32,
+        thread: u32,
+    };
 
     pub const File = struct {
         name: []const u8,
@@ -842,7 +851,6 @@ pub const OptOptions = struct {
         const Func = graph.Func(Backend);
 
         std.debug.assert(!func.start.isDead());
-
         func.iterPeeps(ctx, Func.idealizeDead);
         std.debug.assert(!func.start.isDead());
     }
@@ -1216,33 +1224,33 @@ pub const SupportedTarget = enum {
 };
 
 pub fn init(comptime Type: type) Machine {
-    if (!@hasDecl(Type, "classes")) @compileError("expected `pub const classes = enum { ... }` to be present");
-
     const fns = struct {
+        fn getSelf(self: *Machine) *Type {
+            return @alignCast(@fieldParentPtr("mach", self));
+        }
         fn emitFunc(self: *Machine, func: *BuilderFunc, opts: EmitOptions) void {
-            const slf: *Type = @alignCast(@fieldParentPtr("mach", self));
             const fnc: *graph.Func(Type) = @ptrCast(@alignCast(func));
-            slf.emitFunc(fnc, opts);
+            getSelf(self).emitFunc(fnc, opts);
         }
         fn emitData(self: *Machine, opts: DataOptions) void {
-            const slf: *Type = @alignCast(@fieldParentPtr("mach", self));
-            slf.emitData(opts);
+            getSelf(self).emitData(opts);
+        }
+        fn merge(self: *Machine, others: []*Machine) bool {
+            std.debug.assert(@as(*anyopaque, getSelf(self)) == @as(*anyopaque, self));
+
+            return if (@hasDecl(Type, "merge")) getSelf(self).merge(@ptrCast(others)) else false;
         }
         fn finalize(self: *Machine, opts: FinalizeOptions) void {
-            const slf: *Type = @alignCast(@fieldParentPtr("mach", self));
-            return slf.finalize(opts);
+            return getSelf(self).finalize(opts);
         }
         fn disasm(self: *Machine, opts: DisasmOpts) void {
-            const slf: *Type = @alignCast(@fieldParentPtr("mach", self));
-            return slf.disasm(opts);
+            return getSelf(self).disasm(opts);
         }
         fn run(self: *Machine, env: RunEnv) !usize {
-            const slf: *Type = @alignCast(@fieldParentPtr("mach", self));
-            return slf.run(env);
+            return getSelf(self).run(env);
         }
         fn deinit(self: *Machine) void {
-            const slf: *Type = @alignCast(@fieldParentPtr("mach", self));
-            slf.deinit();
+            getSelf(self).deinit();
         }
     };
 
@@ -1251,6 +1259,7 @@ pub fn init(comptime Type: type) Machine {
         .vtable = comptime &VTable{
             .emitFunc = fns.emitFunc,
             .emitData = fns.emitData,
+            .merge = fns.merge,
             .finalize = fns.finalize,
             .disasm = fns.disasm,
             .run = fns.run,
@@ -1261,11 +1270,14 @@ pub fn init(comptime Type: type) Machine {
 
 /// generate apropriate final output for a function
 ///
-/// this also runs optimization passes
+/// this also runs optimization passes, this assumes to be callef from a single
+/// lane
 pub fn emitFunc(self: *Machine, func: *BuilderFunc, opts: EmitOptions) void {
     self.vtable.emitFunc(self, func, opts);
 }
 
+/// generate apropriate final output for a data section
+/// this assumes to be called from a single lane
 pub fn emitData(self: *Machine, opts: DataOptions) void {
     self.vtable.emitData(self, opts);
 }
@@ -1281,25 +1293,139 @@ pub fn finalize(self: *Machine, out: ?*std.io.Writer, opts: FinalizeOptionsInter
     return self.vtable.finalize(self, .{ .output = out, .interface = opts });
 }
 
+/// output the final code into a byte array, for testing purposes
 pub fn finalizeBytes(self: *Machine, gpa: std.mem.Allocator, opts: FinalizeOptionsInterface) std.ArrayList(u8) {
     var out = std.Io.Writer.Allocating.init(gpa);
-    self.finalize(&out.writer, .{
-        .optimizations = opts.optimizations,
-        .builtins = opts.builtins,
-        .logs = opts.logs,
-        .files = opts.files,
-    });
+    self.finalize(&out.writer, opts);
     return out.toArrayList();
 }
 
 /// visualize already compiled code, its best to include different colors
-/// for registers for better readability
+/// for registers for better readability, for testing purposes
 pub fn disasm(self: *Machine, opts: DisasmOpts) void {
     self.vtable.disasm(self, opts);
 }
 
+/// run the compiled code, for testing purposes
 pub fn run(self: *Machine, env: RunEnv) !usize {
     return self.vtable.run(self, env);
+}
+
+/// compine multiple machine instances (build on multiple threads) into one
+/// this fuction assumes to be called from all lanes, otherwise it will
+/// deadlock
+pub fn merge(self: *Machine, others: []*Machine) bool {
+    std.debug.assert(others[0] == self);
+    if (others.len == 1) return true;
+    return self.vtable.merge(self, others);
+}
+
+pub fn mergeOut(self: *Machine, others: []*Machine, gpa: std.mem.Allocator) void {
+    errdefer unreachable;
+
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    defer lane.sync(.{});
+
+    if (lane.isRoot()) {
+        var total_syms: usize = 0;
+        for (others) |other| {
+            total_syms += other.out.syms.items.len;
+        }
+
+        var merge_map = std.AutoHashMapUnmanaged(Data.UUID, Data.SymIdx)
+            .empty;
+        try merge_map.ensureTotalCapacity(tmp.arena.allocator(), @intCast(total_syms));
+
+        const projections = tmp.arena.alloc([]Data.SymIdx, others.len);
+        for (others, projections) |other, *p| {
+            p.* = tmp.arena.alloc(Data.SymIdx, other.out.syms.items.len);
+        }
+
+        var unique_syms: usize = 0;
+        for (others, projections) |other, local_projs| {
+            const syms = other.out.syms.items;
+
+            for (local_projs, syms) |*proj, *sym| {
+                if (sym.kind == .invalid) continue;
+
+                const entry = merge_map.getOrPutAssumeCapacity(sym.uuid);
+                if (entry.found_existing) {
+                    sym.kind = .invalid;
+                } else {
+                    entry.value_ptr.* = @enumFromInt(unique_syms);
+                    unique_syms += 1;
+                }
+                std.debug.assert(@intFromEnum(entry.value_ptr.*) < unique_syms);
+                proj.* = entry.value_ptr.*;
+            }
+        }
+
+        for (others, projections) |other, local_projs| {
+            for (other.out.remote_funcs.items) |rf| {
+                const local_sym = other.out.funcs.items[rf.local_sym];
+                const remote_sym = others[rf.thread]
+                    .out.funcs.items[rf.remote_sym];
+                const local_idx = local_projs[@intFromEnum(local_sym)];
+                projections[rf.thread][@intFromEnum(remote_sym)] = local_idx;
+            }
+        }
+
+        var unique_relocs: usize = 0;
+        var unique_code: usize = 0;
+        for (others, projections) |other, local_projs| {
+            std.debug.assert(other.out.line_info.items.len == 0); // TODO
+            std.debug.assert(other.out.line_info_relocs.items.len == 0); // TODO
+            std.debug.assert(other.out.inline_funcs.items.len == 0); // TODO
+
+            const syms = other.out.syms.items;
+            const relocs = other.out.relocs.items;
+
+            for (syms) |sym| {
+                if (sym.kind == .invalid) continue;
+
+                unique_relocs += sym.reloc_count;
+                unique_code += sym.size;
+
+                for (relocs[sym.reloc_offset..][0..sym.reloc_count]) |*rel| {
+                    rel.target = local_projs[@intFromEnum(rel.target)];
+                    if (@intFromEnum(rel.target) >= unique_syms) {
+                        utils.panic("invalid relocation target {x}", .{rel.target});
+                    }
+                }
+            }
+        }
+
+        var out = Data{};
+        try out.syms.ensureTotalCapacity(gpa, unique_syms);
+        try out.relocs.ensureTotalCapacity(gpa, unique_relocs);
+        try out.code.ensureTotalCapacity(gpa, unique_code);
+
+        for (others) |other| {
+            const syms = other.out.syms.items;
+            const relocs = other.out.relocs.items;
+            const code = other.out.code.items;
+
+            for (syms) |sym| {
+                if (sym.kind == .invalid) continue;
+
+                var new_sym = sym;
+                new_sym.offset = @intCast(out.code.items.len);
+                new_sym.reloc_offset = @intCast(out.relocs.items.len);
+
+                out.code.appendSliceAssumeCapacity(code[sym.offset..][0..sym.size]);
+                out.relocs.appendSliceAssumeCapacity(
+                    relocs[sym.reloc_offset..][0..sym.reloc_count],
+                );
+
+                out.syms.appendAssumeCapacity(sym);
+            }
+        }
+
+        self.out.deinit(gpa);
+        self.out = out;
+    }
 }
 
 /// frees the internal resources

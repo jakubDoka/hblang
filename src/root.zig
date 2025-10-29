@@ -297,32 +297,6 @@ pub const CompileOptions = struct {
     }
 };
 
-pub const Task = struct {
-    id: utils.EntId(frontend.types.Func),
-    thread: u32,
-    from: *frontend.Types,
-
-    pub fn fronFn(types: *frontend.Types, thread: usize, func: utils.EntId(frontend.types.Func)) Task {
-        return Task{ .id = func, .from = types, .thread = @intCast(thread) };
-    }
-
-    pub fn intoFunc(self: Task, dest: *frontend.Types) ?utils.EntId(frontend.types.Func) {
-        if (self.from == dest) return self.id;
-        const id, const new = dest.cloneFrom(self.from, .init(.{ .Func = self.id }));
-        if (!new) return null;
-
-        dest.remote_ids.append(dest.ct.getGpa(), .{
-            .remote = self.id,
-            .from_thread = self.thread,
-            .local = id.data().Func,
-        }) catch unreachable;
-
-        return id.data().Func;
-    }
-};
-
-pub const Queue = utils.SharedQueue(Task);
-
 pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!void {
     if (opts.help) {
         if (lane.isRoot()) if (opts.diagnostics) |d|
@@ -355,7 +329,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
 
             const ast = hb.frontend.Ast.init(
                 &type_system_memory,
-                &type_system_memory,
+                type_system_memory.allocator(),
                 .{
                     .path = opts.root_file,
                     .code = source,
@@ -381,6 +355,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
 
     const asts, const base = try Loader.loadAll(
         &type_system_memory,
+        opts.gpa,
         opts.path_projection,
         opts.root_file,
         opts.diagnostics,
@@ -464,14 +439,23 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
         return error.Failed;
     }
 
-    //const backends = lane.productBroadcast(root_tmp.arena, bckend);
-    //_ = backends; // autofix
+    const backends = lane.productBroadcast(root_tmp.arena, bckend);
 
-    if (!lane.isSingleThreaded()) return;
+    if (opts.optimizations != .debug and !lane.isSingleThreaded()) {
+        opts.logDiag("multithreaded code emmission is not" ++
+            " supported for the release optimization" ++
+            " level, use `--extra-threads 0`\n", .{});
+        return error.Failed;
+    }
+
+    if (!backends[0].merge(backends)) {
+        opts.logDiag("multithreaded code emmission is not" ++
+            " supported for the current target," ++
+            " use `--extra-threads 0`\n", .{});
+        return error.Failed;
+    }
 
     if (lane.isRoot()) {
-        //bckend.merge(backends[1..]);
-
         if (opts.log_stats) b: {
             const diags = opts.diagnostics orelse break :b;
 
@@ -628,6 +612,7 @@ pub fn makeRelative(arena: std.mem.Allocator, path: []const u8, base: []const u8
 
 const Loader = struct {
     arena: *Arena,
+    gpa: std.mem.Allocator,
     shared: *Shared,
 
     pub const Shared = struct {
@@ -686,6 +671,7 @@ const Loader = struct {
 
     pub fn loadAll(
         scratch: *Arena,
+        gpa: std.mem.Allocator,
         path_projections: std.StringHashMapUnmanaged([]const u8),
         root: []const u8,
         diagnostics: ?*std.Io.Writer,
@@ -716,7 +702,7 @@ const Loader = struct {
         }
         lane.broadcast(&shared, .{});
 
-        var self = Loader{ .arena = scratch, .shared = shared };
+        var self = Loader{ .arena = scratch, .shared = shared, .gpa = gpa };
 
         while (true) {
             var tmp = root_tmp.arena.checkpoint();
@@ -775,7 +761,7 @@ const Loader = struct {
                 continue;
             };
 
-            var ast_res = hb.frontend.Ast.init(tmp.arena, self.arena, .{
+            var ast_res = hb.frontend.Ast.init(self.arena, self.gpa, .{
                 .current = fid,
                 .path = slot_path,
                 .code = source,
@@ -786,8 +772,6 @@ const Loader = struct {
             });
 
             if (ast_res) |*ast| {
-                ast.exprs = try ast.exprs.dupe(self.arena.allocator());
-
                 self.shared.state_lock.lock();
                 self.shared.files.items[i] = ast.*;
                 self.shared.state_lock.unlock();

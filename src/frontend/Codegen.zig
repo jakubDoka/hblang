@@ -299,8 +299,13 @@ pub fn emitReachable(
     const Task = struct {
         from: *Types,
         func: utils.EntId(tys.Func),
+        thread: u32,
 
-        pub fn take(q: *lane.WorkStealingQueue(@This()), home: *Types) ?utils.EntId(tys.Func) {
+        pub fn take(
+            q: *lane.WorkStealingQueue(@This()),
+            home: *Types,
+            bckend: *root.backend.Machine,
+        ) ?utils.EntId(tys.Func) {
             while (q.pop()) |task| {
                 if (home == task.from) {
                     // So we can just take this since we own the task
@@ -311,6 +316,12 @@ pub fn emitReachable(
                 const func: *tys.Func = id.data().Func.get(home);
 
                 if (!new and func.completion.get(.runtime) == .compiled) continue;
+
+                bckend.out.remote_funcs.append(home.ct.gen.gpa, .{
+                    .local_sym = @intFromEnum(id.data().Func),
+                    .remote_sym = @intFromEnum(task.func),
+                    .thread = task.thread,
+                }) catch unreachable;
 
                 return id.data().Func;
             } else return null;
@@ -330,7 +341,11 @@ pub fn emitReachable(
         };
 
         const tasks = root_tmp.arena.alloc(Task, exports.len - 1);
-        for (exports[1..], 0..) |exp, i| tasks[i] = .{ .func = exp, .from = types };
+        for (exports[1..], 0..) |exp, i| tasks[i] = .{
+            .func = exp,
+            .from = types,
+            .thread = lane.index(),
+        };
 
         for (exports[0 .. 1 + queue.push(tasks)]) |exp| types.queue(.runtime, .init(.{ .Func = exp }));
     }
@@ -339,7 +354,7 @@ pub fn emitReachable(
     defer lane.sync(.{});
 
     var errored = false;
-    while (types.nextTask(.runtime, 0) orelse Task.take(queue, types)) |func| {
+    while (types.nextTask(.runtime, 0) orelse Task.take(queue, types, backend)) |func| {
         defer codegen.bl.func.reset();
 
         var build_met = types.metrics.begin(.build);
@@ -370,7 +385,11 @@ pub fn emitReachable(
         const q = types.func_work_list.getPtr(.runtime);
         if (q.items.len > 1) {
             const tasks = tmp.arena.alloc(Task, q.items.len - 1);
-            for (q.items[1..], 0..) |item, i| tasks[i] = .{ .func = item, .from = types };
+            for (q.items[1..], 0..) |item, i| tasks[i] = .{
+                .func = item,
+                .from = types,
+                .thread = lane.index(),
+            };
             q.items.len = 1 + queue.push(tasks);
         }
 

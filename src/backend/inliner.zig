@@ -215,7 +215,7 @@ pub fn Mixin(comptime Backend: type) type {
 
             const prev_next_id = func.next_id;
 
-            var tmp = utils.Arena.scrathFromAlloc(func_work.allocator);
+            var tmp = utils.Arena.scrath(func_work.allocator.ptr);
             defer tmp.deinit();
 
             const cloned = cloneNodes(

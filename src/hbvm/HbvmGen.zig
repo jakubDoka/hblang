@@ -8,11 +8,12 @@ const Mach = root.backend.Machine;
 const Regalloc = root.backend.Regalloc;
 const ExecHeader = root.hbvm.object.ExecHeader;
 const utils = root.utils;
+const lane = root.utils.lane;
 
 const isa = @import("isa.zig");
 
-gpa: std.mem.Allocator,
 mach: Mach = .init(HbvmGen),
+gpa: std.mem.Allocator,
 ctx: *Ctx = undefined,
 emit_global_reloc_offsets: bool = false,
 push_uninit_globals: bool = false,
@@ -731,6 +732,11 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
     if (self.emit_global_reloc_offsets) {
         self.mach.out.makeRelocOffsetsGlobal(self.mach.out.globals.items[opts.id]);
     }
+}
+
+pub fn merge(self: *HbvmGen, others: []*HbvmGen) bool {
+    self.mach.mergeOut(others, self.gpa);
+    return true;
 }
 
 pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {

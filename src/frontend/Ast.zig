@@ -255,15 +255,15 @@ pub const InitOptions = struct {
 };
 
 pub fn init(
-    arena: *utils.Arena,
     final_arena: *utils.Arena,
+    expr_gpa: std.mem.Allocator,
     opts: InitOptions,
 ) error{ ParsingFailed, OutOfMemory }!Ast {
     var lexer = Lexer.init(opts.code, 0);
 
     var parser = Parser{
         .stack_base = @frameAddress(),
-        .arena = arena,
+        .gpa = expr_gpa,
         .path = opts.path,
         .current = opts.current,
         .loader = opts.loader,
@@ -275,7 +275,7 @@ pub fn init(
     };
 
     const source_to_ast_ratio = 5;
-    try parser.store.store.ensureTotalCapacity(arena.allocator(), opts.code.len * source_to_ast_ratio);
+    try parser.store.store.ensureTotalCapacity(expr_gpa, opts.code.len * source_to_ast_ratio);
 
     const items: Slice = parser.parse() catch |err| switch (err) {
         error.UnexpectedToken, error.StackOverflow => .{},
@@ -290,7 +290,7 @@ pub fn init(
         .items = items,
         .path = opts.path,
         .source = opts.code,
-        .root_struct = try parser.store.alloc(arena.allocator(), .Type, .{
+        .root_struct = try parser.store.alloc(expr_gpa, .Type, .{
             .kind = .@"struct",
             .pos = .init(0),
             .tag = .zeroSized(.Void),

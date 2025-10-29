@@ -11,7 +11,7 @@ const Ident = Ast.Ident;
 const Id = Ast.Id;
 const Capture = Ast.Capture;
 
-arena: *utils.Arena,
+gpa: std.mem.Allocator,
 lexer: Lexer,
 cur: Lexer.Token,
 current: Types.File,
@@ -118,7 +118,7 @@ pub const Loader = struct {
 };
 
 pub fn parse(self: *Parser) !Ast.Slice {
-    var tmp = Arena.scrath(self.arena);
+    var tmp = Arena.scrath(self.gpa.ptr);
     defer tmp.deinit();
 
     var item_buf = std.ArrayList(Id){};
@@ -134,7 +134,7 @@ pub fn parse(self: *Parser) !Ast.Slice {
         }
     }
 
-    return self.store.allocSlice(Id, self.arena.allocator(), item_buf.items);
+    return self.store.allocSlice(Id, self.gpa, item_buf.items);
 }
 
 fn parseExpr(self: *Parser) Error!Id {
@@ -169,7 +169,7 @@ fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8, unordered: bool) Error!Id 
             const ty = try self.parseBinExpr(try self.parseUnit(), lover_prec, false);
             _ = self.declareExpr(acum, unordered);
 
-            return try self.store.alloc(self.arena.allocator(), .Decl, .{
+            return try self.store.alloc(self.gpa, .Decl, .{
                 .bindings = acum,
                 .ty = ty,
                 .value = if (self.tryAdvance(.@"="))
@@ -182,7 +182,7 @@ fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8, unordered: bool) Error!Id 
         if (op == .@".." and (self.cur.kind == .@"," or
             self.cur.kind == .@")" or self.cur.kind == .@"]"))
         {
-            return try self.store.alloc(self.arena.allocator(), .Range, .{
+            return try self.store.alloc(self.gpa, .Range, .{
                 .start = acum,
                 .end = .zeroSized(.Void),
             });
@@ -190,29 +190,29 @@ fn parseBinExpr(self: *Parser, lhs: Id, prevPrec: u8, unordered: bool) Error!Id 
 
         const rhs = try self.parseBinExpr(try self.parseUnit(), prec, false);
         if (op.innerOp()) |iop| {
-            acum = try self.store.alloc(self.arena.allocator(), .BinOp, .{
+            acum = try self.store.alloc(self.gpa, .BinOp, .{
                 .lhs = acum,
                 .op = .@"=",
                 .rhs = try self.store.alloc(
-                    self.arena.allocator(),
+                    self.gpa,
                     .BinOp,
                     .{ .lhs = acum, .op = iop, .rhs = rhs },
                 ),
             });
         } else if (op == .@":=") {
             _ = self.declareExpr(acum, unordered);
-            acum = try self.store.alloc(self.arena.allocator(), .Decl, .{
+            acum = try self.store.alloc(self.gpa, .Decl, .{
                 .bindings = acum,
                 .value = rhs,
             });
         } else if (op == .@"..") {
-            acum = try self.store.alloc(self.arena.allocator(), .Range, .{
+            acum = try self.store.alloc(self.gpa, .Range, .{
                 .start = acum,
                 .end = rhs,
             });
         } else {
             acum = try self.store.alloc(
-                self.arena.allocator(),
+                self.gpa,
                 .BinOp,
                 .{ .lhs = acum, .op = op, .rhs = rhs },
             );
@@ -249,7 +249,7 @@ fn declareExpr(self: *Parser, id: Id, unordered: bool) void {
         var sym = self.active_syms.items[slot.key_ptr.*];
         sym.shadows = @intCast(slot.key_ptr.*);
         sym.declared = true;
-        self.active_syms.append(self.arena.allocator(), sym) catch unreachable;
+        self.active_syms.append(self.gpa, sym) catch unreachable;
 
         return;
     } else {
@@ -281,7 +281,7 @@ fn parseUnit(self: *Parser) Error!Id {
         return base;
     }
 
-    while (true) base = try self.store.allocDyn(self.arena.allocator(), switch (self.cur.kind) {
+    while (true) base = try self.store.allocDyn(self.gpa, switch (self.cur.kind) {
         .@"." => b: {
             _ = self.advance();
             break :b .{ .Field = .{
@@ -305,7 +305,7 @@ fn parseUnit(self: *Parser) Error!Id {
                 _ = try self.expectAdvance(.@"]");
                 break :b if (is_range)
                     try self.store.allocDyn(
-                        self.arena.allocator(),
+                        self.gpa,
                         .{ .Range = .{ .start = start, .end = end } },
                     )
                 else
@@ -426,7 +426,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
     var token = self.advance();
     const scope_frame = self.active_syms.items.len;
 
-    return try self.store.allocDyn(self.arena.allocator(), switch (token.kind.expand()) {
+    return try self.store.allocDyn(self.gpa, switch (token.kind.expand()) {
         .Comment => .{ .Comment = .init(token.pos) },
         ._ => .{ .Wildcard = .init(token.pos) },
         .idk => .{ .Idk = .init(token.pos) },
@@ -470,16 +470,16 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
 
             const comptime_args = try self.store.allocSlice(
                 Ident,
-                self.arena.allocator(),
+                self.gpa,
                 self.comptime_idents.items[comptime_arg_start..comptime_idents_end],
             );
 
-            var tmp = utils.Arena.scrath(self.arena);
+            var tmp = utils.Arena.scrath(self.gpa.ptr);
             defer tmp.deinit();
 
             const captures = try self.store.allocSlice(
                 Capture,
-                self.arena.allocator(),
+                self.gpa,
                 self.popCaptures(capture_scope, tmp.arena),
             );
             std.debug.assert(comptime_args.end == captures.start);
@@ -561,7 +561,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
             const fields = try self.parseList(null, .@";", .@"}", parseUnorderedExpr);
             self.finalizeVariables(scope_frame);
 
-            var tmp = utils.Arena.scrath(self.arena);
+            var tmp = utils.Arena.scrath(self.gpa.ptr);
             defer tmp.deinit();
 
             const captures = self.popCaptures(capture_scope, tmp.arena);
@@ -569,7 +569,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 .fields = fields,
                 .tag = tag,
                 .alignment = alignment,
-                .captures = try self.store.allocSlice(Capture, self.arena.allocator(), captures),
+                .captures = try self.store.allocSlice(Capture, self.gpa, captures),
                 .pos = .{ .index = @intCast(token.pos), .flag = self.list_pos.flag },
                 .kind = token.kind,
             } };
@@ -602,7 +602,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 defer self.in_if_or_while = prev_in_if_or_while;
                 self.in_if_or_while = false;
 
-                var tmp = Arena.scrath(self.arena);
+                var tmp = Arena.scrath(self.gpa.ptr);
                 defer tmp.deinit();
                 var buf = std.ArrayList(Id){};
                 while (!self.tryAdvance(.@"}")) {
@@ -610,7 +610,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                     _ = self.tryAdvance(.@";");
                 }
                 self.finalizeVariables(scope_frame);
-                break :b try self.store.allocSlice(Id, self.arena.allocator(), buf.items);
+                break :b try self.store.allocSlice(Id, self.gpa, buf.items);
             },
         } },
         .@"(" => {
@@ -707,7 +707,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                 .pos = pos,
                 .label = label,
                 .iters = b: {
-                    var tmp = Arena.scrath(self.arena);
+                    var tmp = Arena.scrath(self.gpa.ptr);
                     defer tmp.deinit();
 
                     var buf = std.ArrayList(Ast.Decl){};
@@ -721,7 +721,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                         try buf.append(tmp.arena.allocator(), vl.Decl.*);
                         if (!self.tryAdvance(.@",")) break;
                     }
-                    break :b try self.store.allocSlice(Ast.Decl, self.arena.allocator(), buf.items);
+                    break :b try self.store.allocSlice(Ast.Decl, self.gpa, buf.items);
                 },
                 .body = body: {
                     self.func_stats.loop_depth += 1;
@@ -740,7 +740,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
 
             const label: Ast.Id = try self.parseLabel();
 
-            const body = try self.store.alloc(self.arena.allocator(), .If, .{
+            const body = try self.store.alloc(self.gpa, .If, .{
                 .pos = pos,
                 .cond = b: {
                     const prev_in_if_or_while = self.in_if_or_while;
@@ -756,7 +756,7 @@ fn parseUnitWithoutTail(self: *Parser) Error!Id {
                     defer self.finalizeVariables(scope_frame);
                     break :b try self.parseExpr();
                 },
-                .else_ = try self.store.alloc(self.arena.allocator(), .Break, .{
+                .else_ = try self.store.alloc(self.gpa, .Break, .{
                     .pos = pos,
                     .label = label,
                 }),
@@ -894,7 +894,7 @@ fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
     if (token.kind == .@"$") repr = repr[1..];
 
     const slot = self.active_sym_table.getOrPutContextAdapted(
-        self.arena.allocator(),
+        self.gpa,
         repr,
         InsertCtx{ .syms = self.active_syms.items },
         .{ .syms = self.active_syms.items },
@@ -910,7 +910,7 @@ fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
             }
 
             try self.captures.append(
-                self.arena.allocator(),
+                self.gpa,
                 .{ .inner = .{ .id = s.id, .pos = .{
                     .index = @intCast(token.pos),
                     .flag = .{ .@"comptime" = s.id.isComptime(self.lexer.source) },
@@ -918,20 +918,20 @@ fn resolveIdent(self: *Parser, token: Lexer.Token) !Id {
             );
         }
 
-        return try self.store.alloc(self.arena.allocator(), .Ident, .{
+        return try self.store.alloc(self.gpa, .Ident, .{
             .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind == .@"$" } },
             .id = s.id,
         });
     }
 
     const id = Ident.init(token);
-    const alloc = try self.store.alloc(self.arena.allocator(), .Ident, .{
+    const alloc = try self.store.alloc(self.gpa, .Ident, .{
         .pos = .{ .index = @intCast(token.pos), .flag = .{ .@"comptime" = token.kind == .@"$" } },
         .id = id,
     });
-    if (token.kind == .@"$") try self.comptime_idents.append(self.arena.allocator(), id);
+    if (token.kind == .@"$") try self.comptime_idents.append(self.gpa, id);
     slot.key_ptr.* = @intCast(self.active_syms.items.len);
-    try self.active_syms.append(self.arena.allocator(), .{
+    try self.active_syms.append(self.gpa, .{
         .name = repr,
         .id = id,
         .boundary_depth = self.boundary_depth,
@@ -957,7 +957,7 @@ fn parseListTyped(
     comptime Elem: type,
     comptime parser: fn (*Parser) Error!Elem,
 ) Error!utils.EnumSlice(Elem) {
-    var tmp = Arena.scrath(self.arena);
+    var tmp = Arena.scrath(self.gpa.ptr);
     defer tmp.deinit();
 
     const pos = self.cur.pos;
@@ -969,7 +969,7 @@ fn parseListTyped(
         if (sep) |s| indented = self.tryAdvance(s);
     }
     self.list_pos = .{ .index = @intCast(pos), .flag = .{ .indented = indented } };
-    return try self.store.allocSlice(Elem, self.arena.allocator(), buf.items);
+    return try self.store.allocSlice(Elem, self.gpa, buf.items);
 }
 
 fn parseMatchArm(self: *Parser) Error!Ast.MatchArm {
