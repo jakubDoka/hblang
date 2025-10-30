@@ -190,7 +190,7 @@ pub const Data = struct {
 
     pub fn getInlineFunc(self: *Data, comptime Backend: type, at: u32, force_inline: bool) ?*graph.Func(Backend) {
         if (self.funcs.items.len <= at or self.funcs.items[at] == .invalid) return null;
-        const sym = &self.syms.items[@intFromEnum(self.funcs.items[at])];
+        const sym = &self.syms.items[at];
         if (!sym.is_inline and !force_inline) return null;
         return if (sym.inline_func != Sym.no_inline_func)
             @ptrCast(&self.inline_funcs.items[sym.inline_func])
@@ -976,18 +976,6 @@ pub const OptOptions = struct {
             // hanlde stacked inlines as well
             //
 
-            const sym_to_idx = tmp.arena.alloc(u32, bout.syms.items.len);
-
-            for (bout.funcs.items, 0..) |sym, i| {
-                if (sym == .invalid) continue;
-                sym_to_idx[@intFromEnum(sym)] = @intCast(i);
-            }
-
-            for (bout.globals.items, 0..) |sym, i| {
-                if (sym == .invalid) continue;
-                sym_to_idx[@intFromEnum(sym)] = @intCast(i);
-            }
-
             // might be faster like this
 
             const funcs: []graph.Func(Backend) = @ptrCast(bout.inline_funcs.items);
@@ -1000,9 +988,38 @@ pub const OptOptions = struct {
             var gcm_waste: usize = 0;
             var total_waste: usize = 0;
             var regalloc = root.backend.Regalloc{};
-            const reg_alloc_results = tmp.arena.alloc([]u16, bout.inline_funcs.items.len);
 
-            for (funcs) |*sym| {
+            const Ctx = struct {
+                stage_1_queue: lane.FixedQueue = .{},
+                stage_2_queue: lane.FixedQueue = .{},
+                stage_3_queue: lane.FixedQueue = .{},
+
+                reg_alloc_results: [][]u16,
+            };
+
+            var ctx: *Ctx = undefined;
+            if (lane.isRoot()) {
+                ctx = tmp.arena.create(Ctx);
+                ctx.* = Ctx{
+                    .reg_alloc_results = tmp.arena.alloc(
+                        []u16,
+                        bout.inline_funcs.items.len,
+                    ),
+                };
+            }
+            lane.broadcast(&ctx, .{});
+
+            for (bout.syms.items) |sym| {
+                std.debug.assert(!sym.is_inline); // TODO
+            }
+
+            var arena = utils.Arena.init(1024 * 1024 * 1024);
+
+            while (ctx.stage_2_queue.next(funcs.len)) |i| {
+                const sym = &funcs[i];
+
+                sym.arena.child_allocator = arena.allocator();
+
                 emit_waste += sym.waste;
 
                 var dead = metrics.begin(.dead);
@@ -1018,7 +1035,12 @@ pub const OptOptions = struct {
                 mem2reg_waste += sym.waste;
             }
 
-            for (funcs) |*sym| {
+            lane.sync(.{});
+
+            while (ctx.stage_2_queue.next(funcs.len)) |i| {
+                const sym = &funcs[i];
+                sym.arena.child_allocator = arena.allocator();
+
                 var generic = metrics.begin(.generic);
                 idealizeGeneric(Backend, backend, sym, false);
                 generic.end();
@@ -1028,7 +1050,14 @@ pub const OptOptions = struct {
                 generic_waste += sym.waste;
             }
 
-            for (funcs, reg_alloc_results) |*sym, *res| {
+            lane.sync(.{});
+
+            while (ctx.stage_3_queue.next(funcs.len)) |i| {
+                const sym = &funcs[i];
+                const res = &ctx.reg_alloc_results[i];
+
+                sym.arena.child_allocator = arena.allocator();
+
                 var mach = metrics.begin(.mach);
                 idealizeMach(Backend, backend, sym);
                 mach.end();
@@ -1053,81 +1082,119 @@ pub const OptOptions = struct {
                 total_waste += sym.waste;
             }
 
-            for (sym_to_idx, 0..) |i, syn_idx| {
-                const sym = &bout.syms.items[syn_idx];
+            lane.sync(.{});
 
-                switch (sym.kind) {
-                    .func => {
-                        if (sym.linkage == .imported) continue;
-                        const func = &bout.inline_funcs.items[sym.inline_func];
-                        backend.emitFunc(@ptrCast(func), .{
-                            .name = bout.lookupName(sym.name),
-                            .id = @intCast(i),
-                            .linkage = sym.linkage,
-                            .is_inline = false,
-                            .optimizations = .{ .allocs = reg_alloc_results[sym.inline_func] },
-                            .builtins = opts.builtins,
-                            .files = opts.files,
-                            .uuid = sym.uuid,
-                        });
-                    },
-                    .data, .prealloc, .tls_prealloc, .invalid => {},
-                }
-            }
+            if (lane.isRoot()) {
+                // TODO: this is needless, we should basically not care about these ids
+                // and not use them
+                {
+                    var func_count: usize = 0;
+                    var global_count: usize = 0;
+                    for (bout.syms.items) |sym| {
+                        if (sym.kind == .func) {
+                            func_count += 1;
+                        } else {
+                            global_count += 1;
+                        }
+                    }
 
-            if (optimizations.error_buf) |eb| if (eb.items.len != 0) return true;
+                    var index: usize = 0;
+                    try bout.funcs.resize(backend.gpa, func_count);
+                    for (bout.syms.items, 0..) |sym, i| {
+                        if (sym.kind == .func) {
+                            bout.funcs.items[index] = @enumFromInt(i);
+                            index += 1;
+                        }
+                    }
 
-            if (opts.logs) |d| {
-                try d.writeAll("backend:\n");
-
-                inline for (std.meta.fields(Data)[3..]) |f| {
-                    try d.print("  {s:<12}: {}\n", .{ f.name, @field(bout, f.name).items.len });
-                }
-
-                try d.print("  emit waste   :  {}\n", .{emit_waste});
-                try d.print("  dead waste   : +{}\n", .{dead_waste - emit_waste});
-                try d.print("  mem2reg waste: +{}\n", .{mem2reg_waste - dead_waste});
-                try d.print("  generic waste: +{}\n", .{generic_waste - mem2reg_waste});
-                try d.print("  mach waste   : +{}\n", .{mach_waste -| generic_waste});
-                try d.print("  gcm waste    : +{}\n", .{gcm_waste -| mach_waste});
-                try d.print("  waste        : +{}\n", .{total_waste -| gcm_waste});
-            }
-
-            if (@hasDecl(Backend, "preLinkHook")) backend.preLinkHook();
-
-            var dedup = metrics.begin(.dedup);
-            bout.deduplicate();
-            dedup.end();
-
-            var elim = metrics.begin(.elim);
-            bout.eliminateDeadCode();
-            elim.end();
-
-            if (opts.logs) |d| {
-                var alive_syms: usize = 0;
-                var alive_code: usize = 0;
-                for (bout.syms.items) |s| {
-                    if (s.kind != .invalid) {
-                        alive_syms += 1;
-                        alive_code += s.size;
+                    index = 0;
+                    try bout.globals.resize(backend.gpa, global_count);
+                    for (bout.syms.items, 0..) |sym, i| {
+                        if (sym.kind != .func) {
+                            bout.globals.items[index] = @enumFromInt(i);
+                            index += 1;
+                        }
                     }
                 }
 
-                try d.print("  dead syms   : {}\n", .{bout.syms.items.len - alive_syms});
-                try d.print("  dead code   : {}\n", .{bout.code.items.len - alive_code});
-
-                try d.writeAll("regalloc:\n");
-                inline for (std.meta.fields(@TypeOf(regalloc))) |f| {
-                    try d.print("  {s:<12}: {}\n", .{ f.name, @field(regalloc, f.name) });
+                var index: usize = 0;
+                for (bout.syms.items) |*sym| {
+                    switch (sym.kind) {
+                        .func => {
+                            if (sym.linkage == .imported) continue;
+                            const func = &bout.inline_funcs.items[sym.inline_func];
+                            backend.emitFunc(@ptrCast(func), .{
+                                .name = bout.lookupName(sym.name),
+                                .id = @intCast(index),
+                                .linkage = sym.linkage,
+                                .is_inline = false,
+                                .optimizations = .{ .allocs = ctx.reg_alloc_results[sym.inline_func] },
+                                .builtins = opts.builtins,
+                                .files = opts.files,
+                                .uuid = sym.uuid,
+                            });
+                            index += 1;
+                        },
+                        .data, .prealloc, .tls_prealloc, .invalid => {},
+                    }
                 }
 
-                metrics.logStats(d);
+                if (optimizations.error_buf) |eb| if (eb.items.len != 0) return true;
+
+                if (opts.logs) |d| {
+                    try d.writeAll("backend:\n");
+
+                    inline for (std.meta.fields(Data)[3..]) |f| {
+                        try d.print("  {s:<12}: {}\n", .{ f.name, @field(bout, f.name).items.len });
+                    }
+
+                    try d.print("  emit waste   :  {}\n", .{emit_waste});
+                    try d.print("  dead waste   : +{}\n", .{dead_waste - emit_waste});
+                    try d.print("  mem2reg waste: +{}\n", .{mem2reg_waste - dead_waste});
+                    try d.print("  generic waste: +{}\n", .{generic_waste - mem2reg_waste});
+                    try d.print("  mach waste   : +{}\n", .{mach_waste -| generic_waste});
+                    try d.print("  gcm waste    : +{}\n", .{gcm_waste -| mach_waste});
+                    try d.print("  waste        : +{}\n", .{total_waste -| gcm_waste});
+                }
+
+                if (@hasDecl(Backend, "preLinkHook")) backend.preLinkHook();
+
+                var dedup = metrics.begin(.dedup);
+                bout.deduplicate();
+                dedup.end();
+
+                var elim = metrics.begin(.elim);
+                bout.eliminateDeadCode();
+                elim.end();
+
+                if (opts.logs) |d| {
+                    var alive_syms: usize = 0;
+                    var alive_code: usize = 0;
+                    for (bout.syms.items) |s| {
+                        if (s.kind != .invalid) {
+                            alive_syms += 1;
+                            alive_code += s.size;
+                        }
+                    }
+
+                    try d.print("  dead syms   : {}\n", .{bout.syms.items.len - alive_syms});
+                    try d.print("  dead code   : {}\n", .{bout.code.items.len - alive_code});
+
+                    try d.writeAll("regalloc:\n");
+                    inline for (std.meta.fields(@TypeOf(regalloc))) |f| {
+                        try d.print("  {s:<12}: {}\n", .{ f.name, @field(regalloc, f.name) });
+                    }
+
+                    metrics.logStats(d);
+                }
+            } else {
+                if (@hasDecl(Backend, "preLinkHook")) backend.preLinkHook();
             }
-        } else {
-            if (@hasDecl(Backend, "preLinkHook")) backend.preLinkHook();
         }
 
         if (optimizations.error_buf) |eb| if (eb.items.len != 0) return true;
+
+        lane.sync(.{});
 
         return false;
     }
@@ -1582,6 +1649,8 @@ pub fn mergeOut(
         self.out.deinit(gpa);
         self.out = ctx.out;
     }
+
+    lane.sync(.{});
 }
 
 /// frees the internal resources

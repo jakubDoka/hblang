@@ -1219,7 +1219,9 @@ pub const Arena = struct {
     pub fn allocRaw(self: *Arena, alignment: usize, size: usize) [*]u8 {
         self.pos = @ptrFromInt(std.mem.alignForward(usize, @intFromPtr(self.pos), alignment));
         self.pos += size;
-        std.debug.assert(@intFromPtr(self.end) >= @intFromPtr(self.pos));
+        if (@intFromPtr(self.end) < @intFromPtr(self.pos)) {
+            @panic("out of memory");
+        }
         return self.pos - size;
     }
 

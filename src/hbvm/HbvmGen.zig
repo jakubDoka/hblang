@@ -738,12 +738,14 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
     }
 }
 
-pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {
+pub fn finalize(_: *HbvmGen, opts: Mach.FinalizeOptions) void {
     errdefer unreachable;
 
     defer {
         opts.interface.others[lane.index()].out.reset();
     }
+
+    const self: *HbvmGen = @ptrCast(opts.interface.others[0]);
 
     self.mach.mergeOut(
         opts.interface.others,
@@ -751,9 +753,9 @@ pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {
         opts.interface.optimizations.mode,
     );
 
-    if (lane.isRoot()) {
-        if (opts.interface.optimizations.finalize(HbvmGen, self, opts.interface)) return;
+    if (opts.interface.optimizations.finalize(HbvmGen, self, opts.interface)) return;
 
+    if (lane.isRoot()) {
         try root.hbvm.object.flush(self.mach.out, opts.output orelse return);
     }
 }
