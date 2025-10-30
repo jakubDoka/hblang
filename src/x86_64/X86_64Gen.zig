@@ -678,16 +678,17 @@ pub fn regMask(
     }
 
     if (node.kind == .Call) {
-        std.debug.assert(idx >= 2);
+        const dep_offset = node.dataDepOffset();
+        std.debug.assert(idx >= dep_offset);
         const extra = node.extra(.Call);
         if (extra.id == syscall) {
-            return singleReg(Reg.system_v.syscall_args[idx - 2], arena);
+            return singleReg(Reg.system_v.syscall_args[idx - dep_offset], arena);
         } else {
-            if (extra.id == graph.indirect_call and idx == 2) {
+            if (extra.id == graph.indirect_call and idx == dep_offset) {
                 return readIntMask(arena);
             }
 
-            const ix = idx - 2 - @intFromBool(extra.id == graph.indirect_call);
+            const ix = idx - dep_offset - @intFromBool(extra.id == graph.indirect_call);
             const params = @as(graph.Signature, extra.signature).params();
             if (params[ix] == .Stack) return readIntMask(arena);
             var reg_idx: usize = 0;

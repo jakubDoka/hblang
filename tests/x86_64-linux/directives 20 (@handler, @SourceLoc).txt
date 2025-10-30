@@ -33,9 +33,9 @@ memcpy:
 	jz :0
 	mov al, [rsi]
 	mov [rdi], al
-	dec rdx
 	inc rsi
 	inc rdi
+	dec rdx
 	jmp :1
 0:	ret
 _start:

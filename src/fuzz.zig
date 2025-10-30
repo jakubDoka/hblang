@@ -74,5 +74,6 @@ pub fn fuzzRun(
         .optimizations = .{ .mode = .release },
         .builtins = .{},
         .files = types.line_indexes,
+        .others = &.{},
     });
 }

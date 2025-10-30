@@ -341,7 +341,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
                 error.ParsingFailed => {
                     return error.Failed;
                 },
-                else => |e| return e,
+                else => unreachable,
             };
 
             if (opts.output) |o| {
@@ -441,20 +441,6 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
 
     const backends = lane.productBroadcast(root_tmp.arena, bckend);
 
-    if (opts.optimizations != .debug and !lane.isSingleThreaded()) {
-        opts.logDiag("multithreaded code emmission is not" ++
-            " supported for the release optimization" ++
-            " level, use `--extra-threads 0`\n", .{});
-        return error.Failed;
-    }
-
-    if (!backends[0].merge(backends)) {
-        opts.logDiag("multithreaded code emmission is not" ++
-            " supported for the current target," ++
-            " use `--extra-threads 0`\n", .{});
-        return error.Failed;
-    }
-
     if (lane.isRoot()) {
         if (opts.log_stats) b: {
             const diags = opts.diagnostics orelse break :b;
@@ -495,25 +481,34 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
 
             types.metrics.logStats(diags);
         }
+    }
 
-        const name = try std.mem.replaceOwned(u8, root_tmp.arena.allocator(), opts.root_file, "/", "_");
+    var anal_errors = std.ArrayList(backend.static_anal.Error){};
 
-        var anal_errors = std.ArrayList(backend.static_anal.Error){};
+    const options = backend.Machine.FinalizeOptionsInterface{
+        .optimizations = .{
+            .mode = opts.optimizations,
+            .error_buf = &anal_errors,
+            .arena = root_tmp.arena,
+        },
+        .builtins = types.getBuiltins(),
+        .files = types.line_indexes,
+        .others = backends,
+    };
 
-        const options = backend.Machine.FinalizeOptionsInterface{
-            .optimizations = .{
-                .mode = opts.optimizations,
-                .error_buf = &anal_errors,
-                .arena = root_tmp.arena,
-            },
-            .builtins = types.getBuiltins(),
-            .files = types.line_indexes,
-        };
+    const name = try std.mem.replaceOwned(
+        u8,
+        root_tmp.arena.allocator(),
+        opts.root_file,
+        "/",
+        "_",
+    );
 
-        if (opts.dump_asm) {
-            const out = bckend.finalizeBytes(types.pool.arena.allocator(), options);
-            if (types.dumpAnalErrors(&anal_errors)) return error.Failed;
+    if (opts.dump_asm) {
+        const out = bckend.finalizeBytes(types.pool.arena.allocator(), options);
+        if (types.dumpAnalErrors(&anal_errors)) return error.Failed;
 
+        if (lane.isRoot()) {
             bckend.disasm(.{
                 .name = name,
                 .bin = out.items,
@@ -522,16 +517,18 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
             });
 
             if (opts.output) |o| try o.flush();
-
-            return;
         }
 
-        if (opts.vendored_test and !@import("options").dont_simulate) {
-            const expectations: test_utils.Expectations = .init(&asts[0], &types.pool.arena);
+        return;
+    }
 
-            const out = bckend.finalizeBytes(types.pool.arena.allocator(), options);
-            if (types.dumpAnalErrors(&anal_errors)) return error.Failed;
+    if (opts.vendored_test and !@import("options").dont_simulate) {
+        const expectations: test_utils.Expectations = .init(&asts[0], &types.pool.arena);
 
+        const out = bckend.finalizeBytes(types.pool.arena.allocator(), options);
+        if (types.dumpAnalErrors(&anal_errors)) return error.Failed;
+
+        if (lane.isRoot()) {
             errdefer {
                 bckend.disasm(.{
                     .name = name,
@@ -562,21 +559,21 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
                 .out = opts.output,
                 .colors = .no_color,
             });
-
-            return;
         }
 
-        if (opts.colors == .no_color or opts.mangle_terminal) {
-            bckend.finalize(opts.output, options);
-            if (types.dumpAnalErrors(&anal_errors)) return error.Failed;
-        } else {
-            bckend.finalize(null, options);
-            if (types.dumpAnalErrors(&anal_errors)) return error.Failed;
+        return;
+    }
 
-            opts.logDiag("can't dump the executable to the stdout since it" ++
-                " supports colors (pass --mangle-terminal if you dont care)", .{});
-            return error.Failed;
-        }
+    if (opts.colors == .no_color or opts.mangle_terminal) {
+        bckend.finalize(opts.output, options);
+        if (types.dumpAnalErrors(&anal_errors)) return error.Failed;
+    } else {
+        bckend.finalize(null, options);
+        if (types.dumpAnalErrors(&anal_errors)) return error.Failed;
+
+        opts.logDiag("can't dump the executable to the stdout since it" ++
+            " supports colors (pass --mangle-terminal if you dont care)", .{});
+        return error.Failed;
     }
 }
 
@@ -787,11 +784,13 @@ const Loader = struct {
             failed = self.shared.failed.load(.unordered);
         }
 
-        const base = self.shared.base;
-        const files = self.shared.files.items;
         lane.sync(.{});
 
+        const base = self.shared.base;
+        const files = self.shared.files.items;
         if (self.shared.failed.raw) return null;
+
+        lane.sync(.spinning);
 
         return .{ files, base };
     }

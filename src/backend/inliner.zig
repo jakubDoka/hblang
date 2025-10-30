@@ -242,8 +242,15 @@ pub fn Mixin(comptime Backend: type) type {
             } else null;
             var exit_mem = end.inputs()[1];
 
+            const entry_syms: ?*Func.Node = for (start.outputs()) |o| {
+                if (o.get().kind == .Syms) break o.get();
+            } else null;
+
             const into_entry_mem = func.start.outputs()[1].get();
             std.debug.assert(into_entry_mem.kind == .Mem);
+
+            const into_entry_syms = func.start.outputs()[2].get();
+            std.debug.assert(into_entry_syms.kind == .Syms);
 
             const call_end = dest.outputs()[0].get();
             std.debug.assert(call_end.kind == .CallEnd);
@@ -273,6 +280,13 @@ pub fn Mixin(comptime Backend: type) type {
                     if (use.get().kind == .LocalAlloc) {
                         func.setInputNoIntern(use.get(), 0, into_entry_mem);
                     }
+                }
+            }
+
+            if (entry_syms != null) {
+                for (tmp.arena.dupe(Func.Node.Out, entry_syms.?.outputs())) |use| {
+                    const index: usize = if (use.get().kind == .Call) 2 else 1;
+                    _ = func.setInput(use.get(), index, into_entry_syms);
                 }
             }
 
@@ -354,6 +368,8 @@ pub fn Mixin(comptime Backend: type) type {
                 func.subsume(before_dest, call_end);
             } else if (before_return != null) {
                 func.subsume(before_return.?, call_end);
+            } else {
+                func_work.add(call_end);
             }
             dest.data_type = .bot;
             func_work.add(dest);

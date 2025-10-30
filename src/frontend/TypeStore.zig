@@ -355,7 +355,7 @@ pub const Id = enum(IdRepr) {
 
         uuidRecur(ty, types, &hash);
 
-        return hash.finalResult();
+        return @bitCast(hash.finalResult());
     }
 
     pub fn uuidRecur(ty: Id, types: *Types, hash: *UUIDHasher) void {

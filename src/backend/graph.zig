@@ -544,7 +544,7 @@ pub const builtin = enum {
         signature: Signature,
         id: u32,
 
-        pub const data_dep_offset = 1;
+        pub const data_dep_offset = 2;
     };
     pub const CallEnd = extern struct {
         base: Cfg = .{},
@@ -635,6 +635,8 @@ pub const builtin = enum {
     };
     pub const FuncAddr = extern struct {
         id: u32,
+
+        pub const data_dep_offset = 1;
     };
     // ===== MEMORY =====
     pub const Mem = extern struct {
@@ -646,10 +648,14 @@ pub const builtin = enum {
     pub const GlobalAddr = extern struct {
         id: u32,
         pub const is_clone = true;
+        pub const data_dep_offset = 1;
     };
     pub const Dead = extern struct {};
     pub const Poison = extern struct {
         pub const is_clone = true;
+    };
+    pub const Syms = extern struct {
+        pub const is_pinned = true;
     };
 };
 
@@ -973,7 +979,7 @@ pub fn Func(comptime Backend: type) type {
                     try self.base.format(writer);
                 }
 
-                pub fn scheduleBlockAndRestoreBlockIds(bbc: *CfgNode) void {
+                pub fn scheduleBlockAndRestoreBlockIds(bbc: *CfgNode, postorder: []*CfgNode) void {
                     // we do it here because some loads are scheduled already and removing them in this loop messes up the
                     // cheduling in other blocks, we need to hack this becaus there are no anty deps on loads yet, since this
                     // runs before gcm
@@ -999,7 +1005,10 @@ pub fn Func(comptime Backend: type) type {
                     }
 
                     if (!(bb.kind == .If or len == 1)) {
-                        unreachable;
+                        for (postorder) |p| {
+                            std.debug.print("{f}\n", .{p});
+                        }
+                        utils.panic("{f}\n", .{bb});
                     }
 
                     for (buf[0..len], scheds[0..len]) |n, s| n.schedule = s;
@@ -1613,7 +1622,15 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn isInterned(kind: Kind, inpts: []const ?*Node) bool {
                 return switch (kind) {
-                    .CInt, .Poison, .BinOp, .Load, .UnOp, .GlobalAddr, .FramePointer => true,
+                    .CInt,
+                    .Poison,
+                    .BinOp,
+                    .Load,
+                    .UnOp,
+                    .GlobalAddr,
+                    .FramePointer,
+                    .Syms,
+                    => true,
                     .Phi => inpts[2] != null,
                     else => callCheck("isInterned", kind),
                 };
@@ -1818,6 +1835,12 @@ pub fn Func(comptime Backend: type) type {
             std.mem.rotate(Node.Out, to_rotate, to_rotate.len - 1);
         }
 
+        pub fn getSyms(self: *Self) *Node {
+            for (self.start.outputs()) |out| {
+                if (out.get().kind == .Syms) return out.get();
+            } else unreachable;
+        }
+
         pub fn clone(self: *Self, def: *Node, block: *CfgNode) *Node {
             errdefer unreachable;
 
@@ -1914,12 +1937,20 @@ pub fn Func(comptime Backend: type) type {
             } else self.addBinOp(sloc, .iadd, .i64, base, self.addIntImm(sloc, .i64, offset)) else base;
         }
 
-        pub fn addGlobalAddr(self: *Self, sloc: Sloc, arbitrary_global_id: u32) *Node {
-            return self.addNode(.GlobalAddr, sloc, .i64, &.{null}, .{ .id = arbitrary_global_id });
+        pub fn addGlobalAddr(
+            self: *Self,
+            sloc: Sloc,
+            arbitrary_global_id: u32,
+        ) *Node {
+            return self.addNode(.GlobalAddr, sloc, .i64, &.{ null, self.getSyms() }, .{
+                .id = arbitrary_global_id,
+            });
         }
 
         pub fn addFuncAddr(self: *Self, sloc: Sloc, func_id: u32) *Node {
-            return self.addNode(.FuncAddr, sloc, .i64, &.{null}, .{ .id = func_id });
+            return self.addNode(.FuncAddr, sloc, .i64, &.{ null, self.getSyms() }, .{
+                .id = func_id,
+            });
         }
 
         pub fn addCast(self: *Self, sloc: Sloc, to: DataType, value: *Node) *Node {

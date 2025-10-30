@@ -162,8 +162,8 @@ pub const lane = opaque {
             self.waiting += 1;
 
             if (self.waiting == up_to) {
-                self.cond.broadcast();
                 self.waiting = 0;
+                self.cond.broadcast();
             } else {
                 self.cond.wait(&self.mutex);
             }
@@ -288,7 +288,7 @@ pub const lane = opaque {
     pub fn sync(args: SyncCtx) void {
         if (isSingleThreaded()) return;
 
-        if (args.spin) {
+        if (false and args.spin) {
             ctx.shared.spin_barrier.sync(ctx.lane_count);
         } else {
             ctx.shared.barrier.sync(ctx.lane_count);

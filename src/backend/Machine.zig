@@ -89,13 +89,13 @@ pub const Data = struct {
         size: u32,
     };
 
-    pub const UUID = [UUIDHasher.mac_length]u8;
+    pub const UUID = [2]u64;
     pub const UUIDHasher = std.hash.SipHash128(1, 1);
 
     pub fn uuidConst(id: []const u8) UUID {
         var h = UUIDHasher.init(&@splat(0));
         h.update(id);
-        return h.finalResult();
+        return @bitCast(h.finalResult());
     }
 
     pub const Sym = struct {
@@ -152,7 +152,35 @@ pub const Data = struct {
 
     pub const SymIdx = enum(u32) { invalid = std.math.maxInt(u32), _ };
 
-    pub fn setInlineFunc(self: *Data, gpa: std.mem.Allocator, comptime Node: type, func: *graph.Func(Node), to: u32) void {
+    pub fn projectSyms(
+        self: *Data,
+        gpa: std.mem.Allocator,
+        comptime Node: type,
+        func: *graph.Func(Node),
+    ) void {
+        errdefer unreachable;
+        for (func.getSyms().outputs()) |s| {
+            switch (s.get().extra2()) {
+                inline .FuncAddr, .Call, .GlobalAddr => |extra, t| {
+                    const lookup = if (t == .GlobalAddr)
+                        &self.globals
+                    else
+                        &self.funcs;
+                    const slot = try utils.ensureSlot(lookup, gpa, extra.id);
+                    extra.id = @intFromEnum(try self.declSym(gpa, slot));
+                },
+                else => utils.panic("{f} has no sym", .{s}),
+            }
+        }
+    }
+
+    pub fn setInlineFunc(
+        self: *Data,
+        gpa: std.mem.Allocator,
+        comptime Node: type,
+        func: *graph.Func(Node),
+        to: u32,
+    ) void {
         errdefer unreachable;
 
         self.syms.items[@intFromEnum(self.funcs.items[to])].inline_func = @intCast(self.inline_funcs.items.len);
@@ -382,6 +410,10 @@ pub const Data = struct {
         self.endDefineSym(self.globals.items[opts.id]);
         self.syms.items[@intFromEnum(self.globals.items[opts.id])].size =
             if (opts.value == .init) @intCast(opts.value.init.len) else @intCast(opts.value.uninit);
+    }
+
+    pub fn getFuncSym(self: *Data, id: u32) *Sym {
+        return &self.syms.items[@intFromEnum(self.funcs.items[id])];
     }
 
     pub fn startDefineSym(
@@ -731,7 +763,7 @@ pub const Data = struct {
         );
     }
 
-    pub fn elimitaneDeadCode(self: *Data) void {
+    pub fn eliminateDeadCode(self: *Data) void {
         errdefer unreachable;
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
@@ -1068,7 +1100,7 @@ pub const OptOptions = struct {
             dedup.end();
 
             var elim = metrics.begin(.elim);
-            bout.elimitaneDeadCode();
+            bout.eliminateDeadCode();
             elim.end();
 
             if (opts.logs) |d| {
@@ -1129,6 +1161,7 @@ pub const EmitOptions = struct {
         ) ?[]const u16 {
             switch (self) {
                 .opts => |pts| {
+                    backend.mach.out.projectSyms(backend.gpa, Backend, func);
                     if (pts.shouldDefer(id, Backend, func, backend)) return null;
                     return root.backend.Regalloc.rallocIgnoreStats(Backend, func);
                 },
@@ -1163,6 +1196,7 @@ pub const FinalizeOptionsInterface = struct {
     builtins: Builtins,
     logs: ?*std.Io.Writer = null,
     files: []const utils.LineIndex,
+    others: []*Machine,
 };
 
 pub const SupportedTarget = enum {
@@ -1290,6 +1324,10 @@ pub const FinalizeOptions = struct {
 /// package the final output (.eg object file)
 /// this function should also restart the state for next emmiting
 pub fn finalize(self: *Machine, out: ?*std.io.Writer, opts: FinalizeOptionsInterface) void {
+    var ots = opts;
+    var machines: [1]*Machine = .{self};
+    if (ots.others.len != 0) ots.others = &machines;
+
     return self.vtable.finalize(self, .{ .output = out, .interface = opts });
 }
 
@@ -1311,41 +1349,86 @@ pub fn run(self: *Machine, env: RunEnv) !usize {
     return self.vtable.run(self, env);
 }
 
-/// compine multiple machine instances (build on multiple threads) into one
-/// this fuction assumes to be called from all lanes, otherwise it will
-/// deadlock
-pub fn merge(self: *Machine, others: []*Machine) bool {
-    std.debug.assert(others[0] == self);
-    if (others.len == 1) return true;
-    return self.vtable.merge(self, others);
-}
-
-pub fn mergeOut(self: *Machine, others: []*Machine, gpa: std.mem.Allocator) void {
+pub fn mergeOut(
+    self: *Machine,
+    others: []*Machine,
+    gpa: std.mem.Allocator,
+    opts: OptOptions.Mode,
+) void {
     errdefer unreachable;
 
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    defer lane.sync(.{});
+    const Ctx = struct {
+        total_syms: usize = 0,
+        projections: [][]Data.SymIdx,
+        total_inline_funcs: usize = 0,
 
+        unique_syms: usize = 0,
+
+        unique_code_indices: []usize,
+        unique_relocs_indices: []usize,
+        unique_syms_indices: []usize,
+        unique_inline_funcs_indices: []usize,
+        unique_name_indices: []usize,
+
+        out: Data = .{},
+    };
+
+    var ctx: *Ctx = undefined;
     if (lane.isRoot()) {
         var total_syms: usize = 0;
-        for (others) |other| {
-            total_syms += other.out.syms.items.len;
-        }
-
-        var merge_map = std.AutoHashMapUnmanaged(Data.UUID, Data.SymIdx)
-            .empty;
-        try merge_map.ensureTotalCapacity(tmp.arena.allocator(), @intCast(total_syms));
-
+        var total_inline_funcs: usize = 0;
         const projections = tmp.arena.alloc([]Data.SymIdx, others.len);
         for (others, projections) |other, *p| {
             p.* = tmp.arena.alloc(Data.SymIdx, other.out.syms.items.len);
+            total_syms += other.out.syms.items.len;
+            total_inline_funcs += other.out.inline_funcs.items.len;
         }
 
+        const Hasher = struct {
+            pub fn hash(_: @This(), key: Data.UUID) u64 {
+                return key[0] ^ key[1];
+            }
+
+            pub fn eql(_: @This(), a: Data.UUID, b: Data.UUID) bool {
+                return a[0] == b[0] and a[1] == b[1];
+            }
+        };
+
+        var merge_map = std.HashMapUnmanaged(
+            Data.UUID,
+            Data.SymIdx,
+            Hasher,
+            std.hash_map.default_max_load_percentage,
+        ).empty;
+        try merge_map.ensureTotalCapacity(tmp.arena.allocator(), @intCast(total_syms));
+
+        var unique_relocs: usize = 0;
+        var unique_code: usize = 0;
         var unique_syms: usize = 0;
-        for (others, projections) |other, local_projs| {
+        var unique_inline_funcs: usize = 0;
+        var unique_names: usize = 0;
+
+        const unique_code_indices = tmp.arena.alloc(usize, lane.count());
+        const unique_relocs_indices = tmp.arena.alloc(usize, lane.count());
+        const unique_syms_indices = tmp.arena.alloc(usize, lane.count());
+        const unique_inline_funcs_indices = tmp.arena.alloc(usize, lane.count());
+        const unique_name_indices = tmp.arena.alloc(usize, lane.count());
+
+        for (
+            others,
+            projections,
+            0..,
+        ) |other, local_projs, i| {
             const syms = other.out.syms.items;
+
+            unique_code_indices[i] = unique_code;
+            unique_relocs_indices[i] = unique_relocs;
+            unique_syms_indices[i] = unique_syms;
+            unique_inline_funcs_indices[i] = unique_inline_funcs;
+            unique_name_indices[i] = unique_names;
 
             for (local_projs, syms) |*proj, *sym| {
                 if (sym.kind == .invalid) continue;
@@ -1356,75 +1439,148 @@ pub fn mergeOut(self: *Machine, others: []*Machine, gpa: std.mem.Allocator) void
                 } else {
                     entry.value_ptr.* = @enumFromInt(unique_syms);
                     unique_syms += 1;
+
+                    unique_relocs += sym.reloc_count;
+                    unique_code += sym.size;
+                    unique_names += other.out.lookupName(sym.name).len + 1;
+
+                    if (sym.kind == .func and opts == .release) {
+                        std.debug.assert(sym.inline_func != Data.Sym.no_inline_func);
+
+                        unique_inline_funcs += 1;
+                    }
                 }
                 std.debug.assert(@intFromEnum(entry.value_ptr.*) < unique_syms);
                 proj.* = entry.value_ptr.*;
             }
         }
 
-        for (others, projections) |other, local_projs| {
-            for (other.out.remote_funcs.items) |rf| {
-                const local_sym = other.out.funcs.items[rf.local_sym];
-                const remote_sym = others[rf.thread]
-                    .out.funcs.items[rf.remote_sym];
-                const local_idx = local_projs[@intFromEnum(local_sym)];
-                projections[rf.thread][@intFromEnum(remote_sym)] = local_idx;
+        ctx = tmp.arena.create(Ctx);
+        ctx.* = .{
+            .total_syms = total_syms,
+            .projections = projections,
+            .total_inline_funcs = total_inline_funcs,
+            .unique_syms = unique_syms,
+            .unique_code_indices = unique_code_indices,
+            .unique_relocs_indices = unique_relocs_indices,
+            .unique_syms_indices = unique_syms_indices,
+            .unique_inline_funcs_indices = unique_inline_funcs_indices,
+            .unique_name_indices = unique_name_indices,
+        };
+
+        try ctx.out.syms.resize(gpa, unique_syms);
+        try ctx.out.relocs.resize(gpa, unique_relocs);
+        try ctx.out.code.resize(gpa, unique_code);
+        try ctx.out.inline_funcs.resize(gpa, unique_inline_funcs);
+        try ctx.out.names.resize(gpa, unique_names);
+    }
+    lane.broadcast(&ctx, .{});
+
+    const projections = ctx.projections;
+    const unique_syms = ctx.total_syms;
+
+    const other = others[lane.index()];
+    const local_projs = projections[lane.index()];
+
+    for (other.out.remote_funcs.items) |rf| {
+        const local_sym = other.out.funcs.items[rf.local_sym];
+        if (other.out.syms.items[@intFromEnum(local_sym)].kind == .invalid)
+            continue;
+        const remote_sym = others[rf.thread]
+            .out.funcs.items[rf.remote_sym];
+        const local_idx = local_projs[@intFromEnum(local_sym)];
+        // NOTE: this avoids data races
+        projections[rf.thread][@intFromEnum(remote_sym)] = local_idx;
+    }
+
+    lane.sync(.{});
+
+    std.debug.assert(other.out.line_info.items.len == 0); // TODO
+    std.debug.assert(other.out.line_info_relocs.items.len == 0); // TODO
+
+    const syms = other.out.syms.items;
+    const relocs = other.out.relocs.items;
+
+    for (syms) |*sym| {
+        if (sym.kind == .invalid) continue;
+
+        if (opts == .release and sym.kind == .func) {
+            std.debug.assert(sym.size == 0);
+            std.debug.assert(sym.reloc_count == 0);
+            std.debug.assert(sym.inline_func != Data.Sym.no_inline_func);
+
+            const inline_func = &other.out.inline_funcs.items[sym.inline_func];
+            for (inline_func.getSyms().outputs()) |s| {
+                switch (s.get().extra2()) {
+                    inline .FuncAddr, .Call, .GlobalAddr => |extra| {
+                        extra.id = @intFromEnum(local_projs[extra.id]);
+                    },
+                    else => utils.panic("{f} has no sym", .{s}),
+                }
             }
-        }
-
-        var unique_relocs: usize = 0;
-        var unique_code: usize = 0;
-        for (others, projections) |other, local_projs| {
-            std.debug.assert(other.out.line_info.items.len == 0); // TODO
-            std.debug.assert(other.out.line_info_relocs.items.len == 0); // TODO
-            std.debug.assert(other.out.inline_funcs.items.len == 0); // TODO
-
-            const syms = other.out.syms.items;
-            const relocs = other.out.relocs.items;
-
-            for (syms) |sym| {
-                if (sym.kind == .invalid) continue;
-
-                unique_relocs += sym.reloc_count;
-                unique_code += sym.size;
-
-                for (relocs[sym.reloc_offset..][0..sym.reloc_count]) |*rel| {
-                    rel.target = local_projs[@intFromEnum(rel.target)];
-                    if (@intFromEnum(rel.target) >= unique_syms) {
-                        utils.panic("invalid relocation target {x}", .{rel.target});
-                    }
+        } else {
+            for (relocs[sym.reloc_offset..][0..sym.reloc_count]) |*rel| {
+                rel.target = local_projs[@intFromEnum(rel.target)];
+                if (@intFromEnum(rel.target) >= unique_syms) {
+                    utils.panic("invalid relocation target {x}", .{rel.target});
                 }
             }
         }
+    }
 
-        var out = Data{};
-        try out.syms.ensureTotalCapacity(gpa, unique_syms);
-        try out.relocs.ensureTotalCapacity(gpa, unique_relocs);
-        try out.code.ensureTotalCapacity(gpa, unique_code);
+    lane.sync(.{});
 
-        for (others) |other| {
-            const syms = other.out.syms.items;
-            const relocs = other.out.relocs.items;
-            const code = other.out.code.items;
+    const code = other.out.code.items;
 
-            for (syms) |sym| {
-                if (sym.kind == .invalid) continue;
+    var sym_cursor: usize = ctx.unique_syms_indices[lane.index()];
+    var code_cursor: usize = ctx.unique_code_indices[lane.index()];
+    var reloc_cursor: usize = ctx.unique_relocs_indices[lane.index()];
+    var inline_func_cursor: usize = ctx.unique_inline_funcs_indices[lane.index()];
+    var name_cursor: usize = ctx.unique_name_indices[lane.index()];
 
-                var new_sym = sym;
-                new_sym.offset = @intCast(out.code.items.len);
-                new_sym.reloc_offset = @intCast(out.relocs.items.len);
+    for (syms) |sym| {
+        if (sym.kind == .invalid) continue;
 
-                out.code.appendSliceAssumeCapacity(code[sym.offset..][0..sym.size]);
-                out.relocs.appendSliceAssumeCapacity(
-                    relocs[sym.reloc_offset..][0..sym.reloc_count],
-                );
+        const name = other.out.lookupName(sym.name);
 
-                out.syms.appendAssumeCapacity(sym);
-            }
+        var new_sym = sym;
+        new_sym.offset = @intCast(sym_cursor);
+        new_sym.reloc_offset = @intCast(reloc_cursor);
+        new_sym.name = @intCast(name_cursor);
+
+        @memcpy(ctx.out.names.items[name_cursor..][0..name.len], name);
+        ctx.out.names.items[name_cursor + name.len] = 0;
+        name_cursor += name.len + 1;
+
+        @memcpy(
+            ctx.out.code.items[code_cursor..][0..sym.size],
+            code[sym.offset..][0..sym.size],
+        );
+        code_cursor += sym.size;
+
+        @memcpy(
+            ctx.out.relocs.items[reloc_cursor..][0..sym.reloc_count],
+            relocs[sym.reloc_offset..][0..sym.reloc_count],
+        );
+        reloc_cursor += sym.reloc_count;
+
+        if (sym.kind == .func and opts == .release) {
+            std.debug.assert(sym.inline_func != Data.Sym.no_inline_func);
+            ctx.out.inline_funcs.items[inline_func_cursor] =
+                other.out.inline_funcs.items[sym.inline_func];
+            new_sym.inline_func = @intCast(inline_func_cursor);
+            inline_func_cursor += 1;
         }
 
+        ctx.out.syms.items[sym_cursor] = new_sym;
+        sym_cursor += 1;
+    }
+
+    lane.sync(.{});
+
+    if (lane.isRoot()) {
         self.out.deinit(gpa);
-        self.out = out;
+        self.out = ctx.out;
     }
 }
 

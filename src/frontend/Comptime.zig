@@ -516,10 +516,11 @@ pub fn partialEvalCall(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, curr:
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    var globals = tmp.arena.makeArrayList(*Node, call.inputs().len - 2);
+    const dep_offset = call.dataDepOffset();
+    var globals = tmp.arena.makeArrayList(*Node, call.inputs().len - dep_offset);
     // we need this because another call could clogger us
-    var args = tmp.arena.alloc(u64, call.inputs().len - 2);
-    for (call.inputs()[2..], 0..) |arg, arg_idx| {
+    var args = tmp.arena.alloc(u64, call.inputs().len - dep_offset);
+    for (call.inputs()[dep_offset..], 0..) |arg, arg_idx| {
         const argv = try self.partialEval(ctx, bl, arg.?);
         args[arg_idx] = switch (argv.extra2()) {
             .CInt => |extra| @bitCast(extra.value),

@@ -1444,7 +1444,7 @@ pub fn emitLocalStore(self: *WasmGen, for_instr: *Func.Node) void {
 
 pub fn finalize(self: *WasmGen, opts: Mach.FinalizeOptions) void {
     self.mach.out.deduplicate();
-    self.mach.out.elimitaneDeadCode();
+    self.mach.out.eliminateDeadCode();
 
     root.wasm.object.flush(
         self.mach.out,

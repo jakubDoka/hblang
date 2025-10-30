@@ -239,7 +239,7 @@ pub fn Mixin(comptime Backend: type) type {
                     }
                 }
 
-                bbc.scheduleBlockAndRestoreBlockIds();
+                Func.CfgNode.scheduleBlockAndRestoreBlockIds(bbc, postorder);
 
                 var stmp = utils.Arena.scrath(tmp.arena);
                 defer stmp.deinit();

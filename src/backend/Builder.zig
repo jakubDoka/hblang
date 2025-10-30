@@ -53,6 +53,7 @@ pub fn begin(
 ) BuildToken {
     const ctrl = self.func.addNode(.Entry, .none, .top, &.{self.func.start}, .{});
     self.root_mem = self.func.addNode(.Mem, .none, .top, &.{self.func.start}, .{});
+    _ = self.func.addNode(.Syms, .none, .top, &.{self.func.start}, .{});
     self.scope = self.func.addNode(.Scope, .none, .top, &.{ ctrl, self.root_mem }, .{});
     self.func.end = self.func.addNode(.Return, .none, .top, &.{ null, null, null }, .{});
 
@@ -539,7 +540,7 @@ pub const CallArgs = struct {
     hint: enum { @"construst this with Builder.allocCallArgs()" },
 };
 
-const arg_prefix_len: usize = 2;
+const arg_prefix_len: usize = 3;
 
 pub fn allocCallArgs(
     _: *Builder,
@@ -599,8 +600,9 @@ pub fn addCall(
 
     full_args[0] = self.control();
     full_args[1] = self.memory();
+    full_args[2] = self.func.getSyms();
     if (args.fptr) |fptr| {
-        full_args[2] = fptr;
+        full_args[3] = fptr;
     }
 
     const call = self.func.addNode(.Call, sloc, .top, full_args, .{

@@ -258,14 +258,16 @@ pub fn regMask(node: *Func.Node, _: *Func, idx: usize, arena: *utils.Arena) Set 
     }
 
     if (node.kind == .Call) {
+        const dep_offset = node.dataDepOffset();
+
         const is_indirect = node.extra(.Call).id == graph.indirect_call;
-        if (is_indirect and idx == 2) {
+        if (is_indirect and idx == dep_offset) {
             return readMask(arena);
         }
 
-        std.debug.assert(idx - @intFromBool(is_indirect) >= 2);
+        std.debug.assert(idx - @intFromBool(is_indirect) >= dep_offset);
 
-        return singleMask(arena, isa.Reg.arg(idx - 2 - @intFromBool(is_indirect)));
+        return singleMask(arena, isa.Reg.arg(idx - dep_offset - @intFromBool(is_indirect)));
     }
 
     if (node.kind == .Return) {
@@ -311,7 +313,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     const entry = opts.linkage == .exported;
 
-    const sym = try self.mach.out.startDefineFunc(self.gpa, opts.name, opts);
+    _ = try self.mach.out.startDefineFunc(self.gpa, opts.name, opts);
     defer {
         self.mach.out.endDefineFunc(opts.id);
         if (self.emit_global_reloc_offsets) {
@@ -324,6 +326,8 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
         //func.fmtUnscheduledLog();
         return;
     };
+
+    const sym = self.mach.out.getFuncSym(opts.id);
 
     var tmp = utils.Arena.scrath(if (opts.optimizations == .opts)
         opts.optimizations.opts.arena
@@ -461,11 +465,11 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             .Poison => {},
             .Arg => {},
             .GlobalAddr => |extra| {
-                try self.mach.out.addGlobalReloc(self.gpa, extra.id, .@"4", 3, 0);
+                try self.mach.out.addReloc(self.gpa, @ptrCast(&extra.id), .@"4", 3, 0);
                 self.emit(.lra, .{ self.getReg(no), .null, 0 });
             },
             .FuncAddr => |extra| {
-                try self.mach.out.addFuncReloc(self.gpa, extra.id, .@"4", 3, 0);
+                try self.mach.out.addReloc(self.gpa, @ptrCast(&extra.id), .@"4", 3, 0);
                 self.emit(.lra, .{ self.getReg(no), .null, 0 });
             },
             .LocalAlloc => {},
@@ -658,7 +662,7 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 } else if (extra.id == graph.indirect_call) {
                     self.emit(.jala, .{ .ret_addr, self.getReg(inps[0]), 0 });
                 } else {
-                    try self.mach.out.addFuncReloc(self.gpa, extra.id, .@"4", 3, 0);
+                    try self.mach.out.addReloc(self.gpa, @ptrCast(&extra.id), .@"4", 3, 0);
                     self.emit(.jal, .{ .ret_addr, .null, 0 });
                 }
             },
@@ -734,21 +738,24 @@ pub fn emitData(self: *HbvmGen, opts: Mach.DataOptions) void {
     }
 }
 
-pub fn merge(self: *HbvmGen, others: []*HbvmGen) bool {
-    self.mach.mergeOut(others, self.gpa);
-    return true;
-}
-
 pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {
     errdefer unreachable;
 
     defer {
-        self.mach.out.reset();
+        opts.interface.others[lane.index()].out.reset();
     }
 
-    if (opts.interface.optimizations.finalize(HbvmGen, self, opts.interface)) return;
+    self.mach.mergeOut(
+        opts.interface.others,
+        self.gpa,
+        opts.interface.optimizations.mode,
+    );
 
-    try root.hbvm.object.flush(self.mach.out, opts.output orelse return);
+    if (lane.isRoot()) {
+        if (opts.interface.optimizations.finalize(HbvmGen, self, opts.interface)) return;
+
+        try root.hbvm.object.flush(self.mach.out, opts.output orelse return);
+    }
 }
 
 pub fn deinit(self: *HbvmGen) void {

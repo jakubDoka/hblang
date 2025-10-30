@@ -18,9 +18,9 @@ dump asm crash 1.cache(, )(.Inner).do:
 	jz :2
 	mov byte ptr [rsp+0x2A], 0x01
 	jmp :3
-2:	mov ecx, [0x0000000000000006]
-	mov eax, [rsp+0x04]
-	cmp ecx, eax
+2:	mov ecx, [rsp+0x04]
+	mov eax, [0x0000000000000006]
+	cmp eax, ecx
 	setnz dl
 	movzx rdx, dl
 	mov ecx, [0x0000000000000006]

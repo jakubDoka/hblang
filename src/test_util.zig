@@ -244,6 +244,7 @@ pub fn testBuilder(
         .optimizations = optimizations,
         .builtins = types.getBuiltins(),
         .files = types.line_indexes,
+        .others = &.{},
     });
     defer out.deinit(gpa);
 
