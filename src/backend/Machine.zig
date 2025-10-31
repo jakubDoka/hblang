@@ -78,6 +78,11 @@ pub const Data = struct {
     line_info: std.ArrayList(u8) = .empty,
     line_info_relocs: std.ArrayList(Reloc) = .empty,
 
+    pub const DeferCtx = struct {
+        root_sym: SymIdx,
+        sym_slot: SymIdx = .invalid,
+    };
+
     pub const RemoteFunc = struct {
         local_sym: u32,
         remote_sym: u32,
@@ -347,10 +352,16 @@ pub const Data = struct {
         gpa: std.mem.Allocator,
         name: []const u8,
         opts: EmitOptions,
-    ) !*Sym {
-        std.debug.assert(opts.id != max_func and opts.id != graph.indirect_call);
-        const slot = try utils.ensureSlot(&self.funcs, gpa, opts.id);
-        return try self.startDefineSym(
+    ) !struct { *Sym, SymIdx, SymIdx } {
+        const slot = switch (opts.id) {
+            .arbitrary => |id| blk: {
+                std.debug.assert(id != max_func and id != graph.indirect_call);
+                break :blk try utils.ensureSlot(&self.funcs, gpa, id);
+            },
+            .sym => |sym_idx| &sym_idx.sym_slot,
+        };
+
+        return .{ try self.startDefineSym(
             gpa,
             slot,
             name,
@@ -359,7 +370,7 @@ pub const Data = struct {
             true,
             opts.is_inline,
             opts.uuid,
-        );
+        ), slot.*, if (opts.id == .sym) opts.id.sym.root_sym else slot.* };
     }
 
     pub fn defineGlobal(
@@ -458,9 +469,14 @@ pub const Data = struct {
         return slot;
     }
 
-    pub fn endDefineFunc(self: *Data, id: u32) void {
-        std.debug.assert(id != std.math.maxInt(u32));
-        self.endDefineSym(self.funcs.items[id]);
+    pub fn endDefineFunc(self: *Data, emid: EmitOptions.Id) void {
+        switch (emid) {
+            .arbitrary => |id| {
+                std.debug.assert(id != std.math.maxInt(u32));
+                self.endDefineSym(self.funcs.items[id]);
+            },
+            .sym => |sym| self.endDefineSym(sym.sym_slot),
+        }
     }
 
     pub fn endDefineSym(self: *Data, sym: SymIdx) void {
@@ -768,36 +784,13 @@ pub const Data = struct {
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
 
-        const sym_to_idx = tmp.arena.alloc(u32, self.syms.items.len);
-
-        for (self.funcs.items, 0..) |sym, i| {
-            if (sym == .invalid) continue;
-            sym_to_idx[@intFromEnum(sym)] = @intCast(i);
-        }
-
-        for (self.globals.items, 0..) |sym, i| {
-            if (sym == .invalid) continue;
-            sym_to_idx[@intFromEnum(sym)] = @intCast(i);
-        }
-
         var visited_syms = try Set.initEmpty(tmp.arena.allocator(), self.syms.items.len);
         var frontier = std.ArrayList(SymIdx).empty;
 
-        for (self.funcs.items) |fid| {
-            if (fid == .invalid) continue;
-            const f = &self.syms.items[@intFromEnum(fid)];
-            if (f.kind == .func and f.linkage == .exported) {
-                visited_syms.set(@intFromEnum(fid));
-                try frontier.append(tmp.arena.allocator(), fid);
-            }
-        }
-
-        for (self.globals.items) |gid| {
-            if (gid == .invalid) continue;
-            const g = &self.syms.items[@intFromEnum(gid)];
-            if (g.kind == .data and g.linkage == .exported) {
-                visited_syms.set(@intFromEnum(gid));
-                try frontier.append(tmp.arena.allocator(), gid);
+        for (self.syms.items, 0..) |sym, i| {
+            if (sym.linkage == .exported) {
+                visited_syms.set(i);
+                try frontier.append(tmp.arena.allocator(), @enumFromInt(i));
             }
         }
 
@@ -813,13 +806,8 @@ pub const Data = struct {
             }
         }
 
-        for (sym_to_idx, self.syms.items, 0..) |idx, *sym, i| {
+        for (self.syms.items, 0..) |*sym, i| {
             if (!visited_syms.isSet(i)) {
-                switch (sym.kind) {
-                    .func => self.funcs.items[idx] = .invalid,
-                    .data, .prealloc, .tls_prealloc => self.globals.items[idx] = .invalid,
-                    else => unreachable, // TODO: remove
-                }
                 sym.kind = .invalid;
             }
         }
@@ -946,257 +934,367 @@ pub const OptOptions = struct {
         }
     }
 
+    pub fn finalizeRelease(
+        self: OptOptions,
+        comptime Backend: type,
+        backend: *Backend,
+        opts: FinalizeOptionsInterface,
+    ) void {
+        errdefer unreachable;
+
+        var metrics = utils.TimeMetrics(enum {
+            regalloc,
+            mem2reg,
+            generic,
+            mach,
+            gcm,
+            dead,
+            static_anal,
+            dedup,
+            elim,
+        }).init();
+
+        var tmp = utils.Arena.scrath(self.arena);
+        defer tmp.deinit();
+
+        const bout: *Data = &backend.mach.out;
+
+        // do the exhausitve optimization pass with inlining, this should
+        // hanlde stacked inlines as well
+        //
+
+        // might be faster like this
+
+        const funcs: []graph.Func(Backend) = @ptrCast(bout.inline_funcs.items);
+
+        var emit_waste: usize = 0;
+        var dead_waste: usize = 0;
+        var mem2reg_waste: usize = 0;
+        var generic_waste: usize = 0;
+        var mach_waste: usize = 0;
+        var gcm_waste: usize = 0;
+        var total_waste: usize = 0;
+        var regalloc = root.backend.Regalloc{};
+
+        const Ctx = struct {
+            stage_1_queue: lane.FixedQueue = .{},
+            stage_2_queue: lane.FixedQueue = .{},
+            stage_3_queue: lane.FixedQueue = .{},
+            stage_4_queue: lane.FixedQueue = .{},
+
+            funcs: []FuncMeta,
+
+            code_indices: []u32,
+            reloc_indices: []u32,
+            line_info_indices: []u32,
+            line_info_relocs_indices: []u32,
+
+            final_out: Data = undefined,
+
+            // TODO: we can save 4 bytes here
+            const FuncMeta = struct {
+                backedge: Data.SymIdx,
+                thread: u32,
+                index: Data.SymIdx,
+                reg_alloc_results: []u16,
+            };
+        };
+
+        var ctx: *Ctx = undefined;
+        if (lane.isRoot()) {
+            ctx = tmp.arena.create(Ctx);
+            ctx.* = Ctx{
+                .funcs = tmp.arena.alloc(Ctx.FuncMeta, bout.inline_funcs.items.len),
+                .code_indices = tmp.arena.alloc(u32, lane.count()),
+                .reloc_indices = tmp.arena.alloc(u32, lane.count()),
+                .line_info_indices = tmp.arena.alloc(u32, lane.count()),
+                .line_info_relocs_indices = tmp.arena.alloc(u32, lane.count()),
+            };
+
+            for (bout.syms.items, 0..) |sym, i| {
+                if (sym.kind != .func) continue;
+                ctx.funcs[sym.inline_func].backedge = @enumFromInt(i);
+            }
+        }
+        lane.broadcast(&ctx, .{});
+
+        for (bout.syms.items) |sym| {
+            std.debug.assert(!sym.is_inline); // TODO
+        }
+
+        var arena = utils.Arena.init(1024 * 1024 * 1024);
+
+        while (ctx.stage_2_queue.next(funcs.len)) |i| {
+            const sym = &funcs[i];
+
+            sym.arena.child_allocator = arena.allocator();
+
+            emit_waste += sym.waste;
+
+            var dead = metrics.begin(.dead);
+            idealizeDead(Backend, backend, sym);
+            dead.end();
+
+            dead_waste += sym.waste;
+
+            var mem2reg = metrics.begin(.mem2reg);
+            doMem2Reg(Backend, sym);
+            mem2reg.end();
+
+            mem2reg_waste += sym.waste;
+        }
+
+        lane.sync(.{});
+
+        while (ctx.stage_2_queue.next(funcs.len)) |i| {
+            const sym = &funcs[i];
+            sym.arena.child_allocator = arena.allocator();
+
+            var generic = metrics.begin(.generic);
+            idealizeGeneric(Backend, backend, sym, false);
+            generic.end();
+
+            doAliasAnal(Backend, sym);
+
+            generic_waste += sym.waste;
+        }
+
+        lane.sync(.{});
+
+        while (ctx.stage_3_queue.next(funcs.len)) |i| {
+            const sym = &funcs[i];
+            const res = &ctx.funcs[i].reg_alloc_results;
+
+            sym.arena.child_allocator = arena.allocator();
+
+            var mach = metrics.begin(.mach);
+            idealizeMach(Backend, backend, sym);
+            mach.end();
+
+            mach_waste += sym.waste;
+
+            var gcm = metrics.begin(.gcm);
+            doGcm(Backend, sym);
+            gcm.end();
+
+            gcm_waste += sym.waste;
+            if (self.error_buf != null) {
+                var static_anal_met = metrics.begin(.static_anal);
+                self.doStaticAnal(Backend, sym);
+                static_anal_met.end();
+            }
+
+            var regalloc_met = metrics.begin(.regalloc);
+            res.* = regalloc.ralloc(Backend, @ptrCast(sym));
+            regalloc_met.end();
+
+            total_waste += sym.waste;
+        }
+
+        if (lane.isRoot()) {
+            ctx.final_out = backend.mach.out;
+            backend.mach.out = .{};
+
+            if (@hasDecl(Backend, "preEmmisionHook")) {
+                for (opts.others) |other| {
+                    Backend.preEmmisionHook(@ptrCast(other), &ctx.final_out);
+                }
+            }
+        }
+
+        lane.sync(.{});
+
+        const local = opts.others[lane.index()];
+        local.out.reset();
+
+        while (ctx.stage_4_queue.next(funcs.len)) |i| {
+            const func = &funcs[i];
+
+            var index: Data.DeferCtx = .{ .root_sym = ctx.funcs[i].backedge };
+
+            local.emitFunc(@ptrCast(func), .{
+                .name = "",
+                .id = .{ .sym = &index },
+                .linkage = .local,
+                .is_inline = false,
+                .optimizations = .{ .allocs = ctx.funcs[i].reg_alloc_results },
+                .builtins = opts.builtins,
+                .files = opts.files,
+                .uuid = @splat(0),
+            });
+
+            ctx.funcs[i].index = index.sym_slot;
+            ctx.funcs[i].thread = lane.index();
+        }
+
+        lane.sync(.{});
+
+        //var code_cursor: u32 = ctx.final_out.code.items.len;
+        //_ = code_cursor; // autofix
+        //var relocs_cursor: u32 = ctx.final_out.relocs.items.len;
+        //_ = relocs_cursor; // autofix
+        //var li_cursor: u32 = ctx.final_out.li.items.len;
+        //_ = li_cursor; // autofix
+        //var li_relocs_cursor: u32 = ctx.final_out.li_relocs.items.len;
+        //_ = li_relocs_cursor; // autofix
+
+        //lane.sync(.{});
+
+        //if (lane.isRoot()) {
+        //    var total_code: u32 = ctx.final_out.code.items.len;
+        //    var total_relocs: u32 = ctx.final_out.relocs.items.len;
+        //    var total_li: u32 = ctx.final_out.li.items.len;
+        //    var total_li_relocs: u32 = ctx.final_out.li_relocs.items.len;
+
+        //    for (opts.others) |other| {
+        //        ctx.code_indices[other.out.code.items.len] = total_code;
+        //        ctx.reloc_indices[other.out.relocs.items.len] = total_relocs;
+        //        ctx.li_indices[other.out.li.items.len] = total_li;
+        //        ctx.li_relocs_indices[other.out.li_relocs.items.len] = total_li_relocs;
+
+        //        total_code += @intCast(other.out.code.items.len);
+        //        total_relocs += @intCast(other.out.relocs.items.len);
+        //        total_li += @intCast(other.out.li.items.len);
+        //        total_li_relocs += @intCast(other.out.li_relocs.items.len);
+        //    }
+
+        //    ctx.final_out.code.resize(backend.gpa, total_code);
+        //    ctx.final_out.relocs.resize(backend.gpa, total_relocs);
+        //    ctx.final_out.line_info.resize(backend.gpa, total_li);
+        //    ctx.final_out.line_info_relocs.resize(backend.gpa, total_li_relocs);
+        //}
+
+        if (lane.isRoot()) {
+            if (@hasDecl(Backend, "preLinkHook")) {
+                for (opts.others) |other| {
+                    Backend.preLinkHook(@ptrCast(other), &ctx.final_out);
+                }
+            }
+
+            var total_code: usize = 0;
+            var total_code_relocs: usize = 0;
+            var total_li: usize = 0;
+            var total_li_relocs: usize = 0;
+            for (opts.others) |other| {
+                total_code += other.out.code.items.len;
+                total_code_relocs += other.out.relocs.items.len;
+                total_li += other.out.line_info.items.len;
+                total_li_relocs += other.out.line_info_relocs.items.len;
+            }
+
+            try ctx.final_out.code.ensureUnusedCapacity(backend.gpa, total_code);
+            try ctx.final_out.relocs.ensureUnusedCapacity(backend.gpa, total_code_relocs);
+            try ctx.final_out.line_info.ensureUnusedCapacity(backend.gpa, total_li);
+            try ctx.final_out.line_info_relocs.ensureUnusedCapacity(backend.gpa, total_li_relocs);
+
+            for (ctx.final_out.syms.items) |*dsym| {
+                if (dsym.kind != .func) continue;
+                const meta = ctx.funcs[dsym.inline_func];
+                const sout = &opts.others[meta.thread].out;
+                const ssym = sout.syms.items[@intFromEnum(meta.index)];
+
+                dsym.offset = @intCast(ctx.final_out.code.items.len);
+                dsym.reloc_offset = @intCast(ctx.final_out.relocs.items.len);
+                dsym.stack_size = ssym.stack_size;
+
+                ctx.final_out.code.appendSliceAssumeCapacity(
+                    sout.code.items[ssym.offset..][0..ssym.size],
+                );
+
+                ctx.final_out.relocs.appendSliceAssumeCapacity(
+                    sout.relocs.items[ssym.reloc_offset..][0..ssym.reloc_count],
+                );
+
+                dsym.size = ssym.size;
+                dsym.reloc_count = ssym.reloc_count;
+            }
+
+            for (opts.others) |other| {
+                for (other.out.line_info_relocs.items) |*lr| {
+                    lr.offset += @intCast(ctx.final_out.line_info.items.len);
+                }
+                ctx.final_out.line_info.appendSliceAssumeCapacity(other.out.line_info.items);
+                ctx.final_out.line_info_relocs.appendSliceAssumeCapacity(other.out.line_info_relocs.items);
+            }
+
+            backend.mach.out.deinit(backend.gpa);
+            backend.mach.out = ctx.final_out;
+
+            if (opts.logs) |d| {
+                try d.writeAll("backend:\n");
+
+                inline for (std.meta.fields(Data)[3..]) |f| {
+                    try d.print("  {s:<12}: {}\n", .{ f.name, @field(bout, f.name).items.len });
+                }
+
+                try d.print("  emit waste   :  {}\n", .{emit_waste});
+                try d.print("  dead waste   : +{}\n", .{dead_waste - emit_waste});
+                try d.print("  mem2reg waste: +{}\n", .{mem2reg_waste - dead_waste});
+                try d.print("  generic waste: +{}\n", .{generic_waste - mem2reg_waste});
+                try d.print("  mach waste   : +{}\n", .{mach_waste -| generic_waste});
+                try d.print("  gcm waste    : +{}\n", .{gcm_waste -| mach_waste});
+                try d.print("  waste        : +{}\n", .{total_waste -| gcm_waste});
+            }
+
+            var dedup = metrics.begin(.dedup);
+            bout.deduplicate();
+            dedup.end();
+
+            var elim = metrics.begin(.elim);
+            bout.eliminateDeadCode();
+            elim.end();
+
+            if (opts.logs) |d| {
+                var alive_syms: usize = 0;
+                var alive_code: usize = 0;
+                for (bout.syms.items) |s| {
+                    if (s.kind != .invalid) {
+                        alive_syms += 1;
+                        alive_code += s.size;
+                    }
+                }
+
+                try d.print("  dead syms   : {}\n", .{bout.syms.items.len - alive_syms});
+                try d.print("  dead code   : {}\n", .{bout.code.items.len - alive_code});
+
+                try d.writeAll("regalloc:\n");
+                inline for (std.meta.fields(@TypeOf(regalloc))) |f| {
+                    try d.print("  {s:<12}: {}\n", .{ f.name, @field(regalloc, f.name) });
+                }
+
+                metrics.logStats(d);
+            }
+        }
+    }
+
     pub fn finalize(
-        optimizations: @This(),
+        self: OptOptions,
         comptime Backend: type,
         backend: *Backend,
         opts: FinalizeOptionsInterface,
     ) bool {
-        errdefer unreachable;
-
-        if (optimizations.mode == .release) {
-            var metrics = utils.TimeMetrics(enum {
-                regalloc,
-                mem2reg,
-                generic,
-                mach,
-                gcm,
-                dead,
-                static_anal,
-                dedup,
-                elim,
-            }).init();
-
-            var tmp = utils.Arena.scrath(optimizations.arena);
-            defer tmp.deinit();
-
-            const bout: *Data = &backend.mach.out;
-
-            // do the exhausitve optimization pass with inlining, this should
-            // hanlde stacked inlines as well
-            //
-
-            // might be faster like this
-
-            const funcs: []graph.Func(Backend) = @ptrCast(bout.inline_funcs.items);
-
-            var emit_waste: usize = 0;
-            var dead_waste: usize = 0;
-            var mem2reg_waste: usize = 0;
-            var generic_waste: usize = 0;
-            var mach_waste: usize = 0;
-            var gcm_waste: usize = 0;
-            var total_waste: usize = 0;
-            var regalloc = root.backend.Regalloc{};
-
-            const Ctx = struct {
-                stage_1_queue: lane.FixedQueue = .{},
-                stage_2_queue: lane.FixedQueue = .{},
-                stage_3_queue: lane.FixedQueue = .{},
-
-                reg_alloc_results: [][]u16,
-            };
-
-            var ctx: *Ctx = undefined;
+        if (self.mode == .release) {
+            finalizeRelease(self, Backend, backend, opts);
+        } else {
             if (lane.isRoot()) {
-                ctx = tmp.arena.create(Ctx);
-                ctx.* = Ctx{
-                    .reg_alloc_results = tmp.arena.alloc(
-                        []u16,
-                        bout.inline_funcs.items.len,
-                    ),
-                };
-            }
-            lane.broadcast(&ctx, .{});
-
-            for (bout.syms.items) |sym| {
-                std.debug.assert(!sym.is_inline); // TODO
-            }
-
-            var arena = utils.Arena.init(1024 * 1024 * 1024);
-
-            while (ctx.stage_2_queue.next(funcs.len)) |i| {
-                const sym = &funcs[i];
-
-                sym.arena.child_allocator = arena.allocator();
-
-                emit_waste += sym.waste;
-
-                var dead = metrics.begin(.dead);
-                idealizeDead(Backend, backend, sym);
-                dead.end();
-
-                dead_waste += sym.waste;
-
-                var mem2reg = metrics.begin(.mem2reg);
-                doMem2Reg(Backend, sym);
-                mem2reg.end();
-
-                mem2reg_waste += sym.waste;
-            }
-
-            lane.sync(.{});
-
-            while (ctx.stage_2_queue.next(funcs.len)) |i| {
-                const sym = &funcs[i];
-                sym.arena.child_allocator = arena.allocator();
-
-                var generic = metrics.begin(.generic);
-                idealizeGeneric(Backend, backend, sym, false);
-                generic.end();
-
-                doAliasAnal(Backend, sym);
-
-                generic_waste += sym.waste;
-            }
-
-            lane.sync(.{});
-
-            while (ctx.stage_3_queue.next(funcs.len)) |i| {
-                const sym = &funcs[i];
-                const res = &ctx.reg_alloc_results[i];
-
-                sym.arena.child_allocator = arena.allocator();
-
-                var mach = metrics.begin(.mach);
-                idealizeMach(Backend, backend, sym);
-                mach.end();
-
-                mach_waste += sym.waste;
-
-                var gcm = metrics.begin(.gcm);
-                doGcm(Backend, sym);
-                gcm.end();
-
-                gcm_waste += sym.waste;
-                if (optimizations.error_buf != null) {
-                    var static_anal_met = metrics.begin(.static_anal);
-                    optimizations.doStaticAnal(Backend, sym);
-                    static_anal_met.end();
-                }
-
-                var regalloc_met = metrics.begin(.regalloc);
-                res.* = regalloc.ralloc(Backend, @ptrCast(sym));
-                regalloc_met.end();
-
-                total_waste += sym.waste;
-            }
-
-            lane.sync(.{});
-
-            if (lane.isRoot()) {
-                // TODO: this is needless, we should basically not care about these ids
-                // and not use them
-                {
-                    var func_count: usize = 0;
-                    var global_count: usize = 0;
-                    for (bout.syms.items) |sym| {
-                        if (sym.kind == .func) {
-                            func_count += 1;
-                        } else {
-                            global_count += 1;
-                        }
-                    }
-
-                    var index: usize = 0;
-                    try bout.funcs.resize(backend.gpa, func_count);
-                    for (bout.syms.items, 0..) |sym, i| {
-                        if (sym.kind == .func) {
-                            bout.funcs.items[index] = @enumFromInt(i);
-                            index += 1;
-                        }
-                    }
-
-                    index = 0;
-                    try bout.globals.resize(backend.gpa, global_count);
-                    for (bout.syms.items, 0..) |sym, i| {
-                        if (sym.kind != .func) {
-                            bout.globals.items[index] = @enumFromInt(i);
-                            index += 1;
-                        }
-                    }
-                }
-
-                var index: usize = 0;
-                for (bout.syms.items) |*sym| {
-                    switch (sym.kind) {
-                        .func => {
-                            if (sym.linkage == .imported) continue;
-                            const func = &bout.inline_funcs.items[sym.inline_func];
-                            backend.emitFunc(@ptrCast(func), .{
-                                .name = bout.lookupName(sym.name),
-                                .id = @intCast(index),
-                                .linkage = sym.linkage,
-                                .is_inline = false,
-                                .optimizations = .{ .allocs = ctx.reg_alloc_results[sym.inline_func] },
-                                .builtins = opts.builtins,
-                                .files = opts.files,
-                                .uuid = sym.uuid,
-                            });
-                            index += 1;
-                        },
-                        .data, .prealloc, .tls_prealloc, .invalid => {},
-                    }
-                }
-
-                if (optimizations.error_buf) |eb| if (eb.items.len != 0) return true;
-
-                if (opts.logs) |d| {
-                    try d.writeAll("backend:\n");
-
-                    inline for (std.meta.fields(Data)[3..]) |f| {
-                        try d.print("  {s:<12}: {}\n", .{ f.name, @field(bout, f.name).items.len });
-                    }
-
-                    try d.print("  emit waste   :  {}\n", .{emit_waste});
-                    try d.print("  dead waste   : +{}\n", .{dead_waste - emit_waste});
-                    try d.print("  mem2reg waste: +{}\n", .{mem2reg_waste - dead_waste});
-                    try d.print("  generic waste: +{}\n", .{generic_waste - mem2reg_waste});
-                    try d.print("  mach waste   : +{}\n", .{mach_waste -| generic_waste});
-                    try d.print("  gcm waste    : +{}\n", .{gcm_waste -| mach_waste});
-                    try d.print("  waste        : +{}\n", .{total_waste -| gcm_waste});
-                }
-
-                if (@hasDecl(Backend, "preLinkHook")) backend.preLinkHook();
-
-                var dedup = metrics.begin(.dedup);
-                bout.deduplicate();
-                dedup.end();
-
-                var elim = metrics.begin(.elim);
-                bout.eliminateDeadCode();
-                elim.end();
-
-                if (opts.logs) |d| {
-                    var alive_syms: usize = 0;
-                    var alive_code: usize = 0;
-                    for (bout.syms.items) |s| {
-                        if (s.kind != .invalid) {
-                            alive_syms += 1;
-                            alive_code += s.size;
-                        }
-                    }
-
-                    try d.print("  dead syms   : {}\n", .{bout.syms.items.len - alive_syms});
-                    try d.print("  dead code   : {}\n", .{bout.code.items.len - alive_code});
-
-                    try d.writeAll("regalloc:\n");
-                    inline for (std.meta.fields(@TypeOf(regalloc))) |f| {
-                        try d.print("  {s:<12}: {}\n", .{ f.name, @field(regalloc, f.name) });
-                    }
-
-                    metrics.logStats(d);
-                }
-            } else {
-                if (@hasDecl(Backend, "preLinkHook")) backend.preLinkHook();
+                if (@hasDecl(Backend, "preLinkHook"))
+                    backend.preLinkHook(&backend.mach.out);
             }
         }
 
-        if (optimizations.error_buf) |eb| if (eb.items.len != 0) return true;
+        var tmp = utils.Arena.scrath(null);
+        defer tmp.deinit();
+
+        var err = lane.share(tmp.arena, std.atomic.Value(bool).init(false));
+        if (self.error_buf) |eb| if (eb.items.len != 0) {
+            err.store(true, .unordered);
+        };
 
         lane.sync(.{});
+        const errored = err.raw;
+        lane.sync(.{});
 
-        return false;
+        return errored;
     }
 };
 
@@ -1205,7 +1303,7 @@ pub const Builtins = struct {
 };
 
 pub const EmitOptions = struct {
-    id: u32,
+    id: Id,
     name: []const u8 = &.{},
     is_inline: bool,
     linkage: Data.Linkage,
@@ -1215,27 +1313,28 @@ pub const EmitOptions = struct {
     files: []const utils.LineIndex = &.{},
     uuid: Data.UUID,
 
+    pub const Id = union(enum) { arbitrary: u32, sym: *Data.DeferCtx };
+
     pub const Optimizations = union(enum) {
         opts: OptOptions,
         allocs: []const u16,
-
-        pub fn apply(
-            self: @This(),
-            comptime Backend: type,
-            func: *graph.Func(Backend),
-            backend: *Backend,
-            id: u32,
-        ) ?[]const u16 {
-            switch (self) {
-                .opts => |pts| {
-                    backend.mach.out.projectSyms(backend.gpa, Backend, func);
-                    if (pts.shouldDefer(id, Backend, func, backend)) return null;
-                    return root.backend.Regalloc.rallocIgnoreStats(Backend, func);
-                },
-                .allocs => |pts| return pts,
-            }
-        }
     };
+
+    pub fn apply(
+        self: EmitOptions,
+        comptime Backend: type,
+        func: *graph.Func(Backend),
+        backend: *Backend,
+    ) ?[]const u16 {
+        switch (self.optimizations) {
+            .opts => |pts| {
+                backend.mach.out.projectSyms(backend.gpa, Backend, func);
+                if (pts.shouldDefer(self.id.arbitrary, Backend, func, backend)) return null;
+                return root.backend.Regalloc.rallocIgnoreStats(Backend, func);
+            },
+            .allocs => |pts| return pts,
+        }
+    }
 
     pub const Special = enum { entry, memcpy };
 };
@@ -1393,9 +1492,9 @@ pub const FinalizeOptions = struct {
 pub fn finalize(self: *Machine, out: ?*std.io.Writer, opts: FinalizeOptionsInterface) void {
     var ots = opts;
     var machines: [1]*Machine = .{self};
-    if (ots.others.len != 0) ots.others = &machines;
+    if (ots.others.len == 0) ots.others = &machines;
 
-    return self.vtable.finalize(self, .{ .output = out, .interface = opts });
+    return self.vtable.finalize(self, .{ .output = out, .interface = ots });
 }
 
 /// output the final code into a byte array, for testing purposes
@@ -1439,6 +1538,8 @@ pub fn mergeOut(
         unique_syms_indices: []usize,
         unique_inline_funcs_indices: []usize,
         unique_name_indices: []usize,
+        line_info_indices: []usize,
+        line_info_relocs_indices: []usize,
 
         out: Data = .{},
     };
@@ -1477,12 +1578,17 @@ pub fn mergeOut(
         var unique_syms: usize = 0;
         var unique_inline_funcs: usize = 0;
         var unique_names: usize = 0;
+        var line_info: usize = 0;
+        var line_info_relocs: usize = 0;
 
         const unique_code_indices = tmp.arena.alloc(usize, lane.count());
         const unique_relocs_indices = tmp.arena.alloc(usize, lane.count());
         const unique_syms_indices = tmp.arena.alloc(usize, lane.count());
         const unique_inline_funcs_indices = tmp.arena.alloc(usize, lane.count());
         const unique_name_indices = tmp.arena.alloc(usize, lane.count());
+        // NOTE: we dont put any effort into deduping the line info
+        const line_info_indices = tmp.arena.alloc(usize, lane.count());
+        const line_info_relocs_indices = tmp.arena.alloc(usize, lane.count());
 
         for (
             others,
@@ -1496,6 +1602,8 @@ pub fn mergeOut(
             unique_syms_indices[i] = unique_syms;
             unique_inline_funcs_indices[i] = unique_inline_funcs;
             unique_name_indices[i] = unique_names;
+            line_info_indices[i] = line_info;
+            line_info_relocs_indices[i] = line_info_relocs;
 
             for (local_projs, syms) |*proj, *sym| {
                 if (sym.kind == .invalid) continue;
@@ -1520,6 +1628,8 @@ pub fn mergeOut(
                 std.debug.assert(@intFromEnum(entry.value_ptr.*) < unique_syms);
                 proj.* = entry.value_ptr.*;
             }
+            line_info += other.out.line_info.items.len;
+            line_info_relocs += other.out.line_info_relocs.items.len;
         }
 
         ctx = tmp.arena.create(Ctx);
@@ -1533,6 +1643,8 @@ pub fn mergeOut(
             .unique_syms_indices = unique_syms_indices,
             .unique_inline_funcs_indices = unique_inline_funcs_indices,
             .unique_name_indices = unique_name_indices,
+            .line_info_indices = line_info_indices,
+            .line_info_relocs_indices = line_info_relocs_indices,
         };
 
         try ctx.out.syms.resize(gpa, unique_syms);
@@ -1540,6 +1652,8 @@ pub fn mergeOut(
         try ctx.out.code.resize(gpa, unique_code);
         try ctx.out.inline_funcs.resize(gpa, unique_inline_funcs);
         try ctx.out.names.resize(gpa, unique_names);
+        try ctx.out.line_info.resize(gpa, line_info);
+        try ctx.out.line_info_relocs.resize(gpa, line_info_relocs);
     }
     lane.broadcast(&ctx, .{});
 
@@ -1561,9 +1675,6 @@ pub fn mergeOut(
     }
 
     lane.sync(.{});
-
-    std.debug.assert(other.out.line_info.items.len == 0); // TODO
-    std.debug.assert(other.out.line_info_relocs.items.len == 0); // TODO
 
     const syms = other.out.syms.items;
     const relocs = other.out.relocs.items;
@@ -1611,7 +1722,7 @@ pub fn mergeOut(
         const name = other.out.lookupName(sym.name);
 
         var new_sym = sym;
-        new_sym.offset = @intCast(sym_cursor);
+        new_sym.offset = @intCast(code_cursor);
         new_sym.reloc_offset = @intCast(reloc_cursor);
         new_sym.name = @intCast(name_cursor);
 
@@ -1643,9 +1754,27 @@ pub fn mergeOut(
         sym_cursor += 1;
     }
 
+    const line_info_offset: usize = ctx.line_info_indices[lane.index()];
+    const line_info_reloc_offset: usize = ctx.line_info_relocs_indices[lane.index()];
+
+    @memcpy(
+        ctx.out.line_info.items[line_info_offset..][0..other.out.line_info.items.len],
+        other.out.line_info.items,
+    );
+
+    for (other.out.line_info_relocs.items) |*reloc| {
+        reloc.offset += @intCast(line_info_offset);
+        reloc.target = local_projs[@intFromEnum(reloc.target)];
+    }
+    @memcpy(
+        ctx.out.line_info_relocs.items[line_info_reloc_offset..][0..other.out.line_info_relocs.items.len],
+        other.out.line_info_relocs.items,
+    );
+
     lane.sync(.{});
 
     if (lane.isRoot()) {
+        ctx.out.files = self.out.files;
         self.out.deinit(gpa);
         self.out = ctx.out;
     }

@@ -139,7 +139,7 @@ pub const Pool = struct {
 
         return .{
             .ptr = self,
-            .vtable = &.{
+            .vtable = comptime &.{
                 .alloc = alc_impl.alloc,
                 .free = alc_impl.free,
                 .remap = alc_impl.remap,
@@ -1175,7 +1175,7 @@ pub const Arena = struct {
 
         return .{
             .ptr = self,
-            .vtable = &.{
+            .vtable = comptime &.{
                 .alloc = alc_impl.alloc,
                 .free = alc_impl.free,
                 .remap = alc_impl.remap,

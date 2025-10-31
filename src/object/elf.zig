@@ -617,6 +617,7 @@ pub fn flush(self: root.backend.Machine.Data, arch: Arch, writer: *std.Io.Writer
         reloc_proj[symid] = @intCast(i);
 
         const sym = &self.syms.items[symid];
+        std.debug.assert(sym.kind != .invalid);
         poff.* = switch (sym.kind) {
             .func => text_offset_cursor,
             .data => data_offset_cursor,

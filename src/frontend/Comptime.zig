@@ -1264,7 +1264,7 @@ pub fn jitExprLow(
             self.gen.emitFunc(
                 @ptrCast(&gen.bl.func),
                 .{
-                    .id = @intFromEnum(id),
+                    .id = .{ .arbitrary = @intFromEnum(id) },
                     .linkage = .exported,
                     .is_inline = false,
                     .optimizations = .{ .allocs = reg_alloc_results },
@@ -1307,7 +1307,7 @@ pub fn compileDependencies(self: *Codegen, pop_until: usize, new_syms_pop_until:
         self.types.ct.gen.emitFunc(
             @ptrCast(&self.bl.func),
             .{
-                .id = @intFromEnum(func),
+                .id = .{ .arbitrary = @intFromEnum(func) },
                 .linkage = .local,
                 .is_inline = false,
                 .optimizations = .{ .allocs = reg_alloc_results },

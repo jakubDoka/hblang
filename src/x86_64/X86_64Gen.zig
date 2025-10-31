@@ -8,6 +8,7 @@ const Regalloc = root.backend.Regalloc;
 const utils = root.utils;
 const object = root.object;
 const dwarf = root.dwarf;
+const lane = root.utils.lane;
 
 const X86_64Gen = @This();
 const Func = graph.Func(X86_64Gen);
@@ -16,8 +17,8 @@ const Move = utils.Move(Reg);
 
 const memcpy_uuid = Mach.Data.uuidConst("memcpy");
 
-gpa: std.mem.Allocator,
 mach: Mach = .init(X86_64Gen),
+gpa: std.mem.Allocator,
 object_format: enum { elf, coff },
 memcpy: Mach.Data.SymIdx = .invalid,
 f32s: Mach.Data.SymIdx = .invalid,
@@ -811,18 +812,24 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     else
         opts.name;
 
-    const sym = try self.mach.out.startDefineFunc(self.gpa, name, opts);
+    switch (opts.linkage) {
+        else => {},
+    }
+
+    _, const sym_idx, const root_sym = try self.mach.out.startDefineFunc(self.gpa, name, opts);
     defer self.mach.out.endDefineFunc(opts.id);
 
     if (opts.linkage == .imported) return;
 
-    const allocs = opts.optimizations.apply(X86_64Gen, func, self, opts.id) orelse {
+    const allocs = opts.apply(X86_64Gen, func, self) orelse {
         //if (std.mem.indexOf(u8, name, "main") != null) {
         //    func.fmtScheduledLog();
         //}
 
         return;
     };
+
+    const sym = &self.mach.out.syms.items[@intFromEnum(sym_idx)];
 
     var tmp = utils.Arena.scrath(if (opts.optimizations == .opts)
         opts.optimizations.opts.arena
@@ -840,7 +847,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
     const offset = self.lpe.begin(&lpe_writer.writer);
     try self.mach.out.line_info_relocs.append(self.gpa, .{
         .offset = @intCast(base + offset),
-        .target = self.mach.out.funcs.items[opts.id],
+        .target = root_sym,
         .meta = .{
             .slot_size = .@"8",
             .addend = 0,
@@ -1030,6 +1037,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 try self.mach.out.addReloc(self.gpa, sym, .@"4", dis - 4, 4);
             },
             .MemCpy => {
+                if (true) unreachable;
                 // call id
                 self.emitBytes(&.{ 0xe8, 0, 0, 0, 0 });
                 if (self.ctx.builtins.memcpy == std.math.maxInt(u32)) {
@@ -1094,7 +1102,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 self.emitByte(0x8d);
                 self.emitIndirectAddr(dst, .rip, .no_index, 1, null);
 
-                try self.mach.out.addGlobalReloc(self.gpa, extra.id, .@"4", -4, 4);
+                try self.mach.out.addReloc(self.gpa, @ptrCast(&extra.id), .@"4", -4, 4);
             },
             .FuncAddr => |extra| {
                 // lea dst, [rip+reloc]
@@ -1103,7 +1111,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 self.emitByte(0x8d);
                 self.emitIndirectAddr(dst, .rip, .no_index, 1, null);
 
-                try self.mach.out.addFuncReloc(self.gpa, extra.id, .@"4", -4, 4);
+                try self.mach.out.addReloc(self.gpa, @ptrCast(&extra.id), .@"4", -4, 4);
             },
             .RepStosb => {
                 // cld
@@ -1116,9 +1124,9 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const dis: i31 = @intCast(extra.dis);
                 const imm_size: i16 = @intCast(@min(instr.data_type.size(), 4));
                 self.emitMemConstStore(instr.data_type, vl, .rip, null);
-                try self.mach.out.addGlobalReloc(
+                try self.mach.out.addReloc(
                     self.gpa,
-                    extra.id,
+                    @ptrCast(&extra.id),
                     .@"4",
                     dis - 4 - imm_size,
                     @intCast(4 + imm_size),
@@ -1129,14 +1137,14 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                 const src = self.getReg(inps[0]);
                 self.emitMemStoreOrLoad(instr.data_type, src, .rip, null, true);
                 const dis: i31 = @intCast(extra.dis);
-                try self.mach.out.addGlobalReloc(self.gpa, extra.id, .@"4", dis - 4, 4);
+                try self.mach.out.addReloc(self.gpa, @ptrCast(&extra.id), .@"4", dis - 4, 4);
             },
             .GlobalLoad => |extra| {
                 // mov dst, [rip+dis+offset]
                 const dst = self.getReg(instr);
                 self.emitMemStoreOrLoad(instr.data_type, dst, .rip, null, false);
                 const dis: i31 = @intCast(extra.dis);
-                try self.mach.out.addGlobalReloc(self.gpa, extra.id, .@"4", dis - 4, 4);
+                try self.mach.out.addReloc(self.gpa, @ptrCast(&extra.id), .@"4", dis - 4, 4);
             },
             .LocalAlloc => {},
             .Local => {
@@ -1214,7 +1222,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                     // call id
                     self.emitBytes(&.{ 0xe8, 0, 0, 0, 0 });
 
-                    try self.mach.out.addFuncReloc(self.gpa, call.id, .@"4", -4, 4);
+                    try self.mach.out.addReloc(self.gpa, @ptrCast(&call.id), .@"4", -4, 4);
                 }
             },
             .Trap => {
@@ -2029,7 +2037,16 @@ pub fn emitData(self: *X86_64Gen, opts: Mach.DataOptions) void {
     try self.mach.out.defineGlobal(self.gpa, false, .local, 0, opts);
 }
 
-pub fn preLinkHook(self: *X86_64Gen) void {
+pub fn preEmmisionHook(self: *X86_64Gen, final_out: *Mach.Data) void {
+    errdefer unreachable;
+    std.debug.assert(self.f32s == .invalid);
+    std.debug.assert(self.f64s == .invalid);
+
+    _ = try final_out.declSym(self.gpa, &self.f32s);
+    _ = try final_out.declSym(self.gpa, &self.f64s);
+}
+
+pub fn preLinkHook(self: *X86_64Gen, final_out: *Mach.Data) void {
     errdefer unreachable;
     inline for (.{ "f32", "f64" }) |name| {
         const idx = @field(self, name ++ "index");
@@ -2037,44 +2054,55 @@ pub fn preLinkHook(self: *X86_64Gen) void {
 
         const uuid = Mach.Data.uuidConst(@ptrCast(idx.entries.items(.key)));
 
-        _ = try self.mach.out.startDefineSym(self.gpa, sym, name ++ "s", .data, .local, true, false, uuid);
-        try self.mach.out.code.appendSlice(self.gpa, @ptrCast(idx.entries.items(.key)));
-        self.mach.out.endDefineSym(sym.*);
-        try self.mach.out.globals.append(self.gpa, sym.*);
+        _ = try final_out.startDefineSym(self.gpa, sym, name ++ "s", .data, .local, true, false, uuid);
+        try final_out.code.appendSlice(self.gpa, @ptrCast(idx.entries.items(.key)));
+        final_out.endDefineSym(sym.*);
     }
 }
 
-pub fn finalize(self: *X86_64Gen, opts: Mach.FinalizeOptions) void {
+pub fn finalize(local: *X86_64Gen, opts: Mach.FinalizeOptions) void {
     errdefer unreachable;
 
+    const self: *X86_64Gen = @ptrCast(opts.interface.others[0]);
+
     defer {
-        self.memcpy = .invalid;
-        self.f32s = .invalid;
-        self.f64s = .invalid;
-        self.f32index.clearRetainingCapacity();
-        self.f64index.clearRetainingCapacity();
-        self.mach.out.reset();
+        local.memcpy = .invalid;
+        local.f32s = .invalid;
+        local.f64s = .invalid;
+        local.f32index.clearRetainingCapacity();
+        local.f64index.clearRetainingCapacity();
+        local.mach.out.reset();
     }
+
+    self.mach.mergeOut(
+        opts.interface.others,
+        self.gpa,
+        opts.interface.optimizations.mode,
+    );
 
     if (opts.interface.optimizations.finalize(X86_64Gen, self, opts.interface)) return;
 
-    switch (self.object_format) {
-        .elf => {
-            var writer = std.Io.Writer.Allocating.fromArrayList(
-                self.gpa,
-                &self.mach.out.line_info,
-            );
-            root.dwarf.LineProgramEncoder.end(&writer.writer);
-            self.mach.out.line_info = writer.toArrayList();
+    if (lane.isRoot()) {
+        switch (self.object_format) {
+            .elf => {
+                var writer = std.Io.Writer.Allocating.fromArrayList(
+                    self.gpa,
+                    &self.mach.out.line_info,
+                );
+                root.dwarf.LineProgramEncoder.end(&writer.writer);
+                self.mach.out.line_info = writer.toArrayList();
 
-            try root.object.elf.flush(
-                self.mach.out,
-                .x86_64,
-                opts.output orelse return,
-            );
-        },
-        .coff => unreachable, //root.object.coff.flush(self.mach.out, .x86_64, out),try
+                try root.object.elf.flush(
+                    self.mach.out,
+                    .x86_64,
+                    opts.output orelse return,
+                );
+            },
+            .coff => unreachable, //root.object.coff.flush(self.mach.out, .x86_64, out),try
+        }
     }
+
+    lane.sync(.{});
 }
 
 pub fn deinit(self: *X86_64Gen) void {

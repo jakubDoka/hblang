@@ -1189,8 +1189,8 @@ pub fn cloneFrom(self: *Types, from: *Types, id: Id) struct { Id, bool } {
                                 .key = func.key,
                                 .args = args,
                                 .ret = ret,
-                                .is_inline = func.is_inline,
-                                .visibility = func.visibility,
+                                .is_inline = other.is_inline,
+                                .visibility = other.visibility,
                             };
                         },
                         .Template => {

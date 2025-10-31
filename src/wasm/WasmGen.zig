@@ -12,8 +12,8 @@ const WasmGen = @This();
 const Func = graph.Func(WasmGen);
 const opb = object.opb;
 
-gpa: std.mem.Allocator,
 mach: Mach = .init(WasmGen),
+gpa: std.mem.Allocator,
 indirect_signatures: std.ArrayList(u8) = .empty,
 indirect_signature_count: u64 = 0,
 stack_size: u64 = 1024 * 128,
@@ -483,8 +483,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     else
         opts.name;
 
-    const sym = try self.mach.out.startDefineFunc(self.gpa, name, opts);
-    _ = sym;
+    _ = try self.mach.out.startDefineFunc(self.gpa, name, opts);
     defer self.mach.out.endDefineFunc(opts.id);
 
     // For inport, we smuggle the signature with the function
@@ -680,9 +679,13 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
             const param_count = param_counts.get(instr.data_type).*;
             const alloc = self.ctx.allocs[instr.schedule];
 
-            const prefix = if (alloc - typeMaskOffset(instr.data_type) < param_count) 0 else params_len + base;
+            const prefix = if (alloc - typeMaskOffset(instr.data_type) < param_count)
+                0
+            else
+                params_len + base;
 
-            self.ctx.allocs[instr.schedule] = @intCast(prefix + new_allocs[self.ctx.allocs[instr.schedule]]);
+            self.ctx.allocs[instr.schedule] =
+                @intCast(prefix + new_allocs[self.ctx.allocs[instr.schedule]]);
         }
     }
 

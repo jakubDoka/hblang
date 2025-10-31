@@ -313,21 +313,21 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     const entry = opts.linkage == .exported;
 
-    _ = try self.mach.out.startDefineFunc(self.gpa, opts.name, opts);
+    _, const sym_idx, _ = try self.mach.out.startDefineFunc(self.gpa, opts.name, opts);
     defer {
         self.mach.out.endDefineFunc(opts.id);
         if (self.emit_global_reloc_offsets) {
-            self.mach.out.makeRelocOffsetsGlobal(self.mach.out.funcs.items[opts.id]);
+            self.mach.out.makeRelocOffsetsGlobal(sym_idx);
         }
     }
 
-    const allocs = opts.optimizations.apply(HbvmGen, func, self, opts.id) orelse {
+    const allocs = opts.apply(HbvmGen, func, self) orelse {
         //func.fmtScheduledLog();
         //func.fmtUnscheduledLog();
         return;
     };
 
-    const sym = self.mach.out.getFuncSym(opts.id);
+    const sym = &self.mach.out.syms.items[@intFromEnum(sym_idx)];
 
     var tmp = utils.Arena.scrath(if (opts.optimizations == .opts)
         opts.optimizations.opts.arena

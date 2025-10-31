@@ -361,6 +361,8 @@ pub fn emitReachable(
         const err = codegen.build(func);
         build_met.end();
 
+        const func_data = func.get(types);
+
         var retain_globals_met = types.metrics.begin(.retain_globals);
         errored = types.retainGlobals(.runtime, backend, true) or
             errored;
@@ -397,8 +399,6 @@ pub fn emitReachable(
 
         if (opts.verbose) try root.test_utils.header("CODEGEN", opts.output, opts.colors);
 
-        const func_data = func.get(types);
-
         const optms = root.backend.Machine.OptOptions{
             .mode = opts.optimizations,
             .error_buf = &errors,
@@ -407,7 +407,7 @@ pub fn emitReachable(
 
         var emit_func_met = types.metrics.begin(.emit_func);
         backend.emitFunc(&codegen.bl.func, root.backend.Machine.EmitOptions{
-            .id = @intFromEnum(func),
+            .id = .{ .arbitrary = @intFromEnum(func) },
             .name = if (func_data.visibility != .local)
                 func_data.key.name(types)
             else
