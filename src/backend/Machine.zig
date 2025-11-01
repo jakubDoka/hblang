@@ -1321,6 +1321,8 @@ pub fn mergeOut(
         unique_syms_indices: []usize,
         unique_inline_funcs_indices: []usize,
         unique_name_indices: []usize,
+        line_info_indices: []usize,
+        line_info_relocs_indices: []usize,
 
         out: Data = .{},
     };
@@ -1359,12 +1361,17 @@ pub fn mergeOut(
         var unique_syms: usize = 0;
         var unique_inline_funcs: usize = 0;
         var unique_names: usize = 0;
+        var line_info: usize = 0;
+        var line_info_relocs: usize = 0;
 
         const unique_code_indices = tmp.arena.alloc(usize, lane.count());
         const unique_relocs_indices = tmp.arena.alloc(usize, lane.count());
         const unique_syms_indices = tmp.arena.alloc(usize, lane.count());
         const unique_inline_funcs_indices = tmp.arena.alloc(usize, lane.count());
         const unique_name_indices = tmp.arena.alloc(usize, lane.count());
+        // NOTE: we dont put any effort into deduping the line info
+        const line_info_indices = tmp.arena.alloc(usize, lane.count());
+        const line_info_relocs_indices = tmp.arena.alloc(usize, lane.count());
 
         for (
             others,
@@ -1378,6 +1385,8 @@ pub fn mergeOut(
             unique_syms_indices[i] = unique_syms;
             unique_inline_funcs_indices[i] = unique_inline_funcs;
             unique_name_indices[i] = unique_names;
+            line_info_indices[i] = line_info;
+            line_info_relocs_indices[i] = line_info_relocs;
 
             for (local_projs, syms) |*proj, *sym| {
                 if (sym.kind == .invalid) continue;
@@ -1402,6 +1411,8 @@ pub fn mergeOut(
                 std.debug.assert(@intFromEnum(entry.value_ptr.*) < unique_syms);
                 proj.* = entry.value_ptr.*;
             }
+            line_info += other.out.line_info.items.len;
+            line_info_relocs += other.out.line_info_relocs.items.len;
         }
 
         ctx = tmp.arena.create(Ctx);
@@ -1415,6 +1426,8 @@ pub fn mergeOut(
             .unique_syms_indices = unique_syms_indices,
             .unique_inline_funcs_indices = unique_inline_funcs_indices,
             .unique_name_indices = unique_name_indices,
+            .line_info_indices = line_info_indices,
+            .line_info_relocs_indices = line_info_relocs_indices,
         };
 
         try ctx.out.syms.resize(gpa, unique_syms);
@@ -1422,6 +1435,8 @@ pub fn mergeOut(
         try ctx.out.code.resize(gpa, unique_code);
         try ctx.out.inline_funcs.resize(gpa, unique_inline_funcs);
         try ctx.out.names.resize(gpa, unique_names);
+        try ctx.out.line_info.resize(gpa, line_info);
+        try ctx.out.line_info_relocs.resize(gpa, line_info_relocs);
     }
     lane.broadcast(&ctx, .{});
 
@@ -1444,9 +1459,6 @@ pub fn mergeOut(
 
     lane.sync(.{});
 
-    std.debug.assert(other.out.line_info.items.len == 0); // TODO
-    std.debug.assert(other.out.line_info_relocs.items.len == 0); // TODO
-
     const syms = other.out.syms.items;
     const relocs = other.out.relocs.items;
 
@@ -1462,6 +1474,7 @@ pub fn mergeOut(
             for (inline_func.getSyms().outputs()) |s| {
                 switch (s.get().extra2()) {
                     inline .FuncAddr, .Call, .GlobalAddr => |extra| {
+                        if (extra.id >= graph.min_special_fn_id) continue;
                         extra.id = @intFromEnum(local_projs[extra.id]);
                     },
                     else => utils.panic("{f} has no sym", .{s}),
@@ -1493,7 +1506,7 @@ pub fn mergeOut(
         const name = other.out.lookupName(sym.name);
 
         var new_sym = sym;
-        new_sym.offset = @intCast(sym_cursor);
+        new_sym.offset = @intCast(code_cursor);
         new_sym.reloc_offset = @intCast(reloc_cursor);
         new_sym.name = @intCast(name_cursor);
 
@@ -1525,12 +1538,32 @@ pub fn mergeOut(
         sym_cursor += 1;
     }
 
+    const line_info_offset: usize = ctx.line_info_indices[lane.index()];
+    const line_info_reloc_offset: usize = ctx.line_info_relocs_indices[lane.index()];
+
+    @memcpy(
+        ctx.out.line_info.items[line_info_offset..][0..other.out.line_info.items.len],
+        other.out.line_info.items,
+    );
+
+    for (other.out.line_info_relocs.items) |*reloc| {
+        reloc.offset += @intCast(line_info_offset);
+        reloc.target = local_projs[@intFromEnum(reloc.target)];
+    }
+    @memcpy(
+        ctx.out.line_info_relocs.items[line_info_reloc_offset..][0..other.out.line_info_relocs.items.len],
+        other.out.line_info_relocs.items,
+    );
+
     lane.sync(.{});
 
     if (lane.isRoot()) {
+        ctx.out.files = self.out.files;
         self.out.deinit(gpa);
         self.out = ctx.out;
     }
+
+    lane.sync(.{});
 }
 
 /// frees the internal resources
