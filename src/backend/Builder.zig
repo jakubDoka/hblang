@@ -3,6 +3,8 @@ scope: ?*Func.Node = undefined,
 root_mem: *Func.Node = undefined,
 pin_free_list: ?*Func.Node = undefined,
 
+pub const max_func_id = graph.indirect_call - 1;
+
 const std = @import("std");
 const utils = graph.utils;
 const graph = @import("graph.zig");
@@ -567,6 +569,7 @@ pub fn addCall(
     sloc: graph.Sloc,
     call_conv: graph.CallConv,
     arbitrary_call_id: u32,
+    is_sym: enum { is_sym, is_special },
     args_with_initialized_arg_slots: CallArgs,
 ) ?[]const *BuildNode {
     errdefer unreachable;
@@ -576,7 +579,7 @@ pub fn addCall(
         utils.panic("{} != {}", .{ ar.data_type, ar.data_type.meet(pr.getReg()) });
     };
     const prefix_len = arg_prefix_len + @intFromBool(args.fptr != null);
-    const full_args = (args.arg_slots.ptr - prefix_len)[0 .. prefix_len + args.params.len];
+    const full_args: []?*BuildNode = @ptrCast((args.arg_slots.ptr - prefix_len)[0 .. prefix_len + args.params.len]);
     var stack_offset: u64 = 0;
     for (args.params, args.arg_slots) |par, *arg| {
         if (par == .Stack) {
@@ -600,7 +603,7 @@ pub fn addCall(
 
     full_args[0] = self.control();
     full_args[1] = self.memory();
-    full_args[2] = self.func.getSyms();
+    full_args[2] = if (is_sym == .is_sym) self.func.getSyms() else null;
     if (args.fptr) |fptr| {
         full_args[3] = fptr;
     }

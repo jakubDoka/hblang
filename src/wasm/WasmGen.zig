@@ -12,8 +12,8 @@ const WasmGen = @This();
 const Func = graph.Func(WasmGen);
 const opb = object.opb;
 
-gpa: std.mem.Allocator,
 mach: Mach = .init(WasmGen),
+gpa: std.mem.Allocator,
 indirect_signatures: std.ArrayList(u8) = .empty,
 indirect_signature_count: u64 = 0,
 stack_size: u64 = 1024 * 128,

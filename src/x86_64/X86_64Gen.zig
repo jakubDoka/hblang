@@ -16,8 +16,8 @@ const Move = utils.Move(Reg);
 
 const memcpy_uuid = Mach.Data.uuidConst("memcpy");
 
-gpa: std.mem.Allocator,
 mach: Mach = .init(X86_64Gen),
+gpa: std.mem.Allocator,
 object_format: enum { elf, coff },
 memcpy: Mach.Data.SymIdx = .invalid,
 f32s: Mach.Data.SymIdx = .invalid,

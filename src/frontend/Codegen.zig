@@ -2496,7 +2496,7 @@ fn emitUserType(self: *Codegen, _: Ctx, expr: Ast.Id, e: *Expr(.Type)) !Value {
         };
     }
 
-    const rets = self.bl.addCall(sloc, .ablecall, Types.comptime_only_fn, args);
+    const rets = self.bl.addCall(sloc, .ablecall, Types.comptime_only_fn, .is_special, args);
     var ret: Value = .mkv(.type, rets.?[0]);
     if (for (args.arg_slots) |a| {
         if (a.kind != .CInt) break false;
@@ -3077,7 +3077,7 @@ fn emitInternalEca(
     @memcpy(c_args.arg_slots[cursor..], args);
 
     if (ret_ref) {
-        _ = self.bl.addCall(self.src(expr), self.abi.cc, eca, c_args);
+        _ = self.bl.addCall(self.src(expr), self.abi.cc, eca, .is_special, c_args);
         return .mkp(ret_ty, c_args.arg_slots[1]);
     }
 
@@ -3905,7 +3905,13 @@ fn assembleReturn(
     cc: graph.CallConv,
 ) !Value {
     const sloc = self.src(expr);
-    const rets = self.bl.addCall(sloc, cc, id orelse graph.indirect_call, call_args);
+    const rets = self.bl.addCall(
+        sloc,
+        cc,
+        id orelse graph.indirect_call,
+        if (id == null) .is_special else .is_sym,
+        call_args,
+    );
     return switch (ret_abi) {
         .Impossible => return error.Unreachable,
         .Imaginary => .{ .ty = ret },

@@ -465,11 +465,11 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
             .Poison => {},
             .Arg => {},
             .GlobalAddr => |extra| {
-                try self.mach.out.addReloc(self.gpa, @ptrCast(&extra.id), .@"4", 3, 0);
+                try self.mach.out.addGlobalReloc(self.gpa, extra.id, .@"4", 3, 0);
                 self.emit(.lra, .{ self.getReg(no), .null, 0 });
             },
             .FuncAddr => |extra| {
-                try self.mach.out.addReloc(self.gpa, @ptrCast(&extra.id), .@"4", 3, 0);
+                try self.mach.out.addFuncReloc(self.gpa, extra.id, .@"4", 3, 0);
                 self.emit(.lra, .{ self.getReg(no), .null, 0 });
             },
             .LocalAlloc => {},
@@ -662,10 +662,11 @@ pub fn emitBlockBody(self: *HbvmGen, tmp: std.mem.Allocator, node: *Func.Node) v
                 } else if (extra.id == graph.indirect_call) {
                     self.emit(.jala, .{ .ret_addr, self.getReg(inps[0]), 0 });
                 } else {
-                    try self.mach.out.addReloc(self.gpa, @ptrCast(&extra.id), .@"4", 3, 0);
+                    try self.mach.out.addFuncReloc(self.gpa, extra.id, .@"4", 3, 0);
                     self.emit(.jal, .{ .ret_addr, .null, 0 });
                 }
             },
+
             .Return => {},
             .Trap => |extra| {
                 switch (extra.code) {
@@ -742,14 +743,15 @@ pub fn finalize(self: *HbvmGen, opts: Mach.FinalizeOptions) void {
     errdefer unreachable;
 
     defer {
-        opts.interface.others[lane.index()].out.reset();
+        self.mach.out.reset();
+        //opts.interface.others[lane.index()].out.reset();
     }
 
-    self.mach.mergeOut(
-        opts.interface.others,
-        self.gpa,
-        opts.interface.optimizations.mode,
-    );
+    //self.mach.mergeOut(
+    //    opts.interface.others,
+    //    self.gpa,
+    //    opts.interface.optimizations.mode,
+    //);
 
     if (lane.isRoot()) {
         if (opts.interface.optimizations.finalize(HbvmGen, self, opts.interface)) return;

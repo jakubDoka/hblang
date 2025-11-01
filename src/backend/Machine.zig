@@ -152,28 +152,6 @@ pub const Data = struct {
 
     pub const SymIdx = enum(u32) { invalid = std.math.maxInt(u32), _ };
 
-    pub fn projectSyms(
-        self: *Data,
-        gpa: std.mem.Allocator,
-        comptime Node: type,
-        func: *graph.Func(Node),
-    ) void {
-        errdefer unreachable;
-        for (func.getSyms().outputs()) |s| {
-            switch (s.get().extra2()) {
-                inline .FuncAddr, .Call, .GlobalAddr => |extra, t| {
-                    const lookup = if (t == .GlobalAddr)
-                        &self.globals
-                    else
-                        &self.funcs;
-                    const slot = try utils.ensureSlot(lookup, gpa, extra.id);
-                    extra.id = @intFromEnum(try self.declSym(gpa, slot));
-                },
-                else => utils.panic("{f} has no sym", .{s}),
-            }
-        }
-    }
-
     pub fn setInlineFunc(
         self: *Data,
         gpa: std.mem.Allocator,
@@ -768,36 +746,13 @@ pub const Data = struct {
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
 
-        const sym_to_idx = tmp.arena.alloc(u32, self.syms.items.len);
-
-        for (self.funcs.items, 0..) |sym, i| {
-            if (sym == .invalid) continue;
-            sym_to_idx[@intFromEnum(sym)] = @intCast(i);
-        }
-
-        for (self.globals.items, 0..) |sym, i| {
-            if (sym == .invalid) continue;
-            sym_to_idx[@intFromEnum(sym)] = @intCast(i);
-        }
-
         var visited_syms = try Set.initEmpty(tmp.arena.allocator(), self.syms.items.len);
         var frontier = std.ArrayList(SymIdx).empty;
 
-        for (self.funcs.items) |fid| {
-            if (fid == .invalid) continue;
-            const f = &self.syms.items[@intFromEnum(fid)];
-            if (f.kind == .func and f.linkage == .exported) {
-                visited_syms.set(@intFromEnum(fid));
-                try frontier.append(tmp.arena.allocator(), fid);
-            }
-        }
-
-        for (self.globals.items) |gid| {
-            if (gid == .invalid) continue;
-            const g = &self.syms.items[@intFromEnum(gid)];
-            if (g.kind == .data and g.linkage == .exported) {
-                visited_syms.set(@intFromEnum(gid));
-                try frontier.append(tmp.arena.allocator(), gid);
+        for (self.syms.items, 0..) |f, i| {
+            if (f.kind != .invalid and f.linkage == .exported) {
+                visited_syms.set(i);
+                try frontier.append(tmp.arena.allocator(), @enumFromInt(i));
             }
         }
 
@@ -813,13 +768,8 @@ pub const Data = struct {
             }
         }
 
-        for (sym_to_idx, self.syms.items, 0..) |idx, *sym, i| {
+        for (self.syms.items, 0..) |*sym, i| {
             if (!visited_syms.isSet(i)) {
-                switch (sym.kind) {
-                    .func => self.funcs.items[idx] = .invalid,
-                    .data, .prealloc, .tls_prealloc => self.globals.items[idx] = .invalid,
-                    else => unreachable, // TODO: remove
-                }
                 sym.kind = .invalid;
             }
         }
@@ -1161,7 +1111,6 @@ pub const EmitOptions = struct {
         ) ?[]const u16 {
             switch (self) {
                 .opts => |pts| {
-                    backend.mach.out.projectSyms(backend.gpa, Backend, func);
                     if (pts.shouldDefer(id, Backend, func, backend)) return null;
                     return root.backend.Regalloc.rallocIgnoreStats(Backend, func);
                 },

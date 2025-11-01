@@ -283,11 +283,8 @@ pub fn Mixin(comptime Backend: type) type {
                 }
             }
 
-            if (entry_syms != null) {
-                for (tmp.arena.dupe(Func.Node.Out, entry_syms.?.outputs())) |use| {
-                    const index: usize = if (use.get().kind == .Call) 2 else 1;
-                    _ = func.setInput(use.get(), index, into_entry_syms);
-                }
+            if (entry_syms) |syms| {
+                func.subsume(into_entry_syms, syms);
             }
 
             // NOTE: not scheduled yet so args are on the Start
