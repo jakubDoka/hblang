@@ -79,7 +79,7 @@ pub fn build(b: *std.Build) !void {
                 .root_source_file = b.path("src/hbc.zig"),
                 .target = target,
                 .optimize = optimize,
-                //.single_threaded = true,
+                .single_threaded = true,
             }),
             .use_llvm = use_llvm,
             .use_lld = use_lld,

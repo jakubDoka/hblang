@@ -26,7 +26,6 @@ pub const RunError = error{
 const VTable = struct {
     emitFunc: *const fn (self: *Machine, func: *BuilderFunc, opts: EmitOptions) void,
     emitData: *const fn (self: *Machine, opts: DataOptions) void,
-    merge: *const fn (self: *Machine, others: []*Machine) bool,
     finalize: *const fn (self: *Machine, opts: FinalizeOptions) void,
     disasm: *const fn (self: *Machine, opts: DisasmOpts) void,
     run: *const fn (self: *Machine, env: RunEnv) RunError!usize,
@@ -1218,11 +1217,6 @@ pub fn init(comptime Type: type) Machine {
         fn emitData(self: *Machine, opts: DataOptions) void {
             getSelf(self).emitData(opts);
         }
-        fn merge(self: *Machine, others: []*Machine) bool {
-            std.debug.assert(@as(*anyopaque, getSelf(self)) == @as(*anyopaque, self));
-
-            return if (@hasDecl(Type, "merge")) getSelf(self).merge(@ptrCast(others)) else false;
-        }
         fn finalize(self: *Machine, opts: FinalizeOptions) void {
             return getSelf(self).finalize(opts);
         }
@@ -1242,7 +1236,6 @@ pub fn init(comptime Type: type) Machine {
         .vtable = comptime &VTable{
             .emitFunc = fns.emitFunc,
             .emitData = fns.emitData,
-            .merge = fns.merge,
             .finalize = fns.finalize,
             .disasm = fns.disasm,
             .run = fns.run,
@@ -1474,7 +1467,6 @@ pub fn mergeOut(
             for (inline_func.getSyms().outputs()) |s| {
                 switch (s.get().extra2()) {
                     inline .FuncAddr, .Call, .GlobalAddr => |extra| {
-                        if (extra.id >= graph.min_special_fn_id) continue;
                         extra.id = @intFromEnum(local_projs[extra.id]);
                     },
                     else => utils.panic("{f} has no sym", .{s}),
