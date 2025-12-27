@@ -3,10 +3,10 @@
     .fingerprint = 0xa6da53c767f0ddf0,
     .version = "0.0.0",
     .dependencies = .{
-        .afl_kit = .{
-            .url = "git+https://github.com/kristoff-it/zig-afl-kit#8ef04d1db48650345dca68da1e1b8f2615125c40",
-            .hash = "afl_kit-0.1.0-NdJ3cvscAACLEvjZTB017IAks_Uq5ux1qpA-klDe384Y",
-        },
+        //.afl_kit = .{
+        //    .url = "git+https://github.com/kristoff-it/zig-afl-kit.git#b6cb826f21d4026409caec30a932be462bca27b9",
+        //    .hash = "afl_kit-0.1.0-NdJ3cncdAADtO8S74G1yMYKO1f2XoHputmaJBInsHLp2",
+        //},
         .zydis = .{
             .url = "git+https://github.com/zyantific/zydis.git#9bfadd6a55fc92dbd37fa3ba089bf8b36622df4f",
             .hash = "N-V-__8AACyxNgH-wMYYPBKGqdREPwKYY0a99dXCrXckI_d6",
