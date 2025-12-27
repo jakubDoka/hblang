@@ -18,42 +18,38 @@ pub fn build(b: *std.Build) !void {
     options.addOption(bool, "dont_simulate", dont_simulate);
 
     const zydis = zydis: {
+        const zydis = b.dependency("zydis", .{});
+        const zycore = b.dependency("zycore", .{});
+
         const m = b.addModule("zidis", .{
             .root_source_file = b.path("src/zydis.zig"),
             .target = target,
             .optimize = .ReleaseFast,
         });
 
-        m.addIncludePath(b.path("vendored/zydis/include/"));
-        m.addIncludePath(b.path("vendored/zydis/src/"));
-        m.addIncludePath(b.path("vendored/zydis/dependencies/zycore/include/"));
+        m.addIncludePath(zydis.path("include/"));
+        m.addIncludePath(zydis.path("src/"));
+        m.addIncludePath(zycore.path("include/"));
 
-        var files = std.ArrayList([]const u8).empty;
-
-        inline for (.{
-            "vendored/zydis/src/",
-            "vendored/zydis/dependencies/zycore/src/",
-        }) |p| {
-            const path = b.path(p).getPath(b);
-            var dir = try std.fs.openDirAbsolute(path, .{ .iterate = true });
+        for ([_]*std.Build.Dependency{ zydis, zycore }) |dep| {
+            const path = dep.path("src/");
+            var dir = try std.fs.openDirAbsolute(path.getPath(b), .{ .iterate = true });
             var iter = try dir.walk(b.allocator);
 
+            var files = std.ArrayList([]const u8).empty;
+
             while (try iter.next()) |fl| {
-                if (std.mem.endsWith(u8, fl.path, ".c") or
-                    std.mem.endsWith(u8, fl.path, ".h"))
-                {
-                    try files.append(
-                        b.allocator,
-                        try std.mem.concat(b.allocator, u8, &.{ p, fl.path }),
-                    );
+                if (std.mem.endsWith(u8, fl.path, ".c")) {
+                    try files.append(b.allocator, try b.allocator.dupe(u8, fl.path));
                 }
             }
-        }
 
-        m.addCSourceFiles(.{
-            .files = files.items,
-            .flags = &.{"-DZYAN_NO_LIBC"},
-        });
+            m.addCSourceFiles(.{
+                .root = path,
+                .files = files.items,
+                .flags = &.{"-DZYAN_NO_LIBC"},
+            });
+        }
 
         break :zydis m;
     };

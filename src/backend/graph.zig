@@ -752,6 +752,7 @@ pub const Cfg = extern struct {
 const mod = @This();
 const gcm = @import("gcm.zig");
 const mem2reg = @import("mem2reg.zig");
+const mem2reg2 = @import("mem2reg2.zig");
 const static_anal = @import("static_anal.zig");
 const inliner = @import("inliner.zig");
 const alias_anal = @import("alias_anal.zig");
@@ -772,6 +773,7 @@ pub fn Func(comptime Backend: type) type {
         end: *Node = undefined,
         gcm: gcm.Mixin(Backend) = .{},
         mem2reg: mem2reg.Mixin(Backend) = .{},
+        mem2reg2: mem2reg2.Mixin(Backend) = .{},
         alias_anal: alias_anal.Mixin(Backend) = .{},
         static_anal: static_anal.Mixin(Backend) = .{},
         inliner: inliner.Mixin(Backend) = .{},
@@ -1833,6 +1835,12 @@ pub fn Func(comptime Backend: type) type {
             const oidx = if (use.kind == .Phi) block.base.outputs().len - 2 else block.base.posOfOutput(0, use);
             const to_rotate = block.base.outputs()[oidx..];
             std.mem.rotate(Node.Out, to_rotate, to_rotate.len - 1);
+        }
+
+        pub fn getMem(self: *Self) ?*Node {
+            if (self.start.outputs().len < 2) return null;
+            std.debug.assert(self.start.outputs()[1].get().kind == .Mem);
+            return self.start.outputs()[1].get();
         }
 
         pub fn getSyms(self: *Self) *Node {
