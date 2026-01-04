@@ -2992,6 +2992,15 @@ pub fn report(self: *Codegen, expr: anytype, fmt: []const u8, args: anytype) err
     return error.Never;
 }
 
+pub fn logExpr(self: *Codegen, expr: anytype, fmt: []const u8, args: anytype) void {
+    const prev_out = self.types.diagnostics;
+    var out = std.fs.File.stderr().writer(&.{});
+    self.types.diagnostics = &out.interface;
+    defer self.types.diagnostics = prev_out;
+
+    self.types.report(self.source.file, expr, fmt, args);
+}
+
 pub fn lexemeToBinOp(self: *Codegen, pos: anytype, lx: Lexer.Lexeme, ty: Types.Id) !graph.BinOp {
     return lexemeToBinOpLow(lx, ty) orelse self.report(pos, "the operator not supported for {}", .{ty});
 }
@@ -3500,6 +3509,10 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
         else
             value.ty;
 
+        if (value.ty.data() == .Pointer) {
+            value = .mkp(ty, value.getValue(sloc, self));
+        }
+
         if (ty.data() == .Struct or ty.data() == .Union) coerse_to_field: {
             switch (ty.data()) {
                 .Struct => |struct_ty| {
@@ -3509,15 +3522,11 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
                             break .{ elem.field.ty, elem.offset };
                     } else break :coerse_to_field;
 
-                    if (value.ty.data() == .Pointer) {
-                        break :b .{ .mkp(ftype, value.getValue(sloc, self)), null };
-                    } else {
-                        break :b .{ .mkp(ftype, self.bl.addFieldOffset(
-                            sloc,
-                            value.id.Pointer,
-                            @intCast(offset),
-                        )), null };
-                    }
+                    break :b .{ .mkp(ftype, self.bl.addFieldOffset(
+                        sloc,
+                        value.id.Pointer,
+                        @intCast(offset),
+                    )), null };
                 },
                 .Union => |union_ty| {
                     const ftype = for (union_ty.getFields(self.types)) |f| {
@@ -3525,9 +3534,6 @@ pub fn emitCall(self: *Codegen, ctx: Ctx, expr: Ast.Id, cc: graph.CallConv, e: E
                             break f.ty;
                     } else break :coerse_to_field;
                     value.ty = ftype;
-                    if (value.ty.data() == .Pointer) {
-                        break :b .{ .mkp(ftype, value.getValue(sloc, self)), null };
-                    }
                     break :b .{ value, null };
                 },
                 else => unreachable,

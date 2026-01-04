@@ -757,14 +757,16 @@ main := fn(): uint {
 #### function pointers 4
 ```hb
 DynObj := struct {
+    .obj: ^Obj;
     .v_func: ^fn(^Obj): u8;
-    .obj: ^Obj
+    ._wth: void
+    // TODO: fix the formatter here it removes semicolon incorrectly
 
     $func := fn(self: ^DynObj): u8 {
         return self.v_func(self.obj)
     }
     $new := fn(obj: @Any()): DynObj {
-        return .(&@TypeOf(obj.*).func, obj)
+        return .(obj, &@TypeOf(obj.*).func, {})
     }
 }
 

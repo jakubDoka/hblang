@@ -4,8 +4,11 @@
     .fingerprint = 0x13035e5cb467dbb4,
     .minimum_zig_version = "0.14.1",
     .dependencies = .{
-        .raylib = .{ .path = "raylib" },
         .hblang = .{ .path = "../.." },
+        .raylib = .{
+            .url = "git+https://github.com/raysan5/raylib.git#35fc8ece44f899b420c7a227b2f307ba48ff48d2",
+            .hash = "raylib-5.6.0-dev-whq8uEKcDAV_Gm9OiSfUxMqhfPsvcWo5KV7peqgJNzIK",
+        },
     },
 
     .paths = .{

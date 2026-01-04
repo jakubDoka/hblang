@@ -27,20 +27,24 @@
   (BinOp _ (:op op & .iadd | .isub | .bor | .band | .bxor)
     (Load _ (&m) (&bs)) r)) : (OpStore (:dis {@intCast(dis)}) (:op) c m base r)
 
-(Store ?c m bs @ (Local _ LocalAlloc:l) dis = {bs.knownOffset()}
+(Store ?c (:data_type dt && {dt.isInt()}) m bs @ (Local _ LocalAlloc:l)
+  dis = {bs.knownOffset()}
   (CInt (:value value & {Backend.clampI32(value)}))) :
   (ConstStackStore (:dis {@intCast(dis)}) (:imm {@intCast(value)}) c m l)
 
-(Store ?c m bs @ LocalAlloc:l dis = {bs.knownOffset()}
+(Store ?c (:data_type dt && {dt.isInt()}) m bs @ LocalAlloc:l
+  dis = {bs.knownOffset()}
   (CInt (:value value & {Backend.clampI32(value)}))) :
   (ConstStackStore (:dis {@intCast(dis)}) (:imm {@intCast(value)}) c m l)
 
-(Store ?c m bs @ (GlobalAddr (:id) _ s) dis = {bs.knownOffset()}
+(Store ?c (:data_type dt && {dt.isInt()}) m bs @ (GlobalAddr (:id) _ s)
+  dis = {bs.knownOffset()}
   (CInt (:value value & {Backend.clampI32(value)}))) :
-  (ConstGlobalStore (:dis {@intCast(dis)}) (:imm {@intCast(value)}) (:id) c m {null} s)
+  (ConstGlobalStore (:dis {@intCast(dis)}) (:imm {@intCast(value)})
+    (:id) c m {null} s)
 && {res.input_ordered_len -= 1;}
 
-(Store ?c m bs @ base dis = {bs.knownOffset()}
+(Store ?c (:data_type dt && {dt.isInt()}) m bs @ base dis = {bs.knownOffset()}
   (CInt (:value value & {Backend.clampI32(value)}))) :
   (ConstStore (:dis {@intCast(dis)}) (:imm {@intCast(value)}) c m base)
 
@@ -120,8 +124,10 @@
   (CInt (:value dis & {Backend.clampI32(dis)}))
 ) : (StackLea (:dis {@intCast(dis)}) c l)
 
-(UnOp ?c (:op .fneg) (:data_type .f32) a) : (BinOp c (:op .fsub) (F32 c (:imm {0.0})) a)
-(UnOp ?c (:op .fneg) (:data_type .f64) a) : (BinOp c (:op .fsub) (F64 c (:imm {0.0})) a)
+(UnOp ?c (:op .fneg) (:data_type .f32) a) :
+  (BinOp c (:op .fsub) (F32 c (:imm {0.0})) a)
+(UnOp ?c (:op .fneg) (:data_type .f64) a) :
+  (BinOp c (:op .fsub) (F64 c (:imm {0.0})) a)
 
 (UnOp _ (:op .uext | .sext) (:data_type)
   (_:inp (:data_type dt & {data_type.meet(dt)}))) : inp

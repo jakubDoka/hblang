@@ -1,0 +1,26 @@
+main := fn() {
+	#print("fib(10) = ")
+
+	#print(fib(10))
+
+	#printflush(message1)
+}
+
+fib := fn(x) {
+	a := 0
+	b := 1
+
+	loop {
+		c := a + b
+		a = b
+		b = c
+
+		x = x - 1
+
+		if x == 0 {
+			break
+		}
+	}
+
+	return a
+}

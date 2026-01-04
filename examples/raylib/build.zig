@@ -24,14 +24,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const hbc = hblang.artifact("hbc");
-    const run_hbc = b.addRunArtifact(hbc);
-    run_hbc.addFileArg(b.path("main.hb"));
-    run_hbc.addArg("--target");
-    run_hbc.addArg("x86_64-linux");
-    run_hbc.addArg("--optimizations");
-    run_hbc.addArg("release");
-    run_hbc.addArg("--mangle-terminal");
-    const main_obj = captureStdOut(run_hbc, "main.o");
 
     const raylib_dep = b.dependency("raylib", .{
         .target = target,
@@ -39,16 +31,28 @@ pub fn build(b: *std.Build) void {
     });
     const raylib = raylib_dep.artifact("raylib");
 
-    const exe = b.addExecutable(.{
-        .name = "example",
-        .target = target,
-        .optimize = optimize,
-    });
+    inline for ([_][]const u8{ "gam", "spid" }) |file| {
+        const run_hbc = b.addRunArtifact(hbc);
+        run_hbc.addFileArg(b.path(file ++ ".hb"));
+        run_hbc.addArg("--target");
+        run_hbc.addArg("x86_64-linux");
+        run_hbc.addArg("--optimizations");
+        run_hbc.addArg("release");
+        run_hbc.addArg("--mangle-terminal");
+        const main_obj = captureStdOut(run_hbc, "main.o");
 
-    exe.addObjectFile(main_obj);
-    exe.linkLibrary(raylib);
+        const exe = b.addExecutable(.{
+            .name = file,
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+            }),
+        });
+        exe.addObjectFile(main_obj);
+        exe.linkLibrary(raylib);
 
-    const run = b.step("run", "run the example");
-    const run_exe = b.addRunArtifact(exe);
-    run.dependOn(&run_exe.step);
+        const run = b.step(file, "run the example");
+        const run_exe = b.addRunArtifact(exe);
+        run.dependOn(&run_exe.step);
+    }
 }
