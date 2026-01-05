@@ -1350,7 +1350,13 @@ pub fn evalIntConst(self: *Comptime, scope: Codegen.Scope, int_conts: Ast.Id) !i
     return res;
 }
 
-pub fn evalGlobal(self: *Comptime, name: []const u8, global: utils.EntId(tys.Global), ty: ?Types.Id, value: Ast.Id) error{Never}!void {
+pub fn evalGlobal(
+    self: *Comptime,
+    name: []const u8,
+    global: utils.EntId(tys.Global),
+    ty: ?Types.Id,
+    value: Ast.Id,
+) error{Never}!void {
     const types = self.getTypes();
     const glbal = global.get(types);
     const file = glbal.key.loc.file;

@@ -175,7 +175,7 @@ pub const Data = struct {
             null;
     }
 
-    pub fn readFromSym(self: Data, id: u32, offset: i64, size: u64, force_readonly: bool) ?union(enum) { value: i64, global: u32 } {
+    pub fn readFromSym(self: Data, id: u32, offset: i64, size: u64, force_readonly: bool) ?union(enum) { value: i64, global: u32, func: u32 } {
         if (self.globals.items.len <= id) return null;
         const sym = &self.syms.items[@intFromEnum(self.globals.items[id])];
 
@@ -196,6 +196,12 @@ pub const Data = struct {
         for (self.relocs.items[sym.reloc_offset..][0..sym.reloc_count]) |rel| {
             if (rel.offset == offset) {
                 const sm = &self.syms.items[@intFromEnum(rel.target)];
+                // TODO: This is slow
+                for (self.funcs.items, 0..) |f, i| {
+                    if (rel.target == f) {
+                        return .{ .func = @intCast(i) };
+                    }
+                }
                 const gid: u32 = @bitCast(self.code.items[sm.offset - 4 ..][0..4].*);
                 return .{ .global = gid };
             }

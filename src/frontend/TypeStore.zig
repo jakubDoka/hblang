@@ -1077,7 +1077,8 @@ pub fn retainGlobals(self: *Types, target: Target, backend: *Machine, handle_err
                     r.target = std.math.maxInt(u32);
                 } else {
                     r.target = @intCast(ptr);
-                    self.queue(target, .init(.{ .Func = @enumFromInt(ptr) }));
+                    const id = Id.init(.{ .Func = @enumFromInt(ptr) });
+                    self.queue(target, id);
                 }
             } else {
                 r.target = self.findSymForPtr(ptr) catch |err| {

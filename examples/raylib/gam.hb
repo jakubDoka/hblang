@@ -5,7 +5,7 @@ Stats := struct {
 	.max_health: u16 = 0;
 	.speed: f32 = 0;
 	// TODO: pudding a default function pointer here makes the compiler hang
-	.ai: ?^(fn(self: ^Ent): void) = null;
+	.ai: ^(fn(self: ^Ent): void) = &fn(self: ^Ent): void {};
 }
 
 Ent := struct {
@@ -81,7 +81,6 @@ main := fn(): uint {
 	player_stats := Stats.{
 		max_health: 100,
 		speed: 400,
-		ai: &fn(self: ^Ent): void {},
 	}
 
 	player := sim.add() || die
@@ -119,7 +118,7 @@ main := fn(): uint {
 		for ent := sim.slots {
 			if !ent.is_alive() continue
 
-			if ai := ent.stats.ai ai(ent)
+			ent.stats.ai(ent)
 
 			rl.draw_rectangle_v(
 				ent.pos - .xy(ent.size / 2),

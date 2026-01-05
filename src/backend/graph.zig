@@ -2731,6 +2731,7 @@ pub fn Func(comptime Backend: type) type {
                     switch (res) {
                         .value => |v| return self.addIntImm(node.sloc, node.data_type, v),
                         .global => |g| return self.addGlobalAddr(node.sloc, g),
+                        .func => |f| return self.addFuncAddr(node.sloc, f),
                     }
                 }
             }
