@@ -1,17 +1,21 @@
-const frontend2 = enum {
-    pub const Lexer = @import("frontend/Lexer.zig");
-    pub const Ast = @import("frontend/Ast.zig");
-    pub const Abi = @import("frontend/Abi.zig");
-    pub const Parser = @import("frontend/Parser.zig");
-    pub const Fmt = @import("frontend/Fmt.zig");
-    pub const Types = @import("frontend/TypeStore.zig");
-    pub const types = @import("frontend/types.zig");
-    pub const Codegen = @import("frontend/Codegen.zig");
-    pub const Comptime = @import("frontend/Comptime.zig");
-    pub const test_utils = @import("frontend/test_util.zig");
+const frontend2 = opaque {
+    pub const Lexer = @import("frontend2/Lexer.zig");
+    pub const Ast = @import("frontend2/Ast.zig");
+    pub const Abi = @import("frontend2/Abi.zig");
+    pub const Parser = @import("frontend2/Parser.zig");
+    pub const Fmt = @import("frontend2/Fmt.zig");
+    pub const Types = @import("frontend2/TypeStore.zig");
+    pub const types = @import("frontend2/types.zig");
+    pub const Codegen = @import("frontend2/Codegen.zig");
+    pub const Comptime = @import("frontend2/Comptime.zig");
+    pub const test_utils = @import("frontend2/test_util.zig");
 };
 
-pub const backend = enum {
+pub const frontend = opaque {
+    pub const Lexer = @import("frontend/Lexer.zig");
+};
+
+pub const backend = opaque {
     pub const Builder = @import("backend/Builder.zig");
     pub const Machine = @import("backend/Machine.zig");
     pub const Regalloc = @import("backend/Regalloc.zig");
@@ -23,23 +27,23 @@ pub const backend = enum {
     pub const graph = @import("backend/graph.zig");
 };
 
-pub const hbvm = enum {
+pub const hbvm = opaque {
     pub const Vm = @import("hbvm/Vm.zig");
     pub const isa = @import("hbvm/isa.zig");
     pub const HbvmGen = @import("hbvm/HbvmGen.zig");
     pub const object = @import("hbvm/object.zig");
 };
 
-pub const x86_64 = enum {
+pub const x86_64 = opaque {
     pub const X86_64Gen = @import("x86_64/X86_64Gen.zig");
 };
 
-pub const wasm = enum {
+pub const wasm = opaque {
     pub const WasmGen = @import("wasm/WasmGen.zig");
     pub const object = @import("wasm/object.zig");
 };
 
-pub const object = enum {
+pub const object = opaque {
     pub const elf = @import("object/elf.zig");
     pub const coff = @import("object/coff.zig");
 
@@ -57,10 +61,6 @@ const std = @import("std");
 const hb = @import("hb");
 const static_anal = hb.backend.static_anal;
 const Arena = hb.utils.Arena;
-
-test {
-    _ = &utils;
-}
 
 const max_file_len = std.math.maxInt(u31);
 

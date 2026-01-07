@@ -20,7 +20,8 @@ fn tf32(int: i64) f32 {
 pub const Set = std.DynamicBitSetUnmanaged;
 
 pub fn setMasks(s: Set) []Set.MaskInt {
-    return s.masks[0 .. (s.bit_length + @bitSizeOf(Set.MaskInt) - 1) / @bitSizeOf(Set.MaskInt)];
+    return s.masks[0 .. (s.bit_length +
+        @bitSizeOf(Set.MaskInt) - 1) / @bitSizeOf(Set.MaskInt)];
 }
 
 pub const infinite_loop_trap = std.math.maxInt(u64);
@@ -31,7 +32,10 @@ pub const Sloc = packed struct(i64) {
     namespace: u32,
     index: u32,
 
-    pub const none: Sloc = .{ .namespace = std.math.maxInt(u32), .index = std.math.maxInt(u32) };
+    pub const none: Sloc = .{
+        .namespace = std.math.maxInt(u32),
+        .index = std.math.maxInt(u32),
+    };
 };
 
 pub const BinOp = enum(u8) {
@@ -73,7 +77,9 @@ pub const BinOp = enum(u8) {
     fle,
 
     pub fn isCmp(self: BinOp) bool {
-        return self.isInRange(.ne, .ule) or self.isInRange(.sgt, .sle) or self.isInRange(.fgt, .fle);
+        return self.isInRange(.ne, .ule) or
+            self.isInRange(.sgt, .sle) or
+            self.isInRange(.fgt, .fle);
     }
 
     pub fn isUnsifned(self: BinOp) bool {
@@ -89,7 +95,8 @@ pub const BinOp = enum(u8) {
     }
 
     pub inline fn isInRange(self: BinOp, min: BinOp, max: BinOp) bool {
-        return @intFromEnum(min) <= @intFromEnum(self) and @intFromEnum(self) <= @intFromEnum(max);
+        return @intFromEnum(min) <= @intFromEnum(self) and
+            @intFromEnum(self) <= @intFromEnum(max);
     }
 
     pub fn eval(self: BinOp, dt: DataType, lhs: i64, rhs: i64) i64 {
@@ -111,9 +118,18 @@ pub const BinOp = enum(u8) {
                 @as(u32, @bitCast(tf32(lhs) * tf32(rhs))),
             .udiv => if (rhs == 0) 0 else @bitCast(tu(lhs) / tu(rhs)),
             .sdiv => if (rhs == 0) 0 else switch (dt) {
-                .i8 => @divFloor(@as(i8, @truncate(lhs)), @as(i8, @truncate(rhs))),
-                .i16 => @divFloor(@as(i16, @truncate(lhs)), @as(i16, @truncate(rhs))),
-                .i32 => @divFloor(@as(i32, @truncate(lhs)), @as(i32, @truncate(rhs))),
+                .i8 => @divFloor(
+                    @as(i8, @truncate(lhs)),
+                    @as(i8, @truncate(rhs)),
+                ),
+                .i16 => @divFloor(
+                    @as(i16, @truncate(lhs)),
+                    @as(i16, @truncate(rhs)),
+                ),
+                .i32 => @divFloor(
+                    @as(i32, @truncate(lhs)),
+                    @as(i32, @truncate(rhs)),
+                ),
                 .i64 => @divFloor(lhs, rhs),
                 else => unreachable,
             },
@@ -210,7 +226,10 @@ pub const BinOp = enum(u8) {
             .iadd, .isub, .fsub, .fadd, .bxor, .bor, .ishl, .sshr, .ushr => 0,
             .band => @as(i64, -1) & ty.mask().?,
             .imul, .sdiv, .udiv => 1,
-            .fmul, .fdiv => if (ty == .f64) @bitCast(@as(f64, 1.0)) else @as(u32, @bitCast(@as(f32, 1.0))),
+            .fmul, .fdiv => if (ty == .f64)
+                @bitCast(@as(f64, 1.0))
+            else
+                @as(u32, @bitCast(@as(f32, 1.0))),
             else => null,
         };
     }
@@ -266,7 +285,10 @@ pub const UnOp = enum(u8) {
                 @as(u32, @bitCast(-tf32(oper))),
             .not => @intFromBool(oper == 0),
             .bnot => ~oper,
-            .fti => if (src == .f64) @intFromFloat(tf(oper)) else @intFromFloat(tf32(oper)),
+            .fti => if (src == .f64)
+                @intFromFloat(tf(oper))
+            else
+                @intFromFloat(tf32(oper)),
             .itf => return if (dst == .f64)
                 @bitCast(@as(f64, @floatFromInt(oper)))
             else
@@ -330,7 +352,8 @@ pub const DataType = enum(u16) {
     };
 
     comptime {
-        std.debug.assert(std.meta.fields(Kind).len == std.meta.fields(DataType).len);
+        std.debug.assert(std.meta.fields(Kind).len ==
+            std.meta.fields(DataType).len);
     }
 
     pub const Raw = packed struct(u16) {
@@ -344,8 +367,10 @@ pub const DataType = enum(u16) {
     };
 
     pub fn memUnitForAlign(alignment: u64, float: bool) DataType {
-        if (float) return @enumFromInt(@intFromEnum(DataType.f32) + @min(std.math.log2_int(u64, alignment), 3) - 2);
-        return @enumFromInt(@intFromEnum(DataType.i8) + @min(std.math.log2_int(u64, alignment), 3));
+        if (float) return @enumFromInt(@intFromEnum(DataType.f32) +
+            @min(std.math.log2_int(u64, alignment), 3) - 2);
+        return @enumFromInt(@intFromEnum(DataType.i8) +
+            @min(std.math.log2_int(u64, alignment), 3));
     }
 
     pub fn toRaw(self: DataType) Raw {
@@ -513,7 +538,8 @@ pub const Signature = extern struct {
                 var size: u64 = 0;
                 for (self.params()) |par| {
                     if (par == .Stack) {
-                        size = std.mem.alignForward(u64, size, @as(u64, 1) << par.Stack.alignment);
+                        size = std.mem.alignForward(u64, size, @as(u64, 1) <<
+                            par.Stack.alignment);
                         size += par.Stack.size;
                     }
                 }
@@ -578,7 +604,8 @@ pub const builtin = enum {
     pub const Region = mod.Region;
     pub const Loop = extern struct {
         base: mod.Cfg = .{},
-        anal_stage: enum(u8) { is_infinite, has_break, has_dead_break } = .is_infinite,
+        anal_stage: enum(u8) { is_infinite, has_break, has_dead_break } =
+            .is_infinite,
 
         pub const is_basic_block_start = true;
     };
@@ -699,7 +726,8 @@ pub const Region = extern struct {
 pub fn UnionOf(comptime mach_classes: type) type {
     const bdecls = @typeInfo(builtin).@"enum".decls;
     const cdecls = @typeInfo(mach_classes).@"enum".decls;
-    var fields: [bdecls.len + cdecls.len]std.builtin.Type.UnionField = undefined;
+    var fields: [bdecls.len + cdecls.len]std.builtin.Type.UnionField =
+        undefined;
     var i: usize = 0;
     for (bdecls) |decl| {
         fields[i] = .{
@@ -790,7 +818,9 @@ pub fn Func(comptime Backend: type) type {
         stopped_interning: std.debug.SafetyLock = .{},
 
         pub fn optApi(comptime decl_name: []const u8, comptime Ty: type) bool {
-            const prelude = @typeName(Backend) ++ " requires this unless `pub const i_know_the_api = {}` is declared:";
+            const prelude = @typeName(Backend) ++
+                " requires this unless `pub const i_know_the_api = {}`" ++
+                " is declared:";
 
             const decl = if (@typeInfo(Ty) == .@"fn")
                 "pub fn " ++ decl_name ++ @typeName(Ty)[3..]
@@ -801,25 +831,44 @@ pub fn Func(comptime Backend: type) type {
             if (!known_api and !@hasDecl(Backend, decl_name))
                 @compileError(prelude ++ " `" ++ decl ++ "`");
 
-            if (@hasDecl(Backend, decl_name) and @TypeOf(@field(Backend, decl_name)) != Ty)
+            if (@hasDecl(Backend, decl_name) and
+                @TypeOf(@field(Backend, decl_name)) != Ty)
+            {
                 @compileError("expected `" ++ decl ++
-                    "` but the type is: " ++ @typeName(@TypeOf(@field(Backend, decl_name))));
+                    "` but the type is: " ++
+                    @typeName(@TypeOf(@field(Backend, decl_name))));
+            }
 
             return @hasDecl(Backend, decl_name);
         }
 
         pub fn InternMap(comptime Context: type) type {
-            return std.hash_map.HashMapUnmanaged(InternedNode, void, Context, std.hash_map.default_max_load_percentage);
+            return std.hash_map.HashMapUnmanaged(
+                InternedNode,
+                void,
+                Context,
+                std.hash_map.default_max_load_percentage,
+            );
         }
 
-        pub const biased_regs = if (optApi("biased_regs", u64)) Backend.biased_regs else 0;
+        pub const biased_regs = if (optApi("biased_regs", u64))
+            Backend.biased_regs
+        else
+            0;
         pub const all_classes = std.meta.fields(Union);
 
-        pub const sclass_spec: struct { vars: if (use_vec) @Vector(8, u8) else [8]u8, len: usize } = collect_sclasses: {
+        pub const sclass_spec: struct {
+            vars: if (use_vec) @Vector(8, u8) else [8]u8,
+            len: usize,
+        } = collect_sclasses: {
             var variants: [8]u8 = @splat(0);
             var found_count: usize = 0;
             for (all_classes) |class| {
-                const size = std.mem.alignForward(u32, @sizeOf(class.type), @alignOf(Node));
+                const size = std.mem.alignForward(
+                    u32,
+                    @sizeOf(class.type),
+                    @alignOf(Node),
+                );
                 for (variants[0..found_count]) |v| {
                     if (v == size) break;
                 } else {
@@ -829,10 +878,6 @@ pub fn Func(comptime Backend: type) type {
             }
             break :collect_sclasses .{ .vars = variants, .len = found_count };
         };
-
-        comptime {
-            _ = &sclass_spec;
-        }
 
         const use_vec = @import("builtin").mode != .Debug;
 
@@ -865,7 +910,9 @@ pub fn Func(comptime Backend: type) type {
             pub fn add(self: *WorkList, node: *Node) void {
                 errdefer unreachable;
 
-                if (node.isDead()) utils.panic("{f} {any}\n", .{ node, node.inputs() });
+                if (node.isDead()) {
+                    utils.panic("{f} {any}\n", .{ node, node.inputs() });
+                }
                 if (self.in_list.bit_length <= node.id) {
                     try self.in_list.resize(
                         self.allocator,
@@ -961,8 +1008,10 @@ pub fn Func(comptime Backend: type) type {
                     return switch (cfg.base.extra2()) {
                         .Region => |extra| {
                             if (extra.cached_lca != null and
-                                (!@as(*Node, @ptrCast(extra.cached_lca)).isSub(If) or
-                                    @as(*Node, @ptrCast(extra.cached_lca)).subclass(If).?.ext.id != cfg.base.id))
+                                (!@as(*Node, @ptrCast(extra.cached_lca))
+                                    .isSub(If) or
+                                    @as(*Node, @ptrCast(extra.cached_lca))
+                                        .subclass(If).?.ext.id != cfg.base.id))
                                 extra.cached_lca = null;
 
                             if (extra.cached_lca) |lca| {
@@ -973,7 +1022,8 @@ pub fn Func(comptime Backend: type) type {
                                     cfg.base.inputs()[1].?.asCfg().?,
                                 );
                                 cfg.base.extra(.Region).cached_lca = lca;
-                                (lca.base.subclass(If) orelse return lca).ext.id = cfg.base.id;
+                                (lca.base.subclass(If) orelse return lca)
+                                    .ext.id = cfg.base.id;
                                 return lca;
                             }
                         },
@@ -981,20 +1031,36 @@ pub fn Func(comptime Backend: type) type {
                     };
                 }
 
-                pub fn better(cfg: *CfgNode, best: *CfgNode, to_sched: *Node, func: *Self) bool {
-                    return !cfg.base.isBasicBlockEnd() and (idepth(cfg) > idepth(best) or
-                        best.base.isBasicBlockEnd() or
-                        (to_sched.kind != .MachSplit and !to_sched.isCheap() and func.gcm.loopDepthOf(cfg) < func.gcm.loopDepthOf(best)));
+                pub fn better(
+                    cfg: *CfgNode,
+                    best: *CfgNode,
+                    to_sched: *Node,
+                    func: *Self,
+                ) bool {
+                    return !cfg.base.isBasicBlockEnd() and
+                        (idepth(cfg) > idepth(best) or
+                            best.base.isBasicBlockEnd() or
+                            (to_sched.kind != .MachSplit and
+                                !to_sched.isCheap() and
+                                func.gcm.loopDepthOf(cfg) <
+                                    func.gcm.loopDepthOf(best)));
                 }
 
-                pub fn format(self: *const CfgNode, writer: *std.Io.Writer) !void {
+                pub fn format(
+                    self: *const CfgNode,
+                    writer: *std.Io.Writer,
+                ) !void {
                     try self.base.format(writer);
                 }
 
-                pub fn scheduleBlockAndRestoreBlockIds(bbc: *CfgNode, postorder: []*CfgNode) void {
-                    // we do it here because some loads are scheduled already and removing them in this loop messes up the
-                    // cheduling in other blocks, we need to hack this becaus there are no anty deps on loads yet, since this
-                    // runs before gcm
+                pub fn scheduleBlockAndRestoreBlockIds(
+                    bbc: *CfgNode,
+                    postorder: []*CfgNode,
+                ) void {
+                    // we do it here because some loads are scheduled already
+                    // and removing them in this loop messes up the cheduling
+                    // in other blocks, we need to hack this becaus there are
+                    // no anty deps on loads yet, since this runs before gcm
                     //
 
                     const bb = &bbc.base;
@@ -1031,7 +1097,8 @@ pub fn Func(comptime Backend: type) type {
                     defer tmp.deinit();
 
                     // init meta
-                    const extr: []u8 = tmp.arena.alloc(u8, bb.base.outputs().len);
+                    const extr: []u8 =
+                        tmp.arena.alloc(u8, bb.base.outputs().len);
                     for (bb.base.outputs(), extr, 0..) |in, *e, i| {
                         const instr = in.get();
                         instr.schedule = @intCast(i);
@@ -1065,11 +1132,13 @@ pub fn Func(comptime Backend: type) type {
                         );
 
                         const n = outs[scheduled].get();
-                        for (n.outputs()) |def| if (bb == def.get().tryCfg0() and
-                            def.get().kind != .Phi)
-                        {
-                            extr[def.get().schedule] -= 1;
-                        };
+                        for (n.outputs()) |def| {
+                            if (bb == def.get().tryCfg0() and
+                                def.get().kind != .Phi)
+                            {
+                                extr[def.get().schedule] -= 1;
+                            }
+                        }
 
                         scheduled += 1;
 
@@ -1086,7 +1155,8 @@ pub fn Func(comptime Backend: type) type {
         }
 
         fn callCheck(comptime name: []const u8, value: anytype) bool {
-            return (comptime optApi(name, fn (@TypeOf(value)) bool)) and @field(Backend, name)(value);
+            return (comptime optApi(name, fn (@TypeOf(value)) bool)) and
+                @field(Backend, name)(value);
         }
 
         pub const Node = extern struct {
@@ -1119,7 +1189,10 @@ pub fn Func(comptime Backend: type) type {
 
                 pub fn init(node: *Node, ps: usize, from: ?*Node) Out {
                     if (from) |f| std.debug.assert(node.inputs()[ps] == f);
-                    return .{ .inner = .{ .node = @intCast(@intFromPtr(node)), .pos = @intCast(ps) } };
+                    return .{ .inner = .{
+                        .node = @intCast(@intFromPtr(node)),
+                        .pos = @intCast(ps),
+                    } };
                 }
 
                 pub fn get(self: Out) *Node {
@@ -1136,13 +1209,15 @@ pub fn Func(comptime Backend: type) type {
             };
 
             pub fn loadDatatype(self: *Node) DataType {
-                if (@hasDecl(Backend, "loadDatatype")) return Backend.loadDatatype(self);
+                if (@hasDecl(Backend, "loadDatatype"))
+                    return Backend.loadDatatype(self);
                 return self.data_type;
             }
 
             pub fn isKillable(self: *Node) bool {
                 return self.kind != .Return and
-                    (!@hasDecl(Backend, "isKillable") or Backend.isKillable(self));
+                    (!@hasDecl(Backend, "isKillable") or
+                        Backend.isKillable(self));
             }
 
             pub fn isDead(self: *Node) bool {
@@ -1151,13 +1226,20 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn preservesIdentityPhys(self: *Node) bool {
                 std.debug.assert(self.kind == .Region or self.kind == .Loop);
-                return self.kind == .Region and self.extra(.Region).preserve_identity_phys;
+                return self.kind == .Region and self.extra(.Region)
+                    .preserve_identity_phys;
             }
 
-            pub fn useBlock(self: *Node, use: *Node, pos: usize, scheds: []const ?*CfgNode) *CfgNode {
+            pub fn useBlock(
+                self: *Node,
+                use: *Node,
+                pos: usize,
+                scheds: []const ?*CfgNode,
+            ) *CfgNode {
                 _ = self;
                 if (use.kind == .Phi) {
-                    std.debug.assert(use.inputs()[0].?.kind == .Region or use.inputs()[0].?.kind == .Loop);
+                    std.debug.assert(use.inputs()[0].?.kind == .Region or
+                        use.inputs()[0].?.kind == .Loop);
                     return use.inputs()[0].?.inputs()[pos - 1].?.asCfg().?;
                 }
 
@@ -1185,11 +1267,15 @@ pub fn Func(comptime Backend: type) type {
                 for (all_classes, 0..) |cls, i| {
                     var Cursor = cls.type;
                     const off = (while (true) {
-                        if (@hasDecl(Cursor, property)) break @field(Cursor, property);
-                        if (@typeInfo(Cursor) != .@"struct" or !@hasField(Cursor, "base")) break 0;
+                        if (@hasDecl(Cursor, property)) {
+                            break @field(Cursor, property);
+                        }
+                        if (@typeInfo(Cursor) != .@"struct" or
+                            !@hasField(Cursor, "base")) break 0;
                         Cursor = @TypeOf(@as(Cursor, undefined).base);
                     } else unreachable) + 1;
-                    std.debug.assert(off <= std.math.powi(usize, 2, sub_elem_width) catch unreachable);
+                    std.debug.assert(off <= std.math
+                        .powi(usize, 2, sub_elem_width) catch unreachable);
                     const slot_idx = i / (per_dep_elem);
                     const shift = (i % (per_dep_elem)) * sub_elem_width;
 
@@ -1202,13 +1288,14 @@ pub fn Func(comptime Backend: type) type {
             pub fn dataDepOffset(self: *Node) usize {
                 const kind_idx = @intFromEnum(self.kind);
                 const off = dep_offset[kind_idx / per_dep_elem] >>
-                    @intCast((kind_idx % per_dep_elem) * sub_elem_width) & ((@as(u16, 1) << sub_elem_width) - 1);
+                    @intCast((kind_idx % per_dep_elem) * sub_elem_width) &
+                    ((@as(u16, 1) << sub_elem_width) - 1);
 
                 return off;
             }
 
-            // TODO: this is a hack, its here because otherwise everithing gets pulled out of
-            // the loop and cloggs the register allocator
+            // TODO: this is a hack, its here because otherwise everithing gets
+            // pulled out of the loop and cloggs the register allocator
             pub fn isCheap(self: *Node) bool {
                 return self.kind == .StackArgOffset;
             }
@@ -1218,16 +1305,20 @@ pub fn Func(comptime Backend: type) type {
                 const start = self.dataDepOffset();
                 const len = self.input_ordered_len;
                 const deps = self.input_base[start..len];
-                std.debug.assert(std.mem.indexOfScalar(?*Node, deps, null) == null);
+                std.debug.assert(std.mem.indexOfScalar(?*Node, deps, null) ==
+                    null);
                 return @ptrCast(deps);
             }
 
             pub fn knownStore(self: *Node, root: *Node) ?*Node {
-                if (self.isStore() and !self.isSub(MemCpy) and self.tryBase() == root) {
+                if (self.isStore() and !self.isSub(MemCpy) and
+                    self.tryBase() == root)
+                {
                     return self;
                 }
                 if (self.kind == .BinOp and self.outputs().len == 1 and
-                    self.outputs()[0].get().isStore() and !self.outputs()[0].get().isSub(MemCpy) and
+                    self.outputs()[0].get().isStore() and
+                    !self.outputs()[0].get().isSub(MemCpy) and
                     self.outputs()[0].get().base() == self)
                 {
                     return self.outputs()[0].get();
@@ -1239,10 +1330,14 @@ pub fn Func(comptime Backend: type) type {
                 if (self.isMemOp()) return .{ self, self.getStaticOffset() };
                 if (self.kind == .BinOp and self.inputs()[2].?.kind == .CInt and
                     (self.outputs().len) == 1 and
-                    (self.outputs()[0].get().isStore() or self.outputs()[0].get().isLoad()) and
+                    (self.outputs()[0].get().isStore() or
+                        self.outputs()[0].get().isLoad()) and
                     (self.outputs()[0].get().base()) == (self))
                 {
-                    return .{ self.outputs()[0].get(), self.inputs()[2].?.extra(.CInt).value };
+                    return .{
+                        self.outputs()[0].get(),
+                        self.inputs()[2].?.extra(.CInt).value,
+                    };
                 }
                 return null;
             }
@@ -1252,40 +1347,70 @@ pub fn Func(comptime Backend: type) type {
                     const op = self.extra(.BinOp).op;
                     if (op != .iadd and op != .isub) return .{ self, 0 };
                     const magnitude = self.inputs()[2].?.extra(.CInt).value;
-                    return .{ self.inputs()[1].?, if (op == .iadd) magnitude else -magnitude };
+                    return .{
+                        self.inputs()[1].?,
+                        if (op == .iadd) magnitude else -magnitude,
+                    };
                 }
-                if (@hasDecl(Backend, "knownOffset")) return Backend.knownOffset(self);
+                if (@hasDecl(Backend, "knownOffset")) {
+                    return Backend.knownOffset(self);
+                }
                 return .{ self, 0 };
             }
 
-            pub fn regMask(self: *Node, func: *Self, idx: usize, tmp: *utils.Arena) if (@hasDecl(Backend, "Set"))
+            pub fn regMask(
+                self: *Node,
+                func: *Self,
+                idx: usize,
+                tmp: *utils.Arena,
+            ) if (@hasDecl(Backend, "Set"))
                 Backend.Set
             else
                 std.DynamicBitSetUnmanaged {
-                return if (comptime optApi("regMask", @TypeOf(regMask))) Backend.regMask(self, func, idx, tmp) else unreachable;
+                return if (comptime optApi("regMask", @TypeOf(regMask)))
+                    Backend.regMask(self, func, idx, tmp)
+                else
+                    unreachable;
             }
 
             pub fn clobbers(self: *Node) u64 {
-                return if (@hasDecl(Backend, "clobbers")) Backend.clobbers(self) else 0;
+                return if (@hasDecl(Backend, "clobbers"))
+                    Backend.clobbers(self)
+                else
+                    0;
             }
 
             pub fn inPlaceSlot(self: *Node) ?usize {
-                return if (comptime optApi("inPlaceSlot", @TypeOf(inPlaceSlot))) Backend.inPlaceSlot(self) else null;
+                return if (comptime optApi("inPlaceSlot", @TypeOf(inPlaceSlot)))
+                    Backend.inPlaceSlot(self)
+                else
+                    null;
             }
 
             pub fn isClone(self: *Node) bool {
-                return (comptime bakeFlagBitset("is_clone")).contains(self.kind);
+                return (comptime bakeFlagBitset("is_clone"))
+                    .contains(self.kind);
             }
 
             pub fn isReadonly(self: *Node) bool {
-                return (comptime bakeFlagBitset("is_readonly")).contains(self.kind);
+                return (comptime bakeFlagBitset("is_readonly"))
+                    .contains(self.kind);
             }
 
-            pub fn alreadyBefore(self: *Node, use: *Node, block: *CfgNode) bool {
+            pub fn alreadyBefore(
+                self: *Node,
+                use: *Node,
+                block: *CfgNode,
+            ) bool {
                 std.debug.assert(self.isClone());
                 if (self.cfg0() != block) return false;
-                const search_from = if (use.kind == .Phi) block.base.outputs().len - 1 else block.base.posOfOutput(0, use);
-                var iter = std.mem.reverseIterator(block.base.outputs()[0..search_from]);
+                const search_from = if (use.kind == .Phi)
+                    block.base.outputs().len - 1
+                else
+                    block.base.posOfOutput(0, use);
+                var iter = std.mem.reverseIterator(
+                    block.base.outputs()[0..search_from],
+                );
                 while (iter.next()) |o| {
                     const out: *Node = o.get();
                     if (out == self) return true;
@@ -1295,8 +1420,10 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn noAlias(self: *Node, other: *Node) bool {
-                const lsize, const loff, const lbase = self.getOffsetSizeBase() orelse return false;
-                const rsize, const roff, const rbase = other.getOffsetSizeBase() orelse return false;
+                const lsize, const loff, const lbase =
+                    self.getOffsetSizeBase() orelse return false;
+                const rsize, const roff, const rbase =
+                    other.getOffsetSizeBase() orelse return false;
 
                 if (lbase.ptrsNoAlias(rbase)) return true;
                 if (lbase != rbase) return false;
@@ -1305,8 +1432,10 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn fullAlias(self: *Node, other: *Node) bool {
-                const lsize, const loff, const lbase = self.getOffsetSizeBase() orelse return false;
-                const rsize, const roff, const rbase = other.getOffsetSizeBase() orelse return false;
+                const lsize, const loff, const lbase =
+                    self.getOffsetSizeBase() orelse return false;
+                const rsize, const roff, const rbase =
+                    other.getOffsetSizeBase() orelse return false;
 
                 if (lbase.ptrsNoAlias(rbase)) return false;
                 if (lbase != rbase) return true;
@@ -1326,22 +1455,30 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn ptrsNoAlias(self: *Node, other: *Node) bool {
-                return ((self.kind == .Local or self.kind == .StructArg or self.kind == .Arg) and
-                    (other.kind == .Local or other.kind == .StructArg or other.kind == .Arg)) and
-                    (self != other and (self.kind != .Arg or other.kind != .Arg));
+                return ((self.kind == .Local or self.kind == .StructArg or
+                    self.kind == .Arg) and
+                    (other.kind == .Local or other.kind == .StructArg or
+                        other.kind == .Arg)) and
+                    (self != other and
+                        (self.kind != .Arg or other.kind != .Arg));
             }
 
             pub fn isStack(self: *Node) bool {
-                return self.kind == .Local or self.kind == .StructArg or self.kind == .LocalAlloc;
+                return self.kind == .Local or self.kind == .StructArg or
+                    self.kind == .LocalAlloc;
             }
 
             pub fn anyextra(self: *const Node) []const u64 {
-                return @as([*]const u64, @ptrCast(&self.edata))[0 .. size_map[@intFromEnum(self.kind)] / 8];
+                return @as(
+                    [*]const u64,
+                    @ptrCast(&self.edata),
+                )[0 .. size_map[@intFromEnum(self.kind)] / 8];
             }
 
             pub fn format(self: *const Node, writer: *std.Io.Writer) !void {
                 const colors: std.io.tty.Config = if (!utils.freestanding and
-                    writer.vtable.drain == std.fs.File.stderr().writer(&.{}).interface.vtable.drain)
+                    writer.vtable.drain == std.fs.File.stderr().writer(&.{})
+                        .interface.vtable.drain)
                     std.io.tty.detectConfig(std.fs.File.stderr())
                 else
                     .escape_codes;
@@ -1366,7 +1503,11 @@ pub fn Func(comptime Backend: type) type {
                 return true;
             }
 
-            fn logExtra(writ: *std.Io.Writer, ex: anytype, comptime fir: bool) !void {
+            fn logExtra(
+                writ: *std.Io.Writer,
+                ex: anytype,
+                comptime fir: bool,
+            ) !void {
                 switch (@typeInfo(@TypeOf(ex.*))) {
                     .@"struct" => |s| {
                         comptime var fields = std.mem.reverseIterator(s.fields);
@@ -1385,7 +1526,8 @@ pub fn Func(comptime Backend: type) type {
                             if (!first) prefix = ", ";
                             first = false;
 
-                            const is_base = comptime std.mem.eql(u8, f.name, "base");
+                            const is_base =
+                                comptime std.mem.eql(u8, f.name, "base");
                             if (!is_base) {
                                 prefix = prefix ++ f.name ++ ": ";
                             }
@@ -1418,7 +1560,10 @@ pub fn Func(comptime Backend: type) type {
                 logNid(writer, self.id, colors);
                 const name = @tagName(self.kind);
 
-                writer.print(" = {s}:{f}", .{ name, self.data_type }) catch unreachable;
+                writer.print(
+                    " = {s}:{f}",
+                    .{ name, self.data_type },
+                ) catch unreachable;
 
                 var add_colon_space = false;
 
@@ -1500,7 +1645,8 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn isLazyPhi(self: *Node, on_loop: *Node) bool {
-                std.debug.assert(on_loop.kind == .Loop or on_loop.kind == .Region);
+                std.debug.assert(on_loop.kind == .Loop or
+                    on_loop.kind == .Region);
                 return self.kind == .Phi and self.inputs()[0] == on_loop and
                     (self.inputs()[2] == null or self.inputs()[1] == null);
             }
@@ -1524,14 +1670,24 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn hasUseFor(self: *Node, idx: usize, def: *Node) bool {
-                if (self.kind == .Call and def.kind == .StackArgOffset) return false;
-                return self.dataDepOffset() <= idx and idx < self.input_ordered_len;
+                if (self.kind == .Call and def.kind == .StackArgOffset) {
+                    return false;
+                }
+                return self.dataDepOffset() <= idx and
+                    idx < self.input_ordered_len;
             }
 
             pub fn removeUse(self: *Node, idx: usize, use: *Node) void {
                 const outs = self.outputs();
-                const index = std.mem.indexOfScalar(Out, outs, .init(use, idx, self)) orelse {
-                    utils.panic("removeUse: not found {f} {any} {f}", .{ use, self.outputs(), self });
+                const index = std.mem.indexOfScalar(
+                    Out,
+                    outs,
+                    .init(use, idx, self),
+                ) orelse {
+                    utils.panic(
+                        "removeUse: not found {f} {any} {f}",
+                        .{ use, self.outputs(), self },
+                    );
                 };
 
                 outs[index] = outs[outs.len - 1];
@@ -1544,10 +1700,17 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn posOfOutput(self: *Node, index: usize, output: *Node) usize {
-                return std.mem.indexOfScalar(Out, self.outputs(), .init(output, index, self)).?;
+                return std.mem.indexOfScalar(
+                    Out,
+                    self.outputs(),
+                    .init(output, index, self),
+                ).?;
             }
 
-            pub fn extraConst(self: *const Node, comptime kind: Kind) *const ClassFor(kind) {
+            pub fn extraConst(
+                self: *const Node,
+                comptime kind: Kind,
+            ) *const ClassFor(kind) {
                 std.debug.assert(self.kind == kind);
                 const ptr: *const LayoutFor(kind) = @ptrCast(@alignCast(self));
                 return &ptr.ext;
@@ -1555,7 +1718,10 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn extra(self: *Node, comptime kind: Kind) *ClassFor(kind) {
                 if (self.kind != kind) {
-                    utils.panic("{f} expected {}, got {}", .{ self, kind, self.kind });
+                    utils.panic(
+                        "{f} expected {}, got {}",
+                        .{ self, kind, self.kind },
+                    );
                 }
                 const ptr: *LayoutFor(kind) = @ptrCast(@alignCast(self));
                 return &ptr.ext;
@@ -1564,8 +1730,12 @@ pub fn Func(comptime Backend: type) type {
             pub fn extra2(self: *Node) utils.AsRef(Union) {
                 const Repr = extern struct { data: *anyopaque, kind: Kind };
 
-                const ptr: *extern struct { base: Node, ext: u8 } = @ptrCast(@alignCast(self));
-                return @as(*const utils.AsRef(Union), @ptrCast(&Repr{ .kind = self.kind, .data = &ptr.ext })).*;
+                const ptr: *extern struct { base: Node, ext: u8 } =
+                    @ptrCast(@alignCast(self));
+                return @as(
+                    *const utils.AsRef(Union),
+                    @ptrCast(&Repr{ .kind = self.kind, .data = &ptr.ext }),
+                ).*;
             }
 
             pub fn isDef(self: *Node) bool {
@@ -1583,14 +1753,18 @@ pub fn Func(comptime Backend: type) type {
 
             pub fn getStaticOffset(self: *Node) i64 {
                 std.debug.assert(self.isMemOp());
-                return if (@hasDecl(Backend, "getStaticOffset")) Backend.getStaticOffset(self) else 0;
+                return if (@hasDecl(Backend, "getStaticOffset"))
+                    Backend.getStaticOffset(self)
+                else
+                    0;
             }
 
             pub fn isSubbclass(Full: type, Sub: type) bool {
                 var Cursor = Full;
                 while (true) {
                     if (Cursor == Sub) return true;
-                    if (@typeInfo(Cursor) != .@"struct" or !@hasField(Cursor, "base")) return false;
+                    if (@typeInfo(Cursor) != .@"struct" or
+                        !@hasField(Cursor, "base")) return false;
                     Cursor = @TypeOf(@as(Cursor, undefined).base);
                 }
             }
@@ -1598,16 +1772,22 @@ pub fn Func(comptime Backend: type) type {
             pub fn bakeSubclassBitset(comptime Sub: type) std.EnumSet(Kind) {
                 var bitset = std.EnumSet(Kind).initEmpty();
                 for (all_classes, 0..) |c, i| {
-                    if (isSubbclass(c.type, Sub)) bitset.insert(@enumFromInt(i));
+                    if (isSubbclass(c.type, Sub)) {
+                        bitset.insert(@enumFromInt(i));
+                    }
                 }
                 return bitset;
             }
 
-            pub fn hasFlag(comptime Full: type, comptime flag: []const u8) bool {
+            pub fn hasFlag(
+                comptime Full: type,
+                comptime flag: []const u8,
+            ) bool {
                 var Cursor = Full;
                 while (true) {
                     if (@hasDecl(Cursor, flag)) return @field(Cursor, flag);
-                    if (@typeInfo(Cursor) != .@"struct" or !@hasField(Cursor, "base")) return false;
+                    if (@typeInfo(Cursor) != .@"struct" or
+                        !@hasField(Cursor, "base")) return false;
                     Cursor = @TypeOf(@as(Cursor, undefined).base);
                 }
             }
@@ -1629,7 +1809,10 @@ pub fn Func(comptime Backend: type) type {
                 return @ptrCast(self);
             }
 
-            pub fn forceSubclass(self: *Node, comptime Sub: type) *LayoutOf(Sub) {
+            pub fn forceSubclass(
+                self: *Node,
+                comptime Sub: type,
+            ) *LayoutOf(Sub) {
                 std.debug.assert(self.isSub(Sub));
                 return @ptrCast(self);
             }
@@ -1667,11 +1850,13 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn isFloating(self: *const Node) bool {
-                return (comptime bakeFlagBitset("is_floating")).contains(self.kind);
+                return (comptime bakeFlagBitset("is_floating"))
+                    .contains(self.kind);
             }
 
             pub fn isPinned(self: *const Node) bool {
-                return (comptime bakeFlagBitset("is_pinned")).contains(self.kind);
+                return (comptime bakeFlagBitset("is_pinned"))
+                    .contains(self.kind);
             }
 
             pub inline fn isMemOp(self: *const Node) bool {
@@ -1683,7 +1868,8 @@ pub fn Func(comptime Backend: type) type {
             }
 
             pub fn isBasicBlockStart(self: *const Node) bool {
-                return (comptime bakeFlagBitset("is_basic_block_start")).contains(self.kind);
+                return (comptime bakeFlagBitset("is_basic_block_start"))
+                    .contains(self.kind);
             }
 
             pub inline fn isBasicBlockEnd(self: *const Node) bool {
@@ -1703,7 +1889,12 @@ pub fn Func(comptime Backend: type) type {
                 return @sizeOf(Node) + size_map[@intFromEnum(node.kind)];
             }
 
-            pub fn hash(kind: Kind, dt: DataType, inpts: []const ?*Node, extr: []const u64) u64 {
+            pub fn hash(
+                kind: Kind,
+                dt: DataType,
+                inpts: []const ?*Node,
+                extr: []const u64,
+            ) u64 {
                 var hasher = std.hash.Wyhash.init(0);
                 hasher.update(std.mem.asBytes(&kind));
                 hasher.update(std.mem.asBytes(&dt));
@@ -1778,10 +1969,22 @@ pub fn Func(comptime Backend: type) type {
 
         const InsertMap = InternMap(Inserter);
 
-        pub fn addSplit(self: *Self, block: *CfgNode, def: *Node, dgb: builtin.MachSplit.Dbg, counter: *usize) *Node {
+        pub fn addSplit(
+            self: *Self,
+            block: *CfgNode,
+            def: *Node,
+            dgb: builtin.MachSplit.Dbg,
+            counter: *usize,
+        ) *Node {
             std.debug.assert(def.isDef());
             counter.* += 1;
-            return self.addNode(.MachSplit, def.sloc, def.data_type, &.{ &block.base, null }, .{ .dbg = dgb });
+            return self.addNode(
+                .MachSplit,
+                def.sloc,
+                def.data_type,
+                &.{ &block.base, null },
+                .{ .dbg = dgb },
+            );
         }
 
         pub fn splitBefore(
@@ -1805,7 +2008,10 @@ pub fn Func(comptime Backend: type) type {
             const mask = use.regMask(self, idx, tmp.arena);
 
             if (def.isReadonly() and use.kind != .Phi and
-                (if (use.inPlaceSlot()) |s| s + use.dataDepOffset() != idx else true) and
+                (if (use.inPlaceSlot()) |s|
+                    s + use.dataDepOffset() != idx
+                else
+                    true) and
                 Backend.setIntersects(mask, def.regMask(self, 0, tmp.arena)))
             {
                 return;
@@ -1844,7 +2050,10 @@ pub fn Func(comptime Backend: type) type {
 
             self.setInputIgnoreIntern(use, idx, ins);
             if (ins.kind == .MachSplit) self.setInputIgnoreIntern(ins, 1, def);
-            const oidx = if (use.kind == .Phi) block.base.outputs().len - 2 else block.base.posOfOutput(0, use);
+            const oidx = if (use.kind == .Phi)
+                block.base.outputs().len - 2
+            else
+                block.base.posOfOutput(0, use);
             const to_rotate = block.base.outputs()[oidx..];
             std.mem.rotate(Node.Out, to_rotate, to_rotate.len - 1);
         }
@@ -1884,13 +2093,28 @@ pub fn Func(comptime Backend: type) type {
             return new_node;
         }
 
-        pub fn internNode(self: *Self, kind: Kind, dt: DataType, inputs: []const ?*Node, extra: []const u64) InsertMap.GetOrPutResult {
+        pub fn internNode(
+            self: *Self,
+            kind: Kind,
+            dt: DataType,
+            inputs: []const ?*Node,
+            extra: []const u64,
+        ) InsertMap.GetOrPutResult {
             const map: *InsertMap = @ptrCast(&self.interner);
 
-            return map.getOrPutContext(self.arena.allocator(), .{
-                .node = undefined,
-                .hash = Node.hash(kind, dt, inputs, extra),
-            }, Inserter{ .kind = kind, .inputs = inputs, .dt = dt, .extra = extra }) catch unreachable;
+            return map.getOrPutContext(
+                self.arena.allocator(),
+                .{
+                    .node = undefined,
+                    .hash = Node.hash(kind, dt, inputs, extra),
+                },
+                Inserter{
+                    .kind = kind,
+                    .inputs = inputs,
+                    .dt = dt,
+                    .extra = extra,
+                },
+            ) catch unreachable;
         }
 
         const Uninserter = struct {
@@ -1907,7 +2131,12 @@ pub fn Func(comptime Backend: type) type {
             if (Node.isInterned(node.kind, node.inputs())) {
                 if (!self.interner.remove(.{
                     .node = node,
-                    .hash = Node.hash(node.kind, node.data_type, node.inputs(), node.anyextra()),
+                    .hash = Node.hash(
+                        node.kind,
+                        node.data_type,
+                        node.inputs(),
+                        node.anyextra(),
+                    ),
                 })) {
                     //    utils.panic("{}\n", .{node});
                 }
@@ -1916,7 +2145,12 @@ pub fn Func(comptime Backend: type) type {
 
         pub fn reinternNode(self: *Self, node: *Node) ?*Node {
             if (Node.isInterned(node.kind, node.inputs())) {
-                const entry = self.internNode(node.kind, node.data_type, node.inputs(), node.anyextra());
+                const entry = self.internNode(
+                    node.kind,
+                    node.data_type,
+                    node.inputs(),
+                    node.anyextra(),
+                );
 
                 if (entry.found_existing) {
                     return entry.key_ptr.node;
@@ -1943,18 +2177,38 @@ pub fn Func(comptime Backend: type) type {
             if (tree.par == null) {
                 tree.par = tree.head.base.cfg0().base.cfg0().ext.loop;
             }
-            tree.depth = self.loopDepth(&self.gcm.loop_tree[tree.par.?].head.base) + 1;
+            tree.depth =
+                self.loopDepth(&self.gcm.loop_tree[tree.par.?].head.base) + 1;
             return tree.depth;
         }
 
-        pub fn addFieldOffset(self: *Self, sloc: Sloc, base: *Node, offset: i64) *Node {
-            return if (offset != 0) if (base.kind == .BinOp and base.inputs()[2].?.kind == .CInt) b: {
-                break :b self.addBinOp(sloc, .iadd, .i64, base.inputs()[1].?, self.addIntImm(
+        pub fn addFieldOffset(
+            self: *Self,
+            sloc: Sloc,
+            base: *Node,
+            offset: i64,
+        ) *Node {
+            return if (offset != 0) if (base.kind == .BinOp and
+                base.inputs()[2].?.kind == .CInt)
+            b: {
+                break :b self.addBinOp(
                     sloc,
+                    .iadd,
                     .i64,
-                    base.inputs()[2].?.extra(.CInt).value + offset,
-                ));
-            } else self.addBinOp(sloc, .iadd, .i64, base, self.addIntImm(sloc, .i64, offset)) else base;
+                    base.inputs()[1].?,
+                    self.addIntImm(
+                        sloc,
+                        .i64,
+                        base.inputs()[2].?.extra(.CInt).value + offset,
+                    ),
+                );
+            } else self.addBinOp(
+                sloc,
+                .iadd,
+                .i64,
+                base,
+                self.addIntImm(sloc, .i64, offset),
+            ) else base;
         }
 
         pub fn addGlobalAddr(
@@ -1962,19 +2216,38 @@ pub fn Func(comptime Backend: type) type {
             sloc: Sloc,
             arbitrary_global_id: u32,
         ) *Node {
-            return self.addNode(.GlobalAddr, sloc, .i64, &.{ null, self.getSyms() }, .{
-                .id = arbitrary_global_id,
-            });
+            return self.addNode(
+                .GlobalAddr,
+                sloc,
+                .i64,
+                &.{ null, self.getSyms() },
+                .{ .id = arbitrary_global_id },
+            );
         }
 
         pub fn addFuncAddr(self: *Self, sloc: Sloc, func_id: u32) *Node {
-            return self.addNode(.FuncAddr, sloc, .i64, &.{ null, self.getSyms() }, .{
-                .id = func_id,
-            });
+            return self.addNode(
+                .FuncAddr,
+                sloc,
+                .i64,
+                &.{ null, self.getSyms() },
+                .{ .id = func_id },
+            );
         }
 
-        pub fn addCast(self: *Self, sloc: Sloc, to: DataType, value: *Node) *Node {
-            return self.addNode(.UnOp, sloc, to, &.{ null, value }, .{ .op = .cast });
+        pub fn addCast(
+            self: *Self,
+            sloc: Sloc,
+            to: DataType,
+            value: *Node,
+        ) *Node {
+            return self.addNode(
+                .UnOp,
+                sloc,
+                to,
+                &.{ null, value },
+                .{ .op = .cast },
+            );
         }
 
         pub const OffsetDirection = enum(u8) {
@@ -1982,47 +2255,117 @@ pub fn Func(comptime Backend: type) type {
             isub = @intFromEnum(BinOp.isub),
         };
 
-        pub fn addIndexOffset(self: *Self, sloc: Sloc, base: *Node, op: OffsetDirection, elem_size: u64, subscript: *Node) *Node {
+        pub fn addIndexOffset(
+            self: *Self,
+            sloc: Sloc,
+            base: *Node,
+            op: OffsetDirection,
+            elem_size: u64,
+            subscript: *Node,
+        ) *Node {
             const offset = if (elem_size == 1)
                 subscript
             else if (subscript.kind == .CInt)
-                self.addIntImm(sloc, .i64, subscript.extra(.CInt).value * @as(i64, @bitCast(elem_size)))
+                self.addIntImm(
+                    sloc,
+                    .i64,
+                    subscript.extra(.CInt).value *
+                        @as(i64, @bitCast(elem_size)),
+                )
             else
-                self.addBinOp(sloc, .imul, .i64, subscript, self.addIntImm(sloc, .i64, @bitCast(elem_size)));
-            return self.addBinOp(sloc, @enumFromInt(@intFromEnum(op)), .i64, base, offset);
+                self.addBinOp(
+                    sloc,
+                    .imul,
+                    .i64,
+                    subscript,
+                    self.addIntImm(sloc, .i64, @bitCast(elem_size)),
+                );
+            return self.addBinOp(
+                sloc,
+                @enumFromInt(@intFromEnum(op)),
+                .i64,
+                base,
+                offset,
+            );
         }
 
         pub fn addUninit(self: *Self, sloc: Sloc, ty: DataType) *Node {
             return self.addNode(.Poison, sloc, ty, &.{null}, .{});
         }
 
-        pub fn addIntImm(self: *Self, sloc: Sloc, ty: DataType, value: i64) *Node {
+        pub fn addIntImm(
+            self: *Self,
+            sloc: Sloc,
+            ty: DataType,
+            value: i64,
+        ) *Node {
             std.debug.assert(ty != .bot);
             return self.addNode(.CInt, sloc, ty, &.{null}, .{ .value = value });
         }
 
-        pub fn addBinOp(self: *Self, sloc: Sloc, op: BinOp, ty: DataType, lhs: *Node, rhs: *Node) *Node {
+        pub fn addBinOp(
+            self: *Self,
+            sloc: Sloc,
+            op: BinOp,
+            ty: DataType,
+            lhs: *Node,
+            rhs: *Node,
+        ) *Node {
             if (lhs.kind == .CInt and rhs.kind == .CInt) {
-                return self.addIntImm(sloc, ty, op.eval(ty, lhs.extra(.CInt).value, rhs.extra(.CInt).value));
+                return self.addIntImm(
+                    sloc,
+                    ty,
+                    op.eval(ty, lhs.extra(.CInt).value, rhs.extra(.CInt).value),
+                );
             }
 
-            if ((op == .iadd or op == .isub) and rhs.kind == .CInt and rhs.extra(.CInt).value == 0) {
+            if ((op == .iadd or op == .isub) and rhs.kind == .CInt and
+                rhs.extra(.CInt).value == 0)
+            {
                 return lhs;
             }
-            return self.addNode(.BinOp, sloc, ty, &.{ null, lhs, rhs }, .{ .op = op });
+            return self.addNode(
+                .BinOp,
+                sloc,
+                ty,
+                &.{ null, lhs, rhs },
+                .{ .op = op },
+            );
         }
 
-        pub fn addUnOp(self: *Self, sloc: Sloc, op: UnOp, ty: DataType, oper: *Node) *Node {
-            if (op == .uext and ty.size() < oper.data_type.size()) utils.panic("{f} {f}", .{ ty, oper });
-            if (op == .sext and ty.size() < oper.data_type.size()) utils.panic("{f} {f}", .{ ty, oper });
-            if (op == .ired and ty.size() >= oper.data_type.size()) utils.panic("{f} {f}", .{ ty, oper });
-            if (oper.kind == .CInt and ty.isInt()) {
-                return self.addIntImm(sloc, ty, op.eval(oper.data_type, ty, oper.extra(.CInt).value));
+        pub fn addUnOp(
+            self: *Self,
+            sloc: Sloc,
+            op: UnOp,
+            ty: DataType,
+            oper: *Node,
+        ) *Node {
+            if (op == .uext and ty.size() < oper.data_type.size()) {
+                utils.panic("{f} {f}", .{ ty, oper });
             }
-            return self.addNode(.UnOp, sloc, ty, &.{ null, oper }, .{ .op = op });
+            if (op == .sext and ty.size() < oper.data_type.size()) {
+                utils.panic("{f} {f}", .{ ty, oper });
+            }
+            if (op == .ired and ty.size() >= oper.data_type.size()) {
+                utils.panic("{f} {f}", .{ ty, oper });
+            }
+            if (oper.kind == .CInt and ty.isInt()) {
+                return self.addIntImm(
+                    sloc,
+                    ty,
+                    op.eval(oper.data_type, ty, oper.extra(.CInt).value),
+                );
+            }
+            return self.addNode(
+                .UnOp,
+                sloc,
+                ty,
+                &.{ null, oper },
+                .{ .op = op },
+            );
         }
 
-        pub fn addMemJoin(self: *Self, to_join: []const *Node) *Node {
+        fn addMemJoin(self: *Self, to_join: []const *Node) *Node {
             errdefer unreachable;
 
             var tmp = utils.Arena.scrath(null);
@@ -2058,7 +2401,11 @@ pub fn Func(comptime Backend: type) type {
                 }
             }
 
-            const inps = try std.mem.concat(tmp.arena.allocator(), ?*Node, &.{ &.{null}, to_join });
+            const inps = try std.mem.concat(
+                tmp.arena.allocator(),
+                ?*Node,
+                &.{ &.{null}, to_join },
+            );
             return self.addNode(.MemJoin, .none, .top, inps, .{});
         }
 
@@ -2066,26 +2413,58 @@ pub fn Func(comptime Backend: type) type {
             self.addTrapLow(sloc, ctrl, code, setInputNoIntern);
         }
 
-        pub fn addTrapIgnoreIntern(self: *Self, sloc: Sloc, ctrl: *Node, code: u64) void {
+        pub fn addTrapIgnoreIntern(
+            self: *Self,
+            sloc: Sloc,
+            ctrl: *Node,
+            code: u64,
+        ) void {
             self.addTrapLow(sloc, ctrl, code, setInputIgnoreIntern);
         }
 
-        pub fn addTrapLow(self: *Self, sloc: Sloc, ctrl: *Node, code: u64, comptime setter: anytype) void {
+        pub fn addTrapLow(
+            self: *Self,
+            sloc: Sloc,
+            ctrl: *Node,
+            code: u64,
+            comptime setter: anytype,
+        ) void {
             if (self.end.inputs()[2] == null) {
-                setter(self, self.end, 2, self.addNode(.TrapRegion, sloc, .top, &.{}, .{ .base = .{ .loop = 0 } }));
+                setter(self, self.end, 2, self.addNode(
+                    .TrapRegion,
+                    sloc,
+                    .top,
+                    &.{},
+                    .{ .base = .{ .loop = 0 } },
+                ));
             }
 
             const region = self.end.inputs()[2].?;
-            const trap = self.addNode(.Trap, sloc, .top, &.{ctrl}, .{ .code = code, .base = .{ .loop = 0 } });
+            const trap = self.addNode(
+                .Trap,
+                sloc,
+                .top,
+                &.{ctrl},
+                .{ .code = code, .base = .{ .loop = 0 } },
+            );
 
             const idx = self.addDep(region, trap);
             self.addUse(trap, idx, region);
         }
 
-        pub fn addNode(self: *Self, comptime kind: Kind, sloc: Sloc, ty: DataType, inputs: []const ?*Node, extra: ClassFor(kind)) *Node {
+        pub fn addNode(
+            self: *Self,
+            comptime kind: Kind,
+            sloc: Sloc,
+            ty: DataType,
+            inputs: []const ?*Node,
+            extra: ClassFor(kind),
+        ) *Node {
             var typ = ty;
             if (kind == .Phi) {
-                if (inputs[1].?.isStore() or inputs[1].?.kind == .Mem) typ = .top;
+                if (inputs[1].?.isStore() or inputs[1].?.kind == .Mem) {
+                    typ = .top;
+                }
                 if (inputs[2]) |inp| if (inp.isStore() or inp.kind == .Mem) {
                     typ = .top;
                 };
@@ -2098,11 +2477,18 @@ pub fn Func(comptime Backend: type) type {
             return node;
         }
 
-        pub fn addNodeUntyped(self: *Self, kind: Kind, dt: DataType, inputs: []const ?*Node, extra: []const u64) *Node {
+        pub fn addNodeUntyped(
+            self: *Self,
+            kind: Kind,
+            dt: DataType,
+            inputs: []const ?*Node,
+            extra: []const u64,
+        ) *Node {
             if (Node.isInterned(kind, inputs)) {
                 const entry = self.internNode(kind, dt, inputs, extra);
                 if (!entry.found_existing) {
-                    entry.key_ptr.node = self.addNodeNoIntern(kind, dt, inputs, extra);
+                    entry.key_ptr.node =
+                        self.addNodeNoIntern(kind, dt, inputs, extra);
                 }
 
                 const node = entry.key_ptr.node;
@@ -2113,11 +2499,19 @@ pub fn Func(comptime Backend: type) type {
             }
         }
 
-        pub fn addNodeNoIntern(self: *Self, kind: Kind, ty: DataType, inputs: []const ?*Node, extra: []const u64) *Node {
+        pub fn addNodeNoIntern(
+            self: *Self,
+            kind: Kind,
+            ty: DataType,
+            inputs: []const ?*Node,
+            extra: []const u64,
+        ) *Node {
             errdefer unreachable;
             const size = @sizeOf(Node) + extra.len * @sizeOf(u64);
-            const node: *Node = @ptrCast(@alignCast(self.arena.allocator().rawAlloc(size, .@"8", @returnAddress()).?));
-            const owned_inputs = try self.arena.allocator().dupe(?*Node, inputs);
+            const node: *Node = @ptrCast(@alignCast(self.arena.allocator()
+                .rawAlloc(size, .@"8", @returnAddress()).?));
+            const owned_inputs =
+                try self.arena.allocator().dupe(?*Node, inputs);
 
             node.* = .{
                 .input_base = owned_inputs.ptr,
@@ -2149,7 +2543,9 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn kill(func: *Self, self: *Node) void {
-            if (self.output_len != 0) utils.panic("{any} {f}\n", .{ self.outputs(), self });
+            if (self.output_len != 0) {
+                utils.panic("{any} {f}\n", .{ self.outputs(), self });
+            }
 
             std.debug.assert(self.output_len == 0);
             for (self.inputs(), 0..) |oi, j| if (oi) |i| {
@@ -2163,7 +2559,11 @@ pub fn Func(comptime Backend: type) type {
             self.kind = .Dead;
         }
 
-        pub fn subsumeNoKillIgnoreIntern(self: *Self, this: *Node, target: *Node) void {
+        pub fn subsumeNoKillIgnoreIntern(
+            self: *Self,
+            this: *Node,
+            target: *Node,
+        ) void {
             self.ensureOutputCapacity(this, target.outputs().len);
 
             var tmp = utils.Arena.scrath(null);
@@ -2203,7 +2603,11 @@ pub fn Func(comptime Backend: type) type {
             }
         }
 
-        pub fn subsumeIgnoreIntern(self: *Self, this: *Node, target: *Node) void {
+        pub fn subsumeIgnoreIntern(
+            self: *Self,
+            this: *Node,
+            target: *Node,
+        ) void {
             if (this.sloc == Sloc.none) this.sloc = target.sloc;
             self.subsumeNoKillIgnoreIntern(this, target);
             self.kill(target);
@@ -2216,13 +2620,23 @@ pub fn Func(comptime Backend: type) type {
             self.kill(target);
         }
 
-        pub fn setInputNoIntern(self: *Self, use: *Node, idx: usize, def: ?*Node) void {
+        pub fn setInputNoIntern(
+            self: *Self,
+            use: *Node,
+            idx: usize,
+            def: ?*Node,
+        ) void {
             if (self.setInput(use, idx, def)) |new| {
                 utils.panic("setInputNoIntern: {f}", .{new});
             }
         }
 
-        pub fn setInputIgnoreIntern(self: *Self, use: *Node, idx: usize, def: *Node) void {
+        pub fn setInputIgnoreIntern(
+            self: *Self,
+            use: *Node,
+            idx: usize,
+            def: *Node,
+        ) void {
             self.stopped_interning.assertLocked();
             if (use.inputs()[idx] == def) return;
             if (use.inputs()[idx]) |n| n.removeUse(idx, use);
@@ -2230,7 +2644,12 @@ pub fn Func(comptime Backend: type) type {
             self.addUse(def, idx, use);
         }
 
-        pub fn setInput(self: *Self, use: *Node, idx: usize, def: ?*Node) ?*Node {
+        pub fn setInput(
+            self: *Self,
+            use: *Node,
+            idx: usize,
+            def: ?*Node,
+        ) ?*Node {
             self.stopped_interning.assertUnlocked();
 
             if (use.inputs()[idx] == def) return null;
@@ -2279,7 +2698,11 @@ pub fn Func(comptime Backend: type) type {
             } else unreachable;
         }
 
-        pub fn ensureOutputCapacity(self: *Self, def: *Node, at_least: usize) void {
+        pub fn ensureOutputCapacity(
+            self: *Self,
+            def: *Node,
+            at_least: usize,
+        ) void {
             if (def.output_cap < at_least) {
                 self.waste += @sizeOf(Node.Out) * @as(usize, def.output_cap);
                 const new_cap = @max(@max(def.output_cap, 1) * 2, at_least);
@@ -2309,7 +2732,10 @@ pub fn Func(comptime Backend: type) type {
         ) void {
             errdefer unreachable;
 
-            const Ctx = if (@typeInfo(@TypeOf(ctx)) == .pointer) @TypeOf(ctx.*) else @TypeOf(ctx);
+            const Ctx = if (@typeInfo(@TypeOf(ctx)) == .pointer)
+                @TypeOf(ctx.*)
+            else
+                @TypeOf(ctx);
 
             try stack.append(gpa, .{ inp, inp.outputs() });
             visited.set(inp.id);
@@ -2323,16 +2749,23 @@ pub fn Func(comptime Backend: type) type {
                 const node = frame[1][0];
                 frame[1] = frame[1][1..];
                 const n = node.get();
-                if ((!@hasDecl(Ctx, "filter") or ctx.filter(n)) and !visited.isSet(n.id)) {
+                if ((!@hasDecl(Ctx, "filter") or ctx.filter(n)) and
+                    !visited.isSet(n.id))
+                {
                     visited.set(n.id);
                     try stack.append(gpa, .{ n, n.outputs() });
                 }
             }
         }
 
-        pub fn killNodes(self: *Self) void {
+        fn killNodes(self: *Self) void {
             self.iterPeeps({}, struct {
-                fn strategy(_: void, _: *Func(Backend), _: *Node, _: *WorkList) ?*Node {
+                fn strategy(
+                    _: void,
+                    _: *Func(Backend),
+                    _: *Node,
+                    _: *WorkList,
+                ) ?*Node {
                     return null;
                 }
             }.strategy);
@@ -2348,7 +2781,10 @@ pub fn Func(comptime Backend: type) type {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            var worklist = WorkList.init(tmp.arena.allocator(), self.next_id) catch unreachable;
+            var worklist = WorkList.init(
+                tmp.arena.allocator(),
+                self.next_id,
+            ) catch unreachable;
             worklist.collectAll(self);
 
             while (worklist.pop()) |t| {
@@ -2376,7 +2812,14 @@ pub fn Func(comptime Backend: type) type {
             visited: *std.DynamicBitSetUnmanaged,
         ) []*CfgNode {
             var postorder = std.ArrayList(*CfgNode).empty;
-            collectPostorder3(self, self.start, arena, &postorder, visited, true);
+            collectPostorder3(
+                self,
+                self.start,
+                arena,
+                &postorder,
+                visited,
+                true,
+            );
             return postorder.items;
         }
 
@@ -2393,7 +2836,18 @@ pub fn Func(comptime Backend: type) type {
             }
             visited.set(node.id);
             pos.append(arena, node.asCfg().?) catch unreachable;
-            for (node.outputs()) |o| if (o.get().isCfg()) collectPostorder3(self, o.get(), arena, pos, visited, only_basic);
+            for (node.outputs()) |o| {
+                if (o.get().isCfg()) {
+                    collectPostorder3(
+                        self,
+                        o.get(),
+                        arena,
+                        pos,
+                        visited,
+                        only_basic,
+                    );
+                }
+            }
         }
 
         pub fn compact(self: *Self) void {
@@ -2410,7 +2864,14 @@ pub fn Func(comptime Backend: type) type {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            const cloned = Inln.cloneNodes(self.start, self.end, self.next_id, &self.arena, 0, tmp.arena);
+            const cloned = Inln.cloneNodes(
+                self.start,
+                self.end,
+                self.next_id,
+                &self.arena,
+                0,
+                tmp.arena,
+            );
 
             self.start = cloned.new_node_table[self.start.id];
             self.end = cloned.new_node_table[self.end.id];
@@ -2418,11 +2879,18 @@ pub fn Func(comptime Backend: type) type {
             self.signature = self.signature.dupe(self.arena.allocator());
         }
 
-        pub fn idealizeDead(ctx: *Backend, self: *Self, node: *Node, work: *WorkList) ?*Node {
+        pub fn idealizeDead(
+            ctx: *Backend,
+            self: *Self,
+            node: *Node,
+            work: *WorkList,
+        ) ?*Node {
             const inps = node.inputs();
 
-            var is_dead = node.kind == .Region and isDead(inps[0]) and isDead(inps[1]);
-            is_dead = is_dead or (node.kind != .Start and node.kind != .Region and
+            var is_dead = node.kind == .Region and
+                isDead(inps[0]) and isDead(inps[1]);
+            is_dead = is_dead or (node.kind != .Start and
+                node.kind != .Region and
                 node.kind != .TrapRegion and node.isCfg() and isDead(inps[0]));
 
             if (is_dead and node.kind == .Return and inps[0] != null) {
@@ -2482,7 +2950,8 @@ pub fn Func(comptime Backend: type) type {
                     cursor.base.kind != .Loop) : (cursor = cursor.idom())
                 {
                     if (cursor.base.data_type == .bot) break;
-                    if (cursor.base.kind != .Then and cursor.base.kind != .Else) continue;
+                    if (cursor.base.kind != .Then and
+                        cursor.base.kind != .Else) continue;
 
                     const if_node = cursor.base.inputs()[0].?;
                     if (if_node.kind != .If) continue;
@@ -2529,7 +2998,9 @@ pub fn Func(comptime Backend: type) type {
                     if (!o.get().isCfg()) break :eliminate_if;
                 }
 
-                if (node.inputs()[0].?.inputs()[0] == node.inputs()[1].?.inputs()[0]) {
+                if (node.inputs()[0].?.inputs()[0] ==
+                    node.inputs()[1].?.inputs()[0])
+                {
                     return node.inputs()[0].?.inputs()[0].?.inputs()[0];
                 }
             }
@@ -2589,8 +3060,13 @@ pub fn Func(comptime Backend: type) type {
             }
 
             if (node.kind == .Call and node.data_type != .bot) {
-                const force_inline = node.extra(.Call).signature.call_conv == .@"inline";
-                if (ctx.mach.out.getInlineFunc(Backend, node.extra(.Call).id, force_inline)) |inline_func| {
+                const force_inline = node.extra(.Call)
+                    .signature.call_conv == .@"inline";
+                if (ctx.mach.out.getInlineFunc(
+                    Backend,
+                    node.extra(.Call).id,
+                    force_inline,
+                )) |inline_func| {
                     inline_func.inliner.inlineInto(self, node, work);
                     return null;
                 }
@@ -2599,7 +3075,12 @@ pub fn Func(comptime Backend: type) type {
             return null;
         }
 
-        pub fn idealize(ctx: *Backend, self: *Self, node: *Node, work: *WorkList) ?*Node {
+        pub fn idealize(
+            ctx: *Backend,
+            self: *Self,
+            node: *Node,
+            work: *WorkList,
+        ) ?*Node {
             errdefer unreachable;
 
             if (idealizeDead(ctx, self, node, work)) |w| return w;
@@ -2633,21 +3114,31 @@ pub fn Func(comptime Backend: type) type {
                         };
                     }
 
-                    for (base.outputs()) |o| if (o.get().knownStore(base).? != node) {
-                        work.add(o.get().knownStore(base).?);
-                    };
+                    for (base.outputs()) |o| {
+                        if (o.get().knownStore(base).? != node) {
+                            work.add(o.get().knownStore(base).?);
+                        }
+                    }
 
                     return node.mem();
                 }
 
-                if (base.kind == .Local and node.outputs().len == 1 and node.outputs()[0].get().kind == .Return) {
+                if (base.kind == .Local and node.outputs().len == 1 and
+                    node.outputs()[0].get().kind == .Return)
+                {
                     return node.mem();
                 }
 
                 if (base.kind == .Local and node.tryCfg0() != null) {
                     const dinps = tmp.arena.dupe(?*Node, node.inputs());
                     dinps[0] = null;
-                    const st = self.addNode(.Store, node.sloc, node.data_type, dinps, .{});
+                    const st = self.addNode(
+                        .Store,
+                        node.sloc,
+                        node.data_type,
+                        dinps,
+                        .{},
+                    );
                     work.add(st);
                     return st;
                 }
@@ -2663,13 +3154,20 @@ pub fn Func(comptime Backend: type) type {
                 if (base.kind == .Local and node.tryCfg0() != null) {
                     const dinps = tmp.arena.dupe(?*Node, node.inputs());
                     dinps[0] = null;
-                    const st = self.addNode(.Load, node.sloc, node.data_type, dinps, .{});
+                    const st = self.addNode(
+                        .Load,
+                        node.sloc,
+                        node.data_type,
+                        dinps,
+                        .{},
+                    );
                     work.add(st);
                     return st;
                 }
 
                 while ((earlier.kind == .Store and
-                    (earlier.tryCfg0() == node.tryCfg0() or node.tryCfg0() == null) and
+                    (earlier.tryCfg0() == node.tryCfg0() or
+                        node.tryCfg0() == null) and
                     earlier.noAlias(node)))
                 {
                     earlier = earlier.mem();
@@ -2682,13 +3180,26 @@ pub fn Func(comptime Backend: type) type {
                         return earlier.value().?;
                     }
 
-                    if (earlier.data_type.meet(node.data_type) == earlier.data_type) {
-                        return self.addUnOp(earlier.sloc, .ired, node.data_type, earlier.value().?);
+                    if (earlier.data_type.meet(node.data_type) ==
+                        earlier.data_type)
+                    {
+                        return self.addUnOp(
+                            earlier.sloc,
+                            .ired,
+                            node.data_type,
+                            earlier.value().?,
+                        );
                     }
                 }
 
                 if (false and earlier != node.mem()) {
-                    return self.addNode(.Load, node.sloc, node.data_type, &.{ inps[0], earlier, inps[2] }, .{});
+                    return self.addNode(
+                        .Load,
+                        node.sloc,
+                        node.data_type,
+                        &.{ inps[0], earlier, inps[2] },
+                        .{},
+                    );
                 }
             }
 
@@ -2722,9 +3233,14 @@ pub fn Func(comptime Backend: type) type {
                 // NOTE: if the size of the memcpy does not match, we do not care
                 // since reading uninitialized memory is undefined behavior
 
-                const scanned = if (dst.kind == .BinOp) dst.inputs()[1].? else dst;
+                const scanned = if (dst.kind == .BinOp)
+                    dst.inputs()[1].?
+                else
+                    dst;
                 for (scanned.outputs()) |use| {
-                    if (if (use.get().knownMemOp()) |op| !op[0].isLoad() and use.get() != node else true) {
+                    if (if (use.get().knownMemOp()) |op| !op[0].isLoad() and
+                        use.get() != node else true)
+                    {
                         break :memcpy;
                     }
                 }
@@ -2745,7 +3261,8 @@ pub fn Func(comptime Backend: type) type {
                     ) orelse break :fold_const_read;
 
                     switch (res) {
-                        .value => |v| return self.addIntImm(node.sloc, node.data_type, v),
+                        .value => |v| return self
+                            .addIntImm(node.sloc, node.data_type, v),
                         .global => |g| return self.addGlobalAddr(node.sloc, g),
                         .func => |f| return self.addFuncAddr(node.sloc, f),
                     }
@@ -2762,7 +3279,11 @@ pub fn Func(comptime Backend: type) type {
             return fn (C, *Self, *Node, *WorkList) ?*Node;
         }
 
-        pub fn logNid(wr: *std.Io.Writer, nid: usize, cc: std.io.tty.Config) void {
+        pub fn logNid(
+            wr: *std.Io.Writer,
+            nid: usize,
+            cc: std.io.tty.Config,
+        ) void {
             errdefer unreachable;
 
             try utils.setColor(cc, wr, @enumFromInt(1 + nid % 15));
@@ -2774,12 +3295,18 @@ pub fn Func(comptime Backend: type) type {
             var stack_arg_offset: u64 = 0;
             for (self.signature.params(), 0..) |par, j| {
                 const argn = for (self.gcm.postorder[0].base.outputs()) |o| {
-                    if (o.get().subclass(Arg)) |sub| if (sub.ext.index == j) break o.get();
+                    if (o.get().subclass(Arg)) |sub| if (sub.ext.index == j)
+                        break o.get();
                 } else continue; // is dead
 
                 if (par == .Stack) {
-                    stack_arg_offset = std.mem.alignForward(u64, stack_arg_offset, @as(u64, 1) << par.Stack.alignment);
-                    argn.extra(.StructArg).spec.size = @intCast(stack_arg_offset);
+                    stack_arg_offset = std.mem.alignForward(
+                        u64,
+                        stack_arg_offset,
+                        @as(u64, 1) << par.Stack.alignment,
+                    );
+                    argn.extra(.StructArg).spec.size =
+                        @intCast(stack_arg_offset);
                     stack_arg_offset += par.Stack.size;
                 }
             }
@@ -2793,7 +3320,8 @@ pub fn Func(comptime Backend: type) type {
                 if (bb.base.kind == .CallEnd) {
                     const call = bb.base.inputs()[0].?;
                     const signature: *Signature = &call.extra(.Call).signature;
-                    call_slot_size = @max(signature.stackSize(), call_slot_size);
+                    call_slot_size =
+                        @max(signature.stackSize(), call_slot_size);
                     has_call = true;
                 }
             }
@@ -2811,10 +3339,11 @@ pub fn Func(comptime Backend: type) type {
             std.sort.pdq(Node.Out, mem.outputs(), {}, struct {
                 fn isBigger(_: void, lhs: Node.Out, rhs: Node.Out) bool {
                     return switch (lhs.get().extra2()) {
-                        .LocalAlloc => |l| @ctz(l.size) > switch (rhs.get().extra2()) {
-                            .LocalAlloc => |r| @ctz(r.size),
-                            else => return true,
-                        },
+                        .LocalAlloc => |l| @ctz(l.size) >
+                            switch (rhs.get().extra2()) {
+                                .LocalAlloc => |r| @ctz(r.size),
+                                else => return true,
+                            },
                         else => false,
                     };
                 }
@@ -2838,9 +3367,12 @@ pub fn Func(comptime Backend: type) type {
         }
 
         // returns the loop ranges and wether order was changed
-        pub fn backshiftLoopBodies(func: *Self, scratch: *utils.Arena) struct { [][2]u16, bool } {
-            // so this is slow? maybe we can mark nodes we visited each round and then
-            // exit early
+        pub fn backshiftLoopBodies(
+            func: *Self,
+            scratch: *utils.Arena,
+        ) struct { [][2]u16, bool } {
+            // so this is slow? maybe we can mark nodes we visited each round
+            // and then exit early
 
             var ranges = scratch.makeArrayList([2]u16, func.gcm.postorder.len);
             var changed = false;
@@ -2850,9 +3382,15 @@ pub fn Func(comptime Backend: type) type {
                 var backshift_cursor = i + 1;
                 for (func.gcm.postorder[i + 1 ..], i + 1..) |inb, j| {
                     var cursor = inb;
-                    while (cursor.idepth() >= bb.idepth()) : (cursor = cursor.idom()) {
+                    while (cursor.idepth() >= bb.idepth()) : (cursor =
+                        cursor.idom())
+                    {
                         if (cursor == bb) {
-                            std.mem.rotate(*CfgNode, func.gcm.postorder[backshift_cursor .. j + 1], j - backshift_cursor);
+                            std.mem.rotate(
+                                *CfgNode,
+                                func.gcm.postorder[backshift_cursor .. j + 1],
+                                j - backshift_cursor,
+                            );
                             backshift_cursor += 1;
                             changed = true;
                             break;
@@ -2860,7 +3398,10 @@ pub fn Func(comptime Backend: type) type {
                     }
                 }
 
-                ranges.appendAssumeCapacity(.{ @intCast(i), @intCast(backshift_cursor - 1) });
+                ranges.appendAssumeCapacity(.{
+                    @intCast(i),
+                    @intCast(backshift_cursor - 1),
+                });
             }
 
             if (changed) {
@@ -2876,7 +3417,9 @@ pub fn Func(comptime Backend: type) type {
                     var seen_non_dom = false;
                     for (func.gcm.postorder[i..]) |inb| {
                         var cursor = inb;
-                        while (cursor.idepth() >= bb.idepth()) : (cursor = cursor.idom()) {
+                        while (cursor.idepth() >= bb.idepth()) : (cursor =
+                            cursor.idom())
+                        {
                             if (cursor == bb) {
                                 if (seen_non_dom) {
                                     func.fmtScheduledLog();
@@ -2940,7 +3483,9 @@ pub fn Func(comptime Backend: type) type {
                 }
             }
 
-            if (node.isBasicBlockStart()) pos.append(arena, node.asCfg().?) catch unreachable;
+            if (node.isBasicBlockStart()) {
+                pos.append(arena, node.asCfg().?) catch unreachable;
+            }
         }
 
         pub fn fmtScheduledLog(self: *Self) void {
@@ -2948,18 +3493,26 @@ pub fn Func(comptime Backend: type) type {
             self.fmtScheduled(&writer.interface, .escape_codes);
         }
 
-        pub fn fmtScheduled(self: *Self, writer: *std.Io.Writer, colors: std.io.tty.Config) void {
+        pub fn fmtScheduled(
+            self: *Self,
+            writer: *std.Io.Writer,
+            colors: std.io.tty.Config,
+        ) void {
             errdefer unreachable;
 
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             self.start.fmt(self.gcm.block_count, writer, colors);
-            if (self.start.outputs().len > 1 and self.start.outputs()[1].get().kind == .Mem) {
-                for (self.start.outputs()[1].get().outputs()) |oo| if (oo.get().kind == .LocalAlloc) {
-                    try writer.writeAll("\n  ");
-                    oo.get().fmt(self.gcm.instr_count, writer, colors);
-                };
+            if (self.start.outputs().len > 1 and
+                self.start.outputs()[1].get().kind == .Mem)
+            {
+                for (self.start.outputs()[1].get().outputs()) |oo| {
+                    if (oo.get().kind == .LocalAlloc) {
+                        try writer.writeAll("\n  ");
+                        oo.get().fmt(self.gcm.instr_count, writer, colors);
+                    }
+                }
             }
             try writer.writeAll("\n");
             for (self.gcm.postorder) |p| {
@@ -2974,11 +3527,16 @@ pub fn Func(comptime Backend: type) type {
             }
         }
 
-        pub fn fmtUnscheduled(self: *Self, writer: *std.Io.Writer, colors: std.io.tty.Config) void {
+        pub fn fmtUnscheduled(
+            self: *Self,
+            writer: *std.Io.Writer,
+            colors: std.io.tty.Config,
+        ) void {
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
-            var worklist = Self.WorkList.init(tmp.arena.allocator(), self.next_id) catch unreachable;
+            var worklist = Self.WorkList
+                .init(tmp.arena.allocator(), self.next_id) catch unreachable;
             worklist.collectAll(self);
 
             for (worklist.items()) |p| {
