@@ -198,22 +198,26 @@ pub fn partialEval(self: *Comptime, ctx: PartialEvalCtx, bl: *Builder, expr: *No
             return node_res;
         },
         .BinOp => |extra| {
+            const pin = bl.pin(expr);
+
             const lhs = expr.inputs()[1].?;
             const lhs_val = try self.partialEval(ctx, bl, lhs);
             const rhs = expr.inputs()[2].?;
             const rhs_val = try self.partialEval(ctx, bl, rhs);
+
+            const exp = bl.unpin(pin);
 
             if (lhs_val.kind != .CInt) {
                 if (rhs_val.kind != .CInt) {
                     return ctx.err(.{ .Unsupported = .{ rhs_val, "rhs of binop" } });
                 }
 
-                return expr;
+                return exp;
             }
 
-            const res = extra.op.eval(expr.data_type, lhs_val.extra(.CInt).value, rhs_val.extra(.CInt).value);
-            const node_res = bl.addIntImm(.none, expr.data_type, res);
-            bl.func.subsume(node_res, expr);
+            const res = extra.op.eval(exp.data_type, lhs_val.extra(.CInt).value, rhs_val.extra(.CInt).value);
+            const node_res = bl.addIntImm(.none, exp.data_type, res);
+            bl.func.subsume(node_res, exp);
             return node_res;
         },
         .Local => {
@@ -400,7 +404,8 @@ pub fn executeMemOps(
                     continue;
                 }
 
-                const val = try self.partialEval(ctx, bl, op.value().?);
+                const fal = try self.partialEval(ctx, bl, op.value().?);
+                const val, const voff = fal.knownOffset();
 
                 switch (val.extra2()) {
                     .CInt => |extra| {
@@ -410,11 +415,13 @@ pub fn executeMemOps(
                         );
                     },
                     .GlobalAddr => |extra| {
-                        const addr = try self.partialEvalGlobal(ctx, val, extra.id);
+                        const addr = try self.partialEvalGlobal(ctx, val, extra.id) + @as(u64, @intCast(voff));
                         std.debug.assert(op.data_type.size() == 8);
                         @memcpy(mem[@intCast(offset)..][0..8], std.mem.asBytes(&addr));
                     },
-                    else => return ctx.err(.{ .Unsupported = .{ val, "stack store value" } }),
+                    else => {
+                        return ctx.err(.{ .Unsupported = .{ val, "stack store value" } });
+                    },
                 }
 
                 bl.func.subsume(op.mem(), op);

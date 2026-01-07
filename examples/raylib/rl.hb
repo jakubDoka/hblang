@@ -4,6 +4,8 @@ begin_drawing := fn(): void @import("BeginDrawing")
 end_drawing := fn(): void @import("EndDrawing")
 clear_background := fn(color: Color): void @import("ClearBackground")
 draw_rectangle_v := fn(pos: V2, size: V2, color: Color): void @import("DrawRectangleV")
+draw_rectangle_lines_ex := fn(rec: Rect, line_thick: f32, color: Color): void @import("DrawRectangleLinesEx")
+check_collision_recs := fn(rec1: Rect, rec2: Rect): bool @import("CheckCollisionRecs")
 window_should_close := fn(): bool @import("WindowShouldClose")
 get_frame_time := fn(): f32 @import("GetFrameTime")
 get_mouse_position := fn(): V2 @import("GetMousePosition")
@@ -15,6 +17,14 @@ set_random_seed := fn(seed: uint): void @import("SetRandomSeed")
 get_random_value := fn(min: int, max: int): int @import("GetRandomValue")
 set_config_flags := fn(flags: ConfigFlags): void @import("SetConfigFlags")
 set_target_fps := fn(fps: uint): void @import("SetTargetFPS")
+color_lerp := fn(color1: Color, color2: Color, amount: f32): Color @import("ColorLerp")
+color_alpha := fn(color: Color, alpha: f32): Color @import("ColorAlpha")
+sin := fn(value: f32): f32 @import("sin")
+cos := fn(value: f32): f32 @import("cos")
+print_float := fn(str: ^u8, value: f32): void @import("printf")
+draw_text := fn(text: ^u8, pos_x: int, pos_y: int, font_size: int, color: Color): void @import("DrawText")
+draw_fps := fn(pos_x: int, pos_y: int): void @import("DrawFPS")
+
 
 ConfigFlags := struct {
 	.bits: uint
@@ -53,9 +63,6 @@ ConfigFlags := struct {
 	INTERLACED_HINT := ConfigFlags.(0x00010000)
 }
 
-draw_text := fn(text: ^u8, pos_x: int, pos_y: int, font_size: int, color: Color): void @import("DrawText")
-draw_fps := fn(pos_x: int, pos_y: int): void @import("DrawFPS")
-
 $WHITE := u8.[255, 255, 255, 255]
 $BLACK := u8.[0, 0, 0, 255]
 $LIGHTGRAY := u8.[200, 200, 200, 255]
@@ -74,3 +81,9 @@ V2 := struct {
 	norm := fn(self: V2): V2 @import("Vector2Normalize")
 }
 Color := [4]u8
+Rect := struct {
+	.x: f32;
+	.y: f32;
+	.width: f32;
+	.height: f32;
+}

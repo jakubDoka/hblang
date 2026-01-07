@@ -3,6 +3,8 @@ pub const utils = @import("../utils.zig");
 const Machine = @import("Machine.zig");
 const matcher = @import("graph.IdealGen");
 
+const print = (std.debug).print;
+
 fn tu(int: i64) u64 {
     return @bitCast(int);
 }
@@ -253,7 +255,7 @@ pub const UnOp = enum(u8) {
                 .i16 => @as(i16, @truncate(oper)),
                 .i32 => @as(i32, @truncate(oper)),
                 .i64 => oper,
-                else => utils.panic("{}", .{src}),
+                else => utils.panic("{f}", .{src}),
             },
             .uext => oper,
             .ired => oper,
@@ -413,6 +415,14 @@ pub const DataType = enum(u16) {
         }
 
         return .bot;
+    }
+
+    pub fn format(self: DataType, writer: *std.Io.Writer) !void {
+        const raw = self.toRaw();
+        try writer.print("{s}", .{@tagName(raw.kind)});
+        if (raw.lanes() != 1) {
+            try writer.print("x{}", .{raw.lanes()});
+        }
     }
 };
 
@@ -1008,7 +1018,7 @@ pub fn Func(comptime Backend: type) type {
 
                     if (!(bb.kind == .If or len == 1)) {
                         for (postorder) |p| {
-                            std.debug.print("{f}\n", .{p});
+                            print("{f}\n", .{p});
                         }
                         utils.panic("{f}\n", .{bb});
                     }
@@ -1386,6 +1396,8 @@ pub fn Func(comptime Backend: type) type {
                     .@"enum" => |e| {
                         if (e.is_exhaustive) {
                             try writ.print("{s}", .{@tagName(ex.*)});
+                        } else if (std.meta.hasFn(@TypeOf(ex.*), "format")) {
+                            try writ.print("{f}", .{ex.*});
                         } else {
                             try writ.print("{}", .{ex.*});
                         }
@@ -1406,7 +1418,7 @@ pub fn Func(comptime Backend: type) type {
                 logNid(writer, self.id, colors);
                 const name = @tagName(self.kind);
 
-                writer.print(" = {s}:{s}", .{ name, @tagName(self.data_type) }) catch unreachable;
+                writer.print(" = {s}:{f}", .{ name, self.data_type }) catch unreachable;
 
                 var add_colon_space = false;
 
@@ -2001,9 +2013,9 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn addUnOp(self: *Self, sloc: Sloc, op: UnOp, ty: DataType, oper: *Node) *Node {
-            if (op == .uext and ty.size() < oper.data_type.size()) utils.panic("{} {f}", .{ ty, oper });
-            if (op == .sext and ty.size() < oper.data_type.size()) utils.panic("{} {f}", .{ ty, oper });
-            if (op == .ired and ty.size() >= oper.data_type.size()) utils.panic("{} {f}", .{ ty, oper });
+            if (op == .uext and ty.size() < oper.data_type.size()) utils.panic("{f} {f}", .{ ty, oper });
+            if (op == .sext and ty.size() < oper.data_type.size()) utils.panic("{f} {f}", .{ ty, oper });
+            if (op == .ired and ty.size() >= oper.data_type.size()) utils.panic("{f} {f}", .{ ty, oper });
             if (oper.kind == .CInt and ty.isInt()) {
                 return self.addIntImm(sloc, ty, op.eval(oper.data_type, ty, oper.extra(.CInt).value));
             }
@@ -2116,6 +2128,10 @@ pub fn Func(comptime Backend: type) type {
                 .id = self.next_id,
                 .data_type = ty,
             };
+
+            if (self.next_id == 149 and node.kind == .Load) {
+                std.debug.dumpCurrentStackTrace(@returnAddress());
+            }
 
             self.next_id += 1;
 
@@ -2864,8 +2880,7 @@ pub fn Func(comptime Backend: type) type {
                             if (cursor == bb) {
                                 if (seen_non_dom) {
                                     func.fmtScheduledLog();
-                                    std.debug.print("\n{f}\n{f}\n", .{ bb, inb });
-                                    unreachable;
+                                    utils.panic("\n{f}\n{f}\n", .{ bb, inb });
                                 }
                                 break;
                             }

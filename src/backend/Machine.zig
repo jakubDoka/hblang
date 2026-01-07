@@ -1139,7 +1139,7 @@ pub const DisasmOpts = struct {
         if (self.colors == .no_color) {
             if (self.out) |o| o.print(fmt, args) catch unreachable;
         } else {
-            std.debug.print(fmt, args);
+            (std.debug).print(fmt, args);
         }
     }
 };

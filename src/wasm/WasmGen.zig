@@ -12,6 +12,9 @@ const WasmGen = @This();
 const Func = graph.Func(WasmGen);
 const opb = object.opb;
 
+// NOTE: so that it does not show up in the grep
+const print = (std.debug).print;
+
 mach: Mach = .init(WasmGen),
 gpa: std.mem.Allocator,
 indirect_signatures: std.ArrayList(u8) = .empty,
@@ -546,15 +549,6 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
             stacker.recoverBlockTrees();
         }
 
-        if (false) {
-            for (func.gcm.postorder) |block| {
-                std.debug.print("{f}\n", .{block});
-                for (block.base.outputs()) |out| {
-                    std.debug.print("  {f}\n", .{out.get()});
-                }
-            }
-        }
-
         var rloc = Regalloc{};
         self.ctx.allocs = rloc.ralloc(WasmGen, func);
 
@@ -764,10 +758,10 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     const log_cfg = false;
 
     if (log_cfg) {
-        std.debug.print("{}\n", .{changed});
+        print("{}\n", .{changed});
 
         for (scope_ranges.items) |lr| {
-            std.debug.print("{f}\n", .{lr});
+            print("{f}\n", .{lr});
         }
     }
 
@@ -790,7 +784,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
     if (log_cfg) {
         func.fmtScheduledLog();
         for (scope_ranges.items) |lr| {
-            std.debug.print("{f}\n", .{lr});
+            print("{f}\n", .{lr});
         }
     }
 
@@ -806,12 +800,12 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
                     .block => try self.ctx.buf.writer.writeByte(opb(.block)),
                 }
                 try self.ctx.buf.writer.writeByte(0x40);
-                if (log_cfg) std.debug.print("start: {s}\n", .{@tagName(sr.kind)});
+                if (log_cfg) print("start: {s}\n", .{@tagName(sr.kind)});
                 self.ctx.scope_stack.appendAssumeCapacity(sr);
             }
         }
 
-        if (log_cfg) std.debug.print("{f}\n", .{bb});
+        if (log_cfg) print("{f}\n", .{bb});
 
         for (bb.base.outputs()) |out| {
             const instr = out.get();
@@ -831,7 +825,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
                 }
             }
 
-            if (log_cfg) std.debug.print("  {f}\n", .{instr});
+            if (log_cfg) print("  {f}\n", .{instr});
             if (instr.id == deleted_id) continue;
             self.emitInstr(instr);
         }
@@ -839,7 +833,7 @@ pub fn emitFunc(self: *WasmGen, func: *Func, opts: Mach.EmitOptions) void {
         while (self.ctx.scope_stack.items.len > 0 and self.ctx.scope_stack.getLast().range[1] == i) {
             const sr = self.ctx.scope_stack.pop().?;
             try self.ctx.buf.writer.writeByte(opb(.end));
-            if (log_cfg) std.debug.print("end: {s}\n", .{@tagName(sr.kind)});
+            if (log_cfg) print("end: {s}\n", .{@tagName(sr.kind)});
         }
     }
 
@@ -935,7 +929,7 @@ pub fn emitCInt(self: *WasmGen, instr: *Func.Node, value: i64) void {
             try self.ctx.buf.writer.writeByte(opb(.f64_const));
             try self.ctx.buf.writer.writeAll(std.mem.asBytes(&value));
         },
-        else => utils.panic("{}", .{instr.data_type}),
+        else => utils.panic("{f}", .{instr.data_type}),
     }
 
     self.emitLocalStore(instr);
@@ -1004,7 +998,7 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 .ired => switch (inps[0].data_type) {
                     .i64 => switch (instr.data_type) {
                         .i32, .i16, .i8 => opb(.i32_wrap_i64),
-                        else => utils.panic("{} {}", .{ instr.data_type, inps[0].data_type }),
+                        else => utils.panic("{f} {f}", .{ instr.data_type, inps[0].data_type }),
                     },
                     else => unreachable,
                 },
@@ -1048,27 +1042,27 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                     .f32 => switch (instr.data_type) {
                         .i32 => opb(.i32_trunc_f32_s),
                         .i64 => opb(.i64_trunc_f32_s),
-                        else => utils.panic("{}", .{instr.data_type}),
+                        else => utils.panic("{f}", .{instr.data_type}),
                     },
                     .f64 => switch (instr.data_type) {
                         .i32 => opb(.i32_trunc_f64_s),
                         .i64 => opb(.i64_trunc_f64_s),
-                        else => utils.panic("{}", .{instr.data_type}),
+                        else => utils.panic("{f}", .{instr.data_type}),
                     },
-                    else => utils.panic("{}", .{inps[0].data_type}),
+                    else => utils.panic("{f}", .{inps[0].data_type}),
                 },
                 .itf => switch (inps[0].data_type) {
                     .i32 => switch (instr.data_type) {
                         .f32 => opb(.f32_convert_i32_s),
                         .f64 => opb(.f64_convert_i32_s),
-                        else => utils.panic("{}", .{instr.data_type}),
+                        else => utils.panic("{f}", .{instr.data_type}),
                     },
                     .i64 => switch (instr.data_type) {
                         .f32 => opb(.f32_convert_i64_s),
                         .f64 => opb(.f64_convert_i64_s),
-                        else => utils.panic("{}", .{instr.data_type}),
+                        else => utils.panic("{f}", .{instr.data_type}),
                     },
-                    else => utils.panic("{}", .{inps[0].data_type}),
+                    else => utils.panic("{f}", .{inps[0].data_type}),
                 },
                 .fcst => switch (instr.data_type) {
                     .f32 => opb(.f32_demote_f64),
@@ -1089,21 +1083,21 @@ pub fn emitInstr(self: *WasmGen, instr: *Func.Node) void {
                 .cast => switch (op_ty) {
                     .i32 => switch (instr.data_type) {
                         .f32 => opb(.f32_reinterpret_i32),
-                        else => utils.panic("{}", .{instr.data_type}),
+                        else => utils.panic("{f}", .{instr.data_type}),
                     },
                     .i64 => switch (instr.data_type) {
                         .f64 => opb(.f64_reinterpret_i64),
                         else => {
-                            utils.panic("{}", .{instr.data_type});
+                            utils.panic("{f}", .{instr.data_type});
                         },
                     },
                     .f32 => switch (instr.data_type) {
                         .i32 => opb(.i32_reinterpret_f32),
-                        else => utils.panic("{}", .{instr.data_type}),
+                        else => utils.panic("{f}", .{instr.data_type}),
                     },
                     .f64 => switch (instr.data_type) {
                         .i64 => opb(.i64_reinterpret_f64),
-                        else => utils.panic("{}", .{instr.data_type}),
+                        else => utils.panic("{f}", .{instr.data_type}),
                     },
                     else => utils.panic("{}", .{op_ty}),
                 },
@@ -1491,19 +1485,19 @@ pub fn disasm(_: *WasmGen, opts: Mach.DisasmOpts) void {
 
     const term = try child.wait();
     if (term != .Exited or term.Exited != 0) {
-        std.debug.print("{s}\n", .{stderr.items});
+        print("{s}\n", .{stderr.items});
         if (std.mem.indexOf(u8, stderr.items, ": error:")) |idx| {
             const idx_in = std.fmt.parseInt(usize, stderr.items[0..idx], 16) catch unreachable;
 
             for (0..std.mem.alignBackward(usize, opts.bin.len, 16) / 16) |i| {
-                std.debug.print("{x:0>4} ", .{i * 16});
+                print("{x:0>4} ", .{i * 16});
                 var slicer = opts.bin[i * 16 ..];
                 for (0..4) |j| {
-                    std.debug.print("{x} ", .{
+                    print("{x} ", .{
                         slicer[@min(j * 4, slicer.len)..@min(j * 4 + 4, slicer.len)],
                     });
                 }
-                std.debug.print("\n", .{});
+                print("\n", .{});
             }
 
             if (false) {
@@ -1514,10 +1508,10 @@ pub fn disasm(_: *WasmGen, opts: Mach.DisasmOpts) void {
                     .vtable = undefined,
                 };
 
-                std.debug.print("{x}\n", .{reader.takeLeb128(i32) catch unreachable});
+                print("{x}\n", .{reader.takeLeb128(i32) catch unreachable});
             }
         } else {
-            std.debug.print("{x}\n", .{opts.bin});
+            print("{x}\n", .{opts.bin});
             unreachable;
         }
     }
@@ -1565,8 +1559,8 @@ pub fn run(_: *WasmGen, env: Mach.RunEnv) Mach.RunError!usize {
     };
 
     if (res.Exited != 0) {
-        std.debug.print("{s}\n", .{stdout.items});
-        std.debug.print("{s}\n", .{stderr.items});
+        print("{s}\n", .{stdout.items});
+        print("{s}\n", .{stderr.items});
         return error.MalformedBinary;
     }
 

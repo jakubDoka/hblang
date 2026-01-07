@@ -4,6 +4,8 @@ pub const root = @import("hb");
 pub const test_util = root.test_utils;
 pub const Regalloc = root.backend.Regalloc;
 
+pub const print = (std.debug).print;
+
 comptime {
     @setEvalBranchQuota(3000);
     refAllDeclsRecursive(@This(), 10);
@@ -63,15 +65,15 @@ pub fn runTest(name: []const u8, code: [:0]const u8) !void {
             .{ "x86_64-linux-no-opts", &x86_64_no_opt.mach, .debug, .systemv },
         };
 
-        for (tests[0..]) |tst| {
+        for (tests[4..]) |tst| {
             var tmp = glb_arena.checkpoint();
             defer tmp.deinit();
 
             const target, var machine, const opts, const abi = tst;
-            //std.debug.print("{s}\n", .{target});
+            //print("{s}\n", .{target});
             defer machine.deinit();
             //if (std.mem.indexOf(u8, target, "x") != null) continue;
-            if (abi.cc == .systemv and std.mem.indexOf(u8, name, "sse") != null) return;
+            //if (abi.cc == .systemv and std.mem.indexOf(u8, name, "sse") != null) return;
             try runMachineTest(
                 name,
                 target,
@@ -102,7 +104,6 @@ pub fn runMachineTest(
     out: *std.Io.Writer,
     color: std.io.tty.Config,
 ) !void {
-    if (false) std.debug.print("{s}\n", .{category});
     var output = std.Io.Writer.Allocating.init(gpa);
     defer output.deinit();
 
@@ -149,7 +150,7 @@ pub fn runFuzzFindingTest(name: []const u8, code: [:0]const u8) !void {
     utils.Arena.initScratch(1024 * 1024 * 10);
     defer utils.Arena.deinitScratch();
 
-    std.debug.print("{s}\n", .{code});
+    print("{s}\n", .{code});
 
     {
         var arena = utils.Arena.init(1024 * 1024 * 128);

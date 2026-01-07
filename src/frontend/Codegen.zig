@@ -765,7 +765,13 @@ pub fn build(self: *Codegen, func_id: utils.EntId(tys.Func)) BuildError!void {
                 self.bl.addSpill(arg_sloc, self.bl.addParam(arg_sloc, i, @intFromEnum(ty)), @intFromEnum(ty)),
             .ByValuePair => |p| if (params[i] == .Stack) b: {
                 break :b self.bl.addParam(arg_sloc, i, @intFromEnum(ty));
+            } else if (params[i].Reg.lanes() == 2) b: {
+                const slot = self.bl.addLocal(arg_sloc, p.size(), @intFromEnum(ty));
+                const arg = self.bl.addParam(arg_sloc, i, @intFromEnum(ty));
+                self.bl.addStore(arg_sloc, slot, params[i].Reg, arg);
+                break :b slot;
             } else b: {
+                std.debug.assert(params[i].Reg.lanes() == 1);
                 const slot = self.bl.addLocal(arg_sloc, p.size(), @intFromEnum(ty));
                 for (p.offsets(), 0..) |off, j| {
                     const arg = self.bl.addParam(arg_sloc, i + j, @intFromEnum(ty));
@@ -1335,6 +1341,7 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
             self.emitGenericStore(sloc, loc.id.Pointer, &val);
             return .{};
         },
+        .@"$&&" => unreachable,
         .@"&&" => {
             const variable = self.bl.addLocal(.none, 1, @intFromEnum(Types.Id.bool));
 
@@ -1352,7 +1359,7 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
 
             return .mkp(.bool, variable);
         },
-        .@"||" => {
+        .@"$||", .@"||" => |t| {
             var lhs = try self.emit(.{ .ty = .bool }, e.lhs);
 
             if (self.types.store.unwrap(lhs.ty.data(), .Nullable)) |nullable| {
@@ -1372,19 +1379,31 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
                 // TODO: this wastes stack, we should fix up the stack
                 // allocation once we know this results into unwrapped
                 // value
-                var variable = self.bl.addLocal(sloc, self.abiCata(lhs.ty).size(), @intFromEnum(lhs.ty));
+                var variable = self.bl.addLocal(
+                    sloc,
+                    self.abiCata(lhs.ty).size(),
+                    @intFromEnum(lhs.ty),
+                );
                 var cond = try self.checkNull(e.lhs, &lhs, .@"!=");
 
-                var builder = self.bl.addIfAndBeginThen(sloc, cond.getValue(sloc, self));
-                {
-                    self.emitGenericStore(sloc, variable, &lhs);
-                }
-                const token = builder.beginElse(&self.bl);
                 var res_ty = lhs.ty;
-                default_value: {
-                    var rhs = self.emit(.{ .loc = variable, .ty = inner }, e.rhs) catch |err| switch (err) {
-                        error.Unreachable => {
-                            res_ty = inner;
+                if (t == .@"$||") {
+                    if (try self.partialEvalConst(expr, &cond) == 0) {
+                        var rhs = try self.emit(
+                            .{ .loc = variable, .ty = inner },
+                            e.rhs,
+                        );
+
+                        if (!is_compact) {
+                            variable = self.bl.addFieldOffset(
+                                sloc,
+                                variable,
+                                @intCast(inner.alignment(self.types)),
+                            );
+                        }
+
+                        if (rhs.ty != lhs.ty) {
+                            try self.typeCheck(e.rhs, &rhs, inner);
                             if (!is_compact) {
                                 variable = self.bl.addFieldOffset(
                                     sloc,
@@ -1392,13 +1411,9 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
                                     @intCast(inner.alignment(self.types)),
                                 );
                             }
-                            break :default_value;
-                        },
-                        else => return err,
-                    };
-                    if (rhs.ty != lhs.ty) {
-                        try self.typeCheck(e.rhs, &rhs, inner);
-                        res_ty = inner;
+                        }
+                    } else {
+                        self.emitGenericStore(sloc, variable, &lhs);
                         if (!is_compact) {
                             variable = self.bl.addFieldOffset(
                                 sloc,
@@ -1407,28 +1422,76 @@ pub fn emitBinOp(self: *Codegen, ctx: Ctx, expr: Ast.Id, e: *Expr(.BinOp)) EmitE
                             );
                         }
                     }
-                    self.emitGenericStore(sloc, variable, &rhs);
+
+                    res_ty = inner;
+                } else {
+                    var builder = self.bl.addIfAndBeginThen(
+                        sloc,
+                        cond.getValue(sloc, self),
+                    );
+                    {
+                        self.emitGenericStore(sloc, variable, &lhs);
+                    }
+                    const token = builder.beginElse(&self.bl);
+                    default_value: {
+                        var rhs = self.emit(
+                            .{ .loc = variable, .ty = inner },
+                            e.rhs,
+                        ) catch |err| switch (err) {
+                            error.Unreachable => {
+                                res_ty = inner;
+                                if (!is_compact) {
+                                    variable = self.bl.addFieldOffset(
+                                        sloc,
+                                        variable,
+                                        @intCast(inner.alignment(self.types)),
+                                    );
+                                }
+                                break :default_value;
+                            },
+                            else => return err,
+                        };
+                        if (rhs.ty != lhs.ty) {
+                            try self.typeCheck(e.rhs, &rhs, inner);
+                            res_ty = inner;
+                            if (!is_compact) {
+                                variable = self.bl.addFieldOffset(
+                                    sloc,
+                                    variable,
+                                    @intCast(inner.alignment(self.types)),
+                                );
+                            }
+                        }
+                        self.emitGenericStore(sloc, variable, &rhs);
+                    }
+                    builder.end(&self.bl, token);
                 }
-                builder.end(&self.bl, token);
 
                 return .mkp(res_ty, variable);
             } else {
-                const variable = self.bl.addLocal(.none, 1, @intFromEnum(Types.Id.bool));
-
                 try self.typeCheck(e.lhs, &lhs, .bool);
 
-                var builder = self.bl.addIfAndBeginThen(sloc, lhs.getValue(sloc, self));
-                {
-                    self.bl.addStore(sloc, variable, .i8, self.bl.addIntImm(sloc, .i8, 1));
-                }
-                const token = builder.beginElse(&self.bl);
-                {
-                    var rhs = try self.emitTyped(.{ .loc = variable }, .i8, e.rhs);
-                    self.emitGenericStore(sloc, variable, &rhs);
-                }
-                builder.end(&self.bl, token);
+                if (t == .@"$||") {
+                    if (try self.partialEvalConst(e.lhs, &lhs) != 0) {
+                        return .mkv(.bool, self.bl.addIntImm(sloc, .i8, 1));
+                    } else {
+                        return try self.emitTyped(.{}, .bool, e.rhs);
+                    }
+                } else {
+                    const variable = self.bl.addLocal(.none, 1, @intFromEnum(Types.Id.bool));
+                    var builder = self.bl.addIfAndBeginThen(sloc, lhs.getValue(sloc, self));
+                    {
+                        self.bl.addStore(sloc, variable, .i8, self.bl.addIntImm(sloc, .i8, 1));
+                    }
+                    const token = builder.beginElse(&self.bl);
+                    {
+                        var rhs = try self.emitTyped(.{ .loc = variable }, .bool, e.rhs);
+                        self.emitGenericStore(sloc, variable, &rhs);
+                    }
+                    builder.end(&self.bl, token);
 
-                return .mkp(.bool, variable);
+                    return .mkp(.bool, variable);
+                }
             }
         },
         else => {
@@ -3205,6 +3268,13 @@ pub fn emitAlignedLoad(
 
     if (loader == dt) return self.bl.addLoad(sloc, loc, dt);
 
+    if (loader == .f32 and dt == .f64) {
+        std.debug.assert(self.abi.cc == .systemv);
+        // NOTE: this happens with the systemv abi, loading unaligned is fine
+        // here
+        return self.bl.addLoad(sloc, loc, dt);
+    }
+
     std.debug.assert(loader.size() < dt.size());
 
     var offset: u64 = 0;
@@ -3881,7 +3951,14 @@ fn pushParam(
         .ByValuePair => |pair| {
             if (call_args.params[idx] == .Stack) {
                 call_args.arg_slots[idx] = value.id.Pointer;
+            } else if (call_args.params[idx].Reg.lanes() == 2) {
+                call_args.arg_slots[idx] = self.bl.addLoad(
+                    sloc,
+                    value.id.Pointer,
+                    call_args.params[idx].Reg,
+                );
             } else {
+                std.debug.assert(call_args.params[idx].Reg.lanes() == 1);
                 for (pair.types, pair.offsets(), 0..) |t, off, j| {
                     const loc = self.bl.addFieldOffset(sloc, value.id.Pointer, @intCast(off));
                     call_args.arg_slots[idx + j] = self.emitAlignedLoad(

@@ -1412,8 +1412,23 @@ pub fn findSymForPtr(
     const id: utils.EntId(tys.Global) =
         @enumFromInt(@as(u32, @bitCast(data.code.items[@intCast(ptr - 4)..][0..4].*)));
 
-    if (!self.store.isValid(.Global, @intFromEnum(id)))
+    if (!self.store.isValid(.Global, @intFromEnum(id))) {
+        for (data.syms.items) |s| {
+            if (s.offset == ptr) {
+                unreachable;
+            }
+
+            if (s.offset <= ptr and ptr < s.offset + s.size) {
+                utils.panic("{x} {}\n", .{
+                    data.code.items[s.offset - 4 ..][0 .. s.size + 4],
+                    ptr - s.offset,
+                });
+                unreachable;
+            }
+        }
+
         return error.@"to something thats not a global";
+    }
 
     self.queue(.runtime, .init(.{ .Global = id }));
 

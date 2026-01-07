@@ -111,6 +111,9 @@ pub const Lexeme = enum(u16) {
     @"||=" = '|' + 32 + 1,
     @"&&=" = '&' + 32 + 1,
 
+    @"$||" = '|' + 32 + 2,
+    @"$&&" = '&' + 32 + 2,
+
     ty_never = 0x100,
     ty_void,
     ty_bool,
@@ -235,23 +238,6 @@ pub const Lexeme = enum(u16) {
         return @as(*const Expanded, @ptrCast(&vl)).*;
     }
 
-    pub const precedence_groups = [_][]const Lexeme{
-        &.{ .@".", .@".{", .@".(", .@".[", .@".?", .@".*" },
-        &.{ .@"*", .@"/", .@"%" },
-        &.{ .@"+", .@"-" },
-        &.{ .@"<<", .@">>" },
-        &.{.@"^"},
-        &.{ .@"<", .@">", .@"<=", .@">=", .@"==", .@"!=" },
-        &.{ .@"|", .@"&" },
-        &.{.@".."},
-        &.{.@":="},
-        &.{ .@"||", .@"&&" },
-        &.{
-            .@":",  .@"=",  .@"+=", .@"-=",  .@"*=",  .@"/=",  .@"%=",
-            .@"|=", .@"^=", .@"&=", .@"<<=", .@">>=", .@"||=", .@"&&=",
-        },
-    };
-
     pub fn precedence(self: Lexeme, in_if_or_while: bool) u8 {
         return switch (self) {
             .@":",
@@ -269,9 +255,9 @@ pub const Lexeme = enum(u16) {
             .@"&&=",
             .@"||=",
             => 15,
-            .@"&&" => if (in_if_or_while) 14 else 12,
+            .@"&&", .@"$&&" => if (in_if_or_while) 14 else 12,
             .@":=" => 13,
-            .@"||" => 12,
+            .@"||", .@"$||" => 12,
             .@".." => 11,
             .@"|", .@"&" => 8,
             .@"<", .@">", .@"<=", .@">=", .@"==", .@"!=" => 7,
@@ -421,6 +407,7 @@ pub fn next(self: *Lexer) Token {
         hex,
         dec_dot,
         float,
+        dollar,
     };
 
     var pos = self.cursor;
@@ -432,7 +419,8 @@ pub fn next(self: *Lexer) Token {
                 pos += 1;
                 continue :state .start;
             },
-            '$', '@', 'a'...'z', 'A'...'Z', '_', 128...255 => continue :state .ident,
+            '$' => continue :state .dollar,
+            '@', 'a'...'z', 'A'...'Z', '_', 128...255 => continue :state .ident,
             '0' => continue :state .zero,
             '1'...'9' => continue :state .dec,
             '"' => continue :state .double_quotes,
@@ -447,6 +435,17 @@ pub fn next(self: *Lexer) Token {
                 self.cursor += 1;
                 break :state @enumFromInt(c);
             },
+        },
+        .dollar => {
+            self.cursor += 1;
+            switch (self.source[self.cursor]) {
+                '|', '&' => {
+                    self.cursor += 2;
+                    // We dont validate, but nobody will notice, fmt will fix it anyway
+                    break :state @enumFromInt(self.source[self.cursor - 1] + 32 + 2);
+                },
+                else => continue :state .ident,
+            }
         },
         .ident => {
             self.cursor += 1;

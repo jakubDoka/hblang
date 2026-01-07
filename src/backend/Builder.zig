@@ -128,7 +128,7 @@ pub fn addStore(self: *Builder, sloc: graph.Sloc, addr: *BuildNode, ty: DataType
     std.debug.assert(!value.isDead());
 
     if (value.data_type == .bot) return;
-    if (value.data_type.size() == 0) utils.panic("{}", .{value.data_type});
+    if (value.data_type.size() == 0) utils.panic("{f}", .{value.data_type});
     const mem = self.memory();
     const ctrl = self.control();
     const store = self.func.addNode(.Store, sloc, ty, &.{ ctrl, mem, addr, value }, .{});
@@ -576,7 +576,7 @@ pub fn addCall(
 
     const args = args_with_initialized_arg_slots;
     for (args.arg_slots, args.params) |ar, pr| if (ar.data_type != ar.data_type.meet(pr.getReg())) {
-        utils.panic("{} != {}", .{ ar.data_type, ar.data_type.meet(pr.getReg()) });
+        utils.panic("{f} != {f}", .{ ar.data_type, ar.data_type.meet(pr.getReg()) });
     };
     const prefix_len = arg_prefix_len + @intFromBool(args.fptr != null);
     const full_args: []?*BuildNode = @ptrCast((args.arg_slots.ptr - prefix_len)[0 .. prefix_len + args.params.len]);

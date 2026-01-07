@@ -1324,6 +1324,21 @@ main := fn(): int {
 }
 ```
 
+#### float sse call conv 3
+```hb
+expectations := .{
+    should_error: true,
+}
+
+V2 := struct{.a: f32; .b: f32; .c: f32; .d: f32}
+
+fun := fn(v: V2): f32 return v.a + v.b + v.c + v.d
+
+main := fn(): int {
+    return @float_to_int(fun(.(1.0, 2.0, 3.0, 4.0)) - 10.0)
+}
+```
+
 #### float load and store 1
 ```hb
 Stru := struct{.a: f32; .b: f32; .c: f32}

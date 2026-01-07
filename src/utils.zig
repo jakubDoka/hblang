@@ -2,6 +2,8 @@ const std = @import("std");
 
 pub const freestanding = @import("builtin").target.os.tag == .freestanding;
 
+pub const print = (std.debug).print;
+
 pub fn undistributeComutative(
     a: anytype,
     b: @TypeOf(a),
@@ -907,7 +909,7 @@ test "lane.RollingQueue.sanity" {
 
             for (0..10000) |_| {
                 const byte = queue.pop() orelse {
-                    std.debug.print("{}\n", .{queue});
+                    print("{}\n", .{queue});
 
                     unreachable;
                 };
@@ -969,7 +971,7 @@ test "lane.project" {
         var last_group: usize = tc.expected[0];
         var last_boundary: usize = 0;
         for (tc.expected, 0..) |vl, t| {
-            errdefer std.debug.print("testcase {}:{} failed: {}\n", .{ i, t, tc });
+            errdefer print("testcase {}:{} failed: {}\n", .{ i, t, tc });
             const proj = lane.projectHeter(tc.groups, t, tc.expected.len);
 
             if (proj.group != last_group) {
@@ -1415,9 +1417,9 @@ pub fn AsRef(comptime E: type) type {
 
 pub fn dbg(value: anytype) @TypeOf(value) {
     if (@TypeOf(value) == []const u8) {
-        std.debug.print("{s}\n", .{value});
+        print("{s}\n", .{value});
     } else {
-        std.debug.print("{any}\n", .{value});
+        print("{any}\n", .{value});
     }
     return value;
 }

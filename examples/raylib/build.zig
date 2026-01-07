@@ -15,7 +15,7 @@ pub fn captureStdOut(run: *std.Build.Step.Run, basename: []const u8) std.Build.L
     return .{ .generated = .{ .file = &output.generated_file } };
 }
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
@@ -51,8 +51,13 @@ pub fn build(b: *std.Build) void {
         exe.addObjectFile(main_obj);
         exe.linkLibrary(raylib);
 
+        const cmd = b.addSystemCommand(&.{"gdb"});
+        try cmd.getEnvMap().put("DEBUGINFOD_ENABLED", "0");
+        cmd.addFileArg(exe.getEmittedBin());
+        cmd.addArg("-ex");
+        cmd.addArg("run");
+
         const run = b.step(file, "run the example");
-        const run_exe = b.addRunArtifact(exe);
-        run.dependOn(&run_exe.step);
+        run.dependOn(&cmd.step);
     }
 }

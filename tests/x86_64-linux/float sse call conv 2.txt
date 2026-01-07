@@ -1,24 +1,13 @@
 float sse call conv 2.fun:
-	sub rsp, 0x10
-	movups [rsp], xmm0
-	movsd xmm0, qword ptr [rsp]
-	movsd xmm1, qword ptr [rsp+0x08]
 	addsd xmm0, xmm1
-	add rsp, 0x10
 	ret
 main:
-	sub rsp, 0x18
-	mov rcx, 0x3FF0000000000000
-	mov rax, 0x4000000000000000
-	movq xmm0, rcx
-	movsd [rsp], xmm0
-	movq xmm0, rax
-	movsd [rsp+0x08], xmm0
-	movups xmm0, [rsp]
+	sub rsp, 0x08
+	movsd xmm0, qword ptr [0x0000000000000009]
+	movsd xmm1, qword ptr [0x0000000000000009]
 	call :float sse call conv 2.fun
-	mov rax, 0x4008000000000000
-	movq xmm1, rax
+	movsd xmm1, qword ptr [0x0000000000000009]
 	subsd xmm0, xmm1
 	cvttsd2si rax, xmm0
-	add rsp, 0x18
+	add rsp, 0x08
 	ret

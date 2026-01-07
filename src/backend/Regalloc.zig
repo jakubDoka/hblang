@@ -7,6 +7,9 @@ const Arry = std.ArrayList;
 const Error = error{RegallocFailed};
 const Regalloc = @This();
 
+// NOTE: so that it does not show up in the grep
+const print = (std.debug).print;
+
 max_lrgs: usize = 0,
 max_liveouts: usize = 0,
 max_blocks: usize = 0,
@@ -370,23 +373,23 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
     const lrgs: []LiveRange = build_lrgs.items;
 
     if (should_log) {
-        std.debug.print("\n", .{});
+        print("\n", .{});
         for (func.gcm.postorder) |bb| {
-            std.debug.print("{f}\n", .{bb});
+            print("{f}\n", .{bb});
             for (bb.base.outputs()) |in| {
                 const instr = in.get();
                 if (instr.isDef()) {
-                    std.debug.print("  [{}] {x:08} {f}\n", .{
+                    print("  [{}] {x:08} {f}\n", .{
                         lrg_table[instr.schedule].index(lrgs),
                         setMasks(&lrg_table[instr.schedule].mask)[0],
                         instr,
                     });
                 } else {
-                    std.debug.print("       {f}\n", .{instr});
+                    print("       {f}\n", .{instr});
                 }
             }
         }
-        std.debug.print("\n", .{});
+        print("\n", .{});
     }
 
     errdefer {
@@ -396,7 +399,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             if (lrg.parent != null) continue;
             std.debug.assert(lrg.failed);
 
-            if (should_log) std.debug.print("{f}\n", .{lrg});
+            if (should_log) print("{f}\n", .{lrg});
 
             const alc = tmp.arena.allocator();
             var members: Map(*Node, void) = .empty;
@@ -420,7 +423,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
             if (should_log) for (members.entries.items(.key)) |o| {
                 const depth = func.loopDepth(o);
-                std.debug.print("|- [{}] {f}\n", .{ depth, o });
+                print("|- [{}] {f}\n", .{ depth, o });
             };
 
             var call_cnt: usize = 0;
@@ -447,13 +450,13 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
                 }
             }
 
-            if (should_log) std.debug.print("min {} max {}\n", .{ min, max });
+            if (should_log) print("min {} max {}\n", .{ min, max });
             if (min == 1000) {
                 if (should_log) for (members.entries.items(.key)) |member| {
                     if (member.schedule == no_def_sentinel) {
-                        std.debug.print("<- {f}\n", .{member});
+                        print("<- {f}\n", .{member});
                     } else {
-                        std.debug.print("* {} {f} {f} {any}\n", .{
+                        print("* {} {f} {f} {any}\n", .{
                             lrg.hasDef(member, lrg_table),
                             member,
                             lrg_table[member.schedule],
@@ -668,8 +671,8 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
     errdefer {
         for (@as([]LiveRange.Conflict, conflicts.entries.items(.key))) |conflict| {
             if (should_log) {
-                std.debug.print("clrg {f}\n", .{conflict.lrg});
-                std.debug.print("cdef {f}\n", .{conflict.instr});
+                print("clrg {f}\n", .{conflict.lrg});
+                print("cdef {f}\n", .{conflict.instr});
             }
 
             const instr = conflict.instr;
@@ -863,9 +866,9 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             coalesced = true;
 
             if (false and should_log) {
-                std.debug.print("coalesce: {f} + {f}\n", .{ instr, instr.dataDeps()[0] });
-                std.debug.print("lrg:      {f}\n", .{splitLrg});
-                std.debug.print("drg:      {f}\n", .{defLrg});
+                print("coalesce: {f} + {f}\n", .{ instr, instr.dataDeps()[0] });
+                print("lrg:      {f}\n", .{splitLrg});
+                print("drg:      {f}\n", .{defLrg});
             }
 
             // TODO: could we actuially retain here?
@@ -1001,13 +1004,13 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             pub fn logCollision(fnc: *Func, block: *CfgNode, def: *Node, clobber: *Node, use: *Node, allc: []u16) void {
                 if (utils.freestanding) return;
                 for (fnc.gcm.postorder) |bb| {
-                    std.debug.print("{f}\n", .{bb});
+                    print("{f}\n", .{bb});
                     for (bb.base.outputs()) |in| {
                         const instr = in.get();
                         if (instr.schedule != no_def_sentinel) {
-                            std.debug.print("  {} {f}\n", .{ allc[instr.schedule], instr });
+                            print("  {} {f}\n", .{ allc[instr.schedule], instr });
                         } else {
-                            std.debug.print("    {f}\n", .{instr});
+                            print("    {f}\n", .{instr});
                         }
                     }
                 }

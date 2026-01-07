@@ -447,7 +447,7 @@ pub fn emitCInt(self: *HbvmGen, no: *Func.Node, value: i64) void {
         .f64 => {
             self.emit(.li64, .{ self.getReg(no), @bitCast(value) });
         },
-        else => utils.panic("{}\n", .{no.data_type}),
+        else => utils.panic("{f}\n", .{no.data_type}),
     }
 }
 

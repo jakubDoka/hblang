@@ -74,12 +74,15 @@ pub const Builder = union(graph.CallConv) {
                     if (is_ret) {
                         slice(buf, 1).* = .{ .Reg = .i64 };
                         s.remining_scalar_regs -= 1;
-                    } else if (pair.types[0].isFloat() and pair.types[1].isFloat())
-                        if (pair.types[0] == pair.types[1]) {
-                            unreachable;
-                        } else {
-                            slice(buf, 1).* = .{ .Stack = pair.stackSpec() };
-                        }
+                    }
+                    // else if (pair.types[0].isFloat() and pair.types[1].isFloat())
+                    //     if (pair.types[0] == pair.types[1]) {
+                    //         std.debug.assert(pair.types[0] == .f64);
+                    //         std.debug.assert(pair.types[1] == .f64);
+                    //         slice(buf, 1).* = .{ .Reg = .vec(pair.types[0], 2) };
+                    //     } else {
+                    //         slice(buf, 1).* = .{ .Stack = pair.stackSpec() };
+                    //     }
                     else if (pair.types[0].isInt() != pair.types[1].isInt() or
                         (pair.types[0].isInt() and s.remining_scalar_regs < 2) or
                         s.remining_xmm_regs < 2)

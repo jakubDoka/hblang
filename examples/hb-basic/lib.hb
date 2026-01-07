@@ -179,7 +179,35 @@ ArrayList := fn($T: type): type return struct {
 
 fmt := enum {
 	printf := fn($tmpl: []u8, args: @Any()): void {
-		_ = sys.write(1, tmpl)
+		buf: [4096]u8 = idk
+
+		$prev_end := 0
+		$index := 0
+		$loop {
+			next_fmt := @eval(mem.index(u8, tmpl[prev_end..], "%")) $|| break
+			_ = sys.write(1, tmpl[prev_end..next_fmt])
+
+			$if index >= @len_of(@TypeOf(args)) {
+				@error("too many placeholders")
+			}
+
+			$arg_type := @TypeOf(args[index])
+
+			$match @type_info(arg_type) {
+				.builtin => {
+					$if arg_type == f32 $|| arg_type == f64 {} else {
+						@error("unsupported type: ", @TypeOf(args[index]))
+					}
+				},
+				_ => @error("unsupported type: ", @TypeOf(args[index])),
+			}
+
+			prev_end = next_fmt + 1
+			index += 1
+		}
+
+		_ = sys.write(1, tmpl[prev_end..])
+
 	}
 
 	display_int := fn(i: uint, buf: []u8): []u8 {
@@ -195,6 +223,68 @@ fmt := enum {
 			i /= 10
 		}
 		return buf[idx..]
+	}
+
+	fmt_float := fn(buf: []u8, v: @Any(), precision: uint, radix: int): uint {
+		prefix_len := 0
+		if v < 0.0 {
+			v = -v
+			buf[0] = '-'
+			prefix_len += 1
+		}
+
+		if radix == 16 {
+			mem.cpy(buf[prefix_len..], "0x")
+			prefix_len += 2
+		} else if radix == 8 {
+			mem.cpy(buf[prefix_len..], "0o")
+			prefix_len += 2
+		} else if radix == 2 {
+			mem.cpy(buf[prefix_len..], "0b")
+			prefix_len += 2
+		}
+
+		// todo: optimise unnecessary check
+		if v == 0.0 {
+			buf[prefix_len] = '0'
+			return prefix_len + 1
+		}
+
+		integer_part := @float_to_int(v)
+		fractional_part := v - @int_to_float(integer_part)
+
+		i := prefix_len
+		loop if integer_part <= 0 && i > prefix_len break else {
+			remainder: u8 = @int_cast(integer_part % radix)
+			integer_part /= radix
+			if remainder > 9 {
+				buf[i] = remainder - 10 + 'A'
+			} else {
+				buf[i] = remainder + '0'
+			}
+			i += 1
+		}
+
+		_ = mem.reverse(u8, buf[prefix_len..i])
+		if fractional_part > 0.000001 {
+			buf[i] = '.'
+			i += 1
+
+			p := precision
+			loop if p <= 0 || fractional_part < 0.000001 break else {
+				fractional_part *= @int_to_float(radix)
+				digit := @float_to_int(fractional_part)
+				if digit > 9 {
+					buf[i] = @int_cast(digit - 10 + 'a')
+				} else {
+					buf[i] = @int_cast(digit + '0')
+				}
+				i += 1
+				p -= 1
+				fractional_part -= @int_to_float(digit)
+			}
+		}
+		return i
 	}
 }
 
@@ -275,6 +365,14 @@ mem := enum {
 			}
 		}
 		return null
+	}
+
+	reverse := fn($elem: type, str: []elem): void {
+		for i := 0..str.len / 2 {
+			tmp := str[i]
+			str[i] = str[str.len - i - 1]
+			str[str.len - i - 1] = tmp
+		}
 	}
 
 	SplitIter := fn($elem: type): type return struct {

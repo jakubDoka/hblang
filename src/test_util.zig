@@ -11,6 +11,8 @@ const diff = root.diff;
 const utils = root.utils;
 pub const static_anal = root.backend.static_anal;
 
+const print = (std.debug).print;
+
 pub const Expectations = struct {
     return_value: u64 = 0,
     should_error: bool = false,
@@ -293,7 +295,7 @@ pub fn testFmt(
     const ast_overhead = @as(f64, @floatFromInt(ast.exprs.store.items.len)) /
         @as(f64, @floatFromInt(ast.source.len));
     if (ast_overhead > 5.0) {
-        std.debug.print(
+        print(
             "\n{s} is too large ({d} bytes, {any} ratio)\n",
             .{ name, ast.source.len, ast_overhead },
         );

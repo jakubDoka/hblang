@@ -635,7 +635,8 @@ pub fn regMask(
     errdefer unreachable;
 
     if (node.kind == .MachSplit or node.kind == .Phi) {
-        if (node.data_type.isFloat()) return splitFloatMask(arena);
+        if (node.data_type.isFloat() or
+            node.data_type.isSse()) return splitFloatMask(arena);
         if (idx == 0) return splitIntMask(arena);
         return readSplitIntMask(arena);
     }
@@ -650,7 +651,7 @@ pub fn regMask(
         var xmm_idx: usize = 0;
         for (params[0..index]) |p| {
             if (p == .Reg) {
-                if (p.Reg.isFloat()) {
+                if (p.Reg.isFloat() or p.Reg.isSse()) {
                     xmm_idx += 1;
                 } else {
                     reg_idx += 1;
@@ -658,7 +659,10 @@ pub fn regMask(
             }
         }
 
-        if (params[index].Reg.isFloat()) {
+        if (params[index].Reg.isSse()) {
+            std.debug.assert(node.data_type.isSse());
+            return singleReg(Reg.system_v.float_args[xmm_idx], arena);
+        } else if (params[index].Reg.isFloat()) {
             std.debug.assert(node.data_type.isFloat());
             return singleReg(Reg.system_v.float_args[xmm_idx], arena);
         } else {
@@ -695,14 +699,18 @@ pub fn regMask(
             var xmm_idx: usize = 0;
             for (params[0..ix]) |p| {
                 if (p == .Reg) {
-                    if (p.Reg.isFloat()) {
+                    if (p.Reg.isFloat() or p.Reg.isSse()) {
                         xmm_idx += 1;
                     } else {
                         reg_idx += 1;
                     }
                 }
             }
-            if (params[ix].Reg.isFloat()) {
+
+            if (params[ix].Reg.isSse()) {
+                std.debug.assert(node.inputs()[idx].?.data_type.isSse());
+                return singleReg(Reg.system_v.float_args[xmm_idx], arena);
+            } else if (params[ix].Reg.isFloat()) {
                 std.debug.assert(node.inputs()[idx].?.data_type.isFloat());
                 return singleReg(Reg.system_v.float_args[xmm_idx], arena);
             } else {
@@ -731,7 +739,7 @@ pub fn regMask(
         return singleReg(Reg.retForDt(node.data_type), arena);
     }
 
-    if (node.data_type.isFloat() and idx == 0) {
+    if ((node.data_type.isFloat() or node.data_type.isSse()) and idx == 0) {
         return floatMask(arena);
     }
 
@@ -768,7 +776,9 @@ pub fn regMask(
     }
 
     if (idx == 0) return writeIntMask(arena);
-    if (node.inputs()[idx].?.data_type.isFloat()) {
+    if (node.inputs()[idx].?.data_type.isFloat() or
+        node.inputs()[idx].?.data_type.isSse())
+    {
         return floatMask(arena);
     }
     return readIntMask(arena);
@@ -1342,7 +1352,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         switch (instr.data_type) {
                             .i32, .i64, .i16 => self.emitByte(if (crhs == null) 0x81 else 0x83),
                             .i8 => self.emitByte(0x80),
-                            else => utils.panic("{}", .{instr.data_type}),
+                            else => utils.panic("{f}", .{instr.data_type}),
                         }
 
                         self.emitIndirectAddr(@enumFromInt(sub_opcode), base, .no_index, 1, dis);
@@ -1377,7 +1387,7 @@ pub fn emitBlockBody(self: *X86_64Gen, block: *FuncNode) void {
                         const opcode: u8 = switch (instr.data_type) {
                             .i8 => 0xC0,
                             .i16, .i32, .i64 => 0xC1,
-                            else => unreachable,
+                            else => utils.panic("{f}", .{instr.data_type}),
                         };
 
                         const sub_opcode: u3 = switch (op) {
@@ -1851,7 +1861,7 @@ pub fn emitMemConstStore(
     switch (dt) {
         .i16, .i32, .i64 => self.emitByte(0xc7),
         .i8 => self.emitByte(0xc6),
-        else => utils.panic("{}", .{dt}),
+        else => utils.panic("{f}", .{dt}),
     }
     self.emitIndirectAddr(.rax, bse, .no_index, 1, dis);
 
@@ -1875,14 +1885,14 @@ pub fn emitMemStoreOrLoad(
         .i16 => self.emitByte(0x66),
         .f32 => self.emitByte(0xf3),
         .f64 => self.emitByte(0xf2),
-        else => {},
+        else => std.debug.assert(dt.lanes() == 1),
     }
     self.emitRex(reg, bse, .no_index, dt.size());
     self.emitBytes(switch (dt) {
         .i16, .i64, .i32 => &.{if (is_store) 0x89 else 0x8b},
         .i8 => &.{if (is_store) 0x88 else 0x8a},
         .f32, .f64 => &.{ 0x0f, if (is_store) 0x11 else 0x10 },
-        else => unreachable,
+        else => utils.panic("{f}", .{dt}),
     });
     self.emitIndirectAddr(reg, bse, .no_index, 1, dis);
 }
@@ -2195,7 +2205,7 @@ pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
                     std.debug.assert(zydis.ZYAN_SUCCESS(status));
 
                     const printed = buf[0..std.mem.indexOfScalar(u8, &buf, 0).?];
-                    //std.debug.print("{s}\n", .{printed});
+                    (std.debug).print("{s}\n", .{printed});
 
                     if (label_map.get(uaddr)) |nm| {
                         opts.print("{x}:", .{nm});
