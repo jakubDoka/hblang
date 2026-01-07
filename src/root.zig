@@ -1,3 +1,16 @@
+const frontend2 = enum {
+    pub const Lexer = @import("frontend/Lexer.zig");
+    pub const Ast = @import("frontend/Ast.zig");
+    pub const Abi = @import("frontend/Abi.zig");
+    pub const Parser = @import("frontend/Parser.zig");
+    pub const Fmt = @import("frontend/Fmt.zig");
+    pub const Types = @import("frontend/TypeStore.zig");
+    pub const types = @import("frontend/types.zig");
+    pub const Codegen = @import("frontend/Codegen.zig");
+    pub const Comptime = @import("frontend/Comptime.zig");
+    pub const test_utils = @import("frontend/test_util.zig");
+};
+
 pub const backend = enum {
     pub const Builder = @import("backend/Builder.zig");
     pub const Machine = @import("backend/Machine.zig");
@@ -36,21 +49,7 @@ pub const object = enum {
 };
 
 pub const dwarf = @import("dwarf.zig");
-
-pub const frontend = enum {
-    pub const Lexer = @import("frontend/Lexer.zig");
-    pub const Ast = @import("frontend/Ast.zig");
-    pub const Abi = @import("frontend/Abi.zig");
-    pub const Parser = @import("frontend/Parser.zig");
-    pub const Fmt = @import("frontend/Fmt.zig");
-    pub const Types = @import("frontend/TypeStore.zig");
-    pub const types = @import("frontend/types.zig");
-    pub const Codegen = @import("frontend/Codegen.zig");
-    pub const Comptime = @import("frontend/Comptime.zig");
-};
-
 pub const utils = @import("utils-lib");
-pub const test_utils = @import("test_util.zig");
 pub const diff = @import("diff.zig");
 pub const lane = utils.lane;
 
@@ -67,7 +66,7 @@ const max_file_len = std.math.maxInt(u31);
 
 var alloc = std.heap.GeneralPurposeAllocator(.{}).init;
 
-pub const CompileOptions = struct {
+const CompileOptions = struct {
     diagnostics: ?*std.Io.Writer = null,
     error_colors: std.io.tty.Config = .no_color,
     colors: std.io.tty.Config = .no_color,
@@ -81,7 +80,7 @@ pub const CompileOptions = struct {
 
     flag_start: void = {},
 
-    parser_mode: hb.frontend.Ast.InitOptions.Mode = .latest,
+    parser_mode: hb.frontend2.Ast.InitOptions.Mode = .latest,
     help: bool = false,
     fmt: bool = false,
     fmt_stdout: bool = false,
@@ -129,7 +128,7 @@ pub const CompileOptions = struct {
             []const u8 => "<string> =" ++ default,
             usize => "<integer> =" ++ std.fmt.comptimePrint("{d}", .{default}),
             backend.Machine.OptOptions.Mode,
-            frontend.Ast.InitOptions.Mode,
+            frontend2.Ast.InitOptions.Mode,
             hb.backend.Machine.SupportedTarget,
             => {
                 var value: []const u8 = "[";
@@ -264,7 +263,7 @@ pub const CompileOptions = struct {
                 switch (f.type) {
                     bool => val.* = true,
                     backend.Machine.OptOptions.Mode,
-                    frontend.Ast.InitOptions.Mode,
+                    frontend2.Ast.InitOptions.Mode,
                     hb.backend.Machine.SupportedTarget,
                     => {
                         const str_value = args.next() orelse continue :parse;
@@ -298,7 +297,7 @@ pub const CompileOptions = struct {
     }
 };
 
-pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!void {
+fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!void {
     if (opts.help) {
         if (lane.isRoot()) if (opts.diagnostics) |d|
             try d.writeAll(CompileOptions.help_str);
@@ -328,7 +327,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
                 return error.Failed;
             };
 
-            const ast = hb.frontend.Ast.init(
+            const ast = hb.frontend2.Ast.init(
                 &type_system_memory,
                 type_system_memory.allocator(),
                 .{
@@ -407,7 +406,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
 
     const abi = opts.target.toCallConv();
 
-    const types = hb.frontend.Types.init(
+    const types = hb.frontend2.Types.init(
         type_system_memory,
         asts,
         opts.diagnostics,
@@ -425,7 +424,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
 
     const bckend = opts.target.toMachine(&types.pool.arena, opts.gpa);
 
-    const errored = hb.frontend.Codegen.emitReachable(
+    const errored = hb.frontend2.Codegen.emitReachable(
         types,
         bckend,
         .{
@@ -464,7 +463,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
             var dead_functions: usize = 0;
 
             for (0..types.store.rpr.Func.meta.len) |i| {
-                const f: *frontend.types.Func = types.store.rpr.Func.at(i);
+                const f: *frontend2.types.Func = types.store.rpr.Func.at(i);
                 if (f.completion.get(.@"comptime") == .compiled) comptime_functions += 1;
                 if (f.completion.get(.runtime) == .compiled) runtim_functions += 1;
 
@@ -524,7 +523,7 @@ pub fn compile(opts: CompileOptions) error{ WriteFailed, Failed, OutOfMemory }!v
     }
 
     if (opts.vendored_test and !@import("options").dont_simulate) {
-        const expectations: test_utils.Expectations = .init(&asts[0], &types.pool.arena);
+        const expectations: frontend2.test_utils.Expectations = .init(&asts[0], &types.pool.arena);
 
         const out = bckend.finalizeBytes(types.pool.arena.allocator(), options);
         if (types.dumpAnalErrors(&anal_errors)) return error.Failed;
@@ -616,7 +615,7 @@ const Loader = struct {
     pub const Shared = struct {
         base: []const u8,
         path_projections: std.StringHashMapUnmanaged([]const u8),
-        files: std.ArrayList(hb.frontend.Ast) = .{},
+        files: std.ArrayList(hb.frontend2.Ast) = .{},
         in_progress: usize = 0,
         completed: usize = 0,
         failed: std.atomic.Value(bool) = .init(false),
@@ -624,7 +623,7 @@ const Loader = struct {
         lobby: utils.lane.Lobby = .{},
     };
 
-    pub fn load(self: *Loader, opts: hb.frontend.Ast.Loader.LoadOptions) ?hb.frontend.Types.File {
+    pub fn load(self: *Loader, opts: hb.frontend2.Ast.Loader.LoadOptions) ?hb.frontend2.Types.File {
         var tmp = Arena.scrath(null);
         defer tmp.deinit();
 
@@ -674,8 +673,8 @@ const Loader = struct {
         root: []const u8,
         diagnostics: ?*std.Io.Writer,
         colors: std.io.tty.Config,
-        parser_mode: hb.frontend.Ast.InitOptions.Mode,
-    ) Error!?struct { []const hb.frontend.Ast, []const u8 } {
+        parser_mode: hb.frontend2.Ast.InitOptions.Mode,
+    ) Error!?struct { []const hb.frontend2.Ast, []const u8 } {
         var root_tmp = utils.Arena.scrath(scratch);
         defer root_tmp.deinit();
 
@@ -739,7 +738,7 @@ const Loader = struct {
                 self.shared.state_lock.unlock();
             }
 
-            const fid: hb.frontend.Types.File = @enumFromInt(i);
+            const fid: hb.frontend2.Types.File = @enumFromInt(i);
 
             const path = try std.fs.path.join(
                 tmp.arena.allocator(),
@@ -759,7 +758,7 @@ const Loader = struct {
                 continue;
             };
 
-            var ast_res = hb.frontend.Ast.init(self.arena, self.gpa, .{
+            var ast_res = hb.frontend2.Ast.init(self.arena, self.gpa, .{
                 .current = fid,
                 .path = slot_path,
                 .code = source,
