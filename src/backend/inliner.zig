@@ -1,7 +1,7 @@
 const std = @import("std");
 const graph = @import("graph.zig");
 const Machine = @This();
-const utils = @import("../utils.zig");
+const utils = graph.utils;
 const Set = std.DynamicBitSetUnmanaged;
 
 pub fn Mixin(comptime Backend: type) type {
