@@ -1,12 +1,24 @@
 const std = @import("std");
 const Set = std.DynamicBitSetUnmanaged;
 
-const utils = @import("../utils.zig");
+const utils = graph.utils;
 const Builder = @import("Builder.zig");
 const graph = @import("graph.zig");
 const static_anal = @import("static_anal.zig");
 const root = @import("hb");
 const lane = root.utils.lane;
+
+pub fn ensureSlot(self: anytype, gpa: std.mem.Allocator, id: usize) !*std.meta.Child(@TypeOf(self.items)) {
+    if (self.items.len <= id) {
+        // this can happen when we fuck up
+        std.debug.assert(id < std.math.maxInt(u32) - 1000);
+
+        const prev_len = self.items.len;
+        try self.resize(gpa, id + 1);
+        @memset(self.items[prev_len..], .invalid);
+    }
+    return &self.items[id];
+}
 
 out: Data,
 vtable: *const VTable,
@@ -228,11 +240,11 @@ pub const Data = struct {
         addend: i31,
         back_shift: u32,
     ) !void {
-        return self.addReloc(gpa, try utils.ensureSlot(&self.funcs, gpa, target), slot_size, addend, back_shift);
+        return self.addReloc(gpa, try ensureSlot(&self.funcs, gpa, target), slot_size, addend, back_shift);
     }
 
     pub fn addPlaceholderFuncReloc(self: *Data, gpa: std.mem.Allocator, target: u32) !void {
-        try self.addPlaceholderReloc(gpa, try utils.ensureSlot(&self.funcs, gpa, target));
+        try self.addPlaceholderReloc(gpa, try ensureSlot(&self.funcs, gpa, target));
     }
 
     pub fn addGlobalReloc(
@@ -243,11 +255,11 @@ pub const Data = struct {
         addend: i31,
         back_shift: u32,
     ) !void {
-        return self.addReloc(gpa, try utils.ensureSlot(&self.globals, gpa, target), slot_size, addend, back_shift);
+        return self.addReloc(gpa, try ensureSlot(&self.globals, gpa, target), slot_size, addend, back_shift);
     }
 
     pub fn addPlaceholderGlobalReloc(self: *Data, gpa: std.mem.Allocator, target: u32) !void {
-        try self.addPlaceholderReloc(gpa, try utils.ensureSlot(&self.globals, gpa, target));
+        try self.addPlaceholderReloc(gpa, try ensureSlot(&self.globals, gpa, target));
     }
 
     pub fn addReloc(self: *Data, gpa: std.mem.Allocator, target: *SymIdx, slot_size: Reloc.SlotSize, addend: i31, back_shift: u32) !void {
@@ -297,7 +309,7 @@ pub const Data = struct {
         name: []const u8,
         uuid: UUID,
     ) !void {
-        try self.importSym(gpa, try utils.ensureSlot(&self.funcs, gpa, id), name, .func, uuid);
+        try self.importSym(gpa, try ensureSlot(&self.funcs, gpa, id), name, .func, uuid);
     }
 
     pub fn importSym(
@@ -332,7 +344,7 @@ pub const Data = struct {
         opts: EmitOptions,
     ) !*Sym {
         std.debug.assert(opts.id != max_func and opts.id != graph.indirect_call);
-        const slot = try utils.ensureSlot(&self.funcs, gpa, opts.id);
+        const slot = try ensureSlot(&self.funcs, gpa, opts.id);
         return try self.startDefineSym(
             gpa,
             slot,
@@ -359,7 +371,7 @@ pub const Data = struct {
 
         _ = try self.startDefineSym(
             gpa,
-            try utils.ensureSlot(&self.globals, gpa, opts.id),
+            try ensureSlot(&self.globals, gpa, opts.id),
             opts.name,
             if (opts.value == .init) .data else if (opts.thread_local) .tls_prealloc else .prealloc,
             linkage,
@@ -1100,7 +1112,7 @@ pub const EmitOptions = struct {
     optimizations: Optimizations,
     special: ?Special = null,
     builtins: Builtins,
-    files: []const utils.LineIndex = &.{},
+    files: []const root.LineIndex = &.{},
     uuid: Data.UUID,
 
     pub const Optimizations = union(enum) {
@@ -1149,7 +1161,7 @@ pub const FinalizeOptionsInterface = struct {
     optimizations: OptOptions,
     builtins: Builtins,
     logs: ?*std.Io.Writer = null,
-    files: []const utils.LineIndex,
+    files: []const root.LineIndex,
     others: []*Machine,
 };
 

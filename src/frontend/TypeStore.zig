@@ -23,7 +23,7 @@ pub const disabled_handler = 0;
 errored: bool = false,
 alignment: void align(std.atomic.cache_line) = {},
 store: utils.EntStore(tys) = .{},
-pool: utils.Pool,
+pool: utils.SclassPool,
 interner: TypeIndex = .{},
 string_globals: StringGlobalIndex = .{},
 ct: Comptime,
@@ -31,7 +31,7 @@ diagnostics: ?*std.Io.Writer,
 colors: std.io.tty.Config = .no_color,
 files: []const Ast,
 file_scopes: []Id,
-line_indexes: []const utils.LineIndex,
+line_indexes: []const root.LineIndex,
 stack_base: usize,
 target: []const u8 = "hbvm-ableos",
 func_work_list: std.EnumArray(Target, std.ArrayList(utils.EntId(tys.Func))),
@@ -1474,7 +1474,7 @@ pub fn init(arena_: Arena, source: []const Ast, diagnostics: ?*std.Io.Writer, gp
     var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
-    const line_indexes = arena.alloc(utils.LineIndex, source.len);
+    const line_indexes = arena.alloc(root.LineIndex, source.len);
     for (source, 0..) |fl, i| line_indexes[i] = fl.lines;
 
     slot.* = .{

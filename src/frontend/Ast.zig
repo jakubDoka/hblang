@@ -3,7 +3,7 @@ path: []const u8,
 source: [:0]const u8,
 items: Slice,
 root_struct: Id,
-lines: utils.LineIndex,
+lines: root.LineIndex,
 index: Index,
 
 const std = @import("std");

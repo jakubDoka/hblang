@@ -38,7 +38,7 @@ pub const Ctx = struct {
     code_base: u32,
     builtins: Mach.Builtins,
     lpe_writer: *std.Io.Writer,
-    files: []const utils.LineIndex,
+    files: []const root.LineIndex,
 };
 
 const CtxF32 = struct {

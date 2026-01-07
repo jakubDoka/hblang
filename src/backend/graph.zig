@@ -1,5 +1,5 @@
 const std = @import("std");
-pub const utils = @import("../utils.zig");
+pub const utils = @import("utils-lib");
 const Machine = @import("Machine.zig");
 const matcher = @import("graph.IdealGen");
 

@@ -17,6 +17,11 @@ pub fn build(b: *std.Build) !void {
     options.addOption(usize, "stack_size", stack_size);
     options.addOption(bool, "dont_simulate", dont_simulate);
 
+    const utils = b.dependency("utils", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     const zydis = zydis: {
         const zydis = b.dependency("zydis", .{});
         const zycore = b.dependency("zycore", .{});
@@ -64,6 +69,7 @@ pub fn build(b: *std.Build) !void {
         hb.addOptions("options", options);
         hb.addImport("zydis", zydis);
         hb.addImport("hb", hb);
+        hb.addImport("utils-lib", utils.module("utils"));
 
         break :hb hb;
     };

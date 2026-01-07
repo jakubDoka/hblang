@@ -1,6 +1,6 @@
 const std = @import("std");
 const graph = @import("graph.zig");
-const utils = @import("../utils.zig");
+const utils = graph.utils;
 const root = @import("hb");
 
 pub const Error = union(enum) {

@@ -4,36 +4,6 @@ pub const freestanding = @import("builtin").target.os.tag == .freestanding;
 
 pub const print = (std.debug).print;
 
-pub fn undistributeComutative(
-    a: anytype,
-    b: @TypeOf(a),
-    c: @TypeOf(a),
-    d: @TypeOf(a),
-) ?struct { @TypeOf(a), @TypeOf(a), @TypeOf(a) } {
-    if (a == b) return .{ a, c, d };
-    if (a == c) return .{ a, b, d };
-    if (a == d) return .{ a, b, c };
-
-    if (b == c) return .{ b, a, d };
-    if (b == d) return .{ b, a, c };
-
-    if (c == d) return .{ c, a, b };
-
-    return null;
-}
-
-pub fn undistribute(
-    a: anytype,
-    b: @TypeOf(a),
-    c: @TypeOf(a),
-    d: @TypeOf(a),
-    is_rhs: bool,
-) ?struct { @TypeOf(a), @TypeOf(a), @TypeOf(a) } {
-    if (b == d and is_rhs) return .{ a, c, b };
-    if (a == c and !is_rhs) return .{ a, b, d };
-    return null;
-}
-
 pub fn dedupeSorted(comptime T: type, slice: []T) usize {
     if (slice.len == 0) return 0;
 
@@ -64,10 +34,6 @@ pub fn ensureSlot(self: anytype, gpa: std.mem.Allocator, id: usize) !*std.meta.C
 
 pub fn panic(comptime format: []const u8, args: anytype) noreturn {
     if (debug and !freestanding) std.debug.panic(format, args) else unreachable;
-}
-
-pub fn setColor(cfg: std.io.tty.Config, writer: *std.Io.Writer, color: std.io.tty.Color) error{WriteFailed}!void {
-    if (@import("builtin").target.os.tag != .freestanding) cfg.setColor(writer, color) catch return error.WriteFailed;
 }
 
 pub const Pool = struct {
@@ -1944,71 +1910,4 @@ test "dequeueWait" {
     }
 
     defer tread.join();
-}
-
-pub const LineIndex = struct {
-    nlines: []const u32,
-
-    pub fn lineCol(self: LineIndex, pos: u32) struct { u32, u32 } {
-        var start: usize, var end = .{ 0, self.nlines.len };
-
-        while (start < end) {
-            const mid = (start + end) / 2;
-            if (pos < self.nlines[mid]) {
-                end = mid;
-            } else {
-                start = mid + 1;
-            }
-        }
-
-        return .{ @intCast(start), pos - self.nlines[start - 1] };
-    }
-
-    pub fn init(file_content: []const u8, arena: *Arena) LineIndex {
-        var line_count: usize = 1;
-        for (file_content) |c| {
-            if (c == '\n') line_count += 1;
-        }
-
-        var nlines = arena.alloc(u32, line_count);
-        nlines[0] = 0;
-
-        line_count = 1;
-        for (file_content, 0..) |c, i| {
-            if (c == '\n') {
-                nlines[line_count] = @intCast(i + 1);
-                line_count += 1;
-            }
-        }
-
-        return .{ .nlines = nlines };
-    }
-};
-
-test LineIndex {
-    const file_content =
-        \\akjdshkdfj
-        \\ksjdhks
-        \\akjdsk
-        \\akjdshkdfj
-        \\ksjdhks
-        \\akjdsk
-    ;
-
-    var arena = Arena.init(4096);
-    defer arena.deinit();
-
-    const line_index = LineIndex.init(file_content, &arena);
-
-    var line: u32 = 1;
-    var last_nl: usize = 0;
-    for (file_content, 0..) |c, i| {
-        const lin, const col = line_index.lineCol(@intCast(i));
-        try std.testing.expectEqual(line, lin);
-        try std.testing.expectEqual(i - last_nl, col);
-        if (c == '\n') {
-            line += 1;
-            last_nl = i + 1;
-        }
-    }
 }

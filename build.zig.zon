@@ -3,10 +3,6 @@
     .fingerprint = 0xa6da53c767f0ddf0,
     .version = "0.0.0",
     .dependencies = .{
-        //.afl_kit = .{
-        //    .url = "git+https://github.com/kristoff-it/zig-afl-kit.git#b6cb826f21d4026409caec30a932be462bca27b9",
-        //    .hash = "afl_kit-0.1.0-NdJ3cncdAADtO8S74G1yMYKO1f2XoHputmaJBInsHLp2",
-        //},
         .zydis = .{
             .url = "git+https://github.com/zyantific/zydis.git#9bfadd6a55fc92dbd37fa3ba089bf8b36622df4f",
             .hash = "N-V-__8AACyxNgH-wMYYPBKGqdREPwKYY0a99dXCrXckI_d6",
@@ -15,6 +11,11 @@
             .url = "git+https://github.com/zyantific/zycore-c.git#e008c670c2fd7e476c1c03a8d2f995d8f977ff8c",
             .hash = "N-V-__8AAJ3LBwCttPEtrDwMrR2emNETvMHllXK-1iH5Zq0C",
         },
+        .utils = .{ .path = "../utils" },
+        //.utils = .{
+        //    .url = "git+https://github.com/jakubDoka/utils#771919d10f1df557f6eaa9614713a919a403513a",
+        //    .hash = "utils-0.0.0-whqoY0TsAAAFBLBXYSPmdHZdZe5-hg-EQx2ge99-zyw4",
+        //},
     },
     .paths = .{
         "build.zig",
