@@ -23,7 +23,19 @@ pub const classes = enum {
     pub const Scope = extern struct {};
 
     // [pinned_node]
-    pub const Pin = extern struct {};
+    pub const Pin = extern struct {
+        pub fn next(self: *Pin) ?*Func.Node {
+            const layout: *Func.LayoutOf(Pin) =
+                @alignCast(@fieldParentPtr("ext", self));
+            return @ptrFromInt(@as(u64, @bitCast(layout.base.sloc)));
+        }
+
+        pub fn setNext(self: *Pin, nxt: ?*Func.Node) void {
+            const layout: *Func.LayoutOf(Pin) =
+                @alignCast(@fieldParentPtr("ext", self));
+            layout.base.sloc = @bitCast(@intFromPtr(nxt));
+        }
+    };
 };
 
 pub fn isKillable(self: *BuildNode) bool {
@@ -66,6 +78,10 @@ pub fn begin(
     return @enumFromInt(0);
 }
 
+pub fn arena(self: *Builder) std.mem.Allocator {
+    return self.func.arena.allocator();
+}
+
 pub fn addParam(self: *Builder, sloc: graph.Sloc, idx: usize, debug_ty: u32) SpecificNode(.Arg) {
     return switch (self.func.signature.params()[idx]) {
         .Reg => |ty| self.func.addNode(.Arg, sloc, ty, &.{self.func.start}, .{ .index = idx }),
@@ -91,6 +107,7 @@ pub fn end(self: *Builder, _: BuildToken) void {
 
         for (worklist.items()) |node| {
             std.debug.assert(node.kind != .Scope);
+            std.debug.assert(node.kind != .Pin);
         }
     }
 }
@@ -211,20 +228,38 @@ pub fn addUnOp(self: *Builder, sloc: graph.Sloc, op: UnOp, ty: DataType, oper: *
 
 // #SCOPE ======================================================================
 
+pub fn isPinned(_: *Builder, node: *Func.Node) bool {
+    return for (node.outputs()) |o| {
+        if (o.get().kind == .Pin) return true;
+    } else false;
+}
+
 pub fn pin(self: *Builder, to_pin: *Func.Node) SpecificNode(.Pin) {
     if (self.pin_free_list) |pfl| {
-        self.pin_free_list = @ptrFromInt(@as(u64, @bitCast(pfl.sloc)));
+        self.pin_free_list = pfl.extra(.Pin).next();
         self.func.setInputNoIntern(pfl, 0, to_pin);
         return pfl;
     }
 
-    return self.func.addNode(.Pin, .none, .bot, &.{to_pin}, .{});
+    return self.func.addNode(
+        .Pin,
+        std.mem.zeroes(graph.Sloc),
+        .bot,
+        &.{to_pin},
+        .{},
+    );
+}
+
+pub fn unpinKeep(self: *Builder, to_unpin: SpecificNode(.Pin)) *Func.Node {
+    self.func.keep = true;
+    defer self.func.keep = false;
+    return self.unpin(to_unpin);
 }
 
 pub fn unpin(self: *Builder, to_unpin: SpecificNode(.Pin)) *Func.Node {
     const unpinned = to_unpin.inputs()[0].?;
     self.func.setInputNoIntern(to_unpin, 0, null);
-    to_unpin.sloc = @bitCast(@as(u64, @intFromPtr(self.pin_free_list)));
+    to_unpin.extra(.Pin).setNext(self.pin_free_list);
     self.pin_free_list = to_unpin;
     return unpinned;
 }
@@ -242,8 +277,8 @@ pub const scope_value_start = 2;
 pub const Pins = struct {
     scope: *BuildNode,
 
-    pub fn push(self: Pins, bl: *Builder, value: *BuildNode) void {
-        bl.pushToScope(self.scope, value);
+    pub fn push(self: Pins, bl: *Builder, value: *BuildNode) u16 {
+        return bl.pushToScope(self.scope, value);
     }
 
     pub fn getValue(self: Pins, index: usize) *Func.Node {
@@ -277,11 +312,11 @@ pub fn addPins(self: *Builder) Pins {
     return .{ .scope = self.func.addNode(.Scope, .none, .top, &.{}, .{}) };
 }
 
-pub fn pushScopeValue(self: *Builder, value: *BuildNode) void {
-    self.pushToScope(self.scope.?, value);
+pub fn pushScopeValue(self: *Builder, value: *BuildNode) u16 {
+    return self.pushToScope(self.scope.?, value) - scope_value_start;
 }
 
-fn pushToScope(self: *Builder, scope: *BuildNode, value: *BuildNode) void {
+fn pushToScope(self: *Builder, scope: *BuildNode, value: *BuildNode) u16 {
     if (scope.input_ordered_len == scope.input_len) {
         const new_cap = @max(1, scope.input_len) * 2;
         const new_alloc = self.func.arena.allocator().realloc(
@@ -296,6 +331,7 @@ fn pushToScope(self: *Builder, scope: *BuildNode, value: *BuildNode) void {
     scope.input_base[scope.input_ordered_len] = value;
     self.func.addUse(value, scope.input_ordered_len, scope);
     scope.input_ordered_len += 1;
+    return scope.input_ordered_len - 1;
 }
 
 pub fn getScopeValue(self: *Builder, index: usize) *Func.Node {
@@ -366,6 +402,10 @@ pub fn cloneScope(self: *Builder) SpecificNode(.Scope) {
 
 pub inline fn truncateScope(self: *Builder, back_to: usize) void {
     self._truncateScope(self.scope orelse return, scope_value_start + back_to);
+}
+
+pub fn scopeSize(self: *Builder) u16 {
+    return (self.scope orelse return 0).input_ordered_len - scope_value_start;
 }
 
 pub fn _truncateScope(self: *Builder, scope: SpecificNode(.Scope), back_to: usize) void {

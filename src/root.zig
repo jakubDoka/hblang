@@ -13,6 +13,10 @@ const frontend2 = opaque {
 
 pub const frontend = opaque {
     pub const Lexer = @import("frontend/Lexer.zig");
+    pub const Codegen = @import("frontend/Codegen.zig");
+    pub const Abi = @import("frontend/Abi.zig");
+    pub const Types = @import("frontend/TypeStore.zig");
+    pub const DeclIndex = @import("frontend/DeclIndex.zig");
 };
 
 pub const backend = opaque {
@@ -56,6 +60,11 @@ pub const dwarf = @import("dwarf.zig");
 pub const utils = @import("utils-lib");
 pub const diff = @import("diff.zig");
 pub const lane = utils.lane;
+pub const runTest = frontend.Codegen.runTest;
+
+test {
+    std.testing.refAllDeclsRecursive(@This());
+}
 
 const std = @import("std");
 const hb = @import("hb");

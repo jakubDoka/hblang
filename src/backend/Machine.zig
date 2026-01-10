@@ -1162,7 +1162,6 @@ pub const FinalizeOptionsInterface = struct {
     builtins: Builtins,
     logs: ?*std.Io.Writer = null,
     files: []const root.LineIndex,
-    others: []*Machine,
 };
 
 pub const SupportedTarget = enum {
@@ -1215,7 +1214,7 @@ pub const SupportedTarget = enum {
     pub fn toCallConv(triple: SupportedTarget) graph.CallConv {
         return switch (triple) {
             .@"hbvm-ableos" => .ablecall,
-            .@"x86_64-windows" => .fastcall,
+            .@"x86_64-windows" => unreachable, // TODO
             .@"x86_64-linux" => .systemv,
             .@"wasm-freestanding" => .wasmcall,
             .null => .systemv,
@@ -1284,10 +1283,6 @@ pub const FinalizeOptions = struct {
 /// package the final output (.eg object file)
 /// this function should also restart the state for next emmiting
 pub fn finalize(self: *Machine, out: ?*std.io.Writer, opts: FinalizeOptionsInterface) void {
-    var ots = opts;
-    var machines: [1]*Machine = .{self};
-    if (ots.others.len != 0) ots.others = &machines;
-
     return self.vtable.finalize(self, .{ .output = out, .interface = opts });
 }
 

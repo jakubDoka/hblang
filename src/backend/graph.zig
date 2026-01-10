@@ -476,18 +476,16 @@ pub const AbiParam = union(enum) {
 };
 
 pub const CallConv = enum(u8) {
-    refcall,
     systemv,
     ablecall,
     wasmcall,
-    fastcall,
     @"inline",
 };
 
 pub const Signature = extern struct {
     par_base: [*]AbiParam = undefined,
     ret_base: ?[*]AbiParam = undefined,
-    call_conv: CallConv = .refcall,
+    call_conv: CallConv = undefined,
     par_count: u8 = 0,
     ret_count: u8 = 0,
 
@@ -805,7 +803,6 @@ pub fn Func(comptime Backend: type) type {
         interner: InternMap(Uninserter) = .{},
         signature: Signature = .{},
         next_id: u16 = 0,
-        corrupted: bool = false,
         waste: usize = 0,
         start: *Node = undefined,
         end: *Node = undefined,
@@ -816,6 +813,7 @@ pub fn Func(comptime Backend: type) type {
         static_anal: static_anal.Mixin(Backend) = .{},
         inliner: inliner.Mixin(Backend) = .{},
         stopped_interning: std.debug.SafetyLock = .{},
+        keep: bool = false,
 
         pub fn optApi(comptime decl_name: []const u8, comptime Ty: type) bool {
             const prelude = @typeName(Backend) ++
@@ -1677,24 +1675,6 @@ pub fn Func(comptime Backend: type) type {
                     idx < self.input_ordered_len;
             }
 
-            pub fn removeUse(self: *Node, idx: usize, use: *Node) void {
-                const outs = self.outputs();
-                const index = std.mem.indexOfScalar(
-                    Out,
-                    outs,
-                    .init(use, idx, self),
-                ) orelse {
-                    utils.panic(
-                        "removeUse: not found {f} {any} {f}",
-                        .{ use, self.outputs(), self },
-                    );
-                };
-
-                outs[index] = outs[outs.len - 1];
-                outs[outs.len - 1] = undefined;
-                self.output_len -= 1;
-            }
-
             pub fn outputs(self: *Node) []Out {
                 return self.output_base[0..self.output_len];
             }
@@ -2549,7 +2529,7 @@ pub fn Func(comptime Backend: type) type {
 
             std.debug.assert(self.output_len == 0);
             for (self.inputs(), 0..) |oi, j| if (oi) |i| {
-                i.removeUse(j, self);
+                func.removeUse(i, j, self);
             };
 
             func.waste += self.input_len * @sizeOf(?*Node);
@@ -2572,7 +2552,7 @@ pub fn Func(comptime Backend: type) type {
             for (tmp.arena.dupe(Node.Out, target.outputs())) |use| {
                 if (use.get().isDead()) continue;
                 if (use.get() == target) {
-                    target.removeUse(use.pos(), target);
+                    self.removeUse(target, use.pos(), target);
                     target.inputs()[use.pos()] = null;
                 } else {
                     _ = self.setInputIgnoreIntern(use.get(), use.pos(), this);
@@ -2595,7 +2575,7 @@ pub fn Func(comptime Backend: type) type {
                 if (use.get().isDead()) continue;
 
                 if (use.get() == target) {
-                    target.removeUse(use.pos(), target);
+                    self.removeUse(target, use.pos(), target);
                     target.inputs()[use.pos()] = null;
                 } else {
                     _ = self.setInput(use.get(), use.pos(), this);
@@ -2620,6 +2600,28 @@ pub fn Func(comptime Backend: type) type {
             self.kill(target);
         }
 
+        pub fn removeUse(self: *Self, def: *Node, idx: usize, use: *Node) void {
+            const outs = def.outputs();
+            const index = std.mem.indexOfScalar(
+                Node.Out,
+                outs,
+                .init(use, idx, def),
+            ) orelse {
+                utils.panic(
+                    "removeUse: not found {f} {any} {f}",
+                    .{ use, def.outputs(), def },
+                );
+            };
+
+            outs[index] = outs[outs.len - 1];
+            outs[outs.len - 1] = undefined;
+            def.output_len -= 1;
+
+            if (def.output_len == 0 and !self.keep) {
+                self.kill(def);
+            }
+        }
+
         pub fn setInputNoIntern(
             self: *Self,
             use: *Node,
@@ -2639,7 +2641,7 @@ pub fn Func(comptime Backend: type) type {
         ) void {
             self.stopped_interning.assertLocked();
             if (use.inputs()[idx] == def) return;
-            if (use.inputs()[idx]) |n| n.removeUse(idx, use);
+            if (use.inputs()[idx]) |n| self.removeUse(n, idx, use);
             use.inputs()[idx] = def;
             self.addUse(def, idx, use);
         }
@@ -2654,7 +2656,7 @@ pub fn Func(comptime Backend: type) type {
 
             if (use.inputs()[idx] == def) return null;
             if (use.inputs()[idx]) |n| {
-                n.removeUse(idx, use);
+                self.removeUse(n, idx, use);
             }
 
             self.uninternNode(use);
@@ -2910,7 +2912,7 @@ pub fn Func(comptime Backend: type) type {
                 is_dead = true;
                 for (node.inputs(), 0..) |*inp, i| {
                     if (inp.* != null and isDead(inp.*)) {
-                        inp.*.?.removeUse(i, node);
+                        self.removeUse(inp.*.?, i, node);
                         work.add(inp.*.?);
                         inp.* = null;
                     }
@@ -3215,7 +3217,8 @@ pub fn Func(comptime Backend: type) type {
                     return mem;
                 }
 
-                // If store happens after us, it could be a swap so be pesimiztic
+                // If store happens after us, it could be a swap so be
+                // pesimiztic
                 //
                 for (node.outputs()) |use| {
                     if (use.get().kind == .Call) break :memcpy;
@@ -3230,8 +3233,9 @@ pub fn Func(comptime Backend: type) type {
                 if (dst.kind != .Local and (dst.kind != .BinOp or
                     dst.inputs()[1].?.kind != .Local)) break :memcpy;
 
-                // NOTE: if the size of the memcpy does not match, we do not care
-                // since reading uninitialized memory is undefined behavior
+                // NOTE: if the size of the memcpy does not match, we do not
+                // care since reading uninitialized memory is undefined
+                // behavior
 
                 const scanned = if (dst.kind == .BinOp)
                     dst.inputs()[1].?

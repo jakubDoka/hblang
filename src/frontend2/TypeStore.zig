@@ -505,10 +505,6 @@ pub const Id = enum(IdRepr) {
         return self.getKey(types).loc.scope;
     }
 
-    pub fn isInteger(self: Id) bool {
-        return self.isUnsigned() or self.isSigned();
-    }
-
     pub fn isFnPtr(self: Id, types: *Types) bool {
         return self.data() == .Pointer and self.data().Pointer.get(types).data() == .FnTy;
     }
@@ -518,14 +514,6 @@ pub const Id = enum(IdRepr) {
             .f32, .f64 => true,
             else => false,
         };
-    }
-
-    pub fn isUnsigned(self: Id) bool {
-        return @intFromEnum(Id.u8) <= @intFromEnum(self) and @intFromEnum(self) <= @intFromEnum(Id.uint);
-    }
-
-    pub fn isSigned(self: Id) bool {
-        return @intFromEnum(Id.i8) <= @intFromEnum(self) and @intFromEnum(self) <= @intFromEnum(Id.int);
     }
 
     pub fn data(self: Id) Data {

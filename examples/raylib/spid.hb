@@ -34,6 +34,7 @@ main := fn(): uint {
 	rl.init_window(800, 600, "hblang\0".ptr)
 	defer rl.close_window()
 
+
 	$create_enemy := fn(pos: rl.V2, dir: rl.V2): void {
 		enemyes[enemy_count] = .(pos, dir)
 		enemy_count += 1

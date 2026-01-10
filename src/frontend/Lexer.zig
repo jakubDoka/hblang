@@ -265,7 +265,7 @@ pub const Lexeme = enum(u16) {
             .@"<<", .@">>" => 5,
             .@"+", .@"-" => 4,
             .@"*", .@"/", .@"%" => 3,
-            .@".", .@".{", .@".(", .@".[", .@".?", .@".*" => 0,
+            .@".", .@".{", .@".(", .@".[", .@"(", .@"[", .@".?", .@".*" => 0,
             else => 255,
         };
     }
@@ -278,10 +278,10 @@ pub const Lexeme = enum(u16) {
         return @tagName(self);
     }
 
-    pub fn cantStartExpression(self: Lexeme) bool {
+    pub fn canStartExpression(self: Lexeme) bool {
         return switch (self) {
-            .@"}", .@";", .@",", .@")" => true,
-            else => false,
+            .@"}", .@";", .@",", .@")", .@"]" => false,
+            else => true,
         };
     }
 
@@ -366,22 +366,56 @@ const keyword_map = b: {
     var count = 0;
     for (std.meta.fields(Lexeme)) |f| count += @intFromBool(isKeyword(f.name));
 
-    var list: [count + auto_migration_mapping.len]struct { []const u8, Lexeme } = undefined;
+    var lista: [count + auto_migration_mapping.len]struct { []const u8, Lexeme } = undefined;
     var i: usize = 0;
     for (std.meta.fields(Lexeme)) |field| {
         if (!isKeyword(field.name)) continue;
         const start = if (std.mem.startsWith(u8, field.name, "ty_")) 3 else 0;
-        list[i] = .{ field.name[start..], @enumFromInt(field.value) };
+        lista[i] = .{ field.name[start..], @enumFromInt(field.value) };
         i += 1;
     }
 
     for (auto_migration_mapping) |em| {
-        list[i] = em;
+        lista[i] = em;
         i += 1;
     }
 
-    break :b std.StaticStringMap(Lexeme).initComptime(list);
+    break :b std.StaticStringMap(Lexeme).initComptime(lista);
 };
+
+pub fn peekNext(self: Lexer) Token {
+    var s = self;
+    return s.next();
+}
+
+pub fn slit(self: *Lexer, comptime tok: Lexeme) Token {
+    const vl = self.next();
+    std.debug.assert(vl.kind == tok);
+    return vl;
+}
+
+pub fn isIdentByte(ident: u8) bool {
+    return switch (ident) {
+        'a'...'z', 'A'...'Z', '0'...'9', '_', 128...255 => true,
+        else => false,
+    };
+}
+
+pub fn compareIdent(
+    source: [:0]const u8,
+    offset: u32,
+    ref: []const u8,
+) bool {
+    comptime {
+        std.debug.assert(""[0] == 0);
+    }
+
+    return source.len - offset >= ref.len and
+        // NOTE: shortcut but also prevent false match on prefix
+        // NOTE: this assumes terminator
+        !isIdentByte(source[offset + ref.len + 1]) and
+        std.mem.eql(u8, source[offset..][0..ref.len], ref);
+}
 
 pub fn next(self: *Lexer) Token {
     const State = enum {
@@ -663,15 +697,84 @@ pub fn next(self: *Lexer) Token {
     return Token.init(pos, self.cursor, kind);
 }
 
-inline fn advance(self: *Lexer) u8 {
-    defer self.cursor += 1;
-    return self.source[self.cursor];
+pub fn expect(self: *Lexer, kind: Lexeme) !Token {
+    const res = self.peekNext();
+    if (res.kind != kind) return error.UnexpectedToken;
+    self.cursor = res.end;
+    return res;
 }
 
-inline fn advanceIf(self: *Lexer, c: u8) bool {
-    if (self.source[self.cursor] == c) {
-        self.cursor += 1;
-        return true;
+pub fn eatUntilClosingDelimeter(self: *@This()) void {
+    var depth: usize = 0;
+    while (true) {
+        const tok = self.next();
+        switch (tok.kind) {
+            .@".{", .@".(", .@".[", .@"{", .@"(", .@"[" => {
+                depth += 1;
+            },
+            .@"}", .@")", .@"]" => {
+                if (depth == 0) break;
+                depth -= 1;
+            },
+            else => {},
+        }
     }
-    return false;
+}
+
+pub fn list(self: *Lexer, comptime sep: Lexeme, comptime end: Lexeme) *struct {
+    lexer: Lexer,
+
+    pub fn next(slf: *@This()) bool {
+        const tok = slf.lexer.peekNext();
+        switch (tok.kind) {
+            sep => {
+                slf.lexer.cursor = tok.end;
+                const ptok = slf.lexer.peekNext();
+                if (ptok.kind == end) {
+                    slf.lexer.cursor = ptok.end;
+                    return false;
+                }
+
+                return true;
+            },
+            end => {
+                slf.lexer.cursor = tok.end;
+                return false;
+            },
+            else => return true,
+        }
+    }
+
+    pub fn recover(slf: *@This()) bool {
+        var depth: usize = 0;
+        while (true) {
+            const tok = slf.lexer.next();
+            switch (tok.kind) {
+                sep => {
+                    if (depth > 0) {
+                        continue;
+                    }
+
+                    const ptok = slf.lexer.peekNext();
+                    if (ptok.kind == end) {
+                        slf.lexer.cursor = ptok.end;
+                        return true;
+                    }
+
+                    return false;
+                },
+                .Eof => return true,
+                .@".{", .@".(", .@".[", .@"{", .@"(", .@"[" => {
+                    depth += 1;
+                },
+                .@"}", .@")", .@"]" => {
+                    if (depth == 0) return true;
+                    depth -= 1;
+                },
+                else => {},
+            }
+        }
+    }
+} {
+    return @ptrCast(self);
 }
