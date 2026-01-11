@@ -814,7 +814,7 @@ pub fn Func(comptime Backend: type) type {
         static_anal: static_anal.Mixin(Backend) = .{},
         inliner: inliner.Mixin(Backend) = .{},
         stopped_interning: std.debug.SafetyLock = .{},
-        keep: bool = false,
+        keep: bool = false, // TODO: remove at some point
 
         pub fn optApi(comptime decl_name: []const u8, comptime Ty: type) bool {
             const prelude = @typeName(Backend) ++

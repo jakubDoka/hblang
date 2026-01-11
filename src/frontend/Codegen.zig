@@ -223,8 +223,11 @@ pub fn lookupIdent(
                 if (!slot.found_existing) {
                     slot.key_ptr.* = self.types.globals
                         .push(&self.types.arena, global_mem);
-                    global = self.types.globals.at(slot.key_ptr.*);
+                }
 
+                global = self.types.globals.at(slot.key_ptr.*);
+
+                if (!slot.found_existing) {
                     var global_gen: Codegen = undefined;
                     global_gen.init(
                         self.types,
@@ -232,6 +235,7 @@ pub fn lookupIdent(
                         .never,
                         self.types.allocator(),
                     );
+                    global_gen.name = @enumFromInt(vl.offset);
                     defer global_gen.deinit();
 
                     global_gen.evalGlobal(vl.offset, slot.key_ptr.*);
@@ -378,6 +382,8 @@ pub fn emitReachable(stypes: *Types, gpa: std.mem.Allocator) void {
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
 
+        const prev_erred = stypes.errored;
+
         const func = fnid.get(stypes);
 
         self.init(stypes, .nany(fnid), func.ret, gpa);
@@ -445,6 +451,8 @@ pub fn emitReachable(stypes: *Types, gpa: std.mem.Allocator) void {
                     " function implicitly returns", .{}) catch continue;
             }
         }
+
+        if (prev_erred < stypes.errored) continue;
 
         self.popScope(0);
         self.bl.end(token);
@@ -518,6 +526,16 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
                 oper.load(tok.end, self) catch return .never,
             ));
         },
+        ._ => discard: {
+            _ = lex.expect(.@"=") catch {
+                return self.report(lex.cursor, "expected '=' followed by" ++
+                    " the expression to discard", .{});
+            };
+
+            _ = try self.expr(.{ .ty = .void }, lex);
+
+            break :discard .voidv;
+        },
         .@"{" => {
             var iter = lex.list(.@";", .@"}");
             var reached_end = false;
@@ -529,10 +547,14 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
                     return error.Unreachable;
                 }
 
-                _ = self.expr(.{ .ty = .void }, lex) catch |err| switch (err) {
+                var value = self.expr(.{ .ty = .void }, lex) catch |err| switch (err) {
                     error.Report => continue,
-                    error.Unreachable => reached_end = true,
+                    error.Unreachable => {
+                        reached_end = true;
+                        continue;
+                    },
                 };
+                _ = self.typeCheck(lex.cursor, &value, .void) catch {};
             }
 
             if (reached_end) return error.Unreachable;
@@ -557,6 +579,11 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
                 _ = lex.expect(.Ident) catch {
                     self.report(lex.cursor, "expected argument name", .{}) catch {};
                     if (arg_iter.recover()) break else continue;
+                };
+
+                _ = lex.expect(.@":") catch {
+                    return self.report(lex.cursor, "expected ':' as a start of" ++
+                        " argument type", .{});
                 };
 
                 args.append(
@@ -733,7 +760,14 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
 
         switch (top.kind) {
             .@"(" => call: {
-                const fid = try self.peval(tok.pos, res, Types.FuncId);
+                const fid = self.peval(tok.pos, res, Types.FuncId) catch |err| {
+                    const iter = lex.list(.@",", .@")");
+                    while (iter.next()) _ = self.expr(.{}, lex) catch {};
+
+                    return err;
+                };
+                res = .voidv;
+
                 const func = fid.get(self.types);
 
                 var tmp = utils.Arena.scrath(null);
@@ -755,7 +789,7 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
                     if (ty) |t| self.typeCheck(pos, &arg, t) catch {};
 
                     args.appendBounded(.{ .pos = pos, .value = arg }) catch {
-                        self.report(pos, "extra arbgment", .{}) catch {};
+                        self.report(pos, "extra argment", .{}) catch {};
                     };
                 }
 
@@ -774,7 +808,7 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
                     self.types,
                     tmp.arena,
                 ) orelse {
-                    std.debug.assert(self.types.errored);
+                    std.debug.assert(self.types.errored != 0);
                     break :call;
                 };
                 std.debug.assert(!ret_by_ref); // TODO
@@ -783,10 +817,10 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
                     .allocCallArgs(tmp.arena, params, returns, null);
 
                 var cursor: usize = 0;
-                for (args.items) |arg| {
+                for (args.items, func.args) |arg, arg_ty| {
                     var buf = Abi.Buf{};
                     const splits = self.types.abi
-                        .categorize(arg.value.ty, self.types, &buf).?;
+                        .categorize(arg_ty, self.types, &buf).?;
                     if (splits.len == 0) continue;
 
                     if (splits.len == 2) unreachable; // TODOa
@@ -901,6 +935,16 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
 }
 
 pub fn peval(self: *Codegen, pos: u32, value: Value, comptime T: type) !T {
+    switch (T) {
+        Types.FuncId => {
+            if (value.ty.data() != .FuncTy) {
+                return self.report(pos, "expected function," ++
+                    " got {}", .{value.ty});
+            }
+        },
+        else => {},
+    }
+
     const res = try self.partialEval(try value.load(pos, self));
 
     switch (T) {
@@ -962,7 +1006,7 @@ pub fn reportSloc(self: *Codegen, slc: graph.Sloc, fmt: []const u8, args: anytyp
     @branchHint(.cold);
 
     self.types.report(@enumFromInt(slc.namespace), slc.index, fmt, args);
-    self.types.errored = true;
+    self.types.errored += 1;
     return error.Report;
 }
 
@@ -1308,7 +1352,7 @@ pub fn report(self: *Codegen, pos: u32, msg: []const u8, args: anytype) error{Re
     @branchHint(.cold);
 
     self.types.report(self.file, pos, msg, args);
-    self.types.errored = true;
+    self.types.errored += 1;
     return error.Report;
 }
 
@@ -1564,11 +1608,11 @@ pub fn runTest(name: []const u8, code: []const u8) !void {
     const exp = Expectations.init(asts[0].source);
 
     if (exp.should_error) {
-        try std.testing.expect(types.errored);
+        try std.testing.expect(types.errored != 0);
         return;
     }
 
-    try std.testing.expect(!types.errored);
+    try std.testing.expect(types.errored == 0);
 
     var exe = backend.finalizeBytes(gpa, .{
         .optimizations = .{ .mode = .debug },

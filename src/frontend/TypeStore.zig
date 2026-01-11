@@ -31,7 +31,7 @@ vm: hb.hbvm.Vm = .{},
 abi: Abi = .systemv,
 func_queue: std.EnumArray(Target, std.ArrayList(FuncId)) =
     .initFill(.empty),
-errored: bool = false,
+errored: usize = 0,
 
 const Types = @This();
 
