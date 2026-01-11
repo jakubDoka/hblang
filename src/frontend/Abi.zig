@@ -81,6 +81,12 @@ pub fn computeSignature(
     return .{ params.items, ret_abi, ret_by_ref };
 }
 
+pub fn categorizeAssumeReg(self: Abi, ty: Id, types: *Types) graph.DataType {
+    var buf = Buf{};
+    const params = categorize(self, ty, types, &buf) orelse unreachable;
+    return params[0].Reg;
+}
+
 pub fn categorize(self: Abi, ty: Id, types: *Types, buf: *Buf) ?[]graph.AbiParam {
     switch (self.cc) {
         .ablecall, .wasmcall => switch (ty.data()) {
@@ -153,8 +159,8 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
                     .u32, .i64, .u64, .int, .uint, .type => .int,
                     .f32, .f64 => .sse,
                 },
+                .FuncTy => .int,
                 .Struct => unreachable,
-                .Func => unreachable,
             };
 
             const first = offset / 8;

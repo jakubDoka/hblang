@@ -2,6 +2,8 @@ source: [:0]const u8,
 cursor: u32,
 
 const std = @import("std");
+const hb = @import("hb");
+const utils = hb.utils;
 //const Types = @import("Types.zig");
 
 const Lexer = @This();
@@ -390,7 +392,7 @@ pub fn peekNext(self: Lexer) Token {
 
 pub fn slit(self: *Lexer, comptime tok: Lexeme) Token {
     const vl = self.next();
-    std.debug.assert(vl.kind == tok);
+    if (vl.kind != tok) utils.panic("{s} != {s}", .{ @tagName(vl.kind), @tagName(tok) });
     return vl;
 }
 
@@ -785,7 +787,7 @@ pub fn eatMatch(self: *Lexer, kind: Lexeme) bool {
     const tok = self.next();
     if (tok.kind != kind) {
         self.cursor = tok.pos;
-        return true;
+        return false;
     }
-    return false;
+    return true;
 }

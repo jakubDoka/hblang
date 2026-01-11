@@ -28,6 +28,9 @@ pub fn rallocIgnoreStats(comptime Backend: type, func: *graph.Func(Backend)) []u
 pub fn ralloc(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Backend)) []u16 {
     func.gcm.cfg_built.assertLocked();
 
+    //func.keep = true;
+    //defer func.keep = false;
+
     for (0..7) |_| {
         return slf.rallocRound(Backend, func) catch continue;
     } else unreachable;
@@ -199,16 +202,21 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             const ins = self.addSplit(block, def, dbg, counter);
             self.ensureOutputCapacity(ins, def.outputs().len);
 
-            for (tmp.arena.dupe(Node.Out, def.outputs())) |us| {
-                const use = us.get();
-                if (use == def) continue;
-                if (!use.hasUseFor(us.pos(), def)) continue;
-                if (!must and use.kind == .MachSplit and
-                    isSameBlockNoClobber(use, lrg_table)) continue;
+            {
+                const lock = def.lock();
+                defer lock.unlock();
 
-                std.debug.assert(use.dataDepOffset() <= us.pos());
+                for (tmp.arena.dupe(Node.Out, def.outputs())) |us| {
+                    const use = us.get();
+                    if (use == def) continue;
+                    if (!use.hasUseFor(us.pos(), def)) continue;
+                    if (!must and use.kind == .MachSplit and
+                        isSameBlockNoClobber(use, lrg_table)) continue;
 
-                self.setInputIgnoreIntern(use, us.pos(), ins);
+                    std.debug.assert(use.dataDepOffset() <= us.pos());
+
+                    self.setInputIgnoreIntern(use, us.pos(), ins);
+                }
             }
 
             self.setInputIgnoreIntern(ins, 1, def);

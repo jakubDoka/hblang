@@ -411,6 +411,10 @@ pub const Data = struct {
         return &self.syms.items[@intFromEnum(self.funcs.items[id])];
     }
 
+    pub fn getGlobalSym(self: *Data, id: u32) *Sym {
+        return &self.syms.items[@intFromEnum(self.globals.items[id])];
+    }
+
     pub fn startDefineSym(
         self: *Data,
         gpa: std.mem.Allocator,
@@ -849,15 +853,15 @@ pub const OptOptions = struct {
     pub fn idealizeDead(comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) void {
         const Func = graph.Func(Backend);
 
-        std.debug.assert(!func.start.isDead());
+        func.start.assertAlive();
         func.iterPeeps(ctx, Func.idealizeDead);
-        std.debug.assert(!func.start.isDead());
+        func.start.assertAlive();
     }
 
     pub fn idealizeGeneric(comptime Backend: type, ctx: anytype, func: *graph.Func(Backend), minimal_only: bool) void {
         const Func = graph.Func(Backend);
 
-        std.debug.assert(!func.start.isDead());
+        func.start.assertAlive();
 
         if (minimal_only) {
             func.iterPeeps(ctx, Backend.idealize);

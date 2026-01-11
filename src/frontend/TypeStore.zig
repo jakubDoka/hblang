@@ -10,9 +10,18 @@ const Codegen = hb.frontend.Codegen;
 const Abi = hb.frontend.Abi;
 const Machine = hb.backend.Machine;
 const HbvmGen = hb.hbvm.HbvmGen;
+const isa = hb.hbvm.isa;
 
 arena: utils.Arena,
-store: utils.EntStore(Data) = .{},
+structs: utils.SegmentedList(Struct, StructId, 1024, 1024 * 1024) = .{},
+struct_index: Interner(StructId) = .{},
+funcs: utils.SegmentedList(Func, FuncId, 1024, 1024 * 1024) = .{},
+func_index: Interner(FuncId) = .{},
+globals: utils.SegmentedList(Global, GlobalId, 1024, 1024 * 1024) = .{},
+global_index: Interner(GlobalId) = .{},
+func_tys: utils.SegmentedList(FuncTy, FuncTyId, 1024, 1024 * 1024) = .{},
+func_ty_index: Interner(FuncTyId) = .{},
+
 files: []File,
 line_indexes: []const hb.LineIndex,
 loader: *Loader,
@@ -20,120 +29,145 @@ backend: *Machine,
 ct_backend: HbvmGen,
 vm: hb.hbvm.Vm = .{},
 abi: Abi = .systemv,
-func_queue: std.EnumArray(Target, std.ArrayList(utils.EntId(Func))) =
+func_queue: std.EnumArray(Target, std.ArrayList(FuncId)) =
     .initFill(.empty),
 errored: bool = false,
-interner: std.HashMapUnmanaged(
-    Id,
-    void,
-    InternerCtx,
-    std.hash_map.default_max_load_percentage,
-) = .{},
 
 const Types = @This();
 
-pub const InternerCtx = struct {
-    types: *Types,
+pub const stack_size = 1024 * 128;
 
-    pub fn eql(_: InternerCtx, a: Id, b: Id) bool {
-        return a == b;
-    }
+pub fn EntId(comptime T: type, comptime field: []const u8) type {
+    return enum(u32) {
+        _,
 
-    pub fn hash(self: InternerCtx, key: Id) u64 {
-        return (InternerInsertCtx{ .types = self.types }).hash(switch (key.data()) {
-            .Builtin => unreachable,
-            inline .Struct,
-            => |s, t| .{
-                .scope = .{ t, &s.get(self.types).scope },
-            },
-            .Func => |f| .{ .func = f.get(self.types) },
-        });
-    }
-};
+        pub const data = .{ .ty = T, .field = field };
 
-pub const InternerInsertCtx = struct {
-    types: *Types,
-
-    pub const Entry = union(enum) {
-        scope: struct { std.meta.Tag(Data), *Scope },
-        func: *Func,
+        pub fn get(self: @This(), types: *Types) *T {
+            return @field(types, data.field).at(self);
+        }
     };
+}
 
-    pub fn eql(self: @This(), a: Entry, b: Id) bool {
-        switch (a) {
-            .scope => |s| {
-                if (b.data() != s[0]) return false;
-                return std.meta.eql(s[1].*, b.data().downcast(Data.Scope).?.scope(self.types).*);
-            },
-            .func => |f| {
-                if (b.data() != .Func) return false;
-                const ofunc = b.data().Func.get(self.types);
-                if (!std.meta.eql(f.scope, ofunc.scope)) return false;
-                return std.mem.eql(u8, @ptrCast(f.params), @ptrCast(ofunc.params));
-            },
+pub fn Interner(comptime I: type) type {
+    return struct {
+        map: Map = .empty,
+
+        pub const interner = {};
+
+        pub const Map = std.HashMapUnmanaged(I, void, Ctx, std.hash_map.default_max_load_percentage);
+
+        pub const Ctx = struct {
+            types: *Types,
+
+            pub fn eql(_: Ctx, a: I, b: I) bool {
+                return a == b;
+            }
+
+            pub fn hash(self: Ctx, key: I) u64 {
+                return @field(self.types, I.data.field).at(key).hash(self.types);
+            }
+        };
+
+        pub const InsertCtx = struct {
+            types: *Types,
+
+            pub fn eql(c: InsertCtx, a: *I.data.ty, b: I) bool {
+                return a.eql(@field(c.types, I.data.field).at(b), c.types);
+            }
+
+            pub fn hash(self: InsertCtx, key: *I.data.ty) u64 {
+                return key.hash(self.types);
+            }
+        };
+
+        pub fn intern(
+            self: *@This(),
+            types: *Types,
+            value: *I.data.ty,
+        ) Map.GetOrPutResult {
+            return self.map.getOrPutContextAdapted(
+                types.allocator(),
+                value,
+                InsertCtx{ .types = types },
+                Ctx{ .types = types },
+            ) catch unreachable;
         }
-    }
 
-    pub fn hash(_: @This(), key: Entry) u64 {
-        var hasher = std.hash.Wyhash.init(0);
-
-        switch (key) {
-            .scope => |s| {
-                hasher.update(std.mem.asBytes(&s[0]));
-                hasher.update(std.mem.asBytes(s[1]));
-            },
-            .func => |f| {
-                hasher.update(std.mem.asBytes(&std.meta.Tag(Data).Func));
-                hasher.update(std.mem.asBytes(&f.scope));
-                hasher.update(@ptrCast(f.params));
-            },
+        pub fn deinit(self: *@This(), types: *Types) void {
+            self.map.deinit(types.allocator());
         }
-
-        return hasher.final();
-    }
-};
+    };
+}
 
 pub const Target = enum {
     runtime,
     cmptime,
 };
 
-pub const Data = union(enum(u8)) {
-    Builtin: Builtin,
-    Struct: utils.EntId(Struct),
-    Func: utils.EntId(Func),
+pub const UnorderedScope = union(enum(u8)) {
+    Struct: StructId = Data.scope_start,
 
-    pub const Repr = extern struct {
-        tag: u32,
-        value: u32,
-    };
+    pub const upcast = generic.upcast;
+    pub const downcast = generic.downcast;
+    pub const scope = generic.scope;
 
-    pub const UnorderedScope = union(enum(u8)) {
-        Struct: utils.EntId(Struct) = 1,
+    pub fn decls(self: @This(), types: *Types) *DeclIndex {
+        return switch (self) {
+            inline else => |v| v.get(types).decls,
+        };
+    }
+};
 
-        pub const upcast = Data.upcast;
-        pub const downcast = Data.downcast;
-        pub const scope = Data.scope;
+pub const ParentRef = enum(u32) {
+    _,
 
-        pub fn decls(self: @This(), types: *Types) *DeclIndex {
-            return switch (self) {
-                inline else => |v| v.get(types).decls,
-            };
-        }
-    };
+    pub const data = Parent.Conv.data;
+    pub const nany = Parent.Conv.nany;
+    pub const init = Parent.Conv.pack;
+};
 
-    pub const Scope = union(enum(u8)) {
-        Struct: utils.EntId(Struct) = 1,
-        Func: utils.EntId(Func),
+pub const Parent = union(enum(u8)) {
+    Struct: StructId = Data.scope_start,
+    Func: FuncId,
+    Tail: enum(u32) { end },
 
-        pub const upcast = Data.upcast;
-        pub const downcast = Data.downcast;
-        pub const scope = Data.scope;
+    pub const Conv = IdConv(ParentRef, Parent);
 
-        pub fn parent(self: Data.Scope, types: *Types) ?Data.Scope {
-            return self.scope(types).parent.data().downcast(Data.Scope);
-        }
-    };
+    pub const upcast = generic.upcast;
+    pub const downcast = generic.downcast;
+    pub const scope = generic.scope;
+    pub const pack = Conv.pack;
+};
+
+pub const AnyScopeRef = enum(u32) {
+    _,
+
+    pub const data = AnyScope.Conv.data;
+    pub const nany = AnyScope.Conv.nany;
+    pub const init = AnyScope.Conv.pack;
+};
+
+pub const AnyScope = union(enum(u8)) {
+    Struct: StructId = Data.scope_start,
+    Func: FuncId,
+
+    pub const Conv = IdConv(AnyScopeRef, AnyScope);
+
+    pub const upcast = generic.upcast;
+    pub const downcast = generic.downcast;
+    pub const scope = generic.scope;
+    pub const pack = Conv.pack;
+};
+
+pub const generic = struct {
+    pub fn hashScope(self: anytype, _: *Types) u64 {
+        return std.hash.Wyhash.hash(0, std.mem.asBytes(&self.scope));
+    }
+
+    pub fn eqlScope(self: anytype, other: anytype, _: *Types) bool {
+        return std.meta.eql(self.scope, other.scope);
+    }
 
     pub fn scope(self: anytype, types: *Types) *Types.Scope {
         return switch (self.*) {
@@ -141,36 +175,47 @@ pub const Data = union(enum(u8)) {
         };
     }
 
-    pub fn size(self: Data, types: *Types) u64 {
-        return switch (self) {
-            .Builtin => |b| b.size(types),
-            .Struct => |s| s.get(types).size(types),
-            .Func,
-            => unreachable,
-        };
+    pub fn upcast(self: anytype, comptime T: type) T {
+        const Dt = @TypeOf(self.*);
+
+        comptime {
+            for (std.meta.fields(std.meta.Tag(Dt))) |f| {
+                for (std.meta.fields(std.meta.Tag(T))) |of| {
+                    if (std.mem.eql(u8, f.name, of.name)) {
+                        if (f.value != of.value) {
+                            @compileError(std.fmt.comptimePrint(
+                                "subset mismatch {s}.{s}({} != {})",
+                                .{
+                                    @typeName(T),
+                                    f.name,
+                                    f.value,
+                                    of.value,
+                                },
+                            ));
+                        }
+                        break;
+                    }
+                } else {
+                    @compileError(std.fmt.comptimePrint(
+                        "missing field {s}.{s}",
+                        .{
+                            @typeName(T),
+                            f.name,
+                        },
+                    ));
+                }
+            }
+        }
+        return @as(*const T, @ptrCast(self)).*;
     }
 
-    pub fn alignment(self: Data, types: *Types) u64 {
-        return switch (self) {
-            .Builtin => |b| b.alignment(types),
-            .Struct => |s| s.get(types).alignment(types),
-            .Func,
-            => unreachable,
-        };
-    }
-
-    pub fn upcast(self: anytype) Data {
-        comptime std.debug.assert(@sizeOf(@TypeOf(self.*)) == @sizeOf(Data));
-        return @as(*const Data, @ptrCast(self)).*;
-    }
-
-    pub fn downcast(self: anytype, comptime To: type) ?To {
+    pub fn downcast(self: anytype, comptime T: type) ?T {
         const Dt = @TypeOf(self.*);
 
         comptime var range_start = 0;
         comptime var range_end = 0;
         comptime {
-            const to_fields = std.meta.fields(std.meta.Tag(To));
+            const to_fields = std.meta.fields(std.meta.Tag(T));
 
             for (std.meta.fields(std.meta.Tag(Dt))) |f| {
                 for (to_fields) |of| {
@@ -179,7 +224,7 @@ pub const Data = union(enum(u8)) {
                             @compileError(std.fmt.comptimePrint(
                                 "subset mismatch {s}.{s}({} != {})",
                                 .{
-                                    @typeName(To),
+                                    @typeName(T),
                                     f.name,
                                     f.value,
                                     of.value,
@@ -194,34 +239,92 @@ pub const Data = union(enum(u8)) {
             range_start = first;
             for (to_fields[1..]) |v| {
                 if (v.value != first + 1) {
-                    @compileError(@typeName(To) ++ "is not continuous");
+                    @compileError(@typeName(T) ++ "is not continuous");
                 }
                 first += 1;
             }
             range_end = first;
 
-            if (@sizeOf(To) != @sizeOf(Dt)) {
-                @compileError("layout does not match for " ++ @typeName(To));
+            if (@sizeOf(T) != @sizeOf(Dt)) {
+                @compileError("layout does not match for " ++ @typeName(T));
             }
         }
 
         if (range_start <= @intFromEnum(self.*) and
             @intFromEnum(self.*) <= range_end)
         {
-            return @as(*const To, @ptrCast(self)).*;
+            return @as(*const T, @ptrCast(self)).*;
         }
 
         return null;
     }
+};
 
-    comptime {
-        var val = Data{ .Builtin = .int };
-        std.debug.assert(val.downcast(Data.Scope) == null);
+pub const Data = union(enum(u8)) {
+    Builtin: Builtin,
+    FuncTy: FuncTyId,
+    Struct: StructId,
+
+    const scope_start = 2;
+
+    pub const pack = Id.Conv.pack;
+
+    pub fn size(self: Data, types: *Types) u64 {
+        return switch (self) {
+            .Builtin => |b| b.size(types),
+            .FuncTy => 4,
+            .Struct => |s| s.get(types).size(types),
+        };
     }
 
-    // assert that all the stuff in others is a subset of Data with the
-    // matching tag values
+    pub fn alignment(self: Data, types: *Types) u64 {
+        return switch (self) {
+            .Builtin => |b| b.alignment(types),
+            .FuncTy => 4,
+            .Struct => |s| s.get(types).alignment(types),
+        };
+    }
 };
+
+pub fn IdConv(comptime I: type, comptime D: type) type {
+    return struct {
+        pub const DRepr = extern struct {
+            tag: u32,
+            value: u32,
+        };
+
+        pub const IRepr = packed struct(u32) {
+            tag: std.meta.Tag(std.meta.Tag(D)),
+            index: std.meta.Int(.unsigned, 32 - @bitSizeOf(std.meta.Tag(D))),
+        };
+
+        pub fn data(self: I) D {
+            const repr: IRepr = @bitCast(@intFromEnum(self));
+            return @as(*const D, @ptrCast(&DRepr{
+                .value = repr.index,
+                .tag = repr.tag,
+            })).*;
+        }
+
+        pub fn nany(value: anytype) I {
+            inline for (std.meta.fields(D)) |f| {
+                if (f.type == @TypeOf(value)) {
+                    return D.pack(@unionInit(D, f.name, value));
+                }
+            }
+            @compileError(@typeName(@TypeOf(value)));
+        }
+
+        pub fn pack(dt: D) I {
+            const data_repr = @as(*const DRepr, @ptrCast(&dt)).*;
+            const repr = IRepr{
+                .tag = @intCast(data_repr.tag),
+                .index = @intCast(data_repr.value),
+            };
+            return @enumFromInt(@as(u32, @bitCast(repr)));
+        }
+    };
+}
 
 pub const Id = enum(u32) {
     never,
@@ -243,36 +346,10 @@ pub const Id = enum(u32) {
     any,
     _,
 
-    pub const Repr = packed struct(u32) {
-        tag: std.meta.Tag(std.meta.Tag(Data)),
-        index: std.meta.Int(.unsigned, 32 - @bitSizeOf(std.meta.Tag(Data))),
-    };
-
-    pub fn nany(value: anytype) Id {
-        inline for (std.meta.fields(Data)) |f| {
-            if (f.type == @TypeOf(value)) {
-                return .init(@unionInit(Data, f.name, value));
-            }
-        }
-        @compileError(@typeName(@TypeOf(value)));
-    }
-
-    pub fn init(dt: Data) Id {
-        const data_repr = @as(*const Data.Repr, @ptrCast(&dt)).*;
-        const repr = Repr{
-            .tag = @intCast(data_repr.tag),
-            .index = @intCast(data_repr.value),
-        };
-        return @enumFromInt(@as(u32, @bitCast(repr)));
-    }
-
-    pub fn data(self: Id) Data {
-        const repr: Repr = @bitCast(@intFromEnum(self));
-        return @as(*const Data, @ptrCast(&Data.Repr{
-            .value = repr.index,
-            .tag = repr.tag,
-        })).*;
-    }
+    const Conv = IdConv(Id, Data);
+    pub const data = Conv.data;
+    pub const nany = Conv.nany;
+    pub const init = Conv.pack;
 
     pub fn raw(self: Id) u32 {
         return @intFromEnum(self);
@@ -304,11 +381,18 @@ pub const Id = enum(u32) {
     }
 
     pub fn format_(self: Id, types: *Types, writer: *std.io.Writer) !void {
-        _ = types;
         switch (self.data()) {
             .Builtin => |b| try writer.print("{s}", .{@tagName(b)}),
+            .FuncTy => |f| {
+                try writer.writeAll("fn(");
+                for (f.get(types).args, 0..) |arg, i| {
+                    try arg.format_(types, writer);
+                    if (i != f.get(types).args.len - 1) try writer.writeAll(", ");
+                }
+                try writer.writeAll("): ");
+                try f.get(types).ret.format_(types, writer);
+            },
             .Struct => unreachable,
-            .Func => unreachable,
         }
     }
 
@@ -418,7 +502,7 @@ pub const Builtin = enum(u32) {
 };
 
 pub const Scope = extern struct {
-    parent: Id,
+    parent: ParentRef,
     name_pos: NamePos,
     file: File.Id,
 
@@ -449,7 +533,7 @@ pub const Scope = extern struct {
     }
 };
 
-pub const StructId = utils.EntId(Struct);
+pub const StructId = EntId(Struct, "structs");
 pub const Struct = struct {
     scope: Scope,
     decls: *DeclIndex,
@@ -467,7 +551,25 @@ pub const Struct = struct {
     }
 };
 
-pub const FuncId = utils.EntId(Func);
+pub const FuncTyId = EntId(FuncTy, "func_tys");
+pub const FuncTy = struct {
+    args: []Id,
+    ret: Id,
+
+    pub fn hash(self: FuncTy, _: *Types) u64 {
+        var hasher = std.hash.Wyhash.init(0);
+        hasher.update(@ptrCast(self.args));
+        hasher.update(@ptrCast(&self.ret));
+        return hasher.final();
+    }
+
+    pub fn eql(self: *FuncTy, other: *FuncTy, _: *Types) bool {
+        return std.meta.eql(self.args, other.args) and
+            std.meta.eql(self.ret, other.ret);
+    }
+};
+
+pub const FuncId = EntId(Func, "funcs");
 pub const Func = struct {
     scope: Scope,
     params: []Param,
@@ -488,11 +590,12 @@ pub const Func = struct {
         self.compiled.insert(target);
         types.func_queue.getPtr(target).append(
             types.arena.allocator(),
-            types.store.ptrToId(self),
+            types.funcs.ptrToIndex(self),
         ) catch unreachable;
     }
 };
 
+pub const GlobalId = EntId(Global, "globals");
 pub const Global = struct {
     scope: Scope,
     ty: Id,
@@ -500,7 +603,14 @@ pub const Global = struct {
     data: struct {
         pos: u32,
         len: u32,
+
+        pub fn get(self: @This(), types: *Types) []u8 {
+            return types.ct_backend.mach.out.code.items[self.pos..][0..self.len];
+        }
     },
+
+    pub const hash = generic.hashScope;
+    pub const eql = generic.eqlScope;
 };
 
 pub fn init(
@@ -513,11 +623,16 @@ pub fn init(
     var self = Types{
         .files = files,
         .line_indexes = undefined,
-        .ct_backend = HbvmGen{ .gpa = gpa },
+        .ct_backend = HbvmGen{ .gpa = gpa, .push_uninit_globals = true },
         .loader = loader,
         .backend = backend,
         .arena = arena,
     };
+
+    self.ct_backend.mach.out.code.resize(gpa, stack_size) catch unreachable;
+    self.ct_backend.mach.out.code.items[self.ct_backend.mach.out.code.items.len - 1] = @intFromEnum(isa.Op.tx);
+    self.ct_backend.mach.out.code.items[self.ct_backend.mach.out.code.items.len - 2] = @intFromEnum(isa.Op.eca);
+    self.vm.regs.set(.stack_addr, stack_size - 8);
 
     const line_indexes = self.arena.alloc(hb.LineIndex, self.files.len);
     for (self.files, line_indexes) |f, *li| li.* = f.lines;
@@ -530,11 +645,11 @@ pub fn init(
     backend.out.files = out_files;
 
     for (self.files, 0..) |*f, i| {
-        f.root_sope = .nany(self.store.add(
+        f.root_sope = .nany(self.structs.push(
             &self.arena,
             Struct{
                 .scope = .{
-                    .parent = .void,
+                    .parent = .init(.{ .Tail = .end }),
                     .file = @enumFromInt(i),
                     .name_pos = .file,
                 },
@@ -544,6 +659,27 @@ pub fn init(
     }
 
     return self;
+}
+
+pub fn deinit(self: *Types) void {
+    inline for (std.meta.fields(Types)) |f| {
+        if (f.type == utils.Arena) continue;
+
+        if (std.meta.hasMethod(f.type, "deinit")) {
+            const base = if (@typeInfo(f.type) == .pointer)
+                continue
+            else
+                f.type;
+
+            if (@typeInfo(@TypeOf(base.deinit)).@"fn".params.len == 2) {
+                @field(self, f.name).deinit(self);
+            } else {
+                @field(self, f.name).deinit();
+            }
+        }
+    }
+
+    self.* = undefined;
 }
 
 pub fn report(

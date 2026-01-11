@@ -2,6 +2,7 @@ const std = @import("std");
 pub const utils = @import("utils-lib");
 const Machine = @import("Machine.zig");
 const matcher = @import("graph.IdealGen");
+pub const is_debug = @import("builtin").mode == .Debug;
 
 const print = (std.debug).print;
 
@@ -813,6 +814,7 @@ pub fn Func(comptime Backend: type) type {
         static_anal: static_anal.Mixin(Backend) = .{},
         inliner: inliner.Mixin(Backend) = .{},
         stopped_interning: std.debug.SafetyLock = .{},
+        keep: bool = false,
 
         pub fn optApi(comptime decl_name: []const u8, comptime Ty: type) bool {
             const prelude = @typeName(Backend) ++
@@ -1171,7 +1173,14 @@ pub fn Func(comptime Backend: type) type {
             output_base: [*]Out,
             sloc: Sloc = .none,
 
+            killed_at: if (is_debug) *KillMeta else void = undefined,
+
             edata: void = {},
+
+            pub const KillMeta = struct {
+                displayed: []const u8,
+                trace: std.builtin.StackTrace,
+            };
 
             pub const OutInner = if (@sizeOf(*Node) == 8) packed struct(u64) {
                 node: u48,
@@ -1204,6 +1213,16 @@ pub fn Func(comptime Backend: type) type {
                     try writer.print("{}:{f}", .{ self.pos(), self.get() });
                 }
             };
+
+            pub fn assertAlive(node: *Node) void {
+                if (node.isDead()) {
+                    if (is_debug) {
+                        print("{s}\n", .{node.killed_at.displayed});
+                        std.debug.dumpStackTrace(node.killed_at.trace);
+                    }
+                    unreachable;
+                }
+            }
 
             pub fn loadDatatype(self: *Node) DataType {
                 if (@hasDecl(Backend, "loadDatatype"))
@@ -2051,8 +2070,14 @@ pub fn Func(comptime Backend: type) type {
                 break :b def.inputs()[1].?;
             } else def, dbg, counter);
 
-            self.setInputIgnoreIntern(use, idx, ins);
-            if (ins.kind == .MachSplit) self.setInputIgnoreIntern(ins, 1, def);
+            {
+                const lock = def.lock();
+                defer lock.unlock();
+
+                self.setInputIgnoreIntern(use, idx, ins);
+                if (ins.kind == .MachSplit) self.setInputIgnoreIntern(ins, 1, def);
+            }
+
             const oidx = if (use.kind == .Phi)
                 block.base.outputs().len - 2
             else
@@ -2546,6 +2571,31 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn kill(func: *Self, self: *Node) void {
+            self.assertAlive();
+
+            if (is_debug) {
+                var tmp = utils.Arena.scrath(null);
+                defer tmp.deinit();
+
+                const kill_meta = func.arena.allocator()
+                    .create(Node.KillMeta) catch unreachable;
+
+                kill_meta.displayed = std.fmt.allocPrint(
+                    func.arena.allocator(),
+                    "{f}",
+                    .{self},
+                ) catch unreachable;
+
+                kill_meta.trace.instruction_addresses = tmp.arena.alloc(usize, 20);
+                std.debug.captureStackTrace(@returnAddress(), &kill_meta.trace);
+                kill_meta.trace.instruction_addresses = func.arena.allocator()
+                    .dupe(usize, kill_meta.trace.instruction_addresses) catch
+                    unreachable;
+
+                self.killed_at = kill_meta;
+            }
+
+            if (self.kind == .Syms) return;
             if (self.id == Node.lock_id) return;
 
             if (self.output_len != 0) {
@@ -2560,7 +2610,9 @@ pub fn Func(comptime Backend: type) type {
             func.waste += self.input_len * @sizeOf(?*Node);
             func.waste += self.size();
             func.waste += self.output_cap * @sizeOf(Node.Out);
+            const kill_meta = self.killed_at;
             self.* = undefined;
+            self.killed_at = kill_meta;
             self.kind = .Dead;
         }
 
@@ -2569,10 +2621,18 @@ pub fn Func(comptime Backend: type) type {
             this: *Node,
             target: *Node,
         ) void {
+            if (target.outputs().len == 0) {
+                self.kill(target);
+                return;
+            }
+
             self.ensureOutputCapacity(this, target.outputs().len);
 
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
+
+            const lock = this.lock();
+            defer lock.unlock();
 
             for (tmp.arena.dupe(Node.Out, target.outputs())) |use| {
                 if (use.get().isDead()) continue;
@@ -2586,6 +2646,11 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn subsumeNoIntern(self: *Self, this: *Node, target: *Node) void {
+            if (target.outputs().len == 0) {
+                self.kill(target);
+                return;
+            }
+
             if (this == target) {
                 utils.panic("{f} {f}\n", .{ this, target });
             }
@@ -2618,7 +2683,6 @@ pub fn Func(comptime Backend: type) type {
         ) void {
             if (this.sloc == Sloc.none) this.sloc = target.sloc;
             self.subsumeNoKillIgnoreIntern(this, target);
-            self.kill(target);
         }
 
         pub fn subsume(self: *Self, this: *Node, target: *Node) void {
@@ -2645,7 +2709,7 @@ pub fn Func(comptime Backend: type) type {
             outs[outs.len - 1] = undefined;
             def.output_len -= 1;
 
-            if (def.output_len == 0) {
+            if (def.output_len == 0 and !self.keep) {
                 self.kill(def);
             }
         }
@@ -2743,7 +2807,8 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn addUse(self: *Self, def: *Node, index: usize, use: *Node) void {
-            std.debug.assert(!def.isDead());
+            def.assertAlive();
+            use.assertAlive();
 
             self.ensureOutputCapacity(def, def.output_len + 1);
             def.output_base[def.output_len] = .init(use, index, def);
@@ -2836,7 +2901,7 @@ pub fn Func(comptime Backend: type) type {
                         worklist.add(o.get());
                     }
 
-                    std.debug.assert(!nt.isDead());
+                    nt.assertAlive();
 
                     self.subsume(nt, t);
                     continue;

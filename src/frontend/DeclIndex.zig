@@ -41,7 +41,7 @@ pub const File = struct {
     source: [:0]const u8,
     decls: DeclIndex,
     lines: hb.LineIndex,
-    root_sope: Types.Id = undefined,
+    root_sope: Types.AnyScopeRef = undefined,
 
     pub const Id = enum(u32) {
         root,

@@ -141,8 +141,8 @@ pub fn addFieldLoad(self: *Builder, sloc: graph.Sloc, base: *BuildNode, offset: 
 }
 
 pub fn addStore(self: *Builder, sloc: graph.Sloc, addr: *BuildNode, ty: DataType, value: *BuildNode) void {
-    std.debug.assert(!addr.isDead());
-    std.debug.assert(!value.isDead());
+    addr.assertAlive();
+    value.assertAlive();
 
     if (value.data_type == .bot) return;
     if (value.data_type.size() == 0) utils.panic("{f}", .{value.data_type});
