@@ -127,9 +127,9 @@ pub fn Mixin(comptime Backend: type) type {
             const then = func.addNode(.Then, .none, .top, &.{dead}, .{ .base = .{ .loop = loop.ext.loop } });
             const else_ = func.addNode(.Else, .none, .top, &.{dead}, .{ .base = .{ .loop = 0 } });
 
-            func.setInputIgnoreIntern(&loop.base, 1, else_);
+            func.setInput(&loop.base, 1, .nointern, else_);
 
-            func.addTrapIgnoreIntern(loop.base.sloc, then, graph.infinite_loop_trap);
+            func.addTrap(loop.base.sloc, then, graph.infinite_loop_trap, .nointern);
 
             return end.asCfg().?;
         }
@@ -178,7 +178,7 @@ pub fn Mixin(comptime Backend: type) type {
             add_mach_moves: {
                 for (cfg_rpo) |n| if (n.base.kind == .Loop or n.base.kind == .Region) {
                     for (0..2) |i| {
-                        self.setInputIgnoreIntern(&n.base, i, self.addNode(.Jmp, n.base.sloc, .top, &.{n.base.inputs()[i].?}, .{}));
+                        self.setInput(&n.base, i, .nointern, self.addNode(.Jmp, n.base.sloc, .top, &.{n.base.inputs()[i].?}, .{}));
                     }
 
                     try visited.resize(tmp.arena.allocator(), self.next_id, true);
@@ -312,7 +312,7 @@ pub fn Mixin(comptime Backend: type) type {
 
                 for (nodes, late_scheds) |on, l| if (on) |n| {
                     std.debug.assert(!n.isFloating());
-                    self.setInputIgnoreIntern(n, 0, &l.?.base);
+                    self.setInput(n, 0, .nointern, &l.?.base);
                 };
 
                 break :sched_late;
@@ -643,7 +643,7 @@ pub fn Mixin(comptime Backend: type) type {
 
                 std.debug.assert(best.base.kind != .Start);
 
-                self.setInputIgnoreIntern(node, 0, &best.base);
+                self.setInput(node, 0, .nointern, &best.base);
             }
         }
     };

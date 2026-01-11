@@ -2074,8 +2074,8 @@ pub fn Func(comptime Backend: type) type {
                 const lock = def.lock();
                 defer lock.unlock();
 
-                self.setInputIgnoreIntern(use, idx, ins);
-                if (ins.kind == .MachSplit) self.setInputIgnoreIntern(ins, 1, def);
+                self.setInput(use, idx, .nointern, ins);
+                if (ins.kind == .MachSplit) self.setInput(ins, 1, .nointern, def);
             }
 
             const oidx = if (use.kind == .Phi)
@@ -2437,28 +2437,15 @@ pub fn Func(comptime Backend: type) type {
             return self.addNode(.MemJoin, .none, .top, inps, .{});
         }
 
-        pub fn addTrap(self: *Self, sloc: Sloc, ctrl: *Node, code: u64) void {
-            self.addTrapLow(sloc, ctrl, code, setInputNoIntern);
-        }
-
-        pub fn addTrapIgnoreIntern(
+        pub fn addTrap(
             self: *Self,
             sloc: Sloc,
             ctrl: *Node,
             code: u64,
-        ) void {
-            self.addTrapLow(sloc, ctrl, code, setInputIgnoreIntern);
-        }
-
-        pub fn addTrapLow(
-            self: *Self,
-            sloc: Sloc,
-            ctrl: *Node,
-            code: u64,
-            comptime setter: anytype,
+            comptime mode: ModMode,
         ) void {
             if (self.end.inputs()[2] == null) {
-                setter(self, self.end, 2, self.addNode(
+                _ = self.setInput(self.end, 2, mode, self.addNode(
                     .TrapRegion,
                     sloc,
                     .top,
@@ -2616,36 +2603,12 @@ pub fn Func(comptime Backend: type) type {
             self.kind = .Dead;
         }
 
-        pub fn subsumeNoKillIgnoreIntern(
+        pub fn subsumeNoIntern(
             self: *Self,
             this: *Node,
             target: *Node,
+            comptime mode: ModMode,
         ) void {
-            if (target.outputs().len == 0) {
-                self.kill(target);
-                return;
-            }
-
-            self.ensureOutputCapacity(this, target.outputs().len);
-
-            var tmp = utils.Arena.scrath(null);
-            defer tmp.deinit();
-
-            const lock = this.lock();
-            defer lock.unlock();
-
-            for (tmp.arena.dupe(Node.Out, target.outputs())) |use| {
-                if (use.get().isDead()) continue;
-                if (use.get() == target) {
-                    self.removeUse(target, use.pos(), target);
-                    target.inputs()[use.pos()] = null;
-                } else {
-                    _ = self.setInputIgnoreIntern(use.get(), use.pos(), this);
-                }
-            }
-        }
-
-        pub fn subsumeNoIntern(self: *Self, this: *Node, target: *Node) void {
             if (target.outputs().len == 0) {
                 self.kill(target);
                 return;
@@ -2671,25 +2634,23 @@ pub fn Func(comptime Backend: type) type {
                     self.removeUse(target, use.pos(), target);
                     target.inputs()[use.pos()] = null;
                 } else {
-                    _ = self.setInput(use.get(), use.pos(), this);
+                    _ = self.setInput(use.get(), use.pos(), mode, this);
                 }
             }
         }
 
-        pub fn subsumeIgnoreIntern(
+        pub const ModMode = enum { intern, nointern };
+
+        pub fn subsume(
             self: *Self,
             this: *Node,
             target: *Node,
+            comptime mode: ModMode,
         ) void {
-            if (this.sloc == Sloc.none) this.sloc = target.sloc;
-            self.subsumeNoKillIgnoreIntern(this, target);
-        }
-
-        pub fn subsume(self: *Self, this: *Node, target: *Node) void {
             if (target.isDead()) return;
             if (this.sloc == Sloc.none) this.sloc = target.sloc;
-            self.uninternNode(target);
-            self.subsumeNoIntern(this, target);
+            if (mode == .intern) self.uninternNode(target);
+            self.subsumeNoIntern(this, target, mode);
         }
 
         pub fn removeUse(self: *Self, def: *Node, idx: usize, use: *Node) void {
@@ -2720,47 +2681,50 @@ pub fn Func(comptime Backend: type) type {
             idx: usize,
             def: ?*Node,
         ) void {
-            if (self.setInput(use, idx, def)) |new| {
+            if (self.setInput(use, idx, .intern, def)) |new| {
                 utils.panic("setInputNoIntern: {f}", .{new});
             }
-        }
-
-        pub fn setInputIgnoreIntern(
-            self: *Self,
-            use: *Node,
-            idx: usize,
-            def: *Node,
-        ) void {
-            self.stopped_interning.assertLocked();
-            if (use.inputs()[idx] == def) return;
-            if (use.inputs()[idx]) |n| self.removeUse(n, idx, use);
-            use.inputs()[idx] = def;
-            self.addUse(def, idx, use);
         }
 
         pub fn setInput(
             self: *Self,
             use: *Node,
             idx: usize,
-            def: ?*Node,
-        ) ?*Node {
-            self.stopped_interning.assertUnlocked();
+            comptime mode: ModMode,
+            def: switch (mode) {
+                .intern => ?*Node,
+                .nointern => *Node,
+            },
+        ) switch (mode) {
+            .intern => ?*Node,
+            .nointern => void,
+        } {
+            switch (mode) {
+                .intern => self.stopped_interning.assertUnlocked(),
+                .nointern => self.stopped_interning.assertLocked(),
+            }
 
-            if (use.inputs()[idx] == def) return null;
+            if (use.inputs()[idx] == def) return if (mode == .intern) null;
             if (use.inputs()[idx]) |n| {
                 self.removeUse(n, idx, use);
             }
 
-            self.uninternNode(use);
+            if (mode == .intern) self.uninternNode(use);
             use.inputs()[idx] = def;
-            if (def) |d| {
-                _ = self.addUse(d, idx, use);
+            if (mode == .intern) {
+                if (def) |d| {
+                    _ = self.addUse(d, idx, use);
+                }
+            } else {
+                _ = self.addUse(def, idx, use);
             }
-            if (self.reinternNode(use)) |nuse| {
-                self.subsumeNoIntern(nuse, use);
-                return nuse;
+            if (mode == .intern) {
+                if (self.reinternNode(use)) |nuse| {
+                    self.subsumeNoIntern(nuse, use, mode);
+                    return nuse;
+                }
             }
-            return null;
+            return if (mode == .intern) null;
         }
 
         pub fn addDep(self: *Self, use: *Node, def: *Node) usize {
@@ -2903,7 +2867,7 @@ pub fn Func(comptime Backend: type) type {
 
                     nt.assertAlive();
 
-                    self.subsume(nt, t);
+                    self.subsume(nt, t, .intern);
                     continue;
                 }
             }
@@ -3090,7 +3054,7 @@ pub fn Func(comptime Backend: type) type {
                     const o = ot.get();
                     for (o.outputs()) |oo| work.add(oo.get());
                     work.add(o.inputs()[idx + 1].?);
-                    self.subsume(o.inputs()[(1 - idx) + 1].?, o);
+                    self.subsume(o.inputs()[(1 - idx) + 1].?, o, .intern);
                 };
 
                 return node.inputs()[1 - idx].?;
@@ -3116,7 +3080,7 @@ pub fn Func(comptime Backend: type) type {
                     const o = ot.get();
                     for (o.outputs()) |oo| work.add(oo.get());
                     work.add(o.inputs()[2].?);
-                    self.subsume(o.inputs()[1].?, o);
+                    self.subsume(o.inputs()[1].?, o, .intern);
                 };
 
                 return node.inputs()[0].?;
@@ -3350,7 +3314,7 @@ pub fn Func(comptime Backend: type) type {
                     }
                 }
 
-                self.subsume(src, dst);
+                self.subsume(src, dst, .intern);
 
                 return mem;
             }

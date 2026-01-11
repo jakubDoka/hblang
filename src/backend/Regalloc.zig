@@ -215,11 +215,11 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
 
                     std.debug.assert(use.dataDepOffset() <= us.pos());
 
-                    self.setInputIgnoreIntern(use, us.pos(), ins);
+                    self.setInput(use, us.pos(), .nointern, ins);
                 }
             }
 
-            self.setInputIgnoreIntern(ins, 1, def);
+            self.setInput(ins, 1, .nointern, def);
             var oidx = block.base.posOfOutput(0, def);
             if (def.kind == .Phi) {
                 for (block.base.outputs()[oidx + 1 ..]) |o| {
@@ -886,7 +886,7 @@ pub fn rallocRound(slf: *Regalloc, comptime Backend: type, func: *graph.Func(Bac
             instr.inputs()[0] = null;
             removed += 1;
 
-            func.subsumeIgnoreIntern(instr.dataDeps()[0], instr);
+            func.subsume(instr.dataDeps()[0], instr, .nointern);
         }
     }
 

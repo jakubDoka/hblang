@@ -940,7 +940,7 @@ pub fn partialEval(self: *Codegen, value: *BNode) !*BNode {
                     );
 
                     const res = self.bl.addIntImm(.none, value.data_type, val);
-                    self.bl.func.subsume(res, value);
+                    self.bl.func.subsume(res, value, .intern);
                     return res;
                 },
                 else => return self.reportSloc(

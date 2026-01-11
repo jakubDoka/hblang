@@ -135,7 +135,7 @@ pub fn idealizeMach(self: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.W
         if (inps[1].?.data_type != .i64) {
             const new = func.addUnOp(node.sloc, .uext, .i64, inps[1].?);
             work.add(new);
-            _ = func.setInput(node, 1, new);
+            _ = func.setInput(node, 1, .intern, new);
         }
     }
 
@@ -168,7 +168,7 @@ pub fn idealize(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList
                 if (inp.?.data_type.size() != 8) {
                     const new = func.addUnOp(node.sloc, ext_op, .i64, inp.?);
                     work.add(new);
-                    _ = func.setInput(node, i, new);
+                    _ = func.setInput(node, i, .intern, new);
                 }
             }
         }
@@ -179,7 +179,7 @@ pub fn idealize(_: *HbvmGen, func: *Func, node: *Func.Node, work: *Func.WorkList
         if (op == .not and inps[1].?.data_type != .i64) {
             const new = func.addUnOp(node.sloc, .uext, .i64, inps[1].?);
             work.add(new);
-            _ = func.setInput(node, 1, new);
+            _ = func.setInput(node, 1, .intern, new);
         }
 
         if (op == .uext and inps[1].?.data_type == .i64) {

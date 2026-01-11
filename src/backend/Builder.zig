@@ -527,7 +527,7 @@ pub const Loop = struct {
             for (init_values[start..], update_values[start..]) |ini, update| {
                 if (ini.isLazyPhi(init_values[0])) {
                     if (update.kind == .Scope) {
-                        builder.func.subsume(ini.inputs()[1].?, ini);
+                        builder.func.subsume(ini.inputs()[1].?, ini, .intern);
                     } else {
                         builder.func.setInputNoIntern(ini, 2, update);
                     }
@@ -537,10 +537,14 @@ pub const Loop = struct {
         } else {
             for (init_values[start..]) |ini| {
                 if (ini.isLazyPhi(init_values[0])) {
-                    builder.func.subsume(ini.inputs()[1].?, ini);
+                    builder.func.subsume(ini.inputs()[1].?, ini, .intern);
                 }
             }
-            builder.func.subsume(init_values[0].inputs()[0].?, init_values[0]);
+            builder.func.subsume(
+                init_values[0].inputs()[0].?,
+                init_values[0],
+                .intern,
+            );
         }
 
         if (builder.scope) |scope| killScope(&builder.func, scope);
@@ -700,7 +704,7 @@ pub fn addReturn(self: *Builder, values: []const *BuildNode) void {
 }
 
 pub fn addTrap(self: *Builder, sloc: graph.Sloc, code: u64) void {
-    self.func.addTrap(sloc, self.control(), code);
+    self.func.addTrap(sloc, self.control(), code, .intern);
 
     killScope(&self.func, self.scope.?);
     self.scope = null;

@@ -281,7 +281,7 @@ pub fn Mixin(comptime Backend: type) type {
                                         }
                                     }.inner).?;
                                     const su = Local.resolve(self, locals, idx, lo.data_type);
-                                    self.subsume(su, lo);
+                                    self.subsume(su, lo, .intern);
                                 }
                             }
                         }
@@ -315,12 +315,12 @@ pub fn Mixin(comptime Backend: type) type {
                                 }
 
                                 if (rhs == .Node) {
-                                    if (self.setInput(lhs.Node, 2, rhs.Node)) |nlhs| {
+                                    if (self.setInput(lhs.Node, 2, .intern, rhs.Node)) |nlhs| {
                                         lhs = .{ .Node = nlhs };
                                     }
                                 } else {
                                     const prev = lhs.Node.inputs()[1].?;
-                                    self.subsume(prev, lhs.Node);
+                                    self.subsume(prev, lhs.Node, .intern);
                                     lhs = .{ .Node = prev };
                                 }
 
@@ -357,7 +357,7 @@ pub fn Mixin(comptime Backend: type) type {
             }
 
             for (to_remove.items) |tr| {
-                self.subsume(tr.mem(), tr);
+                self.subsume(tr.mem(), tr, .intern);
             }
 
             if (std.debug.runtime_safety) {

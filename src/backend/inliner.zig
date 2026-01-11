@@ -170,7 +170,7 @@ pub fn Mixin(comptime Backend: type) type {
                         node.anyextra(),
                     );
                     if (slot.found_existing) {
-                        into.subsumeNoIntern(slot.key_ptr.node, node);
+                        into.subsumeNoIntern(slot.key_ptr.node, node, .intern);
                     } else {
                         slot.key_ptr.node = node;
                         for (node.inputs()) |on| if (on) |n| {
@@ -283,7 +283,7 @@ pub fn Mixin(comptime Backend: type) type {
             }
 
             if (entry_syms) |syms| {
-                func.subsume(into_entry_syms, syms);
+                func.subsume(into_entry_syms, syms, .intern);
             }
 
             // NOTE: not scheduled yet so args are on the Start
@@ -292,7 +292,7 @@ pub fn Mixin(comptime Backend: type) type {
                 for (start.outputs()) |n| {
                     const o = n.get();
                     if (o.kind == .Arg and o.extra(.Arg).index == j) {
-                        func.subsume(dep, o);
+                        func.subsume(dep, o, .intern);
                         break;
                     }
                     if (o.kind == .StructArg and o.extra(.StructArg).base.index == j) {
@@ -310,8 +310,8 @@ pub fn Mixin(comptime Backend: type) type {
                             .{ .size = sarg.spec.size, .debug_ty = sarg.debug_ty },
                         );
                         const copy = func.addNode(.Local, o.sloc, .i64, &.{ null, alloc }, .{});
-                        func.subsume(copy, dep);
-                        func.subsume(copy, o);
+                        func.subsume(copy, dep, .intern);
+                        func.subsume(copy, o, .intern);
                         break;
                     }
                 }
@@ -322,22 +322,22 @@ pub fn Mixin(comptime Backend: type) type {
                     const ret = for (call_end.outputs()) |o| {
                         if (o.get().kind == .Ret and o.get().extra(.Ret).index == j) break o.get();
                     } else continue;
-                    func.subsume(dep, ret);
+                    func.subsume(dep, ret, .intern);
                 };
 
             if (entry_mem == exit_mem) {
                 if (entry_mem != null) {
                     // NOTE: this is still needed since there can be loads
-                    func.subsume(dest_mem, entry_mem.?);
+                    func.subsume(dest_mem, entry_mem.?, .intern);
                 }
                 if (call_end_entry_mem != null) {
-                    func.subsume(dest_mem, call_end_entry_mem.?);
+                    func.subsume(dest_mem, call_end_entry_mem.?, .intern);
                 }
                 exit_mem = dest_mem;
             } else {
-                func.subsume(dest_mem, entry_mem.?);
+                func.subsume(dest_mem, entry_mem.?, .intern);
                 if (call_end_entry_mem != null) {
-                    func.subsume(exit_mem orelse dest_mem, call_end_entry_mem.?);
+                    func.subsume(exit_mem orelse dest_mem, call_end_entry_mem.?, .intern);
                 }
             }
 
@@ -347,7 +347,7 @@ pub fn Mixin(comptime Backend: type) type {
                 }
             }
 
-            func.subsume(before_dest, entry);
+            func.subsume(before_dest, entry, .intern);
 
             if (end.inputs()[2]) |trap_region| {
                 if (func.end.inputs()[2] == null) {
@@ -361,9 +361,9 @@ pub fn Mixin(comptime Backend: type) type {
             }
 
             if (after_entry.kind == .Return) {
-                func.subsume(before_dest, call_end);
+                func.subsume(before_dest, call_end, .intern);
             } else if (before_return != null) {
-                func.subsume(before_return.?, call_end);
+                func.subsume(before_return.?, call_end, .intern);
             } else {
                 func_work.add(call_end);
             }

@@ -166,7 +166,7 @@ pub fn idealize(self: *WasmGen, func: *Func, node: *Func.Node, work: *Func.WorkL
                 if (inp.?.data_type.size() < 4) {
                     const new = func.addUnOp(node.sloc, ext_op, .i32, inp.?);
                     work.add(new);
-                    _ = func.setInput(node, i, new);
+                    _ = func.setInput(node, i, .intern, new);
                 }
             }
         }
