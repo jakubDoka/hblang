@@ -251,8 +251,8 @@ pub fn pin(self: *Builder, to_pin: *Func.Node) SpecificNode(.Pin) {
 }
 
 pub fn unpinKeep(self: *Builder, to_unpin: SpecificNode(.Pin)) *Func.Node {
-    self.func.keep = true;
-    defer self.func.keep = false;
+    const lock = to_unpin.inputs()[0].?.lock();
+    defer lock.unlock();
     return self.unpin(to_unpin);
 }
 

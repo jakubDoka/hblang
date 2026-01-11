@@ -9,6 +9,7 @@ const Loader = DeclIndex.Loader;
 const Codegen = hb.frontend.Codegen;
 const Abi = hb.frontend.Abi;
 const Machine = hb.backend.Machine;
+const HbvmGen = hb.hbvm.HbvmGen;
 
 arena: utils.Arena,
 store: utils.EntStore(Data) = .{},
@@ -16,11 +17,81 @@ files: []File,
 line_indexes: []const hb.LineIndex,
 loader: *Loader,
 backend: *Machine,
+ct_backend: HbvmGen,
+vm: hb.hbvm.Vm = .{},
 abi: Abi = .systemv,
 func_queue: std.EnumArray(Target, std.ArrayList(utils.EntId(Func))) =
     .initFill(.empty),
+errored: bool = false,
+interner: std.HashMapUnmanaged(
+    Id,
+    void,
+    InternerCtx,
+    std.hash_map.default_max_load_percentage,
+) = .{},
 
 const Types = @This();
+
+pub const InternerCtx = struct {
+    types: *Types,
+
+    pub fn eql(_: InternerCtx, a: Id, b: Id) bool {
+        return a == b;
+    }
+
+    pub fn hash(self: InternerCtx, key: Id) u64 {
+        return (InternerInsertCtx{ .types = self.types }).hash(switch (key.data()) {
+            .Builtin => unreachable,
+            inline .Struct,
+            => |s, t| .{
+                .scope = .{ t, &s.get(self.types).scope },
+            },
+            .Func => |f| .{ .func = f.get(self.types) },
+        });
+    }
+};
+
+pub const InternerInsertCtx = struct {
+    types: *Types,
+
+    pub const Entry = union(enum) {
+        scope: struct { std.meta.Tag(Data), *Scope },
+        func: *Func,
+    };
+
+    pub fn eql(self: @This(), a: Entry, b: Id) bool {
+        switch (a) {
+            .scope => |s| {
+                if (b.data() != s[0]) return false;
+                return std.meta.eql(s[1].*, b.data().downcast(Data.Scope).?.scope(self.types).*);
+            },
+            .func => |f| {
+                if (b.data() != .Func) return false;
+                const ofunc = b.data().Func.get(self.types);
+                if (!std.meta.eql(f.scope, ofunc.scope)) return false;
+                return std.mem.eql(u8, @ptrCast(f.params), @ptrCast(ofunc.params));
+            },
+        }
+    }
+
+    pub fn hash(_: @This(), key: Entry) u64 {
+        var hasher = std.hash.Wyhash.init(0);
+
+        switch (key) {
+            .scope => |s| {
+                hasher.update(std.mem.asBytes(&s[0]));
+                hasher.update(std.mem.asBytes(s[1]));
+            },
+            .func => |f| {
+                hasher.update(std.mem.asBytes(&std.meta.Tag(Data).Func));
+                hasher.update(std.mem.asBytes(&f.scope));
+                hasher.update(@ptrCast(f.params));
+            },
+        }
+
+        return hasher.final();
+    }
+};
 
 pub const Target = enum {
     runtime,
@@ -58,6 +129,10 @@ pub const Data = union(enum(u8)) {
         pub const upcast = Data.upcast;
         pub const downcast = Data.downcast;
         pub const scope = Data.scope;
+
+        pub fn parent(self: Data.Scope, types: *Types) ?Data.Scope {
+            return self.scope(types).parent.data().downcast(Data.Scope);
+        }
     };
 
     pub fn scope(self: anytype, types: *Types) *Types.Scope {
@@ -70,7 +145,8 @@ pub const Data = union(enum(u8)) {
         return switch (self) {
             .Builtin => |b| b.size(types),
             .Struct => |s| s.get(types).size(types),
-            .Func => unreachable,
+            .Func,
+            => unreachable,
         };
     }
 
@@ -78,20 +154,14 @@ pub const Data = union(enum(u8)) {
         return switch (self) {
             .Builtin => |b| b.alignment(types),
             .Struct => |s| s.get(types).alignment(types),
-            .Func => unreachable,
-        };
-    }
-
-    pub fn declIndex(self: Data, types: *Types) ?*DeclIndex {
-        return switch (self) {
-            .Builtin, .Func => null,
-            .Struct => |s| s.get(types).decls,
+            .Func,
+            => unreachable,
         };
     }
 
     pub fn upcast(self: anytype) Data {
-        comptime std.debug.assert(@sizeOf(self) == @sizeOf(Data));
-        return @as(*const Data, @ptrCast(&self)).*;
+        comptime std.debug.assert(@sizeOf(@TypeOf(self.*)) == @sizeOf(Data));
+        return @as(*const Data, @ptrCast(self)).*;
     }
 
     pub fn downcast(self: anytype, comptime To: type) ?To {
@@ -350,9 +420,13 @@ pub const Builtin = enum(u32) {
 pub const Scope = extern struct {
     parent: Id,
     name_pos: NamePos,
-    param_count: u32 = 0,
     file: File.Id,
-    captures: [*]Capture = undefined,
+
+    comptime {
+        if (!std.meta.hasUniqueRepresentation(Scope)) {
+            @compileError("Scope must have unique representation");
+        }
+    }
 
     pub const NamePos = enum(u32) {
         file = std.math.maxInt(u32) - 1,
@@ -368,13 +442,14 @@ pub const Scope = extern struct {
         }
     };
 
-    pub const Capture = extern struct {};
+    pub const Param = extern struct {};
 
     pub fn name(self: Scope, types: *Types) []const u8 {
         return self.name_pos.get(self.file, types);
     }
 };
 
+pub const StructId = utils.EntId(Struct);
 pub const Struct = struct {
     scope: Scope,
     decls: *DeclIndex,
@@ -392,13 +467,21 @@ pub const Struct = struct {
     }
 };
 
+pub const FuncId = utils.EntId(Func);
 pub const Func = struct {
     scope: Scope,
+    params: []Param,
     args: []Id,
     ret: Id,
     // NOTE: start at the first argument
     pos: u32,
     compiled: std.EnumSet(Target) = .initEmpty(),
+
+    pub const Param = struct {
+        name: u32,
+        ty: Id,
+        data: u64,
+    };
 
     pub fn queue(self: *Func, target: Target, types: *Types) void {
         if (self.compiled.contains(target)) return;
@@ -410,10 +493,27 @@ pub const Func = struct {
     }
 };
 
-pub fn init(files: []File, loader: *Loader, backend: *Machine, arena: utils.Arena) Types {
+pub const Global = struct {
+    scope: Scope,
+    ty: Id,
+    // NOTE: points to the vm memory
+    data: struct {
+        pos: u32,
+        len: u32,
+    },
+};
+
+pub fn init(
+    files: []File,
+    loader: *Loader,
+    backend: *Machine,
+    arena: utils.Arena,
+    gpa: std.mem.Allocator,
+) Types {
     var self = Types{
         .files = files,
         .line_indexes = undefined,
+        .ct_backend = HbvmGen{ .gpa = gpa },
         .loader = loader,
         .backend = backend,
         .arena = arena,
@@ -455,4 +555,8 @@ pub fn report(
 ) void {
     const fl = file.get(self);
     Codegen.reportGeneric(fl.path, fl.source, self, pos, fmt, args);
+}
+
+pub fn allocator(self: *Types) std.mem.Allocator {
+    return self.ct_backend.gpa;
 }

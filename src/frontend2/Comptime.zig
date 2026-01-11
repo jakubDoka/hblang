@@ -681,7 +681,7 @@ pub fn doInterrupt(self: *Comptime, vm_ctx: *Vm.SafeContext) void {
 
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
-            const captures = tmp.arena.alloc(Types.Scope.Capture, struct_ast.captures.len());
+            const captures = tmp.arena.alloc(Types.Scope.Param, struct_ast.captures.len());
 
             const prefix = 5;
             for (captures, ast.exprs.view(struct_ast.captures), 0..) |*slot, cp, i| {

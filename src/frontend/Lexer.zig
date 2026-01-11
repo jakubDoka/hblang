@@ -709,6 +709,7 @@ pub fn eatUntilClosingDelimeter(self: *@This()) void {
     while (true) {
         const tok = self.next();
         switch (tok.kind) {
+            .Eof => break,
             .@".{", .@".(", .@".[", .@"{", .@"(", .@"[" => {
                 depth += 1;
             },
@@ -741,6 +742,7 @@ pub fn list(self: *Lexer, comptime sep: Lexeme, comptime end: Lexeme) *struct {
                 slf.lexer.cursor = tok.end;
                 return false;
             },
+            .Eof => return false,
             else => return true,
         }
     }
@@ -777,4 +779,13 @@ pub fn list(self: *Lexer, comptime sep: Lexeme, comptime end: Lexeme) *struct {
     }
 } {
     return @ptrCast(self);
+}
+
+pub fn eatMatch(self: *Lexer, kind: Lexeme) bool {
+    const tok = self.next();
+    if (tok.kind != kind) {
+        self.cursor = tok.pos;
+        return true;
+    }
+    return false;
 }

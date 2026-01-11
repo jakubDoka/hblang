@@ -170,8 +170,7 @@ pub fn Mixin(comptime Backend: type) type {
                         node.anyextra(),
                     );
                     if (slot.found_existing) {
-                        into.subsumeNoKill(slot.key_ptr.node, node);
-                        into.kill(node);
+                        into.subsumeNoIntern(slot.key_ptr.node, node);
                     } else {
                         slot.key_ptr.node = node;
                         for (node.inputs()) |on| if (on) |n| {

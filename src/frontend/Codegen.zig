@@ -9,13 +9,14 @@ const Types = hb.frontend.Types;
 const File = hb.frontend.DeclIndex.File;
 const Loader = hb.frontend.DeclIndex.Loader;
 const Abi = hb.frontend.Abi;
+const Machine = hb.backend.Machine;
 
 const print = (std.debug).print;
 const Codegen = @This();
 
 types: *Types,
 file: File.Id,
-func: utils.EntId(Types.Func),
+func: Types.FuncId,
 name: Types.Scope.NamePos = .empty,
 vars: std.MultiArrayList(VEntry) = .empty,
 var_pins: BBuilder.Pins,
@@ -39,8 +40,8 @@ pub const VEntry = struct {
 pub const Variable = struct {
     ty: Types.Id,
     meta: packed struct {
-        kind: enum(u1) { value, ptr },
-        pos: u31,
+        kind: enum(u2) { value, ptr, empty },
+        pos: u30,
     },
     value: u32 = std.math.maxInt(u32),
 };
@@ -54,23 +55,31 @@ pub const Value = struct {
     },
 
     pub const voidv = unit(.void);
+    pub const never = unit(.never);
 
     pub fn isPinned(self: Value, codegen: *Codegen) bool {
         return switch (self.node()) {
-            .variable => false,
+            .variable, .empty => false,
             .value => |v| codegen.bl.isPinned(v),
             .ptr => |p| codegen.bl.isPinned(p),
         };
     }
 
-    pub fn load(self: Value, pos: u32, codegen: *Codegen) *BNode {
-        _ = pos; // autofix
+    pub fn load(self: Value, pos: u32, codegen: *Codegen) !*BNode {
         return switch (self.node()) {
+            .empty => return error.Report,
             .variable => |idx| vr: {
                 const slot: *Variable = &codegen.vars.items(.variable)[idx];
                 // TODO: this can fail, but do we error?
-                std.debug.assert(slot.value != std.math.maxInt(u32));
+                if (slot.value == std.math.maxInt(u32)) {
+                    return codegen.report(
+                        pos,
+                        "using of uninitialized variable",
+                        .{},
+                    );
+                }
                 break :vr switch (slot.meta.kind) {
+                    .empty => return error.Report,
                     .value => codegen.bl.getScopeValue(slot.value),
                     .ptr => unreachable, // TODO
                 };
@@ -82,7 +91,7 @@ pub const Value = struct {
 
     pub fn pin(self: Value, codegen: *Codegen) ?*BNode {
         return switch (self.node()) {
-            .variable => null,
+            .variable, .empty => null,
             .value => |v| codegen.bl.pin(v),
             .ptr => |p| codegen.bl.pin(p),
         };
@@ -91,7 +100,7 @@ pub const Value = struct {
     pub fn unpin(self: *Value, codegen: *Codegen, pn: ?*BNode) void {
         const tmp = self.*;
         self.* = switch (self.node()) {
-            .variable => return std.debug.assert(pn == null),
+            .variable, .empty => return std.debug.assert(pn == null),
             .value => .value(tmp.ty, codegen.bl.unpin(pn.?)),
             .ptr => .ptr(tmp.ty, codegen.bl.unpin(pn.?)),
         };
@@ -100,7 +109,7 @@ pub const Value = struct {
     pub fn unpinKeep(self: *Value, codegen: *Codegen, pn: ?*BNode) void {
         const tmp = self.*;
         self.* = switch (self.node()) {
-            .variable => return std.debug.assert(pn == null),
+            .variable, .empty => return std.debug.assert(pn == null),
             .value => .value(tmp.ty, codegen.bl.unpinKeep(pn.?)),
             .ptr => .ptr(tmp.ty, codegen.bl.unpinKeep(pn.?)),
         };
@@ -109,7 +118,7 @@ pub const Value = struct {
     pub fn sync(self: *Value, pn: ?*BNode) void {
         const tmp = self.*;
         self.* = switch (self.node()) {
-            .variable => return std.debug.assert(pn == null),
+            .variable, .empty => return std.debug.assert(pn == null),
             .value => .value(tmp.ty, pn.?.inputs()[0].?),
             .ptr => .ptr(tmp.ty, pn.?.inputs()[0].?),
         };
@@ -117,6 +126,7 @@ pub const Value = struct {
 
     pub fn node(self: Value) Node {
         return switch (self.tag) {
+            .empty => .empty,
             .variable => .{ .variable = self.value_.idx },
             .value => .{ .value = self.value_.node },
             .ptr => .{ .ptr = self.value_.node },
@@ -136,11 +146,12 @@ pub const Value = struct {
     }
 
     pub fn unit(ty: Types.Id) Value {
-        return .{ .ty = ty, .tag = .value, .value_ = undefined };
+        return .{ .ty = ty, .tag = .empty, .value_ = undefined };
     }
 };
 
 pub const Node = union(enum) {
+    empty,
     variable: usize,
     value: *BNode,
     ptr: *BNode,
@@ -148,7 +159,12 @@ pub const Node = union(enum) {
 
 pub const Error = error{ Report, Unreachable };
 
-pub fn init(slot: *Codegen, types: *Types, func: utils.EntId(Types.Func), gpa: std.mem.Allocator) void {
+pub fn init(
+    slot: *Codegen,
+    types: *Types,
+    func: Types.FuncId,
+    gpa: std.mem.Allocator,
+) void {
     slot.bl = .init(gpa);
     slot.* = .{
         .bl = slot.bl,
@@ -173,11 +189,17 @@ pub fn lookupIdent(self: *Codegen, scope: Types.Data.Scope, name: []const u8) ?V
     const scope_meta = scope.scope(self.types);
     const file = scope_meta.file.get(self.types);
 
-    if (scope.downcast(Types.Data.UnorderedScope)) |us| {
-        if (us.decls(self.types).lookup(file.source, name)) |vl| {
-            _ = vl; // autofix
-            unreachable; // TODO
+    var scope_cursor = scope;
+    while (true) {
+        if (scope_cursor.downcast(Types.Data.UnorderedScope)) |us| {
+            if (us.decls(self.types).lookup(file.source, name)) |vl| {
+                std.debug.assert(vl.offset == vl.root);
+
+                unreachable;
+            }
         }
+
+        scope_cursor = scope_cursor.parent(self.types) orelse break;
     }
 
     var cursor: usize = 0;
@@ -301,6 +323,27 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
             .{ .Func = self.func },
             tok.view(lex.source),
         ) orelse .variable(.never, self.defineVariable(tok)),
+        .@"~", .@"-" => neg: {
+            var oper = try self.exprPrec(.{ .ty = ctx.ty }, lex, 1);
+
+            break :neg .value(oper.ty, self.bl.addUnOp(
+                self.sloc(tok.pos),
+                if (tok.kind == .@"~") .bnot else .ineg,
+                Abi.categorizeBuiltinUnwrapped(oper.ty.data().Builtin),
+                oper.load(tok.end, self) catch return .never,
+            ));
+        },
+        .@"!" => not: {
+            var oper = try self.exprPrec(.{ .ty = .bool }, lex, 1);
+            try self.typeCheck(tok.pos, &oper, .bool);
+
+            break :not .value(.bool, self.bl.addUnOp(
+                self.sloc(tok.pos),
+                .not,
+                .i8,
+                oper.load(tok.end, self) catch return .never,
+            ));
+        },
         .@"{" => {
             var iter = lex.list(.@";", .@"}");
             var reached_end = false;
@@ -322,6 +365,34 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
 
             return .voidv;
         },
+        .@"if" => {
+            var cond = try self.expr(.{ .ty = .bool }, lex);
+            self.typeCheck(tok.pos, &cond, .bool) catch {};
+
+            var if_bl = self.bl.addIfAndBeginThen(
+                self.sloc(tok.pos),
+                cond.load(tok.end, self) catch
+                    self.bl.addUninit(self.sloc(tok.end), .i8),
+            );
+
+            var unreachable_count: usize = 0;
+
+            _ = self.expr(.{ .ty = .void }, lex) catch |err| {
+                unreachable_count += @intFromBool(err == error.Unreachable);
+            };
+
+            const tk = if_bl.beginElse(&self.bl);
+
+            _ = self.expr(.{ .ty = .void }, lex) catch |err| {
+                unreachable_count += @intFromBool(err == error.Unreachable);
+            };
+
+            if_bl.end(&self.bl, tk);
+
+            if (unreachable_count == 2) return error.Unreachable;
+
+            return .voidv;
+        },
         .@"return" => {
             var ret: Value = if (lex.peekNext().kind.canStartExpression())
                 try self.expr(.{ .ty = self.ret_ty, .loc = self.ret_ref }, lex)
@@ -335,7 +406,7 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
             if (self.bl.func.signature.returns()) |returns| {
                 var buf: [Abi.max_elems]*BNode = undefined;
                 if (returns.len == 1) {
-                    buf[0] = ret.load(tok.pos, self);
+                    buf[0] = try ret.load(tok.pos, self);
                 } else {
                     if (returns.len == 2) unreachable; // TODO
                 }
@@ -348,6 +419,8 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
 
             return error.Unreachable;
         },
+        .true => .value(.bool, self.bl.addIntImm(self.sloc(tok.pos), .i8, 1)),
+        .false => .value(.bool, self.bl.addIntImm(self.sloc(tok.pos), .i8, 0)),
         .DecInteger, .BinInteger, .OctInteger, .HexInteger => int: {
             const res = std.fmt.parseInt(u64, tok.view(lex.source), 0);
             const val = res catch |err| switch (err) {
@@ -371,9 +444,12 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
                 error.InvalidCharacter => unreachable,
             };
 
-            break :float .value(.f64, self.bl.addIntImm(
+            var ty = ctx.ty orelse .f32;
+            if (!ty.isBuiltin(.isFloat)) ty = .f32;
+
+            break :float .value(ty, self.bl.addIntImm(
                 self.sloc(tok.pos),
-                .f64,
+                Abi.categorizeBuiltinUnwrapped(ty.data().Builtin),
                 @bitCast(val),
             ));
         },
@@ -384,7 +460,7 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
             };
             break :par inner;
         },
-        .@"@float_to_int" => {
+        .@"@float_to_int" => b: {
             const oper = (try self.parseDirectiveArgs(lex, "<float>"))[0];
 
             const ret: Types.Id = .int;
@@ -393,11 +469,11 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
                 return self.report(oper.pos, "expected float," ++
                     " {} is not", .{oper.value.ty});
 
-            return .value(ret, self.bl.addUnOp(
+            break :b .value(ret, self.bl.addUnOp(
                 self.sloc(tok.pos),
                 .fti,
                 .i64,
-                oper.load(self),
+                oper.load(self) catch break :b .never,
             ));
         },
         else => return self.report(tok.pos, "unexpected token", .{}),
@@ -411,10 +487,19 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
         lex.cursor = top.end;
 
         switch (top.kind) {
-            .@":" => {
+            .@"(" => {
+                const func = try self.peval(tok.pos, res, Types.FuncId);
+                _ = func; // autofix
+
+                const iter = lex.list(.@",", .@")");
+                while (iter.next()) {}
+
+                unreachable;
+            },
+            .@":", .@":=" => {
                 const index = switch (res.node()) {
                     .variable => |i| i,
-                    .value, .ptr => return self.report(top.pos, "" ++
+                    .value, .ptr, .empty => return self.report(top.pos, "" ++
                         "can't use this as an identifier", .{}),
                 };
 
@@ -427,20 +512,24 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
                     // NOTE: we dont throw, just shadow it
                 }
 
-                slot.ty = self.typ(lex) catch .never;
+                var ty: ?Types.Id = null;
+                var eq = top;
 
-                const eq = lex.expect(.@"=") catch {
-                    return self.report(lex.cursor, "expected '='", .{});
-                };
+                if (top.kind == .@":") {
+                    ty = self.typ(lex) catch .never;
 
-                var value = try self.exprPrec(
-                    .{ .ty = slot.ty },
-                    lex,
-                    Lexer.Lexeme.@"=".precedence(false),
-                );
-                try self.typeCheck(eq.pos, &value, slot.ty);
+                    eq = lex.expect(.@"=") catch {
+                        return self.report(lex.cursor, "expected '='", .{});
+                    };
+                }
 
-                self.declareVariable(index, value);
+                var value = try self.expr(.{ .ty = ty }, lex);
+                if (ty) |t| try self.typeCheck(eq.pos, &value, t);
+
+                // could have been an error
+                if (slot.value == std.math.maxInt(u32)) {
+                    self.declareVariable(index, value);
+                }
             },
             else => {
                 var pin = res.pin(self);
@@ -456,7 +545,7 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
                 oper_ty = self.binOpUpcast(oper_ty, rhs.ty) catch {
                     return self.report(
                         top.pos,
-                        "incompatible operang arguments, {} {} {}",
+                        "incompatible operands, {} {} {}",
                         .{ oper_ty, top.view(lex.source), rhs.ty },
                     );
                 };
@@ -471,10 +560,12 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
 
                 try self.typeCheck(top.pos, &rhs, oper_ty);
 
+                if (oper_ty == .never) return .never;
+
                 var result: Types.Id =
                     if (top.kind.isComparison()) .bool else oper_ty;
 
-                const op = try self.lexemeToBinOp(top.pos, top.kind, res.ty);
+                const op = try self.lexemeToBinOp(top.pos, top.kind, oper_ty);
 
                 res.unpinKeep(self, pin);
 
@@ -482,8 +573,8 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
                     self.sloc(top.pos),
                     op,
                     Abi.categorizeBuiltinUnwrapped(result.data().Builtin),
-                    res.load(top.pos, self),
-                    rhs.load(top.pos, self),
+                    res.load(top.pos, self) catch continue,
+                    rhs.load(top.pos, self) catch continue,
                 ));
 
                 res = bin;
@@ -494,11 +585,42 @@ pub fn exprPrec(self: *Codegen, ctx: Ctx, lex: *Lexer, prevPrec: u8) Error!Value
     return res;
 }
 
+pub fn peval(self: *Codegen, pos: u32, value: Value, comptime T: type) !T {
+    const res = try self.partialEval(try value.load(pos, self));
+
+    switch (T) {
+        Types.FuncId => {
+            if (res.kind != .CInt) {
+                return self.report(pos, "comptime type mismatch," ++
+                    " expected constant but got {}", .{res});
+            }
+
+            return @enumFromInt(res.extra(.CInt).value);
+        },
+        else => @compileError("TODO: " ++ @typeName(T)),
+    }
+}
+
+pub fn partialEval(self: *Codegen, value: *BNode) !*BNode {
+    switch (value.extra2()) {
+        .CInt => return value,
+        else => return self.reportSloc(value.sloc, "TODO: handle this: {}", .{value}),
+    }
+}
+
+pub fn reportSloc(self: *Codegen, slc: graph.Sloc, fmt: []const u8, args: anytype) error{Report} {
+    @branchHint(.cold);
+
+    self.types.report(@enumFromInt(slc.namespace), slc.index, fmt, args);
+    self.types.errored = true;
+    return error.Report;
+}
+
 pub const ValueAndPos = struct {
     value: Value,
     pos: u32,
 
-    pub fn load(self: ValueAndPos, cg: *Codegen) *BNode {
+    pub fn load(self: ValueAndPos, cg: *Codegen) !*BNode {
         return self.value.load(self.pos, cg);
     }
 };
@@ -610,25 +732,25 @@ pub fn typeCheck(
     if (expected == got.ty) return;
 
     if (got.ty.canUpcast(expected, self.types)) {
+        if (expected == .never or got.ty == .never) {
+            return;
+        }
+
         const sloca = self.sloc(pos);
         const res_dt = Abi.categorizeBuiltinUnwrapped(expected.data().Builtin);
 
         if (got.ty.isBuiltin(.isSigned) and
             got.ty.size(self.types) < expected.size(self.types))
         {
-            const tmp = got.load(pos, self);
+            const tmp = got.load(pos, self) catch return;
             got.* = .value(expected, self.bl.addUnOp(sloca, .sext, res_dt, tmp));
         }
 
         if ((got.ty.isBuiltin(.isUnsigned) or got.ty == .bool) and
             got.ty.size(self.types) < expected.size(self.types))
         {
-            const tmp = got.load(pos, self);
+            const tmp = got.load(pos, self) catch return;
             got.* = .value(expected, self.bl.addUnOp(sloca, .uext, res_dt, tmp));
-        }
-
-        if (expected == .never or got.ty == .never) {
-            return;
         }
 
         if (expected != got.ty) {
@@ -648,7 +770,7 @@ pub fn defineVariable(self: *Codegen, name: Lexer.Token) usize {
         .variable = .{
             .ty = .never,
             .meta = .{
-                .kind = undefined,
+                .kind = .empty,
                 .pos = @intCast(name.pos),
             },
         },
@@ -663,18 +785,28 @@ pub fn pushVariable(self: *Codegen, name: Lexer.Token, value: Value) void {
 
 pub fn declareVariable(self: *Codegen, index: usize, value: Value) void {
     // NOTE: this enforces the order of declarations
-    std.debug.assert(index == 0 or
-        self.vars.items(.variable)[index - 1].value != std.math.maxInt(u32));
     const slot: *Variable = &self.vars.items(.variable)[index];
 
     std.debug.assert(slot.value == std.math.maxInt(u32));
 
+    slot.ty = value.ty;
     slot.meta.kind = switch (value.tag) {
+        .empty => .empty,
         .variable, .value => .value,
         .ptr => .ptr,
     };
     slot.value = switch (value.node()) {
-        .variable => unreachable, // TODO
+        .empty => undefined,
+        .variable => |idx| blk: {
+            const other = &self.vars.items(.variable)[idx];
+            break :blk switch (other.meta.kind) {
+                .empty => undefined,
+                .value => self.bl.pushScopeValue(
+                    self.bl.getScopeValue(other.value),
+                ),
+                .ptr => unreachable, // TODO
+            };
+        }, // TODO
         .value => |v| self.bl.pushScopeValue(v),
         .ptr => |t| self.var_pins.push(&self.bl, t),
     };
@@ -687,7 +819,9 @@ pub fn popScope(self: *Codegen, scope_marker: usize) void {
     const poped_vars = self.vars.items(.variable)[scope_marker..];
     var iter = std.mem.reverseIterator(poped_vars);
     while (@as(?Variable, iter.next())) |vr| {
+        if (vr.value == std.math.maxInt(u32)) continue;
         switch (vr.meta.kind) {
+            .empty => {},
             .value => truncate_vals_by += 1,
             .ptr => truncate_slots_by += 1,
         }
@@ -805,6 +939,7 @@ pub fn collectExports(types: *Types) !void {
             .args = types.arena.dupe(Types.Id, args.items),
             .ret = ret,
             .pos = start.end,
+            .params = &.{},
         },
     );
 
@@ -820,7 +955,10 @@ pub fn typ(self: *Codegen, lex: *Lexer) error{Report}!Types.Id {
 }
 
 pub fn report(self: *Codegen, pos: u32, msg: []const u8, args: anytype) error{Report} {
+    @branchHint(.cold);
+
     self.types.report(self.file, pos, msg, args);
+    self.types.errored = true;
     return error.Report;
 }
 
@@ -1066,11 +1204,20 @@ pub fn runTest(name: []const u8, code: []const u8) !void {
         .toMachine(&scratch, gpa);
     defer backend.deinit();
 
-    var types = Types.init(asts, &kl.loader, backend, scratch);
+    var types = Types.init(asts, &kl.loader, backend, scratch, gpa);
 
     try collectExports(&types);
 
     emitReachable(&types, gpa);
+
+    const exp = Expectations.init(asts[0].source);
+
+    if (exp.should_error) {
+        try std.testing.expect(types.errored);
+        return;
+    }
+
+    try std.testing.expect(!types.errored);
 
     var exe = backend.finalizeBytes(gpa, .{
         .optimizations = .{ .mode = .debug },
@@ -1079,11 +1226,86 @@ pub fn runTest(name: []const u8, code: []const u8) !void {
     });
     defer exe.deinit(gpa);
 
-    _ = try backend.run(.{
+    const res = backend.run(.{
         .name = "foobar",
         .code = exe.items,
     });
+
+    errdefer {
+        backend.disasm(.{
+            .name = "foobar",
+            .bin = exe.items,
+            .out = &writer.interface,
+        });
+    }
+
+    try exp.assert(res);
 }
+
+pub const Expectations = struct {
+    return_value: u64 = 0,
+    should_error: bool = false,
+    times_out: bool = false,
+    unreaches: bool = false,
+
+    pub fn init(source: [:0]const u8) Expectations {
+        errdefer unreachable;
+
+        var slf: Expectations = .{};
+
+        var lex = Lexer.init(source, 0);
+
+        var tok = lex.next();
+
+        while (tok.kind == .Comment) : (tok = lex.next()) {}
+
+        if (!std.mem.eql(u8, tok.view(source), "expectations")) {
+            return slf;
+        }
+
+        _ = lex.slit(.@":=");
+        _ = lex.slit(.@".{");
+
+        var iter = lex.list(.@",", .@"}");
+        while (iter.next()) {
+            const fname = lex.slit(.Ident).view(source);
+            _ = lex.slit(.@":");
+            const value = lex.next().view(source);
+
+            inline for (std.meta.fields(Expectations)) |f| {
+                if (std.mem.eql(u8, fname, f.name)) {
+                    @field(slf, f.name) = switch (f.type) {
+                        u64 => @bitCast(try std.fmt.parseInt(i64, value, 10)),
+                        bool => std.mem.eql(u8, value, "true"),
+                        else => comptime unreachable,
+                    };
+                }
+            }
+        }
+
+        return slf;
+    }
+
+    pub fn assert(
+        expectations: Expectations,
+        res: Machine.RunError!usize,
+    ) (error{ TestUnexpectedResult, TestExpectedEqual } ||
+        Machine.RunError)!void {
+        const ret = res catch |err| switch (err) {
+            error.Timeout => {
+                try std.testing.expect(expectations.times_out);
+                return;
+            },
+            error.Unreachable => {
+                try std.testing.expect(expectations.unreaches);
+                return;
+            },
+            else => |e| return e,
+        };
+
+        try std.testing.expectEqual(expectations.return_value, ret);
+    }
+};
 
 const FileRecord = struct {
     path: []const u8,

@@ -104,12 +104,14 @@ sin_table := f32.[0.0, 0.02454122852291229, 0.04906767432741801, 0.0735645635996
 sin := fn(theta: f32): f32 {
     PI := 3.14159265358979323846
     TABLE_SIZE := @as(i32, 256)
-    si := @float_to_int(@float_cast(theta) * 0.5 * @int_to_float(TABLE_SIZE) / @float_cast(PI))
+    si := @float_to_int(@float_cast(theta) * 0.5 * @int_to_float(TABLE_SIZE) /
+        @float_cast(PI))
     d := theta - @int_to_float(si) * 2.0 * PI / @int_to_float(TABLE_SIZE)
     ci := si + TABLE_SIZE / 4 & TABLE_SIZE - 1
     si &= TABLE_SIZE - 1
     //return @int_to_float(si)
-    return sin_table[@bit_cast(si)] + (sin_table[@bit_cast(ci)] - 0.5 * sin_table[@bit_cast(si)] * d) * d
+    return sin_table[@bit_cast(si)] + (sin_table[@bit_cast(ci)] - 0.5 *
+        sin_table[@bit_cast(si)] * d) * d
 }
 
 main := fn(): int {

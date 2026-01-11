@@ -2205,7 +2205,6 @@ pub fn disasm(self: *X86_64Gen, opts: Mach.DisasmOpts) void {
                     std.debug.assert(zydis.ZYAN_SUCCESS(status));
 
                     const printed = buf[0..std.mem.indexOfScalar(u8, &buf, 0).?];
-                    (std.debug).print("{s}\n", .{printed});
 
                     if (label_map.get(uaddr)) |nm| {
                         opts.print("{x}:", .{nm});

@@ -212,7 +212,7 @@ pub const Scope = union(enum) {
         };
     }
 
-    pub fn findCapture(self: Scope, ast: Ast.Pos, id: Ast.Ident, types: *Types, slot: *Types.Scope.Capture) ?*const Types.Scope.Capture {
+    pub fn findCapture(self: Scope, ast: Ast.Pos, id: Ast.Ident, types: *Types, slot: *Types.Scope.Param) ?*const Types.Scope.Param {
         return switch (self) {
             .Perm => |p| p.findCapture(id, types),
             .Tmp => |t| for (t.scope.items, 0..) |se, i| {
@@ -2591,8 +2591,8 @@ fn emitFnTy(self: *Codegen, _: Ctx, _: Ast.Id, e: *Expr(.FnTy)) !Value {
     }));
 }
 
-fn computeCaptures(self: *Codegen, ast_captures: Ast.Captures, scratch: *utils.Arena) ![]Types.Scope.Capture {
-    const captures = scratch.alloc(Types.Scope.Capture, ast_captures.len());
+fn computeCaptures(self: *Codegen, ast_captures: Ast.Captures, scratch: *utils.Arena) ![]Types.Scope.Param {
+    const captures = scratch.alloc(Types.Scope.Param, ast_captures.len());
 
     for (self.source.ast.exprs.view(ast_captures), captures) |cp, *slot| {
         var val = try self.loadIdent(cp.pos, cp.id);
@@ -3473,7 +3473,7 @@ pub fn resolveGlobal(
     return .mkp(global.ty, self.bl.addGlobalAddr(.none, @intFromEnum(global_id)));
 }
 
-pub fn captureToValue(self: *Codegen, sloc: graph.Sloc, c: *const Types.Scope.Capture) !Value {
+pub fn captureToValue(self: *Codegen, sloc: graph.Sloc, c: *const Types.Scope.Param) !Value {
     if (!c.id.has_value) {
         if (!self.only_inference) {
             return self.report(sloc.index, "the variable is not marked with $" ++
@@ -3519,7 +3519,7 @@ pub fn loadIdent(self: *Codegen, expr: Ast.Pos, id: Ast.Ident) !Value {
         var cursor = self.source.scope;
         var tmp = utils.Arena.scrath(null);
         defer tmp.deinit();
-        var slot: Types.Scope.Capture = undefined;
+        var slot: Types.Scope.Param = undefined;
         const decl, const path, _ = while (!cursor.empty()) {
             if (cursor.index(self.types)) |idx| if (idx.search(id)) |v| break v;
             if (cursor.findCapture(expr, id, self.types, &slot)) |c| {
@@ -3781,7 +3781,7 @@ pub fn instantiateTemplate(
             " got {}", .{ tmpl_ast.args.len(), passed_args }));
     }
 
-    const captures = tmp.alloc(Types.Scope.Capture, tmpl_ast.args.len());
+    const captures = tmp.alloc(Types.Scope.Param, tmpl_ast.args.len());
     const arg_tys = tmp.alloc(Types.Id, tmpl_ast.args.len() - tmpl_ast.comptime_args.len());
     const arg_exprs = tmp.alloc(Value, arg_tys.len);
 

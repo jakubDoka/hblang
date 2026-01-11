@@ -813,7 +813,6 @@ pub fn Func(comptime Backend: type) type {
         static_anal: static_anal.Mixin(Backend) = .{},
         inliner: inliner.Mixin(Backend) = .{},
         stopped_interning: std.debug.SafetyLock = .{},
-        keep: bool = false,
 
         pub fn optApi(comptime decl_name: []const u8, comptime Ty: type) bool {
             const prelude = @typeName(Backend) ++
@@ -1558,6 +1557,8 @@ pub fn Func(comptime Backend: type) type {
                 logNid(writer, self.id, colors);
                 const name = @tagName(self.kind);
 
+                errdefer unreachable;
+
                 writer.print(
                     " = {s}:{f}",
                     .{ name, self.data_type },
@@ -1566,6 +1567,14 @@ pub fn Func(comptime Backend: type) type {
                 var add_colon_space = false;
 
                 switch (self.kind) {
+                    .CInt => {
+                        const ext = self.extraConst(.CInt);
+                        switch (self.data_type) {
+                            .f64 => try writer.print(" = {d}", .{tf(ext.value)}),
+                            .f32 => try writer.print(" = {d}", .{tf32(ext.value)}),
+                            else => try writer.print(" = {d}", .{ext.value}),
+                        }
+                    },
                     inline else => |t| {
                         const ext = self.extraConst(t);
                         if (@TypeOf(ext.*) != void) {
@@ -1647,6 +1656,20 @@ pub fn Func(comptime Backend: type) type {
                     on_loop.kind == .Region);
                 return self.kind == .Phi and self.inputs()[0] == on_loop and
                     (self.inputs()[2] == null or self.inputs()[1] == null);
+            }
+
+            pub const lock_id = std.math.maxInt(u16) - 1;
+
+            pub fn lock(self: *Node) struct {
+                node: *Node,
+                prev_id: u16,
+
+                pub fn unlock(slf: @This()) void {
+                    slf.node.id = slf.prev_id;
+                }
+            } {
+                defer self.id = lock_id;
+                return .{ .prev_id = self.id, .node = self };
             }
 
             pub fn inputs(self: *Node) []?*Node {
@@ -2295,7 +2318,7 @@ pub fn Func(comptime Backend: type) type {
                 return self.addIntImm(
                     sloc,
                     ty,
-                    op.eval(ty, lhs.extra(.CInt).value, rhs.extra(.CInt).value),
+                    op.eval(lhs.data_type, lhs.extra(.CInt).value, rhs.extra(.CInt).value),
                 );
             }
 
@@ -2523,6 +2546,8 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn kill(func: *Self, self: *Node) void {
+            if (self.id == Node.lock_id) return;
+
             if (self.output_len != 0) {
                 utils.panic("{any} {f}\n", .{ self.outputs(), self });
             }
@@ -2560,11 +2585,14 @@ pub fn Func(comptime Backend: type) type {
             }
         }
 
-        pub fn subsumeNoKill(self: *Self, this: *Node, target: *Node) void {
+        pub fn subsumeNoIntern(self: *Self, this: *Node, target: *Node) void {
             if (this == target) {
                 utils.panic("{f} {f}\n", .{ this, target });
             }
             errdefer unreachable;
+
+            const lock = this.lock();
+            defer lock.unlock();
 
             self.ensureOutputCapacity(this, target.outputs().len);
 
@@ -2594,10 +2622,10 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn subsume(self: *Self, this: *Node, target: *Node) void {
+            if (target.isDead()) return;
             if (this.sloc == Sloc.none) this.sloc = target.sloc;
             self.uninternNode(target);
-            self.subsumeNoKill(this, target);
-            self.kill(target);
+            self.subsumeNoIntern(this, target);
         }
 
         pub fn removeUse(self: *Self, def: *Node, idx: usize, use: *Node) void {
@@ -2617,7 +2645,7 @@ pub fn Func(comptime Backend: type) type {
             outs[outs.len - 1] = undefined;
             def.output_len -= 1;
 
-            if (def.output_len == 0 and !self.keep) {
+            if (def.output_len == 0) {
                 self.kill(def);
             }
         }
@@ -2665,8 +2693,7 @@ pub fn Func(comptime Backend: type) type {
                 _ = self.addUse(d, idx, use);
             }
             if (self.reinternNode(use)) |nuse| {
-                self.subsumeNoKill(nuse, use);
-                self.kill(use);
+                self.subsumeNoIntern(nuse, use);
                 return nuse;
             }
             return null;
@@ -2793,15 +2820,24 @@ pub fn Func(comptime Backend: type) type {
                 if (t.isDead()) continue;
 
                 if (t.outputs().len == 0 and t.isKillable()) {
-                    for (t.inputs()) |ii| if (ii) |ia| worklist.add(ia);
+                    for (t.inputs()) |ii| {
+                        if (ii) |ia| worklist.add(ia);
+                    }
                     self.uninternNode(t);
                     self.kill(t);
                     continue;
                 }
 
                 if (strategy(ctx, self, t, &worklist)) |nt| {
-                    for (t.inputs()) |ii| if (ii) |ia| worklist.add(ia);
-                    for (t.outputs()) |o| worklist.add(o.get());
+                    for (t.inputs()) |ii| {
+                        if (ii) |ia| worklist.add(ia);
+                    }
+                    for (t.outputs()) |o| {
+                        worklist.add(o.get());
+                    }
+
+                    std.debug.assert(!nt.isDead());
+
                     self.subsume(nt, t);
                     continue;
                 }
