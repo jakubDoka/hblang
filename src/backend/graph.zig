@@ -1679,14 +1679,16 @@ pub fn Func(comptime Backend: type) type {
 
             pub const lock_id = std.math.maxInt(u16) - 1;
 
-            pub fn lock(self: *Node) struct {
+            pub const Lock = struct {
                 node: *Node,
                 prev_id: u16,
 
                 pub fn unlock(slf: @This()) void {
                     slf.node.id = slf.prev_id;
                 }
-            } {
+            };
+
+            pub fn lock(self: *Node) Lock {
                 defer self.id = lock_id;
                 return .{ .prev_id = self.id, .node = self };
             }

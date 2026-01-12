@@ -316,6 +316,10 @@ pub fn pushScopeValue(self: *Builder, value: *BuildNode) u16 {
     return self.pushToScope(self.scope.?, value) - scope_value_start;
 }
 
+pub fn setScopeValue(self: *Builder, index: usize, value: *BuildNode) void {
+    self.func.setInputNoIntern(self.scope.?, scope_value_start + index, value);
+}
+
 fn pushToScope(self: *Builder, scope: *BuildNode, value: *BuildNode) u16 {
     if (scope.input_ordered_len == scope.input_len) {
         const new_cap = @max(1, scope.input_len) * 2;
@@ -454,7 +458,7 @@ pub const If = struct {
     pub fn end(self: *If, builder: *Builder, _: EndToken) void {
         const then = self.saved_branch.then orelse return;
         const else_ = builder.scope orelse {
-            builder.scope = self.saved_branch.then;
+            builder.scope = then;
             return;
         };
         builder.scope = mergeScopes(&builder.func, then, else_);

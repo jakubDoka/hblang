@@ -21,6 +21,8 @@ globals: utils.SegmentedList(Global, GlobalId, 1024, 1024 * 1024) = .{},
 global_index: Interner(GlobalId) = .{},
 func_tys: utils.SegmentedList(FuncTy, FuncTyId, 1024, 1024 * 1024) = .{},
 func_ty_index: Interner(FuncTyId) = .{},
+templates: utils.SegmentedList(Template, TemplateId, 1024, 1024 * 1024) = .{},
+template_index: Interner(TemplateId) = .{},
 
 files: []File,
 line_indexes: []const hb.LineIndex,
@@ -289,20 +291,24 @@ pub const Data = union(enum(u8)) {
 pub fn IdConv(comptime I: type, comptime D: type) type {
     return struct {
         pub const DRepr = extern struct {
-            tag: u32,
             value: u32,
+            tag: u8,
         };
 
         pub const IRepr = packed struct(u32) {
-            tag: std.meta.Tag(std.meta.Tag(D)),
             index: std.meta.Int(.unsigned, 32 - @bitSizeOf(std.meta.Tag(D))),
+            tag: std.meta.Tag(std.meta.Tag(D)),
         };
 
+        pub fn repr(self: I) IRepr {
+            return @bitCast(@intFromEnum(self));
+        }
+
         pub fn data(self: I) D {
-            const repr: IRepr = @bitCast(@intFromEnum(self));
+            const rpr: IRepr = @bitCast(@intFromEnum(self));
             return @as(*const D, @ptrCast(&DRepr{
-                .value = repr.index,
-                .tag = repr.tag,
+                .value = rpr.index,
+                .tag = rpr.tag,
             })).*;
         }
 
@@ -316,12 +322,13 @@ pub fn IdConv(comptime I: type, comptime D: type) type {
         }
 
         pub fn pack(dt: D) I {
+            comptime std.debug.assert(@sizeOf(D) == @sizeOf(DRepr));
             const data_repr = @as(*const DRepr, @ptrCast(&dt)).*;
-            const repr = IRepr{
+            const rpr = IRepr{
                 .tag = @intCast(data_repr.tag),
                 .index = @intCast(data_repr.value),
             };
-            return @enumFromInt(@as(u32, @bitCast(repr)));
+            return @enumFromInt(@as(u32, @bitCast(rpr)));
         }
     };
 }
@@ -343,6 +350,7 @@ pub const Id = enum(u32) {
     f32,
     f64,
     type,
+    template,
     any,
     _,
 
@@ -350,6 +358,7 @@ pub const Id = enum(u32) {
     pub const data = Conv.data;
     pub const nany = Conv.nany;
     pub const init = Conv.pack;
+    pub const repr = Conv.repr;
 
     pub fn raw(self: Id) u32 {
         return @intFromEnum(self);
@@ -433,14 +442,18 @@ pub const Id = enum(u32) {
 
     comptime {
         for (std.meta.fields(Id), std.meta.fields(Builtin)) |a, b| {
-            std.debug.assert(std.mem.eql(u8, a.name, b.name));
+            if (!std.mem.eql(u8, a.name, b.name)) {
+                @compileError("mismatched builtin '" ++ a.name ++ "' and '" ++ b.name ++ "'");
+            }
         }
 
         for (
             std.meta.fields(Id)[0 .. std.meta.fields(Id).len - 1],
             std.meta.fields(Lexer.Lexeme.Type),
         ) |a, b| {
-            std.debug.assert(std.mem.eql(u8, a.name, b.name));
+            if (!std.mem.eql(u8, a.name, b.name)) {
+                @compileError("mismatched lexeme '" ++ a.name ++ "' and '" ++ b.name ++ "'");
+            }
         }
     }
 };
@@ -462,6 +475,7 @@ pub const Builtin = enum(u32) {
     f32,
     f64,
     type,
+    template,
     any,
 
     pub const identity = {};
@@ -490,7 +504,7 @@ pub const Builtin = enum(u32) {
             .void, .never => 0,
             .bool, .u8, .i8 => 1,
             .u16, .i16 => 2,
-            .u32, .i32, .f32, .type => 4,
+            .u32, .i32, .f32, .type, .template => 4,
             .u64, .i64, .f64, .uint, .int => 8,
             .any => unreachable,
         };
@@ -498,6 +512,75 @@ pub const Builtin = enum(u32) {
 
     pub fn alignment(self: Builtin, types: *Types) u64 {
         return @max(self.size(types), 1);
+    }
+};
+
+pub const Captures = struct {
+    /// first byte in the name for each var
+    prefixes: []const u8,
+    variables: []const Variable,
+    /// packed values for each comptime variable, index is comptuted when
+    /// searching
+    values: []const i64,
+
+    pub const empty = Captures{
+        .values = &.{},
+        .variables = &.{},
+        .prefixes = &.{},
+    };
+
+    pub const Variable = struct {
+        meta: packed struct(u32) {
+            offset: u31,
+            is_cmptime: bool,
+        },
+        ty: Id,
+    };
+
+    pub fn init(scope: *Codegen, scratch: *utils.Arena) Captures {
+        var vars: []const Codegen.Variable = scope.vars.items(.variable);
+        if (vars.len > 0 and vars[vars.len - 1].value == std.math.maxInt(u32)) {
+            vars = vars[0 .. vars.len - 1];
+        }
+        const variables = scratch.alloc(Variable, vars.len);
+
+        for (vars, variables) |vari, *variable| {
+            variable.* = .{
+                .meta = .{
+                    .offset = vari.meta.pos,
+                    .is_cmptime = vari.meta.kind == .cmptime,
+                },
+                .ty = vari.ty,
+            };
+        }
+
+        const values = scratch.alloc(i64, scope.cmptime_values.items.len);
+        for (scope.cmptime_values.items, values) |v, *slot| slot.* = v;
+
+        return .{
+            .prefixes = scratch.dupe(u8, scope.vars.items(.prefix)),
+            .variables = variables,
+            .values = values,
+        };
+    }
+
+    pub fn lookup(self: Captures, source: [:0]const u8, name: []const u8) ?struct { Id, ?i64 } {
+        // TODO: we can vectorize this
+
+        var value_index: usize = 0;
+        for (self.prefixes, self.variables) |prefix, variable| {
+            if (prefix == name[0] and Lexer.compareIdent(source, variable.meta.offset, name)) {
+                return .{ variable.ty, if (variable.meta.is_cmptime)
+                    self.values[value_index]
+                else
+                    null };
+            }
+            if (variable.meta.is_cmptime) {
+                value_index += 1;
+            }
+        }
+
+        return null;
     }
 };
 
@@ -536,6 +619,7 @@ pub const Scope = extern struct {
 pub const StructId = EntId(Struct, "structs");
 pub const Struct = struct {
     scope: Scope,
+    captures: Captures,
     decls: *DeclIndex,
 
     pub fn size(self: Struct, types: *Types) u64 {
@@ -572,6 +656,7 @@ pub const FuncTy = struct {
 pub const FuncId = EntId(Func, "funcs");
 pub const Func = struct {
     scope: Scope,
+    captures: Captures,
     params: []Param,
     args: []Id,
     ret: Id,
@@ -595,6 +680,12 @@ pub const Func = struct {
     }
 };
 
+pub const TemplateId = EntId(Template, "templates");
+pub const Template = struct {
+    scope: Scope,
+    captures: Captures,
+};
+
 pub const GlobalId = EntId(Global, "globals");
 pub const Global = struct {
     scope: Scope,
@@ -608,6 +699,8 @@ pub const Global = struct {
             return types.ct_backend.mach.out.code.items[self.pos..][0..self.len];
         }
     },
+    readonly: bool,
+    runtime_emmited: bool = false,
 
     pub const hash = generic.hashScope;
     pub const eql = generic.eqlScope;
@@ -623,7 +716,11 @@ pub fn init(
     var self = Types{
         .files = files,
         .line_indexes = undefined,
-        .ct_backend = HbvmGen{ .gpa = gpa, .push_uninit_globals = true },
+        .ct_backend = HbvmGen{
+            .gpa = gpa,
+            .push_uninit_globals = true,
+            .emit_global_reloc_offsets = true,
+        },
         .loader = loader,
         .backend = backend,
         .arena = arena,
@@ -653,6 +750,7 @@ pub fn init(
                     .file = @enumFromInt(i),
                     .name_pos = .file,
                 },
+                .captures = .empty,
                 .decls = &f.decls,
             },
         ));

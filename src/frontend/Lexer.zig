@@ -132,6 +132,7 @@ pub const Lexeme = enum(u16) {
     ty_f32,
     ty_f64,
     ty_type,
+    ty_template,
 
     @"@CurrentScope" = 0x200,
     @"@RootScope",
@@ -706,6 +707,33 @@ pub fn expect(self: *Lexer, kind: Lexeme) !Token {
     return res;
 }
 
+pub fn eatUntilSameLevelToken(self: *@This(), kinds: []const Lexeme) Lexeme {
+    var depth: usize = 0;
+    while (true) {
+        const tok = self.next();
+
+        if (depth == 0) {
+            for (kinds) |kind| {
+                if (tok.kind == kind) {
+                    return tok.kind;
+                }
+            }
+        }
+
+        switch (tok.kind) {
+            .Eof => return tok.kind,
+            .@".{", .@".(", .@".[", .@"{", .@"(", .@"[" => {
+                depth += 1;
+            },
+            .@"}", .@")", .@"]" => {
+                if (depth == 0) return tok.kind;
+                depth -= 1;
+            },
+            else => {},
+        }
+    }
+}
+
 pub fn eatUntilClosingDelimeter(self: *@This()) void {
     var depth: usize = 0;
     while (true) {
@@ -781,6 +809,15 @@ pub fn list(self: *Lexer, comptime sep: Lexeme, comptime end: Lexeme) *struct {
     }
 } {
     return @ptrCast(self);
+}
+
+pub fn eatIdent(self: *Lexer) ?struct { Token, bool } {
+    const tok = self.next();
+    return .{ tok, switch (tok.kind) {
+        .Ident => false,
+        .@"$" => true,
+        else => return null,
+    } };
 }
 
 pub fn eatMatch(self: *Lexer, kind: Lexeme) bool {

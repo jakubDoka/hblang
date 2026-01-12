@@ -223,6 +223,10 @@ pub const Data = struct {
     }
 
     pub fn reset(self: *Data) void {
+        for (self.inline_funcs.items) |*func| {
+            func.deinit();
+        }
+
         inline for (std.meta.fields(Data)[2..]) |f| {
             @field(self, f.name).items.len = 0;
         }
@@ -284,6 +288,10 @@ pub const Data = struct {
     }
 
     pub fn deinit(self: *Data, gpa: std.mem.Allocator) void {
+        for (self.inline_funcs.items) |*func| {
+            func.deinit();
+        }
+
         inline for (std.meta.fields(Data)[2..]) |f| {
             @field(self, f.name).deinit(gpa);
         }

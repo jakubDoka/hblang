@@ -149,8 +149,11 @@ expectations := .{
     return_value: 0,
 }
 
-hex := fn(): uint return 0x2d
-dec := fn(): uint return 45
+hex := fn(): uint {
+    return 0x2d
+dec := fn(): uint {
+    return 45
+}
 
 main := fn(): uint {
     if hex() != dec() return 1
@@ -277,16 +280,22 @@ main := fn(): uint {
     return foo()
 }
 
-$foo := fn(): uint return 0
+$foo := fn(): uint {
+    return 0
+}
 ```
 
 #### functions 6 (comptime @Any)
 ```hb
 main := fn(): uint {
-    return foo(fn(): uint return 0)
+    return foo(fn(): uint {
+        return 0
+    })
 }
 
-foo := fn($f: @Any()): uint return f()
+foo := fn($f: @Any()): uint {
+    return f()
+}
 ```
 
 #### functions 7 (return postion @Any)
@@ -312,7 +321,9 @@ main := fn(): uint {
     return 0
 }
 
-foo := fn(comment: void): void return // comment evaluates to void
+foo := fn(comment: void): void {
+    return // comment evaluates to void
+}
 
 // comments might be formatted in the future
 ```
