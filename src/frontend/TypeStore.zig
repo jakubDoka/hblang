@@ -132,6 +132,7 @@ pub const ParentRef = enum(u32) {
 pub const Parent = union(enum(u8)) {
     Struct: StructId = Data.scope_start,
     Func: FuncId,
+    Template: TemplateId,
     Tail: enum(u32) { end },
 
     pub const Conv = IdConv(ParentRef, Parent);
@@ -153,16 +154,25 @@ pub const AnyScopeRef = enum(u32) {
 pub const AnyScope = union(enum(u8)) {
     Struct: StructId = Data.scope_start,
     Func: FuncId,
+    Template: TemplateId,
 
     pub const Conv = IdConv(AnyScopeRef, AnyScope);
 
     pub const upcast = generic.upcast;
     pub const downcast = generic.downcast;
     pub const scope = generic.scope;
+    pub const captures = generic.captures;
+    pub const format_ = generic.format_;
     pub const pack = Conv.pack;
 };
 
 pub const generic = struct {
+    pub fn format_(self: anytype, types: *Types, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        return switch (self.*) {
+            inline else => |t| t.get(types).format_(types, writer),
+        };
+    }
+
     pub fn hashScope(self: anytype, _: *Types) u64 {
         return std.hash.Wyhash.hash(0, std.mem.asBytes(&self.scope));
     }
@@ -174,6 +184,12 @@ pub const generic = struct {
     pub fn scope(self: anytype, types: *Types) *Types.Scope {
         return switch (self.*) {
             inline else => |v| &v.get(types).scope,
+        };
+    }
+
+    pub fn captures(self: anytype, types: *Types) *Types.Captures {
+        return switch (self.*) {
+            inline else => |v| &v.get(types).captures,
         };
     }
 
@@ -405,9 +421,7 @@ pub const Id = enum(u32) {
         }
     }
 
-    pub fn fmt(self: Id, types: *Types) Fmt {
-        return .{ .id = self, .types = types };
-    }
+    pub const fmt = Fmt(Id).fmt;
 
     pub fn canUpcast(from: Id, to: Id, types: *Types) bool {
         if (from == .never) return true;
@@ -422,23 +436,6 @@ pub const Id = enum(u32) {
 
         return false;
     }
-
-    pub const Fmt = struct {
-        id: Id,
-        types: *Types,
-
-        pub fn format(self: Fmt, writer: *std.io.Writer) !void {
-            try self.id.format_(self.types, writer);
-        }
-
-        pub fn toString(self: Fmt, arena: *utils.Arena) []u8 {
-            var tmp = utils.Arena.scrath(arena);
-            defer tmp.deinit();
-            var arr = std.io.Writer.Allocating.init(tmp.arena.allocator());
-            self.format(&arr.writer) catch unreachable;
-            return arena.dupe(u8, arr.written());
-        }
-    };
 
     comptime {
         for (std.meta.fields(Id), std.meta.fields(Builtin)) |a, b| {
@@ -457,6 +454,29 @@ pub const Id = enum(u32) {
         }
     }
 };
+
+pub fn Fmt(comptime T: type) type {
+    return struct {
+        id: T,
+        types: *Types,
+
+        pub fn fmt(self: T, types: *Types) @This() {
+            return .{ .types = types, .id = self };
+        }
+
+        pub fn format(self: @This(), writer: *std.io.Writer) !void {
+            try self.id.format_(self.types, writer);
+        }
+
+        pub fn toString(self: @This(), arena: *utils.Arena) []u8 {
+            var tmp = utils.Arena.scrath(arena);
+            defer tmp.deinit();
+            var arr = std.io.Writer.Allocating.init(tmp.arena.allocator());
+            self.format(&arr.writer) catch unreachable;
+            return arena.dupe(u8, arr.written());
+        }
+    };
+}
 
 pub const Builtin = enum(u32) {
     never,
@@ -558,7 +578,7 @@ pub const Captures = struct {
         for (scope.cmptime_values.items, values) |v, *slot| slot.* = v;
 
         return .{
-            .prefixes = scratch.dupe(u8, scope.vars.items(.prefix)),
+            .prefixes = scratch.dupe(u8, scope.vars.items(.prefix)[0..vars.len]),
             .variables = variables,
             .values = values,
         };
@@ -614,6 +634,20 @@ pub const Scope = extern struct {
     pub fn name(self: Scope, types: *Types) []const u8 {
         return self.name_pos.get(self.file, types);
     }
+
+    pub fn format_(self: *Scope, id: anytype, types: *Types, writer: *std.Io.Writer) !void {
+        const nme = self.name(types);
+        if (self.parent.data().downcast(AnyScope)) |as| {
+            try as.format_(types, writer);
+            try writer.writeByte('.');
+        }
+
+        if (nme.len == 0) {
+            try writer.print(@TypeOf(id).data.field ++ "[{}]", .{@intFromEnum(id)});
+        } else {
+            try writer.writeAll(nme);
+        }
+    }
 };
 
 pub const StructId = EntId(Struct, "structs");
@@ -621,6 +655,10 @@ pub const Struct = struct {
     scope: Scope,
     captures: Captures,
     decls: *DeclIndex,
+
+    pub fn format_(self: *Struct, types: *Types, writer: *std.Io.Writer) !void {
+        try self.scope.format_(types.structs.ptrToIndex(self), types, writer);
+    }
 
     pub fn size(self: Struct, types: *Types) u64 {
         _ = self; // autofix
@@ -663,11 +701,18 @@ pub const Func = struct {
     // NOTE: start at the first argument
     pos: u32,
     compiled: std.EnumSet(Target) = .initEmpty(),
+    linkage: Machine.Data.Linkage = .local,
 
-    pub const Param = struct {
-        name: u32,
+    pub const Param = extern struct {
+        _padd: u32 = 0,
         ty: Id,
-        data: u64,
+        value: i64,
+
+        comptime {
+            if (!std.meta.hasUniqueRepresentation(Param)) {
+                @compileError("nah");
+            }
+        }
     };
 
     pub fn queue(self: *Func, target: Target, types: *Types) void {
@@ -678,12 +723,59 @@ pub const Func = struct {
             types.funcs.ptrToIndex(self),
         ) catch unreachable;
     }
+
+    pub fn eql(self: *Func, other: *Func, _: *Types) bool {
+        return std.meta.eql(self.scope, other.scope) and
+            std.mem.eql(u8, @ptrCast(self.params), @ptrCast(other.params));
+    }
+
+    pub fn hash(self: *Func, _: *Types) u64 {
+        var hasher = std.hash.Wyhash.init(0);
+
+        hasher.update(@ptrCast(&self.scope));
+        hasher.update(@ptrCast(self.params));
+
+        return hasher.final();
+    }
+
+    pub fn format_(self: *Func, types: *Types, writer: *std.Io.Writer) !void {
+        const name = self.scope.name(types);
+        if (self.linkage != .local) {
+            std.debug.assert(name.len != 0);
+            try writer.writeAll(name);
+            return;
+        }
+
+        try self.scope.format_(types.funcs.ptrToIndex(self), types, writer);
+
+        if (self.params.len != 0) {
+            try writer.writeByte('[');
+            for (self.params, 0..) |p, i| {
+                if (i != 0) try writer.writeAll(", ");
+                if (p.ty != .type) {
+                    utils.panic("{f}", .{p.ty.fmt(types)});
+                }
+                const ty: Id = @enumFromInt(p.value);
+                try ty.format_(types, writer);
+            }
+            try writer.writeByte(']');
+        }
+    }
+
+    pub const fmt = Fmt(*Func).fmt;
 };
 
 pub const TemplateId = EntId(Template, "templates");
 pub const Template = struct {
     scope: Scope,
     captures: Captures,
+    pos: u32,
+
+    pub fn format_(self: *Template, types: *Types, writer: *std.Io.Writer) !void {
+        if (self.scope.parent.data().downcast(AnyScope)) |p| {
+            try p.format_(types, writer);
+        }
+    }
 };
 
 pub const GlobalId = EntId(Global, "globals");
@@ -701,9 +793,23 @@ pub const Global = struct {
     },
     readonly: bool,
     runtime_emmited: bool = false,
+    linkage: Machine.Data.Linkage = .local,
 
     pub const hash = generic.hashScope;
     pub const eql = generic.eqlScope;
+
+    pub fn format_(self: *Global, types: *Types, writer: *std.Io.Writer) !void {
+        const name = self.scope.name(types);
+        if (self.linkage != .local) {
+            std.debug.assert(name.len != 0);
+            try writer.writeAll(name);
+            return;
+        }
+
+        try self.scope.format_(types.globals.ptrToIndex(self), types, writer);
+    }
+
+    pub const fmt = Fmt(*Global).fmt;
 };
 
 pub fn init(
