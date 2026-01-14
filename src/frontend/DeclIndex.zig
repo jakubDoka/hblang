@@ -7,6 +7,8 @@ const Types = hb.frontend.Types;
 entries: std.MultiArrayList(Entry),
 sub_scopes: std.MultiArrayList(Child),
 imports: std.MultiArrayList(Import),
+fields: std.MultiArrayList(Field),
+end: u32,
 
 const DeclIndex = @This();
 
@@ -18,6 +20,11 @@ pub const Child = struct {
 pub const Entry = struct {
     prefix: u8,
     offset: Decl,
+};
+
+pub const Field = struct {
+    prefix: u8,
+    offset: u32,
 };
 
 pub const Decl = struct {
@@ -146,6 +153,7 @@ pub fn buildLow(
     const init_depth = bl.depth;
 
     var decls = std.ArrayList(Decl).empty;
+    var fields = std.ArrayList(u32).empty;
     var sub_scopes = std.ArrayList(Child).empty;
     var imports = std.ArrayList(Import).empty;
     var subscope: struct { start: u32, depth: u32 } = .{
@@ -165,6 +173,13 @@ pub fn buildLow(
             .Eof => {
                 bl.depth = init_depth;
                 break;
+            },
+            .@"." => {
+                if (bl.depth != init_depth) continue;
+                const ident = bl.lexer.next();
+                if (ident.kind == .Ident and bl.lexer.eatMatch(.@":")) {
+                    fields.append(tmp.arena.allocator(), ident.pos) catch unreachable;
+                }
             },
             .@".(", .@".[", .@"(", .@"[" => bl.depth += 1,
             .@"{" => {
@@ -331,10 +346,32 @@ pub fn buildLow(
         }
     }
 
+    var field_arr = std.MultiArrayList(Field).empty;
+    {
+        try field_arr.setCapacity(
+            scratch.allocator(),
+            fields.items.len,
+        );
+        field_arr.len = fields.items.len;
+
+        const slice = field_arr.slice();
+
+        for (
+            fields.items,
+            slice.items(.offset),
+            slice.items(.prefix),
+        ) |c, *off, *pre| {
+            pre.* = bl.lexer.source[c];
+            off.* = c;
+        }
+    }
+
     return .{
         .entries = entries,
         .sub_scopes = sub_scopes_arr,
         .imports = import_arr,
+        .fields = field_arr,
+        .end = bl.lexer.cursor,
     };
 }
 
@@ -398,24 +435,61 @@ pub fn addPattern(
     }
 }
 
+pub fn filePrefixLookup(
+    prefixes: []const u8,
+    comptime Off: type,
+    offsets: []Off,
+    source: [:0]const u8,
+    name: []const u8,
+) ?*Off {
+    var cursor: usize = 0;
+    return while (std.mem.indexOfScalarPos(
+        u8,
+        prefixes,
+        cursor,
+        name[0],
+    )) |index| : (cursor = index + 1) {
+        const decl = &offsets[index];
+
+        const offset = if (Off == u32)
+            decl.*
+        else if (@hasField(Off, "offset"))
+            decl.offset
+        else
+            decl.meta.pos;
+
+        if (Lexer.compareIdent(source, offset, name)) {
+            return decl;
+        }
+    } else null;
+}
+
 pub fn lookup(
     self: DeclIndex,
     source: [:0]const u8,
     name: []const u8,
-) ?Decl {
-    // TODO: handrolling this might help since we expect multiple matches
-    var cursor: usize = 0;
-    return while (std.mem.indexOfScalarPos(
-        u8,
+) ?*Decl {
+    return filePrefixLookup(
         self.entries.items(.prefix),
-        cursor,
-        name[0],
-    )) |index| : (cursor = index + 1) {
-        const decl = self.entries.items(.offset)[index];
-        if (Lexer.compareIdent(source, decl.offset, name)) {
-            return decl;
-        }
-    } else null;
+        Decl,
+        self.entries.items(.offset),
+        source,
+        name,
+    );
+}
+
+pub fn lookupField(
+    self: DeclIndex,
+    source: [:0]const u8,
+    name: []const u8,
+) ?*u32 {
+    return filePrefixLookup(
+        self.fields.items(.prefix),
+        u32,
+        self.fields.items(.offset),
+        source,
+        name,
+    );
 }
 
 pub fn lookupScope(self: *DeclIndex, source_offset: u32) ?*DeclIndex {
@@ -455,10 +529,11 @@ pub fn log(self: DeclIndex, depth: usize, out: *std.Io.Writer) !void {
     }
 }
 
-test {
+test DeclIndex {
     utils.Arena.initScratch(1024 * 4);
 
     const source =
+        \\.field: u32 = 0;
         \\foo := struct {}
         \\bar := struct {
         \\   voo := struct(struct {}) {}
@@ -473,26 +548,26 @@ test {
     ;
 
     const result =
-        \\0:0 f
-        \\17:17 b
-        \\143:143 f
-        \\143:148 b
-        \\143:160 c
-        \\143:166 k
-        \\143:171 k
-        \\143:182 n
-        \\143:187 p
-        \\7 {
-        \\}
+        \\17:17 f
+        \\34:34 b
+        \\160:160 f
+        \\160:165 b
+        \\160:177 c
+        \\160:183 k
+        \\160:188 k
+        \\160:199 n
+        \\160:204 p
         \\24 {
-        \\ 36:36 v
-        \\ 67:67 k
-        \\ 88:88 l
-        \\ 50 {
+        \\}
+        \\41 {
+        \\ 53:53 v
+        \\ 84:84 k
+        \\ 105:105 l
+        \\ 67 {
         \\ }
-        \\ 43 {
+        \\ 60 {
         \\ }
-        \\ 74 {
+        \\ 91 {
         \\ }
         \\}
         \\

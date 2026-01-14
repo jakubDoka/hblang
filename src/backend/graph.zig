@@ -2,6 +2,7 @@ const std = @import("std");
 pub const utils = @import("utils-lib");
 const Machine = @import("Machine.zig");
 const matcher = @import("graph.IdealGen");
+const Builder = @import("Builder.zig");
 pub const is_debug = @import("builtin").mode == .Debug;
 
 const print = (std.debug).print;
@@ -331,7 +332,7 @@ pub const DataType = enum(u16) {
             };
         }
 
-        pub fn size(self: Kind) u64 {
+        pub fn size(self: Kind) u8 {
             return switch (self) {
                 .top, .bot => unreachable,
                 .i8 => 1,
@@ -362,8 +363,8 @@ pub const DataType = enum(u16) {
         one_less_then_lanes: u5 = 0,
         unused: u8 = 0,
 
-        pub fn lanes(self: Raw) u64 {
-            return @as(u64, self.one_less_then_lanes) + 1;
+        pub fn lanes(self: Raw) u8 {
+            return @as(u8, self.one_less_then_lanes) + 1;
         }
     };
 
@@ -394,9 +395,15 @@ pub const DataType = enum(u16) {
         return self.toRaw().lanes();
     }
 
-    pub fn size(self: DataType) u64 {
+    pub fn size(self: DataType) u8 {
         const raw = self.toRaw();
         return raw.kind.size() * raw.lanes();
+    }
+
+    pub fn halv(self: DataType) DataType {
+        std.debug.assert(self != .i8);
+        std.debug.assert(self != .f32);
+        return @enumFromInt(@intFromEnum(self) - 1);
     }
 
     pub fn mask(self: DataType) ?i64 {
@@ -457,14 +464,22 @@ pub const AbiParam = union(enum) {
     Stack: StackSpec,
 
     pub const StackSpec = packed struct(u64) {
-        alignment: u3,
-        size: u61,
+        alignment: u6,
+        size: u58,
+
+        pub fn fromByteUnits(size: u64, alignment: u64) StackSpec {
+            return .{
+                .size = @intCast(size),
+                .alignment = std.math.log2_int(u64, alignment),
+            };
+        }
+
+        pub fn alignmentBytes(self: StackSpec) u58 {
+            return @intCast(@as(u64, 1) << self.alignment);
+        }
 
         pub fn reg(dt: DataType) StackSpec {
-            return .{
-                .size = @intCast(dt.size()),
-                .alignment = @intCast(std.math.log2_int(u64, dt.size())),
-            };
+            return fromByteUnits(dt.size(), dt.size());
         }
     };
 
@@ -1464,7 +1479,7 @@ pub fn Func(comptime Backend: type) type {
                     if (self.inputs()[4].?.kind != .CInt) return null else true)
                     self.inputs()[4].?.extra(.CInt).value
                 else
-                    @bitCast(self.data_type.size());
+                    self.data_type.size();
                 const bas, var off = knownOffset(self.base());
                 off += self.getStaticOffset();
                 return .{ siz, off, bas };
@@ -2354,6 +2369,7 @@ pub fn Func(comptime Backend: type) type {
             {
                 return lhs;
             }
+
             return self.addNode(
                 .BinOp,
                 sloc,
@@ -2376,6 +2392,7 @@ pub fn Func(comptime Backend: type) type {
             if (op == .sext and ty.size() < oper.data_type.size()) {
                 utils.panic("{f} {f}", .{ ty, oper });
             }
+            if (ty.size() == oper.data_type.size()) return oper;
             if (op == .ired and ty.size() >= oper.data_type.size()) {
                 utils.panic("{f} {f}", .{ ty, oper });
             }
@@ -3128,7 +3145,7 @@ pub fn Func(comptime Backend: type) type {
                 }
             }
 
-            if (node.kind == .Call and node.data_type != .bot) {
+            if (Backend != Builder and node.kind == .Call and node.data_type != .bot) {
                 const force_inline = node.extra(.Call)
                     .signature.call_conv == .@"inline";
                 if (ctx.mach.out.getInlineFunc(
@@ -3321,7 +3338,7 @@ pub fn Func(comptime Backend: type) type {
                 return mem;
             }
 
-            if (node.isLoad()) {
+            if (Backend != Builder and node.isLoad()) {
                 const base, const offset = node.base().knownOffset();
                 if (base.kind == .GlobalAddr) fold_const_read: {
                     const res = ctx.mach.out.readFromSym(
@@ -3374,7 +3391,7 @@ pub fn Func(comptime Backend: type) type {
                     stack_arg_offset = std.mem.alignForward(
                         u64,
                         stack_arg_offset,
-                        @as(u64, 1) << par.Stack.alignment,
+                        par.Stack.alignmentBytes(),
                     );
                     argn.extra(.StructArg).spec.size =
                         @intCast(stack_arg_offset);

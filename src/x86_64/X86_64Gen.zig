@@ -834,6 +834,8 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
         return;
     };
 
+    //func.fmtScheduledLog();
+
     var tmp = utils.Arena.scrath(if (opts.optimizations == .opts)
         opts.optimizations.opts.arena
     else

@@ -649,7 +649,7 @@ main := fn(): uint {
 #### pointers 1
 ```hb
 main := fn(): uint {
-    a := 1
+    a := #1
     b := &a
     modify(b)
     b.* += 2
@@ -669,8 +669,8 @@ expectations := .{
 }
 
 main := fn(): uint {
-    a := 1
-    b := 2
+    a := #1
+    b := #2
 
     c := &a
     d := &b
@@ -694,7 +694,7 @@ expectations := .{
 }
 
 main := fn(): uint {
-    a := 1
+    a := #1
     _ = do_stuff(&a)
     return a
 }
@@ -702,10 +702,8 @@ main := fn(): uint {
 do_stuff := fn(v: ^uint): uint {
     if v.* == 0 {
         return 0
-        v.* = 2
     } else {
         return 1
-        v.* = 3
     }
 }
 ```

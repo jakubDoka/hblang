@@ -13,6 +13,7 @@ const HbvmGen = hb.hbvm.HbvmGen;
 const isa = hb.hbvm.isa;
 
 arena: utils.Arena,
+tmp: utils.Arena,
 structs: utils.SegmentedList(Struct, StructId, 1024, 1024 * 1024) = .{},
 struct_index: Interner(StructId) = .{},
 funcs: utils.SegmentedList(Func, FuncId, 1024, 1024 * 1024) = .{},
@@ -23,6 +24,8 @@ func_tys: utils.SegmentedList(FuncTy, FuncTyId, 1024, 1024 * 1024) = .{},
 func_ty_index: Interner(FuncTyId) = .{},
 templates: utils.SegmentedList(Template, TemplateId, 1024, 1024 * 1024) = .{},
 template_index: Interner(TemplateId) = .{},
+pointers: utils.SegmentedList(Pointer, PointerId, 1024, 1024 * 1024) = .{},
+pointer_index: Interner(PointerId) = .{},
 
 files: []File,
 line_indexes: []const hb.LineIndex,
@@ -37,10 +40,14 @@ errored: usize = 0,
 
 const Types = @This();
 
+pub const Size = u58;
+pub const AlignPow = u6;
+
 pub const stack_size = 1024 * 128;
 
 pub fn EntId(comptime T: type, comptime field: []const u8) type {
     return enum(u32) {
+        invalid = std.math.maxInt(u32),
         _,
 
         pub const data = .{ .ty = T, .field = field };
@@ -164,6 +171,14 @@ pub const AnyScope = union(enum(u8)) {
     pub const captures = generic.captures;
     pub const format_ = generic.format_;
     pub const pack = Conv.pack;
+
+    pub fn decls(self: AnyScope, types: *Types) *DeclIndex {
+        return switch (self) {
+            inline .Func, .Template => |f| f.get(types).scope.parent
+                .data().downcast(AnyScope).?.decls(types),
+            inline else => |v| v.get(types).decls,
+        };
+    }
 };
 
 pub const generic = struct {
@@ -280,25 +295,29 @@ pub const generic = struct {
 
 pub const Data = union(enum(u8)) {
     Builtin: Builtin,
+    Pointer: PointerId,
     FuncTy: FuncTyId,
     Struct: StructId,
 
-    const scope_start = 2;
+    const scope_start = 3;
 
     pub const pack = Id.Conv.pack;
+    pub const downcast = generic.downcast;
 
-    pub fn size(self: Data, types: *Types) u64 {
+    pub fn size(self: Data, types: *Types) Size {
         return switch (self) {
             .Builtin => |b| b.size(types),
             .FuncTy => 4,
+            .Pointer => 8,
             .Struct => |s| s.get(types).size(types),
         };
     }
 
-    pub fn alignment(self: Data, types: *Types) u64 {
+    pub fn alignment(self: Data, types: *Types) Size {
         return switch (self) {
             .Builtin => |b| b.alignment(types),
             .FuncTy => 4,
+            .Pointer => 8,
             .Struct => |s| s.get(types).alignment(types),
         };
     }
@@ -380,7 +399,7 @@ pub const Id = enum(u32) {
         return @intFromEnum(self);
     }
 
-    pub fn size(self: Id, types: *Types) u64 {
+    pub fn size(self: Id, types: *Types) Size {
         return self.data().size(types);
     }
 
@@ -394,20 +413,25 @@ pub const Id = enum(u32) {
         };
     }
 
-    pub fn alignment(self: Id, types: *Types) u64 {
+    pub fn alignment(self: Id, types: *Types) Size {
         return self.data().alignment(types);
     }
 
+    pub fn alignmentPow(self: Id, types: *Types) u6 {
+        return std.math.log2_int(u64, self.alignment(types));
+    }
+
     pub fn stackSpec(self: Id, types: *Types) graph.AbiParam.StackSpec {
-        return .{
-            .size = @intCast(self.size(types)),
-            .alignment = @intCast(@min(4, std.math.log2_int(u64, self.alignment(types)))),
-        };
+        return .fromByteUnits(self.size(types), self.alignment(types));
     }
 
     pub fn format_(self: Id, types: *Types, writer: *std.io.Writer) !void {
         switch (self.data()) {
             .Builtin => |b| try writer.print("{s}", .{@tagName(b)}),
+            .Pointer => |p| {
+                try writer.writeByte('^');
+                try p.get(types).ty.format_(types, writer);
+            },
             .FuncTy => |f| {
                 try writer.writeAll("fn(");
                 for (f.get(types).args, 0..) |arg, i| {
@@ -417,7 +441,7 @@ pub const Id = enum(u32) {
                 try writer.writeAll("): ");
                 try f.get(types).ret.format_(types, writer);
             },
-            .Struct => unreachable,
+            .Struct => |s| try s.get(types).format_(types, writer),
         }
     }
 
@@ -519,7 +543,7 @@ pub const Builtin = enum(u32) {
             @intFromEnum(self) <= @intFromEnum(Id.f64);
     }
 
-    pub fn size(self: Builtin, _: *Types) u64 {
+    pub fn size(self: Builtin, _: *Types) Size {
         return switch (self) {
             .void, .never => 0,
             .bool, .u8, .i8 => 1,
@@ -530,7 +554,7 @@ pub const Builtin = enum(u32) {
         };
     }
 
-    pub fn alignment(self: Builtin, types: *Types) u64 {
+    pub fn alignment(self: Builtin, types: *Types) Size {
         return @max(self.size(types), 1);
     }
 };
@@ -655,21 +679,130 @@ pub const Struct = struct {
     scope: Scope,
     captures: Captures,
     decls: *DeclIndex,
+    layout: ?Layout = null,
+
+    pub const Layout = struct {
+        spec: graph.AbiParam.StackSpec,
+        fields: []Field,
+
+        pub const Field = struct {
+            ty: Id,
+            default: GlobalId,
+            offset: Size,
+        };
+    };
 
     pub fn format_(self: *Struct, types: *Types, writer: *std.Io.Writer) !void {
         try self.scope.format_(types.structs.ptrToIndex(self), types, writer);
     }
 
-    pub fn size(self: Struct, types: *Types) u64 {
-        _ = self; // autofix
-        _ = types; // autofix
-        unreachable;
+    pub fn fieldName(self: *Struct, types: *Types, index: usize) []const u8 {
+        return Lexer.peekStr(
+            self.scope.file.get(types).source,
+            self.decls.fields.items(.offset)[index],
+        );
     }
 
-    pub fn alignment(self: Struct, types: *Types) u64 {
-        _ = self; // autofix
-        _ = types; // autofix
-        unreachable;
+    pub fn lookupField(self: *Struct, types: *Types, name: []const u8) ?usize {
+        const field = self.decls
+            .lookupField(self.scope.file.get(types).source, name) orelse return null;
+        return utils.indexOfPtr(u32, self.decls.fields.items(.offset), field);
+    }
+
+    pub fn getLayout(self: *Struct, types: *Types) *Layout {
+        if (self.layout) |*l| return l;
+
+        const file = self.scope.file.get(types);
+
+        self.layout = Layout{
+            .spec = .{ .size = 0, .alignment = 0 },
+            .fields = types.arena.alloc(Layout.Field, self.decls.fields.len),
+        };
+        const layout = &self.layout.?;
+
+        var tmp = types.tmp.checkpoint();
+        defer tmp.deinit();
+
+        var gen: Codegen = undefined;
+        gen.init(
+            types,
+            .nany(types.structs.ptrToIndex(self)),
+            .never,
+            tmp.arena.allocator(),
+        );
+
+        _ = gen.bl.begin(.systemv, &.{}, &.{});
+
+        for (@as([]u32, self.decls.fields.items(.offset)), 0..) |o, i| {
+            const slot = &layout.fields[i];
+            var lex = Lexer.init(file.source, o);
+
+            _ = lex.slit(.Ident);
+            _ = lex.slit(.@":");
+
+            slot.ty = gen.typ(&lex) catch .never;
+            slot.default = .invalid;
+            slot.offset = layout.spec.size;
+
+            if (lex.eatMatch(.@"=")) {
+                slot.default = types.globals.push(&types.arena, .{
+                    .scope = gen.gatherScope(),
+                    .ty = slot.ty,
+                    .data = .empty,
+                    .readonly = true,
+                });
+
+                var glob_gen: Codegen = undefined;
+                glob_gen.init(
+                    types,
+                    .nany(types.structs.ptrToIndex(self)),
+                    .never,
+                    tmp.arena.allocator(),
+                );
+                glob_gen.target = .cmptime;
+
+                glob_gen.evalGlobal(&lex, slot.ty, slot.default);
+            }
+
+            layout.spec.alignment = @max(
+                layout.spec.alignment,
+                slot.ty.alignmentPow(types),
+            );
+            layout.spec.size += slot.ty.size(types);
+            layout.spec.size = std.mem.alignForward(
+                u58,
+                layout.spec.size,
+                slot.ty.alignment(types),
+            );
+        }
+
+        return layout;
+    }
+
+    pub fn size(self: *Struct, types: *Types) Size {
+        return self.getLayout(types).spec.size;
+    }
+
+    pub fn alignment(self: *Struct, types: *Types) Size {
+        return self.getLayout(types).spec.alignmentBytes();
+    }
+};
+
+pub const PointerId = EntId(Pointer, "pointers");
+pub const Pointer = struct {
+    ty: Id,
+
+    comptime {
+        if (std.meta.fields(Pointer).len != 1)
+            @compileError("handle other fields");
+    }
+
+    pub fn hash(self: Pointer, _: *Types) u64 {
+        return std.hash.int(@intFromEnum(self.ty));
+    }
+
+    pub fn eql(self: *Pointer, other: *Pointer, _: *Types) bool {
+        return self.ty == other.ty;
     }
 };
 
@@ -714,6 +847,10 @@ pub const Func = struct {
             }
         }
     };
+
+    pub fn sig(self: *Func) FuncTy {
+        return .{ .args = self.args, .ret = self.ret };
+    }
 
     pub fn queue(self: *Func, target: Target, types: *Types) void {
         if (self.compiled.contains(target)) return;
@@ -787,6 +924,8 @@ pub const Global = struct {
         pos: u32,
         len: u32,
 
+        pub const empty = @This(){ .pos = 0, .len = 0 };
+
         pub fn get(self: @This(), types: *Types) []u8 {
             return types.ct_backend.mach.out.code.items[self.pos..][0..self.len];
         }
@@ -829,8 +968,11 @@ pub fn init(
         },
         .loader = loader,
         .backend = backend,
+        .tmp = undefined,
         .arena = arena,
     };
+
+    self.tmp = self.arena.subslice(1024 * 128);
 
     self.ct_backend.mach.out.code.resize(gpa, stack_size) catch unreachable;
     self.ct_backend.mach.out.code.items[self.ct_backend.mach.out.code.items.len - 1] = @intFromEnum(isa.Op.tx);
@@ -899,4 +1041,15 @@ pub fn report(
 
 pub fn allocator(self: *Types) std.mem.Allocator {
     return self.ct_backend.gpa;
+}
+
+pub fn pointerTo(self: *Types, ty: Id) Id {
+    var pointer = Pointer{ .ty = ty };
+    const slot = self.pointer_index.intern(self, &pointer);
+
+    if (!slot.found_existing) {
+        slot.key_ptr.* = self.pointers.push(&self.arena, pointer);
+    }
+
+    return .nany(slot.key_ptr.*);
 }

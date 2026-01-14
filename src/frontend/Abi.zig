@@ -110,6 +110,13 @@ pub fn categorize(self: Abi, ty: Id, types: *Types, buf: *Buf) ?[]graph.AbiParam
     return buf.slots[0..buf.len];
 }
 
+pub fn isScalar(ty: Types.Id) bool {
+    return switch (ty.data()) {
+        .Builtin, .Pointer, .FuncTy => true,
+        .Struct => unreachable, // TODO
+    };
+}
+
 pub fn categorizeBuiltinUnwrapped(b: Types.Builtin) graph.DataType {
     return (categorizeBuiltin(b) catch unreachable).?;
 }
@@ -160,7 +167,14 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
                     .f32, .f64 => .sse,
                 },
                 .FuncTy => .int,
-                .Struct => unreachable,
+                .Pointer => .int,
+                .Struct => |s| {
+                    for (s.get(ts).getLayout(ts).fields) |f| {
+                        try classify(f.ty, ts, offset + f.offset, catas);
+                    }
+
+                    return;
+                },
             };
 
             const first = offset / 8;

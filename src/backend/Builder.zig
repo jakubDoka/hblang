@@ -108,8 +108,21 @@ pub fn end(self: *Builder, _: BuildToken) void {
         for (worklist.items()) |node| {
             std.debug.assert(node.kind != .Scope);
             std.debug.assert(node.kind != .Pin);
+            std.debug.assert(node.id != BuildNode.lock_id);
         }
     }
+}
+
+pub fn peep(self: *Builder, node: *BuildNode) *BuildNode {
+    var tmp = utils.Arena.scrath(null);
+    defer tmp.deinit();
+
+    var wl = Func.WorkList.init(tmp.arena.allocator(), 0) catch unreachable;
+    const res = Func.idealize(self, &self.func, node, &wl) orelse return node;
+
+    self.func.subsume(res, node, .intern);
+
+    return res;
 }
 
 // #MEM ========================================================================
@@ -634,7 +647,7 @@ pub fn addCall(
             stack_offset = std.mem.alignForward(
                 u64,
                 stack_offset,
-                @as(u64, 1) << par.Stack.alignment,
+                par.Stack.alignmentBytes(),
             );
             const location = self.func.addNode(
                 .StackArgOffset,

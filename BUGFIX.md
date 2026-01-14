@@ -2,6 +2,25 @@
 
 This file contains minimal repro tests that are not a good example for learning.
 
+#### const folding between func args 1
+```hb
+expectations := .{
+    return_value: 2,
+}
+
+main := fn(): uint {
+    return bar(1)
+}
+
+bar := fn(a: uint): uint {
+    return foo((a + 1), (a + 1) - (a + 1))
+}
+
+foo := fn(a: uint, b: uint): uint {
+    return a + b
+}
+```
+
 #### comptime only leftover 1
 ```hb
 expectations := .{
