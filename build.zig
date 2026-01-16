@@ -74,7 +74,7 @@ pub fn build(b: *std.Build) !void {
         break :hb hb;
     };
 
-    hbc: {
+    if (false) hbc: {
         const exe = b.addExecutable(.{
             .name = "hbc",
             .root_module = b.createModule(.{

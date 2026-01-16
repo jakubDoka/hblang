@@ -2392,11 +2392,11 @@ pub fn Func(comptime Backend: type) type {
             if (op == .sext and ty.size() < oper.data_type.size()) {
                 utils.panic("{f} {f}", .{ ty, oper });
             }
-            if (ty.size() == oper.data_type.size()) return oper;
+            if (op == .ired and ty.size() == oper.data_type.size()) return oper;
             if (op == .ired and ty.size() >= oper.data_type.size()) {
                 utils.panic("{f} {f}", .{ ty, oper });
             }
-            if (oper.kind == .CInt and ty.isInt()) {
+            if (oper.kind == .CInt) {
                 return self.addIntImm(
                     sloc,
                     ty,
@@ -2579,6 +2579,9 @@ pub fn Func(comptime Backend: type) type {
         pub fn kill(func: *Self, self: *Node) void {
             self.assertAlive();
 
+            if (self.kind == .Syms) return;
+            if (self.id == Node.lock_id) return;
+
             if (is_debug) {
                 var tmp = utils.Arena.scrath(null);
                 defer tmp.deinit();
@@ -2600,9 +2603,6 @@ pub fn Func(comptime Backend: type) type {
 
                 self.killed_at = kill_meta;
             }
-
-            if (self.kind == .Syms) return;
-            if (self.id == Node.lock_id) return;
 
             if (self.output_len != 0) {
                 utils.panic("{any} {f}\n", .{ self.outputs(), self });

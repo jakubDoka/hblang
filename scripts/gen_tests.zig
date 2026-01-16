@@ -21,6 +21,7 @@ pub fn main() !void {
     , .{});
 
     var iter = std.mem.splitSequence(u8, case, "#### ");
+    var i: usize = 0;
     while (iter.next()) |segment| {
         const pos = std.mem.indexOf(u8, segment, "\n```hb") orelse continue;
         const name = std.mem.trim(u8, segment[0..pos], "\n\r\t ");
@@ -34,13 +35,14 @@ pub fn main() !void {
         body = try std.mem.replaceOwned(u8, arena, body, "\"", "\\\"");
 
         try writer.interface.print(
-            \\test "{s}" {{
+            \\test "{s} {x}" {{
             \\    try utils.runTest(
             \\        "{s}",
             \\        "{s}",
+            \\        std.testing.allocator,
             \\
         ,
-            .{ name, name, body },
+            .{ name, i, name, body },
         );
 
         try writer.interface.writeAll(
@@ -49,6 +51,8 @@ pub fn main() !void {
             \\
             \\
         );
+
+        i += 1;
     }
 
     try writer.interface.flush();

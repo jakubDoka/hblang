@@ -258,8 +258,8 @@ pub const Lexeme = enum(u16) {
             .@"&&=",
             .@"||=",
             => 15,
-            .@"&&", .@"$&&" => if (in_if_or_while) 14 else 12,
-            .@":=" => 13,
+            .@"&&", .@"$&&" => 14,
+            .@":=" => if (in_if_or_while) 13 else 15,
             .@"||", .@"$||" => 12,
             .@".." => 11,
             .@"|", .@"&" => 8,
@@ -416,7 +416,7 @@ pub fn compareIdent(
     return source.len - offset >= ref.len and
         // NOTE: shortcut but also prevent false match on prefix
         // NOTE: this assumes terminator
-        !isIdentByte(source[offset + ref.len + 1]) and
+        !isIdentByte(source[offset + ref.len]) and
         std.mem.eql(u8, source[offset..][0..ref.len], ref);
 }
 

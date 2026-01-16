@@ -108,7 +108,9 @@ pub fn end(self: *Builder, _: BuildToken) void {
         for (worklist.items()) |node| {
             std.debug.assert(node.kind != .Scope);
             std.debug.assert(node.kind != .Pin);
-            std.debug.assert(node.id != BuildNode.lock_id);
+            if (node.id == BuildNode.lock_id) {
+                utils.panic("{f}\n", .{node});
+            }
         }
     }
 }
@@ -479,6 +481,17 @@ pub const If = struct {
         return;
     }
 };
+
+pub fn addPhi(self: *Builder, sloc: graph.Sloc, lhs: *BuildNode, rhs: *BuildNode) SpecificNode(.Phi) {
+    std.debug.assert(self.control().kind == .Region);
+    return self.func.addNode(
+        .Phi,
+        sloc,
+        lhs.data_type.meet(rhs.data_type),
+        &.{ self.control(), lhs, rhs },
+        .{},
+    );
+}
 
 pub fn addIfAndBeginThen(self: *Builder, sloc: graph.Sloc, cond: *BuildNode) If {
     const else_ = self.cloneScope();

@@ -26,6 +26,8 @@ templates: utils.SegmentedList(Template, TemplateId, 1024, 1024 * 1024) = .{},
 template_index: Interner(TemplateId) = .{},
 pointers: utils.SegmentedList(Pointer, PointerId, 1024, 1024 * 1024) = .{},
 pointer_index: Interner(PointerId) = .{},
+arrays: utils.SegmentedList(Array, ArrayId, 1024, 1024 * 1024) = .{},
+array_index: Interner(ArrayId) = .{},
 
 files: []File,
 line_indexes: []const hb.LineIndex,
@@ -296,10 +298,11 @@ pub const generic = struct {
 pub const Data = union(enum(u8)) {
     Builtin: Builtin,
     Pointer: PointerId,
+    Array: ArrayId,
     FuncTy: FuncTyId,
     Struct: StructId,
 
-    const scope_start = 3;
+    const scope_start = 4;
 
     pub const pack = Id.Conv.pack;
     pub const downcast = generic.downcast;
@@ -309,7 +312,7 @@ pub const Data = union(enum(u8)) {
             .Builtin => |b| b.size(types),
             .FuncTy => 4,
             .Pointer => 8,
-            .Struct => |s| s.get(types).size(types),
+            inline .Array, .Struct => |s| s.get(types).size(types),
         };
     }
 
@@ -318,7 +321,7 @@ pub const Data = union(enum(u8)) {
             .Builtin => |b| b.alignment(types),
             .FuncTy => 4,
             .Pointer => 8,
-            .Struct => |s| s.get(types).alignment(types),
+            inline .Array, .Struct => |s| s.get(types).alignment(types),
         };
     }
 };
@@ -425,12 +428,33 @@ pub const Id = enum(u32) {
         return .fromByteUnits(self.size(types), self.alignment(types));
     }
 
+    pub fn isScalar(ty: Types.Id, types: *Types) bool {
+        return switch (ty.data()) {
+            .Builtin, .Pointer, .FuncTy => true,
+            .Array => |a| {
+                if (a.get(types).len.s != 1) return false;
+                return a.get(types).elem.isScalar(types);
+            },
+            .Struct => |s| {
+                const fields = s.get(types).getLayout(types).fields;
+                if (fields.len != 1) return false;
+                return fields[0].ty.isScalar(types);
+            },
+        };
+    }
+
     pub fn format_(self: Id, types: *Types, writer: *std.io.Writer) !void {
         switch (self.data()) {
             .Builtin => |b| try writer.print("{s}", .{@tagName(b)}),
             .Pointer => |p| {
                 try writer.writeByte('^');
                 try p.get(types).ty.format_(types, writer);
+            },
+            .Array => |a| {
+                try writer.writeByte('[');
+                try writer.print("{}", .{a.get(types).len});
+                try writer.writeByte(']');
+                try a.get(types).elem.format_(types, writer);
             },
             .FuncTy => |f| {
                 try writer.writeAll("fn(");
@@ -671,6 +695,33 @@ pub const Scope = extern struct {
         } else {
             try writer.writeAll(nme);
         }
+    }
+};
+
+pub const ArrayId = EntId(Array, "arrays");
+pub const Array = extern struct {
+    elem: Id,
+    _padd: u32 = 0,
+    len: packed struct {
+        s: Size,
+        pad: u6 = 0,
+    },
+
+    pub fn hash(self: Array, _: *Types) u64 {
+        return std.hash.Wyhash.hash(0, std.mem.asBytes(&self));
+    }
+
+    pub fn eql(self: *Array, other: *Array, _: *Types) bool {
+        return std.meta.eql(self.elem, other.elem) and
+            std.meta.eql(self.len, other.len);
+    }
+
+    pub fn size(self: Array, types: *Types) Size {
+        return self.len.s * self.elem.size(types);
+    }
+
+    pub fn alignment(self: Array, types: *Types) Size {
+        return self.elem.alignment(types);
     }
 };
 
@@ -972,7 +1023,7 @@ pub fn init(
         .arena = arena,
     };
 
-    self.tmp = self.arena.subslice(1024 * 128);
+    self.tmp = self.arena.subslice(1024 * 1024);
 
     self.ct_backend.mach.out.code.resize(gpa, stack_size) catch unreachable;
     self.ct_backend.mach.out.code.items[self.ct_backend.mach.out.code.items.len - 1] = @intFromEnum(isa.Op.tx);
@@ -1049,6 +1100,17 @@ pub fn pointerTo(self: *Types, ty: Id) Id {
 
     if (!slot.found_existing) {
         slot.key_ptr.* = self.pointers.push(&self.arena, pointer);
+    }
+
+    return .nany(slot.key_ptr.*);
+}
+
+pub fn arrayOf(self: *Types, elem: Id, len: Size) Id {
+    var array = Array{ .elem = elem, .len = .{ .s = len } };
+    const slot = self.array_index.intern(self, &array);
+
+    if (!slot.found_existing) {
+        slot.key_ptr.* = self.arrays.push(&self.arena, array);
     }
 
     return .nany(slot.key_ptr.*);
