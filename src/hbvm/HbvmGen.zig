@@ -329,10 +329,7 @@ pub fn emitFunc(self: *HbvmGen, func: *Func, opts: Mach.EmitOptions) void {
 
     const sym = self.mach.out.getFuncSym(opts.id);
 
-    var tmp = utils.Arena.scrath(if (opts.optimizations == .opts)
-        opts.optimizations.opts.arena
-    else
-        null);
+    var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
     const has_call, const call_slot_size = func.computeCallSlotSize();

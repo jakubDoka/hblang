@@ -956,6 +956,7 @@ pub fn Func(comptime Backend: type) type {
                 var i: usize = 0;
                 while (i < self.items().len) : (i += 1) {
                     const n = self.items()[i];
+                    n.assertAlive();
                     for (n.inputs()) |oi| if (oi) |o| self.add(o);
                     for (n.outputs()) |o| self.add(o.get());
                 }
@@ -1189,6 +1190,7 @@ pub fn Func(comptime Backend: type) type {
             sloc: Sloc = .none,
 
             killed_at: if (is_debug) *KillMeta else void = undefined,
+            lock_at: if (is_debug) *Lock.Meta else void = undefined,
 
             edata: void = {},
 
@@ -1698,12 +1700,30 @@ pub fn Func(comptime Backend: type) type {
                 node: *Node,
                 prev_id: u16,
 
+                pub const Meta = struct {
+                    trace: std.builtin.StackTrace,
+                };
+
                 pub fn unlock(slf: @This()) void {
                     slf.node.id = slf.prev_id;
                 }
             };
 
+            threadlocal var arna: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
+
             pub fn lock(self: *Node) Lock {
+                if (is_debug) {
+                    self.lock_at = arna.allocator().create(Lock.Meta) catch unreachable;
+                    self.lock_at.* = Lock.Meta{
+                        .trace = std.builtin.StackTrace{
+                            .index = undefined,
+                            .instruction_addresses = arna.allocator().alloc(usize, 10) catch unreachable,
+                        },
+                    };
+
+                    std.debug.captureStackTrace(@returnAddress(), &self.lock_at.trace);
+                }
+
                 defer self.id = lock_id;
                 return .{ .prev_id = self.id, .node = self };
             }
@@ -2104,9 +2124,9 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn getMem(self: *Self) ?*Node {
-            if (self.start.outputs().len < 2) return null;
-            std.debug.assert(self.start.outputs()[1].get().kind == .Mem);
-            return self.start.outputs()[1].get();
+            return for (self.start.outputs()) |out| {
+                if (out.get().kind == .Mem) return out.get();
+            } else null;
         }
 
         pub fn getSyms(self: *Self) *Node {
@@ -2722,6 +2742,16 @@ pub fn Func(comptime Backend: type) type {
                 .intern => self.stopped_interning.assertUnlocked(),
                 .nointern => self.stopped_interning.assertLocked(),
             }
+
+            var lock: ?Node.Lock = null;
+            if (mode == .intern) {
+                if (def) |d| {
+                    lock = d.lock();
+                }
+            } else {
+                lock = use.lock();
+            }
+            defer if (lock) |l| l.unlock();
 
             if (use.inputs()[idx] == def) return if (mode == .intern) null;
             if (use.inputs()[idx]) |n| {
@@ -3417,10 +3447,7 @@ pub fn Func(comptime Backend: type) type {
         }
 
         pub fn computeStackLayout(self: *Self, start_pos: i64) i64 {
-            if (self.start.outputs().len < 2) return 0;
-
-            const mem = self.start.outputs()[1].get();
-            std.debug.assert(mem.kind == .Mem);
+            const mem = self.getMem() orelse return 0;
 
             var local_size: i64 = start_pos;
 

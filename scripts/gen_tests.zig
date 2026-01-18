@@ -16,6 +16,7 @@ pub fn main() !void {
 
     try writer.interface.print(
         \\const utils = @import("utils");
+        \\const std = @import("std");
         \\
         \\
     , .{});

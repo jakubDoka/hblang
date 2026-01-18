@@ -496,7 +496,9 @@ main := fn(): uint {
     arr := uint.[1, 2, 3, 4]
     i := 0
     sum := 0
-    $loop $if i == arr.len break else {
+    $loop $if i == arr.len {
+        break
+    } else {
         sum += arr[i]
         i += 1
     }
@@ -1894,11 +1896,17 @@ main := fn(): uint {
 }
 
 // in: foo.hb
-foo := fn(): uint return 0
-bar := fn(): uint return 1
+foo := fn(): uint {
+    return 0
+}
+bar := fn(): uint {
+    return 1
+}
 bas := @use("bas.hb")
 // in: bas.hb
-baz := fn(): uint return 2
+baz := fn(): uint {
+    return 2
+}
 ```
 
 #### directives 1 (@size_of, @align_of)

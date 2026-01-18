@@ -161,6 +161,11 @@ pub fn categorizeSystemv(ty: Id, bufr: *Buf, types: *Types) !void {
                 },
                 .FuncTy => .int,
                 .Pointer => .int,
+                .Slice => {
+                    try classify(.uint, ts, offset + 0, catas);
+                    try classify(.uint, ts, offset + 8, catas);
+                    return;
+                },
                 .Struct => |s| {
                     for (s.get(ts).getLayout(ts).fields) |f| {
                         try classify(f.ty, ts, offset + f.offset, catas);

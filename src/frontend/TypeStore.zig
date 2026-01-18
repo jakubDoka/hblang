@@ -14,6 +14,7 @@ const isa = hb.hbvm.isa;
 
 arena: utils.Arena,
 tmp: utils.Arena,
+tmp_depth: usize = 0,
 structs: utils.SegmentedList(Struct, StructId, 1024, 1024 * 1024) = .{},
 struct_index: Interner(StructId) = .{},
 funcs: utils.SegmentedList(Func, FuncId, 1024, 1024 * 1024) = .{},
@@ -28,6 +29,8 @@ pointers: utils.SegmentedList(Pointer, PointerId, 1024, 1024 * 1024) = .{},
 pointer_index: Interner(PointerId) = .{},
 arrays: utils.SegmentedList(Array, ArrayId, 1024, 1024 * 1024) = .{},
 array_index: Interner(ArrayId) = .{},
+slices: utils.SegmentedList(Slice, SliceId, 1024, 1024 * 1024) = .{},
+slice_index: Interner(SliceId) = .{},
 
 files: []File,
 line_indexes: []const hb.LineIndex,
@@ -39,6 +42,20 @@ abi: Abi = .systemv,
 func_queue: std.EnumArray(Target, std.ArrayList(FuncId)) =
     .initFill(.empty),
 errored: usize = 0,
+
+pub const TmpCheckpoint = struct {
+    types: *Types,
+
+    pub fn allocator(self: *TmpCheckpoint) std.mem.Allocator {
+        return self.types.tmp.allocator();
+    }
+
+    pub fn deinit(self: *TmpCheckpoint) void {
+        if (self.types.tmp_depth == 0) {
+            self.types.tmp.reset();
+        }
+    }
+};
 
 const Types = @This();
 
@@ -174,6 +191,22 @@ pub const AnyScope = union(enum(u8)) {
     pub const format_ = generic.format_;
     pub const pack = Conv.pack;
 
+    pub fn findCurrentScope(self: AnyScope, types: *Types) Id {
+        return switch (self) {
+            inline .Func, .Template => |f| f.get(types).scope.parent
+                .data().downcast(AnyScope).?.findCurrentScope(types),
+            inline else => |v| .nany(v),
+        };
+    }
+
+    pub fn findCurrentFunc(self: AnyScope, types: *Types) ?FuncId {
+        return switch (self) {
+            .Func => |f| return f,
+            inline else => |t| (t.get(types).scope.parent.data()
+                .downcast(AnyScope) orelse return null).findCurrentFunc(types),
+        };
+    }
+
     pub fn decls(self: AnyScope, types: *Types) *DeclIndex {
         return switch (self) {
             inline .Func, .Template => |f| f.get(types).scope.parent
@@ -298,11 +331,12 @@ pub const generic = struct {
 pub const Data = union(enum(u8)) {
     Builtin: Builtin,
     Pointer: PointerId,
+    Slice: SliceId,
     Array: ArrayId,
     FuncTy: FuncTyId,
     Struct: StructId,
 
-    const scope_start = 4;
+    const scope_start = 5;
 
     pub const pack = Id.Conv.pack;
     pub const downcast = generic.downcast;
@@ -312,6 +346,7 @@ pub const Data = union(enum(u8)) {
             .Builtin => |b| b.size(types),
             .FuncTy => 4,
             .Pointer => 8,
+            .Slice => 16,
             inline .Array, .Struct => |s| s.get(types).size(types),
         };
     }
@@ -321,6 +356,7 @@ pub const Data = union(enum(u8)) {
             .Builtin => |b| b.alignment(types),
             .FuncTy => 4,
             .Pointer => 8,
+            .Slice => 16,
             inline .Array, .Struct => |s| s.get(types).alignment(types),
         };
     }
@@ -431,6 +467,7 @@ pub const Id = enum(u32) {
     pub fn isScalar(ty: Types.Id, types: *Types) bool {
         return switch (ty.data()) {
             .Builtin, .Pointer, .FuncTy => true,
+            .Slice => false,
             .Array => |a| {
                 if (a.get(types).len.s != 1) return false;
                 return a.get(types).elem.isScalar(types);
@@ -464,6 +501,10 @@ pub const Id = enum(u32) {
                 }
                 try writer.writeAll("): ");
                 try f.get(types).ret.format_(types, writer);
+            },
+            .Slice => |s| {
+                try writer.writeAll("[]");
+                try s.get(types).elem.format_(types, writer);
             },
             .Struct => |s| try s.get(types).format_(types, writer),
         }
@@ -698,6 +739,22 @@ pub const Scope = extern struct {
     }
 };
 
+pub const SliceId = EntId(Slice, "slices");
+pub const Slice = extern struct {
+    elem: Id,
+
+    pub const len_offset = 8;
+    pub const ptr_offset = 0;
+
+    pub fn hash(self: Slice, _: *Types) u64 {
+        return std.hash.Wyhash.hash(0, std.mem.asBytes(&self));
+    }
+
+    pub fn eql(self: *Slice, other: *Slice, _: *Types) bool {
+        return std.meta.eql(self.elem, other.elem);
+    }
+};
+
 pub const ArrayId = EntId(Array, "arrays");
 pub const Array = extern struct {
     elem: Id,
@@ -771,7 +828,7 @@ pub const Struct = struct {
         };
         const layout = &self.layout.?;
 
-        var tmp = types.tmp.checkpoint();
+        var tmp = types.tmpCheckpoint();
         defer tmp.deinit();
 
         var gen: Codegen = undefined;
@@ -779,7 +836,7 @@ pub const Struct = struct {
             types,
             .nany(types.structs.ptrToIndex(self)),
             .never,
-            tmp.arena.allocator(),
+            tmp.allocator(),
         );
 
         _ = gen.bl.begin(.systemv, &.{}, &.{});
@@ -808,7 +865,7 @@ pub const Struct = struct {
                     types,
                     .nany(types.structs.ptrToIndex(self)),
                     .never,
-                    tmp.arena.allocator(),
+                    tmp.allocator(),
                 );
                 glob_gen.target = .cmptime;
 
@@ -888,7 +945,10 @@ pub const Func = struct {
     linkage: Machine.Data.Linkage = .local,
 
     pub const Param = extern struct {
-        _padd: u32 = 0,
+        flags: packed struct {
+            is_any: bool,
+            _padd: u31 = 0,
+        },
         ty: Id,
         value: i64,
 
@@ -941,10 +1001,11 @@ pub const Func = struct {
             for (self.params, 0..) |p, i| {
                 if (i != 0) try writer.writeAll(", ");
                 if (p.ty != .type) {
-                    utils.panic("{f}", .{p.ty.fmt(types)});
+                    try writer.print("{f}(TODO)", .{p.ty.fmt(types)});
+                } else {
+                    const ty: Id = @enumFromInt(p.value);
+                    try ty.format_(types, writer);
                 }
-                const ty: Id = @enumFromInt(p.value);
-                try ty.format_(types, writer);
             }
             try writer.writeByte(']');
         }
@@ -1079,6 +1140,10 @@ pub fn deinit(self: *Types) void {
     self.* = undefined;
 }
 
+pub fn reportSloc(self: *Types, slc: graph.Sloc, fmt: []const u8, args: anytype) void {
+    self.report(@enumFromInt(slc.namespace), slc.index, fmt, args);
+}
+
 pub fn report(
     self: *Types,
     file: File.Id,
@@ -1088,10 +1153,16 @@ pub fn report(
 ) void {
     const fl = file.get(self);
     Codegen.reportGeneric(fl.path, fl.source, self, pos, fmt, args);
+    self.errored += 1;
 }
 
 pub fn allocator(self: *Types) std.mem.Allocator {
     return self.ct_backend.gpa;
+}
+
+pub fn tmpCheckpoint(self: *Types) TmpCheckpoint {
+    self.tmp_depth += 1;
+    return .{ .types = self };
 }
 
 pub fn pointerTo(self: *Types, ty: Id) Id {
@@ -1114,4 +1185,53 @@ pub fn arrayOf(self: *Types, elem: Id, len: Size) Id {
     }
 
     return .nany(slot.key_ptr.*);
+}
+
+pub fn funcTyOf(self: *Types, args: []Id, ret: Id) Id {
+    var func_ty = FuncTy{ .args = args, .ret = ret };
+    const slot = self.func_ty_index.intern(self, &func_ty);
+
+    if (!slot.found_existing) {
+        func_ty.args = self.arena.dupe(Id, args);
+        slot.key_ptr.* = self.func_tys.push(&self.arena, func_ty);
+    }
+
+    return .nany(slot.key_ptr.*);
+}
+
+pub fn sliceOf(self: *Types, elem: Id) Id {
+    var slice = Slice{ .elem = elem };
+    const slot = self.slice_index.intern(self, &slice);
+
+    if (!slot.found_existing) {
+        slot.key_ptr.* = self.slices.push(&self.arena, slice);
+    }
+
+    return .nany(slot.key_ptr.*);
+}
+
+pub fn collectAnalError(types: *anyopaque, err: hb.backend.static_anal.Error) void {
+    const self: *Types = @ptrCast(@alignCast(types));
+
+    switch (err) {
+        .ReturningStack => |loc| {
+            self.reportSloc(loc.slot, "stack location escapes the function", .{});
+        },
+        .StackOob => |loc| {
+            self.reportSloc(loc.slot, "this slot has a out of bounds read/write", .{});
+            self.reportSloc(loc.access, "...the access is here, stack slot has {} bytes," ++
+                " while access is at {}..{}", .{ loc.size, loc.range.start, loc.range.end });
+        },
+        .LoopInvariantBreak => |loc| {
+            self.reportSloc(loc.if_node, "the if condition is loop invariant but it" ++
+                " decides wheter to break out ouf the loop", .{});
+        },
+        .InfiniteLoopWithBreak => |loc| {
+            self.reportSloc(loc.loop, "the loop was declared with breaks or" ++
+                " returns but they are all unreachable", .{});
+        },
+        .UsedPoison => |loc| {
+            self.reportSloc(loc.loc, "reading from an uninitialized memory location", .{});
+        },
+    }
 }

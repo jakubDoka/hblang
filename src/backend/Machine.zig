@@ -834,8 +834,20 @@ pub const DataOptions = struct {
 
 pub const OptOptions = struct {
     mode: Mode = .debug,
-    arena: ?*utils.Arena = null,
-    error_buf: ?*std.ArrayList(static_anal.Error) = null,
+    error_collector: ErrorCollector = .noop,
+
+    pub const ErrorCollector = struct {
+        data: *anyopaque,
+        collect_: *const fn (*anyopaque, err: static_anal.Error) void,
+
+        pub const noop = ErrorCollector{ .data = undefined, .collect_ = noopCollect };
+
+        pub fn noopCollect(_: *anyopaque, _: static_anal.Error) void {}
+
+        pub fn collect(self: ErrorCollector, err: static_anal.Error) void {
+            self.collect_(self.data, err);
+        }
+    };
 
     pub const Mode = enum { release, debug };
 
@@ -893,7 +905,7 @@ pub const OptOptions = struct {
         comptime Backend: type,
         func: *graph.Func(Backend),
     ) void {
-        func.static_anal.analize(self.arena.?, self.error_buf.?);
+        func.static_anal.analize(self.error_collector);
     }
 
     pub fn doMem2Reg(comptime Backend: type, func: *graph.Func(Backend)) void {
@@ -910,9 +922,7 @@ pub const OptOptions = struct {
         idealizeGeneric(Backend, ctx, func, false);
         idealizeMach(Backend, ctx, func);
         doGcm(Backend, func);
-        if (self.error_buf != null) {
-            self.doStaticAnal(Backend, func);
-        }
+        self.doStaticAnal(Backend, func);
     }
 
     pub fn optimizeDebug(self: OptOptions, comptime Backend: type, ctx: anytype, func: *graph.Func(Backend)) void {
@@ -920,9 +930,7 @@ pub const OptOptions = struct {
         idealizeGeneric(Backend, ctx, func, true);
         idealizeMach(Backend, ctx, func);
         doGcm(Backend, func);
-        if (self.error_buf != null) {
-            self.doStaticAnal(Backend, func);
-        }
+        self.doStaticAnal(Backend, func);
     }
 
     pub fn finalize(
@@ -946,7 +954,7 @@ pub const OptOptions = struct {
                 elim,
             }).init();
 
-            var tmp = utils.Arena.scrath(optimizations.arena);
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             const bout: *Data = &backend.mach.out;
@@ -1019,11 +1027,9 @@ pub const OptOptions = struct {
                 gcm.end();
 
                 gcm_waste += sym.waste;
-                if (optimizations.error_buf != null) {
-                    var static_anal_met = metrics.begin(.static_anal);
-                    optimizations.doStaticAnal(Backend, sym);
-                    static_anal_met.end();
-                }
+                var static_anal_met = metrics.begin(.static_anal);
+                optimizations.doStaticAnal(Backend, sym);
+                static_anal_met.end();
 
                 var regalloc_met = metrics.begin(.regalloc);
                 res.* = regalloc.ralloc(Backend, @ptrCast(sym));
@@ -1053,8 +1059,6 @@ pub const OptOptions = struct {
                     .data, .prealloc, .tls_prealloc, .invalid => {},
                 }
             }
-
-            if (optimizations.error_buf) |eb| if (eb.items.len != 0) return true;
 
             if (opts.logs) |d| {
                 try d.writeAll("backend:\n");
@@ -1105,8 +1109,6 @@ pub const OptOptions = struct {
         } else {
             if (@hasDecl(Backend, "preLinkHook")) backend.preLinkHook();
         }
-
-        if (optimizations.error_buf) |eb| if (eb.items.len != 0) return true;
 
         return false;
     }

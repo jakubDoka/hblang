@@ -836,10 +836,7 @@ pub fn emitFunc(self: *X86_64Gen, func: *Func, opts: Mach.EmitOptions) void {
 
     //func.fmtScheduledLog();
 
-    var tmp = utils.Arena.scrath(if (opts.optimizations == .opts)
-        opts.optimizations.opts.arena
-    else
-        null);
+    var tmp = utils.Arena.scrath(null);
     defer tmp.deinit();
 
     const postorder = func.gcm.postorder;

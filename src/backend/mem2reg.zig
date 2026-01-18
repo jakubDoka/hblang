@@ -121,7 +121,7 @@ pub fn Mixin(comptime Backend: type) type {
             const self = m2r.getGraph();
             self.gcm.cfg_built.assertUnlocked();
 
-            if (self.start.outputs().len == 1) return;
+            const mem = self.getMem() orelse return;
 
             var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
@@ -135,8 +135,7 @@ pub fn Mixin(comptime Backend: type) type {
             var store_load_nodes = Arry(*Node){};
             var alloc_offsets = Arry(i64){};
 
-            std.debug.assert(self.start.outputs()[1].get().kind == .Mem);
-            outer: for (self.start.outputs()[1].get().outputs()) |n| {
+            outer: for (mem.outputs()) |n| {
                 const ov = n.get();
                 if (ov.kind != .LocalAlloc or ov.outputs().len != 1) continue :outer;
                 const o = ov.outputs()[0].get();

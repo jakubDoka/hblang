@@ -30,6 +30,66 @@ pub const Field = struct {
 pub const Decl = struct {
     offset: u32,
     root: u32,
+
+    pub fn collectPath(self: Decl, arena: *utils.Arena, source: [:0]const u8) struct { u32, [][]const u8 } {
+        var path = std.ArrayList([]const u8).empty;
+        var lex = Lexer.init(source, self.root);
+        _ = self.collectPathRecur(arena, &path, &lex);
+        return .{ lex.cursor, path.items };
+    }
+
+    pub fn collectPathRecur(
+        self: Decl,
+        arena: *utils.Arena,
+        path: *std.ArrayList([]const u8),
+        lex: *Lexer,
+    ) bool {
+        const tok = lex.next();
+        switch (tok.kind) {
+            .Ident => {
+                if (lex.peekNext().kind == .@".{") {
+                    if (self.collectPathRecur(arena, path, lex)) {
+                        return true;
+                    }
+                }
+
+                if (tok.pos == self.offset) {
+                    return true;
+                }
+            },
+            .@".{" => {
+                var iter = lex.list(.@",", .@"}");
+
+                while (iter.next()) {
+                    const ident = lex.slit(.Ident);
+
+                    path.append(
+                        arena.allocator(),
+                        ident.view(lex.source),
+                    ) catch unreachable;
+
+                    const suffix = lex.next();
+                    switch (suffix.kind) {
+                        .@":" => {},
+                        .@".{", .@",", .@"}" => {
+                            lex.cursor = ident.pos;
+                        },
+                        else => unreachable,
+                    }
+
+                    if (self.collectPathRecur(arena, path, lex)) {
+                        lex.eatUntilClosingDelimeter();
+                        return true;
+                    }
+
+                    _ = path.pop().?;
+                }
+            },
+            else => {},
+        }
+
+        return false;
+    }
 };
 
 pub const Import = struct {

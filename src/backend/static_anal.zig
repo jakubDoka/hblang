@@ -1,5 +1,6 @@
 const std = @import("std");
 const graph = @import("graph.zig");
+const Machine = root.backend.Machine;
 const utils = graph.utils;
 const root = @import("hb");
 
@@ -32,8 +33,7 @@ pub fn Anal(comptime Backend: type) type {
         const Node = Func.Node;
 
         func: *Func,
-        errors: *std.ArrayList(Error),
-        arena: *utils.Arena,
+        collector: Machine.OptOptions.ErrorCollector,
 
         pub fn analize(self: Self) void {
             self.findTrivialStackEscapes();
@@ -45,7 +45,7 @@ pub fn Anal(comptime Backend: type) type {
         }
 
         pub fn addError(self: Self, err: Error) void {
-            self.errors.append(self.arena.allocator(), err) catch unreachable;
+            self.collector.collect(err);
         }
 
         pub fn findInvalidPoisonReads(self: Self) void {
@@ -106,7 +106,7 @@ pub fn Anal(comptime Backend: type) type {
         }
 
         pub fn findLoopInvariantConditions(self: Self) void {
-            var tmp = utils.Arena.scrath(self.arena);
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             const func = self.func;
@@ -179,7 +179,7 @@ pub fn Anal(comptime Backend: type) type {
                 const arg = ar.get();
                 if (arg.kind != .Arg) continue;
 
-                var tmp = utils.Arena.scrath(self.arena);
+                var tmp = utils.Arena.scrath(null);
                 defer tmp.deinit();
 
                 var local_stores = std.ArrayList(*Node){};
@@ -248,7 +248,7 @@ pub fn Anal(comptime Backend: type) type {
             const func = self.func;
             if (func.end.inputs()[0] == null) return;
 
-            var tmp = utils.Arena.scrath(self.arena);
+            var tmp = utils.Arena.scrath(null);
             defer tmp.deinit();
 
             var frontier = std.AutoArrayHashMapUnmanaged(*Node, void){};
@@ -283,8 +283,8 @@ pub fn Mixin(comptime Backend: type) type {
             return @alignCast(@fieldParentPtr("static_anal", self));
         }
 
-        pub fn analize(self: *Self, arena: *utils.Arena, errors: *std.ArrayList(Error)) void {
-            (Anal(Backend){ .func = self.getGraph(), .errors = errors, .arena = arena }).analize();
+        pub fn analize(self: *Self, collector: Machine.OptOptions.ErrorCollector) void {
+            (Anal(Backend){ .func = self.getGraph(), .collector = collector }).analize();
         }
     };
 }

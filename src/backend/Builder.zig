@@ -36,6 +36,8 @@ pub const classes = enum {
             layout.base.sloc = @bitCast(@intFromPtr(nxt));
         }
     };
+
+    pub const Stub = extern struct {};
 };
 
 pub fn isKillable(self: *BuildNode) bool {
@@ -94,8 +96,6 @@ pub fn addParam(self: *Builder, sloc: graph.Sloc, idx: usize, debug_ty: u32) Spe
 }
 
 pub fn end(self: *Builder, _: BuildToken) void {
-    //std.debug.assert(getScopeValues(self.pins).len == 0);
-
     if (!self.isUnreachable()) self.addReturn(&.{});
 
     if (std.debug.runtime_safety) {
@@ -108,7 +108,9 @@ pub fn end(self: *Builder, _: BuildToken) void {
         for (worklist.items()) |node| {
             std.debug.assert(node.kind != .Scope);
             std.debug.assert(node.kind != .Pin);
+            std.debug.assert(node.kind != .Stub);
             if (node.id == BuildNode.lock_id) {
+                std.debug.dumpStackTrace(node.lock_at.trace);
                 utils.panic("{f}\n", .{node});
             }
         }
@@ -504,13 +506,13 @@ pub fn addIfAndBeginThen(self: *Builder, sloc: graph.Sloc, cond: *BuildNode) If 
 }
 
 pub const Loop = struct {
-    scope: SpecificNode(.Scope),
+    scope: BuildNode.Lock,
     control: std.EnumArray(Control, ?SpecificNode(.Scope)) = .{ .values = .{ null, null } },
 
     pub const Control = enum { @"break", @"continue" };
 
     pub fn markBreaking(self: *Loop) void {
-        const loop = getScopeValues(self.scope)[0].extra(.Loop);
+        const loop = getScopeValues(self.scope.node)[0].extra(.Loop);
         loop.anal_stage = .has_break;
     }
 
@@ -519,7 +521,7 @@ pub const Loop = struct {
             const rhs = mergeScopes(&builder.func, builder.scope.?, ctrl);
             getScopeValues(rhs)[0].extra(.Region).preserve_identity_phys = kind == .@"continue";
         } else {
-            builder._truncateScope(builder.scope.?, self.scope.inputs().len);
+            builder._truncateScope(builder.scope.?, self.scope.node.inputs().len);
             self.control.set(kind, builder.scope.?);
         }
         if (kind == .@"break") self.markBreaking();
@@ -550,7 +552,7 @@ pub const Loop = struct {
             }
         }
 
-        const init_values = getScopeValues(self.scope);
+        const init_values = getScopeValues(self.scope.node);
         const start = 1;
         if (builder.scope) |backedge| {
             const update_values = getScopeValues(backedge);
@@ -577,10 +579,16 @@ pub const Loop = struct {
             );
         }
 
-        if (builder.scope) |scope| killScope(&builder.func, scope);
+        if (builder.scope) |scope| {
+            std.debug.assert(scope != self.scope.node);
+            killScope(&builder.func, scope);
+        }
         builder.scope = self.control.get(.@"break");
 
-        defer killScope(&builder.func, self.scope);
+        defer {
+            self.scope.unlock();
+            killScope(&builder.func, self.scope.node);
+        }
         const exit = builder.scope orelse {
             return;
         };
@@ -604,7 +612,7 @@ pub fn addLoopAndBeginBody(self: *Builder, sloc: graph.Sloc) Loop {
     for (1..self.scope.?.input_ordered_len) |i| {
         self.func.setInputNoIntern(self.scope.?, i, pscope);
     }
-    return .{ .scope = pscope };
+    return .{ .scope = pscope.lock() };
 }
 
 pub const CallArgs = struct {
@@ -738,4 +746,8 @@ pub fn addTrap(self: *Builder, sloc: graph.Sloc, code: u64) void {
 
     killScope(&self.func, self.scope.?);
     self.scope = null;
+}
+
+pub fn addStub(self: *Builder, sloc: graph.Sloc, ty: DataType) SpecificNode(.CInt) {
+    return self.func.addNode(.Stub, sloc, ty, &.{}, .{});
 }
